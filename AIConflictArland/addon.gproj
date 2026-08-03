@@ -1,0 +1,19 @@
+GameProject
+{
+	ID "AIConflictArland"
+	GUID "B52C5F6AEDBF423E"
+	TITLE "AI Conflict Arland"
+	Dependencies
+	{
+		"58D0FB3206B6F859"
+		"9178E5822AFE48EA"
+	}
+	Configurations
+	{
+		GameProjectConfig PC {}
+		GameProjectConfig HEADLESS {}
+		GameProjectConfig XBOX_ONE {}
+		GameProjectConfig XBOX_SERIES {}
+		GameProjectConfig PS4 {}
+	}
+}

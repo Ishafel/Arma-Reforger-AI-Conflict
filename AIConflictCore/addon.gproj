@@ -1,0 +1,18 @@
+GameProject
+{
+	ID "AIConflictCore"
+	GUID "9178E5822AFE48EA"
+	TITLE "AI Conflict Core"
+	Dependencies
+	{
+		"58D0FB3206B6F859"
+	}
+	Configurations
+	{
+		GameProjectConfig PC {}
+		GameProjectConfig HEADLESS {}
+		GameProjectConfig XBOX_ONE {}
+		GameProjectConfig XBOX_SERIES {}
+		GameProjectConfig PS4 {}
+	}
+}

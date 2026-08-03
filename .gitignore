@@ -1,2 +1,8 @@
 /.gigaide/
 /.idea/
+/.cache/
+.DS_Store
+*.log
+**/logs/
+**/profile/
+**/resourceDatabase.rdb
