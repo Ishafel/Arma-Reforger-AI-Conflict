@@ -5,7 +5,7 @@ class AICF_OrderPlanner
 	protected static const ResourceName DEFEND_WAYPOINT_PREFAB = "{93291E72AC23930F}Prefabs/AI/Waypoints/AIWaypoint_Defend.et";
 	protected static const ResourceName RELAY_WAYPOINT_PREFAB = "{EAAE93F98ED5D218}Prefabs/AI/Waypoints/AIWaypoint_CaptureRelay.et";
 	protected static const string RELAY_SMART_ACTION_TAG = "CapturePoint";
-	protected static const float ATTACK_RADIUS_METERS = 75.0;
+	protected static const float ATTACK_RADIUS_METERS = 20.0;
 	protected static const float DEFEND_RADIUS_METERS = 50.0;
 	protected static const float RELAY_RADIUS_METERS = 20.0;
 
@@ -182,6 +182,15 @@ class AICF_OrderPlanner
 		if (isRelay)
 		{
 			targetPosition = target.GetOwner().GetOrigin();
+		}
+		else if (role == AICF_EGroupRole.ATTACK)
+		{
+			array<SCR_SeizingComponent> capturePoints = {};
+			target.GetCapturePoints(capturePoints);
+			if (!capturePoints.IsEmpty() && capturePoints[0] && capturePoints[0].GetOwner())
+				targetPosition = capturePoints[0].GetOwner().GetOrigin();
+			else
+				targetPosition = target.GetOwner().GetOrigin();
 		}
 		else
 		{

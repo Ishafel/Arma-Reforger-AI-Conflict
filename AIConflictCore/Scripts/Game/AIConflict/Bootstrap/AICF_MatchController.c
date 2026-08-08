@@ -33,6 +33,7 @@ class AICF_MatchController
 	protected ref AICF_ObjectiveGraph m_ObjectiveGraph;
 	protected ref AICF_TargetSelector m_TargetSelector;
 	protected ref AICF_GroupSpawner m_GroupSpawner;
+	protected ref AICF_ManagedAILODPolicy m_ManagedAILODPolicy;
 	protected ref AICF_ReinforcementSystem m_ReinforcementSystem;
 	protected ref AICF_OrderPlanner m_OrderPlanner;
 	protected ref AICF_VictorySystem m_VictorySystem;
@@ -73,6 +74,7 @@ class AICF_MatchController
 		m_ObjectiveGraph = new AICF_ObjectiveGraph();
 		m_TargetSelector = new AICF_TargetSelector();
 		m_GroupSpawner = new AICF_GroupSpawner();
+		m_ManagedAILODPolicy = new AICF_ManagedAILODPolicy();
 		m_ReinforcementSystem = new AICF_ReinforcementSystem();
 		m_OrderPlanner = new AICF_OrderPlanner();
 		m_VictorySystem = new AICF_VictorySystem();
@@ -266,6 +268,16 @@ class AICF_MatchController
 		if (!slot || !slot.IsCombatReady())
 			return;
 
+		int managedAgents;
+		int recoveredFromMaxLOD;
+		if (!m_ManagedAILODPolicy.KeepCaptureEligible(slot.GetGroup(), managedAgents, recoveredFromMaxLOD))
+		{
+			AICF_Stage1Diagnostics.Error(
+				"MANAGED_AI_LOD_POLICY_FAILED",
+				string.Format("faction=%1 slot=%2", faction.GetFactionKey(), slot.GetSlotId()));
+			return;
+		}
+
 		bool replacement = slot.IsReplacementDeployment();
 		string reason = "INITIAL_DEPLOYMENT";
 		AICF_EDeploymentKind deploymentKind = AICF_EDeploymentKind.INITIAL;
@@ -306,12 +318,13 @@ class AICF_MatchController
 		AICF_Stage1Diagnostics.Info(
 			"SLOT_READY",
 			string.Format(
-				"faction=%1 slot=%2 group=%3 agents=%4 deployment=%5",
+				"faction=%1 slot=%2 group=%3 agents=%4 deployment=%5 lod_policy=PREVENT_MAX recovered_from_max_lod=%6",
 				faction.GetFactionKey(),
 				slot.GetSlotId(),
 				GroupKey(slot.GetGroup()),
 				slot.GetGroup().GetAgentsCount(),
-				reason));
+				reason,
+				recoveredFromMaxLOD));
 
 		if (replacement)
 		{
@@ -411,6 +424,7 @@ class AICF_MatchController
 		SCR_AIGroup group = slot.GetGroup();
 		if (group)
 		{
+			m_ManagedAILODPolicy.Release(group);
 			group.GetOnEmpty().Remove(OnGroupEmpty);
 			RplComponent.DeleteRplEntity(group, false);
 		}
@@ -461,6 +475,7 @@ class AICF_MatchController
 		if (!group)
 			return;
 
+		m_ManagedAILODPolicy.Release(group);
 		group.GetOnEmpty().Remove(OnGroupEmpty);
 
 		AICF_FactionState factionState;
@@ -946,7 +961,10 @@ class AICF_MatchController
 
 			SCR_AIGroup group = slot.GetGroup();
 			if (group)
+			{
+				m_ManagedAILODPolicy.Release(group);
 				group.GetOnEmpty().Remove(OnGroupEmpty);
+			}
 
 			if (!cleanupEntities)
 				continue;
