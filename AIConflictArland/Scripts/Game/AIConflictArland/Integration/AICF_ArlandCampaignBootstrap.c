@@ -1,16 +1,21 @@
-// Thin, scripts-only integration with the stock Conflict game mode. No Arland world is copied.
+// Thin Arland integration: wait for stock Conflict readiness, then start one Stage 1 match loop.
 modded class SCR_GameModeCampaign
 {
-	protected bool m_bAICFStage0Scheduled;
+	protected bool m_bAICFStage1Scheduled;
 	protected bool m_bAICFBootstrapLogged;
 	protected bool m_bAICFWaitingForConflict;
 	protected bool m_bAICFWaitingForBases;
-	protected ref AICF_Stage0Controller m_AICFStage0Controller;
+	protected ref AICF_MatchController m_AICFMatchController;
 
 	override void OnGameStart()
 	{
 		// Stock Conflict initializes its manager, bases, and radio coverage inside this call.
 		super.OnGameStart();
+
+		string peerRole = "client";
+		if (Replication.IsServer())
+			peerRole = "server";
+		AICF_Stage1Diagnostics.Configure(string.Format("stage1-%1-%2", peerRole, System.GetTickCount()));
 
 		if (!GetGame().InPlayMode() || !Replication.IsServer() || !IsMaster())
 			return;
@@ -18,16 +23,17 @@ modded class SCR_GameModeCampaign
 		if (!m_bAICFBootstrapLogged)
 		{
 			m_bAICFBootstrapLogged = true;
-			AICF_Diagnostics.Info("BOOTSTRAP_SERVER", "Authoritative Conflict game mode detected");
+			AICF_Stage1Diagnostics.Info("BOOTSTRAP_SERVER", "authority=server_master map=Arland");
 		}
-		AICF_TryStartStage0();
+
+		AICF_TryStartStage1();
 	}
 
-	protected void AICF_TryStartStage0()
+	protected void AICF_TryStartStage1()
 	{
-		if (m_AICFStage0Controller || m_bAICFStage0Scheduled)
+		if (m_AICFMatchController || m_bAICFStage1Scheduled)
 		{
-			AICF_Diagnostics.Warning("BOOTSTRAP_DUPLICATE_SKIPPED", "Stage 0 initialization is already scheduled or running");
+			AICF_Stage1Diagnostics.Warning("BOOTSTRAP_DUPLICATE_SKIPPED", "Stage 1 is already scheduled or running");
 			return;
 		}
 
@@ -36,12 +42,8 @@ modded class SCR_GameModeCampaign
 			if (!m_bAICFWaitingForConflict)
 			{
 				m_bAICFWaitingForConflict = true;
-				AICF_Diagnostics.Info("BOOTSTRAP_WAIT_CONFLICT", "Waiting for SCR_GameModeCampaign.GetOnStarted()");
+				AICF_Stage1Diagnostics.Info("BOOTSTRAP_WAIT_CONFLICT", "state=WAITING_FOR_CONFLICT");
 				GetOnStarted().Insert(AICF_OnConflictStarted);
-			}
-			else
-			{
-				AICF_Diagnostics.Warning("BOOTSTRAP_WAIT_ALREADY_REGISTERED", "Conflict readiness callback is already registered");
 			}
 			return;
 		}
@@ -49,8 +51,8 @@ modded class SCR_GameModeCampaign
 		SCR_CampaignMilitaryBaseManager baseManager = GetBaseManager();
 		if (!baseManager)
 		{
-			AICF_Diagnostics.Error("BOOTSTRAP_BASE_MANAGER_MISSING", "Conflict started without a base manager");
-			AICF_Diagnostics.Result(false, "Conflict base manager is missing");
+			AICF_Stage1Diagnostics.Error("BOOTSTRAP_BASE_MANAGER_MISSING", "Conflict started without a base manager");
+			AICF_Stage1Diagnostics.Result(false, "reason=BOOTSTRAP_BASE_MANAGER_MISSING");
 			return;
 		}
 
@@ -59,24 +61,20 @@ modded class SCR_GameModeCampaign
 			if (!m_bAICFWaitingForBases)
 			{
 				m_bAICFWaitingForBases = true;
-				AICF_Diagnostics.Info("BOOTSTRAP_WAIT_BASES", "Waiting for all Conflict bases to initialize");
+				AICF_Stage1Diagnostics.Info("BOOTSTRAP_WAIT_BASES", "state=WAITING_FOR_BASES");
 				baseManager.GetOnAllBasesInitialized().Insert(AICF_OnAllBasesInitialized);
-			}
-			else
-			{
-				AICF_Diagnostics.Warning("BOOTSTRAP_WAIT_ALREADY_REGISTERED", "Base readiness callback is already registered");
 			}
 			return;
 		}
 
-		AICF_ScheduleStage0();
+		AICF_ScheduleStage1();
 	}
 
 	protected void AICF_OnConflictStarted()
 	{
 		GetOnStarted().Remove(AICF_OnConflictStarted);
 		m_bAICFWaitingForConflict = false;
-		AICF_TryStartStage0();
+		AICF_TryStartStage1();
 	}
 
 	protected void AICF_OnAllBasesInitialized()
@@ -86,19 +84,16 @@ modded class SCR_GameModeCampaign
 			baseManager.GetOnAllBasesInitialized().Remove(AICF_OnAllBasesInitialized);
 		m_bAICFWaitingForBases = false;
 
-		// The stock invoker fires before its final faction coverage recalculation. Defer one frame.
-		AICF_ScheduleStage0();
+		// Stock invokes this before its final radio/faction coverage recalculation.
+		AICF_ScheduleStage1();
 	}
 
-	protected void AICF_ScheduleStage0()
+	protected void AICF_ScheduleStage1()
 	{
-		if (m_AICFStage0Controller || m_bAICFStage0Scheduled)
-		{
-			AICF_Diagnostics.Warning("BOOTSTRAP_DUPLICATE_SKIPPED", "Duplicate Stage 0 schedule request ignored");
+		if (m_AICFMatchController || m_bAICFStage1Scheduled)
 			return;
-		}
 
-		m_bAICFStage0Scheduled = true;
+		m_bAICFStage1Scheduled = true;
 		if (m_bAICFWaitingForConflict)
 		{
 			GetOnStarted().Remove(AICF_OnConflictStarted);
@@ -112,19 +107,16 @@ modded class SCR_GameModeCampaign
 			m_bAICFWaitingForBases = false;
 		}
 
-		AICF_Diagnostics.Info("CONFLICT_READY", "Conflict and its base manager are ready; scheduling Stage 0 next frame");
-		GetGame().GetCallqueue().CallLater(AICF_RunStage0, 0, false);
+		AICF_Stage1Diagnostics.Info("CONFLICT_READY", "state=READY scheduling=NEXT_FRAME");
+		GetGame().GetCallqueue().CallLater(AICF_RunStage1, 0, false);
 	}
 
-	protected void AICF_RunStage0()
+	protected void AICF_RunStage1()
 	{
-		if (m_AICFStage0Controller)
-		{
-			AICF_Diagnostics.Warning("BOOTSTRAP_DUPLICATE_SKIPPED", "Stage 0 controller already exists");
+		if (m_AICFMatchController)
 			return;
-		}
 
-		m_AICFStage0Controller = new AICF_Stage0Controller();
-		m_AICFStage0Controller.Start(this);
+		m_AICFMatchController = new AICF_MatchController();
+		m_AICFMatchController.Start(this);
 	}
 }

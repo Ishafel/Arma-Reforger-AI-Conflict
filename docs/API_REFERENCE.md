@@ -1,13 +1,15 @@
-# Проверенные API Arma Reforger для этапа 0
+# Проверенные API Arma Reforger для этапов 0 и 1
 
 ## Зафиксированная версия
 
-- Arma Reforger / Reforger Tools: 1.7.0.54.
+- Arma Reforger / Reforger Tools / ServerDiag: 1.7.0.54.
 - Официальный репозиторий: [BohemiaInteractive/Arma-Reforger-Script-Diff](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/tree/v1.7.0.54).
 - Проверенный commit: [`2735631ce1400eaf9f1761c66cdee10c46921d37`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/tree/2735631ce1400eaf9f1761c66cdee10c46921d37).
 - SHA-256 tag-архива: `005f312180cdf48cfc98723bcfa3f89eee838da1571d9050d609c3657fea7164`.
 
 Script Diff — снимок скриптов конкретной версии игры, а не обещание вечной совместимости. После обновления Reforger этот документ и каждую используемую сигнатуру нужно сверить повторно.
+
+Исторический Stage 0 был подтверждён ручным runtime-тестом с итогом `[AICF][STAGE0][RESULT][PASS]`. Для текущей Stage 1-ветки дополнительно выполнены Workbench `Validate Scripts` и direct `ArmaReforgerServerDiag.exe` smoke-запуск штатного Arland: созданы `4 × US` и `4 × USSR`, подтверждены роли `2 ATTACK / 1 DEFEND / 1 RESERVE` на сторону и начальные приказы. Это ещё не полная A/B-приёмка Stage 1.
 
 ## Локальный кэш
 
@@ -23,7 +25,9 @@ Script Diff — снимок скриптов конкретной версии 
 
 Кэш исключён из Git, не включается в addon и не является сторонним модом. Скрипт не скачивает данные повторно, если целевой snapshot уже присутствует.
 
-## Подтверждённые контракты
+## Подтверждённые контракты Stage 0 — историческая основа
+
+Следующие контракты были зафиксированы для Stage 0 и продолжают использоваться Stage 1. Упоминания одноразового контроллера ниже описывают именно подтверждённый Stage 0, а не текущий долгоживущий match loop.
 
 ### Запуск Conflict и server authority
 
@@ -122,7 +126,7 @@ void AddWaypointAt(AIWaypoint waypoint, int index) // inherited AIGroup API
 int GetWaypoints(out array<AIWaypoint> outWaypoints) // inherited AIGroup API
 ```
 
-Если defender prefab отключает immediate spawn, код явно вызывает `SpawnUnits()`. Затем до 30 секунд проверяет наличие бойцов и назначенного waypoint. Полноценный lifecycle/respawn группы не входит в Stage 0.
+Если defender prefab отключает immediate spawn, Stage 0 явно вызывал `SpawnUnits()`, после чего до 30 секунд проверял наличие бойцов и назначенного waypoint. Полноценный lifecycle/respawn не входил в Stage 0; в Stage 1 он реализуется отдельно через стабильные слоты и `GetOnEmpty()`.
 
 ### Waypoint
 
@@ -161,7 +165,146 @@ static proto void RplComponent.DeleteRplEntity(
     IEntity entity, bool releaseFromReplication)
 ```
 
-`CallLater(..., 0, false)` имеет штатные примеры в Script Diff. `DeleteRplEntity(..., false)` применяется только к сущностям, созданным текущим проходом Stage 0, если последующий шаг завершился ошибкой.
+`CallLater(..., 0, false)` имеет штатные примеры в Script Diff. В Stage 0 `DeleteRplEntity(..., false)` применялся только к сущностям, созданным текущим проходом, если последующий шаг завершался ошибкой. В Stage 1 тот же API используется для управляемых групп и созданных AICF waypoint после их отсоединения от группы.
+
+## Проверенные контракты Stage 1
+
+### Смена владельца базы: порядок аргументов invoker
+
+Источник: [`SCR_MilitaryBaseSystem.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Game/Systems/SCR_MilitaryBaseSystem.c).
+
+```c
+void OnBaseFactionChangedDelegate(SCR_MilitaryBaseComponent base, Faction faction)
+typedef ScriptInvokerBase<OnBaseFactionChangedDelegate> OnBaseFactionChangedInvoker
+OnBaseFactionChangedInvoker GetOnBaseFactionChanged()
+```
+
+У внутреннего dispatch-метода системы порядок другой:
+
+```c
+void SCR_MilitaryBaseSystem.OnBaseFactionChanged(
+    Faction faction,
+    SCR_MilitaryBaseComponent base)
+```
+
+Он вызывает invoker как `m_OnBaseFactionChanged.Invoke(base, faction)`. Поэтому подписчик обязан иметь сигнатуру именно `(SCR_MilitaryBaseComponent base, Faction faction)`, несмотря на обратный порядок аргументов внутреннего метода. Stage 1 подписывает и удаляет один и тот же callback через `Insert()`/`Remove()`.
+
+После события Stage 1 заново собирает текущие базы и строит live graph. Если rebuild не удался в отложенном callback, флаг остаётся установленным и следующая попытка выполняется на commander tick; это больше не одноразовый Stage 0 snapshot.
+
+### Уничтожение группы через `GetOnEmpty()`
+
+Источник: [`SCR_AIGroup.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Game/Entities/SCR_AIGroup.c).
+
+```c
+void ScriptInvoker_AIGroupOnEmpty_Callback(AIGroup group)
+typedef ScriptInvokerBase<ScriptInvoker_AIGroupOnEmpty_Callback>
+    ScriptInvoker_AIGroupOnEmpty
+ScriptInvoker_AIGroupOnEmpty SCR_AIGroup.GetOnEmpty()
+```
+
+Invoker вызывается только на сервере. Callback принимает `AIGroup`, затем явно приводит его к `SCR_AIGroup`. Комментарий рядом с `GetOnEmpty()` в snapshot говорит «No invoker params», но фактическое объявление delegate и успешная Workbench-компиляция подтверждают параметр `AIGroup group`; обработчик без аргумента использовать нельзя.
+
+На каждую управляемую группу handler добавляется после создания и удаляется при `OnEmpty`, остановке контроллера или cleanup. Сам slot сохраняется и переходит в ожидание replacement.
+
+### Проверка безопасной базы появления
+
+Источники: [`SCR_CampaignMilitaryBaseComponent.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Game/Components/Locations/SCR_CampaignMilitaryBaseComponent.c), [`SCR_MilitaryBaseComponent.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Game/Components/Locations/SCR_MilitaryBaseComponent.c), [`SCR_SpawnPoint.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Game/GameMode/Respawn/SCR_SpawnPoint.c).
+
+```c
+bool SCR_CampaignMilitaryBaseComponent.IsInitialized()
+Faction SCR_MilitaryBaseComponent.GetFaction(bool checkDefaultFaction = false)
+SCR_EBaseCaptureState SCR_CampaignMilitaryBaseComponent.GetCaptureState()
+bool SCR_CampaignMilitaryBaseComponent.IsBeingCaptured()
+bool SCR_CampaignMilitaryBaseComponent.AreEnemiesPresent()
+SCR_SpawnPoint SCR_CampaignMilitaryBaseComponent.GetSpawnPoint()
+bool SCR_SpawnPoint.IsSpawnPointEnabled()
+bool SCR_SpawnPoint.IsSpawnPointActive()
+FactionKey SCR_SpawnPoint.GetFactionKey()
+```
+
+Replacement может появиться только если база инициализирована, принадлежит нужной фракции, имеет `GetCaptureState() == SCR_EBaseCaptureState.NONE`, не захватывается, не содержит противника и предоставляет активный spawn point той же фракции. Проверка выполняется непосредственно перед `SpawnEntityPrefabEx`, а не только при постановке 30-секундного таймера. Отклонённые причины остаются видимыми в `SPAWN_SITE_REJECTED`.
+
+`IsSpawnPointActive()` базового `SCR_SpawnPoint` возвращает `true`, но API виртуален по фактическому типу spawn point, поэтому отдельная проверка сохранена.
+
+### Замена и удаление waypoint
+
+Источники: generated [`AIGroup.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Game/generated/AI/AIGroup.c), [`SCR_AIGroup.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Game/Entities/SCR_AIGroup.c), официальное использование `DeleteRplEntity` в [`SCR_EntityHelper.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Game/Helpers/SCR_EntityHelper.c).
+
+```c
+void AIGroup.RemoveWaypoint(AIWaypoint waypoint)
+static proto void RplComponent.DeleteRplEntity(
+    IEntity entity,
+    bool releaseFromReplication)
+```
+
+`RemoveWaypoint()` только отсоединяет приказ от группы; он не является удалением созданной replicated entity. При retarget/cleanup Stage 1 сначала вызывает `group.RemoveWaypoint(oldWaypoint)`, затем `RplComponent.DeleteRplEntity(oldWaypoint, false)`. Обратный порядок оставлял бы у группы ссылку на уже удалённый объект.
+
+Stage 1 удаляет только собственный waypoint, сохранённый в slot, и не перебирает с удалением все prefab-waypoint группы.
+
+### Репликация билетов и JIP
+
+Источники: [`EnNetwork.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Core/proto/EnNetwork.c), [`Replication.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Core/generated/Replication/Replication.c), [`RplDocs.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/GameLib/replication/RplDocs.c).
+
+```c
+[RplProp(onRplName: "OnValueReplicated")]
+protected int m_iValue;
+
+static proto void Replication.BumpMe()
+```
+
+Stage 1 хранит два primitive ticket value как `RplProp` на уже реплицируемом `SCR_GameModeCampaign`. Authority меняет оба значения, вызывает `Replication.BumpMe()`, а proxy получает snapshot и `onRplName` callback. На authority callback вызывается явно только для локальной диагностики, потому что `onRpl` предназначен для получателя.
+
+Официальное описание state replication прямо указывает, что snapshot-доставка учитывает join-in-progress. Поэтому выбранный `RplProp`-контракт пригоден для JIP-снимка текущих билетов и не заменён одноразовым RPC. Это подтверждение API-механизма, но фактическая синхронизация поздно подключившегося клиента всё ещё входит в полную MVP-матрицу и пока не принята runtime-тестом.
+
+### Параметры ускоренной приёмки из CLI
+
+Источник: generated [`System.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Core/generated/System/System.c).
+
+```c
+static proto bool System.GetCLIParam(string param, out string val)
+```
+
+Имя передаётся без ведущего `-`; возвращаемый `bool` отличает отсутствующий параметр от присутствующего значения. Stage 1 читает:
+
+```text
+-aicfInitialTickets
+-aicfReplacementTicketCost
+-aicfReinforcementDelayMs
+-aicfCommanderIntervalMs
+-aicfMaxManagedAgents
+-aicfExpectedPlayerFaction
+```
+
+Числа после `ToInt()` ограничиваются безопасными min/max, а ожидаемая сторона принимает только `US` или `USSR`. Нижняя граница `max_managed_agents` равна 32: она покрывает обязательный стартовый roster и консервативный budget одной создаваемой replacement-группы, поэтому заниженный CLI-параметр не может навсегда заблокировать lifecycle. Direct ServerDiag smoke подтвердил применение ускоренных значений `initial_tickets=1`, `commander_interval_ms=5000`, `replacement_delay_ms=30000`, `max_managed_agents=64` и `expected_player_faction=US` в событии `CONFIG`.
+
+### Завершение матча
+
+Источники: [`SCR_BaseGameMode.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Game/GameMode/SCR_BaseGameMode.c), [`SCR_GameModeEndData.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Game/GameMode/SCR_GameModeEndData.c), [`SCR_GameModeCampaign.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Game/GameMode/SCR_GameModeCampaign.c).
+
+```c
+static SCR_GameModeEndData CreateSimple(
+    EGameOverTypes reason = EGameOverTypes.ENDREASON_UNDEFINED,
+    int winnerId = -1,
+    int winnerFactionId = -1)
+
+void SCR_BaseGameMode.EndGameMode(SCR_GameModeEndData endData)
+protected void SCR_GameModeCampaign.CheckForWinner()
+```
+
+`EndGameMode()` действует только на master. Сторона считается исчерпавшей подкрепления, когда остатка билетов уже недостаточно для стоимости replacement и у неё нет живых управляемых групп; это также корректно завершает нестандартные профили, где стоимость не делит начальный баланс без остатка. Stage 1 получает фактический индекс победившей фракции из `FactionManager`, создаёт `SCR_GameModeEndData` с `EGameOverTypes.ENDREASON_SCORELIMIT` и именованным `winnerFactionId`, затем вызывает `EndGameMode()` ровно один раз. `MATCH_END` выводится только после наблюдаемого `campaign.IsRunning() == false`, а не сразу после запроса завершения.
+
+Штатный `CheckForWinner()` реализует территориальные условия Conflict и сам может вызвать `EndGameMode()`. Тонкая Arland-интеграция компилируемо переопределяет этот `protected` метод пустым override, чтобы stock victory не опередила Stage 1 ticket condition. Override действует только пока загружен `AIConflictArland`; для другого режима этот addon использовать нельзя.
+
+### Захват базы без обязательного игрока
+
+Источники: [`SCR_SeizingComponent.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Game/GameMode/Components/SCR_SeizingComponent.c), [`SCR_CampaignSeizingComponent.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/2735631ce1400eaf9f1761c66cdee10c46921d37/scripts/Game/GameMode/Components/SCR_CampaignSeizingComponent.c).
+
+```c
+[Attribute("0", desc: "If enabled, at least one player has to be present in the capture area to progress.")]
+protected bool SCR_SeizingComponent.m_bCapturingRequiresPlayer;
+```
+
+В штатной логике при `true` атакующая фракция без игрока в зоне исключается из прогресса захвата. `SCR_CampaignSeizingComponent` наследует поле как `protected`, поэтому scripts-only Arland-интеграция переопределяет `OnPostInit()` и устанавливает `m_bCapturingRequiresPlayer = false`. Workbench validation подтверждает доступность поля и корректность override; реальный AI-only owner change остаётся обязательной частью A/B runtime-приёмки.
 
 ### Arland и `.gproj`
 
@@ -173,17 +316,18 @@ static proto void RplComponent.DeleteRplEntity(
 
 Формат scripts-only проекта и GUID штатной зависимости `58D0FB3206B6F859` подтверждены официальным [`SampleMod_ModdedScript.gproj`](https://github.com/BohemiaInteractive/Arma-Reforger-Samples/blob/main/SampleMod_ModdedScript/SampleMod_ModdedScript.gproj). Путь `Scripts/Game` подтверждён [официальным sample](https://github.com/BohemiaInteractive/Arma-Reforger-Samples/tree/main/SampleMod_ModdedScript/Scripts/Game).
 
-Собственные 16-hex GUID выделены проектам, но их принятие Resource Database и фактическая компиляция не могли быть проверены без Reforger Tools.
+Собственные 16-hex GUID приняты Resource Database. Текущие `AIConflictCore` и `AIConflictArland` прошли Workbench validation на 1.7.0.54; direct ServerDiag загрузил оба проекта и выполнил Stage 1 smoke до `ROSTER_READY` с восемью готовыми группами.
 
 ## Зафиксированные ограничения решений
 
-1. `AIConflictArland` использует минимально инвазивный `modded SCR_GameModeCampaign`; при загрузке этого addon он расширяет любой Conflict, поэтому тестовый запуск ограничен Arland инструкцией, а не непроверенным scenario-detection API.
-2. `SCR_CampaignMilitaryBaseManager.GetBases()` не даёт relay; полный набор берётся из `SCR_MilitaryBaseSystem`.
-3. Транзит разрешён только через узлы, уже принадлежащие выбирающей фракции, включая её `RELAY`. Вражеская или нейтральная objective-base может быть конечной целью, но не транзитной территорией.
-4. Граф — одноразовый snapshot. Подписка на последующие изменения сигнала относится к более позднему этапу.
-5. Radio reachability и `IsValidTarget()` не равны физической достижимости AI по navmesh.
-6. Defender group prefab зависит от штатной конфигурации US/USSR в выбранном scenario и проверяется только runtime.
-7. Map descriptor/UI API не используется: на dedicated server UI-компоненты Conflict могут отсутствовать.
-8. Отдельный Arland scenario-resource текстом не создаётся, поскольку он не нужен для scripts-only запуска, а фиктивный Workbench-ресурс был бы непроверяемым.
-9. При любой ошибке инициализация Stage 0 завершается `RESULT FAIL` без автоматического retry; сама игровая сессия продолжается. Это защищает от дубликатов в рамках текущего GameMode instance.
-10. Instance-флаг защищает от повторной инициализации одного GameMode. Он не является persistent-маркером уже сохранённых групп; dedicated-тест запускается с `-backendFreshSession`.
+1. `AIConflictArland` использует `modded SCR_GameModeCampaign`, `SCR_CampaignSeizingComponent` и override штатной победы. При загрузке addon эти изменения действуют на запущенный Conflict, поэтому эталонный сценарий строго ограничен Arland и direct Diag-командой из `STAGE_1_TESTING.md`.
+2. `SCR_CampaignMilitaryBaseManager.GetBases()` не даёт relay; полный набор графа по-прежнему берётся из `SCR_MilitaryBaseSystem`.
+3. Stage 0 использовал одноразовый graph snapshot. Stage 1 подписан на `GetOnBaseFactionChanged()`, перестраивает live graph после смены владельца и сохраняет флаг повторной попытки до следующего commander tick, если rebuild временно не удался.
+4. Live rebuild отражает новые faction/radio-связи только после обрабатываемого события. Он не превращает radio reachability и `IsValidTarget()` в navmesh-проверку и не гарантирует физическую проходимость маршрута.
+5. Транзит разрешён только через узлы, принадлежащие выбирающей фракции, включая её `RELAY`. Вражеская или нейтральная objective-base может быть конечной целью, но не транзитной территорией.
+6. Safe-spawn API проверяет владельца, contested-state и доступность spawn point непосредственно перед созданием. Это не является геометрическим collision/clearance query; смещения четырёх слотов остаются частью текущего Arland vertical slice.
+7. Defender group prefab зависит от штатной runtime-конфигурации US/USSR. Direct ServerDiag smoke подтвердил по четыре трёхбойцовые группы на сторону для текущего Arland, но не гарантирует тот же размер после обновления игры или замены faction prefab.
+8. `RplProp` + `BumpMe()` подтверждены API и Workbench для ticket snapshot, однако реальный JIP-клиент, синхронность двух клиентов и UI билетов ещё не прошли полную MVP-матрицу.
+9. Workbench `Validate Scripts` и direct ServerDiag smoke `4 × 4` подтверждены. Smoke доказал bootstrap, CLI config, роли, spawn, начальные приказы и `ROSTER_READY`, но не доказал реальный AI capture, retarget, `OnEmpty → 30 s → replacement`, unsafe-site rejection, ticket debit или единственное завершение матча.
+10. Полные зеркальные прогоны A/B из `STAGE_1_TESTING.md` ещё не выполнены: нет принятого результата с игроком US и отдельного результата с игроком USSR. Поэтому Stage 1, полный MVP и двухчасовой soak пока не объявлены принятыми.
+11. Instance-флаг не является persistent-маркером сохранённых групп. Каждый dedicated acceptance run запускается с новым `-profile` и `-backendFreshSession`.

@@ -16,6 +16,7 @@ class AICF_Diagnostics
 	static void Error(string eventName, string message)
 	{
 		Print(string.Format("%1[ERROR][%2] %3", PREFIX, eventName, message), LogLevel.ERROR);
+		AICF_Stage1Diagnostics.RecordExternalError("AICF_Diagnostics", eventName, message);
 	}
 
 	static void Result(bool success, string message)

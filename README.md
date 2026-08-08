@@ -1,40 +1,62 @@
 # Arma Reforger AI Conflict
 
-Исследовательский прототип автономного AI Conflict для Arma Reforger. Текущая версия реализует только этап 0 из [PROJECT_VISION.md](PROJECT_VISION.md): она проверяет интеграцию со штатным Conflict на Arland, строит граф баз и создаёт по одной тестовой группе США и СССР.
+Scripts-only прототип автономного AI Conflict для Arma Reforger. Проект расширяет штатный Conflict на Arland, не копирует и не изменяет vanilla-мир и выполняет игровую логику только на authoritative server/master.
 
-Статус: код этапа 0 подготовлен для Arma Reforger/Reforger Tools 1.7.0.54. В этой среде нет Reforger Tools, поэтому открытие проектов, компиляция Enforce Script и запуск миссии ещё должны быть подтверждены владельцем продукта по [чек-листу тестирования](docs/STAGE_0_TESTING.md). До такого теста этап 0 нельзя считать принятым.
+## Текущий статус
 
-## Что уже реализовано
+| Этап | Статус | Что это означает |
+|---|---|---|
+| Stage 0 — исследовательский прототип | **PASS** | Ручной direct Diag dedicated-тест на Arland завершился `[AICF][STAGE0][RESULT][PASS]`: обнаружены штатные базы и граф, созданы US/USSR-группы, обе получили цели и waypoint |
+| Stage 1 — пехотный вертикальный срез | **кандидат реализации; compile/smoke PASS, приёмка не пройдена** | Workbench 1.7.0.54 подтвердил `Script validation successful`; direct ServerDiag создал 4+4 группы, роли `2/1/1`, все приказы и `ROSTER_READY`, затем 60 секунд работал без script/Stage 1 ошибок. Полные прогоны A/B ещё не выполнены |
+| Полный MVP | **не готов к приёмке** | После Stage 1 остаются стандартная MVP-матрица, клиентская синхронизация, 30-минутный прогон и исправление найденных дефектов |
+| Двухчасовой soak | **не запускался** | Выполняется отдельно только после успешной полной MVP-матрицы |
 
-- два scripts-only аддона: переиспользуемый `AIConflictCore` и тонкая интеграция `AIConflictArland`;
+Подтверждённый Stage 0 относится к проверенному Stage 0 commit. Он не переносится автоматически на новые изменения Stage 1: текущую ветку нужно заново скомпилировать и протестировать в Reforger.
+
+## Что подтверждено в Stage 0
+
+- загрузка `AIConflictCore` и `AIConflictArland` вместе со штатным Arma Reforger;
 - запуск ядра только на authoritative server/master;
-- ожидание запуска штатного `SCR_GameModeCampaign` и завершения инициализации Conflict-баз;
-- обнаружение штатных `BASE`, `SOURCE_BASE` и `RELAY` без координат и названий конкретных баз Arland;
-- ориентированный граф штатной радиодостижимости баз;
-- подробный вывод узлов, рёбер и итогов графа в журнал;
-- получение штатных фракций BLUFOR/OPFOR с обязательной проверкой ключей `US`/`USSR`;
-- выбор для каждой стороны ближайшей допустимой цели, достижимой по графу от её штаба;
-- создание одной группы из штатного `GetDefendersGroupPrefab()` каждой стороны;
-- создание и назначение штатного Move-waypoint к выбранной базе;
-- идемпотентная инициализация в рамках одного экземпляра Conflict: повторный запрос не создаёт ещё две группы;
-- явные диагностические ошибки для отсутствующих API, баз, фракций, prefab, spawn point, групп и waypoint;
-- локальный, не входящий в мод кэш официального Script Diff 1.7.0.54.
+- ожидание готовности `SCR_GameModeCampaign` и Conflict base manager;
+- обнаружение штатных `BASE`, `SOURCE_BASE` и `RELAY` без координат или имён конкретных баз Arland в коде;
+- построение ориентированного графа штатной радиодостижимости;
+- получение штатных фракций `US` и `USSR`;
+- выбор graph-reachable цели для обеих сторон;
+- создание по одной штатной пехотной группе и Move-waypoint;
+- защита от повторной инициализации в одной сессии;
+- стабильные диагностические сообщения `[AICF][STAGE0]`.
 
-Интеграция не копирует и не изменяет штатный мир Arland. Когда аддон загружен, `modded SCR_GameModeCampaign` расширяет штатный Conflict после вызова его оригинального `OnGameStart()`.
+Stage 0 не проверял фактический захват базы, повторные приказы, подкрепления, билеты или завершение матча.
 
-## Что пока не реализовано
+## Что входит в Stage 1
 
-Этап 1 и последующие этапы намеренно не начаты. В прототипе нет:
+Целевой вертикальный срез должен обеспечить:
 
-- полноценного AI-командующего;
-- повторного выбора целей после захвата или потери базы;
-- проверки прибытия и захвата базы;
-- ролей атаки/обороны, резервов и балансировки;
-- билетов, подкреплений, восстановления групп и условий победы;
-- техники, логистики, сохранения состояния и пользовательского интерфейса;
-- отдельного скопированного или изменённого сценария Arland.
+- по четыре управляемые пехотные группы на сторону;
+- точное распределение каждой стороны `2 ATTACK / 1 DEFEND / 1 RESERVE`;
+- реальные смены владельца штатных баз действиями AI;
+- повторное назначение цели не позднее двух интервалов решений командующего;
+- устойчивые слоты групп и обработку штатного `OnEmpty`;
+- replacement через 30 секунд;
+- списание билета только после успешного появления replacement-группы;
+- запрет появления подкреплений на вражеской или contested-базе;
+- ровно одно завершение матча;
+- подключение игрока к US и USSR;
+- стабильный диагностический контракт `[AICF][STAGE1]`.
 
-Move-waypoint подтверждает выдачу приказа, но этап 0 не обещает завершение маршрута или захват цели. Граф отражает радиосвязь Conflict, а не доказанную проходимость navmesh.
+В рабочей ветке добавлены серверные модели конфигурации, ролей, слотов и билетов, CLI-профиль приёмки, live-выбор целей, role-aware приказы, безопасный spawn, ticket reservation, watchdog групп, репликация билетов, билетная победа и Stage 1-диагностика. Компиляция и начальный smoke подтверждены, но до двух полных runtime-прогонов A/B это остаётся кандидатом реализации, а не принятым результатом.
+
+## Что ещё не заявлено готовым
+
+- полная runtime-приёмка Stage 1 на Arland: AI-only capture, retarget, contested spawn rejection, replacement/debit, клиент US/USSR и завершение матча;
+- стандартный 30-минутный MVP-прогон;
+- синхронизация билетов и состояния матча на нескольких клиентах;
+- проверка смерти и повторного развёртывания игрока;
+- баланс, защита от застревания и восстановление потерянных приказов;
+- техника, логистика, сохранение состояния и пользовательский интерфейс;
+- двухчасовой soak с контролем сущностей, групп, waypoint, памяти и server FPS.
+
+Полные цели и границы продукта описаны в [PROJECT_VISION.md](PROJECT_VISION.md).
 
 ## Состав проекта
 
@@ -44,246 +66,185 @@ Arma-Reforger-AI-Conflict/
 │   ├── addon.gproj
 │   └── Scripts/Game/AIConflict/
 │       ├── Bootstrap/
+│       ├── Config/
 │       ├── Diagnostics/
 │       ├── Forces/
 │       ├── Integration/
 │       ├── Objectives/
-│       └── Orders/
+│       ├── Orders/
+│       └── State/
 ├── AIConflictArland/
 │   ├── addon.gproj
 │   └── Scripts/Game/AIConflictArland/Integration/
 ├── docs/
 │   ├── API_REFERENCE.md
-│   └── STAGE_0_TESTING.md
+│   ├── STAGE_0_TESTING.md
+│   └── STAGE_1_TESTING.md
 ├── tools/fetch_reforger_api_reference.sh
 └── PROJECT_VISION.md
 ```
 
-Идентификаторы проектов не следует менять:
+Идентификаторы проектов менять нельзя:
 
 - `AIConflictCore`: `9178E5822AFE48EA`;
 - `AIConflictArland`: `B52C5F6AEDBF423E`;
 - штатная зависимость Arma Reforger: `58D0FB3206B6F859`.
 
-## Какие программы нужны
+## Необходимые программы
 
-Для тестировщика:
+Для разработки и Stage 1-приёмки нужны:
 
 1. Windows 10/11 x64.
-2. Steam и установленная Arma Reforger версии 1.7.0.54.
-3. Установленные через Steam Arma Reforger Tools той же версии и ветки, что и игра.
-4. Git for Windows — только для клонирования и обновления проекта.
-5. Для dedicated-варианта, который не обязателен для первого теста, — Arma Reforger Server.
+2. Arma Reforger.
+3. Arma Reforger Tools той же версии и ветки, что игра.
+4. Arma Reforger Server той же версии; нужен `ArmaReforgerServerDiag.exe`.
+5. Steam и Git for Windows.
 
-Если Steam уже предлагает версию новее 1.7.0.54, сначала зафиксируйте её номер в отчёте. После любого обновления игры API и ресурс Move-waypoint должны быть проверены заново.
+Исходный Stage 0 ориентировался на API 1.7.0.54, и именно на этой версии был получен runtime PASS. После обновления игры необходимо записать новую версию в отчёте и повторить компиляцию и весь runtime-тест.
 
-## Клонирование и размещение
-
-Рекомендуемый каталог:
-
-```text
-%USERPROFILE%\Documents\My Games\ArmaReforgerWorkbench\addons\Arma-Reforger-AI-Conflict
-```
-
-Не используйте папку Workshop, `OneDrive` или другой каталог только для чтения. Откройте PowerShell и выполните:
+## Получение рабочей ветки
 
 ```powershell
-cd "$env:USERPROFILE\Documents\My Games\ArmaReforgerWorkbench\addons"
 git clone https://github.com/Ishafel/Arma-Reforger-AI-Conflict.git
-cd Arma-Reforger-AI-Conflict
-git switch agent/stage-0-prototype
+Set-Location Arma-Reforger-AI-Conflict
+git fetch origin
+git switch codex/stage-1-infantry
+git rev-parse --short HEAD
 ```
 
-Для текущей локальной поставки рабочая ветка называется `agent/stage-0-prototype`. Если эта ветка не опубликована на сервере Git, используйте переданную владельцем продукта рабочую копию; инструкция не требует публикации мода в Workshop.
+Текущая локальная ветка разработки — `codex/stage-1-infantry`. Если она ещё не опубликована, используйте переданную рабочую копию или конкретный commit от разработчика; не подменяйте его Stage 0-веткой. Commit обязательно записывается отдельно для каждого теста.
 
-## Открытие `.gproj` в Reforger Tools
+Репозиторий следует хранить в локальном доступном для записи каталоге. Не помещайте исходный проект в Workshop, OneDrive или каталог только для чтения.
 
-1. Запустите `Arma Reforger Tools` из Steam. Откроется Workbench Launcher.
-2. Если штатный проект ещё не добавлен, нажмите `Add Existing` и выберите `<папка игры>\addons\data\ArmaReforger.gproj`.
-3. Выберите `Add Project` → `Scan for Projects`.
-4. Укажите корень клонированного репозитория `Arma-Reforger-AI-Conflict`, а не один из двух вложенных каталогов.
-5. Убедитесь, что Launcher показывает три проекта: `ArmaReforger`, `AIConflictCore`, `AIConflictArland`.
-6. Дважды щёлкните проект `AIConflictArland` в Launcher либо выберите для него `Open`. Его `addon.gproj` должен автоматически подключить `AIConflictCore` и штатный `ArmaReforger`.
-7. Дождитесь окончания построения/обновления Resource Database. Не закрывайте Workbench, пока индикатор обработки ресурсов активен.
+## Подключение проектов в Reforger Tools
 
-Если Launcher показывает только vanilla-проект или ошибку dependency, миссию запускать рано: повторите сканирование корня репозитория и приложите снимок окна к дефекту.
+1. Запустите `Arma Reforger Tools` из Steam.
+2. При необходимости добавьте штатный `<папка игры>\addons\data\ArmaReforger.gproj`.
+3. Выберите `Add Project → Scan for Projects` и укажите корень репозитория.
+4. Убедитесь, что Launcher показывает `ArmaReforger`, `AIConflictCore` и `AIConflictArland`.
+5. Откройте `AIConflictArland` и дождитесь завершения Resource Database.
+6. В `Editors → Script Editor` выполните `Build → Validate Scripts`.
+7. При отсутствии ошибок выполните `Build → Compile and Reload Scripts` (`Shift+F7`).
+8. Сохраните полный результат обеих операций.
 
-## Обновление зависимостей, ресурсов и скриптов
+Любая script/dependency/resource error блокирует runtime-тест текущего commit. `resourceDatabase.rdb` создаётся Workbench и не добавляется в Git.
 
-После первого открытия или получения новой версии:
+## Эталонный direct Diag-запуск Arland
 
-1. Закройте активную игровую сессию и Workbench.
-2. В PowerShell перейдите в каталог репозитория и выполните `git pull` для выданной вам ветки.
-3. Убедитесь, что Arma Reforger и Reforger Tools находятся на одинаковой стабильной версии.
-4. Повторите `Scan for Projects`, только если `.gproj` были перемещены или добавлены.
-5. Откройте `AIConflictArland` и дождитесь автоматического обновления `resourceDatabase.rdb`.
-6. В Workbench откройте `Editors` → `Script Editor`.
-7. Выполните `Build` → `Validate Scripts`.
-8. Если ошибок нет, выполните `Build` → `Compile and Reload Scripts` (`Shift+F7`).
-9. Сохраните или сфотографируйте результат обеих операций для отчёта.
+Для локального исходного аддона не используйте `Multiplayer → Host`: при пересоздании GameProject Host UI может выгрузить мод, которого нет в правой колонке Mods. Эталонная Stage 1-приёмка выполняется напрямую через Diag dedicated server.
 
-`resourceDatabase.rdb` создаёт Workbench; этот бинарный файл нельзя добавлять в Git. Если вы меняли зависимости через `Workbench` → `Options` → `Game Project`, перезапустите Workbench до компиляции.
-
-## Штатный сценарий Arland
-
-Проверяется официальный mission header:
-
-```text
-{C41618FD18E9D714}Missions/23_Campaign_Arland.conf
-```
-
-Отдельный сценарий, копия мира или пользовательский компонент не нужны. Не открывайте raw-файл `Arland.ent` и не считайте запуск `F5` проверкой Conflict: такой запуск может не загрузить штатный mission header и его слои.
-
-Если Workbench или инструкция требует изменить vanilla Arland, сохранить его копию в проект либо вручную добавить компонент этапа 0, остановите тест и заведите дефект. В текущей реализации bootstrap является scripts-only расширением `SCR_GameModeCampaign` и не требует компонента в World Editor.
-
-## Запуск listen server — рекомендуемый тест
-
-Сначала успешно выполните `Validate Scripts` и `Compile and Reload Scripts`.
-
-1. Закройте уже запущенную Arma Reforger.
-2. Откройте PowerShell.
-3. Подставьте фактические пути и запустите одной строкой:
+Откройте PowerShell и подставьте фактический путь к репозиторию:
 
 ```powershell
-& "C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger\ArmaReforgerSteam.exe" -addonsDir "C:\Users\<имя>\Documents\My Games\ArmaReforgerWorkbench\addons\Arma-Reforger-AI-Conflict" -addons B52C5F6AEDBF423E
+$serverRoot = "C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger Server"
+$repoRoot = "C:\Users\<имя>\IdeaProjects\Arma-Reforger-AI-Conflict"
+$runStamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$profileRoot = "$env:LOCALAPPDATA\AICF\Stage1-$runStamp"
+
+Set-Location $serverRoot
+
+& "$serverRoot\ArmaReforgerServerDiag.exe" `
+  -gproj "$repoRoot\AIConflictArland\addon.gproj" `
+  -server "worlds/MP/CTI_Campaign_Arland.ent" `
+  -MissionHeader "Missions/23_Campaign_Arland.conf" `
+  -worldSystemsConfig "Configs/Systems/ConflictSystems.conf" `
+  -addonsDir "$repoRoot,$serverRoot\addons" `
+  -addons "9178E5822AFE48EA,B52C5F6AEDBF423E" `
+  -profile "$profileRoot" `
+  -backendFreshSession `
+  -maxFPS 60 `
+  -logStats 10000
 ```
 
-4. В игре выберите `Multiplayer` → `Host` → `Host new server`.
-5. Выберите штатный `Conflict - Arland`.
-6. Проверьте в списке модов наличие `AI Conflict Arland`. Если его нет, не продолжайте: vanilla Conflict может запуститься без нашего кода.
-7. Не отключайте AI. Для эталонного теста используйте неограниченный AI limit; иначе лимита должно хватать на штатный AI и всех бойцов двух тестовых групп.
-8. Запустите сервер и дождитесь появления мира. Играть или выбирать фракцию для запуска Stage 0 не требуется.
-9. Подождите не менее 35 секунд, затем проверьте журнал.
+Параметры `-MissionHeader` и `-worldSystemsConfig` обязательны: raw world без них не равен штатной Conflict-миссии. Для каждого приёмочного запуска создаётся новый `$profileRoot`; persistent-состояние предыдущего матча не переиспользуется.
 
-`-addonsDir` указывает именно на корень репозитория, потому что внутри него соседствуют оба addon-проекта. `-addons` использует GUID тонкого Arland-аддона; Core загружается как зависимость.
+## Подключение локального клиента
 
-## Dedicated server — дополнительный вариант
-
-В уже работающем server JSON обязательно должен быть указан штатный сценарий и разрешён AI:
-
-```json
-{
-  "game": {
-    "scenarioId": "{C41618FD18E9D714}Missions/23_Campaign_Arland.conf"
-  },
-  "operating": {
-    "disableAI": false,
-    "aiLimit": -1
-  }
-}
-```
-
-Это фрагмент, а не полный сетевой конфиг: адреса, порты, имя и пароль сохраните из своего уже проверенного server JSON. Запуск:
+Клиент запускается с теми же локальными аддонами:
 
 ```powershell
-& "<путь>\ArmaReforgerServer.exe" -config "<путь>\stage-0-server.json" -addonsDir "<абсолютный путь>\Arma-Reforger-AI-Conflict" -addons B52C5F6AEDBF423E -backendFreshSession -maxFPS 60
+$gameRoot = "C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger"
+$repoRoot = "C:\Users\<имя>\IdeaProjects\Arma-Reforger-AI-Conflict"
+
+Set-Location $gameRoot
+& "$gameRoot\ArmaReforgerSteamDiag.exe" `
+  -gproj "$repoRoot\AIConflictArland\addon.gproj" `
+  -client 127.0.0.1 `
+  -addonsDir "$repoRoot,$gameRoot\addons" `
+  -addons "9178E5822AFE48EA,B52C5F6AEDBF423E"
 ```
 
-Не используйте `-server "...Arland.ent"`: raw world не равен Conflict mission header и при таком параметре server config может быть проигнорирован. Клиент dedicated-теста запускайте с теми же `-addonsDir` и `-addons`, поскольку локальный неопубликованный аддон не скачивается из Workshop.
+Diag-клиент загружает тот же working project и автоматически подключается к dedicated server по `127.0.0.1` (стандартный локальный порт — `2001`). Если сервер запущен на другом порту, добавьте его после адреса в `-client`. Для Stage 1 требуются две новые сессии: запуск A с игроком за US и запуск B с игроком за USSR.
 
-## Что искать в журнале
+## Проверка журнала
 
-Фильтр всех сообщений проекта:
+Последний `console.log` из заданного профиля находится и фильтруется так:
+
+```powershell
+$log = Get-ChildItem "$profileRoot\logs" -Filter console.log -File -Recurse |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+
+$log.FullName
+Select-String -LiteralPath $log.FullName -SimpleMatch "[AICF][STAGE1]" |
+  ForEach-Object Line
+```
+
+Stage 0 использует префикс:
 
 ```text
 [AICF][STAGE0]
 ```
 
-Нормальная последовательность содержит:
+Stage 1 использует отдельный префикс:
 
 ```text
-[AICF][STAGE0][INFO][BOOTSTRAP_SERVER]
-[AICF][STAGE0][INFO][CONFLICT_READY]
-[AICF][STAGE0][INFO][BASE_DISCOVERY]
-[AICF][STAGE0][INFO][GRAPH_EDGE]
-[AICF][STAGE0][INFO][GRAPH_NODE]
-[AICF][STAGE0][INFO][GRAPH_SUMMARY]
-[AICF][STAGE0][INFO][FACTION_READY] faction=US
-[AICF][STAGE0][INFO][FACTION_READY] faction=USSR
-[AICF][STAGE0][INFO][TARGET_SELECTED] faction=US
-[AICF][STAGE0][INFO][TARGET_SELECTED] faction=USSR
-[AICF][STAGE0][INFO][GROUP_CREATED] faction=US
-[AICF][STAGE0][INFO][WAYPOINT_ASSIGNED] faction=US
-[AICF][STAGE0][INFO][GROUP_CREATED] faction=USSR
-[AICF][STAGE0][INFO][WAYPOINT_ASSIGNED] faction=USSR
-[AICF][STAGE0][INFO][GROUP_READY]
-[AICF][STAGE0][RESULT][PASS]
+[AICF][STAGE1]
 ```
 
-Имена баз, номера узлов, число рёбер, prefab и число бойцов определяются штатным сценарием во время запуска. Любая строка `[ERROR]` или `[RESULT][FAIL]` означает неуспешный тест, даже если сама миссия продолжает работать.
+Отфильтрованный вывод не заменяет полный журнал. К отчёту прикладывается вся папка `$profileRoot\logs`, чтобы сохранить соседние `SCRIPT`, `RESOURCES`, `RPL` и `VME`-ошибки.
 
-## Критерии успешного этапа 0
+## Руководства по тестированию
 
-Тест успешен только одновременно при выполнении всех условий:
+- [Stage 0: инструкция приёмочного тестирования](docs/STAGE_0_TESTING.md) — контракт исследовательского прототипа и расшифровка подтверждённого `[AICF][STAGE0][RESULT][PASS]`.
+- [Stage 1: пехотный вертикальный срез](docs/STAGE_1_TESTING.md) — direct Diag-команды, профиль `4 × 4`, временные и причинные инварианты, два ускоренных запуска и итоговая матрица.
 
-1. Оба `.gproj` видны Launcher; `Validate Scripts` и `Compile and Reload Scripts` завершились без ошибок.
-2. Запущен именно штатный `Conflict - Arland` с активным `AI Conflict Arland`.
-3. В server/listen-server журнале есть один `BOOTSTRAP_SERVER`, один `BASE_DISCOVERY` и `GRAPH_SUMMARY` с ненулевым числом узлов.
-4. Выведены все `GRAPH_NODE`; в штатной конфигурации ожидаются также `GRAPH_EDGE`.
-5. Есть ровно по одному `GROUP_CREATED` для `US` и `USSR`.
-6. Для обеих сторон есть `TARGET_SELECTED` и `WAYPOINT_ASSIGNED`.
-7. Есть `GROUP_READY` с числом бойцов больше нуля для обеих сторон.
-8. Финальная строка — `[AICF][STAGE0][RESULT][PASS]`; строк `[ERROR]` и `[RESULT][FAIL]` нет.
-9. Повторный внутренний запрос, если он возникает, даёт `BOOTSTRAP_DUPLICATE_SKIPPED`, а не дополнительные `GROUP_CREATED`.
+Stage 1 принимается только если одновременно выполнены:
 
-Наличие `PASS` не проверяет захват базы: это уже этап 1.
+1. `Validate Scripts` и `Compile and Reload Scripts` без ошибок.
+2. В каждом запуске готовы четыре US и четыре USSR-группы с ролями `2/1/1`.
+3. AI реально меняет владельца базы без принудительного тестового вызова.
+4. После захвата новая цель назначается не позднее двух commander-интервалов.
+5. `OnEmpty` приводит к replacement не раньше 30 секунд.
+6. Билет списывается только после успешного spawn.
+7. Enemy/contested-база отклоняется как spawn site.
+8. Матч завершается ровно один раз.
+9. Запуск A проходит с игроком US, запуск B — с игроком USSR.
+10. В логах нет `[AICF][STAGE1][ERROR]` и `[RESULT][FAIL]` и есть итоговый `[RESULT][PASS]`.
 
-## Где находятся логи
+Даже два успешных Stage 1-запуска означают только готовность перейти к полной MVP-матрице. Они не являются результатом 30-минутного стандартного прогона или двухчасового soak.
 
-Стандартные каталоги Windows:
+## Что делать после Stage 1
 
-```text
-%USERPROFILE%\Documents\My Games\ArmaReforgerWorkbench\logs
-%USERPROFILE%\Documents\My Games\ArmaReforger\logs
-```
+1. Исправить все compile/runtime-дефекты и повторить оба ускоренных запуска на одном commit.
+2. После `A=PASS` и `B=PASS` запустить полную MVP-матрицу на стандартных настройках минимум на 30 минут.
+3. Проверить клиентскую синхронизацию, AI limit, смерть/развёртывание игрока, сетевое поведение и естественный темп войны.
+4. Повторить MVP-матрицу после исправлений.
+5. Только затем выполнить отдельный двухчасовой soak и сравнить начало/конец по сущностям, группам, waypoint, памяти и server FPS.
 
-В Workbench Log Console открывается клавишей `F1`. Для dedicated server используйте папку профиля/логов, заданную вашей серверной установкой; если путь неоднозначен, добавьте к запуску отдельный `-profile` и приложите этот путь к отчёту.
+## Локальная копия официального API
 
-Не присылайте только одну отфильтрованную строку: нужна последняя целая папка логов, чтобы видеть соседние ошибки `SCRIPT`, `RESOURCES`, `RPL` и `VME`.
-
-## Что приложить к отчёту об ошибке
-
-- заполненную форму из [docs/STAGE_0_TESTING.md](docs/STAGE_0_TESTING.md);
-- версию Arma Reforger и Reforger Tools;
-- ветку и вывод `git rev-parse --short HEAD`;
-- полный command line либо server JSON без паролей;
-- скриншот Launcher со всеми зависимостями;
-- результат `Validate Scripts` и `Compile and Reload Scripts`;
-- последнюю папку логов Workbench;
-- последнюю папку логов игры/server;
-- все сообщения `[AICF][STAGE0]` и 20–30 строк до первой ошибки;
-- время запуска и, по возможности, скриншот/видео двух появившихся групп.
-
-## После получения новой версии проекта
-
-Каждый раз повторяйте полный короткий цикл:
-
-1. Сохранить логи предыдущего теста.
-2. Закрыть игру и Workbench.
-3. Выполнить `git pull` в выданной ветке и записать новый commit.
-4. Сверить версии игры и Tools.
-5. При изменении структуры повторить `Scan for Projects`.
-6. Открыть `AIConflictArland`, дождаться Resource Database.
-7. Повторить `Validate Scripts` и `Compile and Reload Scripts`.
-8. Снова запустить штатный `Conflict - Arland` с тем же addon GUID.
-9. Заполнить новую таблицу фактического результата; старый `PASS` к новой версии не переносится.
-
-## Локальная копия официальных API для разработчика
-
-Чтобы не скачивать Script Diff при каждом анализе, выполните из Git Bash/macOS/Linux:
+Проверенные сигнатуры 1.7.0.54 перечислены в [docs/API_REFERENCE.md](docs/API_REFERENCE.md). Чтобы загрузить официальный Script Diff в локальный, исключённый из Git кэш:
 
 ```bash
 ./tools/fetch_reforger_api_reference.sh
 ```
-
-Скрипт один раз загружает официальный snapshot 1.7.0.54 с проверкой SHA-256 в `.cache/reforger-api/`. `.cache` исключён из Git и не является зависимостью мода. Проверенные сигнатуры и ссылки перечислены в [docs/API_REFERENCE.md](docs/API_REFERENCE.md).
 
 ## Официальные материалы
 
 - [Scripting Modding](https://community.bistudio.com/wiki/Arma_Reforger%3AScripting_Modding)
 - [Mod Project Setup](https://community.bistudio.com/wiki/Arma_Reforger%3AMod_Project_Setup)
 - [Script Editor](https://community.bistudio.com/wiki/Arma_Reforger%3AScript_Editor)
-- [Server Config](https://community.bistudio.com/wiki/Arma_Reforger%3AServer_Config)
 - [Server Hosting](https://community.bistudio.com/wiki/Arma_Reforger%3AServer_Hosting)
 - [Startup Parameters](https://community.bistudio.com/wiki/Arma_Reforger%3AStartup_Parameters)
 - [Arma Reforger Script Diff 1.7.0.54](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/tree/v1.7.0.54)

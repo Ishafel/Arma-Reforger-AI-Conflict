@@ -128,4 +128,73 @@ class AICF_ConflictAdapter
 			string.Format("faction=%1 hq={%2}", actualKey, AICF_Diagnostics.DescribeBase(faction.GetMainBase())));
 		return true;
 	}
+
+	bool SelectSafeSpawnBase(
+		SCR_GameModeCampaign campaign,
+		SCR_CampaignFaction faction,
+		out SCR_CampaignMilitaryBaseComponent spawnBase)
+	{
+		spawnBase = null;
+		if (!campaign || !faction)
+			return false;
+
+		SCR_CampaignMilitaryBaseComponent mainBase = faction.GetMainBase();
+		if (IsSafeSpawnBase(mainBase, faction))
+		{
+			spawnBase = mainBase;
+			return true;
+		}
+
+		SCR_CampaignMilitaryBaseManager baseManager = campaign.GetBaseManager();
+		if (!baseManager)
+			return false;
+
+		array<SCR_CampaignMilitaryBaseComponent> bases = {};
+		baseManager.GetBases(bases);
+		foreach (SCR_CampaignMilitaryBaseComponent base : bases)
+		{
+			if (!IsSafeSpawnBase(base, faction))
+				continue;
+
+			spawnBase = base;
+			return true;
+		}
+
+		return false;
+	}
+
+	bool IsSafeSpawnBase(
+		SCR_CampaignMilitaryBaseComponent base,
+		SCR_CampaignFaction faction)
+	{
+		return GetSpawnRejectionReason(base, faction).IsEmpty();
+	}
+
+	string GetSpawnRejectionReason(
+		SCR_CampaignMilitaryBaseComponent base,
+		SCR_CampaignFaction faction)
+	{
+		if (!base || !base.GetOwner())
+			return "BASE_MISSING";
+		if (!faction)
+			return "FACTION_MISSING";
+		if (!base.IsInitialized())
+			return "BASE_NOT_INITIALIZED";
+		if (base.GetFaction() != faction)
+			return "ENEMY_OWNED";
+		if (base.GetCaptureState() != SCR_EBaseCaptureState.NONE || base.IsBeingCaptured() || base.AreEnemiesPresent())
+			return "CONTESTED";
+
+		SCR_SpawnPoint spawnPoint = base.GetSpawnPoint();
+		if (!spawnPoint)
+			return "SPAWN_POINT_MISSING";
+		if (!spawnPoint.IsSpawnPointEnabled())
+			return "SPAWN_POINT_DISABLED";
+		if (!spawnPoint.IsSpawnPointActive())
+			return "SPAWN_POINT_INACTIVE";
+		if (spawnPoint.GetFactionKey() != faction.GetFactionKey())
+			return "SPAWN_FACTION_MISMATCH";
+
+		return string.Empty;
+	}
 }
