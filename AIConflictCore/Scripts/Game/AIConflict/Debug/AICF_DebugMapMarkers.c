@@ -42,7 +42,6 @@ class AICF_DebugMapMarkerEntry : SCR_MapMarkerEntryDynamic
 		int slotId = remainder / 10000;
 		remainder = remainder % 10000;
 		int roleCode = remainder / 1000;
-		int targetCode = remainder % 1000;
 
 		FactionKey factionKey = "US";
 		Color markerColor = Color.FromSRGBA(44, 126, 255, 255);
@@ -66,10 +65,6 @@ class AICF_DebugMapMarkerEntry : SCR_MapMarkerEntryDynamic
 				break;
 		}
 
-		string target = "-";
-		if (targetCode > 0)
-			target = (targetCode - 1).ToString();
-
 		FactionManager factionManager = GetGame().GetFactionManager();
 		SCR_Faction faction;
 		if (factionManager)
@@ -85,7 +80,7 @@ class AICF_DebugMapMarkerEntry : SCR_MapMarkerEntryDynamic
 		}
 
 		widgetComp.SetColor(markerColor);
-		widgetComp.SetText(string.Format("%1 %2%3 -> %4", factionKey, role, slotId, target));
+		widgetComp.SetText(string.Format("%1 %2%3", factionKey, role, slotId));
 		widgetComp.SetTextVisible(true);
 	}
 }
@@ -123,7 +118,6 @@ class AICF_DebugMapMarkerSystem
 	protected SCR_MapMarkerManagerComponent m_MarkerManager;
 	protected ref array<SCR_MapMarkerEntity> m_aMarkers = {};
 	protected ref array<SCR_AIGroup> m_aTrackedGroups = {};
-	protected ref array<int> m_aConfigIds = {};
 	protected bool m_bReadyLogged;
 
 	void AICF_DebugMapMarkerSystem()
@@ -132,7 +126,6 @@ class AICF_DebugMapMarkerSystem
 		{
 			m_aMarkers.Insert(null);
 			m_aTrackedGroups.Insert(null);
-			m_aConfigIds.Insert(-1);
 		}
 	}
 
@@ -182,56 +175,51 @@ class AICF_DebugMapMarkerSystem
 
 			if (!group)
 			{
-				RemoveMarker(markerIndex);
+				// Keep one stable replicated entity per slot. A replacement can rebind the
+				// same marker instead of racing deletion/creation while the map is open.
+				if (m_aMarkers[markerIndex] && m_aTrackedGroups[markerIndex])
+				{
+					m_aMarkers[markerIndex].SetTarget(null);
+					m_aMarkers[markerIndex].SetGlobalVisible(false);
+					m_aTrackedGroups[markerIndex] = null;
+				}
 				continue;
 			}
 
-			int configId = PackConfig(isUSSR, slot);
-			if (m_aMarkers[markerIndex] &&
-				(m_aTrackedGroups[markerIndex] != group || m_aConfigIds[markerIndex] != configId))
+			SCR_MapMarkerEntity marker = m_aMarkers[markerIndex];
+			if (marker)
 			{
-				RemoveMarker(markerIndex);
+				if (m_aTrackedGroups[markerIndex] != group)
+				{
+					marker.SetTarget(group);
+					marker.SetGlobalVisible(true);
+					m_aTrackedGroups[markerIndex] = group;
+				}
+				continue;
 			}
 
-			if (m_aMarkers[markerIndex])
-				continue;
-
-			SCR_MapMarkerEntity marker = m_MarkerManager.InsertDynamicMarker(
+			marker = m_MarkerManager.InsertDynamicMarker(
 				SCR_EMapMarkerType.DYNAMIC_EXAMPLE,
 				group,
-				configId);
+				PackStableConfig(isUSSR, slot));
 			if (!marker)
 				continue;
 
 			marker.SetGlobalVisible(true);
 			m_aMarkers[markerIndex] = marker;
 			m_aTrackedGroups[markerIndex] = group;
-			m_aConfigIds[markerIndex] = configId;
 		}
 	}
 
-	protected int PackConfig(bool isUSSR, AICF_GroupSlot slot)
+	protected int PackStableConfig(bool isUSSR, AICF_GroupSlot slot)
 	{
 		int factionCode;
 		if (isUSSR)
 			factionCode = 1;
 
-		int targetCode;
-		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
-		if (target)
-		{
-			int callsign = target.GetCallsign();
-			if (callsign < 0)
-				callsign = 0;
-			if (callsign > 998)
-				callsign = 998;
-			targetCode = callsign + 1;
-		}
-
 		return factionCode * 100000 +
 			slot.GetSlotId() * 10000 +
-			((int)slot.GetRole()) * 1000 +
-			targetCode;
+			((int)slot.GetRole()) * 1000;
 	}
 
 	protected void RemoveMarker(int markerIndex)
@@ -245,7 +233,6 @@ class AICF_DebugMapMarkerSystem
 
 		m_aMarkers[markerIndex] = null;
 		m_aTrackedGroups[markerIndex] = null;
-		m_aConfigIds[markerIndex] = -1;
 	}
 
 	protected int CountMarkers()
