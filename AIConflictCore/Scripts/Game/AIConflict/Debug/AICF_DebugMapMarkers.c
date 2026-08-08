@@ -1,4 +1,4 @@
-// Opt-in, globally visible map markers for the eight Stage 1 managed AI groups.
+// Opt-in, globally visible map markers for the leaders of the eight managed AI groups.
 // Both server and client must be started with -aicfDebugMapMarkers 1.
 class AICF_DebugMapMarkerRuntime
 {
@@ -161,6 +161,7 @@ class AICF_DebugMapMarkerSystem
 	protected SCR_MapMarkerManagerComponent m_MarkerManager;
 	protected ref array<SCR_MapMarkerEntity> m_aMarkers = {};
 	protected ref array<SCR_AIGroup> m_aTrackedGroups = {};
+	protected ref array<IEntity> m_aTrackedLeaders = {};
 	protected bool m_bReadyLogged;
 
 	void AICF_DebugMapMarkerSystem()
@@ -169,6 +170,7 @@ class AICF_DebugMapMarkerSystem
 		{
 			m_aMarkers.Insert(null);
 			m_aTrackedGroups.Insert(null);
+			m_aTrackedLeaders.Insert(null);
 		}
 	}
 
@@ -191,7 +193,7 @@ class AICF_DebugMapMarkerSystem
 			m_bReadyLogged = true;
 			AICF_Stage1Diagnostics.Info(
 				"DEBUG_MAP_MARKERS_READY",
-				string.Format("groups=%1 visibility=GLOBAL", TOTAL_SLOTS));
+				string.Format("groups=%1 visibility=GLOBAL tracking=LEADER", TOTAL_SLOTS));
 		}
 	}
 
@@ -215,8 +217,9 @@ class AICF_DebugMapMarkerSystem
 			SCR_AIGroup group;
 			if (slot && slot.IsCombatReady())
 				group = slot.GetGroup();
+			IEntity leader = ResolveAliveLeader(group);
 
-			if (!group)
+			if (!group || !leader)
 			{
 				// Visibility-only updates can leave an already-created client widget on the
 				// map. Delete the replicated marker entity when a slot stops being combat
@@ -226,13 +229,17 @@ class AICF_DebugMapMarkerSystem
 					FactionKey factionKey = "US";
 					if (isUSSR)
 						factionKey = "USSR";
+					string removalReason = "GROUP_NOT_COMBAT_READY";
+					if (group)
+						removalReason = "NO_ALIVE_LEADER";
 
 					AICF_Stage1Diagnostics.Info(
 						"DEBUG_MAP_MARKER_REMOVED",
 						string.Format(
-							"faction=%1 slot=%2 reason=GROUP_NOT_COMBAT_READY",
+							"faction=%1 slot=%2 reason=%3",
 							factionKey,
-							slotId));
+							slotId,
+							removalReason));
 					RemoveMarker(markerIndex);
 				}
 				continue;
@@ -241,11 +248,27 @@ class AICF_DebugMapMarkerSystem
 			SCR_MapMarkerEntity marker = m_aMarkers[markerIndex];
 			if (marker)
 			{
-				if (m_aTrackedGroups[markerIndex] != group)
+				if (m_aTrackedGroups[markerIndex] != group || m_aTrackedLeaders[markerIndex] != leader)
 				{
-					marker.SetTarget(group);
+					bool groupChanged = m_aTrackedGroups[markerIndex] != group;
+					marker.SetTarget(leader);
 					marker.SetGlobalVisible(true);
 					m_aTrackedGroups[markerIndex] = group;
+					m_aTrackedLeaders[markerIndex] = leader;
+
+					FactionKey factionKey = "US";
+					if (isUSSR)
+						factionKey = "USSR";
+					string retargetReason = "LEADER_CHANGED";
+					if (groupChanged)
+						retargetReason = "GROUP_REPLACED";
+					AICF_Stage1Diagnostics.Info(
+						"DEBUG_MAP_MARKER_RETARGETED",
+						string.Format(
+							"faction=%1 slot=%2 reason=%3",
+							factionKey,
+							slotId,
+							retargetReason));
 				}
 
 				marker.AICF_SetDebugText(BuildMarkerText(factionState, slot, group));
@@ -254,7 +277,7 @@ class AICF_DebugMapMarkerSystem
 
 			marker = m_MarkerManager.InsertDynamicMarker(
 				SCR_EMapMarkerType.DYNAMIC_EXAMPLE,
-				group,
+				leader,
 				PackStableConfig(isUSSR, slot));
 			if (!marker)
 				continue;
@@ -270,13 +293,14 @@ class AICF_DebugMapMarkerSystem
 			marker.SetGlobalVisible(true);
 			m_aMarkers[markerIndex] = marker;
 			m_aTrackedGroups[markerIndex] = group;
+			m_aTrackedLeaders[markerIndex] = leader;
 
 			FactionKey factionKey = "US";
 			if (isUSSR)
 				factionKey = "USSR";
 			AICF_Stage1Diagnostics.Info(
 				"DEBUG_MAP_MARKER_CREATED",
-				string.Format("faction=%1 slot=%2", factionKey, slotId));
+				string.Format("faction=%1 slot=%2 tracking=LEADER", factionKey, slotId));
 		}
 	}
 
@@ -327,8 +351,12 @@ class AICF_DebugMapMarkerSystem
 			"%1 [%2]",
 			targetName,
 			target.GetCallsign());
+		IEntity leader = ResolveAliveLeader(group);
+		vector groupPosition = group.GetOrigin();
+		if (leader)
+			groupPosition = leader.GetOrigin();
 		bool atObjective = vector.DistanceSqXZ(
-			group.GetOrigin(),
+			groupPosition,
 			target.GetOwner().GetOrigin()) <=
 			AT_OBJECTIVE_RADIUS_METERS * AT_OBJECTIVE_RADIUS_METERS;
 
@@ -408,6 +436,43 @@ class AICF_DebugMapMarkerSystem
 		return alive;
 	}
 
+	protected IEntity ResolveAliveLeader(SCR_AIGroup group)
+	{
+		if (!group)
+			return null;
+
+		IEntity leader = group.GetLeaderEntity();
+		if (IsAliveCharacter(leader))
+			return leader;
+
+		// Leader promotion is asynchronous. Keep the marker useful during that
+		// short window by following the first surviving member; the next Sync()
+		// automatically switches to the newly appointed leader.
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+
+			IEntity controlledEntity = agent.GetControlledEntity();
+			if (IsAliveCharacter(controlledEntity))
+				return controlledEntity;
+		}
+
+		return null;
+	}
+
+	protected bool IsAliveCharacter(IEntity entity)
+	{
+		ChimeraCharacter character = ChimeraCharacter.Cast(entity);
+		if (!character)
+			return false;
+
+		CharacterControllerComponent controller = character.GetCharacterController();
+		return controller && controller.GetLifeState() == ECharacterLifeState.ALIVE;
+	}
+
 	protected int PackStableConfig(bool isUSSR, AICF_GroupSlot slot)
 	{
 		int factionCode;
@@ -430,6 +495,7 @@ class AICF_DebugMapMarkerSystem
 
 		m_aMarkers[markerIndex] = null;
 		m_aTrackedGroups[markerIndex] = null;
+		m_aTrackedLeaders[markerIndex] = null;
 	}
 
 	protected int CountMarkers()
