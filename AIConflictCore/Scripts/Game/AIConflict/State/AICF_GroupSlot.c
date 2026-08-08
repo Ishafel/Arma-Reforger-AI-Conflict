@@ -10,16 +10,19 @@ class AICF_GroupSlot
 	protected int m_iLastOrderRecoveryAtMs;
 	protected int m_iLastProgressAtMs;
 	protected int m_iStuckRecoveryCount;
+	protected int m_iObjectiveHoldStartedAtMs;
 	protected bool m_bReplacementDeployment;
 	protected bool m_bTargetUnavailableReported;
 	protected bool m_bRecoveringFromStuck;
 	protected bool m_bPersistentStuckReported;
+	protected bool m_bObjectiveHoldReported;
 	protected bool m_bLoadBlockReported;
 	protected float m_fBestDistanceToTarget = -1.0;
 
 	protected SCR_AIGroup m_Group;
 	protected SCR_CampaignMilitaryBaseComponent m_TargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_ProgressTargetBase;
+	protected SCR_CampaignMilitaryBaseComponent m_ObjectiveHoldTargetBase;
 	protected AIWaypoint m_Waypoint;
 
 	void AICF_GroupSlot(int slotId, AICF_EGroupRole role)
@@ -113,6 +116,11 @@ class AICF_GroupSlot
 		return true;
 	}
 
+	bool HasLoadBlockReport()
+	{
+		return m_bLoadBlockReported;
+	}
+
 	void ResetLoadBlockReported()
 	{
 		m_bLoadBlockReported = false;
@@ -178,6 +186,8 @@ class AICF_GroupSlot
 
 		if (m_ProgressTargetBase != targetBase)
 			ResetProgressTracking();
+		else
+			ClearObjectiveHold();
 
 		m_TargetBase = targetBase;
 		m_Waypoint = waypoint;
@@ -244,6 +254,45 @@ class AICF_GroupSlot
 		m_bPersistentStuckReported = false;
 	}
 
+	// Returns true only when a fresh hold window starts for this objective.
+	bool BeginObjectiveHold(SCR_CampaignMilitaryBaseComponent targetBase)
+	{
+		if (!targetBase)
+			return false;
+
+		if (m_ObjectiveHoldTargetBase == targetBase && m_iObjectiveHoldStartedAtMs > 0)
+			return false;
+
+		m_ObjectiveHoldTargetBase = targetBase;
+		m_iObjectiveHoldStartedAtMs = System.GetTickCount();
+		m_bObjectiveHoldReported = false;
+		return true;
+	}
+
+	int GetObjectiveHoldElapsedMs()
+	{
+		if (m_iObjectiveHoldStartedAtMs <= 0)
+			return 0;
+
+		return System.GetTickCount(m_iObjectiveHoldStartedAtMs);
+	}
+
+	bool MarkObjectiveHoldReported()
+	{
+		if (m_bObjectiveHoldReported)
+			return false;
+
+		m_bObjectiveHoldReported = true;
+		return true;
+	}
+
+	void ClearObjectiveHold()
+	{
+		m_ObjectiveHoldTargetBase = null;
+		m_iObjectiveHoldStartedAtMs = 0;
+		m_bObjectiveHoldReported = false;
+	}
+
 	void RecordStuckRecovery(float currentDistanceMeters)
 	{
 		m_iStuckRecoveryCount++;
@@ -299,6 +348,16 @@ class AICF_GroupSlot
 	bool IsReinforcementDue(int nowMilliseconds)
 	{
 		return m_State == AICF_EGroupSlotState.WAITING && nowMilliseconds >= m_iReinforcementReadyAtMs;
+	}
+
+	bool PostponeReinforcementUntil(int readyAtMilliseconds)
+	{
+		if (m_State != AICF_EGroupSlotState.WAITING)
+			return false;
+
+		if (readyAtMilliseconds > m_iReinforcementReadyAtMs)
+			m_iReinforcementReadyAtMs = readyAtMilliseconds;
+		return true;
 	}
 
 	bool ReturnSpawnToWait(int readyAtMilliseconds)
@@ -357,5 +416,6 @@ class AICF_GroupSlot
 		m_iStuckRecoveryCount = 0;
 		m_bRecoveringFromStuck = false;
 		m_bPersistentStuckReported = false;
+		ClearObjectiveHold();
 	}
 }

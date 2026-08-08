@@ -217,7 +217,7 @@ class AICF_DebugMapMarkerSystem
 			SCR_AIGroup group;
 			if (slot && slot.IsCombatReady())
 				group = slot.GetGroup();
-			IEntity leader = ResolveAliveLeader(group);
+			IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
 
 			if (!group || !leader)
 			{
@@ -324,7 +324,7 @@ class AICF_DebugMapMarkerSystem
 				slot.GetStuckRecoveryCount(),
 				task);
 		}
-		int alive = CountAliveAgents(group);
+		int alive = AICF_GroupRuntime.CountAliveAgents(group);
 
 		return string.Format(
 			"%1 | %2 | %3 | ALIVE %4",
@@ -351,7 +351,7 @@ class AICF_DebugMapMarkerSystem
 			"%1 [%2]",
 			targetName,
 			target.GetCallsign());
-		IEntity leader = ResolveAliveLeader(group);
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
 		vector groupPosition = group.GetOrigin();
 		if (leader)
 			groupPosition = leader.GetOrigin();
@@ -409,68 +409,6 @@ class AICF_DebugMapMarkerSystem
 		}
 
 		return "?";
-	}
-
-	protected int CountAliveAgents(SCR_AIGroup group)
-	{
-		if (!group)
-			return 0;
-
-		array<AIAgent> agents = {};
-		group.GetAgents(agents);
-		int alive;
-		foreach (AIAgent agent : agents)
-		{
-			if (!agent)
-				continue;
-
-			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
-			if (!character)
-				continue;
-
-			CharacterControllerComponent controller = character.GetCharacterController();
-			if (controller && controller.GetLifeState() == ECharacterLifeState.ALIVE)
-				alive++;
-		}
-
-		return alive;
-	}
-
-	protected IEntity ResolveAliveLeader(SCR_AIGroup group)
-	{
-		if (!group)
-			return null;
-
-		IEntity leader = group.GetLeaderEntity();
-		if (IsAliveCharacter(leader))
-			return leader;
-
-		// Leader promotion is asynchronous. Keep the marker useful during that
-		// short window by following the first surviving member; the next Sync()
-		// automatically switches to the newly appointed leader.
-		array<AIAgent> agents = {};
-		group.GetAgents(agents);
-		foreach (AIAgent agent : agents)
-		{
-			if (!agent)
-				continue;
-
-			IEntity controlledEntity = agent.GetControlledEntity();
-			if (IsAliveCharacter(controlledEntity))
-				return controlledEntity;
-		}
-
-		return null;
-	}
-
-	protected bool IsAliveCharacter(IEntity entity)
-	{
-		ChimeraCharacter character = ChimeraCharacter.Cast(entity);
-		if (!character)
-			return false;
-
-		CharacterControllerComponent controller = character.GetCharacterController();
-		return controller && controller.GetLifeState() == ECharacterLifeState.ALIVE;
 	}
 
 	protected int PackStableConfig(bool isUSSR, AICF_GroupSlot slot)

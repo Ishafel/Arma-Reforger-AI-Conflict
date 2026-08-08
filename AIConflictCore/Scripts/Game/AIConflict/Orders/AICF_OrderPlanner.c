@@ -308,6 +308,17 @@ class AICF_OrderPlanner
 			waypoint.SetCompletionType(EAIWaypointCompletionType.Any);
 		}
 
+		// The setting is copied into the group only while this AICF waypoint is
+		// current. Column reduces travel spread while stock combat behavior remains
+		// free to seek cover near the objective.
+		SCR_AIWaypoint scriptedWaypoint = SCR_AIWaypoint.Cast(waypoint);
+		if (scriptedWaypoint)
+		{
+			scriptedWaypoint.AddSetting(SCR_AIGroupFormationSetting.Create(
+				SCR_EAISettingOrigin.WAYPOINT,
+				SCR_EAIGroupFormation.Column));
+		}
+
 		waypoint.SetCompletionRadius(completionRadius);
 		return waypoint;
 	}

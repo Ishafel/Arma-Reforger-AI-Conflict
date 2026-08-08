@@ -33,6 +33,7 @@ class AICF_MatchController
 	protected int m_iOrderRecoveries;
 	protected int m_iStuckDetections;
 	protected int m_iStuckRecoveries;
+	protected int m_iStuckRecycles;
 	protected int m_iDuplicateSpawnsPrevented;
 	protected int m_iLifecycleAudits;
 	protected FactionKey m_sObservedPlayerFaction;
@@ -43,6 +44,7 @@ class AICF_MatchController
 	protected ref AICF_ObjectiveGraph m_ObjectiveGraph;
 	protected ref AICF_TargetSelector m_TargetSelector;
 	protected ref AICF_GroupSpawner m_GroupSpawner;
+	protected ref AICF_GroupCohesionPolicy m_GroupCohesionPolicy;
 	protected ref AICF_ManagedAILODPolicy m_ManagedAILODPolicy;
 	protected ref AICF_ReinforcementSystem m_ReinforcementSystem;
 	protected ref AICF_OrderPlanner m_OrderPlanner;
@@ -86,6 +88,7 @@ class AICF_MatchController
 		m_ObjectiveGraph = new AICF_ObjectiveGraph();
 		m_TargetSelector = new AICF_TargetSelector();
 		m_GroupSpawner = new AICF_GroupSpawner();
+		m_GroupCohesionPolicy = new AICF_GroupCohesionPolicy();
 		m_ManagedAILODPolicy = new AICF_ManagedAILODPolicy();
 		m_ReinforcementSystem = new AICF_ReinforcementSystem();
 		m_OrderPlanner = new AICF_OrderPlanner();
@@ -134,13 +137,14 @@ class AICF_MatchController
 		AICF_Stage2Diagnostics.Info(
 			"RELIABILITY_CONFIG",
 			string.Format(
-				"interval_ms=%1 order_retry_ms=%2 stuck_watchdog=%3 stuck_timeout_ms=%4 stuck_progress_m=%5 max_stuck_recoveries=%6 max_concurrent_spawns=%7 require_player=%8",
+				"interval_ms=%1 order_retry_ms=%2 stuck_watchdog=%3 stuck_timeout_ms=%4 stuck_progress_m=%5 max_stuck_recoveries=%6 objective_hold_timeout_ms=%7 max_concurrent_spawns=%8 require_player=%9",
 				m_Stage2Config.GetReliabilityIntervalMs(),
 				m_Stage2Config.GetOrderRecoveryRetryMs(),
 				m_Stage2Config.GetStuckWatchdogEnabled(),
 				m_Stage2Config.GetStuckTimeoutMs(),
 				m_Stage2Config.GetStuckProgressMeters(),
 				m_Stage2Config.GetMaxStuckRecoveries(),
+				m_Stage2Config.GetObjectiveHoldTimeoutMs(),
 				m_Stage2Config.GetMaxConcurrentReplacementSpawns(),
 				m_Config.GetRequirePlayerForResult()));
 		if (m_Stage2Config.HasTestDropOrder())
@@ -328,6 +332,16 @@ class AICF_MatchController
 		if (!slot.GetWaypoint() && !m_OrderPlanner.AssignOrder(slot, faction, m_ObjectiveGraph, m_TargetSelector, reason))
 			return;
 
+		bool cohesionApplied = m_GroupCohesionPolicy.Apply(slot.GetGroup());
+		AICF_Stage2Diagnostics.Info(
+			"GROUP_COHESION_POLICY_APPLIED",
+			string.Format(
+				"faction=%1 slot=%2 formation=%3 displacement=0 success=%4",
+				faction.GetFactionKey(),
+				slot.GetSlotId(),
+				AICF_GroupCohesionPolicy.FORMATION_NAME,
+				cohesionApplied));
+
 		int ticketsBefore = factionState.GetTickets();
 		if (!slot.CanCommitDeploymentReady())
 		{
@@ -389,6 +403,10 @@ class AICF_MatchController
 		int scheduledReadyAtMs = slot.GetReinforcementReadyAtMs();
 		if (CountConcurrentReplacementSpawns() >= m_Stage2Config.GetMaxConcurrentReplacementSpawns())
 		{
+			// This is intentional load shedding, not a reinforcement timing fault.
+			// Move the due time with the queue so the eventual start is measured from
+			// the slot's actual scheduled turn rather than its original contention time.
+			slot.PostponeReinforcementUntil(nowMs + UPDATE_INTERVAL_MS);
 			if (slot.MarkLoadBlockReported())
 			{
 				AICF_Stage2Diagnostics.Info(
@@ -402,7 +420,17 @@ class AICF_MatchController
 			}
 			return;
 		}
+		bool releasedFromLoadQueue = slot.HasLoadBlockReport();
 		slot.ResetLoadBlockReported();
+		if (releasedFromLoadQueue)
+		{
+			AICF_Stage2Diagnostics.Info(
+				"LOAD_LIMIT_RELEASED",
+				string.Format(
+					"faction=%1 slot=%2 action=START_REPLACEMENT",
+					faction.GetFactionKey(),
+					slot.GetSlotId()));
+		}
 
 		if (!factionState.TryReserveDeployment(AICF_EDeploymentKind.REPLACEMENT))
 			return;
@@ -809,15 +837,98 @@ class AICF_MatchController
 			if (!slot || !slot.IsCombatReady())
 				continue;
 
+			// Relay waypoints complete through a stock smart action. Keep the existing
+			// authority fallback active in the more frequent reliability pass as well.
+			if (TryCaptureArrivedRelay(slot, faction))
+				continue;
+
 			string failureReason = m_OrderPlanner.GetOrderFailureReason(slot, faction);
 			if (!failureReason.IsEmpty())
 			{
+				if (TryHoldCompletedOrderAtObjective(slot, faction, failureReason))
+					continue;
+
 				TryRecoverOrder(slot, faction, failureReason);
 				continue;
 			}
 
-			MonitorGroupProgress(slot, faction);
+			MonitorGroupProgress(factionState, slot, faction);
 		}
+	}
+
+	protected bool TryHoldCompletedOrderAtObjective(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		string failureReason)
+	{
+		// A completed S&D/defend waypoint is expected while the group is fighting or
+		// seizing the assigned base. Reissuing it every reliability tick interrupts
+		// that activity and produces recovery churn.
+		if (failureReason != "WAYPOINT_NOT_CURRENT" || !slot || !faction)
+			return false;
+
+		SCR_AIGroup group = slot.GetGroup();
+		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
+		AIWaypoint waypoint = slot.GetWaypoint();
+		if (!group || !target || !target.GetOwner() || !target.IsInitialized() || !waypoint)
+			return false;
+
+		if (slot.GetRole() == AICF_EGroupRole.ATTACK)
+		{
+			if (target.GetFaction() == faction || !target.IsValidTarget(faction))
+				return false;
+		}
+		else if (target.GetFaction() != faction)
+		{
+			return false;
+		}
+
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
+		if (!leader)
+			return false;
+
+		float distanceMeters = Math.Sqrt(vector.DistanceSqXZ(
+			leader.GetOrigin(),
+			waypoint.GetOrigin()));
+		if (distanceMeters > STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
+		{
+			slot.ClearObjectiveHold();
+			return false;
+		}
+
+		slot.BeginObjectiveHold(target);
+		int holdElapsedMs = slot.GetObjectiveHoldElapsedMs();
+		if (holdElapsedMs >= m_Stage2Config.GetObjectiveHoldTimeoutMs())
+		{
+			AICF_Stage2Diagnostics.Warning(
+				"OBJECTIVE_HOLD_EXPIRED",
+				string.Format(
+					"faction=%1 slot=%2 target=%3 distance_m=%4 hold_ms=%5 action=REBUILD_ORDER",
+					faction.GetFactionKey(),
+					slot.GetSlotId(),
+					AICF_Stage1Diagnostics.BaseKey(target),
+					distanceMeters,
+					holdElapsedMs));
+			slot.ClearObjectiveHold();
+			return false;
+		}
+
+		slot.ConfirmAtObjective(target, distanceMeters);
+		if (slot.MarkObjectiveHoldReported())
+		{
+			AICF_Stage2Diagnostics.Info(
+				"ORDER_RECOVERY_SUPPRESSED",
+				string.Format(
+					"faction=%1 slot=%2 role=%3 target=%4 distance_m=%5 state=AT_OBJECTIVE timeout_ms=%6",
+					faction.GetFactionKey(),
+					slot.GetSlotId(),
+					AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+					AICF_Stage1Diagnostics.BaseKey(target),
+					distanceMeters,
+					m_Stage2Config.GetObjectiveHoldTimeoutMs()));
+		}
+
+		return true;
 	}
 
 	protected void TryRecoverOrder(
@@ -842,6 +953,7 @@ class AICF_MatchController
 	}
 
 	protected void MonitorGroupProgress(
+		AICF_FactionState factionState,
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction)
 	{
@@ -854,7 +966,11 @@ class AICF_MatchController
 		if (!group || !waypoint || !target)
 			return;
 
-		float distanceMeters = Math.Sqrt(vector.DistanceSqXZ(group.GetOrigin(), waypoint.GetOrigin()));
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
+		if (!leader)
+			return;
+
+		float distanceMeters = Math.Sqrt(vector.DistanceSqXZ(leader.GetOrigin(), waypoint.GetOrigin()));
 		if (distanceMeters <= STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
 		{
 			slot.ConfirmAtObjective(target, distanceMeters);
@@ -882,6 +998,15 @@ class AICF_MatchController
 				m_Stage2Config.GetStuckTimeoutMs(),
 				recoveryAttempt));
 
+		// Allow the configured number of real route rebuilds. If all of them fail to
+		// produce leader progress, retire this group through the normal replacement
+		// lifecycle instead of rebuilding waypoints forever.
+		if (slot.GetStuckRecoveryCount() >= m_Stage2Config.GetMaxStuckRecoveries())
+		{
+			RecyclePersistentStuckGroup(factionState, faction, slot, target, distanceMeters);
+			return;
+		}
+
 		bool recovered = m_OrderPlanner.RebuildCurrentOrder(slot, faction, "STUCK_ROUTE_REBUILD");
 		if (!recovered)
 		{
@@ -906,17 +1031,76 @@ class AICF_MatchController
 				recovered,
 				recoveryAttempt));
 
-		if (recoveryAttempt >= m_Stage2Config.GetMaxStuckRecoveries() &&
-			slot.MarkPersistentStuckReported())
+	}
+
+	protected void RecyclePersistentStuckGroup(
+		AICF_FactionState factionState,
+		SCR_CampaignFaction faction,
+		AICF_GroupSlot slot,
+		SCR_CampaignMilitaryBaseComponent target,
+		float distanceMeters)
+	{
+		if (!factionState || !faction || !slot || !slot.MarkPersistentStuckReported())
+			return;
+
+		SCR_AIGroup group = slot.GetGroup();
+		if (!group)
+			return;
+
+		string groupKey = GroupKey(group);
+		AICF_Stage2Diagnostics.Warning(
+			"GROUP_STUCK_PERSISTENT",
+			string.Format(
+				"faction=%1 slot=%2 group=%3 target=%4 distance_m=%5 recoveries=%6 action=RECYCLE_GROUP ticket_policy=STANDARD_REPLACEMENT",
+				faction.GetFactionKey(),
+				slot.GetSlotId(),
+				groupKey,
+				AICF_Stage1Diagnostics.BaseKey(target),
+				distanceMeters,
+				slot.GetStuckRecoveryCount()));
+
+		m_ManagedAILODPolicy.Release(group);
+		group.GetOnEmpty().Remove(OnGroupEmpty);
+		m_OrderPlanner.ClearOrder(slot);
+		if (!slot.MarkDestroyed())
 		{
-			AICF_Stage2Diagnostics.Warning(
-				"GROUP_STUCK_PERSISTENT",
-				string.Format(
-					"faction=%1 slot=%2 attempts=%3 action=CONTINUE_ROUTE_REBUILDS",
-					faction.GetFactionKey(),
-					slot.GetSlotId(),
-					recoveryAttempt));
+			AICF_Stage2Diagnostics.Error(
+				"STUCK_RECYCLE_STATE_REJECTED",
+				string.Format("faction=%1 slot=%2", faction.GetFactionKey(), slot.GetSlotId()));
+			return;
 		}
+
+		int recycledAtElapsedMs = AICF_Stage1Diagnostics.GetElapsedMs();
+		int readyAtAbsoluteMs = System.GetTickCount() + m_Config.GetReinforcementDelayMs();
+		if (!slot.BeginReinforcementWait(readyAtAbsoluteMs))
+		{
+			AICF_Stage2Diagnostics.Error(
+				"STUCK_RECYCLE_SCHEDULE_REJECTED",
+				string.Format("faction=%1 slot=%2", faction.GetFactionKey(), slot.GetSlotId()));
+			return;
+		}
+
+		m_iStuckRecycles++;
+		AICF_Stage2Diagnostics.Info(
+			"GROUP_RECYCLED",
+			string.Format(
+				"faction=%1 slot=%2 old_group=%3 cause=PERSISTENT_STUCK replacement_cost=%4",
+				faction.GetFactionKey(),
+				slot.GetSlotId(),
+				groupKey,
+				m_Config.GetReplacementTicketCost()));
+		AICF_Stage1Diagnostics.InfoAt(
+			"REINFORCEMENT_SCHEDULED",
+			string.Format(
+				"faction=%1 slot=%2 ready_at_ms=%3 delay_ms=%4 reason=PERSISTENT_STUCK",
+				faction.GetFactionKey(),
+				slot.GetSlotId(),
+				recycledAtElapsedMs + m_Config.GetReinforcementDelayMs(),
+				m_Config.GetReinforcementDelayMs()),
+			recycledAtElapsedMs);
+
+		RplComponent.DeleteRplEntity(group, false);
+		EvaluateVictory();
 	}
 
 	protected void AuditLifecycleInvariants()
@@ -1237,12 +1421,13 @@ class AICF_MatchController
 		AICF_Stage2Diagnostics.Info(
 			"RELIABILITY_HEARTBEAT",
 			string.Format(
-				"audits=%1 order_attempts=%2 order_recovered=%3 stuck_detected=%4 stuck_recovered=%5 duplicate_spawns_prevented=%6 concurrent_spawns=%7 managed_agents=%8",
+				"audits=%1 order_attempts=%2 order_recovered=%3 stuck_detected=%4 stuck_recovered=%5 stuck_recycled=%6 duplicate_spawns_prevented=%7 concurrent_spawns=%8 managed_agents=%9",
 				m_iLifecycleAudits,
 				m_iOrderRecoveryAttempts,
 				m_iOrderRecoveries,
 				m_iStuckDetections,
 				m_iStuckRecoveries,
+				m_iStuckRecycles,
 				m_iDuplicateSpawnsPrevented,
 				CountConcurrentReplacementSpawns(),
 				CountManagedAgents()));
@@ -1284,12 +1469,13 @@ class AICF_MatchController
 		AICF_Stage2Diagnostics.Info(
 			"MATCH_RELIABILITY_SUMMARY",
 			string.Format(
-				"audits=%1 order_attempts=%2 order_recovered=%3 stuck_detected=%4 stuck_recovered=%5 duplicate_spawns_prevented=%6 errors=%7",
+				"audits=%1 order_attempts=%2 order_recovered=%3 stuck_detected=%4 stuck_recovered=%5 stuck_recycled=%6 duplicate_spawns_prevented=%7 errors=%8",
 				m_iLifecycleAudits,
 				m_iOrderRecoveryAttempts,
 				m_iOrderRecoveries,
 				m_iStuckDetections,
 				m_iStuckRecoveries,
+				m_iStuckRecycles,
 				m_iDuplicateSpawnsPrevented,
 				AICF_Stage2Diagnostics.HasErrors()));
 

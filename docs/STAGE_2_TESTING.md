@@ -8,7 +8,9 @@ Stage 2 принимается отдельно от Stage 1. Его цель �
 - запрет повторной привязки группы и аудит lifecycle-инвариантов;
 - ограничение числа одновременно создаваемых replacement-групп;
 - автоматическое восстановление потерянного или завершившегося waypoint;
-- stuck-watchdog по фактическому сокращению расстояния до waypoint;
+- stuck-watchdog по фактическому сокращению расстояния от живого лидера до waypoint;
+- подавление recovery-churn у активной цели и штатную замену устойчиво застрявшей группы;
+- компактную stock-формацию `Column` без телепортации бойцов;
 - перестроение маршрута застрявшей группы и диагностику повторных попыток;
 - общий параметр темпа войны и отдельные настройки надёжности через CLI;
 - headless-режим результата без обязательного игрока;
@@ -34,7 +36,8 @@ Stage 2 принимается отдельно от Stage 1. Его цель �
 | `aicfStuckWatchdog` | `1` | Включение stuck-watchdog |
 | `aicfStuckTimeoutMs` | `120000` | Время без достаточного прогресса до признания группы застрявшей |
 | `aicfStuckProgressMeters` | `25` | Минимальное сокращение дистанции, считающееся прогрессом |
-| `aicfMaxStuckRecoveries` | `3` | Порог события `GROUP_STUCK_PERSISTENT` |
+| `aicfMaxStuckRecoveries` | `3` | Число реальных перестроений маршрута; при следующем stuck группа заменяется штатно |
+| `aicfObjectiveHoldTimeoutMs` | `300000` | Grace-период у активной цели без повторной выдачи завершившегося waypoint |
 | `aicfMaxConcurrentSpawns` | `1` | Максимум одновременных replacement-spawn |
 
 Явные `aicfCommanderIntervalMs` и `aicfReinforcementDelayMs` применяются после `aicfWarTempoPercent` и имеют приоритет.
@@ -87,9 +90,11 @@ Test-hook должен использоваться только в этом в�
 2. `TEST_ORDER_DROPPED faction=US slot=0` не раньше заданного времени.
 3. `ORDER_RECOVERED faction=US slot=0 cause=WAYPOINT_REFERENCE_MISSING` не позднее двух reliability-интервалов.
 4. После recovery группа снова имеет обычный приказ и продолжает движение.
-5. При срабатывании watchdog: `GROUP_STUCK_DETECTED`, затем `GROUP_STUCK_RECOVERY action=REBUILD_ORDER`.
-6. Каждая `RELIABILITY_HEARTBEAT` увеличивает `audits`; число управляемых агентов остаётся ограниченным.
-7. Нет `DUPLICATE_GROUP_BINDING`, `SPAWN_CONCURRENCY_INVARIANT_FAILED`, `[AICF][STAGE2][ERROR]` или server-side `SCRIPT (E)`.
+5. При срабатывании watchdog расстояние считается от живого лидера: `GROUP_STUCK_DETECTED`, затем `GROUP_STUCK_RECOVERY action=REBUILD_ORDER`.
+6. После исчерпания `aicfMaxStuckRecoveries` допустим только `GROUP_STUCK_PERSISTENT action=RECYCLE_GROUP`, затем `GROUP_RECYCLED` и штатный `REINFORCEMENT_SCHEDULED reason=PERSISTENT_STUCK`. Успешная замена списывает обычный replacement-билет; бесплатного recycle нет.
+7. Завершённый waypoint рядом с ещё активной целью даёт одно `ORDER_RECOVERY_SUPPRESSED state=AT_OBJECTIVE`, а не серию `ORDER_RECOVERED`. По истечении grace-периода разрешено одно контролируемое перестроение.
+8. Каждая `RELIABILITY_HEARTBEAT` увеличивает `audits`; число управляемых агентов остаётся ограниченным.
+9. Нет `DUPLICATE_GROUP_BINDING`, `SPAWN_CONCURRENCY_INVARIANT_FAILED`, `[AICF][STAGE2][ERROR]` или server-side `SCRIPT (E)`.
 
 Автоматическая первичная проверка:
 
@@ -98,7 +103,9 @@ $log = Get-ChildItem "$profileRoot\logs" -Filter console.log -File -Recurse |
   Sort-Object LastWriteTime -Descending |
   Select-Object -First 1
 
-& "$repoRoot\tools\Test-Stage2Log.ps1" -LogPath $log.FullName
+& powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File "$repoRoot\tools\Test-Stage2Log.ps1" `
+  -LogPath $log.FullName
 ```
 
 ## 30-минутная матрица
@@ -112,6 +119,7 @@ aicfReliabilityIntervalMs=5000
 aicfStuckTimeoutMs=120000
 aicfStuckProgressMeters=25
 aicfMaxStuckRecoveries=3
+aicfObjectiveHoldTimeoutMs=300000
 aicfMaxConcurrentSpawns=1
 ```
 
@@ -121,8 +129,13 @@ aicfMaxConcurrentSpawns=1
 - происходят естественные захваты и retarget;
 - нет двух групп, привязанных к одному slot-generation;
 - завершившиеся или потерянные waypoint восстанавливаются;
-- stuck recovery не создаёт новую группу и не списывает билет;
+- отдельный route-rebuild не создаёт новую группу и не списывает билет;
+- устойчиво застрявшая после трёх rebuild группа проходит штатную replacement-очередь и оплачивается обычным билетом только после успешного spawn;
+- waypoint, завершившийся внутри зоны цели, не создаёт recovery-churn во время боя/захвата;
+- прогресс watchdog и debug-маркер используют одного и того же живого лидера;
+- каждый AICF waypoint применяет компактную stock-формацию `Column` с нулевым formation displacement; временный боевой выход в укрытие допустим;
 - replacement-spawn остаётся безопасным и списывает билет только после готовности;
+- очередь `LOAD_LIMIT_BLOCKED` переносит due-time слота и завершается `LOAD_LIMIT_RELEASED`, не создавая ложный `REINFORCEMENT_TIMING_VIOLATION`;
 - `managed_agents` не превышает конфигурационный предел;
 - heartbeat продолжает поступать, server FPS не деградирует ступенчато.
 

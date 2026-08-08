@@ -7,6 +7,7 @@ class AICF_Stage2Config
 	static const int DEFAULT_STUCK_TIMEOUT_MS = 120000;
 	static const float DEFAULT_STUCK_PROGRESS_METERS = 25.0;
 	static const int DEFAULT_MAX_STUCK_RECOVERIES = 3;
+	static const int DEFAULT_OBJECTIVE_HOLD_TIMEOUT_MS = 300000;
 	static const int DEFAULT_MAX_CONCURRENT_REPLACEMENT_SPAWNS = 1;
 
 	protected int m_iReliabilityIntervalMs;
@@ -14,6 +15,7 @@ class AICF_Stage2Config
 	protected int m_iStuckTimeoutMs;
 	protected float m_fStuckProgressMeters;
 	protected int m_iMaxStuckRecoveries;
+	protected int m_iObjectiveHoldTimeoutMs;
 	protected int m_iMaxConcurrentReplacementSpawns;
 	protected bool m_bStuckWatchdogEnabled;
 	protected FactionKey m_sTestDropOrderFaction;
@@ -27,6 +29,7 @@ class AICF_Stage2Config
 		m_iStuckTimeoutMs = DEFAULT_STUCK_TIMEOUT_MS;
 		m_fStuckProgressMeters = DEFAULT_STUCK_PROGRESS_METERS;
 		m_iMaxStuckRecoveries = DEFAULT_MAX_STUCK_RECOVERIES;
+		m_iObjectiveHoldTimeoutMs = DEFAULT_OBJECTIVE_HOLD_TIMEOUT_MS;
 		m_iMaxConcurrentReplacementSpawns = DEFAULT_MAX_CONCURRENT_REPLACEMENT_SPAWNS;
 		m_bStuckWatchdogEnabled = true;
 		ApplyCLIOverrides();
@@ -55,6 +58,11 @@ class AICF_Stage2Config
 	int GetMaxStuckRecoveries()
 	{
 		return m_iMaxStuckRecoveries;
+	}
+
+	int GetObjectiveHoldTimeoutMs()
+	{
+		return m_iObjectiveHoldTimeoutMs;
 	}
 
 	int GetMaxConcurrentReplacementSpawns()
@@ -102,6 +110,8 @@ class AICF_Stage2Config
 			m_fStuckProgressMeters = ClampFloat(value.ToFloat(), 1.0, 500.0);
 		if (System.GetCLIParam("aicfMaxStuckRecoveries", value))
 			m_iMaxStuckRecoveries = ClampInt(value.ToInt(), 1, 100);
+		if (System.GetCLIParam("aicfObjectiveHoldTimeoutMs", value))
+			m_iObjectiveHoldTimeoutMs = ClampInt(value.ToInt(), 30000, 1800000);
 		if (System.GetCLIParam("aicfMaxConcurrentSpawns", value))
 			m_iMaxConcurrentReplacementSpawns = ClampInt(value.ToInt(), 1, 8);
 		if (System.GetCLIParam("aicfStuckWatchdog", value))
