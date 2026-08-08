@@ -293,6 +293,13 @@ class AICF_DebugMapMarkerSystem
 			GetShortRole(slot.GetRole()),
 			slot.GetSlotId());
 		string task = DescribeTask(factionState, slot, group);
+		if (slot.IsRecoveringFromStuck())
+		{
+			task = string.Format(
+				"ROUTE RECOVERY %1 | %2",
+				slot.GetStuckRecoveryCount(),
+				task);
+		}
 		int alive = CountAliveAgents(group);
 
 		return string.Format(

@@ -11,6 +11,7 @@ class AICF_Stage1Config
 	static const int DEFAULT_REINFORCEMENT_DELAY_MS = 30000;
 	static const int DEFAULT_COMMANDER_INTERVAL_MS = 15000;
 	static const int DEFAULT_MAX_MANAGED_AGENTS = 64;
+	static const int DEFAULT_WAR_TEMPO_PERCENT = 100;
 
 	static const int MAX_TICKET_VALUE = 1000000;
 	static const int MAX_DELAY_MS = 3600000;
@@ -26,8 +27,10 @@ class AICF_Stage1Config
 	protected int m_iReinforcementDelayMs;
 	protected int m_iCommanderIntervalMs;
 	protected int m_iMaxManagedAgents;
+	protected int m_iWarTempoPercent;
 	protected FactionKey m_sExpectedPlayerFaction;
 	protected bool m_bDebugMapMarkers;
+	protected bool m_bRequirePlayerForResult;
 
 	void AICF_Stage1Config()
 	{
@@ -42,8 +45,10 @@ class AICF_Stage1Config
 		m_iReinforcementDelayMs = DEFAULT_REINFORCEMENT_DELAY_MS;
 		m_iCommanderIntervalMs = DEFAULT_COMMANDER_INTERVAL_MS;
 		m_iMaxManagedAgents = DEFAULT_MAX_MANAGED_AGENTS;
+		m_iWarTempoPercent = DEFAULT_WAR_TEMPO_PERCENT;
 		m_sExpectedPlayerFaction = string.Empty;
 		m_bDebugMapMarkers = false;
+		m_bRequirePlayerForResult = true;
 	}
 
 	int GetInitialTickets()
@@ -96,6 +101,24 @@ class AICF_Stage1Config
 		m_iMaxManagedAgents = ClampInt(value, MIN_MANAGED_AGENTS, MAX_MANAGED_AGENTS);
 	}
 
+	int GetWarTempoPercent()
+	{
+		return m_iWarTempoPercent;
+	}
+
+	void SetWarTempoPercent(int value)
+	{
+		m_iWarTempoPercent = ClampInt(value, 25, 400);
+		m_iReinforcementDelayMs = ClampInt(
+			DEFAULT_REINFORCEMENT_DELAY_MS * 100 / m_iWarTempoPercent,
+			0,
+			MAX_DELAY_MS);
+		m_iCommanderIntervalMs = ClampInt(
+			DEFAULT_COMMANDER_INTERVAL_MS * 100 / m_iWarTempoPercent,
+			MIN_COMMANDER_INTERVAL_MS,
+			MAX_COMMANDER_INTERVAL_MS);
+	}
+
 	FactionKey GetExpectedPlayerFaction()
 	{
 		return m_sExpectedPlayerFaction;
@@ -118,9 +141,22 @@ class AICF_Stage1Config
 		m_bDebugMapMarkers = enabled;
 	}
 
+	bool GetRequirePlayerForResult()
+	{
+		return m_bRequirePlayerForResult;
+	}
+
+	void SetRequirePlayerForResult(bool required)
+	{
+		m_bRequirePlayerForResult = required;
+	}
+
 	protected void ApplyCLIOverrides()
 	{
 		string value;
+		// Apply the coarse preset first. Explicit timing overrides below always win.
+		if (System.GetCLIParam("aicfWarTempoPercent", value))
+			SetWarTempoPercent(value.ToInt());
 		if (System.GetCLIParam("aicfInitialTickets", value))
 			SetInitialTickets(value.ToInt());
 		if (System.GetCLIParam("aicfReplacementTicketCost", value))
@@ -135,6 +171,8 @@ class AICF_Stage1Config
 			SetExpectedPlayerFaction(value);
 		if (System.GetCLIParam("aicfDebugMapMarkers", value))
 			SetDebugMapMarkers(value.ToInt() > 0);
+		if (System.GetCLIParam("aicfRequirePlayerForResult", value))
+			SetRequirePlayerForResult(value.ToInt() > 0);
 	}
 
 	protected int ClampInt(int value, int minimum, int maximum)

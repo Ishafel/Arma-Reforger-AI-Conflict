@@ -6,11 +6,20 @@ class AICF_GroupSlot
 	protected AICF_EGroupSlotState m_State;
 	protected int m_iReinforcementReadyAtMs;
 	protected int m_iSpawnStartedAtMs;
+	protected int m_iSpawnGeneration;
+	protected int m_iLastOrderRecoveryAtMs;
+	protected int m_iLastProgressAtMs;
+	protected int m_iStuckRecoveryCount;
 	protected bool m_bReplacementDeployment;
 	protected bool m_bTargetUnavailableReported;
+	protected bool m_bRecoveringFromStuck;
+	protected bool m_bPersistentStuckReported;
+	protected bool m_bLoadBlockReported;
+	protected float m_fBestDistanceToTarget = -1.0;
 
 	protected SCR_AIGroup m_Group;
 	protected SCR_CampaignMilitaryBaseComponent m_TargetBase;
+	protected SCR_CampaignMilitaryBaseComponent m_ProgressTargetBase;
 	protected AIWaypoint m_Waypoint;
 
 	void AICF_GroupSlot(int slotId, AICF_EGroupRole role)
@@ -60,6 +69,21 @@ class AICF_GroupSlot
 		return m_iSpawnStartedAtMs;
 	}
 
+	int GetSpawnGeneration()
+	{
+		return m_iSpawnGeneration;
+	}
+
+	int GetStuckRecoveryCount()
+	{
+		return m_iStuckRecoveryCount;
+	}
+
+	bool IsRecoveringFromStuck()
+	{
+		return m_bRecoveringFromStuck;
+	}
+
 	bool IsReplacementDeployment()
 	{
 		return m_bReplacementDeployment;
@@ -80,6 +104,29 @@ class AICF_GroupSlot
 		m_bTargetUnavailableReported = false;
 	}
 
+	bool MarkLoadBlockReported()
+	{
+		if (m_bLoadBlockReported)
+			return false;
+
+		m_bLoadBlockReported = true;
+		return true;
+	}
+
+	void ResetLoadBlockReported()
+	{
+		m_bLoadBlockReported = false;
+	}
+
+	bool MarkPersistentStuckReported()
+	{
+		if (m_bPersistentStuckReported)
+			return false;
+
+		m_bPersistentStuckReported = true;
+		return true;
+	}
+
 	bool BeginInitialSpawn()
 	{
 		if (m_State != AICF_EGroupSlotState.EMPTY)
@@ -87,6 +134,7 @@ class AICF_GroupSlot
 
 		ClearRuntimeReferences();
 		m_bReplacementDeployment = false;
+		m_iSpawnGeneration++;
 		m_iSpawnStartedAtMs = System.GetTickCount();
 		m_State = AICF_EGroupSlotState.SPAWNING;
 		return true;
@@ -99,6 +147,7 @@ class AICF_GroupSlot
 
 		ClearRuntimeReferences();
 		m_bReplacementDeployment = true;
+		m_iSpawnGeneration++;
 		m_iSpawnStartedAtMs = System.GetTickCount();
 		m_State = AICF_EGroupSlotState.SPAWNING;
 		return true;
@@ -106,7 +155,7 @@ class AICF_GroupSlot
 
 	bool BindSpawnedGroup(SCR_AIGroup group)
 	{
-		if (m_State != AICF_EGroupSlotState.SPAWNING || !group)
+		if (m_State != AICF_EGroupSlotState.SPAWNING || !group || m_Group)
 			return false;
 
 		m_Group = group;
@@ -127,9 +176,80 @@ class AICF_GroupSlot
 		if (m_State != AICF_EGroupSlotState.READY || !m_Group || !targetBase || !waypoint)
 			return false;
 
+		if (m_ProgressTargetBase != targetBase)
+			ResetProgressTracking();
+
 		m_TargetBase = targetBase;
 		m_Waypoint = waypoint;
 		return true;
+	}
+
+	bool CanAttemptOrderRecovery(int retryIntervalMs)
+	{
+		if (m_iLastOrderRecoveryAtMs <= 0)
+			return true;
+
+		return System.GetTickCount(m_iLastOrderRecoveryAtMs) >= retryIntervalMs;
+	}
+
+	void MarkOrderRecoveryAttempt()
+	{
+		m_iLastOrderRecoveryAtMs = System.GetTickCount();
+	}
+
+	bool ObserveProgress(
+		SCR_CampaignMilitaryBaseComponent targetBase,
+		float distanceMeters,
+		float minimumProgressMeters)
+	{
+		if (!targetBase || distanceMeters < 0)
+			return false;
+
+		if (m_ProgressTargetBase != targetBase || m_iLastProgressAtMs <= 0)
+		{
+			m_ProgressTargetBase = targetBase;
+			m_fBestDistanceToTarget = distanceMeters;
+			m_iLastProgressAtMs = System.GetTickCount();
+			m_iStuckRecoveryCount = 0;
+			m_bRecoveringFromStuck = false;
+			m_bPersistentStuckReported = false;
+			return true;
+		}
+
+		if (distanceMeters > m_fBestDistanceToTarget - minimumProgressMeters)
+			return false;
+
+		m_fBestDistanceToTarget = distanceMeters;
+		m_iLastProgressAtMs = System.GetTickCount();
+		m_iStuckRecoveryCount = 0;
+		m_bRecoveringFromStuck = false;
+		m_bPersistentStuckReported = false;
+		return true;
+	}
+
+	bool IsStuck(int timeoutMs)
+	{
+		return m_iLastProgressAtMs > 0 && System.GetTickCount(m_iLastProgressAtMs) >= timeoutMs;
+	}
+
+	void ConfirmAtObjective(
+		SCR_CampaignMilitaryBaseComponent targetBase,
+		float distanceMeters)
+	{
+		m_ProgressTargetBase = targetBase;
+		m_fBestDistanceToTarget = distanceMeters;
+		m_iLastProgressAtMs = System.GetTickCount();
+		m_iStuckRecoveryCount = 0;
+		m_bRecoveringFromStuck = false;
+		m_bPersistentStuckReported = false;
+	}
+
+	void RecordStuckRecovery(float currentDistanceMeters)
+	{
+		m_iStuckRecoveryCount++;
+		m_iLastProgressAtMs = System.GetTickCount();
+		m_fBestDistanceToTarget = currentDistanceMeters;
+		m_bRecoveringFromStuck = true;
 	}
 
 	// The caller charges a replacement ticket immediately before committing the ready deployment.
@@ -223,6 +343,19 @@ class AICF_GroupSlot
 		m_Waypoint = null;
 		m_iReinforcementReadyAtMs = 0;
 		m_iSpawnStartedAtMs = 0;
+		m_iLastOrderRecoveryAtMs = 0;
 		m_bTargetUnavailableReported = false;
+		m_bLoadBlockReported = false;
+		ResetProgressTracking();
+	}
+
+	protected void ResetProgressTracking()
+	{
+		m_ProgressTargetBase = null;
+		m_fBestDistanceToTarget = -1.0;
+		m_iLastProgressAtMs = 0;
+		m_iStuckRecoveryCount = 0;
+		m_bRecoveringFromStuck = false;
+		m_bPersistentStuckReported = false;
 	}
 }

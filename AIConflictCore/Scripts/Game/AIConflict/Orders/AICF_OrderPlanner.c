@@ -47,28 +47,86 @@ class AICF_OrderPlanner
 
 	bool IsOrderValid(AICF_GroupSlot slot, SCR_CampaignFaction faction)
 	{
-		if (!slot || !faction || !slot.IsCombatReady() || !slot.GetWaypoint())
-			return false;
+		return GetOrderFailureReason(slot, faction).IsEmpty();
+	}
 
+	string GetOrderFailureReason(AICF_GroupSlot slot, SCR_CampaignFaction faction)
+	{
+		if (!slot || !faction)
+			return "INPUT_INVALID";
+		if (!slot.IsCombatReady() || !slot.GetGroup())
+			return "GROUP_NOT_READY";
+		if (!slot.GetWaypoint())
+			return "WAYPOINT_REFERENCE_MISSING";
 		if (slot.GetGroup().GetCurrentWaypoint() != slot.GetWaypoint())
-			return false;
-
-		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
-		if (!target || !target.GetOwner() || !target.IsInitialized())
-			return false;
-
-		if (slot.GetRole() == AICF_EGroupRole.ATTACK)
+			return "WAYPOINT_NOT_CURRENT";
+		if (!IsTargetValidForRole(slot, faction, slot.GetTargetBase()))
+			return "TARGET_INVALID";
+		if (slot.GetRole() == AICF_EGroupRole.ATTACK &&
+			slot.GetTargetBase().GetType() == SCR_ECampaignBaseType.RELAY &&
+			!SCR_SmartActionWaypoint.Cast(slot.GetWaypoint()))
 		{
-			if (target.GetFaction() == faction || !target.IsValidTarget(faction))
-				return false;
-
-			if (target.GetType() == SCR_ECampaignBaseType.RELAY)
-				return SCR_SmartActionWaypoint.Cast(slot.GetWaypoint()) != null;
-
-			return !target.IsHQ();
+			return "WAYPOINT_TYPE_INVALID";
 		}
 
-		return target == faction.GetMainBase() && target.GetFaction() == faction;
+		return string.Empty;
+	}
+
+	bool RecoverOrder(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		AICF_ObjectiveGraph graph,
+		AICF_TargetSelector targetSelector,
+		string failureReason)
+	{
+		if (!slot || !faction || !graph || !targetSelector || !slot.IsCombatReady())
+			return false;
+
+		SCR_CampaignMilitaryBaseComponent oldTarget = slot.GetTargetBase();
+		bool recovered;
+		if (IsTargetValidForRole(slot, faction, oldTarget))
+			recovered = ReplaceOrder(slot, faction, oldTarget, "ORDER_RECOVERY");
+		else
+			recovered = AssignOrder(slot, faction, graph, targetSelector, "ORDER_RECOVERY", oldTarget);
+
+		if (recovered)
+		{
+			AICF_Stage2Diagnostics.Info(
+				"ORDER_RECOVERED",
+				string.Format(
+					"faction=%1 slot=%2 role=%3 cause=%4 target=%5",
+					faction.GetFactionKey(),
+					slot.GetSlotId(),
+					AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+					failureReason,
+					AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase())));
+		}
+		else
+		{
+			AICF_Stage2Diagnostics.Warning(
+				"ORDER_RECOVERY_DEFERRED",
+				string.Format(
+					"faction=%1 slot=%2 cause=%3",
+					faction.GetFactionKey(),
+					slot.GetSlotId(),
+					failureReason));
+		}
+
+		return recovered;
+	}
+
+	bool RebuildCurrentOrder(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		string reason)
+	{
+		if (!slot || !faction || !slot.IsCombatReady() ||
+			!IsTargetValidForRole(slot, faction, slot.GetTargetBase()))
+		{
+			return false;
+		}
+
+		return ReplaceOrder(slot, faction, slot.GetTargetBase(), reason);
 	}
 
 	void ClearOrder(AICF_GroupSlot slot)
@@ -147,6 +205,28 @@ class AICF_OrderPlanner
 					reason));
 		}
 		return true;
+	}
+
+	protected bool IsTargetValidForRole(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		SCR_CampaignMilitaryBaseComponent target)
+	{
+		if (!slot || !faction || !target || !target.GetOwner() || !target.IsInitialized())
+			return false;
+
+		if (slot.GetRole() == AICF_EGroupRole.ATTACK)
+		{
+			if (target.GetFaction() == faction || !target.IsValidTarget(faction))
+				return false;
+
+			if (target.GetType() == SCR_ECampaignBaseType.RELAY)
+				return true;
+
+			return !target.IsHQ();
+		}
+
+		return target == faction.GetMainBase() && target.GetFaction() == faction;
 	}
 
 	protected AIWaypoint CreateWaypoint(

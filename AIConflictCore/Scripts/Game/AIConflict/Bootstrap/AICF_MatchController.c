@@ -10,6 +10,7 @@ class AICF_MatchController
 	protected static const int GROUP_SPAWN_TIMEOUT_MS = 30000;
 	protected static const int PENDING_GROUP_AGENT_BUDGET = 8;
 	protected static const float RELAY_CAPTURE_RADIUS_METERS = 30.0;
+	protected static const float STUCK_WATCHDOG_IGNORE_RADIUS_METERS = 100.0;
 
 	protected bool m_bStarted;
 	protected bool m_bStopped;
@@ -19,6 +20,7 @@ class AICF_MatchController
 	protected bool m_bGraphRebuildNeeded;
 	protected bool m_bResultLogged;
 	protected bool m_bCampaignWasRunning;
+	protected bool m_bTestOrderDropInjected;
 
 	protected bool m_bObservedCapture;
 	protected bool m_bObservedRetarget;
@@ -27,9 +29,16 @@ class AICF_MatchController
 	protected bool m_bObservedTicketDebit;
 	protected bool m_bObservedPlayerJoin;
 	protected int m_iLastCaptureAtMs;
+	protected int m_iOrderRecoveryAttempts;
+	protected int m_iOrderRecoveries;
+	protected int m_iStuckDetections;
+	protected int m_iStuckRecoveries;
+	protected int m_iDuplicateSpawnsPrevented;
+	protected int m_iLifecycleAudits;
 	protected FactionKey m_sObservedPlayerFaction;
 
 	protected ref AICF_Stage1Config m_Config;
+	protected ref AICF_Stage2Config m_Stage2Config;
 	protected ref AICF_ConflictAdapter m_ConflictAdapter;
 	protected ref AICF_ObjectiveGraph m_ObjectiveGraph;
 	protected ref AICF_TargetSelector m_TargetSelector;
@@ -71,6 +80,8 @@ class AICF_MatchController
 
 		m_Campaign = campaign;
 		m_Config = new AICF_Stage1Config();
+		m_Stage2Config = new AICF_Stage2Config();
+		AICF_Stage2Diagnostics.Configure();
 		m_ConflictAdapter = new AICF_ConflictAdapter();
 		m_ObjectiveGraph = new AICF_ObjectiveGraph();
 		m_TargetSelector = new AICF_TargetSelector();
@@ -110,7 +121,7 @@ class AICF_MatchController
 		AICF_Stage1Diagnostics.Info(
 			"CONFIG",
 			string.Format(
-				"commander_interval_ms=%1 replacement_delay_ms=%2 initial_tickets=%3 groups_per_faction=%4 replacement_ticket_cost=%5 max_managed_agents=%6 expected_player_faction=%7 debug_map_markers=%8",
+				"commander_interval_ms=%1 replacement_delay_ms=%2 initial_tickets=%3 groups_per_faction=%4 replacement_ticket_cost=%5 max_managed_agents=%6 expected_player_faction=%7 debug_map_markers=%8 war_tempo_percent=%9",
 				m_Config.GetCommanderIntervalMs(),
 				m_Config.GetReinforcementDelayMs(),
 				m_Config.GetInitialTickets(),
@@ -118,7 +129,30 @@ class AICF_MatchController
 				m_Config.GetReplacementTicketCost(),
 				m_Config.GetMaxManagedAgents(),
 				expectedPlayerFaction,
-				m_Config.GetDebugMapMarkers()));
+				m_Config.GetDebugMapMarkers(),
+				m_Config.GetWarTempoPercent()));
+		AICF_Stage2Diagnostics.Info(
+			"RELIABILITY_CONFIG",
+			string.Format(
+				"interval_ms=%1 order_retry_ms=%2 stuck_watchdog=%3 stuck_timeout_ms=%4 stuck_progress_m=%5 max_stuck_recoveries=%6 max_concurrent_spawns=%7 require_player=%8",
+				m_Stage2Config.GetReliabilityIntervalMs(),
+				m_Stage2Config.GetOrderRecoveryRetryMs(),
+				m_Stage2Config.GetStuckWatchdogEnabled(),
+				m_Stage2Config.GetStuckTimeoutMs(),
+				m_Stage2Config.GetStuckProgressMeters(),
+				m_Stage2Config.GetMaxStuckRecoveries(),
+				m_Stage2Config.GetMaxConcurrentReplacementSpawns(),
+				m_Config.GetRequirePlayerForResult()));
+		if (m_Stage2Config.HasTestDropOrder())
+		{
+			AICF_Stage2Diagnostics.Warning(
+				"TEST_HOOK_CONFIGURED",
+				string.Format(
+					"action=DROP_ORDER faction=%1 slot=%2 at_ms=%3",
+					m_Stage2Config.GetTestDropOrderFaction(),
+					m_Stage2Config.GetTestDropOrderSlot(),
+					m_Stage2Config.GetTestDropOrderAtMs()));
+		}
 		AICF_Stage1Diagnostics.Info("MATCH_START", "map=Arland factions=US,USSR");
 		SyncTickets();
 
@@ -130,6 +164,7 @@ class AICF_MatchController
 
 		GetGame().GetCallqueue().CallLater(Update, UPDATE_INTERVAL_MS, true);
 		GetGame().GetCallqueue().CallLater(CommanderTick, m_Config.GetCommanderIntervalMs(), true);
+		GetGame().GetCallqueue().CallLater(ReliabilityTick, m_Stage2Config.GetReliabilityIntervalMs(), true);
 		GetGame().GetCallqueue().CallLater(Heartbeat, HEARTBEAT_INTERVAL_MS, true);
 	}
 
@@ -159,6 +194,14 @@ class AICF_MatchController
 			if (!slot || !slot.BeginInitialSpawn())
 				return false;
 
+			AICF_Stage2Diagnostics.Info(
+				"SPAWN_ATTEMPT_STARTED",
+				string.Format(
+					"faction=%1 slot=%2 generation=%3 kind=INITIAL",
+					faction.GetFactionKey(),
+					slotId,
+					slot.GetSpawnGeneration()));
+
 			AICF_Stage1Diagnostics.Info(
 				"ROLE_ASSIGNED",
 				string.Format(
@@ -168,7 +211,7 @@ class AICF_MatchController
 					AICF_Stage1Diagnostics.RoleToString(slot.GetRole())));
 
 			SCR_AIGroup group = m_GroupSpawner.SpawnGroup(faction, spawnBase, slotId);
-			if (!group || !slot.BindSpawnedGroup(group))
+			if (!group || !BindManagedGroup(factionState, faction, slot, group, "INITIAL"))
 			{
 				if (group)
 					RplComponent.DeleteRplEntity(group, false);
@@ -247,12 +290,6 @@ class AICF_MatchController
 			if (slot.GetState() == AICF_EGroupSlotState.READY && !slot.GetGroup())
 			{
 				HandleLostReadyGroup(factionState, faction, slot);
-				continue;
-			}
-
-			if (slot.GetState() == AICF_EGroupSlotState.READY && !slot.GetWaypoint())
-			{
-				CompleteReadyDeployment(factionState, faction, slot);
 				continue;
 			}
 
@@ -350,6 +387,23 @@ class AICF_MatchController
 		int nowMs)
 	{
 		int scheduledReadyAtMs = slot.GetReinforcementReadyAtMs();
+		if (CountConcurrentReplacementSpawns() >= m_Stage2Config.GetMaxConcurrentReplacementSpawns())
+		{
+			if (slot.MarkLoadBlockReported())
+			{
+				AICF_Stage2Diagnostics.Info(
+					"LOAD_LIMIT_BLOCKED",
+					string.Format(
+						"faction=%1 slot=%2 reason=SPAWN_CONCURRENCY active=%3 limit=%4",
+						faction.GetFactionKey(),
+						slot.GetSlotId(),
+						CountConcurrentReplacementSpawns(),
+						m_Stage2Config.GetMaxConcurrentReplacementSpawns()));
+			}
+			return;
+		}
+		slot.ResetLoadBlockReported();
+
 		if (!factionState.TryReserveDeployment(AICF_EDeploymentKind.REPLACEMENT))
 			return;
 
@@ -358,6 +412,14 @@ class AICF_MatchController
 			factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
 			return;
 		}
+
+		AICF_Stage2Diagnostics.Info(
+			"SPAWN_ATTEMPT_STARTED",
+			string.Format(
+				"faction=%1 slot=%2 generation=%3 kind=REPLACEMENT",
+				faction.GetFactionKey(),
+				slot.GetSlotId(),
+				slot.GetSpawnGeneration()));
 
 		int replacementOvershootMs = nowMs - scheduledReadyAtMs;
 		if (replacementOvershootMs < 0 || replacementOvershootMs > 2000)
@@ -397,7 +459,7 @@ class AICF_MatchController
 			return;
 		}
 
-		if (!slot.BindSpawnedGroup(group))
+		if (!BindManagedGroup(factionState, faction, slot, group, "REPLACEMENT"))
 		{
 			RplComponent.DeleteRplEntity(group, false);
 			slot.ReturnSpawnToWait(nowMs + REINFORCEMENT_RETRY_MS);
@@ -414,6 +476,96 @@ class AICF_MatchController
 				slot.GetSlotId(),
 				GroupKey(group),
 				AICF_Stage1Diagnostics.BaseKey(spawnBase)));
+	}
+
+	protected bool BindManagedGroup(
+		AICF_FactionState factionState,
+		SCR_CampaignFaction faction,
+		AICF_GroupSlot slot,
+		SCR_AIGroup group,
+		string deploymentKind)
+	{
+		if (!factionState || !faction || !slot || !group)
+			return false;
+
+		string rejectionReason;
+		if (slot.GetGroup())
+			rejectionReason = "SLOT_ALREADY_BOUND";
+		else if (IsGroupBoundElsewhere(group, slot))
+			rejectionReason = "GROUP_ALREADY_MANAGED";
+		else if (!slot.BindSpawnedGroup(group))
+			rejectionReason = "SLOT_STATE_REJECTED";
+
+		if (!rejectionReason.IsEmpty())
+		{
+			m_iDuplicateSpawnsPrevented++;
+			AICF_Stage2Diagnostics.Warning(
+				"DUPLICATE_SPAWN_PREVENTED",
+				string.Format(
+					"faction=%1 slot=%2 generation=%3 group=%4 reason=%5",
+					faction.GetFactionKey(),
+					slot.GetSlotId(),
+					slot.GetSpawnGeneration(),
+					GroupKey(group),
+					rejectionReason));
+			return false;
+		}
+
+		AICF_Stage2Diagnostics.Info(
+			"SPAWN_BOUND",
+			string.Format(
+				"faction=%1 slot=%2 generation=%3 group=%4 kind=%5",
+				faction.GetFactionKey(),
+				slot.GetSlotId(),
+				slot.GetSpawnGeneration(),
+				GroupKey(group),
+				deploymentKind));
+		return true;
+	}
+
+	protected bool IsGroupBoundElsewhere(SCR_AIGroup group, AICF_GroupSlot expectedSlot)
+	{
+		return IsGroupBoundInFaction(m_USState, group, expectedSlot) ||
+			IsGroupBoundInFaction(m_USSRState, group, expectedSlot);
+	}
+
+	protected bool IsGroupBoundInFaction(
+		AICF_FactionState factionState,
+		SCR_AIGroup group,
+		AICF_GroupSlot expectedSlot)
+	{
+		if (!factionState || !group)
+			return false;
+
+		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (slot && slot != expectedSlot && slot.GetGroup() == group)
+				return true;
+		}
+
+		return false;
+	}
+
+	protected int CountConcurrentReplacementSpawns()
+	{
+		return CountFactionReplacementSpawns(m_USState) + CountFactionReplacementSpawns(m_USSRState);
+	}
+
+	protected int CountFactionReplacementSpawns(AICF_FactionState factionState)
+	{
+		if (!factionState)
+			return 0;
+
+		int count;
+		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (slot && slot.GetState() == AICF_EGroupSlotState.SPAWNING && slot.IsReplacementDeployment())
+				count++;
+		}
+
+		return count;
 	}
 
 	protected void HandleSpawnTimeout(
@@ -580,8 +732,15 @@ class AICF_MatchController
 			if (TryCaptureArrivedRelay(slot, faction))
 				return true;
 
-			if (m_OrderPlanner.IsOrderValid(slot, faction))
+			string failureReason = m_OrderPlanner.GetOrderFailureReason(slot, faction);
+			if (failureReason.IsEmpty())
 				continue;
+
+			if (failureReason != "TARGET_INVALID")
+			{
+				TryRecoverOrder(slot, faction, failureReason);
+				continue;
+			}
 
 			SCR_CampaignMilitaryBaseComponent oldTarget = slot.GetTargetBase();
 			SCR_CampaignMilitaryBaseComponent excludedTarget;
@@ -591,6 +750,238 @@ class AICF_MatchController
 		}
 
 		return false;
+	}
+
+	protected void ReliabilityTick()
+	{
+		if (m_bStopped || !m_Campaign || !m_Campaign.IsRunning())
+			return;
+
+		TryInjectTestOrderLoss();
+		AuditLifecycleInvariants();
+		if (m_bGraphRebuildNeeded || m_bReplanScheduled)
+			return;
+
+		ProcessFactionReliability(m_USState, m_USFaction);
+		ProcessFactionReliability(m_USSRState, m_USSRFaction);
+	}
+
+	protected void TryInjectTestOrderLoss()
+	{
+		if (m_bTestOrderDropInjected || !m_bRosterReady || !m_Stage2Config.HasTestDropOrder() ||
+			AICF_Stage1Diagnostics.GetElapsedMs() < m_Stage2Config.GetTestDropOrderAtMs())
+		{
+			return;
+		}
+
+		AICF_FactionState factionState = m_USState;
+		if (m_Stage2Config.GetTestDropOrderFaction() == "USSR")
+			factionState = m_USSRState;
+		if (!factionState)
+			return;
+
+		AICF_GroupSlot slot = factionState.GetSlot(m_Stage2Config.GetTestDropOrderSlot());
+		if (!slot || !slot.IsCombatReady() || !slot.GetWaypoint())
+			return;
+
+		string oldTarget = AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase());
+		m_OrderPlanner.ClearOrder(slot);
+		m_bTestOrderDropInjected = true;
+		AICF_Stage2Diagnostics.Warning(
+			"TEST_ORDER_DROPPED",
+			string.Format(
+				"faction=%1 slot=%2 old_target=%3",
+				m_Stage2Config.GetTestDropOrderFaction(),
+				m_Stage2Config.GetTestDropOrderSlot(),
+				oldTarget));
+	}
+
+	protected void ProcessFactionReliability(
+		AICF_FactionState factionState,
+		SCR_CampaignFaction faction)
+	{
+		if (!factionState || !faction)
+			return;
+
+		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (!slot || !slot.IsCombatReady())
+				continue;
+
+			string failureReason = m_OrderPlanner.GetOrderFailureReason(slot, faction);
+			if (!failureReason.IsEmpty())
+			{
+				TryRecoverOrder(slot, faction, failureReason);
+				continue;
+			}
+
+			MonitorGroupProgress(slot, faction);
+		}
+	}
+
+	protected void TryRecoverOrder(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		string failureReason)
+	{
+		if (!slot.CanAttemptOrderRecovery(m_Stage2Config.GetOrderRecoveryRetryMs()))
+			return;
+
+		slot.MarkOrderRecoveryAttempt();
+		m_iOrderRecoveryAttempts++;
+		if (m_OrderPlanner.RecoverOrder(
+			slot,
+			faction,
+			m_ObjectiveGraph,
+			m_TargetSelector,
+			failureReason))
+		{
+			m_iOrderRecoveries++;
+		}
+	}
+
+	protected void MonitorGroupProgress(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction)
+	{
+		if (!m_Stage2Config.GetStuckWatchdogEnabled())
+			return;
+
+		SCR_AIGroup group = slot.GetGroup();
+		AIWaypoint waypoint = slot.GetWaypoint();
+		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
+		if (!group || !waypoint || !target)
+			return;
+
+		float distanceMeters = Math.Sqrt(vector.DistanceSqXZ(group.GetOrigin(), waypoint.GetOrigin()));
+		if (distanceMeters <= STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
+		{
+			slot.ConfirmAtObjective(target, distanceMeters);
+			return;
+		}
+
+		slot.ObserveProgress(
+			target,
+			distanceMeters,
+			m_Stage2Config.GetStuckProgressMeters());
+		if (!slot.IsStuck(m_Stage2Config.GetStuckTimeoutMs()))
+			return;
+
+		int recoveryAttempt = slot.GetStuckRecoveryCount() + 1;
+		m_iStuckDetections++;
+		AICF_Stage2Diagnostics.Warning(
+			"GROUP_STUCK_DETECTED",
+			string.Format(
+				"faction=%1 slot=%2 role=%3 target=%4 distance_m=%5 timeout_ms=%6 attempt=%7",
+				faction.GetFactionKey(),
+				slot.GetSlotId(),
+				AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+				AICF_Stage1Diagnostics.BaseKey(target),
+				distanceMeters,
+				m_Stage2Config.GetStuckTimeoutMs(),
+				recoveryAttempt));
+
+		bool recovered = m_OrderPlanner.RebuildCurrentOrder(slot, faction, "STUCK_ROUTE_REBUILD");
+		if (!recovered)
+		{
+			recovered = m_OrderPlanner.RecoverOrder(
+				slot,
+				faction,
+				m_ObjectiveGraph,
+				m_TargetSelector,
+				"STUCK_TARGET_INVALID");
+		}
+
+		slot.RecordStuckRecovery(distanceMeters);
+		if (recovered)
+			m_iStuckRecoveries++;
+
+		AICF_Stage2Diagnostics.Info(
+			"GROUP_STUCK_RECOVERY",
+			string.Format(
+				"faction=%1 slot=%2 action=REBUILD_ORDER success=%3 attempt=%4",
+				faction.GetFactionKey(),
+				slot.GetSlotId(),
+				recovered,
+				recoveryAttempt));
+
+		if (recoveryAttempt >= m_Stage2Config.GetMaxStuckRecoveries() &&
+			slot.MarkPersistentStuckReported())
+		{
+			AICF_Stage2Diagnostics.Warning(
+				"GROUP_STUCK_PERSISTENT",
+				string.Format(
+					"faction=%1 slot=%2 attempts=%3 action=CONTINUE_ROUTE_REBUILDS",
+					faction.GetFactionKey(),
+					slot.GetSlotId(),
+					recoveryAttempt));
+		}
+	}
+
+	protected void AuditLifecycleInvariants()
+	{
+		m_iLifecycleAudits++;
+		array<SCR_AIGroup> seenGroups = {};
+		AuditFactionLifecycle(m_USState, m_USFaction, seenGroups);
+		AuditFactionLifecycle(m_USSRState, m_USSRFaction, seenGroups);
+
+		int concurrentSpawns = CountConcurrentReplacementSpawns();
+		if (concurrentSpawns > m_Stage2Config.GetMaxConcurrentReplacementSpawns())
+		{
+			AICF_Stage2Diagnostics.Error(
+				"SPAWN_CONCURRENCY_INVARIANT_FAILED",
+				string.Format(
+					"active=%1 limit=%2",
+					concurrentSpawns,
+					m_Stage2Config.GetMaxConcurrentReplacementSpawns()));
+		}
+	}
+
+	protected void AuditFactionLifecycle(
+		AICF_FactionState factionState,
+		SCR_CampaignFaction faction,
+		array<SCR_AIGroup> seenGroups)
+	{
+		if (!factionState || !faction)
+			return;
+
+		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (!slot)
+				continue;
+
+			SCR_AIGroup group = slot.GetGroup();
+			if (!group)
+				continue;
+
+			if (seenGroups.Contains(group))
+			{
+				AICF_Stage2Diagnostics.Error(
+					"DUPLICATE_GROUP_BINDING",
+					string.Format(
+						"faction=%1 slot=%2 group=%3",
+						faction.GetFactionKey(),
+						slotId,
+						GroupKey(group)));
+				continue;
+			}
+			seenGroups.Insert(group);
+
+			AICF_EGroupSlotState state = slot.GetState();
+			if (state != AICF_EGroupSlotState.SPAWNING && state != AICF_EGroupSlotState.READY)
+			{
+				AICF_Stage2Diagnostics.Error(
+					"GROUP_SLOT_STATE_INVARIANT_FAILED",
+					string.Format(
+						"faction=%1 slot=%2 state=%3 group=%4",
+						faction.GetFactionKey(),
+						slotId,
+						AICF_Stage1Diagnostics.StateToString(state),
+						GroupKey(group)));
+			}
+		}
 	}
 
 	protected bool TryCaptureArrivedRelay(AICF_GroupSlot slot, SCR_CampaignFaction faction)
@@ -842,6 +1233,19 @@ class AICF_MatchController
 				m_USState.CountSlotsByState(AICF_EGroupSlotState.READY),
 				m_USSRState.CountSlotsByState(AICF_EGroupSlotState.READY),
 				CountManagedAgents()));
+
+		AICF_Stage2Diagnostics.Info(
+			"RELIABILITY_HEARTBEAT",
+			string.Format(
+				"audits=%1 order_attempts=%2 order_recovered=%3 stuck_detected=%4 stuck_recovered=%5 duplicate_spawns_prevented=%6 concurrent_spawns=%7 managed_agents=%8",
+				m_iLifecycleAudits,
+				m_iOrderRecoveryAttempts,
+				m_iOrderRecoveries,
+				m_iStuckDetections,
+				m_iStuckRecoveries,
+				m_iDuplicateSpawnsPrevented,
+				CountConcurrentReplacementSpawns(),
+				CountManagedAgents()));
 	}
 
 	protected void EvaluateVictory()
@@ -858,9 +1262,13 @@ class AICF_MatchController
 			return;
 
 		FactionKey expectedPlayerFaction = m_Config.GetExpectedPlayerFaction();
-		bool playerFactionValid = m_bObservedPlayerJoin;
-		if (!expectedPlayerFaction.IsEmpty())
-			playerFactionValid = m_sObservedPlayerFaction == expectedPlayerFaction;
+		bool playerFactionValid = true;
+		if (m_Config.GetRequirePlayerForResult())
+		{
+			playerFactionValid = m_bObservedPlayerJoin;
+			if (!expectedPlayerFaction.IsEmpty())
+				playerFactionValid = m_sObservedPlayerFaction == expectedPlayerFaction;
+		}
 
 		bool success = m_bRosterReady &&
 			m_bObservedCapture &&
@@ -870,7 +1278,20 @@ class AICF_MatchController
 			m_bObservedTicketDebit &&
 			playerFactionValid &&
 			m_ReinforcementSystem.HasRejectedUnsafeSite() &&
-			!AICF_Stage1Diagnostics.HasErrors();
+			!AICF_Stage1Diagnostics.HasErrors() &&
+			!AICF_Stage2Diagnostics.HasErrors();
+
+		AICF_Stage2Diagnostics.Info(
+			"MATCH_RELIABILITY_SUMMARY",
+			string.Format(
+				"audits=%1 order_attempts=%2 order_recovered=%3 stuck_detected=%4 stuck_recovered=%5 duplicate_spawns_prevented=%6 errors=%7",
+				m_iLifecycleAudits,
+				m_iOrderRecoveryAttempts,
+				m_iOrderRecoveries,
+				m_iStuckDetections,
+				m_iStuckRecoveries,
+				m_iDuplicateSpawnsPrevented,
+				AICF_Stage2Diagnostics.HasErrors()));
 
 		m_bResultLogged = true;
 		AICF_Stage1Diagnostics.Result(
@@ -1025,6 +1446,7 @@ class AICF_MatchController
 		ScriptCallQueue callqueue = GetGame().GetCallqueue();
 		callqueue.Remove(Update);
 		callqueue.Remove(CommanderTick);
+		callqueue.Remove(ReliabilityTick);
 		callqueue.Remove(Heartbeat);
 		callqueue.Remove(ReplanAfterBaseChange);
 		callqueue.Remove(TryLogPlayerJoined);
