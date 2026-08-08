@@ -27,6 +27,7 @@ class AICF_Stage1Config
 	protected int m_iCommanderIntervalMs;
 	protected int m_iMaxManagedAgents;
 	protected FactionKey m_sExpectedPlayerFaction;
+	protected bool m_bDebugMapMarkers;
 
 	void AICF_Stage1Config()
 	{
@@ -42,6 +43,7 @@ class AICF_Stage1Config
 		m_iCommanderIntervalMs = DEFAULT_COMMANDER_INTERVAL_MS;
 		m_iMaxManagedAgents = DEFAULT_MAX_MANAGED_AGENTS;
 		m_sExpectedPlayerFaction = string.Empty;
+		m_bDebugMapMarkers = false;
 	}
 
 	int GetInitialTickets()
@@ -106,6 +108,16 @@ class AICF_Stage1Config
 			m_sExpectedPlayerFaction = factionKey;
 	}
 
+	bool GetDebugMapMarkers()
+	{
+		return m_bDebugMapMarkers;
+	}
+
+	void SetDebugMapMarkers(bool enabled)
+	{
+		m_bDebugMapMarkers = enabled;
+	}
+
 	protected void ApplyCLIOverrides()
 	{
 		string value;
@@ -121,6 +133,8 @@ class AICF_Stage1Config
 			SetMaxManagedAgents(value.ToInt());
 		if (System.GetCLIParam("aicfExpectedPlayerFaction", value))
 			SetExpectedPlayerFaction(value);
+		if (System.GetCLIParam("aicfDebugMapMarkers", value))
+			SetDebugMapMarkers(value.ToInt() > 0);
 	}
 
 	protected int ClampInt(int value, int minimum, int maximum)

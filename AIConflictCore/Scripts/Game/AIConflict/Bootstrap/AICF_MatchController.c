@@ -36,6 +36,7 @@ class AICF_MatchController
 	protected ref AICF_ReinforcementSystem m_ReinforcementSystem;
 	protected ref AICF_OrderPlanner m_OrderPlanner;
 	protected ref AICF_VictorySystem m_VictorySystem;
+	protected ref AICF_DebugMapMarkerSystem m_DebugMapMarkers;
 	protected ref AICF_FactionState m_USState;
 	protected ref AICF_FactionState m_USSRState;
 
@@ -75,6 +76,8 @@ class AICF_MatchController
 		m_ReinforcementSystem = new AICF_ReinforcementSystem();
 		m_OrderPlanner = new AICF_OrderPlanner();
 		m_VictorySystem = new AICF_VictorySystem();
+		if (m_Config.GetDebugMapMarkers())
+			m_DebugMapMarkers = new AICF_DebugMapMarkerSystem();
 
 		array<SCR_CampaignMilitaryBaseComponent> objectiveBases = {};
 		array<SCR_CampaignMilitaryBaseComponent> graphBases = {};
@@ -104,14 +107,15 @@ class AICF_MatchController
 		AICF_Stage1Diagnostics.Info(
 			"CONFIG",
 			string.Format(
-				"commander_interval_ms=%1 replacement_delay_ms=%2 initial_tickets=%3 groups_per_faction=%4 replacement_ticket_cost=%5 max_managed_agents=%6 expected_player_faction=%7",
+				"commander_interval_ms=%1 replacement_delay_ms=%2 initial_tickets=%3 groups_per_faction=%4 replacement_ticket_cost=%5 max_managed_agents=%6 expected_player_faction=%7 debug_map_markers=%8",
 				m_Config.GetCommanderIntervalMs(),
 				m_Config.GetReinforcementDelayMs(),
 				m_Config.GetInitialTickets(),
 				AICF_Stage1Config.GROUP_SLOTS_PER_FACTION,
 				m_Config.GetReplacementTicketCost(),
 				m_Config.GetMaxManagedAgents(),
-				expectedPlayerFaction));
+				expectedPlayerFaction,
+				m_Config.GetDebugMapMarkers()));
 		AICF_Stage1Diagnostics.Info("MATCH_START", "map=Arland factions=US,USSR");
 		SyncTickets();
 
@@ -209,6 +213,8 @@ class AICF_MatchController
 
 		ProcessFaction(m_USState, m_USFaction);
 		ProcessFaction(m_USSRState, m_USSRFaction);
+		if (m_DebugMapMarkers)
+			m_DebugMapMarkers.Sync(m_USState, m_USSRState);
 		TryLogRosterReady();
 		EvaluateVictory();
 	}
@@ -914,6 +920,12 @@ class AICF_MatchController
 			if (m_Campaign)
 				m_Campaign.GetOnPlayerConnected().Remove(OnPlayerConnected);
 			m_bSubscribed = false;
+		}
+
+		if (m_DebugMapMarkers)
+		{
+			m_DebugMapMarkers.Stop();
+			m_DebugMapMarkers = null;
 		}
 
 		ReleaseFactionGroups(m_USState, cleanupEntities);
