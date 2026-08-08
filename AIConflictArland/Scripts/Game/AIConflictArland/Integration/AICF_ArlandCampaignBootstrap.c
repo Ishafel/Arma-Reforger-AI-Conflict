@@ -6,6 +6,7 @@ modded class SCR_GameModeCampaign
 	protected bool m_bAICFWaitingForConflict;
 	protected bool m_bAICFWaitingForBases;
 	protected ref AICF_MatchController m_AICFMatchController;
+	protected ref AICF_ArlandRadioBridgeNormalizer m_AICFRadioBridgeNormalizer;
 
 	override void OnGameStart()
 	{
@@ -27,6 +28,17 @@ modded class SCR_GameModeCampaign
 		}
 
 		AICF_TryStartStage1();
+	}
+
+	override void OnGameEnd()
+	{
+		if (m_AICFRadioBridgeNormalizer)
+		{
+			m_AICFRadioBridgeNormalizer.Stop();
+			m_AICFRadioBridgeNormalizer = null;
+		}
+
+		super.OnGameEnd();
 	}
 
 	protected void AICF_TryStartStage1()
@@ -105,6 +117,18 @@ modded class SCR_GameModeCampaign
 		{
 			baseManager.GetOnAllBasesInitialized().Remove(AICF_OnAllBasesInitialized);
 			m_bAICFWaitingForBases = false;
+		}
+
+		if (!m_AICFRadioBridgeNormalizer)
+		{
+			m_AICFRadioBridgeNormalizer = new AICF_ArlandRadioBridgeNormalizer();
+			if (!m_AICFRadioBridgeNormalizer.Start(this))
+			{
+				m_AICFRadioBridgeNormalizer = null;
+				AICF_Stage1Diagnostics.Warning(
+					"RADIO_BRIDGE_UNAVAILABLE",
+					"Arland radio bridge normalization could not be started");
+			}
 		}
 
 		AICF_Stage1Diagnostics.Info("CONFLICT_READY", "state=READY scheduling=NEXT_FRAME");

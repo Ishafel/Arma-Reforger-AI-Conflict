@@ -518,7 +518,15 @@ class AICF_MatchController
 			return;
 
 		if (m_bGraphRebuildNeeded)
-			ReplanAfterBaseChange();
+		{
+			// A base event already owns a one-second delayed rebuild. Do not race that
+			// callback or revalidate against a stale graph and bypass retarget telemetry.
+			if (!m_bReplanScheduled)
+				ReplanAfterBaseChange();
+
+			if (m_bGraphRebuildNeeded)
+				return;
+		}
 
 		RevalidateFactionOrders(m_USState, m_USFaction, "COMMANDER_REPLAN");
 		RevalidateFactionOrders(m_USSRState, m_USSRFaction, "COMMANDER_REPLAN");
@@ -608,7 +616,13 @@ class AICF_MatchController
 		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
 		{
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
-			if (!slot || !slot.IsCombatReady() || m_OrderPlanner.IsOrderValid(slot, faction))
+			if (!slot)
+				continue;
+
+			// A rebuilt graph is a new target-availability generation. Allow one fresh
+			// diagnostic if the new snapshot still has no legal destination.
+			slot.ResetTargetUnavailableReport();
+			if (!slot.IsCombatReady() || m_OrderPlanner.IsOrderValid(slot, faction))
 				continue;
 
 			SCR_CampaignMilitaryBaseComponent oldTarget = slot.GetTargetBase();

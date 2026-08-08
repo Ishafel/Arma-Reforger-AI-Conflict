@@ -3,8 +3,11 @@ class AICF_OrderPlanner
 {
 	protected static const ResourceName ATTACK_WAYPOINT_PREFAB = "{B3E7B8DC2BAB8ACC}Prefabs/AI/Waypoints/AIWaypoint_SearchAndDestroy.et";
 	protected static const ResourceName DEFEND_WAYPOINT_PREFAB = "{93291E72AC23930F}Prefabs/AI/Waypoints/AIWaypoint_Defend.et";
+	protected static const ResourceName RELAY_WAYPOINT_PREFAB = "{EAAE93F98ED5D218}Prefabs/AI/Waypoints/AIWaypoint_CaptureRelay.et";
+	protected static const string RELAY_SMART_ACTION_TAG = "CapturePoint";
 	protected static const float ATTACK_RADIUS_METERS = 75.0;
 	protected static const float DEFEND_RADIUS_METERS = 50.0;
+	protected static const float RELAY_RADIUS_METERS = 20.0;
 
 	bool AssignOrder(
 		AICF_GroupSlot slot,
@@ -25,14 +28,17 @@ class AICF_OrderPlanner
 
 		if (!target)
 		{
-			AICF_Stage1Diagnostics.Warning(
-				"ORDER_TARGET_UNAVAILABLE",
-				string.Format(
-					"faction=%1 slot=%2 role=%3 reason=%4",
-					faction.GetFactionKey(),
-					slot.GetSlotId(),
-					AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
-					reason));
+			if (slot.MarkTargetUnavailableReported())
+			{
+				AICF_Stage1Diagnostics.Warning(
+					"ORDER_TARGET_UNAVAILABLE",
+					string.Format(
+						"faction=%1 slot=%2 role=%3 reason=%4",
+						faction.GetFactionKey(),
+						slot.GetSlotId(),
+						AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+						reason));
+			}
 			return false;
 		}
 
@@ -52,7 +58,15 @@ class AICF_OrderPlanner
 			return false;
 
 		if (slot.GetRole() == AICF_EGroupRole.ATTACK)
-			return target.GetFaction() != faction && target.IsValidTarget(faction);
+		{
+			if (target.GetFaction() == faction || !target.IsValidTarget(faction))
+				return false;
+
+			if (target.GetType() == SCR_ECampaignBaseType.RELAY)
+				return SCR_SmartActionWaypoint.Cast(slot.GetWaypoint()) != null;
+
+			return !target.IsHQ();
+		}
 
 		return target == faction.GetMainBase() && target.GetFaction() == faction;
 	}
@@ -105,6 +119,7 @@ class AICF_OrderPlanner
 			RplComponent.DeleteRplEntity(newWaypoint, false);
 			return false;
 		}
+		slot.ResetTargetUnavailableReport();
 
 		if (oldTarget && oldTarget != target)
 		{
@@ -141,13 +156,15 @@ class AICF_OrderPlanner
 		if (!target || !target.GetOwner())
 			return null;
 
-		SCR_SpawnPoint spawnPoint = target.GetSpawnPoint();
-		if (!spawnPoint)
-			return null;
-
 		ResourceName waypointPrefab = DEFEND_WAYPOINT_PREFAB;
 		float completionRadius = DEFEND_RADIUS_METERS;
-		if (role == AICF_EGroupRole.ATTACK)
+		bool isRelay = role == AICF_EGroupRole.ATTACK && target.GetType() == SCR_ECampaignBaseType.RELAY;
+		if (isRelay)
+		{
+			waypointPrefab = RELAY_WAYPOINT_PREFAB;
+			completionRadius = RELAY_RADIUS_METERS;
+		}
+		else if (role == AICF_EGroupRole.ATTACK)
 		{
 			waypointPrefab = ATTACK_WAYPOINT_PREFAB;
 			completionRadius = ATTACK_RADIUS_METERS;
@@ -162,7 +179,18 @@ class AICF_OrderPlanner
 
 		vector targetPosition;
 		vector targetRotation;
-		spawnPoint.GetPositionAndRotation(targetPosition, targetRotation);
+		if (isRelay)
+		{
+			targetPosition = target.GetOwner().GetOrigin();
+		}
+		else
+		{
+			SCR_SpawnPoint spawnPoint = target.GetSpawnPoint();
+			if (!spawnPoint)
+				return null;
+
+			spawnPoint.GetPositionAndRotation(targetPosition, targetRotation);
+		}
 
 		EntitySpawnParams spawnParams = new EntitySpawnParams();
 		spawnParams.TransformMode = ETransformMode.WORLD;
@@ -175,6 +203,20 @@ class AICF_OrderPlanner
 			if (spawnedEntity)
 				RplComponent.DeleteRplEntity(spawnedEntity, false);
 			return null;
+		}
+
+		if (isRelay)
+		{
+			SCR_SmartActionWaypoint relayWaypoint = SCR_SmartActionWaypoint.Cast(waypoint);
+			if (!relayWaypoint)
+			{
+				RplComponent.DeleteRplEntity(waypoint, false);
+				AICF_Stage1Diagnostics.Error("RELAY_WAYPOINT_INVALID", RELAY_WAYPOINT_PREFAB);
+				return null;
+			}
+
+			relayWaypoint.SetSmartActionEntity(target.GetOwner(), RELAY_SMART_ACTION_TAG);
+			waypoint.SetCompletionType(EAIWaypointCompletionType.Any);
 		}
 
 		waypoint.SetCompletionRadius(completionRadius);

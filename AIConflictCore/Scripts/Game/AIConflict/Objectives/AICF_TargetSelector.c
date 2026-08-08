@@ -22,8 +22,10 @@ class AICF_TargetSelector
 		queue.Insert(startNodeId);
 		distance[startNodeId] = 0;
 
-		int bestNodeId = -1;
-		int bestDistance = int.MAX;
+		int bestObjectiveNodeId = -1;
+		int bestObjectiveDistance = int.MAX;
+		int bestRelayNodeId = -1;
+		int bestRelayDistance = int.MAX;
 		for (int head = 0; head < queue.Count(); head++)
 		{
 			int currentNodeId = queue[head];
@@ -33,15 +35,26 @@ class AICF_TargetSelector
 
 			SCR_CampaignMilitaryBaseComponent currentBase = currentNode.GetBase();
 			if (currentNodeId != startNodeId &&
-				currentNode.IsObjective() &&
 				currentBase != excludedTarget &&
 				currentBase.IsValidTarget(faction))
 			{
-				if (distance[currentNodeId] < bestDistance ||
-					(distance[currentNodeId] == bestDistance && currentNodeId < bestNodeId))
+				if (currentBase.GetType() == SCR_ECampaignBaseType.RELAY)
 				{
-					bestNodeId = currentNodeId;
-					bestDistance = distance[currentNodeId];
+					if (distance[currentNodeId] < bestRelayDistance ||
+						(distance[currentNodeId] == bestRelayDistance && currentNodeId < bestRelayNodeId))
+					{
+						bestRelayNodeId = currentNodeId;
+						bestRelayDistance = distance[currentNodeId];
+					}
+				}
+				else if (currentNode.IsObjective() && !currentBase.IsHQ())
+				{
+					if (distance[currentNodeId] < bestObjectiveDistance ||
+						(distance[currentNodeId] == bestObjectiveDistance && currentNodeId < bestObjectiveNodeId))
+					{
+						bestObjectiveNodeId = currentNodeId;
+						bestObjectiveDistance = distance[currentNodeId];
+					}
 				}
 			}
 
@@ -57,6 +70,10 @@ class AICF_TargetSelector
 				queue.Insert(nextNodeId);
 			}
 		}
+
+		int bestNodeId = bestObjectiveNodeId;
+		if (bestNodeId < 0)
+			bestNodeId = bestRelayNodeId;
 
 		if (bestNodeId < 0 && excludedTarget)
 			return SelectAttackTarget(graph, faction, null);

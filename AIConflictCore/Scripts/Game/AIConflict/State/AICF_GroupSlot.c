@@ -7,6 +7,7 @@ class AICF_GroupSlot
 	protected int m_iReinforcementReadyAtMs;
 	protected int m_iSpawnStartedAtMs;
 	protected bool m_bReplacementDeployment;
+	protected bool m_bTargetUnavailableReported;
 
 	protected SCR_AIGroup m_Group;
 	protected SCR_CampaignMilitaryBaseComponent m_TargetBase;
@@ -62,6 +63,21 @@ class AICF_GroupSlot
 	bool IsReplacementDeployment()
 	{
 		return m_bReplacementDeployment;
+	}
+
+	// Returns true only for the first report in the current graph generation.
+	bool MarkTargetUnavailableReported()
+	{
+		if (m_bTargetUnavailableReported)
+			return false;
+
+		m_bTargetUnavailableReported = true;
+		return true;
+	}
+
+	void ResetTargetUnavailableReport()
+	{
+		m_bTargetUnavailableReported = false;
 	}
 
 	bool BeginInitialSpawn()
@@ -207,5 +223,6 @@ class AICF_GroupSlot
 		m_Waypoint = null;
 		m_iReinforcementReadyAtMs = 0;
 		m_iSpawnStartedAtMs = 0;
+		m_bTargetUnavailableReported = false;
 	}
 }
