@@ -9,6 +9,44 @@ class AICF_DebugMapMarkerRuntime
 	}
 }
 
+// Replicate the live debug label independently from the marker config ID. The
+// config ID keeps the stable faction/slot visuals, while this text can change
+// as casualties occur and the commander assigns a new objective.
+modded class SCR_MapMarkerEntity
+{
+	[RplProp(onRplName: "AICF_OnDebugTextReplicated")]
+	protected string m_sAICFDebugText;
+
+	void AICF_SetDebugText(string text)
+	{
+		if (!Replication.IsServer() || m_sAICFDebugText == text)
+			return;
+
+		m_sAICFDebugText = text;
+		Replication.BumpMe();
+		AICF_ApplyDebugText();
+	}
+
+	string AICF_GetDebugText()
+	{
+		return m_sAICFDebugText;
+	}
+
+	protected void AICF_OnDebugTextReplicated()
+	{
+		AICF_ApplyDebugText();
+	}
+
+	protected void AICF_ApplyDebugText()
+	{
+		if (!m_MarkerWidgetComp || m_sAICFDebugText.IsEmpty())
+			return;
+
+		m_MarkerWidgetComp.SetText(m_sAICFDebugText);
+		m_MarkerWidgetComp.SetTextVisible(true);
+	}
+}
+
 // DYNAMIC_EXAMPLE is deliberately reused because stock reserves it as an unconfigured example.
 // The replicated marker config ID carries all visual metadata needed by the client.
 [BaseContainerProps(), SCR_MapMarkerTitle()]
@@ -79,8 +117,12 @@ class AICF_DebugMapMarkerEntry : SCR_MapMarkerEntryDynamic
 				widgetComp.SetImage(imageSet, imageQuads[0]);
 		}
 
+		string markerText = marker.AICF_GetDebugText();
+		if (markerText.IsEmpty())
+			markerText = string.Format("%1 %2%3", factionKey, role, slotId);
+
 		widgetComp.SetColor(markerColor);
-		widgetComp.SetText(string.Format("%1 %2%3", factionKey, role, slotId));
+		widgetComp.SetText(markerText);
 		widgetComp.SetTextVisible(true);
 	}
 }
@@ -114,6 +156,7 @@ class AICF_DebugMapMarkerSystem
 {
 	static const int SLOTS_PER_FACTION = AICF_Stage1Config.GROUP_SLOTS_PER_FACTION;
 	static const int TOTAL_SLOTS = SLOTS_PER_FACTION * 2;
+	static const float AT_OBJECTIVE_RADIUS_METERS = 75;
 
 	protected SCR_MapMarkerManagerComponent m_MarkerManager;
 	protected ref array<SCR_MapMarkerEntity> m_aMarkers = {};
@@ -175,13 +218,22 @@ class AICF_DebugMapMarkerSystem
 
 			if (!group)
 			{
-				// Keep one stable replicated entity per slot. A replacement can rebind the
-				// same marker instead of racing deletion/creation while the map is open.
-				if (m_aMarkers[markerIndex] && m_aTrackedGroups[markerIndex])
+				// Visibility-only updates can leave an already-created client widget on the
+				// map. Delete the replicated marker entity when a slot stops being combat
+				// ready; a successful replacement receives a fresh entity below.
+				if (m_aMarkers[markerIndex])
 				{
-					m_aMarkers[markerIndex].SetTarget(null);
-					m_aMarkers[markerIndex].SetGlobalVisible(false);
-					m_aTrackedGroups[markerIndex] = null;
+					FactionKey factionKey = "US";
+					if (isUSSR)
+						factionKey = "USSR";
+
+					AICF_Stage1Diagnostics.Info(
+						"DEBUG_MAP_MARKER_REMOVED",
+						string.Format(
+							"faction=%1 slot=%2 reason=GROUP_NOT_COMBAT_READY",
+							factionKey,
+							slotId));
+					RemoveMarker(markerIndex);
 				}
 				continue;
 			}
@@ -195,6 +247,8 @@ class AICF_DebugMapMarkerSystem
 					marker.SetGlobalVisible(true);
 					m_aTrackedGroups[markerIndex] = group;
 				}
+
+				marker.AICF_SetDebugText(BuildMarkerText(factionState, slot, group));
 				continue;
 			}
 
@@ -205,10 +259,146 @@ class AICF_DebugMapMarkerSystem
 			if (!marker)
 				continue;
 
+			marker.AICF_SetDebugText(BuildMarkerText(factionState, slot, group));
+
+			// Apply stream rules immediately for clients that were already connected.
+			// Markers created before player spawn are covered by stock
+			// SetStreamRulesForPlayer; replacement markers are not unless SetFaction
+			// explicitly refreshes the current connection nodes. A null faction keeps
+			// these opt-in diagnostics globally visible to both sides.
+			marker.SetFaction(null);
 			marker.SetGlobalVisible(true);
 			m_aMarkers[markerIndex] = marker;
 			m_aTrackedGroups[markerIndex] = group;
+
+			FactionKey factionKey = "US";
+			if (isUSSR)
+				factionKey = "USSR";
+			AICF_Stage1Diagnostics.Info(
+				"DEBUG_MAP_MARKER_CREATED",
+				string.Format("faction=%1 slot=%2", factionKey, slotId));
 		}
+	}
+
+	protected string BuildMarkerText(
+		AICF_FactionState factionState,
+		AICF_GroupSlot slot,
+		SCR_AIGroup group)
+	{
+		string factionKey = factionState.GetFactionKey();
+		string role = AICF_Stage1Diagnostics.RoleToString(slot.GetRole());
+		string identity = string.Format(
+			"%1 %2%3",
+			factionKey,
+			GetShortRole(slot.GetRole()),
+			slot.GetSlotId());
+		string task = DescribeTask(factionState, slot, group);
+		int alive = CountAliveAgents(group);
+
+		return string.Format(
+			"%1 | %2 | %3 | ALIVE %4",
+			identity,
+			role,
+			task,
+			alive);
+	}
+
+	protected string DescribeTask(
+		AICF_FactionState factionState,
+		AICF_GroupSlot slot,
+		SCR_AIGroup group)
+	{
+		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
+		if (!target || !target.GetOwner())
+			return "AWAITING ORDER";
+
+		string targetName = WidgetManager.Translate(target.GetBaseName());
+		if (targetName.IsEmpty())
+			targetName = "BASE";
+
+		string targetLabel = string.Format(
+			"%1 [%2]",
+			targetName,
+			target.GetCallsign());
+		bool atObjective = vector.DistanceSqXZ(
+			group.GetOrigin(),
+			target.GetOwner().GetOrigin()) <=
+			AT_OBJECTIVE_RADIUS_METERS * AT_OBJECTIVE_RADIUS_METERS;
+
+		switch (slot.GetRole())
+		{
+			case AICF_EGroupRole.ATTACK:
+				Faction targetFaction = target.GetFaction();
+				if (targetFaction && targetFaction.GetFactionKey() == factionState.GetFactionKey())
+					return string.Format("AWAITING RETASK AT %1", targetLabel);
+
+				if (target.GetType() == SCR_ECampaignBaseType.RELAY)
+				{
+					if (atObjective)
+						return string.Format("CAPTURING RELAY %1", targetLabel);
+
+					return string.Format("MOVING TO RELAY %1", targetLabel);
+				}
+
+				if (atObjective)
+					return string.Format("CAPTURING %1", targetLabel);
+
+				return string.Format("MOVING TO %1", targetLabel);
+
+			case AICF_EGroupRole.DEFEND:
+				if (atObjective)
+					return string.Format("DEFENDING %1", targetLabel);
+
+				return string.Format("MOVING TO DEFEND %1", targetLabel);
+
+			case AICF_EGroupRole.RESERVE:
+				if (atObjective)
+					return string.Format("HOLDING RESERVE AT %1", targetLabel);
+
+				return string.Format("MOVING TO RESERVE %1", targetLabel);
+		}
+
+		return "AWAITING ORDER";
+	}
+
+	protected string GetShortRole(AICF_EGroupRole role)
+	{
+		switch (role)
+		{
+			case AICF_EGroupRole.ATTACK:
+				return "A";
+			case AICF_EGroupRole.DEFEND:
+				return "D";
+			case AICF_EGroupRole.RESERVE:
+				return "R";
+		}
+
+		return "?";
+	}
+
+	protected int CountAliveAgents(SCR_AIGroup group)
+	{
+		if (!group)
+			return 0;
+
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		int alive;
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+
+			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (!character)
+				continue;
+
+			CharacterControllerComponent controller = character.GetCharacterController();
+			if (controller && controller.GetLifeState() == ECharacterLifeState.ALIVE)
+				alive++;
+		}
+
+		return alive;
 	}
 
 	protected int PackStableConfig(bool isUSSR, AICF_GroupSlot slot)

@@ -9,6 +9,7 @@ class AICF_MatchController
 	protected static const int BASE_REPLAN_DELAY_MS = 1000;
 	protected static const int GROUP_SPAWN_TIMEOUT_MS = 30000;
 	protected static const int PENDING_GROUP_AGENT_BUDGET = 8;
+	protected static const float RELAY_CAPTURE_RADIUS_METERS = 30.0;
 
 	protected bool m_bStarted;
 	protected bool m_bStopped;
@@ -549,19 +550,37 @@ class AICF_MatchController
 				return;
 		}
 
-		RevalidateFactionOrders(m_USState, m_USFaction, "COMMANDER_REPLAN");
+		// A relay capture changes radio coverage synchronously. Stop this commander
+		// pass immediately so no other slot is replanned against the old graph.
+		if (RevalidateFactionOrders(m_USState, m_USFaction, "COMMANDER_REPLAN"))
+			return;
+
 		RevalidateFactionOrders(m_USSRState, m_USSRFaction, "COMMANDER_REPLAN");
 	}
 
-	protected void RevalidateFactionOrders(
+	// Returns true when this pass changed base ownership and invalidated the graph.
+	protected bool RevalidateFactionOrders(
 		AICF_FactionState factionState,
 		SCR_CampaignFaction faction,
 		string reason)
 	{
+		if (!factionState || !faction)
+			return false;
+
 		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
 		{
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
-			if (!slot || !slot.IsCombatReady() || m_OrderPlanner.IsOrderValid(slot, faction))
+			if (!slot || !slot.IsCombatReady())
+				continue;
+
+			// The stock CaptureRelay smart-action waypoint reaches Signal Hill in the
+			// dedicated Conflict runtime, but can finish without invoking its user
+			// action. Preserve the stock radio eligibility rules and complete that
+			// authority operation only after a living managed agent has really arrived.
+			if (TryCaptureArrivedRelay(slot, faction))
+				return true;
+
+			if (m_OrderPlanner.IsOrderValid(slot, faction))
 				continue;
 
 			SCR_CampaignMilitaryBaseComponent oldTarget = slot.GetTargetBase();
@@ -570,6 +589,88 @@ class AICF_MatchController
 				excludedTarget = oldTarget;
 			m_OrderPlanner.AssignOrder(slot, faction, m_ObjectiveGraph, m_TargetSelector, reason, excludedTarget);
 		}
+
+		return false;
+	}
+
+	protected bool TryCaptureArrivedRelay(AICF_GroupSlot slot, SCR_CampaignFaction faction)
+	{
+		if (!Replication.IsServer() || !slot || !faction || slot.GetRole() != AICF_EGroupRole.ATTACK)
+			return false;
+
+		SCR_CampaignMilitaryBaseComponent relay = slot.GetTargetBase();
+		if (!relay || !relay.GetOwner() || !relay.IsInitialized() ||
+			relay.GetType() != SCR_ECampaignBaseType.RELAY ||
+			relay.GetFaction() == faction || !relay.IsValidTarget(faction))
+		{
+			return false;
+		}
+
+		// Only a slot that was explicitly assigned the stock relay smart-action
+		// waypoint may use the server-side completion fallback.
+		if (!SCR_SmartActionWaypoint.Cast(slot.GetWaypoint()))
+			return false;
+
+		SCR_AIGroup group = slot.GetGroup();
+		if (!group)
+			return false;
+
+		int arrivedAgents = CountAliveAgentsNearRelay(group, relay);
+		if (arrivedAgents <= 0)
+			return false;
+
+		FactionKey oldOwner = "NONE";
+		if (relay.GetFaction())
+			oldOwner = relay.GetFaction().GetFactionKey();
+
+		relay.CaptureRelay(faction, SCR_CampaignMilitaryBaseComponent.INVALID_PLAYER_INDEX);
+		if (relay.GetFaction() != faction)
+			return false;
+
+		AICF_Stage1Diagnostics.Info(
+			"RELAY_CAPTURED_BY_AI",
+			string.Format(
+				"faction=%1 slot=%2 base=%3 old_owner=%4 agents_in_radius=%5 radius_m=%6",
+				faction.GetFactionKey(),
+				slot.GetSlotId(),
+				AICF_Stage1Diagnostics.BaseKey(relay),
+				oldOwner,
+				arrivedAgents,
+				RELAY_CAPTURE_RADIUS_METERS));
+		return true;
+	}
+
+	protected int CountAliveAgentsNearRelay(
+		SCR_AIGroup group,
+		SCR_CampaignMilitaryBaseComponent relay)
+	{
+		if (!group || !relay || !relay.GetOwner())
+			return 0;
+
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		vector relayPosition = relay.GetOwner().GetOrigin();
+		float radiusSquared = RELAY_CAPTURE_RADIUS_METERS * RELAY_CAPTURE_RADIUS_METERS;
+		int count;
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+
+			IEntity controlledEntity = agent.GetControlledEntity();
+			ChimeraCharacter character = ChimeraCharacter.Cast(controlledEntity);
+			if (!character)
+				continue;
+
+			CharacterControllerComponent controller = character.GetCharacterController();
+			if (!controller || controller.GetLifeState() != ECharacterLifeState.ALIVE)
+				continue;
+
+			if (vector.DistanceSqXZ(controlledEntity.GetOrigin(), relayPosition) <= radiusSquared)
+				count++;
+		}
+
+		return count;
 	}
 
 	protected void OnBaseFactionChanged(SCR_MilitaryBaseComponent rawBase, Faction newFaction)
