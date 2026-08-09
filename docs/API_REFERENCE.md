@@ -1,4 +1,4 @@
-# Проверенные API Arma Reforger для этапов 0 и 1
+# Проверенные API Arma Reforger для этапов 0–3
 
 ## Зафиксированная версия
 
@@ -264,16 +264,13 @@ Stage 1 хранит два primitive ticket value как `RplProp` на уже 
 static proto bool System.GetCLIParam(string param, out string val)
 ```
 
-Имя передаётся без ведущего `-`; возвращаемый `bool` отличает отсутствующий параметр от присутствующего значения. Stage 1 читает:
+Имя передаётся без ведущего `-`; возвращаемый `bool` отличает отсутствующий параметр от присутствующего значения. Параметры, используемые в ускоренной приёмке:
 
-```text
--aicfInitialTickets
--aicfReplacementTicketCost
--aicfReinforcementDelayMs
--aicfCommanderIntervalMs
--aicfMaxManagedAgents
--aicfExpectedPlayerFaction
-```
+| Срез | Параметры |
+|---|---|
+| Stage 1/2 | `aicfInitialTickets`, `aicfReplacementTicketCost`, `aicfReinforcementDelayMs`, `aicfCommanderIntervalMs`, `aicfMaxManagedAgents`, `aicfExpectedPlayerFaction` |
+| Stage 3 lifecycle | `aicfVehiclesEnabled`, `aicfTransportVehiclesPerFaction`, `aicfArmedLightVehiclesPerFaction`, `aicfMaxVehiclesPerFaction`, `aicfVehicleBoardingTimeoutMs`, `aicfVehicleMaxRecoveries`, `aicfVehicleDismountDistanceMeters`, `aicfVehicleRetryIntervalMs`, `aicfVehicleCleanupDelayMs` |
+| Stage 3 movement | `aicfVehicleStuckTimeoutMs`, `aicfVehicleProgressMeters`, `aicfVehicleMotionMeters`, `aicfVehicleObjectiveProgressTimeoutMs`, `aicfVehicleMinimumRouteMeters`, `aicfVehicleMaximumReuseDistanceMeters`, `aicfVehicleMaximumSpawnDistanceMeters`, `aicfVehicleCohesionDistanceMeters` |
 
 Числа после `ToInt()` ограничиваются безопасными min/max, а ожидаемая сторона принимает только `US` или `USSR`. Нижняя граница `max_managed_agents` равна 32: она покрывает обязательный стартовый roster и консервативный budget одной создаваемой replacement-группы, поэтому заниженный CLI-параметр не может навсегда заблокировать lifecycle. Direct ServerDiag smoke подтвердил применение ускоренных значений `initial_tickets=1`, `commander_interval_ms=5000`, `replacement_delay_ms=30000`, `max_managed_agents=64` и `expected_player_faction=US` в событии `CONFIG`.
 
@@ -334,7 +331,7 @@ protected bool SCR_SeizingComponent.m_bCapturingRequiresPlayer;
 
 ## Stage 3: проверенные API наземной техники (1.7.0.54)
 
-Ниже перечислены только API и ресурсы, проверенные по локальному official Script Diff `v1.7.0.54`, установленной Resource Database и успешному Workbench validation. Runtime-поведение посадки, вождения и navmesh всё равно требует матрицы из `STAGE_3_TESTING.md`.
+Ниже перечислены только API и ресурсы, проверенные по локальному official Script Diff `v1.7.0.54`, установленной Resource Database и Workbench validation. Текущий post-T7 snapshot: `.cache/stage3-t7-boarding-final2-20260809-164902/console.log`, Game CRC32 `1d647a62`, пять конфигураций, `Script validation successful`, `SCRIPT (E/F)=0`; `tools/Test-Stage3Static.ps1` — `Stage 3 static audit: PASS`. Runtime-поведение посадки, вождения, репликации и navmesh всё равно требует T8/A2 из `STAGE_3_TESTING.md`.
 
 ### Faction vehicle catalog
 
@@ -364,6 +361,18 @@ USSR armed:     Prefabs/Vehicles/Wheeled/UAZ469/UAZ469_PKM.et
 
 В коде присутствуют проверенные fallback-path того же faction catalog, но cross-faction fallback запрещён.
 
+### Active faction после runtime-spawn
+
+Источник: [`SCR_FactionAffiliationComponent.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/Components/SCR_FactionAffiliationComponent.c). Штатные faction-catalog prefab могут хранить фракцию как default affiliation, не выставляя active affiliation у только что созданной entity. Поэтому принадлежность prefab нужному каталогу используется как разрешение на создание, а authoritative spawner затем явно выполняет:
+
+```c
+SCR_FactionAffiliationComponent affiliation = ...;
+affiliation.SetAffiliatedFaction(faction);
+Faction assignedFaction = affiliation.GetAffiliatedFaction();
+```
+
+Только после этого Stage 3 проверяет точный `FactionKey` и передаёт машину AI/group systems. Это соответствует штатному способу смены affiliation в `SCR_FactionAffiliationComponent.SetFaction()`, `SCR_AIGroup` и Conflict-компонентах. Отсутствие компонента или несовпадение после setter является terminal configuration failure для текущего `group_generation`, а не причиной повторять spawn каждые 10 секунд.
+
 ### Безопасная позиция создания
 
 Источник: [`SCR_WorldTools.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/Global/SCR_WorldTools.c). Штатный Conflict использует тот же query при создании HQ vehicle в `SCR_CampaignMilitaryBaseComponent`.
@@ -379,11 +388,15 @@ static bool SCR_WorldTools.FindEmptyTerrainPosition(
     BaseWorld world = null)
 ```
 
-До геометрического query Stage 3 повторно применяет `AICF_ConflictAdapter.GetSpawnRejectionReason`: base существует и initialized, принадлежит нужной стороне, не contested/capturing, enemies отсутствуют, spawn point enabled/active и имеет правильный faction key. Дополнительно safe base должна находиться не дальше `aicfVehicleMaximumSpawnDistanceMeters` от assigned group. Сам spawn выполняется только при `Replication.IsServer()`, `campaign.IsMaster()` и заранее занятом slot/cap runtime.
+До геометрического query Stage 3 повторно применяет `AICF_ConflictAdapter.GetSpawnRejectionReason`: base существует и initialized, принадлежит нужной стороне, не contested/capturing, enemies отсутствуют, spawn point enabled/active и имеет правильный faction key. Все safe base сортируются детерминированно по расстоянию и `BaseKey`; затем каждая по очереди проходит максимальную spawn-дистанцию, `FindEmptyTerrainPosition` и измерение расстояния всех живых managed members до найденного точного site. `SpawnEntityPrefabEx` вызывается единственный раз и только после выбора полностью допустимого кандидата; если живых бойцов уже нет, возвращается retryable `GROUP_NOT_READY` без entity. Сам spawn выполняется только при `Replication.IsServer()`, `campaign.IsMaster()` и заранее занятом slot/cap runtime.
+
+Spawner возвращает координатору точную причину и признак `retryable`. `CONTESTED`, временно неактивная spawn point, отсутствие пустого участка и превышение допустимой дистанции повторяются с интервалом, но одинаковая причина логируется только один раз до её изменения. Invalid prefab, отсутствие faction/AI-usage component, неудачное назначение faction и невозможность создать entity считаются terminal для текущего поколения группы. Они не преобразуются в `NO_SAFE_SPAWN_AVAILABLE` и не запускают бесконечный retry; новый шанс появляется только после нового `group_generation`.
+
+У штатной main-base spawn point faction key может оставаться пустым во время ранней инициализации Conflict. Это состояние классифицируется как `SPAWN_FACTION_INITIALIZING`, а не как faction mismatch: координатор пишет информационный `VEHICLE_SPAWN_DEFERRED` и выполняет короткий повтор через 1 секунду. После появления faction key действуют обычные проверки владельца и фракции; одинаковое временное состояние не создаёт warning/error churn.
 
 ### AI vehicle usage и compartment
 
-Источники: [`SCR_AIVehicleUsageComponent.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Components/SCR_AIVehicleUsageComponent.c), [`SCR_AIGroupUtilityComponent.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Components/SCR_AIGroupUtilityComponent.c), [`SCR_BoardingWaypoint.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Group/SCR_BoardingWaypoint.c), [`SCR_BoardingEntityWaypoint.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Group/SCR_BoardingEntityWaypoint.c).
+Источники: [`SCR_AIVehicleUsageComponent.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Components/SCR_AIVehicleUsageComponent.c), [`SCR_AIGroupUtilityComponent.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Components/SCR_AIGroupUtilityComponent.c), [`SCR_BoardingWaypoint.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Group/SCR_BoardingWaypoint.c), [`SCR_BoardingEntityWaypoint.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Group/SCR_BoardingEntityWaypoint.c), [`SCR_AIUtils.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Utils/SCR_AIUtils.c).
 
 ```c
 PilotCompartmentSlot SCR_AIVehicleUsageComponent.GetPilotCompartmentSlot()
@@ -403,9 +416,35 @@ void SCR_BoardingWaypoint.SetAllowance(
     bool driverAllowed,
     bool gunnerAllowed,
     bool cargoAllowed)
+
+void BaseCompartmentSlot.SetReserved(IEntity entity)
+void SCR_AIUtilityComponent.AddAction(notnull AIActionBase action)
+
+SCR_AIGetInVehicle(
+    SCR_AIUtilityComponent utility,
+    SCR_AIActivityBase groupActivity,
+    IEntity vehicleEntity,
+    BaseCompartmentSlot compartmentSlot,
+    EAICompartmentType roleInVehicle,
+    float priority,
+    float priorityLevel)
 ```
 
-Перед посадкой транспорт добавляется в utility конкретной managed-группы. На dismount/fallback/cleanup он удаляется оттуда. Водитель и стрелок определяются по фактическим occupant pilot/turret compartment, а не по предположению о порядке агентов.
+На обязательных crew-фазах транспорт ещё не добавлен в utility managed-группы: иначе generic vehicle behavior может занять cargo/gunner раньше driver. Он подключается к group utility только перед пассажирской фазой и удаляется на dismount/fallback/cleanup. Водитель и стрелок определяются по фактическим occupant pilot/turret compartment, а не по предположению о порядке агентов.
+
+До подключения машины к group utility координатор измеряет authoritative server distance каждого живого managed member. Если самый удалённый боец дальше `aicfVehicleMaximumReuseDistanceMeters`, `BOARDING_REJECTED reason=VEHICLE_TOO_FAR` переводит группу в пеший fallback до выдачи любого GetIn. Exact-site preflight выполняет ту же проверку до создания entity.
+
+Если группа допустима для поездки, но `farthest_m > 75`, сначала создаётся обычный Move-waypoint `APPROACH` у машины. В этой фазе vehicle utility отсоединён и GetIn actions отсутствуют. Waypoint получает 5 секунд на переход из queue в current; потеря/неактивация фиксирует acceptance failure. Exact-role посадка начинается только после того, как все живые находятся не дальше 75 м.
+
+Водитель и стрелок назначаются точным `SCR_AIGetInVehicle` на заранее зарезервированный Pilot/Turret slot. Неверно занятые места синхронно нормализуются до создания DRIVER action и повторно после `APPROACH_COMPLETE`. Затем машина подключается к group utility и получает групповой `CARGO_ONLY` waypoint. План фиксируется один раз: transport включает максимум `APPROACH + DRIVER + PASSENGERS` (3 фазы), armed-light — дополнительно `GUNNER` (4 фазы); уже settled crew и ненужный approach из плана исключаются.
+
+Каждая фактически начатая фаза получает полный `aicfVehicleBoardingTimeoutMs`, а общий предел равен `plannedPhaseCount × timeout`. На всю попытку допускается только один sticky grace `+10 с`, и лишь при target-scoped `IsGettingIn()` либо свежем физическом progress. Повторный poll не продлевает phase/total clock. `BOARDING_COMPLETE` возможен после двух последовательных poll, где все живые linked, находятся в compartment, не переходят get-in/get-out и подтверждают `IsInVehicle()`.
+
+Обычная посадка AICF не вызывает teleport-in API. Crew использует exact-role action, cargo — stock `SCR_BoardingWaypoint`; farthest-member staging не позволяет выдать удалённый GetIn. Teleport применяется только наружу как bounded physical-clearance recovery/forced exit.
+
+При `SAFE_REUSE` очищаются stale reservations/actions и заново проверяются current-group occupants. Сценарий `mounted > 0 && driver == null` запускает единственный synchronous role reset до DRIVER action; повторное нарушение либо reset timeout создаёт `BOARDING_ROLE_VIOLATION`, acceptance failure и пеший fallback.
+
+Потеря экипажа после начала движения обрабатывается адресно: координатор выбирает одного живого агента, исключает occupant другой обязательной роли, резервирует конкретный `Pilot`/`Turret` slot и синхронно создаёт штатный `SCR_AIGetInVehicle`. Точная ссылка на этот action-token сохраняется в runtime: при abort/fallback завершается только сохранённый token, без поиска и риска отменить чужой get-in. После settled-занятия нужного места tracking снимается без `Fail()`: штатный `OnActionFailed()` мог бы высадить только что восстановленного водителя/стрелка. Если одновременно потеряны обе роли, driver восстанавливается первым, затем gunner; success допустим только после повторной проверки полного crew и пишет `ALL_REQUIRED_CREW_RESTORED`. Асинхронные `SendGetInMessage`/`SendCancelMessage` с `relatedActivity=null` в recovery-контракте не используются.
 
 ### Проверенные waypoint resources
 
@@ -417,29 +456,71 @@ Resource Database и штатный `SCR_ResupplyTaskSolver` подтвержд�
 {C40316EE26846CAB}Prefabs/AI/Waypoints/AIWaypoint_GetOut.et
 ```
 
-Stage 3 удаляет только собственный transient waypoint: сначала `group.RemoveWaypoint()`, затем `RplComponent.DeleteRplEntity(..., false)`. Пехотный target сохраняется в stable slot; после высадки или отказа `AICF_OrderPlanner` восстанавливает обычный Search-and-Destroy/Defend/CaptureRelay order. Ресурс и семантика `CaptureRelay` не изменены.
+Для привязки vehicle waypoint к дорожной сети дополнительно проверены [`ChimeraAIWorld.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/generated/AI/ChimeraAIWorld.c), [`RoadNetworkManager.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/generated/RoadNetwork/RoadNetworkManager.c) и штатное применение в [`SCR_ResupplyTaskSolver.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/TaskSolver/SCR_ResupplyTaskSolver.c):
+
+```c
+RoadNetworkManager SCR_AIWorld.GetRoadNetworkManager()
+bool RoadNetworkManager.GetReachableWaypointInRoad(
+    vector agentPos,
+    vector goalPos,
+    float range,
+    out vector outPos)
+```
+
+`AICF_OrderPlanner` сначала вычисляет тот же тактический target, который получит пехота; для ATTACK это capture point, а не origin базы. Stage 3 проецирует этот target в достижимую дорожную точку через `GetReachableWaypointInRoad()` и пишет `route_mode=ROAD_REACHABLE`; если дорожная точка не найдена, используется диагностируемый direct fallback. `route_distance_m` — прямая оставшаяся дистанция до полученного route endpoint, а не длина рассчитанного дорожного пути. На объезде она может временно расти, поэтому `VEHICLE_PROGRESS` означает только чистое сокращение этой дистанции не менее чем на `aicfVehicleProgressMeters`.
+
+Физическое перемещение машины отслеживается отдельно и пишет `VEHICLE_MOTION`, даже если чистого сокращения до route endpoint пока нет. Высадка, напротив, проверяется не по route endpoint: расстояние сравнивается с исходным тактическим capture point и порогом `aicfVehicleDismountDistanceMeters`. Stage 3 удаляет только собственный transient waypoint: сначала `group.RemoveWaypoint()`, затем `RplComponent.DeleteRplEntity(..., false)`. Если protected managed occupants остаются внутри на половине `aicfVehicleBoardingTimeoutMs`, actions/waypoint очищаются и stock GetOut выдаётся повторно ровно один раз (`DISEMBARK_REISSUED`). На полном deadline отдельный `DISEMBARK_TIMEOUT` защёлкивает acceptance failure и запускает bounded fallback.
+
+Пехотный target сохраняется в stable slot; после высадки или отказа `AICF_OrderPlanner` восстанавливает обычный Search-and-Destroy/Defend/CaptureRelay order. При commander replan после `BASE_OWNER_CHANGED` moving-runtime сравнивается с новым target стабильного слота: существующая машина получает новый road waypoint (`STRATEGIC_TARGET_CHANGED`) либо начинает высадку, если новый target уже в радиусе. Для одного retarget не создаётся вторая машина. Ресурс и семантика `CaptureRelay` не изменены.
+
+Восстановленный пехотный приказ сначала пишет `ORDER_RECOVERY_ISSUED`. Событие `ORDER_RECOVERED` разрешено только после трёх последовательных reliability-наблюдений, где exact waypoint одновременно является current и остаётся в queue, и не раньше `max(10 с, 2 × reliability interval)` от первого стабильного наблюдения. `ORDER_RECOVERY_STABILITY` фиксирует длительность и число poll; ранняя потеря кандидата расходует bounded stuck budget и в пределе приводит к recycle вместо бесконечного churn.
 
 ### Vehicle watchdog
 
-Источники: [`SCR_AIVehicleUsability.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Utils/SCR_AIVehicleUsability.c), `SCR_AIVehicleUsageComponent`, `BaseCompartmentManagerComponent`, `CompartmentAccessComponent`.
+Источники: [`SCR_AIUtils.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Utils/SCR_AIUtils.c), `SCR_AIVehicleUsageComponent`, `SCR_DamageManagerComponent`, `BaseCompartmentManagerComponent`, `CompartmentAccessComponent`.
 
 Watchdog отдельно от пехотного stuck timer проверяет:
 
 - `EDamageState.DESTROYED`;
-- `SCR_AIVehicleUsability.VehicleCanMove()` и `VehicleIsOnFire()`;
+- `SCR_AIVehicleUsability.VehicleCanMove()` как damage/usable-сигнал и `VehicleIsOnFire()` как отдельное terminal-состояние;
 - orientation up-vector для переворота;
 - живого occupant pilot/turret compartment;
 - фактическое нахождение всех живых членов managed-группы в/вне конкретной машины;
-- сокращение остатка vehicle route на настроенную величину;
+- leader/nearest/farthest distance всех живых managed members до машины перед GetIn;
+- физическое перемещение машины и чистое сокращение дистанции до route endpoint;
 - дистанцию пеших членов группы до движущейся машины.
 
-Vehicle runtime не регистрирует `CallLater` или ScriptInvoker callback. Каждый poll сверяет stable slot, identity группы, `group_generation`, runtime reference и отдельный `vehicle_generation`. Поэтому replacement-группа не может получить stale vehicle state предыдущего поколения.
+В API 1.7 `VehicleCanMove()` не измеряет физическое перемещение: он возвращает только `SCR_DamageManagerComponent.GetMovementDamage() < 1`. Поэтому этот сигнал не вызывает немедленный `VEHICLE_IMMOBILIZED`/fallback. Watchdog держит два независимых deadline:
+
+- `aicfVehicleStuckTimeoutMs` (default `120000`) — нет физического перемещения минимум на `aicfVehicleMotionMeters` (default `3`);
+- `aicfVehicleObjectiveProgressTimeoutMs` (default `300000`) — нет чистого сокращения route endpoint минимум на `aicfVehicleProgressMeters` (default `25`), даже если машина движется по объезду.
+
+Истечение любого deadline создаёт `VEHICLE_STUCK_DETECTED` и проходит один bounded recovery budget. Критерий успеха зависит от причины: recovery после физической неподвижности может подтвердить новое физическое движение (или route progress), а recovery после отсутствия objective progress требует именно сокращения дистанции до route endpoint; движение в сторону без такого сокращения его не завершает. Если damage-сигнал уже запрещает движение, причинная последовательность заканчивается `VEHICLE_RECOVERY_FAILED reason=VEHICLE_RECOVERY_MOBILITY_UNAVAILABLE → INFANTRY_FALLBACK`. Проверка budget выполняется до `VEHICLE_RECOVERY_STARTED`. Destroyed, fire и overturned остаются отдельными terminal-причинами.
+
+Vehicle runtime не регистрирует `CallLater` или ScriptInvoker callback. Каждый poll сверяет stable slot, identity группы, `group_generation`, runtime reference и отдельный `vehicle_generation`. Поэтому replacement-группа не может получить stale vehicle state предыдущего поколения. Переход в `ABANDONED`/`DESTROYED` является edge-событием: повторный poll не меняет terminal reason, state timestamp или cleanup deadline. `BeginDetachedCleanup()` и terminal processing идемпотентны; при очистке array-entry зануляется только если он всё ещё содержит тот же runtime, поэтому старое поколение не может удалить новое.
+
+Обычный terminal cleanup соблюдает `aicfVehicleCleanupDelayMs`, но пустая старая машина не должна удерживать faction cap перед готовой replacement-группой. Grace-период допускается пропустить только когда runtime уже не current, `slot.GetSpawnGeneration()` больше сохранённого generation, slot всё ещё требует допустимый vehicle kind и проходит `CanStartVehicleTrip()`. Перед удалением всё равно выполняется полный protected-occupant gate. Cooldown хранится парой `nextVehicleAtMs + owner group_generation`: при несовпадении с текущим generation оба значения отбрасываются до проверки trip eligibility. На expedited path сброс пары выполняется только после удаления entity и identity-safe очистки slot/runtime reference; occupant не может освободить cooldown без освобождения самой машины. Успешная ранняя очистка диагностируется `VEHICLE_CLEANUP reason=REPLACEMENT_CAPACITY_REQUIRED`.
+
+После fallback stable slot запоминает пару `group_generation + target`. Пока жива та же группа и назначен тот же objective, новая vehicle trip подавлена и восстановленный пехотный приказ остаётся управляющим. Новая группа или действительно новый target могут запросить транспорт снова. Этот latch устраняет повторный spawn для того же assignment после cleanup; окончательная проверка suppression и раннего replacement cleanup остаётся отдельным fault/limits-прогоном.
+
+Suppression записывается только если `IsRuntimeCurrent(runtime, slot)` подтверждает текущую identity группы и `group_generation`. В latch передаётся актуальный `slot.GetTargetBase()` (runtime target используется только как fallback при временно пустом slot target). Поэтому terminal poll stale generation не может подавить transport для replacement-группы или старой целью перезаписать уже изменившуюся assignment.
+
+Fallback сначала выдаёт штатный animated get-out waypoint. После bounded boarding deadline координатор может прервать vehicle action queue и принудительно высадить только управляемых членов текущей группы в состоянии `ECharacterLifeState.ALIVE`: через `FindSuitableTeleportLocation()` + `GetOutVehicle_NoDoor()`, с `GetOutVehicle(EGetOutType.TELEPORT, ...)` как запасным путём. `INCAPACITATED` не force-eject-ится. Успешная принудительная высадка отмечается единичным `FALLBACK_FORCE_DISEMBARK`.
+
+Hard fallback конечен. Если к абсолютному deadline `2 × aicfVehicleBoardingTimeoutMs` в машине остаётся protected member текущей группы, `FALLBACK_DISEMBARK_FAILED` пишется один раз, исходная terminal cause сохраняется и дополняется `+FALLBACK_DISEMBARK_FAILED`, vehicle runtime переводится в `ABANDONED`, а slot получает terminal failure и suppression для текущей assignment. Одновременно выставляется `infantry fallback restore pending`: пехотный приказ в этой ветке не восстанавливается немедленно. Последующие terminal poll восстанавливают его только после `AreAllProtectedMembersOutOfVehicle()` и только если runtime всё ещё принадлежит текущему group generation. Таким образом hard failure не зацикливает fallback и не выдаёт пеший waypoint бойцу, который ещё находится в compartment.
+
+Protected occupant — любой `ChimeraCharacter` с life state, отличным от `DEAD`: как `ALIVE`, так и `INCAPACITATED`. Проверка удаления сканирует все compartments машины, поэтому защищены также посторонние occupants другой группы или фракции. Forced exit применяется только к `ALIVE` членам managed-группы; `INCAPACITATED` и foreign occupants не выталкиваются. Пока остаётся любой protected occupant, `RplComponent.DeleteRplEntity()` не вызывается и cleanup остаётся pending; мёртвый occupant сам по себе этот gate не удерживает.
+
+Завершение хранится отдельно для каждого configured transport/armed slot обеих фракций, но больше не создаёт mid-run PASS. Когда завершены все настроенные первые поездки и ещё нет Stage 3 error/acceptance failure, координатор пишет только `RESULT_CANDIDATE status=READY ... final=0 requires_log_review=1`. `BOARDING_TIMEOUT`, `DISEMBARK_TIMEOUT` и `BOARDING_ROLE_VIOLATION` защёлкивают cumulative `ACCEPTANCE_FAILURE_LATCHED`; первый поздний дефект после READY дополнительно пишет `RESULT_CANDIDATE status=INVALIDATED`. Кандидат не останавливает gameplay и не скрывает повторные поездки.
+
+При остановке координатора `[AICF][STAGE3][RESULT]` остаётся финальным отрицательным событием для незавершённой автоматической приёмки: причины различают `ACCEPTANCE_FAILURE_*`, `STAGE3_ERRORS`, `READY_NOT_FINALIZED` и `STOPPED_BEFORE_ACCEPTANCE`. Автоматического финального PASS нет; его заменяет review полного остановленного server/client log и ручной матрицы.
 
 ### Ограничения Stage 3-кандидата
 
-1. Автоматический `RESULT status=PASS` доказывает только завершение configured поездок обеими сторонами и отсутствие Stage 3 errors. Он не доказывает recovery/fault/limit матрицу.
-2. Наземная проходимость определяется штатным AI Move-waypoint и navmesh runtime. Radio graph не является vehicle road graph; watchdog обязан завершить непроходимый маршрут пешим fallback.
-3. Armed-light машина используется как транспорт одного ATTACK-slot и не создаёт отдельную бессрочную боевую группу. После высадки исходная пехота продолжает objective.
-4. Overflow-policy — `ALL_OR_FALLBACK`: если всем живым членам группы не хватает доступных compartment, частично уехавшая группа не допускается.
-5. Abandoned/destroyed entity учитывается в faction cap до cleanup. Entity с живым occupant не удаляется; после освобождения cleanup может завершиться.
-6. Workbench validation выполнен без запуска server/client. Фактические boarding, driving, dismount, driver/gunner replacement и cleanup ещё не приняты runtime-тестом.
+1. `RESULT_CANDIDATE status=READY final=0` доказывает только завершение настроенного набора поездок до этой точки. Это не PASS; поздняя acceptance failure инвалидирует кандидата.
+2. Transport T7 и Armed A1 остаются последними runtime-срезами и имеют итог FAIL. Post‑T7 изменения подтверждены только static audit и Workbench validation.
+3. Штатные мины Arland не удаляются и не меняются. `VEHICLE_ON_FIRE`/уничтожение на мине остаётся валидной проверкой fallback, но может заблокировать конкретный happy-path.
+4. Наземная проходимость определяется stock AI Move/navmesh. Radio graph не является дорожным графом; bounded watchdog обязан перейти к пешему fallback при недостижимом маршруте.
+5. Overflow-policy — `ALL_OR_FALLBACK`: если всем живым членам группы не хватает compartment, частично уехавшая группа запрещена.
+6. Abandoned/destroyed entity учитывается в faction cap до cleanup. Удаление запрещено при любом protected occupant (`ALIVE`/ `INCAPACITATED`, включая foreign occupant).
+7. Автоматического финального PASS нет. Приёмка требует полного остановленного server/client log, ручной матрицы, Transport T8, Armed A2, отдельных recovery/cap/cleanup fault-срезов и 30-минутного прогона.

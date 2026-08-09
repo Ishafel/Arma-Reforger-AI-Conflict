@@ -192,7 +192,10 @@ class AICF_ConflictAdapter
 			return "SPAWN_POINT_DISABLED";
 		if (!spawnPoint.IsSpawnPointActive())
 			return "SPAWN_POINT_INACTIVE";
-		if (spawnPoint.GetFactionKey() != faction.GetFactionKey())
+		FactionKey spawnFactionKey = spawnPoint.GetFactionKey();
+		if (spawnFactionKey.IsEmpty() && base == faction.GetMainBase())
+			return "SPAWN_FACTION_INITIALIZING";
+		if (spawnFactionKey != faction.GetFactionKey())
 			return "SPAWN_FACTION_MISMATCH";
 
 		return string.Empty;

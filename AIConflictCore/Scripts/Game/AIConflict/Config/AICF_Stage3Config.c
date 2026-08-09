@@ -8,6 +8,8 @@ class AICF_Stage3Config
 	static const int DEFAULT_BOARDING_TIMEOUT_MS = 60000;
 	static const int DEFAULT_STUCK_TIMEOUT_MS = 120000;
 	static const float DEFAULT_PROGRESS_METERS = 25.0;
+	static const float DEFAULT_MOTION_METERS = 3.0;
+	static const int DEFAULT_OBJECTIVE_PROGRESS_TIMEOUT_MS = 300000;
 	static const int DEFAULT_MAX_RECOVERIES = 2;
 	static const float DEFAULT_DISEMBARK_DISTANCE_METERS = 150.0;
 	static const int DEFAULT_RETRY_INTERVAL_MS = 10000;
@@ -24,6 +26,8 @@ class AICF_Stage3Config
 	protected int m_iBoardingTimeoutMs;
 	protected int m_iStuckTimeoutMs;
 	protected float m_fProgressMeters;
+	protected float m_fMotionMeters;
+	protected int m_iObjectiveProgressTimeoutMs;
 	protected int m_iMaxRecoveries;
 	protected float m_fDismountDistanceMeters;
 	protected int m_iRetryIntervalMs;
@@ -42,6 +46,8 @@ class AICF_Stage3Config
 		m_iBoardingTimeoutMs = DEFAULT_BOARDING_TIMEOUT_MS;
 		m_iStuckTimeoutMs = DEFAULT_STUCK_TIMEOUT_MS;
 		m_fProgressMeters = DEFAULT_PROGRESS_METERS;
+		m_fMotionMeters = DEFAULT_MOTION_METERS;
+		m_iObjectiveProgressTimeoutMs = DEFAULT_OBJECTIVE_PROGRESS_TIMEOUT_MS;
 		m_iMaxRecoveries = DEFAULT_MAX_RECOVERIES;
 		m_fDismountDistanceMeters = DEFAULT_DISEMBARK_DISTANCE_METERS;
 		m_iRetryIntervalMs = DEFAULT_RETRY_INTERVAL_MS;
@@ -51,6 +57,7 @@ class AICF_Stage3Config
 		m_fMaximumSpawnDistanceMeters = DEFAULT_MAXIMUM_SPAWN_DISTANCE_METERS;
 		m_fCohesionDistanceMeters = DEFAULT_COHESION_DISTANCE_METERS;
 		ApplyCLIOverrides();
+		NormalizeVehicleCounts();
 	}
 
 	bool GetVehiclesEnabled() { return m_bVehiclesEnabled; }
@@ -60,6 +67,8 @@ class AICF_Stage3Config
 	int GetBoardingTimeoutMs() { return m_iBoardingTimeoutMs; }
 	int GetStuckTimeoutMs() { return m_iStuckTimeoutMs; }
 	float GetProgressMeters() { return m_fProgressMeters; }
+	float GetMotionMeters() { return m_fMotionMeters; }
+	int GetObjectiveProgressTimeoutMs() { return m_iObjectiveProgressTimeoutMs; }
 	int GetMaxRecoveries() { return m_iMaxRecoveries; }
 	float GetDismountDistanceMeters() { return m_fDismountDistanceMeters; }
 	int GetRetryIntervalMs() { return m_iRetryIntervalMs; }
@@ -86,6 +95,10 @@ class AICF_Stage3Config
 			m_iStuckTimeoutMs = ClampInt(value.ToInt(), 30000, 3600000);
 		if (System.GetCLIParam("aicfVehicleProgressMeters", value))
 			m_fProgressMeters = ClampFloat(value.ToFloat(), 1.0, 500.0);
+		if (System.GetCLIParam("aicfVehicleMotionMeters", value))
+			m_fMotionMeters = ClampFloat(value.ToFloat(), 0.5, 50.0);
+		if (System.GetCLIParam("aicfVehicleObjectiveProgressTimeoutMs", value))
+			m_iObjectiveProgressTimeoutMs = ClampInt(value.ToInt(), 60000, 3600000);
 		if (System.GetCLIParam("aicfVehicleMaxRecoveries", value))
 			m_iMaxRecoveries = ClampInt(value.ToInt(), 0, 20);
 		if (System.GetCLIParam("aicfVehicleDismountDistanceMeters", value))
@@ -102,6 +115,13 @@ class AICF_Stage3Config
 			m_fMaximumSpawnDistanceMeters = ClampFloat(value.ToFloat(), 100.0, 10000.0);
 		if (System.GetCLIParam("aicfVehicleCohesionDistanceMeters", value))
 			m_fCohesionDistanceMeters = ClampFloat(value.ToFloat(), 25.0, 500.0);
+	}
+
+	protected void NormalizeVehicleCounts()
+	{
+		int remainingAttackSlots = Math.Max(0, AICF_Stage1Config.ATTACK_SLOTS_PER_FACTION - m_iTransportVehiclesPerFaction);
+		if (m_iArmedLightVehiclesPerFaction > remainingAttackSlots)
+			m_iArmedLightVehiclesPerFaction = remainingAttackSlots;
 	}
 
 	protected int ClampInt(int value, int minimum, int maximum)

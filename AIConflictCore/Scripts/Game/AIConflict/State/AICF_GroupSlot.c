@@ -8,6 +8,9 @@ class AICF_GroupSlot
 	protected int m_iSpawnStartedAtMs;
 	protected int m_iSpawnGeneration;
 	protected int m_iLastOrderRecoveryAtMs;
+	protected int m_iOrderRecoveryStartedAtMs;
+	protected int m_iOrderRecoveryFirstStableAtMs;
+	protected int m_iOrderRecoveryStablePolls;
 	protected int m_iLastProgressAtMs;
 	protected int m_iStuckRecoveryCount;
 	protected int m_iObjectiveHoldStartedAtMs;
@@ -17,13 +20,21 @@ class AICF_GroupSlot
 	protected bool m_bPersistentStuckReported;
 	protected bool m_bObjectiveHoldReported;
 	protected bool m_bLoadBlockReported;
+	protected bool m_bPendingOrderRecoveryCountsAsStuck;
 	protected float m_fBestDistanceToTarget = -1.0;
+	protected string m_sVehicleTerminalFailure;
+	protected string m_sPendingOrderRecoveryCause;
+	protected int m_iVehicleFallbackGroupGeneration = -1;
 
 	protected SCR_AIGroup m_Group;
 	protected SCR_CampaignMilitaryBaseComponent m_TargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_ProgressTargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_ObjectiveHoldTargetBase;
+	protected SCR_CampaignMilitaryBaseComponent m_VehicleFallbackTargetBase;
+	protected SCR_CampaignMilitaryBaseComponent m_PendingOrderRecoveryTargetBase;
 	protected AIWaypoint m_Waypoint;
+	protected AIWaypoint m_PendingOrderRecoveryWaypoint;
+	protected SCR_AIGroup m_PendingOrderRecoveryGroup;
 	protected ref AICF_VehicleRuntime m_VehicleRuntime;
 
 	void AICF_GroupSlot(int slotId, AICF_EGroupRole role)
@@ -79,6 +90,44 @@ class AICF_GroupSlot
 			return;
 
 		m_VehicleRuntime = null;
+	}
+
+	bool HasVehicleTerminalFailure()
+	{
+		return !m_sVehicleTerminalFailure.IsEmpty();
+	}
+
+	string GetVehicleTerminalFailure()
+	{
+		return m_sVehicleTerminalFailure;
+	}
+
+	void RecordVehicleTerminalFailure(string reason)
+	{
+		m_sVehicleTerminalFailure = reason;
+	}
+
+	// A failed/abandoned trip must hand control back to infantry for the current
+	// group and objective. A replacement group or a genuinely new target may
+	// request transport again.
+	void SuppressVehicleTripForAssignment(
+		int groupGeneration,
+		SCR_CampaignMilitaryBaseComponent targetBase)
+	{
+		m_iVehicleFallbackGroupGeneration = groupGeneration;
+		m_VehicleFallbackTargetBase = targetBase;
+	}
+
+	bool IsVehicleTripSuppressedForCurrentAssignment()
+	{
+		return m_iVehicleFallbackGroupGeneration == m_iSpawnGeneration &&
+			m_VehicleFallbackTargetBase && m_VehicleFallbackTargetBase == m_TargetBase;
+	}
+
+	void ClearVehicleTripSuppression()
+	{
+		m_iVehicleFallbackGroupGeneration = -1;
+		m_VehicleFallbackTargetBase = null;
 	}
 
 	int GetReinforcementReadyAtMs()
@@ -203,6 +252,13 @@ class AICF_GroupSlot
 		if (m_State != AICF_EGroupSlotState.READY || !m_Group || !targetBase || !waypoint)
 			return false;
 
+		// Any newly assigned waypoint supersedes a candidate that was still being
+		// verified. RecoverOrder starts a fresh verification after this assignment.
+		ClearPendingOrderRecovery();
+
+		if (m_VehicleFallbackTargetBase && m_VehicleFallbackTargetBase != targetBase)
+			ClearVehicleTripSuppression();
+
 		if (m_ProgressTargetBase != targetBase)
 			ResetProgressTracking();
 		else
@@ -224,6 +280,100 @@ class AICF_GroupSlot
 	void MarkOrderRecoveryAttempt()
 	{
 		m_iLastOrderRecoveryAtMs = System.GetTickCount();
+	}
+
+	void BeginOrderRecoveryVerification(string failureReason, bool countsAsStuckRecovery = false)
+	{
+		ClearPendingOrderRecovery();
+		if (!m_Group || !m_TargetBase || !m_Waypoint)
+			return;
+
+		m_PendingOrderRecoveryGroup = m_Group;
+		m_PendingOrderRecoveryTargetBase = m_TargetBase;
+		m_PendingOrderRecoveryWaypoint = m_Waypoint;
+		m_sPendingOrderRecoveryCause = failureReason;
+		m_bPendingOrderRecoveryCountsAsStuck = countsAsStuckRecovery;
+		m_iOrderRecoveryStartedAtMs = System.GetTickCount();
+	}
+
+	bool HasPendingOrderRecovery()
+	{
+		return m_PendingOrderRecoveryGroup && m_PendingOrderRecoveryTargetBase &&
+			m_PendingOrderRecoveryWaypoint;
+	}
+
+	bool IsPendingOrderRecoveryContextCurrent()
+	{
+		return HasPendingOrderRecovery() && m_Group == m_PendingOrderRecoveryGroup &&
+			m_TargetBase == m_PendingOrderRecoveryTargetBase &&
+			m_Waypoint == m_PendingOrderRecoveryWaypoint;
+	}
+
+	SCR_AIGroup GetPendingOrderRecoveryGroup()
+	{
+		return m_PendingOrderRecoveryGroup;
+	}
+
+	SCR_CampaignMilitaryBaseComponent GetPendingOrderRecoveryTargetBase()
+	{
+		return m_PendingOrderRecoveryTargetBase;
+	}
+
+	AIWaypoint GetPendingOrderRecoveryWaypoint()
+	{
+		return m_PendingOrderRecoveryWaypoint;
+	}
+
+	string GetPendingOrderRecoveryCause()
+	{
+		return m_sPendingOrderRecoveryCause;
+	}
+
+	bool PendingOrderRecoveryCountsAsStuckRecovery()
+	{
+		return m_bPendingOrderRecoveryCountsAsStuck;
+	}
+
+	int RecordPendingOrderRecoveryStablePoll()
+	{
+		if (m_iOrderRecoveryFirstStableAtMs <= 0)
+			m_iOrderRecoveryFirstStableAtMs = System.GetTickCount();
+
+		m_iOrderRecoveryStablePolls++;
+		return m_iOrderRecoveryStablePolls;
+	}
+
+	int GetPendingOrderRecoveryStableElapsedMs()
+	{
+		if (m_iOrderRecoveryFirstStableAtMs <= 0)
+			return 0;
+
+		return System.GetTickCount(m_iOrderRecoveryFirstStableAtMs);
+	}
+
+	int GetPendingOrderRecoveryStablePolls()
+	{
+		return m_iOrderRecoveryStablePolls;
+	}
+
+	int GetPendingOrderRecoveryElapsedMs()
+	{
+		if (m_iOrderRecoveryStartedAtMs <= 0)
+			return 0;
+
+		return System.GetTickCount(m_iOrderRecoveryStartedAtMs);
+	}
+
+	void ClearPendingOrderRecovery()
+	{
+		m_PendingOrderRecoveryGroup = null;
+		m_PendingOrderRecoveryTargetBase = null;
+		m_PendingOrderRecoveryWaypoint = null;
+		m_sPendingOrderRecoveryCause = string.Empty;
+		m_bPendingOrderRecoveryCountsAsStuck = false;
+		m_iOrderRecoveryStartedAtMs = 0;
+		m_iOrderRecoveryFirstStableAtMs = 0;
+		m_iOrderRecoveryStablePolls = 0;
 	}
 
 	bool ObserveProgress(
@@ -316,7 +466,10 @@ class AICF_GroupSlot
 	{
 		m_iStuckRecoveryCount++;
 		m_iLastProgressAtMs = System.GetTickCount();
-		m_fBestDistanceToTarget = currentDistanceMeters;
+		// A transiently missing leader/target yields -1. Preserve the previous
+		// usable baseline so the next positive sample can still prove progress.
+		if (currentDistanceMeters >= 0)
+			m_fBestDistanceToTarget = currentDistanceMeters;
 		m_bRecoveringFromStuck = true;
 	}
 
@@ -337,6 +490,7 @@ class AICF_GroupSlot
 
 	void ClearObjective()
 	{
+		ClearPendingOrderRecovery();
 		m_TargetBase = null;
 		m_Waypoint = null;
 	}
@@ -345,6 +499,7 @@ class AICF_GroupSlot
 	// the strategic target needed to restore the infantry order after dismount.
 	void SuspendObjectiveWaypoint()
 	{
+		ClearPendingOrderRecovery();
 		m_Waypoint = null;
 		ClearObjectiveHold();
 	}
@@ -424,6 +579,7 @@ class AICF_GroupSlot
 
 	protected void ClearRuntimeReferences()
 	{
+		ClearPendingOrderRecovery();
 		m_VehicleRuntime = null;
 		m_Group = null;
 		m_TargetBase = null;
@@ -433,6 +589,8 @@ class AICF_GroupSlot
 		m_iLastOrderRecoveryAtMs = 0;
 		m_bTargetUnavailableReported = false;
 		m_bLoadBlockReported = false;
+		m_sVehicleTerminalFailure = string.Empty;
+		ClearVehicleTripSuppression();
 		ResetProgressTracking();
 	}
 

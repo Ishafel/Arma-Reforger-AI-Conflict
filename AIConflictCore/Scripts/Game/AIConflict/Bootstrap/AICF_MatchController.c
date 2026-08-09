@@ -11,6 +11,13 @@ class AICF_MatchController
 	protected static const int PENDING_GROUP_AGENT_BUDGET = 8;
 	protected static const float RELAY_CAPTURE_RADIUS_METERS = 30.0;
 	protected static const float STUCK_WATCHDOG_IGNORE_RADIUS_METERS = 100.0;
+	// The first valid observation only starts the durability window. Two further
+	// polls (three observations total) and two full reliability intervals prevent
+	// a waypoint that survives one five-second boundary from being confirmed.
+	protected static const int ORDER_RECOVERY_STABLE_POLLS = 2;
+	protected static const int ORDER_RECOVERY_INITIAL_STABLE_OBSERVATION = 1;
+	protected static const int ORDER_RECOVERY_STABLE_INTERVALS = 2;
+	protected static const int ORDER_RECOVERY_MIN_STABLE_MS = 10000;
 
 	protected bool m_bStarted;
 	protected bool m_bStopped;
@@ -161,14 +168,16 @@ class AICF_MatchController
 				m_Stage2Config.GetMaxConcurrentReplacementSpawns(),
 				m_Config.GetRequirePlayerForResult()));
 		string stage3ConfigLine = string.Format(
-			"enabled=%1 transports_per_faction=%2 armed_light_per_faction=%3 max_vehicles_per_faction=%4 boarding_timeout_ms=%5 stuck_timeout_ms=%6 progress_m=%7",
+			"enabled=%1 transports_per_faction=%2 armed_light_per_faction=%3 max_vehicles_per_faction=%4 boarding_timeout_ms=%5 stuck_timeout_ms=%6 progress_m=%7 motion_m=%8 objective_progress_timeout_ms=%9",
 			m_Stage3Config.GetVehiclesEnabled(),
 			m_Stage3Config.GetTransportVehiclesPerFaction(),
 			m_Stage3Config.GetArmedLightVehiclesPerFaction(),
 			m_Stage3Config.GetMaxVehiclesPerFaction(),
 			m_Stage3Config.GetBoardingTimeoutMs(),
 			m_Stage3Config.GetStuckTimeoutMs(),
-			m_Stage3Config.GetProgressMeters());
+			m_Stage3Config.GetProgressMeters(),
+			m_Stage3Config.GetMotionMeters(),
+			m_Stage3Config.GetObjectiveProgressTimeoutMs());
 		stage3ConfigLine += string.Format(
 			" max_recoveries=%1 dismount_distance_m=%2 retry_ms=%3 cleanup_delay_ms=%4 minimum_route_m=%5 maximum_reuse_distance_m=%6 maximum_spawn_distance_m=%7 cohesion_distance_m=%8",
 			m_Stage3Config.GetMaxRecoveries(),
@@ -296,7 +305,11 @@ class AICF_MatchController
 
 		ProcessFaction(m_USState, m_USFaction);
 		ProcessFaction(m_USSRState, m_USSRFaction);
-		if (m_VehicleCoordinator)
+		// Base ownership changes arrive before the delayed graph rebuild. Pause
+		// vehicle orchestration only for that scheduled one-second window so a
+		// newly friendly old target can be rerouted. If Build later fails, normal
+		// safety/fallback/cleanup polling must resume instead of freezing vehicles.
+		if (m_VehicleCoordinator && !m_bReplanScheduled)
 			m_VehicleCoordinator.Update(m_USState, m_USFaction, m_USSRState, m_USSRFaction);
 		if (m_GroupMapMarkers)
 			m_GroupMapMarkers.Sync(m_USState, m_USSRState);
@@ -789,6 +802,10 @@ class AICF_MatchController
 				continue;
 			if (m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot))
 				continue;
+			// CommanderTick may observe the candidate between reliability polls, but
+			// only ReliabilityTick is allowed to confirm or reject its stability.
+			if (slot.HasPendingOrderRecovery())
+				continue;
 
 			// The stock CaptureRelay smart-action waypoint reaches Signal Hill in the
 			// dedicated Conflict runtime, but can finish without invoking its user
@@ -882,6 +899,11 @@ class AICF_MatchController
 			// authority fallback active in the more frequent reliability pass as well.
 			if (TryCaptureArrivedRelay(slot, faction))
 				continue;
+			if (slot.HasPendingOrderRecovery())
+			{
+				ProcessPendingOrderRecovery(factionState, slot, faction);
+				continue;
+			}
 
 			string failureReason = m_OrderPlanner.GetOrderFailureReason(slot, faction);
 			if (!failureReason.IsEmpty())
@@ -972,25 +994,187 @@ class AICF_MatchController
 		return true;
 	}
 
+	protected void ProcessPendingOrderRecovery(
+		AICF_FactionState factionState,
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction)
+	{
+		if (!factionState || !slot || !faction || !slot.HasPendingOrderRecovery())
+			return;
+
+		if (!slot.IsPendingOrderRecoveryContextCurrent())
+		{
+			slot.ClearPendingOrderRecovery();
+			return;
+		}
+
+		SCR_AIGroup group = slot.GetPendingOrderRecoveryGroup();
+		SCR_CampaignMilitaryBaseComponent target = slot.GetPendingOrderRecoveryTargetBase();
+		AIWaypoint expectedWaypoint = slot.GetPendingOrderRecoveryWaypoint();
+		string originalCause = slot.GetPendingOrderRecoveryCause();
+		bool alreadyCountsAsStuck = slot.PendingOrderRecoveryCountsAsStuckRecovery();
+		int lifetimeMs = slot.GetPendingOrderRecoveryElapsedMs();
+		string failureReason = m_OrderPlanner.GetOrderFailureReason(slot, faction);
+		if (failureReason == "TARGET_INVALID")
+		{
+			slot.ClearPendingOrderRecovery();
+			return;
+		}
+
+		AIWaypoint currentWaypoint = group.GetCurrentWaypoint();
+		array<AIWaypoint> waypointQueue = {};
+		int queueCount = group.GetWaypoints(waypointQueue);
+		bool trackedInQueue = waypointQueue.Contains(expectedWaypoint);
+		if (failureReason.IsEmpty() && currentWaypoint == expectedWaypoint && trackedInQueue)
+		{
+			int stablePolls = slot.RecordPendingOrderRecoveryStablePoll();
+			int stableMs = slot.GetPendingOrderRecoveryStableElapsedMs();
+			int requiredStableMs = m_Stage2Config.GetReliabilityIntervalMs() * ORDER_RECOVERY_STABLE_INTERVALS;
+			if (requiredStableMs < ORDER_RECOVERY_MIN_STABLE_MS)
+				requiredStableMs = ORDER_RECOVERY_MIN_STABLE_MS;
+			int requiredStablePolls = ORDER_RECOVERY_STABLE_POLLS + ORDER_RECOVERY_INITIAL_STABLE_OBSERVATION;
+			bool minimumPollsSatisfied = !(stablePolls < ORDER_RECOVERY_STABLE_POLLS +
+				ORDER_RECOVERY_INITIAL_STABLE_OBSERVATION);
+			bool durabilitySatisfied = minimumPollsSatisfied && stableMs >= requiredStableMs;
+
+			// Keep candidate telemetry useful without producing another per-poll churn:
+			// report the first observation, the poll threshold, and final durability.
+			if (stablePolls == 1 || stablePolls == requiredStablePolls || durabilitySatisfied)
+			{
+				string stabilityDetails = string.Format(
+					"faction=%1 slot=%2 role=%3 target=%4 waypoint=%5 stable_polls=%6 required_polls=%7 stable_ms=%8",
+					faction.GetFactionKey(),
+					slot.GetSlotId(),
+					AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+					AICF_Stage1Diagnostics.BaseKey(target),
+					expectedWaypoint.GetID(),
+					stablePolls,
+					requiredStablePolls,
+					stableMs);
+				stabilityDetails += string.Format(
+					" required_stable_ms=%1 candidate_ms=%2 tracked_in_queue=%3 queue_count=%4 durable=%5 state=DURABILITY_SAMPLE",
+					requiredStableMs,
+					lifetimeMs,
+					trackedInQueue,
+					queueCount,
+					durabilitySatisfied);
+				AICF_Stage2Diagnostics.Info("ORDER_RECOVERY_STABILITY", stabilityDetails);
+			}
+
+			if (!durabilitySatisfied)
+				return;
+
+			string confirmedWaypointId = string.Format("%1", expectedWaypoint.GetID());
+			slot.ClearPendingOrderRecovery();
+			m_iOrderRecoveries++;
+			string recoveredDetails = string.Format(
+				"faction=%1 slot=%2 role=%3 cause=%4 target=%5 waypoint=%6 stable_polls=%7 stable_ms=%8",
+					faction.GetFactionKey(),
+					slot.GetSlotId(),
+					AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+					originalCause,
+					AICF_Stage1Diagnostics.BaseKey(target),
+					confirmedWaypointId,
+					stablePolls,
+					stableMs);
+			recoveredDetails += string.Format(
+				" required_stable_ms=%1 candidate_ms=%2",
+					requiredStableMs,
+					lifetimeMs);
+			AICF_Stage2Diagnostics.Info("ORDER_RECOVERED", recoveredDetails);
+			return;
+		}
+
+		if (TryHoldCompletedOrderAtObjective(slot, faction, failureReason))
+		{
+			slot.ClearPendingOrderRecovery();
+			return;
+		}
+
+		string expectedWaypointId = string.Format("%1", expectedWaypoint.GetID());
+		string currentWaypointId = "NONE";
+		if (currentWaypoint)
+			currentWaypointId = string.Format("%1", currentWaypoint.GetID());
+
+		float distanceMeters = -1.0;
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
+		vector targetPosition;
+		if (leader && m_OrderPlanner.TryResolveTargetPosition(target, slot.GetRole(), targetPosition))
+		{
+			distanceMeters = Math.Sqrt(vector.DistanceSqXZ(
+				leader.GetOrigin(),
+				targetPosition));
+		}
+		else if (leader && expectedWaypoint)
+		{
+			distanceMeters = Math.Sqrt(vector.DistanceSqXZ(
+				leader.GetOrigin(),
+				expectedWaypoint.GetOrigin()));
+		}
+
+		int recoveryAttempt = slot.GetStuckRecoveryCount() + 1;
+		if (alreadyCountsAsStuck)
+			recoveryAttempt = slot.GetStuckRecoveryCount();
+		int stablePollsBeforeFailure = slot.GetPendingOrderRecoveryStablePolls();
+		int stableMsBeforeFailure = slot.GetPendingOrderRecoveryStableElapsedMs();
+		string unstableDetails = string.Format(
+			"faction=%1 slot=%2 role=%3 original_cause=%4 failure=%5 target=%6 distance_m=%7 expected_waypoint=%8",
+			faction.GetFactionKey(),
+			slot.GetSlotId(),
+			AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+			originalCause,
+			failureReason,
+			AICF_Stage1Diagnostics.BaseKey(target),
+			distanceMeters,
+			expectedWaypointId);
+		unstableDetails += string.Format(
+			" current_waypoint=%1 tracked_in_queue=%2 queue_count=%3 lifetime_ms=%4 stable_polls=%5 stable_ms=%6",
+			currentWaypointId,
+			trackedInQueue,
+			queueCount,
+			lifetimeMs,
+			stablePollsBeforeFailure,
+			stableMsBeforeFailure);
+		unstableDetails += string.Format(
+			" attempt=%1 already_counted_as_stuck=%2",
+			recoveryAttempt,
+			alreadyCountsAsStuck);
+		AICF_Stage2Diagnostics.Warning("ORDER_RECOVERY_UNSTABLE", unstableDetails);
+
+		slot.ClearPendingOrderRecovery();
+		if (!alreadyCountsAsStuck)
+		{
+			m_iStuckDetections++;
+			slot.RecordStuckRecovery(distanceMeters);
+		}
+
+		if (slot.GetStuckRecoveryCount() >= m_Stage2Config.GetMaxStuckRecoveries())
+		{
+			RecyclePersistentStuckGroup(factionState, faction, slot, target, distanceMeters);
+			return;
+		}
+
+		TryRecoverOrder(slot, faction, failureReason);
+	}
+
 	protected void TryRecoverOrder(
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction,
 		string failureReason)
 	{
+		if (!slot || !faction || slot.HasPendingOrderRecovery())
+			return;
 		if (!slot.CanAttemptOrderRecovery(m_Stage2Config.GetOrderRecoveryRetryMs()))
 			return;
 
 		slot.MarkOrderRecoveryAttempt();
 		m_iOrderRecoveryAttempts++;
-		if (m_OrderPlanner.RecoverOrder(
+		m_OrderPlanner.RecoverOrder(
 			slot,
 			faction,
 			m_ObjectiveGraph,
 			m_TargetSelector,
-			failureReason))
-		{
-			m_iOrderRecoveries++;
-		}
+			failureReason);
 	}
 
 	protected void MonitorGroupProgress(
@@ -1056,7 +1240,8 @@ class AICF_MatchController
 				faction,
 				m_ObjectiveGraph,
 				m_TargetSelector,
-				"STUCK_TARGET_INVALID");
+				"STUCK_TARGET_INVALID",
+				true);
 		}
 
 		slot.RecordStuckRecovery(distanceMeters);
@@ -1360,19 +1545,31 @@ class AICF_MatchController
 			// A rebuilt graph is a new target-availability generation. Allow one fresh
 			// diagnostic if the new snapshot still has no legal destination.
 			slot.ResetTargetUnavailableReport();
-			if (!slot.IsCombatReady() ||
-				(m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot)) ||
-				m_OrderPlanner.IsOrderValid(slot, faction))
+			if (!slot.IsCombatReady())
 				continue;
 
 			SCR_CampaignMilitaryBaseComponent oldTarget = slot.GetTargetBase();
-			if (m_OrderPlanner.AssignOrder(
-				slot,
-				faction,
-				m_ObjectiveGraph,
-				m_TargetSelector,
-				"BASE_OWNER_CHANGED",
-				m_LastChangedBase))
+			bool reassigned = false;
+			if (m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot))
+			{
+				reassigned = m_VehicleCoordinator.ReplanControlledMovement(
+					slot,
+					faction,
+					"BASE_OWNER_CHANGED",
+					m_LastChangedBase);
+			}
+			else if (!m_OrderPlanner.IsOrderValid(slot, faction))
+			{
+				reassigned = m_OrderPlanner.AssignOrder(
+					slot,
+					faction,
+					m_ObjectiveGraph,
+					m_TargetSelector,
+					"BASE_OWNER_CHANGED",
+					m_LastChangedBase);
+			}
+
+			if (reassigned)
 			{
 				if (oldTarget && slot.GetTargetBase() != oldTarget)
 				{

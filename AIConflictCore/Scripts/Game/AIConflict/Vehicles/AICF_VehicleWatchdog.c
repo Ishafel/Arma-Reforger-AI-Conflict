@@ -2,6 +2,9 @@
 // coordinator so this class cannot create waypoints or mutate a group.
 class AICF_VehicleWatchdog
 {
+	protected static const float DISMOUNT_CLEARANCE_MARGIN_METERS = 0.5;
+	protected static const float BOARDING_TRANSITION_SCOPE_MARGIN_METERS = 6.0;
+
 	bool IsDestroyed(AICF_VehicleRuntime runtime)
 	{
 		if (!runtime || !runtime.GetVehicle())
@@ -16,8 +19,25 @@ class AICF_VehicleWatchdog
 		if (!runtime || !runtime.GetVehicle())
 			return false;
 
-		return SCR_AIVehicleUsability.VehicleCanMove(runtime.GetVehicle()) &&
-			!SCR_AIVehicleUsability.VehicleIsOnFire(runtime.GetVehicle());
+		return SCR_AIVehicleUsability.VehicleCanMove(runtime.GetVehicle());
+	}
+
+	bool IsOnFire(AICF_VehicleRuntime runtime)
+	{
+		return runtime && runtime.GetVehicle() &&
+			SCR_AIVehicleUsability.VehicleIsOnFire(runtime.GetVehicle());
+	}
+
+	float GetMovementDamage(AICF_VehicleRuntime runtime)
+	{
+		if (!runtime || !runtime.GetVehicle())
+			return 1.0;
+
+		SCR_DamageManagerComponent damageManager = SCR_DamageManagerComponent.GetDamageManager(runtime.GetVehicle());
+		if (!damageManager)
+			return 1.0;
+
+		return damageManager.GetMovementDamage();
 	}
 
 	bool IsOverturned(AICF_VehicleRuntime runtime)
@@ -79,7 +99,8 @@ class AICF_VehicleWatchdog
 		int count;
 		foreach (BaseCompartmentSlot compartment : compartments)
 		{
-			if (!compartment || !compartment.IsCompartmentAccessible())
+			if (!compartment || !compartment.IsCompartmentAccessible() ||
+				compartment.GetOccupant() || compartment.IsReserved())
 				continue;
 
 			if (PilotCompartmentSlot.Cast(compartment))
@@ -120,15 +141,416 @@ class AICF_VehicleWatchdog
 		return alive > 0 && CountAliveGroupMembersInVehicle(group, vehicle) == alive;
 	}
 
-	bool AreAllAliveMembersOutOfVehicle(SCR_AIGroup group, Vehicle vehicle)
+	bool IsMemberSettledInVehicle(IEntity entity, Vehicle vehicle)
 	{
-		if (!group || !vehicle)
-			return true;
+		ChimeraCharacter character = ChimeraCharacter.Cast(entity);
+		if (!AICF_GroupRuntime.IsAliveCharacter(character) || !vehicle)
+			return false;
 
-		return CountAliveGroupMembersInVehicle(group, vehicle) == 0;
+		CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+		return access && CompartmentAccessComponent.GetVehicleIn(character) == vehicle &&
+			access.IsInCompartment() && !access.IsGettingIn() && !access.IsGettingOut() &&
+			character.IsInVehicle();
 	}
 
-	bool HasAliveOccupant(Vehicle vehicle)
+	bool AreAllAliveMembersSettledInVehicle(SCR_AIGroup group, Vehicle vehicle)
+	{
+		if (!group || !vehicle)
+			return false;
+
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		int alive;
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+			IEntity entity = agent.GetControlledEntity();
+			if (!AICF_GroupRuntime.IsAliveCharacter(entity))
+				continue;
+			alive++;
+			if (!IsMemberSettledInVehicle(entity, vehicle))
+				return false;
+		}
+
+		return alive > 0;
+	}
+
+	// Produces one authoritative physical snapshot for timeout, grace and
+	// completion decisions. Keeping all signals in the same sample prevents a
+	// visually active GetIn transition from being mistaken for no progress.
+	bool InspectBoardingProgress(
+		SCR_AIGroup group,
+		Vehicle vehicle,
+		out int aliveCount,
+		out int linkedCount,
+		out int compartmentCount,
+		out int gettingInCount,
+		out int gettingOutCount,
+		out int characterVehicleCount,
+		out int settledCount,
+		out float nearestDistanceMeters,
+		out float farthestDistanceMeters,
+		out string memberSamples)
+	{
+		aliveCount = 0;
+		linkedCount = 0;
+		compartmentCount = 0;
+		gettingInCount = 0;
+		gettingOutCount = 0;
+		characterVehicleCount = 0;
+		settledCount = 0;
+		nearestDistanceMeters = float.MAX;
+		farthestDistanceMeters = -1.0;
+		memberSamples = string.Empty;
+		if (!group || !vehicle)
+			return false;
+		vector boundsMin;
+		vector boundsMax;
+		vehicle.GetBounds(boundsMin, boundsMax);
+
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+
+			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (!AICF_GroupRuntime.IsAliveCharacter(character))
+				continue;
+
+			CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+			bool linked = CompartmentAccessComponent.GetVehicleIn(character) == vehicle;
+			vector localOrigin = vehicle.CoordToLocal(character.GetOrigin());
+			bool insideTransitionScope =
+				localOrigin[0] >= boundsMin[0] - BOARDING_TRANSITION_SCOPE_MARGIN_METERS &&
+				localOrigin[0] <= boundsMax[0] + BOARDING_TRANSITION_SCOPE_MARGIN_METERS &&
+				localOrigin[1] >= boundsMin[1] - BOARDING_TRANSITION_SCOPE_MARGIN_METERS &&
+				localOrigin[1] <= boundsMax[1] + BOARDING_TRANSITION_SCOPE_MARGIN_METERS &&
+				localOrigin[2] >= boundsMin[2] - BOARDING_TRANSITION_SCOPE_MARGIN_METERS &&
+				localOrigin[2] <= boundsMax[2] + BOARDING_TRANSITION_SCOPE_MARGIN_METERS;
+			bool targetScoped = linked || insideTransitionScope;
+			bool inCompartment = linked && access && access.IsInCompartment();
+			bool gettingIn = targetScoped && access && access.IsGettingIn();
+			bool gettingOut = targetScoped && access && access.IsGettingOut();
+			bool characterVehicle = linked && character.IsInVehicle();
+			bool settled = linked && inCompartment && !gettingIn && !gettingOut && characterVehicle;
+			float distanceMeters = Math.Sqrt(vector.DistanceSqXZ(character.GetOrigin(), vehicle.GetOrigin()));
+
+			aliveCount++;
+			if (linked)
+				linkedCount++;
+			if (inCompartment)
+				compartmentCount++;
+			if (gettingIn)
+				gettingInCount++;
+			if (gettingOut)
+				gettingOutCount++;
+			if (characterVehicle)
+				characterVehicleCount++;
+			if (settled)
+				settledCount++;
+			nearestDistanceMeters = Math.Min(nearestDistanceMeters, distanceMeters);
+			farthestDistanceMeters = Math.Max(farthestDistanceMeters, distanceMeters);
+
+			if (!memberSamples.IsEmpty())
+				memberSamples += ",";
+			memberSamples += string.Format(
+				"%1:distance_m=%2|linked=%3|compartment=%4|getting_in=%5|getting_out=%6|character_vehicle=%7|settled=%8|target_scope=%9",
+				character.GetID(),
+				distanceMeters,
+				linked,
+				inCompartment,
+				gettingIn,
+				gettingOut,
+				characterVehicle,
+				settled,
+				targetScoped);
+		}
+
+		if (aliveCount <= 0)
+		{
+			nearestDistanceMeters = -1.0;
+			return false;
+		}
+		return true;
+	}
+
+	bool IsAliveGroupMember(SCR_AIGroup group, IEntity entity)
+	{
+		if (!group || !AICF_GroupRuntime.IsAliveCharacter(entity))
+			return false;
+
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (agent && agent.GetControlledEntity() == entity)
+				return true;
+		}
+
+		return false;
+	}
+
+	bool MeasureAliveGroupDistances(
+		SCR_AIGroup group,
+		Vehicle vehicle,
+		out int aliveCount,
+		out float leaderDistanceMeters,
+		out float nearestDistanceMeters,
+		out float farthestDistanceMeters,
+		out string memberSamples)
+	{
+		aliveCount = 0;
+		leaderDistanceMeters = -1.0;
+		nearestDistanceMeters = float.MAX;
+		farthestDistanceMeters = -1.0;
+		memberSamples = string.Empty;
+		if (!group || !vehicle)
+			return false;
+
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+
+			IEntity entity = agent.GetControlledEntity();
+			if (!AICF_GroupRuntime.IsAliveCharacter(entity))
+				continue;
+
+			float distanceMeters = Math.Sqrt(vector.DistanceSqXZ(entity.GetOrigin(), vehicle.GetOrigin()));
+			aliveCount++;
+			nearestDistanceMeters = Math.Min(nearestDistanceMeters, distanceMeters);
+			farthestDistanceMeters = Math.Max(farthestDistanceMeters, distanceMeters);
+			if (entity == leader)
+				leaderDistanceMeters = distanceMeters;
+
+			if (!memberSamples.IsEmpty())
+				memberSamples += ",";
+			memberSamples += string.Format("%1:%2", entity.GetID(), distanceMeters);
+		}
+
+		if (aliveCount <= 0)
+		{
+			nearestDistanceMeters = -1.0;
+			return false;
+		}
+
+		return true;
+	}
+
+	int ResetGroupVehicleActions(SCR_AIGroup group)
+	{
+		if (!group)
+			return 0;
+
+		group.ReleaseCompartments();
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		int interrupted;
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+
+			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (!character)
+				continue;
+
+			CharacterControllerComponent controller = character.GetCharacterController();
+			if (!controller || controller.GetLifeState() == ECharacterLifeState.DEAD)
+				continue;
+
+			CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+			if (!access)
+				continue;
+
+			access.InterruptVehicleActionQueue(true, true, true);
+			interrupted++;
+		}
+
+		return interrupted;
+	}
+
+	string DescribeGroupVehicleOccupants(SCR_AIGroup group, AICF_VehicleRuntime runtime)
+	{
+		if (!group || !runtime || !runtime.GetVehicle())
+			return "NONE";
+
+		IEntity pilot;
+		IEntity gunner;
+		SCR_AIVehicleUsageComponent usage = runtime.GetVehicleUsage();
+		if (usage)
+		{
+			PilotCompartmentSlot pilotSlot = usage.GetPilotCompartmentSlot();
+			if (pilotSlot)
+				pilot = pilotSlot.GetOccupant();
+			TurretCompartmentSlot gunnerSlot = usage.GetTurretCompartmentSlot();
+			if (gunnerSlot)
+				gunner = gunnerSlot.GetOccupant();
+		}
+
+		string samples;
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+
+			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (!character || CompartmentAccessComponent.GetVehicleIn(character) != runtime.GetVehicle())
+				continue;
+
+			CharacterControllerComponent controller = character.GetCharacterController();
+			if (!controller || controller.GetLifeState() == ECharacterLifeState.DEAD)
+				continue;
+
+			string role = "CARGO";
+			if (character == pilot)
+				role = "DRIVER";
+			else if (character == gunner)
+				role = "GUNNER";
+			if (!samples.IsEmpty())
+				samples += ",";
+			samples += string.Format("%1:%2:life_%3", character.GetID(), role, controller.GetLifeState());
+		}
+
+		if (samples.IsEmpty())
+			return "NONE";
+		return samples;
+	}
+
+	bool AreAllProtectedMembersOutOfVehicle(SCR_AIGroup group, Vehicle vehicle)
+	{
+		if (!group || !vehicle)
+			return false;
+
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+
+			IEntity entity = agent.GetControlledEntity();
+			if (IsProtectedCharacter(entity) && CompartmentAccessComponent.GetVehicleIn(entity) == vehicle)
+				return false;
+		}
+		return true;
+	}
+
+	bool InspectProtectedMemberDismountClearance(
+		SCR_AIGroup group,
+		Vehicle vehicle,
+		out int logicalOccupantCount,
+		out int transitionCount,
+		out int insideBoundsCount,
+		out string memberSamples)
+	{
+		logicalOccupantCount = 0;
+		transitionCount = 0;
+		insideBoundsCount = 0;
+		memberSamples = string.Empty;
+		if (!group || !vehicle)
+		{
+			memberSamples = "INVALID_INPUT";
+			return false;
+		}
+
+		vector boundsMin;
+		vector boundsMax;
+		vehicle.GetBounds(boundsMin, boundsMax);
+
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent || agent.GetParentGroup() != group)
+				continue;
+
+			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (!IsProtectedCharacter(character))
+				continue;
+
+			CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+			bool linkedToVehicle = CompartmentAccessComponent.GetVehicleIn(character) == vehicle;
+			vector localOrigin = vehicle.CoordToLocal(character.GetOrigin());
+			bool insideBounds = IsInsideExpandedVehicleBounds(localOrigin, boundsMin, boundsMax);
+			bool inCompartment = false;
+			bool gettingIn = false;
+			bool gettingOut = false;
+			if (access)
+			{
+				inCompartment = linkedToVehicle && access.IsInCompartment();
+				// Get-in/out transition state is character-global. Attribute it to
+				// this vehicle only while linked to it or physically inside its
+				// bounds; boarding another vehicle must not pin stale cleanup.
+				gettingIn = (linkedToVehicle || insideBounds) && access.IsGettingIn();
+				gettingOut = (linkedToVehicle || insideBounds) && access.IsGettingOut();
+			}
+
+			bool characterInVehicle = linkedToVehicle && character.IsInVehicle();
+			bool logicalOccupant = linkedToVehicle || inCompartment || characterInVehicle;
+			bool inTransition = gettingIn || gettingOut;
+
+			if (logicalOccupant)
+				logicalOccupantCount++;
+			if (inTransition)
+				transitionCount++;
+			if (insideBounds)
+				insideBoundsCount++;
+
+			if (!memberSamples.IsEmpty())
+				memberSamples += ",";
+			memberSamples += string.Format(
+				"%1:logical_%2:linked_%3:compartment_%4:character_vehicle_%5:getting_in_%6:getting_out_%7:inside_bounds_%8:local_%9",
+				character.GetID(),
+				logicalOccupant,
+				linkedToVehicle,
+				inCompartment,
+				characterInVehicle,
+				gettingIn,
+				gettingOut,
+				insideBounds,
+				localOrigin);
+		}
+
+		if (memberSamples.IsEmpty())
+			memberSamples = "NONE";
+		return logicalOccupantCount == 0 && transitionCount == 0 && insideBoundsCount == 0;
+	}
+
+	bool AreAllProtectedMembersSafelyClear(SCR_AIGroup group, Vehicle vehicle)
+	{
+		int logicalOccupantCount;
+		int transitionCount;
+		int insideBoundsCount;
+		string memberSamples;
+		return InspectProtectedMemberDismountClearance(
+			group,
+			vehicle,
+			logicalOccupantCount,
+			transitionCount,
+			insideBoundsCount,
+			memberSamples);
+	}
+
+	protected bool IsInsideExpandedVehicleBounds(vector localOrigin, vector boundsMin, vector boundsMax)
+	{
+		return localOrigin[0] >= boundsMin[0] - DISMOUNT_CLEARANCE_MARGIN_METERS &&
+			localOrigin[0] <= boundsMax[0] + DISMOUNT_CLEARANCE_MARGIN_METERS &&
+			localOrigin[1] >= boundsMin[1] - DISMOUNT_CLEARANCE_MARGIN_METERS &&
+			localOrigin[1] <= boundsMax[1] + DISMOUNT_CLEARANCE_MARGIN_METERS &&
+			localOrigin[2] >= boundsMin[2] - DISMOUNT_CLEARANCE_MARGIN_METERS &&
+			localOrigin[2] <= boundsMax[2] + DISMOUNT_CLEARANCE_MARGIN_METERS;
+	}
+
+	bool HasProtectedOccupant(Vehicle vehicle)
 	{
 		if (!vehicle)
 			return false;
@@ -142,10 +564,20 @@ class AICF_VehicleWatchdog
 		manager.GetCompartments(compartments);
 		foreach (BaseCompartmentSlot compartment : compartments)
 		{
-			if (compartment && AICF_GroupRuntime.IsAliveCharacter(compartment.GetOccupant()))
+			if (compartment && IsProtectedCharacter(compartment.GetOccupant()))
 				return true;
 		}
 		return false;
+	}
+
+	protected bool IsProtectedCharacter(IEntity entity)
+	{
+		ChimeraCharacter character = ChimeraCharacter.Cast(entity);
+		if (!character)
+			return false;
+
+		CharacterControllerComponent controller = character.GetCharacterController();
+		return controller && controller.GetLifeState() != ECharacterLifeState.DEAD;
 	}
 
 	bool IsGroupCohesiveAroundVehicle(SCR_AIGroup group, Vehicle vehicle, float maximumDistanceMeters)

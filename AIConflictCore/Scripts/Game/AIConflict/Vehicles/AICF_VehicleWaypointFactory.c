@@ -6,58 +6,81 @@ class AICF_VehicleWaypointFactory
 	protected static const ResourceName MOVE_WAYPOINT_PREFAB = "{750A8D1695BD6998}Prefabs/AI/Waypoints/AIWaypoint_Move.et";
 	protected static const ResourceName GET_OUT_WAYPOINT_PREFAB = "{C40316EE26846CAB}Prefabs/AI/Waypoints/AIWaypoint_GetOut.et";
 	protected static const float BOARDING_COMPLETION_RADIUS_METERS = 12.0;
+	protected static const float BOARDING_APPROACH_COMPLETION_RADIUS_METERS = 12.0;
 	protected static const float MOVE_COMPLETION_RADIUS_METERS = 25.0;
 
-	SCR_BoardingEntityWaypoint CreateBoardingWaypoint(Vehicle vehicle, bool allowGunner)
+	SCR_BoardingEntityWaypoint CreateDriverBoardingWaypoint(Vehicle vehicle)
+	{
+		return CreateRoleBoardingWaypoint(vehicle, true, false, false);
+	}
+
+	SCR_BoardingEntityWaypoint CreatePassengerBoardingWaypoint(Vehicle vehicle)
+	{
+		return CreateRoleBoardingWaypoint(vehicle, false, false, true);
+	}
+
+	SCR_BoardingEntityWaypoint CreateGunnerBoardingWaypoint(Vehicle vehicle)
+	{
+		return CreateRoleBoardingWaypoint(vehicle, false, true, false);
+	}
+
+	// This is deliberately a plain infantry Move waypoint. The coordinator has
+	// detached the vehicle from group utility before issuing it, so a distant
+	// member cannot receive a GetIn action before the whole group is staged.
+	AIWaypoint CreateBoardingApproachWaypoint(Vehicle vehicle)
 	{
 		if (!vehicle)
 			return null;
 
-		SCR_BoardingEntityWaypoint waypoint = SCR_BoardingEntityWaypoint.Cast(SpawnWaypoint(GET_IN_WAYPOINT_PREFAB, vehicle.GetOrigin()));
-		if (!waypoint)
-			return null;
-
-		waypoint.SetEntity(vehicle);
-		waypoint.SetAllowance(true, allowGunner, true);
-		waypoint.SetCompletionRadius(BOARDING_COMPLETION_RADIUS_METERS);
-		return waypoint;
-	}
-
-	SCR_BoardingEntityWaypoint CreateDriverRecoveryWaypoint(Vehicle vehicle)
-	{
-		if (!vehicle)
-			return null;
-
-		SCR_BoardingEntityWaypoint waypoint = SCR_BoardingEntityWaypoint.Cast(SpawnWaypoint(GET_IN_WAYPOINT_PREFAB, vehicle.GetOrigin()));
-		if (!waypoint)
-			return null;
-
-		waypoint.SetEntity(vehicle);
-		waypoint.SetAllowance(true, false, false);
-		waypoint.SetCompletionRadius(BOARDING_COMPLETION_RADIUS_METERS);
-		return waypoint;
-	}
-
-	SCR_BoardingEntityWaypoint CreateGunnerRecoveryWaypoint(Vehicle vehicle)
-	{
-		if (!vehicle)
-			return null;
-
-		SCR_BoardingEntityWaypoint waypoint = SCR_BoardingEntityWaypoint.Cast(SpawnWaypoint(GET_IN_WAYPOINT_PREFAB, vehicle.GetOrigin()));
-		if (!waypoint)
-			return null;
-
-		waypoint.SetEntity(vehicle);
-		waypoint.SetAllowance(false, true, false);
-		waypoint.SetCompletionRadius(BOARDING_COMPLETION_RADIUS_METERS);
-		return waypoint;
-	}
-
-	AIWaypoint CreateMoveWaypoint(vector position)
-	{
-		AIWaypoint waypoint = SpawnWaypoint(MOVE_WAYPOINT_PREFAB, position);
+		AIWaypoint waypoint = SpawnWaypoint(MOVE_WAYPOINT_PREFAB, vehicle.GetOrigin());
 		if (waypoint)
-			waypoint.SetCompletionRadius(MOVE_COMPLETION_RADIUS_METERS);
+			waypoint.SetCompletionRadius(BOARDING_APPROACH_COMPLETION_RADIUS_METERS);
+		return waypoint;
+	}
+
+	AIWaypoint CreateMoveWaypoint(
+		vector fromPosition,
+		vector targetPosition,
+		float targetRangeMeters,
+		out vector resolvedPosition,
+		out string routeMode)
+	{
+		resolvedPosition = targetPosition;
+		routeMode = "DIRECT_NO_AI_WORLD";
+		if (targetRangeMeters < MOVE_COMPLETION_RADIUS_METERS)
+			targetRangeMeters = MOVE_COMPLETION_RADIUS_METERS;
+
+		SCR_AIWorld aiWorld = SCR_AIWorld.Cast(GetGame().GetAIWorld());
+		if (aiWorld)
+		{
+			RoadNetworkManager roadNetworkManager = aiWorld.GetRoadNetworkManager();
+			if (roadNetworkManager)
+			{
+				vector roadPosition;
+				if (roadNetworkManager.GetReachableWaypointInRoad(fromPosition, targetPosition, targetRangeMeters, roadPosition))
+				{
+					resolvedPosition = roadPosition;
+					routeMode = "ROAD_REACHABLE";
+				}
+				else
+				{
+					routeMode = "DIRECT_NO_REACHABLE_ROAD";
+				}
+			}
+			else
+			{
+				routeMode = "DIRECT_NO_ROAD_NETWORK";
+			}
+		}
+
+		AIWaypoint waypoint = SpawnWaypoint(MOVE_WAYPOINT_PREFAB, resolvedPosition);
+		if (waypoint)
+		{
+			float completionRadius = targetRangeMeters - vector.Distance(resolvedPosition, targetPosition);
+			if (completionRadius < 1.0)
+				completionRadius = 1.0;
+			waypoint.SetCompletionRadius(completionRadius);
+		}
 		return waypoint;
 	}
 
@@ -83,6 +106,25 @@ class AICF_VehicleWaypointFactory
 		if (group)
 			group.RemoveWaypoint(waypoint);
 		RplComponent.DeleteRplEntity(waypoint, false);
+	}
+
+	protected SCR_BoardingEntityWaypoint CreateRoleBoardingWaypoint(
+		Vehicle vehicle,
+		bool allowDriver,
+		bool allowGunner,
+		bool allowCargo)
+	{
+		if (!vehicle)
+			return null;
+
+		SCR_BoardingEntityWaypoint waypoint = SCR_BoardingEntityWaypoint.Cast(SpawnWaypoint(GET_IN_WAYPOINT_PREFAB, vehicle.GetOrigin()));
+		if (!waypoint)
+			return null;
+
+		waypoint.SetEntity(vehicle);
+		waypoint.SetAllowance(allowDriver, allowGunner, allowCargo);
+		waypoint.SetCompletionRadius(BOARDING_COMPLETION_RADIUS_METERS);
+		return waypoint;
 	}
 
 	protected AIWaypoint SpawnWaypoint(ResourceName prefab, vector position)

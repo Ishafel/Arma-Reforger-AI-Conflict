@@ -50,18 +50,29 @@ class AICF_OrderPlanner
 		return GetOrderFailureReason(slot, faction).IsEmpty();
 	}
 
+	bool IsStrategicTargetValid(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		SCR_CampaignMilitaryBaseComponent target)
+	{
+		return IsTargetValidForRole(slot, faction, target);
+	}
+
 	string GetOrderFailureReason(AICF_GroupSlot slot, SCR_CampaignFaction faction)
 	{
 		if (!slot || !faction)
 			return "INPUT_INVALID";
 		if (!slot.IsCombatReady() || !slot.GetGroup())
 			return "GROUP_NOT_READY";
+		// Strategic ownership/eligibility changes supersede waypoint lifecycle.
+		// A completed waypoint on a freshly captured target is a retarget event,
+		// not an unstable movement recovery that should consume stuck budget.
+		if (!IsTargetValidForRole(slot, faction, slot.GetTargetBase()))
+			return "TARGET_INVALID";
 		if (!slot.GetWaypoint())
 			return "WAYPOINT_REFERENCE_MISSING";
 		if (slot.GetGroup().GetCurrentWaypoint() != slot.GetWaypoint())
 			return "WAYPOINT_NOT_CURRENT";
-		if (!IsTargetValidForRole(slot, faction, slot.GetTargetBase()))
-			return "TARGET_INVALID";
 		if (slot.GetRole() == AICF_EGroupRole.ATTACK &&
 			slot.GetTargetBase().GetType() == SCR_ECampaignBaseType.RELAY &&
 			!SCR_SmartActionWaypoint.Cast(slot.GetWaypoint()))
@@ -77,7 +88,8 @@ class AICF_OrderPlanner
 		SCR_CampaignFaction faction,
 		AICF_ObjectiveGraph graph,
 		AICF_TargetSelector targetSelector,
-		string failureReason)
+		string failureReason,
+		bool countsAsStuckRecovery = false)
 	{
 		if (!slot || !faction || !graph || !targetSelector || !slot.IsCombatReady())
 			return false;
@@ -91,15 +103,18 @@ class AICF_OrderPlanner
 
 		if (recovered)
 		{
+			slot.BeginOrderRecoveryVerification(failureReason, countsAsStuckRecovery);
 			AICF_Stage2Diagnostics.Info(
-				"ORDER_RECOVERED",
+				"ORDER_RECOVERY_ISSUED",
 				string.Format(
-					"faction=%1 slot=%2 role=%3 cause=%4 target=%5",
+					"faction=%1 slot=%2 role=%3 cause=%4 target=%5 waypoint=%6 counts_as_stuck=%7 verification=PENDING_DURABILITY",
 					faction.GetFactionKey(),
 					slot.GetSlotId(),
 					AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
 					failureReason,
-					AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase())));
+					AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
+					slot.GetWaypoint().GetID(),
+					countsAsStuckRecovery));
 		}
 		else
 		{
@@ -163,6 +178,42 @@ class AICF_OrderPlanner
 		}
 
 		slot.SuspendObjectiveWaypoint();
+	}
+
+	bool TryResolveTargetPosition(
+		SCR_CampaignMilitaryBaseComponent target,
+		AICF_EGroupRole role,
+		out vector targetPosition)
+	{
+		targetPosition = "0 0 0";
+		if (!target || !target.GetOwner())
+			return false;
+
+		bool isRelay = role == AICF_EGroupRole.ATTACK && target.GetType() == SCR_ECampaignBaseType.RELAY;
+		if (isRelay)
+		{
+			targetPosition = target.GetOwner().GetOrigin();
+			return true;
+		}
+
+		if (role == AICF_EGroupRole.ATTACK)
+		{
+			array<SCR_SeizingComponent> capturePoints = {};
+			target.GetCapturePoints(capturePoints);
+			if (!capturePoints.IsEmpty() && capturePoints[0] && capturePoints[0].GetOwner())
+				targetPosition = capturePoints[0].GetOwner().GetOrigin();
+			else
+				targetPosition = target.GetOwner().GetOrigin();
+			return true;
+		}
+
+		SCR_SpawnPoint spawnPoint = target.GetSpawnPoint();
+		if (!spawnPoint)
+			return false;
+
+		vector targetRotation;
+		spawnPoint.GetPositionAndRotation(targetPosition, targetRotation);
+		return true;
 	}
 
 	protected bool ReplaceOrder(
@@ -276,28 +327,8 @@ class AICF_OrderPlanner
 		}
 
 		vector targetPosition;
-		vector targetRotation;
-		if (isRelay)
-		{
-			targetPosition = target.GetOwner().GetOrigin();
-		}
-		else if (role == AICF_EGroupRole.ATTACK)
-		{
-			array<SCR_SeizingComponent> capturePoints = {};
-			target.GetCapturePoints(capturePoints);
-			if (!capturePoints.IsEmpty() && capturePoints[0] && capturePoints[0].GetOwner())
-				targetPosition = capturePoints[0].GetOwner().GetOrigin();
-			else
-				targetPosition = target.GetOwner().GetOrigin();
-		}
-		else
-		{
-			SCR_SpawnPoint spawnPoint = target.GetSpawnPoint();
-			if (!spawnPoint)
-				return null;
-
-			spawnPoint.GetPositionAndRotation(targetPosition, targetRotation);
-		}
+		if (!TryResolveTargetPosition(target, role, targetPosition))
+			return null;
 
 		EntitySpawnParams spawnParams = new EntitySpawnParams();
 		spawnParams.TransformMode = ETransformMode.WORLD;

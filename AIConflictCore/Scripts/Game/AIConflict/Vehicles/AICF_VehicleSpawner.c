@@ -1,6 +1,7 @@
-// Chooses the nearest safe friendly Conflict base and uses the same stock empty
-// terrain query as initial HQ vehicles. The caller reserves cap capacity before
-// entering this class, so spawn validation and creation are atomic on authority.
+// Tries safe friendly Conflict bases from nearest to farthest and uses the same
+// stock empty-terrain query as initial HQ vehicles. The caller reserves cap
+// capacity before entering this class, so spawn validation and creation are
+// atomic on authority.
 class AICF_VehicleSpawner
 {
 	protected static const float SPAWN_SEARCH_RADIUS_METERS = 45.0;
@@ -14,14 +15,21 @@ class AICF_VehicleSpawner
 		ResourceName prefab,
 		vector preferredPosition,
 		float maximumSpawnDistanceMeters,
+		float maximumBoardingDistanceMeters,
 		AICF_VehicleRuntime runtime,
 		out Vehicle vehicle,
 		out SCR_AIVehicleUsageComponent vehicleUsage,
-		out SCR_CampaignMilitaryBaseComponent spawnBase)
+		out SCR_CampaignMilitaryBaseComponent spawnBase,
+		out string failureReason,
+		out bool retryable,
+		out SCR_CampaignMilitaryBaseComponent failureBase)
 	{
 		vehicle = null;
 		vehicleUsage = null;
 		spawnBase = null;
+		failureReason = "INVALID_SPAWN_REQUEST";
+		retryable = false;
+		failureBase = null;
 		if (!Replication.IsServer() || !campaign || !campaign.IsMaster() || !faction || !slot || !conflictAdapter || !runtime || prefab.IsEmpty())
 			return false;
 
@@ -42,49 +50,194 @@ class AICF_VehicleSpawner
 			}
 		}
 
-		float bestDistanceSq = float.MAX;
+		array<SCR_CampaignMilitaryBaseComponent> safeCandidates = {};
+		string firstRejectionReason;
+		SCR_CampaignMilitaryBaseComponent firstRejectedBase;
+		string meaningfulRejectionReason;
+		SCR_CampaignMilitaryBaseComponent meaningfulRejectedBase;
 		foreach (SCR_CampaignMilitaryBaseComponent candidate : candidates)
 		{
 			string rejectionReason = conflictAdapter.GetSpawnRejectionReason(candidate, faction);
 			if (!rejectionReason.IsEmpty())
 			{
-				AICF_Stage3Diagnostics.Info(
-					"VEHICLE_SPAWN_SITE_REJECTED",
-					string.Format("%1 base=%2 reason=%3", runtime.DescribeContext(rejectionReason), AICF_Stage1Diagnostics.BaseKey(candidate), rejectionReason));
+				if (firstRejectionReason.IsEmpty())
+				{
+					firstRejectionReason = rejectionReason;
+					firstRejectedBase = candidate;
+				}
+
+				// Hostile bases are expected entries in the global base list. Preserve
+				// actionable owned-base failures (contested, inactive spawn point,
+				// initialization race) instead of flooding every retry with ENEMY_OWNED.
+				if (rejectionReason != "ENEMY_OWNED" && meaningfulRejectionReason.IsEmpty())
+				{
+					meaningfulRejectionReason = rejectionReason;
+					meaningfulRejectedBase = candidate;
+				}
 				continue;
 			}
 
+			// Stable insertion keeps the candidate walk deterministic while avoiding
+			// comparator/delegate syntax that is not available in Enforce 1.7.
 			float distanceSq = vector.DistanceSqXZ(candidate.GetOwner().GetOrigin(), preferredPosition);
-			if (!spawnBase || distanceSq < bestDistanceSq)
+			string candidateKey = AICF_Stage1Diagnostics.BaseKey(candidate);
+			int insertIndex = safeCandidates.Count();
+			for (int safeIndex = 0; safeIndex < safeCandidates.Count(); safeIndex++)
 			{
-				spawnBase = candidate;
-				bestDistanceSq = distanceSq;
+				float sortedDistanceSq = vector.DistanceSqXZ(safeCandidates[safeIndex].GetOwner().GetOrigin(), preferredPosition);
+				string sortedCandidateKey = AICF_Stage1Diagnostics.BaseKey(safeCandidates[safeIndex]);
+				if (distanceSq < sortedDistanceSq ||
+					(distanceSq == sortedDistanceSq && candidateKey.Compare(sortedCandidateKey) < 0))
+				{
+					insertIndex = safeIndex;
+					break;
+				}
 			}
+			safeCandidates.InsertAt(candidate, insertIndex);
 		}
 
-		if (!spawnBase)
-			return false;
-		if (maximumSpawnDistanceMeters > 0 && bestDistanceSq > maximumSpawnDistanceMeters * maximumSpawnDistanceMeters)
+		if (safeCandidates.IsEmpty())
 		{
-			AICF_Stage3Diagnostics.Info(
-				"VEHICLE_SPAWN_SITE_REJECTED",
-				string.Format("%1 base=%2 reason=TOO_FAR distance_m=%3 limit_m=%4", runtime.DescribeContext("TOO_FAR"), AICF_Stage1Diagnostics.BaseKey(spawnBase), Math.Sqrt(bestDistanceSq), maximumSpawnDistanceMeters));
-			spawnBase = null;
+			failureReason = meaningfulRejectionReason;
+			failureBase = meaningfulRejectedBase;
+			if (failureReason.IsEmpty())
+			{
+				failureReason = firstRejectionReason;
+				failureBase = firstRejectedBase;
+			}
+			if (failureReason.IsEmpty())
+				failureReason = "NO_SAFE_SPAWN_AVAILABLE";
+			retryable = true;
 			return false;
 		}
 
 		vector position;
-		if (!SCR_WorldTools.FindEmptyTerrainPosition(
-			position,
-			spawnBase.GetOwner().GetOrigin(),
-			SPAWN_SEARCH_RADIUS_METERS,
-			VEHICLE_CLEARANCE_RADIUS_METERS))
+		string siteFailureReason;
+		SCR_CampaignMilitaryBaseComponent siteFailureBase;
+		SCR_CampaignMilitaryBaseComponent boardingRejectionBase;
+		vector boardingRejectionPosition;
+		int boardingRejectionAliveCount;
+		float boardingRejectionLeaderDistanceMeters;
+		float boardingRejectionNearestDistanceMeters;
+		float boardingRejectionFarthestDistanceMeters;
+		string boardingRejectionMemberSamples;
+		foreach (SCR_CampaignMilitaryBaseComponent safeCandidate : safeCandidates)
+		{
+			float candidateDistanceSq = vector.DistanceSqXZ(safeCandidate.GetOwner().GetOrigin(), preferredPosition);
+			if (maximumSpawnDistanceMeters > 0 && candidateDistanceSq > maximumSpawnDistanceMeters * maximumSpawnDistanceMeters)
+			{
+				// Distance-only rejection is the least precise site failure. Keep the
+				// nearest one unless a terrain/member check produces a stronger cause.
+				if (siteFailureReason.IsEmpty())
+				{
+					siteFailureReason = "TOO_FAR";
+					siteFailureBase = safeCandidate;
+				}
+				continue;
+			}
+
+			vector candidatePosition;
+			if (!SCR_WorldTools.FindEmptyTerrainPosition(
+				candidatePosition,
+				safeCandidate.GetOwner().GetOrigin(),
+				SPAWN_SEARCH_RADIUS_METERS,
+				VEHICLE_CLEARANCE_RADIUS_METERS))
+			{
+				if (siteFailureReason.IsEmpty() || siteFailureReason == "TOO_FAR")
+				{
+					siteFailureReason = "NO_EMPTY_TERRAIN";
+					siteFailureBase = safeCandidate;
+				}
+				continue;
+			}
+
+			int aliveCount;
+			float leaderDistanceMeters;
+			float nearestDistanceMeters;
+			float farthestDistanceMeters;
+			string memberSamples;
+			MeasureAliveGroupDistancesToPosition(
+				slot.GetGroup(),
+				candidatePosition,
+				aliveCount,
+				leaderDistanceMeters,
+				nearestDistanceMeters,
+				farthestDistanceMeters,
+				memberSamples);
+			if (aliveCount <= 0)
+			{
+				siteFailureReason = "GROUP_NOT_READY";
+				siteFailureBase = safeCandidate;
+				break;
+			}
+			if (maximumBoardingDistanceMeters > 0 && aliveCount > 0 &&
+				farthestDistanceMeters > maximumBoardingDistanceMeters)
+			{
+				if (siteFailureReason != "NO_BOARDING_SITE_WITHIN_RANGE")
+				{
+					siteFailureReason = "NO_BOARDING_SITE_WITHIN_RANGE";
+					siteFailureBase = safeCandidate;
+					boardingRejectionBase = safeCandidate;
+					boardingRejectionPosition = candidatePosition;
+					boardingRejectionAliveCount = aliveCount;
+					boardingRejectionLeaderDistanceMeters = leaderDistanceMeters;
+					boardingRejectionNearestDistanceMeters = nearestDistanceMeters;
+					boardingRejectionFarthestDistanceMeters = farthestDistanceMeters;
+					boardingRejectionMemberSamples = memberSamples;
+				}
+				continue;
+			}
+
+			spawnBase = safeCandidate;
+			position = candidatePosition;
+			break;
+		}
+
+		// Report only the nearest exact boarding rejection. Reporting each failed
+		// candidate would rotate the runtime's one-shot key and recreate warning spam.
+		if (boardingRejectionBase)
+		{
+			string reportKey = string.Format(
+				"SITE:%1:%2",
+				AICF_Stage1Diagnostics.BaseKey(boardingRejectionBase),
+				"NO_BOARDING_SITE_WITHIN_RANGE");
+			if (runtime.MarkSpawnIssueReported(reportKey))
+			{
+				string siteSample = string.Format("%1,%2,%3", boardingRejectionPosition[0], boardingRejectionPosition[1], boardingRejectionPosition[2]);
+				AICF_Stage3Diagnostics.Warning(
+					"VEHICLE_SPAWN_SITE_REJECTED",
+					string.Format(
+						"%1 base=%2 retryable=1 alive=%3 leader_m=%4 nearest_m=%5 farthest_m=%6 maximum_m=%7 site=[%8] member_samples=[%9]",
+						runtime.DescribeContext("NO_BOARDING_SITE_WITHIN_RANGE"),
+						AICF_Stage1Diagnostics.BaseKey(boardingRejectionBase),
+						boardingRejectionAliveCount,
+						boardingRejectionLeaderDistanceMeters,
+						boardingRejectionNearestDistanceMeters,
+						boardingRejectionFarthestDistanceMeters,
+						maximumBoardingDistanceMeters,
+						siteSample,
+						boardingRejectionMemberSamples));
+			}
+		}
+
+		if (!spawnBase)
+		{
+			failureReason = siteFailureReason;
+			failureBase = siteFailureBase;
+			if (failureReason.IsEmpty())
+				failureReason = "NO_SAFE_SPAWN_AVAILABLE";
+			retryable = true;
+			return false;
+		}
+
+		// If an owned candidate was unsafe but another safe base was selected,
+		// retain one causal acceptance event without logging every hostile base.
+		if (meaningfulRejectedBase && runtime.MarkSpawnIssueReported(
+			string.Format("SITE:%1:%2", AICF_Stage1Diagnostics.BaseKey(meaningfulRejectedBase), meaningfulRejectionReason)))
 		{
 			AICF_Stage3Diagnostics.Info(
 				"VEHICLE_SPAWN_SITE_REJECTED",
-				string.Format("%1 base=%2 reason=NO_EMPTY_TERRAIN", runtime.DescribeContext("NO_EMPTY_TERRAIN"), AICF_Stage1Diagnostics.BaseKey(spawnBase)));
-			spawnBase = null;
-			return false;
+				string.Format("%1 base=%2 retryable=1", runtime.DescribeContext(meaningfulRejectionReason), AICF_Stage1Diagnostics.BaseKey(meaningfulRejectedBase)));
 		}
 
 		AICF_Stage3Diagnostics.Info(
@@ -97,17 +250,30 @@ class AICF_VehicleSpawner
 		vehicle = Vehicle.Cast(GetGame().SpawnEntityPrefabEx(prefab, false, params: params));
 		if (!vehicle)
 		{
-			AICF_Stage3Diagnostics.Error("VEHICLE_SPAWN_FAILED", string.Format("%1 prefab=%2", runtime.DescribeContext("SPAWN_RETURNED_NULL"), prefab));
+			failureReason = "SPAWN_RETURNED_NULL";
+			failureBase = spawnBase;
 			return false;
 		}
 
 		SCR_FactionAffiliationComponent affiliation = SCR_FactionAffiliationComponent.Cast(vehicle.FindComponent(SCR_FactionAffiliationComponent));
-		Faction vehicleFaction;
-		if (affiliation)
-			vehicleFaction = affiliation.GetAffiliatedFaction();
+		if (!affiliation)
+		{
+			failureReason = "FACTION_COMPONENT_MISSING";
+			failureBase = spawnBase;
+			RplComponent.DeleteRplEntity(vehicle, false);
+			vehicle = null;
+			return false;
+		}
+
+		// Stock faction catalog prefabs may intentionally have no active faction.
+		// The catalog selection authorizes the prefab; authoritative runtime spawn
+		// must assign the active faction before AI/group systems inspect the vehicle.
+		affiliation.SetAffiliatedFaction(faction);
+		Faction vehicleFaction = affiliation.GetAffiliatedFaction();
 		if (!vehicleFaction || vehicleFaction.GetFactionKey() != faction.GetFactionKey())
 		{
-			AICF_Stage3Diagnostics.Error("VEHICLE_FACTION_MISMATCH", string.Format("%1 expected=%2 prefab=%3", runtime.DescribeContext("FACTION_MISMATCH"), faction.GetFactionKey(), prefab));
+			failureReason = "FACTION_ASSIGNMENT_FAILED";
+			failureBase = spawnBase;
 			RplComponent.DeleteRplEntity(vehicle, false);
 			vehicle = null;
 			return false;
@@ -116,7 +282,8 @@ class AICF_VehicleSpawner
 		vehicleUsage = SCR_AIVehicleUsageComponent.Cast(vehicle.FindComponent(SCR_AIVehicleUsageComponent));
 		if (!vehicleUsage || !vehicleUsage.CanBePiloted() || !vehicleUsage.IsVehicleTypeValid())
 		{
-			AICF_Stage3Diagnostics.Error("VEHICLE_AI_USAGE_INVALID", string.Format("%1 prefab=%2", runtime.DescribeContext("AI_USAGE_INVALID"), prefab));
+			failureReason = "AI_USAGE_INVALID";
+			failureBase = spawnBase;
 			RplComponent.DeleteRplEntity(vehicle, false);
 			vehicle = null;
 			vehicleUsage = null;
@@ -126,6 +293,58 @@ class AICF_VehicleSpawner
 		Physics physicsComponent = vehicle.GetPhysics();
 		if (physicsComponent)
 			physicsComponent.SetVelocity("0 -0.1 0");
+
+		failureReason = string.Empty;
+		failureBase = null;
+		return true;
+	}
+
+	protected bool MeasureAliveGroupDistancesToPosition(
+		SCR_AIGroup group,
+		vector position,
+		out int aliveCount,
+		out float leaderDistanceMeters,
+		out float nearestDistanceMeters,
+		out float farthestDistanceMeters,
+		out string memberSamples)
+	{
+		aliveCount = 0;
+		leaderDistanceMeters = -1.0;
+		nearestDistanceMeters = float.MAX;
+		farthestDistanceMeters = -1.0;
+		memberSamples = string.Empty;
+		if (!group)
+			return false;
+
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+
+			IEntity entity = agent.GetControlledEntity();
+			if (!AICF_GroupRuntime.IsAliveCharacter(entity))
+				continue;
+
+			float distanceMeters = Math.Sqrt(vector.DistanceSqXZ(entity.GetOrigin(), position));
+			aliveCount++;
+			nearestDistanceMeters = Math.Min(nearestDistanceMeters, distanceMeters);
+			farthestDistanceMeters = Math.Max(farthestDistanceMeters, distanceMeters);
+			if (entity == leader)
+				leaderDistanceMeters = distanceMeters;
+
+			if (!memberSamples.IsEmpty())
+				memberSamples += ",";
+			memberSamples += string.Format("%1:%2", entity.GetID(), distanceMeters);
+		}
+
+		if (aliveCount <= 0)
+		{
+			nearestDistanceMeters = -1.0;
+			return false;
+		}
 
 		return true;
 	}
