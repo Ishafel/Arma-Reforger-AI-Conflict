@@ -331,3 +331,115 @@ protected bool SCR_SeizingComponent.m_bCapturingRequiresPlayer;
 9. Workbench `Validate Scripts` и direct ServerDiag smoke `4 × 4` подтверждены. Smoke доказал bootstrap, CLI config, роли, spawn, начальные приказы и `ROSTER_READY`, но не доказал реальный AI capture, retarget, `OnEmpty → 30 s → replacement`, unsafe-site rejection, ticket debit или единственное завершение матча.
 10. Полные зеркальные прогоны A/B из `STAGE_1_TESTING.md` ещё не выполнены: нет принятого результата с игроком US и отдельного результата с игроком USSR. Поэтому Stage 1, полный MVP и двухчасовой soak пока не объявлены принятыми.
 11. Instance-флаг не является persistent-маркером сохранённых групп. Каждый dedicated acceptance run запускается с новым `-profile` и `-backendFreshSession`.
+
+## Stage 3: проверенные API наземной техники (1.7.0.54)
+
+Ниже перечислены только API и ресурсы, проверенные по локальному official Script Diff `v1.7.0.54`, установленной Resource Database и успешному Workbench validation. Runtime-поведение посадки, вождения и navmesh всё равно требует матрицы из `STAGE_3_TESTING.md`.
+
+### Faction vehicle catalog
+
+Источники: [`SCR_Faction.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/Faction/SCR_Faction.c), [`SCR_EntityCatalog.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/EntityCatalog/SCR_EntityCatalog.c), [`SCR_EntityCatalogEntry.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/EntityCatalog/EntityCatalogEntry/SCR_EntityCatalogEntry.c).
+
+```c
+SCR_EntityCatalog SCR_Faction.GetFactionEntityCatalogOfType(
+    EEntityCatalogType catalogType,
+    bool printNotFound = true)
+
+int SCR_EntityCatalog.GetEntityList(
+    notnull out array<SCR_EntityCatalogEntry> entityList)
+
+ResourceName SCR_EntityCatalogEntry.GetPrefab()
+```
+
+Stage 3 получает `EEntityCatalogType.VEHICLE` у фактической `SCR_CampaignFaction`, а затем выбирает проверенный path suffix. GUID не угадывается и не копируется из внешнего списка: сохраняется полный `ResourceName`, который вернул загруженный faction catalog. После выбора выполняется `Resource.Load()`/`IsValid()`.
+
+Проверенные в Resource Database пути:
+
+```text
+US transport:   Prefabs/Vehicles/Wheeled/M923A1/M923A1_transport.et
+USSR transport: Prefabs/Vehicles/Wheeled/Ural4320/Ural4320_transport.et
+US armed light: Prefabs/Vehicles/Wheeled/Conflict_Variants/M1025_armed_M2HB_Conflict.et
+USSR armed:     Prefabs/Vehicles/Wheeled/UAZ469/UAZ469_PKM.et
+```
+
+В коде присутствуют проверенные fallback-path того же faction catalog, но cross-faction fallback запрещён.
+
+### Безопасная позиция создания
+
+Источник: [`SCR_WorldTools.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/Global/SCR_WorldTools.c). Штатный Conflict использует тот же query при создании HQ vehicle в `SCR_CampaignMilitaryBaseComponent`.
+
+```c
+static bool SCR_WorldTools.FindEmptyTerrainPosition(
+    out vector outPosition,
+    vector areaCenter,
+    float areaRadius,
+    float cylinderRadius = 0.5,
+    float cylinderHeight = 2,
+    TraceFlags flags = TraceFlags.ENTS | TraceFlags.OCEAN,
+    BaseWorld world = null)
+```
+
+До геометрического query Stage 3 повторно применяет `AICF_ConflictAdapter.GetSpawnRejectionReason`: base существует и initialized, принадлежит нужной стороне, не contested/capturing, enemies отсутствуют, spawn point enabled/active и имеет правильный faction key. Дополнительно safe base должна находиться не дальше `aicfVehicleMaximumSpawnDistanceMeters` от assigned group. Сам spawn выполняется только при `Replication.IsServer()`, `campaign.IsMaster()` и заранее занятом slot/cap runtime.
+
+### AI vehicle usage и compartment
+
+Источники: [`SCR_AIVehicleUsageComponent.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Components/SCR_AIVehicleUsageComponent.c), [`SCR_AIGroupUtilityComponent.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Components/SCR_AIGroupUtilityComponent.c), [`SCR_BoardingWaypoint.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Group/SCR_BoardingWaypoint.c), [`SCR_BoardingEntityWaypoint.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Group/SCR_BoardingEntityWaypoint.c).
+
+```c
+PilotCompartmentSlot SCR_AIVehicleUsageComponent.GetPilotCompartmentSlot()
+TurretCompartmentSlot SCR_AIVehicleUsageComponent.GetTurretCompartmentSlot()
+bool SCR_AIVehicleUsageComponent.CanBePiloted()
+bool SCR_AIVehicleUsageComponent.IsVehicleTypeValid()
+
+void SCR_AIGroupUtilityComponent.AddUsableVehicle(
+    notnull SCR_AIVehicleUsageComponent vehicleUsageComp)
+void SCR_AIGroupUtilityComponent.RemoveUsableVehicle(
+    notnull SCR_AIVehicleUsageComponent vehicleUsageComp)
+bool SCR_AIGroupUtilityComponent.IsUsableVehicle(
+    notnull SCR_AIVehicleUsageComponent vehicleUsageComp)
+
+void SCR_BoardingEntityWaypoint.SetEntity(IEntity entity)
+void SCR_BoardingWaypoint.SetAllowance(
+    bool driverAllowed,
+    bool gunnerAllowed,
+    bool cargoAllowed)
+```
+
+Перед посадкой транспорт добавляется в utility конкретной managed-группы. На dismount/fallback/cleanup он удаляется оттуда. Водитель и стрелок определяются по фактическим occupant pilot/turret compartment, а не по предположению о порядке агентов.
+
+### Проверенные waypoint resources
+
+Resource Database и штатный `SCR_ResupplyTaskSolver` подтверждают цепочку посадки/движения/высадки:
+
+```text
+{712F4795CF8B91C7}Prefabs/AI/Waypoints/AIWaypoint_GetIn.et
+{750A8D1695BD6998}Prefabs/AI/Waypoints/AIWaypoint_Move.et
+{C40316EE26846CAB}Prefabs/AI/Waypoints/AIWaypoint_GetOut.et
+```
+
+Stage 3 удаляет только собственный transient waypoint: сначала `group.RemoveWaypoint()`, затем `RplComponent.DeleteRplEntity(..., false)`. Пехотный target сохраняется в stable slot; после высадки или отказа `AICF_OrderPlanner` восстанавливает обычный Search-and-Destroy/Defend/CaptureRelay order. Ресурс и семантика `CaptureRelay` не изменены.
+
+### Vehicle watchdog
+
+Источники: [`SCR_AIVehicleUsability.c`](https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/blob/v1.7.0.54/scripts/Game/AI/Utils/SCR_AIVehicleUsability.c), `SCR_AIVehicleUsageComponent`, `BaseCompartmentManagerComponent`, `CompartmentAccessComponent`.
+
+Watchdog отдельно от пехотного stuck timer проверяет:
+
+- `EDamageState.DESTROYED`;
+- `SCR_AIVehicleUsability.VehicleCanMove()` и `VehicleIsOnFire()`;
+- orientation up-vector для переворота;
+- живого occupant pilot/turret compartment;
+- фактическое нахождение всех живых членов managed-группы в/вне конкретной машины;
+- сокращение остатка vehicle route на настроенную величину;
+- дистанцию пеших членов группы до движущейся машины.
+
+Vehicle runtime не регистрирует `CallLater` или ScriptInvoker callback. Каждый poll сверяет stable slot, identity группы, `group_generation`, runtime reference и отдельный `vehicle_generation`. Поэтому replacement-группа не может получить stale vehicle state предыдущего поколения.
+
+### Ограничения Stage 3-кандидата
+
+1. Автоматический `RESULT status=PASS` доказывает только завершение configured поездок обеими сторонами и отсутствие Stage 3 errors. Он не доказывает recovery/fault/limit матрицу.
+2. Наземная проходимость определяется штатным AI Move-waypoint и navmesh runtime. Radio graph не является vehicle road graph; watchdog обязан завершить непроходимый маршрут пешим fallback.
+3. Armed-light машина используется как транспорт одного ATTACK-slot и не создаёт отдельную бессрочную боевую группу. После высадки исходная пехота продолжает objective.
+4. Overflow-policy — `ALL_OR_FALLBACK`: если всем живым членам группы не хватает доступных compartment, частично уехавшая группа не допускается.
+5. Abandoned/destroyed entity учитывается в faction cap до cleanup. Entity с живым occupant не удаляется; после освобождения cleanup может завершиться.
+6. Workbench validation выполнен без запуска server/client. Фактические boarding, driving, dismount, driver/gunner replacement и cleanup ещё не приняты runtime-тестом.
