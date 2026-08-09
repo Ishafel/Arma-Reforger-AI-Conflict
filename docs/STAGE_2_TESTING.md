@@ -88,10 +88,10 @@ Test-hook должен использоваться только в этом в�
 
 1. Восемь уникальных `SPAWN_BOUND`, по одному для каждой пары faction/slot.
 2. `TEST_ORDER_DROPPED faction=US slot=0` не раньше заданного времени.
-3. `ORDER_RECOVERED faction=US slot=0 cause=WAYPOINT_REFERENCE_MISSING` не позднее двух reliability-интервалов.
+3. `ORDER_RECOVERED faction=US slot=0 cause=WAYPOINT_REFERENCE_MISSING` появляется только после трёх наблюдений exact current+queued waypoint и не раньше `max(10 с, 2 × reliability interval)`.
 4. После recovery группа снова имеет обычный приказ и продолжает движение.
 5. При срабатывании watchdog расстояние считается от живого лидера: `GROUP_STUCK_DETECTED`, затем `GROUP_STUCK_RECOVERY action=REBUILD_ORDER`.
-6. После исчерпания `aicfMaxStuckRecoveries` допустим только `GROUP_STUCK_PERSISTENT action=RECYCLE_GROUP`, затем `GROUP_RECYCLED` и штатный `REINFORCEMENT_SCHEDULED reason=PERSISTENT_STUCK`. Успешная замена списывает обычный replacement-билет; бесплатного recycle нет.
+6. После исчерпания `aicfMaxStuckRecoveries` допустим только `GROUP_STUCK_PERSISTENT action=FIELD_HOLD`, затем `GROUP_STUCK_FIELD_HOLD entity_preserved=1 ticket_policy=NONE`. Та же группа, её generation, target и достигнутая позиция сохраняются; `GROUP_STUCK_FIELD_RESUMED` повторяет операцию после bounded hold либо ревизии карты. `GROUP_RECYCLED`, `REINFORCEMENT_SCHEDULED` и списание replacement-билета для persistent stuck запрещены.
 7. Завершённый waypoint рядом с ещё активной целью даёт одно `ORDER_RECOVERY_SUPPRESSED state=AT_OBJECTIVE`, а не серию `ORDER_RECOVERED`. По истечении grace-периода разрешено одно контролируемое перестроение.
 8. Каждая `RELIABILITY_HEARTBEAT` увеличивает `audits`; число управляемых агентов остаётся ограниченным.
 9. Нет `DUPLICATE_GROUP_BINDING`, `SPAWN_CONCURRENCY_INVARIANT_FAILED`, `[AICF][STAGE2][ERROR]` или server-side `SCRIPT (E)`.

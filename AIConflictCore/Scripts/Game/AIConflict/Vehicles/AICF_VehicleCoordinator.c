@@ -12,6 +12,7 @@ class AICF_VehicleCoordinator
 	protected static const int BOARDING_SETTLED_POLLS_REQUIRED = 2;
 	protected static const int BOARDING_TRANSITION_GRACE_MS = 10000;
 	protected static const int BOARDING_PROGRESS_FRESH_MS = 10000;
+	protected static const int BOARDING_ACTION_OWNERSHIP_INTERVAL_MS = 10000;
 	protected static const int DISMOUNT_CLEAR_POLLS_REQUIRED = 2;
 	protected static const int DISMOUNT_CLEARANCE_RECOVERY_DELAY_MS = 3000;
 	protected static const int DISMOUNT_CLEARANCE_RECOVERY_MAX_ATTEMPTS = 3;
@@ -986,6 +987,18 @@ class AICF_VehicleCoordinator
 				"BOARDING_PROGRESS",
 				progressDetails);
 		}
+		if (runtime.MarkBoardingOwnershipReportDue(BOARDING_ACTION_OWNERSHIP_INTERVAL_MS))
+		{
+			AICF_Stage3Diagnostics.Info(
+				"BOARDING_ACTION_OWNERSHIP",
+				string.Format(
+					"%1 phase=%2 crew_action=[%3] waypoint=[%4] members=[%5]",
+					runtime.DescribeContext("CURRENT_AI_ACTION_SNAPSHOT"),
+					typename.EnumToString(AICF_EVehicleBoardingPhase, phase),
+					DescribeCrewBoardingAction(runtime),
+					waypointState,
+					memberSamples));
+		}
 
 		if (phase == AICF_EVehicleBoardingPhase.APPROACH)
 		{
@@ -1144,6 +1157,18 @@ class AICF_VehicleCoordinator
 		{
 			if (!driverSettled || (runtime.GetKind() == AICF_EVehicleKind.ARMED_LIGHT && !gunnerSettled))
 			{
+				AICF_Stage3Diagnostics.Warning(
+					"BOARDING_CREW_ROLE_LOST",
+					string.Format(
+						"%1 phase=%2 driver_settled=%3 gunner_settled=%4 crew_action=[%5] waypoint=[%6] members=[%7]",
+						runtime.DescribeContext("CREW_ROLE_LOST_DURING_BOARDING"),
+						typename.EnumToString(AICF_EVehicleBoardingPhase, phase),
+						driverSettled,
+						gunnerSettled,
+						DescribeCrewBoardingAction(runtime),
+						waypointState,
+						memberSamples));
+				LatchAcceptanceFailure(runtime, "CREW_ROLE_LOST_DURING_BOARDING");
 				BeginFallback(runtime, faction, slot, "CREW_ROLE_LOST_DURING_BOARDING");
 				return;
 			}
@@ -3526,6 +3551,37 @@ class AICF_VehicleCoordinator
 			tracked && tracked == current,
 			tracked && waypointQueue.Contains(tracked),
 			queueCount);
+	}
+
+	protected string DescribeCrewBoardingAction(AICF_VehicleRuntime runtime)
+	{
+		if (!runtime)
+			return "runtime=NONE";
+		AIAgent agent = runtime.GetCrewRecoveryAgent();
+		SCR_AIGetInVehicle action = runtime.GetCrewRecoveryAction();
+		string agentId = "NONE";
+		if (agent && agent.GetControlledEntity())
+			agentId = agent.GetControlledEntity().GetID().ToString();
+		string actionState = "NONE";
+		bool isCurrent;
+		if (action)
+		{
+			actionState = typename.EnumToString(EAIActionState, action.GetActionState());
+			if (agent)
+			{
+				SCR_AIUtilityComponent utility = SCR_AIUtilityComponent.Cast(
+					agent.FindComponent(SCR_AIUtilityComponent));
+				if (utility)
+					isCurrent = utility.GetCurrentAction() == action;
+			}
+		}
+		return string.Format(
+			"phase=%1 agent=%2 tracked=%3 state=%4 is_current=%5",
+			typename.EnumToString(AICF_EVehicleCrewRecoveryPhase, runtime.GetCrewRecoveryPhase()),
+			agentId,
+			action != null,
+			actionState,
+			isCurrent);
 	}
 
 	protected bool CanStartVehicleTrip(AICF_GroupSlot slot)

@@ -237,6 +237,21 @@ class AICF_VehicleWatchdog
 			bool characterVehicle = linked && character.IsInVehicle();
 			bool settled = linked && inCompartment && !gettingIn && !gettingOut && characterVehicle;
 			float distanceMeters = Math.Sqrt(vector.DistanceSqXZ(character.GetOrigin(), vehicle.GetOrigin()));
+			string currentActionType = "NONE";
+			string currentActionState = "NONE";
+			SCR_AIUtilityComponent utility = SCR_AIUtilityComponent.Cast(
+				agent.FindComponent(SCR_AIUtilityComponent));
+			if (utility)
+			{
+				AIActionBase currentAction = utility.GetCurrentAction();
+				if (currentAction)
+				{
+					currentActionType = currentAction.Type().ToString();
+					currentActionState = typename.EnumToString(
+						EAIActionState,
+						currentAction.GetActionState());
+				}
+			}
 
 			aliveCount++;
 			if (linked)
@@ -267,6 +282,10 @@ class AICF_VehicleWatchdog
 				characterVehicle,
 				settled,
 				targetScoped);
+			memberSamples += string.Format(
+				"|ai_action=%1|ai_action_state=%2",
+				currentActionType,
+				currentActionState);
 		}
 
 		if (aliveCount <= 0)

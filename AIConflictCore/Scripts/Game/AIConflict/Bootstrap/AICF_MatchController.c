@@ -40,7 +40,7 @@ class AICF_MatchController
 	protected int m_iOrderRecoveries;
 	protected int m_iStuckDetections;
 	protected int m_iStuckRecoveries;
-	protected int m_iStuckRecycles;
+	protected int m_iStuckFieldHolds;
 	protected int m_iDuplicateSpawnsPrevented;
 	protected int m_iLifecycleAudits;
 	protected FactionKey m_sObservedPlayerFaction;
@@ -812,6 +812,33 @@ class AICF_MatchController
 			// only ReliabilityTick is allowed to confirm or reject its stability.
 			if (slot.HasPendingOrderRecovery())
 				continue;
+			if (slot.IsPersistentStuckFieldHold())
+			{
+				if (m_OrderPlanner.IsStrategicTargetValid(slot, faction, slot.GetTargetBase()))
+				{
+					if (!slot.IsPersistentStuckFieldHoldRetryDue(m_Stage2Config.GetStuckTimeoutMs()))
+						continue;
+					slot.ResumeFromPersistentStuckFieldHold();
+					bool fieldResume = m_OrderPlanner.RebuildCurrentOrder(
+						slot,
+						faction,
+						"PERSISTENT_STUCK_FIELD_RETRY");
+					if (!fieldResume)
+						slot.BeginPersistentStuckFieldHold();
+					AICF_Stage2Diagnostics.Info(
+						"GROUP_STUCK_FIELD_RESUMED",
+						string.Format(
+							"faction=%1 slot=%2 group=%3 target=%4 success=%5 trigger=HOLD_TIMEOUT hold_ms=%6 entity_preserved=1",
+							faction.GetFactionKey(),
+							slot.GetSlotId(),
+							GroupKey(slot.GetGroup()),
+							AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
+							fieldResume,
+							m_Stage2Config.GetStuckTimeoutMs()));
+					continue;
+				}
+				slot.ResumeFromPersistentStuckFieldHold();
+			}
 
 			// The stock CaptureRelay smart-action waypoint reaches Signal Hill in the
 			// dedicated Conflict runtime, but can finish without invoking its user
@@ -909,6 +936,12 @@ class AICF_MatchController
 			{
 				ProcessPendingOrderRecovery(factionState, slot, faction);
 				continue;
+			}
+			if (slot.IsPersistentStuckFieldHold())
+			{
+				if (m_OrderPlanner.IsStrategicTargetValid(slot, faction, slot.GetTargetBase()))
+					continue;
+				slot.ResumeFromPersistentStuckFieldHold();
 			}
 
 			string failureReason = m_OrderPlanner.GetOrderFailureReason(slot, faction);
@@ -1156,7 +1189,7 @@ class AICF_MatchController
 
 		if (slot.GetStuckRecoveryCount() >= m_Stage2Config.GetMaxStuckRecoveries())
 		{
-			RecyclePersistentStuckGroup(factionState, faction, slot, target, distanceMeters);
+			HoldPersistentStuckGroup(factionState, faction, slot, target, distanceMeters);
 			return;
 		}
 
@@ -1189,6 +1222,8 @@ class AICF_MatchController
 		SCR_CampaignFaction faction)
 	{
 		if (!m_Stage2Config.GetStuckWatchdogEnabled())
+			return;
+		if (slot && slot.IsPersistentStuckFieldHold())
 			return;
 
 		SCR_AIGroup group = slot.GetGroup();
@@ -1230,11 +1265,11 @@ class AICF_MatchController
 				recoveryAttempt));
 
 		// Allow the configured number of real route rebuilds. If all of them fail to
-		// produce leader progress, retire this group through the normal replacement
-		// lifecycle instead of rebuilding waypoints forever.
+		// produce leader progress, preserve the field group under a durable local
+		// hold instead of deleting it and teleporting its replacement to a MOB.
 		if (slot.GetStuckRecoveryCount() >= m_Stage2Config.GetMaxStuckRecoveries())
 		{
-			RecyclePersistentStuckGroup(factionState, faction, slot, target, distanceMeters);
+			HoldPersistentStuckGroup(factionState, faction, slot, target, distanceMeters);
 			return;
 		}
 
@@ -1265,7 +1300,7 @@ class AICF_MatchController
 
 	}
 
-	protected void RecyclePersistentStuckGroup(
+	protected void HoldPersistentStuckGroup(
 		AICF_FactionState factionState,
 		SCR_CampaignFaction faction,
 		AICF_GroupSlot slot,
@@ -1280,10 +1315,14 @@ class AICF_MatchController
 			return;
 
 		string groupKey = GroupKey(group);
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
+		if (!leader)
+			return;
+		vector fieldPosition = leader.GetOrigin();
 		AICF_Stage2Diagnostics.Warning(
 			"GROUP_STUCK_PERSISTENT",
 			string.Format(
-				"faction=%1 slot=%2 group=%3 target=%4 distance_m=%5 recoveries=%6 action=RECYCLE_GROUP ticket_policy=STANDARD_REPLACEMENT",
+				"faction=%1 slot=%2 group=%3 target=%4 distance_m=%5 recoveries=%6 action=FIELD_HOLD entity_preserved=1 ticket_policy=NONE",
 				faction.GetFactionKey(),
 				slot.GetSlotId(),
 				groupKey,
@@ -1291,48 +1330,32 @@ class AICF_MatchController
 				distanceMeters,
 				slot.GetStuckRecoveryCount()));
 
-		m_ManagedAILODPolicy.Release(group);
-		group.GetOnEmpty().Remove(OnGroupEmpty);
-		m_OrderPlanner.ClearOrder(slot);
-		if (!slot.MarkDestroyed())
+		m_GroupCohesionPolicy.NormalizeAfterMovementFailure(group);
+		if (!m_OrderPlanner.HoldPositionForPersistentStuck(
+			slot,
+			faction,
+			target,
+			fieldPosition))
 		{
 			AICF_Stage2Diagnostics.Error(
-				"STUCK_RECYCLE_STATE_REJECTED",
-				string.Format("faction=%1 slot=%2", faction.GetFactionKey(), slot.GetSlotId()));
+				"STUCK_FIELD_HOLD_REJECTED",
+				string.Format("faction=%1 slot=%2 group=%3 target=%4", faction.GetFactionKey(), slot.GetSlotId(), groupKey, AICF_Stage1Diagnostics.BaseKey(target)));
 			return;
 		}
 
-		int recycledAtElapsedMs = AICF_Stage1Diagnostics.GetElapsedMs();
-		int readyAtAbsoluteMs = System.GetTickCount() + m_Config.GetReinforcementDelayMs();
-		if (!slot.BeginReinforcementWait(readyAtAbsoluteMs))
-		{
-			AICF_Stage2Diagnostics.Error(
-				"STUCK_RECYCLE_SCHEDULE_REJECTED",
-				string.Format("faction=%1 slot=%2", faction.GetFactionKey(), slot.GetSlotId()));
-			return;
-		}
-
-		m_iStuckRecycles++;
+		m_iStuckFieldHolds++;
 		AICF_Stage2Diagnostics.Info(
-			"GROUP_RECYCLED",
+			"GROUP_STUCK_FIELD_HOLD",
 			string.Format(
-				"faction=%1 slot=%2 old_group=%3 cause=PERSISTENT_STUCK replacement_cost=%4",
+				"faction=%1 slot=%2 group=%3 target=%4 position=[%5,%6,%7] entity_preserved=1 group_generation=%8 resume=HOLD_TIMEOUT_OR_STRATEGIC_CONTEXT_CHANGE",
 				faction.GetFactionKey(),
 				slot.GetSlotId(),
 				groupKey,
-				m_Config.GetReplacementTicketCost()));
-		AICF_Stage1Diagnostics.InfoAt(
-			"REINFORCEMENT_SCHEDULED",
-			string.Format(
-				"faction=%1 slot=%2 ready_at_ms=%3 delay_ms=%4 reason=PERSISTENT_STUCK",
-				faction.GetFactionKey(),
-				slot.GetSlotId(),
-				recycledAtElapsedMs + m_Config.GetReinforcementDelayMs(),
-				m_Config.GetReinforcementDelayMs()),
-			recycledAtElapsedMs);
-
-		RplComponent.DeleteRplEntity(group, false);
-		EvaluateVictory();
+				AICF_Stage1Diagnostics.BaseKey(target),
+				fieldPosition[0],
+				fieldPosition[1],
+				fieldPosition[2],
+				slot.GetSpawnGeneration()));
 	}
 
 	protected void AuditLifecycleInvariants()
@@ -1566,6 +1589,29 @@ class AICF_MatchController
 					"BASE_OWNER_CHANGED",
 					m_LastChangedBase);
 			}
+			else if (slot.IsPersistentStuckFieldHold())
+			{
+				SCR_CampaignMilitaryBaseComponent heldTarget = slot.GetTargetBase();
+				if (m_OrderPlanner.IsStrategicTargetValid(slot, faction, heldTarget))
+				{
+					slot.ResumeFromPersistentStuckFieldHold();
+					reassigned = m_OrderPlanner.RebuildCurrentOrder(
+						slot,
+						faction,
+						"PERSISTENT_STUCK_CONTEXT_CHANGED");
+				}
+				else
+				{
+					slot.ResumeFromPersistentStuckFieldHold();
+					reassigned = m_OrderPlanner.AssignOrder(
+						slot,
+						faction,
+						m_ObjectiveGraph,
+						m_TargetSelector,
+						"PERSISTENT_STUCK_TARGET_CHANGED",
+						m_LastChangedBase);
+				}
+			}
 			else if (!m_OrderPlanner.IsOrderValid(slot, faction))
 			{
 				reassigned = m_OrderPlanner.AssignOrder(
@@ -1669,13 +1715,13 @@ class AICF_MatchController
 		AICF_Stage2Diagnostics.Info(
 			"RELIABILITY_HEARTBEAT",
 			string.Format(
-				"audits=%1 order_attempts=%2 order_recovered=%3 stuck_detected=%4 stuck_recovered=%5 stuck_recycled=%6 duplicate_spawns_prevented=%7 concurrent_spawns=%8 managed_agents=%9",
+				"audits=%1 order_attempts=%2 order_recovered=%3 stuck_detected=%4 stuck_recovered=%5 stuck_field_holds=%6 duplicate_spawns_prevented=%7 concurrent_spawns=%8 managed_agents=%9",
 				m_iLifecycleAudits,
 				m_iOrderRecoveryAttempts,
 				m_iOrderRecoveries,
 				m_iStuckDetections,
 				m_iStuckRecoveries,
-				m_iStuckRecycles,
+				m_iStuckFieldHolds,
 				m_iDuplicateSpawnsPrevented,
 				CountConcurrentReplacementSpawns(),
 				CountManagedAgents()));
@@ -1721,13 +1767,13 @@ class AICF_MatchController
 		AICF_Stage2Diagnostics.Info(
 			"MATCH_RELIABILITY_SUMMARY",
 			string.Format(
-				"audits=%1 order_attempts=%2 order_recovered=%3 stuck_detected=%4 stuck_recovered=%5 stuck_recycled=%6 duplicate_spawns_prevented=%7 errors=%8",
+				"audits=%1 order_attempts=%2 order_recovered=%3 stuck_detected=%4 stuck_recovered=%5 stuck_field_holds=%6 duplicate_spawns_prevented=%7 errors=%8",
 				m_iLifecycleAudits,
 				m_iOrderRecoveryAttempts,
 				m_iOrderRecoveries,
 				m_iStuckDetections,
 				m_iStuckRecoveries,
-				m_iStuckRecycles,
+				m_iStuckFieldHolds,
 				m_iDuplicateSpawnsPrevented,
 				AICF_Stage2Diagnostics.HasErrors()));
 

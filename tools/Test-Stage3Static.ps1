@@ -167,6 +167,7 @@ $watchdog = 'AIConflictCore/Scripts/Game/AIConflict/Vehicles/AICF_VehicleWatchdo
 $adapter = 'AIConflictCore/Scripts/Game/AIConflict/Integration/AICF_ConflictAdapter.c'
 $match = 'AIConflictCore/Scripts/Game/AIConflict/Bootstrap/AICF_MatchController.c'
 $orderPlanner = 'AIConflictCore/Scripts/Game/AIConflict/Orders/AICF_OrderPlanner.c'
+$cohesionPolicy = 'AIConflictCore/Scripts/Game/AIConflict/Forces/AICF_GroupCohesionPolicy.c'
 $config = 'AIConflictCore/Scripts/Game/AIConflict/Config/AICF_Stage3Config.c'
 $stage1Config = 'AIConflictCore/Scripts/Game/AIConflict/Config/AICF_Stage1Config.c'
 $groupMarkers = 'AIConflictCore/Scripts/Game/AIConflict/UI/AICF_GroupMapMarkers.c'
@@ -198,7 +199,7 @@ $waypointText = Get-Content -LiteralPath (Join-Path $RepositoryRoot $waypoints) 
 $coordinatorText = Get-Content -LiteralPath (Join-Path $RepositoryRoot $coordinator) -Raw
 $spawnerText = Get-Content -LiteralPath (Join-Path $RepositoryRoot $spawner) -Raw
 $trySpawnBody = Get-CMethodBody $spawner '^\s*bool\s+TrySpawn\s*\(' 'TrySpawn'
-Assert-TextSequence $trySpawnBody @('GetSpawnRejectionReason\(candidate, faction\)', 'distanceSq = vector\.DistanceSqXZ', 'candidateKey = AICF_Stage1Diagnostics\.BaseKey\(candidate\)', 'for \(int safeIndex = 0; safeIndex < safeCandidates\.Count\(\); safeIndex\+\+\)', 'distanceSq < sortedDistanceSq', 'distanceSq == sortedDistanceSq && candidateKey\.Compare\(sortedCandidateKey\) < 0', 'safeCandidates\.InsertAt\(candidate, insertIndex\)') 'Safe friendly bases must be deterministically ordered by distance and base key before site validation'
+Assert-TextSequence $trySpawnBody @('preferredDistanceMeters = Math\.Sqrt\(vector\.DistanceSqXZ', 'candidateKey = AICF_Stage1Diagnostics\.BaseKey\(candidate\)', 'GetSpawnRejectionReason\(candidate, faction\)', 'distanceSq = preferredDistanceMeters \* preferredDistanceMeters', 'for \(int safeIndex = 0; safeIndex < safeCandidates\.Count\(\); safeIndex\+\+\)', 'distanceSq < sortedDistanceSq', 'distanceSq == sortedDistanceSq && candidateKey\.Compare\(sortedCandidateKey\) < 0', 'safeCandidates\.InsertAt\(candidate, insertIndex\)') 'Safe friendly bases must be deterministically ordered by distance and base key before site validation'
 Assert-TextSequence $trySpawnBody @('insertIndex >= safeCandidates\.Count\(\)', 'safeCandidates\.Insert\(candidate\)', 'else', 'safeCandidates\.InsertAt\(candidate, insertIndex\)') 'Sorted spawn candidates must use explicit append semantics at the end of the array'
 Assert-TextSequence $trySpawnBody @('if \(safeCandidates\.IsEmpty\(\)\)', 'meaningfulRejectionReason', 'firstRejectionReason', 'NO_SAFE_SPAWN_AVAILABLE', 'retryable = true', 'return false') 'Unsafe-only failure must preserve the actionable initialization/ownership rejection contract'
 Assert-TextSequence $trySpawnBody @('foreach \(SCR_CampaignMilitaryBaseComponent safeCandidate : safeCandidates\)', 'candidateDistanceSq', 'maximumSpawnDistanceMeters', 'siteFailureReason = "TOO_FAR"', 'continue;', 'FindEmptyTerrainPosition', 'siteFailureReason = "NO_EMPTY_TERRAIN"', 'continue;', 'MeasureAliveGroupDistancesToPosition', 'farthestDistanceMeters > maximumBoardingDistanceMeters', 'siteFailureReason = "NO_BOARDING_SITE_WITHIN_RANGE"', 'continue;', 'spawnBase = safeCandidate', 'position = candidatePosition', 'break;') 'Every ordered safe base must pass maximum distance, exact terrain, and all-member boarding distance before selection'
@@ -208,6 +209,12 @@ Assert-OccurrenceCount $trySpawnBody 'runtime\.MarkSpawnIssueReported\(reportKey
 Assert-TextSequence $trySpawnBody @('if \(!spawnBase\)', 'return false;', '"VEHICLE_SPAWN_SITE_SELECTED"', 'GetGame\(\)\.SpawnEntityPrefabEx') 'No vehicle entity may be created until an exact viable candidate site has been selected'
 Assert-TextSequence $trySpawnBody @('if \(preflightOnly\)', 'VEHICLE_SPAWN_PREFLIGHT_READY', 'entity_created=0', 'return true;', 'VEHICLE_SPAWN_SITE_SELECTED', 'SpawnEntityPrefabEx') 'WAITING_FOR_SITE preflight must return before the only entity-creation boundary'
 Assert-OccurrenceCount $trySpawnBody 'SpawnEntityPrefabEx\(' 1 'TrySpawn must retain a single authoritative entity-creation boundary'
+$appendCandidateTraceBody = Get-CMethodBody $spawner '^\s*protected\s+void\s+AppendCandidateTrace\s*\(' 'AppendCandidateTrace'
+$reportCandidateEvaluationBody = Get-CMethodBody $spawner '^\s*protected\s+void\s+ReportCandidateEvaluation\s*\(' 'ReportCandidateEvaluation'
+Assert-TextSequence $trySpawnBody @('rejectionReason == "ENEMY_OWNED"', 'hostileCandidateCount\+\+', 'AppendCandidateTrace\(', 'rejectionReason', 'safeCandidates\.IsEmpty\(\)', 'ReportCandidateEvaluation\(') 'Every non-hostile strategic base rejection must be retained before the no-safe-base return'
+Assert-TextSequence $trySpawnBody @('"TOO_FAR"', '"NO_EMPTY_TERRAIN"', '"GROUP_NOT_READY"', '"NO_BOARDING_SITE_WITHIN_RANGE"', '"SELECTED"', 'ReportCandidateEvaluation\(', 'if \(boardingRejectionBase\)') 'Every safe base must expose its exact site outcome before the legacy nearest-failure event'
+Assert-TextSequence $appendCandidateTraceBody @('candidateTrace\.IsEmpty', 'candidateTrace \+= ";"', 'preferred_m=', 'baseKey', 'result', 'preferredDistanceMeters', 'details\.IsEmpty', 'candidateTrace \+= "\|" \+ details') 'Candidate trace must aggregate every actionable base without rotating the runtime one-shot key'
+Assert-TextSequence $reportCandidateEvaluationBody @('mode = "SPAWN_ATTEMPT"', 'preflightOnly', 'mode = "WAIT_PREFLIGHT"', 'bases_total=', 'hostile_skipped=', 'safe_candidates=', 'actionable=', 'candidates=', 'VEHICLE_SPAWN_CANDIDATES_EVALUATED') 'Spawn and wait probes must emit one causal aggregate candidate trace'
 $driverWaypointBody = Get-CMethodBody $waypoints '^\s*SCR_BoardingEntityWaypoint\s+CreateDriverBoardingWaypoint\s*\(' 'CreateDriverBoardingWaypoint'
 $gunnerWaypointBody = Get-CMethodBody $waypoints '^\s*SCR_BoardingEntityWaypoint\s+CreateGunnerBoardingWaypoint\s*\(' 'CreateGunnerBoardingWaypoint'
 $passengerWaypointBody = Get-CMethodBody $waypoints '^\s*SCR_BoardingEntityWaypoint\s+CreatePassengerBoardingWaypoint\s*\(' 'CreatePassengerBoardingWaypoint'
@@ -240,6 +247,8 @@ $observeBoardingProgressBody = Get-CMethodBody $runtime '^\s*bool\s+ObserveBoard
 $observeApproachProgressBody = Get-CMethodBody $runtime '^\s*bool\s+ObserveBoardingApproachProgress\s*\(' 'ObserveBoardingApproachProgress'
 $evaluateBoardingGraceBody = Get-CMethodBody $runtime '^\s*bool\s+EvaluateBoardingTransitionGrace\s*\(' 'EvaluateBoardingTransitionGrace'
 $inspectBoardingProgressBody = Get-CMethodBody $watchdog '^\s*bool\s+InspectBoardingProgress\s*\(' 'InspectBoardingProgress'
+$markBoardingOwnershipBody = Get-CMethodBody $runtime '^\s*bool\s+MarkBoardingOwnershipReportDue\s*\(' 'MarkBoardingOwnershipReportDue'
+$describeCrewBoardingActionBody = Get-CMethodBody $coordinator '^\s*protected\s+string\s+DescribeCrewBoardingAction\s*\(' 'DescribeCrewBoardingAction'
 $startApproachActionsBody = Get-CMethodBody $coordinator '^\s*protected\s+bool\s+StartBoardingApproachActions\s*\(' 'StartBoardingApproachActions'
 $maintainApproachActionsBody = Get-CMethodBody $coordinator '^\s*protected\s+bool\s+MaintainBoardingApproachActions\s*\(' 'MaintainBoardingApproachActions'
 $cancelApproachActionsBody = Get-CMethodBody $runtime '^\s*int\s+CancelBoardingApproachActions\s*\(' 'CancelBoardingApproachActions'
@@ -298,6 +307,10 @@ Assert-TextContains $markBoardingRoleRetryBody '^\{\s*m_bBoardingRoleRetryIssued
 Assert-TextSequence $processBoardingBody @('InspectBoardingProgress', 'ObserveBoardingProgress', 'DescribeBoardingApproachActions', 'AICF_EVehicleBoardingPhase\.APPROACH', 'MaintainBoardingApproachActions', 'farthestDistanceMeters <= stagingThresholdMeters', 'RecordBoardingSettledPoll\(true\)', 'BOARDING_SETTLED_POLLS_REQUIRED', 'CancelBoardingApproachActions', 'BOARDING_APPROACH_COMPLETE', 'ContinueRoleOrderedBoarding', 'ResolveAliveDriver\(runtime\)', 'IsAliveGroupMember\(group, driver\)', 'ResolveAliveGunner\(runtime\)', 'IsAliveGroupMember\(group, gunner\)') 'Boarding must stage every alive member for two polls, expose action progress, then validate current-group crew'
 Assert-TextSequence $processBoardingBody @('if \(!MaintainBoardingApproachActions', 'BOARDING_APPROACH_MEMBER_STALLED', 'LatchAcceptanceFailure\(runtime, "BOARDING_APPROACH_MEMBER_STALLED"\)', 'BeginFallback') 'Exhausted member movement must invalidate acceptance before bounded fallback'
 Assert-TextSequence $inspectBoardingProgressBody @('GetBounds', 'CoordToLocal', 'targetScoped = linked \|\| insideTransitionScope', 'inCompartment = linked && access && access\.IsInCompartment\(\)', 'gettingIn = targetScoped && access && access\.IsGettingIn\(\)', 'characterVehicle = linked && character\.IsInVehicle\(\)', 'settled = linked && inCompartment && !gettingIn && !gettingOut && characterVehicle') 'Boarding progress and transition grace must be scoped to the target vehicle'
+Assert-TextSequence $inspectBoardingProgressBody @('SCR_AIUtilityComponent', 'utility\.GetCurrentAction\(\)', 'currentAction\.Type\(\)\.ToString\(\)', 'currentAction\.GetActionState\(\)', 'ai_action=', 'ai_action_state=') 'Per-member boarding telemetry must expose the authoritative current AI action and state'
+Assert-TextSequence $markBoardingOwnershipBody @('intervalMs < 1', 'm_iLastBoardingOwnershipReportAtMs > 0', 'System\.GetTickCount\(m_iLastBoardingOwnershipReportAtMs\) < intervalMs', 'return false', 'm_iLastBoardingOwnershipReportAtMs = System\.GetTickCount', 'return true') 'Boarding action-owner snapshots must be rate limited'
+Assert-TextSequence $processBoardingBody @('MarkBoardingOwnershipReportDue\(BOARDING_ACTION_OWNERSHIP_INTERVAL_MS\)', 'BOARDING_ACTION_OWNERSHIP', 'DescribeCrewBoardingAction\(runtime\)', 'memberSamples', 'BOARDING_CREW_ROLE_LOST', 'CREW_ROLE_LOST_DURING_BOARDING', 'LatchAcceptanceFailure', 'BeginFallback') 'Boarding must capture action ownership periodically and at the exact crew-role loss edge'
+Assert-TextSequence $describeCrewBoardingActionBody @('GetCrewRecoveryAgent', 'GetCrewRecoveryAction', 'GetCurrentAction\(\) == action', 'is_current=', 'GetCrewRecoveryPhase') 'Crew telemetry must distinguish a tracked exact role action from an action preempted by stock AI'
 Assert-TextSequence $observeApproachProgressBody @('m_fBestBoardingFarthestDistanceMeters', 'minimumProgressMeters', 'm_iLastBoardingProgressAtMs = System\.GetTickCount\(\)') 'Approach grace may rely only on monotonic farthest-member progress'
 Assert-TextSequence $processBoardingBody @('phaseAgeMs >= phaseTimeoutMs', 'totalAgeMs >= totalTimeoutMs', 'softDeadlineExpired = phaseExpired \|\| totalExpired', 'EvaluateBoardingTransitionGrace\(graceEligible\)', 'phaseTimeoutMs \+ BOARDING_TRANSITION_GRACE_MS', 'totalTimeoutMs \+ BOARDING_TRANSITION_GRACE_MS') 'Every phase must retain a soft deadline, one non-rolling grace decision and absolute phase/total hard caps'
 Assert-TextSequence $evaluateBoardingGraceBody @('m_bBoardingGraceEvaluated', 'return m_bBoardingGraceGranted', 'm_bBoardingGraceEvaluated = true', 'm_bBoardingGraceGranted = eligible') 'Transition grace must be evaluated only once for the whole immutable boarding attempt'
@@ -529,6 +542,12 @@ $reliabilityBody = Get-CMethodBody $match '^\s*protected\s+void\s+ProcessFaction
 $beginOrderRecoveryVerificationBody = Get-CMethodBody $slot '^\s*void\s+BeginOrderRecoveryVerification\s*\(' 'BeginOrderRecoveryVerification'
 $clearPendingOrderRecoveryBody = Get-CMethodBody $slot '^\s*void\s+ClearPendingOrderRecovery\s*\(' 'ClearPendingOrderRecovery'
 $recordStuckRecoveryBody = Get-CMethodBody $slot '^\s*void\s+RecordStuckRecovery\s*\(' 'RecordStuckRecovery'
+$holdPersistentStuckBody = Get-CMethodBody $match '^\s*protected\s+void\s+HoldPersistentStuckGroup\s*\(' 'HoldPersistentStuckGroup'
+$holdPositionBody = Get-CMethodBody $orderPlanner '^\s*bool\s+HoldPositionForPersistentStuck\s*\(' 'HoldPositionForPersistentStuck'
+$resumeFieldHoldBody = Get-CMethodBody $slot '^\s*void\s+ResumeFromPersistentStuckFieldHold\s*\(' 'ResumeFromPersistentStuckFieldHold'
+$fieldHoldRetryDueBody = Get-CMethodBody $slot '^\s*bool\s+IsPersistentStuckFieldHoldRetryDue\s*\(' 'IsPersistentStuckFieldHoldRetryDue'
+$normalizeMovementFailureBody = Get-CMethodBody $cohesionPolicy '^\s*bool\s+NormalizeAfterMovementFailure\s*\(' 'NormalizeAfterMovementFailure'
+$replanAfterBaseChangeBody = Get-CMethodBody $match '^\s*protected\s+void\s+ReplanFactionAfterBaseChange\s*\(' 'ReplanFactionAfterBaseChange'
 Assert-TextSequence $recoverOrderBody @('ReplaceOrder', 'BeginOrderRecoveryVerification', '"ORDER_RECOVERY_ISSUED"') 'RecoverOrder must issue a verification candidate instead of declaring immediate success'
 Assert-TextNotContains $recoverOrderBody '"ORDER_RECOVERED"' 'RecoverOrder must never claim success before reliability confirmation'
 Assert-TextSequence $getOrderFailureBody @('IsTargetValidForRole', 'return "TARGET_INVALID"', '!slot\.GetWaypoint', 'return "WAYPOINT_REFERENCE_MISSING"', 'GetCurrentWaypoint\(\) != slot\.GetWaypoint\(\)', 'return "WAYPOINT_NOT_CURRENT"') 'Strategic retargeting must outrank transient waypoint loss so it never consumes stuck recovery budget'
@@ -537,8 +556,16 @@ Assert-TextSequence $clearPendingOrderRecoveryBody @('m_PendingOrderRecoveryGrou
 Assert-TextContains $revalidateFactionOrdersBody 'if \(slot\.HasPendingOrderRecovery\(\)\)\s*continue;' 'Commander polling must not replace or confirm a pending recovery candidate'
 Assert-TextSequence $reliabilityBody @('slot\.HasPendingOrderRecovery\(\)', 'ProcessPendingOrderRecovery\(factionState, slot, faction\)', 'continue;') 'Reliability polling must exclusively own pending recovery verification'
 Assert-TextSequence $pendingOrderRecoveryBody @('IsPendingOrderRecoveryContextCurrent', 'GetPendingOrderRecoveryWaypoint', 'group\.GetCurrentWaypoint\(\)', 'currentWaypoint == expectedWaypoint', 'RecordPendingOrderRecoveryStablePoll', 'stablePolls < ORDER_RECOVERY_STABLE_POLLS', 'ClearPendingOrderRecovery', 'm_iOrderRecoveries\+\+', '"ORDER_RECOVERED"') 'ORDER_RECOVERED must require exact identity across two reliability polls'
-Assert-TextSequence $pendingOrderRecoveryBody @('group\.GetWaypoints\(waypointQueue\)', 'waypointQueue\.Contains\(expectedWaypoint\)', '"ORDER_RECOVERY_UNSTABLE"', 'slot\.ClearPendingOrderRecovery\(\)', 'slot\.RecordStuckRecovery\(distanceMeters\)', 'GetMaxStuckRecoveries', 'RecyclePersistentStuckGroup', 'TryRecoverOrder') 'An unstable recovery must expose queue identity and consume bounded stuck recovery before retry'
+Assert-TextSequence $pendingOrderRecoveryBody @('group\.GetWaypoints\(waypointQueue\)', 'waypointQueue\.Contains\(expectedWaypoint\)', '"ORDER_RECOVERY_UNSTABLE"', 'slot\.ClearPendingOrderRecovery\(\)', 'slot\.RecordStuckRecovery\(distanceMeters\)', 'GetMaxStuckRecoveries', 'HoldPersistentStuckGroup', 'TryRecoverOrder') 'An unstable recovery must expose queue identity and consume bounded stuck recovery before retry'
 Assert-TextContains $recordStuckRecoveryBody 'if \(currentDistanceMeters >= 0\)\s*m_fBestDistanceToTarget = currentDistanceMeters;' 'A missing distance sample must not poison future positive progress baselines'
+Assert-TextSequence $holdPersistentStuckBody @('MarkPersistentStuckReported', 'ResolveAliveLeader', 'fieldPosition = leader\.GetOrigin\(\)', 'action=FIELD_HOLD', 'entity_preserved=1', 'ticket_policy=NONE', 'NormalizeAfterMovementFailure', 'HoldPositionForPersistentStuck', 'GROUP_STUCK_FIELD_HOLD', 'entity_preserved=1') 'Persistent stuck must degrade in place at the living leader position without replacement tickets'
+Assert-TextNotContains $holdPersistentStuckBody 'DeleteRplEntity\(group|MarkDestroyed|BeginReinforcementWait|GROUP_RECYCLED|REINFORCEMENT_SCHEDULED' 'Persistent stuck containment must never delete or replace the field group'
+Assert-TextSequence $holdPositionBody @('DEFEND_WAYPOINT_PREFAB', 'fieldPosition', 'group\.RemoveWaypoint\(oldWaypoint\)', 'group\.AddWaypointAt\(fieldHold, 0\)', 'slot\.AssignObjective\(target, fieldHold\)', 'BeginPersistentStuckFieldHold') 'Field hold must preserve the strategic target while replacing only the failed waypoint at the current position'
+Assert-TextSequence $normalizeMovementFailureBody @('ClearGroupMoveHandlers\(\)', 'return Apply\(group\)') 'Persistent-stuck containment must clear stale movement handlers before applying the local hold'
+Assert-TextContains $resumeFieldHoldBody 'ResetProgressTracking\(\);' 'Strategic resume must reset the exhausted stuck budget before retrying from the same field group'
+Assert-TextSequence $fieldHoldRetryDueBody @('m_bPersistentStuckFieldHold', 'm_iPersistentStuckFieldHoldStartedAtMs > 0', 'System\.GetTickCount\(m_iPersistentStuckFieldHoldStartedAtMs\) >= holdMs') 'Field hold retries must use a wrap-safe bounded cooldown'
+Assert-TextSequence $revalidateFactionOrdersBody @('slot\.IsPersistentStuckFieldHold\(\)', 'IsPersistentStuckFieldHoldRetryDue\(m_Stage2Config\.GetStuckTimeoutMs\(\)\)', 'ResumeFromPersistentStuckFieldHold\(\)', 'PERSISTENT_STUCK_FIELD_RETRY', 'if \(!fieldResume\)', 'BeginPersistentStuckFieldHold\(\)', 'GROUP_STUCK_FIELD_RESUMED', 'entity_preserved=1') 'Commander retry must resume the same operation from the preserved field group and re-enter hold on creation failure'
+Assert-TextSequence $replanAfterBaseChangeBody @('slot\.IsPersistentStuckFieldHold\(\)', 'ResumeFromPersistentStuckFieldHold\(\)', 'PERSISTENT_STUCK_CONTEXT_CHANGED', 'PERSISTENT_STUCK_TARGET_CHANGED') 'A graph revision must resume or retarget the preserved field group without respawn'
 Assert-FileContains $match 'm_GroupMapMarkers\s*=\s*new AICF_GroupMapMarkerSystem\(\)' 'Gameplay group markers must always be created'
 Assert-FileNotContains $stage1Config 'aicfDebugMapMarkers|DebugMapMarkers' 'Gameplay group markers must not depend on the removed debug CLI flag'
 Assert-FileContains $groupMarkers 'GROUP_MAP_MARKERS_READY' 'Gameplay marker readiness must use the non-debug event contract'
@@ -549,10 +576,11 @@ Assert-FileNotContains $coordinator '\?[^\r\n]*:' 'Enforce 1.7 does not support 
 
 $requiredEvents = @(
     'CONFIG', 'VEHICLE_STATE_CHANGED', 'VEHICLE_REQUESTED', 'VEHICLE_SPAWN_SITE_SELECTED',
+    'VEHICLE_SPAWN_CANDIDATES_EVALUATED',
     'VEHICLE_SPAWN_SITE_REJECTED', 'VEHICLE_SPAWN_DEFERRED', 'VEHICLE_SPAWNED', 'VEHICLE_ASSIGNED',
     'DRIVER_ASSIGNED', 'GUNNER_ASSIGNED', 'PASSENGERS_ASSIGNED', 'BOARDING_STARTED',
     'BOARDING_PHASE_STARTED', 'BOARDING_REJECTED', 'BOARDING_ROLE_RESET',
-    'BOARDING_ROLE_RETRY', 'BOARDING_ROLE_VIOLATION',
+    'BOARDING_ROLE_RETRY', 'BOARDING_ROLE_VIOLATION', 'BOARDING_ACTION_OWNERSHIP', 'BOARDING_CREW_ROLE_LOST',
     'BOARDING_APPROACH_REISSUED', 'BOARDING_APPROACH_COMPLETE',
     'BOARDING_COMPLETE', 'BOARDING_TIMEOUT', 'VEHICLE_ROUTE_ASSIGNED', 'VEHICLE_PROGRESS', 'VEHICLE_MOTION', 'DISEMBARK_STARTED',
     'DISEMBARK_REISSUED', 'DISEMBARK_TIMEOUT', 'DISEMBARK_COMPLETE', 'VEHICLE_STUCK_DETECTED', 'VEHICLE_RECOVERY_STARTED',
@@ -564,7 +592,7 @@ $requiredEvents = @(
     'VEHICLE_WORLD_POOL_STALE_REMOVED', 'VEHICLE_CLEANUP_DEFERRED', 'VEHICLE_STOP_CLEANUP_STARTED',
     'VEHICLE_STOP_CLEANUP_CONFIRMED', 'VEHICLE_STOP_CLEANUP_RETAINED', 'VEHICLE_DELETE_REQUESTED',
     'VEHICLE_DELETE_RETRIED', 'VEHICLE_DELETE_NOT_CONFIRMED', 'VEHICLE_CLEANUP_CONFIRMED', 'VEHICLE_CLEANUP',
-    'ACCEPTANCE_FAILURE_LATCHED', 'ORDER_RECOVERY_ISSUED', 'ORDER_RECOVERY_UNSTABLE',
+    'ACCEPTANCE_FAILURE_LATCHED', 'ORDER_RECOVERY_ISSUED', 'ORDER_RECOVERY_UNSTABLE', 'GROUP_STUCK_FIELD_HOLD', 'GROUP_STUCK_FIELD_RESUMED',
     'ORDER_RECOVERED', 'HEARTBEAT', 'RESULT_CANDIDATE', 'RESULT'
 )
 

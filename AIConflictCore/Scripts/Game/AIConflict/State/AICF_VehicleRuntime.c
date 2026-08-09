@@ -66,6 +66,7 @@ class AICF_VehicleRuntime
 	protected int m_iBoardingMaxCharacterVehicleCount;
 	protected int m_iBoardingMaxSettledCount;
 	protected int m_iLastBoardingProgressAtMs;
+	protected int m_iLastBoardingOwnershipReportAtMs;
 	protected float m_fBestBoardingFarthestDistanceMeters = -1.0;
 	protected bool m_bBoardingDriverPhasePlanned;
 	protected bool m_bBoardingGunnerPhasePlanned;
@@ -364,6 +365,7 @@ class AICF_VehicleRuntime
 		m_iBoardingMaxCharacterVehicleCount = 0;
 		m_iBoardingMaxSettledCount = 0;
 		m_iLastBoardingProgressAtMs = 0;
+		m_iLastBoardingOwnershipReportAtMs = 0;
 		m_fBestBoardingFarthestDistanceMeters = -1.0;
 		m_bBoardingDriverPhasePlanned = false;
 		m_bBoardingGunnerPhasePlanned = false;
@@ -520,6 +522,7 @@ class AICF_VehicleRuntime
 		m_iBoardingMaxCharacterVehicleCount = 0;
 		m_iBoardingMaxSettledCount = 0;
 		m_iLastBoardingProgressAtMs = 0;
+		m_iLastBoardingOwnershipReportAtMs = 0;
 		m_fBestBoardingFarthestDistanceMeters = -1.0;
 		m_bBoardingDriverPhasePlanned = driverPhasePlanned;
 		m_bBoardingGunnerPhasePlanned = gunnerPhasePlanned;
@@ -536,6 +539,19 @@ class AICF_VehicleRuntime
 			return 0;
 
 		return System.GetTickCount(m_iBoardingStartedAtMs);
+	}
+
+	bool MarkBoardingOwnershipReportDue(int intervalMs)
+	{
+		if (intervalMs < 1)
+			intervalMs = 1;
+		if (m_iLastBoardingOwnershipReportAtMs > 0 &&
+			System.GetTickCount(m_iLastBoardingOwnershipReportAtMs) < intervalMs)
+		{
+			return false;
+		}
+		m_iLastBoardingOwnershipReportAtMs = System.GetTickCount();
+		return true;
 	}
 
 	bool ObserveBoardingProgress(
@@ -667,6 +683,7 @@ class AICF_VehicleRuntime
 		m_iBoardingMaxCharacterVehicleCount = 0;
 		m_iBoardingMaxSettledCount = 0;
 		m_iLastBoardingProgressAtMs = 0;
+		m_iLastBoardingOwnershipReportAtMs = 0;
 		m_fBestBoardingFarthestDistanceMeters = -1.0;
 		m_bBoardingDriverPhasePlanned = false;
 		m_bBoardingGunnerPhasePlanned = false;

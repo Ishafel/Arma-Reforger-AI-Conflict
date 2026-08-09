@@ -14,10 +14,12 @@ class AICF_GroupSlot
 	protected int m_iLastProgressAtMs;
 	protected int m_iStuckRecoveryCount;
 	protected int m_iObjectiveHoldStartedAtMs;
+	protected int m_iPersistentStuckFieldHoldStartedAtMs;
 	protected bool m_bReplacementDeployment;
 	protected bool m_bTargetUnavailableReported;
 	protected bool m_bRecoveringFromStuck;
 	protected bool m_bPersistentStuckReported;
+	protected bool m_bPersistentStuckFieldHold;
 	protected bool m_bObjectiveHoldReported;
 	protected bool m_bLoadBlockReported;
 	protected bool m_bPendingOrderRecoveryCountsAsStuck;
@@ -155,6 +157,11 @@ class AICF_GroupSlot
 		return m_bRecoveringFromStuck;
 	}
 
+	bool IsPersistentStuckFieldHold()
+	{
+		return m_bPersistentStuckFieldHold;
+	}
+
 	bool IsReplacementDeployment()
 	{
 		return m_bReplacementDeployment;
@@ -201,6 +208,32 @@ class AICF_GroupSlot
 
 		m_bPersistentStuckReported = true;
 		return true;
+	}
+
+	void BeginPersistentStuckFieldHold()
+	{
+		ClearPendingOrderRecovery();
+		m_bPersistentStuckFieldHold = true;
+		m_iPersistentStuckFieldHoldStartedAtMs = System.GetTickCount();
+		m_bRecoveringFromStuck = false;
+		m_iLastProgressAtMs = System.GetTickCount();
+	}
+
+	void ClearPersistentStuckFieldHold()
+	{
+		m_bPersistentStuckFieldHold = false;
+		m_iPersistentStuckFieldHoldStartedAtMs = 0;
+	}
+
+	bool IsPersistentStuckFieldHoldRetryDue(int holdMs)
+	{
+		return m_bPersistentStuckFieldHold && m_iPersistentStuckFieldHoldStartedAtMs > 0 &&
+			System.GetTickCount(m_iPersistentStuckFieldHoldStartedAtMs) >= holdMs;
+	}
+
+	void ResumeFromPersistentStuckFieldHold()
+	{
+		ResetProgressTracking();
 	}
 
 	bool BeginInitialSpawn()
@@ -255,6 +288,7 @@ class AICF_GroupSlot
 		// Any newly assigned waypoint supersedes a candidate that was still being
 		// verified. RecoverOrder starts a fresh verification after this assignment.
 		ClearPendingOrderRecovery();
+		ClearPersistentStuckFieldHold();
 
 		if (m_VehicleFallbackTargetBase && m_VehicleFallbackTargetBase != targetBase)
 			ClearVehicleTripSuppression();
@@ -602,6 +636,8 @@ class AICF_GroupSlot
 		m_iStuckRecoveryCount = 0;
 		m_bRecoveringFromStuck = false;
 		m_bPersistentStuckReported = false;
+		m_bPersistentStuckFieldHold = false;
+		m_iPersistentStuckFieldHoldStartedAtMs = 0;
 		ClearObjectiveHold();
 	}
 }

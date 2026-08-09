@@ -144,6 +144,63 @@ class AICF_OrderPlanner
 		return ReplaceOrder(slot, faction, slot.GetTargetBase(), reason);
 	}
 
+	// Persistent movement failure is a local navigation failure, not a casualty.
+	// Keep the same group, target and world position under a durable defend
+	// waypoint. A later strategic graph revision may resume the objective from
+	// this field position without spending tickets or spawning at a MOB.
+	bool HoldPositionForPersistentStuck(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		SCR_CampaignMilitaryBaseComponent target,
+		vector fieldPosition)
+	{
+		if (!slot || !faction || !target || !slot.IsCombatReady() || !slot.GetGroup())
+			return false;
+
+		Resource waypointResource = Resource.Load(DEFEND_WAYPOINT_PREFAB);
+		if (!waypointResource || !waypointResource.IsValid())
+		{
+			AICF_Stage1Diagnostics.Error("WAYPOINT_PREFAB_INVALID", DEFEND_WAYPOINT_PREFAB);
+			return false;
+		}
+
+		EntitySpawnParams spawnParams = new EntitySpawnParams();
+		spawnParams.TransformMode = ETransformMode.WORLD;
+		spawnParams.Transform[3] = fieldPosition;
+		IEntity spawnedEntity = GetGame().SpawnEntityPrefabEx(
+			DEFEND_WAYPOINT_PREFAB,
+			false,
+			params: spawnParams);
+		AIWaypoint fieldHold = AIWaypoint.Cast(spawnedEntity);
+		if (!fieldHold)
+		{
+			if (spawnedEntity)
+				RplComponent.DeleteRplEntity(spawnedEntity, false);
+			return false;
+		}
+		fieldHold.SetCompletionRadius(DEFEND_RADIUS_METERS);
+
+		SCR_AIGroup group = slot.GetGroup();
+		AIWaypoint oldWaypoint = slot.GetWaypoint();
+		if (oldWaypoint)
+		{
+			group.RemoveWaypoint(oldWaypoint);
+			RplComponent.DeleteRplEntity(oldWaypoint, false);
+		}
+
+		group.AddWaypointAt(fieldHold, 0);
+		slot.ClearObjective();
+		if (!slot.AssignObjective(target, fieldHold))
+		{
+			group.RemoveWaypoint(fieldHold);
+			RplComponent.DeleteRplEntity(fieldHold, false);
+			return false;
+		}
+
+		slot.BeginPersistentStuckFieldHold();
+		return true;
+	}
+
 	void ClearOrder(AICF_GroupSlot slot)
 	{
 		if (!slot)

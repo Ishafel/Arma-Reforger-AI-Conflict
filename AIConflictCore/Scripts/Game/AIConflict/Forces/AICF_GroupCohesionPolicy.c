@@ -41,4 +41,18 @@ class AICF_GroupCohesionPolicy
 			movement.ClearGroupMoveHandlers();
 		return Apply(group);
 	}
+
+	// A failed stock movement activity may leave per-agent movement handlers
+	// behind. Persistent-stuck containment owns a fresh field-hold waypoint, so
+	// it is safe to return every survivor to the default group handler first.
+	bool NormalizeAfterMovementFailure(SCR_AIGroup group)
+	{
+		if (!group)
+			return false;
+		AIGroupMovementComponent movement = AIGroupMovementComponent.Cast(
+			group.FindComponent(AIGroupMovementComponent));
+		if (movement)
+			movement.ClearGroupMoveHandlers();
+		return Apply(group);
+	}
 }
