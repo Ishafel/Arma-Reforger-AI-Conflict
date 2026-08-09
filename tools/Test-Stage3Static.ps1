@@ -236,6 +236,9 @@ $issueBoardingRoleRetryBody = Get-CMethodBody $coordinator '^\s*protected\s+void
 $rejectBoardingRoleViolationBody = Get-CMethodBody $coordinator '^\s*protected\s+void\s+RejectBoardingRoleViolation\s*\(' 'RejectBoardingRoleViolation'
 $getBoardingRoleResetTimeoutBody = Get-CMethodBody $coordinator '^\s*protected\s+int\s+GetBoardingRoleResetTimeoutMs\s*\(' 'GetBoardingRoleResetTimeoutMs'
 $processMovingBody = Get-CMethodBody $coordinator '^\s*protected\s+void\s+ProcessMoving\s*\(' 'ProcessMoving'
+$tryVehicleUnstuckBody = Get-CMethodBody $coordinator '^\s*protected\s+bool\s+TryRelocateVehicleForUnstuck\s*\(' 'TryRelocateVehicleForUnstuck'
+$unstuckMineClearBody = Get-CMethodBody $coordinator '^\s*protected\s+bool\s+IsVehicleUnstuckCandidateHazardClear\s*\(' 'IsVehicleUnstuckCandidateHazardClear'
+$unstuckMineQueryBody = Get-CMethodBody $coordinator '^\s*protected\s+bool\s+EvaluateVehicleUnstuckHazard\s*\(' 'EvaluateVehicleUnstuckHazard'
 $processFactionBody = Get-CMethodBody $coordinator '^\s*protected\s+void\s+ProcessFaction\s*\(' 'ProcessFaction'
 $beginBoardingDeadlineBody = Get-CMethodBody $runtime '^\s*void\s+BeginBoardingDeadline\s*\(' 'BeginBoardingDeadline'
 $getBoardingAgeBody = Get-CMethodBody $runtime '^\s*int\s+GetBoardingAgeMs\s*\(' 'GetBoardingAgeMs'
@@ -351,6 +354,12 @@ Assert-TextSequence $rejectBoardingRoleViolationBody @('LatchAcceptanceFailure\(
 Assert-TextSequence $getBoardingRoleResetTimeoutBody @('GetBoardingTimeoutMs\(\) / 2', 'timeoutMs > 10000', 'timeoutMs = 10000', 'timeoutMs < 1000', 'timeoutMs = 1000') 'Role normalization must have a bounded 1-10 second deadline'
 Assert-TextSequence $noCargoPhaseBody @('SetBoardingPhase\(phase\)', 'RestartPhaseDeadline\(\)', 'BOARDING_PHASE_STARTED', 'PASSENGERS_ASSIGNED', 'return true') 'No-cargo passenger phase must still receive and report one bounded phase deadline'
 Assert-TextSequence $processMovingBody @('ResolveAliveDriver\(runtime\)', 'IsAliveGroupMember\(slot\.GetGroup\(\), driver\)', 'if \(!driver\)', 'BeginDriverRecovery\(runtime, faction, slot\)') 'Moving vehicle driver must belong to the managed group before recovery decisions'
+Assert-TextSequence $processMovingBody @('bool stationary = runtime\.IsStationary', 'runtime\.IsUnstuckRecoveryPending\(\)', '"VEHICLE_UNSTUCK_FAILED"', 'runtime\.GetRecoveryCount\(\) >= m_Config\.GetMaxRecoveries\(\)', 'BeginFallback\(runtime, faction, slot, "VEHICLE_STUCK_PERSISTENT"\)') 'An unproven unstuck attempt must fail before the bounded mobility budget permits infantry fallback'
+Assert-TextSequence $processMovingBody @('"VEHICLE_UNSTUCK_STARTED"', 'DeleteRuntimeWaypoint\(runtime\)', 'TryRelocateVehicleForUnstuck', 'CreateMoveWaypoint', 'RecordUnstuckRecovery', '"VEHICLE_UNSTUCK_ATTEMPT"') 'Stationary recovery must safely reposition before rebuilding the route and retain pending evidence state'
+Assert-OccurrenceCount $processMovingBody '"VEHICLE_UNSTUCK_SUCCEEDED"' 2 'Unstuck success must be emitted only by the route-progress and physical-motion evidence branches'
+Assert-TextSequence $tryVehicleUnstuckBody @('Replication\.IsServer\(\)', 'CanSafelyRelocateVehicle', 'FindEmptyTerrainPosition', 'IsVehicleUnstuckCandidateHazardClear', 'SetVelocity\(vector\.Zero\)', 'SetAngularVelocity\(vector\.Zero\)', 'SetWorldTransform', 'SAFE_TERRAIN_REPOSITION') 'Whole-vehicle relocation must be authority-only, occupant/player safe, obstacle/hazard checked and physics-reset'
+Assert-TextSequence $unstuckMineClearBody @('m_bUnstuckHazardDetected = false', 'QueryEntitiesBySphere', 'EvaluateVehicleUnstuckHazard', 'return !m_bUnstuckHazardDetected') 'Every candidate must synchronously scan its mine/character clearance sphere'
+Assert-TextSequence $unstuckMineQueryBody @('SCR_PressureTriggerComponent', 'trigger\.IsActivated\(\)', 'm_bUnstuckHazardDetected = true', 'ChimeraCharacter', 'ECharacterLifeState\.DEAD', 'return false') 'Active pressure triggers and living characters must reject an unstuck candidate'
 
 $createRecoveryBody = Get-CMethodBody $coordinator '^\s*protected\s+SCR_AIGetInVehicle\s+CreateCrewRecoveryAction\s*\(' 'CreateCrewRecoveryAction'
 $beginDriverRecoveryBody = Get-CMethodBody $coordinator '^\s*protected\s+void\s+BeginDriverRecovery\s*\(' 'BeginDriverRecovery'
@@ -359,6 +368,10 @@ $cancelRecoveryBody = Get-CMethodBody $coordinator '^\s*protected\s+void\s+Cance
 $processCrewRecoveryBody = Get-CMethodBody $coordinator '^\s*protected\s+void\s+ProcessDriverRecovery\s*\(' 'ProcessDriverRecovery'
 $trackRecoveryBody = Get-CMethodBody $runtime '^\s*void\s+TrackCrewRecovery\s*\(' 'TrackCrewRecovery'
 $clearRecoveryBody = Get-CMethodBody $runtime '^\s*void\s+ClearCrewRecoveryTracking\s*\(' 'ClearCrewRecoveryTracking'
+$recordCrewRecoveryBody = Get-CMethodBody $runtime '^\s*void\s+RecordCrewRecovery\s*\(' 'RecordCrewRecovery'
+$recordUnstuckRecoveryBody = Get-CMethodBody $runtime '^\s*void\s+RecordUnstuckRecovery\s*\(' 'RecordUnstuckRecovery'
+$confirmRouteRecoveryBody = Get-CMethodBody $runtime '^\s*void\s+ConfirmRouteRecovery\s*\(' 'ConfirmRouteRecovery'
+$canSafelyRelocateBody = Get-CMethodBody $watchdog '^\s*bool\s+CanSafelyRelocateVehicle\s*\(' 'CanSafelyRelocateVehicle'
 Assert-TextContains $beginDriverRecoveryBody 'CreateCrewRecoveryAction\([\s\S]*EAICompartmentType\.Pilot' 'Driver recovery must synchronously target the pilot role'
 Assert-TextNotContains $beginDriverRecoveryBody 'EAICompartmentType\.Turret|SendGetInMessage' 'Driver recovery must not target turret or use async messaging'
 Assert-TextContains $beginGunnerRecoveryBody 'CreateCrewRecoveryAction\([\s\S]*EAICompartmentType\.Turret' 'Gunner recovery must synchronously target the turret role'
@@ -373,6 +386,17 @@ Assert-TextNotContains $processCrewRecoveryBody 'CancelCrewRecovery\(' 'Successf
 Assert-TextSequence $processCrewRecoveryBody @('GetCrewRecoveryPhase\(\)', 'ResolveAliveDriver\(runtime\)', 'IsAliveGroupMember\(slot\.GetGroup\(\), driver\)', 'IsMemberSettledInVehicle\(driver, runtime\.GetVehicle\(\)\)', 'if \(!driverSettled && recoveryPhase == AICF_EVehicleCrewRecoveryPhase\.GUNNER\)', 'BeginDriverRecovery\(runtime, faction, slot\)') 'Recovered driver must be settled, belong to the current managed group, and be restored before gunner recovery'
 Assert-TextContains $processCrewRecoveryBody 'ALL_REQUIRED_CREW_RESTORED' 'Crew recovery may succeed only after the complete mandatory crew set is restored'
 Assert-TextSequence $processCrewRecoveryBody @('ResolveAliveGunner\(runtime\)', 'IsAliveGroupMember\(slot\.GetGroup\(\), gunner\)') 'Recovered gunner must belong to the current managed group'
+Assert-TextContains $beginDriverRecoveryBody 'GetCrewRecoveryCount\(\) >= m_Config\.GetMaxRecoveries\(\)' 'Driver recovery must use its bounded crew budget, not consume mobility attempts'
+Assert-TextContains $beginGunnerRecoveryBody 'GetCrewRecoveryCount\(\) >= m_Config\.GetMaxRecoveries\(\)' 'Gunner recovery must use its bounded crew budget, not consume mobility attempts'
+Assert-TextNotContains $beginDriverRecoveryBody 'GetRecoveryCount\(\) >= m_Config\.GetMaxRecoveries\(\)' 'Driver recovery must not exhaust the vehicle-unstuck budget'
+Assert-TextNotContains $beginGunnerRecoveryBody 'GetRecoveryCount\(\) >= m_Config\.GetMaxRecoveries\(\)' 'Gunner recovery must not exhaust the vehicle-unstuck budget'
+Assert-TextContains $processCrewRecoveryBody '"VEHICLE_CREW_RECOVERY_SUCCEEDED"' 'Restoring seats must be reported as crew recovery only'
+Assert-TextNotContains $processCrewRecoveryBody '"VEHICLE_RECOVERY_SUCCEEDED"' 'Seat restoration alone must never claim mobility recovery success'
+Assert-TextContains $recordCrewRecoveryBody 'm_iCrewRecoveryCount\+\+' 'Crew recovery must consume only the crew budget'
+Assert-TextNotContains $recordCrewRecoveryBody 'm_iRecoveryCount|m_iLastProgressAtMs|m_iLastMotionAtMs' 'Crew recovery must not consume or reset mobility evidence'
+Assert-TextSequence $recordUnstuckRecoveryBody @('m_iRecoveryCount\+\+', 'm_bRouteRecoveryPending = true', 'm_bUnstuckRecoveryPending = true', 'm_bUnstuckRelocated = relocated', 'm_vLastMotionPosition = position', 'm_bHasMotionSample = true') 'Unstuck attempts must start a fresh post-relocation evidence baseline'
+Assert-TextSequence $confirmRouteRecoveryBody @('m_bRouteRecoveryPending = false', 'm_bRecoveryRequiresRouteProgress = false', 'm_bUnstuckRecoveryPending = false', 'm_bUnstuckRelocated = false') 'Confirmed motion/progress must clear all pending unstuck evidence state'
+Assert-TextSequence $canSafelyRelocateBody @('AreAllAliveMembersSettledInVehicle', 'FOREIGN_OR_UNMANAGED_OCCUPANT', 'COMPARTMENT_TRANSITION_ACTIVE', 'GetAllPlayers', 'PLAYER_LINKED_OR_NEARBY', 'return true') 'Vehicle relocation must reject unsettled groups, foreign occupants, transitions and nearby/linked players'
 Assert-TextSequence $createRecoveryBody @('role == EAICompartmentType\.Pilot', 'GetPilotCompartmentSlot\(\)', 'role == EAICompartmentType\.Turret', 'GetTurretCompartmentSlot\(\)') 'Crew recovery roles must map to their exact vehicle compartment slots'
 Assert-TextSequence $createRecoveryBody @('roleSlot\.SetReserved\(recoveryEntity\)', 'new SCR_AIGetInVehicle\(', 'utility\.AddAction\(action\)', 'return action') 'Crew recovery must reserve the exact role slot and retain the exact stock action token'
 Assert-TextContains $createRecoveryBody 'new SCR_AIGetInVehicle\(\s*utility,\s*null,\s*runtime\.GetVehicle\(\),\s*roleSlot,\s*role,\s*SCR_AIActionBase\.PRIORITY_BEHAVIOR_GET_IN_VEHICLE,\s*SCR_AIActionBase\.PRIORITY_LEVEL_NORMAL\)' 'Direct crew recovery must use the exact stock action constructor mapping'
@@ -584,7 +608,8 @@ $requiredEvents = @(
     'BOARDING_APPROACH_REISSUED', 'BOARDING_APPROACH_COMPLETE',
     'BOARDING_COMPLETE', 'BOARDING_TIMEOUT', 'VEHICLE_ROUTE_ASSIGNED', 'VEHICLE_PROGRESS', 'VEHICLE_MOTION', 'DISEMBARK_STARTED',
     'DISEMBARK_REISSUED', 'DISEMBARK_TIMEOUT', 'DISEMBARK_COMPLETE', 'VEHICLE_STUCK_DETECTED', 'VEHICLE_RECOVERY_STARTED',
-    'VEHICLE_RECOVERY_SUCCEEDED', 'VEHICLE_RECOVERY_FAILED', 'DRIVER_LOST',
+    'VEHICLE_RECOVERY_SUCCEEDED', 'VEHICLE_CREW_RECOVERY_SUCCEEDED', 'VEHICLE_RECOVERY_FAILED',
+    'VEHICLE_UNSTUCK_STARTED', 'VEHICLE_UNSTUCK_ATTEMPT', 'VEHICLE_UNSTUCK_SUCCEEDED', 'VEHICLE_UNSTUCK_FAILED', 'DRIVER_LOST',
     'DRIVER_REASSIGNED', 'FALLBACK_FORCE_DISEMBARK', 'FALLBACK_DISEMBARK_FAILED',
     'VEHICLE_ABANDONED', 'INFANTRY_FALLBACK',
     'VEHICLE_DESTROYED', 'VEHICLE_CAP_BLOCKED', 'VEHICLE_REQUEST_WAITING', 'VEHICLE_REQUEST_RESUMED',
@@ -612,4 +637,4 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host 'Stage 3 static audit: PASS'
-Write-Host 'Checked: authority, disabled default, faction assignment, per-member approach and seat-normalized role boarding, one-shot role repair, immutable boarding/dismount deadlines, bounded request waiting, cumulative acceptance failures, non-final READY result candidate, exact/deduplicated spawn failures, terminal retry latch, road-reachable routing, route/physical progress, bounded mobility recovery, player-safe world-pool cleanup, identity-guarded deletion, deferred stop cleanup, generations, waypoint/entity cleanup, infantry fallback, always-global group markers, diagnostics contract.'
+Write-Host 'Checked: authority, disabled default, faction assignment, per-member approach and seat-normalized role boarding, one-shot role repair, immutable boarding/dismount deadlines, bounded request waiting, cumulative acceptance failures, non-final READY result candidate, exact/deduplicated spawn failures, terminal retry latch, road-reachable routing, route/physical progress, independent crew and mobility recovery budgets, bounded authority-only vehicle unstuck with post-action movement evidence, player-safe world-pool cleanup, identity-guarded deletion, deferred stop cleanup, generations, waypoint/entity cleanup, infantry fallback, always-global group markers, diagnostics contract.'

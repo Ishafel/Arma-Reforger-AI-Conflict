@@ -589,6 +589,84 @@ class AICF_VehicleWatchdog
 		return false;
 	}
 
+	// Moving a whole vehicle is a last-resort server recovery. It is only safe
+	// while every living managed member is settled in this vehicle, no foreign
+	// occupant or compartment transition exists, and no player is linked or close
+	// enough to be affected by the relocation.
+	bool CanSafelyRelocateVehicle(
+		SCR_AIGroup group,
+		Vehicle vehicle,
+		float playerProtectionRadiusMeters,
+		out string rejectionReason)
+	{
+		rejectionReason = string.Empty;
+		if (!group || !vehicle)
+		{
+			rejectionReason = "INVALID_INPUT";
+			return false;
+		}
+		if (!AreAllAliveMembersSettledInVehicle(group, vehicle))
+		{
+			rejectionReason = "MANAGED_MEMBERS_NOT_SETTLED";
+			return false;
+		}
+
+		BaseCompartmentManagerComponent manager = BaseCompartmentManagerComponent.Cast(
+			vehicle.FindComponent(BaseCompartmentManagerComponent));
+		if (!manager)
+		{
+			rejectionReason = "COMPARTMENT_MANAGER_MISSING";
+			return false;
+		}
+
+		array<BaseCompartmentSlot> compartments = {};
+		manager.GetCompartments(compartments);
+		foreach (BaseCompartmentSlot compartment : compartments)
+		{
+			if (!compartment)
+				continue;
+			IEntity occupant = compartment.GetOccupant();
+			if (!occupant)
+				continue;
+			if (!IsAliveGroupMember(group, occupant))
+			{
+				rejectionReason = "FOREIGN_OR_UNMANAGED_OCCUPANT";
+				return false;
+			}
+			ChimeraCharacter character = ChimeraCharacter.Cast(occupant);
+			CompartmentAccessComponent access;
+			if (character)
+				access = character.GetCompartmentAccessComponent();
+			if (access && (access.IsGettingIn() || access.IsGettingOut()))
+			{
+				rejectionReason = "COMPARTMENT_TRANSITION_ACTIVE";
+				return false;
+			}
+		}
+
+		PlayerManager playerManager = GetGame().GetPlayerManager();
+		if (!playerManager)
+			return true;
+		array<int> playerIds = {};
+		playerManager.GetAllPlayers(playerIds);
+		float playerProtectionRadiusSq = playerProtectionRadiusMeters * playerProtectionRadiusMeters;
+		foreach (int playerId : playerIds)
+		{
+			ChimeraCharacter player = ChimeraCharacter.Cast(
+				playerManager.GetPlayerControlledEntity(playerId));
+			if (!IsProtectedCharacter(player))
+				continue;
+			if (CompartmentAccessComponent.GetVehicleIn(player) == vehicle ||
+				vector.DistanceSqXZ(player.GetOrigin(), vehicle.GetOrigin()) <= playerProtectionRadiusSq)
+			{
+				rejectionReason = "PLAYER_LINKED_OR_NEARBY";
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	// Cleanup cannot rely on compartment occupancy alone. During the first part
 	// of a player GetIn animation the character is not necessarily linked to a
 	// compartment yet, so deleting the vehicle can leave the client action and

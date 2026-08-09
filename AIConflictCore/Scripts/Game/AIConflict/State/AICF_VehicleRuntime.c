@@ -84,6 +84,7 @@ class AICF_VehicleRuntime
 	protected int m_iLastMotionAtMs;
 	protected int m_iLastMotionReportAtMs;
 	protected int m_iRecoveryCount;
+	protected int m_iCrewRecoveryCount;
 	protected int m_iCleanupAtMs;
 	protected float m_fBestDistanceMeters = -1.0;
 	protected vector m_vLastMotionPosition;
@@ -92,6 +93,8 @@ class AICF_VehicleRuntime
 	protected bool m_bCompletedTrip;
 	protected bool m_bRouteRecoveryPending;
 	protected bool m_bRecoveryRequiresRouteProgress;
+	protected bool m_bUnstuckRecoveryPending;
+	protected bool m_bUnstuckRelocated;
 	protected bool m_bRecoveryFailureReported;
 	protected bool m_bFallbackForceExitReported;
 	protected bool m_bFallbackExitFailureReported;
@@ -176,6 +179,7 @@ class AICF_VehicleRuntime
 	int GetRequestAgeMs() { return System.GetTickCount(m_iRequestStartedAtMs); }
 	string GetLastSpawnFailureReason() { return m_sLastSpawnFailureReason; }
 	int GetRecoveryCount() { return m_iRecoveryCount; }
+	int GetCrewRecoveryCount() { return m_iCrewRecoveryCount; }
 	int GetCleanupAtMs() { return m_iCleanupAtMs; }
 	ResourceName GetVehiclePrefab() { return m_VehiclePrefab; }
 	SCR_AIGroup GetGroup() { return m_Group; }
@@ -199,6 +203,8 @@ class AICF_VehicleRuntime
 	bool IsRecoveringDriver() { return m_CrewRecoveryPhase == AICF_EVehicleCrewRecoveryPhase.DRIVER; }
 	bool HasPendingRouteRecovery() { return m_bRouteRecoveryPending; }
 	bool RecoveryRequiresRouteProgress() { return m_bRecoveryRequiresRouteProgress; }
+	bool IsUnstuckRecoveryPending() { return m_bUnstuckRecoveryPending; }
+	bool WasUnstuckRelocated() { return m_bUnstuckRelocated; }
 	bool IsInfantryFallbackRestorePending() { return m_bInfantryFallbackRestorePending; }
 	bool IsBoardingRoleResetAttempted() { return m_bBoardingRoleResetAttempted; }
 	bool IsBoardingRoleRetryIssued() { return m_bBoardingRoleRetryIssued; }
@@ -334,6 +340,7 @@ class AICF_VehicleRuntime
 		m_VehiclePrefab = prefab;
 		m_SpawnBase = spawnBase;
 		m_iRecoveryCount = 0;
+		m_iCrewRecoveryCount = 0;
 		m_fBestDistanceMeters = -1.0;
 		m_iLastProgressAtMs = System.GetTickCount();
 		m_iLastMotionAtMs = System.GetTickCount();
@@ -341,6 +348,8 @@ class AICF_VehicleRuntime
 		m_bHasMotionSample = false;
 		m_bRouteRecoveryPending = false;
 		m_bRecoveryRequiresRouteProgress = false;
+		m_bUnstuckRecoveryPending = false;
+		m_bUnstuckRelocated = false;
 		m_bRecoveryFailureReported = false;
 		m_bFallbackForceExitReported = false;
 		m_bFallbackExitFailureReported = false;
@@ -650,6 +659,7 @@ class AICF_VehicleRuntime
 		m_iVehicleGeneration++;
 		m_TargetBase = target;
 		m_iRecoveryCount = 0;
+		m_iCrewRecoveryCount = 0;
 		m_fBestDistanceMeters = -1.0;
 		m_iLastProgressAtMs = System.GetTickCount();
 		m_iLastMotionAtMs = System.GetTickCount();
@@ -659,6 +669,8 @@ class AICF_VehicleRuntime
 		m_sTerminalReason = string.Empty;
 		m_bRouteRecoveryPending = false;
 		m_bRecoveryRequiresRouteProgress = false;
+		m_bUnstuckRecoveryPending = false;
+		m_bUnstuckRelocated = false;
 		m_bRecoveryFailureReported = false;
 		m_bFallbackForceExitReported = false;
 		m_bFallbackExitFailureReported = false;
@@ -768,6 +780,8 @@ class AICF_VehicleRuntime
 		m_iRecoveryCount++;
 		m_bRouteRecoveryPending = true;
 		m_bRecoveryRequiresRouteProgress = requireRouteProgress;
+		m_bUnstuckRecoveryPending = false;
+		m_bUnstuckRelocated = false;
 		m_fBestDistanceMeters = distanceMeters;
 		m_iLastProgressAtMs = System.GetTickCount();
 		m_iLastMotionAtMs = System.GetTickCount();
@@ -775,17 +789,33 @@ class AICF_VehicleRuntime
 		m_bHasMotionSample = true;
 	}
 
-	void RecordCrewRecovery()
+	void RecordUnstuckRecovery(float distanceMeters, vector position, bool relocated)
 	{
 		m_iRecoveryCount++;
+		m_bRouteRecoveryPending = true;
+		m_bRecoveryRequiresRouteProgress = false;
+		m_bUnstuckRecoveryPending = true;
+		m_bUnstuckRelocated = relocated;
+		m_fBestDistanceMeters = distanceMeters;
 		m_iLastProgressAtMs = System.GetTickCount();
+		// The relocation itself is not recovery evidence. Start the physical-motion
+		// baseline at the resulting position and require later self-propelled motion.
 		m_iLastMotionAtMs = System.GetTickCount();
+		m_vLastMotionPosition = position;
+		m_bHasMotionSample = true;
+	}
+
+	void RecordCrewRecovery()
+	{
+		m_iCrewRecoveryCount++;
 	}
 
 	void ConfirmRouteRecovery()
 	{
 		m_bRouteRecoveryPending = false;
 		m_bRecoveryRequiresRouteProgress = false;
+		m_bUnstuckRecoveryPending = false;
+		m_bUnstuckRelocated = false;
 	}
 
 	bool MarkRecoveryFailureReported()

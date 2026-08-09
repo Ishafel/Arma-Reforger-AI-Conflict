@@ -1,8 +1,8 @@
 # Stage 3 — наземная техника
 
-Stage 3 принимается отдельно от пехотных Stage 1/2. Он добавляет транспорт существующим ATTACK-слотам, но не меняет количество пехотных групп, билеты, `OnEmpty`, правила победы или `CaptureRelay`.
+Stage 3 добавляет транспорт существующим ATTACK-слотам, но не меняет количество пехотных групп, билеты, `OnEmpty`, правила победы или `CaptureRelay`. Владелец проекта условно принял этап заочно на текущем post-T9 snapshot и разрешил публикацию в `main`; анализ и runtime-регрессия продолжаются, а исторические `FAIL` и известные дефекты ниже сохраняются без переклассификации.
 
-Автоматическая компиляция и строка `[AICF][STAGE3][RESULT_CANDIDATE] ... status=READY final=0` являются только кандидатными доказательствами. Кандидат может быть позднее инвалидирован cumulative acceptance-failure latch; финальный PASS требует полного ручного dedicated runtime-прогона этой матрицы и проверки журнала после остановки сервера.
+Автоматическая компиляция и строка `[AICF][STAGE3][RESULT_CANDIDATE] ... status=READY final=0` остаются только техническими кандидатными доказательствами. Кандидат может быть позднее инвалидирован cumulative acceptance-failure latch. Заочная приёмка — отдельное решение владельца проекта, не равное автоматическому runtime-PASS; эта матрица остаётся обязательной для дальнейшего анализа дефектов.
 
 ## Срезы приёмки
 
@@ -41,7 +41,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage3Stati
 | `aicfVehicleProgressMeters` | `25` | Минимальное чистое сокращение дистанции до route endpoint для `VEHICLE_PROGRESS` |
 | `aicfVehicleMotionMeters` | `3` | Минимальное физическое перемещение машины для `VEHICLE_MOTION` и сброса stationary deadline |
 | `aicfVehicleObjectiveProgressTimeoutMs` | `300000` | Независимый deadline отсутствия чистого progress к route endpoint |
-| `aicfVehicleMaxRecoveries` | `2` | Общий budget смен экипажа и перестроений маршрута на поездку |
+| `aicfVehicleMaxRecoveries` | `2` | Независимый верхний предел для crew-role recovery и mobility/unstuck recovery на поездку; смена экипажа не расходует и не сбрасывает physical-motion budget |
 | `aicfVehicleDismountDistanceMeters` | `150` | Плановая дистанция высадки до тактического capture point, а не до road endpoint |
 | `aicfVehicleRetryIntervalMs` | `10000` | Базовый интервал retryable safe-spawn запроса |
 | `aicfVehicleSpawnMaxAttempts` | `4` | Число retryable spawn-attempt до перехода в cap-free `WAITING_FOR_SITE` |
@@ -181,7 +181,7 @@ Get-Content -LiteralPath $log.FullName -Wait |
 | Boarding не завершён | Заблокировать подход либо занятие места до soft/hard deadline текущей фазы или общего cap | При свежем target-scoped progress допустим ровно один `BOARDING_TRANSITION_GRACE`; затем один `BOARDING_TIMEOUT` с `phase`, точной `cause` (`APPROACH_NOT_COMPLETE`, `DRIVER_NOT_ASSIGNED`, `GUNNER_NOT_ASSIGNED` или `PASSENGERS_NOT_MOUNTED`), состоянием группы, `planned_phases`, phase/total age и `deadline_scope`; после hard cap — высадка оставшихся и `INFANTRY_FALLBACK` |
 | Driver погиб/вышел | Обычным игровым уроном вывести водителя из строя, не уничтожая всю группу | `DRIVER_LOST → VEHICLE_RECOVERY_STARTED role=PILOT mode=DIRECT_ROLE_ACTION → DRIVER_REASSIGNED` либо bounded `VEHICLE_RECOVERY_FAILED → INFANTRY_FALLBACK`; выбранный живой агент получает зарезервированный `Pilot` slot и один точный synchronous `SCR_AIGetInVehicle` token |
 | Gunner погиб | Только armed-run; вывести стрелка из строя | `GUNNER_LOST → VEHICLE_RECOVERY_STARTED role=TURRET mode=DIRECT_ROLE_ACTION → GUNNER_REASSIGNED` либо пеший fallback; водитель исключён из кандидатов, а recovery использует сохранённый synchronous `SCR_AIGetInVehicle` token, не `SendGetInMessage` |
-| Нет физического движения | Наблюдать неподвижную машину дольше `aicfVehicleStuckTimeoutMs`; не телепортировать её | `VEHICLE_STUCK_DETECTED reason=NO_PHYSICAL_MOVEMENT`, не более configured recoveries, затем `VEHICLE_MOTION`/progress или fallback |
+| Нет физического движения | Безопасно заблокировать исправную машину дольше `aicfVehicleStuckTimeoutMs`; бойцы должны быть settled, игроки/foreign occupants — вне защитной области | `VEHICLE_STUCK_DETECTED → VEHICLE_UNSTUCK_STARTED → VEHICLE_UNSTUCK_ATTEMPT`; authority-only reposition не дальше 15 м либо route-only attempt, затем успех только после нового `VEHICLE_MOTION`/route progress; каждая неподтверждённая попытка даёт `VEHICLE_UNSTUCK_FAILED`, и лишь после configured mobility attempts допустим fallback |
 | Движение без objective progress | Машина физически движется, но дольше `aicfVehicleObjectiveProgressTimeoutMs` не сокращает route endpoint | `VEHICLE_STUCK_DETECTED reason=NO_OBJECTIVE_PROGRESS`; recovery считается успешным только после route progress, одного физического движения недостаточно |
 | Машина перевёрнута/неподвижна | Зафиксировать фактическое состояние видео/скриншотом | Немедленный отказ от машины и продолжение пешком |
 | Машина уничтожена | Уничтожить транспорт, сохранив хотя бы одного живого члена managed-группы | `VEHICLE_DESTROYED`, прежний infantry slot/reinforcement contract остаётся корректным |
@@ -244,6 +244,8 @@ VEHICLE_ROUTE_ASSIGNED / VEHICLE_PROGRESS / VEHICLE_MOTION
 DISEMBARK_STARTED / DISEMBARK_REISSUED / DISEMBARK_TIMEOUT / DISEMBARK_COMPLETE
 VEHICLE_STUCK_DETECTED
 VEHICLE_RECOVERY_STARTED / VEHICLE_RECOVERY_SUCCEEDED / VEHICLE_RECOVERY_FAILED
+VEHICLE_CREW_RECOVERY_SUCCEEDED
+VEHICLE_UNSTUCK_STARTED / VEHICLE_UNSTUCK_ATTEMPT / VEHICLE_UNSTUCK_SUCCEEDED / VEHICLE_UNSTUCK_FAILED
 DRIVER_LOST / DRIVER_REASSIGNED / GUNNER_LOST / GUNNER_REASSIGNED
 DISEMBARK_CLEARANCE_RECOVERY
 FALLBACK_FORCE_DISEMBARK / FALLBACK_DISEMBARK_FAILED
@@ -273,7 +275,7 @@ RESULT_CANDIDATE / ACCEPTANCE_FAILURE_LATCHED / RESULT
 
 `DISEMBARK_REISSUED` означает одноразовую очистку stale vehicle actions/waypoint и повторную выдачу штатного GetOut на половине `aicfVehicleBoardingTimeoutMs`. Завершение требует двух последовательных чистых poll: отсутствуют logical vehicle/compartment link и get-in/get-out transition, а персонаж находится вне ориентированных bounds машины. Логически вышедший, но физически оставшийся внутри bounds живой managed member получает ограниченное relocation наружу (`DISEMBARK_CLEARANCE_RECOVERY`). Если к полному deadline clearance не подтверждён, `DISEMBARK_TIMEOUT` фиксирует `logical/transitions/inside_bounds`, защёлкивает acceptance failure и только затем запускает fallback.
 
-Crew recovery резервирует конкретный role slot и синхронно создаёт один точный `SCR_AIGetInVehicle` action-token. Runtime хранит именно этот token: abort/fallback завершает только его, а успешное settled-занятие места снимает tracking без `Fail()`. При одновременной потере ролей driver восстанавливается первым, затем gunner; `VEHICLE_RECOVERY_SUCCEEDED reason=ALL_REQUIRED_CREW_RESTORED` допустим только после повторной проверки полного обязательного crew. `SendGetInMessage`/`SendCancelMessage` с `relatedActivity=null` для recovery не допускаются.
+Crew recovery резервирует конкретный role slot и синхронно создаёт один точный `SCR_AIGetInVehicle` action-token. Runtime хранит именно этот token: abort/fallback завершает только его, а успешное settled-занятие места снимает tracking без `Fail()`. При одновременной потере ролей driver восстанавливается первым, затем gunner. Восстановление полного обязательного crew пишет отдельный `VEHICLE_CREW_RECOVERY_SUCCEEDED`, не общий mobility-success; crew counter независим от mobility counter и не сбрасывает route/motion timestamps. `SendGetInMessage`/`SendCancelMessage` с `relatedActivity=null` для recovery не допускаются.
 
 При fallback сначала используется штатный animated get-out waypoint. После bounded deadline forced teleport/no-door exit применяется только к `ALIVE` членам текущей managed-группы; `INCAPACITATED` и foreign occupants не force-eject-ятся. Попытки ограничены hard deadline `2 × aicfVehicleBoardingTimeoutMs`; успешная принудительная высадка отмечается единичным `FALLBACK_FORCE_DISEMBARK`.
 
@@ -291,7 +293,7 @@ Crew recovery резервирует конкретный role slot и синх�
 
 `VEHICLE_PROGRESS` означает чистое сокращение `route_distance_m` до road/direct endpoint минимум на `aicfVehicleProgressMeters`. `VEHICLE_MOTION` означает физическое перемещение минимум на `aicfVehicleMotionMeters` без такого чистого сокращения. Эти события обслуживают независимые objective/stationary deadline. Dismount проверяется по `target_distance_m` до тактического capture point.
 
-Recovery после `NO_PHYSICAL_MOVEMENT` может завершиться физическим movement (или route progress). Recovery после `NO_OBJECTIVE_PROGRESS` требует route progress; езда без приближения к endpoint не создаёт ложный `VEHICLE_RECOVERY_SUCCEEDED`.
+Recovery после `NO_PHYSICAL_MOVEMENT` проходит bounded safe unstuck. Reposition всей машины выполняется только authority, с settled managed occupants, без foreign/player/transition, после obstacle/ocean и active-mine/living-character clearance; максимальное смещение — 15 м. Само смещение создаёт только `VEHICLE_UNSTUCK_ATTEMPT evidence=PENDING`. Успех требует последующего самостоятельного physical movement либо route progress. Recovery после `NO_OBJECTIVE_PROGRESS` требует route progress; езда без приближения к endpoint и простое возвращение водителя не создают ложный `VEHICLE_RECOVERY_SUCCEEDED`.
 
 ## Текущая матрица приёмки
 
@@ -299,7 +301,7 @@ Recovery после `NO_PHYSICAL_MOVEMENT` может завершиться ф�
 
 | Проверка | Transport | Armed | Что требуется дальше |
 |---|:---:|:---:|---|
-| Workbench 1.7 validation / static audit post-T9 | PASS | PASS | 5 конфигураций, CRC32 `9f3c297e`, `SCRIPT (E/F)=0`; это не runtime PASS |
+| Workbench 1.7 validation / static audit post-T9 | PASS | PASS | 5 конфигураций, CRC32 `946e5a78`, `SCRIPT (E/F)=0`; это не runtime PASS |
 | Safe spawn, faction и configured cap | PASS | PARTIAL | A2: подтвердить вооружённые машины обеих сторон и cap fault |
 | Строгий DRIVER → cargo | PARTIAL | FAIL | T10/A2: ни одного compartment до exact driver, включая SAFE_REUSE; отдельно no-combat repeat action ownership |
 | Строгий DRIVER → GUNNER → cargo | N/A | FAIL | A2: обе роли settled до passenger phase |
@@ -307,7 +309,7 @@ Recovery после `NO_PHYSICAL_MOVEMENT` может завершиться ф�
 | Движение и route progress | PASS | PARTIAL | Подтвердить после новой посадки без remote snap |
 | Высадка и восстановление приказа | PASS | NOT RUN | T10: `NormalizeAfterVehicle`, продолжение пехотой и owner change |
 | Пехотный захват после высадки | NOT RUN | NOT RUN | Наблюдать owner change после штатной высадки |
-| Bounded boarding/recovery/fallback | FAIL | FAIL | Per-member stall/timeout fault без churn и преждевременного recovery |
+| Bounded boarding/recovery/fallback | FAIL | FAIL | T10: отдельно доказать crew-role recovery и safe vehicle-unstuck; никакого success до post-recovery motion/progress |
 | Reuse и vehicle generation | FAIL | FAIL | Повторное использование без нарушения ролей |
 | Retry → WAITING_FOR_SITE → wake | PARTIAL | N/A | T9 подтвердил context wake, но не выдачу у Farm; T10 должен показать per-base trace и успешный wake после clear |
 | Functional abandoned world pool | NOT RUN | NOT RUN | Soft target 4, player available, безопасный overflow и oldest-safe retirement |
@@ -425,7 +427,19 @@ Post-T8 source прошёл static/Workbench и затем был провере
 
 Кандидат passenger/combat пока не маскируется принудительным hold и не объявлен закрытым. Для причинного повтора добавлены `BOARDING_ACTION_OWNERSHIP` каждые 10 секунд и `BOARDING_CREW_ROLE_LOST` на точном failure-edge. Per-member samples теперь содержат `ai_action` и `ai_action_state`, а crew snapshot — tracked agent/action, crew phase и `is_current`. Это позволяет отличить AICF exact GetIn от stock combat/cover/infantry activity. Нужны два повтора: без контакта и с контролируемым контактом.
 
-Текущий post-T9 snapshot прошёл `tools/Test-Stage3Static.ps1` и Workbench 1.7 `Validate Scripts` по конфигурациям `WORKBENCH/PC/XBOX/PS4/PS5`: `.cache/stage3-t9-field-hold-validate-20260809/console.log`, Game CRC32 `9f3c297e`, `Script validation successful`, `SCRIPT (E/F)=0`. Dedicated runtime на этом snapshot ещё не запускался; Transport T9 остаётся историческим `FAIL`.
+Текущий post-T9 snapshot прошёл `tools/Test-Stage3Static.ps1` и Workbench 1.7 `Validate Scripts` по конфигурациям `WORKBENCH/PC/XBOX/PS4/PS5`: `.cache/stage3-post-t9-vehicle-unstuck-final2-20260809/console.log`, Game CRC32 `946e5a78`, `Script validation successful`, `SCRIPT (E/F)=0`. Dedicated runtime на этом snapshot ещё не запускался; Transport T9 остаётся историческим `FAIL`.
+
+#### Срез T9 — US: отсутствует восстановление физически застрявшей машины
+
+- После успешной повторной посадки US A0 машина `0x40000000000014BB` физически застряла при движении к цели. Визуально выход и повторная посадка водителя выглядели как попытки освободить транспорт.
+- Runtime дважды зарегистрировал `DRIVER_LOST`, затем `DRIVER_REASSIGNED` и `VEHICLE_RECOVERY_SUCCEEDED reason=ALL_REQUIRED_CREW_RESTORED`. Эти события подтверждают только восстановление роли водителя, но не восстановление физической подвижности машины.
+- После двух формально успешных role-recovery транспорт остался застрявшим. В 21:27:58 система завершила цикл через `VEHICLE_RECOVERY_FAILED reason=DRIVER_RECOVERY_EXHAUSTED` и `INFANTRY_FALLBACK`; группа окончательно бросила машину.
+- Дефект: физическое застревание ошибочно классифицируется как потеря водителя, а возвращение водителя считается успешным recovery без доказательства перемещения транспорта. Это расходует recovery budget, не устраняя первопричину.
+- Требуемая доработка: добавить bounded vehicle-unstuck recovery по аналогии с восстановлением застрявшего персонажа. До отказа от исправной машины система должна попытаться безопасно восстановить её положение/подвижность, не телепортируя бойцов в салон.
+- Возможная последовательность: определить `NO_PHYSICAL_MOVEMENT` при живом водителе и исправной машине → остановить конфликтующие vehicle actions → выполнить ограниченную попытку корректировки машины на ближайшую безопасную проезжую позицию или иной штатный unstuck → заново назначить маршрут → подтвердить recovery только после реального `VEHICLE_MOTION` либо достаточного route progress.
+- Каждая попытка должна быть ограничена числом и временем, сохранять occupants и проверять безопасность новой позиции: отсутствие воды, препятствий, мин/опасной зоны, пересечения с объектами и недопустимого удаления от текущего маршрута. Если безопасное восстановление невозможно, только тогда выполнить штатную высадку и infantry fallback.
+- Новая диагностика: `VEHICLE_UNSTUCK_STARTED`, `VEHICLE_UNSTUCK_ATTEMPT`, `VEHICLE_UNSTUCK_SUCCEEDED` с подтверждённым displacement/progress и `VEHICLE_UNSTUCK_FAILED` с причиной. `VEHICLE_RECOVERY_SUCCEEDED` не должен появляться только из-за возвращения водителя, если исходной причиной была неподвижность.
+- Статус: `CONFIRMED / NEEDS FIX`. Сам bounded infantry fallback после исчерпания попыток является ожидаемым; дефект находится в отсутствии восстановления машины и ложном успешном результате промежуточных recovery.
 
 ### External/versioned evidence caveat T8
 
@@ -453,7 +467,7 @@ Post-T8 source прошёл static/Workbench и затем был провере
 - Доказать exact DRIVER → GUNNER → PASSENGERS у US и USSR, включая SAFE_REUSE и потерю каждой crew role.
 - Сопоставить server/client EntityID и RplId при delete; визуально оставшаяся машина без совпадающей identity не считается desync.
 - Проверить active AI cap отдельно от functional world-pool cap, occupied/player-transition cleanup, overturned/destroyed fallback и 30-минутную стабильность.
-- Stage 3 остаётся непринятым до успешных T10, A2, fault-срезов и последующего 30-минутного прогона.
+- Заочная приёмка Stage 3 уже зафиксирована; T10, A2, fault-срезы и последующий 30-минутный прогон остаются обязательными post-acceptance проверками, способными открыть новые дефекты.
 
 ## PASS / FAIL / BLOCKED
 
@@ -471,4 +485,4 @@ Post-T8 source прошёл static/Workbench и затем был провере
 
 `BLOCKED`: несовместимая версия, addon/resource не загружен, compile error, занят порт или окружение не позволяет начать нужный сценарий. `BLOCKED` не является PASS.
 
-После Stage 3 PASS всё ещё отдельно выполняются полная MVP-матрица и двухчасовой soak с техникой; текущая реализационная работа их не запускала.
+После заочной приёмки Stage 3 всё ещё отдельно выполняются полная MVP-матрица и двухчасовой soak с техникой; текущая реализационная работа их не запускала.

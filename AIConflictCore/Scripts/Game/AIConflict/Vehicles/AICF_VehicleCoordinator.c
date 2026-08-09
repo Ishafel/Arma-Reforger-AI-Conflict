@@ -25,6 +25,14 @@ class AICF_VehicleCoordinator
 	protected static const int VEHICLE_STOP_CLEANUP_POLL_MS = 1000;
 	protected static const int VEHICLE_STOP_CLEANUP_ACQUIRE_TIMEOUT_MS = 60000;
 	protected static const float VEHICLE_CLEANUP_PLAYER_RADIUS_METERS = 15.0;
+	// Candidate displacement is capped at 15 m. Protecting 35 m around the source
+	// guarantees at least 20 m clearance around every accepted destination.
+	protected static const float VEHICLE_UNSTUCK_PLAYER_RADIUS_METERS = 35.0;
+	protected static const float VEHICLE_UNSTUCK_OFFSET_METERS = 8.0;
+	protected static const float VEHICLE_UNSTUCK_SEARCH_RADIUS_METERS = 3.0;
+	protected static const float VEHICLE_UNSTUCK_MIN_DISPLACEMENT_METERS = 4.0;
+	protected static const float VEHICLE_UNSTUCK_MAX_DISPLACEMENT_METERS = 15.0;
+	protected static const float VEHICLE_UNSTUCK_MINE_CLEARANCE_METERS = 6.0;
 	protected static const float DISMOUNT_CLEARANCE_MARGIN_METERS = 0.5;
 
 	protected ref AICF_Stage3Config m_Config;
@@ -63,6 +71,7 @@ class AICF_VehicleCoordinator
 	protected int m_iBaseRevision;
 	protected int m_iStoppedCleanupStartedAtMs;
 	protected bool m_bStoppedCleanupScheduled;
+	protected bool m_bUnstuckHazardDetected;
 
 	void AICF_VehicleCoordinator(
 		AICF_Stage3Config config,
@@ -2032,7 +2041,20 @@ class AICF_VehicleCoordinator
 					targetDistanceMeters));
 			if (runtime.HasPendingRouteRecovery())
 			{
+				bool unstuckRecovery = runtime.IsUnstuckRecoveryPending();
+				bool relocated = runtime.WasUnstuckRelocated();
 				runtime.ConfirmRouteRecovery();
+				if (unstuckRecovery)
+				{
+					AICF_Stage3Diagnostics.Info(
+						"VEHICLE_UNSTUCK_SUCCEEDED",
+						string.Format(
+							"%1 evidence=ROUTE_PROGRESS relocated=%2 route_distance_m=%3 target_distance_m=%4",
+							runtime.DescribeContext("POST_UNSTUCK_ROUTE_PROGRESS_CONFIRMED"),
+							relocated,
+							routeDistanceMeters,
+							targetDistanceMeters));
+				}
 				AICF_Stage3Diagnostics.Info("VEHICLE_RECOVERY_SUCCEEDED", runtime.DescribeContext("ROUTE_PROGRESS_RESTORED"));
 			}
 		}
@@ -2050,7 +2072,20 @@ class AICF_VehicleCoordinator
 			}
 			if (runtime.HasPendingRouteRecovery() && !runtime.RecoveryRequiresRouteProgress())
 			{
+				bool unstuckRecovery = runtime.IsUnstuckRecoveryPending();
+				bool relocated = runtime.WasUnstuckRelocated();
 				runtime.ConfirmRouteRecovery();
+				if (unstuckRecovery)
+				{
+					AICF_Stage3Diagnostics.Info(
+						"VEHICLE_UNSTUCK_SUCCEEDED",
+						string.Format(
+							"%1 evidence=PHYSICAL_MOVEMENT relocated=%2 route_distance_m=%3 target_distance_m=%4",
+							runtime.DescribeContext("POST_UNSTUCK_MOTION_CONFIRMED"),
+							relocated,
+							routeDistanceMeters,
+							targetDistanceMeters));
+				}
 				AICF_Stage3Diagnostics.Info("VEHICLE_RECOVERY_SUCCEEDED", runtime.DescribeContext("PHYSICAL_MOVEMENT_RESTORED"));
 			}
 		}
@@ -2084,8 +2119,24 @@ class AICF_VehicleCoordinator
 			m_Config.GetObjectiveProgressTimeoutMs(),
 			runtime.GetRecoveryCount() + 1);
 		AICF_Stage3Diagnostics.Warning("VEHICLE_STUCK_DETECTED", stuckDetails);
+		if (stationary && runtime.IsUnstuckRecoveryPending())
+		{
+			AICF_Stage3Diagnostics.Warning(
+				"VEHICLE_UNSTUCK_FAILED",
+				string.Format(
+					"%1 attempt=%2 relocated=%3 evidence=NONE motion_age_ms=%4 route_progress_age_ms=%5 final=%6",
+					runtime.DescribeContext("NO_POST_UNSTUCK_MOVEMENT"),
+					runtime.GetRecoveryCount(),
+					runtime.WasUnstuckRelocated(),
+					runtime.GetMotionAgeMs(),
+					runtime.GetRouteProgressAgeMs(),
+					runtime.GetRecoveryCount() >= m_Config.GetMaxRecoveries()));
+		}
 		if (stationary && !movementUsable)
 		{
+			AICF_Stage3Diagnostics.Warning(
+				"VEHICLE_UNSTUCK_FAILED",
+					string.Format("%1 reason=MOBILITY_DAMAGE final=1", runtime.DescribeContext("VEHICLE_CANNOT_MOVE")));
 			BeginFallback(runtime, faction, slot, "VEHICLE_RECOVERY_MOBILITY_UNAVAILABLE");
 			return;
 		}
@@ -2095,11 +2146,29 @@ class AICF_VehicleCoordinator
 			return;
 		}
 		AICF_Stage3Diagnostics.Info("VEHICLE_RECOVERY_STARTED", runtime.DescribeContext(stuckReason));
+		if (stationary)
+		{
+			AICF_Stage3Diagnostics.Info(
+				"VEHICLE_UNSTUCK_STARTED",
+				string.Format(
+					"%1 attempt=%2 maximum_attempts=%3 origin=%4 occupants=[%5]",
+					runtime.DescribeContext("NO_PHYSICAL_MOVEMENT"),
+					runtime.GetRecoveryCount() + 1,
+					m_Config.GetMaxRecoveries(),
+					runtime.GetVehicle().GetOrigin(),
+					m_Watchdog.DescribeGroupVehicleOccupants(slot.GetGroup(), runtime)));
+		}
 
 		vector destination = targetPosition;
 		vector routeEndpoint;
 		string routeMode;
 		DeleteRuntimeWaypoint(runtime);
+		vector recoveryOrigin = runtime.GetVehicle().GetOrigin();
+		vector unstuckPosition = recoveryOrigin;
+		string unstuckMode = "ROUTE_REBUILD_ONLY";
+		bool relocated;
+		if (stationary)
+			relocated = TryRelocateVehicleForUnstuck(runtime, slot, destination, unstuckPosition, unstuckMode);
 		AIWaypoint rebuilt = m_WaypointFactory.CreateMoveWaypoint(
 			runtime.GetVehicle().GetOrigin(),
 			destination,
@@ -2108,24 +2177,203 @@ class AICF_VehicleCoordinator
 			routeMode);
 		if (!rebuilt)
 		{
+			if (stationary)
+			{
+				AICF_Stage3Diagnostics.Warning(
+					"VEHICLE_UNSTUCK_FAILED",
+					string.Format(
+						"%1 reason=ROUTE_REBUILD_FAILED relocated=%2 mode=%3 final=1",
+						runtime.DescribeContext("UNSTUCK_ROUTE_UNAVAILABLE"),
+						relocated,
+						unstuckMode));
+			}
 			BeginFallback(runtime, faction, slot, "VEHICLE_ROUTE_RECOVERY_FAILED");
 			return;
 		}
 
 		slot.GetGroup().AddWaypointAt(rebuilt, 0);
 		runtime.SetActiveWaypoint(rebuilt);
-		runtime.RecordRecovery(
-			Math.Sqrt(vector.DistanceSqXZ(runtime.GetVehicle().GetOrigin(), routeEndpoint)),
-			runtime.GetVehicle().GetOrigin(),
-			routeStalled && !stationary);
+		float rebuiltDistanceMeters = Math.Sqrt(vector.DistanceSqXZ(runtime.GetVehicle().GetOrigin(), routeEndpoint));
+		if (stationary)
+		{
+			runtime.RecordUnstuckRecovery(
+				rebuiltDistanceMeters,
+				runtime.GetVehicle().GetOrigin(),
+				relocated);
+			AICF_Stage3Diagnostics.Info(
+				"VEHICLE_UNSTUCK_ATTEMPT",
+				string.Format(
+					"%1 attempt=%2 relocated=%3 mode=%4 from=%5 to=%6 displacement_m=%7 route_mode=%8 occupants_preserved=1 evidence=PENDING",
+					runtime.DescribeContext("SAFE_REPOSITION_AND_ROUTE_REBUILD"),
+					runtime.GetRecoveryCount(),
+					relocated,
+					unstuckMode,
+					recoveryOrigin,
+					unstuckPosition,
+					vector.DistanceXZ(recoveryOrigin, unstuckPosition),
+					routeMode));
+		}
+		else
+		{
+			runtime.RecordRecovery(
+				rebuiltDistanceMeters,
+				runtime.GetVehicle().GetOrigin(),
+				true);
+		}
 		AICF_Stage3Diagnostics.Info(
 			"VEHICLE_STUCK_RECOVERY",
 			string.Format(
-				"%1 action=REBUILD_ROUTE attempt=%2 route_mode=%3 endpoint_offset_m=%4",
+				"%1 action=%2 attempt=%3 route_mode=%4 endpoint_offset_m=%5",
 				runtime.DescribeContext("REBUILD_ROUTE"),
+				unstuckMode,
 				runtime.GetRecoveryCount(),
 				routeMode,
 				Math.Sqrt(vector.DistanceSqXZ(routeEndpoint, destination))));
+	}
+
+	protected bool TryRelocateVehicleForUnstuck(
+		AICF_VehicleRuntime runtime,
+		AICF_GroupSlot slot,
+		vector targetPosition,
+		out vector relocatedPosition,
+		out string mode)
+	{
+		relocatedPosition = runtime.GetVehicle().GetOrigin();
+		mode = "ROUTE_REBUILD_ONLY";
+		if (!Replication.IsServer())
+		{
+			mode = "REJECTED_NOT_AUTHORITY";
+			return false;
+		}
+
+		string safetyReason;
+		if (!m_Watchdog.CanSafelyRelocateVehicle(
+			slot.GetGroup(),
+			runtime.GetVehicle(),
+			VEHICLE_UNSTUCK_PLAYER_RADIUS_METERS,
+			safetyReason))
+		{
+			mode = string.Format("REJECTED_%1", safetyReason);
+			return false;
+		}
+
+		Vehicle vehicle = runtime.GetVehicle();
+		vector originalPosition = vehicle.GetOrigin();
+		vector targetDirection = targetPosition - originalPosition;
+		targetDirection[1] = 0;
+		if (targetDirection.LengthSq() < 0.01)
+		{
+			vector currentTransform[4];
+			vehicle.GetWorldTransform(currentTransform);
+			targetDirection = currentTransform[2];
+			targetDirection[1] = 0;
+		}
+		if (targetDirection.LengthSq() < 0.01)
+			targetDirection = "0 0 1";
+		targetDirection.Normalize();
+		vector rightDirection = Vector(targetDirection[2], 0, -targetDirection[0]);
+
+		array<vector> searchDirections = {};
+		searchDirections.Insert(targetDirection);
+		searchDirections.Insert(-targetDirection);
+		searchDirections.Insert(rightDirection);
+		searchDirections.Insert(-rightDirection);
+		searchDirections.Insert((targetDirection + rightDirection).Normalized());
+		searchDirections.Insert((targetDirection - rightDirection).Normalized());
+
+		vector boundsMin;
+		vector boundsMax;
+		vehicle.GetBounds(boundsMin, boundsMax);
+		float clearanceRadius = Math.Max(
+			Math.Max(Math.AbsFloat(boundsMin[0]), Math.AbsFloat(boundsMax[0])),
+			Math.Max(Math.AbsFloat(boundsMin[2]), Math.AbsFloat(boundsMax[2]))) + 0.5;
+		float clearanceHeight = Math.Max(2.0, boundsMax[1] - boundsMin[1] + 1.0);
+		foreach (vector searchDirection : searchDirections)
+		{
+			vector searchCenter = originalPosition + searchDirection * VEHICLE_UNSTUCK_OFFSET_METERS;
+			vector candidate;
+			if (!SCR_WorldTools.FindEmptyTerrainPosition(
+				candidate,
+				searchCenter,
+				VEHICLE_UNSTUCK_SEARCH_RADIUS_METERS,
+				clearanceRadius,
+				clearanceHeight,
+				TraceFlags.ENTS | TraceFlags.OCEAN,
+				vehicle.GetWorld()))
+			{
+				continue;
+			}
+
+			float displacementMeters = vector.DistanceXZ(originalPosition, candidate);
+			if (displacementMeters < VEHICLE_UNSTUCK_MIN_DISPLACEMENT_METERS ||
+				displacementMeters > VEHICLE_UNSTUCK_MAX_DISPLACEMENT_METERS)
+			{
+				continue;
+			}
+			if (!IsVehicleUnstuckCandidateHazardClear(candidate))
+				continue;
+
+			vector angles = targetDirection.VectorToAngles();
+			angles[1] = 0;
+			angles[2] = 0;
+			vector relocatedTransform[4];
+			Math3D.AnglesToMatrix(angles, relocatedTransform);
+			relocatedTransform[3] = candidate;
+			Physics physics = vehicle.GetPhysics();
+			if (physics)
+			{
+				physics.SetVelocity(vector.Zero);
+				physics.SetAngularVelocity(vector.Zero);
+			}
+			if (!vehicle.SetWorldTransform(relocatedTransform))
+				continue;
+
+			relocatedPosition = candidate;
+			mode = "SAFE_TERRAIN_REPOSITION";
+			return true;
+		}
+
+		mode = "NO_SAFE_RELOCATION_POSITION";
+		return false;
+	}
+
+	protected bool IsVehicleUnstuckCandidateHazardClear(vector candidate)
+	{
+		m_bUnstuckHazardDetected = false;
+		BaseWorld world = GetGame().GetWorld();
+		if (!world)
+			return false;
+		world.QueryEntitiesBySphere(
+			candidate,
+			VEHICLE_UNSTUCK_MINE_CLEARANCE_METERS,
+			EvaluateVehicleUnstuckHazard,
+			null,
+			EQueryEntitiesFlags.ALL);
+		return !m_bUnstuckHazardDetected;
+	}
+
+	protected bool EvaluateVehicleUnstuckHazard(IEntity entity)
+	{
+		if (!entity)
+			return true;
+		SCR_PressureTriggerComponent trigger = SCR_PressureTriggerComponent.Cast(
+			entity.FindComponent(SCR_PressureTriggerComponent));
+		if (trigger && trigger.IsActivated())
+		{
+			m_bUnstuckHazardDetected = true;
+			return false;
+		}
+		ChimeraCharacter character = ChimeraCharacter.Cast(entity);
+		if (character)
+		{
+			CharacterControllerComponent controller = character.GetCharacterController();
+			if (controller && controller.GetLifeState() != ECharacterLifeState.DEAD)
+			{
+				m_bUnstuckHazardDetected = true;
+				return false;
+			}
+		}
+		return true;
 	}
 
 	protected void BeginDriverRecovery(
@@ -2133,7 +2381,7 @@ class AICF_VehicleCoordinator
 		SCR_CampaignFaction faction,
 		AICF_GroupSlot slot)
 	{
-		if (runtime.GetRecoveryCount() >= m_Config.GetMaxRecoveries())
+		if (runtime.GetCrewRecoveryCount() >= m_Config.GetMaxRecoveries())
 		{
 			BeginFallback(runtime, faction, slot, "DRIVER_RECOVERY_EXHAUSTED");
 			return;
@@ -2167,7 +2415,12 @@ class AICF_VehicleCoordinator
 		AICF_Stage3Diagnostics.Warning("DRIVER_LOST", runtime.DescribeContext("PILOT_COMPARTMENT_EMPTY_OR_DRIVER_DEAD"));
 		AICF_Stage3Diagnostics.Info(
 			"VEHICLE_RECOVERY_STARTED",
-			string.Format("%1 agent=%2 role=PILOT mode=DIRECT_ROLE_ACTION", runtime.DescribeContext("REASSIGN_DRIVER"), recoveryAgent.GetControlledEntity().GetID()));
+			string.Format(
+				"%1 agent=%2 role=PILOT mode=DIRECT_ROLE_ACTION crew_attempt=%3 mobility_attempts=%4",
+				runtime.DescribeContext("REASSIGN_DRIVER"),
+				recoveryAgent.GetControlledEntity().GetID(),
+				runtime.GetCrewRecoveryCount(),
+				runtime.GetRecoveryCount()));
 	}
 
 	protected AIAgent SelectCrewRecoveryAgent(
@@ -2262,7 +2515,7 @@ class AICF_VehicleCoordinator
 		SCR_CampaignFaction faction,
 		AICF_GroupSlot slot)
 	{
-		if (runtime.GetRecoveryCount() >= m_Config.GetMaxRecoveries())
+		if (runtime.GetCrewRecoveryCount() >= m_Config.GetMaxRecoveries())
 		{
 			BeginFallback(runtime, faction, slot, "GUNNER_RECOVERY_EXHAUSTED");
 			return;
@@ -2292,7 +2545,12 @@ class AICF_VehicleCoordinator
 		AICF_Stage3Diagnostics.Warning("GUNNER_LOST", runtime.DescribeContext("TURRET_COMPARTMENT_EMPTY_OR_GUNNER_DEAD"));
 		AICF_Stage3Diagnostics.Info(
 			"VEHICLE_RECOVERY_STARTED",
-			string.Format("%1 agent=%2 role=TURRET mode=DIRECT_ROLE_ACTION", runtime.DescribeContext("REASSIGN_GUNNER"), recoveryAgent.GetControlledEntity().GetID()));
+			string.Format(
+				"%1 agent=%2 role=TURRET mode=DIRECT_ROLE_ACTION crew_attempt=%3 mobility_attempts=%4",
+				runtime.DescribeContext("REASSIGN_GUNNER"),
+				recoveryAgent.GetControlledEntity().GetID(),
+				runtime.GetCrewRecoveryCount(),
+				runtime.GetRecoveryCount()));
 	}
 
 	protected void ProcessDriverRecovery(
@@ -2360,8 +2618,12 @@ class AICF_VehicleCoordinator
 				runtime.SetLastGunner(gunner);
 			DeleteRuntimeWaypoint(runtime);
 			AICF_Stage3Diagnostics.Info(
-				"VEHICLE_RECOVERY_SUCCEEDED",
-				runtime.DescribeContext("ALL_REQUIRED_CREW_RESTORED"));
+				"VEHICLE_CREW_RECOVERY_SUCCEEDED",
+				string.Format(
+					"%1 crew_attempt=%2 mobility_attempts=%3 evidence=ALL_REQUIRED_CREW_SETTLED",
+					runtime.DescribeContext("ALL_REQUIRED_CREW_RESTORED"),
+					runtime.GetCrewRecoveryCount(),
+					runtime.GetRecoveryCount()));
 			StartMovement(runtime, faction, slot, "ALL_REQUIRED_CREW_RESTORED");
 			return;
 		}
