@@ -40,6 +40,7 @@ class AICF_MatchController
 
 	protected ref AICF_Stage1Config m_Config;
 	protected ref AICF_Stage2Config m_Stage2Config;
+	protected ref AICF_Stage3Config m_Stage3Config;
 	protected ref AICF_ConflictAdapter m_ConflictAdapter;
 	protected ref AICF_ObjectiveGraph m_ObjectiveGraph;
 	protected ref AICF_TargetSelector m_TargetSelector;
@@ -50,6 +51,7 @@ class AICF_MatchController
 	protected ref AICF_OrderPlanner m_OrderPlanner;
 	protected ref AICF_VictorySystem m_VictorySystem;
 	protected ref AICF_DebugMapMarkerSystem m_DebugMapMarkers;
+	protected ref AICF_VehicleCoordinator m_VehicleCoordinator;
 	protected ref AICF_FactionState m_USState;
 	protected ref AICF_FactionState m_USSRState;
 
@@ -83,7 +85,9 @@ class AICF_MatchController
 		m_Campaign = campaign;
 		m_Config = new AICF_Stage1Config();
 		m_Stage2Config = new AICF_Stage2Config();
+		m_Stage3Config = new AICF_Stage3Config();
 		AICF_Stage2Diagnostics.Configure();
+		AICF_Stage3Diagnostics.Configure();
 		m_ConflictAdapter = new AICF_ConflictAdapter();
 		m_ObjectiveGraph = new AICF_ObjectiveGraph();
 		m_TargetSelector = new AICF_TargetSelector();
@@ -93,6 +97,17 @@ class AICF_MatchController
 		m_ReinforcementSystem = new AICF_ReinforcementSystem();
 		m_OrderPlanner = new AICF_OrderPlanner();
 		m_VictorySystem = new AICF_VictorySystem();
+		if (m_Stage3Config.GetVehiclesEnabled())
+		{
+			m_VehicleCoordinator = new AICF_VehicleCoordinator(
+				m_Stage3Config,
+				m_Campaign,
+				m_ConflictAdapter,
+				m_OrderPlanner,
+				m_GroupCohesionPolicy,
+				m_ObjectiveGraph,
+				m_TargetSelector);
+		}
 		if (m_Config.GetDebugMapMarkers())
 			m_DebugMapMarkers = new AICF_DebugMapMarkerSystem();
 
@@ -147,6 +162,26 @@ class AICF_MatchController
 				m_Stage2Config.GetObjectiveHoldTimeoutMs(),
 				m_Stage2Config.GetMaxConcurrentReplacementSpawns(),
 				m_Config.GetRequirePlayerForResult()));
+		string stage3ConfigLine = string.Format(
+			"enabled=%1 transports_per_faction=%2 armed_light_per_faction=%3 max_vehicles_per_faction=%4 boarding_timeout_ms=%5 stuck_timeout_ms=%6 progress_m=%7",
+			m_Stage3Config.GetVehiclesEnabled(),
+			m_Stage3Config.GetTransportVehiclesPerFaction(),
+			m_Stage3Config.GetArmedLightVehiclesPerFaction(),
+			m_Stage3Config.GetMaxVehiclesPerFaction(),
+			m_Stage3Config.GetBoardingTimeoutMs(),
+			m_Stage3Config.GetStuckTimeoutMs(),
+			m_Stage3Config.GetProgressMeters());
+		stage3ConfigLine += string.Format(
+			" max_recoveries=%1 dismount_distance_m=%2 retry_ms=%3 cleanup_delay_ms=%4 minimum_route_m=%5 maximum_reuse_distance_m=%6 maximum_spawn_distance_m=%7 cohesion_distance_m=%8",
+			m_Stage3Config.GetMaxRecoveries(),
+			m_Stage3Config.GetDismountDistanceMeters(),
+			m_Stage3Config.GetRetryIntervalMs(),
+			m_Stage3Config.GetCleanupDelayMs(),
+			m_Stage3Config.GetMinimumRouteMeters(),
+			m_Stage3Config.GetMaximumReuseDistanceMeters(),
+			m_Stage3Config.GetMaximumSpawnDistanceMeters(),
+			m_Stage3Config.GetCohesionDistanceMeters());
+		AICF_Stage3Diagnostics.Info("CONFIG", stage3ConfigLine);
 		if (m_Stage2Config.HasTestDropOrder())
 		{
 			AICF_Stage2Diagnostics.Warning(
@@ -263,6 +298,8 @@ class AICF_MatchController
 
 		ProcessFaction(m_USState, m_USFaction);
 		ProcessFaction(m_USSRState, m_USSRFaction);
+		if (m_VehicleCoordinator)
+			m_VehicleCoordinator.Update(m_USState, m_USFaction, m_USSRState, m_USSRFaction);
 		if (m_DebugMapMarkers)
 			m_DebugMapMarkers.Sync(m_USState, m_USSRState);
 		TryLogRosterReady();
@@ -752,6 +789,8 @@ class AICF_MatchController
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
 			if (!slot || !slot.IsCombatReady())
 				continue;
+			if (m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot))
+				continue;
 
 			// The stock CaptureRelay smart-action waypoint reaches Signal Hill in the
 			// dedicated Conflict runtime, but can finish without invoking its user
@@ -811,6 +850,8 @@ class AICF_MatchController
 		AICF_GroupSlot slot = factionState.GetSlot(m_Stage2Config.GetTestDropOrderSlot());
 		if (!slot || !slot.IsCombatReady() || !slot.GetWaypoint())
 			return;
+		if (m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot))
+			return;
 
 		string oldTarget = AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase());
 		m_OrderPlanner.ClearOrder(slot);
@@ -835,6 +876,8 @@ class AICF_MatchController
 		{
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
 			if (!slot || !slot.IsCombatReady())
+				continue;
+			if (m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot))
 				continue;
 
 			// Relay waypoints complete through a stock smart action. Keep the existing
@@ -1319,7 +1362,9 @@ class AICF_MatchController
 			// A rebuilt graph is a new target-availability generation. Allow one fresh
 			// diagnostic if the new snapshot still has no legal destination.
 			slot.ResetTargetUnavailableReport();
-			if (!slot.IsCombatReady() || m_OrderPlanner.IsOrderValid(slot, faction))
+			if (!slot.IsCombatReady() ||
+				(m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot)) ||
+				m_OrderPlanner.IsOrderValid(slot, faction))
 				continue;
 
 			SCR_CampaignMilitaryBaseComponent oldTarget = slot.GetTargetBase();
@@ -1431,6 +1476,9 @@ class AICF_MatchController
 				m_iDuplicateSpawnsPrevented,
 				CountConcurrentReplacementSpawns(),
 				CountManagedAgents()));
+
+		if (m_VehicleCoordinator)
+			m_VehicleCoordinator.Heartbeat(CountManagedAgents());
 	}
 
 	protected void EvaluateVictory()
@@ -1464,7 +1512,8 @@ class AICF_MatchController
 			playerFactionValid &&
 			m_ReinforcementSystem.HasRejectedUnsafeSite() &&
 			!AICF_Stage1Diagnostics.HasErrors() &&
-			!AICF_Stage2Diagnostics.HasErrors();
+			!AICF_Stage2Diagnostics.HasErrors() &&
+			(!m_Stage3Config.GetVehiclesEnabled() || !AICF_Stage3Diagnostics.HasErrors());
 
 		AICF_Stage2Diagnostics.Info(
 			"MATCH_RELIABILITY_SUMMARY",
@@ -1650,6 +1699,12 @@ class AICF_MatchController
 		{
 			m_DebugMapMarkers.Stop();
 			m_DebugMapMarkers = null;
+		}
+
+		if (m_VehicleCoordinator)
+		{
+			m_VehicleCoordinator.Stop(cleanupEntities);
+			m_VehicleCoordinator = null;
 		}
 
 		ReleaseFactionGroups(m_USState, cleanupEntities);

@@ -24,6 +24,7 @@ class AICF_GroupSlot
 	protected SCR_CampaignMilitaryBaseComponent m_ProgressTargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_ObjectiveHoldTargetBase;
 	protected AIWaypoint m_Waypoint;
+	protected ref AICF_VehicleRuntime m_VehicleRuntime;
 
 	void AICF_GroupSlot(int slotId, AICF_EGroupRole role)
 	{
@@ -60,6 +61,24 @@ class AICF_GroupSlot
 	AIWaypoint GetWaypoint()
 	{
 		return m_Waypoint;
+	}
+
+	AICF_VehicleRuntime GetVehicleRuntime()
+	{
+		return m_VehicleRuntime;
+	}
+
+	void SetVehicleRuntime(AICF_VehicleRuntime runtime)
+	{
+		m_VehicleRuntime = runtime;
+	}
+
+	void ClearVehicleRuntime(AICF_VehicleRuntime expected = null)
+	{
+		if (expected && expected != m_VehicleRuntime)
+			return;
+
+		m_VehicleRuntime = null;
 	}
 
 	int GetReinforcementReadyAtMs()
@@ -322,6 +341,14 @@ class AICF_GroupSlot
 		m_Waypoint = null;
 	}
 
+	// Vehicle control temporarily owns the group's waypoint queue while retaining
+	// the strategic target needed to restore the infantry order after dismount.
+	void SuspendObjectiveWaypoint()
+	{
+		m_Waypoint = null;
+		ClearObjectiveHold();
+	}
+
 	bool MarkDestroyed()
 	{
 		if (m_State != AICF_EGroupSlotState.SPAWNING && m_State != AICF_EGroupSlotState.READY)
@@ -397,6 +424,7 @@ class AICF_GroupSlot
 
 	protected void ClearRuntimeReferences()
 	{
+		m_VehicleRuntime = null;
 		m_Group = null;
 		m_TargetBase = null;
 		m_Waypoint = null;

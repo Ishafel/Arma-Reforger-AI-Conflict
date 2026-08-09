@@ -325,13 +325,20 @@ class AICF_DebugMapMarkerSystem
 				task);
 		}
 		int alive = AICF_GroupRuntime.CountAliveAgents(group);
+		string vehicleState;
+		AICF_VehicleRuntime vehicleRuntime = slot.GetVehicleRuntime();
+		if (vehicleRuntime)
+			vehicleState = AICF_Stage3Diagnostics.StateToString(vehicleRuntime.GetState());
+		if (vehicleState.IsEmpty() || vehicleState == "NONE")
+			vehicleState = "ON_FOOT";
 
 		return string.Format(
-			"%1 | %2 | %3 | ALIVE %4",
+			"%1 | %2 | %3 | ALIVE %4 | VEH %5",
 			identity,
 			role,
 			task,
-			alive);
+			alive,
+			vehicleState);
 	}
 
 	protected string DescribeTask(

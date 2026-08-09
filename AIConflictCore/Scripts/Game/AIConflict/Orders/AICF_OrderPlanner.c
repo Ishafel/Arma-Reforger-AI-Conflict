@@ -147,6 +147,24 @@ class AICF_OrderPlanner
 		slot.ClearObjective();
 	}
 
+	void SuspendOrderForVehicle(AICF_GroupSlot slot)
+	{
+		if (!slot)
+			return;
+
+		SCR_AIGroup group = slot.GetGroup();
+		AIWaypoint waypoint = slot.GetWaypoint();
+		if (waypoint)
+		{
+			if (group)
+				group.RemoveWaypoint(waypoint);
+
+			RplComponent.DeleteRplEntity(waypoint, false);
+		}
+
+		slot.SuspendObjectiveWaypoint();
+	}
+
 	protected bool ReplaceOrder(
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction,
