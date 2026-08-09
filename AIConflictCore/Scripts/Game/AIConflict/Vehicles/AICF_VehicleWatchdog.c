@@ -570,6 +570,108 @@ class AICF_VehicleWatchdog
 		return false;
 	}
 
+	// Cleanup cannot rely on compartment occupancy alone. During the first part
+	// of a player GetIn animation the character is not necessarily linked to a
+	// compartment yet, so deleting the vehicle can leave the client action and
+	// animation without their target. A small authoritative protection radius is
+	// intentionally conservative: an abandoned vehicle is not worth risking a
+	// stuck player state for.
+	bool InspectProtectedCleanupUse(
+		Vehicle vehicle,
+		float playerProtectionRadiusMeters,
+		out int protectedOccupantCount,
+		out int playerTransitionCount,
+		out int nearbyPlayerCount,
+		out string samples)
+	{
+		protectedOccupantCount = 0;
+		playerTransitionCount = 0;
+		nearbyPlayerCount = 0;
+		int linkedPlayerCount;
+		int sampleCount;
+		samples = string.Empty;
+		if (!vehicle)
+		{
+			samples = "INVALID_VEHICLE";
+			return false;
+		}
+
+		BaseCompartmentManagerComponent manager = BaseCompartmentManagerComponent.Cast(
+			vehicle.FindComponent(BaseCompartmentManagerComponent));
+		if (manager)
+		{
+			array<BaseCompartmentSlot> compartments = {};
+			manager.GetCompartments(compartments);
+			foreach (BaseCompartmentSlot compartment : compartments)
+			{
+				if (!compartment)
+					continue;
+				IEntity occupant = compartment.GetOccupant();
+				if (!IsProtectedCharacter(occupant))
+					continue;
+
+				protectedOccupantCount++;
+				if (sampleCount < 8)
+				{
+					if (!samples.IsEmpty())
+						samples += ",";
+					samples += string.Format("occupant:%1", occupant.GetID());
+					sampleCount++;
+				}
+			}
+		}
+
+		PlayerManager playerManager = GetGame().GetPlayerManager();
+		if (playerManager)
+		{
+			array<int> playerIds = {};
+			playerManager.GetAllPlayers(playerIds);
+			float protectionRadiusSq = playerProtectionRadiusMeters * playerProtectionRadiusMeters;
+			foreach (int playerId : playerIds)
+			{
+				ChimeraCharacter character = ChimeraCharacter.Cast(
+					playerManager.GetPlayerControlledEntity(playerId));
+				if (!IsProtectedCharacter(character))
+					continue;
+
+				float distanceSq = vector.DistanceSqXZ(character.GetOrigin(), vehicle.GetOrigin());
+				bool nearby = distanceSq <= protectionRadiusSq;
+				bool linked = CompartmentAccessComponent.GetVehicleIn(character) == vehicle;
+				CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+				bool transition = access && (access.IsGettingIn() || access.IsGettingOut()) && (nearby || linked);
+				if (nearby)
+					nearbyPlayerCount++;
+				if (linked)
+					linkedPlayerCount++;
+				if (transition)
+					playerTransitionCount++;
+				if (!nearby && !linked && !transition)
+					continue;
+
+				if (sampleCount < 8)
+				{
+					if (!samples.IsEmpty())
+						samples += ",";
+					samples += string.Format(
+						"player:%1:entity_%2:distance_m_%3:nearby_%4:linked_%5:getting_in_%6:getting_out_%7",
+						playerId,
+						character.GetID(),
+						Math.Sqrt(distanceSq),
+						nearby,
+						linked,
+						access && access.IsGettingIn(),
+						access && access.IsGettingOut());
+					sampleCount++;
+				}
+			}
+		}
+
+		if (samples.IsEmpty())
+			samples = "NONE";
+		return protectedOccupantCount == 0 && linkedPlayerCount == 0 &&
+			playerTransitionCount == 0 && nearbyPlayerCount == 0;
+	}
+
 	protected bool IsProtectedCharacter(IEntity entity)
 	{
 		ChimeraCharacter character = ChimeraCharacter.Cast(entity);

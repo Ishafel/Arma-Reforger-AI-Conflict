@@ -3,7 +3,6 @@
 class AICF_GroupCohesionPolicy
 {
 	static const string FORMATION_NAME = "Column";
-	static const int MAX_MOVE_HANDLERS = 16;
 
 	bool Apply(SCR_AIGroup group)
 	{
@@ -20,18 +19,26 @@ class AICF_GroupCohesionPolicy
 			group.FindComponent(AIGroupMovementComponent));
 		if (movement)
 		{
-			// Zero displacement keeps all handlers attached to the group's formation.
+			// Zero displacement keeps the default handler attached to the group.
 			movement.SetFormationDisplacement(0);
-			for (int handlerId = 0; handlerId < MAX_MOVE_HANDLERS; handlerId++)
-			{
-				if (movement.GetMoveHandlerAgentCount(handlerId) == -1)
-					break;
-
-				movement.SetFormationDefinition(handlerId, FORMATION_NAME);
-			}
+			movement.SetFormationDefinition(AIGroupMovementComponent.DEFAULT_HANDLER_ID, FORMATION_NAME);
 			applied = true;
 		}
 
 		return applied;
+	}
+
+	// Boarding may create extra movement handlers for vehicle subgroups. Call
+	// this only after every protected member is verified outside the vehicle;
+	// ordinary formation refreshes must not disrupt active movement handlers.
+	bool NormalizeAfterVehicle(SCR_AIGroup group)
+	{
+		if (!group)
+			return false;
+		AIGroupMovementComponent movement = AIGroupMovementComponent.Cast(
+			group.FindComponent(AIGroupMovementComponent));
+		if (movement)
+			movement.ClearGroupMoveHandlers();
+		return Apply(group);
 	}
 }

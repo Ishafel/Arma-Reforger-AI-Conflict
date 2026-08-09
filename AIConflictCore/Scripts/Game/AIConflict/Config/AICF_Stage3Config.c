@@ -13,7 +13,11 @@ class AICF_Stage3Config
 	static const int DEFAULT_MAX_RECOVERIES = 2;
 	static const float DEFAULT_DISEMBARK_DISTANCE_METERS = 150.0;
 	static const int DEFAULT_RETRY_INTERVAL_MS = 10000;
+	static const int DEFAULT_SPAWN_MAX_ATTEMPTS = 4;
+	static const int DEFAULT_RETRY_BACKOFF_MAX_MS = 60000;
+	static const int DEFAULT_WAIT_PROBE_INTERVAL_MS = 60000;
 	static const int DEFAULT_CLEANUP_DELAY_MS = 60000;
+	static const int DEFAULT_ABANDONED_WORLD_POOL_PER_FACTION = 4;
 	static const float DEFAULT_MINIMUM_ROUTE_METERS = 400.0;
 	static const float DEFAULT_MAXIMUM_REUSE_DISTANCE_METERS = 250.0;
 	static const float DEFAULT_MAXIMUM_SPAWN_DISTANCE_METERS = 2000.0;
@@ -31,7 +35,11 @@ class AICF_Stage3Config
 	protected int m_iMaxRecoveries;
 	protected float m_fDismountDistanceMeters;
 	protected int m_iRetryIntervalMs;
+	protected int m_iSpawnMaxAttempts;
+	protected int m_iRetryBackoffMaxMs;
+	protected int m_iWaitProbeIntervalMs;
 	protected int m_iCleanupDelayMs;
+	protected int m_iAbandonedWorldPoolPerFaction;
 	protected float m_fMinimumRouteMeters;
 	protected float m_fMaximumReuseDistanceMeters;
 	protected float m_fMaximumSpawnDistanceMeters;
@@ -51,7 +59,11 @@ class AICF_Stage3Config
 		m_iMaxRecoveries = DEFAULT_MAX_RECOVERIES;
 		m_fDismountDistanceMeters = DEFAULT_DISEMBARK_DISTANCE_METERS;
 		m_iRetryIntervalMs = DEFAULT_RETRY_INTERVAL_MS;
+		m_iSpawnMaxAttempts = DEFAULT_SPAWN_MAX_ATTEMPTS;
+		m_iRetryBackoffMaxMs = DEFAULT_RETRY_BACKOFF_MAX_MS;
+		m_iWaitProbeIntervalMs = DEFAULT_WAIT_PROBE_INTERVAL_MS;
 		m_iCleanupDelayMs = DEFAULT_CLEANUP_DELAY_MS;
+		m_iAbandonedWorldPoolPerFaction = DEFAULT_ABANDONED_WORLD_POOL_PER_FACTION;
 		m_fMinimumRouteMeters = DEFAULT_MINIMUM_ROUTE_METERS;
 		m_fMaximumReuseDistanceMeters = DEFAULT_MAXIMUM_REUSE_DISTANCE_METERS;
 		m_fMaximumSpawnDistanceMeters = DEFAULT_MAXIMUM_SPAWN_DISTANCE_METERS;
@@ -72,7 +84,11 @@ class AICF_Stage3Config
 	int GetMaxRecoveries() { return m_iMaxRecoveries; }
 	float GetDismountDistanceMeters() { return m_fDismountDistanceMeters; }
 	int GetRetryIntervalMs() { return m_iRetryIntervalMs; }
+	int GetSpawnMaxAttempts() { return m_iSpawnMaxAttempts; }
+	int GetRetryBackoffMaxMs() { return m_iRetryBackoffMaxMs; }
+	int GetWaitProbeIntervalMs() { return m_iWaitProbeIntervalMs; }
 	int GetCleanupDelayMs() { return m_iCleanupDelayMs; }
+	int GetAbandonedWorldPoolPerFaction() { return m_iAbandonedWorldPoolPerFaction; }
 	float GetMinimumRouteMeters() { return m_fMinimumRouteMeters; }
 	float GetMaximumReuseDistanceMeters() { return m_fMaximumReuseDistanceMeters; }
 	float GetMaximumSpawnDistanceMeters() { return m_fMaximumSpawnDistanceMeters; }
@@ -105,8 +121,16 @@ class AICF_Stage3Config
 			m_fDismountDistanceMeters = ClampFloat(value.ToFloat(), 30.0, 500.0);
 		if (System.GetCLIParam("aicfVehicleRetryIntervalMs", value))
 			m_iRetryIntervalMs = ClampInt(value.ToInt(), 1000, 600000);
+		if (System.GetCLIParam("aicfVehicleSpawnMaxAttempts", value))
+			m_iSpawnMaxAttempts = ClampInt(value.ToInt(), 1, 10);
+		if (System.GetCLIParam("aicfVehicleRetryBackoffMaxMs", value))
+			m_iRetryBackoffMaxMs = ClampInt(value.ToInt(), 1000, 600000);
+		if (System.GetCLIParam("aicfVehicleWaitProbeIntervalMs", value))
+			m_iWaitProbeIntervalMs = ClampInt(value.ToInt(), 10000, 1800000);
 		if (System.GetCLIParam("aicfVehicleCleanupDelayMs", value))
 			m_iCleanupDelayMs = ClampInt(value.ToInt(), 0, 1800000);
+		if (System.GetCLIParam("aicfVehicleAbandonedWorldPoolPerFaction", value))
+			m_iAbandonedWorldPoolPerFaction = ClampInt(value.ToInt(), 1, 16);
 		if (System.GetCLIParam("aicfVehicleMinimumRouteMeters", value))
 			m_fMinimumRouteMeters = ClampFloat(value.ToFloat(), 100.0, 5000.0);
 		if (System.GetCLIParam("aicfVehicleMaximumReuseDistanceMeters", value))

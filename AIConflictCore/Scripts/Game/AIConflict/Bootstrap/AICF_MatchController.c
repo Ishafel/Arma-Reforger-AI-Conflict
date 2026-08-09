@@ -188,6 +188,12 @@ class AICF_MatchController
 			m_Stage3Config.GetMaximumReuseDistanceMeters(),
 			m_Stage3Config.GetMaximumSpawnDistanceMeters(),
 			m_Stage3Config.GetCohesionDistanceMeters());
+		stage3ConfigLine += string.Format(
+			" spawn_max_attempts=%1 retry_backoff_max_ms=%2 wait_probe_interval_ms=%3 abandoned_world_pool_per_faction=%4",
+			m_Stage3Config.GetSpawnMaxAttempts(),
+			m_Stage3Config.GetRetryBackoffMaxMs(),
+			m_Stage3Config.GetWaitProbeIntervalMs(),
+			m_Stage3Config.GetAbandonedWorldPoolPerFaction());
 		AICF_Stage3Diagnostics.Info("CONFIG", stage3ConfigLine);
 		if (m_Stage2Config.HasTestDropOrder())
 		{
@@ -1525,6 +1531,8 @@ class AICF_MatchController
 			AICF_Stage1Diagnostics.Warning("GRAPH_REBUILD_FAILED", "Will retry after the next commander interval");
 			return;
 		}
+		if (m_VehicleCoordinator)
+			m_VehicleCoordinator.NotifyStrategicContextChanged("BASE_GRAPH_REBUILT");
 
 		ReplanFactionAfterBaseChange(m_USState, m_USFaction);
 		ReplanFactionAfterBaseChange(m_USSRState, m_USSRFaction);

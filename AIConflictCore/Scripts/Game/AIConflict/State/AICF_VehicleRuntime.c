@@ -1,3 +1,48 @@
+// Exact per-member movement is used only while the whole fireteam approaches
+// a vehicle. A group waypoint may complete when its leader arrives even while
+// other members are still far away, so every living member owns a separately
+// tracked, bounded action instead.
+class AICF_VehicleApproachActionToken
+{
+	protected AIAgent m_Agent;
+	protected ref SCR_AIMoveIndividuallyBehavior m_Action;
+	protected int m_iRetryCount;
+	protected int m_iLastProgressAtMs;
+	protected float m_fBestDistanceMeters;
+
+	void AICF_VehicleApproachActionToken(
+		AIAgent agent,
+		SCR_AIMoveIndividuallyBehavior action,
+		float distanceMeters,
+		int retryCount = 0)
+	{
+		m_Agent = agent;
+		m_Action = action;
+		m_fBestDistanceMeters = distanceMeters;
+		m_iRetryCount = retryCount;
+		m_iLastProgressAtMs = System.GetTickCount();
+	}
+
+	AIAgent GetAgent() { return m_Agent; }
+	SCR_AIMoveIndividuallyBehavior GetAction() { return m_Action; }
+	int GetRetryCount() { return m_iRetryCount; }
+	float GetBestDistanceMeters() { return m_fBestDistanceMeters; }
+
+	bool ObserveProgress(float distanceMeters, float minimumProgressMeters)
+	{
+		if (distanceMeters < 0 || distanceMeters > m_fBestDistanceMeters - minimumProgressMeters)
+			return false;
+		m_fBestDistanceMeters = distanceMeters;
+		m_iLastProgressAtMs = System.GetTickCount();
+		return true;
+	}
+
+	int GetProgressAgeMs()
+	{
+		return System.GetTickCount(m_iLastProgressAtMs);
+	}
+}
+
 // One runtime belongs to a stable faction/slot/group-generation tuple. The
 // coordinator keeps terminal runtimes alive until their vehicle is safely
 // cleaned, which makes the per-faction vehicle cap include abandoned entities.
@@ -27,6 +72,13 @@ class AICF_VehicleRuntime
 	protected bool m_bBoardingGraceEvaluated;
 	protected bool m_bBoardingGraceGranted;
 	protected int m_iNextAttemptAtMs;
+	protected int m_iRequestGeneration = 1;
+	protected int m_iSpawnAttempt;
+	protected int m_iTotalSpawnAttempts;
+	protected int m_iObservedBaseRevision;
+	protected int m_iRequestStartedAtMs;
+	protected int m_iLastWaitReportAtMs;
+	protected string m_sLastSpawnFailureReason;
 	protected int m_iLastProgressAtMs;
 	protected int m_iLastMotionAtMs;
 	protected int m_iLastMotionReportAtMs;
@@ -56,6 +108,10 @@ class AICF_VehicleRuntime
 	protected int m_iLastVehicleDeleteAttemptAtMs;
 	protected int m_iVehicleDeleteAttempts;
 	protected bool m_bVehicleDeleteFailureReported;
+	protected bool m_bWorldPoolRetirementRequested;
+	protected int m_iWorldPoolReleasedAtMs;
+	protected int m_iCleanupClearStartedAtMs;
+	protected int m_iLastCleanupDeferredReportAtMs;
 	protected string m_sLastSpawnIssueReportKey;
 	protected string m_sTerminalReason;
 	protected string m_sVehicleDeleteEntityId;
@@ -73,6 +129,7 @@ class AICF_VehicleRuntime
 	protected IEntity m_LastGunner;
 	protected AIAgent m_CrewRecoveryAgent;
 	protected ref SCR_AIGetInVehicle m_CrewRecoveryAction;
+	protected ref array<ref AICF_VehicleApproachActionToken> m_aBoardingApproachActions = {};
 
 	void AICF_VehicleRuntime(
 		FactionKey factionKey,
@@ -85,6 +142,7 @@ class AICF_VehicleRuntime
 		m_iGroupGeneration = groupGeneration;
 		m_Kind = kind;
 		m_iVehicleGeneration = 1;
+		m_iRequestStartedAtMs = System.GetTickCount();
 		SetState(AICF_EVehicleState.REQUESTED);
 	}
 
@@ -110,6 +168,12 @@ class AICF_VehicleRuntime
 	bool IsBoardingGunnerPhasePlanned() { return m_bBoardingGunnerPhasePlanned; }
 	bool IsBoardingGraceGranted() { return m_bBoardingGraceGranted; }
 	int GetNextAttemptAtMs() { return m_iNextAttemptAtMs; }
+	int GetRequestGeneration() { return m_iRequestGeneration; }
+	int GetSpawnAttempt() { return m_iSpawnAttempt; }
+	int GetTotalSpawnAttempts() { return m_iTotalSpawnAttempts; }
+	int GetObservedBaseRevision() { return m_iObservedBaseRevision; }
+	int GetRequestAgeMs() { return System.GetTickCount(m_iRequestStartedAtMs); }
+	string GetLastSpawnFailureReason() { return m_sLastSpawnFailureReason; }
 	int GetRecoveryCount() { return m_iRecoveryCount; }
 	int GetCleanupAtMs() { return m_iCleanupAtMs; }
 	ResourceName GetVehiclePrefab() { return m_VehiclePrefab; }
@@ -123,6 +187,13 @@ class AICF_VehicleRuntime
 	IEntity GetLastGunner() { return m_LastGunner; }
 	AIAgent GetCrewRecoveryAgent() { return m_CrewRecoveryAgent; }
 	SCR_AIGetInVehicle GetCrewRecoveryAction() { return m_CrewRecoveryAction; }
+	int GetBoardingApproachActionCount() { return m_aBoardingApproachActions.Count(); }
+	AICF_VehicleApproachActionToken GetBoardingApproachAction(int index)
+	{
+		if (!m_aBoardingApproachActions.IsIndexValid(index))
+			return null;
+		return m_aBoardingApproachActions[index];
+	}
 	bool HasCompletedTrip() { return m_bCompletedTrip; }
 	bool IsRecoveringDriver() { return m_CrewRecoveryPhase == AICF_EVehicleCrewRecoveryPhase.DRIVER; }
 	bool HasPendingRouteRecovery() { return m_bRouteRecoveryPending; }
@@ -140,6 +211,13 @@ class AICF_VehicleRuntime
 	string GetVehicleDeleteRplId() { return m_sVehicleDeleteRplId; }
 	vector GetVehicleDeleteOrigin() { return m_vVehicleDeleteOrigin; }
 	string GetTerminalReason() { return m_sTerminalReason; }
+	bool IsWorldPoolRetirementRequested() { return m_bWorldPoolRetirementRequested; }
+	int GetWorldPoolAgeMs()
+	{
+		if (m_iWorldPoolReleasedAtMs <= 0)
+			return 0;
+		return System.GetTickCount(m_iWorldPoolReleasedAtMs);
+	}
 
 	void SetGroup(SCR_AIGroup group)
 	{
@@ -175,6 +253,47 @@ class AICF_VehicleRuntime
 		m_iNextAttemptAtMs = timestamp;
 	}
 
+	int RecordSpawnAttempt()
+	{
+		m_iSpawnAttempt++;
+		m_iTotalSpawnAttempts++;
+		return m_iSpawnAttempt;
+	}
+
+	void RecordSpawnFailure(string reason)
+	{
+		m_sLastSpawnFailureReason = reason;
+	}
+
+	void ResetSpawnRequestContext(
+		SCR_CampaignMilitaryBaseComponent target,
+		int baseRevision)
+	{
+		m_iRequestGeneration++;
+		m_iSpawnAttempt = 0;
+		m_iObservedBaseRevision = baseRevision;
+		m_iRequestStartedAtMs = System.GetTickCount();
+		m_iLastWaitReportAtMs = 0;
+		m_sLastSpawnFailureReason = string.Empty;
+		m_iNextAttemptAtMs = 0;
+		ClearSpawnIssueReport();
+		SetTargetBase(target);
+		SetState(AICF_EVehicleState.REQUESTED);
+	}
+
+	void SetObservedBaseRevision(int baseRevision)
+	{
+		m_iObservedBaseRevision = baseRevision;
+	}
+
+	bool MarkWaitReportDue(int intervalMs)
+	{
+		if (m_iLastWaitReportAtMs > 0 && System.GetTickCount(m_iLastWaitReportAtMs) < intervalMs)
+			return false;
+		m_iLastWaitReportAtMs = System.GetTickCount();
+		return true;
+	}
+
 	bool MarkCapBlockedReported()
 	{
 		if (m_bCapBlockedReported)
@@ -208,6 +327,7 @@ class AICF_VehicleRuntime
 		if (!vehicle || !usage || prefab.IsEmpty() || !spawnBase)
 			return false;
 
+		CancelBoardingApproachActions();
 		m_Vehicle = vehicle;
 		m_VehicleUsage = usage;
 		m_VehiclePrefab = prefab;
@@ -321,6 +441,55 @@ class AICF_VehicleRuntime
 	{
 		m_CrewRecoveryAgent = null;
 		m_CrewRecoveryAction = null;
+	}
+
+	AICF_VehicleApproachActionToken FindBoardingApproachAction(AIAgent agent)
+	{
+		foreach (AICF_VehicleApproachActionToken token : m_aBoardingApproachActions)
+		{
+			if (token && token.GetAgent() == agent)
+				return token;
+		}
+		return null;
+	}
+
+	void TrackBoardingApproachAction(
+		AIAgent agent,
+		SCR_AIMoveIndividuallyBehavior action,
+		float distanceMeters,
+		int retryCount = 0)
+	{
+		if (!agent || !action)
+			return;
+		m_aBoardingApproachActions.Insert(new AICF_VehicleApproachActionToken(
+			agent,
+			action,
+			distanceMeters,
+			retryCount));
+	}
+
+	void RemoveBoardingApproachAction(AICF_VehicleApproachActionToken expected)
+	{
+		if (!expected)
+			return;
+		m_aBoardingApproachActions.RemoveItem(expected);
+	}
+
+	int CancelBoardingApproachActions()
+	{
+		int cancelled;
+		foreach (AICF_VehicleApproachActionToken token : m_aBoardingApproachActions)
+		{
+			if (!token || !token.GetAction())
+				continue;
+			EAIActionState state = token.GetAction().GetActionState();
+			if (state == EAIActionState.COMPLETED || state == EAIActionState.FAILED)
+				continue;
+			token.GetAction().Fail();
+			cancelled++;
+		}
+		m_aBoardingApproachActions.Clear();
+		return cancelled;
 	}
 
 	void RestartPhaseDeadline()
@@ -460,6 +629,7 @@ class AICF_VehicleRuntime
 
 	void BeginReuse(int groupGeneration, SCR_CampaignMilitaryBaseComponent target)
 	{
+		CancelBoardingApproachActions();
 		m_iGroupGeneration = groupGeneration;
 		m_iVehicleGeneration++;
 		m_TargetBase = target;
@@ -788,6 +958,50 @@ class AICF_VehicleRuntime
 	{
 		if (m_iCleanupAtMs <= 0 || cleanupAtMs < m_iCleanupAtMs)
 			m_iCleanupAtMs = cleanupAtMs;
+	}
+
+	void MarkReleasedToWorldPool()
+	{
+		m_iWorldPoolReleasedAtMs = System.GetTickCount();
+		m_bWorldPoolRetirementRequested = false;
+		m_iCleanupClearStartedAtMs = 0;
+		m_iLastCleanupDeferredReportAtMs = 0;
+	}
+
+	void RequestWorldPoolRetirement()
+	{
+		if (!m_bWorldPoolRetirementRequested)
+			m_iCleanupClearStartedAtMs = 0;
+		m_bWorldPoolRetirementRequested = true;
+	}
+
+	void ClearWorldPoolRetirementRequest()
+	{
+		m_bWorldPoolRetirementRequested = false;
+		m_iCleanupClearStartedAtMs = 0;
+	}
+
+	int ObserveCleanupClear(bool safelyClear)
+	{
+		if (!safelyClear)
+		{
+			m_iCleanupClearStartedAtMs = 0;
+			return 0;
+		}
+		if (m_iCleanupClearStartedAtMs <= 0)
+			m_iCleanupClearStartedAtMs = System.GetTickCount();
+		return System.GetTickCount(m_iCleanupClearStartedAtMs);
+	}
+
+	bool MarkCleanupDeferredReportDue(int intervalMs)
+	{
+		if (m_iLastCleanupDeferredReportAtMs > 0 &&
+			System.GetTickCount(m_iLastCleanupDeferredReportAtMs) < intervalMs)
+		{
+			return false;
+		}
+		m_iLastCleanupDeferredReportAtMs = System.GetTickCount();
+		return true;
 	}
 
 	string GetVehicleId()

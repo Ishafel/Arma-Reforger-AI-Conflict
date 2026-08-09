@@ -24,7 +24,7 @@ Stage 3 принимается отдельно от пехотных Stage 1/2.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage3Static.ps1
 ```
 
-6. Любая script/resource/dependency error означает `BLOCKED`.
+6. Любая AICF script/resource/dependency error означает `BLOCKED`. Stock/versioned error не считается AICF-дефектом автоматически, но сохраняется в отчёте, классифицируется по symbol/stack/resource context и не может быть молча исключён из acceptance evidence.
 7. Каждый runtime-прогон использует новый `-profile` и `-backendFreshSession`.
 8. Сервер и клиент должны быть Diag-версии одной сборки. Retail и Diag не смешивать.
 
@@ -43,8 +43,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage3Stati
 | `aicfVehicleObjectiveProgressTimeoutMs` | `300000` | Независимый deadline отсутствия чистого progress к route endpoint |
 | `aicfVehicleMaxRecoveries` | `2` | Общий budget смен экипажа и перестроений маршрута на поездку |
 | `aicfVehicleDismountDistanceMeters` | `150` | Плановая дистанция высадки до тактического capture point, а не до road endpoint |
-| `aicfVehicleRetryIntervalMs` | `10000` | Повтор после временно недоступного safe spawn |
-| `aicfVehicleCleanupDelayMs` | `60000` | Grace-период abandoned/destroyed entity до удаления; пустая terminal-машина старого generation может быть очищена раньше ради готовой replacement-группы |
+| `aicfVehicleRetryIntervalMs` | `10000` | Базовый интервал retryable safe-spawn запроса |
+| `aicfVehicleSpawnMaxAttempts` | `4` | Число retryable spawn-attempt до перехода в cap-free `WAITING_FOR_SITE` |
+| `aicfVehicleRetryBackoffMaxMs` | `60000` | Верхняя граница экспоненциального backoff между попытками |
+| `aicfVehicleWaitProbeIntervalMs` | `60000` | Период полного site preflight в `WAITING_FOR_SITE`; target/base-context change будит запрос раньше |
+| `aicfVehicleCleanupDelayMs` | `60000` | Grace-период destroyed/unusable entity до protected cleanup |
+| `aicfVehicleAbandonedWorldPoolPerFaction` | `4` | Safety-first soft target исправных abandoned-машин стороны вне active AI cap; pool может временно превышать его, пока player/interaction/proximity gate запрещает retirement |
 | `aicfVehicleMinimumRouteMeters` | `400` | Короткий маршрут выполняется пешком без машины |
 | `aicfVehicleMaximumReuseDistanceMeters` | `250` | Максимальная дистанция группы до оставленной машины для reuse |
 | `aicfVehicleMaximumSpawnDistanceMeters` | `2000` | Максимальная дистанция safe friendly-базы от назначенной группы |
@@ -121,8 +125,8 @@ Get-Content -LiteralPath $log.FullName -Wait |
 2. Перед spawn есть `VEHICLE_SPAWN_SITE_SELECTED` с friendly owner и `contested=0`.
 3. Создан ровно один transport на сторону; prefab и entity указаны в `VEHICLE_SPAWNED`.
 4. До выдачи GetIn измеряются все живые члены группы. `leader_m`, `nearest_m`, `farthest_m` и `member_samples` относятся к authoritative server positions; если `farthest_m > aicfVehicleMaximumReuseDistanceMeters`, ожидается `BOARDING_REJECTED reason=VEHICLE_TOO_FAR` и ни один GetIn/action не выдаётся.
-5. Если `farthest_m > 75`, сначала выдаётся `BOARDING_PHASE_STARTED phase=APPROACH allowance=MOVE_ONLY_NO_VEHICLE_UTILITY`: машина не подключена к group utility, GetIn отсутствует, вся группа идёт одним обычным Move-waypoint к машине. Waypoint должен присутствовать в queue сразу и стать current не позднее 5 секунд; иначе ожидается `BOARDING_APPROACH_LOST` и bounded fallback. Exact-role фаза разрешена только после `BOARDING_APPROACH_COMPLETE ... farthest_m<=75`.
-6. Если `farthest_m <= 75`, `APPROACH` не создаётся. В отдельном near-threshold сценарии проверить точки немного ниже и выше 75 м: первая сразу начинает role chain, вторая обязательно проходит MOVE-only staging без snap/teleport.
+5. Если `farthest_m > 75`, сначала выдаётся `BOARDING_PHASE_STARTED phase=APPROACH allowance=MOVE_ONLY_NO_VEHICLE_UTILITY`: машина не подключена к group utility, GetIn и group Move-waypoint отсутствуют. Каждый удалённый живой участник получает отдельный MOVE-only action к фактической машине с радиусом не больше 70 м; authoritative distance/progress отслеживается отдельно по member. При terminal action или 15 с без сокращения минимум на 2 м action переиздаётся ровно один раз; следующий stall даёт `BOARDING_APPROACH_MEMBER_STALLED`, acceptance failure и bounded fallback.
+6. Если `farthest_m <= 75`, `APPROACH` не создаётся. В отдельном near-threshold сценарии проверить точки немного ниже и выше 75 м: первая сразу начинает role chain, вторая обязательно проходит per-member staging без snap/teleport. `BOARDING_APPROACH_COMPLETE ... farthest_m<=75` требует два последовательных settled poll всей группы.
 7. До exact `DRIVER` и повторно после завершения `APPROACH` синхронно нормализуется любой `mounted>0 && driver=0`: ограниченная цепочка `BOARDING_ROLE_RESET → BOARDING_ROLE_RETRY` либо `BOARDING_ROLE_VIOLATION → INFANTRY_FALLBACK`, но не продолжение посадки с неверным occupant.
 8. Посадка проходит строго `DRIVER → optional GUNNER → PASSENGERS`: exact Pilot/Turret actions резервируют конкретные места; passenger `CARGO_ONLY` waypoint и group utility появляются лишь после settled обязательного crew.
 9. План фиксируется один раз в `BOARDING_STARTED` и содержит только реально нужные фазы: обязательную `PASSENGERS`, при необходимости `APPROACH`, `DRIVER` и для armed-light `GUNNER`; максимум 3 фазы для transport и 4 для armed-light. Каждая фаза получает soft timeout, immutable total равен `planned_phases × timeout`.
@@ -190,12 +194,12 @@ Game Master/teleport не является доказательством нор
 ## Прогон L — лимиты, reuse и cleanup
 
 1. Запустить с двумя requested vehicle-slots, но `aicfMaxVehiclesPerFaction=1`.
-2. До cleanup на стороне существует не более одной active/reserved/abandoned машины.
+2. До cleanup на стороне существует не более одной active/reserved AI-машины; исправные released abandoned-машины считаются отдельно в faction world pool с default soft target 4.
 3. Заблокированный slot пишет `VEHICLE_CAP_BLOCKED` один раз, а не каждый tick.
 4. После dismount близкая группа может повторно использовать ту же машину; `vehicle_generation` увеличивается, новая entity не создаётся.
-5. Далёкая, уничтоженная или небезопасная машина получает `VEHICLE_ABANDONED/DESTROYED`, затем `VEHICLE_CLEANUP`.
-6. Cleanup не вызывает `DeleteRplEntity` при любом protected occupant (`ALIVE` или `INCAPACITATED`) в любом compartment, включая foreign group/faction. Forced exit разрешён только для `ALIVE` членов managed-группы; `INCAPACITATED` и foreign не выталкиваются. После выхода/смерти всех protected occupants cleanup завершается и cap снова доступен.
-7. Если terminal runtime уже не принадлежит текущей группе, `slot.GetSpawnGeneration()` вырос и replacement-группа действительно готова начать vehicle trip, пустая старая машина может быть удалена до обычного grace-периода. Ожидается `VEHICLE_CLEANUP reason=REPLACEMENT_CAPACITY_REQUIRED`. Cooldown хранит owner generation: новое поколение отбрасывает timestamp старого до eligibility-check. На expedited path пара timestamp/generation сбрасывается только после protected-occupant gate, фактического удаления и identity-safe очистки runtime; наличие protected occupant запрещает раннее удаление.
+5. Исправная abandoned-машина получает `VEHICLE_WORLD_POOL_RELEASED ... ai_cap_reserved=0 player_available=1`, теряет managed group/runtime ownership, остаётся в мире и не блокирует новую AI trip.
+6. Destroyed/on-fire/overturned/неподвижная либо выбранная для pool retirement машина удаляется только после отсутствия любого protected occupant, target-scoped player transition и живого игрока в радиусе 15 м в течение непрерывных 5 с. Непосредственно перед `DeleteRplEntity` выполняется повторный scan; blocker сбрасывает всё stable-clear окно и диагностируется через `VEHICLE_CLEANUP_DEFERRED`.
+7. Заполнить world pool до 4 исправных машин стороны и освободить пятую. Пятая всегда немедленно выходит из active AI cap и остаётся в мире; координатор помечает/ищет oldest-safe retirement. При занятой игроком, transition или proximity-защищённой машине pool временно превышает target, а не выполняет небезопасный delete. После освобождения gate oldest entry удаляется безопасно и размер возвращается к target.
 8. В логе нет двух `VEHICLE_SPAWNED` с одной парой `faction/slot/group_generation/vehicle_generation`.
 9. За 30 минут число vehicle entities и waypoint не растёт монотонно после завершённых cleanup-циклов.
 
@@ -226,12 +230,14 @@ CONFIG
 VEHICLE_STATE_CHANGED
 VEHICLE_REQUESTED
 VEHICLE_SPAWN_SITE_SELECTED / VEHICLE_SPAWN_SITE_REJECTED / VEHICLE_SPAWN_DEFERRED
+VEHICLE_REQUEST_WAITING / VEHICLE_SPAWN_WAIT_HEARTBEAT
+VEHICLE_REQUEST_RESUMED / VEHICLE_REQUEST_CONTEXT_CHANGED
 VEHICLE_SPAWNED
 VEHICLE_ASSIGNED
 DRIVER_ASSIGNED / GUNNER_ASSIGNED
 PASSENGERS_ASSIGNED
 BOARDING_STARTED / BOARDING_REJECTED / BOARDING_PHASE_STARTED
-BOARDING_APPROACH_COMPLETE / BOARDING_APPROACH_LOST / BOARDING_PROGRESS
+BOARDING_APPROACH_COMPLETE / BOARDING_APPROACH_REISSUED / BOARDING_APPROACH_MEMBER_STALLED / BOARDING_PROGRESS
 BOARDING_TRANSITION_GRACE / BOARDING_COMPLETE / BOARDING_TIMEOUT
 BOARDING_ROLE_RESET / BOARDING_ROLE_RETRY / BOARDING_ROLE_VIOLATION
 VEHICLE_ROUTE_ASSIGNED / VEHICLE_PROGRESS / VEHICLE_MOTION
@@ -242,8 +248,11 @@ DRIVER_LOST / DRIVER_REASSIGNED / GUNNER_LOST / GUNNER_REASSIGNED
 DISEMBARK_CLEARANCE_RECOVERY
 FALLBACK_FORCE_DISEMBARK / FALLBACK_DISEMBARK_FAILED
 VEHICLE_ABANDONED / VEHICLE_DESTROYED
+VEHICLE_WORLD_POOL_RELEASED / VEHICLE_WORLD_POOL_SOFT_OVERFLOW
+VEHICLE_CLEANUP_DEFERRED
 VEHICLE_DELETE_REQUESTED / VEHICLE_DELETE_RETRIED / VEHICLE_DELETE_NOT_CONFIRMED
 VEHICLE_CLEANUP_CONFIRMED / VEHICLE_CLEANUP
+VEHICLE_STOP_CLEANUP_STARTED / VEHICLE_STOP_CLEANUP_CONFIRMED / VEHICLE_STOP_CLEANUP_RETAINED
 INFANTRY_FALLBACK
 VEHICLE_CAP_BLOCKED
 HEARTBEAT
@@ -252,15 +261,15 @@ RESULT_CANDIDATE / ACCEPTANCE_FAILURE_LATCHED / RESULT
 
 Повторяющийся warning с одинаковыми faction/slot/generations/reason каждый tick является дефектом, даже если поездка позднее завершилась.
 
-`BOARDING_STARTED` фиксирует `phase_timeout_ms`, immutable `planned_phases`/`total_timeout_ms`, leader-distance, `nearest_m`, `farthest_m`, прерванные старые actions и per-member samples. План содержит обязательную `PASSENGERS` и только реально нужные `APPROACH`, `DRIVER`, optional `GUNNER`: максимум 3 фазы transport и 4 armed-light. Если `farthest_m > 75`, сначала создаётся обычный Move-waypoint `APPROACH` без vehicle utility/GetIn; он должен оставаться в queue и стать current в пределах 5 секунд. Driver и gunner затем получают точные `SCR_AIGetInVehicle` action на заранее зарезервированный Pilot/Turret slot; переход роли подтверждается только после физического settled-state. Машина подключается к group utility и получает `CARGO_ONLY` лишь после settled полного обязательного crew.
+`BOARDING_STARTED` фиксирует `phase_timeout_ms`, immutable `planned_phases`/`total_timeout_ms`, leader-distance, `nearest_m`, `farthest_m`, прерванные старые actions и per-member samples. План содержит обязательную `PASSENGERS` и только реально нужные `APPROACH`, `DRIVER`, optional `GUNNER`: максимум 3 фазы transport и 4 armed-light. Если `farthest_m > 75`, для каждого удалённого живого участника создаётся собственный MOVE-only action к фактической машине с радиусом не больше 70 м, без group Move-waypoint, vehicle utility и GetIn. Per-member progress составляет минимум 2 м; после 15 с stall action переиздаётся не более одного раза. Driver и gunner затем получают точные `SCR_AIGetInVehicle` action на заранее зарезервированный Pilot/Turret slot; переход роли подтверждается только после физического settled-state. Машина подключается к group utility и получает `CARGO_ONLY` лишь после settled полного обязательного crew.
 
 Каждая начатая фаза имеет soft deadline, общий clock не сбрасывается. На всю boarding-попытку допускается ровно одна `BOARDING_TRANSITION_GRACE` длительностью 10 секунд только при target-scoped `getting_in` или свежем физическом progress; phase/total hard cap остаётся абсолютным. `BOARDING_TIMEOUT` обязан содержать текущую фазу, точную причину, число живых/посаженных, состояние driver/gunner, `planned_phases`, phase/total age, `deadline_scope`, physical maxima, waypoint state и per-member samples. `BOARDING_COMPLETE` требует двух подряд settled poll всех живых членов именно в этой машине.
 
 До `SpawnEntityPrefabEx` spawner детерминированно обходит все safe friendly base по расстоянию и ключу. Для каждого кандидата до создания проверяются максимальная spawn-дистанция, точный empty-terrain site и расстояние всех живых бойцов до этого site. Entity создаётся только для полностью допустимого кандидата; отсутствие живых бойцов даёт retryable `GROUP_NOT_READY` без spawn.
 
-Обычная посадка AICF не вызывает teleport-in: `APPROACH` использует только Move-waypoint, обязательные роли — штатный exact-role action, пассажиры — stock `SCR_BoardingWaypoint` с `CARGO_ONLY`. Teleport API используется только наружу при bounded physical-clearance recovery/forced exit. В T8/A2 отсутствие snap должно подтверждаться последовательными authoritative `member_samples`/`BOARDING_PROGRESS` и видео клиента, а не только конечным occupant-state.
+Обычная посадка AICF не вызывает teleport-in: `APPROACH` использует только per-member move actions, обязательные роли — штатный exact-role action, пассажиры — stock `SCR_BoardingWaypoint` с `CARGO_ONLY`. Teleport API используется только наружу при bounded physical-clearance recovery/forced exit. В T9/A2 отсутствие snap должно подтверждаться последовательными authoritative `member_samples`/`BOARDING_PROGRESS` и видео клиента, а не только конечным occupant-state.
 
-`SAFE_REUSE` перед новой role-ordered посадкой освобождает старые compartment reservations и прерывает vehicle action queue всех живых managed members. Состояние `mounted > 0 && driver=0` нормализуется синхронно до первой exact-role action и повторно сразу после `APPROACH`: старый waypoint удаляется, живые managed occupants высаживаются, затем exact `DRIVER` выдаётся повторно. Повторное нарушение или истечение reset deadline даёт `BOARDING_ROLE_VIOLATION`, acceptance failure и пеший fallback.
+`SAFE_REUSE` перед новой role-ordered посадкой освобождает старые compartment reservations и прерывает vehicle action queue всех живых managed members. Состояние `mounted > 0 && driver=0` нормализуется синхронно до первой exact-role action и повторно сразу после `APPROACH`: per-member actions очищаются, живые managed occupants высаживаются, затем exact `DRIVER` выдаётся повторно. Повторное нарушение или истечение reset deadline даёт `BOARDING_ROLE_VIOLATION`, acceptance failure и пеший fallback.
 
 `DISEMBARK_REISSUED` означает одноразовую очистку stale vehicle actions/waypoint и повторную выдачу штатного GetOut на половине `aicfVehicleBoardingTimeoutMs`. Завершение требует двух последовательных чистых poll: отсутствуют logical vehicle/compartment link и get-in/get-out transition, а персонаж находится вне ориентированных bounds машины. Логически вышедший, но физически оставшийся внутри bounds живой managed member получает ограниченное relocation наружу (`DISEMBARK_CLEARANCE_RECOVERY`). Если к полному deadline clearance не подтверждён, `DISEMBARK_TIMEOUT` фиксирует `logical/transitions/inside_bounds`, защёлкивает acceptance failure и только затем запускает fallback.
 
@@ -270,7 +279,13 @@ Crew recovery резервирует конкретный role slot и синх�
 
 Если к hard deadline protected member текущей группы всё ещё внутри, один `FALLBACK_DISEMBARK_FAILED` дополняет исходную terminal cause, runtime конечным образом переходит в `ABANDONED`, записывает slot terminal failure/suppression и выставляет infantry restore pending. Пехотный приказ восстанавливается только после `AreAllProtectedMembersOutOfVehicle()` для текущего group generation. Cleanup отдельно сканирует все compartments: любой `ALIVE`/`INCAPACITATED`, включая foreign occupant, блокирует `DeleteRplEntity`; hard failure не зацикливается и не удаляет защищённого персонажа вместе с машиной.
 
-Cleanup не освобождает runtime/cap в tick delete-запроса. `VEHICLE_DELETE_REQUESTED` сохраняет `entity_id`, `rpl_id`, origin и attempt; authority ограниченно повторяет удаление, а `VEHICLE_CLEANUP_CONFIRMED` появляется только после того, как тот же `EntityID` больше не разрешается. Через 10 секунд живой authority entity даёт `VEHICLE_DELETE_NOT_CONFIRMED` и acceptance failure. Это не client acknowledgement: возможный визуальный despawn desync должен быть проверен в Armed A2 по тем же `EntityID`/`RplId`.
+Исправная abandoned-машина всегда немедленно снимается с managed runtime и active AI cap через `VEHICLE_WORLD_POOL_RELEASED`, остаётся доступной игрокам и учитывается в отдельном faction world pool. Default 4 — soft target: при превышении `VEHICLE_WORLD_POOL_SOFT_OVERFLOW` фиксирует `pool_size`, `pool_limit`, `retirement_candidates` и `policy=PLAYER_SAFE_DEFERRED_RETIREMENT`; координатор помечает/ищет oldest-safe retirement, но pool временно остаётся больше target при player/interaction/proximity blocker. Destructive cleanup предназначен только для unusable или явно retired entity и никогда не имеет приоритет над safety gate.
+
+Перед любым delete watchdog сканирует все compartments, target-scoped get-in/get-out transitions и живых игроков, связанных с машиной или находящихся в 15 м. Любой blocker обнуляет stable-clear clock и может дать `VEHICLE_CLEANUP_DEFERRED`; destructive call разрешён только после 5 с непрерывного clear и повторного scan непосредственно перед удалением. Затем `VEHICLE_DELETE_REQUESTED` сохраняет `entity_id`, `rpl_id`, origin и attempt; authority ограниченно повторяет удаление, а `VEHICLE_CLEANUP_CONFIRMED` появляется только после того, как тот же `EntityID` больше не разрешается. Это не client acknowledgement: возможный визуальный despawn desync должен быть проверен в Armed A2 по тем же `EntityID`/`RplId`.
+
+При `Stop(cleanupEntities=true)` runtime не удаляются синхронно: coordinator переносит их в deferred очередь и запускает one-shot poll раз в секунду, перепланируя его только пока очередь не пуста. На получение тех же 15 м/5 с safety-условий отведено 60 с; далее используются прежние `EntityID`/`RplId` guard, bounded retry и authority confirmation. `VEHICLE_STOP_CLEANUP_CONFIRMED` означает подтверждённое исчезновение. Identity mismatch, delete без confirmation или отсутствие stable-clear к deadline дают `VEHICLE_STOP_CLEANUP_RETAINED ... action=FAIL_CLOSED`: машина остаётся в мире.
+
+После подтверждённой высадки, fallback и guarded physical-clearance path `NormalizeAfterVehicle` очищает временные group move handlers и повторно применяет stock `Column`/default handler до восстановления пехотного приказа. Это предотвращает post-vehicle зависание группы и не телепортирует бойцов.
 
 Пехотный order recovery пишет `ORDER_RECOVERY_ISSUED`, а `ORDER_RECOVERED` — только после трёх наблюдений, где exact тот же waypoint одновременно остаётся current и присутствует в queue, и не раньше `max(10 с, 2 × reliability interval)`. `ORDER_RECOVERY_STABILITY` фиксирует число poll, длительность, queue/current context и решение durability; нестабильный кандидат расходует bounded stuck budget и в пределе вызывает recycle вместо бесконечного повтора каждые 5 секунд.
 
@@ -280,37 +295,39 @@ Recovery после `NO_PHYSICAL_MOVEMENT` может завершиться ф�
 
 ## Текущая матрица приёмки
 
-Матрица отражает последний runtime (Transport T7, Armed A1) и post‑T7-кандидат. Исторические T1–T6 не являются актуальным доказательством и ниже не разворачиваются.
+Матрица отражает исторические Transport T8/Armed A1 и статус post-T8-патча. Исторические T1–T6 не являются актуальным доказательством и ниже не разворачиваются. Static/Workbench evidence относится к текущему post-T8 snapshot; runtime-строки остаются историческими или `NOT RUN` до T9/A2.
 
 | Проверка | Transport | Armed | Что требуется дальше |
 |---|:---:|:---:|---|
-| Workbench 1.7 validation / static audit | PASS | PASS | Повторять на точном commit перед runtime |
+| Workbench 1.7 validation / static audit post-T8 | PASS | PASS | 5 конфигураций, CRC32 `013129aa`, `SCRIPT (E/F)=0`; это не runtime PASS |
 | Safe spawn, faction и configured cap | PASS | PARTIAL | A2: подтвердить вооружённые машины обеих сторон и cap fault |
-| Строгий DRIVER → cargo | FAIL | FAIL | T8/A2: ни одного compartment до exact driver |
+| Строгий DRIVER → cargo | PASS | FAIL | T9/A2: ни одного compartment до exact driver, включая SAFE_REUSE |
 | Строгий DRIVER → GUNNER → cargo | N/A | FAIL | A2: обе роли settled до passenger phase |
-| Полная посадка всех живых | FAIL | FAIL | T8/A2: new vehicle и SAFE_REUSE у US/USSR |
+| Полная посадка всех живых | PASS | FAIL | T9/A2: new vehicle и SAFE_REUSE у US/USSR без stalled approach |
 | Движение и route progress | PASS | PARTIAL | Подтвердить после новой посадки без remote snap |
-| Высадка и восстановление приказа | PARTIAL | NOT RUN | T8: два stable-clear poll и продолжение пехотой |
+| Высадка и восстановление приказа | PASS | NOT RUN | T9: `NormalizeAfterVehicle`, продолжение пехотой и owner change |
 | Пехотный захват после высадки | NOT RUN | NOT RUN | Наблюдать owner change после штатной высадки |
-| Bounded boarding/recovery/fallback | PASS | FAIL | Fault-run без churn и преждевременного recovery |
+| Bounded boarding/recovery/fallback | FAIL | FAIL | Per-member stall/timeout fault без churn и преждевременного recovery |
 | Reuse и vehicle generation | FAIL | FAIL | Повторное использование без нарушения ролей |
-| Cleanup / authority delete | PARTIAL | PARTIAL | A2: сопоставить server/client EntityID и RplId |
+| Retry → WAITING_FOR_SITE → wake | FAIL | N/A | T9: 4 attempts, backoff, cap-free wait, probe и context wake |
+| Functional abandoned world pool | NOT RUN | NOT RUN | Soft target 4, player available, безопасный overflow и oldest-safe retirement |
+| Cleanup / authority delete | FAIL | PARTIAL | T9/A2: player/transition gate 15 м + 5 с stable clear; сопоставить ID |
 | Stuck/recovery и order durability | PARTIAL | PARTIAL | Отдельный fault-run, три stable poll и ≥10 с |
-| 30 минут без роста сущностей/ошибок | NOT RUN | NOT RUN | После T8/A2 |
+| 30 минут без роста сущностей/ошибок | NOT RUN | NOT RUN | После T9/A2 |
 | Полные server/client доказательства | PASS | PARTIAL | Для A2 обязателен клиентский despawn probe |
 
 ### Архив T1–T6
 
-Подробные журналы, команды, профили, временные срезы и пути к артефактам T1–T6 удалены как неактуальные. Все шесть прогонов исторически завершились FAIL. Они последовательно выявили уже закрытые или заменённые классы дефектов: faction-init mismatch и warning churn, ложный immobility, abandoned-spam, захват пассажирского места до водителя, общий deadline фаз, преждевременный RESULT PASS и ложный dismount completion. Для текущей приёмки источниками истины являются T7, Armed A1 и следующие T8/A2.
+Подробные журналы, команды, профили, временные срезы и пути к артефактам T1–T6 удалены как неактуальные. Все шесть прогонов исторически завершились FAIL. Они последовательно выявили уже закрытые или заменённые классы дефектов: faction-init mismatch и warning churn, ложный immobility, abandoned-spam, захват пассажирского места до водителя, общий deadline фаз, преждевременный RESULT PASS и ложный dismount completion. Для текущей приёмки источниками истины являются исторические T7/T8, Armed A1 и следующий post-T8 T9/A2.
 
-### Transport T7 — актуальный runtime FAIL
+### Transport T7 — исторический runtime FAIL
 
 - US SAFE_REUSE начался на расстоянии 114–128 м. Водитель занял pilot seat через 43 с; затем пассажирская фаза получила собственные 60 с и завершилась при mounted=2/3. Последний солдат визуально входил, но сервер ещё не считал его settled. Итог: BOARDING_TIMEOUT, acceptance failure, forced dismount и пехотный fallback.
 - USSR SAFE_REUSE начался на расстоянии 143–151 м. Водитель сел через 6 с, но к hard deadline пассажирской фазы осталось mounted=1/3. Итог тот же: bounded timeout, infantry order и подтверждённый cleanup.
 - Общая причина: пассажиры не подходили к машине до подтверждения водителя, а штатный поиск посадки ограничен примерно 100 м. Простое увеличение тайм-аута не устраняет дальний последовательный подход.
 - T7 также подтвердил, что прежний ORDER_RECOVERY стал bounded, но двух ранних stable poll было недостаточно: новый waypoint позднее снова исчезал, после чего группа перерабатывалась.
 
-### Armed A1 — актуальный runtime FAIL
+### Armed A1 — исторический runtime FAIL
 
 - PILOT_ONLY не исключил раннее занятие gunner/cargo; strict role ordering нарушался у обеих фракций.
 - Crew recovery был недостаточно прозрачен и мог завершаться без доказательства восстановления всех обязательных ролей.
@@ -318,9 +335,9 @@ Recovery после `NO_PHYSICAL_MOVEMENT` может завершиться ф�
 - Возможный client despawn desync остаётся PARTIAL: authority delete подтверждался, но клиентского EntityID/RplId доказательства нет.
 - Infantry waypoint recovery давал повторный WAYPOINT_NOT_CURRENT churn; это исправлено только в post-A1-кандидате.
 
-### Post‑T7-кандидат
+### Исторический post‑T7-кандидат, проверенный T8
 
-Кандидат не меняет штатные мины Arland и пока не имеет runtime PASS.
+Этот snapshot не менял штатные мины Arland и не получил runtime PASS: следующий прогон T8 завершился FAIL. Ниже сохранён исторический контракт, чтобы связать T8-наблюдения с проверявшейся реализацией; он заменён текущим post-T8-патчем.
 
 - При farthest member >75 м запускается MOVE-only APPROACH всей группы. Vehicle utility и GetIn actions до завершения подхода отсутствуют.
 - APPROACH waypoint получает 5 с на активацию в queue; потеря/неактивация ограниченно завершает попытку и фиксирует acceptance failure.
@@ -328,10 +345,9 @@ Recovery после `NO_PHYSICAL_MOVEMENT` может завершиться ф�
 - Общий budget вычисляется один раз из реально запланированных фаз: transport максимум 3, armed максимум 4. Каждая фаза имеет soft timeout; один sticky grace +10 с разрешён только при target-scoped getting-in или свежем физическом progress. Общий hard cap также не расширяется более чем на 10 с.
 - BOARDING_COMPLETE требует два последовательных poll, где все живые участники settled в целевой машине.
 - ORDER_RECOVERED требует exact current+queued waypoint в трёх последовательных наблюдениях и не раньше max(10 с, 2 × reliability interval). Нестабильность расходует bounded stuck budget.
-- `tools/Test-Stage3Static.ps1`: PASS.
-- Workbench 1.7.0.54: `.cache/stage3-t7-boarding-final2-20260809-164902/console.log`, Game CRC32 `1d647a62`, пять конфигураций, `Script validation successful`, `SCRIPT (E/F)=0`.
+- Перед T8 этот старый snapshot проходил static/Workbench validation; результат не переносится на post-T8-патч.
 
-### Transport T8 — текущий runtime FAIL
+### Transport T8 — исторический runtime FAIL
 
 Текущий runtime: `C:\Users\retar\AppData\Local\AICF\Stage3-Transport-T8-Morning-20260809-170234`. USSR generation=1 штатно завершил посадку `3/3`, доехал до dismount-порога цели 48 и безопасно высадился. В 17:06:21 восстановлен пехотный ATTACK-приказ на ту же цель 48, без `TARGET_REASSIGNED`. Сразу после высадки группа визуально пошла в обратную сторону, но дошла до промежуточной точки, развернулась и продолжила правильно к цели. Классификация: штатный navmesh-обход, не дефект post-dismount маршрута.
 
@@ -352,6 +368,7 @@ Recovery после `NO_PHYSICAL_MOVEMENT` может завершиться ф�
 - **Первичный отказ:** новая машина корректно не создана из-за `NO_BOARDING_SITE_WITHIN_RANGE`, поскольку установленный предел 250 м проверяется по каждому живому участнику.
 - **Невосстановившееся состояние:** позднее все трое визуально воссоединились, US захватил базу 48 и получил новую дальнюю цель 31, однако машина не появилась. Runtime продолжил бесконечные переходы `REQUESTED → SPAWNING → REQUESTED` каждые 10 секунд без `VEHICLE_SPAWNED`, `VEHICLE_ASSIGNED`, bounded fallback или новой подробной причины.
 - **Повторное воспроизведение:** в 17:46:45 US захватил следующую базу 31 и получил новую дальнюю цель 60. Ни изменение ownership, ни второй `TARGET_REASSIGNED` не сбросили зависший request: в 17:46:53, 17:47:03, 17:47:14, 17:47:24 и далее снова записаны только `SPAWNING → REQUESTED`, без созданной машины. Последняя повторно выведенная подробная причина до этого — `NO_BOARDING_SITE_WITHIN_RANGE` для базы 19 с distances 1205–1351 м; после захвата 31 актуальная причина снова подавлена.
+- **Воспроизведение на USSR:** `SAFE_REUSE` «Урала» `EntityID=0x400000000000145E` начался в 17:48:00 с distances 123–126 м. В 17:48:43 approach-waypoint исчез (`BOARDING_APPROACH_LOST reason=MOVE_WAYPOINT_NOT_IN_QUEUE`): один боец оказался в 8 м от машины, двое других — в 157.8 м. Машина стала `ABANDONED` и была authority-удалена в 17:49:46 по обычному `CLEANUP_DUE`. Следующие запросы USSR также зациклились: сначала candidate base 48 отклонена при distances 27/34/278 м, затем base 60 — при 319/631/633 м, после чего продолжились `SPAWNING → REQUESTED`. Таким образом, cohesion/request-recovery defect общий для обеих фракций, не US-specific.
 - **Фактический результат:** группа остаётся без транспорта и не может начать посадку, хотя исходная причина — разрыв участников — визуально устранена и strategic/base context изменился.
 - **Ожидаемый результат:** после восстановления cohesion либо появления новой допустимой friendly-базы координатор заново измеряет всех участников и перечень spawn sites, создаёт машину при валидной точке; если валидной точки всё ещё нет — пишет актуальную диагностическую причину и использует bounded backoff/пехотный исход без постоянного state/log churn.
 
@@ -365,21 +382,65 @@ Recovery после `NO_PHYSICAL_MOVEMENT` может завершиться ф�
 - **Ожидаемый результат:** abandoned vehicle нельзя удалять, пока любой игрок или AI выполняет target-scoped get-in/get-out interaction либо находится в зоне активного vehicle action. Нужен server-authoritative interaction reservation/delete lock, повторная проверка непосредственно перед `DeleteRplEntity`, короткий stable-clear window и безопасная отмена/восстановление персонажа при race. Cleanup должен писать причину defer и данные foreign/player protection.
 - **Рекомендуемая lifecycle-политика:** исправный abandoned-транспорт не удалять автоматически ради replacement capacity. Снять его с управления Stage 3 и исключить из лимита активных/reserved AI-машин либо учитывать в отдельном ограниченном world pool, оставив доступным игрокам и для возможного safe reuse. Автоматическое удаление применять к уничтоженной/непригодной технике или после длительного TTL, но только после устойчивого stable-clear подтверждения отсутствия occupants, активных get-in/get-out interactions и игроков в защитном радиусе. Нужны отдельный предел мирового пула и oldest-safe cleanup, чтобы сохранение техники не приводило к неограниченному росту сущностей.
 
-1. Проверить US и USSR, initial vehicle и SAFE_REUSE.
-2. При farthest >75 м сначала получить APPROACH без vehicle utility/GetIn; waypoint должен стать queued/current, farthest — уменьшаться, COMPLETE — произойти не дальше 75 м.
-3. До DRIVER_ASSIGNED должно быть mounted=0. После него transport переходит только в PASSENGERS.
-4. Все живые должны стать settled в двух последовательных poll без role reset/violation и без remote snap.
-5. На границе soft deadline допускается ровно один grace только с target-scoped доказательством; hard outcome — не позже phase/total +10 с.
-6. Отдельный no-progress fault обязан дать ровно один BOARDING_TIMEOUT и bounded fallback.
-7. После штатной высадки подтвердить пехотное движение и реальный захват.
-8. ORDER_RECOVERED не должен сопровождаться тем же WAYPOINT_NOT_CURRENT внутри durability window.
+### Post-T8-патч — static/Workbench candidate
+
+Текущий source адресует оба T8-дефекта. `tools/Test-Stage3Static.ps1` завершился `PASS`; Workbench 1.7 `Validate Scripts` по пяти конфигурациям завершился `Script validation successful`, Game CRC32 `013129aa`, `SCRIPT (E/F)=0`. Журнал: `.cache/stage3-t8-fixes-final5-20260809-191200/console.log`. Dedicated runtime T9/A2 ещё не выполнялся, поэтому ни один пункт ниже не является заявлением runtime `PASS`.
+
+- Общий `APPROACH` waypoint заменён точным per-member staging: отдельный `SCR_AIMoveIndividuallyBehavior` к фактической машине для каждого живого бойца дальше 75 м, action radius ≤70 м, без group waypoint, vehicle utility и GetIn. Progress наблюдается по каждому участнику; после 15 с stall action переиздаётся ровно один раз, следующий stall даёт bounded `BOARDING_APPROACH_MEMBER_STALLED`. Завершение требует двух settled poll всей группы в радиусе 75 м.
+- До `DRIVER` и повторно после approach выполняется synchronous wrong-seat normalization. Дальше неизменно действует `DRIVER → optional GUNNER → PASSENGERS`; immutable plan содержит максимум 3 фазы transport/4 armed, у каждой свой soft timeout, на попытку доступна ровно одна target-scoped grace 10 с и абсолютный total hard cap.
+- Retryable spawn делает максимум 4 попытки с экспоненциальным backoff до 60 с. Затем `WAITING_FOR_SITE` сохраняет пехотный приказ, не резервирует AI cap и выполняет полный periodic preflight; допустимый site пробуждает запрос через `VEHICLE_REQUEST_RESUMED`, а смена target/base revision сбрасывает request context немедленно. Recoverable `APPROACH_LOST/STALL/TIMEOUT_APPROACH`, `VEHICLE_TOO_FAR` и `GROUP_COHESION` также переходят в ожидание без assignment suppression.
+- После verified dismount/fallback `NormalizeAfterVehicle` очищает временные move handlers и восстанавливает stock `Column`/default handler перед пехотным приказом.
+- Исправный abandoned-транспорт всегда освобождает managed runtime/active AI cap и остаётся доступным игрокам в faction world pool с default soft target 4. При overflow координатор ищет oldest-safe retirement; pool может временно превысить target и не применяет destructive replacement cleanup вопреки safety gate.
+- Destructive cleanup unusable/retired entity блокируется protected occupant, target-scoped player transition или живым игроком в радиусе 15 м. Нужны 5 с непрерывного clear и повторный scan непосредственно перед delete; blocker диагностируется через `VEHICLE_CLEANUP_DEFERRED`.
+- Coordinator-stop cleanup использует one-shot polling раз в секунду и до 60 с пытается получить те же 15 м/5 с safety-условия. После этого действует тот же `EntityID`/`RplId` guard; невозможность безопасно удалить заканчивается fail-closed `VEHICLE_STOP_CLEANUP_RETAINED`, а не force delete.
+- Durable infantry recovery сохраняет прежний контракт: exact waypoint одновременно current+queued в трёх poll и не меньше `max(10 с, 2 × reliability interval)`.
+
+Штатные мины Arland остаются включёнными и не изменялись.
+
+#### Кандидат-дефект T9-USSR-1: пассажиры расходятся после успешного APPROACH до завершения DRIVER в боевой обстановке
+
+- В runtime 19:49:36–19:51:11 `USSR A0`, generation 4, начал `SAFE_REUSE` транспорта `0x4000000000001FDD` с тремя живыми бойцами примерно в 112–117 м.
+- Новый per-member APPROACH работал правильно: все три individual action сокращали расстояние, и `BOARDING_APPROACH_COMPLETE` был зарегистрирован при 72.8/73.3/75.0 м.
+- После перехода в фазу `DRIVER` approach-actions были сняты со всей группы. Пока водитель шёл к машине и садился около 30 с, два будущих пассажира возобновили пехотное движение от машины: к `DRIVER_ASSIGNED` расстояния выросли до 83.8 и 86.6 м.
+- `PASSENGERS_ASSIGNED requested=2` был выдан, но пассажиры визуально продолжили движение в другую сторону. В 19:51:07 цикл завершился `INFANTRY_FALLBACK reason=CREW_ROLE_LOST_DURING_BOARDING`; машина стала `ABANDONED` и была выпущена в world pool.
+- Во время посадки рядом шёл бой. Логи не показывают потерь (`alive=3` сохранялся), возгорания или повреждения машины, но не позволяют отличить возобновившийся stock infantry order от combat reaction/cover behavior. Поэтому механизм причины считается недоказанным до повторения без контакта с противником либо до добавления диагностики action/behavior ownership.
+- Ожидаемое поведение: после `BOARDING_APPROACH_COMPLETE` все неводительские участники должны удерживаться в staging-зоне возле машины до начала своей role-phase. Нельзя снимать/терять их точные удерживающие действия так, чтобы stock infantry order снова уводил их от машины. Переход `APPROACH → DRIVER → PASSENGERS` должен сохранять invariant `farthest_m <= staging_threshold_m` либо немедленно возвращать удалившегося member в bounded per-member approach без потери уже назначенного водителя.
+
+#### Срез T9 — 2026-08-09 19:56–19:57, US A0 после захвата фермы
+
+- В 19:56:20 база 65 (Farm) сменила владельца `USSR → US`; ожидавший транспорт запрос US A0 проснулся по `BASE_REVISION_CHANGED`.
+- US A0 визуально находилась рядом с фермой. Однако транспорт там выдан не был. Лог показал только ближайший точный boarding-rejection для другой безопасной базы 29: расстояние около 1126 м при максимуме 250 м.
+- Это сообщение не доказывает, что Farm не рассматривалась: диагностика выводит только ближайший отказ среди safe-кандидатов. Недавно захваченная Farm могла быть исключена раньше как `CONTESTED`, `IsBeingCaptured()` или `AreEnemiesPresent()`; незадолго до смены владельца база 65 явно отмечалась contested. Точная причина отклонения Farm в текущем логе отсутствует.
+- В 19:56:28 прежняя US A0 после повторяющихся `WAYPOINT_NOT_CURRENT` и persistent-stuck была завершена через `GROUP_RECYCLED`. Это не перемещение существующих бойцов: старая группа удалена вместе со своим положением возле фермы.
+- В 19:56:58 замещающая US A0 создана на MOB-базе 30. В 19:57:00 ей выдан новый M923A1, посадка началась с расстояния 24–29 м. Наблюдаемая «телепортация на базу» является удалением старой группы и созданием новой на MOB.
+- Кандидат-дефект: recovery/recycle группы возле только что захваченной точки теряет её достигнутое положение и переносит продолжение операции на удалённую MOB. Из-за recycle через 8 секунд невозможно проверить, получила бы исходная группа транспорт после окончательной очистки Farm.
+- Пробел диагностики: при отсутствии подходящего spawn-site необходимо логировать причину отклонения каждой релевантной owned-базы либо как минимум выбранной ближайшей к группе базы. Иначе нельзя отличить ожидаемое ограничение `CONTESTED/enemies present` от ошибочного отказа выдачи транспорта на безопасной захваченной точке.
+- Статус: `CANDIDATE / NEEDS REPRO`. Подтверждать функциональный дефект выдачи транспорта следует в повторе, где Farm визуально очищена, capture-state завершён и группа остаётся возле базы дольше одного spawn-probe. Сам факт recycle на MOB и потеря позиции подтверждён.
+
+### External/versioned evidence caveat T8
+
+- В server log до AICF init при загрузке stock `GameMode_Campaign`/RNGD присутствовали `WORLD (E): Unknown keyword/data 'm_bEnabled'` и `DEFAULT (E): Unknown keyword/data 'm_bCanAIMarkTargets'`. Ссылок на эти поля в репозитории нет; сообщения классифицируются как external/versioned resource noise, а не AICF `SCRIPT (E/F)`, но не считаются исправленными post-T8-патчем.
+- Client log содержал stock UI `ScriptInvoker::Invoke: Incompatible parameter ... ShowFactionPlayerList`; bind/signature относится к `SCR_RoleSelectionMenu`, символ отсутствует в репозитории. Это внешний UI/version mismatch, который сохраняется как acceptance caveat и не является доказательством чистого окружения.
+
+### Transport T9 — критерии повторной проверки post-T8
+
+1. Проверить обе фракции, initial vehicle и `SAFE_REUSE`, включая точки немного ниже и выше порога 75 м.
+2. При `farthest_m >75` подтвердить отдельный approach-token для каждого удалённого живого member, отсутствие group waypoint/vehicle utility/GetIn, authoritative progress и `BOARDING_APPROACH_COMPLETE` после двух poll не дальше 75 м.
+3. В stall-fault подтвердить не более одного `BOARDING_APPROACH_REISSUED` для конкретного member и затем один bounded `BOARDING_APPROACH_MEMBER_STALLED`/fallback без snap или teleport-in.
+4. До `DRIVER_ASSIGNED` должно быть `mounted=0`; затем transport проходит только `DRIVER → PASSENGERS`, а armed-light — `DRIVER → GUNNER → PASSENGERS`. Все живые settled в двух poll без wrong-seat recurrence и remote snap.
+5. На границе soft deadline допускается ровно одна grace только с target-scoped доказательством; hard outcome наступает не позже соответствующего phase/total cap +10 с.
+6. В spawn-site fault подтвердить ровно 4 attempts, экспоненциальный backoff, `WAITING_FOR_SITE ... cap_reserved=0`, отсутствие state/log churn, periodic probe и отдельное пробуждение при смене target/base revision.
+7. После штатной высадки проверить `NormalizeAfterVehicle`, устойчивое пехотное движение и реальный owner change. `ORDER_RECOVERED` не должен сопровождаться тем же `WAYPOINT_NOT_CURRENT` внутри durability window.
+8. Выпустить исправную abandoned-машину в world pool и убедиться, что она остаётся доступной игроку и не блокирует новую AI trip. Отдельно превысить soft target 4: получить `VEHICLE_WORLD_POOL_SOFT_OVERFLOW ... policy=PLAYER_SAFE_DEFERRED_RETIREMENT`; защищённая пятая машина должна остаться в мире, а после освобождения gate должен выполниться oldest-safe retirement и размер вернуться к target.
+9. Повторить T8 cleanup race: игрок в машине, в enter/exit transition и в радиусе 15 м блокирует delete; только после 5 с непрерывного clear допустим authority delete с тем же `EntityID`/`RplId`.
+10. Отдельно вызвать coordinator stop с cleanup: подтвердить one-shot poll, максимум 60 с на acquire, `VEHICLE_STOP_CLEANUP_CONFIRMED` для безопасной машины и `VEHICLE_STOP_CLEANUP_RETAINED ... action=FAIL_CLOSED` при blocker/identity mismatch/unconfirmed delete.
 
 ### Armed A2 и отдельные fault-срезы
 
 - Доказать exact DRIVER → GUNNER → PASSENGERS у US и USSR, включая SAFE_REUSE и потерю каждой crew role.
 - Сопоставить server/client EntityID и RplId при delete; визуально оставшаяся машина без совпадающей identity не считается desync.
-- Проверить cap, occupied cleanup, overturned/destroyed fallback и 30-минутную стабильность.
-- Stage 3 остаётся непринятым до успешных T8, A2, fault-срезов и последующего 30-минутного прогона.
+- Проверить active AI cap отдельно от functional world-pool cap, occupied/player-transition cleanup, overturned/destroyed fallback и 30-минутную стабильность.
+- Stage 3 остаётся непринятым до успешных T9, A2, fault-срезов и последующего 30-минутного прогона.
 
 ## PASS / FAIL / BLOCKED
 
@@ -391,7 +452,7 @@ Recovery после `NO_PHYSICAL_MOVEMENT` может завершиться ф�
 - лимит и cleanup соблюдаются;
 - Stage 2 disabled regression чист;
 - получен `RESULT_CANDIDATE status=READY final=0`, затем до остановки полного окна нет `status=INVALIDATED` и `ACCEPTANCE_FAILURE_LATCHED`;
-- нет `[AICF][STAGE3][ERROR]`, `SCRIPT (E/F)`, duplicate spawn или бесконечного warning churn.
+- нет `[AICF][STAGE3][ERROR]`, AICF `SCRIPT (E/F)`, duplicate spawn или бесконечного warning churn; любые stock/resource/UI errors отдельно объяснены и не коррелируют с проверяемым поведением.
 
 `FAIL`: Stage 3 загрузился, но нарушен любой инвариант: unsafe/double spawn, неполная посадка без fallback, движение без водителя, преждевременный infantry order до выхода protected members, бесконечный recovery/fallback, spawn сверх cap, stale generation, удаление машины с `ALIVE`/`INCAPACITATED` occupant (включая foreign) или утечка entity/waypoint.
 

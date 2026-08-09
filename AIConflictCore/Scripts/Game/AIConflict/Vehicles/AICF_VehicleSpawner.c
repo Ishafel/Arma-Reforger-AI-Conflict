@@ -16,6 +16,7 @@ class AICF_VehicleSpawner
 		vector preferredPosition,
 		float maximumSpawnDistanceMeters,
 		float maximumBoardingDistanceMeters,
+		bool preflightOnly,
 		AICF_VehicleRuntime runtime,
 		out Vehicle vehicle,
 		out SCR_AIVehicleUsageComponent vehicleUsage,
@@ -93,7 +94,10 @@ class AICF_VehicleSpawner
 					break;
 				}
 			}
-			safeCandidates.InsertAt(candidate, insertIndex);
+			if (insertIndex >= safeCandidates.Count())
+				safeCandidates.Insert(candidate);
+			else
+				safeCandidates.InsertAt(candidate, insertIndex);
 		}
 
 		if (safeCandidates.IsEmpty())
@@ -198,15 +202,15 @@ class AICF_VehicleSpawner
 		if (boardingRejectionBase)
 		{
 			string reportKey = string.Format(
-				"SITE:%1:%2",
+				"SITE:%1:%2:%3:%4",
+				runtime.GetRequestGeneration(),
+				runtime.GetSpawnAttempt(),
 				AICF_Stage1Diagnostics.BaseKey(boardingRejectionBase),
 				"NO_BOARDING_SITE_WITHIN_RANGE");
 			if (runtime.MarkSpawnIssueReported(reportKey))
 			{
 				string siteSample = string.Format("%1,%2,%3", boardingRejectionPosition[0], boardingRejectionPosition[1], boardingRejectionPosition[2]);
-				AICF_Stage3Diagnostics.Warning(
-					"VEHICLE_SPAWN_SITE_REJECTED",
-					string.Format(
+				string rejectionDetails = string.Format(
 						"%1 base=%2 retryable=1 alive=%3 leader_m=%4 nearest_m=%5 farthest_m=%6 maximum_m=%7 site=[%8] member_samples=[%9]",
 						runtime.DescribeContext("NO_BOARDING_SITE_WITHIN_RANGE"),
 						AICF_Stage1Diagnostics.BaseKey(boardingRejectionBase),
@@ -216,7 +220,11 @@ class AICF_VehicleSpawner
 						boardingRejectionFarthestDistanceMeters,
 						maximumBoardingDistanceMeters,
 						siteSample,
-						boardingRejectionMemberSamples));
+						boardingRejectionMemberSamples);
+				if (preflightOnly)
+					AICF_Stage3Diagnostics.Info("VEHICLE_SPAWN_SITE_REJECTED", rejectionDetails);
+				else
+					AICF_Stage3Diagnostics.Warning("VEHICLE_SPAWN_SITE_REJECTED", rejectionDetails);
 			}
 		}
 
@@ -233,11 +241,26 @@ class AICF_VehicleSpawner
 		// If an owned candidate was unsafe but another safe base was selected,
 		// retain one causal acceptance event without logging every hostile base.
 		if (meaningfulRejectedBase && runtime.MarkSpawnIssueReported(
-			string.Format("SITE:%1:%2", AICF_Stage1Diagnostics.BaseKey(meaningfulRejectedBase), meaningfulRejectionReason)))
+			string.Format(
+				"SITE:%1:%2:%3:%4",
+				runtime.GetRequestGeneration(),
+				runtime.GetSpawnAttempt(),
+				AICF_Stage1Diagnostics.BaseKey(meaningfulRejectedBase),
+				meaningfulRejectionReason)))
 		{
 			AICF_Stage3Diagnostics.Info(
 				"VEHICLE_SPAWN_SITE_REJECTED",
 				string.Format("%1 base=%2 retryable=1", runtime.DescribeContext(meaningfulRejectionReason), AICF_Stage1Diagnostics.BaseKey(meaningfulRejectedBase)));
+		}
+
+		if (preflightOnly)
+		{
+			failureReason = string.Empty;
+			failureBase = null;
+			AICF_Stage3Diagnostics.Info(
+				"VEHICLE_SPAWN_PREFLIGHT_READY",
+				string.Format("%1 base=%2 owner=%3 contested=0 entity_created=0", runtime.DescribeContext("SAFE_FRIENDLY_BASE"), AICF_Stage1Diagnostics.BaseKey(spawnBase), faction.GetFactionKey()));
+			return true;
 		}
 
 		AICF_Stage3Diagnostics.Info(

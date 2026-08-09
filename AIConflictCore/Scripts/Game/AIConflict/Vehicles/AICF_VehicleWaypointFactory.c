@@ -6,7 +6,6 @@ class AICF_VehicleWaypointFactory
 	protected static const ResourceName MOVE_WAYPOINT_PREFAB = "{750A8D1695BD6998}Prefabs/AI/Waypoints/AIWaypoint_Move.et";
 	protected static const ResourceName GET_OUT_WAYPOINT_PREFAB = "{C40316EE26846CAB}Prefabs/AI/Waypoints/AIWaypoint_GetOut.et";
 	protected static const float BOARDING_COMPLETION_RADIUS_METERS = 12.0;
-	protected static const float BOARDING_APPROACH_COMPLETION_RADIUS_METERS = 12.0;
 	protected static const float MOVE_COMPLETION_RADIUS_METERS = 25.0;
 
 	SCR_BoardingEntityWaypoint CreateDriverBoardingWaypoint(Vehicle vehicle)
@@ -22,20 +21,6 @@ class AICF_VehicleWaypointFactory
 	SCR_BoardingEntityWaypoint CreateGunnerBoardingWaypoint(Vehicle vehicle)
 	{
 		return CreateRoleBoardingWaypoint(vehicle, false, true, false);
-	}
-
-	// This is deliberately a plain infantry Move waypoint. The coordinator has
-	// detached the vehicle from group utility before issuing it, so a distant
-	// member cannot receive a GetIn action before the whole group is staged.
-	AIWaypoint CreateBoardingApproachWaypoint(Vehicle vehicle)
-	{
-		if (!vehicle)
-			return null;
-
-		AIWaypoint waypoint = SpawnWaypoint(MOVE_WAYPOINT_PREFAB, vehicle.GetOrigin());
-		if (waypoint)
-			waypoint.SetCompletionRadius(BOARDING_APPROACH_COMPLETION_RADIUS_METERS);
-		return waypoint;
 	}
 
 	AIWaypoint CreateMoveWaypoint(
