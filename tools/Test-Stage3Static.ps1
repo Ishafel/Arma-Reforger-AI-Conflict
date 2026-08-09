@@ -49,6 +49,8 @@ $spawner = 'AIConflictCore/Scripts/Game/AIConflict/Vehicles/AICF_VehicleSpawner.
 $waypoints = 'AIConflictCore/Scripts/Game/AIConflict/Vehicles/AICF_VehicleWaypointFactory.c'
 $match = 'AIConflictCore/Scripts/Game/AIConflict/Bootstrap/AICF_MatchController.c'
 $config = 'AIConflictCore/Scripts/Game/AIConflict/Config/AICF_Stage3Config.c'
+$stage1Config = 'AIConflictCore/Scripts/Game/AIConflict/Config/AICF_Stage1Config.c'
+$groupMarkers = 'AIConflictCore/Scripts/Game/AIConflict/UI/AICF_GroupMapMarkers.c'
 
 Assert-FileContains $config 'm_bVehiclesEnabled\s*=\s*false' 'Stage 3 must preserve Stage 2 unless explicitly enabled'
 Assert-FileContains $spawner '!Replication\.IsServer\(\).*campaign\.IsMaster\(\)' 'Vehicle spawning must be server/master-only'
@@ -62,6 +64,10 @@ Assert-FileContains $coordinator 'RplComponent\.DeleteRplEntity\(runtime\.GetVeh
 Assert-FileContains $coordinator 'RestoreInfantryOrder' 'Every vehicle terminal path must preserve an infantry fallback'
 Assert-FileContains $match 'm_VehicleCoordinator\.Stop\(cleanupEntities\)' 'Match shutdown must stop the vehicle coordinator'
 Assert-FileContains $match 'm_VehicleCoordinator\.IsControllingMovement\(slot\)' 'Infantry reliability must not overwrite vehicle waypoints'
+Assert-FileContains $match 'm_GroupMapMarkers\s*=\s*new AICF_GroupMapMarkerSystem\(\)' 'Gameplay group markers must always be created'
+Assert-FileNotContains $stage1Config 'aicfDebugMapMarkers|DebugMapMarkers' 'Gameplay group markers must not depend on the removed debug CLI flag'
+Assert-FileContains $groupMarkers 'GROUP_MAP_MARKERS_READY' 'Gameplay marker readiness must use the non-debug event contract'
+Assert-FileContains $groupMarkers 'SetFaction\(null\)[\s\S]*SetGlobalVisible\(true\)' 'Current marker policy must show both factions globally'
 Assert-FileNotContains 'AIConflictCore/Scripts/Game/AIConflict/Vehicles/AICF_VehicleCoordinator.c' 'CallLater|GetCallqueue' 'Vehicle lifecycle must not leave delayed callbacks'
 
 $requiredEvents = @(
@@ -92,4 +98,4 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host 'Stage 3 static audit: PASS'
-Write-Host 'Checked: authority, disabled default, cap reservation, generations, waypoint/entity cleanup, infantry fallback, callback absence, diagnostics contract.'
+Write-Host 'Checked: authority, disabled default, cap reservation, generations, waypoint/entity cleanup, infantry fallback, always-global group markers, callback absence, diagnostics contract.'

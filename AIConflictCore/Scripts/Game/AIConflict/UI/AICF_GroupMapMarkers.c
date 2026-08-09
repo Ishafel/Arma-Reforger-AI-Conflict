@@ -1,48 +1,41 @@
-// Opt-in, globally visible map markers for the leaders of the eight managed AI groups.
-// Both server and client must be started with -aicfDebugMapMarkers 1.
-class AICF_DebugMapMarkerRuntime
-{
-	static bool IsEnabled()
-	{
-		string value;
-		return System.GetCLIParam("aicfDebugMapMarkers", value) && value.ToInt() > 0;
-	}
-}
+// Gameplay map markers for the leaders of all managed AI groups. The current
+// visibility policy is intentionally global; a later stage will filter them to
+// the local player's allied faction without changing marker identity or text.
 
-// Replicate the live debug label independently from the marker config ID. The
+// Replicate the live group label independently from the marker config ID. The
 // config ID keeps the stable faction/slot visuals, while this text can change
 // as casualties occur and the commander assigns a new objective.
 modded class SCR_MapMarkerEntity
 {
-	[RplProp(onRplName: "AICF_OnDebugTextReplicated")]
-	protected string m_sAICFDebugText;
+	[RplProp(onRplName: "AICF_OnGroupMarkerTextReplicated")]
+	protected string m_sAICFGroupMarkerText;
 
-	void AICF_SetDebugText(string text)
+	void AICF_SetGroupMarkerText(string text)
 	{
-		if (!Replication.IsServer() || m_sAICFDebugText == text)
+		if (!Replication.IsServer() || m_sAICFGroupMarkerText == text)
 			return;
 
-		m_sAICFDebugText = text;
+		m_sAICFGroupMarkerText = text;
 		Replication.BumpMe();
-		AICF_ApplyDebugText();
+		AICF_ApplyGroupMarkerText();
 	}
 
-	string AICF_GetDebugText()
+	string AICF_GetGroupMarkerText()
 	{
-		return m_sAICFDebugText;
+		return m_sAICFGroupMarkerText;
 	}
 
-	protected void AICF_OnDebugTextReplicated()
+	protected void AICF_OnGroupMarkerTextReplicated()
 	{
-		AICF_ApplyDebugText();
+		AICF_ApplyGroupMarkerText();
 	}
 
-	protected void AICF_ApplyDebugText()
+	protected void AICF_ApplyGroupMarkerText()
 	{
-		if (!m_MarkerWidgetComp || m_sAICFDebugText.IsEmpty())
+		if (!m_MarkerWidgetComp || m_sAICFGroupMarkerText.IsEmpty())
 			return;
 
-		m_MarkerWidgetComp.SetText(m_sAICFDebugText);
+		m_MarkerWidgetComp.SetText(m_sAICFGroupMarkerText);
 		m_MarkerWidgetComp.SetTextVisible(true);
 	}
 }
@@ -50,7 +43,7 @@ modded class SCR_MapMarkerEntity
 // DYNAMIC_EXAMPLE is deliberately reused because stock reserves it as an unconfigured example.
 // The replicated marker config ID carries all visual metadata needed by the client.
 [BaseContainerProps(), SCR_MapMarkerTitle()]
-class AICF_DebugMapMarkerEntry : SCR_MapMarkerEntryDynamic
+class AICF_GroupMapMarkerEntry : SCR_MapMarkerEntryDynamic
 {
 	static const ResourceName MARKER_PREFAB = "{DD74BE2BBAE07192}Prefabs/Markers/MapMarkerEntityBase.et";
 	static const ResourceName MARKER_LAYOUT = "{3E27127E86F84A12}UI/layouts/Map/MapMarkerDynamicBase.layout";
@@ -117,7 +110,7 @@ class AICF_DebugMapMarkerEntry : SCR_MapMarkerEntryDynamic
 				widgetComp.SetImage(imageSet, imageQuads[0]);
 		}
 
-		string markerText = marker.AICF_GetDebugText();
+		string markerText = marker.AICF_GetGroupMarkerText();
 		if (markerText.IsEmpty())
 			markerText = string.Format("%1 %2%3", factionKey, role, slotId);
 
@@ -132,7 +125,7 @@ modded class SCR_MapMarkerManagerComponent
 	override void OnPostInit(IEntity owner)
 	{
 		super.OnPostInit(owner);
-		if (!AICF_DebugMapMarkerRuntime.IsEnabled() || !m_MarkerCfg)
+		if (!m_MarkerCfg)
 			return;
 
 		// GetMarkerEntryConfigs returns the live config array. Mutate it through the
@@ -148,11 +141,11 @@ modded class SCR_MapMarkerManagerComponent
 				entries.Remove(i);
 		}
 
-		entries.Insert(new AICF_DebugMapMarkerEntry());
+		entries.Insert(new AICF_GroupMapMarkerEntry());
 	}
 }
 
-class AICF_DebugMapMarkerSystem
+class AICF_GroupMapMarkerSystem
 {
 	static const int SLOTS_PER_FACTION = AICF_Stage1Config.GROUP_SLOTS_PER_FACTION;
 	static const int TOTAL_SLOTS = SLOTS_PER_FACTION * 2;
@@ -164,7 +157,7 @@ class AICF_DebugMapMarkerSystem
 	protected ref array<IEntity> m_aTrackedLeaders = {};
 	protected bool m_bReadyLogged;
 
-	void AICF_DebugMapMarkerSystem()
+	void AICF_GroupMapMarkerSystem()
 	{
 		for (int i = 0; i < TOTAL_SLOTS; i++)
 		{
@@ -192,7 +185,7 @@ class AICF_DebugMapMarkerSystem
 		{
 			m_bReadyLogged = true;
 			AICF_Stage1Diagnostics.Info(
-				"DEBUG_MAP_MARKERS_READY",
+				"GROUP_MAP_MARKERS_READY",
 				string.Format("groups=%1 visibility=GLOBAL tracking=LEADER", TOTAL_SLOTS));
 		}
 	}
@@ -234,7 +227,7 @@ class AICF_DebugMapMarkerSystem
 						removalReason = "NO_ALIVE_LEADER";
 
 					AICF_Stage1Diagnostics.Info(
-						"DEBUG_MAP_MARKER_REMOVED",
+						"GROUP_MAP_MARKER_REMOVED",
 						string.Format(
 							"faction=%1 slot=%2 reason=%3",
 							factionKey,
@@ -263,7 +256,7 @@ class AICF_DebugMapMarkerSystem
 					if (groupChanged)
 						retargetReason = "GROUP_REPLACED";
 					AICF_Stage1Diagnostics.Info(
-						"DEBUG_MAP_MARKER_RETARGETED",
+						"GROUP_MAP_MARKER_RETARGETED",
 						string.Format(
 							"faction=%1 slot=%2 reason=%3",
 							factionKey,
@@ -271,7 +264,7 @@ class AICF_DebugMapMarkerSystem
 							retargetReason));
 				}
 
-				marker.AICF_SetDebugText(BuildMarkerText(factionState, slot, group));
+				marker.AICF_SetGroupMarkerText(BuildMarkerText(factionState, slot, group));
 				continue;
 			}
 
@@ -282,13 +275,13 @@ class AICF_DebugMapMarkerSystem
 			if (!marker)
 				continue;
 
-			marker.AICF_SetDebugText(BuildMarkerText(factionState, slot, group));
+			marker.AICF_SetGroupMarkerText(BuildMarkerText(factionState, slot, group));
 
 			// Apply stream rules immediately for clients that were already connected.
 			// Markers created before player spawn are covered by stock
 			// SetStreamRulesForPlayer; replacement markers are not unless SetFaction
 			// explicitly refreshes the current connection nodes. A null faction keeps
-			// these opt-in diagnostics globally visible to both sides.
+			// the current gameplay policy globally visible to both sides.
 			marker.SetFaction(null);
 			marker.SetGlobalVisible(true);
 			m_aMarkers[markerIndex] = marker;
@@ -299,7 +292,7 @@ class AICF_DebugMapMarkerSystem
 			if (isUSSR)
 				factionKey = "USSR";
 			AICF_Stage1Diagnostics.Info(
-				"DEBUG_MAP_MARKER_CREATED",
+				"GROUP_MAP_MARKER_CREATED",
 				string.Format("faction=%1 slot=%2 tracking=LEADER", factionKey, slotId));
 		}
 	}

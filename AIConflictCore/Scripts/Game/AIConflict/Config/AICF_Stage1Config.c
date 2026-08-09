@@ -29,7 +29,6 @@ class AICF_Stage1Config
 	protected int m_iMaxManagedAgents;
 	protected int m_iWarTempoPercent;
 	protected FactionKey m_sExpectedPlayerFaction;
-	protected bool m_bDebugMapMarkers;
 	protected bool m_bRequirePlayerForResult;
 
 	void AICF_Stage1Config()
@@ -47,7 +46,6 @@ class AICF_Stage1Config
 		m_iMaxManagedAgents = DEFAULT_MAX_MANAGED_AGENTS;
 		m_iWarTempoPercent = DEFAULT_WAR_TEMPO_PERCENT;
 		m_sExpectedPlayerFaction = string.Empty;
-		m_bDebugMapMarkers = false;
 		m_bRequirePlayerForResult = true;
 	}
 
@@ -131,16 +129,6 @@ class AICF_Stage1Config
 			m_sExpectedPlayerFaction = factionKey;
 	}
 
-	bool GetDebugMapMarkers()
-	{
-		return m_bDebugMapMarkers;
-	}
-
-	void SetDebugMapMarkers(bool enabled)
-	{
-		m_bDebugMapMarkers = enabled;
-	}
-
 	bool GetRequirePlayerForResult()
 	{
 		return m_bRequirePlayerForResult;
@@ -169,8 +157,6 @@ class AICF_Stage1Config
 			SetMaxManagedAgents(value.ToInt());
 		if (System.GetCLIParam("aicfExpectedPlayerFaction", value))
 			SetExpectedPlayerFaction(value);
-		if (System.GetCLIParam("aicfDebugMapMarkers", value))
-			SetDebugMapMarkers(value.ToInt() > 0);
 		if (System.GetCLIParam("aicfRequirePlayerForResult", value))
 			SetRequirePlayerForResult(value.ToInt() > 0);
 	}

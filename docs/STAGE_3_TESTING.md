@@ -50,6 +50,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage3Stati
 
 Недопустимая комбинация, где requested transport+armed превышает число ATTACK-слотов или общий cap, не создаёт лишние машины: лишний slot остаётся пешим и пишет `VEHICLE_CAP_BLOCKED`.
 
+Групповые map-маркеры включены всегда. В текущем срезе каждый клиент видит обе фракции; фильтрация до союзной фракции остаётся отдельной следующей задачей.
+
 ## Прогон T — невооружённый транспорт
 
 Окно PowerShell №1:
@@ -73,7 +75,6 @@ Set-Location $serverRoot
   -aicfTransportVehiclesPerFaction 1 `
   -aicfArmedLightVehiclesPerFaction 0 `
   -aicfMaxVehiclesPerFaction 1 `
-  -aicfDebugMapMarkers 1 `
   -aicfInitialTickets 20 `
   -aicfRequirePlayerForResult 0 `
   -backendFreshSession `
@@ -92,8 +93,7 @@ Set-Location $gameRoot
   -gproj "$repoRoot\AIConflictArland\addon.gproj" `
   -client 127.0.0.1 `
   -addonsDir "$repoRoot,$gameRoot\addons" `
-  -addons "9178E5822AFE48EA,B52C5F6AEDBF423E" `
-  -aicfDebugMapMarkers 1
+  -addons "9178E5822AFE48EA,B52C5F6AEDBF423E"
 ```
 
 Окно №3 для наблюдения:
