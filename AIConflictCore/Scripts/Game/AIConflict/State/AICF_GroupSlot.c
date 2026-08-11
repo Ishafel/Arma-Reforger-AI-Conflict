@@ -2,6 +2,7 @@
 class AICF_GroupSlot
 {
 	protected int m_iSlotId;
+	protected int m_iRoleIndex;
 	protected AICF_EGroupRole m_Role;
 	protected AICF_EGroupSlotState m_State;
 	protected int m_iReinforcementReadyAtMs;
@@ -23,10 +24,23 @@ class AICF_GroupSlot
 	protected bool m_bObjectiveHoldReported;
 	protected bool m_bLoadBlockReported;
 	protected bool m_bPendingOrderRecoveryCountsAsStuck;
+	protected bool m_bUnexplainedMobIdleDeadlineReported;
+	protected bool m_bMeaningfulTaskLossReported;
+	protected bool m_bMeaningfulTaskDeadlineReported;
 	protected float m_fBestDistanceToTarget = -1.0;
 	protected string m_sVehicleTerminalFailure;
 	protected string m_sPendingOrderRecoveryCause;
 	protected int m_iVehicleFallbackGroupGeneration = -1;
+	protected int m_iStrategicAssignmentAtMs;
+	protected int m_iStrategicCandidateFirstSeenAtMs;
+	protected int m_iUnexplainedMobIdleStartedAtMs;
+	protected int m_iMeaningfulTaskLostStartedAtMs;
+	protected int m_iLastCommanderMotionAtMs;
+	protected bool m_bHasCommanderMotionSample;
+	protected vector m_vLastCommanderMotionPosition;
+	protected string m_sOperationalPosture;
+	protected string m_sStrategicCandidatePosture;
+	protected string m_sMobIdleSuppressionReason;
 
 	protected SCR_AIGroup m_Group;
 	protected SCR_CampaignMilitaryBaseComponent m_TargetBase;
@@ -34,14 +48,16 @@ class AICF_GroupSlot
 	protected SCR_CampaignMilitaryBaseComponent m_ObjectiveHoldTargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_VehicleFallbackTargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_PendingOrderRecoveryTargetBase;
+	protected SCR_CampaignMilitaryBaseComponent m_StrategicCandidateTargetBase;
 	protected AIWaypoint m_Waypoint;
 	protected AIWaypoint m_PendingOrderRecoveryWaypoint;
 	protected SCR_AIGroup m_PendingOrderRecoveryGroup;
 	protected ref AICF_VehicleRuntime m_VehicleRuntime;
 
-	void AICF_GroupSlot(int slotId, AICF_EGroupRole role)
+	void AICF_GroupSlot(int slotId, AICF_EGroupRole role, int roleIndex = 0)
 	{
 		m_iSlotId = slotId;
+		m_iRoleIndex = roleIndex;
 		m_Role = role;
 		m_State = AICF_EGroupSlotState.EMPTY;
 	}
@@ -54,6 +70,215 @@ class AICF_GroupSlot
 	AICF_EGroupRole GetRole()
 	{
 		return m_Role;
+	}
+
+	int GetRoleIndex()
+	{
+		return m_iRoleIndex;
+	}
+
+	string GetSlotKey()
+	{
+		switch (m_Role)
+		{
+			case AICF_EGroupRole.ATTACK:
+				return string.Format("A%1", m_iRoleIndex);
+			case AICF_EGroupRole.DEFEND:
+				return string.Format("D%1", m_iRoleIndex);
+			case AICF_EGroupRole.RESERVE:
+				return string.Format("R%1", m_iRoleIndex);
+		}
+
+		return string.Format("S%1", m_iSlotId);
+	}
+
+	string GetOperationalPosture()
+	{
+		return m_sOperationalPosture;
+	}
+
+	int GetStrategicAssignmentAgeMs()
+	{
+		if (m_iStrategicAssignmentAtMs <= 0)
+			return 0;
+
+		return System.GetTickCount(m_iStrategicAssignmentAtMs);
+	}
+
+	int GetStrategicCandidateAgeMs()
+	{
+		if (m_iStrategicCandidateFirstSeenAtMs <= 0)
+			return 0;
+
+		return System.GetTickCount(m_iStrategicCandidateFirstSeenAtMs);
+	}
+
+	void RecordStrategicAssignment(
+		SCR_CampaignMilitaryBaseComponent targetBase,
+		string posture)
+	{
+		m_sOperationalPosture = posture;
+		m_iStrategicAssignmentAtMs = System.GetTickCount();
+		ClearStrategicCandidate();
+	}
+
+	bool IsStrategicCandidateReady(
+		SCR_CampaignMilitaryBaseComponent targetBase,
+		string posture,
+		int minimumDwellMs,
+		int stableCandidateMs)
+	{
+		if (!targetBase)
+			return false;
+		if (targetBase == m_TargetBase && posture == m_sOperationalPosture)
+		{
+			ClearStrategicCandidate();
+			return false;
+		}
+
+		if (m_StrategicCandidateTargetBase != targetBase || m_sStrategicCandidatePosture != posture)
+		{
+			m_StrategicCandidateTargetBase = targetBase;
+			m_sStrategicCandidatePosture = posture;
+			m_iStrategicCandidateFirstSeenAtMs = System.GetTickCount();
+			return false;
+		}
+
+		if (GetStrategicAssignmentAgeMs() < minimumDwellMs)
+			return false;
+
+		return m_iStrategicCandidateFirstSeenAtMs > 0 &&
+			System.GetTickCount(m_iStrategicCandidateFirstSeenAtMs) >= stableCandidateMs;
+	}
+
+	void ClearStrategicCandidate()
+	{
+		m_StrategicCandidateTargetBase = null;
+		m_sStrategicCandidatePosture = string.Empty;
+		m_iStrategicCandidateFirstSeenAtMs = 0;
+	}
+
+	int ObserveUnexplainedMobIdle(bool isIdle, int observationSlackMs = 0)
+	{
+		if (!isIdle)
+		{
+			m_iUnexplainedMobIdleStartedAtMs = 0;
+			m_bUnexplainedMobIdleDeadlineReported = false;
+			return 0;
+		}
+
+		if (m_iUnexplainedMobIdleStartedAtMs <= 0)
+		{
+			int nowMs = System.GetTickCount();
+			m_iUnexplainedMobIdleStartedAtMs = Math.Max(1, nowMs - Math.Max(0, observationSlackMs));
+			return System.GetTickCount(m_iUnexplainedMobIdleStartedAtMs);
+		}
+
+		return System.GetTickCount(m_iUnexplainedMobIdleStartedAtMs);
+	}
+
+	int GetUnexplainedMobIdleAgeMs()
+	{
+		if (m_iUnexplainedMobIdleStartedAtMs <= 0)
+			return 0;
+
+		return System.GetTickCount(m_iUnexplainedMobIdleStartedAtMs);
+	}
+
+	int ObserveMeaningfulTaskLoss(bool taskLost, int observationSlackMs = 0)
+	{
+		if (!taskLost)
+		{
+			m_iMeaningfulTaskLostStartedAtMs = 0;
+			m_bMeaningfulTaskLossReported = false;
+			m_bMeaningfulTaskDeadlineReported = false;
+			return 0;
+		}
+
+		if (m_iMeaningfulTaskLostStartedAtMs <= 0)
+		{
+			int nowMs = System.GetTickCount();
+			m_iMeaningfulTaskLostStartedAtMs = Math.Max(1, nowMs - Math.Max(0, observationSlackMs));
+		}
+
+		return System.GetTickCount(m_iMeaningfulTaskLostStartedAtMs);
+	}
+
+	int GetMeaningfulTaskLostAgeMs()
+	{
+		if (m_iMeaningfulTaskLostStartedAtMs <= 0)
+			return 0;
+
+		return System.GetTickCount(m_iMeaningfulTaskLostStartedAtMs);
+	}
+
+	bool MarkMeaningfulTaskLossReported()
+	{
+		if (m_bMeaningfulTaskLossReported)
+			return false;
+
+		m_bMeaningfulTaskLossReported = true;
+		return true;
+	}
+
+	bool MarkMeaningfulTaskDeadlineReported()
+	{
+		if (m_bMeaningfulTaskDeadlineReported)
+			return false;
+
+		m_bMeaningfulTaskDeadlineReported = true;
+		return true;
+	}
+
+	bool ObserveMobIdleSuppression(string reason)
+	{
+		if (reason.IsEmpty() || reason == "NONE")
+		{
+			bool suppressionCleared = !m_sMobIdleSuppressionReason.IsEmpty();
+			m_sMobIdleSuppressionReason = string.Empty;
+			return suppressionCleared;
+		}
+
+		if (m_sMobIdleSuppressionReason == reason)
+			return false;
+
+		m_sMobIdleSuppressionReason = reason;
+		return true;
+	}
+
+	string GetMobIdleSuppressionReason()
+	{
+		return m_sMobIdleSuppressionReason;
+	}
+
+	int ObserveCommanderMotion(vector position, float minimumMovementMeters)
+	{
+		if (!m_bHasCommanderMotionSample)
+		{
+			m_bHasCommanderMotionSample = true;
+			m_vLastCommanderMotionPosition = position;
+			m_iLastCommanderMotionAtMs = System.GetTickCount();
+			return 0;
+		}
+
+		if (vector.DistanceSqXZ(position, m_vLastCommanderMotionPosition) >=
+			minimumMovementMeters * minimumMovementMeters)
+		{
+			m_vLastCommanderMotionPosition = position;
+			m_iLastCommanderMotionAtMs = System.GetTickCount();
+			return 0;
+		}
+
+		return System.GetTickCount(m_iLastCommanderMotionAtMs);
+	}
+
+	bool MarkUnexplainedMobIdleDeadlineReported()
+	{
+		if (m_bUnexplainedMobIdleDeadlineReported)
+			return false;
+
+		m_bUnexplainedMobIdleDeadlineReported = true;
+		return true;
 	}
 
 	AICF_EGroupSlotState GetState()
@@ -624,6 +849,18 @@ class AICF_GroupSlot
 		m_bTargetUnavailableReported = false;
 		m_bLoadBlockReported = false;
 		m_sVehicleTerminalFailure = string.Empty;
+		m_sOperationalPosture = string.Empty;
+		m_iStrategicAssignmentAtMs = 0;
+		m_iUnexplainedMobIdleStartedAtMs = 0;
+		m_bUnexplainedMobIdleDeadlineReported = false;
+		m_iMeaningfulTaskLostStartedAtMs = 0;
+		m_bMeaningfulTaskLossReported = false;
+		m_bMeaningfulTaskDeadlineReported = false;
+		m_sMobIdleSuppressionReason = string.Empty;
+		m_iLastCommanderMotionAtMs = 0;
+		m_bHasCommanderMotionSample = false;
+		m_vLastCommanderMotionPosition = vector.Zero;
+		ClearStrategicCandidate();
 		ClearVehicleTripSuppression();
 		ResetProgressTracking();
 	}

@@ -17,7 +17,7 @@ class AICF_FactionState
 			resolvedConfig.GetInitialTickets(),
 			resolvedConfig.GetReplacementTicketCost());
 
-		BuildDefaultSlots();
+		BuildDefaultSlots(resolvedConfig.GetActiveForcesRolesEnabled());
 	}
 
 	FactionKey GetFactionKey()
@@ -122,18 +122,40 @@ class AICF_FactionState
 		return m_TicketLedger.TryCommitDeployment(deploymentKind);
 	}
 
-	protected void BuildDefaultSlots()
+	protected void BuildDefaultSlots(bool activeForcesRolesEnabled)
 	{
 		m_aGroupSlots.Clear();
+		int attackSlots = AICF_Stage1Config.ATTACK_SLOTS_PER_FACTION;
+		int defendSlots = AICF_Stage1Config.DEFEND_SLOTS_PER_FACTION;
+		if (!activeForcesRolesEnabled)
+		{
+			attackSlots = AICF_Stage1Config.LEGACY_ATTACK_SLOTS_PER_FACTION;
+			defendSlots = AICF_Stage1Config.LEGACY_DEFEND_SLOTS_PER_FACTION;
+		}
+
+		int attackIndex;
+		int defendIndex;
+		int reserveIndex;
 		for (int slotId = 0; slotId < AICF_Stage1Config.GROUP_SLOTS_PER_FACTION; slotId++)
 		{
 			AICF_EGroupRole role = AICF_EGroupRole.RESERVE;
-			if (slotId < AICF_Stage1Config.ATTACK_SLOTS_PER_FACTION)
+			int roleIndex;
+			if (slotId < attackSlots)
+			{
 				role = AICF_EGroupRole.ATTACK;
-			else if (slotId < AICF_Stage1Config.ATTACK_SLOTS_PER_FACTION + AICF_Stage1Config.DEFEND_SLOTS_PER_FACTION)
+				roleIndex = attackIndex++;
+			}
+			else if (slotId < attackSlots + defendSlots)
+			{
 				role = AICF_EGroupRole.DEFEND;
+				roleIndex = defendIndex++;
+			}
+			else
+			{
+				roleIndex = reserveIndex++;
+			}
 
-			m_aGroupSlots.Insert(new AICF_GroupSlot(slotId, role));
+			m_aGroupSlots.Insert(new AICF_GroupSlot(slotId, role, roleIndex));
 		}
 	}
 }

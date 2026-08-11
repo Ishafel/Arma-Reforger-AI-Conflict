@@ -2,9 +2,9 @@
 // without explicit CLI opt-in remains behaviorally equivalent to Stage 2.
 class AICF_Stage3Config
 {
-	static const int DEFAULT_TRANSPORTS_PER_FACTION = 1;
+	static const int DEFAULT_TRANSPORTS_PER_FACTION = 4;
 	static const int DEFAULT_ARMED_LIGHT_PER_FACTION = 0;
-	static const int DEFAULT_MAX_VEHICLES_PER_FACTION = 2;
+	static const int DEFAULT_MAX_VEHICLES_PER_FACTION = 4;
 	static const int DEFAULT_BOARDING_TIMEOUT_MS = 60000;
 	static const int DEFAULT_STUCK_TIMEOUT_MS = 120000;
 	static const float DEFAULT_PROGRESS_METERS = 25.0;
@@ -16,12 +16,17 @@ class AICF_Stage3Config
 	static const int DEFAULT_SPAWN_MAX_ATTEMPTS = 4;
 	static const int DEFAULT_RETRY_BACKOFF_MAX_MS = 60000;
 	static const int DEFAULT_WAIT_PROBE_INTERVAL_MS = 60000;
+	static const int DEFAULT_COHESION_WAIT_TIMEOUT_MS = 300000;
 	static const int DEFAULT_CLEANUP_DELAY_MS = 60000;
 	static const int DEFAULT_ABANDONED_WORLD_POOL_PER_FACTION = 4;
 	static const float DEFAULT_MINIMUM_ROUTE_METERS = 400.0;
 	static const float DEFAULT_MAXIMUM_REUSE_DISTANCE_METERS = 250.0;
 	static const float DEFAULT_MAXIMUM_SPAWN_DISTANCE_METERS = 2000.0;
 	static const float DEFAULT_COHESION_DISTANCE_METERS = 100.0;
+	// A fresh full-size transport is useful only while a five-person fireteam
+	// still has a majority of its roster. A vehicle that is already assigned is
+	// deliberately not revoked when later losses take the group below this gate.
+	static const int DEFAULT_MINIMUM_VEHICLE_REQUEST_AGENTS = 3;
 
 	protected bool m_bVehiclesEnabled;
 	protected int m_iTransportVehiclesPerFaction;
@@ -38,12 +43,14 @@ class AICF_Stage3Config
 	protected int m_iSpawnMaxAttempts;
 	protected int m_iRetryBackoffMaxMs;
 	protected int m_iWaitProbeIntervalMs;
+	protected int m_iCohesionWaitTimeoutMs;
 	protected int m_iCleanupDelayMs;
 	protected int m_iAbandonedWorldPoolPerFaction;
 	protected float m_fMinimumRouteMeters;
 	protected float m_fMaximumReuseDistanceMeters;
 	protected float m_fMaximumSpawnDistanceMeters;
 	protected float m_fCohesionDistanceMeters;
+	protected int m_iMinimumVehicleRequestAgents;
 
 	void AICF_Stage3Config()
 	{
@@ -62,12 +69,14 @@ class AICF_Stage3Config
 		m_iSpawnMaxAttempts = DEFAULT_SPAWN_MAX_ATTEMPTS;
 		m_iRetryBackoffMaxMs = DEFAULT_RETRY_BACKOFF_MAX_MS;
 		m_iWaitProbeIntervalMs = DEFAULT_WAIT_PROBE_INTERVAL_MS;
+		m_iCohesionWaitTimeoutMs = DEFAULT_COHESION_WAIT_TIMEOUT_MS;
 		m_iCleanupDelayMs = DEFAULT_CLEANUP_DELAY_MS;
 		m_iAbandonedWorldPoolPerFaction = DEFAULT_ABANDONED_WORLD_POOL_PER_FACTION;
 		m_fMinimumRouteMeters = DEFAULT_MINIMUM_ROUTE_METERS;
 		m_fMaximumReuseDistanceMeters = DEFAULT_MAXIMUM_REUSE_DISTANCE_METERS;
 		m_fMaximumSpawnDistanceMeters = DEFAULT_MAXIMUM_SPAWN_DISTANCE_METERS;
 		m_fCohesionDistanceMeters = DEFAULT_COHESION_DISTANCE_METERS;
+		m_iMinimumVehicleRequestAgents = DEFAULT_MINIMUM_VEHICLE_REQUEST_AGENTS;
 		ApplyCLIOverrides();
 		NormalizeVehicleCounts();
 	}
@@ -87,12 +96,14 @@ class AICF_Stage3Config
 	int GetSpawnMaxAttempts() { return m_iSpawnMaxAttempts; }
 	int GetRetryBackoffMaxMs() { return m_iRetryBackoffMaxMs; }
 	int GetWaitProbeIntervalMs() { return m_iWaitProbeIntervalMs; }
+	int GetCohesionWaitTimeoutMs() { return m_iCohesionWaitTimeoutMs; }
 	int GetCleanupDelayMs() { return m_iCleanupDelayMs; }
 	int GetAbandonedWorldPoolPerFaction() { return m_iAbandonedWorldPoolPerFaction; }
 	float GetMinimumRouteMeters() { return m_fMinimumRouteMeters; }
 	float GetMaximumReuseDistanceMeters() { return m_fMaximumReuseDistanceMeters; }
 	float GetMaximumSpawnDistanceMeters() { return m_fMaximumSpawnDistanceMeters; }
 	float GetCohesionDistanceMeters() { return m_fCohesionDistanceMeters; }
+	int GetMinimumVehicleRequestAgents() { return m_iMinimumVehicleRequestAgents; }
 
 	protected void ApplyCLIOverrides()
 	{
@@ -100,9 +111,9 @@ class AICF_Stage3Config
 		if (System.GetCLIParam("aicfVehiclesEnabled", value))
 			m_bVehiclesEnabled = value.ToInt() > 0;
 		if (System.GetCLIParam("aicfTransportVehiclesPerFaction", value))
-			m_iTransportVehiclesPerFaction = ClampInt(value.ToInt(), 0, AICF_Stage1Config.ATTACK_SLOTS_PER_FACTION);
+			m_iTransportVehiclesPerFaction = ClampInt(value.ToInt(), 0, AICF_Stage1Config.GROUP_SLOTS_PER_FACTION);
 		if (System.GetCLIParam("aicfArmedLightVehiclesPerFaction", value))
-			m_iArmedLightVehiclesPerFaction = ClampInt(value.ToInt(), 0, AICF_Stage1Config.ATTACK_SLOTS_PER_FACTION);
+			m_iArmedLightVehiclesPerFaction = ClampInt(value.ToInt(), 0, AICF_Stage1Config.GROUP_SLOTS_PER_FACTION);
 		if (System.GetCLIParam("aicfMaxVehiclesPerFaction", value))
 			m_iMaxVehiclesPerFaction = ClampInt(value.ToInt(), 0, AICF_Stage1Config.GROUP_SLOTS_PER_FACTION);
 		if (System.GetCLIParam("aicfVehicleBoardingTimeoutMs", value))
@@ -127,6 +138,8 @@ class AICF_Stage3Config
 			m_iRetryBackoffMaxMs = ClampInt(value.ToInt(), 1000, 600000);
 		if (System.GetCLIParam("aicfVehicleWaitProbeIntervalMs", value))
 			m_iWaitProbeIntervalMs = ClampInt(value.ToInt(), 10000, 1800000);
+		if (System.GetCLIParam("aicfVehicleCohesionWaitTimeoutMs", value))
+			m_iCohesionWaitTimeoutMs = ClampInt(value.ToInt(), 60000, 1800000);
 		if (System.GetCLIParam("aicfVehicleCleanupDelayMs", value))
 			m_iCleanupDelayMs = ClampInt(value.ToInt(), 0, 1800000);
 		if (System.GetCLIParam("aicfVehicleAbandonedWorldPoolPerFaction", value))
@@ -139,13 +152,15 @@ class AICF_Stage3Config
 			m_fMaximumSpawnDistanceMeters = ClampFloat(value.ToFloat(), 100.0, 10000.0);
 		if (System.GetCLIParam("aicfVehicleCohesionDistanceMeters", value))
 			m_fCohesionDistanceMeters = ClampFloat(value.ToFloat(), 25.0, 500.0);
+		if (System.GetCLIParam("aicfVehicleMinimumRequestAgents", value))
+			m_iMinimumVehicleRequestAgents = ClampInt(value.ToInt(), 1, AICF_Stage1Config.MANAGED_GROUP_SIZE);
 	}
 
 	protected void NormalizeVehicleCounts()
 	{
-		int remainingAttackSlots = Math.Max(0, AICF_Stage1Config.ATTACK_SLOTS_PER_FACTION - m_iTransportVehiclesPerFaction);
-		if (m_iArmedLightVehiclesPerFaction > remainingAttackSlots)
-			m_iArmedLightVehiclesPerFaction = remainingAttackSlots;
+		int remainingSlots = Math.Max(0, AICF_Stage1Config.GROUP_SLOTS_PER_FACTION - m_iTransportVehiclesPerFaction);
+		if (m_iArmedLightVehiclesPerFaction > remainingSlots)
+			m_iArmedLightVehiclesPerFaction = remainingSlots;
 	}
 
 	protected int ClampInt(int value, int minimum, int maximum)

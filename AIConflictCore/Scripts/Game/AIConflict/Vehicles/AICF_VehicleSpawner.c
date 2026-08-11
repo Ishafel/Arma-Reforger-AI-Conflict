@@ -1,3 +1,26 @@
+// Compact result object for one safe base. Keeping per-position surface and
+// roster samples out of TrySpawn avoids exhausting the Enforce compiler's local
+// frame while retaining the exact rejection/selection evidence for the caller.
+class AICF_VehicleSpawnSiteEvaluation
+{
+	SCR_CampaignMilitaryBaseComponent m_Base;
+	string m_sResult;
+	string m_sTraceDetails;
+	vector m_vPosition;
+	int m_iCandidatePositionIndex = -1;
+	int m_iCandidatePositionCount;
+	string m_sSurfaceKind;
+	float m_fFootprintHeightDeltaMeters = -1.0;
+	int m_iSurfaceProbeCount;
+	bool m_bHasBoardingRejection;
+	vector m_vBoardingRejectionPosition;
+	int m_iAliveCount;
+	float m_fLeaderDistanceMeters;
+	float m_fNearestDistanceMeters;
+	float m_fFarthestDistanceMeters;
+	string m_sMemberSamples;
+}
+
 // Tries safe friendly Conflict bases from nearest to farthest and uses the same
 // stock empty-terrain query as initial HQ vehicles. The caller reserves cap
 // capacity before entering this class, so spawn validation and creation are
@@ -6,6 +29,9 @@ class AICF_VehicleSpawner
 {
 	protected static const float SPAWN_SEARCH_RADIUS_METERS = 45.0;
 	protected static const float VEHICLE_CLEARANCE_RADIUS_METERS = 8.0;
+	protected static const int MAX_SPAWN_POSITIONS_PER_BASE = 16;
+	protected static const float SURFACE_PROBE_RADIUS_METERS = 6.0;
+	protected static const float MAX_FOOTPRINT_HEIGHT_DELTA_METERS = 4.0;
 
 	bool TrySpawn(
 		SCR_GameModeCampaign campaign,
@@ -144,16 +170,10 @@ class AICF_VehicleSpawner
 			return false;
 		}
 
-		vector position;
 		string siteFailureReason;
 		SCR_CampaignMilitaryBaseComponent siteFailureBase;
-		SCR_CampaignMilitaryBaseComponent boardingRejectionBase;
-		vector boardingRejectionPosition;
-		int boardingRejectionAliveCount;
-		float boardingRejectionLeaderDistanceMeters;
-		float boardingRejectionNearestDistanceMeters;
-		float boardingRejectionFarthestDistanceMeters;
-		string boardingRejectionMemberSamples;
+		AICF_VehicleSpawnSiteEvaluation boardingRejectionSite;
+		AICF_VehicleSpawnSiteEvaluation selectedSite;
 		foreach (SCR_CampaignMilitaryBaseComponent safeCandidate : safeCandidates)
 		{
 			float candidateDistanceSq = vector.DistanceSqXZ(safeCandidate.GetOwner().GetOrigin(), preferredPosition);
@@ -178,20 +198,43 @@ class AICF_VehicleSpawner
 				continue;
 			}
 
-			vector candidatePosition;
-			if (!SCR_WorldTools.FindEmptyTerrainPosition(
-				candidatePosition,
-				safeCandidate.GetOwner().GetOrigin(),
-				SPAWN_SEARCH_RADIUS_METERS,
-				VEHICLE_CLEARANCE_RADIUS_METERS))
+			AICF_VehicleSpawnSiteEvaluation site = EvaluateBaseSpawnPositions(
+				runtime,
+				faction,
+				slot,
+				safeCandidate,
+				maximumBoardingDistanceMeters,
+				preflightOnly);
+			AppendCandidateTrace(
+				candidateTrace,
+				safeCandidateKey,
+				site.m_sResult,
+				candidateDistanceMeters,
+				site.m_sTraceDetails);
+			actionableCandidateCount++;
+
+			if (site.m_sResult == "NO_BOARDING_SITE_WITHIN_RANGE" &&
+				site.m_bHasBoardingRejection && !boardingRejectionSite)
 			{
-				AppendCandidateTrace(
-					candidateTrace,
-					safeCandidateKey,
-					"NO_EMPTY_TERRAIN",
-					candidateDistanceMeters,
-					string.Empty);
-				actionableCandidateCount++;
+				boardingRejectionSite = site;
+				siteFailureReason = "NO_BOARDING_SITE_WITHIN_RANGE";
+				siteFailureBase = safeCandidate;
+			}
+
+			if (site.m_sResult == "SELECTED")
+			{
+				selectedSite = site;
+				spawnBase = safeCandidate;
+				break;
+			}
+			if (site.m_sResult == "GROUP_NOT_READY")
+			{
+				siteFailureReason = "GROUP_NOT_READY";
+				siteFailureBase = safeCandidate;
+				break;
+			}
+			if (site.m_sResult == "NO_EMPTY_TERRAIN")
+			{
 				if (siteFailureReason.IsEmpty() || siteFailureReason == "TOO_FAR")
 				{
 					siteFailureReason = "NO_EMPTY_TERRAIN";
@@ -199,77 +242,14 @@ class AICF_VehicleSpawner
 				}
 				continue;
 			}
-
-			int aliveCount;
-			float leaderDistanceMeters;
-			float nearestDistanceMeters;
-			float farthestDistanceMeters;
-			string memberSamples;
-			MeasureAliveGroupDistancesToPosition(
-				slot.GetGroup(),
-				candidatePosition,
-				aliveCount,
-				leaderDistanceMeters,
-				nearestDistanceMeters,
-				farthestDistanceMeters,
-				memberSamples);
-			if (aliveCount <= 0)
+			if (site.m_sResult == "WATER_OR_UNDRIVABLE_SURFACE")
 			{
-				AppendCandidateTrace(
-					candidateTrace,
-					safeCandidateKey,
-					"GROUP_NOT_READY",
-					candidateDistanceMeters,
-					"alive=0");
-				actionableCandidateCount++;
-				siteFailureReason = "GROUP_NOT_READY";
-				siteFailureBase = safeCandidate;
-				break;
-			}
-			if (maximumBoardingDistanceMeters > 0 && aliveCount > 0 &&
-				farthestDistanceMeters > maximumBoardingDistanceMeters)
-			{
-				AppendCandidateTrace(
-					candidateTrace,
-					safeCandidateKey,
-					"NO_BOARDING_SITE_WITHIN_RANGE",
-					candidateDistanceMeters,
-					string.Format(
-						"alive=%1|nearest_m=%2|farthest_m=%3|maximum_boarding_m=%4",
-						aliveCount,
-						nearestDistanceMeters,
-						farthestDistanceMeters,
-						maximumBoardingDistanceMeters));
-				actionableCandidateCount++;
-				if (siteFailureReason != "NO_BOARDING_SITE_WITHIN_RANGE")
+				if (siteFailureReason.IsEmpty() || siteFailureReason == "TOO_FAR" || siteFailureReason == "NO_EMPTY_TERRAIN")
 				{
-					siteFailureReason = "NO_BOARDING_SITE_WITHIN_RANGE";
+					siteFailureReason = "WATER_OR_UNDRIVABLE_SURFACE";
 					siteFailureBase = safeCandidate;
-					boardingRejectionBase = safeCandidate;
-					boardingRejectionPosition = candidatePosition;
-					boardingRejectionAliveCount = aliveCount;
-					boardingRejectionLeaderDistanceMeters = leaderDistanceMeters;
-					boardingRejectionNearestDistanceMeters = nearestDistanceMeters;
-					boardingRejectionFarthestDistanceMeters = farthestDistanceMeters;
-					boardingRejectionMemberSamples = memberSamples;
 				}
-				continue;
 			}
-
-			spawnBase = safeCandidate;
-			position = candidatePosition;
-			AppendCandidateTrace(
-				candidateTrace,
-				safeCandidateKey,
-				"SELECTED",
-				candidateDistanceMeters,
-				string.Format(
-					"alive=%1|nearest_m=%2|farthest_m=%3",
-					aliveCount,
-					nearestDistanceMeters,
-					farthestDistanceMeters));
-			actionableCandidateCount++;
-			break;
 		}
 
 		ReportCandidateEvaluation(
@@ -284,28 +264,32 @@ class AICF_VehicleSpawner
 
 		// Report only the nearest exact boarding rejection. Reporting each failed
 		// candidate would rotate the runtime's one-shot key and recreate warning spam.
-		if (boardingRejectionBase)
+		if (boardingRejectionSite)
 		{
 			string reportKey = string.Format(
 				"SITE:%1:%2:%3:%4",
 				runtime.GetRequestGeneration(),
 				runtime.GetSpawnAttempt(),
-				AICF_Stage1Diagnostics.BaseKey(boardingRejectionBase),
+				AICF_Stage1Diagnostics.BaseKey(boardingRejectionSite.m_Base),
 				"NO_BOARDING_SITE_WITHIN_RANGE");
 			if (runtime.MarkSpawnIssueReported(reportKey))
 			{
-				string siteSample = string.Format("%1,%2,%3", boardingRejectionPosition[0], boardingRejectionPosition[1], boardingRejectionPosition[2]);
+				string siteSample = string.Format(
+					"%1,%2,%3",
+					boardingRejectionSite.m_vBoardingRejectionPosition[0],
+					boardingRejectionSite.m_vBoardingRejectionPosition[1],
+					boardingRejectionSite.m_vBoardingRejectionPosition[2]);
 				string rejectionDetails = string.Format(
 						"%1 base=%2 retryable=1 alive=%3 leader_m=%4 nearest_m=%5 farthest_m=%6 maximum_m=%7 site=[%8] member_samples=[%9]",
 						runtime.DescribeContext("NO_BOARDING_SITE_WITHIN_RANGE"),
-						AICF_Stage1Diagnostics.BaseKey(boardingRejectionBase),
-						boardingRejectionAliveCount,
-						boardingRejectionLeaderDistanceMeters,
-						boardingRejectionNearestDistanceMeters,
-						boardingRejectionFarthestDistanceMeters,
+						AICF_Stage1Diagnostics.BaseKey(boardingRejectionSite.m_Base),
+						boardingRejectionSite.m_iAliveCount,
+						boardingRejectionSite.m_fLeaderDistanceMeters,
+						boardingRejectionSite.m_fNearestDistanceMeters,
+						boardingRejectionSite.m_fFarthestDistanceMeters,
 						maximumBoardingDistanceMeters,
 						siteSample,
-						boardingRejectionMemberSamples);
+						boardingRejectionSite.m_sMemberSamples);
 				if (preflightOnly)
 					AICF_Stage3Diagnostics.Info("VEHICLE_SPAWN_SITE_REJECTED", rejectionDetails);
 				else
@@ -342,19 +326,43 @@ class AICF_VehicleSpawner
 		{
 			failureReason = string.Empty;
 			failureBase = null;
+			string preflightSurfaceTelemetry = FormatSelectedSurfaceTelemetry(
+				selectedSite.m_vPosition,
+				selectedSite.m_iCandidatePositionIndex,
+				selectedSite.m_iCandidatePositionCount,
+				selectedSite.m_sSurfaceKind,
+				selectedSite.m_fFootprintHeightDeltaMeters,
+				selectedSite.m_iSurfaceProbeCount);
 			AICF_Stage3Diagnostics.Info(
 				"VEHICLE_SPAWN_PREFLIGHT_READY",
-				string.Format("%1 base=%2 owner=%3 contested=0 entity_created=0", runtime.DescribeContext("SAFE_FRIENDLY_BASE"), AICF_Stage1Diagnostics.BaseKey(spawnBase), faction.GetFactionKey()));
+				string.Format(
+					"%1 base=%2 owner=%3 contested=0 entity_created=0%4",
+					runtime.DescribeContext("SAFE_FRIENDLY_BASE"),
+					AICF_Stage1Diagnostics.BaseKey(spawnBase),
+					faction.GetFactionKey(),
+					preflightSurfaceTelemetry));
 			return true;
 		}
 
+		string selectedDetails = string.Format(
+			"%1 base=%2 owner=%3 contested=0",
+			runtime.DescribeContext("SAFE_FRIENDLY_BASE"),
+			AICF_Stage1Diagnostics.BaseKey(spawnBase),
+			faction.GetFactionKey());
+		selectedDetails += FormatSelectedSurfaceTelemetry(
+			selectedSite.m_vPosition,
+			selectedSite.m_iCandidatePositionIndex,
+			selectedSite.m_iCandidatePositionCount,
+			selectedSite.m_sSurfaceKind,
+			selectedSite.m_fFootprintHeightDeltaMeters,
+			selectedSite.m_iSurfaceProbeCount);
 		AICF_Stage3Diagnostics.Info(
 			"VEHICLE_SPAWN_SITE_SELECTED",
-			string.Format("%1 base=%2 owner=%3 contested=0", runtime.DescribeContext("SAFE_FRIENDLY_BASE"), AICF_Stage1Diagnostics.BaseKey(spawnBase), faction.GetFactionKey()));
+			selectedDetails);
 
 		EntitySpawnParams params = new EntitySpawnParams();
 		params.TransformMode = ETransformMode.WORLD;
-		params.Transform[3] = position;
+		params.Transform[3] = selectedSite.m_vPosition;
 		vehicle = Vehicle.Cast(GetGame().SpawnEntityPrefabEx(prefab, false, params: params));
 		if (!vehicle)
 		{
@@ -405,6 +413,261 @@ class AICF_VehicleSpawner
 		failureReason = string.Empty;
 		failureBase = null;
 		return true;
+	}
+
+	protected AICF_VehicleSpawnSiteEvaluation EvaluateBaseSpawnPositions(
+		AICF_VehicleRuntime runtime,
+		SCR_CampaignFaction faction,
+		AICF_GroupSlot slot,
+		SCR_CampaignMilitaryBaseComponent candidateBase,
+		float maximumBoardingDistanceMeters,
+		bool preflightOnly)
+	{
+		AICF_VehicleSpawnSiteEvaluation result = new AICF_VehicleSpawnSiteEvaluation();
+		result.m_Base = candidateBase;
+		vector searchCenter = candidateBase.GetOwner().GetOrigin();
+		SCR_SpawnPoint baseSpawnPoint = candidateBase.GetSpawnPoint();
+		if (baseSpawnPoint)
+			searchCenter = baseSpawnPoint.GetOrigin();
+
+		array<vector> candidatePositions = {};
+		result.m_iCandidatePositionCount = SCR_WorldTools.FindAllEmptyTerrainPositions(
+			candidatePositions,
+			searchCenter,
+			SPAWN_SEARCH_RADIUS_METERS,
+			VEHICLE_CLEARANCE_RADIUS_METERS,
+			maxResults: MAX_SPAWN_POSITIONS_PER_BASE,
+			world: candidateBase.GetOwner().GetWorld());
+		if (result.m_iCandidatePositionCount <= 0)
+		{
+			result.m_sResult = "NO_EMPTY_TERRAIN";
+			return result;
+		}
+
+		bool foundValidatedSurface;
+		int rejectedSurfaceCount;
+		for (int candidatePositionIndex; candidatePositionIndex < result.m_iCandidatePositionCount; candidatePositionIndex++)
+		{
+			vector candidatePosition = candidatePositions[candidatePositionIndex];
+			string surfaceKind;
+			bool waterDetected;
+			float footprintHeightDeltaMeters;
+			int surfaceProbeCount;
+			if (!IsWheeledSpawnSurfaceSuitable(
+				candidatePosition,
+				candidateBase.GetOwner().GetWorld(),
+				surfaceKind,
+				waterDetected,
+				footprintHeightDeltaMeters,
+				surfaceProbeCount))
+			{
+				rejectedSurfaceCount++;
+				ReportSurfaceCandidateRejected(
+					runtime,
+					faction,
+					slot,
+					candidateBase,
+					candidatePosition,
+					candidatePositionIndex,
+					result.m_iCandidatePositionCount,
+					preflightOnly,
+					surfaceKind,
+					waterDetected,
+					footprintHeightDeltaMeters,
+					surfaceProbeCount);
+				continue;
+			}
+			foundValidatedSurface = true;
+
+			int aliveCount;
+			float leaderDistanceMeters;
+			float nearestDistanceMeters;
+			float farthestDistanceMeters;
+			string memberSamples;
+			MeasureAliveGroupDistancesToPosition(
+				slot.GetGroup(),
+				candidatePosition,
+				aliveCount,
+				leaderDistanceMeters,
+				nearestDistanceMeters,
+				farthestDistanceMeters,
+				memberSamples);
+			if (aliveCount <= 0)
+			{
+				result.m_sResult = "GROUP_NOT_READY";
+				result.m_sTraceDetails = "alive=0";
+				return result;
+			}
+
+			if (maximumBoardingDistanceMeters > 0 && farthestDistanceMeters > maximumBoardingDistanceMeters)
+			{
+				if (!result.m_bHasBoardingRejection)
+				{
+					result.m_bHasBoardingRejection = true;
+					result.m_vBoardingRejectionPosition = candidatePosition;
+					result.m_iAliveCount = aliveCount;
+					result.m_fLeaderDistanceMeters = leaderDistanceMeters;
+					result.m_fNearestDistanceMeters = nearestDistanceMeters;
+					result.m_fFarthestDistanceMeters = farthestDistanceMeters;
+					result.m_sMemberSamples = memberSamples;
+				}
+				continue;
+			}
+
+			result.m_sResult = "SELECTED";
+			result.m_vPosition = candidatePosition;
+			result.m_iCandidatePositionIndex = candidatePositionIndex;
+			result.m_sSurfaceKind = surfaceKind;
+			result.m_fFootprintHeightDeltaMeters = footprintHeightDeltaMeters;
+			result.m_iSurfaceProbeCount = surfaceProbeCount;
+			result.m_sTraceDetails = string.Format(
+				"alive=%1|nearest_m=%2|farthest_m=%3|candidate_index=%4",
+				aliveCount,
+				nearestDistanceMeters,
+				farthestDistanceMeters,
+				candidatePositionIndex);
+			return result;
+		}
+
+		if (!foundValidatedSurface)
+		{
+			result.m_sResult = "WATER_OR_UNDRIVABLE_SURFACE";
+			result.m_sTraceDetails = string.Format(
+				"rejected=%1|evaluated=%2",
+				rejectedSurfaceCount,
+				result.m_iCandidatePositionCount);
+			return result;
+		}
+
+		result.m_sResult = "NO_BOARDING_SITE_WITHIN_RANGE";
+		result.m_sTraceDetails = string.Format(
+			"evaluated=%1|maximum_boarding_m=%2",
+			result.m_iCandidatePositionCount,
+			maximumBoardingDistanceMeters);
+		return result;
+	}
+
+	protected bool IsWheeledSpawnSurfaceSuitable(
+		vector candidatePosition,
+		BaseWorld world,
+		out string surfaceKind,
+		out bool waterDetected,
+		out float footprintHeightDeltaMeters,
+		out int surfaceProbeCount)
+	{
+		surfaceKind = "WORLD_UNAVAILABLE";
+		waterDetected = false;
+		footprintHeightDeltaMeters = -1.0;
+		surfaceProbeCount = 0;
+		if (!world)
+			return false;
+
+		array<vector> probeOffsets = {};
+		probeOffsets.Insert(vector.Zero);
+		probeOffsets.Insert(Vector(SURFACE_PROBE_RADIUS_METERS, 0, 0));
+		probeOffsets.Insert(Vector(-SURFACE_PROBE_RADIUS_METERS, 0, 0));
+		probeOffsets.Insert(Vector(0, 0, SURFACE_PROBE_RADIUS_METERS));
+		probeOffsets.Insert(Vector(0, 0, -SURFACE_PROBE_RADIUS_METERS));
+		bool hasTerrainHeight;
+		float minimumTerrainY;
+		float maximumTerrainY;
+		foreach (vector probeOffset : probeOffsets)
+		{
+			vector probePosition = candidatePosition + probeOffset;
+			float terrainY = world.GetSurfaceY(probePosition[0], probePosition[2]);
+			probePosition[1] = terrainY;
+			surfaceProbeCount++;
+			if (ChimeraWorldUtils.TryGetWaterSurfaceSimple(world, probePosition))
+			{
+				waterDetected = true;
+				surfaceKind = "WATER";
+				return false;
+			}
+
+			if (!hasTerrainHeight)
+			{
+				minimumTerrainY = terrainY;
+				maximumTerrainY = terrainY;
+				hasTerrainHeight = true;
+			}
+			else
+			{
+				minimumTerrainY = Math.Min(minimumTerrainY, terrainY);
+				maximumTerrainY = Math.Max(maximumTerrainY, terrainY);
+			}
+		}
+
+		footprintHeightDeltaMeters = maximumTerrainY - minimumTerrainY;
+		if (footprintHeightDeltaMeters > MAX_FOOTPRINT_HEIGHT_DELTA_METERS)
+		{
+			surfaceKind = "UNEVEN_TERRAIN";
+			return false;
+		}
+
+		surfaceKind = "LAND";
+		return true;
+	}
+
+	protected void ReportSurfaceCandidateRejected(
+		AICF_VehicleRuntime runtime,
+		SCR_CampaignFaction faction,
+		AICF_GroupSlot slot,
+		SCR_CampaignMilitaryBaseComponent candidateBase,
+		vector candidatePosition,
+		int candidatePositionIndex,
+		int candidatePositionCount,
+		bool preflightOnly,
+		string surfaceKind,
+		bool waterDetected,
+		float footprintHeightDeltaMeters,
+		int surfaceProbeCount)
+	{
+		string details = string.Format(
+			"faction=%1 slot=%2 base=%3 reason=WATER_OR_UNDRIVABLE_SURFACE",
+			faction.GetFactionKey(),
+			slot.GetSlotKey(),
+			AICF_Stage1Diagnostics.BaseKey(candidateBase));
+		details += string.Format(
+			" candidate_index=%1 candidates=%2 preflight=%3 request_generation=%4",
+			candidatePositionIndex,
+			candidatePositionCount,
+			preflightOnly,
+			runtime.GetRequestGeneration());
+		details += string.Format(
+			" origin=[%1,%2,%3] surface=%4 water=%5",
+			candidatePosition[0],
+			candidatePosition[1],
+			candidatePosition[2],
+			surfaceKind,
+			waterDetected);
+		details += string.Format(
+			" footprint_delta_m=%1 probes=%2",
+			footprintHeightDeltaMeters,
+			surfaceProbeCount);
+		AICF_Stage35Diagnostics.Info("VEHICLE_SPAWN_CANDIDATE_REJECTED", details);
+	}
+
+	protected string FormatSelectedSurfaceTelemetry(
+		vector position,
+		int candidatePositionIndex,
+		int candidatePositionCount,
+		string surfaceKind,
+		float footprintHeightDeltaMeters,
+		int surfaceProbeCount)
+	{
+		string details = string.Format(
+			" origin=[%1,%2,%3] surface=%4",
+			position[0],
+			position[1],
+			position[2],
+			surfaceKind);
+		details += string.Format(
+			" water=0 footprint_delta_m=%1 probes=%2 candidate_index=%3 candidates=%4",
+			footprintHeightDeltaMeters,
+			surfaceProbeCount,
+			candidatePositionIndex,
+			candidatePositionCount);
+		return details;
 	}
 
 	protected void AppendCandidateTrace(

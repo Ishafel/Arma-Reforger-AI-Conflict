@@ -20,6 +20,7 @@ enum AICF_EVehicleState
 enum AICF_EVehicleKind
 {
 	TRANSPORT,
+	LIGHT_TRANSPORT,
 	ARMED_LIGHT
 }
 

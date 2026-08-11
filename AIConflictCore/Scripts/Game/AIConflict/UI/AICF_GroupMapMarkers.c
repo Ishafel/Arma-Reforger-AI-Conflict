@@ -73,6 +73,8 @@ class AICF_GroupMapMarkerEntry : SCR_MapMarkerEntryDynamic
 		int slotId = remainder / 10000;
 		remainder = remainder % 10000;
 		int roleCode = remainder / 1000;
+		remainder = remainder % 1000;
+		int roleLocalIndex = remainder / 100;
 
 		FactionKey factionKey = "US";
 		Color markerColor = Color.FromSRGBA(44, 126, 255, 255);
@@ -112,7 +114,7 @@ class AICF_GroupMapMarkerEntry : SCR_MapMarkerEntryDynamic
 
 		string markerText = marker.AICF_GetGroupMarkerText();
 		if (markerText.IsEmpty())
-			markerText = string.Format("%1 %2%3", factionKey, role, slotId);
+			markerText = string.Format("%1 %2%3", factionKey, role, roleLocalIndex);
 
 		widgetComp.SetColor(markerColor);
 		widgetComp.SetText(markerText);
@@ -305,10 +307,9 @@ class AICF_GroupMapMarkerSystem
 		string factionKey = factionState.GetFactionKey();
 		string role = AICF_Stage1Diagnostics.RoleToString(slot.GetRole());
 		string identity = string.Format(
-			"%1 %2%3",
+			"%1 %2",
 			factionKey,
-			GetShortRole(slot.GetRole()),
-			slot.GetSlotId());
+			GetRoleLocalMarkerKey(slot));
 		string task = DescribeTask(factionState, slot, group);
 		if (slot.IsRecoveringFromStuck())
 		{
@@ -381,10 +382,18 @@ class AICF_GroupMapMarkerSystem
 				return string.Format("MOVING TO %1", targetLabel);
 
 			case AICF_EGroupRole.DEFEND:
-				if (atObjective)
-					return string.Format("DEFENDING %1", targetLabel);
+				if (slot.GetOperationalPosture() == "QRF")
+				{
+					if (atObjective)
+						return string.Format("QRF AT %1", targetLabel);
 
-				return string.Format("MOVING TO DEFEND %1", targetLabel);
+					return string.Format("QRF TO %1", targetLabel);
+				}
+
+				if (atObjective)
+					return string.Format("FORWARD DEFEND %1", targetLabel);
+
+				return string.Format("MOVING TO FORWARD DEFEND %1", targetLabel);
 
 			case AICF_EGroupRole.RESERVE:
 				if (atObjective)
@@ -411,6 +420,24 @@ class AICF_GroupMapMarkerSystem
 		return "?";
 	}
 
+	// Marker identity is role-local (A0/A1/A2/D0), while slotId remains the
+	// stable internal identity used by lifecycle and replication. The boundary
+	// fallback also keeps old 2/1/1 baseline layouts readable.
+	protected string GetRoleLocalMarkerKey(AICF_GroupSlot slot)
+	{
+		if (!slot)
+			return "?";
+
+		int roleLocalIndex = slot.GetRoleIndex();
+		if (slot.GetRole() == AICF_EGroupRole.DEFEND &&
+			slot.GetSlotId() >= AICF_Stage1Config.ATTACK_SLOTS_PER_FACTION)
+		{
+			roleLocalIndex = slot.GetSlotId() - AICF_Stage1Config.ATTACK_SLOTS_PER_FACTION;
+		}
+
+		return string.Format("%1%2", GetShortRole(slot.GetRole()), roleLocalIndex);
+	}
+
 	protected int PackStableConfig(bool isUSSR, AICF_GroupSlot slot)
 	{
 		int factionCode;
@@ -419,7 +446,8 @@ class AICF_GroupMapMarkerSystem
 
 		return factionCode * 100000 +
 			slot.GetSlotId() * 10000 +
-			((int)slot.GetRole()) * 1000;
+			((int)slot.GetRole()) * 1000 +
+			slot.GetRoleIndex() * 100;
 	}
 
 	protected void RemoveMarker(int markerIndex)

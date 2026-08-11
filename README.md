@@ -10,7 +10,7 @@ Scripts-only прототип автономного AI Conflict для Arma Ref
 | Stage 1 — пехотный вертикальный срез | **PASS** | Подтверждены 4+4 группы, роли `2/1/1`, AI-захват и retarget, безопасные подкрепления, билеты, групповые маркеры и клиентский runtime-прогон |
 | Stage 2 — надёжность и баланс | **кандидат реализован** | Lifecycle-аудит, восстановление приказов, stuck-watchdog, spawn/load guard, внешний CLI-конфиг и headless soak; runtime-матрица учитывается отдельно |
 | Stage 3 — наземная техника | **условно завершён / принят заочно** | Владелец проекта зафиксировал текущую реализацию в `main` как завершение этапа с продолжением анализа. Исторические Transport T1–T9 и Armed A1 остаются `FAIL`, известные дефекты не закрываются административно; post-T9-патч сохраняет stuck-группу в поле, разделяет crew/mobility budget и выполняет bounded safe vehicle-unstuck с обязательным post-recovery motion/progress evidence. Static audit и Workbench validation пройдены |
-| Stage 3.5 — Active Motorized Forces | **запланирован** | Четыре группы по пять бойцов на сторону; `3 ATTACK / 1 forward DEFEND-QRF`; одна вместительная машина на каждый managed slot; controlled matrix и soak до экономики |
+| Stage 3.5 — Active Motorized Forces | **реализован, runtime-приёмка не запускалась** | Четыре группы по пять бойцов на сторону; `3 ATTACK / 1 forward DEFEND-QRF`; вместительный truck/light transport для каждого managed slot; static audit и Workbench validation пройдены, controlled matrix и soak остаются `NOT RUN` |
 | Полный MVP | **не готов к приёмке** | После Stage 2 остаются стандартная MVP-матрица, клиентская синхронизация и полный 30-минутный прогон |
 | Двухчасовой soak | **не запускался** | Выполняется отдельно только после успешной полной MVP-матрицы |
 
@@ -87,16 +87,18 @@ Stage 1 реализует серверные модели конфигурац�
 
 Stage 3 условно завершён и принят владельцем проекта заочно на текущем snapshot; дальнейший анализ продолжается. Ручные Transport T1–T9 и Armed A1 сохраняют исторический статус `FAIL`, а подробные T8/T9-отчёты — в `docs/STAGE_3_TESTING.md`: известные дефекты не считаются исчезнувшими. Post-T9-патч сохраняет persistent-stuck группу и её target на достигнутой позиции, возобновляет операцию после bounded hold или изменения карты, пишет агрегированный результат проверки каждой невражеской spawn-базы и фиксирует current AI action каждого бойца во время посадки. Crew-role recovery больше не расходует и не сбрасывает mobility watchdog; исправная неподвижная машина получает bounded authority-only reposition с obstacle/water/mine/character/player guards, а успех подтверждается только последующим самостоятельным motion либо route progress. Ранее добавленные bounded `WAITING_FOR_SITE`, functional world pool и 15-метровый/5-секундный delete gate сохранены. Штатные мины Arland не удалялись и не менялись. Текущий snapshot прошёл `tools/Test-Stage3Static.ps1` и Workbench 1.7 `Validate Scripts` по пяти конфигурациям: `.cache/stage3-post-t9-vehicle-unstuck-final2-20260809/console.log`, Game CRC32 `946e5a78`, `Script validation successful`, `SCRIPT (E/F)=0`. Transport T10, Armed A2, controlled no-combat boarding repeat, focused timeout/order/cleanup/cap fault-срезы и 30-минутный прогон остаются post-acceptance проверками.
 
-## Что планируется в Stage 3.5
+## Что реализовано в Stage 3.5
 
-- увеличить initial и replacement-группы с трёх до пяти faction-correct бойцов;
-- сохранить четыре slot на фракцию, но использовать их как `3 ATTACK / 1 forward DEFEND-QRF`, без постоянно простаивающего резерва на MOB;
-- выдать каждой группе собственный грузовик или вместительный лёгкий транспорт, выбираемый по числу доступных мест для всей живой группы;
-- поднять безопасную нижнюю границу managed AI budget, проверить 40 AI и восемь active vehicles;
-- сохранить действующие bounded boarding/recovery/fallback, `SAFE_REUSE`, world-pool и player-safe cleanup-инварианты;
-- завершить controlled 30-минутную матрицу и двухчасовой soak до Stage 4.
+- initial и replacement-группы формируются из stock faction roster ровно по пять бойцов и переходят в `READY` только после проверки `5/5` и faction каждого участника;
+- четыре stable numeric slot отображаются как `A0/A1/A2/D0`; штатная схема — `3 ATTACK / 1 forward DEFEND-QRF`, а CLI baseline сохраняет прежние роли `2/1/1` при том же размере группы;
+- ATTACK-цели ранжируются детерминированно как primary/secondary/support, а D0 выбирает безопасную передовую friendly-базу и переходит в QRF при contested/HQ threat/потере соседней базы;
+- QRF escalation выполняется сразу, возврат и смена передовой позиции ограничены stable-candidate hysteresis и minimum dwell;
+- все четыре slot vehicle-eligible; A0/A1 предпочитают faction truck, A2/D0 — unarmed light M998/UAZ-452 с обязательным capacity preflight и truck fallback;
+- active/reserved cap равен четырём на фракцию, не более одной runtime на slot; functional world pool учитывается отдельно;
+- сохранены bounded boarding/recovery/fallback, `SAFE_REUSE`, generation/identity guards и player-safe cleanup-инварианты Stage 3;
+- нижняя граница `aicfMaxManagedAgents` поднята до 48 при standard 64; heartbeat показывает фактические agents, managed waypoint/entity, per-slot activity и раздельные vehicle/world-pool counters.
 
-Полный план и критерии: [Stage 3.5 — Active Motorized Forces](docs/STAGE_3_5_ACTIVE_FORCES.md).
+Полный контракт: [Stage 3.5 — Active Motorized Forces](docs/STAGE_3_5_ACTIVE_FORCES.md). Незаполненная runtime-матрица: [Stage 3.5 — приёмочное тестирование](docs/STAGE_3_5_TESTING.md).
 
 ## Что ещё не заявлено готовым
 
@@ -106,6 +108,7 @@ Stage 3 условно завершён и принят владельцем п�
 - проверка смерти и повторного развёртывания игрока;
 - окончательная настройка баланса и темпа войны;
 - runtime-приёмка наземной техники, расширенная логистика, сохранение состояния и пользовательский интерфейс;
+- controlled runtime-матрица Stage 3.5, 30-минутный headless-прогон и двухчасовой soak;
 - двухчасовой soak с контролем сущностей, групп, waypoint, памяти и server FPS.
 
 Полные цели и границы продукта описаны в [PROJECT_VISION.md](PROJECT_VISION.md).
@@ -263,11 +266,12 @@ Stage 1 использует отдельный префикс:
 [AICF][STAGE1]
 ```
 
-Stage 2 и Stage 3 дополняют тот же `run` отдельными префиксами:
+Stage 2, Stage 3 и Stage 3.5 дополняют тот же `run` отдельными префиксами:
 
 ```text
 [AICF][STAGE2]
 [AICF][STAGE3]
+[AICF][STAGE3.5]
 ```
 
 Отфильтрованный вывод не заменяет полный журнал. К отчёту прикладывается вся папка `$profileRoot\logs`, чтобы сохранить соседние `SCRIPT`, `RESOURCES`, `RPL` и `VME`-ошибки.
@@ -278,7 +282,8 @@ Stage 2 и Stage 3 дополняют тот же `run` отдельными п�
 - [Stage 1: пехотный вертикальный срез](docs/STAGE_1_TESTING.md) — direct Diag-команды, профиль `4 × 4`, временные и причинные инварианты, два ускоренных запуска и итоговая матрица.
 - [Stage 2: надёжность и баланс](docs/STAGE_2_TESTING.md) — fault injection, lifecycle/order/load инварианты, 30-минутная headless-матрица и двухчасовой soak.
 - [Stage 3: наземная техника](docs/STAGE_3_TESTING.md) — транспортный и вооружённый срезы, crew/boarding, safe spawn, watchdog, fallback, лимиты и регрессия Stage 2.
-- [Stage 3.5: Active Motorized Forces](docs/STAGE_3_5_ACTIVE_FORCES.md) — группы `4 × 5`, активные роли `3/1`, транспорт каждого slot, capacity policy и нагрузочная приёмка.
+- [Stage 3.5: Active Motorized Forces](docs/STAGE_3_5_ACTIVE_FORCES.md) — реализованный контракт групп `4 × 5`, активных ролей `3/1`, транспорта каждого slot и capacity policy.
+- [Stage 3.5: приёмочное тестирование](docs/STAGE_3_5_TESTING.md) — незаполненные срезы B/P/T/A/R/L, M30 и S120, команды, evidence-таблицы и правила результата.
 
 Stage 1 принимается только если одновременно выполнены:
 

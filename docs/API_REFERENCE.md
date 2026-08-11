@@ -269,10 +269,11 @@ static proto bool System.GetCLIParam(string param, out string val)
 | Срез | Параметры |
 |---|---|
 | Stage 1/2 | `aicfInitialTickets`, `aicfReplacementTicketCost`, `aicfReinforcementDelayMs`, `aicfCommanderIntervalMs`, `aicfMaxManagedAgents`, `aicfExpectedPlayerFaction` |
+| Stage 3.5 roles | `aicfActiveForcesRolesEnabled` (`1`: `3 ATTACK / 1 DEFEND-QRF`; `0`: baseline `2/1/1`, всегда по пять бойцов) |
 | Stage 3 lifecycle | `aicfVehiclesEnabled`, `aicfTransportVehiclesPerFaction`, `aicfArmedLightVehiclesPerFaction`, `aicfMaxVehiclesPerFaction`, `aicfVehicleBoardingTimeoutMs`, `aicfVehicleMaxRecoveries`, `aicfVehicleDismountDistanceMeters`, `aicfVehicleRetryIntervalMs`, `aicfVehicleCleanupDelayMs` |
 | Stage 3 movement | `aicfVehicleStuckTimeoutMs`, `aicfVehicleProgressMeters`, `aicfVehicleMotionMeters`, `aicfVehicleObjectiveProgressTimeoutMs`, `aicfVehicleMinimumRouteMeters`, `aicfVehicleMaximumReuseDistanceMeters`, `aicfVehicleMaximumSpawnDistanceMeters`, `aicfVehicleCohesionDistanceMeters` |
 
-Числа после `ToInt()` ограничиваются безопасными min/max, а ожидаемая сторона принимает только `US` или `USSR`. Нижняя граница `max_managed_agents` равна 32: она покрывает обязательный стартовый roster и консервативный budget одной создаваемой replacement-группы, поэтому заниженный CLI-параметр не может навсегда заблокировать lifecycle. Direct ServerDiag smoke подтвердил применение ускоренных значений `initial_tickets=1`, `commander_interval_ms=5000`, `replacement_delay_ms=30000`, `max_managed_agents=64` и `expected_player_faction=US` в событии `CONFIG`.
+Числа после `ToInt()` ограничиваются безопасными min/max, а ожидаемая сторона принимает только `US` или `USSR`. В Stage 3.5 нижняя граница `max_managed_agents` равна 48: она покрывает обязательные 40 бойцов и консервативную pending-проекцию 8, поэтому заниженный CLI-параметр не блокирует replacement lifecycle. Стандартное значение остаётся 64. Исторический Direct ServerDiag smoke подтвердил применение ускоренных значений `initial_tickets=1`, `commander_interval_ms=5000`, `replacement_delay_ms=30000`, `max_managed_agents=64` и `expected_player_faction=US` в событии `CONFIG`.
 
 ### Завершение матча
 

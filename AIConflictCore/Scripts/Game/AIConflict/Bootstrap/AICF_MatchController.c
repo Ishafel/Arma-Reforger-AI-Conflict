@@ -67,6 +67,9 @@ class AICF_MatchController
 	protected SCR_CampaignFaction m_USSRFaction;
 	protected SCR_MilitaryBaseSystem m_BaseSystem;
 	protected SCR_CampaignMilitaryBaseComponent m_LastChangedBase;
+	protected ref array<SCR_CampaignMilitaryBaseComponent> m_aPendingOwnerChangedBases = {};
+	protected ref array<FactionKey> m_aPendingOwnerChangeOldOwners = {};
+	protected ref array<FactionKey> m_aPendingOwnerChangeNewOwners = {};
 
 	protected ref array<SCR_CampaignMilitaryBaseComponent> m_aTrackedBases = {};
 	protected ref array<FactionKey> m_aTrackedBaseOwners = {};
@@ -95,6 +98,7 @@ class AICF_MatchController
 		m_Stage3Config = new AICF_Stage3Config();
 		AICF_Stage2Diagnostics.Configure();
 		AICF_Stage3Diagnostics.Configure();
+		AICF_Stage35Diagnostics.Configure();
 		m_ConflictAdapter = new AICF_ConflictAdapter();
 		m_ObjectiveGraph = new AICF_ObjectiveGraph();
 		m_TargetSelector = new AICF_TargetSelector();
@@ -189,12 +193,42 @@ class AICF_MatchController
 			m_Stage3Config.GetMaximumSpawnDistanceMeters(),
 			m_Stage3Config.GetCohesionDistanceMeters());
 		stage3ConfigLine += string.Format(
-			" spawn_max_attempts=%1 retry_backoff_max_ms=%2 wait_probe_interval_ms=%3 abandoned_world_pool_per_faction=%4",
+			" spawn_max_attempts=%1 retry_backoff_max_ms=%2 wait_probe_interval_ms=%3 abandoned_world_pool_per_faction=%4 minimum_vehicle_request_agents=%5 cohesion_wait_timeout_ms=%6",
 			m_Stage3Config.GetSpawnMaxAttempts(),
 			m_Stage3Config.GetRetryBackoffMaxMs(),
 			m_Stage3Config.GetWaitProbeIntervalMs(),
-			m_Stage3Config.GetAbandonedWorldPoolPerFaction());
+			m_Stage3Config.GetAbandonedWorldPoolPerFaction(),
+			m_Stage3Config.GetMinimumVehicleRequestAgents(),
+			m_Stage3Config.GetCohesionWaitTimeoutMs());
 		AICF_Stage3Diagnostics.Info("CONFIG", stage3ConfigLine);
+		bool activeForcesRolesEnabled = m_Config.GetActiveForcesRolesEnabled();
+		int configuredAttackSlots = AICF_Stage1Config.LEGACY_ATTACK_SLOTS_PER_FACTION;
+		int configuredDefendSlots = AICF_Stage1Config.LEGACY_DEFEND_SLOTS_PER_FACTION;
+		int configuredReserveSlots = AICF_Stage1Config.LEGACY_RESERVE_SLOTS_PER_FACTION;
+		if (activeForcesRolesEnabled)
+		{
+			configuredAttackSlots = AICF_Stage1Config.ATTACK_SLOTS_PER_FACTION;
+			configuredDefendSlots = AICF_Stage1Config.DEFEND_SLOTS_PER_FACTION;
+			configuredReserveSlots = AICF_Stage1Config.RESERVE_SLOTS_PER_FACTION;
+		}
+		string stage35ConfigLine = string.Format(
+			"group_size=%1 groups_per_faction=%2 active_roles=%3 attack=%4 defend=%5 reserve=%6 legacy_attack=%7 legacy_defend=%8 legacy_reserve=%9",
+			AICF_Stage1Config.MANAGED_GROUP_SIZE,
+			AICF_Stage1Config.GROUP_SLOTS_PER_FACTION,
+			activeForcesRolesEnabled,
+			configuredAttackSlots,
+			configuredDefendSlots,
+			configuredReserveSlots,
+			AICF_Stage1Config.LEGACY_ATTACK_SLOTS_PER_FACTION,
+			AICF_Stage1Config.LEGACY_DEFEND_SLOTS_PER_FACTION,
+			AICF_Stage1Config.LEGACY_RESERVE_SLOTS_PER_FACTION);
+		stage35ConfigLine += string.Format(
+			" minimum_dwell_ms=%1 max_managed_agents=%2 target_active_vehicles_per_faction=%3 minimum_vehicle_request_agents=%4",
+			m_Config.GetRoleMinimumDwellMs(),
+			m_Config.GetMaxManagedAgents(),
+			m_Stage3Config.GetMaxVehiclesPerFaction(),
+			m_Stage3Config.GetMinimumVehicleRequestAgents());
+		AICF_Stage35Diagnostics.Info("CONFIG", stage35ConfigLine);
 		if (m_Stage2Config.HasTestDropOrder())
 		{
 			AICF_Stage2Diagnostics.Warning(
@@ -257,9 +291,10 @@ class AICF_MatchController
 			AICF_Stage1Diagnostics.Info(
 				"ROLE_ASSIGNED",
 				string.Format(
-					"faction=%1 slot=%2 role=%3",
+					"faction=%1 slot=%2 slot_key=%3 role=%4",
 					faction.GetFactionKey(),
 					slotId,
+					slot.GetSlotKey(),
 					AICF_Stage1Diagnostics.RoleToString(slot.GetRole())));
 
 			SCR_AIGroup group = m_GroupSpawner.SpawnGroup(faction, spawnBase, slotId);
@@ -317,6 +352,11 @@ class AICF_MatchController
 		// safety/fallback/cleanup polling must resume instead of freezing vehicles.
 		if (m_VehicleCoordinator && !m_bReplanScheduled)
 			m_VehicleCoordinator.Update(m_USState, m_USFaction, m_USSRState, m_USSRFaction);
+		// Sample continuous MOB presence at the one-second authority cadence. If it
+		// were sampled only on CommanderTick, a group entering just after a tick could
+		// remain for almost three commander intervals before the two-interval error.
+		AuditActiveFactionTasking(m_USState, m_USFaction);
+		AuditActiveFactionTasking(m_USSRState, m_USSRFaction);
 		if (m_GroupMapMarkers)
 			m_GroupMapMarkers.Sync(m_USState, m_USSRState);
 		TryLogRosterReady();
@@ -338,8 +378,52 @@ class AICF_MatchController
 			if (slot.GetState() == AICF_EGroupSlotState.SPAWNING)
 			{
 				SCR_AIGroup spawningGroup = slot.GetGroup();
-				if (spawningGroup && spawningGroup.GetAgentsCount() > 0 && slot.MarkReady())
-					CompleteReadyDeployment(factionState, faction, slot);
+				int actualCount;
+				if (spawningGroup)
+					actualCount = spawningGroup.GetAgentsCount();
+				if (spawningGroup && actualCount > AICF_Stage1Config.MANAGED_GROUP_SIZE)
+				{
+					int factionMismatchCount;
+					int nonAliveCount;
+					AICF_GroupRuntime.HasExactFactionRoster(
+						spawningGroup,
+						faction.GetFactionKey(),
+						AICF_Stage1Config.MANAGED_GROUP_SIZE,
+						actualCount,
+						factionMismatchCount,
+						nonAliveCount);
+					HandleInvalidRoster(
+						factionState,
+						faction,
+						slot,
+						actualCount,
+						factionMismatchCount,
+						nonAliveCount);
+				}
+				else if (spawningGroup &&
+					spawningGroup.GetAgentsCount() == AICF_Stage1Config.MANAGED_GROUP_SIZE &&
+					spawningGroup.GetSpawnQueueSize() == 0)
+				{
+					int factionMismatchCount;
+					int nonAliveCount;
+					bool rosterValid = AICF_GroupRuntime.HasExactFactionRoster(
+						spawningGroup,
+						faction.GetFactionKey(),
+						AICF_Stage1Config.MANAGED_GROUP_SIZE,
+						actualCount,
+						factionMismatchCount,
+						nonAliveCount);
+					if (rosterValid && slot.MarkReady())
+						CompleteReadyDeployment(factionState, faction, slot);
+					else if (!rosterValid)
+						HandleInvalidRoster(
+							factionState,
+							faction,
+							slot,
+							actualCount,
+							factionMismatchCount,
+							nonAliveCount);
+				}
 				else if (System.GetTickCount(slot.GetSpawnStartedAtMs()) >= GROUP_SPAWN_TIMEOUT_MS)
 					HandleSpawnTimeout(factionState, faction, slot);
 				continue;
@@ -420,6 +504,28 @@ class AICF_MatchController
 				string.Format("faction=%1 slot=%2", faction.GetFactionKey(), slot.GetSlotId()));
 			return;
 		}
+
+		AICF_Stage1Diagnostics.Info(
+			"GROUP_SPAWNED",
+			string.Format(
+				"faction=%1 slot=%2 slot_key=%3 generation=%4 deployment=%5 initial_agents=%6 faction_correct=1",
+				faction.GetFactionKey(),
+				slot.GetSlotId(),
+				slot.GetSlotKey(),
+				slot.GetSpawnGeneration(),
+				reason,
+				slot.GetGroup().GetAgentsCount()));
+		AICF_Stage35Diagnostics.Info(
+			"GROUP_ROSTER_READY",
+			string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 generation=%4 deployment=%5 initial_agents=%6 expected_agents=%7 faction_correct=1",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetSlotId(),
+				slot.GetSpawnGeneration(),
+				reason,
+				slot.GetGroup().GetAgentsCount(),
+				AICF_Stage1Config.MANAGED_GROUP_SIZE));
 
 		AICF_Stage1Diagnostics.Info(
 			"SLOT_READY",
@@ -683,6 +789,62 @@ class AICF_MatchController
 		slot.BeginReinforcementWait(System.GetTickCount() + REINFORCEMENT_RETRY_MS);
 	}
 
+	protected void HandleInvalidRoster(
+		AICF_FactionState factionState,
+		SCR_CampaignFaction faction,
+		AICF_GroupSlot slot,
+		int actualCount,
+		int factionMismatchCount,
+		int nonAliveCount)
+	{
+		bool replacement = slot.IsReplacementDeployment();
+		SCR_AIGroup group = slot.GetGroup();
+		if (group)
+		{
+			m_ManagedAILODPolicy.Release(group);
+			group.GetOnEmpty().Remove(OnGroupEmpty);
+			RplComponent.DeleteRplEntity(group, false);
+		}
+
+		if (replacement)
+			factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
+		if (!slot.MarkDestroyed())
+			return;
+
+		string deploymentKind = "INITIAL";
+		if (replacement)
+			deploymentKind = "REPLACEMENT";
+		AICF_Stage35Diagnostics.Error(
+			"GROUP_ROSTER_REJECTED",
+			string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 actual=%4 expected=%5 faction_mismatches=%6 non_alive=%7 deployment=%8",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetSlotId(),
+				actualCount,
+				AICF_Stage1Config.MANAGED_GROUP_SIZE,
+				factionMismatchCount,
+				nonAliveCount,
+				deploymentKind));
+
+		if (!replacement)
+		{
+			Fail(
+				"INITIAL_GROUP_ROSTER_INVALID",
+				string.Format(
+					"faction=%1 slot=%2 actual=%3 expected=%4 mismatches=%5 non_alive=%6",
+					faction.GetFactionKey(),
+					slot.GetSlotId(),
+					actualCount,
+					AICF_Stage1Config.MANAGED_GROUP_SIZE,
+					factionMismatchCount,
+					nonAliveCount));
+			return;
+		}
+
+		slot.BeginReinforcementWait(System.GetTickCount() + REINFORCEMENT_RETRY_MS);
+	}
+
 	protected void HandleLostReadyGroup(
 		AICF_FactionState factionState,
 		SCR_CampaignFaction faction,
@@ -789,7 +951,270 @@ class AICF_MatchController
 		if (RevalidateFactionOrders(m_USState, m_USFaction, "COMMANDER_REPLAN"))
 			return;
 
-		RevalidateFactionOrders(m_USSRState, m_USSRFaction, "COMMANDER_REPLAN");
+		if (RevalidateFactionOrders(m_USSRState, m_USSRFaction, "COMMANDER_REPLAN"))
+			return;
+
+	}
+
+	protected void AuditActiveFactionTasking(
+		AICF_FactionState factionState,
+		SCR_CampaignFaction faction)
+	{
+		if (!m_Config.GetActiveForcesRolesEnabled() || !factionState || !faction)
+			return;
+
+		SCR_CampaignMilitaryBaseComponent mainBase = faction.GetMainBase();
+		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (!slot)
+				continue;
+			if (!slot.IsCombatReady())
+			{
+				slot.ObserveUnexplainedMobIdle(false);
+				slot.ObserveMeaningfulTaskLoss(false);
+				slot.ObserveMobIdleSuppression(string.Empty);
+				continue;
+			}
+
+			IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
+			bool atMob = false;
+			float distanceToMobMeters = -1.0;
+			int commanderMotionAgeMs = 0;
+			if (leader && mainBase && mainBase.GetOwner())
+			{
+				distanceToMobMeters = Math.Sqrt(vector.DistanceSqXZ(leader.GetOrigin(), mainBase.GetOwner().GetOrigin()));
+				atMob = distanceToMobMeters <= STUCK_WATCHDOG_IGNORE_RADIUS_METERS;
+				commanderMotionAgeMs = slot.ObserveCommanderMotion(
+					leader.GetOrigin(),
+					m_Stage2Config.GetStuckProgressMeters());
+			}
+
+			AICF_VehicleRuntime vehicleRuntime = slot.GetVehicleRuntime();
+			bool vehicleLifecycle = IsBoundedVehicleLifecycle(vehicleRuntime);
+			bool safeVehicleSpawnWait = IsSafeVehicleSpawnWait(vehicleRuntime);
+			bool infantryWaypointBound = IsWaypointBoundToGroup(slot.GetGroup(), slot.GetWaypoint());
+			bool vehicleWaypointBound = vehicleRuntime &&
+				IsWaypointBoundToGroup(slot.GetGroup(), vehicleRuntime.GetActiveWaypoint());
+			string allowedIdleReason = ResolveAllowedIdleReason(
+				slot,
+				mainBase,
+				vehicleLifecycle,
+				safeVehicleSpawnWait);
+			bool allowedException = allowedIdleReason != "NONE";
+			bool meaningfulTask = HasMeaningfulTask(slot, vehicleRuntime, vehicleLifecycle);
+			int previousTasklessAgeMs = slot.GetMeaningfulTaskLostAgeMs();
+			int tasklessAgeMs = slot.ObserveMeaningfulTaskLoss(!meaningfulTask, UPDATE_INTERVAL_MS);
+			string vehicleState = "NONE";
+			if (vehicleRuntime)
+				vehicleState = AICF_Stage3Diagnostics.StateToString(vehicleRuntime.GetState());
+
+			if (!meaningfulTask && slot.MarkMeaningfulTaskLossReported())
+			{
+				string taskLostLine = string.Format(
+					"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 alive=%5 target=%6 role=%7 posture=%8 vehicle_state=%9",
+					faction.GetFactionKey(),
+					slot.GetSlotKey(),
+					slot.GetSlotId(),
+					slot.GetSpawnGeneration(),
+					AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()),
+					AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
+					AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+					slot.GetOperationalPosture(),
+					vehicleState);
+				taskLostLine += string.Format(
+					" infantry_waypoint=%1 vehicle_waypoint=%2 loss_trigger=AUTHORITY_TASK_AUDIT loss_reason=NO_EXECUTABLE_WAYPOINT taskless_age_ms=%3 at_mob=%4",
+					infantryWaypointBound,
+					vehicleWaypointBound,
+					tasklessAgeMs,
+					atMob);
+				AICF_Stage35Diagnostics.Warning("MEANINGFUL_TASK_LOST", taskLostLine);
+			}
+			else if (meaningfulTask && previousTasklessAgeMs > 0)
+			{
+				AICF_Stage35Diagnostics.Info(
+					"MEANINGFUL_TASK_RECOVERED",
+					string.Format(
+						"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 target=%5 vehicle_state=%6 taskless_age_ms=%7 infantry_waypoint=%8 vehicle_waypoint=%9",
+						faction.GetFactionKey(),
+						slot.GetSlotKey(),
+						slot.GetSlotId(),
+						slot.GetSpawnGeneration(),
+						AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
+						vehicleState,
+						previousTasklessAgeMs,
+						infantryWaypointBound,
+						vehicleWaypointBound) + string.Format(
+						" alive=%1 role=%2 posture=%3 at_mob=%4",
+						AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()),
+						AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+						slot.GetOperationalPosture(),
+						atMob));
+			}
+
+			bool repairSucceeded = false;
+			if (!meaningfulTask && (!m_VehicleCoordinator || !m_VehicleCoordinator.IsControllingMovement(slot)))
+				repairSucceeded = TryRecoverOrder(slot, faction, "MEANINGFUL_TASK_LOST");
+
+			int taskDeadlineMs = 2 * m_Config.GetCommanderIntervalMs();
+			if (!meaningfulTask && !repairSucceeded && tasklessAgeMs >= taskDeadlineMs && slot.MarkMeaningfulTaskDeadlineReported())
+			{
+				AICF_Stage35Diagnostics.Error(
+					"MEANINGFUL_TASK_DEADLINE_MISSED",
+					string.Format(
+						"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 taskless_age_ms=%5 deadline_ms=%6 target=%7 vehicle_state=%8 at_mob=%9",
+						faction.GetFactionKey(),
+						slot.GetSlotKey(),
+						slot.GetSlotId(),
+						slot.GetSpawnGeneration(),
+						tasklessAgeMs,
+						taskDeadlineMs,
+						AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
+						vehicleState,
+						atMob));
+			}
+
+			string suppressionRule = allowedIdleReason;
+			if (!atMob)
+				suppressionRule = "OUTSIDE_MOB";
+			else if (!allowedException)
+				suppressionRule = string.Empty;
+			if (slot.ObserveMobIdleSuppression(suppressionRule))
+			{
+				AICF_Stage35Diagnostics.Info(
+					"IDLE_DEADLINE_SUPPRESSED",
+					string.Format(
+						"faction=%1 slot=%2 numeric_slot=%3 scope=MOB suppression_rule=%4 at_mob=%5 distance_to_mob_m=%6 meaningful_task=%7 allowed_idle_reason=%8 vehicle_state=%9",
+						faction.GetFactionKey(),
+						slot.GetSlotKey(),
+						slot.GetSlotId(),
+						suppressionRule,
+						atMob,
+						distanceToMobMeters,
+						meaningfulTask,
+						allowedIdleReason,
+						vehicleState) + string.Format(
+						" taskless_age_ms=%1 suppression_active=%2",
+						tasklessAgeMs,
+						!suppressionRule.IsEmpty()));
+			}
+			// The Stage 3.5 contract limits continuous presence inside the MOB radius,
+			// not merely a lack of waypoint or measurable motion. Circling/pathfinding
+			// inside the radius therefore cannot reset this deadline.
+			bool unexplainedMobIdle = atMob && !allowedException;
+			int idleAgeMs = slot.ObserveUnexplainedMobIdle(unexplainedMobIdle, UPDATE_INTERVAL_MS);
+			if (idleAgeMs < 2 * m_Config.GetCommanderIntervalMs() ||
+				!slot.MarkUnexplainedMobIdleDeadlineReported())
+			{
+				continue;
+			}
+
+			string mobIdleLine = string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 role=%4 idle_ms=%5 motion_age_ms=%6 deadline_ms=%7 target=%8 waypoint=%9",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetSlotId(),
+				AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+				idleAgeMs,
+				commanderMotionAgeMs,
+				2 * m_Config.GetCommanderIntervalMs(),
+				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
+				slot.GetWaypoint() != null);
+			mobIdleLine += string.Format(" vehicle_state=%1", vehicleState);
+			AICF_Stage35Diagnostics.Error("MOB_IDLE_DEADLINE_MISSED", mobIdleLine);
+		}
+	}
+
+	protected bool HasMeaningfulTask(
+		AICF_GroupSlot slot,
+		AICF_VehicleRuntime vehicleRuntime,
+		bool vehicleLifecycle)
+	{
+		if (!slot || !slot.GetTargetBase())
+			return false;
+
+		return IsWaypointBoundToGroup(slot.GetGroup(), slot.GetWaypoint()) ||
+			(vehicleRuntime && IsWaypointBoundToGroup(slot.GetGroup(), vehicleRuntime.GetActiveWaypoint())) ||
+			vehicleLifecycle || slot.IsPersistentStuckFieldHold();
+	}
+
+	protected bool IsWaypointBoundToGroup(SCR_AIGroup group, AIWaypoint waypoint)
+	{
+		if (!group || !waypoint)
+			return false;
+
+		array<AIWaypoint> waypointQueue = {};
+		group.GetWaypoints(waypointQueue);
+		return waypointQueue.Contains(waypoint);
+	}
+
+	protected string ResolveAllowedIdleReason(
+		AICF_GroupSlot slot,
+		SCR_CampaignMilitaryBaseComponent mainBase,
+		bool vehicleLifecycle,
+		bool safeVehicleSpawnWait)
+	{
+		if (slot && slot.GetRole() == AICF_EGroupRole.DEFEND && slot.GetTargetBase() == mainBase)
+			return "HQ_DEFENSE";
+		if (safeVehicleSpawnWait)
+			return "SAFE_VEHICLE_SPAWN_WAIT";
+		if (vehicleLifecycle)
+			return "BOUNDED_VEHICLE_LIFECYCLE";
+		return "NONE";
+	}
+
+	protected bool IsBoundedVehicleLifecycle(AICF_VehicleRuntime runtime)
+	{
+		if (!runtime)
+			return false;
+
+		switch (runtime.GetState())
+		{
+			case AICF_EVehicleState.REQUESTED:
+			case AICF_EVehicleState.SPAWNING:
+			case AICF_EVehicleState.BOARDING:
+			case AICF_EVehicleState.MOUNTED:
+			case AICF_EVehicleState.MOVING:
+			case AICF_EVehicleState.DISEMBARKING:
+			case AICF_EVehicleState.RECOVERING:
+			case AICF_EVehicleState.INFANTRY_FALLBACK:
+				return true;
+		}
+
+		// WAITING_FOR_SITE is handled separately and only exact safe-site reasons are
+		// exempt. DISMOUNTED and terminal/player-safe cleanup cannot hide a group from
+		// the two-commander-interval MOB audit.
+		return false;
+	}
+
+	protected bool IsSafeVehicleSpawnWait(AICF_VehicleRuntime runtime)
+	{
+		if (!runtime || runtime.GetState() != AICF_EVehicleState.WAITING_FOR_SITE)
+			return false;
+
+		string reason = runtime.GetLastSpawnFailureReason();
+		switch (reason)
+		{
+			case "BASE_MISSING":
+			case "BASE_NOT_INITIALIZED":
+			case "ENEMY_OWNED":
+			case "CONTESTED":
+			case "SPAWN_POINT_MISSING":
+			case "SPAWN_POINT_DISABLED":
+			case "SPAWN_POINT_INACTIVE":
+			case "SPAWN_FACTION_INITIALIZING":
+			case "SPAWN_FACTION_MISMATCH":
+			case "NO_SAFE_SPAWN_AVAILABLE":
+			case "TOO_FAR":
+			case "NO_EMPTY_TERRAIN":
+			case "WATER_OR_UNDRIVABLE_SURFACE":
+			case "NO_BOARDING_SITE_WITHIN_RANGE":
+				return true;
+		}
+
+		// Cap, invalid trip context, POST_APPROACH_COHESION_WAIT and unknown future
+		// reasons retain infantry tasking and are deliberately not exempt.
+		return false;
 	}
 
 	// Returns true when this pass changed base ownership and invalidated the graph.
@@ -807,7 +1232,15 @@ class AICF_MatchController
 			if (!slot || !slot.IsCombatReady())
 				continue;
 			if (m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot))
+			{
+				m_VehicleCoordinator.ReplanControlledMovement(
+					slot,
+					faction,
+					reason,
+					m_Config.GetRoleMinimumDwellMs(),
+					m_Config.GetCommanderIntervalMs());
 				continue;
+			}
 			// CommanderTick may observe the candidate between reliability polls, but
 			// only ReliabilityTick is allowed to confirm or reject its stability.
 			if (slot.HasPendingOrderRecovery())
@@ -849,7 +1282,17 @@ class AICF_MatchController
 
 			string failureReason = m_OrderPlanner.GetOrderFailureReason(slot, faction);
 			if (failureReason.IsEmpty())
+			{
+				m_OrderPlanner.ReconcileStrategicOrder(
+					slot,
+					faction,
+					m_ObjectiveGraph,
+					m_TargetSelector,
+					reason,
+					m_Config.GetRoleMinimumDwellMs(),
+					m_Config.GetCommanderIntervalMs());
 				continue;
+			}
 
 			if (failureReason != "TARGET_INVALID")
 			{
@@ -1196,24 +1639,86 @@ class AICF_MatchController
 		TryRecoverOrder(slot, faction, failureReason);
 	}
 
-	protected void TryRecoverOrder(
+	protected bool TryRecoverOrder(
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction,
 		string failureReason)
 	{
+		int requestedAtMs = System.GetTickCount();
 		if (!slot || !faction || slot.HasPendingOrderRecovery())
-			return;
+			return false;
 		if (!slot.CanAttemptOrderRecovery(m_Stage2Config.GetOrderRecoveryRetryMs()))
-			return;
+			return false;
+
+		string oldWaypointId = "NONE";
+		if (slot.GetWaypoint())
+			oldWaypointId = slot.GetWaypoint().GetID().ToString();
+		string vehicleState = "NONE";
+		if (slot.GetVehicleRuntime())
+			vehicleState = AICF_Stage3Diagnostics.StateToString(slot.GetVehicleRuntime().GetState());
+		AICF_Stage35Diagnostics.Info(
+			"ORDER_RESTORE_REQUESTED",
+			string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 trigger=RELIABILITY_AUDIT reason=%5 target=%6 old_waypoint=%7 vehicle_state=%8 taskless_age_ms=%9",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetSlotId(),
+				slot.GetSpawnGeneration(),
+				failureReason,
+				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
+				oldWaypointId,
+				vehicleState,
+				slot.GetMeaningfulTaskLostAgeMs()));
 
 		slot.MarkOrderRecoveryAttempt();
 		m_iOrderRecoveryAttempts++;
-		m_OrderPlanner.RecoverOrder(
+		bool recovered = m_OrderPlanner.RecoverOrder(
 			slot,
 			faction,
 			m_ObjectiveGraph,
 			m_TargetSelector,
 			failureReason);
+		AIWaypoint newWaypoint = slot.GetWaypoint();
+		string newWaypointId = "NONE";
+		if (newWaypoint)
+			newWaypointId = newWaypoint.GetID().ToString();
+		array<AIWaypoint> waypointQueue = {};
+		int queueCount;
+		bool inQueue;
+		bool isCurrent;
+		if (slot.GetGroup())
+		{
+			queueCount = slot.GetGroup().GetWaypoints(waypointQueue);
+			inQueue = newWaypoint && waypointQueue.Contains(newWaypoint);
+			isCurrent = newWaypoint && slot.GetGroup().GetCurrentWaypoint() == newWaypoint;
+		}
+		bool postconditionMeaningful = recovered && newWaypoint && inQueue;
+		string failure = "NONE";
+		if (!recovered)
+			failure = "PLANNER_REJECTED";
+		else if (!postconditionMeaningful)
+			failure = "WAYPOINT_BIND_MISMATCH";
+		AICF_Stage35Diagnostics.Info(
+			"ORDER_RESTORE_RESULT",
+			string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 success=%5 old_waypoint=%6 new_waypoint=%7 bound_to_group=%8 is_current=%9",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetSlotId(),
+				slot.GetSpawnGeneration(),
+				recovered && postconditionMeaningful,
+				oldWaypointId,
+				newWaypointId,
+				inQueue,
+				isCurrent) + string.Format(
+				" queue_count=%1 postcondition_meaningful_task=%2 failure_reason=%3 latency_ms=%4",
+				queueCount,
+				postconditionMeaningful,
+				failure,
+				System.GetTickCount(requestedAtMs)));
+		if (recovered && !postconditionMeaningful)
+			AICF_Stage35Diagnostics.Warning("WAYPOINT_BIND_MISMATCH", string.Format("faction=%1 slot=%2 waypoint=%3 queue_count=%4", faction.GetFactionKey(), slot.GetSlotKey(), newWaypointId, queueCount));
+		return recovered && postconditionMeaningful;
 	}
 
 	protected void MonitorGroupProgress(
@@ -1525,6 +2030,7 @@ class AICF_MatchController
 		m_iLastCaptureAtMs = AICF_Stage1Diagnostics.GetElapsedMs();
 		m_bGraphRebuildNeeded = true;
 		m_LastChangedBase = base;
+		RecordPendingOwnerChange(base, oldOwner, newOwner);
 		AICF_Stage1Diagnostics.Info(
 			"BASE_OWNER_CHANGED",
 			string.Format(
@@ -1561,6 +2067,9 @@ class AICF_MatchController
 		ReplanFactionAfterBaseChange(m_USSRState, m_USSRFaction);
 		m_bGraphRebuildNeeded = false;
 		m_LastChangedBase = null;
+		m_aPendingOwnerChangedBases.Clear();
+		m_aPendingOwnerChangeOldOwners.Clear();
+		m_aPendingOwnerChangeNewOwners.Clear();
 	}
 
 	protected void ReplanFactionAfterBaseChange(
@@ -1581,13 +2090,47 @@ class AICF_MatchController
 
 			SCR_CampaignMilitaryBaseComponent oldTarget = slot.GetTargetBase();
 			bool reassigned = false;
-			if (m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot))
+			bool vehicleControlled = m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot);
+			array<SCR_CampaignMilitaryBaseComponent> relevantLostBases = {};
+			if (slot.GetRole() == AICF_EGroupRole.DEFEND)
+			{
+				for (int changeIndex = 0; changeIndex < m_aPendingOwnerChangedBases.Count(); changeIndex++)
+				{
+					SCR_CampaignMilitaryBaseComponent lostBase = m_aPendingOwnerChangedBases[changeIndex];
+					if (m_aPendingOwnerChangeOldOwners[changeIndex] == faction.GetFactionKey() &&
+						m_aPendingOwnerChangeNewOwners[changeIndex] != faction.GetFactionKey() &&
+						IsDefendLossResponseRelevant(slot, lostBase))
+					{
+						relevantLostBases.Insert(lostBase);
+					}
+				}
+			}
+
+			if (!relevantLostBases.IsEmpty())
+			{
+				foreach (SCR_CampaignMilitaryBaseComponent lostBase : relevantLostBases)
+				{
+					bool responseChanged = m_OrderPlanner.AssignLossResponseOrder(
+						slot,
+						faction,
+						m_ObjectiveGraph,
+						m_TargetSelector,
+						lostBase,
+						m_Config.GetRoleMinimumDwellMs(),
+						m_Config.GetCommanderIntervalMs());
+					reassigned = responseChanged || reassigned;
+				}
+				if (reassigned && vehicleControlled && slot.GetTargetBase() != oldTarget && slot.GetWaypoint())
+					m_OrderPlanner.SuspendOrderForVehicle(slot);
+			}
+			else if (vehicleControlled)
 			{
 				reassigned = m_VehicleCoordinator.ReplanControlledMovement(
 					slot,
 					faction,
 					"BASE_OWNER_CHANGED",
-					m_LastChangedBase);
+					m_Config.GetRoleMinimumDwellMs(),
+					m_Config.GetCommanderIntervalMs());
 			}
 			else if (slot.IsPersistentStuckFieldHold())
 			{
@@ -1614,13 +2157,24 @@ class AICF_MatchController
 			}
 			else if (!m_OrderPlanner.IsOrderValid(slot, faction))
 			{
-				reassigned = m_OrderPlanner.AssignOrder(
+					reassigned = m_OrderPlanner.AssignOrder(
 					slot,
 					faction,
 					m_ObjectiveGraph,
 					m_TargetSelector,
 					"BASE_OWNER_CHANGED",
 					m_LastChangedBase);
+			}
+			else
+			{
+				reassigned = m_OrderPlanner.ReconcileStrategicOrder(
+					slot,
+					faction,
+					m_ObjectiveGraph,
+					m_TargetSelector,
+					"BASE_OWNER_CHANGED",
+					m_Config.GetRoleMinimumDwellMs(),
+					m_Config.GetCommanderIntervalMs());
 			}
 
 			if (reassigned)
@@ -1638,6 +2192,50 @@ class AICF_MatchController
 				}
 			}
 		}
+	}
+
+	protected void RecordPendingOwnerChange(
+		SCR_CampaignMilitaryBaseComponent base,
+		FactionKey oldOwner,
+		FactionKey newOwner)
+	{
+		if (!base)
+			return;
+
+		int pendingIndex = m_aPendingOwnerChangedBases.Find(base);
+		if (pendingIndex >= 0)
+		{
+			// Preserve the first owner and update only the net new owner. A rapid
+			// capture-and-recapture back to the original owner therefore cancels loss.
+			m_aPendingOwnerChangeNewOwners[pendingIndex] = newOwner;
+			return;
+		}
+
+		m_aPendingOwnerChangedBases.Insert(base);
+		m_aPendingOwnerChangeOldOwners.Insert(oldOwner);
+		m_aPendingOwnerChangeNewOwners.Insert(newOwner);
+	}
+
+	protected bool IsDefendLossResponseRelevant(
+		AICF_GroupSlot slot,
+		SCR_CampaignMilitaryBaseComponent lostBase)
+	{
+		if (!slot || !lostBase)
+			return false;
+
+		SCR_CampaignMilitaryBaseComponent defendedBase = slot.GetTargetBase();
+		if (!defendedBase || defendedBase == lostBase)
+			return true;
+
+		int defendedNodeId = m_ObjectiveGraph.FindNodeId(defendedBase);
+		int lostNodeId = m_ObjectiveGraph.FindNodeId(lostBase);
+		if (defendedNodeId < 0 || lostNodeId < 0)
+			return false;
+
+		AICF_ObjectiveNode defendedNode = m_ObjectiveGraph.GetNode(defendedNodeId);
+		AICF_ObjectiveNode lostNode = m_ObjectiveGraph.GetNode(lostNodeId);
+		return (defendedNode && defendedNode.GetOutgoingNodeIds().Contains(lostNodeId)) ||
+			(lostNode && lostNode.GetOutgoingNodeIds().Contains(defendedNodeId));
 	}
 
 	protected void OnPlayerConnected(int playerId)
@@ -1726,8 +2324,144 @@ class AICF_MatchController
 				CountConcurrentReplacementSpawns(),
 				CountManagedAgents()));
 
+		int usReservedVehicles;
+		int ussrReservedVehicles;
+		int usSpawnedVehicles;
+		int ussrSpawnedVehicles;
+		int usWorldPool;
+		int ussrWorldPool;
+		if (m_VehicleCoordinator)
+		{
+			usReservedVehicles = m_VehicleCoordinator.GetReservedCount("US");
+			ussrReservedVehicles = m_VehicleCoordinator.GetReservedCount("USSR");
+			usSpawnedVehicles = m_VehicleCoordinator.GetSpawnedCount("US");
+			ussrSpawnedVehicles = m_VehicleCoordinator.GetSpawnedCount("USSR");
+			usWorldPool = m_VehicleCoordinator.GetWorldPoolCount("US");
+			ussrWorldPool = m_VehicleCoordinator.GetWorldPoolCount("USSR");
+		}
+		int managedGroups = CountManagedGroups();
+		int managedAgents = CountManagedAgents();
+		int managedWaypoints = CountManagedWaypoints();
+		int trackedEntities = managedGroups + managedAgents + managedWaypoints +
+			usSpawnedVehicles + ussrSpawnedVehicles + usWorldPool + ussrWorldPool;
+		string forceHeartbeatLine = string.Format(
+			"managed_groups=%1 managed_agents=%2 managed_waypoints=%3 tracked_entities=%4 us_active=%5 us_reserved=%6 us_world_pool=%7 ussr_active=%8 ussr_reserved=%9",
+			managedGroups,
+			managedAgents,
+			managedWaypoints,
+			trackedEntities,
+			usSpawnedVehicles,
+			usReservedVehicles,
+			usWorldPool,
+			ussrSpawnedVehicles,
+			ussrReservedVehicles);
+		forceHeartbeatLine += string.Format(
+			" ussr_world_pool=%1 vehicle_cap=%2",
+			ussrWorldPool,
+			m_Stage3Config.GetMaxVehiclesPerFaction());
+		AICF_Stage35Diagnostics.Info("FORCE_HEARTBEAT", forceHeartbeatLine);
+		EmitStage35FactionActivity(m_USState, m_USFaction);
+		EmitStage35FactionActivity(m_USSRState, m_USSRFaction);
+
 		if (m_VehicleCoordinator)
 			m_VehicleCoordinator.Heartbeat(CountManagedAgents());
+	}
+
+	protected void EmitStage35FactionActivity(
+		AICF_FactionState factionState,
+		SCR_CampaignFaction faction)
+	{
+		if (!factionState || !faction)
+			return;
+
+		SCR_CampaignMilitaryBaseComponent mainBase = faction.GetMainBase();
+		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (!slot)
+				continue;
+
+			SCR_AIGroup group = slot.GetGroup();
+			IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
+			int alive = AICF_GroupRuntime.CountAliveAgents(group);
+			float distanceToMobMeters = -1.0;
+			bool atMob;
+			if (leader && mainBase && mainBase.GetOwner())
+			{
+				distanceToMobMeters = Math.Sqrt(vector.DistanceSqXZ(
+					leader.GetOrigin(),
+					mainBase.GetOwner().GetOrigin()));
+				atMob = distanceToMobMeters <= STUCK_WATCHDOG_IGNORE_RADIUS_METERS;
+			}
+
+			AICF_VehicleRuntime vehicleRuntime = slot.GetVehicleRuntime();
+			string vehicleState = "NONE";
+			bool vehicleLifecycle;
+			bool vehicleWaypoint;
+			bool infantryWaypoint = IsWaypointBoundToGroup(slot.GetGroup(), slot.GetWaypoint());
+			if (vehicleRuntime)
+			{
+				vehicleState = AICF_Stage3Diagnostics.StateToString(vehicleRuntime.GetState());
+				vehicleLifecycle = IsBoundedVehicleLifecycle(vehicleRuntime);
+				vehicleWaypoint = IsWaypointBoundToGroup(slot.GetGroup(), vehicleRuntime.GetActiveWaypoint());
+			}
+
+			string allowedIdleReason = "NONE";
+			if (slot.GetState() == AICF_EGroupSlotState.SPAWNING ||
+				slot.GetState() == AICF_EGroupSlotState.WAITING)
+			{
+				allowedIdleReason = "SAFE_SPAWN_OR_ROSTER_RECOVERY";
+			}
+			else
+			{
+				bool safeSpawnWait = IsSafeVehicleSpawnWait(vehicleRuntime);
+				allowedIdleReason = ResolveAllowedIdleReason(
+					slot,
+					mainBase,
+					vehicleLifecycle,
+					safeSpawnWait);
+			}
+
+			bool hasMeaningfulTask = HasMeaningfulTask(slot, vehicleRuntime, vehicleLifecycle);
+			int unexplainedIdleMs = slot.GetUnexplainedMobIdleAgeMs();
+			bool restorePending = false;
+			string vehicleFailureReason = "NONE";
+			string vehicleTerminalReason = "NONE";
+			if (vehicleRuntime)
+			{
+				restorePending = vehicleRuntime.IsInfantryFallbackRestorePending();
+				vehicleFailureReason = vehicleRuntime.GetLastSpawnFailureReason();
+				vehicleTerminalReason = vehicleRuntime.GetTerminalReason();
+			}
+			string slotActivityLine = string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 state=%4 role=%5 posture=%6 alive=%7 target=%8 infantry_waypoint=%9",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetSlotId(),
+				AICF_Stage1Diagnostics.StateToString(slot.GetState()),
+				AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+				slot.GetOperationalPosture(),
+				alive,
+				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
+				infantryWaypoint);
+			slotActivityLine += string.Format(
+				" vehicle_waypoint=%1 vehicle_state=%2 at_mob=%3 distance_to_mob_m=%4 meaningful_task=%5 allowed_idle_reason=%6 unexplained_idle_ms=%7",
+				vehicleWaypoint,
+				vehicleState,
+				atMob,
+				distanceToMobMeters,
+				hasMeaningfulTask,
+				allowedIdleReason,
+				unexplainedIdleMs);
+			slotActivityLine += string.Format(
+				" taskless_age_ms=%1 restore_pending=%2 vehicle_failure_reason=%3 vehicle_terminal_reason=%4 idle_suppression=%5",
+				slot.GetMeaningfulTaskLostAgeMs(),
+				restorePending,
+				vehicleFailureReason,
+				vehicleTerminalReason,
+				slot.GetMobIdleSuppressionReason());
+			AICF_Stage35Diagnostics.Info("SLOT_ACTIVITY", slotActivityLine);
+		}
 	}
 
 	protected void EvaluateVictory()
@@ -1762,6 +2496,7 @@ class AICF_MatchController
 			m_ReinforcementSystem.HasRejectedUnsafeSite() &&
 			!AICF_Stage1Diagnostics.HasErrors() &&
 			!AICF_Stage2Diagnostics.HasErrors() &&
+			!AICF_Stage35Diagnostics.HasErrors() &&
 			(!m_Stage3Config.GetVehiclesEnabled() || !AICF_Stage3Diagnostics.HasErrors());
 
 		AICF_Stage2Diagnostics.Info(
@@ -1797,6 +2532,52 @@ class AICF_MatchController
 	protected int CountManagedAgents()
 	{
 		return CountFactionAgents(m_USState) + CountFactionAgents(m_USSRState);
+	}
+
+	protected int CountManagedGroups()
+	{
+		return CountFactionGroups(m_USState) + CountFactionGroups(m_USSRState);
+	}
+
+	protected int CountFactionGroups(AICF_FactionState factionState)
+	{
+		if (!factionState)
+			return 0;
+
+		int count;
+		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (slot && slot.GetGroup())
+				count++;
+		}
+		return count;
+	}
+
+	protected int CountManagedWaypoints()
+	{
+		return CountFactionManagedWaypoints(m_USState) +
+			CountFactionManagedWaypoints(m_USSRState);
+	}
+
+	protected int CountFactionManagedWaypoints(AICF_FactionState factionState)
+	{
+		if (!factionState)
+			return 0;
+
+		int count;
+		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (!slot)
+				continue;
+			if (slot.GetWaypoint())
+				count++;
+			AICF_VehicleRuntime runtime = slot.GetVehicleRuntime();
+			if (runtime && runtime.GetActiveWaypoint())
+				count++;
+		}
+		return count;
 	}
 
 	protected int CountProjectedManagedAgents()

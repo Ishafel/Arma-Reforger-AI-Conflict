@@ -2,9 +2,14 @@
 class AICF_Stage1Config
 {
 	static const int GROUP_SLOTS_PER_FACTION = 4;
-	static const int ATTACK_SLOTS_PER_FACTION = 2;
+	static const int MANAGED_GROUP_SIZE = 5;
+	static const int ATTACK_SLOTS_PER_FACTION = 3;
 	static const int DEFEND_SLOTS_PER_FACTION = 1;
-	static const int RESERVE_SLOTS_PER_FACTION = 1;
+	static const int RESERVE_SLOTS_PER_FACTION = 0;
+	static const int LEGACY_ATTACK_SLOTS_PER_FACTION = 2;
+	static const int LEGACY_DEFEND_SLOTS_PER_FACTION = 1;
+	static const int LEGACY_RESERVE_SLOTS_PER_FACTION = 1;
+	static const int ROLE_MINIMUM_DWELL_INTERVALS = 2;
 
 	static const int DEFAULT_INITIAL_TICKETS = 12;
 	static const int DEFAULT_REPLACEMENT_TICKET_COST = 1;
@@ -17,9 +22,10 @@ class AICF_Stage1Config
 	static const int MAX_DELAY_MS = 3600000;
 	static const int MIN_COMMANDER_INTERVAL_MS = 1000;
 	static const int MAX_COMMANDER_INTERVAL_MS = 600000;
-	// Seven live stock squads plus one conservative eight-agent replacement projection need 29;
-	// keep a small explicit margin so the first valid replacement cannot deadlock at the clamp.
-	static const int MIN_MANAGED_AGENTS = 32;
+	// Stage 3.5 owns eight five-agent groups plus one conservative eight-agent
+	// pending replacement projection. Keep the documented 48-agent floor even
+	// though a destroyed slot normally frees its live agents before replacement.
+	static const int MIN_MANAGED_AGENTS = 48;
 	static const int MAX_MANAGED_AGENTS = 128;
 
 	protected int m_iInitialTickets;
@@ -30,6 +36,7 @@ class AICF_Stage1Config
 	protected int m_iWarTempoPercent;
 	protected FactionKey m_sExpectedPlayerFaction;
 	protected bool m_bRequirePlayerForResult;
+	protected bool m_bActiveForcesRolesEnabled;
 
 	void AICF_Stage1Config()
 	{
@@ -47,6 +54,7 @@ class AICF_Stage1Config
 		m_iWarTempoPercent = DEFAULT_WAR_TEMPO_PERCENT;
 		m_sExpectedPlayerFaction = string.Empty;
 		m_bRequirePlayerForResult = true;
+		m_bActiveForcesRolesEnabled = true;
 	}
 
 	int GetInitialTickets()
@@ -139,6 +147,21 @@ class AICF_Stage1Config
 		m_bRequirePlayerForResult = required;
 	}
 
+	bool GetActiveForcesRolesEnabled()
+	{
+		return m_bActiveForcesRolesEnabled;
+	}
+
+	void SetActiveForcesRolesEnabled(bool enabled)
+	{
+		m_bActiveForcesRolesEnabled = enabled;
+	}
+
+	int GetRoleMinimumDwellMs()
+	{
+		return m_iCommanderIntervalMs * ROLE_MINIMUM_DWELL_INTERVALS;
+	}
+
 	protected void ApplyCLIOverrides()
 	{
 		string value;
@@ -159,6 +182,8 @@ class AICF_Stage1Config
 			SetExpectedPlayerFaction(value);
 		if (System.GetCLIParam("aicfRequirePlayerForResult", value))
 			SetRequirePlayerForResult(value.ToInt() > 0);
+		if (System.GetCLIParam("aicfActiveForcesRolesEnabled", value))
+			SetActiveForcesRolesEnabled(value.ToInt() > 0);
 	}
 
 	protected int ClampInt(int value, int minimum, int maximum)

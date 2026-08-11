@@ -43,6 +43,38 @@ class AICF_VehicleApproachActionToken
 	}
 }
 
+// Exact cargo boarding keeps the selected compartment and its reservation
+// owner together with the action. The owner snapshot lets cleanup release only
+// our reservation even when an agent has already detached or been replaced.
+class AICF_VehiclePassengerActionToken
+{
+	protected AIAgent m_Agent;
+	protected ref SCR_AIGetInVehicle m_Action;
+	protected BaseCompartmentSlot m_Compartment;
+	protected IEntity m_ReservedEntity;
+	protected int m_iRetryCount;
+
+	void AICF_VehiclePassengerActionToken(
+		AIAgent agent,
+		SCR_AIGetInVehicle action,
+		BaseCompartmentSlot compartment,
+		IEntity reservedEntity,
+		int retryCount = 0)
+	{
+		m_Agent = agent;
+		m_Action = action;
+		m_Compartment = compartment;
+		m_ReservedEntity = reservedEntity;
+		m_iRetryCount = retryCount;
+	}
+
+	AIAgent GetAgent() { return m_Agent; }
+	SCR_AIGetInVehicle GetAction() { return m_Action; }
+	BaseCompartmentSlot GetCompartment() { return m_Compartment; }
+	IEntity GetReservedEntity() { return m_ReservedEntity; }
+	int GetRetryCount() { return m_iRetryCount; }
+}
+
 // One runtime belongs to a stable faction/slot/group-generation tuple. The
 // coordinator keeps terminal runtimes alive until their vehicle is safely
 // cleaned, which makes the per-faction vehicle cap include abandoned entities.
@@ -107,6 +139,12 @@ class AICF_VehicleRuntime
 	protected int m_iDismountClearanceBlockedAtMs;
 	protected int m_iDismountClearPollCount;
 	protected int m_iDismountClearanceRecoveryAttempts;
+	protected int m_iLastForceDismountAttemptAtMs;
+	protected int m_iForceDismountAttempts;
+	protected int m_iLastTerminalAuditAtMs;
+	protected string m_sLastTerminalAuditSignature;
+	protected int m_iCohesionWaitStartedAtMs;
+	protected bool m_bCohesionWaitRecoveryAttempted;
 	protected EntityID m_VehicleDeleteEntityId = EntityID.INVALID;
 	protected int m_iVehicleDeleteRequestedAtMs;
 	protected int m_iLastVehicleDeleteAttemptAtMs;
@@ -134,6 +172,7 @@ class AICF_VehicleRuntime
 	protected AIAgent m_CrewRecoveryAgent;
 	protected ref SCR_AIGetInVehicle m_CrewRecoveryAction;
 	protected ref array<ref AICF_VehicleApproachActionToken> m_aBoardingApproachActions = {};
+	protected ref array<ref AICF_VehiclePassengerActionToken> m_aPassengerBoardingActions = {};
 
 	void AICF_VehicleRuntime(
 		FactionKey factionKey,
@@ -199,6 +238,13 @@ class AICF_VehicleRuntime
 			return null;
 		return m_aBoardingApproachActions[index];
 	}
+	int GetPassengerBoardingActionCount() { return m_aPassengerBoardingActions.Count(); }
+	AICF_VehiclePassengerActionToken GetPassengerBoardingAction(int index)
+	{
+		if (!m_aPassengerBoardingActions.IsIndexValid(index))
+			return null;
+		return m_aPassengerBoardingActions[index];
+	}
 	bool HasCompletedTrip() { return m_bCompletedTrip; }
 	bool IsRecoveringDriver() { return m_CrewRecoveryPhase == AICF_EVehicleCrewRecoveryPhase.DRIVER; }
 	bool HasPendingRouteRecovery() { return m_bRouteRecoveryPending; }
@@ -212,6 +258,14 @@ class AICF_VehicleRuntime
 	bool IsDismountClearanceRecoveryAttempted() { return m_bDismountClearanceRecoveryAttempted; }
 	int GetDismountClearanceRecoveryAttempts() { return m_iDismountClearanceRecoveryAttempts; }
 	int GetDismountClearPollCount() { return m_iDismountClearPollCount; }
+	int GetForceDismountAttempts() { return m_iForceDismountAttempts; }
+	bool IsCohesionWaitRecoveryAttempted() { return m_bCohesionWaitRecoveryAttempted; }
+	int GetCohesionWaitAgeMs()
+	{
+		if (m_iCohesionWaitStartedAtMs <= 0)
+			return 0;
+		return System.GetTickCount(m_iCohesionWaitStartedAtMs);
+	}
 	EntityID GetVehicleDeleteEntityId() { return m_VehicleDeleteEntityId; }
 	int GetVehicleDeleteAttempts() { return m_iVehicleDeleteAttempts; }
 	string GetVehicleDeleteEntityIdString() { return m_sVehicleDeleteEntityId; }
@@ -361,6 +415,12 @@ class AICF_VehicleRuntime
 		m_iDismountClearanceBlockedAtMs = 0;
 		m_iDismountClearPollCount = 0;
 		m_iDismountClearanceRecoveryAttempts = 0;
+		m_iLastForceDismountAttemptAtMs = 0;
+		m_iForceDismountAttempts = 0;
+		m_iLastTerminalAuditAtMs = 0;
+		m_sLastTerminalAuditSignature = string.Empty;
+		m_iCohesionWaitStartedAtMs = 0;
+		m_bCohesionWaitRecoveryAttempted = false;
 		m_iBoardingRoleResetAtMs = 0;
 		ClearVehicleDeleteConfirmation();
 		ResetCrewRecoveryPhase();
@@ -486,6 +546,45 @@ class AICF_VehicleRuntime
 		m_aBoardingApproachActions.RemoveItem(expected);
 	}
 
+	AICF_VehiclePassengerActionToken FindPassengerBoardingAction(AIAgent agent)
+	{
+		foreach (AICF_VehiclePassengerActionToken token : m_aPassengerBoardingActions)
+		{
+			if (token && token.GetAgent() == agent)
+				return token;
+		}
+		return null;
+	}
+
+	void TrackPassengerBoardingAction(
+		AIAgent agent,
+		SCR_AIGetInVehicle action,
+		BaseCompartmentSlot compartment,
+		IEntity reservedEntity,
+		int retryCount = 0)
+	{
+		if (!agent || !action || !compartment || !reservedEntity)
+			return;
+		m_aPassengerBoardingActions.Insert(new AICF_VehiclePassengerActionToken(
+			agent,
+			action,
+			compartment,
+			reservedEntity,
+			retryCount));
+	}
+
+	void RemovePassengerBoardingAction(AICF_VehiclePassengerActionToken expected)
+	{
+		if (!expected)
+			return;
+		m_aPassengerBoardingActions.RemoveItem(expected);
+	}
+
+	void ClearPassengerBoardingActions()
+	{
+		m_aPassengerBoardingActions.Clear();
+	}
+
 	int CancelBoardingApproachActions()
 	{
 		int cancelled;
@@ -493,8 +592,20 @@ class AICF_VehicleRuntime
 		{
 			if (!token || !token.GetAction())
 				continue;
+			AIAgent agent = token.GetAgent();
+			IEntity entity;
+			SCR_AIUtilityComponent utility;
+			if (agent)
+			{
+				entity = agent.GetControlledEntity();
+				utility = SCR_AIUtilityComponent.Cast(agent.FindComponent(SCR_AIUtilityComponent));
+			}
 			EAIActionState state = token.GetAction().GetActionState();
 			if (state == EAIActionState.COMPLETED || state == EAIActionState.FAILED)
+				continue;
+			// Fail() invokes stock OnActionFailed synchronously. That path assumes
+			// m_OwnerEntity still exists, so never call it for a detached/deleted AI.
+			if (!AICF_GroupRuntime.IsAliveCharacter(entity) || !utility || utility.m_OwnerEntity != entity)
 				continue;
 			token.GetAction().Fail();
 			cancelled++;
@@ -932,6 +1043,53 @@ class AICF_VehicleRuntime
 	void ClearInfantryFallbackRestorePending()
 	{
 		m_bInfantryFallbackRestorePending = false;
+	}
+
+	bool BeginForceDismountAttempt(int retryIntervalMs, int maximumAttempts)
+	{
+		if (m_iForceDismountAttempts >= maximumAttempts)
+			return false;
+		if (m_iLastForceDismountAttemptAtMs > 0 &&
+			System.GetTickCount(m_iLastForceDismountAttemptAtMs) < retryIntervalMs)
+		{
+			return false;
+		}
+
+		m_iLastForceDismountAttemptAtMs = System.GetTickCount();
+		m_iForceDismountAttempts++;
+		return true;
+	}
+
+	bool MarkTerminalAuditDue(string signature, int intervalMs)
+	{
+		if (signature != m_sLastTerminalAuditSignature || m_iLastTerminalAuditAtMs <= 0 ||
+			System.GetTickCount(m_iLastTerminalAuditAtMs) >= intervalMs)
+		{
+			m_sLastTerminalAuditSignature = signature;
+			m_iLastTerminalAuditAtMs = System.GetTickCount();
+			return true;
+		}
+
+		return false;
+	}
+
+	int ObserveCohesionWait(bool fragmented)
+	{
+		if (!fragmented)
+		{
+			m_iCohesionWaitStartedAtMs = 0;
+			m_bCohesionWaitRecoveryAttempted = false;
+			return 0;
+		}
+
+		if (m_iCohesionWaitStartedAtMs <= 0)
+			m_iCohesionWaitStartedAtMs = System.GetTickCount();
+		return System.GetTickCount(m_iCohesionWaitStartedAtMs);
+	}
+
+	void MarkCohesionWaitRecoveryAttempted()
+	{
+		m_bCohesionWaitRecoveryAttempted = true;
 	}
 
 	void MarkTripCompleted()

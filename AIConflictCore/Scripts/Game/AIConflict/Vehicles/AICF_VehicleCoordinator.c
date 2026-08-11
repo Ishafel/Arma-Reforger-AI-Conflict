@@ -17,6 +17,9 @@ class AICF_VehicleCoordinator
 	protected static const int DISMOUNT_CLEARANCE_RECOVERY_DELAY_MS = 3000;
 	protected static const int DISMOUNT_CLEARANCE_RECOVERY_MAX_ATTEMPTS = 3;
 	protected static const int DISMOUNT_CLEARANCE_TERMINAL_MAX_ATTEMPTS = 6;
+	protected static const int FORCE_DISEMBARK_RETRY_INTERVAL_MS = 5000;
+	protected static const int FORCE_DISEMBARK_MAX_ATTEMPTS = 3;
+	protected static const int TERMINAL_AUDIT_INTERVAL_MS = 60000;
 	protected static const int VEHICLE_DELETE_RETRY_INTERVAL_MS = 2000;
 	protected static const int VEHICLE_DELETE_MAX_ATTEMPTS = 3;
 	protected static const int VEHICLE_DELETE_CONFIRM_TIMEOUT_MS = 10000;
@@ -40,6 +43,7 @@ class AICF_VehicleCoordinator
 	protected ref AICF_VehicleSpawner m_Spawner;
 	protected ref AICF_VehicleWaypointFactory m_WaypointFactory;
 	protected ref AICF_VehicleWatchdog m_Watchdog;
+	protected ref AICF_VehiclePassengerBoardingController m_PassengerBoarding;
 	protected ref AICF_OrderPlanner m_OrderPlanner;
 	protected ref AICF_GroupCohesionPolicy m_CohesionPolicy;
 	protected ref AICF_ObjectiveGraph m_ObjectiveGraph;
@@ -93,6 +97,7 @@ class AICF_VehicleCoordinator
 		m_Spawner = new AICF_VehicleSpawner();
 		m_WaypointFactory = new AICF_VehicleWaypointFactory();
 		m_Watchdog = new AICF_VehicleWatchdog();
+		m_PassengerBoarding = new AICF_VehiclePassengerBoardingController(m_Watchdog);
 
 		for (int i = 0; i < AICF_Stage1Config.GROUP_SLOTS_PER_FACTION; i++)
 		{
@@ -155,7 +160,9 @@ class AICF_VehicleCoordinator
 				return true;
 			case AICF_EVehicleState.ABANDONED:
 			case AICF_EVehicleState.DESTROYED:
-				return runtime.IsInfantryFallbackRestorePending();
+				// Terminal cleanup may keep the vehicle entity quarantined, but it must
+				// never own or suppress the living group's strategic infantry order.
+				return false;
 		}
 
 		return false;
@@ -169,28 +176,30 @@ class AICF_VehicleCoordinator
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction,
 		string reason,
-		SCR_CampaignMilitaryBaseComponent excludedTarget = null)
+		int minimumDwellMs,
+		int stableCandidateMs)
 	{
 		if (!slot || !faction || !IsControllingMovement(slot))
 			return false;
 
 		AICF_VehicleRuntime runtime = slot.GetVehicleRuntime();
-		if (!runtime || m_OrderPlanner.IsStrategicTargetValid(slot, faction, runtime.GetTargetBase()))
+		if (!runtime)
 			return false;
 
 		SCR_CampaignMilitaryBaseComponent oldTarget = slot.GetTargetBase();
-		if (!m_OrderPlanner.AssignOrder(
+		bool reconciled = m_OrderPlanner.ReconcileStrategicOrder(
 			slot,
 			faction,
 			m_ObjectiveGraph,
 			m_TargetSelector,
 			reason,
-			excludedTarget))
-		{
+			minimumDwellMs,
+			stableCandidateMs);
+		if (!reconciled)
 			return false;
-		}
 
-		m_OrderPlanner.SuspendOrderForVehicle(slot);
+		if (slot.GetTargetBase() != oldTarget && slot.GetWaypoint())
+			m_OrderPlanner.SuspendOrderForVehicle(slot);
 		return oldTarget && slot.GetTargetBase() != oldTarget;
 	}
 
@@ -225,6 +234,30 @@ class AICF_VehicleCoordinator
 				managedAgents,
 				m_aUSWorldPool.Count(),
 				m_aUSSRWorldPool.Count()));
+	}
+
+	int GetReservedCount(FactionKey factionKey)
+	{
+		if (factionKey == "US")
+			return CountReserved(m_aUSRuntime);
+
+		return CountReserved(m_aUSSRRuntime);
+	}
+
+	int GetSpawnedCount(FactionKey factionKey)
+	{
+		if (factionKey == "US")
+			return CountSpawned(m_aUSRuntime);
+
+		return CountSpawned(m_aUSSRRuntime);
+	}
+
+	int GetWorldPoolCount(FactionKey factionKey)
+	{
+		if (factionKey == "US")
+			return m_aUSWorldPool.Count();
+
+		return m_aUSSRWorldPool.Count();
 	}
 
 	void Stop(bool cleanupEntities)
@@ -308,7 +341,20 @@ class AICF_VehicleCoordinator
 				}
 
 				AICF_EVehicleKind desiredKind;
-				if (!TryGetDesiredKind(slot, desiredKind) || !CanStartVehicleTrip(slot) || System.GetTickCount() < nextVehicleAtMs[slotId])
+				if (!TryGetDesiredKind(slot, desiredKind))
+					continue;
+				if (!CanStartVehicleTrip(slot))
+					continue;
+				if (!HasMinimumRosterForNewVehicleRequest(slot))
+				{
+					if (!slot.IsVehicleTripSuppressedForCurrentAssignment())
+					{
+						ReportVehicleRequestIneligible(faction, slot, null);
+						slot.SuppressVehicleTripForAssignment(slot.GetSpawnGeneration(), slot.GetTargetBase());
+					}
+					continue;
+				}
+				if (System.GetTickCount() < nextVehicleAtMs[slotId])
 					continue;
 
 				if (CountReserved(runtimes) >= m_Config.GetMaxVehiclesPerFaction())
@@ -330,7 +376,7 @@ class AICF_VehicleCoordinator
 				runtime.SetObservedBaseRevision(m_iBaseRevision);
 				runtimes[slotId] = runtime;
 				slot.SetVehicleRuntime(runtime);
-				AICF_Stage3Diagnostics.Info("VEHICLE_REQUESTED", runtime.DescribeContext("LONG_RANGE_ATTACK_ORDER"));
+				AICF_Stage3Diagnostics.Info("VEHICLE_REQUESTED", runtime.DescribeContext("LONG_RANGE_OPERATIONAL_ORDER"));
 			}
 
 			ProcessRuntime(runtime, factionState, faction, slot, runtimes, nextVehicleAtMs, nextVehicleGeneration, slotId);
@@ -349,6 +395,14 @@ class AICF_VehicleCoordinator
 	{
 		if (!runtime)
 			return;
+		if ((runtime.GetState() == AICF_EVehicleState.REQUESTED ||
+			runtime.GetState() == AICF_EVehicleState.WAITING_FOR_SITE) &&
+			!runtime.GetVehicle() && !HasMinimumRosterForNewVehicleRequest(slot))
+		{
+			ReportVehicleRequestIneligible(faction, slot, runtime);
+			BeginFallback(runtime, faction, slot, "GROUP_NOT_COMBAT_READY");
+			return;
+		}
 
 		if (runtime.GetState() == AICF_EVehicleState.REQUESTED ||
 			runtime.GetState() == AICF_EVehicleState.WAITING_FOR_SITE)
@@ -362,7 +416,7 @@ class AICF_VehicleCoordinator
 				ProcessRequested(runtime, faction, slot, runtimes);
 				break;
 			case AICF_EVehicleState.WAITING_FOR_SITE:
-				ProcessWaitingForSite(runtime, faction, slot);
+				ProcessWaitingForSite(runtime, faction, slot, runtimes);
 				break;
 			case AICF_EVehicleState.BOARDING:
 				ProcessBoarding(runtime, faction, slot);
@@ -414,8 +468,8 @@ class AICF_VehicleCoordinator
 			return;
 		}
 
-		ResourceName prefab = m_Catalog.SelectPrefab(faction, runtime.GetKind());
-		if (prefab.IsEmpty())
+		array<ResourceName> prefabCandidates = {};
+		if (!m_Catalog.GetCandidatePrefabs(faction, runtime.GetKind(), prefabCandidates) || prefabCandidates.IsEmpty())
 		{
 			string terminalReason = "PREFAB_UNAVAILABLE";
 			slot.RecordVehicleTerminalFailure(terminalReason);
@@ -445,29 +499,119 @@ class AICF_VehicleCoordinator
 		SCR_CampaignMilitaryBaseComponent failureBase;
 		string failureReason;
 		bool retryable;
+		ResourceName prefab;
+		bool spawned;
+		bool spawnCallFailed;
 		vector groupPosition = slot.GetGroup().GetOrigin();
 		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
 		if (leader)
 			groupPosition = leader.GetOrigin();
 
-		if (!m_Spawner.TrySpawn(
-			m_Campaign,
-			faction,
-			slot,
-			m_ConflictAdapter,
-			prefab,
-			groupPosition,
-			m_Config.GetMaximumSpawnDistanceMeters(),
-			m_Config.GetMaximumReuseDistanceMeters(),
-			false,
-			runtime,
-			vehicle,
-			usage,
-			spawnBase,
-			failureReason,
-			retryable,
-			failureBase))
+		int requiredSeats = AICF_GroupRuntime.CountAliveAgents(slot.GetGroup());
+		for (int candidateIndex = 0; candidateIndex < prefabCandidates.Count(); candidateIndex++)
 		{
+			ResourceName candidatePrefab = prefabCandidates[candidateIndex];
+			prefab = candidatePrefab;
+			if (!m_Spawner.TrySpawn(
+				m_Campaign,
+				faction,
+				slot,
+				m_ConflictAdapter,
+				candidatePrefab,
+				groupPosition,
+				m_Config.GetMaximumSpawnDistanceMeters(),
+				m_Config.GetMaximumReuseDistanceMeters(),
+				false,
+				runtime,
+				vehicle,
+				usage,
+				spawnBase,
+				failureReason,
+				retryable,
+				failureBase))
+			{
+				if (!retryable && runtime.GetKind() == AICF_EVehicleKind.LIGHT_TRANSPORT &&
+					candidateIndex + 1 < prefabCandidates.Count())
+				{
+					AICF_Stage35Diagnostics.Info(
+						"VEHICLE_TRANSPORT_FALLBACK",
+						string.Format(
+							"faction=%1 slot=%2 rejected_prefab=%3 reason=%4 next_prefab=%5 fallback_kind=TRANSPORT",
+							faction.GetFactionKey(),
+							slot.GetSlotKey(),
+							candidatePrefab,
+							failureReason,
+							prefabCandidates[candidateIndex + 1]));
+					continue;
+				}
+
+				spawnCallFailed = true;
+				break;
+			}
+
+			int availableSeats;
+			bool hasPilot;
+			bool hasTurret;
+			bool capacityAccepted = m_Watchdog.InspectVehicleCapacity(
+				vehicle,
+				runtime.GetKind(),
+				requiredSeats,
+				availableSeats,
+				hasPilot,
+				hasTurret);
+			string capacityPreflightLine = string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 kind=%4 candidate_index=%5 candidates=%6 prefab=%7 required=%8 available=%9",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetSlotId(),
+				AICF_Stage3Diagnostics.KindToString(runtime.GetKind()),
+				candidateIndex,
+				prefabCandidates.Count(),
+				candidatePrefab,
+				requiredSeats,
+				availableSeats);
+			capacityPreflightLine += string.Format(
+				" pilot=%1 turret=%2 accepted=%3 policy=ALL_OR_FALLBACK",
+				hasPilot,
+				hasTurret,
+				capacityAccepted);
+			AICF_Stage35Diagnostics.Info("VEHICLE_CAPACITY_PREFLIGHT", capacityPreflightLine);
+			if (!capacityAccepted)
+			{
+				if (runtime.GetKind() == AICF_EVehicleKind.LIGHT_TRANSPORT &&
+					candidateIndex + 1 < prefabCandidates.Count())
+				{
+					AICF_Stage35Diagnostics.Info(
+						"VEHICLE_TRANSPORT_FALLBACK",
+						string.Format(
+							"faction=%1 slot=%2 rejected_prefab=%3 required=%4 available=%5 next_prefab=%6 fallback_kind=TRANSPORT",
+							faction.GetFactionKey(),
+							slot.GetSlotKey(),
+							candidatePrefab,
+							requiredSeats,
+							availableSeats,
+							prefabCandidates[candidateIndex + 1]));
+				}
+				RplComponent.DeleteRplEntity(vehicle, false);
+				vehicle = null;
+				usage = null;
+				failureReason = "INSUFFICIENT_COMPARTMENTS";
+				retryable = false;
+				continue;
+			}
+
+			prefab = candidatePrefab;
+			spawned = true;
+			break;
+		}
+
+		if (!spawned)
+		{
+			if (!spawnCallFailed)
+			{
+				failureReason = "INSUFFICIENT_COMPARTMENTS";
+				retryable = false;
+			}
 			if (retryable)
 			{
 				runtime.RecordSpawnFailure(failureReason);
@@ -520,6 +664,19 @@ class AICF_VehicleCoordinator
 			}
 
 			slot.RecordVehicleTerminalFailure(failureReason);
+			if (failureReason == "INSUFFICIENT_COMPARTMENTS")
+			{
+				AICF_Stage3Diagnostics.Warning(
+					"VEHICLE_CAPACITY_UNAVAILABLE",
+					string.Format(
+						"%1 candidates=%2 required=%3 outcome=BOUNDED_INFANTRY_FALLBACK",
+						runtime.DescribeContext(failureReason),
+						prefabCandidates.Count(),
+						requiredSeats));
+				BeginFallback(runtime, faction, slot, failureReason);
+				return;
+			}
+
 			string failureEvent = "VEHICLE_SPAWN_FAILED";
 			if (failureReason.Contains("FACTION"))
 				failureEvent = "VEHICLE_FACTION_MISMATCH";
@@ -550,9 +707,14 @@ class AICF_VehicleCoordinator
 	protected void ProcessWaitingForSite(
 		AICF_VehicleRuntime runtime,
 		SCR_CampaignFaction faction,
-		AICF_GroupSlot slot)
+		AICF_GroupSlot slot,
+		array<ref AICF_VehicleRuntime> runtimes)
 	{
-		if (!runtime || !slot || System.GetTickCount() < runtime.GetNextAttemptAtMs())
+		if (!runtime || !slot)
+			return;
+		if (ProcessBoundedCohesionWait(runtime, faction, slot))
+			return;
+		if (System.GetTickCount() < runtime.GetNextAttemptAtMs())
 			return;
 
 		if (!CanStartVehicleTrip(slot))
@@ -563,20 +725,48 @@ class AICF_VehicleCoordinator
 				AICF_Stage3Diagnostics.Info(
 					"VEHICLE_SPAWN_WAIT_HEARTBEAT",
 					string.Format(
-						"%1 request_generation=%2 attempts=%3 target=%4 base_revision=%5 infantry_order_active=%6 cap_reserved=0",
+						"%1 request_generation=%2 attempts=%3 target=%4 base_revision=%5 infantry_order_active=%6 cap_reserved=0 wait_age_ms=%7 cumulative_attempts=%8 cohesion_wait_age_ms=%9",
 						runtime.DescribeContext("TRIP_CONTEXT_NOT_READY"),
 						runtime.GetRequestGeneration(),
 						runtime.GetSpawnAttempt(),
 						AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
 						m_iBaseRevision,
-						slot.GetWaypoint() != null));
+						slot.GetWaypoint() != null,
+						runtime.GetRequestAgeMs(),
+						runtime.GetTotalSpawnAttempts(),
+						runtime.GetCohesionWaitAgeMs()));
+			}
+			return;
+		}
+		if (CountReservedExcluding(runtimes, runtime) >= m_Config.GetMaxVehiclesPerFaction())
+		{
+			runtime.RecordSpawnFailure("VEHICLE_CAP_UNAVAILABLE");
+			runtime.SetNextAttemptAtMs(System.GetTickCount() + m_Config.GetWaitProbeIntervalMs());
+			if (runtime.MarkWaitReportDue(m_Config.GetWaitProbeIntervalMs()))
+			{
+				AICF_Stage3Diagnostics.Info(
+					"VEHICLE_SPAWN_WAIT_HEARTBEAT",
+					string.Format(
+						"%1 request_generation=%2 attempts=%3 target=%4 base_revision=%5 infantry_order_active=%6 cap_reserved=0 active_or_reserved=%7 limit=%8",
+						runtime.DescribeContext("VEHICLE_CAP_UNAVAILABLE"),
+						runtime.GetRequestGeneration(),
+						runtime.GetSpawnAttempt(),
+						AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
+						m_iBaseRevision,
+						slot.GetWaypoint() != null,
+						CountReservedExcluding(runtimes, runtime),
+						m_Config.GetMaxVehiclesPerFaction()) + string.Format(
+						" wait_age_ms=%1 cumulative_attempts=%2 cohesion_wait_age_ms=%3",
+						runtime.GetRequestAgeMs(),
+						runtime.GetTotalSpawnAttempts(),
+						runtime.GetCohesionWaitAgeMs()));
 			}
 			return;
 		}
 
 		runtime.ClearSpawnIssueReport();
-		ResourceName prefab = m_Catalog.SelectPrefab(faction, runtime.GetKind());
-		if (prefab.IsEmpty())
+		array<ResourceName> prefabCandidates = {};
+		if (!m_Catalog.GetCandidatePrefabs(faction, runtime.GetKind(), prefabCandidates) || prefabCandidates.IsEmpty())
 		{
 			string terminalReason = "PREFAB_UNAVAILABLE";
 			slot.RecordVehicleTerminalFailure(terminalReason);
@@ -587,6 +777,7 @@ class AICF_VehicleCoordinator
 			BeginFallback(runtime, faction, slot, terminalReason);
 			return;
 		}
+		ResourceName prefab = prefabCandidates[0];
 		Vehicle probeVehicle;
 		SCR_AIVehicleUsageComponent probeUsage;
 		SCR_CampaignMilitaryBaseComponent probeBase;
@@ -636,11 +827,25 @@ class AICF_VehicleCoordinator
 					AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
 					AICF_Stage1Diagnostics.BaseKey(failureBase),
 					m_iBaseRevision,
-					slot.GetWaypoint() != null));
+					slot.GetWaypoint() != null) + string.Format(
+					" wait_age_ms=%1 cumulative_attempts=%2 cohesion_wait_age_ms=%3",
+					runtime.GetRequestAgeMs(),
+					runtime.GetTotalSpawnAttempts(),
+					runtime.GetCohesionWaitAgeMs()));
 			return;
 		}
 
 		int oldRequestGeneration = runtime.GetRequestGeneration();
+		AICF_Stage35Diagnostics.Info(
+			"WAITING_FOR_SITE_EXIT",
+			string.Format(
+				"%1 outcome=ELIGIBLE_SITE_PREFLIGHT wait_age_ms=%2 cumulative_attempts=%3 old_request_generation=%4 base_revision=%5 target=%6",
+				runtime.DescribeContext("WAIT_RESOLVED"),
+				runtime.GetRequestAgeMs(),
+				runtime.GetTotalSpawnAttempts(),
+				oldRequestGeneration,
+				m_iBaseRevision,
+				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase())));
 		runtime.ResetSpawnRequestContext(slot.GetTargetBase(), m_iBaseRevision);
 		AICF_Stage3Diagnostics.Info(
 			"VEHICLE_REQUEST_RESUMED",
@@ -965,6 +1170,8 @@ class AICF_VehicleCoordinator
 		string waypointState = DescribeBoardingWaypointState(group, runtime);
 		if (phase == AICF_EVehicleBoardingPhase.APPROACH)
 			waypointState = DescribeBoardingApproachActions(runtime);
+		else if (phase == AICF_EVehicleBoardingPhase.PASSENGERS)
+			waypointState = m_PassengerBoarding.Describe(runtime);
 		if (progressAdvanced)
 		{
 			string progressDetails = string.Format(
@@ -1001,12 +1208,13 @@ class AICF_VehicleCoordinator
 			AICF_Stage3Diagnostics.Info(
 				"BOARDING_ACTION_OWNERSHIP",
 				string.Format(
-					"%1 phase=%2 crew_action=[%3] waypoint=[%4] members=[%5]",
+					"%1 phase=%2 crew_action=[%3] waypoint=[%4] members=[%5] passengers=[%6]",
 					runtime.DescribeContext("CURRENT_AI_ACTION_SNAPSHOT"),
 					typename.EnumToString(AICF_EVehicleBoardingPhase, phase),
 					DescribeCrewBoardingAction(runtime),
 					waypointState,
-					memberSamples));
+					memberSamples,
+					m_PassengerBoarding.Describe(runtime)));
 		}
 
 		if (phase == AICF_EVehicleBoardingPhase.APPROACH)
@@ -1020,6 +1228,7 @@ class AICF_VehicleCoordinator
 				group,
 				vehicle,
 				stagingThresholdMeters,
+				null,
 				approachFailure))
 			{
 				AICF_Stage3Diagnostics.Warning(
@@ -1072,7 +1281,38 @@ class AICF_VehicleCoordinator
 					BeginFallback(runtime, faction, slot, phaseFailureReason);
 				return;
 			}
-			runtime.RecordBoardingSettledPoll(false);
+				runtime.RecordBoardingSettledPoll(false);
+			}
+		if (phase == AICF_EVehicleBoardingPhase.DRIVER || phase == AICF_EVehicleBoardingPhase.GUNNER)
+		{
+			IEntity crewEntity;
+			AIAgent crewAgent = runtime.GetCrewRecoveryAgent();
+			if (crewAgent)
+				crewEntity = crewAgent.GetControlledEntity();
+			float crewStagingThresholdMeters = Math.Min(
+				BOARDING_STAGING_THRESHOLD_METERS,
+				m_Config.GetMaximumReuseDistanceMeters());
+			string stagingFailureReason;
+			if (!MaintainBoardingApproachActions(
+				runtime,
+				group,
+				vehicle,
+				crewStagingThresholdMeters,
+				crewEntity,
+				stagingFailureReason))
+			{
+				AICF_Stage3Diagnostics.Warning(
+					"BOARDING_STAGING_MEMBER_STALLED",
+					string.Format(
+						"%1 phase=%2 actions=[%3] members=[%4]",
+						runtime.DescribeContext(stagingFailureReason),
+						typename.EnumToString(AICF_EVehicleBoardingPhase, phase),
+						DescribeBoardingApproachActions(runtime),
+						memberSamples));
+				LatchAcceptanceFailure(runtime, "BOARDING_STAGING_MEMBER_STALLED");
+				BeginFallback(runtime, faction, slot, "BOARDING_STAGING_MEMBER_STALLED");
+				return;
+			}
 		}
 
 		IEntity driver = m_Watchdog.ResolveAliveDriver(runtime);
@@ -1118,7 +1358,7 @@ class AICF_VehicleCoordinator
 				if (gunnerSettled)
 				{
 					if (!StartBoardingPhase(runtime, slot, AICF_EVehicleBoardingPhase.PASSENGERS))
-						BeginFallback(runtime, faction, slot, "PASSENGER_BOARDING_WAYPOINT_FAILED");
+						BeginFallback(runtime, faction, slot, "PASSENGER_BOARDING_ACTION_FAILED");
 					return;
 				}
 				if (!runtime.IsBoardingGunnerPhasePlanned())
@@ -1136,7 +1376,7 @@ class AICF_VehicleCoordinator
 
 			if (!StartBoardingPhase(runtime, slot, AICF_EVehicleBoardingPhase.PASSENGERS))
 			{
-				BeginFallback(runtime, faction, slot, "PASSENGER_BOARDING_WAYPOINT_FAILED");
+				BeginFallback(runtime, faction, slot, "PASSENGER_BOARDING_ACTION_FAILED");
 				return;
 			}
 			return;
@@ -1155,7 +1395,7 @@ class AICF_VehicleCoordinator
 				runtime.ClearCrewRecoveryTracking();
 				if (!StartBoardingPhase(runtime, slot, AICF_EVehicleBoardingPhase.PASSENGERS))
 				{
-					BeginFallback(runtime, faction, slot, "PASSENGER_BOARDING_WAYPOINT_FAILED");
+					BeginFallback(runtime, faction, slot, "PASSENGER_BOARDING_ACTION_FAILED");
 					return;
 				}
 				return;
@@ -1164,6 +1404,8 @@ class AICF_VehicleCoordinator
 
 		if (phase == AICF_EVehicleBoardingPhase.PASSENGERS)
 		{
+			// Crew loss invalidates the passenger plan immediately. Do not allocate or
+			// retry cargo actions for a vehicle that is about to enter fallback.
 			if (!driverSettled || (runtime.GetKind() == AICF_EVehicleKind.ARMED_LIGHT && !gunnerSettled))
 			{
 				AICF_Stage3Diagnostics.Warning(
@@ -1182,6 +1424,20 @@ class AICF_VehicleCoordinator
 				return;
 			}
 
+			string passengerFailureReason;
+			if (!m_PassengerBoarding.Maintain(runtime, group, passengerFailureReason))
+			{
+				AICF_Stage3Diagnostics.Warning(
+					"PASSENGER_BOARDING_ACTION_FAILED",
+					string.Format(
+						"%1 actions=[%2] members=[%3]",
+						runtime.DescribeContext(passengerFailureReason),
+						m_PassengerBoarding.Describe(runtime),
+						memberSamples));
+				LatchAcceptanceFailure(runtime, "PASSENGER_BOARDING_ACTION_FAILED");
+				BeginFallback(runtime, faction, slot, "PASSENGER_BOARDING_ACTION_FAILED");
+				return;
+			}
 			bool allSettled = aliveCount > 0 && settledCount == aliveCount &&
 				m_Watchdog.AreAllAliveMembersSettledInVehicle(group, vehicle);
 			int settledPolls = runtime.RecordBoardingSettledPoll(allSettled);
@@ -1323,6 +1579,7 @@ class AICF_VehicleCoordinator
 		}
 		DeleteRuntimeWaypoint(runtime);
 		runtime.ClearCrewRecoveryTracking();
+		m_PassengerBoarding.ClearTracking(runtime);
 		runtime.SetBoardingPhase(AICF_EVehicleBoardingPhase.NONE);
 		AICF_Stage3Diagnostics.Info(
 			"BOARDING_COMPLETE",
@@ -1354,7 +1611,7 @@ class AICF_VehicleCoordinator
 			CancelCrewRecovery(runtime);
 			DeleteRuntimeWaypoint(runtime);
 			int interrupted = m_Watchdog.ResetGroupVehicleActions(group);
-			int forced = ForceAliveGroupMembersOut(group, runtime.GetVehicle());
+			int forced = ForceAliveGroupMembersOut(runtime, group, runtime.GetVehicle(), "BOARDING_ROLE_RESET");
 			int remaining = m_Watchdog.CountAliveGroupMembersInVehicle(group, runtime.GetVehicle());
 			AICF_Stage3Diagnostics.Warning(
 				"BOARDING_ROLE_RESET",
@@ -1491,7 +1748,7 @@ class AICF_VehicleCoordinator
 
 		if (!StartBoardingPhase(runtime, slot, AICF_EVehicleBoardingPhase.PASSENGERS))
 		{
-			failureReason = "PASSENGER_BOARDING_WAYPOINT_FAILED";
+			failureReason = "PASSENGER_BOARDING_ACTION_FAILED";
 			return false;
 		}
 		return true;
@@ -1513,7 +1770,7 @@ class AICF_VehicleCoordinator
 		}
 		DeleteRuntimeWaypoint(runtime);
 		CancelCrewRecovery(runtime);
-		SCR_BoardingEntityWaypoint waypoint;
+		m_PassengerBoarding.CancelAll(runtime);
 		string allowance;
 		if (phase == AICF_EVehicleBoardingPhase.APPROACH)
 		{
@@ -1535,6 +1792,14 @@ class AICF_VehicleCoordinator
 			if (!driverAgent || !driverAction)
 				return false;
 			runtime.TrackCrewRecovery(driverAgent, driverAction);
+			if (!StartBoardingApproachActions(
+				runtime,
+				slot.GetGroup(),
+				runtime.GetVehicle(),
+				driverAgent.GetControlledEntity()))
+			{
+				return false;
+			}
 			allowance = "PILOT_EXACT_ACTION";
 		}
 		else if (phase == AICF_EVehicleBoardingPhase.GUNNER)
@@ -1547,12 +1812,22 @@ class AICF_VehicleCoordinator
 			if (!gunnerAgent || !gunnerAction)
 				return false;
 			runtime.TrackCrewRecovery(gunnerAgent, gunnerAction);
+			if (!StartBoardingApproachActions(
+				runtime,
+				slot.GetGroup(),
+				runtime.GetVehicle(),
+				gunnerAgent.GetControlledEntity()))
+			{
+				return false;
+			}
 			allowance = "TURRET_EXACT_ACTION";
 		}
 		else if (phase == AICF_EVehicleBoardingPhase.PASSENGERS)
 		{
-			if (!AttachVehicleToGroup(runtime, slot))
-				return false;
+			// Keep the group vehicle utility detached until every living member is
+			// physically settled. Generic cargo waypoints lost ownership to threat
+			// behaviours in five-person groups; exact reserved actions do not.
+			CancelBoardingApproachActions(runtime);
 			int passengerCount = Math.Max(
 				0,
 				AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()) -
@@ -1575,28 +1850,23 @@ class AICF_VehicleCoordinator
 					string.Format("%1 requested=0 policy=NO_CARGO_REQUIRED", runtime.DescribeContext("ROLE_ORDERED_GET_IN")));
 				return true;
 			}
-
-			waypoint = m_WaypointFactory.CreatePassengerBoardingWaypoint(runtime.GetVehicle());
-			allowance = "CARGO_ONLY";
-			if (waypoint)
-			{
-				AICF_Stage3Diagnostics.Info(
-					"PASSENGERS_ASSIGNED",
-					string.Format("%1 requested=%2 policy=CARGO_ONLY_AFTER_CREW", runtime.DescribeContext("ROLE_ORDERED_GET_IN"), passengerCount));
-			}
+			int issuedPassengerActions;
+			if (!m_PassengerBoarding.Start(runtime, slot.GetGroup(), issuedPassengerActions))
+				return false;
+			allowance = "EXACT_PER_MEMBER_CARGO";
+			AICF_Stage3Diagnostics.Info(
+				"PASSENGERS_ASSIGNED",
+				string.Format(
+					"%1 requested=%2 issued=%3 policy=EXACT_PER_MEMBER_CARGO_AFTER_CREW",
+					runtime.DescribeContext("ROLE_ORDERED_GET_IN"),
+					passengerCount,
+					issuedPassengerActions));
 		}
 		else
 		{
 			return false;
 		}
 
-		if (phase == AICF_EVehicleBoardingPhase.PASSENGERS)
-		{
-			if (!waypoint)
-				return false;
-			slot.GetGroup().AddWaypointAt(waypoint, 0);
-			runtime.SetActiveWaypoint(waypoint);
-		}
 		runtime.SetBoardingPhase(phase);
 		runtime.ResetBoardingSettledPolls();
 		if (previousPhase != phase)
@@ -1615,7 +1885,8 @@ class AICF_VehicleCoordinator
 	protected bool StartBoardingApproachActions(
 		AICF_VehicleRuntime runtime,
 		SCR_AIGroup group,
-		Vehicle vehicle)
+		Vehicle vehicle,
+		IEntity excludedEntity = null)
 	{
 		if (!runtime || !group || !vehicle)
 			return false;
@@ -1639,8 +1910,11 @@ class AICF_VehicleCoordinator
 			}
 
 			alive++;
+			IEntity memberEntity = agent.GetControlledEntity();
+			if (memberEntity == excludedEntity || CompartmentAccessComponent.GetVehicleIn(memberEntity) == vehicle)
+				continue;
 			float distanceMeters = vector.DistanceXZ(
-				agent.GetControlledEntity().GetOrigin(),
+				memberEntity.GetOrigin(),
 				vehicle.GetOrigin());
 			if (distanceMeters <= thresholdMeters)
 				continue;
@@ -1688,6 +1962,7 @@ class AICF_VehicleCoordinator
 		SCR_AIGroup group,
 		Vehicle vehicle,
 		float thresholdMeters,
+		IEntity excludedEntity,
 		out string failureReason)
 	{
 		failureReason = string.Empty;
@@ -1707,7 +1982,9 @@ class AICF_VehicleCoordinator
 			if (staleToken)
 				staleAgent = staleToken.GetAgent();
 			if (staleAgent && staleAgent.GetParentGroup() == group &&
-				AICF_GroupRuntime.IsAliveCharacter(staleAgent.GetControlledEntity()))
+				AICF_GroupRuntime.IsAliveCharacter(staleAgent.GetControlledEntity()) &&
+				staleAgent.GetControlledEntity() != excludedEntity &&
+				CompartmentAccessComponent.GetVehicleIn(staleAgent.GetControlledEntity()) != vehicle)
 			{
 				continue;
 			}
@@ -1724,10 +2001,16 @@ class AICF_VehicleCoordinator
 				continue;
 			}
 
-			float distanceMeters = vector.DistanceXZ(
-				agent.GetControlledEntity().GetOrigin(),
-				vehicle.GetOrigin());
+			IEntity memberEntity = agent.GetControlledEntity();
 			AICF_VehicleApproachActionToken token = runtime.FindBoardingApproachAction(agent);
+			if (memberEntity == excludedEntity || CompartmentAccessComponent.GetVehicleIn(memberEntity) == vehicle)
+			{
+				CancelBoardingApproachAction(runtime, token);
+				continue;
+			}
+			float distanceMeters = vector.DistanceXZ(
+				memberEntity.GetOrigin(),
+				vehicle.GetOrigin());
 			if (distanceMeters <= thresholdMeters)
 			{
 				CancelBoardingApproachAction(runtime, token);
@@ -1812,7 +2095,16 @@ class AICF_VehicleCoordinator
 		if (action)
 		{
 			EAIActionState state = action.GetActionState();
-			if (state != EAIActionState.COMPLETED && state != EAIActionState.FAILED)
+			AIAgent agent = token.GetAgent();
+			IEntity entity;
+			SCR_AIUtilityComponent utility;
+			if (agent)
+			{
+				entity = agent.GetControlledEntity();
+				utility = SCR_AIUtilityComponent.Cast(agent.FindComponent(SCR_AIUtilityComponent));
+			}
+			if (state != EAIActionState.COMPLETED && state != EAIActionState.FAILED &&
+				AICF_GroupRuntime.IsAliveCharacter(entity) && utility && utility.m_OwnerEntity == entity)
 				action.Fail();
 		}
 		runtime.RemoveBoardingApproachAction(token);
@@ -1852,6 +2144,112 @@ class AICF_VehicleCoordinator
 		return details;
 	}
 
+	protected bool ProcessBoundedCohesionWait(
+		AICF_VehicleRuntime runtime,
+		SCR_CampaignFaction faction,
+		AICF_GroupSlot slot)
+	{
+		if (!runtime || !faction || !slot)
+			return false;
+
+		string waitReason = runtime.GetLastSpawnFailureReason();
+		bool cohesionWait = waitReason == "NO_BOARDING_SITE_WITHIN_RANGE" ||
+			waitReason == "POST_APPROACH_COHESION_WAIT";
+		int aliveCount;
+		float farthestFromLeaderMeters;
+		float maximumPairDistanceMeters;
+		string memberSamples;
+		bool measured = cohesionWait && m_Watchdog.MeasureAliveGroupSpread(
+			slot.GetGroup(),
+			aliveCount,
+			farthestFromLeaderMeters,
+			maximumPairDistanceMeters,
+			memberSamples);
+		bool fragmented = measured && aliveCount > 1 &&
+			maximumPairDistanceMeters > m_Config.GetCohesionDistanceMeters();
+		int cohesionWaitAgeMs = runtime.ObserveCohesionWait(fragmented);
+		if (!fragmented)
+			return false;
+
+		int deadlineMs = m_Config.GetCohesionWaitTimeoutMs();
+		if (!runtime.IsCohesionWaitRecoveryAttempted() && cohesionWaitAgeMs >= deadlineMs / 2)
+		{
+			runtime.MarkCohesionWaitRecoveryAttempted();
+			bool normalized = m_CohesionPolicy.NormalizeAfterMovementFailure(slot.GetGroup());
+			bool rebuilt = m_OrderPlanner.RebuildCurrentOrder(slot, faction, "COHESION_WAIT_RECOVERY");
+			AICF_Stage35Diagnostics.Info(
+				"COHESION_OUTCOME",
+				string.Format(
+					"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 outcome=RECOVERY_ISSUED wait_reason=%5 wait_age_ms=%6 deadline_ms=%7 alive=%8 farthest_from_leader_m=%9",
+					faction.GetFactionKey(),
+					slot.GetSlotKey(),
+					slot.GetSlotId(),
+					slot.GetSpawnGeneration(),
+					waitReason,
+					cohesionWaitAgeMs,
+					deadlineMs,
+					aliveCount,
+					farthestFromLeaderMeters) + string.Format(
+					" maximum_pair_m=%1 threshold_m=%2 normalized=%3 order_rebuilt=%4 members=[%5]",
+					maximumPairDistanceMeters,
+					m_Config.GetCohesionDistanceMeters(),
+					normalized,
+					rebuilt,
+					memberSamples));
+		}
+
+		if (cohesionWaitAgeMs < deadlineMs)
+			return false;
+
+		slot.SuppressVehicleTripForAssignment(runtime.GetGroupGeneration(), slot.GetTargetBase());
+		runtime.SetTerminalReason("BOARDING_RANGE_WAIT_EXHAUSTED");
+		runtime.SetState(AICF_EVehicleState.ABANDONED);
+		runtime.ScheduleCleanup(System.GetTickCount());
+		bool infantryOrderActive = RestoreInfantryOrder(runtime, faction, slot, "COHESION_WAIT_EXHAUSTED");
+		if (!infantryOrderActive)
+			runtime.MarkInfantryFallbackRestorePending();
+		AICF_Stage3Diagnostics.Warning(
+			"VEHICLE_SITE_WAIT_EXHAUSTED",
+			string.Format(
+				"%1 wait_reason=%2 wait_age_ms=%3 deadline_ms=%4 alive=%5 maximum_pair_m=%6 threshold_m=%7 infantry_order_active=%8 vehicle_retry_suppressed=1",
+				runtime.DescribeContext("BOARDING_RANGE_WAIT_EXHAUSTED"),
+				waitReason,
+				cohesionWaitAgeMs,
+				deadlineMs,
+				aliveCount,
+				maximumPairDistanceMeters,
+				m_Config.GetCohesionDistanceMeters(),
+				infantryOrderActive));
+		AICF_Stage35Diagnostics.Info(
+			"COHESION_OUTCOME",
+			string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 outcome=VEHICLE_REQUEST_ENDED wait_reason=%5 wait_age_ms=%6 alive=%7 farthest_from_leader_m=%8 maximum_pair_m=%9",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetSlotId(),
+				slot.GetSpawnGeneration(),
+				waitReason,
+				cohesionWaitAgeMs,
+				aliveCount,
+				farthestFromLeaderMeters,
+				maximumPairDistanceMeters) + string.Format(
+				" threshold_m=%1 infantry_order_active=%2 vehicle_retry_suppressed=1 members=[%3] deadline_ms=%4",
+				m_Config.GetCohesionDistanceMeters(),
+				infantryOrderActive,
+				memberSamples,
+				deadlineMs));
+		AICF_Stage35Diagnostics.Info(
+			"WAITING_FOR_SITE_EXIT",
+			string.Format(
+				"%1 outcome=BOUNDED_INFANTRY_FALLBACK wait_age_ms=%2 cumulative_attempts=%3 request_generation=%4 target=%5 vehicle_retry_suppressed=1",
+				runtime.DescribeContext("BOARDING_RANGE_WAIT_EXHAUSTED"),
+				cohesionWaitAgeMs,
+				runtime.GetTotalSpawnAttempts(),
+				runtime.GetRequestGeneration(),
+				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase())));
+		return true;
+	}
+
 	protected bool AttachVehicleToGroup(AICF_VehicleRuntime runtime, AICF_GroupSlot slot)
 	{
 		if (!runtime || !runtime.GetVehicleUsage() || !slot || !slot.GetGroup())
@@ -1872,7 +2270,7 @@ class AICF_VehicleCoordinator
 		string reason)
 	{
 		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
-		if (!target || !target.GetOwner() || (slot.GetRole() == AICF_EGroupRole.ATTACK && target.GetFaction() == faction))
+		if (!m_OrderPlanner.IsStrategicTargetValid(slot, faction, target))
 		{
 			BeginFallback(runtime, faction, slot, "TARGET_INVALID_BEFORE_MOVE");
 			return;
@@ -1947,8 +2345,7 @@ class AICF_VehicleCoordinator
 		SCR_CampaignMilitaryBaseComponent assignedTarget = slot.GetTargetBase();
 		if (assignedTarget && assignedTarget != runtime.GetTargetBase())
 		{
-			if (!assignedTarget.GetOwner() ||
-				(slot.GetRole() == AICF_EGroupRole.ATTACK && assignedTarget.GetFaction() == faction))
+			if (!m_OrderPlanner.IsStrategicTargetValid(slot, faction, assignedTarget))
 			{
 				BeginFallback(runtime, faction, slot, "STRATEGIC_TARGET_CHANGED_INVALID");
 				return;
@@ -1973,7 +2370,7 @@ class AICF_VehicleCoordinator
 			StartMovement(runtime, faction, slot, "STRATEGIC_TARGET_CHANGED");
 			return;
 		}
-		if (!runtime.GetTargetBase() || runtime.GetTargetBase().GetFaction() == faction)
+		if (!m_OrderPlanner.IsStrategicTargetValid(slot, faction, runtime.GetTargetBase()))
 		{
 			BeginFallback(runtime, faction, slot, "STRATEGIC_TARGET_CHANGED");
 			return;
@@ -2500,14 +2897,52 @@ class AICF_VehicleCoordinator
 		if (!runtime)
 			return;
 
+		AIAgent agent = runtime.GetCrewRecoveryAgent();
+		IEntity entity;
+		SCR_AIUtilityComponent utility;
+		if (agent)
+		{
+			entity = agent.GetControlledEntity();
+			utility = SCR_AIUtilityComponent.Cast(agent.FindComponent(SCR_AIUtilityComponent));
+		}
 		SCR_AIGetInVehicle action = runtime.GetCrewRecoveryAction();
 		if (action)
 		{
 			EAIActionState state = action.GetActionState();
-			if (state != EAIActionState.COMPLETED && state != EAIActionState.FAILED)
+			if (state != EAIActionState.COMPLETED && state != EAIActionState.FAILED &&
+				AICF_GroupRuntime.IsAliveCharacter(entity) && utility && utility.m_OwnerEntity == entity)
+			{
 				action.Fail();
+			}
+			else if (state != EAIActionState.COMPLETED && state != EAIActionState.FAILED)
+			{
+				// SCR_AIGetInVehicle.OnActionFailed dereferences m_OwnerEntity.
+				// A terminal/detached agent has no valid owner, so release only the
+				// reservation and never invoke the stock failure callback.
+				ReleaseTrackedCrewReservation(runtime, entity);
+			}
 		}
 		runtime.ClearCrewRecoveryTracking();
+	}
+
+	protected void ReleaseTrackedCrewReservation(AICF_VehicleRuntime runtime, IEntity entity)
+	{
+		if (!runtime || !runtime.GetVehicleUsage())
+			return;
+		BaseCompartmentSlot roleSlot;
+		if (runtime.GetCrewRecoveryPhase() == AICF_EVehicleCrewRecoveryPhase.GUNNER ||
+			runtime.GetBoardingPhase() == AICF_EVehicleBoardingPhase.GUNNER)
+		{
+			roleSlot = runtime.GetVehicleUsage().GetTurretCompartmentSlot();
+		}
+		else
+		{
+			roleSlot = runtime.GetVehicleUsage().GetPilotCompartmentSlot();
+		}
+		if (!roleSlot || roleSlot.GetOccupant() || !roleSlot.IsReserved())
+			return;
+		if (!entity || roleSlot.IsReservedBy(entity))
+			roleSlot.SetReserved(null);
 	}
 
 	protected void BeginGunnerRecovery(
@@ -2699,26 +3134,38 @@ class AICF_VehicleCoordinator
 		}
 
 		// A compartment link can disappear before the get-out animation has moved
-		// the character clear of the vehicle. T6 proved that treating this edge as
-		// completion can strand a soldier in the cargo bed indefinitely. Recover a
-		// logically-out but physically trapped member once, then require two fresh
-		// safe-clear observations before completing the trip.
+		// the character clear of the vehicle. Guide a logically-out member to empty
+		// terrain with an ordinary per-member move; teleport remains reserved for the
+		// terminal fail-closed path. Two fresh safe-clear observations are still
+		// required before completing the trip.
 		if (physicalOnlyBlocked &&
 			runtime.GetDismountClearanceBlockedAgeMs() >= DISMOUNT_CLEARANCE_RECOVERY_DELAY_MS &&
 			runtime.CanAttemptDismountClearanceRecovery(DISMOUNT_CLEARANCE_RECOVERY_MAX_ATTEMPTS))
 		{
-			int relocated = RelocateTrappedDismountedMembers(slot.GetGroup(), runtime.GetVehicle());
-			runtime.RecordDismountClearanceRecoveryAttempt(relocated > 0);
-			AICF_Stage3Diagnostics.Warning(
-				"DISEMBARK_CLEARANCE_RECOVERY",
-				string.Format(
-					"%1 relocated=%2 attempt=%3 maximum_attempts=%4 inside_bounds=%5 samples=[%6]",
-					runtime.DescribeContext("LOGICALLY_OUT_BUT_INSIDE_VEHICLE_BOUNDS"),
-					relocated,
-					runtime.GetDismountClearanceRecoveryAttempts(),
-					DISMOUNT_CLEARANCE_RECOVERY_MAX_ATTEMPTS,
-					insideBounds,
-					clearanceSamples));
+			int alreadyActive;
+			int searchAttempts;
+			int newlyIssued = GuideTrappedDismountedMembers(
+				runtime,
+				slot.GetGroup(),
+				runtime.GetVehicle(),
+				alreadyActive,
+				searchAttempts);
+			if (searchAttempts > 0)
+			{
+				runtime.RecordDismountClearanceRecoveryAttempt(newlyIssued > 0);
+				AICF_Stage3Diagnostics.Info(
+					"DISEMBARK_CLEARANCE_GUIDANCE",
+					string.Format(
+						"%1 newly_issued=%2 already_active=%3 search_attempts=%4 attempt=%5 maximum_attempts=%6 inside_bounds=%7 samples=[%8]",
+						runtime.DescribeContext("LOGICALLY_OUT_BUT_INSIDE_VEHICLE_BOUNDS"),
+						newlyIssued,
+						alreadyActive,
+						searchAttempts,
+						runtime.GetDismountClearanceRecoveryAttempts(),
+						DISMOUNT_CLEARANCE_RECOVERY_MAX_ATTEMPTS,
+						insideBounds,
+						clearanceSamples));
+			}
 		}
 
 		int dismountAgeMs = System.GetTickCount(runtime.GetStateStartedAtMs());
@@ -2743,7 +3190,8 @@ class AICF_VehicleCoordinator
 			return;
 		}
 
-		if (!runtime.IsDismountReissueAttempted() && dismountAgeMs >= dismountTimeoutMs / 2)
+		if (!runtime.IsDismountReissueAttempted() && dismountAgeMs >= dismountTimeoutMs / 2 &&
+			(logicalOccupants > 0 || transitions > 0))
 		{
 			runtime.MarkDismountReissueAttempted();
 			string occupantSamplesBefore = m_Watchdog.DescribeGroupVehicleOccupants(slot.GetGroup(), runtime);
@@ -2764,6 +3212,107 @@ class AICF_VehicleCoordinator
 					interrupted,
 					occupantSamplesBefore));
 		}
+	}
+
+	protected int GuideTrappedDismountedMembers(
+		AICF_VehicleRuntime runtime,
+		SCR_AIGroup group,
+		Vehicle vehicle,
+		out int alreadyActive,
+		out int searchAttempts)
+	{
+		alreadyActive = 0;
+		searchAttempts = 0;
+		if (!runtime || !group || !vehicle || !Replication.IsServer())
+			return 0;
+
+		vector boundsMin;
+		vector boundsMax;
+		vehicle.GetBounds(boundsMin, boundsMax);
+		float clearanceRadius = Math.Max(
+			Math.Max(Math.AbsFloat(boundsMin[0]), Math.AbsFloat(boundsMax[0])),
+			Math.Max(Math.AbsFloat(boundsMin[2]), Math.AbsFloat(boundsMax[2]))) + 3.0;
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		int newlyIssued;
+		int fallbackDirectionIndex;
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent || agent.GetParentGroup() != group)
+				continue;
+
+			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (!AICF_GroupRuntime.IsAliveCharacter(character))
+				continue;
+
+			AICF_VehicleApproachActionToken existing = runtime.FindBoardingApproachAction(agent);
+			CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+			bool linkedOrTransitioning = CompartmentAccessComponent.GetVehicleIn(character) == vehicle ||
+				character.IsInVehicle() ||
+				(access && (access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut()));
+			vector localOrigin = vehicle.CoordToLocal(character.GetOrigin());
+			if (linkedOrTransitioning || !IsInsideExpandedDismountBounds(localOrigin, boundsMin, boundsMax))
+			{
+				CancelBoardingApproachAction(runtime, existing);
+				continue;
+			}
+
+			if (existing && existing.GetAction())
+			{
+				EAIActionState existingState = existing.GetAction().GetActionState();
+				if (existingState != EAIActionState.COMPLETED && existingState != EAIActionState.FAILED)
+				{
+					alreadyActive++;
+					continue;
+				}
+				CancelBoardingApproachAction(runtime, existing);
+			}
+
+			vector direction = Vector(localOrigin[0], 0, localOrigin[2]);
+			if (direction.LengthSq() < 0.01)
+			{
+				switch (fallbackDirectionIndex % 4)
+				{
+					case 0: direction = "1 0 0"; break;
+					case 1: direction = "-1 0 0"; break;
+					case 2: direction = "0 0 1"; break;
+					default: direction = "0 0 -1"; break;
+				}
+			}
+			fallbackDirectionIndex++;
+			direction.Normalize();
+			vector searchCenter = vehicle.CoordToParent(direction * clearanceRadius);
+			searchAttempts++;
+			vector safePosition;
+			if (!SCR_WorldTools.FindEmptyTerrainPosition(safePosition, searchCenter, 3.0, 0.75, 2.0) ||
+				IsInsideExpandedDismountBounds(vehicle.CoordToLocal(safePosition), boundsMin, boundsMax) ||
+				ChimeraWorldUtils.TryGetWaterSurfaceSimple(vehicle.GetWorld(), safePosition))
+			{
+				continue;
+			}
+
+			SCR_AIUtilityComponent utility = SCR_AIUtilityComponent.Cast(
+				agent.FindComponent(SCR_AIUtilityComponent));
+			if (!utility || utility.m_OwnerEntity != character)
+				continue;
+			SCR_AIMoveIndividuallyBehavior action = new SCR_AIMoveIndividuallyBehavior(
+				utility,
+				null,
+				safePosition,
+				SCR_AIActionBase.PRIORITY_BEHAVIOR_MOVE_INDIVIDUALLY,
+				SCR_AIActionBase.PRIORITY_LEVEL_PLAYER,
+				null,
+				1.5);
+			utility.AddAction(action);
+			runtime.TrackBoardingApproachAction(
+				agent,
+				action,
+				vector.DistanceXZ(character.GetOrigin(), safePosition),
+				runtime.GetDismountClearanceRecoveryAttempts());
+			newlyIssued++;
+		}
+
+		return newlyIssued;
 	}
 
 	protected int RelocateTrappedDismountedMembers(SCR_AIGroup group, Vehicle vehicle)
@@ -2892,8 +3441,7 @@ class AICF_VehicleCoordinator
 		}
 
 		vector targetPosition;
-		if (!m_OrderPlanner.TryResolveTargetPosition(newTarget, slot.GetRole(), targetPosition) ||
-			!IsRouteLongEnough(leader.GetOrigin(), targetPosition))
+		if (!m_OrderPlanner.TryResolveTargetPosition(newTarget, slot.GetRole(), targetPosition))
 			return;
 
 		runtime.BeginReuse(slot.GetSpawnGeneration(), newTarget);
@@ -2914,6 +3462,7 @@ class AICF_VehicleCoordinator
 
 		CancelCrewRecovery(runtime);
 		CancelBoardingApproachActions(runtime);
+		m_PassengerBoarding.CancelAll(runtime);
 		DeleteRuntimeWaypoint(runtime);
 		runtime.SetTerminalReason(reason);
 		if ((reason.Contains("RECOVERY") || reason.Contains("STUCK_PERSISTENT")) && runtime.MarkRecoveryFailureReported())
@@ -2941,6 +3490,7 @@ class AICF_VehicleCoordinator
 	{
 		CancelCrewRecovery(runtime);
 		CancelBoardingApproachActions(runtime);
+		m_PassengerBoarding.CancelAll(runtime);
 		bool groupCurrent = IsRuntimeCurrent(runtime, slot);
 		bool allOut = !runtime.GetVehicle() || !runtime.GetVehicle().IsOccupied();
 		if (groupCurrent && runtime.GetVehicle())
@@ -2956,7 +3506,9 @@ class AICF_VehicleCoordinator
 			return;
 		if (!allOut && groupCurrent)
 		{
-			int forced = ForceAliveGroupMembersOut(slot.GetGroup(), runtime.GetVehicle());
+			int forced = 0;
+			if (runtime.BeginForceDismountAttempt(FORCE_DISEMBARK_RETRY_INTERVAL_MS, FORCE_DISEMBARK_MAX_ATTEMPTS))
+				forced = ForceAliveGroupMembersOut(runtime, slot.GetGroup(), runtime.GetVehicle(), "FALLBACK_FORCE_CLEARANCE");
 			allOut = RecoverProtectedDismountClearance(
 				runtime,
 				slot.GetGroup(),
@@ -3013,7 +3565,8 @@ class AICF_VehicleCoordinator
 			if (ShouldSuppressVehicleTripAfterFallback(runtime.GetTerminalReason()))
 				slot.SuppressVehicleTripForAssignment(runtime.GetGroupGeneration(), fallbackTarget);
 			m_CohesionPolicy.NormalizeAfterVehicle(slot.GetGroup());
-			RestoreInfantryOrder(runtime, faction, slot, "VEHICLE_FALLBACK");
+			if (!RestoreInfantryOrder(runtime, faction, slot, "VEHICLE_FALLBACK"))
+				runtime.MarkInfantryFallbackRestorePending();
 		}
 
 		bool destroyed = runtime.GetTerminalReason().Contains("DESTROYED") || m_Watchdog.IsDestroyed(runtime);
@@ -3037,9 +3590,13 @@ class AICF_VehicleCoordinator
 		}
 	}
 
-	protected int ForceAliveGroupMembersOut(SCR_AIGroup group, Vehicle vehicle)
+	protected int ForceAliveGroupMembersOut(
+		AICF_VehicleRuntime runtime,
+		SCR_AIGroup group,
+		Vehicle vehicle,
+		string trigger)
 	{
-		if (!group || !vehicle)
+		if (!runtime || !group || !vehicle)
 			return 0;
 
 		array<AIAgent> agents = {};
@@ -3061,12 +3618,61 @@ class AICF_VehicleCoordinator
 			if (!access)
 				continue;
 			access.InterruptVehicleActionQueue(true, true, true);
-			vector teleportTransform[4];
-			bool hasTeleportLocation = access.FindSuitableTeleportLocation(teleportTransform);
-			if (hasTeleportLocation && access.GetOutVehicle_NoDoor(teleportTransform, false, false, true))
+			int forceAttempt = runtime.GetForceDismountAttempts();
+			bool exactEscalation = forceAttempt > 1;
+			bool directAccepted = false;
+			if (!exactEscalation)
+			{
+				vector teleportTransform[4];
+				bool hasTeleportLocation = access.FindSuitableTeleportLocation(teleportTransform);
+				if (hasTeleportLocation && access.GetOutVehicle_NoDoor(teleportTransform, false, false, true))
+					directAccepted = true;
+				else if (access.GetOutVehicle(EGetOutType.TELEPORT, -1, ECloseDoorAfterActions.INVALID, false, true))
+					directAccepted = true;
+			}
+
+			BaseCompartmentSlot compartment = access.GetCompartment();
+			bool ejectRequested = false;
+			bool ejectedImmediately = false;
+			bool exactOwnerStillLinked = compartment && compartment.GetVehicle() == vehicle &&
+				compartment.GetOccupant() == character;
+			bool exactEjectNeeded = exactEscalation || (!access.IsGettingOut() && exactOwnerStillLinked);
+			if (exactOwnerStillLinked && exactEjectNeeded)
+			{
+				ejectRequested = compartment.EjectOccupant(true, false, ejectedImmediately, false);
+			}
+			if (directAccepted || ejectRequested)
 				forced++;
-			else if (access.GetOutVehicle(EGetOutType.TELEPORT, -1, ECloseDoorAfterActions.INVALID, false, true))
-				forced++;
+
+			bool linkedAfter = CompartmentAccessComponent.GetVehicleIn(character) == vehicle ||
+				character.IsInVehicle() || access.IsInCompartment();
+			int compartmentSlot = -1;
+			int compartmentManager = -1;
+			if (compartment)
+			{
+				compartmentSlot = compartment.GetCompartmentSlotID();
+				compartmentManager = compartment.GetCompartmentMgrID();
+			}
+			AICF_Stage35Diagnostics.Info(
+				"FORCE_DISEMBARK_MEMBER",
+				string.Format(
+					"%1 trigger=%2 member=%3 compartment_slot=%4 direct_accepted=%5 eject_requested=%6 eject_immediate=%7 linked_after=%8 getting_out=%9",
+					runtime.DescribeContext("PROTECTED_MEMBER_FORCE_EXIT"),
+					trigger,
+					character.GetID(),
+					compartmentSlot,
+					directAccepted,
+					ejectRequested,
+					ejectedImmediately,
+					linkedAfter,
+					access.IsGettingOut()) + string.Format(
+					" compartment_manager=%1 getting_in=%2 force_attempt=%3 maximum_attempts=%4 exact_escalation=%5 exact_owner_linked=%6",
+					compartmentManager,
+					access.IsGettingIn(),
+					forceAttempt,
+					FORCE_DISEMBARK_MAX_ATTEMPTS,
+					exactEscalation,
+					exactOwnerStillLinked));
 		}
 
 		return forced;
@@ -3515,6 +4121,7 @@ class AICF_VehicleCoordinator
 		CancelCrewRecovery(runtime);
 		CancelBoardingApproachActions(runtime);
 		bool groupCurrent = IsRuntimeCurrent(runtime, slot);
+		EmitAbandonedExitAudit(runtime, slot, groupCurrent);
 		if (runtime.IsInfantryFallbackRestorePending() && !runtime.GetGroup())
 		{
 			// There is no managed group left to receive an infantry order. Drop
@@ -3536,7 +4143,8 @@ class AICF_VehicleCoordinator
 				DISMOUNT_CLEARANCE_TERMINAL_MAX_ATTEMPTS);
 			if (!groupOut && runtime.GetVehicle())
 			{
-				ForceAliveGroupMembersOut(runtime.GetGroup(), runtime.GetVehicle());
+				if (runtime.BeginForceDismountAttempt(FORCE_DISEMBARK_RETRY_INTERVAL_MS, FORCE_DISEMBARK_MAX_ATTEMPTS))
+					ForceAliveGroupMembersOut(runtime, runtime.GetGroup(), runtime.GetVehicle(), "TERMINAL_FORCE_CLEARANCE");
 				groupOut = RecoverProtectedDismountClearance(
 					runtime,
 					runtime.GetGroup(),
@@ -3545,37 +4153,39 @@ class AICF_VehicleCoordinator
 					true,
 					DISMOUNT_CLEARANCE_TERMINAL_MAX_ATTEMPTS);
 			}
-			if (groupOut && groupCurrent)
-			{
-				m_CohesionPolicy.NormalizeAfterVehicle(slot.GetGroup());
-				RestoreInfantryOrder(runtime, faction, slot, "FALLBACK_DISEMBARK_FAILED");
-				runtime.ClearInfantryFallbackRestorePending();
-			}
-			else if (!groupOut && groupCurrent && runtime.GetVehicle())
+			if (groupCurrent)
 			{
 				int logicalOccupants;
 				int transitions;
 				int insideBounds;
 				string samples;
-				m_Watchdog.InspectProtectedMemberDismountClearance(
-					runtime.GetGroup(),
-					runtime.GetVehicle(),
-					logicalOccupants,
-					transitions,
-					insideBounds,
-					samples);
-				// A member with no compartment link or transition is safe to receive
-				// an infantry order even while the vehicle entity is retained as a
-				// physical-clearance guard. Movement itself can clear the footprint;
-				// deletion below remains blocked until a later verified clear poll.
-				if (logicalOccupants == 0 && transitions == 0 && insideBounds > 0)
+				if (runtime.GetVehicle())
 				{
+					m_Watchdog.InspectProtectedMemberDismountClearance(
+						runtime.GetGroup(),
+						runtime.GetVehicle(),
+						logicalOccupants,
+						transitions,
+						insideBounds,
+						samples);
+				}
+				if (groupOut || (logicalOccupants == 0 && transitions == 0))
 					m_CohesionPolicy.NormalizeAfterVehicle(slot.GetGroup());
-					RestoreInfantryOrder(runtime, faction, slot, "PHYSICAL_CLEARANCE_PENDING");
+				string restoreReason = "FALLBACK_DISEMBARK_PENDING_CLEARANCE";
+				if (groupOut)
+					restoreReason = "FALLBACK_DISEMBARK_FAILED";
+				else if (logicalOccupants == 0 && transitions == 0 && insideBounds > 0)
+					restoreReason = "PHYSICAL_CLEARANCE_PENDING";
+				bool restored = RestoreInfantryOrder(runtime, faction, slot, restoreReason);
+				if (restored)
+				{
 					runtime.ClearInfantryFallbackRestorePending();
-					AICF_Stage3Diagnostics.Warning(
-						"DISEMBARK_CLEARANCE_PENDING",
-						string.Format("%1 inside_bounds=%2 samples=[%3]", runtime.DescribeContext("INFANTRY_ORDER_RESTORED_VEHICLE_RETAINED"), insideBounds, samples));
+					if (!groupOut)
+					{
+						AICF_Stage3Diagnostics.Warning(
+							"DISEMBARK_CLEARANCE_PENDING",
+							string.Format("%1 logical=%2 transitions=%3 inside_bounds=%4 samples=[%5]", runtime.DescribeContext("INFANTRY_ORDER_RESTORED_VEHICLE_RETAINED"), logicalOccupants, transitions, insideBounds, samples));
+					}
 				}
 			}
 			if (!groupOut)
@@ -3627,6 +4237,82 @@ class AICF_VehicleCoordinator
 		}
 
 		FinalizeVehicleCleanup(runtime, slot, runtimes, nextVehicleAtMs, nextVehicleGeneration, slotId, expediteForReplacement && !cleanupDue);
+	}
+
+	protected void EmitAbandonedExitAudit(
+		AICF_VehicleRuntime runtime,
+		AICF_GroupSlot slot,
+		bool groupCurrent)
+	{
+		if (!runtime)
+			return;
+
+		int logicalOccupants;
+		int transitions;
+		int insideBounds;
+		string samples = "NONE";
+		if (runtime.GetVehicle() && runtime.GetGroup())
+		{
+			m_Watchdog.InspectProtectedMemberDismountClearance(
+				runtime.GetGroup(),
+				runtime.GetVehicle(),
+				logicalOccupants,
+				transitions,
+				insideBounds,
+				samples);
+		}
+		bool infantryWaypoint = IsInfantryOrderBound(slot);
+		bool vehicleWaypoint = runtime.GetActiveWaypoint() != null;
+		bool meaningfulTask = groupCurrent && slot && slot.GetTargetBase() && infantryWaypoint;
+		string signature = string.Format(
+			"%1:%2:%3:%4:%5:%6",
+			runtime.IsInfantryFallbackRestorePending(),
+			logicalOccupants,
+			transitions,
+			insideBounds,
+			infantryWaypoint,
+			groupCurrent);
+		if (!runtime.MarkTerminalAuditDue(signature, TERMINAL_AUDIT_INTERVAL_MS))
+			return;
+
+		int stateAgeMs = System.GetTickCount(runtime.GetStateStartedAtMs());
+		int pendingAgeMs = 0;
+		if (runtime.IsInfantryFallbackRestorePending())
+			pendingAgeMs = stateAgeMs;
+		string nextAction = "WAIT_SAFE_CLEANUP";
+		if (runtime.IsInfantryFallbackRestorePending())
+			nextAction = "RESTORE_INFANTRY_ORDER";
+		if (logicalOccupants > 0 || transitions > 0)
+		{
+			nextAction = "WAIT_PROTECTED_CLEARANCE";
+			if (runtime.IsInfantryFallbackRestorePending() &&
+				runtime.GetForceDismountAttempts() < FORCE_DISEMBARK_MAX_ATTEMPTS)
+			{
+				nextAction = "FORCE_DISEMBARK_RECHECK";
+			}
+		}
+		AICF_Stage35Diagnostics.Info(
+			"ABANDONED_EXIT_AUDIT",
+			string.Format(
+				"%1 state_age_ms=%2 group_current=%3 alive=%4 logical_occupants=%5 transitions=%6 inside_bounds=%7 restore_pending=%8 meaningful_task=%9",
+				runtime.DescribeContext("TERMINAL_HANDOFF_AUDIT"),
+				stateAgeMs,
+				groupCurrent,
+				AICF_GroupRuntime.CountAliveAgents(runtime.GetGroup()),
+				logicalOccupants,
+				transitions,
+				insideBounds,
+				runtime.IsInfantryFallbackRestorePending(),
+				meaningfulTask) + string.Format(
+				" pending_age_ms=%1 infantry_waypoint=%2 vehicle_waypoint=%3 force_attempts=%4 clearance_attempts=%5 cleanup_due_ms=%6 next_action=%7 samples=[%8]",
+				pendingAgeMs,
+				infantryWaypoint,
+				vehicleWaypoint,
+				runtime.GetForceDismountAttempts(),
+				runtime.GetDismountClearanceRecoveryAttempts(),
+				Math.Max(0, runtime.GetCleanupAtMs() - System.GetTickCount()),
+				nextAction,
+				samples));
 	}
 
 	protected void RequestVehicleDelete(
@@ -3849,7 +4535,7 @@ class AICF_VehicleCoordinator
 	protected bool CanStartVehicleTrip(AICF_GroupSlot slot)
 	{
 		if (!slot || slot.HasVehicleTerminalFailure() || slot.IsVehicleTripSuppressedForCurrentAssignment() ||
-			!slot.IsCombatReady() || slot.GetRole() != AICF_EGroupRole.ATTACK ||
+			!slot.IsCombatReady() ||
 			!slot.GetGroup() || !slot.GetTargetBase() || !slot.GetTargetBase().GetOwner() || !slot.GetWaypoint())
 		{
 			return false;
@@ -3857,19 +4543,58 @@ class AICF_VehicleCoordinator
 
 		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
 		vector targetPosition;
-		return leader && m_OrderPlanner.TryResolveTargetPosition(slot.GetTargetBase(), slot.GetRole(), targetPosition) &&
-			IsRouteLongEnough(leader.GetOrigin(), targetPosition);
+		return leader && m_OrderPlanner.TryResolveTargetPosition(
+			slot.GetTargetBase(),
+			slot.GetRole(),
+			targetPosition);
+	}
+
+	protected bool HasMinimumRosterForNewVehicleRequest(AICF_GroupSlot slot)
+	{
+		return slot && slot.GetGroup() &&
+			AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()) >= m_Config.GetMinimumVehicleRequestAgents();
+	}
+
+	protected void ReportVehicleRequestIneligible(
+		SCR_CampaignFaction faction,
+		AICF_GroupSlot slot,
+		AICF_VehicleRuntime runtime)
+	{
+		if (!faction || !slot)
+			return;
+		int alive = AICF_GroupRuntime.CountAliveAgents(slot.GetGroup());
+		int assignedVehiclePresent = 0;
+		if (runtime && runtime.GetVehicle())
+			assignedVehiclePresent = 1;
+		string details = string.Format(
+			"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 alive=%5 required_minimum=%6 policy=NEW_REQUEST_ONLY assigned_vehicle_present=%7 assigned_vehicle_policy=PRESERVE_EXISTING",
+			faction.GetFactionKey(),
+			slot.GetSlotKey(),
+			slot.GetSlotId(),
+			slot.GetSpawnGeneration(),
+			alive,
+			m_Config.GetMinimumVehicleRequestAgents(),
+			assignedVehiclePresent);
+		if (runtime)
+			details += string.Format(" request_generation=%1 state=%2", runtime.GetRequestGeneration(), AICF_Stage3Diagnostics.StateToString(runtime.GetState()));
+		AICF_Stage35Diagnostics.Info("VEHICLE_REQUEST_INELIGIBLE", details);
 	}
 
 	protected bool TryGetDesiredKind(AICF_GroupSlot slot, out AICF_EVehicleKind kind)
 	{
-		if (!slot || slot.GetRole() != AICF_EGroupRole.ATTACK)
+		if (!slot)
 			return false;
 
 		int slotId = slot.GetSlotId();
+		if (slotId < 0 || slotId >= AICF_Stage1Config.GROUP_SLOTS_PER_FACTION)
+			return false;
+
 		if (slotId < m_Config.GetTransportVehiclesPerFaction())
 		{
-			kind = AICF_EVehicleKind.TRANSPORT;
+			if (slot.GetSlotKey() == "A0" || slot.GetSlotKey() == "A1")
+				kind = AICF_EVehicleKind.TRANSPORT;
+			else
+				kind = AICF_EVehicleKind.LIGHT_TRANSPORT;
 			return true;
 		}
 
@@ -3909,27 +4634,131 @@ class AICF_VehicleCoordinator
 		return vector.DistanceSqXZ(from, to) >= m_Config.GetMinimumRouteMeters() * m_Config.GetMinimumRouteMeters();
 	}
 
-	protected void RestoreInfantryOrder(
+	protected bool RestoreInfantryOrder(
 		AICF_VehicleRuntime runtime,
 		SCR_CampaignFaction faction,
 		AICF_GroupSlot slot,
 		string reason)
 	{
-		if (!slot || !slot.IsCombatReady() || slot.GetWaypoint())
-			return;
+		int requestedAtMs = System.GetTickCount();
+		string oldWaypointId = "NONE";
+		if (slot && slot.GetWaypoint())
+			oldWaypointId = slot.GetWaypoint().GetID().ToString();
+		string factionKey = "NONE";
+		if (faction)
+			factionKey = faction.GetFactionKey();
+		string slotKey = "NONE";
+		int numericSlot = -1;
+		SCR_CampaignMilitaryBaseComponent requestedTarget;
+		if (slot)
+		{
+			slotKey = slot.GetSlotKey();
+			numericSlot = slot.GetSlotId();
+			requestedTarget = slot.GetTargetBase();
+		}
+		int groupGeneration = -1;
+		string vehicleState = "NONE";
+		bool restorePending = false;
+		if (runtime)
+		{
+			groupGeneration = runtime.GetGroupGeneration();
+			vehicleState = AICF_Stage3Diagnostics.StateToString(runtime.GetState());
+			restorePending = runtime.IsInfantryFallbackRestorePending();
+		}
+		AICF_Stage35Diagnostics.Info(
+			"ORDER_RESTORE_REQUESTED",
+			string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 trigger=VEHICLE_HANDOFF reason=%5 target=%6 old_waypoint=%7 vehicle_state=%8 restore_pending=%9",
+				factionKey,
+				slotKey,
+				numericSlot,
+				groupGeneration,
+				reason,
+				AICF_Stage1Diagnostics.BaseKey(requestedTarget),
+				oldWaypointId,
+				vehicleState,
+				restorePending));
+		if (!runtime || !slot || !slot.IsCombatReady() || !faction)
+		{
+			AICF_Stage35Diagnostics.Info(
+				"ORDER_RESTORE_RESULT",
+				string.Format("faction=%1 slot=%2 success=0 failure_reason=INPUT_OR_SLOT_NOT_READY latency_ms=%3", factionKey, slotKey, System.GetTickCount(requestedAtMs)));
+			return false;
+		}
 
 		SCR_CampaignMilitaryBaseComponent oldTarget = slot.GetTargetBase();
-		bool restored = m_OrderPlanner.RebuildCurrentOrder(slot, faction, reason);
-		if (!restored)
-			restored = m_OrderPlanner.AssignOrder(slot, faction, m_ObjectiveGraph, m_TargetSelector, reason, oldTarget);
-
+		bool restored = false;
+		if (slot.GetWaypoint() && slot.GetGroup())
+		{
+			array<AIWaypoint> existingQueue = {};
+			slot.GetGroup().GetWaypoints(existingQueue);
+			restored = existingQueue.Contains(slot.GetWaypoint());
+		}
 		if (!restored)
 		{
+			restored = m_OrderPlanner.RebuildCurrentOrder(slot, faction, reason);
+			if (!restored)
+				restored = m_OrderPlanner.AssignOrder(slot, faction, m_ObjectiveGraph, m_TargetSelector, reason, oldTarget);
+		}
+		AIWaypoint newWaypoint = slot.GetWaypoint();
+		string newWaypointId = "NONE";
+		if (newWaypoint)
+			newWaypointId = newWaypoint.GetID().ToString();
+		array<AIWaypoint> waypointQueue = {};
+		int queueCount;
+		bool inQueue;
+		bool isCurrent;
+		if (slot.GetGroup())
+		{
+			queueCount = slot.GetGroup().GetWaypoints(waypointQueue);
+			inQueue = newWaypoint && waypointQueue.Contains(newWaypoint);
+			isCurrent = newWaypoint && slot.GetGroup().GetCurrentWaypoint() == newWaypoint;
+		}
+		bool postconditionMeaningful = restored && newWaypoint && inQueue;
+		string failureReason = "NONE";
+		if (!restored)
+			failureReason = "PLANNER_REJECTED";
+		else if (!postconditionMeaningful)
+			failureReason = "WAYPOINT_BIND_MISMATCH";
+		AICF_Stage35Diagnostics.Info(
+			"ORDER_RESTORE_RESULT",
+			string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 success=%5 old_waypoint=%6 new_waypoint=%7 bound_to_group=%8 is_current=%9",
+				factionKey,
+				slot.GetSlotKey(),
+				slot.GetSlotId(),
+				runtime.GetGroupGeneration(),
+				postconditionMeaningful,
+				oldWaypointId,
+				newWaypointId,
+				inQueue,
+				isCurrent) + string.Format(
+				" queue_count=%1 postcondition_meaningful_task=%2 failure_reason=%3 latency_ms=%4",
+				queueCount,
+				postconditionMeaningful,
+				failureReason,
+				System.GetTickCount(requestedAtMs)));
+
+		if (!postconditionMeaningful)
+		{
 			AICF_Stage3Diagnostics.Warning("INFANTRY_FALLBACK", string.Format("%1 order_restored=0", runtime.DescribeContext("ORDER_RESTORE_DEFERRED")));
-			return;
+			if (restored)
+				AICF_Stage35Diagnostics.Warning("WAYPOINT_BIND_MISMATCH", string.Format("faction=%1 slot=%2 waypoint=%3 queue_count=%4", factionKey, slot.GetSlotKey(), newWaypointId, queueCount));
+			return false;
 		}
 
 		AICF_Stage3Diagnostics.Info("INFANTRY_FALLBACK", string.Format("%1 order_restored=1 target=%2", runtime.DescribeContext(reason), AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase())));
+		return true;
+	}
+
+	protected bool IsInfantryOrderBound(AICF_GroupSlot slot)
+	{
+		if (!slot || !slot.GetGroup() || !slot.GetWaypoint())
+			return false;
+
+		array<AIWaypoint> waypointQueue = {};
+		slot.GetGroup().GetWaypoints(waypointQueue);
+		return waypointQueue.Contains(slot.GetWaypoint());
 	}
 
 	protected void DeleteRuntimeWaypoint(AICF_VehicleRuntime runtime)
@@ -3938,6 +4767,17 @@ class AICF_VehicleCoordinator
 			return;
 
 		AIWaypoint waypoint = runtime.GetActiveWaypoint();
+		string removeReason = runtime.GetTerminalReason();
+		if (removeReason.IsEmpty())
+			removeReason = AICF_Stage3Diagnostics.StateToString(runtime.GetState());
+		AICF_Stage35Diagnostics.Info(
+			"WAYPOINT_REMOVED",
+			string.Format(
+				"%1 waypoint=%2 waypoint_kind=VEHICLE owner=VEHICLE_RUNTIME remove_trigger=STATE_TRANSITION remove_reason=%3 target=%4",
+				runtime.DescribeContext("VEHICLE_WAYPOINT_REMOVED"),
+				waypoint.GetID(),
+				removeReason,
+				AICF_Stage1Diagnostics.BaseKey(runtime.GetTargetBase())));
 		m_WaypointFactory.DeleteOwnedWaypoint(runtime.GetGroup(), waypoint);
 		runtime.ClearActiveWaypoint(waypoint);
 	}
@@ -3949,6 +4789,7 @@ class AICF_VehicleCoordinator
 
 		CancelCrewRecovery(runtime);
 		CancelBoardingApproachActions(runtime);
+		m_PassengerBoarding.CancelAll(runtime);
 		SCR_AIGroupUtilityComponent groupUtility = runtime.GetGroup().GetGroupUtilityComponent();
 		if (groupUtility && groupUtility.IsUsableVehicle(runtime.GetVehicleUsage()))
 			groupUtility.RemoveUsableVehicle(runtime.GetVehicleUsage());
@@ -4015,7 +4856,8 @@ class AICF_VehicleCoordinator
 
 		bool us = runtime.GetFactionKey() == "US";
 		int slotId = runtime.GetSlotId();
-		if (runtime.GetKind() == AICF_EVehicleKind.TRANSPORT)
+		if (runtime.GetKind() == AICF_EVehicleKind.TRANSPORT ||
+			runtime.GetKind() == AICF_EVehicleKind.LIGHT_TRANSPORT)
 		{
 			if (us && m_aUSTransportCompletedSlots.IsIndexValid(slotId))
 				m_aUSTransportCompletedSlots[slotId] = true;

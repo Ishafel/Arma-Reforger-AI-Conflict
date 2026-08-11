@@ -89,8 +89,26 @@ class AICF_VehicleWatchdog
 		if (!runtime || !runtime.GetVehicle())
 			return 0;
 
+		return CountAccessibleSeatsForVehicle(
+			runtime.GetVehicle(),
+			runtime.GetKind(),
+			hasPilot,
+			hasTurret);
+	}
+
+	int CountAccessibleSeatsForVehicle(
+		Vehicle vehicle,
+		AICF_EVehicleKind kind,
+		out bool hasPilot,
+		out bool hasTurret)
+	{
+		hasPilot = false;
+		hasTurret = false;
+		if (!vehicle)
+			return 0;
+
 		BaseCompartmentManagerComponent manager = BaseCompartmentManagerComponent.Cast(
-			runtime.GetVehicle().FindComponent(BaseCompartmentManagerComponent));
+			vehicle.FindComponent(BaseCompartmentManagerComponent));
 		if (!manager)
 			return 0;
 
@@ -103,13 +121,40 @@ class AICF_VehicleWatchdog
 				compartment.GetOccupant() || compartment.IsReserved())
 				continue;
 
+			bool supportedSeat;
 			if (PilotCompartmentSlot.Cast(compartment))
+			{
 				hasPilot = true;
-			if (TurretCompartmentSlot.Cast(compartment))
+				supportedSeat = true;
+			}
+			else if (CargoCompartmentSlot.Cast(compartment))
+			{
+				supportedSeat = true;
+			}
+			else if (TurretCompartmentSlot.Cast(compartment))
+			{
 				hasTurret = true;
-			count++;
+				supportedSeat = kind == AICF_EVehicleKind.ARMED_LIGHT;
+			}
+			if (supportedSeat)
+				count++;
 		}
 		return count;
+	}
+
+	bool InspectVehicleCapacity(
+		Vehicle vehicle,
+		AICF_EVehicleKind kind,
+		int requiredSeats,
+		out int availableSeats,
+		out bool hasPilot,
+		out bool hasTurret)
+	{
+		availableSeats = CountAccessibleSeatsForVehicle(vehicle, kind, hasPilot, hasTurret);
+		if (requiredSeats <= 0 || availableSeats < requiredSeats || !hasPilot)
+			return false;
+
+		return kind != AICF_EVehicleKind.ARMED_LIGHT || (hasTurret && requiredSeats >= 2);
 	}
 
 	int CountAliveGroupMembersInVehicle(SCR_AIGroup group, Vehicle vehicle)
@@ -360,6 +405,59 @@ class AICF_VehicleWatchdog
 		}
 
 		return true;
+	}
+
+	bool MeasureAliveGroupSpread(
+		SCR_AIGroup group,
+		out int aliveCount,
+		out float farthestFromLeaderMeters,
+		out float maximumPairDistanceMeters,
+		out string memberSamples)
+	{
+		aliveCount = 0;
+		farthestFromLeaderMeters = -1.0;
+		maximumPairDistanceMeters = -1.0;
+		memberSamples = string.Empty;
+		if (!group)
+			return false;
+
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
+		if (!leader)
+			return false;
+		array<IEntity> aliveMembers = {};
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+			IEntity member = agent.GetControlledEntity();
+			if (!AICF_GroupRuntime.IsAliveCharacter(member))
+				continue;
+
+			float leaderDistanceMeters = Math.Sqrt(vector.DistanceSqXZ(member.GetOrigin(), leader.GetOrigin()));
+			aliveMembers.Insert(member);
+			aliveCount++;
+			farthestFromLeaderMeters = Math.Max(farthestFromLeaderMeters, leaderDistanceMeters);
+			if (!memberSamples.IsEmpty())
+				memberSamples += ",";
+			memberSamples += string.Format("%1:%2", member.GetID(), leaderDistanceMeters);
+		}
+
+		for (int firstIndex = 0; firstIndex < aliveMembers.Count(); firstIndex++)
+		{
+			for (int secondIndex = firstIndex + 1; secondIndex < aliveMembers.Count(); secondIndex++)
+			{
+				float pairDistanceMeters = Math.Sqrt(vector.DistanceSqXZ(
+					aliveMembers[firstIndex].GetOrigin(),
+					aliveMembers[secondIndex].GetOrigin()));
+				maximumPairDistanceMeters = Math.Max(maximumPairDistanceMeters, pairDistanceMeters);
+			}
+		}
+
+		if (aliveCount == 1)
+			maximumPairDistanceMeters = 0.0;
+		return aliveCount > 0;
 	}
 
 	int ResetGroupVehicleActions(SCR_AIGroup group)

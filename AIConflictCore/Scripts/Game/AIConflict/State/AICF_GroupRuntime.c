@@ -45,6 +45,49 @@ class AICF_GroupRuntime
 		return alive;
 	}
 
+	static bool HasExactFactionRoster(
+		SCR_AIGroup group,
+		FactionKey expectedFactionKey,
+		int expectedCount,
+		out int actualCount,
+		out int factionMismatchCount,
+		out int nonAliveCount)
+	{
+		actualCount = 0;
+		factionMismatchCount = 0;
+		nonAliveCount = 0;
+		if (!group || expectedFactionKey.IsEmpty() || expectedCount <= 0)
+			return false;
+
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		actualCount = agents.Count();
+		foreach (AIAgent agent : agents)
+		{
+			IEntity controlledEntity;
+			if (agent)
+				controlledEntity = agent.GetControlledEntity();
+			if (!controlledEntity)
+			{
+				factionMismatchCount++;
+				nonAliveCount++;
+				continue;
+			}
+			if (!IsAliveCharacter(controlledEntity))
+				nonAliveCount++;
+
+			FactionAffiliationComponent affiliation = FactionAffiliationComponent.Cast(
+				controlledEntity.FindComponent(FactionAffiliationComponent));
+			Faction affiliatedFaction;
+			if (affiliation)
+				affiliatedFaction = affiliation.GetAffiliatedFaction();
+			if (!affiliatedFaction || affiliatedFaction.GetFactionKey() != expectedFactionKey)
+				factionMismatchCount++;
+		}
+
+		return actualCount == expectedCount && factionMismatchCount == 0 && nonAliveCount == 0;
+	}
+
 	static bool IsAliveCharacter(IEntity entity)
 	{
 		ChimeraCharacter character = ChimeraCharacter.Cast(entity);
