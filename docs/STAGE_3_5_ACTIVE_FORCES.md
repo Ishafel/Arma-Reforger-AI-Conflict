@@ -1,14 +1,20 @@
 # Stage 3.5 — Active Motorized Forces
 
-Статус реализации: **IMPLEMENTED**. Статус полной runtime-приёмки: **NOT RUN**; исторический Transport-срез T: **FAIL**; preliminary repeat smoke: **BLOCKED** внешней backend-аутентификацией и не считается повтором T. На текущем рабочем снимке пройдены отдельные статические аудиты Stage 3/3.5 и локальный безоконный Workbench compile-smoke, но они не заменяют controlled-срезы, 30-минутную матрицу и двухчасовой soak из отдельного [бланка приёмки](STAGE_3_5_TESTING.md).
+Статус Stage 3.5: **FAILED — REWRITE IMPLEMENTATION/CUTOVER COMPLETE, RUNTIME ACCEPTANCE NOT PASSED**. Статус полной runtime-приёмки: **NOT RUN**. Последний Transport run `stage1-server-11245` дошёл до vehicle runtime и завершился FAIL: обнаружены terminal route loop, waypoint reconciliation, bounded-clearance и exact-cargo defects. Их root cause и текущий fix-candidate задокументированы в [runtime fix report 13.08.2026](STAGE_3_5_RUNTIME_FIX_2026-08-13.md). Static/Workbench evidence fix-candidate не заменяет новый длинный server+client repeat, 30-минутную матрицу и двухчасовой soak из отдельного [бланка приёмки](STAGE_3_5_TESTING.md).
 
-Этот этап следует после условной фиксации Stage 3 и до экономики/снабжения Stage 4. Он не добавляет экономику, строительство или сложную логистику: цель — задействовать все существующие managed-группы и проверить устойчивость более крупного моторизованного состава.
+Vehicle-lifecycle rewrite Stage 3.5 реализован и переключён вместе со Stage 3. Нормативные требования этапа и подтверждённые положительные свойства не отменены и перенесены без ослабления, однако ещё не подтверждены runtime acceptance. Этап по-прежнему предшествует экономике/снабжению Stage 4 и не добавляет экономику, строительство или сложную логистику: цель — задействовать все существующие managed-группы и проверить устойчивость более крупного моторизованного состава.
+
+Текущий dirty-working-tree fix-candidate прошёл `tools/Test-Stage3Static.ps1` и `tools/Test-Stage35Static.ps1`; negative fixtures подтвердили `COORDINATOR_SIDE_EFFECT`, `FLOW_CROSS_CALL`, `WAYPOINT_SIDE_EFFECT_OWNER`, `TRANSITION_OUTSIDE_CONTROLLER`, `TRANSITION_EFFECT_ORDER`, `WAITING_WITH_LEASE`, `HANDOFF_CLEARANCE_GATE`, `CLEANUP_CLEARANCE_OWNER`, `CLEANUP_IDENTITY_SAFETY` и `VEHICLE_LIVENESS_OWNERSHIP`. Финальный Workbench 1.8 validate `.cache/stage35-runtime-report-fix-validate-20260813-r4/console.log` создал Game `5719/11200`, CRC32 `859d2690`, при `SCRIPT(E/F)=0`, `ENGINE(F)=0`, VM `0`; 25 shutdown `RESOURCES(E)` сохранены как resource caveat, не runtime evidence.
+
+Final-tree headless development smoke `.cache/Stage35-Rewrite-FinalSmoke-20260812-002210` был **BLOCKED** внешним backend до AICF bootstrap: `Game created=1`, `AICF=0`, `BACKEND(E)=12` (`SSL peer certificate`/`BAD_REQUEST`), `SCRIPT(E/F)=0`, `ENGINE(F)=0`, VM `0`. Он не дал roster/vehicle evidence, не является Repeat T, Repeat-T2 или M30 и не повышает статус этапа. Commit/SHA не записан: проверялось dirty working tree.
+
+Post-cutover run `stage1-server-30017` на Reforger 1.8 завершился `INITIAL_GROUP_SPAWN_TIMEOUT` раньше vehicle phases. Отдельный fix-candidate заменил несовместимый direct `SpawnUnits()` на 1.8 `RequestSpawn(5)` и прошёл focused vehicles-off smoke: восемь `GROUP_ROSTER_READY` по `5/5`, общий `ROSTER_READY` за 5.986 с, без timeout/AICF/SCRIPT/ENGINE failures. Этот smoke снимает только initial-roster blocker; transport rewrite по-прежнему не проверен, а Stage 3/3.5 остаётся **FAILED / NOT ACCEPTED**. Полный разбор: [Stage 1 spawn regression](STAGE_1_SPAWN_CUTOVER_2026-08-13.md).
 
 Реализационные решения:
 
 - stable numeric slot остаются `0..3`, а role-local identity выводится как `A0/A1/A2/D0`;
 - forward defender сохраняет базовую роль `DEFEND`, а `FORWARD_DEFEND` и `QRF` являются оперативными posture с hysteresis/minimum dwell;
-- stock faction defender roster формируется через `SCR_AIGroup` до обычного асинхронного `SpawnUnits()` и допускается в `READY` только при точном составе `5/5` и совпадении faction каждого бойца;
+- stock faction defender roster конфигурируется через `SCR_AIGroup`, после managed bind и generation-fenced observers передаётся в глобальную 1.8 spawn queue через `RequestSpawn(5)` и допускается в `READY` только при точном составе `5/5` и совпадении faction каждого бойца;
 - `aicfActiveForcesRolesEnabled=0` оставляет проверочный baseline `2 ATTACK / 1 DEFEND / 1 RESERVE`, не возвращая старый размер группы;
 - техника по-прежнему включается явно через `aicfVehiclesEnabled=1`; штатный срез Stage 3.5 задаёт transport `4`, armed-light `0` и active/reserved cap `4`;
 - `[AICF][STAGE3.5]` пишет roster, strategic assignment/hysteresis, capacity fallback, per-slot activity и агрегированные managed waypoint/entity/vehicle/world-pool счётчики.
@@ -52,6 +58,7 @@
 - Новый vehicle request разрешён при minimum combat-ready составе, штатно не менее трёх живых бойцов. Эта policy не отбирает уже назначенную исправную машину у группы, которая понесла потери.
 - После обязательного crew будущие пассажиры получают атомарно зарезервированные точные `CargoCompartmentSlot` и отдельные bounded action-token; settled засчитывается только в назначенном compartment, а cancellation освобождает только собственную reservation.
 - Normal dismount выводит физически застрявших с помощью bounded per-member movement guidance без relocation/teleport; принудительное перемещение остаётся только terminal/fallback fail-closed восстановлением.
+- Прекращение vehicle control немедленно запускает восстановление meaningful infantry order. `order_restored` не зависит от `clearance_safe`: logical occupant, get-in/get-out transition, oriented-bounds или player blocker удерживает только lease release/delete, а terminal/`ABANDONED`/`DESTROYED` никогда не владеет движением группы.
 - Armed-light остаётся отдельным опциональным классом и не подменяет транспорт для пятерых. Его состав/вместимость проверяются отдельным срезом.
 - Группа сохраняет исправную машину при смене цели и использует `SAFE_REUSE`; новый transport не создаётся, пока прежний пригоден и достижим.
 - После уничтожения или недоступности машины действует bounded request/recovery, затем группа продолжает пешком. Запрещены бесконечный spawn-loop, remote GetIn и teleport-in.

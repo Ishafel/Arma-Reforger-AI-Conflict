@@ -1,21 +1,35 @@
 // Resolves ordered faction-owned ResourceNames from the stock vehicle catalog.
 // LIGHT_TRANSPORT lists the light candidate first and faction truck fallbacks
-// afterwards; the coordinator accepts the first prefab whose live compartments
+// afterwards; acquisition accepts the first prefab whose conservative metadata
+// and live compartments
 // fit every surviving member under ALL_OR_FALLBACK.
 class AICF_VehicleCatalog
 {
-	ResourceName SelectPrefab(SCR_CampaignFaction faction, AICF_EVehicleKind kind)
-	{
-		array<ResourceName> candidates = {};
-		if (!GetCandidatePrefabs(faction, kind, candidates) || candidates.IsEmpty())
-			return ResourceName.Empty;
-
-		return candidates[0];
-	}
-
-	bool GetCandidatePrefabs(
+	bool GetCandidatePrefabsForAcquisition(
 		SCR_CampaignFaction faction,
 		AICF_EVehicleKind kind,
+		AICF_StrategicAssignmentSnapshot assignment,
+		string identityContext,
+		out array<ResourceName> candidates)
+	{
+		candidates.Clear();
+		if (!assignment || !assignment.IsValid() || !faction ||
+			assignment.GetFactionKey() != faction.GetFactionKey())
+		{
+			return false;
+		}
+
+		return GetCandidatePrefabsInternal(
+			faction,
+			kind,
+			identityContext,
+			candidates);
+	}
+
+	protected bool GetCandidatePrefabsInternal(
+		SCR_CampaignFaction faction,
+		AICF_EVehicleKind kind,
+		string identityContext,
 		out array<ResourceName> candidates)
 	{
 		candidates.Clear();
@@ -27,7 +41,7 @@ class AICF_VehicleCatalog
 		{
 			AICF_Stage3Diagnostics.Error(
 				"VEHICLE_CATALOG_MISSING",
-				string.Format("faction=%1 kind=%2", faction.GetFactionKey(), AICF_Stage3Diagnostics.KindToString(kind)));
+				FormatCatalogContext(faction, kind, identityContext));
 			return false;
 		}
 
@@ -47,11 +61,11 @@ class AICF_VehicleCatalog
 
 			AICF_Stage3Diagnostics.Warning(
 				"VEHICLE_PREFAB_CANDIDATE_REJECTED",
-				string.Format(
-					"faction=%1 kind=%2 prefab=%3 reason=RESOURCE_INVALID",
-					faction.GetFactionKey(),
-					AICF_Stage3Diagnostics.KindToString(kind),
-					candidate));
+				FormatCatalogCandidateRejection(
+					faction,
+					kind,
+					candidate,
+					identityContext));
 			candidates.Remove(candidateIndex);
 		}
 
@@ -60,11 +74,96 @@ class AICF_VehicleCatalog
 
 		AICF_Stage3Diagnostics.Error(
 			"VEHICLE_PREFAB_NOT_FOUND",
-			string.Format(
-				"faction=%1 kind=%2 catalog_entries=%3",
-				faction.GetFactionKey(),
-				AICF_Stage3Diagnostics.KindToString(kind),
-				entries.Count()));
+			FormatCatalogNotFound(faction, kind, entries.Count(), identityContext));
+		return false;
+	}
+
+	protected string FormatCatalogContext(
+		SCR_CampaignFaction faction,
+		AICF_EVehicleKind kind,
+		string identityContext)
+	{
+		string details = identityContext;
+		if (!details.IsEmpty())
+			details += " ";
+		details += string.Format(
+			"faction=%1 kind=%2",
+			faction.GetFactionKey(),
+			AICF_Stage3Diagnostics.KindToString(kind));
+		return details;
+	}
+
+	protected string FormatCatalogCandidateRejection(
+		SCR_CampaignFaction faction,
+		AICF_EVehicleKind kind,
+		ResourceName candidate,
+		string identityContext)
+	{
+		string details = FormatCatalogContext(faction, kind, identityContext);
+		details += string.Format(
+			" prefab=%1 reason=RESOURCE_INVALID",
+			candidate);
+		return details;
+	}
+
+	protected string FormatCatalogNotFound(
+		SCR_CampaignFaction faction,
+		AICF_EVehicleKind kind,
+		int catalogEntries,
+		string identityContext)
+	{
+		string details = FormatCatalogContext(faction, kind, identityContext);
+		details += string.Format(" catalog_entries=%1", catalogEntries);
+		return details;
+	}
+
+	// Conservative metadata for the explicitly supported faction candidates.
+	// Acquisition uses this before entity creation, then repeats the check on
+	// live accessible compartments as a defensive engine/runtime validation.
+	bool TryGetConservativeCapacity(
+		ResourceName prefab,
+		AICF_EVehicleKind kind,
+		out int accessibleSeats,
+		out bool hasPilot,
+		out bool hasTurret)
+	{
+		accessibleSeats = 0;
+		hasPilot = false;
+		hasTurret = false;
+		if (prefab.IsEmpty())
+			return false;
+
+		if (prefab.Contains("M923A1_transport.et") ||
+			prefab.Contains("Ural4320_transport.et"))
+		{
+			accessibleSeats = 15;
+			hasPilot = true;
+			return kind != AICF_EVehicleKind.ARMED_LIGHT;
+		}
+		if (prefab.Contains("UAZ452_transport.et"))
+		{
+			accessibleSeats = 8;
+			hasPilot = true;
+			return kind != AICF_EVehicleKind.ARMED_LIGHT;
+		}
+		if (prefab.Contains("M998_covered_long.et"))
+		{
+			accessibleSeats = 4;
+			hasPilot = true;
+			return kind != AICF_EVehicleKind.ARMED_LIGHT;
+		}
+		if (prefab.Contains("M1025_armed_M2HB") ||
+			prefab.Contains("UAZ469_PKM.et") ||
+			prefab.Contains("BRDM2_Conflict.et"))
+		{
+			// Four is intentionally conservative. Live validation may observe more,
+			// but acquisition never promises seats absent from supported metadata.
+			accessibleSeats = 4;
+			hasPilot = true;
+			hasTurret = true;
+			return kind == AICF_EVehicleKind.ARMED_LIGHT;
+		}
+
 		return false;
 	}
 

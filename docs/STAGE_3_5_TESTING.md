@@ -1,8 +1,8 @@
 # Stage 3.5 — Active Motorized Forces: приёмочное тестирование
 
-Статус полной приёмки Stage 3.5: **NOT RUN**. Зафиксированный Transport-срез T: **FAIL**. Preliminary repeat smoke `Stage35-T-RepeatSmoke-20260810-224931`: **BLOCKED**, не засчитан как repeat T.
+Статус Stage 3.5: **FAILED — REWRITE IMPLEMENTATION/CUTOVER COMPLETE, RUNTIME ACCEPTANCE NOT PASSED**. Статус полной runtime-приёмки: **NOT RUN**. Legacy runtime/coordinator fragments удалены; новый vehicle-domain включён единственным active side-effect path. Оба исторических Transport-прогона `Stage35-T-20260810-210932` и `Stage35-T-20260811-190311`: **FAIL**. Preliminary repeat smoke `Stage35-T-RepeatSmoke-20260810-224931`: **BLOCKED**, не засчитан как repeat T. Repeat T и Repeat-T2: **NOT RUN**.
 
-Документ совмещает бланк для ещё не выполненных обязательных срезов, фактические журналы неуспешных Transport-прогонов `Stage35-T-20260810-210932` и `Stage35-T-20260811-190311`, а также журнал заблокированного preliminary smoke. Незаполненные поля сохраняют `NOT RUN`; они не отменяют уже подтверждённый FAIL среза T и не являются runtime-доказательством. Ни один текущий T, ни заблокированный smoke, ни автоматическая компиляция, статический аудит, отдельная успешная поездка или строка Stage 3 RESULT_CANDIDATE не заявляют PASS полной Stage 3.5.
+Новое решение владельца отклонило legacy vehicle lifecycle, но не требования и не историческое evidence; replacement architecture теперь реализована и переключена. Документ совмещает бланк для ещё не выполненных обязательных срезов, фактические журналы двух неуспешных Transport-прогонов и журналы заблокированных smoke. Незаполненные поля сохраняют `NOT RUN`; они не отменяют подтверждённые `FAIL` и не являются runtime-доказательством. Ни один Transport-прогон, заблокированный smoke, автоматическая компиляция, статический аудит, отдельная успешная поездка или строка Stage 3 RESULT_CANDIDATE не заявляют PASS полной Stage 3.5 или новой архитектуры.
 
 Stage 3.5 принимается только после выполнения всех обязательных срезов на одном commit: пехотного baseline B, активного планирования P, невооружённого транспорта T, отдельного armed-light среза A, recovery/replacement R, limits/cleanup L, 30-минутной матрицы M30 и двухчасового soak S120.
 
@@ -34,13 +34,13 @@ Stage 3.5 не добавляет supply, economy, строительство и
 
 Все применимые инварианты docs/STAGE_3_TESTING.md обязательны и для Stage 3.5. Новый размер групп и расширение eligibility не ослабляют существующий контракт:
 
-1. Authority оценивает несколько safe-site позиций и отклоняет water/undrivable surface до `SpawnEntityPrefabEx`. Отклонённая позиция не создаёт live entity, не привязывает vehicle и не продвигает vehicle generation; request runtime и cap reservation к этому моменту уже могут существовать. Spawned prefab принимается и привязывается только после faction/resource и role-compatible capacity preflight, а отклонённая пустая entity безопасно удаляется до следующего кандидата.
+1. `VehicleAcquisitionFlow` оценивает несколько safe-site позиций и отклоняет water/undrivable surface до `SpawnEntityPrefabEx`. Отклонённая позиция не создаёт live entity, не привязывает vehicle и не продвигает accepted vehicle generation; `VehicleRequestState` уже может существовать, но `WAITING_FOR_SITE` не удерживает lease/cap reservation. Spawned prefab принимается и привязывается Fleet только после faction/resource и role-compatible capacity preflight, а отклонённая пустая entity безопасно удаляется до следующего кандидата.
 2. Обычная посадка не использует teleport-in, remote GetIn или snap к машине.
 3. Для transport соблюдается DRIVER → PASSENGERS; для armed-light — DRIVER → GUNNER → PASSENGERS.
 4. До обязательного crew не выдаются passenger actions. После crew каждый будущий пассажир получает отдельную atomic reservation точного `CargoCompartmentSlot`; ожидается `PASSENGERS_ASSIGNED policy=EXACT_PER_MEMBER_CARGO_AFTER_CREW`.
-5. Passenger token сохраняет action state/current/retry, назначенные compartment manager/slot и reservation; settled засчитывается только при совпадении фактических manager/slot с назначенными. Reissue допускается только bounded и с `transition_fenced=1`; terminal/wrong-compartment outcome очищает reservations/actions и завершает runtime fail-closed.
+5. Passenger token сохраняет action state/current/retry, назначенные compartment manager/slot и reservation; settled засчитывается только при совпадении фактических manager/slot с назначенными. Reissue допускается только bounded и с `transition_fenced=1`; terminal/wrong-compartment outcome owner-safe очищает reservations/actions и возвращает TripController typed fail-closed outcome.
 6. BOARDING_COMPLETE разрешён только после двух settled poll всех живых членов именно в назначенной машине.
-7. Для полного controlled roster ожидается settled 5/5. После боевых потерь уже назначенная пригодная машина продолжает использовать mounted=alive. Новый vehicle request разрешён только при достижении явно заданного minimum combat-ready состава (штатно 3); группа ниже порога получает `VEHICLE_REQUEST_INELIGIBLE policy=NEW_REQUEST_ONLY assigned_vehicle_present=<0|1> assigned_vehicle_policy=PRESERVE_EXISTING`, а не новую машину. `GROUP_NOT_COMBAT_READY` ожидается только при завершении уже существующего pending runtime в состоянии REQUESTED/WAITING без assigned vehicle; pre-runtime rejection не обязан создавать такой runtime/fallback event.
+7. Для полного controlled roster ожидается settled 5/5. После боевых потерь уже назначенная пригодная машина продолжает использовать mounted=alive. Новый vehicle request разрешён только при достижении явно заданного minimum combat-ready состава (штатно 3); группа ниже порога получает `VEHICLE_REQUEST_INELIGIBLE policy=NEW_REQUEST_ONLY assigned_vehicle_present=<0|1> assigned_vehicle_policy=PRESERVE_EXISTING`, а не новую машину. `GROUP_NOT_COMBAT_READY` ожидается только для уже существующего pending `VehicleRequestState`/Trip request phase без assigned lease vehicle; pre-request rejection не обязан создавать Trip/fallback event.
 8. Boarding, dismount, crew recovery, mobility recovery и fallback имеют абсолютные bounded deadline и attempt budget.
 9. До normal dismount timeout физически застрявшему бойцу выдаётся bounded per-member movement guidance (`DISEMBARK_CLEARANCE_GUIDANCE`), без relocation/teleport. `DISEMBARK_CLEARANCE_RECOVERY` с relocation допустим только в terminal/fallback fail-closed recovery и не доказывает штатный dismount PASS.
 10. Успех mobility recovery подтверждается только последующим VEHICLE_MOTION либо достаточным route progress.
@@ -77,18 +77,54 @@ Stage 3.5 не добавляет supply, economy, строительство и
 | Версия Arma Reforger | ______________________________ |
 | Версия Arma Reforger Server/Diag | engine `190965` по T server log |
 | Версия Reforger Tools | `1.7.0.54` по `ArmaReforgerWorkbenchSteamDiag.exe` |
-| Ветка/тег | NOT RECORDED — evidence gap |
-| Commit, полный SHA | NOT RECORDED — evidence gap; повтор T обязан зафиксировать SHA |
+| Ветка/тег | NOT RECORDED — final rewrite development evidence получено на dirty working tree |
+| Commit, полный SHA | NOT RECORDED — evidence gap; final smoke не переносим на другой SHA, повтор T обязан зафиксировать commit |
 | Дата начала | 2026-08-10 21:09:33, Transport T |
 | Дата окончания | ______________________________ |
 | Тестировщик | ______________________________ |
 | Карта/mission header | Arland / `Missions/23_Campaign_Arland.conf` |
 | Путь к repository | `C:\Users\retar\IdeaProjects\Arma-Reforger-AI-Conflict` |
-| Результат Validate Scripts | PASS — локальный Workbench compile-smoke текущего рабочего снимка; `.cache/stage35-newrun-telemetry-final7-validate-20260811/console.log` |
-| Результат Compile and Reload Scripts | PASS — `Module: Game; loaded 5675x files; 11049x classes`, `Game successfully created`, без AICF `SCRIPT(E)`/`ENGINE(F)`/`Broken expression`; только development evidence |
-| Результат Stage 3 static audit | PASS — `tools/Test-Stage3Static.ps1`; только development/static evidence, не runtime-приёмка |
-| Результат Stage 3.5 static audit | PASS — `tools/Test-Stage35Static.ps1`; только development/static evidence, не runtime-приёмка |
+| Результат Validate Scripts | PASS — `.cache/vehicle-rewrite-final-validate-20260812-r2/console.log`, Game `5692` files / `11109` classes, CRC32 `7f2cbec0`, `Game successfully created`; только development evidence |
+| Результат Compile and Reload Scripts | PASS — `SCRIPT(E/F)=0`, `ENGINE(F)=0`; два harness `PLATFORM(E)` и 25 shutdown `RESOURCES(E)` сохранены как Workbench platform/resource caveat, не runtime gameplay evidence |
+| Результат Stage 3 static audit | PASS — `tools/Test-Stage3Static.ps1`, включая обязательный negative-fixture self-check; только development/static evidence |
+| Результат Stage 3.5 static audit | PASS — `tools/Test-Stage35Static.ps1`, включая обязательный negative-fixture self-check; только development/static evidence |
 | Общий итог | NOT RUN |
+
+## Финальная development-проверка rewrite
+
+Обе обязательные static-команды завершились `PASS`. Negative fixture дал ожидаемый `PASS` для rule IDs:
+
+```text
+COORDINATOR_SIDE_EFFECT
+FLOW_CROSS_CALL
+WAYPOINT_SIDE_EFFECT_OWNER
+TRANSITION_OUTSIDE_CONTROLLER
+TRANSITION_EFFECT_ORDER
+WAITING_WITH_LEASE
+HANDOFF_CLEARANCE_GATE
+CLEANUP_CLEARANCE_OWNER
+CLEANUP_IDENTITY_SAFETY
+VEHICLE_LIVENESS_OWNERSHIP
+```
+
+Полный Workbench validate находится в `.cache/vehicle-rewrite-final-validate-20260812-r2/console.log`: Game `5692` files / `11109` classes, CRC32 `7f2cbec0`, `Game successfully created`, `SCRIPT(E/F)=0`, `ENGINE(F)=0`. Общий поиск `(E)/(F)` не равен нулю и не скрывается: два harness `PLATFORM(E)` относятся к `SteamAPI_Init failed`/platform services, ещё 25 `RESOURCES(E)` составляют shutdown resource-leak list; всего 27 generic matches. Это Workbench platform/shutdown-resource caveat, не AICF script compile error и не runtime gameplay evidence.
+
+### Final-tree headless development smoke — BLOCKED, не Repeat T/T2/M30
+
+| Поле | Фактически |
+|---|---|
+| Profile | `.cache/Stage35-Rewrite-FinalSmoke-20260812-002210` |
+| Server console.log | `.cache/Stage35-Rewrite-FinalSmoke-20260812-002210/logs/logs_2026-08-12_00-22-10/console.log` |
+| Start | `2026-08-12T00:22:10+03` |
+| Exact cutoff | `2026-08-12T00:22:51.7568935+03` |
+| Commit/SHA | NOT RECORDED — dirty working tree |
+| CLI | canonical Arland world/header/systems/addons + `-backendFreshSession`; roles=1, maxAgents=64, requirePlayer=0, vehicles=1, transport=4, armed=0, cap=4, minimum request agents=3 |
+| Load result | `Game created=1`, `SCRIPT(E/F)=0`, `ENGINE(F)=0`, VM=0 |
+| Blocker | `BACKEND(E)=12`: SSL peer certificate и `BAD_REQUEST` до AICF bootstrap |
+| AICF/runtime evidence | `AICF=0`; roster и vehicle events отсутствуют |
+| Статус | **BLOCKED — external backend before AICF bootstrap** |
+
+Этот короткий smoke не дошёл до проверяемого gameplay и поэтому не заполняет ни одну runtime-строку T/Repeat T/Repeat-T2/M30, не подтверждает roster/cap/boarding/handoff/cleanup и не повышает Stage 3/3.5 до PASS.
 
 ## Метаданные отдельного прогона
 
@@ -423,7 +459,7 @@ aicfRequirePlayerForResult=0
 3. Старое распределение ролей остаётся 2 ATTACK / 1 DEFEND / 1 RESERVE.
 4. Все восемь групп получают обычный пехотный order.
 5. Heartbeat без игроков показывает managed_agents=40.
-6. Нет VEHICLE_REQUESTED, vehicle entity и Stage 3 vehicle runtime.
+6. Нет `VEHICLE_REQUESTED`, vehicle entity, Transport Trip или VehicleLease.
 7. Formation, cohesion, stuck/recovery и map marker используют фактический состав.
 8. Нет size-dependent ошибки, duplicate binding или AI-limit блокировки.
 
@@ -512,7 +548,7 @@ aicfRequirePlayerForResult=0
 Для US и USSR отдельно проверить:
 
 1. A0/A1/A2/D0 проходят одну и ту же route/cap eligibility-проверку, но **новый** vehicle request дополнительно требует minimum combat-ready живого состава.
-2. Ниже порога новая машина не создаётся: требуется `VEHICLE_REQUEST_INELIGIBLE alive=<n> required_minimum=3 policy=NEW_REQUEST_ONLY assigned_vehicle_present=<0|1> assigned_vehicle_policy=PRESERVE_EXISTING`. Pre-runtime rejection продолжает suppression/current infantry assignment без `VEHICLE_REQUESTED`; `GROUP_NOT_COMBAT_READY` требуется только для уже pending REQUESTED/WAITING runtime без assigned vehicle.
+2. Ниже порога новая машина не создаётся: требуется `VEHICLE_REQUEST_INELIGIBLE alive=<n> required_minimum=3 policy=NEW_REQUEST_ONLY assigned_vehicle_present=<0|1> assigned_vehicle_policy=PRESERVE_EXISTING`. Pre-request rejection сохраняет current infantry assignment без `VEHICLE_REQUESTED`; `GROUP_NOT_COMBAT_READY` требуется только для уже pending Trip request phase/`VehicleRequestState` без assigned lease vehicle.
 3. Уже назначенная исправная машина остаётся доступной выжившим и не отбирается только из-за падения alive ниже new-request threshold.
 4. Active и reserved counters не превышают четыре на фракцию; если их множества пересекаются, heartbeat и отчёт явно фиксируют семантику и не складывают их как независимые entity.
 5. Один slot не имеет более одной active/reserved машины.
@@ -520,7 +556,7 @@ aicfRequirePlayerForResult=0
 7. A2/D0 предпочитают faction-correct unarmed light transport, только если capacity достаточна для всех живых.
 8. US-кандидаты проверяются среди M923A1 и подходящего M998; USSR — «Урал» и UAZ-452 transport.
 9. Candidate trace содержит catalog/resource result и фактическую accessible capacity.
-10. До `SpawnEntityPrefabEx` surface trace содержит `candidate_index`, `candidates`, authoritative `origin`, `surface`, `water`, `footprint_delta_m` и число `probes`. Water/uneven position даёт `VEHICLE_SPAWN_CANDIDATE_REJECTED` без live entity, vehicle binding и продвижения vehicle generation; request runtime/cap reservation уже могут существовать. Достижимость дальнейшего route подтверждается отдельным route evidence и не выводится из surface preflight.
+10. До `SpawnEntityPrefabEx` surface trace содержит `candidate_index`, `candidates`, authoritative `origin`, `surface`, `water`, `footprint_delta_m` и число `probes`. Water/uneven position даёт `VEHICLE_SPAWN_CANDIDATE_REJECTED` без live entity, vehicle binding и продвижения accepted vehicle generation; request state может существовать, но `WAITING_FOR_SITE` не удерживает lease/cap reservation. Достижимость дальнейшего route подтверждается отдельным route evidence и не выводится из surface preflight.
 11. Недостаточный light candidate приводит к truck либо bounded infantry fallback без частичной посадки.
 12. До DRIVER_ASSIGNED mounted=0.
 13. После crew ожидается `PASSENGERS_ASSIGNED policy=EXACT_PER_MEMBER_CARGO_AFTER_CREW requested=<n> issued=<n>`. `BOARDING_ACTION_OWNERSHIP` перечисляет каждый живой EntityID и token state/current/retry, assigned compartment manager/slot, reserved, actual compartment manager/slot, а также group/vehicle generation; missing member указывается явно, а не только агрегатом mounted.
@@ -595,7 +631,7 @@ Armed-light не может молча уменьшить группу, оста
 5. Есть ровно один TICKET_DEBIT с delta, равным configured group replacement cost.
 6. Не возникает пять отдельных debit.
 7. Managed projection и фактическое число агентов не превышают aicfMaxManagedAgents.
-8. Старый vehicle runtime не привязывается к новой группе.
+8. Ни старый Trip, ни lease/asset identity не привязываются к replacement-группе; stale callback self-cancel по полному generation/token fence.
 
 | Faction | Identity | Old group/gen | GROUP_EMPTY | Replacement group/gen | Agents | Faction-correct | Debit count/delta | Peak projection/actual | Stale vehicle absent | Статус | Evidence |
 |---|---|---|---|---|---:|---|---|---|---|:---:|---|
@@ -610,7 +646,7 @@ Armed-light не может молча уменьшить группу, оста
 
 ### Fault/recovery R
 
-`Protected occupant remains` выполняется отдельным expected-negative профилем. Единственный разрешённый отрицательный исход этого профиля — ровно один `[AICF][STAGE3][ERROR][FALLBACK_DISEMBARK_FAILED]`, коррелирующий `ACCEPTANCE_FAILURE_LATCHED` и, при естественном входе через обычный dismount timeout, предшествующая пара `DISEMBARK_TIMEOUT → ACCEPTANCE_FAILURE_LATCHED`. Затем runtime обязан перейти в конечное состояние, сохранив protected occupant/entity. Такой профиль получает PASS только как доказательство fail-closed safety и не используется как чистый `RESULT_CANDIDATE`. Число и порядок latch-событий фиксируются заранее выбранным setup; любой другой AICF ERROR, повтор terminal ERROR, unsafe eject/delete или незавершённый runtime означает FAIL. Для общего результата R дополнительно обязателен отдельный чистый recovery-профиль без AICF ERROR и invalidation.
+`Protected occupant remains` выполняется отдельным expected-negative профилем. Единственный разрешённый отрицательный исход этого профиля — ровно один `[AICF][STAGE3][ERROR][FALLBACK_DISEMBARK_FAILED]`, коррелирующий `ACCEPTANCE_FAILURE_LATCHED` и, при естественном входе через обычный dismount timeout, предшествующая пара `DISEMBARK_TIMEOUT → ACCEPTANCE_FAILURE_LATCHED`. Затем Trip обязан перейти в конечное состояние, немедленно восстановить meaningful infantry order для живой current-группы и независимо сохранить protected occupant/entity до `clearance_safe`; pending clearance блокирует только lease release/delete. Такой профиль получает PASS только как доказательство fail-closed safety и не используется как чистый `RESULT_CANDIDATE`. Число и порядок latch-событий фиксируются заранее выбранным setup; любой другой AICF ERROR, повтор terminal ERROR, unsafe eject/delete, taskless current-группа или незавершённый cleanup-контур означает FAIL. Для общего результата R дополнительно обязателен отдельный чистый recovery-профиль без AICF ERROR и invalidation.
 
 | Сценарий | Как создать fault | Ожидаемый результат | Фактически | Статус | Evidence |
 |---|---|---|---|:---:|---|
@@ -620,10 +656,10 @@ Armed-light не может молча уменьшить группу, оста
 | Gunner lost | Только A | Bounded exact-role recovery либо foot fallback | | NOT RUN | |
 | No physical motion | Безопасно заблокировать машину | Bounded unstuck; success только после motion/progress | | NOT RUN | |
 | No objective progress | Машина движется без route progress | Recovery требует route progress | | NOT RUN | |
-| Vehicle destroyed | Сохранить живого managed member | Terminal old runtime, bounded request/fallback, no stale binding | | NOT RUN | |
+| Vehicle destroyed | Сохранить живого managed member | Terminal old Trip/lease identity, bounded request/fallback, no stale lease/asset binding to replacement | | NOT RUN | |
 | Vehicle unavailable | Сделать reuse недостижимым | Bounded request/recovery, затем foot fallback | | NOT RUN | |
 | Spawn site unavailable | Временно заблокировать safe sites | 4 attempts, cap-free WAITING_FOR_SITE, bounded wake | | NOT RUN | |
-| Protected occupant remains (expected-negative profile) | Удерживать INCAPACITATED/foreign occupant до hard deadline | Ровно один allowlisted `FALLBACK_DISEMBARK_FAILED` + latch; no unsafe eject/delete; bounded terminal/fail-closed retained entity | | NOT RUN | |
+| Protected occupant remains (expected-negative profile) | Удерживать INCAPACITATED/foreign occupant до hard deadline | Ровно один allowlisted `FALLBACK_DISEMBARK_FAILED` + latch; immediate proven `order_restored` для живой current-группы; no unsafe eject/delete; clearance удерживает только lease/delete; bounded terminal/fail-closed retained entity | | NOT RUN | |
 
 Итог R: **NOT RUN**
 
@@ -784,7 +820,7 @@ PASS S120 требует не просто жизни процесса два ч
   - D0, UAZ452 transport, entity `0x400000000000154B`.
 - Текущий лог не содержит координат выбранного spawn-site, water-depth либо результата отдельной проверки поверхности, поэтому по server evidence нельзя однозначно определить, какая из четырёх сущностей находилась в воде. Это отдельный пробел диагностики.
 - Фактическое поведение нарушает safe-spawn invariant: водная позиция не должна приниматься как безопасная для колёсной техники, даже если база дружественная и не contested.
-- Реализационный контракт повтора: несколько позиций проверяются по типу поверхности, глубине воды, пригодности для колёсной техники и устойчивой опоре до `SpawnEntityPrefabEx`. Неподходящая позиция отклоняется без live entity, vehicle binding и продвижения vehicle generation; уже созданные request runtime/cap reservation этим не опровергаются. Возможность дальнейшего движения проверяется отдельным route evidence.
+- Контракт rewrite-повтора: `VehicleAcquisitionFlow` проверяет несколько позиций по типу поверхности, глубине воды, пригодности для колёсной техники и устойчивой опоре до `SpawnEntityPrefabEx`. Неподходящая позиция отклоняется без live entity, vehicle binding и продвижения accepted vehicle generation; request state может существовать, но `WAITING_FOR_SITE` не удерживает Lease/cap. Возможность дальнейшего движения проверяется отдельным route evidence.
 - Требуемая диагностика: `VEHICLE_SPAWN_CANDIDATE_REJECTED reason=WATER_OR_UNDRIVABLE_SURFACE` с `candidate_index`, `candidates`, authoritative `origin`, `surface`, `water`, `footprint_delta_m`, `probes`, `preflight` и `request_generation`; принятые `VEHICLE_SPAWN_PREFLIGHT_READY`/`VEHICLE_SPAWN_SITE_SELECTED` повторяют validated surface telemetry.
 - Исторический статус: `CONFIRMED FAIL` по визуальному наблюдению. Реализационный surface-контракт и диагностика добавлены; repeat: **NOT RUN**. Для точного определения проблемного slot/entity требуется новый runtime evidence.
 
@@ -798,7 +834,7 @@ PASS S120 требует не просто жизни процесса два ч
 - Боец занял водительское место; пассажирская фаза штатно завершилась как `requested=0 policy=NO_CARGO_REQUIRED`. В 21:19:53 получен `BOARDING_COMPLETE mounted=1 driver=1`, после чего одиночный водитель начал движение к цели 38.
 - Принятая policy: minimum combat-ready применяется только к **новому** vehicle request. Группа ниже порога не создаёт новую машину и получает bounded recovery/replacement/infantry outcome. Уже назначенная исправная машина остаётся пригодной для оставшихся в живых и не отбирается/не удаляется только из-за последующего уменьшения alive.
 - Наблюдаемое нарушение принятой policy: A1 с `alive=1` получила новую 15-местную машину. Для явно разрешённой singleton-задачи понадобились бы отдельная policy и подходящий light transport; общий `required=alive` сам по себе такого разрешения не даёт.
-- Обязательная диагностика повтора: `VEHICLE_REQUEST_INELIGIBLE alive=1 required_minimum=3 policy=NEW_REQUEST_ONLY assigned_vehicle_present=<0|1> assigned_vehicle_policy=PRESERVE_EXISTING`. Pre-runtime rejection не создаёт `VEHICLE_REQUESTED` и продолжает suppression/current infantry assignment; `GROUP_NOT_COMBAT_READY` ожидается только для уже pending REQUESTED/WAITING runtime без assigned vehicle. Stage 3.5 `SLOT_ACTIVITY` показывает выбранный recovery/replacement/infantry outcome.
+- Обязательная диагностика повтора: `VEHICLE_REQUEST_INELIGIBLE alive=1 required_minimum=3 policy=NEW_REQUEST_ONLY assigned_vehicle_present=<0|1> assigned_vehicle_policy=PRESERVE_EXISTING`. Pre-request rejection не создаёт `VEHICLE_REQUESTED` и сохраняет current infantry assignment; `GROUP_NOT_COMBAT_READY` ожидается только для pending Trip request phase/`VehicleRequestState` без assigned lease vehicle. Stage 3.5 `SLOT_ACTIVITY` показывает выбранный recovery/replacement/infantry outcome.
 - Исторический статус: `CONFIRMED FAIL / ACCEPTED POLICY`. Реализационный контракт добавлен; repeat: **NOT RUN**.
 
 ### S35-T-3 — водная/непроходимая позиция вызывает повторяющиеся VM exceptions и распад USSR A1
@@ -873,14 +909,14 @@ PASS S120 требует не просто жизни процесса два ч
 | Reproducibility | commit SHA, Game/Server/Tools versions, обе полные CLI, server/client profile и console.log, start/stop/cutoff | | NOT RUN |
 | Initial roster | 8 × `GROUP_ROSTER_READY initial_agents=5 expected_agents=5 faction_correct=1`; общий `ROSTER_READY managed_agents=40` | | NOT RUN |
 | Surface preflight | Для каждого candidate: `candidate_index/candidates`, `origin`, `surface`, `water`, `footprint_delta_m`, `probes`, `preflight`, request generation и accepted/rejected reason | | NOT RUN |
-| Surface rejection | Water/uneven position даёт `VEHICLE_SPAWN_CANDIDATE_REJECTED reason=WATER_OR_UNDRIVABLE_SURFACE` до `SpawnEntityPrefabEx`, live entity, vehicle binding и продвижения vehicle generation; accepted preflight/site повторяет validated telemetry. Request runtime/cap reservation уже могут существовать | | NOT RUN |
-| New-request combat readiness | Ниже threshold=3: `VEHICLE_REQUEST_INELIGIBLE alive=<n> required_minimum=3 policy=NEW_REQUEST_ONLY assigned_vehicle_present=<0|1> assigned_vehicle_policy=PRESERVE_EXISTING`; pre-runtime rejection не порождает `VEHICLE_REQUESTED`, а `GROUP_NOT_COMBAT_READY` допустим только для уже pending REQUESTED/WAITING runtime без assigned vehicle; новой entity нет | | NOT RUN |
+| Surface rejection | Water/uneven position даёт `VEHICLE_SPAWN_CANDIDATE_REJECTED reason=WATER_OR_UNDRIVABLE_SURFACE` до `SpawnEntityPrefabEx`, live entity, vehicle binding и продвижения accepted vehicle generation; accepted preflight/site повторяет validated telemetry. Request state может существовать, но WAITING не удерживает lease/cap | | NOT RUN |
+| New-request combat readiness | Ниже threshold=3: `VEHICLE_REQUEST_INELIGIBLE alive=<n> required_minimum=3 policy=NEW_REQUEST_ONLY assigned_vehicle_present=<0|1> assigned_vehicle_policy=PRESERVE_EXISTING`; pre-request rejection не порождает `VEHICLE_REQUESTED`, а `GROUP_NOT_COMBAT_READY` допустим только для pending Trip request phase без assigned lease vehicle; новой entity нет | | NOT RUN |
 | Assigned-vehicle retention | После потерь уже назначенная пригодная entity остаётся usable/reusable; нет abandon/delete только по причине alive<threshold | | NOT RUN |
 | Capacity | Для A0/A1 truck и A2/D0 light→truck trace: catalog/resource, required=alive, accessible seats, candidate deletion и выбранный prefab | | NOT RUN |
 | Exact boarding | После crew: `PASSENGERS_ASSIGNED policy=EXACT_PER_MEMBER_CARGO_AFTER_CREW requested=<n> issued=<n>`; `BOARDING_ACTION_OWNERSHIP` содержит полный список живых EntityID, token state/current/retry, assigned compartment manager/slot, reserved и actual compartment manager/slot; missing member назван явно | | NOT RUN |
 | Boarding action lifecycle | `PASSENGER_BOARDING_REISSUED` только bounded с `transition_fenced=1`; нет `PASSENGER_BOARDING_ACTION_FAILED`, wrong/unsupported compartment и stale reservation/action после completion/fallback | | NOT RUN |
 | Boarding completion | Ровно два settled poll, для полного состава mounted=alive=5; нет timeout, remote GetIn или snap | | NOT RUN |
-| Route/dismount | Подтверждённые route progress/physical motion; normal physical blocker получает bounded per-member `DISEMBARK_CLEARANCE_GUIDANCE` без relocation/teleport; terminal/fallback `DISEMBARK_CLEARANCE_RECOVERY` bounded, не churn-ит и не считается доказательством normal-path PASS; затем полная безопасная высадка и infantry order | | NOT RUN |
+| Route/dismount | Подтверждённые route progress/physical motion; normal physical blocker получает bounded per-member `DISEMBARK_CLEARANCE_GUIDANCE` без relocation/teleport; terminal/fallback `DISEMBARK_CLEARANCE_RECOVERY` bounded, не churn-ит и не считается доказательством normal-path PASS; при прекращении vehicle control infantry order восстанавливается немедленно и независимо от продолжающейся clearance | | NOT RUN |
 | Recovery/fallback | Attempt/deadline bounded; success только после последующего motion/progress; terminal fallback не создаёт повторный request/state churn и не удаляет protected/usable entity небезопасно | | NOT RUN |
 | Cap/pool identity | По EntityID/RplId доказаны <=4 unique active/reserved на фракцию, <=1 на slot; описано пересечение heartbeat counters; world-pool отделён | | NOT RUN |
 | Runtime cleanliness | 0 AICF ERROR, 0 `SCRIPT (E/F)`, 0 VM exception, 0 late `ACCEPTANCE_FAILURE_LATCHED`; предупреждения не churn-ят | | NOT RUN |
@@ -893,8 +929,8 @@ Repeat T получает PASS только при PASS всех строк gate
 | № | Проверка | Ожидается | Фактически | PASS / FAIL / BLOCKED / NOT RUN | Доказательство |
 |---:|---|---|---|:---:|---|
 | 1 | Один commit | Все B/P/T/A/R/L/M30/S120 на одном SHA | | NOT RUN | |
-| 2 | Validate/Compile | Без AICF ошибок | Локальный current-snapshot compile-smoke PASS; это development evidence без зафиксированного commit | PASS | `.cache/stage35-newrun-telemetry-final7-validate-20260811/console.log`: Game 5675/11049, `Game successfully created` |
-| 3 | Static audit | Stage 3 и Stage 3.5 contracts соблюдены | Оба audit scripts завершились PASS; это development evidence, не runtime acceptance | PASS | `tools/Test-Stage3Static.ps1`, `tools/Test-Stage35Static.ps1` |
+| 2 | Validate/Compile | Без AICF ошибок | Final dirty-working-tree Workbench validate PASS; `SCRIPT(E/F)=0`, `ENGINE(F)=0`; 2 platform + 25 shutdown-resource caveats сохранены отдельно | PASS | `.cache/vehicle-rewrite-final-validate-20260812-r2/console.log`: Game 5692/11109, CRC32 `7f2cbec0`, `Game successfully created` |
+| 3 | Static audit | Stage 3 и Stage 3.5 contracts соблюдены | Оба audit scripts и обязательные negative fixtures завершились PASS; это development evidence, не runtime acceptance | PASS | `tools/Test-Stage3Static.ps1`, `tools/Test-Stage35Static.ps1`; rule IDs перечислены в финальной development-проверке |
 | 4 | Initial roster | 8 групп × 5 | 8 групп × 5 в историческом T | PASS | Исторический T only, не repeat/full acceptance: `GROUP_ROSTER_READY`, общий `ROSTER_READY` |
 | 5 | Faction correctness | 40/40 бойцов принадлежат своей фракции | Все initial roster исторического T `faction_correct=1` | PASS | Исторический T only, не repeat/full acceptance: run `stage1-server-11212`, 21:09:45 |
 | 6 | Heartbeat | managed_agents=40 без игроков | Начальный managed roster 40 подтверждён, но T имел подключённого клиента (`Player: 1`) и не доказывает no-player условие | NOT RUN | Требуется отдельный headless/no-client evidence |
@@ -921,7 +957,7 @@ Repeat T получает PASS только при PASS всех строк gate
 | 27 | Boarding complete | Full roster settled 5/5; runtime mounted=alive; exact per-member Cargo token/reservation/actual-compartment trace | Есть успешные 5/5, но USSR A0 завершилась timeout один раз, US A0 — дважды | FAIL | `BOARDING_TIMEOUT_PASSENGERS_NOT_MOUNTED` 21:22:41 / 21:33:17 / 21:58:23 |
 | 28 | No remote boarding | Нет teleport-in/remote GetIn/snap | | NOT RUN | |
 | 29 | Strict crew roles | DRIVER→PASSENGERS или DRIVER→GUNNER→PASSENGERS | | NOT RUN | |
-| 30 | Route/dismount | Реальное движение; normal blocker использует bounded movement guidance без teleport; terminal/fallback relocation только bounded fail-closed; полная безопасная высадка и infantry continuation | Массовый clearance recovery как системный штатный путь; failed movement из низкой/непроходимой области, surface type не телеметрирован | FAIL | S35-T-1/S35-T-3/S35-T-4 |
+| 30 | Route/dismount | Реальное движение; normal blocker использует bounded movement guidance без teleport; terminal/fallback relocation только bounded fail-closed; infantry continuation начинается сразу после прекращения vehicle control и не ждёт clearance-safe | Массовый clearance recovery как системный штатный путь; failed movement из низкой/непроходимой области, surface type не телеметрирован | FAIL | S35-T-1/S35-T-3/S35-T-4 |
 | 31 | SAFE_REUSE | Target change использует ту же пригодную entity | | NOT RUN | |
 | 32 | Vehicle loss | Bounded recovery/request либо foot fallback без churn/false success/VM exception | Terminal fallback был bounded, но повторный churn и runtime exceptions нарушили полный контракт | FAIL | S35-T-6 |
 | 33 | No duplicate spawn | Нет повторной entity для той же generation/assignment | | NOT RUN | |
@@ -982,7 +1018,7 @@ NOT RUN:
 - автоматическая компиляция/static audit без runtime не меняет NOT RUN на PASS;
 - отдельный успешный визуальный эпизод без полного причинного журнала не меняет NOT RUN на PASS.
 
-Текущий итог полной Stage 3.5: **NOT RUN** — остальные обязательные B/P/A/R/L/M30/S120 не выполнены. Текущий Transport-срез T: **FAIL**.
+Текущий итог полной Stage 3.5: **NOT RUN** — обязательные B/P/A/R/L/M30/S120 не выполнены. Оба исторических Transport-прогона остаются **FAIL**, preliminary repeat smoke — **BLOCKED**, Repeat T и Repeat-T2 — **NOT RUN**. Final-tree development smoke также **BLOCKED** внешним backend до AICF bootstrap и не является ни одним обязательным срезом. Rewrite implementation/cutover завершены, но статус Stage 3.5 остаётся **FAILED — RUNTIME ACCEPTANCE NOT PASSED**.
 
 ## Что приложить к итоговому отчёту
 
@@ -1098,7 +1134,7 @@ Evidence:
 - Normal dismount не расходует recovery attempt, когда per-member move action уже активен; новая попытка учитывается только после реального поиска safe position.
 - Новый CLI для повторного теста: `-aicfVehicleCohesionWaitTimeoutMs <60000..1800000>`, default `300000`.
 
-Runtime-статус этих изменений: **NOT RUN**. До успешного Repeat-T2 текущий срез остаётся **FAIL**.
+Эти изменения остаются историческим development evidence реализации, которая заменена завершённым rewrite. Их runtime-статус: **NOT RUN**. До успешного Repeat-T2 текущий срез остаётся **FAIL**; rewrite сам по себе не повышает этот статус.
 
 ### Расширенный лог-контракт Repeat-T2
 

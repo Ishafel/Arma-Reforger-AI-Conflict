@@ -169,7 +169,10 @@ class AICF_GroupMapMarkerSystem
 		}
 	}
 
-	void Sync(AICF_FactionState usState, AICF_FactionState ussrState)
+	void Sync(
+		AICF_FactionState usState,
+		AICF_FactionState ussrState,
+		AICF_VehicleCoordinator vehicleCoordinator)
 	{
 		if (!Replication.IsServer())
 			return;
@@ -180,8 +183,8 @@ class AICF_GroupMapMarkerSystem
 			!m_MarkerManager.GetMarkerConfig().GetMarkerEntryConfigByType(SCR_EMapMarkerType.DYNAMIC_EXAMPLE))
 			return;
 
-		SyncFaction(usState, false, 0);
-		SyncFaction(ussrState, true, SLOTS_PER_FACTION);
+		SyncFaction(usState, false, 0, vehicleCoordinator);
+		SyncFaction(ussrState, true, SLOTS_PER_FACTION, vehicleCoordinator);
 
 		if (!m_bReadyLogged && CountMarkers() == TOTAL_SLOTS)
 		{
@@ -200,7 +203,11 @@ class AICF_GroupMapMarkerSystem
 		m_MarkerManager = null;
 	}
 
-	protected void SyncFaction(AICF_FactionState factionState, bool isUSSR, int offset)
+	protected void SyncFaction(
+		AICF_FactionState factionState,
+		bool isUSSR,
+		int offset,
+		AICF_VehicleCoordinator vehicleCoordinator)
 	{
 		if (!factionState)
 			return;
@@ -266,7 +273,11 @@ class AICF_GroupMapMarkerSystem
 							retargetReason));
 				}
 
-				marker.AICF_SetGroupMarkerText(BuildMarkerText(factionState, slot, group));
+				marker.AICF_SetGroupMarkerText(BuildMarkerText(
+					factionState,
+					slot,
+					group,
+					vehicleCoordinator));
 				continue;
 			}
 
@@ -277,7 +288,11 @@ class AICF_GroupMapMarkerSystem
 			if (!marker)
 				continue;
 
-			marker.AICF_SetGroupMarkerText(BuildMarkerText(factionState, slot, group));
+			marker.AICF_SetGroupMarkerText(BuildMarkerText(
+				factionState,
+				slot,
+				group,
+				vehicleCoordinator));
 
 			// Apply stream rules immediately for clients that were already connected.
 			// Markers created before player spawn are covered by stock
@@ -302,7 +317,8 @@ class AICF_GroupMapMarkerSystem
 	protected string BuildMarkerText(
 		AICF_FactionState factionState,
 		AICF_GroupSlot slot,
-		SCR_AIGroup group)
+		SCR_AIGroup group,
+		AICF_VehicleCoordinator vehicleCoordinator)
 	{
 		string factionKey = factionState.GetFactionKey();
 		string role = AICF_Stage1Diagnostics.RoleToString(slot.GetRole());
@@ -320,9 +336,11 @@ class AICF_GroupMapMarkerSystem
 		}
 		int alive = AICF_GroupRuntime.CountAliveAgents(group);
 		string vehicleState;
-		AICF_VehicleRuntime vehicleRuntime = slot.GetVehicleRuntime();
-		if (vehicleRuntime)
-			vehicleState = AICF_Stage3Diagnostics.StateToString(vehicleRuntime.GetState());
+		AICF_VehicleSlotView vehicleView;
+		if (vehicleCoordinator)
+			vehicleView = vehicleCoordinator.GetSlotView(slot);
+		if (vehicleView)
+			vehicleState = vehicleView.GetPhase();
 		if (vehicleState.IsEmpty() || vehicleState == "NONE")
 			vehicleState = "ON_FOOT";
 

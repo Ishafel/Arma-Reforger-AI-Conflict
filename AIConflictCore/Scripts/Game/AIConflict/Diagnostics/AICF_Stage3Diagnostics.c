@@ -50,9 +50,9 @@ class AICF_Stage3Diagnostics
 		AICF_Stage1Diagnostics.RecordExternalError("STAGE3", eventName, message);
 	}
 
-	static string StateToString(AICF_EVehicleState state)
+	static string TripPhaseToString(AICF_ETransportTripPhase phase)
 	{
-		return typename.EnumToString(AICF_EVehicleState, state);
+		return typename.EnumToString(AICF_ETransportTripPhase, phase);
 	}
 
 	static string KindToString(AICF_EVehicleKind kind)

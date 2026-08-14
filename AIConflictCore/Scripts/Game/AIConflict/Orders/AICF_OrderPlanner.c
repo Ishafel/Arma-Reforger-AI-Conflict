@@ -418,9 +418,9 @@ class AICF_OrderPlanner
 		AIWaypoint oldWaypoint = slot.GetWaypoint();
 		if (oldWaypoint)
 		{
-			LogWaypointRemoved(slot, oldWaypoint, "PERSISTENT_STUCK_HOLD", "ORDER_REPLACED");
 			group.RemoveWaypoint(oldWaypoint);
 			RplComponent.DeleteRplEntity(oldWaypoint, false);
+			LogWaypointRemoved(slot, oldWaypoint, "PERSISTENT_STUCK_HOLD", "ORDER_REPLACED");
 		}
 
 		group.AddWaypointAt(fieldHold, 0);
@@ -445,11 +445,11 @@ class AICF_OrderPlanner
 		AIWaypoint waypoint = slot.GetWaypoint();
 		if (waypoint)
 		{
-			LogWaypointRemoved(slot, waypoint, "CLEAR_ORDER", "STRATEGIC_ORDER_CLEARED");
 			if (group)
 				group.RemoveWaypoint(waypoint);
 
 			RplComponent.DeleteRplEntity(waypoint, false);
+			LogWaypointRemoved(slot, waypoint, "CLEAR_ORDER", "STRATEGIC_ORDER_CLEARED");
 		}
 
 		slot.ClearObjective();
@@ -464,11 +464,11 @@ class AICF_OrderPlanner
 		AIWaypoint waypoint = slot.GetWaypoint();
 		if (waypoint)
 		{
-			LogWaypointRemoved(slot, waypoint, "SUSPEND_FOR_VEHICLE", "VEHICLE_CONTROL_ACQUIRED");
 			if (group)
 				group.RemoveWaypoint(waypoint);
 
 			RplComponent.DeleteRplEntity(waypoint, false);
+			LogWaypointRemoved(slot, waypoint, "SUSPEND_FOR_VEHICLE", "VEHICLE_CONTROL_ACQUIRED");
 		}
 
 		slot.SuspendObjectiveWaypoint();
@@ -510,6 +510,45 @@ class AICF_OrderPlanner
 		return true;
 	}
 
+	// Planning is the sole writer of strategic intent. Vehicle orchestration
+	// receives this point-in-time value object and may only validate or retarget
+	// through a later snapshot with a newer planning/base revision.
+	bool TryCreateAssignmentSnapshot(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		int baseRevision,
+		out AICF_StrategicAssignmentSnapshot snapshot)
+	{
+		snapshot = null;
+		if (!slot || !faction || !slot.IsCombatReady() || !slot.GetTargetBase())
+			return false;
+
+		vector targetPosition;
+		if (!TryResolveTargetPosition(slot.GetTargetBase(), slot.GetRole(), targetPosition))
+			return false;
+
+		int assignmentStartedAtMs;
+		int assignmentAgeMs = slot.GetStrategicAssignmentAgeMs();
+		if (assignmentAgeMs > 0)
+			assignmentStartedAtMs = Math.Max(1, System.GetTickCount() - assignmentAgeMs);
+
+		snapshot = new AICF_StrategicAssignmentSnapshot(
+			faction.GetFactionKey(),
+			slot.GetSlotId(),
+			slot.GetSlotKey(),
+			slot.GetSpawnGeneration(),
+			slot.GetGroup(),
+			slot.GetRole(),
+			slot.GetOperationalPosture(),
+			slot.GetTargetBase(),
+			targetPosition,
+			slot.GetStrategicAssignmentRevision(),
+			Math.Max(0, baseRevision),
+			slot.GetWaypoint(),
+			assignmentStartedAtMs);
+		return snapshot.IsValid();
+	}
+
 	protected bool ReplaceOrder(
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction,
@@ -531,9 +570,9 @@ class AICF_OrderPlanner
 		string oldPosture = slot.GetOperationalPosture();
 		if (oldWaypoint)
 		{
-			LogWaypointRemoved(slot, oldWaypoint, trigger, reason);
 			group.RemoveWaypoint(oldWaypoint);
 			RplComponent.DeleteRplEntity(oldWaypoint, false);
+			LogWaypointRemoved(slot, oldWaypoint, trigger, reason);
 		}
 
 		group.AddWaypointAt(newWaypoint, 0);
@@ -579,9 +618,7 @@ class AICF_OrderPlanner
 					reason,
 					trigger));
 		}
-		AICF_Stage35Diagnostics.Info(
-			"STRATEGIC_ASSIGNMENT",
-			string.Format(
+		string strategicAssignmentLine = string.Format(
 				"faction=%1 slot=%2 numeric_slot=%3 role=%4 posture=%5 target=%6 trigger=%7 reason=%8 waypoint=%9",
 				faction.GetFactionKey(),
 				slot.GetSlotKey(),
@@ -591,7 +628,14 @@ class AICF_OrderPlanner
 				AICF_Stage1Diagnostics.BaseKey(target),
 				trigger,
 				reason,
-				newWaypoint.GetID()));
+				newWaypoint.GetID());
+		strategicAssignmentLine += string.Format(
+			" group=%1 group_generation=%2 assignment_revision=%3 assignment_age_ms=%4",
+			group.GetID(),
+			slot.GetSpawnGeneration(),
+			slot.GetStrategicAssignmentRevision(),
+			slot.GetStrategicAssignmentAgeMs());
+		AICF_Stage35Diagnostics.Info("STRATEGIC_ASSIGNMENT", strategicAssignmentLine);
 		return true;
 	}
 

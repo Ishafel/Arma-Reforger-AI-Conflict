@@ -8,6 +8,9 @@ class AICF_GroupSlot
 	protected int m_iReinforcementReadyAtMs;
 	protected int m_iSpawnStartedAtMs;
 	protected int m_iSpawnGeneration;
+	protected int m_iRosterSpawnRequestedAtMs;
+	protected int m_iLastRosterProgressAtMs;
+	protected int m_iRosterExpectedCount;
 	protected int m_iLastOrderRecoveryAtMs;
 	protected int m_iOrderRecoveryStartedAtMs;
 	protected int m_iOrderRecoveryFirstStableAtMs;
@@ -17,6 +20,8 @@ class AICF_GroupSlot
 	protected int m_iObjectiveHoldStartedAtMs;
 	protected int m_iPersistentStuckFieldHoldStartedAtMs;
 	protected bool m_bReplacementDeployment;
+	protected bool m_bRosterSpawnRequested;
+	protected bool m_bRosterCompletionCallbackObserved;
 	protected bool m_bTargetUnavailableReported;
 	protected bool m_bRecoveringFromStuck;
 	protected bool m_bPersistentStuckReported;
@@ -28,31 +33,42 @@ class AICF_GroupSlot
 	protected bool m_bMeaningfulTaskLossReported;
 	protected bool m_bMeaningfulTaskDeadlineReported;
 	protected float m_fBestDistanceToTarget = -1.0;
-	protected string m_sVehicleTerminalFailure;
 	protected string m_sPendingOrderRecoveryCause;
-	protected int m_iVehicleFallbackGroupGeneration = -1;
 	protected int m_iStrategicAssignmentAtMs;
+	protected int m_iStrategicAssignmentRevision;
 	protected int m_iStrategicCandidateFirstSeenAtMs;
 	protected int m_iUnexplainedMobIdleStartedAtMs;
 	protected int m_iMeaningfulTaskLostStartedAtMs;
+	protected int m_iMeaningfulTaskLossEpisode;
+	protected int m_iMeaningfulTaskLossReportedAssignmentRevision = -1;
 	protected int m_iLastCommanderMotionAtMs;
+	protected int m_iPendingStuckRecoveryEvidenceStartedAtMs;
+	protected int m_iPendingStuckRecoveryAttempt;
 	protected bool m_bHasCommanderMotionSample;
+	protected bool m_bPendingStuckRecoveryEvidence;
 	protected vector m_vLastCommanderMotionPosition;
+	protected vector m_vPendingStuckRecoveryStartPosition;
+	protected float m_fPendingStuckRecoveryStartDistance = -1.0;
 	protected string m_sOperationalPosture;
 	protected string m_sStrategicCandidatePosture;
 	protected string m_sMobIdleSuppressionReason;
+	protected string m_sMeaningfulTaskLossReportedWaypointId;
+	protected ref array<AIAgent> m_aRosterObservedAgents = {};
+	protected ref array<int> m_aRosterObservedAtMs = {};
+	protected ref array<AIAgent> m_aRosterCallbackAgents = {};
 
 	protected SCR_AIGroup m_Group;
 	protected SCR_CampaignMilitaryBaseComponent m_TargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_ProgressTargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_ObjectiveHoldTargetBase;
-	protected SCR_CampaignMilitaryBaseComponent m_VehicleFallbackTargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_PendingOrderRecoveryTargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_StrategicCandidateTargetBase;
 	protected AIWaypoint m_Waypoint;
 	protected AIWaypoint m_PendingOrderRecoveryWaypoint;
+	protected AIWaypoint m_PendingStuckRecoveryWaypoint;
 	protected SCR_AIGroup m_PendingOrderRecoveryGroup;
-	protected ref AICF_VehicleRuntime m_VehicleRuntime;
+	protected SCR_AIGroup m_PendingStuckRecoveryGroup;
+	protected SCR_CampaignMilitaryBaseComponent m_PendingStuckRecoveryTargetBase;
 
 	void AICF_GroupSlot(int slotId, AICF_EGroupRole role, int roleIndex = 0)
 	{
@@ -105,6 +121,11 @@ class AICF_GroupSlot
 		return System.GetTickCount(m_iStrategicAssignmentAtMs);
 	}
 
+	int GetStrategicAssignmentRevision()
+	{
+		return m_iStrategicAssignmentRevision;
+	}
+
 	int GetStrategicCandidateAgeMs()
 	{
 		if (m_iStrategicCandidateFirstSeenAtMs <= 0)
@@ -119,6 +140,8 @@ class AICF_GroupSlot
 	{
 		m_sOperationalPosture = posture;
 		m_iStrategicAssignmentAtMs = System.GetTickCount();
+		m_iStrategicAssignmentRevision++;
+		ResetMeaningfulTaskObservation();
 		ClearStrategicCandidate();
 	}
 
@@ -212,13 +235,36 @@ class AICF_GroupSlot
 		return System.GetTickCount(m_iMeaningfulTaskLostStartedAtMs);
 	}
 
-	bool MarkMeaningfulTaskLossReported()
+	bool MarkMeaningfulTaskLossReported(int assignmentRevision, string waypointId)
 	{
 		if (m_bMeaningfulTaskLossReported)
 			return false;
 
 		m_bMeaningfulTaskLossReported = true;
+		m_iMeaningfulTaskLossEpisode++;
+		m_iMeaningfulTaskLossReportedAssignmentRevision = assignmentRevision;
+		m_sMeaningfulTaskLossReportedWaypointId = waypointId;
 		return true;
+	}
+
+	bool HasReportedMeaningfulTaskLoss()
+	{
+		return m_bMeaningfulTaskLossReported;
+	}
+
+	int GetMeaningfulTaskLossEpisode()
+	{
+		return m_iMeaningfulTaskLossEpisode;
+	}
+
+	int GetReportedMeaningfulTaskLossAssignmentRevision()
+	{
+		return m_iMeaningfulTaskLossReportedAssignmentRevision;
+	}
+
+	string GetReportedMeaningfulTaskLossWaypointId()
+	{
+		return m_sMeaningfulTaskLossReportedWaypointId;
 	}
 
 	bool MarkMeaningfulTaskDeadlineReported()
@@ -301,62 +347,6 @@ class AICF_GroupSlot
 		return m_Waypoint;
 	}
 
-	AICF_VehicleRuntime GetVehicleRuntime()
-	{
-		return m_VehicleRuntime;
-	}
-
-	void SetVehicleRuntime(AICF_VehicleRuntime runtime)
-	{
-		m_VehicleRuntime = runtime;
-	}
-
-	void ClearVehicleRuntime(AICF_VehicleRuntime expected = null)
-	{
-		if (expected && expected != m_VehicleRuntime)
-			return;
-
-		m_VehicleRuntime = null;
-	}
-
-	bool HasVehicleTerminalFailure()
-	{
-		return !m_sVehicleTerminalFailure.IsEmpty();
-	}
-
-	string GetVehicleTerminalFailure()
-	{
-		return m_sVehicleTerminalFailure;
-	}
-
-	void RecordVehicleTerminalFailure(string reason)
-	{
-		m_sVehicleTerminalFailure = reason;
-	}
-
-	// A failed/abandoned trip must hand control back to infantry for the current
-	// group and objective. A replacement group or a genuinely new target may
-	// request transport again.
-	void SuppressVehicleTripForAssignment(
-		int groupGeneration,
-		SCR_CampaignMilitaryBaseComponent targetBase)
-	{
-		m_iVehicleFallbackGroupGeneration = groupGeneration;
-		m_VehicleFallbackTargetBase = targetBase;
-	}
-
-	bool IsVehicleTripSuppressedForCurrentAssignment()
-	{
-		return m_iVehicleFallbackGroupGeneration == m_iSpawnGeneration &&
-			m_VehicleFallbackTargetBase && m_VehicleFallbackTargetBase == m_TargetBase;
-	}
-
-	void ClearVehicleTripSuppression()
-	{
-		m_iVehicleFallbackGroupGeneration = -1;
-		m_VehicleFallbackTargetBase = null;
-	}
-
 	int GetReinforcementReadyAtMs()
 	{
 		return m_iReinforcementReadyAtMs;
@@ -370,6 +360,97 @@ class AICF_GroupSlot
 	int GetSpawnGeneration()
 	{
 		return m_iSpawnGeneration;
+	}
+
+	bool MarkRosterSpawnRequested(int expectedCount)
+	{
+		if (m_State != AICF_EGroupSlotState.SPAWNING || !m_Group || m_bRosterSpawnRequested ||
+			expectedCount <= 0)
+			return false;
+
+		m_bRosterSpawnRequested = true;
+		m_iRosterExpectedCount = expectedCount;
+		m_iRosterSpawnRequestedAtMs = System.GetTickCount();
+		m_iLastRosterProgressAtMs = m_iRosterSpawnRequestedAtMs;
+		return true;
+	}
+
+	bool IsRosterSpawnRequested()
+	{
+		return m_bRosterSpawnRequested;
+	}
+
+	int GetRosterExpectedCount()
+	{
+		return m_iRosterExpectedCount;
+	}
+
+	int GetRosterSpawnRequestAgeMs()
+	{
+		if (m_iRosterSpawnRequestedAtMs <= 0)
+			return 0;
+
+		return System.GetTickCount(m_iRosterSpawnRequestedAtMs);
+	}
+
+	int GetRosterProgressAgeMs()
+	{
+		if (m_iLastRosterProgressAtMs <= 0)
+			return 0;
+
+		return System.GetTickCount(m_iLastRosterProgressAtMs);
+	}
+
+	void ObserveRosterAgent(AIAgent agent, bool fromCallback = false)
+	{
+		if (!agent || m_State != AICF_EGroupSlotState.SPAWNING || !m_Group ||
+			agent.GetParentGroup() != m_Group)
+		{
+			return;
+		}
+
+		if (!m_aRosterObservedAgents.Contains(agent))
+		{
+			m_aRosterObservedAgents.Insert(agent);
+			m_aRosterObservedAtMs.Insert(System.GetTickCount());
+			m_iLastRosterProgressAtMs = System.GetTickCount();
+		}
+
+		if (fromCallback && !m_aRosterCallbackAgents.Contains(agent))
+			m_aRosterCallbackAgents.Insert(agent);
+	}
+
+	int GetRosterAgentObservedAgeMs(AIAgent agent)
+	{
+		int index = m_aRosterObservedAgents.Find(agent);
+		if (index < 0 || index >= m_aRosterObservedAtMs.Count())
+			return -1;
+
+		return System.GetTickCount(m_aRosterObservedAtMs[index]);
+	}
+
+	int GetRosterCallbackAgentCount()
+	{
+		return m_aRosterCallbackAgents.Count();
+	}
+
+	bool WasRosterAgentObservedFromCallback(AIAgent agent)
+	{
+		return agent && m_aRosterCallbackAgents.Contains(agent);
+	}
+
+	void MarkRosterCompletionCallbackObserved()
+	{
+		if (m_State != AICF_EGroupSlotState.SPAWNING)
+			return;
+
+		m_bRosterCompletionCallbackObserved = true;
+		m_iLastRosterProgressAtMs = System.GetTickCount();
+	}
+
+	bool WasRosterCompletionCallbackObserved()
+	{
+		return m_bRosterCompletionCallbackObserved;
 	}
 
 	int GetStuckRecoveryCount()
@@ -438,6 +519,7 @@ class AICF_GroupSlot
 	void BeginPersistentStuckFieldHold()
 	{
 		ClearPendingOrderRecovery();
+		ClearPendingStuckRecoveryEvidence();
 		m_bPersistentStuckFieldHold = true;
 		m_iPersistentStuckFieldHoldStartedAtMs = System.GetTickCount();
 		m_bRecoveringFromStuck = false;
@@ -513,10 +595,8 @@ class AICF_GroupSlot
 		// Any newly assigned waypoint supersedes a candidate that was still being
 		// verified. RecoverOrder starts a fresh verification after this assignment.
 		ClearPendingOrderRecovery();
+		ClearPendingStuckRecoveryEvidence();
 		ClearPersistentStuckFieldHold();
-
-		if (m_VehicleFallbackTargetBase && m_VehicleFallbackTargetBase != targetBase)
-			ClearVehicleTripSuppression();
 
 		if (m_ProgressTargetBase != targetBase)
 			ResetProgressTracking();
@@ -674,6 +754,7 @@ class AICF_GroupSlot
 		SCR_CampaignMilitaryBaseComponent targetBase,
 		float distanceMeters)
 	{
+		ClearPendingStuckRecoveryEvidence();
 		m_ProgressTargetBase = targetBase;
 		m_fBestDistanceToTarget = distanceMeters;
 		m_iLastProgressAtMs = System.GetTickCount();
@@ -732,6 +813,113 @@ class AICF_GroupSlot
 		m_bRecoveringFromStuck = true;
 	}
 
+	void ArmPendingStuckRecoveryEvidence(
+		SCR_AIGroup group,
+		SCR_CampaignMilitaryBaseComponent targetBase,
+		AIWaypoint waypoint,
+		vector leaderPosition,
+		float routeDistanceMeters,
+		int attempt)
+	{
+		ClearPendingStuckRecoveryEvidence();
+		if (!group || !targetBase || !waypoint || attempt <= 0)
+			return;
+
+		m_bPendingStuckRecoveryEvidence = true;
+		m_PendingStuckRecoveryGroup = group;
+		m_PendingStuckRecoveryTargetBase = targetBase;
+		m_PendingStuckRecoveryWaypoint = waypoint;
+		m_vPendingStuckRecoveryStartPosition = leaderPosition;
+		m_fPendingStuckRecoveryStartDistance = routeDistanceMeters;
+		m_iPendingStuckRecoveryAttempt = attempt;
+		m_iPendingStuckRecoveryEvidenceStartedAtMs = System.GetTickCount();
+	}
+
+	bool HasPendingStuckRecoveryEvidence()
+	{
+		return m_bPendingStuckRecoveryEvidence;
+	}
+
+	bool IsPendingStuckRecoveryEvidenceContextCurrent()
+	{
+		return m_bPendingStuckRecoveryEvidence &&
+			m_Group == m_PendingStuckRecoveryGroup &&
+			m_TargetBase == m_PendingStuckRecoveryTargetBase &&
+			m_Waypoint == m_PendingStuckRecoveryWaypoint;
+	}
+
+	bool EvaluatePendingStuckRecoveryEvidence(
+		vector leaderPosition,
+		float routeDistanceMeters,
+		float thresholdMeters,
+		out bool movementResumed,
+		out bool routeProgressResumed,
+		out float displacementMeters,
+		out float routeReductionMeters)
+	{
+		movementResumed = false;
+		routeProgressResumed = false;
+		displacementMeters = 0;
+		routeReductionMeters = 0;
+		if (!IsPendingStuckRecoveryEvidenceContextCurrent() || thresholdMeters <= 0)
+			return false;
+
+		displacementMeters = Math.Sqrt(vector.DistanceSqXZ(
+			leaderPosition,
+			m_vPendingStuckRecoveryStartPosition));
+		if (m_fPendingStuckRecoveryStartDistance >= 0 && routeDistanceMeters >= 0)
+			routeReductionMeters = m_fPendingStuckRecoveryStartDistance - routeDistanceMeters;
+
+		movementResumed = displacementMeters >= thresholdMeters;
+		routeProgressResumed = routeReductionMeters >= thresholdMeters;
+		return movementResumed || routeProgressResumed;
+	}
+
+	int GetPendingStuckRecoveryEvidenceAgeMs()
+	{
+		if (!m_bPendingStuckRecoveryEvidence ||
+			m_iPendingStuckRecoveryEvidenceStartedAtMs <= 0)
+		{
+			return 0;
+		}
+
+		return System.GetTickCount(m_iPendingStuckRecoveryEvidenceStartedAtMs);
+	}
+
+	int GetPendingStuckRecoveryAttempt()
+	{
+		return m_iPendingStuckRecoveryAttempt;
+	}
+
+	AIWaypoint GetPendingStuckRecoveryWaypoint()
+	{
+		return m_PendingStuckRecoveryWaypoint;
+	}
+
+	void ConfirmPendingStuckRecoveryEvidence(float routeDistanceMeters)
+	{
+		SCR_CampaignMilitaryBaseComponent targetBase = m_PendingStuckRecoveryTargetBase;
+		ClearPendingStuckRecoveryEvidence();
+		m_ProgressTargetBase = targetBase;
+		m_fBestDistanceToTarget = routeDistanceMeters;
+		m_iLastProgressAtMs = System.GetTickCount();
+		m_iStuckRecoveryCount = 0;
+		m_bRecoveringFromStuck = false;
+		m_bPersistentStuckReported = false;
+	}
+
+	void ClearPendingStuckRecoveryEvidence()
+	{
+		m_bPendingStuckRecoveryEvidence = false;
+		m_PendingStuckRecoveryGroup = null;
+		m_PendingStuckRecoveryTargetBase = null;
+		m_PendingStuckRecoveryWaypoint = null;
+		m_vPendingStuckRecoveryStartPosition = vector.Zero;
+		m_fPendingStuckRecoveryStartDistance = -1.0;
+		m_iPendingStuckRecoveryAttempt = 0;
+		m_iPendingStuckRecoveryEvidenceStartedAtMs = 0;
+	}
+
 	// The caller charges a replacement ticket immediately before committing the ready deployment.
 	bool CommitDeploymentReady()
 	{
@@ -750,6 +938,7 @@ class AICF_GroupSlot
 	void ClearObjective()
 	{
 		ClearPendingOrderRecovery();
+		ClearPendingStuckRecoveryEvidence();
 		m_TargetBase = null;
 		m_Waypoint = null;
 	}
@@ -759,6 +948,7 @@ class AICF_GroupSlot
 	void SuspendObjectiveWaypoint()
 	{
 		ClearPendingOrderRecovery();
+		ClearPendingStuckRecoveryEvidence();
 		m_Waypoint = null;
 		ClearObjectiveHold();
 	}
@@ -839,7 +1029,14 @@ class AICF_GroupSlot
 	protected void ClearRuntimeReferences()
 	{
 		ClearPendingOrderRecovery();
-		m_VehicleRuntime = null;
+		m_bRosterSpawnRequested = false;
+		m_bRosterCompletionCallbackObserved = false;
+		m_iRosterSpawnRequestedAtMs = 0;
+		m_iLastRosterProgressAtMs = 0;
+		m_iRosterExpectedCount = 0;
+		m_aRosterObservedAgents.Clear();
+		m_aRosterObservedAtMs.Clear();
+		m_aRosterCallbackAgents.Clear();
 		m_Group = null;
 		m_TargetBase = null;
 		m_Waypoint = null;
@@ -848,25 +1045,26 @@ class AICF_GroupSlot
 		m_iLastOrderRecoveryAtMs = 0;
 		m_bTargetUnavailableReported = false;
 		m_bLoadBlockReported = false;
-		m_sVehicleTerminalFailure = string.Empty;
 		m_sOperationalPosture = string.Empty;
 		m_iStrategicAssignmentAtMs = 0;
+		m_iStrategicAssignmentRevision = 0;
 		m_iUnexplainedMobIdleStartedAtMs = 0;
 		m_bUnexplainedMobIdleDeadlineReported = false;
-		m_iMeaningfulTaskLostStartedAtMs = 0;
-		m_bMeaningfulTaskLossReported = false;
-		m_bMeaningfulTaskDeadlineReported = false;
+		ResetMeaningfulTaskObservation();
+		m_iMeaningfulTaskLossEpisode = 0;
+		m_iMeaningfulTaskLossReportedAssignmentRevision = -1;
+		m_sMeaningfulTaskLossReportedWaypointId = string.Empty;
 		m_sMobIdleSuppressionReason = string.Empty;
 		m_iLastCommanderMotionAtMs = 0;
 		m_bHasCommanderMotionSample = false;
 		m_vLastCommanderMotionPosition = vector.Zero;
 		ClearStrategicCandidate();
-		ClearVehicleTripSuppression();
 		ResetProgressTracking();
 	}
 
 	protected void ResetProgressTracking()
 	{
+		ClearPendingStuckRecoveryEvidence();
 		m_ProgressTargetBase = null;
 		m_fBestDistanceToTarget = -1.0;
 		m_iLastProgressAtMs = 0;
@@ -876,5 +1074,12 @@ class AICF_GroupSlot
 		m_bPersistentStuckFieldHold = false;
 		m_iPersistentStuckFieldHoldStartedAtMs = 0;
 		ClearObjectiveHold();
+	}
+
+	protected void ResetMeaningfulTaskObservation()
+	{
+		m_iMeaningfulTaskLostStartedAtMs = 0;
+		m_bMeaningfulTaskLossReported = false;
+		m_bMeaningfulTaskDeadlineReported = false;
 	}
 }

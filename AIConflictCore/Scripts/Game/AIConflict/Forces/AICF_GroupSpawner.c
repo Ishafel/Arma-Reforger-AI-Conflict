@@ -98,20 +98,43 @@ class AICF_GroupSpawner
 			return null;
 		}
 
+		// Keep member materialisation behind a second phase. MatchController first
+		// binds the group and subscribes its generation-fenced observers, then calls
+		// BeginRosterSpawn(). This prevents a completion callback from racing the
+		// authoritative managed-slot ownership boundary.
 		group.SetSpawnImmediately(false);
-		group.SpawnUnits();
 
 		AICF_Stage35Diagnostics.Info(
 			"GROUP_ENTITY_SPAWNED",
 			string.Format(
-				"faction=%1 slot=%2 base={%3} prefab=%4 source_roster=%5 expected_agents=%6 spawning_pending=1",
+				"faction=%1 slot=%2 group=%3 base={%4} prefab=%5 source_roster=%6 expected_agents=%7 spawn_request_issued=0 pending_owner=AWAITING_MANAGED_BIND",
 				faction.GetFactionKey(),
 				slotId,
+				AICF_GroupRuntime.FormatEntityId(group),
 				AICF_Stage1Diagnostics.DescribeBase(spawnBase),
 				groupPrefab,
 				sourceRosterSize,
 				AICF_Stage1Config.MANAGED_GROUP_SIZE));
 		return group;
+	}
+
+	bool BeginRosterSpawn(SCR_AIGroup group, int expectedSize)
+	{
+		if (!Replication.IsServer() || !group || expectedSize <= 0 ||
+			!group.m_aUnitPrefabSlots || group.m_aUnitPrefabSlots.Count() != expectedSize ||
+			group.GetAgentsCount() != 0)
+		{
+			return false;
+		}
+
+		// Arma Reforger 1.8 moved runtime member materialisation to SCR_AIWorld's
+		// global queue. Direct SpawnUnits() is now a synchronous fallback: a member
+		// blocked by an unloaded navmesh tile is not re-enqueued. RequestSpawn keeps
+		// the stock retry/budget/importance ownership and is the production API used
+		// by the 1.8 Scenario Framework.
+		group.SetNumberOfMembersToSpawn(expectedSize);
+		group.RequestSpawn(expectedSize);
+		return true;
 	}
 
 	protected bool ConfigureManagedRoster(
