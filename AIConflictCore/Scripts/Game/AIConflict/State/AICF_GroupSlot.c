@@ -15,6 +15,9 @@ class AICF_GroupSlot
 	protected int m_iOrderRecoveryStartedAtMs;
 	protected int m_iOrderRecoveryFirstStableAtMs;
 	protected int m_iOrderRecoveryStablePolls;
+	protected int m_iPendingOrderRecoveryAssignmentRevision;
+	protected int m_iPendingOrderRecoveryGroupGeneration;
+	protected int m_iPendingOrderRecoveryReliabilityAttemptId;
 	protected int m_iLastProgressAtMs;
 	protected int m_iStuckRecoveryCount;
 	protected int m_iObjectiveHoldStartedAtMs;
@@ -45,14 +48,27 @@ class AICF_GroupSlot
 	protected int m_iLastCommanderMotionAtMs;
 	protected int m_iPendingStuckRecoveryEvidenceStartedAtMs;
 	protected int m_iPendingStuckRecoveryAttempt;
+	protected int m_iOwnedWaypointTerminalAtMs;
+	protected int m_iOwnedWaypointTerminalGeneration;
+	protected int m_iOrderReliabilityRepairFailureCount;
+	protected int m_iMobEgressLastOutwardProgressAtMs;
+	protected int m_iMobEgressLastHiddenRecoveryAttemptAtMs;
 	protected bool m_bHasCommanderMotionSample;
 	protected bool m_bPendingStuckRecoveryEvidence;
+	protected bool m_bMobEgressSoftNudgeApplied;
+	protected bool m_bMobEgressProgressExtensionReported;
+	protected bool m_bMobEgressDeadlineDeferredReported;
+	protected bool m_bMobEgressHiddenMutationConsumed;
+	protected bool m_bOrderReliabilityRepairBudgetExhaustionReported;
 	protected vector m_vLastCommanderMotionPosition;
 	protected vector m_vPendingStuckRecoveryStartPosition;
 	protected float m_fPendingStuckRecoveryStartDistance = -1.0;
+	protected float m_fMobEgressBestDistanceFromMob = -1.0;
 	protected string m_sOperationalPosture;
 	protected string m_sStrategicCandidatePosture;
 	protected string m_sMobIdleSuppressionReason;
+	protected string m_sOwnedWaypointTerminalOutcome;
+	protected string m_sMobEgressLastHiddenRecoveryRejection;
 	protected string m_sMeaningfulTaskLossReportedWaypointId;
 	protected ref array<AIAgent> m_aRosterObservedAgents = {};
 	protected ref array<int> m_aRosterObservedAtMs = {};
@@ -65,6 +81,7 @@ class AICF_GroupSlot
 	protected SCR_CampaignMilitaryBaseComponent m_PendingOrderRecoveryTargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_StrategicCandidateTargetBase;
 	protected AIWaypoint m_Waypoint;
+	protected AIWaypoint m_OwnedWaypointTerminalWaypoint;
 	protected AIWaypoint m_PendingOrderRecoveryWaypoint;
 	protected AIWaypoint m_PendingStuckRecoveryWaypoint;
 	protected SCR_AIGroup m_PendingOrderRecoveryGroup;
@@ -142,6 +159,7 @@ class AICF_GroupSlot
 		m_sOperationalPosture = posture;
 		m_iStrategicAssignmentAtMs = System.GetTickCount();
 		m_iStrategicAssignmentRevision++;
+		ResetOrderReliabilityRepairFailureBudget();
 		ResetMeaningfulTaskObservation();
 		ClearStrategicCandidate();
 	}
@@ -317,6 +335,114 @@ class AICF_GroupSlot
 		}
 
 		return System.GetTickCount(m_iLastCommanderMotionAtMs);
+	}
+
+	// Tracks progress specifically toward leaving the MOB envelope. Generic motion
+	// is insufficient here because circling inside the spawn area must not make a
+	// truly stalled group look healthy.
+	int ObserveMobEgressOutwardProgress(
+		bool requiresEgress,
+		float distanceFromMobMeters,
+		float minimumProgressMeters)
+	{
+		if (!requiresEgress || distanceFromMobMeters < 0)
+		{
+			ResetMobEgressRecovery();
+			return 0;
+		}
+
+		int nowMs = System.GetTickCount();
+		if (m_iMobEgressLastOutwardProgressAtMs <= 0 ||
+			m_fMobEgressBestDistanceFromMob < 0)
+		{
+			m_iMobEgressLastOutwardProgressAtMs = nowMs;
+			m_fMobEgressBestDistanceFromMob = distanceFromMobMeters;
+			return 0;
+		}
+
+		float thresholdMeters = Math.Max(1.0, minimumProgressMeters);
+		if (distanceFromMobMeters >= m_fMobEgressBestDistanceFromMob + thresholdMeters)
+		{
+			m_fMobEgressBestDistanceFromMob = distanceFromMobMeters;
+			m_iMobEgressLastOutwardProgressAtMs = nowMs;
+			return 0;
+		}
+
+		return System.GetTickCount(m_iMobEgressLastOutwardProgressAtMs);
+	}
+
+	float GetMobEgressBestDistanceFromMob()
+	{
+		return m_fMobEgressBestDistanceFromMob;
+	}
+
+	bool MarkMobEgressSoftNudgeApplied()
+	{
+		if (m_bMobEgressSoftNudgeApplied)
+			return false;
+
+		m_bMobEgressSoftNudgeApplied = true;
+		return true;
+	}
+
+	bool MarkMobEgressProgressExtensionReported()
+	{
+		if (m_bMobEgressProgressExtensionReported)
+			return false;
+
+		m_bMobEgressProgressExtensionReported = true;
+		return true;
+	}
+
+	bool MarkMobEgressDeadlineDeferredReported()
+	{
+		if (m_bMobEgressDeadlineDeferredReported)
+			return false;
+
+		m_bMobEgressDeadlineDeferredReported = true;
+		return true;
+	}
+
+	bool CanAttemptMobEgressHiddenRecovery(int retryIntervalMs)
+	{
+		if (m_iMobEgressLastHiddenRecoveryAttemptAtMs <= 0)
+			return true;
+
+		return System.GetTickCount(m_iMobEgressLastHiddenRecoveryAttemptAtMs) >=
+			Math.Max(1000, retryIntervalMs);
+	}
+
+	bool IsMobEgressHiddenMutationConsumed()
+	{
+		return m_bMobEgressHiddenMutationConsumed;
+	}
+
+	void MarkMobEgressHiddenMutationConsumed()
+	{
+		m_bMobEgressHiddenMutationConsumed = true;
+	}
+
+	void RecordMobEgressHiddenRecoveryAttempt(string rejectionReason)
+	{
+		m_iMobEgressLastHiddenRecoveryAttemptAtMs = System.GetTickCount();
+		m_sMobEgressLastHiddenRecoveryRejection = rejectionReason;
+	}
+
+	string GetMobEgressLastHiddenRecoveryRejection()
+	{
+		return m_sMobEgressLastHiddenRecoveryRejection;
+	}
+
+	void ResetMobEgressRecovery()
+	{
+		m_iMobEgressLastOutwardProgressAtMs = 0;
+		m_iMobEgressLastHiddenRecoveryAttemptAtMs = 0;
+		m_fMobEgressBestDistanceFromMob = -1.0;
+		m_bMobEgressSoftNudgeApplied = false;
+		m_bMobEgressProgressExtensionReported = false;
+		m_bMobEgressDeadlineDeferredReported = false;
+		m_bMobEgressHiddenMutationConsumed = false;
+		m_sMobEgressLastHiddenRecoveryRejection = string.Empty;
 	}
 
 	bool MarkUnexplainedMobIdleDeadlineReported()
@@ -552,6 +678,7 @@ class AICF_GroupSlot
 		ClearRuntimeReferences();
 		m_bReplacementDeployment = false;
 		m_iSpawnGeneration++;
+		ResetOrderReliabilityRepairFailureBudget();
 		m_iSpawnStartedAtMs = System.GetTickCount();
 		m_State = AICF_EGroupSlotState.SPAWNING;
 		return true;
@@ -565,6 +692,7 @@ class AICF_GroupSlot
 		ClearRuntimeReferences();
 		m_bReplacementDeployment = true;
 		m_iSpawnGeneration++;
+		ResetOrderReliabilityRepairFailureBudget();
 		m_iSpawnStartedAtMs = System.GetTickCount();
 		m_State = AICF_EGroupSlotState.SPAWNING;
 		return true;
@@ -576,6 +704,8 @@ class AICF_GroupSlot
 			return false;
 
 		m_Group = group;
+		m_Group.GetOnWaypointCompleted().Insert(OnOwnedWaypointCompleted);
+		m_Group.GetOnWaypointRemoved().Insert(OnOwnedWaypointRemoved);
 		return true;
 	}
 
@@ -604,9 +734,110 @@ class AICF_GroupSlot
 		else
 			ClearObjectiveHold();
 
+		ClearOwnedWaypointTerminalOutcome();
 		m_TargetBase = targetBase;
 		m_Waypoint = waypoint;
 		return true;
+	}
+
+	string GetOwnedWaypointTerminalOutcome(AIWaypoint waypoint)
+	{
+		if (!waypoint || waypoint != m_OwnedWaypointTerminalWaypoint ||
+			m_iOwnedWaypointTerminalGeneration != m_iSpawnGeneration)
+		{
+			return string.Empty;
+		}
+
+		return m_sOwnedWaypointTerminalOutcome;
+	}
+
+	int GetOwnedWaypointTerminalAgeMs(AIWaypoint waypoint)
+	{
+		if (GetOwnedWaypointTerminalOutcome(waypoint).IsEmpty() ||
+			m_iOwnedWaypointTerminalAtMs <= 0)
+		{
+			return 0;
+		}
+
+		return System.GetTickCount(m_iOwnedWaypointTerminalAtMs);
+	}
+
+	protected void OnOwnedWaypointCompleted(AIWaypoint waypoint)
+	{
+		if (!waypoint || waypoint != m_Waypoint)
+			return;
+
+		RecordOwnedWaypointTerminalOutcome(waypoint, "GROUP_CALLBACK_COMPLETED", string.Empty);
+	}
+
+	protected void OnOwnedWaypointRemoved(AIWaypoint waypoint)
+	{
+		if (!waypoint || waypoint != m_Waypoint)
+			return;
+
+		string priorOutcome = GetOwnedWaypointTerminalOutcome(waypoint);
+		if (priorOutcome != "GROUP_CALLBACK_COMPLETED")
+			RecordOwnedWaypointTerminalOutcome(waypoint, "GROUP_CALLBACK_REMOVED", priorOutcome);
+		else
+			LogOwnedWaypointTerminalOutcome(waypoint, "GROUP_CALLBACK_REMOVED", priorOutcome);
+	}
+
+	protected void RecordOwnedWaypointTerminalOutcome(
+		AIWaypoint waypoint,
+		string outcome,
+		string priorOutcome)
+	{
+		m_OwnedWaypointTerminalWaypoint = waypoint;
+		m_sOwnedWaypointTerminalOutcome = outcome;
+		m_iOwnedWaypointTerminalAtMs = System.GetTickCount();
+		m_iOwnedWaypointTerminalGeneration = m_iSpawnGeneration;
+		LogOwnedWaypointTerminalOutcome(waypoint, outcome, priorOutcome);
+	}
+
+	protected void LogOwnedWaypointTerminalOutcome(
+		AIWaypoint waypoint,
+		string outcome,
+		string priorOutcome)
+	{
+		string factionKey = "NONE";
+		if (m_Group && m_Group.GetFaction())
+			factionKey = m_Group.GetFaction().GetFactionKey();
+		array<AIWaypoint> waypointQueue = {};
+		int queueCount;
+		bool trackedInQueue;
+		bool isCurrent;
+		if (m_Group)
+		{
+			queueCount = m_Group.GetWaypoints(waypointQueue);
+			trackedInQueue = waypointQueue.Contains(waypoint);
+			isCurrent = m_Group.GetCurrentWaypoint() == waypoint;
+		}
+		if (priorOutcome.IsEmpty())
+			priorOutcome = "NONE";
+		AICF_Stage35Diagnostics.Info(
+			"ORDER_WAYPOINT_TERMINAL_OBSERVED",
+			string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 assignment_revision=%5 waypoint=%6 outcome=%7 prior_outcome=%8",
+				factionKey,
+				GetSlotKey(),
+				m_iSlotId,
+				m_iSpawnGeneration,
+				m_iStrategicAssignmentRevision,
+				waypoint.GetID(),
+				outcome,
+				priorOutcome) + string.Format(
+				" is_current=%1 tracked_in_queue=%2 queue_count=%3",
+				isCurrent,
+				trackedInQueue,
+				queueCount));
+	}
+
+	protected void ClearOwnedWaypointTerminalOutcome()
+	{
+		m_OwnedWaypointTerminalWaypoint = null;
+		m_sOwnedWaypointTerminalOutcome = string.Empty;
+		m_iOwnedWaypointTerminalAtMs = 0;
+		m_iOwnedWaypointTerminalGeneration = 0;
 	}
 
 	bool CanAttemptOrderRecovery(int retryIntervalMs)
@@ -620,6 +851,38 @@ class AICF_GroupSlot
 	void MarkOrderRecoveryAttempt()
 	{
 		m_iLastOrderRecoveryAtMs = System.GetTickCount();
+	}
+
+	int RecordOrderReliabilityRepairFailure()
+	{
+		m_iOrderReliabilityRepairFailureCount++;
+		return m_iOrderReliabilityRepairFailureCount;
+	}
+
+	int GetOrderReliabilityRepairFailureCount()
+	{
+		return m_iOrderReliabilityRepairFailureCount;
+	}
+
+	bool IsOrderReliabilityRepairFailureBudgetExhausted(int maximumFailures)
+	{
+		return maximumFailures > 0 &&
+			m_iOrderReliabilityRepairFailureCount >= maximumFailures;
+	}
+
+	bool MarkOrderReliabilityRepairBudgetExhaustionReported()
+	{
+		if (m_bOrderReliabilityRepairBudgetExhaustionReported)
+			return false;
+
+		m_bOrderReliabilityRepairBudgetExhaustionReported = true;
+		return true;
+	}
+
+	protected void ResetOrderReliabilityRepairFailureBudget()
+	{
+		m_iOrderReliabilityRepairFailureCount = 0;
+		m_bOrderReliabilityRepairBudgetExhaustionReported = false;
 	}
 
 	void BeginOrderRecoveryVerification(
@@ -638,6 +901,8 @@ class AICF_GroupSlot
 		m_bPendingOrderRecoveryCountsAsStuck = countsAsStuckRecovery;
 		m_bPendingOrderRecoveryCountsAsReliabilityAttempt =
 			countsAsReliabilityAttempt && !countsAsStuckRecovery;
+		m_iPendingOrderRecoveryAssignmentRevision = m_iStrategicAssignmentRevision;
+		m_iPendingOrderRecoveryGroupGeneration = m_iSpawnGeneration;
 		m_iOrderRecoveryStartedAtMs = System.GetTickCount();
 	}
 
@@ -645,12 +910,13 @@ class AICF_GroupSlot
 	// reliability caller marks that candidate immediately after the synchronous
 	// call, keeping vehicle handoff and stuck-route verification out of repair
 	// attempt accounting without coupling the planner to controller telemetry.
-	bool MarkPendingOrderRecoveryAsReliabilityAttempt()
+	bool MarkPendingOrderRecoveryAsReliabilityAttempt(int attemptId)
 	{
-		if (!HasPendingOrderRecovery() || m_bPendingOrderRecoveryCountsAsStuck)
+		if (!HasPendingOrderRecovery() || m_bPendingOrderRecoveryCountsAsStuck || attemptId <= 0)
 			return false;
 
 		m_bPendingOrderRecoveryCountsAsReliabilityAttempt = true;
+		m_iPendingOrderRecoveryReliabilityAttemptId = attemptId;
 		return true;
 	}
 
@@ -664,7 +930,9 @@ class AICF_GroupSlot
 	{
 		return HasPendingOrderRecovery() && m_Group == m_PendingOrderRecoveryGroup &&
 			m_TargetBase == m_PendingOrderRecoveryTargetBase &&
-			m_Waypoint == m_PendingOrderRecoveryWaypoint;
+			m_Waypoint == m_PendingOrderRecoveryWaypoint &&
+			m_iSpawnGeneration == m_iPendingOrderRecoveryGroupGeneration &&
+			m_iStrategicAssignmentRevision == m_iPendingOrderRecoveryAssignmentRevision;
 	}
 
 	SCR_AIGroup GetPendingOrderRecoveryGroup()
@@ -695,6 +963,21 @@ class AICF_GroupSlot
 	bool PendingOrderRecoveryCountsAsReliabilityAttempt()
 	{
 		return m_bPendingOrderRecoveryCountsAsReliabilityAttempt;
+	}
+
+	int GetPendingOrderRecoveryReliabilityAttemptId()
+	{
+		return m_iPendingOrderRecoveryReliabilityAttemptId;
+	}
+
+	int GetPendingOrderRecoveryAssignmentRevision()
+	{
+		return m_iPendingOrderRecoveryAssignmentRevision;
+	}
+
+	int GetPendingOrderRecoveryGroupGeneration()
+	{
+		return m_iPendingOrderRecoveryGroupGeneration;
 	}
 
 	int RecordPendingOrderRecoveryStablePoll()
@@ -735,6 +1018,9 @@ class AICF_GroupSlot
 		m_sPendingOrderRecoveryCause = string.Empty;
 		m_bPendingOrderRecoveryCountsAsStuck = false;
 		m_bPendingOrderRecoveryCountsAsReliabilityAttempt = false;
+		m_iPendingOrderRecoveryAssignmentRevision = 0;
+		m_iPendingOrderRecoveryGroupGeneration = 0;
+		m_iPendingOrderRecoveryReliabilityAttemptId = 0;
 		m_iOrderRecoveryStartedAtMs = 0;
 		m_iOrderRecoveryFirstStableAtMs = 0;
 		m_iOrderRecoveryStablePolls = 0;
@@ -1053,7 +1339,13 @@ class AICF_GroupSlot
 
 	protected void ClearRuntimeReferences()
 	{
+		if (m_Group)
+		{
+			m_Group.GetOnWaypointCompleted().Remove(OnOwnedWaypointCompleted);
+			m_Group.GetOnWaypointRemoved().Remove(OnOwnedWaypointRemoved);
+		}
 		ClearPendingOrderRecovery();
+		ClearOwnedWaypointTerminalOutcome();
 		m_bRosterSpawnRequested = false;
 		m_bRosterCompletionCallbackObserved = false;
 		m_iRosterSpawnRequestedAtMs = 0;
@@ -1073,6 +1365,7 @@ class AICF_GroupSlot
 		m_sOperationalPosture = string.Empty;
 		m_iStrategicAssignmentAtMs = 0;
 		m_iStrategicAssignmentRevision = 0;
+		ResetOrderReliabilityRepairFailureBudget();
 		m_iUnexplainedMobIdleStartedAtMs = 0;
 		m_bUnexplainedMobIdleDeadlineReported = false;
 		ResetMeaningfulTaskObservation();
@@ -1083,6 +1376,7 @@ class AICF_GroupSlot
 		m_iLastCommanderMotionAtMs = 0;
 		m_bHasCommanderMotionSample = false;
 		m_vLastCommanderMotionPosition = vector.Zero;
+		ResetMobEgressRecovery();
 		ClearStrategicCandidate();
 		ResetProgressTracking();
 	}

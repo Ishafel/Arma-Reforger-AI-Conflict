@@ -172,32 +172,49 @@ class AICF_VehicleCleanupQuery
 	protected bool m_bRetainedFailClosed;
 	protected int m_iStableClearMs;
 	protected int m_iDeleteAttempts;
+	protected int m_iProtectedOccupants;
+	protected int m_iNearbyPlayers;
+	protected int m_iManagedLogicalOccupants;
+	protected int m_iManagedTransitions;
+	protected int m_iManagedInsideBounds;
 	protected string m_sBlockerSignature;
+	protected string m_sManagedSamples;
 	protected string m_sActionToken;
 	protected string m_sNextAction;
 
 	void AICF_VehicleCleanupQuery(
 		bool tracked,
-		bool releasePending,
 		bool releaseComplete,
 		bool clearanceSafe,
 		bool deletePending,
 		bool retainedFailClosed,
 		int stableClearMs,
 		int deleteAttempts,
+		int protectedOccupants,
+		int nearbyPlayers,
+		int managedLogicalOccupants,
+		int managedTransitions,
+		int managedInsideBounds,
 		string blockerSignature,
+		string managedSamples,
 		string actionToken,
 		string nextAction)
 	{
 		m_bTracked = tracked;
-		m_bReleasePending = releasePending;
+		m_bReleasePending = tracked && !releaseComplete && !retainedFailClosed;
 		m_bReleaseComplete = releaseComplete;
 		m_bClearanceSafe = clearanceSafe;
 		m_bDeletePending = deletePending;
 		m_bRetainedFailClosed = retainedFailClosed;
 		m_iStableClearMs = stableClearMs;
 		m_iDeleteAttempts = deleteAttempts;
+		m_iProtectedOccupants = protectedOccupants;
+		m_iNearbyPlayers = nearbyPlayers;
+		m_iManagedLogicalOccupants = managedLogicalOccupants;
+		m_iManagedTransitions = managedTransitions;
+		m_iManagedInsideBounds = managedInsideBounds;
 		m_sBlockerSignature = blockerSignature;
+		m_sManagedSamples = managedSamples;
 		m_sActionToken = actionToken;
 		m_sNextAction = nextAction;
 	}
@@ -210,7 +227,13 @@ class AICF_VehicleCleanupQuery
 	bool IsRetainedFailClosed() { return m_bRetainedFailClosed; }
 	int GetStableClearMs() { return m_iStableClearMs; }
 	int GetDeleteAttempts() { return m_iDeleteAttempts; }
+	int GetProtectedOccupants() { return m_iProtectedOccupants; }
+	int GetNearbyPlayers() { return m_iNearbyPlayers; }
+	int GetManagedLogicalOccupants() { return m_iManagedLogicalOccupants; }
+	int GetManagedTransitions() { return m_iManagedTransitions; }
+	int GetManagedInsideBounds() { return m_iManagedInsideBounds; }
 	string GetBlockerSignature() { return m_sBlockerSignature; }
+	string GetManagedSamples() { return m_sManagedSamples; }
 	string GetActionToken() { return m_sActionToken; }
 	string GetNextAction() { return m_sNextAction; }
 
@@ -222,9 +245,14 @@ class AICF_VehicleCleanupQuery
 			false,
 			false,
 			false,
-			false,
 			0,
 			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			"NONE",
 			"NONE",
 			"NONE",
 			"NONE");
@@ -392,6 +420,7 @@ class AICF_VehicleCleanupJob
 	string m_sActionToken;
 	string m_sRetirementReason;
 	string m_sFailClosedReason;
+	string m_sManagedExactRecoveryFenceReason;
 	string m_sLastReportedBlocker;
 	int m_iFirstDeleteRequestedAtMs;
 	int m_iLastAuditAtMs;
@@ -400,7 +429,8 @@ class AICF_VehicleCleanupJob
 	int m_iLastManagedRecoveryAtMs;
 	int m_iManagedExactRecoveryAttempts;
 	int m_iLastManagedExactRecoveryAtMs;
-	int m_iManagedExactRecoveryExhaustedAtMs;
+	int m_iProtectedClearanceDeadlineAtMs;
+	int m_iProtectedClearanceDeadlineTriggeredAtMs;
 	bool m_bReleaseComplete;
 	bool m_bClearanceSafe;
 	bool m_bRetirementRequested;
@@ -416,6 +446,8 @@ class AICF_VehicleCleanupJob
 	bool m_bStopRetainedReported;
 	bool m_bManagedRecoveryBudgetReported;
 	bool m_bManagedExactRecoveryBudgetReported;
+	bool m_bProtectedClearanceDeadlineReported;
+	bool m_bProtectedClearanceFinalOutcomeReported;
 
 	void InitializeCommon(
 		AICF_FactionFleet fleet,
@@ -439,6 +471,7 @@ class AICF_VehicleCleanupJob
 		m_sActionToken = actionToken;
 		m_State = new AICF_VehicleCleanupState();
 		m_State.Begin(nowMs, absoluteDeadlineMs, 3);
+		m_iProtectedClearanceDeadlineAtMs = absoluteDeadlineMs;
 		m_Fence = new AICF_VehicleCleanupFence();
 		m_Fence.InitializeFromLease(lease, actionToken);
 		m_Scan = new AICF_VehicleCleanupScan();
@@ -469,7 +502,9 @@ class AICF_VehicleCleanupManager
 	protected static const int MANAGED_CLEARANCE_RECOVERY_INTERVAL_MS = 2000;
 	protected static const int MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS = 3;
 	protected static const int MANAGED_EXACT_RECOVERY_INTERVAL_MS = 2000;
-	protected static const int MANAGED_EXACT_RECOVERY_REARM_MS = 30000;
+	// The threshold starts recovery. This immutable grace bounds externally
+	// fenced clearance without ever authorizing an unsafe release or delete.
+	protected static const int PROTECTED_CLEARANCE_TERMINAL_GRACE_MS = 30000;
 	protected static const float MANAGED_CLEARANCE_MARGIN_METERS = 1.5;
 	protected static const float PLAYER_PROTECTION_RADIUS_METERS = 15.0;
 
@@ -860,11 +895,11 @@ class AICF_VehicleCleanupManager
 			if (job.m_State.GetAbsoluteDeadlineMs() > 0 &&
 				nowMs >= job.m_State.GetAbsoluteDeadlineMs())
 			{
-				HandleProtectedClearanceDeadline(job, vehicle, nowMs);
-				return AICF_VehicleCleanupOutcome.Queued(
-					"PROTECTED_CLEARANCE_DEADLINE_POLLING:" +
-						job.m_Scan.m_sBlockerSignature,
-					job.m_sActionToken);
+				return HandleProtectedClearanceDeadline(
+					job,
+					vehicle,
+					actualRplId,
+					nowMs);
 			}
 			return AICF_VehicleCleanupOutcome.Queued(
 				"PROTECTED_CLEARANCE_PENDING",
@@ -892,17 +927,29 @@ class AICF_VehicleCleanupManager
 		return ReleaseToWorldPool(job, vehicle, nowMs);
 	}
 
-	// The release deadline is a recovery threshold, never permission to abandon
-	// a valid asset. Player blockers keep the job in conservative polling. When
-	// only the managed group remains, bounded queue resets remove stale GetIn or
-	// GetOut work and the same protected scan remains the release authority.
-	protected void HandleProtectedClearanceDeadline(
+	// The release deadline starts bounded recovery; it is never permission to
+	// release or delete an occupied asset. Managed blockers get queue reset plus
+	// exact native exit/relocation. External safety fences get a short immutable
+	// grace. Exhaustion transfers the still-protected asset to manager-owned,
+	// cap-held fail-closed retention so the Trip itself can terminate.
+	protected AICF_VehicleCleanupOutcome HandleProtectedClearanceDeadline(
 		AICF_VehicleCleanupJob job,
 		Vehicle vehicle,
+		string actualRplId,
 		int nowMs)
 	{
 		if (!job || !job.m_Scan || !vehicle)
-			return;
+		{
+			return AICF_VehicleCleanupOutcome.NoAction(
+				"PROTECTED_CLEARANCE_HANDLER_INVALID",
+				"NONE");
+		}
+		ReportProtectedClearanceDeadlineExceeded(job, nowMs);
+		int deadlineAgeMs = Math.Max(
+			0,
+			nowMs - job.m_iProtectedClearanceDeadlineAtMs);
+		int terminalAtMs = job.m_iProtectedClearanceDeadlineAtMs +
+			PROTECTED_CLEARANCE_TERMINAL_GRACE_MS;
 		bool managedBlocked = job.m_Scan.m_iManagedLogicalOccupants > 0 ||
 			job.m_Scan.m_iManagedTransitions > 0 ||
 			job.m_Scan.m_iManagedInsideBounds > 0;
@@ -914,119 +961,174 @@ class AICF_VehicleCleanupManager
 			job.m_Scan.m_iPlayerTransitions > 0 ||
 			job.m_Scan.m_iNearbyPlayers > 0 ||
 			job.m_Scan.m_sGlobalSamples.Contains("position_unknown");
+		if (nowMs >= terminalAtMs)
+		{
+			string terminalReason = "PROTECTED_CLEARANCE_GRACE_EXPIRED";
+			if (playerProtected)
+				terminalReason = "PROTECTED_CLEARANCE_PLAYER_GRACE_EXPIRED";
+			else if (foreignProtected)
+				terminalReason = "PROTECTED_CLEARANCE_FOREIGN_GRACE_EXPIRED";
+			else if (!job.m_sManagedExactRecoveryFenceReason.IsEmpty())
+				terminalReason = "PROTECTED_CLEARANCE_HIDDEN_FENCE_GRACE_EXPIRED:" +
+					job.m_sManagedExactRecoveryFenceReason;
+			else if (managedBlocked)
+				terminalReason = "PROTECTED_CLEARANCE_MANAGED_GRACE_EXPIRED";
+			return RetainFailClosed(
+				job,
+				terminalReason + ":" + job.m_Scan.m_sBlockerSignature,
+				actualRplId,
+				nowMs);
+		}
 		if (playerProtected || foreignProtected)
 		{
 			string protectionReason = "PROTECTED_CLEARANCE_PLAYER_POLL";
 			if (!playerProtected)
 				protectionReason = "PROTECTED_CLEARANCE_FOREIGN_OCCUPANT_POLL";
 			AuditDeferred(job, protectionReason, 0, nowMs);
-			return;
+			return AICF_VehicleCleanupOutcome.Queued(
+				protectionReason,
+				job.m_sActionToken);
 		}
 		if (!managedBlocked)
 		{
 			AuditDeferred(job, "PROTECTED_CLEARANCE_STABLE_WINDOW", 0, nowMs);
-			return;
+			return AICF_VehicleCleanupOutcome.Queued(
+				"PROTECTED_CLEARANCE_STABLE_WINDOW",
+				job.m_sActionToken);
+		}
+		if (!job.m_Group ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(job.m_Group))
+		{
+			return RetainFailClosed(
+				job,
+				"MANAGED_GROUP_AUTHORITY_LOST:" + job.m_Scan.m_sBlockerSignature,
+				actualRplId,
+				nowMs);
 		}
 		if (job.m_iManagedRecoveryAttempts >= MANAGED_CLEARANCE_RECOVERY_MAX_ATTEMPTS)
 		{
 			if (!job.m_bManagedRecoveryBudgetReported)
 			{
 				job.m_bManagedRecoveryBudgetReported = true;
+				string exhaustedDetails = BuildJobIdentity(job);
+				exhaustedDetails += string.Format(
+					" attempts=%1 maximum_attempts=%2 action=ESCALATE_EXACT_HIDDEN_CLEARANCE blocker_signature=%3 managed_samples=[%4]",
+					job.m_iManagedRecoveryAttempts,
+					MANAGED_CLEARANCE_RECOVERY_MAX_ATTEMPTS,
+					job.m_Scan.m_sBlockerSignature,
+					job.m_Scan.m_sManagedSamples);
+				exhaustedDetails += string.Format(
+					" deadline_at_ms=%1 deadline_age_ms=%2 terminal_at_ms=%3",
+					job.m_iProtectedClearanceDeadlineAtMs,
+					deadlineAgeMs,
+					terminalAtMs);
 				AICF_Stage3Diagnostics.Warning(
 					"VEHICLE_CLEANUP_MANAGED_RECOVERY_EXHAUSTED",
-					BuildJobIdentity(job) + string.Format(
-						" attempts=%1 maximum_attempts=%2 action=ESCALATE_EXACT_HIDDEN_CLEARANCE blocker_signature=%3 managed_samples=[%4]",
-						job.m_iManagedRecoveryAttempts,
-						MANAGED_CLEARANCE_RECOVERY_MAX_ATTEMPTS,
-						job.m_Scan.m_sBlockerSignature,
-						job.m_Scan.m_sManagedSamples));
+					exhaustedDetails);
 			}
-			TryExactManagedCleanupRecovery(job, vehicle, nowMs);
-			return;
+			return TryExactManagedCleanupRecovery(
+				job,
+				vehicle,
+				actualRplId,
+				nowMs);
 		}
 		if (job.m_iLastManagedRecoveryAtMs > 0 &&
 			nowMs - job.m_iLastManagedRecoveryAtMs < MANAGED_CLEARANCE_RECOVERY_INTERVAL_MS)
 		{
-			return;
+			return AICF_VehicleCleanupOutcome.Queued(
+				"MANAGED_QUEUE_RESET_INTERVAL",
+				job.m_sActionToken);
 		}
 		job.m_iManagedRecoveryAttempts++;
 		job.m_iLastManagedRecoveryAtMs = nowMs;
 		int interrupted = m_Watchdog.ResetGroupVehicleActions(job.m_Group);
 		job.m_State.ObserveSafeClear(false, job.m_Scan.m_sBlockerSignature, nowMs);
+		string recoveryDetails = BuildJobIdentity(job);
+		recoveryDetails += string.Format(
+			" attempt=%1 maximum_attempts=%2 interrupted_actions=%3 player_scan_available=%4 protected_occupants=%5 player_transitions=%6 nearby_players=%7",
+			job.m_iManagedRecoveryAttempts,
+			MANAGED_CLEARANCE_RECOVERY_MAX_ATTEMPTS,
+			interrupted,
+			job.m_Scan.m_bPlayerScanAvailable,
+			job.m_Scan.m_iProtectedOccupants,
+			job.m_Scan.m_iPlayerTransitions,
+			job.m_Scan.m_iNearbyPlayers);
+		recoveryDetails += string.Format(
+			" managed_logical=%1 managed_transitions=%2 managed_inside_bounds=%3 action=RESET_GROUP_VEHICLE_ACTIONS_THEN_CONTINUE_SCAN managed_samples=[%4]",
+			job.m_Scan.m_iManagedLogicalOccupants,
+			job.m_Scan.m_iManagedTransitions,
+			job.m_Scan.m_iManagedInsideBounds,
+			job.m_Scan.m_sManagedSamples);
+		recoveryDetails += string.Format(
+			" deadline_at_ms=%1 deadline_age_ms=%2 terminal_at_ms=%3",
+			job.m_iProtectedClearanceDeadlineAtMs,
+			deadlineAgeMs,
+			terminalAtMs);
 		AICF_Stage3Diagnostics.Warning(
 			"VEHICLE_CLEANUP_MANAGED_RECOVERY",
-			BuildJobIdentity(job) + string.Format(
-				" attempt=%1 maximum_attempts=%2 interrupted_actions=%3 player_scan_available=%4 protected_occupants=%5 player_transitions=%6 nearby_players=%7",
-				job.m_iManagedRecoveryAttempts,
-				MANAGED_CLEARANCE_RECOVERY_MAX_ATTEMPTS,
-				interrupted,
-				job.m_Scan.m_bPlayerScanAvailable,
-				job.m_Scan.m_iProtectedOccupants,
-				job.m_Scan.m_iPlayerTransitions,
-				job.m_Scan.m_iNearbyPlayers) + string.Format(
-				" managed_logical=%1 managed_transitions=%2 managed_inside_bounds=%3 action=RESET_GROUP_VEHICLE_ACTIONS_THEN_CONTINUE_SCAN managed_samples=[%4]",
-				job.m_Scan.m_iManagedLogicalOccupants,
-				job.m_Scan.m_iManagedTransitions,
-				job.m_Scan.m_iManagedInsideBounds,
-				job.m_Scan.m_sManagedSamples));
+			recoveryDetails);
+		return AICF_VehicleCleanupOutcome.Queued(
+			"MANAGED_QUEUE_RESET_APPLIED",
+			job.m_sActionToken);
 	}
 
-	protected void TryExactManagedCleanupRecovery(
+	protected AICF_VehicleCleanupOutcome TryExactManagedCleanupRecovery(
 		AICF_VehicleCleanupJob job,
 		Vehicle vehicle,
+		string actualRplId,
 		int nowMs)
 	{
-		if (!job || !job.m_Group || !vehicle ||
+		if (!job)
+		{
+			return AICF_VehicleCleanupOutcome.NoAction(
+				"MANAGED_EXACT_RECOVERY_JOB_MISSING",
+				"NONE");
+		}
+		if (!job.m_Group || !vehicle ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(job.m_Group) ||
 			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle) ||
 			!m_Config.GetHiddenRecoveryEnabled())
 		{
+			job.m_sManagedExactRecoveryFenceReason =
+				"MANAGED_EXACT_RECOVERY_DISABLED_OR_INVALID";
 			AuditDeferred(job, "MANAGED_EXACT_RECOVERY_DISABLED_OR_INVALID", 0, nowMs);
-			return;
+			return AICF_VehicleCleanupOutcome.Queued(
+				"MANAGED_EXACT_RECOVERY_DISABLED_OR_INVALID",
+				job.m_sActionToken);
 		}
 		if (job.m_iManagedExactRecoveryAttempts >= MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS)
 		{
-			if (job.m_iManagedExactRecoveryExhaustedAtMs <= 0)
-				job.m_iManagedExactRecoveryExhaustedAtMs = nowMs;
+			int deadlineAgeMs = Math.Max(
+				0,
+				nowMs - job.m_iProtectedClearanceDeadlineAtMs);
 			if (!job.m_bManagedExactRecoveryBudgetReported)
 			{
 				job.m_bManagedExactRecoveryBudgetReported = true;
-				AICF_Stage3Diagnostics.Error(
-					"VEHICLE_CLEANUP_EXACT_RECOVERY_EXHAUSTED",
-					BuildJobIdentity(job) + string.Format(
-						" attempts=%1 maximum_attempts=%2 action=CONTINUE_PROTECTED_SCAN_NO_UNSAFE_RELEASE retention=CAP_HELD_PROTECTED blocker_signature=%3 managed_samples=[%4]",
-						job.m_iManagedExactRecoveryAttempts,
-						MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS,
-						job.m_Scan.m_sBlockerSignature,
-						job.m_Scan.m_sManagedSamples));
-				ObserveLateCleanupFailure(
-					job,
-					"MANAGED_EXACT_RECOVERY_EXHAUSTED:" + job.m_Scan.m_sBlockerSignature);
-			}
-			if (nowMs - job.m_iManagedExactRecoveryExhaustedAtMs >=
-				MANAGED_EXACT_RECOVERY_REARM_MS)
-			{
-				job.m_iManagedRecoveryAttempts = 0;
-				job.m_iLastManagedRecoveryAtMs = 0;
-				job.m_iManagedExactRecoveryAttempts = 0;
-				job.m_iLastManagedExactRecoveryAtMs = 0;
-				job.m_iManagedExactRecoveryExhaustedAtMs = 0;
-				job.m_bManagedRecoveryBudgetReported = false;
-				job.m_bManagedExactRecoveryBudgetReported = false;
+				string exactExhaustedDetails = BuildJobIdentity(job);
+				exactExhaustedDetails += string.Format(
+					" attempts=%1 maximum_attempts=%2 deadline_at_ms=%3 deadline_age_ms=%4 action=TRANSFER_RETAINED_FAIL_CLOSED retention=CAP_HELD_PROTECTED blocker_signature=%5 managed_samples=[%6]",
+					job.m_iManagedExactRecoveryAttempts,
+					MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS,
+					job.m_iProtectedClearanceDeadlineAtMs,
+					deadlineAgeMs,
+					job.m_Scan.m_sBlockerSignature,
+					job.m_Scan.m_sManagedSamples);
 				AICF_Stage3Diagnostics.Warning(
-					"VEHICLE_CLEANUP_RECOVERY_REARMED",
-					BuildJobIdentity(job) + string.Format(
-						" cooldown_ms=%1 queue_reset_maximum=%2 exact_recovery_maximum=%3 action=RESTART_BOUNDED_PLAYER_FENCED_RECOVERY blocker_signature=%4",
-						MANAGED_EXACT_RECOVERY_REARM_MS,
-						MANAGED_CLEARANCE_RECOVERY_MAX_ATTEMPTS,
-						MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS,
-						job.m_Scan.m_sBlockerSignature));
+					"VEHICLE_CLEANUP_EXACT_RECOVERY_EXHAUSTED",
+					exactExhaustedDetails);
 			}
-			return;
+			return RetainFailClosed(
+				job,
+				"MANAGED_EXACT_RECOVERY_EXHAUSTED:" + job.m_Scan.m_sBlockerSignature,
+				actualRplId,
+				nowMs);
 		}
 		if (job.m_iLastManagedExactRecoveryAtMs > 0 &&
 			nowMs - job.m_iLastManagedExactRecoveryAtMs < MANAGED_EXACT_RECOVERY_INTERVAL_MS)
 		{
-			return;
+			return AICF_VehicleCleanupOutcome.Queued(
+				"MANAGED_EXACT_RECOVERY_INTERVAL",
+				job.m_sActionToken);
 		}
 		float nearestPlayerMeters;
 		string rejectionReason;
@@ -1038,14 +1140,18 @@ class AICF_VehicleCleanupManager
 			nearestPlayerMeters,
 			rejectionReason))
 		{
+			job.m_sManagedExactRecoveryFenceReason = rejectionReason;
 			AuditDeferred(
 				job,
 				"MANAGED_EXACT_RECOVERY_PLAYER_FENCED:" + rejectionReason,
 				0,
 				nowMs);
-			return;
+			return AICF_VehicleCleanupOutcome.Queued(
+				"MANAGED_EXACT_RECOVERY_PLAYER_FENCED:" + rejectionReason,
+				job.m_sActionToken);
 		}
 
+		job.m_sManagedExactRecoveryFenceReason = string.Empty;
 		job.m_iManagedExactRecoveryAttempts++;
 		job.m_iLastManagedExactRecoveryAtMs = nowMs;
 		int interrupted = m_Watchdog.ResetGroupVehicleActions(job.m_Group);
@@ -1057,6 +1163,7 @@ class AICF_VehicleCleanupManager
 			job,
 			vehicle,
 			hiddenRadiusMeters,
+			nowMs,
 			forced,
 			relocated,
 			stillBlocked,
@@ -1066,30 +1173,47 @@ class AICF_VehicleCleanupManager
 			job.m_Scan.m_bSafe,
 			job.m_Scan.m_sBlockerSignature,
 			nowMs);
+		int deadlineAgeMs = Math.Max(
+			0,
+			nowMs - job.m_iProtectedClearanceDeadlineAtMs);
+		int terminalAtMs = job.m_iProtectedClearanceDeadlineAtMs +
+			PROTECTED_CLEARANCE_TERMINAL_GRACE_MS;
+		string exactRecoveryDetails = BuildJobIdentity(job);
+		exactRecoveryDetails += string.Format(
+			" attempt=%1 maximum_attempts=%2 interrupted_actions=%3 forced=%4 relocated=%5 still_blocked=%6 position_failures=%7",
+			job.m_iManagedExactRecoveryAttempts,
+			MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS,
+			interrupted,
+			forced,
+			relocated,
+			stillBlocked,
+			positionFailures);
+		exactRecoveryDetails += string.Format(
+			" hidden_radius_m=%1 nearest_player_m=%2 immediate_clear=%3 stable_clear_ms=%4 action=CONTINUE_FIVE_SECOND_PROTECTED_SCAN blocker_signature=%5 managed_samples=[%6]",
+			hiddenRadiusMeters,
+			nearestPlayerMeters,
+			job.m_Scan.m_bSafe,
+			stableClearMs,
+			job.m_Scan.m_sBlockerSignature,
+			job.m_Scan.m_sManagedSamples);
+		exactRecoveryDetails += string.Format(
+			" deadline_at_ms=%1 deadline_age_ms=%2 terminal_at_ms=%3",
+			job.m_iProtectedClearanceDeadlineAtMs,
+			deadlineAgeMs,
+			terminalAtMs);
 		AICF_Stage3Diagnostics.Warning(
 			"VEHICLE_CLEANUP_EXACT_RECOVERY",
-			BuildJobIdentity(job) + string.Format(
-				" attempt=%1 maximum_attempts=%2 interrupted_actions=%3 forced=%4 relocated=%5 still_blocked=%6 position_failures=%7",
-				job.m_iManagedExactRecoveryAttempts,
-				MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS,
-				interrupted,
-				forced,
-				relocated,
-				stillBlocked,
-				positionFailures) + string.Format(
-				" hidden_radius_m=%1 nearest_player_m=%2 immediate_clear=%3 stable_clear_ms=%4 action=CONTINUE_FIVE_SECOND_PROTECTED_SCAN blocker_signature=%5 managed_samples=[%6]",
-				hiddenRadiusMeters,
-				nearestPlayerMeters,
-				job.m_Scan.m_bSafe,
-				stableClearMs,
-				job.m_Scan.m_sBlockerSignature,
-				job.m_Scan.m_sManagedSamples));
+			exactRecoveryDetails);
+		return AICF_VehicleCleanupOutcome.Queued(
+			"MANAGED_EXACT_RECOVERY_APPLIED",
+			job.m_sActionToken);
 	}
 
 	protected void ForceAndRelocateExactManagedMembers(
 		AICF_VehicleCleanupJob job,
 		Vehicle vehicle,
 		float hiddenRadiusMeters,
+		int nowMs,
 		out int forced,
 		out int relocated,
 		out int stillBlocked,
@@ -1099,6 +1223,9 @@ class AICF_VehicleCleanupManager
 		relocated = 0;
 		stillBlocked = 0;
 		positionFailures = 0;
+		int deadlineAgeMs = Math.Max(
+			0,
+			nowMs - job.m_iProtectedClearanceDeadlineAtMs);
 		vector boundsMin;
 		vector boundsMax;
 		vehicle.GetBounds(boundsMin, boundsMax);
@@ -1147,14 +1274,60 @@ class AICF_VehicleCleanupManager
 						true);
 				bool ejectRequested;
 				bool ejectImmediate;
+				bool ejectAttempted;
 				if (exactOwner && (useEject || !directAccepted))
+				{
+					ejectAttempted = true;
 					ejectRequested = compartment.EjectOccupant(
 						true,
 						false,
 						ejectImmediate,
-						false);
+						true);
+				}
 				if (directAccepted || ejectRequested)
 					forced++;
+
+				bool linkedAfterExit =
+					CompartmentAccessComponent.GetVehicleIn(character) == vehicle;
+				bool transitioningAfterExit = linkedAfterExit &&
+					(access.IsGettingIn() || access.IsGettingOut());
+				int compartmentSlot = -1;
+				int compartmentManager = -1;
+				if (compartment)
+				{
+					compartmentSlot = compartment.GetCompartmentSlotID();
+					compartmentManager = compartment.GetCompartmentMgrID();
+				}
+				string exitMethod = "NONE";
+				if (directAccepted)
+					exitMethod = "DIRECT_TELEPORT_EXIT";
+				if (ejectAttempted)
+					exitMethod = "EJECT_ON_THE_SPOT";
+				string memberDetails = BuildJobIdentity(job);
+				memberDetails += string.Format(
+					" member=%1 compartment_slot=%2 compartment_manager=%3 exact_owner_valid=%4 method=%5 direct_accepted=%6 eject_attempted=%7 eject_requested=%8 eject_immediate=%9",
+					character.GetID(),
+					compartmentSlot,
+					compartmentManager,
+					exactOwner,
+					exitMethod,
+					directAccepted,
+					ejectAttempted,
+					ejectRequested,
+					ejectImmediate);
+				memberDetails += string.Format(
+					" linked_before=%1 transitioning_before=%2 linked_after=%3 transitioning_after=%4 immediate_unlink=%5 attempt=%6 deadline_at_ms=%7 deadline_age_ms=%8",
+					linked,
+					transitioning,
+					linkedAfterExit,
+					transitioningAfterExit,
+					!linkedAfterExit && !transitioningAfterExit,
+					job.m_iManagedExactRecoveryAttempts,
+					job.m_iProtectedClearanceDeadlineAtMs,
+					deadlineAgeMs);
+				AICF_Stage35Diagnostics.Info(
+					"VEHICLE_CLEANUP_EXACT_MEMBER",
+					memberDetails);
 			}
 
 			linked = CompartmentAccessComponent.GetVehicleIn(character) == vehicle;
@@ -1791,6 +1964,10 @@ class AICF_VehicleCleanupManager
 		job.m_bFailClosed = true;
 		job.m_sFailClosedReason = reason;
 		job.m_State.StopFailClosed();
+		ReportProtectedClearanceFinalOutcome(
+			job,
+			"RETAINED_FAIL_CLOSED:" + reason,
+			nowMs);
 		if (!job.m_bIdentityFailureReported)
 		{
 			job.m_bIdentityFailureReported = true;
@@ -1800,6 +1977,30 @@ class AICF_VehicleCleanupManager
 				reason,
 				job.m_Fence.GetRplId(),
 				actualRplId);
+			int terminalAtMs = job.m_iProtectedClearanceDeadlineAtMs +
+				PROTECTED_CLEARANCE_TERMINAL_GRACE_MS;
+			int terminalAgeMs = Math.Max(0, nowMs - terminalAtMs);
+			if (job.m_Scan)
+			{
+				details += string.Format(
+					" protected_occupants=%1 nearby_players=%2 managed_logical=%3 managed_transitions=%4 managed_inside_bounds=%5 terminal_at_ms=%6 terminal_age_ms=%7",
+					job.m_Scan.m_iProtectedOccupants,
+					job.m_Scan.m_iNearbyPlayers,
+					job.m_Scan.m_iManagedLogicalOccupants,
+					job.m_Scan.m_iManagedTransitions,
+					job.m_Scan.m_iManagedInsideBounds,
+					terminalAtMs,
+					terminalAgeMs);
+				details += " managed_samples=[" + job.m_Scan.m_sManagedSamples + "]";
+			}
+			string ownershipSummary =
+				"ownership=CleanupManager cap=HELD trip_detach_allowed=1";
+			if (job.m_bReleaseComplete)
+			{
+				ownershipSummary =
+					"ownership=CleanupManager cap=RELEASED release_complete=1 trip_detach_allowed=1";
+			}
+			details += " " + ownershipSummary;
 			AICF_Stage3Diagnostics.Error("VEHICLE_CLEANUP_RETAINED", details);
 			if (reason.Contains("MISMATCH"))
 				AICF_Stage3Diagnostics.Warning("VEHICLE_DELETE_IDENTITY_REPLACED", details);
@@ -2054,16 +2255,36 @@ class AICF_VehicleCleanupManager
 			nextAction = "CONFIRM_DELETE_IDENTITY";
 		else if (job.m_bRetirementRequested)
 			nextAction = "WAIT_STABLE_CLEAR_DELETE";
+		int protectedOccupants;
+		int nearbyPlayers;
+		int managedLogicalOccupants;
+		int managedTransitions;
+		int managedInsideBounds;
+		string managedSamples = "NONE";
+		if (job.m_Scan)
+		{
+			protectedOccupants = job.m_Scan.m_iProtectedOccupants;
+			nearbyPlayers = job.m_Scan.m_iNearbyPlayers;
+			managedLogicalOccupants = job.m_Scan.m_iManagedLogicalOccupants;
+			managedTransitions = job.m_Scan.m_iManagedTransitions;
+			managedInsideBounds = job.m_Scan.m_iManagedInsideBounds;
+			managedSamples = job.m_Scan.m_sManagedSamples;
+		}
 		return new AICF_VehicleCleanupQuery(
 			true,
-			!job.m_bReleaseComplete,
 			job.m_bReleaseComplete,
 			job.m_bClearanceSafe,
 			job.m_State.IsDeleteConfirmationPending(),
 			job.m_bFailClosed,
 			stableClearMs,
 			job.m_State.GetDeleteAttempts(),
+			protectedOccupants,
+			nearbyPlayers,
+			managedLogicalOccupants,
+			managedTransitions,
+			managedInsideBounds,
 			job.m_State.GetBlockerSignature(),
+			managedSamples,
 			job.m_sActionToken,
 			nextAction);
 	}
@@ -2213,6 +2434,10 @@ class AICF_VehicleCleanupManager
 		string details = BuildJobIdentity(job);
 		details += " disposition=FUNCTIONAL_WORLD_POOL ai_cap_reserved=0 player_available=1";
 		AICF_Stage3Diagnostics.Info("VEHICLE_WORLD_POOL_RELEASED", details);
+		ReportProtectedClearanceFinalOutcome(
+			job,
+			"RELEASED_TO_WORLD_POOL",
+			System.GetTickCount());
 	}
 
 	protected void ReportRetirementQuarantined(AICF_VehicleCleanupJob job)
@@ -2224,6 +2449,89 @@ class AICF_VehicleCleanupManager
 			"VEHICLE_RETIREMENT_QUARANTINED",
 			BuildJobIdentity(job) +
 			" disposition=DESTRUCTIVE_RETIREMENT_QUARANTINE ai_cap_reserved=0 player_available=0");
+		ReportProtectedClearanceFinalOutcome(
+			job,
+			"QUARANTINED_FOR_RETIREMENT",
+			System.GetTickCount());
+	}
+
+	protected void ReportProtectedClearanceDeadlineExceeded(
+		AICF_VehicleCleanupJob job,
+		int nowMs)
+	{
+		if (!job || job.m_bProtectedClearanceDeadlineReported)
+			return;
+		job.m_bProtectedClearanceDeadlineReported = true;
+		job.m_iProtectedClearanceDeadlineTriggeredAtMs = nowMs;
+		int deadlineAgeMs = Math.Max(
+			0,
+			nowMs - job.m_iProtectedClearanceDeadlineAtMs);
+		int terminalAtMs = job.m_iProtectedClearanceDeadlineAtMs +
+			PROTECTED_CLEARANCE_TERMINAL_GRACE_MS;
+		int terminalRemainingMs = Math.Max(0, terminalAtMs - nowMs);
+		string deadlineDetails = BuildJobIdentity(job);
+		deadlineDetails += string.Format(
+			" deadline_at_ms=%1 deadline_age_ms=%2 terminal_at_ms=%3 terminal_remaining_ms=%4 protected_occupants=%5 player_transitions=%6 nearby_players=%7",
+			job.m_iProtectedClearanceDeadlineAtMs,
+			deadlineAgeMs,
+			terminalAtMs,
+			terminalRemainingMs,
+			job.m_Scan.m_iProtectedOccupants,
+			job.m_Scan.m_iPlayerTransitions,
+			job.m_Scan.m_iNearbyPlayers);
+		deadlineDetails += string.Format(
+			" managed_logical=%1 managed_transitions=%2 managed_inside_bounds=%3 blocker_signature=%4 action=START_BOUNDED_PLAYER_FENCED_RECOVERY",
+			job.m_Scan.m_iManagedLogicalOccupants,
+			job.m_Scan.m_iManagedTransitions,
+			job.m_Scan.m_iManagedInsideBounds,
+			job.m_Scan.m_sBlockerSignature);
+		AICF_Stage3Diagnostics.Warning(
+			"PROTECTED_CLEARANCE_DEADLINE_EXCEEDED",
+			deadlineDetails);
+	}
+
+	protected void ReportProtectedClearanceFinalOutcome(
+		AICF_VehicleCleanupJob job,
+		string outcome,
+		int nowMs)
+	{
+		if (!job || !job.m_bProtectedClearanceDeadlineReported ||
+			job.m_bProtectedClearanceFinalOutcomeReported)
+		{
+			return;
+		}
+		job.m_bProtectedClearanceFinalOutcomeReported = true;
+		string blockerSignature = "NONE";
+		if (job.m_Scan)
+			blockerSignature = job.m_Scan.m_sBlockerSignature;
+		int deadlineAgeMs = Math.Max(
+			0,
+			nowMs - job.m_iProtectedClearanceDeadlineAtMs);
+		int recoveryAgeMs = Math.Max(
+			0,
+			nowMs - job.m_iProtectedClearanceDeadlineTriggeredAtMs);
+		string ownershipSummary =
+			"ownership=CleanupManager cap=HELD_UNTIL_SAFE trip_detach_allowed=1";
+		if (job.m_bReleaseComplete)
+		{
+			ownershipSummary =
+				"ownership=CleanupManager cap=RELEASED release_complete=1 trip_detach_allowed=1";
+		}
+		string finalDetails = BuildJobIdentity(job);
+		finalDetails += string.Format(
+			" outcome=%1 deadline_at_ms=%2 deadline_age_ms=%3 terminal_grace_ms=%4 recovery_age_ms=%5 managed_recovery_attempts=%6 exact_recovery_attempts=%7 blocker_signature=%8",
+			outcome,
+			job.m_iProtectedClearanceDeadlineAtMs,
+			deadlineAgeMs,
+			PROTECTED_CLEARANCE_TERMINAL_GRACE_MS,
+			recoveryAgeMs,
+			job.m_iManagedRecoveryAttempts,
+			job.m_iManagedExactRecoveryAttempts,
+			blockerSignature);
+		finalDetails += " " + ownershipSummary;
+		AICF_Stage3Diagnostics.Info(
+			"PROTECTED_CLEARANCE_FINAL_OUTCOME",
+			finalDetails);
 	}
 
 	protected void AuditDeferred(
@@ -2240,6 +2548,15 @@ class AICF_VehicleCleanupManager
 		}
 		job.m_sLastReportedBlocker = signature;
 		job.m_iLastAuditAtMs = nowMs;
+		int deadlineAgeMs = Math.Max(
+			0,
+			nowMs - job.m_iProtectedClearanceDeadlineAtMs);
+		int terminalAtMs = job.m_iProtectedClearanceDeadlineAtMs +
+			PROTECTED_CLEARANCE_TERMINAL_GRACE_MS;
+		int terminalRemainingMs = Math.Max(0, terminalAtMs - nowMs);
+		string hiddenFenceReason = job.m_sManagedExactRecoveryFenceReason;
+		if (hiddenFenceReason.IsEmpty())
+			hiddenFenceReason = "NONE";
 		string details = BuildJobIdentity(job);
 		details += string.Format(
 			" reason=%1 protected_occupants=%2 player_transitions=%3 nearby_players=%4 stable_clear_ms=%5",
@@ -2259,7 +2576,14 @@ class AICF_VehicleCleanupManager
 			job.m_iManagedExactRecoveryAttempts,
 			MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS);
 		details += string.Format(
-			" global_samples=[%1] managed_samples=[%2]",
+			" deadline_at_ms=%1 deadline_age_ms=%2 terminal_at_ms=%3 terminal_remaining_ms=%4",
+			job.m_iProtectedClearanceDeadlineAtMs,
+			deadlineAgeMs,
+			terminalAtMs,
+			terminalRemainingMs);
+		details += string.Format(
+			" hidden_fence_reason=%1 global_samples=[%2] managed_samples=[%3]",
+			hiddenFenceReason,
 			job.m_Scan.m_sGlobalSamples,
 			job.m_Scan.m_sManagedSamples);
 		AICF_Stage3Diagnostics.Info("VEHICLE_CLEANUP_DEFERRED", details);

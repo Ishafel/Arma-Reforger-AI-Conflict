@@ -788,11 +788,26 @@ class AICF_OrderPlanner
 			waypoint.GetID(),
 			GetWaypointKind(slot, waypoint));
 		createdLine += string.Format(
-			" role=%1 reason=%2 trigger=%3",
+			" role=%1 reason=%2 trigger=%3 completion_policy=%4",
 			AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
 			reason,
-			trigger);
+			trigger,
+			GetWaypointCompletionPolicy(slot, waypoint));
 		AICF_Stage35Diagnostics.Info("ORDER_WAYPOINT_CREATED", createdLine);
+	}
+
+	protected string GetWaypointCompletionPolicy(AICF_GroupSlot slot, AIWaypoint waypoint)
+	{
+		if (!waypoint)
+			return "NONE";
+		if (SCR_SmartActionWaypoint.Cast(waypoint))
+			return "ANY";
+		if (slot && slot.GetRole() == AICF_EGroupRole.ATTACK &&
+			!SCR_SearchAndDestroyWaypoint.Cast(waypoint))
+		{
+			return "LEADER";
+		}
+		return "PREFAB_DEFAULT";
 	}
 
 	protected void LogWaypointRemoved(
@@ -970,6 +985,14 @@ class AICF_OrderPlanner
 
 			relayWaypoint.SetSmartActionEntity(target.GetOwner(), RELAY_SMART_ACTION_TAG);
 			waypoint.SetCompletionType(EAIWaypointCompletionType.Any);
+		}
+		else if (role == AICF_EGroupRole.ATTACK)
+		{
+			// The stock Move prefab's completion policy is prefab-owned. Make the
+			// operational contract explicit: a distant attack leg completes only when
+			// the authoritative group leader arrives, never because one separated
+			// member happens to enter the radius first.
+			waypoint.SetCompletionType(EAIWaypointCompletionType.Leader);
 		}
 
 		// The setting is copied into the group only while this AICF waypoint is

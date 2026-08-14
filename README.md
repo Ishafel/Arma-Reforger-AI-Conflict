@@ -94,12 +94,17 @@ Stage 1 реализует серверные модели конфигурац�
 | Passenger exact-cargo stall | `aicfVehiclePassengerStallMs` | `8000` мс (8 с) |
 | Повторная passenger action после stall | `aicfVehiclePassengerMaxRetries` | `1` |
 | Boarding deadline | `aicfVehicleBoardingTimeoutMs` | `40000` мс (40 с) |
+| Cleanup recovery threshold | `aicfVehicleCleanupDelayMs` | `10000` мс (10 с) |
 | Vehicle stuck watchdog | `aicfVehicleStuckTimeoutMs` | `45000` мс (45 с) |
 | Infantry stuck watchdog | `aicfStuckTimeoutMs` | `60000` мс (60 с) |
 | Скрытое server-side recovery | `aicfHiddenRecoveryEnabled` | `1` (включено) |
 | Player-protection radius для скрытого recovery | `aicfHiddenRecoveryPlayerRadiusMeters` | `300` м |
 
 Скрытая коррекция является последней bounded-ступенью: она разрешена только если authoritative scan не находит controlled/main entity игрока в радиусе 300 м от исходной и целевой точек. В пределах 1200 м дополнительно требуется отсутствие прямой линии видимости к обеим точкам; неизвестная позиция игрока закрывает gate fail-closed. `aicfHiddenRecoveryEnabled=0` полностью отключает эту ступень.
+
+Protected cleanup теперь конечен: через 10 секунд начинается три queue-reset и не более трёх exact exit/eject/relocate попыток с повторным live scan. Бойцы при этом не удаляются и не пересоздаются. Managed-only exhaustion немедленно передаёт asset в manager-owned `FAILED_CLOSED` retention; player/foreign/LOS fence получает неизменяемую safety-grace 30 секунд, после чего Trip также отсоединяется, а машина остаётся cap-held и физически защищённой. `ABANDONED_EXIT_AUDIT` после handoff использует live cleanup counts, а не остановленный snapshot DismountState.
+
+MOB egress использует ступени 15/30/60 секунд: сначала мягкое восстановление приказа только при отсутствии outward progress, затем один скрытый identity-preserving выход только для бойцов, всё ещё находящихся внутри MOB, и в 60 секунд — hard failure. На 30-секундной границе progressing-группа получает diagnostic extension, а запрещённая player/LOS/combat fence фиксируется отдельным warning с причиной и оставшимся hard deadline.
 
 Non-relay ATTACK использует stock `Move` для дальней operational-фазы. Когда живой лидер оказывается не дальше 100 м от resolved target, planner атомарно заменяет `Move` локальным `SearchAndDestroy` с holding time не меньше 600 с. Порог promotion 100 м является production policy, а не CLI-настройкой; relay продолжает использовать `CaptureRelay`, defend — штатный `Defend`.
 

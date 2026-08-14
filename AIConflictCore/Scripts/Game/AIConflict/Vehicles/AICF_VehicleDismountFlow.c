@@ -241,11 +241,32 @@ class AICF_VehicleDismountFlow
 			return AICF_TripOutcome.ReleaseLease("TERMINAL_CLEARANCE_SAFE", causationId);
 		}
 
+		// Once all exact terminal mutations have been consumed, waiting out the
+		// remainder of the generic boarding timeout cannot improve the result.
+		// Transfer the still-protected asset immediately to CleanupManager, whose
+		// independent scan owns the stronger player-fenced recovery escalation.
+		if (!sample.m_bSafelyClear &&
+			state.GetForceClearanceAttempts() >= FORCE_MAX_ATTEMPTS)
+		{
+			state.StopTerminalClearance();
+			AICF_Stage3Diagnostics.Warning(
+				"FALLBACK_DISEMBARK_ESCALATED",
+				FormatClearance(trip, sample, "TERMINAL_FORCE_BUDGET_EXHAUSTED") +
+				string.Format(
+					" terminal_deadline_ms=%1 handoff_at_ms=%2 remaining_deadline_ms=%3 action=QUEUE_PROTECTED_CLEANUP_IMMEDIATELY",
+					state.GetTerminalDeadlineMs(),
+					nowMs,
+					Math.Max(0, state.GetTerminalDeadlineMs() - nowMs)));
+			return AICF_TripOutcome.ReleaseLease(
+				"FALLBACK_DISEMBARK_FORCE_BUDGET_EXHAUSTED",
+				causationId);
+		}
+
 		if (nowMs >= state.GetTerminalDeadlineMs())
 		{
 			state.StopTerminalClearance();
-			AICF_Stage3Diagnostics.Error(
-				"FALLBACK_DISEMBARK_FAILED",
+			AICF_Stage3Diagnostics.Warning(
+				"FALLBACK_DISEMBARK_ESCALATED",
 				FormatClearance(trip, sample, "TERMINAL_DEADLINE_REACHED"));
 			// RELEASE_LEASE is only a request to transfer the still-uncleared asset
 			// to CleanupManager. Its independent protected-clearance scan remains
@@ -542,8 +563,17 @@ class AICF_VehicleDismountFlow
 				true);
 		bool ejectRequested;
 		bool ejectImmediate;
+		bool ejectAttempted;
 		if (exactOwner && (useEject || !directAccepted))
-			ejectRequested = compartment.EjectOccupant(true, false, ejectImmediate, false);
+		{
+			// A door-directed EjectOccupant may only enqueue an owner request when
+			// the compartment's selected exit is unusable.  The terminal path has
+			// already proven exact ownership and is player-fenced, so force the
+			// engine's no-door detach first.  Physical relocation remains a
+			// separate, destination-fenced operation on the next clearance poll.
+			ejectAttempted = true;
+			ejectRequested = compartment.EjectOccupant(true, false, ejectImmediate, true);
+		}
 		bool linkedAfter = CompartmentAccessComponent.GetVehicleIn(character) == vehicle ||
 			character.IsInVehicle() || access.IsInCompartment();
 		int compartmentSlot = -1;
@@ -555,21 +585,23 @@ class AICF_VehicleDismountFlow
 		}
 		string details = FormatIdentity(trip, "PROTECTED_MEMBER_FORCE_EXIT");
 		details += string.Format(
-			" member=%1 compartment_slot=%2 compartment_manager=%3 direct_accepted=%4 eject_requested=%5 eject_immediate=%6",
+			" member=%1 compartment_slot=%2 compartment_manager=%3 direct_accepted=%4 eject_attempted=%5 eject_requested=%6 eject_immediate=%7",
 			character.GetID(),
 			compartmentSlot,
 			compartmentManager,
 			directAccepted,
+			ejectAttempted,
 			ejectRequested,
 			ejectImmediate);
 		details += string.Format(
-			" linked_after=%1 getting_in=%2 getting_out=%3 force_attempt=%4 maximum_attempts=%5 exact_owner_valid=%6 escalation=TERMINAL_ONLY immediate_result=%7",
+			" linked_after=%1 getting_in=%2 getting_out=%3 force_attempt=%4 maximum_attempts=%5 exact_owner_valid=%6 eject_on_the_spot=%7 escalation=TERMINAL_ONLY immediate_result=%8",
 			linkedAfter,
 			access.IsGettingIn(),
 			access.IsGettingOut(),
 			forceAttempt,
 			FORCE_MAX_ATTEMPTS,
 			exactOwner,
+			ejectAttempted,
 			!linkedAfter);
 		AICF_Stage35Diagnostics.Info("FORCE_DISEMBARK_MEMBER", details);
 		return directAccepted || ejectRequested;

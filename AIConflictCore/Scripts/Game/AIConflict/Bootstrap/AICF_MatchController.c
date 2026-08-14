@@ -17,8 +17,15 @@ class AICF_MatchController
 	// a waypoint that survives one five-second boundary from being confirmed.
 	protected static const int ORDER_RECOVERY_STABLE_POLLS = 2;
 	protected static const int ORDER_RECOVERY_INITIAL_STABLE_OBSERVATION = 1;
+	protected static const int ORDER_RELIABILITY_REPAIR_FAILURE_BUDGET = 2;
 	protected static const int ORDER_RECOVERY_STABLE_INTERVALS = 2;
 	protected static const int ORDER_RECOVERY_MIN_STABLE_MS = 10000;
+	protected static const int MOB_EGRESS_HARD_DEADLINE_INTERVALS = 4;
+	protected static const int MOB_EGRESS_HIDDEN_RETRY_MS = 5000;
+	protected static const float MOB_EGRESS_HIDDEN_FORWARD_METERS = 130.0;
+	protected static const float MOB_EGRESS_HIDDEN_SEARCH_RADIUS_METERS = 4.0;
+	protected static const float MOB_EGRESS_HIDDEN_SPACING_METERS = 3.5;
+	protected static const float MOB_EGRESS_MAX_THREAT_MEASURE = 0.01;
 
 	protected bool m_bStarted;
 	protected bool m_bStopped;
@@ -40,6 +47,8 @@ class AICF_MatchController
 	protected int m_iOrderRecoveryAttempts;
 	protected int m_iOrderRecoveries;
 	protected int m_iOrderRecoveryFailures;
+	protected int m_iOrderRecoverySuperseded;
+	protected int m_iLastOrderRepairAccountingDelta;
 	protected int m_iOrderBindingVerifications;
 	protected int m_iOrderBindingVerificationFailures;
 	protected int m_iStuckDetections;
@@ -64,6 +73,7 @@ class AICF_MatchController
 	protected ref AICF_VictorySystem m_VictorySystem;
 	protected ref AICF_GroupMapMarkerSystem m_GroupMapMarkers;
 	protected ref AICF_VehicleCoordinator m_VehicleCoordinator;
+	protected ref AICF_VehicleWatchdog m_HiddenRecoveryWatchdog;
 	protected ref AICF_FactionState m_USState;
 	protected ref AICF_FactionState m_USSRState;
 
@@ -116,6 +126,7 @@ class AICF_MatchController
 		m_ReinforcementSystem = new AICF_ReinforcementSystem();
 		m_OrderPlanner = new AICF_OrderPlanner();
 		m_VictorySystem = new AICF_VictorySystem();
+		m_HiddenRecoveryWatchdog = new AICF_VehicleWatchdog();
 		if (m_Stage3Config.GetVehiclesEnabled())
 		{
 			m_VehicleCoordinator = new AICF_VehicleCoordinator(
@@ -1073,6 +1084,13 @@ class AICF_MatchController
 		if (slot.IsReplacementDeployment())
 			factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
 
+		if (slot.HasPendingOrderRecovery())
+		{
+			RecordPendingOrderVerificationFailure(
+				slot,
+				faction,
+				"GROUP_LOST");
+		}
 		m_OrderPlanner.ClearOrder(slot);
 		if (!slot.MarkDestroyed())
 			return;
@@ -1107,6 +1125,13 @@ class AICF_MatchController
 		string groupKey = GroupKey(group);
 		if (slot.IsReplacementDeployment())
 			factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
+		if (slot.HasPendingOrderRecovery())
+		{
+			RecordPendingOrderVerificationFailure(
+				slot,
+				faction,
+				"GROUP_EMPTY");
+		}
 		m_OrderPlanner.ClearOrder(slot);
 		if (!slot.MarkDestroyed())
 			return;
@@ -1318,7 +1343,11 @@ class AICF_MatchController
 				(vehicleView.IsControllingMovement() || vehicleView.IsRestorePending());
 			bool repairSucceeded = false;
 			if (!meaningfulTask && !vehicleOwnsTaskRepair)
-				repairSucceeded = TryRecoverOrder(slot, faction, "MEANINGFUL_TASK_LOST");
+				repairSucceeded = TryRecoverOrder(
+					factionState,
+					slot,
+					faction,
+					"MEANINGFUL_TASK_LOST");
 
 			int taskDeadlineMs = 2 * m_Config.GetCommanderIntervalMs();
 			if (!meaningfulTask && !repairSucceeded && tasklessAgeMs >= taskDeadlineMs && slot.MarkMeaningfulTaskDeadlineReported())
@@ -1362,14 +1391,212 @@ class AICF_MatchController
 						tasklessAgeMs,
 						!suppressionRule.IsEmpty()));
 			}
-			// The Stage 3.5 contract limits continuous presence inside the MOB radius,
-			// not merely a lack of waypoint or measurable motion. Circling/pathfinding
-			// inside the radius therefore cannot reset this deadline.
+			// MOB presence remains bounded, but real outward route progress is not an
+			// egress failure at the first deadline. Stalled groups receive an early
+			// identity-preserving nudge and, behind strict player/LOS/combat fences, one
+			// last-resort hidden relocation before the extended hard deadline.
 			bool mobPresenceRequiresEgress = atMob && !allowedException;
 			int mobPresenceMs = slot.ObserveUnexplainedMobIdle(
 				mobPresenceRequiresEgress,
 				UPDATE_INTERVAL_MS);
-			if (mobPresenceMs < 2 * m_Config.GetCommanderIntervalMs() ||
+			int commanderIntervalMs = m_Config.GetCommanderIntervalMs();
+			int outwardProgressAgeMs = slot.ObserveMobEgressOutwardProgress(
+				mobPresenceRequiresEgress,
+				distanceToMobMeters,
+				m_Stage2Config.GetStuckProgressMeters());
+			int softNudgeDeadlineMs = commanderIntervalMs;
+			int egressDeadlineMs = 2 * commanderIntervalMs;
+			int hardDeadlineMs = MOB_EGRESS_HARD_DEADLINE_INTERVALS * commanderIntervalMs;
+			bool recentOutwardProgress = outwardProgressAgeMs < commanderIntervalMs;
+
+			if (mobPresenceRequiresEgress && mobPresenceMs >= softNudgeDeadlineMs &&
+				!recentOutwardProgress && slot.MarkMobEgressSoftNudgeApplied())
+			{
+				bool normalized = m_GroupCohesionPolicy &&
+					m_GroupCohesionPolicy.NormalizeAfterMovementFailure(slot.GetGroup());
+				bool rebuilt = false;
+				if (!slot.HasPendingOrderRecovery() && !vehicleOwnsTaskRepair)
+				{
+					rebuilt = m_OrderPlanner.RebuildCurrentOrder(
+						slot,
+						faction,
+						"MOB_EGRESS_SOFT_NUDGE");
+				}
+				AICF_Stage35Diagnostics.Warning(
+					"MOB_EGRESS_SOFT_NUDGE",
+					string.Format(
+						"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 target=%5 mob_presence_ms=%6 outward_progress_age_ms=%7 distance_to_mob_m=%8 best_distance_to_mob_m=%9",
+						faction.GetFactionKey(),
+						slot.GetSlotKey(),
+						slot.GetSlotId(),
+						slot.GetSpawnGeneration(),
+						AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
+						mobPresenceMs,
+						outwardProgressAgeMs,
+						distanceToMobMeters,
+						slot.GetMobEgressBestDistanceFromMob()) + string.Format(
+						" normalized=%1 order_rebuilt=%2 pending_verification=%3 vehicle_state=%4 action=IDENTITY_PRESERVING_REISSUE",
+						normalized,
+						rebuilt,
+						slot.HasPendingOrderRecovery(),
+						vehicleState));
+			}
+
+			if (mobPresenceMs < egressDeadlineMs)
+			{
+				continue;
+			}
+
+			if (recentOutwardProgress)
+			{
+				float progressingThreatMeasure;
+				bool progressingCombatSafe = IsHiddenMobRecoveryCombatSafe(
+					slot.GetGroup(),
+					progressingThreatMeasure);
+				string progressingCombatClearance = "BLOCKED";
+				if (progressingCombatSafe)
+					progressingCombatClearance = "CLEAR";
+				int progressingRemainingHardMs = Math.Max(
+					0,
+					hardDeadlineMs - mobPresenceMs);
+				if (slot.MarkMobEgressDeadlineDeferredReported())
+				{
+					AICF_Stage35Diagnostics.Warning(
+						"MOB_EGRESS_DEADLINE_DEFERRED",
+						string.Format(
+							"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 mob_presence_ms=%5 egress_deadline_ms=%6 hard_deadline_ms=%7 remaining_hard_ms=%8",
+							faction.GetFactionKey(),
+							slot.GetSlotKey(),
+							slot.GetSlotId(),
+							slot.GetSpawnGeneration(),
+							mobPresenceMs,
+							egressDeadlineMs,
+							hardDeadlineMs,
+							progressingRemainingHardMs) + string.Format(
+							" player_clearance=NOT_EVALUATED_PROGRESSING los_clearance=NOT_EVALUATED_PROGRESSING combat_clearance=%1 threat=%2 progress=RECENT_OUTWARD outward_progress_age_ms=%3 defer_reason=BOUNDED_PROGRESS_EXTENSION",
+							progressingCombatClearance,
+							progressingThreatMeasure,
+							outwardProgressAgeMs));
+				}
+				if (slot.MarkMobEgressProgressExtensionReported())
+				{
+					AICF_Stage35Diagnostics.Warning(
+						"MOB_EGRESS_DELAYED_PROGRESSING",
+						string.Format(
+							"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 target=%5 mob_presence_ms=%6 egress_deadline_ms=%7 hard_deadline_ms=%8 outward_progress_age_ms=%9",
+							faction.GetFactionKey(),
+							slot.GetSlotKey(),
+							slot.GetSlotId(),
+							slot.GetSpawnGeneration(),
+							AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
+							mobPresenceMs,
+							egressDeadlineMs,
+							hardDeadlineMs,
+							outwardProgressAgeMs) + string.Format(
+							" motion_age_ms=%1 distance_to_mob_m=%2 best_distance_to_mob_m=%3 action=BOUNDED_PROGRESS_EXTENSION",
+							commanderMotionAgeMs,
+							distanceToMobMeters,
+							slot.GetMobEgressBestDistanceFromMob()));
+				}
+				if (mobPresenceMs < hardDeadlineMs)
+					continue;
+			}
+
+			if (!recentOutwardProgress && mobPresenceMs < hardDeadlineMs &&
+				!slot.IsMobEgressHiddenMutationConsumed() &&
+				slot.CanAttemptMobEgressHiddenRecovery(MOB_EGRESS_HIDDEN_RETRY_MS))
+			{
+				string hiddenRejectionReason;
+				vector hiddenDestination;
+				float nearestPlayerMeters;
+				int relocatedMembers;
+				string playerClearance;
+				string losClearance;
+				string combatClearance;
+				bool hiddenRecovered = TryApplyHiddenMobEgressRecovery(
+					slot,
+					faction,
+					mainBase,
+					hiddenDestination,
+					nearestPlayerMeters,
+					relocatedMembers,
+					playerClearance,
+					losClearance,
+					combatClearance,
+					hiddenRejectionReason);
+				slot.RecordMobEgressHiddenRecoveryAttempt(hiddenRejectionReason);
+				int stalledRemainingHardMs = Math.Max(0, hardDeadlineMs - mobPresenceMs);
+				if (slot.MarkMobEgressDeadlineDeferredReported())
+				{
+					string stalledDeferReason = hiddenRejectionReason;
+					if (hiddenRecovered)
+						stalledDeferReason = "HIDDEN_RECOVERY_COMMITTED";
+					AICF_Stage35Diagnostics.Warning(
+						"MOB_EGRESS_DEADLINE_DEFERRED",
+						string.Format(
+							"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 mob_presence_ms=%5 egress_deadline_ms=%6 hard_deadline_ms=%7 remaining_hard_ms=%8",
+							faction.GetFactionKey(),
+							slot.GetSlotKey(),
+							slot.GetSlotId(),
+							slot.GetSpawnGeneration(),
+							mobPresenceMs,
+							egressDeadlineMs,
+							hardDeadlineMs,
+							stalledRemainingHardMs) + string.Format(
+							" player_clearance=%1 los_clearance=%2 combat_clearance=%3 progress=STALLED outward_progress_age_ms=%4 defer_reason=%5 nearest_player_m=%6",
+							playerClearance,
+							losClearance,
+							combatClearance,
+							outwardProgressAgeMs,
+							stalledDeferReason,
+							nearestPlayerMeters));
+				}
+				if (hiddenRecovered)
+				{
+					slot.ObserveUnexplainedMobIdle(false);
+					slot.ResetMobEgressRecovery();
+					continue;
+				}
+
+				AICF_Stage35Diagnostics.Info(
+					"MOB_EGRESS_HIDDEN_RECOVERY_DEFERRED",
+					string.Format(
+						"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 target=%5 mob_presence_ms=%6 hard_deadline_ms=%7 rejection=%8 nearest_player_m=%9",
+						faction.GetFactionKey(),
+						slot.GetSlotKey(),
+						slot.GetSlotId(),
+						slot.GetSpawnGeneration(),
+						AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
+						mobPresenceMs,
+						hardDeadlineMs,
+						hiddenRejectionReason,
+						nearestPlayerMeters) + string.Format(
+						" destination=%1 relocated=%2 action=CONTINUE_BOUNDED_POLLING",
+						hiddenDestination,
+						relocatedMembers));
+				continue;
+			}
+			if (!recentOutwardProgress && mobPresenceMs < hardDeadlineMs &&
+				slot.MarkMobEgressDeadlineDeferredReported())
+			{
+				int retryRemainingHardMs = Math.Max(0, hardDeadlineMs - mobPresenceMs);
+				AICF_Stage35Diagnostics.Warning(
+					"MOB_EGRESS_DEADLINE_DEFERRED",
+					string.Format(
+						"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 mob_presence_ms=%5 egress_deadline_ms=%6 hard_deadline_ms=%7 remaining_hard_ms=%8",
+						faction.GetFactionKey(),
+						slot.GetSlotKey(),
+						slot.GetSlotId(),
+						slot.GetSpawnGeneration(),
+						mobPresenceMs,
+						egressDeadlineMs,
+						hardDeadlineMs,
+						retryRemainingHardMs) + string.Format(
+						" player_clearance=NOT_EVALUATED_RETRY_BACKOFF los_clearance=NOT_EVALUATED_RETRY_BACKOFF combat_clearance=NOT_EVALUATED_RETRY_BACKOFF progress=STALLED outward_progress_age_ms=%1 defer_reason=HIDDEN_RECOVERY_RETRY_BACKOFF",
+						outwardProgressAgeMs));
+			}
+
+			if (mobPresenceMs < hardDeadlineMs ||
 				!slot.MarkUnexplainedMobIdleDeadlineReported())
 			{
 				continue;
@@ -1383,7 +1610,7 @@ class AICF_MatchController
 				AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
 				mobPresenceMs,
 				commanderMotionAgeMs,
-				2 * m_Config.GetCommanderIntervalMs(),
+				hardDeadlineMs,
 				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
 				slot.GetWaypoint() != null);
 			mobEgressLine += string.Format(
@@ -1391,7 +1618,11 @@ class AICF_MatchController
 				vehicleState,
 				atMob,
 				meaningfulTask,
-				allowedIdleReason);
+				allowedIdleReason) + string.Format(
+				" outward_progress_age_ms=%1 best_distance_to_mob_m=%2 last_hidden_rejection=%3 recovery_policy=SOFT_NUDGE_THEN_HIDDEN_THEN_HARD_DEADLINE",
+				outwardProgressAgeMs,
+				slot.GetMobEgressBestDistanceFromMob(),
+				slot.GetMobEgressLastHiddenRecoveryRejection());
 			AICF_Stage35Diagnostics.Error("MOB_EGRESS_DEADLINE_MISSED", mobEgressLine);
 		}
 	}
@@ -1412,6 +1643,473 @@ class AICF_MatchController
 			return IsWaypointBoundToGroup(slot.GetGroup(), vehicleWaypoint);
 		}
 		return slot.IsPersistentStuckFieldHold();
+	}
+
+	// Last-resort recovery for a group that has made no material outward progress
+	// for a full MOB deadline. It never replaces the group or any roster member.
+	// Every source and destination is fenced against both player entities and LOS,
+	// and the complete mutation is rejected during combat or vehicle transitions.
+	protected bool TryApplyHiddenMobEgressRecovery(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		SCR_CampaignMilitaryBaseComponent mainBase,
+		out vector recoveryDestination,
+		out float nearestPlayerMeters,
+		out int relocatedMembers,
+		out string playerClearance,
+		out string losClearance,
+		out string combatClearance,
+		out string rejectionReason)
+	{
+		recoveryDestination = vector.Zero;
+		nearestPlayerMeters = -1.0;
+		relocatedMembers = 0;
+		playerClearance = "NOT_EVALUATED";
+		losClearance = "NOT_EVALUATED";
+		combatClearance = "NOT_EVALUATED";
+		rejectionReason = string.Empty;
+		if (!Replication.IsServer() || !GetGame() || !slot || !faction || !mainBase ||
+			!mainBase.GetOwner() || !m_Stage3Config.GetHiddenRecoveryEnabled() ||
+			!m_HiddenRecoveryWatchdog)
+		{
+			rejectionReason = "POLICY_OR_AUTHORITY_UNAVAILABLE";
+			return false;
+		}
+
+		SCR_AIGroup group = slot.GetGroup();
+		AIWaypoint expectedWaypoint = slot.GetWaypoint();
+		SCR_CampaignMilitaryBaseComponent expectedTarget = slot.GetTargetBase();
+		int expectedGeneration = slot.GetSpawnGeneration();
+		int expectedAssignmentRevision = slot.GetStrategicAssignmentRevision();
+		if (!group || !expectedWaypoint || !expectedTarget || group.GetFaction() != faction ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(group))
+		{
+			rejectionReason = "GROUP_IDENTITY_OR_AUTHORITY_INVALID";
+			return false;
+		}
+		if (slot.HasPendingOrderRecovery() || (m_VehicleCoordinator &&
+			(m_VehicleCoordinator.IsControllingMovement(slot) ||
+			m_VehicleCoordinator.IsRestorePending(slot))))
+		{
+			rejectionReason = "MOVEMENT_OR_ORDER_OWNERSHIP_ACTIVE";
+			return false;
+		}
+
+		float threatMeasure;
+		bool combatSafe = IsHiddenMobRecoveryCombatSafe(group, threatMeasure);
+		if (!combatSafe)
+		{
+			combatClearance = "BLOCKED";
+			rejectionReason = string.Format("COMBAT_THREAT_%1", threatMeasure);
+			return false;
+		}
+		combatClearance = "CLEAR";
+
+		vector targetPosition;
+		if (!m_OrderPlanner.TryResolveTargetPosition(
+			expectedTarget,
+			slot.GetRole(),
+			targetPosition))
+		{
+			rejectionReason = "TARGET_POSITION_UNAVAILABLE";
+			return false;
+		}
+
+		vector mobOrigin = mainBase.GetOwner().GetOrigin();
+		vector forward = targetPosition - mobOrigin;
+		forward[1] = 0;
+		if (forward.LengthSq() < 0.01)
+		{
+			rejectionReason = "TARGET_DIRECTION_INVALID";
+			return false;
+		}
+		forward.Normalize();
+		vector right = Vector(forward[2], 0, -forward[0]);
+		vector recoveryCenter = mobOrigin +
+			forward * MOB_EGRESS_HIDDEN_FORWARD_METERS;
+		recoveryDestination = recoveryCenter;
+
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		if (agents.IsEmpty() || agents.Count() != AICF_GroupRuntime.CountAliveAgents(group))
+		{
+			rejectionReason = "ROSTER_NOT_FULLY_ALIVE";
+			return false;
+		}
+
+		array<AIAgent> relocationAgents = {};
+		array<ChimeraCharacter> characters = {};
+		array<vector> beforeOrigins = {};
+		array<vector> destinations = {};
+		float hiddenRadiusMeters = m_Stage3Config.GetHiddenRecoveryPlayerRadiusMeters();
+		for (int memberIndex; memberIndex < agents.Count(); memberIndex++)
+		{
+			AIAgent agent = agents[memberIndex];
+			ChimeraCharacter character;
+			if (agent)
+				character = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			FactionAffiliationComponent affiliation;
+			Faction memberFaction;
+			if (character)
+			{
+				affiliation = FactionAffiliationComponent.Cast(
+					character.FindComponent(FactionAffiliationComponent));
+				if (affiliation)
+					memberFaction = affiliation.GetAffiliatedFaction();
+			}
+			if (!agent || agent.GetParentGroup() != group || !character ||
+				!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(character) ||
+				!memberFaction || memberFaction.GetFactionKey() != faction.GetFactionKey())
+			{
+				rejectionReason = string.Format("MEMBER_IDENTITY_INVALID_%1", memberIndex);
+				return false;
+			}
+
+			CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+			if (character.IsInVehicle() || CompartmentAccessComponent.GetVehicleIn(character) ||
+				(access && (access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut())))
+			{
+				rejectionReason = string.Format("MEMBER_VEHICLE_TRANSITION_%1", memberIndex);
+				return false;
+			}
+			vector memberOrigin = character.GetOrigin();
+			if (vector.DistanceXZ(memberOrigin, mobOrigin) >
+				STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
+			{
+				continue;
+			}
+
+			int relocationIndex = relocationAgents.Count();
+			int row = relocationIndex / 3;
+			int column = relocationIndex % 3;
+			vector searchCenter = recoveryCenter +
+				right * ((column - 1) * MOB_EGRESS_HIDDEN_SPACING_METERS) -
+				forward * (row * MOB_EGRESS_HIDDEN_SPACING_METERS);
+			vector destination;
+			if (!SCR_WorldTools.FindEmptyTerrainPosition(
+				destination,
+				searchCenter,
+				MOB_EGRESS_HIDDEN_SEARCH_RADIUS_METERS,
+				0.75,
+				2.0,
+				TraceFlags.ENTS | TraceFlags.OCEAN,
+				group.GetWorld()) ||
+				ChimeraWorldUtils.TryGetWaterSurfaceSimple(group.GetWorld(), destination))
+			{
+				rejectionReason = string.Format("SAFE_TERRAIN_UNAVAILABLE_%1", memberIndex);
+				return false;
+			}
+			if (vector.DistanceXZ(destination, mobOrigin) <= STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
+			{
+				rejectionReason = string.Format("DESTINATION_INSIDE_MOB_%1", memberIndex);
+				return false;
+			}
+			foreach (vector reservedDestination : destinations)
+			{
+				if (vector.DistanceSqXZ(destination, reservedDestination) < 2.25)
+				{
+					rejectionReason = string.Format("DESTINATION_OVERLAP_%1", memberIndex);
+					return false;
+				}
+			}
+
+			float memberNearestPlayerMeters;
+			string playerFenceReason;
+			if (!m_HiddenRecoveryWatchdog.CanApplyHiddenRecovery(
+				memberOrigin,
+				destination,
+				hiddenRadiusMeters,
+				memberNearestPlayerMeters,
+				playerFenceReason))
+			{
+				nearestPlayerMeters = memberNearestPlayerMeters;
+				if (playerFenceReason.Contains("NEARBY"))
+				{
+					playerClearance = "BLOCKED";
+					losClearance = "NOT_EVALUATED";
+				}
+				else if (playerFenceReason.Contains("LINE_OF_SIGHT"))
+				{
+					playerClearance = "CLEAR";
+					losClearance = "BLOCKED";
+				}
+				else
+				{
+					playerClearance = "UNKNOWN";
+					losClearance = "UNKNOWN";
+				}
+				rejectionReason = string.Format(
+					"PLAYER_FENCE_%1_MEMBER_%2",
+					playerFenceReason,
+					memberIndex);
+				return false;
+			}
+			if (memberNearestPlayerMeters >= 0 &&
+				(nearestPlayerMeters < 0 || memberNearestPlayerMeters < nearestPlayerMeters))
+			{
+				nearestPlayerMeters = memberNearestPlayerMeters;
+			}
+			playerClearance = "CLEAR";
+			losClearance = "CLEAR";
+			relocationAgents.Insert(agent);
+			characters.Insert(character);
+			beforeOrigins.Insert(memberOrigin);
+			destinations.Insert(destination);
+		}
+		if (characters.IsEmpty())
+		{
+			playerClearance = "NOT_REQUIRED";
+			losClearance = "NOT_REQUIRED";
+			rejectionReason = "NO_MEMBERS_INSIDE_MOB";
+			return false;
+		}
+
+		// Revalidate every immutable identity and all visibility/combat fences at the
+		// commit boundary. The preflight above may have yielded several frames.
+		array<AIAgent> commitRoster = {};
+		group.GetAgents(commitRoster);
+		if (slot.GetGroup() != group || slot.GetWaypoint() != expectedWaypoint ||
+			slot.GetTargetBase() != expectedTarget ||
+			slot.GetSpawnGeneration() != expectedGeneration ||
+			slot.GetStrategicAssignmentRevision() != expectedAssignmentRevision ||
+			commitRoster.Count() != agents.Count() ||
+			!IsHiddenMobRecoveryCombatSafe(group, threatMeasure))
+		{
+			combatClearance = "BLOCKED_OR_CONTEXT_CHANGED";
+			rejectionReason = "COMMIT_CONTEXT_CHANGED";
+			return false;
+		}
+		combatClearance = "CLEAR";
+		for (int rosterIndex; rosterIndex < agents.Count(); rosterIndex++)
+		{
+			if (!commitRoster.Contains(agents[rosterIndex]))
+			{
+				rejectionReason = string.Format("COMMIT_ROSTER_CHANGED_%1", rosterIndex);
+				return false;
+			}
+		}
+		for (int commitIndex; commitIndex < characters.Count(); commitIndex++)
+		{
+			ChimeraCharacter commitCharacter = characters[commitIndex];
+			if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(commitCharacter) ||
+				relocationAgents[commitIndex].GetParentGroup() != group ||
+				relocationAgents[commitIndex].GetControlledEntity() != commitCharacter)
+			{
+				rejectionReason = string.Format("COMMIT_MEMBER_CHANGED_%1", commitIndex);
+				return false;
+			}
+			vector commitOrigin = commitCharacter.GetOrigin();
+			if (vector.DistanceXZ(commitOrigin, mobOrigin) >
+				STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
+			{
+				rejectionReason = string.Format("COMMIT_MEMBER_LEFT_MOB_%1", commitIndex);
+				return false;
+			}
+			float commitNearestPlayerMeters;
+			string commitFenceReason;
+			if (!m_HiddenRecoveryWatchdog.CanApplyHiddenRecovery(
+				commitOrigin,
+				destinations[commitIndex],
+				hiddenRadiusMeters,
+				commitNearestPlayerMeters,
+				commitFenceReason))
+			{
+				nearestPlayerMeters = commitNearestPlayerMeters;
+				if (commitFenceReason.Contains("NEARBY"))
+				{
+					playerClearance = "BLOCKED";
+					losClearance = "NOT_EVALUATED";
+				}
+				else if (commitFenceReason.Contains("LINE_OF_SIGHT"))
+				{
+					playerClearance = "CLEAR";
+					losClearance = "BLOCKED";
+				}
+				else
+				{
+					playerClearance = "UNKNOWN";
+					losClearance = "UNKNOWN";
+				}
+				rejectionReason = string.Format(
+					"COMMIT_PLAYER_FENCE_%1_MEMBER_%2",
+					commitFenceReason,
+					commitIndex);
+				return false;
+			}
+			beforeOrigins[commitIndex] = commitOrigin;
+		}
+
+		AICF_Stage35Diagnostics.Warning(
+			"MOB_EGRESS_HIDDEN_RECOVERY_ATTEMPTED",
+			string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 assignment_revision=%5 group=%6 waypoint=%7 target=%8 total_members=%9",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetSlotId(),
+				expectedGeneration,
+				expectedAssignmentRevision,
+				GroupKey(group),
+				expectedWaypoint.GetID(),
+				AICF_Stage1Diagnostics.BaseKey(expectedTarget),
+				agents.Count()) + string.Format(
+				" inside_members=%1 relocation_candidates=%2 destination=%3 nearest_player_m=%4 hidden_radius_m=%5 threat=%6 identity_preserved=1 roster_recreated=0",
+				characters.Count(),
+				characters.Count(),
+				recoveryCenter,
+				nearestPlayerMeters,
+				hiddenRadiusMeters,
+				threatMeasure));
+
+		int exactMemberPostconditions;
+		// From this point onward the episode owns a side effect. Even a partial
+		// postcondition must not be followed by another hidden teleport attempt.
+		slot.MarkMobEgressHiddenMutationConsumed();
+		for (int relocateIndex; relocateIndex < characters.Count(); relocateIndex++)
+		{
+			vector transform[4];
+			characters[relocateIndex].GetWorldTransform(transform);
+			transform[3] = destinations[relocateIndex];
+			characters[relocateIndex].Teleport(transform);
+			relocatedMembers++;
+			vector afterOrigin = characters[relocateIndex].GetOrigin();
+			bool outsideMob = vector.DistanceXZ(afterOrigin, mobOrigin) >
+				STUCK_WATCHDOG_IGNORE_RADIUS_METERS;
+			bool destinationExact = vector.DistanceXZ(
+				afterOrigin,
+				destinations[relocateIndex]) <= 2.0;
+			bool identityExact = relocationAgents[relocateIndex].GetParentGroup() == group &&
+				relocationAgents[relocateIndex].GetControlledEntity() == characters[relocateIndex];
+			if (outsideMob && destinationExact && identityExact)
+				exactMemberPostconditions++;
+			AICF_Stage35Diagnostics.Info(
+				"MOB_EGRESS_HIDDEN_RECOVERY_MEMBER",
+				string.Format(
+					"faction=%1 slot=%2 member_index=%3 entity=%4 before=%5 destination=%6 after=%7",
+					faction.GetFactionKey(),
+					slot.GetSlotKey(),
+					relocateIndex,
+					characters[relocateIndex].GetID(),
+					beforeOrigins[relocateIndex],
+					destinations[relocateIndex],
+					afterOrigin) + string.Format(
+					" outside_mob=%1 destination_exact=%2 identity_exact=%3",
+					outsideMob,
+					destinationExact,
+					identityExact));
+		}
+		int allMembersOutsideCount;
+		bool allMembersOutsideMob = true;
+		for (int allMemberIndex; allMemberIndex < agents.Count(); allMemberIndex++)
+		{
+			AIAgent originalAgent = agents[allMemberIndex];
+			ChimeraCharacter originalCharacter;
+			if (originalAgent)
+				originalCharacter = ChimeraCharacter.Cast(originalAgent.GetControlledEntity());
+			bool originalIdentityExact = originalAgent && originalCharacter &&
+				originalAgent.GetParentGroup() == group;
+			bool originalMemberOutside = originalIdentityExact &&
+				vector.DistanceXZ(originalCharacter.GetOrigin(), mobOrigin) >
+				STUCK_WATCHDOG_IGNORE_RADIUS_METERS;
+			if (originalMemberOutside)
+				allMembersOutsideCount++;
+			else
+				allMembersOutsideMob = false;
+		}
+		bool normalized = m_GroupCohesionPolicy &&
+			m_GroupCohesionPolicy.NormalizeAfterMovementFailure(group);
+		bool orderRebuilt = m_OrderPlanner.RebuildCurrentOrder(
+			slot,
+			faction,
+			"MOB_EGRESS_HIDDEN_RECOVERY");
+
+		bool postcondition = relocatedMembers == characters.Count() &&
+			exactMemberPostconditions == characters.Count() && orderRebuilt &&
+			allMembersOutsideMob && allMembersOutsideCount == agents.Count() &&
+			slot.GetGroup() == group && slot.GetSpawnGeneration() == expectedGeneration &&
+			slot.GetStrategicAssignmentRevision() == expectedAssignmentRevision &&
+			IsWaypointBoundToGroup(group, slot.GetWaypoint());
+		AICF_Stage35Diagnostics.Info(
+			"MOB_EGRESS_HIDDEN_RECOVERY_VERIFIED",
+			string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 assignment_revision=%5 group=%6 target=%7 total_members=%8 inside_members=%9",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetSlotId(),
+				expectedGeneration,
+				expectedAssignmentRevision,
+				GroupKey(group),
+				AICF_Stage1Diagnostics.BaseKey(expectedTarget),
+				agents.Count(),
+				characters.Count()) + string.Format(
+				" relocated=%1 exact_member_postconditions=%2 all_members_outside_mob=%3 all_members_outside_count=%4 normalized=%5 order_rebuilt=%6 waypoint_bound=%7 postcondition_exact=%8 identity_preserved=1",
+				relocatedMembers,
+				exactMemberPostconditions,
+				allMembersOutsideMob,
+				allMembersOutsideCount,
+				normalized,
+				orderRebuilt,
+				IsWaypointBoundToGroup(group, slot.GetWaypoint()),
+				postcondition));
+		if (!postcondition)
+		{
+			rejectionReason = "POSTCONDITION_FAILED";
+			AICF_Stage35Diagnostics.Error(
+				"MOB_EGRESS_HIDDEN_RECOVERY_PARTIAL",
+				string.Format(
+					"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 assignment_revision=%5 total_members=%6 inside_members=%7 relocated=%8 exact_member_postconditions=%9",
+					faction.GetFactionKey(),
+					slot.GetSlotKey(),
+					slot.GetSlotId(),
+					expectedGeneration,
+					expectedAssignmentRevision,
+					agents.Count(),
+					characters.Count(),
+					relocatedMembers,
+					exactMemberPostconditions) + string.Format(
+					" all_members_outside_mob=%1 all_members_outside_count=%2 order_rebuilt=%3 waypoint_bound=%4 outcome=PARTIAL terminal=1 acceptance=FAIL next_action=HARD_DEADLINE_AUDIT",
+					allMembersOutsideMob,
+					allMembersOutsideCount,
+					orderRebuilt,
+					IsWaypointBoundToGroup(group, slot.GetWaypoint())));
+			return false;
+		}
+
+		AICF_Stage35Diagnostics.Info(
+			"MOB_EGRESS_HIDDEN_RECOVERY_COMMITTED",
+			string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 assignment_revision=%5 group=%6 target=%7 total_members=%8 inside_members=%9",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetSlotId(),
+				expectedGeneration,
+				expectedAssignmentRevision,
+				GroupKey(group),
+				AICF_Stage1Diagnostics.BaseKey(expectedTarget),
+				agents.Count(),
+				characters.Count()) + string.Format(
+				" relocated=%1 exact_member_postconditions=%2 all_members_outside_mob=%3 all_members_outside_count=%4 postcondition_exact=1 terminal=1 identity_preserved=1 roster_recreated=0",
+				relocatedMembers,
+				exactMemberPostconditions,
+				allMembersOutsideMob,
+				allMembersOutsideCount));
+		return true;
+	}
+
+	protected bool IsHiddenMobRecoveryCombatSafe(
+		SCR_AIGroup group,
+		out float threatMeasure)
+	{
+		threatMeasure = -1.0;
+		if (!group)
+			return false;
+
+		SCR_AIGroupUtilityComponent utility = SCR_AIGroupUtilityComponent.Cast(
+			group.FindComponent(SCR_AIGroupUtilityComponent));
+		if (!utility)
+			return false;
+
+		threatMeasure = utility.GetThreatMeasure();
+		return threatMeasure <= MOB_EGRESS_MAX_THREAT_MEASURE;
 	}
 
 	protected bool IsWaypointBoundToGroup(SCR_AIGroup group, AIWaypoint waypoint)
@@ -1483,6 +2181,11 @@ class AICF_MatchController
 			{
 				if (m_OrderPlanner.IsStrategicTargetValid(slot, faction, slot.GetTargetBase()))
 				{
+					if (slot.IsOrderReliabilityRepairFailureBudgetExhausted(
+						ORDER_RELIABILITY_REPAIR_FAILURE_BUDGET))
+					{
+						continue;
+					}
 					if (!slot.IsPersistentStuckFieldHoldRetryDue(m_Stage2Config.GetStuckTimeoutMs()))
 						continue;
 					slot.ResumeFromPersistentStuckFieldHold();
@@ -1530,7 +2233,7 @@ class AICF_MatchController
 
 			if (failureReason != "TARGET_INVALID")
 			{
-				TryRecoverOrder(slot, faction, failureReason);
+				TryRecoverOrder(factionState, slot, faction, failureReason);
 				continue;
 			}
 
@@ -1609,15 +2312,21 @@ class AICF_MatchController
 				m_VehicleCoordinator.IsRestorePending(slot)))
 				continue;
 
+			if (slot.HasPendingOrderRecovery())
+			{
+				// A relay capture by this exact group/target/revision is stronger terminal
+				// evidence than the generic waypoint durability window. Account it before
+				// OnBaseFactionChanged schedules a graph replan that supersedes the waypoint.
+				if (TryConfirmPendingOrderRecoveryByRelayCapture(slot, faction))
+					continue;
+				ProcessPendingOrderRecovery(factionState, slot, faction);
+				continue;
+			}
+
 			// Relay waypoints complete through a stock smart action. Keep the existing
 			// authority fallback active in the more frequent reliability pass as well.
 			if (TryCaptureArrivedRelay(slot, faction))
 				continue;
-			if (slot.HasPendingOrderRecovery())
-			{
-				ProcessPendingOrderRecovery(factionState, slot, faction);
-				continue;
-			}
 
 			// Long-range ATTACK travel is a durable Move order. Only after the
 			// group reaches the local objective envelope may the planner start the
@@ -1639,7 +2348,7 @@ class AICF_MatchController
 				if (TryHoldCompletedOrderAtObjective(slot, faction, failureReason))
 					continue;
 
-				TryRecoverOrder(slot, faction, failureReason);
+				TryRecoverOrder(factionState, slot, faction, failureReason);
 				continue;
 			}
 
@@ -1722,6 +2431,104 @@ class AICF_MatchController
 		return true;
 	}
 
+	protected bool TryConfirmPendingOrderRecoveryByRelayCapture(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction)
+	{
+		if (!slot || !faction || !slot.HasPendingOrderRecovery() ||
+			slot.GetRole() != AICF_EGroupRole.ATTACK ||
+			!slot.IsPendingOrderRecoveryContextCurrent())
+		{
+			return false;
+		}
+
+		SCR_AIGroup expectedGroup = slot.GetPendingOrderRecoveryGroup();
+		SCR_CampaignMilitaryBaseComponent expectedTarget =
+			slot.GetPendingOrderRecoveryTargetBase();
+		AIWaypoint expectedWaypoint = slot.GetPendingOrderRecoveryWaypoint();
+		int expectedAssignmentRevision =
+			slot.GetPendingOrderRecoveryAssignmentRevision();
+		int expectedGroupGeneration =
+			slot.GetPendingOrderRecoveryGroupGeneration();
+		if (!expectedTarget || expectedTarget.GetType() != SCR_ECampaignBaseType.RELAY ||
+			!SCR_SmartActionWaypoint.Cast(expectedWaypoint))
+		{
+			return false;
+		}
+
+		if (!TryCaptureArrivedRelay(slot, faction))
+			return false;
+
+		bool exactProof = slot.HasPendingOrderRecovery() &&
+			slot.GetGroup() == expectedGroup &&
+			slot.GetTargetBase() == expectedTarget &&
+			slot.GetWaypoint() == expectedWaypoint &&
+			slot.GetSpawnGeneration() == expectedGroupGeneration &&
+			slot.GetStrategicAssignmentRevision() == expectedAssignmentRevision &&
+			expectedTarget.GetFaction() == faction;
+		if (!exactProof)
+		{
+			AICF_Stage2Diagnostics.Warning(
+				"ORDER_RECOVERY_RELAY_CAPTURE_PROOF_REJECTED",
+				string.Format(
+					"faction=%1 slot=%2 target=%3 expected_revision=%4 current_revision=%5 expected_generation=%6 current_generation=%7 action=SUPERSEDE",
+					faction.GetFactionKey(),
+					slot.GetSlotId(),
+					AICF_Stage1Diagnostics.BaseKey(expectedTarget),
+					expectedAssignmentRevision,
+					slot.GetStrategicAssignmentRevision(),
+					expectedGroupGeneration,
+					slot.GetSpawnGeneration()));
+			SupersedePendingOrderRecovery(
+				slot,
+				faction,
+				"RELAY_CAPTURE_EXACT_PROOF_REJECTED");
+			return true;
+		}
+
+		bool countsAsReliabilityRepair =
+			slot.PendingOrderRecoveryCountsAsReliabilityAttempt();
+		bool alreadyCountsAsStuck = slot.PendingOrderRecoveryCountsAsStuckRecovery();
+		int attemptId = slot.GetPendingOrderRecoveryReliabilityAttemptId();
+		int candidateMs = slot.GetPendingOrderRecoveryElapsedMs();
+		string originalCause = slot.GetPendingOrderRecoveryCause();
+		string completionEvent = "ORDER_BINDING_STABLE";
+		if (countsAsReliabilityRepair)
+		{
+			RecordPendingOrderRepairTerminal(
+				slot,
+				faction,
+				"CONFIRMED",
+				"TARGET_COMPLETED",
+				"RELAY_CAPTURED_BY_AI");
+			completionEvent = "ORDER_RECOVERED";
+		}
+		else if (!alreadyCountsAsStuck)
+		{
+			m_iOrderBindingVerifications++;
+		}
+
+		AICF_Stage2Diagnostics.Info(
+			completionEvent,
+			string.Format(
+				"faction=%1 slot=%2 cause=%3 target=%4 waypoint=%5 attempt_id=%6 verification_kind=%7 confirmation_basis=RELAY_CAPTURED_BY_AI",
+				faction.GetFactionKey(),
+				slot.GetSlotId(),
+				originalCause,
+				AICF_Stage1Diagnostics.BaseKey(expectedTarget),
+				expectedWaypoint.GetID(),
+				attemptId,
+				DescribePendingOrderVerificationKind(
+					countsAsReliabilityRepair,
+					alreadyCountsAsStuck)) + string.Format(
+				" candidate_ms=%1 assignment_revision=%2 group_generation=%3 exact_target_revision_proof=1",
+				candidateMs,
+				expectedAssignmentRevision,
+				expectedGroupGeneration));
+		slot.ClearPendingOrderRecovery();
+		return true;
+	}
+
 	protected void ProcessPendingOrderRecovery(
 		AICF_FactionState factionState,
 		AICF_GroupSlot slot,
@@ -1733,19 +2540,32 @@ class AICF_MatchController
 		bool countsAsReliabilityRepair =
 			slot.PendingOrderRecoveryCountsAsReliabilityAttempt();
 		bool alreadyCountsAsStuck = slot.PendingOrderRecoveryCountsAsStuckRecovery();
+		int repairAttemptId = slot.GetPendingOrderRecoveryReliabilityAttemptId();
 		if (!slot.IsPendingOrderRecoveryContextCurrent())
 		{
-			RecordPendingOrderVerificationFailure(slot);
+			RecordPendingOrderVerificationFailure(
+				slot,
+				faction,
+				"CONTEXT_SUPERSEDED");
 			AICF_Stage2Diagnostics.Warning(
 				"ORDER_BINDING_VERIFICATION_ABORTED",
 				string.Format(
-					"faction=%1 slot=%2 reason=CONTEXT_SUPERSEDED verification_kind=%3",
+					"faction=%1 slot=%2 reason=CONTEXT_SUPERSEDED verification_kind=%3 attempt_id=%4",
 					faction.GetFactionKey(),
 					slot.GetSlotId(),
 					DescribePendingOrderVerificationKind(
 						countsAsReliabilityRepair,
-						alreadyCountsAsStuck)));
+						alreadyCountsAsStuck),
+					repairAttemptId));
 			slot.ClearPendingOrderRecovery();
+			if (countsAsReliabilityRepair)
+			{
+				ApplyOrderReliabilityRepairBudgetFallback(
+					factionState,
+					slot,
+					faction,
+					"CONTEXT_SUPERSEDED");
+			}
 			return;
 		}
 
@@ -1754,21 +2574,41 @@ class AICF_MatchController
 		AIWaypoint expectedWaypoint = slot.GetPendingOrderRecoveryWaypoint();
 		string originalCause = slot.GetPendingOrderRecoveryCause();
 		int lifetimeMs = slot.GetPendingOrderRecoveryElapsedMs();
+		string terminalOutcome = slot.GetOwnedWaypointTerminalOutcome(expectedWaypoint);
+		string terminalOutcomeDetails = terminalOutcome;
+		if (terminalOutcomeDetails.IsEmpty())
+			terminalOutcomeDetails = "NONE";
+		int terminalAgeMs = slot.GetOwnedWaypointTerminalAgeMs(expectedWaypoint);
+		string terminalProvenance = "UNOBSERVED";
+		if (!terminalOutcome.IsEmpty())
+			terminalProvenance = "GROUP_CALLBACK";
 		string failureReason = m_OrderPlanner.GetOrderFailureReason(slot, faction);
 		if (failureReason == "TARGET_INVALID")
 		{
-			RecordPendingOrderVerificationFailure(slot);
+			RecordPendingOrderVerificationFailure(
+				slot,
+				faction,
+				"TARGET_INVALID");
 			AICF_Stage2Diagnostics.Warning(
 				"ORDER_BINDING_VERIFICATION_ABORTED",
 				string.Format(
-					"faction=%1 slot=%2 reason=TARGET_INVALID verification_kind=%3 candidate_ms=%4",
+					"faction=%1 slot=%2 reason=TARGET_INVALID verification_kind=%3 candidate_ms=%4 attempt_id=%5",
 					faction.GetFactionKey(),
 					slot.GetSlotId(),
 					DescribePendingOrderVerificationKind(
 						countsAsReliabilityRepair,
 						alreadyCountsAsStuck),
-					lifetimeMs));
+					lifetimeMs,
+					repairAttemptId));
 			slot.ClearPendingOrderRecovery();
+			if (countsAsReliabilityRepair)
+			{
+				ApplyOrderReliabilityRepairBudgetFallback(
+					factionState,
+					slot,
+					faction,
+					"TARGET_INVALID");
+			}
 			return;
 		}
 
@@ -1803,7 +2643,7 @@ class AICF_MatchController
 					requiredStablePolls,
 					stableMs);
 				stabilityDetails += string.Format(
-					" required_stable_ms=%1 candidate_ms=%2 tracked_in_queue=%3 queue_count=%4 durable=%5 state=DURABILITY_SAMPLE verification_kind=%6",
+					" required_stable_ms=%1 candidate_ms=%2 tracked_in_queue=%3 queue_count=%4 durable=%5 state=DURABILITY_SAMPLE verification_kind=%6 attempt_id=%7",
 					requiredStableMs,
 					lifetimeMs,
 					trackedInQueue,
@@ -1811,7 +2651,8 @@ class AICF_MatchController
 					durabilitySatisfied,
 					DescribePendingOrderVerificationKind(
 						countsAsReliabilityRepair,
-						alreadyCountsAsStuck));
+						alreadyCountsAsStuck),
+					repairAttemptId);
 				AICF_Stage2Diagnostics.Info("ORDER_RECOVERY_STABILITY", stabilityDetails);
 			}
 
@@ -1819,14 +2660,18 @@ class AICF_MatchController
 				return;
 
 			string confirmedWaypointId = string.Format("%1", expectedWaypoint.GetID());
-			slot.ClearPendingOrderRecovery();
 			string verificationKind = DescribePendingOrderVerificationKind(
 				countsAsReliabilityRepair,
 				alreadyCountsAsStuck);
 			string confirmationEvent = "ORDER_BINDING_STABLE";
 			if (countsAsReliabilityRepair)
 			{
-				m_iOrderRecoveries++;
+				RecordPendingOrderRepairTerminal(
+					slot,
+					faction,
+					"CONFIRMED",
+					"DURABILITY_CONFIRMED",
+					"DURABILITY_WINDOW");
 				confirmationEvent = "ORDER_RECOVERED";
 			}
 			else if (!alreadyCountsAsStuck)
@@ -1844,22 +2689,40 @@ class AICF_MatchController
 					stablePolls,
 					stableMs);
 			recoveredDetails += string.Format(
-				" required_stable_ms=%1 candidate_ms=%2 verification_kind=%3 counts_as_reliability_repair=%4 counts_as_stuck=%5",
-					requiredStableMs,
-					lifetimeMs,
-					verificationKind,
-					countsAsReliabilityRepair,
-					alreadyCountsAsStuck);
+				" required_stable_ms=%1 candidate_ms=%2 verification_kind=%3 counts_as_reliability_repair=%4 counts_as_stuck=%5 attempt_id=%6",
+				requiredStableMs,
+				lifetimeMs,
+				verificationKind,
+				countsAsReliabilityRepair,
+				alreadyCountsAsStuck,
+				repairAttemptId);
 			AICF_Stage2Diagnostics.Info(confirmationEvent, recoveredDetails);
+			slot.ClearPendingOrderRecovery();
 			return;
 		}
 
-		if (TryHoldCompletedOrderAtObjective(slot, faction, failureReason))
+		// Proximity is confirmation only after the stock group explicitly reports
+		// completion for this exact waypoint. A removed or unobserved waypoint at the
+		// objective remains a failed durability candidate.
+		if (terminalOutcome == "GROUP_CALLBACK_COMPLETED" &&
+			TryHoldCompletedOrderAtObjective(slot, faction, failureReason))
 		{
+			string completionReason = "TARGET_COMPLETED";
+			string confirmationBasis = "COMPLETED_AT_OBJECTIVE";
+			if (terminalOutcome == "GROUP_CALLBACK_COMPLETED")
+			{
+				completionReason = "WAYPOINT_COMPLETED";
+				confirmationBasis = "GROUP_CALLBACK_COMPLETED";
+			}
 			string completionEvent = "ORDER_BINDING_STABLE";
 			if (countsAsReliabilityRepair)
 			{
-				m_iOrderRecoveries++;
+				RecordPendingOrderRepairTerminal(
+					slot,
+					faction,
+					"CONFIRMED",
+					completionReason,
+					confirmationBasis);
 				completionEvent = "ORDER_RECOVERED";
 			}
 			else if (!alreadyCountsAsStuck)
@@ -1869,7 +2732,7 @@ class AICF_MatchController
 			AICF_Stage2Diagnostics.Info(
 				completionEvent,
 				string.Format(
-					"faction=%1 slot=%2 cause=%3 target=%4 verification_kind=%5 confirmation_basis=COMPLETED_AT_OBJECTIVE candidate_ms=%6",
+					"faction=%1 slot=%2 cause=%3 target=%4 verification_kind=%5 confirmation_basis=%6 candidate_ms=%7 attempt_id=%8",
 					faction.GetFactionKey(),
 					slot.GetSlotId(),
 					originalCause,
@@ -1877,9 +2740,26 @@ class AICF_MatchController
 					DescribePendingOrderVerificationKind(
 						countsAsReliabilityRepair,
 						alreadyCountsAsStuck),
-					lifetimeMs));
+					confirmationBasis,
+					lifetimeMs,
+					repairAttemptId) + string.Format(
+					" terminal_outcome=%1 terminal_provenance=%2 terminal_age_ms=%3",
+					terminalOutcomeDetails,
+					terminalProvenance,
+					terminalAgeMs));
 			slot.ClearPendingOrderRecovery();
 			return;
+		}
+
+		string verificationFailureReason = failureReason;
+		if (failureReason == "WAYPOINT_NOT_CURRENT")
+		{
+			if (terminalOutcome == "GROUP_CALLBACK_COMPLETED")
+				verificationFailureReason = "WAYPOINT_COMPLETED_OUTSIDE_OBJECTIVE";
+			else if (terminalOutcome == "GROUP_CALLBACK_REMOVED")
+				verificationFailureReason = "WAYPOINT_REMOVED_CALLBACK";
+			else if (terminalOutcome.IsEmpty())
+				verificationFailureReason = "WAYPOINT_TERMINAL_UNOBSERVED";
 		}
 
 		string expectedWaypointId = string.Format("%1", expectedWaypoint.GetID());
@@ -1927,15 +2807,25 @@ class AICF_MatchController
 			stablePollsBeforeFailure,
 			stableMsBeforeFailure);
 		unstableDetails += string.Format(
-			" attempt=%1 already_counted_as_stuck=%2 counts_as_reliability_repair=%3 verification_kind=%4",
+			" attempt=%1 already_counted_as_stuck=%2 counts_as_reliability_repair=%3 verification_kind=%4 attempt_id=%5",
 			recoveryAttempt,
 			alreadyCountsAsStuck,
 			countsAsReliabilityRepair,
 			DescribePendingOrderVerificationKind(
 				countsAsReliabilityRepair,
-				alreadyCountsAsStuck));
+				alreadyCountsAsStuck),
+			repairAttemptId);
+		unstableDetails += string.Format(
+			" classified_failure=%1 terminal_outcome=%2 terminal_provenance=%3 terminal_age_ms=%4",
+			verificationFailureReason,
+			terminalOutcomeDetails,
+			terminalProvenance,
+			terminalAgeMs);
 		AICF_Stage2Diagnostics.Warning("ORDER_RECOVERY_UNSTABLE", unstableDetails);
-		RecordPendingOrderVerificationFailure(slot);
+		RecordPendingOrderVerificationFailure(
+			slot,
+			faction,
+			verificationFailureReason);
 
 		if (alreadyCountsAsStuck && slot.HasPendingStuckRecoveryEvidence())
 		{
@@ -1956,32 +2846,255 @@ class AICF_MatchController
 		}
 
 		slot.ClearPendingOrderRecovery();
-		if (!alreadyCountsAsStuck)
+		bool consumesStuckBudget = !alreadyCountsAsStuck && !countsAsReliabilityRepair;
+		if (consumesStuckBudget)
 		{
-			// An unstable recovery candidate is a binding failure, not another
-			// physical stuck detection. It still consumes the bounded per-slot
-			// recovery budget, while GROUP_STUCK_DETECTED owns the global counter.
+			// Vehicle-handoff binding still uses the bounded per-slot budget. A
+			// reliability repair is a waypoint-lifecycle outcome, not evidence that
+			// the group itself is physically stuck; MonitorGroupProgress owns that
+			// independent classification and budget.
 			slot.RecordStuckRecovery(distanceMeters);
 		}
 
-		if (slot.GetStuckRecoveryCount() >= m_Stage2Config.GetMaxStuckRecoveries())
+		bool enforceStuckBudget = alreadyCountsAsStuck || consumesStuckBudget;
+		if (enforceStuckBudget &&
+			slot.GetStuckRecoveryCount() >= m_Stage2Config.GetMaxStuckRecoveries())
 		{
 			HoldPersistentStuckGroup(factionState, faction, slot, target, distanceMeters);
 			return;
 		}
 
-		TryRecoverOrder(slot, faction, failureReason);
+		TryRecoverOrder(factionState, slot, faction, verificationFailureReason);
 	}
 
-	protected void RecordPendingOrderVerificationFailure(AICF_GroupSlot slot)
+	protected void RecordPendingOrderVerificationFailure(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		string reason)
 	{
 		if (!slot || !slot.HasPendingOrderRecovery())
 			return;
 
 		if (slot.PendingOrderRecoveryCountsAsReliabilityAttempt())
-			m_iOrderRecoveryFailures++;
+		{
+			RecordPendingOrderRepairTerminal(
+				slot,
+				faction,
+				"FAILED",
+				reason,
+				"VERIFICATION_REJECTED");
+		}
 		else if (!slot.PendingOrderRecoveryCountsAsStuckRecovery())
 			m_iOrderBindingVerificationFailures++;
+	}
+
+	protected bool RecordPendingOrderRepairTerminal(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		string outcome,
+		string reason,
+		string confirmationBasis)
+	{
+		if (!slot || !slot.HasPendingOrderRecovery() ||
+			!slot.PendingOrderRecoveryCountsAsReliabilityAttempt())
+		{
+			return false;
+		}
+
+		if (outcome == "CONFIRMED")
+			m_iOrderRecoveries++;
+		else if (outcome == "FAILED")
+		{
+			m_iOrderRecoveryFailures++;
+			slot.RecordOrderReliabilityRepairFailure();
+		}
+		else if (outcome == "SUPERSEDED")
+			m_iOrderRecoverySuperseded++;
+		else
+			return false;
+
+		string factionKey = "UNKNOWN";
+		if (faction)
+			factionKey = faction.GetFactionKey();
+		AIWaypoint waypoint = slot.GetPendingOrderRecoveryWaypoint();
+		string waypointId = "NONE";
+		if (waypoint)
+			waypointId = waypoint.GetID().ToString();
+		string terminalDetails = string.Format(
+			"attempt_id=%1 faction=%2 slot=%3 outcome=%4 reason=%5 confirmation_basis=%6 target=%7 waypoint=%8",
+			slot.GetPendingOrderRecoveryReliabilityAttemptId(),
+			factionKey,
+			slot.GetSlotId(),
+			outcome,
+			reason,
+			confirmationBasis,
+			AICF_Stage1Diagnostics.BaseKey(
+				slot.GetPendingOrderRecoveryTargetBase()),
+			waypointId);
+		terminalDetails += string.Format(
+			" candidate_ms=%1 assignment_revision=%2 current_assignment_revision=%3 group_generation=%4 current_group_generation=%5",
+			slot.GetPendingOrderRecoveryElapsedMs(),
+			slot.GetPendingOrderRecoveryAssignmentRevision(),
+			slot.GetStrategicAssignmentRevision(),
+			slot.GetPendingOrderRecoveryGroupGeneration(),
+			slot.GetSpawnGeneration());
+		if (outcome == "FAILED")
+			AICF_Stage2Diagnostics.Warning("ORDER_REPAIR_ATTEMPT_TERMINATED", terminalDetails);
+		else
+			AICF_Stage2Diagnostics.Info("ORDER_REPAIR_ATTEMPT_TERMINATED", terminalDetails);
+		return true;
+	}
+
+	protected void RecordImmediateOrderRepairFailure(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		int attemptId,
+		string reason)
+	{
+		m_iOrderRecoveryFailures++;
+		if (slot)
+			slot.RecordOrderReliabilityRepairFailure();
+		string factionKey = "UNKNOWN";
+		if (faction)
+			factionKey = faction.GetFactionKey();
+		string targetKey = "NONE";
+		string waypointId = "NONE";
+		int assignmentRevision;
+		int groupGeneration;
+		if (slot)
+		{
+			targetKey = AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase());
+			if (slot.GetWaypoint())
+				waypointId = slot.GetWaypoint().GetID().ToString();
+			assignmentRevision = slot.GetStrategicAssignmentRevision();
+			groupGeneration = slot.GetSpawnGeneration();
+		}
+		AICF_Stage2Diagnostics.Warning(
+			"ORDER_REPAIR_ATTEMPT_TERMINATED",
+			string.Format(
+				"attempt_id=%1 faction=%2 slot=%3 outcome=FAILED reason=%4 confirmation_basis=ISSUE_REJECTED target=%5 waypoint=%6 candidate_ms=0 assignment_revision=%7 group_generation=%8",
+				attemptId,
+				factionKey,
+				slot.GetSlotId(),
+				reason,
+				targetKey,
+				waypointId,
+				assignmentRevision,
+				groupGeneration));
+	}
+
+	protected bool ApplyOrderReliabilityRepairBudgetFallback(
+		AICF_FactionState factionState,
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		string trigger)
+	{
+		if (!factionState || !slot || !faction ||
+			!slot.IsOrderReliabilityRepairFailureBudgetExhausted(
+				ORDER_RELIABILITY_REPAIR_FAILURE_BUDGET))
+		{
+			return false;
+		}
+		bool firstExhaustion =
+			slot.MarkOrderReliabilityRepairBudgetExhaustionReported();
+		if (!firstExhaustion)
+			return true;
+
+		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
+		SCR_AIGroup group = slot.GetGroup();
+		string fallbackAction = "WAIT_STRATEGIC_REPLAN";
+		bool fallbackCommitted;
+		if (slot.IsPersistentStuckFieldHold())
+		{
+			fallbackAction = "FIELD_HOLD_ALREADY_ACTIVE";
+			fallbackCommitted = true;
+		}
+		else if (group && target &&
+			m_OrderPlanner.IsStrategicTargetValid(slot, faction, target))
+		{
+			IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
+			if (leader)
+			{
+				fallbackAction = "FIELD_HOLD";
+				if (m_GroupCohesionPolicy)
+					m_GroupCohesionPolicy.NormalizeAfterMovementFailure(group);
+				fallbackCommitted = m_OrderPlanner.HoldPositionForPersistentStuck(
+					slot,
+					faction,
+					target,
+					leader.GetOrigin());
+			}
+			else
+			{
+				fallbackAction = "WAIT_ALIVE_LEADER";
+			}
+		}
+
+		string budgetDetails = string.Format(
+			"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 assignment_revision=%5 failures=%6 budget=%7 trigger=%8",
+			faction.GetFactionKey(),
+			slot.GetSlotKey(),
+			slot.GetSlotId(),
+			slot.GetSpawnGeneration(),
+			slot.GetStrategicAssignmentRevision(),
+			slot.GetOrderReliabilityRepairFailureCount(),
+			ORDER_RELIABILITY_REPAIR_FAILURE_BUDGET,
+			trigger);
+		budgetDetails += string.Format(
+			" budget_domain=RELIABILITY_REPAIR stuck_recovery_count=%1 fallback_action=%2 fallback_committed=%3 repair_retry=BLOCKED_UNTIL_ASSIGNMENT_OR_GENERATION_CHANGE",
+			slot.GetStuckRecoveryCount(),
+			fallbackAction,
+			fallbackCommitted);
+		AICF_Stage2Diagnostics.Warning(
+			"ORDER_REPAIR_FAILURE_BUDGET_EXHAUSTED",
+			budgetDetails);
+		AICF_Stage2Diagnostics.Info(
+			"ORDER_REPAIR_FAILURE_FALLBACK",
+			budgetDetails + " terminal=1 entity_preserved=1 roster_recreated=0");
+		return true;
+	}
+
+	protected void SupersedePendingOrderRecovery(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		string reason)
+	{
+		if (!slot || !slot.HasPendingOrderRecovery())
+			return;
+
+		bool reliabilityRepair = slot.PendingOrderRecoveryCountsAsReliabilityAttempt();
+		bool stuckRecovery = slot.PendingOrderRecoveryCountsAsStuckRecovery();
+		int attemptId = slot.GetPendingOrderRecoveryReliabilityAttemptId();
+		string verificationKind = DescribePendingOrderVerificationKind(
+			reliabilityRepair,
+			stuckRecovery);
+		if (reliabilityRepair)
+		{
+			RecordPendingOrderRepairTerminal(
+				slot,
+				faction,
+				"SUPERSEDED",
+				reason,
+				"STRATEGIC_CONTEXT_CHANGE");
+		}
+		else if (!stuckRecovery)
+		{
+			m_iOrderBindingVerificationFailures++;
+		}
+
+		AICF_Stage2Diagnostics.Info(
+			"ORDER_BINDING_VERIFICATION_SUPERSEDED",
+			string.Format(
+				"faction=%1 slot=%2 reason=%3 verification_kind=%4 attempt_id=%5 candidate_ms=%6",
+				faction.GetFactionKey(),
+				slot.GetSlotId(),
+				reason,
+				verificationKind,
+				attemptId,
+				slot.GetPendingOrderRecoveryElapsedMs()));
+		if (stuckRecovery)
+			slot.ClearPendingStuckRecoveryEvidence();
+		slot.ClearPendingOrderRecovery();
 	}
 
 	protected string DescribePendingOrderVerificationKind(
@@ -1996,15 +3109,29 @@ class AICF_MatchController
 	}
 
 	protected bool TryRecoverOrder(
+		AICF_FactionState factionState,
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction,
 		string failureReason)
 	{
-		int requestedAtMs = System.GetTickCount();
 		if (!slot || !faction || slot.HasPendingOrderRecovery())
 			return false;
+		if (slot.IsOrderReliabilityRepairFailureBudgetExhausted(
+			ORDER_RELIABILITY_REPAIR_FAILURE_BUDGET))
+		{
+			ApplyOrderReliabilityRepairBudgetFallback(
+				factionState,
+				slot,
+				faction,
+				failureReason);
+			return false;
+		}
 		if (!slot.CanAttemptOrderRecovery(m_Stage2Config.GetOrderRecoveryRetryMs()))
 			return false;
+		int requestedAtMs = System.GetTickCount();
+		slot.MarkOrderRecoveryAttempt();
+		m_iOrderRecoveryAttempts++;
+		int repairAttemptId = m_iOrderRecoveryAttempts;
 
 		string oldWaypointId = "NONE";
 		if (slot.GetWaypoint())
@@ -2027,10 +3154,10 @@ class AICF_MatchController
 				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
 				oldWaypointId,
 				vehicleState,
-				slot.GetMeaningfulTaskLostAgeMs()));
+				slot.GetMeaningfulTaskLostAgeMs()) + string.Format(
+				" attempt_id=%1",
+				repairAttemptId));
 
-		slot.MarkOrderRecoveryAttempt();
-		m_iOrderRecoveryAttempts++;
 		bool recovered = m_OrderPlanner.RecoverOrder(
 			slot,
 			faction,
@@ -2042,7 +3169,7 @@ class AICF_MatchController
 		if (verificationPending)
 		{
 			countsAsReliabilityRepair =
-				slot.MarkPendingOrderRecoveryAsReliabilityAttempt();
+				slot.MarkPendingOrderRecoveryAsReliabilityAttempt(repairAttemptId);
 		}
 		AIWaypoint newWaypoint = slot.GetWaypoint();
 		string newWaypointId = "NONE";
@@ -2069,7 +3196,22 @@ class AICF_MatchController
 		else if (!postconditionMeaningful)
 			failure = "WAYPOINT_BIND_MISMATCH";
 		if (!recovered || !verificationPending || !countsAsReliabilityRepair)
-			m_iOrderRecoveryFailures++;
+		{
+			RecordImmediateOrderRepairFailure(
+				slot,
+				faction,
+				repairAttemptId,
+				failure);
+			if (slot.IsOrderReliabilityRepairFailureBudgetExhausted(
+				ORDER_RELIABILITY_REPAIR_FAILURE_BUDGET))
+			{
+				ApplyOrderReliabilityRepairBudgetFallback(
+					factionState,
+					slot,
+					faction,
+					failure);
+			}
+		}
 		AICF_Stage35Diagnostics.Info(
 			"ORDER_RESTORE_RESULT",
 			string.Format(
@@ -2091,7 +3233,9 @@ class AICF_MatchController
 					failureReason) + string.Format(
 				" verification_pending=%1 counts_as_reliability_repair=%2",
 					verificationPending,
-					countsAsReliabilityRepair));
+					countsAsReliabilityRepair) + string.Format(
+				" attempt_id=%1",
+				repairAttemptId));
 		if (recovered && !postconditionMeaningful)
 			AICF_Stage35Diagnostics.Warning("WAYPOINT_BIND_MISMATCH", string.Format("faction=%1 slot=%2 waypoint=%3 queue_count=%4", faction.GetFactionKey(), slot.GetSlotKey(), newWaypointId, queueCount));
 		return repairCandidateAccepted;
@@ -2587,6 +3731,18 @@ class AICF_MatchController
 			slot.ResetTargetUnavailableReport();
 			if (!slot.IsCombatReady())
 				continue;
+			if (slot.HasPendingOrderRecovery())
+			{
+				// Preserve a still-valid durability candidate. If the ownership change
+				// invalidated it, terminalize its accounting before ReplaceOrder clears
+				// the slot references.
+				if (m_OrderPlanner.IsOrderValid(slot, faction))
+					continue;
+				SupersedePendingOrderRecovery(
+					slot,
+					faction,
+					"BASE_GRAPH_REBUILT_ORDER_INVALID");
+			}
 
 			SCR_CampaignMilitaryBaseComponent oldTarget = slot.GetTargetBase();
 			bool reassigned = false;
@@ -2644,6 +3800,11 @@ class AICF_MatchController
 				SCR_CampaignMilitaryBaseComponent heldTarget = slot.GetTargetBase();
 				if (m_OrderPlanner.IsStrategicTargetValid(slot, faction, heldTarget))
 				{
+					if (slot.IsOrderReliabilityRepairFailureBudgetExhausted(
+						ORDER_RELIABILITY_REPAIR_FAILURE_BUDGET))
+					{
+						continue;
+					}
 					slot.ResumeFromPersistentStuckFieldHold();
 					reassigned = m_OrderPlanner.RebuildCurrentOrder(
 						slot,
@@ -2816,15 +3977,23 @@ class AICF_MatchController
 				m_USSRState.CountSlotsByState(AICF_EGroupSlotState.READY),
 				CountManagedAgents()));
 
+		int pendingOrderRepairs = CountPendingOrderRepairs();
+		int unaccountedOrderRepairs = AuditOrderRepairAccounting(
+			"HEARTBEAT",
+			pendingOrderRepairs);
 		AICF_Stage2Diagnostics.Info(
 			"RELIABILITY_HEARTBEAT",
 			string.Format(
-				"audits=%1 order_repair_attempted=%2 order_repair_confirmed=%3 order_repair_failed=%4 order_repair_pending=%5",
+				"audits=%1 order_repair_attempted=%2 order_repair_confirmed=%3 order_repair_failed=%4 order_repair_superseded=%5",
 					m_iLifecycleAudits,
 					m_iOrderRecoveryAttempts,
 					m_iOrderRecoveries,
 					m_iOrderRecoveryFailures,
-					CountPendingOrderRepairs()) + string.Format(
+					m_iOrderRecoverySuperseded) + string.Format(
+				" order_repair_pending=%1 order_repair_unaccounted=%2 accounting_balanced=%3",
+					pendingOrderRepairs,
+					unaccountedOrderRepairs,
+					unaccountedOrderRepairs == 0) + string.Format(
 				" handoff_verified=%1 handoff_failed=%2 stuck_detected=%3 stuck_recovered=%4 stuck_field_holds=%5 duplicate_spawns_prevented=%6 concurrent_spawns=%7 managed_agents=%8",
 					m_iOrderBindingVerifications,
 					m_iOrderBindingVerificationFailures,
@@ -3061,15 +4230,25 @@ class AICF_MatchController
 			!AICF_Stage35Diagnostics.HasErrors() &&
 			(!m_Stage3Config.GetVehiclesEnabled() || !AICF_Stage3Diagnostics.HasErrors());
 
+		int pendingOrderRepairs = CountPendingOrderRepairs();
+		int unaccountedOrderRepairs = AuditOrderRepairAccounting(
+			"MATCH_SUMMARY",
+			pendingOrderRepairs);
+		if (unaccountedOrderRepairs != 0)
+			success = false;
 		AICF_Stage2Diagnostics.Info(
 			"MATCH_RELIABILITY_SUMMARY",
 			string.Format(
-				"audits=%1 order_repair_attempted=%2 order_repair_confirmed=%3 order_repair_failed=%4 order_repair_pending=%5",
+				"audits=%1 order_repair_attempted=%2 order_repair_confirmed=%3 order_repair_failed=%4 order_repair_superseded=%5",
 					m_iLifecycleAudits,
 					m_iOrderRecoveryAttempts,
 					m_iOrderRecoveries,
 					m_iOrderRecoveryFailures,
-					CountPendingOrderRepairs()) + string.Format(
+					m_iOrderRecoverySuperseded) + string.Format(
+				" order_repair_pending=%1 order_repair_unaccounted=%2 accounting_balanced=%3",
+					pendingOrderRepairs,
+					unaccountedOrderRepairs,
+					unaccountedOrderRepairs == 0) + string.Format(
 				" handoff_verified=%1 handoff_failed=%2 stuck_detected=%3 stuck_recovered=%4 stuck_field_holds=%5 duplicate_spawns_prevented=%6 errors=%7",
 					m_iOrderBindingVerifications,
 					m_iOrderBindingVerificationFailures,
@@ -3094,6 +4273,43 @@ class AICF_MatchController
 				m_sObservedPlayerFaction,
 				m_ReinforcementSystem.HasRejectedUnsafeSite()));
 		Stop(false);
+	}
+
+	protected int AuditOrderRepairAccounting(string trigger, int pendingCount)
+	{
+		int terminalCount = m_iOrderRecoveries + m_iOrderRecoveryFailures +
+			m_iOrderRecoverySuperseded;
+		int unaccounted = m_iOrderRecoveryAttempts - terminalCount - pendingCount;
+		if (unaccounted != 0 && unaccounted != m_iLastOrderRepairAccountingDelta)
+		{
+			AICF_Stage2Diagnostics.Error(
+				"ORDER_REPAIR_ACCOUNTING_INVARIANT_FAILED",
+				string.Format(
+					"trigger=%1 attempted=%2 confirmed=%3 failed=%4 superseded=%5 pending=%6 unaccounted=%7 invariant=attempted_equals_confirmed_plus_failed_plus_superseded_plus_pending",
+					trigger,
+					m_iOrderRecoveryAttempts,
+					m_iOrderRecoveries,
+					m_iOrderRecoveryFailures,
+					m_iOrderRecoverySuperseded,
+					pendingCount,
+					unaccounted));
+		}
+		else if (unaccounted == 0 && m_iLastOrderRepairAccountingDelta != 0)
+		{
+			AICF_Stage2Diagnostics.Info(
+				"ORDER_REPAIR_ACCOUNTING_RESTORED",
+				string.Format(
+					"trigger=%1 attempted=%2 confirmed=%3 failed=%4 superseded=%5 pending=%6 unaccounted=0",
+					trigger,
+					m_iOrderRecoveryAttempts,
+					m_iOrderRecoveries,
+					m_iOrderRecoveryFailures,
+					m_iOrderRecoverySuperseded,
+					pendingCount));
+		}
+
+		m_iLastOrderRepairAccountingDelta = unaccounted;
+		return unaccounted;
 	}
 
 	protected int CountPendingOrderRepairs()

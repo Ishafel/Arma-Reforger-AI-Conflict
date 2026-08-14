@@ -1058,12 +1058,20 @@ class AICF_TransportTripController
 		string nextAction = ResolveTerminalNextAction(handoffState, trip.GetLease());
 		int cleanupDueMs;
 		string cleanupSamples = "NONE";
+		string clearanceSource = "DISMOUNT_LAST_SAMPLE";
+		int liveLogicalOccupants = dismountState.GetLogicalOccupants();
+		int liveTransitions = dismountState.GetTransitions();
+		int liveInsideBounds = dismountState.GetInsideBounds();
 		AICF_VehicleCleanupQuery cleanupQuery;
 		if (m_CleanupManager && trip.GetLease() && handoffState.IsCleanupQueueAccepted())
 			cleanupQuery = m_CleanupManager.QueryLease(trip.GetLease());
 		if (cleanupQuery && cleanupQuery.IsTracked())
 		{
 			nextAction = cleanupQuery.GetNextAction();
+			clearanceSource = "CLEANUP_LIVE_SCAN";
+			liveLogicalOccupants = cleanupQuery.GetManagedLogicalOccupants();
+			liveTransitions = cleanupQuery.GetManagedTransitions();
+			liveInsideBounds = cleanupQuery.GetManagedInsideBounds();
 			if (cleanupQuery.IsReleasePending())
 			{
 				cleanupDueMs = Math.Max(
@@ -1071,10 +1079,19 @@ class AICF_TransportTripController
 					CLEANUP_STABLE_CLEAR_MS - cleanupQuery.GetStableClearMs());
 			}
 			cleanupSamples = string.Format(
-				"blocker=%1 action_token=%2 delete_attempts=%3",
+				"clearance_source=%1 blocker=%2 action_token=%3 delete_attempts=%4 protected_occupants=%5 nearby_players=%6",
+				clearanceSource,
 				cleanupQuery.GetBlockerSignature(),
 				cleanupQuery.GetActionToken(),
-				cleanupQuery.GetDeleteAttempts());
+				cleanupQuery.GetDeleteAttempts(),
+				cleanupQuery.GetProtectedOccupants(),
+				cleanupQuery.GetNearbyPlayers());
+			cleanupSamples += string.Format(
+				" managed_logical=%1 managed_transitions=%2 managed_inside_bounds=%3 managed_samples=[%4]",
+				liveLogicalOccupants,
+				liveTransitions,
+				liveInsideBounds,
+				cleanupQuery.GetManagedSamples());
 		}
 		if (restorePending)
 			nextAction = "RESTORE_INFANTRY_ORDER";
@@ -1087,9 +1104,9 @@ class AICF_TransportTripController
 			terminalState,
 			restorePending,
 			meaningfulTask,
-			dismountState.GetLogicalOccupants(),
-			dismountState.GetTransitions(),
-			dismountState.GetInsideBounds());
+			liveLogicalOccupants,
+			liveTransitions,
+			liveInsideBounds);
 		signature += string.Format(
 			":%1:%2:%3:%4:%5",
 			infantryWaypoint,
@@ -1112,9 +1129,9 @@ class AICF_TransportTripController
 		AICF_VehicleTerminalClearanceObservation observation =
 			new AICF_VehicleTerminalClearanceObservation(
 				AICF_GroupRuntime.CountAliveAgents(group),
-				dismountState.GetLogicalOccupants(),
-				dismountState.GetTransitions(),
-				dismountState.GetInsideBounds(),
+				liveLogicalOccupants,
+				liveTransitions,
+				liveInsideBounds,
 				dismountState.GetForceClearanceAttempts(),
 				dismountState.GetGuidanceAttempts(),
 				nextAction,

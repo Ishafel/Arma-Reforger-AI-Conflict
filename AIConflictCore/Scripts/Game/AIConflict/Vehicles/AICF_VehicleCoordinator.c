@@ -450,6 +450,17 @@ class AICF_VehicleCoordinator
 		}
 		if (trip)
 		{
+			AICF_ETransportTripPhase activePhase = trip.GetPhase();
+			if (slot.HasPendingOrderRecovery() &&
+				(activePhase == AICF_ETransportTripPhase.WAITING_FOR_SITE ||
+				activePhase == AICF_ETransportTripPhase.ACQUIRING))
+			{
+				// StartBoarding suspends the infantry waypoint. Keep an admitted but
+				// pre-boarding trip inert until the exact reliability candidate has a
+				// terminal accounting outcome.
+				ReportAdmissionOnce(assignment, "ORDER_RECOVERY_PENDING");
+				return;
+			}
 			AICF_ETransportTripPhase previousPhase = trip.GetPhase();
 			int previousTransitions = trip.GetTransitionCount();
 			AICF_TripOutcome observed = m_TripController.Tick(
@@ -528,6 +539,11 @@ class AICF_VehicleCoordinator
 		out string reason)
 	{
 		reason = "NONE";
+		if (slot.HasPendingOrderRecovery())
+		{
+			reason = "ORDER_RECOVERY_PENDING";
+			return false;
+		}
 		int configuredSlots = m_Config.GetTransportVehiclesPerFaction() +
 			m_Config.GetArmedLightVehiclesPerFaction();
 		if (assignment.GetSlotId() >= configuredSlots)
