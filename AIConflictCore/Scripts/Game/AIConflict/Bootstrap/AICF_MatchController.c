@@ -39,6 +39,9 @@ class AICF_MatchController
 	protected int m_iLastCaptureAtMs;
 	protected int m_iOrderRecoveryAttempts;
 	protected int m_iOrderRecoveries;
+	protected int m_iOrderRecoveryFailures;
+	protected int m_iOrderBindingVerifications;
+	protected int m_iOrderBindingVerificationFailures;
 	protected int m_iStuckDetections;
 	protected int m_iStuckRecoveries;
 	protected int m_iStuckFieldHolds;
@@ -206,6 +209,12 @@ class AICF_MatchController
 			m_Stage3Config.GetAbandonedWorldPoolPerFaction(),
 			m_Stage3Config.GetMinimumVehicleRequestAgents(),
 			m_Stage3Config.GetCohesionWaitTimeoutMs());
+		stage3ConfigLine += string.Format(
+			" passenger_stall_ms=%1 passenger_max_retries=%2 hidden_recovery_enabled=%3 hidden_recovery_player_radius_m=%4",
+			m_Stage3Config.GetPassengerStallMs(),
+			m_Stage3Config.GetPassengerMaxRetries(),
+			m_Stage3Config.GetHiddenRecoveryEnabled(),
+			m_Stage3Config.GetHiddenRecoveryPlayerRadiusMeters());
 		AICF_Stage3Diagnostics.Info("CONFIG", stage3ConfigLine);
 		bool activeForcesRolesEnabled = m_Config.GetActiveForcesRolesEnabled();
 		int configuredAttackSlots = AICF_Stage1Config.LEGACY_ATTACK_SLOTS_PER_FACTION;
@@ -1609,6 +1618,14 @@ class AICF_MatchController
 				ProcessPendingOrderRecovery(factionState, slot, faction);
 				continue;
 			}
+
+			// Long-range ATTACK travel is a durable Move order. Only after the
+			// group reaches the local objective envelope may the planner start the
+			// timed SearchAndDestroy activity.
+			m_OrderPlanner.PromoteAttackToObjectiveAction(
+				slot,
+				faction,
+				"OBJECTIVE_RADIUS_ENTERED");
 			if (slot.IsPersistentStuckFieldHold())
 			{
 				if (m_OrderPlanner.IsStrategicTargetValid(slot, faction, slot.GetTargetBase()))
@@ -1713,8 +1730,21 @@ class AICF_MatchController
 		if (!factionState || !slot || !faction || !slot.HasPendingOrderRecovery())
 			return;
 
+		bool countsAsReliabilityRepair =
+			slot.PendingOrderRecoveryCountsAsReliabilityAttempt();
+		bool alreadyCountsAsStuck = slot.PendingOrderRecoveryCountsAsStuckRecovery();
 		if (!slot.IsPendingOrderRecoveryContextCurrent())
 		{
+			RecordPendingOrderVerificationFailure(slot);
+			AICF_Stage2Diagnostics.Warning(
+				"ORDER_BINDING_VERIFICATION_ABORTED",
+				string.Format(
+					"faction=%1 slot=%2 reason=CONTEXT_SUPERSEDED verification_kind=%3",
+					faction.GetFactionKey(),
+					slot.GetSlotId(),
+					DescribePendingOrderVerificationKind(
+						countsAsReliabilityRepair,
+						alreadyCountsAsStuck)));
 			slot.ClearPendingOrderRecovery();
 			return;
 		}
@@ -1723,11 +1753,21 @@ class AICF_MatchController
 		SCR_CampaignMilitaryBaseComponent target = slot.GetPendingOrderRecoveryTargetBase();
 		AIWaypoint expectedWaypoint = slot.GetPendingOrderRecoveryWaypoint();
 		string originalCause = slot.GetPendingOrderRecoveryCause();
-		bool alreadyCountsAsStuck = slot.PendingOrderRecoveryCountsAsStuckRecovery();
 		int lifetimeMs = slot.GetPendingOrderRecoveryElapsedMs();
 		string failureReason = m_OrderPlanner.GetOrderFailureReason(slot, faction);
 		if (failureReason == "TARGET_INVALID")
 		{
+			RecordPendingOrderVerificationFailure(slot);
+			AICF_Stage2Diagnostics.Warning(
+				"ORDER_BINDING_VERIFICATION_ABORTED",
+				string.Format(
+					"faction=%1 slot=%2 reason=TARGET_INVALID verification_kind=%3 candidate_ms=%4",
+					faction.GetFactionKey(),
+					slot.GetSlotId(),
+					DescribePendingOrderVerificationKind(
+						countsAsReliabilityRepair,
+						alreadyCountsAsStuck),
+					lifetimeMs));
 			slot.ClearPendingOrderRecovery();
 			return;
 		}
@@ -1763,12 +1803,15 @@ class AICF_MatchController
 					requiredStablePolls,
 					stableMs);
 				stabilityDetails += string.Format(
-					" required_stable_ms=%1 candidate_ms=%2 tracked_in_queue=%3 queue_count=%4 durable=%5 state=DURABILITY_SAMPLE",
+					" required_stable_ms=%1 candidate_ms=%2 tracked_in_queue=%3 queue_count=%4 durable=%5 state=DURABILITY_SAMPLE verification_kind=%6",
 					requiredStableMs,
 					lifetimeMs,
 					trackedInQueue,
 					queueCount,
-					durabilitySatisfied);
+					durabilitySatisfied,
+					DescribePendingOrderVerificationKind(
+						countsAsReliabilityRepair,
+						alreadyCountsAsStuck));
 				AICF_Stage2Diagnostics.Info("ORDER_RECOVERY_STABILITY", stabilityDetails);
 			}
 
@@ -1777,7 +1820,19 @@ class AICF_MatchController
 
 			string confirmedWaypointId = string.Format("%1", expectedWaypoint.GetID());
 			slot.ClearPendingOrderRecovery();
-			m_iOrderRecoveries++;
+			string verificationKind = DescribePendingOrderVerificationKind(
+				countsAsReliabilityRepair,
+				alreadyCountsAsStuck);
+			string confirmationEvent = "ORDER_BINDING_STABLE";
+			if (countsAsReliabilityRepair)
+			{
+				m_iOrderRecoveries++;
+				confirmationEvent = "ORDER_RECOVERED";
+			}
+			else if (!alreadyCountsAsStuck)
+			{
+				m_iOrderBindingVerifications++;
+			}
 			string recoveredDetails = string.Format(
 				"faction=%1 slot=%2 role=%3 cause=%4 target=%5 waypoint=%6 stable_polls=%7 stable_ms=%8",
 					faction.GetFactionKey(),
@@ -1789,15 +1844,40 @@ class AICF_MatchController
 					stablePolls,
 					stableMs);
 			recoveredDetails += string.Format(
-				" required_stable_ms=%1 candidate_ms=%2",
+				" required_stable_ms=%1 candidate_ms=%2 verification_kind=%3 counts_as_reliability_repair=%4 counts_as_stuck=%5",
 					requiredStableMs,
-					lifetimeMs);
-			AICF_Stage2Diagnostics.Info("ORDER_RECOVERED", recoveredDetails);
+					lifetimeMs,
+					verificationKind,
+					countsAsReliabilityRepair,
+					alreadyCountsAsStuck);
+			AICF_Stage2Diagnostics.Info(confirmationEvent, recoveredDetails);
 			return;
 		}
 
 		if (TryHoldCompletedOrderAtObjective(slot, faction, failureReason))
 		{
+			string completionEvent = "ORDER_BINDING_STABLE";
+			if (countsAsReliabilityRepair)
+			{
+				m_iOrderRecoveries++;
+				completionEvent = "ORDER_RECOVERED";
+			}
+			else if (!alreadyCountsAsStuck)
+			{
+				m_iOrderBindingVerifications++;
+			}
+			AICF_Stage2Diagnostics.Info(
+				completionEvent,
+				string.Format(
+					"faction=%1 slot=%2 cause=%3 target=%4 verification_kind=%5 confirmation_basis=COMPLETED_AT_OBJECTIVE candidate_ms=%6",
+					faction.GetFactionKey(),
+					slot.GetSlotId(),
+					originalCause,
+					AICF_Stage1Diagnostics.BaseKey(target),
+					DescribePendingOrderVerificationKind(
+						countsAsReliabilityRepair,
+						alreadyCountsAsStuck),
+					lifetimeMs));
 			slot.ClearPendingOrderRecovery();
 			return;
 		}
@@ -1847,10 +1927,15 @@ class AICF_MatchController
 			stablePollsBeforeFailure,
 			stableMsBeforeFailure);
 		unstableDetails += string.Format(
-			" attempt=%1 already_counted_as_stuck=%2",
+			" attempt=%1 already_counted_as_stuck=%2 counts_as_reliability_repair=%3 verification_kind=%4",
 			recoveryAttempt,
-			alreadyCountsAsStuck);
+			alreadyCountsAsStuck,
+			countsAsReliabilityRepair,
+			DescribePendingOrderVerificationKind(
+				countsAsReliabilityRepair,
+				alreadyCountsAsStuck));
 		AICF_Stage2Diagnostics.Warning("ORDER_RECOVERY_UNSTABLE", unstableDetails);
+		RecordPendingOrderVerificationFailure(slot);
 
 		if (alreadyCountsAsStuck && slot.HasPendingStuckRecoveryEvidence())
 		{
@@ -1886,6 +1971,28 @@ class AICF_MatchController
 		}
 
 		TryRecoverOrder(slot, faction, failureReason);
+	}
+
+	protected void RecordPendingOrderVerificationFailure(AICF_GroupSlot slot)
+	{
+		if (!slot || !slot.HasPendingOrderRecovery())
+			return;
+
+		if (slot.PendingOrderRecoveryCountsAsReliabilityAttempt())
+			m_iOrderRecoveryFailures++;
+		else if (!slot.PendingOrderRecoveryCountsAsStuckRecovery())
+			m_iOrderBindingVerificationFailures++;
+	}
+
+	protected string DescribePendingOrderVerificationKind(
+		bool countsAsReliabilityRepair,
+		bool countsAsStuckRecovery)
+	{
+		if (countsAsReliabilityRepair)
+			return "RELIABILITY_REPAIR";
+		if (countsAsStuckRecovery)
+			return "STUCK_RECOVERY";
+		return "VEHICLE_HANDOFF";
 	}
 
 	protected bool TryRecoverOrder(
@@ -1930,6 +2037,13 @@ class AICF_MatchController
 			m_ObjectiveGraph,
 			m_TargetSelector,
 			failureReason);
+		bool verificationPending = slot.HasPendingOrderRecovery();
+		bool countsAsReliabilityRepair = false;
+		if (verificationPending)
+		{
+			countsAsReliabilityRepair =
+				slot.MarkPendingOrderRecoveryAsReliabilityAttempt();
+		}
 		AIWaypoint newWaypoint = slot.GetWaypoint();
 		string newWaypointId = "NONE";
 		if (newWaypoint)
@@ -1945,33 +2059,42 @@ class AICF_MatchController
 			isCurrent = newWaypoint && slot.GetGroup().GetCurrentWaypoint() == newWaypoint;
 		}
 		bool postconditionMeaningful = recovered && newWaypoint && inQueue && isCurrent;
+		bool repairCandidateAccepted = postconditionMeaningful &&
+			verificationPending && countsAsReliabilityRepair;
 		string failure = "NONE";
 		if (!recovered)
 			failure = "PLANNER_REJECTED";
+		else if (!verificationPending || !countsAsReliabilityRepair)
+			failure = "DURABILITY_VERIFICATION_NOT_ARMED";
 		else if (!postconditionMeaningful)
 			failure = "WAYPOINT_BIND_MISMATCH";
+		if (!recovered || !verificationPending || !countsAsReliabilityRepair)
+			m_iOrderRecoveryFailures++;
 		AICF_Stage35Diagnostics.Info(
 			"ORDER_RESTORE_RESULT",
 			string.Format(
 				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 success=%5 old_waypoint=%6 new_waypoint=%7 bound_to_group=%8 is_current=%9",
-				faction.GetFactionKey(),
+					faction.GetFactionKey(),
 				slot.GetSlotKey(),
 				slot.GetSlotId(),
 				slot.GetSpawnGeneration(),
-				recovered && postconditionMeaningful,
+					repairCandidateAccepted,
 				oldWaypointId,
 				newWaypointId,
 				inQueue,
 				isCurrent) + string.Format(
 				" queue_count=%1 postcondition_meaningful_task=%2 failure_reason=%3 latency_ms=%4 trigger=RELIABILITY_AUDIT reason=%5",
-				queueCount,
+					queueCount,
 				postconditionMeaningful,
 				failure,
 				System.GetTickCount(requestedAtMs),
-				failureReason));
+					failureReason) + string.Format(
+				" verification_pending=%1 counts_as_reliability_repair=%2",
+					verificationPending,
+					countsAsReliabilityRepair));
 		if (recovered && !postconditionMeaningful)
 			AICF_Stage35Diagnostics.Warning("WAYPOINT_BIND_MISMATCH", string.Format("faction=%1 slot=%2 waypoint=%3 queue_count=%4", faction.GetFactionKey(), slot.GetSlotKey(), newWaypointId, queueCount));
-		return recovered && postconditionMeaningful;
+		return repairCandidateAccepted;
 	}
 
 	protected void MonitorGroupProgress(
@@ -2696,12 +2819,17 @@ class AICF_MatchController
 		AICF_Stage2Diagnostics.Info(
 			"RELIABILITY_HEARTBEAT",
 			string.Format(
-				"audits=%1 order_attempts=%2 order_recovered=%3 stuck_detected=%4 stuck_recovered=%5 stuck_field_holds=%6 duplicate_spawns_prevented=%7 concurrent_spawns=%8 managed_agents=%9",
-				m_iLifecycleAudits,
-				m_iOrderRecoveryAttempts,
-				m_iOrderRecoveries,
-				m_iStuckDetections,
-				m_iStuckRecoveries,
+				"audits=%1 order_repair_attempted=%2 order_repair_confirmed=%3 order_repair_failed=%4 order_repair_pending=%5",
+					m_iLifecycleAudits,
+					m_iOrderRecoveryAttempts,
+					m_iOrderRecoveries,
+					m_iOrderRecoveryFailures,
+					CountPendingOrderRepairs()) + string.Format(
+				" handoff_verified=%1 handoff_failed=%2 stuck_detected=%3 stuck_recovered=%4 stuck_field_holds=%5 duplicate_spawns_prevented=%6 concurrent_spawns=%7 managed_agents=%8",
+					m_iOrderBindingVerifications,
+					m_iOrderBindingVerificationFailures,
+					m_iStuckDetections,
+					m_iStuckRecoveries,
 				m_iStuckFieldHolds,
 				m_iDuplicateSpawnsPrevented,
 				CountConcurrentReplacementSpawns(),
@@ -2936,11 +3064,16 @@ class AICF_MatchController
 		AICF_Stage2Diagnostics.Info(
 			"MATCH_RELIABILITY_SUMMARY",
 			string.Format(
-				"audits=%1 order_attempts=%2 order_recovered=%3 stuck_detected=%4 stuck_recovered=%5 stuck_field_holds=%6 duplicate_spawns_prevented=%7 errors=%8",
-				m_iLifecycleAudits,
-				m_iOrderRecoveryAttempts,
-				m_iOrderRecoveries,
-				m_iStuckDetections,
+				"audits=%1 order_repair_attempted=%2 order_repair_confirmed=%3 order_repair_failed=%4 order_repair_pending=%5",
+					m_iLifecycleAudits,
+					m_iOrderRecoveryAttempts,
+					m_iOrderRecoveries,
+					m_iOrderRecoveryFailures,
+					CountPendingOrderRepairs()) + string.Format(
+				" handoff_verified=%1 handoff_failed=%2 stuck_detected=%3 stuck_recovered=%4 stuck_field_holds=%5 duplicate_spawns_prevented=%6 errors=%7",
+					m_iOrderBindingVerifications,
+					m_iOrderBindingVerificationFailures,
+					m_iStuckDetections,
 				m_iStuckRecoveries,
 				m_iStuckFieldHolds,
 				m_iDuplicateSpawnsPrevented,
@@ -2961,6 +3094,30 @@ class AICF_MatchController
 				m_sObservedPlayerFaction,
 				m_ReinforcementSystem.HasRejectedUnsafeSite()));
 		Stop(false);
+	}
+
+	protected int CountPendingOrderRepairs()
+	{
+		return CountFactionPendingOrderRepairs(m_USState) +
+			CountFactionPendingOrderRepairs(m_USSRState);
+	}
+
+	protected int CountFactionPendingOrderRepairs(AICF_FactionState factionState)
+	{
+		if (!factionState)
+			return 0;
+
+		int pendingCount;
+		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (slot && slot.HasPendingOrderRecovery() &&
+				slot.PendingOrderRecoveryCountsAsReliabilityAttempt())
+			{
+				pendingCount++;
+			}
+		}
+		return pendingCount;
 	}
 
 	protected int CountManagedAgents()

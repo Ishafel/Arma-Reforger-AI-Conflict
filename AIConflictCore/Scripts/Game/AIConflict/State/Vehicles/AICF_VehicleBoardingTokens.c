@@ -50,6 +50,8 @@ class AICF_VehicleBoardingActionToken
 	protected bool m_bLastLinked;
 	protected bool m_bLastGettingIn;
 	protected bool m_bLastGettingOut;
+	protected bool m_bHiddenExactSeatRecoveryPending;
+	protected bool m_bHiddenExactSeatRecoveryAttempted;
 
 	void AICF_VehicleBoardingActionToken(
 		AICF_VehicleAsyncFence fence,
@@ -146,6 +148,62 @@ class AICF_VehicleBoardingActionToken
 			!m_Compartment.GetOccupant() && m_ReservedEntity &&
 			m_Compartment.IsReservedBy(m_ReservedEntity) &&
 			!m_Compartment.IsGetInLockedFor(m_ReservedEntity);
+	}
+
+	// A repeated RUNNING stall arms exactly one forced exact-seat operation.
+	// Scheduling and applying are deliberately split across scheduler ticks so
+	// player proximity and all physical ownership fences are sampled afresh.
+	bool ScheduleHiddenExactSeatRecovery()
+	{
+		if (m_bHiddenExactSeatRecoveryPending || m_bHiddenExactSeatRecoveryAttempted ||
+			m_CompartmentType != EAICompartmentType.Cargo)
+		{
+			return false;
+		}
+		m_bHiddenExactSeatRecoveryPending = true;
+		return true;
+	}
+
+	bool IsHiddenExactSeatRecoveryPending()
+	{
+		return m_bHiddenExactSeatRecoveryPending;
+	}
+
+	bool WasHiddenExactSeatRecoveryAttempted()
+	{
+		return m_bHiddenExactSeatRecoveryAttempted;
+	}
+
+	bool ApplyHiddenExactSeatRecovery()
+	{
+		if (!m_bHiddenExactSeatRecoveryPending || m_bHiddenExactSeatRecoveryAttempted ||
+			m_CompartmentType != EAICompartmentType.Cargo ||
+			!MatchesLiveTargetIdentity() || !IsPhysicalMutationOwnerSafe() ||
+			!IsExactCompartmentMutationSafe() || !IsTrackedActionCurrent() ||
+			!IsTrackedActionOwnedByUtility())
+		{
+			return false;
+		}
+
+		CompartmentAccessComponent access = ResolveAccess(m_ReservedEntity);
+		if (!access || access.IsInCompartment() ||
+			CompartmentAccessComponent.GetVehicleIn(m_ReservedEntity) ||
+			access.IsGettingIn() || access.IsGettingOut())
+		{
+			return false;
+		}
+
+		// Consume the allowance before invoking the engine mutation. A rejected
+		// GetInVehicle call must never be retried by this token/trip identity.
+		m_bHiddenExactSeatRecoveryPending = false;
+		m_bHiddenExactSeatRecoveryAttempted = true;
+		return access.GetInVehicle(
+			m_TargetVehicle,
+			m_Compartment,
+			true,
+			-1,
+			ECloseDoorAfterActions.INVALID,
+			false);
 	}
 
 	bool ObserveSpatialProgress(float distanceMeters, float minimumProgressMeters)

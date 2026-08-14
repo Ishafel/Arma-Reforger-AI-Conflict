@@ -1,11 +1,15 @@
 // Owns only AICF-created waypoints and replaces them without touching prefab orders.
 class AICF_OrderPlanner
 {
-	protected static const ResourceName ATTACK_WAYPOINT_PREFAB = "{B3E7B8DC2BAB8ACC}Prefabs/AI/Waypoints/AIWaypoint_SearchAndDestroy.et";
+	protected static const ResourceName ATTACK_OPERATIONAL_WAYPOINT_PREFAB = "{750A8D1695BD6998}Prefabs/AI/Waypoints/AIWaypoint_Move.et";
+	protected static const ResourceName ATTACK_OBJECTIVE_ACTION_PREFAB = "{B3E7B8DC2BAB8ACC}Prefabs/AI/Waypoints/AIWaypoint_SearchAndDestroy.et";
 	protected static const ResourceName DEFEND_WAYPOINT_PREFAB = "{93291E72AC23930F}Prefabs/AI/Waypoints/AIWaypoint_Defend.et";
 	protected static const ResourceName RELAY_WAYPOINT_PREFAB = "{EAAE93F98ED5D218}Prefabs/AI/Waypoints/AIWaypoint_CaptureRelay.et";
 	protected static const string RELAY_SMART_ACTION_TAG = "CapturePoint";
-	protected static const float ATTACK_RADIUS_METERS = 20.0;
+	protected static const float ATTACK_OPERATIONAL_RADIUS_METERS = 20.0;
+	protected static const float ATTACK_OBJECTIVE_ACTION_RADIUS_METERS = 20.0;
+	protected static const float ATTACK_OBJECTIVE_PROMOTION_RADIUS_METERS = 100.0;
+	protected static const float ATTACK_OBJECTIVE_HOLDING_TIME_SECONDS = 600.0;
 	protected static const float DEFEND_RADIUS_METERS = 50.0;
 	protected static const float RELAY_RADIUS_METERS = 20.0;
 	protected static const string POSTURE_ATTACK_PRIMARY = "ATTACK_PRIMARY";
@@ -378,6 +382,129 @@ class AICF_OrderPlanner
 			"ORDER_REBUILD");
 	}
 
+	// Non-relay ATTACK assignments travel under a stock Move waypoint. The
+	// objective action is deliberately created only after the alive leader enters
+	// the local objective envelope, so long operational movement cannot start the
+	// stock search grid (and its holding clock) at assignment time.
+	//
+	// Returns true when the local S&D action is current, including an idempotent
+	// call for an action that this planner has already promoted.
+	bool PromoteAttackToObjectiveAction(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		string reason)
+	{
+		if (!Replication.IsServer() || !slot || !faction || !slot.IsCombatReady() ||
+			slot.GetRole() != AICF_EGroupRole.ATTACK)
+		{
+			return false;
+		}
+
+		SCR_AIGroup group = slot.GetGroup();
+		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
+		AIWaypoint operationalWaypoint = slot.GetWaypoint();
+		if (!group || !operationalWaypoint || !IsTargetValidForRole(slot, faction, target) ||
+			target.GetType() == SCR_ECampaignBaseType.RELAY)
+		{
+			return false;
+		}
+
+		SCR_SearchAndDestroyWaypoint activeObjectiveAction =
+			SCR_SearchAndDestroyWaypoint.Cast(operationalWaypoint);
+		if (activeObjectiveAction)
+			return group.GetCurrentWaypoint() == operationalWaypoint;
+
+		// The only promotable ATTACK order is the non-timed stock Move prefab.
+		// This prevents a field-hold/relay/foreign prefab from being silently
+		// rewritten into an objective action.
+		if (SCR_TimedWaypoint.Cast(operationalWaypoint) ||
+			SCR_SmartActionWaypoint.Cast(operationalWaypoint))
+		{
+			return false;
+		}
+
+		vector targetPosition;
+		if (!TryResolveTargetPosition(target, AICF_EGroupRole.ATTACK, targetPosition))
+			return false;
+
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
+		if (!leader)
+			return false;
+
+		float targetDistanceMeters = Math.Sqrt(vector.DistanceSqXZ(
+			leader.GetOrigin(),
+			targetPosition));
+		if (targetDistanceMeters > ATTACK_OBJECTIVE_PROMOTION_RADIUS_METERS)
+			return false;
+
+		SCR_SearchAndDestroyWaypoint objectiveAction = CreateAttackObjectiveAction(target);
+		if (!objectiveAction)
+			return false;
+
+		AICF_Stage35Diagnostics.Info(
+			"ATTACK_OBJECTIVE_ACTION_CREATED",
+			string.Format(
+				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 target=%5 waypoint=%6 waypoint_kind=ATTACK_OBJECTIVE_ACTION distance_m=%7 completion_radius_m=%8 holding_time_s=%9",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetSlotId(),
+				slot.GetSpawnGeneration(),
+				AICF_Stage1Diagnostics.BaseKey(target),
+				objectiveAction.GetID(),
+				targetDistanceMeters,
+				ATTACK_OBJECTIVE_ACTION_RADIUS_METERS,
+				ATTACK_OBJECTIVE_HOLDING_TIME_SECONDS));
+
+		// Add first and commit the slot reference before deleting the old Move.
+		// If the slot rejects the assignment, removing the candidate restores the
+		// original operational queue without a taskless interval.
+		group.AddWaypointAt(objectiveAction, 0);
+		if (!slot.AssignObjective(target, objectiveAction))
+		{
+			group.RemoveWaypoint(objectiveAction);
+			RplComponent.DeleteRplEntity(objectiveAction, false);
+			AICF_Stage35Diagnostics.Warning(
+				"ATTACK_OBJECTIVE_PROMOTION_REJECTED",
+				string.Format(
+					"faction=%1 slot=%2 numeric_slot=%3 target=%4 old_waypoint=%5 reason=SLOT_ASSIGNMENT_REJECTED",
+					faction.GetFactionKey(),
+					slot.GetSlotKey(),
+					slot.GetSlotId(),
+					AICF_Stage1Diagnostics.BaseKey(target),
+					operationalWaypoint.GetID()));
+			return false;
+		}
+
+		EntityID operationalWaypointId = operationalWaypoint.GetID();
+		group.RemoveWaypoint(operationalWaypoint);
+		RplComponent.DeleteRplEntity(operationalWaypoint, false);
+		LogWaypointRemoved(
+			slot,
+			operationalWaypoint,
+			"ATTACK_OBJECTIVE_PROMOTION",
+			reason);
+
+		string promotionLine = string.Format(
+			"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 target=%5 old_waypoint=%6 old_waypoint_kind=ATTACK_OPERATIONAL_MOVE new_waypoint=%7 new_waypoint_kind=ATTACK_OBJECTIVE_ACTION",
+			faction.GetFactionKey(),
+			slot.GetSlotKey(),
+			slot.GetSlotId(),
+			slot.GetSpawnGeneration(),
+			AICF_Stage1Diagnostics.BaseKey(target),
+			operationalWaypointId,
+			objectiveAction.GetID());
+		promotionLine += string.Format(
+			" reason=%1 distance_m=%2 promotion_radius_m=%3 holding_time_s=%4",
+			reason,
+			targetDistanceMeters,
+			ATTACK_OBJECTIVE_PROMOTION_RADIUS_METERS,
+			ATTACK_OBJECTIVE_HOLDING_TIME_SECONDS);
+		AICF_Stage35Diagnostics.Info(
+			"ATTACK_OBJECTIVE_ACTION_PROMOTED",
+			promotionLine);
+		return true;
+	}
+
 	// Persistent movement failure is a local navigation failure, not a casualty.
 	// Keep the same group, target and world position under a durable defend
 	// waypoint. A later strategic graph revision may resume the objective from
@@ -586,6 +713,7 @@ class AICF_OrderPlanner
 		slot.ResetTargetUnavailableReport();
 		if (oldTarget != target || oldPosture != posture)
 			slot.RecordStrategicAssignment(target, posture);
+		LogOrderWaypointCreated(slot, faction, target, newWaypoint, reason, trigger);
 
 		if (oldTarget && oldTarget != target)
 		{
@@ -639,6 +767,34 @@ class AICF_OrderPlanner
 		return true;
 	}
 
+	protected void LogOrderWaypointCreated(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		SCR_CampaignMilitaryBaseComponent target,
+		AIWaypoint waypoint,
+		string reason,
+		string trigger)
+	{
+		if (!slot || !faction || !target || !waypoint)
+			return;
+
+		string createdLine = string.Format(
+			"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 target=%5 waypoint=%6 waypoint_kind=%7",
+			faction.GetFactionKey(),
+			slot.GetSlotKey(),
+			slot.GetSlotId(),
+			slot.GetSpawnGeneration(),
+			AICF_Stage1Diagnostics.BaseKey(target),
+			waypoint.GetID(),
+			GetWaypointKind(slot, waypoint));
+		createdLine += string.Format(
+			" role=%1 reason=%2 trigger=%3",
+			AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+			reason,
+			trigger);
+		AICF_Stage35Diagnostics.Info("ORDER_WAYPOINT_CREATED", createdLine);
+	}
+
 	protected void LogWaypointRemoved(
 		AICF_GroupSlot slot,
 		AIWaypoint waypoint,
@@ -655,15 +811,37 @@ class AICF_OrderPlanner
 		AICF_Stage35Diagnostics.Info(
 			"WAYPOINT_REMOVED",
 			string.Format(
-				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 waypoint=%5 waypoint_kind=INFANTRY owner=ORDER_PLANNER remove_trigger=%6 remove_reason=%7 target=%8",
+				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 waypoint=%5 waypoint_kind=%6 owner=ORDER_PLANNER remove_trigger=%7 remove_reason=%8 target=%9",
 				factionKey,
 				slot.GetSlotKey(),
 				slot.GetSlotId(),
 				slot.GetSpawnGeneration(),
 				waypoint.GetID(),
+				GetWaypointKind(slot, waypoint),
 				trigger,
 				reason,
 				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase())));
+	}
+
+	protected string GetWaypointKind(AICF_GroupSlot slot, AIWaypoint waypoint)
+	{
+		if (!waypoint)
+			return "NONE";
+		if (SCR_SmartActionWaypoint.Cast(waypoint))
+			return "ATTACK_RELAY_ACTION";
+		if (SCR_SearchAndDestroyWaypoint.Cast(waypoint))
+			return "ATTACK_OBJECTIVE_ACTION";
+		if (SCR_DefendWaypoint.Cast(waypoint))
+		{
+			if (slot && slot.IsPersistentStuckFieldHold())
+				return "PERSISTENT_STUCK_FIELD_HOLD";
+
+			return "DEFEND_ACTION";
+		}
+		if (slot && slot.GetRole() == AICF_EGroupRole.ATTACK)
+			return "ATTACK_OPERATIONAL_MOVE";
+
+		return "INFANTRY_WAYPOINT";
 	}
 
 	protected bool IsTargetValidForRole(
@@ -752,8 +930,8 @@ class AICF_OrderPlanner
 		}
 		else if (role == AICF_EGroupRole.ATTACK)
 		{
-			waypointPrefab = ATTACK_WAYPOINT_PREFAB;
-			completionRadius = ATTACK_RADIUS_METERS;
+			waypointPrefab = ATTACK_OPERATIONAL_WAYPOINT_PREFAB;
+			completionRadius = ATTACK_OPERATIONAL_RADIUS_METERS;
 		}
 
 		Resource waypointResource = Resource.Load(waypointPrefab);
@@ -807,5 +985,62 @@ class AICF_OrderPlanner
 
 		waypoint.SetCompletionRadius(completionRadius);
 		return waypoint;
+	}
+
+	// This is the sole creation path for the local non-relay ATTACK action. Keep
+	// it separate from CreateWaypoint(), which is used for operational assignment
+	// and recovery and must therefore always rebuild an ATTACK Move waypoint.
+	protected SCR_SearchAndDestroyWaypoint CreateAttackObjectiveAction(
+		SCR_CampaignMilitaryBaseComponent target)
+	{
+		if (!target || !target.GetOwner() || target.GetType() == SCR_ECampaignBaseType.RELAY)
+			return null;
+
+		Resource waypointResource = Resource.Load(ATTACK_OBJECTIVE_ACTION_PREFAB);
+		if (!waypointResource || !waypointResource.IsValid())
+		{
+			AICF_Stage1Diagnostics.Error(
+				"WAYPOINT_PREFAB_INVALID",
+				ATTACK_OBJECTIVE_ACTION_PREFAB);
+			return null;
+		}
+
+		vector targetPosition;
+		if (!TryResolveTargetPosition(target, AICF_EGroupRole.ATTACK, targetPosition))
+			return null;
+
+		EntitySpawnParams spawnParams = new EntitySpawnParams();
+		spawnParams.TransformMode = ETransformMode.WORLD;
+		spawnParams.Transform[3] = targetPosition;
+
+		IEntity spawnedEntity = GetGame().SpawnEntityPrefabEx(
+			ATTACK_OBJECTIVE_ACTION_PREFAB,
+			false,
+			params: spawnParams);
+		SCR_SearchAndDestroyWaypoint objectiveAction =
+			SCR_SearchAndDestroyWaypoint.Cast(spawnedEntity);
+		if (!objectiveAction)
+		{
+			if (spawnedEntity)
+				RplComponent.DeleteRplEntity(spawnedEntity, false);
+
+			AICF_Stage1Diagnostics.Error(
+				"ATTACK_OBJECTIVE_ACTION_INVALID",
+				ATTACK_OBJECTIVE_ACTION_PREFAB);
+			return null;
+		}
+
+		objectiveAction.SetHoldingTime(ATTACK_OBJECTIVE_HOLDING_TIME_SECONDS);
+		objectiveAction.SetCompletionRadius(ATTACK_OBJECTIVE_ACTION_RADIUS_METERS);
+
+		SCR_AIWaypoint scriptedWaypoint = SCR_AIWaypoint.Cast(objectiveAction);
+		if (scriptedWaypoint)
+		{
+			scriptedWaypoint.AddSetting(SCR_AIGroupFormationSetting.Create(
+				SCR_EAISettingOrigin.WAYPOINT,
+				SCR_EAIGroupFormation.Column));
+		}
+
+		return objectiveAction;
 	}
 }

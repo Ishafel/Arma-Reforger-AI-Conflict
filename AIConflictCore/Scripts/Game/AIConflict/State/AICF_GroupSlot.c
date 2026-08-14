@@ -29,6 +29,7 @@ class AICF_GroupSlot
 	protected bool m_bObjectiveHoldReported;
 	protected bool m_bLoadBlockReported;
 	protected bool m_bPendingOrderRecoveryCountsAsStuck;
+	protected bool m_bPendingOrderRecoveryCountsAsReliabilityAttempt;
 	protected bool m_bUnexplainedMobIdleDeadlineReported;
 	protected bool m_bMeaningfulTaskLossReported;
 	protected bool m_bMeaningfulTaskDeadlineReported;
@@ -621,7 +622,10 @@ class AICF_GroupSlot
 		m_iLastOrderRecoveryAtMs = System.GetTickCount();
 	}
 
-	void BeginOrderRecoveryVerification(string failureReason, bool countsAsStuckRecovery = false)
+	void BeginOrderRecoveryVerification(
+		string failureReason,
+		bool countsAsStuckRecovery = false,
+		bool countsAsReliabilityAttempt = false)
 	{
 		ClearPendingOrderRecovery();
 		if (!m_Group || !m_TargetBase || !m_Waypoint)
@@ -632,7 +636,22 @@ class AICF_GroupSlot
 		m_PendingOrderRecoveryWaypoint = m_Waypoint;
 		m_sPendingOrderRecoveryCause = failureReason;
 		m_bPendingOrderRecoveryCountsAsStuck = countsAsStuckRecovery;
+		m_bPendingOrderRecoveryCountsAsReliabilityAttempt =
+			countsAsReliabilityAttempt && !countsAsStuckRecovery;
 		m_iOrderRecoveryStartedAtMs = System.GetTickCount();
+	}
+
+	// RecoverOrder creates the durability candidate inside the planner. The
+	// reliability caller marks that candidate immediately after the synchronous
+	// call, keeping vehicle handoff and stuck-route verification out of repair
+	// attempt accounting without coupling the planner to controller telemetry.
+	bool MarkPendingOrderRecoveryAsReliabilityAttempt()
+	{
+		if (!HasPendingOrderRecovery() || m_bPendingOrderRecoveryCountsAsStuck)
+			return false;
+
+		m_bPendingOrderRecoveryCountsAsReliabilityAttempt = true;
+		return true;
 	}
 
 	bool HasPendingOrderRecovery()
@@ -673,6 +692,11 @@ class AICF_GroupSlot
 		return m_bPendingOrderRecoveryCountsAsStuck;
 	}
 
+	bool PendingOrderRecoveryCountsAsReliabilityAttempt()
+	{
+		return m_bPendingOrderRecoveryCountsAsReliabilityAttempt;
+	}
+
 	int RecordPendingOrderRecoveryStablePoll()
 	{
 		if (m_iOrderRecoveryFirstStableAtMs <= 0)
@@ -710,6 +734,7 @@ class AICF_GroupSlot
 		m_PendingOrderRecoveryWaypoint = null;
 		m_sPendingOrderRecoveryCause = string.Empty;
 		m_bPendingOrderRecoveryCountsAsStuck = false;
+		m_bPendingOrderRecoveryCountsAsReliabilityAttempt = false;
 		m_iOrderRecoveryStartedAtMs = 0;
 		m_iOrderRecoveryFirstStableAtMs = 0;
 		m_iOrderRecoveryStablePolls = 0;

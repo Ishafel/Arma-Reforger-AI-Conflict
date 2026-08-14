@@ -8,7 +8,6 @@ class AICF_VehicleTransitFlow
 	protected static const int RECOVERY_RETRY_DELAY_MS = 1000;
 	protected static const int HARD_MAX_CREW_RECOVERIES = 2;
 	protected static const int HARD_MAX_MOBILITY_RECOVERIES = 2;
-	protected static const float UNSTUCK_PLAYER_RADIUS_METERS = 35.0;
 	protected static const float UNSTUCK_OFFSET_METERS = 8.0;
 	protected static const float UNSTUCK_SEARCH_RADIUS_METERS = 3.0;
 	protected static const float UNSTUCK_MIN_DISPLACEMENT_METERS = 4.0;
@@ -708,12 +707,17 @@ class AICF_VehicleTransitFlow
 			mode = "REJECTED_NOT_AUTHORITY";
 			return false;
 		}
+		if (!m_Config.GetHiddenRecoveryEnabled())
+		{
+			mode = "REJECTED_HIDDEN_RECOVERY_DISABLED";
+			return false;
+		}
 
 		string safetyReason;
 		if (!m_Watchdog.CanSafelyRelocateVehicle(
 			trip.GetAssignment().GetGroup(),
 			vehicle,
-			UNSTUCK_PLAYER_RADIUS_METERS,
+			m_Config.GetHiddenRecoveryPlayerRadiusMeters(),
 			safetyReason))
 		{
 			mode = string.Format("REJECTED_%1", safetyReason);
@@ -769,6 +773,31 @@ class AICF_VehicleTransitFlow
 				displacementMeters > UNSTUCK_MAX_DISPLACEMENT_METERS ||
 				!IsUnstuckCandidateHazardClear(candidate))
 				continue;
+
+			// Re-run both the physical ownership scan and the player fence against
+			// the concrete destination immediately before the world mutation. The
+			// earlier source-only scan cannot prove that a candidate is off-screen.
+			if (!m_Watchdog.CanSafelyRelocateVehicle(
+				trip.GetAssignment().GetGroup(),
+				vehicle,
+				m_Config.GetHiddenRecoveryPlayerRadiusMeters(),
+				safetyReason))
+			{
+				mode = string.Format("REJECTED_%1", safetyReason);
+				return false;
+			}
+			float nearestPlayerMeters;
+			string destinationSafetyReason;
+			if (!m_Watchdog.CanApplyHiddenRecovery(
+				originalPosition,
+				candidate,
+				m_Config.GetHiddenRecoveryPlayerRadiusMeters(),
+				nearestPlayerMeters,
+				destinationSafetyReason))
+			{
+				mode = string.Format("REJECTED_%1", destinationSafetyReason);
+				continue;
+			}
 
 			vector angles = targetDirection.VectorToAngles();
 			angles[1] = 0;

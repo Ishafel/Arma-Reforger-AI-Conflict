@@ -8,10 +8,8 @@ class AICF_VehicleBoardingFlow
 	protected static const float APPROACH_ACTION_RADIUS_METERS = 70.0;
 	protected static const float APPROACH_PROGRESS_METERS = 2.0;
 	protected static const int APPROACH_STALL_MS = 15000;
-	protected static const int PASSENGER_STALL_MS = 15000;
 	protected static const int APPROACH_MAX_RETRIES = 1;
 	protected static const int CREW_MAX_RETRIES = 1;
-	protected static const int PASSENGER_MAX_RETRIES = 2;
 	protected static const int SETTLED_POLLS_REQUIRED = 2;
 	protected static const int TRANSITION_GRACE_MS = 10000;
 	protected static const int PROGRESS_FRESH_MS = 10000;
@@ -129,7 +127,11 @@ class AICF_VehicleBoardingFlow
 			return Reject(trip, lease, causationId, "BOARDING_TRIP_DEADLINE_EXCEEDED");
 
 		int interruptedActions = m_Watchdog.ResetGroupVehicleActions(group);
-		state.Begin(nowMs, totalDeadlineMs, plannedPhaseCount, PASSENGER_MAX_RETRIES);
+		state.Begin(
+			nowMs,
+			totalDeadlineMs,
+			plannedPhaseCount,
+			m_Config.GetPassengerMaxRetries());
 		state.ConfigureImmutablePlan(
 			phaseTimeoutMs,
 			driverPhasePlanned,
@@ -1665,6 +1667,57 @@ class AICF_VehicleBoardingFlow
 			{
 				continue;
 			}
+			if (token.IsHiddenExactSeatRecoveryPending())
+			{
+				if (!m_Config.GetHiddenRecoveryEnabled())
+				{
+					failureReason = "PASSENGER_HIDDEN_EXACT_CARGO_DISABLED";
+					ReportPassengerAction(
+						"PASSENGER_ACTION_FAILURE",
+						trip, lease, token, causationId, failureReason, false);
+					return false;
+				}
+				float nearestPlayerMeters;
+				string hiddenFenceReason;
+				float playerRadiusMeters = m_Config.GetHiddenRecoveryPlayerRadiusMeters();
+				if (!m_Watchdog.CanApplyHiddenRecovery(
+					entity.GetOrigin(),
+					lease.GetVehicle().GetOrigin(),
+					playerRadiusMeters,
+					nearestPlayerMeters,
+					hiddenFenceReason))
+				{
+					failureReason = "PASSENGER_HIDDEN_EXACT_CARGO_FENCE_REJECTED";
+					AICF_Stage3Diagnostics.Warning(
+						"PASSENGER_HIDDEN_EXACT_CARGO_REJECTED",
+						DescribeTokenContext(
+							trip, lease, token, causationId, hiddenFenceReason) +
+						string.Format(
+							" player_radius_m=%1 nearest_player_m=%2",
+							playerRadiusMeters,
+							nearestPlayerMeters));
+					return false;
+				}
+				if (!token.ApplyHiddenExactSeatRecovery())
+				{
+					failureReason = "PASSENGER_HIDDEN_EXACT_CARGO_APPLY_REJECTED";
+					ReportPassengerAction(
+						"PASSENGER_ACTION_FAILURE",
+						trip, lease, token, causationId, failureReason, false);
+					return false;
+				}
+				AICF_Stage3Diagnostics.Warning(
+					"PASSENGER_HIDDEN_EXACT_CARGO_FORCED",
+					DescribeTokenContext(
+						trip, lease, token, causationId, "NO_PLAYER_PROXIMITY_FORCE_TELEPORT") +
+					string.Format(
+						" player_radius_m=%1 nearest_player_m=%2",
+						playerRadiusMeters,
+						nearestPlayerMeters));
+				// At most one physical mutation is supervised per scheduler tick. The
+				// next tick verifies that the same entity settled in the same Cargo slot.
+				return true;
+			}
 			float distanceMeters = vector.DistanceXZ(
 				entity.GetOrigin(),
 				lease.GetVehicle().GetOrigin());
@@ -1673,11 +1726,24 @@ class AICF_VehicleBoardingFlow
 			bool actionTerminal = actionState == EAIActionState.COMPLETED ||
 				actionState == EAIActionState.FAILED;
 			bool runningStalled = actionState == EAIActionState.RUNNING &&
-				token.GetProgressAgeMs() >= PASSENGER_STALL_MS;
+				token.GetProgressAgeMs() >= m_Config.GetPassengerStallMs();
 			if (!actionTerminal && !runningStalled)
 				continue;
-			if (token.GetRetryCount() >= PASSENGER_MAX_RETRIES)
+			if (token.GetRetryCount() >= m_Config.GetPassengerMaxRetries())
 			{
+				if (runningStalled && m_Config.GetHiddenRecoveryEnabled() &&
+					token.ScheduleHiddenExactSeatRecovery())
+				{
+					AICF_Stage3Diagnostics.Warning(
+						"PASSENGER_HIDDEN_EXACT_CARGO_SCHEDULED",
+						DescribeTokenContext(
+							trip, lease, token, causationId, "REPEATED_RUNNING_STALL") +
+						string.Format(
+							" stall_ms=%1 normal_retry_budget=%2 apply=NEXT_TICK",
+							m_Config.GetPassengerStallMs(),
+							m_Config.GetPassengerMaxRetries()));
+					return true;
+				}
 				failureReason = "PASSENGER_ACTION_BUDGET_EXHAUSTED";
 				if (runningStalled)
 					failureReason = "PASSENGER_EXACT_CARGO_STALL_BUDGET_EXHAUSTED";
@@ -2146,8 +2212,10 @@ class AICF_VehicleBoardingFlow
 			token.IsTrackedActionOwnedByUtility(),
 			token.IsExactCompartmentTarget());
 		details += string.Format(
-			" exact_compartment_mutation_safe=%1",
-			token.IsExactCompartmentMutationSafe());
+			" exact_compartment_mutation_safe=%1 hidden_recovery_pending=%2 hidden_recovery_attempted=%3",
+			token.IsExactCompartmentMutationSafe(),
+			token.IsHiddenExactSeatRecoveryPending(),
+			token.WasHiddenExactSeatRecoveryAttempted());
 		details += string.Format(
 			" exact_reserved_manager=%1 exact_reserved_slot=%2 actual_manager=%3 actual_slot=%4 reserved_by_owner=%5",
 			token.GetAssignedManagerId(),

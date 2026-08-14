@@ -2,6 +2,8 @@
 // coordinator so this class cannot create waypoints or mutate a group.
 class AICF_VehicleWatchdog
 {
+	protected static const float HIDDEN_RECOVERY_LOS_RADIUS_METERS = 1200.0;
+	protected static const float HIDDEN_RECOVERY_TARGET_HEIGHT_METERS = 1.5;
 	protected static const float DISMOUNT_CLEARANCE_MARGIN_METERS = 0.5;
 	protected static const float BOARDING_TRANSITION_SCOPE_MARGIN_METERS = 6.0;
 
@@ -384,7 +386,8 @@ class AICF_VehicleWatchdog
 				continue;
 
 			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
-			if (!character)
+			if (!character ||
+				!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(character))
 				continue;
 
 			CharacterControllerComponent controller = character.GetCharacterController();
@@ -547,6 +550,114 @@ class AICF_VehicleWatchdog
 		return false;
 	}
 
+	// Hidden recovery is a server-side correction, not gameplay-visible movement.
+	// Check both the currently controlled entity and the possession/main entity so
+	// a GM camera or possession hand-off cannot bypass the privacy radius or the
+	// conservative 1.2 km line-of-sight fence. A connected player without either
+	// position makes the scan fail closed.
+	bool CanApplyHiddenRecovery(
+		vector source,
+		vector destination,
+		float playerProtectionRadiusMeters,
+		out float nearestPlayerMeters,
+		out string rejectionReason)
+	{
+		nearestPlayerMeters = -1.0;
+		rejectionReason = string.Empty;
+		if (!Replication.IsServer() || !GetGame() || !GetGame().GetWorld())
+		{
+			rejectionReason = "SERVER_AUTHORITY_REQUIRED";
+			return false;
+		}
+		PlayerManager playerManager = GetGame().GetPlayerManager();
+		if (!playerManager)
+		{
+			rejectionReason = "PLAYER_MANAGER_UNAVAILABLE";
+			return false;
+		}
+		array<int> playerIds = {};
+		playerManager.GetAllPlayers(playerIds);
+		float protectionRadiusSq = playerProtectionRadiusMeters * playerProtectionRadiusMeters;
+		float losRadiusSq = HIDDEN_RECOVERY_LOS_RADIUS_METERS *
+			HIDDEN_RECOVERY_LOS_RADIUS_METERS;
+		foreach (int playerId : playerIds)
+		{
+			IEntity controlled = playerManager.GetPlayerControlledEntity(playerId);
+			IEntity mainEntity = SCR_PossessingManagerComponent.GetPlayerMainEntity(playerId);
+			if (!controlled && !mainEntity)
+			{
+				rejectionReason = "PLAYER_POSITION_UNKNOWN";
+				return false;
+			}
+			if (controlled)
+			{
+				float sourceDistanceSq = vector.DistanceSqXZ(controlled.GetOrigin(), source);
+				float destinationDistanceSq = vector.DistanceSqXZ(controlled.GetOrigin(), destination);
+				float nearestSq = Math.Min(sourceDistanceSq, destinationDistanceSq);
+				float distanceMeters = Math.Sqrt(nearestSq);
+				if (nearestPlayerMeters < 0 || distanceMeters < nearestPlayerMeters)
+					nearestPlayerMeters = distanceMeters;
+				if (nearestSq <= protectionRadiusSq)
+				{
+					rejectionReason = "PLAYER_CONTROLLED_ENTITY_NEARBY";
+					return false;
+				}
+				if (nearestSq <= losRadiusSq &&
+					(IsHiddenRecoveryPointVisible(controlled, source) ||
+						IsHiddenRecoveryPointVisible(controlled, destination)))
+				{
+					rejectionReason = "PLAYER_CONTROLLED_ENTITY_HAS_LINE_OF_SIGHT";
+					return false;
+				}
+			}
+			if (mainEntity && mainEntity != controlled)
+			{
+				float mainSourceDistanceSq = vector.DistanceSqXZ(mainEntity.GetOrigin(), source);
+				float mainDestinationDistanceSq = vector.DistanceSqXZ(mainEntity.GetOrigin(), destination);
+				float mainNearestSq = Math.Min(mainSourceDistanceSq, mainDestinationDistanceSq);
+				float mainDistanceMeters = Math.Sqrt(mainNearestSq);
+				if (nearestPlayerMeters < 0 || mainDistanceMeters < nearestPlayerMeters)
+					nearestPlayerMeters = mainDistanceMeters;
+				if (mainNearestSq <= protectionRadiusSq)
+				{
+					rejectionReason = "PLAYER_MAIN_ENTITY_NEARBY";
+					return false;
+				}
+				if (mainNearestSq <= losRadiusSq &&
+					(IsHiddenRecoveryPointVisible(mainEntity, source) ||
+						IsHiddenRecoveryPointVisible(mainEntity, destination)))
+				{
+					rejectionReason = "PLAYER_MAIN_ENTITY_HAS_LINE_OF_SIGHT";
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	protected bool IsHiddenRecoveryPointVisible(IEntity observer, vector target)
+	{
+		if (!observer || !GetGame() || !GetGame().GetWorld())
+			return true;
+
+		vector observerPosition = observer.GetOrigin();
+		ChimeraCharacter character = ChimeraCharacter.Cast(observer);
+		if (character)
+			observerPosition = character.EyePosition();
+		else
+			observerPosition[1] = observerPosition[1] + HIDDEN_RECOVERY_TARGET_HEIGHT_METERS;
+		target[1] = target[1] + HIDDEN_RECOVERY_TARGET_HEIGHT_METERS;
+
+		TraceParam trace = new TraceParam();
+		trace.Start = observerPosition;
+		trace.End = target;
+		trace.Exclude = observer;
+		trace.LayerMask = EPhysicsLayerDefs.Projectile;
+		trace.Flags = TraceFlags.ENTS | TraceFlags.OCEAN |
+			TraceFlags.WORLD | TraceFlags.ANY_CONTACT;
+		return GetGame().GetWorld().TraceMove(trace, null) >= 0.98;
+	}
+
 	// Moving a whole vehicle is a last-resort server recovery. It is only safe
 	// while every living managed member is settled in this vehicle, no foreign
 	// occupant or compartment transition exists, and no player is linked or close
@@ -561,6 +672,11 @@ class AICF_VehicleWatchdog
 		if (!group || !vehicle)
 		{
 			rejectionReason = "INVALID_INPUT";
+			return false;
+		}
+		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle))
+		{
+			rejectionReason = "VEHICLE_AUTHORITY_REQUIRED";
 			return false;
 		}
 		if (!AreAllAliveMembersSettledInVehicle(group, vehicle))
@@ -602,27 +718,13 @@ class AICF_VehicleWatchdog
 			}
 		}
 
-		PlayerManager playerManager = GetGame().GetPlayerManager();
-		if (!playerManager)
-			return true;
-		array<int> playerIds = {};
-		playerManager.GetAllPlayers(playerIds);
-		float playerProtectionRadiusSq = playerProtectionRadiusMeters * playerProtectionRadiusMeters;
-		foreach (int playerId : playerIds)
-		{
-			ChimeraCharacter player = ChimeraCharacter.Cast(
-				playerManager.GetPlayerControlledEntity(playerId));
-			if (!IsProtectedCharacter(player))
-				continue;
-			if (CompartmentAccessComponent.GetVehicleIn(player) == vehicle ||
-				vector.DistanceSqXZ(player.GetOrigin(), vehicle.GetOrigin()) <= playerProtectionRadiusSq)
-			{
-				rejectionReason = "PLAYER_LINKED_OR_NEARBY";
-				return false;
-			}
-		}
-
-		return true;
+		float nearestPlayerMeters;
+		return CanApplyHiddenRecovery(
+			vehicle.GetOrigin(),
+			vehicle.GetOrigin(),
+			playerProtectionRadiusMeters,
+			nearestPlayerMeters,
+			rejectionReason);
 	}
 
 	// Cleanup cannot rely on compartment occupancy alone. During the first part
@@ -644,6 +746,7 @@ class AICF_VehicleWatchdog
 		nearbyPlayerCount = 0;
 		int linkedPlayerCount;
 		int sampleCount;
+		bool playerPositionUnknown;
 		samples = string.Empty;
 		if (!vehicle)
 		{
@@ -684,46 +787,77 @@ class AICF_VehicleWatchdog
 			float protectionRadiusSq = playerProtectionRadiusMeters * playerProtectionRadiusMeters;
 			foreach (int playerId : playerIds)
 			{
-				ChimeraCharacter character = ChimeraCharacter.Cast(
-					playerManager.GetPlayerControlledEntity(playerId));
-				if (!IsProtectedCharacter(character))
-					continue;
-
-				float distanceSq = vector.DistanceSqXZ(character.GetOrigin(), vehicle.GetOrigin());
-				bool nearby = distanceSq <= protectionRadiusSq;
-				bool linked = CompartmentAccessComponent.GetVehicleIn(character) == vehicle;
-				CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
-				bool transition = access && (access.IsGettingIn() || access.IsGettingOut()) && (nearby || linked);
-				if (nearby)
-					nearbyPlayerCount++;
-				if (linked)
-					linkedPlayerCount++;
-				if (transition)
-					playerTransitionCount++;
-				if (!nearby && !linked && !transition)
-					continue;
-
-				if (sampleCount < 8)
+				IEntity controlled = playerManager.GetPlayerControlledEntity(playerId);
+				IEntity mainEntity = SCR_PossessingManagerComponent.GetPlayerMainEntity(playerId);
+				array<IEntity> observedEntities = {};
+				if (controlled)
+					observedEntities.Insert(controlled);
+				if (mainEntity && mainEntity != controlled)
+					observedEntities.Insert(mainEntity);
+				if (observedEntities.IsEmpty())
 				{
-					if (!samples.IsEmpty())
-						samples += ",";
-					samples += string.Format(
-						"player:%1:entity_%2:distance_m_%3:nearby_%4:linked_%5:getting_in_%6:getting_out_%7",
-						playerId,
-						character.GetID(),
-						Math.Sqrt(distanceSq),
-						nearby,
-						linked,
-						access && access.IsGettingIn(),
-						access && access.IsGettingOut());
-					sampleCount++;
+					playerPositionUnknown = true;
+					if (sampleCount < 8)
+					{
+						if (!samples.IsEmpty())
+							samples += ",";
+						samples += string.Format("player:%1:position_unknown", playerId);
+						sampleCount++;
+					}
+					continue;
 				}
+
+				bool playerNearby;
+				bool playerLinked;
+				bool playerTransition;
+				foreach (IEntity observed : observedEntities)
+				{
+					float distanceSq = vector.DistanceSqXZ(observed.GetOrigin(), vehicle.GetOrigin());
+					bool nearby = distanceSq <= protectionRadiusSq;
+					ChimeraCharacter character = ChimeraCharacter.Cast(observed);
+					bool linked;
+					bool transition;
+					CompartmentAccessComponent access;
+					if (character)
+					{
+						linked = CompartmentAccessComponent.GetVehicleIn(character) == vehicle;
+						access = character.GetCompartmentAccessComponent();
+						transition = access && (access.IsGettingIn() || access.IsGettingOut()) &&
+							(nearby || linked);
+					}
+					playerNearby = playerNearby || nearby;
+					playerLinked = playerLinked || linked;
+					playerTransition = playerTransition || transition;
+					if (!nearby && !linked && !transition)
+						continue;
+					if (sampleCount < 8)
+					{
+						if (!samples.IsEmpty())
+							samples += ",";
+						samples += string.Format(
+							"player:%1:entity_%2:distance_m_%3:nearby_%4:linked_%5:getting_in_%6:getting_out_%7",
+							playerId,
+							observed.GetID(),
+							Math.Sqrt(distanceSq),
+							nearby,
+							linked,
+							access && access.IsGettingIn(),
+							access && access.IsGettingOut());
+						sampleCount++;
+					}
+				}
+				if (playerNearby)
+					nearbyPlayerCount++;
+				if (playerLinked)
+					linkedPlayerCount++;
+				if (playerTransition)
+					playerTransitionCount++;
 			}
 		}
 
 		if (samples.IsEmpty())
 			samples = "NONE";
-		return protectedOccupantCount == 0 && linkedPlayerCount == 0 &&
+		return !playerPositionUnknown && protectedOccupantCount == 0 && linkedPlayerCount == 0 &&
 			playerTransitionCount == 0 && nearbyPlayerCount == 0;
 	}
 

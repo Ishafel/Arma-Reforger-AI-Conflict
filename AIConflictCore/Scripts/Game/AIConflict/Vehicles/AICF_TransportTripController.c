@@ -838,7 +838,7 @@ class AICF_TransportTripController
 			return AICF_TripOutcome.Wait("EMPTY_RESERVATION_RELEASED", causationId);
 		}
 		AICF_VehicleDismountState dismountState = trip.GetDismountState();
-		if (dismountState.GetStartedAtMs() <= 0)
+		if (!dismountState.IsTerminalClearanceStarted())
 			return BeginTerminalClearanceIfRequired(trip, causationId);
 		AICF_TripOutcome outcome = m_DismountFlow.ProcessTerminalClearance(trip, causationId);
 		if (outcome && outcome.GetKind() == AICF_ETripOutcomeKind.RELEASE_LEASE)
@@ -857,7 +857,7 @@ class AICF_TransportTripController
 		}
 		if (!trip.GetLease().HasPhysicalAsset())
 			return AICF_TripOutcome.Wait("TERMINAL_ASSET_IDENTITY_PENDING", causationId);
-		if (trip.GetDismountState().GetStartedAtMs() > 0)
+		if (trip.GetDismountState().IsTerminalClearanceStarted())
 			return AICF_TripOutcome.Wait("TERMINAL_CLEARANCE_ALREADY_STARTED", causationId);
 		return m_DismountFlow.BeginTerminalClearance(trip, causationId);
 	}

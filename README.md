@@ -85,6 +85,24 @@ Stage 1 реализует серверные модели конфигурац�
 - `RESULT_CANDIDATE status=READY final=0` вместо mid-run PASS; последующий boarding/dismount/role defect защёлкивает `ACCEPTANCE_FAILURE_LATCHED` и инвалидирует кандидата до финальной проверки полного журнала;
 - состояние `VEH <state>` в игровом групповом маркере и отдельный лог-контракт `[AICF][STAGE3]`.
 
+### Production defaults надёжности
+
+Если server CLI не задаёт override, применяются следующие production-значения:
+
+| Контур | CLI-параметр | Значение по умолчанию |
+|---|---|---:|
+| Passenger exact-cargo stall | `aicfVehiclePassengerStallMs` | `8000` мс (8 с) |
+| Повторная passenger action после stall | `aicfVehiclePassengerMaxRetries` | `1` |
+| Boarding deadline | `aicfVehicleBoardingTimeoutMs` | `40000` мс (40 с) |
+| Vehicle stuck watchdog | `aicfVehicleStuckTimeoutMs` | `45000` мс (45 с) |
+| Infantry stuck watchdog | `aicfStuckTimeoutMs` | `60000` мс (60 с) |
+| Скрытое server-side recovery | `aicfHiddenRecoveryEnabled` | `1` (включено) |
+| Player-protection radius для скрытого recovery | `aicfHiddenRecoveryPlayerRadiusMeters` | `300` м |
+
+Скрытая коррекция является последней bounded-ступенью: она разрешена только если authoritative scan не находит controlled/main entity игрока в радиусе 300 м от исходной и целевой точек. В пределах 1200 м дополнительно требуется отсутствие прямой линии видимости к обеим точкам; неизвестная позиция игрока закрывает gate fail-closed. `aicfHiddenRecoveryEnabled=0` полностью отключает эту ступень.
+
+Non-relay ATTACK использует stock `Move` для дальней operational-фазы. Когда живой лидер оказывается не дальше 100 м от resolved target, planner атомарно заменяет `Move` локальным `SearchAndDestroy` с holding time не меньше 600 с. Порог promotion 100 м является production policy, а не CLI-настройкой; relay продолжает использовать `CaptureRelay`, defend — штатный `Defend`.
+
 Ранее заочно зафиксированный Stage 3 snapshot теперь признан владельцем `FAILED`; его архитектурная замена реализована и atomic cutover завершён. Ручные Transport T1–T9 и Armed A1 сохраняют исторический статус `FAIL`, а подробные T8/T9-отчёты — в `docs/STAGE_3_TESTING.md`: известные дефекты не считаются исчезнувшими. Post-T9-патч сохраняет persistent-stuck группу и её target на достигнутой позиции, возобновляет операцию после bounded hold или изменения карты, пишет агрегированный результат проверки каждой невражеской spawn-базы и фиксирует current AI action каждого бойца во время посадки. Crew-role recovery больше не расходует и не сбрасывает mobility watchdog; исправная неподвижная машина получает bounded authority-only reposition с obstacle/water/mine/character/player guards, а успех подтверждается только последующим самостоятельным motion либо route progress. Ранее добавленные bounded `WAITING_FOR_SITE`, functional world pool и 15-метровый/5-секундный delete gate сохранены как обязательные контракты rewrite. Штатные мины Arland не удалялись и не менялись. Прежний snapshot прошёл `tools/Test-Stage3Static.ps1` и Workbench 1.7 `Validate Scripts` по пяти конфигурациям: `.cache/stage3-post-t9-vehicle-unstuck-final2-20260809/console.log`, Game CRC32 `946e5a78`, `Script validation successful`, `SCRIPT (E/F)=0`; это историческое development evidence, не runtime PASS новой архитектуры. Transport T10, Armed A2, controlled no-combat boarding repeat, focused timeout/order/cleanup/cap fault-срезы и 30-минутный прогон остаются `NOT RUN` и должны быть выполнены для runtime acceptance rewrite.
 
 Финальный dirty-working-tree rewrite snapshot прошёл обе обязательные static-команды с negative-fixture self-check и полный Workbench validate: `.cache/vehicle-rewrite-final-validate-20260812-r2/console.log`, Game `5692` files / `11109` classes, CRC32 `7f2cbec0`, `Game successfully created`, `SCRIPT(E/F)=0`, `ENGINE(F)=0`. Полный Workbench log также сохраняет два harness `PLATFORM(E)` (`SteamAPI_Init failed`/platform services) и 25 `RESOURCES(E)` строк shutdown resource-leak list, всего 27 generic `(E)/(F)` matches; это platform/shutdown-resource caveat, не AICF script compile error и не runtime gameplay evidence. Final-tree headless smoke `.cache/Stage35-Rewrite-FinalSmoke-20260812-002210` был `BLOCKED` внешним backend до AICF bootstrap (`BACKEND(E)=12`, SSL peer certificate/`BAD_REQUEST`; `AICF=0`), поэтому не дал roster/vehicle evidence и не является Repeat T, Repeat-T2 или M30.

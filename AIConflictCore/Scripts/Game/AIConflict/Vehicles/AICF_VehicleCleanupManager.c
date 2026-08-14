@@ -344,6 +344,7 @@ class AICF_VehicleCleanupFence
 class AICF_VehicleCleanupScan
 {
 	bool m_bSafe;
+	bool m_bPlayerScanAvailable;
 	int m_iProtectedOccupants;
 	int m_iPlayerTransitions;
 	int m_iNearbyPlayers;
@@ -357,6 +358,7 @@ class AICF_VehicleCleanupScan
 	void Reset()
 	{
 		m_bSafe = false;
+		m_bPlayerScanAvailable = false;
 		m_iProtectedOccupants = 0;
 		m_iPlayerTransitions = 0;
 		m_iNearbyPlayers = 0;
@@ -394,6 +396,11 @@ class AICF_VehicleCleanupJob
 	int m_iFirstDeleteRequestedAtMs;
 	int m_iLastAuditAtMs;
 	int m_iStopStartedAtMs;
+	int m_iManagedRecoveryAttempts;
+	int m_iLastManagedRecoveryAtMs;
+	int m_iManagedExactRecoveryAttempts;
+	int m_iLastManagedExactRecoveryAtMs;
+	int m_iManagedExactRecoveryExhaustedAtMs;
 	bool m_bReleaseComplete;
 	bool m_bClearanceSafe;
 	bool m_bRetirementRequested;
@@ -407,6 +414,8 @@ class AICF_VehicleCleanupJob
 	bool m_bIdentityFailureReported;
 	bool m_bAcceptanceFailureReported;
 	bool m_bStopRetainedReported;
+	bool m_bManagedRecoveryBudgetReported;
+	bool m_bManagedExactRecoveryBudgetReported;
 
 	void InitializeCommon(
 		AICF_FactionFleet fleet,
@@ -456,6 +465,12 @@ class AICF_VehicleCleanupManager
 	protected static const int DEFERRED_AUDIT_INTERVAL_MS = 30000;
 	protected static const int STOP_POLL_MS = 1000;
 	protected static const int STOP_TIMEOUT_MS = 60000;
+	protected static const int MANAGED_CLEARANCE_RECOVERY_MAX_ATTEMPTS = 3;
+	protected static const int MANAGED_CLEARANCE_RECOVERY_INTERVAL_MS = 2000;
+	protected static const int MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS = 3;
+	protected static const int MANAGED_EXACT_RECOVERY_INTERVAL_MS = 2000;
+	protected static const int MANAGED_EXACT_RECOVERY_REARM_MS = 30000;
+	protected static const float MANAGED_CLEARANCE_MARGIN_METERS = 1.5;
 	protected static const float PLAYER_PROTECTION_RADIUS_METERS = 15.0;
 
 	protected ref AICF_Stage3Config m_Config;
@@ -845,11 +860,11 @@ class AICF_VehicleCleanupManager
 			if (job.m_State.GetAbsoluteDeadlineMs() > 0 &&
 				nowMs >= job.m_State.GetAbsoluteDeadlineMs())
 			{
-				return RetainFailClosed(
-					job,
-					"PROTECTED_CLEARANCE_DEADLINE_EXCEEDED:" + job.m_Scan.m_sBlockerSignature,
-					actualRplId,
-					nowMs);
+				HandleProtectedClearanceDeadline(job, vehicle, nowMs);
+				return AICF_VehicleCleanupOutcome.Queued(
+					"PROTECTED_CLEARANCE_DEADLINE_POLLING:" +
+						job.m_Scan.m_sBlockerSignature,
+					job.m_sActionToken);
 			}
 			return AICF_VehicleCleanupOutcome.Queued(
 				"PROTECTED_CLEARANCE_PENDING",
@@ -875,6 +890,398 @@ class AICF_VehicleCleanupManager
 		if (job.m_Disposition == AICF_EVehicleReleaseDisposition.DESTRUCTIVE_RETIREMENT)
 			return ReleaseToRetirement(job, vehicle, nowMs);
 		return ReleaseToWorldPool(job, vehicle, nowMs);
+	}
+
+	// The release deadline is a recovery threshold, never permission to abandon
+	// a valid asset. Player blockers keep the job in conservative polling. When
+	// only the managed group remains, bounded queue resets remove stale GetIn or
+	// GetOut work and the same protected scan remains the release authority.
+	protected void HandleProtectedClearanceDeadline(
+		AICF_VehicleCleanupJob job,
+		Vehicle vehicle,
+		int nowMs)
+	{
+		if (!job || !job.m_Scan || !vehicle)
+			return;
+		bool managedBlocked = job.m_Scan.m_iManagedLogicalOccupants > 0 ||
+			job.m_Scan.m_iManagedTransitions > 0 ||
+			job.m_Scan.m_iManagedInsideBounds > 0;
+		// The global occupant count includes managed AI. It is a foreign blocker
+		// only when it exceeds the exact current-group logical occupant count.
+		bool foreignProtected = job.m_Scan.m_iProtectedOccupants >
+			job.m_Scan.m_iManagedLogicalOccupants;
+		bool playerProtected = !job.m_Scan.m_bPlayerScanAvailable ||
+			job.m_Scan.m_iPlayerTransitions > 0 ||
+			job.m_Scan.m_iNearbyPlayers > 0 ||
+			job.m_Scan.m_sGlobalSamples.Contains("position_unknown");
+		if (playerProtected || foreignProtected)
+		{
+			string protectionReason = "PROTECTED_CLEARANCE_PLAYER_POLL";
+			if (!playerProtected)
+				protectionReason = "PROTECTED_CLEARANCE_FOREIGN_OCCUPANT_POLL";
+			AuditDeferred(job, protectionReason, 0, nowMs);
+			return;
+		}
+		if (!managedBlocked)
+		{
+			AuditDeferred(job, "PROTECTED_CLEARANCE_STABLE_WINDOW", 0, nowMs);
+			return;
+		}
+		if (job.m_iManagedRecoveryAttempts >= MANAGED_CLEARANCE_RECOVERY_MAX_ATTEMPTS)
+		{
+			if (!job.m_bManagedRecoveryBudgetReported)
+			{
+				job.m_bManagedRecoveryBudgetReported = true;
+				AICF_Stage3Diagnostics.Warning(
+					"VEHICLE_CLEANUP_MANAGED_RECOVERY_EXHAUSTED",
+					BuildJobIdentity(job) + string.Format(
+						" attempts=%1 maximum_attempts=%2 action=ESCALATE_EXACT_HIDDEN_CLEARANCE blocker_signature=%3 managed_samples=[%4]",
+						job.m_iManagedRecoveryAttempts,
+						MANAGED_CLEARANCE_RECOVERY_MAX_ATTEMPTS,
+						job.m_Scan.m_sBlockerSignature,
+						job.m_Scan.m_sManagedSamples));
+			}
+			TryExactManagedCleanupRecovery(job, vehicle, nowMs);
+			return;
+		}
+		if (job.m_iLastManagedRecoveryAtMs > 0 &&
+			nowMs - job.m_iLastManagedRecoveryAtMs < MANAGED_CLEARANCE_RECOVERY_INTERVAL_MS)
+		{
+			return;
+		}
+		job.m_iManagedRecoveryAttempts++;
+		job.m_iLastManagedRecoveryAtMs = nowMs;
+		int interrupted = m_Watchdog.ResetGroupVehicleActions(job.m_Group);
+		job.m_State.ObserveSafeClear(false, job.m_Scan.m_sBlockerSignature, nowMs);
+		AICF_Stage3Diagnostics.Warning(
+			"VEHICLE_CLEANUP_MANAGED_RECOVERY",
+			BuildJobIdentity(job) + string.Format(
+				" attempt=%1 maximum_attempts=%2 interrupted_actions=%3 player_scan_available=%4 protected_occupants=%5 player_transitions=%6 nearby_players=%7",
+				job.m_iManagedRecoveryAttempts,
+				MANAGED_CLEARANCE_RECOVERY_MAX_ATTEMPTS,
+				interrupted,
+				job.m_Scan.m_bPlayerScanAvailable,
+				job.m_Scan.m_iProtectedOccupants,
+				job.m_Scan.m_iPlayerTransitions,
+				job.m_Scan.m_iNearbyPlayers) + string.Format(
+				" managed_logical=%1 managed_transitions=%2 managed_inside_bounds=%3 action=RESET_GROUP_VEHICLE_ACTIONS_THEN_CONTINUE_SCAN managed_samples=[%4]",
+				job.m_Scan.m_iManagedLogicalOccupants,
+				job.m_Scan.m_iManagedTransitions,
+				job.m_Scan.m_iManagedInsideBounds,
+				job.m_Scan.m_sManagedSamples));
+	}
+
+	protected void TryExactManagedCleanupRecovery(
+		AICF_VehicleCleanupJob job,
+		Vehicle vehicle,
+		int nowMs)
+	{
+		if (!job || !job.m_Group || !vehicle ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle) ||
+			!m_Config.GetHiddenRecoveryEnabled())
+		{
+			AuditDeferred(job, "MANAGED_EXACT_RECOVERY_DISABLED_OR_INVALID", 0, nowMs);
+			return;
+		}
+		if (job.m_iManagedExactRecoveryAttempts >= MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS)
+		{
+			if (job.m_iManagedExactRecoveryExhaustedAtMs <= 0)
+				job.m_iManagedExactRecoveryExhaustedAtMs = nowMs;
+			if (!job.m_bManagedExactRecoveryBudgetReported)
+			{
+				job.m_bManagedExactRecoveryBudgetReported = true;
+				AICF_Stage3Diagnostics.Error(
+					"VEHICLE_CLEANUP_EXACT_RECOVERY_EXHAUSTED",
+					BuildJobIdentity(job) + string.Format(
+						" attempts=%1 maximum_attempts=%2 action=CONTINUE_PROTECTED_SCAN_NO_UNSAFE_RELEASE retention=CAP_HELD_PROTECTED blocker_signature=%3 managed_samples=[%4]",
+						job.m_iManagedExactRecoveryAttempts,
+						MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS,
+						job.m_Scan.m_sBlockerSignature,
+						job.m_Scan.m_sManagedSamples));
+				ObserveLateCleanupFailure(
+					job,
+					"MANAGED_EXACT_RECOVERY_EXHAUSTED:" + job.m_Scan.m_sBlockerSignature);
+			}
+			if (nowMs - job.m_iManagedExactRecoveryExhaustedAtMs >=
+				MANAGED_EXACT_RECOVERY_REARM_MS)
+			{
+				job.m_iManagedRecoveryAttempts = 0;
+				job.m_iLastManagedRecoveryAtMs = 0;
+				job.m_iManagedExactRecoveryAttempts = 0;
+				job.m_iLastManagedExactRecoveryAtMs = 0;
+				job.m_iManagedExactRecoveryExhaustedAtMs = 0;
+				job.m_bManagedRecoveryBudgetReported = false;
+				job.m_bManagedExactRecoveryBudgetReported = false;
+				AICF_Stage3Diagnostics.Warning(
+					"VEHICLE_CLEANUP_RECOVERY_REARMED",
+					BuildJobIdentity(job) + string.Format(
+						" cooldown_ms=%1 queue_reset_maximum=%2 exact_recovery_maximum=%3 action=RESTART_BOUNDED_PLAYER_FENCED_RECOVERY blocker_signature=%4",
+						MANAGED_EXACT_RECOVERY_REARM_MS,
+						MANAGED_CLEARANCE_RECOVERY_MAX_ATTEMPTS,
+						MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS,
+						job.m_Scan.m_sBlockerSignature));
+			}
+			return;
+		}
+		if (job.m_iLastManagedExactRecoveryAtMs > 0 &&
+			nowMs - job.m_iLastManagedExactRecoveryAtMs < MANAGED_EXACT_RECOVERY_INTERVAL_MS)
+		{
+			return;
+		}
+		float nearestPlayerMeters;
+		string rejectionReason;
+		float hiddenRadiusMeters = m_Config.GetHiddenRecoveryPlayerRadiusMeters();
+		if (!m_Watchdog.CanApplyHiddenRecovery(
+			vehicle.GetOrigin(),
+			vehicle.GetOrigin(),
+			hiddenRadiusMeters,
+			nearestPlayerMeters,
+			rejectionReason))
+		{
+			AuditDeferred(
+				job,
+				"MANAGED_EXACT_RECOVERY_PLAYER_FENCED:" + rejectionReason,
+				0,
+				nowMs);
+			return;
+		}
+
+		job.m_iManagedExactRecoveryAttempts++;
+		job.m_iLastManagedExactRecoveryAtMs = nowMs;
+		int interrupted = m_Watchdog.ResetGroupVehicleActions(job.m_Group);
+		int forced;
+		int relocated;
+		int stillBlocked;
+		int positionFailures;
+		ForceAndRelocateExactManagedMembers(
+			job,
+			vehicle,
+			hiddenRadiusMeters,
+			forced,
+			relocated,
+			stillBlocked,
+			positionFailures);
+		InspectCleanupSafety(job, vehicle, job.m_Scan);
+		int stableClearMs = job.m_State.ObserveSafeClear(
+			job.m_Scan.m_bSafe,
+			job.m_Scan.m_sBlockerSignature,
+			nowMs);
+		AICF_Stage3Diagnostics.Warning(
+			"VEHICLE_CLEANUP_EXACT_RECOVERY",
+			BuildJobIdentity(job) + string.Format(
+				" attempt=%1 maximum_attempts=%2 interrupted_actions=%3 forced=%4 relocated=%5 still_blocked=%6 position_failures=%7",
+				job.m_iManagedExactRecoveryAttempts,
+				MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS,
+				interrupted,
+				forced,
+				relocated,
+				stillBlocked,
+				positionFailures) + string.Format(
+				" hidden_radius_m=%1 nearest_player_m=%2 immediate_clear=%3 stable_clear_ms=%4 action=CONTINUE_FIVE_SECOND_PROTECTED_SCAN blocker_signature=%5 managed_samples=[%6]",
+				hiddenRadiusMeters,
+				nearestPlayerMeters,
+				job.m_Scan.m_bSafe,
+				stableClearMs,
+				job.m_Scan.m_sBlockerSignature,
+				job.m_Scan.m_sManagedSamples));
+	}
+
+	protected void ForceAndRelocateExactManagedMembers(
+		AICF_VehicleCleanupJob job,
+		Vehicle vehicle,
+		float hiddenRadiusMeters,
+		out int forced,
+		out int relocated,
+		out int stillBlocked,
+		out int positionFailures)
+	{
+		forced = 0;
+		relocated = 0;
+		stillBlocked = 0;
+		positionFailures = 0;
+		vector boundsMin;
+		vector boundsMax;
+		vehicle.GetBounds(boundsMin, boundsMax);
+		float clearanceRadius = ResolveManagedClearanceRadius(boundsMin, boundsMax);
+		array<AIAgent> agents = {};
+		job.m_Group.GetAgents(agents);
+		int directionIndex;
+		foreach (AIAgent agent : agents)
+		{
+			if (!IsExactAliveCleanupMember(job.m_Group, agent))
+				continue;
+			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+			if (!access)
+				continue;
+			vector localOrigin = vehicle.CoordToLocal(character.GetOrigin());
+			bool insideBounds = IsInsideManagedClearanceBounds(
+				localOrigin,
+				boundsMin,
+				boundsMax);
+			access.InterruptVehicleActionQueue(true, true, true);
+			bool linked = CompartmentAccessComponent.GetVehicleIn(character) == vehicle;
+			bool transitioning = (linked || insideBounds) &&
+				(access.IsGettingIn() || access.IsGettingOut());
+			if (linked || transitioning)
+			{
+				BaseCompartmentSlot compartment = access.GetCompartment();
+				bool exactOwner = compartment && compartment.GetVehicle() == vehicle &&
+					compartment.GetOccupant() == character;
+				bool useEject = exactOwner &&
+					job.m_iManagedExactRecoveryAttempts > 1;
+				bool directAccepted;
+				vector exitTransform[4];
+				if (!useEject && access.FindSuitableTeleportLocation(exitTransform))
+					directAccepted = access.GetOutVehicle_NoDoor(
+						exitTransform,
+						false,
+						false,
+						true);
+				if (!useEject && !directAccepted)
+					directAccepted = access.GetOutVehicle(
+						EGetOutType.TELEPORT,
+						-1,
+						ECloseDoorAfterActions.INVALID,
+						false,
+						true);
+				bool ejectRequested;
+				bool ejectImmediate;
+				if (exactOwner && (useEject || !directAccepted))
+					ejectRequested = compartment.EjectOccupant(
+						true,
+						false,
+						ejectImmediate,
+						false);
+				if (directAccepted || ejectRequested)
+					forced++;
+			}
+
+			linked = CompartmentAccessComponent.GetVehicleIn(character) == vehicle;
+			transitioning = (linked || insideBounds) &&
+				(access.IsGettingIn() || access.IsGettingOut());
+			if (linked || transitioning)
+			{
+				stillBlocked++;
+				continue;
+			}
+			localOrigin = vehicle.CoordToLocal(character.GetOrigin());
+			if (!IsInsideManagedClearanceBounds(localOrigin, boundsMin, boundsMax))
+				continue;
+			vector safePosition;
+			if (!FindManagedClearancePosition(
+				vehicle,
+				character,
+				boundsMin,
+				boundsMax,
+				clearanceRadius,
+				directionIndex,
+				safePosition))
+			{
+				positionFailures++;
+				stillBlocked++;
+				continue;
+			}
+			directionIndex++;
+			float nearestPlayerMeters;
+			string rejectionReason;
+			if (!m_Watchdog.CanApplyHiddenRecovery(
+				character.GetOrigin(),
+				safePosition,
+				hiddenRadiusMeters,
+				nearestPlayerMeters,
+				rejectionReason))
+			{
+				stillBlocked++;
+				continue;
+			}
+			if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(character) ||
+				!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle))
+			{
+				stillBlocked++;
+				continue;
+			}
+			vector transform[4];
+			character.GetWorldTransform(transform);
+			transform[3] = safePosition;
+			character.Teleport(transform);
+			relocated++;
+		}
+	}
+
+	protected bool FindManagedClearancePosition(
+		Vehicle vehicle,
+		IEntity entity,
+		vector boundsMin,
+		vector boundsMax,
+		float clearanceRadius,
+		int directionIndex,
+		out vector safePosition)
+	{
+		vector localOrigin = vehicle.CoordToLocal(entity.GetOrigin());
+		vector direction = Vector(localOrigin[0], 0, localOrigin[2]);
+		if (direction.LengthSq() < 0.01)
+		{
+			switch (directionIndex % 4)
+			{
+				case 0: direction = "1 0 0"; break;
+				case 1: direction = "-1 0 0"; break;
+				case 2: direction = "0 0 1"; break;
+				default: direction = "0 0 -1"; break;
+			}
+		}
+		direction.Normalize();
+		for (int attempt; attempt < 4; attempt++)
+		{
+			vector center = vehicle.CoordToParent(
+				direction * (clearanceRadius + attempt * 3.0));
+			if (!SCR_WorldTools.FindEmptyTerrainPosition(
+				safePosition,
+				center,
+				3.0,
+				0.75,
+				2.0))
+			{
+				continue;
+			}
+			if (IsInsideManagedClearanceBounds(
+				vehicle.CoordToLocal(safePosition),
+				boundsMin,
+				boundsMax) ||
+				ChimeraWorldUtils.TryGetWaterSurfaceSimple(vehicle.GetWorld(), safePosition))
+			{
+				continue;
+			}
+			return true;
+		}
+		return false;
+	}
+
+	protected bool IsInsideManagedClearanceBounds(
+		vector localOrigin,
+		vector boundsMin,
+		vector boundsMax)
+	{
+		return localOrigin[0] >= boundsMin[0] - MANAGED_CLEARANCE_MARGIN_METERS &&
+			localOrigin[0] <= boundsMax[0] + MANAGED_CLEARANCE_MARGIN_METERS &&
+			localOrigin[1] >= boundsMin[1] - MANAGED_CLEARANCE_MARGIN_METERS &&
+			localOrigin[1] <= boundsMax[1] + MANAGED_CLEARANCE_MARGIN_METERS &&
+			localOrigin[2] >= boundsMin[2] - MANAGED_CLEARANCE_MARGIN_METERS &&
+			localOrigin[2] <= boundsMax[2] + MANAGED_CLEARANCE_MARGIN_METERS;
+	}
+
+	protected float ResolveManagedClearanceRadius(vector boundsMin, vector boundsMax)
+	{
+		return Math.Max(
+			Math.Max(Math.AbsFloat(boundsMin[0]), Math.AbsFloat(boundsMax[0])),
+			Math.Max(Math.AbsFloat(boundsMin[2]), Math.AbsFloat(boundsMax[2]))) + 3.0;
+	}
+
+	protected bool IsExactAliveCleanupMember(SCR_AIGroup group, AIAgent agent)
+	{
+		return group && agent && agent.GetParentGroup() == group &&
+			AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(
+				agent.GetControlledEntity());
 	}
 
 	protected AICF_VehicleCleanupOutcome ReleaseToWorldPool(
@@ -1209,6 +1616,7 @@ class AICF_VehicleCleanupManager
 		PlayerManager playerManager;
 		if (GetGame())
 			playerManager = GetGame().GetPlayerManager();
+		scan.m_bPlayerScanAvailable = playerManager != null;
 		bool globalClear = m_Watchdog.InspectProtectedCleanupUse(
 			vehicle,
 			PLAYER_PROTECTION_RADIUS_METERS,
@@ -1227,7 +1635,7 @@ class AICF_VehicleCleanupManager
 				scan.m_iManagedInsideBounds,
 				scan.m_sManagedSamples);
 		}
-		scan.m_bSafe = playerManager && globalClear && managedClear;
+		scan.m_bSafe = scan.m_bPlayerScanAvailable && globalClear && managedClear;
 		scan.m_sBlockerSignature = string.Format(
 			"player_scan_%1:occupants_%2:player_transitions_%3:nearby_players_%4:managed_logical_%5:managed_transitions_%6",
 			playerManager != null,
@@ -1841,11 +2249,15 @@ class AICF_VehicleCleanupManager
 			job.m_Scan.m_iNearbyPlayers,
 			stableClearMs);
 		details += string.Format(
-			" managed_logical=%1 managed_transitions=%2 managed_inside_bounds=%3 protection_radius_m=%4",
+			" managed_logical=%1 managed_transitions=%2 managed_inside_bounds=%3 protection_radius_m=%4 managed_recovery_attempts=%5 managed_recovery_maximum=%6 exact_recovery_attempts=%7 exact_recovery_maximum=%8",
 			job.m_Scan.m_iManagedLogicalOccupants,
 			job.m_Scan.m_iManagedTransitions,
 			job.m_Scan.m_iManagedInsideBounds,
-			PLAYER_PROTECTION_RADIUS_METERS);
+			PLAYER_PROTECTION_RADIUS_METERS,
+			job.m_iManagedRecoveryAttempts,
+			MANAGED_CLEARANCE_RECOVERY_MAX_ATTEMPTS,
+			job.m_iManagedExactRecoveryAttempts,
+			MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS);
 		details += string.Format(
 			" global_samples=[%1] managed_samples=[%2]",
 			job.m_Scan.m_sGlobalSamples,

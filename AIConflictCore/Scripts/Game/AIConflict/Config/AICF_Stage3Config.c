@@ -5,11 +5,11 @@ class AICF_Stage3Config
 	static const int DEFAULT_TRANSPORTS_PER_FACTION = 4;
 	static const int DEFAULT_ARMED_LIGHT_PER_FACTION = 0;
 	static const int DEFAULT_MAX_VEHICLES_PER_FACTION = 4;
-	static const int DEFAULT_BOARDING_TIMEOUT_MS = 60000;
-	static const int DEFAULT_STUCK_TIMEOUT_MS = 120000;
+	static const int DEFAULT_BOARDING_TIMEOUT_MS = 40000;
+	static const int DEFAULT_STUCK_TIMEOUT_MS = 45000;
 	static const float DEFAULT_PROGRESS_METERS = 25.0;
 	static const float DEFAULT_MOTION_METERS = 3.0;
-	static const int DEFAULT_OBJECTIVE_PROGRESS_TIMEOUT_MS = 300000;
+	static const int DEFAULT_OBJECTIVE_PROGRESS_TIMEOUT_MS = 120000;
 	static const int DEFAULT_MAX_RECOVERIES = 2;
 	static const float DEFAULT_DISEMBARK_DISTANCE_METERS = 150.0;
 	static const int DEFAULT_RETRY_INTERVAL_MS = 10000;
@@ -17,12 +17,15 @@ class AICF_Stage3Config
 	static const int DEFAULT_RETRY_BACKOFF_MAX_MS = 60000;
 	static const int DEFAULT_WAIT_PROBE_INTERVAL_MS = 60000;
 	static const int DEFAULT_COHESION_WAIT_TIMEOUT_MS = 300000;
-	static const int DEFAULT_CLEANUP_DELAY_MS = 60000;
+	static const int DEFAULT_CLEANUP_DELAY_MS = 30000;
 	static const int DEFAULT_ABANDONED_WORLD_POOL_PER_FACTION = 4;
 	static const float DEFAULT_MINIMUM_ROUTE_METERS = 400.0;
 	static const float DEFAULT_MAXIMUM_REUSE_DISTANCE_METERS = 250.0;
 	static const float DEFAULT_MAXIMUM_SPAWN_DISTANCE_METERS = 2000.0;
 	static const float DEFAULT_COHESION_DISTANCE_METERS = 100.0;
+	static const int DEFAULT_PASSENGER_STALL_MS = 8000;
+	static const int DEFAULT_PASSENGER_MAX_RETRIES = 1;
+	static const float DEFAULT_HIDDEN_RECOVERY_PLAYER_RADIUS_METERS = 300.0;
 	// A fresh full-size transport is useful only while a five-person fireteam
 	// still has a majority of its roster. A vehicle that is already assigned is
 	// deliberately not revoked when later losses take the group below this gate.
@@ -51,6 +54,10 @@ class AICF_Stage3Config
 	protected float m_fMaximumSpawnDistanceMeters;
 	protected float m_fCohesionDistanceMeters;
 	protected int m_iMinimumVehicleRequestAgents;
+	protected int m_iPassengerStallMs;
+	protected int m_iPassengerMaxRetries;
+	protected float m_fHiddenRecoveryPlayerRadiusMeters;
+	protected bool m_bHiddenRecoveryEnabled;
 
 	void AICF_Stage3Config()
 	{
@@ -77,6 +84,10 @@ class AICF_Stage3Config
 		m_fMaximumSpawnDistanceMeters = DEFAULT_MAXIMUM_SPAWN_DISTANCE_METERS;
 		m_fCohesionDistanceMeters = DEFAULT_COHESION_DISTANCE_METERS;
 		m_iMinimumVehicleRequestAgents = DEFAULT_MINIMUM_VEHICLE_REQUEST_AGENTS;
+		m_iPassengerStallMs = DEFAULT_PASSENGER_STALL_MS;
+		m_iPassengerMaxRetries = DEFAULT_PASSENGER_MAX_RETRIES;
+		m_fHiddenRecoveryPlayerRadiusMeters = DEFAULT_HIDDEN_RECOVERY_PLAYER_RADIUS_METERS;
+		m_bHiddenRecoveryEnabled = true;
 		ApplyCLIOverrides();
 		NormalizeVehicleCounts();
 	}
@@ -104,6 +115,10 @@ class AICF_Stage3Config
 	float GetMaximumSpawnDistanceMeters() { return m_fMaximumSpawnDistanceMeters; }
 	float GetCohesionDistanceMeters() { return m_fCohesionDistanceMeters; }
 	int GetMinimumVehicleRequestAgents() { return m_iMinimumVehicleRequestAgents; }
+	int GetPassengerStallMs() { return m_iPassengerStallMs; }
+	int GetPassengerMaxRetries() { return m_iPassengerMaxRetries; }
+	float GetHiddenRecoveryPlayerRadiusMeters() { return m_fHiddenRecoveryPlayerRadiusMeters; }
+	bool GetHiddenRecoveryEnabled() { return m_bHiddenRecoveryEnabled; }
 
 	protected void ApplyCLIOverrides()
 	{
@@ -154,6 +169,14 @@ class AICF_Stage3Config
 			m_fCohesionDistanceMeters = ClampFloat(value.ToFloat(), 25.0, 500.0);
 		if (System.GetCLIParam("aicfVehicleMinimumRequestAgents", value))
 			m_iMinimumVehicleRequestAgents = ClampInt(value.ToInt(), 1, AICF_Stage1Config.MANAGED_GROUP_SIZE);
+		if (System.GetCLIParam("aicfVehiclePassengerStallMs", value))
+			m_iPassengerStallMs = ClampInt(value.ToInt(), 3000, 30000);
+		if (System.GetCLIParam("aicfVehiclePassengerMaxRetries", value))
+			m_iPassengerMaxRetries = ClampInt(value.ToInt(), 0, 3);
+		if (System.GetCLIParam("aicfHiddenRecoveryPlayerRadiusMeters", value))
+			m_fHiddenRecoveryPlayerRadiusMeters = ClampFloat(value.ToFloat(), 75.0, 1000.0);
+		if (System.GetCLIParam("aicfHiddenRecoveryEnabled", value))
+			m_bHiddenRecoveryEnabled = value.ToInt() > 0;
 	}
 
 	protected void NormalizeVehicleCounts()

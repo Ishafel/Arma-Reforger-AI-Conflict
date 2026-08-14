@@ -843,7 +843,11 @@ class AICF_VehicleDismountState
 	protected int m_iTransitions;
 	protected int m_iInsideBounds;
 	protected int m_iClearPollCount;
+	protected int m_iContinuousClearStartedAtMs;
+	protected bool m_bTerminalClearanceStarted;
 	protected bool m_bTerminalClearanceStopped;
+	protected int m_iLastHiddenRecoveryAuditAtMs;
+	protected string m_sLastHiddenRecoveryRejection;
 	protected AIWaypoint m_DismountWaypoint;
 	protected AIWaypoint m_SupersededDismountWaypoint;
 	protected bool m_bDismountWaypointBound;
@@ -863,7 +867,11 @@ class AICF_VehicleDismountState
 		m_iTransitions = 0;
 		m_iInsideBounds = 0;
 		m_iClearPollCount = 0;
+		m_iContinuousClearStartedAtMs = 0;
+		m_bTerminalClearanceStarted = false;
 		m_bTerminalClearanceStopped = false;
+		m_iLastHiddenRecoveryAuditAtMs = 0;
+		m_sLastHiddenRecoveryRejection = string.Empty;
 		m_DismountWaypoint = null;
 		m_SupersededDismountWaypoint = null;
 		m_bDismountWaypointBound = false;
@@ -880,6 +888,16 @@ class AICF_VehicleDismountState
 		m_iMaximumForceClearanceAttempts = Math.Max(0, forceBudget);
 	}
 
+	void BeginTerminal(int nowMs, int terminalDeadlineMs, int forceBudget)
+	{
+		Reset();
+		m_iStartedAtMs = nowMs;
+		m_iNormalDeadlineMs = nowMs;
+		m_iTerminalDeadlineMs = terminalDeadlineMs;
+		m_iMaximumForceClearanceAttempts = Math.Max(0, forceBudget);
+		m_bTerminalClearanceStarted = true;
+	}
+
 	int GetStartedAtMs() { return m_iStartedAtMs; }
 	int GetNormalDeadlineMs() { return m_iNormalDeadlineMs; }
 	int GetTerminalDeadlineMs() { return m_iTerminalDeadlineMs; }
@@ -890,6 +908,7 @@ class AICF_VehicleDismountState
 	int GetInsideBounds() { return m_iInsideBounds; }
 	int GetClearPollCount() { return m_iClearPollCount; }
 	bool WasNormalReissueAttempted() { return m_bNormalReissueAttempted; }
+	bool IsTerminalClearanceStarted() { return m_bTerminalClearanceStarted; }
 	bool IsTerminalClearanceStopped() { return m_bTerminalClearanceStopped; }
 	AIWaypoint GetDismountWaypoint() { return m_DismountWaypoint; }
 	AIWaypoint GetSupersededDismountWaypoint() { return m_SupersededDismountWaypoint; }
@@ -985,12 +1004,32 @@ class AICF_VehicleDismountState
 		return true;
 	}
 
+	bool ShouldAuditHiddenRecoveryRejection(
+		string rejectionReason,
+		int nowMs,
+		int auditIntervalMs)
+	{
+		if (rejectionReason == m_sLastHiddenRecoveryRejection &&
+			m_iLastHiddenRecoveryAuditAtMs > 0 &&
+			nowMs - m_iLastHiddenRecoveryAuditAtMs < auditIntervalMs)
+		{
+			return false;
+		}
+		m_sLastHiddenRecoveryRejection = rejectionReason;
+		m_iLastHiddenRecoveryAuditAtMs = nowMs;
+		return true;
+	}
+
 	void StopTerminalClearance()
 	{
 		m_bTerminalClearanceStopped = true;
 	}
 
-	int RecordClearanceSample(int logicalOccupants, int transitions, int insideBounds)
+	int RecordClearanceSample(
+		int logicalOccupants,
+		int transitions,
+		int insideBounds,
+		int nowMs)
 	{
 		m_iLogicalOccupants = Math.Max(0, logicalOccupants);
 		m_iTransitions = Math.Max(0, transitions);
@@ -998,10 +1037,20 @@ class AICF_VehicleDismountState
 		if (m_iLogicalOccupants > 0 || m_iTransitions > 0 || m_iInsideBounds > 0)
 		{
 			m_iClearPollCount = 0;
+			m_iContinuousClearStartedAtMs = 0;
 			return 0;
 		}
+		if (m_iContinuousClearStartedAtMs <= 0)
+			m_iContinuousClearStartedAtMs = nowMs;
 		m_iClearPollCount++;
 		return m_iClearPollCount;
+	}
+
+	int GetContinuousClearMs(int nowMs)
+	{
+		if (m_iContinuousClearStartedAtMs <= 0 || m_iClearPollCount <= 0)
+			return 0;
+		return Math.Max(0, nowMs - m_iContinuousClearStartedAtMs);
 	}
 }
 
