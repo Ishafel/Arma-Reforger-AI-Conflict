@@ -62,11 +62,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage3Stati
 | `aicfVehicleSpawnMaxAttempts` | `4` | Число retryable spawn-attempt до перехода в cap-free `WAITING_FOR_SITE` |
 | `aicfVehicleRetryBackoffMaxMs` | `60000` | Верхняя граница экспоненциального backoff между попытками |
 | `aicfVehicleWaitProbeIntervalMs` | `60000` | Период полного site preflight в `WAITING_FOR_SITE`; target/base-context change будит запрос раньше |
-| `aicfVehicleNoRangeProgressTimeoutMs` | `90000` | Bounded deadline отсутствия сокращения дистанции до ближайшей safe-base reference при `NO_BOARDING_SITE_WITHIN_RANGE` и нуле spawn-attempt; затем запрос возвращается к пехотному выполнению без spawn/teleport |
+| `aicfVehicleNoRangeProgressTimeoutMs` | `150000` | Bounded deadline отсутствия сокращения дистанции до ближайшей safe-base reference при `NO_BOARDING_SITE_WITHIN_RANGE` и нуле spawn-attempt; затем запрос возвращается к пехотному выполнению без spawn/teleport |
 | `aicfVehicleCleanupDelayMs` | `60000` | Grace-период destroyed/unusable entity до protected cleanup |
 | `aicfVehicleAbandonedWorldPoolPerFaction` | `4` | Safety-first soft target исправных abandoned-машин стороны вне active AI cap; pool может временно превышать его, пока player/interaction/proximity gate запрещает retirement |
 | `aicfVehicleMinimumRouteMeters` | `400` | Короткий маршрут выполняется пешком без машины |
-| `aicfVehicleMaximumReuseDistanceMeters` | `250` | Максимальная дистанция группы до оставленной машины для reuse |
+| `aicfVehicleMaximumReuseDistanceMeters` | `1000` | Максимальная дистанция группы до оставленной машины для reuse |
 | `aicfVehicleMaximumSpawnDistanceMeters` | `2000` | Максимальная дистанция safe friendly-базы от назначенной группы |
 | `aicfVehicleCohesionDistanceMeters` | `100` | Допустимый отрыв живого бойца группы от движущейся машины |
 

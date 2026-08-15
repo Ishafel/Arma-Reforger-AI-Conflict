@@ -146,6 +146,8 @@ class AICF_VehicleTransitFlow
 	protected static const int RECOVERY_RETRY_DELAY_MS = 1000;
 	protected static const int CREW_SETTLED_LOSS_MIN_POLLS = 3;
 	protected static const int CREW_SETTLED_LOSS_GRACE_MS = 3000;
+	protected static const int MANAGED_SETTLEMENT_RECOVERY_GRACE_MS = 5000;
+	protected static const int MANAGED_SETTLEMENT_RECOVERY_MAX_DEFERRALS = 15;
 	protected static const int HARD_MAX_CREW_RECOVERIES = 2;
 	protected static const int HARD_MAX_MOBILITY_RECOVERIES = 2;
 	protected static const float UNSTUCK_OFFSET_METERS = 8.0;
@@ -469,6 +471,8 @@ class AICF_VehicleTransitFlow
 			vehicle.GetOrigin(),
 			m_Config.GetMotionMeters(),
 			nowMs);
+		if (routeProgress || physicalMotion)
+			state.ClearMobilityRecoverySettlementDeferrals();
 		ReportProgress(trip, routeProgress, physicalMotion, routeDistanceMeters, targetDistanceMeters, nowMs);
 		if (state.CanReportRecoveryMobilityRestored())
 			ReportRecoveryMobilityRestored(trip, routeDistanceMeters, targetDistanceMeters, nowMs);
@@ -509,14 +513,40 @@ class AICF_VehicleTransitFlow
 		}
 		if (stationary)
 		{
+			bool allowManagedTransitionRecovery =
+				state.IsMobilityRecoverySettlementGraceExpired(
+					nowMs,
+					MANAGED_SETTLEMENT_RECOVERY_GRACE_MS);
 			string relocationPreflightReason;
 			if (!m_Watchdog.CanSafelyRelocateVehicle(
 				trip.GetAssignment().GetGroup(),
 				vehicle,
 				m_Config.GetHiddenRecoveryPlayerRadiusMeters(),
+				allowManagedTransitionRecovery,
 				relocationPreflightReason) &&
 				relocationPreflightReason == "MANAGED_MEMBERS_NOT_SETTLED")
 			{
+				int settlementDeferrals =
+					state.RecordMobilityRecoverySettlementDeferral(nowMs);
+				int settlementGraceAgeMs = Math.Max(
+					0,
+					nowMs - state.GetMobilityRecoverySettlementDeferredAtMs());
+				if (settlementDeferrals >= MANAGED_SETTLEMENT_RECOVERY_MAX_DEFERRALS)
+				{
+					AICF_Stage3Diagnostics.Warning(
+						"VEHICLE_RECOVERY_DEFERRED_EXHAUSTED",
+						FormatIdentity(trip, relocationPreflightReason) + string.Format(
+							" settlement_deferrals=%1 maximum_deferrals=%2 grace_age_ms=%3 grace_ms=%4 final=1 next_action=FALLBACK_TO_FOOT",
+							settlementDeferrals,
+							MANAGED_SETTLEMENT_RECOVERY_MAX_DEFERRALS,
+							settlementGraceAgeMs,
+							MANAGED_SETTLEMENT_RECOVERY_GRACE_MS));
+					return FailRecovery(
+						trip,
+						"MOBILITY_RECOVERY_MANAGED_MEMBERS_NOT_SETTLED_EXHAUSTED",
+						"MOBILITY_SETTLEMENT",
+						causationId);
+				}
 				if (state.MarkMobilityRecoveryDeferredDue(nowMs, MOTION_REPORT_INTERVAL_MS))
 				{
 					ReportStuckDetected(
@@ -529,9 +559,14 @@ class AICF_VehicleTransitFlow
 					AICF_Stage3Diagnostics.Warning(
 						"VEHICLE_RECOVERY_DEFERRED",
 						FormatIdentity(trip, relocationPreflightReason) + string.Format(
-							" mobility_attempt=%1 maximum_attempts=%2 attempt_consumed=0 next_action=WAIT_MANAGED_MEMBERS_SETTLED retry_delay_ms=%3",
+							" mobility_attempt=%1 maximum_attempts=%2 attempt_consumed=0 settlement_deferral=%3 maximum_deferrals=%4 grace_age_ms=%5 grace_ms=%6 relaxed_check_enabled=%7 next_action=WAIT_MANAGED_MEMBERS_SETTLED retry_delay_ms=%8",
 							state.GetMobilityRecoveryAttempts(),
 							state.GetMaximumMobilityRecoveryAttempts(),
+							settlementDeferrals,
+							MANAGED_SETTLEMENT_RECOVERY_MAX_DEFERRALS,
+							settlementGraceAgeMs,
+							MANAGED_SETTLEMENT_RECOVERY_GRACE_MS,
+							allowManagedTransitionRecovery,
 							RECOVERY_RETRY_DELAY_MS));
 				}
 				return AICF_TripOutcome.Retry(
@@ -1177,18 +1212,42 @@ class AICF_VehicleTransitFlow
 				state.GetTacticalTarget(),
 				relocatedPosition,
 				unstuckMode,
-				unstuckSearchDiagnostics);
+				unstuckSearchDiagnostics,
+				state.IsMobilityRecoverySettlementGraceExpired(
+					System.GetTickCount(),
+					MANAGED_SETTLEMENT_RECOVERY_GRACE_MS));
 			if (!relocated &&
 				unstuckMode == "REJECTED_MANAGED_MEMBERS_NOT_SETTLED")
 			{
 				bool rolledBack = state.RollbackUncommittedMobilityRecovery();
+				int deferredAtMs = System.GetTickCount();
+				int settlementDeferrals =
+					state.RecordMobilityRecoverySettlementDeferral(deferredAtMs);
+				if (settlementDeferrals >= MANAGED_SETTLEMENT_RECOVERY_MAX_DEFERRALS)
+				{
+					AICF_Stage3Diagnostics.Warning(
+						"VEHICLE_RECOVERY_DEFERRED_EXHAUSTED",
+						FormatIdentity(trip, unstuckMode) + string.Format(
+							" settlement_deferrals=%1 maximum_deferrals=%2 rollback_confirmed=%3 final=1 next_action=FALLBACK_TO_FOOT",
+							settlementDeferrals,
+							MANAGED_SETTLEMENT_RECOVERY_MAX_DEFERRALS,
+							rolledBack) +
+							" " + unstuckSearchDiagnostics);
+					return FailRecovery(
+						trip,
+						"MOBILITY_RECOVERY_MANAGED_MEMBERS_NOT_SETTLED_EXHAUSTED",
+						"MOBILITY_SETTLEMENT",
+						causationId);
+				}
 				AICF_Stage3Diagnostics.Warning(
 					"VEHICLE_RECOVERY_DEFERRED",
 					FormatIdentity(trip, unstuckMode) + string.Format(
-						" mobility_attempt=%1 attempt_consumed=%2 rollback_confirmed=%3 next_action=WAIT_MANAGED_MEMBERS_SETTLED retry_delay_ms=%4",
+						" mobility_attempt=%1 attempt_consumed=%2 rollback_confirmed=%3 settlement_deferral=%4 maximum_deferrals=%5 next_action=WAIT_MANAGED_MEMBERS_SETTLED retry_delay_ms=%6",
 						state.GetMobilityRecoveryAttempts(),
 						!rolledBack,
 						rolledBack,
+						settlementDeferrals,
+						MANAGED_SETTLEMENT_RECOVERY_MAX_DEFERRALS,
 						RECOVERY_RETRY_DELAY_MS) +
 						" " + unstuckSearchDiagnostics);
 				return AICF_TripOutcome.Retry(
@@ -1199,6 +1258,7 @@ class AICF_VehicleTransitFlow
 						System.GetTickCount() + RECOVERY_RETRY_DELAY_MS));
 			}
 		}
+		state.ClearMobilityRecoverySettlementDeferrals();
 
 		state.SuspendRouteWaypoint();
 		AICF_Stage3Diagnostics.Info(
@@ -1259,7 +1319,8 @@ class AICF_VehicleTransitFlow
 		vector targetPosition,
 		out vector relocatedPosition,
 		out string mode,
-		out string searchDiagnostics)
+		out string searchDiagnostics,
+		bool allowManagedTransitionRecovery)
 	{
 		Vehicle vehicle = trip.GetLease().GetVehicle();
 		relocatedPosition = vehicle.GetOrigin();
@@ -1283,6 +1344,7 @@ class AICF_VehicleTransitFlow
 			trip.GetAssignment().GetGroup(),
 			vehicle,
 			m_Config.GetHiddenRecoveryPlayerRadiusMeters(),
+			allowManagedTransitionRecovery,
 			safetyReason))
 		{
 			mode = string.Format("REJECTED_%1", safetyReason);
@@ -1405,6 +1467,7 @@ class AICF_VehicleTransitFlow
 					trip.GetAssignment().GetGroup(),
 					vehicle,
 					m_Config.GetHiddenRecoveryPlayerRadiusMeters(),
+					allowManagedTransitionRecovery,
 					safetyReason))
 				{
 					mode = string.Format("REJECTED_%1", safetyReason);
@@ -1737,8 +1800,8 @@ class AICF_VehicleTransitFlow
 		if (failureReason == "VEHICLE_ON_FIRE")
 		{
 			// The engine fire bit proves the terminal state, not who or what caused
-			// it. Keep acceptance blocking while explicitly avoiding attribution to
-			// route logic, mines, combat or collision without an instigator trace.
+			// it. Preserve the fallback evidence while explicitly avoiding attribution
+			// to route logic, mines, combat or collision without an instigator trace.
 			causeClassification = "CAUSE_UNRESOLVED";
 			causeEvidence = "ENGINE_FIRE_SIGNAL_WITHOUT_INSTIGATOR";
 		}

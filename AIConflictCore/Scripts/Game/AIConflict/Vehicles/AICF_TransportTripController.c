@@ -3,8 +3,8 @@
 // exactly-once cross-boundary effects, and never implements engine mechanics.
 class AICF_TransportTripController
 {
-	protected static const int ORDER_RESTORE_DEADLINE_MS = 30000;
-	protected static const int ORDER_RESTORE_MAX_ATTEMPTS = 2;
+	protected static const int ORDER_RESTORE_DEADLINE_MS = 60000;
+	protected static const int ORDER_RESTORE_MAX_ATTEMPTS = 4;
 	protected static const int TERMINAL_AUDIT_INTERVAL_MS = 30000;
 	protected static const int CLEANUP_STABLE_CLEAR_MS = 5000;
 
@@ -718,6 +718,7 @@ class AICF_TransportTripController
 		}
 		if (System.GetTickCount() >= state.GetAbsoluteOrderDeadlineMs())
 		{
+			ReportOrderRestoreDeadlineMissed(trip, state);
 			return AICF_TripOutcome.TerminalFailClosed(
 				"ORDER_RESTORE_DEADLINE_MISSED",
 				BuildCausationId(trip, "HANDOFF_DEADLINE"));
@@ -1596,6 +1597,48 @@ class AICF_TransportTripController
 			nowMs,
 			nowMs + ORDER_RESTORE_DEADLINE_MS,
 			ORDER_RESTORE_MAX_ATTEMPTS);
+	}
+
+	protected void ReportOrderRestoreDeadlineMissed(
+		AICF_TransportTrip trip,
+		AICF_VehicleHandoffState state)
+	{
+		string causationId = BuildCausationId(trip, "HANDOFF_DEADLINE");
+		string restoreFailure = "RESTORE_PROOF_INCOMPLETE";
+		if (!state.IsRestoreRequested())
+			restoreFailure = "RESTORE_NOT_REQUESTED";
+		else if (state.GetRestoreAttempts() >= state.GetMaximumRestoreAttempts())
+			restoreFailure = "RESTORE_ATTEMPTS_EXHAUSTED";
+
+		string cleanupProofState = "NOT_REQUESTED";
+		if (state.IsCleanupReleaseComplete())
+			cleanupProofState = "RELEASE_COMPLETE";
+		else if (state.IsCleanupRetainedFailClosed())
+			cleanupProofState = "RETAINED_FAIL_CLOSED";
+		else if (state.IsCleanupQueueAccepted())
+			cleanupProofState = "QUEUE_ACCEPTED_PENDING_RELEASE";
+		else if (state.IsCleanupQueueAttempted())
+			cleanupProofState = "QUEUE_REJECTED_OR_PENDING";
+		else if (state.IsLeaseReleaseRequested())
+			cleanupProofState = "REQUESTED_NOT_QUEUED";
+
+		string details = FormatIdentity(trip, causationId, "ORDER_RESTORE_DEADLINE_MISSED");
+		details += string.Format(
+			" failure_scope=ORDER_RESTORE restore_failure=%1 restore_attempts=%2 restore_max_attempts=%3",
+			restoreFailure,
+			state.GetRestoreAttempts(),
+			state.GetMaximumRestoreAttempts());
+		details += string.Format(
+			" restore_proof_bound=%1 restore_proof_current=%2 restore_proof_queued=%3 restore_proof_meaningful=%4",
+			state.IsBoundToGroup(),
+			state.IsCurrent(),
+			state.IsWaypointInQueue(),
+			state.HasMeaningfulTask());
+		details += string.Format(
+			" cleanup_vs_proof=INDEPENDENT cleanup_proof_state=%1 cleanup_failure=%2",
+			cleanupProofState,
+			state.GetCleanupFailureReason());
+		AICF_Stage35Diagnostics.Error("ORDER_RESTORE_DEADLINE_MISSED", details);
 	}
 
 	protected bool IsAuthorityReady()

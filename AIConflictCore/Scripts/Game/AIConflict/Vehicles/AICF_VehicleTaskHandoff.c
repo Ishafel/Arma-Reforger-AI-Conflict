@@ -306,7 +306,7 @@ class AICF_VehicleTaskHandoff
 
 	// Proof-only reconciliation never creates, removes, or reorders a waypoint.
 	// It lets Handoff adopt Planning's already-committed current order even when
-	// the two bounded mutation attempts have been exhausted.
+	// the bounded mutation budget has been exhausted.
 	protected bool ObserveExistingInfantryOrder(
 		AICF_TransportTrip trip,
 		AICF_VehicleHandoffState handoffState,

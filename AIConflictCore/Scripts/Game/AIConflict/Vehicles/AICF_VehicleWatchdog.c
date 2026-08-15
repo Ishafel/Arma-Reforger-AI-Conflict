@@ -132,6 +132,46 @@ class AICF_VehicleWatchdog
 		return alive > 0;
 	}
 
+	// After a bounded wait, recovery may tolerate stale GetIn/GetOut flags only
+	// when every living member is still an authoritative non-player entity and
+	// remains logically linked to this vehicle or owns one of its exact seats.
+	protected bool AreAllAliveMembersRecoveryLinkedToVehicle(
+		SCR_AIGroup group,
+		Vehicle vehicle)
+	{
+		if (!group || !vehicle)
+			return false;
+
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		int alive;
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+			IEntity entity = agent.GetControlledEntity();
+			if (!AICF_GroupRuntime.IsAliveCharacter(entity))
+				continue;
+			alive++;
+			if (!IsAuthoritativeNonPlayerCharacter(entity))
+				return false;
+
+			ChimeraCharacter character = ChimeraCharacter.Cast(entity);
+			CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+			if (!access)
+				return false;
+			BaseCompartmentSlot compartment = access.GetCompartment();
+			bool exactCompartmentOwner = compartment &&
+				compartment.GetVehicle() == vehicle &&
+				compartment.GetOccupant() == character;
+			bool linkedToVehicle = CompartmentAccessComponent.GetVehicleIn(character) == vehicle;
+			bool characterInVehicle = linkedToVehicle && character.IsInVehicle();
+			if (!characterInVehicle && !exactCompartmentOwner)
+				return false;
+		}
+		return alive > 0;
+	}
+
 	// Produces one authoritative physical snapshot for timeout, grace and
 	// completion decisions. Keeping all signals in the same sample prevents a
 	// visually active GetIn transition from being mistaken for no progress.
@@ -714,13 +754,14 @@ class AICF_VehicleWatchdog
 	}
 
 	// Moving a whole vehicle is a last-resort server recovery. It is only safe
-	// while every living managed member is settled in this vehicle, no foreign
-	// occupant or compartment transition exists, and no player is linked or close
-	// enough to be affected by the relocation.
+	// while every living managed member is settled in this vehicle. After the
+	// caller's bounded grace it also accepts authoritative managed members with a
+	// stale transition flag, but foreign occupants and players remain hard fences.
 	bool CanSafelyRelocateVehicle(
 		SCR_AIGroup group,
 		Vehicle vehicle,
 		float playerProtectionRadiusMeters,
+		bool allowManagedTransitionRecovery,
 		out string rejectionReason)
 	{
 		rejectionReason = string.Empty;
@@ -734,7 +775,9 @@ class AICF_VehicleWatchdog
 			rejectionReason = "VEHICLE_AUTHORITY_REQUIRED";
 			return false;
 		}
-		if (!AreAllAliveMembersSettledInVehicle(group, vehicle))
+		if (!AreAllAliveMembersSettledInVehicle(group, vehicle) &&
+			(!allowManagedTransitionRecovery ||
+				!AreAllAliveMembersRecoveryLinkedToVehicle(group, vehicle)))
 		{
 			rejectionReason = "MANAGED_MEMBERS_NOT_SETTLED";
 			return false;
@@ -766,7 +809,8 @@ class AICF_VehicleWatchdog
 			CompartmentAccessComponent access;
 			if (character)
 				access = character.GetCompartmentAccessComponent();
-			if (access && (access.IsGettingIn() || access.IsGettingOut()))
+			if (access && (access.IsGettingIn() || access.IsGettingOut()) &&
+				!allowManagedTransitionRecovery)
 			{
 				rejectionReason = "COMPARTMENT_TRANSITION_ACTIVE";
 				return false;

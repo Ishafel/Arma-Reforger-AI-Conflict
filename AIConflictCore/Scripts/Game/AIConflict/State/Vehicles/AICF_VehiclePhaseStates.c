@@ -635,6 +635,8 @@ class AICF_VehicleMovementState
 	protected bool m_bRecoveryMobilityRestoredReported;
 	protected bool m_bPendingUnstuckRelocated;
 	protected int m_iLastMobilityRecoveryDeferredAtMs;
+	protected int m_iMobilityRecoverySettlementDeferrals;
+	protected int m_iMobilityRecoverySettlementDeferredAtMs;
 	protected int m_iRecoveryEvidenceArmedAtMs;
 	protected string m_sPendingRecoveryReason;
 	protected AIWaypoint m_RouteWaypoint;
@@ -681,6 +683,8 @@ class AICF_VehicleMovementState
 		m_bRecoveryMobilityRestoredReported = false;
 		m_bPendingUnstuckRelocated = false;
 		m_iLastMobilityRecoveryDeferredAtMs = 0;
+		m_iMobilityRecoverySettlementDeferrals = 0;
+		m_iMobilityRecoverySettlementDeferredAtMs = 0;
 		m_iRecoveryEvidenceArmedAtMs = 0;
 		m_sPendingRecoveryReason = string.Empty;
 		m_RouteWaypoint = null;
@@ -725,6 +729,14 @@ class AICF_VehicleMovementState
 	int GetMobilityRecoveryAttempts() { return m_iMobilityRecoveryAttempts; }
 	int GetMaximumCrewRecoveryAttempts() { return m_iMaximumCrewRecoveryAttempts; }
 	int GetMaximumMobilityRecoveryAttempts() { return m_iMaximumMobilityRecoveryAttempts; }
+	int GetMobilityRecoverySettlementDeferrals()
+	{
+		return m_iMobilityRecoverySettlementDeferrals;
+	}
+	int GetMobilityRecoverySettlementDeferredAtMs()
+	{
+		return m_iMobilityRecoverySettlementDeferredAtMs;
+	}
 	bool IsRecoveryEvidencePending() { return m_bRecoveryEvidencePending; }
 	bool RecoveryRequiresRouteProgress() { return m_bRecoveryRequiresRouteProgress; }
 	bool HasRecoveryPhysicalEvidence() { return m_bRecoveryPhysicalEvidence; }
@@ -887,6 +899,27 @@ class AICF_VehicleMovementState
 		}
 		m_iLastMobilityRecoveryDeferredAtMs = nowMs;
 		return true;
+	}
+
+	int RecordMobilityRecoverySettlementDeferral(int nowMs)
+	{
+		if (m_iMobilityRecoverySettlementDeferredAtMs <= 0)
+			m_iMobilityRecoverySettlementDeferredAtMs = nowMs;
+		m_iMobilityRecoverySettlementDeferrals++;
+		return m_iMobilityRecoverySettlementDeferrals;
+	}
+
+	bool IsMobilityRecoverySettlementGraceExpired(int nowMs, int graceMs)
+	{
+		return m_iMobilityRecoverySettlementDeferredAtMs > 0 &&
+			nowMs - m_iMobilityRecoverySettlementDeferredAtMs >= graceMs;
+	}
+
+	void ClearMobilityRecoverySettlementDeferrals()
+	{
+		m_iMobilityRecoverySettlementDeferrals = 0;
+		m_iMobilityRecoverySettlementDeferredAtMs = 0;
+		m_iLastMobilityRecoveryDeferredAtMs = 0;
 	}
 
 	void TrackCrewRecoveryToken(AICF_VehicleCrewRecoveryToken token)

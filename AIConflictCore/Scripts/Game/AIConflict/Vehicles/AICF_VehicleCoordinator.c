@@ -640,6 +640,15 @@ class AICF_VehicleCoordinator
 		{
 			return AICF_EVehicleAcceptanceFailureDomain.NONE;
 		}
+		string terminalReason = terminalOutcome.GetReason();
+		if (terminalReason == "VEHICLE_ON_FIRE" ||
+			terminalReason == "VEHICLE_ON_FIRE_DURING_BOARDING")
+		{
+			// Combat, mines and other stock-world damage are valid runtime
+			// conditions. Keep the terminal fallback evidence without turning an
+			// unattributed destroyed asset into an acceptance failure.
+			return AICF_EVehicleAcceptanceFailureDomain.NONE;
+		}
 		switch (previousPhase)
 		{
 			case AICF_ETransportTripPhase.BOARDING:
