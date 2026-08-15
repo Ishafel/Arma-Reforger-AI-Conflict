@@ -42,8 +42,29 @@ function Assert-Ordered(
     }
 }
 
+function Assert-OrderedAfter(
+    [string]$text,
+    [string]$anchor,
+    [string]$first,
+    [string]$second,
+    [string]$contract
+) {
+    $anchorIndex = $text.IndexOf($anchor, [StringComparison]::Ordinal)
+    if ($anchorIndex -lt 0) {
+        $script:issues.Add("[$contract] missing anchor: $anchor")
+        return
+    }
+
+    $firstIndex = $text.IndexOf($first, $anchorIndex, [StringComparison]::Ordinal)
+    $secondIndex = $text.IndexOf($second, $anchorIndex, [StringComparison]::Ordinal)
+    if ($firstIndex -lt 0 -or $secondIndex -lt 0 -or $firstIndex -ge $secondIndex) {
+        $script:issues.Add("[$contract] expected '$first' before '$second' after '$anchor'")
+    }
+}
+
 $stage2 = Read-RepoFile 'AIConflictCore/Scripts/Game/AIConflict/Config/AICF_Stage2Config.c'
 $stage3 = Read-RepoFile 'AIConflictCore/Scripts/Game/AIConflict/Config/AICF_Stage3Config.c'
+$acquisition = Read-RepoFile 'AIConflictCore/Scripts/Game/AIConflict/Vehicles/AICF_VehicleAcquisitionFlow.c'
 $boarding = Read-RepoFile 'AIConflictCore/Scripts/Game/AIConflict/Vehicles/AICF_VehicleBoardingFlow.c'
 $tokens = Read-RepoFile 'AIConflictCore/Scripts/Game/AIConflict/State/Vehicles/AICF_VehicleBoardingTokens.c'
 $watchdog = Read-RepoFile 'AIConflictCore/Scripts/Game/AIConflict/Vehicles/AICF_VehicleWatchdog.c'
@@ -62,6 +83,10 @@ Assert-Contains $stage3 'DEFAULT_STUCK_TIMEOUT_MS = 45000' 'TIMING_DEFAULTS'
 Assert-Contains $stage3 'DEFAULT_PASSENGER_STALL_MS = 8000' 'TIMING_DEFAULTS'
 Assert-Contains $stage3 'DEFAULT_PASSENGER_MAX_RETRIES = 1' 'TIMING_DEFAULTS'
 Assert-Contains $stage3 'DEFAULT_CLEANUP_DELAY_MS = 10000' 'TIMING_DEFAULTS'
+Assert-Contains $stage3 'DEFAULT_NO_RANGE_PROGRESS_TIMEOUT_MS = 90000' 'NO_RANGE_BOUNDED_WAIT'
+Assert-Contains $stage3 'aicfVehicleNoRangeProgressTimeoutMs' 'NO_RANGE_BOUNDED_WAIT'
+Assert-Contains $stage3 'ClampInt(value.ToInt(), 60000, 300000)' 'NO_RANGE_BOUNDED_WAIT'
+Assert-Contains $stage3 'int GetNoRangeProgressTimeoutMs()' 'NO_RANGE_BOUNDED_WAIT'
 Assert-Contains $stage2 'DEFAULT_STUCK_TIMEOUT_MS = 60000' 'TIMING_DEFAULTS'
 Assert-Contains $stage2 'DEFAULT_MAX_STUCK_RECOVERIES = 2' 'TIMING_DEFAULTS'
 
@@ -92,6 +117,25 @@ Assert-Contains $watchdog 'TraceFlags.ANY_CONTACT' 'HIDDEN_PLAYER_FENCE'
 Assert-Contains $watchdog 'IsAuthoritativeAIEntity(character)' 'MUTATION_AUTHORITY'
 Assert-Contains $watchdog 'IsAuthoritativeReplicatedEntity(vehicle)' 'MUTATION_AUTHORITY'
 
+Assert-Contains $phaseStates 'ObserveNoRangeProbe(' 'NO_RANGE_PROGRESS_STATE'
+Assert-Contains $phaseStates 'm_iNoRangeLastProgressAtMs = nowMs' 'NO_RANGE_PROGRESS_STATE'
+Assert-Contains $phaseStates 'm_fNoRangePreviousCandidateDistanceMeters - candidateDistanceMeters' 'NO_RANGE_PROGRESS_TREND'
+Assert-Contains $acquisition 'requestState.GetTotalAttemptCount() == 0' 'NO_RANGE_ZERO_ATTEMPT_SCOPE'
+Assert-Contains $acquisition 'NO_RANGE_PROGRESS_EPSILON_METERS = 5.0' 'NO_RANGE_PROGRESS_TREND'
+Assert-Contains $acquisition 'm_Config.GetNoRangeProgressTimeoutMs()' 'NO_RANGE_BOUNDED_WAIT'
+Assert-Contains $acquisition 'nextProbeAtMs = Math.Min(nextProbeAtMs, noRangeDeadlineAtMs)' 'NO_RANGE_DEADLINE_WAKE'
+Assert-Contains $acquisition 'BOARDING_RANGE_WAIT_AUDIT' 'NO_RANGE_DIAGNOSTICS'
+Assert-Contains $acquisition 'BOARDING_RANGE_WAIT_EXHAUSTED' 'NO_RANGE_BOUNDED_WAIT'
+Assert-Contains $acquisition 'nearest_base_reference_m=' 'NO_RANGE_DIAGNOSTICS'
+Assert-Contains $acquisition 'candidate_trace=[' 'NO_RANGE_DIAGNOSTICS'
+Assert-Contains $acquisition 'selection_trace_causation_id=' 'NO_RANGE_DIAGNOSTICS'
+Assert-Contains $acquisition 'group_motion_m=' 'NO_RANGE_DIAGNOSTICS'
+Assert-Contains $acquisition 'farthest_from_leader_m=' 'NO_RANGE_DIAGNOSTICS'
+Assert-Contains $acquisition 'if (boundedNoRange && noRangeNoProgressAgeMs >=' 'NO_RANGE_BOUNDED_WAIT'
+Assert-OrderedAfter $acquisition 'protected AICF_TripOutcome ProcessWaitingForSite(' 'if (boundedNoRange && noRangeNoProgressAgeMs >=' '"BOARDING_RANGE_WAIT_EXHAUSTED"' 'NO_RANGE_BOUNDED_WAIT'
+Assert-Contains $acquisition 'infantry_order_preserved=1 hidden_mutation=0' 'NO_RANGE_NO_HIDDEN_MUTATION'
+Assert-NotContains $acquisition 'Teleport(' 'NO_RANGE_NO_HIDDEN_MUTATION'
+
 Assert-Contains $transit 'm_Config.GetHiddenRecoveryEnabled()' 'VEHICLE_UNSTUCK_HIDDEN'
 Assert-Contains $transit 'originalPosition,' 'VEHICLE_UNSTUCK_DESTINATION_RECHECK'
 Assert-Contains $transit 'candidate,' 'VEHICLE_UNSTUCK_DESTINATION_RECHECK'
@@ -106,6 +150,25 @@ Assert-Contains $transit 'managed_occupant_observations_ignored=' 'VEHICLE_UNSTU
 Assert-Contains $transit 'rejection_samples=[' 'VEHICLE_UNSTUCK_REJECTION_DIAGNOSTICS'
 Assert-Contains $transit 'VEHICLE_FAILURE_SNAPSHOT' 'VEHICLE_FIRE_CAUSE_CLASSIFICATION'
 Assert-Contains $transit 'ENGINE_FIRE_SIGNAL_WITHOUT_INSTIGATOR' 'VEHICLE_FIRE_CAUSE_CLASSIFICATION'
+
+Assert-Contains $transit 'CREW_SETTLED_LOSS_MIN_POLLS = 3' 'MANDATORY_CREW_SETTLED_LOSS_DEBOUNCE'
+Assert-Contains $transit 'CREW_SETTLED_LOSS_GRACE_MS = 3000' 'MANDATORY_CREW_SETTLED_LOSS_DEBOUNCE'
+Assert-Contains $phaseStates 'ObserveCrewRoleSettledLoss(' 'MANDATORY_CREW_SETTLED_LOSS_DEBOUNCE'
+Assert-Contains $phaseStates 'ResolveCrewRoleSettledLoss(' 'MANDATORY_CREW_SETTLED_LOSS_DEBOUNCE'
+Assert-Contains $transit 'polls >= CREW_SETTLED_LOSS_MIN_POLLS' 'MANDATORY_CREW_SETTLED_LOSS_DEBOUNCE'
+Assert-Contains $transit 'ageMs >= CREW_SETTLED_LOSS_GRACE_MS' 'MANDATORY_CREW_SETTLED_LOSS_DEBOUNCE'
+Assert-Contains $transit 'MANDATORY_CREW_SETTLED_LOSS_SNAPSHOT' 'MANDATORY_CREW_SETTLED_LOSS_TELEMETRY'
+Assert-Contains $transit 'MANDATORY_CREW_SETTLED_LOSS_RECOVERED' 'MANDATORY_CREW_SETTLED_LOSS_TELEMETRY'
+Assert-Contains $transit 'MANDATORY_CREW_SETTLED_LOSS_IDENTITY_CHANGED' 'MANDATORY_CREW_SETTLED_LOSS_IDENTITY'
+Assert-Contains $transit 'MANDATORY_CREW_SETTLED_LOSS_TERMINAL' 'MANDATORY_CREW_SETTLED_LOSS_TELEMETRY'
+Assert-Contains $transit 'm_bCharacterInVehicle && m_bExactRoleSlot' 'MANDATORY_CREW_SETTLED_EXACT_ROLE_GATE'
+Assert-Contains $transit 'if (observedOccupant != snapshot.GetOccupant())' 'MANDATORY_CREW_SETTLED_LOSS_IDENTITY'
+Assert-Contains $transit 'snapshot_immutable=1 predicates=[' 'MANDATORY_CREW_SETTLED_LOSS_TELEMETRY'
+Assert-Contains $transit 'alive_managed=%1|linked=%2|in_compartment=%3|get_in=%4|get_out=%5|character_vehicle=%6' 'MANDATORY_CREW_SETTLED_LOSS_PREDICATES'
+Assert-Contains $transit 'exact_role_slot=%1|assigned_mgr=%2|assigned_slot=%3|actual_mgr=%4|actual_slot=%5' 'MANDATORY_CREW_SETTLED_LOSS_EXACT_SEAT'
+Assert-Contains $transit 'route_generation=%1 route_mode=%2 route_bound=%3 route_waypoint=%4' 'MANDATORY_CREW_SETTLED_LOSS_ROUTE_CONTEXT'
+Assert-Contains $transit 'state.ClearCrewRoleSettledLoss(EAICompartmentType.Pilot)' 'MISSING_DRIVER_USES_CREW_RECOVERY'
+Assert-Ordered $transit 'state.ClearCrewRoleSettledLoss(EAICompartmentType.Pilot)' 'return StartCrewRecovery(trip, EAICompartmentType.Pilot' 'MISSING_DRIVER_USES_CREW_RECOVERY'
 
 Assert-Contains $phaseStates 'm_bTerminalClearanceStarted' 'TERMINAL_CLEARANCE_MODE'
 Assert-Contains $phaseStates 'void BeginTerminal(' 'TERMINAL_CLEARANCE_MODE'
@@ -125,11 +188,25 @@ Assert-Contains $dismount 'ResolveTargetSideEgress(' 'TARGET_SIDE_POST_DISEMBARK
 Assert-Contains $dismount 'POST_DISEMBARK_TARGET_SIDE_EGRESS' 'TARGET_SIDE_POST_DISEMBARK_DIAGNOSTICS'
 Assert-Contains $dismount 'NON_ALIVE_FORCE_DISEMBARK_MEMBER' 'NON_ALIVE_EXACT_DETACH'
 Assert-Contains $dismount 'compartment.EjectOccupant(true, false, ejectImmediate, true)' 'NON_ALIVE_EXACT_DETACH'
+Assert-Contains $phaseStates 'TryBeginExactRelocationProbe(' 'EXACT_RELOCATION_PROBE_COMMIT'
+Assert-Contains $dismount 'EXACT_RELOCATION_PROBE_BACKOFF_MS = 2000' 'EXACT_RELOCATION_PROBE_COMMIT'
+Assert-Contains $dismount 'if (candidates.IsEmpty())' 'EXACT_RELOCATION_EMPTY_PROBE'
+Assert-Contains $dismount 'DISEMBARK_EXACT_RELOCATION_PROBE_EMPTY' 'EXACT_RELOCATION_EMPTY_PROBE'
+Assert-Contains $dismount 'budget_consumed=0' 'EXACT_RELOCATION_EMPTY_PROBE'
+Assert-OrderedAfter $dismount 'protected void TryRelocateExactManagedMembers(' 'if (candidates.IsEmpty())' 'if (!state.RecordForceClearanceAttempt())' 'EXACT_RELOCATION_EMPTY_PROBE'
+Assert-OrderedAfter $dismount 'protected void TryRelocateExactManagedMembers(' 'if (!state.RecordForceClearanceAttempt())' 'm_Watchdog.ResetGroupVehicleActions(group)' 'EXACT_RELOCATION_PROBE_COMMIT'
+Assert-Contains $dismount 'trip.GetAssignment().GetGroup() != group' 'EXACT_RELOCATION_COMMIT_REVALIDATION'
+Assert-Contains $dismount 'agent.GetControlledEntity() != character' 'EXACT_RELOCATION_COMMIT_REVALIDATION'
+Assert-Contains $dismount '!IsPhysicalOnlyBlocker(character, vehicle, boundsMin, boundsMax)' 'EXACT_RELOCATION_COMMIT_REVALIDATION'
+Assert-OrderedAfter $dismount 'protected void TryRelocateExactManagedMembers(' 'if (!state.RecordForceClearanceAttempt())' 'character.Teleport(transform)' 'EXACT_RELOCATION_PROBE_COMMIT'
 
 Assert-Contains $cleanup 'HandleProtectedClearanceDeadline(' 'RECOVERABLE_CLEANUP_DEADLINE'
 Assert-Contains $cleanup 'VEHICLE_CLEANUP_MANAGED_RECOVERY' 'RECOVERABLE_CLEANUP_DEADLINE'
 Assert-Contains $cleanup 'VEHICLE_CLEANUP_EXACT_RECOVERY' 'RECOVERABLE_CLEANUP_DEADLINE'
 Assert-Contains $cleanup 'PROTECTED_CLEARANCE_DEADLINE_EXCEEDED' 'RECOVERABLE_CLEANUP_DEADLINE'
+Assert-Contains $cleanup 'PROTECTED_CLEARANCE_STABILITY_PENDING_AT_DEADLINE' 'CLEANUP_STABILITY_PENDING'
+Assert-Contains $cleanup 'action=CONTINUE_STABLE_CLEAR_PROOF' 'CLEANUP_STABILITY_PENDING'
+Assert-OrderedAfter $cleanup 'protected AICF_VehicleCleanupOutcome HandleProtectedClearanceDeadline(' 'ReportProtectedClearanceStabilityPending(' 'ReportProtectedClearanceDeadlineExceeded(job' 'CLEANUP_DEADLINE_CLASSIFICATION'
 Assert-Contains $cleanup 'PROTECTED_CLEARANCE_FINAL_OUTCOME' 'RECOVERABLE_CLEANUP_DEADLINE'
 Assert-Contains $cleanup 'PROTECTED_CLEARANCE_TERMINAL_GRACE_MS = 30000' 'RECOVERABLE_CLEANUP_DEADLINE'
 Assert-Contains $cleanup 'TRANSFER_RETAINED_FAIL_CLOSED' 'RECOVERABLE_CLEANUP_DEADLINE'
@@ -148,6 +225,14 @@ Assert-Contains $cleanup 'NON_ALIVE_DETACH_MAX_ATTEMPTS = 3' 'NON_ALIVE_EXACT_DE
 Assert-Contains $cleanup 'TryDetachNonAliveExactOccupants(job, vehicle, nowMs)' 'NON_ALIVE_EXACT_DETACH'
 Assert-Contains $cleanup 'VEHICLE_CLEANUP_NON_ALIVE_EXACT_MEMBER' 'NON_ALIVE_EXACT_DETACH_DIAGNOSTICS'
 Assert-Contains $cleanup 'managed_non_alive_logical=' 'NON_ALIVE_EXACT_DETACH_DIAGNOSTICS'
+Assert-Contains $cleanup 'clock_domain=SYSTEM_TICK' 'CLEANUP_CLOCK_DOMAIN'
+Assert-Contains $cleanup 'scan_sequence=%3 scan_safe=%4' 'CLEANUP_SCAN_HISTORY'
+Assert-Contains $cleanup 'safe_since_tick_ms=%1' 'CLEANUP_SCAN_HISTORY'
+Assert-Contains $cleanup 'current_unsafe_since_ms=%1 current_unsafe_age_ms=%2 current_unsafe_signature=%3' 'CLEANUP_UNSAFE_EPISODE'
+Assert-Contains $cleanup 'job.m_sCurrentUnsafeBlockerSignature != scan.m_sBlockerSignature' 'CLEANUP_UNSAFE_EPISODE'
+Assert-Contains $cleanup 'job.m_iCurrentUnsafeStartedAtMs = 0' 'CLEANUP_UNSAFE_EPISODE'
+Assert-Contains $cleanup 'job.m_sCurrentUnsafeBlockerSignature = string.Empty' 'CLEANUP_UNSAFE_EPISODE'
+Assert-Contains $cleanup 'job.m_iLastUnsafeAtMs = scanAtMs' 'CLEANUP_LAST_UNSAFE_SCAN'
 Assert-Contains $watchdog 'exactCompartmentOwner' 'NON_ALIVE_LOGICAL_OCCUPANT_SCAN'
 Assert-Contains $watchdog 'nonAliveLogicalOccupantCount++' 'NON_ALIVE_LOGICAL_OCCUPANT_SCAN'
 Assert-Contains $watchdog 'IsAuthoritativeNonPlayerCharacter' 'NON_ALIVE_EXACT_DETACH_AUTHORITY'
@@ -177,6 +262,20 @@ Assert-Contains $match 'terminal_age_ms=' 'WAYPOINT_TERMINAL_CLASSIFICATION'
 Assert-Contains $match 'terminalOutcome == "GROUP_CALLBACK_COMPLETED"' 'WAYPOINT_PROXIMITY_CONFIRMATION'
 Assert-Contains $match 'bool consumesStuckBudget = !alreadyCountsAsStuck && !countsAsReliabilityRepair' 'RELIABILITY_STUCK_BUDGET_ISOLATION'
 Assert-Contains $match 'bool enforceStuckBudget = alreadyCountsAsStuck || consumesStuckBudget' 'RELIABILITY_STUCK_BUDGET_ISOLATION'
+Assert-Contains $groupSlot 'return routeProgressResumed;' 'STUCK_ROUTE_PROGRESS_ONLY'
+Assert-NotContains $groupSlot 'return movementResumed || routeProgressResumed' 'STUCK_ROUTE_PROGRESS_ONLY'
+Assert-Contains $match 'failedOutcome = "MOVEMENT_ONLY_REGRESSED"' 'STUCK_MOVEMENT_CLASSIFICATION'
+Assert-Contains $match 'failedOutcome = "MOVEMENT_ONLY"' 'STUCK_MOVEMENT_CLASSIFICATION'
+Assert-Contains $groupSlot 'RecordStuckRecoveryTerminalOutcome("ROUTE_PROGRESS")' 'STUCK_ROUTE_PROGRESS_ONLY'
+Assert-Contains $match 'AuditStuckRecoveryAccounting(' 'STUCK_ACCOUNTING_INVARIANT'
+Assert-Contains $match 'STUCK_RECOVERY_ACCOUNTING_INVARIANT_FAILED' 'STUCK_ACCOUNTING_INVARIANT'
+Assert-Contains $match 'invariant=attempted_equals_all_terminal_outcomes_plus_pending' 'STUCK_ACCOUNTING_INVARIANT'
+Assert-Contains $match 'stuck_unaccounted=' 'STUCK_ACCOUNTING_INVARIANT'
+Assert-Contains $match 'if (stuckUnaccounted != 0)' 'STUCK_ACCOUNTING_INVARIANT'
+Assert-NotContains $match 'IsPersistentStuckFieldHoldRetryDue(' 'NO_TIMED_PERSISTENT_STUCK_RETRY'
+Assert-Contains $match 'resume=STRATEGIC_CONTEXT_CHANGE auto_retry=0' 'NO_TIMED_PERSISTENT_STUCK_RETRY'
+Assert-Contains $match 'trigger=STRATEGIC_CONTEXT_CHANGE reason=%1 auto_retry=0' 'NO_TIMED_PERSISTENT_STUCK_RETRY'
+Assert-Contains $match 'next_action=WAIT_STRATEGIC_CONTEXT_CHANGE offscreen_recovery=NOT_IMPLEMENTED' 'NO_TIMED_PERSISTENT_STUCK_RETRY'
 
 Assert-Contains $coordinator 'slot.HasPendingOrderRecovery()' 'TRANSPORT_ORDER_RECOVERY_ADMISSION_FENCE'
 Assert-Contains $coordinator 'reason = "ORDER_RECOVERY_PENDING"' 'TRANSPORT_ORDER_RECOVERY_ADMISSION_FENCE'

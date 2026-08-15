@@ -17,6 +17,24 @@ class AICF_VehicleAcquisitionCandidate
 	Vehicle m_Vehicle;
 }
 
+// One immutable diagnostic sample for a cap-free WAITING_FOR_SITE probe.
+// Base-reference distance is intentionally identified as approximate: the
+// spawner remains the sole owner of exact empty-terrain/site acceptance.
+class AICF_VehicleNoRangeProbeSample
+{
+	vector m_vGroupOrigin;
+	int m_iAliveCount;
+	float m_fFarthestFromLeaderMeters;
+	float m_fMaximumPairMeters;
+	string m_sMemberSamples;
+	int m_iSafeCandidateCount;
+	string m_sNearestCandidateKey = "NONE";
+	float m_fNearestCandidateDistanceMeters = -1.0;
+	string m_sCandidateTrace = "NONE";
+	float m_fTargetDistanceMeters = -1.0;
+	float m_fMobDistanceMeters = -1.0;
+}
+
 // One bounded request/spawn phase. This component owns acquisition-local state
 // and engine spawn through AICF_VehicleSpawner. It never transitions a trip,
 // invokes another flow, restores infantry orders, starts boarding or cleans up
@@ -25,6 +43,8 @@ class AICF_VehicleAcquisitionFlow
 {
 	protected static const int HARD_MAX_ATTEMPTS = 4;
 	protected static const int HARD_MAX_BACKOFF_MS = 60000;
+	protected static const float NO_RANGE_PROGRESS_EPSILON_METERS = 5.0;
+	protected static const int NO_RANGE_TRACE_LIMIT = 8;
 
 	protected ref AICF_Stage3Config m_Config;
 	protected ref AICF_VehicleCatalog m_Catalog;
@@ -219,6 +239,7 @@ class AICF_VehicleAcquisitionFlow
 
 		if (!fleet.CanReserveLease(trip.GetAssignment()))
 		{
+			requestState.ClearNoRangeObservation();
 			string admissionReason = ResolveLeaseAdmissionFailure(trip, fleet);
 			if (admissionReason != "VEHICLE_CAP_UNAVAILABLE")
 				return FailClosed(trip, admissionReason, "WAIT_LEASE_ADMISSION_GUARD");
@@ -256,7 +277,39 @@ class AICF_VehicleAcquisitionFlow
 			if (!selection || !selection.m_bRetryable)
 				return EndRequest(trip, fleet, requestState, "SITE_PREFLIGHT_TERMINAL", nowMs);
 			int nextProbeAtMs = nowMs + m_Config.GetWaitProbeIntervalMs();
+			AICF_VehicleNoRangeProbeSample noRangeSample;
+			int noRangeNoProgressAgeMs;
+			bool boundedNoRange = selection.m_sFailureReason ==
+				"NO_BOARDING_SITE_WITHIN_RANGE" &&
+				requestState.GetTotalAttemptCount() == 0;
+			if (boundedNoRange)
+			{
+				noRangeSample = BuildNoRangeProbeSample(trip, faction, selection);
+				noRangeNoProgressAgeMs = requestState.ObserveNoRangeProbe(
+					nowMs,
+					noRangeSample.m_vGroupOrigin,
+					noRangeSample.m_sNearestCandidateKey,
+					noRangeSample.m_fNearestCandidateDistanceMeters,
+					noRangeSample.m_sCandidateTrace,
+					NO_RANGE_PROGRESS_EPSILON_METERS);
+				int noRangeDeadlineAtMs = requestState.GetNoRangeLastProgressAtMs() +
+					m_Config.GetNoRangeProgressTimeoutMs();
+				nextProbeAtMs = Math.Min(nextProbeAtMs, noRangeDeadlineAtMs);
+			}
+			else
+			{
+				requestState.ClearNoRangeObservation();
+			}
 			requestState.EnterWaitingForSite(nowMs, nextProbeAtMs, selection.m_sFailureReason);
+			if (boundedNoRange)
+				ReportNoRangeProbe(
+					trip,
+					requestState,
+					noRangeSample,
+					noRangeNoProgressAgeMs,
+					nowMs,
+					nextProbeAtMs,
+					"OBSERVED");
 			ReportWaitHeartbeat(
 				trip,
 				fleet,
@@ -264,6 +317,24 @@ class AICF_VehicleAcquisitionFlow
 				selection.m_sFailureReason,
 				nowMs,
 				nextProbeAtMs);
+			if (boundedNoRange && noRangeNoProgressAgeMs >=
+				m_Config.GetNoRangeProgressTimeoutMs())
+			{
+				ReportNoRangeProbe(
+					trip,
+					requestState,
+					noRangeSample,
+					noRangeNoProgressAgeMs,
+					nowMs,
+					nextProbeAtMs,
+					"BOUNDED_INFANTRY_FALLBACK");
+				return EndRequest(
+					trip,
+					fleet,
+					requestState,
+					"BOARDING_RANGE_WAIT_EXHAUSTED",
+					nowMs);
+			}
 			return AICF_TripOutcome.Wait(selection.m_sFailureReason, causationId);
 		}
 
@@ -951,6 +1022,107 @@ class AICF_VehicleAcquisitionFlow
 		return delayMs;
 	}
 
+	protected AICF_VehicleNoRangeProbeSample BuildNoRangeProbeSample(
+		AICF_TransportTrip trip,
+		SCR_CampaignFaction faction,
+		AICF_VehicleSpawnSiteSelection selection)
+	{
+		AICF_VehicleNoRangeProbeSample sample = new AICF_VehicleNoRangeProbeSample();
+		SCR_AIGroup group = trip.GetAssignment().GetGroup();
+		sample.m_vGroupOrigin = ResolveGroupPosition(group);
+		m_Watchdog.MeasureAliveGroupSpread(
+			group,
+			sample.m_iAliveCount,
+			sample.m_fFarthestFromLeaderMeters,
+			sample.m_fMaximumPairMeters,
+			sample.m_sMemberSamples);
+		MeasureNearestSafeBaseCandidate(faction, sample);
+		sample.m_fTargetDistanceMeters = MeasureBaseReferenceDistance(
+			sample.m_vGroupOrigin,
+			trip.GetAssignment().GetTargetBase());
+		sample.m_fMobDistanceMeters = MeasureBaseReferenceDistance(
+			sample.m_vGroupOrigin,
+			faction.GetMainBase());
+		string failureBase = "NONE";
+		if (selection && selection.m_FailureBase)
+			failureBase = AICF_Stage1Diagnostics.BaseKey(selection.m_FailureBase);
+		sample.m_sCandidateTrace += string.Format(
+			"|failure_base=%1|exact_trace_event=VEHICLE_SPAWN_CANDIDATES_EVALUATED",
+			failureBase);
+		return sample;
+	}
+
+	protected void MeasureNearestSafeBaseCandidate(
+		SCR_CampaignFaction faction,
+		AICF_VehicleNoRangeProbeSample sample)
+	{
+		if (!faction || !sample || !m_Campaign || !m_ConflictAdapter)
+			return;
+		array<SCR_CampaignMilitaryBaseComponent> candidates = {};
+		SCR_CampaignMilitaryBaseComponent mainBase = faction.GetMainBase();
+		if (mainBase)
+			candidates.Insert(mainBase);
+		SCR_CampaignMilitaryBaseManager baseManager = m_Campaign.GetBaseManager();
+		if (baseManager)
+		{
+			array<SCR_CampaignMilitaryBaseComponent> bases = {};
+			baseManager.GetBases(bases);
+			foreach (SCR_CampaignMilitaryBaseComponent base : bases)
+			{
+				if (base && !candidates.Contains(base))
+					candidates.Insert(base);
+			}
+		}
+
+		string trace = "safe=[";
+		int tracedCount;
+		foreach (SCR_CampaignMilitaryBaseComponent candidate : candidates)
+		{
+			if (!m_ConflictAdapter.GetSpawnRejectionReason(candidate, faction).IsEmpty())
+				continue;
+			float distanceMeters = MeasureBaseReferenceDistance(
+				sample.m_vGroupOrigin,
+				candidate);
+			if (distanceMeters < 0)
+				continue;
+			sample.m_iSafeCandidateCount++;
+			string candidateKey = AICF_Stage1Diagnostics.BaseKey(candidate);
+			if (sample.m_fNearestCandidateDistanceMeters < 0 ||
+				distanceMeters < sample.m_fNearestCandidateDistanceMeters)
+			{
+				sample.m_fNearestCandidateDistanceMeters = distanceMeters;
+				sample.m_sNearestCandidateKey = candidateKey;
+			}
+			if (tracedCount >= NO_RANGE_TRACE_LIMIT)
+				continue;
+			if (tracedCount > 0)
+				trace += ",";
+			trace += string.Format("%1:%2", candidateKey, distanceMeters);
+			tracedCount++;
+		}
+		if (sample.m_iSafeCandidateCount > tracedCount)
+			trace += ",TRUNCATED";
+		trace += string.Format(
+			"]|safe_count=%1|nearest=%2|nearest_base_reference_m=%3",
+			sample.m_iSafeCandidateCount,
+			sample.m_sNearestCandidateKey,
+			sample.m_fNearestCandidateDistanceMeters);
+		sample.m_sCandidateTrace = trace;
+	}
+
+	protected float MeasureBaseReferenceDistance(
+		vector groupPosition,
+		SCR_CampaignMilitaryBaseComponent base)
+	{
+		if (!base || !base.GetOwner())
+			return -1.0;
+		vector referencePosition = base.GetOwner().GetOrigin();
+		SCR_SpawnPoint spawnPoint = base.GetSpawnPoint();
+		if (spawnPoint)
+			referencePosition = spawnPoint.GetOrigin();
+		return Math.Sqrt(vector.DistanceSqXZ(groupPosition, referencePosition));
+	}
+
 	protected vector ResolveGroupPosition(SCR_AIGroup group)
 	{
 		if (!group)
@@ -1248,7 +1420,90 @@ class AICF_VehicleAcquisitionFlow
 			" active_or_reserved=%1 limit=%2 cap_reserved=0",
 			fleet.GetActiveOrReservedCount(),
 			fleet.GetMaximumActiveOrReserved());
+		details += string.Format(
+			" no_range_probes=%1 no_range_no_progress_age_ms=%2 no_range_last_progress_at_ms=%3",
+			requestState.GetNoRangeProbeCount(),
+			GetNoRangeNoProgressAgeMs(requestState, nowMs),
+			requestState.GetNoRangeLastProgressAtMs());
+		details += string.Format(
+			" no_range_candidate=%1 no_range_best_reference_m=%2 no_range_delta_m=%3 no_range_trend=%4",
+			requestState.GetNoRangeCandidateKey(),
+			requestState.GetNoRangeBestCandidateDistanceMeters(),
+			requestState.GetNoRangeLastCandidateDeltaMeters(),
+			requestState.GetNoRangeTrend());
+		details += string.Format(
+			" no_range_group_motion_m=%1 no_range_candidate_trace=[%2]",
+			requestState.GetNoRangeLastGroupMotionMeters(),
+			requestState.GetNoRangeCandidateTrace());
 		AICF_Stage3Diagnostics.Info("VEHICLE_SPAWN_WAIT_HEARTBEAT", details);
+	}
+
+	protected void ReportNoRangeProbe(
+		AICF_TransportTrip trip,
+		AICF_VehicleRequestState requestState,
+		AICF_VehicleNoRangeProbeSample sample,
+		int noProgressAgeMs,
+		int nowMs,
+		int nextProbeAtMs,
+		string outcome)
+	{
+		if (!trip || !requestState || !sample)
+			return;
+		string causationId = BuildCausationId(trip, requestState, "NO_RANGE_PROBE");
+		string details = BuildIdentityContext(trip, requestState, null, causationId);
+		details += string.Format(
+			" outcome=%1 reason=NO_BOARDING_SITE_WITHIN_RANGE spawn_attempts=%2 probes=%3",
+			outcome,
+			requestState.GetTotalAttemptCount(),
+			requestState.GetNoRangeProbeCount());
+		details += string.Format(
+			" no_progress_age_ms=%1 no_progress_timeout_ms=%2 no_progress_deadline_at_ms=%3 next_probe_at_ms=%4",
+			noProgressAgeMs,
+			m_Config.GetNoRangeProgressTimeoutMs(),
+			requestState.GetNoRangeLastProgressAtMs() +
+				m_Config.GetNoRangeProgressTimeoutMs(),
+			nextProbeAtMs);
+		details += string.Format(
+			" group_origin=[%1,%2,%3] group_motion_m=%4 alive=%5",
+			sample.m_vGroupOrigin[0],
+			sample.m_vGroupOrigin[1],
+			sample.m_vGroupOrigin[2],
+			requestState.GetNoRangeLastGroupMotionMeters(),
+			sample.m_iAliveCount);
+		details += string.Format(
+			" farthest_from_leader_m=%1 maximum_pair_m=%2 target_distance_m=%3 mob_distance_m=%4",
+			sample.m_fFarthestFromLeaderMeters,
+			sample.m_fMaximumPairMeters,
+			sample.m_fTargetDistanceMeters,
+			sample.m_fMobDistanceMeters);
+		details += string.Format(
+			" nearest_candidate=%1 nearest_base_reference_m=%2 best_base_reference_m=%3 range_delta_m=%4 trend=%5",
+			sample.m_sNearestCandidateKey,
+			sample.m_fNearestCandidateDistanceMeters,
+			requestState.GetNoRangeBestCandidateDistanceMeters(),
+			requestState.GetNoRangeLastCandidateDeltaMeters(),
+			requestState.GetNoRangeTrend());
+		details += string.Format(
+			" maximum_boarding_m=%1 range_gap_reference_m=%2 safe_candidates=%3",
+			m_Config.GetMaximumReuseDistanceMeters(),
+			Math.Max(
+				0.0,
+				sample.m_fNearestCandidateDistanceMeters -
+					m_Config.GetMaximumReuseDistanceMeters()),
+			sample.m_iSafeCandidateCount);
+		details += string.Format(
+			" candidate_trace=[%1] members=[%2]",
+			sample.m_sCandidateTrace,
+			sample.m_sMemberSamples);
+		details += string.Format(
+			" selection_trace_causation_id=%1",
+			BuildCausationId(trip, requestState, "WAIT_PREFLIGHT"));
+		details +=
+			" cap_reserved=0 entity_created=0 infantry_order_preserved=1 hidden_mutation=0";
+		string eventName = "BOARDING_RANGE_WAIT_AUDIT";
+		if (outcome == "BOUNDED_INFANTRY_FALLBACK")
+			eventName = "BOARDING_RANGE_WAIT_EXHAUSTED";
+		AICF_Stage35Diagnostics.Info(eventName, details);
 	}
 
 	protected void ReportWaitingExit(
@@ -1329,6 +1584,15 @@ class AICF_VehicleAcquisitionFlow
 		if (!requestState || requestState.GetCohesionStartedAtMs() <= 0)
 			return 0;
 		return Math.Max(0, nowMs - requestState.GetCohesionStartedAtMs());
+	}
+
+	protected int GetNoRangeNoProgressAgeMs(
+		AICF_VehicleRequestState requestState,
+		int nowMs)
+	{
+		if (!requestState || requestState.GetNoRangeLastProgressAtMs() <= 0)
+			return 0;
+		return Math.Max(0, nowMs - requestState.GetNoRangeLastProgressAtMs());
 	}
 
 	protected AICF_TripOutcome FailClosed(

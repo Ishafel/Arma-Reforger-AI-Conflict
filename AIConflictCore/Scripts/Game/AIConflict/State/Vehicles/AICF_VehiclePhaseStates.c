@@ -79,6 +79,18 @@ class AICF_VehicleRequestState
 	protected int m_iCohesionStartedAtMs;
 	protected float m_fCohesionSpreadMeters;
 	protected bool m_bCohesionRecoveryAttempted;
+	protected int m_iNoRangeStartedAtMs;
+	protected int m_iNoRangeLastProgressAtMs;
+	protected int m_iNoRangeProbeCount;
+	protected vector m_vNoRangePreviousGroupPosition;
+	protected bool m_bNoRangeHasPreviousGroupPosition;
+	protected float m_fNoRangePreviousCandidateDistanceMeters = -1.0;
+	protected float m_fNoRangeBestCandidateDistanceMeters = -1.0;
+	protected float m_fNoRangeLastGroupMotionMeters;
+	protected float m_fNoRangeLastCandidateDeltaMeters;
+	protected string m_sNoRangeCandidateKey;
+	protected string m_sNoRangeTrend;
+	protected string m_sNoRangeCandidateTrace;
 
 	void Reset()
 	{
@@ -97,6 +109,7 @@ class AICF_VehicleRequestState
 		m_iCohesionStartedAtMs = 0;
 		m_fCohesionSpreadMeters = 0;
 		m_bCohesionRecoveryAttempted = false;
+		ClearNoRangeObservation();
 	}
 
 	void Begin(int nowMs, int absoluteDeadlineMs, int maximumAttempts = 4)
@@ -124,6 +137,15 @@ class AICF_VehicleRequestState
 	int GetCohesionStartedAtMs() { return m_iCohesionStartedAtMs; }
 	float GetCohesionSpreadMeters() { return m_fCohesionSpreadMeters; }
 	bool WasCohesionRecoveryAttempted() { return m_bCohesionRecoveryAttempted; }
+	int GetNoRangeStartedAtMs() { return m_iNoRangeStartedAtMs; }
+	int GetNoRangeLastProgressAtMs() { return m_iNoRangeLastProgressAtMs; }
+	int GetNoRangeProbeCount() { return m_iNoRangeProbeCount; }
+	float GetNoRangeBestCandidateDistanceMeters() { return m_fNoRangeBestCandidateDistanceMeters; }
+	float GetNoRangeLastGroupMotionMeters() { return m_fNoRangeLastGroupMotionMeters; }
+	float GetNoRangeLastCandidateDeltaMeters() { return m_fNoRangeLastCandidateDeltaMeters; }
+	string GetNoRangeCandidateKey() { return m_sNoRangeCandidateKey; }
+	string GetNoRangeTrend() { return m_sNoRangeTrend; }
+	string GetNoRangeCandidateTrace() { return m_sNoRangeCandidateTrace; }
 
 	bool IsDeadlineReached(int nowMs)
 	{
@@ -176,6 +198,7 @@ class AICF_VehicleRequestState
 		m_iNextAttemptAtMs = 0;
 		m_iWaitingStartedAtMs = 0;
 		m_sLastFailureReason = string.Empty;
+		ClearNoRangeObservation();
 	}
 
 	int ObserveCohesion(bool fragmented, float spreadMeters, int nowMs)
@@ -195,6 +218,83 @@ class AICF_VehicleRequestState
 	void MarkCohesionRecoveryAttempted()
 	{
 		m_bCohesionRecoveryAttempted = true;
+	}
+
+	int ObserveNoRangeProbe(
+		int nowMs,
+		vector groupPosition,
+		string candidateKey,
+		float candidateDistanceMeters,
+		string candidateTrace,
+		float progressEpsilonMeters)
+	{
+		m_iNoRangeProbeCount++;
+		m_fNoRangeLastGroupMotionMeters = 0;
+		m_fNoRangeLastCandidateDeltaMeters = 0;
+		m_sNoRangeTrend = "FIRST_PROBE";
+		if (m_iNoRangeStartedAtMs <= 0)
+		{
+			m_iNoRangeStartedAtMs = nowMs;
+			m_iNoRangeLastProgressAtMs = nowMs;
+		}
+		if (m_bNoRangeHasPreviousGroupPosition)
+		{
+			m_fNoRangeLastGroupMotionMeters = Math.Sqrt(vector.DistanceSqXZ(
+				groupPosition,
+				m_vNoRangePreviousGroupPosition));
+		}
+
+		if (candidateDistanceMeters < 0)
+		{
+			m_sNoRangeTrend = "NO_CANDIDATE";
+		}
+		else if (m_fNoRangePreviousCandidateDistanceMeters >= 0)
+		{
+			m_fNoRangeLastCandidateDeltaMeters =
+				m_fNoRangePreviousCandidateDistanceMeters - candidateDistanceMeters;
+			if (m_fNoRangeLastCandidateDeltaMeters > progressEpsilonMeters)
+			{
+				m_sNoRangeTrend = "APPROACHING";
+				m_iNoRangeLastProgressAtMs = nowMs;
+			}
+			else if (m_fNoRangeLastCandidateDeltaMeters < -progressEpsilonMeters)
+			{
+				m_sNoRangeTrend = "RETREATING";
+			}
+			else
+			{
+				m_sNoRangeTrend = "STABLE";
+			}
+		}
+
+		if (candidateDistanceMeters >= 0 &&
+			(m_fNoRangeBestCandidateDistanceMeters < 0 ||
+			candidateDistanceMeters < m_fNoRangeBestCandidateDistanceMeters))
+		{
+			m_fNoRangeBestCandidateDistanceMeters = candidateDistanceMeters;
+		}
+		m_vNoRangePreviousGroupPosition = groupPosition;
+		m_bNoRangeHasPreviousGroupPosition = true;
+		m_fNoRangePreviousCandidateDistanceMeters = candidateDistanceMeters;
+		m_sNoRangeCandidateKey = candidateKey;
+		m_sNoRangeCandidateTrace = candidateTrace;
+		return Math.Max(0, nowMs - m_iNoRangeLastProgressAtMs);
+	}
+
+	void ClearNoRangeObservation()
+	{
+		m_iNoRangeStartedAtMs = 0;
+		m_iNoRangeLastProgressAtMs = 0;
+		m_iNoRangeProbeCount = 0;
+		m_vNoRangePreviousGroupPosition = vector.Zero;
+		m_bNoRangeHasPreviousGroupPosition = false;
+		m_fNoRangePreviousCandidateDistanceMeters = -1.0;
+		m_fNoRangeBestCandidateDistanceMeters = -1.0;
+		m_fNoRangeLastGroupMotionMeters = 0;
+		m_fNoRangeLastCandidateDeltaMeters = 0;
+		m_sNoRangeCandidateKey = string.Empty;
+		m_sNoRangeTrend = string.Empty;
+		m_sNoRangeCandidateTrace = string.Empty;
 	}
 }
 
@@ -545,6 +645,14 @@ class AICF_VehicleMovementState
 	protected string m_sRouteMode;
 	protected IEntity m_LastDriver;
 	protected IEntity m_LastGunner;
+	protected IEntity m_DriverSettledLossOccupant;
+	protected int m_iDriverSettledLossStartedAtMs;
+	protected int m_iDriverSettledLossPolls;
+	protected string m_sDriverSettledLossPredicateSnapshot;
+	protected IEntity m_GunnerSettledLossOccupant;
+	protected int m_iGunnerSettledLossStartedAtMs;
+	protected int m_iGunnerSettledLossPolls;
+	protected string m_sGunnerSettledLossPredicateSnapshot;
 	protected bool m_bCrewRecoveryRoutePending;
 	protected ref AICF_VehicleCrewRecoveryToken m_CrewRecoveryToken;
 
@@ -581,6 +689,14 @@ class AICF_VehicleMovementState
 		m_sRouteMode = string.Empty;
 		m_LastDriver = null;
 		m_LastGunner = null;
+		m_DriverSettledLossOccupant = null;
+		m_iDriverSettledLossStartedAtMs = 0;
+		m_iDriverSettledLossPolls = 0;
+		m_sDriverSettledLossPredicateSnapshot = string.Empty;
+		m_GunnerSettledLossOccupant = null;
+		m_iGunnerSettledLossStartedAtMs = 0;
+		m_iGunnerSettledLossPolls = 0;
+		m_sGunnerSettledLossPredicateSnapshot = string.Empty;
 		m_bCrewRecoveryRoutePending = false;
 		m_CrewRecoveryToken = null;
 	}
@@ -761,6 +877,110 @@ class AICF_VehicleMovementState
 
 	void SetLastDriver(IEntity driver) { m_LastDriver = driver; }
 	void SetLastGunner(IEntity gunner) { m_LastGunner = gunner; }
+
+	int ObserveCrewRoleSettledLoss(
+		EAICompartmentType role,
+		IEntity occupant,
+		string predicateSnapshot,
+		int nowMs,
+		out int ageMs,
+		out bool episodeStarted,
+		out bool predicateChanged)
+	{
+		ageMs = 0;
+		episodeStarted = false;
+		predicateChanged = false;
+		if (!occupant)
+			return 0;
+		if (role == EAICompartmentType.Pilot)
+		{
+			episodeStarted = m_DriverSettledLossOccupant != occupant ||
+				m_iDriverSettledLossStartedAtMs <= 0;
+			predicateChanged = episodeStarted ||
+				m_sDriverSettledLossPredicateSnapshot != predicateSnapshot;
+			if (episodeStarted)
+			{
+				m_DriverSettledLossOccupant = occupant;
+				m_iDriverSettledLossStartedAtMs = nowMs;
+				m_iDriverSettledLossPolls = 0;
+			}
+			m_iDriverSettledLossPolls++;
+			m_sDriverSettledLossPredicateSnapshot = predicateSnapshot;
+			ageMs = Math.Max(0, nowMs - m_iDriverSettledLossStartedAtMs);
+			return m_iDriverSettledLossPolls;
+		}
+		if (role != EAICompartmentType.Turret)
+			return 0;
+		episodeStarted = m_GunnerSettledLossOccupant != occupant ||
+			m_iGunnerSettledLossStartedAtMs <= 0;
+		predicateChanged = episodeStarted ||
+			m_sGunnerSettledLossPredicateSnapshot != predicateSnapshot;
+		if (episodeStarted)
+		{
+			m_GunnerSettledLossOccupant = occupant;
+			m_iGunnerSettledLossStartedAtMs = nowMs;
+			m_iGunnerSettledLossPolls = 0;
+		}
+		m_iGunnerSettledLossPolls++;
+		m_sGunnerSettledLossPredicateSnapshot = predicateSnapshot;
+		ageMs = Math.Max(0, nowMs - m_iGunnerSettledLossStartedAtMs);
+		return m_iGunnerSettledLossPolls;
+	}
+
+	bool ResolveCrewRoleSettledLoss(
+		EAICompartmentType role,
+		int nowMs,
+		out IEntity observedOccupant,
+		out int polls,
+		out int ageMs,
+		out string predicateSnapshot)
+	{
+		observedOccupant = null;
+		polls = 0;
+		ageMs = 0;
+		predicateSnapshot = string.Empty;
+		if (role == EAICompartmentType.Pilot)
+		{
+			if (!m_DriverSettledLossOccupant || m_iDriverSettledLossStartedAtMs <= 0)
+				return false;
+			observedOccupant = m_DriverSettledLossOccupant;
+			polls = m_iDriverSettledLossPolls;
+			ageMs = Math.Max(0, nowMs - m_iDriverSettledLossStartedAtMs);
+			predicateSnapshot = m_sDriverSettledLossPredicateSnapshot;
+			ClearCrewRoleSettledLoss(role);
+			return true;
+		}
+		if (role != EAICompartmentType.Turret || !m_GunnerSettledLossOccupant ||
+			m_iGunnerSettledLossStartedAtMs <= 0)
+		{
+			return false;
+		}
+		observedOccupant = m_GunnerSettledLossOccupant;
+		polls = m_iGunnerSettledLossPolls;
+		ageMs = Math.Max(0, nowMs - m_iGunnerSettledLossStartedAtMs);
+		predicateSnapshot = m_sGunnerSettledLossPredicateSnapshot;
+		ClearCrewRoleSettledLoss(role);
+		return true;
+	}
+
+	void ClearCrewRoleSettledLoss(EAICompartmentType role)
+	{
+		if (role == EAICompartmentType.Pilot)
+		{
+			m_DriverSettledLossOccupant = null;
+			m_iDriverSettledLossStartedAtMs = 0;
+			m_iDriverSettledLossPolls = 0;
+			m_sDriverSettledLossPredicateSnapshot = string.Empty;
+			return;
+		}
+		if (role != EAICompartmentType.Turret)
+			return;
+		m_GunnerSettledLossOccupant = null;
+		m_iGunnerSettledLossStartedAtMs = 0;
+		m_iGunnerSettledLossPolls = 0;
+		m_sGunnerSettledLossPredicateSnapshot = string.Empty;
+	}
+
 	void MarkCrewRecoveryRoutePending() { m_bCrewRecoveryRoutePending = true; }
 	void ClearCrewRecoveryRoutePending() { m_bCrewRecoveryRoutePending = false; }
 
@@ -810,23 +1030,65 @@ class AICF_VehicleDismountActionToken
 	protected IEntity m_ReservedEntity;
 	protected SCR_AIMoveIndividuallyBehavior m_Action;
 	protected ref AICF_VehicleAsyncFence m_Fence;
+	protected vector m_vTargetPosition;
+	protected int m_iIssuedAtMs;
+	protected int m_iLastProgressAtMs;
+	protected int m_iLastAuditAtMs;
+	protected float m_fBestDistanceMeters = -1.0;
+	protected float m_fCurrentDistanceMeters = -1.0;
+	protected float m_fMinimumProjectionMeters;
 
 	void AICF_VehicleDismountActionToken(
 		AIAgent agent,
 		IEntity reservedEntity,
 		SCR_AIMoveIndividuallyBehavior action,
-		AICF_VehicleAsyncFence fence)
+		AICF_VehicleAsyncFence fence,
+		vector targetPosition,
+		float initialDistanceMeters,
+		float minimumProjectionMeters)
 	{
 		m_Agent = agent;
 		m_ReservedEntity = reservedEntity;
 		m_Action = action;
 		m_Fence = fence;
+		m_vTargetPosition = targetPosition;
+		m_iIssuedAtMs = System.GetTickCount();
+		m_iLastProgressAtMs = m_iIssuedAtMs;
+		m_iLastAuditAtMs = m_iIssuedAtMs;
+		m_fBestDistanceMeters = initialDistanceMeters;
+		m_fCurrentDistanceMeters = initialDistanceMeters;
+		m_fMinimumProjectionMeters = minimumProjectionMeters;
 	}
 
 	AIAgent GetAgent() { return m_Agent; }
 	IEntity GetReservedEntity() { return m_ReservedEntity; }
 	SCR_AIMoveIndividuallyBehavior GetAction() { return m_Action; }
 	AICF_VehicleAsyncFence GetFence() { return m_Fence; }
+	vector GetTargetPosition() { return m_vTargetPosition; }
+	int GetIssuedAtMs() { return m_iIssuedAtMs; }
+	int GetLastProgressAtMs() { return m_iLastProgressAtMs; }
+	float GetBestDistanceMeters() { return m_fBestDistanceMeters; }
+	float GetCurrentDistanceMeters() { return m_fCurrentDistanceMeters; }
+	float GetMinimumProjectionMeters() { return m_fMinimumProjectionMeters; }
+
+	void ObserveDistance(float distanceMeters, int nowMs, float progressMeters)
+	{
+		m_fCurrentDistanceMeters = distanceMeters;
+		if (m_fBestDistanceMeters < 0 ||
+			distanceMeters <= m_fBestDistanceMeters - progressMeters)
+		{
+			m_fBestDistanceMeters = distanceMeters;
+			m_iLastProgressAtMs = nowMs;
+		}
+	}
+
+	bool ShouldAudit(int nowMs, int intervalMs)
+	{
+		if (m_iLastAuditAtMs > 0 && nowMs - m_iLastAuditAtMs < intervalMs)
+			return false;
+		m_iLastAuditAtMs = nowMs;
+		return true;
+	}
 }
 
 class AICF_VehicleDismountState
@@ -837,8 +1099,10 @@ class AICF_VehicleDismountState
 	protected bool m_bNormalReissueAttempted;
 	protected int m_iGuidanceAttempts;
 	protected int m_iMaximumGuidanceAttempts;
+	protected int m_iLastGuidanceAttemptAtMs;
 	protected int m_iForceClearanceAttempts;
 	protected int m_iMaximumForceClearanceAttempts;
+	protected int m_iLastExactRelocationProbeAtMs;
 	protected int m_iLogicalOccupants;
 	protected int m_iTransitions;
 	protected int m_iInsideBounds;
@@ -861,8 +1125,10 @@ class AICF_VehicleDismountState
 		m_bNormalReissueAttempted = false;
 		m_iGuidanceAttempts = 0;
 		m_iMaximumGuidanceAttempts = 0;
+		m_iLastGuidanceAttemptAtMs = 0;
 		m_iForceClearanceAttempts = 0;
 		m_iMaximumForceClearanceAttempts = 0;
+		m_iLastExactRelocationProbeAtMs = 0;
 		m_iLogicalOccupants = 0;
 		m_iTransitions = 0;
 		m_iInsideBounds = 0;
@@ -902,6 +1168,7 @@ class AICF_VehicleDismountState
 	int GetNormalDeadlineMs() { return m_iNormalDeadlineMs; }
 	int GetTerminalDeadlineMs() { return m_iTerminalDeadlineMs; }
 	int GetGuidanceAttempts() { return m_iGuidanceAttempts; }
+	int GetLastGuidanceAttemptAtMs() { return m_iLastGuidanceAttemptAtMs; }
 	int GetForceClearanceAttempts() { return m_iForceClearanceAttempts; }
 	int GetLogicalOccupants() { return m_iLogicalOccupants; }
 	int GetTransitions() { return m_iTransitions; }
@@ -988,11 +1255,12 @@ class AICF_VehicleDismountState
 		return true;
 	}
 
-	bool RecordGuidanceAttempt()
+	bool RecordGuidanceAttempt(int nowMs)
 	{
 		if (m_iGuidanceAttempts >= m_iMaximumGuidanceAttempts)
 			return false;
 		m_iGuidanceAttempts++;
+		m_iLastGuidanceAttemptAtMs = nowMs;
 		return true;
 	}
 
@@ -1001,6 +1269,17 @@ class AICF_VehicleDismountState
 		if (m_iForceClearanceAttempts >= m_iMaximumForceClearanceAttempts)
 			return false;
 		m_iForceClearanceAttempts++;
+		return true;
+	}
+
+	bool TryBeginExactRelocationProbe(int nowMs, int backoffMs)
+	{
+		if (m_iLastExactRelocationProbeAtMs > 0 &&
+			nowMs - m_iLastExactRelocationProbeAtMs < backoffMs)
+		{
+			return false;
+		}
+		m_iLastExactRelocationProbeAtMs = nowMs;
 		return true;
 	}
 

@@ -1,3 +1,110 @@
+// One authoritative read of an exact Pilot/Turret seat and every predicate
+// used by the settled decision. The flow never re-reads these values while it
+// decides or reports this tick, so telemetry describes the decision it made.
+class AICF_VehicleCrewRoleSnapshot
+{
+	protected EAICompartmentType m_Role;
+	protected BaseCompartmentSlot m_RoleSlot;
+	protected IEntity m_Occupant;
+	protected bool m_bAliveManagedOccupant;
+	protected bool m_bLinkedToVehicle;
+	protected bool m_bInCompartment;
+	protected bool m_bGettingIn;
+	protected bool m_bGettingOut;
+	protected bool m_bCharacterInVehicle;
+	protected bool m_bExactRoleSlot;
+	protected int m_iAssignedManagerId = -1;
+	protected int m_iAssignedSlotId = -1;
+	protected int m_iActualManagerId = -1;
+	protected int m_iActualSlotId = -1;
+	protected string m_sOccupantRplId = "NONE";
+
+	void AICF_VehicleCrewRoleSnapshot(
+		SCR_AIGroup group,
+		Vehicle vehicle,
+		BaseCompartmentSlot roleSlot,
+		EAICompartmentType role,
+		AICF_VehicleWatchdog watchdog)
+	{
+		m_Role = role;
+		m_RoleSlot = roleSlot;
+		if (!m_RoleSlot)
+			return;
+		m_iAssignedManagerId = m_RoleSlot.GetCompartmentMgrID();
+		m_iAssignedSlotId = m_RoleSlot.GetCompartmentSlotID();
+		m_Occupant = m_RoleSlot.GetOccupant();
+		if (!m_Occupant)
+			return;
+
+		m_bAliveManagedOccupant = watchdog &&
+			watchdog.IsAliveGroupMember(group, m_Occupant);
+		RplComponent rpl = RplComponent.Cast(m_Occupant.FindComponent(RplComponent));
+		if (rpl)
+			m_sOccupantRplId = rpl.Id().ToString();
+		ChimeraCharacter character = ChimeraCharacter.Cast(m_Occupant);
+		if (!character)
+			return;
+		CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+		m_bLinkedToVehicle = CompartmentAccessComponent.GetVehicleIn(character) == vehicle;
+		m_bCharacterInVehicle = character.IsInVehicle();
+		if (!access)
+			return;
+		m_bInCompartment = access.IsInCompartment();
+		m_bGettingIn = access.IsGettingIn();
+		m_bGettingOut = access.IsGettingOut();
+		BaseCompartmentSlot actualSlot = access.GetCompartment();
+		if (actualSlot)
+		{
+			m_iActualManagerId = actualSlot.GetCompartmentMgrID();
+			m_iActualSlotId = actualSlot.GetCompartmentSlotID();
+		}
+		m_bExactRoleSlot = actualSlot == m_RoleSlot;
+	}
+
+	EAICompartmentType GetRole() { return m_Role; }
+	IEntity GetOccupant() { return m_Occupant; }
+	bool HasAliveManagedOccupant() { return m_bAliveManagedOccupant; }
+	bool IsSettled()
+	{
+		return m_bAliveManagedOccupant && m_bLinkedToVehicle &&
+			m_bInCompartment && !m_bGettingIn && !m_bGettingOut &&
+			m_bCharacterInVehicle && m_bExactRoleSlot;
+	}
+
+	string GetPredicateSnapshot()
+	{
+		string snapshot = string.Format(
+			"alive_managed=%1|linked=%2|in_compartment=%3|get_in=%4|get_out=%5|character_vehicle=%6",
+			m_bAliveManagedOccupant,
+			m_bLinkedToVehicle,
+			m_bInCompartment,
+			m_bGettingIn,
+			m_bGettingOut,
+			m_bCharacterInVehicle);
+		snapshot += string.Format(
+			"|exact_role_slot=%1|assigned_mgr=%2|assigned_slot=%3|actual_mgr=%4|actual_slot=%5",
+			m_bExactRoleSlot,
+			m_iAssignedManagerId,
+			m_iAssignedSlotId,
+			m_iActualManagerId,
+			m_iActualSlotId);
+		return snapshot;
+	}
+
+	string FormatDetails()
+	{
+		string occupantId = "NONE";
+		if (m_Occupant)
+			occupantId = m_Occupant.GetID().ToString();
+		return string.Format(
+			" role=%1 occupant=%2 occupant_rpl=%3 snapshot_immutable=1 predicates=[%4]",
+			typename.EnumToString(EAICompartmentType, m_Role),
+			occupantId,
+			m_sOccupantRplId,
+			GetPredicateSnapshot());
+	}
+}
+
 // Sole owner of route creation, transit progress, exact crew recovery and
 // guarded mobility recovery. It never transitions a Trip and never calls any
 // other phase flow, controller, handoff or cleanup component.
@@ -6,6 +113,8 @@ class AICF_VehicleTransitFlow
 	protected static const int MOTION_REPORT_INTERVAL_MS = 10000;
 	protected static const int CREW_ACTION_TELEMETRY_INTERVAL_MS = 10000;
 	protected static const int RECOVERY_RETRY_DELAY_MS = 1000;
+	protected static const int CREW_SETTLED_LOSS_MIN_POLLS = 3;
+	protected static const int CREW_SETTLED_LOSS_GRACE_MS = 3000;
 	protected static const int HARD_MAX_CREW_RECOVERIES = 2;
 	protected static const int HARD_MAX_MOBILITY_RECOVERIES = 2;
 	protected static const float UNSTUCK_OFFSET_METERS = 8.0;
@@ -395,22 +504,213 @@ class AICF_VehicleTransitFlow
 		if (token)
 			return ProcessCrewRecoveryToken(trip, token, causationId, nowMs);
 
-		IEntity driver = ResolveAliveRoleOccupant(trip, EAICompartmentType.Pilot);
-		if (!driver)
+		AICF_VehicleCrewRoleSnapshot driverSnapshot = CaptureCrewRoleSnapshot(
+			trip,
+			EAICompartmentType.Pilot);
+		if (!driverSnapshot.HasAliveManagedOccupant())
+		{
+			state.ClearCrewRoleSettledLoss(EAICompartmentType.Pilot);
 			return StartCrewRecovery(trip, EAICompartmentType.Pilot, causationId, nowMs);
-		if (!m_Watchdog.IsMemberSettledInVehicle(driver, trip.GetLease().GetVehicle()))
-			return AICF_TripOutcome.FallbackToFoot("DRIVER_NOT_SETTLED_OUTSIDE_RECOVERY", causationId);
-		state.SetLastDriver(driver);
+		}
+		AICF_TripOutcome driverOutcome = ObserveCrewRoleSettledLoss(
+			trip,
+			driverSnapshot,
+			causationId,
+			nowMs);
+		if (driverOutcome)
+			return driverOutcome;
+		state.SetLastDriver(driverSnapshot.GetOccupant());
 
 		if (trip.GetLease().GetKind() != AICF_EVehicleKind.ARMED_LIGHT)
 			return null;
-		IEntity gunner = ResolveAliveRoleOccupant(trip, EAICompartmentType.Turret);
-		if (!gunner)
+		AICF_VehicleCrewRoleSnapshot gunnerSnapshot = CaptureCrewRoleSnapshot(
+			trip,
+			EAICompartmentType.Turret);
+		if (!gunnerSnapshot.HasAliveManagedOccupant())
+		{
+			state.ClearCrewRoleSettledLoss(EAICompartmentType.Turret);
 			return StartCrewRecovery(trip, EAICompartmentType.Turret, causationId, nowMs);
-		if (!m_Watchdog.IsMemberSettledInVehicle(gunner, trip.GetLease().GetVehicle()))
-			return AICF_TripOutcome.FallbackToFoot("GUNNER_NOT_SETTLED_OUTSIDE_RECOVERY", causationId);
-		state.SetLastGunner(gunner);
+		}
+		AICF_TripOutcome gunnerOutcome = ObserveCrewRoleSettledLoss(
+			trip,
+			gunnerSnapshot,
+			causationId,
+			nowMs);
+		if (gunnerOutcome)
+			return gunnerOutcome;
+		state.SetLastGunner(gunnerSnapshot.GetOccupant());
 		return null;
+	}
+
+	protected AICF_VehicleCrewRoleSnapshot CaptureCrewRoleSnapshot(
+		AICF_TransportTrip trip,
+		EAICompartmentType role)
+	{
+		Vehicle vehicle = trip.GetLease().GetVehicle();
+		return new AICF_VehicleCrewRoleSnapshot(
+			trip.GetAssignment().GetGroup(),
+			vehicle,
+			ResolveRoleSlot(vehicle, role),
+			role,
+			m_Watchdog);
+	}
+
+	protected AICF_TripOutcome ObserveCrewRoleSettledLoss(
+		AICF_TransportTrip trip,
+		AICF_VehicleCrewRoleSnapshot snapshot,
+		string causationId,
+		int nowMs)
+	{
+		AICF_VehicleMovementState state = trip.GetMovementState();
+		EAICompartmentType role = snapshot.GetRole();
+		if (snapshot.IsSettled())
+		{
+			IEntity observedOccupant;
+			int observedPolls;
+			int observedAgeMs;
+			string observedPredicates;
+			if (state.ResolveCrewRoleSettledLoss(
+				role,
+				nowMs,
+				observedOccupant,
+				observedPolls,
+				observedAgeMs,
+				observedPredicates))
+			{
+				string recoveredEvent = "MANDATORY_CREW_SETTLED_LOSS_RECOVERED";
+				if (observedOccupant != snapshot.GetOccupant())
+					recoveredEvent = "MANDATORY_CREW_SETTLED_LOSS_IDENTITY_CHANGED";
+				ReportCrewSettledLoss(
+					trip,
+					snapshot,
+					recoveredEvent,
+					observedPolls,
+					observedAgeMs,
+					false,
+					observedOccupant,
+					observedPredicates,
+					nowMs);
+			}
+			return null;
+		}
+
+		int ageMs;
+		bool episodeStarted;
+		bool predicateChanged;
+		int polls = state.ObserveCrewRoleSettledLoss(
+			role,
+			snapshot.GetOccupant(),
+			snapshot.GetPredicateSnapshot(),
+			nowMs,
+			ageMs,
+			episodeStarted,
+			predicateChanged);
+		bool terminal = polls >= CREW_SETTLED_LOSS_MIN_POLLS &&
+			ageMs >= CREW_SETTLED_LOSS_GRACE_MS;
+		if (terminal)
+		{
+			ReportCrewSettledLoss(
+				trip,
+				snapshot,
+				"MANDATORY_CREW_SETTLED_LOSS_TERMINAL",
+				polls,
+				ageMs,
+				true,
+				null,
+				string.Empty,
+				nowMs);
+			string reason = "DRIVER_NOT_SETTLED_OUTSIDE_RECOVERY";
+			if (role == EAICompartmentType.Turret)
+				reason = "GUNNER_NOT_SETTLED_OUTSIDE_RECOVERY";
+			return AICF_TripOutcome.FallbackToFoot(reason, causationId);
+		}
+		if (episodeStarted || predicateChanged)
+		{
+			ReportCrewSettledLoss(
+				trip,
+				snapshot,
+				"MANDATORY_CREW_SETTLED_LOSS_SNAPSHOT",
+				polls,
+				ageMs,
+				false,
+				null,
+				string.Empty,
+				nowMs);
+		}
+		return AICF_TripOutcome.Wait(
+			"MANDATORY_CREW_SETTLED_LOSS_GRACE",
+			causationId);
+	}
+
+	protected void ReportCrewSettledLoss(
+		AICF_TransportTrip trip,
+		AICF_VehicleCrewRoleSnapshot snapshot,
+		string eventName,
+		int polls,
+		int ageMs,
+		bool terminal,
+		IEntity previousOccupant,
+		string previousPredicates,
+		int nowMs)
+	{
+		string details = FormatIdentity(trip, eventName) + snapshot.FormatDetails();
+		details += string.Format(
+			" consecutive_authority_polls=%1 required_polls=%2 age_ms=%3 required_age_ms=%4 terminal=%5",
+			polls,
+			CREW_SETTLED_LOSS_MIN_POLLS,
+			ageMs,
+			CREW_SETTLED_LOSS_GRACE_MS,
+			terminal);
+		if (previousOccupant)
+		{
+			details += string.Format(
+				" previous_occupant=%1 previous_predicates=[%2]",
+				previousOccupant.GetID(),
+				previousPredicates);
+		}
+		details += FormatCrewSettledLossRouteContext(trip, nowMs);
+		if (terminal)
+			AICF_Stage3Diagnostics.Warning(eventName, details);
+		else
+			AICF_Stage3Diagnostics.Info(eventName, details);
+	}
+
+	protected string FormatCrewSettledLossRouteContext(
+		AICF_TransportTrip trip,
+		int nowMs)
+	{
+		AICF_VehicleMovementState state = trip.GetMovementState();
+		Vehicle vehicle = trip.GetLease().GetVehicle();
+		string waypointId = "NONE";
+		if (state.GetRouteWaypoint())
+			waypointId = state.GetRouteWaypoint().GetID().ToString();
+		float routeDistanceMeters = -1.0;
+		float targetDistanceMeters = -1.0;
+		vector vehicleOrigin = vector.Zero;
+		if (vehicle)
+		{
+			vehicleOrigin = vehicle.GetOrigin();
+			routeDistanceMeters = vector.DistanceXZ(vehicleOrigin, state.GetRouteEndpoint());
+			targetDistanceMeters = vector.DistanceXZ(vehicleOrigin, state.GetTacticalTarget());
+		}
+		string details = string.Format(
+			" route_generation=%1 route_mode=%2 route_bound=%3 route_waypoint=%4",
+			state.GetRouteGeneration(),
+			state.GetRouteMode(),
+			state.IsRouteWaypointBound(),
+			waypointId);
+		details += string.Format(
+			" vehicle_origin=%1 route_endpoint=%2 tactical_target=%3",
+			vehicleOrigin,
+			state.GetRouteEndpoint(),
+			state.GetTacticalTarget());
+		details += string.Format(
+			" route_distance_m=%1 target_distance_m=%2 route_progress_age_ms=%3 motion_age_ms=%4",
+			routeDistanceMeters,
+			targetDistanceMeters,
+			Math.Max(0, nowMs - state.GetLastRouteProgressAtMs()),
+			Math.Max(0, nowMs - state.GetLastPhysicalMotionAtMs()));
+		return details;
 	}
 
 	protected AICF_TripOutcome StartCrewRecovery(

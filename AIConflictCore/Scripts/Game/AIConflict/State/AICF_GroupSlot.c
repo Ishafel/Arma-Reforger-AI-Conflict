@@ -48,6 +48,18 @@ class AICF_GroupSlot
 	protected int m_iLastCommanderMotionAtMs;
 	protected int m_iPendingStuckRecoveryEvidenceStartedAtMs;
 	protected int m_iPendingStuckRecoveryAttempt;
+	protected int m_iStuckEpisodeSequence;
+	protected int m_iStuckEpisodeId;
+	protected int m_iPersistentStuckEpisodeId;
+	protected int m_iPersistentStuckGroupGeneration;
+	protected int m_iPersistentStuckAssignmentRevision;
+	protected int m_iStuckRecoveryAttemptedTotal;
+	protected int m_iStuckRecoveryRouteConfirmedTotal;
+	protected int m_iStuckRecoveryMovementOnlyTotal;
+	protected int m_iStuckRecoveryRegressedTotal;
+	protected int m_iStuckRecoveryFailedTotal;
+	protected int m_iStuckRecoverySupersededTotal;
+	protected int m_iStuckRecoveryIssueFailedTotal;
 	protected int m_iOwnedWaypointTerminalAtMs;
 	protected int m_iOwnedWaypointTerminalGeneration;
 	protected int m_iOrderReliabilityRepairFailureCount;
@@ -62,7 +74,10 @@ class AICF_GroupSlot
 	protected bool m_bOrderReliabilityRepairBudgetExhaustionReported;
 	protected vector m_vLastCommanderMotionPosition;
 	protected vector m_vPendingStuckRecoveryStartPosition;
+	protected vector m_vStuckEpisodeAnchor;
+	protected vector m_vPersistentStuckAnchor;
 	protected float m_fPendingStuckRecoveryStartDistance = -1.0;
+	protected float m_fStuckEpisodeAnchorDistance = -1.0;
 	protected float m_fMobEgressBestDistanceFromMob = -1.0;
 	protected string m_sOperationalPosture;
 	protected string m_sStrategicCandidatePosture;
@@ -87,6 +102,8 @@ class AICF_GroupSlot
 	protected SCR_AIGroup m_PendingOrderRecoveryGroup;
 	protected SCR_AIGroup m_PendingStuckRecoveryGroup;
 	protected SCR_CampaignMilitaryBaseComponent m_PendingStuckRecoveryTargetBase;
+	protected SCR_AIGroup m_PersistentStuckGroup;
+	protected SCR_CampaignMilitaryBaseComponent m_PersistentStuckTargetBase;
 
 	void AICF_GroupSlot(int slotId, AICF_EGroupRole role, int roleIndex = 0)
 	{
@@ -595,6 +612,76 @@ class AICF_GroupSlot
 		return m_bPersistentStuckFieldHold;
 	}
 
+	int EnsureStuckEpisode(vector anchor, float distanceMeters)
+	{
+		if (m_iStuckEpisodeId > 0)
+			return m_iStuckEpisodeId;
+
+		m_iStuckEpisodeSequence++;
+		m_iStuckEpisodeId = m_iStuckEpisodeSequence;
+		m_vStuckEpisodeAnchor = anchor;
+		m_fStuckEpisodeAnchorDistance = distanceMeters;
+		return m_iStuckEpisodeId;
+	}
+
+	int GetStuckEpisodeId()
+	{
+		return m_iStuckEpisodeId;
+	}
+
+	vector GetStuckEpisodeAnchor()
+	{
+		return m_vStuckEpisodeAnchor;
+	}
+
+	float GetStuckEpisodeAnchorDistance()
+	{
+		return m_fStuckEpisodeAnchorDistance;
+	}
+
+	float GetStuckEpisodeAnchorDelta(vector currentPosition)
+	{
+		if (m_iStuckEpisodeId <= 0)
+			return 0;
+
+		return Math.Sqrt(vector.DistanceSqXZ(currentPosition, m_vStuckEpisodeAnchor));
+	}
+
+	int GetPersistentStuckEpisodeId()
+	{
+		return m_iPersistentStuckEpisodeId;
+	}
+
+	vector GetPersistentStuckAnchor()
+	{
+		return m_vPersistentStuckAnchor;
+	}
+
+	float GetPersistentStuckAnchorDelta(vector currentPosition)
+	{
+		if (!m_bPersistentStuckFieldHold)
+			return 0;
+
+		return Math.Sqrt(vector.DistanceSqXZ(currentPosition, m_vPersistentStuckAnchor));
+	}
+
+	bool IsPersistentStuckContextCurrent()
+	{
+		return m_bPersistentStuckFieldHold &&
+			m_Group == m_PersistentStuckGroup &&
+			m_TargetBase == m_PersistentStuckTargetBase &&
+			m_iSpawnGeneration == m_iPersistentStuckGroupGeneration &&
+			m_iStrategicAssignmentRevision == m_iPersistentStuckAssignmentRevision;
+	}
+
+	int GetStuckRecoveryAttemptedTotal() { return m_iStuckRecoveryAttemptedTotal; }
+	int GetStuckRecoveryRouteConfirmedTotal() { return m_iStuckRecoveryRouteConfirmedTotal; }
+	int GetStuckRecoveryMovementOnlyTotal() { return m_iStuckRecoveryMovementOnlyTotal; }
+	int GetStuckRecoveryRegressedTotal() { return m_iStuckRecoveryRegressedTotal; }
+	int GetStuckRecoveryFailedTotal() { return m_iStuckRecoveryFailedTotal; }
+	int GetStuckRecoverySupersededTotal() { return m_iStuckRecoverySupersededTotal; }
+	int GetStuckRecoveryIssueFailedTotal() { return m_iStuckRecoveryIssueFailedTotal; }
+
 	bool IsReplacementDeployment()
 	{
 		return m_bReplacementDeployment;
@@ -643,12 +730,18 @@ class AICF_GroupSlot
 		return true;
 	}
 
-	void BeginPersistentStuckFieldHold()
+	void BeginPersistentStuckFieldHold(vector fieldPosition)
 	{
 		ClearPendingOrderRecovery();
-		ClearPendingStuckRecoveryEvidence();
+		SupersedePendingStuckRecoveryEvidence("PERSISTENT_FIELD_HOLD");
 		m_bPersistentStuckFieldHold = true;
 		m_iPersistentStuckFieldHoldStartedAtMs = System.GetTickCount();
+		m_iPersistentStuckEpisodeId = m_iStuckEpisodeId;
+		m_PersistentStuckGroup = m_Group;
+		m_PersistentStuckTargetBase = m_TargetBase;
+		m_iPersistentStuckGroupGeneration = m_iSpawnGeneration;
+		m_iPersistentStuckAssignmentRevision = m_iStrategicAssignmentRevision;
+		m_vPersistentStuckAnchor = fieldPosition;
 		m_bRecoveringFromStuck = false;
 		m_iLastProgressAtMs = System.GetTickCount();
 	}
@@ -657,6 +750,12 @@ class AICF_GroupSlot
 	{
 		m_bPersistentStuckFieldHold = false;
 		m_iPersistentStuckFieldHoldStartedAtMs = 0;
+		m_iPersistentStuckEpisodeId = 0;
+		m_PersistentStuckGroup = null;
+		m_PersistentStuckTargetBase = null;
+		m_iPersistentStuckGroupGeneration = 0;
+		m_iPersistentStuckAssignmentRevision = 0;
+		m_vPersistentStuckAnchor = vector.Zero;
 	}
 
 	bool IsPersistentStuckFieldHoldRetryDue(int holdMs)
@@ -665,9 +764,9 @@ class AICF_GroupSlot
 			System.GetTickCount(m_iPersistentStuckFieldHoldStartedAtMs) >= holdMs;
 	}
 
-	void ResumeFromPersistentStuckFieldHold()
+	void ResumeFromPersistentStuckFieldHold(string reason)
 	{
-		ResetProgressTracking();
+		ResetProgressTracking(reason);
 	}
 
 	bool BeginInitialSpawn()
@@ -726,11 +825,11 @@ class AICF_GroupSlot
 		// Any newly assigned waypoint supersedes a candidate that was still being
 		// verified. RecoverOrder starts a fresh verification after this assignment.
 		ClearPendingOrderRecovery();
-		ClearPendingStuckRecoveryEvidence();
+		SupersedePendingStuckRecoveryEvidence("OBJECTIVE_REASSIGNED");
 		ClearPersistentStuckFieldHold();
 
 		if (m_ProgressTargetBase != targetBase)
-			ResetProgressTracking();
+			ResetProgressTracking("TARGET_CHANGED");
 		else
 			ClearObjectiveHold();
 
@@ -1042,6 +1141,7 @@ class AICF_GroupSlot
 			m_iStuckRecoveryCount = 0;
 			m_bRecoveringFromStuck = false;
 			m_bPersistentStuckReported = false;
+			CompleteStuckEpisodeTracking();
 			return true;
 		}
 
@@ -1053,6 +1153,7 @@ class AICF_GroupSlot
 		m_iStuckRecoveryCount = 0;
 		m_bRecoveringFromStuck = false;
 		m_bPersistentStuckReported = false;
+		CompleteStuckEpisodeTracking();
 		return true;
 	}
 
@@ -1065,13 +1166,18 @@ class AICF_GroupSlot
 		SCR_CampaignMilitaryBaseComponent targetBase,
 		float distanceMeters)
 	{
-		ClearPendingStuckRecoveryEvidence();
+		if (m_bPendingStuckRecoveryEvidence)
+		{
+			RecordStuckRecoveryTerminalOutcome("ROUTE_PROGRESS_AT_OBJECTIVE");
+			ClearPendingStuckRecoveryEvidenceInternal();
+		}
 		m_ProgressTargetBase = targetBase;
 		m_fBestDistanceToTarget = distanceMeters;
 		m_iLastProgressAtMs = System.GetTickCount();
 		m_iStuckRecoveryCount = 0;
 		m_bRecoveringFromStuck = false;
 		m_bPersistentStuckReported = false;
+		CompleteStuckEpisodeTracking();
 	}
 
 	// Returns true only when a fresh hold window starts for this objective.
@@ -1124,6 +1230,13 @@ class AICF_GroupSlot
 		m_bRecoveringFromStuck = true;
 	}
 
+	void RecordStuckRecoveryAttempt(bool evidencePending)
+	{
+		m_iStuckRecoveryAttemptedTotal++;
+		if (!evidencePending)
+			m_iStuckRecoveryIssueFailedTotal++;
+	}
+
 	void ArmPendingStuckRecoveryEvidence(
 		SCR_AIGroup group,
 		SCR_CampaignMilitaryBaseComponent targetBase,
@@ -1132,7 +1245,7 @@ class AICF_GroupSlot
 		float routeDistanceMeters,
 		int attempt)
 	{
-		ClearPendingStuckRecoveryEvidence();
+		SupersedePendingStuckRecoveryEvidence("NEW_RECOVERY_ATTEMPT");
 		if (!group || !targetBase || !waypoint || attempt <= 0)
 			return;
 
@@ -1183,7 +1296,9 @@ class AICF_GroupSlot
 
 		movementResumed = displacementMeters >= thresholdMeters;
 		routeProgressResumed = routeReductionMeters >= thresholdMeters;
-		return movementResumed || routeProgressResumed;
+		// Body displacement alone may be lateral or backwards. It is useful
+		// telemetry, but only objective-route reduction proves recovery.
+		return routeProgressResumed;
 	}
 
 	int GetPendingStuckRecoveryEvidenceAgeMs()
@@ -1210,16 +1325,74 @@ class AICF_GroupSlot
 	void ConfirmPendingStuckRecoveryEvidence(float routeDistanceMeters)
 	{
 		SCR_CampaignMilitaryBaseComponent targetBase = m_PendingStuckRecoveryTargetBase;
-		ClearPendingStuckRecoveryEvidence();
+		RecordStuckRecoveryTerminalOutcome("ROUTE_PROGRESS");
+		ClearPendingStuckRecoveryEvidenceInternal();
 		m_ProgressTargetBase = targetBase;
 		m_fBestDistanceToTarget = routeDistanceMeters;
 		m_iLastProgressAtMs = System.GetTickCount();
 		m_iStuckRecoveryCount = 0;
 		m_bRecoveringFromStuck = false;
 		m_bPersistentStuckReported = false;
+		CompleteStuckEpisodeTracking();
+	}
+
+	void CompletePendingStuckRecoveryEvidence(string outcome)
+	{
+		if (!m_bPendingStuckRecoveryEvidence)
+			return;
+
+		RecordStuckRecoveryTerminalOutcome(outcome);
+		ClearPendingStuckRecoveryEvidenceInternal();
+	}
+
+	void SupersedePendingStuckRecoveryEvidence(string reason)
+	{
+		if (!m_bPendingStuckRecoveryEvidence)
+			return;
+
+		string factionKey = "NONE";
+		if (m_PendingStuckRecoveryGroup && m_PendingStuckRecoveryGroup.GetFaction())
+			factionKey = m_PendingStuckRecoveryGroup.GetFaction().GetFactionKey();
+		AICF_Stage2Diagnostics.Info(
+			"GROUP_STUCK_RECOVERY",
+			string.Format(
+				"faction=%1 slot=%2 action=CONFIRM_EXECUTION success=0 attempt=%3 order_issue_succeeded=1 evidence_state=SUPERSEDED evidence_age_ms=%4 evidence_waypoint=%5",
+				factionKey,
+				m_iSlotId,
+				m_iPendingStuckRecoveryAttempt,
+				GetPendingStuckRecoveryEvidenceAgeMs(),
+				m_PendingStuckRecoveryWaypoint.GetID()) + string.Format(
+				" outcome=SUPERSEDED reason=%1 episode_id=%2 group_generation=%3 assignment_revision=%4",
+				reason,
+				m_iStuckEpisodeId,
+				m_iSpawnGeneration,
+				m_iStrategicAssignmentRevision));
+		RecordStuckRecoveryTerminalOutcome("SUPERSEDED");
+		ClearPendingStuckRecoveryEvidenceInternal();
 	}
 
 	void ClearPendingStuckRecoveryEvidence()
+	{
+		SupersedePendingStuckRecoveryEvidence("UNCLASSIFIED_CLEAR");
+	}
+
+	protected void RecordStuckRecoveryTerminalOutcome(string outcome)
+	{
+		if (outcome == "ROUTE_PROGRESS" || outcome == "ROUTE_PROGRESS_AT_OBJECTIVE")
+			m_iStuckRecoveryRouteConfirmedTotal++;
+		else if (outcome == "MOVEMENT_ONLY")
+			m_iStuckRecoveryMovementOnlyTotal++;
+		else if (outcome == "MOVEMENT_ONLY_REGRESSED")
+			m_iStuckRecoveryRegressedTotal++;
+		else if (outcome == "SUPERSEDED")
+			m_iStuckRecoverySupersededTotal++;
+		else if (outcome == "ISSUE_FAILED")
+			m_iStuckRecoveryIssueFailedTotal++;
+		else
+			m_iStuckRecoveryFailedTotal++;
+	}
+
+	protected void ClearPendingStuckRecoveryEvidenceInternal()
 	{
 		m_bPendingStuckRecoveryEvidence = false;
 		m_PendingStuckRecoveryGroup = null;
@@ -1229,6 +1402,13 @@ class AICF_GroupSlot
 		m_fPendingStuckRecoveryStartDistance = -1.0;
 		m_iPendingStuckRecoveryAttempt = 0;
 		m_iPendingStuckRecoveryEvidenceStartedAtMs = 0;
+	}
+
+	protected void CompleteStuckEpisodeTracking()
+	{
+		m_iStuckEpisodeId = 0;
+		m_vStuckEpisodeAnchor = vector.Zero;
+		m_fStuckEpisodeAnchorDistance = -1.0;
 	}
 
 	// The caller charges a replacement ticket immediately before committing the ready deployment.
@@ -1249,7 +1429,7 @@ class AICF_GroupSlot
 	void ClearObjective()
 	{
 		ClearPendingOrderRecovery();
-		ClearPendingStuckRecoveryEvidence();
+		SupersedePendingStuckRecoveryEvidence("OBJECTIVE_CLEARED");
 		m_TargetBase = null;
 		m_Waypoint = null;
 	}
@@ -1259,7 +1439,7 @@ class AICF_GroupSlot
 	void SuspendObjectiveWaypoint()
 	{
 		ClearPendingOrderRecovery();
-		ClearPendingStuckRecoveryEvidence();
+		SupersedePendingStuckRecoveryEvidence("VEHICLE_CONTROL_ACQUIRED");
 		m_Waypoint = null;
 		ClearObjectiveHold();
 	}
@@ -1345,6 +1525,7 @@ class AICF_GroupSlot
 			m_Group.GetOnWaypointRemoved().Remove(OnOwnedWaypointRemoved);
 		}
 		ClearPendingOrderRecovery();
+		SupersedePendingStuckRecoveryEvidence("GROUP_RUNTIME_CLEARED");
 		ClearOwnedWaypointTerminalOutcome();
 		m_bRosterSpawnRequested = false;
 		m_bRosterCompletionCallbackObserved = false;
@@ -1378,12 +1559,12 @@ class AICF_GroupSlot
 		m_vLastCommanderMotionPosition = vector.Zero;
 		ResetMobEgressRecovery();
 		ClearStrategicCandidate();
-		ResetProgressTracking();
+		ResetProgressTracking("GROUP_RUNTIME_CLEARED");
 	}
 
-	protected void ResetProgressTracking()
+	protected void ResetProgressTracking(string reason)
 	{
-		ClearPendingStuckRecoveryEvidence();
+		SupersedePendingStuckRecoveryEvidence(reason);
 		m_ProgressTargetBase = null;
 		m_fBestDistanceToTarget = -1.0;
 		m_iLastProgressAtMs = 0;
@@ -1392,6 +1573,8 @@ class AICF_GroupSlot
 		m_bPersistentStuckReported = false;
 		m_bPersistentStuckFieldHold = false;
 		m_iPersistentStuckFieldHoldStartedAtMs = 0;
+		ClearPersistentStuckFieldHold();
+		CompleteStuckEpisodeTracking();
 		ClearObjectiveHold();
 	}
 

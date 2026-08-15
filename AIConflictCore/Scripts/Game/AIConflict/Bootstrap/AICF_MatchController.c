@@ -49,6 +49,7 @@ class AICF_MatchController
 	protected int m_iOrderRecoveryFailures;
 	protected int m_iOrderRecoverySuperseded;
 	protected int m_iLastOrderRepairAccountingDelta;
+	protected int m_iLastStuckRecoveryAccountingDelta;
 	protected int m_iOrderBindingVerifications;
 	protected int m_iOrderBindingVerificationFailures;
 	protected int m_iStuckDetections;
@@ -2180,34 +2181,12 @@ class AICF_MatchController
 			if (slot.IsPersistentStuckFieldHold())
 			{
 				if (m_OrderPlanner.IsStrategicTargetValid(slot, faction, slot.GetTargetBase()))
-				{
-					if (slot.IsOrderReliabilityRepairFailureBudgetExhausted(
-						ORDER_RELIABILITY_REPAIR_FAILURE_BUDGET))
-					{
-						continue;
-					}
-					if (!slot.IsPersistentStuckFieldHoldRetryDue(m_Stage2Config.GetStuckTimeoutMs()))
-						continue;
-					slot.ResumeFromPersistentStuckFieldHold();
-					bool fieldResume = m_OrderPlanner.RebuildCurrentOrder(
-						slot,
-						faction,
-						"PERSISTENT_STUCK_FIELD_RETRY");
-					if (!fieldResume)
-						slot.BeginPersistentStuckFieldHold();
-					AICF_Stage2Diagnostics.Info(
-						"GROUP_STUCK_FIELD_RESUMED",
-						string.Format(
-							"faction=%1 slot=%2 group=%3 target=%4 success=%5 trigger=HOLD_TIMEOUT hold_ms=%6 entity_preserved=1",
-							faction.GetFactionKey(),
-							slot.GetSlotId(),
-							GroupKey(slot.GetGroup()),
-							AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
-							fieldResume,
-							m_Stage2Config.GetStuckTimeoutMs()));
 					continue;
-				}
-				slot.ResumeFromPersistentStuckFieldHold();
+
+				ResumePersistentStuckFieldHold(
+					slot,
+					faction,
+					"STRATEGIC_TARGET_INVALIDATED");
 			}
 
 			// The stock CaptureRelay smart-action waypoint reaches Signal Hill in the
@@ -2339,7 +2318,10 @@ class AICF_MatchController
 			{
 				if (m_OrderPlanner.IsStrategicTargetValid(slot, faction, slot.GetTargetBase()))
 					continue;
-				slot.ResumeFromPersistentStuckFieldHold();
+				ResumePersistentStuckFieldHold(
+					slot,
+					faction,
+					"STRATEGIC_TARGET_INVALIDATED");
 			}
 
 			string failureReason = m_OrderPlanner.GetOrderFailureReason(slot, faction);
@@ -2413,7 +2395,10 @@ class AICF_MatchController
 			return false;
 		}
 
+		bool confirmedPendingStuckRecovery = slot.HasPendingStuckRecoveryEvidence();
 		slot.ConfirmAtObjective(target, distanceMeters);
+		if (confirmedPendingStuckRecovery)
+			m_iStuckRecoveries++;
 		if (slot.MarkObjectiveHoldReported())
 		{
 			AICF_Stage2Diagnostics.Info(
@@ -2833,7 +2818,7 @@ class AICF_MatchController
 			int evidenceAgeMs = slot.GetPendingStuckRecoveryEvidenceAgeMs();
 			string evidenceWaypointId = WaypointKey(
 				slot.GetPendingStuckRecoveryWaypoint());
-			slot.ClearPendingStuckRecoveryEvidence();
+			slot.CompletePendingStuckRecoveryEvidence("ORDER_BINDING_UNSTABLE");
 			AICF_Stage2Diagnostics.Info(
 				"GROUP_STUCK_RECOVERY",
 				string.Format(
@@ -3093,7 +3078,7 @@ class AICF_MatchController
 				attemptId,
 				slot.GetPendingOrderRecoveryElapsedMs()));
 		if (stuckRecovery)
-			slot.ClearPendingStuckRecoveryEvidence();
+			slot.SupersedePendingStuckRecoveryEvidence(reason);
 		slot.ClearPendingOrderRecovery();
 	}
 
@@ -3276,16 +3261,7 @@ class AICF_MatchController
 				slot.GetPendingStuckRecoveryWaypoint());
 			if (!slot.IsPendingStuckRecoveryEvidenceContextCurrent())
 			{
-				slot.ClearPendingStuckRecoveryEvidence();
-				AICF_Stage2Diagnostics.Info(
-					"GROUP_STUCK_RECOVERY",
-					string.Format(
-						"faction=%1 slot=%2 action=CONFIRM_EXECUTION success=0 attempt=%3 order_issue_succeeded=1 movement_resumed=0 route_progress_resumed=0 evidence_state=CONTEXT_INVALIDATED evidence_age_ms=%4 evidence_waypoint=%5",
-						faction.GetFactionKey(),
-						slot.GetSlotId(),
-						evidenceAttempt,
-						evidenceAgeMs,
-						evidenceWaypointId));
+				slot.SupersedePendingStuckRecoveryEvidence("CONTEXT_INVALIDATED");
 			}
 			else
 			{
@@ -3303,6 +3279,8 @@ class AICF_MatchController
 					routeReductionMeters);
 				if (executionConfirmed)
 				{
+					int confirmedEpisodeId = slot.GetStuckEpisodeId();
+					float confirmedAnchorDelta = slot.GetStuckEpisodeAnchorDelta(leaderPosition);
 					slot.ConfirmPendingStuckRecoveryEvidence(distanceMeters);
 					m_iStuckRecoveries++;
 					string confirmedRecoveryDetails = string.Format(
@@ -3317,8 +3295,12 @@ class AICF_MatchController
 						evidenceAgeMs,
 						evidenceThresholdMeters);
 					confirmedRecoveryDetails += string.Format(
-						" evidence_waypoint=%1",
-						evidenceWaypointId);
+						" evidence_waypoint=%1 outcome=ROUTE_PROGRESS episode_id=%2 group_generation=%3 assignment_revision=%4 anchor_delta_m=%5",
+						evidenceWaypointId,
+						confirmedEpisodeId,
+						slot.GetSpawnGeneration(),
+						slot.GetStrategicAssignmentRevision(),
+						confirmedAnchorDelta);
 					AICF_Stage2Diagnostics.Info(
 						"GROUP_STUCK_RECOVERY",
 						confirmedRecoveryDetails);
@@ -3327,6 +3309,8 @@ class AICF_MatchController
 		}
 		if (distanceMeters <= STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
 		{
+			if (slot.HasPendingStuckRecoveryEvidence())
+				m_iStuckRecoveries++;
 			slot.ConfirmAtObjective(target, distanceMeters);
 			return;
 		}
@@ -3356,34 +3340,60 @@ class AICF_MatchController
 			int failedEvidenceAgeMs = slot.GetPendingStuckRecoveryEvidenceAgeMs();
 			string failedEvidenceWaypointId = WaypointKey(
 				slot.GetPendingStuckRecoveryWaypoint());
-			slot.ClearPendingStuckRecoveryEvidence();
+			string failedOutcome = "TIMEOUT";
+			if (movementResumed && routeReductionMeters <= 0)
+				failedOutcome = "MOVEMENT_ONLY_REGRESSED";
+			else if (movementResumed)
+				failedOutcome = "MOVEMENT_ONLY";
+			int failedEpisodeId = slot.GetStuckEpisodeId();
+			float failedAnchorDelta = slot.GetStuckEpisodeAnchorDelta(leaderPosition);
+			slot.CompletePendingStuckRecoveryEvidence(failedOutcome);
 			AICF_Stage2Diagnostics.Info(
 				"GROUP_STUCK_RECOVERY",
 				string.Format(
-					"faction=%1 slot=%2 action=CONFIRM_EXECUTION success=0 attempt=%3 order_issue_succeeded=1 movement_resumed=0 route_progress_resumed=0 displacement_m=%4 route_reduction_m=%5 evidence_state=TIMEOUT evidence_age_ms=%6 threshold_m=%7 evidence_waypoint=%8",
+					"faction=%1 slot=%2 action=CONFIRM_EXECUTION success=0 attempt=%3 order_issue_succeeded=1 movement_resumed=%4 route_progress_resumed=%5 displacement_m=%6 route_reduction_m=%7 evidence_state=TIMEOUT evidence_age_ms=%8",
 					faction.GetFactionKey(),
 					slot.GetSlotId(),
 					failedAttempt,
+					movementResumed,
+					routeProgressResumed,
 					displacementMeters,
 					routeReductionMeters,
-					failedEvidenceAgeMs,
+					failedEvidenceAgeMs) + string.Format(
+					" threshold_m=%1 evidence_waypoint=%2 outcome=%3 episode_id=%4 group_generation=%5 assignment_revision=%6 anchor_delta_m=%7",
 					evidenceThresholdMeters,
-					failedEvidenceWaypointId));
+					failedEvidenceWaypointId,
+					failedOutcome,
+					failedEpisodeId,
+					slot.GetSpawnGeneration(),
+					slot.GetStrategicAssignmentRevision(),
+					failedAnchorDelta));
 		}
 
 		int recoveryAttempt = slot.GetStuckRecoveryCount() + 1;
+		int stuckEpisodeId = slot.EnsureStuckEpisode(leaderPosition, distanceMeters);
+		float stuckAnchorDelta = slot.GetStuckEpisodeAnchorDelta(leaderPosition);
 		m_iStuckDetections++;
 		AICF_Stage2Diagnostics.Warning(
 			"GROUP_STUCK_DETECTED",
 			string.Format(
-				"faction=%1 slot=%2 role=%3 target=%4 distance_m=%5 timeout_ms=%6 attempt=%7",
+				"faction=%1 slot=%2 role=%3 target=%4 distance_m=%5 timeout_ms=%6 attempt=%7 episode_id=%8",
 				faction.GetFactionKey(),
 				slot.GetSlotId(),
 				AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
 				AICF_Stage1Diagnostics.BaseKey(target),
 				distanceMeters,
 				m_Stage2Config.GetStuckTimeoutMs(),
-				recoveryAttempt));
+				recoveryAttempt,
+				stuckEpisodeId) + string.Format(
+				" group=%1 group_generation=%2 assignment_revision=%3 waypoint=%4 order_role=%5 anchor=%6 anchor_delta_m=%7",
+				GroupKey(group),
+				slot.GetSpawnGeneration(),
+				slot.GetStrategicAssignmentRevision(),
+				WaypointKey(waypoint),
+				AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+				slot.GetStuckEpisodeAnchor(),
+				stuckAnchorDelta));
 
 		// Allow the configured number of real route rebuilds. If all of them fail to
 		// produce leader progress, preserve the field group under a durable local
@@ -3428,10 +3438,14 @@ class AICF_MatchController
 		if (recoveryRouteDistanceMeters >= 0)
 			recoveryBaselineDistance = recoveryRouteDistanceMeters;
 		slot.RecordStuckRecovery(recoveryBaselineDistance);
+		slot.RecordStuckRecoveryAttempt(slot.HasPendingStuckRecoveryEvidence());
 
 		string recoveryEvidenceState = "NOT_ARMED";
 		if (slot.HasPendingStuckRecoveryEvidence())
 			recoveryEvidenceState = "PENDING";
+		string recoveryOutcome = "ISSUE_FAILED";
+		if (slot.HasPendingStuckRecoveryEvidence())
+			recoveryOutcome = "PENDING";
 		AICF_Stage2Diagnostics.Info(
 			"GROUP_STUCK_RECOVERY",
 			string.Format(
@@ -3442,7 +3456,15 @@ class AICF_MatchController
 				orderIssueSucceeded,
 				recoveryEvidenceState,
 				evidenceThresholdMeters,
-				WaypointKey(recoveryWaypoint)));
+				WaypointKey(recoveryWaypoint)) + string.Format(
+				" outcome=%1 episode_id=%2 group_generation=%3 assignment_revision=%4 anchor=%5 anchor_delta_m=%6 terminal=%7",
+				recoveryOutcome,
+				stuckEpisodeId,
+				slot.GetSpawnGeneration(),
+				slot.GetStrategicAssignmentRevision(),
+				slot.GetStuckEpisodeAnchor(),
+				stuckAnchorDelta,
+				!slot.HasPendingStuckRecoveryEvidence()));
 
 	}
 
@@ -3468,13 +3490,19 @@ class AICF_MatchController
 		AICF_Stage2Diagnostics.Warning(
 			"GROUP_STUCK_PERSISTENT",
 			string.Format(
-				"faction=%1 slot=%2 group=%3 target=%4 distance_m=%5 recoveries=%6 action=FIELD_HOLD entity_preserved=1 ticket_policy=NONE",
+				"faction=%1 slot=%2 group=%3 target=%4 distance_m=%5 recoveries=%6 action=FIELD_HOLD entity_preserved=1 ticket_policy=NONE episode_id=%7 group_generation=%8",
 				faction.GetFactionKey(),
 				slot.GetSlotId(),
 				groupKey,
 				AICF_Stage1Diagnostics.BaseKey(target),
 				distanceMeters,
-				slot.GetStuckRecoveryCount()));
+				slot.GetStuckRecoveryCount(),
+				slot.GetStuckEpisodeId(),
+				slot.GetSpawnGeneration()) + string.Format(
+				" assignment_revision=%1 anchor=%2 anchor_delta_m=%3",
+				slot.GetStrategicAssignmentRevision(),
+				slot.GetStuckEpisodeAnchor(),
+				slot.GetStuckEpisodeAnchorDelta(fieldPosition)));
 
 		m_GroupCohesionPolicy.NormalizeAfterMovementFailure(group);
 		if (!m_OrderPlanner.HoldPositionForPersistentStuck(
@@ -3493,7 +3521,7 @@ class AICF_MatchController
 		AICF_Stage2Diagnostics.Info(
 			"GROUP_STUCK_FIELD_HOLD",
 			string.Format(
-				"faction=%1 slot=%2 group=%3 target=%4 position=[%5,%6,%7] entity_preserved=1 group_generation=%8 resume=HOLD_TIMEOUT_OR_STRATEGIC_CONTEXT_CHANGE",
+				"faction=%1 slot=%2 group=%3 target=%4 position=[%5,%6,%7] entity_preserved=1 group_generation=%8",
 				faction.GetFactionKey(),
 				slot.GetSlotId(),
 				groupKey,
@@ -3501,7 +3529,43 @@ class AICF_MatchController
 				fieldPosition[0],
 				fieldPosition[1],
 				fieldPosition[2],
-				slot.GetSpawnGeneration()));
+				slot.GetSpawnGeneration()) + string.Format(
+				" assignment_revision=%1 episode_id=%2 anchor=%3 anchor_delta_m=0 resume=STRATEGIC_CONTEXT_CHANGE auto_retry=0 offscreen_recovery=NOT_IMPLEMENTED ticket_policy=NONE",
+				slot.GetStrategicAssignmentRevision(),
+				slot.GetPersistentStuckEpisodeId(),
+				slot.GetPersistentStuckAnchor()));
+	}
+
+	protected void ResumePersistentStuckFieldHold(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		string reason)
+	{
+		if (!slot || !slot.IsPersistentStuckFieldHold())
+			return;
+
+		string factionKey = "NONE";
+		if (faction)
+			factionKey = faction.GetFactionKey();
+		string groupKey = GroupKey(slot.GetGroup());
+		int episodeId = slot.GetPersistentStuckEpisodeId();
+		int groupGeneration = slot.GetSpawnGeneration();
+		int assignmentRevision = slot.GetStrategicAssignmentRevision();
+		vector anchor = slot.GetPersistentStuckAnchor();
+		slot.ResumeFromPersistentStuckFieldHold(reason);
+		AICF_Stage2Diagnostics.Info(
+			"GROUP_STUCK_FIELD_RESUMED",
+			string.Format(
+				"faction=%1 slot=%2 group=%3 group_generation=%4 assignment_revision=%5 episode_id=%6 anchor=%7",
+				factionKey,
+				slot.GetSlotId(),
+				groupKey,
+				groupGeneration,
+				assignmentRevision,
+				episodeId,
+				anchor) + string.Format(
+				" trigger=STRATEGIC_CONTEXT_CHANGE reason=%1 auto_retry=0 entity_preserved=1 ticket_policy=NONE",
+				reason));
 	}
 
 	protected void AuditLifecycleInvariants()
@@ -3800,20 +3864,36 @@ class AICF_MatchController
 				SCR_CampaignMilitaryBaseComponent heldTarget = slot.GetTargetBase();
 				if (m_OrderPlanner.IsStrategicTargetValid(slot, faction, heldTarget))
 				{
-					if (slot.IsOrderReliabilityRepairFailureBudgetExhausted(
-						ORDER_RELIABILITY_REPAIR_FAILURE_BUDGET))
+					vector heldPosition = slot.GetPersistentStuckAnchor();
+					IEntity heldLeader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
+					float heldAnchorDelta = 0;
+					if (heldLeader)
 					{
-						continue;
+						heldPosition = heldLeader.GetOrigin();
+						heldAnchorDelta = slot.GetPersistentStuckAnchorDelta(heldPosition);
 					}
-					slot.ResumeFromPersistentStuckFieldHold();
-					reassigned = m_OrderPlanner.RebuildCurrentOrder(
-						slot,
-						faction,
-						"PERSISTENT_STUCK_CONTEXT_CHANGED");
+					AICF_Stage2Diagnostics.Info(
+						"GROUP_STUCK_FIELD_HOLD_RETAINED",
+						string.Format(
+							"faction=%1 slot=%2 group=%3 group_generation=%4 assignment_revision=%5 target=%6 episode_id=%7",
+							faction.GetFactionKey(),
+							slot.GetSlotId(),
+							GroupKey(slot.GetGroup()),
+							slot.GetSpawnGeneration(),
+							slot.GetStrategicAssignmentRevision(),
+							AICF_Stage1Diagnostics.BaseKey(heldTarget),
+							slot.GetPersistentStuckEpisodeId()) + string.Format(
+							" anchor=%1 anchor_delta_m=%2 changed_base=%3 reason=ROUTE_CONTEXT_UNCHANGED next_action=WAIT_STRATEGIC_CONTEXT_CHANGE offscreen_recovery=NOT_IMPLEMENTED entity_preserved=1 ticket_policy=NONE",
+							slot.GetPersistentStuckAnchor(),
+							heldAnchorDelta,
+							AICF_Stage1Diagnostics.BaseKey(m_LastChangedBase)));
 				}
 				else
 				{
-					slot.ResumeFromPersistentStuckFieldHold();
+					ResumePersistentStuckFieldHold(
+						slot,
+						faction,
+						"STRATEGIC_TARGET_INVALIDATED");
 					reassigned = m_OrderPlanner.AssignOrder(
 						slot,
 						faction,
@@ -3981,6 +4061,40 @@ class AICF_MatchController
 		int unaccountedOrderRepairs = AuditOrderRepairAccounting(
 			"HEARTBEAT",
 			pendingOrderRepairs);
+		int stuckAttempted;
+		int stuckRouteConfirmed;
+		int stuckMovementOnly;
+		int stuckRegressed;
+		int stuckFailed;
+		int stuckSuperseded;
+		int stuckIssueFailed;
+		int stuckPending;
+		int stuckUnaccounted = AuditStuckRecoveryAccounting(
+			"HEARTBEAT",
+			stuckAttempted,
+			stuckRouteConfirmed,
+			stuckMovementOnly,
+			stuckRegressed,
+			stuckFailed,
+			stuckSuperseded,
+			stuckIssueFailed,
+			stuckPending);
+		string stuckAccountingLine = string.Format(
+			" stuck_attempted=%1 stuck_route_confirmed=%2 stuck_movement_only=%3 stuck_regressed=%4",
+			stuckAttempted,
+			stuckRouteConfirmed,
+			stuckMovementOnly,
+			stuckRegressed);
+		stuckAccountingLine += string.Format(
+			" stuck_failed=%1 stuck_superseded=%2 stuck_issue_failed=%3 stuck_pending=%4",
+			stuckFailed,
+			stuckSuperseded,
+			stuckIssueFailed,
+			stuckPending);
+		stuckAccountingLine += string.Format(
+			" stuck_unaccounted=%1 stuck_accounting_balanced=%2",
+			stuckUnaccounted,
+			stuckUnaccounted == 0);
 		AICF_Stage2Diagnostics.Info(
 			"RELIABILITY_HEARTBEAT",
 			string.Format(
@@ -4002,7 +4116,7 @@ class AICF_MatchController
 				m_iStuckFieldHolds,
 				m_iDuplicateSpawnsPrevented,
 				CountConcurrentReplacementSpawns(),
-				CountManagedAgents()));
+				CountManagedAgents()) + stuckAccountingLine);
 
 		int usReservedVehicles;
 		int ussrReservedVehicles;
@@ -4236,6 +4350,42 @@ class AICF_MatchController
 			pendingOrderRepairs);
 		if (unaccountedOrderRepairs != 0)
 			success = false;
+		int stuckAttempted;
+		int stuckRouteConfirmed;
+		int stuckMovementOnly;
+		int stuckRegressed;
+		int stuckFailed;
+		int stuckSuperseded;
+		int stuckIssueFailed;
+		int stuckPending;
+		int stuckUnaccounted = AuditStuckRecoveryAccounting(
+			"MATCH_SUMMARY",
+			stuckAttempted,
+			stuckRouteConfirmed,
+			stuckMovementOnly,
+			stuckRegressed,
+			stuckFailed,
+			stuckSuperseded,
+			stuckIssueFailed,
+			stuckPending);
+		if (stuckUnaccounted != 0)
+			success = false;
+		string stuckAccountingLine = string.Format(
+			" stuck_attempted=%1 stuck_route_confirmed=%2 stuck_movement_only=%3 stuck_regressed=%4",
+			stuckAttempted,
+			stuckRouteConfirmed,
+			stuckMovementOnly,
+			stuckRegressed);
+		stuckAccountingLine += string.Format(
+			" stuck_failed=%1 stuck_superseded=%2 stuck_issue_failed=%3 stuck_pending=%4",
+			stuckFailed,
+			stuckSuperseded,
+			stuckIssueFailed,
+			stuckPending);
+		stuckAccountingLine += string.Format(
+			" stuck_unaccounted=%1 stuck_accounting_balanced=%2",
+			stuckUnaccounted,
+			stuckUnaccounted == 0);
 		AICF_Stage2Diagnostics.Info(
 			"MATCH_RELIABILITY_SUMMARY",
 			string.Format(
@@ -4256,7 +4406,7 @@ class AICF_MatchController
 				m_iStuckRecoveries,
 				m_iStuckFieldHolds,
 				m_iDuplicateSpawnsPrevented,
-				AICF_Stage2Diagnostics.HasErrors()));
+				AICF_Stage2Diagnostics.HasErrors()) + stuckAccountingLine);
 
 		m_bResultLogged = true;
 		AICF_Stage1Diagnostics.Result(
@@ -4310,6 +4460,115 @@ class AICF_MatchController
 
 		m_iLastOrderRepairAccountingDelta = unaccounted;
 		return unaccounted;
+	}
+
+	protected int AuditStuckRecoveryAccounting(
+		string trigger,
+		out int attempted,
+		out int routeConfirmed,
+		out int movementOnly,
+		out int regressed,
+		out int failed,
+		out int superseded,
+		out int issueFailed,
+		out int pending)
+	{
+		attempted = 0;
+		routeConfirmed = 0;
+		movementOnly = 0;
+		regressed = 0;
+		failed = 0;
+		superseded = 0;
+		issueFailed = 0;
+		pending = 0;
+		AccumulateFactionStuckRecoveryAccounting(
+			m_USState,
+			attempted,
+			routeConfirmed,
+			movementOnly,
+			regressed,
+			failed,
+			superseded,
+			issueFailed,
+			pending);
+		AccumulateFactionStuckRecoveryAccounting(
+			m_USSRState,
+			attempted,
+			routeConfirmed,
+			movementOnly,
+			regressed,
+			failed,
+			superseded,
+			issueFailed,
+			pending);
+		int terminal = routeConfirmed + movementOnly + regressed + failed +
+			superseded + issueFailed;
+		int unaccounted = attempted - terminal - pending;
+		if (unaccounted != 0 &&
+			unaccounted != m_iLastStuckRecoveryAccountingDelta)
+		{
+			string details = string.Format(
+				"trigger=%1 attempted=%2 route_confirmed=%3 movement_only=%4 regressed=%5",
+				trigger,
+				attempted,
+				routeConfirmed,
+				movementOnly,
+				regressed);
+			details += string.Format(
+				" failed=%1 superseded=%2 issue_failed=%3 pending=%4 unaccounted=%5",
+				failed,
+				superseded,
+				issueFailed,
+				pending,
+				unaccounted);
+			details += " invariant=attempted_equals_all_terminal_outcomes_plus_pending";
+			AICF_Stage2Diagnostics.Error(
+				"STUCK_RECOVERY_ACCOUNTING_INVARIANT_FAILED",
+				details);
+		}
+		else if (unaccounted == 0 && m_iLastStuckRecoveryAccountingDelta != 0)
+		{
+			AICF_Stage2Diagnostics.Info(
+				"STUCK_RECOVERY_ACCOUNTING_RESTORED",
+				string.Format(
+					"trigger=%1 attempted=%2 route_confirmed=%3 pending=%4 unaccounted=0",
+					trigger,
+					attempted,
+					routeConfirmed,
+					pending));
+		}
+		m_iLastStuckRecoveryAccountingDelta = unaccounted;
+		return unaccounted;
+	}
+
+	protected void AccumulateFactionStuckRecoveryAccounting(
+		AICF_FactionState factionState,
+		inout int attempted,
+		inout int routeConfirmed,
+		inout int movementOnly,
+		inout int regressed,
+		inout int failed,
+		inout int superseded,
+		inout int issueFailed,
+		inout int pending)
+	{
+		if (!factionState)
+			return;
+		for (int slotId; slotId < factionState.GetSlotCount(); slotId++)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (!slot)
+				continue;
+			attempted += slot.GetStuckRecoveryAttemptedTotal();
+			routeConfirmed += slot.GetStuckRecoveryRouteConfirmedTotal();
+			movementOnly += slot.GetStuckRecoveryMovementOnlyTotal();
+			regressed += slot.GetStuckRecoveryRegressedTotal();
+			failed += slot.GetStuckRecoveryFailedTotal();
+			superseded += slot.GetStuckRecoverySupersededTotal();
+			issueFailed += slot.GetStuckRecoveryIssueFailedTotal();
+			if (slot.HasPendingStuckRecoveryEvidence())
+				pending++;
+		}
 	}
 
 	protected int CountPendingOrderRepairs()

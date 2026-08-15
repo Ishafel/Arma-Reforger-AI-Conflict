@@ -17,6 +17,7 @@ class AICF_Stage3Config
 	static const int DEFAULT_RETRY_BACKOFF_MAX_MS = 60000;
 	static const int DEFAULT_WAIT_PROBE_INTERVAL_MS = 60000;
 	static const int DEFAULT_COHESION_WAIT_TIMEOUT_MS = 300000;
+	static const int DEFAULT_NO_RANGE_PROGRESS_TIMEOUT_MS = 90000;
 	static const int DEFAULT_CLEANUP_DELAY_MS = 10000;
 	static const int DEFAULT_ABANDONED_WORLD_POOL_PER_FACTION = 4;
 	static const float DEFAULT_MINIMUM_ROUTE_METERS = 400.0;
@@ -47,6 +48,7 @@ class AICF_Stage3Config
 	protected int m_iRetryBackoffMaxMs;
 	protected int m_iWaitProbeIntervalMs;
 	protected int m_iCohesionWaitTimeoutMs;
+	protected int m_iNoRangeProgressTimeoutMs;
 	protected int m_iCleanupDelayMs;
 	protected int m_iAbandonedWorldPoolPerFaction;
 	protected float m_fMinimumRouteMeters;
@@ -77,6 +79,7 @@ class AICF_Stage3Config
 		m_iRetryBackoffMaxMs = DEFAULT_RETRY_BACKOFF_MAX_MS;
 		m_iWaitProbeIntervalMs = DEFAULT_WAIT_PROBE_INTERVAL_MS;
 		m_iCohesionWaitTimeoutMs = DEFAULT_COHESION_WAIT_TIMEOUT_MS;
+		m_iNoRangeProgressTimeoutMs = DEFAULT_NO_RANGE_PROGRESS_TIMEOUT_MS;
 		m_iCleanupDelayMs = DEFAULT_CLEANUP_DELAY_MS;
 		m_iAbandonedWorldPoolPerFaction = DEFAULT_ABANDONED_WORLD_POOL_PER_FACTION;
 		m_fMinimumRouteMeters = DEFAULT_MINIMUM_ROUTE_METERS;
@@ -108,6 +111,7 @@ class AICF_Stage3Config
 	int GetRetryBackoffMaxMs() { return m_iRetryBackoffMaxMs; }
 	int GetWaitProbeIntervalMs() { return m_iWaitProbeIntervalMs; }
 	int GetCohesionWaitTimeoutMs() { return m_iCohesionWaitTimeoutMs; }
+	int GetNoRangeProgressTimeoutMs() { return m_iNoRangeProgressTimeoutMs; }
 	int GetCleanupDelayMs() { return m_iCleanupDelayMs; }
 	int GetAbandonedWorldPoolPerFaction() { return m_iAbandonedWorldPoolPerFaction; }
 	float GetMinimumRouteMeters() { return m_fMinimumRouteMeters; }
@@ -155,6 +159,8 @@ class AICF_Stage3Config
 			m_iWaitProbeIntervalMs = ClampInt(value.ToInt(), 10000, 1800000);
 		if (System.GetCLIParam("aicfVehicleCohesionWaitTimeoutMs", value))
 			m_iCohesionWaitTimeoutMs = ClampInt(value.ToInt(), 60000, 1800000);
+		if (System.GetCLIParam("aicfVehicleNoRangeProgressTimeoutMs", value))
+			m_iNoRangeProgressTimeoutMs = ClampInt(value.ToInt(), 60000, 300000);
 		if (System.GetCLIParam("aicfVehicleCleanupDelayMs", value))
 			m_iCleanupDelayMs = ClampInt(value.ToInt(), 0, 1800000);
 		if (System.GetCLIParam("aicfVehicleAbandonedWorldPoolPerFaction", value))

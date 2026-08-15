@@ -559,7 +559,7 @@ class AICF_OrderPlanner
 			return false;
 		}
 
-		slot.BeginPersistentStuckFieldHold();
+		slot.BeginPersistentStuckFieldHold(fieldPosition);
 		return true;
 	}
 
