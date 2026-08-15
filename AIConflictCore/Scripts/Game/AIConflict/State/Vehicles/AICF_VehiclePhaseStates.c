@@ -632,7 +632,9 @@ class AICF_VehicleMovementState
 	protected bool m_bRecoveryRequiresRouteProgress;
 	protected bool m_bRecoveryPhysicalEvidence;
 	protected bool m_bRecoveryRouteEvidence;
+	protected bool m_bRecoveryMobilityRestoredReported;
 	protected bool m_bPendingUnstuckRelocated;
+	protected int m_iLastMobilityRecoveryDeferredAtMs;
 	protected int m_iRecoveryEvidenceArmedAtMs;
 	protected string m_sPendingRecoveryReason;
 	protected AIWaypoint m_RouteWaypoint;
@@ -676,7 +678,9 @@ class AICF_VehicleMovementState
 		m_bRecoveryRequiresRouteProgress = false;
 		m_bRecoveryPhysicalEvidence = false;
 		m_bRecoveryRouteEvidence = false;
+		m_bRecoveryMobilityRestoredReported = false;
 		m_bPendingUnstuckRelocated = false;
+		m_iLastMobilityRecoveryDeferredAtMs = 0;
 		m_iRecoveryEvidenceArmedAtMs = 0;
 		m_sPendingRecoveryReason = string.Empty;
 		m_RouteWaypoint = null;
@@ -725,6 +729,10 @@ class AICF_VehicleMovementState
 	bool RecoveryRequiresRouteProgress() { return m_bRecoveryRequiresRouteProgress; }
 	bool HasRecoveryPhysicalEvidence() { return m_bRecoveryPhysicalEvidence; }
 	bool HasRecoveryRouteEvidence() { return m_bRecoveryRouteEvidence; }
+	bool HasReportedRecoveryMobilityRestored()
+	{
+		return m_bRecoveryMobilityRestoredReported;
+	}
 	bool WasPendingUnstuckRelocated() { return m_bPendingUnstuckRelocated; }
 	int GetRecoveryEvidenceArmedAtMs() { return m_iRecoveryEvidenceArmedAtMs; }
 	string GetPendingRecoveryReason() { return m_sPendingRecoveryReason; }
@@ -862,6 +870,25 @@ class AICF_VehicleMovementState
 		return true;
 	}
 
+	bool RollbackUncommittedMobilityRecovery()
+	{
+		if (m_iMobilityRecoveryAttempts <= 0 || m_bRecoveryEvidencePending)
+			return false;
+		m_iMobilityRecoveryAttempts--;
+		return true;
+	}
+
+	bool MarkMobilityRecoveryDeferredDue(int nowMs, int intervalMs)
+	{
+		if (m_iLastMobilityRecoveryDeferredAtMs > 0 &&
+			nowMs - m_iLastMobilityRecoveryDeferredAtMs < intervalMs)
+		{
+			return false;
+		}
+		m_iLastMobilityRecoveryDeferredAtMs = nowMs;
+		return true;
+	}
+
 	void TrackCrewRecoveryToken(AICF_VehicleCrewRecoveryToken token)
 	{
 		m_CrewRecoveryToken = token;
@@ -996,6 +1023,7 @@ class AICF_VehicleMovementState
 		m_bRecoveryRequiresRouteProgress = requireRouteProgress;
 		m_bRecoveryPhysicalEvidence = false;
 		m_bRecoveryRouteEvidence = false;
+		m_bRecoveryMobilityRestoredReported = false;
 		m_bPendingUnstuckRelocated = unstuckRelocated;
 		m_iRecoveryEvidenceArmedAtMs = nowMs;
 		m_sPendingRecoveryReason = reason;
@@ -1012,12 +1040,25 @@ class AICF_VehicleMovementState
 			(!m_bRecoveryRequiresRouteProgress || m_bRecoveryRouteEvidence);
 	}
 
+	bool CanReportRecoveryMobilityRestored()
+	{
+		return m_bRecoveryEvidencePending && m_bRecoveryPhysicalEvidence &&
+			!m_bRecoveryMobilityRestoredReported;
+	}
+
+	void MarkRecoveryMobilityRestoredReported()
+	{
+		if (m_bRecoveryEvidencePending && m_bRecoveryPhysicalEvidence)
+			m_bRecoveryMobilityRestoredReported = true;
+	}
+
 	void ConfirmRecoveryEvidence()
 	{
 		m_bRecoveryEvidencePending = false;
 		m_bRecoveryRequiresRouteProgress = false;
 		m_bRecoveryPhysicalEvidence = false;
 		m_bRecoveryRouteEvidence = false;
+		m_bRecoveryMobilityRestoredReported = false;
 		m_bPendingUnstuckRelocated = false;
 		m_iRecoveryEvidenceArmedAtMs = 0;
 		m_sPendingRecoveryReason = string.Empty;

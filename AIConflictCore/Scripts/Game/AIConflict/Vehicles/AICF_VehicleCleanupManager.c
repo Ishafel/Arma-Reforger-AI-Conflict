@@ -446,6 +446,8 @@ class AICF_VehicleCleanupJob
 	int m_iCleanupScanSequence;
 	int m_iLastUnsafeAtMs;
 	int m_iCurrentUnsafeStartedAtMs;
+	int m_iRetainedRecoveryNextAtMs;
+	int m_iRetainedRecoverySequence;
 	string m_sLastUnsafeBlockerSignature;
 	string m_sCurrentUnsafeBlockerSignature;
 	string m_sLastUnsafeManagedSamples;
@@ -470,6 +472,9 @@ class AICF_VehicleCleanupJob
 	bool m_bProtectedClearanceDeadlineReported;
 	bool m_bProtectedClearanceStabilityPendingReported;
 	bool m_bProtectedClearanceFinalOutcomeReported;
+	bool m_bRecoverableRetainedClearance;
+	bool m_bRetainedRecoveryStartedReported;
+	bool m_bRetainedRecoveryExhaustedReported;
 
 	void InitializeCommon(
 		AICF_FactionFleet fleet,
@@ -529,6 +534,7 @@ class AICF_VehicleCleanupManager
 	// The threshold starts recovery. This immutable grace bounds externally
 	// fenced clearance without ever authorizing an unsafe release or delete.
 	protected static const int PROTECTED_CLEARANCE_TERMINAL_GRACE_MS = 30000;
+	protected static const int RETAINED_CLEARANCE_RECHECK_INTERVAL_MS = 5000;
 	protected static const float MANAGED_CLEARANCE_MARGIN_METERS = 1.5;
 	protected static const float PLAYER_PROTECTION_RADIUS_METERS = 15.0;
 
@@ -708,8 +714,14 @@ class AICF_VehicleCleanupManager
 			AICF_VehicleCleanupJob job = m_aJobs[jobIndex];
 			if (!job || job.m_Fleet != fleet || job.m_bCompleted)
 				continue;
-			if (job.m_bStopMode || job.m_bFailClosed)
+			if (job.m_bStopMode)
 				continue;
+			if (job.m_bFailClosed)
+			{
+				if (job.m_bRecoverableRetainedClearance)
+					ProcessRecoverableRetainedClearance(job, nowMs);
+				continue;
+			}
 			if (!job.m_bReleaseComplete)
 				ProcessLeaseRelease(job, nowMs);
 			if (job.m_bReleaseComplete)
@@ -953,6 +965,153 @@ class AICF_VehicleCleanupManager
 		return ReleaseToWorldPool(job, vehicle, nowMs);
 	}
 
+	// Only clearance-related fail-closed jobs are reconsidered. Identity,
+	// authority, delete-confirmation and snapshot failures remain irreversible.
+	// The failed lease stays in Fleet and consumes cap until this method proves an
+	// exact vehicle, a five-second safe window and an immediate safe rescan.
+	protected void ProcessRecoverableRetainedClearance(
+		AICF_VehicleCleanupJob job,
+		int nowMs)
+	{
+		if (!job || !job.m_bFailClosed || !job.m_bRecoverableRetainedClearance ||
+			job.m_bReleaseComplete || !job.m_Lease || !job.m_Fleet || !job.m_Fence)
+		{
+			return;
+		}
+		if (job.m_iRetainedRecoveryNextAtMs > 0 &&
+			nowMs < job.m_iRetainedRecoveryNextAtMs)
+		{
+			return;
+		}
+		job.m_iRetainedRecoveryNextAtMs = nowMs +
+			RETAINED_CLEARANCE_RECHECK_INTERVAL_MS;
+		job.m_iRetainedRecoverySequence++;
+		bool exactLeaseOwner = job.m_Lease.GetState() ==
+			AICF_EVehicleLeaseState.FAILED_CLOSED &&
+			FleetContainsLease(job.m_Fleet, job.m_Lease) &&
+			job.m_Fleet.FindLeaseForSlot(
+				job.m_Lease.GetSlotId(),
+				job.m_Lease.GetGroupGeneration()) == job.m_Lease &&
+			job.m_Fence.MatchesLease(job.m_Lease);
+		if (!exactLeaseOwner || !IsJobCurrent(job))
+		{
+			job.m_bRecoverableRetainedClearance = false;
+			AICF_Stage3Diagnostics.Error(
+				"VEHICLE_CLEANUP_RETAINED_RECHECK_STOPPED",
+				BuildJobIdentity(job) +
+				" reason=RETAINED_LEASE_IDENTITY_INVALID action=KEEP_CAP_HELD_NO_MUTATION");
+			return;
+		}
+
+		Vehicle vehicle;
+		string actualRplId;
+		string identityFailure;
+		if (!ResolveExpectedVehicle(job, vehicle, actualRplId, identityFailure))
+		{
+			job.m_bRecoverableRetainedClearance = false;
+			AICF_Stage3Diagnostics.Error(
+				"VEHICLE_CLEANUP_RETAINED_RECHECK_STOPPED",
+				BuildJobIdentity(job) + string.Format(
+					" reason=%1 actual_rpl_id=%2 action=KEEP_CAP_HELD_NO_MUTATION",
+					identityFailure,
+					actualRplId));
+			return;
+		}
+
+		TryDetachNonAliveExactOccupants(job, vehicle, nowMs);
+		InspectCleanupSafety(job, vehicle, job.m_Scan);
+		int stableClearMs = job.m_State.ObserveSafeClear(
+			job.m_Scan.m_bSafe,
+			job.m_Scan.m_sBlockerSignature,
+			nowMs);
+		string recheckDetails = BuildJobIdentity(job);
+		recheckDetails += string.Format(
+			" sequence=%1 retained_reason=%2 scan_safe=%3 stable_clear_ms=%4 required_stable_ms=%5",
+			job.m_iRetainedRecoverySequence,
+			job.m_sFailClosedReason,
+			job.m_Scan.m_bSafe,
+			stableClearMs,
+			STABLE_CLEAR_MS);
+		recheckDetails += string.Format(
+			" protected_occupants=%1 nearby_players=%2 managed_logical=%3 managed_transitions=%4 managed_inside_bounds=%5",
+			job.m_Scan.m_iProtectedOccupants,
+			job.m_Scan.m_iNearbyPlayers,
+			job.m_Scan.m_iManagedLogicalOccupants,
+			job.m_Scan.m_iManagedTransitions,
+			job.m_Scan.m_iManagedInsideBounds);
+		recheckDetails += " blocker_signature=" + job.m_Scan.m_sBlockerSignature;
+		recheckDetails += " global_samples=[" + job.m_Scan.m_sGlobalSamples + "]";
+		recheckDetails += " managed_samples=[" + job.m_Scan.m_sManagedSamples + "]";
+		AICF_Stage3Diagnostics.Info(
+			"VEHICLE_CLEANUP_RETAINED_RECHECK",
+			recheckDetails);
+
+		if (!job.m_Scan.m_bSafe)
+		{
+			bool managedBlocked = job.m_Scan.m_iManagedLogicalOccupants > 0 ||
+				job.m_Scan.m_iManagedTransitions > 0 ||
+				job.m_Scan.m_iManagedInsideBounds > 0;
+			bool foreignProtected = job.m_Scan.m_iProtectedOccupants >
+				job.m_Scan.m_iManagedLogicalOccupants;
+			bool playerProtected = !job.m_Scan.m_bPlayerScanAvailable ||
+				job.m_Scan.m_iPlayerTransitions > 0 ||
+				job.m_Scan.m_iNearbyPlayers > 0 ||
+				job.m_Scan.m_sGlobalSamples.Contains("position_unknown");
+			if (managedBlocked && !foreignProtected && !playerProtected &&
+				job.m_iManagedExactRecoveryAttempts <
+					MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS)
+			{
+				if (!job.m_bRetainedRecoveryStartedReported)
+				{
+					job.m_bRetainedRecoveryStartedReported = true;
+					AICF_Stage3Diagnostics.Warning(
+						"VEHICLE_CLEANUP_RETAINED_RECOVERY_STARTED",
+						recheckDetails +
+						" action=EXACT_PLAYER_FENCED_MANAGED_CLEARANCE");
+				}
+				TryExactManagedCleanupRecovery(job, vehicle, actualRplId, nowMs);
+				return;
+			}
+			if (managedBlocked && !foreignProtected && !playerProtected &&
+				job.m_iManagedExactRecoveryAttempts >=
+					MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS &&
+				!job.m_bRetainedRecoveryExhaustedReported)
+			{
+				job.m_bRetainedRecoveryExhaustedReported = true;
+				AICF_Stage3Diagnostics.Error(
+					"VEHICLE_CLEANUP_RETAINED_RECOVERY_EXHAUSTED",
+					recheckDetails +
+					" action=KEEP_CAP_HELD_CONTINUE_READ_ONLY_RECHECK");
+			}
+			return;
+		}
+		if (stableClearMs < STABLE_CLEAR_MS)
+			return;
+
+		// The second scan and entity lookup are intentionally adjacent to Fleet's
+		// ownership transfer. No stale safe sample can release the cap.
+		InspectCleanupSafety(job, vehicle, job.m_Scan);
+		if (!job.m_Scan.m_bSafe)
+		{
+			job.m_State.ObserveSafeClear(
+				false,
+				job.m_Scan.m_sBlockerSignature,
+				nowMs);
+			return;
+		}
+		if (!ResolveExpectedVehicle(job, vehicle, actualRplId, identityFailure))
+		{
+			job.m_bRecoverableRetainedClearance = false;
+			return;
+		}
+
+		job.m_bClearanceSafe = true;
+		if (IsVehicleUnusable(vehicle))
+			ReleaseRecoverableRetainedToRetirement(job, vehicle, nowMs);
+		else
+			ReleaseRecoverableRetainedToWorldPool(job, vehicle, nowMs);
+	}
+
 	// The release deadline starts bounded recovery; it is never permission to
 	// release or delete an occupied asset. Managed blockers get queue reset plus
 	// exact native exit/relocation. External safety fences get a short immutable
@@ -1006,7 +1165,13 @@ class AICF_VehicleCleanupManager
 		if (nowMs >= terminalAtMs)
 		{
 			string terminalReason = "PROTECTED_CLEARANCE_GRACE_EXPIRED";
-			if (playerProtected)
+			if (playerProtected &&
+				job.m_Scan.m_sGlobalSamples.Contains("position_unknown"))
+			{
+				terminalReason =
+					"PROTECTED_CLEARANCE_PLAYER_POSITION_UNKNOWN_GRACE_EXPIRED";
+			}
+			else if (playerProtected)
 				terminalReason = "PROTECTED_CLEARANCE_PLAYER_GRACE_EXPIRED";
 			else if (foreignProtected)
 				terminalReason = "PROTECTED_CLEARANCE_FOREIGN_GRACE_EXPIRED";
@@ -1745,6 +1910,83 @@ class AICF_VehicleCleanupManager
 			asset);
 	}
 
+	protected void ReleaseRecoverableRetainedToWorldPool(
+		AICF_VehicleCleanupJob job,
+		Vehicle vehicle,
+		int nowMs)
+	{
+		AICF_WorldPoolAsset asset;
+		if (!job.m_Fleet.ReleaseRetainedLeaseAt(
+			job.m_Lease,
+			true,
+			"RETAINED_CLEARANCE_RECOVERED",
+			vehicle.GetOrigin(),
+			nowMs,
+			asset) || !asset)
+		{
+			AICF_Stage3Diagnostics.Error(
+				"VEHICLE_CLEANUP_RETAINED_RELEASE_REJECTED",
+				BuildJobIdentity(job) +
+				" disposition=FUNCTIONAL_WORLD_POOL action=KEEP_CAP_HELD");
+			return;
+		}
+		job.m_WorldPoolAsset = asset;
+		job.m_Snapshot = asset.GetCleanupSnapshot();
+		job.m_State = asset.GetCleanupState();
+		job.m_State.Begin(nowMs, 0, DELETE_MAX_ATTEMPTS);
+		job.m_bReleaseComplete = true;
+		job.m_bClearanceSafe = true;
+		job.m_bFailClosed = false;
+		job.m_bRecoverableRetainedClearance = false;
+		if (!job.m_Fence.MatchesSnapshot(job.m_Snapshot))
+		{
+			RetainFailClosed(job, "RETAINED_RELEASE_SNAPSHOT_MISMATCH", "NONE", nowMs);
+			return;
+		}
+		ReportWorldPoolReleased(job);
+		ReportRecoverableRetainedReleased(job, "FUNCTIONAL_WORLD_POOL", nowMs);
+	}
+
+	protected void ReleaseRecoverableRetainedToRetirement(
+		AICF_VehicleCleanupJob job,
+		Vehicle vehicle,
+		int nowMs)
+	{
+		AICF_VehicleRetirementAsset asset;
+		if (!job.m_Fleet.RetireRetainedLeaseAt(
+			job.m_Lease,
+			true,
+			"RETAINED_CLEARANCE_RECOVERED_UNUSABLE",
+			vehicle.GetOrigin(),
+			nowMs,
+			asset) || !asset)
+		{
+			AICF_Stage3Diagnostics.Error(
+				"VEHICLE_CLEANUP_RETAINED_RELEASE_REJECTED",
+				BuildJobIdentity(job) +
+				" disposition=DESTRUCTIVE_RETIREMENT action=KEEP_CAP_HELD");
+			return;
+		}
+		job.m_RetirementAsset = asset;
+		job.m_Snapshot = asset.GetCleanupSnapshot();
+		job.m_State = asset.GetCleanupState();
+		job.m_State.Begin(nowMs, 0, DELETE_MAX_ATTEMPTS);
+		job.m_bReleaseComplete = true;
+		job.m_bClearanceSafe = true;
+		job.m_bQuarantined = true;
+		job.m_bRetirementRequested = true;
+		job.m_sRetirementReason = "RETAINED_CLEARANCE_RECOVERED_UNUSABLE";
+		job.m_bFailClosed = false;
+		job.m_bRecoverableRetainedClearance = false;
+		if (!job.m_Fence.MatchesSnapshot(job.m_Snapshot))
+		{
+			RetainFailClosed(job, "RETAINED_RETIREMENT_SNAPSHOT_MISMATCH", "NONE", nowMs);
+			return;
+		}
+		ReportRetirementQuarantined(job);
+		ReportRecoverableRetainedReleased(job, "DESTRUCTIVE_RETIREMENT", nowMs);
+	}
+
 	protected void EnsureWorldPoolJobs(AICF_FactionFleet fleet, int nowMs)
 	{
 		for (int assetIndex; assetIndex < fleet.GetWorldPoolCount(); assetIndex++)
@@ -2212,6 +2454,21 @@ class AICF_VehicleCleanupManager
 		job.m_bFailClosed = true;
 		job.m_sFailClosedReason = reason;
 		job.m_State.StopFailClosed();
+		if (!job.m_bReleaseComplete &&
+			IsRecoverableProtectedClearanceReason(reason) && job.m_Lease &&
+			job.m_Lease.GetState() == AICF_EVehicleLeaseState.FAILED_CLOSED &&
+			FleetContainsLease(job.m_Fleet, job.m_Lease) &&
+			job.m_Fence.MatchesLease(job.m_Lease))
+		{
+			job.m_bRecoverableRetainedClearance = true;
+			job.m_iRetainedRecoveryNextAtMs = nowMs +
+				RETAINED_CLEARANCE_RECHECK_INTERVAL_MS;
+			job.m_iManagedExactRecoveryAttempts = 0;
+			job.m_iLastManagedExactRecoveryAtMs = 0;
+			job.m_bManagedExactRecoveryBudgetReported = false;
+			job.m_bRetainedRecoveryStartedReported = false;
+			job.m_bRetainedRecoveryExhaustedReported = false;
+		}
 		ReportProtectedClearanceFinalOutcome(
 			job,
 			"RETAINED_FAIL_CLOSED:" + reason,
@@ -2259,6 +2516,16 @@ class AICF_VehicleCleanupManager
 		if (job.m_bStopMode)
 			ReportStopRetained(job, nowMs, reason);
 		return AICF_VehicleCleanupOutcome.Retained(reason, job.m_sActionToken);
+	}
+
+	protected bool IsRecoverableProtectedClearanceReason(string reason)
+	{
+		if (reason.IsEmpty())
+			return false;
+		if (reason.Contains("MANAGED_EXACT_RECOVERY_EXHAUSTED"))
+			return true;
+		return reason.Contains("PROTECTED_CLEARANCE_") &&
+			reason.Contains("GRACE_EXPIRED");
 	}
 
 	protected void ObserveLateCleanupFailure(
@@ -2705,6 +2972,28 @@ class AICF_VehicleCleanupManager
 			job,
 			"QUARANTINED_FOR_RETIREMENT",
 			System.GetTickCount());
+	}
+
+	protected void ReportRecoverableRetainedReleased(
+		AICF_VehicleCleanupJob job,
+		string disposition,
+		int nowMs)
+	{
+		string details = BuildJobIdentity(job);
+		details += string.Format(
+			" retained_reason=%1 retained_rechecks=%2 disposition=%3 release_complete=1 cap=RELEASED stable_clear_required_ms=%4",
+			job.m_sFailClosedReason,
+			job.m_iRetainedRecoverySequence,
+			disposition,
+			STABLE_CLEAR_MS);
+		details += string.Format(
+			" recovered_at_ms=%1 exact_recovery_attempts=%2 non_alive_detach_attempts=%3",
+			nowMs,
+			job.m_iManagedExactRecoveryAttempts,
+			job.m_iNonAliveDetachAttempts);
+		AICF_Stage3Diagnostics.Info(
+			"VEHICLE_CLEANUP_RETAINED_RECOVERED",
+			details);
 	}
 
 	protected void ReportProtectedClearanceDeadlineExceeded(

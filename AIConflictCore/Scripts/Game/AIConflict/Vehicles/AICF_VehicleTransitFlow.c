@@ -18,6 +18,9 @@ class AICF_VehicleCrewRoleSnapshot
 	protected int m_iActualManagerId = -1;
 	protected int m_iActualSlotId = -1;
 	protected string m_sOccupantRplId = "NONE";
+	protected string m_sCurrentActionType = "NONE";
+	protected string m_sCurrentActionState = "NONE";
+	protected bool m_bUtilityOwnerExact;
 
 	void AICF_VehicleCrewRoleSnapshot(
 		SCR_AIGroup group,
@@ -59,6 +62,29 @@ class AICF_VehicleCrewRoleSnapshot
 			m_iActualSlotId = actualSlot.GetCompartmentSlotID();
 		}
 		m_bExactRoleSlot = actualSlot == m_RoleSlot;
+		if (!group)
+			return;
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent || agent.GetControlledEntity() != m_Occupant)
+				continue;
+			SCR_AIUtilityComponent utility = SCR_AIUtilityComponent.Cast(
+				agent.FindComponent(SCR_AIUtilityComponent));
+			if (!utility)
+				break;
+			m_bUtilityOwnerExact = utility.m_OwnerEntity == m_Occupant;
+			AIActionBase currentAction = utility.GetCurrentAction();
+			if (currentAction)
+			{
+				m_sCurrentActionType = currentAction.Type().ToString();
+				m_sCurrentActionState = typename.EnumToString(
+					EAIActionState,
+					currentAction.GetActionState());
+			}
+			break;
+		}
 	}
 
 	EAICompartmentType GetRole() { return m_Role; }
@@ -88,6 +114,11 @@ class AICF_VehicleCrewRoleSnapshot
 			m_iAssignedSlotId,
 			m_iActualManagerId,
 			m_iActualSlotId);
+		snapshot += string.Format(
+			"|utility_owner_exact=%1|current_action=%2|current_action_state=%3",
+			m_bUtilityOwnerExact,
+			m_sCurrentActionType,
+			m_sCurrentActionState);
 		return snapshot;
 	}
 
@@ -415,7 +446,7 @@ class AICF_VehicleTransitFlow
 			false,
 			true,
 			"CREW_RECOVERY",
-			false,
+			true,
 			false);
 	}
 
@@ -439,6 +470,8 @@ class AICF_VehicleTransitFlow
 			m_Config.GetMotionMeters(),
 			nowMs);
 		ReportProgress(trip, routeProgress, physicalMotion, routeDistanceMeters, targetDistanceMeters, nowMs);
+		if (state.CanReportRecoveryMobilityRestored())
+			ReportRecoveryMobilityRestored(trip, routeDistanceMeters, targetDistanceMeters, nowMs);
 		if (state.CanConfirmRecoveryEvidence())
 			ReportAndConfirmRecovery(trip, routeDistanceMeters, targetDistanceMeters);
 
@@ -457,16 +490,15 @@ class AICF_VehicleTransitFlow
 			stuckReason = "NO_PHYSICAL_MOVEMENT";
 		if (stationary && !vehicleCanMove)
 			stuckReason = "MOVEMENT_DAMAGE_WITHOUT_PROGRESS";
-		ReportStuckDetected(
-			trip,
-			stuckReason,
-			routeDistanceMeters,
-			targetDistanceMeters,
-			nowMs,
-			vehicleCanMove);
-
 		if (!vehicleCanMove)
 		{
+			ReportStuckDetected(
+				trip,
+				stuckReason,
+				routeDistanceMeters,
+				targetDistanceMeters,
+				nowMs,
+				vehicleCanMove);
 			if (state.IsRecoveryEvidencePending())
 				ReportPendingRecoveryFailure(trip, stuckReason, true);
 			return FailRecovery(
@@ -475,6 +507,48 @@ class AICF_VehicleTransitFlow
 				"MOBILITY",
 				causationId);
 		}
+		if (stationary)
+		{
+			string relocationPreflightReason;
+			if (!m_Watchdog.CanSafelyRelocateVehicle(
+				trip.GetAssignment().GetGroup(),
+				vehicle,
+				m_Config.GetHiddenRecoveryPlayerRadiusMeters(),
+				relocationPreflightReason) &&
+				relocationPreflightReason == "MANAGED_MEMBERS_NOT_SETTLED")
+			{
+				if (state.MarkMobilityRecoveryDeferredDue(nowMs, MOTION_REPORT_INTERVAL_MS))
+				{
+					ReportStuckDetected(
+						trip,
+						stuckReason,
+						routeDistanceMeters,
+						targetDistanceMeters,
+						nowMs,
+						vehicleCanMove);
+					AICF_Stage3Diagnostics.Warning(
+						"VEHICLE_RECOVERY_DEFERRED",
+						FormatIdentity(trip, relocationPreflightReason) + string.Format(
+							" mobility_attempt=%1 maximum_attempts=%2 attempt_consumed=0 next_action=WAIT_MANAGED_MEMBERS_SETTLED retry_delay_ms=%3",
+							state.GetMobilityRecoveryAttempts(),
+							state.GetMaximumMobilityRecoveryAttempts(),
+							RECOVERY_RETRY_DELAY_MS));
+				}
+				return AICF_TripOutcome.Retry(
+					"MOBILITY_RECOVERY_MANAGED_MEMBERS_NOT_SETTLED",
+					causationId,
+					Math.Min(
+						trip.GetAbsoluteDeadlineMs(),
+						nowMs + RECOVERY_RETRY_DELAY_MS));
+			}
+		}
+		ReportStuckDetected(
+			trip,
+			stuckReason,
+			routeDistanceMeters,
+			targetDistanceMeters,
+			nowMs,
+			vehicleCanMove);
 		if (!state.BeginMobilityRecovery())
 		{
 			if (state.IsRecoveryEvidencePending())
@@ -509,7 +583,6 @@ class AICF_VehicleTransitFlow
 			EAICompartmentType.Pilot);
 		if (!driverSnapshot.HasAliveManagedOccupant())
 		{
-			state.ClearCrewRoleSettledLoss(EAICompartmentType.Pilot);
 			return StartCrewRecovery(trip, EAICompartmentType.Pilot, causationId, nowMs);
 		}
 		AICF_TripOutcome driverOutcome = ObserveCrewRoleSettledLoss(
@@ -528,7 +601,6 @@ class AICF_VehicleTransitFlow
 			EAICompartmentType.Turret);
 		if (!gunnerSnapshot.HasAliveManagedOccupant())
 		{
-			state.ClearCrewRoleSettledLoss(EAICompartmentType.Turret);
 			return StartCrewRecovery(trip, EAICompartmentType.Turret, causationId, nowMs);
 		}
 		AICF_TripOutcome gunnerOutcome = ObserveCrewRoleSettledLoss(
@@ -713,6 +785,137 @@ class AICF_VehicleTransitFlow
 		return details;
 	}
 
+	protected string FormatMissingCrewRoleEvidence(
+		AICF_TransportTrip trip,
+		EAICompartmentType role,
+		BaseCompartmentSlot roleSlot,
+		IEntity lastKnownOccupant,
+		IEntity observedLossOccupant,
+		int observedLossPolls,
+		int observedLossAgeMs,
+		string observedPredicates)
+	{
+		Vehicle vehicle = trip.GetLease().GetVehicle();
+		IEntity roleSlotOccupant;
+		if (roleSlot)
+			roleSlotOccupant = roleSlot.GetOccupant();
+		IEntity evidenceEntity = observedLossOccupant;
+		if (!evidenceEntity)
+			evidenceEntity = lastKnownOccupant;
+		string evidenceEntityId = "NONE";
+		string evidenceRplId = "NONE";
+		bool linked;
+		bool inCompartment;
+		bool gettingIn;
+		bool gettingOut;
+		bool characterVehicle;
+		int actualManagerId = -1;
+		int actualSlotId = -1;
+		BaseCompartmentSlot actualSlot;
+		if (evidenceEntity)
+		{
+			evidenceEntityId = evidenceEntity.GetID().ToString();
+			RplComponent evidenceRpl = RplComponent.Cast(
+				evidenceEntity.FindComponent(RplComponent));
+			if (evidenceRpl)
+				evidenceRplId = evidenceRpl.Id().ToString();
+			ChimeraCharacter character = ChimeraCharacter.Cast(evidenceEntity);
+			if (character)
+			{
+				CompartmentAccessComponent access =
+					character.GetCompartmentAccessComponent();
+				linked = CompartmentAccessComponent.GetVehicleIn(character) == vehicle;
+				characterVehicle = character.IsInVehicle();
+				if (access)
+				{
+					inCompartment = access.IsInCompartment();
+					gettingIn = access.IsGettingIn();
+					gettingOut = access.IsGettingOut();
+					actualSlot = access.GetCompartment();
+					if (actualSlot)
+					{
+						actualManagerId = actualSlot.GetCompartmentMgrID();
+						actualSlotId = actualSlot.GetCompartmentSlotID();
+					}
+				}
+			}
+		}
+
+		string currentActionType = "NONE";
+		string currentActionState = "NONE";
+		bool utilityOwnerExact;
+		SCR_AIGroup group = trip.GetAssignment().GetGroup();
+		array<AIAgent> agents = {};
+		if (group)
+			group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent || agent.GetControlledEntity() != evidenceEntity)
+				continue;
+			SCR_AIUtilityComponent utility = SCR_AIUtilityComponent.Cast(
+				agent.FindComponent(SCR_AIUtilityComponent));
+			if (!utility)
+				break;
+			utilityOwnerExact = utility.m_OwnerEntity == evidenceEntity;
+			AIActionBase currentAction = utility.GetCurrentAction();
+			if (currentAction)
+			{
+				currentActionType = currentAction.Type().ToString();
+				currentActionState = typename.EnumToString(
+					EAIActionState,
+					currentAction.GetActionState());
+			}
+			break;
+		}
+
+		string lossKind = "ROLE_SLOT_EMPTY";
+		if (gettingOut || observedPredicates.Contains("get_out=1"))
+			lossKind = "EXIT_ACTION";
+		else if (actualSlot && actualSlot != roleSlot)
+			lossKind = "SEAT_CHANGED";
+		else if (gettingIn)
+			lossKind = "INGRESS_TRANSITION";
+		string roleSlotOccupantId = "NONE";
+		if (roleSlotOccupant)
+			roleSlotOccupantId = roleSlotOccupant.GetID().ToString();
+		int assignedManagerId = -1;
+		int assignedSlotId = -1;
+		if (roleSlot)
+		{
+			assignedManagerId = roleSlot.GetCompartmentMgrID();
+			assignedSlotId = roleSlot.GetCompartmentSlotID();
+		}
+		string details = string.Format(
+			" loss_kind=%1 role=%2 role_slot_occupant=%3 last_known_occupant=%4 last_known_rpl=%5",
+			lossKind,
+			typename.EnumToString(EAICompartmentType, role),
+			roleSlotOccupantId,
+			evidenceEntityId,
+			evidenceRplId);
+		details += string.Format(
+			" last_linked=%1 last_in_compartment=%2 last_get_in=%3 last_get_out=%4 last_character_vehicle=%5",
+			linked,
+			inCompartment,
+			gettingIn,
+			gettingOut,
+			characterVehicle);
+		details += string.Format(
+			" assigned_mgr=%1 assigned_slot=%2 actual_mgr=%3 actual_slot=%4 utility_owner_exact=%5",
+			assignedManagerId,
+			assignedSlotId,
+			actualManagerId,
+			actualSlotId,
+			utilityOwnerExact);
+		details += string.Format(
+			" current_action=%1 current_action_state=%2 loss_polls=%3 loss_age_ms=%4 prior_predicates=[%5]",
+			currentActionType,
+			currentActionState,
+			observedLossPolls,
+			observedLossAgeMs,
+			observedPredicates);
+		return details;
+	}
+
 	protected AICF_TripOutcome StartCrewRecovery(
 		AICF_TransportTrip trip,
 		EAICompartmentType role,
@@ -816,9 +1019,34 @@ class AICF_VehicleTransitFlow
 		string lostEvent = "DRIVER_LOST";
 		if (role == EAICompartmentType.Turret)
 			lostEvent = "GUNNER_LOST";
+		IEntity observedLossOccupant;
+		int observedLossPolls;
+		int observedLossAgeMs;
+		string observedPredicates;
+		state.ResolveCrewRoleSettledLoss(
+			role,
+			nowMs,
+			observedLossOccupant,
+			observedLossPolls,
+			observedLossAgeMs,
+			observedPredicates);
+		IEntity lastKnownOccupant = state.GetLastDriver();
+		if (role == EAICompartmentType.Turret)
+			lastKnownOccupant = state.GetLastGunner();
+		string lostDetails = FormatIdentity(trip, "MANDATORY_CREW_ROLE_MISSING");
+		lostDetails += FormatMissingCrewRoleEvidence(
+			trip,
+			role,
+			roleSlot,
+			lastKnownOccupant,
+			observedLossOccupant,
+			observedLossPolls,
+			observedLossAgeMs,
+			observedPredicates);
+		lostDetails += FormatCrewSettledLossRouteContext(trip, nowMs);
 		AICF_Stage3Diagnostics.Warning(
 			lostEvent,
-			FormatIdentity(trip, "MANDATORY_CREW_ROLE_MISSING"));
+			lostDetails);
 		AICF_Stage3Diagnostics.Info(
 			"VEHICLE_RECOVERY_STARTED",
 			FormatIdentity(trip, "EXACT_CREW_ROLE_ACTION") + string.Format(
@@ -950,6 +1178,26 @@ class AICF_VehicleTransitFlow
 				relocatedPosition,
 				unstuckMode,
 				unstuckSearchDiagnostics);
+			if (!relocated &&
+				unstuckMode == "REJECTED_MANAGED_MEMBERS_NOT_SETTLED")
+			{
+				bool rolledBack = state.RollbackUncommittedMobilityRecovery();
+				AICF_Stage3Diagnostics.Warning(
+					"VEHICLE_RECOVERY_DEFERRED",
+					FormatIdentity(trip, unstuckMode) + string.Format(
+						" mobility_attempt=%1 attempt_consumed=%2 rollback_confirmed=%3 next_action=WAIT_MANAGED_MEMBERS_SETTLED retry_delay_ms=%4",
+						state.GetMobilityRecoveryAttempts(),
+						!rolledBack,
+						rolledBack,
+						RECOVERY_RETRY_DELAY_MS) +
+						" " + unstuckSearchDiagnostics);
+				return AICF_TripOutcome.Retry(
+					"MOBILITY_RECOVERY_MANAGED_MEMBERS_NOT_SETTLED",
+					causationId,
+					Math.Min(
+						trip.GetAbsoluteDeadlineMs(),
+						System.GetTickCount() + RECOVERY_RETRY_DELAY_MS));
+			}
 		}
 
 		state.SuspendRouteWaypoint();
@@ -991,7 +1239,7 @@ class AICF_VehicleTransitFlow
 			false,
 			true,
 			stuckReason,
-			stuckReason == "NO_OBJECTIVE_PROGRESS",
+			true,
 			relocated);
 		if (outcome.GetKind() == AICF_ETripOutcomeKind.START_MOVEMENT)
 		{
@@ -1693,6 +1941,27 @@ class AICF_VehicleTransitFlow
 		}
 	}
 
+	protected void ReportRecoveryMobilityRestored(
+		AICF_TransportTrip trip,
+		float routeDistanceMeters,
+		float targetDistanceMeters,
+		int nowMs)
+	{
+		AICF_VehicleMovementState state = trip.GetMovementState();
+		string details = FormatIdentity(trip, state.GetPendingRecoveryReason());
+		details += string.Format(
+			" evidence=PHYSICAL_MOTION route_progress_confirmed=%1 route_distance_m=%2 target_distance_m=%3",
+			state.HasRecoveryRouteEvidence(),
+			routeDistanceMeters,
+			targetDistanceMeters);
+		details += string.Format(
+			" evidence_age_ms=%1 relocated=%2 next_action=WAIT_ROUTE_PROGRESS",
+			Math.Max(0, nowMs - state.GetRecoveryEvidenceArmedAtMs()),
+			state.WasPendingUnstuckRelocated());
+		AICF_Stage3Diagnostics.Info("VEHICLE_MOBILITY_RESTORED", details);
+		state.MarkRecoveryMobilityRestoredReported();
+	}
+
 	protected void ReportAndConfirmRecovery(
 		AICF_TransportTrip trip,
 		float routeDistanceMeters,
@@ -1701,15 +1970,15 @@ class AICF_VehicleTransitFlow
 		AICF_VehicleMovementState state = trip.GetMovementState();
 		string recoveryReason = state.GetPendingRecoveryReason();
 		bool relocated = state.WasPendingUnstuckRelocated();
-		string evidence = "PHYSICAL_MOTION";
-		if (state.RecoveryRequiresRouteProgress())
-			evidence = "PHYSICAL_MOTION_AND_ROUTE_PROGRESS";
+		string evidence = "PHYSICAL_MOTION_AND_ROUTE_PROGRESS";
 		string details = FormatIdentity(trip, recoveryReason) + string.Format(
 			" evidence=%1 relocated=%2 route_distance_m=%3 target_distance_m=%4",
 			evidence,
 			relocated,
 			routeDistanceMeters,
 			targetDistanceMeters);
+		details += " route_progress_confirmed=1 terminal_outcome=SUCCEEDED";
+		AICF_Stage3Diagnostics.Info("VEHICLE_ROUTE_PROGRESS_CONFIRMED", details);
 		AICF_Stage3Diagnostics.Info("VEHICLE_RECOVERY_SUCCEEDED", details);
 		if (recoveryReason == "CREW_RECOVERY")
 			AICF_Stage3Diagnostics.Info("VEHICLE_CREW_RECOVERY_SUCCEEDED", details);

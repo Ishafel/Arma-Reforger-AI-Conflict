@@ -251,6 +251,50 @@ class AICF_VehicleLease
 		return true;
 	}
 
+	// Fleet-only recovery of a retained clearance lease. FAILED_CLOSED remains
+	// cap-active until CleanupManager has re-established an uninterrupted safe
+	// window and Fleet atomically transfers this exact physical asset. Hard
+	// identity/delete failures never call this method.
+	bool BeginRetainedRelease(
+		bool clearanceSafe,
+		string trigger,
+		vector origin,
+		int releaseAtMs)
+	{
+		if (!clearanceSafe || m_State != AICF_EVehicleLeaseState.FAILED_CLOSED ||
+			trigger.IsEmpty() || releaseAtMs <= 0 || !m_Vehicle ||
+			m_iVehicleGeneration <= 0 || m_sVehicleLifecycleId.IsEmpty() ||
+			m_EntityId == EntityID.INVALID || m_sRplId.IsEmpty() ||
+			m_sRplId == "NONE" || m_Prefab.IsEmpty() || m_iCapacity < 1 ||
+			m_Vehicle.GetID() != m_EntityId)
+		{
+			return false;
+		}
+		m_vLastKnownOrigin = origin;
+		m_CleanupSnapshot = new AICF_VehicleCleanupSnapshot(
+			m_sFactionKey,
+			m_iSlotId,
+			m_iGroupGeneration,
+			m_iTripGeneration,
+			m_iLeaseGeneration,
+			m_sVehicleLifecycleId,
+			m_iVehicleGeneration,
+			m_EntityId,
+			m_sEntityId,
+			m_sRplId,
+			origin,
+			m_Prefab,
+			releaseAtMs,
+			trigger);
+		if (!m_CleanupSnapshot || !m_CleanupSnapshot.IsComplete())
+		{
+			m_CleanupSnapshot = null;
+			return false;
+		}
+		m_State = AICF_EVehicleLeaseState.RELEASE_PENDING;
+		return true;
+	}
+
 	bool MarkReleased()
 	{
 		if (m_State != AICF_EVehicleLeaseState.RELEASE_PENDING || !m_CleanupSnapshot)

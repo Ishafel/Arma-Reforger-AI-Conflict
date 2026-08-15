@@ -233,6 +233,47 @@ class AICF_FactionFleet
 		return true;
 	}
 
+	// Exact retained-clearance transfer. This is intentionally separate from
+	// normal release: only a Fleet-owned FAILED_CLOSED lease may enter it, after
+	// CleanupManager has repeated every safety/identity check and proved five
+	// seconds of continuous clearance. The cap remains held until this succeeds.
+	bool ReleaseRetainedLeaseAt(
+		AICF_VehicleLease lease,
+		bool clearanceSafe,
+		string cleanupTrigger,
+		vector origin,
+		int releaseAtMs,
+		out AICF_WorldPoolAsset releasedAsset)
+	{
+		releasedAsset = null;
+		if (!OwnsLease(lease) ||
+			lease.GetState() != AICF_EVehicleLeaseState.FAILED_CLOSED ||
+			!lease.BeginRetainedRelease(
+				clearanceSafe,
+				cleanupTrigger,
+				origin,
+				releaseAtMs))
+		{
+			return false;
+		}
+		AICF_WorldPoolAsset asset = new AICF_WorldPoolAsset(lease);
+		if (!asset || !asset.IsValid())
+		{
+			lease.FailClosed();
+			return false;
+		}
+		if (!lease.MarkReleased() ||
+			!lease.RelinquishReleasedVehicleReference(asset.GetVehicle()))
+		{
+			lease.FailClosed();
+			return false;
+		}
+		m_aLeases.RemoveItem(lease);
+		m_aWorldPool.Insert(asset);
+		releasedAsset = asset;
+		return true;
+	}
+
 	// Retires an unusable/destroyed asset from the active lease registry without
 	// advertising it as a reusable fleet asset. CleanupManager owns the returned
 	// quarantine object and may delete it only after its independent safety gate.
@@ -247,6 +288,44 @@ class AICF_FactionFleet
 		retirementAsset = null;
 		if (!OwnsLease(lease) ||
 			!lease.BeginRelease(clearanceSafe, cleanupTrigger, origin, releaseAtMs))
+		{
+			return false;
+		}
+		AICF_VehicleRetirementAsset retiredAsset = new AICF_VehicleRetirementAsset(lease);
+		if (!retiredAsset || !retiredAsset.IsValid())
+		{
+			lease.FailClosed();
+			return false;
+		}
+		if (!lease.MarkReleased() ||
+			!lease.RelinquishReleasedVehicleReference(retiredAsset.GetVehicle()))
+		{
+			lease.FailClosed();
+			return false;
+		}
+		m_aLeases.RemoveItem(lease);
+		retirementAsset = retiredAsset;
+		return true;
+	}
+
+	// Unusable retained assets use the same exact FAILED_CLOSED recovery gate,
+	// but transfer into quarantine rather than player-available world-pool stock.
+	bool RetireRetainedLeaseAt(
+		AICF_VehicleLease lease,
+		bool clearanceSafe,
+		string cleanupTrigger,
+		vector origin,
+		int releaseAtMs,
+		out AICF_VehicleRetirementAsset retirementAsset)
+	{
+		retirementAsset = null;
+		if (!OwnsLease(lease) ||
+			lease.GetState() != AICF_EVehicleLeaseState.FAILED_CLOSED ||
+			!lease.BeginRetainedRelease(
+				clearanceSafe,
+				cleanupTrigger,
+				origin,
+				releaseAtMs))
 		{
 			return false;
 		}
