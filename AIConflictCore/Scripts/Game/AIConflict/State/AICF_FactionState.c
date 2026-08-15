@@ -122,6 +122,16 @@ class AICF_FactionState
 		return m_TicketLedger.TryCommitDeployment(deploymentKind);
 	}
 
+	int GetReplacementTicketCost()
+	{
+		return m_TicketLedger.GetReplacementTicketCost();
+	}
+
+	bool RollbackCommittedDeployment(AICF_EDeploymentKind deploymentKind)
+	{
+		return m_TicketLedger.RollbackCommittedDeployment(deploymentKind);
+	}
+
 	protected void BuildDefaultSlots(bool activeForcesRolesEnabled)
 	{
 		m_aGroupSlots.Clear();

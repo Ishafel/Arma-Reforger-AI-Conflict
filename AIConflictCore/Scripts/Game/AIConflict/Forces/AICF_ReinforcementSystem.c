@@ -8,6 +8,44 @@ class AICF_ReinforcementSystem
 		return m_bRejectedUnsafeSite;
 	}
 
+	void MarkRejectedUnsafeSite()
+	{
+		m_bRejectedUnsafeSite = true;
+	}
+
+	bool TrySpawnAtBase(
+		SCR_CampaignFaction faction,
+		AICF_GroupSlot slot,
+		SCR_CampaignMilitaryBaseComponent selectedBase,
+		AICF_ConflictAdapter conflictAdapter,
+		AICF_GroupSpawner groupSpawner,
+		out SCR_AIGroup group)
+	{
+		group = null;
+		if (!Replication.IsServer() || !faction || !slot || !selectedBase ||
+			!conflictAdapter || !groupSpawner)
+			return false;
+
+		string rejectionReason = conflictAdapter.GetSpawnRejectionReason(selectedBase, faction);
+		if (!rejectionReason.IsEmpty())
+		{
+			if (rejectionReason == "ENEMY_OWNED" || rejectionReason == "CONTESTED")
+				m_bRejectedUnsafeSite = true;
+			AICF_Stage4Diagnostics.Warning(
+				"SPAWN_REVALIDATION_FAILED",
+				string.Format(
+					"faction=%1 slot=%2 base=%3 reason=%4",
+					faction.GetFactionKey(),
+					slot.GetSlotId(),
+					AICF_Stage1Diagnostics.BaseKey(selectedBase),
+					rejectionReason));
+			return false;
+		}
+
+		group = groupSpawner.SpawnGroup(faction, selectedBase, slot.GetSlotId());
+		return group != null;
+	}
+
 	bool TrySpawn(
 		SCR_GameModeCampaign campaign,
 		SCR_CampaignFaction faction,

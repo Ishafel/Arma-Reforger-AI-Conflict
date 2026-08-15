@@ -45,4 +45,4 @@ AICF вызывал `SpawnUnits()` для всех восьми групп до 
   - общий `ROSTER_READY` в `t_ms=5986`;
   - `GROUP_SPAWN_TIMEOUT=0`, `AICF ERROR/FAIL=0`, `SCRIPT(E/F)=0`, `ENGINE(F)=0`.
 
-Этот smoke подтверждает только устранение initial roster blocker на engine `191843`. Он выполнен без клиента и с `aicfVehiclesEnabled=0`, поэтому не является Repeat T, Repeat-T2 или runtime acceptance транспортной архитектуры. Stage 3/3.5 остаётся `FAILED / NOT ACCEPTED` до обязательной controlled runtime matrix.
+Этот smoke подтверждает только устранение initial roster blocker на engine `191843`. Он выполнен без клиента и с `aicfVehiclesEnabled=0`, поэтому не является Repeat T, Repeat-T2 или техническим runtime PASS транспортной архитектуры. На дату этого отчёта Stage 3/3.5 оставались `FAILED / NOT ACCEPTED`; текущий продуктовый статус позднее изменён [решением владельца от 15.08.2026](STAGE_3_3_5_OWNER_ACCEPTANCE_2026-08-15.md) без переклассификации данного evidence.

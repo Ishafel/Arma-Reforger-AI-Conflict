@@ -1,6 +1,6 @@
 # Stage 3 — наземная техника
 
-Текущий статус Stage 3: **FAILED — REWRITE IMPLEMENTATION/CUTOVER COMPLETE, RUNTIME ACCEPTANCE NOT PASSED**. Новое решение владельца отменяет прежнюю заочную фиксацию post-T9 snapshot: legacy vehicle runtime/coordinator fragments удалены и новый vehicle-domain включён единственным active side-effect path, но требования этапа ещё не подтверждены controlled runtime. Stage 3 по-прежнему добавляет транспорт существующим managed-slot и не меняет билеты, `OnEmpty`, правила победы или `CaptureRelay`.
+Текущий статус Stage 3: **ACCEPTED — OWNER DECISION 15.08.2026**. Legacy vehicle runtime/coordinator fragments удалены и новый vehicle-domain включён единственным active side-effect path; эта реализация принята как базовая линия для Stage 4. Полная controlled runtime-матрица не завершена и не считается техническим PASS. Stage 3 по-прежнему добавляет транспорт существующим managed-slot и не меняет билеты, `OnEmpty`, правила победы или `CaptureRelay`. Основание: [решение владельца](STAGE_3_3_5_OWNER_ACCEPTANCE_2026-08-15.md).
 
 Все исторические результаты ниже сохраняются без переклассификации: Transport T1–T9 и Armed A1 остаются `FAIL`; Transport T10, Armed A2 и незапущенные fault/soak-срезы остаются `NOT RUN`. Автоматическая компиляция, static audit и строка `[AICF][STAGE3][RESULT_CANDIDATE] ... status=READY final=0` являются только development evidence и не дают PASS ни прежней, ни новой архитектуре. Положительные наблюдения и safety-контракты этой матрицы обязательны для rewrite.
 
@@ -501,4 +501,4 @@ Post-T8 source прошёл static/Workbench и затем был провере
 
 `BLOCKED`: несовместимая версия, addon/resource не загружен, compile error, занят порт или окружение не позволяет начать нужный сценарий. `BLOCKED` не является PASS.
 
-Прежняя заочная фиксация Stage 3 отменена. Implementation/cutover новой архитектуры завершены; полная MVP-матрица и двухчасовой soak с техникой всё ещё выполняются отдельно и остаются `NOT RUN`, пока не получено новое runtime evidence.
+Implementation/cutover новой архитектуры приняты решением владельца от 15.08.2026. Полная MVP-матрица и двухчасовой soak с техникой всё ещё выполняются отдельно и остаются `NOT RUN`, пока не получено новое runtime evidence; это не отменяет продуктовую приёмку и не блокирует Stage 4.

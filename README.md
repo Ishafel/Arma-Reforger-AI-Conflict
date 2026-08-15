@@ -9,12 +9,13 @@ Scripts-only прототип автономного AI Conflict для Arma Ref
 | Stage 0 — исследовательский прототип | **PASS** | Ручной direct Diag dedicated-тест на Arland завершился `[AICF][STAGE0][RESULT][PASS]`: обнаружены штатные базы и граф, созданы US/USSR-группы, обе получили цели и waypoint |
 | Stage 1 — пехотный вертикальный срез | **PASS** | Подтверждены 4+4 группы, роли `2/1/1`, AI-захват и retarget, безопасные подкрепления, билеты, групповые маркеры и клиентский runtime-прогон |
 | Stage 2 — надёжность и баланс | **кандидат реализован** | Lifecycle-аудит, восстановление приказов, stuck-watchdog, spawn/load guard, внешний CLI-конфиг и headless soak; runtime-матрица учитывается отдельно |
-| Stage 3 — наземная техника | **FAILED — rewrite implemented, runtime acceptance not passed** | Vehicle-domain rewrite и atomic cutover завершены, legacy runtime/coordinator fragments удалены. Это development implementation status, не PASS: Transport T1–T9 и Armed A1 остаются историческими `FAIL`, Transport T10 и Armed A2 — `NOT RUN` |
-| Stage 3.5 — Active Motorized Forces | **FAILED — rewrite implemented, runtime acceptance not passed** | Rewrite завершён вместе со Stage 3, но gameplay не дошёл до runtime-приёмки. Оба Transport-прогона `Stage35-T-20260810-210932` и `Stage35-T-20260811-190311` остаются `FAIL`; preliminary repeat smoke остаётся `BLOCKED`; Repeat T, Repeat-T2 и B/P/A/R/L/M30/S120 остаются `NOT RUN` |
+| Stage 3 — наземная техника | **ACCEPTED — owner decision** | Vehicle-domain rewrite и atomic cutover приняты владельцем 15.08.2026. Исторические Transport T1–T9 и Armed A1 остаются `FAIL`, Transport T10 и Armed A2 — `NOT RUN` |
+| Stage 3.5 — Active Motorized Forces | **ACCEPTED — owner decision** | Rewrite принят вместе со Stage 3. Исторические Transport-прогоны остаются `FAIL`, а Repeat T, Repeat-T2 и B/P/A/R/L/M30/S120 — `NOT RUN`; это не блокирует Stage 4 |
+| Stage 4 — экономика и снабжение | **implementation complete — runtime acceptance partial** | Реализован opt-in серверный контур `ticket + stock supplies`, logistics pacing, детерминированный выбор базы, транзакционный rollback, абстрактные shipments и JIP-агрегаты. Startup/calibration probe `E1` прошёл; остальная runtime-матрица не запускалась. По умолчанию `aicfEconomyEnabled=0` |
 | Полный MVP | **не готов к приёмке** | После Stage 2 остаются стандартная MVP-матрица, клиентская синхронизация и полный 30-минутный прогон |
 | Двухчасовой soak | **не запускался** | Выполняется отдельно только после успешной полной MVP-матрицы |
 
-Подтверждённые Stage 0 и Stage 1 относятся к своим проверенным commit. Stage 2 продолжает отдельную runtime-проверку. Новое решение владельца отменяет прежнюю заочную фиксацию Stage 3: implementation/cutover vehicle-domain rewrite завершены, однако Stage 3/3.5 сохраняют статус `FAILED`, потому что runtime acceptance не пройдена. Это не отменяет требования этапов, не обесценивает уже полученное положительное evidence и не переклассифицирует ни один исторический `PASS`, `FAIL`, `BLOCKED` или `NOT RUN`.
+Подтверждённые Stage 0 и Stage 1 относятся к своим проверенным commit. Stage 2 продолжает отдельную runtime-проверку. Stage 3 и Stage 3.5 [приняты решением владельца от 15.08.2026](docs/STAGE_3_3_5_OWNER_ACCEPTANCE_2026-08-15.md), а Stage 4 разблокирован. Решение не переклассифицирует ни один исторический `PASS`, `FAIL`, `BLOCKED` или `NOT RUN`: незавершённая техническая матрица остаётся отдельным backlog/evidence-контуром.
 
 ## Что подтверждено в Stage 0
 
@@ -108,11 +109,11 @@ MOB egress использует ступени 15/30/60 секунд: снача
 
 Non-relay ATTACK использует stock `Move` для дальней operational-фазы. Когда живой лидер оказывается не дальше 100 м от resolved target, planner атомарно заменяет `Move` локальным `SearchAndDestroy` с holding time не меньше 600 с. Порог promotion 100 м является production policy, а не CLI-настройкой; relay продолжает использовать `CaptureRelay`, defend — штатный `Defend`.
 
-Ранее заочно зафиксированный Stage 3 snapshot теперь признан владельцем `FAILED`; его архитектурная замена реализована и atomic cutover завершён. Ручные Transport T1–T9 и Armed A1 сохраняют исторический статус `FAIL`, а подробные T8/T9-отчёты — в `docs/STAGE_3_TESTING.md`: известные дефекты не считаются исчезнувшими. Post-T9-патч сохраняет persistent-stuck группу и её target на достигнутой позиции, возобновляет операцию после bounded hold или изменения карты, пишет агрегированный результат проверки каждой невражеской spawn-базы и фиксирует current AI action каждого бойца во время посадки. Crew-role recovery больше не расходует и не сбрасывает mobility watchdog; исправная неподвижная машина получает bounded authority-only reposition с obstacle/water/mine/character/player guards, а успех подтверждается только последующим самостоятельным motion либо route progress. Ранее добавленные bounded `WAITING_FOR_SITE`, functional world pool и 15-метровый/5-секундный delete gate сохранены как обязательные контракты rewrite. Штатные мины Arland не удалялись и не менялись. Прежний snapshot прошёл `tools/Test-Stage3Static.ps1` и Workbench 1.7 `Validate Scripts` по пяти конфигурациям: `.cache/stage3-post-t9-vehicle-unstuck-final2-20260809/console.log`, Game CRC32 `946e5a78`, `Script validation successful`, `SCRIPT (E/F)=0`; это историческое development evidence, не runtime PASS новой архитектуры. Transport T10, Armed A2, controlled no-combat boarding repeat, focused timeout/order/cleanup/cap fault-срезы и 30-минутный прогон остаются `NOT RUN` и должны быть выполнены для runtime acceptance rewrite.
+Исторический post-T9 Stage 3 snapshot был признан владельцем `FAILED`; затем его архитектурная замена была реализована, переключена atomic cutover и 15.08.2026 принята как текущая продуктовая базовая линия. Ручные Transport T1–T9 и Armed A1 сохраняют исторический статус `FAIL`, а подробные T8/T9-отчёты — в `docs/STAGE_3_TESTING.md`: известные дефекты не считаются исчезнувшими. Post-T9-патч сохраняет persistent-stuck группу и её target на достигнутой позиции, возобновляет операцию после bounded hold или изменения карты, пишет агрегированный результат проверки каждой невражеской spawn-базы и фиксирует current AI action каждого бойца во время посадки. Crew-role recovery больше не расходует и не сбрасывает mobility watchdog; исправная неподвижная машина получает bounded authority-only reposition с obstacle/water/mine/character/player guards, а успех подтверждается только последующим самостоятельным motion либо route progress. Ранее добавленные bounded `WAITING_FOR_SITE`, functional world pool и 15-метровый/5-секундный delete gate сохранены как обязательные контракты rewrite. Штатные мины Arland не удалялись и не менялись. Прежний snapshot прошёл `tools/Test-Stage3Static.ps1` и Workbench 1.7 `Validate Scripts` по пяти конфигурациям: `.cache/stage3-post-t9-vehicle-unstuck-final2-20260809/console.log`, Game CRC32 `946e5a78`, `Script validation successful`, `SCRIPT (E/F)=0`; это историческое development evidence, не runtime PASS новой архитектуры. Transport T10, Armed A2, controlled no-combat boarding repeat, focused timeout/order/cleanup/cap fault-срезы и 30-минутный прогон остаются `NOT RUN` и должны быть выполнены для отдельного технического runtime PASS rewrite.
 
 Финальный dirty-working-tree rewrite snapshot прошёл обе обязательные static-команды с negative-fixture self-check и полный Workbench validate: `.cache/vehicle-rewrite-final-validate-20260812-r2/console.log`, Game `5692` files / `11109` classes, CRC32 `7f2cbec0`, `Game successfully created`, `SCRIPT(E/F)=0`, `ENGINE(F)=0`. Полный Workbench log также сохраняет два harness `PLATFORM(E)` (`SteamAPI_Init failed`/platform services) и 25 `RESOURCES(E)` строк shutdown resource-leak list, всего 27 generic `(E)/(F)` matches; это platform/shutdown-resource caveat, не AICF script compile error и не runtime gameplay evidence. Final-tree headless smoke `.cache/Stage35-Rewrite-FinalSmoke-20260812-002210` был `BLOCKED` внешним backend до AICF bootstrap (`BACKEND(E)=12`, SSL peer certificate/`BAD_REQUEST`; `AICF=0`), поэтому не дал roster/vehicle evidence и не является Repeat T, Repeat-T2 или M30.
 
-Первый post-cutover runtime на Reforger 1.8 выявил отдельную Stage 1 regression: старый direct `SCR_AIGroup.SpawnUnits()` потерял все initial member attempts до первого world frame. Production path перенесён на 1.8 `SCR_AIWorld` queue через bind/subscription → `RequestSpawn(5)`, а timeout получил pre-cleanup per-group/per-member snapshot. Vehicles-off dedicated smoke `.cache/stage1-roster-request-smoke-20260813-r3` подтвердил восемь `GROUP_ROSTER_READY` по `5/5` и общий `ROSTER_READY` за 5.986 с без AICF/SCRIPT/ENGINE failures. Это снимает initial roster blocker, но не тестирует vehicle phases и не меняет статус Stage 3/3.5 `FAILED / NOT ACCEPTED`. Полная форензика: [Stage 1 spawn regression после Reforger 1.8 cutover](docs/STAGE_1_SPAWN_CUTOVER_2026-08-13.md).
+Первый post-cutover runtime на Reforger 1.8 выявил отдельную Stage 1 regression: старый direct `SCR_AIGroup.SpawnUnits()` потерял все initial member attempts до первого world frame. Production path перенесён на 1.8 `SCR_AIWorld` queue через bind/subscription → `RequestSpawn(5)`, а timeout получил pre-cleanup per-group/per-member snapshot. Vehicles-off dedicated smoke `.cache/stage1-roster-request-smoke-20260813-r3` подтвердил восемь `GROUP_ROSTER_READY` по `5/5` и общий `ROSTER_READY` за 5.986 с без AICF/SCRIPT/ENGINE failures. Этот smoke снимает initial roster blocker, но не тестирует vehicle phases; последующая продуктовая приёмка Stage 3/3.5 зафиксирована отдельным решением владельца. Полная форензика: [Stage 1 spawn regression после Reforger 1.8 cutover](docs/STAGE_1_SPAWN_CUTOVER_2026-08-13.md).
 
 ## Что реализовано в Stage 3.5 rewrite
 
@@ -129,6 +130,18 @@ Non-relay ATTACK использует stock `Move` для дальней operati
 
 Полный контракт: [Stage 3.5 — Active Motorized Forces](docs/STAGE_3_5_ACTIVE_FORCES.md). Незаполненная runtime-матрица: [Stage 3.5 — приёмочное тестирование](docs/STAGE_3_5_TESTING.md).
 
+## Что реализовано в Stage 4
+
+- начальные восемь managed-групп остаются бесплатными, replacement `5/5` требует одновременно ticket, безопасную friendly-базу и stock supplies этой базы;
+- supply временно списывается вместе с ticket reservation и становится окончательным debit только после точного roster `5/5`; spawn, bind, timeout, invalid roster, capture, stale graph/generation и shutdown возвращают обе части транзакции;
+- readiness replacement-запроса накапливается со скоростью `100% / 67% / 50% / 0%` для `HEALTHY / STRAINED / ISOLATED / BLOCKED` и не сбрасывается при временном разрыве логистики;
+- spawn-базы ранжируются по connected-состоянию, числу graph-hop до сохранённой цели погибшей группы, остатку supplies и stable node ID;
+- абстрактные shipments списывают пакет с HQ/SOURCE_BASE, учитывают ETA по hop, паузу разорванного маршрута, capture destination, возврат и conservation `dispatched = delivered + returned + in_transit`;
+- `SCR_GameModeCampaign` реплицирует агрегаты supplies, connected supplies, logistics tier, pending replacements и shipments для US/USSR; конкретные базы по-прежнему реплицирует stock Conflict;
+- статический Stage 4 audit и Workbench 1.8 validation прошли; direct ServerDiag startup/calibration probe `E1` подтвердил `500`-supplies defaults, обе faction MOB `1000/1000`, девять stock-pool снимков и `balance_delta=0`; остальные runtime-срезы остаются `NOT RUN`.
+
+Контракт и команды: [Stage 4 — экономика и снабжение](docs/STAGE_4_TESTING.md).
+
 ## Что ещё не заявлено готовым
 
 - полная runtime-приёмка Stage 2: fault-injection, 30-минутная матрица и двухчасовой soak;
@@ -136,7 +149,7 @@ Non-relay ATTACK использует stock `Move` для дальней operati
 - синхронизация билетов и состояния матча на нескольких клиентах;
 - проверка смерти и повторного развёртывания игрока;
 - окончательная настройка баланса и темпа войны;
-- runtime-приёмка наземной техники, расширенная логистика, сохранение состояния и пользовательский интерфейс;
+- runtime-приёмка наземной техники, Stage 4 economy/logistics, сохранение состояния и пользовательский интерфейс;
 - controlled runtime-матрица Stage 3.5, 30-минутный headless-прогон и двухчасовой soak;
 - двухчасовой soak с контролем сущностей, групп, waypoint, памяти и server FPS.
 
@@ -152,6 +165,7 @@ Arma-Reforger-AI-Conflict/
 │       ├── Bootstrap/
 │       ├── Config/
 │       ├── Diagnostics/
+│       ├── Economy/
 │       ├── Forces/
 │       ├── Integration/
 │       ├── Objectives/
@@ -167,10 +181,13 @@ Arma-Reforger-AI-Conflict/
 │   ├── STAGE_0_TESTING.md
 │   ├── STAGE_1_TESTING.md
 │   ├── STAGE_2_TESTING.md
-│   └── STAGE_3_TESTING.md
+│   ├── STAGE_3_TESTING.md
+│   └── STAGE_4_TESTING.md
 ├── tools/
 │   ├── Test-Stage2Log.ps1
 │   ├── Test-Stage3Static.ps1
+│   ├── Test-Stage4Static.ps1
+│   ├── Test-Stage4Log.ps1
 │   └── fetch_reforger_api_reference.sh
 └── PROJECT_VISION.md
 ```
@@ -295,12 +312,13 @@ Stage 1 использует отдельный префикс:
 [AICF][STAGE1]
 ```
 
-Stage 2, Stage 3 и Stage 3.5 дополняют тот же `run` отдельными префиксами:
+Stage 2, Stage 3, Stage 3.5 и Stage 4 дополняют тот же `run` отдельными префиксами:
 
 ```text
 [AICF][STAGE2]
 [AICF][STAGE3]
 [AICF][STAGE3.5]
+[AICF][STAGE4]
 ```
 
 Отфильтрованный вывод не заменяет полный журнал. К отчёту прикладывается вся папка `$profileRoot\logs`, чтобы сохранить соседние `SCRIPT`, `RESOURCES`, `RPL` и `VME`-ошибки.
@@ -311,8 +329,9 @@ Stage 2, Stage 3 и Stage 3.5 дополняют тот же `run` отдель�
 - [Stage 1: пехотный вертикальный срез](docs/STAGE_1_TESTING.md) — direct Diag-команды, профиль `4 × 4`, временные и причинные инварианты, два ускоренных запуска и итоговая матрица.
 - [Stage 2: надёжность и баланс](docs/STAGE_2_TESTING.md) — fault injection, lifecycle/order/load инварианты, 30-минутная headless-матрица и двухчасовой soak.
 - [Stage 3: наземная техника](docs/STAGE_3_TESTING.md) — транспортный и вооружённый срезы, crew/boarding, safe spawn, watchdog, fallback, лимиты и регрессия Stage 2.
-- [Stage 3.5: Active Motorized Forces](docs/STAGE_3_5_ACTIVE_FORCES.md) — нормативный контракт групп `4 × 5`, активных ролей `3/1`, транспорта каждого slot и capacity policy; rewrite implementation/cutover завершены, но статус этапа остаётся `FAILED` до runtime acceptance.
+- [Stage 3.5: Active Motorized Forces](docs/STAGE_3_5_ACTIVE_FORCES.md) — нормативный контракт групп `4 × 5`, активных ролей `3/1`, транспорта каждого slot и capacity policy; rewrite implementation/cutover принят решением владельца, техническая runtime-матрица ведётся отдельно.
 - [Stage 3.5: приёмочное тестирование](docs/STAGE_3_5_TESTING.md) — незаполненные срезы B/P/T/A/R/L, M30 и S120, команды, evidence-таблицы и правила результата.
+- [Stage 4: экономика и снабжение](docs/STAGE_4_TESTING.md) — stock supply probe, transaction/base-selection/pacing/shipment/JIP матрица, CLI и log-аудит.
 
 Stage 1 принимается только если одновременно выполнены:
 
@@ -345,7 +364,7 @@ Stage 1 принимается только если одновременно в
 4. После PASS транспорта включить одну вооружённую лёгкую машину на сторону и проверить стрелка, потерю экипажа и тот же fallback-контракт.
 5. Проверить лимит техники, cleanup, отсутствие роста сущностей и отдельный регрессионный запуск с `aicfVehiclesEnabled=0`.
 
-Строка `[AICF][STAGE3][RESULT_CANDIDATE] ... status=READY final=0` означает только достижение автоматизируемых инвариантов первых configured-поездок. Она не является автоматическим PASS и может быть позднее инвалидирована `ACCEPTANCE_FAILURE_LATCHED`. Прежняя заочная фиксация Stage 3 отменена новым решением владельца; rewrite implementation/cutover завершены, но этап остаётся `FAILED`, а техническая матрица по-прежнему требует полного server/client log, ручной проверки и видео/скриншотов.
+Строка `[AICF][STAGE3][RESULT_CANDIDATE] ... status=READY final=0` означает только достижение автоматизируемых инвариантов первых configured-поездок. Она не является автоматическим runtime PASS и может быть позднее инвалидирована `ACCEPTANCE_FAILURE_LATCHED`. Stage 3 принят продуктовым решением владельца от 15.08.2026; техническая матрица по-прежнему требует полного server/client log, ручной проверки и видео/скриншотов и ведётся как отдельный evidence/backlog-контур.
 
 ## Локальная копия официального API
 

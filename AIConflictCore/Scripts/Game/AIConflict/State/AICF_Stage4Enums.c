@@ -1,0 +1,16 @@
+enum AICF_ESupplyNetworkTier
+{
+	HEALTHY = 0,
+	STRAINED,
+	ISOLATED,
+	BLOCKED
+}
+
+enum AICF_ESupplyShipmentState
+{
+	IN_TRANSIT = 0,
+	PAUSED_ROUTE,
+	RETURN_PENDING,
+	DELIVERED,
+	RETURNED
+}

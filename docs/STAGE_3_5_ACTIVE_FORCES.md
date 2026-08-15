@@ -1,14 +1,14 @@
 # Stage 3.5 — Active Motorized Forces
 
-Статус Stage 3.5: **FAILED — REWRITE IMPLEMENTATION/CUTOVER COMPLETE, RUNTIME ACCEPTANCE NOT PASSED**. Статус полной runtime-приёмки: **NOT RUN**. Последний Transport run `stage1-server-11245` дошёл до vehicle runtime и завершился FAIL: обнаружены terminal route loop, waypoint reconciliation, bounded-clearance и exact-cargo defects. Их root cause и текущий fix-candidate задокументированы в [runtime fix report 13.08.2026](STAGE_3_5_RUNTIME_FIX_2026-08-13.md). Static/Workbench evidence fix-candidate не заменяет новый длинный server+client repeat, 30-минутную матрицу и двухчасовой soak из отдельного [бланка приёмки](STAGE_3_5_TESTING.md).
+Статус Stage 3.5: **ACCEPTED — OWNER DECISION 15.08.2026**. Статус полной runtime-матрицы: **NOT RUN**. Текущий rewrite принят как базовая линия для Stage 4 согласно [решению владельца](STAGE_3_3_5_OWNER_ACCEPTANCE_2026-08-15.md). Последний Transport run `stage1-server-11245` дошёл до vehicle runtime и завершился FAIL: обнаружены terminal route loop, waypoint reconciliation, bounded-clearance и exact-cargo defects. Их root cause и текущий fix-candidate задокументированы в [runtime fix report 13.08.2026](STAGE_3_5_RUNTIME_FIX_2026-08-13.md). Исторические результаты и незапущенные server/client repeat, 30-минутная матрица и двухчасовой soak сохраняются без переклассификации в отдельном [бланке приёмки](STAGE_3_5_TESTING.md).
 
-Vehicle-lifecycle rewrite Stage 3.5 реализован и переключён вместе со Stage 3. Нормативные требования этапа и подтверждённые положительные свойства не отменены и перенесены без ослабления, однако ещё не подтверждены runtime acceptance. Этап по-прежнему предшествует экономике/снабжению Stage 4 и не добавляет экономику, строительство или сложную логистику: цель — задействовать все существующие managed-группы и проверить устойчивость более крупного моторизованного состава.
+Vehicle-lifecycle rewrite Stage 3.5 реализован, переключён вместе со Stage 3 и принят решением владельца. Нормативные требования этапа и подтверждённые положительные свойства не отменены; полная техническая runtime-матрица остаётся незавершённой. Этап не добавляет экономику, строительство или сложную логистику: цель — задействовать все существующие managed-группы и проверить устойчивость более крупного моторизованного состава.
 
 Текущий dirty-working-tree fix-candidate прошёл `tools/Test-Stage3Static.ps1` и `tools/Test-Stage35Static.ps1`; negative fixtures подтвердили `COORDINATOR_SIDE_EFFECT`, `FLOW_CROSS_CALL`, `WAYPOINT_SIDE_EFFECT_OWNER`, `TRANSITION_OUTSIDE_CONTROLLER`, `TRANSITION_EFFECT_ORDER`, `WAITING_WITH_LEASE`, `HANDOFF_CLEARANCE_GATE`, `CLEANUP_CLEARANCE_OWNER`, `CLEANUP_IDENTITY_SAFETY` и `VEHICLE_LIVENESS_OWNERSHIP`. Финальный Workbench 1.8 validate `.cache/stage35-runtime-report-fix-validate-20260813-r4/console.log` создал Game `5719/11200`, CRC32 `859d2690`, при `SCRIPT(E/F)=0`, `ENGINE(F)=0`, VM `0`; 25 shutdown `RESOURCES(E)` сохранены как resource caveat, не runtime evidence.
 
 Final-tree headless development smoke `.cache/Stage35-Rewrite-FinalSmoke-20260812-002210` был **BLOCKED** внешним backend до AICF bootstrap: `Game created=1`, `AICF=0`, `BACKEND(E)=12` (`SSL peer certificate`/`BAD_REQUEST`), `SCRIPT(E/F)=0`, `ENGINE(F)=0`, VM `0`. Он не дал roster/vehicle evidence, не является Repeat T, Repeat-T2 или M30 и не повышает статус этапа. Commit/SHA не записан: проверялось dirty working tree.
 
-Post-cutover run `stage1-server-30017` на Reforger 1.8 завершился `INITIAL_GROUP_SPAWN_TIMEOUT` раньше vehicle phases. Отдельный fix-candidate заменил несовместимый direct `SpawnUnits()` на 1.8 `RequestSpawn(5)` и прошёл focused vehicles-off smoke: восемь `GROUP_ROSTER_READY` по `5/5`, общий `ROSTER_READY` за 5.986 с, без timeout/AICF/SCRIPT/ENGINE failures. Этот smoke снимает только initial-roster blocker; transport rewrite по-прежнему не проверен, а Stage 3/3.5 остаётся **FAILED / NOT ACCEPTED**. Полный разбор: [Stage 1 spawn regression](STAGE_1_SPAWN_CUTOVER_2026-08-13.md).
+Post-cutover run `stage1-server-30017` на Reforger 1.8 завершился `INITIAL_GROUP_SPAWN_TIMEOUT` раньше vehicle phases. Отдельный fix-candidate заменил несовместимый direct `SpawnUnits()` на 1.8 `RequestSpawn(5)` и прошёл focused vehicles-off smoke: восемь `GROUP_ROSTER_READY` по `5/5`, общий `ROSTER_READY` за 5.986 с, без timeout/AICF/SCRIPT/ENGINE failures. Этот smoke снимает только initial-roster blocker и не является техническим runtime PASS transport rewrite; продуктовая приёмка Stage 3/3.5 зафиксирована последующим решением владельца. Полный разбор: [Stage 1 spawn regression](STAGE_1_SPAWN_CUTOVER_2026-08-13.md).
 
 Реализационные решения:
 
@@ -69,7 +69,7 @@ Post-cutover run `stage1-server-30017` на Reforger 1.8 завершился `I
 1. Выполнить пехотный baseline `4 × 5` с прежними ролями, чтобы отделить ошибки размера группы от нового планирования.
 2. Проверить `3 ATTACK / 1 FORWARD_DEFEND_QRF`, распределение целей и role hysteresis.
 3. Выполнить controlled transport/capacity/reuse/recovery/cleanup-срезы для всех четырёх slot.
-4. Выполнить 30-минутную headless-матрицу и двухчасовой soak до начала Stage 4.
+4. Выполнить 30-минутную headless-матрицу и двухчасовой soak как отдельную техническую проверку принятой базовой линии.
 
 Команды, профили, таблицы доказательств и правила `PASS/FAIL/BLOCKED` находятся в [`STAGE_3_5_TESTING.md`](STAGE_3_5_TESTING.md).
 
@@ -85,4 +85,4 @@ Post-cutover run `stage1-server-30017` на Reforger 1.8 завершился `I
 8. За 30 минут нет бесконечного роста групп, машин, waypoint и world-pool entries; server FPS и managed AI остаются в заданном бюджете.
 9. Двухчасовой soak не выявляет зависших slot, необъяснимых idle-групп, unsafe cleanup или роста памяти/сущностей.
 
-Stage 4 начинается только после этого среза: supply/economy не должны маскировать дефекты базового командования, состава групп и транспорта.
+Решением владельца от 15.08.2026 Stage 4 разблокирован до завершения этой матрицы. Supply/economy реализуется отдельным opt-in контуром и при выключенной функции не должен маскировать или менять baseline-поведение командования, состава групп и транспорта.

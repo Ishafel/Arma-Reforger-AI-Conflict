@@ -63,6 +63,7 @@ class AICF_MatchController
 	protected ref AICF_Stage1Config m_Config;
 	protected ref AICF_Stage2Config m_Stage2Config;
 	protected ref AICF_Stage3Config m_Stage3Config;
+	protected ref AICF_Stage4Config m_Stage4Config;
 	protected ref AICF_ConflictAdapter m_ConflictAdapter;
 	protected ref AICF_ObjectiveGraph m_ObjectiveGraph;
 	protected ref AICF_TargetSelector m_TargetSelector;
@@ -75,6 +76,7 @@ class AICF_MatchController
 	protected ref AICF_GroupMapMarkerSystem m_GroupMapMarkers;
 	protected ref AICF_VehicleCoordinator m_VehicleCoordinator;
 	protected ref AICF_VehicleWatchdog m_HiddenRecoveryWatchdog;
+	protected ref AICF_EconomySystem m_EconomySystem;
 	protected ref AICF_FactionState m_USState;
 	protected ref AICF_FactionState m_USSRState;
 
@@ -115,9 +117,11 @@ class AICF_MatchController
 		m_Config = new AICF_Stage1Config();
 		m_Stage2Config = new AICF_Stage2Config();
 		m_Stage3Config = new AICF_Stage3Config();
+		m_Stage4Config = new AICF_Stage4Config();
 		AICF_Stage2Diagnostics.Configure();
 		AICF_Stage3Diagnostics.Configure();
 		AICF_Stage35Diagnostics.Configure();
+		AICF_Stage4Diagnostics.Configure();
 		m_ConflictAdapter = new AICF_ConflictAdapter();
 		m_ObjectiveGraph = new AICF_ObjectiveGraph();
 		m_TargetSelector = new AICF_TargetSelector();
@@ -160,6 +164,12 @@ class AICF_MatchController
 
 		m_USState = new AICF_FactionState(m_USFaction.GetFactionKey(), m_Config);
 		m_USSRState = new AICF_FactionState(m_USSRFaction.GetFactionKey(), m_Config);
+		m_EconomySystem = new AICF_EconomySystem(
+			m_Stage4Config,
+			m_Campaign,
+			m_ConflictAdapter,
+			m_ObjectiveGraph,
+			m_Config.GetReinforcementDelayMs());
 		CacheBaseOwners(graphBases);
 		Subscribe();
 
@@ -256,6 +266,25 @@ class AICF_MatchController
 			m_Stage3Config.GetMaxVehiclesPerFaction(),
 			m_Stage3Config.GetMinimumVehicleRequestAgents());
 		AICF_Stage35Diagnostics.Info("CONFIG", stage35ConfigLine);
+		string stage4ConfigLine = string.Format(
+			"enabled=%1 replacement_supply_cost=%2 healthy_stock_groups=%3 healthy_pace_percent=%4 strained_pace_percent=%5 isolated_pace_percent=%6 blocked_pace_percent=%7 retry_ms=%8",
+			m_Stage4Config.GetEconomyEnabled(),
+			m_Stage4Config.GetReplacementSupplyCost(),
+			m_Stage4Config.GetHealthyStockGroups(),
+			m_Stage4Config.GetHealthyPacePercent(),
+			m_Stage4Config.GetStrainedPacePercent(),
+			m_Stage4Config.GetIsolatedPacePercent(),
+			m_Stage4Config.GetBlockedPacePercent(),
+			m_Stage4Config.GetRetryIntervalMs());
+		stage4ConfigLine += string.Format(
+			" delivery_interval_ms=%1 delivery_package=%2 delivery_base_travel_ms=%3 delivery_per_hop_ms=%4 max_shipments_per_faction=%5 source_reserve_supplies=%6",
+			m_Stage4Config.GetDeliveryIntervalMs(),
+			m_Stage4Config.GetDeliveryPackageSupplies(),
+			m_Stage4Config.GetDeliveryBaseTravelMs(),
+			m_Stage4Config.GetDeliveryPerHopMs(),
+			m_Stage4Config.GetMaxShipmentsPerFaction(),
+			m_Stage4Config.GetSourceReserveSupplies());
+		AICF_Stage4Diagnostics.Info("CONFIG", stage4ConfigLine);
 		if (m_Stage2Config.HasTestDropOrder())
 		{
 			AICF_Stage2Diagnostics.Warning(
@@ -268,6 +297,8 @@ class AICF_MatchController
 		}
 		AICF_Stage1Diagnostics.Info("MATCH_START", "map=Arland factions=US,USSR");
 		SyncTickets();
+		SyncStage4State();
+		m_EconomySystem.ProbeInitialSupplies();
 
 		if (!SpawnInitialRoster(m_USState, m_USFaction) || !SpawnInitialRoster(m_USSRState, m_USSRFaction))
 		{
@@ -371,6 +402,8 @@ class AICF_MatchController
 		}
 		m_bCampaignWasRunning = true;
 
+		if (m_EconomySystem && m_EconomySystem.IsEnabled())
+			m_EconomySystem.UpdateLogistics(m_USFaction, m_USSRFaction);
 		ProcessFaction(m_USState, m_USFaction);
 		ProcessFaction(m_USSRState, m_USSRFaction);
 		// The facade always advances independent asset cleanup. During the delayed
@@ -394,6 +427,7 @@ class AICF_MatchController
 		if (m_GroupMapMarkers)
 			m_GroupMapMarkers.Sync(m_USState, m_USSRState, m_VehicleCoordinator);
 		TryLogRosterReady();
+		SyncStage4State();
 		EvaluateVictory();
 	}
 
@@ -476,8 +510,19 @@ class AICF_MatchController
 				continue;
 			}
 
-			if (slot.IsReinforcementDue(nowMs))
+			if (slot.GetState() == AICF_EGroupSlotState.WAITING &&
+				m_EconomySystem && m_EconomySystem.IsEnabled())
+			{
+				m_EconomySystem.AdvanceRequest(faction, slot);
+				if (!m_bReplanScheduled && !m_bGraphRebuildNeeded &&
+					m_EconomySystem.IsRequestAttemptDue(faction, slot, nowMs) &&
+					slot.IsReinforcementDue(nowMs))
+					TryStartReplacement(factionState, faction, slot, nowMs);
+			}
+			else if (slot.IsReinforcementDue(nowMs))
+			{
 				TryStartReplacement(factionState, faction, slot, nowMs);
+			}
 		}
 	}
 
@@ -488,6 +533,7 @@ class AICF_MatchController
 	{
 		if (!slot || !slot.IsCombatReady())
 			return;
+		bool replacement = slot.IsReplacementDeployment();
 
 		DetachSpawnObservers(slot.GetGroup());
 
@@ -498,10 +544,11 @@ class AICF_MatchController
 			AICF_Stage1Diagnostics.Error(
 				"MANAGED_AI_LOD_POLICY_FAILED",
 				string.Format("faction=%1 slot=%2", faction.GetFactionKey(), slot.GetSlotId()));
+			if (replacement && m_EconomySystem && m_EconomySystem.IsEnabled())
+				RejectReadyReplacement(factionState, faction, slot, "MANAGED_AI_LOD_POLICY_FAILED");
 			return;
 		}
 
-		bool replacement = slot.IsReplacementDeployment();
 		string reason = "INITIAL_DEPLOYMENT";
 		AICF_EDeploymentKind deploymentKind = AICF_EDeploymentKind.INITIAL;
 		if (replacement)
@@ -511,7 +558,11 @@ class AICF_MatchController
 		}
 
 		if (!slot.GetWaypoint() && !m_OrderPlanner.AssignOrder(slot, faction, m_ObjectiveGraph, m_TargetSelector, reason))
+		{
+			if (replacement && m_EconomySystem && m_EconomySystem.IsEnabled())
+				RejectReadyReplacement(factionState, faction, slot, "ORDER_ASSIGNMENT_FAILED");
 			return;
+		}
 
 		bool cohesionApplied = m_GroupCohesionPolicy.Apply(slot.GetGroup());
 		AICF_Stage2Diagnostics.Info(
@@ -529,14 +580,23 @@ class AICF_MatchController
 			AICF_Stage1Diagnostics.Error(
 				"SLOT_COMMIT_PRECONDITION_FAILED",
 				string.Format("faction=%1 slot=%2", faction.GetFactionKey(), slot.GetSlotId()));
+			if (replacement && m_EconomySystem && m_EconomySystem.IsEnabled())
+				RejectReadyReplacement(factionState, faction, slot, "SLOT_COMMIT_PRECONDITION_FAILED");
 			return;
 		}
 
-		if (!factionState.TryCommitDeployment(deploymentKind))
+		bool deploymentCommitted;
+		if (replacement && m_EconomySystem && m_EconomySystem.IsEnabled())
+			deploymentCommitted = m_EconomySystem.TryCommitDeployment(factionState, faction, slot);
+		else
+			deploymentCommitted = factionState.TryCommitDeployment(deploymentKind);
+		if (!deploymentCommitted)
 		{
 			AICF_Stage1Diagnostics.Error(
 				"TICKET_COMMIT_FAILED",
 				string.Format("faction=%1 slot=%2 tickets=%3", faction.GetFactionKey(), slot.GetSlotId(), ticketsBefore));
+			if (replacement && m_EconomySystem && m_EconomySystem.IsEnabled())
+				RejectReadyReplacement(factionState, faction, slot, "DEPLOYMENT_COMMIT_FAILED");
 			return;
 		}
 
@@ -545,8 +605,19 @@ class AICF_MatchController
 			AICF_Stage1Diagnostics.Error(
 				"SLOT_COMMIT_FAILED",
 				string.Format("faction=%1 slot=%2", faction.GetFactionKey(), slot.GetSlotId()));
+			if (replacement && m_EconomySystem && m_EconomySystem.IsEnabled())
+			{
+				m_EconomySystem.RollbackCommittedDeployment(
+					factionState,
+					faction,
+					slot,
+					"SLOT_COMMIT_FAILED");
+				RejectReadyReplacement(factionState, faction, slot, "SLOT_COMMIT_FAILED");
+			}
 			return;
 		}
+		if (replacement && m_EconomySystem && m_EconomySystem.IsEnabled())
+			m_EconomySystem.FinalizeDeployment(faction, slot);
 
 		AICF_Stage1Diagnostics.Info(
 			"GROUP_SPAWNED",
@@ -604,6 +675,7 @@ class AICF_MatchController
 		int nowMs)
 	{
 		int scheduledReadyAtMs = slot.GetReinforcementReadyAtMs();
+		bool economyEnabled = m_EconomySystem && m_EconomySystem.IsEnabled();
 		if (CountConcurrentReplacementSpawns() >= m_Stage2Config.GetMaxConcurrentReplacementSpawns())
 		{
 			// This is intentional load shedding, not a reinforcement timing fault.
@@ -635,12 +707,13 @@ class AICF_MatchController
 					slot.GetSlotId()));
 		}
 
-		if (!factionState.TryReserveDeployment(AICF_EDeploymentKind.REPLACEMENT))
+		if (!economyEnabled && !factionState.TryReserveDeployment(AICF_EDeploymentKind.REPLACEMENT))
 			return;
 
 		if (!slot.BeginReplacementSpawn(nowMs))
 		{
-			factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
+			if (!economyEnabled)
+				factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
 			return;
 		}
 
@@ -653,7 +726,7 @@ class AICF_MatchController
 				slot.GetSpawnGeneration()));
 
 		int replacementOvershootMs = nowMs - scheduledReadyAtMs;
-		if (replacementOvershootMs < 0 || replacementOvershootMs > 2000)
+		if (!economyEnabled && (replacementOvershootMs < 0 || replacementOvershootMs > 2000))
 		{
 			AICF_Stage1Diagnostics.Error(
 				"REINFORCEMENT_TIMING_VIOLATION",
@@ -669,32 +742,60 @@ class AICF_MatchController
 			AICF_Stage1Diagnostics.Warning(
 				"REINFORCEMENT_BLOCKED",
 				string.Format("faction=%1 slot=%2 reason=AI_LIMIT", faction.GetFactionKey(), slot.GetSlotId()));
-			slot.ReturnSpawnToWait(nowMs + REINFORCEMENT_RETRY_MS);
-			factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
+			AbortReplacementAttempt(factionState, faction, slot, "AI_LIMIT");
+			slot.ReturnSpawnToWait(nowMs + GetReplacementRetryMs());
 			return;
 		}
 
 		SCR_AIGroup group;
 		SCR_CampaignMilitaryBaseComponent spawnBase;
-		if (!m_ReinforcementSystem.TrySpawn(
-			m_Campaign,
-			faction,
-			slot,
-			m_ConflictAdapter,
-			m_GroupSpawner,
-			group,
-			spawnBase))
+		bool spawnSucceeded;
+		if (economyEnabled)
 		{
-			slot.ReturnSpawnToWait(nowMs + REINFORCEMENT_RETRY_MS);
-			factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
+			if (m_EconomySystem.TryBeginDeployment(factionState, faction, slot, spawnBase))
+			{
+				string spawnValidationFailure;
+				if (m_EconomySystem.ValidateReservationForSpawn(
+					factionState,
+					faction,
+					slot,
+					spawnValidationFailure))
+				{
+					spawnSucceeded = m_ReinforcementSystem.TrySpawnAtBase(
+						faction,
+						slot,
+						spawnBase,
+						m_ConflictAdapter,
+						m_GroupSpawner,
+						group);
+				}
+			}
+			if (m_EconomySystem.HasRejectedUnsafeSite())
+				m_ReinforcementSystem.MarkRejectedUnsafeSite();
+		}
+		else
+		{
+			spawnSucceeded = m_ReinforcementSystem.TrySpawn(
+				m_Campaign,
+				faction,
+				slot,
+				m_ConflictAdapter,
+				m_GroupSpawner,
+				group,
+				spawnBase);
+		}
+		if (!spawnSucceeded)
+		{
+			AbortReplacementAttempt(factionState, faction, slot, "SPAWN_FAILED");
+			slot.ReturnSpawnToWait(nowMs + GetReplacementRetryMs());
 			return;
 		}
 
 		if (!BindManagedGroup(factionState, faction, slot, group, "REPLACEMENT"))
 		{
 			RplComponent.DeleteRplEntity(group, false);
-			slot.ReturnSpawnToWait(nowMs + REINFORCEMENT_RETRY_MS);
-			factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
+			AbortReplacementAttempt(factionState, faction, slot, "BIND_FAILED");
+			slot.ReturnSpawnToWait(nowMs + GetReplacementRetryMs());
 			return;
 		}
 
@@ -707,6 +808,64 @@ class AICF_MatchController
 				slot.GetSlotId(),
 				GroupKey(group),
 				AICF_Stage1Diagnostics.BaseKey(spawnBase)));
+	}
+
+	protected int GetReplacementRetryMs()
+	{
+		if (m_EconomySystem && m_EconomySystem.IsEnabled())
+			return m_EconomySystem.GetRetryIntervalMs();
+		return REINFORCEMENT_RETRY_MS;
+	}
+
+	protected void AbortReplacementAttempt(
+		AICF_FactionState factionState,
+		SCR_CampaignFaction faction,
+		AICF_GroupSlot slot,
+		string reason)
+	{
+		if (m_EconomySystem && m_EconomySystem.IsEnabled())
+			m_EconomySystem.AbortDeployment(factionState, faction, slot, reason);
+		else if (factionState)
+			factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
+	}
+
+	protected void BeginEconomyReinforcementRequest(
+		SCR_CampaignFaction faction,
+		AICF_GroupSlot slot,
+		SCR_CampaignMilitaryBaseComponent savedTargetBase)
+	{
+		if (m_EconomySystem && m_EconomySystem.IsEnabled())
+			m_EconomySystem.BeginRequest(faction, slot, savedTargetBase);
+	}
+
+	protected void RejectReadyReplacement(
+		AICF_FactionState factionState,
+		SCR_CampaignFaction faction,
+		AICF_GroupSlot slot,
+		string reason)
+	{
+		if (!slot || !slot.IsReplacementDeployment())
+			return;
+		SCR_AIGroup group = slot.GetGroup();
+		DetachSpawnObservers(group);
+		m_OrderPlanner.ClearOrder(slot);
+		AbortReplacementAttempt(factionState, faction, slot, reason);
+		if (group)
+		{
+			m_ManagedAILODPolicy.Release(group);
+			group.GetOnEmpty().Remove(OnGroupEmpty);
+			RplComponent.DeleteRplEntity(group, false);
+		}
+		if (!slot.MarkDestroyed())
+			return;
+		slot.BeginReinforcementWait(System.GetTickCount() + GetReplacementRetryMs());
+		AICF_Stage4Diagnostics.Warning(
+			"READY_DEPLOYMENT_REJECTED",
+			string.Format(
+				"faction=%1 slot=%2 reason=%3 action=ROLLBACK_AND_RETRY",
+				faction.GetFactionKey(),
+				slot.GetSlotId(),
+				reason));
 	}
 
 	protected bool BindManagedGroup(
@@ -999,7 +1158,7 @@ class AICF_MatchController
 		}
 
 		if (replacement)
-			factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
+			AbortReplacementAttempt(factionState, faction, slot, "SPAWN_TIMEOUT");
 
 		if (!slot.MarkDestroyed())
 			return;
@@ -1018,7 +1177,7 @@ class AICF_MatchController
 			return;
 		}
 
-		slot.BeginReinforcementWait(System.GetTickCount() + REINFORCEMENT_RETRY_MS);
+		slot.BeginReinforcementWait(System.GetTickCount() + GetReplacementRetryMs());
 	}
 
 	protected void HandleInvalidRoster(
@@ -1040,7 +1199,7 @@ class AICF_MatchController
 		}
 
 		if (replacement)
-			factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
+			AbortReplacementAttempt(factionState, faction, slot, "INVALID_ROSTER");
 		if (!slot.MarkDestroyed())
 			return;
 
@@ -1074,7 +1233,7 @@ class AICF_MatchController
 					nonAliveCount));
 			return;
 		}
-		slot.BeginReinforcementWait(System.GetTickCount() + REINFORCEMENT_RETRY_MS);
+		slot.BeginReinforcementWait(System.GetTickCount() + GetReplacementRetryMs());
 	}
 
 	protected void HandleLostReadyGroup(
@@ -1082,8 +1241,9 @@ class AICF_MatchController
 		SCR_CampaignFaction faction,
 		AICF_GroupSlot slot)
 	{
+		SCR_CampaignMilitaryBaseComponent savedTargetBase = slot.GetTargetBase();
 		if (slot.IsReplacementDeployment())
-			factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
+			AbortReplacementAttempt(factionState, faction, slot, "READY_GROUP_LOST");
 
 		if (slot.HasPendingOrderRecovery())
 		{
@@ -1099,7 +1259,11 @@ class AICF_MatchController
 		AICF_Stage1Diagnostics.Error(
 			"READY_GROUP_LOST",
 			string.Format("faction=%1 slot=%2", faction.GetFactionKey(), slot.GetSlotId()));
-		slot.BeginReinforcementWait(System.GetTickCount() + m_Config.GetReinforcementDelayMs());
+		int readyAtMs = System.GetTickCount() + m_Config.GetReinforcementDelayMs();
+		if (m_EconomySystem && m_EconomySystem.IsEnabled())
+			readyAtMs = System.GetTickCount();
+		slot.BeginReinforcementWait(readyAtMs);
+		BeginEconomyReinforcementRequest(faction, slot, savedTargetBase);
 	}
 
 	protected void OnGroupEmpty(AIGroup rawGroup)
@@ -1124,8 +1288,9 @@ class AICF_MatchController
 		}
 
 		string groupKey = GroupKey(group);
+		SCR_CampaignMilitaryBaseComponent savedTargetBase = slot.GetTargetBase();
 		if (slot.IsReplacementDeployment())
-			factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
+			AbortReplacementAttempt(factionState, faction, slot, "GROUP_EMPTY");
 		if (slot.HasPendingOrderRecovery())
 		{
 			RecordPendingOrderVerificationFailure(
@@ -1138,7 +1303,10 @@ class AICF_MatchController
 			return;
 
 		int readyAtAbsoluteMs = System.GetTickCount() + m_Config.GetReinforcementDelayMs();
+		if (m_EconomySystem && m_EconomySystem.IsEnabled())
+			readyAtAbsoluteMs = System.GetTickCount();
 		slot.BeginReinforcementWait(readyAtAbsoluteMs);
+		BeginEconomyReinforcementRequest(faction, slot, savedTargetBase);
 		int emptyAtElapsedMs = AICF_Stage1Diagnostics.GetElapsedMs();
 
 		AICF_Stage1Diagnostics.InfoAt(
@@ -3734,6 +3902,8 @@ class AICF_MatchController
 		m_bObservedCapture = true;
 		m_iLastCaptureAtMs = AICF_Stage1Diagnostics.GetElapsedMs();
 		m_bGraphRebuildNeeded = true;
+		if (m_EconomySystem)
+			m_EconomySystem.SetGraphContextReady(false);
 		m_LastChangedBase = base;
 		RecordPendingOwnerChange(base, oldOwner, newOwner);
 		AICF_Stage1Diagnostics.Info(
@@ -3766,6 +3936,8 @@ class AICF_MatchController
 			return;
 		}
 		m_iStrategicBaseRevision++;
+		if (m_EconomySystem)
+			m_EconomySystem.SetGraphContextReady(true);
 		if (m_VehicleCoordinator)
 			m_VehicleCoordinator.NotifyStrategicContextChanged(
 				m_iStrategicBaseRevision,
@@ -4056,6 +4228,7 @@ class AICF_MatchController
 				m_USState.CountSlotsByState(AICF_EGroupSlotState.READY),
 				m_USSRState.CountSlotsByState(AICF_EGroupSlotState.READY),
 				CountManagedAgents()));
+		SyncStage4State();
 
 		int pendingOrderRepairs = CountPendingOrderRepairs();
 		int unaccountedOrderRepairs = AuditOrderRepairAccounting(
@@ -4342,7 +4515,8 @@ class AICF_MatchController
 			!AICF_Stage1Diagnostics.HasErrors() &&
 			!AICF_Stage2Diagnostics.HasErrors() &&
 			!AICF_Stage35Diagnostics.HasErrors() &&
-			(!m_Stage3Config.GetVehiclesEnabled() || !AICF_Stage3Diagnostics.HasErrors());
+			(!m_Stage3Config.GetVehiclesEnabled() || !AICF_Stage3Diagnostics.HasErrors()) &&
+			(!m_Stage4Config.GetEconomyEnabled() || !AICF_Stage4Diagnostics.HasErrors());
 
 		int pendingOrderRepairs = CountPendingOrderRepairs();
 		int unaccountedOrderRepairs = AuditOrderRepairAccounting(
@@ -4697,6 +4871,33 @@ class AICF_MatchController
 			m_Campaign.AICF_SetTickets(m_USState.GetTickets(), m_USSRState.GetTickets());
 	}
 
+	protected void SyncStage4State()
+	{
+		if (!m_Campaign || !m_Stage4Config)
+			return;
+		if (!m_Stage4Config.GetEconomyEnabled() || !m_EconomySystem || !m_USFaction || !m_USSRFaction)
+		{
+			m_Campaign.AICF_SetStage4State(
+				false,
+				0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0);
+			return;
+		}
+
+		m_Campaign.AICF_SetStage4State(
+			true,
+			m_EconomySystem.GetTotalSupplies(m_USFaction),
+			m_EconomySystem.GetConnectedSupplies(m_USFaction),
+			m_EconomySystem.GetFactionTier(m_USFaction),
+			m_EconomySystem.GetPendingRequestCount("US"),
+			m_EconomySystem.GetShipmentCount("US"),
+			m_EconomySystem.GetTotalSupplies(m_USSRFaction),
+			m_EconomySystem.GetConnectedSupplies(m_USSRFaction),
+			m_EconomySystem.GetFactionTier(m_USSRFaction),
+			m_EconomySystem.GetPendingRequestCount("USSR"),
+			m_EconomySystem.GetShipmentCount("USSR"));
+	}
+
 	protected void Subscribe()
 	{
 		m_BaseSystem = SCR_MilitaryBaseSystem.GetInstance();
@@ -4813,6 +5014,12 @@ class AICF_MatchController
 				m_USSRState,
 				m_USSRFaction);
 			m_VehicleCoordinator = null;
+		}
+
+		if (m_EconomySystem)
+		{
+			m_EconomySystem.Stop(m_USState, m_USFaction, m_USSRState, m_USSRFaction);
+			m_EconomySystem = null;
 		}
 
 		ReleaseFactionGroups(m_USState, cleanupEntities);

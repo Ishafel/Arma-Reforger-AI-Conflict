@@ -542,4 +542,26 @@ Protected occupant — любой `ChimeraCharacter` с life state, отличн
 5. Overflow-policy — `ALL_OR_FALLBACK`: если всем живым членам группы не хватает compartment, частично уехавшая группа запрещена.
 6. Исправная abandoned entity освобождает active AI cap, но учитывается в отдельном faction world pool с soft target 4. Pool разрешено временно превысить target: protected occupant, player transition или живой игрок в радиусе 15 м важнее лимита и блокирует destructive cleanup; после освобождения требуется ещё 5 секунд непрерывного clear.
 7. В T8 встречались внешние/versioned сообщения до или вне AICF init: server resource load `WORLD (E): Unknown keyword/data 'm_bEnabled'`, `DEFAULT (E): Unknown keyword/data 'm_bCanAIMarkTargets'` и client stock UI `ScriptInvoker::Invoke: Incompatible parameter ... ShowFactionPlayerList`. Символы отсутствуют в репозитории, а stack/resource context относится к stock `GameMode_Campaign`/RNGD и `SCR_RoleSelectionMenu`; они не классифицируются как AICF `SCRIPT (E/F)`, но сохраняются в отчёте и не могут использоваться как доказательство чистого окружения.
-8. Автоматического финального PASS нет. Новое решение владельца отменило прежнюю заочную фиксацию; rewrite implementation/cutover завершены, но Stage 3/3.5 сохраняют статус `FAILED — RUNTIME ACCEPTANCE NOT PASSED`. Техническая приёмка новой архитектуры по-прежнему требует полного остановленного server/client log, ручной матрицы, Transport T10, Armed A2, отдельных retry/approach/order/cap/cleanup fault-срезов и 30-минутного прогона; до выполнения они остаются `NOT RUN`.
+8. Автоматического финального runtime PASS нет. Решением владельца от 15.08.2026 rewrite implementation/cutover Stage 3/3.5 приняты как продуктовая базовая линия и Stage 4 разблокирован. Техническая матрица новой архитектуры по-прежнему требует полного остановленного server/client log, Transport T10, Armed A2, отдельных retry/approach/order/cap/cleanup fault-срезов и 30-минутного прогона; до выполнения они остаются `NOT RUN`, не отменяя продуктовую приёмку.
+
+## Stage 4: stock supply API и серверная экономика
+
+Production-контракт проверен по локальному Script Diff Reforger `1.8.0.10` в `.cache/reforger-api/Arma-Reforger-Script-Diff-1.8.0.10/scripts/Game/Components/Locations/SCR_CampaignMilitaryBaseComponent.c`:
+
+```c
+float GetSupplies();
+float GetSuppliesMax();
+void AddSupplies(int suppliesCount, bool replicate = true);
+void SetSupplies(float suppliesCount);
+SCR_ECampaignBaseType GetType();
+```
+
+Stage 4 не создаёт параллельную валюту: reservation, rollback, shipment dispatch, delivery и return используют только `SCR_CampaignMilitaryBaseComponent.AddSupplies()`. Это сохраняет общий stock pool с player deliveries, building/repair/respawn расходами и штатной репликацией Conflict.
+
+`AICF_ObjectiveGraph` теперь предоставляет revision, общий hop distance и friendly BFS path. `AICF_SupplyNetwork` дополнительно проверяет ownership, initialized/capture/enemy state каждого узла пути. Source определяется как faction main base или `SCR_ECampaignBaseType.SOURCE_BASE`.
+
+Агрегаты Stage 4 добавлены в уже реплицируемый `SCR_GameModeCampaign` через `RplProp` + `Replication.BumpMe()`: total/connected supplies, logistics tier, pending reinforcement requests и shipments in transit отдельно для US/USSR. Конкретный stock каждой базы остаётся собственностью vanilla replication.
+
+Workbench 1.8 validation `.cache/stage4-implementation-validate-20260815-r5/console.log`: Game `5729 files / 11223 classes`, CRC32 `307e40e6`, `Game successfully created`, `SCRIPT(E/F)=0`, `ENGINE(F)=0`; shutdown resource-leak list относится к стандартному Workbench harness.
+
+Direct ServerDiag calibration probe `C:\Users\retar\AppData\Local\AICF\Stage4-Probe-20260815-115400\logs\logs_2026-08-15_11-54-11\console.log` дошёл до AICF bootstrap и `ROSTER_READY`, записал девять отложенных `SUPPLY_PROBE` после инициализации обеих сторон и прошёл `tools/Test-Stage4Log.ps1`. Faction MOB имели `1000/1000`; стандартные non-relay базы — `supplies_max=1000`, более крупные pools — `2150/3000`. На этом evidence defaults откалиброваны как group cost `500`, delivery package `500`, source reserve `500`. Это `E1 PASS`, а не полный runtime PASS Stage 4.

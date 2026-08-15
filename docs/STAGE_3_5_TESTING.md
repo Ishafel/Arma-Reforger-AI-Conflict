@@ -1,10 +1,10 @@
 # Stage 3.5 — Active Motorized Forces: приёмочное тестирование
 
-Статус Stage 3.5: **FAILED — REWRITE IMPLEMENTATION/CUTOVER COMPLETE, RUNTIME ACCEPTANCE NOT PASSED**. Статус полной runtime-приёмки: **NOT RUN**. Legacy runtime/coordinator fragments удалены; новый vehicle-domain включён единственным active side-effect path. Оба исторических Transport-прогона `Stage35-T-20260810-210932` и `Stage35-T-20260811-190311`: **FAIL**. Preliminary repeat smoke `Stage35-T-RepeatSmoke-20260810-224931`: **BLOCKED**, не засчитан как repeat T. Repeat T и Repeat-T2: **NOT RUN**.
+Статус Stage 3.5: **ACCEPTED — OWNER DECISION 15.08.2026**. Статус полной технической runtime-матрицы: **NOT RUN**. Legacy runtime/coordinator fragments удалены; новый vehicle-domain включён единственным active side-effect path и принят как базовая линия для Stage 4. Оба исторических Transport-прогона `Stage35-T-20260810-210932` и `Stage35-T-20260811-190311`: **FAIL**. Preliminary repeat smoke `Stage35-T-RepeatSmoke-20260810-224931`: **BLOCKED**, не засчитан как repeat T. Repeat T и Repeat-T2: **NOT RUN**. Основание продуктовой приёмки: [решение владельца](STAGE_3_3_5_OWNER_ACCEPTANCE_2026-08-15.md).
 
-Новое решение владельца отклонило legacy vehicle lifecycle, но не требования и не историческое evidence; replacement architecture теперь реализована и переключена. Документ совмещает бланк для ещё не выполненных обязательных срезов, фактические журналы двух неуспешных Transport-прогонов и журналы заблокированных smoke. Незаполненные поля сохраняют `NOT RUN`; они не отменяют подтверждённые `FAIL` и не являются runtime-доказательством. Ни один Transport-прогон, заблокированный smoke, автоматическая компиляция, статический аудит, отдельная успешная поездка или строка Stage 3 RESULT_CANDIDATE не заявляют PASS полной Stage 3.5 или новой архитектуры.
+Решение владельца принимает текущую replacement architecture как продуктовую базовую линию, но не меняет требования и историческое evidence. Документ совмещает бланк для ещё не выполненных технических срезов, фактические журналы двух неуспешных Transport-прогонов и журналы заблокированных smoke. Незаполненные поля сохраняют `NOT RUN`; они не отменяют подтверждённые `FAIL` и не являются runtime-доказательством. Ни один Transport-прогон, заблокированный smoke, автоматическая компиляция, статический аудит, отдельная успешная поездка или строка Stage 3 RESULT_CANDIDATE не заявляют полный технический runtime PASS Stage 3.5.
 
-Stage 3.5 принимается только после выполнения всех обязательных срезов на одном commit: пехотного baseline B, активного планирования P, невооружённого транспорта T, отдельного armed-light среза A, recovery/replacement R, limits/cleanup L, 30-минутной матрицы M30 и двухчасового soak S120.
+Полный технический runtime PASS Stage 3.5 присваивается только после выполнения всех обязательных срезов на одном commit: пехотного baseline B, активного планирования P, невооружённого транспорта T, отдельного armed-light среза A, recovery/replacement R, limits/cleanup L, 30-минутной матрицы M30 и двухчасового soak S120. Продуктовая приёмка владельцем уже состоялась и не зависит от присвоения этого технического результата.
 
 ## Нормативная граница
 
@@ -26,7 +26,7 @@ Stage 3.5 проверяет:
 - SAFE_REUSE при смене цели;
 - bounded request/recovery/fallback после потери машины;
 - отдельный player-safe functional world pool;
-- устойчивость 30 минут и два часа до начала Stage 4.
+- устойчивость 30 минут и два часа как отдельный технический evidence-контур принятой базовой линии.
 
 Stage 3.5 не добавляет supply, economy, строительство или сложную логистику. Эти системы не используются для маскировки дефектов состава, планирования или транспорта.
 
@@ -1018,7 +1018,7 @@ NOT RUN:
 - автоматическая компиляция/static audit без runtime не меняет NOT RUN на PASS;
 - отдельный успешный визуальный эпизод без полного причинного журнала не меняет NOT RUN на PASS.
 
-Текущий итог полной Stage 3.5: **NOT RUN** — обязательные B/P/A/R/L/M30/S120 не выполнены. Оба исторических Transport-прогона остаются **FAIL**, preliminary repeat smoke — **BLOCKED**, Repeat T и Repeat-T2 — **NOT RUN**. Final-tree development smoke также **BLOCKED** внешним backend до AICF bootstrap и не является ни одним обязательным срезом. Rewrite implementation/cutover завершены, но статус Stage 3.5 остаётся **FAILED — RUNTIME ACCEPTANCE NOT PASSED**.
+Текущий итог полной технической runtime-матрицы Stage 3.5: **NOT RUN** — обязательные B/P/A/R/L/M30/S120 не выполнены. Оба исторических Transport-прогона остаются **FAIL**, preliminary repeat smoke — **BLOCKED**, Repeat T и Repeat-T2 — **NOT RUN**. Final-tree development smoke также **BLOCKED** внешним backend до AICF bootstrap и не является ни одним обязательным срезом. При этом Stage 3.5 имеет продуктовый статус **ACCEPTED — OWNER DECISION 15.08.2026**, и Stage 4 разблокирован.
 
 ## Что приложить к итоговому отчёту
 

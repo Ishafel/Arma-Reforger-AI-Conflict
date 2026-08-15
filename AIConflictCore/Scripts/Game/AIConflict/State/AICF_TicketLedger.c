@@ -85,4 +85,18 @@ class AICF_TicketLedger
 		m_iSpentTickets += m_iReplacementTicketCost;
 		return true;
 	}
+
+	bool RollbackCommittedDeployment(AICF_EDeploymentKind deploymentKind)
+	{
+		if (!Replication.IsServer())
+			return false;
+		if (deploymentKind == AICF_EDeploymentKind.INITIAL)
+			return true;
+		if (m_iSpentTickets < m_iReplacementTicketCost)
+			return false;
+
+		m_iTickets += m_iReplacementTicketCost;
+		m_iSpentTickets -= m_iReplacementTicketCost;
+		return true;
+	}
 }

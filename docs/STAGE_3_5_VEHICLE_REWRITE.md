@@ -1,6 +1,6 @@
 # Stage 3 / 3.5 vehicle-domain rewrite
 
-Статус этапов: **FAILED — REWRITE IMPLEMENTATION/CUTOVER COMPLETE, RUNTIME ACCEPTANCE NOT PASSED**.
+Статус этапов: **ACCEPTED — OWNER DECISION 15.08.2026**. Полная техническая runtime-матрица не завершена.
 
 Этот документ фиксирует реализованную архитектуру новой реализации. Он не меняет результаты приёмки: исторические Stage 3 Transport T1–T9 и Armed A1 остаются `FAIL`; оба фактических Stage 3.5 Transport-прогона остаются `FAIL`; preliminary repeat smoke остаётся `BLOCKED`; B/P/A/R/L/M30/S120, Repeat T и Repeat‑T2 остаются `NOT RUN`. Final-tree development smoke также `BLOCKED` внешним backend и не относится к этим срезам. Static/Workbench evidence остаётся development evidence и не является runtime `PASS`.
 
@@ -377,4 +377,4 @@ Each audit also runs intentionally broken fixtures. Финальный self-chec
 
 ## Acceptance rule
 
-Architecture implementation/cutover, static audit and Workbench compile завершены, но необходимы и недостаточны. Заблокированный pre-bootstrap smoke не является runtime evidence. Stage 3/3.5 remain failed/not accepted until the controlled runtime matrix supplies the evidence required by `STAGE_3_TESTING.md` and `STAGE_3_5_TESTING.md`. Historical statuses are append-only evidence and are never renamed to manufacture a PASS.
+Architecture implementation/cutover приняты владельцем как продуктовая базовая линия Stage 3/3.5 и разблокируют Stage 4. Static audit, Workbench compile и заблокированный pre-bootstrap smoke не образуют полный технический runtime PASS; controlled runtime matrix из `STAGE_3_TESTING.md` и `STAGE_3_5_TESTING.md` остаётся отдельным evidence/backlog-контуром. Historical statuses are append-only evidence and are never renamed to manufacture a PASS. Основание: [`STAGE_3_3_5_OWNER_ACCEPTANCE_2026-08-15.md`](STAGE_3_3_5_OWNER_ACCEPTANCE_2026-08-15.md).

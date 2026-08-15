@@ -4,7 +4,7 @@
 
 - Исходный Transport run `stage1-server-11245`: **FAIL**.
 - Текущий dirty-working-tree fix-candidate: static/compile **PASS**, runtime transport **NOT VERIFIED**.
-- Stage 3 / 3.5: **FAILED / NOT ACCEPTED** до нового длительного server+client прогона.
+- На дату отчёта Stage 3 / 3.5: **FAILED / NOT ACCEPTED** до нового длительного server+client прогона. Текущий продуктовый статус позднее изменён [решением владельца от 15.08.2026](STAGE_3_3_5_OWNER_ACCEPTANCE_2026-08-15.md); исторический runtime-результат этого отчёта не переклассифицирован.
 
 Исходный server log: `C:\Users\retar\AppData\Local\AICF\Stage35-Rewrite-T-20260813-211511\logs\logs_2026-08-13_21-15-12\console.log`.
 Сохранённый immutable snapshot: `.cache/stage35-rewrite-t-11245-capture-20260813/server-console-live-snapshot.log`, SHA-256 `2C9F37B06185B72165AE68DFF97B9E70B6EDBAAC61E9B7E65EF0A0A85E7AC777`.
