@@ -1,6 +1,31 @@
-// Gameplay map markers for the leaders of all managed AI groups. The current
-// visibility policy is intentionally global; a later stage will filter them to
-// the local player's allied faction without changing marker identity or text.
+// Gameplay map markers for managed allied groups and their current objectives.
+// Stock marker streaming keeps each faction's operational picture private.
+
+modded class SCR_MapMarkerDynamicWComponent
+{
+	static const string AICF_ATTACK_BADGE_TEXT_NAME = "AICF_AttackBadgeText";
+
+	void AICF_SetLiveText(string text)
+	{
+		Widget markerRoot = GetRootWidget();
+		TextWidget attackBadgeText;
+		if (markerRoot)
+		{
+			attackBadgeText = TextWidget.Cast(
+				markerRoot.FindAnyWidget(AICF_ATTACK_BADGE_TEXT_NAME));
+		}
+
+		if (attackBadgeText)
+		{
+			attackBadgeText.SetText(text);
+			SetTextVisible(false);
+			return;
+		}
+
+		SetText(text);
+		SetTextVisible(true);
+	}
+}
 
 // Replicate the live group label independently from the marker config ID. The
 // config ID keeps the stable faction/slot visuals, while this text can change
@@ -35,8 +60,7 @@ modded class SCR_MapMarkerEntity
 		if (!m_MarkerWidgetComp || m_sAICFGroupMarkerText.IsEmpty())
 			return;
 
-		m_MarkerWidgetComp.SetText(m_sAICFGroupMarkerText);
-		m_MarkerWidgetComp.SetTextVisible(true);
+		m_MarkerWidgetComp.AICF_SetLiveText(m_sAICFGroupMarkerText);
 	}
 }
 
@@ -47,6 +71,9 @@ class AICF_GroupMapMarkerEntry : SCR_MapMarkerEntryDynamic
 {
 	static const ResourceName MARKER_PREFAB = "{DD74BE2BBAE07192}Prefabs/Markers/MapMarkerEntityBase.et";
 	static const ResourceName MARKER_LAYOUT = "{3E27127E86F84A12}UI/layouts/Map/MapMarkerDynamicBase.layout";
+	static const ResourceName ATTACK_BADGE_FONT =
+		"{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt";
+	static const string ATTACK_BADGE_NAME = "AICF_AttackBadge";
 
 	override SCR_EMapMarkerType GetMarkerType()
 	{
@@ -75,6 +102,7 @@ class AICF_GroupMapMarkerEntry : SCR_MapMarkerEntryDynamic
 		int roleCode = remainder / 1000;
 		remainder = remainder % 1000;
 		int roleLocalIndex = remainder / 100;
+		int markerKind = remainder % 10;
 
 		FactionKey factionKey = "US";
 		Color markerColor = Color.FromSRGBA(44, 126, 255, 255);
@@ -82,6 +110,13 @@ class AICF_GroupMapMarkerEntry : SCR_MapMarkerEntryDynamic
 		{
 			factionKey = "USSR";
 			markerColor = Color.FromSRGBA(230, 66, 66, 255);
+		}
+		if (markerKind == 1)
+		{
+			if (factionCode == 1)
+				markerColor = Color.FromSRGBA(255, 132, 84, 255);
+			else
+				markerColor = Color.FromSRGBA(232, 143, 38, 255);
 		}
 
 		string role = "?";
@@ -103,7 +138,7 @@ class AICF_GroupMapMarkerEntry : SCR_MapMarkerEntryDynamic
 		if (factionManager)
 			faction = SCR_Faction.Cast(factionManager.GetFactionByKey(factionKey));
 
-		if (faction)
+		if (faction && markerKind == 0)
 		{
 			ResourceName imageSet = faction.GetGroupFlagImageSet();
 			array<string> imageQuads = {};
@@ -117,8 +152,70 @@ class AICF_GroupMapMarkerEntry : SCR_MapMarkerEntryDynamic
 			markerText = string.Format("%1 %2%3", factionKey, role, roleLocalIndex);
 
 		widgetComp.SetColor(markerColor);
-		widgetComp.SetText(markerText);
-		widgetComp.SetTextVisible(true);
+		if (markerKind == 1)
+			ConfigureAttackBadge(widgetComp, markerColor);
+		widgetComp.AICF_SetLiveText(markerText);
+	}
+
+	protected void ConfigureAttackBadge(
+		notnull SCR_MapMarkerDynamicWComponent widgetComp,
+		Color markerColor)
+	{
+		Widget markerRoot = widgetComp.GetRootWidget();
+		if (!markerRoot)
+			return;
+		markerRoot.ClearFlags(WidgetFlags.CLIPCHILDREN);
+
+		ImageWidget markerIcon = ImageWidget.Cast(
+			markerRoot.FindAnyWidget("MarkerIcon"));
+		if (markerIcon)
+			markerIcon.SetVisible(false);
+		TextWidget stockMarkerLabel = TextWidget.Cast(
+			markerRoot.FindAnyWidget("MarkerText"));
+		if (stockMarkerLabel)
+			stockMarkerLabel.SetVisible(false);
+
+		ImageWidget attackBadge = ImageWidget.Cast(
+			GetGame().GetWorkspace().CreateWidget(
+				WidgetType.ImageWidgetTypeID,
+				WidgetFlags.VISIBLE | WidgetFlags.IGNORE_CURSOR |
+					WidgetFlags.BLEND | WidgetFlags.STRETCH |
+					WidgetFlags.NOWRAP,
+				Color.FromSRGBA(5, 10, 14, 235),
+				1,
+				markerRoot));
+		if (attackBadge)
+		{
+			attackBadge.SetName(ATTACK_BADGE_NAME);
+			attackBadge.SetColor(Color.FromSRGBA(5, 10, 14, 235));
+			FrameSlot.SetAnchor(attackBadge, 0.5, 1);
+			FrameSlot.SetAlignment(attackBadge, 0.5, 0);
+			FrameSlot.SetSize(attackBadge, 150, 24);
+			FrameSlot.SetPos(attackBadge, 0, 18);
+			attackBadge.SetZOrder(1);
+		}
+
+		TextWidget attackBadgeText = TextWidget.Cast(
+			GetGame().GetWorkspace().CreateWidget(
+				WidgetType.TextWidgetTypeID,
+				WidgetFlags.VISIBLE | WidgetFlags.IGNORE_CURSOR |
+					WidgetFlags.BLEND | WidgetFlags.CENTER |
+					WidgetFlags.VCENTER | WidgetFlags.NO_LOCALIZATION,
+				markerColor,
+				2,
+				markerRoot));
+		if (!attackBadgeText)
+			return;
+		attackBadgeText.SetName(
+			SCR_MapMarkerDynamicWComponent.AICF_ATTACK_BADGE_TEXT_NAME);
+		attackBadgeText.SetColor(markerColor);
+		attackBadgeText.SetFont(ATTACK_BADGE_FONT);
+		attackBadgeText.SetExactFontSize(14);
+		FrameSlot.SetAnchor(attackBadgeText, 0.5, 1);
+		FrameSlot.SetAlignment(attackBadgeText, 0.5, 0);
+		FrameSlot.SetSize(attackBadgeText, 150, 24);
+		FrameSlot.SetPos(attackBadgeText, 0, 18);
+		attackBadgeText.SetZOrder(2);
 	}
 }
 
@@ -157,6 +254,8 @@ class AICF_GroupMapMarkerSystem
 	protected ref array<SCR_MapMarkerEntity> m_aMarkers = {};
 	protected ref array<SCR_AIGroup> m_aTrackedGroups = {};
 	protected ref array<IEntity> m_aTrackedLeaders = {};
+	protected ref array<SCR_MapMarkerEntity> m_aObjectiveMarkers = {};
+	protected ref array<SCR_CampaignMilitaryBaseComponent> m_aTrackedObjectives = {};
 	protected bool m_bReadyLogged;
 
 	void AICF_GroupMapMarkerSystem()
@@ -166,6 +265,8 @@ class AICF_GroupMapMarkerSystem
 			m_aMarkers.Insert(null);
 			m_aTrackedGroups.Insert(null);
 			m_aTrackedLeaders.Insert(null);
+			m_aObjectiveMarkers.Insert(null);
+			m_aTrackedObjectives.Insert(null);
 		}
 	}
 
@@ -191,14 +292,17 @@ class AICF_GroupMapMarkerSystem
 			m_bReadyLogged = true;
 			AICF_Stage1Diagnostics.Info(
 				"GROUP_MAP_MARKERS_READY",
-				string.Format("groups=%1 visibility=GLOBAL tracking=LEADER", TOTAL_SLOTS));
+				string.Format("groups=%1 visibility=ALLIED tracking=LEADER", TOTAL_SLOTS));
 		}
 	}
 
 	void Stop()
 	{
 		for (int i = 0; i < m_aMarkers.Count(); i++)
+		{
 			RemoveMarker(i);
+			RemoveObjectiveMarker(i);
+		}
 
 		m_MarkerManager = null;
 	}
@@ -210,6 +314,13 @@ class AICF_GroupMapMarkerSystem
 		AICF_VehicleCoordinator vehicleCoordinator)
 	{
 		if (!factionState)
+			return;
+		FactionManager factionManager = GetGame().GetFactionManager();
+		SCR_Faction markerFaction;
+		if (factionManager)
+			markerFaction = SCR_Faction.Cast(
+				factionManager.GetFactionByKey(factionState.GetFactionKey()));
+		if (!markerFaction)
 			return;
 
 		for (int slotId = 0; slotId < SLOTS_PER_FACTION; slotId++)
@@ -297,9 +408,8 @@ class AICF_GroupMapMarkerSystem
 			// Apply stream rules immediately for clients that were already connected.
 			// Markers created before player spawn are covered by stock
 			// SetStreamRulesForPlayer; replacement markers are not unless SetFaction
-			// explicitly refreshes the current connection nodes. A null faction keeps
-			// the current gameplay policy globally visible to both sides.
-			marker.SetFaction(null);
+			// explicitly refreshes the current connection nodes.
+			marker.SetFaction(markerFaction);
 			marker.SetGlobalVisible(true);
 			m_aMarkers[markerIndex] = marker;
 			m_aTrackedGroups[markerIndex] = group;
@@ -312,6 +422,8 @@ class AICF_GroupMapMarkerSystem
 				"GROUP_MAP_MARKER_CREATED",
 				string.Format("faction=%1 slot=%2 tracking=LEADER", factionKey, slotId));
 		}
+
+		SyncFactionObjectiveMarkers(factionState, isUSSR, offset, markerFaction);
 	}
 
 	protected string BuildMarkerText(
@@ -345,12 +457,48 @@ class AICF_GroupMapMarkerSystem
 			vehicleState = "ON_FOOT";
 
 		return string.Format(
-			"%1 | %2 | %3 | ALIVE %4 | VEH %5",
+			"%1 | %2 | %3 | ALIVE %4 | VEH %5 | %6",
 			identity,
 			role,
 			task,
 			alive,
-			vehicleState);
+			vehicleState,
+			DescribeDirection(group, slot.GetTargetBase()));
+	}
+
+	protected string DescribeDirection(
+		SCR_AIGroup group,
+		SCR_CampaignMilitaryBaseComponent target)
+	{
+		if (!group || !target || !target.GetOwner())
+			return "DIR -";
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
+		vector origin = group.GetOrigin();
+		if (leader)
+			origin = leader.GetOrigin();
+		vector destination = target.GetOwner().GetOrigin();
+		vector direction = vector.Direction(origin, destination);
+		float bearing = Math.Atan2(direction[0], direction[2]) * Math.RAD2DEG;
+		if (bearing < 0)
+			bearing += 360;
+		int sector = Math.Floor((bearing + 22.5) / 45.0);
+		if (sector >= 8)
+			sector = 0;
+		string compass = "N";
+		switch (sector)
+		{
+			case 1: compass = "NE"; break;
+			case 2: compass = "E"; break;
+			case 3: compass = "SE"; break;
+			case 4: compass = "S"; break;
+			case 5: compass = "SW"; break;
+			case 6: compass = "W"; break;
+			case 7: compass = "NW"; break;
+		}
+		return string.Format(
+			"DIR %1 %2m",
+			compass,
+			Math.Round(vector.DistanceXZ(origin, destination)));
 	}
 
 	protected string DescribeTask(
@@ -456,16 +604,93 @@ class AICF_GroupMapMarkerSystem
 		return string.Format("%1%2", GetShortRole(slot.GetRole()), roleLocalIndex);
 	}
 
-	protected int PackStableConfig(bool isUSSR, AICF_GroupSlot slot)
+	protected int PackStableConfig(bool isUSSR, AICF_GroupSlot slot, bool objective = false)
 	{
 		int factionCode;
 		if (isUSSR)
 			factionCode = 1;
+		int markerKind;
+		if (objective)
+			markerKind = 1;
 
 		return factionCode * 100000 +
 			slot.GetSlotId() * 10000 +
 			((int)slot.GetRole()) * 1000 +
-			slot.GetRoleIndex() * 100;
+			slot.GetRoleIndex() * 100 + markerKind;
+	}
+
+	// One target base owns one marker per faction. Multiple ATTACK slots are
+	// folded into the same label so co-located replicated widgets cannot overlap.
+	protected void SyncFactionObjectiveMarkers(
+		AICF_FactionState factionState,
+		bool isUSSR,
+		int offset,
+		SCR_Faction markerFaction)
+	{
+		array<SCR_CampaignMilitaryBaseComponent> targets = {};
+		array<AICF_GroupSlot> representativeSlots = {};
+		array<string> attackers = {};
+		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (!slot || !slot.IsCombatReady() ||
+				slot.GetRole() != AICF_EGroupRole.ATTACK)
+			{
+				continue;
+			}
+
+			SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
+			if (!target || !target.GetOwner())
+				continue;
+
+			int targetIndex = targets.Find(target);
+			if (targetIndex < 0)
+			{
+				targets.Insert(target);
+				representativeSlots.Insert(slot);
+				attackers.Insert(slot.GetSlotKey());
+			}
+			else
+			{
+				string attackerList = attackers[targetIndex];
+				attackerList += string.Format("+%1", slot.GetSlotKey());
+				attackers.Set(targetIndex, attackerList);
+			}
+		}
+
+		for (int objectiveIndex = 0; objectiveIndex < SLOTS_PER_FACTION; objectiveIndex++)
+		{
+			int markerIndex = offset + objectiveIndex;
+			if (objectiveIndex >= targets.Count())
+			{
+				RemoveObjectiveMarker(markerIndex);
+				continue;
+			}
+
+			SCR_CampaignMilitaryBaseComponent target = targets[objectiveIndex];
+			SCR_MapMarkerEntity objectiveMarker = m_aObjectiveMarkers[markerIndex];
+			if (!objectiveMarker || m_aTrackedObjectives[markerIndex] != target)
+			{
+				RemoveObjectiveMarker(markerIndex);
+				objectiveMarker = m_MarkerManager.InsertDynamicMarker(
+					SCR_EMapMarkerType.DYNAMIC_EXAMPLE,
+					target.GetOwner(),
+					PackStableConfig(
+						isUSSR,
+						representativeSlots[objectiveIndex],
+						true));
+				if (!objectiveMarker)
+					continue;
+				objectiveMarker.SetFaction(markerFaction);
+				objectiveMarker.SetGlobalVisible(true);
+				m_aObjectiveMarkers[markerIndex] = objectiveMarker;
+				m_aTrackedObjectives[markerIndex] = target;
+			}
+
+			objectiveMarker.AICF_SetGroupMarkerText(string.Format(
+				"ATK  %1",
+				attackers[objectiveIndex]));
+		}
 	}
 
 	protected void RemoveMarker(int markerIndex)
@@ -480,6 +705,17 @@ class AICF_GroupMapMarkerSystem
 		m_aMarkers[markerIndex] = null;
 		m_aTrackedGroups[markerIndex] = null;
 		m_aTrackedLeaders[markerIndex] = null;
+	}
+
+	protected void RemoveObjectiveMarker(int markerIndex)
+	{
+		if (markerIndex < 0 || markerIndex >= m_aObjectiveMarkers.Count())
+			return;
+		SCR_MapMarkerEntity marker = m_aObjectiveMarkers[markerIndex];
+		if (marker && m_MarkerManager)
+			m_MarkerManager.RemoveDynamicMarker(marker);
+		m_aObjectiveMarkers[markerIndex] = null;
+		m_aTrackedObjectives[markerIndex] = null;
 	}
 
 	protected int CountMarkers()

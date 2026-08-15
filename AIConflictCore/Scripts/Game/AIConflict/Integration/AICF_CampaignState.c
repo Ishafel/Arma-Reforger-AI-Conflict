@@ -40,6 +40,54 @@ modded class SCR_GameModeCampaign
 	[RplProp(onRplName: "AICF_OnStage4StateReplicated")]
 	protected int m_iAICFUSSRShipmentsInTransit;
 
+	[RplProp()]
+	protected string m_sAICFUSStrategicObjective;
+
+	[RplProp()]
+	protected string m_sAICFUSOrderTargets;
+
+	[RplProp()]
+	protected string m_sAICFUSGroup0;
+
+	[RplProp()]
+	protected string m_sAICFUSGroup1;
+
+	[RplProp()]
+	protected string m_sAICFUSGroup2;
+
+	[RplProp()]
+	protected string m_sAICFUSGroup3;
+
+	[RplProp()]
+	protected int m_iAICFUSCombatGroups;
+
+	[RplProp()]
+	protected int m_iAICFUSManagedAgents;
+
+	[RplProp()]
+	protected string m_sAICFUSSRStrategicObjective;
+
+	[RplProp()]
+	protected string m_sAICFUSSROrderTargets;
+
+	[RplProp()]
+	protected string m_sAICFUSSRGroup0;
+
+	[RplProp()]
+	protected string m_sAICFUSSRGroup1;
+
+	[RplProp()]
+	protected string m_sAICFUSSRGroup2;
+
+	[RplProp()]
+	protected string m_sAICFUSSRGroup3;
+
+	[RplProp()]
+	protected int m_iAICFUSSRCombatGroups;
+
+	[RplProp()]
+	protected int m_iAICFUSSRManagedAgents;
+
 	void AICF_SetTickets(int usTickets, int ussrTickets)
 	{
 		if (!Replication.IsServer() || !IsMaster())
@@ -125,6 +173,118 @@ modded class SCR_GameModeCampaign
 	int AICF_GetUSSRLogisticsTier() { return m_iAICFUSSRLogisticsTier; }
 	int AICF_GetUSSRPendingReinforcements() { return m_iAICFUSSRPendingReinforcements; }
 	int AICF_GetUSSRShipmentsInTransit() { return m_iAICFUSSRShipmentsInTransit; }
+
+	void AICF_SetStrategicFactionState(
+		bool isUSSR,
+		string objective,
+		string orderTargets,
+		string group0,
+		string group1,
+		string group2,
+		string group3,
+		int combatGroups,
+		int managedAgents)
+	{
+		if (!Replication.IsServer() || !IsMaster())
+			return;
+
+		combatGroups = Math.Max(0, combatGroups);
+		managedAgents = Math.Max(0, managedAgents);
+		bool changed;
+		if (!isUSSR)
+		{
+			changed = m_sAICFUSStrategicObjective != objective ||
+				m_sAICFUSOrderTargets != orderTargets ||
+				m_sAICFUSGroup0 != group0 || m_sAICFUSGroup1 != group1 ||
+				m_sAICFUSGroup2 != group2 || m_sAICFUSGroup3 != group3 ||
+				m_iAICFUSCombatGroups != combatGroups ||
+				m_iAICFUSManagedAgents != managedAgents;
+			if (!changed)
+				return;
+
+			m_sAICFUSStrategicObjective = objective;
+			m_sAICFUSOrderTargets = orderTargets;
+			m_sAICFUSGroup0 = group0;
+			m_sAICFUSGroup1 = group1;
+			m_sAICFUSGroup2 = group2;
+			m_sAICFUSGroup3 = group3;
+			m_iAICFUSCombatGroups = combatGroups;
+			m_iAICFUSManagedAgents = managedAgents;
+		}
+		else
+		{
+			changed = m_sAICFUSSRStrategicObjective != objective ||
+				m_sAICFUSSROrderTargets != orderTargets ||
+				m_sAICFUSSRGroup0 != group0 || m_sAICFUSSRGroup1 != group1 ||
+				m_sAICFUSSRGroup2 != group2 || m_sAICFUSSRGroup3 != group3 ||
+				m_iAICFUSSRCombatGroups != combatGroups ||
+				m_iAICFUSSRManagedAgents != managedAgents;
+			if (!changed)
+				return;
+
+			m_sAICFUSSRStrategicObjective = objective;
+			m_sAICFUSSROrderTargets = orderTargets;
+			m_sAICFUSSRGroup0 = group0;
+			m_sAICFUSSRGroup1 = group1;
+			m_sAICFUSSRGroup2 = group2;
+			m_sAICFUSSRGroup3 = group3;
+			m_iAICFUSSRCombatGroups = combatGroups;
+			m_iAICFUSSRManagedAgents = managedAgents;
+		}
+		Replication.BumpMe();
+	}
+
+	string AICF_GetStrategicObjective(bool isUSSR)
+	{
+		if (isUSSR)
+			return m_sAICFUSSRStrategicObjective;
+		return m_sAICFUSStrategicObjective;
+	}
+
+	string AICF_GetOrderTargets(bool isUSSR)
+	{
+		if (isUSSR)
+			return m_sAICFUSSROrderTargets;
+		return m_sAICFUSOrderTargets;
+	}
+
+	string AICF_GetStrategicGroupSummary(bool isUSSR, int slotId)
+	{
+		if (isUSSR)
+		{
+			switch (slotId)
+			{
+				case 0: return m_sAICFUSSRGroup0;
+				case 1: return m_sAICFUSSRGroup1;
+				case 2: return m_sAICFUSSRGroup2;
+				case 3: return m_sAICFUSSRGroup3;
+			}
+			return string.Empty;
+		}
+
+		switch (slotId)
+		{
+			case 0: return m_sAICFUSGroup0;
+			case 1: return m_sAICFUSGroup1;
+			case 2: return m_sAICFUSGroup2;
+			case 3: return m_sAICFUSGroup3;
+		}
+		return string.Empty;
+	}
+
+	int AICF_GetCombatGroups(bool isUSSR)
+	{
+		if (isUSSR)
+			return m_iAICFUSSRCombatGroups;
+		return m_iAICFUSCombatGroups;
+	}
+
+	int AICF_GetManagedAgents(bool isUSSR)
+	{
+		if (isUSSR)
+			return m_iAICFUSSRManagedAgents;
+		return m_iAICFUSManagedAgents;
+	}
 
 	protected void AICF_OnTicketsReplicated()
 	{

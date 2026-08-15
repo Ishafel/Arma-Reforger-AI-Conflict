@@ -40,6 +40,11 @@ $delivery = Read-Required 'Economy\AICF_SupplyDeliverySystem.c'
 $controller = Read-Required 'Bootstrap\AICF_MatchController.c'
 $campaignState = Read-Required 'Integration\AICF_CampaignState.c'
 $ticketLedger = Read-Required 'State\AICF_TicketLedger.c'
+$orderPlanner = Read-Required 'Orders\AICF_OrderPlanner.c'
+$groupSlot = Read-Required 'State\AICF_GroupSlot.c'
+$mapMarkers = Read-Required 'UI\AICF_GroupMapMarkers.c'
+$strategicRpc = Read-Required 'UI\AICF_StrategicCommandRpc.c'
+$strategicUI = Read-Required 'UI\AICF_StrategicUI.c'
 
 Assert-Contains 'STAGE4_DEFAULT_OFF' $config 'm_bEconomyEnabled\s*=\s*false\s*;' 'Economy must default off'
 Assert-Contains 'STAGE4_DEFAULT_OFF' $config '"aicfEconomyEnabled"' 'Economy must require an explicit CLI opt-in'
@@ -107,6 +112,48 @@ foreach ($field in @(
     Assert-Contains 'STAGE4_REPLICATION' $campaignState ("RplProp[\s\S]{0,100}" + [regex]::Escape($field)) "Missing replicated field $field"
 }
 Assert-Contains 'STAGE4_REPLICATION' $campaignState 'Replication\.BumpMe\s*\(' 'Stage 4 aggregate changes must be pushed to JIP/proxies'
+
+foreach ($field in @(
+    'm_sAICFUSStrategicObjective', 'm_sAICFUSOrderTargets',
+    'm_sAICFUSGroup0', 'm_sAICFUSGroup1', 'm_sAICFUSGroup2', 'm_sAICFUSGroup3',
+    'm_iAICFUSCombatGroups', 'm_iAICFUSManagedAgents',
+    'm_sAICFUSSRStrategicObjective', 'm_sAICFUSSROrderTargets',
+    'm_sAICFUSSRGroup0', 'm_sAICFUSSRGroup1', 'm_sAICFUSSRGroup2', 'm_sAICFUSSRGroup3',
+    'm_iAICFUSSRCombatGroups', 'm_iAICFUSSRManagedAgents'
+)) {
+    Assert-Contains 'STAGE4_STRATEGIC_REPLICATION' $campaignState ("RplProp[\s\S]{0,100}" + [regex]::Escape($field)) "Missing strategic replicated field $field"
+}
+
+Assert-Contains 'STAGE4_HUD' $strategicUI 'TICKETS\s+%1[\s\S]*SUPPLY\s+%2[\s\S]*SQUADS\s+%3[\s\S]*OBJECTIVE' 'Compact HUD must expose tickets, supply, squads, and the current objective'
+Assert-Contains 'STAGE4_WIDGET_HIERARCHY' $strategicUI 'CreateRect[\s\S]*FrameWidgetTypeID[\s\S]*RECT_BACKGROUND_NAME' 'Text and controls must be siblings of a background image inside a FrameWidget container'
+Assert-Contains 'STAGE4_WIDGET_RENDERING' $strategicUI 'ImageWidgetTypeID[\s\S]*WidgetFlags\.BLEND[\s\S]*background\.SetColor\s*\(\s*color\s*\)' 'Programmatic panel backgrounds must alpha-blend their explicit dark color'
+Assert-Contains 'STAGE4_WIDGET_RENDERING' $strategicUI 'RefreshVisualStyles[\s\S]*SetRectColor\s*\(\s*m_wHUDRoot[\s\S]*SetRectColor\s*\(\s*m_wCommandPanel[\s\S]*foreach\s*\(\s*Widget\s+targetButton' 'Top-level and dynamic panel colors must be restored after Enfusion widget initialization'
+Assert-Contains 'STAGE4_WIDGET_INPUT' $strategicUI 'ButtonWidgetTypeID[\s\S]*inputWidget\.SetName\s*\(\s*RECT_INPUT_NAME\s*\)' 'Every clickable rectangle must own a real ButtonWidget input surface'
+Assert-Contains 'STAGE4_WIDGET_INPUT' $strategicUI 'inputWidget\.AddHandler\s*\(\s*handler\s*\)' 'Button input surfaces must receive the strategic action handler'
+Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'ARMY / SELECT GROUP' 'Command surface must expose army composition'
+Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'SELECT A READY GROUP[\s\S]*NO VALID TARGETS FOR THIS ROLE' 'Command surface must explain empty target states'
+Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'REINFORCEMENTS[\s\S]*SHIPMENTS' 'Command surface must expose reinforcement and logistics state'
+Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'FormatGroupSummary[\s\S]*POSTURE[\s\S]*VEH[\s\S]*REINF' 'Unit cards must expose role, state, posture, vehicle phase, and reinforcement ETA'
+Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'AICF_RequestStrategicOrder\s*\(' 'Command target buttons must issue a strategic-order RPC'
+
+Assert-Contains 'STAGE4_ALLIED_MAP' $mapMarkers 'SetFaction\s*\(\s*markerFaction\s*\)' 'Group and objective markers must use allied faction stream rules'
+Assert-Contains 'STAGE4_ALLIED_MAP' $mapMarkers 'visibility=ALLIED' 'Marker diagnostics must preserve the allied-only visibility policy'
+Assert-Contains 'STAGE4_MAP_DIRECTION' $mapMarkers 'DescribeDirection[\s\S]*Math\.Atan2[\s\S]*DIR\s+%1\s+%2m' 'Group markers must expose movement bearing and distance'
+Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'SyncFactionObjectiveMarkers[\s\S]*targets\.Find\s*\(\s*target\s*\)' 'Attack targets must be deduplicated before objective markers are created'
+Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'markerKind\s*==\s*1[\s\S]*MarkerIcon[\s\S]*SetVisible\s*\(\s*false\s*\)' 'Attack targets must use a distinct text badge instead of a duplicate faction flag'
+Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'AICF_ATTACK_BADGE_TEXT_NAME[\s\S]*SetTextVisible\s*\(\s*false\s*\)' 'Attack targets must use an independently positioned label instead of stock MarkerText'
+Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'ATTACK_BADGE_NAME[\s\S]*FrameSlot\.SetAnchor\s*\(\s*attackBadge\s*,\s*0\.5\s*,\s*1\s*\)[\s\S]*FrameSlot\.SetPos\s*\(\s*attackBadge\s*,\s*0\s*,\s*18\s*\)' 'Attack badges must be placed below the stock base marker'
+Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'attackerList\s*\+=\s*string\.Format\s*\(\s*"\+%1"[\s\S]*"ATK  %1"' 'One compact objective badge must aggregate all allied attacker slot keys'
+
+Assert-Contains 'STAGE4_ORDER_AUTHORITY' $strategicRpc 'AICF_RequestStrategicOrder\s*\(\s*int\s+slotId\s*,\s*int\s+targetCallsign\s*\)' 'The client RPC may supply only slot identity and a base callsign'
+Assert-Contains 'STAGE4_ORDER_AUTHORITY' $strategicRpc 'RplRcver\.Server[\s\S]*GetPlayerId\s*\(' 'Order requests must resolve player identity on the authoritative PlayerController'
+Assert-NotContains 'STAGE4_ORDER_AUTHORITY' $strategicRpc 'AICF_RequestStrategicOrder\s*\([^)]*(?:Faction|playerId)' 'The public client request must not accept faction or player identity'
+Assert-Contains 'STAGE4_ORDER_AUTHORITY' $controller 'RequestPlayerOrder[\s\S]*SGetPlayerFaction\s*\(\s*playerId\s*\)' 'Authority must derive the request faction from the player id'
+Assert-Contains 'STAGE4_ORDER_AUTHORITY' $controller 'PLAYER_ORDER_RATE_LIMIT_MS[\s\S]*AssignPlayerOrder' 'Authority must rate-limit and validate player orders'
+Assert-Contains 'STAGE4_ORDER_ROLE_GATE' $orderPlanner 'AssignPlayerOrder[\s\S]*IsTargetValidForRole' 'Player orders must use the existing role/target validity gate'
+Assert-Contains 'STAGE4_ORDER_PERSISTENCE' $orderPlanner 'HasPlayerStrategicOrder\s*\(\)[\s\S]*ClearStrategicCandidate' 'A valid player order must survive routine commander reconciliation'
+Assert-Contains 'STAGE4_ORDER_PERSISTENCE' $groupSlot 'm_bPlayerStrategicOrder[\s\S]*BeginPlayerStrategicOrder[\s\S]*ClearPlayerStrategicOrder' 'Group slots must own the lifecycle of explicit strategic orders'
+
 Assert-Contains 'STAGE4_DIAGNOSTICS' $diagnostics '\[AICF\]\[STAGE4\]' 'Stage 4 must use its own log prefix'
 Assert-NotContains 'STAGE4_NO_STATIC_PASS' ($config + $network + $selector + $economy + $delivery + $controller) 'status\s*=\s*PASS|\[RESULT\]\[PASS\]' 'Production/static code must not manufacture runtime acceptance'
 
@@ -124,4 +171,4 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host 'Stage 4 static audit: PASS' -ForegroundColor Green
-Write-Host 'negative_fixture=PASS default_off=PASS transaction=PASS delivery_balance=PASS replication=PASS'
+Write-Host 'negative_fixture=PASS default_off=PASS transaction=PASS delivery_balance=PASS replication=PASS strategic_ui=PASS order_authority=PASS'

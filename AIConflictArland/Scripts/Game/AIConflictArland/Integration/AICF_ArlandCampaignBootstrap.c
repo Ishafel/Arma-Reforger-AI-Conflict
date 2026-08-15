@@ -7,6 +7,7 @@ modded class SCR_GameModeCampaign
 	protected bool m_bAICFWaitingForBases;
 	protected ref AICF_MatchController m_AICFMatchController;
 	protected ref AICF_ArlandRadioBridgeNormalizer m_AICFRadioBridgeNormalizer;
+	protected ref AICF_StrategicUIController m_AICFStrategicUIController;
 
 	override void OnGameStart()
 	{
@@ -17,6 +18,11 @@ modded class SCR_GameModeCampaign
 		if (Replication.IsServer())
 			peerRole = "server";
 		AICF_Stage1Diagnostics.Configure(string.Format("stage1-%1-%2", peerRole, System.GetTickCount()));
+		if (!m_AICFStrategicUIController)
+		{
+			m_AICFStrategicUIController = new AICF_StrategicUIController();
+			m_AICFStrategicUIController.Start(this);
+		}
 
 		if (!GetGame().InPlayMode() || !Replication.IsServer() || !IsMaster())
 			return;
@@ -32,6 +38,11 @@ modded class SCR_GameModeCampaign
 
 	override void OnGameEnd()
 	{
+		if (m_AICFStrategicUIController)
+		{
+			m_AICFStrategicUIController.Stop();
+			m_AICFStrategicUIController = null;
+		}
 		if (m_AICFRadioBridgeNormalizer)
 		{
 			m_AICFRadioBridgeNormalizer.Stop();

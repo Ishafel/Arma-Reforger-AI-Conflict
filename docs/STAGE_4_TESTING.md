@@ -1,15 +1,16 @@
-# Stage 4 — экономика и снабжение
+# Stage 4 — экономика, снабжение и командный интерфейс
 
 Статус реализации: **IMPLEMENTATION COMPLETE**. Статус runtime-приёмки: **PARTIAL — E1 PASS; E0/E2–E13 NOT RUN**.
 
-Stage 4 реализован как отдельный authoritative server-only контур поверх stock Conflict supplies. Функция выключена по умолчанию: без явного `-aicfEconomyEnabled 1` reinforcement использует прежний Stage 3/3.5 путь — один ticket reservation и first-safe spawn-base selection без supply debit, request pacing или AICF shipments.
+Экономика Stage 4 реализована как отдельный authoritative server-only контур поверх stock Conflict supplies. Функция выключена по умолчанию: без явного `-aicfEconomyEnabled 1` reinforcement использует прежний Stage 3/3.5 путь — один ticket reservation и first-safe spawn-base selection без supply debit, request pacing или AICF shipments. HUD, союзная карта и окно командования работают в обоих режимах; при выключенной экономике supply-поле явно показывает `OFF`.
 
 Development evidence текущего working tree:
 
-- `tools/Test-Stage4Static.ps1`: **PASS**, включая negative fixture отсутствующего supply rollback;
+- `tools/Test-Stage4Static.ps1`: **PASS**, включая negative fixture отсутствующего supply rollback, strategic replication, allied map и order-authority gates;
 - language audit `Invoke-AICFLanguageAudit`: **PASS**;
-- Workbench 1.8.0.10: `.cache/stage4-implementation-validate-20260815-r5/console.log`, Game `5729/11223`, CRC32 `307e40e6`, `Game successfully created`, `SCRIPT(E/F)=0`, `ENGINE(F)=0`;
+- Workbench 1.8.0.10: `.cache/stage4-strategic-ui-validate-20260815-r13/console.log`, Game `5731/11230`, CRC32 `f6e1fed1`, `Game successfully created`, `SCRIPT(E/F)=0`, `ENGINE(F)=0`;
 - direct ServerDiag E1: `C:\Users\retar\AppData\Local\AICF\Stage4-Probe-20260815-115400\logs\logs_2026-08-15_11-54-11\console.log`, `CONFIG enabled=1`, `ROSTER_READY 4+4`, `SUPPLY_PROBE=9`, both faction MOB `1000/1000`, `balance_delta=0`, `tools/Test-Stage4Log.ps1` **PASS**;
+- client UI-retest 15.08.2026 подтвердил compact HUD, тёмное command menu, выбор групп, построение role-compatible целей и синхронный aggregate attack badge. Runtime-log `Full-Stage3-4-20260815-141111` подтверждает принятые сервером приказы A0/A1/D0; кратковременный отказ A2 при `ORDER_RECOVERY` корректно остановлен authoritative gate. Кнопка `AI COMMAND` дополнительно сдвинута вправо от stock map toolbar; post-shift client screenshot **PENDING**;
 - replacement transaction, delivery, capture, JIP and soak evidence: **NOT RUN**.
 
 ## Нормативный контракт
@@ -23,7 +24,19 @@ Development evidence текущего working tree:
 7. Supply delivery не создаёт vehicle entity: cargo существует как bounded server shipment, списанный с stock HQ/SOURCE_BASE.
 8. Для AICF shipments выполняется conservation: `dispatched = delivered + returned + in_transit`.
 9. Player delivery и vanilla supply consumption используют тот же stock pool и немедленно влияют на последующий pacing/selection.
-10. Репликация Stage 4 содержит только агрегаты; конкретные base supplies остаются stock Conflict state.
+10. Economy-репликация Stage 4 содержит только агрегаты; конкретные base supplies остаются stock Conflict state.
+11. Стратегическая UI-проекция содержит текущую faction objective, четыре bounded group summary, допустимые callsign-цели и общую численность, но не передаёт authority клиенту.
+12. Клиентский приказ содержит только numeric slot и stock base callsign. Сервер выводит faction из player identity, применяет rate limit и повторно проверяет combat-ready state, pending recovery и role-specific target validity.
+13. Явный приказ сохраняется до потери допустимости цели либо до lifecycle/recovery/reassignment, после чего штатный commander снова владеет выбором цели.
+
+## Стратегический интерфейс
+
+- HUD появляется после выбора `US` или `USSR` и показывает tickets, connected/total supplies, READY squads, managed personnel и текущую цель A0/fallback-группы.
+- Stock map получает только faction-streamed allied group markers. Подпись содержит role-local identity `A0/A1/A2/D0`, роль, задачу, alive count, vehicle phase и compass/distance до цели.
+- Каждая уникальная атакуемая база получает один компактный тёмный badge под stock base marker, без второго faction flag и без повторения названия базы. Оранжевая подпись агрегирует slot keys: `ATK  A0+A1+A2`.
+- Кнопка `AI COMMAND` в правой верхней части карты открывает полноэкранную панель. Слева выбирается группа, справа отображаются только цели, допустимые для её роли.
+- Карточка группы показывает slot/role/state/alive, target, operational posture, vehicle phase и reinforcement ETA. Верхняя сводка показывает force size, logistics tier, supplies, pending reinforcements и shipments.
+- Нажатие цели сразу отправляет приказ. Серверный результат подтверждается последующей репликацией target/posture; authoritative журнал использует `PLAYER_ORDER_ACCEPTED` или `PLAYER_ORDER_REJECTED`.
 
 ## Pacing
 
@@ -121,5 +134,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage4Log.p
 | E11 | JIP | клиент получает правильные агрегаты US/USSR | NOT RUN |
 | E12 | M30 | нет request/reservation/shipment leak или log churn | NOT RUN |
 | E13 | S120 | supply conservation, entity/memory/FPS устойчивы | NOT RUN |
+| U0 | economy-off HUD | `SUPPLY OFF`, tickets/squads/personnel/objective обновляются без economy side effects | FAIL на первом срезе; FIXED CANDIDATE, RETEST NOT RUN |
+| U1 | allied map US/USSR | каждая сторона видит только свои четыре группы, их направления и атакуемые базы | NOT RUN |
+| U2 | command composition | четыре карточки соответствуют server slots, casualties, vehicle phase и replacement ETA | NOT RUN |
+| U3 | valid order | ATTACK/DEFEND получает выбранную допустимую базу; target/posture реплицируется всем союзникам | NOT RUN |
+| U4 | rejected order | enemy faction spoof, invalid slot/role target, recovery state и spam не меняют приказ | NOT RUN |
+| U5 | JIP/reopen | поздний клиент и повторное открытие карты получают актуальный HUD/command state без duplicate widgets | NOT RUN |
 
 Stage 4 не получает автоматический runtime PASS из static/Workbench evidence. Итог присваивается после review полного остановленного server/client log и заполнения матрицы на одном commit.

@@ -36,6 +36,7 @@ class AICF_GroupSlot
 	protected bool m_bUnexplainedMobIdleDeadlineReported;
 	protected bool m_bMeaningfulTaskLossReported;
 	protected bool m_bMeaningfulTaskDeadlineReported;
+	protected bool m_bPlayerStrategicOrder;
 	protected float m_fBestDistanceToTarget = -1.0;
 	protected string m_sPendingOrderRecoveryCause;
 	protected int m_iStrategicAssignmentAtMs;
@@ -146,6 +147,21 @@ class AICF_GroupSlot
 	string GetOperationalPosture()
 	{
 		return m_sOperationalPosture;
+	}
+
+	void BeginPlayerStrategicOrder()
+	{
+		m_bPlayerStrategicOrder = true;
+	}
+
+	void ClearPlayerStrategicOrder()
+	{
+		m_bPlayerStrategicOrder = false;
+	}
+
+	bool HasPlayerStrategicOrder()
+	{
+		return m_bPlayerStrategicOrder;
 	}
 
 	int GetStrategicAssignmentAgeMs()
@@ -1543,6 +1559,7 @@ class AICF_GroupSlot
 		m_iLastOrderRecoveryAtMs = 0;
 		m_bTargetUnavailableReported = false;
 		m_bLoadBlockReported = false;
+		m_bPlayerStrategicOrder = false;
 		m_sOperationalPosture = string.Empty;
 		m_iStrategicAssignmentAtMs = 0;
 		m_iStrategicAssignmentRevision = 0;

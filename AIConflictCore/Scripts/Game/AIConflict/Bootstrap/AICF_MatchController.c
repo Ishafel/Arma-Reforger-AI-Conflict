@@ -1,7 +1,9 @@
 // Long-lived authoritative infantry match loop for the Stage 1 vertical slice.
 class AICF_MatchController
 {
+	protected static AICF_MatchController s_ActiveController;
 	protected static const int UPDATE_INTERVAL_MS = 1000;
+	protected static const int PLAYER_ORDER_RATE_LIMIT_MS = 1000;
 	protected static const int REINFORCEMENT_RETRY_MS = 5000;
 	protected static const int HEARTBEAT_INTERVAL_MS = 60000;
 	protected static const int PLAYER_FACTION_RETRY_MS = 1000;
@@ -91,6 +93,8 @@ class AICF_MatchController
 	protected ref array<SCR_AIGroup> m_aSpawnAuditGroups = {};
 	protected ref array<int> m_aSpawnAuditLastLoggedAtMs = {};
 	protected ref array<int> m_aSpawnObserverGenerations = {};
+	protected ref array<int> m_aPlayerOrderIds = {};
+	protected ref array<int> m_aPlayerOrderAtMs = {};
 
 	protected ref array<SCR_CampaignMilitaryBaseComponent> m_aTrackedBases = {};
 	protected ref array<FactionKey> m_aTrackedBaseOwners = {};
@@ -114,6 +118,7 @@ class AICF_MatchController
 		}
 
 		m_Campaign = campaign;
+		s_ActiveController = this;
 		m_Config = new AICF_Stage1Config();
 		m_Stage2Config = new AICF_Stage2Config();
 		m_Stage3Config = new AICF_Stage3Config();
@@ -312,6 +317,105 @@ class AICF_MatchController
 		GetGame().GetCallqueue().CallLater(Heartbeat, HEARTBEAT_INTERVAL_MS, true);
 	}
 
+	static AICF_MatchController GetActiveController()
+	{
+		return s_ActiveController;
+	}
+
+	// Called by the server RPC on the requesting player's own PlayerController.
+	// Authority re-resolves faction, role, slot and target; the client supplies
+	// only a slot index and a stock Conflict base callsign.
+	bool RequestPlayerOrder(int playerId, int slotId, int targetCallsign)
+	{
+		if (!Replication.IsServer() || m_bStopped || !m_Campaign ||
+			!m_Campaign.IsRunning() || !m_OrderPlanner)
+			return false;
+
+		SCR_CampaignFaction faction = SCR_CampaignFaction.Cast(
+			SCR_FactionManager.SGetPlayerFaction(playerId));
+		if (!faction)
+			return false;
+
+		AICF_FactionState factionState;
+		if (faction.GetFactionKey() == "US")
+			factionState = m_USState;
+		else if (faction.GetFactionKey() == "USSR")
+			factionState = m_USSRState;
+		if (!factionState)
+			return false;
+
+		int nowMs = System.GetTickCount();
+		int playerOrderIndex = m_aPlayerOrderIds.Find(playerId);
+		if (playerOrderIndex >= 0)
+		{
+			if (System.GetTickCount(m_aPlayerOrderAtMs[playerOrderIndex]) < PLAYER_ORDER_RATE_LIMIT_MS)
+				return false;
+			m_aPlayerOrderAtMs[playerOrderIndex] = nowMs;
+		}
+		else
+		{
+			m_aPlayerOrderIds.Insert(playerId);
+			m_aPlayerOrderAtMs.Insert(nowMs);
+		}
+
+		AICF_GroupSlot slot = factionState.GetSlot(slotId);
+		SCR_CampaignMilitaryBaseComponent target;
+		SCR_CampaignMilitaryBaseManager baseManager = m_Campaign.GetBaseManager();
+		if (baseManager)
+			target = baseManager.FindBaseByCallsign(targetCallsign);
+		if (!slot || !slot.IsCombatReady() || !target || slot.HasPendingOrderRecovery())
+		{
+			AICF_Stage4Diagnostics.Warning(
+				"PLAYER_ORDER_REJECTED",
+				string.Format(
+					"player=%1 faction=%2 slot=%3 target=%4 reason=GROUP_OR_TARGET_UNAVAILABLE",
+					playerId,
+					faction.GetFactionKey(),
+					slotId,
+					targetCallsign));
+			return false;
+		}
+
+		SCR_CampaignMilitaryBaseComponent oldTarget = slot.GetTargetBase();
+		if (!m_OrderPlanner.AssignPlayerOrder(slot, faction, target))
+		{
+			AICF_Stage4Diagnostics.Warning(
+				"PLAYER_ORDER_REJECTED",
+				string.Format(
+					"player=%1 faction=%2 slot=%3 target=%4 reason=ROLE_OR_TARGET_INVALID",
+					playerId,
+					faction.GetFactionKey(),
+					slotId,
+					targetCallsign));
+			return false;
+		}
+
+		bool vehicleAdopted = true;
+		if (m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot))
+		{
+			vehicleAdopted = m_VehicleCoordinator.AdoptCurrentStrategicAssignment(
+				slot,
+				faction,
+				"PLAYER_COMMAND",
+				m_iStrategicBaseRevision);
+		}
+
+		AICF_Stage4Diagnostics.Info(
+			"PLAYER_ORDER_ACCEPTED",
+			string.Format(
+				"player=%1 faction=%2 slot=%3 slot_key=%4 role=%5 old_target=%6 target=%7 vehicle_adopted=%8",
+				playerId,
+				faction.GetFactionKey(),
+				slotId,
+				slot.GetSlotKey(),
+				AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+				AICF_Stage1Diagnostics.BaseKey(oldTarget),
+				AICF_Stage1Diagnostics.BaseKey(target),
+				vehicleAdopted));
+		SyncStrategicUIState();
+		return true;
+	}
+
 	protected bool SpawnInitialRoster(AICF_FactionState factionState, SCR_CampaignFaction faction)
 	{
 		if (!factionState || !faction)
@@ -428,6 +532,7 @@ class AICF_MatchController
 			m_GroupMapMarkers.Sync(m_USState, m_USSRState, m_VehicleCoordinator);
 		TryLogRosterReady();
 		SyncStage4State();
+		SyncStrategicUIState();
 		EvaluateVictory();
 	}
 
@@ -4898,6 +5003,169 @@ class AICF_MatchController
 			m_EconomySystem.GetShipmentCount("USSR"));
 	}
 
+	protected void SyncStrategicUIState()
+	{
+		if (!m_Campaign || !m_USState || !m_USSRState)
+			return;
+
+		m_Campaign.AICF_SetStrategicFactionState(
+			false,
+			BuildStrategicObjective(m_USState),
+			BuildOrderTargets(m_USState, m_USFaction),
+			BuildGroupSummary(m_USState, 0),
+			BuildGroupSummary(m_USState, 1),
+			BuildGroupSummary(m_USState, 2),
+			BuildGroupSummary(m_USState, 3),
+			m_USState.CountSlotsByState(AICF_EGroupSlotState.READY),
+			CountFactionAgents(m_USState));
+		m_Campaign.AICF_SetStrategicFactionState(
+			true,
+			BuildStrategicObjective(m_USSRState),
+			BuildOrderTargets(m_USSRState, m_USSRFaction),
+			BuildGroupSummary(m_USSRState, 0),
+			BuildGroupSummary(m_USSRState, 1),
+			BuildGroupSummary(m_USSRState, 2),
+			BuildGroupSummary(m_USSRState, 3),
+			m_USSRState.CountSlotsByState(AICF_EGroupSlotState.READY),
+			CountFactionAgents(m_USSRState));
+	}
+
+	protected string BuildStrategicObjective(AICF_FactionState factionState)
+	{
+		if (!factionState)
+			return "AWAITING ORDERS";
+
+		AICF_GroupSlot fallback;
+		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (!slot || !slot.IsCombatReady() || !slot.GetTargetBase())
+				continue;
+			if (!fallback)
+				fallback = slot;
+			if (slot.GetRole() == AICF_EGroupRole.ATTACK && slot.GetRoleIndex() == 0)
+				return string.Format("ATTACK %1", BuildBaseLabel(slot.GetTargetBase()));
+		}
+
+		if (fallback)
+		{
+			return string.Format(
+				"%1 %2",
+				AICF_Stage1Diagnostics.RoleToString(fallback.GetRole()),
+				BuildBaseLabel(fallback.GetTargetBase()));
+		}
+		return "AWAITING ORDERS";
+	}
+
+	protected string BuildGroupSummary(AICF_FactionState factionState, int slotId)
+	{
+		AICF_GroupSlot slot;
+		if (factionState)
+			slot = factionState.GetSlot(slotId);
+		if (!slot)
+			return string.Empty;
+
+		int alive;
+		if (slot.GetGroup())
+			alive = AICF_GroupRuntime.CountAliveAgents(slot.GetGroup());
+		string target = "NONE";
+		if (slot.GetTargetBase())
+			target = BuildBaseLabel(slot.GetTargetBase());
+		string vehiclePhase = "ON_FOOT";
+		AICF_VehicleSlotView vehicleView;
+		if (m_VehicleCoordinator)
+			vehicleView = m_VehicleCoordinator.GetSlotView(slot);
+		if (vehicleView && !vehicleView.GetPhase().IsEmpty() && vehicleView.GetPhase() != "NONE")
+			vehiclePhase = vehicleView.GetPhase();
+		string reinforcement = "-";
+		string state = AICF_Stage1Diagnostics.StateToString(slot.GetState());
+		if (slot.HasPendingOrderRecovery())
+			state = "ORDER_RECOVERY";
+		if (slot.GetState() == AICF_EGroupSlotState.WAITING)
+		{
+			int remainingSeconds = Math.Max(
+				0,
+				(slot.GetReinforcementReadyAtMs() - System.GetTickCount() + 999) / 1000);
+			reinforcement = string.Format("ETA %1s", remainingSeconds);
+		}
+
+		return string.Format(
+			"%1|%2|%3|%4|%5|%6|%7|%8",
+			slot.GetSlotKey(),
+			AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
+			state,
+			alive,
+			target,
+			slot.GetOperationalPosture(),
+			vehiclePhase,
+			reinforcement);
+	}
+
+	protected string BuildOrderTargets(
+		AICF_FactionState factionState,
+		SCR_CampaignFaction faction)
+	{
+		if (!factionState || !faction || !m_ObjectiveGraph || !m_OrderPlanner)
+			return string.Empty;
+
+		AICF_GroupSlot attackSlot;
+		AICF_GroupSlot defendSlot;
+		AICF_GroupSlot reserveSlot;
+		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (!slot)
+				continue;
+			if (!attackSlot && slot.GetRole() == AICF_EGroupRole.ATTACK)
+				attackSlot = slot;
+			else if (!defendSlot && slot.GetRole() == AICF_EGroupRole.DEFEND)
+				defendSlot = slot;
+			else if (!reserveSlot && slot.GetRole() == AICF_EGroupRole.RESERVE)
+				reserveSlot = slot;
+		}
+
+		string result;
+		for (int nodeId = 0; nodeId < m_ObjectiveGraph.GetNodeCount(); nodeId++)
+		{
+			AICF_ObjectiveNode node = m_ObjectiveGraph.GetNode(nodeId);
+			SCR_CampaignMilitaryBaseComponent target;
+			if (node)
+				target = node.GetBase();
+			if (!target)
+				continue;
+
+			if (attackSlot && m_OrderPlanner.IsStrategicTargetValid(attackSlot, faction, target))
+			{
+				if (!result.IsEmpty()) result += ";";
+				result += string.Format(
+					"%1~A~%2", target.GetCallsign(), BuildBaseLabel(target));
+			}
+			if (defendSlot && m_OrderPlanner.IsStrategicTargetValid(defendSlot, faction, target))
+			{
+				if (!result.IsEmpty()) result += ";";
+				result += string.Format(
+					"%1~D~%2", target.GetCallsign(), BuildBaseLabel(target));
+			}
+			if (reserveSlot && m_OrderPlanner.IsStrategicTargetValid(reserveSlot, faction, target))
+			{
+				if (!result.IsEmpty()) result += ";";
+				result += string.Format(
+					"%1~R~%2", target.GetCallsign(), BuildBaseLabel(target));
+			}
+		}
+		return result;
+	}
+
+	protected string BuildBaseLabel(SCR_CampaignMilitaryBaseComponent base)
+	{
+		if (!base)
+			return "NONE";
+		string baseName = WidgetManager.Translate(base.GetBaseName());
+		if (baseName.IsEmpty())
+			baseName = "BASE";
+		return string.Format("%1 [%2]", baseName, base.GetCallsign());
+	}
+
 	protected void Subscribe()
 	{
 		m_BaseSystem = SCR_MilitaryBaseSystem.GetInstance();
@@ -5027,6 +5295,10 @@ class AICF_MatchController
 		m_aSpawnAuditGroups.Clear();
 		m_aSpawnAuditLastLoggedAtMs.Clear();
 		m_aSpawnObserverGenerations.Clear();
+		m_aPlayerOrderIds.Clear();
+		m_aPlayerOrderAtMs.Clear();
+		if (s_ActiveController == this)
+			s_ActiveController = null;
 		m_BaseSystem = null;
 	}
 

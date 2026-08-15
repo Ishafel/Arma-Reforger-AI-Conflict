@@ -18,6 +18,9 @@ class AICF_OrderPlanner
 	protected static const string POSTURE_FORWARD_DEFEND = "FORWARD_DEFEND";
 	protected static const string POSTURE_QRF = "QRF";
 	protected static const string POSTURE_IDLE_RESERVE = "IDLE_RESERVE";
+	protected static const string POSTURE_PLAYER_ATTACK = "PLAYER_ATTACK";
+	protected static const string POSTURE_PLAYER_DEFEND = "PLAYER_DEFEND";
+	protected static const string POSTURE_PLAYER_RESERVE = "PLAYER_RESERVE";
 
 	bool AssignOrder(
 		AICF_GroupSlot slot,
@@ -60,6 +63,33 @@ class AICF_OrderPlanner
 		return ReplaceOrder(slot, faction, target, reason, posture, trigger);
 	}
 
+	// Applies an allied player's explicit strategic target. The role remains
+	// server-owned: ATTACK slots may only receive legal enemy objectives,
+	// DEFEND slots friendly spawn bases, and RESERVE slots their faction HQ.
+	bool AssignPlayerOrder(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		SCR_CampaignMilitaryBaseComponent target)
+	{
+		if (!Replication.IsServer() || !slot || !faction || !target ||
+			!slot.IsCombatReady() || !IsTargetValidForRole(slot, faction, target))
+		{
+			return false;
+		}
+
+		string posture = POSTURE_PLAYER_RESERVE;
+		if (slot.GetRole() == AICF_EGroupRole.ATTACK)
+			posture = POSTURE_PLAYER_ATTACK;
+		else if (slot.GetRole() == AICF_EGroupRole.DEFEND)
+			posture = POSTURE_PLAYER_DEFEND;
+
+		if (!ReplaceOrder(slot, faction, target, "PLAYER_COMMAND", posture, "PLAYER_COMMAND"))
+			return false;
+
+		slot.BeginPlayerStrategicOrder();
+		return true;
+	}
+
 	// Re-evaluates forward defense/QRF posture without rebuilding a stable attack
 	// waypoint. QRF escalation is immediate; a new forward position or the return
 	// from QRF must remain stable for one commander interval and respect the
@@ -93,6 +123,11 @@ class AICF_OrderPlanner
 		string currentPosture = slot.GetOperationalPosture();
 		if (!IsTargetValidForRole(slot, faction, currentTarget))
 			return ReplaceOrder(slot, faction, desiredTarget, reason, desiredPosture, trigger);
+		if (slot.HasPlayerStrategicOrder())
+		{
+			slot.ClearStrategicCandidate();
+			return false;
+		}
 
 		// Ranked ATTACK selection is deterministic at assignment time. Preserve a
 		// still-valid target so graph churn cannot make all three groups rotate every
@@ -710,6 +745,7 @@ class AICF_OrderPlanner
 			RplComponent.DeleteRplEntity(newWaypoint, false);
 			return false;
 		}
+		slot.ClearPlayerStrategicOrder();
 		slot.ResetTargetUnavailableReport();
 		if (oldTarget != target || oldPosture != posture)
 			slot.RecordStrategicAssignment(target, posture);

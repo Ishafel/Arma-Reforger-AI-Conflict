@@ -11,7 +11,7 @@ Scripts-only прототип автономного AI Conflict для Arma Ref
 | Stage 2 — надёжность и баланс | **кандидат реализован** | Lifecycle-аудит, восстановление приказов, stuck-watchdog, spawn/load guard, внешний CLI-конфиг и headless soak; runtime-матрица учитывается отдельно |
 | Stage 3 — наземная техника | **ACCEPTED — owner decision** | Vehicle-domain rewrite и atomic cutover приняты владельцем 15.08.2026. Исторические Transport T1–T9 и Armed A1 остаются `FAIL`, Transport T10 и Armed A2 — `NOT RUN` |
 | Stage 3.5 — Active Motorized Forces | **ACCEPTED — owner decision** | Rewrite принят вместе со Stage 3. Исторические Transport-прогоны остаются `FAIL`, а Repeat T, Repeat-T2 и B/P/A/R/L/M30/S120 — `NOT RUN`; это не блокирует Stage 4 |
-| Stage 4 — экономика и снабжение | **implementation complete — runtime acceptance partial** | Реализован opt-in серверный контур `ticket + stock supplies`, logistics pacing, детерминированный выбор базы, транзакционный rollback, абстрактные shipments и JIP-агрегаты. Startup/calibration probe `E1` прошёл; остальная runtime-матрица не запускалась. По умолчанию `aicfEconomyEnabled=0` |
+| Stage 4 — экономика, снабжение и командный UI | **implementation complete — runtime acceptance partial** | Реализованы opt-in контур `ticket + stock supplies`, HUD, союзная оперативная карта и полноэкранное командование с server-authoritative приказами. Startup/calibration probe `E1` прошёл; economy/UI runtime-матрица остаётся частичной. По умолчанию `aicfEconomyEnabled=0` |
 | Полный MVP | **не готов к приёмке** | После Stage 2 остаются стандартная MVP-матрица, клиентская синхронизация и полный 30-минутный прогон |
 | Двухчасовой soak | **не запускался** | Выполняется отдельно только после успешной полной MVP-матрицы |
 
@@ -137,8 +137,12 @@ Non-relay ATTACK использует stock `Move` для дальней operati
 - readiness replacement-запроса накапливается со скоростью `100% / 67% / 50% / 0%` для `HEALTHY / STRAINED / ISOLATED / BLOCKED` и не сбрасывается при временном разрыве логистики;
 - spawn-базы ранжируются по connected-состоянию, числу graph-hop до сохранённой цели погибшей группы, остатку supplies и stable node ID;
 - абстрактные shipments списывают пакет с HQ/SOURCE_BASE, учитывают ETA по hop, паузу разорванного маршрута, capture destination, возврат и conservation `dispatched = delivered + returned + in_transit`;
-- `SCR_GameModeCampaign` реплицирует агрегаты supplies, connected supplies, logistics tier, pending replacements и shipments для US/USSR; конкретные базы по-прежнему реплицирует stock Conflict;
-- статический Stage 4 audit и Workbench 1.8 validation прошли; direct ServerDiag startup/calibration probe `E1` подтвердил `500`-supplies defaults, обе faction MOB `1000/1000`, девять stock-pool снимков и `balance_delta=0`; остальные runtime-срезы остаются `NOT RUN`.
+- небольшой HUD показывает билеты, connected/total supplies, число боеготовых отрядов, личный состав и текущую цель своей стороны;
+- карта стримит только союзные managed-группы, показывает роль, состояние задачи, направление/дистанцию движения и отдельные маркеры атакуемых баз;
+- кнопка `AI COMMAND` на карте открывает полноэкранный состав армии: состояние, численность, цель, posture, транспорт, ETA подкрепления, logistics tier, pending replacements и shipments;
+- выбор группы и базы отправляет только `slot + callsign`; сервер получает фракцию из player identity, применяет rate limit и повторно проверяет роль, состояние группы и допустимость цели;
+- `SCR_GameModeCampaign` реплицирует economy-агрегаты и стратегические проекции для US/USSR; конкретные base supplies по-прежнему реплицирует stock Conflict;
+- статический Stage 4 audit и Workbench 1.8 validation прошли; direct ServerDiag startup/calibration probe `E1` подтвердил `500`-supplies defaults, обе faction MOB `1000/1000`, девять stock-pool снимков и `balance_delta=0`; UI и остальные runtime-срезы остаются `NOT RUN`.
 
 Контракт и команды: [Stage 4 — экономика и снабжение](docs/STAGE_4_TESTING.md).
 
@@ -149,7 +153,7 @@ Non-relay ATTACK использует stock `Move` для дальней operati
 - синхронизация билетов и состояния матча на нескольких клиентах;
 - проверка смерти и повторного развёртывания игрока;
 - окончательная настройка баланса и темпа войны;
-- runtime-приёмка наземной техники, Stage 4 economy/logistics, сохранение состояния и пользовательский интерфейс;
+- runtime-приёмка наземной техники, Stage 4 economy/logistics/command UI и сохранение состояния;
 - controlled runtime-матрица Stage 3.5, 30-минутный headless-прогон и двухчасовой soak;
 - двухчасовой soak с контролем сущностей, групп, waypoint, памяти и server FPS.
 
