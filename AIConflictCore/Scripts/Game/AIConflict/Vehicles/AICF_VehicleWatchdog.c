@@ -430,11 +430,13 @@ class AICF_VehicleWatchdog
 		out int logicalOccupantCount,
 		out int transitionCount,
 		out int insideBoundsCount,
+		out int nonAliveLogicalOccupantCount,
 		out string memberSamples)
 	{
 		logicalOccupantCount = 0;
 		transitionCount = 0;
 		insideBoundsCount = 0;
+		nonAliveLogicalOccupantCount = 0;
 		memberSamples = string.Empty;
 		if (!group || !vehicle)
 		{
@@ -454,11 +456,28 @@ class AICF_VehicleWatchdog
 				continue;
 
 			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
-			if (!IsProtectedCharacter(character))
+			if (!character)
 				continue;
+			CharacterControllerComponent controller = character.GetCharacterController();
+			ECharacterLifeState lifeState;
+			string lifeStateName = "NO_CONTROLLER";
+			if (controller)
+			{
+				lifeState = controller.GetLifeState();
+				lifeStateName = typename.EnumToString(ECharacterLifeState, lifeState);
+			}
+			bool alive = controller && lifeState == ECharacterLifeState.ALIVE;
+			bool dead = controller && lifeState == ECharacterLifeState.DEAD;
+			bool authoritySafe = IsAuthoritativeNonPlayerCharacter(character);
 
 			CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
 			bool linkedToVehicle = CompartmentAccessComponent.GetVehicleIn(character) == vehicle;
+			BaseCompartmentSlot exactCompartment;
+			if (access)
+				exactCompartment = access.GetCompartment();
+			bool exactCompartmentOwner = exactCompartment &&
+				exactCompartment.GetVehicle() == vehicle &&
+				exactCompartment.GetOccupant() == character;
 			vector localOrigin = vehicle.CoordToLocal(character.GetOrigin());
 			bool insideBounds = IsInsideExpandedVehicleBounds(localOrigin, boundsMin, boundsMax);
 			bool inCompartment = false;
@@ -466,23 +485,34 @@ class AICF_VehicleWatchdog
 			bool gettingOut = false;
 			if (access)
 			{
-				inCompartment = linkedToVehicle && access.IsInCompartment();
+				inCompartment = exactCompartmentOwner ||
+					(linkedToVehicle && access.IsInCompartment());
 				// Get-in/out transition state is character-global. Attribute it to
 				// this vehicle only while linked to it or physically inside its
 				// bounds; boarding another vehicle must not pin stale cleanup.
-				gettingIn = (linkedToVehicle || insideBounds) && access.IsGettingIn();
-				gettingOut = (linkedToVehicle || insideBounds) && access.IsGettingOut();
+				gettingIn = (linkedToVehicle || exactCompartmentOwner || insideBounds) &&
+					access.IsGettingIn();
+				gettingOut = (linkedToVehicle || exactCompartmentOwner || insideBounds) &&
+					access.IsGettingOut();
 			}
 
-			bool characterInVehicle = linkedToVehicle && character.IsInVehicle();
+			bool characterInVehicle = (linkedToVehicle || exactCompartmentOwner) &&
+				character.IsInVehicle();
 			bool logicalOccupant = linkedToVehicle || inCompartment || characterInVehicle;
 			bool inTransition = gettingIn || gettingOut;
+			// A detached corpse lying inside the geometric box is not an asset
+			// ownership blocker. A dead exact occupant still is; incapacitated/live
+			// members retain full physical protection.
+			bool clearanceInsideBounds = insideBounds &&
+				(!dead || logicalOccupant || inTransition);
 
 			if (logicalOccupant)
 				logicalOccupantCount++;
+			if (logicalOccupant && !alive)
+				nonAliveLogicalOccupantCount++;
 			if (inTransition)
 				transitionCount++;
-			if (insideBounds)
+			if (clearanceInsideBounds)
 				insideBoundsCount++;
 
 			if (!memberSamples.IsEmpty())
@@ -496,8 +526,15 @@ class AICF_VehicleWatchdog
 				characterInVehicle,
 				gettingIn,
 				gettingOut,
-				insideBounds,
+				clearanceInsideBounds,
 				localOrigin);
+			memberSamples += string.Format(
+				":alive_%1:life_state_%2:authority_safe_%3:exact_compartment_owner_%4:raw_inside_bounds_%5",
+				alive,
+				lifeStateName,
+				authoritySafe,
+				exactCompartmentOwner,
+				insideBounds);
 		}
 
 		if (memberSamples.IsEmpty())
@@ -510,6 +547,7 @@ class AICF_VehicleWatchdog
 		int logicalOccupantCount;
 		int transitionCount;
 		int insideBoundsCount;
+		int nonAliveLogicalOccupantCount;
 		string memberSamples;
 		return InspectProtectedMemberDismountClearance(
 			group,
@@ -517,7 +555,24 @@ class AICF_VehicleWatchdog
 			logicalOccupantCount,
 			transitionCount,
 			insideBoundsCount,
+			nonAliveLogicalOccupantCount,
 			memberSamples);
+	}
+
+	// Unlike the live-AI mutation fence, this predicate deliberately accepts an
+	// incapacitated or dead exact group member.  It is only used for a native
+	// compartment detach; player ownership and replication authority remain hard
+	// requirements, and callers must additionally pass the hidden-recovery scan.
+	bool IsAuthoritativeNonPlayerCharacter(IEntity entity)
+	{
+		if (!Replication.IsServer() || !ChimeraCharacter.Cast(entity) || !GetGame() ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(entity))
+		{
+			return false;
+		}
+		PlayerManager playerManager = GetGame().GetPlayerManager();
+		return playerManager && playerManager.GetPlayerIdFromControlledEntity(entity) <= 0 &&
+			SCR_PossessingManagerComponent.GetPlayerIdFromMainEntity(entity) <= 0;
 	}
 
 	protected bool IsInsideExpandedVehicleBounds(vector localOrigin, vector boundsMin, vector boundsMax)
@@ -765,7 +820,8 @@ class AICF_VehicleWatchdog
 				if (!compartment)
 					continue;
 				IEntity occupant = compartment.GetOccupant();
-				if (!IsProtectedCharacter(occupant))
+				ChimeraCharacter occupantCharacter = ChimeraCharacter.Cast(occupant);
+				if (!occupantCharacter)
 					continue;
 
 				protectedOccupantCount++;
@@ -773,7 +829,23 @@ class AICF_VehicleWatchdog
 				{
 					if (!samples.IsEmpty())
 						samples += ",";
-					samples += string.Format("occupant:%1", occupant.GetID());
+					CharacterControllerComponent occupantController =
+						occupantCharacter.GetCharacterController();
+					ECharacterLifeState occupantLifeState;
+					string occupantLifeStateName = "NO_CONTROLLER";
+					if (occupantController)
+					{
+						occupantLifeState = occupantController.GetLifeState();
+						occupantLifeStateName = typename.EnumToString(
+							ECharacterLifeState,
+							occupantLifeState);
+					}
+					samples += string.Format(
+						"occupant:%1:alive_%2:life_state_%3:authority_safe_%4",
+						occupant.GetID(),
+						occupantController && occupantLifeState == ECharacterLifeState.ALIVE,
+						occupantLifeStateName,
+						IsAuthoritativeNonPlayerCharacter(occupant));
 					sampleCount++;
 				}
 			}

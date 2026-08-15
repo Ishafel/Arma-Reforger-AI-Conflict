@@ -10,14 +10,21 @@ class AICF_VehicleTransitFlow
 	protected static const int HARD_MAX_MOBILITY_RECOVERIES = 2;
 	protected static const float UNSTUCK_OFFSET_METERS = 8.0;
 	protected static const float UNSTUCK_SEARCH_RADIUS_METERS = 3.0;
+	protected static const float UNSTUCK_OUTER_OFFSET_METERS = 13.0;
+	protected static const float UNSTUCK_OUTER_SEARCH_RADIUS_METERS = 2.0;
 	protected static const float UNSTUCK_MIN_DISPLACEMENT_METERS = 4.0;
 	protected static const float UNSTUCK_MAX_DISPLACEMENT_METERS = 15.0;
 	protected static const float UNSTUCK_HAZARD_CLEARANCE_METERS = 6.0;
+	protected static const int UNSTUCK_MAX_REJECTION_SAMPLES = 12;
 
 	protected ref AICF_Stage3Config m_Config;
 	protected ref AICF_VehicleWaypointFactory m_WaypointFactory;
 	protected ref AICF_VehicleWatchdog m_Watchdog;
 	protected bool m_bUnstuckHazardDetected;
+	protected Vehicle m_UnstuckHazardVehicle;
+	protected SCR_AIGroup m_UnstuckHazardGroup;
+	protected string m_sUnstuckHazardReason;
+	protected int m_iUnstuckManagedOccupantObservationsIgnored;
 
 	void AICF_VehicleTransitFlow(
 		AICF_Stage3Config config,
@@ -94,6 +101,7 @@ class AICF_VehicleTransitFlow
 		string vehicleFailure = InspectRouteAssetFailure(trip);
 		if (!vehicleFailure.IsEmpty())
 		{
+			ReportVehicleFailureSnapshot(trip, vehicleFailure);
 			AbortOwnedActions(trip);
 			return AICF_TripOutcome.FallbackToFoot(vehicleFailure, causationId);
 		}
@@ -142,6 +150,7 @@ class AICF_VehicleTransitFlow
 		string vehicleFailure = InspectRouteAssetFailure(trip);
 		if (!vehicleFailure.IsEmpty())
 		{
+			ReportVehicleFailureSnapshot(trip, vehicleFailure);
 			AbortOwnedActions(trip);
 			return AICF_TripOutcome.FallbackToFoot(vehicleFailure, causationId);
 		}
@@ -624,6 +633,7 @@ class AICF_VehicleTransitFlow
 		vector recoveryOrigin = vehicle.GetOrigin();
 		vector relocatedPosition = recoveryOrigin;
 		string unstuckMode = "ROUTE_REBUILD_ONLY";
+		string unstuckSearchDiagnostics = "search=NOT_APPLICABLE";
 		bool relocated = false;
 		if (stationary)
 		{
@@ -638,7 +648,8 @@ class AICF_VehicleTransitFlow
 				trip,
 				state.GetTacticalTarget(),
 				relocatedPosition,
-				unstuckMode);
+				unstuckMode,
+				unstuckSearchDiagnostics);
 		}
 
 		state.SuspendRouteWaypoint();
@@ -661,14 +672,16 @@ class AICF_VehicleTransitFlow
 					unstuckMode,
 					recoveryOrigin,
 					relocatedPosition,
-					vector.DistanceXZ(recoveryOrigin, relocatedPosition)));
+					vector.DistanceXZ(recoveryOrigin, relocatedPosition)) +
+					" " + unstuckSearchDiagnostics);
 			if (!relocated)
 			{
 				AICF_Stage3Diagnostics.Warning(
 					"VEHICLE_UNSTUCK_FAILED",
 					FormatIdentity(trip, unstuckMode) + string.Format(
 						" attempt=%1 relocated=0 evidence=NONE final=0",
-						state.GetMobilityRecoveryAttempts()));
+						state.GetMobilityRecoveryAttempts()) +
+						" " + unstuckSearchDiagnostics);
 			}
 		}
 
@@ -697,19 +710,23 @@ class AICF_VehicleTransitFlow
 		AICF_TransportTrip trip,
 		vector targetPosition,
 		out vector relocatedPosition,
-		out string mode)
+		out string mode,
+		out string searchDiagnostics)
 	{
 		Vehicle vehicle = trip.GetLease().GetVehicle();
 		relocatedPosition = vehicle.GetOrigin();
 		mode = "ROUTE_REBUILD_ONLY";
+		searchDiagnostics = "search=NOT_STARTED";
 		if (!Replication.IsServer())
 		{
 			mode = "REJECTED_NOT_AUTHORITY";
+			searchDiagnostics = "search=PRECHECK_REJECTED reason=NOT_AUTHORITY";
 			return false;
 		}
 		if (!m_Config.GetHiddenRecoveryEnabled())
 		{
 			mode = "REJECTED_HIDDEN_RECOVERY_DISABLED";
+			searchDiagnostics = "search=PRECHECK_REJECTED reason=HIDDEN_RECOVERY_DISABLED";
 			return false;
 		}
 
@@ -721,6 +738,9 @@ class AICF_VehicleTransitFlow
 			safetyReason))
 		{
 			mode = string.Format("REJECTED_%1", safetyReason);
+			searchDiagnostics = string.Format(
+				"search=PRECHECK_REJECTED reason=%1",
+				safetyReason);
 			return false;
 		}
 
@@ -746,6 +766,17 @@ class AICF_VehicleTransitFlow
 		searchDirections.Insert(-rightDirection);
 		searchDirections.Insert((targetDirection + rightDirection).Normalized());
 		searchDirections.Insert((targetDirection - rightDirection).Normalized());
+		searchDirections.Insert((-targetDirection + rightDirection).Normalized());
+		searchDirections.Insert((-targetDirection - rightDirection).Normalized());
+
+		array<float> searchOffsets = {
+			UNSTUCK_OFFSET_METERS,
+			UNSTUCK_OUTER_OFFSET_METERS
+		};
+		array<float> searchRadii = {
+			UNSTUCK_SEARCH_RADIUS_METERS,
+			UNSTUCK_OUTER_SEARCH_RADIUS_METERS
+		};
 
 		vector boundsMin;
 		vector boundsMax;
@@ -754,87 +785,237 @@ class AICF_VehicleTransitFlow
 			Math.Max(Math.AbsFloat(boundsMin[0]), Math.AbsFloat(boundsMax[0])),
 			Math.Max(Math.AbsFloat(boundsMin[2]), Math.AbsFloat(boundsMax[2]))) + 0.5;
 		float clearanceHeight = Math.Max(2.0, boundsMax[1] - boundsMin[1] + 1.0);
-		foreach (vector searchDirection : searchDirections)
+		int centersTested;
+		int terrainCandidates;
+		int displacementRejected;
+		int hazardRejected;
+		int hiddenFenceRejected;
+		int transformRejected;
+		string rejectionSamples;
+		m_iUnstuckManagedOccupantObservationsIgnored = 0;
+		for (int ringIndex = 0; ringIndex < searchOffsets.Count(); ringIndex++)
 		{
-			vector searchCenter = originalPosition + searchDirection * UNSTUCK_OFFSET_METERS;
-			vector candidate;
-			if (!SCR_WorldTools.FindEmptyTerrainPosition(
-				candidate,
-				searchCenter,
-				UNSTUCK_SEARCH_RADIUS_METERS,
-				clearanceRadius,
-				clearanceHeight,
-				TraceFlags.ENTS | TraceFlags.OCEAN,
-				vehicle.GetWorld()))
-				continue;
-
-			float displacementMeters = vector.DistanceXZ(originalPosition, candidate);
-			if (displacementMeters < UNSTUCK_MIN_DISPLACEMENT_METERS ||
-				displacementMeters > UNSTUCK_MAX_DISPLACEMENT_METERS ||
-				!IsUnstuckCandidateHazardClear(candidate))
-				continue;
-
-			// Re-run both the physical ownership scan and the player fence against
-			// the concrete destination immediately before the world mutation. The
-			// earlier source-only scan cannot prove that a candidate is off-screen.
-			if (!m_Watchdog.CanSafelyRelocateVehicle(
-				trip.GetAssignment().GetGroup(),
-				vehicle,
-				m_Config.GetHiddenRecoveryPlayerRadiusMeters(),
-				safetyReason))
+			float searchOffset = searchOffsets[ringIndex];
+			float searchRadius = searchRadii[ringIndex];
+			for (int directionIndex = 0; directionIndex < searchDirections.Count(); directionIndex++)
 			{
-				mode = string.Format("REJECTED_%1", safetyReason);
-				return false;
-			}
-			float nearestPlayerMeters;
-			string destinationSafetyReason;
-			if (!m_Watchdog.CanApplyHiddenRecovery(
-				originalPosition,
-				candidate,
-				m_Config.GetHiddenRecoveryPlayerRadiusMeters(),
-				nearestPlayerMeters,
-				destinationSafetyReason))
-			{
-				mode = string.Format("REJECTED_%1", destinationSafetyReason);
-				continue;
-			}
+				centersTested++;
+				vector searchDirection = searchDirections[directionIndex];
+				vector searchCenter = originalPosition + searchDirection * searchOffset;
+				vector candidate;
+				if (!SCR_WorldTools.FindEmptyTerrainPosition(
+					candidate,
+					searchCenter,
+					searchRadius,
+					clearanceRadius,
+					clearanceHeight,
+					TraceFlags.ENTS | TraceFlags.OCEAN,
+					vehicle.GetWorld()))
+				{
+					rejectionSamples = AppendUnstuckSearchSample(
+						rejectionSamples,
+						centersTested,
+						searchCenter,
+						"NO_EMPTY_TERRAIN");
+					continue;
+				}
 
-			vector angles = targetDirection.VectorToAngles();
-			angles[1] = 0;
-			angles[2] = 0;
-			vector relocatedTransform[4];
-			Math3D.AnglesToMatrix(angles, relocatedTransform);
-			relocatedTransform[3] = candidate;
-			Physics physics = vehicle.GetPhysics();
-			if (physics)
-			{
-				physics.SetVelocity(vector.Zero);
-				physics.SetAngularVelocity(vector.Zero);
-			}
-			if (!vehicle.SetWorldTransform(relocatedTransform))
-				continue;
+				terrainCandidates++;
+				float displacementMeters = vector.DistanceXZ(originalPosition, candidate);
+				if (displacementMeters < UNSTUCK_MIN_DISPLACEMENT_METERS ||
+					displacementMeters > UNSTUCK_MAX_DISPLACEMENT_METERS)
+				{
+					displacementRejected++;
+					rejectionSamples = AppendUnstuckSearchSample(
+						rejectionSamples,
+						centersTested,
+						candidate,
+						string.Format("DISPLACEMENT_%1", displacementMeters));
+					continue;
+				}
 
-			relocatedPosition = candidate;
-			mode = "SAFE_TERRAIN_REPOSITION";
-			return true;
+				string hazardReason;
+				if (!IsUnstuckCandidateHazardClear(
+					candidate,
+					trip.GetAssignment().GetGroup(),
+					vehicle,
+					hazardReason))
+				{
+					hazardRejected++;
+					rejectionSamples = AppendUnstuckSearchSample(
+						rejectionSamples,
+						centersTested,
+						candidate,
+						string.Format("HAZARD_%1", hazardReason));
+					continue;
+				}
+
+				// Re-run both the physical ownership scan and the player fence against
+				// the concrete destination immediately before the world mutation. The
+				// earlier source-only scan cannot prove that a candidate is off-screen.
+				if (!m_Watchdog.CanSafelyRelocateVehicle(
+					trip.GetAssignment().GetGroup(),
+					vehicle,
+					m_Config.GetHiddenRecoveryPlayerRadiusMeters(),
+					safetyReason))
+				{
+					mode = string.Format("REJECTED_%1", safetyReason);
+					searchDiagnostics = BuildUnstuckSearchDiagnostics(
+						centersTested,
+						terrainCandidates,
+						displacementRejected,
+						hazardRejected,
+						hiddenFenceRejected,
+						transformRejected,
+						rejectionSamples,
+						string.Format("SOURCE_RECHECK_%1", safetyReason));
+					return false;
+				}
+				float nearestPlayerMeters;
+				string destinationSafetyReason;
+				if (!m_Watchdog.CanApplyHiddenRecovery(
+					originalPosition,
+					candidate,
+					m_Config.GetHiddenRecoveryPlayerRadiusMeters(),
+					nearestPlayerMeters,
+					destinationSafetyReason))
+				{
+					hiddenFenceRejected++;
+					rejectionSamples = AppendUnstuckSearchSample(
+						rejectionSamples,
+						centersTested,
+						candidate,
+						string.Format(
+							"HIDDEN_FENCE_%1_NEAREST_%2",
+							destinationSafetyReason,
+							nearestPlayerMeters));
+					continue;
+				}
+
+				vector angles = targetDirection.VectorToAngles();
+				angles[1] = 0;
+				angles[2] = 0;
+				vector relocatedTransform[4];
+				Math3D.AnglesToMatrix(angles, relocatedTransform);
+				relocatedTransform[3] = candidate;
+				Physics physics = vehicle.GetPhysics();
+				if (physics)
+				{
+					physics.SetVelocity(vector.Zero);
+					physics.SetAngularVelocity(vector.Zero);
+				}
+				if (!vehicle.SetWorldTransform(relocatedTransform))
+				{
+					transformRejected++;
+					rejectionSamples = AppendUnstuckSearchSample(
+						rejectionSamples,
+						centersTested,
+						candidate,
+						"WORLD_TRANSFORM_REJECTED");
+					continue;
+				}
+
+				relocatedPosition = candidate;
+				mode = "SAFE_TERRAIN_REPOSITION";
+				searchDiagnostics = BuildUnstuckSearchDiagnostics(
+					centersTested,
+					terrainCandidates,
+					displacementRejected,
+					hazardRejected,
+					hiddenFenceRejected,
+					transformRejected,
+					rejectionSamples,
+					"ACCEPTED");
+				return true;
+			}
 		}
 
 		mode = "NO_SAFE_RELOCATION_POSITION";
+		searchDiagnostics = BuildUnstuckSearchDiagnostics(
+			centersTested,
+			terrainCandidates,
+			displacementRejected,
+			hazardRejected,
+			hiddenFenceRejected,
+			transformRejected,
+			rejectionSamples,
+			"EXHAUSTED");
 		return false;
 	}
 
-	protected bool IsUnstuckCandidateHazardClear(vector candidate)
+	protected string AppendUnstuckSearchSample(
+		string samples,
+		int centerIndex,
+		vector position,
+		string reason)
+	{
+		if (centerIndex > UNSTUCK_MAX_REJECTION_SAMPLES)
+			return samples;
+		if (!samples.IsEmpty())
+			samples += ",";
+		return samples + string.Format(
+			"center_%1:position_%2:reason_%3",
+			centerIndex,
+			position,
+			reason);
+	}
+
+	protected string BuildUnstuckSearchDiagnostics(
+		int centersTested,
+		int terrainCandidates,
+		int displacementRejected,
+		int hazardRejected,
+		int hiddenFenceRejected,
+		int transformRejected,
+		string rejectionSamples,
+		string result)
+	{
+		if (rejectionSamples.IsEmpty())
+			rejectionSamples = "NONE";
+		string details = string.Format(
+			"search=BOUNDED_MULTI_RING result=%1 centers_tested=%2 terrain_candidates=%3 displacement_rejected=%4",
+			result,
+			centersTested,
+			terrainCandidates,
+			displacementRejected);
+		details += string.Format(
+			" hazard_rejected=%1 hidden_fence_rejected=%2 transform_rejected=%3 managed_occupant_observations_ignored=%4",
+			hazardRejected,
+			hiddenFenceRejected,
+			transformRejected,
+			m_iUnstuckManagedOccupantObservationsIgnored);
+		return details + string.Format(" rejection_samples=[%1]", rejectionSamples);
+	}
+
+	protected bool IsUnstuckCandidateHazardClear(
+		vector candidate,
+		SCR_AIGroup group,
+		Vehicle vehicle,
+		out string rejectionReason)
 	{
 		m_bUnstuckHazardDetected = false;
+		m_sUnstuckHazardReason = string.Empty;
+		m_UnstuckHazardGroup = group;
+		m_UnstuckHazardVehicle = vehicle;
 		BaseWorld world = GetGame().GetWorld();
 		if (!world)
+		{
+			rejectionReason = "WORLD_UNAVAILABLE";
+			m_UnstuckHazardGroup = null;
+			m_UnstuckHazardVehicle = null;
 			return false;
+		}
 		world.QueryEntitiesBySphere(
 			candidate,
 			UNSTUCK_HAZARD_CLEARANCE_METERS,
 			EvaluateUnstuckHazard,
 			null,
 			EQueryEntitiesFlags.ALL);
+		rejectionReason = m_sUnstuckHazardReason;
+		m_UnstuckHazardGroup = null;
+		m_UnstuckHazardVehicle = null;
+		if (rejectionReason.IsEmpty() && m_bUnstuckHazardDetected)
+			rejectionReason = "UNCLASSIFIED_HAZARD";
 		return !m_bUnstuckHazardDetected;
 	}
 
@@ -847,6 +1028,9 @@ class AICF_VehicleTransitFlow
 		if (pressureTrigger && pressureTrigger.IsActivated())
 		{
 			m_bUnstuckHazardDetected = true;
+			m_sUnstuckHazardReason = string.Format(
+				"ACTIVE_PRESSURE_TRIGGER_%1",
+				entity.GetID());
 			return false;
 		}
 		ChimeraCharacter character = ChimeraCharacter.Cast(entity);
@@ -855,7 +1039,23 @@ class AICF_VehicleTransitFlow
 		CharacterControllerComponent controller = character.GetCharacterController();
 		if (controller && controller.GetLifeState() != ECharacterLifeState.DEAD)
 		{
+			// The synchronous source preflight already proved that every living
+			// member of this exact group is settled in this exact vehicle. Those
+			// passengers move with the vehicle and must not reject their own
+			// destination. Foreign, unlinked and player characters remain hazards.
+			bool exactManagedOccupant = m_UnstuckHazardGroup && m_UnstuckHazardVehicle &&
+				m_Watchdog.IsAliveGroupMember(m_UnstuckHazardGroup, character) &&
+				CompartmentAccessComponent.GetVehicleIn(character) == m_UnstuckHazardVehicle &&
+				m_Watchdog.IsMemberSettledInVehicle(character, m_UnstuckHazardVehicle);
+			if (exactManagedOccupant)
+			{
+				m_iUnstuckManagedOccupantObservationsIgnored++;
+				return true;
+			}
 			m_bUnstuckHazardDetected = true;
+			m_sUnstuckHazardReason = string.Format(
+				"LIVE_CHARACTER_%1",
+				entity.GetID());
 			return false;
 		}
 		return true;
@@ -920,6 +1120,106 @@ class AICF_VehicleTransitFlow
 				firstAvailable = agent;
 		}
 		return firstAvailable;
+	}
+
+	protected void ReportVehicleFailureSnapshot(
+		AICF_TransportTrip trip,
+		string failureReason)
+	{
+		if (!trip || !trip.GetLease())
+			return;
+
+		Vehicle vehicle = trip.GetLease().GetVehicle();
+		int nowMs = System.GetTickCount();
+		vector origin = vector.Zero;
+		float speedMetersPerSecond = -1.0;
+		float movementDamage = -1.0;
+		bool movementUsable;
+		bool onFire;
+		string damageState = "UNAVAILABLE";
+		int aliveMembers = -1;
+		int linkedAliveMembers = -1;
+		float routeDistanceMeters = -1.0;
+		float targetDistanceMeters = -1.0;
+		int routeProgressAgeMs = -1;
+		int physicalMotionAgeMs = -1;
+		if (vehicle)
+		{
+			origin = vehicle.GetOrigin();
+			Physics physics = vehicle.GetPhysics();
+			if (physics)
+				speedMetersPerSecond = physics.GetVelocity().Length();
+			SCR_AIVehicleUsageComponent usage = SCR_AIVehicleUsageComponent.Cast(
+				vehicle.FindComponent(SCR_AIVehicleUsageComponent));
+			if (usage)
+				damageState = typename.EnumToString(EDamageState, usage.GetDamageState());
+			SCR_DamageManagerComponent damageManager = SCR_DamageManagerComponent.GetDamageManager(
+				vehicle);
+			if (damageManager)
+				movementDamage = damageManager.GetMovementDamage();
+			movementUsable = SCR_AIVehicleUsability.VehicleCanMove(vehicle);
+			onFire = SCR_AIVehicleUsability.VehicleIsOnFire(vehicle);
+
+			AICF_StrategicAssignmentSnapshot assignment = trip.GetAssignment();
+			if (assignment && assignment.GetGroup())
+			{
+				aliveMembers = AICF_GroupRuntime.CountAliveAgents(assignment.GetGroup());
+				linkedAliveMembers = m_Watchdog.CountAliveGroupMembersInVehicle(
+					assignment.GetGroup(),
+					vehicle);
+			}
+
+			AICF_VehicleMovementState state = trip.GetMovementState();
+			if (state)
+			{
+				if (state.GetRouteWaypoint())
+				{
+					routeDistanceMeters = vector.DistanceXZ(origin, state.GetRouteEndpoint());
+					targetDistanceMeters = vector.DistanceXZ(origin, state.GetTacticalTarget());
+				}
+				if (state.GetLastRouteProgressAtMs() > 0)
+					routeProgressAgeMs = Math.Max(0, nowMs - state.GetLastRouteProgressAtMs());
+				if (state.GetLastPhysicalMotionAtMs() > 0)
+					physicalMotionAgeMs = Math.Max(0, nowMs - state.GetLastPhysicalMotionAtMs());
+			}
+		}
+
+		string causeClassification = "TERMINAL_ASSET_STATE";
+		string causeEvidence = "ENGINE_DAMAGE_STATE";
+		if (failureReason == "VEHICLE_ON_FIRE")
+		{
+			// The engine fire bit proves the terminal state, not who or what caused
+			// it. Keep acceptance blocking while explicitly avoiding attribution to
+			// route logic, mines, combat or collision without an instigator trace.
+			causeClassification = "CAUSE_UNRESOLVED";
+			causeEvidence = "ENGINE_FIRE_SIGNAL_WITHOUT_INSTIGATOR";
+		}
+
+		string details = FormatIdentity(trip, failureReason);
+		details += string.Format(
+			" classification=%1 cause_evidence=%2 origin=%3 damage_state=%4",
+			causeClassification,
+			causeEvidence,
+			origin,
+			damageState);
+		details += string.Format(
+			" on_fire=%1 movement_damage=%2 movement_usable=%3 speed_mps=%4",
+			onFire,
+			movementDamage,
+			movementUsable,
+			speedMetersPerSecond);
+		details += string.Format(
+			" alive=%1 linked_alive=%2 route_distance_m=%3 target_distance_m=%4",
+			aliveMembers,
+			linkedAliveMembers,
+			routeDistanceMeters,
+			targetDistanceMeters);
+		details += string.Format(
+			" route_progress_age_ms=%1 physical_motion_age_ms=%2 phase=%3",
+			routeProgressAgeMs,
+			physicalMotionAgeMs,
+			typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase()));
+		AICF_Stage3Diagnostics.Warning("VEHICLE_FAILURE_SNAPSHOT", details);
 	}
 
 	protected string InspectVehicleFailure(Vehicle vehicle)

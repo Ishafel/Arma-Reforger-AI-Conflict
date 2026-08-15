@@ -52,6 +52,12 @@ class AICF_VehicleBoardingActionToken
 	protected bool m_bLastGettingOut;
 	protected bool m_bHiddenExactSeatRecoveryPending;
 	protected bool m_bHiddenExactSeatRecoveryAttempted;
+	protected int m_iHiddenExactSeatRecoveryScheduledAtMs;
+	protected bool m_bAnimatedExactSeatRecoveryAttempted;
+	protected bool m_bAnimatedExactSeatRecoveryAccepted;
+	protected bool m_bAnimatedManagerWaitAudited;
+	protected int m_iAnimatedExactSeatRecoveryAtMs;
+	protected int m_iAnimatedExactSeatRecoveryDoorIndex = -1;
 
 	void AICF_VehicleBoardingActionToken(
 		AICF_VehicleAsyncFence fence,
@@ -150,6 +156,111 @@ class AICF_VehicleBoardingActionToken
 			!m_Compartment.IsGetInLockedFor(m_ReservedEntity);
 	}
 
+	// A non-teleport exact-seat recovery is permitted only when every immutable
+	// ownership condition is still true and the stock action owns the utility,
+	// yet has not begun a compartment transition near an available door.
+	bool IsReadyExactCargoWithoutTransition(float maximumDistanceMeters)
+	{
+		if (maximumDistanceMeters <= 0 || m_fCurrentDistanceMeters < 0 ||
+			m_fCurrentDistanceMeters > maximumDistanceMeters ||
+			m_CompartmentType != EAICompartmentType.Cargo ||
+			!MatchesLiveTargetIdentity() || !IsPhysicalMutationOwnerSafe() ||
+			!IsExactCompartmentMutationSafe() || !IsTrackedActionCurrent() ||
+			!IsTrackedActionOwnedByUtility())
+		{
+			return false;
+		}
+		CompartmentAccessComponent access = ResolveAccess(m_ReservedEntity);
+		if (!access || access.IsInCompartment() || access.IsGettingIn() ||
+			access.IsGettingOut() ||
+			CompartmentAccessComponent.GetVehicleIn(m_ReservedEntity))
+		{
+			return false;
+		}
+		array<int> doorIndices = {};
+		return m_Compartment.GetAvailableDoorIndices(doorIndices) > 0;
+	}
+
+	// Bypass a stock behavior-tree hang without teleporting. The existing exact
+	// reservation is preserved, a real available door is selected, and the
+	// animated request consumes one normal retry before any hidden recovery can
+	// be armed.
+	bool RequestAnimatedExactSeatRecovery(
+		out bool requestAccepted,
+		out int doorIndex)
+	{
+		requestAccepted = false;
+		doorIndex = -1;
+		if (m_bAnimatedExactSeatRecoveryAttempted ||
+			m_CompartmentType != EAICompartmentType.Cargo ||
+			!MatchesLiveTargetIdentity() || !IsPhysicalMutationOwnerSafe() ||
+			!IsExactCompartmentMutationSafe() || !IsTrackedActionCurrent() ||
+			!IsTrackedActionOwnedByUtility())
+		{
+			return false;
+		}
+		CompartmentAccessComponent access = ResolveAccess(m_ReservedEntity);
+		if (!access || access.IsInCompartment() || access.IsGettingIn() ||
+			access.IsGettingOut() ||
+			CompartmentAccessComponent.GetVehicleIn(m_ReservedEntity))
+		{
+			return false;
+		}
+		array<int> doorIndices = {};
+		if (m_Compartment.GetAvailableDoorIndices(doorIndices) <= 0)
+		{
+			return false;
+		}
+		doorIndex = doorIndices[0];
+		m_bAnimatedExactSeatRecoveryAttempted = true;
+		m_iAnimatedExactSeatRecoveryAtMs = System.GetTickCount();
+		m_iAnimatedExactSeatRecoveryDoorIndex = doorIndex;
+		m_iRetryCount++;
+		m_iLastProgressAtMs = m_iAnimatedExactSeatRecoveryAtMs;
+		requestAccepted = access.GetInVehicle(
+			m_TargetVehicle,
+			m_Compartment,
+			false,
+			doorIndex,
+			ECloseDoorAfterActions.INVALID,
+			false);
+		m_bAnimatedExactSeatRecoveryAccepted = requestAccepted;
+		return true;
+	}
+
+	bool WasAnimatedExactSeatRecoveryAttempted()
+	{
+		return m_bAnimatedExactSeatRecoveryAttempted;
+	}
+
+	bool WasAnimatedExactSeatRecoveryAccepted()
+	{
+		return m_bAnimatedExactSeatRecoveryAccepted;
+	}
+
+	int GetAnimatedExactSeatRecoveryAgeMs()
+	{
+		if (!m_bAnimatedExactSeatRecoveryAttempted ||
+			m_iAnimatedExactSeatRecoveryAtMs <= 0)
+		{
+			return 0;
+		}
+		return System.GetTickCount(m_iAnimatedExactSeatRecoveryAtMs);
+	}
+
+	int GetAnimatedExactSeatRecoveryDoorIndex()
+	{
+		return m_iAnimatedExactSeatRecoveryDoorIndex;
+	}
+
+	bool MarkAnimatedManagerWaitAudited()
+	{
+		if (m_bAnimatedManagerWaitAudited)
+			return false;
+		m_bAnimatedManagerWaitAudited = true;
+		return true;
+	}
+
 	// A repeated RUNNING stall arms exactly one forced exact-seat operation.
 	// Scheduling and applying are deliberately split across scheduler ticks so
 	// player proximity and all physical ownership fences are sampled afresh.
@@ -161,6 +272,7 @@ class AICF_VehicleBoardingActionToken
 			return false;
 		}
 		m_bHiddenExactSeatRecoveryPending = true;
+		m_iHiddenExactSeatRecoveryScheduledAtMs = System.GetTickCount();
 		return true;
 	}
 
@@ -174,24 +286,58 @@ class AICF_VehicleBoardingActionToken
 		return m_bHiddenExactSeatRecoveryAttempted;
 	}
 
+	int GetHiddenExactSeatRecoveryPendingAgeMs()
+	{
+		if (!m_bHiddenExactSeatRecoveryPending ||
+			m_iHiddenExactSeatRecoveryScheduledAtMs <= 0)
+		{
+			return 0;
+		}
+		return System.GetTickCount(m_iHiddenExactSeatRecoveryScheduledAtMs);
+	}
+
 	bool ApplyHiddenExactSeatRecovery()
 	{
 		if (!m_bHiddenExactSeatRecoveryPending || m_bHiddenExactSeatRecoveryAttempted ||
 			m_CompartmentType != EAICompartmentType.Cargo ||
 			!MatchesLiveTargetIdentity() || !IsPhysicalMutationOwnerSafe() ||
-			!IsExactCompartmentMutationSafe() || !IsTrackedActionCurrent() ||
-			!IsTrackedActionOwnedByUtility())
+			!IsExactCompartmentTarget())
 		{
 			return false;
 		}
+		bool stockActionOwned = IsTrackedActionCurrent() &&
+			IsTrackedActionOwnedByUtility();
+		if (!stockActionOwned && !m_bAnimatedExactSeatRecoveryAttempted)
+			return false;
 
 		CompartmentAccessComponent access = ResolveAccess(m_ReservedEntity);
 		if (!access || access.IsInCompartment() ||
-			CompartmentAccessComponent.GetVehicleIn(m_ReservedEntity) ||
-			access.IsGettingIn() || access.IsGettingOut())
+			CompartmentAccessComponent.GetVehicleIn(m_ReservedEntity))
 		{
 			return false;
 		}
+		bool transitioning = access.IsGettingIn() || access.IsGettingOut();
+		if (transitioning)
+		{
+			if (!m_bAnimatedExactSeatRecoveryAttempted)
+				return false;
+			// The animated alternate received its full observation window. This
+			// interrupt is reached only after the caller has passed the player/LOS
+			// fence for the hidden one-shot correction.
+			access.InterruptVehicleActionQueue(true, true, true);
+		}
+		if (!m_Compartment.IsCompartmentAccessible() ||
+			m_Compartment.GetOccupant() ||
+			m_Compartment.IsGetInLockedFor(m_ReservedEntity) ||
+			(m_Compartment.IsReserved() &&
+			!m_Compartment.IsReservedBy(m_ReservedEntity)))
+		{
+			return false;
+		}
+		if (!m_Compartment.IsReservedBy(m_ReservedEntity))
+			m_Compartment.SetReserved(m_ReservedEntity);
+		if (!m_Compartment.IsReservedBy(m_ReservedEntity))
+			return false;
 
 		// Consume the allowance before invoking the engine mutation. A rejected
 		// GetInVehicle call must never be retried by this token/trip identity.

@@ -1060,6 +1060,10 @@ class AICF_TransportTripController
 		string cleanupSamples = "NONE";
 		string clearanceSource = "DISMOUNT_LAST_SAMPLE";
 		int liveLogicalOccupants = dismountState.GetLogicalOccupants();
+		int liveNonAliveLogicalOccupants;
+		if (trip.GetLease())
+			liveNonAliveLogicalOccupants =
+				m_DismountFlow.GetLiveNonAliveLogicalOccupants(trip);
 		int liveTransitions = dismountState.GetTransitions();
 		int liveInsideBounds = dismountState.GetInsideBounds();
 		AICF_VehicleCleanupQuery cleanupQuery;
@@ -1070,6 +1074,8 @@ class AICF_TransportTripController
 			nextAction = cleanupQuery.GetNextAction();
 			clearanceSource = "CLEANUP_LIVE_SCAN";
 			liveLogicalOccupants = cleanupQuery.GetManagedLogicalOccupants();
+			liveNonAliveLogicalOccupants =
+				cleanupQuery.GetManagedNonAliveLogicalOccupants();
 			liveTransitions = cleanupQuery.GetManagedTransitions();
 			liveInsideBounds = cleanupQuery.GetManagedInsideBounds();
 			if (cleanupQuery.IsReleasePending())
@@ -1087,10 +1093,13 @@ class AICF_TransportTripController
 				cleanupQuery.GetProtectedOccupants(),
 				cleanupQuery.GetNearbyPlayers());
 			cleanupSamples += string.Format(
-				" managed_logical=%1 managed_transitions=%2 managed_inside_bounds=%3 managed_samples=[%4]",
+				" managed_logical=%1 managed_non_alive_logical=%2 managed_transitions=%3 managed_inside_bounds=%4",
 				liveLogicalOccupants,
+				liveNonAliveLogicalOccupants,
 				liveTransitions,
-				liveInsideBounds,
+				liveInsideBounds);
+			cleanupSamples += string.Format(
+				" managed_samples=[%1]",
 				cleanupQuery.GetManagedSamples());
 		}
 		if (restorePending)
@@ -1108,7 +1117,8 @@ class AICF_TransportTripController
 			liveTransitions,
 			liveInsideBounds);
 		signature += string.Format(
-			":%1:%2:%3:%4:%5",
+			":%1:%2:%3:%4:%5:%6",
+			liveNonAliveLogicalOccupants,
 			infantryWaypoint,
 			vehicleWaypoint,
 			handoffState.IsCleanupQueueAccepted(),

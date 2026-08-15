@@ -15,6 +15,8 @@ class AICF_VehicleBoardingFlow
 	protected static const int PROGRESS_FRESH_MS = 10000;
 	protected static const int OWNERSHIP_AUDIT_INTERVAL_MS = 10000;
 	protected static const int MAX_ACTION_TOKENS = 16;
+	protected static const int EXACT_CARGO_READY_RETRY_STALL_MS = 4000;
+	protected static const float EXACT_CARGO_READY_DISTANCE_METERS = 6.0;
 	protected ref AICF_Stage3Config m_Config;
 	protected ref AICF_VehicleWatchdog m_Watchdog;
 
@@ -1662,13 +1664,17 @@ class AICF_VehicleBoardingFlow
 				continue;
 			}
 			CompartmentAccessComponent access = ResolveAccess(entity);
-			if (CompartmentAccessComponent.GetVehicleIn(entity) == lease.GetVehicle() ||
-				(access && (access.IsGettingIn() || access.IsGettingOut())))
-			{
-				continue;
-			}
+			bool linked = CompartmentAccessComponent.GetVehicleIn(entity) ==
+				lease.GetVehicle();
+			bool transitioning = access &&
+				(access.IsGettingIn() || access.IsGettingOut());
 			if (token.IsHiddenExactSeatRecoveryPending())
 			{
+				// A link may become observable one poll before the watchdog's full
+				// settled postcondition. Never race that transition with a force.
+				if (linked ||
+					(transitioning && !token.WasAnimatedExactSeatRecoveryAttempted()))
+					continue;
 				if (!m_Config.GetHiddenRecoveryEnabled())
 				{
 					failureReason = "PASSENGER_HIDDEN_EXACT_CARGO_DISABLED";
@@ -1698,6 +1704,8 @@ class AICF_VehicleBoardingFlow
 							nearestPlayerMeters));
 					return false;
 				}
+				int hiddenPendingAgeMs =
+					token.GetHiddenExactSeatRecoveryPendingAgeMs();
 				if (!token.ApplyHiddenExactSeatRecovery())
 				{
 					failureReason = "PASSENGER_HIDDEN_EXACT_CARGO_APPLY_REJECTED";
@@ -1711,53 +1719,141 @@ class AICF_VehicleBoardingFlow
 					DescribeTokenContext(
 						trip, lease, token, causationId, "NO_PLAYER_PROXIMITY_FORCE_TELEPORT") +
 					string.Format(
-						" player_radius_m=%1 nearest_player_m=%2",
+						" player_radius_m=%1 nearest_player_m=%2 pending_age_ms=%3 animated_attempted=%4 animated_accepted=%5",
 						playerRadiusMeters,
-						nearestPlayerMeters));
+						nearestPlayerMeters,
+						hiddenPendingAgeMs,
+						token.WasAnimatedExactSeatRecoveryAttempted(),
+						token.WasAnimatedExactSeatRecoveryAccepted()));
 				// At most one physical mutation is supervised per scheduler tick. The
 				// next tick verifies that the same entity settled in the same Cargo slot.
 				return true;
 			}
+			int configuredStallMs = m_Config.GetPassengerStallMs();
+			int animatedRecoveryAgeMs = token.GetAnimatedExactSeatRecoveryAgeMs();
+			bool animatedRecoveryExpired =
+				token.WasAnimatedExactSeatRecoveryAttempted() &&
+				animatedRecoveryAgeMs >= configuredStallMs;
+			if (linked || (transitioning && !animatedRecoveryExpired))
+				continue;
 			float distanceMeters = vector.DistanceXZ(
 				entity.GetOrigin(),
 				lease.GetVehicle().GetOrigin());
 			token.ObserveSpatialProgress(distanceMeters, APPROACH_PROGRESS_METERS);
 			EAIActionState actionState = token.GetActionState();
+			int progressAgeMs = token.GetProgressAgeMs();
+			bool readyAlternateDue = actionState == EAIActionState.RUNNING &&
+				token.GetRetryCount() == 0 &&
+				m_Config.GetPassengerMaxRetries() > 0 &&
+				progressAgeMs >= EXACT_CARGO_READY_RETRY_STALL_MS &&
+				token.IsReadyExactCargoWithoutTransition(
+					EXACT_CARGO_READY_DISTANCE_METERS);
+			if (readyAlternateDue)
+			{
+				AICF_VehicleBoardingActionToken managerOwner =
+					FindAnimatedExactSeatRecoveryOwner(tokens, token);
+				if (managerOwner)
+				{
+					if (token.MarkAnimatedManagerWaitAudited())
+					{
+						string waitDetails = DescribeTokenContext(
+							trip, lease, token, causationId,
+							"COMPARTMENT_MANAGER_RECOVERY_SERIALIZED");
+						waitDetails += string.Format(
+							" blocking_action_token=%1 blocking_agent=%2 blocking_age_ms=%3 manager_id=%4",
+							managerOwner.GetActionToken(),
+							managerOwner.GetReservedEntity().GetID().ToString(),
+							managerOwner.GetAnimatedExactSeatRecoveryAgeMs(),
+							token.GetAssignedManagerId());
+						AICF_Stage3Diagnostics.Warning(
+							"PASSENGER_ANIMATED_EXACT_CARGO_MANAGER_WAIT",
+							waitDetails);
+					}
+					continue;
+				}
+				bool animatedRequestAccepted;
+				int animatedDoorIndex;
+				if (!token.RequestAnimatedExactSeatRecovery(
+					animatedRequestAccepted,
+					animatedDoorIndex))
+				{
+					AICF_Stage3Diagnostics.Warning(
+						"PASSENGER_ANIMATED_EXACT_CARGO_REJECTED",
+						DescribeTokenContext(
+							trip, lease, token, causationId,
+							"PRECONDITION_CHANGED_BEFORE_NON_TELEPORT_REQUEST"));
+					continue;
+				}
+				string animatedDetails = DescribeTokenContext(
+					trip, lease, token, causationId,
+					"READY_NO_TRANSITION_NON_TELEPORT_REQUEST");
+				animatedDetails += string.Format(
+					" trigger_stall_ms=%1 configured_observation_ms=%2 door_index=%3 request_accepted=%4 force_teleport=0 manager_id=%5",
+					EXACT_CARGO_READY_RETRY_STALL_MS,
+					configuredStallMs,
+					animatedDoorIndex,
+					animatedRequestAccepted,
+					token.GetAssignedManagerId());
+				AICF_Stage3Diagnostics.Warning(
+					"PASSENGER_ANIMATED_EXACT_CARGO_REQUESTED",
+					animatedDetails);
+				return true;
+			}
+			if (token.WasAnimatedExactSeatRecoveryAttempted() &&
+				!animatedRecoveryExpired)
+			{
+				continue;
+			}
 			bool actionTerminal = actionState == EAIActionState.COMPLETED ||
 				actionState == EAIActionState.FAILED;
 			bool runningStalled = actionState == EAIActionState.RUNNING &&
-				token.GetProgressAgeMs() >= m_Config.GetPassengerStallMs();
-			if (!actionTerminal && !runningStalled)
+				progressAgeMs >= configuredStallMs;
+			if (!actionTerminal && !runningStalled && !animatedRecoveryExpired)
 				continue;
-			if (token.GetRetryCount() >= m_Config.GetPassengerMaxRetries())
+			bool recoveryBudgetExhausted = token.GetRetryCount() >=
+				m_Config.GetPassengerMaxRetries();
+			// A direct animated request still transitioning after its complete
+			// observation window cannot be safely replaced by another stock action.
+			if (recoveryBudgetExhausted ||
+				(animatedRecoveryExpired && transitioning))
 			{
-				if (runningStalled && m_Config.GetHiddenRecoveryEnabled() &&
+				if ((runningStalled || animatedRecoveryExpired) &&
+					m_Config.GetHiddenRecoveryEnabled() &&
 					token.ScheduleHiddenExactSeatRecovery())
 				{
+					string hiddenReason = "REPEATED_RUNNING_STALL";
+					if (animatedRecoveryExpired)
+						hiddenReason = "ANIMATED_EXACT_CARGO_OBSERVATION_EXPIRED";
 					AICF_Stage3Diagnostics.Warning(
 						"PASSENGER_HIDDEN_EXACT_CARGO_SCHEDULED",
 						DescribeTokenContext(
-							trip, lease, token, causationId, "REPEATED_RUNNING_STALL") +
+							trip, lease, token, causationId, hiddenReason) +
 						string.Format(
-							" stall_ms=%1 normal_retry_budget=%2 apply=NEXT_TICK",
-							m_Config.GetPassengerStallMs(),
-							m_Config.GetPassengerMaxRetries()));
+							" stall_ms=%1 normal_retry_budget=%2 animated_attempted=%3 animated_accepted=%4 animated_age_ms=%5 apply=NEXT_TICK",
+							configuredStallMs,
+							m_Config.GetPassengerMaxRetries(),
+							token.WasAnimatedExactSeatRecoveryAttempted(),
+							token.WasAnimatedExactSeatRecoveryAccepted(),
+							animatedRecoveryAgeMs));
 					return true;
 				}
 				failureReason = "PASSENGER_ACTION_BUDGET_EXHAUSTED";
-				if (runningStalled)
+				if (runningStalled || animatedRecoveryExpired)
 					failureReason = "PASSENGER_EXACT_CARGO_STALL_BUDGET_EXHAUSTED";
 				ReportPassengerAction(
 					"PASSENGER_ACTION_FAILURE",
 					trip, lease, token, causationId, failureReason, false);
 				return false;
 			}
-			if (runningStalled)
+			if (runningStalled || animatedRecoveryExpired)
 			{
+				string stallReason = "RUNNING_NO_SPATIAL_PROGRESS";
+				if (animatedRecoveryExpired)
+					stallReason = "ANIMATED_EXACT_CARGO_OBSERVATION_EXPIRED";
 				AICF_Stage3Diagnostics.Warning(
 					"PASSENGER_EXACT_CARGO_STALLED",
 					DescribeTokenContext(
-						trip, lease, token, causationId, "RUNNING_NO_SPATIAL_PROGRESS"));
+						trip, lease, token, causationId, stallReason));
 			}
 			int retryCount = token.GetRetryCount() + 1;
 			AIAgent retryAgent = token.GetAgent();
@@ -1780,7 +1876,7 @@ class AICF_VehicleBoardingFlow
 				DescribeTokenContext(trip, lease, retryToken, causationId, "EXACT_CARGO_REISSUED"));
 			// Avoid immediately restarting several actions that may contend for the
 			// same vehicle entry. The next scheduler tick may supervise the next one.
-			if (runningStalled)
+			if (runningStalled || animatedRecoveryExpired)
 				return true;
 		}
 
@@ -1808,6 +1904,35 @@ class AICF_VehicleBoardingFlow
 			return false;
 		}
 		return true;
+	}
+
+	// Only one alternate direct request may own a compartment manager at a
+	// time. Other stock actions remain untouched while the owner either settles
+	// or reaches its bounded hidden fallback.
+	protected AICF_VehicleBoardingActionToken FindAnimatedExactSeatRecoveryOwner(
+		AICF_VehicleBoardingTokenSet tokens,
+		AICF_VehicleBoardingActionToken candidate)
+	{
+		if (!tokens || !candidate)
+			return null;
+		int managerId = candidate.GetAssignedManagerId();
+		if (managerId == -1)
+			return null;
+		for (int index = 0; index < tokens.Count(); index++)
+		{
+			AICF_VehicleBoardingActionToken token = tokens.Get(index);
+			if (!token || token == candidate || !token.GetGetInAction() ||
+				token.GetCompartmentType() != EAICompartmentType.Cargo ||
+				token.GetAssignedManagerId() != managerId ||
+				!token.GetReservedEntity() ||
+				!token.WasAnimatedExactSeatRecoveryAttempted() ||
+				!token.WasAnimatedExactSeatRecoveryAccepted())
+			{
+				continue;
+			}
+			return token;
+		}
+		return null;
 	}
 
 	protected bool ReissueExactCargo(
@@ -2171,10 +2296,13 @@ class AICF_VehicleBoardingFlow
 			CompartmentAccessComponent.GetVehicleIn(token.GetReservedEntity()) == lease.GetVehicle();
 		bool gettingIn;
 		bool gettingOut;
+		bool canGetInVehicle;
 		if (access)
 		{
 			gettingIn = access.IsGettingIn();
 			gettingOut = access.IsGettingOut();
+			if (lease && lease.GetVehicle())
+				canGetInVehicle = access.CanGetInVehicle(lease.GetVehicle());
 		}
 		bool reserved;
 		bool accessible;
@@ -2183,6 +2311,7 @@ class AICF_VehicleBoardingFlow
 		bool occupied;
 		string occupantId = "NONE";
 		int availableDoors = -1;
+		string availableDoorIndices = "NONE";
 		BaseCompartmentSlot compartment = token.GetCompartment();
 		if (compartment)
 		{
@@ -2194,6 +2323,16 @@ class AICF_VehicleBoardingFlow
 				occupantId = occupant.GetID().ToString();
 			array<int> doorIndices = {};
 			availableDoors = compartment.GetAvailableDoorIndices(doorIndices);
+			if (availableDoors > 0)
+			{
+				availableDoorIndices = string.Empty;
+				foreach (int doorIndex : doorIndices)
+				{
+					if (!availableDoorIndices.IsEmpty())
+						availableDoorIndices += ",";
+					availableDoorIndices += doorIndex.ToString();
+				}
+			}
 			if (token.GetReservedEntity())
 			{
 				reserved = compartment.IsReservedBy(token.GetReservedEntity());
@@ -2212,10 +2351,17 @@ class AICF_VehicleBoardingFlow
 			token.IsTrackedActionOwnedByUtility(),
 			token.IsExactCompartmentTarget());
 		details += string.Format(
-			" exact_compartment_mutation_safe=%1 hidden_recovery_pending=%2 hidden_recovery_attempted=%3",
+			" exact_compartment_mutation_safe=%1 hidden_recovery_pending=%2 hidden_recovery_attempted=%3 hidden_pending_age_ms=%4",
 			token.IsExactCompartmentMutationSafe(),
 			token.IsHiddenExactSeatRecoveryPending(),
-			token.WasHiddenExactSeatRecoveryAttempted());
+			token.WasHiddenExactSeatRecoveryAttempted(),
+			token.GetHiddenExactSeatRecoveryPendingAgeMs());
+		details += string.Format(
+			" animated_recovery_attempted=%1 animated_request_accepted=%2 animated_age_ms=%3 animated_door_index=%4",
+			token.WasAnimatedExactSeatRecoveryAttempted(),
+			token.WasAnimatedExactSeatRecoveryAccepted(),
+			token.GetAnimatedExactSeatRecoveryAgeMs(),
+			token.GetAnimatedExactSeatRecoveryDoorIndex());
 		details += string.Format(
 			" exact_reserved_manager=%1 exact_reserved_slot=%2 actual_manager=%3 actual_slot=%4 reserved_by_owner=%5",
 			token.GetAssignedManagerId(),
@@ -2241,6 +2387,10 @@ class AICF_VehicleBoardingFlow
 			gettingOut,
 			typename.EnumToString(EAIActionState, token.GetActionState()),
 			typename.EnumToString(EAICompartmentType, token.GetCompartmentType()));
+		details += string.Format(
+			" can_get_in_vehicle=%1 available_door_indices=[%2]",
+			canGetInVehicle,
+			availableDoorIndices);
 		return details;
 	}
 

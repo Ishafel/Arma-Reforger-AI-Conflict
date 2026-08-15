@@ -1029,12 +1029,14 @@ class AICF_VehicleDismountState
 		int logicalOccupants,
 		int transitions,
 		int insideBounds,
-		int nowMs)
+		int nowMs,
+		int additionalStabilityBlockers = 0)
 	{
 		m_iLogicalOccupants = Math.Max(0, logicalOccupants);
 		m_iTransitions = Math.Max(0, transitions);
 		m_iInsideBounds = Math.Max(0, insideBounds);
-		if (m_iLogicalOccupants > 0 || m_iTransitions > 0 || m_iInsideBounds > 0)
+		if (m_iLogicalOccupants > 0 || m_iTransitions > 0 || m_iInsideBounds > 0 ||
+			additionalStabilityBlockers > 0)
 		{
 			m_iClearPollCount = 0;
 			m_iContinuousClearStartedAtMs = 0;

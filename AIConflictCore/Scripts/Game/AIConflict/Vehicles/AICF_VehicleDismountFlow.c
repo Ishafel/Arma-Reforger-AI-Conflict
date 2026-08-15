@@ -9,6 +9,8 @@ class AICF_VehicleDismountFlow
 	protected static const int FORCE_MAX_ATTEMPTS = 3;
 	protected static const int HIDDEN_RECOVERY_AUDIT_INTERVAL_MS = 5000;
 	protected static const float CLEARANCE_MARGIN_METERS = 1.5;
+	protected static const float POST_EGRESS_PADDING_METERS = 8.0;
+	protected static const float POST_EGRESS_LATERAL_SPACING_METERS = 2.5;
 	protected ref AICF_Stage3Config m_Config;
 	protected ref AICF_VehicleWatchdog m_Watchdog;
 	protected ref AICF_VehicleWaypointFactory m_WaypointFactory;
@@ -69,6 +71,16 @@ class AICF_VehicleDismountFlow
 		return trip.GetDismountState().GetSupersededDismountWaypoint();
 	}
 
+	int GetLiveNonAliveLogicalOccupants(AICF_TransportTrip trip)
+	{
+		if (!IsAuthoritativeTripAssetCurrent(trip))
+			return 0;
+		AICF_DismountClearanceSample sample = InspectCurrentManagedClearance(trip);
+		if (!sample)
+			return 0;
+		return sample.m_iNonAliveLogicalOccupants;
+	}
+
 	bool ConfirmDismountWaypointBound(
 		AICF_TransportTrip trip,
 		AIWaypoint expected,
@@ -119,10 +131,12 @@ class AICF_VehicleDismountFlow
 			sample.m_iLogicalOccupants,
 			sample.m_iTransitions,
 			sample.m_iInsideBounds,
-			nowMs);
+			nowMs,
+			sample.m_iPostEgressBlocked);
 		int continuousClearMs = state.GetContinuousClearMs(nowMs);
 		MaintainGuidanceTokens(trip);
-		if (sample.m_bSafelyClear && continuousClearMs >= CONTINUOUS_CLEAR_MS)
+		if (sample.m_bSafelyClear && sample.m_iPostEgressBlocked == 0 &&
+			continuousClearMs >= CONTINUOUS_CLEAR_MS)
 		{
 			CancelGuidanceTokens(trip);
 			AICF_Stage3Diagnostics.Info(
@@ -135,9 +149,10 @@ class AICF_VehicleDismountFlow
 			return AICF_TripOutcome.CompleteTrip("DISEMBARK_COMPLETE", causationId);
 		}
 
-		bool physicalOnlyBlocked = sample.m_iLogicalOccupants == 0 &&
-			sample.m_iTransitions == 0 && sample.m_iInsideBounds > 0;
-		if (physicalOnlyBlocked && nowMs - state.GetStartedAtMs() >= GUIDANCE_DELAY_MS)
+		bool egressGuidanceRequired = sample.m_iLogicalOccupants == 0 &&
+			sample.m_iTransitions == 0 &&
+			(sample.m_iInsideBounds > 0 || sample.m_iPostEgressBlocked > 0);
+		if (egressGuidanceRequired && nowMs - state.GetStartedAtMs() >= GUIDANCE_DELAY_MS)
 			TryGuidePhysicallyBlockedMembers(trip, sample);
 
 		int normalDurationMs = state.GetNormalDeadlineMs() - state.GetStartedAtMs();
@@ -314,7 +329,12 @@ class AICF_VehicleDismountFlow
 			sample.m_iLogicalOccupants,
 			sample.m_iTransitions,
 			sample.m_iInsideBounds,
+			sample.m_iNonAliveLogicalOccupants,
 			sample.m_sMemberSamples);
+		InspectTargetSideEgress(
+			trip,
+			sample.m_iPostEgressBlocked,
+			sample.m_sPostEgressSamples);
 		return sample;
 	}
 
@@ -323,15 +343,28 @@ class AICF_VehicleDismountFlow
 		AICF_DismountClearanceSample sample)
 	{
 		AICF_VehicleDismountState state = trip.GetDismountState();
-		if (!state.RecordGuidanceAttempt())
+		if (state.GetGuidanceAttempts() >= GUIDANCE_MAX_ATTEMPTS)
 			return;
 		int issued;
 		int alreadyActive;
 		int searched;
-		IssueGuidanceForMembers(trip, issued, alreadyActive, searched);
+		int attemptOrdinal = state.GetGuidanceAttempts() + 1;
+		IssueGuidanceForMembers(
+			trip,
+			attemptOrdinal,
+			issued,
+			alreadyActive,
+			searched);
+		// Active actions are maintenance, not new attempts. The old accounting
+		// consumed the full budget in three consecutive polls while the first
+		// action was still RUNNING, leaving no actual retry if navigation failed.
+		if (searched <= 0)
+			return;
+		if (!state.RecordGuidanceAttempt())
+			return;
 		AICF_Stage3Diagnostics.Info(
 			"DISEMBARK_CLEARANCE_GUIDANCE",
-			FormatClearance(trip, sample, "LOGICALLY_OUT_INSIDE_BOUNDS") + string.Format(
+			FormatClearance(trip, sample, "POST_DISEMBARK_TARGET_SIDE_EGRESS") + string.Format(
 				" newly_issued=%1 already_active=%2 search_attempts=%3 attempt=%4 maximum_attempts=%5",
 				issued,
 				alreadyActive,
@@ -342,6 +375,7 @@ class AICF_VehicleDismountFlow
 
 	protected void IssueGuidanceForMembers(
 		AICF_TransportTrip trip,
+		int attemptOrdinal,
 		out int issued,
 		out int alreadyActive,
 		out int searched)
@@ -355,6 +389,13 @@ class AICF_VehicleDismountFlow
 		vector boundsMax;
 		vehicle.GetBounds(boundsMin, boundsMax);
 		float clearanceRadius = ResolveClearanceRadius(boundsMin, boundsMax, 3.0);
+		vector targetDirection;
+		float minimumProjection;
+		if (!ResolveTargetSideEgress(trip, boundsMin, boundsMax,
+			targetDirection, minimumProjection))
+		{
+			return;
+		}
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);
 		int directionIndex;
@@ -363,25 +404,50 @@ class AICF_VehicleDismountFlow
 			if (!IsExactAliveCurrentMember(group, agent))
 				continue;
 			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
-			if (!IsPhysicalOnlyBlocker(character, vehicle, boundsMin, boundsMax))
+			if (IsTargetSideEgressComplete(
+				character,
+				vehicle,
+				boundsMin,
+				boundsMax,
+				targetDirection,
+				minimumProjection))
 			{
 				CancelGuidanceToken(trip, trip.GetDismountState().FindGuidanceToken(agent));
+				continue;
+			}
+			CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+			bool linked = CompartmentAccessComponent.GetVehicleIn(character) == vehicle;
+			if (linked || character.IsInVehicle() ||
+				(access && (access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut())))
+			{
 				continue;
 			}
 			AICF_VehicleDismountActionToken existing = trip.GetDismountState().FindGuidanceToken(agent);
 			if (IsGuidanceActionActive(existing, trip))
 			{
 				alreadyActive++;
+				directionIndex++;
 				continue;
 			}
 			CancelGuidanceToken(trip, existing);
 			vector safePosition;
 			searched++;
-			if (!FindGuidancePosition(vehicle, character, boundsMin, boundsMax,
-				clearanceRadius, directionIndex, safePosition))
+			if (!FindTargetSideGuidancePosition(
+				vehicle,
+				boundsMin,
+				boundsMax,
+				targetDirection,
+				clearanceRadius,
+				directionIndex,
+				safePosition))
 				continue;
 			directionIndex++;
-			if (IssueGuidanceAction(trip, agent, character, safePosition))
+			if (IssueGuidanceAction(
+				trip,
+				agent,
+				character,
+				safePosition,
+				attemptOrdinal))
 				issued++;
 		}
 	}
@@ -390,7 +456,8 @@ class AICF_VehicleDismountFlow
 		AICF_TransportTrip trip,
 		AIAgent agent,
 		IEntity entity,
-		vector safePosition)
+		vector safePosition,
+		int attemptOrdinal)
 	{
 		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(entity))
 			return false;
@@ -410,7 +477,7 @@ class AICF_VehicleDismountFlow
 			"%1-dismount-%2-%3",
 			trip.GetOperationId(),
 			entity.GetID(),
-			trip.GetDismountState().GetGuidanceAttempts());
+			attemptOrdinal);
 		AICF_VehicleAsyncFence fence = CreateFence(trip, tokenId);
 		if (!fence)
 			return false;
@@ -511,24 +578,103 @@ class AICF_VehicleDismountFlow
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);
 		int forced;
+		int forcedNonAlive;
+		int rejectedNonAlive;
 		foreach (AIAgent agent : agents)
 		{
-			if (!IsExactAliveCurrentMember(group, agent))
+			if (!IsExactCurrentCharacterMember(group, agent))
 				continue;
 			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
-			if (CompartmentAccessComponent.GetVehicleIn(character) != vehicle)
+			if (!IsExactOccupantOfVehicle(character, vehicle))
 				continue;
-			if (ForceOneManagedMemberOut(trip, character, state.GetForceClearanceAttempts()))
+			if (AICF_GroupRuntime.IsAliveCharacter(character) &&
+				ForceOneManagedMemberOut(trip, character, state.GetForceClearanceAttempts()))
+			{
 				forced++;
+			}
+			else if (!AICF_GroupRuntime.IsAliveCharacter(character))
+			{
+				if (ForceOneNonAliveManagedMemberOut(
+					trip,
+					character,
+					state.GetForceClearanceAttempts()))
+				{
+					forcedNonAlive++;
+				}
+				else
+				{
+					rejectedNonAlive++;
+				}
+			}
 		}
 		AICF_Stage3Diagnostics.Warning(
 			"FALLBACK_FORCE_DISEMBARK",
 			FormatClearance(trip, sample, "BOUNDED_TERMINAL_FORCE") + string.Format(
-				" forced=%1 interrupted_actions=%2 attempt=%3 maximum_attempts=%4",
+				" forced_alive=%1 forced_non_alive=%2 rejected_non_alive=%3 interrupted_actions=%4 attempt=%5 maximum_attempts=%6",
 				forced,
+				forcedNonAlive,
+				rejectedNonAlive,
 				interrupted,
 				state.GetForceClearanceAttempts(),
 				FORCE_MAX_ATTEMPTS));
+	}
+
+	protected bool ForceOneNonAliveManagedMemberOut(
+		AICF_TransportTrip trip,
+		ChimeraCharacter character,
+		int forceAttempt)
+	{
+		Vehicle vehicle = trip.GetLease().GetVehicle();
+		CompartmentAccessComponent access;
+		BaseCompartmentSlot compartment;
+		if (character)
+			access = character.GetCompartmentAccessComponent();
+		if (access)
+			compartment = access.GetCompartment();
+		bool exactOwner = compartment && compartment.GetVehicle() == vehicle &&
+			compartment.GetOccupant() == character;
+		bool authoritySafe = m_Watchdog.IsAuthoritativeNonPlayerCharacter(character) &&
+			AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle);
+		bool ejectRequested;
+		bool ejectImmediate;
+		if (exactOwner && authoritySafe)
+			ejectRequested = compartment.EjectOccupant(true, false, ejectImmediate, true);
+		bool linkedAfter = IsExactOccupantOfVehicle(character, vehicle);
+		ECharacterLifeState lifeState;
+		string lifeStateName = "NO_CONTROLLER";
+		CharacterControllerComponent controller;
+		if (character)
+			controller = character.GetCharacterController();
+		if (controller)
+		{
+			lifeState = controller.GetLifeState();
+			lifeStateName = typename.EnumToString(ECharacterLifeState, lifeState);
+		}
+		string rejectionReason = "NONE";
+		if (!exactOwner)
+			rejectionReason = "EXACT_COMPARTMENT_OWNERSHIP_REQUIRED";
+		else if (!authoritySafe)
+			rejectionReason = "NON_PLAYER_AUTHORITY_REQUIRED";
+		else if (!ejectRequested && linkedAfter)
+			rejectionReason = "EJECT_NOT_ACCEPTED";
+		string details = FormatIdentity(trip, "NON_ALIVE_EXACT_OCCUPANT_EXIT");
+		details += string.Format(
+			" member=%1 alive=0 life_state=%2 exact_owner=%3 authority_safe=%4 eject_requested=%5 eject_immediate=%6 linked_after=%7",
+			character.GetID(),
+			lifeStateName,
+			exactOwner,
+			authoritySafe,
+			ejectRequested,
+			ejectImmediate,
+			linkedAfter);
+		details += string.Format(
+			" force_attempt=%1 maximum_attempts=%2 outcome=%3 rejection_reason=%4 player_fence=PASSED",
+			forceAttempt,
+			FORCE_MAX_ATTEMPTS,
+			!linkedAfter,
+			rejectionReason);
+		AICF_Stage35Diagnostics.Info("NON_ALIVE_FORCE_DISEMBARK_MEMBER", details);
+		return ejectRequested || !linkedAfter;
 	}
 
 	protected bool ForceOneManagedMemberOut(
@@ -574,8 +720,10 @@ class AICF_VehicleDismountFlow
 			ejectAttempted = true;
 			ejectRequested = compartment.EjectOccupant(true, false, ejectImmediate, true);
 		}
+		bool exactOwnerAfter = compartment && compartment.GetVehicle() == vehicle &&
+			compartment.GetOccupant() == character;
 		bool linkedAfter = CompartmentAccessComponent.GetVehicleIn(character) == vehicle ||
-			character.IsInVehicle() || access.IsInCompartment();
+			exactOwnerAfter || character.IsInVehicle() || access.IsInCompartment();
 		int compartmentSlot = -1;
 		int compartmentManager = -1;
 		if (compartment)
@@ -728,6 +876,164 @@ class AICF_VehicleDismountFlow
 				nearestPlayerMeters));
 	}
 
+	protected void InspectTargetSideEgress(
+		AICF_TransportTrip trip,
+		out int blockedCount,
+		out string samples)
+	{
+		blockedCount = 0;
+		samples = string.Empty;
+		if (!trip || !trip.GetAssignment() || !trip.GetLease() ||
+			!trip.GetAssignment().GetGroup() || !trip.GetLease().GetVehicle())
+		{
+			samples = "INVALID_CONTEXT";
+			return;
+		}
+		Vehicle vehicle = trip.GetLease().GetVehicle();
+		vector boundsMin;
+		vector boundsMax;
+		vehicle.GetBounds(boundsMin, boundsMax);
+		vector targetDirection;
+		float minimumProjection;
+		if (!ResolveTargetSideEgress(
+			trip,
+			boundsMin,
+			boundsMax,
+			targetDirection,
+			minimumProjection))
+		{
+			samples = "TARGET_DIRECTION_INVALID";
+			blockedCount = AICF_GroupRuntime.CountAliveAgents(
+				trip.GetAssignment().GetGroup());
+			return;
+		}
+		array<AIAgent> agents = {};
+		SCR_AIGroup group = trip.GetAssignment().GetGroup();
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!IsExactAliveCurrentMember(group, agent))
+				continue;
+			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			vector offset = character.GetOrigin() - vehicle.GetOrigin();
+			float targetProjection = offset[0] * targetDirection[0] +
+				offset[2] * targetDirection[2];
+			bool staged = IsTargetSideEgressComplete(
+				character,
+				vehicle,
+				boundsMin,
+				boundsMax,
+				targetDirection,
+				minimumProjection);
+			if (!staged)
+				blockedCount++;
+			if (!samples.IsEmpty())
+				samples += ",";
+			samples += string.Format(
+				"%1:target_projection_m_%2:minimum_projection_m_%3:target_side_staged_%4",
+				character.GetID(),
+				targetProjection,
+				minimumProjection,
+				staged);
+		}
+		if (samples.IsEmpty())
+			samples = "NONE";
+	}
+
+	protected bool ResolveTargetSideEgress(
+		AICF_TransportTrip trip,
+		vector boundsMin,
+		vector boundsMax,
+		out vector targetDirection,
+		out float minimumProjection)
+	{
+		targetDirection = vector.Zero;
+		minimumProjection = 0.0;
+		if (!trip || !trip.GetAssignment() || !trip.GetLease() ||
+			!trip.GetLease().GetVehicle())
+		{
+			return false;
+		}
+		Vehicle vehicle = trip.GetLease().GetVehicle();
+		targetDirection = trip.GetAssignment().GetTargetPosition() - vehicle.GetOrigin();
+		targetDirection[1] = 0;
+		if (targetDirection.LengthSq() < 1.0)
+			return false;
+		targetDirection.Normalize();
+		minimumProjection = ResolveClearanceRadius(boundsMin, boundsMax, 3.0) +
+			POST_EGRESS_PADDING_METERS;
+		return true;
+	}
+
+	protected bool IsTargetSideEgressComplete(
+		ChimeraCharacter character,
+		Vehicle vehicle,
+		vector boundsMin,
+		vector boundsMax,
+		vector targetDirection,
+		float minimumProjection)
+	{
+		if (!character || !vehicle)
+			return false;
+		CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+		if (CompartmentAccessComponent.GetVehicleIn(character) == vehicle ||
+			character.IsInVehicle() ||
+			(access && (access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut())))
+		{
+			return false;
+		}
+		if (IsInsideExpandedBounds(vehicle.CoordToLocal(character.GetOrigin()), boundsMin, boundsMax))
+			return false;
+		vector offset = character.GetOrigin() - vehicle.GetOrigin();
+		float targetProjection = offset[0] * targetDirection[0] +
+			offset[2] * targetDirection[2];
+		return targetProjection >= minimumProjection;
+	}
+
+	protected bool FindTargetSideGuidancePosition(
+		Vehicle vehicle,
+		vector boundsMin,
+		vector boundsMax,
+		vector targetDirection,
+		float clearanceRadius,
+		int directionIndex,
+		out vector safePosition)
+	{
+		vector lateralDirection = Vector(
+			-targetDirection[2],
+			0,
+			targetDirection[0]);
+		float lateralOffset = (directionIndex - 2) *
+			POST_EGRESS_LATERAL_SPACING_METERS;
+		float minimumProjection = clearanceRadius + POST_EGRESS_PADDING_METERS;
+		for (int attempt; attempt < 4; attempt++)
+		{
+			float forwardDistance = minimumProjection + attempt * 3.0;
+			vector center = vehicle.GetOrigin() + targetDirection * forwardDistance +
+				lateralDirection * lateralOffset;
+			if (!SCR_WorldTools.FindEmptyTerrainPosition(
+				safePosition,
+				center,
+				3.0,
+				0.75,
+				2.0))
+			{
+				continue;
+			}
+			vector offset = safePosition - vehicle.GetOrigin();
+			float targetProjection = offset[0] * targetDirection[0] +
+				offset[2] * targetDirection[2];
+			if (targetProjection < minimumProjection ||
+				IsInsideExpandedBounds(vehicle.CoordToLocal(safePosition), boundsMin, boundsMax) ||
+				ChimeraWorldUtils.TryGetWaterSurfaceSimple(vehicle.GetWorld(), safePosition))
+			{
+				continue;
+			}
+			return true;
+		}
+		return false;
+	}
+
 	protected bool FindGuidancePosition(
 		Vehicle vehicle,
 		IEntity entity,
@@ -803,6 +1109,28 @@ class AICF_VehicleDismountFlow
 				agent.GetControlledEntity());
 	}
 
+	protected bool IsExactCurrentCharacterMember(SCR_AIGroup group, AIAgent agent)
+	{
+		return group && agent && agent.GetParentGroup() == group &&
+			ChimeraCharacter.Cast(agent.GetControlledEntity());
+	}
+
+	protected bool IsExactOccupantOfVehicle(
+		ChimeraCharacter character,
+		Vehicle vehicle)
+	{
+		if (!character || !vehicle)
+			return false;
+		if (CompartmentAccessComponent.GetVehicleIn(character) == vehicle)
+			return true;
+		CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+		if (!access)
+			return false;
+		BaseCompartmentSlot compartment = access.GetCompartment();
+		return compartment && compartment.GetVehicle() == vehicle &&
+			compartment.GetOccupant() == character;
+	}
+
 	protected bool IsAuthoritativeTripAssetCurrent(AICF_TransportTrip trip)
 	{
 		if (!Replication.IsServer() || !trip || !trip.GetAssignment() || !trip.GetLease())
@@ -855,19 +1183,24 @@ class AICF_VehicleDismountFlow
 	{
 		string details = FormatIdentity(trip, reason);
 		details += string.Format(
-			" logical_occupants=%1 transitions=%2 inside_bounds=%3 force_attempts=%4 clearance_attempts=%5",
+			" logical_occupants=%1 non_alive_logical_occupants=%2 transitions=%3 inside_bounds=%4 post_egress_blocked=%5",
 			sample.m_iLogicalOccupants,
+			sample.m_iNonAliveLogicalOccupants,
 			sample.m_iTransitions,
 			sample.m_iInsideBounds,
-			trip.GetDismountState().GetForceClearanceAttempts(),
-			trip.GetDismountState().GetGuidanceAttempts());
+			sample.m_iPostEgressBlocked);
 		details += string.Format(
-			" clearance_safe=%1 continuous_clear_ms=%2 required_clear_ms=%3 next_action=%4 samples=[%5]",
+			" force_attempts=%1 clearance_attempts=%2 clearance_safe=%3 continuous_clear_ms=%4 required_clear_ms=%5",
+			trip.GetDismountState().GetForceClearanceAttempts(),
+			trip.GetDismountState().GetGuidanceAttempts(),
 			sample.m_bSafelyClear,
 			trip.GetDismountState().GetContinuousClearMs(System.GetTickCount()),
-			CONTINUOUS_CLEAR_MS,
+			CONTINUOUS_CLEAR_MS);
+		details += string.Format(
+			" next_action=%1 samples=[%2] post_egress_samples=[%3]",
 			reason,
-			sample.m_sMemberSamples);
+			sample.m_sMemberSamples,
+			sample.m_sPostEgressSamples);
 		return details;
 	}
 
@@ -905,7 +1238,10 @@ class AICF_DismountClearanceSample
 {
 	bool m_bSafelyClear;
 	int m_iLogicalOccupants;
+	int m_iNonAliveLogicalOccupants;
 	int m_iTransitions;
 	int m_iInsideBounds;
+	int m_iPostEgressBlocked;
 	string m_sMemberSamples;
+	string m_sPostEgressSamples;
 }

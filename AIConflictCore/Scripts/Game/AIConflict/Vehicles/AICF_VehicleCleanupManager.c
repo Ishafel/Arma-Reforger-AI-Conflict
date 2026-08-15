@@ -175,6 +175,7 @@ class AICF_VehicleCleanupQuery
 	protected int m_iProtectedOccupants;
 	protected int m_iNearbyPlayers;
 	protected int m_iManagedLogicalOccupants;
+	protected int m_iManagedNonAliveLogicalOccupants;
 	protected int m_iManagedTransitions;
 	protected int m_iManagedInsideBounds;
 	protected string m_sBlockerSignature;
@@ -230,12 +231,17 @@ class AICF_VehicleCleanupQuery
 	int GetProtectedOccupants() { return m_iProtectedOccupants; }
 	int GetNearbyPlayers() { return m_iNearbyPlayers; }
 	int GetManagedLogicalOccupants() { return m_iManagedLogicalOccupants; }
+	int GetManagedNonAliveLogicalOccupants() { return m_iManagedNonAliveLogicalOccupants; }
 	int GetManagedTransitions() { return m_iManagedTransitions; }
 	int GetManagedInsideBounds() { return m_iManagedInsideBounds; }
 	string GetBlockerSignature() { return m_sBlockerSignature; }
 	string GetManagedSamples() { return m_sManagedSamples; }
 	string GetActionToken() { return m_sActionToken; }
 	string GetNextAction() { return m_sNextAction; }
+	void SetManagedNonAliveLogicalOccupants(int count)
+	{
+		m_iManagedNonAliveLogicalOccupants = Math.Max(0, count);
+	}
 
 	static AICF_VehicleCleanupQuery NotTracked()
 	{
@@ -377,6 +383,7 @@ class AICF_VehicleCleanupScan
 	int m_iPlayerTransitions;
 	int m_iNearbyPlayers;
 	int m_iManagedLogicalOccupants;
+	int m_iManagedNonAliveLogicalOccupants;
 	int m_iManagedTransitions;
 	int m_iManagedInsideBounds;
 	string m_sGlobalSamples;
@@ -391,6 +398,7 @@ class AICF_VehicleCleanupScan
 		m_iPlayerTransitions = 0;
 		m_iNearbyPlayers = 0;
 		m_iManagedLogicalOccupants = 0;
+		m_iManagedNonAliveLogicalOccupants = 0;
 		m_iManagedTransitions = 0;
 		m_iManagedInsideBounds = 0;
 		m_sGlobalSamples = "NONE";
@@ -421,6 +429,7 @@ class AICF_VehicleCleanupJob
 	string m_sRetirementReason;
 	string m_sFailClosedReason;
 	string m_sManagedExactRecoveryFenceReason;
+	string m_sNonAliveDetachFenceReason;
 	string m_sLastReportedBlocker;
 	int m_iFirstDeleteRequestedAtMs;
 	int m_iLastAuditAtMs;
@@ -429,6 +438,8 @@ class AICF_VehicleCleanupJob
 	int m_iLastManagedRecoveryAtMs;
 	int m_iManagedExactRecoveryAttempts;
 	int m_iLastManagedExactRecoveryAtMs;
+	int m_iNonAliveDetachAttempts;
+	int m_iLastNonAliveDetachAtMs;
 	int m_iProtectedClearanceDeadlineAtMs;
 	int m_iProtectedClearanceDeadlineTriggeredAtMs;
 	bool m_bReleaseComplete;
@@ -446,6 +457,7 @@ class AICF_VehicleCleanupJob
 	bool m_bStopRetainedReported;
 	bool m_bManagedRecoveryBudgetReported;
 	bool m_bManagedExactRecoveryBudgetReported;
+	bool m_bNonAliveDetachBudgetReported;
 	bool m_bProtectedClearanceDeadlineReported;
 	bool m_bProtectedClearanceFinalOutcomeReported;
 
@@ -502,6 +514,8 @@ class AICF_VehicleCleanupManager
 	protected static const int MANAGED_CLEARANCE_RECOVERY_INTERVAL_MS = 2000;
 	protected static const int MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS = 3;
 	protected static const int MANAGED_EXACT_RECOVERY_INTERVAL_MS = 2000;
+	protected static const int NON_ALIVE_DETACH_MAX_ATTEMPTS = 3;
+	protected static const int NON_ALIVE_DETACH_INTERVAL_MS = 1000;
 	// The threshold starts recovery. This immutable grace bounds externally
 	// fenced clearance without ever authorizing an unsafe release or delete.
 	protected static const int PROTECTED_CLEARANCE_TERMINAL_GRACE_MS = 30000;
@@ -883,6 +897,7 @@ class AICF_VehicleCleanupManager
 		if (!ResolveExpectedVehicle(job, vehicle, actualRplId, identityFailure))
 			return RetainFailClosed(job, identityFailure, actualRplId, nowMs);
 
+		TryDetachNonAliveExactOccupants(job, vehicle, nowMs);
 		InspectCleanupSafety(job, vehicle, job.m_Scan);
 		int stableClearMs = job.m_State.ObserveSafeClear(
 			job.m_Scan.m_bSafe,
@@ -1209,6 +1224,173 @@ class AICF_VehicleCleanupManager
 			job.m_sActionToken);
 	}
 
+	// A burning/destroyed vehicle can leave incapacitated or dead exact members
+	// linked after the live-AI action fence correctly stops accepting them.  This
+	// path performs only a native exact-compartment detach: no corpse teleport,
+	// no foreign occupant mutation, and no mutation at all unless the strong
+	// player proximity/LOS fence passes.
+	protected void TryDetachNonAliveExactOccupants(
+		AICF_VehicleCleanupJob job,
+		Vehicle vehicle,
+		int nowMs)
+	{
+		if (!job || !job.m_Group || !vehicle || !m_Config ||
+			!m_Config.GetHiddenRecoveryEnabled() ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(job.m_Group) ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle))
+		{
+			return;
+		}
+		array<AIAgent> agents = {};
+		job.m_Group.GetAgents(agents);
+		int candidates;
+		foreach (AIAgent candidateAgent : agents)
+		{
+			if (!candidateAgent || candidateAgent.GetParentGroup() != job.m_Group)
+				continue;
+			ChimeraCharacter candidate = ChimeraCharacter.Cast(
+				candidateAgent.GetControlledEntity());
+			if (!candidate || AICF_GroupRuntime.IsAliveCharacter(candidate) ||
+				!IsExactCleanupOccupantOfVehicle(candidate, vehicle))
+			{
+				continue;
+			}
+			candidates++;
+		}
+		if (candidates <= 0)
+		{
+			job.m_sNonAliveDetachFenceReason = string.Empty;
+			return;
+		}
+		if (job.m_iNonAliveDetachAttempts >= NON_ALIVE_DETACH_MAX_ATTEMPTS)
+		{
+			if (!job.m_bNonAliveDetachBudgetReported)
+			{
+				job.m_bNonAliveDetachBudgetReported = true;
+				string budgetDetails = BuildJobIdentity(job);
+				budgetDetails += string.Format(
+					" candidates=%1 attempts=%2 maximum_attempts=%3 action=CONTINUE_PROTECTED_CLEARANCE_NO_UNSAFE_MUTATION",
+					candidates,
+					job.m_iNonAliveDetachAttempts,
+					NON_ALIVE_DETACH_MAX_ATTEMPTS);
+				AICF_Stage3Diagnostics.Warning(
+					"VEHICLE_CLEANUP_NON_ALIVE_DETACH_EXHAUSTED",
+					budgetDetails);
+			}
+			return;
+		}
+		if (job.m_iLastNonAliveDetachAtMs > 0 &&
+			nowMs - job.m_iLastNonAliveDetachAtMs < NON_ALIVE_DETACH_INTERVAL_MS)
+		{
+			return;
+		}
+		float nearestPlayerMeters;
+		string rejectionReason;
+		float hiddenRadiusMeters = m_Config.GetHiddenRecoveryPlayerRadiusMeters();
+		if (!m_Watchdog.CanApplyHiddenRecovery(
+			vehicle.GetOrigin(),
+			vehicle.GetOrigin(),
+			hiddenRadiusMeters,
+			nearestPlayerMeters,
+			rejectionReason))
+		{
+			if (job.m_sNonAliveDetachFenceReason != rejectionReason)
+			{
+				job.m_sNonAliveDetachFenceReason = rejectionReason;
+				string fencedDetails = BuildJobIdentity(job);
+				fencedDetails += string.Format(
+					" candidates=%1 hidden_radius_m=%2 nearest_player_m=%3 fence_reason=%4 action=DEFER_WITHOUT_MUTATION",
+					candidates,
+					hiddenRadiusMeters,
+					nearestPlayerMeters,
+					rejectionReason);
+				AICF_Stage3Diagnostics.Info(
+					"VEHICLE_CLEANUP_NON_ALIVE_DETACH_DEFERRED",
+					fencedDetails);
+			}
+			return;
+		}
+
+		job.m_sNonAliveDetachFenceReason = string.Empty;
+		job.m_iNonAliveDetachAttempts++;
+		job.m_iLastNonAliveDetachAtMs = nowMs;
+		int requested;
+		int immediate;
+		int rejected;
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent || agent.GetParentGroup() != job.m_Group)
+				continue;
+			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (!character || AICF_GroupRuntime.IsAliveCharacter(character) ||
+				!IsExactCleanupOccupantOfVehicle(character, vehicle))
+			{
+				continue;
+			}
+			CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+			BaseCompartmentSlot compartment;
+			if (access)
+				compartment = access.GetCompartment();
+			bool exactOwner = compartment && compartment.GetVehicle() == vehicle &&
+				compartment.GetOccupant() == character;
+			bool authoritySafe = m_Watchdog.IsAuthoritativeNonPlayerCharacter(character);
+			bool ejectRequested;
+			bool ejectImmediate;
+			if (exactOwner && authoritySafe)
+				ejectRequested = compartment.EjectOccupant(true, false, ejectImmediate, true);
+			bool linkedAfter = IsExactCleanupOccupantOfVehicle(character, vehicle);
+			if (ejectRequested)
+				requested++;
+			if (!linkedAfter)
+				immediate++;
+			if ((!ejectRequested && linkedAfter) || !exactOwner || !authoritySafe)
+				rejected++;
+			CharacterControllerComponent controller = character.GetCharacterController();
+			ECharacterLifeState lifeState;
+			string lifeStateName = "NO_CONTROLLER";
+			if (controller)
+			{
+				lifeState = controller.GetLifeState();
+				lifeStateName = typename.EnumToString(ECharacterLifeState, lifeState);
+			}
+			string memberDetails = BuildJobIdentity(job);
+			memberDetails += string.Format(
+				" member=%1 alive=0 life_state=%2 exact_owner=%3 authority_safe=%4 eject_requested=%5 eject_immediate=%6 linked_after=%7",
+				character.GetID(),
+				lifeStateName,
+				exactOwner,
+				authoritySafe,
+				ejectRequested,
+				ejectImmediate,
+				linkedAfter);
+			memberDetails += string.Format(
+				" attempt=%1 maximum_attempts=%2 hidden_radius_m=%3 nearest_player_m=%4 player_fence=PASSED",
+				job.m_iNonAliveDetachAttempts,
+				NON_ALIVE_DETACH_MAX_ATTEMPTS,
+				hiddenRadiusMeters,
+				nearestPlayerMeters);
+			AICF_Stage35Diagnostics.Info(
+				"VEHICLE_CLEANUP_NON_ALIVE_EXACT_MEMBER",
+				memberDetails);
+		}
+		string resultDetails = BuildJobIdentity(job);
+		resultDetails += string.Format(
+			" candidates=%1 eject_requested=%2 immediate_unlinked=%3 rejected=%4 attempt=%5 maximum_attempts=%6",
+			candidates,
+			requested,
+			immediate,
+			rejected,
+			job.m_iNonAliveDetachAttempts,
+			NON_ALIVE_DETACH_MAX_ATTEMPTS);
+		resultDetails += string.Format(
+			" hidden_radius_m=%1 nearest_player_m=%2 player_fence=PASSED action=CONTINUE_EXACT_CLEARANCE_SCAN",
+			hiddenRadiusMeters,
+			nearestPlayerMeters);
+		AICF_Stage3Diagnostics.Warning(
+			"VEHICLE_CLEANUP_NON_ALIVE_DETACH",
+			resultDetails);
+	}
+
 	protected void ForceAndRelocateExactManagedMembers(
 		AICF_VehicleCleanupJob job,
 		Vehicle vehicle,
@@ -1455,6 +1637,22 @@ class AICF_VehicleCleanupManager
 		return group && agent && agent.GetParentGroup() == group &&
 			AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(
 				agent.GetControlledEntity());
+	}
+
+	protected bool IsExactCleanupOccupantOfVehicle(
+		ChimeraCharacter character,
+		Vehicle vehicle)
+	{
+		if (!character || !vehicle)
+			return false;
+		if (CompartmentAccessComponent.GetVehicleIn(character) == vehicle)
+			return true;
+		CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+		if (!access)
+			return false;
+		BaseCompartmentSlot compartment = access.GetCompartment();
+		return compartment && compartment.GetVehicle() == vehicle &&
+			compartment.GetOccupant() == character;
 	}
 
 	protected AICF_VehicleCleanupOutcome ReleaseToWorldPool(
@@ -1806,6 +2004,7 @@ class AICF_VehicleCleanupManager
 				scan.m_iManagedLogicalOccupants,
 				scan.m_iManagedTransitions,
 				scan.m_iManagedInsideBounds,
+				scan.m_iManagedNonAliveLogicalOccupants,
 				scan.m_sManagedSamples);
 		}
 		scan.m_bSafe = scan.m_bPlayerScanAvailable && globalClear && managedClear;
@@ -1818,8 +2017,9 @@ class AICF_VehicleCleanupManager
 			scan.m_iManagedLogicalOccupants,
 			scan.m_iManagedTransitions);
 		scan.m_sBlockerSignature += string.Format(
-			":managed_bounds_%1",
-			scan.m_iManagedInsideBounds);
+			":managed_bounds_%1:managed_non_alive_logical_%2",
+			scan.m_iManagedInsideBounds,
+			scan.m_iManagedNonAliveLogicalOccupants);
 	}
 
 	protected bool ResolveExpectedVehicle(
@@ -2270,7 +2470,7 @@ class AICF_VehicleCleanupManager
 			managedInsideBounds = job.m_Scan.m_iManagedInsideBounds;
 			managedSamples = job.m_Scan.m_sManagedSamples;
 		}
-		return new AICF_VehicleCleanupQuery(
+		AICF_VehicleCleanupQuery query = new AICF_VehicleCleanupQuery(
 			true,
 			job.m_bReleaseComplete,
 			job.m_bClearanceSafe,
@@ -2287,6 +2487,10 @@ class AICF_VehicleCleanupManager
 			managedSamples,
 			job.m_sActionToken,
 			nextAction);
+		if (job.m_Scan)
+			query.SetManagedNonAliveLogicalOccupants(
+				job.m_Scan.m_iManagedNonAliveLogicalOccupants);
+		return query;
 	}
 
 	protected AICF_VehicleCleanupJob FindJobByLease(AICF_VehicleLease lease)
@@ -2480,8 +2684,9 @@ class AICF_VehicleCleanupManager
 			job.m_Scan.m_iPlayerTransitions,
 			job.m_Scan.m_iNearbyPlayers);
 		deadlineDetails += string.Format(
-			" managed_logical=%1 managed_transitions=%2 managed_inside_bounds=%3 blocker_signature=%4 action=START_BOUNDED_PLAYER_FENCED_RECOVERY",
+			" managed_logical=%1 managed_non_alive_logical=%2 managed_transitions=%3 managed_inside_bounds=%4 blocker_signature=%5 action=START_BOUNDED_PLAYER_FENCED_RECOVERY",
 			job.m_Scan.m_iManagedLogicalOccupants,
+			job.m_Scan.m_iManagedNonAliveLogicalOccupants,
 			job.m_Scan.m_iManagedTransitions,
 			job.m_Scan.m_iManagedInsideBounds,
 			job.m_Scan.m_sBlockerSignature);
@@ -2519,7 +2724,7 @@ class AICF_VehicleCleanupManager
 		}
 		string finalDetails = BuildJobIdentity(job);
 		finalDetails += string.Format(
-			" outcome=%1 deadline_at_ms=%2 deadline_age_ms=%3 terminal_grace_ms=%4 recovery_age_ms=%5 managed_recovery_attempts=%6 exact_recovery_attempts=%7 blocker_signature=%8",
+			" outcome=%1 deadline_at_ms=%2 deadline_age_ms=%3 terminal_grace_ms=%4 recovery_age_ms=%5 managed_recovery_attempts=%6 exact_recovery_attempts=%7 non_alive_detach_attempts=%8",
 			outcome,
 			job.m_iProtectedClearanceDeadlineAtMs,
 			deadlineAgeMs,
@@ -2527,6 +2732,10 @@ class AICF_VehicleCleanupManager
 			recoveryAgeMs,
 			job.m_iManagedRecoveryAttempts,
 			job.m_iManagedExactRecoveryAttempts,
+			job.m_iNonAliveDetachAttempts);
+		finalDetails += string.Format(
+			" managed_non_alive_logical=%1 blocker_signature=%2",
+			job.m_Scan.m_iManagedNonAliveLogicalOccupants,
 			blockerSignature);
 		finalDetails += " " + ownershipSummary;
 		AICF_Stage3Diagnostics.Info(
@@ -2557,6 +2766,9 @@ class AICF_VehicleCleanupManager
 		string hiddenFenceReason = job.m_sManagedExactRecoveryFenceReason;
 		if (hiddenFenceReason.IsEmpty())
 			hiddenFenceReason = "NONE";
+		string nonAliveFenceReason = job.m_sNonAliveDetachFenceReason;
+		if (nonAliveFenceReason.IsEmpty())
+			nonAliveFenceReason = "NONE";
 		string details = BuildJobIdentity(job);
 		details += string.Format(
 			" reason=%1 protected_occupants=%2 player_transitions=%3 nearby_players=%4 stable_clear_ms=%5",
@@ -2566,15 +2778,20 @@ class AICF_VehicleCleanupManager
 			job.m_Scan.m_iNearbyPlayers,
 			stableClearMs);
 		details += string.Format(
-			" managed_logical=%1 managed_transitions=%2 managed_inside_bounds=%3 protection_radius_m=%4 managed_recovery_attempts=%5 managed_recovery_maximum=%6 exact_recovery_attempts=%7 exact_recovery_maximum=%8",
+			" managed_logical=%1 managed_non_alive_logical=%2 managed_transitions=%3 managed_inside_bounds=%4 protection_radius_m=%5 managed_recovery_attempts=%6 managed_recovery_maximum=%7",
 			job.m_Scan.m_iManagedLogicalOccupants,
+			job.m_Scan.m_iManagedNonAliveLogicalOccupants,
 			job.m_Scan.m_iManagedTransitions,
 			job.m_Scan.m_iManagedInsideBounds,
 			PLAYER_PROTECTION_RADIUS_METERS,
 			job.m_iManagedRecoveryAttempts,
-			MANAGED_CLEARANCE_RECOVERY_MAX_ATTEMPTS,
+			MANAGED_CLEARANCE_RECOVERY_MAX_ATTEMPTS);
+		details += string.Format(
+			" exact_recovery_attempts=%1 exact_recovery_maximum=%2 non_alive_detach_attempts=%3 non_alive_detach_maximum=%4",
 			job.m_iManagedExactRecoveryAttempts,
-			MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS);
+			MANAGED_EXACT_RECOVERY_MAX_ATTEMPTS,
+			job.m_iNonAliveDetachAttempts,
+			NON_ALIVE_DETACH_MAX_ATTEMPTS);
 		details += string.Format(
 			" deadline_at_ms=%1 deadline_age_ms=%2 terminal_at_ms=%3 terminal_remaining_ms=%4",
 			job.m_iProtectedClearanceDeadlineAtMs,
@@ -2582,8 +2799,9 @@ class AICF_VehicleCleanupManager
 			terminalAtMs,
 			terminalRemainingMs);
 		details += string.Format(
-			" hidden_fence_reason=%1 global_samples=[%2] managed_samples=[%3]",
+			" hidden_fence_reason=%1 non_alive_fence_reason=%2 global_samples=[%3] managed_samples=[%4]",
 			hiddenFenceReason,
+			nonAliveFenceReason,
 			job.m_Scan.m_sGlobalSamples,
 			job.m_Scan.m_sManagedSamples);
 		AICF_Stage3Diagnostics.Info("VEHICLE_CLEANUP_DEFERRED", details);
