@@ -42,16 +42,17 @@ Add-Stage35Failures @(Invoke-AICFLanguageAudit -RepositoryRoot $RepositoryRoot)
 $stage1Config = Get-Stage35RecordByName $records 'AICF_Stage1Config.c'
 if (Require-Stage35Record $stage1Config 'AICF_Stage1Config.c') {
     $forceConstants = @{
-        'GROUP_SLOTS_PER_FACTION\s*=\s*4\s*;' = 'Four stable slots per faction are required'
-        'MANAGED_GROUP_SIZE\s*=\s*5\s*;' = 'Managed initial and replacement rosters must contain exactly five members'
-        'ATTACK_SLOTS_PER_FACTION\s*=\s*3\s*;' = 'Active roles must expose three ATTACK slots'
-        'DEFEND_SLOTS_PER_FACTION\s*=\s*1\s*;' = 'Active roles must expose one DEFEND/QRF slot'
-        'RESERVE_SLOTS_PER_FACTION\s*=\s*0\s*;' = 'Active roles must expose zero RESERVE slots'
-        'LEGACY_ATTACK_SLOTS_PER_FACTION\s*=\s*2\s*;' = 'Roles-off baseline must retain two ATTACK slots'
-        'LEGACY_DEFEND_SLOTS_PER_FACTION\s*=\s*1\s*;' = 'Roles-off baseline must retain one DEFEND slot'
-        'LEGACY_RESERVE_SLOTS_PER_FACTION\s*=\s*1\s*;' = 'Roles-off baseline must retain one RESERVE slot'
-        'MIN_MANAGED_AGENTS\s*=\s*48\s*;' = 'Managed-agent CLI floor must remain 48'
-        'DEFAULT_MAX_MANAGED_AGENTS\s*=\s*64\s*;' = 'Default managed-agent budget must remain 64'
+        'GROUP_SLOTS_PER_FACTION\s*=\s*10\s*;' = 'Ten stable slots per faction are required'
+        'DEFAULT_GROUP_SIZE\s*=\s*4\s*;' = 'Managed rosters must default to four members'
+        'MAX_GROUP_SIZE\s*=\s*10\s*;' = 'Commander-selected rosters must be capped at ten members'
+        'ATTACK_SLOTS_PER_FACTION\s*=\s*6\s*;' = 'Default doctrine must expose six ATTACK slots'
+        'DEFEND_SLOTS_PER_FACTION\s*=\s*3\s*;' = 'Default doctrine must expose three DEFEND/QRF slots'
+        'RESERVE_SLOTS_PER_FACTION\s*=\s*1\s*;' = 'Default doctrine must expose one RESERVE slot'
+        'LEGACY_ATTACK_SLOTS_PER_FACTION\s*=\s*5\s*;' = 'Roles-off baseline must retain five ATTACK slots'
+        'LEGACY_DEFEND_SLOTS_PER_FACTION\s*=\s*3\s*;' = 'Roles-off baseline must retain three DEFEND slots'
+        'LEGACY_RESERVE_SLOTS_PER_FACTION\s*=\s*2\s*;' = 'Roles-off baseline must retain two RESERVE slots'
+        'MIN_MANAGED_AGENTS\s*=\s*80\s*;' = 'Managed-agent CLI floor must cover twenty default four-person groups'
+        'DEFAULT_MAX_MANAGED_AGENTS\s*=\s*220\s*;' = 'Default managed-agent budget must cover twenty groups up to their configured cap'
     }
     foreach ($pattern in $forceConstants.Keys) {
         Assert-AICFContains $failures 'STAGE35_FORCE_STRUCTURE' $stage1Config.Code $pattern $forceConstants[$pattern]
@@ -61,11 +62,11 @@ if (Require-Stage35Record $stage1Config 'AICF_Stage1Config.c') {
 
 $stage3Config = Get-Stage35RecordByName $records 'AICF_Stage3Config.c'
 if (Require-Stage35Record $stage3Config 'AICF_Stage3Config.c') {
-    Assert-AICFContains $failures 'STAGE35_VEHICLE_CAP' $stage3Config.Code 'DEFAULT_MAX_VEHICLES_PER_FACTION\s*=\s*4\s*;' 'Active/reserved vehicle lease cap must default to four'
+    Assert-AICFContains $failures 'STAGE35_VEHICLE_CAP' $stage3Config.Code 'DEFAULT_MAX_VEHICLES_PER_FACTION\s*=\s*10\s*;' 'Active/reserved vehicle lease cap must cover all ten groups'
     Assert-AICFContains $failures 'STAGE35_MINIMUM_NEW_REQUEST' $stage3Config.Code 'DEFAULT_MINIMUM_VEHICLE_REQUEST_AGENTS\s*=\s*3\s*;' 'New vehicle request minimum must remain three'
     Assert-AICFContains $failures 'STAGE35_COHESION_WAIT' $stage3Config.Code 'DEFAULT_COHESION_WAIT_TIMEOUT_MS\s*=\s*300000\s*;' 'Fragmented cohesion wait must retain its five-minute default deadline'
     Assert-AICFContains $failures 'STAGE35_COHESION_WAIT' $stage3Config.Source '"aicfVehicleCohesionWaitTimeoutMs"' 'Cohesion wait must retain its CLI override'
-    Assert-AICFContains $failures 'STAGE35_FOUR_SLOT_MOTORIZATION' $stage3Config.Code 'NormalizeVehicleCounts[\s\S]*GROUP_SLOTS_PER_FACTION' 'Vehicle counts must normalize against all four stable slots'
+    Assert-AICFContains $failures 'STAGE35_ALL_SLOT_MOTORIZATION' $stage3Config.Code 'NormalizeVehicleCounts[\s\S]*GROUP_SLOTS_PER_FACTION' 'Vehicle counts must normalize against all stable slots'
 }
 
 $acquisition = Find-AICFClassRecord $records 'AICF_VehicleAcquisitionFlow'
@@ -123,7 +124,7 @@ if ($acquisition) {
 $factionState = Find-AICFClassRecord $records 'AICF_FactionState'
 if ($factionState) {
     $buildSlots = ConvertTo-AICFCodeText (Get-AICFMethodBody $factionState 'BuildDefaultSlots')
-    Assert-AICFContains $failures 'STAGE35_ACTIVE_ROLE_TOGGLE' $buildSlots 'activeForcesRolesEnabled[\s\S]*LEGACY_ATTACK_SLOTS_PER_FACTION[\s\S]*LEGACY_DEFEND_SLOTS_PER_FACTION' 'Roles-off baseline must select the legacy 2/1/1 boundaries'
+    Assert-AICFContains $failures 'STAGE35_ACTIVE_ROLE_TOGGLE' $buildSlots 'activeForcesRolesEnabled[\s\S]*LEGACY_ATTACK_SLOTS_PER_FACTION[\s\S]*LEGACY_DEFEND_SLOTS_PER_FACTION' 'Roles-off baseline must select the configured legacy boundaries'
     Assert-AICFContains $failures 'STAGE35_ROLE_LOCAL_IDENTITY' $buildSlots 'roleIndex' 'Stable slots must retain role-local A0/A1/A2/D0 ordinals'
 }
 
@@ -136,7 +137,7 @@ if ($groupSpawner) {
     Assert-AICFContains $failures 'STAGE35_EXACT_ROSTER' $spawnGroup 'IgnoreSpawning\s*\(\s*true\s*\)[\s\S]*SpawnEntityPrefabEx[\s\S]*IgnoreSpawning\s*\(\s*false\s*\)[\s\S]*ConfigureManagedRoster' 'Group entity creation and exact roster shaping must preserve the one-shot stock spawn guard order'
     Assert-AICFNotContains $failures 'STAGE35_AI18_QUEUE' $spawnGroup 'SpawnUnits\s*\(' 'Reforger 1.8 managed group creation must not use the lossy synchronous SpawnUnits path'
     Assert-AICFContains $failures 'STAGE35_AI18_QUEUE' $beginRosterSpawn 'SetNumberOfMembersToSpawn\s*\([\s\S]*RequestSpawn\s*\(' 'Managed members must enter the Reforger 1.8 SCR_AIWorld request queue'
-    Assert-AICFContains $failures 'STAGE35_EXACT_ROSTER' $spawnGroup 'MANAGED_GROUP_SIZE' 'Initial and replacement roster shaping must derive from the exact five-member constant'
+    Assert-AICFContains $failures 'STAGE35_EXACT_ROSTER' $spawnGroup 'desiredSize[\s\S]*ConfigureManagedRoster' 'Initial and replacement roster shaping must derive from the commander-selected desired size'
 }
 
 $groupRuntime = Find-AICFClassRecord $records 'AICF_GroupRuntime'
@@ -187,7 +188,7 @@ if ($match) {
     $spawnTimeout = Get-AICFMethodBody $match 'HandleSpawnTimeout'
     $spawnTimeoutCode = ConvertTo-AICFCodeText $spawnTimeout
     $releaseGroups = ConvertTo-AICFCodeText (Get-AICFMethodBody $match 'ReleaseFactionGroups')
-    Assert-AICFContains $failures 'STAGE35_EXACT_ROSTER' $processFaction 'IsRosterSpawnRequested\s*\([\s\S]*actualCount\s*==\s*AICF_Stage1Config\.MANAGED_GROUP_SIZE[\s\S]*GetNumberOfMembersToSpawn\s*\([\s\S]*HasExactFactionRoster[\s\S]*MarkReady' 'Slot READY requires an issued request and the exact alive faction-correct five-member roster'
+    Assert-AICFContains $failures 'STAGE35_EXACT_ROSTER' $processFaction 'expectedSize\s*=\s*slot\.GetDesiredSize\s*\([\s\S]*IsRosterSpawnRequested\s*\([\s\S]*actualCount\s*==\s*expectedSize[\s\S]*GetNumberOfMembersToSpawn\s*\([\s\S]*HasExactFactionRoster[\s\S]*MarkReady' 'Slot READY requires an issued request and the exact alive faction-correct commander-selected roster'
     Assert-AICFNotContains $failures 'STAGE35_AI18_QUEUE' $processFaction 'GetSpawnQueueSize\s*\(' 'READY must not use the Reforger 1.8 compatibility queue-size stub'
     Assert-AICFNotContains $failures 'STAGE35_EXACT_ROSTER' $match.Code 'GetAgentsCount\s*\(\s*\)\s*>\s*0[\s\S]{0,100}MarkReady' 'Legacy non-empty READY gate must not survive'
     Assert-AICFContains $failures 'STAGE35_AI18_QUEUE' $bindManagedCode 'BindSpawnedGroup[\s\S]*GetOnAgentAdded[\s\S]*GetOnAllDelayedEntitySpawned[\s\S]*MarkRosterSpawnRequested[\s\S]*BeginRosterSpawn' 'Managed ownership, generation observers, and pending intent must be installed before the 1.8 roster request is issued'
@@ -212,7 +213,7 @@ if ($catalog) {
 $acquisition = Find-AICFClassRecord $records 'AICF_VehicleAcquisitionFlow'
 if ($acquisition) {
     Assert-AICFNotContains $failures 'STAGE35_ALL_SLOT_ELIGIBILITY' $acquisition.Code 'GetRole\s*\(\s*\)\s*!=\s*AICF_EGroupRole\.ATTACK' 'DEFEND/QRF must not be excluded from vehicle eligibility'
-    Assert-AICFContains $failures 'STAGE35_VEHICLE_PREFERENCE' $acquisition.Source 'A0[\s\S]*A1[\s\S]*(?:TRANSPORT|Truck)[\s\S]*(?:LIGHT_TRANSPORT|LightTransport)' 'A0/A1 must select trucks while A2/D0 remain light-first'
+    Assert-AICFContains $failures 'STAGE35_VEHICLE_PREFERENCE' $acquisition.Code 'GetUnitType[\s\S]*MOTORIZED_LIGHT[\s\S]*LIGHT_TRANSPORT[\s\S]*MOTORIZED_TRUCK[\s\S]*TRANSPORT[\s\S]*MOTORIZED_ARMED_LIGHT[\s\S]*ARMED_LIGHT' 'Vehicle preference must follow commander-selected transport or armed-light mobility type'
     Assert-AICFContains $failures 'STAGE35_CAPACITY_PREFLIGHT' $acquisition.Code 'requiredSeats|livingRoster|aliveAgents' 'Capacity preflight must use the complete living managed roster'
     Assert-AICFContains $failures 'STAGE35_CAPACITY_PREFLIGHT' $acquisition.Code 'capacity|Capacity|accessibleSeats' 'Acquisition must preflight candidate capacity before accepted binding'
     Assert-AICFContains $failures 'STAGE35_LIGHT_TO_TRUCK_FALLBACK' $acquisition.Code 'LIGHT_TRANSPORT[\s\S]*TRANSPORT' 'A roomy light rejection must advance to faction truck before foot fallback'
@@ -247,7 +248,7 @@ if ($match) {
     Assert-AICFContains $failures 'STAGE35_MEANINGFUL_TASK_GRACE' $taskAudit 'CountAliveAgents[\s\S]*alive\s*<=\s*0[\s\S]*ObserveMeaningfulTaskLoss\s*\(\s*false\s*\)[\s\S]*continue' 'Empty managed groups must not emit authority task loss/recovery events'
     Assert-AICFContains $failures 'STAGE35_MEANINGFUL_TASK_GRACE' $taskAudit 'taskLossGraceMs[\s\S]*GetReliabilityIntervalMs[\s\S]*tasklessAgeMs\s*>=\s*taskLossGraceMs[\s\S]*MarkMeaningfulTaskLossReported' 'Transient handoff gaps must survive one reliability interval before MEANINGFUL_TASK_LOST'
     Assert-AICFContains $failures 'STAGE35_MEANINGFUL_TASK_GRACE' $taskAudit 'meaningfulTaskLossWasReported[\s\S]*MEANINGFUL_TASK_RECOVERED' 'MEANINGFUL_TASK_RECOVERED must require a previously emitted loss edge'
-    Assert-AICFContains $failures 'STAGE35_MOB_EGRESS_DEADLINE' $taskAudit 'mobPresenceRequiresEgress[\s\S]*2\s*\*\s*m_Config\.GetCommanderIntervalMs[\s\S]*MOB_EGRESS_DEADLINE_MISSED' 'Continuous unsuppressed MOB presence must fail the egress deadline within two commander intervals'
+    Assert-AICFContains $failures 'STAGE35_MOB_EGRESS_DEADLINE' $taskAudit 'mobPresenceRequiresEgress[\s\S]*recentOutwardProgress[\s\S]*ObserveUnexplainedMobIdle\s*\(\s*mobPresenceRequiresEgress\s*&&\s*!recentOutwardProgress[\s\S]*MOB_EGRESS_HARD_DEADLINE_INTERVALS[\s\S]*MOB_EGRESS_DEADLINE_MISSED' 'Only continuously stalled MOB presence may fail the bounded hard deadline; recent outward progress must reset the stall episode'
     Assert-AICFContains $failures 'STAGE35_MOB_EGRESS_TELEMETRY' $taskAudit 'mob_presence_ms=[\s\S]*motion_age_ms=[\s\S]*egress_deadline_ms=' 'MOB egress failure must distinguish continuous presence from physical motion evidence'
     Assert-AICFContains $failures 'STAGE35_MEANINGFUL_TASK_PROOF' $meaningfulTask 'IsWaypointBoundToGroup' 'Meaningful task must be based on a waypoint actually bound to the group'
     Assert-AICFContains $failures 'STAGE35_MEANINGFUL_TASK_PROOF' $waypointBind 'GetWaypoints[\s\S]*Contains' 'Waypoint evidence must use the authoritative group queue'
@@ -328,7 +329,7 @@ $marker = Find-AICFClassRecord $records 'AICF_GroupMapMarkerSystem'
 if ($marker) {
     $markerText = ConvertTo-AICFCodeText (Get-AICFMethodBody $marker 'BuildMarkerText')
     Assert-AICFContains $failures 'STAGE35_ROLE_LOCAL_IDENTITY' $markerText 'RoleLocal|ROLE_LOCAL|GetRoleLocalMarkerKey' 'Marker identity must use A0/A1/A2/D0 role-local keys'
-    Assert-AICFContains $failures 'STAGE35_ROLE_LOCAL_IDENTITY' $marker.Code 'ATTACK_SLOTS_PER_FACTION' 'D0 numbering must account for the ATTACK boundary'
+    Assert-AICFContains $failures 'STAGE35_ROLE_LOCAL_IDENTITY' $marker.Code 'GetRoleIndex' 'Dynamic role-local marker numbering must use the reindexed slot role ordinal'
 }
 
 $allStrings = ($records | ForEach-Object { $_.Strings }) -join "`n"

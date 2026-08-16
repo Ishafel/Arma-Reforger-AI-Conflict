@@ -121,7 +121,14 @@ class AICF_VehicleBoardingFlow
 			gunnerPhasePlanned);
 		int nowMs = System.GetTickCount();
 		int phaseTimeoutMs = m_Config.GetBoardingTimeoutMs();
+		int approachTimeoutMs = phaseTimeoutMs;
+		if (approachPlanned)
+			approachTimeoutMs = Math.Max(
+				phaseTimeoutMs,
+				m_Config.GetBoardingApproachTimeoutMs());
 		int totalTimeoutMs = phaseTimeoutMs * plannedPhaseCount;
+		if (approachPlanned)
+			totalTimeoutMs += approachTimeoutMs - phaseTimeoutMs;
 		int totalDeadlineMs = nowMs + totalTimeoutMs;
 		if (trip.GetAbsoluteDeadlineMs() > 0 && totalDeadlineMs > trip.GetAbsoluteDeadlineMs())
 			totalDeadlineMs = trip.GetAbsoluteDeadlineMs();
@@ -136,17 +143,20 @@ class AICF_VehicleBoardingFlow
 			m_Config.GetPassengerMaxRetries());
 		state.ConfigureImmutablePlan(
 			phaseTimeoutMs,
+			approachTimeoutMs,
 			driverPhasePlanned,
 			gunnerPhasePlanned);
 		string startedDetails = DescribeContext(trip, lease, causationId, "ROLE_ORDERED_EXACT_BOARDING");
 		startedDetails += string.Format(
-			" alive=%1 mounted=%2 empty_accessible=%3 planned_phases=%4 phase_timeout_ms=%5 total_timeout_ms=%6 total_deadline_ms=%7",
+			" alive=%1 mounted=%2 empty_accessible=%3 planned_phases=%4 phase_timeout_ms=%5 approach_timeout_ms=%6 total_timeout_ms=%7",
 			aliveCount,
 			mountedCount,
 			accessibleSeats,
 			plannedPhaseCount,
 			phaseTimeoutMs,
-			totalTimeoutMs,
+			approachTimeoutMs,
+			totalTimeoutMs) + string.Format(
+			" total_deadline_ms=%1",
 			totalDeadlineMs);
 		startedDetails += string.Format(
 			" leader_m=%1 nearest_m=%2 farthest_m=%3 staging_threshold_m=%4 approach_planned=%5 members=[%6]",

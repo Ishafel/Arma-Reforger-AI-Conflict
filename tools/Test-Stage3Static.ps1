@@ -43,10 +43,12 @@ if (Require-Stage3Record $config 'AICF_Stage3Config.c') {
     Assert-AICFContains $failures 'STAGE3_DISABLED_BASELINE' $config.Code 'm_bVehiclesEnabled\s*=\s*false' 'aicfVehiclesEnabled must remain disabled by default'
     Assert-AICFContains $failures 'STAGE3_BOUNDED_REQUEST' $config.Code 'DEFAULT_SPAWN_MAX_ATTEMPTS\s*=\s*4\s*;' 'Spawn request attempts must default to four'
     Assert-AICFContains $failures 'STAGE3_BOUNDED_REQUEST' $config.Code 'DEFAULT_WAIT_PROBE_INTERVAL_MS\s*=\s*60000\s*;' 'WAITING_FOR_SITE probe must default to sixty seconds'
+	Assert-AICFContains $failures 'STAGE3_APPROACH_DEADLINE' $config.Code 'DEFAULT_BOARDING_APPROACH_TIMEOUT_MS\s*=\s*180000\s*;' 'Long per-member approach must have its own bounded three-minute deadline'
+	Assert-AICFContains $failures 'STAGE3_APPROACH_DEADLINE' $config.Source '"aicfVehicleBoardingApproachTimeoutMs"' 'Approach deadline must retain an explicit CLI override'
     Assert-AICFContains $failures 'STAGE3_PROGRESS_EVIDENCE' $config.Code 'DEFAULT_MOTION_METERS\s*=\s*3\.0' 'Physical motion evidence must retain the independent three-metre threshold'
     Assert-AICFContains $failures 'STAGE3_PROGRESS_EVIDENCE' $config.Code 'DEFAULT_OBJECTIVE_PROGRESS_TIMEOUT_MS\s*=\s*300000' 'Objective progress must retain its independent five-minute timeout'
     Assert-AICFContains $failures 'STAGE3_MINIMUM_REQUEST_ROSTER' $config.Code 'DEFAULT_MINIMUM_VEHICLE_REQUEST_AGENTS\s*=\s*3\s*;' 'New vehicle requests must require the accepted three-member minimum'
-    Assert-AICFContains $failures 'STAGE3_FACTION_CAP' $config.Code 'DEFAULT_MAX_VEHICLES_PER_FACTION\s*=\s*4\s*;' 'Faction active/reserved lease cap must default to four'
+    Assert-AICFContains $failures 'STAGE3_FACTION_CAP' $config.Code 'DEFAULT_MAX_VEHICLES_PER_FACTION\s*=\s*10\s*;' 'Faction active/reserved lease cap must cover all ten commander-configurable groups'
     Assert-AICFContains $failures 'STAGE3_COHESION_DEADLINE' $config.Code 'DEFAULT_COHESION_WAIT_TIMEOUT_MS\s*=\s*300000\s*;' 'Fragmented cohesion wait must have a five-minute absolute deadline'
     foreach ($cliName in @('aicfVehiclesEnabled', 'aicfVehicleMinimumRequestAgents', 'aicfVehicleCohesionWaitTimeoutMs', 'aicfMaxVehiclesPerFaction')) {
         Assert-AICFContains $failures 'STAGE3_CONFIG_CLI' $config.Source ([regex]::Escape('"' + $cliName + '"')) "Missing documented CLI option $cliName"
@@ -108,6 +110,7 @@ if ($boarding) {
     Assert-AICFContains $failures 'STAGE3_ALL_OR_FALLBACK' $boardingCode '(?:SETTLED_POLLS_REQUIRED\s*=\s*2|settledPolls\s*>?=\s*2)' 'Boarding completion must require two settled polls'
     Assert-AICFNotContains $failures 'STAGE3_NO_GROUP_BOARDING_WAYPOINT' $boardingCode 'CreatePassengerBoardingWaypoint|SCR_BoardingEntityWaypoint' 'Boarding must not reintroduce a generic group vehicle waypoint'
     Assert-AICFContains $failures 'STAGE3_PER_MEMBER_APPROACH' $boardingCode 'MoveIndividually|ApproachAction|TrackBoardingApproach' 'Boarding approach must remain per-member and token-owned'
+	Assert-AICFContains $failures 'STAGE3_APPROACH_DEADLINE' $boarding.Code 'GetBoardingApproachTimeoutMs[\s\S]*totalTimeoutMs\s*\+=\s*approachTimeoutMs\s*-\s*phaseTimeoutMs' 'Approach must extend the immutable total budget without extending later role phases'
 	Assert-AICFContains $failures 'STAGE3_RUNNING_CARGO_STALL' $boarding.Code 'PASSENGER_STALL_MS\s*=\s*15000' 'Exact Cargo must bound a RUNNING action with no physical progress'
 	Assert-AICFContains $failures 'STAGE3_RUNNING_CARGO_STALL' $maintainPassengers 'ObserveSpatialProgress[\s\S]*EAIActionState\.RUNNING[\s\S]*GetProgressAgeMs[\s\S]*PASSENGER_STALL_MS[\s\S]*ReissueExactCargo' 'Every unlinked non-transitioning RUNNING Cargo token must use the exact retry path after a bounded no-progress stall, including an orphaned action reference'
     Assert-AICFContains $failures 'STAGE3_RUNNING_CARGO_STALL' $maintainPassengers 'IsGettingIn[\s\S]*IsGettingOut[\s\S]*continue;' 'Cargo retries must remain fenced while a compartment transition is active'

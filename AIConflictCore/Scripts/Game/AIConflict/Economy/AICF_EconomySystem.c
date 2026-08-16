@@ -112,7 +112,7 @@ class AICF_EconomySystem
 				slot.GetSlotId(),
 				AICF_Stage1Diagnostics.BaseKey(savedTargetBase),
 				GetRequiredProgressMs(),
-				m_Config.GetReplacementSupplyCost()));
+				m_Config.GetReplacementSupplyCostForSize(slot.GetDesiredSize())));
 	}
 
 	void AdvanceRequest(SCR_CampaignFaction faction, AICF_GroupSlot slot)
@@ -134,7 +134,7 @@ class AICF_EconomySystem
 		{
 			tier = m_SupplyNetwork.EvaluateReinforcementTier(
 				faction,
-				m_Config.GetReplacementSupplyCost());
+				m_Config.GetReplacementSupplyCostForSize(slot.GetDesiredSize()));
 		}
 		int pacePercent = m_Config.GetPacePercent(tier);
 		bool tierChanged = request.Advance(tier, pacePercent, GetRequiredProgressMs());
@@ -187,11 +187,12 @@ class AICF_EconomySystem
 		}
 
 		int attemptToken = request.BeginAttempt(slot.GetSpawnGeneration());
+		int supplyCost = m_Config.GetReplacementSupplyCostForSize(slot.GetDesiredSize());
 		if (!m_BaseSelector.Select(
 			faction,
 			slot,
 			request.GetSavedTargetBase(),
-			m_Config.GetReplacementSupplyCost(),
+			supplyCost,
 			spawnBase))
 		{
 			request.ScheduleRetry(m_Config.GetRetryIntervalMs());
@@ -222,7 +223,6 @@ class AICF_EconomySystem
 			return false;
 		}
 
-		int supplyCost = m_Config.GetReplacementSupplyCost();
 		float suppliesBefore = spawnBase.GetSupplies();
 		if (suppliesBefore < supplyCost)
 		{
@@ -376,17 +376,20 @@ class AICF_EconomySystem
 		if (!reservation || !reservation.IsCommitted())
 			return;
 		reservation.ClearSupplyReservation();
-		AICF_Stage4Diagnostics.Info(
-			"DEPLOYMENT_COMMITTED",
-			string.Format(
-				"request=%1 token=%2 faction=%3 slot=%4 generation=%5 base=%6 ticket_debit=1 supply_debit=%7 roster=5/5",
+		string details = string.Format(
+			"request=%1 token=%2 faction=%3 slot=%4 generation=%5 base=%6 ticket_debit=1 supply_debit=%7",
 				reservation.GetRequestId(),
 				reservation.GetAttemptToken(),
 				faction.GetFactionKey(),
 				slot.GetSlotId(),
 				slot.GetSpawnGeneration(),
 				AICF_Stage1Diagnostics.BaseKey(reservation.GetBase()),
-				reservation.GetSupplyCost()));
+				reservation.GetSupplyCost());
+		details += string.Format(
+			" roster=%1/%2",
+			slot.GetDesiredSize(),
+			slot.GetDesiredSize());
+		AICF_Stage4Diagnostics.Info("DEPLOYMENT_COMMITTED", details);
 		RemoveRequest(faction.GetFactionKey(), slot.GetSlotId());
 		RemoveReservation(faction.GetFactionKey(), slot.GetSlotId());
 	}

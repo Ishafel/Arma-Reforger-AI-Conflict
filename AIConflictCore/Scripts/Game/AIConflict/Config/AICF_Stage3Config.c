@@ -2,10 +2,11 @@
 // without explicit CLI opt-in remains behaviorally equivalent to Stage 2.
 class AICF_Stage3Config
 {
-	static const int DEFAULT_TRANSPORTS_PER_FACTION = 4;
+	static const int DEFAULT_TRANSPORTS_PER_FACTION = 10;
 	static const int DEFAULT_ARMED_LIGHT_PER_FACTION = 0;
-	static const int DEFAULT_MAX_VEHICLES_PER_FACTION = 4;
+	static const int DEFAULT_MAX_VEHICLES_PER_FACTION = 10;
 	static const int DEFAULT_BOARDING_TIMEOUT_MS = 40000;
+	static const int DEFAULT_BOARDING_APPROACH_TIMEOUT_MS = 180000;
 	static const int DEFAULT_STUCK_TIMEOUT_MS = 45000;
 	static const float DEFAULT_PROGRESS_METERS = 25.0;
 	static const float DEFAULT_MOTION_METERS = 3.0;
@@ -27,8 +28,12 @@ class AICF_Stage3Config
 	static const int DEFAULT_PASSENGER_STALL_MS = 8000;
 	static const int DEFAULT_PASSENGER_MAX_RETRIES = 1;
 	static const float DEFAULT_HIDDEN_RECOVERY_PLAYER_RADIUS_METERS = 300.0;
-	// A fresh full-size transport is useful only while a five-person fireteam
-	// still has a majority of its roster. A vehicle that is already assigned is
+	static const float DEFAULT_SPAWN_STAGING_OFFSET_METERS = 28.0;
+	static const float DEFAULT_SPAWN_STAGING_RADIUS_METERS = 12.0;
+	static const int DEFAULT_SPAWN_STAGING_HOLD_MS = 3000;
+	static const int DEFAULT_SPAWN_APPROACH_TIMEOUT_MS = 300000;
+	// A fresh transport is useful only while a group retains a viable fireteam.
+	// A vehicle that is already assigned is
 	// deliberately not revoked when later losses take the group below this gate.
 	static const int DEFAULT_MINIMUM_VEHICLE_REQUEST_AGENTS = 3;
 
@@ -37,6 +42,7 @@ class AICF_Stage3Config
 	protected int m_iArmedLightVehiclesPerFaction;
 	protected int m_iMaxVehiclesPerFaction;
 	protected int m_iBoardingTimeoutMs;
+	protected int m_iBoardingApproachTimeoutMs;
 	protected int m_iStuckTimeoutMs;
 	protected float m_fProgressMeters;
 	protected float m_fMotionMeters;
@@ -60,6 +66,10 @@ class AICF_Stage3Config
 	protected int m_iPassengerMaxRetries;
 	protected float m_fHiddenRecoveryPlayerRadiusMeters;
 	protected bool m_bHiddenRecoveryEnabled;
+	protected float m_fSpawnStagingOffsetMeters;
+	protected float m_fSpawnStagingRadiusMeters;
+	protected int m_iSpawnStagingHoldMs;
+	protected int m_iSpawnApproachTimeoutMs;
 
 	void AICF_Stage3Config()
 	{
@@ -68,6 +78,7 @@ class AICF_Stage3Config
 		m_iArmedLightVehiclesPerFaction = DEFAULT_ARMED_LIGHT_PER_FACTION;
 		m_iMaxVehiclesPerFaction = DEFAULT_MAX_VEHICLES_PER_FACTION;
 		m_iBoardingTimeoutMs = DEFAULT_BOARDING_TIMEOUT_MS;
+		m_iBoardingApproachTimeoutMs = DEFAULT_BOARDING_APPROACH_TIMEOUT_MS;
 		m_iStuckTimeoutMs = DEFAULT_STUCK_TIMEOUT_MS;
 		m_fProgressMeters = DEFAULT_PROGRESS_METERS;
 		m_fMotionMeters = DEFAULT_MOTION_METERS;
@@ -91,6 +102,10 @@ class AICF_Stage3Config
 		m_iPassengerMaxRetries = DEFAULT_PASSENGER_MAX_RETRIES;
 		m_fHiddenRecoveryPlayerRadiusMeters = DEFAULT_HIDDEN_RECOVERY_PLAYER_RADIUS_METERS;
 		m_bHiddenRecoveryEnabled = true;
+		m_fSpawnStagingOffsetMeters = DEFAULT_SPAWN_STAGING_OFFSET_METERS;
+		m_fSpawnStagingRadiusMeters = DEFAULT_SPAWN_STAGING_RADIUS_METERS;
+		m_iSpawnStagingHoldMs = DEFAULT_SPAWN_STAGING_HOLD_MS;
+		m_iSpawnApproachTimeoutMs = DEFAULT_SPAWN_APPROACH_TIMEOUT_MS;
 		ApplyCLIOverrides();
 		NormalizeVehicleCounts();
 	}
@@ -100,6 +115,7 @@ class AICF_Stage3Config
 	int GetArmedLightVehiclesPerFaction() { return m_iArmedLightVehiclesPerFaction; }
 	int GetMaxVehiclesPerFaction() { return m_iMaxVehiclesPerFaction; }
 	int GetBoardingTimeoutMs() { return m_iBoardingTimeoutMs; }
+	int GetBoardingApproachTimeoutMs() { return m_iBoardingApproachTimeoutMs; }
 	int GetStuckTimeoutMs() { return m_iStuckTimeoutMs; }
 	float GetProgressMeters() { return m_fProgressMeters; }
 	float GetMotionMeters() { return m_fMotionMeters; }
@@ -123,6 +139,10 @@ class AICF_Stage3Config
 	int GetPassengerMaxRetries() { return m_iPassengerMaxRetries; }
 	float GetHiddenRecoveryPlayerRadiusMeters() { return m_fHiddenRecoveryPlayerRadiusMeters; }
 	bool GetHiddenRecoveryEnabled() { return m_bHiddenRecoveryEnabled; }
+	float GetSpawnStagingOffsetMeters() { return m_fSpawnStagingOffsetMeters; }
+	float GetSpawnStagingRadiusMeters() { return m_fSpawnStagingRadiusMeters; }
+	int GetSpawnStagingHoldMs() { return m_iSpawnStagingHoldMs; }
+	int GetSpawnApproachTimeoutMs() { return m_iSpawnApproachTimeoutMs; }
 
 	protected void ApplyCLIOverrides()
 	{
@@ -137,6 +157,8 @@ class AICF_Stage3Config
 			m_iMaxVehiclesPerFaction = ClampInt(value.ToInt(), 0, AICF_Stage1Config.GROUP_SLOTS_PER_FACTION);
 		if (System.GetCLIParam("aicfVehicleBoardingTimeoutMs", value))
 			m_iBoardingTimeoutMs = ClampInt(value.ToInt(), 10000, 600000);
+		if (System.GetCLIParam("aicfVehicleBoardingApproachTimeoutMs", value))
+			m_iBoardingApproachTimeoutMs = ClampInt(value.ToInt(), 10000, 600000);
 		if (System.GetCLIParam("aicfVehicleStuckTimeoutMs", value))
 			m_iStuckTimeoutMs = ClampInt(value.ToInt(), 30000, 3600000);
 		if (System.GetCLIParam("aicfVehicleProgressMeters", value))
@@ -174,7 +196,10 @@ class AICF_Stage3Config
 		if (System.GetCLIParam("aicfVehicleCohesionDistanceMeters", value))
 			m_fCohesionDistanceMeters = ClampFloat(value.ToFloat(), 25.0, 500.0);
 		if (System.GetCLIParam("aicfVehicleMinimumRequestAgents", value))
-			m_iMinimumVehicleRequestAgents = ClampInt(value.ToInt(), 1, AICF_Stage1Config.MANAGED_GROUP_SIZE);
+			m_iMinimumVehicleRequestAgents = ClampInt(
+				value.ToInt(),
+				1,
+				AICF_Stage1Config.MAX_GROUP_SIZE);
 		if (System.GetCLIParam("aicfVehiclePassengerStallMs", value))
 			m_iPassengerStallMs = ClampInt(value.ToInt(), 3000, 30000);
 		if (System.GetCLIParam("aicfVehiclePassengerMaxRetries", value))
@@ -183,6 +208,14 @@ class AICF_Stage3Config
 			m_fHiddenRecoveryPlayerRadiusMeters = ClampFloat(value.ToFloat(), 75.0, 1000.0);
 		if (System.GetCLIParam("aicfHiddenRecoveryEnabled", value))
 			m_bHiddenRecoveryEnabled = value.ToInt() > 0;
+		if (System.GetCLIParam("aicfVehicleSpawnStagingOffsetMeters", value))
+			m_fSpawnStagingOffsetMeters = ClampFloat(value.ToFloat(), 15.0, 60.0);
+		if (System.GetCLIParam("aicfVehicleSpawnStagingRadiusMeters", value))
+			m_fSpawnStagingRadiusMeters = ClampFloat(value.ToFloat(), 5.0, 25.0);
+		if (System.GetCLIParam("aicfVehicleSpawnStagingHoldMs", value))
+			m_iSpawnStagingHoldMs = ClampInt(value.ToInt(), 1000, 10000);
+		if (System.GetCLIParam("aicfVehicleSpawnApproachTimeoutMs", value))
+			m_iSpawnApproachTimeoutMs = ClampInt(value.ToInt(), 60000, 900000);
 	}
 
 	protected void NormalizeVehicleCounts()

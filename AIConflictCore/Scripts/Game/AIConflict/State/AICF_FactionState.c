@@ -76,6 +76,31 @@ class AICF_FactionState
 		return count;
 	}
 
+	bool ApplyCommanderConfiguration(
+		int slotId,
+		AICF_EGroupRole role,
+		AICF_EGroupUnitType unitType,
+		int desiredSize)
+	{
+		AICF_GroupSlot slot = GetSlot(slotId);
+		if (!slot || role < AICF_EGroupRole.ATTACK || role > AICF_EGroupRole.RESERVE ||
+			unitType < AICF_EGroupUnitType.INFANTRY ||
+			unitType > AICF_EGroupUnitType.MOTORIZED_ARMED_LIGHT ||
+			desiredSize < AICF_Stage1Config.MIN_GROUP_SIZE ||
+			desiredSize > AICF_Stage1Config.MAX_GROUP_SIZE ||
+			(unitType == AICF_EGroupUnitType.MOTORIZED_ARMED_LIGHT &&
+				(desiredSize < 2 || desiredSize > 4)))
+		{
+			return false;
+		}
+
+		slot.SetRoleAndIndex(role, 0);
+		slot.SetUnitType(unitType);
+		slot.SetDesiredSize(desiredSize);
+		ReindexRoles();
+		return true;
+	}
+
 	bool HasCombatReadyGroups()
 	{
 		foreach (AICF_GroupSlot slot : m_aGroupSlots)
@@ -166,6 +191,30 @@ class AICF_FactionState
 			}
 
 			m_aGroupSlots.Insert(new AICF_GroupSlot(slotId, role, roleIndex));
+		}
+	}
+
+	protected void ReindexRoles()
+	{
+		int attackIndex;
+		int defendIndex;
+		int reserveIndex;
+		foreach (AICF_GroupSlot slot : m_aGroupSlots)
+		{
+			if (!slot)
+				continue;
+			switch (slot.GetRole())
+			{
+				case AICF_EGroupRole.ATTACK:
+					slot.SetRoleAndIndex(AICF_EGroupRole.ATTACK, attackIndex++);
+					break;
+				case AICF_EGroupRole.DEFEND:
+					slot.SetRoleAndIndex(AICF_EGroupRole.DEFEND, defendIndex++);
+					break;
+				case AICF_EGroupRole.RESERVE:
+					slot.SetRoleAndIndex(AICF_EGroupRole.RESERVE, reserveIndex++);
+					break;
+			}
 		}
 	}
 }

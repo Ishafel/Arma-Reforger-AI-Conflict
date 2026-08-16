@@ -89,6 +89,7 @@ class AICF_VehicleSlotView
 {
 	protected bool m_bPresent;
 	protected string m_sPhase;
+	protected string m_sStatusText;
 	protected bool m_bControlsMovement;
 	protected bool m_bExecutableVehicleTask;
 	protected bool m_bSafeSpawnWait;
@@ -106,7 +107,12 @@ class AICF_VehicleSlotView
 			return;
 		m_bPresent = true;
 		m_sPhase = typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase());
-		m_bControlsMovement = trip.GetPhase() == AICF_ETransportTripPhase.BOARDING ||
+		m_sStatusText = ResolveStatusText(trip);
+		m_bControlsMovement = trip.GetPhase() == AICF_ETransportTripPhase.SITE_PLANNED ||
+			trip.GetPhase() == AICF_ETransportTripPhase.APPROACHING_SITE ||
+			trip.GetPhase() == AICF_ETransportTripPhase.STAGING_CONFIRMED ||
+			trip.GetPhase() == AICF_ETransportTripPhase.SPAWN_COMMIT ||
+			trip.GetPhase() == AICF_ETransportTripPhase.BOARDING ||
 			trip.GetPhase() == AICF_ETransportTripPhase.TRANSIT ||
 			trip.GetPhase() == AICF_ETransportTripPhase.DISMOUNT;
 		m_bSafeSpawnWait = trip.GetPhase() == AICF_ETransportTripPhase.WAITING_FOR_SITE &&
@@ -116,7 +122,17 @@ class AICF_VehicleSlotView
 		m_bRestorePending = trip.GetHandoffState().IsRestoreRequested() &&
 			!m_bOrderRestored;
 		AICF_ETransportTripPhase phase = trip.GetPhase();
-		if (phase == AICF_ETransportTripPhase.BOARDING)
+		if (phase == AICF_ETransportTripPhase.SITE_PLANNED ||
+			phase == AICF_ETransportTripPhase.APPROACHING_SITE ||
+			phase == AICF_ETransportTripPhase.STAGING_CONFIRMED ||
+			phase == AICF_ETransportTripPhase.SPAWN_COMMIT)
+		{
+			AICF_VehicleSpawnPlan plan = trip.GetRequestState().GetSpawnPlan();
+			if (plan)
+				m_VehicleWaypoint = plan.GetApproachWaypoint();
+			m_bExecutableVehicleTask = m_VehicleWaypoint != null;
+		}
+		else if (phase == AICF_ETransportTripPhase.BOARDING)
 		{
 			AICF_VehicleBoardingTokenSet tokens = trip.GetBoardingState().GetTokens();
 			m_bExecutableVehicleTask = trip.GetBoardingState().GetStartedAtMs() > 0 &&
@@ -141,6 +157,7 @@ class AICF_VehicleSlotView
 
 	bool IsPresent() { return m_bPresent; }
 	string GetPhase() { return m_sPhase; }
+	string GetStatusText() { return m_sStatusText; }
 	bool IsControllingMovement() { return m_bControlsMovement; }
 	bool HasExecutableVehicleTask() { return m_bExecutableVehicleTask; }
 	bool IsSafeSpawnWait() { return m_bSafeSpawnWait; }
@@ -151,6 +168,36 @@ class AICF_VehicleSlotView
 	string GetFailureReason() { return m_sFailureReason; }
 	string GetTerminalReason() { return m_sTerminalReason; }
 	string GetOperationId() { return m_sOperationId; }
+
+	protected string ResolveStatusText(AICF_TransportTrip trip)
+	{
+		if (!trip)
+			return "Пешком";
+		AICF_VehicleSpawnPlan plan = trip.GetRequestState().GetSpawnPlan();
+		switch (trip.GetPhase())
+		{
+			case AICF_ETransportTripPhase.SITE_PLANNED:
+				return "Площадка выбрана";
+			case AICF_ETransportTripPhase.APPROACHING_SITE:
+				if (plan)
+				{
+					return string.Format(
+						"Следует к месту выдачи %1/%2",
+						plan.GetStagedCount(),
+						plan.GetAliveCount());
+				}
+				return "Следует к месту выдачи";
+			case AICF_ETransportTripPhase.STAGING_CONFIRMED:
+				if (plan)
+					return string.Format("Ожидание бойцов %1/%2", plan.GetStagedCount(), plan.GetAliveCount());
+				return "Ожидание бойцов";
+			case AICF_ETransportTripPhase.SPAWN_COMMIT:
+				return "Выдача техники";
+			case AICF_ETransportTripPhase.BOARDING:
+				return "Посадка";
+		}
+		return typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase());
+	}
 
 	protected bool IsSafeSiteReason(string reason)
 	{

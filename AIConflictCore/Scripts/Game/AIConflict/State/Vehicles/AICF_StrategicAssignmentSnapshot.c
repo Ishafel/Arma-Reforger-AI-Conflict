@@ -8,6 +8,7 @@ class AICF_StrategicAssignmentSnapshot
 	protected int m_iGroupGeneration;
 	protected SCR_AIGroup m_Group;
 	protected AICF_EGroupRole m_Role;
+	protected AICF_EGroupUnitType m_UnitType;
 	protected string m_sPosture;
 	protected SCR_CampaignMilitaryBaseComponent m_TargetBase;
 	protected vector m_vTargetPosition;
@@ -23,6 +24,7 @@ class AICF_StrategicAssignmentSnapshot
 		int groupGeneration,
 		SCR_AIGroup group,
 		AICF_EGroupRole role,
+		AICF_EGroupUnitType unitType,
 		string posture,
 		SCR_CampaignMilitaryBaseComponent targetBase,
 		vector targetPosition,
@@ -37,6 +39,7 @@ class AICF_StrategicAssignmentSnapshot
 		m_iGroupGeneration = groupGeneration;
 		m_Group = group;
 		m_Role = role;
+		m_UnitType = unitType;
 		m_sPosture = posture;
 		m_TargetBase = targetBase;
 		m_vTargetPosition = targetPosition;
@@ -52,6 +55,7 @@ class AICF_StrategicAssignmentSnapshot
 	int GetGroupGeneration() { return m_iGroupGeneration; }
 	SCR_AIGroup GetGroup() { return m_Group; }
 	AICF_EGroupRole GetRole() { return m_Role; }
+	AICF_EGroupUnitType GetUnitType() { return m_UnitType; }
 	string GetPosture() { return m_sPosture; }
 	SCR_CampaignMilitaryBaseComponent GetTargetBase() { return m_TargetBase; }
 	vector GetTargetPosition() { return m_vTargetPosition; }

@@ -55,6 +55,20 @@ class AICF_Stage4Config
 
 	bool GetEconomyEnabled() { return m_bEconomyEnabled; }
 	int GetReplacementSupplyCost() { return m_iReplacementSupplyCost; }
+	int GetReplacementSupplyCostForSize(int desiredSize)
+	{
+		int clampedSize = ClampInt(
+			desiredSize,
+			AICF_Stage1Config.MIN_GROUP_SIZE,
+			AICF_Stage1Config.MAX_GROUP_SIZE);
+		// Keep the configured price as the cost of the default four-person
+		// roster and round larger/smaller custom rosters up to whole supplies.
+		return Math.Max(
+			1,
+			(m_iReplacementSupplyCost * clampedSize +
+				AICF_Stage1Config.DEFAULT_GROUP_SIZE - 1) /
+				AICF_Stage1Config.DEFAULT_GROUP_SIZE);
+	}
 	int GetHealthyStockGroups() { return m_iHealthyStockGroups; }
 	int GetHealthyPacePercent() { return m_iHealthyPacePercent; }
 	int GetStrainedPacePercent() { return m_iStrainedPacePercent; }

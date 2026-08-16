@@ -1,32 +1,37 @@
 // Server-owned Stage 1 balance settings with conservative bounds for local Arland play.
 class AICF_Stage1Config
 {
-	static const int GROUP_SLOTS_PER_FACTION = 4;
-	static const int MANAGED_GROUP_SIZE = 5;
-	static const int ATTACK_SLOTS_PER_FACTION = 3;
-	static const int DEFEND_SLOTS_PER_FACTION = 1;
-	static const int RESERVE_SLOTS_PER_FACTION = 0;
-	static const int LEGACY_ATTACK_SLOTS_PER_FACTION = 2;
-	static const int LEGACY_DEFEND_SLOTS_PER_FACTION = 1;
-	static const int LEGACY_RESERVE_SLOTS_PER_FACTION = 1;
+	static const int GROUP_SLOTS_PER_FACTION = 10;
+	static const int DEFAULT_GROUP_SIZE = 4;
+	static const int MIN_GROUP_SIZE = 1;
+	static const int MAX_GROUP_SIZE = 10;
+	// Compatibility alias for diagnostics and older static contracts. Runtime
+	// roster gates use each slot's commander-selected desired size.
+	static const int MANAGED_GROUP_SIZE = DEFAULT_GROUP_SIZE;
+	static const int ATTACK_SLOTS_PER_FACTION = 6;
+	static const int DEFEND_SLOTS_PER_FACTION = 3;
+	static const int RESERVE_SLOTS_PER_FACTION = 1;
+	static const int LEGACY_ATTACK_SLOTS_PER_FACTION = 5;
+	static const int LEGACY_DEFEND_SLOTS_PER_FACTION = 3;
+	static const int LEGACY_RESERVE_SLOTS_PER_FACTION = 2;
 	static const int ROLE_MINIMUM_DWELL_INTERVALS = 2;
 
 	static const int DEFAULT_INITIAL_TICKETS = 12;
 	static const int DEFAULT_REPLACEMENT_TICKET_COST = 1;
 	static const int DEFAULT_REINFORCEMENT_DELAY_MS = 30000;
 	static const int DEFAULT_COMMANDER_INTERVAL_MS = 15000;
-	static const int DEFAULT_MAX_MANAGED_AGENTS = 64;
+	static const int DEFAULT_MAX_MANAGED_AGENTS = 220;
 	static const int DEFAULT_WAR_TEMPO_PERCENT = 100;
 
 	static const int MAX_TICKET_VALUE = 1000000;
 	static const int MAX_DELAY_MS = 3600000;
 	static const int MIN_COMMANDER_INTERVAL_MS = 1000;
 	static const int MAX_COMMANDER_INTERVAL_MS = 600000;
-	// Stage 3.5 owns eight five-agent groups plus one conservative eight-agent
-	// pending replacement projection. Keep the documented 48-agent floor even
-	// though a destroyed slot normally frees its live agents before replacement.
-	static const int MIN_MANAGED_AGENTS = 48;
-	static const int MAX_MANAGED_AGENTS = 128;
+	// Twenty default four-agent groups require 80 live agents. The upper bound
+	// also permits all twenty groups to use the commander maximum of ten while
+	// retaining a small replacement-spawn margin.
+	static const int MIN_MANAGED_AGENTS = 80;
+	static const int MAX_MANAGED_AGENTS = 256;
 
 	protected int m_iInitialTickets;
 	protected int m_iReplacementTicketCost;

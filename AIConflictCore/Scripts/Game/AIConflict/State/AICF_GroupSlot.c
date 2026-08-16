@@ -4,6 +4,8 @@ class AICF_GroupSlot
 	protected int m_iSlotId;
 	protected int m_iRoleIndex;
 	protected AICF_EGroupRole m_Role;
+	protected AICF_EGroupUnitType m_UnitType;
+	protected int m_iDesiredSize;
 	protected AICF_EGroupSlotState m_State;
 	protected int m_iReinforcementReadyAtMs;
 	protected int m_iSpawnStartedAtMs;
@@ -111,6 +113,8 @@ class AICF_GroupSlot
 		m_iSlotId = slotId;
 		m_iRoleIndex = roleIndex;
 		m_Role = role;
+		m_UnitType = AICF_EGroupUnitType.INFANTRY;
+		m_iDesiredSize = AICF_Stage1Config.DEFAULT_GROUP_SIZE;
 		m_State = AICF_EGroupSlotState.EMPTY;
 	}
 
@@ -122,6 +126,35 @@ class AICF_GroupSlot
 	AICF_EGroupRole GetRole()
 	{
 		return m_Role;
+	}
+
+	AICF_EGroupUnitType GetUnitType()
+	{
+		return m_UnitType;
+	}
+
+	int GetDesiredSize()
+	{
+		return m_iDesiredSize;
+	}
+
+	void SetRoleAndIndex(AICF_EGroupRole role, int roleIndex)
+	{
+		m_Role = role;
+		m_iRoleIndex = Math.Max(0, roleIndex);
+	}
+
+	void SetUnitType(AICF_EGroupUnitType unitType)
+	{
+		m_UnitType = unitType;
+	}
+
+	void SetDesiredSize(int desiredSize)
+	{
+		m_iDesiredSize = Math.ClampInt(
+			desiredSize,
+			AICF_Stage1Config.MIN_GROUP_SIZE,
+			AICF_Stage1Config.MAX_GROUP_SIZE);
 	}
 
 	int GetRoleIndex()
@@ -177,6 +210,13 @@ class AICF_GroupSlot
 		return m_iStrategicAssignmentRevision;
 	}
 
+	void TouchCommanderConfiguration()
+	{
+		m_iStrategicAssignmentRevision++;
+		ResetMeaningfulTaskObservation();
+		ClearStrategicCandidate();
+	}
+
 	int GetStrategicCandidateAgeMs()
 	{
 		if (m_iStrategicCandidateFirstSeenAtMs <= 0)
@@ -194,6 +234,10 @@ class AICF_GroupSlot
 		m_iStrategicAssignmentRevision++;
 		ResetOrderReliabilityRepairFailureBudget();
 		ResetMeaningfulTaskObservation();
+		// A strategic assignment starts a genuinely new MOB-egress episode. A later
+		// full-roster physical observation outside the MOB may also close an episode
+		// and re-arm recovery for a distinct re-entry under the same assignment.
+		ResetMobEgressRecovery(true);
 		ClearStrategicCandidate();
 	}
 
@@ -466,7 +510,7 @@ class AICF_GroupSlot
 		return m_sMobEgressLastHiddenRecoveryRejection;
 	}
 
-	void ResetMobEgressRecovery()
+	void ResetMobEgressRecovery(bool resetHiddenMutation = false)
 	{
 		m_iMobEgressLastOutwardProgressAtMs = 0;
 		m_iMobEgressLastHiddenRecoveryAttemptAtMs = 0;
@@ -474,7 +518,8 @@ class AICF_GroupSlot
 		m_bMobEgressSoftNudgeApplied = false;
 		m_bMobEgressProgressExtensionReported = false;
 		m_bMobEgressDeadlineDeferredReported = false;
-		m_bMobEgressHiddenMutationConsumed = false;
+		if (resetHiddenMutation)
+			m_bMobEgressHiddenMutationConsumed = false;
 		m_sMobEgressLastHiddenRecoveryRejection = string.Empty;
 	}
 
@@ -1283,6 +1328,9 @@ class AICF_GroupSlot
 	bool IsPendingStuckRecoveryEvidenceContextCurrent()
 	{
 		return m_bPendingStuckRecoveryEvidence &&
+			m_PendingStuckRecoveryGroup &&
+			m_PendingStuckRecoveryTargetBase &&
+			m_PendingStuckRecoveryWaypoint &&
 			m_Group == m_PendingStuckRecoveryGroup &&
 			m_TargetBase == m_PendingStuckRecoveryTargetBase &&
 			m_Waypoint == m_PendingStuckRecoveryWaypoint;
@@ -1369,6 +1417,9 @@ class AICF_GroupSlot
 		string factionKey = "NONE";
 		if (m_PendingStuckRecoveryGroup && m_PendingStuckRecoveryGroup.GetFaction())
 			factionKey = m_PendingStuckRecoveryGroup.GetFaction().GetFactionKey();
+		string evidenceWaypointId = "NONE";
+		if (m_PendingStuckRecoveryWaypoint)
+			evidenceWaypointId = m_PendingStuckRecoveryWaypoint.GetID().ToString();
 		AICF_Stage2Diagnostics.Info(
 			"GROUP_STUCK_RECOVERY",
 			string.Format(
@@ -1377,7 +1428,7 @@ class AICF_GroupSlot
 				m_iSlotId,
 				m_iPendingStuckRecoveryAttempt,
 				GetPendingStuckRecoveryEvidenceAgeMs(),
-				m_PendingStuckRecoveryWaypoint.GetID()) + string.Format(
+				evidenceWaypointId) + string.Format(
 				" outcome=SUPERSEDED reason=%1 episode_id=%2 group_generation=%3 assignment_revision=%4",
 				reason,
 				m_iStuckEpisodeId,
@@ -1574,7 +1625,7 @@ class AICF_GroupSlot
 		m_iLastCommanderMotionAtMs = 0;
 		m_bHasCommanderMotionSample = false;
 		m_vLastCommanderMotionPosition = vector.Zero;
-		ResetMobEgressRecovery();
+		ResetMobEgressRecovery(true);
 		ClearStrategicCandidate();
 		ResetProgressTracking("GROUP_RUNTIME_CLEARED");
 	}

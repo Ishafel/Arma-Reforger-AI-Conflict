@@ -2,7 +2,7 @@
 // There are deliberately no faction-specific parallel arrays.
 class AICF_FactionFleet
 {
-	static const int HARD_MAX_ACTIVE_OR_RESERVED = 4;
+	static const int HARD_MAX_ACTIVE_OR_RESERVED = 10;
 
 	protected FactionKey m_sFactionKey;
 	protected int m_iMaximumActiveOrReserved;
@@ -11,7 +11,7 @@ class AICF_FactionFleet
 	protected ref array<ref AICF_VehicleLease> m_aLeases = {};
 	protected ref array<ref AICF_WorldPoolAsset> m_aWorldPool = {};
 
-	void AICF_FactionFleet(FactionKey factionKey, int maximumActiveOrReserved = 4)
+	void AICF_FactionFleet(FactionKey factionKey, int maximumActiveOrReserved = 10)
 	{
 		m_sFactionKey = factionKey;
 		m_iMaximumActiveOrReserved = Math.Max(0, maximumActiveOrReserved);
@@ -396,7 +396,7 @@ class AICF_FleetRegistry
 		return null;
 	}
 
-	AICF_FactionFleet GetOrCreateFleet(FactionKey factionKey, int maximumActiveOrReserved = 4)
+	AICF_FactionFleet GetOrCreateFleet(FactionKey factionKey, int maximumActiveOrReserved = 10)
 	{
 		if (factionKey.IsEmpty())
 			return null;

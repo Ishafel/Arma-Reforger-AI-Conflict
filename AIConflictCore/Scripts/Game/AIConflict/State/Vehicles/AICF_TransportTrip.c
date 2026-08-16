@@ -112,7 +112,7 @@ class AICF_TransportTrip
 
 	bool TryAttachLease(AICF_VehicleLease lease)
 	{
-		if (m_Lease || !lease || m_Phase != AICF_ETransportTripPhase.ACQUIRING)
+		if (m_Lease || !lease || m_Phase != AICF_ETransportTripPhase.SPAWN_COMMIT)
 			return false;
 		if (!lease.MatchesSlotIdentity(GetFactionKey(), GetSlotId(), GetGroupGeneration()))
 			return false;
@@ -202,12 +202,29 @@ class AICF_TransportTrip
 	{
 		switch (fromPhase)
 		{
-			case AICF_ETransportTripPhase.WAITING_FOR_SITE:
-				return toPhase == AICF_ETransportTripPhase.ACQUIRING ||
+		case AICF_ETransportTripPhase.WAITING_FOR_SITE:
+				return toPhase == AICF_ETransportTripPhase.SITE_PLANNED ||
 					toPhase == AICF_ETransportTripPhase.FALLBACK ||
 					toPhase == AICF_ETransportTripPhase.FAILED_CLOSED;
-			case AICF_ETransportTripPhase.ACQUIRING:
+			case AICF_ETransportTripPhase.SITE_PLANNED:
+				return toPhase == AICF_ETransportTripPhase.APPROACHING_SITE ||
+					toPhase == AICF_ETransportTripPhase.WAITING_FOR_SITE ||
+					toPhase == AICF_ETransportTripPhase.FALLBACK ||
+					toPhase == AICF_ETransportTripPhase.FAILED_CLOSED;
+			case AICF_ETransportTripPhase.APPROACHING_SITE:
+				return toPhase == AICF_ETransportTripPhase.STAGING_CONFIRMED ||
+					toPhase == AICF_ETransportTripPhase.WAITING_FOR_SITE ||
+					toPhase == AICF_ETransportTripPhase.FALLBACK ||
+					toPhase == AICF_ETransportTripPhase.FAILED_CLOSED;
+			case AICF_ETransportTripPhase.STAGING_CONFIRMED:
+				return toPhase == AICF_ETransportTripPhase.SPAWN_COMMIT ||
+					toPhase == AICF_ETransportTripPhase.APPROACHING_SITE ||
+					toPhase == AICF_ETransportTripPhase.WAITING_FOR_SITE ||
+					toPhase == AICF_ETransportTripPhase.FALLBACK ||
+					toPhase == AICF_ETransportTripPhase.FAILED_CLOSED;
+			case AICF_ETransportTripPhase.SPAWN_COMMIT:
 				return toPhase == AICF_ETransportTripPhase.WAITING_FOR_SITE ||
+					toPhase == AICF_ETransportTripPhase.APPROACHING_SITE ||
 					toPhase == AICF_ETransportTripPhase.BOARDING ||
 					toPhase == AICF_ETransportTripPhase.FALLBACK ||
 					toPhase == AICF_ETransportTripPhase.FAILED_CLOSED;
@@ -236,13 +253,9 @@ class AICF_TransportTrip
 		AICF_ETransportTripPhase exitedPhase,
 		AICF_ETransportTripPhase nextPhase)
 	{
-		bool acquisitionToAcquisition =
-			(exitedPhase == AICF_ETransportTripPhase.WAITING_FOR_SITE ||
-			exitedPhase == AICF_ETransportTripPhase.ACQUIRING) &&
-			(nextPhase == AICF_ETransportTripPhase.WAITING_FOR_SITE ||
-			nextPhase == AICF_ETransportTripPhase.ACQUIRING);
-		if ((exitedPhase == AICF_ETransportTripPhase.WAITING_FOR_SITE ||
-			exitedPhase == AICF_ETransportTripPhase.ACQUIRING) && !acquisitionToAcquisition)
+		bool acquisitionToAcquisition = IsAcquisitionPhase(exitedPhase) &&
+			IsAcquisitionPhase(nextPhase);
+		if (IsAcquisitionPhase(exitedPhase) && !acquisitionToAcquisition)
 			m_RequestState.Reset();
 		else if (exitedPhase == AICF_ETransportTripPhase.BOARDING)
 			m_BoardingState.Reset();
@@ -252,5 +265,14 @@ class AICF_TransportTrip
 			m_DismountState.Reset();
 		// Handoff evidence persists into terminal state so order_restored and
 		// clearance_safe remain independently auditable.
+	}
+
+	protected bool IsAcquisitionPhase(AICF_ETransportTripPhase phase)
+	{
+		return phase == AICF_ETransportTripPhase.WAITING_FOR_SITE ||
+			phase == AICF_ETransportTripPhase.SITE_PLANNED ||
+			phase == AICF_ETransportTripPhase.APPROACHING_SITE ||
+			phase == AICF_ETransportTripPhase.STAGING_CONFIRMED ||
+			phase == AICF_ETransportTripPhase.SPAWN_COMMIT;
 	}
 }

@@ -42,7 +42,11 @@ class AICF_ReinforcementSystem
 			return false;
 		}
 
-		group = groupSpawner.SpawnGroup(faction, selectedBase, slot.GetSlotId());
+		group = groupSpawner.SpawnGroup(
+			faction,
+			selectedBase,
+			slot.GetSlotId(),
+			slot.GetDesiredSize());
 		return group != null;
 	}
 
@@ -119,7 +123,11 @@ class AICF_ReinforcementSystem
 				AICF_Stage1Diagnostics.BaseKey(spawnBase),
 				spawnBase.GetFaction().GetFactionKey()));
 
-		group = groupSpawner.SpawnGroup(faction, spawnBase, slot.GetSlotId());
+		group = groupSpawner.SpawnGroup(
+			faction,
+			spawnBase,
+			slot.GetSlotId(),
+			slot.GetDesiredSize());
 		return group != null;
 	}
 }

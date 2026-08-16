@@ -45,9 +45,25 @@ $groupSlot = Read-Required 'State\AICF_GroupSlot.c'
 $mapMarkers = Read-Required 'UI\AICF_GroupMapMarkers.c'
 $strategicRpc = Read-Required 'UI\AICF_StrategicCommandRpc.c'
 $strategicUI = Read-Required 'UI\AICF_StrategicUI.c'
+$stage1Config = Read-Required 'Config\AICF_Stage1Config.c'
+$factionState = Read-Required 'State\AICF_FactionState.c'
+$groupSpawner = Read-Required 'Forces\AICF_GroupSpawner.c'
+$unitTypes = Read-Required 'State\AICF_Stage1Enums.c'
+$vehicleAcquisition = Read-Required 'Vehicles\AICF_VehicleAcquisitionFlow.c'
+$vehicleSpawner = Read-Required 'Vehicles\AICF_VehicleSpawner.c'
+$vehicleTripController = Read-Required 'Vehicles\AICF_TransportTripController.c'
+$vehicleTaskHandoff = Read-Required 'Vehicles\AICF_VehicleTaskHandoff.c'
+$vehicleWaypointFactory = Read-Required 'Vehicles\AICF_VehicleWaypointFactory.c'
+$vehicleTripEnums = Read-Required 'State\Vehicles\AICF_TransportTripEnums.c'
+$vehicleTripView = Read-Required 'State\Vehicles\AICF_TransportTripRegistry.c'
+$stage3Config = Read-Required 'Config\AICF_Stage3Config.c'
+$factionFleet = Read-Required 'State\Vehicles\AICF_FactionFleet.c'
+$logAudit = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'tools\Test-Stage4Log.ps1') -Raw
 
 Assert-Contains 'STAGE4_DEFAULT_OFF' $config 'm_bEconomyEnabled\s*=\s*false\s*;' 'Economy must default off'
 Assert-Contains 'STAGE4_DEFAULT_OFF' $config '"aicfEconomyEnabled"' 'Economy must require an explicit CLI opt-in'
+Assert-Contains 'STAGE4_VARIABLE_SUPPLY_COST' $config 'GetReplacementSupplyCostForSize[\s\S]*DEFAULT_GROUP_SIZE' 'Replacement supply cost must scale from the default four-person roster'
+Assert-Contains 'STAGE4_VARIABLE_SUPPLY_COST' $economy 'GetReplacementSupplyCostForSize\s*\(\s*slot\.GetDesiredSize\(\)\s*\)' 'Replacement reservations must price the selected next-deployment size'
 foreach ($cli in @(
     'aicfReplacementSupplyCost', 'aicfEconomyHealthyPacePercent',
     'aicfEconomyStrainedPacePercent', 'aicfEconomyIsolatedPacePercent',
@@ -115,10 +131,12 @@ Assert-Contains 'STAGE4_REPLICATION' $campaignState 'Replication\.BumpMe\s*\(' '
 
 foreach ($field in @(
     'm_sAICFUSStrategicObjective', 'm_sAICFUSOrderTargets',
-    'm_sAICFUSGroup0', 'm_sAICFUSGroup1', 'm_sAICFUSGroup2', 'm_sAICFUSGroup3',
+    'm_sAICFUSGroup0', 'm_sAICFUSGroup1', 'm_sAICFUSGroup2', 'm_sAICFUSGroup3', 'm_sAICFUSGroup4',
+    'm_sAICFUSGroup5', 'm_sAICFUSGroup6', 'm_sAICFUSGroup7', 'm_sAICFUSGroup8', 'm_sAICFUSGroup9',
     'm_iAICFUSCombatGroups', 'm_iAICFUSManagedAgents',
     'm_sAICFUSSRStrategicObjective', 'm_sAICFUSSROrderTargets',
-    'm_sAICFUSSRGroup0', 'm_sAICFUSSRGroup1', 'm_sAICFUSSRGroup2', 'm_sAICFUSSRGroup3',
+    'm_sAICFUSSRGroup0', 'm_sAICFUSSRGroup1', 'm_sAICFUSSRGroup2', 'm_sAICFUSSRGroup3', 'm_sAICFUSSRGroup4',
+    'm_sAICFUSSRGroup5', 'm_sAICFUSSRGroup6', 'm_sAICFUSSRGroup7', 'm_sAICFUSSRGroup8', 'm_sAICFUSSRGroup9',
     'm_iAICFUSSRCombatGroups', 'm_iAICFUSSRManagedAgents'
 )) {
     Assert-Contains 'STAGE4_STRATEGIC_REPLICATION' $campaignState ("RplProp[\s\S]{0,100}" + [regex]::Escape($field)) "Missing strategic replicated field $field"
@@ -135,6 +153,40 @@ Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'SELECT A READY GROUP[\s\S
 Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'REINFORCEMENTS[\s\S]*SHIPMENTS' 'Command surface must expose reinforcement and logistics state'
 Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'FormatGroupSummary[\s\S]*POSTURE[\s\S]*VEH[\s\S]*REINF' 'Unit cards must expose role, state, posture, vehicle phase, and reinforcement ETA'
 Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'AICF_RequestStrategicOrder\s*\(' 'Command target buttons must issue a strategic-order RPC'
+
+Assert-Contains 'STAGE4_TEN_GROUPS' $stage1Config 'GROUP_SLOTS_PER_FACTION\s*=\s*10\s*;' 'Each faction must own ten stable group slots'
+Assert-Contains 'STAGE4_TEN_GROUPS' $stage1Config 'DEFAULT_GROUP_SIZE\s*=\s*4\s*;' 'Every group must default to four soldiers'
+Assert-Contains 'STAGE4_TEN_GROUPS' $stage1Config 'MAX_GROUP_SIZE\s*=\s*10\s*;' 'Commander-selected group size must be capped at ten'
+Assert-Contains 'STAGE4_TEN_GROUPS' $factionFleet 'HARD_MAX_ACTIVE_OR_RESERVED\s*=\s*10\s*;' 'Fleet hard cap must not silently clamp the ten configurable groups back to four'
+Assert-Contains 'STAGE4_TEN_GROUPS' $factionState 'for\s*\([^)]*GROUP_SLOTS_PER_FACTION' 'Default faction state must construct every configured group slot'
+Assert-Contains 'STAGE4_VARIABLE_ROSTER' $groupSpawner 'SpawnGroup\s*\([\s\S]*int\s+desiredSize[\s\S]*ConfigureManagedRoster\s*\(\s*group\s*,\s*desiredSize' 'Spawner must shape the faction-correct roster to the selected size'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $strategicUI 'ROLE[\s\S]*ATTACK[\s\S]*DEFEND[\s\S]*RESERVE' 'Commander panel must expose all group roles'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $strategicUI 'UNIT TYPE / NO HEAVY ARMOR[\s\S]*INFANTRY[\s\S]*LIGHT 4X4[\s\S]*TRUCK[\s\S]*ARMED 4X4' 'Commander panel must expose infantry, transport, and armed-light profiles without heavy armor'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $strategicUI 'NEXT DEPLOYMENT SIZE[\s\S]*MAX 10' 'Commander panel must label deferred roster-size changes and show the cap'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $unitTypes 'AICF_EGroupUnitType[\s\S]*INFANTRY[\s\S]*MOTORIZED_LIGHT[\s\S]*MOTORIZED_TRUCK[\s\S]*MOTORIZED_ARMED_LIGHT' 'Model must contain infantry, transport, and armed-light profiles without heavy armor'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $vehicleAcquisition 'GetUnitType[\s\S]*MOTORIZED_LIGHT[\s\S]*LIGHT_TRANSPORT[\s\S]*MOTORIZED_TRUCK[\s\S]*TRANSPORT[\s\S]*MOTORIZED_ARMED_LIGHT[\s\S]*ARMED_LIGHT' 'Vehicle acquisition must derive light, truck, and armed-light mobility from commander unit type'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $strategicRpc 'AICF_RequestGroupConfiguration\s*\([\s\S]*RpcAsk_AICFGroupConfiguration' 'Client configuration controls must use a reliable server RPC'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $controller 'RequestPlayerGroupConfiguration[\s\S]*SGetPlayerFaction\s*\(\s*playerId\s*\)' 'Server must derive group-configuration authority from the player faction'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $controller 'ROSTER_SPAWN_ACTIVE' 'Size changes must be rejected while a roster spawn is already active'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $controller 'MOTORIZED_ARMED_LIGHT[\s\S]*desiredSize\s*<\s*2[\s\S]*desiredSize\s*>\s*4' 'Armed-light configuration must stay within its conservative two-to-four-seat roster contract'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $controller 'VEHICLE_TYPE_CHANGED[\s\S]*flow=TYPE_CHANGED desired_only=1 cap_reserved=0 entity_created=0' 'Commander type changes must persist desired state without allocating a lease or entity'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $vehicleSpawner 'SPAWN_SEARCH_RADIUS_METERS\s*=\s*90\.0\s*;' 'Dense friendly bases must receive a wider bounded empty-terrain search before range-wait fallback'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleTripEnums 'WAITING_FOR_SITE[\s\S]*SITE_PLANNED[\s\S]*APPROACHING_SITE[\s\S]*STAGING_CONFIRMED[\s\S]*SPAWN_COMMIT[\s\S]*BOARDING' 'Vehicle requests must use the explicit plan, approach, staging, commit, and boarding phases'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleSpawner 'class AICF_VehicleSpawnSiteReservation[\s\S]*class AICF_VehicleSpawnPlan' 'A persisted plan and cap-free pad reservation must fence concurrent groups'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleAcquisition 'TrySelectSiteForAcquisition\([\s\S]*GetMaximumSpawnDistanceMeters\(\),\s*0,' 'Site planning must not require the group to already be inside boarding range'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleAcquisition 'ProcessApproachingSite[\s\S]*MeasureStagingReadiness[\s\S]*GetSpawnStagingHoldMs' 'All living members must remain staged for a stable hold before commit'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleSpawner 'RevalidateSpawnCommit[\s\S]*GetSpawnRejectionReason[\s\S]*STAGING_NO_LONGER_CONFIRMED[\s\S]*FindAllEmptyTerrainPositions[\s\S]*SPAWN_PAD_OCCUPIED' 'Spawn commit must recheck base safety, full staging, surface, and pad clearance'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleSpawner 'ObserveStaging[\s\S]*rosterChanged[\s\S]*m_iAllStagedSinceMs\s*=\s*nowMs' 'A changed living roster must earn a fresh stable staging hold'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleSpawner 'RevalidateSpawnCommit[\s\S]*minimumAliveCount[\s\S]*GROUP_NOT_COMBAT_READY' 'Commit revalidation must reject a roster below the configured vehicle threshold'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleAcquisition 'ProcessSpawnCommit[\s\S]*RevalidateSpawnCommit[\s\S]*EnsureReservedLease' 'Fleet cap may be reserved only after staging and commit revalidation'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleAcquisition 'ProcessSpawnCommit[\s\S]*RevalidateSpawnCommit[\s\S]*GetNextAttemptAtMs\(\)' 'Cap waiting must continue to revalidate staging on every controller tick'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleTripController 'CreateSpawnStagingWaypoint[\s\S]*BindVehicleWaypoint[\s\S]*ReleaseSpawnPlan' 'The controller and handoff boundary must own the temporary staging route lifecycle'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleWaypointFactory 'CreateSpawnStagingWaypoint[\s\S]*SetCompletionType\(EAIWaypointCompletionType\.All\)' 'The engine must keep the staging waypoint active until every living member arrives'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleAcquisition 'MAX_APPROACH_WAYPOINT_REISSUES\s*=\s*1[\s\S]*CanReissueApproachWaypoint[\s\S]*SPAWN_SITE_APPROACH_QUEUE_SETTLED' 'A missing staging waypoint must use one delayed retry instead of per-tick command churn'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $logAudit 'Vehicle staging waypoint reissue churn[\s\S]*maximum=1' 'Runtime log audit must reject repeated staging command/voice churn per reservation'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleTaskHandoff 'APPROACHING_SITE[\s\S]*GetApproachWaypoint' 'Waypoint removal must prove exact spawn-plan ownership'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $stage3Config 'DEFAULT_SPAWN_STAGING_HOLD_MS\s*=\s*3000' 'Default staging confirmation must remain stable for three seconds'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleTripView 'Площадка выбрана[\s\S]*Следует к месту выдачи[\s\S]*Ожидание бойцов[\s\S]*Выдача техники[\s\S]*Посадка' 'Commander and map projections must expose the deferred vehicle-delivery states'
 
 Assert-Contains 'STAGE4_ALLIED_MAP' $mapMarkers 'SetFaction\s*\(\s*markerFaction\s*\)' 'Group and objective markers must use allied faction stream rules'
 Assert-Contains 'STAGE4_ALLIED_MAP' $mapMarkers 'visibility=ALLIED' 'Marker diagnostics must preserve the allied-only visibility policy'

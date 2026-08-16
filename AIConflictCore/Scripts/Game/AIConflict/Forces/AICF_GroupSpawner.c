@@ -4,9 +4,12 @@ class AICF_GroupSpawner
 	SCR_AIGroup SpawnGroup(
 		SCR_CampaignFaction faction,
 		SCR_CampaignMilitaryBaseComponent spawnBase,
-		int slotId)
+		int slotId,
+		int desiredSize)
 	{
-		if (!Replication.IsServer() || !faction || !spawnBase || !spawnBase.GetOwner())
+		if (!Replication.IsServer() || !faction || !spawnBase || !spawnBase.GetOwner() ||
+			desiredSize < AICF_Stage1Config.MIN_GROUP_SIZE ||
+			desiredSize > AICF_Stage1Config.MAX_GROUP_SIZE)
 		{
 			AICF_Stage1Diagnostics.Error("GROUP_SPAWN_INPUT_INVALID", "Spawn requires server authority, faction, and base");
 			return null;
@@ -83,7 +86,7 @@ class AICF_GroupSpawner
 		}
 
 		int sourceRosterSize;
-		if (!ConfigureManagedRoster(group, AICF_Stage1Config.MANAGED_GROUP_SIZE, sourceRosterSize))
+		if (!ConfigureManagedRoster(group, desiredSize, sourceRosterSize))
 		{
 			AICF_Stage35Diagnostics.Error(
 				"GROUP_ROSTER_CONFIG_INVALID",
@@ -93,7 +96,7 @@ class AICF_GroupSpawner
 					slotId,
 					groupPrefab,
 					sourceRosterSize,
-					AICF_Stage1Config.MANAGED_GROUP_SIZE));
+					desiredSize));
 			RplComponent.DeleteRplEntity(group, false);
 			return null;
 		}
@@ -114,7 +117,7 @@ class AICF_GroupSpawner
 				AICF_Stage1Diagnostics.DescribeBase(spawnBase),
 				groupPrefab,
 				sourceRosterSize,
-				AICF_Stage1Config.MANAGED_GROUP_SIZE));
+				desiredSize));
 		return group;
 	}
 
@@ -181,13 +184,25 @@ class AICF_GroupSpawner
 		switch (slotId % AICF_Stage1Config.GROUP_SLOTS_PER_FACTION)
 		{
 			case 0:
-				return "6 0 6";
+				return "12 0 6";
 			case 1:
-				return "-6 0 6";
+				return "6 0 6";
 			case 2:
-				return "6 0 -6";
+				return "0 0 6";
 			case 3:
+				return "-6 0 6";
+			case 4:
+				return "-12 0 6";
+			case 5:
+				return "12 0 -6";
+			case 6:
+				return "6 0 -6";
+			case 7:
+				return "0 0 -6";
+			case 8:
 				return "-6 0 -6";
+			case 9:
+				return "-12 0 -6";
 		}
 
 		return vector.Zero;

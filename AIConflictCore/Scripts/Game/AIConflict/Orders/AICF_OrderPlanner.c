@@ -701,6 +701,7 @@ class AICF_OrderPlanner
 			slot.GetSpawnGeneration(),
 			slot.GetGroup(),
 			slot.GetRole(),
+			slot.GetUnitType(),
 			slot.GetOperationalPosture(),
 			slot.GetTargetBase(),
 			targetPosition,

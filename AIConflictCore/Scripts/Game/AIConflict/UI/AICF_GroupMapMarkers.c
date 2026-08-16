@@ -452,7 +452,7 @@ class AICF_GroupMapMarkerSystem
 		if (vehicleCoordinator)
 			vehicleView = vehicleCoordinator.GetSlotView(slot);
 		if (vehicleView)
-			vehicleState = vehicleView.GetPhase();
+			vehicleState = vehicleView.GetStatusText();
 		if (vehicleState.IsEmpty() || vehicleState == "NONE")
 			vehicleState = "ON_FOOT";
 
@@ -586,22 +586,18 @@ class AICF_GroupMapMarkerSystem
 		return "?";
 	}
 
-	// Marker identity is role-local (A0/A1/A2/D0), while slotId remains the
-	// stable internal identity used by lifecycle and replication. The boundary
-	// fallback also keeps old 2/1/1 baseline layouts readable.
+	// Marker identity is role-local, while slotId remains the stable internal
+	// identity used by lifecycle and replication. Commander role changes reindex
+	// all same-role callsigns in AICF_FactionState.
 	protected string GetRoleLocalMarkerKey(AICF_GroupSlot slot)
 	{
 		if (!slot)
 			return "?";
 
-		int roleLocalIndex = slot.GetRoleIndex();
-		if (slot.GetRole() == AICF_EGroupRole.DEFEND &&
-			slot.GetSlotId() >= AICF_Stage1Config.ATTACK_SLOTS_PER_FACTION)
-		{
-			roleLocalIndex = slot.GetSlotId() - AICF_Stage1Config.ATTACK_SLOTS_PER_FACTION;
-		}
-
-		return string.Format("%1%2", GetShortRole(slot.GetRole()), roleLocalIndex);
+		return string.Format(
+			"%1%2",
+			GetShortRole(slot.GetRole()),
+			slot.GetRoleIndex());
 	}
 
 	protected int PackStableConfig(bool isUSSR, AICF_GroupSlot slot, bool objective = false)

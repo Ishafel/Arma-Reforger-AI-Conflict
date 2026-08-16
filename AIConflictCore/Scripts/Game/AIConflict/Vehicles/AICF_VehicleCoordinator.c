@@ -63,6 +63,8 @@ class AICF_VehicleCoordinator
 		m_iObservedBaseRevision = Math.Max(0, baseRevision);
 		EnsureFactionFleet(usState, usFaction);
 		EnsureFactionFleet(ussrState, ussrFaction);
+		m_Acceptance.SyncFactionConfiguration(usState);
+		m_Acceptance.SyncFactionConfiguration(ussrState);
 		if (dispatchTrips)
 		{
 			ProcessFaction(usState, usFaction);
@@ -410,6 +412,25 @@ class AICF_VehicleCoordinator
 		if (!slot)
 			return;
 		AICF_TransportTrip trip = m_Trips.Find(faction.GetFactionKey(), slot.GetSlotId());
+		if (trip && trip.GetAssignment() &&
+			trip.GetAssignment().GetUnitType() != slot.GetUnitType())
+		{
+			AICF_ETransportTripPhase changedTypePhase = trip.GetPhase();
+			int changedTypeTransitions = trip.GetTransitionCount();
+			AICF_TripOutcome changedTypeOutcome = m_TripController.TerminateStaleTrip(
+				trip,
+				fleet,
+				"COMMANDER_UNIT_TYPE_CHANGED");
+			ObserveTerminalCommit(
+				trip,
+				changedTypePhase,
+				changedTypeTransitions,
+				changedTypeOutcome);
+			if (!m_TripController.CanRetireTrip(trip))
+				return;
+			m_Trips.RemoveTerminal(trip);
+			trip = null;
+		}
 		AICF_StrategicAssignmentSnapshot assignment;
 		if (!ResolveAssignment(slot, faction, trip, assignment))
 		{
@@ -453,7 +474,10 @@ class AICF_VehicleCoordinator
 			AICF_ETransportTripPhase activePhase = trip.GetPhase();
 			if (slot.HasPendingOrderRecovery() &&
 				(activePhase == AICF_ETransportTripPhase.WAITING_FOR_SITE ||
-				activePhase == AICF_ETransportTripPhase.ACQUIRING))
+				activePhase == AICF_ETransportTripPhase.SITE_PLANNED ||
+				activePhase == AICF_ETransportTripPhase.APPROACHING_SITE ||
+				activePhase == AICF_ETransportTripPhase.STAGING_CONFIRMED ||
+				activePhase == AICF_ETransportTripPhase.SPAWN_COMMIT))
 			{
 				// StartBoarding suspends the infantry waypoint. Keep an admitted but
 				// pre-boarding trip inert until the exact reliability candidate has a
@@ -544,11 +568,9 @@ class AICF_VehicleCoordinator
 			reason = "ORDER_RECOVERY_PENDING";
 			return false;
 		}
-		int configuredSlots = m_Config.GetTransportVehiclesPerFaction() +
-			m_Config.GetArmedLightVehiclesPerFaction();
-		if (assignment.GetSlotId() >= configuredSlots)
+		if (slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY)
 		{
-			reason = "SLOT_NOT_CONFIGURED";
+			reason = "COMMANDER_INFANTRY_PROFILE";
 			return false;
 		}
 		int alive = AICF_GroupRuntime.CountAliveAgents(assignment.GetGroup());

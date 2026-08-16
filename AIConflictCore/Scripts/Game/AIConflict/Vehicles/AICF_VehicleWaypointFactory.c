@@ -6,6 +6,25 @@ class AICF_VehicleWaypointFactory
 	protected static const ResourceName GET_OUT_WAYPOINT_PREFAB = "{C40316EE26846CAB}Prefabs/AI/Waypoints/AIWaypoint_GetOut.et";
 	protected static const float DISMOUNT_COMPLETION_RADIUS_METERS = 12.0;
 	protected static const float MOVE_COMPLETION_RADIUS_METERS = 25.0;
+	protected static const float MINIMUM_STAGING_COMPLETION_RADIUS_METERS = 5.0;
+
+	AIWaypoint CreateSpawnStagingWaypoint(
+		vector stagingPosition,
+		float completionRadiusMeters)
+	{
+		if (completionRadiusMeters < MINIMUM_STAGING_COMPLETION_RADIUS_METERS)
+			completionRadiusMeters = MINIMUM_STAGING_COMPLETION_RADIUS_METERS;
+		AIWaypoint waypoint = SpawnWaypoint(MOVE_WAYPOINT_PREFAB, stagingPosition);
+		if (waypoint)
+		{
+			waypoint.SetCompletionRadius(completionRadiusMeters);
+			// The stock Move prefab may complete when the first member arrives.
+			// Staging is an all-living-members contract, so the engine waypoint and
+			// the explicit spawn proof must use the same completion semantics.
+			waypoint.SetCompletionType(EAIWaypointCompletionType.All);
+		}
+		return waypoint;
+	}
 
 	AIWaypoint CreateMoveWaypoint(
 		vector fromPosition,

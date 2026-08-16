@@ -123,6 +123,11 @@ class AICF_VehicleTaskHandoff
 		if (!IsExactTripOwnedVehicleWaypoint(trip, waypoint))
 			return false;
 		SCR_AIGroup group = trip.GetAssignment().GetGroup();
+		// A destroyed group has no authoritative queue left to detach from. The
+		// exact plan pointer still proves ownership and lets the controller delete
+		// the orphaned waypoint entity and release the site reservation.
+		if (!group)
+			return true;
 		array<AIWaypoint> waypointQueue = {};
 		group.GetWaypoints(waypointQueue);
 		if (waypointQueue.Contains(waypoint))
@@ -136,11 +141,21 @@ class AICF_VehicleTaskHandoff
 		AICF_TransportTrip trip,
 		AIWaypoint waypoint)
 	{
-		if (!trip || !trip.IsValid() || trip.IsTerminal() ||
-			!trip.GetAssignment() || !trip.GetAssignment().GetGroup() || !waypoint)
+		if (!trip || !trip.GetAssignment() || !waypoint)
 		{
 			return false;
 		}
+		AICF_ETransportTripPhase phase = trip.GetPhase();
+		if (phase == AICF_ETransportTripPhase.SITE_PLANNED ||
+			phase == AICF_ETransportTripPhase.APPROACHING_SITE ||
+			phase == AICF_ETransportTripPhase.STAGING_CONFIRMED ||
+			phase == AICF_ETransportTripPhase.SPAWN_COMMIT)
+		{
+			AICF_VehicleSpawnPlan plan = trip.GetRequestState().GetSpawnPlan();
+			return plan && waypoint == plan.GetApproachWaypoint();
+		}
+		if (!trip.IsValid() || trip.IsTerminal() || !trip.GetAssignment().GetGroup())
+			return false;
 		if (trip.GetPhase() == AICF_ETransportTripPhase.TRANSIT)
 		{
 			AICF_VehicleMovementState movement = trip.GetMovementState();

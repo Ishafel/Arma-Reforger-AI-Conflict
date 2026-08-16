@@ -20,6 +20,7 @@ class AICF_VehicleAcceptanceRecord
 	protected int m_iSlotId;
 	protected bool m_bTransportComplete;
 	protected bool m_bArmedComplete;
+	protected AICF_EGroupUnitType m_ExpectedUnitType;
 	protected int m_iLastGroupGeneration;
 	protected int m_iLastTripGeneration;
 	protected AICF_ETripOutcomeKind m_LastOutcomeKind;
@@ -36,6 +37,22 @@ class AICF_VehicleAcceptanceRecord
 	int GetSlotId() { return m_iSlotId; }
 	bool IsTransportComplete() { return m_bTransportComplete; }
 	bool IsArmedComplete() { return m_bArmedComplete; }
+	bool IsConfiguredMotorized()
+	{
+		return m_ExpectedUnitType == AICF_EGroupUnitType.MOTORIZED_LIGHT ||
+			m_ExpectedUnitType == AICF_EGroupUnitType.MOTORIZED_TRUCK ||
+			m_ExpectedUnitType == AICF_EGroupUnitType.MOTORIZED_ARMED_LIGHT;
+	}
+	bool IsExpectedComplete()
+	{
+		if (m_ExpectedUnitType == AICF_EGroupUnitType.MOTORIZED_ARMED_LIGHT)
+			return m_bArmedComplete;
+		return !IsConfiguredMotorized() || m_bTransportComplete;
+	}
+	void SetExpectedUnitType(AICF_EGroupUnitType unitType)
+	{
+		m_ExpectedUnitType = unitType;
+	}
 	int GetLastGroupGeneration() { return m_iLastGroupGeneration; }
 	int GetLastTripGeneration() { return m_iLastTripGeneration; }
 	string GetLastOperationId() { return m_sLastOperationId; }
@@ -141,6 +158,23 @@ class AICF_VehicleAcceptanceMonitor
 			m_aRecords.Insert(new AICF_VehicleAcceptanceRecord(factionKey, slotId));
 		EvaluateCandidate();
 		return true;
+	}
+
+	// Commander configuration, rather than legacy numeric-slot allocation,
+	// defines which live slots belong to the transport acceptance surface.
+	void SyncFactionConfiguration(AICF_FactionState factionState)
+	{
+		if (m_bStopped || !factionState)
+			return;
+		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			AICF_VehicleAcceptanceRecord record = FindRecord(
+				factionState.GetFactionKey(),
+				slotId);
+			if (slot && record)
+				record.SetExpectedUnitType(slot.GetUnitType());
+		}
 	}
 
 	// Call exactly once after TripController commits the terminal transition and
@@ -377,6 +411,16 @@ class AICF_VehicleAcceptanceMonitor
 			return;
 		}
 
+		if (m_bVehiclesEnabled && CountConfiguredMotorizedSlots() == 0)
+		{
+			AICF_Stage3Diagnostics.Info(
+				"RESULT",
+				string.Format(
+					"status=NOT_APPLICABLE reason=%1 configured_motorized_slots=0 final=0 requires_log_review=0",
+					stopReason));
+			return;
+		}
+
 		AICF_Stage3Diagnostics.Warning(
 			"RESULT",
 			string.Format(
@@ -443,26 +487,26 @@ class AICF_VehicleAcceptanceMonitor
 	{
 		if (!m_bVehiclesEnabled || m_iRequiredFactionCount <= 0 ||
 			m_aFactions.Count() != m_iRequiredFactionCount ||
-			m_iTransportSlotsPerFaction + m_iArmedSlotsPerFaction <= 0)
+			CountConfiguredMotorizedSlots() <= 0)
 			return false;
 
-		foreach (FactionKey factionKey : m_aFactions)
+		foreach (AICF_VehicleAcceptanceRecord record : m_aRecords)
 		{
-			for (int transportSlot = 0; transportSlot < m_iTransportSlotsPerFaction; transportSlot++)
-			{
-				AICF_VehicleAcceptanceRecord transport = FindRecord(factionKey, transportSlot);
-				if (!transport || !transport.IsTransportComplete())
-					return false;
-			}
-			int armedEnd = m_iTransportSlotsPerFaction + m_iArmedSlotsPerFaction;
-			for (int armedSlot = m_iTransportSlotsPerFaction; armedSlot < armedEnd; armedSlot++)
-			{
-				AICF_VehicleAcceptanceRecord armed = FindRecord(factionKey, armedSlot);
-				if (!armed || !armed.IsArmedComplete())
-					return false;
-			}
+			if (record && !record.IsExpectedComplete())
+				return false;
 		}
 		return true;
+	}
+
+	protected int CountConfiguredMotorizedSlots()
+	{
+		int count;
+		foreach (AICF_VehicleAcceptanceRecord record : m_aRecords)
+		{
+			if (record && record.IsConfiguredMotorized())
+				count++;
+		}
+		return count;
 	}
 
 	protected void EvaluateCandidate()
@@ -474,9 +518,8 @@ class AICF_VehicleAcceptanceMonitor
 
 		m_bReadyCandidateEmitted = true;
 		string details = string.Format(
-			"status=READY transport_complete=1 armed_light_complete=1 transport_slots_per_faction=%1 armed_slots_per_faction=%2",
-			m_iTransportSlotsPerFaction,
-			m_iArmedSlotsPerFaction);
+			"status=READY configured_profiles_complete=1 configured_motorized_slots=%1",
+			CountConfiguredMotorizedSlots());
 		details += string.Format(
 			" required_factions=%1 registered_factions=%2 scope=AUTOMATED_TRIP_INVARIANTS final=0 requires_log_review=1",
 			m_iRequiredFactionCount,

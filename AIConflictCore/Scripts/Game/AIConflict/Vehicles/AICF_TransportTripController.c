@@ -18,6 +18,7 @@ class AICF_TransportTripController
 	protected ref AICF_VehicleTaskHandoff m_Handoff;
 	protected ref AICF_VehicleCleanupManager m_CleanupManager;
 	protected ref AICF_VehicleDomainDiagnostics m_Diagnostics;
+	protected ref AICF_VehicleWaypointFactory m_WaypointFactory;
 
 	void AICF_TransportTripController(
 		AICF_Stage3Config config,
@@ -34,15 +35,15 @@ class AICF_TransportTripController
 		m_Campaign = campaign;
 		m_ConflictAdapter = conflictAdapter;
 		AICF_VehicleWatchdog watchdog = new AICF_VehicleWatchdog();
-		AICF_VehicleWaypointFactory waypointFactory = new AICF_VehicleWaypointFactory();
+		m_WaypointFactory = new AICF_VehicleWaypointFactory();
 		m_AcquisitionFlow = new AICF_VehicleAcquisitionFlow(
 			m_Config,
 			campaign,
 			conflictAdapter,
 			cohesionPolicy);
 		m_BoardingFlow = new AICF_VehicleBoardingFlow(m_Config, watchdog);
-		m_TransitFlow = new AICF_VehicleTransitFlow(m_Config, waypointFactory, watchdog);
-		m_DismountFlow = new AICF_VehicleDismountFlow(m_Config, watchdog, waypointFactory);
+		m_TransitFlow = new AICF_VehicleTransitFlow(m_Config, m_WaypointFactory, watchdog);
+		m_DismountFlow = new AICF_VehicleDismountFlow(m_Config, watchdog, m_WaypointFactory);
 		m_Handoff = new AICF_VehicleTaskHandoff(orderPlanner, objectiveGraph, targetSelector);
 		m_Diagnostics = new AICF_VehicleDomainDiagnostics();
 	}
@@ -118,6 +119,9 @@ class AICF_TransportTripController
 			fleet.GetFactionKey() != trip.GetFactionKey() ||
 			!IsStaleTerminationLeaseCurrent(trip, fleet))
 		{
+			// An invalidated/destroyed group may no longer satisfy the general Trip
+			// identity guard, but its exact spawn-plan pointer is still safe to cancel.
+			ReleaseSpawnPlan(trip, reason);
 			return AICF_TripOutcome.Wait(
 				"STALE_TERMINATION_IDENTITY_REJECTED",
 				causationId);
@@ -140,6 +144,7 @@ class AICF_TransportTripController
 		}
 
 		ReleaseEmptyReservationIfPresent(trip, fleet);
+		ReleaseSpawnPlan(trip, reason);
 		m_Handoff.DetachVehicleUtility(trip);
 		if (!TransitionTo(
 			trip,
@@ -226,10 +231,17 @@ class AICF_TransportTripController
 		bool restoreInfantryOrder,
 		string reason)
 	{
-		if (!trip || !trip.IsValid())
+		if (!trip)
 			return AICF_TripOutcome.TerminalFailClosed(
 				"STOP_TRIP_IDENTITY_INVALID",
 				"controller-stop-invalid");
+		if (!trip.IsValid())
+		{
+			ReleaseSpawnPlan(trip, reason);
+			return AICF_TripOutcome.TerminalFailClosed(
+				"STOP_TRIP_IDENTITY_INVALID",
+				"controller-stop-invalid");
+		}
 		if (reason.IsEmpty())
 			reason = "COORDINATOR_STOP";
 		string causationId = BuildCausationId(trip, "STOP_ABORT");
@@ -239,6 +251,7 @@ class AICF_TransportTripController
 			// An empty reservation has no physical cleanup obligation and must not
 			// remain counted after its scheduler is stopped.
 			ReleaseEmptyReservationIfPresent(trip, fleet);
+			ReleaseSpawnPlan(trip, reason);
 			committedTerminal = TransitionTo(
 				trip,
 				AICF_ETransportTripPhase.FAILED_CLOSED,
@@ -440,11 +453,33 @@ class AICF_TransportTripController
 					"RETARGET_RESERVATION_RELEASE_REJECTED",
 					outcome.GetCausationId(), true);
 			}
+			if (!ReleaseSpawnPlan(trip, outcome.GetReason()))
+			{
+				return EndVehicleControl(
+					trip, slot, fleet, faction,
+					AICF_ETransportTripPhase.FAILED_CLOSED,
+					"RETARGET_SPAWN_PLAN_RELEASE_REJECTED",
+					outcome.GetCausationId(), true);
+			}
+			if (trip.GetPhase() != AICF_ETransportTripPhase.WAITING_FOR_SITE &&
+				IsAcquisitionPhase(trip.GetPhase()) &&
+				!TransitionTo(
+					trip,
+					AICF_ETransportTripPhase.WAITING_FOR_SITE,
+					outcome.GetReason(),
+					outcome.GetCausationId()))
+			{
+				return EndVehicleControl(
+					trip, slot, fleet, faction,
+					AICF_ETransportTripPhase.FAILED_CLOSED,
+					"RETARGET_WAITING_TRANSITION_REJECTED",
+					outcome.GetCausationId(), true);
+			}
 			return outcome;
 		}
 		if (outcome.GetReason().Contains("ENTER_WAITING_FOR_SITE:"))
 		{
-			if (trip.GetPhase() == AICF_ETransportTripPhase.ACQUIRING &&
+			if (trip.GetPhase() != AICF_ETransportTripPhase.WAITING_FOR_SITE &&
 				!trip.IsTransitionAllowedTo(AICF_ETransportTripPhase.WAITING_FOR_SITE))
 			{
 				return EndVehicleControl(
@@ -461,7 +496,15 @@ class AICF_TransportTripController
 					"WAITING_RESERVATION_RELEASE_REJECTED",
 					outcome.GetCausationId(), true);
 			}
-			if (trip.GetPhase() == AICF_ETransportTripPhase.ACQUIRING &&
+			if (!ReleaseSpawnPlan(trip, outcome.GetReason()))
+			{
+				return EndVehicleControl(
+					trip, slot, fleet, faction,
+					AICF_ETransportTripPhase.FAILED_CLOSED,
+					"WAITING_SPAWN_PLAN_RELEASE_REJECTED",
+					outcome.GetCausationId(), true);
+			}
+			if (trip.GetPhase() != AICF_ETransportTripPhase.WAITING_FOR_SITE &&
 				!TransitionTo(
 					trip,
 					AICF_ETransportTripPhase.WAITING_FOR_SITE,
@@ -477,22 +520,175 @@ class AICF_TransportTripController
 			return outcome;
 		}
 
-		if (trip.GetPhase() == AICF_ETransportTripPhase.WAITING_FOR_SITE)
+		if (outcome.GetReason() == "BEGIN_SITE_APPROACH")
+			return BeginOrReissueSiteApproach(trip, outcome, false, slot, fleet, faction);
+		if (outcome.GetReason() == "REISSUE_SITE_APPROACH")
+			return BeginOrReissueSiteApproach(trip, outcome, true, slot, fleet, faction);
+
+		AICF_ETransportTripPhase nextPhase;
+		if (outcome.GetReason() == "SITE_PLAN_READY" &&
+			trip.GetPhase() == AICF_ETransportTripPhase.WAITING_FOR_SITE)
+			nextPhase = AICF_ETransportTripPhase.SITE_PLANNED;
+		else if (outcome.GetReason() == "STAGING_CONFIRMED" &&
+			trip.GetPhase() == AICF_ETransportTripPhase.APPROACHING_SITE)
+			nextPhase = AICF_ETransportTripPhase.STAGING_CONFIRMED;
+		else if (outcome.GetReason() == "STAGING_CONFIRMATION_LOST" &&
+			(trip.GetPhase() == AICF_ETransportTripPhase.STAGING_CONFIRMED ||
+			trip.GetPhase() == AICF_ETransportTripPhase.SPAWN_COMMIT))
+			nextPhase = AICF_ETransportTripPhase.APPROACHING_SITE;
+		else if (outcome.GetReason() == "SPAWN_COMMIT_READY" &&
+			trip.GetPhase() == AICF_ETransportTripPhase.STAGING_CONFIRMED)
+			nextPhase = AICF_ETransportTripPhase.SPAWN_COMMIT;
+		else
+			return outcome;
+
+		if (!TransitionTo(
+			trip,
+			nextPhase,
+			outcome.GetReason(),
+			outcome.GetCausationId()))
 		{
-			if (!TransitionTo(
-				trip,
-				AICF_ETransportTripPhase.ACQUIRING,
-				outcome.GetReason(),
-				outcome.GetCausationId()))
-			{
-				return EndVehicleControl(
-					trip, slot, fleet, faction,
-					AICF_ETransportTripPhase.FAILED_CLOSED,
-					"ACQUISITION_TRANSITION_REJECTED",
-					outcome.GetCausationId(), true);
-			}
+			return EndVehicleControl(
+				trip, slot, fleet, faction,
+				AICF_ETransportTripPhase.FAILED_CLOSED,
+				"ACQUISITION_TRANSITION_REJECTED",
+				outcome.GetCausationId(), true);
 		}
 		return outcome;
+	}
+
+	protected AICF_TripOutcome BeginOrReissueSiteApproach(
+		AICF_TransportTrip trip,
+		AICF_TripOutcome outcome,
+		bool reissue,
+		AICF_GroupSlot slot,
+		AICF_FactionFleet fleet,
+		SCR_CampaignFaction faction)
+	{
+		AICF_VehicleSpawnPlan plan = trip.GetRequestState().GetSpawnPlan();
+		if (!plan || !plan.IsValid() ||
+			(!reissue && trip.GetPhase() != AICF_ETransportTripPhase.SITE_PLANNED) ||
+			(reissue && trip.GetPhase() != AICF_ETransportTripPhase.APPROACHING_SITE))
+		{
+			return EndVehicleControl(
+				trip, slot, fleet, faction,
+				AICF_ETransportTripPhase.FAILED_CLOSED,
+				"SPAWN_APPROACH_CONTEXT_INVALID",
+				outcome.GetCausationId(), true);
+		}
+		if (reissue && !RemoveSpawnApproachWaypoint(trip, plan, "APPROACH_REISSUE"))
+		{
+			return EndVehicleControl(
+				trip, slot, fleet, faction,
+				AICF_ETransportTripPhase.FAILED_CLOSED,
+				"SPAWN_APPROACH_REISSUE_RELEASE_REJECTED",
+				outcome.GetCausationId(), true);
+		}
+
+		AIWaypoint waypoint = m_WaypointFactory.CreateSpawnStagingWaypoint(
+			plan.GetStagingPosition(),
+			m_Config.GetSpawnStagingRadiusMeters());
+		if (!waypoint || !plan.BindApproachWaypoint(waypoint))
+		{
+			if (waypoint)
+				m_Handoff.DeleteDetachedVehicleWaypoint(
+					trip,
+					waypoint,
+					"SPAWN_APPROACH_CREATE_ROLLBACK",
+					"BIND_STATE_REJECTED");
+			return EndVehicleControl(
+				trip, slot, fleet, faction,
+				AICF_ETransportTripPhase.FAILED_CLOSED,
+				"SPAWN_APPROACH_WAYPOINT_CREATE_FAILED",
+				outcome.GetCausationId(), true);
+		}
+		if (!m_Handoff.BindVehicleWaypoint(trip, waypoint, "SPAWN_STAGING"))
+		{
+			plan.ClearApproachWaypoint(waypoint);
+			m_Handoff.DeleteDetachedVehicleWaypoint(
+				trip,
+				waypoint,
+				"SPAWN_APPROACH_BIND_ROLLBACK",
+				"GROUP_QUEUE_REJECTED");
+			return EndVehicleControl(
+				trip, slot, fleet, faction,
+				AICF_ETransportTripPhase.FAILED_CLOSED,
+				"SPAWN_APPROACH_WAYPOINT_BIND_FAILED",
+				outcome.GetCausationId(), true);
+		}
+		plan.RecordApproachWaypointIssued(System.GetTickCount(), reissue);
+
+		if (!reissue && !TransitionTo(
+			trip,
+			AICF_ETransportTripPhase.APPROACHING_SITE,
+			"SITE_APPROACH_STARTED",
+			outcome.GetCausationId()))
+		{
+			RemoveSpawnApproachWaypoint(trip, plan, "TRANSITION_REJECTED");
+			return EndVehicleControl(
+				trip, slot, fleet, faction,
+				AICF_ETransportTripPhase.FAILED_CLOSED,
+				"SPAWN_APPROACH_TRANSITION_REJECTED",
+				outcome.GetCausationId(), true);
+		}
+
+		vector spawnPosition = plan.GetSpawnPosition();
+		vector stagingPosition = plan.GetStagingPosition();
+		string approachReason = "STARTED";
+		if (reissue)
+			approachReason = "REISSUED";
+		string details = FormatIdentity(
+			trip,
+			outcome.GetCausationId(),
+			approachReason);
+		details += string.Format(
+			" reservation=%1 base=%2 waypoint=%3 spawn=[%4,%5,%6] staging=[%7,%8,%9]",
+			plan.GetReservation().GetOwnerToken(),
+			AICF_Stage1Diagnostics.BaseKey(plan.GetSelection().m_Base),
+			waypoint.GetID(),
+			spawnPosition[0],
+			spawnPosition[1],
+			spawnPosition[2],
+			stagingPosition[0],
+			stagingPosition[1],
+			stagingPosition[2]);
+		AICF_Stage4Diagnostics.Info("VEHICLE_SPAWN_APPROACH_STARTED", details);
+		return outcome;
+	}
+
+	protected bool RemoveSpawnApproachWaypoint(
+		AICF_TransportTrip trip,
+		AICF_VehicleSpawnPlan plan,
+		string reason)
+	{
+		if (!trip || !plan)
+			return false;
+		AIWaypoint waypoint = plan.GetApproachWaypoint();
+		if (!waypoint)
+			return true;
+		if (!m_Handoff.DetachVehicleWaypoint(trip, waypoint))
+			return false;
+		if (!plan.ClearApproachWaypoint(waypoint))
+			return false;
+		m_Handoff.DeleteDetachedVehicleWaypoint(
+			trip,
+			waypoint,
+			"SPAWN_PLAN_RELEASE",
+			reason);
+		return true;
+	}
+
+	protected bool ReleaseSpawnPlan(AICF_TransportTrip trip, string reason)
+	{
+		if (!trip || !trip.GetRequestState())
+			return false;
+		AICF_VehicleSpawnPlan plan = trip.GetRequestState().GetSpawnPlan();
+		if (!plan)
+			return true;
+		if (!RemoveSpawnApproachWaypoint(trip, plan, reason))
+			return false;
+		m_AcquisitionFlow.CancelPendingSpawnPlan(trip, reason);
+		return trip.GetRequestState().GetSpawnPlan() == null;
 	}
 
 	protected AICF_TripOutcome StartBoarding(
@@ -503,7 +699,15 @@ class AICF_TransportTripController
 		AICF_FactionFleet fleet,
 		SCR_CampaignFaction faction)
 	{
-		if (trip.GetPhase() != AICF_ETransportTripPhase.ACQUIRING ||
+		if (!ReleaseSpawnPlan(trip, "SPAWN_COMMIT_ACCEPTED"))
+		{
+			return EndVehicleControl(
+				trip, slot, fleet, faction,
+				AICF_ETransportTripPhase.FAILED_CLOSED,
+				"SPAWN_PLAN_RELEASE_REJECTED",
+				outcome.GetCausationId(), true);
+		}
+		if (trip.GetPhase() != AICF_ETransportTripPhase.SPAWN_COMMIT ||
 			!TransitionTo(
 				trip,
 				AICF_ETransportTripPhase.BOARDING,
@@ -745,6 +949,7 @@ class AICF_TransportTripController
 		if (!trip.IsTransitionAllowedTo(terminalPhase))
 			return AICF_TripOutcome.TerminalFailClosed("TERMINAL_PREFLIGHT_REJECTED", causationId);
 		ReleaseEmptyReservationIfPresent(trip, fleet);
+		ReleaseSpawnPlan(trip, reason);
 		m_Handoff.DetachVehicleUtility(trip);
 		if (!TransitionTo(trip, terminalPhase, reason, causationId))
 			return AICF_TripOutcome.TerminalFailClosed("TERMINAL_COMMIT_REJECTED", causationId);
@@ -1586,6 +1791,7 @@ class AICF_TransportTripController
 		if (!RemoveDismountWaypoints(trip, "COORDINATOR_STOP", reason))
 			cancelled = false;
 		m_Handoff.DetachVehicleUtility(trip);
+		ReleaseSpawnPlan(trip, reason);
 		return cancelled;
 	}
 
@@ -1694,7 +1900,10 @@ class AICF_TransportTripController
 	protected bool IsAcquisitionPhase(AICF_ETransportTripPhase phase)
 	{
 		return phase == AICF_ETransportTripPhase.WAITING_FOR_SITE ||
-			phase == AICF_ETransportTripPhase.ACQUIRING;
+			phase == AICF_ETransportTripPhase.SITE_PLANNED ||
+			phase == AICF_ETransportTripPhase.APPROACHING_SITE ||
+			phase == AICF_ETransportTripPhase.STAGING_CONFIRMED ||
+			phase == AICF_ETransportTripPhase.SPAWN_COMMIT;
 	}
 
 	protected string ResolveCausationId(

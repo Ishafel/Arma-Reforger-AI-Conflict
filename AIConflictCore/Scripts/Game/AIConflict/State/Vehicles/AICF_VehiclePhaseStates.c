@@ -91,6 +91,7 @@ class AICF_VehicleRequestState
 	protected string m_sNoRangeCandidateKey;
 	protected string m_sNoRangeTrend;
 	protected string m_sNoRangeCandidateTrace;
+	protected ref AICF_VehicleSpawnPlan m_SpawnPlan;
 
 	void Reset()
 	{
@@ -110,6 +111,7 @@ class AICF_VehicleRequestState
 		m_fCohesionSpreadMeters = 0;
 		m_bCohesionRecoveryAttempted = false;
 		ClearNoRangeObservation();
+		m_SpawnPlan = null;
 	}
 
 	void Begin(int nowMs, int absoluteDeadlineMs, int maximumAttempts = 4)
@@ -146,6 +148,23 @@ class AICF_VehicleRequestState
 	string GetNoRangeCandidateKey() { return m_sNoRangeCandidateKey; }
 	string GetNoRangeTrend() { return m_sNoRangeTrend; }
 	string GetNoRangeCandidateTrace() { return m_sNoRangeCandidateTrace; }
+	AICF_VehicleSpawnPlan GetSpawnPlan() { return m_SpawnPlan; }
+
+	bool SetSpawnPlan(AICF_VehicleSpawnPlan plan)
+	{
+		if (!plan || !plan.IsValid() || m_SpawnPlan)
+			return false;
+		m_SpawnPlan = plan;
+		return true;
+	}
+
+	bool ClearSpawnPlan(AICF_VehicleSpawnPlan expected)
+	{
+		if (!expected || expected != m_SpawnPlan)
+			return false;
+		m_SpawnPlan = null;
+		return true;
+	}
 
 	bool IsDeadlineReached(int nowMs)
 	{
@@ -305,6 +324,7 @@ class AICF_VehicleBoardingState
 	protected int m_iPhaseStartedAtMs;
 	protected int m_iPhaseDeadlineMs;
 	protected int m_iPhaseTimeoutMs;
+	protected int m_iApproachTimeoutMs;
 	protected int m_iPlannedPhaseCount;
 	protected int m_iCurrentPhaseIndex;
 	protected AICF_EVehicleBoardingPhase m_Phase;
@@ -344,6 +364,7 @@ class AICF_VehicleBoardingState
 		m_iPhaseStartedAtMs = 0;
 		m_iPhaseDeadlineMs = 0;
 		m_iPhaseTimeoutMs = 0;
+		m_iApproachTimeoutMs = 0;
 		m_iPlannedPhaseCount = 0;
 		m_iCurrentPhaseIndex = 0;
 		m_Phase = AICF_EVehicleBoardingPhase.NONE;
@@ -391,6 +412,7 @@ class AICF_VehicleBoardingState
 	int GetPhaseStartedAtMs() { return m_iPhaseStartedAtMs; }
 	int GetPhaseDeadlineMs() { return m_iPhaseDeadlineMs; }
 	int GetPhaseTimeoutMs() { return m_iPhaseTimeoutMs; }
+	int GetApproachTimeoutMs() { return m_iApproachTimeoutMs; }
 	int GetPlannedPhaseCount() { return m_iPlannedPhaseCount; }
 	int GetCurrentPhaseIndex() { return m_iCurrentPhaseIndex; }
 	AICF_EVehicleBoardingPhase GetPhase() { return m_Phase; }
@@ -418,12 +440,14 @@ class AICF_VehicleBoardingState
 
 	void ConfigureImmutablePlan(
 		int phaseTimeoutMs,
+		int approachTimeoutMs,
 		bool driverPhasePlanned,
 		bool gunnerPhasePlanned)
 	{
 		if (m_iPhaseTimeoutMs > 0)
 			return;
 		m_iPhaseTimeoutMs = Math.Max(1000, phaseTimeoutMs);
+		m_iApproachTimeoutMs = Math.Max(m_iPhaseTimeoutMs, approachTimeoutMs);
 		m_bDriverPhasePlanned = driverPhasePlanned;
 		m_bGunnerPhasePlanned = gunnerPhasePlanned;
 	}
@@ -436,7 +460,10 @@ class AICF_VehicleBoardingState
 		m_Phase = phase;
 		m_iCurrentPhaseIndex = Math.Max(0, phaseIndex);
 		m_iPhaseStartedAtMs = nowMs;
-		m_iPhaseDeadlineMs = nowMs + m_iPhaseTimeoutMs;
+		int currentPhaseTimeoutMs = m_iPhaseTimeoutMs;
+		if (phase == AICF_EVehicleBoardingPhase.APPROACH)
+			currentPhaseTimeoutMs = m_iApproachTimeoutMs;
+		m_iPhaseDeadlineMs = nowMs + currentPhaseTimeoutMs;
 		if (m_iAbsoluteDeadlineMs > 0 && m_iPhaseDeadlineMs > m_iAbsoluteDeadlineMs)
 			m_iPhaseDeadlineMs = m_iAbsoluteDeadlineMs;
 		m_iSettledPollCount = 0;

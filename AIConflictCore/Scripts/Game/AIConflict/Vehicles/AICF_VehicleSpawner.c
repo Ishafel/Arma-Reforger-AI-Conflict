@@ -44,6 +44,182 @@ class AICF_VehicleSpawnSiteSelection
 	}
 }
 
+// A site reservation is intentionally lighter than a fleet lease. It prevents
+// two groups from walking to the same delivery pad, but it neither consumes
+// vehicle cap nor authorizes entity creation.
+class AICF_VehicleSpawnSiteReservation
+{
+	protected string m_sOwnerToken;
+	protected FactionKey m_sFactionKey;
+	protected int m_iSlotId;
+	protected int m_iGroupGeneration;
+	protected int m_iTripGeneration;
+	protected int m_iRequestGeneration;
+	protected SCR_CampaignMilitaryBaseComponent m_Base;
+	protected vector m_vSpawnPosition;
+	protected int m_iReservedAtMs;
+	protected int m_iExpiresAtMs;
+
+	void AICF_VehicleSpawnSiteReservation(
+		string ownerToken,
+		FactionKey factionKey,
+		int slotId,
+		int groupGeneration,
+		int tripGeneration,
+		int requestGeneration,
+		SCR_CampaignMilitaryBaseComponent base,
+		vector spawnPosition,
+		int reservedAtMs,
+		int expiresAtMs)
+	{
+		m_sOwnerToken = ownerToken;
+		m_sFactionKey = factionKey;
+		m_iSlotId = slotId;
+		m_iGroupGeneration = groupGeneration;
+		m_iTripGeneration = tripGeneration;
+		m_iRequestGeneration = requestGeneration;
+		m_Base = base;
+		m_vSpawnPosition = spawnPosition;
+		m_iReservedAtMs = reservedAtMs;
+		m_iExpiresAtMs = expiresAtMs;
+	}
+
+	string GetOwnerToken() { return m_sOwnerToken; }
+	FactionKey GetFactionKey() { return m_sFactionKey; }
+	int GetSlotId() { return m_iSlotId; }
+	int GetGroupGeneration() { return m_iGroupGeneration; }
+	int GetTripGeneration() { return m_iTripGeneration; }
+	int GetRequestGeneration() { return m_iRequestGeneration; }
+	SCR_CampaignMilitaryBaseComponent GetBase() { return m_Base; }
+	vector GetSpawnPosition() { return m_vSpawnPosition; }
+	int GetReservedAtMs() { return m_iReservedAtMs; }
+	int GetExpiresAtMs() { return m_iExpiresAtMs; }
+
+	bool IsExpired(int nowMs)
+	{
+		return m_iExpiresAtMs > 0 && nowMs >= m_iExpiresAtMs;
+	}
+
+	bool MatchesTrip(AICF_TransportTrip trip, int requestGeneration)
+	{
+		return trip && requestGeneration == m_iRequestGeneration &&
+			m_sFactionKey == trip.GetFactionKey() && m_iSlotId == trip.GetSlotId() &&
+			m_iGroupGeneration == trip.GetGroupGeneration() &&
+			m_iTripGeneration == trip.GetTripGeneration();
+	}
+}
+
+// Persistent acquisition plan. The exact pad and staging point survive all
+// approach polls, so SPAWN_COMMIT cannot silently move the vehicle elsewhere.
+class AICF_VehicleSpawnPlan
+{
+	protected ref AICF_VehicleSpawnSiteSelection m_Selection;
+	protected ref AICF_VehicleSpawnSiteReservation m_Reservation;
+	protected vector m_vStagingPosition;
+	protected AIWaypoint m_ApproachWaypoint;
+	protected int m_iPlannedAtMs;
+	protected int m_iApproachDeadlineMs;
+	protected int m_iAllStagedSinceMs;
+	protected int m_iStagedCount;
+	protected int m_iAliveCount;
+	protected int m_iLastProgressReportAtMs;
+	protected int m_iLastReportedStagedCount = -1;
+	protected int m_iApproachWaypointIssuedAtMs;
+	protected int m_iApproachWaypointReissueCount;
+
+	void AICF_VehicleSpawnPlan(
+		AICF_VehicleSpawnSiteSelection selection,
+		AICF_VehicleSpawnSiteReservation reservation,
+		vector stagingPosition,
+		int plannedAtMs,
+		int approachDeadlineMs)
+	{
+		m_Selection = selection;
+		m_Reservation = reservation;
+		m_vStagingPosition = stagingPosition;
+		m_iPlannedAtMs = plannedAtMs;
+		m_iApproachDeadlineMs = approachDeadlineMs;
+	}
+
+	AICF_VehicleSpawnSiteSelection GetSelection() { return m_Selection; }
+	AICF_VehicleSpawnSiteReservation GetReservation() { return m_Reservation; }
+	vector GetSpawnPosition() { return m_Selection.m_vPosition; }
+	vector GetStagingPosition() { return m_vStagingPosition; }
+	AIWaypoint GetApproachWaypoint() { return m_ApproachWaypoint; }
+	int GetPlannedAtMs() { return m_iPlannedAtMs; }
+	int GetApproachDeadlineMs() { return m_iApproachDeadlineMs; }
+	int GetAllStagedSinceMs() { return m_iAllStagedSinceMs; }
+	int GetStagedCount() { return m_iStagedCount; }
+	int GetAliveCount() { return m_iAliveCount; }
+	int GetApproachWaypointReissueCount() { return m_iApproachWaypointReissueCount; }
+
+	bool IsValid()
+	{
+		return m_Selection && m_Selection.IsSelected() && m_Reservation &&
+			m_iPlannedAtMs > 0 && m_iApproachDeadlineMs > m_iPlannedAtMs;
+	}
+
+	bool BindApproachWaypoint(AIWaypoint waypoint)
+	{
+		if (!waypoint || m_ApproachWaypoint)
+			return false;
+		m_ApproachWaypoint = waypoint;
+		return true;
+	}
+
+	bool ClearApproachWaypoint(AIWaypoint expected)
+	{
+		if (!expected || expected != m_ApproachWaypoint)
+			return false;
+		m_ApproachWaypoint = null;
+		return true;
+	}
+
+	void RecordApproachWaypointIssued(int nowMs, bool reissue)
+	{
+		m_iApproachWaypointIssuedAtMs = nowMs;
+		if (reissue)
+			m_iApproachWaypointReissueCount++;
+	}
+
+	bool CanReissueApproachWaypoint(int nowMs, int cooldownMs, int maximumReissues)
+	{
+		return m_iApproachWaypointIssuedAtMs > 0 &&
+			m_iApproachWaypointReissueCount < maximumReissues &&
+			nowMs - m_iApproachWaypointIssuedAtMs >= cooldownMs;
+	}
+
+	bool ObserveStaging(int stagedCount, int aliveCount, int nowMs, int holdMs)
+	{
+		bool rosterChanged = aliveCount != m_iAliveCount;
+		m_iStagedCount = stagedCount;
+		m_iAliveCount = aliveCount;
+		if (aliveCount <= 0 || stagedCount != aliveCount)
+		{
+			m_iAllStagedSinceMs = 0;
+			return false;
+		}
+		// A casualty or a newly attached member changes the set whose continuous
+		// presence is being proven, even when every remaining member is in range.
+		if (rosterChanged || m_iAllStagedSinceMs <= 0)
+			m_iAllStagedSinceMs = nowMs;
+		return nowMs - m_iAllStagedSinceMs >= Math.Max(0, holdMs);
+	}
+
+	bool ShouldReportProgress(int nowMs, int intervalMs)
+	{
+		if (m_iLastReportedStagedCount != m_iStagedCount ||
+			m_iLastProgressReportAtMs <= 0 ||
+			nowMs - m_iLastProgressReportAtMs >= intervalMs)
+		{
+			m_iLastReportedStagedCount = m_iStagedCount;
+			m_iLastProgressReportAtMs = nowMs;
+			return true;
+		}
+		return false;
+	}
+}
+
 // Per-call search aggregate keeps the Enforce local frame small and makes the
 // deterministic base walk explicit. It is not retained by a trip.
 class AICF_VehicleSpawnSearchState
@@ -61,19 +237,229 @@ class AICF_VehicleSpawnSearchState
 
 // Tries safe friendly Conflict bases from nearest to farthest and uses the same
 // stock empty-terrain query as initial HQ vehicles. New WAIT preflight is
-// explicitly cap-free and entity-free; ACQUIRING reserves a lease before it
+// explicitly cap-free and entity-free; SPAWN_COMMIT reserves a lease before it
 // calls the separate authoritative entity-creation helper.
 class AICF_VehicleSpawner
 {
-	protected static const float SPAWN_SEARCH_RADIUS_METERS = 45.0;
+	// Dense bases on Arland frequently have no eight-metre-clear position inside
+	// the old 45 m ring. The wider query stays tied to an authoritative safe base,
+	// and every exact result still passes the existing surface and roster fences.
+	protected static const float SPAWN_SEARCH_RADIUS_METERS = 90.0;
 	protected static const float VEHICLE_CLEARANCE_RADIUS_METERS = 8.0;
 	protected static const int MAX_SPAWN_POSITIONS_PER_BASE = 16;
 	protected static const float SURFACE_PROBE_RADIUS_METERS = 6.0;
 	protected static const float MAX_FOOTPRINT_HEIGHT_DELTA_METERS = 4.0;
+	protected static const float SITE_RESERVATION_SEPARATION_METERS = 20.0;
+	protected static const float COMMIT_RECHECK_RADIUS_METERS = 3.0;
+	protected ref array<ref AICF_VehicleSpawnSiteReservation> m_aSiteReservations = {};
+
+	bool TryReserveSelectedSite(
+		AICF_TransportTrip trip,
+		AICF_VehicleRequestState requestState,
+		AICF_VehicleSpawnSiteSelection selection,
+		int nowMs,
+		int expiresAtMs,
+		out AICF_VehicleSpawnSiteReservation reservation)
+	{
+		reservation = null;
+		if (!trip || !requestState || !selection || !selection.IsSelected() ||
+			expiresAtMs <= nowMs)
+		{
+			return false;
+		}
+		PurgeExpiredSiteReservations(nowMs);
+		foreach (AICF_VehicleSpawnSiteReservation active : m_aSiteReservations)
+		{
+			if (!active || active.GetBase() != selection.m_Base)
+				continue;
+			if (vector.DistanceSqXZ(active.GetSpawnPosition(), selection.m_vPosition) <
+				SITE_RESERVATION_SEPARATION_METERS * SITE_RESERVATION_SEPARATION_METERS)
+			{
+				return false;
+			}
+		}
+
+		string ownerToken = string.Format(
+			"site-%1-%2-%3-%4-%5",
+			trip.GetFactionKey(),
+			trip.GetSlotId(),
+			trip.GetGroupGeneration(),
+			trip.GetTripGeneration(),
+			requestState.GetRequestGeneration());
+		reservation = new AICF_VehicleSpawnSiteReservation(
+			ownerToken,
+			trip.GetFactionKey(),
+			trip.GetSlotId(),
+			trip.GetGroupGeneration(),
+			trip.GetTripGeneration(),
+			requestState.GetRequestGeneration(),
+			selection.m_Base,
+			selection.m_vPosition,
+			nowMs,
+			expiresAtMs);
+		m_aSiteReservations.Insert(reservation);
+		return true;
+	}
+
+	bool IsSiteReservationCurrent(
+		AICF_VehicleSpawnSiteReservation reservation,
+		AICF_TransportTrip trip,
+		AICF_VehicleRequestState requestState,
+		int nowMs)
+	{
+		PurgeExpiredSiteReservations(nowMs);
+		return reservation && trip && requestState &&
+			reservation.MatchesTrip(trip, requestState.GetRequestGeneration()) &&
+			m_aSiteReservations.Contains(reservation);
+	}
+
+	bool ReleaseSelectedSite(AICF_VehicleSpawnSiteReservation expected)
+	{
+		if (!expected || !m_aSiteReservations.Contains(expected))
+			return false;
+		m_aSiteReservations.RemoveItem(expected);
+		return true;
+	}
+
+	bool MeasureStagingReadiness(
+		SCR_AIGroup group,
+		vector stagingPosition,
+		float stagingRadiusMeters,
+		out int stagedCount,
+		out int aliveCount,
+		out float farthestDistanceMeters,
+		out string memberSamples)
+	{
+		stagedCount = 0;
+		aliveCount = 0;
+		farthestDistanceMeters = -1.0;
+		memberSamples = string.Empty;
+		if (!group || stagingRadiusMeters <= 0)
+			return false;
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			IEntity entity;
+			if (agent)
+				entity = agent.GetControlledEntity();
+			if (!AICF_GroupRuntime.IsAliveCharacter(entity))
+				continue;
+			float distanceMeters = Math.Sqrt(vector.DistanceSqXZ(
+				entity.GetOrigin(),
+				stagingPosition));
+			aliveCount++;
+			farthestDistanceMeters = Math.Max(farthestDistanceMeters, distanceMeters);
+			if (distanceMeters <= stagingRadiusMeters)
+				stagedCount++;
+			if (!memberSamples.IsEmpty())
+				memberSamples += ",";
+			memberSamples += string.Format("%1:%2", entity.GetID(), distanceMeters);
+		}
+		return aliveCount > 0;
+	}
+
+	bool RevalidateSpawnCommit(
+		SCR_GameModeCampaign campaign,
+		SCR_CampaignFaction faction,
+		SCR_AIGroup group,
+		AICF_ConflictAdapter conflictAdapter,
+		AICF_VehicleSpawnPlan plan,
+		float stagingRadiusMeters,
+		int minimumAliveCount,
+		out int stagedCount,
+		out int aliveCount,
+		out float farthestDistanceMeters,
+		out string failureReason)
+	{
+		failureReason = "SPAWN_PLAN_INVALID";
+		stagedCount = 0;
+		aliveCount = 0;
+		farthestDistanceMeters = -1.0;
+		if (!Replication.IsServer() || !campaign || !campaign.IsMaster() ||
+			!faction || !group || !conflictAdapter || !plan || !plan.IsValid())
+		{
+			return false;
+		}
+
+		AICF_VehicleSpawnSiteSelection selection = plan.GetSelection();
+		failureReason = conflictAdapter.GetSpawnRejectionReason(selection.m_Base, faction);
+		if (!failureReason.IsEmpty())
+			return false;
+		if (!selection.m_Base.GetOwner())
+		{
+			failureReason = "BASE_ENTITY_UNAVAILABLE";
+			return false;
+		}
+
+		string memberSamples;
+		if (!MeasureStagingReadiness(
+			group,
+			plan.GetStagingPosition(),
+			stagingRadiusMeters,
+			stagedCount,
+			aliveCount,
+			farthestDistanceMeters,
+			memberSamples) || aliveCount < minimumAliveCount)
+		{
+			failureReason = "GROUP_NOT_COMBAT_READY";
+			return false;
+		}
+		if (stagedCount != aliveCount)
+		{
+			failureReason = "STAGING_NO_LONGER_CONFIRMED";
+			return false;
+		}
+
+		string surfaceKind;
+		bool waterDetected;
+		float footprintDeltaMeters;
+		int surfaceProbeCount;
+		if (!IsWheeledSpawnSurfaceSuitable(
+			selection.m_vPosition,
+			selection.m_Base.GetOwner().GetWorld(),
+			surfaceKind,
+			waterDetected,
+			footprintDeltaMeters,
+			surfaceProbeCount))
+		{
+			failureReason = "WATER_OR_UNDRIVABLE_SURFACE";
+			return false;
+		}
+
+		array<vector> exactPositions = {};
+		int exactCount = SCR_WorldTools.FindAllEmptyTerrainPositions(
+			exactPositions,
+			selection.m_vPosition,
+			COMMIT_RECHECK_RADIUS_METERS,
+			VEHICLE_CLEARANCE_RADIUS_METERS,
+			maxResults: 1,
+			world: selection.m_Base.GetOwner().GetWorld());
+		if (exactCount <= 0 || exactPositions.IsEmpty() ||
+			vector.DistanceSqXZ(exactPositions[0], selection.m_vPosition) >
+			COMMIT_RECHECK_RADIUS_METERS * COMMIT_RECHECK_RADIUS_METERS)
+		{
+			failureReason = "SPAWN_PAD_OCCUPIED";
+			return false;
+		}
+		failureReason = string.Empty;
+		return true;
+	}
+
+	protected void PurgeExpiredSiteReservations(int nowMs)
+	{
+		for (int reservationIndex = m_aSiteReservations.Count() - 1; reservationIndex >= 0; reservationIndex--)
+		{
+			AICF_VehicleSpawnSiteReservation reservation =
+				m_aSiteReservations[reservationIndex];
+			if (!reservation || reservation.IsExpired(nowMs))
+				m_aSiteReservations.Remove(reservationIndex);
+		}
+	}
 
 	// New acquisition boundary. It performs every strategic/site/surface/member
 	// check but never allocates an entity. The caller may use it from a cap-free
-	// WAITING_FOR_SITE probe or immediately before an ACQUIRING spawn attempt.
+	// WAITING_FOR_SITE probe or immediately before a SPAWN_COMMIT attempt.
 	bool TrySelectSiteForAcquisition(
 		SCR_GameModeCampaign campaign,
 		SCR_CampaignFaction faction,

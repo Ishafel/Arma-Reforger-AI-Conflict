@@ -195,8 +195,8 @@ class AICF_VehicleCatalog
 				suffixes.Insert("Prefabs/Vehicles/Wheeled/UAZ452/UAZ452_transport.et");
 		}
 
-		// Trucks are the primary A0/A1 choice and the mandatory capacity fallback
-		// for A2/D0 when a light candidate cannot seat the full living roster.
+		// A roomy faction truck is also the capacity fallback when a requested
+		// light transport cannot seat the full living roster.
 		if (factionKey == "US")
 			suffixes.Insert("Prefabs/Vehicles/Wheeled/M923A1/M923A1_transport.et");
 		else if (factionKey == "USSR")

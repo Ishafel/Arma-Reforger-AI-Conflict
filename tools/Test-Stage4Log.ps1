@@ -14,17 +14,40 @@ $config = @($lines | Select-String -Pattern '\[AICF\]\[STAGE4\]\[INFO\]\[CONFIG\
 $stage4Errors = @($lines | Select-String -SimpleMatch '[AICF][STAGE4][ERROR]')
 $scriptErrors = @($lines | Select-String -Pattern 'SCRIPT\s+\(E\)|Virtual Machine Exception')
 $probes = @($lines | Select-String -Pattern '\[AICF\]\[STAGE4\]\[INFO\]\[SUPPLY_PROBE\].*supplies=.*supplies_max=')
-$reservations = @($lines | Select-String -Pattern '\[DEPLOYMENT_RESERVED\].*request=([0-9]+) token=([0-9]+).*faction=(US|USSR).*slot=([0-3]).*supply_cost=([0-9]+)')
-$commits = @($lines | Select-String -Pattern '\[DEPLOYMENT_COMMITTED\].*request=([0-9]+) token=([0-9]+).*faction=(US|USSR).*slot=([0-3]).*ticket_debit=1 supply_debit=([0-9]+) roster=5/5')
+$reservations = @($lines | Select-String -Pattern '\[DEPLOYMENT_RESERVED\].*request=([0-9]+) token=([0-9]+).*faction=(US|USSR).*slot=([0-9]).*supply_cost=([0-9]+)')
+$commits = @($lines | Select-String -Pattern '\[DEPLOYMENT_COMMITTED\].*request=([0-9]+) token=([0-9]+).*faction=(US|USSR).*slot=([0-9]).*ticket_debit=1 supply_debit=([0-9]+) roster=(10|[1-9])\/\6')
 $aborts = @($lines | Select-String -Pattern '\[DEPLOYMENT_ABORTED\].*request=([0-9]+) token=([0-9]+).*ticket_rollback=1 supply_rollback=([0-9]+)')
 $balanceFailures = @($lines | Select-String -SimpleMatch '[SHIPMENT_BALANCE_FAILED]')
 $badHeartbeatBalance = @($lines | Select-String -Pattern '\[AICF\]\[STAGE4\]\[INFO\]\[HEARTBEAT\].*balance_delta=(?!0(?:\s|$))-?[0-9]+')
+$approachReissues = @($lines | Select-String -SimpleMatch '[VEHICLE_SPAWN_APPROACH_STARTED]' | Where-Object { $_.Line -match '\breason=REISSUED\b' })
 
 if (-not $config) { $failures.Add('Missing Stage 4 CONFIG enabled=1') }
 if (-not $probes) { $failures.Add('Missing stock SUPPLY_PROBE evidence') }
 if ($stage4Errors) { $failures.Add("Stage 4 ERROR events: $($stage4Errors.Count)") }
 if ($scriptErrors) { $failures.Add("Script/VM failures: $($scriptErrors.Count)") }
 if ($balanceFailures -or $badHeartbeatBalance) { $failures.Add('Shipment conservation failed') }
+
+# A plan may retry one staging waypoint after a delayed external queue loss.
+# Repeated reissues for the same reservation reproduce the per-second command
+# and voice churn seen in Full-Stage3-4-20260816-094529.
+$approachReissuesByReservation = @{}
+foreach ($reissue in $approachReissues) {
+    $reservationMatch = [regex]::Match($reissue.Line, '\breservation=([^\s]+)')
+    if (-not $reservationMatch.Success) {
+        $failures.Add('Vehicle approach reissue has no reservation identity')
+        continue
+    }
+    $reservationId = $reservationMatch.Groups[1].Value
+    if (-not $approachReissuesByReservation.ContainsKey($reservationId)) {
+        $approachReissuesByReservation[$reservationId] = 0
+    }
+    $approachReissuesByReservation[$reservationId]++
+}
+foreach ($reservationId in $approachReissuesByReservation.Keys) {
+    if ($approachReissuesByReservation[$reservationId] -gt 1) {
+        $failures.Add("Vehicle staging waypoint reissue churn: reservation=$reservationId count=$($approachReissuesByReservation[$reservationId]) maximum=1")
+    }
+}
 
 $terminalByKey = @{}
 foreach ($terminal in @($commits + $aborts)) {
@@ -107,4 +130,4 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host 'Stage 4 log audit: PASS' -ForegroundColor Green
-Write-Host "probes=$($probes.Count) reservations=$($reservations.Count) commits=$($commits.Count) aborts=$($aborts.Count) shipments=$($dispatches.Count)"
+Write-Host "probes=$($probes.Count) reservations=$($reservations.Count) commits=$($commits.Count) aborts=$($aborts.Count) shipments=$($dispatches.Count) approach_reissues=$($approachReissues.Count)"

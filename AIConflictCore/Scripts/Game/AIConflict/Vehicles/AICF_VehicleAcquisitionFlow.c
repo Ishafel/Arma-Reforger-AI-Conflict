@@ -45,6 +45,9 @@ class AICF_VehicleAcquisitionFlow
 	protected static const int HARD_MAX_BACKOFF_MS = 60000;
 	protected static const float NO_RANGE_PROGRESS_EPSILON_METERS = 5.0;
 	protected static const int NO_RANGE_TRACE_LIMIT = 8;
+	protected static const int STAGING_PROGRESS_REPORT_INTERVAL_MS = 10000;
+	protected static const int APPROACH_REISSUE_COOLDOWN_MS = 15000;
+	protected static const int MAX_APPROACH_WAYPOINT_REISSUES = 1;
 
 	protected ref AICF_Stage3Config m_Config;
 	protected ref AICF_VehicleCatalog m_Catalog;
@@ -102,11 +105,24 @@ class AICF_VehicleAcquisitionFlow
 		{
 			case AICF_ETransportTripPhase.WAITING_FOR_SITE:
 				return ProcessWaitingForSite(trip, fleet, faction, requestState, nowMs);
-			case AICF_ETransportTripPhase.ACQUIRING:
-				return ProcessAcquiring(trip, fleet, faction, requestState, nowMs);
+			case AICF_ETransportTripPhase.SITE_PLANNED:
+				return ProcessSitePlanned(trip, fleet, requestState, nowMs);
+			case AICF_ETransportTripPhase.APPROACHING_SITE:
+				return ProcessApproachingSite(trip, fleet, faction, requestState, nowMs);
+			case AICF_ETransportTripPhase.STAGING_CONFIRMED:
+				return ProcessStagingConfirmed(trip, fleet, faction, requestState, nowMs);
+			case AICF_ETransportTripPhase.SPAWN_COMMIT:
+				return ProcessSpawnCommit(trip, fleet, faction, requestState, nowMs);
 		}
 
 		return FailClosed(trip, "ACQUISITION_PHASE_MISMATCH", "PHASE_GUARD");
+	}
+
+	void CancelPendingSpawnPlan(AICF_TransportTrip trip, string reason)
+	{
+		if (!trip || !trip.GetRequestState())
+			return;
+		CancelSpawnPlan(trip, trip.GetRequestState(), reason);
 	}
 
 	protected bool IsAuthorityContextValid(
@@ -237,27 +253,6 @@ class AICF_VehicleAcquisitionFlow
 		if (!HasConservativeCapacityCandidate(candidates, kind, aliveCount))
 			return EndRequest(trip, fleet, requestState, "INSUFFICIENT_COMPARTMENTS", nowMs);
 
-		if (!fleet.CanReserveLease(trip.GetAssignment()))
-		{
-			requestState.ClearNoRangeObservation();
-			string admissionReason = ResolveLeaseAdmissionFailure(trip, fleet);
-			if (admissionReason != "VEHICLE_CAP_UNAVAILABLE")
-				return FailClosed(trip, admissionReason, "WAIT_LEASE_ADMISSION_GUARD");
-			bool firstCapBlock = requestState.GetLastFailureReason() != "VEHICLE_CAP_UNAVAILABLE";
-			int nextProbeAtMs = nowMs + m_Config.GetWaitProbeIntervalMs();
-			requestState.EnterWaitingForSite(nowMs, nextProbeAtMs, "VEHICLE_CAP_UNAVAILABLE");
-			if (firstCapBlock)
-				ReportCapBlocked(trip, fleet, requestState, "WAIT_PREFLIGHT");
-			ReportWaitHeartbeat(
-				trip,
-				fleet,
-				requestState,
-				"VEHICLE_CAP_UNAVAILABLE",
-				nowMs,
-				nextProbeAtMs);
-			return AICF_TripOutcome.Wait("VEHICLE_CAP_UNAVAILABLE", causationId);
-		}
-
 		AICF_VehicleSpawnSiteSelection selection;
 		bool siteReady = m_Spawner.TrySelectSiteForAcquisition(
 			m_Campaign,
@@ -266,7 +261,7 @@ class AICF_VehicleAcquisitionFlow
 			m_ConflictAdapter,
 			ResolveGroupPosition(trip.GetAssignment().GetGroup()),
 			m_Config.GetMaximumSpawnDistanceMeters(),
-			m_Config.GetMaximumReuseDistanceMeters(),
+			0,
 			identity,
 			requestState.GetRequestGeneration(),
 			requestState.GetAttemptCount(),
@@ -277,39 +272,8 @@ class AICF_VehicleAcquisitionFlow
 			if (!selection || !selection.m_bRetryable)
 				return EndRequest(trip, fleet, requestState, "SITE_PREFLIGHT_TERMINAL", nowMs);
 			int nextProbeAtMs = nowMs + m_Config.GetWaitProbeIntervalMs();
-			AICF_VehicleNoRangeProbeSample noRangeSample;
-			int noRangeNoProgressAgeMs;
-			bool boundedNoRange = selection.m_sFailureReason ==
-				"NO_BOARDING_SITE_WITHIN_RANGE" &&
-				requestState.GetTotalAttemptCount() == 0;
-			if (boundedNoRange)
-			{
-				noRangeSample = BuildNoRangeProbeSample(trip, faction, selection);
-				noRangeNoProgressAgeMs = requestState.ObserveNoRangeProbe(
-					nowMs,
-					noRangeSample.m_vGroupOrigin,
-					noRangeSample.m_sNearestCandidateKey,
-					noRangeSample.m_fNearestCandidateDistanceMeters,
-					noRangeSample.m_sCandidateTrace,
-					NO_RANGE_PROGRESS_EPSILON_METERS);
-				int noRangeDeadlineAtMs = requestState.GetNoRangeLastProgressAtMs() +
-					m_Config.GetNoRangeProgressTimeoutMs();
-				nextProbeAtMs = Math.Min(nextProbeAtMs, noRangeDeadlineAtMs);
-			}
-			else
-			{
-				requestState.ClearNoRangeObservation();
-			}
+			requestState.ClearNoRangeObservation();
 			requestState.EnterWaitingForSite(nowMs, nextProbeAtMs, selection.m_sFailureReason);
-			if (boundedNoRange)
-				ReportNoRangeProbe(
-					trip,
-					requestState,
-					noRangeSample,
-					noRangeNoProgressAgeMs,
-					nowMs,
-					nextProbeAtMs,
-					"OBSERVED");
 			ReportWaitHeartbeat(
 				trip,
 				fleet,
@@ -317,32 +281,58 @@ class AICF_VehicleAcquisitionFlow
 				selection.m_sFailureReason,
 				nowMs,
 				nextProbeAtMs);
-			if (boundedNoRange && noRangeNoProgressAgeMs >=
-				m_Config.GetNoRangeProgressTimeoutMs())
-			{
-				ReportNoRangeProbe(
-					trip,
-					requestState,
-					noRangeSample,
-					noRangeNoProgressAgeMs,
-					nowMs,
-					nextProbeAtMs,
-					"BOUNDED_INFANTRY_FALLBACK");
-				return EndRequest(
-					trip,
-					fleet,
-					requestState,
-					"BOARDING_RANGE_WAIT_EXHAUSTED",
-					nowMs);
-			}
 			return AICF_TripOutcome.Wait(selection.m_sFailureReason, causationId);
+		}
+
+		int approachDeadlineMs = Math.Min(
+			trip.GetAbsoluteDeadlineMs(),
+			nowMs + m_Config.GetSpawnApproachTimeoutMs());
+		AICF_VehicleSpawnSiteReservation reservation;
+		if (!m_Spawner.TryReserveSelectedSite(
+			trip,
+			requestState,
+			selection,
+			nowMs,
+			trip.GetAbsoluteDeadlineMs(),
+			reservation))
+		{
+			// A reserved pad is a short-lived queue condition. Recheck it on the
+			// regular retry cadence instead of leaving the squad idle for the full
+			// no-site probe interval.
+			int reservedProbeAtMs = nowMs + m_Config.GetRetryIntervalMs();
+			requestState.EnterWaitingForSite(
+				nowMs,
+				reservedProbeAtMs,
+				"SPAWN_SITE_RESERVED");
+			ReportWaitHeartbeat(
+				trip,
+				fleet,
+				requestState,
+				"SPAWN_SITE_RESERVED",
+				nowMs,
+				reservedProbeAtMs);
+			return AICF_TripOutcome.Wait("SPAWN_SITE_RESERVED", causationId);
+		}
+
+		vector stagingPosition = ResolveStagingPosition(
+			ResolveGroupPosition(trip.GetAssignment().GetGroup()),
+			selection.m_vPosition);
+		AICF_VehicleSpawnPlan plan = new AICF_VehicleSpawnPlan(
+			selection,
+			reservation,
+			stagingPosition,
+			nowMs,
+			approachDeadlineMs);
+		if (!requestState.SetSpawnPlan(plan))
+		{
+			m_Spawner.ReleaseSelectedSite(reservation);
+			return FailClosed(trip, "SPAWN_PLAN_COMMIT_REJECTED", "PLAN_GUARD");
 		}
 
 		int oldRequestGeneration = requestState.GetRequestGeneration();
 		int waitAgeMs = GetWaitAgeMs(requestState, nowMs);
-		requestState.RecordContextReset(nowMs, "ELIGIBLE_SITE_PREFLIGHT");
 		requestState.ExitWaitingForSite();
-		causationId = BuildCausationId(trip, requestState, "WAIT_RESOLVED");
+		causationId = BuildCausationId(trip, requestState, "SITE_PLANNED");
 		ReportWaitingExit(
 			trip,
 			requestState,
@@ -350,16 +340,236 @@ class AICF_VehicleAcquisitionFlow
 			oldRequestGeneration,
 			waitAgeMs,
 			causationId);
-		return AICF_TripOutcome.Retry("ELIGIBLE_SITE_PREFLIGHT", causationId, nowMs);
+		ReportSpawnPlanCreated(trip, requestState, plan, causationId);
+		return AICF_TripOutcome.Retry("SITE_PLAN_READY", causationId, nowMs);
 	}
 
-	protected AICF_TripOutcome ProcessAcquiring(
+	protected AICF_TripOutcome ProcessSitePlanned(
+		AICF_TransportTrip trip,
+		AICF_FactionFleet fleet,
+		AICF_VehicleRequestState requestState,
+		int nowMs)
+	{
+		AICF_VehicleSpawnPlan plan = requestState.GetSpawnPlan();
+		if (!IsSpawnPlanCurrent(trip, requestState, plan, nowMs))
+			return ReplanSpawnSite(trip, fleet, requestState, "SITE_RESERVATION_LOST", nowMs);
+		if (nowMs >= plan.GetApproachDeadlineMs())
+			return EndRequest(trip, fleet, requestState, "SPAWN_SITE_APPROACH_TIMEOUT", nowMs);
+
+		string causationId = BuildCausationId(trip, requestState, "APPROACH_STARTED");
+		return AICF_TripOutcome.Retry("BEGIN_SITE_APPROACH", causationId, nowMs);
+	}
+
+	protected AICF_TripOutcome ProcessApproachingSite(
 		AICF_TransportTrip trip,
 		AICF_FactionFleet fleet,
 		SCR_CampaignFaction faction,
 		AICF_VehicleRequestState requestState,
 		int nowMs)
 	{
+		AICF_VehicleSpawnPlan plan = requestState.GetSpawnPlan();
+		if (!IsSpawnPlanCurrent(trip, requestState, plan, nowMs))
+			return ReplanSpawnSite(trip, fleet, requestState, "SITE_RESERVATION_LOST", nowMs);
+		if (nowMs >= plan.GetApproachDeadlineMs())
+			return EndRequest(trip, fleet, requestState, "SPAWN_SITE_APPROACH_TIMEOUT", nowMs);
+		string baseFailure = m_ConflictAdapter.GetSpawnRejectionReason(
+			plan.GetSelection().m_Base,
+			faction);
+		if (!baseFailure.IsEmpty())
+			return ReplanSpawnSite(trip, fleet, requestState, baseFailure, nowMs);
+
+		int stagedCount;
+		int aliveCount;
+		float farthestDistanceMeters;
+		string memberSamples;
+		if (!m_Spawner.MeasureStagingReadiness(
+			trip.GetAssignment().GetGroup(),
+			plan.GetStagingPosition(),
+			m_Config.GetSpawnStagingRadiusMeters(),
+			stagedCount,
+			aliveCount,
+			farthestDistanceMeters,
+			memberSamples) || aliveCount < m_Config.GetMinimumVehicleRequestAgents())
+		{
+			return EndRequest(trip, fleet, requestState, "GROUP_NOT_COMBAT_READY", nowMs);
+		}
+
+		bool stagingConfirmed = plan.ObserveStaging(
+			stagedCount,
+			aliveCount,
+			nowMs,
+			m_Config.GetSpawnStagingHoldMs());
+		if (plan.ShouldReportProgress(nowMs, STAGING_PROGRESS_REPORT_INTERVAL_MS))
+			ReportStagingProgress(
+				trip,
+				requestState,
+				plan,
+				farthestDistanceMeters,
+				memberSamples,
+				stagingConfirmed);
+		if (!stagingConfirmed)
+		{
+			if (!IsApproachWaypointQueued(trip, plan))
+			{
+				// A completed All-members waypoint is normally removed by the engine.
+				// Missing queue membership is therefore not an immediate failure. A
+				// single delayed retry covers external removal without command/voice
+				// churn if the engine repeatedly settles the same waypoint.
+				if (plan.CanReissueApproachWaypoint(
+					nowMs,
+					APPROACH_REISSUE_COOLDOWN_MS,
+					MAX_APPROACH_WAYPOINT_REISSUES))
+				{
+					return AICF_TripOutcome.Retry(
+						"REISSUE_SITE_APPROACH",
+						BuildCausationId(trip, requestState, "APPROACH_REISSUE"),
+						nowMs);
+				}
+				return AICF_TripOutcome.Wait(
+					"SPAWN_SITE_APPROACH_QUEUE_SETTLED",
+					BuildCausationId(trip, requestState, "APPROACH_QUEUE_SETTLED"));
+			}
+			return AICF_TripOutcome.Wait(
+				"SPAWN_SITE_APPROACH_IN_PROGRESS",
+				BuildCausationId(trip, requestState, "APPROACH_WAIT"));
+		}
+
+		string causationId = BuildCausationId(trip, requestState, "STAGING_CONFIRMED");
+		return AICF_TripOutcome.Retry("STAGING_CONFIRMED", causationId, nowMs);
+	}
+
+	protected AICF_TripOutcome ProcessStagingConfirmed(
+		AICF_TransportTrip trip,
+		AICF_FactionFleet fleet,
+		SCR_CampaignFaction faction,
+		AICF_VehicleRequestState requestState,
+		int nowMs)
+	{
+		AICF_VehicleSpawnPlan plan = requestState.GetSpawnPlan();
+		if (!IsSpawnPlanCurrent(trip, requestState, plan, nowMs))
+			return ReplanSpawnSite(trip, fleet, requestState, "SITE_RESERVATION_LOST", nowMs);
+
+		int stagedCount;
+		int aliveCount;
+		float farthestDistanceMeters;
+		string failureReason;
+		if (!m_Spawner.RevalidateSpawnCommit(
+			m_Campaign,
+			faction,
+			trip.GetAssignment().GetGroup(),
+			m_ConflictAdapter,
+			plan,
+			m_Config.GetSpawnStagingRadiusMeters(),
+			m_Config.GetMinimumVehicleRequestAgents(),
+			stagedCount,
+			aliveCount,
+			farthestDistanceMeters,
+			failureReason))
+		{
+			if (failureReason == "STAGING_NO_LONGER_CONFIRMED")
+			{
+				plan.ObserveStaging(stagedCount, aliveCount, nowMs, m_Config.GetSpawnStagingHoldMs());
+				return AICF_TripOutcome.Retry(
+					"STAGING_CONFIRMATION_LOST",
+					BuildCausationId(trip, requestState, "STAGING_LOST"),
+					nowMs);
+			}
+			if (failureReason == "GROUP_NOT_COMBAT_READY")
+				return EndRequest(trip, fleet, requestState, failureReason, nowMs);
+			return ReplanSpawnSite(trip, fleet, requestState, failureReason, nowMs);
+		}
+		if (!plan.ObserveStaging(
+			stagedCount,
+			aliveCount,
+			nowMs,
+			m_Config.GetSpawnStagingHoldMs()))
+		{
+			return AICF_TripOutcome.Retry(
+				"STAGING_CONFIRMATION_LOST",
+				BuildCausationId(trip, requestState, "STAGING_ROSTER_CHANGED"),
+				nowMs);
+		}
+
+		string causationId = BuildCausationId(trip, requestState, "COMMIT_REQUESTED");
+		string details = BuildIdentityContext(trip, requestState, null, causationId);
+		details += FormatSpawnPlan(plan);
+		details += string.Format(
+			" staged=%1 alive=%2 farthest_m=%3 cap_reserved=0 entity_created=0",
+			stagedCount,
+			aliveCount,
+			farthestDistanceMeters);
+		AICF_Stage4Diagnostics.Info("VEHICLE_SPAWN_COMMIT_REQUESTED", details);
+		return AICF_TripOutcome.Retry("SPAWN_COMMIT_READY", causationId, nowMs);
+	}
+
+	protected AICF_TripOutcome ProcessSpawnCommit(
+		AICF_TransportTrip trip,
+		AICF_FactionFleet fleet,
+		SCR_CampaignFaction faction,
+		AICF_VehicleRequestState requestState,
+		int nowMs)
+	{
+		AICF_VehicleSpawnPlan plan = requestState.GetSpawnPlan();
+		if (!IsSpawnPlanCurrent(trip, requestState, plan, nowMs))
+			return ReplanSpawnSite(trip, fleet, requestState, "SITE_RESERVATION_LOST", nowMs);
+
+		int stagedCount;
+		int aliveCount;
+		float farthestDistanceMeters;
+		string commitFailure;
+		if (!m_Spawner.RevalidateSpawnCommit(
+			m_Campaign,
+			faction,
+			trip.GetAssignment().GetGroup(),
+			m_ConflictAdapter,
+			plan,
+			m_Config.GetSpawnStagingRadiusMeters(),
+			m_Config.GetMinimumVehicleRequestAgents(),
+			stagedCount,
+			aliveCount,
+			farthestDistanceMeters,
+			commitFailure))
+		{
+			ReportSpawnCommitRejected(
+				trip,
+				requestState,
+				plan,
+				commitFailure,
+				stagedCount,
+				aliveCount,
+				farthestDistanceMeters);
+			if (commitFailure == "STAGING_NO_LONGER_CONFIRMED" && !trip.HasLease())
+			{
+				plan.ObserveStaging(stagedCount, aliveCount, nowMs, m_Config.GetSpawnStagingHoldMs());
+				return AICF_TripOutcome.Retry(
+					"STAGING_CONFIRMATION_LOST",
+					BuildCausationId(trip, requestState, "COMMIT_STAGING_LOST"),
+					nowMs);
+			}
+			if (commitFailure == "GROUP_NOT_COMBAT_READY")
+				return EndRequest(trip, fleet, requestState, commitFailure, nowMs);
+			return ReplanSpawnSite(trip, fleet, requestState, commitFailure, nowMs);
+		}
+		if (!plan.ObserveStaging(
+			stagedCount,
+			aliveCount,
+			nowMs,
+			m_Config.GetSpawnStagingHoldMs()))
+		{
+			return AICF_TripOutcome.Retry(
+				"STAGING_CONFIRMATION_LOST",
+				BuildCausationId(trip, requestState, "COMMIT_ROSTER_CHANGED"),
+				nowMs);
+		}
+		// Keep checking the staging proof every controller tick while the fleet
+		// cap is busy. A squad that leaves and re-enters must earn a fresh hold.
+		if (!trip.HasLease() && requestState.GetNextAttemptAtMs() > nowMs)
+		{
+			return AICF_TripOutcome.Wait(
+				"SPAWN_COMMIT_CAP_WAIT",
+				BuildCausationId(trip, requestState, "CAP_WAIT_PENDING"));
+		}
+
 		AICF_TripOutcome leaseOutcome = EnsureReservedLease(
 			trip,
 			fleet,
@@ -407,32 +617,6 @@ class AICF_VehicleAcquisitionFlow
 			return EndRequest(trip, fleet, requestState, "PREFAB_UNAVAILABLE", nowMs);
 		}
 
-		AICF_VehicleSpawnSiteSelection selection;
-		bool siteReady = m_Spawner.TrySelectSiteForAcquisition(
-			m_Campaign,
-			faction,
-			trip.GetAssignment().GetGroup(),
-			m_ConflictAdapter,
-			ResolveGroupPosition(trip.GetAssignment().GetGroup()),
-			m_Config.GetMaximumSpawnDistanceMeters(),
-			m_Config.GetMaximumReuseDistanceMeters(),
-			identity,
-			requestState.GetRequestGeneration(),
-			requestState.GetAttemptCount(),
-			false,
-			selection);
-		if (!siteReady)
-		{
-			if (selection && selection.m_bRetryable)
-				return HandleRetryableFailure(
-					trip,
-					fleet,
-					requestState,
-					selection,
-					nowMs);
-			return EndRequest(trip, fleet, requestState, "SPAWN_SITE_TERMINAL", nowMs);
-		}
-
 		return SpawnAcceptedCandidate(
 			trip,
 			fleet,
@@ -441,7 +625,7 @@ class AICF_VehicleAcquisitionFlow
 			lease,
 			kind,
 			candidates,
-			selection,
+			plan.GetSelection(),
 			identity,
 			causationId,
 			nowMs);
@@ -473,15 +657,16 @@ class AICF_VehicleAcquisitionFlow
 			if (admissionReason != "VEHICLE_CAP_UNAVAILABLE")
 				return FailClosed(trip, admissionReason, "LEASE_ADMISSION_GUARD");
 			bool firstCapBlock = requestState.GetLastFailureReason() != "VEHICLE_CAP_UNAVAILABLE";
-			int nextProbeAtMs = nowMs + m_Config.GetWaitProbeIntervalMs();
-			requestState.EnterWaitingForSite(nowMs, nextProbeAtMs, "VEHICLE_CAP_UNAVAILABLE");
+			// The squad is already staged, so keep fleet admission responsive while
+			// still avoiding a per-frame cap request loop.
+			int nextProbeAtMs = nowMs + m_Config.GetRetryIntervalMs();
+			requestState.ScheduleRetry(nextProbeAtMs, "VEHICLE_CAP_UNAVAILABLE");
 			if (firstCapBlock)
 				ReportCapBlocked(trip, fleet, requestState, "LEASE_RESERVATION");
 			ReportRequestWaiting(trip, requestState, "VEHICLE_CAP_UNAVAILABLE", nextProbeAtMs);
-			return AICF_TripOutcome.Retry(
-				"ENTER_WAITING_FOR_SITE:VEHICLE_CAP_UNAVAILABLE",
-				BuildCausationId(trip, requestState, "CAP_WAIT"),
-				nextProbeAtMs);
+			return AICF_TripOutcome.Wait(
+				"SPAWN_COMMIT_CAP_WAIT",
+				BuildCausationId(trip, requestState, "CAP_WAIT"));
 		}
 
 		AICF_VehicleLease lease;
@@ -744,6 +929,167 @@ class AICF_VehicleAcquisitionFlow
 		candidate.m_bEntityDeleted = true;
 	}
 
+	protected bool IsSpawnPlanCurrent(
+		AICF_TransportTrip trip,
+		AICF_VehicleRequestState requestState,
+		AICF_VehicleSpawnPlan plan,
+		int nowMs)
+	{
+		return plan && plan.IsValid() &&
+			m_Spawner.IsSiteReservationCurrent(
+				plan.GetReservation(),
+				trip,
+				requestState,
+				nowMs);
+	}
+
+	protected vector ResolveStagingPosition(vector groupPosition, vector spawnPosition)
+	{
+		vector direction = groupPosition - spawnPosition;
+		direction[1] = 0;
+		if (vector.DistanceSqXZ(groupPosition, spawnPosition) < 0.01)
+			direction = "1 0 0";
+		direction.Normalize();
+		vector stagingPosition = spawnPosition +
+			direction * m_Config.GetSpawnStagingOffsetMeters();
+		BaseWorld world = GetGame().GetWorld();
+		if (world)
+			stagingPosition[1] = world.GetSurfaceY(stagingPosition[0], stagingPosition[2]);
+		return stagingPosition;
+	}
+
+	protected bool IsApproachWaypointQueued(
+		AICF_TransportTrip trip,
+		AICF_VehicleSpawnPlan plan)
+	{
+		if (!trip || !plan || !plan.GetApproachWaypoint())
+			return false;
+		SCR_AIGroup group = trip.GetAssignment().GetGroup();
+		array<AIWaypoint> queue = {};
+		group.GetWaypoints(queue);
+		return queue.Contains(plan.GetApproachWaypoint());
+	}
+
+	protected void CancelSpawnPlan(
+		AICF_TransportTrip trip,
+		AICF_VehicleRequestState requestState,
+		string reason)
+	{
+		if (!trip || !requestState)
+			return;
+		AICF_VehicleSpawnPlan plan = requestState.GetSpawnPlan();
+		if (!plan)
+			return;
+		string details = BuildIdentityContext(
+			trip,
+			requestState,
+			trip.GetLease(),
+			BuildCausationId(trip, requestState, "PLAN_CANCELLED"));
+		details += FormatSpawnPlan(plan) + " reason=" + reason;
+		m_Spawner.ReleaseSelectedSite(plan.GetReservation());
+		requestState.ClearSpawnPlan(plan);
+		string eventName = "VEHICLE_SPAWN_PLAN_CANCELLED";
+		if (reason == "SPAWN_COMMIT_ACCEPTED")
+			eventName = "VEHICLE_SPAWN_PLAN_COMPLETED";
+		AICF_Stage4Diagnostics.Info(eventName, details);
+	}
+
+	protected AICF_TripOutcome ReplanSpawnSite(
+		AICF_TransportTrip trip,
+		AICF_FactionFleet fleet,
+		AICF_VehicleRequestState requestState,
+		string reason,
+		int nowMs)
+	{
+		int nextProbeAtMs = nowMs + m_Config.GetWaitProbeIntervalMs();
+		requestState.EnterWaitingForSite(nowMs, nextProbeAtMs, reason);
+		ReportRequestWaiting(trip, requestState, reason, nextProbeAtMs);
+		return AICF_TripOutcome.Retry(
+			"ENTER_WAITING_FOR_SITE:" + reason,
+			BuildCausationId(trip, requestState, "REPLAN_SITE"),
+			nextProbeAtMs);
+	}
+
+	protected string FormatSpawnPlan(AICF_VehicleSpawnPlan plan)
+	{
+		if (!plan || !plan.GetSelection() || !plan.GetReservation())
+			return " plan=NONE";
+		vector spawnPosition = plan.GetSpawnPosition();
+		vector stagingPosition = plan.GetStagingPosition();
+		string details = string.Format(
+			" reservation=%1 base=%2 spawn=[%3,%4,%5] staging=[%6,%7,%8] planned_at_ms=%9",
+			plan.GetReservation().GetOwnerToken(),
+			AICF_Stage1Diagnostics.BaseKey(plan.GetSelection().m_Base),
+			spawnPosition[0],
+			spawnPosition[1],
+			spawnPosition[2],
+			stagingPosition[0],
+			stagingPosition[1],
+			stagingPosition[2],
+			plan.GetPlannedAtMs());
+		details += string.Format(
+			" approach_deadline_ms=%1 approach_reissues=%2",
+			plan.GetApproachDeadlineMs(),
+			plan.GetApproachWaypointReissueCount());
+		return details;
+	}
+
+	protected void ReportSpawnPlanCreated(
+		AICF_TransportTrip trip,
+		AICF_VehicleRequestState requestState,
+		AICF_VehicleSpawnPlan plan,
+		string causationId)
+	{
+		string details = BuildIdentityContext(trip, requestState, null, causationId);
+		details += FormatSpawnPlan(plan);
+		details += " cap_reserved=0 entity_created=0";
+		AICF_Stage4Diagnostics.Info("VEHICLE_SPAWN_PLAN_CREATED", details);
+	}
+
+	protected void ReportStagingProgress(
+		AICF_TransportTrip trip,
+		AICF_VehicleRequestState requestState,
+		AICF_VehicleSpawnPlan plan,
+		float farthestDistanceMeters,
+		string memberSamples,
+		bool confirmed)
+	{
+		string causationId = BuildCausationId(trip, requestState, "STAGING_PROGRESS");
+		string details = BuildIdentityContext(trip, requestState, null, causationId);
+		details += FormatSpawnPlan(plan);
+		details += string.Format(
+			" staged=%1 alive=%2 farthest_m=%3 radius_m=%4 hold_ms=%5 confirmed=%6 members=[%7]",
+			plan.GetStagedCount(),
+			plan.GetAliveCount(),
+			farthestDistanceMeters,
+			m_Config.GetSpawnStagingRadiusMeters(),
+			m_Config.GetSpawnStagingHoldMs(),
+			confirmed,
+			memberSamples);
+		AICF_Stage4Diagnostics.Info("VEHICLE_SPAWN_STAGING_PROGRESS", details);
+	}
+
+	protected void ReportSpawnCommitRejected(
+		AICF_TransportTrip trip,
+		AICF_VehicleRequestState requestState,
+		AICF_VehicleSpawnPlan plan,
+		string reason,
+		int stagedCount,
+		int aliveCount,
+		float farthestDistanceMeters)
+	{
+		string causationId = BuildCausationId(trip, requestState, "COMMIT_REJECTED");
+		string details = BuildIdentityContext(trip, requestState, trip.GetLease(), causationId);
+		details += FormatSpawnPlan(plan);
+		details += string.Format(
+			" reason=%1 staged=%2 alive=%3 farthest_m=%4 entity_created=0",
+			reason,
+			stagedCount,
+			aliveCount,
+			farthestDistanceMeters);
+		AICF_Stage4Diagnostics.Warning("VEHICLE_SPAWN_COMMIT_REJECTED", details);
+	}
+
 	protected AICF_TripOutcome HandleRetryableFailure(
 		AICF_TransportTrip trip,
 		AICF_FactionFleet fleet,
@@ -907,19 +1253,17 @@ class AICF_VehicleAcquisitionFlow
 		int slotId = assignment.GetSlotId();
 		if (slotId < 0 || slotId >= AICF_Stage1Config.GROUP_SLOTS_PER_FACTION)
 			return false;
-		if (slotId < m_Config.GetTransportVehiclesPerFaction())
+		switch (assignment.GetUnitType())
 		{
-			if (assignment.GetSlotKey() == "A0" || assignment.GetSlotKey() == "A1")
-				kind = AICF_EVehicleKind.TRANSPORT;
-			else
+			case AICF_EGroupUnitType.MOTORIZED_LIGHT:
 				kind = AICF_EVehicleKind.LIGHT_TRANSPORT;
-			return true;
-		}
-		if (slotId - m_Config.GetTransportVehiclesPerFaction() <
-			m_Config.GetArmedLightVehiclesPerFaction())
-		{
-			kind = AICF_EVehicleKind.ARMED_LIGHT;
-			return true;
+				return true;
+			case AICF_EGroupUnitType.MOTORIZED_TRUCK:
+				kind = AICF_EVehicleKind.TRANSPORT;
+				return true;
+			case AICF_EGroupUnitType.MOTORIZED_ARMED_LIGHT:
+				kind = AICF_EVehicleKind.ARMED_LIGHT;
+				return true;
 		}
 		return false;
 	}

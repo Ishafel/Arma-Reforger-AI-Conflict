@@ -69,7 +69,7 @@ Stage 1 реализует серверные модели конфигурац�
 - серверное создание техники только после детерминированного обхода всех безопасных friendly-баз: contested/enemy state, допустимая дистанция, пустой участок и расстояние каждого живого бойца до точной позиции проверяются до `SpawnEntityPrefabEx`;
 - перед посадкой измеряется дистанция каждого живого бойца: при `farthest_m > aicfVehicleMaximumReuseDistanceMeters` группа продолжает пешком, а при `farthest_m > 75 м` каждый удалённый живой участник получает собственный MOVE-only `SCR_AIMoveIndividuallyBehavior` к реальной машине с action radius не больше 70 м; в `APPROACH` нет group Move-waypoint, vehicle utility и GetIn, progress отслеживается отдельно по каждому бойцу, stalled action через 15 секунд переиздаётся не более одного раза, а завершение требует двух settled poll всей группы в радиусе 75 м;
 - перед `DRIVER` и повторно после `APPROACH` синхронно нормализуется уже занятое неверное место; водитель и опциональный стрелок садятся через точные `SCR_AIGetInVehicle` action на заранее зарезервированные Pilot/Turret compartment. После settled обязательного crew машина может подключиться к group utility, но пассажирского group waypoint нет: до первой passenger action BoardingFlow атомарно сопоставляет каждому живому пассажиру exact `CargoCompartmentSlot`, reservation и owner-token, затем выдаёт отдельный `SCR_AIGetInVehicle`; после высадки или fallback handoff очищает owned vehicle handlers и восстанавливает штатную компактную пехотную формацию;
-- план фаз фиксируется один раз для текущей попытки и включает только действительно нужные `APPROACH`, `DRIVER`, опциональный `GUNNER` и обязательный `PASSENGERS`: максимум 3 фазы для transport и 4 для armed-light; у каждой фазы есть soft timeout, на всю попытку допускается ровно одна target-scoped grace длительностью 10 секунд при подтверждённом физическом прогрессе/входе, а phase и total hard cap не продлеваются повторно;
+- план фаз фиксируется один раз для текущей попытки и включает только действительно нужные `APPROACH`, `DRIVER`, опциональный `GUNNER` и обязательный `PASSENGERS`: максимум 3 фазы для transport и 4 для armed-light; пеший APPROACH имеет отдельный bounded timeout 180 с, role/passenger phases — 40 с, на всю попытку допускается ровно одна target-scoped grace длительностью 10 секунд при подтверждённом физическом прогрессе/входе, а phase и total hard cap не продлеваются повторно;
 - `BOARDING_COMPLETE` требует двух последовательных poll, в которых каждый живой участник физически settled именно в этой машине;
 - высадка на настраиваемой дистанции от цели и восстановление прежнего пехотного приказа без изменения правил `CaptureRelay`;
 - отдельный vehicle watchdog для boarding timeout, отсутствия водителя/стрелка, отсутствия прогресса, переворота, повреждения, разделения группы и физической очистки кузова после высадки;
@@ -123,8 +123,8 @@ Non-relay ATTACK использует stock `Move` для дальней operati
 - четыре stable numeric slot отображаются как `A0/A1/A2/D0`; штатная схема — `3 ATTACK / 1 forward DEFEND-QRF`, а CLI baseline сохраняет прежние роли `2/1/1` при том же размере группы;
 - ATTACK-цели ранжируются детерминированно как primary/secondary/support, а D0 выбирает безопасную передовую friendly-базу и переходит в QRF при contested/HQ threat/потере соседней базы;
 - QRF escalation выполняется сразу, возврат и смена передовой позиции ограничены stable-candidate hysteresis и minimum dwell;
-- все четыре slot vehicle-eligible; A0/A1 предпочитают faction truck, A2/D0 — unarmed light M998/UAZ-452 с обязательным capacity preflight и truck fallback;
-- active/reserved cap равен четырём на фракцию, не более одного lease на slot; functional world pool учитывается отдельно;
+- все десять slot могут получить commander-selected transport; light использует M998/UAZ-452 с обязательным capacity preflight и truck fallback, armed-light — M1025/UAZ-469;
+- active/reserved cap настраивается до десяти на фракцию, не более одного lease на slot; functional world pool учитывается отдельно;
 - сохранены bounded boarding/recovery/fallback, `SAFE_REUSE`, generation/identity guards и player-safe cleanup-инварианты Stage 3;
 - нижняя граница `aicfMaxManagedAgents` поднята до 48 при standard 64; heartbeat показывает фактические agents, managed waypoint/entity, per-slot activity и раздельные vehicle/world-pool counters.
 
@@ -132,17 +132,21 @@ Non-relay ATTACK использует stock `Move` для дальней operati
 
 ## Что реализовано в Stage 4
 
-- начальные восемь managed-групп остаются бесплатными, replacement `5/5` требует одновременно ticket, безопасную friendly-базу и stock supplies этой базы;
-- supply временно списывается вместе с ticket reservation и становится окончательным debit только после точного roster `5/5`; spawn, bind, timeout, invalid roster, capture, stale graph/generation и shutdown возвращают обе части транзакции;
+- каждая сторона получает десять stable managed-групп; штатный состав — `6 ATTACK / 3 DEFEND / 1 RESERVE`, каждая группа стартует как пехотная с четырьмя бойцами;
+- в окне командования можно менять роль, профиль подразделения (`INFANTRY`, `LIGHT 4X4`, `TRUCK`, `ARMED 4X4`) и численность следующего развёртывания от 1 до 10; armed-light ограничен составом 2–4, тяжёлая техника в интерфейс не входит;
+- роль и профиль мобильности применяются к живой группе, а новая численность — при следующем initial/replacement spawn; изменение размера во время активного spawn отклоняется сервером;
+- смена профиля на транспорт сохраняет только желаемую конфигурацию: сервер резервирует отдельную площадку, ведёт всех живых бойцов к вынесенной точке сбора через waypoint с completion `All` и создаёт машину лишь после устойчивого сбора и повторной проверки базы, площадки, вместимости и fleet cap; аварийный reissue маршрута ограничен одной попыткой, отмена или повторная смена профиля освобождает маршрут и резервацию;
+- initial-группы остаются бесплатными, replacement требует одновременно ticket, безопасную friendly-базу и stock supplies этой базы; supply cost масштабируется относительно baseline `500` за штатные четыре бойца;
+- supply временно списывается вместе с ticket reservation и становится окончательным debit только после exact roster выбранного размера; spawn, bind, timeout, invalid roster, capture, stale graph/generation и shutdown возвращают обе части транзакции;
 - readiness replacement-запроса накапливается со скоростью `100% / 67% / 50% / 0%` для `HEALTHY / STRAINED / ISOLATED / BLOCKED` и не сбрасывается при временном разрыве логистики;
 - spawn-базы ранжируются по connected-состоянию, числу graph-hop до сохранённой цели погибшей группы, остатку supplies и stable node ID;
 - абстрактные shipments списывают пакет с HQ/SOURCE_BASE, учитывают ETA по hop, паузу разорванного маршрута, capture destination, возврат и conservation `dispatched = delivered + returned + in_transit`;
 - небольшой HUD показывает билеты, connected/total supplies, число боеготовых отрядов, личный состав и текущую цель своей стороны;
 - карта стримит только союзные managed-группы, показывает роль, состояние задачи, направление/дистанцию движения и отдельные маркеры атакуемых баз;
-- кнопка `AI COMMAND` на карте открывает полноэкранный состав армии: состояние, численность, цель, posture, транспорт, ETA подкрепления, logistics tier, pending replacements и shipments;
+- кнопка `AI COMMAND` на карте открывает полноэкранный состав армии: десять групп, состояние, текущая/целевая численность, цель, posture, транспорт, ETA подкрепления, logistics tier, pending replacements, shipments и элементы конфигурации;
 - выбор группы и базы отправляет только `slot + callsign`; сервер получает фракцию из player identity, применяет rate limit и повторно проверяет роль, состояние группы и допустимость цели;
-- `SCR_GameModeCampaign` реплицирует economy-агрегаты и стратегические проекции для US/USSR; конкретные base supplies по-прежнему реплицирует stock Conflict;
-- статический Stage 4 audit и Workbench 1.8 validation прошли; direct ServerDiag startup/calibration probe `E1` подтвердил `500`-supplies defaults, обе faction MOB `1000/1000`, девять stock-pool снимков и `balance_delta=0`; UI и остальные runtime-срезы остаются `NOT RUN`.
+- `SCR_GameModeCampaign` реплицирует economy-агрегаты и десять стратегических проекций для US/USSR; конкретные base supplies по-прежнему реплицирует stock Conflict;
+- статический Stage 4 audit и Workbench 1.8 validation после critical runtime fixes (`5731/11231`, CRC32 `6a07dbba`, VM `0`) прошли. Финальный direct ServerDiag smoke подтвердил `HQ_RESERVE` для обеих R0 без MOB churn и полную recovery-цепочку одного отставшего бойца A1: `ATTEMPTED → SUBMITTED → ACCEPTED → PHYSICALLY_CONFIRMED 4/4`; `PARTIAL`, `DEADLINE_MISSED`, VM/null и order-accounting ошибок нет. Предшествующий 211-секундный smoke подтвердил безопасное переоткрытие четырёх отдельных recovery-эпизодов. Startup/calibration probe `E1` ранее подтвердил `500`-supplies baseline, обе faction MOB `1000/1000`, девять stock-pool снимков и `balance_delta=0`; новые role/type/size и vehicle-сценарии всё ещё требуют клиентского runtime-ретеста.
 
 Контракт и команды: [Stage 4 — экономика и снабжение](docs/STAGE_4_TESTING.md).
 

@@ -59,6 +59,24 @@ modded class SCR_GameModeCampaign
 	protected string m_sAICFUSGroup3;
 
 	[RplProp()]
+	protected string m_sAICFUSGroup4;
+
+	[RplProp()]
+	protected string m_sAICFUSGroup5;
+
+	[RplProp()]
+	protected string m_sAICFUSGroup6;
+
+	[RplProp()]
+	protected string m_sAICFUSGroup7;
+
+	[RplProp()]
+	protected string m_sAICFUSGroup8;
+
+	[RplProp()]
+	protected string m_sAICFUSGroup9;
+
+	[RplProp()]
 	protected int m_iAICFUSCombatGroups;
 
 	[RplProp()]
@@ -81,6 +99,24 @@ modded class SCR_GameModeCampaign
 
 	[RplProp()]
 	protected string m_sAICFUSSRGroup3;
+
+	[RplProp()]
+	protected string m_sAICFUSSRGroup4;
+
+	[RplProp()]
+	protected string m_sAICFUSSRGroup5;
+
+	[RplProp()]
+	protected string m_sAICFUSSRGroup6;
+
+	[RplProp()]
+	protected string m_sAICFUSSRGroup7;
+
+	[RplProp()]
+	protected string m_sAICFUSSRGroup8;
+
+	[RplProp()]
+	protected string m_sAICFUSSRGroup9;
 
 	[RplProp()]
 	protected int m_iAICFUSSRCombatGroups;
@@ -182,6 +218,12 @@ modded class SCR_GameModeCampaign
 		string group1,
 		string group2,
 		string group3,
+		string group4,
+		string group5,
+		string group6,
+		string group7,
+		string group8,
+		string group9,
 		int combatGroups,
 		int managedAgents)
 	{
@@ -197,6 +239,9 @@ modded class SCR_GameModeCampaign
 				m_sAICFUSOrderTargets != orderTargets ||
 				m_sAICFUSGroup0 != group0 || m_sAICFUSGroup1 != group1 ||
 				m_sAICFUSGroup2 != group2 || m_sAICFUSGroup3 != group3 ||
+				m_sAICFUSGroup4 != group4 || m_sAICFUSGroup5 != group5 ||
+				m_sAICFUSGroup6 != group6 || m_sAICFUSGroup7 != group7 ||
+				m_sAICFUSGroup8 != group8 || m_sAICFUSGroup9 != group9 ||
 				m_iAICFUSCombatGroups != combatGroups ||
 				m_iAICFUSManagedAgents != managedAgents;
 			if (!changed)
@@ -208,6 +253,12 @@ modded class SCR_GameModeCampaign
 			m_sAICFUSGroup1 = group1;
 			m_sAICFUSGroup2 = group2;
 			m_sAICFUSGroup3 = group3;
+			m_sAICFUSGroup4 = group4;
+			m_sAICFUSGroup5 = group5;
+			m_sAICFUSGroup6 = group6;
+			m_sAICFUSGroup7 = group7;
+			m_sAICFUSGroup8 = group8;
+			m_sAICFUSGroup9 = group9;
 			m_iAICFUSCombatGroups = combatGroups;
 			m_iAICFUSManagedAgents = managedAgents;
 		}
@@ -217,6 +268,9 @@ modded class SCR_GameModeCampaign
 				m_sAICFUSSROrderTargets != orderTargets ||
 				m_sAICFUSSRGroup0 != group0 || m_sAICFUSSRGroup1 != group1 ||
 				m_sAICFUSSRGroup2 != group2 || m_sAICFUSSRGroup3 != group3 ||
+				m_sAICFUSSRGroup4 != group4 || m_sAICFUSSRGroup5 != group5 ||
+				m_sAICFUSSRGroup6 != group6 || m_sAICFUSSRGroup7 != group7 ||
+				m_sAICFUSSRGroup8 != group8 || m_sAICFUSSRGroup9 != group9 ||
 				m_iAICFUSSRCombatGroups != combatGroups ||
 				m_iAICFUSSRManagedAgents != managedAgents;
 			if (!changed)
@@ -228,6 +282,12 @@ modded class SCR_GameModeCampaign
 			m_sAICFUSSRGroup1 = group1;
 			m_sAICFUSSRGroup2 = group2;
 			m_sAICFUSSRGroup3 = group3;
+			m_sAICFUSSRGroup4 = group4;
+			m_sAICFUSSRGroup5 = group5;
+			m_sAICFUSSRGroup6 = group6;
+			m_sAICFUSSRGroup7 = group7;
+			m_sAICFUSSRGroup8 = group8;
+			m_sAICFUSSRGroup9 = group9;
 			m_iAICFUSSRCombatGroups = combatGroups;
 			m_iAICFUSSRManagedAgents = managedAgents;
 		}
@@ -258,6 +318,12 @@ modded class SCR_GameModeCampaign
 				case 1: return m_sAICFUSSRGroup1;
 				case 2: return m_sAICFUSSRGroup2;
 				case 3: return m_sAICFUSSRGroup3;
+				case 4: return m_sAICFUSSRGroup4;
+				case 5: return m_sAICFUSSRGroup5;
+				case 6: return m_sAICFUSSRGroup6;
+				case 7: return m_sAICFUSSRGroup7;
+				case 8: return m_sAICFUSSRGroup8;
+				case 9: return m_sAICFUSSRGroup9;
 			}
 			return string.Empty;
 		}
@@ -268,6 +334,12 @@ modded class SCR_GameModeCampaign
 			case 1: return m_sAICFUSGroup1;
 			case 2: return m_sAICFUSGroup2;
 			case 3: return m_sAICFUSGroup3;
+			case 4: return m_sAICFUSGroup4;
+			case 5: return m_sAICFUSGroup5;
+			case 6: return m_sAICFUSGroup6;
+			case 7: return m_sAICFUSGroup7;
+			case 8: return m_sAICFUSGroup8;
+			case 9: return m_sAICFUSGroup9;
 		}
 		return string.Empty;
 	}

@@ -73,7 +73,7 @@ class AICF_TicketLedger
 		if (!Replication.IsServer())
 			return false;
 
-		// The four initial groups are part of setup and never consume tickets.
+		// Initial groups are part of setup and never consume tickets.
 		if (deploymentKind == AICF_EDeploymentKind.INITIAL)
 			return true;
 
