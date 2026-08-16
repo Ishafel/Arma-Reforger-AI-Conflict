@@ -107,6 +107,35 @@ class AICF_VehicleCoordinator
 		return new AICF_VehicleSlotView(trip);
 	}
 
+	// User-facing mobility is a physical projection first and a lifecycle
+	// projection second. In particular, retained fail-closed cleanup may outlive
+	// the Trip record while living members remain linked to the vehicle.
+	string GetSlotDisplayStatusText(AICF_GroupSlot slot)
+	{
+		if (!slot)
+			return "Пешком";
+		SCR_AIGroup group = slot.GetGroup();
+		int alive = AICF_GroupRuntime.CountAliveAgents(group);
+		int inVehicle = AICF_GroupRuntime.CountAliveAgentsInAnyVehicle(group);
+		AICF_VehicleSlotView view = GetSlotView(slot);
+		if (inVehicle > 0)
+		{
+			string phase;
+			if (view)
+				phase = view.GetPhase();
+			if (phase == "BOARDING")
+				return string.Format("Посадка %1/%2", inVehicle, alive);
+			if (phase == "DISMOUNT")
+				return string.Format("Высадка, в машине %1/%2", inVehicle, alive);
+			if (phase == "TRANSIT")
+				return string.Format("Движение на технике %1/%2", inVehicle, alive);
+			return string.Format("В технике %1/%2", inVehicle, alive);
+		}
+		if (view)
+			return view.GetStatusText();
+		return "Пешком";
+	}
+
 	AICF_TransportTrip GetTrip(AICF_GroupSlot slot)
 	{
 		return FindTripForSlot(slot);

@@ -275,6 +275,9 @@ class AICF_MatchController
 			AICF_Stage1Config.LEGACY_DEFEND_SLOTS_PER_FACTION,
 			AICF_Stage1Config.LEGACY_RESERVE_SLOTS_PER_FACTION);
 		stage35ConfigLine += string.Format(
+			" default_full_size_groups=%1",
+			AICF_Stage1Config.DEFAULT_FULL_SIZE_GROUPS_PER_FACTION);
+		stage35ConfigLine += string.Format(
 			" group_size_min=%1 group_size_max=%2 minimum_dwell_ms=%3 max_managed_agents=%4",
 			AICF_Stage1Config.MIN_GROUP_SIZE,
 			AICF_Stage1Config.MAX_GROUP_SIZE,
@@ -5340,6 +5343,7 @@ class AICF_MatchController
 			if (m_VehicleCoordinator)
 				vehicleView = m_VehicleCoordinator.GetSlotView(slot);
 			string vehicleState = "NONE";
+			int physicalVehicleMembers = AICF_GroupRuntime.CountAliveAgentsInAnyVehicle(group);
 			bool vehicleLifecycle;
 			bool vehicleWaypoint;
 			bool infantryWaypoint = IsWaypointBoundToGroup(slot.GetGroup(), slot.GetWaypoint());
@@ -5396,9 +5400,10 @@ class AICF_MatchController
 				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
 				infantryWaypoint);
 			slotActivityLine += string.Format(
-				" vehicle_waypoint=%1 vehicle_state=%2 at_mob=%3 distance_to_mob_m=%4 meaningful_task=%5 allowed_idle_reason=%6 mob_presence_ms=%7",
+				" vehicle_waypoint=%1 vehicle_state=%2 physical_vehicle_members=%3 at_mob=%4 distance_to_mob_m=%5 meaningful_task=%6 allowed_idle_reason=%7 mob_presence_ms=%8",
 				vehicleWaypoint,
 				vehicleState,
+				physicalVehicleMembers,
 				atMob,
 				distanceToMobMeters,
 				hasMeaningfulTask,
@@ -5932,11 +5937,14 @@ class AICF_MatchController
 		if (slot.GetTargetBase())
 			target = BuildBaseLabel(slot.GetTargetBase());
 		string vehiclePhase = "Пешком";
-		AICF_VehicleSlotView vehicleView;
 		if (m_VehicleCoordinator)
-			vehicleView = m_VehicleCoordinator.GetSlotView(slot);
-		if (vehicleView && !vehicleView.GetPhase().IsEmpty() && vehicleView.GetPhase() != "NONE")
-			vehiclePhase = vehicleView.GetStatusText();
+			vehiclePhase = m_VehicleCoordinator.GetSlotDisplayStatusText(slot);
+		else
+		{
+			int inVehicle = AICF_GroupRuntime.CountAliveAgentsInAnyVehicle(slot.GetGroup());
+			if (inVehicle > 0)
+				vehiclePhase = string.Format("В технике %1/%2", inVehicle, alive);
+		}
 		string reinforcement = "-";
 		string state = AICF_Stage1Diagnostics.StateToString(slot.GetState());
 		if (slot.HasPendingOrderRecovery())

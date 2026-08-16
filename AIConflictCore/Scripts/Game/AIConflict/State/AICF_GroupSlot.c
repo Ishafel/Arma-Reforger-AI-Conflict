@@ -128,7 +128,7 @@ class AICF_GroupSlot
 		m_iRoleIndex = roleIndex;
 		m_Role = role;
 		m_UnitType = AICF_EGroupUnitType.INFANTRY;
-		m_iDesiredSize = AICF_Stage1Config.DEFAULT_GROUP_SIZE;
+		m_iDesiredSize = AICF_Stage1Config.GetDefaultGroupSizeForSlot(slotId);
 		m_State = AICF_EGroupSlotState.EMPTY;
 	}
 

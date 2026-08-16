@@ -447,12 +447,17 @@ class AICF_GroupMapMarkerSystem
 				task);
 		}
 		int alive = AICF_GroupRuntime.CountAliveAgents(group);
+		int inVehicle = AICF_GroupRuntime.CountAliveAgentsInAnyVehicle(group);
 		string vehicleState;
-		AICF_VehicleSlotView vehicleView;
 		if (vehicleCoordinator)
-			vehicleView = vehicleCoordinator.GetSlotView(slot);
-		if (vehicleView)
-			vehicleState = vehicleView.GetStatusText();
+			vehicleState = vehicleCoordinator.GetSlotDisplayStatusText(slot);
+		else if (inVehicle > 0)
+		{
+			vehicleState = string.Format(
+				"В технике %1/%2",
+				inVehicle,
+				alive);
+		}
 		if (vehicleState.IsEmpty() || vehicleState == "NONE")
 			vehicleState = "Пешком";
 

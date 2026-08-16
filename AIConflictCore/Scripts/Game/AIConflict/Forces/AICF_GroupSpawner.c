@@ -86,7 +86,9 @@ class AICF_GroupSpawner
 		}
 
 		int sourceRosterSize;
-		if (!ConfigureManagedRoster(group, desiredSize, sourceRosterSize))
+		int fallbackSlots;
+		string configuredRoles;
+		if (!ConfigureManagedRoster(group, faction, desiredSize, sourceRosterSize, fallbackSlots, configuredRoles))
 		{
 			AICF_Stage35Diagnostics.Error(
 				"GROUP_ROSTER_CONFIG_INVALID",
@@ -106,6 +108,16 @@ class AICF_GroupSpawner
 		// BeginRosterSpawn(). This prevents a completion callback from racing the
 		// authoritative managed-slot ownership boundary.
 		group.SetSpawnImmediately(false);
+
+		AICF_Stage35Diagnostics.Info(
+			"GROUP_ROSTER_CONFIGURED",
+			string.Format(
+				"faction=%1 slot=%2 size=%3 roles=%4 fallback_slots=%5",
+				faction.GetFactionKey(),
+				slotId,
+				desiredSize,
+				configuredRoles,
+				fallbackSlots));
 
 		AICF_Stage35Diagnostics.Info(
 			"GROUP_ENTITY_SPAWNED",
@@ -142,11 +154,16 @@ class AICF_GroupSpawner
 
 	protected bool ConfigureManagedRoster(
 		SCR_AIGroup group,
+		SCR_CampaignFaction faction,
 		int expectedSize,
-		out int sourceRosterSize)
+		out int sourceRosterSize,
+		out int fallbackSlots,
+		out string configuredRoles)
 	{
 		sourceRosterSize = 0;
-		if (!group || expectedSize <= 0 || !group.m_aUnitPrefabSlots)
+		fallbackSlots = 0;
+		configuredRoles = string.Empty;
+		if (!group || !faction || expectedSize <= 0 || !group.m_aUnitPrefabSlots)
 			return false;
 
 		array<ResourceName> sourceRoster = {};
@@ -162,21 +179,138 @@ class AICF_GroupSpawner
 				return false;
 		}
 
+		array<SCR_EntityCatalogEntry> characterEntries = {};
+		SCR_EntityCatalog characterCatalog = faction.GetFactionEntityCatalogOfType(EEntityCatalogType.CHARACTER);
+		if (characterCatalog)
+			characterCatalog.GetEntityList(characterEntries);
+
 		group.m_aUnitPrefabSlots.Clear();
+		for (int memberIndex = 0; memberIndex < expectedSize; memberIndex++)
+		{
+			string role;
+			string prefabSuffix;
+			BuildRoleSlot(faction.GetFactionKey(), memberIndex, role, prefabSuffix);
+			ResourceName selectedPrefab = FindCharacterPrefab(characterEntries, prefabSuffix);
+			if (selectedPrefab.IsEmpty())
+			{
+				selectedPrefab = GetSourceRosterFallback(sourceRoster, memberIndex);
+				fallbackSlots++;
+			}
+
+			if (selectedPrefab.IsEmpty())
+				return false;
+
+			if (!configuredRoles.IsEmpty())
+				configuredRoles += ",";
+			configuredRoles += string.Format("%1:%2", memberIndex + 1, role);
+			group.m_aUnitPrefabSlots.Insert(selectedPrefab);
+		}
+
+		return group.m_aUnitPrefabSlots.Count() == expectedSize;
+	}
+
+	// A managed squad has a stable ten-position table. Smaller squads take the
+	// prefix, so slot 1 is always command and the first four always contain the
+	// commander, medic, machine-gunner and anti-tank specialist requested by the
+	// match configuration.
+	protected void BuildRoleSlot(
+		FactionKey factionKey,
+		int memberIndex,
+		out string role,
+		out string prefabSuffix)
+	{
+		string prefix = "Character_US_";
+		if (factionKey == "USSR")
+			prefix = "Character_USSR_";
+
+		switch (memberIndex)
+		{
+			case 0:
+				role = "SQUAD_LEADER";
+				prefabSuffix = prefix + "SL.et";
+				return;
+			case 1:
+				role = "MEDIC";
+				prefabSuffix = prefix + "Medic.et";
+				return;
+			case 2:
+				role = "MACHINE_GUNNER";
+				prefabSuffix = prefix + "MG.et";
+				return;
+			case 3:
+				role = "ANTI_TANK";
+				prefabSuffix = prefix + "AT.et";
+				return;
+			case 4:
+				role = "GRENADIER";
+				prefabSuffix = prefix + "GL.et";
+				return;
+			case 5:
+				role = "AUTOMATIC_RIFLEMAN";
+				prefabSuffix = prefix + "AR.et";
+				return;
+			case 6:
+				if (factionKey == "USSR")
+				{
+					role = "SENIOR_RIFLEMAN";
+					prefabSuffix = prefix + "SR.et";
+				}
+				else
+				{
+					role = "TEAM_LEADER";
+					prefabSuffix = prefix + "TL.et";
+				}
+				return;
+			case 7:
+				role = "MACHINE_GUNNER_ASSISTANT";
+				prefabSuffix = prefix + "AMG.et";
+				return;
+			case 8:
+				role = "ANTI_TANK_ASSISTANT";
+				prefabSuffix = prefix + "AAT.et";
+				return;
+		}
+
+		role = "RIFLEMAN";
+		prefabSuffix = prefix + "Rifleman.et";
+	}
+
+	protected ResourceName FindCharacterPrefab(
+		array<SCR_EntityCatalogEntry> entries,
+		string prefabSuffix)
+	{
+		foreach (SCR_EntityCatalogEntry entry : entries)
+		{
+			if (!entry)
+				continue;
+
+			ResourceName prefab = entry.GetPrefab();
+			if (prefab.IsEmpty() || !prefab.Contains(prefabSuffix))
+				continue;
+
+			Resource resource = Resource.Load(prefab);
+			if (resource && resource.IsValid())
+				return prefab;
+		}
+
+		return ResourceName.Empty;
+	}
+
+	protected ResourceName GetSourceRosterFallback(
+		array<ResourceName> sourceRoster,
+		int memberIndex)
+	{
+		int sourceRosterSize = sourceRoster.Count();
+		if (sourceRosterSize <= 0)
+			return ResourceName.Empty;
+		if (memberIndex < sourceRosterSize)
+			return sourceRoster[memberIndex];
+
 		int repeatStart;
 		if (sourceRosterSize > 1)
 			repeatStart = 1;
 		int repeatCount = sourceRosterSize - repeatStart;
-		for (int memberIndex = 0; memberIndex < expectedSize; memberIndex++)
-		{
-			int sourceIndex = memberIndex;
-			if (sourceIndex >= sourceRosterSize)
-				sourceIndex = repeatStart + ((memberIndex - sourceRosterSize) % repeatCount);
-
-			group.m_aUnitPrefabSlots.Insert(sourceRoster[sourceIndex]);
-		}
-
-		return group.m_aUnitPrefabSlots.Count() == expectedSize;
+		return sourceRoster[repeatStart + ((memberIndex - sourceRosterSize) % repeatCount)];
 	}
 
 	protected vector GetSlotOffset(int slotId)

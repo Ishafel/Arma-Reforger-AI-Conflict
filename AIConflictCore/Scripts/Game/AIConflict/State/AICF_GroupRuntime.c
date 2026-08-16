@@ -45,6 +45,31 @@ class AICF_GroupRuntime
 		return alive;
 	}
 
+	// Physical UI truth must not depend on the lifetime of a TransportTrip. A
+	// terminal fallback can deliberately retain a protected vehicle while some
+	// managed occupants are still linked to it; calling that group "on foot"
+	// during cleanup is misleading and also hides lifecycle/clearance defects.
+	static int CountAliveAgentsInAnyVehicle(SCR_AIGroup group)
+	{
+		if (!group)
+			return 0;
+
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		int inVehicle;
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+			IEntity entity = agent.GetControlledEntity();
+			if (!IsAliveCharacter(entity))
+				continue;
+			if (CompartmentAccessComponent.GetVehicleIn(entity))
+				inVehicle++;
+		}
+		return inVehicle;
+	}
+
 	static bool HasExactFactionRoster(
 		SCR_AIGroup group,
 		FactionKey expectedFactionKey,

@@ -3,6 +3,7 @@ class AICF_Stage1Config
 {
 	static const int GROUP_SLOTS_PER_FACTION = 10;
 	static const int DEFAULT_GROUP_SIZE = 4;
+	static const int DEFAULT_FULL_SIZE_GROUPS_PER_FACTION = 4;
 	static const int MIN_GROUP_SIZE = 1;
 	static const int MAX_GROUP_SIZE = 10;
 	// Compatibility alias for diagnostics and older static contracts. Runtime
@@ -27,11 +28,18 @@ class AICF_Stage1Config
 	static const int MAX_DELAY_MS = 3600000;
 	static const int MIN_COMMANDER_INTERVAL_MS = 1000;
 	static const int MAX_COMMANDER_INTERVAL_MS = 600000;
-	// Twenty default four-agent groups require 80 live agents. The upper bound
-	// also permits all twenty groups to use the commander maximum of ten while
-	// retaining a small replacement-spawn margin.
-	static const int MIN_MANAGED_AGENTS = 80;
+	// Per faction the first four slots start at ten agents and the remaining six
+	// at four: (4 * 10 + 6 * 4) * 2 factions = 128 live agents. Do not allow a
+	// CLI override to make the configured initial roster permanently inadmissible.
+	static const int MIN_MANAGED_AGENTS = 128;
 	static const int MAX_MANAGED_AGENTS = 256;
+
+	static int GetDefaultGroupSizeForSlot(int slotId)
+	{
+		if (slotId >= 0 && slotId < DEFAULT_FULL_SIZE_GROUPS_PER_FACTION)
+			return MAX_GROUP_SIZE;
+		return DEFAULT_GROUP_SIZE;
+	}
 
 	protected int m_iInitialTickets;
 	protected int m_iReplacementTicketCost;
