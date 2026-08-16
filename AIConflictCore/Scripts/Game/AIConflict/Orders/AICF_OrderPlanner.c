@@ -11,7 +11,12 @@ class AICF_OrderPlanner
 	protected static const float ATTACK_OBJECTIVE_PROMOTION_RADIUS_METERS = 100.0;
 	protected static const float ATTACK_OBJECTIVE_HOLDING_TIME_SECONDS = 600.0;
 	protected static const float DEFEND_RADIUS_METERS = 50.0;
+	protected static const float DEFEND_HOLDING_TIME_SECONDS = 3600.0;
 	protected static const float RELAY_RADIUS_METERS = 20.0;
+	protected static const float FALSE_COMPLETION_ROUTE_LEG_METERS = 140.0;
+	protected static const float FALSE_COMPLETION_ROUTE_MIN_PROGRESS_METERS = 30.0;
+	protected static const int FALSE_COMPLETION_ROUTE_SAMPLE_COUNT = 16;
+	protected static const vector NAVMESH_ENDPOINT_SEARCH_HALF_EXTENTS = "20 20 20";
 	protected static const string POSTURE_ATTACK_PRIMARY = "ATTACK_PRIMARY";
 	protected static const string POSTURE_ATTACK_SECONDARY = "ATTACK_SECONDARY";
 	protected static const string POSTURE_ATTACK_SUPPORT = "ATTACK_SUPPORT";
@@ -417,6 +422,29 @@ class AICF_OrderPlanner
 			"ORDER_REBUILD");
 	}
 
+	bool AssignLoneSurvivorRetreat(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		string reason)
+	{
+		if (!slot || !faction || !slot.IsCombatReady() ||
+			AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()) != 1)
+		{
+			return false;
+		}
+		SCR_CampaignMilitaryBaseComponent mainBase = faction.GetMainBase();
+		if (!mainBase || !mainBase.GetOwner() || mainBase.GetFaction() != faction)
+			return false;
+		return ReplaceOrder(
+			slot,
+			faction,
+			mainBase,
+			reason,
+			"LONE_SURVIVOR_RETREAT",
+			"VEHICLE_FALLBACK_LONE_SURVIVOR",
+			true);
+	}
+
 	// Non-relay ATTACK assignments travel under a stock Move waypoint. The
 	// objective action is deliberately created only after the alive leader enters
 	// the local objective envelope, so long operational movement cannot start the
@@ -672,6 +700,73 @@ class AICF_OrderPlanner
 		return true;
 	}
 
+	bool TryResolveSlotTargetPosition(
+		AICF_GroupSlot slot,
+		SCR_CampaignMilitaryBaseComponent target,
+		out vector targetPosition)
+	{
+		if (!slot)
+		{
+			targetPosition = vector.Zero;
+			return false;
+		}
+		AICF_EGroupRole positionRole = slot.GetRole();
+		if (slot.IsLoneSurvivorRetreat())
+			positionRole = AICF_EGroupRole.DEFEND;
+		return TryResolveTargetPosition(target, positionRole, targetPosition);
+	}
+
+	bool HoldPositionForTemporaryRouteReplan(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		SCR_CampaignMilitaryBaseComponent target,
+		vector fieldPosition)
+	{
+		if (!slot || !faction || !target || !slot.IsCombatReady() || !slot.GetGroup())
+			return false;
+		Resource waypointResource = Resource.Load(DEFEND_WAYPOINT_PREFAB);
+		if (!waypointResource || !waypointResource.IsValid())
+			return false;
+		EntitySpawnParams spawnParams = new EntitySpawnParams();
+		spawnParams.TransformMode = ETransformMode.WORLD;
+		spawnParams.Transform[3] = fieldPosition;
+		IEntity spawnedEntity = GetGame().SpawnEntityPrefabEx(
+			DEFEND_WAYPOINT_PREFAB,
+			false,
+			params: spawnParams);
+		AIWaypoint routeHold = AIWaypoint.Cast(spawnedEntity);
+		if (!routeHold)
+		{
+			if (spawnedEntity)
+				RplComponent.DeleteRplEntity(spawnedEntity, false);
+			return false;
+		}
+		routeHold.SetCompletionRadius(DEFEND_RADIUS_METERS);
+		routeHold.SetCompletionType(EAIWaypointCompletionType.All);
+		SCR_TimedWaypoint timedHold = SCR_TimedWaypoint.Cast(routeHold);
+		if (timedHold)
+			timedHold.SetHoldingTime(DEFEND_HOLDING_TIME_SECONDS);
+
+		SCR_AIGroup group = slot.GetGroup();
+		AIWaypoint oldWaypoint = slot.GetWaypoint();
+		if (oldWaypoint)
+		{
+			group.RemoveWaypoint(oldWaypoint);
+			RplComponent.DeleteRplEntity(oldWaypoint, false);
+			LogWaypointRemoved(slot, oldWaypoint, "FALSE_COMPLETION_HOLD", "ROUTE_ENDPOINTS_EXHAUSTED");
+		}
+		group.AddWaypointAt(routeHold, 0);
+		slot.ClearObjective();
+		if (!slot.AssignObjective(target, routeHold))
+		{
+			group.RemoveWaypoint(routeHold);
+			RplComponent.DeleteRplEntity(routeHold, false);
+			return false;
+		}
+		slot.BeginTemporaryRouteReplanHold(fieldPosition);
+		return true;
+	}
+
 	// Planning is the sole writer of strategic intent. Vehicle orchestration
 	// receives this point-in-time value object and may only validate or retarget
 	// through a later snapshot with a newer planning/base revision.
@@ -686,7 +781,7 @@ class AICF_OrderPlanner
 			return false;
 
 		vector targetPosition;
-		if (!TryResolveTargetPosition(slot.GetTargetBase(), slot.GetRole(), targetPosition))
+		if (!TryResolveSlotTargetPosition(slot, slot.GetTargetBase(), targetPosition))
 			return false;
 
 		int assignmentStartedAtMs;
@@ -718,13 +813,22 @@ class AICF_OrderPlanner
 		SCR_CampaignMilitaryBaseComponent target,
 		string reason,
 		string posture,
-		string trigger)
+		string trigger,
+		bool loneSurvivorRetreat = false)
 	{
 		SCR_AIGroup group = slot.GetGroup();
 		if (!group || !slot.IsCombatReady())
 			return false;
 
-		AIWaypoint newWaypoint = CreateWaypoint(target, slot.GetRole());
+		AIWaypoint newWaypoint;
+		if (loneSurvivorRetreat)
+			newWaypoint = CreateLoneSurvivorRetreatWaypoint(slot.GetGroup(), target);
+		else
+			newWaypoint = CreateWaypoint(
+				target,
+				slot.GetRole(),
+				slot.GetGroup(),
+				slot.GetFalseCompletionEndpointRevision());
 		if (!newWaypoint)
 			return false;
 
@@ -750,6 +854,8 @@ class AICF_OrderPlanner
 		slot.ResetTargetUnavailableReport();
 		if (oldTarget != target || oldPosture != posture)
 			slot.RecordStrategicAssignment(target, posture);
+		if (loneSurvivorRetreat)
+			slot.BeginLoneSurvivorRetreat();
 		LogOrderWaypointCreated(slot, faction, target, newWaypoint, reason, trigger);
 
 		if (oldTarget && oldTarget != target)
@@ -784,12 +890,15 @@ class AICF_OrderPlanner
 					trigger));
 		}
 		string strategicAssignmentLine = string.Format(
-				"faction=%1 slot=%2 numeric_slot=%3 role=%4 posture=%5 target=%6 trigger=%7 reason=%8 waypoint=%9",
+				"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 role=%5 posture=%6",
 				faction.GetFactionKey(),
 				slot.GetSlotKey(),
+				slot.GetStableSlotKey(),
 				slot.GetSlotId(),
 				AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
-				posture,
+				posture);
+		strategicAssignmentLine += string.Format(
+			" target=%1 trigger=%2 reason=%3 waypoint=%4",
 				AICF_Stage1Diagnostics.BaseKey(target),
 				trigger,
 				reason,
@@ -816,20 +925,23 @@ class AICF_OrderPlanner
 			return;
 
 		string createdLine = string.Format(
-			"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 target=%5 waypoint=%6 waypoint_kind=%7",
+			"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 group_generation=%5 target=%6 waypoint=%7 waypoint_kind=%8",
 			faction.GetFactionKey(),
 			slot.GetSlotKey(),
+			slot.GetStableSlotKey(),
 			slot.GetSlotId(),
 			slot.GetSpawnGeneration(),
 			AICF_Stage1Diagnostics.BaseKey(target),
 			waypoint.GetID(),
 			GetWaypointKind(slot, waypoint));
 		createdLine += string.Format(
-			" role=%1 reason=%2 trigger=%3 completion_policy=%4",
+			" role=%1 reason=%2 trigger=%3 completion_policy=%4 endpoint_revision=%5 endpoint=%6",
 			AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
 			reason,
 			trigger,
-			GetWaypointCompletionPolicy(slot, waypoint));
+			GetWaypointCompletionPolicy(slot, waypoint),
+			slot.GetFalseCompletionEndpointRevision(),
+			waypoint.GetOrigin());
 		AICF_Stage35Diagnostics.Info("ORDER_WAYPOINT_CREATED", createdLine);
 	}
 
@@ -839,11 +951,15 @@ class AICF_OrderPlanner
 			return "NONE";
 		if (SCR_SmartActionWaypoint.Cast(waypoint))
 			return "ANY";
+		if (slot && slot.IsLoneSurvivorRetreat())
+			return "ALL_PHYSICAL_RETREAT";
 		if (slot && slot.GetRole() == AICF_EGroupRole.ATTACK &&
 			!SCR_SearchAndDestroyWaypoint.Cast(waypoint))
 		{
-			return "LEADER";
+			return "ALL";
 		}
+		if (SCR_DefendWaypoint.Cast(waypoint))
+			return "ALL_HOLD_3600S";
 		return "PREFAB_DEFAULT";
 	}
 
@@ -860,19 +976,22 @@ class AICF_OrderPlanner
 		SCR_AIGroup group = slot.GetGroup();
 		if (group && group.GetFaction())
 			factionKey = group.GetFaction().GetFactionKey();
-		AICF_Stage35Diagnostics.Info(
-			"WAYPOINT_REMOVED",
-			string.Format(
-				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 waypoint=%5 waypoint_kind=%6 owner=ORDER_PLANNER remove_trigger=%7 remove_reason=%8 target=%9",
+		string removalLine = string.Format(
+				"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 group_generation=%5 assignment_revision=%6",
 				factionKey,
 				slot.GetSlotKey(),
+				slot.GetStableSlotKey(),
 				slot.GetSlotId(),
 				slot.GetSpawnGeneration(),
+				slot.GetStrategicAssignmentRevision());
+		removalLine += string.Format(
+				" waypoint=%1 waypoint_kind=%2 owner=ORDER_PLANNER remove_trigger=%3 remove_reason=%4 target=%5",
 				waypoint.GetID(),
 				GetWaypointKind(slot, waypoint),
 				trigger,
 				reason,
-				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase())));
+				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()));
+		AICF_Stage35Diagnostics.Info("WAYPOINT_REMOVED", removalLine);
 	}
 
 	protected string GetWaypointKind(AICF_GroupSlot slot, AIWaypoint waypoint)
@@ -883,6 +1002,10 @@ class AICF_OrderPlanner
 			return "ATTACK_RELAY_ACTION";
 		if (SCR_SearchAndDestroyWaypoint.Cast(waypoint))
 			return "ATTACK_OBJECTIVE_ACTION";
+		if (slot && slot.IsLoneSurvivorRetreat())
+			return "LONE_SURVIVOR_RETREAT";
+		if (slot && slot.IsTemporaryRouteReplanHold())
+			return "TEMPORARY_ROUTE_REPLAN_HOLD";
 		if (SCR_DefendWaypoint.Cast(waypoint))
 		{
 			if (slot && slot.IsPersistentStuckFieldHold())
@@ -903,6 +1026,8 @@ class AICF_OrderPlanner
 	{
 		if (!slot || !faction || !target || !target.GetOwner() || !target.IsInitialized())
 			return false;
+		if (slot.IsLoneSurvivorRetreat())
+			return target == faction.GetMainBase() && target.GetFaction() == faction;
 
 		if (slot.GetRole() == AICF_EGroupRole.ATTACK)
 		{
@@ -967,7 +1092,9 @@ class AICF_OrderPlanner
 
 	protected AIWaypoint CreateWaypoint(
 		SCR_CampaignMilitaryBaseComponent target,
-		AICF_EGroupRole role)
+		AICF_EGroupRole role,
+		SCR_AIGroup group = null,
+		int endpointRevision = 0)
 	{
 		if (!target || !target.GetOwner())
 			return null;
@@ -996,6 +1123,17 @@ class AICF_OrderPlanner
 		vector targetPosition;
 		if (!TryResolveTargetPosition(target, role, targetPosition))
 			return null;
+		if (!isRelay && endpointRevision > 0)
+		{
+			vector recoveryEndpoint;
+			if (!TryResolveFalseCompletionEndpoint(
+				group,
+				targetPosition,
+				endpointRevision,
+				recoveryEndpoint))
+				return null;
+			targetPosition = recoveryEndpoint;
+		}
 
 		EntitySpawnParams spawnParams = new EntitySpawnParams();
 		spawnParams.TransformMode = ETransformMode.WORLD;
@@ -1025,11 +1163,17 @@ class AICF_OrderPlanner
 		}
 		else if (role == AICF_EGroupRole.ATTACK)
 		{
-			// The stock Move prefab's completion policy is prefab-owned. Make the
-			// operational contract explicit: a distant attack leg completes only when
-			// the authoritative group leader arrives, never because one separated
-			// member happens to enter the radius first.
-			waypoint.SetCompletionType(EAIWaypointCompletionType.Leader);
+			// A long strategic leg is complete only after the whole living formation
+			// reaches it. Leader completion allowed a separated leader to terminate a
+			// waypoint while the group was still hundreds of metres from the target.
+			waypoint.SetCompletionType(EAIWaypointCompletionType.All);
+		}
+		else
+		{
+			waypoint.SetCompletionType(EAIWaypointCompletionType.All);
+			SCR_TimedWaypoint defendWaypoint = SCR_TimedWaypoint.Cast(waypoint);
+			if (defendWaypoint)
+				defendWaypoint.SetHoldingTime(DEFEND_HOLDING_TIME_SECONDS);
 		}
 
 		// The setting is copied into the group only while this AICF waypoint is
@@ -1044,6 +1188,98 @@ class AICF_OrderPlanner
 		}
 
 		waypoint.SetCompletionRadius(completionRadius);
+		return waypoint;
+	}
+
+	protected bool TryResolveFalseCompletionEndpoint(
+		SCR_AIGroup group,
+		vector objectivePosition,
+		int endpointRevision,
+		out vector endpoint)
+	{
+		endpoint = vector.Zero;
+		if (!group || endpointRevision <= 0)
+			return false;
+		AIPathfindingComponent pathfinding = AIPathfindingComponent.Cast(
+			group.FindComponent(AIPathfindingComponent));
+		if (!pathfinding)
+			return false;
+		NavmeshWorldComponent navmesh = pathfinding.GetNavmeshComponent();
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
+		if (!navmesh || !leader)
+			return false;
+		vector origin = leader.GetOrigin();
+		float objectiveDistanceMeters = vector.DistanceXZ(origin, objectivePosition);
+		if (objectiveDistanceMeters <= FALSE_COMPLETION_ROUTE_MIN_PROGRESS_METERS)
+			return false;
+		float requestedLegMeters = Math.Min(
+			FALSE_COMPLETION_ROUTE_LEG_METERS,
+			Math.Max(
+				FALSE_COMPLETION_ROUTE_MIN_PROGRESS_METERS,
+				objectiveDistanceMeters - ATTACK_OPERATIONAL_RADIUS_METERS));
+		float bestRemainingMeters = objectiveDistanceMeters;
+		bool found;
+		for (int candidateAttempt; candidateAttempt < FALSE_COMPLETION_ROUTE_SAMPLE_COUNT; candidateAttempt++)
+		{
+			int distanceBand = candidateAttempt;
+			while (distanceBand >= 3)
+				distanceBand -= 3;
+			float sampleDistanceMeters = requestedLegMeters -
+				distanceBand * 20.0;
+			vector candidate;
+			if (!navmesh.GetReachablePoint(origin, sampleDistanceMeters, candidate))
+				continue;
+			float legMeters = vector.DistanceXZ(origin, candidate);
+			float remainingMeters = vector.DistanceXZ(candidate, objectivePosition);
+			if (legMeters < FALSE_COMPLETION_ROUTE_MIN_PROGRESS_METERS ||
+				remainingMeters >= bestRemainingMeters - 5.0)
+			{
+				continue;
+			}
+			endpoint = candidate;
+			bestRemainingMeters = remainingMeters;
+			found = true;
+		}
+		return found;
+	}
+
+	protected AIWaypoint CreateLoneSurvivorRetreatWaypoint(
+		SCR_AIGroup group,
+		SCR_CampaignMilitaryBaseComponent target)
+	{
+		Resource waypointResource = Resource.Load(ATTACK_OPERATIONAL_WAYPOINT_PREFAB);
+		if (!waypointResource || !waypointResource.IsValid())
+			return null;
+		vector targetPosition;
+		if (!TryResolveTargetPosition(target, AICF_EGroupRole.DEFEND, targetPosition))
+			return null;
+		AIPathfindingComponent pathfinding;
+		if (group)
+			pathfinding = AIPathfindingComponent.Cast(group.FindComponent(AIPathfindingComponent));
+		vector navmeshPosition;
+		if (pathfinding && pathfinding.GetClosestPositionOnNavmesh(
+			targetPosition,
+			NAVMESH_ENDPOINT_SEARCH_HALF_EXTENTS,
+			navmeshPosition))
+		{
+			targetPosition = navmeshPosition;
+		}
+		EntitySpawnParams spawnParams = new EntitySpawnParams();
+		spawnParams.TransformMode = ETransformMode.WORLD;
+		spawnParams.Transform[3] = targetPosition;
+		IEntity spawnedEntity = GetGame().SpawnEntityPrefabEx(
+			ATTACK_OPERATIONAL_WAYPOINT_PREFAB,
+			false,
+			params: spawnParams);
+		AIWaypoint waypoint = AIWaypoint.Cast(spawnedEntity);
+		if (!waypoint)
+		{
+			if (spawnedEntity)
+				RplComponent.DeleteRplEntity(spawnedEntity, false);
+			return null;
+		}
+		waypoint.SetCompletionType(EAIWaypointCompletionType.All);
+		waypoint.SetCompletionRadius(ATTACK_OPERATIONAL_RADIUS_METERS);
 		return waypoint;
 	}
 

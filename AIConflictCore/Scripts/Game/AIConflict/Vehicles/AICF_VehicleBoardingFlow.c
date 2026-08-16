@@ -17,6 +17,8 @@ class AICF_VehicleBoardingFlow
 	protected static const int MAX_ACTION_TOKENS = 16;
 	protected static const int EXACT_CARGO_READY_RETRY_STALL_MS = 4000;
 	protected static const float EXACT_CARGO_READY_DISTANCE_METERS = 6.0;
+	protected static const int EXACT_CREW_READY_RETRY_STALL_MS = 4000;
+	protected static const float EXACT_CREW_READY_DISTANCE_METERS = 8.0;
 	protected ref AICF_Stage3Config m_Config;
 	protected ref AICF_VehicleWatchdog m_Watchdog;
 
@@ -140,7 +142,8 @@ class AICF_VehicleBoardingFlow
 			nowMs,
 			totalDeadlineMs,
 			plannedPhaseCount,
-			m_Config.GetPassengerMaxRetries());
+			m_Config.GetPassengerMaxRetries(),
+			trip.GetAbsoluteDeadlineMs());
 		state.ConfigureImmutablePlan(
 			phaseTimeoutMs,
 			approachTimeoutMs,
@@ -1433,6 +1436,36 @@ class AICF_VehicleBoardingFlow
 		if (access && (access.IsGettingIn() || access.IsGettingOut()))
 			return true;
 		EAIActionState actionState = token.GetActionState();
+		bool exactCrewRetryDue = actionState == EAIActionState.RUNNING &&
+			token.GetRetryCount() < CREW_MAX_RETRIES &&
+			token.GetProgressAgeMs() >= EXACT_CREW_READY_RETRY_STALL_MS &&
+			token.IsReadyExactSeatWithoutTransition(
+				EXACT_CREW_READY_DISTANCE_METERS,
+				role);
+		if (exactCrewRetryDue)
+		{
+			bool requestAccepted;
+			int doorIndex;
+			if (token.RequestAnimatedExactSeatRecovery(requestAccepted, doorIndex))
+			{
+				string retryDetails = DescribeTokenContext(
+					trip,
+					lease,
+					token,
+					causationId,
+					"MANDATORY_CREW_READY_WITHOUT_TRANSITION");
+				retryDetails += string.Format(
+					" role=%1 trigger_stall_ms=%2 door_index=%3 request_accepted=%4 force_teleport=0",
+					typename.EnumToString(EAICompartmentType, role),
+					EXACT_CREW_READY_RETRY_STALL_MS,
+					doorIndex,
+					requestAccepted);
+				AICF_Stage3Diagnostics.Warning(
+					"CREW_ANIMATED_EXACT_ROLE_REISSUED",
+					retryDetails);
+				return true;
+			}
+		}
 		if (actionState != EAIActionState.COMPLETED && actionState != EAIActionState.FAILED)
 			return true;
 		if (token.GetRetryCount() >= CREW_MAX_RETRIES)

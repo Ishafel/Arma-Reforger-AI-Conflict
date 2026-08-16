@@ -28,8 +28,10 @@ class AICF_Stage3Config
 	static const int DEFAULT_PASSENGER_STALL_MS = 8000;
 	static const int DEFAULT_PASSENGER_MAX_RETRIES = 1;
 	static const float DEFAULT_HIDDEN_RECOVERY_PLAYER_RADIUS_METERS = 300.0;
-	static const float DEFAULT_SPAWN_STAGING_OFFSET_METERS = 28.0;
-	static const float DEFAULT_SPAWN_STAGING_RADIUS_METERS = 12.0;
+	// 50 m staging radius + 8 m spawn cylinder + 10 m safety margin.
+	// The old 28 m offset made the accepted staging circle overlap the pad.
+	static const float DEFAULT_SPAWN_STAGING_OFFSET_METERS = 68.0;
+	static const float DEFAULT_SPAWN_STAGING_RADIUS_METERS = 50.0;
 	static const int DEFAULT_SPAWN_STAGING_HOLD_MS = 3000;
 	static const int DEFAULT_SPAWN_APPROACH_TIMEOUT_MS = 300000;
 	// A fresh transport is useful only while a group retains a viable fireteam.
@@ -209,9 +211,9 @@ class AICF_Stage3Config
 		if (System.GetCLIParam("aicfHiddenRecoveryEnabled", value))
 			m_bHiddenRecoveryEnabled = value.ToInt() > 0;
 		if (System.GetCLIParam("aicfVehicleSpawnStagingOffsetMeters", value))
-			m_fSpawnStagingOffsetMeters = ClampFloat(value.ToFloat(), 15.0, 60.0);
+			m_fSpawnStagingOffsetMeters = ClampFloat(value.ToFloat(), 20.0, 160.0);
 		if (System.GetCLIParam("aicfVehicleSpawnStagingRadiusMeters", value))
-			m_fSpawnStagingRadiusMeters = ClampFloat(value.ToFloat(), 5.0, 25.0);
+			m_fSpawnStagingRadiusMeters = ClampFloat(value.ToFloat(), 5.0, 100.0);
 		if (System.GetCLIParam("aicfVehicleSpawnStagingHoldMs", value))
 			m_iSpawnStagingHoldMs = ClampInt(value.ToInt(), 1000, 10000);
 		if (System.GetCLIParam("aicfVehicleSpawnApproachTimeoutMs", value))

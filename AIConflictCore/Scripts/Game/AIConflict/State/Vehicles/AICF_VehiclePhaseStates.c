@@ -321,6 +321,7 @@ class AICF_VehicleBoardingState
 {
 	protected int m_iStartedAtMs;
 	protected int m_iAbsoluteDeadlineMs;
+	protected int m_iHardDeadlineMs;
 	protected int m_iPhaseStartedAtMs;
 	protected int m_iPhaseDeadlineMs;
 	protected int m_iPhaseTimeoutMs;
@@ -361,6 +362,7 @@ class AICF_VehicleBoardingState
 			m_Tokens.CancelAllOwnerSafe();
 		m_iStartedAtMs = 0;
 		m_iAbsoluteDeadlineMs = 0;
+		m_iHardDeadlineMs = 0;
 		m_iPhaseStartedAtMs = 0;
 		m_iPhaseDeadlineMs = 0;
 		m_iPhaseTimeoutMs = 0;
@@ -396,11 +398,17 @@ class AICF_VehicleBoardingState
 		m_Tokens = null;
 	}
 
-	void Begin(int nowMs, int absoluteDeadlineMs, int plannedPhaseCount, int maximumRetries)
+	void Begin(
+		int nowMs,
+		int absoluteDeadlineMs,
+		int plannedPhaseCount,
+		int maximumRetries,
+		int hardDeadlineMs = 0)
 	{
 		Reset();
 		m_iStartedAtMs = nowMs;
 		m_iAbsoluteDeadlineMs = absoluteDeadlineMs;
+		m_iHardDeadlineMs = hardDeadlineMs;
 		m_iPlannedPhaseCount = Math.Max(1, plannedPhaseCount);
 		m_iMaximumRetries = Math.Max(0, maximumRetries);
 		m_iLastProgressAtMs = nowMs;
@@ -409,6 +417,7 @@ class AICF_VehicleBoardingState
 
 	int GetStartedAtMs() { return m_iStartedAtMs; }
 	int GetAbsoluteDeadlineMs() { return m_iAbsoluteDeadlineMs; }
+	int GetHardDeadlineMs() { return m_iHardDeadlineMs; }
 	int GetPhaseStartedAtMs() { return m_iPhaseStartedAtMs; }
 	int GetPhaseDeadlineMs() { return m_iPhaseDeadlineMs; }
 	int GetPhaseTimeoutMs() { return m_iPhaseTimeoutMs; }
@@ -464,8 +473,14 @@ class AICF_VehicleBoardingState
 		if (phase == AICF_EVehicleBoardingPhase.APPROACH)
 			currentPhaseTimeoutMs = m_iApproachTimeoutMs;
 		m_iPhaseDeadlineMs = nowMs + currentPhaseTimeoutMs;
-		if (m_iAbsoluteDeadlineMs > 0 && m_iPhaseDeadlineMs > m_iAbsoluteDeadlineMs)
-			m_iPhaseDeadlineMs = m_iAbsoluteDeadlineMs;
+		// A progressed DRIVER phase must never consume the complete opportunity of
+		// the following GUNNER/PASSENGERS phase.  The boarding deadline is allowed
+		// to grow only enough to give the newly committed phase its configured
+		// bounded window, and can never cross the immutable Trip deadline.
+		if (m_iHardDeadlineMs > 0 && m_iPhaseDeadlineMs > m_iHardDeadlineMs)
+			m_iPhaseDeadlineMs = m_iHardDeadlineMs;
+		if (m_iPhaseDeadlineMs > m_iAbsoluteDeadlineMs)
+			m_iAbsoluteDeadlineMs = m_iPhaseDeadlineMs;
 		m_iSettledPollCount = 0;
 		m_iStagingPollCount = 0;
 	}

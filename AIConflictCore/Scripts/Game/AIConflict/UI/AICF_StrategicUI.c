@@ -736,7 +736,7 @@ class AICF_StrategicUIController
 			"%1  %2  %3  %4/%5",
 			fields[0], fields[1], fields[2], fields[3], fields[9]);
 		result += string.Format(
-			"\n%1  |  %2\nPOSTURE %3  VEH %4  REINF %5",
+			"\n%1  |  %2\nЗАДАЧА %3  |  ТЕХНИКА %4  |  ПОПОЛН. %5",
 			fields[8], fields[4], fields[5], fields[6], fields[7]);
 		return result;
 	}

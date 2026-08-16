@@ -48,6 +48,9 @@ class AICF_VehicleAcquisitionFlow
 	protected static const int STAGING_PROGRESS_REPORT_INTERVAL_MS = 10000;
 	protected static const int APPROACH_REISSUE_COOLDOWN_MS = 15000;
 	protected static const int MAX_APPROACH_WAYPOINT_REISSUES = 1;
+	protected static const float SPAWN_PAD_CLEARANCE_RADIUS_METERS = 8.0;
+	protected static const float STAGING_TO_PAD_MARGIN_METERS = 10.0;
+	protected static const vector STAGING_NAVMESH_SEARCH_HALF_EXTENTS = "12 12 12";
 
 	protected ref AICF_Stage3Config m_Config;
 	protected ref AICF_VehicleCatalog m_Catalog;
@@ -315,7 +318,7 @@ class AICF_VehicleAcquisitionFlow
 		}
 
 		vector stagingPosition = ResolveStagingPosition(
-			ResolveGroupPosition(trip.GetAssignment().GetGroup()),
+			trip.GetAssignment().GetGroup(),
 			selection.m_vPosition);
 		AICF_VehicleSpawnPlan plan = new AICF_VehicleSpawnPlan(
 			selection,
@@ -943,18 +946,39 @@ class AICF_VehicleAcquisitionFlow
 				nowMs);
 	}
 
-	protected vector ResolveStagingPosition(vector groupPosition, vector spawnPosition)
+	protected vector ResolveStagingPosition(SCR_AIGroup group, vector spawnPosition)
 	{
+		vector groupPosition = ResolveGroupPosition(group);
 		vector direction = groupPosition - spawnPosition;
 		direction[1] = 0;
 		if (vector.DistanceSqXZ(groupPosition, spawnPosition) < 0.01)
 			direction = "1 0 0";
 		direction.Normalize();
+		// The rally circle itself must not intersect the spawn cylinder.  Keeping
+		// the point on the group's side of the pad also prevents a straight
+		// approach route from being intentionally projected through spawn origin.
+		float minimumOffsetMeters = m_Config.GetSpawnStagingRadiusMeters() +
+			SPAWN_PAD_CLEARANCE_RADIUS_METERS + STAGING_TO_PAD_MARGIN_METERS;
+		float effectiveOffsetMeters = Math.Max(
+			m_Config.GetSpawnStagingOffsetMeters(),
+			minimumOffsetMeters);
 		vector stagingPosition = spawnPosition +
-			direction * m_Config.GetSpawnStagingOffsetMeters();
+			direction * effectiveOffsetMeters;
 		BaseWorld world = GetGame().GetWorld();
 		if (world)
 			stagingPosition[1] = world.GetSurfaceY(stagingPosition[0], stagingPosition[2]);
+		AIPathfindingComponent pathfinding;
+		if (group)
+			pathfinding = AIPathfindingComponent.Cast(group.FindComponent(AIPathfindingComponent));
+		vector navmeshPosition;
+		if (pathfinding && pathfinding.GetClosestPositionOnNavmesh(
+			stagingPosition,
+			STAGING_NAVMESH_SEARCH_HALF_EXTENTS,
+			navmeshPosition) &&
+			vector.DistanceXZ(navmeshPosition, spawnPosition) >= minimumOffsetMeters)
+		{
+			stagingPosition = navmeshPosition;
+		}
 		return stagingPosition;
 	}
 
@@ -1535,13 +1559,25 @@ class AICF_VehicleAcquisitionFlow
 		}
 		string tripState = typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase());
 
+		int assignmentRevision = -1;
+		int baseRevision = -1;
+		AICF_StrategicAssignmentSnapshot assignment = trip.GetAssignment();
+		if (assignment)
+		{
+			assignmentRevision = assignment.GetAssignmentRevision();
+			baseRevision = assignment.GetBaseRevision();
+		}
 		string details = string.Format(
-			"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 trip_generation=%5",
+			"faction=%1 slot=%2 stable_slot=S%3 numeric_slot=%3 group_generation=%4 trip_generation=%5",
 			trip.GetFactionKey(),
 			trip.GetSlotKey(),
 			trip.GetSlotId(),
 			trip.GetGroupGeneration(),
 			trip.GetTripGeneration());
+		details += string.Format(
+			" assignment_revision=%1 base_revision=%2",
+			assignmentRevision,
+			baseRevision);
 		details += string.Format(
 			" request_generation=%1 attempt=%2 lease_generation=%3 vehicle_generation=%4",
 			requestGeneration,

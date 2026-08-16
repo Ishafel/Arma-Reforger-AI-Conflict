@@ -126,6 +126,7 @@ class AICF_VehicleSpawnPlan
 	protected int m_iLastReportedStagedCount = -1;
 	protected int m_iApproachWaypointIssuedAtMs;
 	protected int m_iApproachWaypointReissueCount;
+	protected string m_sLastReportedPadProbeResult;
 
 	void AICF_VehicleSpawnPlan(
 		AICF_VehicleSpawnSiteSelection selection,
@@ -152,6 +153,14 @@ class AICF_VehicleSpawnPlan
 	int GetStagedCount() { return m_iStagedCount; }
 	int GetAliveCount() { return m_iAliveCount; }
 	int GetApproachWaypointReissueCount() { return m_iApproachWaypointReissueCount; }
+
+	bool MarkPadProbeResultReported(string result)
+	{
+		if (m_sLastReportedPadProbeResult == result)
+			return false;
+		m_sLastReportedPadProbeResult = result;
+		return true;
+	}
 
 	bool IsValid()
 	{
@@ -246,12 +255,19 @@ class AICF_VehicleSpawner
 	// and every exact result still passes the existing surface and roster fences.
 	protected static const float SPAWN_SEARCH_RADIUS_METERS = 90.0;
 	protected static const float VEHICLE_CLEARANCE_RADIUS_METERS = 8.0;
+	protected static const float REQUESTING_GROUP_CLEARANCE_MARGIN_METERS = 2.0;
 	protected static const int MAX_SPAWN_POSITIONS_PER_BASE = 16;
 	protected static const float SURFACE_PROBE_RADIUS_METERS = 6.0;
 	protected static const float MAX_FOOTPRINT_HEIGHT_DELTA_METERS = 4.0;
 	protected static const float SITE_RESERVATION_SEPARATION_METERS = 20.0;
-	protected static const float COMMIT_RECHECK_RADIUS_METERS = 3.0;
+	protected static const float VEHICLE_CLEARANCE_HEIGHT_METERS = 2.0;
+	protected static const int MAX_PAD_DIAGNOSTIC_ENTITIES = 12;
 	protected ref array<ref AICF_VehicleSpawnSiteReservation> m_aSiteReservations = {};
+	protected vector m_vPadDiagnosticOrigin;
+	protected string m_sPadDiagnosticEntities;
+	protected int m_iPadDiagnosticEntityCount;
+	protected string m_sPadDiagnosticTraceHits;
+	protected int m_iPadDiagnosticTraceHitCount;
 
 	bool TryReserveSelectedSite(
 		AICF_TransportTrip trip,
@@ -427,22 +443,260 @@ class AICF_VehicleSpawner
 			return false;
 		}
 
-		array<vector> exactPositions = {};
-		int exactCount = SCR_WorldTools.FindAllEmptyTerrainPositions(
-			exactPositions,
+		float nearestRequestingMemberMeters;
+		string requestingMemberSamples;
+		if (!IsRequestingGroupClearOfSpawnPad(
+			group,
 			selection.m_vPosition,
-			COMMIT_RECHECK_RADIUS_METERS,
+			nearestRequestingMemberMeters,
+			requestingMemberSamples))
+		{
+			failureReason = "REQUESTING_GROUP_IN_SPAWN_CLEARANCE";
+			AICF_Stage4Diagnostics.Warning(
+				"VEHICLE_SPAWN_STAGING_CLEARANCE_REJECTED",
+				string.Format(
+					"faction=%1 base=%2 spawn=%3 nearest_member_m=%4 required_m=%5 members=[%6]",
+					faction.GetFactionKey(),
+					AICF_Stage1Diagnostics.BaseKey(selection.m_Base),
+					selection.m_vPosition,
+					nearestRequestingMemberMeters,
+					VEHICLE_CLEARANCE_RADIUS_METERS + REQUESTING_GROUP_CLEARANCE_MARGIN_METERS,
+					requestingMemberSamples));
+			return false;
+		}
+
+		// The site selector has already returned an exact empty grid point. The old
+		// commit search passed areaRadius=3 with cylinderRadius=8; WorldTools rejects
+		// every grid cell when areaRadius < cylinderRadius. Recheck the persisted
+		// center itself with the same obstacle/ocean cylinder contract instead.
+		BaseWorld world = selection.m_Base.GetOwner().GetWorld();
+		vector clearanceCenter = selection.m_vPosition +
+			Vector(0, VEHICLE_CLEARANCE_HEIGHT_METERS * 0.5, 0);
+		bool padClear = SCR_WorldTools.TraceCilinderUtil(
+			clearanceCenter,
 			VEHICLE_CLEARANCE_RADIUS_METERS,
-			maxResults: 1,
-			world: selection.m_Base.GetOwner().GetWorld());
-		if (exactCount <= 0 || exactPositions.IsEmpty() ||
-			vector.DistanceSqXZ(exactPositions[0], selection.m_vPosition) >
-			COMMIT_RECHECK_RADIUS_METERS * COMMIT_RECHECK_RADIUS_METERS)
+			VEHICLE_CLEARANCE_HEIGHT_METERS,
+			TraceFlags.ENTS | TraceFlags.OCEAN,
+			world);
+		ReportSpawnPadProbe(plan, padClear, world);
+		if (!padClear)
 		{
 			failureReason = "SPAWN_PAD_OCCUPIED";
 			return false;
 		}
 		failureReason = string.Empty;
+		return true;
+	}
+
+	protected bool IsRequestingGroupClearOfSpawnPad(
+		SCR_AIGroup group,
+		vector spawnPosition,
+		out float nearestDistanceMeters,
+		out string memberSamples)
+	{
+		nearestDistanceMeters = -1.0;
+		memberSamples = string.Empty;
+		if (!group)
+			return false;
+		float requiredMeters = VEHICLE_CLEARANCE_RADIUS_METERS +
+			REQUESTING_GROUP_CLEARANCE_MARGIN_METERS;
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		int aliveCount;
+		foreach (AIAgent agent : agents)
+		{
+			IEntity entity;
+			if (agent)
+				entity = agent.GetControlledEntity();
+			if (!AICF_GroupRuntime.IsAliveCharacter(entity))
+				continue;
+			aliveCount++;
+			float distanceMeters = vector.DistanceXZ(entity.GetOrigin(), spawnPosition);
+			if (nearestDistanceMeters < 0 || distanceMeters < nearestDistanceMeters)
+				nearestDistanceMeters = distanceMeters;
+			if (!memberSamples.IsEmpty())
+				memberSamples += ",";
+			memberSamples += string.Format("%1:%2", entity.GetID(), distanceMeters);
+			if (distanceMeters < requiredMeters)
+				return false;
+		}
+		return aliveCount > 0;
+	}
+
+	protected void ReportSpawnPadProbe(
+		AICF_VehicleSpawnPlan plan,
+		bool padClear,
+		BaseWorld world)
+	{
+		if (!plan)
+			return;
+		string result = "OCCUPIED";
+		if (padClear)
+			result = "CLEAR";
+		// A clear plan may be revalidated while waiting for fleet capacity. Emit
+		// each result transition once; occupied plans are immediately released, so
+		// every rejected reservation still gets its own complete probe record.
+		if (!plan.MarkPadProbeResultReported(result))
+			return;
+
+		m_vPadDiagnosticOrigin = plan.GetSpawnPosition();
+		m_sPadDiagnosticEntities = string.Empty;
+		m_iPadDiagnosticEntityCount = 0;
+		m_sPadDiagnosticTraceHits = string.Empty;
+		m_iPadDiagnosticTraceHitCount = 0;
+		if (!padClear && world)
+		{
+			CollectSpawnPadTraceDiagnostics(
+				m_vPadDiagnosticOrigin + Vector(0, VEHICLE_CLEARANCE_HEIGHT_METERS * 0.5, 0),
+				world);
+			world.QueryEntitiesBySphere(
+				m_vPadDiagnosticOrigin,
+				VEHICLE_CLEARANCE_RADIUS_METERS,
+				CollectSpawnPadDiagnosticEntity,
+				null,
+				EQueryEntitiesFlags.ALL);
+		}
+		if (m_sPadDiagnosticEntities.IsEmpty())
+			m_sPadDiagnosticEntities = "NONE";
+		if (m_sPadDiagnosticTraceHits.IsEmpty())
+			m_sPadDiagnosticTraceHits = "NONE";
+
+		AICF_VehicleSpawnSiteReservation reservation = plan.GetReservation();
+		AICF_VehicleSpawnSiteSelection selection = plan.GetSelection();
+		string factionKey = "NONE";
+		string reservationId = "NONE";
+		int numericSlot = -1;
+		if (reservation)
+		{
+			factionKey = reservation.GetFactionKey();
+			reservationId = reservation.GetOwnerToken();
+			numericSlot = reservation.GetSlotId();
+		}
+		AICF_Stage4Diagnostics.Info(
+			"VEHICLE_SPAWN_PAD_PROBE",
+			string.Format(
+				"faction=%1 stable_slot=S%2 numeric_slot=%2 reservation=%3 base=%4 result=%5",
+				factionKey,
+				numericSlot,
+				reservationId,
+				AICF_Stage1Diagnostics.BaseKey(selection.m_Base),
+				result) + string.Format(
+				" origin=%1 probe=EXACT_TRACE_CYLINDER clearance_radius_m=%2 clearance_height_m=%3 blocking_trace_count=%4 blocking_traces=[%5] nearby_entity_count=%6 nearby_entities=[%7]",
+				plan.GetSpawnPosition(),
+				VEHICLE_CLEARANCE_RADIUS_METERS,
+				VEHICLE_CLEARANCE_HEIGHT_METERS,
+				m_iPadDiagnosticTraceHitCount,
+				m_sPadDiagnosticTraceHits,
+				m_iPadDiagnosticEntityCount,
+				m_sPadDiagnosticEntities));
+	}
+
+	protected void CollectSpawnPadTraceDiagnostics(vector center, BaseWorld world)
+	{
+		if (!world)
+			return;
+		float heightHalf = VEHICLE_CLEARANCE_HEIGHT_METERS * 0.5;
+		AppendSpawnPadTraceDiagnostic(
+			"X_POS",
+			center,
+			Vector(VEHICLE_CLEARANCE_RADIUS_METERS, heightHalf, 0),
+			world);
+		AppendSpawnPadTraceDiagnostic(
+			"X_NEG",
+			center,
+			Vector(-VEHICLE_CLEARANCE_RADIUS_METERS, heightHalf, 0),
+			world);
+		AppendSpawnPadTraceDiagnostic(
+			"Z_POS",
+			center,
+			Vector(0, heightHalf, VEHICLE_CLEARANCE_RADIUS_METERS),
+			world);
+		AppendSpawnPadTraceDiagnostic(
+			"Z_NEG",
+			center,
+			Vector(0, heightHalf, -VEHICLE_CLEARANCE_RADIUS_METERS),
+			world);
+	}
+
+	protected void AppendSpawnPadTraceDiagnostic(
+		string ray,
+		vector center,
+		vector offset,
+		BaseWorld world)
+	{
+		autoptr TraceParam trace = new TraceParam();
+		trace.Flags = TraceFlags.ENTS | TraceFlags.OCEAN;
+		trace.Start = center + offset;
+		trace.End = center - offset;
+		float coefficient = world.TraceMove(trace, null);
+		if (coefficient >= 1.0)
+			return;
+
+		m_iPadDiagnosticTraceHitCount++;
+		IEntity blocker = trace.TraceEnt;
+		string entityId = "NONE";
+		string rplId = "NONE";
+		string entityType = "OCEAN_OR_NON_ENTITY";
+		string factionKey = "NONE";
+		float distanceMeters = -1.0;
+		if (blocker)
+		{
+			entityId = blocker.GetID().ToString();
+			entityType = blocker.Type().ToString();
+			distanceMeters = vector.DistanceXZ(blocker.GetOrigin(), m_vPadDiagnosticOrigin);
+			RplComponent rpl = RplComponent.Cast(blocker.FindComponent(RplComponent));
+			if (rpl)
+				rplId = rpl.Id().ToString();
+			FactionAffiliationComponent affiliation = FactionAffiliationComponent.Cast(
+				blocker.FindComponent(FactionAffiliationComponent));
+			Faction faction;
+			if (affiliation)
+				faction = affiliation.GetAffiliatedFaction();
+			if (faction)
+				factionKey = faction.GetFactionKey();
+		}
+		if (!m_sPadDiagnosticTraceHits.IsEmpty())
+			m_sPadDiagnosticTraceHits += ";";
+		m_sPadDiagnosticTraceHits += string.Format(
+			"ray=%1|coefficient=%2|entity_id=%3|rpl_id=%4|type=%5|distance_m=%6|faction=%7",
+			ray,
+			coefficient,
+			entityId,
+			rplId,
+			entityType,
+			distanceMeters,
+			factionKey);
+	}
+
+	protected bool CollectSpawnPadDiagnosticEntity(IEntity entity)
+	{
+		if (!entity)
+			return true;
+		if (m_iPadDiagnosticEntityCount >= MAX_PAD_DIAGNOSTIC_ENTITIES)
+			return false;
+		m_iPadDiagnosticEntityCount++;
+
+		string rplId = "NONE";
+		RplComponent rpl = RplComponent.Cast(entity.FindComponent(RplComponent));
+		if (rpl)
+			rplId = rpl.Id().ToString();
+		string factionKey = "NONE";
+		FactionAffiliationComponent affiliation = FactionAffiliationComponent.Cast(
+			entity.FindComponent(FactionAffiliationComponent));
+		Faction faction;
+		if (affiliation)
+			faction = affiliation.GetAffiliatedFaction();
+		if (faction)
+			factionKey = faction.GetFactionKey();
+		if (!m_sPadDiagnosticEntities.IsEmpty())
+			m_sPadDiagnosticEntities += ";";
+		m_sPadDiagnosticEntities += string.Format(
+			"entity_id=%1|rpl_id=%2|type=%3|distance_m=%4|faction=%5",
+			entity.GetID(),
+			rplId,
+			entity.Type().ToString(),
+			Math.Sqrt(vector.DistanceSqXZ(entity.GetOrigin(), m_vPadDiagnosticOrigin)),
+			factionKey);
 		return true;
 	}
 

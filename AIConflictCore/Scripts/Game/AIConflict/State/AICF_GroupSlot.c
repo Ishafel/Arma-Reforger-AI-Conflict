@@ -33,6 +33,7 @@ class AICF_GroupSlot
 	protected bool m_bPersistentStuckFieldHold;
 	protected bool m_bObjectiveHoldReported;
 	protected bool m_bLoadBlockReported;
+	protected bool m_bAgentLimitBlockReported;
 	protected bool m_bPendingOrderRecoveryCountsAsStuck;
 	protected bool m_bPendingOrderRecoveryCountsAsReliabilityAttempt;
 	protected bool m_bUnexplainedMobIdleDeadlineReported;
@@ -68,6 +69,13 @@ class AICF_GroupSlot
 	protected int m_iOrderReliabilityRepairFailureCount;
 	protected int m_iMobEgressLastOutwardProgressAtMs;
 	protected int m_iMobEgressLastHiddenRecoveryAttemptAtMs;
+	protected int m_iMobEgressSafetyBlockedStartedAtMs;
+	protected int m_iMobEgressSafetyHeartbeatAtMs;
+	protected int m_iFalseCompletionCount;
+	protected int m_iFalseCompletionNoProgressCount;
+	protected int m_iFalseCompletionAssignmentRevision;
+	protected int m_iFalseCompletionGroupGeneration;
+	protected int m_iTemporaryRouteReplanHoldStartedAtMs;
 	protected bool m_bHasCommanderMotionSample;
 	protected bool m_bPendingStuckRecoveryEvidence;
 	protected bool m_bMobEgressSoftNudgeApplied;
@@ -75,7 +83,12 @@ class AICF_GroupSlot
 	protected bool m_bMobEgressDeadlineDeferredReported;
 	protected bool m_bMobEgressHiddenMutationConsumed;
 	protected bool m_bOrderReliabilityRepairBudgetExhaustionReported;
+	protected bool m_bTemporaryRouteReplanHold;
+	protected bool m_bLoneSurvivorRetreat;
 	protected vector m_vLastCommanderMotionPosition;
+	protected vector m_vPendingOrderRecoveryStartPosition;
+	protected vector m_vLastFalseCompletionEndpoint;
+	protected vector m_vTemporaryRouteReplanAnchor;
 	protected vector m_vPendingStuckRecoveryStartPosition;
 	protected vector m_vStuckEpisodeAnchor;
 	protected vector m_vPersistentStuckAnchor;
@@ -87,6 +100,7 @@ class AICF_GroupSlot
 	protected string m_sMobIdleSuppressionReason;
 	protected string m_sOwnedWaypointTerminalOutcome;
 	protected string m_sMobEgressLastHiddenRecoveryRejection;
+	protected string m_sMobEgressSafetyBlockReason;
 	protected string m_sMeaningfulTaskLossReportedWaypointId;
 	protected ref array<AIAgent> m_aRosterObservedAgents = {};
 	protected ref array<int> m_aRosterObservedAtMs = {};
@@ -177,6 +191,14 @@ class AICF_GroupSlot
 		return string.Format("S%1", m_iSlotId);
 	}
 
+	// Role-local labels (A6/D1/R0) are presentation names and may change when a
+	// commander changes a role. This key never changes for the lifetime of the
+	// faction slot and is the primary diagnostic correlation identity.
+	string GetStableSlotKey()
+	{
+		return string.Format("S%1", m_iSlotId);
+	}
+
 	string GetOperationalPosture()
 	{
 		return m_sOperationalPosture;
@@ -213,6 +235,9 @@ class AICF_GroupSlot
 	void TouchCommanderConfiguration()
 	{
 		m_iStrategicAssignmentRevision++;
+		ResetFalseCompletionRecovery();
+		ClearTemporaryRouteReplanHold();
+		ClearLoneSurvivorRetreat();
 		ResetMeaningfulTaskObservation();
 		ClearStrategicCandidate();
 	}
@@ -233,6 +258,9 @@ class AICF_GroupSlot
 		m_iStrategicAssignmentAtMs = System.GetTickCount();
 		m_iStrategicAssignmentRevision++;
 		ResetOrderReliabilityRepairFailureBudget();
+		ResetFalseCompletionRecovery();
+		ClearTemporaryRouteReplanHold();
+		ClearLoneSurvivorRetreat();
 		ResetMeaningfulTaskObservation();
 		// A strategic assignment starts a genuinely new MOB-egress episode. A later
 		// full-roster physical observation outside the MOB may also close an episode
@@ -518,9 +546,61 @@ class AICF_GroupSlot
 		m_bMobEgressSoftNudgeApplied = false;
 		m_bMobEgressProgressExtensionReported = false;
 		m_bMobEgressDeadlineDeferredReported = false;
+		ClearMobEgressSafetyBlock();
 		if (resetHiddenMutation)
 			m_bMobEgressHiddenMutationConsumed = false;
 		m_sMobEgressLastHiddenRecoveryRejection = string.Empty;
+	}
+
+	bool ObserveMobEgressSafetyBlock(string reason)
+	{
+		int nowMs = System.GetTickCount();
+		bool changed = m_iMobEgressSafetyBlockedStartedAtMs <= 0 ||
+			m_sMobEgressSafetyBlockReason != reason;
+		if (m_iMobEgressSafetyBlockedStartedAtMs <= 0)
+			m_iMobEgressSafetyBlockedStartedAtMs = nowMs;
+		m_sMobEgressSafetyBlockReason = reason;
+		if (changed)
+			m_iMobEgressSafetyHeartbeatAtMs = 0;
+		return changed;
+	}
+
+	bool IsMobEgressSafetyBlocked()
+	{
+		return m_iMobEgressSafetyBlockedStartedAtMs > 0;
+	}
+
+	string GetMobEgressSafetyBlockReason()
+	{
+		return m_sMobEgressSafetyBlockReason;
+	}
+
+	int GetMobEgressSafetyBlockedAgeMs()
+	{
+		if (m_iMobEgressSafetyBlockedStartedAtMs <= 0)
+			return 0;
+		return System.GetTickCount(m_iMobEgressSafetyBlockedStartedAtMs);
+	}
+
+	bool ShouldReportMobEgressSafetyHeartbeat(int intervalMs)
+	{
+		int nowMs = System.GetTickCount();
+		if (m_iMobEgressSafetyHeartbeatAtMs > 0 &&
+			System.GetTickCount(m_iMobEgressSafetyHeartbeatAtMs) < Math.Max(1000, intervalMs))
+		{
+			return false;
+		}
+		m_iMobEgressSafetyHeartbeatAtMs = nowMs;
+		return true;
+	}
+
+	int ClearMobEgressSafetyBlock()
+	{
+		int blockedAgeMs = GetMobEgressSafetyBlockedAgeMs();
+		m_iMobEgressSafetyBlockedStartedAtMs = 0;
+		m_iMobEgressSafetyHeartbeatAtMs = 0;
+		m_sMobEgressSafetyBlockReason = string.Empty;
+		return blockedAgeMs;
 	}
 
 	bool MarkUnexplainedMobIdleDeadlineReported()
@@ -782,6 +862,25 @@ class AICF_GroupSlot
 		m_bLoadBlockReported = false;
 	}
 
+	bool MarkAgentLimitBlockReported()
+	{
+		if (m_bAgentLimitBlockReported)
+			return false;
+
+		m_bAgentLimitBlockReported = true;
+		return true;
+	}
+
+	bool HasAgentLimitBlockReport()
+	{
+		return m_bAgentLimitBlockReported;
+	}
+
+	void ResetAgentLimitBlockReported()
+	{
+		m_bAgentLimitBlockReported = false;
+	}
+
 	bool MarkPersistentStuckReported()
 	{
 		if (m_bPersistentStuckReported)
@@ -977,9 +1076,10 @@ class AICF_GroupSlot
 		AICF_Stage35Diagnostics.Info(
 			"ORDER_WAYPOINT_TERMINAL_OBSERVED",
 			string.Format(
-				"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 assignment_revision=%5 waypoint=%6 outcome=%7 prior_outcome=%8",
+				"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 group_generation=%5 assignment_revision=%6 waypoint=%7 outcome=%8 prior_outcome=%9",
 				factionKey,
 				GetSlotKey(),
+				GetStableSlotKey(),
 				m_iSlotId,
 				m_iSpawnGeneration,
 				m_iStrategicAssignmentRevision,
@@ -1064,6 +1164,9 @@ class AICF_GroupSlot
 		m_iPendingOrderRecoveryAssignmentRevision = m_iStrategicAssignmentRevision;
 		m_iPendingOrderRecoveryGroupGeneration = m_iSpawnGeneration;
 		m_iOrderRecoveryStartedAtMs = System.GetTickCount();
+		IEntity recoveryLeader = AICF_GroupRuntime.ResolveAliveLeader(m_Group);
+		if (recoveryLeader)
+			m_vPendingOrderRecoveryStartPosition = recoveryLeader.GetOrigin();
 	}
 
 	// RecoverOrder creates the durability candidate inside the planner. The
@@ -1170,6 +1273,123 @@ class AICF_GroupSlot
 		return System.GetTickCount(m_iOrderRecoveryStartedAtMs);
 	}
 
+	float GetPendingOrderRecoveryPhysicalProgressMeters()
+	{
+		if (!HasPendingOrderRecovery() || m_vPendingOrderRecoveryStartPosition == vector.Zero)
+			return 0;
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(m_PendingOrderRecoveryGroup);
+		if (!leader)
+			return 0;
+		return Math.Sqrt(vector.DistanceSqXZ(
+			leader.GetOrigin(),
+			m_vPendingOrderRecoveryStartPosition));
+	}
+
+	int RecordFalseWaypointCompletion(vector endpoint, bool noPhysicalProgress)
+	{
+		if (m_iFalseCompletionAssignmentRevision != m_iStrategicAssignmentRevision ||
+			m_iFalseCompletionGroupGeneration != m_iSpawnGeneration)
+		{
+			ResetFalseCompletionRecovery();
+		}
+		m_iFalseCompletionAssignmentRevision = m_iStrategicAssignmentRevision;
+		m_iFalseCompletionGroupGeneration = m_iSpawnGeneration;
+		m_iFalseCompletionCount++;
+		if (noPhysicalProgress)
+			m_iFalseCompletionNoProgressCount++;
+		else
+			m_iFalseCompletionNoProgressCount = 0;
+		m_vLastFalseCompletionEndpoint = endpoint;
+		return m_iFalseCompletionCount;
+	}
+
+	int GetFalseCompletionNoProgressCount()
+	{
+		if (m_iFalseCompletionAssignmentRevision != m_iStrategicAssignmentRevision ||
+			m_iFalseCompletionGroupGeneration != m_iSpawnGeneration)
+		{
+			return 0;
+		}
+		return m_iFalseCompletionNoProgressCount;
+	}
+
+	int GetFalseCompletionEndpointRevision()
+	{
+		if (m_iFalseCompletionAssignmentRevision != m_iStrategicAssignmentRevision ||
+			m_iFalseCompletionGroupGeneration != m_iSpawnGeneration)
+		{
+			return 0;
+		}
+		return m_iFalseCompletionCount;
+	}
+
+	vector GetLastFalseCompletionEndpoint()
+	{
+		return m_vLastFalseCompletionEndpoint;
+	}
+
+	void ResetFalseCompletionRecovery()
+	{
+		m_iFalseCompletionCount = 0;
+		m_iFalseCompletionNoProgressCount = 0;
+		m_iFalseCompletionAssignmentRevision = 0;
+		m_iFalseCompletionGroupGeneration = 0;
+		m_vLastFalseCompletionEndpoint = vector.Zero;
+	}
+
+	void BeginTemporaryRouteReplanHold(vector anchor)
+	{
+		m_bTemporaryRouteReplanHold = true;
+		m_iTemporaryRouteReplanHoldStartedAtMs = System.GetTickCount();
+		m_vTemporaryRouteReplanAnchor = anchor;
+	}
+
+	bool IsTemporaryRouteReplanHold()
+	{
+		return m_bTemporaryRouteReplanHold;
+	}
+
+	bool IsTemporaryRouteReplanHoldDue(int holdMs)
+	{
+		return m_bTemporaryRouteReplanHold &&
+			m_iTemporaryRouteReplanHoldStartedAtMs > 0 &&
+			System.GetTickCount(m_iTemporaryRouteReplanHoldStartedAtMs) >= holdMs;
+	}
+
+	int GetTemporaryRouteReplanHoldAgeMs()
+	{
+		if (!m_bTemporaryRouteReplanHold || m_iTemporaryRouteReplanHoldStartedAtMs <= 0)
+			return 0;
+		return System.GetTickCount(m_iTemporaryRouteReplanHoldStartedAtMs);
+	}
+
+	vector GetTemporaryRouteReplanAnchor()
+	{
+		return m_vTemporaryRouteReplanAnchor;
+	}
+
+	void ClearTemporaryRouteReplanHold()
+	{
+		m_bTemporaryRouteReplanHold = false;
+		m_iTemporaryRouteReplanHoldStartedAtMs = 0;
+		m_vTemporaryRouteReplanAnchor = vector.Zero;
+	}
+
+	void BeginLoneSurvivorRetreat()
+	{
+		m_bLoneSurvivorRetreat = true;
+	}
+
+	bool IsLoneSurvivorRetreat()
+	{
+		return m_bLoneSurvivorRetreat;
+	}
+
+	void ClearLoneSurvivorRetreat()
+	{
+		m_bLoneSurvivorRetreat = false;
+	}
+
 	void ClearPendingOrderRecovery()
 	{
 		m_PendingOrderRecoveryGroup = null;
@@ -1184,6 +1404,7 @@ class AICF_GroupSlot
 		m_iOrderRecoveryStartedAtMs = 0;
 		m_iOrderRecoveryFirstStableAtMs = 0;
 		m_iOrderRecoveryStablePolls = 0;
+		m_vPendingOrderRecoveryStartPosition = vector.Zero;
 	}
 
 	bool ObserveProgress(
@@ -1610,11 +1831,15 @@ class AICF_GroupSlot
 		m_iLastOrderRecoveryAtMs = 0;
 		m_bTargetUnavailableReported = false;
 		m_bLoadBlockReported = false;
+		m_bAgentLimitBlockReported = false;
 		m_bPlayerStrategicOrder = false;
 		m_sOperationalPosture = string.Empty;
 		m_iStrategicAssignmentAtMs = 0;
 		m_iStrategicAssignmentRevision = 0;
 		ResetOrderReliabilityRepairFailureBudget();
+		ResetFalseCompletionRecovery();
+		ClearTemporaryRouteReplanHold();
+		ClearLoneSurvivorRetreat();
 		m_iUnexplainedMobIdleStartedAtMs = 0;
 		m_bUnexplainedMobIdleDeadlineReported = false;
 		ResetMeaningfulTaskObservation();

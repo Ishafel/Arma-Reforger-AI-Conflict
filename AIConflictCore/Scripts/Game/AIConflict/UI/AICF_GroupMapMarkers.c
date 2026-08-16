@@ -454,10 +454,10 @@ class AICF_GroupMapMarkerSystem
 		if (vehicleView)
 			vehicleState = vehicleView.GetStatusText();
 		if (vehicleState.IsEmpty() || vehicleState == "NONE")
-			vehicleState = "ON_FOOT";
+			vehicleState = "Пешком";
 
 		return string.Format(
-			"%1 | %2 | %3 | ALIVE %4 | VEH %5 | %6",
+			"%1 | %2 | %3 | БОЙЦОВ %4 | ТЕХНИКА %5 | %6",
 			identity,
 			role,
 			task,

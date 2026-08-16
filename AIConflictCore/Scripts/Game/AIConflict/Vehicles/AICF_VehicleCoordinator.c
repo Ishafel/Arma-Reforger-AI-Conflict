@@ -603,6 +603,16 @@ class AICF_VehicleCoordinator
 			reason = "SLOT_LEASE_ALREADY_PRESENT";
 			return false;
 		}
+		int admissionHeld = fleet.GetActiveOrReservedCount() +
+			m_Trips.GetPreLeaseNonTerminalCount(assignment.GetFactionKey());
+		if (admissionHeld >= fleet.GetMaximumActiveOrReserved())
+		{
+			// Keep the squad on its meaningful infantry order.  A TransportTrip is
+			// created only after an admission slot exists, so cap/site pressure cannot
+			// manufacture a parallel fleet of APPROACHING/WAITING operations.
+			reason = "VEHICLE_CAP_UNAVAILABLE_PRE_ADMISSION";
+			return false;
+		}
 		return true;
 	}
 

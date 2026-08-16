@@ -196,7 +196,11 @@ if ($match) {
     Assert-AICFContains $failures 'STAGE35_SPAWN_DIAGNOSTICS' $spawnTimeout 'GROUP_SPAWN_TIMEOUT' 'Timeout must retain its dedicated diagnostic event'
     Assert-AICFContains $failures 'STAGE35_SPAWN_DIAGNOSTICS' $spawnTimeoutCode 'BuildGroupSpawnSnapshot[\s\S]*AuditAllSpawningGroups[\s\S]*DetachSpawnObservers[\s\S]*DeleteRplEntity[\s\S]*MarkDestroyed' 'Timeout must snapshot the failed and remaining spawning groups before callback detach, entity deletion, and slot clearing'
     Assert-AICFContains $failures 'STAGE35_SPAWN_CALLBACK_CLEANUP' $releaseGroups 'DetachSpawnObservers' 'Shutdown must remove roster spawn callbacks even when entities are retained'
-    Assert-AICFContains $failures 'STAGE35_AGENT_BUDGET' (ConvertTo-AICFCodeText (Get-AICFMethodBody $match 'CountProjectedFactionAgents')) 'PENDING_GROUP_AGENT_BUDGET' 'Agent projection must include a conservative pending-group budget'
+    $replacementStart = ConvertTo-AICFCodeText (Get-AICFMethodBody $match 'TryStartReplacement')
+    $projectedAgents = ConvertTo-AICFCodeText (Get-AICFMethodBody $match 'CountProjectedFactionAgents')
+    Assert-AICFContains $failures 'STAGE35_AGENT_BUDGET' $projectedAgents 'slot\s*==\s*pendingSlot[\s\S]*slot\.GetState\s*\(\s*\)\s*==\s*AICF_EGroupSlotState\.SPAWNING[\s\S]*Math\.Max\s*\(\s*actualAgents\s*,\s*slot\.GetDesiredSize\s*\(\s*\)\s*\)' 'Agent projection must reserve each pending or partially materialized slot at its configured desired roster size'
+    Assert-AICFNotContains $failures 'STAGE35_AGENT_BUDGET' $projectedAgents 'MAX_GROUP_SIZE|PENDING_GROUP_AGENT_BUDGET' 'Agent projection must not charge every pending slot at the global maximum group size'
+    Assert-AICFContains $failures 'STAGE35_AGENT_BUDGET' $replacementStart 'CountProjectedManagedAgentsForSpawn\s*\(\s*slot\s*\)[\s\S]*projectedManagedAgents\s*>\s*managedAgentLimit[\s\S]*PostponeReinforcementUntil[\s\S]*BeginReplacementSpawn' 'AI-limit preflight must run before the slot enters SPAWNING so blocked retries do not consume group generations'
     $forceHeartbeat = ConvertTo-AICFCodeText (Get-AICFMethodBody $match 'Heartbeat')
     Assert-AICFContains $failures 'STAGE35_FLEET_HEARTBEAT_TRUTH' $forceHeartbeat 'trackedEntities[\s\S]*usRetainedPhysical[\s\S]*ussrRetainedPhysical' 'Tracked entity telemetry must include retained or unconfirmed physical vehicle assets'
 }
@@ -235,6 +239,7 @@ if ($orderPlanner) {
     $reconcile = Get-AICFMethodBody $orderPlanner 'ReconcileStrategicOrder'
     Assert-AICFContains $failures 'STAGE35_QRF_HYSTERESIS' $reconcile 'urgentQRF[\s\S]*minimumDwellMs[\s\S]*stableCandidateMs[\s\S]*STRATEGIC_CANDIDATE_HELD' 'QRF escalation and stabilized return must retain hysteresis/minimum dwell'
     Assert-AICFContains $failures 'STAGE35_WAYPOINT_LIFECYCLE' $orderPlanner.Strings 'WAYPOINT_REMOVED' 'Infantry waypoint removal must remain observable'
+    Assert-AICFContains $failures 'STAGE35_WAYPOINT_PREMATURE_COMPLETION' $orderPlanner.Code 'SetCompletionType\s*\(\s*EAIWaypointCompletionType\.All\s*\)[\s\S]*SetHoldingTime\s*\(\s*DEFEND_HOLDING_TIME_SECONDS\s*\)' 'Strategic movement and defend waypoints must not complete on a lone member or a short prefab hold'
 }
 
 if ($match) {

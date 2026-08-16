@@ -708,12 +708,12 @@ class AICF_VehicleDomainDiagnostics
 		if (!trip)
 		{
 			return string.Format(
-				"faction=NONE slot=NONE numeric_slot=-1 group_generation=-1 trip_generation=-1 operation_id=NONE causation_id=%1 reason=%2 vehicle=NONE kind=NONE state=NONE",
+				"faction=NONE slot=NONE stable_slot=NONE numeric_slot=-1 group_generation=-1 trip_generation=-1 operation_id=NONE causation_id=%1 reason=%2 vehicle=NONE kind=NONE state=NONE",
 				causationId,
 				reason);
 		}
 		string details = string.Format(
-			"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 trip_generation=%5",
+			"faction=%1 slot=%2 stable_slot=S%3 numeric_slot=%3 group_generation=%4 trip_generation=%5",
 			trip.GetFactionKey(),
 			trip.GetSlotKey(),
 			trip.GetSlotId(),
@@ -765,12 +765,12 @@ class AICF_VehicleDomainDiagnostics
 		if (!assignment)
 		{
 			return string.Format(
-				"faction=NONE slot=NONE numeric_slot=-1 group_generation=-1 operation_id=%1 causation_id=%2",
+				"faction=NONE slot=NONE stable_slot=NONE numeric_slot=-1 group_generation=-1 operation_id=%1 causation_id=%2",
 				operationId,
 				causationId);
 		}
 		string details = string.Format(
-			"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 assignment_revision=%5 base_revision=%6",
+			"faction=%1 slot=%2 stable_slot=S%3 numeric_slot=%3 group_generation=%4 assignment_revision=%5 base_revision=%6",
 			assignment.GetFactionKey(),
 			assignment.GetSlotKey(),
 			assignment.GetSlotId(),

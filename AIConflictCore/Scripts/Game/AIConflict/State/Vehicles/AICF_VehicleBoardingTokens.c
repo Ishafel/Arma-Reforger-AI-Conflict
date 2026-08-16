@@ -161,9 +161,18 @@ class AICF_VehicleBoardingActionToken
 	// yet has not begun a compartment transition near an available door.
 	bool IsReadyExactCargoWithoutTransition(float maximumDistanceMeters)
 	{
+		return IsReadyExactSeatWithoutTransition(
+			maximumDistanceMeters,
+			EAICompartmentType.Cargo);
+	}
+
+	bool IsReadyExactSeatWithoutTransition(
+		float maximumDistanceMeters,
+		EAICompartmentType requiredType)
+	{
 		if (maximumDistanceMeters <= 0 || m_fCurrentDistanceMeters < 0 ||
 			m_fCurrentDistanceMeters > maximumDistanceMeters ||
-			m_CompartmentType != EAICompartmentType.Cargo ||
+			m_CompartmentType != requiredType ||
 			!MatchesLiveTargetIdentity() || !IsPhysicalMutationOwnerSafe() ||
 			!IsExactCompartmentMutationSafe() || !IsTrackedActionCurrent() ||
 			!IsTrackedActionOwnedByUtility())
@@ -192,7 +201,6 @@ class AICF_VehicleBoardingActionToken
 		requestAccepted = false;
 		doorIndex = -1;
 		if (m_bAnimatedExactSeatRecoveryAttempted ||
-			m_CompartmentType != EAICompartmentType.Cargo ||
 			!MatchesLiveTargetIdentity() || !IsPhysicalMutationOwnerSafe() ||
 			!IsExactCompartmentMutationSafe() || !IsTrackedActionCurrent() ||
 			!IsTrackedActionOwnedByUtility())

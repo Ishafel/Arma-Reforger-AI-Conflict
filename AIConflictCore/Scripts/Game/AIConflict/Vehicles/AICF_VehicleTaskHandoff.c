@@ -208,7 +208,10 @@ class AICF_VehicleTaskHandoff
 		// current order after the bounded mutation budget was spent. Observing that
 		// authoritative proof is not another mutation attempt and must remain
 		// available until the handoff deadline.
-		if (ObserveExistingInfantryOrder(
+		bool requiresLoneSurvivorRetreat = slot &&
+			AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()) == 1 &&
+			!slot.IsLoneSurvivorRetreat();
+		if (!requiresLoneSurvivorRetreat && ObserveExistingInfantryOrder(
 			trip,
 			handoffState,
 			slot,
@@ -259,9 +262,28 @@ class AICF_VehicleTaskHandoff
 			return false;
 		}
 
+		int alive = AICF_GroupRuntime.CountAliveAgents(slot.GetGroup());
+		if (alive <= 0)
+		{
+			AICF_Stage3Diagnostics.Info(
+				"INFANTRY_FALLBACK_DEFERRED",
+				FormatIdentity(trip, reason) +
+					" alive=0 handoff_mode=GROUP_REPLACEMENT transition_owner=GROUP_LIFECYCLE order_restored=0");
+			return false;
+		}
+		bool loneSurvivorRetreat = alive == 1;
 		bool plannerAccepted = IsExactWaypointCurrentAndQueued(slot, slot.GetWaypoint());
-		if (!plannerAccepted)
+		if (loneSurvivorRetreat && !slot.IsLoneSurvivorRetreat())
+		{
+			plannerAccepted = m_OrderPlanner.AssignLoneSurvivorRetreat(
+				slot,
+				faction,
+				"VEHICLE_FALLBACK_LONE_SURVIVOR");
+		}
+		else if (!plannerAccepted)
+		{
 			plannerAccepted = m_OrderPlanner.RebuildCurrentOrder(slot, faction, reason);
+		}
 		if (!plannerAccepted && m_ObjectiveGraph && m_TargetSelector)
 		{
 			plannerAccepted = m_OrderPlanner.AssignOrder(
@@ -388,11 +410,16 @@ class AICF_VehicleTaskHandoff
 		// Existing Stage 2 durability auditing observes the same exact waypoint
 		// for three stable polls after this immediate handoff proof.
 		slot.BeginOrderRecoveryVerification("VEHICLE_HANDOFF");
+		string handoffMode = "OPERATIONAL_ORDER_RESTORE";
+		if (slot.IsLoneSurvivorRetreat())
+			handoffMode = "LONE_SURVIVOR_RETREAT";
 		AICF_Stage3Diagnostics.Info(
 			"INFANTRY_FALLBACK",
 			FormatIdentity(trip, reason) + string.Format(
-				" order_restored=1 target=%1",
-				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase())));
+				" order_restored=1 target=%1 handoff_mode=%2 alive=%3 transition_owner=VEHICLE_HANDOFF",
+				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
+				handoffMode,
+				AICF_GroupRuntime.CountAliveAgents(slot.GetGroup())));
 	}
 
 	protected bool IsCurrentAssignment(AICF_TransportTrip trip, AICF_GroupSlot slot)

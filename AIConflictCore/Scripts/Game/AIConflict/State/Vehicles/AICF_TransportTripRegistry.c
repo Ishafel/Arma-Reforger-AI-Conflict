@@ -40,6 +40,23 @@ class AICF_TransportTripRegistry
 		return trip && !trip.IsTerminal() && trip.GetGroupGeneration() == groupGeneration;
 	}
 
+	// Pre-lease trips are admission tokens.  Counting them before another Trip is
+	// created prevents ten groups entering acquisition when the faction cap is
+	// three, while leases already holding cap are counted by FactionFleet only.
+	int GetPreLeaseNonTerminalCount(FactionKey factionKey)
+	{
+		int count;
+		foreach (AICF_TransportTrip trip : m_aTrips)
+		{
+			if (!trip || trip.IsTerminal() || trip.GetFactionKey() != factionKey)
+				continue;
+			AICF_VehicleLease lease = trip.GetLease();
+			if (!lease || !lease.IsCapActive())
+				count++;
+		}
+		return count;
+	}
+
 	AICF_TransportTrip Create(
 		AICF_StrategicAssignmentSnapshot assignment,
 		int nowMs,
@@ -176,6 +193,9 @@ class AICF_VehicleSlotView
 		AICF_VehicleSpawnPlan plan = trip.GetRequestState().GetSpawnPlan();
 		switch (trip.GetPhase())
 		{
+			case AICF_ETransportTripPhase.WAITING_FOR_SITE:
+				return ResolveWaitingForSiteStatus(
+					trip.GetRequestState().GetLastFailureReason());
 			case AICF_ETransportTripPhase.SITE_PLANNED:
 				return "Площадка выбрана";
 			case AICF_ETransportTripPhase.APPROACHING_SITE:
@@ -195,8 +215,48 @@ class AICF_VehicleSlotView
 				return "Выдача техники";
 			case AICF_ETransportTripPhase.BOARDING:
 				return "Посадка";
+			case AICF_ETransportTripPhase.TRANSIT:
+				return "Движение на технике";
+			case AICF_ETransportTripPhase.DISMOUNT:
+				return "Высадка";
+			case AICF_ETransportTripPhase.HANDOFF:
+				return "Возврат к пешему приказу";
+			case AICF_ETransportTripPhase.COMPLETE:
+				return "Задача техники завершена";
+			case AICF_ETransportTripPhase.FALLBACK:
+				return "Переход на пеший порядок";
+			case AICF_ETransportTripPhase.FAILED_CLOSED:
+				return "Техника недоступна";
 		}
-		return typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase());
+		return "Пешком";
+	}
+
+	protected string ResolveWaitingForSiteStatus(string reason)
+	{
+		switch (reason)
+		{
+			case "VEHICLE_CAP_UNAVAILABLE":
+				return "Ожидание свободной техники";
+			case "SPAWN_PAD_OCCUPIED":
+			case "NO_EMPTY_TERRAIN":
+			case "WATER_OR_UNDRIVABLE_SURFACE":
+				return "Поиск свободной площадки";
+			case "ENEMY_OWNED":
+			case "CONTESTED":
+			case "SPAWN_POINT_MISSING":
+			case "SPAWN_POINT_DISABLED":
+			case "SPAWN_POINT_INACTIVE":
+			case "SPAWN_FACTION_INITIALIZING":
+			case "SPAWN_FACTION_MISMATCH":
+			case "NO_SAFE_SPAWN_AVAILABLE":
+				return "Ожидание безопасной базы";
+			case "TOO_FAR":
+			case "NO_BOARDING_SITE_WITHIN_RANGE":
+				return "Ожидание отряда у базы";
+			case "GROUP_NOT_READY":
+				return "Ожидание готовности отряда";
+		}
+		return "Ожидание площадки";
 	}
 
 	protected bool IsSafeSiteReason(string reason)

@@ -12,7 +12,6 @@ class AICF_MatchController
 	protected static const int BASE_REPLAN_DELAY_MS = 1000;
 	protected static const int GROUP_SPAWN_TIMEOUT_MS = 30000;
 	protected static const int GROUP_SPAWN_AUDIT_INTERVAL_MS = 5000;
-	protected static const int PENDING_GROUP_AGENT_BUDGET = AICF_Stage1Config.MAX_GROUP_SIZE;
 	protected static const float RELAY_CAPTURE_RADIUS_METERS = 30.0;
 	protected static const float STUCK_WATCHDOG_IGNORE_RADIUS_METERS = 100.0;
 	// The first valid observation only starts the durability window. Two further
@@ -23,6 +22,10 @@ class AICF_MatchController
 	protected static const int ORDER_RELIABILITY_REPAIR_FAILURE_BUDGET = 2;
 	protected static const int ORDER_RECOVERY_STABLE_INTERVALS = 2;
 	protected static const int ORDER_RECOVERY_MIN_STABLE_MS = 10000;
+	protected static const int FALSE_COMPLETION_ENDPOINT_BUDGET = 3;
+	protected static const int FALSE_COMPLETION_REPLAN_HOLD_MS = 15000;
+	protected static const float FALSE_COMPLETION_NO_PROGRESS_METERS = 2.0;
+	protected static const float LONE_SURVIVOR_RETREAT_ARRIVAL_METERS = 30.0;
 	protected static const int MOB_EGRESS_HARD_DEADLINE_INTERVALS = 4;
 	protected static const int MOB_EGRESS_HIDDEN_RETRY_MS = 5000;
 	protected static const float MOB_EGRESS_HIDDEN_FORWARD_METERS = 130.0;
@@ -984,6 +987,51 @@ class AICF_MatchController
 					slot.GetSlotId()));
 		}
 
+		// Capacity is a preflight, not a spawn attempt. Project this slot at its
+		// commander-selected roster size while all other SPAWNING slots retain their
+		// own desired-size reservations. Doing this before BeginReplacementSpawn()
+		// prevents a genuine capacity wait from consuming group generations.
+		int managedAgents = CountManagedAgents();
+		int projectedManagedAgents = CountProjectedManagedAgentsForSpawn(slot);
+		int managedAgentLimit = m_Config.GetMaxManagedAgents();
+		if (projectedManagedAgents > managedAgentLimit)
+		{
+			slot.PostponeReinforcementUntil(nowMs + GetReplacementRetryMs());
+			if (slot.MarkAgentLimitBlockReported())
+			{
+				AICF_Stage1Diagnostics.Warning(
+					"REINFORCEMENT_BLOCKED",
+					string.Format(
+						"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 managed_agents=%5 requested_agents=%6 projected_managed_agents=%7 limit=%8 reason=AI_LIMIT generation_unchanged=%9",
+						faction.GetFactionKey(),
+						slot.GetSlotKey(),
+						slot.GetStableSlotKey(),
+						slot.GetSlotId(),
+						managedAgents,
+						slot.GetDesiredSize(),
+						projectedManagedAgents,
+						managedAgentLimit,
+						slot.GetSpawnGeneration()));
+			}
+			return;
+		}
+		if (slot.HasAgentLimitBlockReport())
+		{
+			slot.ResetAgentLimitBlockReported();
+			AICF_Stage1Diagnostics.Info(
+				"REINFORCEMENT_CAPACITY_RELEASED",
+				string.Format(
+					"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 managed_agents=%5 requested_agents=%6 projected_managed_agents=%7 limit=%8 action=START_REPLACEMENT",
+					faction.GetFactionKey(),
+					slot.GetSlotKey(),
+					slot.GetStableSlotKey(),
+					slot.GetSlotId(),
+					managedAgents,
+					slot.GetDesiredSize(),
+					projectedManagedAgents,
+					managedAgentLimit));
+		}
+
 		if (!economyEnabled && !factionState.TryReserveDeployment(AICF_EDeploymentKind.REPLACEMENT))
 			return;
 
@@ -1012,16 +1060,6 @@ class AICF_MatchController
 					faction.GetFactionKey(),
 					slot.GetSlotId(),
 					replacementOvershootMs));
-		}
-
-		if (CountProjectedManagedAgents() > m_Config.GetMaxManagedAgents())
-		{
-			AICF_Stage1Diagnostics.Warning(
-				"REINFORCEMENT_BLOCKED",
-				string.Format("faction=%1 slot=%2 reason=AI_LIMIT", faction.GetFactionKey(), slot.GetSlotId()));
-			AbortReplacementAttempt(factionState, faction, slot, "AI_LIMIT");
-			slot.ReturnSpawnToWait(nowMs + GetReplacementRetryMs());
-			return;
 		}
 
 		SCR_AIGroup group;
@@ -1897,6 +1935,71 @@ class AICF_MatchController
 			int softNudgeDeadlineMs = commanderIntervalMs;
 			int egressDeadlineMs = 2 * commanderIntervalMs;
 			int hardDeadlineMs = MOB_EGRESS_HARD_DEADLINE_INTERVALS * commanderIntervalMs;
+			if (mobPresenceRequiresEgress && slot.IsMobEgressSafetyBlocked())
+			{
+				slot.ObserveUnexplainedMobIdle(false);
+				if (!slot.CanAttemptMobEgressHiddenRecovery(MOB_EGRESS_HIDDEN_RETRY_MS))
+				{
+					ReportMobEgressSafetyHeartbeat(
+						slot,
+						faction,
+						distanceToMobMeters,
+						commanderMotionAgeMs,
+						"RETRY_BACKOFF");
+					continue;
+				}
+				string activeSafetyReason;
+				float activeNearestPlayerMeters;
+				float activeThreatMeasure;
+				bool safetyClear = IsMobEgressSafetyClear(
+					slot,
+					mainBase,
+					activeSafetyReason,
+					activeNearestPlayerMeters,
+					activeThreatMeasure);
+				if (!safetyClear)
+				{
+					slot.ObserveMobEgressSafetyBlock(activeSafetyReason);
+					slot.RecordMobEgressHiddenRecoveryAttempt(activeSafetyReason);
+					ReportMobEgressSafetyHeartbeat(
+						slot,
+						faction,
+						distanceToMobMeters,
+						commanderMotionAgeMs,
+						"SAFETY_STILL_BLOCKED");
+					continue;
+				}
+
+				int safetyBlockedMs = slot.GetMobEgressSafetyBlockedAgeMs();
+				string clearedSafetyReason = slot.GetMobEgressSafetyBlockReason();
+				slot.ClearMobEgressSafetyBlock();
+				slot.ResetMobEgressRecovery();
+				bool safetyOrderRebuilt = false;
+				if (!slot.HasPendingOrderRecovery() && !vehicleOwnsTaskRepair)
+				{
+					safetyOrderRebuilt = m_OrderPlanner.RebuildCurrentOrder(
+						slot,
+						faction,
+						"MOB_EGRESS_SAFETY_CLEARED");
+				}
+				AICF_Stage35Diagnostics.Info(
+					"MOB_EGRESS_SAFETY_CLEARED",
+					string.Format(
+						"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 group_generation=%5 assignment_revision=%6 blocker=%7 blocked_ms=%8",
+						faction.GetFactionKey(),
+						slot.GetSlotKey(),
+						slot.GetStableSlotKey(),
+						slot.GetSlotId(),
+						slot.GetSpawnGeneration(),
+						slot.GetStrategicAssignmentRevision(),
+						clearedSafetyReason,
+						safetyBlockedMs) + string.Format(
+						" nearest_player_m=%1 threat=%2 order_rebuilt=%3 deadline_state=RESTARTED next_action=BOUNDED_EGRESS_WAYPOINT",
+						activeNearestPlayerMeters,
+						activeThreatMeasure,
+						safetyOrderRebuilt));
+				continue;
+			}
 
 			if (mobPresenceRequiresEgress && mobPresenceMs >= softNudgeDeadlineMs &&
 				!recentOutwardProgress && slot.MarkMobEgressSoftNudgeApplied())
@@ -2014,6 +2117,19 @@ class AICF_MatchController
 					combatClearance,
 					hiddenRejectionReason);
 				slot.RecordMobEgressHiddenRecoveryAttempt(hiddenRejectionReason);
+				if (!hiddenRecovered && IsMobEgressSafetyRejection(hiddenRejectionReason))
+				{
+					slot.ObserveMobEgressSafetyBlock(
+						NormalizeMobEgressSafetyReason(hiddenRejectionReason));
+					slot.ObserveUnexplainedMobIdle(false);
+					ReportMobEgressSafetyHeartbeat(
+						slot,
+						faction,
+						distanceToMobMeters,
+						commanderMotionAgeMs,
+						"SAFETY_BLOCK_DETECTED");
+					continue;
+				}
 				int stalledRemainingHardMs = Math.Max(0, hardDeadlineMs - mobPresenceMs);
 				if (slot.MarkMobEgressDeadlineDeferredReported())
 				{
@@ -2237,9 +2353,14 @@ class AICF_MatchController
 		bool movementOwnershipBlocks = recoveryVehicleView &&
 			recoveryVehicleView.IsControllingMovement() &&
 			!IsSpawnStagingRecoveryCompatible(slot, recoveryVehicleView);
-		if (slot.HasPendingOrderRecovery() || restorePending || movementOwnershipBlocks)
+		if (restorePending)
 		{
-			rejectionReason = "MOVEMENT_OR_ORDER_OWNERSHIP_ACTIVE";
+			rejectionReason = "VEHICLE_ORDER_RESTORE_PENDING";
+			return false;
+		}
+		if (movementOwnershipBlocks)
+		{
+			rejectionReason = "VEHICLE_MOVEMENT_OWNERSHIP_ACTIVE";
 			return false;
 		}
 
@@ -2254,9 +2375,9 @@ class AICF_MatchController
 		combatClearance = "CLEAR";
 
 		vector targetPosition;
-		if (!m_OrderPlanner.TryResolveTargetPosition(
+		if (!m_OrderPlanner.TryResolveSlotTargetPosition(
+			slot,
 			expectedTarget,
-			slot.GetRole(),
 			targetPosition))
 		{
 			rejectionReason = "TARGET_POSITION_UNAVAILABLE";
@@ -2334,31 +2455,17 @@ class AICF_MatchController
 				right * ((column - 1) * MOB_EGRESS_HIDDEN_SPACING_METERS) -
 				forward * (row * MOB_EGRESS_HIDDEN_SPACING_METERS);
 			vector destination;
-			if (!SCR_WorldTools.FindEmptyTerrainPosition(
-				destination,
+			if (!TryFindDistinctMobEgressDestination(
+				group.GetWorld(),
 				searchCenter,
-				MOB_EGRESS_HIDDEN_SEARCH_RADIUS_METERS,
-				0.75,
-				2.0,
-				TraceFlags.ENTS | TraceFlags.OCEAN,
-				group.GetWorld()) ||
-				ChimeraWorldUtils.TryGetWaterSurfaceSimple(group.GetWorld(), destination))
+				mobOrigin,
+				destinations,
+				destination))
 			{
-				rejectionReason = string.Format("SAFE_TERRAIN_UNAVAILABLE_%1", memberIndex);
+				rejectionReason = string.Format(
+					"DISTINCT_SAFE_TERRAIN_UNAVAILABLE_%1",
+					memberIndex);
 				return false;
-			}
-			if (vector.DistanceXZ(destination, mobOrigin) <= STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
-			{
-				rejectionReason = string.Format("DESTINATION_INSIDE_MOB_%1", memberIndex);
-				return false;
-			}
-			foreach (vector reservedDestination : destinations)
-			{
-				if (vector.DistanceSqXZ(destination, reservedDestination) < 2.25)
-				{
-					rejectionReason = string.Format("DESTINATION_OVERLAP_%1", memberIndex);
-					return false;
-				}
 			}
 
 			float memberNearestPlayerMeters;
@@ -2485,6 +2592,31 @@ class AICF_MatchController
 				return false;
 			}
 			beforeOrigins[commitIndex] = commitOrigin;
+		}
+		// A pending binding/order verification is allowed to coexist with the
+		// read-only safety preflight above. Transfer ownership only at the actual
+		// mutation boundary, so a blocked player/combat/identity fence preserves the
+		// order-repair candidate and its accounting evidence.
+		if (slot.HasPendingOrderRecovery())
+		{
+			string pendingVerificationKind = DescribePendingOrderVerificationKind(
+				slot.PendingOrderRecoveryCountsAsReliabilityAttempt(),
+				slot.PendingOrderRecoveryCountsAsStuckRecovery());
+			AICF_Stage35Diagnostics.Warning(
+				"MOB_EGRESS_HIDDEN_RECOVERY_OWNERSHIP_TAKEOVER",
+				string.Format(
+					"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 group_generation=%5 assignment_revision=%6 pending_verification=%7 action=SUPERSEDE_ORDER_RECOVERY",
+					faction.GetFactionKey(),
+					slot.GetSlotKey(),
+					slot.GetStableSlotKey(),
+					slot.GetSlotId(),
+					slot.GetSpawnGeneration(),
+					slot.GetStrategicAssignmentRevision(),
+					pendingVerificationKind));
+			SupersedePendingOrderRecovery(
+				slot,
+				faction,
+				"MOB_EGRESS_HIDDEN_TAKEOVER");
 		}
 
 		AICF_Stage35Diagnostics.Warning(
@@ -2649,6 +2781,54 @@ class AICF_MatchController
 		return true;
 	}
 
+	protected bool TryFindDistinctMobEgressDestination(
+		BaseWorld world,
+		vector searchCenter,
+		vector mobOrigin,
+		array<vector> reservedDestinations,
+		out vector destination)
+	{
+		destination = vector.Zero;
+		if (!world)
+			return false;
+
+		array<vector> candidates = {};
+		int candidateCount = SCR_WorldTools.FindAllEmptyTerrainPositions(
+			candidates,
+			searchCenter,
+			MOB_EGRESS_HIDDEN_SEARCH_RADIUS_METERS,
+			0.75,
+			2.0,
+			maxResults: 32,
+			flags: TraceFlags.ENTS | TraceFlags.OCEAN,
+			world: world);
+		if (candidateCount <= 0)
+			return false;
+
+		foreach (vector candidate : candidates)
+		{
+			if (ChimeraWorldUtils.TryGetWaterSurfaceSimple(world, candidate) ||
+				vector.DistanceXZ(candidate, mobOrigin) <= STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
+			{
+				continue;
+			}
+			bool overlapsReserved;
+			foreach (vector reservedDestination : reservedDestinations)
+			{
+				if (vector.DistanceSqXZ(candidate, reservedDestination) < 2.25)
+				{
+					overlapsReserved = true;
+					break;
+				}
+			}
+			if (overlapsReserved)
+				continue;
+			destination = candidate;
+			return true;
+		}
+		return false;
+	}
+
 	protected bool IsHiddenMobRecoveryCombatSafe(
 		SCR_AIGroup group,
 		out float threatMeasure)
@@ -2664,6 +2844,151 @@ class AICF_MatchController
 
 		threatMeasure = utility.GetThreatMeasure();
 		return threatMeasure <= MOB_EGRESS_MAX_THREAT_MEASURE;
+	}
+
+	protected bool IsMobEgressSafetyRejection(string reason)
+	{
+		return reason.Contains("PLAYER_FENCE") || reason.Contains("COMBAT_THREAT");
+	}
+
+	protected string NormalizeMobEgressSafetyReason(string reason)
+	{
+		if (reason.Contains("PLAYER_FENCE"))
+			return "PLAYER_FENCE";
+		if (reason.Contains("COMBAT_THREAT"))
+			return "COMBAT_THREAT";
+		return reason;
+	}
+
+	protected bool IsMobEgressSafetyClear(
+		AICF_GroupSlot slot,
+		SCR_CampaignMilitaryBaseComponent mainBase,
+		out string safetyReason,
+		out float nearestPlayerMeters,
+		out float threatMeasure)
+	{
+		safetyReason = string.Empty;
+		nearestPlayerMeters = -1.0;
+		threatMeasure = -1.0;
+		if (!slot || !mainBase || !mainBase.GetOwner() || !m_HiddenRecoveryWatchdog)
+		{
+			safetyReason = "NO_CONFIRMED_SAFETY_BLOCK";
+			return true;
+		}
+		SCR_AIGroup group = slot.GetGroup();
+		if (!IsHiddenMobRecoveryCombatSafe(group, threatMeasure))
+		{
+			if (threatMeasure < 0)
+			{
+				safetyReason = "NO_CONFIRMED_SAFETY_BLOCK";
+				return true;
+			}
+			safetyReason = "COMBAT_THREAT";
+			return false;
+		}
+
+		vector targetPosition;
+		if (!m_OrderPlanner.TryResolveSlotTargetPosition(
+			slot,
+			slot.GetTargetBase(),
+			targetPosition))
+		{
+			safetyReason = "NO_CONFIRMED_SAFETY_BLOCK";
+			return true;
+		}
+		vector mobOrigin = mainBase.GetOwner().GetOrigin();
+		vector forward = targetPosition - mobOrigin;
+		forward[1] = 0;
+		if (forward.LengthSq() < 0.01)
+			forward = "1 0 0";
+		else
+			forward.Normalize();
+		vector right = Vector(forward[2], 0, -forward[0]);
+		vector recoveryCenter = mobOrigin + forward * MOB_EGRESS_HIDDEN_FORWARD_METERS;
+		array<vector> reservedDestinations = {};
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		BaseWorld world = GetGame().GetWorld();
+		float hiddenRadiusMeters = m_Stage3Config.GetHiddenRecoveryPlayerRadiusMeters();
+		int insideIndex;
+		foreach (AIAgent agent : agents)
+		{
+			IEntity member;
+			if (agent)
+				member = agent.GetControlledEntity();
+			if (!member || agent.GetParentGroup() != group ||
+				vector.DistanceXZ(member.GetOrigin(), mobOrigin) > STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
+			{
+				continue;
+			}
+			int row = insideIndex / 3;
+			int column = insideIndex % 3;
+			vector searchCenter = recoveryCenter +
+				right * ((column - 1) * MOB_EGRESS_HIDDEN_SPACING_METERS) -
+				forward * (row * MOB_EGRESS_HIDDEN_SPACING_METERS);
+			vector destination;
+			if (!TryFindDistinctMobEgressDestination(
+				world,
+				searchCenter,
+				mobOrigin,
+				reservedDestinations,
+				destination))
+			{
+				safetyReason = "NO_CONFIRMED_SAFETY_BLOCK";
+				return true;
+			}
+			float memberNearestPlayerMeters;
+			string fenceReason;
+			if (!m_HiddenRecoveryWatchdog.CanApplyHiddenRecovery(
+				member.GetOrigin(),
+				destination,
+				hiddenRadiusMeters,
+				memberNearestPlayerMeters,
+				fenceReason))
+			{
+				nearestPlayerMeters = memberNearestPlayerMeters;
+				safetyReason = "PLAYER_FENCE";
+				return false;
+			}
+			if (memberNearestPlayerMeters >= 0 &&
+				(nearestPlayerMeters < 0 || memberNearestPlayerMeters < nearestPlayerMeters))
+			{
+				nearestPlayerMeters = memberNearestPlayerMeters;
+			}
+			reservedDestinations.Insert(destination);
+			insideIndex++;
+		}
+		return true;
+	}
+
+	protected void ReportMobEgressSafetyHeartbeat(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		float distanceToMobMeters,
+		int motionAgeMs,
+		string observation)
+	{
+		if (!slot || !faction ||
+			!slot.ShouldReportMobEgressSafetyHeartbeat(HEARTBEAT_INTERVAL_MS))
+		{
+			return;
+		}
+		AICF_Stage35Diagnostics.Info(
+			"MOB_EGRESS_BLOCKED_BY_SAFETY",
+			string.Format(
+				"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 group_generation=%5 assignment_revision=%6 state=EGRESS_BLOCKED_BY_SAFETY blocker=%7 blocked_ms=%8",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetStableSlotKey(),
+				slot.GetSlotId(),
+				slot.GetSpawnGeneration(),
+				slot.GetStrategicAssignmentRevision(),
+				slot.GetMobEgressSafetyBlockReason(),
+				slot.GetMobEgressSafetyBlockedAgeMs()) + string.Format(
+				" distance_to_mob_m=%1 motion_age_ms=%2 observation=%3 hard_deadline=PAUSED acceptance_failure=0 next_action=WAIT_SAFETY_CLEARANCE",
+				distanceToMobMeters,
+				motionAgeMs,
+				observation));
 	}
 
 	protected bool IsWaypointBoundToGroup(SCR_AIGroup group, AIWaypoint waypoint)
@@ -2682,6 +3007,8 @@ class AICF_MatchController
 		bool vehicleLifecycle,
 		bool safeVehicleSpawnWait)
 	{
+		if (slot && slot.IsTemporaryRouteReplanHold())
+			return "TEMPORARY_ROUTE_REPLAN_HOLD";
 		if (slot && slot.GetRole() == AICF_EGroupRole.DEFEND && slot.GetTargetBase() == mainBase)
 			return "HQ_DEFENSE";
 		if (slot && slot.GetRole() == AICF_EGroupRole.RESERVE && slot.GetTargetBase() == mainBase)
@@ -2841,6 +3168,14 @@ class AICF_MatchController
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
 			if (!slot || !slot.IsCombatReady())
 				continue;
+			if (TryCompleteLoneSurvivorRetreat(slot, faction))
+				continue;
+			if (slot.IsTemporaryRouteReplanHold())
+			{
+				if (slot.IsTemporaryRouteReplanHoldDue(FALSE_COMPLETION_REPLAN_HOLD_MS))
+					ResumeAfterFalseCompletionHold(slot, faction);
+				continue;
+			}
 			if (m_VehicleCoordinator &&
 				(m_VehicleCoordinator.IsControllingMovement(slot) ||
 				m_VehicleCoordinator.IsRestorePending(slot)))
@@ -2910,7 +3245,12 @@ class AICF_MatchController
 		if (!group || !target || !target.GetOwner() || !target.IsInitialized() || !waypoint)
 			return false;
 
-		if (slot.GetRole() == AICF_EGroupRole.ATTACK)
+		if (slot.IsLoneSurvivorRetreat())
+		{
+			if (target != faction.GetMainBase() || target.GetFaction() != faction)
+				return false;
+		}
+		else if (slot.GetRole() == AICF_EGroupRole.ATTACK)
 		{
 			if (target.GetFaction() == faction || !target.IsValidTarget(faction))
 				return false;
@@ -2969,6 +3309,103 @@ class AICF_MatchController
 		}
 
 		return true;
+	}
+
+	protected bool TryCompleteLoneSurvivorRetreat(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction)
+	{
+		if (!slot || !faction || !slot.IsLoneSurvivorRetreat() ||
+			AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()) != 1)
+		{
+			return false;
+		}
+		IEntity survivor = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
+		vector retreatPosition;
+		if (!survivor || !m_OrderPlanner.TryResolveSlotTargetPosition(
+			slot,
+			slot.GetTargetBase(),
+			retreatPosition))
+		{
+			return false;
+		}
+		float distanceMeters = Math.Sqrt(vector.DistanceSqXZ(
+			survivor.GetOrigin(),
+			retreatPosition));
+		if (distanceMeters > LONE_SURVIVOR_RETREAT_ARRIVAL_METERS)
+			return false;
+
+		SCR_CampaignMilitaryBaseComponent retreatBase = slot.GetTargetBase();
+		if (slot.HasPendingOrderRecovery())
+			SupersedePendingOrderRecovery(slot, faction, "LONE_SURVIVOR_RETREAT_ARRIVED");
+		slot.ClearLoneSurvivorRetreat();
+		slot.ResetFalseCompletionRecovery();
+		bool operationalRestored = m_OrderPlanner.AssignOrder(
+			slot,
+			faction,
+			m_ObjectiveGraph,
+			m_TargetSelector,
+			"LONE_SURVIVOR_RETREAT_COMPLETE",
+			retreatBase);
+		if (!operationalRestored)
+		{
+			operationalRestored = m_OrderPlanner.AssignLoneSurvivorRetreat(
+				slot,
+				faction,
+				"LONE_SURVIVOR_RETREAT_WAIT_REPLAN");
+		}
+		AICF_Stage35Diagnostics.Info(
+			"LONE_SURVIVOR_RETREAT_COMPLETED",
+			string.Format(
+				"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 group_generation=%5 distance_m=%6 retreat_base=%7 alive=1 operational_restored=%8",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetStableSlotKey(),
+				slot.GetSlotId(),
+				slot.GetSpawnGeneration(),
+				distanceMeters,
+				AICF_Stage1Diagnostics.BaseKey(retreatBase),
+				operationalRestored));
+		return true;
+	}
+
+	protected void ResumeAfterFalseCompletionHold(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction)
+	{
+		if (!slot || !faction || !slot.IsTemporaryRouteReplanHold())
+			return;
+		SCR_CampaignMilitaryBaseComponent failedTarget = slot.GetTargetBase();
+		vector holdAnchor = slot.GetTemporaryRouteReplanAnchor();
+		int holdAgeMs = slot.GetTemporaryRouteReplanHoldAgeMs();
+		slot.ClearTemporaryRouteReplanHold();
+		slot.ResetFalseCompletionRecovery();
+		bool replanned = m_OrderPlanner.AssignOrder(
+			slot,
+			faction,
+			m_ObjectiveGraph,
+			m_TargetSelector,
+			"FALSE_COMPLETION_FULL_REPLAN",
+			failedTarget);
+		if (!replanned)
+			replanned = m_OrderPlanner.RebuildCurrentOrder(
+				slot,
+				faction,
+				"FALSE_COMPLETION_ROUTE_REBUILD");
+		if (!replanned)
+			slot.BeginTemporaryRouteReplanHold(holdAnchor);
+		AICF_Stage2Diagnostics.Info(
+			"FALSE_COMPLETION_ROUTE_REPLAN",
+			string.Format(
+				"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 group_generation=%5 failed_target=%6 hold_ms=%7 replanned=%8",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetStableSlotKey(),
+				slot.GetSlotId(),
+				slot.GetSpawnGeneration(),
+				AICF_Stage1Diagnostics.BaseKey(failedTarget),
+				holdAgeMs,
+				replanned));
 	}
 
 	protected bool TryConfirmPendingOrderRecoveryByRelayCapture(
@@ -3065,6 +3502,7 @@ class AICF_MatchController
 				candidateMs,
 				expectedAssignmentRevision,
 				expectedGroupGeneration));
+		slot.ResetFalseCompletionRecovery();
 		slot.ClearPendingOrderRecovery();
 		return true;
 	}
@@ -3237,6 +3675,13 @@ class AICF_MatchController
 				alreadyCountsAsStuck,
 				repairAttemptId);
 			AICF_Stage2Diagnostics.Info(confirmationEvent, recoveredDetails);
+			// A reachable intermediate leg may outlive the durability window. Keep
+			// its route revision so a later legitimate leg completion rebuilds the
+			// next connected leg instead of falling back to the original unreachable
+			// objective endpoint. Objective completion and strategic retarget still
+			// clear the chain explicitly.
+			if (slot.GetFalseCompletionEndpointRevision() <= 0)
+				slot.ResetFalseCompletionRecovery();
 			slot.ClearPendingOrderRecovery();
 			return;
 		}
@@ -3287,6 +3732,7 @@ class AICF_MatchController
 					terminalOutcomeDetails,
 					terminalProvenance,
 					terminalAgeMs));
+			slot.ResetFalseCompletionRecovery();
 			slot.ClearPendingOrderRecovery();
 			return;
 		}
@@ -3310,7 +3756,7 @@ class AICF_MatchController
 		float distanceMeters = -1.0;
 		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
 		vector targetPosition;
-		if (leader && m_OrderPlanner.TryResolveTargetPosition(target, slot.GetRole(), targetPosition))
+		if (leader && m_OrderPlanner.TryResolveSlotTargetPosition(slot, target, targetPosition))
 		{
 			distanceMeters = Math.Sqrt(vector.DistanceSqXZ(
 				leader.GetOrigin(),
@@ -3321,6 +3767,100 @@ class AICF_MatchController
 			distanceMeters = Math.Sqrt(vector.DistanceSqXZ(
 				leader.GetOrigin(),
 				expectedWaypoint.GetOrigin()));
+		}
+		float physicalProgressMeters = slot.GetPendingOrderRecoveryPhysicalProgressMeters();
+		if (verificationFailureReason == "WAYPOINT_COMPLETED_OUTSIDE_OBJECTIVE")
+		{
+			bool noPhysicalProgress = physicalProgressMeters < FALSE_COMPLETION_NO_PROGRESS_METERS;
+			bool completedRecoveryLeg = slot.GetFalseCompletionEndpointRevision() > 0 &&
+				!noPhysicalProgress;
+			int endpointAttempt = slot.RecordFalseWaypointCompletion(
+				expectedWaypoint.GetOrigin(),
+				noPhysicalProgress);
+			int noProgressAttempt = slot.GetFalseCompletionNoProgressCount();
+			string falseCompletionDetails = string.Format(
+				"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 group_generation=%5 assignment_revision=%6 target=%7",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetStableSlotKey(),
+				slot.GetSlotId(),
+				slot.GetSpawnGeneration(),
+				slot.GetStrategicAssignmentRevision(),
+				AICF_Stage1Diagnostics.BaseKey(target));
+			falseCompletionDetails += string.Format(
+				" waypoint=%1 endpoint=%2 objective_distance_m=%3 physical_progress_m=%4 lifetime_ms=%5 endpoint_revision=%6 no_progress_attempt=%7 endpoint_budget=%8",
+				expectedWaypointId,
+				expectedWaypoint.GetOrigin(),
+				distanceMeters,
+				physicalProgressMeters,
+				lifetimeMs,
+				endpointAttempt,
+				noProgressAttempt,
+				FALSE_COMPLETION_ENDPOINT_BUDGET);
+			if (completedRecoveryLeg)
+			{
+				AICF_Stage2Diagnostics.Info(
+					"RECOVERY_ROUTE_LEG_COMPLETED",
+					falseCompletionDetails +
+					" callback=GROUP_CALLBACK_COMPLETED physical_confirmation=ROUTE_LEG_PROGRESS next_action=NEXT_REACHABLE_LEG");
+				if (countsAsReliabilityRepair)
+				{
+					RecordPendingOrderRepairTerminal(
+						slot,
+						faction,
+						"SUPERSEDED",
+						"RECOVERY_ROUTE_LEG_COMPLETED",
+						"PHYSICAL_ROUTE_PROGRESS");
+				}
+				if (alreadyCountsAsStuck)
+					slot.SupersedePendingStuckRecoveryEvidence("RECOVERY_ROUTE_LEG_COMPLETED");
+				slot.ClearPendingOrderRecovery();
+				TryRecoverOrder(
+					factionState,
+					slot,
+					faction,
+					"RECOVERY_ROUTE_LEG_COMPLETED");
+				return;
+			}
+			falseCompletionDetails += string.Format(
+				" callback=GROUP_CALLBACK_COMPLETED physical_confirmation=REJECTED no_physical_progress=%1 reliability_budget_consumed=0",
+				noPhysicalProgress);
+			AICF_Stage2Diagnostics.Warning("FALSE_COMPLETION", falseCompletionDetails);
+
+			if (countsAsReliabilityRepair)
+			{
+				RecordPendingOrderRepairTerminal(
+					slot,
+					faction,
+					"SUPERSEDED",
+					"FALSE_COMPLETION_ENDPOINT_REJECTED",
+					"PHYSICAL_OBJECTIVE_CHECK");
+			}
+			if (alreadyCountsAsStuck)
+				slot.SupersedePendingStuckRecoveryEvidence("FALSE_COMPLETION_ENDPOINT_REJECTED");
+			slot.ClearPendingOrderRecovery();
+
+			if (noProgressAttempt >= FALSE_COMPLETION_ENDPOINT_BUDGET)
+			{
+				bool holdCommitted = leader && m_OrderPlanner.HoldPositionForTemporaryRouteReplan(
+					slot,
+					faction,
+					target,
+					leader.GetOrigin());
+				AICF_Stage2Diagnostics.Warning(
+					"FALSE_COMPLETION_ENDPOINTS_EXHAUSTED",
+					falseCompletionDetails + string.Format(
+						" action=TEMPORARY_ROUTE_REPLAN_HOLD hold_ms=%1 hold_committed=%2 next_action=FULL_STRATEGIC_REPLAN",
+						FALSE_COMPLETION_REPLAN_HOLD_MS,
+						holdCommitted));
+				return;
+			}
+			TryRecoverOrder(
+				factionState,
+				slot,
+				faction,
+				"FALSE_COMPLETION_ENDPOINT_REJECTED");
+			return;
 		}
 
 		int recoveryAttempt = slot.GetStuckRecoveryCount() + 1;
@@ -5223,12 +5763,15 @@ class AICF_MatchController
 		return count;
 	}
 
-	protected int CountProjectedManagedAgents()
+	protected int CountProjectedManagedAgentsForSpawn(AICF_GroupSlot pendingSlot)
 	{
-		return CountProjectedFactionAgents(m_USState) + CountProjectedFactionAgents(m_USSRState);
+		return CountProjectedFactionAgents(m_USState, pendingSlot) +
+			CountProjectedFactionAgents(m_USSRState, pendingSlot);
 	}
 
-	protected int CountProjectedFactionAgents(AICF_FactionState factionState)
+	protected int CountProjectedFactionAgents(
+		AICF_FactionState factionState,
+		AICF_GroupSlot pendingSlot)
 	{
 		if (!factionState)
 			return 0;
@@ -5241,10 +5784,19 @@ class AICF_MatchController
 				continue;
 
 			SCR_AIGroup group = slot.GetGroup();
-			if (group && group.GetAgentsCount() > 0)
-				count += group.GetAgentsCount();
-			else if (slot.GetState() == AICF_EGroupSlotState.SPAWNING)
-				count += PENDING_GROUP_AGENT_BUDGET;
+			int actualAgents;
+			if (group)
+				actualAgents = group.GetAgentsCount();
+			if (slot == pendingSlot || slot.GetState() == AICF_EGroupSlotState.SPAWNING)
+			{
+				// A partially materialized roster still owns its complete configured
+				// capacity reservation. Never undercount an invalid oversized group.
+				count += Math.Max(actualAgents, slot.GetDesiredSize());
+			}
+			else
+			{
+				count += actualAgents;
+			}
 		}
 
 		return count;
@@ -5379,7 +5931,7 @@ class AICF_MatchController
 		string target = "NONE";
 		if (slot.GetTargetBase())
 			target = BuildBaseLabel(slot.GetTargetBase());
-		string vehiclePhase = "ON_FOOT";
+		string vehiclePhase = "Пешком";
 		AICF_VehicleSlotView vehicleView;
 		if (m_VehicleCoordinator)
 			vehicleView = m_VehicleCoordinator.GetSlotView(slot);
