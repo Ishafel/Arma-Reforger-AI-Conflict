@@ -227,7 +227,7 @@ class AICF_StrategicUIController
 			totalSupplies = m_Campaign.AICF_GetUSSRTotalSupplies();
 			connectedSupplies = m_Campaign.AICF_GetUSSRConnectedSupplies();
 		}
-		string supply = "OFF";
+		string supply = "SYNC";
 		if (m_Campaign.AICF_GetStage4Enabled())
 			supply = string.Format("%1/%2", connectedSupplies, totalSupplies);
 		string objective = m_Campaign.AICF_GetStrategicObjective(m_bLocalUSSR);
@@ -481,7 +481,7 @@ class AICF_StrategicUIController
 			totalSupplies = m_Campaign.AICF_GetUSSRTotalSupplies();
 			connectedSupplies = m_Campaign.AICF_GetUSSRConnectedSupplies();
 		}
-		string logistics = "ECONOMY OFF";
+		string logistics = "ECONOMY SYNC";
 		if (m_Campaign.AICF_GetStage4Enabled())
 			logistics = GetTierName(tier);
 		m_wCommandOverview.SetText(string.Format(

@@ -812,7 +812,7 @@ class AICF_VehicleCoordinator
 
 	protected bool IsAuthorityReady()
 	{
-		return !m_bStopped && m_Config && m_Config.GetVehiclesEnabled() && Replication.IsServer() &&
+		return !m_bStopped && m_Config && Replication.IsServer() &&
 			m_Campaign && m_Campaign.IsMaster() && m_ConflictAdapter && m_OrderPlanner &&
 			m_ObjectiveGraph && m_TargetSelector && m_Trips && m_Fleets &&
 			m_TripController && m_CleanupManager && m_Diagnostics && m_Acceptance;

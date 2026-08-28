@@ -54,7 +54,6 @@ try {
             "-config `"$($plan.Config)`""
             "-addonsDir `"$addonDirs`""
             "-profile `"$profile`""
-            "-aicfVehiclesEnabled 1"
             "-aicfTransportVehiclesPerFaction $($plan.Transport)"
             "-aicfArmedLightVehiclesPerFaction $($plan.Armed)"
             "-aicfMaxVehiclesPerFaction 1"

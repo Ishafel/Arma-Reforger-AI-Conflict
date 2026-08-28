@@ -144,17 +144,14 @@ class AICF_MatchController
 		m_OrderPlanner = new AICF_OrderPlanner();
 		m_VictorySystem = new AICF_VictorySystem();
 		m_HiddenRecoveryWatchdog = new AICF_VehicleWatchdog();
-		if (m_Stage3Config.GetVehiclesEnabled())
-		{
-			m_VehicleCoordinator = new AICF_VehicleCoordinator(
-				m_Stage3Config,
-				m_Campaign,
-				m_ConflictAdapter,
-				m_OrderPlanner,
-				m_GroupCohesionPolicy,
-				m_ObjectiveGraph,
-				m_TargetSelector);
-		}
+		m_VehicleCoordinator = new AICF_VehicleCoordinator(
+			m_Stage3Config,
+			m_Campaign,
+			m_ConflictAdapter,
+			m_OrderPlanner,
+			m_GroupCohesionPolicy,
+			m_ObjectiveGraph,
+			m_TargetSelector);
 		m_GroupMapMarkers = new AICF_GroupMapMarkerSystem();
 
 		array<SCR_CampaignMilitaryBaseComponent> objectiveBases = {};
@@ -5553,8 +5550,8 @@ class AICF_MatchController
 			!AICF_Stage1Diagnostics.HasErrors() &&
 			!AICF_Stage2Diagnostics.HasErrors() &&
 			!AICF_Stage35Diagnostics.HasErrors() &&
-			(!m_Stage3Config.GetVehiclesEnabled() || !AICF_Stage3Diagnostics.HasErrors()) &&
-			(!m_Stage4Config.GetEconomyEnabled() || !AICF_Stage4Diagnostics.HasErrors());
+			!AICF_Stage3Diagnostics.HasErrors() &&
+			!AICF_Stage4Diagnostics.HasErrors();
 
 		int pendingOrderRepairs = CountPendingOrderRepairs();
 		int unaccountedOrderRepairs = AuditOrderRepairAccounting(
@@ -5925,7 +5922,7 @@ class AICF_MatchController
 	{
 		if (!m_Campaign || !m_Stage4Config)
 			return;
-		if (!m_Stage4Config.GetEconomyEnabled() || !m_EconomySystem || !m_USFaction || !m_USSRFaction)
+		if (!m_EconomySystem || !m_USFaction || !m_USSRFaction)
 		{
 			m_Campaign.AICF_SetStage4State(
 				false,

@@ -71,8 +71,12 @@ $stage3Config = Read-Required 'Config\AICF_Stage3Config.c'
 $factionFleet = Read-Required 'State\Vehicles\AICF_FactionFleet.c'
 $logAudit = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'tools\Test-Stage4Log.ps1') -Raw
 
-Assert-Contains 'STAGE4_DEFAULT_OFF' $config 'm_bEconomyEnabled\s*=\s*false\s*;' 'Economy must default off'
-Assert-Contains 'STAGE4_DEFAULT_OFF' $config '"aicfEconomyEnabled"' 'Economy must require an explicit CLI opt-in'
+Assert-Contains 'STAGE4_ALWAYS_ON' $config 'bool\s+GetEconomyEnabled\s*\(\s*\)\s*\{\s*return\s+true\s*;\s*\}' 'Economy compatibility accessor must remain permanently enabled'
+Assert-NotContains 'STAGE4_ALWAYS_ON' $config 'm_bEconomyEnabled' 'Economy must not retain mutable enable state'
+Assert-NotContains 'STAGE4_ALWAYS_ON' $config '"aicfEconomyEnabled"' 'Economy must not expose a CLI opt-out'
+Assert-Contains 'STAGE4_ALWAYS_ON' $controller 'm_EconomySystem\s*=\s*new\s+AICF_EconomySystem' 'Match controller must always compose the economy subsystem'
+Assert-Contains 'STAGE4_ALWAYS_ON' $economy 'bool\s+IsEnabled\s*\(\s*\)[\s\S]*m_Config\s*&&\s*m_Config\.GetEconomyEnabled\s*\(' 'Economy runtime gate must resolve through the permanently enabled configuration'
+Assert-NotContains 'STAGE4_ALWAYS_ON' $strategicUI 'string\s+supply\s*=\s*"OFF"|ECONOMY OFF' 'Strategic UI must not expose a disabled economy state'
 Assert-Contains 'STAGE4_VARIABLE_SUPPLY_COST' $config 'GetReplacementSupplyCostForSize[\s\S]*DEFAULT_GROUP_SIZE' 'Replacement supply cost must scale from the default four-person roster'
 Assert-Contains 'STAGE4_VARIABLE_SUPPLY_COST' $economy 'GetReplacementSupplyCostForSize\s*\(\s*slot\.GetDesiredSize\(\)\s*\)' 'Replacement reservations must price the selected next-deployment size'
 foreach ($cli in @(
@@ -119,9 +123,6 @@ Assert-Contains 'STAGE4_TRANSACTION' $ticketLedger 'RollbackCommittedDeployment'
 foreach ($reason in @('SPAWN_FAILED', 'BIND_FAILED', 'SPAWN_TIMEOUT', 'INVALID_ROSTER', 'GROUP_EMPTY', 'SYSTEM_STOP')) {
     Assert-Contains 'STAGE4_ROLLBACK_PATHS' ($controller + $economy) ([regex]::Escape('"' + $reason + '"')) "Missing rollback reason $reason"
 }
-
-Assert-Contains 'STAGE4_BASELINE_PRESERVED' $controller '!economyEnabled\s*&&\s*!factionState\.TryReserveDeployment' 'Legacy ticket reservation must remain the economy-off path'
-Assert-Contains 'STAGE4_BASELINE_PRESERVED' $controller 'else[\s\S]*m_ReinforcementSystem\.TrySpawn\s*\(' 'Economy-off replacements must retain the legacy first-safe spawner'
 
 Assert-NotContains 'STAGE4_ABSTRACT_DELIVERY' $delivery 'SpawnEntity|SpawnEntityPrefab|RplComponent\.DeleteRplEntity' 'Stage 4 delivery must not create physical convoy entities'
 Assert-Contains 'STAGE4_ABSTRACT_DELIVERY' $delivery 'sourceBase\.AddSupplies\s*\(\s*-cargo\s*\)' 'Shipment dispatch must debit its source'
@@ -274,4 +275,4 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host 'Stage 4 static audit: PASS' -ForegroundColor Green
-Write-Host 'negative_fixture=PASS widget_rendering_fixture=PASS default_off=PASS transaction=PASS delivery_balance=PASS replication=PASS strategic_ui=PASS order_authority=PASS'
+Write-Host 'negative_fixture=PASS widget_rendering_fixture=PASS always_on=PASS transaction=PASS delivery_balance=PASS replication=PASS strategic_ui=PASS order_authority=PASS'

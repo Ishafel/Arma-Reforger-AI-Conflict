@@ -116,7 +116,6 @@ class AICF_VehicleAcceptanceMonitor
 {
 	static const int DEFAULT_REQUIRED_FACTIONS = 2;
 
-	protected bool m_bVehiclesEnabled;
 	protected int m_iTransportSlotsPerFaction;
 	protected int m_iArmedSlotsPerFaction;
 	protected int m_iRequiredFactionCount;
@@ -139,7 +138,6 @@ class AICF_VehicleAcceptanceMonitor
 		m_iRequiredFactionCount = Math.Max(1, requiredFactionCount);
 		if (!config)
 			return;
-		m_bVehiclesEnabled = config.GetVehiclesEnabled();
 		m_iTransportSlotsPerFaction = config.GetTransportVehiclesPerFaction();
 		m_iArmedSlotsPerFaction = config.GetArmedLightVehiclesPerFaction();
 	}
@@ -411,7 +409,7 @@ class AICF_VehicleAcceptanceMonitor
 			return;
 		}
 
-		if (m_bVehiclesEnabled && CountConfiguredMotorizedSlots() == 0)
+		if (CountConfiguredMotorizedSlots() == 0)
 		{
 			AICF_Stage3Diagnostics.Info(
 				"RESULT",
@@ -485,7 +483,7 @@ class AICF_VehicleAcceptanceMonitor
 
 	protected bool AreConfiguredSlicesComplete()
 	{
-		if (!m_bVehiclesEnabled || m_iRequiredFactionCount <= 0 ||
+		if (m_iRequiredFactionCount <= 0 ||
 			m_aFactions.Count() != m_iRequiredFactionCount ||
 			CountConfiguredMotorizedSlots() <= 0)
 			return false;

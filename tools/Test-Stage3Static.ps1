@@ -40,7 +40,9 @@ Add-Stage3Failures @(Invoke-AICFArchitectureNegativeSelfCheck)
 
 $config = Get-Stage3RecordByName $records 'AICF_Stage3Config.c'
 if (Require-Stage3Record $config 'AICF_Stage3Config.c') {
-    Assert-AICFContains $failures 'STAGE3_DISABLED_BASELINE' $config.Code 'm_bVehiclesEnabled\s*=\s*false' 'aicfVehiclesEnabled must remain disabled by default'
+    Assert-AICFContains $failures 'STAGE3_ALWAYS_ON' $config.Code 'bool\s+GetVehiclesEnabled\s*\(\s*\)\s*\{\s*return\s+true\s*;\s*\}' 'Vehicle subsystem compatibility accessor must remain permanently enabled'
+    Assert-AICFNotContains $failures 'STAGE3_ALWAYS_ON' $config.Code 'm_bVehiclesEnabled' 'Vehicle subsystem must not retain mutable enable state'
+    Assert-AICFNotContains $failures 'STAGE3_ALWAYS_ON' $config.Source '"aicfVehiclesEnabled"' 'Vehicle subsystem must not expose a CLI opt-out'
     Assert-AICFContains $failures 'STAGE3_BOUNDED_REQUEST' $config.Code 'DEFAULT_SPAWN_MAX_ATTEMPTS\s*=\s*4\s*;' 'Spawn request attempts must default to four'
     Assert-AICFContains $failures 'STAGE3_BOUNDED_REQUEST' $config.Code 'DEFAULT_WAIT_PROBE_INTERVAL_MS\s*=\s*60000\s*;' 'WAITING_FOR_SITE probe must default to sixty seconds'
 	Assert-AICFContains $failures 'STAGE3_APPROACH_DEADLINE' $config.Code 'DEFAULT_BOARDING_APPROACH_TIMEOUT_MS\s*=\s*180000\s*;' 'Long per-member approach must have its own bounded three-minute deadline'
@@ -50,9 +52,15 @@ if (Require-Stage3Record $config 'AICF_Stage3Config.c') {
     Assert-AICFContains $failures 'STAGE3_MINIMUM_REQUEST_ROSTER' $config.Code 'DEFAULT_MINIMUM_VEHICLE_REQUEST_AGENTS\s*=\s*3\s*;' 'New vehicle requests must require the accepted three-member minimum'
     Assert-AICFContains $failures 'STAGE3_FACTION_CAP' $config.Code 'DEFAULT_MAX_VEHICLES_PER_FACTION\s*=\s*10\s*;' 'Faction active/reserved lease cap must cover all ten commander-configurable groups'
     Assert-AICFContains $failures 'STAGE3_COHESION_DEADLINE' $config.Code 'DEFAULT_COHESION_WAIT_TIMEOUT_MS\s*=\s*300000\s*;' 'Fragmented cohesion wait must have a five-minute absolute deadline'
-    foreach ($cliName in @('aicfVehiclesEnabled', 'aicfVehicleMinimumRequestAgents', 'aicfVehicleCohesionWaitTimeoutMs', 'aicfMaxVehiclesPerFaction')) {
+    foreach ($cliName in @('aicfVehicleMinimumRequestAgents', 'aicfVehicleCohesionWaitTimeoutMs', 'aicfMaxVehiclesPerFaction')) {
         Assert-AICFContains $failures 'STAGE3_CONFIG_CLI' $config.Source ([regex]::Escape('"' + $cliName + '"')) "Missing documented CLI option $cliName"
     }
+}
+
+$matchController = Find-AICFClassRecord $records 'AICF_MatchController'
+if ($matchController) {
+    Assert-AICFContains $failures 'STAGE3_ALWAYS_ON' $matchController.Code 'm_VehicleCoordinator\s*=\s*new\s+AICF_VehicleCoordinator' 'Match controller must always compose the vehicle subsystem'
+    Assert-AICFNotContains $failures 'STAGE3_ALWAYS_ON' $matchController.Code 'if\s*\(\s*m_Stage3Config\.GetVehiclesEnabled\s*\(' 'Vehicle coordinator construction must not be feature-gated'
 }
 
 $spawner = Find-AICFClassRecord $records 'AICF_VehicleSpawner'
@@ -176,6 +184,7 @@ if ($handoff) {
 $vehicleCoordinator = Find-AICFClassRecord $records 'AICF_VehicleCoordinator'
 if ($vehicleCoordinator) {
 	$terminalObservation = ConvertTo-AICFCodeText (Get-AICFMethodBody $vehicleCoordinator 'ObserveTerminalCommit')
+	Assert-AICFNotContains $failures 'STAGE3_ALWAYS_ON' $vehicleCoordinator.Code 'GetVehiclesEnabled\s*\(' 'Vehicle authority must not be feature-gated'
 	Assert-AICFContains $failures 'STAGE3_TERMINAL_OUTCOME_COMMIT' $terminalObservation 'observed[\s\S]*observed\.IsTerminal[\s\S]*!trip\.IsTerminal' 'Coordinator must explicitly detect a returned terminal outcome that was not committed by the controller'
 	Assert-AICFContains $failures 'STAGE3_TERMINAL_OUTCOME_COMMIT' $vehicleCoordinator.Strings 'UNCOMMITTED_TERMINAL_OUTCOME:' 'An uncommitted terminal outcome must fail observably instead of being silently ignored'
 }

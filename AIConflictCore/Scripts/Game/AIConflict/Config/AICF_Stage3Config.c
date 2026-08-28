@@ -1,5 +1,5 @@
-// Ground-vehicle settings are disabled by default so loading the Stage 3 code
-// without explicit CLI opt-in remains behaviorally equivalent to Stage 2.
+// Ground vehicles are a permanent part of the product configuration.
+// Runtime tuning remains available, but the subsystem has no opt-out.
 class AICF_Stage3Config
 {
 	static const int DEFAULT_TRANSPORTS_PER_FACTION = 10;
@@ -39,7 +39,6 @@ class AICF_Stage3Config
 	// deliberately not revoked when later losses take the group below this gate.
 	static const int DEFAULT_MINIMUM_VEHICLE_REQUEST_AGENTS = 3;
 
-	protected bool m_bVehiclesEnabled;
 	protected int m_iTransportVehiclesPerFaction;
 	protected int m_iArmedLightVehiclesPerFaction;
 	protected int m_iMaxVehiclesPerFaction;
@@ -75,7 +74,6 @@ class AICF_Stage3Config
 
 	void AICF_Stage3Config()
 	{
-		m_bVehiclesEnabled = false;
 		m_iTransportVehiclesPerFaction = DEFAULT_TRANSPORTS_PER_FACTION;
 		m_iArmedLightVehiclesPerFaction = DEFAULT_ARMED_LIGHT_PER_FACTION;
 		m_iMaxVehiclesPerFaction = DEFAULT_MAX_VEHICLES_PER_FACTION;
@@ -112,7 +110,8 @@ class AICF_Stage3Config
 		NormalizeVehicleCounts();
 	}
 
-	bool GetVehiclesEnabled() { return m_bVehiclesEnabled; }
+	// Retained as a source-compatible accessor for dependent addons.
+	bool GetVehiclesEnabled() { return true; }
 	int GetTransportVehiclesPerFaction() { return m_iTransportVehiclesPerFaction; }
 	int GetArmedLightVehiclesPerFaction() { return m_iArmedLightVehiclesPerFaction; }
 	int GetMaxVehiclesPerFaction() { return m_iMaxVehiclesPerFaction; }
@@ -149,8 +148,6 @@ class AICF_Stage3Config
 	protected void ApplyCLIOverrides()
 	{
 		string value;
-		if (System.GetCLIParam("aicfVehiclesEnabled", value))
-			m_bVehiclesEnabled = value.ToInt() > 0;
 		if (System.GetCLIParam("aicfTransportVehiclesPerFaction", value))
 			m_iTransportVehiclesPerFaction = ClampInt(value.ToInt(), 0, AICF_Stage1Config.GROUP_SLOTS_PER_FACTION);
 		if (System.GetCLIParam("aicfArmedLightVehiclesPerFaction", value))

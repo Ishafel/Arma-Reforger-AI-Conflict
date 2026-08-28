@@ -1,5 +1,5 @@
-// Stage 4 is opt-in. Loading the economy code with the default configuration
-// must preserve the accepted Stage 3/3.5 reinforcement behavior exactly.
+// Economy and supply pacing are permanent parts of the product configuration.
+// Runtime tuning remains available, but the subsystem has no opt-out.
 class AICF_Stage4Config
 {
 	static const int DEFAULT_REPLACEMENT_SUPPLY_COST = 500;
@@ -17,7 +17,6 @@ class AICF_Stage4Config
 	static const int DEFAULT_SOURCE_RESERVE_GROUPS = 1;
 	static const int DEFAULT_HEARTBEAT_INTERVAL_MS = 60000;
 
-	protected bool m_bEconomyEnabled;
 	protected int m_iReplacementSupplyCost;
 	protected int m_iHealthyStockGroups;
 	protected int m_iHealthyPacePercent;
@@ -35,7 +34,6 @@ class AICF_Stage4Config
 
 	void AICF_Stage4Config()
 	{
-		m_bEconomyEnabled = false;
 		m_iReplacementSupplyCost = DEFAULT_REPLACEMENT_SUPPLY_COST;
 		m_iHealthyStockGroups = DEFAULT_HEALTHY_STOCK_GROUPS;
 		m_iHealthyPacePercent = DEFAULT_HEALTHY_PACE_PERCENT;
@@ -53,7 +51,8 @@ class AICF_Stage4Config
 		ApplyCLIOverrides();
 	}
 
-	bool GetEconomyEnabled() { return m_bEconomyEnabled; }
+	// Retained as a source-compatible accessor for dependent addons.
+	bool GetEconomyEnabled() { return true; }
 	int GetReplacementSupplyCost() { return m_iReplacementSupplyCost; }
 	int GetReplacementSupplyCostForSize(int desiredSize)
 	{
@@ -103,8 +102,6 @@ class AICF_Stage4Config
 	protected void ApplyCLIOverrides()
 	{
 		string value;
-		if (System.GetCLIParam("aicfEconomyEnabled", value))
-			m_bEconomyEnabled = value.ToInt() > 0;
 		if (System.GetCLIParam("aicfReplacementSupplyCost", value))
 			m_iReplacementSupplyCost = ClampInt(value.ToInt(), 1, 1000000);
 		if (System.GetCLIParam("aicfEconomyHealthyStockGroups", value))
