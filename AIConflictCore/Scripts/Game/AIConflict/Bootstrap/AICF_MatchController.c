@@ -3059,6 +3059,11 @@ class AICF_MatchController
 					m_iStrategicBaseRevision);
 				continue;
 			}
+			// ReliabilityTick owns the bounded hold and its full-replan transition.
+			// CommanderTick must not reinterpret the temporary Defend waypoint as an
+			// invalid ATTACK/relay order before that transition becomes due.
+			if (slot.IsTemporaryRouteReplanHold())
+				continue;
 			// CommanderTick may observe the candidate between reliability polls, but
 			// only ReliabilityTick is allowed to confirm or reject its stability.
 			if (slot.HasPendingOrderRecovery())
@@ -3267,9 +3272,12 @@ class AICF_MatchController
 		if (!leader)
 			return false;
 
+		vector targetPosition;
+		if (!m_OrderPlanner.TryResolveSlotTargetPosition(slot, target, targetPosition))
+			return false;
 		float distanceMeters = Math.Sqrt(vector.DistanceSqXZ(
 			leader.GetOrigin(),
-			waypoint.GetOrigin()));
+			targetPosition));
 		if (distanceMeters > STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
 		{
 			slot.ClearObjectiveHold();
@@ -3294,6 +3302,10 @@ class AICF_MatchController
 		}
 
 		bool confirmedPendingStuckRecovery = slot.HasPendingStuckRecoveryEvidence();
+		// Reaching the resolved strategic endpoint closes the route-recovery episode.
+		// Keep this after the target/faction/distance proof so a false completion of
+		// an intermediate leg cannot clear its assignment-scoped endpoint history.
+		slot.ResetFalseCompletionRecovery();
 		slot.ConfirmAtObjective(target, distanceMeters);
 		if (confirmedPendingStuckRecovery)
 			m_iStuckRecoveries++;
@@ -3381,6 +3393,13 @@ class AICF_MatchController
 		SCR_CampaignMilitaryBaseComponent failedTarget = slot.GetTargetBase();
 		vector holdAnchor = slot.GetTemporaryRouteReplanAnchor();
 		int holdAgeMs = slot.GetTemporaryRouteReplanHoldAgeMs();
+		if (slot.HasPendingOrderRecovery())
+		{
+			SupersedePendingOrderRecovery(
+				slot,
+				faction,
+				"FALSE_COMPLETION_FULL_REPLAN");
+		}
 		slot.ClearTemporaryRouteReplanHold();
 		slot.ResetFalseCompletionRecovery();
 		bool replanned = m_OrderPlanner.AssignOrder(
@@ -4066,6 +4085,33 @@ class AICF_MatchController
 				groupGeneration));
 	}
 
+	protected void RecordImmediateOrderRepairSuperseded(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		int attemptId,
+		string reason)
+	{
+		if (!slot || !faction || attemptId <= 0)
+			return;
+
+		m_iOrderRecoverySuperseded++;
+		string waypointId = "NONE";
+		if (slot.GetWaypoint())
+			waypointId = slot.GetWaypoint().GetID().ToString();
+		AICF_Stage2Diagnostics.Info(
+			"ORDER_REPAIR_ATTEMPT_TERMINATED",
+			string.Format(
+				"attempt_id=%1 faction=%2 slot=%3 outcome=SUPERSEDED reason=%4 confirmation_basis=TEMPORARY_ROUTE_REPLAN_HOLD target=%5 waypoint=%6 candidate_ms=0 assignment_revision=%7 group_generation=%8",
+				attemptId,
+				faction.GetFactionKey(),
+				slot.GetSlotId(),
+				reason,
+				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
+				waypointId,
+				slot.GetStrategicAssignmentRevision(),
+				slot.GetSpawnGeneration()));
+	}
+
 	protected bool ApplyOrderReliabilityRepairBudgetFallback(
 		AICF_FactionState factionState,
 		AICF_GroupSlot slot,
@@ -4199,7 +4245,13 @@ class AICF_MatchController
 	{
 		if (!slot || !faction || slot.HasPendingOrderRecovery())
 			return false;
-		if (slot.IsOrderReliabilityRepairFailureBudgetExhausted(
+		// Route-recovery ownership is persistent slot state, not the transient caller
+		// reason. An immediate retry may be rate-limited and return later through the
+		// generic task audit, while the same assignment/generation route episode lives.
+		bool falseCompletionRouteRecovery =
+			slot.GetFalseCompletionEndpointRevision() > 0;
+		if (!falseCompletionRouteRecovery &&
+			slot.IsOrderReliabilityRepairFailureBudgetExhausted(
 			ORDER_RELIABILITY_REPAIR_FAILURE_BUDGET))
 		{
 			ApplyOrderReliabilityRepairBudgetFallback(
@@ -4258,11 +4310,36 @@ class AICF_MatchController
 			countsAsReliabilityRepair =
 				slot.MarkPendingOrderRecoveryAsReliabilityAttempt(repairAttemptId);
 		}
+		bool temporaryRouteReplanHoldCommitted = false;
+		if (!recovered && falseCompletionRouteRecovery)
+		{
+			IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
+			if (leader)
+			{
+				temporaryRouteReplanHoldCommitted =
+					m_OrderPlanner.HoldPositionForTemporaryRouteReplan(
+						slot,
+						faction,
+						slot.GetTargetBase(),
+						leader.GetOrigin());
+			}
+			if (temporaryRouteReplanHoldCommitted)
+			{
+				RecordImmediateOrderRepairSuperseded(
+					slot,
+					faction,
+					repairAttemptId,
+					"FALSE_COMPLETION_ROUTE_REISSUE_REJECTED");
+			}
+		}
 		string immediateFailure = string.Empty;
-		if (!recovered)
+		if (!recovered && !temporaryRouteReplanHoldCommitted)
 			immediateFailure = "PLANNER_REJECTED";
-		else if (!verificationPending || !countsAsReliabilityRepair)
+		else if (!temporaryRouteReplanHoldCommitted &&
+			(!verificationPending || !countsAsReliabilityRepair))
+		{
 			immediateFailure = "DURABILITY_VERIFICATION_NOT_ARMED";
+		}
 		// Establish either a live pending classification or its immediate terminal
 		// before optional waypoint diagnostics can dereference mutable engine state.
 		if (!immediateFailure.IsEmpty())
@@ -4287,17 +4364,30 @@ class AICF_MatchController
 			inQueue = newWaypoint && waypointQueue.Contains(newWaypoint);
 			isCurrent = newWaypoint && slot.GetGroup().GetCurrentWaypoint() == newWaypoint;
 		}
-		bool postconditionMeaningful = recovered && newWaypoint && inQueue && isCurrent;
+		bool postconditionMeaningful =
+			(recovered || temporaryRouteReplanHoldCommitted) &&
+			newWaypoint && inQueue && isCurrent;
 		bool repairCandidateAccepted = postconditionMeaningful &&
-			verificationPending && countsAsReliabilityRepair;
+			(temporaryRouteReplanHoldCommitted ||
+			(verificationPending && countsAsReliabilityRepair));
 		string failure = "NONE";
-		if (!recovered)
+		if (!recovered && !temporaryRouteReplanHoldCommitted)
 			failure = "PLANNER_REJECTED";
-		else if (!verificationPending || !countsAsReliabilityRepair)
+		else if (!temporaryRouteReplanHoldCommitted &&
+			(!verificationPending || !countsAsReliabilityRepair))
+		{
 			failure = "DURABILITY_VERIFICATION_NOT_ARMED";
+		}
 		else if (!postconditionMeaningful)
 			failure = "WAYPOINT_BIND_MISMATCH";
-		if (!recovered || !verificationPending || !countsAsReliabilityRepair)
+		string fallbackAction = "NONE";
+		if (temporaryRouteReplanHoldCommitted)
+			fallbackAction = "TEMPORARY_ROUTE_REPLAN_HOLD";
+		int reliabilityBudgetConsumed = 0;
+		if (!immediateFailure.IsEmpty())
+			reliabilityBudgetConsumed = 1;
+		if (!temporaryRouteReplanHoldCommitted &&
+			(!recovered || !verificationPending || !countsAsReliabilityRepair))
 		{
 			if (slot.IsOrderReliabilityRepairFailureBudgetExhausted(
 				ORDER_RELIABILITY_REPAIR_FAILURE_BUDGET))
@@ -4331,8 +4421,10 @@ class AICF_MatchController
 				" verification_pending=%1 counts_as_reliability_repair=%2",
 					verificationPending,
 					countsAsReliabilityRepair) + string.Format(
-				" attempt_id=%1",
-				repairAttemptId));
+				" attempt_id=%1 fallback_action=%2 reliability_budget_consumed=%3",
+				repairAttemptId,
+				fallbackAction,
+				reliabilityBudgetConsumed));
 		if (recovered && !postconditionMeaningful)
 			AICF_Stage35Diagnostics.Warning("WAYPOINT_BIND_MISMATCH", string.Format("faction=%1 slot=%2 waypoint=%3 queue_count=%4", faction.GetFactionKey(), slot.GetSlotKey(), newWaypointId, queueCount));
 		return repairCandidateAccepted;

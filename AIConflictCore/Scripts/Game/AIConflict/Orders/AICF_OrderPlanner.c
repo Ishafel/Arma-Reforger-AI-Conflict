@@ -753,7 +753,7 @@ class AICF_OrderPlanner
 		{
 			group.RemoveWaypoint(oldWaypoint);
 			RplComponent.DeleteRplEntity(oldWaypoint, false);
-			LogWaypointRemoved(slot, oldWaypoint, "FALSE_COMPLETION_HOLD", "ROUTE_ENDPOINTS_EXHAUSTED");
+			LogWaypointRemoved(slot, oldWaypoint, "FALSE_COMPLETION_HOLD", "TEMPORARY_ROUTE_REPLAN_HOLD");
 		}
 		group.AddWaypointAt(routeHold, 0);
 		slot.ClearObjective();
@@ -828,7 +828,8 @@ class AICF_OrderPlanner
 				target,
 				slot.GetRole(),
 				slot.GetGroup(),
-				slot.GetFalseCompletionEndpointRevision());
+				slot.GetFalseCompletionEndpointRevision(),
+				slot);
 		if (!newWaypoint)
 			return false;
 
@@ -1093,8 +1094,9 @@ class AICF_OrderPlanner
 	protected AIWaypoint CreateWaypoint(
 		SCR_CampaignMilitaryBaseComponent target,
 		AICF_EGroupRole role,
-		SCR_AIGroup group = null,
-		int endpointRevision = 0)
+		SCR_AIGroup group,
+		int endpointRevision,
+		AICF_GroupSlot slot)
 	{
 		if (!target || !target.GetOwner())
 			return null;
@@ -1126,13 +1128,40 @@ class AICF_OrderPlanner
 		if (!isRelay && endpointRevision > 0)
 		{
 			vector recoveryEndpoint;
-			if (!TryResolveFalseCompletionEndpoint(
+			bool endpointResolved = TryResolveFalseCompletionEndpoint(
 				group,
 				targetPosition,
 				endpointRevision,
-				recoveryEndpoint))
+				recoveryEndpoint);
+			if (endpointResolved)
+			{
+				targetPosition = recoveryEndpoint;
+			}
+			else
+			{
+				// The controller converts this route-local miss into a temporary hold and
+				// a full strategic replan. It must not leak into the unrelated generic
+				// reliability-repair failure budget.
+				string factionKey = "NONE";
+				if (group && group.GetFaction())
+					factionKey = group.GetFaction().GetFactionKey();
+				string endpointFallbackDetails = string.Format(
+					"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 group_generation=%5 assignment_revision=%6 target=%7 endpoint_revision=%8",
+					factionKey,
+					slot.GetSlotKey(),
+					slot.GetStableSlotKey(),
+					slot.GetSlotId(),
+					slot.GetSpawnGeneration(),
+					slot.GetStrategicAssignmentRevision(),
+					AICF_Stage1Diagnostics.BaseKey(target),
+					endpointRevision);
+				endpointFallbackDetails +=
+					" endpoint_resolution=UNAVAILABLE next_action=REQUEST_TEMPORARY_ROUTE_REPLAN_HOLD reliability_budget_consumed=0";
+				AICF_Stage2Diagnostics.Warning(
+					"FALSE_COMPLETION_ROUTE_ENDPOINT_UNAVAILABLE",
+					endpointFallbackDetails);
 				return null;
-			targetPosition = recoveryEndpoint;
+			}
 		}
 
 		EntitySpawnParams spawnParams = new EntitySpawnParams();

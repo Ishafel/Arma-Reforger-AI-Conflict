@@ -501,7 +501,8 @@ class AICF_VehicleCoordinator
 		if (trip)
 		{
 			AICF_ETransportTripPhase activePhase = trip.GetPhase();
-			if (slot.HasPendingOrderRecovery() &&
+			string orderOwnershipFence = GetInfantryOrderAdmissionFenceReason(slot);
+			if (!orderOwnershipFence.IsEmpty() &&
 				(activePhase == AICF_ETransportTripPhase.WAITING_FOR_SITE ||
 				activePhase == AICF_ETransportTripPhase.SITE_PLANNED ||
 				activePhase == AICF_ETransportTripPhase.APPROACHING_SITE ||
@@ -509,9 +510,9 @@ class AICF_VehicleCoordinator
 				activePhase == AICF_ETransportTripPhase.SPAWN_COMMIT))
 			{
 				// StartBoarding suspends the infantry waypoint. Keep an admitted but
-				// pre-boarding trip inert until the exact reliability candidate has a
-				// terminal accounting outcome.
-				ReportAdmissionOnce(assignment, "ORDER_RECOVERY_PENDING");
+				// pre-boarding trip inert while infantry reliability owns either its
+				// durability candidate or its bounded route-replan hold.
+				ReportAdmissionOnce(assignment, orderOwnershipFence);
 				return;
 			}
 			AICF_ETransportTripPhase previousPhase = trip.GetPhase();
@@ -592,9 +593,10 @@ class AICF_VehicleCoordinator
 		out string reason)
 	{
 		reason = "NONE";
-		if (slot.HasPendingOrderRecovery())
+		string orderOwnershipFence = GetInfantryOrderAdmissionFenceReason(slot);
+		if (!orderOwnershipFence.IsEmpty())
 		{
-			reason = "ORDER_RECOVERY_PENDING";
+			reason = orderOwnershipFence;
 			return false;
 		}
 		if (slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY)
@@ -643,6 +645,17 @@ class AICF_VehicleCoordinator
 			return false;
 		}
 		return true;
+	}
+
+	protected string GetInfantryOrderAdmissionFenceReason(AICF_GroupSlot slot)
+	{
+		if (!slot)
+			return string.Empty;
+		if (slot.IsTemporaryRouteReplanHold())
+			return "TEMPORARY_ROUTE_REPLAN_HOLD";
+		if (slot.HasPendingOrderRecovery())
+			return "ORDER_RECOVERY_PENDING";
+		return string.Empty;
 	}
 
 	protected bool ShouldReplaceTerminalTrip(
