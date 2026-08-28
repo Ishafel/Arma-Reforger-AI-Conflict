@@ -46,6 +46,11 @@ $groupRuntime = Read-Required 'State\AICF_GroupRuntime.c'
 $mapMarkers = Read-Required 'UI\AICF_GroupMapMarkers.c'
 $strategicRpc = Read-Required 'UI\AICF_StrategicCommandRpc.c'
 $strategicUI = Read-Required 'UI\AICF_StrategicUI.c'
+$createRectMatch = [regex]::Match(
+    $strategicUI,
+    'protected\s+Widget\s+CreateRect\s*\([\s\S]*?(?=\r?\n\s*protected\s+void\s+SetRectColor\s*\()'
+)
+$createRect = $createRectMatch.Value
 $stage1Config = Read-Required 'Config\AICF_Stage1Config.c'
 $factionState = Read-Required 'State\AICF_FactionState.c'
 $groupSpawner = Read-Required 'Forces\AICF_GroupSpawner.c'
@@ -150,7 +155,10 @@ foreach ($field in @(
 
 Assert-Contains 'STAGE4_HUD' $strategicUI 'TICKETS\s+%1[\s\S]*SUPPLY\s+%2[\s\S]*SQUADS\s+%3[\s\S]*OBJECTIVE' 'Compact HUD must expose tickets, supply, squads, and the current objective'
 Assert-Contains 'STAGE4_WIDGET_HIERARCHY' $strategicUI 'CreateRect[\s\S]*FrameWidgetTypeID[\s\S]*RECT_BACKGROUND_NAME' 'Text and controls must be siblings of a background image inside a FrameWidget container'
-Assert-Contains 'STAGE4_WIDGET_RENDERING' $strategicUI 'ImageWidgetTypeID[\s\S]*WidgetFlags\.BLEND[\s\S]*background\.SetColor\s*\(\s*color\s*\)' 'Programmatic panel backgrounds must alpha-blend their explicit dark color'
+$createRectColorPattern = 'CreateWidget\s*\(\s*WidgetType\.ImageWidgetTypeID\s*,[\s\S]{0,320}?WidgetFlags\.BLEND[\s\S]{0,320}?\bcolor\s*,\s*0\s*,\s*widget\s*\)'
+$redundantCreateRectColorPattern = 'background\.SetColor\s*\(\s*color\s*\)'
+Assert-Contains 'STAGE4_WIDGET_RENDERING' $createRect $createRectColorPattern 'Programmatic panel backgrounds must receive their explicit dark color during widget creation'
+Assert-NotContains 'STAGE4_WIDGET_RENDERING' $createRect $redundantCreateRectColorPattern 'CreateRect must not reuse its Color after CreateWidget has already applied it'
 Assert-Contains 'STAGE4_WIDGET_RENDERING' $strategicUI 'RefreshVisualStyles[\s\S]*SetRectColor\s*\(\s*m_wHUDRoot[\s\S]*SetRectColor\s*\(\s*m_wCommandPanel[\s\S]*foreach\s*\(\s*Widget\s+targetButton' 'Top-level and dynamic panel colors must be restored after Enfusion widget initialization'
 Assert-Contains 'STAGE4_WIDGET_INPUT' $strategicUI 'ButtonWidgetTypeID[\s\S]*inputWidget\.SetName\s*\(\s*RECT_INPUT_NAME\s*\)' 'Every clickable rectangle must own a real ButtonWidget input surface'
 Assert-Contains 'STAGE4_WIDGET_INPUT' $strategicUI 'inputWidget\.AddHandler\s*\(\s*handler\s*\)' 'Button input surfaces must receive the strategic action handler'
@@ -252,6 +260,13 @@ if (-not $negativeDetected) {
     Add-Failure 'STAGE4_NEGATIVE_FIXTURE' 'Rollback negative fixture was not detected'
 }
 
+# Negative-fixture self-check: reusing CreateRect's Color after CreateWidget must be caught.
+$brokenCreateRect = $createRect + "`r`n`tbackground.SetColor(color);"
+$widgetRenderingNegativeDetected = $brokenCreateRect -match $redundantCreateRectColorPattern
+if (-not $widgetRenderingNegativeDetected) {
+    Add-Failure 'STAGE4_NEGATIVE_FIXTURE' 'CreateRect color-reuse negative fixture was not detected'
+}
+
 if ($failures.Count -gt 0) {
     Write-Host "Stage 4 static audit: FAIL ($($failures.Count) issue(s))" -ForegroundColor Red
     $failures | ForEach-Object { Write-Host " - $_" }
@@ -259,4 +274,4 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host 'Stage 4 static audit: PASS' -ForegroundColor Green
-Write-Host 'negative_fixture=PASS default_off=PASS transaction=PASS delivery_balance=PASS replication=PASS strategic_ui=PASS order_authority=PASS'
+Write-Host 'negative_fixture=PASS widget_rendering_fixture=PASS default_off=PASS transaction=PASS delivery_balance=PASS replication=PASS strategic_ui=PASS order_authority=PASS'

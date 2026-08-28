@@ -920,7 +920,6 @@ class AICF_StrategicUIController
 			return null;
 		}
 		background.SetName(RECT_BACKGROUND_NAME);
-		background.SetColor(color);
 		FrameSlot.SetAnchorMin(background, 0, 0);
 		FrameSlot.SetAnchorMax(background, 1, 1);
 		FrameSlot.SetOffsets(background, 0, 0, 0, 0);
