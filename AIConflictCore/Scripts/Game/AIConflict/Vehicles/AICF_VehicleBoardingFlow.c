@@ -676,21 +676,13 @@ class AICF_VehicleBoardingFlow
 			AICF_EVehicleBoardingPhase.PASSENGERS,
 			state.GetCurrentPhaseIndex() + 1,
 			System.GetTickCount());
-		int issuedCount;
-		string failureReason;
-		if (!IssuePassengerPlan(
-			trip, lease, group, state, causationId, issuedCount, failureReason))
-		{
-			return Reject(trip, lease, causationId, failureReason);
-		}
-		ReportPhaseStarted(trip, lease, state, causationId, "EXACT_PER_MEMBER_CARGO_AFTER_CREW");
-		AICF_Stage3Diagnostics.Info(
-			"PASSENGERS_ASSIGNED",
-			DescribeContext(trip, lease, causationId, "ROLE_ORDERED_GET_IN") +
-			string.Format(
-				" issued=%1 policy=ATOMIC_EXACT_CARGO_AFTER_MANDATORY_CREW",
-				issuedCount));
-		return AICF_TripOutcome.Wait("BOARDING_PASSENGERS_ACTIVE", causationId);
+		ReportPhaseStarted(
+			trip,
+			lease,
+			state,
+			causationId,
+			"POST_CREW_EXACT_CARGO_ALLOCATION_GATE");
+		return AICF_TripOutcome.Wait("BOARDING_PASSENGER_ALLOCATION_NEXT_TICK", causationId);
 	}
 
 	protected AICF_TripOutcome ProcessPassengers(
@@ -734,6 +726,80 @@ class AICF_VehicleBoardingFlow
 				"BOARDING_CREW_ROLE_LOST",
 				lostDetails);
 			return Reject(trip, lease, causationId, "CREW_ROLE_LOST_DURING_BOARDING");
+		}
+		if (!state.IsPassengerPlanIssued())
+		{
+			int issuedCount;
+			int requiredCount;
+			int mappedCount;
+			bool allocationPending;
+			string allocationDetails;
+			string allocationFailure;
+			if (!IssuePassengerPlan(
+				trip,
+				lease,
+				group,
+				state,
+				causationId,
+				issuedCount,
+				requiredCount,
+				mappedCount,
+				allocationPending,
+				allocationDetails,
+				allocationFailure))
+			{
+				if (!allocationPending)
+					return Reject(trip, lease, causationId, allocationFailure);
+				int nowMs = System.GetTickCount();
+				int allocationAgeMs = state.GetPassengerAllocationAgeMs(nowMs);
+				int allocationTimeoutMs = m_Config.GetPassengerStallMs();
+				string allocationContext = DescribeContext(
+					trip, lease, causationId, allocationFailure);
+				allocationContext += string.Format(
+					" allocation_age_ms=%1 allocation_timeout_ms=%2 required=%3 mapped=%4",
+					allocationAgeMs,
+					allocationTimeoutMs,
+					requiredCount,
+					mappedCount);
+				allocationContext += " " + allocationDetails;
+				if (state.MarkPassengerAllocationFailureReported())
+				{
+					AICF_Stage3Diagnostics.Warning(
+						"PASSENGER_EXACT_CARGO_ALLOCATION_WAIT",
+						allocationContext);
+				}
+				if (allocationAgeMs < allocationTimeoutMs)
+				{
+					return AICF_TripOutcome.Wait(
+						"BOARDING_PASSENGER_EXACT_CARGO_ALLOCATION_PENDING",
+						causationId);
+				}
+				string timeoutReason = "PASSENGER_EXACT_CARGO_ALLOCATION_TIMEOUT";
+				string timeoutContext = DescribeContext(
+					trip, lease, causationId, timeoutReason);
+				timeoutContext += string.Format(
+					" allocation_age_ms=%1 allocation_timeout_ms=%2 required=%3 mapped=%4 last_allocation_reason=%5",
+					allocationAgeMs,
+					allocationTimeoutMs,
+					requiredCount,
+					mappedCount,
+					allocationFailure);
+				timeoutContext += " " + allocationDetails;
+				AICF_Stage3Diagnostics.Warning(
+					"PASSENGER_EXACT_CARGO_ALLOCATION_TIMEOUT",
+					timeoutContext);
+				return Reject(trip, lease, causationId, timeoutReason);
+			}
+			state.MarkPassengerPlanIssued();
+			AICF_Stage3Diagnostics.Info(
+				"PASSENGERS_ASSIGNED",
+				DescribeContext(trip, lease, causationId, "ROLE_ORDERED_GET_IN") +
+				string.Format(
+					" issued=%1 required=%2 mapped=%3 policy=ATOMIC_EXACT_CARGO_AFTER_MANDATORY_CREW",
+					issuedCount,
+					requiredCount,
+					mappedCount));
+			return AICF_TripOutcome.Wait("BOARDING_PASSENGERS_ACTIVE", causationId);
 		}
 		string failureReason;
 		if (!MaintainPassengerActions(
@@ -1542,9 +1608,17 @@ class AICF_VehicleBoardingFlow
 		AICF_VehicleBoardingState state,
 		string causationId,
 		out int issuedCount,
+		out int requiredCount,
+		out int mappedCount,
+		out bool allocationPending,
+		out string allocationDetails,
 		out string failureReason)
 	{
 		issuedCount = 0;
+		requiredCount = 0;
+		mappedCount = 0;
+		allocationPending = false;
+		allocationDetails = string.Empty;
 		failureReason = string.Empty;
 		if (!IsLeaseLiveIdentity(lease))
 		{
@@ -1554,7 +1628,6 @@ class AICF_VehicleBoardingFlow
 		array<AIAgent> pendingAgents = {};
 		array<IEntity> pendingEntities = {};
 		array<SCR_AIUtilityComponent> pendingUtilities = {};
-		array<BaseCompartmentSlot> assignedCompartments = {};
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);
 		foreach (AIAgent agent : agents)
@@ -1584,33 +1657,71 @@ class AICF_VehicleBoardingFlow
 				failureReason = "PASSENGER_UTILITY_INVALID";
 				return false;
 			}
-			BaseCompartmentSlot compartment;
-			if (!FindAvailableCargoCompartment(
-				lease.GetVehicle(), entity, assignedCompartments, compartment))
-			{
-				failureReason = "PASSENGER_EXACT_CARGO_UNAVAILABLE";
-				return false;
-			}
 			pendingAgents.Insert(agent);
 			pendingEntities.Insert(entity);
 			pendingUtilities.Insert(utility);
-			assignedCompartments.Insert(compartment);
 		}
+		requiredCount = pendingAgents.Count();
 		if (state.GetTokens().Count() + pendingAgents.Count() > MAX_ACTION_TOKENS)
 		{
 			failureReason = "PASSENGER_TOKEN_LIMIT";
 			return false;
 		}
+		array<BaseCompartmentSlot> assignedCompartments = {};
+		for (int mappingIndex = 0; mappingIndex < pendingEntities.Count(); mappingIndex++)
+		{
+			BaseCompartmentSlot compartment;
+			if (!FindAvailableCargoCompartment(
+				lease.GetVehicle(),
+				pendingEntities[mappingIndex],
+				assignedCompartments,
+				compartment))
+			{
+				mappedCount = assignedCompartments.Count();
+				allocationPending = true;
+				failureReason = "PASSENGER_EXACT_CARGO_ALLOCATION_PENDING";
+				allocationDetails = DescribeCargoAllocationSlots(
+					lease.GetVehicle(),
+					pendingEntities[mappingIndex],
+					assignedCompartments,
+					requiredCount,
+					mappedCount);
+				return false;
+			}
+			assignedCompartments.Insert(compartment);
+		}
+		mappedCount = assignedCompartments.Count();
 
 		// Atomic mapping: every exact CargoCompartmentSlot is reserved and
 		// verified before the first SCR_AIGetInVehicle action is added.
 		for (int reserveIndex = 0; reserveIndex < assignedCompartments.Count(); reserveIndex++)
 		{
+			if (!IsCargoAllocationSlotAvailable(
+				assignedCompartments[reserveIndex], pendingEntities[reserveIndex]))
+			{
+				RollbackReservations(assignedCompartments, pendingEntities);
+				allocationPending = true;
+				failureReason = "PASSENGER_EXACT_CARGO_REVALIDATION_PENDING";
+				allocationDetails = DescribeCargoAllocationSlots(
+					lease.GetVehicle(),
+					pendingEntities[reserveIndex],
+					assignedCompartments,
+					requiredCount,
+					mappedCount);
+				return false;
+			}
 			assignedCompartments[reserveIndex].SetReserved(pendingEntities[reserveIndex]);
 			if (!assignedCompartments[reserveIndex].IsReservedBy(pendingEntities[reserveIndex]))
 			{
 				RollbackReservations(assignedCompartments, pendingEntities);
-				failureReason = "PASSENGER_ATOMIC_RESERVATION_FAILED";
+				allocationPending = true;
+				failureReason = "PASSENGER_EXACT_CARGO_RESERVATION_PENDING";
+				allocationDetails = DescribeCargoAllocationSlots(
+					lease.GetVehicle(),
+					pendingEntities[reserveIndex],
+					assignedCompartments,
+					requiredCount,
+					mappedCount);
 				return false;
 			}
 		}
@@ -2064,10 +2175,8 @@ class AICF_VehicleBoardingFlow
 		manager.GetCompartments(compartments);
 		foreach (BaseCompartmentSlot compartment : compartments)
 		{
-			CargoCompartmentSlot cargo = CargoCompartmentSlot.Cast(compartment);
-			if (!cargo || excluded.Contains(compartment) ||
-				!compartment.IsCompartmentAccessible() || compartment.GetOccupant() ||
-				compartment.IsReserved() || compartment.IsGetInLockedFor(entity))
+			if (excluded.Contains(compartment) ||
+				!IsCargoAllocationSlotAvailable(compartment, entity))
 			{
 				continue;
 			}
@@ -2075,6 +2184,66 @@ class AICF_VehicleBoardingFlow
 			return true;
 		}
 		return false;
+	}
+
+	protected bool IsCargoAllocationSlotAvailable(
+		BaseCompartmentSlot compartment,
+		IEntity entity)
+	{
+		return compartment && entity && CargoCompartmentSlot.Cast(compartment) &&
+			compartment.IsCompartmentAccessible() && !compartment.GetOccupant() &&
+			!compartment.IsReserved() && !compartment.IsGetInLocked() &&
+			!compartment.IsGetInLockedFor(entity);
+	}
+
+	protected string DescribeCargoAllocationSlots(
+		Vehicle vehicle,
+		IEntity candidate,
+		array<BaseCompartmentSlot> mappedCompartments,
+		int requiredCount,
+		int mappedCount)
+	{
+		string candidateId = "NONE";
+		if (candidate)
+			candidateId = candidate.GetID().ToString();
+		string details = string.Format(
+			"allocation_candidate=%1 required=%2 mapped=%3 cargo_slots=[",
+			candidateId,
+			requiredCount,
+			mappedCount);
+		if (!vehicle)
+			return details + "NONE]";
+		BaseCompartmentManagerComponent manager = BaseCompartmentManagerComponent.Cast(
+			vehicle.FindComponent(BaseCompartmentManagerComponent));
+		if (!manager)
+			return details + "NONE]";
+		array<BaseCompartmentSlot> compartments = {};
+		manager.GetCompartments(compartments);
+		bool hasCargo;
+		foreach (BaseCompartmentSlot compartment : compartments)
+		{
+			if (!CargoCompartmentSlot.Cast(compartment))
+				continue;
+			if (hasCargo)
+				details += ",";
+			hasCargo = true;
+			bool reservedByCandidate = candidate && compartment.IsReservedBy(candidate);
+			bool mapped = mappedCompartments && mappedCompartments.Contains(compartment);
+			details += string.Format(
+				"{manager=%1 slot=%2 accessible=%3 occupied=%4 reserved=%5 reserved_by_candidate=%6 get_in_locked=%7 get_in_locked_for=%8 mapped=%9}",
+				compartment.GetCompartmentMgrID(),
+				compartment.GetCompartmentSlotID(),
+				compartment.IsCompartmentAccessible(),
+				compartment.GetOccupant() != null,
+				compartment.IsReserved(),
+				reservedByCandidate,
+				compartment.IsGetInLocked(),
+				candidate && compartment.IsGetInLockedFor(candidate),
+				mapped);
+		}
+		if (!hasCargo)
+			details += "NONE";
+		return details + "]";
 	}
 
 	protected void RollbackReservations(

@@ -98,6 +98,29 @@ Assert-Contains $stage2 'DEFAULT_MAX_STUCK_RECOVERIES = 2' 'TIMING_DEFAULTS'
 
 Assert-Contains $boarding 'm_Config.GetPassengerStallMs()' 'EXACT_CARGO_RECOVERY'
 Assert-Contains $boarding 'm_Config.GetPassengerMaxRetries()' 'EXACT_CARGO_RECOVERY'
+Assert-Contains $boarding 'BOARDING_PASSENGER_ALLOCATION_NEXT_TICK' 'POST_CREW_CARGO_ALLOCATION_GATE'
+Assert-Contains $boarding 'state.IsPassengerPlanIssued()' 'POST_CREW_CARGO_ALLOCATION_GATE'
+Assert-Contains $boarding 'state.GetPassengerAllocationAgeMs(nowMs)' 'POST_CREW_CARGO_ALLOCATION_GATE'
+Assert-Contains $boarding 'PASSENGER_EXACT_CARGO_ALLOCATION_TIMEOUT' 'POST_CREW_CARGO_ALLOCATION_GATE'
+Assert-Contains $boarding 'compartment.IsGetInLockedFor(entity)' 'POST_CREW_CARGO_ALLOCATION_GATE'
+Assert-Contains $boarding 'PASSENGER_EXACT_CARGO_REVALIDATION_PENDING' 'POST_CREW_CARGO_ALLOCATION_GATE'
+foreach ($cargoField in @(
+    'manager=%1', 'slot=%2', 'accessible=%3', 'occupied=%4', 'reserved=%5',
+    'reserved_by_candidate=%6', 'get_in_locked=%7', 'get_in_locked_for=%8', 'mapped=%9'
+)) {
+    Assert-Contains $boarding $cargoField 'POST_CREW_CARGO_ALLOCATION_DIAGNOSTICS'
+}
+Assert-Contains $boarding 'required=%2 mapped=%3 cargo_slots=[' 'POST_CREW_CARGO_ALLOCATION_DIAGNOSTICS'
+Assert-Contains $phaseStates 'MarkPassengerAllocationFailureReported()' 'POST_CREW_CARGO_ALLOCATION_LOG_BOUND'
+$beginPassengerPhase = [regex]::Match(
+    $boarding,
+    '(?s)protected AICF_TripOutcome BeginPassengerPhase\(.*?(?=\r?\n\tprotected AICF_TripOutcome ProcessPassengers\()'
+)
+if (-not $beginPassengerPhase.Success) {
+    $issues.Add('[POST_CREW_CARGO_ALLOCATION_GATE] BeginPassengerPhase body not found')
+} else {
+    Assert-NotContains $beginPassengerPhase.Value 'IssuePassengerPlan(' 'POST_CREW_CARGO_ALLOCATION_GATE'
+}
 Assert-Contains $boarding 'm_Config.GetHiddenRecoveryEnabled()' 'EXACT_CARGO_RECOVERY'
 Assert-Contains $boarding 'PASSENGER_HIDDEN_EXACT_CARGO_SCHEDULED' 'EXACT_CARGO_RECOVERY'
 Assert-Contains $boarding 'PASSENGER_HIDDEN_EXACT_CARGO_FORCED' 'EXACT_CARGO_RECOVERY'

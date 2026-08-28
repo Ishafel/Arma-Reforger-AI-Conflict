@@ -352,6 +352,8 @@ class AICF_VehicleBoardingState
 	protected bool m_bRoleRetryIssued;
 	protected int m_iRoleResetStartedAtMs;
 	protected AICF_EVehicleBoardingPhase m_RoleResetNextPhase;
+	protected bool m_bPassengerPlanIssued;
+	protected bool m_bPassengerAllocationFailureReported;
 	protected bool m_bExitEffectsApplied;
 	protected ref array<ref AICF_VehicleAsyncFence> m_aActionFences = {};
 	protected ref AICF_VehicleBoardingTokenSet m_Tokens;
@@ -393,6 +395,8 @@ class AICF_VehicleBoardingState
 		m_bRoleRetryIssued = false;
 		m_iRoleResetStartedAtMs = 0;
 		m_RoleResetNextPhase = AICF_EVehicleBoardingPhase.NONE;
+		m_bPassengerPlanIssued = false;
+		m_bPassengerAllocationFailureReported = false;
 		m_bExitEffectsApplied = false;
 		m_aActionFences.Clear();
 		m_Tokens = null;
@@ -444,6 +448,7 @@ class AICF_VehicleBoardingState
 	bool IsRoleResetAttempted() { return m_bRoleResetAttempted; }
 	bool IsRoleRetryIssued() { return m_bRoleRetryIssued; }
 	AICF_EVehicleBoardingPhase GetRoleResetNextPhase() { return m_RoleResetNextPhase; }
+	bool IsPassengerPlanIssued() { return m_bPassengerPlanIssued; }
 	AICF_VehicleBoardingTokenSet GetTokens() { return m_Tokens; }
 	bool AreExitEffectsApplied() { return m_bExitEffectsApplied; }
 
@@ -483,6 +488,28 @@ class AICF_VehicleBoardingState
 			m_iAbsoluteDeadlineMs = m_iPhaseDeadlineMs;
 		m_iSettledPollCount = 0;
 		m_iStagingPollCount = 0;
+		m_bPassengerPlanIssued = false;
+		m_bPassengerAllocationFailureReported = false;
+	}
+
+	int GetPassengerAllocationAgeMs(int nowMs)
+	{
+		if (m_Phase != AICF_EVehicleBoardingPhase.PASSENGERS || m_iPhaseStartedAtMs <= 0)
+			return 0;
+		return Math.Max(0, nowMs - m_iPhaseStartedAtMs);
+	}
+
+	void MarkPassengerPlanIssued()
+	{
+		m_bPassengerPlanIssued = true;
+	}
+
+	bool MarkPassengerAllocationFailureReported()
+	{
+		if (m_bPassengerAllocationFailureReported)
+			return false;
+		m_bPassengerAllocationFailureReported = true;
+		return true;
 	}
 
 	void SetCurrentPhaseIndex(int phaseIndex)
