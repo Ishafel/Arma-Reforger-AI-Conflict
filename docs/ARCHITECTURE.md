@@ -218,6 +218,11 @@ Reforger 1.8 асинхронна: готовность доказывается
 faction/replication checks и callback/generation fencing, а не самим вызовом
 `RequestSpawn()`.
 
+Перед initial roster authoritative `AICF_MatchController` проверяет глобальный
+active-AI limit `AIWorld` и при необходимости поднимает его до настроенного
+`max_managed_agents`, не уменьшая более высокий world limit. Если effective
+limit всё ещё недостаточен, запуск завершается fail-closed до создания групп.
+
 Для физического положения группы используется `AICF_GroupRuntime`: живой
 leader, а пока promotion не завершён — живой участник. Origin
 `SCR_AIGroup` не считается положением бойцов.

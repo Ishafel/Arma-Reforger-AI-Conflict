@@ -60,7 +60,7 @@ class AICF_Stage4Config
 			desiredSize,
 			AICF_Stage1Config.MIN_GROUP_SIZE,
 			AICF_Stage1Config.MAX_GROUP_SIZE);
-		// Keep the configured price as the cost of the default four-person
+		// Keep the configured price as the cost of the default ten-person
 		// roster and round larger/smaller custom rosters up to whole supplies.
 		return Math.Max(
 			1,

@@ -5,8 +5,8 @@ class AICF_Stage1Config
 	static const string AI_COMMANDER_MODE_US = "US";
 	static const string AI_COMMANDER_MODE_USSR = "USSR";
 	static const int GROUP_SLOTS_PER_FACTION = 10;
-	static const int DEFAULT_GROUP_SIZE = 4;
-	static const int DEFAULT_FULL_SIZE_GROUPS_PER_FACTION = 4;
+	static const int DEFAULT_GROUP_SIZE = 10;
+	static const int DEFAULT_FULL_SIZE_GROUPS_PER_FACTION = GROUP_SLOTS_PER_FACTION;
 	static const int MIN_GROUP_SIZE = 1;
 	static const int MAX_GROUP_SIZE = 10;
 	// Compatibility alias for diagnostics and older static contracts. Runtime
@@ -31,10 +31,10 @@ class AICF_Stage1Config
 	static const int MAX_DELAY_MS = 3600000;
 	static const int MIN_COMMANDER_INTERVAL_MS = 1000;
 	static const int MAX_COMMANDER_INTERVAL_MS = 600000;
-	// Per faction the first four slots start at ten agents and the remaining six
-	// at four: (4 * 10 + 6 * 4) * 2 factions = 128 live agents. Do not allow a
-	// CLI override to make the configured initial roster permanently inadmissible.
-	static const int MIN_MANAGED_AGENTS = 128;
+	// All twenty slots start at ten agents: 10 slots * 10 agents * 2 factions =
+	// 200 live agents. Do not allow a CLI override to make the configured initial
+	// roster permanently inadmissible.
+	static const int MIN_MANAGED_AGENTS = 200;
 	static const int MAX_MANAGED_AGENTS = 256;
 
 	static int GetDefaultGroupSizeForSlot(int slotId)

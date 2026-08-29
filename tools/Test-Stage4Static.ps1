@@ -78,7 +78,7 @@ Assert-NotContains 'STAGE4_ALWAYS_ON' $config '"aicfEconomyEnabled"' 'Economy mu
 Assert-Contains 'STAGE4_ALWAYS_ON' $controller 'm_EconomySystem\s*=\s*new\s+AICF_EconomySystem' 'Match controller must always compose the economy subsystem'
 Assert-Contains 'STAGE4_ALWAYS_ON' $economy 'bool\s+IsEnabled\s*\(\s*\)[\s\S]*m_Config\s*&&\s*m_Config\.GetEconomyEnabled\s*\(' 'Economy runtime gate must resolve through the permanently enabled configuration'
 Assert-NotContains 'STAGE4_ALWAYS_ON' $strategicUI 'string\s+supply\s*=\s*"OFF"|ECONOMY OFF' 'Strategic UI must not expose a disabled economy state'
-Assert-Contains 'STAGE4_VARIABLE_SUPPLY_COST' $config 'GetReplacementSupplyCostForSize[\s\S]*DEFAULT_GROUP_SIZE' 'Replacement supply cost must scale from the default four-person roster'
+Assert-Contains 'STAGE4_VARIABLE_SUPPLY_COST' $config 'GetReplacementSupplyCostForSize[\s\S]*DEFAULT_GROUP_SIZE' 'Replacement supply cost must scale from the default ten-person roster'
 Assert-Contains 'STAGE4_VARIABLE_SUPPLY_COST' $economy 'GetReplacementSupplyCostForSize\s*\(\s*slot\.GetDesiredSize\(\)\s*\)' 'Replacement reservations must price the selected next-deployment size'
 foreach ($cli in @(
     'aicfReplacementSupplyCost', 'aicfEconomyHealthyPacePercent',
@@ -171,11 +171,11 @@ Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'FormatGroupSummary[\s\S]*
 Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'AICF_RequestStrategicOrder\s*\(' 'Command target buttons must issue a strategic-order RPC'
 
 Assert-Contains 'STAGE4_TEN_GROUPS' $stage1Config 'GROUP_SLOTS_PER_FACTION\s*=\s*10\s*;' 'Each faction must own ten stable group slots'
-Assert-Contains 'STAGE4_TEN_GROUPS' $stage1Config 'DEFAULT_GROUP_SIZE\s*=\s*4\s*;' 'Every group must default to four soldiers'
+Assert-Contains 'STAGE4_TEN_GROUPS' $stage1Config 'DEFAULT_GROUP_SIZE\s*=\s*10\s*;' 'Every group must default to ten soldiers'
 Assert-Contains 'STAGE4_TEN_GROUPS' $stage1Config 'MAX_GROUP_SIZE\s*=\s*10\s*;' 'Commander-selected group size must be capped at ten'
-Assert-Contains 'STAGE4_DEFAULT_FULL_GROUPS' $stage1Config 'DEFAULT_FULL_SIZE_GROUPS_PER_FACTION\s*=\s*4\s*;[\s\S]*GetDefaultGroupSizeForSlot[\s\S]*slotId\s*<\s*DEFAULT_FULL_SIZE_GROUPS_PER_FACTION[\s\S]*return\s+MAX_GROUP_SIZE' 'The first four slots of each faction must default to the ten-agent limit'
+Assert-Contains 'STAGE4_DEFAULT_FULL_GROUPS' $stage1Config 'DEFAULT_FULL_SIZE_GROUPS_PER_FACTION\s*=\s*GROUP_SLOTS_PER_FACTION\s*;[\s\S]*GetDefaultGroupSizeForSlot[\s\S]*slotId\s*<\s*DEFAULT_FULL_SIZE_GROUPS_PER_FACTION[\s\S]*return\s+MAX_GROUP_SIZE' 'Every slot of each faction must default to the ten-agent limit'
 Assert-Contains 'STAGE4_DEFAULT_FULL_GROUPS' $groupSlot 'm_iDesiredSize\s*=\s*AICF_Stage1Config\.GetDefaultGroupSizeForSlot\s*\(\s*slotId\s*\)' 'Each group slot must retain its slot-specific desired size for replacement spawns'
-Assert-Contains 'STAGE4_DEFAULT_FULL_GROUPS' $stage1Config 'MIN_MANAGED_AGENTS\s*=\s*128\s*;' 'Admission cap must fit four ten-agent and six four-agent groups for both factions'
+Assert-Contains 'STAGE4_DEFAULT_FULL_GROUPS' $stage1Config 'MIN_MANAGED_AGENTS\s*=\s*200\s*;' 'Admission cap must fit twenty ten-agent groups across both factions'
 Assert-Contains 'STAGE4_TEN_GROUPS' $factionFleet 'HARD_MAX_ACTIVE_OR_RESERVED\s*=\s*10\s*;' 'Fleet hard cap must not silently clamp the ten configurable groups back to four'
 Assert-Contains 'STAGE4_TEN_GROUPS' $factionState 'for\s*\([^)]*GROUP_SLOTS_PER_FACTION' 'Default faction state must construct every configured group slot'
 Assert-Contains 'STAGE4_VARIABLE_ROSTER' $groupSpawner 'SpawnGroup\s*\([\s\S]*int\s+desiredSize[\s\S]*ConfigureManagedRoster\s*\(\s*group\s*,\s*faction\s*,\s*desiredSize' 'Spawner must shape the faction-correct roster to the selected size'

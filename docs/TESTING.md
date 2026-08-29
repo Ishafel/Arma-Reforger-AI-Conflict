@@ -85,8 +85,6 @@ Stage 3 baseline failures:
 
 Stage 3.5 baseline failures:
 
-- `STAGE35_FORCE_STRUCTURE`: auditor всё ещё ожидает floor `80`, текущий код
-  использует более высокий `MIN_MANAGED_AGENTS = 128`;
 - `STAGE35_MEANINGFUL_TASK_PROOF` queue evidence;
 - `STAGE35_EXACT_CARGO_STALL`;
 - `STAGE35_BOUNDED_PROTECTED_CLEARANCE` reason signature.
@@ -256,8 +254,9 @@ Stage 2–4 используют Stage 1 `run` и `t_ms`, поэтому соб�
 - `PROFILE_SELECTED` содержит `RHS_USMC_MSV_0_16_5150`, runtime keys
   `RHS_USAF`/`RHS_AFRF` и stable `US`/`USSR`;
 - ровно двадцать initial slots дошли до `GROUP_ROSTER_READY`, затем один
-  `ROSTER_READY`;
-- каждый `GROUP_ROSTER_CONFIGURED` содержит `fallback_slots=0`, RHS USMC/MSV
+  `ROSTER_READY`; каждый ready snapshot подтверждает `expected=10`, `actual=10`;
+- `AI_WORLD_CAPACITY` имеет `effective_limit >= required_limit`, а каждый
+  `GROUP_ROSTER_CONFIGURED` содержит `size=10`, `fallback_slots=0`, RHS USMC/MSV
   `prefabs` и ни одного `Character_US_`/`Character_USSR_`;
 - после захвата односторонней frontier-base событие `RADIO_BRIDGE_NORMALIZED`
   предшествует graph rebuild, а новый graph даёт владельцу путь от базы к relay;

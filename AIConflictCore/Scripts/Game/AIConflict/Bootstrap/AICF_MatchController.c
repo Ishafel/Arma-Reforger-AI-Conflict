@@ -165,6 +165,13 @@ class AICF_MatchController
 		AICF_Stage3Diagnostics.Configure();
 		AICF_Stage35Diagnostics.Configure();
 		AICF_Stage4Diagnostics.Configure();
+		if (!EnsureAIWorldCapacity())
+		{
+			Fail(
+				"AI_WORLD_CAPACITY_UNAVAILABLE",
+				"Active-AI limit could not admit the configured managed-agent budget");
+			return;
+		}
 		m_ConflictAdapter = new AICF_ConflictAdapter();
 		m_ObjectiveGraph = new AICF_ObjectiveGraph();
 		m_TargetSelector = new AICF_TargetSelector();
@@ -413,6 +420,29 @@ class AICF_MatchController
 		GetGame().GetCallqueue().CallLater(CommanderTick, m_Config.GetCommanderIntervalMs(), true);
 		GetGame().GetCallqueue().CallLater(ReliabilityTick, m_Stage2Config.GetReliabilityIntervalMs(), true);
 		GetGame().GetCallqueue().CallLater(Heartbeat, HEARTBEAT_INTERVAL_MS, true);
+	}
+
+	protected bool EnsureAIWorldCapacity()
+	{
+		AIWorld aiWorld = GetGame().GetAIWorld();
+		if (!aiWorld || !m_Config)
+			return false;
+
+		int previousLimit = aiWorld.GetLimitOfActiveAIs();
+		int requiredLimit = m_Config.GetMaxManagedAgents();
+		if (previousLimit < requiredLimit)
+			aiWorld.SetLimitOfActiveAIs(requiredLimit);
+
+		int effectiveLimit = aiWorld.GetLimitOfActiveAIs();
+		AICF_Stage35Diagnostics.Info(
+			"AI_WORLD_CAPACITY",
+			string.Format(
+				"previous_limit=%1 required_limit=%2 effective_limit=%3 changed=%4",
+				previousLimit,
+				requiredLimit,
+				effectiveLimit,
+				effectiveLimit != previousLimit));
+		return effectiveLimit >= requiredLimit;
 	}
 
 	static AICF_MatchController GetActiveController()

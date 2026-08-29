@@ -43,7 +43,7 @@ $stage1Config = Get-Stage35RecordByName $records 'AICF_Stage1Config.c'
 if (Require-Stage35Record $stage1Config 'AICF_Stage1Config.c') {
     $forceConstants = @{
         'GROUP_SLOTS_PER_FACTION\s*=\s*10\s*;' = 'Ten stable slots per faction are required'
-        'DEFAULT_GROUP_SIZE\s*=\s*4\s*;' = 'Managed rosters must default to four members'
+        'DEFAULT_GROUP_SIZE\s*=\s*10\s*;' = 'Managed rosters must default to ten members'
         'MAX_GROUP_SIZE\s*=\s*10\s*;' = 'Commander-selected rosters must be capped at ten members'
         'ATTACK_SLOTS_PER_FACTION\s*=\s*6\s*;' = 'Default doctrine must expose six ATTACK slots'
         'DEFEND_SLOTS_PER_FACTION\s*=\s*3\s*;' = 'Default doctrine must expose three DEFEND/QRF slots'
@@ -51,7 +51,7 @@ if (Require-Stage35Record $stage1Config 'AICF_Stage1Config.c') {
         'LEGACY_ATTACK_SLOTS_PER_FACTION\s*=\s*5\s*;' = 'Roles-off baseline must retain five ATTACK slots'
         'LEGACY_DEFEND_SLOTS_PER_FACTION\s*=\s*3\s*;' = 'Roles-off baseline must retain three DEFEND slots'
         'LEGACY_RESERVE_SLOTS_PER_FACTION\s*=\s*2\s*;' = 'Roles-off baseline must retain two RESERVE slots'
-        'MIN_MANAGED_AGENTS\s*=\s*80\s*;' = 'Managed-agent CLI floor must cover twenty default four-person groups'
+        'MIN_MANAGED_AGENTS\s*=\s*200\s*;' = 'Managed-agent CLI floor must cover twenty default ten-person groups'
         'DEFAULT_MAX_MANAGED_AGENTS\s*=\s*220\s*;' = 'Default managed-agent budget must cover twenty groups up to their configured cap'
     }
     foreach ($pattern in $forceConstants.Keys) {
@@ -182,12 +182,18 @@ if ($vehicleCoordinator -and $vehicleDiagnostics) {
 
 $match = Find-AICFClassRecord $records 'AICF_MatchController'
 if ($match) {
+    $startController = Get-AICFMethodBody $match 'Start'
+    $ensureAIWorldCapacityBody = Get-AICFMethodBody $match 'EnsureAIWorldCapacity'
+    $ensureAIWorldCapacity = ConvertTo-AICFCodeText $ensureAIWorldCapacityBody
     $processFaction = ConvertTo-AICFCodeText (Get-AICFMethodBody $match 'ProcessFaction')
     $bindManaged = Get-AICFMethodBody $match 'BindManagedGroup'
     $bindManagedCode = ConvertTo-AICFCodeText $bindManaged
     $spawnTimeout = Get-AICFMethodBody $match 'HandleSpawnTimeout'
     $spawnTimeoutCode = ConvertTo-AICFCodeText $spawnTimeout
     $releaseGroups = ConvertTo-AICFCodeText (Get-AICFMethodBody $match 'ReleaseFactionGroups')
+    Assert-AICFContains $failures 'STAGE35_AGENT_BUDGET' $startController 'if\s*\(\s*!EnsureAIWorldCapacity\s*\(\s*\)\s*\)[\s\S]*AI_WORLD_CAPACITY_UNAVAILABLE' 'Authority startup must fail closed when AIWorld cannot admit the managed-agent budget'
+    Assert-AICFContains $failures 'STAGE35_AGENT_BUDGET' $ensureAIWorldCapacity 'GetLimitOfActiveAIs\s*\(\s*\)[\s\S]*GetMaxManagedAgents\s*\(\s*\)[\s\S]*SetLimitOfActiveAIs\s*\(\s*requiredLimit\s*\)[\s\S]*effectiveLimit\s*>=\s*requiredLimit' 'AIWorld capacity must preserve higher limits and raise lower limits to the configured managed-agent budget'
+    Assert-AICFContains $failures 'STAGE35_AGENT_BUDGET' $ensureAIWorldCapacityBody 'AI_WORLD_CAPACITY[\s\S]*previous_limit=[\s\S]*required_limit=[\s\S]*effective_limit=' 'AIWorld capacity changes must be observable in Stage 3.5 diagnostics'
     Assert-AICFContains $failures 'STAGE35_EXACT_ROSTER' $processFaction 'expectedSize\s*=\s*slot\.GetDesiredSize\s*\([\s\S]*IsRosterSpawnRequested\s*\([\s\S]*actualCount\s*==\s*expectedSize[\s\S]*GetNumberOfMembersToSpawn\s*\([\s\S]*HasExactFactionRoster[\s\S]*MarkReady' 'Slot READY requires an issued request and the exact alive faction-correct commander-selected roster'
     Assert-AICFNotContains $failures 'STAGE35_AI18_QUEUE' $processFaction 'GetSpawnQueueSize\s*\(' 'READY must not use the Reforger 1.8 compatibility queue-size stub'
     Assert-AICFNotContains $failures 'STAGE35_EXACT_ROSTER' $match.Code 'GetAgentsCount\s*\(\s*\)\s*>\s*0[\s\S]{0,100}MarkReady' 'Legacy non-empty READY gate must not survive'
