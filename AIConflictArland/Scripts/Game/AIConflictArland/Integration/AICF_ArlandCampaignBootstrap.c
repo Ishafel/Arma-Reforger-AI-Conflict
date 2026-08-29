@@ -5,6 +5,7 @@ modded class SCR_GameModeCampaign
 	protected bool m_bAICFBootstrapLogged;
 	protected bool m_bAICFWaitingForConflict;
 	protected bool m_bAICFWaitingForBases;
+	protected ref AICF_Stage1Config m_AICFStage1Config;
 	protected ref AICF_MatchController m_AICFMatchController;
 	protected ref AICF_ArlandRadioBridgeNormalizer m_AICFRadioBridgeNormalizer;
 	protected ref AICF_StrategicUIController m_AICFStrategicUIController;
@@ -18,6 +19,13 @@ modded class SCR_GameModeCampaign
 		if (Replication.IsServer())
 			peerRole = "server";
 		AICF_Stage1Diagnostics.Configure(string.Format("stage1-%1-%2", peerRole, System.GetTickCount()));
+		// Reject an invalid immutable process mode before any AICF subscription or
+		// repeating callqueue is installed on the authoritative peer.
+		if (GetGame().InPlayMode() && Replication.IsServer() && IsMaster() &&
+			!AICF_ValidateStage1Config())
+		{
+			return;
+		}
 		if (!m_AICFStrategicUIController)
 		{
 			m_AICFStrategicUIController = new AICF_StrategicUIController();
@@ -130,6 +138,11 @@ modded class SCR_GameModeCampaign
 			m_bAICFWaitingForBases = false;
 		}
 
+		// Retain the prevalidated instance handed to MatchController. The fallback
+		// protects direct/integration calls without re-reading a valid config.
+		if (!AICF_ValidateStage1Config())
+			return;
+
 		if (!m_AICFRadioBridgeNormalizer)
 		{
 			m_AICFRadioBridgeNormalizer = new AICF_ArlandRadioBridgeNormalizer();
@@ -146,12 +159,30 @@ modded class SCR_GameModeCampaign
 		GetGame().GetCallqueue().CallLater(AICF_RunStage1, 0, false);
 	}
 
+	protected bool AICF_ValidateStage1Config()
+	{
+		if (!m_AICFStage1Config)
+			m_AICFStage1Config = new AICF_Stage1Config();
+		if (m_AICFStage1Config.IsAICommanderModeValid())
+			return true;
+
+		string invalidMode = m_AICFStage1Config.GetInvalidAICommanderMode();
+		string detail = string.Format(
+			"parameter=aicfAICommanderMode value=\"%1\" allowed=BOTH,US,USSR",
+			invalidMode);
+		AICF_Stage1Diagnostics.Error("CONFIG_INVALID", detail);
+		AICF_Stage1Diagnostics.Result(
+			false,
+			string.Format("reason=CONFIG_INVALID detail=%1", detail));
+		return false;
+	}
+
 	protected void AICF_RunStage1()
 	{
 		if (m_AICFMatchController)
 			return;
 
 		m_AICFMatchController = new AICF_MatchController();
-		m_AICFMatchController.Start(this);
+		m_AICFMatchController.Start(this, m_AICFStage1Config);
 	}
 }

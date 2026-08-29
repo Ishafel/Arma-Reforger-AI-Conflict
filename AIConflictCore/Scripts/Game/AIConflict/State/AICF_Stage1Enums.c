@@ -30,3 +30,29 @@ enum AICF_EDeploymentKind
 	INITIAL = 0,
 	REPLACEMENT
 }
+
+enum AICF_EStrategicDecisionAuthority
+{
+	NONE = 0,
+	AI_COMMANDER,
+	PLAYER_COMMAND,
+	SYSTEM_HOLD
+}
+
+class AICF_StrategicDecisionAuthority
+{
+	static string ToString(AICF_EStrategicDecisionAuthority authority)
+	{
+		switch (authority)
+		{
+			case AICF_EStrategicDecisionAuthority.AI_COMMANDER:
+				return "AI_COMMANDER";
+			case AICF_EStrategicDecisionAuthority.PLAYER_COMMAND:
+				return "PLAYER_COMMAND";
+			case AICF_EStrategicDecisionAuthority.SYSTEM_HOLD:
+				return "SYSTEM_HOLD";
+		}
+
+		return "NONE";
+	}
+}

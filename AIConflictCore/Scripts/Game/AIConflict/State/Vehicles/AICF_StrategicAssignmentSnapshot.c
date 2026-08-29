@@ -13,6 +13,7 @@ class AICF_StrategicAssignmentSnapshot
 	protected SCR_CampaignMilitaryBaseComponent m_TargetBase;
 	protected vector m_vTargetPosition;
 	protected int m_iAssignmentRevision;
+	protected int m_iStrategicIntentRevision;
 	protected int m_iBaseRevision;
 	protected AIWaypoint m_MeaningfulInfantryWaypoint;
 	protected int m_iAssignmentStartedAtMs;
@@ -29,6 +30,7 @@ class AICF_StrategicAssignmentSnapshot
 		SCR_CampaignMilitaryBaseComponent targetBase,
 		vector targetPosition,
 		int assignmentRevision,
+		int strategicIntentRevision,
 		int baseRevision,
 		AIWaypoint meaningfulInfantryWaypoint = null,
 		int assignmentStartedAtMs = 0)
@@ -44,6 +46,7 @@ class AICF_StrategicAssignmentSnapshot
 		m_TargetBase = targetBase;
 		m_vTargetPosition = targetPosition;
 		m_iAssignmentRevision = assignmentRevision;
+		m_iStrategicIntentRevision = strategicIntentRevision;
 		m_iBaseRevision = baseRevision;
 		m_MeaningfulInfantryWaypoint = meaningfulInfantryWaypoint;
 		m_iAssignmentStartedAtMs = assignmentStartedAtMs;
@@ -60,6 +63,7 @@ class AICF_StrategicAssignmentSnapshot
 	SCR_CampaignMilitaryBaseComponent GetTargetBase() { return m_TargetBase; }
 	vector GetTargetPosition() { return m_vTargetPosition; }
 	int GetAssignmentRevision() { return m_iAssignmentRevision; }
+	int GetStrategicIntentRevision() { return m_iStrategicIntentRevision; }
 	int GetBaseRevision() { return m_iBaseRevision; }
 	AIWaypoint GetMeaningfulInfantryWaypoint() { return m_MeaningfulInfantryWaypoint; }
 	int GetAssignmentStartedAtMs() { return m_iAssignmentStartedAtMs; }
@@ -68,7 +72,8 @@ class AICF_StrategicAssignmentSnapshot
 	{
 		return !m_sFactionKey.IsEmpty() && m_iSlotId >= 0 && !m_sSlotKey.IsEmpty() &&
 			m_iGroupGeneration > 0 && m_Group && m_TargetBase &&
-			m_iAssignmentRevision >= 0 && m_iBaseRevision >= 0;
+			m_iAssignmentRevision >= 0 && m_iStrategicIntentRevision >= 0 &&
+			m_iBaseRevision >= 0;
 	}
 
 	bool MatchesCurrent(
@@ -87,6 +92,7 @@ class AICF_StrategicAssignmentSnapshot
 			other.GetSlotId() == m_iSlotId &&
 			other.GetGroupGeneration() == m_iGroupGeneration &&
 			other.GetAssignmentRevision() == m_iAssignmentRevision &&
+			other.GetStrategicIntentRevision() == m_iStrategicIntentRevision &&
 			other.GetBaseRevision() == m_iBaseRevision;
 	}
 }

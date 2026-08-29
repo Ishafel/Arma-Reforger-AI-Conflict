@@ -32,24 +32,45 @@ Arma Reforger / stock Conflict
 ```text
 SCR_GameModeCampaign.OnGameStart()
   -> super.OnGameStart()
+  -> server/master command-mode preflight: создание и strict validation
+     AICF_Stage1Config до любых AICF subscriptions/callqueue
   -> AICF_StrategicUIController.Start() на игровых peers
   -> server/master guard
   -> ожидание campaign.HasStarted()
   -> ожидание baseManager.IsBasesInitDone()
+  -> повторная fail-closed проверка того же config instance
   -> AICF_ArlandRadioBridgeNormalizer.Start()
-  -> next-frame AICF_MatchController.Start()
+  -> next-frame AICF_MatchController.Start(same config instance)
 ```
 
 `AICF_MatchController.Start()`:
 
-1. Проверяет play mode и server/master authority.
-2. Создаёт Stage 1–4 configs и диагностические каналы.
-3. Собирает stock bases и строит `AICF_ObjectiveGraph`.
-4. Разрешает только фракции `US` и `USSR`.
-5. Создаёт faction state, planner, spawner, reliability, victory, markers,
-   economy и vehicle subsystem.
-6. Подписывается на stock events и создаёт начальные roster.
-7. Запускает периодические server loops.
+1. Проверяет play mode и server/master authority, принимает тот же
+   prevalidated `AICF_Stage1Config` и повторно проверяет его fail-closed.
+2. Материализует из этого config immutable `AICF_CommandAuthorityPolicy`, не
+   перечитывая CLI.
+3. Создаёт Stage 2–4 configs и диагностические каналы.
+4. Собирает stock bases и строит `AICF_ObjectiveGraph`.
+5. Разрешает только фракции `US` и `USSR`.
+6. Создаёт обе faction state, общий planner, spawner, reliability, victory,
+   markers, economy и vehicle subsystem, а также разрешённые политикой
+   faction-scoped `AICF_AICommander`.
+7. Подписывается на stock events и инициирует полный initial roster: отправляет
+   запросы на двадцать group controllers, а их group/agent rosters становятся
+   готовыми асинхронно.
+8. Запускает периодические server loops, которые обслуживают readiness gates и
+   остальные общие подсистемы.
+9. Только когда все двадцать initial slots фактически перешли в `READY`,
+   публикует replicated authority availability flags и `ROSTER_READY`.
+
+Strict CLI preflight принадлежит Arland bootstrap, потому что normalizer сам
+подписывается на смену владельца базы и может немедленно менять replicated
+radio state. Invalid mode возвращает `CONFIG_INVALID` до
+`AICF_ArlandRadioBridgeNormalizer.Start()`, его subscription/normalization и до
+deferred `AICF_MatchController`; readiness-subscriptions stock Conflict к этому
+моменту уже сняты. Production path передаёт в controller тот же предварительно
+проверенный объект config; fallback-создание config существует только для
+прямого вызова без bootstrap.
 
 `AICF_Stage0Controller` и классы `AICF_Test*` являются исследовательскими
 утилитами и не вызываются из текущего production bootstrap.
@@ -59,7 +80,7 @@ SCR_GameModeCampaign.OnGameStart()
 | Цикл | Частота | Ответственность |
 |---|---:|---|
 | `Update()` | 1 секунда | group lifecycle, reinforcement/economy, vehicle tick, task audit, replicated UI state, victory |
-| `CommanderTick()` | `aicfCommanderIntervalMs`, default 15 секунд | детерминированный выбор ролей/целей и стратегическое перепланирование |
+| `CommanderTick()` | `aicfCommanderIntervalMs`, default 15 секунд | стабильный обход `US -> USSR`: AI commander выбирает цели только для своей стороны, player-commanded сторона поддерживает player intent/`SYSTEM_HOLD` без автономного retarget |
 | `ReliabilityTick()` | `aicfReliabilityIntervalMs`, default 5 секунд | order binding, stuck recovery, lifecycle и accounting invariants |
 | `Heartbeat()` | 60 секунд | агрегированное диагностическое состояние |
 
@@ -73,7 +94,7 @@ SCR_GameModeCampaign.OnGameStart()
 SCR_MilitaryBaseSystem
   -> AICF_ConflictAdapter.CollectBases()
   -> AICF_ObjectiveGraph.Build()
-  -> AICF_TargetSelector
+  -> AICF_AICommander(faction) -> AICF_TargetSelector
   -> AICF_OrderPlanner
   -> SCR_AIGroup waypoint queue
 ```
@@ -85,9 +106,51 @@ SCR_MilitaryBaseSystem
   reachability, предоставляет BFS/friendly path и собственный revision.
 - `AICF_TargetSelector` ранжирует attack/defend/loss-response цели
   детерминированно.
+- `AICF_AICommander` является faction-scoped boundary для нового автономного
+  target selection. Он привязан к одной `AICF_FactionState` и не владеет
+  spawn, tickets, economy, transport или waypoint entities.
 - `AICF_OrderPlanner` владеет AICF infantry waypoints: создаёт, связывает,
-  заменяет, восстанавливает и удаляет их. Vehicle flows не должны обходить эту
-  границу для стратегического infantry order.
+  заменяет, восстанавливает и удаляет их, а также применяет player intent и
+  безопасный `SYSTEM_HOLD`. Vehicle flows могут продолжить или восстановить
+  уже выбранное назначение, но не имеют права выбирать другую базу.
+
+## Command authority
+
+`aicfAICommanderMode` имеет три допустимых exact-case значения:
+
+| Mode | `US` | `USSR` |
+|---|---|---|
+| `BOTH` | AI commander | AI commander |
+| `US` | AI commander | player command |
+| `USSR` | player command | AI commander |
+
+Параметр читается только при создании `AICF_Stage1Config` в Arland bootstrap;
+без него действует `BOTH`. `NONE`, пустое, lowercase и любое неизвестное
+значение не получают fallback и завершают startup до radio normalizer,
+MatchController composition, roster и loops. Тот же предварительно проверенный
+объект config передаётся в `AICF_MatchController`, а эффективная policy не
+перечитывает CLI и меняется только перезапуском server process. Она независима от
+`aicfExpectedPlayerFaction`, который относится к проверке результата.
+
+Один `AICF_MatchController` сохраняется при любом mode: graph, lifecycle,
+economy, vehicles, victory, replication, subscriptions и callqueue остаются
+общими. Опциональны только `AICF_AICommander(US)` и
+`AICF_AICommander(USSR)`. Явный valid player order имеет приоритет и на
+AI-controlled стороне; запрет player RPC для неё не входит в текущую политику.
+
+Player-commanded сторона без valid player intent получает стратегическое
+состояние `AWAITING_PLAYER_COMMAND`. Физический приказ при этом — созданный
+`AICF_OrderPlanner` waypoint `SYSTEM_HOLD` типа Defend на собственной HQ,
+независимо от slot role. Он не является новой attack/defend целью, vehicle
+assignment, task loss или stuck episode. Valid player order снимает ожидание.
+Reliability вправе повторно выпустить waypoint к тому же valid player target,
+но не выбирать другую базу; invalidated после capture target очищается и
+приводит обратно к `SYSTEM_HOLD`.
+
+Все причины нового выбора проходят через тот же boundary: initial/replacement
+deployment, player role change, graph rebuild, reliability/stuck/lone-survivor
+recovery и vehicle replan/fallback. Это особенно важно для vehicle domain: он
+не должен становиться скрытым вторым командиром.
 
 В Core нельзя добавлять координатные списки или специальные имена баз. Если
 карта требует коррекции stock поведения, она оформляется в её integration
@@ -104,6 +167,8 @@ addon.
 - presentation: role-local `A0..`, `D0..`, `R0..` — меняется при смене роли;
 - конкретное воплощение группы: stable slot + `spawn/group generation`;
 - стратегический приказ: slot + `assignment revision`;
+- долговечное стратегическое намерение: target, role, posture,
+  `decision_authority` и собственный intent revision;
 - карта/снабжение: `graph revision`;
 - асинхронная операция: request/trip token и immutable entity identity.
 
@@ -112,6 +177,14 @@ Slot переживает уничтожение и замену группы. �
 ```text
 EMPTY -> SPAWNING -> READY -> DESTROYED -> WAITING -> SPAWNING
 ```
+
+`AWAITING_PLAYER_COMMAND` не добавляется в этот lifecycle: combat-ready slot
+остаётся `READY`, а ожидание описывает command state. Runtime target/waypoint и
+group reference очищаются при replacement, но durable intent на стабильном
+`faction + slotId` сохраняется. После появления новой group generation intent
+повторно проверяется по текущим role, ownership и graph и только затем
+восстанавливается. `AICF_EStrategicDecisionAuthority` различает
+`AI_COMMANDER`, `PLAYER_COMMAND`, `SYSTEM_HOLD` и отсутствие назначения.
 
 `AICF_GroupSpawner` создаёт controller entity и настраивает roster. Spawn queue
 Reforger 1.8 асинхронна: готовность доказывается фактическим составом,
@@ -166,6 +239,14 @@ Flows возвращают данные и не вызывают друг дру
 lease. Cleanup живёт независимо от terminal trip: поездка может закончиться, а
 защищённая проверка пассажиров и подтверждение удаления продолжиться.
 
+Vehicle snapshot переносит две разные версии: `assignment revision` защищает
+runtime waypoint/entity identity, а `intent revision` обозначает только смену
+target/posture/authority/role. Если новый intent приходит в уже начатый
+`HANDOFF` или terminal restore, `AICF_VehicleHandoffState` выдаёт свежий
+ограниченный order-restore budget по новому intent revision. При этом lease,
+clearance и cleanup evidence не сбрасываются; простая замена waypoint не может
+переармить budget.
+
 Перед удалением vehicle Cleanup Manager сохраняет immutable snapshot,
 проверяет `EntityID`/replicated identity, выдерживает stable-clear window и
 повторяет occupancy scan непосредственно перед `DeleteRplEntity`. При stale
@@ -200,6 +281,7 @@ cargo между stock supply pools по доступному friendly path, н�
 `Integration/AICF_CampaignState.c` расширяет уже реплицируемый
 `SCR_GameModeCampaign`:
 
+- authority availability flags для `US` и `USSR`;
 - tickets;
 - Stage 4 supply/tier/request/shipment totals;
 - strategic objective и допустимые order targets;
@@ -214,6 +296,22 @@ player-owned `SCR_PlayerController`. Reliable RPC передаёт slot/selectio
 server заново получает `GetPlayerId()`, faction и authoritative slot и проверяет
 role, target, size, rate limit и текущий lifecycle.
 
+Authority flags входят в JIP snapshot, но не являются хранилищем immutable
+policy. `false/false` означает, что authoritative command state ещё недоступен
+или controller уже остановлен; поскольку `NONE` не является valid mode, UI
+безопасно показывает `COMMAND SYNC`. Controller оставляет sentinel во время
+composition и всего асинхронного initial spawn, а policy flags публикует в
+`TryLogRosterReady()` только после перехода всех двадцати slots обеих фракций в
+`READY`. Эта готовность доказывается `GROUP_ROSTER_READY`/`ROSTER_READY`.
+
+`AICF_MatchController.Stop()` возвращает flags в `false/false` до снятия
+subscriptions и очистки domain state. Если flags действительно
+изменились, authority вызывает `Replication.BumpMe()`, поэтому connected proxy
+и поздний snapshot больше не показывают действующий command mode. Опубликованные
+valid flags позволяют UI отличить `AI COMMANDER` от `PLAYER COMMAND`, но не дают
+клиенту право решать, кто управляет фракцией: источником истины остаются server
+policy и per-assignment `decision_authority`.
+
 Map markers получают faction streaming и показывают союзные группы/цели.
 Маркер следует за живым leader и перепривязывается после замены группы.
 
@@ -221,12 +319,15 @@ Map markers получают faction streaming и показывают союз�
 
 `AIConflictArland` содержит четыре чувствительных расширения stock классов:
 
-- bootstrap ждёт готовности Conflict и bases;
+- bootstrap сразу после stock `super.OnGameStart()` выполняет server/master
+  command-mode preflight, только после valid результата ждёт готовности Conflict
+  и bases, повторно проверяет и передаёт тот же immutable config в
+  MatchController;
 - `AICF_ArlandSeizingPolicy` разрешает AI-only capture;
 - `AICF_ArlandVictoryPolicy` отключает stock territorial winner, чтобы
   `AICF_VictorySystem` завершал матч по ticket contract;
 - `AICF_ArlandRadioBridgeNormalizer` исправляет релевантные односторонние
-  radio links после bootstrap и смены владельца.
+  radio links после valid preflight и при смене владельца.
 
 Эти `modded` классы действуют всякий раз, когда загружен Arland addon. Поэтому
 его нельзя без review подключать к другой миссии. Особенно важны порядок
@@ -245,6 +346,17 @@ Map markers получают faction streaming и показывают союз�
   информацию;
 - отфильтрованные события не заменяют полный server/client log;
 - static audit, Workbench compile и runtime доказывают разные свойства.
+
+Command-authority contract добавляет следующие поля и события, не переименовывая
+существующие:
+
+- `CONFIG ai_commander_mode=... ai_commander_us=... ai_commander_ussr=...`;
+- один `COMMAND_AUTHORITY_SET faction=... authority=AI|PLAYER` на сторону;
+- edge-triggered `COMMAND_WAITING` при переходе в ожидание player order;
+- `STRATEGIC_ASSIGNMENT decision_authority=AI_COMMANDER|PLAYER_COMMAND|SYSTEM_HOLD`.
+
+По этим строкам можно доказать server decision path, но UI/JIP всё равно
+требуют отдельного client evidence, а визуальный вид — ручного verdict.
 
 ## Зоны повышенного риска
 

@@ -88,6 +88,7 @@ class AICF_TransportTripController
 				"STALE_ASSIGNMENT_CALLBACK_CANCELLED",
 				BuildCausationId(trip, "STALE_REVISION"));
 		}
+		RearmHandoffOrderRestoreForIntent(trip, currentAssignment);
 		if (trip.IsTerminal())
 			return TickTerminalPostconditions(trip, currentAssignment, slot, fleet, faction);
 
@@ -280,7 +281,7 @@ class AICF_TransportTripController
 		if (restoreInfantryOrder && slot && faction &&
 			!trip.GetHandoffState().IsOrderRestored())
 		{
-			EnsureHandoffStarted(trip.GetHandoffState(), System.GetTickCount());
+			EnsureHandoffStarted(trip, System.GetTickCount());
 			m_Handoff.RestoreInfantryOrder(
 				trip,
 				trip.GetHandoffState(),
@@ -905,7 +906,7 @@ class AICF_TransportTripController
 		SCR_CampaignFaction faction)
 	{
 		AICF_VehicleHandoffState state = trip.GetHandoffState();
-		EnsureHandoffStarted(state, System.GetTickCount());
+		EnsureHandoffStarted(trip, System.GetTickCount());
 		if (!state.IsOrderRestored())
 			m_Handoff.RestoreInfantryOrder(
 				trip,
@@ -979,7 +980,7 @@ class AICF_TransportTripController
 		SCR_CampaignFaction faction)
 	{
 		AICF_VehicleHandoffState state = trip.GetHandoffState();
-		EnsureHandoffStarted(state, System.GetTickCount());
+		EnsureHandoffStarted(trip, System.GetTickCount());
 		if (!state.IsOrderRestored() &&
 			HasCurrentIdentity(trip, currentAssignment, slot, fleet, faction))
 		{
@@ -1756,14 +1757,14 @@ class AICF_TransportTripController
 	protected void BeginHandoffEvidence(AICF_TransportTrip trip, bool clearanceSafe)
 	{
 		AICF_VehicleHandoffState state = trip.GetHandoffState();
-		EnsureHandoffStarted(state, System.GetTickCount());
+		EnsureHandoffStarted(trip, System.GetTickCount());
 		state.RecordClearanceResult(clearanceSafe);
 	}
 
 	protected void PrepareStopHandoffEvidence(AICF_TransportTrip trip)
 	{
 		AICF_VehicleHandoffState state = trip.GetHandoffState();
-		EnsureHandoffStarted(state, System.GetTickCount());
+		EnsureHandoffStarted(trip, System.GetTickCount());
 		if (!trip.GetLease())
 		{
 			state.RecordClearanceResult(true);
@@ -1795,14 +1796,58 @@ class AICF_TransportTripController
 		return cancelled;
 	}
 
-	protected void EnsureHandoffStarted(AICF_VehicleHandoffState state, int nowMs)
+	protected void EnsureHandoffStarted(AICF_TransportTrip trip, int nowMs)
 	{
+		if (!trip)
+			return;
+		AICF_VehicleHandoffState state = trip.GetHandoffState();
 		if (state.GetStartedAtMs() > 0)
 			return;
+		int strategicIntentRevision;
+		if (trip.GetAssignment())
+			strategicIntentRevision =
+				trip.GetAssignment().GetStrategicIntentRevision();
 		state.Begin(
 			nowMs,
 			nowMs + ORDER_RESTORE_DEADLINE_MS,
-			ORDER_RESTORE_MAX_ATTEMPTS);
+			ORDER_RESTORE_MAX_ATTEMPTS,
+			strategicIntentRevision);
+	}
+
+	protected void RearmHandoffOrderRestoreForIntent(
+		AICF_TransportTrip trip,
+		AICF_StrategicAssignmentSnapshot currentAssignment)
+	{
+		if (!trip || !currentAssignment)
+			return;
+		AICF_VehicleHandoffState state = trip.GetHandoffState();
+		if (!state || state.GetStartedAtMs() <= 0)
+			return;
+
+		int previousIntentRevision = state.GetOrderRestoreIntentRevision();
+		int currentIntentRevision =
+			currentAssignment.GetStrategicIntentRevision();
+		int nowMs = System.GetTickCount();
+		if (!state.RearmOrderRestoreForIntent(
+			currentIntentRevision,
+			nowMs,
+			nowMs + ORDER_RESTORE_DEADLINE_MS,
+			ORDER_RESTORE_MAX_ATTEMPTS))
+		{
+			return;
+		}
+
+		AICF_Stage35Diagnostics.Info(
+			"ORDER_RESTORE_REARMED",
+			FormatIdentity(
+				trip,
+				BuildCausationId(trip, "ORDER_RESTORE_REARMED"),
+				"STRATEGIC_ASSIGNMENT_REVISION_CHANGED") + string.Format(
+				" previous_intent_revision=%1 intent_revision=%2 assignment_revision=%3 restore_attempts=0 restore_max_attempts=%4 cleanup_state_preserved=1",
+				previousIntentRevision,
+				currentIntentRevision,
+				currentAssignment.GetAssignmentRevision(),
+				ORDER_RESTORE_MAX_ATTEMPTS));
 	}
 
 	protected void ReportOrderRestoreDeadlineMissed(
@@ -1871,8 +1916,9 @@ class AICF_TransportTripController
 		{
 			return false;
 		}
+		// Role-local names may change when any faction slot is reindexed. Stable
+		// vehicle identity is faction + numeric slot + group generation/entity.
 		return slot.GetSlotId() == currentAssignment.GetSlotId() &&
-			slot.GetSlotKey() == currentAssignment.GetSlotKey() &&
 			slot.GetSpawnGeneration() == currentAssignment.GetGroupGeneration() &&
 			slot.GetGroup() == currentAssignment.GetGroup() &&
 			slot.GetStrategicAssignmentRevision() == currentAssignment.GetAssignmentRevision();

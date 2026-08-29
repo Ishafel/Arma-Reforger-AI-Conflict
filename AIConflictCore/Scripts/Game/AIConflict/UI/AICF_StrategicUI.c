@@ -52,6 +52,7 @@ class AICF_StrategicUIController
 	protected TextWidget m_wHUDObjective;
 	protected Widget m_wMapToggle;
 	protected Widget m_wMapToggleAccent;
+	protected TextWidget m_wMapToggleText;
 	protected Widget m_wCommandScrim;
 	protected Widget m_wCommandPanel;
 	protected Widget m_wCommandAccent;
@@ -170,6 +171,12 @@ class AICF_StrategicUIController
 		m_bLocalUSSR = key == "USSR";
 		EnsureHUD();
 		RefreshHUD();
+		if (m_wMapToggleText)
+		{
+			m_wMapToggleText.SetText(string.Format(
+				"%1  [OPEN]",
+				GetCommandAuthorityLabel()));
+		}
 		RefreshVisualStyles();
 		if (m_bCommandOpen)
 			RefreshCommandPanel();
@@ -239,7 +246,10 @@ class AICF_StrategicUIController
 			supply,
 			m_Campaign.AICF_GetCombatGroups(m_bLocalUSSR),
 			m_Campaign.AICF_GetManagedAgents(m_bLocalUSSR)));
-		m_wHUDObjective.SetText(string.Format("ORDERS // %1", objective));
+		m_wHUDObjective.SetText(string.Format(
+			"%1 // %2",
+			GetCommandAuthorityLabel(),
+			objective));
 	}
 
 	protected void OnMapOpen(MapConfiguration config)
@@ -265,9 +275,9 @@ class AICF_StrategicUIController
 			true);
 		m_wMapToggle.SetName("AICF_CommandToggle");
 		m_wMapToggle.SetZOrder(220);
-		CreateText(
+		m_wMapToggleText = CreateText(
 			m_wMapToggle, 0, 0, 1, 1,
-			"AI COMMAND  [OPEN]",
+			string.Format("%1  [OPEN]", GetCommandAuthorityLabel()),
 			20,
 			Color.FromSRGBA(236, 242, 245, 255),
 			true);
@@ -485,7 +495,8 @@ class AICF_StrategicUIController
 		if (m_Campaign.AICF_GetStage4Enabled())
 			logistics = GetTierName(tier);
 		m_wCommandOverview.SetText(string.Format(
-			"OBJECTIVE  %1\nFORCE  %2 squads / %3 personnel     LOGISTICS  %4     SUPPLY  %5/%6     REINFORCEMENTS  %7     SHIPMENTS  %8",
+			"AUTHORITY  %1     OBJECTIVE  %2\nFORCE  %3 squads / %4 personnel     LOGISTICS  %5     SUPPLY  %6/%7     REINFORCEMENTS  %8     SHIPMENTS  %9",
+			GetCommandAuthorityLabel(),
 			m_Campaign.AICF_GetStrategicObjective(m_bLocalUSSR),
 			m_Campaign.AICF_GetCombatGroups(m_bLocalUSSR),
 			m_Campaign.AICF_GetManagedAgents(m_bLocalUSSR),
@@ -763,13 +774,23 @@ class AICF_StrategicUIController
 	{
 		array<string> fields = {};
 		summary.Split("|", fields, false);
-		if (fields.Count() < 3 || fields[2] != "READY")
+		if (fields.Count() < 3 ||
+			(fields[2] != "READY" && fields[2] != "AWAITING_PLAYER_COMMAND"))
 			return string.Empty;
 		string role = GetRoleName(summary);
 		if (role == "ATTACK") return "A";
 		if (role == "DEFEND") return "D";
 		if (role == "RESERVE") return "R";
 		return string.Empty;
+	}
+
+	protected string GetCommandAuthorityLabel()
+	{
+		if (!m_Campaign || !m_Campaign.AICF_HasAICommanderState())
+			return "COMMAND SYNC";
+		if (m_Campaign.AICF_GetAICommanderEnabled(m_bLocalUSSR))
+			return "AI COMMANDER";
+		return "PLAYER COMMAND";
 	}
 
 	protected string GetSlotKey(string summary)
@@ -814,6 +835,7 @@ class AICF_StrategicUIController
 		m_wCommandPanel = null;
 		m_wMapToggle = null;
 		m_wMapToggleAccent = null;
+		m_wMapToggleText = null;
 		m_wCommandScrim = null;
 		m_wCommandAccent = null;
 		m_wCloseButton = null;

@@ -236,7 +236,10 @@ if ($selector) {
 
 $orderPlanner = Find-AICFClassRecord $records 'AICF_OrderPlanner'
 if ($orderPlanner) {
-    $reconcile = Get-AICFMethodBody $orderPlanner 'ReconcileStrategicOrder'
+    $reconcile = Get-AICFFirstMethodBody $orderPlanner @(
+        'ReconcileAICommanderOrder',
+        'ReconcileStrategicOrder'
+    )
     Assert-AICFContains $failures 'STAGE35_QRF_HYSTERESIS' $reconcile 'urgentQRF[\s\S]*minimumDwellMs[\s\S]*stableCandidateMs[\s\S]*STRATEGIC_CANDIDATE_HELD' 'QRF escalation and stabilized return must retain hysteresis/minimum dwell'
     Assert-AICFContains $failures 'STAGE35_WAYPOINT_LIFECYCLE' $orderPlanner.Strings 'WAYPOINT_REMOVED' 'Infantry waypoint removal must remain observable'
     Assert-AICFContains $failures 'STAGE35_WAYPOINT_PREMATURE_COMPLETION' $orderPlanner.Code 'SetCompletionType\s*\(\s*EAIWaypointCompletionType\.All\s*\)[\s\S]*SetHoldingTime\s*\(\s*DEFEND_HOLDING_TIME_SECONDS\s*\)' 'Strategic movement and defend waypoints must not complete on a lone member or a short prefab hold'

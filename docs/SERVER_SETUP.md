@@ -172,6 +172,7 @@ $profileRoot = Join-Path $env:LOCALAPPDATA "AICF\Server-$runStamp"
   -addons '9178E5822AFE48EA,B52C5F6AEDBF423E' `
   -profile "$profileRoot" `
   -backendFreshSession `
+  -aicfAICommanderMode BOTH `
   -maxFPS 60 `
   -logStats 10000
 
@@ -191,6 +192,7 @@ $serverExitCode = $LASTEXITCODE
 | `-addons` | загружает Core и Arland по неизменяемым GUID |
 | `-profile` | отделяет логи и runtime state конкретного запуска |
 | `-backendFreshSession` | начинает новую backend session |
+| `-aicfAICommanderMode BOTH` | фиксирует command authority обеих фракций; без параметра default также `BOTH` |
 | `-maxFPS 60` | ограничивает нагрузку dedicated server |
 | `-logStats 10000` | пишет performance statistics раз в 10 секунд |
 
@@ -236,6 +238,9 @@ Select-String -LiteralPath $log.FullName -Pattern `
 - `Get-NetUDPEndpoint -LocalPort 2001` показывает UDP endpoint процесса;
 - log содержит `Game successfully created`;
 - log содержит `[AICF][STAGE1] ... BOOTSTRAP_SERVER`;
+- `CONFIG` содержит `ai_commander_mode`, `ai_commander_us` и
+  `ai_commander_ussr`, затем для обеих фракций появляется
+  `COMMAND_AUTHORITY_SET`;
 - затем появляется `[AICF][STAGE1] ... MATCH_START`;
 - после создания roster появляются `SPAWN_BOUND`, а примерно через минуту —
   `HEARTBEAT` events;
@@ -296,8 +301,44 @@ Vehicle и economy subsystems включены всегда. Параметры
 `aicfVehiclesEnabled` и `aicfEconomyEnabled` больше не читаются, поэтому
 server command не требует feature-enable flags.
 
-Чтобы полностью автономный матч мог зафиксировать результат без подключённого
-игрока, добавь:
+Command authority выбирается одним exact-case параметром:
+
+| CLI | Результат |
+|---|---|
+| параметр отсутствует | `BOTH`: AI commander для `US` и `USSR` |
+| `-aicfAICommanderMode BOTH` | AI commander для `US` и `USSR` |
+| `-aicfAICommanderMode US` | AI commander только для `US`; `USSR` управляется player orders |
+| `-aicfAICommanderMode USSR` | AI commander только для `USSR`; `US` управляется player orders |
+
+Mode неизменяем в течение матча. Чтобы поменять его, останови server и запусти
+новый process; желательно использовать новый profile. `NONE`, пустое,
+lowercase и любое неизвестное значение не поддерживаются: server пишет
+`CONFIG_INVALID` в Arland bootstrap и отклоняет AICF startup до запуска
+`AICF_ArlandRadioBridgeNormalizer`, его base-owner subscription/radio mutation,
+MatchController roster и loops вместо fallback к `BOTH`. Bootstrap передаёт в
+MatchController тот же предварительно проверенный объект config; CLI внутри
+controller/policy не перечитывается.
+
+У player-commanded стороны сохраняются все десять slots, tickets, economy,
+vehicles, reliability, victory и UI. До valid player order её группы показывают
+`AWAITING_PLAYER_COMMAND` и получают `SYSTEM_HOLD` на своей HQ. Player order
+снимает ожидание; если target после capture становится недопустим, server
+возвращает slot в hold, не выбирая другую базу автономно.
+
+Два replicated authority availability flags позволяют подключившемуся позже
+клиенту получить действующий mode. Пока все двадцать асинхронных initial slots
+не перешли в `READY`, они намеренно равны `false/false`, и UI показывает
+`COMMAND SYNC`. Затем `TryLogRosterReady()` публикует выбранную пару
+(`BOTH=1/1`, `US=1/0`, `USSR=0/1`). При
+`AICF_MatchController.Stop()` pair снова сбрасывается в `false/false` до снятия
+domain subscriptions и cleanup; immutable server policy от этого не становится
+runtime-настройкой.
+
+`aicfExpectedPlayerFaction` влияет только на проверку результата и не должен
+использоваться вместо `aicfAICommanderMode`.
+
+Чтобы матч в `BOTH` мог зафиксировать результат без подключённого игрока,
+добавь:
 
 ```text
 -aicfRequirePlayerForResult 0
@@ -343,6 +384,10 @@ shutdown contract: `Ctrl+C` завершает локальный process, но 
 | Server сразу завершился | полный `console.log`, версии, `SCRIPT/ENGINE/VM` errors |
 | Запустился обычный vanilla Conflict | оба GUID в `-addons`, repo в `-addonsDir`, Arland `-gproj` |
 | Нет `MATCH_START` | raw world, `-MissionHeader`, `-worldSystemsConfig`, bootstrap errors |
+| `CONFIG_INVALID` для command mode | exact uppercase `BOTH`, `US` или `USSR`; отсутствие лишних пробелов и `NONE` |
+| Invalid mode всё же дал readiness/radio/roster events | regression: после `CONFIG_INVALID` не должно быть `CONFLICT_READY`, любого `RADIO_BRIDGE_*`, controller `CONFIG`, `MATCH_START` или spawn/roster events |
+| UI показывает `COMMAND SYNC` во время bootstrap | ожидай перехода всех двадцати initial slots в `READY`; до публикации availability pair равна `false/false` |
+| Player-commanded группы стоят на HQ | это ожидаемый `AWAITING_PLAYER_COMMAND`/`SYSTEM_HOLD`; отправь valid player order своей фракции |
 | Клиент не подключается | `2001/UDP`, LAN IPv4, локальный firewall, exact commit и версии |
 | UDP 2001 занят | `Get-NetUDPEndpoint -LocalPort 2001` и точный `OwningProcess` |
 | Нет `[AICF]` событий | загружены ли оба аддона и не произошёл ли fallback к vanilla |

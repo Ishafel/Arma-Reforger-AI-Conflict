@@ -272,8 +272,10 @@ class AICF_VehicleTaskHandoff
 			return false;
 		}
 		bool loneSurvivorRetreat = alive == 1;
-		bool plannerAccepted = IsExactWaypointCurrentAndQueued(slot, slot.GetWaypoint());
-		if (loneSurvivorRetreat && !slot.IsLoneSurvivorRetreat())
+		bool plannerAccepted = IsExactWaypointCurrentAndQueued(slot, slot.GetWaypoint()) &&
+			m_OrderPlanner.IsOrderValid(slot, faction);
+		if (loneSurvivorRetreat && !slot.IsSystemHoldOrder() &&
+			!slot.IsLoneSurvivorRetreat())
 		{
 			plannerAccepted = m_OrderPlanner.AssignLoneSurvivorRetreat(
 				slot,
@@ -302,7 +304,7 @@ class AICF_VehicleTaskHandoff
 		bool boundToGroup = slot.GetGroup() == trip.GetAssignment().GetGroup() && waypointInQueue;
 		bool isCurrent = newWaypoint && slot.GetGroup().GetCurrentWaypoint() == newWaypoint;
 		bool postconditionMeaningfulTask = plannerAccepted && slot.GetTargetBase() &&
-			m_OrderPlanner.IsStrategicTargetValid(slot, faction, slot.GetTargetBase()) &&
+			m_OrderPlanner.IsOrderValid(slot, faction) &&
 			boundToGroup && isCurrent && waypointInQueue;
 		bool restored = handoffState.RecordOrderRestoreResult(
 			newWaypoint,
@@ -361,7 +363,7 @@ class AICF_VehicleTaskHandoff
 		AIWaypoint waypoint = slot.GetWaypoint();
 		if (!IsExactWaypointCurrentAndQueued(slot, waypoint) ||
 			!slot.GetTargetBase() ||
-			!m_OrderPlanner.IsStrategicTargetValid(slot, faction, slot.GetTargetBase()))
+			!m_OrderPlanner.IsOrderValid(slot, faction))
 		{
 			return false;
 		}
@@ -407,9 +409,13 @@ class AICF_VehicleTaskHandoff
 		AICF_GroupSlot slot,
 		string reason)
 	{
-		// Existing Stage 2 durability auditing observes the same exact waypoint
-		// for three stable polls after this immediate handoff proof.
-		slot.BeginOrderRecoveryVerification("VEHICLE_HANDOFF");
+		// Existing Stage 2 durability auditing observes an operational waypoint for
+		// three stable polls after this immediate handoff proof. SYSTEM_HOLD is an
+		// awaiting-command safety state: its dedicated reliability branch may rebuild
+		// the same HQ Defend waypoint, but it must never consume generic stuck/task-
+		// loss recovery budgets.
+		if (!slot.IsSystemHoldOrder())
+			slot.BeginOrderRecoveryVerification("VEHICLE_HANDOFF");
 		string handoffMode = "OPERATIONAL_ORDER_RESTORE";
 		if (slot.IsLoneSurvivorRetreat())
 			handoffMode = "LONE_SURVIVOR_RETREAT";

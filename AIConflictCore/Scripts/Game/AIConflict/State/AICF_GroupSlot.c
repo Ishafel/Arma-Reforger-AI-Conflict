@@ -40,6 +40,9 @@ class AICF_GroupSlot
 	protected bool m_bMeaningfulTaskLossReported;
 	protected bool m_bMeaningfulTaskDeadlineReported;
 	protected bool m_bPlayerStrategicOrder;
+	protected bool m_bAwaitingPlayerCommand;
+	protected bool m_bSystemHoldOrder;
+	protected bool m_bCommandWaitingReported;
 	protected float m_fBestDistanceToTarget = -1.0;
 	protected string m_sPendingOrderRecoveryCause;
 	protected int m_iStrategicAssignmentAtMs;
@@ -96,6 +99,7 @@ class AICF_GroupSlot
 	protected float m_fStuckEpisodeAnchorDistance = -1.0;
 	protected float m_fMobEgressBestDistanceFromMob = -1.0;
 	protected string m_sOperationalPosture;
+	protected AICF_EStrategicDecisionAuthority m_DecisionAuthority;
 	protected string m_sStrategicCandidatePosture;
 	protected string m_sMobIdleSuppressionReason;
 	protected string m_sOwnedWaypointTerminalOutcome;
@@ -112,6 +116,11 @@ class AICF_GroupSlot
 	protected SCR_CampaignMilitaryBaseComponent m_ObjectiveHoldTargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_PendingOrderRecoveryTargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_StrategicCandidateTargetBase;
+	protected SCR_CampaignMilitaryBaseComponent m_StrategicIntentTargetBase;
+	protected AICF_EGroupRole m_StrategicIntentRole;
+	protected AICF_EStrategicDecisionAuthority m_StrategicIntentAuthority;
+	protected string m_sStrategicIntentPosture;
+	protected int m_iStrategicIntentRevision;
 	protected AIWaypoint m_Waypoint;
 	protected AIWaypoint m_OwnedWaypointTerminalWaypoint;
 	protected AIWaypoint m_PendingOrderRecoveryWaypoint;
@@ -204,19 +213,175 @@ class AICF_GroupSlot
 		return m_sOperationalPosture;
 	}
 
+	AICF_EStrategicDecisionAuthority GetDecisionAuthority()
+	{
+		return m_DecisionAuthority;
+	}
+
+	void SetDecisionAuthority(AICF_EStrategicDecisionAuthority decisionAuthority)
+	{
+		m_DecisionAuthority = decisionAuthority;
+		m_bPlayerStrategicOrder =
+			decisionAuthority == AICF_EStrategicDecisionAuthority.PLAYER_COMMAND;
+		m_bSystemHoldOrder =
+			decisionAuthority == AICF_EStrategicDecisionAuthority.SYSTEM_HOLD;
+	}
+
 	void BeginPlayerStrategicOrder()
 	{
-		m_bPlayerStrategicOrder = true;
+		SetDecisionAuthority(AICF_EStrategicDecisionAuthority.PLAYER_COMMAND);
 	}
 
 	void ClearPlayerStrategicOrder()
 	{
-		m_bPlayerStrategicOrder = false;
+		if (m_DecisionAuthority == AICF_EStrategicDecisionAuthority.PLAYER_COMMAND)
+			SetDecisionAuthority(AICF_EStrategicDecisionAuthority.NONE);
 	}
 
 	bool HasPlayerStrategicOrder()
 	{
 		return m_bPlayerStrategicOrder;
+	}
+
+	void RecordPlayerStrategicIntent(SCR_CampaignMilitaryBaseComponent targetBase)
+	{
+		CommitStrategicIntent(
+			targetBase,
+			m_sOperationalPosture,
+			AICF_EStrategicDecisionAuthority.PLAYER_COMMAND);
+		m_bAwaitingPlayerCommand = false;
+		m_bCommandWaitingReported = false;
+	}
+
+	void ClearPlayerStrategicIntent()
+	{
+		if (m_StrategicIntentAuthority ==
+			AICF_EStrategicDecisionAuthority.PLAYER_COMMAND)
+		{
+			ClearStrategicIntent();
+		}
+		m_bCommandWaitingReported = false;
+	}
+
+	bool HasPlayerStrategicIntent()
+	{
+		return m_StrategicIntentTargetBase &&
+			m_StrategicIntentAuthority ==
+				AICF_EStrategicDecisionAuthority.PLAYER_COMMAND;
+	}
+
+	bool IsPlayerStrategicIntentRoleCurrent()
+	{
+		return HasPlayerStrategicIntent() && m_StrategicIntentRole == m_Role;
+	}
+
+	SCR_CampaignMilitaryBaseComponent GetPlayerStrategicIntentTargetBase()
+	{
+		if (!HasPlayerStrategicIntent())
+			return null;
+		return m_StrategicIntentTargetBase;
+	}
+
+	int GetPlayerStrategicIntentRevision()
+	{
+		return m_iStrategicIntentRevision;
+	}
+
+	void CommitStrategicIntent(
+		SCR_CampaignMilitaryBaseComponent targetBase,
+		string posture,
+		AICF_EStrategicDecisionAuthority authority)
+	{
+		if (!targetBase || authority == AICF_EStrategicDecisionAuthority.NONE)
+			return;
+		if (m_StrategicIntentTargetBase == targetBase &&
+			m_sStrategicIntentPosture == posture &&
+			m_StrategicIntentAuthority == authority &&
+			m_StrategicIntentRole == m_Role)
+		{
+			return;
+		}
+
+		m_StrategicIntentTargetBase = targetBase;
+		m_sStrategicIntentPosture = posture;
+		m_StrategicIntentAuthority = authority;
+		m_StrategicIntentRole = m_Role;
+		m_iStrategicIntentRevision++;
+	}
+
+	void ClearStrategicIntent()
+	{
+		if (m_StrategicIntentTargetBase ||
+			m_StrategicIntentAuthority != AICF_EStrategicDecisionAuthority.NONE)
+		{
+			m_iStrategicIntentRevision++;
+		}
+		m_StrategicIntentTargetBase = null;
+		m_sStrategicIntentPosture = string.Empty;
+		m_StrategicIntentAuthority = AICF_EStrategicDecisionAuthority.NONE;
+	}
+
+	bool HasStrategicIntent()
+	{
+		return m_StrategicIntentTargetBase &&
+			m_StrategicIntentAuthority != AICF_EStrategicDecisionAuthority.NONE;
+	}
+
+	SCR_CampaignMilitaryBaseComponent GetStrategicIntentTargetBase()
+	{
+		return m_StrategicIntentTargetBase;
+	}
+
+	string GetStrategicIntentPosture()
+	{
+		return m_sStrategicIntentPosture;
+	}
+
+	AICF_EStrategicDecisionAuthority GetStrategicIntentAuthority()
+	{
+		return m_StrategicIntentAuthority;
+	}
+
+	bool IsStrategicIntentRoleCurrent()
+	{
+		return HasStrategicIntent() && m_StrategicIntentRole == m_Role;
+	}
+
+	int GetStrategicIntentRevision()
+	{
+		return m_iStrategicIntentRevision;
+	}
+
+	bool BeginAwaitingPlayerCommand()
+	{
+		bool changed = !m_bAwaitingPlayerCommand;
+		m_bAwaitingPlayerCommand = true;
+		return changed;
+	}
+
+	void ClearAwaitingPlayerCommand()
+	{
+		m_bAwaitingPlayerCommand = false;
+		m_bCommandWaitingReported = false;
+	}
+
+	bool IsAwaitingPlayerCommand()
+	{
+		return m_bAwaitingPlayerCommand;
+	}
+
+	bool IsSystemHoldOrder()
+	{
+		return m_bSystemHoldOrder;
+	}
+
+	bool MarkCommandWaitingReported()
+	{
+		if (m_bCommandWaitingReported)
+			return false;
+
+		m_bCommandWaitingReported = true;
+		return true;
 	}
 
 	int GetStrategicAssignmentAgeMs()
@@ -267,6 +432,15 @@ class AICF_GroupSlot
 		// and re-arm recovery for a distinct re-entry under the same assignment.
 		ResetMobEgressRecovery(true);
 		ClearStrategicCandidate();
+	}
+
+	// Runtime waypoint identity participates in every asynchronous vehicle and
+	// recovery snapshot. Replacing a waypoint under the same strategic target
+	// must still advance the assignment revision without restarting its dwell.
+	void RecordRuntimeWaypointReplacement()
+	{
+		m_iStrategicAssignmentRevision++;
+		ResetMeaningfulTaskObservation();
 	}
 
 	bool IsStrategicCandidateReady(
@@ -996,6 +1170,29 @@ class AICF_GroupSlot
 		ClearOwnedWaypointTerminalOutcome();
 		m_TargetBase = targetBase;
 		m_Waypoint = waypoint;
+		return true;
+	}
+
+	// BOARDING/TRANSIT/DISMOUNT temporarily own the group waypoint queue. The
+	// planner may retarget the durable assignment for the vehicle controller, but
+	// it must not recreate an infantry waypoint until the handoff restores it.
+	bool AssignSuspendedObjective(SCR_CampaignMilitaryBaseComponent targetBase)
+	{
+		if (m_State != AICF_EGroupSlotState.READY || !m_Group || !targetBase ||
+			m_Waypoint)
+		{
+			return false;
+		}
+
+		ClearPendingOrderRecovery();
+		SupersedePendingStuckRecoveryEvidence("SUSPENDED_OBJECTIVE_REASSIGNED");
+		ClearPersistentStuckFieldHold();
+		if (m_ProgressTargetBase != targetBase)
+			ResetProgressTracking("TARGET_CHANGED_DURING_VEHICLE_CONTROL");
+		else
+			ClearObjectiveHold();
+		ClearOwnedWaypointTerminalOutcome();
+		m_TargetBase = targetBase;
 		return true;
 	}
 
@@ -1796,6 +1993,7 @@ class AICF_GroupSlot
 	void Reset()
 	{
 		ClearRuntimeReferences();
+		ClearStrategicIntent();
 		m_bReplacementDeployment = false;
 		m_State = AICF_EGroupSlotState.EMPTY;
 	}
@@ -1833,7 +2031,11 @@ class AICF_GroupSlot
 		m_bLoadBlockReported = false;
 		m_bAgentLimitBlockReported = false;
 		m_bPlayerStrategicOrder = false;
+		m_bAwaitingPlayerCommand = false;
+		m_bSystemHoldOrder = false;
+		m_bCommandWaitingReported = false;
 		m_sOperationalPosture = string.Empty;
+		m_DecisionAuthority = AICF_EStrategicDecisionAuthority.NONE;
 		m_iStrategicAssignmentAtMs = 0;
 		m_iStrategicAssignmentRevision = 0;
 		ResetOrderReliabilityRepairFailureBudget();

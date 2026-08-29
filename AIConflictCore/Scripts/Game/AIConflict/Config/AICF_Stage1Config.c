@@ -1,6 +1,9 @@
 // Server-owned Stage 1 balance settings with conservative bounds for local Arland play.
 class AICF_Stage1Config
 {
+	static const string AI_COMMANDER_MODE_BOTH = "BOTH";
+	static const string AI_COMMANDER_MODE_US = "US";
+	static const string AI_COMMANDER_MODE_USSR = "USSR";
 	static const int GROUP_SLOTS_PER_FACTION = 10;
 	static const int DEFAULT_GROUP_SIZE = 4;
 	static const int DEFAULT_FULL_SIZE_GROUPS_PER_FACTION = 4;
@@ -48,8 +51,11 @@ class AICF_Stage1Config
 	protected int m_iMaxManagedAgents;
 	protected int m_iWarTempoPercent;
 	protected FactionKey m_sExpectedPlayerFaction;
+	protected string m_sAICommanderMode;
+	protected string m_sInvalidAICommanderMode;
 	protected bool m_bRequirePlayerForResult;
 	protected bool m_bActiveForcesRolesEnabled;
+	protected bool m_bAICommanderModeValid;
 
 	void AICF_Stage1Config()
 	{
@@ -66,8 +72,11 @@ class AICF_Stage1Config
 		m_iMaxManagedAgents = DEFAULT_MAX_MANAGED_AGENTS;
 		m_iWarTempoPercent = DEFAULT_WAR_TEMPO_PERCENT;
 		m_sExpectedPlayerFaction = string.Empty;
+		m_sAICommanderMode = AI_COMMANDER_MODE_BOTH;
+		m_sInvalidAICommanderMode = string.Empty;
 		m_bRequirePlayerForResult = true;
 		m_bActiveForcesRolesEnabled = true;
+		m_bAICommanderModeValid = true;
 	}
 
 	int GetInitialTickets()
@@ -160,6 +169,36 @@ class AICF_Stage1Config
 		m_bRequirePlayerForResult = required;
 	}
 
+	string GetAICommanderMode()
+	{
+		return m_sAICommanderMode;
+	}
+
+	void SetAICommanderMode(string mode)
+	{
+		m_bAICommanderModeValid = mode == AI_COMMANDER_MODE_BOTH ||
+			mode == AI_COMMANDER_MODE_US ||
+			mode == AI_COMMANDER_MODE_USSR;
+		if (!m_bAICommanderModeValid)
+		{
+			m_sInvalidAICommanderMode = mode;
+			return;
+		}
+
+		m_sAICommanderMode = mode;
+		m_sInvalidAICommanderMode = string.Empty;
+	}
+
+	bool IsAICommanderModeValid()
+	{
+		return m_bAICommanderModeValid;
+	}
+
+	string GetInvalidAICommanderMode()
+	{
+		return m_sInvalidAICommanderMode;
+	}
+
 	bool GetActiveForcesRolesEnabled()
 	{
 		return m_bActiveForcesRolesEnabled;
@@ -193,6 +232,8 @@ class AICF_Stage1Config
 			SetMaxManagedAgents(value.ToInt());
 		if (System.GetCLIParam("aicfExpectedPlayerFaction", value))
 			SetExpectedPlayerFaction(value);
+		if (System.GetCLIParam("aicfAICommanderMode", value))
+			SetAICommanderMode(value);
 		if (System.GetCLIParam("aicfRequirePlayerForResult", value))
 			SetRequirePlayerForResult(value.ToInt() > 0);
 		if (System.GetCLIParam("aicfActiveForcesRolesEnabled", value))

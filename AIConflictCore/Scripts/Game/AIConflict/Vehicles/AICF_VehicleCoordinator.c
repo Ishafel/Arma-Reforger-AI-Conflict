@@ -99,6 +99,21 @@ class AICF_VehicleCoordinator
 		return view && view.IsRestorePending();
 	}
 
+	bool IsInfantryOrderSuspended(AICF_GroupSlot slot)
+	{
+		if (!slot || slot.GetWaypoint())
+			return false;
+		AICF_TransportTrip trip = FindTripForSlot(slot);
+		if (!trip || trip.GetHandoffState().IsOrderRestored())
+			return false;
+		AICF_ETransportTripPhase phase = trip.GetPhase();
+		return phase == AICF_ETransportTripPhase.BOARDING ||
+			phase == AICF_ETransportTripPhase.TRANSIT ||
+			phase == AICF_ETransportTripPhase.DISMOUNT ||
+			phase == AICF_ETransportTripPhase.HANDOFF ||
+			trip.GetHandoffState().IsRestoreRequested();
+	}
+
 	AICF_VehicleSlotView GetSlotView(AICF_GroupSlot slot)
 	{
 		AICF_TransportTrip trip = FindTripForSlot(slot);
@@ -162,7 +177,8 @@ class AICF_VehicleCoordinator
 			m_TargetSelector,
 			reason,
 			minimumDwellMs,
-			stableCandidateMs);
+			stableCandidateMs,
+			IsInfantryOrderSuspended(slot));
 		if (!reconciled)
 			return false;
 		if (!AdoptCurrentStrategicAssignment(slot, faction, reason, baseRevision))

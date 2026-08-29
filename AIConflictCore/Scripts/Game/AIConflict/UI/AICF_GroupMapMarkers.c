@@ -511,6 +511,9 @@ class AICF_GroupMapMarkerSystem
 		AICF_GroupSlot slot,
 		SCR_AIGroup group)
 	{
+		if (slot.IsAwaitingPlayerCommand() || slot.IsSystemHoldOrder())
+			return "AWAITING PLAYER COMMAND";
+
 		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
 		if (!target || !target.GetOwner())
 			return "AWAITING ORDER";
@@ -635,6 +638,7 @@ class AICF_GroupMapMarkerSystem
 		{
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
 			if (!slot || !slot.IsCombatReady() ||
+				slot.IsAwaitingPlayerCommand() || slot.IsSystemHoldOrder() ||
 				slot.GetRole() != AICF_EGroupRole.ATTACK)
 			{
 				continue;

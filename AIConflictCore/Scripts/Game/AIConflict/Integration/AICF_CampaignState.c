@@ -7,6 +7,12 @@ modded class SCR_GameModeCampaign
 	[RplProp(onRplName: "AICF_OnTicketsReplicated")]
 	protected int m_iAICFUSSRTickets;
 
+	[RplProp(onRplName: "AICF_OnAICommanderStateReplicated")]
+	protected bool m_bAICFUSAICommanderEnabled;
+
+	[RplProp(onRplName: "AICF_OnAICommanderStateReplicated")]
+	protected bool m_bAICFUSSRAICommanderEnabled;
+
 	[RplProp(onRplName: "AICF_OnStage4StateReplicated")]
 	protected bool m_bAICFStage4Enabled;
 
@@ -153,6 +159,35 @@ modded class SCR_GameModeCampaign
 	int AICF_GetUSSRTickets()
 	{
 		return m_iAICFUSSRTickets;
+	}
+
+	void AICF_SetAICommanderState(bool usEnabled, bool ussrEnabled)
+	{
+		if (!Replication.IsServer() || !IsMaster())
+			return;
+		if (m_bAICFUSAICommanderEnabled == usEnabled &&
+			m_bAICFUSSRAICommanderEnabled == ussrEnabled)
+		{
+			return;
+		}
+
+		m_bAICFUSAICommanderEnabled = usEnabled;
+		m_bAICFUSSRAICommanderEnabled = ussrEnabled;
+		Replication.BumpMe();
+	}
+
+	bool AICF_GetAICommanderEnabled(bool isUSSR)
+	{
+		if (isUSSR)
+			return m_bAICFUSSRAICommanderEnabled;
+		return m_bAICFUSAICommanderEnabled;
+	}
+
+	bool AICF_HasAICommanderState()
+	{
+		// NONE is not a valid server mode, so false/false remains a safe
+		// pre-snapshot sentinel for clients and late joiners.
+		return m_bAICFUSAICommanderEnabled || m_bAICFUSSRAICommanderEnabled;
 	}
 
 	void AICF_SetStage4State(
@@ -366,6 +401,25 @@ modded class SCR_GameModeCampaign
 		AICF_Stage1Diagnostics.Info(
 			"TICKETS_REPLICATED",
 			string.Format("US=%1 USSR=%2", m_iAICFUSTickets, m_iAICFUSSRTickets));
+	}
+
+	protected void AICF_OnAICommanderStateReplicated()
+	{
+		if (!AICF_Stage1Diagnostics.IsConfigured())
+			AICF_Stage1Diagnostics.Configure(string.Format("stage1-proxy-%1", System.GetTickCount()));
+
+		int usEnabled;
+		int ussrEnabled;
+		if (m_bAICFUSAICommanderEnabled)
+			usEnabled = 1;
+		if (m_bAICFUSSRAICommanderEnabled)
+			ussrEnabled = 1;
+		AICF_Stage1Diagnostics.Info(
+			"COMMAND_AUTHORITY_REPLICATED",
+			string.Format(
+				"ai_commander_us=%1 ai_commander_ussr=%2",
+				usEnabled,
+				ussrEnabled));
 	}
 
 	protected void AICF_OnStage4StateReplicated()

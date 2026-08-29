@@ -117,11 +117,45 @@ $profileRoot = Join-Path $env:LOCALAPPDATA "AICF\Server-$runStamp"
   -addons '9178E5822AFE48EA,B52C5F6AEDBF423E' `
   -profile "$profileRoot" `
   -backendFreshSession `
+  -aicfAICommanderMode BOTH `
   -maxFPS 60 `
   -logStats 10000
 ```
 
-Добавляй только параметры конкретного сценария проверки, например:
+`-aicfAICommanderMode` фиксирует command authority на весь process:
+
+| Значение | Автономный target selection |
+|---|---|
+| `BOTH` | отдельный AI commander для `US` и для `USSR` |
+| `US` | только `US`; `USSR` ожидает player orders |
+| `USSR` | только `USSR`; `US` ожидает player orders |
+
+Если параметр опущен, применяется `BOTH`. Проверка exact-case: `NONE`, пустое,
+lowercase и неизвестное значение вызывают `CONFIG_INVALID` и останавливают
+startup до запуска изменяющего состояние Arland radio normalizer, его
+subscription/изменения replicated radio state, MatchController composition,
+roster и periodic loops. Arland bootstrap создаёт config один раз и передаёт тот
+же предварительно проверенный объект в `AICF_MatchController`; controller строит
+immutable policy без повторного чтения CLI. Runtime-переключения нет; для
+другого mode останови server и начни новый run. Для воспроизводимого evidence
+указывай mode явно даже при проверке default-поведения, а отдельный default-run
+выполняй без параметра.
+
+Replicated `ai_commander_us`/`ai_commander_ussr` — availability snapshot, а не
+изменяемая замена policy. Пока все двадцать асинхронных initial slots не
+перешли в `READY`, они остаются `false/false`, поэтому UI показывает
+`COMMAND SYNC`. В `TryLogRosterReady()` controller публикует flags допустимого
+mode одним authoritative state change. При любом
+`AICF_MatchController.Stop()` flags снова сбрасываются в `false/false` до снятия
+domain subscriptions и cleanup. Готовность group/agent roster по-прежнему
+проверяется отдельными readiness/generation gates.
+
+Player-commanded сторона продолжает иметь roster, tickets, economy, vehicles,
+reliability, victory и replicated UI state. Пока valid player order отсутствует,
+её combat-ready slots имеют `AWAITING_PLAYER_COMMAND` и `SYSTEM_HOLD` на HQ.
+`aicfExpectedPlayerFaction` не задаёт authority и не заменяет этот параметр.
+
+Добавляй только остальные параметры конкретного сценария проверки, например:
 
 ```powershell
 -aicfRequirePlayerForResult 0

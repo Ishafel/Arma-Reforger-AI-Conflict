@@ -1484,6 +1484,7 @@ class AICF_VehicleHandoffState
 	protected int m_iAbsoluteOrderDeadlineMs;
 	protected int m_iRestoreAttempts;
 	protected int m_iMaximumRestoreAttempts;
+	protected int m_iOrderRestoreIntentRevision;
 	protected bool m_bRestoreRequested;
 	protected bool m_bBoundToGroup;
 	protected bool m_bIsCurrent;
@@ -1511,6 +1512,7 @@ class AICF_VehicleHandoffState
 		m_iAbsoluteOrderDeadlineMs = 0;
 		m_iRestoreAttempts = 0;
 		m_iMaximumRestoreAttempts = 0;
+		m_iOrderRestoreIntentRevision = -1;
 		m_bRestoreRequested = false;
 		m_bBoundToGroup = false;
 		m_bIsCurrent = false;
@@ -1533,18 +1535,24 @@ class AICF_VehicleHandoffState
 		m_RestoredWaypoint = null;
 	}
 
-	void Begin(int nowMs, int absoluteOrderDeadlineMs, int maximumRestoreAttempts)
+	void Begin(
+		int nowMs,
+		int absoluteOrderDeadlineMs,
+		int maximumRestoreAttempts,
+		int strategicIntentRevision)
 	{
 		Reset();
 		m_iStartedAtMs = nowMs;
 		m_iAbsoluteOrderDeadlineMs = absoluteOrderDeadlineMs;
 		m_iMaximumRestoreAttempts = Math.Max(1, maximumRestoreAttempts);
+		m_iOrderRestoreIntentRevision = Math.Max(0, strategicIntentRevision);
 	}
 
 	int GetStartedAtMs() { return m_iStartedAtMs; }
 	int GetAbsoluteOrderDeadlineMs() { return m_iAbsoluteOrderDeadlineMs; }
 	int GetRestoreAttempts() { return m_iRestoreAttempts; }
 	int GetMaximumRestoreAttempts() { return m_iMaximumRestoreAttempts; }
+	int GetOrderRestoreIntentRevision() { return m_iOrderRestoreIntentRevision; }
 	bool IsRestoreRequested() { return m_bRestoreRequested; }
 	bool IsBoundToGroup() { return m_bBoundToGroup; }
 	bool IsCurrent() { return m_bIsCurrent; }
@@ -1568,6 +1576,35 @@ class AICF_VehicleHandoffState
 	int GetLastAbandonedAuditAtMs() { return m_iLastAbandonedAuditAtMs; }
 	int GetDurablePollCount() { return m_iDurablePollCount; }
 	AIWaypoint GetRestoredWaypoint() { return m_RestoredWaypoint; }
+
+	// A newer strategic assignment needs a fresh bounded restore proof even when
+	// the previous HANDOFF attempt budget was exhausted. Lease, clearance and
+	// cleanup evidence deliberately remain untouched.
+	bool RearmOrderRestoreForIntent(
+		int strategicIntentRevision,
+		int nowMs,
+		int absoluteOrderDeadlineMs,
+		int maximumRestoreAttempts)
+	{
+		if (strategicIntentRevision <= m_iOrderRestoreIntentRevision || nowMs <= 0)
+			return false;
+
+		m_iStartedAtMs = nowMs;
+		m_iAbsoluteOrderDeadlineMs = absoluteOrderDeadlineMs;
+		m_iRestoreAttempts = 0;
+		m_iMaximumRestoreAttempts = Math.Max(1, maximumRestoreAttempts);
+		m_iOrderRestoreIntentRevision = strategicIntentRevision;
+		m_bRestoreRequested = false;
+		m_bBoundToGroup = false;
+		m_bIsCurrent = false;
+		m_bWaypointInQueue = false;
+		m_bMeaningfulTask = false;
+		m_bOrderRestored = false;
+		m_iDurablePollCount = 0;
+		m_iFirstDurablePollAtMs = 0;
+		m_RestoredWaypoint = null;
+		return true;
+	}
 
 	bool BeginOrderRestoreRequest()
 	{

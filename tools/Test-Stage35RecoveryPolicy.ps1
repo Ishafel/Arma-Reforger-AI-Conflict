@@ -422,6 +422,31 @@ Assert-Contains $match 'MOB_EGRESS_HIDDEN_RECOVERY_ACCEPTED' 'BOUNDED_MOB_EGRESS
 Assert-Contains $match 'MOB_EGRESS_HIDDEN_RECOVERY_PHYSICALLY_CONFIRMED' 'BOUNDED_MOB_EGRESS_RECOVERY'
 Assert-Contains $match 'MOB_EGRESS_HIDDEN_RECOVERY_SUBMISSION_FAILED' 'BOUNDED_MOB_EGRESS_RECOVERY'
 Assert-Contains $match 'MOB_EGRESS_HIDDEN_RECOVERY_MEMBER' 'BOUNDED_MOB_EGRESS_RECOVERY'
+$hiddenMobRecovery = [regex]::Match(
+    $match,
+    '(?s)protected bool TryApplyHiddenMobEgressRecovery\(.*?(?=\r?\n\tprotected bool TryFindDistinctMobEgressDestination\()'
+)
+if (-not $hiddenMobRecovery.Success) {
+    $issues.Add('[MOB_EGRESS_RUNTIME_REVISION_HANDOFF] TryApplyHiddenMobEgressRecovery body not found')
+} else {
+    Assert-Contains $hiddenMobRecovery.Value 'int expectedStrategicIntentRevision = slot.GetStrategicIntentRevision();' 'MOB_EGRESS_RUNTIME_REVISION_HANDOFF'
+    Assert-Contains $hiddenMobRecovery.Value 'AICF_EStrategicDecisionAuthority expectedDecisionAuthority =' 'MOB_EGRESS_RUNTIME_REVISION_HANDOFF'
+    Assert-Contains $hiddenMobRecovery.Value 'slot.GetDecisionAuthority();' 'MOB_EGRESS_RUNTIME_REVISION_HANDOFF'
+    Assert-Contains $hiddenMobRecovery.Value 'int resultingAssignmentRevision = slot.GetStrategicAssignmentRevision();' 'MOB_EGRESS_RUNTIME_REVISION_HANDOFF'
+    Assert-Contains $hiddenMobRecovery.Value 'resultingAssignmentRevision == expectedAssignmentRevision + 1;' 'MOB_EGRESS_RUNTIME_REVISION_HANDOFF'
+    Assert-Contains $hiddenMobRecovery.Value 'slot.GetGroup() == group && slot.GetSpawnGeneration() == expectedGeneration &&' 'MOB_EGRESS_RUNTIME_IDENTITY_FENCE'
+    Assert-Contains $hiddenMobRecovery.Value 'slot.GetTargetBase() == expectedTarget &&' 'MOB_EGRESS_STRATEGIC_IDENTITY_FENCE'
+    Assert-Contains $hiddenMobRecovery.Value 'slot.GetDecisionAuthority() == expectedDecisionAuthority &&' 'MOB_EGRESS_STRATEGIC_IDENTITY_FENCE'
+    Assert-Contains $hiddenMobRecovery.Value 'slot.GetStrategicIntentRevision() == expectedStrategicIntentRevision;' 'MOB_EGRESS_STRATEGIC_IDENTITY_FENCE'
+    Assert-Contains $hiddenMobRecovery.Value 'slot.GetDecisionAuthority() != expectedDecisionAuthority ||' 'MOB_EGRESS_COMMIT_BOUNDARY_FENCE'
+    Assert-Contains $hiddenMobRecovery.Value 'slot.GetStrategicIntentRevision() != expectedStrategicIntentRevision ||' 'MOB_EGRESS_COMMIT_BOUNDARY_FENCE'
+    Assert-Contains $hiddenMobRecovery.Value 'runtimeWaypointRevisionAdvanced && strategicIdentityPreserved &&' 'MOB_EGRESS_RUNTIME_REVISION_HANDOFF'
+    Assert-Contains $hiddenMobRecovery.Value 'slot.GetWaypoint() != expectedWaypoint &&' 'MOB_EGRESS_RUNTIME_IDENTITY_FENCE'
+    Assert-Contains $hiddenMobRecovery.Value 'result_assignment_revision=%2' 'MOB_EGRESS_RUNTIME_REVISION_DIAGNOSTICS'
+    Assert-NotContains $hiddenMobRecovery.Value 'slot.GetStrategicAssignmentRevision() == expectedAssignmentRevision &&' 'MOB_EGRESS_RUNTIME_REVISION_HANDOFF'
+    Assert-Ordered $hiddenMobRecovery.Value 'slot.GetStrategicIntentRevision() != expectedStrategicIntentRevision ||' 'slot.MarkMobEgressHiddenMutationConsumed()' 'MOB_EGRESS_COMMIT_BOUNDARY_FENCE'
+    Assert-Ordered $hiddenMobRecovery.Value 'm_OrderPlanner.RebuildCurrentOrder(' 'resultingAssignmentRevision == expectedAssignmentRevision + 1;' 'MOB_EGRESS_RUNTIME_REVISION_HANDOFF'
+}
 Assert-Contains $groupSlot 'm_bMobEgressHiddenMutationConsumed' 'ONE_SHOT_MOB_EGRESS_MUTATION'
 Assert-Contains $groupSlot 'if (resetHiddenMutation)' 'ONE_SHOT_MOB_EGRESS_MUTATION'
 Assert-Contains $match '!slot.IsMobEgressHiddenMutationConsumed()' 'ONE_SHOT_MOB_EGRESS_MUTATION'

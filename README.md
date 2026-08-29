@@ -5,10 +5,10 @@ Scripts-only прототип автономной войны `US` против 
 и prefab-каталоги Arma Reforger; собственных world/prefab/layout-ресурсов в
 репозитории сейчас нет.
 
-Игровая логика server-authoritative: сервер выбирает цели, создаёт и заменяет
-группы, управляет транспортом, билетами, снабжением и победой. Клиент получает
-реплицируемую сводку, показывает карту/командный интерфейс и отправляет
-проверяемые сервером запросы.
+Игровая логика server-authoritative: сервер применяет выбранную при запуске
+политику командования, создаёт и заменяет группы, управляет транспортом,
+билетами, снабжением и победой. Клиент получает реплицируемую сводку,
+показывает карту/командный интерфейс и отправляет проверяемые сервером запросы.
 
 ## Текущее устройство
 
@@ -30,8 +30,19 @@ Scripts-only прототип автономной войны `US` против 
 - первые четыре слота создаются по 10 бойцов, остальные шесть — по 4;
 - стартовый состав — 64 бойца на фракцию, 128 всего;
 - максимальный бюджет управляемых бойцов по умолчанию — 220;
+- отдельные faction-scoped AI commanders активны для `US` и `USSR`; режим
+  `-aicfAICommanderMode BOTH|US|USSR` выбирается один раз при запуске dedicated
+  server, а без параметра используется `BOTH`;
 - ground vehicles всегда включены;
 - economy/supply pacing всегда включены; CLI opt-out для этих subsystems нет.
+
+`US` и `USSR` в `aicfAICommanderMode` означают сторону, которой разрешено
+автономно выбирать новые стратегические цели. Другая сторона сохраняет полный
+roster, economy, vehicles, reliability и victory state, но до player order
+остаётся в `AWAITING_PLAYER_COMMAND` и физически удерживается на своей HQ через
+`SYSTEM_HOLD`. Значения регистрозависимы; `NONE`, пустое и неизвестное значение
+отклоняются до создания roster и запуска server loops. Подробности запуска — в
+[`docs/SERVER_SETUP.md`](docs/SERVER_SETUP.md#8-параметры-aicf).
 
 Названия Stage в коде отражают эволюцию реализации, но сами по себе не являются
 статусом приёмки. Текущий проверочный baseline описан в
@@ -42,6 +53,7 @@ Scripts-only прототип автономной войны `US` против 
 ```text
 AIConflictCore/Scripts/Game/AIConflict/
   Bootstrap/     composition root и server loops
+  Command/       immutable authority policy и faction-scoped AI commanders
   Config/        defaults и aicf* CLI overrides
   Diagnostics/   стабильные [AICF][STAGE...] события
   Economy/       supply network, транзакции и abstract deliveries
