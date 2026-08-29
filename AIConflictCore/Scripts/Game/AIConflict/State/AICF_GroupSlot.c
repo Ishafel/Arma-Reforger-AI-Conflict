@@ -436,10 +436,18 @@ class AICF_GroupSlot
 
 	// Runtime waypoint identity participates in every asynchronous vehicle and
 	// recovery snapshot. Replacing a waypoint under the same strategic target
-	// must still advance the assignment revision without restarting its dwell.
+	// must still advance the assignment revision without restarting its dwell or
+	// its bounded false-completion episode. Otherwise every recovery replacement
+	// resets the no-progress counter before it can reach the route-replan budget.
 	void RecordRuntimeWaypointReplacement()
 	{
+		int previousAssignmentRevision = m_iStrategicAssignmentRevision;
 		m_iStrategicAssignmentRevision++;
+		if (m_iFalseCompletionAssignmentRevision == previousAssignmentRevision &&
+			m_iFalseCompletionGroupGeneration == m_iSpawnGeneration)
+		{
+			m_iFalseCompletionAssignmentRevision = m_iStrategicAssignmentRevision;
+		}
 		ResetMeaningfulTaskObservation();
 	}
 

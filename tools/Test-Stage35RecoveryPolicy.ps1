@@ -488,6 +488,22 @@ Assert-Ordered $match 'MOB_EGRESS_HIDDEN_RECOVERY_SUBMITTED' 'MOB_EGRESS_HIDDEN_
 Assert-Contains $groupSlot 'm_bPendingOrderRecoveryCountsAsReliabilityAttempt' 'RELIABILITY_COUNTER_DOMAINS'
 Assert-Contains $groupSlot 'm_iPendingOrderRecoveryReliabilityAttemptId' 'RELIABILITY_ATTEMPT_IDENTITY'
 Assert-Contains $groupSlot 'm_iPendingOrderRecoveryAssignmentRevision' 'RELIABILITY_ATTEMPT_IDENTITY'
+$runtimeWaypointReplacement = [regex]::Match(
+    $groupSlot,
+    '(?s)void RecordRuntimeWaypointReplacement\(\).*?(?=\r?\n\tbool IsStrategicCandidateReady\()'
+)
+if (-not $runtimeWaypointReplacement.Success) {
+    $issues.Add('[FALSE_COMPLETION_RUNTIME_REVISION_HANDOFF] RecordRuntimeWaypointReplacement body not found')
+} else {
+    Assert-Contains $runtimeWaypointReplacement.Value 'int previousAssignmentRevision = m_iStrategicAssignmentRevision;' 'FALSE_COMPLETION_RUNTIME_REVISION_HANDOFF'
+    Assert-Contains $runtimeWaypointReplacement.Value 'm_iFalseCompletionAssignmentRevision == previousAssignmentRevision' 'FALSE_COMPLETION_RUNTIME_REVISION_HANDOFF'
+    Assert-Contains $runtimeWaypointReplacement.Value 'm_iFalseCompletionGroupGeneration == m_iSpawnGeneration' 'FALSE_COMPLETION_RUNTIME_REVISION_HANDOFF'
+    Assert-Contains $runtimeWaypointReplacement.Value 'm_iFalseCompletionAssignmentRevision = m_iStrategicAssignmentRevision;' 'FALSE_COMPLETION_RUNTIME_REVISION_HANDOFF'
+    Assert-Ordered $runtimeWaypointReplacement.Value 'm_iStrategicAssignmentRevision++;' 'm_iFalseCompletionAssignmentRevision = m_iStrategicAssignmentRevision;' 'FALSE_COMPLETION_RUNTIME_REVISION_HANDOFF'
+}
+Assert-Contains $match 'if (noProgressAttempt >= FALSE_COMPLETION_ENDPOINT_BUDGET)' 'FALSE_COMPLETION_BOUNDED_FALLBACK'
+Assert-Contains $match 'HoldPositionForTemporaryRouteReplan(' 'FALSE_COMPLETION_BOUNDED_FALLBACK'
+Assert-Contains $match 'FALSE_COMPLETION_ENDPOINTS_EXHAUSTED' 'FALSE_COMPLETION_BOUNDED_FALLBACK'
 Assert-Contains $match 'TryConfirmPendingOrderRecoveryByRelayCapture(' 'RELAY_CAPTURE_TERMINAL_PROOF'
 Assert-Contains $match 'exact_target_revision_proof=1' 'RELAY_CAPTURE_TERMINAL_PROOF'
 Assert-Contains $match 'ORDER_REPAIR_ATTEMPT_TERMINATED' 'RELIABILITY_ATTEMPT_OUTCOME'
