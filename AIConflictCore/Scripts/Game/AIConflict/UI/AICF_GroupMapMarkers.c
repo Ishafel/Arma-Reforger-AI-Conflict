@@ -136,7 +136,8 @@ class AICF_GroupMapMarkerEntry : SCR_MapMarkerEntryDynamic
 		FactionManager factionManager = GetGame().GetFactionManager();
 		SCR_Faction faction;
 		if (factionManager)
-			faction = SCR_Faction.Cast(factionManager.GetFactionByKey(factionKey));
+			faction = SCR_Faction.Cast(factionManager.GetFactionByKey(
+				AICF_ContentProfile.GetActive().GetRuntimeFactionKey(factionKey)));
 
 		if (faction && markerKind == 0)
 		{

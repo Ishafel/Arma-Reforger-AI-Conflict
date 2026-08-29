@@ -59,21 +59,21 @@ class AICF_SupplyDeliverySystem
 
 	int GetDispatchedSupplies(FactionKey factionKey)
 	{
-		if (factionKey == "US")
+		if (AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey) == "US")
 			return m_iUSDispatchedSupplies;
 		return m_iUSSRDispatchedSupplies;
 	}
 
 	int GetDeliveredSupplies(FactionKey factionKey)
 	{
-		if (factionKey == "US")
+		if (AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey) == "US")
 			return m_iUSDeliveredSupplies;
 		return m_iUSSRDeliveredSupplies;
 	}
 
 	int GetReturnedSupplies(FactionKey factionKey)
 	{
-		if (factionKey == "US")
+		if (AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey) == "US")
 			return m_iUSReturnedSupplies;
 		return m_iUSSRReturnedSupplies;
 	}
@@ -84,7 +84,7 @@ class AICF_SupplyDeliverySystem
 		{
 			AICF_SupplyShipment shipment = m_aShipments[index];
 			SCR_CampaignFaction faction = usFaction;
-			if (shipment.GetFactionKey() == "USSR")
+			if (AICF_ContentProfile.GetActive().GetStableFactionKey(shipment.GetFactionKey()) == "USSR")
 				faction = ussrFaction;
 			if (!ReturnShipmentCargo(shipment, faction, "SYSTEM_STOP"))
 			{
@@ -171,14 +171,15 @@ class AICF_SupplyDeliverySystem
 	protected void TryDispatch(SCR_CampaignFaction faction)
 	{
 		FactionKey factionKey = faction.GetFactionKey();
+		FactionKey stableKey = AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey);
 		int nowMs = System.GetTickCount();
 		int lastDispatchAtMs = m_iLastUSDispatchAtMs;
-		if (factionKey == "USSR")
+		if (stableKey == "USSR")
 			lastDispatchAtMs = m_iLastUSSRDispatchAtMs;
 		if (lastDispatchAtMs > 0 && System.GetTickCount(lastDispatchAtMs) < m_Config.GetDeliveryIntervalMs())
 			return;
 
-		if (factionKey == "US")
+		if (stableKey == "US")
 			m_iLastUSDispatchAtMs = nowMs;
 		else
 			m_iLastUSSRDispatchAtMs = nowMs;
@@ -372,7 +373,7 @@ class AICF_SupplyDeliverySystem
 
 	protected void RecordDispatched(FactionKey factionKey, int supplies)
 	{
-		if (factionKey == "US")
+		if (AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey) == "US")
 			m_iUSDispatchedSupplies += supplies;
 		else
 			m_iUSSRDispatchedSupplies += supplies;
@@ -380,7 +381,7 @@ class AICF_SupplyDeliverySystem
 
 	protected void RecordDelivered(FactionKey factionKey, int supplies)
 	{
-		if (factionKey == "US")
+		if (AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey) == "US")
 			m_iUSDeliveredSupplies += supplies;
 		else
 			m_iUSSRDeliveredSupplies += supplies;
@@ -388,7 +389,7 @@ class AICF_SupplyDeliverySystem
 
 	protected void RecordReturned(FactionKey factionKey, int supplies)
 	{
-		if (factionKey == "US")
+		if (AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey) == "US")
 			m_iUSReturnedSupplies += supplies;
 		else
 			m_iUSSRReturnedSupplies += supplies;

@@ -38,6 +38,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage35Stat
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage35RecoveryPolicy.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage4Static.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-AICommanderModeStatic.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RHSIntegrationStatic.ps1
 ```
 
 Назначение:
@@ -49,6 +50,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-AICommander
 | `Test-Stage35RecoveryPolicy.ps1` | точные recovery, timing, ownership и fail-closed policies |
 | `Test-Stage4Static.ps1` | economy transaction, supply balance, replication, strategic UI и RPC authority |
 | `Test-AICommanderModeStatic.ps1` | Arland CLI preflight, immutable authority policy, faction commander boundary, intent, availability replication и UI contract |
+| `Test-RHSIntegrationStatic.ps1` | optional dependency graph, Core isolation, stock/RHS profiles, fail-closed roles/vehicles, stable-side Arland radio normalization, single lifecycle и cleanup symmetry |
 
 Аудиторы проверяют часть архитектуры регулярными выражениями. Красный rule ID
 может означать реальный regression или drift тестового контракта. Сначала
@@ -70,6 +72,8 @@ Baseline получен `2026-08-28` на `main`, commit
 
 `Test-AICommanderModeStatic.ps1` добавлен после этого исторического baseline и
 должен передаваться отдельным verdict, без выдуманного сравнения с `main`.
+То же относится к `Test-RHSIntegrationStatic.ps1`: его первый успешный прогон
+является отдельным focused verdict, а не частью исторического baseline commit.
 
 Stage 3 baseline failures:
 
@@ -102,6 +106,7 @@ Stage 3.5 baseline failures:
 | `Economy/` | Stage 4 static + Workbench + server runtime/log audit |
 | `UI/`, RPC или campaign replicated state | Stage 4 static + Workbench + server/client runtime; JIP при изменении snapshot |
 | Arland `modded` integration | Workbench + canonical Arland server runtime; клиент, если меняется UI/replication |
+| Content profile или `AIConflictArlandRHS` | все Stage/authority audits + `Test-RHSIntegrationStatic.ps1`; отдельный stock и RHS Workbench; fresh RHS server; client/JIP при изменении faction/UI mapping |
 | PowerShell analyzer | позитивный и негативный representative input; не ослаблять rule молча |
 | Enfusion version/API | pinned reference diff + полный Workbench Validate по целевой версии |
 
@@ -239,10 +244,35 @@ Select-String -LiteralPath $log.FullName -Pattern `
 [AICF][STAGE3]
 [AICF][STAGE3.5]
 [AICF][STAGE4]
+[AICF][CONTENT]
 ```
 
 Stage 2–4 используют Stage 1 `run` и `t_ms`, поэтому события одной сессии можно
 сопоставлять без приблизительных wall-clock timestamps.
+
+Для RHS runtime дополнительно обязательно подтвердить по полному остановленному
+логу:
+
+- `PROFILE_SELECTED` содержит `RHS_USMC_MSV_0_16_5150`, runtime keys
+  `RHS_USAF`/`RHS_AFRF` и stable `US`/`USSR`;
+- ровно двадцать initial slots дошли до `GROUP_ROSTER_READY`, затем один
+  `ROSTER_READY`;
+- каждый `GROUP_ROSTER_CONFIGURED` содержит `fallback_slots=0`, RHS USMC/MSV
+  `prefabs` и ни одного `Character_US_`/`Character_USSR_`;
+- после захвата односторонней frontier-base событие `RADIO_BRIDGE_NORMALIZED`
+  предшествует graph rebuild, а новый graph даёт владельцу путь от базы к relay;
+- vehicle metadata `CATALOG` повторена событием `LIVE` после spawn; выбранные
+  prefab принадлежат заявленному RHS faction catalog;
+- нет `SCRIPT (E/F)`, `ENGINE (F)`, VM exception или null-pointer;
+- RHS deployment map не пишет `Can't find image ''` для
+  `UI/Imagesets/MilitarySymbol/ID_D.imageset`; spawn-point factions отображаются
+  как полные `BLUFOR`/`OPFOR` symbols, а не пустые цветные квадраты;
+- отдельный stock Arland run по обычному `AIConflictArland` не выбрал RHS
+  profile и сохранил stock roster/vehicle behavior.
+
+Комплектные loadouts принадлежат RHS character prefab. Лог доказывает выбранный
+prefab, но визуальное соответствие оружия/формы и UI остаётся `NOT RUN`, пока
+пользователь не проверит клиент вручную.
 
 ### Runtime matrix: command authority
 

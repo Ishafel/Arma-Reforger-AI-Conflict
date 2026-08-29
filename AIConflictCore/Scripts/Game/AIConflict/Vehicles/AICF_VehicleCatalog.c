@@ -5,6 +5,15 @@
 // fit every surviving member under ALL_OR_FALLBACK.
 class AICF_VehicleCatalog
 {
+	protected ref AICF_ContentProfile m_ContentProfile;
+
+	void AICF_VehicleCatalog(AICF_ContentProfile contentProfile = null)
+	{
+		m_ContentProfile = contentProfile;
+		if (!m_ContentProfile)
+			m_ContentProfile = AICF_ContentProfile.GetActive();
+	}
+
 	bool GetCandidatePrefabsForAcquisition(
 		SCR_CampaignFaction faction,
 		AICF_EVehicleKind kind,
@@ -48,7 +57,8 @@ class AICF_VehicleCatalog
 		array<SCR_EntityCatalogEntry> entries = {};
 		catalog.GetEntityList(entries);
 		array<string> suffixes = {};
-		BuildSuffixPreference(faction.GetFactionKey(), kind, suffixes);
+		FactionKey stableKey = m_ContentProfile.GetStableFactionKey(faction.GetFactionKey());
+		m_ContentProfile.BuildVehicleSuffixPreference(stableKey, kind, suffixes);
 		foreach (string suffix : suffixes)
 			AppendCatalogMatch(entries, suffix, candidates);
 
@@ -127,80 +137,14 @@ class AICF_VehicleCatalog
 		out bool hasPilot,
 		out bool hasTurret)
 	{
-		accessibleSeats = 0;
-		hasPilot = false;
-		hasTurret = false;
-		if (prefab.IsEmpty())
+		if (!m_ContentProfile)
 			return false;
-
-		if (prefab.Contains("M923A1_transport.et") ||
-			prefab.Contains("Ural4320_transport.et"))
-		{
-			accessibleSeats = 15;
-			hasPilot = true;
-			return kind != AICF_EVehicleKind.ARMED_LIGHT;
-		}
-		if (prefab.Contains("UAZ452_transport.et"))
-		{
-			accessibleSeats = 8;
-			hasPilot = true;
-			return kind != AICF_EVehicleKind.ARMED_LIGHT;
-		}
-		if (prefab.Contains("M998_covered_long.et"))
-		{
-			accessibleSeats = 4;
-			hasPilot = true;
-			return kind != AICF_EVehicleKind.ARMED_LIGHT;
-		}
-		if (prefab.Contains("M1025_armed_M2HB") ||
-			prefab.Contains("UAZ469_PKM.et") ||
-			prefab.Contains("BRDM2_Conflict.et"))
-		{
-			// Four is intentionally conservative. Live validation may observe more,
-			// but acquisition never promises seats absent from supported metadata.
-			accessibleSeats = 4;
-			hasPilot = true;
-			hasTurret = true;
-			return kind == AICF_EVehicleKind.ARMED_LIGHT;
-		}
-
-		return false;
-	}
-
-	protected void BuildSuffixPreference(
-		FactionKey factionKey,
-		AICF_EVehicleKind kind,
-		array<string> suffixes)
-	{
-		if (kind == AICF_EVehicleKind.ARMED_LIGHT)
-		{
-			if (factionKey == "US")
-			{
-				suffixes.Insert("Prefabs/Vehicles/Wheeled/Conflict_Variants/M1025_armed_M2HB_Conflict.et");
-				suffixes.Insert("Prefabs/Vehicles/Wheeled/M998/M1025_armed_M2HB.et");
-			}
-			else if (factionKey == "USSR")
-			{
-				suffixes.Insert("Prefabs/Vehicles/Wheeled/UAZ469/UAZ469_PKM.et");
-				suffixes.Insert("Prefabs/Vehicles/Wheeled/Conflict_Variants/BRDM2_Conflict.et");
-			}
-			return;
-		}
-
-		if (kind == AICF_EVehicleKind.LIGHT_TRANSPORT)
-		{
-			if (factionKey == "US")
-				suffixes.Insert("Prefabs/Vehicles/Wheeled/M998/M998_covered_long.et");
-			else if (factionKey == "USSR")
-				suffixes.Insert("Prefabs/Vehicles/Wheeled/UAZ452/UAZ452_transport.et");
-		}
-
-		// A roomy faction truck is also the capacity fallback when a requested
-		// light transport cannot seat the full living roster.
-		if (factionKey == "US")
-			suffixes.Insert("Prefabs/Vehicles/Wheeled/M923A1/M923A1_transport.et");
-		else if (factionKey == "USSR")
-			suffixes.Insert("Prefabs/Vehicles/Wheeled/Ural4320/Ural4320_transport.et");
+		return m_ContentProfile.TryGetConservativeVehicleCapacity(
+			prefab,
+			kind,
+			accessibleSeats,
+			hasPilot,
+			hasTurret);
 	}
 
 	protected void AppendCatalogMatch(

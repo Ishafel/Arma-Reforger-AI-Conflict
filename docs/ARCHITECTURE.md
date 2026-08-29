@@ -12,6 +12,9 @@ Arma Reforger / stock Conflict
              |
              v
        AIConflictArland
+          /       \
+ stock mission    AIConflictArlandRHS
+                  + RHS dependencies
 ```
 
 `AIConflictCore` не должен знать о конкретных именах или координатах Arland.
@@ -19,8 +22,26 @@ Arma Reforger / stock Conflict
 через stock API. `AIConflictArland` подключает Core к конкретной stock-миссии и
 содержит неизбежные map-specific overrides.
 
-В production path нет собственного мира. Рабочий проект для Workbench и Diag —
-`AIConflictArland/addon.gproj`; зависимость подтягивает Core.
+В production path нет собственного мира. Stock-проект для Workbench и Diag —
+`AIConflictArland/addon.gproj`. Опциональный `AIConflictArlandRHS/addon.gproj`
+использует установленные RHS world/mission без копирования ресурсов и зависит
+от обычного Arland, Core и RHS. Обычные проекты RHS не знают.
+
+## Content profile boundary
+
+`AICF_ContentProfile` — узкая composition dependency для трёх вещей:
+
+- отображения runtime faction key в стабильную сторону AICF `US`/`USSR`;
+- детерминированных role candidates из faction `CHARACTER` catalog;
+- vehicle candidate suffixes и подтверждённой conservative metadata.
+
+Stock implementation находится в Core и воспроизводит прежние stock suffixes и
+fallback. `AICF_RHSContentProfile` целиком находится в RHS-addon: runtime
+`RHS_USAF -> US`, `RHS_AFRF -> USSR`, USMC/MSV paths и RHS vehicle metadata не
+попадают в Core. Runtime key остаётся частью entity/trip/fleet identity guards;
+stable key используется только политикой, CLI, UI и публичными Stage fields.
+Одно событие `[AICF][CONTENT][INFO][PROFILE_SELECTED]` публикует обе стороны
+mapping как startup evidence.
 
 ## Bootstrap
 
@@ -34,13 +55,14 @@ SCR_GameModeCampaign.OnGameStart()
   -> super.OnGameStart()
   -> server/master command-mode preflight: создание и strict validation
      AICF_Stage1Config до любых AICF subscriptions/callqueue
+  -> bootstrap factory выбирает и активирует один AICF_ContentProfile
   -> AICF_StrategicUIController.Start() на игровых peers
   -> server/master guard
   -> ожидание campaign.HasStarted()
   -> ожидание baseManager.IsBasesInitDone()
   -> повторная fail-closed проверка того же config instance
   -> AICF_ArlandRadioBridgeNormalizer.Start()
-  -> next-frame AICF_MatchController.Start(same config instance)
+  -> next-frame AICF_MatchController.Start(same config instance, same profile)
 ```
 
 `AICF_MatchController.Start()`:
@@ -51,7 +73,8 @@ SCR_GameModeCampaign.OnGameStart()
    перечитывая CLI.
 3. Создаёт Stage 2–4 configs и диагностические каналы.
 4. Собирает stock bases и строит `AICF_ObjectiveGraph`.
-5. Разрешает только фракции `US` и `USSR`.
+5. Разрешает только runtime-фракции выбранного profile; stock требует
+   `US`/`USSR`, RHS — `RHS_USAF`/`RHS_AFRF`.
 6. Создаёт обе faction state, общий planner, spawner, reliability, victory,
    markers, economy и vehicle subsystem, а также разрешённые политикой
    faction-scoped `AICF_AICommander`.
@@ -186,7 +209,11 @@ group reference очищаются при replacement, но durable intent на 
 восстанавливается. `AICF_EStrategicDecisionAuthority` различает
 `AI_COMMANDER`, `PLAYER_COMMAND`, `SYSTEM_HOLD` и отсутствие назначения.
 
-`AICF_GroupSpawner` создаёт controller entity и настраивает roster. Spawn queue
+`AICF_GroupSpawner` создаёт controller entity и настраивает roster через
+выбранный content profile. Profile возвращает ordered suffixes, но итоговый
+prefab обязательно должен принадлежать faction `CHARACTER` catalog и успешно
+загружаться. RHS запрещает source-roster fallback; отсутствие любой роли
+удаляет ещё пустой controller fail-closed. Spawn queue
 Reforger 1.8 асинхронна: готовность доказывается фактическим составом,
 faction/replication checks и callback/generation fencing, а не самим вызовом
 `RequestSpawn()`.
@@ -199,6 +226,13 @@ leader, а пока promotion не завершён — живой участн�
 
 Vehicle subsystem всегда включён. Его задача — временно ускорить существующий
 infantry assignment, а не стать вторым стратегическим командиром.
+
+`AICF_VehicleCatalog` не владеет content paths: он получает ordered candidates
+и metadata от active profile, затем принимает только faction `VEHICLE` catalog
+entries. Acquisition проверяет metadata до spawn и повторно измеряет live
+accessible pilot/cargo/turret compartments до fleet binding. Неизвестный prefab,
+нехватка мест, pilot/turret или невалидный AI usage дают fail-closed/fallback,
+а не скрытую подмену stock asset.
 
 Фазы одной поездки:
 
@@ -332,6 +366,11 @@ Map markers получают faction streaming и показывают союз�
 Эти `modded` классы действуют всякий раз, когда загружен Arland addon. Поэтому
 его нельзя без review подключать к другой миссии. Особенно важны порядок
 `super` и очистка event subscriptions.
+
+`AIConflictArlandRHS` добавляет ровно одно пятое расширение того же campaign
+class: override `AICF_CreateContentProfile()`. В нём нет `OnGameStart`, event
+subscription, `CallLater` или второго `AICF_MatchController`, поэтому Arland
+policies и lifecycle исполняются один раз.
 
 ## Диагностика как интерфейс
 

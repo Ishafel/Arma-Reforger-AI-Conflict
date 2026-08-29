@@ -17,6 +17,7 @@ class AICF_Stage35Diagnostics
 
 	static void Info(string eventName, string message)
 	{
+		message = AICF_ContentProfile.GetActive().NormalizeDiagnosticMessage(message);
 		Print(string.Format(
 			"%1[INFO][%2] run=%3 t_ms=%4 %5",
 			PREFIX,
@@ -28,6 +29,7 @@ class AICF_Stage35Diagnostics
 
 	static void Warning(string eventName, string message)
 	{
+		message = AICF_ContentProfile.GetActive().NormalizeDiagnosticMessage(message);
 		Print(string.Format(
 			"%1[WARNING][%2] run=%3 t_ms=%4 %5",
 			PREFIX,
@@ -40,6 +42,7 @@ class AICF_Stage35Diagnostics
 	static void Error(string eventName, string message)
 	{
 		s_bHadError = true;
+		message = AICF_ContentProfile.GetActive().NormalizeDiagnosticMessage(message);
 		Print(string.Format(
 			"%1[ERROR][%2] run=%3 t_ms=%4 %5",
 			PREFIX,

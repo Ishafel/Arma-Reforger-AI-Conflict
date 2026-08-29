@@ -9,6 +9,7 @@ modded class SCR_GameModeCampaign
 	protected ref AICF_MatchController m_AICFMatchController;
 	protected ref AICF_ArlandRadioBridgeNormalizer m_AICFRadioBridgeNormalizer;
 	protected ref AICF_StrategicUIController m_AICFStrategicUIController;
+	protected ref AICF_ContentProfile m_AICFContentProfile;
 
 	override void OnGameStart()
 	{
@@ -19,6 +20,8 @@ modded class SCR_GameModeCampaign
 		if (Replication.IsServer())
 			peerRole = "server";
 		AICF_Stage1Diagnostics.Configure(string.Format("stage1-%1-%2", peerRole, System.GetTickCount()));
+		m_AICFContentProfile = AICF_CreateContentProfile();
+		AICF_ContentProfile.SetActive(m_AICFContentProfile);
 		// Reject an invalid immutable process mode before any AICF subscription or
 		// repeating callqueue is installed on the authoritative peer.
 		if (GetGame().InPlayMode() && Replication.IsServer() && IsMaster() &&
@@ -56,8 +59,17 @@ modded class SCR_GameModeCampaign
 			m_AICFRadioBridgeNormalizer.Stop();
 			m_AICFRadioBridgeNormalizer = null;
 		}
-
 		super.OnGameEnd();
+
+		// Keep faction-key normalization active while the vanilla lifecycle tears
+		// down groups and emits their final callbacks.
+		AICF_ContentProfile.ClearActive(m_AICFContentProfile);
+		m_AICFContentProfile = null;
+	}
+
+	protected AICF_ContentProfile AICF_CreateContentProfile()
+	{
+		return new AICF_ContentProfile();
 	}
 
 	protected void AICF_TryStartStage1()
@@ -183,6 +195,6 @@ modded class SCR_GameModeCampaign
 			return;
 
 		m_AICFMatchController = new AICF_MatchController();
-		m_AICFMatchController.Start(this, m_AICFStage1Config);
+		m_AICFMatchController.Start(this, m_AICFStage1Config, m_AICFContentProfile);
 	}
 }

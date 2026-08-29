@@ -12,16 +12,30 @@ Scripts-only прототип автономной войны `US` против 
 
 ## Текущее устройство
 
-Загружаются два исходных аддона:
+Stock-вариант загружает два исходных аддона; RHS-вариант добавляет третий:
 
 | Проект | GUID | Назначение |
 |---|---|---|
 | `AIConflictCore` | `9178E5822AFE48EA` | Карто-независимая модель войны, AI, техника, экономика, UI и диагностика |
 | `AIConflictArland` | `B52C5F6AEDBF423E` | Тонкий bootstrap и политики stock Conflict для Arland |
+| `AIConflictArlandRHS` | `9F88011DA22B471C` | Опциональный RHS USMC против RHS MSV на штатной RHS Arland mission |
 
-Оба зависят от штатного проекта `58D0FB3206B6F859`; Arland дополнительно
-зависит от Core. Рабочая точка входа —
+Core и обычный Arland не имеют RHS dependencies. `AIConflictArlandRHS` зависит
+от них, RHS Content Pack 01 `1337C0DE5DABBEEF`, Content Pack 02
+`BADC0DEDABBEDA5E` и RHS - Status Quo `595F2BF2F44836FB`. Его постоянный GUID —
+`9F88011DA22B471C`. Рабочая точка входа обоих вариантов —
 `AIConflictArland/Scripts/Game/AIConflictArland/Integration/AICF_ArlandCampaignBootstrap.c`.
+RHS-addon только подменяет передаваемый через bootstrap content profile, не
+создавая второй controller или server loops.
+
+Stock profile сохраняет текущие `US`/`USSR` catalog mappings. RHS profile
+разрешает `RHS_USAF` как стабильную сторону `US`, `RHS_AFRF` как `USSR`,
+создаёт USMC MEF и MSV VKPO Demiseason rosters из faction `CHARACTER` catalogs
+и выбирает только явно поддержанные faction `VEHICLE` candidates. RHS
+character/source-roster и vehicle fallback к stock запрещён fail-closed.
+Source runtime использует штатную mission
+`{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf`; RHS world/mission assets
+в репозиторий не копируются.
 
 Актуальные defaults, видимые в коде:
 
@@ -55,6 +69,7 @@ AIConflictCore/Scripts/Game/AIConflict/
   Bootstrap/     composition root и server loops
   Command/       immutable authority policy и faction-scoped AI commanders
   Config/        defaults и aicf* CLI overrides
+  Content/       stock profile и runtime faction -> stable side mapping boundary
   Diagnostics/   стабильные [AICF][STAGE...] события
   Economy/       supply network, транзакции и abstract deliveries
   Forces/        spawn, reinforcement, cohesion и managed AI LOD
@@ -67,6 +82,9 @@ AIConflictCore/Scripts/Game/AIConflict/
 
 AIConflictArland/Scripts/Game/AIConflictArland/Integration/
   bootstrap, AI-only capture, victory override, radio normalization
+
+AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/
+  RHS USMC/MSV content profile и единственный bootstrap factory override
 
 tools/
   статические аудиторы, анализаторы runtime-логов и API reference helper
@@ -99,6 +117,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage3Stati
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage35Static.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage35RecoveryPolicy.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage4Static.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-AICommanderModeStatic.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RHSIntegrationStatic.ps1
 ```
 
 Репозиторий не содержит CI, готового `.pak` или автоматической первой

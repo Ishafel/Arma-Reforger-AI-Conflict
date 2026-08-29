@@ -2,12 +2,14 @@
 
 ## Статус и границы
 
-Проект публикуется двумя отдельными addon в следующем порядке:
+Проект состоит из двух stock-compatible addon и отдельного опционального RHS
+root-addon. Порядок публикации:
 
 | Addon | GUID / Workshop ID | Назначение |
 |---|---|---|
 | `AIConflictCore` | `9178E5822AFE48EA` | Общая server-authoritative логика и UI |
 | `AIConflictArland` | `B52C5F6AEDBF423E` | Интеграция со stock Conflict Arland; зависит от Core |
+| `AIConflictArlandRHS` | `9F88011DA22B471C` | RHS USMC/MSV integration; зависит от Core, Arland и RHS packages |
 
 GUID менять нельзя. Первый upload выполняется владельцем вручную через
 стабильную Arma Reforger Tools: CLI-параметр `-publishAddon` предназначен для
@@ -34,6 +36,10 @@ Codex не выполняет вход в Bohemia Account и не управля
 | Arland preview | `workshop/AIConflictArland/preview.jpg` |
 | Custom license Core | `AIConflictCore/license.txt` |
 | Custom license Arland | `AIConflictArland/license.txt` |
+
+Workshop metadata/preview для нового RHS entry пока не подготовлены. До их
+добавления и ручного Test upload `AIConflictArlandRHS` проверяется только как
+unpacked source addon и не объявляется опубликованным.
 
 `manifest.json` и packaged files не создаются вручную и не коммитятся:
 Resource Publisher генерирует их в выбранном Working Dir.
@@ -83,15 +89,30 @@ Resource Publisher генерирует их в выбранном Working Dir.
 Если Core не появился как dependency, Arland нельзя переводить в Public:
 сначала исправляется обнаружение dependency и повторяется upload.
 
+## Первая публикация RHS root-addon
+
+1. Сначала опубликовать и проверить Core и Arland.
+2. В stable Tools открыть `AIConflictArlandRHS/addon.gproj` с установленными RHS
+   `0.16.5150` packages.
+3. Проверить GUID `9F88011DA22B471C` и dependencies:
+   `58D0FB3206B6F859`, `9178E5822AFE48EA`, `B52C5F6AEDBF423E`,
+   `1337C0DE5DABBEEF`, `BADC0DEDABBEDA5E`, `595F2BF2F44836FB`.
+4. До upload добавить отдельные RHS metadata, preview и полный license text;
+   не переиспользовать stock entry так, чтобы скрыть RHS dependency.
+5. Первый upload выполнить вручную с visibility `Test`, затем проверить
+   автоматическую загрузку всех dependencies на чистом profile.
+
 ## Проверка packaged build
 
 Проверка из локальных исходников не доказывает исправность Workshop-пакета.
-После публикации обоих Test addon:
+После публикации применимых Test addons:
 
 1. Использовать отдельный свежий game profile и Workshop addons directory,
    которые не видят checkout репозитория.
 2. Скачать/включить `AI Conflict Arland` и доказать, что Core скачался как
    dependency.
+   Для RHS отдельно скачать/включить RHS root-addon и доказать загрузку Arland,
+   Core и трёх RHS packages.
 3. Запустить stock Conflict Arland. Отдельной scenario tile мод не добавляет.
 4. На dedicated server загрузить оба Workshop addon и сохранить полный
    остановленный server log; для UI/replication также сохранить client log.

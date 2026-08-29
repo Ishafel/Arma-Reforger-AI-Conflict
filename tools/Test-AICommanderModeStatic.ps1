@@ -152,7 +152,7 @@ if (Require-AICommanderRecord $arlandBootstrap 'AICF_ArlandCampaignBootstrap.c')
     Assert-AICommanderOrdered 'AI_COMMANDER_EARLY_REJECT' $onGameStartCode '!AICF_ValidateStage1Config())' 'new AICF_StrategicUIController' 'Invalid-mode rejection must precede the strategic UI repeating callqueue'
     Assert-AICommanderOrdered 'AI_COMMANDER_EARLY_REJECT' $scheduleCode 'if (!AICF_ValidateStage1Config())' 'new AICF_ArlandRadioBridgeNormalizer' 'Invalid-mode rejection must precede Arland radio normalization and subscription'
     Assert-AICommanderOrdered 'AI_COMMANDER_EARLY_REJECT' $scheduleCode 'if (!AICF_ValidateStage1Config())' 'CallLater(AICF_RunStage1' 'Invalid-mode rejection must precede the deferred match-controller loop'
-    Assert-AICFContains $failures 'AI_COMMANDER_POLICY_IMMUTABLE' (ConvertTo-AICFCodeText $runStage1) 'Start\s*\(\s*this\s*,\s*m_AICFStage1Config\s*\)' 'Arland bootstrap must hand the exact prevalidated config instance to MatchController'
+    Assert-AICFContains $failures 'AI_COMMANDER_POLICY_IMMUTABLE' (ConvertTo-AICFCodeText $runStage1) 'Start\s*\(\s*this\s*,\s*m_AICFStage1Config\s*,\s*m_AICFContentProfile\s*\)' 'Arland bootstrap must hand the exact prevalidated config and selected content profile to MatchController'
 }
 
 if (Require-AICommanderClass $authorityPolicy 'AICF_CommandAuthorityPolicy') {

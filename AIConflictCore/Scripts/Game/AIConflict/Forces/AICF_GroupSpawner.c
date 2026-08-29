@@ -1,6 +1,15 @@
 // Creates one managed infantry group at a validated friendly Conflict base.
 class AICF_GroupSpawner
 {
+	protected ref AICF_ContentProfile m_ContentProfile;
+
+	void AICF_GroupSpawner(AICF_ContentProfile contentProfile = null)
+	{
+		m_ContentProfile = contentProfile;
+		if (!m_ContentProfile)
+			m_ContentProfile = AICF_ContentProfile.GetActive();
+	}
+
 	SCR_AIGroup SpawnGroup(
 		SCR_CampaignFaction faction,
 		SCR_CampaignMilitaryBaseComponent spawnBase,
@@ -76,11 +85,36 @@ class AICF_GroupSpawner
 		// faction prefab is ever misconfigured, no wrong-faction characters enter
 		// SCR_AIGroup's asynchronous spawn queue.
 		Faction groupFaction = group.GetFaction();
+		if ((!groupFaction || groupFaction.GetFactionKey() != faction.GetFactionKey()) &&
+			m_ContentProfile.AllowsGroupFactionRebinding())
+		{
+			group.SetFaction(faction);
+			groupFaction = group.GetFaction();
+			if (groupFaction && groupFaction.GetFactionKey() == faction.GetFactionKey())
+			{
+				AICF_Stage35Diagnostics.Info(
+					"GROUP_FACTION_REBOUND",
+					string.Format(
+						"faction=%1 slot=%2 profile=%3 timing=PRE_ROSTER_REQUEST",
+						faction.GetFactionKey(),
+						slotId,
+						m_ContentProfile.GetProfileKey()));
+			}
+		}
 		if (!groupFaction || groupFaction.GetFactionKey() != faction.GetFactionKey())
 		{
+			string actualFactionKey = "NONE";
+			if (groupFaction)
+				actualFactionKey = groupFaction.GetFactionKey();
+
 			AICF_Stage1Diagnostics.Error(
 				"GROUP_FACTION_MISMATCH",
-				string.Format("requested=%1 slot=%2", faction.GetFactionKey(), slotId));
+				string.Format(
+					"requested=%1 actual=%2 slot=%3 profile=%4",
+					faction.GetFactionKey(),
+					actualFactionKey,
+					slotId,
+					m_ContentProfile.GetProfileKey()));
 			RplComponent.DeleteRplEntity(group, false);
 			return null;
 		}
@@ -88,7 +122,15 @@ class AICF_GroupSpawner
 		int sourceRosterSize;
 		int fallbackSlots;
 		string configuredRoles;
-		if (!ConfigureManagedRoster(group, faction, desiredSize, sourceRosterSize, fallbackSlots, configuredRoles))
+		string configuredPrefabs;
+		if (!ConfigureManagedRoster(
+			group,
+			faction,
+			desiredSize,
+			sourceRosterSize,
+			fallbackSlots,
+			configuredRoles,
+			configuredPrefabs))
 		{
 			AICF_Stage35Diagnostics.Error(
 				"GROUP_ROSTER_CONFIG_INVALID",
@@ -112,12 +154,13 @@ class AICF_GroupSpawner
 		AICF_Stage35Diagnostics.Info(
 			"GROUP_ROSTER_CONFIGURED",
 			string.Format(
-				"faction=%1 slot=%2 size=%3 roles=%4 fallback_slots=%5",
+				"faction=%1 slot=%2 size=%3 profile=%4 roles=%5 fallback_slots=%6",
 				faction.GetFactionKey(),
 				slotId,
 				desiredSize,
+				m_ContentProfile.GetProfileKey(),
 				configuredRoles,
-				fallbackSlots));
+				fallbackSlots) + string.Format(" prefabs=%1", configuredPrefabs));
 
 		AICF_Stage35Diagnostics.Info(
 			"GROUP_ENTITY_SPAWNED",
@@ -158,12 +201,18 @@ class AICF_GroupSpawner
 		int expectedSize,
 		out int sourceRosterSize,
 		out int fallbackSlots,
-		out string configuredRoles)
+		out string configuredRoles,
+		out string configuredPrefabs)
 	{
 		sourceRosterSize = 0;
 		fallbackSlots = 0;
 		configuredRoles = string.Empty;
-		if (!group || !faction || expectedSize <= 0 || !group.m_aUnitPrefabSlots)
+		configuredPrefabs = string.Empty;
+		if (!group || !faction || !m_ContentProfile || expectedSize <= 0 ||
+			!group.m_aUnitPrefabSlots)
+			return false;
+		FactionKey stableKey = m_ContentProfile.GetStableFactionKey(faction.GetFactionKey());
+		if (stableKey.IsEmpty())
 			return false;
 
 		array<ResourceName> sourceRoster = {};
@@ -188,11 +237,32 @@ class AICF_GroupSpawner
 		for (int memberIndex = 0; memberIndex < expectedSize; memberIndex++)
 		{
 			string role;
-			string prefabSuffix;
-			BuildRoleSlot(faction.GetFactionKey(), memberIndex, role, prefabSuffix);
-			ResourceName selectedPrefab = FindCharacterPrefab(characterEntries, prefabSuffix);
+			array<string> prefabSuffixes = {};
+			if (!m_ContentProfile.BuildCharacterRoleCandidates(
+				stableKey,
+				memberIndex,
+				role,
+				prefabSuffixes))
+			{
+				return false;
+			}
+			ResourceName selectedPrefab = FindCharacterPrefab(characterEntries, prefabSuffixes);
 			if (selectedPrefab.IsEmpty())
 			{
+				if (!m_ContentProfile.AllowsSourceRosterFallback())
+				{
+					AICF_Stage35Diagnostics.Error(
+						"CONTENT_ROLE_PREFAB_MISSING",
+						string.Format(
+							"faction=%1 stable_side=%2 profile=%3 member=%4 role=%5 candidates=%6 fallback=DENIED",
+							faction.GetFactionKey(),
+							stableKey,
+							m_ContentProfile.GetProfileKey(),
+							memberIndex + 1,
+							role,
+							JoinSuffixes(prefabSuffixes)));
+					return false;
+				}
 				selectedPrefab = GetSourceRosterFallback(sourceRoster, memberIndex);
 				fallbackSlots++;
 			}
@@ -201,99 +271,52 @@ class AICF_GroupSpawner
 				return false;
 
 			if (!configuredRoles.IsEmpty())
+			{
 				configuredRoles += ",";
+				configuredPrefabs += ",";
+			}
 			configuredRoles += string.Format("%1:%2", memberIndex + 1, role);
+			configuredPrefabs += string.Format("%1:%2", memberIndex + 1, selectedPrefab);
 			group.m_aUnitPrefabSlots.Insert(selectedPrefab);
 		}
 
 		return group.m_aUnitPrefabSlots.Count() == expectedSize;
 	}
 
-	// A managed squad has a stable ten-position table. Smaller squads take the
-	// prefix, so slot 1 is always command and the first four always contain the
-	// commander, medic, machine-gunner and anti-tank specialist requested by the
-	// match configuration.
-	protected void BuildRoleSlot(
-		FactionKey factionKey,
-		int memberIndex,
-		out string role,
-		out string prefabSuffix)
-	{
-		string prefix = "Character_US_";
-		if (factionKey == "USSR")
-			prefix = "Character_USSR_";
-
-		switch (memberIndex)
-		{
-			case 0:
-				role = "SQUAD_LEADER";
-				prefabSuffix = prefix + "SL.et";
-				return;
-			case 1:
-				role = "MEDIC";
-				prefabSuffix = prefix + "Medic.et";
-				return;
-			case 2:
-				role = "MACHINE_GUNNER";
-				prefabSuffix = prefix + "MG.et";
-				return;
-			case 3:
-				role = "ANTI_TANK";
-				prefabSuffix = prefix + "AT.et";
-				return;
-			case 4:
-				role = "GRENADIER";
-				prefabSuffix = prefix + "GL.et";
-				return;
-			case 5:
-				role = "AUTOMATIC_RIFLEMAN";
-				prefabSuffix = prefix + "AR.et";
-				return;
-			case 6:
-				if (factionKey == "USSR")
-				{
-					role = "SENIOR_RIFLEMAN";
-					prefabSuffix = prefix + "SR.et";
-				}
-				else
-				{
-					role = "TEAM_LEADER";
-					prefabSuffix = prefix + "TL.et";
-				}
-				return;
-			case 7:
-				role = "MACHINE_GUNNER_ASSISTANT";
-				prefabSuffix = prefix + "AMG.et";
-				return;
-			case 8:
-				role = "ANTI_TANK_ASSISTANT";
-				prefabSuffix = prefix + "AAT.et";
-				return;
-		}
-
-		role = "RIFLEMAN";
-		prefabSuffix = prefix + "Rifleman.et";
-	}
-
 	protected ResourceName FindCharacterPrefab(
 		array<SCR_EntityCatalogEntry> entries,
-		string prefabSuffix)
+		array<string> prefabSuffixes)
 	{
-		foreach (SCR_EntityCatalogEntry entry : entries)
+		foreach (string prefabSuffix : prefabSuffixes)
 		{
-			if (!entry)
-				continue;
+			foreach (SCR_EntityCatalogEntry entry : entries)
+			{
+				if (!entry)
+					continue;
 
-			ResourceName prefab = entry.GetPrefab();
-			if (prefab.IsEmpty() || !prefab.Contains(prefabSuffix))
-				continue;
+				ResourceName prefab = entry.GetPrefab();
+				if (prefab.IsEmpty() || !prefab.Contains(prefabSuffix))
+					continue;
 
-			Resource resource = Resource.Load(prefab);
-			if (resource && resource.IsValid())
-				return prefab;
+				Resource resource = Resource.Load(prefab);
+				if (resource && resource.IsValid())
+					return prefab;
+			}
 		}
 
 		return ResourceName.Empty;
+	}
+
+	protected string JoinSuffixes(array<string> suffixes)
+	{
+		string result;
+		foreach (string suffix : suffixes)
+		{
+			if (!result.IsEmpty())
+				result += ",";
+			result += suffix;
+		}
+		return result;
 	}
 
 	protected ResourceName GetSourceRosterFallback(

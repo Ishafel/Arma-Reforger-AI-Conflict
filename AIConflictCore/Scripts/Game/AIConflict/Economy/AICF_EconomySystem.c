@@ -502,7 +502,7 @@ class AICF_EconomySystem
 			AICF_DeploymentReservation reservation = m_aReservations[index];
 			AICF_FactionState state = usState;
 			SCR_CampaignFaction faction = usFaction;
-			if (reservation.GetFactionKey() == "USSR")
+			if (AICF_ContentProfile.GetActive().GetStableFactionKey(reservation.GetFactionKey()) == "USSR")
 			{
 				state = ussrState;
 				faction = ussrFaction;

@@ -27,7 +27,8 @@ class AICF_TransportTripController
 		AICF_GroupCohesionPolicy cohesionPolicy,
 		AICF_OrderPlanner orderPlanner,
 		AICF_ObjectiveGraph objectiveGraph,
-		AICF_TargetSelector targetSelector)
+		AICF_TargetSelector targetSelector,
+		AICF_ContentProfile contentProfile)
 	{
 		m_Config = config;
 		if (!m_Config)
@@ -40,7 +41,8 @@ class AICF_TransportTripController
 			m_Config,
 			campaign,
 			conflictAdapter,
-			cohesionPolicy);
+			cohesionPolicy,
+			contentProfile);
 		m_BoardingFlow = new AICF_VehicleBoardingFlow(m_Config, watchdog);
 		m_TransitFlow = new AICF_VehicleTransitFlow(m_Config, m_WaypointFactory, watchdog);
 		m_DismountFlow = new AICF_VehicleDismountFlow(m_Config, watchdog, m_WaypointFactory);

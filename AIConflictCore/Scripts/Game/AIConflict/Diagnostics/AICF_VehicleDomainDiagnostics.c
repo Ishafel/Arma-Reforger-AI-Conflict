@@ -637,13 +637,15 @@ class AICF_VehicleDomainDiagnostics
 				capHeld += fleet.GetActiveOrReservedCount();
 				worldPool += fleet.GetWorldPoolCount();
 				totalCap += fleet.GetMaximumActiveOrReserved();
-				if (fleet.GetFactionKey() == "US")
+				FactionKey stableKey = AICF_ContentProfile.GetActive().GetStableFactionKey(
+					fleet.GetFactionKey());
+				if (stableKey == "US")
 				{
 					usActive = fleet.GetActiveCount();
 					usReserved = fleet.GetReservedCount();
 					usWorldPool = fleet.GetWorldPoolCount();
 				}
-				else if (fleet.GetFactionKey() == "USSR")
+				else if (stableKey == "USSR")
 				{
 					ussrActive = fleet.GetActiveCount();
 					ussrReserved = fleet.GetReservedCount();

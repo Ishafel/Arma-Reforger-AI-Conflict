@@ -8,7 +8,9 @@ metadata и preview assets хранятся в `workshop/`, но первая у
 выполняются владельцем вручную через Workbench по
 [`docs/PUBLISHING.md`](PUBLISHING.md).
 
-Рабочий `gproj` — `AIConflictArland/addon.gproj`; он зависит от Core и vanilla.
+Stock рабочий `gproj` — `AIConflictArland/addon.gproj`; он зависит от Core и
+vanilla. RHS рабочий `gproj` — `AIConflictArlandRHS/addon.gproj`, постоянный
+GUID `9F88011DA22B471C`; обычные проекты не получают его RHS dependencies.
 
 ## Требования
 
@@ -50,6 +52,29 @@ if ($LASTEXITCODE -ne 0)
   throw "Workbench Validate failed with exit code $LASTEXITCODE. Logs: $logsDir"
 }
 ```
+
+Для RHS-варианта укажи установленный каталог RHS и валидируй отдельный root
+project со всем dependency graph:
+
+```powershell
+$rhsRoot = 'C:\Users\retar\OneDrive\Документы\My Games\ArmaReforger\addons'
+$rhsLogsDir = Join-Path $env:LOCALAPPDATA ('AICF\Workbench-RHS-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+
+& "$toolsRoot\Workbench\ArmaReforgerWorkbenchSteamDiag.exe" `
+  -noThrow `
+  -wbsilent `
+  -gproj "$repoRoot\AIConflictArlandRHS\addon.gproj" `
+  -addonsDir "$gameRoot\addons,$repoRoot,$rhsRoot" `
+  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C' `
+  -logsDir "$rhsLogsDir" `
+  -wbModule=ScriptEditor `
+  -run `
+  -validate
+```
+
+RHS target зафиксирован на Status Quo `0.16.5150` и Reforger `1.8.0.10`.
+После обновления любого RHS package нужны новый catalog probe, Workbench и
+runtime; числа capacity и prefab mappings нельзя переносить автоматически.
 
 `resourceDatabase.rdb` может быть создан Workbench локально и не коммитится.
 Compile evidence требует успешного создания Game module и отсутствия
@@ -167,6 +192,36 @@ Vehicle и economy subsystems включены всегда. Параметры
 Не переиспользуй старый profile и не заменяй эту схему Host UI или raw world
 без `-MissionHeader`/`-worldSystemsConfig`.
 
+## Direct Diag server: RHS Arland Conflict
+
+RHS source-run использует штатные RHS world и mission. Не подставляй stock raw
+world: он создаёт stock faction manager даже при RHS `MissionHeader`.
+
+```powershell
+$serverRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger Server'
+$repoRoot = (Resolve-Path '.').Path
+$rhsRoot = 'C:\Users\retar\OneDrive\Документы\My Games\ArmaReforger\addons'
+$runStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$profileRoot = Join-Path $env:LOCALAPPDATA "AICF\Server-RHS-$runStamp"
+
+& "$serverRoot\ArmaReforgerServerDiag.exe" `
+  -gproj "$repoRoot\AIConflictArlandRHS\addon.gproj" `
+  -server 'Worlds/MP/Conflict/CTI_Campaign_Arland_RHS.ent' `
+  -MissionHeader 'Missions/RHS_Conflict_Arland.conf' `
+  -worldSystemsConfig 'Configs/Systems/ConflictSystems.conf' `
+  -addonsDir "$repoRoot,$serverRoot\addons,$rhsRoot" `
+  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C' `
+  -profile "$profileRoot" `
+  -backendFreshSession `
+  -aicfAICommanderMode BOTH `
+  -maxFPS 60 `
+  -logStats 10000
+```
+
+Startup должен дать `[AICF][CONTENT][INFO][PROFILE_SELECTED]` с profile
+`RHS_USMC_MSV_0_16_5150`, runtime sides `RHS_USAF`/`RHS_AFRF` и stable sides
+`US`/`USSR`. Все `[AICF][STAGE...] faction=...` сохраняют stable values.
+
 ## Direct Diag client
 
 Если клиент нужен для log-side проверки, Codex запускает его из терминала, не
@@ -190,6 +245,21 @@ $clientProfile = Join-Path $env:LOCALAPPDATA "AICF\Client-$runStamp"
 
 Стандартный локальный game port — `2001`. Для другого порта укажи его в
 client target согласно текущему Reforger CLI.
+
+RHS-клиент использует тот же RHS dependency set:
+
+```powershell
+$rhsRoot = 'C:\Users\retar\OneDrive\Документы\My Games\ArmaReforger\addons'
+$rhsClientProfile = Join-Path $env:LOCALAPPDATA ('AICF\Client-RHS-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+
+& "$gameRoot\ArmaReforgerSteamDiag.exe" `
+  -gproj "$repoRoot\AIConflictArlandRHS\addon.gproj" `
+  -client 127.0.0.1 `
+  -addonsDir "$repoRoot,$gameRoot\addons,$rhsRoot" `
+  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C' `
+  -profile "$rhsClientProfile" `
+  -backendFreshSession
+```
 
 ## Логи
 

@@ -206,12 +206,16 @@ if ($match) {
 }
 
 $catalog = Find-AICFClassRecord $records 'AICF_VehicleCatalog'
-if ($catalog) {
-    Assert-AICFContains $failures 'STAGE35_FACTION_CATALOG' $catalog.Source 'M923A1[\\/]M923A1_transport\.et' 'US truck catalog candidate must remain M923A1'
-    Assert-AICFContains $failures 'STAGE35_FACTION_CATALOG' $catalog.Source 'M998[\\/]M998_covered_long\.et' 'US roomy unarmed light candidate must remain M998'
-    Assert-AICFContains $failures 'STAGE35_FACTION_CATALOG' $catalog.Source 'Ural4320[\\/]Ural4320_transport\.et' 'USSR truck catalog candidate must remain Ural'
-    Assert-AICFContains $failures 'STAGE35_FACTION_CATALOG' $catalog.Source 'UAZ452[\\/]UAZ452_transport\.et' 'USSR roomy unarmed light candidate must remain UAZ-452'
-    Assert-AICFContains $failures 'STAGE35_FACTION_CATALOG' $catalog.Code 'AICF_EVehicleKind\.LIGHT_TRANSPORT' 'Unarmed light transport must remain distinct from trucks and armed light vehicles'
+$stockContentProfile = Find-AICFClassRecord $records 'AICF_ContentProfile'
+if ($catalog -and $stockContentProfile) {
+    Assert-AICFContains $failures 'STAGE35_FACTION_CATALOG' $stockContentProfile.Source 'M923A1[\\/]M923A1_transport\.et' 'US truck catalog candidate must remain M923A1 in the stock profile'
+    Assert-AICFContains $failures 'STAGE35_FACTION_CATALOG' $stockContentProfile.Source 'M998[\\/]M998_covered_long\.et' 'US roomy unarmed light candidate must remain M998 in the stock profile'
+    Assert-AICFContains $failures 'STAGE35_FACTION_CATALOG' $stockContentProfile.Source 'Ural4320[\\/]Ural4320_transport\.et' 'USSR truck catalog candidate must remain Ural in the stock profile'
+    Assert-AICFContains $failures 'STAGE35_FACTION_CATALOG' $stockContentProfile.Source 'UAZ452[\\/]UAZ452_transport\.et' 'USSR roomy unarmed light candidate must remain UAZ-452 in the stock profile'
+    Assert-AICFContains $failures 'STAGE35_FACTION_CATALOG' $stockContentProfile.Code 'AICF_EVehicleKind\.LIGHT_TRANSPORT' 'Unarmed light transport must remain distinct from trucks and armed light vehicles'
+    Assert-AICFContains $failures 'STAGE35_FACTION_CATALOG' $catalog.Code 'BuildVehicleSuffixPreference' 'Vehicle catalog must resolve candidates through the active content profile'
+} else {
+    Add-AICFAuditFailure $failures 'STAGE35_COMPONENT_MISSING' 'Missing vehicle catalog or stock content profile'
 }
 
 $acquisition = Find-AICFClassRecord $records 'AICF_VehicleAcquisitionFlow'

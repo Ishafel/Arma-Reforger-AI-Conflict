@@ -191,8 +191,9 @@ class AICF_ArlandRadioBridgeNormalizer
 		if (!faction)
 			return false;
 
-		FactionKey factionKey = faction.GetFactionKey();
-		return factionKey == "US" || factionKey == "USSR";
+		FactionKey stableKey = AICF_ContentProfile.GetActive().GetStableFactionKey(
+			faction.GetFactionKey());
+		return stableKey == "US" || stableKey == "USSR";
 	}
 
 	protected void RefreshAuthoritativeCoverage()

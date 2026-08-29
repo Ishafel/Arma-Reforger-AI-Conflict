@@ -71,6 +71,7 @@ class AICF_MatchController
 	protected ref AICF_Stage2Config m_Stage2Config;
 	protected ref AICF_Stage3Config m_Stage3Config;
 	protected ref AICF_Stage4Config m_Stage4Config;
+	protected ref AICF_ContentProfile m_ContentProfile;
 	protected ref AICF_CommandAuthorityPolicy m_CommandAuthorityPolicy;
 	protected ref AICF_AICommander m_USAICommander;
 	protected ref AICF_AICommander m_USSRAICommander;
@@ -111,7 +112,8 @@ class AICF_MatchController
 
 	void Start(
 		SCR_GameModeCampaign campaign,
-		AICF_Stage1Config immutableConfig = null)
+		AICF_Stage1Config immutableConfig = null,
+		AICF_ContentProfile contentProfile = null)
 	{
 		if (m_bStarted)
 		{
@@ -131,6 +133,11 @@ class AICF_MatchController
 
 		m_Campaign = campaign;
 		s_ActiveController = this;
+		m_ContentProfile = contentProfile;
+		if (!m_ContentProfile)
+			m_ContentProfile = AICF_ContentProfile.GetActive();
+		AICF_ContentProfile.SetActive(m_ContentProfile);
+		AICF_ContentDiagnostics.ProfileSelected(m_ContentProfile);
 		m_Config = immutableConfig;
 		if (!m_Config)
 			m_Config = new AICF_Stage1Config();
@@ -161,7 +168,7 @@ class AICF_MatchController
 		m_ConflictAdapter = new AICF_ConflictAdapter();
 		m_ObjectiveGraph = new AICF_ObjectiveGraph();
 		m_TargetSelector = new AICF_TargetSelector();
-		m_GroupSpawner = new AICF_GroupSpawner();
+		m_GroupSpawner = new AICF_GroupSpawner(m_ContentProfile);
 		m_GroupCohesionPolicy = new AICF_GroupCohesionPolicy();
 		m_ManagedAILODPolicy = new AICF_ManagedAILODPolicy();
 		m_ReinforcementSystem = new AICF_ReinforcementSystem();
@@ -175,7 +182,8 @@ class AICF_MatchController
 			m_OrderPlanner,
 			m_GroupCohesionPolicy,
 			m_ObjectiveGraph,
-			m_TargetSelector);
+			m_TargetSelector,
+			m_ContentProfile);
 		m_GroupMapMarkers = new AICF_GroupMapMarkerSystem();
 
 		array<SCR_CampaignMilitaryBaseComponent> objectiveBases = {};
@@ -188,10 +196,20 @@ class AICF_MatchController
 		}
 		m_iStrategicBaseRevision = 1;
 
-		if (!m_ConflictAdapter.ResolveFaction(m_Campaign, SCR_ECampaignFaction.BLUFOR, "US", m_USFaction) ||
-			!m_ConflictAdapter.ResolveFaction(m_Campaign, SCR_ECampaignFaction.OPFOR, "USSR", m_USSRFaction))
+		if (!m_ConflictAdapter.ResolveFaction(
+			m_Campaign,
+			SCR_ECampaignFaction.BLUFOR,
+			m_ContentProfile.GetRuntimeFactionKey("US"),
+			m_USFaction) ||
+			!m_ConflictAdapter.ResolveFaction(
+				m_Campaign,
+				SCR_ECampaignFaction.OPFOR,
+				m_ContentProfile.GetRuntimeFactionKey("USSR"),
+				m_USSRFaction))
 		{
-			Fail("FACTION_RESOLUTION_FAILED", "Stock US and USSR factions are required");
+			Fail(
+				"FACTION_RESOLUTION_FAILED",
+				string.Format("Content profile %1 factions are required", m_ContentProfile.GetProfileKey()));
 			return;
 		}
 
@@ -522,9 +540,10 @@ class AICF_MatchController
 			return false;
 
 		AICF_FactionState factionState;
-		if (faction.GetFactionKey() == "US")
+		FactionKey stableFactionKey = m_ContentProfile.GetStableFactionKey(faction.GetFactionKey());
+		if (stableFactionKey == "US")
 			factionState = m_USState;
-		else if (faction.GetFactionKey() == "USSR")
+		else if (stableFactionKey == "USSR")
 			factionState = m_USSRState;
 		if (!factionState)
 			return false;
@@ -629,9 +648,10 @@ class AICF_MatchController
 			return false;
 
 		AICF_FactionState factionState;
-		if (faction.GetFactionKey() == "US")
+		FactionKey stableFactionKey = m_ContentProfile.GetStableFactionKey(faction.GetFactionKey());
+		if (stableFactionKey == "US")
 			factionState = m_USState;
-		else if (faction.GetFactionKey() == "USSR")
+		else if (stableFactionKey == "USSR")
 			factionState = m_USSRState;
 		if (!factionState)
 			return false;
@@ -5574,13 +5594,16 @@ class AICF_MatchController
 		if (factionManager)
 			faction = factionManager.GetPlayerFaction(playerId);
 
-		if (faction && (faction.GetFactionKey() == "US" || faction.GetFactionKey() == "USSR"))
+		FactionKey stableFactionKey;
+		if (faction)
+			stableFactionKey = m_ContentProfile.GetStableFactionKey(faction.GetFactionKey());
+		if (faction && (stableFactionKey == "US" || stableFactionKey == "USSR"))
 		{
 			m_bObservedPlayerJoin = true;
-			m_sObservedPlayerFaction = faction.GetFactionKey();
+			m_sObservedPlayerFaction = stableFactionKey;
 			AICF_Stage1Diagnostics.Info(
 				"PLAYER_JOINED",
-				string.Format("player=%1 faction=%2", playerId, faction.GetFactionKey()));
+				string.Format("player=%1 faction=%2", playerId, stableFactionKey));
 			return;
 		}
 

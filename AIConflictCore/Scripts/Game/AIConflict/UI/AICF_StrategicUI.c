@@ -161,7 +161,8 @@ class AICF_StrategicUIController
 				m_wHUDRoot.SetVisible(false);
 			return;
 		}
-		FactionKey key = localFaction.GetFactionKey();
+		FactionKey key = AICF_ContentProfile.GetActive().GetStableFactionKey(
+			localFaction.GetFactionKey());
 		if (key != "US" && key != "USSR")
 		{
 			if (m_wHUDRoot)
@@ -258,7 +259,8 @@ class AICF_StrategicUIController
 		Faction localFaction = SCR_FactionManager.SGetLocalPlayerFaction();
 		if (!localFaction)
 			return;
-		FactionKey localFactionKey = localFaction.GetFactionKey();
+		FactionKey localFactionKey = AICF_ContentProfile.GetActive().GetStableFactionKey(
+			localFaction.GetFactionKey());
 		if (localFactionKey != "US" && localFactionKey != "USSR")
 			return;
 		m_bLocalUSSR = localFactionKey == "USSR";

@@ -5,22 +5,26 @@ class AICF_Diagnostics
 
 	static void Info(string eventName, string message)
 	{
+		message = AICF_ContentProfile.GetActive().NormalizeDiagnosticMessage(message);
 		Print(string.Format("%1[INFO][%2] %3", PREFIX, eventName, message), LogLevel.NORMAL);
 	}
 
 	static void Warning(string eventName, string message)
 	{
+		message = AICF_ContentProfile.GetActive().NormalizeDiagnosticMessage(message);
 		Print(string.Format("%1[WARNING][%2] %3", PREFIX, eventName, message), LogLevel.WARNING);
 	}
 
 	static void Error(string eventName, string message)
 	{
+		message = AICF_ContentProfile.GetActive().NormalizeDiagnosticMessage(message);
 		Print(string.Format("%1[ERROR][%2] %3", PREFIX, eventName, message), LogLevel.ERROR);
 		AICF_Stage1Diagnostics.RecordExternalError("AICF_Diagnostics", eventName, message);
 	}
 
 	static void Result(bool success, string message)
 	{
+		message = AICF_ContentProfile.GetActive().NormalizeDiagnosticMessage(message);
 		if (success)
 			Print(string.Format("%1[RESULT][PASS] %2", PREFIX, message), LogLevel.NORMAL);
 		else

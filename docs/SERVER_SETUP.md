@@ -3,7 +3,8 @@
 ## Что создаёт этот гайд
 
 Инструкция поднимает локальный development server Arma Reforger Conflict на
-Arland с исходными аддонами `AIConflictCore` и `AIConflictArland`. Сервер
+Arland с исходными аддонами `AIConflictCore` и `AIConflictArland` либо их
+опциональным RHS root-addon `AIConflictArlandRHS`. Сервер
 запускается из PowerShell напрямую через `ArmaReforgerServerDiag.exe`, без
 Launcher, Host UI, Workbench GUI и скриншотов.
 
@@ -294,6 +295,66 @@ Codex может запустить client этой командой и анал
 аддонов; скорректируй `$repoRoot` и `$gameRoot` и предварительно выполни там
 терминальный Workbench Validate, чтобы создать согласованную Resource Database.
 Подключение произвольных Internet-клиентов этим source workflow не покрывается.
+
+### RHS-вариант: USMC против MSV
+
+Нужны RHS - Status Quo `0.16.5150` (`595F2BF2F44836FB`), Content Pack 01
+(`1337C0DE5DABBEEF`) и Content Pack 02 (`BADC0DEDABBEDA5E`). Постоянный GUID
+`AIConflictArlandRHS` — `9F88011DA22B471C`; stock Core/Arland от RHS не
+зависят. Сначала выполни RHS Workbench-команду из `docs/DEVELOPMENT.md`.
+
+Запуск dedicated server на штатной RHS mission:
+
+```powershell
+$repoRoot = (Resolve-Path '.').Path
+$serverRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger Server'
+$serverExe = Join-Path $serverRoot 'ArmaReforgerServerDiag.exe'
+$rhsRoot = 'C:\Users\retar\OneDrive\Документы\My Games\ArmaReforger\addons'
+$rhsServerProfile = Join-Path $env:LOCALAPPDATA ('AICF\Server-RHS-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+
+& $serverExe `
+  -gproj "$repoRoot\AIConflictArlandRHS\addon.gproj" `
+  -server 'Worlds/MP/Conflict/CTI_Campaign_Arland_RHS.ent' `
+  -MissionHeader 'Missions/RHS_Conflict_Arland.conf' `
+  -worldSystemsConfig 'Configs/Systems/ConflictSystems.conf' `
+  -addonsDir "$repoRoot,$serverRoot\addons,$rhsRoot" `
+  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C' `
+  -profile "$rhsServerProfile" `
+  -backendFreshSession `
+  -aicfAICommanderMode BOTH `
+  -maxFPS 60 `
+  -logStats 10000
+```
+
+Здесь обязательны именно RHS raw world и RHS `MissionHeader`. Stock world с
+RHS header оставляет faction keys `US`/`USSR` и не является RHS runtime.
+Корректный startup сообщает:
+
+```text
+[AICF][CONTENT][INFO][PROFILE_SELECTED] profile=RHS_USMC_MSV_0_16_5150 runtime_blufor=RHS_USAF stable_blufor=US runtime_opfor=RHS_AFRF stable_opfor=USSR
+```
+
+RHS-клиент запускается с тем же checkout и packages:
+
+```powershell
+$gameRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger'
+$clientExe = Join-Path $gameRoot 'ArmaReforgerSteamDiag.exe'
+$rhsClientProfile = Join-Path $env:LOCALAPPDATA ('AICF\Client-RHS-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+
+& $clientExe `
+  -gproj "$repoRoot\AIConflictArlandRHS\addon.gproj" `
+  -client 127.0.0.1 `
+  -addonsDir "$repoRoot,$gameRoot\addons,$rhsRoot" `
+  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C' `
+  -profile "$rhsClientProfile" `
+  -backendFreshSession
+```
+
+Перед verdict останови оба процесса и проверь полные server/client logs.
+`GROUP_ROSTER_CONFIGURED` должен иметь RHS `profile`, `fallback_slots=0` и
+USMC/MSV `prefabs`; vehicle `CATALOG` и `LIVE` capacity events должны указывать
+только candidates из RHS profile. Внешний вид формы, оружия и UI проверяется
+пользователем вручную, не через GUI automation Codex.
 
 ## 8. Параметры AICF
 

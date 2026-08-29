@@ -25,7 +25,8 @@ class AICF_VehicleCoordinator
 		AICF_OrderPlanner orderPlanner,
 		AICF_GroupCohesionPolicy cohesionPolicy,
 		AICF_ObjectiveGraph objectiveGraph,
-		AICF_TargetSelector targetSelector)
+		AICF_TargetSelector targetSelector,
+		AICF_ContentProfile contentProfile)
 	{
 		m_Config = config;
 		m_Campaign = campaign;
@@ -42,7 +43,8 @@ class AICF_VehicleCoordinator
 			cohesionPolicy,
 			orderPlanner,
 			objectiveGraph,
-			targetSelector);
+			targetSelector,
+			contentProfile);
 		m_CleanupManager = new AICF_VehicleCleanupManager(config, campaign);
 		m_TripController.SetCleanupManager(m_CleanupManager);
 		m_Diagnostics = new AICF_VehicleDomainDiagnostics();

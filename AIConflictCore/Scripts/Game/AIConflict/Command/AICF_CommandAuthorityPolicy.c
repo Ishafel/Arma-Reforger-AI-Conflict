@@ -26,6 +26,7 @@ class AICF_CommandAuthorityPolicy
 	{
 		if (!m_bValid)
 			return false;
+		factionKey = AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey);
 		if (factionKey == "US")
 		{
 			return m_sMode == AICF_Stage1Config.AI_COMMANDER_MODE_BOTH ||
@@ -42,6 +43,7 @@ class AICF_CommandAuthorityPolicy
 
 	AICF_EStrategicDecisionAuthority GetFactionAuthority(FactionKey factionKey)
 	{
+		factionKey = AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey);
 		if (!m_bValid || (factionKey != "US" && factionKey != "USSR"))
 			return AICF_EStrategicDecisionAuthority.NONE;
 		if (IsAICommanderEnabled(factionKey))

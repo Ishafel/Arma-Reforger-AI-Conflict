@@ -64,13 +64,14 @@ class AICF_VehicleAcquisitionFlow
 		AICF_Stage3Config config,
 		SCR_GameModeCampaign campaign,
 		AICF_ConflictAdapter conflictAdapter,
-		AICF_GroupCohesionPolicy cohesionPolicy)
+		AICF_GroupCohesionPolicy cohesionPolicy,
+		AICF_ContentProfile contentProfile)
 	{
 		m_Config = config;
 		m_Campaign = campaign;
 		m_ConflictAdapter = conflictAdapter;
 		m_CohesionPolicy = cohesionPolicy;
-		m_Catalog = new AICF_VehicleCatalog();
+		m_Catalog = new AICF_VehicleCatalog(contentProfile);
 		m_Spawner = new AICF_VehicleSpawner();
 		m_Watchdog = new AICF_VehicleWatchdog();
 	}
