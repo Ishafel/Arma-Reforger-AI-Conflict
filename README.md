@@ -89,9 +89,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage35Reco
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage4Static.ps1
 ```
 
-Репозиторий не содержит CI, `.pak`, Workshop metadata или готового
-package/publish pipeline. Сейчас проект разрабатывается и запускается как
-unpacked source addon.
+Репозиторий не содержит CI, готового `.pak` или автоматической первой
+публикации. Canonical Workshop metadata, preview assets и ручной release
+workflow находятся в [`workshop/`](workshop/README.md) и
+[`docs/PUBLISHING.md`](docs/PUBLISHING.md). До первой ручной публикации через
+Workbench проект продолжает запускаться как unpacked source addon.
 
 ## Документация
 
@@ -99,6 +101,7 @@ unpacked source addon.
 - [`docs/SERVER_SETUP.md`](docs/SERVER_SETUP.md) — пользовательский запуск dedicated server и клиента.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — домены, lifecycle и trust boundaries.
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — Workbench, API reference и Diag-запуск.
+- [`docs/PUBLISHING.md`](docs/PUBLISHING.md) — подготовка, первый Workshop upload и проверка packaged build.
 - [`docs/TESTING.md`](docs/TESTING.md) — gates, команды, baseline и evidence.
 
 Проект распространяется на условиях [`LICENSE`](LICENSE).

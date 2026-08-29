@@ -3,8 +3,10 @@
 ## Модель проекта
 
 Репозиторий не имеет обычного compiler/package manager. Он проверяется через
-Diag Workbench и запускается как unpacked source addon. Packaging, `.pak`,
-Workshop metadata, upload и CI сейчас не предоставлены.
+Diag Workbench и запускается как unpacked source addon. Canonical Workshop
+metadata и preview assets хранятся в `workshop/`, но первая упаковка и upload
+выполняются владельцем вручную через Workbench по
+[`docs/PUBLISHING.md`](PUBLISHING.md).
 
 Рабочий `gproj` — `AIConflictArland/addon.gproj`; он зависит от Core и vanilla.
 
@@ -212,6 +214,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 - `%LOCALAPPDATA%\AICF\...` profiles;
 - файлы в установленных каталогах игры, Server и Tools.
 
-Публикация/упаковка пока не автоматизирована. Если она понадобится, сначала
-нужно определить целевой канал, metadata, versioning и воспроизводимый
-Resource Publisher workflow.
+Первая публикация не автоматизирована: Workbench CLI поддерживает
+`-publishAddon` только для обновления уже опубликованного проекта. Целевой
+канал, canonical metadata, versioning, порядок Core -> Arland и проверка
+packaged build зафиксированы в [`docs/PUBLISHING.md`](PUBLISHING.md).
