@@ -4,9 +4,9 @@
 Workbench не читает Markdown автоматически: значения копируются владельцем в
 `Publish Project` по `docs/PUBLISHING.md`.
 
-Два addon публикуются раздельно и строго в порядке Core -> Arland. Preview
-assets не входят в игровые addon и передаются Resource Publisher как внешние
-Workshop-изображения.
+Три addon публикуются раздельно и строго в порядке Core -> Arland -> RHS.
+Preview assets не входят в игровые addon и передаются Resource Publisher как
+внешние Workshop-изображения.
 
 Финальные ImageGen briefs и ограничения зафиксированы в `PROMPTS.md`.
 

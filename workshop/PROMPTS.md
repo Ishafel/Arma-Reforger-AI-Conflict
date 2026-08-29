@@ -1,6 +1,6 @@
 # ImageGen briefs для Workshop preview
 
-Обе финальные обложки созданы встроенным ImageGen и сохранены как квадратные
+Все три финальные обложки созданы встроенным ImageGen и сохранены как квадратные
 JPEG без текста, логотипов, insignia и watermarks. PNG-оригиналы вне
 репозитория не являются release assets; canonical файлы — `preview.jpg` в
 каталогах addon.
@@ -35,4 +35,20 @@ Lighting/mood: overcast Atlantic daylight breaking into restrained warm light ov
 Color palette: natural dark greens, slate sea and sky, weathered earth, restrained blue and muted red tactical accents
 Constraints: no text, no letters, no numbers, no flags, no insignia, no logos, no trademarks, no watermark, no gore, no modern equipment, no science-fiction interface
 Avoid: photorealistic game screenshot, recognizable real map geometry, excessive explosions, crowded tiny details
+```
+
+## AI Conflict Arland RHS
+
+```text
+Use case: stylized-concept
+Asset type: square Workshop preview image for an Arma Reforger RHS-dependent game-mode integration mod
+Primary request: an autonomous US Marine versus Russian motor-rifle combined-arms campaign across a rugged North Atlantic island, emphasizing faction-specific infantry rosters, ground transport and radio-connected objectives
+Scene/backdrop: windswept green island with rocky coast, pine patches, small villages, narrow roads and cold gray sea; a fictional Arland-like environment without copying exact map geometry
+Subject: one formation of modern US Marine-style infantry with boxy light utility vehicles and a cargo truck, opposed by modern Russian motor-rifle infantry in green seasonal field gear with an armored 4x4 and military transport truck; both sides advance toward a contested radio tower and linked bases
+Style/medium: polished cinematic military strategy key art, stylized realism, grounded contemporary equipment, strong readable silhouettes
+Composition/framing: square oblique aerial view, opposing formations balanced around a central radio objective, visible road network and restrained blue/red route accents, safe margins for a Workshop tile
+Lighting/mood: dramatic overcast Atlantic daylight with a narrow warm break over the central objective; strategic tension, no spectacle
+Color palette: natural dark greens, slate sea and sky, weathered vehicle colors, restrained cool blue and muted red tactical accents
+Constraints: no text, no letters, no numbers, no flags, no insignia, no RHS logo, no Arma logo, no trademarks, no watermark, no gore, no copied UI, no exact real-world or game-map layout
+Avoid: futuristic equipment, tanks dominating the frame, excessive explosions, photorealistic game screenshot, crowded tiny details
 ```

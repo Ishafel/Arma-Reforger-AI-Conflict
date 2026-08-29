@@ -320,5 +320,5 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 Первая публикация не автоматизирована: Workbench CLI поддерживает
 `-publishAddon` только для обновления уже опубликованного проекта. Целевой
-канал, canonical metadata, versioning, порядок Core -> Arland и проверка
+канал, canonical metadata, versioning, порядок Core -> Arland -> RHS и проверка
 packaged build зафиксированы в [`docs/PUBLISHING.md`](PUBLISHING.md).
