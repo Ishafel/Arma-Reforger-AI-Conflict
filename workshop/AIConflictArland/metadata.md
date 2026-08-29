@@ -25,10 +25,10 @@ and fight to a server-authoritative match result.
 How to use:
 1. Install and enable AI Conflict Arland; AI Conflict Core is required and
    should be downloaded as a Workshop dependency.
-2. Start a stock Conflict Arland session with the addon enabled, or join a
-   server that lists it in its required mods.
-3. The addon modifies the stock campaign and does not add a separate scenario
-   tile.
+2. Open Scenarios and select `AI Conflict - Arland`, or join a server that
+   lists the addon in its required mods.
+3. The scenario inherits the official Conflict - Arland world and campaign
+   configuration; no vanilla world resources are copied.
 
 The Arland integration contains map-specific Conflict policies and must not be
 loaded into unrelated missions without compatibility review.
@@ -36,12 +36,14 @@ loaded into unrelated missions without compatibility review.
 Русский:
 Автономная война US против USSR поверх штатного Conflict на Arland. Обе
 стороны самостоятельно выбирают цели, создают и заменяют отряды, используют
-наземный транспорт, билеты и снабжение. Отдельной плитки сценария нет: мод
-загружается вместе со штатной миссией Conflict Arland.
+наземный транспорт, билеты и снабжение. Для локального запуска откройте
+`Сценарии` и выберите `AI Conflict - Arland`; плитка наследует штатную миссию
+Conflict Arland и не копирует её мир.
 
 License: Apache License 2.0 (Custom license; full text is included in the
 addon).
 
 ## Change Notes
 
-Initial Test release of the Arland integration for AI Conflict Core.
+Initial Test release of the Arland integration for AI Conflict Core, including
+the `AI Conflict - Arland` scenario-menu entry.

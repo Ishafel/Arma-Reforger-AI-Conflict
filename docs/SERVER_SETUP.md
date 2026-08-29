@@ -1,12 +1,13 @@
-# Пользовательский гайд: запуск dedicated server
+# Пользовательский гайд: запуск из игры и dedicated server
 
 ## Что создаёт этот гайд
 
-Инструкция поднимает локальный development server Arma Reforger Conflict на
-Arland с исходными аддонами `AIConflictCore` и `AIConflictArland` либо их
-опциональным RHS root-addon `AIConflictArlandRHS`. Сервер
-запускается из PowerShell напрямую через `ArmaReforgerServerDiag.exe`, без
-Launcher, Host UI, Workbench GUI и скриншотов.
+Инструкция описывает два пути: ручной запуск через встроенное меню `Сценарии`
+и локальный development server Arma Reforger Conflict на Arland с исходными
+аддонами `AIConflictCore` и `AIConflictArland` либо их опциональным RHS
+root-addon `AIConflictArlandRHS`. Сервер запускается из PowerShell напрямую
+через `ArmaReforgerServerDiag.exe`, без Launcher, Host UI, Workbench GUI и
+скриншотов.
 
 Это пока не готовая схема публичного Workshop-сервера. Репозиторий содержит
 Workshop metadata и release checklist, но packaged build ещё должен быть
@@ -38,6 +39,53 @@ C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger Tools
 
 Если игры установлены в другой Steam Library, измени только переменные
 `$gameRoot`, `$serverRoot` и `$toolsRoot`.
+
+## Запуск из меню сценариев
+
+После установки и включения packaged `AI Conflict Arland` открой в игре
+`Сценарии` и выбери `AI Conflict - Arland`. Для RHS установи и включи
+`AI Conflict Arland RHS` со всеми dependencies, затем выбери
+`AI Conflict RHS - Arland`.
+
+Пока Workshop build не опубликован, плитку можно проверить из checkout через
+Diag-клиент. Открой PowerShell в репозитории и выполни stock-команду:
+
+```powershell
+$repoRoot = (Resolve-Path '.').Path
+$gameRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger'
+$scenarioProfile = Join-Path $env:LOCALAPPDATA ('AICF\ScenarioMenu-Stock-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+
+& "$gameRoot\ArmaReforgerSteamDiag.exe" `
+  -gproj "$repoRoot\AIConflictArland\addon.gproj" `
+  -addonsDir "$repoRoot,$gameRoot\addons" `
+  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E' `
+  -profile "$scenarioProfile" `
+  -backendFreshSession
+```
+
+Для RHS добавь установленный RHS-каталог и используй его root project:
+
+```powershell
+$rhsRoot = 'C:\Users\retar\OneDrive\Документы\My Games\ArmaReforger\addons'
+$rhsScenarioProfile = Join-Path $env:LOCALAPPDATA ('AICF\ScenarioMenu-RHS-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+
+& "$gameRoot\ArmaReforgerSteamDiag.exe" `
+  -gproj "$repoRoot\AIConflictArlandRHS\addon.gproj" `
+  -addonsDir "$repoRoot,$gameRoot\addons,$rhsRoot" `
+  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C' `
+  -profile "$rhsScenarioProfile" `
+  -backendFreshSession
+```
+
+После появления главного меню пользователь вручную открывает `Сценарии` и
+выбирает нужную плитку. В RHS graph видна также stock-плитка из dependency;
+для RHS запуска выбирай именно `AI Conflict RHS - Arland`. Для stock не
+подключай `AIConflictArlandRHS`.
+
+Запуск из меню использует default `aicfAICommanderMode=BOTH`. Выбор только
+одного AI commander (`US` или `USSR`) доступен в dedicated server через CLI.
+Codex не проверяет визуальную плитку или controls через GUI: такой критерий
+остаётся `NOT RUN` до ручного verdict пользователя.
 
 ## 1. Открой PowerShell в репозитории
 
@@ -167,7 +215,7 @@ $profileRoot = Join-Path $env:LOCALAPPDATA "AICF\Server-$runStamp"
 & $serverExe `
   -gproj "$repoRoot\AIConflictArland\addon.gproj" `
   -server 'worlds/MP/CTI_Campaign_Arland.ent' `
-  -MissionHeader 'Missions/23_Campaign_Arland.conf' `
+  -MissionHeader 'Missions/AICF_Conflict_Arland.conf' `
   -worldSystemsConfig 'Configs/Systems/ConflictSystems.conf' `
   -addonsDir "$repoRoot,$serverRoot\addons" `
   -addons '9178E5822AFE48EA,B52C5F6AEDBF423E' `
@@ -187,7 +235,7 @@ $serverExitCode = $LASTEXITCODE
 |---|---|
 | `-gproj` | загружает проект Arland; через dependency подключается Core |
 | `-server` | запускает raw Arland Conflict world |
-| `-MissionHeader` | подключает штатную Campaign mission |
+| `-MissionHeader` | подключает AICF header, наследующий штатную Campaign mission |
 | `-worldSystemsConfig` | подключает штатные Conflict systems |
 | `-addonsDir` | добавляет repo и vanilla server addons в пути поиска |
 | `-addons` | загружает Core и Arland по неизменяемым GUID |
@@ -315,7 +363,7 @@ $rhsServerProfile = Join-Path $env:LOCALAPPDATA ('AICF\Server-RHS-' + (Get-Date 
 & $serverExe `
   -gproj "$repoRoot\AIConflictArlandRHS\addon.gproj" `
   -server 'Worlds/MP/Conflict/CTI_Campaign_Arland_RHS.ent' `
-  -MissionHeader 'Missions/RHS_Conflict_Arland.conf' `
+  -MissionHeader 'Missions/AICF_RHS_Conflict_Arland.conf' `
   -worldSystemsConfig 'Configs/Systems/ConflictSystems.conf' `
   -addonsDir "$repoRoot,$serverRoot\addons,$rhsRoot" `
   -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C' `
@@ -326,8 +374,9 @@ $rhsServerProfile = Join-Path $env:LOCALAPPDATA ('AICF\Server-RHS-' + (Get-Date 
   -logStats 10000
 ```
 
-Здесь обязательны именно RHS raw world и RHS `MissionHeader`. Stock world с
-RHS header оставляет faction keys `US`/`USSR` и не является RHS runtime.
+Здесь обязательны именно RHS raw world и AICF RHS `MissionHeader`, который
+наследует штатный RHS header. Stock world с RHS header оставляет faction keys
+`US`/`USSR` и не является RHS runtime.
 Корректный startup сообщает:
 
 ```text
@@ -452,6 +501,8 @@ shutdown contract: `Ctrl+C` завершает локальный process, но 
 | Клиент не подключается | `2001/UDP`, LAN IPv4, локальный firewall, exact commit и версии |
 | UDP 2001 занят | `Get-NetUDPEndpoint -LocalPort 2001` и точный `OwningProcess` |
 | Нет `[AICF]` событий | загружены ли оба аддона и не произошёл ли fallback к vanilla |
+| Нет плитки `AI Conflict - Arland` | включён ли packaged Arland addon либо запущен ли source-client с его `-gproj`/GUID |
+| В RHS запустился stock world | выбрана ли точная плитка `AI Conflict RHS - Arland`, а не stock-плитка dependency |
 | Видно окно клиента, но UI не проверен | это `NOT RUN`; визуальный verdict даёт пользователь вручную |
 
 Дополнительные project-specific требования к запуску и evidence находятся в

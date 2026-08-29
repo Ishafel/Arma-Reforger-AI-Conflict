@@ -2,10 +2,12 @@
 
 ## Назначение
 
-Этот репозиторий — scripts-only расширение штатного Conflict для автономной
-войны `US` против `USSR`. Разработка выполняется в Enforce Script. Общие
-механики должны оставаться в `AIConflictCore`, особенности Arland — в
-`AIConflictArland`.
+Этот репозиторий — scripts-first расширение штатного Conflict для автономной
+войны `US` против `USSR`. Разработка выполняется преимущественно в Enforce
+Script; единственные gameplay resources проекта — тонкие inherited
+`MissionHeader` для запуска stock/RHS вариантов из меню сценариев. Они не
+владеют world, bases или layouts. Общие механики должны оставаться в
+`AIConflictCore`, особенности Arland — в `AIConflictArland`.
 
 Перед существенным изменением прочитай:
 

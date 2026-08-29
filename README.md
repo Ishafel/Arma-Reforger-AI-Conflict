@@ -1,9 +1,10 @@
 # Arma Reforger AI Conflict
 
-Scripts-only прототип автономной войны `US` против `USSR` поверх штатного
+Scripts-first прототип автономной войны `US` против `USSR` поверх штатного
 режима Conflict. Проект использует существующий мир, базы, радио-граф, фракции
-и prefab-каталоги Arma Reforger; собственных world/prefab/layout-ресурсов в
-репозитории сейчас нет.
+и prefab-каталоги Arma Reforger. Собственных world/prefab/layout-ресурсов в
+репозитории нет; два тонких `MissionHeader` добавляют запуск из меню сценариев
+и наследуют штатные stock/RHS missions.
 
 Игровая логика server-authoritative: сервер применяет выбранную при запуске
 политику командования, создаёт и заменяет группы, управляет транспортом,
@@ -82,9 +83,13 @@ AIConflictCore/Scripts/Game/AIConflict/
 
 AIConflictArland/Scripts/Game/AIConflictArland/Integration/
   bootstrap, AI-only capture, victory override, radio normalization
+AIConflictArland/Missions/
+  игровая плитка AI Conflict - Arland поверх штатного Conflict
 
 AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/
   RHS USMC/MSV content profile и единственный bootstrap factory override
+AIConflictArlandRHS/Missions/
+  игровая плитка AI Conflict RHS - Arland поверх штатной RHS mission
 
 tools/
   статические аудиторы, анализаторы runtime-логов и API reference helper
@@ -104,6 +109,14 @@ Computer Use и скриншотов. Workbench validation, server и client з�
 по exit code и полным логам. Визуальные критерии остаются `NOT RUN`, пока их
 вручную не проверит пользователь.
 
+Для ручного source-запуска из самой игры открой Diag-клиент с нужным root
+project и addon graph, затем выбери `Сценарии -> AI Conflict - Arland` либо
+`Сценарии -> AI Conflict RHS - Arland`. Готовые команды и ограничения описаны
+в [`docs/SERVER_SETUP.md`](docs/SERVER_SETUP.md#запуск-из-меню-сценариев).
+После Workshop-публикации те же плитки появляются у включённых packaged addons.
+Запуск из меню не задаёт CLI-параметры и поэтому использует default
+`aicfAICommanderMode=BOTH`.
+
 1. Запустите применимые статические проверки из
    [`docs/TESTING.md`](docs/TESTING.md).
 2. Выполните терминальный Diag Workbench Validate/Compile.
@@ -119,6 +132,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage35Reco
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage4Static.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-AICommanderModeStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RHSIntegrationStatic.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-ScenarioHeadersStatic.ps1
 ```
 
 Репозиторий не содержит CI, готового `.pak` или автоматической первой

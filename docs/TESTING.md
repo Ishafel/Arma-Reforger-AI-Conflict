@@ -39,6 +39,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage35Reco
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage4Static.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-AICommanderModeStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RHSIntegrationStatic.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-ScenarioHeadersStatic.ps1
 ```
 
 Назначение:
@@ -51,6 +52,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RHSIntegrat
 | `Test-Stage4Static.ps1` | economy transaction, supply balance, replication, strategic UI и RPC authority |
 | `Test-AICommanderModeStatic.ps1` | Arland CLI preflight, immutable authority policy, faction commander boundary, intent, availability replication и UI contract |
 | `Test-RHSIntegrationStatic.ps1` | optional dependency graph, Core isolation, stock/RHS profiles, fail-closed roles/vehicles, stable-side Arland radio normalization, single lifecycle и cleanup symmetry |
+| `Test-ScenarioHeadersStatic.ps1` | stock/RHS inherited MissionHeader, menu visibility, stable resource GUID, platform metadata и отсутствие собственных world/layer resources |
 
 Аудиторы проверяют часть архитектуры регулярными выражениями. Красный rule ID
 может означать реальный regression или drift тестового контракта. Сначала
@@ -74,6 +76,8 @@ Baseline получен `2026-08-28` на `main`, commit
 должен передаваться отдельным verdict, без выдуманного сравнения с `main`.
 То же относится к `Test-RHSIntegrationStatic.ps1`: его первый успешный прогон
 является отдельным focused verdict, а не частью исторического baseline commit.
+`Test-ScenarioHeadersStatic.ps1` добавлен вместе со scenario headers и также
+передаётся отдельным focused verdict без сравнения с историческим commit.
 
 Stage 3 baseline failures:
 
@@ -105,6 +109,7 @@ Stage 3.5 baseline failures:
 | `UI/`, RPC или campaign replicated state | Stage 4 static + Workbench + server/client runtime; JIP при изменении snapshot |
 | Arland `modded` integration | Workbench + canonical Arland server runtime; клиент, если меняется UI/replication |
 | Content profile или `AIConflictArlandRHS` | все Stage/authority audits + `Test-RHSIntegrationStatic.ps1`; отдельный stock и RHS Workbench; fresh RHS server; client/JIP при изменении faction/UI mapping |
+| `Missions/*.conf` или `.conf.meta` | `Test-ScenarioHeadersStatic.ps1` на позитивном и негативном input; отдельный stock и RHS Workbench; source/direct MissionHeader load; ручная проверка плитки и packaged build |
 | PowerShell analyzer | позитивный и негативный representative input; не ослаблять rule молча |
 | Enfusion version/API | pinned reference diff + полный Workbench Validate по целевой версии |
 
@@ -225,6 +230,32 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 - записанные `aicf*` flags, включая факт отсутствия или exact value
   `aicfAICommanderMode`;
 - одинаковые версии Game, Server и Tools.
+
+Для stock runtime используй
+`Missions/AICF_Conflict_Arland.conf`, для RHS —
+`Missions/AICF_RHS_Conflict_Arland.conf`. Оба header наследуют официальный
+scenario contract; raw world и `worldSystemsConfig` в terminal-команде должны
+соответствовать выбранному родителю.
+
+### Scenario menu
+
+Scenario gate разделяется на четыре независимых уровня:
+
+1. `Test-ScenarioHeadersStatic.ps1` подтверждает exact official parent,
+   `m_bShowInScenarioMenu`, metadata GUID и отсутствие скопированных
+   `.ent`/`.layer`.
+2. Отдельный stock/RHS Workbench Validate подтверждает регистрацию ресурсов и
+   отсутствие `SCRIPT (E/F)`, `ENGINE (F)`, VM/null ошибок проекта.
+3. Direct source run с новым `-MissionHeader` должен прочитать header и
+   загрузить world/systems его официального родителя; это ещё не доказывает
+   появление плитки в UI или полный gameplay runtime.
+4. Пользователь вручную проверяет плитку, её название, выбор и начало сессии в
+   меню `Сценарии`. Для релиза проверка повторяется на packaged Workshop build,
+   который не видит source checkout.
+
+Визуальные пункты остаются `NOT RUN`, пока пользователь не передаст ручной
+verdict. Запуск из меню использует default `aicfAICommanderMode=BOTH`; другие
+режимы command authority проверяются через отдельный dedicated server CLI.
 
 После завершения изучи полный остановленный log. Минимальный поиск:
 

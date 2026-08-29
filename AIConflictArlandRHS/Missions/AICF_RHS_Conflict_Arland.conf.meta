@@ -1,0 +1,12 @@
+MetaFileClass
+{
+	Name "{97E4BCB73F044C66}Missions/AICF_RHS_Conflict_Arland.conf"
+	Configurations
+	{
+		CONFResourceClass PC {}
+		CONFResourceClass HEADLESS : PC {}
+		CONFResourceClass XBOX_ONE : PC {}
+		CONFResourceClass XBOX_SERIES : PC {}
+		CONFResourceClass PS4 : PC {}
+	}
+}

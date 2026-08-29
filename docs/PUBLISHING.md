@@ -3,7 +3,9 @@
 ## Статус и границы
 
 Проект состоит из двух stock-compatible addon и отдельного опционального RHS
-root-addon. Порядок публикации:
+root-addon. Arland и RHS root-addon содержат только inherited scenario headers
+для запуска из меню; собственных world/base/layout resources нет. Порядок
+публикации:
 
 | Addon | GUID / Workshop ID | Назначение |
 |---|---|---|
@@ -118,9 +120,11 @@ Resource Publisher генерирует их в выбранном Working Dir.
    dependency.
    Для RHS отдельно скачать/включить RHS root-addon и доказать загрузку Arland,
    Core и трёх RHS packages.
-3. Для stock entry запустить stock Conflict Arland. Для RHS entry запустить
-   штатную RHS mission `{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf`.
-   Собственной scenario tile AICF addon не добавляют.
+3. В меню `Сценарии` проверить и запустить `AI Conflict - Arland`. Для RHS
+   entry проверить и запустить `AI Conflict RHS - Arland`; не выбирать
+   stock-плитку, которая также видна через dependency на обычный Arland addon.
+   Оба сценария должны загрузить мир и Conflict contract официального parent,
+   не source checkout.
 4. На dedicated server загрузить применимый Workshop dependency set и сохранить
    полный остановленный server log; для UI/replication также сохранить client
    log.

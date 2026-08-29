@@ -2,7 +2,8 @@
 
 ## Общая модель
 
-Проект расширяет штатный Conflict только скриптами:
+Проект расширяет штатный Conflict преимущественно скриптами. Два собственных
+`MissionHeader` являются только точками запуска и не владеют world topology:
 
 ```text
 Arma Reforger / stock Conflict
@@ -22,10 +23,17 @@ Arma Reforger / stock Conflict
 через stock API. `AIConflictArland` подключает Core к конкретной stock-миссии и
 содержит неизбежные map-specific overrides.
 
-В production path нет собственного мира. Stock-проект для Workbench и Diag —
-`AIConflictArland/addon.gproj`. Опциональный `AIConflictArlandRHS/addon.gproj`
-использует установленные RHS world/mission без копирования ресурсов и зависит
-от обычного Arland, Core и RHS. Обычные проекты RHS не знают.
+В production path нет собственного мира. `Missions/AICF_Conflict_Arland.conf`
+наследует штатный `{C41618FD18E9D714}Missions/23_Campaign_Arland.conf`, а
+`Missions/AICF_RHS_Conflict_Arland.conf` — штатный RHS
+`{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf`. Они меняют только
+presentation metadata и `m_bShowInScenarioMenu`; world, systems config, базы и
+параметры Conflict остаются у родителей.
+
+Stock-проект для Workbench и Diag — `AIConflictArland/addon.gproj`.
+Опциональный `AIConflictArlandRHS/addon.gproj` использует установленные RHS
+world/mission без копирования ресурсов и зависит от обычного Arland, Core и
+RHS. Обычные проекты RHS не знают.
 
 ## Content profile boundary
 
@@ -368,6 +376,10 @@ Map markers получают faction streaming и показывают союз�
 - `AICF_ArlandRadioBridgeNormalizer` исправляет релевантные односторонние
   radio links после valid preflight и при смене владельца.
 
+Отдельно `AIConflictArland/Missions/AICF_Conflict_Arland.conf` предоставляет
+плитку `AI Conflict - Arland`. Это inherited config, а не пятое расширение
+класса и не копия мира.
+
 Эти `modded` классы действуют всякий раз, когда загружен Arland addon. Поэтому
 его нельзя без review подключать к другой миссии. Особенно важны порядок
 `super` и очистка event subscriptions.
@@ -376,6 +388,12 @@ Map markers получают faction streaming и показывают союз�
 class: override `AICF_CreateContentProfile()`. В нём нет `OnGameStart`, event
 subscription, `CallLater` или второго `AICF_MatchController`, поэтому Arland
 policies и lifecycle исполняются один раз.
+
+Его `Missions/AICF_RHS_Conflict_Arland.conf` аналогично добавляет плитку
+`AI Conflict RHS - Arland`, наследуя RHS mission. Поскольку RHS root-addon
+зависит от обычного Arland, при одновременной загрузке видны обе плитки; для RHS
+runtime пользователь выбирает именно RHS-вариант, а для stock запускает addon
+graph без `AIConflictArlandRHS`.
 
 ## Диагностика как интерфейс
 

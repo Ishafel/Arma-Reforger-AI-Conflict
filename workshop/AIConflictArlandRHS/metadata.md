@@ -39,8 +39,8 @@ managed RHS factions.
 How to use:
 1. Install and enable AI Conflict Arland RHS; Workshop should download Core,
    Arland and all RHS packages as dependencies.
-2. Start the RHS Conflict Arland mission, or join a server that lists this
-   addon in its required mods.
+2. Open Scenarios and select `AI Conflict RHS - Arland`, or join a server that
+   lists this addon in its required mods.
 3. Do not enable this optional addon for the stock-only AI Conflict setup.
 
 No RHS assets are copied or redistributed by this addon. RHS packages retain
@@ -50,11 +50,14 @@ their own licenses; Apache License 2.0 applies to the AICF integration code.
 Интеграция автономной кампании AI Conflict со штатной RHS Conflict mission на
 Arland: RHS USMC MEF против RHS Russian MSV, отряды по десять бойцов,
 поддержанная наземная техника, билеты и снабжение. Мод не содержит ресурсов
-RHS и требует отдельно установить перечисленные Workshop dependencies.
+RHS и требует отдельно установить перечисленные Workshop dependencies. Для
+локального запуска откройте `Сценарии` и выберите именно
+`AI Conflict RHS - Arland`, а не stock-плитку из dependency.
 
 License: Apache License 2.0 (Custom license; full text is included in the
 addon).
 
 ## Change Notes
 
-Initial Test release of the RHS USMC-versus-MSV Arland integration.
+Initial Test release of the RHS USMC-versus-MSV Arland integration, including
+the `AI Conflict RHS - Arland` scenario-menu entry.

@@ -3,10 +3,11 @@
 ## Модель проекта
 
 Репозиторий не имеет обычного compiler/package manager. Он проверяется через
-Diag Workbench и запускается как unpacked source addon. Canonical Workshop
-metadata и preview assets хранятся в `workshop/`, но первая упаковка и upload
-выполняются владельцем вручную через Workbench по
-[`docs/PUBLISHING.md`](PUBLISHING.md).
+Diag Workbench и запускается как unpacked source addon. Два inherited
+`MissionHeader` дают source addons собственные плитки в меню сценариев, но не
+добавляют world или mission topology. Canonical Workshop metadata и preview
+assets хранятся в `workshop/`, а первая упаковка и upload выполняются владельцем
+вручную через Workbench по [`docs/PUBLISHING.md`](PUBLISHING.md).
 
 Stock рабочий `gproj` — `AIConflictArland/addon.gproj`; он зависит от Core и
 vanilla. RHS рабочий `gproj` — `AIConflictArlandRHS/addon.gproj`, постоянный
@@ -119,6 +120,46 @@ version/commit/checksum в helper и миграция всех protected/interna
    profiles и проверить полные логи.
 8. Передать diff, команды, exit codes, verdict и не выполненные gates.
 
+## Ручной запуск из меню сценариев
+
+Stock source-client запускается без `-client`, чтобы открыть главное меню:
+
+```powershell
+$repoRoot = (Resolve-Path '.').Path
+$gameRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger'
+$profile = Join-Path $env:LOCALAPPDATA ('AICF\ScenarioMenu-Stock-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+
+& "$gameRoot\ArmaReforgerSteamDiag.exe" `
+  -gproj "$repoRoot\AIConflictArland\addon.gproj" `
+  -addonsDir "$repoRoot,$gameRoot\addons" `
+  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E' `
+  -profile "$profile" `
+  -backendFreshSession
+```
+
+Пользователь вручную выбирает `Сценарии -> AI Conflict - Arland`. Для RHS:
+
+```powershell
+$rhsRoot = 'C:\Users\retar\OneDrive\Документы\My Games\ArmaReforger\addons'
+$rhsProfile = Join-Path $env:LOCALAPPDATA ('AICF\ScenarioMenu-RHS-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+
+& "$gameRoot\ArmaReforgerSteamDiag.exe" `
+  -gproj "$repoRoot\AIConflictArlandRHS\addon.gproj" `
+  -addonsDir "$repoRoot,$gameRoot\addons,$rhsRoot" `
+  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C' `
+  -profile "$rhsProfile" `
+  -backendFreshSession
+```
+
+При RHS graph видны обе inherited плитки, потому что RHS addon зависит от
+обычного Arland. Выбирай `AI Conflict RHS - Arland`; для stock запуска не
+подключай `AIConflictArlandRHS`.
+
+Меню не передаёт custom CLI arguments, поэтому оба сценария используют default
+`aicfAICommanderMode=BOTH`. Для `US` или `USSR` по-прежнему нужен отдельный
+dedicated server process. Наличие плитки, её выбор и визуальная загрузка —
+ручные критерии пользователя; Codex отмечает их `NOT RUN` без GUI automation.
+
 ## Direct Diag server: Arland Conflict
 
 Пошаговая пользовательская инструкция: [`SERVER_SETUP.md`](SERVER_SETUP.md).
@@ -136,7 +177,7 @@ $profileRoot = Join-Path $env:LOCALAPPDATA "AICF\Server-$runStamp"
 & "$serverRoot\ArmaReforgerServerDiag.exe" `
   -gproj "$repoRoot\AIConflictArland\addon.gproj" `
   -server 'worlds/MP/CTI_Campaign_Arland.ent' `
-  -MissionHeader 'Missions/23_Campaign_Arland.conf' `
+  -MissionHeader 'Missions/AICF_Conflict_Arland.conf' `
   -worldSystemsConfig 'Configs/Systems/ConflictSystems.conf' `
   -addonsDir "$repoRoot,$serverRoot\addons" `
   -addons '9178E5822AFE48EA,B52C5F6AEDBF423E' `
@@ -207,7 +248,7 @@ $profileRoot = Join-Path $env:LOCALAPPDATA "AICF\Server-RHS-$runStamp"
 & "$serverRoot\ArmaReforgerServerDiag.exe" `
   -gproj "$repoRoot\AIConflictArlandRHS\addon.gproj" `
   -server 'Worlds/MP/Conflict/CTI_Campaign_Arland_RHS.ent' `
-  -MissionHeader 'Missions/RHS_Conflict_Arland.conf' `
+  -MissionHeader 'Missions/AICF_RHS_Conflict_Arland.conf' `
   -worldSystemsConfig 'Configs/Systems/ConflictSystems.conf' `
   -addonsDir "$repoRoot,$serverRoot\addons,$rhsRoot" `
   -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C' `
