@@ -1308,9 +1308,14 @@ class AICF_OrderPlanner
 		SCR_CampaignFaction faction,
 		SCR_CampaignMilitaryBaseComponent target)
 	{
-		if (slot && slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
-			return true;
 		return IsTargetValidForRole(slot, faction, target);
+	}
+
+	bool IsCurrentStrategicDestinationValid(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction)
+	{
+		return IsCurrentTargetValid(slot, faction);
 	}
 
 	string GetOrderFailureReason(AICF_GroupSlot slot, SCR_CampaignFaction faction)

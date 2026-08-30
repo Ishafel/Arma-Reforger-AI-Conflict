@@ -152,6 +152,11 @@ SCR_MilitaryBaseSystem
   сервером world endpoint. Для `POSITION` planner создаёт Defend waypoint с
   семантикой `MOVE_AND_HOLD`; такой приказ не участвует в radio graph,
   ownership/capture, relay smart action или SearchAndDestroy promotion.
+- Проверка новой base-кандидатуры и проверка уже назначенной destination имеют
+  разные boundaries. `IsStrategicTargetValid()` всегда применяет role/ownership
+  правила к переданной `BASE`; `IsCurrentStrategicDestinationValid()` учитывает
+  текущий `BASE|POSITION`. Поэтому point intent representative-slot не может
+  раскрыть в UI все узлы objective graph как допустимые base targets.
 - Если stock Move waypoint завершён вне физического радиуса цели,
   reliability сохраняет `faction + slot`, group generation и assignment
   revision и строит следующий endpoint только на navmesh, связанной с

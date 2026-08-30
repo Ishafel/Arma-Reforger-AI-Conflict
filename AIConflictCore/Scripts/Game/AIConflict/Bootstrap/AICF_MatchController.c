@@ -3922,7 +3922,7 @@ class AICF_MatchController
 				continue;
 			if (slot.IsPersistentStuckFieldHold())
 			{
-				if (m_OrderPlanner.IsStrategicTargetValid(slot, faction, slot.GetTargetBase()))
+				if (m_OrderPlanner.IsCurrentStrategicDestinationValid(slot, faction))
 					continue;
 
 				ResumePersistentStuckFieldHold(
@@ -4097,7 +4097,7 @@ class AICF_MatchController
 				"OBJECTIVE_RADIUS_ENTERED");
 			if (slot.IsPersistentStuckFieldHold())
 			{
-				if (m_OrderPlanner.IsStrategicTargetValid(slot, faction, slot.GetTargetBase()))
+				if (m_OrderPlanner.IsCurrentStrategicDestinationValid(slot, faction))
 					continue;
 				ResumePersistentStuckFieldHold(
 					slot,
@@ -5042,7 +5042,7 @@ class AICF_MatchController
 			fallbackCommitted = true;
 		}
 		else if (group && slot.HasStrategicDestination() &&
-			m_OrderPlanner.IsStrategicTargetValid(slot, faction, target))
+			m_OrderPlanner.IsCurrentStrategicDestinationValid(slot, faction))
 		{
 			IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
 			if (leader)
@@ -5989,7 +5989,7 @@ class AICF_MatchController
 			else if (slot.IsPersistentStuckFieldHold())
 			{
 				SCR_CampaignMilitaryBaseComponent heldTarget = slot.GetTargetBase();
-				if (m_OrderPlanner.IsStrategicTargetValid(slot, faction, heldTarget))
+				if (m_OrderPlanner.IsCurrentStrategicDestinationValid(slot, faction))
 				{
 					vector heldPosition = slot.GetPersistentStuckAnchor();
 					IEntity heldLeader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());

@@ -44,6 +44,15 @@ $reconcileAICommander = [regex]::Match(
 $lossResponseAICommander = [regex]::Match(
     $planner,
     'bool\s+AssignAICommanderLossResponseOrder\s*\([\s\S]*?(?=\r?\n\s*bool\s+IsOrderValid\s*\()').Value
+$strategicBaseTargetValidator = [regex]::Match(
+    $planner,
+    'bool\s+IsStrategicTargetValid\s*\([\s\S]*?(?=\r?\n\s*bool\s+IsCurrentStrategicDestinationValid\s*\()').Value
+$currentStrategicDestinationValidator = [regex]::Match(
+    $planner,
+    'bool\s+IsCurrentStrategicDestinationValid\s*\([\s\S]*?(?=\r?\n\s*string\s+GetOrderFailureReason\s*\()').Value
+$buildOrderTargets = [regex]::Match(
+    $controller,
+    'protected\s+string\s+BuildOrderTargets\s*\([\s\S]*?(?=\r?\n\s*protected\s+string\s+BuildBaseLabel\s*\()').Value
 
 Assert-Contains 'MAP_POINT_MODEL' $enums 'enum\s+AICF_EOrderTargetKind[\s\S]*BASE[\s\S]*POSITION' 'Target identity must explicitly distinguish BASE and POSITION'
 Assert-Contains 'MAP_POINT_MODEL' $slot 'm_TargetKind[\s\S]*m_vTargetPosition[\s\S]*CommitStrategicPointIntent' 'Runtime and durable intent must retain point identity and coordinates'
@@ -72,6 +81,11 @@ Assert-Contains 'MAP_POINT_WAYPOINT' $planner 'ReplacePointOrder[\s\S]*RemoveWay
 Assert-NotContains 'MAP_POINT_WAYPOINT' ($rpc + $ui + $controller) '(?:SpawnEntityPrefabEx|AddWaypointAt|RemoveWaypoint)\s*\(' 'UI, RPC and MatchController must not become a second infantry waypoint writer'
 Assert-Contains 'MAP_POINT_WAYPOINT' $planner 'PromoteAttackToObjectiveAction[\s\S]*GetTargetKind\s*\(\s*\)\s*!=\s*AICF_EOrderTargetKind\.BASE' 'Point orders must never enter base capture/SearchAndDestroy promotion'
 Assert-Contains 'MAP_POINT_BASE_REGRESSION' $planner 'AssignPlayerOrder[\s\S]*IsTargetValidForRole\s*\([\s\S]*ReplaceOrder' 'Existing BASE player orders must retain role/ownership validation'
+Assert-Contains 'MAP_POINT_BASE_TARGET_FILTER' $strategicBaseTargetValidator 'return\s+IsTargetValidForRole\s*\(' 'A BASE candidate must always pass the selected role and ownership filter'
+Assert-NotContains 'MAP_POINT_BASE_TARGET_FILTER' $strategicBaseTargetValidator 'GetTargetKind|POSITION|IsCurrentTargetValid' 'A current POSITION order must not make every BASE candidate valid'
+Assert-Contains 'MAP_POINT_CURRENT_DESTINATION' $currentStrategicDestinationValidator 'return\s+IsCurrentTargetValid\s*\(' 'Current BASE/POSITION maintenance must use destination-aware validity'
+Assert-Contains 'MAP_POINT_BASE_TARGET_FILTER' $buildOrderTargets 'IsStrategicTargetValid\s*\(\s*attackSlot[\s\S]*IsStrategicTargetValid\s*\(\s*defendSlot[\s\S]*IsStrategicTargetValid\s*\(\s*reserveSlot' 'Replicated ATTACK/DEFEND/RESERVE lists must filter each BASE candidate independently of the current destination kind'
+Assert-Contains 'MAP_POINT_CURRENT_DESTINATION' $controller 'IsPersistentStuckFieldHold[\s\S]*IsCurrentStrategicDestinationValid' 'Persistent current-destination maintenance must preserve valid POSITION orders without weakening BASE candidate filtering'
 
 Assert-Contains 'MAP_POINT_DURABILITY' $planner 'RestorePlayerStrategicIntent[\s\S]*POSITION[\s\S]*ReplacePointOrder' 'Replacement and replan paths must restore durable point intent'
 Assert-Contains 'MAP_POINT_DURABILITY' $slot 'IsPlayerStrategicIntentRoleCurrent[\s\S]*POSITION[\s\S]*m_StrategicIntentRole\s*==\s*m_Role' 'POSITION intent must survive role changes while BASE intent remains role-bound'
@@ -119,4 +133,4 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Host 'Map point orders static audit: PASS'
-Write-Host 'model=PASS rpc_trust=PASS rpc_result=PASS validation=PASS navmesh_streaming=PASS waypoint=PASS durability=PASS replan_priority=PASS vehicle=PASS ui=PASS marker_jip=PASS diagnostics=PASS'
+Write-Host 'model=PASS rpc_trust=PASS rpc_result=PASS validation=PASS navmesh_streaming=PASS waypoint=PASS base_target_filter=PASS current_destination=PASS durability=PASS replan_priority=PASS vehicle=PASS ui=PASS marker_jip=PASS diagnostics=PASS'
