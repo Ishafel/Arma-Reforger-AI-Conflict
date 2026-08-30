@@ -111,12 +111,20 @@ class AICF_GroupSlot
 	protected ref array<AIAgent> m_aRosterCallbackAgents = {};
 
 	protected SCR_AIGroup m_Group;
+	protected AICF_EOrderTargetKind m_TargetKind;
 	protected SCR_CampaignMilitaryBaseComponent m_TargetBase;
+	protected vector m_vTargetPosition;
+	protected AICF_EOrderTargetKind m_ProgressTargetKind;
 	protected SCR_CampaignMilitaryBaseComponent m_ProgressTargetBase;
+	protected vector m_vProgressTargetPosition;
 	protected SCR_CampaignMilitaryBaseComponent m_ObjectiveHoldTargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_PendingOrderRecoveryTargetBase;
+	protected AICF_EOrderTargetKind m_PendingOrderRecoveryTargetKind;
+	protected vector m_vPendingOrderRecoveryTargetPosition;
 	protected SCR_CampaignMilitaryBaseComponent m_StrategicCandidateTargetBase;
 	protected SCR_CampaignMilitaryBaseComponent m_StrategicIntentTargetBase;
+	protected AICF_EOrderTargetKind m_StrategicIntentTargetKind;
+	protected vector m_vStrategicIntentTargetPosition;
 	protected AICF_EGroupRole m_StrategicIntentRole;
 	protected AICF_EStrategicDecisionAuthority m_StrategicIntentAuthority;
 	protected string m_sStrategicIntentPosture;
@@ -128,6 +136,8 @@ class AICF_GroupSlot
 	protected SCR_AIGroup m_PendingOrderRecoveryGroup;
 	protected SCR_AIGroup m_PendingStuckRecoveryGroup;
 	protected SCR_CampaignMilitaryBaseComponent m_PendingStuckRecoveryTargetBase;
+	protected AICF_EOrderTargetKind m_PendingStuckRecoveryTargetKind;
+	protected vector m_vPendingStuckRecoveryTargetPosition;
 	protected SCR_AIGroup m_PersistentStuckGroup;
 	protected SCR_CampaignMilitaryBaseComponent m_PersistentStuckTargetBase;
 
@@ -253,6 +263,16 @@ class AICF_GroupSlot
 		m_bCommandWaitingReported = false;
 	}
 
+	void RecordPlayerStrategicPointIntent(vector targetPosition)
+	{
+		CommitStrategicPointIntent(
+			targetPosition,
+			"MOVE_AND_HOLD",
+			AICF_EStrategicDecisionAuthority.PLAYER_COMMAND);
+		m_bAwaitingPlayerCommand = false;
+		m_bCommandWaitingReported = false;
+	}
+
 	void ClearPlayerStrategicIntent()
 	{
 		if (m_StrategicIntentAuthority ==
@@ -265,14 +285,16 @@ class AICF_GroupSlot
 
 	bool HasPlayerStrategicIntent()
 	{
-		return m_StrategicIntentTargetBase &&
+		return HasStrategicIntent() &&
 			m_StrategicIntentAuthority ==
 				AICF_EStrategicDecisionAuthority.PLAYER_COMMAND;
 	}
 
 	bool IsPlayerStrategicIntentRoleCurrent()
 	{
-		return HasPlayerStrategicIntent() && m_StrategicIntentRole == m_Role;
+		return HasPlayerStrategicIntent() &&
+			(m_StrategicIntentTargetKind == AICF_EOrderTargetKind.POSITION ||
+			m_StrategicIntentRole == m_Role);
 	}
 
 	SCR_CampaignMilitaryBaseComponent GetPlayerStrategicIntentTargetBase()
@@ -280,6 +302,18 @@ class AICF_GroupSlot
 		if (!HasPlayerStrategicIntent())
 			return null;
 		return m_StrategicIntentTargetBase;
+	}
+
+	AICF_EOrderTargetKind GetPlayerStrategicIntentTargetKind()
+	{
+		if (!HasPlayerStrategicIntent())
+			return AICF_EOrderTargetKind.NONE;
+		return m_StrategicIntentTargetKind;
+	}
+
+	vector GetPlayerStrategicIntentTargetPosition()
+	{
+		return m_vStrategicIntentTargetPosition;
 	}
 
 	int GetPlayerStrategicIntentRevision()
@@ -294,7 +328,8 @@ class AICF_GroupSlot
 	{
 		if (!targetBase || authority == AICF_EStrategicDecisionAuthority.NONE)
 			return;
-		if (m_StrategicIntentTargetBase == targetBase &&
+		if (m_StrategicIntentTargetKind == AICF_EOrderTargetKind.BASE &&
+			m_StrategicIntentTargetBase == targetBase &&
 			m_sStrategicIntentPosture == posture &&
 			m_StrategicIntentAuthority == authority &&
 			m_StrategicIntentRole == m_Role)
@@ -302,7 +337,34 @@ class AICF_GroupSlot
 			return;
 		}
 
+		m_StrategicIntentTargetKind = AICF_EOrderTargetKind.BASE;
 		m_StrategicIntentTargetBase = targetBase;
+		if (targetBase.GetOwner())
+			m_vStrategicIntentTargetPosition = targetBase.GetOwner().GetOrigin();
+		m_sStrategicIntentPosture = posture;
+		m_StrategicIntentAuthority = authority;
+		m_StrategicIntentRole = m_Role;
+		m_iStrategicIntentRevision++;
+	}
+
+	void CommitStrategicPointIntent(
+		vector targetPosition,
+		string posture,
+		AICF_EStrategicDecisionAuthority authority)
+	{
+		if (authority == AICF_EStrategicDecisionAuthority.NONE)
+			return;
+		if (m_StrategicIntentTargetKind == AICF_EOrderTargetKind.POSITION &&
+			m_vStrategicIntentTargetPosition == targetPosition &&
+			m_sStrategicIntentPosture == posture &&
+			m_StrategicIntentAuthority == authority)
+		{
+			return;
+		}
+
+		m_StrategicIntentTargetKind = AICF_EOrderTargetKind.POSITION;
+		m_StrategicIntentTargetBase = null;
+		m_vStrategicIntentTargetPosition = targetPosition;
 		m_sStrategicIntentPosture = posture;
 		m_StrategicIntentAuthority = authority;
 		m_StrategicIntentRole = m_Role;
@@ -311,25 +373,41 @@ class AICF_GroupSlot
 
 	void ClearStrategicIntent()
 	{
-		if (m_StrategicIntentTargetBase ||
+		if (m_StrategicIntentTargetKind != AICF_EOrderTargetKind.NONE ||
 			m_StrategicIntentAuthority != AICF_EStrategicDecisionAuthority.NONE)
 		{
 			m_iStrategicIntentRevision++;
 		}
+		m_StrategicIntentTargetKind = AICF_EOrderTargetKind.NONE;
 		m_StrategicIntentTargetBase = null;
+		m_vStrategicIntentTargetPosition = vector.Zero;
 		m_sStrategicIntentPosture = string.Empty;
 		m_StrategicIntentAuthority = AICF_EStrategicDecisionAuthority.NONE;
 	}
 
 	bool HasStrategicIntent()
 	{
-		return m_StrategicIntentTargetBase &&
-			m_StrategicIntentAuthority != AICF_EStrategicDecisionAuthority.NONE;
+		bool destinationValid = m_StrategicIntentTargetKind ==
+			AICF_EOrderTargetKind.POSITION ||
+			(m_StrategicIntentTargetKind == AICF_EOrderTargetKind.BASE &&
+			m_StrategicIntentTargetBase);
+		return destinationValid && m_StrategicIntentAuthority !=
+			AICF_EStrategicDecisionAuthority.NONE;
+	}
+
+	AICF_EOrderTargetKind GetStrategicIntentTargetKind()
+	{
+		return m_StrategicIntentTargetKind;
 	}
 
 	SCR_CampaignMilitaryBaseComponent GetStrategicIntentTargetBase()
 	{
 		return m_StrategicIntentTargetBase;
+	}
+
+	vector GetStrategicIntentTargetPosition()
+	{
+		return m_vStrategicIntentTargetPosition;
 	}
 
 	string GetStrategicIntentPosture()
@@ -344,7 +422,9 @@ class AICF_GroupSlot
 
 	bool IsStrategicIntentRoleCurrent()
 	{
-		return HasStrategicIntent() && m_StrategicIntentRole == m_Role;
+		return HasStrategicIntent() &&
+			(m_StrategicIntentTargetKind == AICF_EOrderTargetKind.POSITION ||
+			m_StrategicIntentRole == m_Role);
 	}
 
 	int GetStrategicIntentRevision()
@@ -804,9 +884,25 @@ class AICF_GroupSlot
 		return m_Group;
 	}
 
+	AICF_EOrderTargetKind GetTargetKind()
+	{
+		return m_TargetKind;
+	}
+
+	bool HasStrategicDestination()
+	{
+		return m_TargetKind == AICF_EOrderTargetKind.POSITION ||
+			(m_TargetKind == AICF_EOrderTargetKind.BASE && m_TargetBase);
+	}
+
 	SCR_CampaignMilitaryBaseComponent GetTargetBase()
 	{
 		return m_TargetBase;
+	}
+
+	vector GetTargetPosition()
+	{
+		return m_vTargetPosition;
 	}
 
 	AIWaypoint GetWaypoint()
@@ -1170,13 +1266,41 @@ class AICF_GroupSlot
 		SupersedePendingStuckRecoveryEvidence("OBJECTIVE_REASSIGNED");
 		ClearPersistentStuckFieldHold();
 
-		if (m_ProgressTargetBase != targetBase)
+		if (m_ProgressTargetKind != AICF_EOrderTargetKind.BASE ||
+			m_ProgressTargetBase != targetBase)
 			ResetProgressTracking("TARGET_CHANGED");
 		else
 			ClearObjectiveHold();
 
 		ClearOwnedWaypointTerminalOutcome();
+		m_TargetKind = AICF_EOrderTargetKind.BASE;
 		m_TargetBase = targetBase;
+		m_vTargetPosition = waypoint.GetOrigin();
+		m_Waypoint = waypoint;
+		return true;
+	}
+
+	bool AssignPointObjective(vector targetPosition, AIWaypoint waypoint)
+	{
+		if (m_State != AICF_EGroupSlotState.READY || !m_Group || !waypoint)
+			return false;
+
+		ClearPendingOrderRecovery();
+		SupersedePendingStuckRecoveryEvidence("OBJECTIVE_REASSIGNED");
+		ClearPersistentStuckFieldHold();
+		if (m_ProgressTargetKind != AICF_EOrderTargetKind.POSITION ||
+			m_vProgressTargetPosition != targetPosition)
+		{
+			ResetProgressTracking("TARGET_CHANGED");
+		}
+		else
+		{
+			ClearObjectiveHold();
+		}
+		ClearOwnedWaypointTerminalOutcome();
+		m_TargetKind = AICF_EOrderTargetKind.POSITION;
+		m_TargetBase = null;
+		m_vTargetPosition = targetPosition;
 		m_Waypoint = waypoint;
 		return true;
 	}
@@ -1195,12 +1319,40 @@ class AICF_GroupSlot
 		ClearPendingOrderRecovery();
 		SupersedePendingStuckRecoveryEvidence("SUSPENDED_OBJECTIVE_REASSIGNED");
 		ClearPersistentStuckFieldHold();
-		if (m_ProgressTargetBase != targetBase)
+		if (m_ProgressTargetKind != AICF_EOrderTargetKind.BASE ||
+			m_ProgressTargetBase != targetBase)
 			ResetProgressTracking("TARGET_CHANGED_DURING_VEHICLE_CONTROL");
 		else
 			ClearObjectiveHold();
 		ClearOwnedWaypointTerminalOutcome();
+		m_TargetKind = AICF_EOrderTargetKind.BASE;
 		m_TargetBase = targetBase;
+		if (targetBase.GetOwner())
+			m_vTargetPosition = targetBase.GetOwner().GetOrigin();
+		return true;
+	}
+
+	bool AssignSuspendedPointObjective(vector targetPosition)
+	{
+		if (m_State != AICF_EGroupSlotState.READY || !m_Group || m_Waypoint)
+			return false;
+
+		ClearPendingOrderRecovery();
+		SupersedePendingStuckRecoveryEvidence("SUSPENDED_OBJECTIVE_REASSIGNED");
+		ClearPersistentStuckFieldHold();
+		if (m_ProgressTargetKind != AICF_EOrderTargetKind.POSITION ||
+			m_vProgressTargetPosition != targetPosition)
+		{
+			ResetProgressTracking("TARGET_CHANGED_DURING_VEHICLE_CONTROL");
+		}
+		else
+		{
+			ClearObjectiveHold();
+		}
+		ClearOwnedWaypointTerminalOutcome();
+		m_TargetKind = AICF_EOrderTargetKind.POSITION;
+		m_TargetBase = null;
+		m_vTargetPosition = targetPosition;
 		return true;
 	}
 
@@ -1356,11 +1508,13 @@ class AICF_GroupSlot
 		bool countsAsReliabilityAttempt = false)
 	{
 		ClearPendingOrderRecovery();
-		if (!m_Group || !m_TargetBase || !m_Waypoint)
+		if (!m_Group || !HasStrategicDestination() || !m_Waypoint)
 			return;
 
 		m_PendingOrderRecoveryGroup = m_Group;
+		m_PendingOrderRecoveryTargetKind = m_TargetKind;
 		m_PendingOrderRecoveryTargetBase = m_TargetBase;
+		m_vPendingOrderRecoveryTargetPosition = m_vTargetPosition;
 		m_PendingOrderRecoveryWaypoint = m_Waypoint;
 		m_sPendingOrderRecoveryCause = failureReason;
 		m_bPendingOrderRecoveryCountsAsStuck = countsAsStuckRecovery;
@@ -1390,14 +1544,20 @@ class AICF_GroupSlot
 
 	bool HasPendingOrderRecovery()
 	{
-		return m_PendingOrderRecoveryGroup && m_PendingOrderRecoveryTargetBase &&
+		bool destinationValid = m_PendingOrderRecoveryTargetKind ==
+			AICF_EOrderTargetKind.POSITION ||
+			(m_PendingOrderRecoveryTargetKind == AICF_EOrderTargetKind.BASE &&
+			m_PendingOrderRecoveryTargetBase);
+		return m_PendingOrderRecoveryGroup && destinationValid &&
 			m_PendingOrderRecoveryWaypoint;
 	}
 
 	bool IsPendingOrderRecoveryContextCurrent()
 	{
 		return HasPendingOrderRecovery() && m_Group == m_PendingOrderRecoveryGroup &&
+			m_TargetKind == m_PendingOrderRecoveryTargetKind &&
 			m_TargetBase == m_PendingOrderRecoveryTargetBase &&
+			m_vTargetPosition == m_vPendingOrderRecoveryTargetPosition &&
 			m_Waypoint == m_PendingOrderRecoveryWaypoint &&
 			m_iSpawnGeneration == m_iPendingOrderRecoveryGroupGeneration &&
 			m_iStrategicAssignmentRevision == m_iPendingOrderRecoveryAssignmentRevision;
@@ -1411,6 +1571,16 @@ class AICF_GroupSlot
 	SCR_CampaignMilitaryBaseComponent GetPendingOrderRecoveryTargetBase()
 	{
 		return m_PendingOrderRecoveryTargetBase;
+	}
+
+	AICF_EOrderTargetKind GetPendingOrderRecoveryTargetKind()
+	{
+		return m_PendingOrderRecoveryTargetKind;
+	}
+
+	vector GetPendingOrderRecoveryTargetPosition()
+	{
+		return m_vPendingOrderRecoveryTargetPosition;
 	}
 
 	AIWaypoint GetPendingOrderRecoveryWaypoint()
@@ -1598,7 +1768,9 @@ class AICF_GroupSlot
 	void ClearPendingOrderRecovery()
 	{
 		m_PendingOrderRecoveryGroup = null;
+		m_PendingOrderRecoveryTargetKind = AICF_EOrderTargetKind.NONE;
 		m_PendingOrderRecoveryTargetBase = null;
+		m_vPendingOrderRecoveryTargetPosition = vector.Zero;
 		m_PendingOrderRecoveryWaypoint = null;
 		m_sPendingOrderRecoveryCause = string.Empty;
 		m_bPendingOrderRecoveryCountsAsStuck = false;
@@ -1644,6 +1816,39 @@ class AICF_GroupSlot
 		return true;
 	}
 
+	bool ObserveCurrentDestinationProgress(
+		float distanceMeters,
+		float minimumProgressMeters)
+	{
+		if (!HasStrategicDestination() || distanceMeters < 0)
+			return false;
+		if (m_ProgressTargetKind != m_TargetKind ||
+			m_ProgressTargetBase != m_TargetBase ||
+			m_vProgressTargetPosition != m_vTargetPosition ||
+			m_iLastProgressAtMs <= 0)
+		{
+			m_ProgressTargetKind = m_TargetKind;
+			m_ProgressTargetBase = m_TargetBase;
+			m_vProgressTargetPosition = m_vTargetPosition;
+			m_fBestDistanceToTarget = distanceMeters;
+			m_iLastProgressAtMs = System.GetTickCount();
+			m_iStuckRecoveryCount = 0;
+			m_bRecoveringFromStuck = false;
+			m_bPersistentStuckReported = false;
+			CompleteStuckEpisodeTracking();
+			return true;
+		}
+		if (distanceMeters > m_fBestDistanceToTarget - minimumProgressMeters)
+			return false;
+		m_fBestDistanceToTarget = distanceMeters;
+		m_iLastProgressAtMs = System.GetTickCount();
+		m_iStuckRecoveryCount = 0;
+		m_bRecoveringFromStuck = false;
+		m_bPersistentStuckReported = false;
+		CompleteStuckEpisodeTracking();
+		return true;
+	}
+
 	bool IsStuck(int timeoutMs)
 	{
 		return m_iLastProgressAtMs > 0 && System.GetTickCount(m_iLastProgressAtMs) >= timeoutMs;
@@ -1659,6 +1864,24 @@ class AICF_GroupSlot
 			ClearPendingStuckRecoveryEvidenceInternal();
 		}
 		m_ProgressTargetBase = targetBase;
+		m_fBestDistanceToTarget = distanceMeters;
+		m_iLastProgressAtMs = System.GetTickCount();
+		m_iStuckRecoveryCount = 0;
+		m_bRecoveringFromStuck = false;
+		m_bPersistentStuckReported = false;
+		CompleteStuckEpisodeTracking();
+	}
+
+	void ConfirmAtCurrentDestination(float distanceMeters)
+	{
+		if (m_bPendingStuckRecoveryEvidence)
+		{
+			RecordStuckRecoveryTerminalOutcome("ROUTE_PROGRESS_AT_OBJECTIVE");
+			ClearPendingStuckRecoveryEvidenceInternal();
+		}
+		m_ProgressTargetKind = m_TargetKind;
+		m_ProgressTargetBase = m_TargetBase;
+		m_vProgressTargetPosition = m_vTargetPosition;
 		m_fBestDistanceToTarget = distanceMeters;
 		m_iLastProgressAtMs = System.GetTickCount();
 		m_iStuckRecoveryCount = 0;
@@ -1733,12 +1956,14 @@ class AICF_GroupSlot
 		int attempt)
 	{
 		SupersedePendingStuckRecoveryEvidence("NEW_RECOVERY_ATTEMPT");
-		if (!group || !targetBase || !waypoint || attempt <= 0)
+		if (!group || !HasStrategicDestination() || !waypoint || attempt <= 0)
 			return;
 
 		m_bPendingStuckRecoveryEvidence = true;
 		m_PendingStuckRecoveryGroup = group;
+		m_PendingStuckRecoveryTargetKind = m_TargetKind;
 		m_PendingStuckRecoveryTargetBase = targetBase;
+		m_vPendingStuckRecoveryTargetPosition = m_vTargetPosition;
 		m_PendingStuckRecoveryWaypoint = waypoint;
 		m_vPendingStuckRecoveryStartPosition = leaderPosition;
 		m_fPendingStuckRecoveryStartDistance = routeDistanceMeters;
@@ -1755,10 +1980,11 @@ class AICF_GroupSlot
 	{
 		return m_bPendingStuckRecoveryEvidence &&
 			m_PendingStuckRecoveryGroup &&
-			m_PendingStuckRecoveryTargetBase &&
 			m_PendingStuckRecoveryWaypoint &&
 			m_Group == m_PendingStuckRecoveryGroup &&
+			m_TargetKind == m_PendingStuckRecoveryTargetKind &&
 			m_TargetBase == m_PendingStuckRecoveryTargetBase &&
+			m_vTargetPosition == m_vPendingStuckRecoveryTargetPosition &&
 			m_Waypoint == m_PendingStuckRecoveryWaypoint;
 	}
 
@@ -1889,7 +2115,9 @@ class AICF_GroupSlot
 	{
 		m_bPendingStuckRecoveryEvidence = false;
 		m_PendingStuckRecoveryGroup = null;
+		m_PendingStuckRecoveryTargetKind = AICF_EOrderTargetKind.NONE;
 		m_PendingStuckRecoveryTargetBase = null;
+		m_vPendingStuckRecoveryTargetPosition = vector.Zero;
 		m_PendingStuckRecoveryWaypoint = null;
 		m_vPendingStuckRecoveryStartPosition = vector.Zero;
 		m_fPendingStuckRecoveryStartDistance = -1.0;
@@ -1916,14 +2144,17 @@ class AICF_GroupSlot
 
 	bool CanCommitDeploymentReady()
 	{
-		return m_State == AICF_EGroupSlotState.READY && m_Group && m_TargetBase && m_Waypoint;
+		return m_State == AICF_EGroupSlotState.READY && m_Group &&
+			HasStrategicDestination() && m_Waypoint;
 	}
 
 	void ClearObjective()
 	{
 		ClearPendingOrderRecovery();
 		SupersedePendingStuckRecoveryEvidence("OBJECTIVE_CLEARED");
+		m_TargetKind = AICF_EOrderTargetKind.NONE;
 		m_TargetBase = null;
+		m_vTargetPosition = vector.Zero;
 		m_Waypoint = null;
 	}
 
@@ -2030,7 +2261,9 @@ class AICF_GroupSlot
 		m_aRosterObservedAtMs.Clear();
 		m_aRosterCallbackAgents.Clear();
 		m_Group = null;
+		m_TargetKind = AICF_EOrderTargetKind.NONE;
 		m_TargetBase = null;
+		m_vTargetPosition = vector.Zero;
 		m_Waypoint = null;
 		m_iReinforcementReadyAtMs = 0;
 		m_iSpawnStartedAtMs = 0;
@@ -2069,6 +2302,8 @@ class AICF_GroupSlot
 	{
 		SupersedePendingStuckRecoveryEvidence(reason);
 		m_ProgressTargetBase = null;
+		m_ProgressTargetKind = AICF_EOrderTargetKind.NONE;
+		m_vProgressTargetPosition = vector.Zero;
 		m_fBestDistanceToTarget = -1.0;
 		m_iLastProgressAtMs = 0;
 		m_iStuckRecoveryCount = 0;

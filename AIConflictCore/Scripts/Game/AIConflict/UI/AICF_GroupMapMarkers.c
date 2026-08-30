@@ -250,6 +250,7 @@ class AICF_GroupMapMarkerSystem
 	static const int SLOTS_PER_FACTION = AICF_Stage1Config.GROUP_SLOTS_PER_FACTION;
 	static const int TOTAL_SLOTS = SLOTS_PER_FACTION * 2;
 	static const float AT_OBJECTIVE_RADIUS_METERS = 75;
+	static const float POINT_AT_OBJECTIVE_RADIUS_METERS = 20;
 
 	protected SCR_MapMarkerManagerComponent m_MarkerManager;
 	protected ref array<SCR_MapMarkerEntity> m_aMarkers = {};
@@ -257,6 +258,10 @@ class AICF_GroupMapMarkerSystem
 	protected ref array<IEntity> m_aTrackedLeaders = {};
 	protected ref array<SCR_MapMarkerEntity> m_aObjectiveMarkers = {};
 	protected ref array<SCR_CampaignMilitaryBaseComponent> m_aTrackedObjectives = {};
+	protected ref array<ref SCR_MapMarkerBase> m_aDestinationMarkers = {};
+	protected ref array<int> m_aDestinationIntentRevisions = {};
+	protected ref array<vector> m_aDestinationPositions = {};
+	protected ref array<string> m_aDestinationSlotKeys = {};
 	protected bool m_bReadyLogged;
 
 	void AICF_GroupMapMarkerSystem()
@@ -268,6 +273,10 @@ class AICF_GroupMapMarkerSystem
 			m_aTrackedLeaders.Insert(null);
 			m_aObjectiveMarkers.Insert(null);
 			m_aTrackedObjectives.Insert(null);
+			m_aDestinationMarkers.Insert(null);
+			m_aDestinationIntentRevisions.Insert(-1);
+			m_aDestinationPositions.Insert(vector.Zero);
+			m_aDestinationSlotKeys.Insert(string.Empty);
 		}
 	}
 
@@ -303,6 +312,7 @@ class AICF_GroupMapMarkerSystem
 		{
 			RemoveMarker(i);
 			RemoveObjectiveMarker(i);
+			RemoveDestinationMarker(i);
 		}
 
 		m_MarkerManager = null;
@@ -328,6 +338,12 @@ class AICF_GroupMapMarkerSystem
 		{
 			int markerIndex = offset + slotId;
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			SyncDestinationMarker(
+				slot,
+				markerIndex,
+				isUSSR,
+				markerFaction,
+				factionManager);
 			SCR_AIGroup group;
 			if (slot && slot.IsCombatReady())
 				group = slot.GetGroup();
@@ -469,20 +485,27 @@ class AICF_GroupMapMarkerSystem
 			task,
 			alive,
 			vehicleState,
-			DescribeDirection(group, slot.GetTargetBase()));
+			DescribeDirection(group, slot));
 	}
 
 	protected string DescribeDirection(
 		SCR_AIGroup group,
-		SCR_CampaignMilitaryBaseComponent target)
+		AICF_GroupSlot slot)
 	{
-		if (!group || !target || !target.GetOwner())
+		if (!group || !slot || !slot.HasStrategicDestination())
 			return "DIR -";
 		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
 		vector origin = group.GetOrigin();
 		if (leader)
 			origin = leader.GetOrigin();
-		vector destination = target.GetOwner().GetOrigin();
+		vector destination = slot.GetTargetPosition();
+		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
+		if (slot.GetTargetKind() == AICF_EOrderTargetKind.BASE)
+		{
+			if (!target || !target.GetOwner())
+				return "DIR -";
+			destination = target.GetOwner().GetOrigin();
+		}
 		vector direction = vector.Direction(origin, destination);
 		float bearing = Math.Atan2(direction[0], direction[2]) * Math.RAD2DEG;
 		if (bearing < 0)
@@ -514,6 +537,25 @@ class AICF_GroupMapMarkerSystem
 	{
 		if (slot.IsAwaitingPlayerCommand() || slot.IsSystemHoldOrder())
 			return "AWAITING PLAYER COMMAND";
+		if (slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
+		{
+			vector targetPosition = slot.GetTargetPosition();
+			IEntity pointLeader = AICF_GroupRuntime.ResolveAliveLeader(group);
+			vector pointOrigin = group.GetOrigin();
+			if (pointLeader)
+				pointOrigin = pointLeader.GetOrigin();
+			string pointLabel = string.Format(
+				"%1/%2",
+				Math.Round(targetPosition[0]),
+				Math.Round(targetPosition[2]));
+			if (vector.DistanceSqXZ(pointOrigin, targetPosition) <=
+				POINT_AT_OBJECTIVE_RADIUS_METERS *
+					POINT_AT_OBJECTIVE_RADIUS_METERS)
+			{
+				return string.Format("HOLDING MAP POINT %1", pointLabel);
+			}
+			return string.Format("MOVING TO MAP POINT %1", pointLabel);
+		}
 
 		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
 		if (!target || !target.GetOwner())
@@ -624,6 +666,68 @@ class AICF_GroupMapMarkerSystem
 			slot.GetRoleIndex() * 100 + markerKind;
 	}
 
+	protected void SyncDestinationMarker(
+		AICF_GroupSlot slot,
+		int markerIndex,
+		bool isUSSR,
+		SCR_Faction markerFaction,
+		FactionManager factionManager)
+	{
+		bool shouldExist = slot && slot.HasPlayerStrategicIntent() &&
+			slot.GetPlayerStrategicIntentTargetKind() ==
+				AICF_EOrderTargetKind.POSITION;
+		if (!shouldExist)
+		{
+			RemoveDestinationMarker(markerIndex);
+			return;
+		}
+
+		vector targetPosition = slot.GetPlayerStrategicIntentTargetPosition();
+		int intentRevision = slot.GetPlayerStrategicIntentRevision();
+		string slotKey = slot.GetSlotKey();
+		if (m_aDestinationMarkers[markerIndex] &&
+			m_aDestinationIntentRevisions[markerIndex] == intentRevision &&
+			m_aDestinationPositions[markerIndex] == targetPosition &&
+			m_aDestinationSlotKeys[markerIndex] == slotKey)
+		{
+			return;
+		}
+
+		RemoveDestinationMarker(markerIndex);
+		EMilitarySymbolIdentity identity = EMilitarySymbolIdentity.BLUFOR;
+		if (isUSSR)
+			identity = EMilitarySymbolIdentity.OPFOR;
+		SCR_MapMarkerBase marker = m_MarkerManager.PrepareMilitaryMarker(
+			identity,
+			EMilitarySymbolDimension.LAND,
+			EMilitarySymbolIcon.INFANTRY);
+		if (!marker)
+			return;
+		marker.SetWorldPos(
+			Math.Round(targetPosition[0]),
+			Math.Round(targetPosition[2]));
+		marker.SetCustomText(string.Format("MOVE %1", slotKey));
+		marker.SetCanBeRemovedByOwner(false);
+		marker.AddMarkerFactionFlags(
+			factionManager.GetFactionIndex(markerFaction));
+		m_MarkerManager.InsertStaticMarker(marker, false, true);
+		m_aDestinationMarkers[markerIndex] = marker;
+		m_aDestinationIntentRevisions[markerIndex] = intentRevision;
+		m_aDestinationPositions[markerIndex] = targetPosition;
+		m_aDestinationSlotKeys[markerIndex] = slotKey;
+		AICF_Stage4Diagnostics.Info(
+			"PLAYER_POINT_MARKER_CREATED",
+			string.Format(
+				"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 target_kind=POSITION target_x=%5 target_z=%6 intent_revision=%7 visibility=ALLIED jip=STATIC_SERVER_MARKER",
+				markerFaction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetStableSlotKey(),
+				slot.GetSlotId(),
+				Math.Round(targetPosition[0]),
+				Math.Round(targetPosition[2]),
+				intentRevision));
+	}
+
 	// One target base owns one marker per faction. Multiple ATTACK slots are
 	// folded into the same label so co-located replicated widgets cannot overlap.
 	protected void SyncFactionObjectiveMarkers(
@@ -722,6 +826,19 @@ class AICF_GroupMapMarkerSystem
 			m_MarkerManager.RemoveDynamicMarker(marker);
 		m_aObjectiveMarkers[markerIndex] = null;
 		m_aTrackedObjectives[markerIndex] = null;
+	}
+
+	protected void RemoveDestinationMarker(int markerIndex)
+	{
+		if (markerIndex < 0 || markerIndex >= m_aDestinationMarkers.Count())
+			return;
+		SCR_MapMarkerBase marker = m_aDestinationMarkers[markerIndex];
+		if (marker && m_MarkerManager)
+			m_MarkerManager.RemoveStaticMarker(marker);
+		m_aDestinationMarkers[markerIndex] = null;
+		m_aDestinationIntentRevisions[markerIndex] = -1;
+		m_aDestinationPositions[markerIndex] = vector.Zero;
+		m_aDestinationSlotKeys[markerIndex] = string.Empty;
 	}
 
 	protected int CountMarkers()

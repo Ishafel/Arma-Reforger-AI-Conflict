@@ -39,6 +39,31 @@ enum AICF_EStrategicDecisionAuthority
 	SYSTEM_HOLD
 }
 
+// Strategic destination identity is explicit. POSITION is never represented by
+// a fake Conflict base and vector.Zero is not used as an absence sentinel.
+enum AICF_EOrderTargetKind
+{
+	NONE = 0,
+	BASE,
+	POSITION
+}
+
+class AICF_OrderTargetKind
+{
+	static string ToString(AICF_EOrderTargetKind kind)
+	{
+		switch (kind)
+		{
+			case AICF_EOrderTargetKind.BASE:
+				return "BASE";
+			case AICF_EOrderTargetKind.POSITION:
+				return "POSITION";
+		}
+
+		return "NONE";
+	}
+}
+
 class AICF_StrategicDecisionAuthority
 {
 	static string ToString(AICF_EStrategicDecisionAuthority authority)

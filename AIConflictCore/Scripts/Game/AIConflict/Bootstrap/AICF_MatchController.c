@@ -4,6 +4,8 @@ class AICF_MatchController
 	protected static AICF_MatchController s_ActiveController;
 	protected static const int UPDATE_INTERVAL_MS = 1000;
 	protected static const int PLAYER_ORDER_RATE_LIMIT_MS = 1000;
+	protected static const int PLAYER_POINT_NAVMESH_RETRY_MS = 100;
+	protected static const int PLAYER_POINT_NAVMESH_TIMEOUT_MS = 6000;
 	protected static const int PLAYER_CONFIG_RATE_LIMIT_MS = 100;
 	protected static const int REINFORCEMENT_RETRY_MS = 5000;
 	protected static const int HEARTBEAT_INTERVAL_MS = 60000;
@@ -14,6 +16,7 @@ class AICF_MatchController
 	protected static const int GROUP_SPAWN_AUDIT_INTERVAL_MS = 5000;
 	protected static const float RELAY_CAPTURE_RADIUS_METERS = 30.0;
 	protected static const float STUCK_WATCHDOG_IGNORE_RADIUS_METERS = 100.0;
+	protected static const float POINT_DESTINATION_RADIUS_METERS = 20.0;
 	// The first valid observation only starts the durability window. Two further
 	// polls (three observations total) and two full reliability intervals prevent
 	// a waypoint that survives one five-second boundary from being confirmed.
@@ -42,6 +45,7 @@ class AICF_MatchController
 	protected bool m_bResultLogged;
 	protected bool m_bCampaignWasRunning;
 	protected bool m_bTestOrderDropInjected;
+	protected bool m_bPlayerPointRetryScheduled;
 
 	protected bool m_bObservedCapture;
 	protected bool m_bObservedRetarget;
@@ -65,6 +69,7 @@ class AICF_MatchController
 	protected int m_iDuplicateSpawnsPrevented;
 	protected int m_iLifecycleAudits;
 	protected int m_iStrategicBaseRevision;
+	protected int m_iPlayerPointRequestSequence;
 	protected FactionKey m_sObservedPlayerFaction;
 
 	protected ref AICF_Stage1Config m_Config;
@@ -106,6 +111,7 @@ class AICF_MatchController
 	protected ref array<int> m_aPlayerOrderAtMs = {};
 	protected ref array<int> m_aPlayerConfigIds = {};
 	protected ref array<int> m_aPlayerConfigAtMs = {};
+	protected ref array<ref AICF_PlayerPointOrderRequest> m_aPendingPlayerPointOrders = {};
 
 	protected ref array<SCR_CampaignMilitaryBaseComponent> m_aTrackedBases = {};
 	protected ref array<FactionKey> m_aTrackedBaseOwners = {};
@@ -578,35 +584,43 @@ class AICF_MatchController
 		if (!factionState)
 			return false;
 
-		int nowMs = System.GetTickCount();
-		int playerOrderIndex = m_aPlayerOrderIds.Find(playerId);
-		if (playerOrderIndex >= 0)
+		AICF_GroupSlot slot = factionState.GetSlot(slotId);
+		if (!ConsumePlayerOrderRateLimit(playerId))
 		{
-			if (System.GetTickCount(m_aPlayerOrderAtMs[playerOrderIndex]) < PLAYER_ORDER_RATE_LIMIT_MS)
-				return false;
-			m_aPlayerOrderAtMs[playerOrderIndex] = nowMs;
-		}
-		else
-		{
-			m_aPlayerOrderIds.Insert(playerId);
-			m_aPlayerOrderAtMs.Insert(nowMs);
+			AICF_Stage4Diagnostics.Warning(
+				"PLAYER_ORDER_REJECTED",
+				string.Format(
+					"player=%1 faction=%2 slot=%3 target=%4 target_kind=BASE reason=RATE_LIMITED decision_authority=PLAYER_COMMAND authority=SERVER",
+					playerId,
+					faction.GetFactionKey(),
+					slotId,
+					targetCallsign));
+			return false;
 		}
 
-		AICF_GroupSlot slot = factionState.GetSlot(slotId);
 		SCR_CampaignMilitaryBaseComponent target;
 		SCR_CampaignMilitaryBaseManager baseManager = m_Campaign.GetBaseManager();
 		if (baseManager)
 			target = baseManager.FindBaseByCallsign(targetCallsign);
 		if (!slot || !slot.IsCombatReady() || !target || slot.HasPendingOrderRecovery())
 		{
-			AICF_Stage4Diagnostics.Warning(
-				"PLAYER_ORDER_REJECTED",
-				string.Format(
-					"player=%1 faction=%2 slot=%3 target=%4 reason=GROUP_OR_TARGET_UNAVAILABLE",
-					playerId,
-					faction.GetFactionKey(),
-					slotId,
-					targetCallsign));
+			string rejected = string.Format(
+				"player=%1 faction=%2 slot=%3 target=%4 target_kind=BASE reason=GROUP_OR_TARGET_UNAVAILABLE decision_authority=PLAYER_COMMAND authority=SERVER",
+				playerId,
+				faction.GetFactionKey(),
+				slotId,
+				targetCallsign);
+			if (slot)
+			{
+				rejected += string.Format(
+					" stable_slot=%1 numeric_slot=%2 group_generation=%3 assignment_revision=%4 intent_revision=%5",
+					slot.GetStableSlotKey(),
+					slot.GetSlotId(),
+					slot.GetSpawnGeneration(),
+					slot.GetStrategicAssignmentRevision(),
+					slot.GetStrategicIntentRevision());
+			}
+			AICF_Stage4Diagnostics.Warning("PLAYER_ORDER_REJECTED", rejected);
 			return false;
 		}
 
@@ -619,14 +633,20 @@ class AICF_MatchController
 			target,
 			waypointSuspendedByVehicle))
 		{
-			AICF_Stage4Diagnostics.Warning(
-				"PLAYER_ORDER_REJECTED",
-				string.Format(
-					"player=%1 faction=%2 slot=%3 target=%4 reason=ROLE_OR_TARGET_INVALID",
-					playerId,
-					faction.GetFactionKey(),
-					slotId,
-					targetCallsign));
+			string rejected = string.Format(
+				"player=%1 faction=%2 slot=%3 target=%4 target_kind=BASE reason=ROLE_OR_TARGET_INVALID decision_authority=PLAYER_COMMAND authority=SERVER",
+				playerId,
+				faction.GetFactionKey(),
+				slotId,
+				targetCallsign);
+			rejected += string.Format(
+				" stable_slot=%1 numeric_slot=%2 group_generation=%3 assignment_revision=%4 intent_revision=%5",
+				slot.GetStableSlotKey(),
+				slot.GetSlotId(),
+				slot.GetSpawnGeneration(),
+				slot.GetStrategicAssignmentRevision(),
+				slot.GetStrategicIntentRevision());
+			AICF_Stage4Diagnostics.Warning("PLAYER_ORDER_REJECTED", rejected);
 			return false;
 		}
 
@@ -640,9 +660,7 @@ class AICF_MatchController
 				m_iStrategicBaseRevision);
 		}
 
-		AICF_Stage4Diagnostics.Info(
-			"PLAYER_ORDER_ACCEPTED",
-			string.Format(
+		string accepted = string.Format(
 				"player=%1 faction=%2 slot=%3 slot_key=%4 role=%5 old_target=%6 target=%7 vehicle_adopted=%8",
 				playerId,
 				faction.GetFactionKey(),
@@ -651,8 +669,440 @@ class AICF_MatchController
 				AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
 				AICF_Stage1Diagnostics.BaseKey(oldTarget),
 				AICF_Stage1Diagnostics.BaseKey(target),
-				vehicleAdopted));
+				vehicleAdopted);
+		accepted += string.Format(
+			" target_kind=BASE stable_slot=%1 numeric_slot=%2 group_generation=%3 assignment_revision=%4 intent_revision=%5 decision_authority=PLAYER_COMMAND authority=SERVER",
+			slot.GetStableSlotKey(),
+			slot.GetSlotId(),
+			slot.GetSpawnGeneration(),
+			slot.GetStrategicAssignmentRevision(),
+			slot.GetStrategicIntentRevision());
+		AICF_Stage4Diagnostics.Info("PLAYER_ORDER_ACCEPTED", accepted);
 		SyncStrategicUIState();
+		return true;
+	}
+
+	// The RPC carries only an owned slot index and an untrusted X/Z intent.
+	// Terrain height, world bounds, navmesh reachability and the durable endpoint
+	// are resolved again on the authoritative server.
+	bool RequestPlayerPointOrder(
+		SCR_PlayerController requester,
+		int playerId,
+		int slotId,
+		vector clientPosition,
+		out string rejectionReason,
+		out vector resolvedPosition,
+		out bool responseDeferred)
+	{
+		rejectionReason = string.Empty;
+		resolvedPosition = vector.Zero;
+		responseDeferred = false;
+		if (!Replication.IsServer() || m_bStopped || !m_Campaign ||
+			!m_Campaign.IsRunning() || !m_OrderPlanner)
+		{
+			rejectionReason = "MATCH_UNAVAILABLE";
+			if (Replication.IsServer())
+			{
+				AICF_Stage4Diagnostics.Warning(
+					"PLAYER_ORDER_REJECTED",
+					string.Format(
+						"player=%1 slot=%2 target_kind=POSITION reason=MATCH_UNAVAILABLE decision_authority=PLAYER_COMMAND authority=SERVER",
+						playerId,
+						slotId));
+			}
+			return false;
+		}
+		if (!requester || requester.GetPlayerId() != playerId)
+		{
+			rejectionReason = "REQUESTER_IDENTITY_INVALID";
+			AICF_Stage4Diagnostics.Warning(
+				"PLAYER_ORDER_REJECTED",
+				string.Format(
+					"player=%1 slot=%2 target_kind=POSITION reason=REQUESTER_IDENTITY_INVALID decision_authority=PLAYER_COMMAND authority=SERVER",
+					playerId,
+					slotId));
+			return false;
+		}
+
+		SCR_CampaignFaction faction = SCR_CampaignFaction.Cast(
+			SCR_FactionManager.SGetPlayerFaction(playerId));
+		if (!faction)
+		{
+			rejectionReason = "PLAYER_FACTION_UNAVAILABLE";
+			AICF_Stage4Diagnostics.Warning(
+				"PLAYER_ORDER_REJECTED",
+				string.Format(
+					"player=%1 slot=%2 target_kind=POSITION reason=PLAYER_FACTION_UNAVAILABLE decision_authority=PLAYER_COMMAND authority=SERVER",
+					playerId,
+					slotId));
+			return false;
+		}
+		AICF_FactionState factionState;
+		FactionKey stableFactionKey = m_ContentProfile.GetStableFactionKey(
+			faction.GetFactionKey());
+		if (stableFactionKey == "US")
+			factionState = m_USState;
+		else if (stableFactionKey == "USSR")
+			factionState = m_USSRState;
+		if (!factionState)
+		{
+			rejectionReason = "FACTION_NOT_MANAGED";
+			AICF_Stage4Diagnostics.Warning(
+				"PLAYER_ORDER_REJECTED",
+				string.Format(
+					"player=%1 faction=%2 slot=%3 target_kind=POSITION reason=FACTION_NOT_MANAGED decision_authority=PLAYER_COMMAND authority=SERVER",
+					playerId,
+					faction.GetFactionKey(),
+					slotId));
+			return false;
+		}
+		if (!ConsumePlayerOrderRateLimit(playerId))
+		{
+			rejectionReason = "RATE_LIMITED";
+			AICF_Stage4Diagnostics.Warning(
+				"PLAYER_ORDER_REJECTED",
+				string.Format(
+					"player=%1 faction=%2 slot=%3 target_kind=POSITION reason=RATE_LIMITED decision_authority=PLAYER_COMMAND authority=SERVER",
+					playerId,
+					faction.GetFactionKey(),
+					slotId));
+			return false;
+		}
+
+		AICF_GroupSlot slot = factionState.GetSlot(slotId);
+		if (!slot || !slot.IsCombatReady() || slot.HasPendingOrderRecovery())
+		{
+			rejectionReason = "GROUP_UNAVAILABLE";
+			AICF_Stage4Diagnostics.Warning(
+				"PLAYER_ORDER_REJECTED",
+				string.Format(
+					"player=%1 faction=%2 slot=%3 target_kind=POSITION reason=GROUP_UNAVAILABLE decision_authority=PLAYER_COMMAND authority=SERVER",
+					playerId,
+					faction.GetFactionKey(),
+					slotId));
+			return false;
+		}
+		if (FindPendingPlayerPointOrder(playerId) >= 0)
+		{
+			rejectionReason = "REQUEST_ALREADY_PENDING";
+			AICF_Stage4Diagnostics.Warning(
+				"PLAYER_ORDER_REJECTED",
+				string.Format(
+					"player=%1 faction=%2 slot=%3 target_kind=POSITION reason=REQUEST_ALREADY_PENDING decision_authority=PLAYER_COMMAND authority=SERVER",
+					playerId,
+					faction.GetFactionKey(),
+					slotId));
+			return false;
+		}
+
+		m_iPlayerPointRequestSequence++;
+		AICF_PlayerPointOrderRequest request = new AICF_PlayerPointOrderRequest(
+			requester,
+			slot.GetGroup(),
+			playerId,
+			slotId,
+			slot.GetSpawnGeneration(),
+			slot.GetStrategicAssignmentRevision(),
+			slot.GetStrategicIntentRevision(),
+			m_iPlayerPointRequestSequence,
+			stableFactionKey,
+			clientPosition);
+		bool waitingForNavmesh;
+		bool accepted = TryCompletePlayerPointOrder(
+			request,
+			rejectionReason,
+			resolvedPosition,
+			waitingForNavmesh);
+		if (!waitingForNavmesh)
+			return accepted;
+
+		m_aPendingPlayerPointOrders.Insert(request);
+		responseDeferred = true;
+		AICF_Stage4Diagnostics.Info(
+			"PLAYER_POINT_ORDER_PENDING",
+			string.Format(
+				"player=%1 faction=%2 slot=%3 request_token=%4 requested_x=%5 requested_z=%6 reason=NAVMESH_TILE_LOADING authority=SERVER",
+				playerId,
+				stableFactionKey,
+				slotId,
+				request.GetRequestToken(),
+				clientPosition[0],
+				clientPosition[2]));
+		SchedulePendingPlayerPointOrders();
+		return false;
+	}
+
+	protected bool TryCompletePlayerPointOrder(
+		AICF_PlayerPointOrderRequest request,
+		out string rejectionReason,
+		out vector resolvedPosition,
+		out bool waitingForNavmesh)
+	{
+		rejectionReason = string.Empty;
+		resolvedPosition = vector.Zero;
+		waitingForNavmesh = false;
+		AICF_GroupSlot slot;
+		SCR_CampaignFaction faction;
+		if (!Replication.IsServer() || m_bStopped || !m_Campaign ||
+			!m_Campaign.IsRunning() || !m_OrderPlanner)
+		{
+			rejectionReason = "MATCH_UNAVAILABLE";
+		}
+		else if (!request || !request.GetRequester() ||
+			request.GetRequester().GetPlayerId() != request.GetPlayerId())
+		{
+			rejectionReason = "REQUESTER_IDENTITY_CHANGED";
+		}
+		else
+		{
+			faction = SCR_CampaignFaction.Cast(
+				SCR_FactionManager.SGetPlayerFaction(request.GetPlayerId()));
+			if (!faction ||
+				m_ContentProfile.GetStableFactionKey(faction.GetFactionKey()) !=
+					request.GetStableFactionKey())
+			{
+				rejectionReason = "PLAYER_FACTION_CHANGED";
+			}
+			else
+			{
+				AICF_FactionState factionState = GetPlayerPointFactionState(
+					request.GetStableFactionKey());
+				if (factionState)
+					slot = factionState.GetSlot(request.GetSlotId());
+				if (!slot || slot.GetGroup() != request.GetGroup() ||
+					slot.GetSpawnGeneration() != request.GetGroupGeneration() ||
+					slot.GetStrategicAssignmentRevision() != request.GetAssignmentRevision() ||
+					slot.GetStrategicIntentRevision() != request.GetIntentRevision())
+				{
+					rejectionReason = "REQUEST_IDENTITY_CHANGED";
+				}
+				else if (!slot.IsCombatReady() || slot.HasPendingOrderRecovery())
+				{
+					rejectionReason = "GROUP_UNAVAILABLE";
+				}
+			}
+		}
+
+		if (rejectionReason.IsEmpty() &&
+			!m_OrderPlanner.TryResolvePlayerPointTarget(
+				slot,
+				request.GetClientPosition(),
+				resolvedPosition,
+				rejectionReason))
+		{
+			if (rejectionReason == "NAVMESH_TILE_LOADING")
+			{
+				rejectionReason = string.Empty;
+				waitingForNavmesh = true;
+				return false;
+			}
+		}
+
+		if (!rejectionReason.IsEmpty())
+		{
+			LogPlayerPointOrderRejected(request, slot, rejectionReason);
+			return false;
+		}
+
+		AICF_EOrderTargetKind oldKind = slot.GetTargetKind();
+		vector oldPosition = slot.GetTargetPosition();
+		bool waypointSuspendedByVehicle = m_VehicleCoordinator &&
+			m_VehicleCoordinator.IsInfantryOrderSuspended(slot);
+		if (!m_OrderPlanner.AssignPlayerPointOrder(
+			slot,
+			faction,
+			resolvedPosition,
+			waypointSuspendedByVehicle))
+		{
+			rejectionReason = "ASSIGNMENT_FAILED";
+			LogPlayerPointOrderRejected(request, slot, rejectionReason);
+			return false;
+		}
+
+		bool vehicleAdopted = true;
+		if (m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot))
+		{
+			vehicleAdopted = m_VehicleCoordinator.AdoptCurrentStrategicAssignment(
+				slot,
+				faction,
+				"PLAYER_POINT_COMMAND",
+				m_iStrategicBaseRevision);
+		}
+		string accepted = string.Format(
+			"player=%1 faction=%2 slot=%3 stable_slot=%4 numeric_slot=%5 target=MAP_POINT target_kind=POSITION target_x=%6 target_y=%7 target_z=%8",
+			request.GetPlayerId(),
+			faction.GetFactionKey(),
+			request.GetSlotId(),
+			slot.GetStableSlotKey(),
+			slot.GetSlotId(),
+			Math.Round(resolvedPosition[0]),
+			Math.Round(resolvedPosition[1]),
+			Math.Round(resolvedPosition[2]));
+		accepted += string.Format(
+			" old_target_kind=%1 old_target_x=%2 old_target_z=%3 group_generation=%4 assignment_revision=%5 intent_revision=%6 vehicle_adopted=%7 decision_authority=PLAYER_COMMAND authority=SERVER",
+			AICF_OrderTargetKind.ToString(oldKind),
+			Math.Round(oldPosition[0]),
+			Math.Round(oldPosition[2]),
+			slot.GetSpawnGeneration(),
+			slot.GetStrategicAssignmentRevision(),
+			slot.GetStrategicIntentRevision(),
+			vehicleAdopted);
+		AICF_Stage4Diagnostics.Info("PLAYER_ORDER_ACCEPTED", accepted);
+		SyncStrategicUIState();
+		return true;
+	}
+
+	protected AICF_FactionState GetPlayerPointFactionState(
+		FactionKey stableFactionKey)
+	{
+		if (stableFactionKey == "US")
+			return m_USState;
+		if (stableFactionKey == "USSR")
+			return m_USSRState;
+		return null;
+	}
+
+	protected int FindPendingPlayerPointOrder(int playerId)
+	{
+		for (int requestIndex = 0; requestIndex < m_aPendingPlayerPointOrders.Count(); requestIndex++)
+		{
+			AICF_PlayerPointOrderRequest request =
+				m_aPendingPlayerPointOrders[requestIndex];
+			if (request && request.GetPlayerId() == playerId)
+				return requestIndex;
+		}
+		return -1;
+	}
+
+	protected void SchedulePendingPlayerPointOrders()
+	{
+		if (m_bStopped || m_bPlayerPointRetryScheduled ||
+			m_aPendingPlayerPointOrders.IsEmpty())
+		{
+			return;
+		}
+		m_bPlayerPointRetryScheduled = true;
+		GetGame().GetCallqueue().CallLater(
+			ProcessPendingPlayerPointOrders,
+			PLAYER_POINT_NAVMESH_RETRY_MS,
+			false);
+	}
+
+	protected void ProcessPendingPlayerPointOrders()
+	{
+		m_bPlayerPointRetryScheduled = false;
+		for (int requestIndex = m_aPendingPlayerPointOrders.Count() - 1; requestIndex >= 0; requestIndex--)
+		{
+			AICF_PlayerPointOrderRequest request =
+				m_aPendingPlayerPointOrders[requestIndex];
+			string rejectionReason;
+			vector resolvedPosition;
+			bool accepted = false;
+			bool waitingForNavmesh;
+			if (!request)
+			{
+				m_aPendingPlayerPointOrders.Remove(requestIndex);
+				continue;
+			}
+			if (System.GetTickCount(request.GetStartedAtMs()) >=
+				PLAYER_POINT_NAVMESH_TIMEOUT_MS)
+			{
+				rejectionReason = "NAVMESH_TILE_TIMEOUT";
+				AICF_GroupSlot slot;
+				AICF_FactionState factionState = GetPlayerPointFactionState(
+					request.GetStableFactionKey());
+				if (factionState)
+					slot = factionState.GetSlot(request.GetSlotId());
+				LogPlayerPointOrderRejected(request, slot, rejectionReason);
+			}
+			else
+			{
+				accepted = TryCompletePlayerPointOrder(
+					request,
+					rejectionReason,
+					resolvedPosition,
+					waitingForNavmesh);
+				if (waitingForNavmesh)
+					continue;
+			}
+
+			SCR_PlayerController requester = request.GetRequester();
+			if (requester)
+			{
+				requester.AICF_SendStrategicPointOrderResult(
+					request.GetSlotId(),
+					request.GetClientPosition(),
+					accepted,
+					rejectionReason,
+					resolvedPosition);
+			}
+			m_aPendingPlayerPointOrders.Remove(requestIndex);
+		}
+		SchedulePendingPlayerPointOrders();
+	}
+
+	protected void CancelPendingPlayerPointOrders(string rejectionReason)
+	{
+		foreach (AICF_PlayerPointOrderRequest request : m_aPendingPlayerPointOrders)
+		{
+			if (!request || !request.GetRequester())
+				continue;
+			request.GetRequester().AICF_SendStrategicPointOrderResult(
+				request.GetSlotId(),
+				request.GetClientPosition(),
+				false,
+				rejectionReason,
+				vector.Zero);
+		}
+		m_aPendingPlayerPointOrders.Clear();
+	}
+
+	protected void LogPlayerPointOrderRejected(
+		AICF_PlayerPointOrderRequest request,
+		AICF_GroupSlot slot,
+		string rejectionReason)
+	{
+		if (!request)
+			return;
+		vector clientPosition = request.GetClientPosition();
+		string rejected = string.Format(
+			"player=%1 faction=%2 slot=%3 target_kind=POSITION requested_x=%4 requested_z=%5 reason=%6 request_token=%7 authority=SERVER",
+			request.GetPlayerId(),
+			request.GetStableFactionKey(),
+			request.GetSlotId(),
+			clientPosition[0],
+			clientPosition[2],
+			rejectionReason,
+			request.GetRequestToken());
+		if (slot)
+		{
+			rejected += string.Format(
+				" stable_slot=%1 numeric_slot=%2 group_generation=%3 assignment_revision=%4 intent_revision=%5 decision_authority=PLAYER_COMMAND",
+				slot.GetStableSlotKey(),
+				slot.GetSlotId(),
+				slot.GetSpawnGeneration(),
+				slot.GetStrategicAssignmentRevision(),
+				slot.GetStrategicIntentRevision());
+		}
+		AICF_Stage4Diagnostics.Warning("PLAYER_ORDER_REJECTED", rejected);
+	}
+
+	protected bool ConsumePlayerOrderRateLimit(int playerId)
+	{
+		int nowMs = System.GetTickCount();
+		int playerOrderIndex = m_aPlayerOrderIds.Find(playerId);
+		if (playerOrderIndex >= 0)
+		{
+			if (System.GetTickCount(m_aPlayerOrderAtMs[playerOrderIndex]) <
+				PLAYER_ORDER_RATE_LIMIT_MS)
+			{
+				return false;
+			}
+			m_aPlayerOrderAtMs[playerOrderIndex] = nowMs;
+			return true;
+		}
+		m_aPlayerOrderIds.Insert(playerId);
+		m_aPlayerOrderAtMs.Insert(nowMs);
 		return true;
 	}
 
@@ -780,6 +1230,14 @@ class AICF_MatchController
 		{
 			if (!waypointSuspendedByVehicle)
 				m_OrderPlanner.ClearOrder(slot);
+			else if (slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
+			{
+				// POSITION posture is intentionally role-independent, so a suspended
+				// assignment would otherwise look unchanged. Advance runtime identity
+				// before vehicle adoption so callbacks carrying the former role cannot
+				// commit after this configuration change.
+				slot.TouchCommanderConfiguration();
+			}
 			orderAssigned = AssignFactionStrategicOrder(
 				slot,
 				faction,
@@ -2588,7 +3046,7 @@ class AICF_MatchController
 		AICF_GroupSlot slot,
 		AICF_VehicleSlotView vehicleView)
 	{
-		if (!slot || !slot.GetTargetBase())
+		if (!slot || !slot.HasStrategicDestination())
 			return false;
 		// Awaiting command is an explicit safe state, not an authority task-loss
 		// episode. ReliabilityTick independently verifies and repairs its physical
@@ -2650,13 +3108,16 @@ class AICF_MatchController
 
 		SCR_AIGroup group = slot.GetGroup();
 		AIWaypoint expectedWaypoint = slot.GetWaypoint();
+		AICF_EOrderTargetKind expectedTargetKind = slot.GetTargetKind();
 		SCR_CampaignMilitaryBaseComponent expectedTarget = slot.GetTargetBase();
+		vector expectedTargetPosition = slot.GetTargetPosition();
 		int expectedGeneration = slot.GetSpawnGeneration();
 		int expectedAssignmentRevision = slot.GetStrategicAssignmentRevision();
 		int expectedStrategicIntentRevision = slot.GetStrategicIntentRevision();
 		AICF_EStrategicDecisionAuthority expectedDecisionAuthority =
 			slot.GetDecisionAuthority();
-		if (!group || !expectedWaypoint || !expectedTarget || group.GetFaction() != faction ||
+		if (!group || !expectedWaypoint || !slot.HasStrategicDestination() ||
+			group.GetFaction() != faction ||
 			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(group))
 		{
 			rejectionReason = "GROUP_IDENTITY_OR_AUTHORITY_INVALID";
@@ -2844,7 +3305,10 @@ class AICF_MatchController
 		array<AIAgent> commitRoster = {};
 		group.GetAgents(commitRoster);
 		if (slot.GetGroup() != group || slot.GetWaypoint() != expectedWaypoint ||
+			slot.GetTargetKind() != expectedTargetKind ||
 			slot.GetTargetBase() != expectedTarget ||
+			(expectedTargetKind == AICF_EOrderTargetKind.POSITION &&
+			slot.GetTargetPosition() != expectedTargetPosition) ||
 			slot.GetDecisionAuthority() != expectedDecisionAuthority ||
 			slot.GetStrategicIntentRevision() != expectedStrategicIntentRevision ||
 			slot.GetSpawnGeneration() != expectedGeneration ||
@@ -3029,7 +3493,10 @@ class AICF_MatchController
 		int resultingAssignmentRevision = slot.GetStrategicAssignmentRevision();
 		bool runtimeWaypointRevisionAdvanced =
 			resultingAssignmentRevision == expectedAssignmentRevision + 1;
-		bool strategicIdentityPreserved = slot.GetTargetBase() == expectedTarget &&
+		bool strategicIdentityPreserved = slot.GetTargetKind() == expectedTargetKind &&
+			slot.GetTargetBase() == expectedTarget &&
+			(expectedTargetKind != AICF_EOrderTargetKind.POSITION ||
+			slot.GetTargetPosition() == expectedTargetPosition) &&
 			slot.GetDecisionAuthority() == expectedDecisionAuthority &&
 			slot.GetStrategicIntentRevision() == expectedStrategicIntentRevision;
 
@@ -3666,7 +4133,25 @@ class AICF_MatchController
 		SCR_AIGroup group = slot.GetGroup();
 		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
 		AIWaypoint waypoint = slot.GetWaypoint();
-		if (!group || !target || !target.GetOwner() || !target.IsInitialized() || !waypoint)
+		if (!group || !slot.HasStrategicDestination() || !waypoint)
+			return false;
+
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
+		if (!leader)
+			return false;
+		vector targetPosition;
+		if (!m_OrderPlanner.TryResolveSlotTargetPosition(slot, target, targetPosition))
+			return false;
+		float distanceMeters = Math.Sqrt(vector.DistanceSqXZ(
+			leader.GetOrigin(),
+			targetPosition));
+		if (slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
+		{
+			if (distanceMeters > POINT_DESTINATION_RADIUS_METERS)
+				return false;
+			return RefreshCompletedPointHold(slot, faction, distanceMeters);
+		}
+		if (!target || !target.GetOwner() || !target.IsInitialized())
 			return false;
 
 		if (slot.IsLoneSurvivorRetreat())
@@ -3684,16 +4169,6 @@ class AICF_MatchController
 			return false;
 		}
 
-		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
-		if (!leader)
-			return false;
-
-		vector targetPosition;
-		if (!m_OrderPlanner.TryResolveSlotTargetPosition(slot, target, targetPosition))
-			return false;
-		float distanceMeters = Math.Sqrt(vector.DistanceSqXZ(
-			leader.GetOrigin(),
-			targetPosition));
 		if (distanceMeters > STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
 		{
 			slot.ClearObjectiveHold();
@@ -3740,6 +4215,22 @@ class AICF_MatchController
 		}
 
 		return true;
+	}
+
+	protected bool RefreshCompletedPointHold(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		float distanceMeters)
+	{
+		if (!slot || !faction ||
+			slot.GetTargetKind() != AICF_EOrderTargetKind.POSITION)
+			return false;
+		slot.ResetFalseCompletionRecovery();
+		slot.ConfirmAtCurrentDestination(distanceMeters);
+		return m_OrderPlanner.RebuildCurrentOrder(
+			slot,
+			faction,
+			"POINT_HOLD_REFRESH");
 	}
 
 	protected bool TryCompleteLoneSurvivorRetreat(
@@ -4550,7 +5041,7 @@ class AICF_MatchController
 			fallbackAction = "FIELD_HOLD_ALREADY_ACTIVE";
 			fallbackCommitted = true;
 		}
-		else if (group && target &&
+		else if (group && slot.HasStrategicDestination() &&
 			m_OrderPlanner.IsStrategicTargetValid(slot, faction, target))
 		{
 			IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
@@ -4856,7 +5347,7 @@ class AICF_MatchController
 		SCR_AIGroup group = slot.GetGroup();
 		AIWaypoint waypoint = slot.GetWaypoint();
 		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
-		if (!group || !waypoint || !target)
+		if (!group || !waypoint || !slot.HasStrategicDestination())
 			return;
 
 		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
@@ -4924,16 +5415,18 @@ class AICF_MatchController
 				}
 			}
 		}
-		if (distanceMeters <= STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
+		float arrivalRadiusMeters = STUCK_WATCHDOG_IGNORE_RADIUS_METERS;
+		if (slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
+			arrivalRadiusMeters = POINT_DESTINATION_RADIUS_METERS;
+		if (distanceMeters <= arrivalRadiusMeters)
 		{
 			if (slot.HasPendingStuckRecoveryEvidence())
 				m_iStuckRecoveries++;
-			slot.ConfirmAtObjective(target, distanceMeters);
+			slot.ConfirmAtCurrentDestination(distanceMeters);
 			return;
 		}
 
-		slot.ObserveProgress(
-			target,
+		slot.ObserveCurrentDestinationProgress(
 			distanceMeters,
 			m_Stage2Config.GetStuckProgressMeters());
 		if (!slot.IsStuck(m_Stage2Config.GetStuckTimeoutMs()))
@@ -4998,7 +5491,7 @@ class AICF_MatchController
 				faction.GetFactionKey(),
 				slot.GetSlotId(),
 				AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
-				AICF_Stage1Diagnostics.BaseKey(target),
+				DescribeSlotTarget(slot),
 				distanceMeters,
 				m_Stage2Config.GetStuckTimeoutMs(),
 				recoveryAttempt,
@@ -5111,7 +5604,7 @@ class AICF_MatchController
 				faction.GetFactionKey(),
 				slot.GetSlotId(),
 				groupKey,
-				AICF_Stage1Diagnostics.BaseKey(target),
+				DescribeSlotTarget(slot),
 				distanceMeters,
 				slot.GetStuckRecoveryCount(),
 				slot.GetStuckEpisodeId(),
@@ -5130,7 +5623,7 @@ class AICF_MatchController
 		{
 			AICF_Stage2Diagnostics.Error(
 				"STUCK_FIELD_HOLD_REJECTED",
-				string.Format("faction=%1 slot=%2 group=%3 target=%4", faction.GetFactionKey(), slot.GetSlotId(), groupKey, AICF_Stage1Diagnostics.BaseKey(target)));
+				string.Format("faction=%1 slot=%2 group=%3 target=%4", faction.GetFactionKey(), slot.GetSlotId(), groupKey, DescribeSlotTarget(slot)));
 			return;
 		}
 
@@ -5142,7 +5635,7 @@ class AICF_MatchController
 				faction.GetFactionKey(),
 				slot.GetSlotId(),
 				groupKey,
-				AICF_Stage1Diagnostics.BaseKey(target),
+				DescribeSlotTarget(slot),
 				fieldPosition[0],
 				fieldPosition[1],
 				fieldPosition[2],
@@ -6422,9 +6915,11 @@ class AICF_MatchController
 		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
 		{
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
-			if (!slot || !slot.IsCombatReady() || !slot.GetTargetBase() ||
+			if (!slot || !slot.IsCombatReady() || !slot.HasStrategicDestination() ||
 				slot.IsAwaitingPlayerCommand() || slot.IsSystemHoldOrder())
 				continue;
+			if (slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
+				return string.Format("MOVE %1", BuildPositionLabel(slot.GetTargetPosition()));
 			if (!fallback)
 				fallback = slot;
 			if (slot.GetRole() == AICF_EGroupRole.ATTACK && slot.GetRoleIndex() == 0)
@@ -6433,6 +6928,8 @@ class AICF_MatchController
 
 		if (fallback)
 		{
+			if (fallback.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
+				return string.Format("MOVE %1", BuildPositionLabel(fallback.GetTargetPosition()));
 			return string.Format(
 				"%1 %2",
 				AICF_Stage1Diagnostics.RoleToString(fallback.GetRole()),
@@ -6452,8 +6949,19 @@ class AICF_MatchController
 		int alive;
 		if (slot.GetGroup())
 			alive = AICF_GroupRuntime.CountAliveAgents(slot.GetGroup());
+		AICF_EOrderTargetKind displayTargetKind = slot.GetTargetKind();
+		vector displayTargetPosition = slot.GetTargetPosition();
+		if (displayTargetKind == AICF_EOrderTargetKind.NONE &&
+			slot.GetPlayerStrategicIntentTargetKind() ==
+				AICF_EOrderTargetKind.POSITION)
+		{
+			displayTargetKind = AICF_EOrderTargetKind.POSITION;
+			displayTargetPosition = slot.GetPlayerStrategicIntentTargetPosition();
+		}
 		string target = "NONE";
-		if (slot.GetTargetBase())
+		if (displayTargetKind == AICF_EOrderTargetKind.POSITION)
+			target = BuildPositionLabel(displayTargetPosition);
+		else if (slot.GetTargetBase())
 			target = BuildBaseLabel(slot.GetTargetBase());
 		string vehiclePhase = "Пешком";
 		if (m_VehicleCoordinator)
@@ -6489,10 +6997,31 @@ class AICF_MatchController
 			vehiclePhase,
 			reinforcement);
 		summary += string.Format(
-			"|%1|%2",
+			"|%1|%2|%3|%4|%5|%6",
 			DescribeUnitType(slot.GetUnitType()),
-			slot.GetDesiredSize());
+			slot.GetDesiredSize(),
+			AICF_OrderTargetKind.ToString(displayTargetKind),
+			Math.Round(displayTargetPosition[0]),
+			Math.Round(displayTargetPosition[2]),
+			slot.GetStrategicIntentRevision());
 		return summary;
+	}
+
+	protected string BuildPositionLabel(vector position)
+	{
+		return string.Format(
+			"MAP POINT %1/%2",
+			Math.Round(position[0]),
+			Math.Round(position[2]));
+	}
+
+	protected string DescribeSlotTarget(AICF_GroupSlot slot)
+	{
+		if (!slot)
+			return "NONE";
+		if (slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
+			return BuildPositionLabel(slot.GetTargetPosition());
+		return AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase());
 	}
 
 	protected string DescribeUnitType(AICF_EGroupUnitType unitType)
@@ -6663,6 +7192,9 @@ class AICF_MatchController
 		callqueue.Remove(Heartbeat);
 		callqueue.Remove(ReplanAfterBaseChange);
 		callqueue.Remove(TryLogPlayerJoined);
+		callqueue.Remove(ProcessPendingPlayerPointOrders);
+		m_bPlayerPointRetryScheduled = false;
+		CancelPendingPlayerPointOrders("MATCH_UNAVAILABLE");
 		if (m_Campaign)
 			m_Campaign.AICF_SetAICommanderState(false, false);
 

@@ -4,6 +4,8 @@ enum AICF_EStrategicUIButtonAction
 	CLOSE_COMMAND,
 	SELECT_GROUP,
 	ISSUE_TARGET,
+	SELECT_MAP_POINT,
+	CANCEL_MAP_POINT,
 	SET_ROLE,
 	SET_UNIT_TYPE,
 	ADJUST_SIZE
@@ -40,6 +42,8 @@ class AICF_StrategicUIButtonHandler : ScriptedWidgetEventHandler
 class AICF_StrategicUIController
 {
 	protected static const int UPDATE_INTERVAL_MS = 500;
+	protected static const int MAP_POINT_CURSOR_ACTIVATION_DELAY_MS = 100;
+	protected static const int MAP_POINT_ACK_TIMEOUT_MS = 8000;
 	protected static const ResourceName FONT =
 		"{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt";
 	protected static const string RECT_BACKGROUND_NAME = "AICF_RectBackground";
@@ -62,6 +66,11 @@ class AICF_StrategicUIController
 	protected TextWidget m_wTargetTitle;
 	protected TextWidget m_wTargetEmptyState;
 	protected TextWidget m_wSizeValue;
+	protected Widget m_wMapPointPrompt;
+	protected TextWidget m_wMapPointPromptText;
+	protected Widget m_wMapPointCancel;
+	protected Widget m_wMapPointButton;
+	protected ref SCR_MapCommandCursor m_MapPointCursor;
 	protected ref array<Widget> m_aGroupButtons = {};
 	protected ref array<TextWidget> m_aGroupTexts = {};
 	protected ref array<Widget> m_aRoleButtons = {};
@@ -79,6 +88,13 @@ class AICF_StrategicUIController
 	protected int m_iPendingConfigUnitType;
 	protected int m_iPendingConfigSize;
 	protected int m_iPendingConfigAtMs;
+	protected bool m_bSelectingMapPoint;
+	protected bool m_bMapPointPending;
+	protected int m_iMapPointPendingAtMs;
+	protected int m_iMapPointPendingIntentRevision = -1;
+	protected int m_iMapPointPendingSlot = -1;
+	protected int m_iMapPointPendingResultSequence = -1;
+	protected vector m_vMapPointRequestedPosition;
 	protected string m_sRenderedTargets;
 	protected string m_sRenderedTargetMode;
 
@@ -138,6 +154,12 @@ class AICF_StrategicUIController
 			case AICF_EStrategicUIButtonAction.ISSUE_TARGET:
 				IssueOrder(value);
 				break;
+			case AICF_EStrategicUIButtonAction.SELECT_MAP_POINT:
+				BeginMapPointSelection();
+				break;
+			case AICF_EStrategicUIButtonAction.CANCEL_MAP_POINT:
+				CancelMapPointSelection(true);
+				break;
 			case AICF_EStrategicUIButtonAction.SET_ROLE:
 				SubmitGroupConfiguration(value, -1, 0);
 				break;
@@ -172,6 +194,7 @@ class AICF_StrategicUIController
 		m_bLocalUSSR = key == "USSR";
 		EnsureHUD();
 		RefreshHUD();
+		ObservePendingMapPointOrder();
 		if (m_wMapToggleText)
 		{
 			m_wMapToggleText.SetText(string.Format(
@@ -179,7 +202,7 @@ class AICF_StrategicUIController
 				GetCommandAuthorityLabel()));
 		}
 		RefreshVisualStyles();
-		if (m_bCommandOpen)
+		if (m_bCommandOpen && !m_bSelectingMapPoint && !m_bMapPointPending)
 			RefreshCommandPanel();
 	}
 
@@ -544,6 +567,7 @@ class AICF_StrategicUIController
 		}
 		m_aTargetButtons.Clear();
 		m_aTargetHandlers.Clear();
+		m_wMapPointButton = null;
 		if (targetMode.IsEmpty())
 		{
 			if (m_wTargetEmptyState)
@@ -553,6 +577,23 @@ class AICF_StrategicUIController
 			}
 			return;
 		}
+
+		m_wMapPointButton = CreateRect(
+			m_wCommandPanel,
+			0.515, 0.525, 0.97, 0.575,
+			Color.FromSRGBA(24, 79, 105, 245),
+			true);
+		CreateText(
+			m_wMapPointButton, 0, 0, 1, 1,
+			"MOVE TO MAP POINT / УКАЗАТЬ ТОЧКУ НА КАРТЕ",
+			14, Color.FromSRGBA(220, 244, 255, 255), true);
+		AICF_StrategicUIButtonHandler pointHandler =
+			new AICF_StrategicUIButtonHandler(
+				this,
+				AICF_EStrategicUIButtonAction.SELECT_MAP_POINT);
+		GetRectInputWidget(m_wMapPointButton).AddHandler(pointHandler);
+		m_aTargetHandlers.Insert(pointHandler);
+		m_aTargetButtons.Insert(m_wMapPointButton);
 
 		array<string> entries = {};
 		encodedTargets.Split(";", entries, true);
@@ -566,10 +607,10 @@ class AICF_StrategicUIController
 
 			int column = visibleIndex % 2;
 			int row = visibleIndex / 2;
-			if (visibleIndex >= 10)
+			if (visibleIndex >= 8)
 				continue;
 			float left = 0.515 + column * 0.23;
-			float top = 0.525 + row * 0.06;
+			float top = 0.585 + row * 0.06;
 			Widget targetButton = CreateRect(
 				m_wCommandPanel,
 				left, top, left + 0.215, top + 0.05,
@@ -590,7 +631,7 @@ class AICF_StrategicUIController
 		}
 		if (m_wTargetEmptyState)
 		{
-			if (visibleIndex > 0)
+			if (targetMode != string.Empty)
 			{
 				m_wTargetEmptyState.SetVisible(false);
 			}
@@ -619,6 +660,296 @@ class AICF_StrategicUIController
 				m_iSelectedSlot,
 				targetCallsign));
 		}
+	}
+
+	protected void BeginMapPointSelection()
+	{
+		if (!m_Campaign || m_bSelectingMapPoint || m_bMapPointPending)
+			return;
+		string summary = m_Campaign.AICF_GetStrategicGroupSummary(
+			m_bLocalUSSR,
+			m_iSelectedSlot);
+		if (GetTargetMode(summary).IsEmpty())
+		{
+			if (m_wCommandStatus)
+				m_wCommandStatus.SetText("POINT ORDER NOT STARTED: select a ready group.");
+			return;
+		}
+		array<string> fields = {};
+		summary.Split("|", fields, false);
+		m_iMapPointPendingIntentRevision = -1;
+		if (fields.Count() >= 14)
+			m_iMapPointPendingIntentRevision = fields[13].ToInt();
+		m_iMapPointPendingSlot = m_iSelectedSlot;
+		m_bSelectingMapPoint = true;
+		SetCommandOpen(false);
+		if (m_wMapToggle)
+			m_wMapToggle.SetVisible(false);
+		CreateMapPointPrompt(
+			"CLICK THE MAP TO MOVE AND HOLD\nЩЁЛКНИТЕ ПО КАРТЕ: ДВИЖЕНИЕ И УДЕРЖАНИЕ",
+			true);
+		GetGame().GetCallqueue().CallLater(
+			ActivateMapPointCursor,
+			MAP_POINT_CURSOR_ACTIVATION_DELAY_MS,
+			false);
+		AICF_Stage4Diagnostics.Info(
+			"PLAYER_POINT_SELECTION_STARTED",
+			string.Format(
+				"slot=%1 interaction=MAP_COMMAND_CURSOR activation=DEFERRED",
+				m_iSelectedSlot));
+	}
+
+	protected void ActivateMapPointCursor()
+	{
+		if (!m_bSelectingMapPoint || m_bMapPointPending || m_MapPointCursor)
+			return;
+		SCR_MapEntity mapEntity = SCR_MapEntity.GetMapInstance();
+		if (!mapEntity || !mapEntity.GetMapMenuRoot())
+		{
+			CancelMapPointSelection(true);
+			return;
+		}
+		m_MapPointCursor = new SCR_MapCommandCursor();
+		m_MapPointCursor.GetOnCommandExecuted().Insert(OnMapPointSelected);
+		m_MapPointCursor.ShowCursor(vector.Zero);
+		AICF_Stage4Diagnostics.Info(
+			"PLAYER_POINT_SELECTION_CURSOR_READY",
+			string.Format("slot=%1 interaction=MAP_COMMAND_CURSOR", m_iSelectedSlot));
+	}
+
+	protected void OnMapPointSelected(vector clientPosition)
+	{
+		if (!m_bSelectingMapPoint)
+			return;
+		DisableMapPointCursor();
+		m_bSelectingMapPoint = false;
+		SCR_PlayerController playerController = SCR_PlayerController.Cast(
+			GetGame().GetPlayerController());
+		if (!playerController)
+		{
+			RemoveMapPointPrompt();
+			SetCommandOpen(true);
+			if (m_wCommandStatus)
+				m_wCommandStatus.SetText("POINT ORDER NOT SENT: local player controller is unavailable.");
+			return;
+		}
+
+		m_vMapPointRequestedPosition = clientPosition;
+		m_iMapPointPendingAtMs = System.GetTickCount();
+		m_iMapPointPendingResultSequence =
+			playerController.AICF_GetStrategicPointOrderResultSequence();
+		m_bMapPointPending = true;
+		playerController.AICF_RequestStrategicPointOrder(
+			m_iMapPointPendingSlot,
+			clientPosition);
+		CreateMapPointPrompt(
+			"ORDER SENT — AWAITING SERVER VALIDATION\nПРИКАЗ ОТПРАВЛЕН — ПРОВЕРКА СЕРВЕРОМ",
+			false);
+		AICF_Stage4Diagnostics.Info(
+			"PLAYER_POINT_ORDER_SENT",
+			string.Format(
+				"slot=%1 requested_x=%2 requested_z=%3 trust=UNTRUSTED_CLIENT_INTENT",
+				m_iMapPointPendingSlot,
+				clientPosition[0],
+				clientPosition[2]));
+	}
+
+	protected void ObservePendingMapPointOrder()
+	{
+		if (!m_bMapPointPending || !m_Campaign)
+			return;
+		if (ObservePointOrderServerResult())
+			return;
+		string summary = m_Campaign.AICF_GetStrategicGroupSummary(
+			m_bLocalUSSR,
+			m_iMapPointPendingSlot);
+		array<string> fields = {};
+		summary.Split("|", fields, false);
+		bool accepted;
+		if (fields.Count() >= 14 && fields[10] == "POSITION")
+		{
+			vector authoritativePosition;
+			authoritativePosition[0] = fields[11].ToFloat();
+			authoritativePosition[2] = fields[12].ToFloat();
+			accepted = fields[13].ToInt() != m_iMapPointPendingIntentRevision ||
+				vector.DistanceXZ(
+					authoritativePosition,
+					m_vMapPointRequestedPosition) <= 26.0;
+		}
+		if (accepted)
+		{
+			m_bMapPointPending = false;
+			RemoveMapPointPrompt();
+			SetCommandOpen(true);
+			if (m_wCommandStatus)
+				m_wCommandStatus.SetText("POINT ORDER ACCEPTED: MOVING AND HOLDING AT THE AUTHORITATIVE MAP POINT.");
+			return;
+		}
+		if (System.GetTickCount(m_iMapPointPendingAtMs) < MAP_POINT_ACK_TIMEOUT_MS)
+			return;
+
+		m_bMapPointPending = false;
+		RemoveMapPointPrompt();
+		SetCommandOpen(true);
+		if (m_wCommandStatus)
+			m_wCommandStatus.SetText("POINT ORDER RESPONSE TIMED OUT: no owner response or replicated state was received.");
+	}
+
+	protected bool ObservePointOrderServerResult()
+	{
+		SCR_PlayerController playerController = SCR_PlayerController.Cast(
+			GetGame().GetPlayerController());
+		if (!playerController ||
+			playerController.AICF_GetStrategicPointOrderResultSequence() ==
+				m_iMapPointPendingResultSequence ||
+			playerController.AICF_GetStrategicPointOrderResultSlot() !=
+				m_iMapPointPendingSlot ||
+			vector.DistanceXZ(
+				playerController.AICF_GetStrategicPointOrderResultRequest(),
+				m_vMapPointRequestedPosition) > 0.1)
+		{
+			return false;
+		}
+
+		m_iMapPointPendingResultSequence =
+			playerController.AICF_GetStrategicPointOrderResultSequence();
+		bool accepted = playerController.AICF_WasStrategicPointOrderAccepted();
+		string rejectionReason =
+			playerController.AICF_GetStrategicPointOrderResultReason();
+		vector resolvedPosition =
+			playerController.AICF_GetStrategicPointOrderResultPosition();
+		m_bMapPointPending = false;
+		RemoveMapPointPrompt();
+		SetCommandOpen(true);
+		if (m_wCommandStatus)
+		{
+			if (accepted)
+			{
+				m_wCommandStatus.SetText(string.Format(
+					"POINT ORDER ACCEPTED: MOVING AND HOLDING AT %1/%2.",
+					Math.Round(resolvedPosition[0]),
+					Math.Round(resolvedPosition[2])));
+			}
+			else
+			{
+				m_wCommandStatus.SetText(BuildPointOrderRejectionStatus(
+					rejectionReason));
+			}
+		}
+		AICF_Stage4Diagnostics.Info(
+			"PLAYER_POINT_ORDER_RESULT_RECEIVED",
+			string.Format(
+				"slot=%1 accepted=%2 reason=%3 requested_x=%4 requested_z=%5 authority=OWNER_RPC",
+				m_iMapPointPendingSlot,
+				accepted,
+				rejectionReason,
+				m_vMapPointRequestedPosition[0],
+				m_vMapPointRequestedPosition[2]));
+		return true;
+	}
+
+	protected string BuildPointOrderRejectionStatus(string rejectionReason)
+	{
+		if (rejectionReason == "NO_NAVMESH_ENDPOINT_NEARBY" ||
+			rejectionReason == "NAVMESH_ENDPOINT_OUT_OF_RANGE")
+		{
+			return string.Format(
+				"POINT ORDER REJECTED: choose nearby road or open ground / ВЫБЕРИТЕ РЯДОМ ДОРОГУ ИЛИ ОТКРЫТУЮ МЕСТНОСТЬ [%1].",
+				rejectionReason);
+		}
+		if (rejectionReason == "NAVMESH_TILE_UNAVAILABLE" ||
+			rejectionReason == "NAVMESH_TILE_TIMEOUT" ||
+			rejectionReason == "NAVMESH_UNAVAILABLE")
+		{
+			return string.Format(
+				"POINT ORDER REJECTED: navmesh could not be loaded here / НАВИГАЦИЯ В ЭТОЙ ТОЧКЕ НЕДОСТУПНА [%1].",
+				rejectionReason);
+		}
+		if (rejectionReason == "OUTSIDE_WORLD_BOUNDS")
+		{
+			return "POINT ORDER REJECTED: point is outside the world / ТОЧКА ВНЕ ГРАНИЦ МИРА [OUTSIDE_WORLD_BOUNDS].";
+		}
+		if (rejectionReason == "RATE_LIMITED")
+		{
+			return "POINT ORDER REJECTED: retry shortly / ПОВТОРИТЕ ЧЕРЕЗ НЕСКОЛЬКО СЕКУНД [RATE_LIMITED].";
+		}
+		if (rejectionReason.IsEmpty())
+			rejectionReason = "SERVER_REJECTED";
+		return string.Format(
+			"POINT ORDER REJECTED BY SERVER / ПРИКАЗ ОТКЛОНЁН СЕРВЕРОМ [%1].",
+			rejectionReason);
+	}
+
+	protected void CancelMapPointSelection(bool reopenPanel)
+	{
+		if (!m_bSelectingMapPoint)
+			return;
+		DisableMapPointCursor();
+		RemoveMapPointPrompt();
+		m_bSelectingMapPoint = false;
+		if (reopenPanel)
+		{
+			SetCommandOpen(true);
+			if (m_wCommandStatus)
+				m_wCommandStatus.SetText("MAP POINT SELECTION CANCELLED.");
+		}
+	}
+
+	protected void DisableMapPointCursor()
+	{
+		GetGame().GetCallqueue().Remove(ActivateMapPointCursor);
+		if (!m_MapPointCursor)
+			return;
+		m_MapPointCursor.GetOnCommandExecuted().Remove(OnMapPointSelected);
+		m_MapPointCursor.DisableSelection();
+		m_MapPointCursor = null;
+	}
+
+	protected void CreateMapPointPrompt(string text, bool showCancel)
+	{
+		RemoveMapPointPrompt();
+		SCR_MapEntity mapEntity = SCR_MapEntity.GetMapInstance();
+		if (!mapEntity || !mapEntity.GetMapMenuRoot())
+			return;
+		m_wMapPointPrompt = CreateRect(
+			mapEntity.GetMapMenuRoot(),
+			0.27, 0.025, 0.73, 0.105,
+			Color.FromSRGBA(6, 18, 25, 245),
+			false);
+		SetRectColor(m_wMapPointPrompt, Color.FromSRGBA(6, 18, 25, 245));
+		m_wMapPointPrompt.SetZOrder(260);
+		m_wMapPointPromptText = CreateText(
+			m_wMapPointPrompt,
+			0.025, 0.08, 0.77, 0.92,
+			text,
+			15,
+			Color.FromSRGBA(220, 242, 250, 255));
+		if (!showCancel)
+			return;
+		m_wMapPointCancel = CreateRect(
+			m_wMapPointPrompt,
+			0.79, 0.16, 0.975, 0.84,
+			Color.FromSRGBA(91, 34, 34, 250),
+			true);
+		SetRectColor(m_wMapPointCancel, Color.FromSRGBA(91, 34, 34, 250));
+		CreateText(
+			m_wMapPointCancel, 0, 0, 1, 1,
+			"CANCEL / ОТМЕНА",
+			13,
+			Color.FromSRGBA(255, 232, 232, 255),
+			true);
+		AttachHandler(
+			m_wMapPointCancel,
+			AICF_EStrategicUIButtonAction.CANCEL_MAP_POINT);
+	}
+
+	protected void RemoveMapPointPrompt()
+	{
+		if (m_wMapPointPrompt)
+			m_wMapPointPrompt.RemoveFromHierarchy();
+		m_wMapPointPrompt = null;
+		m_wMapPointPromptText = null;
+		m_wMapPointCancel = null;
 	}
 
 	protected void SubmitGroupConfiguration(
@@ -827,6 +1158,13 @@ class AICF_StrategicUIController
 
 	protected void RemoveMapUI()
 	{
+		DisableMapPointCursor();
+		RemoveMapPointPrompt();
+		m_bSelectingMapPoint = false;
+		m_bMapPointPending = false;
+		m_iMapPointPendingSlot = -1;
+		m_iMapPointPendingIntentRevision = -1;
+		m_iMapPointPendingResultSequence = -1;
 		m_bCommandOpen = false;
 		if (m_wCommandPanel)
 			m_wCommandPanel.RemoveFromHierarchy();
@@ -852,6 +1190,7 @@ class AICF_StrategicUIController
 		m_aUnitTypeButtons.Clear();
 		m_aSizeButtons.Clear();
 		m_aTargetButtons.Clear();
+		m_wMapPointButton = null;
 		m_aHandlers.Clear();
 		m_aTargetHandlers.Clear();
 		m_iPendingConfigSlot = -1;
@@ -869,6 +1208,8 @@ class AICF_StrategicUIController
 		SetRectColor(m_wCommandPanel, Color.FromSRGBA(4, 8, 11, 250));
 		SetRectColor(m_wCommandAccent, Color.FromSRGBA(226, 167, 79, 255));
 		SetRectColor(m_wCloseButton, Color.FromSRGBA(91, 34, 34, 250));
+		SetRectColor(m_wMapPointPrompt, Color.FromSRGBA(6, 18, 25, 245));
+		SetRectColor(m_wMapPointCancel, Color.FromSRGBA(91, 34, 34, 250));
 		foreach (Widget roleButton : m_aRoleButtons)
 			SetRectColor(roleButton, Color.FromSRGBA(34, 45, 52, 245));
 		foreach (Widget unitTypeButton : m_aUnitTypeButtons)
@@ -876,7 +1217,12 @@ class AICF_StrategicUIController
 		foreach (Widget sizeButton : m_aSizeButtons)
 			SetRectColor(sizeButton, Color.FromSRGBA(34, 45, 52, 245));
 		foreach (Widget targetButton : m_aTargetButtons)
-			SetRectColor(targetButton, Color.FromSRGBA(66, 48, 19, 248));
+		{
+			if (targetButton == m_wMapPointButton)
+				SetRectColor(targetButton, Color.FromSRGBA(24, 79, 105, 245));
+			else
+				SetRectColor(targetButton, Color.FromSRGBA(66, 48, 19, 248));
+		}
 	}
 
 	protected void AttachHandler(

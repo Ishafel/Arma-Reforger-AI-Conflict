@@ -57,6 +57,11 @@ Source runtime использует штатную mission
   server, а без параметра используется `BOTH`;
 - ground vehicles всегда включены;
 - economy/supply pacing всегда включены; CLI opt-out для этих subsystems нет;
+- командир может выбрать любую доступную группу и отдать ей server-authoritative
+  приказ `MOVE_AND_HOLD` щелчком по stock карте. Клиент передаёт только slot и
+  X/Z intent; сервер восстанавливает terrain Y, при необходимости асинхронно
+  загружает streamable navmesh tile, проверяет world bounds/navmesh, а союзный
+  static marker выбранной точки входит в JIP state;
 - оба AICF scenario headers задают `m_eSaveTypes 0`: запуск и hosting из
   игрового меню всегда начинают новую кампанию, потому что собственный
   campaign state AICF пока не поддерживает безопасное восстановление из
@@ -151,6 +156,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage35Stat
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage35RecoveryPolicy.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage4Static.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-AICommanderModeStatic.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-MapPointOrdersStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RHSIntegrationStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-ScenarioHeadersStatic.ps1
 ```

@@ -177,7 +177,7 @@ class AICF_VehicleAcquisitionFlow
 			return FailClosed(trip, "STALE_ASSIGNMENT_REVISION", "CONTEXT_GUARD");
 		}
 
-		bool targetChanged = currentAssignment.GetTargetBase() != observed.GetTargetBase();
+		bool targetChanged = !currentAssignment.MatchesDestination(observed);
 		bool assignmentChanged = currentAssignment.GetAssignmentRevision() !=
 			observed.GetAssignmentRevision();
 		bool baseChanged = currentAssignment.GetBaseRevision() != observed.GetBaseRevision();
@@ -1406,9 +1406,9 @@ class AICF_VehicleAcquisitionFlow
 			sample.m_fMaximumPairMeters,
 			sample.m_sMemberSamples);
 		MeasureNearestSafeBaseCandidate(faction, sample);
-		sample.m_fTargetDistanceMeters = MeasureBaseReferenceDistance(
+		sample.m_fTargetDistanceMeters = vector.DistanceXZ(
 			sample.m_vGroupOrigin,
-			trip.GetAssignment().GetTargetBase());
+			trip.GetAssignment().GetTargetPosition());
 		sample.m_fMobDistanceMeters = MeasureBaseReferenceDistance(
 			sample.m_vGroupOrigin,
 			faction.GetMainBase());

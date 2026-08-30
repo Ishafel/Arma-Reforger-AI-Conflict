@@ -38,6 +38,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage35Stat
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage35RecoveryPolicy.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage4Static.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-AICommanderModeStatic.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-MapPointOrdersStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RHSIntegrationStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-ScenarioHeadersStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RankRestrictionsStatic.ps1
@@ -52,6 +53,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RankRestric
 | `Test-Stage35RecoveryPolicy.ps1` | точные recovery, timing, ownership и fail-closed policies |
 | `Test-Stage4Static.ps1` | economy transaction, supply balance, replication, strategic UI и RPC authority |
 | `Test-AICommanderModeStatic.ps1` | Arland CLI preflight, immutable authority policy, faction commander boundary, intent, availability replication и UI contract |
+| `Test-MapPointOrdersStatic.ps1` | `BASE|POSITION` model, RPC trust boundary, bounded streamable-navmesh retry и identity guards, terrain/navmesh validation, planner ownership, durable recovery, vehicle stale guards, deferred stock map cursor, dynamic UI palette, static allied/JIP marker и diagnostics |
 | `Test-RHSIntegrationStatic.ps1` | optional dependency graph, Core isolation, stock/RHS profiles, fail-closed roles/vehicles, personnel building-browser adapter, loadout UI guard, stable-side Arland radio normalization, RHS_AFRF identity voice, single lifecycle и cleanup symmetry |
 | `Test-ScenarioHeadersStatic.ps1` | stock/RHS inherited MissionHeader, menu visibility, отключённый persistence, stable resource GUID, platform metadata и отсутствие собственных world/layer resources |
 | `Test-RankRestrictionsStatic.ps1` | `GENERAL` join/XP floor, maximum non-renegade fallback для container без `GENERAL`, central mutation/restore hook, authoritative faction/spawn recheck, replicated character state, authority/replication, запрет раннего polling и сохранение остальных admission checks |
@@ -63,14 +65,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RankRestric
 
 ## Зафиксированный baseline
 
-Baseline получен `2026-08-28` на `main`, commit
-`6ff6c550dc7c5a40d5876e3f96ddf57bfc64f107`, до создания этой документации.
+Baseline повторно проверен `2026-08-30` на чистом `main`, commit
+`2575ff07a4c9d2afe1e1cc7aa8f6c0d657e72a5b`, до изменений map-point orders.
 После изменения HEAD его нужно запускать заново.
 
 | Проверка | Exit | Результат |
 |---|---:|---|
 | `Test-Stage3Static.ps1` | 1 | `FAIL`, 5 issues |
-| `Test-Stage35Static.ps1` | 1 | `FAIL`, 4 issues |
+| `Test-Stage35Static.ps1` | 1 | `FAIL`, 3 issues |
 | `Test-Stage35RecoveryPolicy.ps1` | 0 | `PASS` |
 | `Test-Stage4Static.ps1` | 0 | `PASS` |
 
@@ -80,6 +82,8 @@ Baseline получен `2026-08-28` на `main`, commit
 является отдельным focused verdict, а не частью исторического baseline commit.
 `Test-ScenarioHeadersStatic.ps1` добавлен вместе со scenario headers и также
 передаётся отдельным focused verdict без сравнения с историческим commit.
+`Test-MapPointOrdersStatic.ps1` добавлен вместе с map-point orders и передаётся
+как отдельный focused verdict относительно этого baseline.
 
 Stage 3 baseline failures:
 
@@ -109,6 +113,7 @@ Stage 3.5 baseline failures:
 | `Vehicles/` или `State/Vehicles/` | Stage 3, Stage 3.5 и RecoveryPolicy + Workbench + targeted runtime |
 | `Economy/` | Stage 4 static + Workbench + server runtime/log audit |
 | `UI/`, RPC или campaign replicated state | Stage 4 static + Workbench + server/client runtime; JIP при изменении snapshot |
+| Map-point orders (`POSITION`) | `Test-MapPointOrdersStatic.ps1` + AI commander/Stage 3/3.5/RecoveryPolicy/Stage 4 + Workbench; server/client/JIP runtime и отдельный ручной visual/input verdict |
 | Arland `modded` integration | Workbench + canonical Arland server runtime; клиент, если меняется UI/replication |
 | Content profile или `AIConflictArlandRHS` | все Stage/authority audits + `Test-RHSIntegrationStatic.ps1`; отдельный stock и RHS Workbench; fresh RHS server; client/JIP при изменении faction/UI mapping |
 | `Missions/*.conf` или `.conf.meta` | `Test-ScenarioHeadersStatic.ps1` на позитивном и негативном input; отдельный stock и RHS Workbench; source/direct MissionHeader load; ручная проверка плитки и packaged build |
@@ -366,6 +371,17 @@ prefab, но визуальное соответствие оружия/форм
 | Vehicle replan/fallback | invalidation или fallback во время active trip | vehicle domain продолжает/восстанавливает выбранный intent, не создаёт `AI_COMMANDER` assignment для player-commanded faction; hold не поступает в vehicle admission; новый intent revision в начатом `HANDOFF` получает свежий bounded restore budget без сброса cleanup, waypoint-only revision budget не переармит |
 | Client JIP | после `ROSTER_READY` и initial coverage PASS подключить новый client | server connection marker расположен после `ROSTER_READY`, client connection marker — до `COMMAND_AUTHORITY_REPLICATED`, последняя реплика содержит согласованные flags; UI показывает `AI COMMANDER`/`PLAYER COMMAND`, waiting state доступен; визуальный verdict пользователя или `NOT RUN` |
 | Controller stop | отдельный lifecycle-run: оставить client подключённым при fatal/completed Stop | после ранее опубликованного valid pair client получает `ai_commander_us=0 ai_commander_ussr=0`; UI возвращается в `COMMAND SYNC`; source ordering также закрывает `AI_COMMANDER_REPLICATION` |
+
+### Runtime matrix: map-point orders
+
+| Сценарий | Действие | Обязательное evidence |
+|---|---|---|
+| Valid point | выбрать READY slot, нажать `MOVE TO MAP POINT`, затем отдельным кликом выбрать доступную navmesh; дождаться минимум одного commander tick и одной несвязанной смены владельца базы | первый клик только скрывает panel и после input-frame активирует cursor; для unloaded tile есть `PLAYER_POINT_ORDER_PENDING reason=NAVMESH_TILE_LOADING`, затем server `PLAYER_ORDER_ACCEPTED target_kind=POSITION` и `STRATEGIC_ASSIGNMENT target_kind=POSITION`; summary содержит `POSITION`, authoritative X/Z и новый intent revision; waypoint `MOVE_AND_HOLD` current/queued; последующие `COMMANDER_REPLAN`/`BASE_OWNER_CHANGED` не создают для того же stable slot `target_kind=BASE decision_authority=AI_COMMANDER` и не очищают player intent |
+| Invalid point | отправить non-finite, за terrain bounds и точку без nearby navmesh отдельными RPC/runtime fixtures | `PLAYER_ORDER_REJECTED target_kind=POSITION` с exact `COORDINATE_NOT_FINITE`, `OUTSIDE_WORLD_BOUNDS`, `NO_NAVMESH_ENDPOINT_NEARBY`/`NAVMESH_ENDPOINT_OUT_OF_RANGE`, `NAVMESH_TILE_UNAVAILABLE` или bounded `NAVMESH_TILE_TIMEOUT`; reliable owner response приходит до UI timeout, UI показывает exact reason и actionable подсказку; runtime target/intent/waypoint не изменились |
+| Cancel, input и map lifecycle | начать выбор, убедиться, что клик кнопки не выбрал точку; отменить; повторить и закрыть карту | panel/scrim скрыты только во время выбора; prompt имеет тёмно-синий фон, читаемый светлый текст и красную cancel-action; map-point action синяя, base targets янтарные; stock pan/zoom остаются доступны; после cancel/close нет deferred activation, selection callback и повторного cursor update; визуальный verdict пользователя или `NOT RUN` |
+| Role/replacement/recovery | сменить role, уничтожить группу, вызвать waypoint loss и stuck rebuild | сохраняются `faction + numeric slot`, `POSITION`, X/Z и intent revision; новая group generation получает тот же endpoint; bounded recovery не выбирает BASE и не запускает capture/S&D |
+| Active vehicle retarget | выдать point order в acquisition, boarding, transit и handoff | snapshot содержит kind/position; старый request/trip не коммитит stale destination; acquisition site выбирается независимо от destination; после fallback/dismount восстановлен тот же point order |
+| Allied marker/JIP | выдать point order, подключить союзного и вражеского JIP client, затем сменить point и BASE | static server marker виден только союзникам, присутствует у allied JIP, меняет позицию/label и удаляется при BASE/clear/Stop; визуальный verdict пользователя или `NOT RUN` |
 
 Для всех valid runs сохрани `CONFIG`, `COMMAND_AUTHORITY_SET`,
 `COMMAND_WAITING`, `STRATEGIC_ASSIGNMENT decision_authority=...`, полные logs и

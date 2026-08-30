@@ -1883,8 +1883,7 @@ class AICF_VehicleTransitFlow
 
 		AICF_StrategicAssignmentSnapshot assignment = trip.GetAssignment();
 		AICF_VehicleLease lease = trip.GetLease();
-		if (!assignment || !assignment.IsValid() || !assignment.GetGroup() ||
-			!assignment.GetTargetBase())
+		if (!assignment || !assignment.IsValid() || !assignment.GetGroup())
 		{
 			failureReason = "TRANSIT_ASSIGNMENT_INVALID";
 			return false;

@@ -171,7 +171,9 @@ class AICF_VehicleCoordinator
 		AICF_TransportTrip trip = FindTripForSlot(slot);
 		if (!trip || trip.GetFactionKey() != faction.GetFactionKey())
 			return false;
+		AICF_EOrderTargetKind oldTargetKind = slot.GetTargetKind();
 		SCR_CampaignMilitaryBaseComponent oldTarget = slot.GetTargetBase();
+		vector oldTargetPosition = slot.GetTargetPosition();
 		bool reconciled = m_OrderPlanner.ReconcileStrategicOrder(
 			slot,
 			faction,
@@ -185,7 +187,10 @@ class AICF_VehicleCoordinator
 			return false;
 		if (!AdoptCurrentStrategicAssignment(slot, faction, reason, baseRevision))
 			return false;
-		return oldTarget && oldTarget != slot.GetTargetBase();
+		return oldTargetKind != slot.GetTargetKind() ||
+			oldTarget != slot.GetTargetBase() ||
+			(oldTargetKind == AICF_EOrderTargetKind.POSITION &&
+			oldTargetPosition != slot.GetTargetPosition());
 	}
 
 	// Planning may already have committed a specialized QRF/loss-response
@@ -223,9 +228,7 @@ class AICF_VehicleCoordinator
 			fleet,
 			faction);
 		ObserveTerminalCommit(trip, previousPhase, previousTransitions, observed);
-		return trip.GetAssignment().GetAssignmentRevision() ==
-			assignment.GetAssignmentRevision() &&
-			trip.GetAssignment().GetBaseRevision() == assignment.GetBaseRevision();
+		return trip.GetAssignment().MatchesAssignmentRevision(assignment);
 	}
 
 	int GetReservedCount(FactionKey factionKey)
@@ -583,7 +586,8 @@ class AICF_VehicleCoordinator
 		out AICF_StrategicAssignmentSnapshot assignment)
 	{
 		assignment = null;
-		if (!slot || !faction || !slot.IsCombatReady() || !slot.GetTargetBase())
+		if (!slot || !faction || !slot.IsCombatReady() ||
+			!slot.HasStrategicDestination())
 			return false;
 		if (trip && trip.GetAssignment() &&
 			trip.GetAssignment().MatchesCurrent(
@@ -592,6 +596,11 @@ class AICF_VehicleCoordinator
 				slot.GetSpawnGeneration(),
 				slot.GetGroup()) &&
 			trip.GetAssignment().GetAssignmentRevision() == slot.GetStrategicAssignmentRevision() &&
+			trip.GetAssignment().GetStrategicIntentRevision() == slot.GetStrategicIntentRevision() &&
+			trip.GetAssignment().GetTargetKind() == slot.GetTargetKind() &&
+			trip.GetAssignment().GetTargetBase() == slot.GetTargetBase() &&
+			(slot.GetTargetKind() != AICF_EOrderTargetKind.POSITION ||
+			trip.GetAssignment().GetTargetPosition() == slot.GetTargetPosition()) &&
 			trip.GetAssignment().GetBaseRevision() == m_iObservedBaseRevision)
 		{
 			assignment = trip.GetAssignment();
@@ -684,7 +693,7 @@ class AICF_VehicleCoordinator
 			return false;
 		return trip.GetAssignment().GetAssignmentRevision() != assignment.GetAssignmentRevision() ||
 			trip.GetAssignment().GetBaseRevision() != assignment.GetBaseRevision() ||
-			trip.GetAssignment().GetTargetBase() != assignment.GetTargetBase();
+			!trip.GetAssignment().MatchesDestination(assignment);
 	}
 
 	protected void ObserveTerminalCommit(

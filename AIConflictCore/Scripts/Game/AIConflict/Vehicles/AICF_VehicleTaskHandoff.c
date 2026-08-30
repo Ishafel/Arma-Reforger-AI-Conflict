@@ -303,7 +303,8 @@ class AICF_VehicleTaskHandoff
 		bool waypointInQueue = newWaypoint && waypointQueue.Contains(newWaypoint);
 		bool boundToGroup = slot.GetGroup() == trip.GetAssignment().GetGroup() && waypointInQueue;
 		bool isCurrent = newWaypoint && slot.GetGroup().GetCurrentWaypoint() == newWaypoint;
-		bool postconditionMeaningfulTask = plannerAccepted && slot.GetTargetBase() &&
+		bool postconditionMeaningfulTask = plannerAccepted &&
+			slot.HasStrategicDestination() &&
 			m_OrderPlanner.IsOrderValid(slot, faction) &&
 			boundToGroup && isCurrent && waypointInQueue;
 		bool restored = handoffState.RecordOrderRestoreResult(
@@ -362,7 +363,7 @@ class AICF_VehicleTaskHandoff
 		}
 		AIWaypoint waypoint = slot.GetWaypoint();
 		if (!IsExactWaypointCurrentAndQueued(slot, waypoint) ||
-			!slot.GetTargetBase() ||
+			!slot.HasStrategicDestination() ||
 			!m_OrderPlanner.IsOrderValid(slot, faction))
 		{
 			return false;

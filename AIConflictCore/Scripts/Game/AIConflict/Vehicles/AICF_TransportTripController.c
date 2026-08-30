@@ -1942,7 +1942,7 @@ class AICF_TransportTripController
 		AICF_StrategicAssignmentSnapshot observed = trip.GetAssignment();
 		return currentAssignment.GetAssignmentRevision() != observed.GetAssignmentRevision() ||
 			currentAssignment.GetBaseRevision() != observed.GetBaseRevision() ||
-			currentAssignment.GetTargetBase() != observed.GetTargetBase();
+			!currentAssignment.MatchesDestination(observed);
 	}
 
 	protected bool IsAcquisitionPhase(AICF_ETransportTripPhase phase)
@@ -1988,9 +1988,21 @@ class AICF_TransportTripController
 			trip.GetTripGeneration(),
 			trip.GetOperationId());
 		details += string.Format(
-			" causation_id=%1 reason=%2",
+			" stable_slot=S%1 numeric_slot=%1 causation_id=%2 reason=%3",
+			trip.GetSlotId(),
 			causationId,
 			reason);
+		AICF_StrategicAssignmentSnapshot assignment = trip.GetAssignment();
+		if (assignment)
+		{
+			details += string.Format(
+				" target_kind=%1 target_x=%2 target_z=%3 assignment_revision=%4 intent_revision=%5",
+				AICF_OrderTargetKind.ToString(assignment.GetTargetKind()),
+				Math.Round(assignment.GetTargetPosition()[0]),
+				Math.Round(assignment.GetTargetPosition()[2]),
+				assignment.GetAssignmentRevision(),
+				assignment.GetStrategicIntentRevision());
+		}
 		AICF_VehicleLease lease = trip.GetLease();
 		if (!lease)
 		{

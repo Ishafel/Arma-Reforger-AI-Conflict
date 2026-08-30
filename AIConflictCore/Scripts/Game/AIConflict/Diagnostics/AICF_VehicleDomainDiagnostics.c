@@ -780,9 +780,13 @@ class AICF_VehicleDomainDiagnostics
 			assignment.GetAssignmentRevision(),
 			assignment.GetBaseRevision());
 		details += string.Format(
-			" operation_id=%1 causation_id=%2",
+			" operation_id=%1 causation_id=%2 target_kind=%3 target_x=%4 target_z=%5 intent_revision=%6",
 			operationId,
-			causationId);
+			causationId,
+			AICF_OrderTargetKind.ToString(assignment.GetTargetKind()),
+			Math.Round(assignment.GetTargetPosition()[0]),
+			Math.Round(assignment.GetTargetPosition()[2]),
+			assignment.GetStrategicIntentRevision());
 		return details;
 	}
 
@@ -800,7 +804,17 @@ class AICF_VehicleDomainDiagnostics
 		string posture = "NONE";
 		if (assignment)
 		{
-			target = AICF_Stage1Diagnostics.BaseKey(assignment.GetTargetBase());
+			if (assignment.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
+			{
+				target = string.Format(
+					"MAP_POINT_%1_%2",
+					Math.Round(assignment.GetTargetPosition()[0]),
+					Math.Round(assignment.GetTargetPosition()[2]));
+			}
+			else
+			{
+				target = AICF_Stage1Diagnostics.BaseKey(assignment.GetTargetBase());
+			}
 			role = AICF_Stage1Diagnostics.RoleToString(assignment.GetRole());
 			posture = assignment.GetPosture();
 		}

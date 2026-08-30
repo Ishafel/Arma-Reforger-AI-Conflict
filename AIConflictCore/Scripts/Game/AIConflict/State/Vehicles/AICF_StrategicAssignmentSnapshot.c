@@ -10,6 +10,7 @@ class AICF_StrategicAssignmentSnapshot
 	protected AICF_EGroupRole m_Role;
 	protected AICF_EGroupUnitType m_UnitType;
 	protected string m_sPosture;
+	protected AICF_EOrderTargetKind m_TargetKind;
 	protected SCR_CampaignMilitaryBaseComponent m_TargetBase;
 	protected vector m_vTargetPosition;
 	protected int m_iAssignmentRevision;
@@ -27,6 +28,7 @@ class AICF_StrategicAssignmentSnapshot
 		AICF_EGroupRole role,
 		AICF_EGroupUnitType unitType,
 		string posture,
+		AICF_EOrderTargetKind targetKind,
 		SCR_CampaignMilitaryBaseComponent targetBase,
 		vector targetPosition,
 		int assignmentRevision,
@@ -43,6 +45,7 @@ class AICF_StrategicAssignmentSnapshot
 		m_Role = role;
 		m_UnitType = unitType;
 		m_sPosture = posture;
+		m_TargetKind = targetKind;
 		m_TargetBase = targetBase;
 		m_vTargetPosition = targetPosition;
 		m_iAssignmentRevision = assignmentRevision;
@@ -60,6 +63,7 @@ class AICF_StrategicAssignmentSnapshot
 	AICF_EGroupRole GetRole() { return m_Role; }
 	AICF_EGroupUnitType GetUnitType() { return m_UnitType; }
 	string GetPosture() { return m_sPosture; }
+	AICF_EOrderTargetKind GetTargetKind() { return m_TargetKind; }
 	SCR_CampaignMilitaryBaseComponent GetTargetBase() { return m_TargetBase; }
 	vector GetTargetPosition() { return m_vTargetPosition; }
 	int GetAssignmentRevision() { return m_iAssignmentRevision; }
@@ -70,10 +74,30 @@ class AICF_StrategicAssignmentSnapshot
 
 	bool IsValid()
 	{
+		bool positionValid = m_vTargetPosition[0] == m_vTargetPosition[0] &&
+			m_vTargetPosition[1] == m_vTargetPosition[1] &&
+			m_vTargetPosition[2] == m_vTargetPosition[2] &&
+			Math.AbsFloat(m_vTargetPosition[0]) < float.MAX &&
+			Math.AbsFloat(m_vTargetPosition[1]) < float.MAX &&
+			Math.AbsFloat(m_vTargetPosition[2]) < float.MAX;
+		bool destinationValid = m_TargetKind == AICF_EOrderTargetKind.POSITION ||
+			(m_TargetKind == AICF_EOrderTargetKind.BASE && m_TargetBase);
 		return !m_sFactionKey.IsEmpty() && m_iSlotId >= 0 && !m_sSlotKey.IsEmpty() &&
-			m_iGroupGeneration > 0 && m_Group && m_TargetBase &&
+			m_iGroupGeneration > 0 && m_Group && destinationValid && positionValid &&
 			m_iAssignmentRevision >= 0 && m_iStrategicIntentRevision >= 0 &&
 			m_iBaseRevision >= 0;
+	}
+
+	bool MatchesDestination(AICF_StrategicAssignmentSnapshot other)
+	{
+		if (!other || other.GetTargetKind() != m_TargetKind ||
+			other.GetTargetBase() != m_TargetBase)
+		{
+			return false;
+		}
+		if (m_TargetKind == AICF_EOrderTargetKind.POSITION)
+			return other.GetTargetPosition() == m_vTargetPosition;
+		return true;
 	}
 
 	bool MatchesCurrent(
@@ -93,6 +117,7 @@ class AICF_StrategicAssignmentSnapshot
 			other.GetGroupGeneration() == m_iGroupGeneration &&
 			other.GetAssignmentRevision() == m_iAssignmentRevision &&
 			other.GetStrategicIntentRevision() == m_iStrategicIntentRevision &&
-			other.GetBaseRevision() == m_iBaseRevision;
+			other.GetBaseRevision() == m_iBaseRevision &&
+			MatchesDestination(other);
 	}
 }

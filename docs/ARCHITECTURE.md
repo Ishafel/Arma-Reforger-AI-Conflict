@@ -147,6 +147,11 @@ SCR_MilitaryBaseSystem
   заменяет, восстанавливает и удаляет их, а также применяет player intent и
   безопасный `SYSTEM_HOLD`. Vehicle flows могут продолжить или восстановить
   уже выбранное назначение, но не имеют права выбирать другую базу.
+- Стратегическое назначение имеет явный `AICF_EOrderTargetKind`: `BASE` хранит
+  stock `SCR_CampaignMilitaryBaseComponent`, `POSITION` — подтверждённый
+  сервером world endpoint. Для `POSITION` planner создаёт Defend waypoint с
+  семантикой `MOVE_AND_HOLD`; такой приказ не участвует в radio graph,
+  ownership/capture, relay smart action или SearchAndDestroy promotion.
 - Если stock Move waypoint завершён вне физического радиуса цели,
   reliability сохраняет `faction + slot`, group generation и assignment
   revision и строит следующий endpoint только на navmesh, связанной с
@@ -183,6 +188,10 @@ economy, vehicles, victory, replication, subscriptions и callqueue остают
 общими. Опциональны только `AICF_AICommander(US)` и
 `AICF_AICommander(USSR)`. Явный valid player order имеет приоритет и на
 AI-controlled стороне; запрет player RPC для неё не входит в текущую политику.
+Этот приоритет обязателен на всех commander boundaries: initial assignment,
+периодическом `ReconcileAICommanderOrder()` и loss response после смены
+владельца базы. Они могут удержать или восстановить valid `POSITION`, включая
+состояние с waypoint под управлением vehicle domain, но не заменить его `BASE`.
 
 Player-commanded сторона без valid player intent получает стратегическое
 состояние `AWAITING_PLAYER_COMMAND`. Физический приказ при этом — созданный
@@ -190,8 +199,35 @@ Player-commanded сторона без valid player intent получает ст
 независимо от slot role. Он не является новой attack/defend целью, vehicle
 assignment, task loss или stuck episode. Valid player order снимает ожидание.
 Reliability вправе повторно выпустить waypoint к тому же valid player target,
-но не выбирать другую базу; invalidated после capture target очищается и
-приводит обратно к `SYSTEM_HOLD`.
+но не выбирать другую цель. `BASE`, ставшая недопустимой после capture,
+очищается и приводит обратно к `SYSTEM_HOLD`; `POSITION` остаётся role-agnostic
+durable intent, переживает commander tick и несвязанную смену владельца базы и
+проходит обычные waypoint/progress/stuck gates.
+
+Map-point RPC передаёт только `slotId` и untrusted vector. Сервер повторно
+определяет player/faction/stable slot, применяет общий player-order rate limit,
+отбрасывает non-finite и выходящие за terrain bounds X/Z, игнорирует client Y,
+получает `BaseWorld.GetSurfaceY()` и принимает только ближайший navmesh endpoint
+в ограниченном окне и с ограниченным смещением. Ни target kind, ни faction,
+ни marker label, ни waypoint identity клиент не выбирает.
+
+Для удалённой точки `NavmeshWorldComponent` может ещё не держать streamable
+tile в памяти. Resolver сначала вызывает `LoadTileIn()` и возвращает внутреннее
+transient-состояние `NAVMESH_TILE_LOADING`; `AICF_MatchController` повторяет
+проверку каждые 100 ms не дольше 6 s. Pending request сохраняет requester,
+player id, stable faction, numeric slot, immutable group entity, group
+generation, assignment/intent revisions и request token. Каждый retry заново
+сверяет всю identity и текущую faction, а при несовпадении завершается
+fail-closed до waypoint/intent mutation. `Stop()` явно снимает callback и
+возвращает terminal owner response всем оставшимся запросам.
+
+Результат этой проверки возвращается только владельцу player controller через
+reliable `RplRcver.Owner`: `slotId`, исходная X/Z, `accepted`, exact rejection
+reason и server-resolved endpoint. Это ephemeral acknowledgement, а не новый
+источник gameplay state. UI сопоставляет его с pending request и немедленно
+показывает server rejection; accepted destination и JIP по-прежнему читаются
+из replicated campaign summary/static marker. Отсутствие owner response и
+явный server rejection имеют разные UI-состояния.
 
 Все причины нового выбора проходят через тот же boundary: initial/replacement
 deployment, player role change, graph rebuild, reliability/stuck/lone-survivor
@@ -213,7 +249,7 @@ addon.
 - presentation: role-local `A0..`, `D0..`, `R0..` — меняется при смене роли;
 - конкретное воплощение группы: stable slot + `spawn/group generation`;
 - стратегический приказ: slot + `assignment revision`;
-- долговечное стратегическое намерение: target, role, posture,
+- долговечное стратегическое намерение: target kind + base/position, role, posture,
   `decision_authority` и собственный intent revision;
 - карта/снабжение: `graph revision`;
 - асинхронная операция: request/trip token и immutable entity identity.
@@ -310,7 +346,8 @@ Flows возвращают данные и не вызывают друг дру
 lease. Cleanup живёт независимо от terminal trip: поездка может закончиться, а
 защищённая проверка пассажиров и подтверждение удаления продолжиться.
 
-Vehicle snapshot переносит две разные версии: `assignment revision` защищает
+Vehicle snapshot переносит target kind, base/position и две разные версии:
+`assignment revision` защищает
 runtime waypoint/entity identity, а `intent revision` обозначает только смену
 target/posture/authority/role. Если новый intent приходит в уже начатый
 `HANDOFF` или terminal restore, `AICF_VehicleHandoffState` выдаёт свежий
@@ -359,6 +396,8 @@ cargo между stock supply pools по доступному friendly path, н�
 - summaries десяти групп на каждую сторону.
 
 Сводки UI сериализуются компактными строками с разделителями `|`, `~` и `;`.
+После прежних десяти полей summary содержит `target kind`, округлённые X/Z и
+`intent revision`; старые первые десять полей и их parser contract сохранены.
 Это внутренний wire contract между server state и программно построенным UI;
 изменение формата требует одновременной правки producer и parser.
 
@@ -366,6 +405,18 @@ cargo между stock supply pools по доступному friendly path, н�
 player-owned `SCR_PlayerController`. Reliable RPC передаёт slot/selection, но
 server заново получает `GetPlayerId()`, faction и authoritative slot и проверяет
 role, target, size, rate limit и текущий lifecycle.
+
+Выбор `POSITION` использует stock `SCR_MapCommandCursor`, поэтому pan/zoom и
+положительный cursor остаются штатными. На время выбора command panel/scrim
+скрыты, отдельный compact prompt имеет явную отмену; cursor callbacks и
+повторяющийся update снимаются при выборе, отмене, закрытии карты и `Stop()`.
+UI считает приказ принятым только после изменения authoritative group summary.
+Создание `SCR_MapCommandCursor` откладывается за пределы input event кнопки:
+клик `MOVE TO MAP POINT` не может одновременно стать координатой приказа.
+Отложенная активация снимается тем же lifecycle cleanup. Цвета prompt/cancel
+повторно устанавливаются через `SetRectColor()` после Enfusion widget
+initialization, а map-point action сохраняет отдельный синий стиль и не
+попадает под янтарный стиль base targets.
 
 Authority flags входят в JIP snapshot, но не являются хранилищем immutable
 policy. `false/false` означает, что authoritative command state ещё недоступен
@@ -385,6 +436,9 @@ policy и per-assignment `decision_authority`.
 
 Map markers получают faction streaming и показывают союзные группы/цели.
 Маркер следует за живым leader и перепривязывается после замены группы.
+Для active player `POSITION` marker system дополнительно создаёт faction-filtered
+stock static server marker. Его static-marker serialization обеспечивает JIP;
+новый point/base intent и `Stop()` удаляют прежний marker.
 
 ## Rank policy
 
