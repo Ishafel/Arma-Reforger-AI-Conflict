@@ -48,12 +48,15 @@ $rhsProfilePath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AI
 $rhsBootstrapPath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/Integration/AICF_RHSArlandBootstrap.c'
 $rhsDeployIconFixPath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/Integration/AICF_RHSDeployMapIconFix.c'
 $rhsFactionVoiceFixPath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/Integration/AICF_RHSFactionVoiceFix.c'
+$rhsPersonnelCatalogFixPath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/Integration/AICF_RHSPersonnelCatalogFix.c'
+$rhsLoadoutUIFixPath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/Integration/AICF_RHSLoadoutUIFix.c'
 
 foreach ($path in @(
     $coreProjectPath, $arlandProjectPath, $rhsProjectPath, $profilePath,
     $groupSpawnerPath, $vehicleCatalogPath, $acquisitionPath,
     $arlandBootstrapPath, $radioNormalizerPath, $rhsProfilePath, $rhsBootstrapPath,
-    $rhsDeployIconFixPath, $rhsFactionVoiceFixPath
+    $rhsDeployIconFixPath, $rhsFactionVoiceFixPath, $rhsPersonnelCatalogFixPath,
+    $rhsLoadoutUIFixPath
 )) {
     if (-not (Test-Path -LiteralPath $path)) {
         Add-Failure 'RHS_FILE_MISSING' "Missing required file $path"
@@ -74,6 +77,8 @@ if ($failures.Count -eq 0) {
     $rhsBootstrap = Get-Content -LiteralPath $rhsBootstrapPath -Raw
     $rhsDeployIconFix = Get-Content -LiteralPath $rhsDeployIconFixPath -Raw
     $rhsFactionVoiceFix = Get-Content -LiteralPath $rhsFactionVoiceFixPath -Raw
+    $rhsPersonnelCatalogFix = Get-Content -LiteralPath $rhsPersonnelCatalogFixPath -Raw
+    $rhsLoadoutUIFix = Get-Content -LiteralPath $rhsLoadoutUIFixPath -Raw
     $coreSources = Read-Tree 'AIConflictCore/Scripts/Game'
     $rhsSources = Read-Tree 'AIConflictArlandRHS/Scripts/Game'
 
@@ -108,6 +113,17 @@ if ($failures.Count -eq 0) {
     Require-Match 'RHS_FACTION_VOICE' $rhsFactionVoiceFix 'GetFactionKey\s*\(\s*\)\s*==\s*"RHS_AFRF"[\s\S]*return\s+1\s*;' 'RHS_AFRF does not map to the stock USSR identity-voice signal'
     Require-Match 'RHS_FACTION_VOICE' $rhsFactionVoiceFix 'return\s+super\.GetIndentityVoiceSignal\s*\(\s*\)\s*;' 'Non-RHS factions do not preserve their configured identity-voice signal'
     Forbid-Match 'RHS_FACTION_VOICE' $rhsFactionVoiceFix 'RHS_USAF|GetStableFactionKey|SetFaction' 'RHS faction voice override exceeds its RHS_AFRF compatibility boundary'
+
+    Require-Match 'RHS_PERSONNEL_CATALOG' $rhsPersonnelCatalogFix 'modded\s+class\s+SCR_CatalogEntitySpawnerComponent[\s\S]*override\s+protected\s+void\s+SetCurrentFactionCatalog' 'RHS addon does not own its stock personnel-service catalog adapter'
+    Require-Match 'RHS_PERSONNEL_CATALOG' $rhsPersonnelCatalogFix 'super\.SetCurrentFactionCatalog\(\)[\s\S]*m_aCatalogTypes\.Count\(\)\s*!=\s*1[\s\S]*m_aCatalogTypes\.Contains\(EEntityCatalogType\.CHARACTER\)' 'RHS personnel adapter does not preserve vanilla behavior or constrain itself to character-only spawners'
+    Require-Match 'RHS_PERSONNEL_CATALOG' $rhsPersonnelCatalogFix 'GetStableFactionKey[\s\S]*GetFactionEntityCatalogOfType\([\s\r\n]*EEntityCatalogType\.CHARACTER\)' 'RHS personnel adapter does not resolve the current RHS faction character catalog through stable identity'
+    Require-Match 'RHS_PERSONNEL_CATALOG' $rhsPersonnelCatalogFix 'BuildCharacterRoleCandidates[\s\S]*GetEntityUiInfo\(\)[\s\S]*GetEntityDataOfType\(SCR_EntityCatalogSpawnerData\)' 'RHS personnel adapter does not reuse the supported role table or require stock spawner data and UI info'
+    Require-Match 'RHS_PERSONNEL_CATALOG' $rhsPersonnelCatalogFix 'm_aAssetList\.Clear\(\)[\s\S]*m_aAssetList\.InsertAll\(personnelEntries\)[\s\S]*AssignUserActions\(\)' 'RHS personnel adapter does not atomically replace the filtered list and refresh stock user actions'
+    Forbid-Match 'RHS_PERSONNEL_CATALOG' $rhsPersonnelCatalogFix 'Character_US_|Character_USSR_|AddAssetsFromCatalog\(' 'RHS personnel adapter contains stock fallback or bypasses the supported RHS role table'
+
+    Require-Match 'RHS_LOADOUT_UI' $rhsLoadoutUIFix 'modded\s+class\s+SCR_LoadoutButton[\s\S]*override\s+void\s+SetLoadout' 'RHS addon does not own its factionless loadout UI compatibility guard'
+    Require-Match 'RHS_LOADOUT_UI' $rhsLoadoutUIFix 'Faction\s+faction\s*=\s*entityUIInfo\.GetFaction\(\)[\s\S]*if\s*\(\s*!m_wBadge\s*\|\|\s*!faction\s*\)[\s\S]*faction\.GetFactionColor\(\)' 'RHS loadout UI guard does not validate the optional faction before painting the badge'
+    Forbid-Match 'RHS_LOADOUT_UI' $rhsLoadoutUIFix 'entityUIInfo\.GetFaction\(\)\.GetFactionColor\(\)' 'RHS loadout UI still dereferences the optional faction directly'
 
     Require-Match 'CONTENT_PROFILES' $stockProfile 'class\s+AICF_ContentProfile' 'Stock content profile class is missing'
     Require-Match 'CONTENT_PROFILES' $stockProfile 'return\s+"STOCK"\s*;' 'Stock profile key is missing'
@@ -183,5 +199,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Output '[AICF][RHS_STATIC][RESULT][PASS] dependency_graph=PASS core_isolation=PASS profiles=PASS roles=PASS vehicles=PASS radio_bridge_mapping=PASS deploy_map_icons=PASS faction_voice=PASS lifecycle=PASS cleanup=PASS'
+Write-Output '[AICF][RHS_STATIC][RESULT][PASS] dependency_graph=PASS core_isolation=PASS profiles=PASS roles=PASS vehicles=PASS personnel_catalog=PASS loadout_ui=PASS radio_bridge_mapping=PASS deploy_map_icons=PASS faction_voice=PASS lifecycle=PASS cleanup=PASS'
 exit 0

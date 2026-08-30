@@ -413,6 +413,17 @@ override `SCR_Faction.GetIndentityVoiceSignal()` сопоставляет тол
 `RHS_AFRF` со штатным русским voice signal СССР (`1`); для остальных фракций
 результат без изменений делегируется исходной реализации.
 
+RHS-only adapter `SCR_CatalogEntitySpawnerComponent.SetCurrentFactionCatalog()`
+сначала сохраняет штатное наполнение, затем только для `CHARACTER` spawner и
+активного RHS profile заменяет результат на поддержанные role entries текущего
+faction catalog. Entry принимается только при наличии `SCR_EntityCatalogSpawnerData`
+и UI info; supplies, authority, slots, cooldown и spawn остаются во владении
+штатного personnel service. Событие `PERSONNEL_CATALOG_BOUND` публикует исходное
+и итоговое количество, `missing_roles` и выбранные roles; пустой результат даёт
+`PERSONNEL_CATALOG_BIND_FAILED` и оставляет штатный список без изменений.
+Клиентский `SCR_LoadoutButton` дополнительно не рисует badge, если UI info RHS
+Campaign loadout не содержит faction, предотвращая vanilla null dereference.
+
 Его `Missions/AICF_RHS_Conflict_Arland.conf` аналогично добавляет плитку
 `AI Conflict RHS - Arland`, наследуя RHS mission. Поскольку RHS root-addon
 зависит от обычного Arland, при одновременной загрузке видны обе плитки; для RHS

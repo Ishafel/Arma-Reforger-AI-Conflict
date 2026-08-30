@@ -26,14 +26,18 @@ Core и обычный Arland не имеют RHS dependencies. `AIConflictArlan
 `BADC0DEDABBEDA5E` и RHS - Status Quo `595F2BF2F44836FB`. Его постоянный GUID —
 `9F88011DA22B471C`. Рабочая точка входа обоих вариантов —
 `AIConflictArland/Scripts/Game/AIConflictArland/Integration/AICF_ArlandCampaignBootstrap.c`.
-RHS-addon только подменяет передаваемый через bootstrap content profile, не
-создавая второй controller или server loops.
+RHS-addon подменяет передаваемый через bootstrap content profile и содержит
+локальные compatibility adapters для штатных RHS UI/services, не создавая
+второй controller или server loops.
 
 Stock profile сохраняет текущие `US`/`USSR` catalog mappings. RHS profile
 разрешает `RHS_USAF` как стабильную сторону `US`, `RHS_AFRF` как `USSR`,
 создаёт USMC MEF и MSV VKPO Demiseason rosters из faction `CHARACTER` catalogs
 и выбирает только явно поддержанные faction `VEHICLE` candidates. RHS
 character/source-roster и vehicle fallback к stock запрещён fail-closed.
+Тот же детерминированный список character roles наполняет штатный personnel
+service в казармах, обходя несовместимые с RHS vanilla label filters, но
+сохраняя `SCR_EntityCatalogSpawnerData`, supplies и остальные stock checks.
 Source runtime использует штатную mission
 `{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf`; RHS world/mission assets
 в репозиторий не копируются.
@@ -90,7 +94,7 @@ AIConflictArland/Missions/
   игровая плитка AI Conflict - Arland поверх штатного Conflict
 
 AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/
-  RHS USMC/MSV content profile и единственный bootstrap factory override
+  RHS USMC/MSV content profile, bootstrap factory override и RHS-only adapters
 AIConflictArlandRHS/Missions/
   игровая плитка AI Conflict RHS - Arland поверх штатной RHS mission
 
