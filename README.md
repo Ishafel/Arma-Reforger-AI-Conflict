@@ -59,7 +59,12 @@ Source runtime использует штатную mission
 - economy/supply pacing всегда включены; CLI opt-out для этих subsystems нет;
 - общий rank policy отключает player-rank gates для строительства, заказа
   техники, арсенала, loadouts, групп, защитников, radial commands и Commander
-  volunteer; scenario headers дополнительно выдают игрокам `GENERAL` при входе.
+  volunteer; scenario headers объявляют стартовый rank `GENERAL`, а
+  authoritative `SCR_PlayerXPHandlerComponent` выдаёт и восстанавливает его XP
+  floor после входа, любых XP-штрафов, reconnect/JIP и загрузки persistence
+  state. Если активный Reforger 1.8 `RankContainer` не содержит отдельной записи
+  `GENERAL`, floor равен его максимальному non-renegade порогу. Накопленный XP
+  выше порога сохраняется, replicated character state остаётся `GENERAL`.
 
 `US` и `USSR` в `aicfAICommanderMode` означают сторону, которой разрешено
 автономно выбирать новые стратегические цели. Другая сторона сохраняет полный

@@ -54,7 +54,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RankRestric
 | `Test-AICommanderModeStatic.ps1` | Arland CLI preflight, immutable authority policy, faction commander boundary, intent, availability replication и UI contract |
 | `Test-RHSIntegrationStatic.ps1` | optional dependency graph, Core isolation, stock/RHS profiles, fail-closed roles/vehicles, personnel building-browser adapter, loadout UI guard, stable-side Arland radio normalization, RHS_AFRF identity voice, single lifecycle и cleanup symmetry |
 | `Test-ScenarioHeadersStatic.ps1` | stock/RHS inherited MissionHeader, menu visibility, stable resource GUID, platform metadata и отсутствие собственных world/layer resources |
-| `Test-RankRestrictionsStatic.ps1` | общий policy отключения player-rank gates без снятия supply/cooldown/faction/capacity/authority проверок |
+| `Test-RankRestrictionsStatic.ps1` | `GENERAL` join/XP floor, maximum non-renegade fallback для container без `GENERAL`, central mutation/restore hook, authoritative faction/spawn recheck, replicated character state, authority/replication, запрет раннего polling и сохранение остальных admission checks |
 
 Аудиторы проверяют часть архитектуры регулярными выражениями. Красный rule ID
 может означать реальный regression или drift тестового контракта. Сначала
@@ -209,6 +209,31 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 `[AICF][STAGE4][INFO][CONFIG] ... enabled=1` и `SUPPLY_PROBE`.
 `-AllowActiveAtEnd` разрешает только незавершённые reservations/shipments на
 момент остановки; errors он не игнорирует.
+
+### Rank floor
+
+Rank runtime выполняется с отдельным fresh server/client profile. После
+автоматического или ручного входа за игровую фракцию зафиксируй XP и rank,
+затем последовательно проверь:
+
+```text
+GENERAL -> teamkill/collision penalty -> GENERAL -> respawn -> GENERAL
+        -> disconnect/reconnect или новый JIP client -> GENERAL
+```
+
+Server log должен содержать
+`[AICF][RANK][INFO][XP_FLOOR_VERIFIED] ... current_xp=... floor_xp=...
+catalog_floor_rank=... rank=GENERAL` для initial join, XP mutation, respawn и
+reconnect/JIP. `catalog_floor_rank=MAJOR` ожидаем для stock/default Reforger 1.8
+container без отдельной записи `GENERAL`; это источник effective XP threshold,
+а итоговый replicated character rank всё равно обязан быть `GENERAL`.
+`XP_FLOOR_APPLIED` дополнительно требуется для каждой коррекции, которая иначе
+опустила бы XP ниже порога. Сами эти строки не доказывают всю цепочку: отдельно
+сохрани server evidence исходного штрафа, server respawn и
+disconnect/reconnect, а в client log и HUD проверь итоговый owner-only XP/rank
+после каждой фазы. Визуальный HUD остаётся ручным критерием пользователя. Для
+persistence-run загрузка сохранения с XP ниже порога должна закончиться
+`XP_FLOOR_APPLIED`, а затем `XP_FLOOR_VERIFIED` до наблюдаемого rank state.
 
 Сейчас отсутствуют:
 

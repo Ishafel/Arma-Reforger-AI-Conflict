@@ -44,7 +44,13 @@ C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger Tools
 
 Оба сценария AICF отключают player-rank gates для строительства и отдельных
 построек, заказа техники, арсенала, loadouts, групп, защитников, radial commands
-и Commander volunteer. Дополнительно всем игрокам назначается стартовое звание
+и Commander volunteer. Всем игрокам назначается XP floor стартового звания
+`GENERAL`. В Reforger 1.8 stock/default `RankContainer` заканчивается на
+`MAJOR`; для контейнера без отдельной записи `GENERAL` effective floor равен
+его максимальному non-renegade XP-порогу. Authoritative server повторно
+применяет floor после каждого изменения XP, reconnect/JIP и восстановления
+persistence state: штрафы сначала уменьшают накопленный избыток, но не могут
+понизить итоговый XP ниже floor, а replicated character state остаётся
 `GENERAL`. Ограничения по supply, cooldown, принадлежности фракции, capacity,
 authority и другим правилам Conflict сохраняются.
 

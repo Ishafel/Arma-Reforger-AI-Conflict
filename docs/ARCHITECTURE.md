@@ -383,6 +383,39 @@ policy и per-assignment `decision_authority`.
 Map markers получают faction streaming и показывают союзные группы/цели.
 Маркер следует за живым leader и перепривязывается после замены группы.
 
+## Rank policy
+
+Оба scenario headers задают `m_eStartingRank GENERAL`. В Reforger 1.8
+stock/default `SCR_RankContainer` сериализует ранги только до `MAJOR`, поэтому
+штатный `SCR_GameModeCampaign.SetStartingRank()` не может сам разрешить порог
+несуществующей записи `GENERAL`. Modded `SCR_PlayerXPHandlerComponent` в Core
+использует faction-specific `GENERAL` threshold, когда он существует, иначе
+максимальный настроенный non-renegade threshold активного container как
+effective `GENERAL` floor. Все штатные награды, штрафы, reconnect restore и
+persistence deserialize сходятся в `AddPlayerXP()`; floor применяется до
+`UpdatePlayerRank()`, который authoritative записывает именно `GENERAL` в
+replicated character state. Поэтому character не успевает перейти в `RENEGADE`
+даже временно.
+
+XP выше порога не обрезается: положительные награды и статистика сохраняются,
+а штрафы уменьшают сначала накопленный избыток. При фактической коррекции server
+меняет owner-only XP, вызывает stock XP listeners/RPC и делает
+`Replication.BumpMe()` только после изменения. До назначения фракции в
+authoritative map `SCR_FactionManager` floor fail-closed не выбирает
+`SCR_RankContainer`; после назначения container разрешается через штатный
+`SCR_FactionManager.GetFactionRanks()`, включая stock fallback для нестандартной
+RHS faction. Map обновляется до `OnPlayerFactionSet_S`, тогда как affiliation
+component во время callback ещё может возвращать предыдущее значение. Назначение
+фракции server публикует через authoritative
+`SCR_FactionManager.OnPlayerFactionSet_S()`; после обновления faction state этот
+callback повторно вызывает `UpdatePlayerRank()`, а
+повторную проверку при создании character даёт штатный spawn-вызов
+`UpdatePlayerRank()`. Поэтому join/JIP, reconnect и persistence restore
+покрываются `AddPlayerXP()` и faction/spawn lifecycle hooks без раннего polling
+неготового `PlayerController`. Override `GetCharacterRank()` и
+`GetPlayerRankByXP()` остаются дополнительной защитой чтения. Глобальный
+override `SCR_RankContainer.GetRankByXP()` не используется.
+
 ## Arland integration
 
 `AIConflictArland` содержит четыре чувствительных расширения stock классов:
