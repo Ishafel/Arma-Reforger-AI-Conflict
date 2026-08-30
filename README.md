@@ -35,9 +35,12 @@ Stock profile сохраняет текущие `US`/`USSR` catalog mappings. RH
 создаёт USMC MEF и MSV VKPO Demiseason rosters из faction `CHARACTER` catalogs
 и выбирает только явно поддержанные faction `VEHICLE` candidates. RHS
 character/source-roster и vehicle fallback к stock запрещён fail-closed.
-Тот же детерминированный список character roles наполняет штатный personnel
-service в казармах, обходя несовместимые с RHS vanilla label filters, но
-сохраняя `SCR_EntityCatalogSpawnerData`, supplies и остальные stock checks.
+Для малых казарм RHS-only building-browser adapter трактует как
+`GROUPTYPE_ESSENTIAL` по одному уже зарегистрированному минимальному USMC/MSV
+`SentryTeam` на сторону в локальной копии данных фильтра и в локальном массиве
+server-side provider validation. Дорогие казармы сохраняют полный штатный
+список групп; numeric IDs, faction, provider, budget и server placement
+validation не меняются; после штатной проверки временный label удаляется.
 Source runtime использует штатную mission
 `{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf`; RHS world/mission assets
 в репозиторий не копируются.

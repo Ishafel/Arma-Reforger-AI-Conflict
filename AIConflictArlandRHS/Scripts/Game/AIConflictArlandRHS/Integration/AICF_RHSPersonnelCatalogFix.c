@@ -1,129 +1,231 @@
-// RHS character catalogs use their own role labels, while the stock Conflict
-// personnel service filters entries by vanilla labels. Reuse the deterministic
-// RHS content-profile table to bind only catalog-backed, spawnable characters
-// to character spawners. Vehicle and other catalog spawners retain vanilla
-// behavior through super.SetCurrentFactionCatalog().
-modded class SCR_CatalogEntitySpawnerComponent
+// Small LivingArea providers deliberately show only GROUPTYPE_ESSENTIAL groups.
+// RHS groups visible in the large LivingArea omit that vanilla label. Treat one
+// minimal, already-registered SentryTeam per supported faction as essential only
+// in the client-side filter copy. Numeric prefab IDs, UI metadata, budgets and
+// authoritative placement keeps all stock checks while receiving the same narrow
+// label projection before validating provider traits.
+class AICF_RHSPersonnelBuildingFix
 {
-	override protected void SetCurrentFactionCatalog()
+	static bool IsActiveProfile()
 	{
-		super.SetCurrentFactionCatalog();
+		AICF_ContentProfile contentProfile = AICF_ContentProfile.GetActive();
+		return contentProfile &&
+			contentProfile.GetProfileKey() == "RHS_USMC_MSV_0_16_5150";
+	}
+
+	static bool IsSupportedEssentialGroup(ResourceName prefab)
+	{
+		return prefab.Contains(
+			"RHS_USAF_USMC_MEF/Group_USAF_USMC_MEF_SentryTeam.et") ||
+			prefab.Contains(
+				"MSV/VKPO_Demiseason/Group_RHS_RF_MSV_VKPO_DS_SentryTeam.et");
+	}
+}
+
+modded class SCR_ContentBrowserEditorComponent
+{
+	protected bool m_bAICFEssentialGroupsLogged;
+
+	override void FilterEntries()
+	{
+		if (GetExtendedEntity())
+			return;
 
 		AICF_ContentProfile contentProfile = AICF_ContentProfile.GetActive();
-		if (!contentProfile ||
-			contentProfile.GetProfileKey() != "RHS_USMC_MSV_0_16_5150" ||
-			!m_aCatalogTypes ||
-			m_aCatalogTypes.Count() != 1 ||
-			!m_aCatalogTypes.Contains(EEntityCatalogType.CHARACTER))
+		bool isRHSProfile = AICF_RHSPersonnelBuildingFix.IsActiveProfile();
+		SCR_PlacingEditorComponentClass placingPrefabData;
+		array<int> essentialGroupPrefabIDs = {};
+		string groups;
+		if (isRHSProfile)
+		{
+			placingPrefabData = SCR_PlacingEditorComponentClass.Cast(
+				SCR_PlacingEditorComponentClass.GetInstance(SCR_PlacingEditorComponent, true));
+			if (placingPrefabData)
+			{
+				for (int prefabId = 0, infoCount = GetInfoCount(); prefabId < infoCount; prefabId++)
+				{
+					ResourceName prefab = placingPrefabData.GetPrefab(prefabId);
+					if (!AICF_RHSPersonnelBuildingFix.IsSupportedEssentialGroup(prefab))
+						continue;
+
+					SCR_EditableEntityUIInfo groupInfo = GetInfo(prefabId);
+					if (!groupInfo || !groupInfo.HasEntityLabel(EEditableEntityLabel.ENTITYTYPE_GROUP))
+						continue;
+
+					essentialGroupPrefabIDs.Insert(prefabId);
+					if (!groups.IsEmpty())
+						groups += ",";
+					groups += prefab;
+				}
+			}
+		}
+
+		bool bindEssentialGroups = essentialGroupPrefabIDs.Count() == 2;
+
+		// Stock FilterEntries implementation, with the narrow RHS label projection.
+		m_aFilteredPrefabIDs.Clear();
+		m_aLocalizationKeys.Clear();
+		array<EEditableEntityLabel> entityLabels = {};
+
+		array<EEditableEntityLabel> validBlackListLabels = {};
+		GetValidBlackListedLabels(validBlackListLabels);
+
+		bool isBlackListed;
+		SCR_EditableEntityUIInfo info;
+		int count = GetInfoCount();
+		for (int i = 0; i < count; i++)
+		{
+			isBlackListed = false;
+			entityLabels.Clear();
+			info = GetInfo(i);
+
+			if (!info)
+				continue;
+
+			info.GetEntityLabels(entityLabels);
+			if (bindEssentialGroups && essentialGroupPrefabIDs.Contains(i))
+				entityLabels.Insert(EEditableEntityLabel.GROUPTYPE_ESSENTIAL);
+
+			if (!IsMatchingToggledLabels(entityLabels))
+				continue;
+
+			foreach (EEditableEntityLabel blackListLabel : validBlackListLabels)
+			{
+				if (entityLabels.Contains(blackListLabel))
+				{
+					isBlackListed = true;
+					break;
+				}
+			}
+
+			if (isBlackListed)
+				continue;
+
+			m_aFilteredPrefabIDs.Insert(i);
+			m_aLocalizationKeys.Insert(info.GetName());
+		}
+
+		string currentSearch = GetCurrentSearch();
+		if (!currentSearch.IsEmpty())
+		{
+			array<int> searchResultPrefabID = {}, searchResultIndices = {};
+			WidgetManager.SearchLocalized(currentSearch, m_aLocalizationKeys, searchResultIndices);
+
+			foreach (int searchResultIndex : searchResultIndices)
+			{
+				int prefabID = m_aFilteredPrefabIDs.Get(searchResultIndex);
+				searchResultPrefabID.Insert(prefabID);
+			}
+			m_aFilteredPrefabIDs.Copy(searchResultPrefabID);
+		}
+
+		m_iFilteredPrefabIDsCount = m_aFilteredPrefabIDs.Count();
+		Event_OnBrowserEntriesFiltered.Invoke();
+
+		if (!isRHSProfile ||
+			!IsLabelActive(EEditableEntityLabel.GROUPTYPE_ESSENTIAL) ||
+			m_bAICFEssentialGroupsLogged)
 		{
 			return;
 		}
 
-		SCR_Faction faction = SCR_Faction.Cast(GetFaction());
-		if (!faction)
-			return;
-
-		FactionKey stableFactionKey = contentProfile.GetStableFactionKey(
-			faction.GetFactionKey());
-		if (stableFactionKey.IsEmpty())
-			return;
-
-		SCR_EntityCatalog characterCatalog = faction.GetFactionEntityCatalogOfType(
-			EEntityCatalogType.CHARACTER);
-		if (!characterCatalog)
-			return;
-
-		array<SCR_EntityCatalogEntry> characterEntries = {};
-		characterCatalog.GetEntityList(characterEntries);
-		array<SCR_EntityCatalogEntry> personnelEntries = {};
-		string roles;
-		int missingRoles;
-		for (int memberIndex = 0; memberIndex < AICF_Stage1Config.DEFAULT_GROUP_SIZE; memberIndex++)
-		{
-			string role;
-			array<string> prefabSuffixes = {};
-			if (!contentProfile.BuildCharacterRoleCandidates(
-				stableFactionKey,
-				memberIndex,
-				role,
-				prefabSuffixes))
-			{
-				missingRoles++;
-				continue;
-			}
-
-			SCR_EntityCatalogEntry personnelEntry = AICF_FindPersonnelEntry(
-				characterEntries,
-				prefabSuffixes);
-			if (!personnelEntry || personnelEntries.Contains(personnelEntry))
-			{
-				missingRoles++;
-				continue;
-			}
-
-			personnelEntries.Insert(personnelEntry);
-			if (!roles.IsEmpty())
-				roles += ",";
-			roles += role;
-		}
-
-		if (personnelEntries.IsEmpty())
+		m_bAICFEssentialGroupsLogged = true;
+		if (!bindEssentialGroups)
 		{
 			Print(
 				string.Format(
-					"[AICF][CONTENT][ERROR][PERSONNEL_CATALOG_BIND_FAILED] profile=%1 faction=%2 stable_side=%3 catalog_entries=%4 missing_roles=%5",
+					"[AICF][CONTENT][ERROR][PERSONNEL_BROWSER_BIND_FAILED] profile=%1 reason=ESSENTIAL_GROUPS_MISSING bound_count=%2 expected_count=2 info_count=%3 groups=%4",
 					contentProfile.GetProfileKey(),
-					faction.GetFactionKey(),
-					stableFactionKey,
-					characterEntries.Count(),
-					missingRoles),
+					essentialGroupPrefabIDs.Count(),
+					GetInfoCount(),
+					groups),
 				LogLevel.ERROR);
 			return;
 		}
 
-		int originalCount = m_aAssetList.Count();
-		m_aAssetList.Clear();
-		m_aAssetList.InsertAll(personnelEntries);
-		AssignUserActions();
 		Print(
 			string.Format(
-				"[AICF][CONTENT][INFO][PERSONNEL_CATALOG_BOUND] profile=%1 faction=%2 stable_side=%3 original_count=%4 bound_count=%5 missing_roles=%6 roles=%7",
+				"[AICF][CONTENT][INFO][PERSONNEL_BROWSER_BOUND] profile=%1 bound_count=%2 filtered_count=%3 groups=%4",
 				contentProfile.GetProfileKey(),
-				faction.GetFactionKey(),
-				stableFactionKey,
-				originalCount,
-				personnelEntries.Count(),
-				missingRoles,
-				roles),
+				essentialGroupPrefabIDs.Count(),
+				GetFilteredPrefabCount(),
+				groups),
 			LogLevel.NORMAL);
 	}
+}
 
-	protected SCR_EntityCatalogEntry AICF_FindPersonnelEntry(
-		array<SCR_EntityCatalogEntry> entries,
-		array<string> prefabSuffixes)
+// SCR_CampaignBuildingPlacingEditorComponent validates the original prefab
+// labels again on authority. Project the same label only around the stock
+// AreLabelsMatching call so faction, provider, blacklist and budget checks stay
+// authoritative and unchanged.
+modded class SCR_CampaignBuildingPlacingEditorComponent
+{
+	protected bool m_bAICFValidateSupportedEssentialGroup;
+	protected bool m_bAICFEssentialGroupLabelProjected;
+
+	override protected bool CanPlaceEntityServer(
+		IEntityComponentSource editableEntitySource,
+		out EEditableEntityBudget blockingBudget,
+		bool updatePreview,
+		bool showNotification,
+		int prefabID = -1,
+		int playerID = -1,
+		SCR_EditorPreviewParams params = null)
 	{
-		foreach (string prefabSuffix : prefabSuffixes)
+		ResourceName prefab;
+		SCR_PlacingEditorComponentClass prefabData = SCR_PlacingEditorComponentClass.Cast(
+			GetEditorComponentData());
+		if (prefabData && prefabID >= 0)
+			prefab = prefabData.GetPrefab(prefabID);
+
+		m_bAICFValidateSupportedEssentialGroup =
+			AICF_RHSPersonnelBuildingFix.IsActiveProfile() &&
+			AICF_RHSPersonnelBuildingFix.IsSupportedEssentialGroup(prefab);
+		m_bAICFEssentialGroupLabelProjected = false;
+
+		bool canPlace = super.CanPlaceEntityServer(
+			editableEntitySource,
+			blockingBudget,
+			updatePreview,
+			showNotification,
+			prefabID,
+			playerID,
+			params);
+
+		if (m_bAICFValidateSupportedEssentialGroup && playerID >= 0)
 		{
-			foreach (SCR_EntityCatalogEntry entry : entries)
-			{
-				if (!entry)
-					continue;
-
-				ResourceName prefab = entry.GetPrefab();
-				if (prefab.IsEmpty() || !prefab.Contains(prefabSuffix))
-					continue;
-				if (!entry.GetEntityUiInfo())
-					continue;
-				if (!SCR_EntityCatalogSpawnerData.Cast(
-					entry.GetEntityDataOfType(SCR_EntityCatalogSpawnerData)))
-				{
-					continue;
-				}
-
-				return entry;
-			}
+			AICF_ContentProfile contentProfile = AICF_ContentProfile.GetActive();
+			Print(
+				string.Format(
+					"[AICF][CONTENT][INFO][PERSONNEL_SERVER_VALIDATED] profile=%1 prefab=%2 player_id=%3 essential_projected=%4 allowed=%5",
+					contentProfile.GetProfileKey(),
+					prefab,
+					playerID,
+					m_bAICFEssentialGroupLabelProjected,
+					canPlace),
+				LogLevel.NORMAL);
 		}
 
-		return null;
+		m_bAICFValidateSupportedEssentialGroup = false;
+		m_bAICFEssentialGroupLabelProjected = false;
+		return canPlace;
+	}
+
+	override protected bool AreLabelsMatching(notnull array<EEditableEntityLabel> entityLabels)
+	{
+		bool projected;
+		if (m_bAICFValidateSupportedEssentialGroup &&
+			!entityLabels.Contains(EEditableEntityLabel.GROUPTYPE_ESSENTIAL))
+		{
+			entityLabels.Insert(EEditableEntityLabel.GROUPTYPE_ESSENTIAL);
+			projected = true;
+			m_bAICFEssentialGroupLabelProjected = true;
+		}
+
+		bool matches = super.AreLabelsMatching(entityLabels);
+		if (projected)
+			entityLabels.RemoveItem(EEditableEntityLabel.GROUPTYPE_ESSENTIAL);
+
+		return matches;
 	}
 }

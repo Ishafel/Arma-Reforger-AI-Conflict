@@ -52,7 +52,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RankRestric
 | `Test-Stage35RecoveryPolicy.ps1` | точные recovery, timing, ownership и fail-closed policies |
 | `Test-Stage4Static.ps1` | economy transaction, supply balance, replication, strategic UI и RPC authority |
 | `Test-AICommanderModeStatic.ps1` | Arland CLI preflight, immutable authority policy, faction commander boundary, intent, availability replication и UI contract |
-| `Test-RHSIntegrationStatic.ps1` | optional dependency graph, Core isolation, stock/RHS profiles, fail-closed roles/vehicles, personnel catalog adapter, loadout UI guard, stable-side Arland radio normalization, RHS_AFRF identity voice, single lifecycle и cleanup symmetry |
+| `Test-RHSIntegrationStatic.ps1` | optional dependency graph, Core isolation, stock/RHS profiles, fail-closed roles/vehicles, personnel building-browser adapter, loadout UI guard, stable-side Arland radio normalization, RHS_AFRF identity voice, single lifecycle и cleanup symmetry |
 | `Test-ScenarioHeadersStatic.ps1` | stock/RHS inherited MissionHeader, menu visibility, stable resource GUID, platform metadata и отсутствие собственных world/layer resources |
 | `Test-RankRestrictionsStatic.ps1` | общий policy отключения player-rank gates без снятия supply/cooldown/faction/capacity/authority проверок |
 
@@ -291,10 +291,13 @@ Stage 2–4 используют Stage 1 `run` и `t_ms`, поэтому соб�
 - `AI_WORLD_CAPACITY` имеет `effective_limit >= required_limit`, а каждый
   `GROUP_ROSTER_CONFIGURED` содержит `size=10`, `fallback_slots=0`, RHS USMC/MSV
   `prefabs` и ни одного `Character_US_`/`Character_USSR_`;
-- после появления или смены владельца RHS-казармы `PERSONNEL_CATALOG_BOUND`
-  содержит нужную runtime faction, `bound_count > 0` и поддержанные profile
-  roles; ручной клиентский запрос одного бойца проходит через штатные supplies,
-  capacity и authority checks без VM/null ошибки;
+- при первом открытии building mode событие `PERSONNEL_BROWSER_BOUND` содержит
+  `bound_count=2`, ненулевой `filtered_count` и только USMC/MSV `SentryTeam`;
+- после нажатия карточки `PERSONNEL_SERVER_VALIDATED` содержит
+  `essential_projected=1 allowed=1`, а server log подтверждает spawn выбранной
+  RHS group prefab;
+  ручной клиентский запрос одного бойца из каждой постройки проходит через
+  штатные supplies, capacity и authority checks без VM/null ошибки;
 - после захвата односторонней frontier-base событие `RADIO_BRIDGE_NORMALIZED`
   предшествует graph rebuild, а новый graph даёт владельцу путь от базы к relay;
 - vehicle metadata `CATALOG` повторена событием `LIVE` после spawn; выбранные
