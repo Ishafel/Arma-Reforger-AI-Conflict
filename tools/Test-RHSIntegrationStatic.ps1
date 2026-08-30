@@ -47,12 +47,13 @@ $radioNormalizerPath = Join-Path $RepositoryRoot 'AIConflictArland/Scripts/Game/
 $rhsProfilePath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/Content/AICF_RHSContentProfile.c'
 $rhsBootstrapPath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/Integration/AICF_RHSArlandBootstrap.c'
 $rhsDeployIconFixPath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/Integration/AICF_RHSDeployMapIconFix.c'
+$rhsFactionVoiceFixPath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/Integration/AICF_RHSFactionVoiceFix.c'
 
 foreach ($path in @(
     $coreProjectPath, $arlandProjectPath, $rhsProjectPath, $profilePath,
     $groupSpawnerPath, $vehicleCatalogPath, $acquisitionPath,
     $arlandBootstrapPath, $radioNormalizerPath, $rhsProfilePath, $rhsBootstrapPath,
-    $rhsDeployIconFixPath
+    $rhsDeployIconFixPath, $rhsFactionVoiceFixPath
 )) {
     if (-not (Test-Path -LiteralPath $path)) {
         Add-Failure 'RHS_FILE_MISSING' "Missing required file $path"
@@ -72,6 +73,7 @@ if ($failures.Count -eq 0) {
     $radioNormalizer = Get-Content -LiteralPath $radioNormalizerPath -Raw
     $rhsBootstrap = Get-Content -LiteralPath $rhsBootstrapPath -Raw
     $rhsDeployIconFix = Get-Content -LiteralPath $rhsDeployIconFixPath -Raw
+    $rhsFactionVoiceFix = Get-Content -LiteralPath $rhsFactionVoiceFixPath -Raw
     $coreSources = Read-Tree 'AIConflictCore/Scripts/Game'
     $rhsSources = Read-Tree 'AIConflictArlandRHS/Scripts/Game'
 
@@ -101,6 +103,11 @@ if ($failures.Count -eq 0) {
     Require-Match 'RHS_DEPLOY_MAP_ICONS' $rhsDeployIconFix 'modded\s+class\s+SCR_CampaignMapUIBase[\s\S]*override\s+void\s+SetImage' 'RHS addon does not repair campaign base icons whose faction keys contain underscores'
     Require-Match 'RHS_DEPLOY_MAP_ICONS' $rhsDeployIconFix 'image\.StartsWith\(runtimePrefix\)[\s\S]*imageSuffix\.Replace\(runtimePrefix,\s*""\)' 'RHS base icon parser does not strip the complete runtime faction key before tokenization'
     Require-Match 'RHS_DEPLOY_MAP_ICONS' $rhsDeployIconFix 'string\s+selection\s*=\s*"Unknown_Select"[\s\S]*string\s+highlight\s*=\s*"Unknown_Installation_Focus_Land"' 'RHS base icon fix does not provide non-empty fallback quads'
+
+    Require-Match 'RHS_FACTION_VOICE' $rhsFactionVoiceFix 'modded\s+class\s+SCR_Faction[\s\S]*override\s+int\s+GetIndentityVoiceSignal\s*\(\s*\)' 'RHS addon does not own its faction identity-voice compatibility override'
+    Require-Match 'RHS_FACTION_VOICE' $rhsFactionVoiceFix 'GetFactionKey\s*\(\s*\)\s*==\s*"RHS_AFRF"[\s\S]*return\s+1\s*;' 'RHS_AFRF does not map to the stock USSR identity-voice signal'
+    Require-Match 'RHS_FACTION_VOICE' $rhsFactionVoiceFix 'return\s+super\.GetIndentityVoiceSignal\s*\(\s*\)\s*;' 'Non-RHS factions do not preserve their configured identity-voice signal'
+    Forbid-Match 'RHS_FACTION_VOICE' $rhsFactionVoiceFix 'RHS_USAF|GetStableFactionKey|SetFaction' 'RHS faction voice override exceeds its RHS_AFRF compatibility boundary'
 
     Require-Match 'CONTENT_PROFILES' $stockProfile 'class\s+AICF_ContentProfile' 'Stock content profile class is missing'
     Require-Match 'CONTENT_PROFILES' $stockProfile 'return\s+"STOCK"\s*;' 'Stock profile key is missing'
@@ -176,5 +183,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Output '[AICF][RHS_STATIC][RESULT][PASS] dependency_graph=PASS core_isolation=PASS profiles=PASS roles=PASS vehicles=PASS radio_bridge_mapping=PASS deploy_map_icons=PASS lifecycle=PASS cleanup=PASS'
+Write-Output '[AICF][RHS_STATIC][RESULT][PASS] dependency_graph=PASS core_isolation=PASS profiles=PASS roles=PASS vehicles=PASS radio_bridge_mapping=PASS deploy_map_icons=PASS faction_voice=PASS lifecycle=PASS cleanup=PASS'
 exit 0

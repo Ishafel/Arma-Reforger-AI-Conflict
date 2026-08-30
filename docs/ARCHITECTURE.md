@@ -408,7 +408,10 @@ Map markers получают faction streaming и показывают союз�
 `AIConflictArlandRHS` добавляет ровно одно пятое расширение того же campaign
 class: override `AICF_CreateContentProfile()`. В нём нет `OnGameStart`, event
 subscription, `CallLater` или второго `AICF_MatchController`, поэтому Arland
-policies и lifecycle исполняются один раз.
+policies и lifecycle исполняются один раз. Отдельный RHS-only compatibility
+override `SCR_Faction.GetIndentityVoiceSignal()` сопоставляет только
+`RHS_AFRF` со штатным русским voice signal СССР (`1`); для остальных фракций
+результат без изменений делегируется исходной реализации.
 
 Его `Missions/AICF_RHS_Conflict_Arland.conf` аналогично добавляет плитку
 `AI Conflict RHS - Arland`, наследуя RHS mission. Поскольку RHS root-addon
