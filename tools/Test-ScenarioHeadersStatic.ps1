@@ -52,6 +52,9 @@ if ($failures.Count -eq 0) {
         Require-Match 'SCENARIO_MENU_VISIBILITY' $scenario `
             'm_bShowInScenarioMenu\s+1' `
             'Scenario header must be visible in the in-game Scenarios menu'
+        Require-Match 'SCENARIO_PERSISTENCE_DISABLED' $scenario `
+            '(?m)^\s*m_eSaveTypes\s+0\s*$' `
+            'Scenario header must disable unsupported session persistence so in-game hosting always starts a fresh campaign'
         Require-Match 'SCENARIO_IDENTITY' $scenario `
             'm_sName\s+"AI Conflict[^"\r\n]*"[\s\S]*m_sGameMode\s+"AI Conflict"' `
             'Scenario header must expose an AI Conflict name and game-mode label'
@@ -99,5 +102,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Output '[AICF][SCENARIO_STATIC][RESULT][PASS] stock_header=PASS rhs_header=PASS menu_visibility=PASS rank_unlocks=PASS inheritance=PASS metadata=PASS world_ownership=PASS'
+Write-Output '[AICF][SCENARIO_STATIC][RESULT][PASS] stock_header=PASS rhs_header=PASS menu_visibility=PASS persistence=DISABLED rank_unlocks=PASS inheritance=PASS metadata=PASS world_ownership=PASS'
 exit 0

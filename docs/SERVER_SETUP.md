@@ -48,16 +48,22 @@ C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger Tools
 `GENERAL`. В Reforger 1.8 stock/default `RankContainer` заканчивается на
 `MAJOR`; для контейнера без отдельной записи `GENERAL` effective floor равен
 его максимальному non-renegade XP-порогу. Authoritative server повторно
-применяет floor после каждого изменения XP, reconnect/JIP и восстановления
-persistence state: штрафы сначала уменьшают накопленный избыток, но не могут
-понизить итоговый XP ниже floor, а replicated character state остаётся
-`GENERAL`. Ограничения по supply, cooldown, принадлежности фракции, capacity,
-authority и другим правилам Conflict сохраняются.
+применяет floor после каждого изменения XP и reconnect/JIP: штрафы сначала
+уменьшают накопленный избыток, но не могут понизить итоговый XP ниже floor, а
+replicated character state остаётся `GENERAL`. Ограничения по supply, cooldown,
+принадлежности фракции, capacity, authority и другим правилам Conflict
+сохраняются.
 
 После установки и включения packaged `AI Conflict Arland` открой в игре
 `Сценарии` и выбери `AI Conflict - Arland`. Для RHS установи и включи
 `AI Conflict Arland RHS` со всеми dependencies, затем выбери
 `AI Conflict RHS - Arland`.
+
+Обе AICF-плитки отключают штатные session saves через `m_eSaveTypes 0`.
+Обычный `Играть` и hosting из встроенного Host dialog всегда создают новую
+войну и не предлагают продолжить прежнюю progression. Никакие Steam launch
+options и ручное удаление `.save`/`.db` из profile для сброса не нужны.
+Продолжение AICF-кампании после закрытия host сейчас не поддерживается.
 
 Пока Workshop build не опубликован, плитку можно проверить из checkout через
 Diag-клиент. Открой PowerShell в репозитории и выполни stock-команду:
@@ -515,6 +521,7 @@ shutdown contract: `Ctrl+C` завершает локальный process, но 
 | Нет `[AICF]` событий | загружены ли оба аддона и не произошёл ли fallback к vanilla |
 | Нет плитки `AI Conflict - Arland` | включён ли packaged Arland addon либо запущен ли source-client с его `-gproj`/GUID |
 | В RHS запустился stock world | выбрана ли точная плитка `AI Conflict RHS - Arland`, а не stock-плитка dependency |
+| Host загрузил старую Conflict progression | проверить, что выбран AICF header текущей версии с `m_eSaveTypes 0`, а не штатная Conflict-плитка или старый Workshop build |
 | Видно окно клиента, но UI не проверен | это `NOT RUN`; визуальный verdict даёт пользователь вручную |
 
 Дополнительные project-specific требования к запуску и evidence находятся в

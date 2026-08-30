@@ -155,6 +155,12 @@ $rhsProfile = Join-Path $env:LOCALAPPDATA ('AICF\ScenarioMenu-RHS-' + (Get-Date 
 обычного Arland. Выбирай `AI Conflict RHS - Arland`; для stock запуска не
 подключай `AIConflictArlandRHS`.
 
+Оба AICF `MissionHeader` задают `m_eSaveTypes 0`. Поэтому запуск или hosting
+этих плиток из обычной игры не загружает прежнюю Conflict progression и всегда
+начинает новую кампанию; удалять `.save`/`.db` из game profile не требуется.
+Указанные выше отдельные profiles и `-backendFreshSession` всё равно остаются в
+development-командах для полной изоляции logs и backend state каждого run.
+
 Меню не передаёт custom CLI arguments, поэтому оба сценария используют default
 `aicfAICommanderMode=BOTH`. Для `US` или `USSR` по-прежнему нужен отдельный
 dedicated server process. Наличие плитки, её выбор и визуальная загрузка —

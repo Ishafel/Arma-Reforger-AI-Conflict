@@ -57,6 +57,10 @@ Source runtime использует штатную mission
   server, а без параметра используется `BOTH`;
 - ground vehicles всегда включены;
 - economy/supply pacing всегда включены; CLI opt-out для этих subsystems нет;
+- оба AICF scenario headers задают `m_eSaveTypes 0`: запуск и hosting из
+  игрового меню всегда начинают новую кампанию, потому что собственный
+  campaign state AICF пока не поддерживает безопасное восстановление из
+  штатного Conflict session save;
 - общий rank policy отключает player-rank gates для строительства, заказа
   техники, арсенала, loadouts, групп, защитников, radial commands и Commander
   volunteer; scenario headers объявляют стартовый rank `GENERAL`, а
@@ -130,7 +134,8 @@ project и addon graph, затем выбери `Сценарии -> AI Conflict
 в [`docs/SERVER_SETUP.md`](docs/SERVER_SETUP.md#запуск-из-меню-сценариев).
 После Workshop-публикации те же плитки появляются у включённых packaged addons.
 Запуск из меню не задаёт CLI-параметры и поэтому использует default
-`aicfAICommanderMode=BOTH`.
+`aicfAICommanderMode=BOTH`. Сохранение session progression для этих плиток
+отключено: каждый новый запуск или hosting начинает войну с исходного состояния.
 
 1. Запустите применимые статические проверки из
    [`docs/TESTING.md`](docs/TESTING.md).

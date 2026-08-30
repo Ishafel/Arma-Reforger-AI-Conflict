@@ -53,7 +53,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RankRestric
 | `Test-Stage4Static.ps1` | economy transaction, supply balance, replication, strategic UI и RPC authority |
 | `Test-AICommanderModeStatic.ps1` | Arland CLI preflight, immutable authority policy, faction commander boundary, intent, availability replication и UI contract |
 | `Test-RHSIntegrationStatic.ps1` | optional dependency graph, Core isolation, stock/RHS profiles, fail-closed roles/vehicles, personnel building-browser adapter, loadout UI guard, stable-side Arland radio normalization, RHS_AFRF identity voice, single lifecycle и cleanup symmetry |
-| `Test-ScenarioHeadersStatic.ps1` | stock/RHS inherited MissionHeader, menu visibility, stable resource GUID, platform metadata и отсутствие собственных world/layer resources |
+| `Test-ScenarioHeadersStatic.ps1` | stock/RHS inherited MissionHeader, menu visibility, отключённый persistence, stable resource GUID, platform metadata и отсутствие собственных world/layer resources |
 | `Test-RankRestrictionsStatic.ps1` | `GENERAL` join/XP floor, maximum non-renegade fallback для container без `GENERAL`, central mutation/restore hook, authoritative faction/spawn recheck, replicated character state, authority/replication, запрет раннего polling и сохранение остальных admission checks |
 
 Аудиторы проверяют часть архитектуры регулярными выражениями. Красный rule ID
@@ -231,9 +231,12 @@ container без отдельной записи `GENERAL`; это источн�
 опустила бы XP ниже порога. Сами эти строки не доказывают всю цепочку: отдельно
 сохрани server evidence исходного штрафа, server respawn и
 disconnect/reconnect, а в client log и HUD проверь итоговый owner-only XP/rank
-после каждой фазы. Визуальный HUD остаётся ручным критерием пользователя. Для
-persistence-run загрузка сохранения с XP ниже порога должна закончиться
-`XP_FLOOR_APPLIED`, а затем `XP_FLOOR_VERIFIED` до наблюдаемого rank state.
+после каждой фазы. Визуальный HUD остаётся ручным критерием пользователя.
+Default AICF scenario headers отключают persistence, поэтому загрузка save не
+входит в их release gate. Защитный deserialize path rank policy проверяется
+отдельно только при появлении явно поддержанного persistence-enabled integration
+header; такой тест должен закончиться `XP_FLOOR_APPLIED`, а затем
+`XP_FLOOR_VERIFIED` до наблюдаемого rank state.
 
 Сейчас отсутствуют:
 
@@ -269,16 +272,18 @@ scenario contract; raw world и `worldSystemsConfig` в terminal-команде 
 Scenario gate разделяется на четыре независимых уровня:
 
 1. `Test-ScenarioHeadersStatic.ps1` подтверждает exact official parent,
-   `m_bShowInScenarioMenu`, metadata GUID и отсутствие скопированных
-   `.ent`/`.layer`.
+   `m_bShowInScenarioMenu`, `m_eSaveTypes 0`, metadata GUID и отсутствие
+   скопированных `.ent`/`.layer`.
 2. Отдельный stock/RHS Workbench Validate подтверждает регистрацию ресурсов и
    отсутствие `SCRIPT (E/F)`, `ENGINE (F)`, VM/null ошибок проекта.
 3. Direct source run с новым `-MissionHeader` должен прочитать header и
    загрузить world/systems его официального родителя; это ещё не доказывает
    появление плитки в UI или полный gameplay runtime.
-4. Пользователь вручную проверяет плитку, её название, выбор и начало сессии в
-   меню `Сценарии`. Для релиза проверка повторяется на packaged Workshop build,
-   который не видит source checkout.
+4. Пользователь вручную проверяет плитку, её название, выбор и начало новой
+   сессии в меню `Сценарии`, затем повторный hosting с тем же game profile:
+   прежняя progression не должна загружаться, а save/continue UI для AICF не
+   должен появляться. Для релиза проверка повторяется на packaged Workshop
+   build, который не видит source checkout.
 
 Визуальные пункты остаются `NOT RUN`, пока пользователь не передаст ручной
 verdict. Запуск из меню использует default `aicfAICommanderMode=BOTH`; другие

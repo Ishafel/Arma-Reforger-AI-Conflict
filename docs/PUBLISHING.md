@@ -124,7 +124,8 @@ Resource Publisher генерирует их в выбранном Working Dir.
    entry проверить и запустить `AI Conflict RHS - Arland`; не выбирать
    stock-плитку, которая также видна через dependency на обычный Arland addon.
    Оба сценария должны загрузить мир и Conflict contract официального parent,
-   не source checkout.
+   не source checkout. Повторный hosting на том же game profile должен начать
+   новую кампанию, не загрузить прежнюю progression и не предложить AICF save.
 4. На dedicated server загрузить применимый Workshop dependency set и сохранить
    полный остановленный server log; для UI/replication также сохранить client
    log.

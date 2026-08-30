@@ -26,9 +26,12 @@ Arma Reforger / stock Conflict
 В production path нет собственного мира. `Missions/AICF_Conflict_Arland.conf`
 наследует штатный `{C41618FD18E9D714}Missions/23_Campaign_Arland.conf`, а
 `Missions/AICF_RHS_Conflict_Arland.conf` — штатный RHS
-`{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf`. Они меняют только
-presentation metadata и `m_bShowInScenarioMenu`; world, systems config, базы и
-параметры Conflict остаются у родителей.
+`{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf`. Presentation overrides
+ограничены metadata и `m_bShowInScenarioMenu`; world, systems config, базы и
+параметры Conflict остаются у родителей. Единственный behavior override самих
+headers — `m_eSaveTypes 0`: AICF state не имеет persistence serializers и
+resume lifecycle, поэтому обе плитки fail-closed отключают штатный session
+save/load и при каждом запуске создают новую кампанию.
 
 Stock-проект для Workbench и Diag — `AIConflictArland/addon.gproj`.
 Опциональный `AIConflictArlandRHS/addon.gproj` использует установленные RHS
@@ -431,8 +434,9 @@ override `SCR_RankContainer.GetRankByXP()` не используется.
   radio links после valid preflight и при смене владельца.
 
 Отдельно `AIConflictArland/Missions/AICF_Conflict_Arland.conf` предоставляет
-плитку `AI Conflict - Arland`. Это inherited config, а не пятое расширение
-класса и не копия мира.
+плитку `AI Conflict - Arland` и отключает для неё persistence через
+`m_eSaveTypes 0`. Это inherited config, а не пятое расширение класса и не копия
+мира.
 
 Эти `modded` классы действуют всякий раз, когда загружен Arland addon. Поэтому
 его нельзя без review подключать к другой миссии. Особенно важны порядок
