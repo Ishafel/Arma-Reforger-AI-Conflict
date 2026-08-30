@@ -40,6 +40,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage4Stati
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-AICommanderModeStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RHSIntegrationStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-ScenarioHeadersStatic.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RankRestrictionsStatic.ps1
 ```
 
 Назначение:
@@ -53,6 +54,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-ScenarioHea
 | `Test-AICommanderModeStatic.ps1` | Arland CLI preflight, immutable authority policy, faction commander boundary, intent, availability replication и UI contract |
 | `Test-RHSIntegrationStatic.ps1` | optional dependency graph, Core isolation, stock/RHS profiles, fail-closed roles/vehicles, stable-side Arland radio normalization, RHS_AFRF identity voice, single lifecycle и cleanup symmetry |
 | `Test-ScenarioHeadersStatic.ps1` | stock/RHS inherited MissionHeader, menu visibility, stable resource GUID, platform metadata и отсутствие собственных world/layer resources |
+| `Test-RankRestrictionsStatic.ps1` | общий policy отключения player-rank gates без снятия supply/cooldown/faction/capacity/authority проверок |
 
 Аудиторы проверяют часть архитектуры регулярными выражениями. Красный rule ID
 может означать реальный regression или drift тестового контракта. Сначала

@@ -1,6 +1,11 @@
 // Primitive ticket values live on the already-replicated stock game mode, including JIP snapshots.
 modded class SCR_GameModeCampaign
 {
+	override bool CanRequestVehicleWithoutRank()
+	{
+		return true;
+	}
+
 	[RplProp(onRplName: "AICF_OnTicketsReplicated")]
 	protected int m_iAICFUSTickets;
 

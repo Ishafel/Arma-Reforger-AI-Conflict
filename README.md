@@ -50,9 +50,9 @@ Source runtime использует штатную mission
   server, а без параметра используется `BOTH`;
 - ground vehicles всегда включены;
 - economy/supply pacing всегда включены; CLI opt-out для этих subsystems нет;
-- оба scenario header отключают минимальное звание для заказа техники и выдают
-  игрокам `GENERAL` при входе, поэтому строительство, арсенал и остальные
-  действия не закрыты progression по званию.
+- общий rank policy отключает player-rank gates для строительства, заказа
+  техники, арсенала, loadouts, групп, защитников, radial commands и Commander
+  volunteer; scenario headers дополнительно выдают игрокам `GENERAL` при входе.
 
 `US` и `USSR` в `aicfAICommanderMode` означают сторону, которой разрешено
 автономно выбирать новые стратегические цели. Другая сторона сохраняет полный
