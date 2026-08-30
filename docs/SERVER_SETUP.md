@@ -42,6 +42,11 @@ C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger Tools
 
 ## Запуск из меню сценариев
 
+Оба сценария AICF отключают минимальное звание для заказа техники и назначают
+всем игрокам стартовое звание `GENERAL`. Поэтому строительство, арсенал, роли
+групп и остальные rank-gated действия доступны сразу. Ограничения по supply,
+cooldown, принадлежности фракции и другим правилам Conflict сохраняются.
+
 После установки и включения packaged `AI Conflict Arland` открой в игре
 `Сценарии` и выбери `AI Conflict - Arland`. Для RHS установи и включи
 `AI Conflict Arland RHS` со всеми dependencies, затем выбери

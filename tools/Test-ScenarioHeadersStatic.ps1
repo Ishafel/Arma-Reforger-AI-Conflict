@@ -55,6 +55,12 @@ if ($failures.Count -eq 0) {
         Require-Match 'SCENARIO_IDENTITY' $scenario `
             'm_sName\s+"AI Conflict[^"\r\n]*"[\s\S]*m_sGameMode\s+"AI Conflict"' `
             'Scenario header must expose an AI Conflict name and game-mode label'
+        Require-Match 'SCENARIO_RANK_UNLOCKS' $scenario `
+            'm_bIgnoreMinimumVehicleRank\s+1' `
+            'Scenario header must disable vehicle rank requirements'
+        Require-Match 'SCENARIO_RANK_UNLOCKS' $scenario `
+            'm_eStartingRank\s+GENERAL' `
+            'Scenario header must grant the highest stock rank for building and all other rank-gated actions'
         Forbid-Match 'SCENARIO_VANILLA_OWNERSHIP' $scenario `
             '(?m)^\s*(World|SystemsConfig|m_aCampaignCustomBaseList)\b' `
             'Scenario header must inherit world, systems, and base topology from its official parent'
@@ -93,5 +99,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Output '[AICF][SCENARIO_STATIC][RESULT][PASS] stock_header=PASS rhs_header=PASS menu_visibility=PASS inheritance=PASS metadata=PASS world_ownership=PASS'
+Write-Output '[AICF][SCENARIO_STATIC][RESULT][PASS] stock_header=PASS rhs_header=PASS menu_visibility=PASS rank_unlocks=PASS inheritance=PASS metadata=PASS world_ownership=PASS'
 exit 0

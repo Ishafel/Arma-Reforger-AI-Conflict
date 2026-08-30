@@ -49,7 +49,10 @@ Source runtime использует штатную mission
   `-aicfAICommanderMode BOTH|US|USSR` выбирается один раз при запуске dedicated
   server, а без параметра используется `BOTH`;
 - ground vehicles всегда включены;
-- economy/supply pacing всегда включены; CLI opt-out для этих subsystems нет.
+- economy/supply pacing всегда включены; CLI opt-out для этих subsystems нет;
+- оба scenario header отключают минимальное звание для заказа техники и выдают
+  игрокам `GENERAL` при входе, поэтому строительство, арсенал и остальные
+  действия не закрыты progression по званию.
 
 `US` и `USSR` в `aicfAICommanderMode` означают сторону, которой разрешено
 автономно выбирать новые стратегические цели. Другая сторона сохраняет полный
