@@ -15,6 +15,7 @@ class AICF_OrderPlanner
 	protected static const float RELAY_RADIUS_METERS = 20.0;
 	protected static const float FALSE_COMPLETION_ROUTE_LEG_METERS = 140.0;
 	protected static const float FALSE_COMPLETION_ROUTE_MIN_PROGRESS_METERS = 30.0;
+	protected static const float FALSE_COMPLETION_ROUTE_MAX_DETOUR_METERS = 80.0;
 	protected static const int FALSE_COMPLETION_ROUTE_SAMPLE_COUNT = 16;
 	protected static const vector NAVMESH_ENDPOINT_SEARCH_HALF_EXTENTS = "20 20 20";
 	protected static const string POSTURE_ATTACK_PRIMARY = "ATTACK_PRIMARY";
@@ -2070,15 +2071,38 @@ class AICF_OrderPlanner
 		if (!navmesh || !leader)
 			return false;
 		vector origin = leader.GetOrigin();
+		vector navmeshOrigin;
+		// GetReachablePoint rejects an origin which is not sufficiently close to
+		// navmesh. A formation stopped against an obstacle can leave its living
+		// leader just outside that tolerance even though a usable connected point
+		// exists beside it. Snap only the route query origin; never move the entity.
+		if (!pathfinding.GetClosestPositionOnNavmesh(
+			origin,
+			NAVMESH_ENDPOINT_SEARCH_HALF_EXTENTS,
+			navmeshOrigin))
+		{
+			return false;
+		}
 		float objectiveDistanceMeters = vector.DistanceXZ(origin, objectivePosition);
 		if (objectiveDistanceMeters <= FALSE_COMPLETION_ROUTE_MIN_PROGRESS_METERS)
-			return false;
+		{
+			// A hidden egress recovery can legitimately place the formation inside the
+			// minimum route-leg distance. Finish against the real objective here; the
+			// controller still requires its independent physical completion radius.
+			endpoint = objectivePosition;
+			return true;
+		}
 		float requestedLegMeters = Math.Min(
 			FALSE_COMPLETION_ROUTE_LEG_METERS,
 			Math.Max(
 				FALSE_COMPLETION_ROUTE_MIN_PROGRESS_METERS,
 				objectiveDistanceMeters - ATTACK_OPERATIONAL_RADIUS_METERS));
-		float bestRemainingMeters = objectiveDistanceMeters;
+		// A fence or another concave obstacle can make every connected escape leg
+		// temporarily increase straight-line objective distance. Permit only a
+		// bounded detour and still choose the candidate with the best remaining
+		// distance, so recovery can leave that local minimum without wandering.
+		float bestRemainingMeters = objectiveDistanceMeters +
+			FALSE_COMPLETION_ROUTE_MAX_DETOUR_METERS;
 		bool found;
 		for (int candidateAttempt; candidateAttempt < FALSE_COMPLETION_ROUTE_SAMPLE_COUNT; candidateAttempt++)
 		{
@@ -2088,12 +2112,14 @@ class AICF_OrderPlanner
 			float sampleDistanceMeters = requestedLegMeters -
 				distanceBand * 20.0;
 			vector candidate;
-			if (!navmesh.GetReachablePoint(origin, sampleDistanceMeters, candidate))
+			if (!navmesh.GetReachablePoint(navmeshOrigin, sampleDistanceMeters, candidate))
 				continue;
 			float legMeters = vector.DistanceXZ(origin, candidate);
 			float remainingMeters = vector.DistanceXZ(candidate, objectivePosition);
 			if (legMeters < FALSE_COMPLETION_ROUTE_MIN_PROGRESS_METERS ||
-				remainingMeters >= bestRemainingMeters - 5.0)
+				remainingMeters > objectiveDistanceMeters +
+					FALSE_COMPLETION_ROUTE_MAX_DETOUR_METERS ||
+				(found && remainingMeters >= bestRemainingMeters - 5.0))
 			{
 				continue;
 			}

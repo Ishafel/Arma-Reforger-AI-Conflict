@@ -28,7 +28,7 @@ class AICF_MatchController
 	protected static const float LONE_SURVIVOR_RETREAT_ARRIVAL_METERS = 30.0;
 	protected static const int MOB_EGRESS_HARD_DEADLINE_INTERVALS = 4;
 	protected static const int MOB_EGRESS_HIDDEN_RETRY_MS = 5000;
-	protected static const float MOB_EGRESS_HIDDEN_FORWARD_METERS = 130.0;
+	protected static const float MOB_EGRESS_HIDDEN_TARGET_STANDOFF_METERS = 15.0;
 	protected static const float MOB_EGRESS_HIDDEN_SEARCH_RADIUS_METERS = 35.0;
 	protected static const float MOB_EGRESS_HIDDEN_SPACING_METERS = 3.5;
 	protected static const float MOB_EGRESS_MAX_THREAT_MEASURE = 0.01;
@@ -2710,8 +2710,12 @@ class AICF_MatchController
 		}
 		forward.Normalize();
 		vector right = Vector(forward[2], 0, -forward[0]);
-		vector recoveryCenter = mobOrigin +
-			forward * MOB_EGRESS_HIDDEN_FORWARD_METERS;
+		// A fixed forward hop can cross one local navmesh break and still leave the
+		// group on another disconnected island. This is the terminal, fully hidden
+		// fallback, so resolve it against the target instead of guessing a map-specific
+		// egress distance.
+		vector recoveryCenter = targetPosition -
+			forward * MOB_EGRESS_HIDDEN_TARGET_STANDOFF_METERS;
 		recoveryDestination = recoveryCenter;
 
 		array<AIAgent> agents = {};
@@ -3250,7 +3254,8 @@ class AICF_MatchController
 		else
 			forward.Normalize();
 		vector right = Vector(forward[2], 0, -forward[0]);
-		vector recoveryCenter = mobOrigin + forward * MOB_EGRESS_HIDDEN_FORWARD_METERS;
+		vector recoveryCenter = targetPosition -
+			forward * MOB_EGRESS_HIDDEN_TARGET_STANDOFF_METERS;
 		array<vector> reservedDestinations = {};
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);

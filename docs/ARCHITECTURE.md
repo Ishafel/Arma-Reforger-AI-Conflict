@@ -144,6 +144,18 @@ SCR_MilitaryBaseSystem
   заменяет, восстанавливает и удаляет их, а также применяет player intent и
   безопасный `SYSTEM_HOLD`. Vehicle flows могут продолжить или восстановить
   уже выбранное назначение, но не имеют права выбирать другую базу.
+- Если stock Move waypoint завершён вне физического радиуса цели,
+  reliability сохраняет `faction + slot`, group generation и assignment
+  revision и строит следующий endpoint только на navmesh, связанной с
+  фактической позицией группы. Query origin сначала привязывается к ближайшей
+  navmesh-точке без перемещения entity. Ограниченный боковой detour разрешает
+  обойти ограду или другой локальный минимум, после чего каждый реально
+  пройденный route leg продолжает тот же false-completion episode. Отсутствие
+  физического прогресса по-прежнему ограничено endpoint budget и завершается
+  temporary field hold/full replan, а не бесконечной выдачей waypoint. Если
+  recovery уже поместил группу ближе минимальной длины route leg, planner
+  выдаёт конечный objective endpoint; его всё равно принимает только отдельная
+  физическая проверка радиуса цели.
 
 ## Command authority
 
@@ -234,6 +246,15 @@ limit всё ещё недостаточен, запуск завершаетс�
 Для физического положения группы используется `AICF_GroupRuntime`: живой
 leader, а пока promotion не завершён — живой участник. Origin
 `SCR_AIGroup` не считается положением бойцов.
+
+После полного bounded MOB-egress deadline разрешён identity-preserving hidden
+recovery живых участников в свободную точку рядом с текущей целью (с базовым
+отступом 15 м). Привязка к цели, а не фиксированный шаг от HQ, не оставляет
+formation на следующем изолированном участке navmesh. Recovery по-прежнему
+требует server authority, exact group/generation/assignment identity,
+отсутствие vehicle transition и
+отдельные player proximity, LOS и combat fences; небезопасный перенос
+отклоняется fail-closed.
 
 ## Vehicle domain
 
