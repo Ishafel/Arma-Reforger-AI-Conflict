@@ -49,7 +49,15 @@ class AICF_VehicleAcquisitionFlow
 	protected static const int APPROACH_REISSUE_COOLDOWN_MS = 15000;
 	protected static const int MAX_APPROACH_WAYPOINT_REISSUES = 1;
 	protected static const float SPAWN_PAD_CLEARANCE_RADIUS_METERS = 8.0;
+	protected static const float SPAWN_PAD_MEMBER_CLEARANCE_MARGIN_METERS = 2.0;
 	protected static const float STAGING_TO_PAD_MARGIN_METERS = 10.0;
+	protected static const float SPAWN_BOARDING_ENVELOPE_RADIUS_METERS = 90.0;
+	protected static const int STAGING_MEMBER_ACTION_DELAY_MS = 5000;
+	protected static const int STAGING_MEMBER_ACTION_STALL_MS = 12000;
+	protected static const int STAGING_MEMBER_ACTION_AUDIT_INTERVAL_MS = 5000;
+	protected static const int STAGING_MEMBER_RELOCATION_PROBE_INTERVAL_MS = 5000;
+	protected static const float STAGING_MEMBER_ACTION_PROGRESS_METERS = 2.0;
+	protected static const float STAGING_MEMBER_ACTION_MINIMUM_RADIUS_METERS = 5.0;
 	protected static const vector STAGING_NAVMESH_SEARCH_HALF_EXTENTS = "12 12 12";
 
 	protected ref AICF_Stage3Config m_Config;
@@ -180,13 +188,44 @@ class AICF_VehicleAcquisitionFlow
 		bool targetChanged = !currentAssignment.MatchesDestination(observed);
 		bool assignmentChanged = currentAssignment.GetAssignmentRevision() !=
 			observed.GetAssignmentRevision();
+		bool strategicIntentChanged = currentAssignment.GetStrategicIntentRevision() !=
+			observed.GetStrategicIntentRevision();
 		bool baseChanged = currentAssignment.GetBaseRevision() != observed.GetBaseRevision();
-		if (!targetChanged && !assignmentChanged && !baseChanged)
+		if (!targetChanged && !strategicIntentChanged)
+		{
+			if (assignmentChanged || baseChanged)
+			{
+				string adoptionCausationId = BuildCausationId(
+					trip,
+					requestState,
+					"RUNTIME_REVISION_ADOPTED");
+				string adoptionDetails = BuildIdentityContext(
+					trip,
+					requestState,
+					null,
+					adoptionCausationId);
+				adoptionDetails += string.Format(
+					" old_assignment_revision=%1 new_assignment_revision=%2 intent_revision=%3 target=%4 action=KEEP_SPAWN_PLAN",
+					observed.GetAssignmentRevision(),
+					currentAssignment.GetAssignmentRevision(),
+					currentAssignment.GetStrategicIntentRevision(),
+					AICF_Stage1Diagnostics.BaseKey(currentAssignment.GetTargetBase()));
+				adoptionDetails += string.Format(
+					" old_base_revision=%1 new_base_revision=%2 live_site_revalidated=1",
+					observed.GetBaseRevision(),
+					currentAssignment.GetBaseRevision());
+				AICF_Stage4Diagnostics.Info(
+					"VEHICLE_REQUEST_RUNTIME_REVISION_ADOPTED",
+					adoptionDetails);
+			}
 			return null;
+		}
 
-		string reason = "BASE_REVISION_CHANGED";
-		if (targetChanged || assignmentChanged)
+		string reason = "TARGET_CHANGED";
+		if (targetChanged)
 			reason = "TARGET_CHANGED";
+		else
+			reason = "STRATEGIC_INTENT_CHANGED";
 		int oldRequestGeneration = requestState.GetRequestGeneration();
 		int discardedAttempts = requestState.GetAttemptCount();
 		requestState.RecordContextReset(nowMs, reason);
@@ -390,6 +429,8 @@ class AICF_VehicleAcquisitionFlow
 			trip.GetAssignment().GetGroup(),
 			plan.GetStagingPosition(),
 			m_Config.GetSpawnStagingRadiusMeters(),
+			plan.GetSpawnPosition(),
+			SPAWN_BOARDING_ENVELOPE_RADIUS_METERS,
 			stagedCount,
 			aliveCount,
 			farthestDistanceMeters,
@@ -413,6 +454,7 @@ class AICF_VehicleAcquisitionFlow
 				stagingConfirmed);
 		if (!stagingConfirmed)
 		{
+			MaintainStagingMemberActions(trip, requestState, plan, nowMs);
 			if (!IsApproachWaypointQueued(trip, plan))
 			{
 				// A completed All-members waypoint is normally removed by the engine.
@@ -437,6 +479,7 @@ class AICF_VehicleAcquisitionFlow
 				"SPAWN_SITE_APPROACH_IN_PROGRESS",
 				BuildCausationId(trip, requestState, "APPROACH_WAIT"));
 		}
+		plan.CancelStagingActionsOwnerSafe();
 
 		string causationId = BuildCausationId(trip, requestState, "STAGING_CONFIRMED");
 		return AICF_TripOutcome.Retry("STAGING_CONFIRMED", causationId, nowMs);
@@ -464,6 +507,7 @@ class AICF_VehicleAcquisitionFlow
 			m_ConflictAdapter,
 			plan,
 			m_Config.GetSpawnStagingRadiusMeters(),
+			SPAWN_BOARDING_ENVELOPE_RADIUS_METERS,
 			m_Config.GetMinimumVehicleRequestAgents(),
 			stagedCount,
 			aliveCount,
@@ -528,6 +572,7 @@ class AICF_VehicleAcquisitionFlow
 			m_ConflictAdapter,
 			plan,
 			m_Config.GetSpawnStagingRadiusMeters(),
+			SPAWN_BOARDING_ENVELOPE_RADIUS_METERS,
 			m_Config.GetMinimumVehicleRequestAgents(),
 			stagedCount,
 			aliveCount,
@@ -947,6 +992,560 @@ class AICF_VehicleAcquisitionFlow
 				nowMs);
 	}
 
+	protected void MaintainStagingMemberActions(
+		AICF_TransportTrip trip,
+		AICF_VehicleRequestState requestState,
+		AICF_VehicleSpawnPlan plan,
+		int nowMs)
+	{
+		if (!trip || !requestState || !plan)
+			return;
+		SCR_AIGroup group = trip.GetAssignment().GetGroup();
+		for (int index = plan.GetStagingActionTokenCount() - 1; index >= 0; index--)
+		{
+			AICF_VehicleStagingActionToken token = plan.GetStagingActionToken(index);
+			IEntity entity;
+			if (token)
+				entity = token.GetReservedEntity();
+			if (!token || !token.Matches(
+				trip,
+				requestState.GetRequestGeneration(),
+				group))
+			{
+				ReportStagingMemberAction(
+					trip, requestState, plan, token,
+					"VEHICLE_STAGING_MEMBER_ACTION_OUTCOME",
+					"IDENTITY_INVALID", nowMs);
+				CancelStagingMemberAction(plan, token);
+				return;
+			}
+
+			float stagingDistanceMeters = vector.DistanceXZ(
+				entity.GetOrigin(),
+				plan.GetStagingPosition());
+			token.ObserveDistance(
+				stagingDistanceMeters,
+				nowMs,
+				STAGING_MEMBER_ACTION_PROGRESS_METERS);
+			if (IsMemberWithinSpawnBoardingEnvelope(entity, plan.GetSpawnPosition()))
+			{
+				ReportStagingMemberAction(
+					trip, requestState, plan, token,
+					"VEHICLE_STAGING_MEMBER_ACTION_OUTCOME",
+					"MEMBER_READY", nowMs);
+				CancelStagingMemberAction(plan, token);
+				return;
+			}
+
+			SCR_AIMoveIndividuallyBehavior action = token.GetAction();
+			EAIActionState actionState = EAIActionState.FAILED;
+			if (action)
+				actionState = action.GetActionState();
+			bool terminal = actionState == EAIActionState.COMPLETED ||
+				actionState == EAIActionState.FAILED;
+			if (terminal || !token.IsActionOwnedByUtility())
+			{
+				string reason = "ACTION_OWNERSHIP_LOST";
+				if (terminal)
+					reason = "ACTION_TERMINAL_OUTSIDE_ENVELOPE";
+				RecordStagingMemberAttemptOutcome(plan, entity);
+				ReportStagingMemberAction(
+					trip, requestState, plan, token,
+					"VEHICLE_STAGING_MEMBER_ACTION_OUTCOME",
+					reason, nowMs);
+				CancelStagingMemberAction(plan, token);
+				return;
+			}
+
+			if (nowMs - token.GetLastProgressAtMs() >= STAGING_MEMBER_ACTION_STALL_MS)
+			{
+				RecordStagingMemberAttemptOutcome(plan, entity);
+				ReportStagingMemberAction(
+					trip, requestState, plan, token,
+					"VEHICLE_STAGING_MEMBER_ACTION_OUTCOME",
+					"NO_PROGRESS_TIMEOUT", nowMs);
+				CancelStagingMemberAction(plan, token);
+				return;
+			}
+
+			if (token.ShouldAudit(nowMs, STAGING_MEMBER_ACTION_AUDIT_INTERVAL_MS))
+			{
+				ReportStagingMemberAction(
+					trip, requestState, plan, token,
+					"VEHICLE_STAGING_MEMBER_ACTION_PROGRESS",
+					"ACTION_ACTIVE", nowMs);
+			}
+		}
+
+		if (nowMs - plan.GetPlannedAtMs() < STAGING_MEMBER_ACTION_DELAY_MS)
+			return;
+		if (TryRelocateOneExhaustedStagingOutlier(
+			trip,
+			requestState,
+			plan,
+			nowMs))
+		{
+			return;
+		}
+		AIAgent candidate = SelectStagingRecoveryCandidate(group, plan);
+		if (!candidate)
+			return;
+		IssueStagingMemberAction(trip, requestState, plan, candidate, nowMs);
+	}
+
+	protected bool TryRelocateOneExhaustedStagingOutlier(
+		AICF_TransportTrip trip,
+		AICF_VehicleRequestState requestState,
+		AICF_VehicleSpawnPlan plan,
+		int nowMs)
+	{
+		if (!trip || !requestState || !plan || plan.GetAliveCount() <= 1 ||
+			plan.GetStagedCount() != plan.GetAliveCount() - 1 ||
+			!plan.CanProbeStagingRelocation(
+				nowMs,
+				STAGING_MEMBER_RELOCATION_PROBE_INTERVAL_MS))
+		{
+			return false;
+		}
+		SCR_AIGroup group = trip.GetAssignment().GetGroup();
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		AIAgent outlierAgent;
+		ChimeraCharacter outlier;
+		foreach (AIAgent agent : agents)
+		{
+			ChimeraCharacter character;
+			if (agent)
+				character = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (!AICF_GroupRuntime.IsAliveCharacter(character) ||
+				IsMemberWithinSpawnBoardingEnvelope(character, plan.GetSpawnPosition()))
+			{
+				continue;
+			}
+			if (outlier)
+				return false;
+			outlierAgent = agent;
+			outlier = character;
+		}
+		if (!outlier || !plan.IsStagingMemberExhausted(outlier) ||
+			plan.WasStagingMemberRelocated(outlier))
+		{
+			return false;
+		}
+
+		string rejectionReason;
+		vector destination;
+		if (!TryResolveStagingGroundRecoveryPosition(
+			group,
+			plan,
+			outlier,
+			destination,
+			rejectionReason))
+		{
+			ReportStagingGroundRecovery(
+				trip, requestState, plan, outlier,
+				outlier.GetOrigin(), destination,
+				"VEHICLE_STAGING_MEMBER_RELOCATION_DEFERRED",
+				rejectionReason, false, nowMs);
+			return false;
+		}
+
+		EntityID expectedEntityId = outlier.GetID();
+		RplComponent expectedRpl = RplComponent.Cast(outlier.FindComponent(RplComponent));
+		string expectedRplId;
+		if (expectedRpl)
+			expectedRplId = expectedRpl.Id().ToString();
+		CompartmentAccessComponent access = outlier.GetCompartmentAccessComponent();
+		FactionAffiliationComponent affiliation = FactionAffiliationComponent.Cast(
+			outlier.FindComponent(FactionAffiliationComponent));
+		Faction memberFaction;
+		if (affiliation)
+			memberFaction = affiliation.GetAffiliatedFaction();
+		if (!expectedRpl || expectedRplId.IsEmpty() ||
+			!IsSpawnPlanCurrent(trip, requestState, plan, nowMs) ||
+			outlierAgent.GetParentGroup() != group ||
+			outlierAgent.GetControlledEntity() != outlier ||
+			outlier.GetID() != expectedEntityId ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(outlier) ||
+			!memberFaction || memberFaction.GetFactionKey() != trip.GetFactionKey() ||
+			outlier.IsInVehicle() || CompartmentAccessComponent.GetVehicleIn(outlier) ||
+			(access && (access.IsInCompartment() || access.IsGettingIn() ||
+			access.IsGettingOut())))
+		{
+			ReportStagingGroundRecovery(
+				trip, requestState, plan, outlier,
+				outlier.GetOrigin(), destination,
+				"VEHICLE_STAGING_MEMBER_RELOCATION_DEFERRED",
+				"COMMIT_IDENTITY_OR_TRANSITION_INVALID", false, nowMs);
+			return false;
+		}
+		RplComponent commitRpl = RplComponent.Cast(outlier.FindComponent(RplComponent));
+		if (!commitRpl || commitRpl.Id().ToString() != expectedRplId)
+		{
+			ReportStagingGroundRecovery(
+				trip, requestState, plan, outlier,
+				outlier.GetOrigin(), destination,
+				"VEHICLE_STAGING_MEMBER_RELOCATION_DEFERRED",
+				"COMMIT_RPL_IDENTITY_CHANGED", false, nowMs);
+			return false;
+		}
+
+		vector before = outlier.GetOrigin();
+		ReportStagingGroundRecovery(
+			trip, requestState, plan, outlier, before, destination,
+			"VEHICLE_STAGING_MEMBER_RELOCATION_ATTEMPTED",
+			"EXHAUSTED_CLUSTER_OUTLIER", false, nowMs);
+		// This is an intentionally visible ground recovery, not a hidden vehicle
+		// mutation. The clustered roster is already at the delivery pad and the
+		// exact authoritative AI outlier has exhausted both movement actions.
+		plan.MarkStagingMemberRelocated(outlier);
+		vector transform[4];
+		outlier.GetWorldTransform(transform);
+		transform[3] = destination;
+		outlier.Teleport(transform);
+		vector after = outlier.GetOrigin();
+		bool exact = vector.DistanceXZ(after, destination) <= 2.0 &&
+			outlierAgent.GetParentGroup() == group &&
+			outlierAgent.GetControlledEntity() == outlier;
+		ReportStagingGroundRecovery(
+			trip, requestState, plan, outlier, before, destination,
+			"VEHICLE_STAGING_MEMBER_RELOCATION_RESULT",
+			"POSTCONDITION", exact, nowMs, after);
+		return true;
+	}
+
+	protected bool TryResolveStagingGroundRecoveryPosition(
+		SCR_AIGroup group,
+		AICF_VehicleSpawnPlan plan,
+		ChimeraCharacter character,
+		out vector safePosition,
+		out string rejectionReason)
+	{
+		safePosition = vector.Zero;
+		rejectionReason = "SAFE_GROUND_UNAVAILABLE";
+		if (!group || !plan || !character)
+			return false;
+		AIPathfindingComponent pathfinding = AIPathfindingComponent.Cast(
+			group.FindComponent(AIPathfindingComponent));
+		if (!pathfinding)
+		{
+			rejectionReason = "GROUP_PATHFINDING_UNAVAILABLE";
+			return false;
+		}
+		for (int attempt; attempt < 9; attempt++)
+		{
+			vector offset = vector.Zero;
+			switch (attempt)
+			{
+				case 1: offset = "4 0 0"; break;
+				case 2: offset = "-4 0 0"; break;
+				case 3: offset = "0 0 4"; break;
+				case 4: offset = "0 0 -4"; break;
+				case 5: offset = "4 0 4"; break;
+				case 6: offset = "-4 0 4"; break;
+				case 7: offset = "4 0 -4"; break;
+				case 8: offset = "-4 0 -4"; break;
+			}
+			vector center = plan.GetStagingPosition() + offset;
+			vector terrainPosition;
+			if (!SCR_WorldTools.FindEmptyTerrainPosition(
+				terrainPosition,
+				center,
+				3.0,
+				0.75,
+				2.0))
+			{
+				continue;
+			}
+			vector navmeshPosition;
+			if (!pathfinding.GetClosestPositionOnNavmesh(
+				terrainPosition,
+				"4 4 4",
+				navmeshPosition) ||
+				ChimeraWorldUtils.TryGetWaterSurfaceSimple(
+					character.GetWorld(),
+					navmeshPosition))
+			{
+				continue;
+			}
+			float padDistanceMeters = vector.DistanceXZ(
+				navmeshPosition,
+				plan.GetSpawnPosition());
+			if (padDistanceMeters < SPAWN_PAD_CLEARANCE_RADIUS_METERS +
+				SPAWN_PAD_MEMBER_CLEARANCE_MARGIN_METERS ||
+				padDistanceMeters > SPAWN_BOARDING_ENVELOPE_RADIUS_METERS)
+			{
+				continue;
+			}
+			safePosition = navmeshPosition;
+			rejectionReason = string.Empty;
+			return true;
+		}
+		return false;
+	}
+
+	protected void ReportStagingGroundRecovery(
+		AICF_TransportTrip trip,
+		AICF_VehicleRequestState requestState,
+		AICF_VehicleSpawnPlan plan,
+		IEntity entity,
+		vector before,
+		vector destination,
+		string eventName,
+		string reason,
+		bool postcondition,
+		int nowMs,
+		vector after = vector.Zero)
+	{
+		string details = BuildIdentityContext(
+			trip,
+			requestState,
+			null,
+			BuildCausationId(trip, requestState, "STAGING_RELOCATION"));
+		string memberId = "NONE";
+		if (entity)
+			memberId = entity.GetID().ToString();
+		details += string.Format(
+			" member=%1 reason=%2 staged=%3 alive=%4 before=%5 destination=%6",
+			memberId,
+			reason,
+			plan.GetStagedCount(),
+			plan.GetAliveCount(),
+			before,
+			destination);
+		details += string.Format(
+			" after=%1 postcondition=%2 visibility_policy=VISIBLE_GROUND_RECOVERY player_fence=NOT_APPLICABLE deadline_remaining_ms=%3",
+			after,
+			postcondition,
+			Math.Max(0, plan.GetApproachDeadlineMs() - nowMs));
+		AICF_Stage4Diagnostics.Warning(eventName, details);
+	}
+
+	protected void RecordStagingMemberAttemptOutcome(
+		AICF_VehicleSpawnPlan plan,
+		IEntity entity)
+	{
+		if (!plan || !entity)
+			return;
+		if (!plan.WasStagingMemberRetried(entity))
+			plan.MarkStagingMemberRetried(entity);
+		else
+			plan.MarkStagingMemberExhausted(entity);
+	}
+
+	protected void CancelStagingMemberAction(
+		AICF_VehicleSpawnPlan plan,
+		AICF_VehicleStagingActionToken token)
+	{
+		if (!plan || !token)
+			return;
+		token.CancelOwnerSafe();
+		plan.RemoveStagingActionToken(token);
+	}
+
+	protected AIAgent SelectStagingRecoveryCandidate(
+		SCR_AIGroup group,
+		AICF_VehicleSpawnPlan plan)
+	{
+		if (!group || !plan)
+			return null;
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		AIAgent selected;
+		float selectedDistanceMeters = -1.0;
+		string selectedEntityId;
+		foreach (AIAgent agent : agents)
+		{
+			IEntity entity;
+			if (agent)
+				entity = agent.GetControlledEntity();
+			if (!AICF_GroupRuntime.IsAliveCharacter(entity) ||
+				IsMemberWithinSpawnBoardingEnvelope(entity, plan.GetSpawnPosition()) ||
+				plan.FindStagingActionToken(entity) ||
+				plan.IsStagingMemberExhausted(entity) ||
+				!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(entity))
+			{
+				continue;
+			}
+			float distanceMeters = vector.DistanceXZ(
+				entity.GetOrigin(),
+				plan.GetStagingPosition());
+			string entityId = entity.GetID().ToString();
+			if (!selected || distanceMeters > selectedDistanceMeters ||
+				(distanceMeters == selectedDistanceMeters &&
+				entityId.Compare(selectedEntityId) < 0))
+			{
+				selected = agent;
+				selectedDistanceMeters = distanceMeters;
+				selectedEntityId = entityId;
+			}
+		}
+		return selected;
+	}
+
+	protected bool IssueStagingMemberAction(
+		AICF_TransportTrip trip,
+		AICF_VehicleRequestState requestState,
+		AICF_VehicleSpawnPlan plan,
+		AIAgent agent,
+		int nowMs)
+	{
+		if (!trip || !requestState || !plan || !agent)
+			return false;
+		IEntity entity = agent.GetControlledEntity();
+		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(entity) ||
+			agent.GetParentGroup() != trip.GetAssignment().GetGroup())
+		{
+			return false;
+		}
+		ChimeraCharacter character = ChimeraCharacter.Cast(entity);
+		CompartmentAccessComponent access;
+		if (character)
+			access = character.GetCompartmentAccessComponent();
+		if (CompartmentAccessComponent.GetVehicleIn(entity) ||
+			(access && (access.IsGettingIn() || access.IsGettingOut())))
+		{
+			return false;
+		}
+		SCR_AIUtilityComponent utility = SCR_AIUtilityComponent.Cast(
+			agent.FindComponent(SCR_AIUtilityComponent));
+		RplComponent rpl = RplComponent.Cast(entity.FindComponent(RplComponent));
+		if (!utility || utility.m_OwnerEntity != entity || !rpl ||
+			!rpl.IsMaster() || rpl.IsProxy())
+		{
+			return false;
+		}
+
+		int retryCount;
+		if (plan.WasStagingMemberRetried(entity))
+			retryCount = 1;
+		float completionRadiusMeters = Math.Max(
+			STAGING_MEMBER_ACTION_MINIMUM_RADIUS_METERS,
+			m_Config.GetSpawnStagingRadiusMeters() - 5.0);
+		SCR_AIMoveIndividuallyBehavior action = new SCR_AIMoveIndividuallyBehavior(
+			utility,
+			null,
+			plan.GetStagingPosition(),
+			SCR_AIActionBase.PRIORITY_BEHAVIOR_MOVE_INDIVIDUALLY,
+			SCR_AIActionBase.PRIORITY_LEVEL_PLAYER,
+			null,
+			completionRadiusMeters);
+		string actionToken = string.Format(
+			"%1-staging-%2-%3-%4",
+			trip.GetOperationId(),
+			entity.GetID(),
+			requestState.GetRequestGeneration(),
+			retryCount);
+		AICF_VehicleAsyncFence fence = new AICF_VehicleAsyncFence(
+			trip.GetFactionKey(),
+			trip.GetSlotId(),
+			trip.GetGroupGeneration(),
+			trip.GetTripGeneration(),
+			-1,
+			-1,
+			entity.GetID(),
+			rpl.Id().ToString(),
+			actionToken);
+		float initialDistanceMeters = vector.DistanceXZ(
+			entity.GetOrigin(),
+			plan.GetStagingPosition());
+		AICF_VehicleStagingActionToken token = new AICF_VehicleStagingActionToken(
+			fence,
+			requestState.GetRequestGeneration(),
+			agent,
+			entity,
+			action,
+			plan.GetStagingPosition(),
+			retryCount,
+			initialDistanceMeters,
+			nowMs);
+		if (!plan.TrackStagingActionToken(token))
+			return false;
+		utility.AddAction(action);
+		string eventName = "VEHICLE_STAGING_MEMBER_ACTION_ISSUED";
+		if (retryCount > 0)
+			eventName = "VEHICLE_STAGING_MEMBER_ACTION_REISSUED";
+		ReportStagingMemberAction(
+			trip, requestState, plan, token, eventName, "OUTSIDE_BOARDING_ENVELOPE", nowMs);
+		return true;
+	}
+
+	protected bool IsMemberWithinSpawnBoardingEnvelope(
+		IEntity entity,
+		vector spawnPosition)
+	{
+		if (!AICF_GroupRuntime.IsAliveCharacter(entity))
+			return false;
+		float padDistanceMeters = vector.DistanceXZ(entity.GetOrigin(), spawnPosition);
+		return padDistanceMeters >= SPAWN_PAD_CLEARANCE_RADIUS_METERS +
+			SPAWN_PAD_MEMBER_CLEARANCE_MARGIN_METERS &&
+			padDistanceMeters <= SPAWN_BOARDING_ENVELOPE_RADIUS_METERS;
+	}
+
+	protected void ReportStagingMemberAction(
+		AICF_TransportTrip trip,
+		AICF_VehicleRequestState requestState,
+		AICF_VehicleSpawnPlan plan,
+		AICF_VehicleStagingActionToken token,
+		string eventName,
+		string reason,
+		int nowMs)
+	{
+		string details = BuildIdentityContext(
+			trip,
+			requestState,
+			null,
+			BuildCausationId(trip, requestState, "STAGING_MEMBER"));
+		IEntity entity;
+		if (token)
+			entity = token.GetReservedEntity();
+		string memberId = "NONE";
+		float padDistanceMeters = -1.0;
+		if (entity)
+		{
+			memberId = entity.GetID().ToString();
+			padDistanceMeters = vector.DistanceXZ(entity.GetOrigin(), plan.GetSpawnPosition());
+		}
+		string actionToken = "NONE";
+		EAIActionState actionState = EAIActionState.FAILED;
+		bool actionOwned = false;
+		int retryCount = -1;
+		if (token)
+		{
+			if (token.GetFence())
+				actionToken = token.GetFence().GetToken();
+			if (token.GetAction())
+				actionState = token.GetAction().GetActionState();
+			actionOwned = token.IsActionOwnedByUtility();
+			retryCount = token.GetRetryCount();
+		}
+		details += string.Format(
+			" member=%1 action_token=%2 reason=%3 action_state=%4 action_owned=%5 retry=%6",
+			memberId,
+			actionToken,
+			reason,
+			typename.EnumToString(EAIActionState, actionState),
+			actionOwned,
+			retryCount);
+		if (token)
+		{
+			details += string.Format(
+				" staging_distance_m=%1 best_distance_m=%2 pad_distance_m=%3 issued_age_ms=%4 progress_age_ms=%5",
+				token.GetCurrentDistanceMeters(),
+				token.GetBestDistanceMeters(),
+				padDistanceMeters,
+				Math.Max(0, nowMs - token.GetIssuedAtMs()),
+				Math.Max(0, nowMs - token.GetLastProgressAtMs()));
+		}
+		details += string.Format(
+			" envelope_min_m=%1 envelope_max_m=%2 deadline_remaining_ms=%3",
+			SPAWN_PAD_CLEARANCE_RADIUS_METERS +
+				SPAWN_PAD_MEMBER_CLEARANCE_MARGIN_METERS,
+			SPAWN_BOARDING_ENVELOPE_RADIUS_METERS,
+			Math.Max(0, plan.GetApproachDeadlineMs() - nowMs));
+		AICF_Stage4Diagnostics.Info(eventName, details);
+	}
+
 	protected vector ResolveStagingPosition(SCR_AIGroup group, vector spawnPosition)
 	{
 		vector groupPosition = ResolveGroupPosition(group);
@@ -1011,6 +1610,7 @@ class AICF_VehicleAcquisitionFlow
 			trip.GetLease(),
 			BuildCausationId(trip, requestState, "PLAN_CANCELLED"));
 		details += FormatSpawnPlan(plan) + " reason=" + reason;
+		plan.CancelStagingActionsOwnerSafe();
 		m_Spawner.ReleaseSelectedSite(plan.GetReservation());
 		requestState.ClearSpawnPlan(plan);
 		string eventName = "VEHICLE_SPAWN_PLAN_CANCELLED";
@@ -1083,14 +1683,17 @@ class AICF_VehicleAcquisitionFlow
 		string details = BuildIdentityContext(trip, requestState, null, causationId);
 		details += FormatSpawnPlan(plan);
 		details += string.Format(
-			" staged=%1 alive=%2 farthest_m=%3 radius_m=%4 hold_ms=%5 confirmed=%6 members=[%7]",
+			" staged=%1 alive=%2 farthest_staging_m=%3 guidance_radius_m=%4 envelope_min_m=%5 envelope_max_m=%6 hold_ms=%7 confirmed=%8",
 			plan.GetStagedCount(),
 			plan.GetAliveCount(),
 			farthestDistanceMeters,
 			m_Config.GetSpawnStagingRadiusMeters(),
+			SPAWN_PAD_CLEARANCE_RADIUS_METERS +
+				SPAWN_PAD_MEMBER_CLEARANCE_MARGIN_METERS,
+			SPAWN_BOARDING_ENVELOPE_RADIUS_METERS,
 			m_Config.GetSpawnStagingHoldMs(),
-			confirmed,
-			memberSamples);
+			confirmed);
+		details += " members=[" + memberSamples + "]";
 		AICF_Stage4Diagnostics.Info("VEHICLE_SPAWN_STAGING_PROGRESS", details);
 	}
 

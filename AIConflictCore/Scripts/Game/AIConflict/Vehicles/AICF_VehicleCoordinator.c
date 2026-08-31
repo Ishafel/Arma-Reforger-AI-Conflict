@@ -15,6 +15,7 @@ class AICF_VehicleCoordinator
 	protected ref AICF_VehicleDomainDiagnostics m_Diagnostics;
 	protected ref AICF_VehicleAcceptanceMonitor m_Acceptance;
 	protected ref array<ref AICF_VehicleAdmissionAudit> m_aAdmissionAudits = {};
+	protected ref array<ref AICF_ExplicitVehicleAdmissionIntent> m_aExplicitAdmissionIntents = {};
 	protected int m_iObservedBaseRevision;
 	protected bool m_bStopped;
 
@@ -87,6 +88,53 @@ class AICF_VehicleCoordinator
 				"base_revision=%1 reason=%2 owner=STRATEGIC_PLANNING",
 				m_iObservedBaseRevision,
 				reason));
+	}
+
+	// A player changing a live group from INFANTRY back to a motorized doctrine
+	// is an explicit request for reacquisition, not merely a preference for a
+	// future long route. Keep that intent in the vehicle domain until all normal
+	// identity/cap/order gates admit one trip; only the minimum-route heuristic is
+	// bypassed. This makes the UI operation observable and effective even after a
+	// failed trip has already carried the group inside the nominal 400 m cutoff.
+	bool RequestExplicitVehicleAdmission(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		string reason)
+	{
+		if (!IsAuthorityReady() || !slot || !faction || reason.IsEmpty() ||
+			!slot.IsCombatReady() || !slot.GetGroup() ||
+			slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY)
+		{
+			return false;
+		}
+		AICF_ExplicitVehicleAdmissionIntent intent;
+		for (int index; index < m_aExplicitAdmissionIntents.Count(); index++)
+		{
+			AICF_ExplicitVehicleAdmissionIntent candidate = m_aExplicitAdmissionIntents[index];
+			if (candidate && candidate.IsSlot(faction.GetFactionKey(), slot.GetSlotId()))
+			{
+				intent = candidate;
+				break;
+			}
+		}
+		if (!intent)
+		{
+			intent = new AICF_ExplicitVehicleAdmissionIntent();
+			m_aExplicitAdmissionIntents.Insert(intent);
+		}
+		intent.Record(slot, faction.GetFactionKey(), reason, System.GetTickCount());
+		AICF_Stage35Diagnostics.Info(
+			"VEHICLE_EXPLICIT_ADMISSION_REQUESTED",
+			string.Format(
+				"faction=%1 slot=%2 stable_slot=%3 numeric_slot=%4 group_generation=%5 unit_type=%6 reason=%7 route_threshold_bypass=1 other_gates_preserved=1",
+				faction.GetFactionKey(),
+				slot.GetSlotKey(),
+				slot.GetStableSlotKey(),
+				slot.GetSlotId(),
+				slot.GetSpawnGeneration(),
+				slot.GetUnitType(),
+				reason));
+		return true;
 	}
 
 	bool IsControllingMovement(AICF_GroupSlot slot)
@@ -564,6 +612,7 @@ class AICF_VehicleCoordinator
 			"STRATEGIC_ASSIGNMENT_ADMITTED");
 		if (!admitted)
 			return;
+		ConsumeExplicitVehicleAdmission(assignment);
 		AICF_ETransportTripPhase admittedPhase = admitted.GetPhase();
 		int admittedTransitions = admitted.GetTransitionCount();
 		AICF_TripOutcome admittedOutcome = m_TripController.Tick(
@@ -651,7 +700,8 @@ class AICF_VehicleCoordinator
 		float routeMeters = Math.Sqrt(vector.DistanceSqXZ(
 			leader.GetOrigin(),
 			assignment.GetTargetPosition()));
-		if (routeMeters < m_Config.GetMinimumRouteMeters())
+		bool explicitAdmission = HasExplicitVehicleAdmission(slot, assignment);
+		if (routeMeters < m_Config.GetMinimumRouteMeters() && !explicitAdmission)
 		{
 			reason = "ROUTE_BELOW_VEHICLE_THRESHOLD";
 			return false;
@@ -672,6 +722,50 @@ class AICF_VehicleCoordinator
 			return false;
 		}
 		return true;
+	}
+
+	protected bool HasExplicitVehicleAdmission(
+		AICF_GroupSlot slot,
+		AICF_StrategicAssignmentSnapshot assignment)
+	{
+		if (!slot || !assignment)
+			return false;
+		for (int index = m_aExplicitAdmissionIntents.Count() - 1; index >= 0; index--)
+		{
+			AICF_ExplicitVehicleAdmissionIntent intent = m_aExplicitAdmissionIntents[index];
+			if (!intent || !intent.IsSlot(assignment.GetFactionKey(), assignment.GetSlotId()))
+				continue;
+			if (intent.Matches(slot, assignment))
+				return true;
+			m_aExplicitAdmissionIntents.Remove(index);
+			return false;
+		}
+		return false;
+	}
+
+	protected void ConsumeExplicitVehicleAdmission(
+		AICF_StrategicAssignmentSnapshot assignment)
+	{
+		if (!assignment)
+			return;
+		for (int index = m_aExplicitAdmissionIntents.Count() - 1; index >= 0; index--)
+		{
+			AICF_ExplicitVehicleAdmissionIntent intent = m_aExplicitAdmissionIntents[index];
+			if (!intent || !intent.IsSlot(assignment.GetFactionKey(), assignment.GetSlotId()))
+				continue;
+			m_aExplicitAdmissionIntents.Remove(index);
+			AICF_Stage35Diagnostics.Info(
+				"VEHICLE_EXPLICIT_ADMISSION_CONSUMED",
+				string.Format(
+					"faction=%1 slot=%2 group_generation=%3 assignment_revision=%4 request_age_ms=%5 reason=%6 trip_created=1",
+					assignment.GetFactionKey(),
+					assignment.GetSlotKey(),
+					assignment.GetGroupGeneration(),
+					assignment.GetAssignmentRevision(),
+					Math.Max(0, System.GetTickCount() - intent.GetRequestedAtMs()),
+					intent.GetReason()));
+			return;
+		}
 	}
 
 	protected string GetInfantryOrderAdmissionFenceReason(AICF_GroupSlot slot)
@@ -777,15 +871,31 @@ class AICF_VehicleCoordinator
 			m_aAdmissionAudits.Insert(audit);
 		}
 		audit.Record(assignment, reason);
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(assignment.GetGroup());
+		float routeMeters = -1.0;
+		if (leader)
+		{
+			routeMeters = vector.DistanceXZ(
+				leader.GetOrigin(),
+				assignment.GetTargetPosition());
+		}
+		string details = string.Format(
+			"faction=%1 slot=%2 group_generation=%3 assignment_revision=%4 reason=%5",
+			assignment.GetFactionKey(),
+			assignment.GetSlotKey(),
+			assignment.GetGroupGeneration(),
+			assignment.GetAssignmentRevision(),
+			reason);
+		details += string.Format(
+			" route_m=%1 minimum_route_m=%2 target_kind=%3 target_x=%4 target_z=%5",
+			routeMeters,
+			m_Config.GetMinimumRouteMeters(),
+			AICF_OrderTargetKind.ToString(assignment.GetTargetKind()),
+			Math.Round(assignment.GetTargetPosition()[0]),
+			Math.Round(assignment.GetTargetPosition()[2]));
 		AICF_Stage35Diagnostics.Info(
 			"VEHICLE_REQUEST_INELIGIBLE",
-			string.Format(
-				"faction=%1 slot=%2 group_generation=%3 assignment_revision=%4 reason=%5",
-				assignment.GetFactionKey(),
-				assignment.GetSlotKey(),
-				assignment.GetGroupGeneration(),
-				assignment.GetAssignmentRevision(),
-				reason));
+			details);
 	}
 
 	protected AICF_VehicleAdmissionAudit FindAdmissionAudit(FactionKey factionKey, int slotId)
@@ -879,4 +989,52 @@ class AICF_VehicleAdmissionAudit
 		m_iBaseRevision = assignment.GetBaseRevision();
 		m_sReason = reason;
 	}
+}
+
+class AICF_ExplicitVehicleAdmissionIntent
+{
+	protected FactionKey m_FactionKey;
+	protected int m_iSlotId = -1;
+	protected int m_iGroupGeneration;
+	protected SCR_AIGroup m_Group;
+	protected AICF_EGroupUnitType m_UnitType;
+	protected int m_iRequestedAtMs;
+	protected string m_sReason;
+
+	void Record(
+		AICF_GroupSlot slot,
+		FactionKey factionKey,
+		string reason,
+		int requestedAtMs)
+	{
+		m_FactionKey = factionKey;
+		m_iSlotId = slot.GetSlotId();
+		m_iGroupGeneration = slot.GetSpawnGeneration();
+		m_Group = slot.GetGroup();
+		m_UnitType = slot.GetUnitType();
+		m_iRequestedAtMs = requestedAtMs;
+		m_sReason = reason;
+	}
+
+	bool IsSlot(FactionKey factionKey, int slotId)
+	{
+		return m_FactionKey == factionKey && m_iSlotId == slotId;
+	}
+
+	bool Matches(
+		AICF_GroupSlot slot,
+		AICF_StrategicAssignmentSnapshot assignment)
+	{
+		return slot && assignment &&
+			IsSlot(assignment.GetFactionKey(), assignment.GetSlotId()) &&
+			m_iGroupGeneration == slot.GetSpawnGeneration() &&
+			m_iGroupGeneration == assignment.GetGroupGeneration() &&
+			m_Group && m_Group == slot.GetGroup() && m_Group == assignment.GetGroup() &&
+			m_UnitType == slot.GetUnitType() &&
+			m_UnitType == assignment.GetUnitType() &&
+			m_UnitType != AICF_EGroupUnitType.INFANTRY;
+	}
+
+	int GetRequestedAtMs() { return m_iRequestedAtMs; }
+	string GetReason() { return m_sReason; }
 }

@@ -55,9 +55,10 @@ class AICF_VehicleBoardingActionToken
 	protected int m_iHiddenExactSeatRecoveryScheduledAtMs;
 	protected bool m_bAnimatedExactSeatRecoveryAttempted;
 	protected bool m_bAnimatedExactSeatRecoveryAccepted;
-	protected bool m_bAnimatedManagerWaitAudited;
 	protected int m_iAnimatedExactSeatRecoveryAtMs;
 	protected int m_iAnimatedExactSeatRecoveryDoorIndex = -1;
+	protected bool m_bVisibleCrewRotationAttempted;
+	protected string m_sRecoveryFence = "NOT_EVALUATED";
 
 	void AICF_VehicleBoardingActionToken(
 		AICF_VehicleAsyncFence fence,
@@ -104,6 +105,16 @@ class AICF_VehicleBoardingActionToken
 	int GetIssuedAtMs() { return m_iIssuedAtMs; }
 	float GetBestDistanceMeters() { return m_fBestDistanceMeters; }
 	float GetCurrentDistanceMeters() { return m_fCurrentDistanceMeters; }
+	string GetRecoveryFence() { return m_sRecoveryFence; }
+
+	bool RecordRecoveryFence(string recoveryFence)
+	{
+		if (recoveryFence.IsEmpty())
+			recoveryFence = "NOT_EVALUATED";
+		bool changed = recoveryFence != m_sRecoveryFence;
+		m_sRecoveryFence = recoveryFence;
+		return changed;
+	}
 
 	bool Matches(
 		AICF_TransportTrip trip,
@@ -190,15 +201,17 @@ class AICF_VehicleBoardingActionToken
 		return m_Compartment.GetAvailableDoorIndices(doorIndices) > 0;
 	}
 
-	// Bypass a stock behavior-tree hang without teleporting. The existing exact
-	// reservation is preserved, a real available door is selected, and the
-	// animated request consumes one normal retry before any hidden recovery can
-	// be armed.
-	bool RequestAnimatedExactSeatRecovery(
-		out bool requestAccepted,
+	// Replace a stalled stock behavior with a new tracked SCR_AIGetInVehicle.
+	// Calling CompartmentAccessComponent.GetInVehicle(false) beside the still
+	// current behavior lets the engine deselect the tracked action and release
+	// its exact reservation without beginning a compartment transition. Failing
+	// the old action first follows the stock lifecycle, after which this token
+	// reacquires the same exact seat and owns the replacement behavior.
+	bool ReissueTrackedExactSeatAction(
+		out bool replacementOwned,
 		out int doorIndex)
 	{
-		requestAccepted = false;
+		replacementOwned = false;
 		doorIndex = -1;
 		if (m_bAnimatedExactSeatRecoveryAttempted ||
 			!MatchesLiveTargetIdentity() || !IsPhysicalMutationOwnerSafe() ||
@@ -220,19 +233,43 @@ class AICF_VehicleBoardingActionToken
 			return false;
 		}
 		doorIndex = doorIndices[0];
+		SCR_AIUtilityComponent utility = SCR_AIUtilityComponent.Cast(
+			m_Agent.FindComponent(SCR_AIUtilityComponent));
+		if (!utility || utility.m_OwnerEntity != m_ReservedEntity)
+			return false;
+
+		SCR_AIGetInVehicle previousAction = m_GetInAction;
+		previousAction.Fail();
+		if (!m_Compartment.IsCompartmentAccessible() ||
+			m_Compartment.GetOccupant() ||
+			m_Compartment.IsGetInLockedFor(m_ReservedEntity) ||
+			(m_Compartment.IsReserved() &&
+			!m_Compartment.IsReservedBy(m_ReservedEntity)))
+		{
+			return false;
+		}
+		if (!m_Compartment.IsReservedBy(m_ReservedEntity))
+			m_Compartment.SetReserved(m_ReservedEntity);
+		if (!m_Compartment.IsReservedBy(m_ReservedEntity))
+			return false;
+
+		SCR_AIGetInVehicle replacementAction = new SCR_AIGetInVehicle(
+			utility,
+			null,
+			m_TargetVehicle,
+			m_Compartment,
+			m_CompartmentType,
+			SCR_AIActionBase.PRIORITY_BEHAVIOR_GET_IN_VEHICLE,
+			SCR_AIActionBase.PRIORITY_LEVEL_NORMAL);
+		m_GetInAction = replacementAction;
 		m_bAnimatedExactSeatRecoveryAttempted = true;
 		m_iAnimatedExactSeatRecoveryAtMs = System.GetTickCount();
 		m_iAnimatedExactSeatRecoveryDoorIndex = doorIndex;
 		m_iRetryCount++;
 		m_iLastProgressAtMs = m_iAnimatedExactSeatRecoveryAtMs;
-		requestAccepted = access.GetInVehicle(
-			m_TargetVehicle,
-			m_Compartment,
-			false,
-			doorIndex,
-			ECloseDoorAfterActions.INVALID,
-			false);
-		m_bAnimatedExactSeatRecoveryAccepted = requestAccepted;
+		utility.AddAction(replacementAction);
+		replacementOwned = IsActionOwnedByUtility(replacementAction);
+		m_bAnimatedExactSeatRecoveryAccepted = replacementOwned;
 		return true;
 	}
 
@@ -261,11 +298,11 @@ class AICF_VehicleBoardingActionToken
 		return m_iAnimatedExactSeatRecoveryDoorIndex;
 	}
 
-	bool MarkAnimatedManagerWaitAudited()
+	bool MarkVisibleCrewRotationAttempted()
 	{
-		if (m_bAnimatedManagerWaitAudited)
+		if (m_bVisibleCrewRotationAttempted)
 			return false;
-		m_bAnimatedManagerWaitAudited = true;
+		m_bVisibleCrewRotationAttempted = true;
 		return true;
 	}
 
@@ -275,7 +312,7 @@ class AICF_VehicleBoardingActionToken
 	bool ScheduleHiddenExactSeatRecovery()
 	{
 		if (m_bHiddenExactSeatRecoveryPending || m_bHiddenExactSeatRecoveryAttempted ||
-			m_CompartmentType != EAICompartmentType.Cargo)
+			!IsSupportedExactSeatType())
 		{
 			return false;
 		}
@@ -307,7 +344,7 @@ class AICF_VehicleBoardingActionToken
 	bool ApplyHiddenExactSeatRecovery()
 	{
 		if (!m_bHiddenExactSeatRecoveryPending || m_bHiddenExactSeatRecoveryAttempted ||
-			m_CompartmentType != EAICompartmentType.Cargo ||
+			!IsSupportedExactSeatType() ||
 			!MatchesLiveTargetIdentity() || !IsPhysicalMutationOwnerSafe() ||
 			!IsExactCompartmentTarget())
 		{
@@ -329,7 +366,7 @@ class AICF_VehicleBoardingActionToken
 		{
 			if (!m_bAnimatedExactSeatRecoveryAttempted)
 				return false;
-			// The animated alternate received its full observation window. This
+			// The tracked replacement received its full observation window. This
 			// interrupt is reached only after the caller has passed the player/LOS
 			// fence for the hidden one-shot correction.
 			access.InterruptVehicleActionQueue(true, true, true);
@@ -497,8 +534,12 @@ class AICF_VehicleBoardingActionToken
 		// lets the supervisor issue a fresh action safely.
 		if (IsPhysicalMutationOwnerSafe() && !linked && !transitioning)
 		{
-			if (m_GetInAction && IsExactCompartmentMutationSafe() &&
-				IsActionOwnedByUtility(m_GetInAction))
+			// Failing a still-owned action is an action-lifecycle operation, not a
+			// seat mutation. Do not require the exact reservation here: the engine
+			// can drop that reservation while leaving SCR_AIGetInVehicle RUNNING.
+			// Keeping such an action alive across terminal infantry handoff lets the
+			// member enter the vehicle after the trip already fell back to foot.
+			if (m_GetInAction && IsActionOwnedByUtility(m_GetInAction))
 			{
 				EAIActionState getInState = m_GetInAction.GetActionState();
 				if (getInState != EAIActionState.COMPLETED && getInState != EAIActionState.FAILED)
@@ -569,6 +610,13 @@ class AICF_VehicleBoardingActionToken
 		return character.GetCompartmentAccessComponent();
 	}
 
+	protected bool IsSupportedExactSeatType()
+	{
+		return m_CompartmentType == EAICompartmentType.Pilot ||
+			m_CompartmentType == EAICompartmentType.Turret ||
+			m_CompartmentType == EAICompartmentType.Cargo;
+	}
+
 	protected bool MatchesLiveTargetIdentity()
 	{
 		if (!m_Fence || !m_TargetVehicle ||
@@ -579,6 +627,138 @@ class AICF_VehicleBoardingActionToken
 		RplComponent rpl = RplComponent.Cast(
 			m_TargetVehicle.FindComponent(RplComponent));
 		return rpl && rpl.Id().ToString() == m_Fence.GetRplId();
+	}
+}
+
+// Immutable member -> Cargo seat mapping for one passenger phase. A plan entry
+// can wait behind a foreign/stale reservation without preventing ready pairs
+// from receiving their exact actions. It never clears a reservation owned by
+// another entity.
+class AICF_VehiclePassengerSeatPlanEntry
+{
+	protected ref AICF_VehicleAsyncFence m_Fence;
+	protected AIAgent m_Agent;
+	protected IEntity m_Entity;
+	protected Vehicle m_Vehicle;
+	protected BaseCompartmentSlot m_Compartment;
+
+	void AICF_VehiclePassengerSeatPlanEntry(
+		AICF_VehicleAsyncFence fence,
+		AIAgent agent,
+		IEntity entity,
+		Vehicle vehicle,
+		BaseCompartmentSlot compartment)
+	{
+		m_Fence = fence;
+		m_Agent = agent;
+		m_Entity = entity;
+		m_Vehicle = vehicle;
+		m_Compartment = compartment;
+	}
+
+	AICF_VehicleAsyncFence GetFence() { return m_Fence; }
+	AIAgent GetAgent() { return m_Agent; }
+	IEntity GetEntity() { return m_Entity; }
+	Vehicle GetVehicle() { return m_Vehicle; }
+	BaseCompartmentSlot GetCompartment() { return m_Compartment; }
+
+	bool MatchesIdentity(
+		AICF_TransportTrip trip,
+		AICF_VehicleLease lease,
+		SCR_AIGroup group)
+	{
+		return m_Fence && m_Fence.MatchesTrip(trip) && m_Fence.MatchesLease(lease) &&
+			m_Agent && m_Agent.GetParentGroup() == group &&
+			m_Agent.GetControlledEntity() == m_Entity && m_Vehicle && lease &&
+			lease.GetVehicle() == m_Vehicle && m_Compartment &&
+			m_Compartment.GetVehicle() == m_Vehicle &&
+			CargoCompartmentSlot.Cast(m_Compartment) != null;
+	}
+
+	bool IsAliveCurrentMember(SCR_AIGroup group)
+	{
+		return m_Agent && m_Agent.GetParentGroup() == group &&
+			m_Agent.GetControlledEntity() == m_Entity &&
+			AICF_GroupRuntime.IsAliveCharacter(m_Entity);
+	}
+
+	bool IsExactCompartmentSettled(AICF_VehicleWatchdog watchdog)
+	{
+		if (!watchdog || !m_Entity || !m_Vehicle || !m_Compartment ||
+			!watchdog.IsMemberSettledInVehicle(m_Entity, m_Vehicle))
+		{
+			return false;
+		}
+		ChimeraCharacter character = ChimeraCharacter.Cast(m_Entity);
+		CompartmentAccessComponent access;
+		if (character)
+			access = character.GetCompartmentAccessComponent();
+		return access && access.GetCompartment() == m_Compartment;
+	}
+
+	bool IsSeatReadyForAction()
+	{
+		if (!m_Entity || !m_Compartment || !m_Vehicle ||
+			m_Compartment.GetVehicle() != m_Vehicle ||
+			!m_Compartment.IsCompartmentAccessible() ||
+			m_Compartment.GetOccupant() ||
+			m_Compartment.IsGetInLockedFor(m_Entity))
+		{
+			return false;
+		}
+		return !m_Compartment.IsReserved() || m_Compartment.IsReservedBy(m_Entity);
+	}
+
+	void ReleaseReservationOwnerSafe()
+	{
+		if (m_Compartment && m_Vehicle &&
+			m_Compartment.GetVehicle() == m_Vehicle && m_Entity &&
+			m_Compartment.IsReservedBy(m_Entity))
+		{
+			m_Compartment.SetReserved(null);
+		}
+	}
+}
+
+class AICF_VehiclePassengerSeatPlan
+{
+	protected ref array<ref AICF_VehiclePassengerSeatPlanEntry> m_aEntries = {};
+
+	int Count() { return m_aEntries.Count(); }
+
+	AICF_VehiclePassengerSeatPlanEntry Get(int index)
+	{
+		if (!m_aEntries.IsIndexValid(index))
+			return null;
+		return m_aEntries[index];
+	}
+
+	bool Track(AICF_VehiclePassengerSeatPlanEntry entry, int maximumEntries = 16)
+	{
+		if (!entry || maximumEntries < 1 || m_aEntries.Count() >= maximumEntries)
+			return false;
+		m_aEntries.Insert(entry);
+		return true;
+	}
+
+	AICF_VehiclePassengerSeatPlanEntry FindByAgent(AIAgent agent)
+	{
+		foreach (AICF_VehiclePassengerSeatPlanEntry entry : m_aEntries)
+		{
+			if (entry && entry.GetAgent() == agent)
+				return entry;
+		}
+		return null;
+	}
+
+	void ReleaseReservationsOwnerSafe()
+	{
+		foreach (AICF_VehiclePassengerSeatPlanEntry entry : m_aEntries)
+		{
+			if (entry)
+				entry.ReleaseReservationOwnerSafe();
+		}
+		m_aEntries.Clear();
 	}
 }
 

@@ -320,8 +320,10 @@ class AICF_MatchController
 			m_Stage3Config.GetMotionMeters(),
 			m_Stage3Config.GetObjectiveProgressTimeoutMs());
 		stage3ConfigLine += string.Format(
-			" boarding_approach_timeout_ms=%1",
-			m_Stage3Config.GetBoardingApproachTimeoutMs());
+			" boarding_approach_timeout_ms=%1 passenger_boarding_timeout_ms=%2 dismount_timeout_ms=%3",
+			m_Stage3Config.GetBoardingApproachTimeoutMs(),
+			m_Stage3Config.GetPassengerBoardingTimeoutMs(),
+			m_Stage3Config.GetDismountTimeoutMs());
 		stage3ConfigLine += string.Format(
 			" max_recoveries=%1 dismount_distance_m=%2 retry_ms=%3 cleanup_delay_ms=%4 minimum_route_m=%5 maximum_reuse_distance_m=%6 maximum_spawn_distance_m=%7 cohesion_distance_m=%8",
 			m_Stage3Config.GetMaxRecoveries(),
@@ -1261,6 +1263,16 @@ class AICF_MatchController
 		{
 			slot.TouchCommanderConfiguration();
 		}
+		bool explicitVehicleAdmissionRequested = false;
+		if (unitTypeChanged && slot.GetUnitType() != AICF_EGroupUnitType.INFANTRY &&
+			m_VehicleCoordinator)
+		{
+			explicitVehicleAdmissionRequested =
+				m_VehicleCoordinator.RequestExplicitVehicleAdmission(
+					slot,
+					faction,
+					"PLAYER_UNIT_TYPE_CHANGED");
+		}
 
 		string configDetails = string.Format(
 			"player=%1 faction=%2 slot=%3 slot_key=%4 old_role=%5 role=%6 old_type=%7 type=%8",
@@ -1273,10 +1285,11 @@ class AICF_MatchController
 			oldUnitType,
 			slot.GetUnitType());
 		configDetails += string.Format(
-			" old_size=%1 size=%2 order_assigned=%3 size_apply=NEXT_DEPLOYMENT",
+			" old_size=%1 size=%2 order_assigned=%3 size_apply=NEXT_DEPLOYMENT explicit_vehicle_admission=%4",
 			oldDesiredSize,
 			slot.GetDesiredSize(),
-			orderAssigned);
+			orderAssigned,
+			explicitVehicleAdmissionRequested);
 		AICF_Stage4Diagnostics.Info("GROUP_CONFIG_ACCEPTED", configDetails);
 		if (unitTypeChanged)
 		{

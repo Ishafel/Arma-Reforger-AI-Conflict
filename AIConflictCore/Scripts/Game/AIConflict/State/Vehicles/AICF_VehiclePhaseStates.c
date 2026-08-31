@@ -326,6 +326,7 @@ class AICF_VehicleBoardingState
 	protected int m_iPhaseDeadlineMs;
 	protected int m_iPhaseTimeoutMs;
 	protected int m_iApproachTimeoutMs;
+	protected int m_iPassengerTimeoutMs;
 	protected int m_iPlannedPhaseCount;
 	protected int m_iCurrentPhaseIndex;
 	protected AICF_EVehicleBoardingPhase m_Phase;
@@ -348,6 +349,7 @@ class AICF_VehicleBoardingState
 	protected bool m_bGraceEvaluated;
 	protected bool m_bGraceGranted;
 	protected int m_iGraceDeadlineMs;
+	protected bool m_bFullOccupancyDeadlineSuppressionReported;
 	protected bool m_bRoleResetAttempted;
 	protected bool m_bRoleRetryIssued;
 	protected int m_iRoleResetStartedAtMs;
@@ -355,8 +357,17 @@ class AICF_VehicleBoardingState
 	protected bool m_bPassengerPlanIssued;
 	protected bool m_bPassengerAllocationFailureReported;
 	protected bool m_bExitEffectsApplied;
+	protected bool m_bCrewRotationPending;
+	protected EAICompartmentType m_CrewRotationRole;
+	protected int m_iCrewRotationScheduledAtMs;
+	protected string m_sCrewRotationPreviousEntityId;
+	protected string m_sCrewRotationFence;
+	protected bool m_bCrewRotationWaitAudited;
+	protected ref array<string> m_aRejectedDriverEntityIds = {};
+	protected ref array<string> m_aRejectedGunnerEntityIds = {};
 	protected ref array<ref AICF_VehicleAsyncFence> m_aActionFences = {};
 	protected ref AICF_VehicleBoardingTokenSet m_Tokens;
+	protected ref AICF_VehiclePassengerSeatPlan m_PassengerSeatPlan;
 
 	void Reset()
 	{
@@ -369,6 +380,7 @@ class AICF_VehicleBoardingState
 		m_iPhaseDeadlineMs = 0;
 		m_iPhaseTimeoutMs = 0;
 		m_iApproachTimeoutMs = 0;
+		m_iPassengerTimeoutMs = 0;
 		m_iPlannedPhaseCount = 0;
 		m_iCurrentPhaseIndex = 0;
 		m_Phase = AICF_EVehicleBoardingPhase.NONE;
@@ -391,6 +403,7 @@ class AICF_VehicleBoardingState
 		m_bGraceEvaluated = false;
 		m_bGraceGranted = false;
 		m_iGraceDeadlineMs = 0;
+		m_bFullOccupancyDeadlineSuppressionReported = false;
 		m_bRoleResetAttempted = false;
 		m_bRoleRetryIssued = false;
 		m_iRoleResetStartedAtMs = 0;
@@ -398,8 +411,14 @@ class AICF_VehicleBoardingState
 		m_bPassengerPlanIssued = false;
 		m_bPassengerAllocationFailureReported = false;
 		m_bExitEffectsApplied = false;
+		ClearCrewRotation();
+		m_aRejectedDriverEntityIds.Clear();
+		m_aRejectedGunnerEntityIds.Clear();
 		m_aActionFences.Clear();
 		m_Tokens = null;
+		if (m_PassengerSeatPlan)
+			m_PassengerSeatPlan.ReleaseReservationsOwnerSafe();
+		m_PassengerSeatPlan = null;
 	}
 
 	void Begin(
@@ -426,6 +445,7 @@ class AICF_VehicleBoardingState
 	int GetPhaseDeadlineMs() { return m_iPhaseDeadlineMs; }
 	int GetPhaseTimeoutMs() { return m_iPhaseTimeoutMs; }
 	int GetApproachTimeoutMs() { return m_iApproachTimeoutMs; }
+	int GetPassengerTimeoutMs() { return m_iPassengerTimeoutMs; }
 	int GetPlannedPhaseCount() { return m_iPlannedPhaseCount; }
 	int GetCurrentPhaseIndex() { return m_iCurrentPhaseIndex; }
 	AICF_EVehicleBoardingPhase GetPhase() { return m_Phase; }
@@ -445,16 +465,28 @@ class AICF_VehicleBoardingState
 	bool IsGraceEvaluated() { return m_bGraceEvaluated; }
 	bool IsGraceGranted() { return m_bGraceGranted; }
 	int GetGraceDeadlineMs() { return m_iGraceDeadlineMs; }
+	bool MarkFullOccupancyDeadlineSuppressionReported()
+	{
+		if (m_bFullOccupancyDeadlineSuppressionReported)
+			return false;
+		m_bFullOccupancyDeadlineSuppressionReported = true;
+		return true;
+	}
 	bool IsRoleResetAttempted() { return m_bRoleResetAttempted; }
 	bool IsRoleRetryIssued() { return m_bRoleRetryIssued; }
 	AICF_EVehicleBoardingPhase GetRoleResetNextPhase() { return m_RoleResetNextPhase; }
 	bool IsPassengerPlanIssued() { return m_bPassengerPlanIssued; }
 	AICF_VehicleBoardingTokenSet GetTokens() { return m_Tokens; }
+	AICF_VehiclePassengerSeatPlan GetPassengerSeatPlan() { return m_PassengerSeatPlan; }
 	bool AreExitEffectsApplied() { return m_bExitEffectsApplied; }
+	int GetCrewRotationScheduledAtMs() { return m_iCrewRotationScheduledAtMs; }
+	string GetCrewRotationPreviousEntityId() { return m_sCrewRotationPreviousEntityId; }
+	string GetCrewRotationFence() { return m_sCrewRotationFence; }
 
 	void ConfigureImmutablePlan(
 		int phaseTimeoutMs,
 		int approachTimeoutMs,
+		int passengerTimeoutMs,
 		bool driverPhasePlanned,
 		bool gunnerPhasePlanned)
 	{
@@ -462,6 +494,7 @@ class AICF_VehicleBoardingState
 			return;
 		m_iPhaseTimeoutMs = Math.Max(1000, phaseTimeoutMs);
 		m_iApproachTimeoutMs = Math.Max(m_iPhaseTimeoutMs, approachTimeoutMs);
+		m_iPassengerTimeoutMs = Math.Max(1000, passengerTimeoutMs);
 		m_bDriverPhasePlanned = driverPhasePlanned;
 		m_bGunnerPhasePlanned = gunnerPhasePlanned;
 	}
@@ -470,6 +503,9 @@ class AICF_VehicleBoardingState
 	{
 		if (m_Tokens)
 			m_Tokens.CancelAllOwnerSafe();
+		if (m_PassengerSeatPlan)
+			m_PassengerSeatPlan.ReleaseReservationsOwnerSafe();
+		m_PassengerSeatPlan = null;
 		m_aActionFences.Clear();
 		m_Phase = phase;
 		m_iCurrentPhaseIndex = Math.Max(0, phaseIndex);
@@ -477,6 +513,8 @@ class AICF_VehicleBoardingState
 		int currentPhaseTimeoutMs = m_iPhaseTimeoutMs;
 		if (phase == AICF_EVehicleBoardingPhase.APPROACH)
 			currentPhaseTimeoutMs = m_iApproachTimeoutMs;
+		else if (phase == AICF_EVehicleBoardingPhase.PASSENGERS)
+			currentPhaseTimeoutMs = m_iPassengerTimeoutMs;
 		m_iPhaseDeadlineMs = nowMs + currentPhaseTimeoutMs;
 		// A progressed DRIVER phase must never consume the complete opportunity of
 		// the following GUNNER/PASSENGERS phase.  The boarding deadline is allowed
@@ -488,8 +526,131 @@ class AICF_VehicleBoardingState
 			m_iAbsoluteDeadlineMs = m_iPhaseDeadlineMs;
 		m_iSettledPollCount = 0;
 		m_iStagingPollCount = 0;
+		m_bGraceEvaluated = false;
+		m_bGraceGranted = false;
+		m_iGraceDeadlineMs = 0;
+		m_bFullOccupancyDeadlineSuppressionReported = false;
 		m_bPassengerPlanIssued = false;
 		m_bPassengerAllocationFailureReported = false;
+		ClearCrewRotation();
+		if (phase == AICF_EVehicleBoardingPhase.DRIVER)
+			m_aRejectedDriverEntityIds.Clear();
+		else if (phase == AICF_EVehicleBoardingPhase.GUNNER)
+			m_aRejectedGunnerEntityIds.Clear();
+		if (phase == AICF_EVehicleBoardingPhase.PASSENGERS)
+			m_PassengerSeatPlan = new AICF_VehiclePassengerSeatPlan();
+	}
+
+	// Crew replacement is deliberately split across scheduler ticks. Stock
+	// action teardown may release its exact reservation after Fail(); assigning
+	// another entity to that seat in the same tick creates an ABA reservation
+	// race. The first rotation receives one bounded observation window while the
+	// immutable trip hard deadline remains authoritative.
+	bool ScheduleCrewRotation(
+		EAICompartmentType role,
+		IEntity previousEntity,
+		string recoveryFence,
+		int nowMs,
+		int observationWindowMs)
+	{
+		if (m_bCrewRotationPending || !previousEntity ||
+			(role != EAICompartmentType.Pilot && role != EAICompartmentType.Turret))
+		{
+			return false;
+		}
+		m_bCrewRotationPending = true;
+		m_CrewRotationRole = role;
+		m_iCrewRotationScheduledAtMs = nowMs;
+		m_sCrewRotationPreviousEntityId = previousEntity.GetID().ToString();
+		m_sCrewRotationFence = recoveryFence;
+		m_bCrewRotationWaitAudited = false;
+		if (GetRejectedCrewCandidateCount(role) == 1)
+		{
+			int boundedDeadlineMs = nowMs + Math.Max(1000, observationWindowMs);
+			if (m_iHardDeadlineMs > 0 && boundedDeadlineMs > m_iHardDeadlineMs)
+				boundedDeadlineMs = m_iHardDeadlineMs;
+			if (boundedDeadlineMs > m_iPhaseDeadlineMs)
+				m_iPhaseDeadlineMs = boundedDeadlineMs;
+			if (m_iPhaseDeadlineMs > m_iAbsoluteDeadlineMs)
+				m_iAbsoluteDeadlineMs = m_iPhaseDeadlineMs;
+		}
+		return true;
+	}
+
+	bool IsCrewRotationPending(EAICompartmentType role)
+	{
+		return m_bCrewRotationPending && m_CrewRotationRole == role;
+	}
+
+	bool IsCrewRotationReady(EAICompartmentType role, int nowMs)
+	{
+		return IsCrewRotationPending(role) && nowMs > m_iCrewRotationScheduledAtMs;
+	}
+
+	bool MarkCrewRotationWaitAudited()
+	{
+		if (m_bCrewRotationWaitAudited)
+			return false;
+		m_bCrewRotationWaitAudited = true;
+		return true;
+	}
+
+	void ClearCrewRotation()
+	{
+		m_bCrewRotationPending = false;
+		m_CrewRotationRole = EAICompartmentType.Cargo;
+		m_iCrewRotationScheduledAtMs = 0;
+		m_sCrewRotationPreviousEntityId = string.Empty;
+		m_sCrewRotationFence = string.Empty;
+		m_bCrewRotationWaitAudited = false;
+	}
+
+	bool RejectCrewCandidate(EAICompartmentType role, IEntity entity)
+	{
+		if (!entity)
+			return false;
+		array<string> rejectedEntityIds = ResolveRejectedCrewEntityIds(role);
+		if (!rejectedEntityIds)
+			return false;
+		string entityId = entity.GetID().ToString();
+		if (rejectedEntityIds.Contains(entityId))
+			return false;
+		rejectedEntityIds.Insert(entityId);
+		return true;
+	}
+
+	bool IsCrewCandidateRejected(EAICompartmentType role, IEntity entity)
+	{
+		if (!entity)
+			return false;
+		array<string> rejectedEntityIds = ResolveRejectedCrewEntityIds(role);
+		return rejectedEntityIds && rejectedEntityIds.Contains(entity.GetID().ToString());
+	}
+
+	void RestoreCrewCandidate(EAICompartmentType role, IEntity entity)
+	{
+		if (!entity)
+			return;
+		array<string> rejectedEntityIds = ResolveRejectedCrewEntityIds(role);
+		if (rejectedEntityIds)
+			rejectedEntityIds.RemoveItem(entity.GetID().ToString());
+	}
+
+	int GetRejectedCrewCandidateCount(EAICompartmentType role)
+	{
+		array<string> rejectedEntityIds = ResolveRejectedCrewEntityIds(role);
+		if (!rejectedEntityIds)
+			return 0;
+		return rejectedEntityIds.Count();
+	}
+
+	protected array<string> ResolveRejectedCrewEntityIds(EAICompartmentType role)
+	{
+		if (role == EAICompartmentType.Pilot)
+			return m_aRejectedDriverEntityIds;
+		if (role == EAICompartmentType.Turret)
+			return m_aRejectedGunnerEntityIds;
+		return null;
 	}
 
 	int GetPassengerAllocationAgeMs(int nowMs)
@@ -601,7 +762,11 @@ class AICF_VehicleBoardingState
 		m_bGraceEvaluated = true;
 		m_bGraceGranted = eligible;
 		if (eligible)
+		{
 			m_iGraceDeadlineMs = nowMs + Math.Max(0, graceMs);
+			if (m_iHardDeadlineMs > 0 && m_iGraceDeadlineMs > m_iHardDeadlineMs)
+				m_iGraceDeadlineMs = m_iHardDeadlineMs;
+		}
 		return m_bGraceGranted;
 	}
 
@@ -636,6 +801,8 @@ class AICF_VehicleBoardingState
 		m_bExitEffectsApplied = true;
 		if (m_Tokens)
 			m_Tokens.CancelAllOwnerSafe();
+		if (m_PassengerSeatPlan)
+			m_PassengerSeatPlan.ReleaseReservationsOwnerSafe();
 		m_aActionFences.Clear();
 		return true;
 	}
@@ -1250,7 +1417,9 @@ class AICF_VehicleDismountState
 	protected int m_iTransitions;
 	protected int m_iInsideBounds;
 	protected int m_iClearPollCount;
+	protected int m_iTripExitClearPollCount;
 	protected int m_iContinuousClearStartedAtMs;
+	protected bool m_bAnimatedExactExitAttempted;
 	protected bool m_bTerminalClearanceStarted;
 	protected bool m_bTerminalClearanceStopped;
 	protected int m_iLastHiddenRecoveryAuditAtMs;
@@ -1276,7 +1445,9 @@ class AICF_VehicleDismountState
 		m_iTransitions = 0;
 		m_iInsideBounds = 0;
 		m_iClearPollCount = 0;
+		m_iTripExitClearPollCount = 0;
 		m_iContinuousClearStartedAtMs = 0;
+		m_bAnimatedExactExitAttempted = false;
 		m_bTerminalClearanceStarted = false;
 		m_bTerminalClearanceStopped = false;
 		m_iLastHiddenRecoveryAuditAtMs = 0;
@@ -1317,7 +1488,9 @@ class AICF_VehicleDismountState
 	int GetTransitions() { return m_iTransitions; }
 	int GetInsideBounds() { return m_iInsideBounds; }
 	int GetClearPollCount() { return m_iClearPollCount; }
+	int GetTripExitClearPollCount() { return m_iTripExitClearPollCount; }
 	bool WasNormalReissueAttempted() { return m_bNormalReissueAttempted; }
+	bool WasAnimatedExactExitAttempted() { return m_bAnimatedExactExitAttempted; }
 	bool IsTerminalClearanceStarted() { return m_bTerminalClearanceStarted; }
 	bool IsTerminalClearanceStopped() { return m_bTerminalClearanceStopped; }
 	AIWaypoint GetDismountWaypoint() { return m_DismountWaypoint; }
@@ -1398,6 +1571,14 @@ class AICF_VehicleDismountState
 		return true;
 	}
 
+	bool MarkAnimatedExactExitAttempted()
+	{
+		if (m_bAnimatedExactExitAttempted)
+			return false;
+		m_bAnimatedExactExitAttempted = true;
+		return true;
+	}
+
 	bool RecordGuidanceAttempt(int nowMs)
 	{
 		if (m_iGuidanceAttempts >= m_iMaximumGuidanceAttempts)
@@ -1468,6 +1649,20 @@ class AICF_VehicleDismountState
 			m_iContinuousClearStartedAtMs = nowMs;
 		m_iClearPollCount++;
 		return m_iClearPollCount;
+	}
+
+	int RecordTripExitSample(
+		int logicalOccupants,
+		int transitions,
+		int insideBounds)
+	{
+		if (logicalOccupants > 0 || transitions > 0 || insideBounds > 0)
+		{
+			m_iTripExitClearPollCount = 0;
+			return 0;
+		}
+		m_iTripExitClearPollCount++;
+		return m_iTripExitClearPollCount;
 	}
 
 	int GetContinuousClearMs(int nowMs)

@@ -45,8 +45,11 @@ if (Require-Stage3Record $config 'AICF_Stage3Config.c') {
     Assert-AICFNotContains $failures 'STAGE3_ALWAYS_ON' $config.Source '"aicfVehiclesEnabled"' 'Vehicle subsystem must not expose a CLI opt-out'
     Assert-AICFContains $failures 'STAGE3_BOUNDED_REQUEST' $config.Code 'DEFAULT_SPAWN_MAX_ATTEMPTS\s*=\s*4\s*;' 'Spawn request attempts must default to four'
     Assert-AICFContains $failures 'STAGE3_BOUNDED_REQUEST' $config.Code 'DEFAULT_WAIT_PROBE_INTERVAL_MS\s*=\s*60000\s*;' 'WAITING_FOR_SITE probe must default to sixty seconds'
-	Assert-AICFContains $failures 'STAGE3_APPROACH_DEADLINE' $config.Code 'DEFAULT_BOARDING_APPROACH_TIMEOUT_MS\s*=\s*180000\s*;' 'Long per-member approach must have its own bounded three-minute deadline'
+	Assert-AICFContains $failures 'STAGE3_APPROACH_DEADLINE' $config.Code 'DEFAULT_BOARDING_APPROACH_TIMEOUT_MS\s*=\s*60000\s*;' 'Per-member boarding approach must have its own bounded sixty-second deadline'
 	Assert-AICFContains $failures 'STAGE3_APPROACH_DEADLINE' $config.Source '"aicfVehicleBoardingApproachTimeoutMs"' 'Approach deadline must retain an explicit CLI override'
+	Assert-AICFContains $failures 'STAGE3_PHASE_DEADLINES' $config.Code 'DEFAULT_BOARDING_TIMEOUT_MS\s*=\s*25000\s*;' 'Driver and gunner phases must default to twenty-five seconds'
+	Assert-AICFContains $failures 'STAGE3_PHASE_DEADLINES' $config.Code 'DEFAULT_PASSENGER_BOARDING_TIMEOUT_MS\s*=\s*30000\s*;' 'Passenger phase must retain its separate thirty-second deadline'
+	Assert-AICFContains $failures 'STAGE3_PHASE_DEADLINES' $config.Code 'DEFAULT_DISMOUNT_TIMEOUT_MS\s*=\s*20000\s*;' 'Normal dismount must default to twenty seconds'
     Assert-AICFContains $failures 'STAGE3_PROGRESS_EVIDENCE' $config.Code 'DEFAULT_MOTION_METERS\s*=\s*3\.0' 'Physical motion evidence must retain the independent three-metre threshold'
     Assert-AICFContains $failures 'STAGE3_PROGRESS_EVIDENCE' $config.Code 'DEFAULT_OBJECTIVE_PROGRESS_TIMEOUT_MS\s*=\s*300000' 'Objective progress must retain its independent five-minute timeout'
     Assert-AICFContains $failures 'STAGE3_MINIMUM_REQUEST_ROSTER' $config.Code 'DEFAULT_MINIMUM_VEHICLE_REQUEST_AGENTS\s*=\s*3\s*;' 'New vehicle requests must require the accepted three-member minimum'
@@ -118,13 +121,18 @@ if ($boarding) {
     Assert-AICFContains $failures 'STAGE3_ALL_OR_FALLBACK' $boardingCode '(?:SETTLED_POLLS_REQUIRED\s*=\s*2|settledPolls\s*>?=\s*2)' 'Boarding completion must require two settled polls'
     Assert-AICFNotContains $failures 'STAGE3_NO_GROUP_BOARDING_WAYPOINT' $boardingCode 'CreatePassengerBoardingWaypoint|SCR_BoardingEntityWaypoint' 'Boarding must not reintroduce a generic group vehicle waypoint'
     Assert-AICFContains $failures 'STAGE3_PER_MEMBER_APPROACH' $boardingCode 'MoveIndividually|ApproachAction|TrackBoardingApproach' 'Boarding approach must remain per-member and token-owned'
-	Assert-AICFContains $failures 'STAGE3_APPROACH_DEADLINE' $boarding.Code 'GetBoardingApproachTimeoutMs[\s\S]*totalTimeoutMs\s*\+=\s*approachTimeoutMs\s*-\s*phaseTimeoutMs' 'Approach must extend the immutable total budget without extending later role phases'
-	Assert-AICFContains $failures 'STAGE3_RUNNING_CARGO_STALL' $boarding.Code 'PASSENGER_STALL_MS\s*=\s*15000' 'Exact Cargo must bound a RUNNING action with no physical progress'
-	Assert-AICFContains $failures 'STAGE3_RUNNING_CARGO_STALL' $maintainPassengers 'ObserveSpatialProgress[\s\S]*EAIActionState\.RUNNING[\s\S]*GetProgressAgeMs[\s\S]*PASSENGER_STALL_MS[\s\S]*ReissueExactCargo' 'Every unlinked non-transitioning RUNNING Cargo token must use the exact retry path after a bounded no-progress stall, including an orphaned action reference'
+	Assert-AICFContains $failures 'STAGE3_APPROACH_DEADLINE' $boarding.Code 'GetPassengerBoardingTimeoutMs[\s\S]*GetBoardingApproachTimeoutMs[\s\S]*totalTimeoutMs\s*\+=\s*approachTimeoutMs' 'Approach and passenger phases must contribute independent immutable total-budget slices'
+	Assert-AICFContains $failures 'STAGE3_RUNNING_CARGO_STALL' $boarding.Code 'EXACT_CARGO_READY_RETRY_STALL_MS\s*=\s*5000' 'Exact Cargo must start bounded recovery after five seconds without useful progress'
+	Assert-AICFContains $failures 'STAGE3_RUNNING_CARGO_STALL' $maintainPassengers 'ObserveSpatialProgress[\s\S]*GetProgressAgeMs[\s\S]*EAIActionState\.RUNNING[\s\S]*configuredStallMs[\s\S]*ReissueExactCargo' 'Every unlinked non-transitioning RUNNING Cargo token must retain a bounded progress-aware exact retry before hidden recovery'
     Assert-AICFContains $failures 'STAGE3_RUNNING_CARGO_STALL' $maintainPassengers 'IsGettingIn[\s\S]*IsGettingOut[\s\S]*continue;' 'Cargo retries must remain fenced while a compartment transition is active'
-    foreach ($field in @('current_distance_m=', 'best_distance_m=', 'progress_age_ms=', 'accessible=', 'get_in_locked=', 'occupied=')) {
+	foreach ($field in @('current_distance_m=', 'best_distance_m=', 'progress_age_ms=', 'accessible=', 'get_in_locked=', 'occupied=')) {
         Assert-AICFContains $failures 'STAGE3_CARGO_TOKEN_DIAGNOSTICS' $tokenContextStrings ([regex]::Escape($field)) "Exact Cargo token diagnostics omit $field"
-    }
+	}
+	foreach ($field in @('phase=', 'blocker_member=', 'distance_m=', 'action_state=', 'retry=', 'seat=', 'linked=', 'getting_in=', 'recovery_fence=', 'deadline_remaining_ms=')) {
+		Assert-AICFContains $failures 'STAGE3_BOARDING_BLOCKER_DIAGNOSTICS' $boarding.Strings ([regex]::Escape($field)) "Boarding blocker diagnostics omit $field"
+	}
+	Assert-AICFContains $failures 'STAGE3_PARTIAL_EXACT_CARGO' $boarding.Code 'AICF_VehiclePassengerSeatPlan[\s\S]*IssueReadyPassengerPlanActions[\s\S]*blockedCount' 'Passenger boarding must retain one immutable exact-seat plan while ready pairs progress independently'
+	Assert-AICFContains $failures 'STAGE3_HIDDEN_RECOVERY_WAIT' $boarding.Source 'PASSENGER_HIDDEN_EXACT_CARGO_DEFERRED[\s\S]*WAIT_UNTIL_PHASE_DEADLINE' 'An unsafe hidden-recovery fence must wait until the phase deadline instead of failing the trip immediately'
 }
 
 $transit = Find-AICFClassRecord $records 'AICF_VehicleTransitFlow'
@@ -241,10 +249,10 @@ $requiredEvents = @(
     'BOARDING_STARTED', 'BOARDING_PHASE_STARTED', 'BOARDING_REJECTED', 'BOARDING_ROLE_RESET',
     'BOARDING_ROLE_RETRY', 'BOARDING_ROLE_VIOLATION', 'BOARDING_ACTION_OWNERSHIP', 'BOARDING_CREW_ROLE_LOST',
     'BOARDING_APPROACH_REISSUED', 'BOARDING_APPROACH_COMPLETE', 'PASSENGER_BOARDING_REISSUED',
-    'PASSENGER_EXACT_CARGO_ALLOCATION_WAIT', 'PASSENGER_EXACT_CARGO_ALLOCATION_TIMEOUT',
+    'PASSENGER_EXACT_CARGO_ALLOCATION_WAIT', 'BOARDING_BLOCKER',
     'PASSENGER_BOARDING_ACTION_FAILED', 'BOARDING_TRANSITION_GRACE', 'BOARDING_PROGRESS', 'BOARDING_COMPLETE',
     'BOARDING_TIMEOUT', 'VEHICLE_ROUTE_ASSIGNED', 'VEHICLE_PROGRESS', 'VEHICLE_MOTION', 'DISEMBARK_STARTED',
-    'DISEMBARK_CLEARANCE_GUIDANCE', 'DISEMBARK_CLEARANCE_RECOVERY', 'DISEMBARK_REISSUED', 'DISEMBARK_TIMEOUT',
+    'DISEMBARK_CLEARANCE_GUIDANCE', 'DISEMBARK_CLEARANCE_RECOVERY', 'DISEMBARK_ANIMATED_EXACT_RETRY', 'DISEMBARK_TIMEOUT',
     'DISEMBARK_COMPLETE', 'VEHICLE_STUCK_DETECTED', 'VEHICLE_RECOVERY_STARTED', 'VEHICLE_RECOVERY_SUCCEEDED',
     'VEHICLE_CREW_RECOVERY_SUCCEEDED', 'VEHICLE_RECOVERY_FAILED', 'VEHICLE_UNSTUCK_STARTED',
     'VEHICLE_UNSTUCK_ATTEMPT', 'VEHICLE_UNSTUCK_SUCCEEDED', 'VEHICLE_UNSTUCK_FAILED', 'DRIVER_LOST',

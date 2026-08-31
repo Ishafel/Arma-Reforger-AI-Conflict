@@ -4,8 +4,8 @@
 // state, or invokes another lifecycle component.
 class AICF_VehicleBoardingFlow
 {
-	protected static const float STAGING_THRESHOLD_METERS = 75.0;
-	protected static const float APPROACH_ACTION_RADIUS_METERS = 70.0;
+	protected static const float STAGING_THRESHOLD_METERS = 90.0;
+	protected static const float APPROACH_ACTION_RADIUS_METERS = 85.0;
 	protected static const float APPROACH_PROGRESS_METERS = 2.0;
 	protected static const int APPROACH_STALL_MS = 15000;
 	protected static const int APPROACH_MAX_RETRIES = 1;
@@ -15,10 +15,13 @@ class AICF_VehicleBoardingFlow
 	protected static const int PROGRESS_FRESH_MS = 10000;
 	protected static const int OWNERSHIP_AUDIT_INTERVAL_MS = 10000;
 	protected static const int MAX_ACTION_TOKENS = 16;
-	protected static const int EXACT_CARGO_READY_RETRY_STALL_MS = 4000;
+	protected static const int EXACT_CARGO_READY_RETRY_STALL_MS = 5000;
 	protected static const float EXACT_CARGO_READY_DISTANCE_METERS = 6.0;
-	protected static const int EXACT_CREW_READY_RETRY_STALL_MS = 4000;
+	protected static const int EXACT_CREW_READY_RETRY_STALL_MS = 5000;
 	protected static const float EXACT_CREW_READY_DISTANCE_METERS = 8.0;
+	protected static const int EXACT_SEAT_RECOVERY_OBSERVATION_MS = 5000;
+	protected static const int CREW_ROTATION_OBSERVATION_WINDOW_MS = 20000;
+	protected static const float HIDDEN_RECOVERY_MAX_VEHICLE_SPEED_MPS = 0.25;
 	protected ref AICF_Stage3Config m_Config;
 	protected ref AICF_VehicleWatchdog m_Watchdog;
 
@@ -123,14 +126,19 @@ class AICF_VehicleBoardingFlow
 			gunnerPhasePlanned);
 		int nowMs = System.GetTickCount();
 		int phaseTimeoutMs = m_Config.GetBoardingTimeoutMs();
+		int passengerTimeoutMs = m_Config.GetPassengerBoardingTimeoutMs();
 		int approachTimeoutMs = phaseTimeoutMs;
 		if (approachPlanned)
 			approachTimeoutMs = Math.Max(
 				phaseTimeoutMs,
 				m_Config.GetBoardingApproachTimeoutMs());
-		int totalTimeoutMs = phaseTimeoutMs * plannedPhaseCount;
+		int totalTimeoutMs = passengerTimeoutMs;
 		if (approachPlanned)
-			totalTimeoutMs += approachTimeoutMs - phaseTimeoutMs;
+			totalTimeoutMs += approachTimeoutMs;
+		if (driverPhasePlanned)
+			totalTimeoutMs += phaseTimeoutMs;
+		if (gunnerPhasePlanned)
+			totalTimeoutMs += phaseTimeoutMs;
 		int totalDeadlineMs = nowMs + totalTimeoutMs;
 		if (trip.GetAbsoluteDeadlineMs() > 0 && totalDeadlineMs > trip.GetAbsoluteDeadlineMs())
 			totalDeadlineMs = trip.GetAbsoluteDeadlineMs();
@@ -147,17 +155,19 @@ class AICF_VehicleBoardingFlow
 		state.ConfigureImmutablePlan(
 			phaseTimeoutMs,
 			approachTimeoutMs,
+			passengerTimeoutMs,
 			driverPhasePlanned,
 			gunnerPhasePlanned);
 		string startedDetails = DescribeContext(trip, lease, causationId, "ROLE_ORDERED_EXACT_BOARDING");
 		startedDetails += string.Format(
-			" alive=%1 mounted=%2 empty_accessible=%3 planned_phases=%4 phase_timeout_ms=%5 approach_timeout_ms=%6 total_timeout_ms=%7",
+			" alive=%1 mounted=%2 empty_accessible=%3 planned_phases=%4 phase_timeout_ms=%5 approach_timeout_ms=%6 passenger_timeout_ms=%7 total_timeout_ms=%8",
 			aliveCount,
 			mountedCount,
 			accessibleSeats,
 			plannedPhaseCount,
 			phaseTimeoutMs,
 			approachTimeoutMs,
+			passengerTimeoutMs,
 			totalTimeoutMs) + string.Format(
 			" total_deadline_ms=%1",
 			totalDeadlineMs);
@@ -244,7 +254,10 @@ class AICF_VehicleBoardingFlow
 				nearestDistanceMeters, farthestDistanceMeters, memberSamples);
 		ReportActionChanges(trip, lease, state, causationId);
 		if (state.MarkOwnershipAuditDue(nowMs, OWNERSHIP_AUDIT_INTERVAL_MS))
+		{
 			ReportOwnershipAudit(trip, lease, state, causationId, memberSamples);
+			ReportCurrentBlocker(trip, lease, state, causationId);
+		}
 
 		AICF_TripOutcome stepOutcome;
 		if (state.IsRoleResetAttempted() && !state.IsRoleRetryIssued())
@@ -282,6 +295,12 @@ class AICF_VehicleBoardingFlow
 		}
 		if (stepOutcome && stepOutcome.GetKind() != AICF_ETripOutcomeKind.WAIT)
 			return stepOutcome;
+		bool fullOccupancyConfirmationPending =
+			state.GetPhase() == AICF_EVehicleBoardingPhase.PASSENGERS &&
+			aliveCount > 0 && linkedCount == aliveCount &&
+			compartmentCount == aliveCount && characterVehicleCount == aliveCount &&
+			settledCount == aliveCount && gettingInCount == 0 && gettingOutCount == 0 &&
+			m_Watchdog.AreAllAliveMembersSettledInVehicle(group, vehicle);
 		return EnforceDeadline(
 			trip,
 			lease,
@@ -291,6 +310,7 @@ class AICF_VehicleBoardingFlow
 			aliveCount,
 			linkedCount,
 			settledCount,
+			fullOccupancyConfirmationPending,
 			memberSamples);
 	}
 
@@ -392,6 +412,62 @@ class AICF_VehicleBoardingFlow
 			return false;
 		}
 		return true;
+	}
+
+	protected bool CanApplyBoardingHiddenRecovery(
+		SCR_AIGroup group,
+		Vehicle vehicle,
+		IEntity entity,
+		out float nearestPlayerMeters,
+		out float threatMeasure,
+		out string rejectionReason)
+	{
+		nearestPlayerMeters = -1.0;
+		threatMeasure = -1.0;
+		rejectionReason = string.Empty;
+		if (!m_Config.GetHiddenRecoveryEnabled())
+		{
+			rejectionReason = "HIDDEN_RECOVERY_DISABLED";
+			return false;
+		}
+		if (!group || !vehicle || !entity ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(entity) ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle))
+		{
+			rejectionReason = "RECOVERY_AUTHORITY_OR_IDENTITY_INVALID";
+			return false;
+		}
+		string healthReason;
+		if (!InspectVehicleHealth(vehicle, healthReason))
+		{
+			rejectionReason = healthReason;
+			return false;
+		}
+		Physics physics = vehicle.GetPhysics();
+		if (!physics)
+		{
+			rejectionReason = "VEHICLE_PHYSICS_UNAVAILABLE";
+			return false;
+		}
+		float vehicleSpeedMetersPerSecond = physics.GetVelocity().Length();
+		if (vehicleSpeedMetersPerSecond > HIDDEN_RECOVERY_MAX_VEHICLE_SPEED_MPS)
+		{
+			rejectionReason = string.Format(
+				"VEHICLE_MOVING_%1_MPS",
+				vehicleSpeedMetersPerSecond);
+			return false;
+		}
+		if (!m_Watchdog.IsHiddenRecoveryCombatSafe(group, threatMeasure))
+		{
+			rejectionReason = string.Format("COMBAT_THREAT_%1", threatMeasure);
+			return false;
+		}
+		return m_Watchdog.CanApplyHiddenRecovery(
+			entity.GetOrigin(),
+			vehicle.GetOrigin(),
+			m_Config.GetHiddenRecoveryPlayerRadiusMeters(),
+			nearestPlayerMeters,
+			rejectionReason);
 	}
 
 	protected bool InspectCapacity(
@@ -623,8 +699,30 @@ class AICF_VehicleBoardingFlow
 		IEntity roleOccupant = ResolveRoleOccupant(lease.GetVehicle(), role);
 		bool occupantSettled = m_Watchdog.IsAliveGroupMember(group, roleOccupant) &&
 			m_Watchdog.IsMemberSettledInVehicle(roleOccupant, lease.GetVehicle());
+		if (occupantSettled && state.IsCrewRotationPending(role))
+			state.ClearCrewRotation();
 		if (occupantSettled && crewToken && roleOccupant != crewToken.GetReservedEntity())
 			return RejectRoleViolation(trip, lease, state, causationId, "EXACT_ROLE_STOLEN");
+		if (!occupantSettled && !crewToken && state.IsCrewRotationPending(role))
+		{
+			bool rotationIssued;
+			string rotationFailure;
+			if (!TryIssuePendingCrewRotation(
+				trip,
+				lease,
+				group,
+				state,
+				causationId,
+				role,
+				rotationIssued,
+				rotationFailure))
+			{
+				return Reject(trip, lease, causationId, rotationFailure);
+			}
+			if (rotationIssued || state.IsCrewRotationPending(role))
+				return AICF_TripOutcome.Wait("BOARDING_CREW_ROTATION_PENDING", causationId);
+			crewToken = FindCrewToken(state, role);
+		}
 		IEntity excludedEntity;
 		if (crewToken)
 			excludedEntity = crewToken.GetReservedEntity();
@@ -752,13 +850,12 @@ class AICF_VehicleBoardingFlow
 					return Reject(trip, lease, causationId, allocationFailure);
 				int nowMs = System.GetTickCount();
 				int allocationAgeMs = state.GetPassengerAllocationAgeMs(nowMs);
-				int allocationTimeoutMs = m_Config.GetPassengerStallMs();
 				string allocationContext = DescribeContext(
 					trip, lease, causationId, allocationFailure);
 				allocationContext += string.Format(
-					" allocation_age_ms=%1 allocation_timeout_ms=%2 required=%3 mapped=%4",
+					" allocation_age_ms=%1 phase_deadline_remaining_ms=%2 required=%3 mapped=%4",
 					allocationAgeMs,
-					allocationTimeoutMs,
+					Math.Max(0, state.GetPhaseDeadlineMs() - nowMs),
 					requiredCount,
 					mappedCount);
 				allocationContext += " " + allocationDetails;
@@ -768,37 +865,20 @@ class AICF_VehicleBoardingFlow
 						"PASSENGER_EXACT_CARGO_ALLOCATION_WAIT",
 						allocationContext);
 				}
-				if (allocationAgeMs < allocationTimeoutMs)
-				{
-					return AICF_TripOutcome.Wait(
-						"BOARDING_PASSENGER_EXACT_CARGO_ALLOCATION_PENDING",
-						causationId);
-				}
-				string timeoutReason = "PASSENGER_EXACT_CARGO_ALLOCATION_TIMEOUT";
-				string timeoutContext = DescribeContext(
-					trip, lease, causationId, timeoutReason);
-				timeoutContext += string.Format(
-					" allocation_age_ms=%1 allocation_timeout_ms=%2 required=%3 mapped=%4 last_allocation_reason=%5",
-					allocationAgeMs,
-					allocationTimeoutMs,
-					requiredCount,
-					mappedCount,
-					allocationFailure);
-				timeoutContext += " " + allocationDetails;
-				AICF_Stage3Diagnostics.Warning(
-					"PASSENGER_EXACT_CARGO_ALLOCATION_TIMEOUT",
-					timeoutContext);
-				return Reject(trip, lease, causationId, timeoutReason);
+				return AICF_TripOutcome.Wait(
+					"BOARDING_PASSENGER_EXACT_CARGO_ALLOCATION_PENDING",
+					causationId);
 			}
 			state.MarkPassengerPlanIssued();
 			AICF_Stage3Diagnostics.Info(
 				"PASSENGERS_ASSIGNED",
 				DescribeContext(trip, lease, causationId, "ROLE_ORDERED_GET_IN") +
 				string.Format(
-					" issued=%1 required=%2 mapped=%3 policy=ATOMIC_EXACT_CARGO_AFTER_MANDATORY_CREW",
+					" issued=%1 required=%2 mapped=%3 policy=DETERMINISTIC_PARTIAL_EXACT_CARGO_AFTER_MANDATORY_CREW allocation_pending=%4",
 					issuedCount,
 					requiredCount,
-					mappedCount));
+					mappedCount,
+					allocationPending));
 			return AICF_TripOutcome.Wait("BOARDING_PASSENGERS_ACTIVE", causationId);
 		}
 		string failureReason;
@@ -845,11 +925,45 @@ class AICF_VehicleBoardingFlow
 		int aliveCount,
 		int linkedCount,
 		int settledCount,
+		bool fullOccupancyConfirmationPending,
 		string memberSamples)
 	{
 		int nowMs = System.GetTickCount();
 		if (!state.IsSoftDeadlineReached(nowMs))
 			return AICF_TripOutcome.Wait("BOARDING_ACTIVE", causationId);
+		// Completion requires two consecutive settled polls, but the deadline used
+		// to run between the first and second poll. That terminal race could turn
+		// a physically complete 10/10 boarding into FALLBACK and force every member
+		// back out of the vehicle. A fully linked, transition-free and settled
+		// roster is completion evidence, never timeout evidence. Give
+		// ProcessPassengers the next scheduler tick to commit its second poll; any
+		// physical regression removes this suppression immediately.
+		if (fullOccupancyConfirmationPending)
+		{
+			if (state.MarkFullOccupancyDeadlineSuppressionReported())
+			{
+				string suppressionDetails = DescribeContext(
+					trip,
+					lease,
+					causationId,
+					"FULL_OCCUPANCY_AWAITING_SECOND_SETTLED_POLL");
+				suppressionDetails += string.Format(
+					" phase=%1 alive=%2 linked=%3 settled=%4 settled_polls=%5",
+					typename.EnumToString(AICF_EVehicleBoardingPhase, state.GetPhase()),
+					aliveCount,
+					linkedCount,
+					settledCount,
+					state.GetSettledPollCount());
+				suppressionDetails +=
+					" action=WAIT_NEXT_TICK_NO_FALLBACK no_force_disembark=1";
+				AICF_Stage3Diagnostics.Info(
+					"BOARDING_FULL_OCCUPANCY_DEADLINE_SUPPRESSED",
+					suppressionDetails);
+			}
+			return AICF_TripOutcome.Wait(
+				"BOARDING_FULL_OCCUPANCY_CONFIRMATION_PENDING",
+				causationId);
+		}
 		bool graceEligible = gettingInCount > 0 ||
 			state.HasRecentProgress(nowMs, PROGRESS_FRESH_MS);
 		bool graceWasEvaluated = state.IsGraceEvaluated();
@@ -1422,13 +1536,30 @@ class AICF_VehicleBoardingFlow
 		if (role == EAICompartmentType.Turret)
 			otherRole = EAICompartmentType.Pilot;
 		excludedEntity = ResolveRoleOccupant(lease.GetVehicle(), otherRole);
-		AIAgent agent = SelectCrewAgent(group, preferredAgent, excludedEntity);
+		AIAgent agent = SelectCrewAgent(
+			group,
+			preferredAgent,
+			excludedEntity,
+			roleSlot,
+			lease.GetVehicle(),
+			state,
+			role);
 		if (!agent)
 		{
 			failureReason = "MANDATORY_CREW_AGENT_UNAVAILABLE";
 			return false;
 		}
 		IEntity entity = agent.GetControlledEntity();
+		AICF_Stage3Diagnostics.Info(
+			"CREW_AGENT_SELECTED",
+			DescribeContext(trip, lease, causationId, "NEAREST_EXACT_ROLE_CANDIDATE") +
+			string.Format(
+				" role=%1 member=%2 distance_to_entry_m=%3 inside_boarding_radius=%4 transition_active=0",
+				typename.EnumToString(EAICompartmentType, role),
+				entity.GetID(),
+				MeasureCrewCandidateDistance(entity, roleSlot, lease.GetVehicle()),
+				vector.DistanceXZ(entity.GetOrigin(), lease.GetVehicle().GetOrigin()) <=
+					GetStagingThresholdMeters()));
 		SCR_AIUtilityComponent utility = ResolveOwnedUtility(agent, entity);
 		if (!utility)
 		{
@@ -1498,21 +1629,141 @@ class AICF_VehicleBoardingFlow
 			failureReason = "MANDATORY_CREW_TOKEN_STALE";
 			return false;
 		}
-		CompartmentAccessComponent access = ResolveAccess(token.GetReservedEntity());
-		if (access && (access.IsGettingIn() || access.IsGettingOut()))
+		IEntity entity = token.GetReservedEntity();
+		Vehicle vehicle = lease.GetVehicle();
+		float distanceMeters = vector.DistanceXZ(entity.GetOrigin(), vehicle.GetOrigin());
+		token.ObserveSpatialProgress(distanceMeters, APPROACH_PROGRESS_METERS);
+		CompartmentAccessComponent access = ResolveAccess(entity);
+		bool linked = CompartmentAccessComponent.GetVehicleIn(entity) == vehicle;
+		bool transitioning = access && (access.IsGettingIn() || access.IsGettingOut());
+		int animatedRecoveryAgeMs = token.GetAnimatedExactSeatRecoveryAgeMs();
+		bool animatedRecoveryExpired = token.WasAnimatedExactSeatRecoveryAttempted() &&
+			animatedRecoveryAgeMs >= EXACT_SEAT_RECOVERY_OBSERVATION_MS;
+		if (token.IsHiddenExactSeatRecoveryPending())
+		{
+			if (linked || (transitioning && !animatedRecoveryExpired))
+				return true;
+			float nearestPlayerMeters;
+			float threatMeasure;
+			string recoveryFence;
+			if (!CanApplyBoardingHiddenRecovery(
+				group,
+				vehicle,
+				entity,
+				nearestPlayerMeters,
+				threatMeasure,
+				recoveryFence))
+			{
+				bool rotated;
+				if (!TryRotateVisibleCrewCandidate(
+					trip,
+					lease,
+					group,
+					state,
+					causationId,
+					role,
+					token,
+					recoveryFence,
+					rotated,
+					failureReason))
+				{
+					return false;
+				}
+				if (rotated)
+					return true;
+				if (token.RecordRecoveryFence(recoveryFence))
+				{
+					AICF_Stage3Diagnostics.Info(
+						"CREW_HIDDEN_EXACT_ROLE_DEFERRED",
+						DescribeTokenContext(trip, lease, token, causationId, recoveryFence) +
+						string.Format(
+							" role=%1 nearest_player_m=%2 threat_measure=%3 action=VISIBLE_ROTATION_EXHAUSTED_WAIT_UNTIL_PHASE_DEADLINE",
+							typename.EnumToString(EAICompartmentType, role),
+							nearestPlayerMeters,
+							threatMeasure));
+				}
+				return true;
+			}
+			token.RecordRecoveryFence("PASSED");
+			if (!token.ApplyHiddenExactSeatRecovery())
+			{
+				bool rotated;
+				if (!TryRotateVisibleCrewCandidate(
+					trip,
+					lease,
+					group,
+					state,
+					causationId,
+					role,
+					token,
+					"EXACT_MUTATION_PRECONDITION_CHANGED",
+					rotated,
+					failureReason))
+				{
+					return false;
+				}
+				if (rotated)
+					return true;
+				token.RecordRecoveryFence("APPLY_REJECTED");
+				AICF_Stage3Diagnostics.Warning(
+					"CREW_HIDDEN_EXACT_ROLE_REJECTED",
+					DescribeTokenContext(
+						trip, lease, token, causationId, "EXACT_MUTATION_PRECONDITION_CHANGED") +
+					string.Format(
+						" role=%1 action=WAIT_UNTIL_PHASE_DEADLINE",
+						typename.EnumToString(EAICompartmentType, role)));
+				return true;
+			}
+			AICF_Stage3Diagnostics.Warning(
+				"CREW_HIDDEN_EXACT_ROLE_FORCED",
+				DescribeTokenContext(trip, lease, token, causationId, "FENCED_FORCE_TELEPORT") +
+				string.Format(
+					" role=%1 nearest_player_m=%2 threat_measure=%3 verify=NEXT_TICK",
+					typename.EnumToString(EAICompartmentType, role),
+					nearestPlayerMeters,
+					threatMeasure));
 			return true;
+		}
+		if (linked || (transitioning && !animatedRecoveryExpired))
+			return true;
+		if (token.WasAnimatedExactSeatRecoveryAttempted())
+		{
+			bool trackedRetryOwned = token.IsTrackedActionOwnedByUtility();
+			if (!animatedRecoveryExpired && trackedRetryOwned)
+				return true;
+			if (m_Config.GetHiddenRecoveryEnabled() &&
+				token.ScheduleHiddenExactSeatRecovery())
+			{
+				string hiddenReason = "TRACKED_EXACT_ROLE_OBSERVATION_EXPIRED";
+				if (!trackedRetryOwned)
+					hiddenReason = "TRACKED_EXACT_ROLE_OWNERSHIP_LOST";
+				AICF_Stage3Diagnostics.Warning(
+					"CREW_HIDDEN_EXACT_ROLE_SCHEDULED",
+					DescribeTokenContext(
+						trip, lease, token, causationId, hiddenReason) +
+					string.Format(
+						" role=%1 observation_ms=%2 tracked_retry_owned=%3 apply=NEXT_TICK",
+						typename.EnumToString(EAICompartmentType, role),
+						EXACT_SEAT_RECOVERY_OBSERVATION_MS,
+						trackedRetryOwned));
+			}
+			return true;
+		}
 		EAIActionState actionState = token.GetActionState();
-		bool exactCrewRetryDue = actionState == EAIActionState.RUNNING &&
-			token.GetRetryCount() < CREW_MAX_RETRIES &&
-			token.GetProgressAgeMs() >= EXACT_CREW_READY_RETRY_STALL_MS &&
+		bool actionTerminal = actionState == EAIActionState.COMPLETED ||
+			actionState == EAIActionState.FAILED;
+		bool runningStalled = actionState == EAIActionState.RUNNING &&
+			token.GetProgressAgeMs() >= m_Config.GetPassengerStallMs();
+		bool exactCrewRetryDue = (actionTerminal ||
+			token.GetProgressAgeMs() >= EXACT_CREW_READY_RETRY_STALL_MS) &&
 			token.IsReadyExactSeatWithoutTransition(
 				EXACT_CREW_READY_DISTANCE_METERS,
 				role);
 		if (exactCrewRetryDue)
 		{
-			bool requestAccepted;
+			bool replacementOwned;
 			int doorIndex;
-			if (token.RequestAnimatedExactSeatRecovery(requestAccepted, doorIndex))
+			if (token.ReissueTrackedExactSeatAction(replacementOwned, doorIndex))
 			{
 				string retryDetails = DescribeTokenContext(
 					trip,
@@ -1521,26 +1772,33 @@ class AICF_VehicleBoardingFlow
 					causationId,
 					"MANDATORY_CREW_READY_WITHOUT_TRANSITION");
 				retryDetails += string.Format(
-					" role=%1 trigger_stall_ms=%2 door_index=%3 request_accepted=%4 force_teleport=0",
+					" role=%1 trigger_stall_ms=%2 door_index=%3 replacement_owned=%4 tracked_action=1 direct_component_request=0",
 					typename.EnumToString(EAICompartmentType, role),
 					EXACT_CREW_READY_RETRY_STALL_MS,
 					doorIndex,
-					requestAccepted);
+					replacementOwned);
 				AICF_Stage3Diagnostics.Warning(
 					"CREW_ANIMATED_EXACT_ROLE_REISSUED",
 					retryDetails);
 				return true;
 			}
 		}
-		if (actionState != EAIActionState.COMPLETED && actionState != EAIActionState.FAILED)
+		if (!actionTerminal && !runningStalled)
 			return true;
 		if (token.GetRetryCount() >= CREW_MAX_RETRIES)
 		{
-			failureReason = "MANDATORY_CREW_ACTION_BUDGET_EXHAUSTED";
-			ReportPassengerAction(
-				"PASSENGER_ACTION_FAILURE",
-				trip, lease, token, causationId, failureReason, false);
-			return false;
+			if (m_Config.GetHiddenRecoveryEnabled() &&
+				token.ScheduleHiddenExactSeatRecovery())
+			{
+				AICF_Stage3Diagnostics.Warning(
+					"CREW_HIDDEN_EXACT_ROLE_SCHEDULED",
+					DescribeTokenContext(
+						trip, lease, token, causationId, "NORMAL_EXACT_ROLE_BUDGET_EXHAUSTED") +
+					string.Format(
+						" role=%1 apply=NEXT_TICK",
+						typename.EnumToString(EAICompartmentType, role)));
+			}
+			return true;
 		}
 		AIAgent retryAgent = token.GetAgent();
 		int retryCount = token.GetRetryCount() + 1;
@@ -1557,6 +1815,160 @@ class AICF_VehicleBoardingFlow
 		AICF_Stage3Diagnostics.Warning(
 			"PASSENGER_BOARDING_REISSUED",
 			DescribeTokenContext(trip, lease, retryToken, causationId, "MANDATORY_CREW_REISSUED"));
+		return true;
+	}
+
+	// A hidden correction can be forbidden by an observing player, LOS or combat
+	// while a normal exact-seat behavior remains safe and visible. Do not let one
+	// exhausted mandatory-crew candidate cancel transport for a staged squad:
+	// try each live eligible member at most once, preserving the phase/trip hard
+	// deadlines and the exact Pilot/Turret compartment.
+	protected bool TryRotateVisibleCrewCandidate(
+		AICF_TransportTrip trip,
+		AICF_VehicleLease lease,
+		SCR_AIGroup group,
+		AICF_VehicleBoardingState state,
+		string causationId,
+		EAICompartmentType role,
+		AICF_VehicleBoardingActionToken token,
+		string recoveryFence,
+		out bool rotated,
+		out string failureReason)
+	{
+		rotated = false;
+		failureReason = string.Empty;
+		if (!token || !token.MarkVisibleCrewRotationAttempted())
+			return true;
+		AIAgent previousAgent = token.GetAgent();
+		IEntity previousEntity = token.GetReservedEntity();
+		Vehicle vehicle = lease.GetVehicle();
+		BaseCompartmentSlot roleSlot = token.GetCompartment();
+		if (!previousAgent || !previousEntity || !vehicle || !roleSlot)
+		{
+			failureReason = "VISIBLE_CREW_ROTATION_CONTEXT_INVALID";
+			return false;
+		}
+
+		state.RejectCrewCandidate(role, previousEntity);
+		EAICompartmentType otherRole = EAICompartmentType.Turret;
+		if (role == EAICompartmentType.Turret)
+			otherRole = EAICompartmentType.Pilot;
+		IEntity excludedEntity = ResolveRoleOccupant(vehicle, otherRole);
+		AIAgent alternateAgent = SelectCrewAgent(
+			group,
+			null,
+			excludedEntity,
+			roleSlot,
+			vehicle,
+			state,
+			role);
+		if (!alternateAgent)
+		{
+			string exhaustedDetails = DescribeTokenContext(
+				trip, lease, token, causationId, recoveryFence);
+			exhaustedDetails += string.Format(
+				" role=%1 rejected_candidates=%2 action=WAIT_FOR_FENCE_OR_PHASE_DEADLINE",
+				typename.EnumToString(EAICompartmentType, role),
+				state.GetRejectedCrewCandidateCount(role));
+			AICF_Stage3Diagnostics.Info(
+				"CREW_VISIBLE_EXACT_ROLE_ROTATION_DEFERRED",
+				exhaustedDetails);
+			return true;
+		}
+
+		IEntity alternateEntity = alternateAgent.GetControlledEntity();
+		token.CancelOwnerSafe();
+		state.RemoveActionFence(token.GetFence());
+		state.GetTokens().Remove(token);
+		if (!state.ScheduleCrewRotation(
+			role,
+			previousEntity,
+			recoveryFence,
+			System.GetTickCount(),
+			CREW_ROTATION_OBSERVATION_WINDOW_MS))
+		{
+			state.RestoreCrewCandidate(role, previousEntity);
+			failureReason = "VISIBLE_CREW_ROTATION_SCHEDULE_REJECTED";
+			return false;
+		}
+
+		rotated = true;
+		string scheduledDetails = DescribeContext(
+			trip, lease, causationId, recoveryFence);
+		scheduledDetails += string.Format(
+			" role=%1 previous_member=%2 next_candidate=%3 rejected_candidates=%4",
+			typename.EnumToString(EAICompartmentType, role),
+			previousEntity.GetID().ToString(),
+			alternateEntity.GetID().ToString(),
+			state.GetRejectedCrewCandidateCount(role));
+		scheduledDetails += string.Format(
+			" action=WAIT_ONE_SCHEDULER_TICK_BEFORE_EXACT_ROLE_REISSUE phase_deadline_remaining_ms=%1",
+			Math.Max(0, state.GetPhaseDeadlineMs() - System.GetTickCount()));
+		AICF_Stage3Diagnostics.Warning("CREW_AGENT_ROTATION_SCHEDULED", scheduledDetails);
+		return true;
+	}
+
+	protected bool TryIssuePendingCrewRotation(
+		AICF_TransportTrip trip,
+		AICF_VehicleLease lease,
+		SCR_AIGroup group,
+		AICF_VehicleBoardingState state,
+		string causationId,
+		EAICompartmentType role,
+		out bool issued,
+		out string failureReason)
+	{
+		issued = false;
+		failureReason = string.Empty;
+		int nowMs = System.GetTickCount();
+		if (!state.IsCrewRotationReady(role, nowMs))
+			return true;
+		AICF_VehicleBoardingActionToken alternateToken;
+		string issueFailure;
+		if (!IssueCrewAction(
+			trip,
+			lease,
+			group,
+			state,
+			causationId,
+			role,
+			null,
+			0,
+			alternateToken,
+			issueFailure))
+		{
+			if (state.MarkCrewRotationWaitAudited())
+			{
+				AICF_Stage3Diagnostics.Info(
+					"CREW_AGENT_ROTATION_DEFERRED",
+					DescribeContext(trip, lease, causationId, issueFailure) +
+					string.Format(
+						" role=%1 previous_member=%2 handoff_age_ms=%3 action=WAIT_UNTIL_OLD_ACTION_TEARDOWN_SETTLES",
+						typename.EnumToString(EAICompartmentType, role),
+						state.GetCrewRotationPreviousEntityId(),
+						Math.Max(0, nowMs - state.GetCrewRotationScheduledAtMs())));
+			}
+			return true;
+		}
+
+		string previousEntityId = state.GetCrewRotationPreviousEntityId();
+		string recoveryFence = state.GetCrewRotationFence();
+		int handoffAgeMs = Math.Max(0, nowMs - state.GetCrewRotationScheduledAtMs());
+		state.ClearCrewRotation();
+		issued = true;
+		string rotatedDetails = DescribeTokenContext(
+			trip, lease, alternateToken, causationId, recoveryFence);
+		rotatedDetails += string.Format(
+			" role=%1 previous_member=%2 alternate_member=%3 rejected_candidates=%4",
+			typename.EnumToString(EAICompartmentType, role),
+			previousEntityId,
+			alternateToken.GetReservedEntity().GetID().ToString(),
+			state.GetRejectedCrewCandidateCount(role));
+		rotatedDetails += string.Format(
+			" action=TRACKED_VISIBLE_EXACT_ROLE_REISSUE handoff_age_ms=%1 phase_deadline_remaining_ms=%2",
+			handoffAgeMs,
+			Math.Max(0, state.GetPhaseDeadlineMs() - nowMs));
+		AICF_Stage3Diagnostics.Warning("CREW_AGENT_ROTATED", rotatedDetails);
 		return true;
 	}
 
@@ -1577,28 +1989,110 @@ class AICF_VehicleBoardingFlow
 	protected AIAgent SelectCrewAgent(
 		SCR_AIGroup group,
 		AIAgent preferredAgent,
-		IEntity excludedEntity)
+		IEntity excludedEntity,
+		BaseCompartmentSlot roleSlot,
+		Vehicle vehicle,
+		AICF_VehicleBoardingState state,
+		EAICompartmentType role)
 	{
-		if (preferredAgent && preferredAgent.GetParentGroup() == group &&
-			preferredAgent.GetControlledEntity() != excludedEntity &&
-			AICF_GroupRuntime.IsAliveCharacter(preferredAgent.GetControlledEntity()))
-		{
+		if (IsCrewCandidateEligible(
+			preferredAgent,
+			group,
+			excludedEntity,
+			vehicle) &&
+			(!state || !state.IsCrewCandidateRejected(
+				role, preferredAgent.GetControlledEntity())))
 			return preferredAgent;
-		}
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);
+		AIAgent selected;
+		float selectedDistanceMeters = -1.0;
+		bool selectedInsideRadius;
+		string selectedEntityId;
 		foreach (AIAgent agent : agents)
 		{
-			if (!agent || agent.GetParentGroup() != group)
+			if (!IsCrewCandidateEligible(agent, group, excludedEntity, vehicle))
 				continue;
 			IEntity entity = agent.GetControlledEntity();
-			if (entity != excludedEntity && AICF_GroupRuntime.IsAliveCharacter(entity) &&
-				CompartmentAccessComponent.GetVehicleIn(entity) == null)
-			{
-				return agent;
-			}
+			if (state && state.IsCrewCandidateRejected(role, entity))
+				continue;
+			float distanceMeters = MeasureCrewCandidateDistance(entity, roleSlot, vehicle);
+			bool insideRadius = vector.DistanceXZ(entity.GetOrigin(), vehicle.GetOrigin()) <=
+				GetStagingThresholdMeters();
+			string entityId = entity.GetID().ToString();
+			bool better = !selected;
+			if (!better && distanceMeters < selectedDistanceMeters)
+				better = true;
+			else if (!better && distanceMeters == selectedDistanceMeters &&
+				insideRadius != selectedInsideRadius)
+				better = insideRadius;
+			else if (!better && distanceMeters == selectedDistanceMeters &&
+				insideRadius == selectedInsideRadius &&
+				entityId.Compare(selectedEntityId) < 0)
+				better = true;
+			if (!better)
+				continue;
+			selected = agent;
+			selectedDistanceMeters = distanceMeters;
+			selectedInsideRadius = insideRadius;
+			selectedEntityId = entityId;
 		}
-		return null;
+		return selected;
+	}
+
+	protected bool IsCrewCandidateEligible(
+		AIAgent agent,
+		SCR_AIGroup group,
+		IEntity excludedEntity,
+		Vehicle vehicle)
+	{
+		if (!agent || !group || !vehicle || agent.GetParentGroup() != group)
+			return false;
+		IEntity entity = agent.GetControlledEntity();
+		if (!entity || entity == excludedEntity ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(entity) ||
+			CompartmentAccessComponent.GetVehicleIn(entity))
+		{
+			return false;
+		}
+		CompartmentAccessComponent access = ResolveAccess(entity);
+		return access && !access.IsInCompartment() &&
+			!access.IsGettingIn() && !access.IsGettingOut();
+	}
+
+	protected float MeasureCrewCandidateDistance(
+		IEntity entity,
+		BaseCompartmentSlot roleSlot,
+		Vehicle vehicle)
+	{
+		if (!entity || !vehicle)
+			return -1.0;
+		float bestDistanceMeters = vector.DistanceXZ(
+			entity.GetOrigin(),
+			vehicle.GetOrigin());
+		if (!roleSlot || !roleSlot.GetManager())
+			return bestDistanceMeters;
+		array<int> doorIndices = {};
+		roleSlot.GetAvailableDoorIndices(doorIndices);
+		foreach (int doorIndex : doorIndices)
+		{
+			CompartmentDoorInfo doorInfo = roleSlot.GetManager().GetDoorInfo(doorIndex);
+			if (!doorInfo)
+				continue;
+			PointInfo entryPoint = doorInfo.GetAIEntryPointInfo();
+			if (!entryPoint)
+				entryPoint = doorInfo.GetEntryPointInfo();
+			if (!entryPoint)
+				continue;
+			vector entryTransform[4];
+			entryPoint.GetWorldTransform(entryTransform);
+			float doorDistanceMeters = vector.DistanceXZ(
+				entity.GetOrigin(),
+				entryTransform[3]);
+			if (doorDistanceMeters < bestDistanceMeters)
+				bestDistanceMeters = doorDistanceMeters;
+		}
+		return bestDistanceMeters;
 	}
 
 	protected bool IssuePassengerPlan(
@@ -1625,9 +2119,14 @@ class AICF_VehicleBoardingFlow
 			failureReason = "PASSENGER_LIVE_IDENTITY_MISMATCH";
 			return false;
 		}
+		AICF_VehiclePassengerSeatPlan seatPlan = state.GetPassengerSeatPlan();
+		if (!seatPlan)
+		{
+			failureReason = "PASSENGER_SEAT_PLAN_STATE_MISSING";
+			return false;
+		}
 		array<AIAgent> pendingAgents = {};
 		array<IEntity> pendingEntities = {};
-		array<SCR_AIUtilityComponent> pendingUtilities = {};
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);
 		foreach (AIAgent agent : agents)
@@ -1651,118 +2150,257 @@ class AICF_VehicleBoardingFlow
 				failureReason = "PASSENGER_UNOWNED_TRANSITION_PRESENT";
 				return false;
 			}
-			SCR_AIUtilityComponent utility = ResolveOwnedUtility(agent, entity);
-			if (!utility)
+			if (!ResolveOwnedUtility(agent, entity))
 			{
 				failureReason = "PASSENGER_UTILITY_INVALID";
 				return false;
 			}
-			pendingAgents.Insert(agent);
-			pendingEntities.Insert(entity);
-			pendingUtilities.Insert(utility);
+			InsertPassengerCandidateSorted(
+				pendingAgents,
+				pendingEntities,
+				agent,
+				entity);
 		}
 		requiredCount = pendingAgents.Count();
-		if (state.GetTokens().Count() + pendingAgents.Count() > MAX_ACTION_TOKENS)
+		if (requiredCount > MAX_ACTION_TOKENS)
 		{
 			failureReason = "PASSENGER_TOKEN_LIMIT";
 			return false;
 		}
-		array<BaseCompartmentSlot> assignedCompartments = {};
-		for (int mappingIndex = 0; mappingIndex < pendingEntities.Count(); mappingIndex++)
+		array<BaseCompartmentSlot> plannedCompartments = {};
+		CollectStableCargoPlanCompartments(
+			lease.GetVehicle(),
+			group,
+			plannedCompartments);
+		if (plannedCompartments.Count() < requiredCount)
 		{
-			BaseCompartmentSlot compartment;
-			if (!FindAvailableCargoCompartment(
-				lease.GetVehicle(),
-				pendingEntities[mappingIndex],
-				assignedCompartments,
-				compartment))
-			{
-				mappedCount = assignedCompartments.Count();
-				allocationPending = true;
-				failureReason = "PASSENGER_EXACT_CARGO_ALLOCATION_PENDING";
-				allocationDetails = DescribeCargoAllocationSlots(
-					lease.GetVehicle(),
+			mappedCount = plannedCompartments.Count();
+			allocationPending = true;
+			failureReason = "PASSENGER_EXACT_CARGO_PLAN_PENDING";
+			allocationDetails = string.Format(
+				"required=%1 mapped=%2 plan_policy=STABLE_ENTITY_AND_SEAT_ID",
+				requiredCount,
+				mappedCount);
+			return false;
+		}
+		for (int mappingIndex = 0; mappingIndex < requiredCount; mappingIndex++)
+		{
+			AICF_VehicleAsyncFence planFence = CreateFence(
+				trip,
+				lease,
+				state,
+				causationId,
+				"CARGO_PLAN",
+				pendingAgents[mappingIndex]);
+			AICF_VehiclePassengerSeatPlanEntry entry =
+				new AICF_VehiclePassengerSeatPlanEntry(
+					planFence,
+					pendingAgents[mappingIndex],
 					pendingEntities[mappingIndex],
-					assignedCompartments,
-					requiredCount,
-					mappedCount);
-				return false;
-			}
-			assignedCompartments.Insert(compartment);
-		}
-		mappedCount = assignedCompartments.Count();
-
-		// Atomic mapping: every exact CargoCompartmentSlot is reserved and
-		// verified before the first SCR_AIGetInVehicle action is added.
-		for (int reserveIndex = 0; reserveIndex < assignedCompartments.Count(); reserveIndex++)
-		{
-			if (!IsCargoAllocationSlotAvailable(
-				assignedCompartments[reserveIndex], pendingEntities[reserveIndex]))
-			{
-				RollbackReservations(assignedCompartments, pendingEntities);
-				allocationPending = true;
-				failureReason = "PASSENGER_EXACT_CARGO_REVALIDATION_PENDING";
-				allocationDetails = DescribeCargoAllocationSlots(
 					lease.GetVehicle(),
-					pendingEntities[reserveIndex],
-					assignedCompartments,
-					requiredCount,
-					mappedCount);
-				return false;
-			}
-			assignedCompartments[reserveIndex].SetReserved(pendingEntities[reserveIndex]);
-			if (!assignedCompartments[reserveIndex].IsReservedBy(pendingEntities[reserveIndex]))
+					plannedCompartments[mappingIndex]);
+			if (!seatPlan.Track(entry, MAX_ACTION_TOKENS))
 			{
-				RollbackReservations(assignedCompartments, pendingEntities);
-				allocationPending = true;
-				failureReason = "PASSENGER_EXACT_CARGO_RESERVATION_PENDING";
-				allocationDetails = DescribeCargoAllocationSlots(
-					lease.GetVehicle(),
-					pendingEntities[reserveIndex],
-					assignedCompartments,
-					requiredCount,
-					mappedCount);
+				failureReason = "PASSENGER_SEAT_PLAN_TRACK_FAILED";
 				return false;
 			}
 		}
-
-		for (int actionIndex = 0; actionIndex < pendingAgents.Count(); actionIndex++)
+		mappedCount = seatPlan.Count();
+		int blockedCount;
+		if (!IssueReadyPassengerPlanActions(
+			trip,
+			lease,
+			group,
+			state,
+			causationId,
+			issuedCount,
+			blockedCount,
+			failureReason))
 		{
+			return false;
+		}
+		allocationPending = blockedCount > 0;
+		allocationDetails = DescribePassengerSeatPlan(state, lease);
+		return true;
+	}
+
+	protected void InsertPassengerCandidateSorted(
+		array<AIAgent> agents,
+		array<IEntity> entities,
+		AIAgent agent,
+		IEntity entity)
+	{
+		string entityId = entity.GetID().ToString();
+		int insertIndex = entities.Count();
+		for (int index = 0; index < entities.Count(); index++)
+		{
+			if (entityId.Compare(entities[index].GetID().ToString()) < 0)
+			{
+				insertIndex = index;
+				break;
+			}
+		}
+		agents.InsertAt(agent, insertIndex);
+		entities.InsertAt(entity, insertIndex);
+	}
+
+	protected void CollectStableCargoPlanCompartments(
+		Vehicle vehicle,
+		SCR_AIGroup group,
+		out array<BaseCompartmentSlot> plannedCompartments)
+	{
+		plannedCompartments.Clear();
+		if (!vehicle)
+			return;
+		BaseCompartmentManagerComponent manager = BaseCompartmentManagerComponent.Cast(
+			vehicle.FindComponent(BaseCompartmentManagerComponent));
+		if (!manager)
+			return;
+		array<BaseCompartmentSlot> compartments = {};
+		manager.GetCompartments(compartments);
+		foreach (BaseCompartmentSlot compartment : compartments)
+		{
+			// Build the immutable exact-seat plan from physical Cargo topology, not
+			// transient occupancy, accessibility or reservation state. Those mutable
+			// blockers are repaired per pair without remapping or rolling back pairs
+			// that are already progressing correctly.
+			if (!compartment || !CargoCompartmentSlot.Cast(compartment) ||
+				compartment.GetVehicle() != vehicle)
+			{
+				continue;
+			}
+			IEntity occupant = compartment.GetOccupant();
+			if (occupant && m_Watchdog.IsAliveGroupMember(group, occupant))
+				continue;
+			int insertIndex = plannedCompartments.Count();
+			for (int index = 0; index < plannedCompartments.Count(); index++)
+			{
+				BaseCompartmentSlot sorted = plannedCompartments[index];
+				bool compartmentReady = compartment.IsCompartmentAccessible() &&
+					!compartment.GetOccupant() && !compartment.IsReserved();
+				bool sortedReady = sorted.IsCompartmentAccessible() &&
+					!sorted.GetOccupant() && !sorted.IsReserved();
+				if ((compartmentReady && !sortedReady) ||
+					(compartmentReady == sortedReady &&
+					(compartment.GetCompartmentMgrID() < sorted.GetCompartmentMgrID() ||
+					(compartment.GetCompartmentMgrID() == sorted.GetCompartmentMgrID() &&
+					compartment.GetCompartmentSlotID() < sorted.GetCompartmentSlotID()))))
+				{
+					insertIndex = index;
+					break;
+				}
+			}
+			plannedCompartments.InsertAt(compartment, insertIndex);
+		}
+	}
+
+	protected bool IssueReadyPassengerPlanActions(
+		AICF_TransportTrip trip,
+		AICF_VehicleLease lease,
+		SCR_AIGroup group,
+		AICF_VehicleBoardingState state,
+		string causationId,
+		out int issuedCount,
+		out int blockedCount,
+		out string failureReason)
+	{
+		issuedCount = 0;
+		blockedCount = 0;
+		failureReason = string.Empty;
+		AICF_VehiclePassengerSeatPlan seatPlan = state.GetPassengerSeatPlan();
+		if (!seatPlan || !IsLeaseLiveIdentity(lease))
+		{
+			failureReason = "PASSENGER_SEAT_PLAN_IDENTITY_INVALID";
+			return false;
+		}
+		for (int index = 0; index < seatPlan.Count(); index++)
+		{
+			AICF_VehiclePassengerSeatPlanEntry entry = seatPlan.Get(index);
+			if (!entry || !entry.MatchesIdentity(trip, lease, group))
+			{
+				failureReason = "PASSENGER_SEAT_PLAN_ENTRY_STALE";
+				return false;
+			}
+			if (!entry.IsAliveCurrentMember(group))
+			{
+				entry.ReleaseReservationOwnerSafe();
+				continue;
+			}
+			IEntity entity = entry.GetEntity();
+			if (m_Watchdog.IsMemberSettledInVehicle(entity, lease.GetVehicle()))
+			{
+				if (!entry.IsExactCompartmentSettled(m_Watchdog))
+				{
+					failureReason = "PASSENGER_SEAT_PLAN_EXACT_COMPARTMENT_MISMATCH";
+					return false;
+				}
+				continue;
+			}
+			if (state.GetTokens().FindByAgent(entry.GetAgent()))
+				continue;
+			CompartmentAccessComponent access = ResolveAccess(entity);
+			if (!access)
+			{
+				failureReason = "PASSENGER_SEAT_PLAN_ACCESS_MISSING";
+				return false;
+			}
+			if (access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut() ||
+				CompartmentAccessComponent.GetVehicleIn(entity))
+			{
+				blockedCount++;
+				continue;
+			}
+			if (!entry.IsSeatReadyForAction())
+			{
+				blockedCount++;
+				continue;
+			}
+			BaseCompartmentSlot compartment = entry.GetCompartment();
+			compartment.SetReserved(entity);
+			if (!compartment.IsReservedBy(entity))
+			{
+				blockedCount++;
+				continue;
+			}
+			SCR_AIUtilityComponent utility = ResolveOwnedUtility(entry.GetAgent(), entity);
+			if (!utility)
+			{
+				entry.ReleaseReservationOwnerSafe();
+				failureReason = "PASSENGER_SEAT_PLAN_UTILITY_INVALID";
+				return false;
+			}
 			SCR_AIGetInVehicle action = new SCR_AIGetInVehicle(
-				pendingUtilities[actionIndex],
+				utility,
 				null,
 				lease.GetVehicle(),
-				assignedCompartments[actionIndex],
+				compartment,
 				EAICompartmentType.Cargo,
 				SCR_AIActionBase.PRIORITY_BEHAVIOR_GET_IN_VEHICLE,
 				SCR_AIActionBase.PRIORITY_LEVEL_PLAYER);
 			AICF_VehicleAsyncFence fence = CreateFence(
-				trip, lease, state, causationId, "CARGO", pendingAgents[actionIndex]);
+				trip, lease, state, causationId, "CARGO", entry.GetAgent());
 			AICF_VehicleBoardingActionToken token = new AICF_VehicleBoardingActionToken(
 				fence,
-				pendingAgents[actionIndex],
-				pendingEntities[actionIndex],
+				entry.GetAgent(),
+				entity,
 				lease.GetVehicle(),
 				null,
 				action,
-				assignedCompartments[actionIndex],
+				compartment,
 				EAICompartmentType.Cargo,
 				0,
-				vector.DistanceXZ(
-					pendingEntities[actionIndex].GetOrigin(),
-					lease.GetVehicle().GetOrigin()));
+				vector.DistanceXZ(entity.GetOrigin(), lease.GetVehicle().GetOrigin()));
 			if (!TrackToken(state, token))
 			{
-				RollbackReservations(assignedCompartments, pendingEntities);
-				state.GetTokens().CancelAllOwnerSafe();
+				entry.ReleaseReservationOwnerSafe();
 				failureReason = "PASSENGER_TOKEN_TRACK_FAILED";
 				return false;
 			}
-			pendingUtilities[actionIndex].AddAction(action);
+			utility.AddAction(action);
 			issuedCount++;
 			ReportPassengerAction(
 				"PASSENGER_ACTION_TRANSITION",
-				trip, lease, token, causationId, "EXACT_CARGO_ISSUED", true);
+				trip, lease, token, causationId, "EXACT_CARGO_PLAN_PAIR_ISSUED", true);
 		}
 		return true;
 	}
@@ -1822,60 +2460,62 @@ class AICF_VehicleBoardingFlow
 				lease.GetVehicle();
 			bool transitioning = access &&
 				(access.IsGettingIn() || access.IsGettingOut());
+			int animatedRecoveryAgeMs = token.GetAnimatedExactSeatRecoveryAgeMs();
+			bool animatedRecoveryExpired =
+				token.WasAnimatedExactSeatRecoveryAttempted() &&
+				animatedRecoveryAgeMs >= EXACT_SEAT_RECOVERY_OBSERVATION_MS;
 			if (token.IsHiddenExactSeatRecoveryPending())
 			{
 				// A link may become observable one poll before the watchdog's full
 				// settled postcondition. Never race that transition with a force.
 				if (linked ||
-					(transitioning && !token.WasAnimatedExactSeatRecoveryAttempted()))
+					(transitioning && !animatedRecoveryExpired))
 					continue;
-				if (!m_Config.GetHiddenRecoveryEnabled())
-				{
-					failureReason = "PASSENGER_HIDDEN_EXACT_CARGO_DISABLED";
-					ReportPassengerAction(
-						"PASSENGER_ACTION_FAILURE",
-						trip, lease, token, causationId, failureReason, false);
-					return false;
-				}
 				float nearestPlayerMeters;
-				string hiddenFenceReason;
-				float playerRadiusMeters = m_Config.GetHiddenRecoveryPlayerRadiusMeters();
-				if (!m_Watchdog.CanApplyHiddenRecovery(
-					entity.GetOrigin(),
-					lease.GetVehicle().GetOrigin(),
-					playerRadiusMeters,
+				float threatMeasure;
+				string recoveryFence;
+				if (!CanApplyBoardingHiddenRecovery(
+					group,
+					lease.GetVehicle(),
+					entity,
 					nearestPlayerMeters,
-					hiddenFenceReason))
+					threatMeasure,
+					recoveryFence))
 				{
-					failureReason = "PASSENGER_HIDDEN_EXACT_CARGO_FENCE_REJECTED";
-					AICF_Stage3Diagnostics.Warning(
-						"PASSENGER_HIDDEN_EXACT_CARGO_REJECTED",
-						DescribeTokenContext(
-							trip, lease, token, causationId, hiddenFenceReason) +
-						string.Format(
-							" player_radius_m=%1 nearest_player_m=%2",
-							playerRadiusMeters,
-							nearestPlayerMeters));
-					return false;
+					if (token.RecordRecoveryFence(recoveryFence))
+					{
+						AICF_Stage3Diagnostics.Info(
+							"PASSENGER_HIDDEN_EXACT_CARGO_DEFERRED",
+							DescribeTokenContext(
+								trip, lease, token, causationId, recoveryFence) +
+							string.Format(
+								" nearest_player_m=%1 threat_measure=%2 action=WAIT_UNTIL_PHASE_DEADLINE",
+								nearestPlayerMeters,
+								threatMeasure));
+					}
+					continue;
 				}
+				token.RecordRecoveryFence("PASSED");
 				int hiddenPendingAgeMs =
 					token.GetHiddenExactSeatRecoveryPendingAgeMs();
 				if (!token.ApplyHiddenExactSeatRecovery())
 				{
-					failureReason = "PASSENGER_HIDDEN_EXACT_CARGO_APPLY_REJECTED";
-					ReportPassengerAction(
-						"PASSENGER_ACTION_FAILURE",
-						trip, lease, token, causationId, failureReason, false);
-					return false;
+					token.RecordRecoveryFence("APPLY_REJECTED");
+					AICF_Stage3Diagnostics.Warning(
+						"PASSENGER_HIDDEN_EXACT_CARGO_REJECTED",
+						DescribeTokenContext(
+							trip, lease, token, causationId,
+							"EXACT_MUTATION_PRECONDITION_CHANGED") +
+						" action=WAIT_UNTIL_PHASE_DEADLINE");
+					continue;
 				}
 				AICF_Stage3Diagnostics.Warning(
 					"PASSENGER_HIDDEN_EXACT_CARGO_FORCED",
-					DescribeTokenContext(
-						trip, lease, token, causationId, "NO_PLAYER_PROXIMITY_FORCE_TELEPORT") +
+					DescribeTokenContext(trip, lease, token, causationId, "FENCED_FORCE_TELEPORT") +
 					string.Format(
-						" player_radius_m=%1 nearest_player_m=%2 pending_age_ms=%3 animated_attempted=%4 animated_accepted=%5",
-						playerRadiusMeters,
+						" nearest_player_m=%1 threat_measure=%2 pending_age_ms=%3 animated_attempted=%4 animated_accepted=%5 verify=NEXT_TICK",
 						nearestPlayerMeters,
+						threatMeasure,
 						hiddenPendingAgeMs,
 						token.WasAnimatedExactSeatRecoveryAttempted(),
 						token.WasAnimatedExactSeatRecoveryAccepted()));
@@ -1884,10 +2524,6 @@ class AICF_VehicleBoardingFlow
 				return true;
 			}
 			int configuredStallMs = m_Config.GetPassengerStallMs();
-			int animatedRecoveryAgeMs = token.GetAnimatedExactSeatRecoveryAgeMs();
-			bool animatedRecoveryExpired =
-				token.WasAnimatedExactSeatRecoveryAttempted() &&
-				animatedRecoveryAgeMs >= configuredStallMs;
 			if (linked || (transitioning && !animatedRecoveryExpired))
 				continue;
 			float distanceMeters = vector.DistanceXZ(
@@ -1897,38 +2533,16 @@ class AICF_VehicleBoardingFlow
 			EAIActionState actionState = token.GetActionState();
 			int progressAgeMs = token.GetProgressAgeMs();
 			bool readyAlternateDue = actionState == EAIActionState.RUNNING &&
-				token.GetRetryCount() == 0 &&
-				m_Config.GetPassengerMaxRetries() > 0 &&
+				!token.WasAnimatedExactSeatRecoveryAttempted() &&
 				progressAgeMs >= EXACT_CARGO_READY_RETRY_STALL_MS &&
 				token.IsReadyExactCargoWithoutTransition(
 					EXACT_CARGO_READY_DISTANCE_METERS);
 			if (readyAlternateDue)
 			{
-				AICF_VehicleBoardingActionToken managerOwner =
-					FindAnimatedExactSeatRecoveryOwner(tokens, token);
-				if (managerOwner)
-				{
-					if (token.MarkAnimatedManagerWaitAudited())
-					{
-						string waitDetails = DescribeTokenContext(
-							trip, lease, token, causationId,
-							"COMPARTMENT_MANAGER_RECOVERY_SERIALIZED");
-						waitDetails += string.Format(
-							" blocking_action_token=%1 blocking_agent=%2 blocking_age_ms=%3 manager_id=%4",
-							managerOwner.GetActionToken(),
-							managerOwner.GetReservedEntity().GetID().ToString(),
-							managerOwner.GetAnimatedExactSeatRecoveryAgeMs(),
-							token.GetAssignedManagerId());
-						AICF_Stage3Diagnostics.Warning(
-							"PASSENGER_ANIMATED_EXACT_CARGO_MANAGER_WAIT",
-							waitDetails);
-					}
-					continue;
-				}
-				bool animatedRequestAccepted;
+				bool replacementOwned;
 				int animatedDoorIndex;
-				if (!token.RequestAnimatedExactSeatRecovery(
-					animatedRequestAccepted,
+				if (!token.ReissueTrackedExactSeatAction(
+					replacementOwned,
 					animatedDoorIndex))
 				{
 					AICF_Stage3Diagnostics.Warning(
@@ -1940,21 +2554,26 @@ class AICF_VehicleBoardingFlow
 				}
 				string animatedDetails = DescribeTokenContext(
 					trip, lease, token, causationId,
-					"READY_NO_TRANSITION_NON_TELEPORT_REQUEST");
+					"READY_NO_TRANSITION_TRACKED_EXACT_ACTION_REPLACED");
 				animatedDetails += string.Format(
-					" trigger_stall_ms=%1 configured_observation_ms=%2 door_index=%3 request_accepted=%4 force_teleport=0 manager_id=%5",
+					" trigger_stall_ms=%1 configured_observation_ms=%2 door_index=%3 replacement_owned=%4 manager_id=%5",
 					EXACT_CARGO_READY_RETRY_STALL_MS,
-					configuredStallMs,
+					EXACT_SEAT_RECOVERY_OBSERVATION_MS,
 					animatedDoorIndex,
-					animatedRequestAccepted,
+					replacementOwned,
 					token.GetAssignedManagerId());
+				animatedDetails +=
+					" tracked_action=1 direct_component_request=0 force_teleport=0";
 				AICF_Stage3Diagnostics.Warning(
 					"PASSENGER_ANIMATED_EXACT_CARGO_REQUESTED",
 					animatedDetails);
 				return true;
 			}
+			bool trackedRetryOwned = token.IsTrackedActionOwnedByUtility();
+			bool trackedRetryOrphaned = token.WasAnimatedExactSeatRecoveryAttempted() &&
+				!trackedRetryOwned;
 			if (token.WasAnimatedExactSeatRecoveryAttempted() &&
-				!animatedRecoveryExpired)
+				!animatedRecoveryExpired && trackedRetryOwned)
 			{
 				continue;
 			}
@@ -1962,48 +2581,55 @@ class AICF_VehicleBoardingFlow
 				actionState == EAIActionState.FAILED;
 			bool runningStalled = actionState == EAIActionState.RUNNING &&
 				progressAgeMs >= configuredStallMs;
-			if (!actionTerminal && !runningStalled && !animatedRecoveryExpired)
+			if (!actionTerminal && !runningStalled && !animatedRecoveryExpired &&
+				!trackedRetryOrphaned)
 				continue;
 			bool recoveryBudgetExhausted = token.GetRetryCount() >=
 				m_Config.GetPassengerMaxRetries();
-			// A direct animated request still transitioning after its complete
+			// A tracked replacement still transitioning after its complete
 			// observation window cannot be safely replaced by another stock action.
 			if (recoveryBudgetExhausted ||
 				(animatedRecoveryExpired && transitioning))
 			{
-				if ((runningStalled || animatedRecoveryExpired) &&
-					m_Config.GetHiddenRecoveryEnabled() &&
+				if ((runningStalled || animatedRecoveryExpired || trackedRetryOrphaned) &&
 					token.ScheduleHiddenExactSeatRecovery())
 				{
 					string hiddenReason = "REPEATED_RUNNING_STALL";
 					if (animatedRecoveryExpired)
-						hiddenReason = "ANIMATED_EXACT_CARGO_OBSERVATION_EXPIRED";
+						hiddenReason = "TRACKED_EXACT_CARGO_OBSERVATION_EXPIRED";
+					else if (trackedRetryOrphaned)
+						hiddenReason = "TRACKED_EXACT_CARGO_OWNERSHIP_LOST";
 					AICF_Stage3Diagnostics.Warning(
 						"PASSENGER_HIDDEN_EXACT_CARGO_SCHEDULED",
 						DescribeTokenContext(
 							trip, lease, token, causationId, hiddenReason) +
 						string.Format(
-							" stall_ms=%1 normal_retry_budget=%2 animated_attempted=%3 animated_accepted=%4 animated_age_ms=%5 apply=NEXT_TICK",
+							" stall_ms=%1 normal_retry_budget=%2 tracked_retry_attempted=%3 tracked_retry_owned=%4 retry_age_ms=%5 apply=NEXT_TICK",
 							configuredStallMs,
 							m_Config.GetPassengerMaxRetries(),
 							token.WasAnimatedExactSeatRecoveryAttempted(),
-							token.WasAnimatedExactSeatRecoveryAccepted(),
+							trackedRetryOwned,
 							animatedRecoveryAgeMs));
 					return true;
 				}
-				failureReason = "PASSENGER_ACTION_BUDGET_EXHAUSTED";
-				if (runningStalled || animatedRecoveryExpired)
-					failureReason = "PASSENGER_EXACT_CARGO_STALL_BUDGET_EXHAUSTED";
-				ReportPassengerAction(
-					"PASSENGER_ACTION_FAILURE",
-					trip, lease, token, causationId, failureReason, false);
-				return false;
+				if (token.RecordRecoveryFence("RECOVERY_SCHEDULE_REJECTED"))
+				{
+					AICF_Stage3Diagnostics.Warning(
+						"PASSENGER_EXACT_CARGO_RECOVERY_DEFERRED",
+						DescribeTokenContext(
+							trip, lease, token, causationId,
+							"RECOVERY_SCHEDULE_REJECTED") +
+						" action=WAIT_UNTIL_PHASE_DEADLINE");
+				}
+				continue;
 			}
-			if (runningStalled || animatedRecoveryExpired)
+			if (runningStalled || animatedRecoveryExpired || trackedRetryOrphaned)
 			{
 				string stallReason = "RUNNING_NO_SPATIAL_PROGRESS";
 				if (animatedRecoveryExpired)
-					stallReason = "ANIMATED_EXACT_CARGO_OBSERVATION_EXPIRED";
+					stallReason = "TRACKED_EXACT_CARGO_OBSERVATION_EXPIRED";
+				else if (trackedRetryOrphaned)
+					stallReason = "TRACKED_EXACT_CARGO_OWNERSHIP_LOST";
 				AICF_Stage3Diagnostics.Warning(
 					"PASSENGER_EXACT_CARGO_STALLED",
 					DescribeTokenContext(
@@ -2030,12 +2656,27 @@ class AICF_VehicleBoardingFlow
 				DescribeTokenContext(trip, lease, retryToken, causationId, "EXACT_CARGO_REISSUED"));
 			// Avoid immediately restarting several actions that may contend for the
 			// same vehicle entry. The next scheduler tick may supervise the next one.
-			if (runningStalled || animatedRecoveryExpired)
+			if (runningStalled || animatedRecoveryExpired || trackedRetryOrphaned)
 				return true;
+		}
+		int issuedPlanActions;
+		int blockedPlanActions;
+		if (!IssueReadyPassengerPlanActions(
+			trip,
+			lease,
+			group,
+			state,
+			causationId,
+			issuedPlanActions,
+			blockedPlanActions,
+			failureReason))
+		{
+			return false;
 		}
 
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);
+		AICF_VehiclePassengerSeatPlan seatPlan = state.GetPassengerSeatPlan();
 		foreach (AIAgent currentAgent : agents)
 		{
 			if (!currentAgent || currentAgent.GetParentGroup() != group)
@@ -2054,39 +2695,13 @@ class AICF_VehicleBoardingFlow
 			}
 			if (tokens.FindByAgent(currentAgent))
 				continue;
-			failureReason = "PASSENGER_ACTION_TOKEN_MISSING";
-			return false;
+			if (!seatPlan || !seatPlan.FindByAgent(currentAgent))
+			{
+				failureReason = "PASSENGER_SEAT_PLAN_ENTRY_MISSING";
+				return false;
+			}
 		}
 		return true;
-	}
-
-	// Only one alternate direct request may own a compartment manager at a
-	// time. Other stock actions remain untouched while the owner either settles
-	// or reaches its bounded hidden fallback.
-	protected AICF_VehicleBoardingActionToken FindAnimatedExactSeatRecoveryOwner(
-		AICF_VehicleBoardingTokenSet tokens,
-		AICF_VehicleBoardingActionToken candidate)
-	{
-		if (!tokens || !candidate)
-			return null;
-		int managerId = candidate.GetAssignedManagerId();
-		if (managerId == -1)
-			return null;
-		for (int index = 0; index < tokens.Count(); index++)
-		{
-			AICF_VehicleBoardingActionToken token = tokens.Get(index);
-			if (!token || token == candidate || !token.GetGetInAction() ||
-				token.GetCompartmentType() != EAICompartmentType.Cargo ||
-				token.GetAssignedManagerId() != managerId ||
-				!token.GetReservedEntity() ||
-				!token.WasAnimatedExactSeatRecoveryAttempted() ||
-				!token.WasAnimatedExactSeatRecoveryAccepted())
-			{
-				continue;
-			}
-			return token;
-		}
-		return null;
 	}
 
 	protected bool ReissueExactCargo(
@@ -2438,6 +3053,136 @@ class AICF_VehicleBoardingFlow
 		AICF_Stage3Diagnostics.Info("BOARDING_ACTION_OWNERSHIP", details);
 	}
 
+	protected void ReportCurrentBlocker(
+		AICF_TransportTrip trip,
+		AICF_VehicleLease lease,
+		AICF_VehicleBoardingState state,
+		string causationId)
+	{
+		if (!trip || !lease || !state)
+			return;
+		AICF_VehicleBoardingActionToken blockerToken;
+		int blockerProgressAgeMs = -1;
+		string blockerEntityId = "NONE";
+		AICF_VehicleBoardingTokenSet tokens = state.GetTokens();
+		for (int index = 0; index < tokens.Count(); index++)
+		{
+			AICF_VehicleBoardingActionToken token = tokens.Get(index);
+			if (!token || !token.GetReservedEntity() ||
+				token.IsExactCompartmentSettled(m_Watchdog, lease.GetVehicle()))
+			{
+				continue;
+			}
+			int progressAgeMs = token.GetProgressAgeMs();
+			string entityId = token.GetReservedEntity().GetID().ToString();
+			if (!blockerToken || progressAgeMs > blockerProgressAgeMs ||
+				(progressAgeMs == blockerProgressAgeMs &&
+				entityId.Compare(blockerEntityId) < 0))
+			{
+				blockerToken = token;
+				blockerProgressAgeMs = progressAgeMs;
+				blockerEntityId = entityId;
+			}
+		}
+		int deadlineRemainingMs = Math.Max(
+			0,
+			state.GetPhaseDeadlineMs() - System.GetTickCount());
+		string phaseName = typename.EnumToString(
+			AICF_EVehicleBoardingPhase,
+			state.GetPhase());
+		if (blockerToken)
+		{
+			CompartmentAccessComponent access = ResolveAccess(blockerToken.GetReservedEntity());
+			bool linked = CompartmentAccessComponent.GetVehicleIn(
+				blockerToken.GetReservedEntity()) == lease.GetVehicle();
+			bool gettingIn = access && access.IsGettingIn();
+			string seat = string.Format(
+				"%1:%2",
+				blockerToken.GetAssignedManagerId(),
+				blockerToken.GetAssignedSlotId());
+			string details = DescribeContext(
+				trip, lease, causationId, "RATE_LIMITED_CURRENT_BLOCKER");
+			details += string.Format(
+				" phase=%1 blocker_member=%2 distance_m=%3 action_state=%4 progress_age_ms=%5 retry=%6",
+				phaseName,
+				blockerEntityId,
+				blockerToken.GetCurrentDistanceMeters(),
+				typename.EnumToString(EAIActionState, blockerToken.GetActionState()),
+				blockerProgressAgeMs,
+				blockerToken.GetRetryCount());
+			details += string.Format(
+				" seat=%1 linked=%2 getting_in=%3 recovery_fence=%4 deadline_remaining_ms=%5",
+				seat,
+				linked,
+				gettingIn,
+				blockerToken.GetRecoveryFence(),
+				deadlineRemainingMs);
+			AICF_Stage3Diagnostics.Info("BOARDING_BLOCKER", details);
+			return;
+		}
+		AICF_VehiclePassengerSeatPlan seatPlan = state.GetPassengerSeatPlan();
+		AICF_VehiclePassengerSeatPlanEntry blockedEntry;
+		if (seatPlan)
+		{
+			SCR_AIGroup group = trip.GetAssignment().GetGroup();
+			for (int planIndex = 0; planIndex < seatPlan.Count(); planIndex++)
+			{
+				AICF_VehiclePassengerSeatPlanEntry entry = seatPlan.Get(planIndex);
+				if (!entry || !entry.GetEntity() ||
+					!entry.IsAliveCurrentMember(group) ||
+					entry.IsExactCompartmentSettled(m_Watchdog) ||
+					state.GetTokens().FindByAgent(entry.GetAgent()))
+				{
+					continue;
+				}
+				if (!blockedEntry || entry.GetEntity().GetID().ToString().Compare(
+					blockedEntry.GetEntity().GetID().ToString()) < 0)
+				{
+					blockedEntry = entry;
+				}
+			}
+		}
+		if (blockedEntry)
+		{
+			IEntity blockedEntity = blockedEntry.GetEntity();
+			BaseCompartmentSlot blockedSeat = blockedEntry.GetCompartment();
+			CompartmentAccessComponent blockedAccess = ResolveAccess(blockedEntity);
+			bool linked = CompartmentAccessComponent.GetVehicleIn(blockedEntity) ==
+				lease.GetVehicle();
+			bool gettingIn = blockedAccess && blockedAccess.IsGettingIn();
+			string recoveryFence = "SEAT_UNAVAILABLE";
+			if (blockedAccess && (blockedAccess.IsGettingIn() || blockedAccess.IsGettingOut()))
+				recoveryFence = "MEMBER_TRANSITION_ACTIVE";
+			string planDetails = DescribeContext(
+				trip, lease, causationId, "PARTIAL_SEAT_PLAN_BLOCKER");
+			planDetails += string.Format(
+				" phase=%1 blocker_member=%2 distance_m=%3 action_state=WAITING_FOR_SEAT progress_age_ms=%4 retry=0",
+				phaseName,
+				blockedEntity.GetID().ToString(),
+				vector.DistanceXZ(blockedEntity.GetOrigin(), lease.GetVehicle().GetOrigin()),
+				Math.Max(0, System.GetTickCount() - state.GetPhaseStartedAtMs()));
+			planDetails += string.Format(
+				" seat=%1:%2 linked=%3 getting_in=%4 recovery_fence=%5 deadline_remaining_ms=%6",
+				blockedSeat.GetCompartmentMgrID(),
+				blockedSeat.GetCompartmentSlotID(),
+				linked,
+				gettingIn,
+				recoveryFence,
+				deadlineRemainingMs);
+			AICF_Stage3Diagnostics.Info("BOARDING_BLOCKER", planDetails);
+			return;
+		}
+		string emptyDetails = DescribeContext(
+			trip, lease, causationId, "NO_ACTION_TOKEN_BLOCKER");
+		emptyDetails += string.Format(
+			" phase=%1 blocker_member=NONE distance_m=-1 action_state=NONE progress_age_ms=-1 retry=-1",
+			phaseName);
+		emptyDetails += string.Format(
+			" seat=NONE linked=0 getting_in=0 recovery_fence=NOT_EVALUATED deadline_remaining_ms=%1",
+			deadlineRemainingMs);
+		AICF_Stage3Diagnostics.Info("BOARDING_BLOCKER", emptyDetails);
+	}
+
 	protected void ReportPassengerAction(
 		string eventName,
 		AICF_TransportTrip trip,
@@ -2487,6 +3232,42 @@ class AICF_VehicleBoardingFlow
 			if (!samples.IsEmpty())
 				samples += ",";
 			samples += DescribeTokenState(token, lease);
+		}
+		if (samples.IsEmpty())
+			return "NONE";
+		return samples;
+	}
+
+	protected string DescribePassengerSeatPlan(
+		AICF_VehicleBoardingState state,
+		AICF_VehicleLease lease)
+	{
+		if (!state || !lease)
+			return "NONE";
+		AICF_VehiclePassengerSeatPlan seatPlan = state.GetPassengerSeatPlan();
+		if (!seatPlan || seatPlan.Count() == 0)
+			return "NONE";
+		string samples;
+		for (int index = 0; index < seatPlan.Count(); index++)
+		{
+			AICF_VehiclePassengerSeatPlanEntry entry = seatPlan.Get(index);
+			if (!entry || !entry.GetEntity() || !entry.GetCompartment())
+				continue;
+			if (!samples.IsEmpty())
+				samples += ",";
+			BaseCompartmentSlot compartment = entry.GetCompartment();
+			IEntity occupant = compartment.GetOccupant();
+			string occupantId = "NONE";
+			if (occupant)
+				occupantId = occupant.GetID().ToString();
+			samples += string.Format(
+				"{member=%1,manager=%2,seat=%3,ready=%4,reserved_by_member=%5,occupant=%6}",
+				entry.GetEntity().GetID().ToString(),
+				compartment.GetCompartmentMgrID(),
+				compartment.GetCompartmentSlotID(),
+				entry.IsSeatReadyForAction(),
+				compartment.IsReservedBy(entry.GetEntity()),
+				occupantId);
 		}
 		if (samples.IsEmpty())
 			return "NONE";
@@ -2600,9 +3381,10 @@ class AICF_VehicleBoardingFlow
 			typename.EnumToString(EAIActionState, token.GetActionState()),
 			typename.EnumToString(EAICompartmentType, token.GetCompartmentType()));
 		details += string.Format(
-			" can_get_in_vehicle=%1 available_door_indices=[%2]",
+			" can_get_in_vehicle=%1 available_door_indices=[%2] recovery_fence=%3",
 			canGetInVehicle,
-			availableDoorIndices);
+			availableDoorIndices,
+			token.GetRecoveryFence());
 		return details;
 	}
 

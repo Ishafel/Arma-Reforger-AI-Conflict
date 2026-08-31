@@ -3,6 +3,7 @@
 class AICF_VehicleWatchdog
 {
 	protected static const float HIDDEN_RECOVERY_LOS_RADIUS_METERS = 1200.0;
+	protected static const float HIDDEN_RECOVERY_MAX_THREAT_MEASURE = 0.01;
 	protected static const float HIDDEN_RECOVERY_TARGET_HEIGHT_METERS = 1.5;
 	protected static const float DISMOUNT_CLEARANCE_MARGIN_METERS = 0.5;
 	protected static const float BOARDING_TRANSITION_SCOPE_MARGIN_METERS = 6.0;
@@ -728,6 +729,21 @@ class AICF_VehicleWatchdog
 			}
 		}
 		return true;
+	}
+
+	bool IsHiddenRecoveryCombatSafe(
+		SCR_AIGroup group,
+		out float threatMeasure)
+	{
+		threatMeasure = -1.0;
+		if (!group)
+			return false;
+		SCR_AIGroupUtilityComponent utility = SCR_AIGroupUtilityComponent.Cast(
+			group.FindComponent(SCR_AIGroupUtilityComponent));
+		if (!utility)
+			return false;
+		threatMeasure = utility.GetThreatMeasure();
+		return threatMeasure <= HIDDEN_RECOVERY_MAX_THREAT_MEASURE;
 	}
 
 	protected bool IsHiddenRecoveryPointVisible(IEntity observer, vector target)

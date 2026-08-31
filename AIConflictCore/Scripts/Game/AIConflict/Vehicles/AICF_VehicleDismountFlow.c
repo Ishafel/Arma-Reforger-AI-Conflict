@@ -4,6 +4,9 @@
 class AICF_VehicleDismountFlow
 {
 	protected static const int CONTINUOUS_CLEAR_MS = 5000;
+	protected static const int TRIP_EXIT_CLEAR_POLLS = 2;
+	protected static const int ANIMATED_EXACT_EXIT_DELAY_MS = 5000;
+	protected static const int FORCED_EXACT_EXIT_DELAY_MS = 10000;
 	protected static const int GUIDANCE_DELAY_MS = 3000;
 	protected static const int GUIDANCE_MAX_ATTEMPTS = 3;
 	protected static const int GUIDANCE_RETRY_INTERVAL_MS = 3000;
@@ -18,6 +21,7 @@ class AICF_VehicleDismountFlow
 	protected static const float GUIDANCE_ACTION_COMPLETION_RADIUS_METERS = 1.5;
 	protected static const float GUIDANCE_DESTINATION_MARGIN_METERS = 1.0;
 	protected static const float GUIDANCE_PROGRESS_METERS = 0.5;
+	protected static const float HIDDEN_RECOVERY_MAX_VEHICLE_SPEED_MPS = 0.25;
 	protected ref AICF_Stage3Config m_Config;
 	protected ref AICF_VehicleWatchdog m_Watchdog;
 	protected ref AICF_VehicleWaypointFactory m_WaypointFactory;
@@ -37,7 +41,7 @@ class AICF_VehicleDismountFlow
 		if (!IsAuthoritativeTripAssetCurrent(trip))
 			return AICF_TripOutcome.TerminalFailClosed("DISEMBARK_IDENTITY_INVALID", causationId);
 		int nowMs = System.GetTickCount();
-		int normalTimeoutMs = Math.Max(1000, m_Config.GetBoardingTimeoutMs());
+		int normalTimeoutMs = Math.Max(1000, m_Config.GetDismountTimeoutMs());
 		AICF_VehicleDismountState state = trip.GetDismountState();
 		state.Begin(
 			nowMs,
@@ -141,15 +145,20 @@ class AICF_VehicleDismountFlow
 			nowMs,
 			sample.m_iPostEgressBlocked);
 		int continuousClearMs = state.GetContinuousClearMs(nowMs);
+		int tripExitClearPolls = state.RecordTripExitSample(
+			sample.m_iLogicalOccupants,
+			sample.m_iTransitions,
+			sample.m_iInsideBounds);
 		MaintainGuidanceTokens(trip);
-		if (sample.m_bSafelyClear && sample.m_iPostEgressBlocked == 0 &&
-			continuousClearMs >= CONTINUOUS_CLEAR_MS)
+		if (tripExitClearPolls >= TRIP_EXIT_CLEAR_POLLS)
 		{
 			CancelGuidanceTokens(trip);
 			AICF_Stage3Diagnostics.Info(
 				"DISEMBARK_COMPLETE",
-				FormatIdentity(trip, "ALL_PROTECTED_MEMBERS_SAFELY_CLEAR") + string.Format(
-					" clear_polls=%1 continuous_clear_ms=%2 required_clear_ms=%3",
+				FormatClearance(trip, sample, "TRIP_EXIT_PHYSICALLY_PROVEN") + string.Format(
+					" trip_exit_clear_polls=%1 required_trip_exit_clear_polls=%2 strict_clear_polls=%3 strict_continuous_clear_ms=%4 cleanup_strict_clear_ms=%5",
+					tripExitClearPolls,
+					TRIP_EXIT_CLEAR_POLLS,
 					clearPolls,
 					continuousClearMs,
 					CONTINUOUS_CLEAR_MS));
@@ -174,27 +183,18 @@ class AICF_VehicleDismountFlow
 			TryRelocateExactManagedMembers(trip, sample, false);
 		}
 
-		int normalDurationMs = state.GetNormalDeadlineMs() - state.GetStartedAtMs();
-		if (!state.WasNormalReissueAttempted() &&
-			nowMs - state.GetStartedAtMs() >= normalDurationMs / 2 &&
+		int normalAgeMs = nowMs - state.GetStartedAtMs();
+		if (!state.WasAnimatedExactExitAttempted() &&
+			normalAgeMs >= ANIMATED_EXACT_EXIT_DELAY_MS &&
 			(sample.m_iLogicalOccupants > 0 || sample.m_iTransitions > 0))
 		{
-			state.MarkNormalReissueAttempted();
-			m_Watchdog.ResetGroupVehicleActions(trip.GetAssignment().GetGroup());
-			AIWaypoint rejectedWaypoint;
-			if (!IssueNormalDismountWaypoint(trip, rejectedWaypoint))
-			{
-				return AICF_TripOutcome.FallbackToFootWithWaypoint(
-					"DISEMBARK_REISSUE_WAYPOINT_FAILED",
-					causationId,
-					rejectedWaypoint);
-			}
-			AICF_Stage3Diagnostics.Warning(
-				"DISEMBARK_REISSUED",
-				FormatClearance(trip, sample, "HALF_DEADLINE_REISSUE"));
-			return AICF_TripOutcome.StartDismount(
-				"DISEMBARK_REISSUE_RECONCILIATION_REQUIRED",
-				causationId);
+			state.MarkAnimatedExactExitAttempted();
+			TryRequestAnimatedExactManagedExits(trip, sample);
+		}
+		if (normalAgeMs >= FORCED_EXACT_EXIT_DELAY_MS &&
+			(sample.m_iLogicalOccupants > 0 || sample.m_iTransitions > 0))
+		{
+			TryForceExactManagedExit(trip, sample);
 		}
 
 		if (nowMs >= state.GetNormalDeadlineMs())
@@ -221,7 +221,7 @@ class AICF_VehicleDismountFlow
 			return AICF_TripOutcome.TerminalFailClosed("TERMINAL_CLEARANCE_IDENTITY_INVALID", causationId);
 		}
 		int nowMs = System.GetTickCount();
-		int terminalTimeoutMs = Math.Max(1000, m_Config.GetBoardingTimeoutMs());
+		int terminalTimeoutMs = Math.Max(1000, m_Config.GetDismountTimeoutMs());
 		CancelGuidanceTokens(trip);
 		SCR_AIGroup group = trip.GetAssignment().GetGroup();
 		int interrupted = m_Watchdog.ResetGroupVehicleActions(group);
@@ -788,6 +788,57 @@ class AICF_VehicleDismountFlow
 		trip.GetDismountState().RemoveGuidanceToken(token);
 	}
 
+	protected void TryRequestAnimatedExactManagedExits(
+		AICF_TransportTrip trip,
+		AICF_DismountClearanceSample sample)
+	{
+		if (!IsAuthoritativeTripAssetCurrent(trip))
+			return;
+		SCR_AIGroup group = trip.GetAssignment().GetGroup();
+		Vehicle vehicle = trip.GetLease().GetVehicle();
+		int interrupted = m_Watchdog.ResetGroupVehicleActions(group);
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		int requested;
+		int rejected;
+		foreach (AIAgent agent : agents)
+		{
+			if (!IsExactAliveCurrentMember(group, agent))
+				continue;
+			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (!IsExactOccupantOfVehicle(character, vehicle))
+				continue;
+			CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+			if (!access || !AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(character))
+			{
+				rejected++;
+				continue;
+			}
+			access.InterruptVehicleActionQueue(true, true, true);
+			if (access.GetOutVehicle(
+				EGetOutType.ANIMATED,
+				-1,
+				ECloseDoorAfterActions.INVALID,
+				false))
+			{
+				requested++;
+			}
+			else
+			{
+				rejected++;
+			}
+		}
+		AICF_Stage3Diagnostics.Warning(
+			"DISEMBARK_ANIMATED_EXACT_RETRY",
+			FormatClearance(trip, sample, "FIVE_SECOND_EXACT_ANIMATED_RETRY") +
+			string.Format(
+				" requested=%1 rejected=%2 interrupted_actions=%3 next_escalation_ms=%4",
+				requested,
+				rejected,
+				interrupted,
+				FORCED_EXACT_EXIT_DELAY_MS));
+	}
+
 	protected void TryForceExactManagedExit(
 		AICF_TransportTrip trip,
 		AICF_DismountClearanceSample sample)
@@ -797,6 +848,8 @@ class AICF_VehicleDismountFlow
 		float nearestPlayerMeters;
 		string rejectionReason;
 		if (!CanApplyTerminalHiddenRecovery(
+			trip.GetAssignment().GetGroup(),
+			vehicle,
 			vehicle.GetOrigin(),
 			vehicle.GetOrigin(),
 			nearestPlayerMeters,
@@ -951,8 +1004,8 @@ class AICF_VehicleDismountFlow
 		if (exactOwner && (useEject || !directAccepted))
 		{
 			// A door-directed EjectOccupant may only enqueue an owner request when
-			// the compartment's selected exit is unusable.  The terminal path has
-			// already proven exact ownership and is player-fenced, so force the
+			// the compartment's selected exit is unusable.  The exact-recovery path
+			// has already proven ownership and player/combat fences, so force the
 			// engine's no-door detach first.  Physical relocation remains a
 			// separate, destination-fenced operation on the next clearance poll.
 			ejectAttempted = true;
@@ -980,7 +1033,7 @@ class AICF_VehicleDismountFlow
 			ejectRequested,
 			ejectImmediate);
 		details += string.Format(
-			" linked_after=%1 getting_in=%2 getting_out=%3 force_attempt=%4 maximum_attempts=%5 exact_owner_valid=%6 eject_on_the_spot=%7 escalation=TERMINAL_ONLY immediate_result=%8",
+			" linked_after=%1 getting_in=%2 getting_out=%3 force_attempt=%4 maximum_attempts=%5 exact_owner_valid=%6 eject_on_the_spot=%7 escalation=FENCED_EXACT immediate_result=%8",
 			linkedAfter,
 			access.IsGettingIn(),
 			access.IsGettingOut(),
@@ -1017,6 +1070,8 @@ class AICF_VehicleDismountFlow
 		float nearestPlayerMeters;
 		string rejectionReason;
 		if (!CanApplyTerminalHiddenRecovery(
+			group,
+			vehicle,
 			vehicle.GetOrigin(),
 			vehicle.GetOrigin(),
 			nearestPlayerMeters,
@@ -1080,6 +1135,8 @@ class AICF_VehicleDismountFlow
 			}
 			directionIndex++;
 			if (!CanApplyTerminalHiddenRecovery(
+				group,
+				vehicle,
 				character.GetOrigin(),
 				safePosition,
 				nearestPlayerMeters,
@@ -1171,6 +1228,8 @@ class AICF_VehicleDismountFlow
 				continue;
 			}
 			if (!CanApplyTerminalHiddenRecovery(
+				group,
+				vehicle,
 				character.GetOrigin(),
 				safePosition,
 				nearestPlayerMeters,
@@ -1230,6 +1289,8 @@ class AICF_VehicleDismountFlow
 	}
 
 	protected bool CanApplyTerminalHiddenRecovery(
+		SCR_AIGroup group,
+		Vehicle vehicle,
 		vector source,
 		vector destination,
 		out float nearestPlayerMeters,
@@ -1240,6 +1301,32 @@ class AICF_VehicleDismountFlow
 		if (!m_Config.GetHiddenRecoveryEnabled())
 		{
 			rejectionReason = "HIDDEN_RECOVERY_DISABLED";
+			return false;
+		}
+		if (!group || !vehicle ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle))
+		{
+			rejectionReason = "RECOVERY_AUTHORITY_OR_IDENTITY_INVALID";
+			return false;
+		}
+		Physics physics = vehicle.GetPhysics();
+		if (!physics)
+		{
+			rejectionReason = "VEHICLE_PHYSICS_UNAVAILABLE";
+			return false;
+		}
+		float vehicleSpeedMetersPerSecond = physics.GetVelocity().Length();
+		if (vehicleSpeedMetersPerSecond > HIDDEN_RECOVERY_MAX_VEHICLE_SPEED_MPS)
+		{
+			rejectionReason = string.Format(
+				"VEHICLE_MOVING_%1_MPS",
+				vehicleSpeedMetersPerSecond);
+			return false;
+		}
+		float threatMeasure;
+		if (!m_Watchdog.IsHiddenRecoveryCombatSafe(group, threatMeasure))
+		{
+			rejectionReason = string.Format("COMBAT_THREAT_%1", threatMeasure);
 			return false;
 		}
 		return m_Watchdog.CanApplyHiddenRecovery(

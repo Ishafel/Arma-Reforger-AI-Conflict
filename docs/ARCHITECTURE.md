@@ -351,6 +351,80 @@ Flows возвращают данные и не вызывают друг дру
 lease. Cleanup живёт независимо от terminal trip: поездка может закончиться, а
 защищённая проверка пассажиров и подтверждение удаления продолжиться.
 
+Предспавновая staging geometry по умолчанию использует offset `43 м` и radius
+`25 м` как guidance для штатного group waypoint. Готовность доказывается не
+принадлежностью к этому кругу, а фактическим положением каждого живого member в
+безопасном pad envelope `10..90 м`: spawn clearance сохраняется, а рельеф и
+растянутая формация не создают ложный результат `9/10`. Настоящему outlier вне
+envelope acquisition выдаёт видимый tracked `SCR_AIMoveIndividuallyBehavior` к
+staging point. Action fenced по trip/request/entity/Rpl identity, progress
+проверяется live, retry ограничен одной попыткой, а plan cancellation завершает
+только всё ещё принадлежащие utility actions. Если ровно один живой member
+остаётся вне envelope после исчерпания обеих move-actions, а остальные `N-1`
+уже собраны, acquisition выполняет обязательную наземную relocation этого exact
+authoritative AI к свободной navmesh-позиции staging. Это намеренно видимый
+administrative recovery без player/LOS fence: он не меняет compartment state,
+проверяет trip/request/entity/Rpl/faction identity и vehicle transitions, а
+mutation разрешена только одному member за scheduler tick. Waypoint-only
+`assignment revision` и глобальный `base revision` при неизменных destination и
+`intent revision` принимаются новым runtime snapshot без сброса site
+reservation/spawn plan; пригодность exact выбранной базы и pad всё равно
+перепроверяется live. Смена стратегического intent по-прежнему инвалидирует
+acquisition context. Boarding использует согласованный threshold `90 м` и
+применяет отдельные immutable phase budgets
+для `APPROACH`, `DRIVER`, `GUNNER` и `PASSENGERS`; grace пересчитывается в каждой
+фазе, но никогда не продлевает общий hard trip deadline.
+
+`AICF_VehicleBoardingFlow` выбирает mandatory crew по расстоянию до exact door
+с детерминированным `EntityID` tie-break. В passenger phase один раз создаётся
+immutable план `member EntityID -> exact Cargo manager/slot`. Временная
+occupancy, accessibility или чужая reservation блокирует только свою пару:
+готовые пары получают action, а уже корректные reservations не откатываются.
+После normal action bounded recovery заменяет зависший behavior новым
+отслеживаемым `SCR_AIGetInVehicle` к тому же exact seat; прямой параллельный
+`CompartmentAccessComponent.GetInVehicle(... forceTeleport=false ...)` здесь
+запрещён, потому что он может снять ownership исходного action и reservation без
+начала transition. Только после tracked retry разрешён forced
+`GetInVehicle(... forceTeleport=true ...)`. Hidden
+mutation разрешена по одному member за scheduler tick после повторной проверки
+authority, group/trip/lease/entity identity, vehicle state, combat, player
+radius и LOS. Для Cargo не прошедший fence означает `WAIT` до phase deadline.
+Для mandatory Pilot/Turret flow сначала детерминированно исключает исчерпавшего
+recovery бойца. Старый action завершается в текущем scheduler tick, а видимый
+tracked exact-seat action следующему ближайшему неиспытанному кандидату выдаётся
+не раньше следующего tick: это не позволяет отложенному teardown старого action
+снять новую reservation того же seat (ABA race). Первая rotation получает
+bounded observation window, не выходя за общий hard trip deadline. При terminal
+fallback всё ещё принадлежащий utility `SCR_AIGetInVehicle` завершается даже
+если engine уже потерял его reservation; иначе водитель может сесть после
+восстановления infantry order. Перебор ограничен живыми members и общими
+phase/trip deadlines; только отсутствие кандидата оставляет `WAIT` до deadline.
+
+Deadline не может преобразовать уже физически завершённую посадку в
+`FALLBACK`. Если все живые members связаны с vehicle, имеют compartment,
+находятся без `getting_in/getting_out` и проходят settled-проверку, flow ждёт
+следующий scheduler tick для обязательного второго settled poll. Любая
+физическая регрессия сразу снимает это подавление; при сохранённом `10/10`
+следующий tick коммитит `TRANSIT`, а не запускает terminal force-disembark.
+
+Явное изменение игроком live-группы с `INFANTRY` на motorized unit type создаёт
+в `AICF_VehicleCoordinator` одноразовый exact admission intent. Он сохраняется
+до создания одного trip и обходит только эвристический
+`minimum_route_m`: authority, group generation, unit type, meaningful order,
+minimum roster, faction cap и lease gates остаются обязательными. Поэтому
+повторное включение транспорта после fallback работает и внутри прежнего
+порога `400 м`, но не создаёт бесконечный цикл автоматических retry.
+
+Для dismount завершение trip и безопасность cleanup являются разными
+доказательствами. `AICF_VehicleDismountFlow` после двух последовательных polls
+без logical occupants, compartment transitions и живых members внутри vehicle
+bounds возвращает completion, позволяя controller раньше восстановить infantry
+order. Target-side guidance, clearance radius и непрерывный `5 с` stable-clear
+остаются у независимого cleanup/clearance lifecycle и по-прежнему обязательны
+перед release/delete. Exact occupant escalation начинается animated retry через
+`5 с`, forced fenced exit через `10 с`; relocation физического ghost выполняется
+отдельно на следующем poll и только если transform всё ещё внутри hull.
+
 Vehicle snapshot переносит target kind, base/position и две разные версии:
 `assignment revision` защищает
 runtime waypoint/entity identity, а `intent revision` обозначает только смену

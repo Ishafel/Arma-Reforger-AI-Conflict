@@ -109,6 +109,140 @@ class AICF_VehicleSpawnSiteReservation
 	}
 }
 
+// One visible exact-member movement owned by an acquisition spawn plan. The
+// token carries immutable trip/request/entity identity so a stale plan may
+// cancel only its own still-live action and can never steer a replacement
+// roster member after a group or request generation change.
+class AICF_VehicleStagingActionToken
+{
+	protected ref AICF_VehicleAsyncFence m_Fence;
+	protected int m_iRequestGeneration;
+	protected AIAgent m_Agent;
+	protected IEntity m_ReservedEntity;
+	protected ref SCR_AIMoveIndividuallyBehavior m_Action;
+	protected vector m_vTargetPosition;
+	protected int m_iRetryCount;
+	protected int m_iIssuedAtMs;
+	protected int m_iLastProgressAtMs;
+	protected int m_iLastAuditAtMs;
+	protected float m_fBestDistanceMeters = -1.0;
+	protected float m_fCurrentDistanceMeters = -1.0;
+
+	void AICF_VehicleStagingActionToken(
+		AICF_VehicleAsyncFence fence,
+		int requestGeneration,
+		AIAgent agent,
+		IEntity reservedEntity,
+		SCR_AIMoveIndividuallyBehavior action,
+		vector targetPosition,
+		int retryCount,
+		float initialDistanceMeters,
+		int nowMs)
+	{
+		m_Fence = fence;
+		m_iRequestGeneration = requestGeneration;
+		m_Agent = agent;
+		m_ReservedEntity = reservedEntity;
+		m_Action = action;
+		m_vTargetPosition = targetPosition;
+		m_iRetryCount = retryCount;
+		m_iIssuedAtMs = nowMs;
+		m_iLastProgressAtMs = nowMs;
+		m_iLastAuditAtMs = nowMs;
+		m_fBestDistanceMeters = initialDistanceMeters;
+		m_fCurrentDistanceMeters = initialDistanceMeters;
+	}
+
+	AICF_VehicleAsyncFence GetFence() { return m_Fence; }
+	AIAgent GetAgent() { return m_Agent; }
+	IEntity GetReservedEntity() { return m_ReservedEntity; }
+	SCR_AIMoveIndividuallyBehavior GetAction() { return m_Action; }
+	vector GetTargetPosition() { return m_vTargetPosition; }
+	int GetRequestGeneration() { return m_iRequestGeneration; }
+	int GetRetryCount() { return m_iRetryCount; }
+	int GetIssuedAtMs() { return m_iIssuedAtMs; }
+	int GetLastProgressAtMs() { return m_iLastProgressAtMs; }
+	float GetBestDistanceMeters() { return m_fBestDistanceMeters; }
+	float GetCurrentDistanceMeters() { return m_fCurrentDistanceMeters; }
+
+	bool Matches(
+		AICF_TransportTrip trip,
+		int requestGeneration,
+		SCR_AIGroup group)
+	{
+		return m_Fence && m_Fence.MatchesTrip(trip) &&
+			m_iRequestGeneration == requestGeneration &&
+			MatchesLiveEntityIdentity() && m_Agent && group &&
+			m_Agent.GetParentGroup() == group &&
+			m_Agent.GetControlledEntity() == m_ReservedEntity &&
+			AICF_GroupRuntime.IsAliveCharacter(m_ReservedEntity);
+	}
+
+	bool MatchesLiveEntityIdentity()
+	{
+		if (!m_Fence || !m_ReservedEntity ||
+			m_ReservedEntity.GetID() != m_Fence.GetEntityId())
+		{
+			return false;
+		}
+		RplComponent rpl = RplComponent.Cast(
+			m_ReservedEntity.FindComponent(RplComponent));
+		return rpl && rpl.Id().ToString() == m_Fence.GetRplId();
+	}
+
+	bool IsActionOwnedByUtility()
+	{
+		if (!m_Agent || !m_Action)
+			return false;
+		SCR_AIUtilityComponent utility = SCR_AIUtilityComponent.Cast(
+			m_Agent.FindComponent(SCR_AIUtilityComponent));
+		if (!utility || utility.m_OwnerEntity != m_ReservedEntity)
+			return false;
+		array<ref AIActionBase> actions = {};
+		utility.GetActions(actions);
+		return actions.Contains(m_Action);
+	}
+
+	bool ObserveDistance(float distanceMeters, int nowMs, float minimumProgressMeters)
+	{
+		m_fCurrentDistanceMeters = distanceMeters;
+		if (distanceMeters < 0 || m_fBestDistanceMeters < 0 ||
+			distanceMeters > m_fBestDistanceMeters - minimumProgressMeters)
+		{
+			return false;
+		}
+		m_fBestDistanceMeters = distanceMeters;
+		m_iLastProgressAtMs = nowMs;
+		return true;
+	}
+
+	bool ShouldAudit(int nowMs, int intervalMs)
+	{
+		if (nowMs - m_iLastAuditAtMs < intervalMs)
+			return false;
+		m_iLastAuditAtMs = nowMs;
+		return true;
+	}
+
+	void CancelOwnerSafe()
+	{
+		if (!MatchesLiveEntityIdentity() || !m_Action ||
+			!IsActionOwnedByUtility() ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(m_ReservedEntity))
+		{
+			m_Action = null;
+			return;
+		}
+		EAIActionState actionState = m_Action.GetActionState();
+		if (actionState != EAIActionState.COMPLETED &&
+			actionState != EAIActionState.FAILED)
+		{
+			m_Action.Fail();
+		}
+		m_Action = null;
+	}
+}
+
 // Persistent acquisition plan. The exact pad and staging point survive all
 // approach polls, so SPAWN_COMMIT cannot silently move the vehicle elsewhere.
 class AICF_VehicleSpawnPlan
@@ -127,6 +261,11 @@ class AICF_VehicleSpawnPlan
 	protected int m_iApproachWaypointIssuedAtMs;
 	protected int m_iApproachWaypointReissueCount;
 	protected string m_sLastReportedPadProbeResult;
+	protected ref array<ref AICF_VehicleStagingActionToken> m_aStagingActionTokens = {};
+	protected ref array<string> m_aStagingRetriedEntityIds = {};
+	protected ref array<string> m_aStagingExhaustedEntityIds = {};
+	protected ref array<string> m_aStagingRelocatedEntityIds = {};
+	protected int m_iLastStagingRelocationProbeAtMs;
 
 	void AICF_VehicleSpawnPlan(
 		AICF_VehicleSpawnSiteSelection selection,
@@ -153,6 +292,103 @@ class AICF_VehicleSpawnPlan
 	int GetStagedCount() { return m_iStagedCount; }
 	int GetAliveCount() { return m_iAliveCount; }
 	int GetApproachWaypointReissueCount() { return m_iApproachWaypointReissueCount; }
+	int GetStagingActionTokenCount() { return m_aStagingActionTokens.Count(); }
+
+	AICF_VehicleStagingActionToken GetStagingActionToken(int index)
+	{
+		if (index < 0 || index >= m_aStagingActionTokens.Count())
+			return null;
+		return m_aStagingActionTokens[index];
+	}
+
+	AICF_VehicleStagingActionToken FindStagingActionToken(IEntity entity)
+	{
+		if (!entity)
+			return null;
+		foreach (AICF_VehicleStagingActionToken token : m_aStagingActionTokens)
+		{
+			if (token && token.GetReservedEntity() == entity)
+				return token;
+		}
+		return null;
+	}
+
+	bool TrackStagingActionToken(AICF_VehicleStagingActionToken token)
+	{
+		if (!token || !token.GetReservedEntity() ||
+			FindStagingActionToken(token.GetReservedEntity()))
+		{
+			return false;
+		}
+		m_aStagingActionTokens.Insert(token);
+		return true;
+	}
+
+	bool RemoveStagingActionToken(AICF_VehicleStagingActionToken expected)
+	{
+		if (!expected || !m_aStagingActionTokens.Contains(expected))
+			return false;
+		m_aStagingActionTokens.RemoveItem(expected);
+		return true;
+	}
+
+	bool WasStagingMemberRetried(IEntity entity)
+	{
+		return entity && m_aStagingRetriedEntityIds.Contains(entity.GetID().ToString());
+	}
+
+	void MarkStagingMemberRetried(IEntity entity)
+	{
+		if (!entity || WasStagingMemberRetried(entity))
+			return;
+		m_aStagingRetriedEntityIds.Insert(entity.GetID().ToString());
+	}
+
+	bool IsStagingMemberExhausted(IEntity entity)
+	{
+		return entity && m_aStagingExhaustedEntityIds.Contains(entity.GetID().ToString());
+	}
+
+	void MarkStagingMemberExhausted(IEntity entity)
+	{
+		if (!entity || IsStagingMemberExhausted(entity))
+			return;
+		m_aStagingExhaustedEntityIds.Insert(entity.GetID().ToString());
+	}
+
+	bool WasStagingMemberRelocated(IEntity entity)
+	{
+		return entity && m_aStagingRelocatedEntityIds.Contains(entity.GetID().ToString());
+	}
+
+	void MarkStagingMemberRelocated(IEntity entity)
+	{
+		if (!entity || WasStagingMemberRelocated(entity))
+			return;
+		m_aStagingRelocatedEntityIds.Insert(entity.GetID().ToString());
+	}
+
+	bool CanProbeStagingRelocation(int nowMs, int intervalMs)
+	{
+		if (m_iLastStagingRelocationProbeAtMs > 0 &&
+			nowMs - m_iLastStagingRelocationProbeAtMs < intervalMs)
+		{
+			return false;
+		}
+		m_iLastStagingRelocationProbeAtMs = nowMs;
+		return true;
+	}
+
+	void CancelStagingActionsOwnerSafe()
+	{
+		for (int index = m_aStagingActionTokens.Count() - 1; index >= 0; index--)
+		{
+			AICF_VehicleStagingActionToken token = m_aStagingActionTokens[index];
+			if (token)
+				token.CancelOwnerSafe();
+			m_aStagingActionTokens.Remove(index);
+		}
+	}
 
 	bool MarkPadProbeResultReported(string result)
 	{
@@ -341,6 +577,8 @@ class AICF_VehicleSpawner
 		SCR_AIGroup group,
 		vector stagingPosition,
 		float stagingRadiusMeters,
+		vector spawnPosition,
+		float boardingEnvelopeRadiusMeters,
 		out int stagedCount,
 		out int aliveCount,
 		out float farthestDistanceMeters,
@@ -350,7 +588,9 @@ class AICF_VehicleSpawner
 		aliveCount = 0;
 		farthestDistanceMeters = -1.0;
 		memberSamples = string.Empty;
-		if (!group || stagingRadiusMeters <= 0)
+		if (!group || stagingRadiusMeters <= 0 ||
+			boardingEnvelopeRadiusMeters <= VEHICLE_CLEARANCE_RADIUS_METERS +
+			REQUESTING_GROUP_CLEARANCE_MARGIN_METERS)
 			return false;
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);
@@ -364,13 +604,24 @@ class AICF_VehicleSpawner
 			float distanceMeters = Math.Sqrt(vector.DistanceSqXZ(
 				entity.GetOrigin(),
 				stagingPosition));
+			float padDistanceMeters = Math.Sqrt(vector.DistanceSqXZ(
+				entity.GetOrigin(),
+				spawnPosition));
+			bool ready = padDistanceMeters >= VEHICLE_CLEARANCE_RADIUS_METERS +
+				REQUESTING_GROUP_CLEARANCE_MARGIN_METERS &&
+				padDistanceMeters <= boardingEnvelopeRadiusMeters;
 			aliveCount++;
 			farthestDistanceMeters = Math.Max(farthestDistanceMeters, distanceMeters);
-			if (distanceMeters <= stagingRadiusMeters)
+			if (ready)
 				stagedCount++;
 			if (!memberSamples.IsEmpty())
 				memberSamples += ",";
-			memberSamples += string.Format("%1:%2", entity.GetID(), distanceMeters);
+			memberSamples += string.Format(
+				"%1:{staging_m=%2,pad_m=%3,ready=%4}",
+				entity.GetID(),
+				distanceMeters,
+				padDistanceMeters,
+				ready);
 		}
 		return aliveCount > 0;
 	}
@@ -382,6 +633,7 @@ class AICF_VehicleSpawner
 		AICF_ConflictAdapter conflictAdapter,
 		AICF_VehicleSpawnPlan plan,
 		float stagingRadiusMeters,
+		float boardingEnvelopeRadiusMeters,
 		int minimumAliveCount,
 		out int stagedCount,
 		out int aliveCount,
@@ -413,6 +665,8 @@ class AICF_VehicleSpawner
 			group,
 			plan.GetStagingPosition(),
 			stagingRadiusMeters,
+			plan.GetSpawnPosition(),
+			boardingEnvelopeRadiusMeters,
 			stagedCount,
 			aliveCount,
 			farthestDistanceMeters,

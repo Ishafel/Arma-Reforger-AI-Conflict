@@ -5,8 +5,10 @@ class AICF_Stage3Config
 	static const int DEFAULT_TRANSPORTS_PER_FACTION = 10;
 	static const int DEFAULT_ARMED_LIGHT_PER_FACTION = 0;
 	static const int DEFAULT_MAX_VEHICLES_PER_FACTION = 10;
-	static const int DEFAULT_BOARDING_TIMEOUT_MS = 40000;
-	static const int DEFAULT_BOARDING_APPROACH_TIMEOUT_MS = 180000;
+	static const int DEFAULT_BOARDING_TIMEOUT_MS = 25000;
+	static const int DEFAULT_BOARDING_APPROACH_TIMEOUT_MS = 60000;
+	static const int DEFAULT_PASSENGER_BOARDING_TIMEOUT_MS = 30000;
+	static const int DEFAULT_DISMOUNT_TIMEOUT_MS = 20000;
 	static const int DEFAULT_STUCK_TIMEOUT_MS = 45000;
 	static const float DEFAULT_PROGRESS_METERS = 25.0;
 	static const float DEFAULT_MOTION_METERS = 3.0;
@@ -28,12 +30,14 @@ class AICF_Stage3Config
 	static const int DEFAULT_PASSENGER_STALL_MS = 8000;
 	static const int DEFAULT_PASSENGER_MAX_RETRIES = 1;
 	static const float DEFAULT_HIDDEN_RECOVERY_PLAYER_RADIUS_METERS = 300.0;
-	// 50 m staging radius + 8 m spawn cylinder + 10 m safety margin.
-	// The old 28 m offset made the accepted staging circle overlap the pad.
-	static const float DEFAULT_SPAWN_STAGING_OFFSET_METERS = 68.0;
-	static const float DEFAULT_SPAWN_STAGING_RADIUS_METERS = 50.0;
+	// The 43 m point and 25 m radius guide the stock group waypoint. Its nominal
+	// 18..68 m pad distance remains inside the 90 m boarding threshold. Physical
+	// readiness is proved independently against the safe 10..90 m pad envelope,
+	// so terrain and formation spacing cannot create a false 9/10 result.
+	static const float DEFAULT_SPAWN_STAGING_OFFSET_METERS = 43.0;
+	static const float DEFAULT_SPAWN_STAGING_RADIUS_METERS = 25.0;
 	static const int DEFAULT_SPAWN_STAGING_HOLD_MS = 3000;
-	static const int DEFAULT_SPAWN_APPROACH_TIMEOUT_MS = 300000;
+	static const int DEFAULT_SPAWN_APPROACH_TIMEOUT_MS = 90000;
 	// A fresh transport is useful only while a group retains a viable fireteam.
 	// A vehicle that is already assigned is
 	// deliberately not revoked when later losses take the group below this gate.
@@ -44,6 +48,8 @@ class AICF_Stage3Config
 	protected int m_iMaxVehiclesPerFaction;
 	protected int m_iBoardingTimeoutMs;
 	protected int m_iBoardingApproachTimeoutMs;
+	protected int m_iPassengerBoardingTimeoutMs;
+	protected int m_iDismountTimeoutMs;
 	protected int m_iStuckTimeoutMs;
 	protected float m_fProgressMeters;
 	protected float m_fMotionMeters;
@@ -79,6 +85,8 @@ class AICF_Stage3Config
 		m_iMaxVehiclesPerFaction = DEFAULT_MAX_VEHICLES_PER_FACTION;
 		m_iBoardingTimeoutMs = DEFAULT_BOARDING_TIMEOUT_MS;
 		m_iBoardingApproachTimeoutMs = DEFAULT_BOARDING_APPROACH_TIMEOUT_MS;
+		m_iPassengerBoardingTimeoutMs = DEFAULT_PASSENGER_BOARDING_TIMEOUT_MS;
+		m_iDismountTimeoutMs = DEFAULT_DISMOUNT_TIMEOUT_MS;
 		m_iStuckTimeoutMs = DEFAULT_STUCK_TIMEOUT_MS;
 		m_fProgressMeters = DEFAULT_PROGRESS_METERS;
 		m_fMotionMeters = DEFAULT_MOTION_METERS;
@@ -117,6 +125,8 @@ class AICF_Stage3Config
 	int GetMaxVehiclesPerFaction() { return m_iMaxVehiclesPerFaction; }
 	int GetBoardingTimeoutMs() { return m_iBoardingTimeoutMs; }
 	int GetBoardingApproachTimeoutMs() { return m_iBoardingApproachTimeoutMs; }
+	int GetPassengerBoardingTimeoutMs() { return m_iPassengerBoardingTimeoutMs; }
+	int GetDismountTimeoutMs() { return m_iDismountTimeoutMs; }
 	int GetStuckTimeoutMs() { return m_iStuckTimeoutMs; }
 	float GetProgressMeters() { return m_fProgressMeters; }
 	float GetMotionMeters() { return m_fMotionMeters; }
@@ -158,6 +168,10 @@ class AICF_Stage3Config
 			m_iBoardingTimeoutMs = ClampInt(value.ToInt(), 10000, 600000);
 		if (System.GetCLIParam("aicfVehicleBoardingApproachTimeoutMs", value))
 			m_iBoardingApproachTimeoutMs = ClampInt(value.ToInt(), 10000, 600000);
+		if (System.GetCLIParam("aicfVehiclePassengerBoardingTimeoutMs", value))
+			m_iPassengerBoardingTimeoutMs = ClampInt(value.ToInt(), 10000, 600000);
+		if (System.GetCLIParam("aicfVehicleDismountTimeoutMs", value))
+			m_iDismountTimeoutMs = ClampInt(value.ToInt(), 10000, 600000);
 		if (System.GetCLIParam("aicfVehicleStuckTimeoutMs", value))
 			m_iStuckTimeoutMs = ClampInt(value.ToInt(), 30000, 3600000);
 		if (System.GetCLIParam("aicfVehicleProgressMeters", value))
