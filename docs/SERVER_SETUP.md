@@ -223,29 +223,21 @@ Port forwarding, server-list visibility, name/password/admin и public address
 ## 5. Запусти сервер
 
 Оставь этот PowerShell открытым: сервер работает в foreground, а полный вывод
-остаётся доступен в терминале и profile logs.
+остаётся доступен в терминале и profile logs. Запуск выполняется только
+canonical helper: он не использует `Start-Process`, проверяет пути и fresh
+profile, сохраняет `-addonsDir` одним native argument и печатает JSON manifest.
 
 ```powershell
-$runStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$profileRoot = Join-Path $env:LOCALAPPDATA "AICF\Server-$runStamp"
-"Server profile: $profileRoot"
-
-& $serverExe `
-  -gproj "$repoRoot\AIConflictArland\addon.gproj" `
-  -server 'worlds/MP/CTI_Campaign_Arland.ent' `
-  -MissionHeader 'Missions/AICF_Conflict_Arland.conf' `
-  -worldSystemsConfig 'Configs/Systems/ConflictSystems.conf' `
-  -addonsDir "$repoRoot,$serverRoot\addons" `
-  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E' `
-  -profile "$profileRoot" `
-  -backendFreshSession `
-  -aicfAICommanderMode BOTH `
-  -maxFPS 60 `
-  -logStats 10000
-
-$serverExitCode = $LASTEXITCODE
-"Server exit code: $serverExitCode"
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Start-AICFRuntime.ps1 `
+  -Role Server `
+  -Variant Stock `
+  -AICommanderMode BOTH
 ```
+
+Сохрани строки `AICF_RUNTIME_PROFILE` и `AICF_RUNTIME_MANIFEST_JSON`. Вторая
+является машиночитаемым evidence exact executable, profile и массива native
+arguments; первая нужна для проверки лога и запуска client.
 
 Обязательные части команды:
 
@@ -269,8 +261,9 @@ $serverExitCode = $LASTEXITCODE
 
 ## 6. Проверь успешный старт
 
-Открой второй PowerShell в репозитории. Вставь точный `Server profile` path,
-который первый терминал напечатал перед запуском, и найди log:
+Открой второй PowerShell в репозитории. Вставь точный
+`AICF_RUNTIME_PROFILE`, который первый терминал напечатал перед запуском, и
+найди log:
 
 ```powershell
 $profileRoot = Read-Host 'Вставь Server profile path из первого терминала'
@@ -332,24 +325,18 @@ Get-Content -LiteralPath $log.FullName -Wait |
 исходных аддонов:
 
 ```powershell
-$repoRoot = (Resolve-Path '.').Path
-$gameRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger'
-$clientExe = Join-Path $gameRoot 'ArmaReforgerSteamDiag.exe'
-$clientStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$clientProfile = Join-Path $env:LOCALAPPDATA "AICF\Client-$clientStamp"
-"Client profile: $clientProfile"
-
-& $clientExe `
-  -gproj "$repoRoot\AIConflictArland\addon.gproj" `
-  -client 127.0.0.1 `
-  -addonsDir "$repoRoot,$gameRoot\addons" `
-  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E' `
-  -profile "$clientProfile" `
-  -backendFreshSession
-
-$clientExitCode = $LASTEXITCODE
-"Client exit code: $clientExitCode"
+$serverProfileRoot = Read-Host 'Вставь AICF_RUNTIME_PROFILE server-процесса'
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Start-AICFRuntime.ps1 `
+  -Role Client `
+  -Variant Stock `
+  -ServerProfileRoot $serverProfileRoot
 ```
+
+Перед созданием client process helper fail-closed проверяет точный `CLI Params`
+в server log, живой `ArmaReforgerServer` на UDP `2001` и единственный
+`[AICF][STAGE1][INFO][ROSTER_READY]`. Поэтому truncated `addonsDir`, неверный
+profile или преждевременное подключение не маскируются client timeout.
 
 Codex может запустить client этой командой и анализировать его logs, но не
 управляет окном, мышью или клавиатурой и не создаёт screenshots/video.
@@ -372,25 +359,16 @@ Codex может запустить client этой командой и анал
 Запуск dedicated server на штатной RHS mission:
 
 ```powershell
-$repoRoot = (Resolve-Path '.').Path
-$serverRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger Server'
-$serverExe = Join-Path $serverRoot 'ArmaReforgerServerDiag.exe'
-$rhsRoot = 'C:\Users\retar\OneDrive\Документы\My Games\ArmaReforger\addons'
-$rhsServerProfile = Join-Path $env:LOCALAPPDATA ('AICF\Server-RHS-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-
-& $serverExe `
-  -gproj "$repoRoot\AIConflictArlandRHS\addon.gproj" `
-  -server 'Worlds/MP/Conflict/CTI_Campaign_Arland_RHS.ent' `
-  -MissionHeader 'Missions/AICF_RHS_Conflict_Arland.conf' `
-  -worldSystemsConfig 'Configs/Systems/ConflictSystems.conf' `
-  -addonsDir "$repoRoot,$serverRoot\addons,$rhsRoot" `
-  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C' `
-  -profile "$rhsServerProfile" `
-  -backendFreshSession `
-  -aicfAICommanderMode BOTH `
-  -maxFPS 60 `
-  -logStats 10000
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Start-AICFRuntime.ps1 `
+  -Role Server `
+  -Variant RHS `
+  -AICommanderMode BOTH
 ```
+
+Helper автоматически ищет RHS packages в `My Documents`/OneDrive. Для другого
+пути укажи `-RhsAddonsRoot`; custom Steam Library задаётся через `-ServerRoot`
+и `-GameRoot`.
 
 Здесь обязательны именно RHS raw world и AICF RHS `MissionHeader`, который
 наследует штатный RHS header. Stock world с RHS header оставляет faction keys
@@ -404,17 +382,13 @@ $rhsServerProfile = Join-Path $env:LOCALAPPDATA ('AICF\Server-RHS-' + (Get-Date 
 RHS-клиент запускается с тем же checkout и packages:
 
 ```powershell
-$gameRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger'
-$clientExe = Join-Path $gameRoot 'ArmaReforgerSteamDiag.exe'
-$rhsClientProfile = Join-Path $env:LOCALAPPDATA ('AICF\Client-RHS-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$serverProfileRoot = Read-Host 'Вставь AICF_RUNTIME_PROFILE RHS server-процесса'
 
-& $clientExe `
-  -gproj "$repoRoot\AIConflictArlandRHS\addon.gproj" `
-  -client 127.0.0.1 `
-  -addonsDir "$repoRoot,$gameRoot\addons,$rhsRoot" `
-  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C' `
-  -profile "$rhsClientProfile" `
-  -backendFreshSession
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Start-AICFRuntime.ps1 `
+  -Role Client `
+  -Variant RHS `
+  -ServerProfileRoot $serverProfileRoot
 ```
 
 Перед verdict останови оба процесса и проверь полные server/client logs.

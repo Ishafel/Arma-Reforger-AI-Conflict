@@ -42,6 +42,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-MapPointOrd
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RHSIntegrationStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-ScenarioHeadersStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RankRestrictionsStatic.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RuntimeLauncherStatic.ps1
 ```
 
 Назначение:
@@ -57,6 +58,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RankRestric
 | `Test-RHSIntegrationStatic.ps1` | optional dependency graph, Core isolation, stock/RHS profiles, fail-closed roles/vehicles, personnel building-browser adapter, loadout UI guard, stable-side Arland radio normalization, RHS_AFRF identity voice, single lifecycle и cleanup symmetry |
 | `Test-ScenarioHeadersStatic.ps1` | stock/RHS inherited MissionHeader, menu visibility, отключённый persistence, stable resource GUID, platform metadata и отсутствие собственных world/layer resources |
 | `Test-RankRestrictionsStatic.ps1` | `GENERAL` join/XP floor, maximum non-renegade fallback для container без `GENERAL`, central mutation/restore hook, authoritative faction/spawn recheck, replicated character state, authority/replication, запрет раннего polling и сохранение остальных admission checks |
+| `Test-RuntimeLauncherStatic.ps1` | прямой native invocation без повторной сериализации, целостность `addonsDir` с пробелами/кириллицей, stock/RHS graph, fresh profile и fail-closed client readiness gate |
 
 Аудиторы проверяют часть архитектуры регулярными выражениями. Красный rule ID
 может означать реальный regression или drift тестового контракта. Сначала

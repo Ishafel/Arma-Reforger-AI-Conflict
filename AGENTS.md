@@ -37,8 +37,12 @@ Script; единственные gameplay resources проекта — тонк�
 - Workbench Validate/Compile запускай только из терминала через
   `ArmaReforgerWorkbenchSteamDiag.exe` по команде из `docs/DEVELOPMENT.md`. Не
   открывай Launcher, Workbench или Script Editor через GUI.
-- Dedicated server и, если он нужен, client запускай и останавливай только
-  явными командами из терминала. Не используй Launcher, Host UI или GUI-кнопки.
+- Dedicated server и подключаемый к нему direct-connect client запускай только через
+  `tools/Start-AICFRuntime.ps1` из отдельных терминальных сессий. Не генерируй
+  ad-hoc `Start-Process` команды и не используй Launcher, Host UI или GUI-кнопки.
+- Перед подключением client launcher обязан подтвердить в свежем server profile
+  точный `CLI Params`, живой server process и `[ROSTER_READY]`; напечатанный
+  `AICF_RUNTIME_MANIFEST_JSON` сохраняй как evidence целостности аргументов.
 - Evidence собирай из команды, exit code и полных Workbench/server/client logs.
   Визуальный критерий, который нельзя доказать логами, помечай `NOT RUN`, пока
   пользователь не выполнит ручную проверку; не заменяй её скриншотом или

@@ -116,7 +116,7 @@ AIConflictArlandRHS/Missions/
   игровая плитка AI Conflict RHS - Arland поверх штатной RHS mission
 
 tools/
-  статические аудиторы, анализаторы runtime-логов и API reference helper
+  canonical runtime launcher, статические аудиторы, анализаторы логов и API helper
 ```
 
 Подробная карта компонентов и потоков: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -159,6 +159,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-AICommander
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-MapPointOrdersStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RHSIntegrationStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-ScenarioHeadersStatic.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RuntimeLauncherStatic.ps1
 ```
 
 Репозиторий не содержит CI, готового `.pak` или автоматической первой

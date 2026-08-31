@@ -171,28 +171,24 @@ dedicated server process. Наличие плитки, её выбор и виз
 Пошаговая пользовательская инструкция: [`SERVER_SETUP.md`](SERVER_SETUP.md).
 
 Для stock Conflict parity нужны raw world, mission header и systems config
-одновременно. Codex запускает server только этой терминальной схемой, без
-Launcher или Host UI. Каждый проверочный запуск получает новый profile.
+одновременно. Их exact values принадлежат canonical launcher; Codex не собирает
+server CLI вручную и не использует `Start-Process`, Launcher или Host UI. Каждый
+запуск получает новый profile и печатает JSON manifest фактически передаваемого
+массива аргументов.
 
 ```powershell
-$serverRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger Server'
-$repoRoot = (Resolve-Path '.').Path
-$runStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$profileRoot = Join-Path $env:LOCALAPPDATA "AICF\Server-$runStamp"
-
-& "$serverRoot\ArmaReforgerServerDiag.exe" `
-  -gproj "$repoRoot\AIConflictArland\addon.gproj" `
-  -server 'worlds/MP/CTI_Campaign_Arland.ent' `
-  -MissionHeader 'Missions/AICF_Conflict_Arland.conf' `
-  -worldSystemsConfig 'Configs/Systems/ConflictSystems.conf' `
-  -addonsDir "$repoRoot,$serverRoot\addons" `
-  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E' `
-  -profile "$profileRoot" `
-  -backendFreshSession `
-  -aicfAICommanderMode BOTH `
-  -maxFPS 60 `
-  -logStats 10000
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Start-AICFRuntime.ps1 `
+  -Role Server `
+  -Variant Stock `
+  -AICommanderMode BOTH
 ```
+
+Launcher работает в foreground. До запуска он проверяет executable, gproj,
+addon roots, запрещает повторное использование profile и передаёт native CLI
+прямым `& $executable @nativeArguments`, поэтому path с пробелами остаётся одним
+аргументом. `AICF_RUNTIME_PROFILE` и `AICF_RUNTIME_MANIFEST_JSON` из вывода нужны
+для последующей проверки и evidence.
 
 `-aicfAICommanderMode` фиксирует command authority на весь process:
 
@@ -211,7 +207,7 @@ roster и periodic loops. Arland bootstrap создаёт config один раз
 immutable policy без повторного чтения CLI. Runtime-переключения нет; для
 другого mode останови server и начни новый run. Для воспроизводимого evidence
 указывай mode явно даже при проверке default-поведения, а отдельный default-run
-выполняй без параметра.
+выполняй с `-UseDefaultAICommanderMode`.
 
 Replicated `ai_commander_us`/`ai_commander_ussr` — availability snapshot, а не
 изменяемая замена policy. Пока все двадцать асинхронных initial slots не
@@ -230,8 +226,12 @@ reliability, victory и replicated UI state. Пока valid player order отс�
 Добавляй только остальные параметры конкретного сценария проверки, например:
 
 ```powershell
--aicfRequirePlayerForResult 0
+-AdditionalArguments @('-aicfRequirePlayerForResult', '0')
 ```
+
+`-AdditionalArguments` не разрешает переопределять launcher-owned `-gproj`,
+`-server`, `-MissionHeader`, `-worldSystemsConfig`, `-client`, `-addonsDir`,
+`-addons`, `-profile`, `-backendFreshSession`, command mode или server limits.
 
 Vehicle и economy subsystems включены всегда. Параметры
 `aicfVehiclesEnabled` и `aicfEconomyEnabled` больше не читаются.
@@ -245,25 +245,16 @@ RHS source-run использует штатные RHS world и mission. Не п
 world: он создаёт stock faction manager даже при RHS `MissionHeader`.
 
 ```powershell
-$serverRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger Server'
-$repoRoot = (Resolve-Path '.').Path
-$rhsRoot = 'C:\Users\retar\OneDrive\Документы\My Games\ArmaReforger\addons'
-$runStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$profileRoot = Join-Path $env:LOCALAPPDATA "AICF\Server-RHS-$runStamp"
-
-& "$serverRoot\ArmaReforgerServerDiag.exe" `
-  -gproj "$repoRoot\AIConflictArlandRHS\addon.gproj" `
-  -server 'Worlds/MP/Conflict/CTI_Campaign_Arland_RHS.ent' `
-  -MissionHeader 'Missions/AICF_RHS_Conflict_Arland.conf' `
-  -worldSystemsConfig 'Configs/Systems/ConflictSystems.conf' `
-  -addonsDir "$repoRoot,$serverRoot\addons,$rhsRoot" `
-  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C' `
-  -profile "$profileRoot" `
-  -backendFreshSession `
-  -aicfAICommanderMode BOTH `
-  -maxFPS 60 `
-  -logStats 10000
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Start-AICFRuntime.ps1 `
+  -Role Server `
+  -Variant RHS `
+  -AICommanderMode BOTH
 ```
+
+RHS root определяется среди `My Documents`/OneDrive directories. Если packages
+установлены в другом месте, передай exact `-RhsAddonsRoot`; для нестандартной
+Steam Library аналогично доступны `-ServerRoot` и `-GameRoot`.
 
 Startup должен дать `[AICF][CONTENT][INFO][PROFILE_SELECTED]` с profile
 `RHS_USMC_MSV_0_16_5150`, runtime sides `RHS_USAF`/`RHS_AFRF` и stable sides
@@ -276,36 +267,30 @@ Startup должен дать `[AICF][CONTENT][INFO][PROFILE_SELECTED]` с profi
 же local addons и иметь отдельный свежий profile:
 
 ```powershell
-$gameRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger'
-$repoRoot = (Resolve-Path '.').Path
-$runStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$clientProfile = Join-Path $env:LOCALAPPDATA "AICF\Client-$runStamp"
-
-& "$gameRoot\ArmaReforgerSteamDiag.exe" `
-  -gproj "$repoRoot\AIConflictArland\addon.gproj" `
-  -client 127.0.0.1 `
-  -addonsDir "$repoRoot,$gameRoot\addons" `
-  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E' `
-  -profile "$clientProfile" `
-  -backendFreshSession
+$serverProfileRoot = Read-Host 'Вставь AICF_RUNTIME_PROFILE server-процесса'
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Start-AICFRuntime.ps1 `
+  -Role Client `
+  -Variant Stock `
+  -ServerProfileRoot $serverProfileRoot
 ```
 
 Стандартный локальный game port — `2001`. Для другого порта укажи его в
-client target согласно текущему Reforger CLI.
+`-ServerPort` и, при необходимости, `-ClientAddress`. До запуска client helper
+проверяет в полном свежем server log exact `gproj`, `MissionHeader`, цельный
+`addonsDir`, addon GUID/profile и `[AICF][STAGE1][INFO][ROSTER_READY]`, а также
+живой `ArmaReforgerServer` process на UDP-порту. Несовпадение останавливает
+подключение fail-closed.
 
 RHS-клиент использует тот же RHS dependency set:
 
 ```powershell
-$rhsRoot = 'C:\Users\retar\OneDrive\Документы\My Games\ArmaReforger\addons'
-$rhsClientProfile = Join-Path $env:LOCALAPPDATA ('AICF\Client-RHS-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-
-& "$gameRoot\ArmaReforgerSteamDiag.exe" `
-  -gproj "$repoRoot\AIConflictArlandRHS\addon.gproj" `
-  -client 127.0.0.1 `
-  -addonsDir "$repoRoot,$gameRoot\addons,$rhsRoot" `
-  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C' `
-  -profile "$rhsClientProfile" `
-  -backendFreshSession
+$serverProfileRoot = Read-Host 'Вставь AICF_RUNTIME_PROFILE RHS server-процесса'
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Start-AICFRuntime.ps1 `
+  -Role Client `
+  -Variant RHS `
+  -ServerProfileRoot $serverProfileRoot
 ```
 
 ## Логи
