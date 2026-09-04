@@ -30,12 +30,13 @@ Features:
 
 This is a dependency package. It does not add a standalone scenario and is not
 intended to be enabled without a map integration addon. Install AI Conflict
-Arland to use the current playable integration.
+Arland or AI Conflict Everon to use a playable stock integration.
 
 Русский:
 Общая scripts-only основа AI Conflict. Содержит автономное управление силами,
 приказы, транспорт, экономику, репликацию, UI и диагностику. Самостоятельного
-сценария не добавляет; для игры используйте AI Conflict Arland.
+сценария не добавляет; для игры используйте AI Conflict Arland или AI Conflict
+Everon.
 
 License: Apache License 2.0 (Custom license; full text is included in the
 addon).

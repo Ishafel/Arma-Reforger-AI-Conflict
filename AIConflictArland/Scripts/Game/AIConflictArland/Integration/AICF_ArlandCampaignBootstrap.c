@@ -1,4 +1,4 @@
-// Thin Arland integration: wait for stock Conflict readiness, then start one Stage 1 match loop.
+// Thin stock Conflict integration: wait for supported-map readiness, then start one Stage 1 match loop.
 modded class SCR_GameModeCampaign
 {
 	protected bool m_bAICFStage1Scheduled;
@@ -7,14 +7,19 @@ modded class SCR_GameModeCampaign
 	protected bool m_bAICFWaitingForBases;
 	protected ref AICF_Stage1Config m_AICFStage1Config;
 	protected ref AICF_MatchController m_AICFMatchController;
-	protected ref AICF_ArlandRadioBridgeNormalizer m_AICFRadioBridgeNormalizer;
+	protected ref AICF_StockRadioBridgeNormalizer m_AICFRadioBridgeNormalizer;
 	protected ref AICF_StrategicUIController m_AICFStrategicUIController;
 	protected ref AICF_ContentProfile m_AICFContentProfile;
+	protected string m_sAICFMapKey;
 
 	override void OnGameStart()
 	{
 		// Stock Conflict initializes its manager, bases, and radio coverage inside this call.
 		super.OnGameStart();
+
+		m_sAICFMapKey = AICF_ResolveSupportedMapKey();
+		if (m_sAICFMapKey.IsEmpty())
+			return;
 
 		string peerRole = "client";
 		if (Replication.IsServer())
@@ -41,7 +46,9 @@ modded class SCR_GameModeCampaign
 		if (!m_bAICFBootstrapLogged)
 		{
 			m_bAICFBootstrapLogged = true;
-			AICF_Stage1Diagnostics.Info("BOOTSTRAP_SERVER", "authority=server_master map=Arland");
+			AICF_Stage1Diagnostics.Info(
+				"BOOTSTRAP_SERVER",
+				string.Format("authority=server_master map=%1", m_sAICFMapKey));
 		}
 
 		AICF_TryStartStage1();
@@ -70,6 +77,22 @@ modded class SCR_GameModeCampaign
 	protected AICF_ContentProfile AICF_CreateContentProfile()
 	{
 		return new AICF_ContentProfile();
+	}
+
+	protected AICF_StockRadioBridgeNormalizer AICF_CreateRadioBridgeNormalizer()
+	{
+		return new AICF_StockRadioBridgeNormalizer();
+	}
+
+	protected string AICF_ResolveSupportedMapKey()
+	{
+		string worldFile = GetGame().GetWorldFile();
+		if (worldFile.Contains("CTI_Campaign_Arland"))
+			return "Arland";
+		if (worldFile.Contains("CTI_Campaign_Eden"))
+			return "Everon";
+
+		return string.Empty;
 	}
 
 	protected void AICF_TryStartStage1()
@@ -155,15 +178,17 @@ modded class SCR_GameModeCampaign
 		if (!AICF_ValidateStage1Config())
 			return;
 
+		// The shared lifecycle owns exactly one normalizer. A supported map may
+		// specialize its bounded data-driven policy through the factory boundary.
 		if (!m_AICFRadioBridgeNormalizer)
 		{
-			m_AICFRadioBridgeNormalizer = new AICF_ArlandRadioBridgeNormalizer();
+			m_AICFRadioBridgeNormalizer = AICF_CreateRadioBridgeNormalizer();
 			if (!m_AICFRadioBridgeNormalizer.Start(this))
 			{
 				m_AICFRadioBridgeNormalizer = null;
 				AICF_Stage1Diagnostics.Warning(
 					"RADIO_BRIDGE_UNAVAILABLE",
-					"Arland radio bridge normalization could not be started");
+					"Stock radio bridge normalization could not be started");
 			}
 		}
 
@@ -195,6 +220,10 @@ modded class SCR_GameModeCampaign
 			return;
 
 		m_AICFMatchController = new AICF_MatchController();
-		m_AICFMatchController.Start(this, m_AICFStage1Config, m_AICFContentProfile);
+		m_AICFMatchController.Start(
+			this,
+			m_AICFStage1Config,
+			m_AICFContentProfile,
+			m_sAICFMapKey);
 	}
 }

@@ -119,7 +119,8 @@ class AICF_MatchController
 	void Start(
 		SCR_GameModeCampaign campaign,
 		AICF_Stage1Config immutableConfig = null,
-		AICF_ContentProfile contentProfile = null)
+		AICF_ContentProfile contentProfile = null,
+		string mapKey = "UNKNOWN")
 	{
 		if (m_bStarted)
 		{
@@ -413,7 +414,9 @@ class AICF_MatchController
 					m_Stage2Config.GetTestDropOrderSlot(),
 					m_Stage2Config.GetTestDropOrderAtMs()));
 		}
-		AICF_Stage1Diagnostics.Info("MATCH_START", "map=Arland factions=US,USSR");
+		AICF_Stage1Diagnostics.Info(
+			"MATCH_START",
+			string.Format("map=%1 factions=US,USSR", mapKey));
 		SyncTickets();
 		SyncStage4State();
 		m_EconomySystem.ProbeInitialSupplies();

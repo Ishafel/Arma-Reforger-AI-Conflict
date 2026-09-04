@@ -11,6 +11,7 @@ if (-not $PolicyPath) {
 $policyPath = $PolicyPath
 $campaignStatePath = Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/Integration/AICF_CampaignState.c'
 $stockHeaderPath = Join-Path $RepositoryRoot 'AIConflictArland/Missions/AICF_Conflict_Arland.conf'
+$everonHeaderPath = Join-Path $RepositoryRoot 'AIConflictEveron/Missions/AICF_Conflict_Everon.conf'
 $rhsHeaderPath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland.conf'
 
 function Require-Match {
@@ -27,7 +28,7 @@ function Forbid-Match {
     }
 }
 
-$requiredPaths = @($policyPath, $campaignStatePath, $stockHeaderPath, $rhsHeaderPath)
+$requiredPaths = @($policyPath, $campaignStatePath, $stockHeaderPath, $everonHeaderPath, $rhsHeaderPath)
 $missingPaths = @($requiredPaths | Where-Object { -not (Test-Path -LiteralPath $_) })
 if ($missingPaths.Count -gt 0) {
     $failures.Add('[RANK_POLICY_FILE] Missing rank policy, campaign-state, or scenario-header source: ' + ($missingPaths -join ', '))
@@ -36,12 +37,13 @@ else {
     $policy = Get-Content -LiteralPath $policyPath -Raw
     $campaignState = Get-Content -LiteralPath $campaignStatePath -Raw
     $stockHeader = Get-Content -LiteralPath $stockHeaderPath -Raw
+    $everonHeader = Get-Content -LiteralPath $everonHeaderPath -Raw
     $rhsHeader = Get-Content -LiteralPath $rhsHeaderPath -Raw
 
     Require-Match 'RANK_VEHICLE_REQUEST' $campaignState `
         'CanRequestVehicleWithoutRank\s*\(\s*\)[^}]*return\s+true\s*;' `
         'Vehicle requests must bypass the vanilla rank gate'
-    foreach ($scenarioHeader in @($stockHeader, $rhsHeader)) {
+    foreach ($scenarioHeader in @($stockHeader, $everonHeader, $rhsHeader)) {
         Require-Match 'RANK_JOIN_GENERAL' $scenarioHeader `
             'm_eStartingRank\s+GENERAL' `
             'Every AICF scenario must grant the GENERAL XP threshold on initial join'

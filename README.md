@@ -3,7 +3,7 @@
 Scripts-first прототип автономной войны `US` против `USSR` поверх штатного
 режима Conflict. Проект использует существующий мир, базы, радио-граф, фракции
 и prefab-каталоги Arma Reforger. Собственных world/prefab/layout-ресурсов в
-репозитории нет; два тонких `MissionHeader` добавляют запуск из меню сценариев
+репозитории нет; три тонких `MissionHeader` добавляют запуск из меню сценариев
 и наследуют штатные stock/RHS missions.
 
 Игровая логика server-authoritative: сервер применяет выбранную при запуске
@@ -13,20 +13,25 @@ Scripts-first прототип автономной войны `US` против
 
 ## Текущее устройство
 
-Stock-вариант загружает два исходных аддона; RHS-вариант добавляет третий:
+Arland загружает Core и stock integration; Everon и RHS добавляют собственный
+тонкий root-addon:
 
 | Проект | GUID | Назначение |
 |---|---|---|
 | `AIConflictCore` | `9178E5822AFE48EA` | Карто-независимая модель войны, AI, техника, экономика, UI и диагностика |
-| `AIConflictArland` | `B52C5F6AEDBF423E` | Тонкий bootstrap и политики stock Conflict для Arland |
+| `AIConflictArland` | `B52C5F6AEDBF423E` | Проверенный stock Conflict bootstrap и data-driven one-way radio normalization |
+| `AIConflictEveron` | `A4B2E62595F645A4` | Плитка stock Conflict для Everon и map-specific выход из изолированного radio-компонента |
 | `AIConflictArlandRHS` | `9F88011DA22B471C` | Опциональный RHS USMC против RHS MSV на штатной RHS Arland mission |
 
 Core и обычный Arland не имеют RHS dependencies. `AIConflictArlandRHS` зависит
 от них, RHS Content Pack 01 `1337C0DE5DABBEEF`, Content Pack 02
 `BADC0DEDABBEDA5E` и RHS - Status Quo `595F2BF2F44836FB`. Его постоянный GUID —
-`9F88011DA22B471C`. Рабочая точка входа обоих вариантов —
+`9F88011DA22B471C`. Рабочая точка входа всех stock/RHS вариантов —
 `AIConflictArland/Scripts/Game/AIConflictArland/Integration/AICF_ArlandCampaignBootstrap.c`.
-RHS-addon подменяет передаваемый через bootstrap content profile и содержит
+Bootstrap допускает только штатные Arland/Everon Conflict worlds и запускает
+data-driven one-way radio normalization. Everon через factory boundary добавляет
+коррекцию полностью изолированного relay frontier; RHS-addon подменяет передаваемый через
+bootstrap content profile и содержит
 локальные compatibility adapters для штатных RHS UI/services, не создавая
 второй controller или server loops.
 
@@ -62,7 +67,7 @@ Source runtime использует штатную mission
   X/Z intent; сервер восстанавливает terrain Y, при необходимости асинхронно
   загружает streamable navmesh tile, проверяет world bounds/navmesh, а союзный
   static marker выбранной точки входит в JIP state;
-- оба AICF scenario headers задают `m_eSaveTypes 0`: запуск и hosting из
+- все AICF scenario headers задают `m_eSaveTypes 0`: запуск и hosting из
   игрового меню всегда начинают новую кампанию, потому что собственный
   campaign state AICF пока не поддерживает безопасное восстановление из
   штатного Conflict session save;
@@ -110,6 +115,11 @@ AIConflictArland/Scripts/Game/AIConflictArland/Integration/
 AIConflictArland/Missions/
   игровая плитка AI Conflict - Arland поверх штатного Conflict
 
+AIConflictEveron/Missions/
+  игровая плитка AI Conflict - Everon поверх штатного Conflict
+AIConflictEveron/Scripts/Game/AIConflictEveron/Integration/
+  map-specific политика выхода из изолированного radio-компонента
+
 AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/
   RHS USMC/MSV content profile, bootstrap factory override и RHS-only adapters
 AIConflictArlandRHS/Missions/
@@ -124,8 +134,10 @@ tools/
 ## Начало работы
 
 Нужны Windows, Arma Reforger, Arma Reforger Server и Arma Reforger Tools одной
-версии. Закреплённая в репозитории API-база — `1.8.0.10`; установленную версию
-всё равно нужно записывать для каждого runtime-прогона.
+версии. Закреплённая в репозитории API-база — `1.8.0.13`; переход проверен
+`2026-09-03` отдельными stock/RHS Workbench Validate и stock server smoke до
+`ROSTER_READY`. Установленную версию всё равно нужно записывать для каждого
+runtime-прогона.
 
 Для Codex действует terminal-only workflow: без Launcher/Workbench GUI,
 Computer Use и скриншотов. Workbench validation, server и client запускаются
@@ -134,12 +146,13 @@ Computer Use и скриншотов. Workbench validation, server и client з�
 вручную не проверит пользователь.
 
 Для ручного source-запуска из самой игры открой Diag-клиент с нужным root
-project и addon graph, затем выбери `Сценарии -> AI Conflict - Arland` либо
-`Сценарии -> AI Conflict RHS - Arland`. Готовые команды и ограничения описаны
+project и addon graph, затем выбери `Сценарии -> AI Conflict - Arland`,
+`Сценарии -> AI Conflict - Everon` либо `Сценарии -> AI Conflict RHS - Arland`.
+Готовые команды и ограничения описаны
 в [`docs/SERVER_SETUP.md`](docs/SERVER_SETUP.md#запуск-из-меню-сценариев).
 После Workshop-публикации те же плитки появляются у включённых packaged addons.
 Запуск из меню не задаёт CLI-параметры и поэтому использует default
-`aicfAICommanderMode=BOTH`. Сохранение session progression для этих плиток
+`aicfAICommanderMode=BOTH`. Сохранение session progression для всех плиток
 отключено: каждый новый запуск или hosting начинает войну с исходного состояния.
 
 1. Запустите применимые статические проверки из

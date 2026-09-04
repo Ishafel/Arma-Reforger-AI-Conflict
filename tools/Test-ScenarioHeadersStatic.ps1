@@ -26,10 +26,13 @@ function Forbid-Match {
 
 $stockHeaderPath = Join-Path $RepositoryRoot 'AIConflictArland/Missions/AICF_Conflict_Arland.conf'
 $stockMetaPath = $stockHeaderPath + '.meta'
+$everonProjectPath = Join-Path $RepositoryRoot 'AIConflictEveron/addon.gproj'
+$everonHeaderPath = Join-Path $RepositoryRoot 'AIConflictEveron/Missions/AICF_Conflict_Everon.conf'
+$everonMetaPath = $everonHeaderPath + '.meta'
 $rhsHeaderPath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland.conf'
 $rhsMetaPath = $rhsHeaderPath + '.meta'
 
-foreach ($path in @($stockHeaderPath, $stockMetaPath, $rhsHeaderPath, $rhsMetaPath)) {
+foreach ($path in @($stockHeaderPath, $stockMetaPath, $everonProjectPath, $everonHeaderPath, $everonMetaPath, $rhsHeaderPath, $rhsMetaPath)) {
     if (-not (Test-Path -LiteralPath $path)) {
         Add-Failure 'SCENARIO_FILE_MISSING' "Missing required scenario resource $path"
     }
@@ -38,6 +41,9 @@ foreach ($path in @($stockHeaderPath, $stockMetaPath, $rhsHeaderPath, $rhsMetaPa
 if ($failures.Count -eq 0) {
     $stockHeader = Get-Content -LiteralPath $stockHeaderPath -Raw
     $stockMeta = Get-Content -LiteralPath $stockMetaPath -Raw
+    $everonProject = Get-Content -LiteralPath $everonProjectPath -Raw
+    $everonHeader = Get-Content -LiteralPath $everonHeaderPath -Raw
+    $everonMeta = Get-Content -LiteralPath $everonMetaPath -Raw
     $rhsHeader = Get-Content -LiteralPath $rhsHeaderPath -Raw
     $rhsMeta = Get-Content -LiteralPath $rhsMetaPath -Raw
 
@@ -47,8 +53,14 @@ if ($failures.Count -eq 0) {
     Require-Match 'SCENARIO_RHS_PARENT' $rhsHeader `
         'SCR_MissionHeaderCampaign\s*:\s*"\{7577640CD42A00BD\}Missions/RHS_Conflict_Arland\.conf"' `
         'RHS scenario must inherit the official RHS Conflict - Arland mission header'
+    Require-Match 'SCENARIO_EVERON_PARENT' $everonHeader `
+        'SCR_MissionHeaderCampaign\s*:\s*"\{ECC61978EDCC2B5A\}Missions/23_Campaign\.conf"' `
+        'Everon scenario must inherit the official Conflict - Everon mission header'
+    Require-Match 'SCENARIO_EVERON_PROJECT' $everonProject `
+        'ID\s+"AIConflictEveron"[\s\S]*GUID\s+"A4B2E62595F645A4"[\s\S]*Dependencies\s*\{[\s\S]*"58D0FB3206B6F859"[\s\S]*"9178E5822AFE48EA"[\s\S]*"B52C5F6AEDBF423E"' `
+        'Everon project must keep its stable identity and load the reviewed stock integration graph'
 
-    foreach ($scenario in @($stockHeader, $rhsHeader)) {
+    foreach ($scenario in @($stockHeader, $everonHeader, $rhsHeader)) {
         Require-Match 'SCENARIO_MENU_VISIBILITY' $scenario `
             'm_bShowInScenarioMenu\s+1' `
             'Scenario header must be visible in the in-game Scenarios menu'
@@ -75,8 +87,11 @@ if ($failures.Count -eq 0) {
     Require-Match 'SCENARIO_RHS_META' $rhsMeta `
         'Name\s+"\{97E4BCB73F044C66\}Missions/AICF_RHS_Conflict_Arland\.conf"' `
         'RHS scenario metadata GUID or resource path changed'
+    Require-Match 'SCENARIO_EVERON_META' $everonMeta `
+        'Name\s+"\{4C5D73A5614F41D9\}Missions/AICF_Conflict_Everon\.conf"' `
+        'Everon scenario metadata GUID or resource path changed'
 
-    foreach ($meta in @($stockMeta, $rhsMeta)) {
+    foreach ($meta in @($stockMeta, $everonMeta, $rhsMeta)) {
         foreach ($platform in @('PC', 'HEADLESS', 'XBOX_ONE', 'XBOX_SERIES', 'PS4')) {
             Require-Match 'SCENARIO_PLATFORM_CONFIG' $meta `
                 ("CONFResourceClass\s+" + [regex]::Escape($platform) + '\b') `
@@ -86,6 +101,7 @@ if ($failures.Count -eq 0) {
 }
 
 $ownedWorldResources = @(Get-ChildItem -LiteralPath (Join-Path $RepositoryRoot 'AIConflictArland'), `
+    (Join-Path $RepositoryRoot 'AIConflictEveron'), `
     (Join-Path $RepositoryRoot 'AIConflictArlandRHS') -Recurse -File -ErrorAction SilentlyContinue |
     Where-Object { $_.Extension -in @('.ent', '.layer') })
 if ($ownedWorldResources.Count -gt 0) {
@@ -102,5 +118,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Output '[AICF][SCENARIO_STATIC][RESULT][PASS] stock_header=PASS rhs_header=PASS menu_visibility=PASS persistence=DISABLED rank_unlocks=PASS inheritance=PASS metadata=PASS world_ownership=PASS'
+Write-Output '[AICF][SCENARIO_STATIC][RESULT][PASS] arland_header=PASS everon_header=PASS rhs_header=PASS menu_visibility=PASS persistence=DISABLED rank_unlocks=PASS inheritance=PASS metadata=PASS world_ownership=PASS'
 exit 0

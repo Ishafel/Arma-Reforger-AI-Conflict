@@ -2,7 +2,7 @@
 
 ## Общая модель
 
-Проект расширяет штатный Conflict преимущественно скриптами. Два собственных
+Проект расширяет штатный Conflict преимущественно скриптами. Три собственных
 `MissionHeader` являются только точками запуска и не владеют world topology:
 
 ```text
@@ -13,27 +13,34 @@ Arma Reforger / stock Conflict
              |
              v
        AIConflictArland
-          /       \
- stock mission    AIConflictArlandRHS
-                  + RHS dependencies
+       /      |       \
+ Arland   AIConflictEveron   AIConflictArlandRHS
+ header   + Everon header    + RHS dependencies
 ```
 
-`AIConflictCore` не должен знать о конкретных именах или координатах Arland.
+`AIConflictCore` не должен знать о конкретных именах или координатах карт.
 Он получает базы, фракции, spawn points, radio reachability и prefab-каталоги
-через stock API. `AIConflictArland` подключает Core к конкретной stock-миссии и
-содержит неизбежные map-specific overrides.
+через stock API. `AIConflictArland` содержит единый проверенный stock Conflict
+bootstrap и data-driven stock radio override; bootstrap разрешает только Arland
+и Everon. `AIConflictEveron` не добавляет второй lifecycle: он содержит
+inherited header и подменяет только radio-normalizer factory на Everon policy.
 
 В production path нет собственного мира. `Missions/AICF_Conflict_Arland.conf`
-наследует штатный `{C41618FD18E9D714}Missions/23_Campaign_Arland.conf`, а
+наследует штатный `{C41618FD18E9D714}Missions/23_Campaign_Arland.conf`,
+`Missions/AICF_Conflict_Everon.conf` — штатный
+`{ECC61978EDCC2B5A}Missions/23_Campaign.conf`, а
 `Missions/AICF_RHS_Conflict_Arland.conf` — штатный RHS
 `{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf`. Presentation overrides
 ограничены metadata и `m_bShowInScenarioMenu`; world, systems config, базы и
 параметры Conflict остаются у родителей. Единственный behavior override самих
 headers — `m_eSaveTypes 0`: AICF state не имеет persistence serializers и
-resume lifecycle, поэтому обе плитки fail-closed отключают штатный session
+resume lifecycle, поэтому все плитки fail-closed отключают штатный session
 save/load и при каждом запуске создают новую кампанию.
 
-Stock-проект для Workbench и Diag — `AIConflictArland/addon.gproj`.
+Stock-проекты для Workbench и Diag — `AIConflictArland/addon.gproj` и
+`AIConflictEveron/addon.gproj`; Everon зависит от Arland integration после
+явного compatibility review и использует raw world
+`worlds/MP/CTI_Campaign_Eden.ent`.
 Опциональный `AIConflictArlandRHS/addon.gproj` использует установленные RHS
 world/mission без копирования ресурсов и зависит от обычного Arland, Core и
 RHS. Обычные проекты RHS не знают.
@@ -64,6 +71,7 @@ mapping как startup evidence.
 ```text
 SCR_GameModeCampaign.OnGameStart()
   -> super.OnGameStart()
+  -> fail-closed world gate: Arland или Everon
   -> server/master command-mode preflight: создание и strict validation
      AICF_Stage1Config до любых AICF subscriptions/callqueue
   -> bootstrap factory выбирает и активирует один AICF_ContentProfile
@@ -72,8 +80,10 @@ SCR_GameModeCampaign.OnGameStart()
   -> ожидание campaign.HasStarted()
   -> ожидание baseManager.IsBasesInitDone()
   -> повторная fail-closed проверка того же config instance
-  -> AICF_ArlandRadioBridgeNormalizer.Start()
-  -> next-frame AICF_MatchController.Start(same config instance, same profile)
+  -> один radio normalizer из map factory:
+     stock one-way policy; Everon дополнительно чинит полностью изолированный frontier
+  -> next-frame AICF_MatchController.Start(same config instance, same profile,
+     resolved map key)
 ```
 
 `AICF_MatchController.Start()`:
@@ -97,10 +107,10 @@ SCR_GameModeCampaign.OnGameStart()
 9. Только когда все двадцать initial slots фактически перешли в `READY`,
    публикует replicated authority availability flags и `ROSTER_READY`.
 
-Strict CLI preflight принадлежит Arland bootstrap, потому что normalizer сам
+Strict CLI preflight принадлежит stock bootstrap, потому что на Arland normalizer сам
 подписывается на смену владельца базы и может немедленно менять replicated
 radio state. Invalid mode возвращает `CONFIG_INVALID` до
-`AICF_ArlandRadioBridgeNormalizer.Start()`, его subscription/normalization и до
+`AICF_StockRadioBridgeNormalizer.Start()`, его subscription/normalization и до
 deferred `AICF_MatchController`; readiness-subscriptions stock Conflict к этому
 моменту уже сняты. Production path передаёт в controller тот же предварительно
 проверенный объект config; fallback-создание config существует только для
@@ -552,9 +562,10 @@ callback повторно вызывает `UpdatePlayerRank()`, а
 `GetPlayerRankByXP()` остаются дополнительной защитой чтения. Глобальный
 override `SCR_RankContainer.GetRankByXP()` не используется.
 
-## Arland integration
+## Stock campaign integration: Arland и Everon
 
-`AIConflictArland` содержит четыре чувствительных расширения stock классов:
+`AIConflictArland` содержит четыре чувствительных расширения stock классов,
+проверенных для штатных Arland и Everon Conflict missions:
 
 - bootstrap сразу после stock `super.OnGameStart()` выполняет server/master
   command-mode preflight, только после valid результата ждёт готовности Conflict
@@ -563,17 +574,29 @@ override `SCR_RankContainer.GetRankByXP()` не используется.
 - `AICF_ArlandSeizingPolicy` разрешает AI-only capture;
 - `AICF_ArlandVictoryPolicy` отключает stock territorial winner, чтобы
   `AICF_VictorySystem` завершал матч по ticket contract;
-- `AICF_ArlandRadioBridgeNormalizer` исправляет релевантные односторонние
-  radio links после valid preflight и при смене владельца.
+- `AICF_StockRadioBridgeNormalizer` исправляет релевантные односторонние
+  radio links после valid preflight и при смене владельца. Bootstrap создаёт
+  ровно один normalizer через `AICF_CreateRadioBridgeNormalizer()`.
 
 Отдельно `AIConflictArland/Missions/AICF_Conflict_Arland.conf` предоставляет
 плитку `AI Conflict - Arland` и отключает для неё persistence через
 `m_eSaveTypes 0`. Это inherited config, а не пятое расширение класса и не копия
 мира.
 
-Эти `modded` классы действуют всякий раз, когда загружен Arland addon. Поэтому
-его нельзя без review подключать к другой миссии. Особенно важны порядок
-`super` и очистка event subscriptions.
+Bootstrap сверяет `GetGame().GetWorldFile()` и fail-closed запускается только
+для `CTI_Campaign_Arland`, RHS Arland или `CTI_Campaign_Eden`. Поэтому загрузка
+dependency рядом с иной mission не создаёт controller/UI/subscriptions.
+Порядок `super` и очистка event subscriptions остаются обязательными.
+
+`AIConflictEveron` добавляет
+`Missions/AICF_Conflict_Everon.conf`: плитка `AI Conflict - Everon` наследует
+официальный Everon Conflict header и отключает persistence через
+`m_eSaveTypes 0`. Его `AICF_EveronRadioBridgeNormalizer` расширяет stock
+normalizer: только когда достижимый от HQ friendly-компонент исчерпал все
+допустимые цели, он детерминированно расширяет ближайшую обычную базу до
+полезного relay. Имена и координаты баз не задаются. Factory override не
+добавляет `OnGameStart`, subscription, controller или server loop, поэтому
+dependency на `AIConflictArland` по-прежнему использует один lifecycle.
 
 `AIConflictArlandRHS` добавляет ровно одно пятое расширение того же campaign
 class: override `AICF_CreateContentProfile()`. В нём нет `OnGameStart`, event

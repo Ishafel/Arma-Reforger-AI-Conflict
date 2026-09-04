@@ -1,0 +1,20 @@
+GameProject
+{
+	ID "AIConflictEveron"
+	GUID "A4B2E62595F645A4"
+	TITLE "AI Conflict Everon"
+	Dependencies
+	{
+		"58D0FB3206B6F859"
+		"9178E5822AFE48EA"
+		"B52C5F6AEDBF423E"
+	}
+	Configurations
+	{
+		GameProjectConfig PC {}
+		GameProjectConfig HEADLESS {}
+		GameProjectConfig XBOX_ONE {}
+		GameProjectConfig XBOX_SERIES {}
+		GameProjectConfig PS4 {}
+	}
+}

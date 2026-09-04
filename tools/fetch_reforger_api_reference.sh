@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly AICF_API_VERSION="1.8.0.10"
-readonly AICF_API_COMMIT="b46bdd8f4932f3a256c765f93a44417996a6da73"
-readonly AICF_API_SHA256="1ff7cfc1d13b23c64000afa5cbd5f2924c607218c0b093a27b4d7b0a31fb788a"
+readonly AICF_API_VERSION="1.8.0.13"
+readonly AICF_API_COMMIT="3d77cc212d5cda9922daf5f45635c7300d2d4cce"
+readonly AICF_API_SHA256="0115e59ec57220f9b21364aab835a6e2ec30ebc8d35e658b1d92399ac4af479b"
 readonly AICF_API_URL="https://github.com/BohemiaInteractive/Arma-Reforger-Script-Diff/archive/refs/tags/v${AICF_API_VERSION}.tar.gz"
 
 AICF_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,7 +24,7 @@ mkdir -p "${AICF_CACHE_ROOT}"
 if [[ ! -f "${AICF_ARCHIVE}" ]]; then
 	printf 'Downloading official Arma Reforger Script Diff %s...\n' "${AICF_API_VERSION}"
 	curl --fail --location --output "${AICF_ARCHIVE}.part" "${AICF_API_URL}"
-	AICF_DOWNLOADED_SHA256="$(shasum -a 256 "${AICF_ARCHIVE}.part" | awk '{print $1}')"
+	AICF_DOWNLOADED_SHA256="$(sha256sum "${AICF_ARCHIVE}.part" | awk '{print $1}')"
 	if [[ "${AICF_DOWNLOADED_SHA256}" != "${AICF_API_SHA256}" ]]; then
 		printf 'Checksum mismatch: expected %s, got %s. Partial archive left at %s.part\n' \
 			"${AICF_API_SHA256}" "${AICF_DOWNLOADED_SHA256}" "${AICF_ARCHIVE}" >&2
@@ -33,7 +33,7 @@ if [[ ! -f "${AICF_ARCHIVE}" ]]; then
 	mv "${AICF_ARCHIVE}.part" "${AICF_ARCHIVE}"
 fi
 
-AICF_ARCHIVE_SHA256="$(shasum -a 256 "${AICF_ARCHIVE}" | awk '{print $1}')"
+AICF_ARCHIVE_SHA256="$(sha256sum "${AICF_ARCHIVE}" | awk '{print $1}')"
 if [[ "${AICF_ARCHIVE_SHA256}" != "${AICF_API_SHA256}" ]]; then
 	printf 'Cached archive checksum mismatch at %s. Remove that exact file and run again.\n' "${AICF_ARCHIVE}" >&2
 	exit 1

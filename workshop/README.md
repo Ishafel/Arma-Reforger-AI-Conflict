@@ -4,7 +4,8 @@
 Workbench не читает Markdown автоматически: значения копируются владельцем в
 `Publish Project` по `docs/PUBLISHING.md`.
 
-Три addon публикуются раздельно и строго в порядке Core -> Arland -> RHS.
+Четыре addon публикуются раздельно. Dependency order:
+Core -> Arland integration -> Everon и RHS.
 Preview assets не входят в игровые addon и передаются Resource Publisher как
 внешние Workshop-изображения.
 

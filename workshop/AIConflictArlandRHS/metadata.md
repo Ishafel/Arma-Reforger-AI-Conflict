@@ -31,7 +31,7 @@ Required Workshop dependencies:
 - RHS - Status Quo.
 
 The current integration targets RHS - Status Quo 0.16.5150 and Arma Reforger
-1.8.0.10. It uses only faction-catalog RHS characters and supported vehicles;
+1.8.0.13. It uses only faction-catalog RHS characters and supported vehicles;
 missing RHS roster or vehicle content fails closed instead of silently falling
 back to stock US/USSR assets. Deployment-map identities are normalized for the
 managed RHS factions.

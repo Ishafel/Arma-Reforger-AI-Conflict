@@ -1,6 +1,6 @@
 # ImageGen briefs для Workshop preview
 
-Все три финальные обложки созданы встроенным ImageGen и сохранены как квадратные
+Все четыре финальные обложки созданы встроенным ImageGen и сохранены как квадратные
 JPEG без текста, логотипов, insignia и watermarks. PNG-оригиналы вне
 репозитория не являются release assets; canonical файлы — `preview.jpg` в
 каталогах addon.
@@ -51,4 +51,21 @@ Lighting/mood: dramatic overcast Atlantic daylight with a narrow warm break over
 Color palette: natural dark greens, slate sea and sky, weathered vehicle colors, restrained cool blue and muted red tactical accents
 Constraints: no text, no letters, no numbers, no flags, no insignia, no RHS logo, no Arma logo, no trademarks, no watermark, no gore, no copied UI, no exact real-world or game-map layout
 Avoid: futuristic equipment, tanks dominating the frame, excessive explosions, photorealistic game screenshot, crowded tiny details
+```
+
+## AI Conflict Everon
+
+```text
+Use case: stylized-concept
+Asset type: square Workshop preview image for an Arma Reforger Cold War game-mode integration mod
+Primary request: autonomous US-versus-USSR combined-arms conflict unfolding across a large temperate European island, with radio-connected objectives and an active frontline
+Scene/backdrop: rolling green farmland, dense deciduous and pine forests, hedgerows, old stone villages, winding roads, low hills and a rugged sea coast; evoke a fictional 1980s Everon-like landscape without copying any exact game-map geometry
+Subject: opposing infantry squads and period-appropriate late-Cold-War tracked and wheeled military vehicles advancing from different approaches toward a contested radio mast and linked field bases; tactical movement and campaign scale are the focus, not individual hero characters
+Style/medium: polished cinematic military strategy key art, stylized realism, grounded and faithful late-Cold-War atmosphere
+Composition/framing: square oblique aerial establishing view, broad island landscape and coastline readable, central radio mast and branching radio links as focal point, strong thumbnail silhouette, generous safe margins
+Lighting/mood: crisp early-morning light breaking through layered clouds over the central objective, tense strategic campaign mood without spectacle
+Color palette: rich natural greens, warm farmland ochres, slate-blue sea and sky, weathered earth, restrained cool blue and muted red tactical accents
+Materials/textures: wet roads, rough stone buildings, natural forest canopy, worn military vehicle paint
+Constraints: no text, no letters, no numbers, no flags, no insignia, no logos, no trademarks, no watermark, no gore, no modern equipment, no science-fiction interface, no exact real-world or game-map layout
+Avoid: photorealistic game screenshot, excessive explosions, tanks dominating the frame, crowded tiny details
 ```

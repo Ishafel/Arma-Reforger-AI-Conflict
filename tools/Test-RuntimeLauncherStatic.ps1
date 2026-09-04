@@ -93,6 +93,7 @@ try {
     foreach ($directory in @(
         $fakeRepository,
         (Join-Path $fakeRepository 'AIConflictArland'),
+        (Join-Path $fakeRepository 'AIConflictEveron'),
         (Join-Path $fakeRepository 'AIConflictArlandRHS'),
         (Join-Path $fakeServerRoot 'addons'),
         (Join-Path $fakeGameRoot 'addons'),
@@ -102,6 +103,7 @@ try {
     }
     foreach ($file in @(
         (Join-Path $fakeRepository 'AIConflictArland\addon.gproj'),
+        (Join-Path $fakeRepository 'AIConflictEveron\addon.gproj'),
         (Join-Path $fakeRepository 'AIConflictArlandRHS\addon.gproj'),
         (Join-Path $fakeServerRoot 'ArmaReforgerServerDiag.exe'),
         (Join-Path $fakeGameRoot 'ArmaReforgerSteamDiag.exe')
@@ -137,6 +139,31 @@ try {
             if ($serverManifest.addonsDir -cne $expectedServerAddonsDir) {
                 Add-Failure 'RUNTIME_LAUNCHER_ARGUMENT_INTEGRITY' 'Manifest addonsDir does not preserve spaces and Cyrillic as one value'
             }
+        }
+    }
+
+    $everonProfile = Join-Path $testRoot 'Profiles\Server Everon новый'
+    $everonInvocation = @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $launcherPath,
+        '-Role', 'Server', '-Variant', 'Everon',
+        '-RepositoryRoot', $fakeRepository,
+        '-ServerRoot', $fakeServerRoot,
+        '-ProfileRoot', $everonProfile,
+        '-AICommanderMode', 'BOTH',
+        '-DryRun'
+    )
+    $everonOutput = @(& powershell.exe @everonInvocation 2>&1 | ForEach-Object { $_.ToString() })
+    $everonExitCode = $LASTEXITCODE
+    if ($everonExitCode -ne 0) {
+        Add-Failure 'RUNTIME_LAUNCHER_EVERON_DRY_RUN' "Everon server dry-run exited $everonExitCode`: $($everonOutput -join ' | ')"
+    }
+    else {
+        $everonManifest = Get-ManifestFromOutput -Output $everonOutput -Rule 'RUNTIME_LAUNCHER_EVERON_DRY_RUN'
+        if ($everonManifest) {
+            Require-ArgumentPair $everonManifest '-gproj' (Join-Path $fakeRepository 'AIConflictEveron\addon.gproj') 'RUNTIME_LAUNCHER_EVERON_GRAPH'
+            Require-ArgumentPair $everonManifest '-server' 'worlds/MP/CTI_Campaign_Eden.ent' 'RUNTIME_LAUNCHER_EVERON_WORLD'
+            Require-ArgumentPair $everonManifest '-MissionHeader' 'Missions/AICF_Conflict_Everon.conf' 'RUNTIME_LAUNCHER_EVERON_HEADER'
+            Require-ArgumentPair $everonManifest '-addons' '9178E5822AFE48EA,B52C5F6AEDBF423E,A4B2E62595F645A4' 'RUNTIME_LAUNCHER_EVERON_GRAPH'
         }
     }
 
@@ -230,5 +257,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Output '[AICF][RUNTIME_LAUNCHER_STATIC][RESULT][PASS] direct_invocation=PASS argument_integrity=PASS spaces=PASS cyrillic=PASS stock_rhs=PASS fresh_profile=PASS ready_gate=PASS'
+Write-Output '[AICF][RUNTIME_LAUNCHER_STATIC][RESULT][PASS] direct_invocation=PASS argument_integrity=PASS spaces=PASS cyrillic=PASS stock_everon_rhs=PASS fresh_profile=PASS ready_gate=PASS'
 exit 0

@@ -135,6 +135,8 @@ if (Require-AICommanderClass $matchController 'AICF_MatchController') {
     }
     Assert-AICFContains $failures 'AI_COMMANDER_EARLY_REJECT' $start 'allowed=BOTH,US,USSR' 'CONFIG_INVALID must publish the exact accepted values'
     Assert-AICFContains $failures 'AI_COMMANDER_POLICY_IMMUTABLE' $startCode 'm_Config\s*=\s*immutableConfig\s*;[\s\S]*if\s*\(\s*!m_Config\s*\)[\s\S]*m_Config\s*=\s*new\s+AICF_Stage1Config\s*\(' 'MatchController must retain a prevalidated immutable config while preserving a direct-start fallback'
+    Assert-AICFContains $failures 'SUPPORTED_MAP_DIAGNOSTICS' $matchController.Source 'void\s+Start\s*\([\s\S]*string\s+mapKey\s*=\s*"UNKNOWN"\s*\)' 'MatchController must accept the bootstrap-resolved map identity without performing map-specific discovery'
+    Assert-AICFContains $failures 'SUPPORTED_MAP_DIAGNOSTICS' $start 'MATCH_START[\s\S]*map=%1 factions=US,USSR[\s\S]*mapKey' 'MATCH_START must report the resolved supported map identity'
 }
 
 if (Require-AICommanderRecord $arlandBootstrap 'AICF_ArlandCampaignBootstrap.c') {
@@ -142,6 +144,8 @@ if (Require-AICommanderRecord $arlandBootstrap 'AICF_ArlandCampaignBootstrap.c')
     $scheduleStage1 = Assert-AICommanderMethodPresent $arlandBootstrap 'AICF_ScheduleStage1' 'AI_COMMANDER_EARLY_REJECT'
     $validateConfig = Assert-AICommanderMethodPresent $arlandBootstrap 'AICF_ValidateStage1Config' 'AI_COMMANDER_EARLY_REJECT'
     $runStage1 = Assert-AICommanderMethodPresent $arlandBootstrap 'AICF_RunStage1' 'AI_COMMANDER_EARLY_REJECT'
+    $resolveMap = Assert-AICommanderMethodPresent $arlandBootstrap 'AICF_ResolveSupportedMapKey' 'SUPPORTED_MAP_GATE'
+    $createRadioNormalizer = Assert-AICommanderMethodPresent $arlandBootstrap 'AICF_CreateRadioBridgeNormalizer' 'SUPPORTED_MAP_RADIO_POLICY'
     $onGameStartCode = ConvertTo-AICFCodeText $onGameStart
     $scheduleCode = ConvertTo-AICFCodeText $scheduleStage1
     $preflightGuard = Get-AICFBracedBody $onGameStart 'if\s*\(\s*GetGame\(\)\.InPlayMode\(\)[\s\S]*?!AICF_ValidateStage1Config\(\)\s*\)'
@@ -150,9 +154,30 @@ if (Require-AICommanderRecord $arlandBootstrap 'AICF_ArlandCampaignBootstrap.c')
     Assert-AICFContains $failures 'AI_COMMANDER_EARLY_REJECT' $preflightGuard '\breturn\s*;' 'OnGameStart invalid-mode guard must return before any AICF startup side effect'
     Assert-AICFContains $failures 'AI_COMMANDER_EARLY_REJECT' $scheduleCode 'if\s*\(\s*!AICF_ValidateStage1Config\(\)\s*\)\s*return\s*;' 'Schedule invalid-mode guard must return before radio normalization and controller scheduling'
     Assert-AICommanderOrdered 'AI_COMMANDER_EARLY_REJECT' $onGameStartCode '!AICF_ValidateStage1Config())' 'new AICF_StrategicUIController' 'Invalid-mode rejection must precede the strategic UI repeating callqueue'
-    Assert-AICommanderOrdered 'AI_COMMANDER_EARLY_REJECT' $scheduleCode 'if (!AICF_ValidateStage1Config())' 'new AICF_ArlandRadioBridgeNormalizer' 'Invalid-mode rejection must precede Arland radio normalization and subscription'
+    Assert-AICommanderOrdered 'AI_COMMANDER_EARLY_REJECT' $scheduleCode 'if (!AICF_ValidateStage1Config())' 'AICF_CreateRadioBridgeNormalizer()' 'Invalid-mode rejection must precede stock radio normalization and subscription'
     Assert-AICommanderOrdered 'AI_COMMANDER_EARLY_REJECT' $scheduleCode 'if (!AICF_ValidateStage1Config())' 'CallLater(AICF_RunStage1' 'Invalid-mode rejection must precede the deferred match-controller loop'
-    Assert-AICFContains $failures 'AI_COMMANDER_POLICY_IMMUTABLE' (ConvertTo-AICFCodeText $runStage1) 'Start\s*\(\s*this\s*,\s*m_AICFStage1Config\s*,\s*m_AICFContentProfile\s*\)' 'Arland bootstrap must hand the exact prevalidated config and selected content profile to MatchController'
+    Assert-AICFContains $failures 'AI_COMMANDER_POLICY_IMMUTABLE' (ConvertTo-AICFCodeText $runStage1) 'Start\s*\(\s*this\s*,\s*m_AICFStage1Config\s*,\s*m_AICFContentProfile\s*,\s*m_sAICFMapKey\s*\)' 'Stock bootstrap must hand the exact prevalidated config, selected content profile, and supported map identity to MatchController'
+    Assert-AICFContains $failures 'SUPPORTED_MAP_GATE' $resolveMap 'GetGame\(\)\.GetWorldFile\(\)[\s\S]*CTI_Campaign_Arland[\s\S]*return\s+"Arland"[\s\S]*CTI_Campaign_Eden[\s\S]*return\s+"Everon"[\s\S]*return\s+string\.Empty' 'Stock bootstrap must whitelist exact Arland/Everon world identities and fail closed for other missions'
+    Assert-AICFContains $failures 'SUPPORTED_MAP_GATE' $onGameStartCode 'm_sAICFMapKey\s*=\s*AICF_ResolveSupportedMapKey\s*\(\s*\)[\s\S]*if\s*\(\s*m_sAICFMapKey\.IsEmpty\s*\(\s*\)\s*\)[\s\S]*return\s*;' 'Unsupported worlds must return before AICF diagnostics, UI, subscriptions, or controller startup'
+    Assert-AICFContains $failures 'SUPPORTED_MAP_RADIO_POLICY' $scheduleStage1 'if\s*\(\s*!m_AICFRadioBridgeNormalizer\s*\)[\s\S]*AICF_CreateRadioBridgeNormalizer\s*\(' 'Supported stock maps must compose exactly one radio normalizer through the map-specific factory boundary'
+    Assert-AICFContains $failures 'SUPPORTED_MAP_RADIO_POLICY' $createRadioNormalizer 'return\s+new\s+AICF_StockRadioBridgeNormalizer\s*\(' 'The shared stock integration must default to the one-way radio policy'
+
+    $radioNormalizerPath = Join-Path $RepositoryRoot 'AIConflictArland/Scripts/Game/AIConflictArland/Integration/AICF_ArlandRadioBridgeNormalizer.c'
+    $everonRadioPolicyPath = Join-Path $RepositoryRoot 'AIConflictEveron/Scripts/Game/AIConflictEveron/Integration/AICF_EveronRadioBridgePolicy.c'
+    if (Test-Path -LiteralPath $radioNormalizerPath) {
+        $radioNormalizer = Get-Content -LiteralPath $radioNormalizerPath -Raw
+        Assert-AICFContains $failures 'SUPPORTED_MAP_RADIO_POLICY' $radioNormalizer 'NormalizeMapSpecificFrontiers\s*\([\s\S]*return\s+0\s*;' 'The shared stock normalizer must keep map-specific frontier repair disabled by default'
+    }
+    if (-not (Test-Path -LiteralPath $everonRadioPolicyPath)) {
+        $failures.Add('[SUPPORTED_MAP_RADIO_POLICY] Everon radio policy source is missing')
+    } else {
+        $everonRadioPolicy = Get-Content -LiteralPath $everonRadioPolicyPath -Raw
+        Assert-AICFContains $failures 'SUPPORTED_MAP_RADIO_POLICY' $everonRadioPolicy 'class\s+AICF_EveronRadioBridgeNormalizer\s*:\s*AICF_StockRadioBridgeNormalizer' 'Everon isolation repair must specialize the shared one-way normalizer'
+        Assert-AICFContains $failures 'SUPPORTED_MAP_RADIO_POLICY' $everonRadioPolicy 'override\s+protected\s+AICF_StockRadioBridgeNormalizer\s+AICF_CreateRadioBridgeNormalizer\s*\([\s\S]*return\s+new\s+AICF_EveronRadioBridgeNormalizer' 'Everon must opt into its map-specific policy only through the shared factory boundary'
+        Assert-AICFContains $failures 'SUPPORTED_MAP_RADIO_POLICY' $everonRadioPolicy 'NormalizeIsolatedFaction\s*\([\s\S]*if\s*\(HasReachableStrategicTarget\s*\([\s\S]*return\s+false\s*;' 'Everon radio repair must detect a faction component only after it exhausts reachable strategic targets'
+        Assert-AICFContains $failures 'SUPPORTED_MAP_RADIO_POLICY' $everonRadioPolicy 'distance\s*>\s*selectedDistance[\s\S]*baseIndex\s*>\s*selectedBaseIndex[\s\S]*relayIndex\s*>=\s*selectedRelayIndex' 'Everon isolated-component bridge selection must have stable base/relay tie-breaks'
+        Assert-AICFContains $failures 'SUPPORTED_MAP_RADIO_POLICY' $everonRadioPolicy 'RADIO_COMPONENT_BRIDGE_NORMALIZED' 'Everon isolated-component bridge repair must publish dedicated runtime evidence'
+    }
 }
 
 if (Require-AICommanderClass $authorityPolicy 'AICF_CommandAuthorityPolicy') {

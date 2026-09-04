@@ -53,12 +53,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RuntimeLaun
 | `Test-Stage35Static.ps1` | force structure, vehicle/infantry integration и Enforce language audit |
 | `Test-Stage35RecoveryPolicy.ps1` | точные recovery, timing, ownership и fail-closed policies |
 | `Test-Stage4Static.ps1` | economy transaction, supply balance, replication, strategic UI и RPC authority |
-| `Test-AICommanderModeStatic.ps1` | Arland CLI preflight, immutable authority policy, faction commander boundary, intent, availability replication и UI contract |
+| `Test-AICommanderModeStatic.ps1` | stock Arland/Everon CLI preflight, supported-world gate, immutable authority policy, faction commander boundary, intent, availability replication и UI contract |
 | `Test-MapPointOrdersStatic.ps1` | `BASE|POSITION` model, RPC trust boundary, bounded streamable-navmesh retry и identity guards, terrain/navmesh validation, planner ownership, отдельные current-destination/base-candidate validity boundaries, durable recovery, vehicle stale guards, deferred stock map cursor, dynamic UI palette, static allied/JIP marker и diagnostics |
-| `Test-RHSIntegrationStatic.ps1` | optional dependency graph, Core isolation, stock/RHS profiles, fail-closed roles/vehicles, personnel building-browser adapter, loadout UI guard, stable-side Arland radio normalization, RHS_AFRF identity voice, single lifecycle и cleanup symmetry |
-| `Test-ScenarioHeadersStatic.ps1` | stock/RHS inherited MissionHeader, menu visibility, отключённый persistence, stable resource GUID, platform metadata и отсутствие собственных world/layer resources |
+| `Test-RHSIntegrationStatic.ps1` | optional dependency graph, Core isolation, stock/RHS profiles, fail-closed roles/vehicles, personnel building-browser adapter, loadout UI guard, stable-side stock radio normalization, RHS_AFRF identity voice, single lifecycle и cleanup symmetry |
+| `Test-ScenarioHeadersStatic.ps1` | Arland/Everon/RHS inherited MissionHeader, menu visibility, отключённый persistence, stable project/resource GUID, platform metadata и отсутствие собственных world/layer resources |
 | `Test-RankRestrictionsStatic.ps1` | `GENERAL` join/XP floor, maximum non-renegade fallback для container без `GENERAL`, central mutation/restore hook, authoritative faction/spawn recheck, replicated character state, authority/replication, запрет раннего polling и сохранение остальных admission checks |
-| `Test-RuntimeLauncherStatic.ps1` | прямой native invocation без повторной сериализации, целостность `addonsDir` с пробелами/кириллицей, stock/RHS graph, fresh profile и fail-closed client readiness gate |
+| `Test-RuntimeLauncherStatic.ps1` | прямой native invocation без повторной сериализации, целостность `addonsDir` с пробелами/кириллицей, Arland/Everon/RHS graph, fresh profile и fail-closed client readiness gate |
 
 Аудиторы проверяют часть архитектуры регулярными выражениями. Красный rule ID
 может означать реальный regression или drift тестового контракта. Сначала
@@ -105,6 +105,25 @@ Stage 3.5 baseline failures:
 наборы failures. Новых failures быть не должно; исчезнувший failure объясняется
 изменением реализации или осознанным обновлением контракта.
 
+## Переход на Reforger 1.8.0.13
+
+Совместимость целевой версии `1.8.0.13` проверена `2026-09-03` на commit
+`c8bcd798298bf79fdc9fbfbc4b6847eee77180f8`:
+
+| Gate | Результат |
+|---|---|
+| Script Diff `1.8.0.10 -> 1.8.0.13` | Изменённые stock API сопоставлены с AICF; используемых удалённых или несовместимо изменённых сигнатур нет |
+| Stock Workbench Validate | `PASS`: `Game successfully created`, `Script validation successful`, `SCRIPT (E/F)=0`, `ENGINE (F)=0`, VM/null errors `0` |
+| RHS Workbench Validate | `PASS` с теми же compile-критериями |
+| Stock server startup | `PASS`: `ROSTER_READY` за `27033` ms, `US=10`, `USSR=10`, AICF errors/FAIL `0` |
+| Static audits | Stage 3: сохранены 3 известных issues; Stage 3.5: 2 известных issues; остальные focused audits `PASS` |
+| Client/JIP, RHS runtime, soak, visual | `NOT RUN` |
+
+Пять повторяющихся AICF compile warnings об избыточном up-cast и набор
+Workbench shutdown resource leaks совпали с последним baseline `1.8.0.10`.
+Двенадцать stock `RESOURCES/WORLD/ENTITY (E)` при server startup также совпали
+с прежним baseline и не являются новой регрессией `1.8.0.13`.
+
 ## Выбор проверок по области
 
 | Изменение | Минимум |
@@ -116,9 +135,10 @@ Stage 3.5 baseline failures:
 | `Economy/` | Stage 4 static + Workbench + server runtime/log audit |
 | `UI/`, RPC или campaign replicated state | Stage 4 static + Workbench + server/client runtime; JIP при изменении snapshot |
 | Map-point orders (`POSITION`) | `Test-MapPointOrdersStatic.ps1` + AI commander/Stage 3/3.5/RecoveryPolicy/Stage 4 + Workbench; server/client/JIP runtime и отдельный ручной visual/input verdict |
-| Arland `modded` integration | Workbench + canonical Arland server runtime; клиент, если меняется UI/replication |
+| Stock `modded` integration или supported-world gate | отдельные Arland/Everon Workbench и canonical server runtime; клиент, если меняется UI/replication |
+| `AIConflictEveron` или его header | `Test-ScenarioHeadersStatic.ps1` + `Test-RuntimeLauncherStatic.ps1`; Everon Workbench; fresh Everon server; ручная проверка плитки и packaged build |
 | Content profile или `AIConflictArlandRHS` | все Stage/authority audits + `Test-RHSIntegrationStatic.ps1`; отдельный stock и RHS Workbench; fresh RHS server; client/JIP при изменении faction/UI mapping |
-| `Missions/*.conf` или `.conf.meta` | `Test-ScenarioHeadersStatic.ps1` на позитивном и негативном input; отдельный stock и RHS Workbench; source/direct MissionHeader load; ручная проверка плитки и packaged build |
+| `Missions/*.conf` или `.conf.meta` | `Test-ScenarioHeadersStatic.ps1` на позитивном и негативном input; отдельный затронутый Arland/Everon/RHS Workbench; source/direct MissionHeader load; ручная проверка плитки и packaged build |
 | PowerShell analyzer | позитивный и негативный representative input; не ослаблять rule молча |
 | Enfusion version/API | pinned reference diff + полный Workbench Validate по целевой версии |
 
@@ -257,20 +277,20 @@ header; такой тест должен закончиться `XP_FLOOR_APPLIE
 
 ## Runtime contract
 
-Запускай canonical Arland server/client из терминала по `docs/DEVELOPMENT.md`:
+Запускай canonical Arland/Everon server/client из терминала по `docs/DEVELOPMENT.md`:
 
 - новый server profile на каждый run;
 - новый client profile, если нужен клиент;
 - `-backendFreshSession`;
-- raw Arland world вместе с `-MissionHeader` и `-worldSystemsConfig`;
-- оба addon GUID;
+- raw world выбранной карты вместе с соответствующими `-MissionHeader` и `-worldSystemsConfig`;
+- exact addon GUID graph выбранного варианта;
 - записанные `aicf*` flags, включая факт отсутствия или exact value
   `aicfAICommanderMode`;
 - одинаковые версии Game, Server и Tools.
 
-Для stock runtime используй
-`Missions/AICF_Conflict_Arland.conf`, для RHS —
-`Missions/AICF_RHS_Conflict_Arland.conf`. Оба header наследуют официальный
+Для stock runtime используй `Missions/AICF_Conflict_Arland.conf` или
+`Missions/AICF_Conflict_Everon.conf`, для RHS —
+`Missions/AICF_RHS_Conflict_Arland.conf`. Все headers наследуют официальный
 scenario contract; raw world и `worldSystemsConfig` в terminal-команде должны
 соответствовать выбранному родителю.
 
@@ -281,7 +301,7 @@ Scenario gate разделяется на четыре независимых у
 1. `Test-ScenarioHeadersStatic.ps1` подтверждает exact official parent,
    `m_bShowInScenarioMenu`, `m_eSaveTypes 0`, metadata GUID и отсутствие
    скопированных `.ent`/`.layer`.
-2. Отдельный stock/RHS Workbench Validate подтверждает регистрацию ресурсов и
+2. Отдельный Arland/Everon/RHS Workbench Validate подтверждает регистрацию ресурсов и
    отсутствие `SCRIPT (E/F)`, `ENGINE (F)`, VM/null ошибок проекта.
 3. Direct source run с новым `-MissionHeader` должен прочитать header и
    загрузить world/systems его официального родителя; это ещё не доказывает
@@ -337,6 +357,10 @@ Stage 2–4 используют Stage 1 `run` и `t_ms`, поэтому соб�
   штатные supplies, capacity и authority checks без VM/null ошибки;
 - после захвата односторонней frontier-base событие `RADIO_BRIDGE_NORMALIZED`
   предшествует graph rebuild, а новый graph даёт владельцу путь от базы к relay;
+- на Everon, когда friendly-компонент от HQ исчерпал все допустимые цели и не имеет даже
+  одностороннего контакта с relay, `RADIO_COMPONENT_BRIDGE_NORMALIZED`
+  предшествует graph rebuild; выбранная обычная база и relay образуют ближайшую
+  детерминированную пару, после чего AI получает хотя бы одну новую цель;
 - vehicle metadata `CATALOG` повторена событием `LIVE` после spawn; выбранные
   prefab принадлежат заявленному RHS faction catalog;
 - нет `SCRIPT (E/F)`, `ENGINE (F)`, VM exception или null-pointer;

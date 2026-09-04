@@ -1,9 +1,10 @@
-// Arland's stock radio layout contains intentional high-range relay transmitters. Some ordinary
-// bases can receive a relay, but cannot answer it. Normalise only US/USSR-owned, non-HQ bases
-// when that one-way frontier becomes relevant to the live match.
+// Supported stock radio layouts contain high-range relay transmitters. Some ordinary bases can
+// receive a relay, but cannot answer it. Normalise only US/USSR-owned, non-HQ bases when that
+// one-way frontier becomes relevant to the live match. Map-specific subclasses may add a bounded
+// frontier policy through the protected hooks without adding another subscription or lifecycle.
 modded class SCR_CampaignMilitaryBaseComponent
 {
-	bool AICF_ArlandExtendRadioRange(float requestedRange)
+	bool AICF_ExtendRadioRangeForBridge(float requestedRange)
 	{
 		if (!Replication.IsServer() || IsProxy() || !m_RadioComponent)
 			return false;
@@ -27,7 +28,7 @@ modded class SCR_CampaignMilitaryBaseComponent
 			return false;
 
 		// RecalculateRadioRange() starts from this value, so later stock service updates preserve
-		// the Arland correction. m_fRadioRange is an RplProp with OnRadioRangeChanged callback.
+		// the bridge correction. m_fRadioRange is an RplProp with OnRadioRangeChanged callback.
 		m_fRadioRangeDefault = newRange;
 		m_fRadioRange = newRange;
 		Replication.BumpMe();
@@ -36,7 +37,7 @@ modded class SCR_CampaignMilitaryBaseComponent
 	}
 }
 
-class AICF_ArlandRadioBridgeNormalizer
+class AICF_StockRadioBridgeNormalizer
 {
 	protected static const float RANGE_MARGIN_METERS = 10.0;
 
@@ -61,10 +62,12 @@ class AICF_ArlandRadioBridgeNormalizer
 		m_bStarted = true;
 
 		int initialNormalizations = NormalizeAllPlayableOwnedBases("BOOTSTRAP");
+		initialNormalizations += NormalizeMapSpecificFrontiers("BOOTSTRAP");
 		AICF_Stage1Diagnostics.Info(
 			"RADIO_BRIDGE_READY",
 			string.Format(
-				"authority=server_master margin_m=%1 initial_normalized=%2",
+				"authority=server_master policy=%1 margin_m=%2 initial_normalized=%3",
+				GetPolicyKey(),
 				RANGE_MARGIN_METERS,
 				initialNormalizations));
 		return true;
@@ -106,7 +109,9 @@ class AICF_ArlandRadioBridgeNormalizer
 		if (!m_bStarted || !Replication.IsServer() || !base || base.GetFaction() != expectedFaction)
 			return;
 
-		NormalizeBase(base, "BASE_OWNER_CHANGED");
+		bool oneWayNormalized = NormalizeBase(base, "BASE_OWNER_CHANGED");
+		if (!oneWayNormalized)
+			NormalizeMapSpecificFrontierAfterCapture(expectedFaction, "BASE_OWNER_CHANGED");
 	}
 
 	protected int NormalizeAllPlayableOwnedBases(string trigger)
@@ -123,6 +128,23 @@ class AICF_ArlandRadioBridgeNormalizer
 		}
 
 		return normalizedCount;
+	}
+
+	protected int NormalizeMapSpecificFrontiers(string trigger)
+	{
+		return 0;
+	}
+
+	protected bool NormalizeMapSpecificFrontierAfterCapture(
+		SCR_CampaignFaction faction,
+		string trigger)
+	{
+		return false;
+	}
+
+	protected string GetPolicyKey()
+	{
+		return "ONE_WAY_FRONTIER";
 	}
 
 	protected bool NormalizeBase(SCR_CampaignMilitaryBaseComponent base, string trigger)
@@ -151,7 +173,7 @@ class AICF_ArlandRadioBridgeNormalizer
 				relay.GetType() != SCR_ECampaignBaseType.RELAY)
 				continue;
 
-			// CanReachByRadio() is the official directed physical-radio query in 1.7.0.54.
+			// CanReachByRadio() is the official directed physical-radio query in 1.8.0.13.
 			if (!relay.CanReachByRadio(base.GetOwner()) || base.CanReachByRadio(relay.GetOwner()))
 				continue;
 
@@ -166,7 +188,7 @@ class AICF_ArlandRadioBridgeNormalizer
 			farthestRelay = relay;
 		}
 
-		if (!farthestRelay || !base.AICF_ArlandExtendRadioRange(requiredRange))
+		if (!farthestRelay || !base.AICF_ExtendRadioRangeForBridge(requiredRange))
 			return false;
 
 		RefreshAuthoritativeCoverage();

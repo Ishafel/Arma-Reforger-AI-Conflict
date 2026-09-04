@@ -3,9 +3,9 @@
 ## Что создаёт этот гайд
 
 Инструкция описывает два пути: ручной запуск через встроенное меню `Сценарии`
-и локальный development server Arma Reforger Conflict на Arland с исходными
-аддонами `AIConflictCore` и `AIConflictArland` либо их опциональным RHS
-root-addon `AIConflictArlandRHS`. Сервер запускается из PowerShell напрямую
+и локальный development server Arma Reforger Conflict на Arland или Everon с
+исходными аддонами `AIConflictCore`, `AIConflictArland` и выбранным root-addon,
+либо опциональный RHS root-addon `AIConflictArlandRHS`. Сервер запускается из PowerShell напрямую
 через `ArmaReforgerServerDiag.exe`, без Launcher, Host UI, Workbench GUI и
 скриншотов.
 
@@ -14,7 +14,7 @@ Workshop metadata и release checklist, но packaged build ещё должен 
 впервые вручную опубликован по [`docs/PUBLISHING.md`](PUBLISHING.md). До этого
 для подключения клиент должен иметь тот же checkout исходников и запускаться
 с теми же addon GUID. Публичный сервер для произвольных игроков потребует
-публикации обоих аддонов.
+публикации всех аддонов выбранного dependency graph.
 
 ## Что потребуется
 
@@ -25,7 +25,7 @@ Workshop metadata и release checklist, но packaged build ещё должен 
 - `Arma Reforger Tools` для проверки скриптов перед запуском.
 - Одинаковые версии Game, Server и Tools.
 
-Проект и локальный API reference сейчас ориентированы на версию `1.8.0.10`.
+Проект и локальный API reference сейчас ориентированы на версию `1.8.0.13`.
 Переход на другую версию требует отдельного Workbench Validate и проверки
 совместимости Enfusion API.
 
@@ -42,7 +42,7 @@ C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger Tools
 
 ## Запуск из меню сценариев
 
-Оба сценария AICF отключают player-rank gates для строительства и отдельных
+Все сценарии AICF отключают player-rank gates для строительства и отдельных
 построек, заказа техники, арсенала, loadouts, групп, защитников, radial commands
 и Commander volunteer. Всем игрокам назначается XP floor стартового звания
 `GENERAL`. В Reforger 1.8 stock/default `RankContainer` заканчивается на
@@ -55,11 +55,12 @@ replicated character state остаётся `GENERAL`. Ограничения п
 сохраняются.
 
 После установки и включения packaged `AI Conflict Arland` открой в игре
-`Сценарии` и выбери `AI Conflict - Arland`. Для RHS установи и включи
+`Сценарии` и выбери `AI Conflict - Arland`. Для Everon установи и включи
+`AI Conflict Everon`, затем выбери `AI Conflict - Everon`. Для RHS установи и включи
 `AI Conflict Arland RHS` со всеми dependencies, затем выбери
 `AI Conflict RHS - Arland`.
 
-Обе AICF-плитки отключают штатные session saves через `m_eSaveTypes 0`.
+Все AICF-плитки отключают штатные session saves через `m_eSaveTypes 0`.
 Обычный `Играть` и hosting из встроенного Host dialog всегда создают новую
 войну и не предлагают продолжить прежнюю progression. Никакие Steam launch
 options и ручное удаление `.save`/`.db` из profile для сброса не нужны.
@@ -81,6 +82,19 @@ $scenarioProfile = Join-Path $env:LOCALAPPDATA ('AICF\ScenarioMenu-Stock-' + (Ge
   -backendFreshSession
 ```
 
+Для source-плитки Everon используй отдельный root graph:
+
+```powershell
+$everonScenarioProfile = Join-Path $env:LOCALAPPDATA ('AICF\ScenarioMenu-Everon-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+
+& "$gameRoot\ArmaReforgerSteamDiag.exe" `
+  -gproj "$repoRoot\AIConflictEveron\addon.gproj" `
+  -addonsDir "$repoRoot,$gameRoot\addons" `
+  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,A4B2E62595F645A4' `
+  -profile "$everonScenarioProfile" `
+  -backendFreshSession
+```
+
 Для RHS добавь установленный RHS-каталог и используй его root project:
 
 ```powershell
@@ -96,7 +110,7 @@ $rhsScenarioProfile = Join-Path $env:LOCALAPPDATA ('AICF\ScenarioMenu-RHS-' + (G
 ```
 
 После появления главного меню пользователь вручную открывает `Сценарии` и
-выбирает нужную плитку. В RHS graph видна также stock-плитка из dependency;
+выбирает нужную плитку. В Everon и RHS graph видна также Arland-плитка из dependency;
 для RHS запуска выбирай именно `AI Conflict RHS - Arland`. Для stock не
 подключай `AIConflictArlandRHS`.
 
@@ -159,7 +173,7 @@ if ($serverVersion -ne $clientVersion -or $serverVersion -ne $toolsVersion)
 }
 ```
 
-На текущем рабочем окружении все три файла имеют версию `1.8.0.10`.
+На текущем рабочем окружении все три файла имеют версию `1.8.0.13`.
 
 ## 3. Проверь скрипты через терминальный Workbench
 
@@ -235,6 +249,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -AICommanderMode BOTH
 ```
 
+Для Everon используй тот же canonical helper с `-Variant Everon`. Он передаёт
+`AIConflictEveron/addon.gproj`, raw world `worlds/MP/CTI_Campaign_Eden.ent`,
+`Missions/AICF_Conflict_Everon.conf` и exact три GUID:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Start-AICFRuntime.ps1 `
+  -Role Server `
+  -Variant Everon `
+  -AICommanderMode BOTH
+```
+
 Сохрани строки `AICF_RUNTIME_PROFILE` и `AICF_RUNTIME_MANIFEST_JSON`. Вторая
 является машиночитаемым evidence exact executable, profile и массива native
 arguments; первая нужна для проверки лога и запуска client.
@@ -243,12 +269,12 @@ arguments; первая нужна для проверки лога и запу�
 
 | Параметр | Назначение |
 |---|---|
-| `-gproj` | загружает проект Arland; через dependency подключается Core |
-| `-server` | запускает raw Arland Conflict world |
+| `-gproj` | загружает root project выбранной карты; через dependencies подключаются Core и stock integration |
+| `-server` | запускает соответствующий raw Arland/Everon Conflict world |
 | `-MissionHeader` | подключает AICF header, наследующий штатную Campaign mission |
 | `-worldSystemsConfig` | подключает штатные Conflict systems |
 | `-addonsDir` | добавляет repo и vanilla server addons в пути поиска |
-| `-addons` | загружает Core и Arland по неизменяемым GUID |
+| `-addons` | загружает exact Core/integration/root GUID graph выбранного варианта |
 | `-profile` | отделяет логи и runtime state конкретного запуска |
 | `-backendFreshSession` | начинает новую backend session |
 | `-aicfAICommanderMode BOTH` | фиксирует command authority обеих фракций; без параметра default также `BOTH` |
@@ -322,7 +348,8 @@ Get-Content -LiteralPath $log.FullName -Wait |
 ## 7. Подключи локальный клиент
 
 Клиент запускается из отдельного PowerShell и должен видеть тот же checkout
-исходных аддонов:
+исходных аддонов. Значение `-Variant` обязано совпадать с server (`Stock` для
+Arland или `Everon` для Everon):
 
 ```powershell
 $serverProfileRoot = Read-Host 'Вставь AICF_RUNTIME_PROFILE server-процесса'
@@ -344,8 +371,8 @@ Codex может запустить client этой командой и анал
 `NOT RUN`.
 
 Для клиента на другой машине в той же LAN замени `127.0.0.1` на LAN IPv4
-сервера. На клиентской машине должны находиться exact same commit обоих
-аддонов; скорректируй `$repoRoot` и `$gameRoot` и предварительно выполни там
+сервера. На клиентской машине должен находиться exact same commit всех аддонов
+выбранного graph; скорректируй `$repoRoot` и `$gameRoot` и предварительно выполни там
 терминальный Workbench Validate, чтобы создать согласованную Resource Database.
 Подключение произвольных Internet-клиентов этим source workflow не покрывается.
 
@@ -415,8 +442,8 @@ Command authority выбирается одним exact-case параметро�
 Mode неизменяем в течение матча. Чтобы поменять его, останови server и запусти
 новый process; желательно использовать новый profile. `NONE`, пустое,
 lowercase и любое неизвестное значение не поддерживаются: server пишет
-`CONFIG_INVALID` в Arland bootstrap и отклоняет AICF startup до запуска
-`AICF_ArlandRadioBridgeNormalizer`, его base-owner subscription/radio mutation,
+`CONFIG_INVALID` в stock bootstrap и отклоняет AICF startup до запуска
+`AICF_StockRadioBridgeNormalizer`, его base-owner subscription/radio mutation,
 MatchController roster и loops вместо fallback к `BOTH`. Bootstrap передаёт в
 MatchController тот же предварительно проверенный объект config; CLI внутри
 controller/policy не перечитывается.
@@ -484,7 +511,7 @@ shutdown contract: `Ctrl+C` завершает локальный process, но 
 |---|---|
 | Executable не найден | Steam Library path в `$serverRoot`, `$gameRoot`, `$toolsRoot` |
 | Server сразу завершился | полный `console.log`, версии, `SCRIPT/ENGINE/VM` errors |
-| Запустился обычный vanilla Conflict | оба GUID в `-addons`, repo в `-addonsDir`, Arland `-gproj` |
+| Запустился обычный vanilla Conflict | exact GUID graph в `-addons`, repo в `-addonsDir`, правильный root `-gproj` |
 | Нет `MATCH_START` | raw world, `-MissionHeader`, `-worldSystemsConfig`, bootstrap errors |
 | `CONFIG_INVALID` для command mode | exact uppercase `BOTH`, `US` или `USSR`; отсутствие лишних пробелов и `NONE` |
 | Invalid mode всё же дал readiness/radio/roster events | regression: после `CONFIG_INVALID` не должно быть `CONFLICT_READY`, любого `RADIO_BRIDGE_*`, controller `CONFIG`, `MATCH_START` или spawn/roster events |
@@ -492,8 +519,9 @@ shutdown contract: `Ctrl+C` завершает локальный process, но 
 | Player-commanded группы стоят на HQ | это ожидаемый `AWAITING_PLAYER_COMMAND`/`SYSTEM_HOLD`; отправь valid player order своей фракции |
 | Клиент не подключается | `2001/UDP`, LAN IPv4, локальный firewall, exact commit и версии |
 | UDP 2001 занят | `Get-NetUDPEndpoint -LocalPort 2001` и точный `OwningProcess` |
-| Нет `[AICF]` событий | загружены ли оба аддона и не произошёл ли fallback к vanilla |
+| Нет `[AICF]` событий | загружен ли полный addon graph выбранного варианта и не произошёл ли fallback к vanilla |
 | Нет плитки `AI Conflict - Arland` | включён ли packaged Arland addon либо запущен ли source-client с его `-gproj`/GUID |
+| Нет плитки `AI Conflict - Everon` | включён ли packaged Everon addon либо запущен ли source-client с `AIConflictEveron` root/GUID |
 | В RHS запустился stock world | выбрана ли точная плитка `AI Conflict RHS - Arland`, а не stock-плитка dependency |
 | Host загрузил старую Conflict progression | проверить, что выбран AICF header текущей версии с `m_eSaveTypes 0`, а не штатная Conflict-плитка или старый Workshop build |
 | Видно окно клиента, но UI не проверен | это `NOT RUN`; визуальный verdict даёт пользователь вручную |

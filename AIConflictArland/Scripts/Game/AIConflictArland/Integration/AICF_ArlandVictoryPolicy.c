@@ -1,4 +1,4 @@
-// Stage 1 uses ticket exhaustion; suppress stock Conflict's territorial countdown while this integration is loaded.
+// AICF uses ticket exhaustion on supported stock maps; suppress stock Conflict's territorial countdown.
 modded class SCR_GameModeCampaign
 {
 	override protected void CheckForWinner()

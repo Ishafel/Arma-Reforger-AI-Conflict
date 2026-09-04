@@ -2,15 +2,16 @@
 
 ## Статус и границы
 
-Проект состоит из двух stock-compatible addon и отдельного опционального RHS
-root-addon. Arland и RHS root-addon содержат только inherited scenario headers
-для запуска из меню; собственных world/base/layout resources нет. Порядок
+Проект состоит из трёх stock-compatible addon и отдельного опционального RHS
+root-addon. Все scenario entrypoints — inherited headers для запуска из меню;
+собственных world/base/layout resources нет. Порядок
 публикации:
 
 | Addon | GUID / Workshop ID | Назначение |
 |---|---|---|
 | `AIConflictCore` | `9178E5822AFE48EA` | Общая server-authoritative логика и UI |
 | `AIConflictArland` | `B52C5F6AEDBF423E` | Интеграция со stock Conflict Arland; зависит от Core |
+| `AIConflictEveron` | `A4B2E62595F645A4` | Плитка stock Conflict Everon; зависит от Core и проверенного stock integration |
 | `AIConflictArlandRHS` | `9F88011DA22B471C` | RHS USMC/MSV integration; зависит от Core, Arland и RHS packages |
 
 GUID менять нельзя. Первый upload выполняется владельцем вручную через
@@ -36,10 +37,13 @@ Codex не выполняет вход в Bohemia Account и не управля
 | Core preview | `workshop/AIConflictCore/preview.jpg` |
 | Arland metadata | `workshop/AIConflictArland/metadata.md` |
 | Arland preview | `workshop/AIConflictArland/preview.jpg` |
+| Everon metadata | `workshop/AIConflictEveron/metadata.md` |
+| Everon preview | `workshop/AIConflictEveron/preview.jpg` |
 | RHS metadata | `workshop/AIConflictArlandRHS/metadata.md` |
 | RHS preview | `workshop/AIConflictArlandRHS/preview.jpg` |
 | Custom license Core | `AIConflictCore/license.txt` |
 | Custom license Arland | `AIConflictArland/license.txt` |
+| Custom license Everon | `AIConflictEveron/license.txt` |
 | Custom license RHS | `AIConflictArlandRHS/license.txt` |
 
 `manifest.json` и packaged files не создаются вручную и не коммитятся:
@@ -90,6 +94,20 @@ Resource Publisher генерирует их в выбранном Working Dir.
 Если Core не появился как dependency, Arland нельзя переводить в Public:
 сначала исправляется обнаружение dependency и повторяется upload.
 
+## Первая публикация Everon
+
+1. Сначала опубликовать и проверить Core и Arland integration.
+2. В stable Tools открыть `AIConflictEveron/addon.gproj`.
+3. Проверить GUID `A4B2E62595F645A4` и dependencies:
+   `58D0FB3206B6F859`, `9178E5822AFE48EA`, `B52C5F6AEDBF423E`.
+4. Выбрать `Workbench -> Publish Project` и перенести поля из
+   `workshop/AIConflictEveron/metadata.md`.
+5. Для Preview Image выбрать `workshop/AIConflictEveron/preview.jpg`, Working
+   Dir держать вне исходников, license выбрать `Custom`; полный текст находится
+   в `AIConflictEveron/license.txt`.
+6. Выполнить публикацию с visibility `Test` и проверить на Workshop-странице
+   project ID, metadata и зависимости Core/Arland.
+
 ## Первая публикация RHS root-addon
 
 1. Сначала опубликовать и проверить Core и Arland.
@@ -117,13 +135,15 @@ Resource Publisher генерирует их в выбранном Working Dir.
 1. Использовать отдельный свежий game profile и Workshop addons directory,
    которые не видят checkout репозитория.
 2. Скачать/включить `AI Conflict Arland` и доказать, что Core скачался как
-   dependency.
+   dependency. Для Everon отдельно скачать/включить `AI Conflict Everon` и
+   доказать загрузку Core и Arland integration.
    Для RHS отдельно скачать/включить RHS root-addon и доказать загрузку Arland,
    Core и трёх RHS packages.
-3. В меню `Сценарии` проверить и запустить `AI Conflict - Arland`. Для RHS
+3. В меню `Сценарии` проверить и запустить `AI Conflict - Arland` и
+   `AI Conflict - Everon`. Для RHS
    entry проверить и запустить `AI Conflict RHS - Arland`; не выбирать
    stock-плитку, которая также видна через dependency на обычный Arland addon.
-   Оба сценария должны загрузить мир и Conflict contract официального parent,
+   Все сценарии должны загрузить мир и Conflict contract официального parent,
    не source checkout. Повторный hosting на том же game profile должен начать
    новую кампанию, не загрузить прежнюю progression и не предложить AICF save.
 4. На dedicated server загрузить применимый Workshop dependency set и сохранить
@@ -141,8 +161,9 @@ Resource Publisher генерирует их в выбранном Working Dir.
 
 Каждый функциональный release затронутого addon увеличивает version в формате
 `major.minor.patch`. Если меняются несколько addon, зависимости публикуются и
-проверяются раньше потребителей: Core -> Arland -> RHS. Arland-only или RHS-only
-update не требует фиктивного обновления неизменных dependencies. В Change Notes
+проверяются раньше потребителей: Core -> Arland integration -> Everon/RHS.
+Arland-only, Everon-only или RHS-only update не требует фиктивного обновления
+неизменных dependencies. В Change Notes
 перечисляются только изменения данной версии. Изменение visibility, preview или
 description также создаёт новую Workshop version.
 

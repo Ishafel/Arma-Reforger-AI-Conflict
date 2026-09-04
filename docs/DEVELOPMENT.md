@@ -3,14 +3,16 @@
 ## Модель проекта
 
 Репозиторий не имеет обычного compiler/package manager. Он проверяется через
-Diag Workbench и запускается как unpacked source addon. Два inherited
+Diag Workbench и запускается как unpacked source addon. Три inherited
 `MissionHeader` дают source addons собственные плитки в меню сценариев, но не
 добавляют world или mission topology. Canonical Workshop metadata и preview
 assets хранятся в `workshop/`, а первая упаковка и upload выполняются владельцем
 вручную через Workbench по [`docs/PUBLISHING.md`](PUBLISHING.md).
 
-Stock рабочий `gproj` — `AIConflictArland/addon.gproj`; он зависит от Core и
-vanilla. RHS рабочий `gproj` — `AIConflictArlandRHS/addon.gproj`, постоянный
+Stock рабочие `gproj` — `AIConflictArland/addon.gproj` и
+`AIConflictEveron/addon.gproj`. Everon зависит от Core, vanilla и проверенного
+stock integration в Arland addon; собственного lifecycle-кода в нём нет.
+RHS рабочий `gproj` — `AIConflictArlandRHS/addon.gproj`, постоянный
 GUID `9F88011DA22B471C`; обычные проекты не получают его RHS dependencies.
 
 ## Требования
@@ -20,8 +22,8 @@ GUID `9F88011DA22B471C`; обычные проекты не получают е�
 - PowerShell 7 или Windows PowerShell для scripts в `tools/`.
 - Git for Windows, если нужно обновить локальный Script Diff через Bash.
 
-Зафиксированная API-база проекта — Arma Reforger Script Diff `1.8.0.10`, commit
-`b46bdd8f4932f3a256c765f93a44417996a6da73`. Это не отменяет запись фактически
+Зафиксированная API-база проекта — Arma Reforger Script Diff `1.8.0.13`, commit
+`3d77cc212d5cda9922daf5f45635c7300d2d4cce`. Это не отменяет запись фактически
 установленных версий перед проверкой.
 
 ## Workbench Validate из терминала
@@ -54,6 +56,23 @@ if ($LASTEXITCODE -ne 0)
 }
 ```
 
+Для Everon валидируй его root project и полный stock dependency graph:
+
+```powershell
+$everonLogsDir = Join-Path $env:LOCALAPPDATA ('AICF\Workbench-Everon-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+
+& "$toolsRoot\Workbench\ArmaReforgerWorkbenchSteamDiag.exe" `
+  -noThrow `
+  -wbsilent `
+  -gproj "$repoRoot\AIConflictEveron\addon.gproj" `
+  -addonsDir "$gameRoot\addons,$repoRoot" `
+  -addons '9178E5822AFE48EA,B52C5F6AEDBF423E,A4B2E62595F645A4' `
+  -logsDir "$everonLogsDir" `
+  -wbModule=ScriptEditor `
+  -run `
+  -validate
+```
+
 Для RHS-варианта укажи установленный каталог RHS и валидируй отдельный root
 project со всем dependency graph:
 
@@ -73,7 +92,7 @@ $rhsLogsDir = Join-Path $env:LOCALAPPDATA ('AICF\Workbench-RHS-' + (Get-Date -Fo
   -validate
 ```
 
-RHS target зафиксирован на Status Quo `0.16.5150` и Reforger `1.8.0.10`.
+RHS target зафиксирован на Status Quo `0.16.5150` и Reforger `1.8.0.13`.
 После обновления любого RHS package нужны новый catalog probe, Workbench и
 runtime; числа capacity и prefab mappings нельзя переносить автоматически.
 
@@ -86,7 +105,7 @@ Compile evidence требует успешного создания Game module 
 Кэш находится под игнорируемым каталогом:
 
 ```text
-.cache/reforger-api/Arma-Reforger-Script-Diff-1.8.0.10/
+.cache/reforger-api/Arma-Reforger-Script-Diff-1.8.0.13/
 ```
 
 Проверить или загрузить его из Git Bash:
@@ -137,7 +156,10 @@ $profile = Join-Path $env:LOCALAPPDATA ('AICF\ScenarioMenu-Stock-' + (Get-Date -
   -backendFreshSession
 ```
 
-Пользователь вручную выбирает `Сценарии -> AI Conflict - Arland`. Для RHS:
+Пользователь вручную выбирает `Сценарии -> AI Conflict - Arland`. Для Everon
+используй тот же запуск с root project `AIConflictEveron/addon.gproj`, addon
+graph `9178E5822AFE48EA,B52C5F6AEDBF423E,A4B2E62595F645A4` и выбери
+`Сценарии -> AI Conflict - Everon`. Для RHS:
 
 ```powershell
 $rhsRoot = 'C:\Users\retar\OneDrive\Документы\My Games\ArmaReforger\addons'
@@ -155,18 +177,18 @@ $rhsProfile = Join-Path $env:LOCALAPPDATA ('AICF\ScenarioMenu-RHS-' + (Get-Date 
 обычного Arland. Выбирай `AI Conflict RHS - Arland`; для stock запуска не
 подключай `AIConflictArlandRHS`.
 
-Оба AICF `MissionHeader` задают `m_eSaveTypes 0`. Поэтому запуск или hosting
+Все AICF `MissionHeader` задают `m_eSaveTypes 0`. Поэтому запуск или hosting
 этих плиток из обычной игры не загружает прежнюю Conflict progression и всегда
 начинает новую кампанию; удалять `.save`/`.db` из game profile не требуется.
 Указанные выше отдельные profiles и `-backendFreshSession` всё равно остаются в
 development-командах для полной изоляции logs и backend state каждого run.
 
-Меню не передаёт custom CLI arguments, поэтому оба сценария используют default
+Меню не передаёт custom CLI arguments, поэтому все сценарии используют default
 `aicfAICommanderMode=BOTH`. Для `US` или `USSR` по-прежнему нужен отдельный
 dedicated server process. Наличие плитки, её выбор и визуальная загрузка —
 ручные критерии пользователя; Codex отмечает их `NOT RUN` без GUI automation.
 
-## Direct Diag server: Arland Conflict
+## Direct Diag server: stock Arland/Everon Conflict
 
 Пошаговая пользовательская инструкция: [`SERVER_SETUP.md`](SERVER_SETUP.md).
 
@@ -181,6 +203,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\tools\Start-AICFRuntime.ps1 `
   -Role Server `
   -Variant Stock `
+  -AICommanderMode BOTH
+```
+
+Для Everon команда отличается только вариантом; launcher сам выбирает
+`AIConflictEveron/addon.gproj`, `worlds/MP/CTI_Campaign_Eden.ent`, Everon
+header и exact addon graph:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Start-AICFRuntime.ps1 `
+  -Role Server `
+  -Variant Everon `
   -AICommanderMode BOTH
 ```
 
@@ -202,7 +236,7 @@ addon roots, запрещает повторное использование pr
 lowercase и неизвестное значение вызывают `CONFIG_INVALID` и останавливают
 startup до запуска изменяющего состояние Arland radio normalizer, его
 subscription/изменения replicated radio state, MatchController composition,
-roster и periodic loops. Arland bootstrap создаёт config один раз и передаёт тот
+roster и periodic loops. Stock bootstrap создаёт config один раз и передаёт тот
 же предварительно проверенный объект в `AICF_MatchController`; controller строит
 immutable policy без повторного чтения CLI. Runtime-переключения нет; для
 другого mode останови server и начни новый run. Для воспроизводимого evidence

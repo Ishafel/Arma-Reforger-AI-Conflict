@@ -5,9 +5,9 @@
 Этот репозиторий — scripts-first расширение штатного Conflict для автономной
 войны `US` против `USSR`. Разработка выполняется преимущественно в Enforce
 Script; единственные gameplay resources проекта — тонкие inherited
-`MissionHeader` для запуска stock/RHS вариантов из меню сценариев. Они не
+`MissionHeader` для запуска stock Arland/Everon и RHS вариантов из меню сценариев. Они не
 владеют world, bases или layouts. Общие механики должны оставаться в
-`AIConflictCore`, особенности Arland — в `AIConflictArland`.
+`AIConflictCore`, особенности карт — в соответствующем integration addon.
 
 Перед существенным изменением прочитай:
 
@@ -27,7 +27,7 @@ Script; единственные gameplay resources проекта — тонк�
 - Запусти релевантные статические проверки до правки и сохрани baseline.
   Текущий набор не полностью зелёный; сравнивай результат до и после.
 - Для неизвестной сигнатуры Enfusion сначала ищи её в закреплённом Script Diff
-  `1.8.0.10` под `.cache/reforger-api/`. Если кэша нет, используй
+  `1.8.0.13` под `.cache/reforger-api/`. Если кэша нет, используй
   `tools/fetch_reforger_api_reference.sh`. Не придумывай API по аналогии с C#.
 
 ## Только терминальный workflow
@@ -53,9 +53,10 @@ Script; единственные gameplay resources проекта — тонк�
 - Не меняй идентификаторы проектов:
   - vanilla dependency: `58D0FB3206B6F859`;
   - `AIConflictCore`: `9178E5822AFE48EA`;
-  - `AIConflictArland`: `B52C5F6AEDBF423E`.
+  - `AIConflictArland`: `B52C5F6AEDBF423E`;
+  - `AIConflictEveron`: `A4B2E62595F645A4`.
 - Не копируй и не изменяй vanilla world, mission или установленные файлы игры.
-- Не хардкодь координаты и имена баз Arland в Core. Топология берётся из
+- Не хардкодь координаты и имена баз Arland/Everon в Core. Топология берётся из
   штатных баз и radio graph.
 - Стратегия, spawn/delete, экономика, билеты, владение силами и завершение
   матча изменяются только на authoritative server/master.
@@ -136,7 +137,8 @@ occupancy/clearance проверки.
 - `.idea/`, `.gigaide/`;
 - `*.log`, каталоги `logs/` и `profile/`;
 - `AIConflictCore/resourceDatabase.rdb` и
-  `AIConflictArland/resourceDatabase.rdb`;
+  `AIConflictArland/resourceDatabase.rdb`,
+  `AIConflictEveron/resourceDatabase.rdb`;
 - установленные каталоги Arma Reforger, Server и Tools;
 - `.codex-runtime/active-parallel-batch.txt`, если его создал smoke-helper.
 

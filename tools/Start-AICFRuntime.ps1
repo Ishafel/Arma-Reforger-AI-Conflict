@@ -5,7 +5,7 @@ param(
     [string]$Role,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Stock', 'RHS')]
+    [ValidateSet('Stock', 'Everon', 'RHS')]
     [string]$Variant,
 
     [string]$RepositoryRoot,
@@ -318,7 +318,14 @@ $world = 'worlds/MP/CTI_Campaign_Arland.ent'
 $missionHeader = 'Missions/AICF_Conflict_Arland.conf'
 $addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E'
 $profileVariant = ''
-if ($Variant -eq 'RHS') {
+if ($Variant -eq 'Everon') {
+    $projectRelativePath = 'AIConflictEveron\addon.gproj'
+    $world = 'worlds/MP/CTI_Campaign_Eden.ent'
+    $missionHeader = 'Missions/AICF_Conflict_Everon.conf'
+    $addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E,A4B2E62595F645A4'
+    $profileVariant = '-Everon'
+}
+elseif ($Variant -eq 'RHS') {
     $projectRelativePath = 'AIConflictArlandRHS\addon.gproj'
     $world = 'Worlds/MP/Conflict/CTI_Campaign_Arland_RHS.ent'
     $missionHeader = 'Missions/AICF_RHS_Conflict_Arland.conf'
