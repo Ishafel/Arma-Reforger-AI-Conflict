@@ -222,18 +222,22 @@ function Find-AICFClassRecord {
 }
 
 function Get-AICFBracedBody {
-    param([string]$Source, [string]$StartPattern)
+    param([string]$Source, [string]$StartPattern, [string]$Code)
 
     if (-not $Source) {
         return ''
     }
 
-    $match = [regex]::Match($Source, $StartPattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
+    if (-not $PSBoundParameters.ContainsKey('Code')) {
+        $Code = ConvertTo-AICFCodeText $Source
+    }
+    # Маска сохраняет offsets: комментарии и строки не могут подменить начало блока.
+    $match = [regex]::Match($Code, $StartPattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
     if (-not $match.Success) {
         return ''
     }
 
-    $openBrace = $Source.IndexOf('{', $match.Index + $match.Length)
+    $openBrace = $Code.IndexOf('{', $match.Index + $match.Length)
     if ($openBrace -lt 0) {
         return ''
     }
@@ -302,8 +306,11 @@ function Get-AICFMethodBody {
     }
 
     $escapedName = [regex]::Escape($MethodName)
-    $signature = "(?m)^\s*(?!return\b)(?:(?:override|protected|private|static)\s+)*[A-Za-z_][A-Za-z0-9_<>.,\[\]]*\s+$escapedName\s*\("
-    return Get-AICFBracedBody $Record.Source $signature
+    # Между return type и именем допустим только горизонтальный пробел.
+    # Полная сигнатура должна вести непосредственно к телу, а не к ';' вызова/prototype.
+    $signature = "(?m)^[\t ]*(?!(?:return|throw|new|else)\b)(?:(?:override|protected|private|public|static)\s+)*[A-Za-z_][A-Za-z0-9_<>.,\[\]]*[\t ]+$escapedName\s*\([^;{}]*\)\s*(?=\{)"
+    $code = $Record.Code
+    return Get-AICFBracedBody $Record.Source $signature -Code $code
 }
 
 function Get-AICFFirstMethodBody {
@@ -344,6 +351,27 @@ function Assert-AICFNotContains {
     if ($Text -and $Text -match $Pattern) {
         Add-AICFAuditFailure $Failures $RuleId $Message
     }
+}
+
+function Assert-AICFProtectedClearanceDeadline {
+    param(
+        [System.Collections.Generic.List[string]]$Failures,
+        [string]$RuleId,
+        [object]$Cleanup
+    )
+
+    $release = ConvertTo-AICFCodeText (Get-AICFMethodBody $Cleanup 'ProcessLeaseRelease')
+    $deadline = Get-AICFMethodBody $Cleanup 'HandleProtectedClearanceDeadline'
+    $deadlineCode = ConvertTo-AICFCodeText $deadline
+    Assert-AICFContains $Failures $RuleId $release 'nowMs\s*>=\s*job\.m_State\.GetAbsoluteDeadlineMs\s*\(\s*\)\s*\)\s*\{\s*return\s+HandleProtectedClearanceDeadline\s*\(' 'Release deadline must delegate protected clearance to its bounded recovery handler'
+    Assert-AICFContains $Failures $RuleId $Cleanup.Code 'PROTECTED_CLEARANCE_TERMINAL_GRACE_MS\s*=\s*30000\s*;' 'Protected clearance must retain its bounded thirty-second terminal grace'
+    Assert-AICFContains $Failures $RuleId $deadlineCode 'terminalAtMs\s*=\s*job\.m_iProtectedClearanceDeadlineAtMs\s*\+\s*PROTECTED_CLEARANCE_TERMINAL_GRACE_MS\s*;' 'Terminal grace must be anchored to the original protected-clearance deadline'
+    $expired = Get-AICFBracedBody $deadline 'if\s*\(\s*nowMs\s*>=\s*terminalAtMs\s*\)' -Code $deadlineCode
+    $expiredStrings = Get-AICFStringLiteralText $expired
+    foreach ($reason in @('PROTECTED_CLEARANCE_GRACE_EXPIRED', 'PROTECTED_CLEARANCE_PLAYER_POSITION_UNKNOWN_GRACE_EXPIRED', 'PROTECTED_CLEARANCE_PLAYER_GRACE_EXPIRED', 'PROTECTED_CLEARANCE_FOREIGN_GRACE_EXPIRED', 'PROTECTED_CLEARANCE_HIDDEN_FENCE_GRACE_EXPIRED:', 'PROTECTED_CLEARANCE_MANAGED_GRACE_EXPIRED')) {
+        Assert-AICFContains $Failures $RuleId $expiredStrings ('(?m)^' + [regex]::Escape($reason) + '\r?$') "Protected-clearance expiration branch must preserve reason $reason"
+    }
+    Assert-AICFContains $Failures $RuleId (ConvertTo-AICFCodeText $expired) 'return\s+RetainFailClosed\s*\(\s*job\s*,\s*terminalReason\s*\+\s*\+\s*job\.m_Scan\.m_sBlockerSignature\s*,' 'Retained grace-expiration outcome must include its exact protected blocker signature'
 }
 
 function Assert-AICFComponentPresent {

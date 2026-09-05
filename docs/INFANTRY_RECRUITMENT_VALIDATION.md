@@ -72,6 +72,10 @@ Pre/post outputs сохранены в
 - `STAGE35_MEANINGFUL_TASK_PROOF`;
 - `STAGE35_BOUNDED_PROTECTED_CLEARANCE`.
 
+Этот список фиксирует исторический output прогона набора пехоты. После
+исправления контрактов аудиторов все пять failures сняты; текущие Stage 3/3.5
+дают PASS. Обоснование и отрицательные проверки — в [TESTING.md](TESTING.md).
+
 Обновления двух regex сделаны по новому product contract, не для обхода
 ошибок: `GetDeploymentSize()` определяет точную численность создаваемой
 группы и её цену, `GetDesiredSize()` — цель последующего набора. Проверки

@@ -51,7 +51,7 @@ if (Require-Stage3Record $config 'AICF_Stage3Config.c') {
 	Assert-AICFContains $failures 'STAGE3_PHASE_DEADLINES' $config.Code 'DEFAULT_PASSENGER_BOARDING_TIMEOUT_MS\s*=\s*30000\s*;' 'Passenger phase must retain its separate thirty-second deadline'
 	Assert-AICFContains $failures 'STAGE3_PHASE_DEADLINES' $config.Code 'DEFAULT_DISMOUNT_TIMEOUT_MS\s*=\s*20000\s*;' 'Normal dismount must default to twenty seconds'
     Assert-AICFContains $failures 'STAGE3_PROGRESS_EVIDENCE' $config.Code 'DEFAULT_MOTION_METERS\s*=\s*3\.0' 'Physical motion evidence must retain the independent three-metre threshold'
-    Assert-AICFContains $failures 'STAGE3_PROGRESS_EVIDENCE' $config.Code 'DEFAULT_OBJECTIVE_PROGRESS_TIMEOUT_MS\s*=\s*300000' 'Objective progress must retain its independent five-minute timeout'
+    Assert-AICFContains $failures 'STAGE3_PROGRESS_EVIDENCE' $config.Code 'DEFAULT_OBJECTIVE_PROGRESS_TIMEOUT_MS\s*=\s*120000\s*;' 'Objective progress must retain its independent two-minute timeout'
     Assert-AICFContains $failures 'STAGE3_MINIMUM_REQUEST_ROSTER' $config.Code 'DEFAULT_MINIMUM_VEHICLE_REQUEST_AGENTS\s*=\s*3\s*;' 'New vehicle requests must require the accepted three-member minimum'
     Assert-AICFContains $failures 'STAGE3_FACTION_CAP' $config.Code 'DEFAULT_MAX_VEHICLES_PER_FACTION\s*=\s*10\s*;' 'Faction active/reserved lease cap must cover all ten commander-configurable groups'
     Assert-AICFContains $failures 'STAGE3_COHESION_DEADLINE' $config.Code 'DEFAULT_COHESION_WAIT_TIMEOUT_MS\s*=\s*300000\s*;' 'Fragmented cohesion wait must have a five-minute absolute deadline'
@@ -199,15 +199,13 @@ if ($vehicleCoordinator) {
 
 $cleanup = Find-AICFClassRecord $records 'AICF_VehicleCleanupManager'
 if ($cleanup) {
-	$leaseRelease = ConvertTo-AICFCodeText (Get-AICFMethodBody $cleanup 'ProcessLeaseRelease')
 	$retainedAck = ConvertTo-AICFCodeText (Get-AICFMethodBody $cleanup 'AcknowledgeRetainedLease')
     Assert-AICFContains $failures 'STAGE3_CLEANUP_PROTECTION' $cleanup.Code 'GetAllPlayers|PlayerManager' 'Cleanup must inspect players'
     Assert-AICFContains $failures 'STAGE3_CLEANUP_PROTECTION' $cleanup.Code '15\.0|PLAYER_SAFE_DISTANCE|PROXIMITY' 'Cleanup must retain the fifteen-metre player proximity gate'
     Assert-AICFContains $failures 'STAGE3_CLEANUP_PROTECTION' $cleanup.Code 'IsGettingIn|IsGettingOut|transition|Transition' 'Cleanup must protect active vehicle transitions'
     Assert-AICFContains $failures 'STAGE3_WORLD_POOL' $cleanup.Code 'WorldPool|WORLD_POOL' 'Cleanup must retain world-pool processing outside active AI leases'
 	Assert-AICFContains $failures 'STAGE3_STOP_CLEANUP' $cleanup.Code 'CallLater|STOP_CLEANUP|StopCleanup' 'Stop cleanup must continue through bounded deferred polls'
-	Assert-AICFContains $failures 'STAGE3_BOUNDED_PROTECTED_CLEARANCE' $leaseRelease 'GetAbsoluteDeadlineMs[\s\S]*RetainFailClosed' 'Protected clearance must terminate in a retained fail-closed outcome at its absolute deadline'
-	Assert-AICFContains $failures 'STAGE3_BOUNDED_PROTECTED_CLEARANCE' $cleanup.Strings 'PROTECTED_CLEARANCE_DEADLINE_EXCEEDED:' 'Protected-clearance deadline must preserve an explicit blocker-bearing failure reason'
+	Assert-AICFProtectedClearanceDeadline $failures 'STAGE3_BOUNDED_PROTECTED_CLEARANCE' $cleanup
 	foreach ($proof in @('job\.m_bReleaseComplete', 'FAILED_CLOSED', 'FleetContainsLease', 'FindLeaseForSlot', 'MatchesLease')) {
 		Assert-AICFContains $failures 'STAGE3_RETAINED_CLEANUP_OWNERSHIP' $retainedAck $proof 'Retained ownership acknowledgement must prove an unreleased, exact, cap-holding Fleet lease'
 	}
@@ -238,7 +236,11 @@ if ($slot) {
 
 $marker = Find-AICFClassRecord $records 'AICF_GroupMapMarkerSystem'
 if ($marker) {
-    Assert-AICFContains $failures 'STAGE3_MARKER_STATE' $marker.Source 'VEH ' 'Gameplay marker must expose VEH <state>'
+    $markerBody = Get-AICFMethodBody $marker 'BuildMarkerText'
+    $markerCode = ConvertTo-AICFCodeText $markerBody
+    Assert-AICFContains $failures 'STAGE3_MARKER_STATE' (Get-AICFStringLiteralText $markerBody) 'ТЕХНИКА %5' 'Gameplay marker must expose the localized vehicle-state placeholder'
+    Assert-AICFContains $failures 'STAGE3_MARKER_STATE' $markerCode 'vehicleState\s*=\s*vehicleCoordinator\.GetSlotDisplayStatusText\s*\(\s*slot\s*\)' 'Gameplay marker must read the current vehicle state'
+    Assert-AICFContains $failures 'STAGE3_MARKER_STATE' $markerCode 'return\s+string\.Format\s*\(\s*,\s*identity\s*,\s*role\s*,\s*task\s*,\s*alive\s*,\s*vehicleState\s*,' 'Gameplay marker must render vehicleState in its fifth placeholder'
 }
 
 $allStrings = ($records | ForEach-Object { $_.Strings }) -join "`n"

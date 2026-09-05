@@ -35,6 +35,7 @@ Evidence агента состоит из команд, exit codes и полны
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage3Static.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage35Static.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage3StaticContracts.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage35RecoveryPolicy.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-Stage4Static.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-AICommanderModeStatic.ps1
@@ -52,6 +53,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-BaseBuilder
 |---|---|
 | `Test-Stage3Static.ps1` | vehicle architecture, acquisition, trip, cleanup и diagnostics contracts |
 | `Test-Stage35Static.ps1` | force structure, vehicle/infantry integration и Enforce language audit |
+| `Test-Stage3StaticContracts.ps1` | регрессии извлечения методов и отрицательные копии production sources: timeout, grace/blocker, поле техники в маркере и waypoint queue |
 | `Test-Stage35RecoveryPolicy.ps1` | точные recovery, timing, ownership и fail-closed policies |
 | `Test-Stage4Static.ps1` | economy transaction, supply balance, replication, strategic UI и RPC authority |
 | `Test-AICommanderModeStatic.ps1` | stock Arland/Everon CLI preflight, supported-world gate, immutable authority policy, faction commander boundary, intent, availability replication и UI contract |
@@ -67,7 +69,58 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-BaseBuilder
 сопоставь правило с поведением и историей; не меняй production-код либо regex
 только ради зелёного вывода.
 
-## Зафиксированный baseline
+## Текущий baseline Stage 3/3.5 — 2026-09-05
+
+Проверен source commit `490b6a8` после исправления устаревших контрактов
+аудиторов. Production `.c` в этой правке не меняются. Перечисленные ниже
+пять прежних failures больше не являются текущими failures.
+
+| Проверка | До исправления аудиторов | После |
+|---|---|---|
+| `Test-Stage3Static.ps1` | FAIL / 1, 3 issues | PASS / 0 |
+| `Test-Stage35Static.ps1` | FAIL / 1, 2 issues | PASS / 0 |
+| `Test-AICommanderModeStatic.ps1` | PASS / 0 | PASS / 0 |
+| `Test-Stage3StaticContracts.ps1` | Новая проверка | PASS / 0: parser fixtures и 10 отрицательных запусков для 8 мутаций |
+
+`Test-Stage35RecoveryPolicy.ps1` также выполнен с PASS / 0. До правки
+`Test-Stage4Static.ps1` и `Test-MapPointOrdersStatic.ps1` дали PASS / 0;
+общий parser эти два аудитора не используют, повтор не требовался.
+
+Причины обновления контрактов:
+
+- `STAGE3_PROGRESS_EVIDENCE`: default objective-progress timeout —
+  `120000` ms. Он изменён с пяти до двух минут в `59c402e` от 2026-08-14
+  вместе с bounded transport recovery. Аудитор теперь требует две минуты;
+  независимый трёхметровый motion threshold сохраняется.
+- `STAGE3_BOUNDED_PROTECTED_CLEARANCE` и
+  `STAGE35_BOUNDED_PROTECTED_CLEARANCE`: deadline вызывает
+  `HandleProtectedClearanceDeadline`; после ограниченного recovery/grace
+  требуется `RetainFailClosed` с причиной `PROTECTED_CLEARANCE_*GRACE_EXPIRED`
+  и `m_sBlockerSignature`. Оба аудитора используют общий контракт: 30 секунд
+  grace от исходного deadline, конкретные причины и сохранение blocker
+  непосредственно в ветке истечения grace. Старый литерал
+  `PROTECTED_CLEARANCE_DEADLINE_EXCEEDED:` больше не требуется.
+- `STAGE3_MARKER_STATE`: `BuildMarkerText` выводит `ТЕХНИКА %5` и передаёт
+  туда `vehicleState`, полученный из `GetSlotDisplayStatusText(slot)`.
+  Проверяется и placeholder, и получение/вывод состояния.
+- `STAGE35_MEANINGFUL_TASK_PROOF`: парсер теперь распознаёт полную сигнатуру
+  объявления перед `{`, исключает вызовы, prototypes, comments и строки.
+  `IsWaypointBoundToGroup` по-прежнему обязан использовать `GetWaypoints`
+  и `Contains`; проверка не отключена.
+
+`Test-Stage3StaticContracts.ps1` проверяет parser fixtures и восемь
+отрицательных мутаций в отдельной временной копии sources. Удаление queue
+evidence, blocker signature, grace check или отображаемого состояния,
+а также возврат старого timeout должны давать соответствующий FAIL.
+Изменение производственных файлов для этих тестов не требуется.
+
+Полный pre/post output: `.codex-runtime/play-static-contracts-20260905/`.
+Workbench и runtime для этой правки — `NOT RUN`: изменены PowerShell-аудиторы
+и документация, а production Enforce/API не менялись. Исторические отчёты
+ниже и в validation documents описывают результаты на даты своих прогонов;
+их прежние failures не следует переносить в новый baseline.
+
+## Исторический baseline — 2026-08-30
 
 Baseline повторно проверен `2026-08-30` на чистом `main`, commit
 `2575ff07a4c9d2afe1e1cc7aa8f6c0d657e72a5b`, до изменений map-point orders.

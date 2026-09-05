@@ -315,10 +315,8 @@ if ($vehicleHandoff) {
 
 $cleanupManager = Find-AICFClassRecord $records 'AICF_VehicleCleanupManager'
 if ($cleanupManager) {
-	$leaseRelease = ConvertTo-AICFCodeText (Get-AICFMethodBody $cleanupManager 'ProcessLeaseRelease')
 	$retainedAck = ConvertTo-AICFCodeText (Get-AICFMethodBody $cleanupManager 'AcknowledgeRetainedLease')
-	Assert-AICFContains $failures 'STAGE35_BOUNDED_PROTECTED_CLEARANCE' $leaseRelease 'GetAbsoluteDeadlineMs[\s\S]*RetainFailClosed' 'WAIT_PROTECTED_CLEARANCE must end in an observable retained fail-closed outcome at its absolute deadline'
-	Assert-AICFContains $failures 'STAGE35_BOUNDED_PROTECTED_CLEARANCE' $cleanupManager.Strings 'PROTECTED_CLEARANCE_DEADLINE_EXCEEDED:' 'The retained deadline outcome must preserve the protected blocker signature'
+	Assert-AICFProtectedClearanceDeadline $failures 'STAGE35_BOUNDED_PROTECTED_CLEARANCE' $cleanupManager
 	foreach ($proof in @('job\.m_bReleaseComplete', 'FAILED_CLOSED', 'FleetContainsLease', 'FindLeaseForSlot', 'MatchesLease')) {
 		Assert-AICFContains $failures 'STAGE35_RETAINED_CLEANUP_OWNERSHIP' $retainedAck $proof 'Retained ownership acknowledgement must prove the exact unreleased Fleet lease and cap holder'
 	}
@@ -389,4 +387,4 @@ if ($failures.Count -gt 0) {
 
 Write-Host 'Stage 3.5 static audit: PASS' -ForegroundColor Green
 Write-Host 'Negative fixture self-check: PASS (COORDINATOR_SIDE_EFFECT, FLOW_CROSS_CALL, WAYPOINT_SIDE_EFFECT_OWNER, TRANSITION_OUTSIDE_CONTROLLER, TRANSITION_EFFECT_ORDER, WAITING_WITH_LEASE, HANDOFF_CLEARANCE_GATE, CLEANUP_CLEARANCE_OWNER, CLEANUP_IDENTITY_SAFETY, VEHICLE_LIVENESS_OWNERSHIP)'
-Write-Host 'Checked: exact 5x4 rosters and 48/64 budget, 2/1/1 baseline and 3/1/0 active roles, A0/A1/A2/D0 planning, QRF hysteresis, all-slot lease admission and cap, faction vehicle policy, capacity/minimum-roster contracts, meaningful-task deadlines, independent handoff, cleanup-only physical-clearance proof, exclusive vehicle-waypoint queue ownership, ordered transition effects, Repeat-T2 telemetry, architecture ownership, and Enforce language limits.'
+Write-Host 'Checked: ten stable slots per faction, one-member infantry deployment with configured roster goals up to ten, 200/220 agent budget, 5/3/2 legacy and 6/3/1 active roles, A0/A1/A2/D0 planning, QRF hysteresis, all-slot lease admission and cap, faction vehicle policy, capacity/minimum-roster contracts, meaningful-task deadlines, independent handoff, cleanup-only physical-clearance proof, exclusive vehicle-waypoint queue ownership, ordered transition effects, Repeat-T2 telemetry, architecture ownership, and Enforce language limits.'
