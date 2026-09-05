@@ -128,6 +128,15 @@ Workbench shutdown resource leaks совпали с последним baseline 
 
 ## Выбор проверок по области
 
+Для набора живой пехоты дополнительно нужны
+`tools/Test-InfantryRecruitmentStatic.ps1` и
+`tools/Test-InfantryRecruitmentLog.ps1`. Сценарии и fixture описаны в
+[INFANTRY_RECRUITMENT.md](INFANTRY_RECRUITMENT.md). Контракты
+`STAGE35_EXACT_ROSTER` и `STAGE4_VARIABLE_SUPPLY_COST` используют
+`GetDeploymentSize()`: пехота появляется с одним бойцом, независимо от
+цели набора `GetDesiredSize()`. Точная readiness и оплата выбранного
+deployment roster остаются обязательными.
+
 Проверка навыка `VETERAN` у управляемых групп, команды и ограничения smoke:
 [AI_COMBAT_VALIDATION.md](AI_COMBAT_VALIDATION.md). Для нового прогона требуется
 полное покрытие `GROUP_COMBAT_POLICY_APPLIED` по stable slots до `ROSTER_READY`;

@@ -171,6 +171,59 @@ class AICF_GroupSlot
 		return m_iDesiredSize;
 	}
 
+	// Пехота получает только начального бойца; полный состав набирается в казарме.
+	int GetDeploymentSize()
+	{
+		if (m_UnitType == AICF_EGroupUnitType.INFANTRY)
+			return AICF_Stage1Config.MIN_GROUP_SIZE;
+		return m_iDesiredSize;
+	}
+
+	protected AICF_InfantryRecruitmentOrder m_RecruitmentOrder;
+	protected ref array<IEntity> m_aRosterMembers = {};
+
+	void RecordDeploymentMembers()
+	{
+		m_aRosterMembers.Clear();
+		m_aRosterMembers.Resize(AICF_Stage1Config.MAX_GROUP_SIZE);
+		array<AIAgent> agents = {};
+		if (!m_Group)
+			return;
+		m_Group.GetAgents(agents);
+		for (int index = 0; index < agents.Count() && index < m_aRosterMembers.Count(); index++)
+		{
+			if (agents[index])
+				m_aRosterMembers[index] = agents[index].GetControlledEntity();
+		}
+	}
+
+	bool HasRosterMember(int index)
+	{
+		if (index < 0 || index >= m_aRosterMembers.Count())
+			return false;
+		IEntity member = m_aRosterMembers[index];
+		if (!AICF_GroupRuntime.IsAliveCharacter(member))
+			return false;
+		AIControlComponent control = AIControlComponent.Cast(member.FindComponent(AIControlComponent));
+		return control && control.GetControlAIAgent() && control.GetControlAIAgent().GetParentGroup() == m_Group;
+	}
+
+	void RecordRecruitedMember(int index, IEntity member)
+	{
+		if (Replication.IsServer() && index >= 0 && index < m_aRosterMembers.Count())
+			m_aRosterMembers[index] = member;
+	}
+
+	void SetRecruitmentOrder(AICF_InfantryRecruitmentOrder order)
+	{
+		m_RecruitmentOrder = order;
+	}
+
+	bool IsRecruitingInfantry()
+	{
+		return m_RecruitmentOrder && m_RecruitmentOrder.IsCurrent(this);
+	}
+
 	void SetRoleAndIndex(AICF_EGroupRole role, int roleIndex)
 	{
 		m_Role = role;
@@ -2244,6 +2297,8 @@ class AICF_GroupSlot
 
 	protected void ClearRuntimeReferences()
 	{
+		m_RecruitmentOrder = null;
+		m_aRosterMembers.Clear();
 		if (m_Group)
 		{
 			m_Group.GetOnWaypointCompleted().Remove(OnOwnedWaypointCompleted);

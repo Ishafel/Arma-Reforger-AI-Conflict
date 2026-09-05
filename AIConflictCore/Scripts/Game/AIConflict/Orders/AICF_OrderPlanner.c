@@ -101,6 +101,8 @@ class AICF_OrderPlanner
 		SCR_CampaignMilitaryBaseComponent excludedTarget = null,
 		bool waypointSuspendedByVehicle = false)
 	{
+		if (slot && slot.IsRecruitingInfantry())
+			return true;
 		if (!Replication.IsServer() || !slot || !faction || !graph || !targetSelector ||
 			!m_AuthorityPolicy || !m_AuthorityPolicy.IsValid())
 			return false;
@@ -206,6 +208,8 @@ class AICF_OrderPlanner
 		SCR_CampaignMilitaryBaseComponent excludedTarget = null,
 		bool waypointSuspendedByVehicle = false)
 	{
+		if (slot && slot.IsRecruitingInfantry())
+			return true;
 		if (!Replication.IsServer() || !slot || !faction || !graph || !targetSelector ||
 			!m_AuthorityPolicy || !m_AuthorityPolicy.IsValid() ||
 			!m_AuthorityPolicy.IsAICommanderEnabled(faction.GetFactionKey()))
@@ -888,6 +892,8 @@ class AICF_OrderPlanner
 		int stableCandidateMs,
 		bool waypointSuspendedByVehicle = false)
 	{
+		if (slot && slot.IsRecruitingInfantry())
+			return true;
 		if (!Replication.IsServer() || !slot || !faction || !graph ||
 			!targetSelector || !slot.IsCombatReady())
 			return false;
@@ -931,6 +937,8 @@ class AICF_OrderPlanner
 		int stableCandidateMs,
 		bool waypointSuspendedByVehicle = false)
 	{
+		if (slot && slot.IsRecruitingInfantry())
+			return true;
 		if (!Replication.IsServer() || !slot || !faction || !graph ||
 			!targetSelector || !slot.IsCombatReady() ||
 			!m_AuthorityPolicy || !m_AuthorityPolicy.IsValid() ||
@@ -1137,6 +1145,8 @@ class AICF_OrderPlanner
 		int stableCandidateMs,
 		bool waypointSuspendedByVehicle = false)
 	{
+		if (slot && slot.IsRecruitingInfantry())
+			return true;
 		if (!Replication.IsServer() || !slot ||
 			slot.GetRole() != AICF_EGroupRole.DEFEND || !faction ||
 			!graph || !targetSelector || !lostBase || !slot.IsCombatReady())
@@ -1173,6 +1183,8 @@ class AICF_OrderPlanner
 		int stableCandidateMs,
 		bool waypointSuspendedByVehicle = false)
 	{
+		if (slot && slot.IsRecruitingInfantry())
+			return true;
 		if (!Replication.IsServer() || !slot ||
 			slot.GetRole() != AICF_EGroupRole.DEFEND || !faction ||
 			!graph || !targetSelector || !lostBase || !slot.IsCombatReady() ||
@@ -1414,6 +1426,8 @@ class AICF_OrderPlanner
 		string failureReason,
 		bool countsAsStuckRecovery = false)
 	{
+		if (slot && slot.IsRecruitingInfantry())
+			return true;
 		if (!slot || !faction || !graph || !targetSelector || !slot.IsCombatReady())
 			return false;
 
@@ -1482,6 +1496,8 @@ class AICF_OrderPlanner
 		SCR_CampaignFaction faction,
 		string reason)
 	{
+		if (slot && slot.IsRecruitingInfantry())
+			return true;
 		if (!slot || !faction || !slot.IsCombatReady() ||
 			!IsCurrentTargetValid(slot, faction))
 		{
@@ -2854,5 +2870,74 @@ class AICF_OrderPlanner
 		}
 
 		return objectiveAction;
+	}
+
+	bool CanRecruitInfantry(AICF_GroupSlot slot, SCR_CampaignFaction faction)
+	{
+		return Replication.IsServer() && slot && faction && slot.IsCombatReady() &&
+			slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY && !slot.HasPlayerStrategicIntent() &&
+			!slot.IsAwaitingPlayerCommand() && !slot.IsLoneSurvivorRetreat() &&
+			m_AuthorityPolicy && m_AuthorityPolicy.IsAICommanderEnabled(faction.GetFactionKey()) &&
+			slot.HasStrategicIntent() && slot.GetStrategicIntentTargetKind() == AICF_EOrderTargetKind.BASE;
+	}
+
+	bool BeginInfantryRecruitment(AICF_InfantryRecruitmentOrder order)
+	{
+		if (!order || !CanRecruitInfantry(order.m_Slot, order.m_Faction) || !order.HasSafeBarracks())
+			return false;
+		AIPathfindingComponent pathfinding = AIPathfindingComponent.Cast(order.m_Group.FindComponent(AIPathfindingComponent));
+		vector endpoint;
+		if (!pathfinding || !pathfinding.GetNavmeshComponent())
+			return false;
+		pathfinding.GetNavmeshComponent().LoadTileIn(order.m_vPosition);
+		if (!pathfinding.GetClosestPositionOnNavmesh(order.m_vPosition, "15 5 15", endpoint) ||
+			vector.DistanceSqXZ(endpoint, order.m_vPosition) > 225)
+			return false;
+		Resource resource = Resource.Load(DEFEND_WAYPOINT_PREFAB);
+		if (!resource || !resource.IsValid())
+			return false;
+		EntitySpawnParams params = new EntitySpawnParams();
+		params.TransformMode = ETransformMode.WORLD;
+		params.Transform[3] = endpoint;
+		IEntity entity = GetGame().SpawnEntityPrefabEx(DEFEND_WAYPOINT_PREFAB, false, params: params);
+		SCR_DefendWaypoint waypoint = SCR_DefendWaypoint.Cast(entity);
+		if (!waypoint)
+		{
+			if (entity)
+				RplComponent.DeleteRplEntity(entity, false);
+			return false;
+		}
+		waypoint.SetCompletionRadius(15);
+		waypoint.SetCompletionType(EAIWaypointCompletionType.All);
+		waypoint.SetHoldingTime(3600);
+		ClearOrder(order.m_Slot);
+		order.m_Group.AddWaypointAt(waypoint, 0);
+		order.m_Slot.AssignObjective(order.m_Base, waypoint);
+		order.m_Slot.RecordStrategicAssignment(order.m_Base, "INFANTRY_RECRUITMENT");
+		order.m_Waypoint = waypoint;
+		order.m_iAssignment = order.m_Slot.GetStrategicAssignmentRevision();
+		order.m_Slot.SetRecruitmentOrder(order);
+		return true;
+	}
+
+	void EndInfantryRecruitment(AICF_InfantryRecruitmentOrder order, AICF_ObjectiveGraph graph,
+		AICF_TargetSelector selector, bool restore)
+	{
+		if (!Replication.IsServer() || !order)
+			return;
+		bool current = order.IsCurrent(order.m_Slot);
+		order.m_Slot.SetRecruitmentOrder(null);
+		if (current)
+		{
+			ClearOrder(order.m_Slot);
+			if (restore)
+				AssignOrder(order.m_Slot, order.m_Faction, graph, selector, "INFANTRY_RECRUITMENT_FINISHED");
+		}
+		else if (order.m_Waypoint && order.m_Group && order.m_Group.GetID() == order.m_GroupId)
+		{
+			order.m_Group.RemoveWaypoint(order.m_Waypoint);
+			RplComponent.DeleteRplEntity(order.m_Waypoint, false);
+		}
+		order.m_Waypoint = null;
 	}
 }

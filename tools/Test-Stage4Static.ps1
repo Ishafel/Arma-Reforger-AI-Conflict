@@ -79,7 +79,7 @@ Assert-Contains 'STAGE4_ALWAYS_ON' $controller 'm_EconomySystem\s*=\s*new\s+AICF
 Assert-Contains 'STAGE4_ALWAYS_ON' $economy 'bool\s+IsEnabled\s*\(\s*\)[\s\S]*m_Config\s*&&\s*m_Config\.GetEconomyEnabled\s*\(' 'Economy runtime gate must resolve through the permanently enabled configuration'
 Assert-NotContains 'STAGE4_ALWAYS_ON' $strategicUI 'string\s+supply\s*=\s*"OFF"|ECONOMY OFF' 'Strategic UI must not expose a disabled economy state'
 Assert-Contains 'STAGE4_VARIABLE_SUPPLY_COST' $config 'GetReplacementSupplyCostForSize[\s\S]*DEFAULT_GROUP_SIZE' 'Replacement supply cost must scale from the default ten-person roster'
-Assert-Contains 'STAGE4_VARIABLE_SUPPLY_COST' $economy 'GetReplacementSupplyCostForSize\s*\(\s*slot\.GetDesiredSize\(\)\s*\)' 'Replacement reservations must price the selected next-deployment size'
+Assert-Contains 'STAGE4_VARIABLE_SUPPLY_COST' $economy 'GetReplacementSupplyCostForSize\s*\(\s*slot\.GetDeploymentSize\(\)\s*\)' 'Replacement reservations must price the selected next-deployment size'
 foreach ($cli in @(
     'aicfReplacementSupplyCost', 'aicfEconomyHealthyPacePercent',
     'aicfEconomyStrainedPacePercent', 'aicfEconomyIsolatedPacePercent',

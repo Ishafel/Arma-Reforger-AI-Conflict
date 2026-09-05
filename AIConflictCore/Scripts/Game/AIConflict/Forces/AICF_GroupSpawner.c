@@ -2,6 +2,8 @@
 class AICF_GroupSpawner
 {
 	protected ref AICF_ContentProfile m_ContentProfile;
+	protected ref array<FactionKey> m_aSourceFactions = {};
+	protected ref array<ref array<ResourceName>> m_aSourceRosters = {};
 
 	void AICF_GroupSpawner(AICF_ContentProfile contentProfile = null)
 	{
@@ -14,7 +16,8 @@ class AICF_GroupSpawner
 		SCR_CampaignFaction faction,
 		SCR_CampaignMilitaryBaseComponent spawnBase,
 		int slotId,
-		int desiredSize)
+		int desiredSize,
+		bool managedDeployment = true)
 	{
 		if (!Replication.IsServer() || !faction || !spawnBase || !spawnBase.GetOwner() ||
 			desiredSize < AICF_Stage1Config.MIN_GROUP_SIZE ||
@@ -150,6 +153,8 @@ class AICF_GroupSpawner
 		// BeginRosterSpawn(). This prevents a completion callback from racing the
 		// authoritative managed-slot ownership boundary.
 		group.SetSpawnImmediately(false);
+		if (!managedDeployment)
+			return group;
 
 		AICF_Stage35Diagnostics.Info(
 			"GROUP_ROSTER_CONFIGURED",
@@ -195,6 +200,43 @@ class AICF_GroupSpawner
 		return true;
 	}
 
+	// Сохраняем исходный roster до resize, чтобы пополнение использовало тот же
+	// stock fallback. RHS profile по-прежнему запрещает fallback fail-closed.
+	ResourceName ResolveRecruitPrefab(SCR_CampaignFaction faction, int memberIndex, out string role)
+	{
+		if (!faction)
+			return ResourceName.Empty;
+		array<string> suffixes = {};
+		if (!m_ContentProfile.BuildCharacterRoleCandidates(
+			m_ContentProfile.GetStableFactionKey(faction.GetFactionKey()), memberIndex, role, suffixes))
+			return ResourceName.Empty;
+		array<SCR_EntityCatalogEntry> entries = {};
+		SCR_EntityCatalog catalog = faction.GetFactionEntityCatalogOfType(EEntityCatalogType.CHARACTER);
+		if (catalog)
+			catalog.GetEntityList(entries);
+		ResourceName prefab = FindCharacterPrefab(entries, suffixes);
+		if (!prefab.IsEmpty() || !m_ContentProfile.AllowsSourceRosterFallback())
+			return prefab;
+		int sourceIndex = m_aSourceFactions.Find(faction.GetFactionKey());
+		if (sourceIndex < 0)
+			return ResourceName.Empty;
+		prefab = GetSourceRosterFallback(m_aSourceRosters[sourceIndex], memberIndex);
+		// Цена соответствует фактическому бойцу из stock defender roster.
+		role = "RIFLEMAN";
+		for (int index = 0; index < AICF_Stage1Config.MAX_GROUP_SIZE; index++)
+		{
+			string candidateRole;
+			if (m_ContentProfile.BuildCharacterRoleCandidates(
+				m_ContentProfile.GetStableFactionKey(faction.GetFactionKey()), index, candidateRole, suffixes) &&
+				FindCharacterPrefab(entries, suffixes) == prefab)
+			{
+				role = candidateRole;
+				break;
+			}
+		}
+		return prefab;
+	}
+
 	protected bool ConfigureManagedRoster(
 		SCR_AIGroup group,
 		SCR_CampaignFaction faction,
@@ -229,6 +271,12 @@ class AICF_GroupSpawner
 		}
 
 		array<SCR_EntityCatalogEntry> characterEntries = {};
+		int sourceIndex = m_aSourceFactions.Find(faction.GetFactionKey());
+		if (sourceIndex < 0)
+		{
+			m_aSourceFactions.Insert(faction.GetFactionKey());
+			m_aSourceRosters.Insert(sourceRoster);
+		}
 		SCR_EntityCatalog characterCatalog = faction.GetFactionEntityCatalogOfType(EEntityCatalogType.CHARACTER);
 		if (characterCatalog)
 			characterCatalog.GetEntityList(characterEntries);

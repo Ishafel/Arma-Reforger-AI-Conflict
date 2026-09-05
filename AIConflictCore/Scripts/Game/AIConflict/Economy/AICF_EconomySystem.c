@@ -112,7 +112,7 @@ class AICF_EconomySystem
 				slot.GetSlotId(),
 				AICF_Stage1Diagnostics.BaseKey(savedTargetBase),
 				GetRequiredProgressMs(),
-				m_Config.GetReplacementSupplyCostForSize(slot.GetDesiredSize())));
+				m_Config.GetReplacementSupplyCostForSize(slot.GetDeploymentSize())));
 	}
 
 	void AdvanceRequest(SCR_CampaignFaction faction, AICF_GroupSlot slot)
@@ -134,7 +134,7 @@ class AICF_EconomySystem
 		{
 			tier = m_SupplyNetwork.EvaluateReinforcementTier(
 				faction,
-				m_Config.GetReplacementSupplyCostForSize(slot.GetDesiredSize()));
+				m_Config.GetReplacementSupplyCostForSize(slot.GetDeploymentSize()));
 		}
 		int pacePercent = m_Config.GetPacePercent(tier);
 		bool tierChanged = request.Advance(tier, pacePercent, GetRequiredProgressMs());
@@ -187,7 +187,7 @@ class AICF_EconomySystem
 		}
 
 		int attemptToken = request.BeginAttempt(slot.GetSpawnGeneration());
-		int supplyCost = m_Config.GetReplacementSupplyCostForSize(slot.GetDesiredSize());
+		int supplyCost = m_Config.GetReplacementSupplyCostForSize(slot.GetDeploymentSize());
 		if (!m_BaseSelector.Select(
 			faction,
 			slot,
@@ -387,8 +387,8 @@ class AICF_EconomySystem
 				reservation.GetSupplyCost());
 		details += string.Format(
 			" roster=%1/%2",
-			slot.GetDesiredSize(),
-			slot.GetDesiredSize());
+			slot.GetDeploymentSize(),
+			slot.GetDeploymentSize());
 		AICF_Stage4Diagnostics.Info("DEPLOYMENT_COMMITTED", details);
 		RemoveRequest(faction.GetFactionKey(), slot.GetSlotId());
 		RemoveReservation(faction.GetFactionKey(), slot.GetSlotId());

@@ -319,6 +319,24 @@ formation на следующем изолированном участке navm
 отдельные player proximity, LOS и combat fences; небезопасный перенос
 отклоняется fail-closed.
 
+## Набор пехоты
+
+`AICF_InfantryRecruitmentService` обслуживает живые автономные `INFANTRY`
+slots после `ROSTER_READY`. `GetDeploymentSize()` возвращает для пехоты 1,
+а `GetDesiredSize()` сохраняет цель набора до 10. Slot отслеживает конкретного
+живого бойца каждой позиции roster, в том числе после stock randomizer;
+полная замена сбрасывает эти identities. Казарма выбирается на текущей или
+соседней базе, не далее 500 м; соседняя должна быть ближе боевой цели.
+
+Planner владеет временным waypoint и сохраняет durable intent. Служба
+проверяет physical arrival, service/base ownership, revisions и лимиты;
+spawner материализует одного бойца через отдельный owned donor. Economy
+повторно проверяет supplies и снимает цену только перед передачей готового
+бойца. Initial/replacement readiness по-прежнему требует точный deployment
+roster, а pending recruits входят в managed-agent projection. Очистка
+spawn queue и donor заканчивается до остановки экономики. Player orders
+имеют приоритет. Полный контракт: [INFANTRY_RECRUITMENT.md](INFANTRY_RECRUITMENT.md).
+
 ## Строители баз
 
 `AICF_BaseBuilderService` — отдельный server/master support domain в Core.

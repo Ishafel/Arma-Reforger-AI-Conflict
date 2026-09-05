@@ -95,6 +95,7 @@ class AICF_MatchController
 	protected ref AICF_VehicleCoordinator m_VehicleCoordinator;
 	protected ref AICF_VehicleWatchdog m_HiddenRecoveryWatchdog;
 	protected ref AICF_EconomySystem m_EconomySystem;
+	protected ref AICF_InfantryRecruitmentService m_InfantryRecruitment;
 	protected ref AICF_FactionState m_USState;
 	protected ref AICF_FactionState m_USSRState;
 
@@ -258,6 +259,8 @@ class AICF_MatchController
 			m_ObjectiveGraph,
 			m_Config.GetReinforcementDelayMs());
 		CacheBaseOwners(graphBases);
+		m_InfantryRecruitment = new AICF_InfantryRecruitmentService(
+			m_Campaign, m_OrderPlanner, m_EconomySystem, m_ObjectiveGraph, m_TargetSelector, m_GroupSpawner);
 		m_BaseBuilders = new AICF_BaseBuilderService();
 		m_BaseBuilders.Start(m_Campaign, m_OrderPlanner, m_Config.GetMaxManagedAgents());
 		m_Construction = new AICF_ConstructionPlanner();
@@ -1190,7 +1193,7 @@ class AICF_MatchController
 		AICF_EGroupRole oldRole = slot.GetRole();
 		AICF_EGroupUnitType oldUnitType = slot.GetUnitType();
 		int oldDesiredSize = slot.GetDesiredSize();
-		if (oldDesiredSize != desiredSize &&
+		if ((oldDesiredSize != desiredSize || oldUnitType != unitTypeCode) &&
 			slot.GetState() == AICF_EGroupSlotState.SPAWNING)
 		{
 			AICF_Stage4Diagnostics.Warning(
@@ -1359,7 +1362,7 @@ class AICF_MatchController
 				faction,
 				spawnBase,
 				slotId,
-				slot.GetDesiredSize());
+				slot.GetDeploymentSize());
 			if (!group || !BindManagedGroup(factionState, faction, slot, group, "INITIAL"))
 			{
 				if (group)
@@ -1410,6 +1413,12 @@ class AICF_MatchController
 			m_EconomySystem.UpdateLogistics(m_USFaction, m_USSRFaction);
 		ProcessFaction(m_USState, m_USFaction);
 		ProcessFaction(m_USSRState, m_USSRFaction);
+		if (m_bRosterReady && m_InfantryRecruitment)
+		{
+			m_InfantryRecruitment.Update(m_USState, m_USFaction, m_USSRState, m_USSRFaction,
+				m_Config.GetMaxManagedAgents() - CountProjectedManagedAgentsForSpawn(null),
+				!m_bReplanScheduled && !m_bGraphRebuildNeeded);
+		}
 		// The facade always advances independent asset cleanup. During the delayed
 		// graph-rebuild window it suppresses Trip dispatch only, so no stale target
 		// is admitted while protected-clearance and delete confirmation keep moving.
@@ -1455,7 +1464,7 @@ class AICF_MatchController
 			if (slot.GetState() == AICF_EGroupSlotState.SPAWNING)
 			{
 				SCR_AIGroup spawningGroup = slot.GetGroup();
-				int expectedSize = slot.GetDesiredSize();
+				int expectedSize = slot.GetDeploymentSize();
 				int actualCount;
 				if (spawningGroup)
 				{
@@ -1546,6 +1555,7 @@ class AICF_MatchController
 		bool replacement = slot.IsReplacementDeployment();
 
 		DetachSpawnObservers(slot.GetGroup());
+		slot.RecordDeploymentMembers();
 
 		int managedAgents;
 		int recoveredFromMaxLOD;
@@ -1584,8 +1594,8 @@ class AICF_MatchController
 			slot.GetSpawnGeneration(),
 			reason,
 			combatConfiguredAgents,
-			slot.GetDesiredSize());
-		if (combatConfiguredAgents == slot.GetDesiredSize())
+			slot.GetDeploymentSize());
+		if (combatConfiguredAgents == slot.GetDeploymentSize())
 			AICF_Stage35Diagnostics.Info("GROUP_COMBAT_POLICY_APPLIED", combatPolicyDetails);
 		else
 			AICF_Stage35Diagnostics.Error("GROUP_COMBAT_POLICY_INCOMPLETE", combatPolicyDetails);
@@ -1664,7 +1674,7 @@ class AICF_MatchController
 				slot.GetSpawnGeneration(),
 				reason,
 				slot.GetGroup().GetAgentsCount(),
-				slot.GetDesiredSize()));
+				slot.GetDeploymentSize()));
 
 		AICF_Stage1Diagnostics.Info(
 			"SLOT_READY",
@@ -1753,7 +1763,7 @@ class AICF_MatchController
 						slot.GetStableSlotKey(),
 						slot.GetSlotId(),
 						managedAgents,
-						slot.GetDesiredSize(),
+						slot.GetDeploymentSize(),
 						projectedManagedAgents,
 						managedAgentLimit,
 						slot.GetSpawnGeneration()));
@@ -1772,7 +1782,7 @@ class AICF_MatchController
 					slot.GetStableSlotKey(),
 					slot.GetSlotId(),
 					managedAgents,
-					slot.GetDesiredSize(),
+					slot.GetDeploymentSize(),
 					projectedManagedAgents,
 					managedAgentLimit));
 		}
@@ -1982,7 +1992,7 @@ class AICF_MatchController
 		// In 1.8 this request transfers transient navmesh/AI-budget retries to
 		// SCR_AIWorld. It intentionally happens after the managed identity and
 		// generation observers above are installed.
-		int expectedSize = slot.GetDesiredSize();
+		int expectedSize = slot.GetDeploymentSize();
 		if (!m_GroupSpawner ||
 			!slot.MarkRosterSpawnRequested(expectedSize) ||
 			!m_GroupSpawner.BeginRosterSpawn(group, expectedSize))
@@ -2157,7 +2167,7 @@ class AICF_MatchController
 		return AICF_GroupRuntime.BuildSpawnSnapshot(
 			faction,
 			slot,
-			slot.GetDesiredSize());
+			slot.GetDeploymentSize());
 	}
 
 	protected string ResolveIncompleteRosterReason(
@@ -2167,7 +2177,7 @@ class AICF_MatchController
 		return AICF_GroupRuntime.ResolveSpawnIncompleteReason(
 			faction,
 			slot,
-			slot.GetDesiredSize());
+			slot.GetDeploymentSize());
 	}
 
 	protected int CountConcurrentReplacementSpawns()
@@ -2275,7 +2285,7 @@ class AICF_MatchController
 				slot.GetSlotKey(),
 				slot.GetSlotId(),
 				actualCount,
-				slot.GetDesiredSize(),
+				slot.GetDeploymentSize(),
 				factionMismatchCount,
 				nonAliveCount,
 				deploymentKind));
@@ -2289,7 +2299,7 @@ class AICF_MatchController
 					faction.GetFactionKey(),
 					slot.GetSlotId(),
 					actualCount,
-					slot.GetDesiredSize(),
+					slot.GetDeploymentSize(),
 					factionMismatchCount,
 					nonAliveCount));
 			return;
@@ -2496,6 +2506,8 @@ class AICF_MatchController
 		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
 		{
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (slot && slot.IsRecruitingInfantry())
+				continue;
 			if (!slot)
 				continue;
 			if (!slot.IsCombatReady())
@@ -3904,6 +3916,8 @@ class AICF_MatchController
 		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
 		{
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (slot && slot.IsRecruitingInfantry())
+				continue;
 			if (!slot || !slot.IsCombatReady())
 				continue;
 			// ReliabilityTick owns completion of the temporary HQ retreat. Its durable
@@ -4086,6 +4100,8 @@ class AICF_MatchController
 		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
 		{
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
+			if (slot && slot.IsRecruitingInfantry())
+				continue;
 			if (!slot || !slot.IsCombatReady())
 				continue;
 			bool vehicleOwnsMovementOrRestore = m_VehicleCoordinator &&
@@ -6821,8 +6837,11 @@ class AICF_MatchController
 
 	protected int CountProjectedManagedAgentsForSpawn(AICF_GroupSlot pendingSlot)
 	{
+		int recruits;
+		if (m_InfantryRecruitment)
+			recruits = m_InfantryRecruitment.CountPendingAgents();
 		return CountProjectedFactionAgents(m_USState, pendingSlot) +
-			CountProjectedFactionAgents(m_USSRState, pendingSlot);
+			CountProjectedFactionAgents(m_USSRState, pendingSlot) + recruits;
 	}
 
 	protected int CountProjectedFactionAgents(
@@ -7274,6 +7293,11 @@ class AICF_MatchController
 			m_VehicleCoordinator = null;
 		}
 
+		if (m_InfantryRecruitment)
+		{
+			m_InfantryRecruitment.Stop();
+			m_InfantryRecruitment = null;
+		}
 		if (m_EconomySystem)
 		{
 			m_EconomySystem.Stop(m_USState, m_USFaction, m_USSRState, m_USSRFaction);

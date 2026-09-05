@@ -46,7 +46,7 @@ class AICF_ReinforcementSystem
 			faction,
 			selectedBase,
 			slot.GetSlotId(),
-			slot.GetDesiredSize());
+			slot.GetDeploymentSize());
 		return group != null;
 	}
 
@@ -127,7 +127,7 @@ class AICF_ReinforcementSystem
 			faction,
 			spawnBase,
 			slot.GetSlotId(),
-			slot.GetDesiredSize());
+			slot.GetDeploymentSize());
 		return group != null;
 	}
 }

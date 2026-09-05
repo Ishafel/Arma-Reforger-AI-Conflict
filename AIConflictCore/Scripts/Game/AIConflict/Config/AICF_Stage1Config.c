@@ -31,9 +31,8 @@ class AICF_Stage1Config
 	static const int MAX_DELAY_MS = 3600000;
 	static const int MIN_COMMANDER_INTERVAL_MS = 1000;
 	static const int MAX_COMMANDER_INTERVAL_MS = 600000;
-	// All twenty slots start at ten agents: 10 slots * 10 agents * 2 factions =
-	// 200 live agents. Do not allow a CLI override to make the configured initial
-	// roster permanently inadmissible.
+	// Лимит допускает полный состав двадцати slots после набора в казармах:
+	// 10 slots * 10 бойцов * 2 стороны = 200. Стартовая пехота — один боец.
 	static const int MIN_MANAGED_AGENTS = 200;
 	static const int MAX_MANAGED_AGENTS = 256;
 
