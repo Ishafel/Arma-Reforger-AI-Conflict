@@ -310,6 +310,63 @@ formation на следующем изолированном участке navm
 отдельные player proximity, LOS и combat fences; небезопасный перенос
 отклоняется fail-closed.
 
+## Строители баз
+
+`AICF_BaseBuilderService` — отдельный server/master support domain в Core.
+`AICF_MatchController` только создаёт службу, обновляет после `ROSTER_READY`
+и вызывает `Stop()`. Армейские десять slots, их задания, reinforcement и
+ticket accounting не меняются. Это отдельное архитектурное решение для
+вспомогательного персонала: служба владеет единственным service slot каждой
+stock base, а `AICF_BaseBuilderSpawner` создаёт для него одиночный faction
+`RIFLEMAN` из active content profile. RHS не получает stock character fallback.
+`AICF_OrderPlanner` сохраняет исключительное владение waypoint entities.
+
+Готовность после `RequestSpawn(1)` подтверждается фактическим ровно одним
+живым бойцом нужной фракции. Стабильная identity — faction + numeric service
+slot, выделенный базе из диапазона после армейских slots и не переиспользуемый
+для другой базы. Group/entity identity и spawn generation
+сохраняются до удаления; повторные polling ticks не создают второго бота.
+Строители имеют отдельную ограниченную квоту активного AI — не более числа
+баз сверх `max_managed_agents`; она не уменьшает более высокий world limit.
+
+Очередь состоит из уже размещённых stock `SCR_CampaignBuildingCompositionComponent`.
+Источник — `GetBuildingCompositions()` и server event
+`GetOnEntitySpawnedByProvider()`: второй покрывает размещение внутри provider
+radius, но за пределами меньшего base radius. Перед работой повторно
+проверяются текущий владелец базы, связь provider с этой базой, его актуальный
+building radius и unfinished layout. Neutral props допускаются, чужая faction
+composition — нет. Цель выбирается по расстоянию с устойчивым `EntityID` tie-break.
+
+Бот подходит к ближайшей стороне world bounds layout с отступом 2 метра;
+arrival tolerance — 1 метр, отдельно проверяется нахождение вне footprint.
+Большой stock `Danger_UnsafeArea` больше не задаёт рабочую дистанцию.
+`AICF_BaseBuilderDangerEvent` сохраняет source layout, character identity и
+generation. Только работающий с этим layout бот снаружи footprint получает
+исключение из этой реакции. Остальные AI и все чужие danger events сохраняют
+штатную реакцию; после completion исключение перестаёт действовать.
+Прогресс начинается только после физического прибытия;
+боевой контакт, бессознательное состояние и нахождение в машине приостанавливают
+работу. Сначала бот достаёт строительный gadget через штатный AI equip path,
+ожидает hand attachment и запускает `CMD_Item_Action`. Progress требует
+`OnItemUseBegan`, `IsUsingItem` и инструмент в левой руке. Только после
+3 секунд непрерывной работы вызывается `AddBuildingValue` со значением
+инструмента; fallback-прогресса без инструмента/анимации нет. `OnItemUseEnded`
+сбрасывает таймер, `StopTool` симметрично снимает оба invoker и убирает gadget.
+Supplies за размещение, стоимость,
+replication и активация готового service остаются в stock building pipeline;
+строитель не выдаёт player XP и повторно не списывает стоимость проекта.
+
+Недостижимая за 120 секунд цель откладывается на 60 секунд, освобождая очередь
+для других проектов. После завершения или отмены работы бот идёт к master
+provider (главной палатке); удаление после 30 секунд простоя разрешено только
+при физическом нахождении не далее 8 метров от неё. Новая работа прерывает
+возврат/ожидание. Потеря базы, смерть или spawn timeout отменяют работу,
+очищают stock spawn queue и owned entities; следующая попытка ограничена
+60 секундами. Player-controlled или потерявший identity бот не удаляется,
+а slot удерживается fail-closed без замены. `Stop()` снимает placement event
+и завершает службу без новых callbacks. Runtime probe находится только в
+`tools/fixtures/` и не загружается обычным addon.
+
 ## Vehicle domain
 
 Vehicle subsystem всегда включён. Его задача — временно ускорить существующий

@@ -43,6 +43,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RHSIntegrat
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-ScenarioHeadersStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RankRestrictionsStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RuntimeLauncherStatic.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-BaseBuildersStatic.ps1
 ```
 
 Назначение:
@@ -59,6 +60,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-RuntimeLaun
 | `Test-ScenarioHeadersStatic.ps1` | Arland/Everon/RHS inherited MissionHeader, menu visibility, отключённый persistence, stable project/resource GUID, platform metadata и отсутствие собственных world/layer resources |
 | `Test-RankRestrictionsStatic.ps1` | `GENERAL` join/XP floor, maximum non-renegade fallback для container без `GENERAL`, central mutation/restore hook, authoritative faction/spawn recheck, replicated character state, authority/replication, запрет раннего polling и сохранение остальных admission checks |
 | `Test-RuntimeLauncherStatic.ps1` | прямой native invocation без повторной сериализации, целостность `addonsDir` с пробелами/кириллицей, Arland/Everon/RHS graph, fresh profile и fail-closed client readiness gate |
+| `Test-BaseBuildersStatic.ps1` | один base slot/один member, асинхронная readiness, provider/radius, authority, stock progress, физический idle gate, queue purge, безопасное удаление и отсутствие runtime fixture в production |
 
 Аудиторы проверяют часть архитектуры регулярными выражениями. Красный rule ID
 может означать реальный regression или drift тестового контракта. Сначала
@@ -425,6 +427,60 @@ prefab, но визуальное соответствие оружия/форм
 `COMMAND_WAITING`, `STRATEGIC_ASSIGNMENT decision_authority=...`, полные logs и
 отдельные server/client/JIP verdict. Одних этих filtered events недостаточно для
 общего runtime PASS.
+
+### Runtime matrix: строители баз
+
+| Сценарий | Обязательное evidence |
+|---|---|
+| Два и более проекта одной базы | Один `BUILDER_SPAWN_REQUESTED`, один `BUILDER_READY agents=1`; несколько `BUILDER_TARGET_ASSIGNED`/`BUILDER_COMPLETED` с той же generation/group |
+| Несколько баз | Независимые очереди; одновременно не более одного live или spawning worker каждой базы |
+| Работа | Перед `BUILDER_PROGRESS` есть readiness, equip и `BUILDER_WORK_STARTED`; физическая позиция соответствует рабочему endpoint, `tool_active=1 item_using=1`, character identity и `character_rpl` совпадают |
+| Пустая очередь | `BUILDER_RETURNING`, фактическое прибытие к master provider, `BUILDER_HOME`, не ранее 30 секунд непрерывного простоя — `BUILDER_RETIRED reason=IDLE_AT_MAIN_TENT` |
+| Новая работа при возврате/ожидании | Сохраняются group, numeric slot и generation; idle timer отменяется |
+| Смерть | Cleanup старой generation, отсутствие позднего spawn callback, следующий одиночный roster не ранее 60 секунд после retirement |
+| Потеря базы/удаление provider | Прогресс старой стороны прекращён, очередь очищена от stale target, `BUILDER_RETIRED` |
+| Отмена/перемещение/недостижимый проект | Старый endpoint не даёт прогресс новой позиции; удалённая цель пропускается, недостижимая откладывается без второго строителя |
+| Client/JIP | Видны обычный faction bot, перемещение, инструмент/анимация и готовый service; без ручного verdict визуальные пункты `NOT RUN` |
+
+Терминальная fixture `tools/fixtures/AICF_BaseBuilderRuntimeProbe.c` создаёт
+настоящие stock layouts, используя building registry и master providers.
+Она обходит player placement и оплату **только в тестовом прогоне**, поэтому
+не доказывает UI, проверку supplies или player RPC. Обычный addon fixture
+не загружает. Для воспроизведения временно скопируй её в
+`AIConflictCore/Scripts/Game/AIConflict/Construction/`, затем запусти:
+
+```powershell
+& .\tools\Start-AICFRuntime.ps1 -Role Server -Variant Stock `
+  -AdditionalArguments @('-aicfBuilderProbe', '1', '-aicfRequirePlayerForResult', '0')
+```
+
+Значение probe `3` задерживает размещение на 45 секунд после readiness для
+подключения клиента через canonical launcher и добавляет временное JIP-поле
+в character controller. `BUILDER_CLIENT_PROBE` читает на клиенте позицию,
+`IsUsingItem`, hand attachment и proxy state конкретного `character_rpl`.
+Эти записи доказывают сетевое движение и состояние анимации, но не заменяют
+ручную визуальную проверку. Значение probe `2` дополнительно размещает новый проект во время idle, убивает
+строителя и после замены меняет владельца тестовой базы. `-Variant RHS`
+проверяет ту же службу с RHS rosters. Fixture запрашивает остановку через
+5 минут после readiness; если смена владельца HQ завершила match loops раньше,
+нужно отдельно остановить только созданный process и зафиксировать способ
+остановки. После остановки удали временную копию fixture из Core и повтори
+Workbench Validate. `Test-BaseBuildersStatic.ps1` отклоняет оставленную копию.
+
+Полный остановленный log анализируется командой:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-BaseBuildersLog.ps1 `
+  -LogPath 'C:\absolute\path\console.log' -RequireLifecycle -RequireToolUse
+```
+
+Для обычного probe `1` опусти `-RequireLifecycle`. Анализатор проверяет порядок
+событий, уникальность active worker и completion, readiness, интервалы work,
+idle и replacement. Все остальные engine/resource сообщения полного лога
+классифицируются отдельно; автоматический PASS не заменяет client/visual gate.
+Для probe `3` добавь `-ClientLogPath 'C:\absolute\client\console.log'`:
+проверяются совпадающий RplId, client displacement не менее 2 метров и
+`using=1 tool_attached=1 proxy=1`. Оба лога должны быть полностью остановлены.
 
 ## Evidence checklist
 

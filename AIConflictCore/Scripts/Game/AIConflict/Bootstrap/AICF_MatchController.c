@@ -84,6 +84,7 @@ class AICF_MatchController
 	protected ref AICF_ObjectiveGraph m_ObjectiveGraph;
 	protected ref AICF_TargetSelector m_TargetSelector;
 	protected ref AICF_GroupSpawner m_GroupSpawner;
+	protected ref AICF_BaseBuilderService m_BaseBuilders;
 	protected ref AICF_GroupCohesionPolicy m_GroupCohesionPolicy;
 	protected ref AICF_ManagedAILODPolicy m_ManagedAILODPolicy;
 	protected ref AICF_ReinforcementSystem m_ReinforcementSystem;
@@ -256,6 +257,8 @@ class AICF_MatchController
 			m_ObjectiveGraph,
 			m_Config.GetReinforcementDelayMs());
 		CacheBaseOwners(graphBases);
+		m_BaseBuilders = new AICF_BaseBuilderService();
+		m_BaseBuilders.Start(m_Campaign, m_OrderPlanner, m_Config.GetMaxManagedAgents());
 		Subscribe();
 
 		string expectedPlayerFaction = m_Config.GetExpectedPlayerFaction();
@@ -1425,6 +1428,8 @@ class AICF_MatchController
 		if (m_GroupMapMarkers)
 			m_GroupMapMarkers.Sync(m_USState, m_USSRState, m_VehicleCoordinator);
 		TryLogRosterReady();
+		if (m_bRosterReady && m_BaseBuilders)
+			m_BaseBuilders.Update();
 		SyncStage4State();
 		SyncStrategicUIState();
 		EvaluateVictory();
@@ -7201,6 +7206,11 @@ class AICF_MatchController
 			return;
 
 		m_bStopped = true;
+		if (m_BaseBuilders)
+		{
+			m_BaseBuilders.Stop();
+			m_BaseBuilders = null;
+		}
 		ScriptCallQueue callqueue = GetGame().GetCallqueue();
 		callqueue.Remove(Update);
 		callqueue.Remove(CommanderTick);

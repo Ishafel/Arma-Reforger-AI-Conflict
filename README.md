@@ -62,6 +62,12 @@ Source runtime использует штатную mission
   server, а без параметра используется `BOTH`;
 - ground vehicles всегда включены;
 - economy/supply pacing всегда включены; CLI opt-out для этих subsystems нет;
+- на каждой захваченной базе при появлении незавершённого проекта появляется
+  один строитель своей фракции. Он последовательно достраивает объекты в
+  штатном building radius, возвращается к главной палатке и исчезает после
+  30 секунд простоя; новая работа использует уже существующего строителя.
+  Он работает у края проекта лопатой; прогресс требует фактического подхода,
+  инструмента в руке и подтверждённой item-use анимации;
 - командир может выбрать любую доступную группу и отдать ей server-authoritative
   приказ `MOVE_AND_HOLD` щелчком по stock карте. Клиент передаёт только slot и
   X/Z intent; сервер восстанавливает terrain Y, при необходимости асинхронно
@@ -99,6 +105,7 @@ AIConflictCore/Scripts/Game/AIConflict/
   Bootstrap/     composition root и server loops
   Command/       immutable authority policy и faction-scoped AI commanders
   Config/        defaults и aicf* CLI overrides
+  Construction/  один временный строитель на базу и очередь stock layouts
   Content/       stock profile и runtime faction -> stable side mapping boundary
   Diagnostics/   стабильные [AICF][STAGE...] события
   Economy/       supply network, транзакции и abstract deliveries

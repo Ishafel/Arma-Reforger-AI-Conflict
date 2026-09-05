@@ -1,6 +1,7 @@
 /.gigaide/
 /.idea/
 /.cache/
+/.codex-runtime/builders-*/
 .DS_Store
 *.log
 **/logs/

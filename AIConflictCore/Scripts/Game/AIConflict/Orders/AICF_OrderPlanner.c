@@ -40,6 +40,58 @@ class AICF_OrderPlanner
 		m_AuthorityPolicy = authorityPolicy;
 	}
 
+	// Вспомогательный строитель использует тот же boundary владения waypoint,
+	// но не получает стратегический армейский assignment или vehicle admission.
+	bool SetBuilderWaypoint(AICF_BaseBuilder builder, vector position, float radius)
+	{
+		if (!Replication.IsServer() || !builder || !builder.m_Group || builder.m_Group.GetID() != builder.m_GroupId)
+			return false;
+		AIPathfindingComponent pathfinding = AIPathfindingComponent.Cast(builder.m_Group.FindComponent(AIPathfindingComponent));
+		if (!pathfinding)
+			return false;
+		NavmeshWorldComponent navmesh = pathfinding.GetNavmeshComponent();
+		if (!navmesh)
+			return false;
+		position[1] = GetGame().GetWorld().GetSurfaceY(position[0], position[2]);
+		navmesh.LoadTileIn(position);
+		vector endpoint;
+		vector searchExtents = Vector(radius, 5, radius);
+		if (!pathfinding.GetClosestPositionOnNavmesh(position, searchExtents, endpoint) || vector.DistanceSqXZ(endpoint, position) > radius * radius)
+			return false;
+		Resource resource = Resource.Load(ATTACK_OPERATIONAL_WAYPOINT_PREFAB);
+		if (!resource || !resource.IsValid())
+			return false;
+		EntitySpawnParams params = new EntitySpawnParams();
+		params.TransformMode = ETransformMode.WORLD;
+		params.Transform[3] = endpoint;
+		IEntity entity = GetGame().SpawnEntityPrefabEx(ATTACK_OPERATIONAL_WAYPOINT_PREFAB, false, params: params);
+		AIWaypoint waypoint = AIWaypoint.Cast(entity);
+		if (!waypoint)
+		{
+			if (entity)
+				RplComponent.DeleteRplEntity(entity, false);
+			return false;
+		}
+		waypoint.SetCompletionRadius(radius);
+		waypoint.SetCompletionType(EAIWaypointCompletionType.All);
+		ClearBuilderWaypoint(builder);
+		builder.m_Waypoint = waypoint;
+		builder.m_Group.AddWaypoint(waypoint);
+		return true;
+	}
+
+	void ClearBuilderWaypoint(AICF_BaseBuilder builder)
+	{
+		if (!Replication.IsServer() || !builder || !builder.m_Waypoint)
+			return;
+		if (builder.m_Group && builder.m_Group.GetID() != builder.m_GroupId)
+			return;
+		if (builder.m_Group && builder.m_Group.GetID() == builder.m_GroupId)
+			builder.m_Group.RemoveWaypoint(builder.m_Waypoint);
+		RplComponent.DeleteRplEntity(builder.m_Waypoint, false);
+		builder.m_Waypoint = null;
+	}
+
 	bool AssignOrder(
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction,
