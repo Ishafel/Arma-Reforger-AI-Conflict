@@ -367,6 +367,42 @@ provider (главной палатке); удаление после 30 сек�
 и завершает службу без новых callbacks. Runtime probe находится только в
 `tools/fixtures/` и не загружается обычным addon.
 
+### Автономные construction orders
+
+`AICF_AICommander.SelectConstructionType` выбирает из пяти подтверждённых типов
+только для AI-controlled стороны. `AICF_ConstructionPlanner` владеет порядком
+обхода баз, request token, revision, cooldown, identity и пространственной
+reservation. `MatchController` создаёт/останавливает domain и вызывает его из
+server scheduler после `ROSTER_READY`, перед существующей службой строителей.
+Один pending/accepted order на базу; новая работа игрока или смена owner сразу
+отменяет ещё не принятый order, сохраняя минутный rate limit.
+
+`AICF_ConstructionMetadata` проверяет точный content allowlist и faction/provider
+traits. Она один раз раскрывает реальную геометрию composition и outline через
+transient preview без gameplay prefab entries, сохраняя `Resource` lifetime до
+удаления preview. `AICF_ConstructionSiteSearch` проверяет весь объём, terrain,
+воду, дороги, spawn/exit envelopes и конечный navmesh-путь к endpoint строителя.
+Physics/navmesh queries имеют общую квоту, включая commit и completion. Поиск
+не резервирует supplies между ticks. Vehicle reservations и construction sites
+учитывают друг друга через узкие пространственные проверки.
+
+`AICF_StockConstructionAdapter` владеет единственным spawn и восстановлением
+временных stock flags. Он создаёт unfinished layout, проверяет postconditions
+и связывает его с provider и существующим builder registry. `AICF_EconomySystem`
+владеет свежей ценой, резервом reinforcement/source, snapshot реальных containers,
+однократной оплатой и rollback. Supplies списывает stock building manager;
+поздний per-entity debit подавляется только для exact receipt этого AI root.
+Global editor budgets продолжают учитываться stock core. Обычный последующий
+демонтаж оплаченного root использует штатный fractional refund.
+
+После принятия layout остаётся stock composition при capture/Stop. Planner не
+сносит его. Receipt сохраняет completion clearance guard; progress остаётся за
+строителем и stock building tool. `CONSTRUCTION_COMPLETED` требует одновременно
+`IsCompositionSpawned()` и реальный `SCR_EServicePointStatus.ONLINE`. Provider
+передаётся через stock `SetProviderEntityServer` и stock `RplSave/RplLoad`; новые
+one-shot RPC для JIP не добавляются. Подробности и пределы проверки —
+[CONSTRUCTION_VALIDATION.md](CONSTRUCTION_VALIDATION.md).
+
 ## Vehicle domain
 
 Vehicle subsystem всегда включён. Его задача — временно ускорить существующий

@@ -499,6 +499,32 @@ class AICF_VehicleSpawner
 	protected static const float VEHICLE_CLEARANCE_HEIGHT_METERS = 2.0;
 	protected static const int MAX_PAD_DIAGNOSTIC_ENTITIES = 12;
 	protected ref array<ref AICF_VehicleSpawnSiteReservation> m_aSiteReservations = {};
+	// Read-only spatial projection для construction; lease/spawn ownership прежний.
+	protected static ref array<AICF_VehicleSpawnSiteReservation> s_aConstructionSites = {};
+
+	static bool ConstructionAreaClear(vector mins, vector maxs)
+	{
+		for (int i = s_aConstructionSites.Count() - 1; i >= 0; i--)
+		{
+			AICF_VehicleSpawnSiteReservation site = s_aConstructionSites[i];
+			if (!site || site.IsExpired(System.GetTickCount()))
+			{
+				s_aConstructionSites.Remove(i);
+				continue;
+			}
+			vector position = site.GetSpawnPosition();
+			vector nearest = Vector(Math.Clamp(position[0], mins[0], maxs[0]), position[1], Math.Clamp(position[2], mins[2], maxs[2]));
+			if (vector.DistanceSqXZ(position, nearest) <= SPAWN_SEARCH_RADIUS_METERS * SPAWN_SEARCH_RADIUS_METERS)
+				return false;
+		}
+		return true;
+	}
+
+	void ~AICF_VehicleSpawner()
+	{
+		foreach (AICF_VehicleSpawnSiteReservation site : m_aSiteReservations)
+			s_aConstructionSites.RemoveItem(site);
+	}
 	protected vector m_vPadDiagnosticOrigin;
 	protected string m_sPadDiagnosticEntities;
 	protected int m_iPadDiagnosticEntityCount;
@@ -520,6 +546,8 @@ class AICF_VehicleSpawner
 			return false;
 		}
 		PurgeExpiredSiteReservations(nowMs);
+		if (!AICF_ConstructionPlanner.VehicleAreaClear(selection.m_vPosition, SPAWN_SEARCH_RADIUS_METERS))
+			return false;
 		foreach (AICF_VehicleSpawnSiteReservation active : m_aSiteReservations)
 		{
 			if (!active || active.GetBase() != selection.m_Base)
@@ -550,6 +578,7 @@ class AICF_VehicleSpawner
 			nowMs,
 			expiresAtMs);
 		m_aSiteReservations.Insert(reservation);
+		s_aConstructionSites.Insert(reservation);
 		return true;
 	}
 
@@ -570,6 +599,7 @@ class AICF_VehicleSpawner
 		if (!expected || !m_aSiteReservations.Contains(expected))
 			return false;
 		m_aSiteReservations.RemoveItem(expected);
+		s_aConstructionSites.RemoveItem(expected);
 		return true;
 	}
 
@@ -961,7 +991,10 @@ class AICF_VehicleSpawner
 			AICF_VehicleSpawnSiteReservation reservation =
 				m_aSiteReservations[reservationIndex];
 			if (!reservation || reservation.IsExpired(nowMs))
+			{
+				s_aConstructionSites.RemoveItem(reservation);
 				m_aSiteReservations.Remove(reservationIndex);
+			}
 		}
 	}
 

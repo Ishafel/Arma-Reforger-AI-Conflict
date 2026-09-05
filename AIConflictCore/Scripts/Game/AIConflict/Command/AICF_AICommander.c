@@ -50,6 +50,33 @@ class AICF_AICommander
 			m_AuthorityPolicy.IsAICommanderEnabled(m_sFactionKey);
 	}
 
+	int SelectConstructionType(array<bool> covered, int startType)
+	{
+		if (!Replication.IsServer() || !IsEnabled() || !covered || covered.Count() != AICF_EConstructionType.COUNT)
+			return -1;
+		for (int offset; offset < AICF_EConstructionType.COUNT; offset++)
+		{
+			int type = (startType + offset) % AICF_EConstructionType.COUNT;
+			if (!covered[type])
+				return type;
+		}
+		return -1;
+	}
+
+	// Read-only infantry navmesh context; не создаёт group/worker или assignment.
+	AIPathfindingComponent GetConstructionPathfinding()
+	{
+		if (!IsEnabled())
+			return null;
+		for (int i; i < AICF_Stage1Config.GROUP_SLOTS_PER_FACTION; i++)
+		{
+			AICF_GroupSlot slot = m_FactionState.GetSlot(i);
+			if (slot && slot.GetGroup() && slot.GetGroup().GetFaction() == m_Faction)
+				return AIPathfindingComponent.Cast(slot.GetGroup().FindComponent(AIPathfindingComponent));
+		}
+		return null;
+	}
+
 	bool OwnsSlot(AICF_GroupSlot slot)
 	{
 		return IsEnabled() && slot && slot.GetSlotId() >= 0 &&

@@ -122,9 +122,63 @@ class AICF_BaseBuilderService
 			layout.GetToBuildValue() > 0 && layout.GetCurrentBuildValue() < layout.GetToBuildValue();
 	}
 
+	// Player event зависит от editor manager; AI использует exact validated hook.
+	bool RegisterConstruction(SCR_CampaignBuildingCompositionComponent composition, SCR_CampaignMilitaryBaseComponent base,
+		SCR_CampaignBuildingProviderComponent provider, SCR_CampaignFaction faction)
+	{
+		if (m_bStopped || !Replication.IsServer() || !m_Campaign || !m_Campaign.IsMaster() || !IsUnfinished(composition) ||
+			!base || base.GetFaction() != faction || !provider || !provider.GetOwner() ||
+			provider.GetCampaignMilitaryBaseComponent() != base || composition.GetProviderEntity() != provider.GetOwner() ||
+			SCR_Faction.GetEntityFaction(composition.GetOwner()) != faction ||
+			vector.DistanceXZ(composition.GetOwner().GetOrigin(), provider.GetOwner().GetOrigin()) > provider.GetBuildingRadius())
+			return false;
+		if (!m_aPlaced.Contains(composition))
+			m_aPlaced.Insert(composition);
+		return true;
+	}
+
+	bool HasUnfinishedWork(SCR_CampaignMilitaryBaseComponent base)
+	{
+		if (!base || !m_BuildingManager)
+			return true;
+		array<SCR_CampaignBuildingCompositionComponent> candidates = {};
+		m_BuildingManager.GetBuildingCompositions(base, candidates);
+		candidates.InsertAll(m_aPlaced);
+		foreach (SCR_CampaignBuildingCompositionComponent composition : candidates)
+		{
+			if (composition && composition.m_AICFConstructionReceipt && !composition.m_AICFConstructionReceipt.m_bAccepted)
+				continue;
+			if (!IsUnfinished(composition) || !composition.GetProviderEntity())
+				continue;
+			SCR_CampaignBuildingProviderComponent provider = SCR_CampaignBuildingProviderComponent.Cast(composition.GetProviderEntity().FindComponent(SCR_CampaignBuildingProviderComponent));
+			if (provider && provider.GetOwner() && provider.GetCampaignMilitaryBaseComponent() == base &&
+				SCR_Faction.GetEntityFaction(composition.GetOwner()) == base.GetFaction() &&
+				SCR_Faction.GetEntityFaction(provider.GetOwner()) == base.GetFaction() &&
+				vector.DistanceXZ(composition.GetOwner().GetOrigin(), provider.GetOwner().GetOrigin()) <= provider.GetBuildingRadius())
+				return true;
+		}
+		return false;
+	}
+
+	// Synchronous rollback до первого builder tick: exact непринятый AI root
+	// снимается с нашей очереди прежде, чем engine начнёт удалять его owner.
+	void UnregisterFailedConstruction(SCR_CampaignBuildingCompositionComponent composition)
+	{
+		if (!Replication.IsServer() || !composition || !composition.m_AICFConstructionReceipt ||
+			composition.m_AICFConstructionReceipt.m_bAccepted || composition.m_AICFConstructionReceipt.m_bPaid)
+			return;
+		m_aPlaced.RemoveItem(composition);
+	}
+
 	protected bool IsTargetValid(AICF_BaseBuilder builder, SCR_CampaignBuildingCompositionComponent composition)
 	{
+		// Stock registry может ещё содержать удаляемый root после rollback.
+		if (composition && composition.m_AICFConstructionReceipt && !composition.m_AICFConstructionReceipt.m_bAccepted)
+			return false;
 		if (!IsUnfinished(composition) || !builder.m_Base || builder.m_Base.GetFaction() != builder.m_Faction)
+			return false;
+		IEntity owner = composition.GetOwner();
+		if (!owner)
 			return false;
 		IEntity providerEntity = composition.GetProviderEntity();
 		if (!providerEntity)
@@ -132,11 +186,11 @@ class AICF_BaseBuilderService
 		SCR_CampaignBuildingProviderComponent provider = SCR_CampaignBuildingProviderComponent.Cast(providerEntity.FindComponent(SCR_CampaignBuildingProviderComponent));
 		if (!provider || provider.GetCampaignMilitaryBaseComponent() != builder.m_Base)
 			return false;
-		Faction faction = SCR_Faction.GetEntityFaction(composition.GetOwner());
+		Faction faction = SCR_Faction.GetEntityFaction(owner);
 		if (faction && faction != builder.m_Faction)
 			return false;
 		float radius = provider.GetBuildingRadius();
-		return radius > 0 && vector.DistanceSqXZ(providerEntity.GetOrigin(), composition.GetOwner().GetOrigin()) <= radius * radius;
+		return radius > 0 && vector.DistanceSqXZ(providerEntity.GetOrigin(), owner.GetOrigin()) <= radius * radius;
 	}
 
 	protected SCR_CampaignBuildingCompositionComponent SelectTarget(AICF_BaseBuilder builder, vector origin)
@@ -295,6 +349,12 @@ class AICF_BaseBuilderService
 	protected void SelectWorkPosition(AICF_BaseBuilder builder)
 	{
 		builder.m_Target.GetCompositionLayout().GetOwner().GetWorldBounds(builder.m_vFootprintMin, builder.m_vFootprintMax);
+		AICF_ConstructionOrder receipt = builder.m_Target.m_AICFConstructionReceipt;
+		if (receipt && receipt.m_bAccepted && receipt.PlacementUnchanged())
+		{
+			builder.m_vWorkPosition = receipt.m_vWork;
+			return;
+		}
 		vector mins = builder.m_vFootprintMin;
 		vector maxs = builder.m_vFootprintMax;
 		vector origin = builder.m_Character.GetOrigin();
@@ -422,7 +482,7 @@ class AICF_BaseBuilderService
 		// Stock вызывает replication, service activation и удаляет layout при completion.
 		// После вызова не обращаться к layout: он мог быть синхронно уничтожен.
 		layout.AddBuildingValue(value);
-		if (completing)
+		if (completing && builder.m_Target && builder.m_Target.IsCompositionSpawned())
 		{
 			Log(builder, "BUILDER_COMPLETED");
 			ClearTarget(builder);

@@ -17,6 +17,53 @@ class AICF_RHSContentProfile : AICF_ContentProfile
 		return FactionKey.Empty;
 	}
 
+	override bool PrepareConstructionFaction(IEntity entity, FactionKey stableKey, AICF_EConstructionType type, SCR_CampaignFaction faction)
+	{
+		if (!Replication.IsServer() || !entity || !faction || !entity.GetPrefabData() ||
+			entity.GetPrefabData().GetPrefabName() != GetConstructionPrefab(stableKey, type) ||
+			faction.GetFactionKey() != GetRuntimeFactionKey(stableKey))
+			return false;
+		Faction current = SCR_Faction.GetEntityFaction(entity);
+		if (current == faction)
+			return true;
+		// Registry/labels уже проверены; RHS root наследует stock affiliation.
+		// Чужая runtime faction не перепривязывается, fallback prefab отсутствует.
+		if (current && current.GetFactionKey() != stableKey)
+			return false;
+		FactionAffiliationComponent affiliation = FactionAffiliationComponent.Cast(entity.FindComponent(FactionAffiliationComponent));
+		if (!affiliation)
+			return false;
+		affiliation.SetAffiliatedFaction(faction);
+		return SCR_Faction.GetEntityFaction(entity) == faction;
+	}
+
+	override ResourceName GetConstructionPrefab(FactionKey stableKey, AICF_EConstructionType type)
+	{
+		if (stableKey == "US")
+		{
+			switch (type)
+			{
+				case AICF_EConstructionType.SMALL_BARRACKS: return "{28E24277E65162C9}PrefabsEditable/Auto/ConflictRHS/E_LivingArea_S_USMC_01.et";
+				case AICF_EConstructionType.ARMORY: return "{BABA872EAB372FC6}PrefabsEditable/Auto/ConflictRHS/E_AmmoStorage_S_USMC_01.et";
+				case AICF_EConstructionType.LIGHT_DEPOT: return "{C4A1043FB488799F}PrefabsEditable/Auto/ConflictRHS/E_VehicleMaintenance_S_USMC_01.et";
+				case AICF_EConstructionType.LARGE_BARRACKS: return "{71B0DC7DA57FDC3F}PrefabsEditable/Auto/ConflictRHS/E_LivingArea_L_USMC_01.et";
+				case AICF_EConstructionType.HEAVY_DEPOT: return "{0915F1A0EF535ADA}PrefabsEditable/Auto/ConflictRHS/E_VehicleMaintenance_M_USMC_01.et";
+			}
+		}
+		if (stableKey == "USSR")
+		{
+			switch (type)
+			{
+				case AICF_EConstructionType.SMALL_BARRACKS: return "{6D49271024887478}PrefabsEditable/Auto/ConflictRHS/E_LivingArea_S_AFRF_01.et";
+				case AICF_EConstructionType.ARMORY: return "{FF11E24969EE3977}PrefabsEditable/Auto/ConflictRHS/E_AmmoStorage_S_AFRF_01.et";
+				case AICF_EConstructionType.LIGHT_DEPOT: return "{810A615876516F2E}PrefabsEditable/Auto/ConflictRHS/E_VehicleMaintenance_S_AFRF_01.et";
+				case AICF_EConstructionType.LARGE_BARRACKS: return "{341BB91A67A6CA8E}PrefabsEditable/Auto/ConflictRHS/E_LivingArea_L_AFRF_01.et";
+				case AICF_EConstructionType.HEAVY_DEPOT: return "{4CBE94C72D8A4C6B}PrefabsEditable/Auto/ConflictRHS/E_VehicleMaintenance_M_AFRF_01.et";
+			}
+		}
+		return ResourceName.Empty;
+	}
+
 	override FactionKey GetStableFactionKey(FactionKey runtimeKey)
 	{
 		if (runtimeKey == "RHS_USAF" || runtimeKey == "US")

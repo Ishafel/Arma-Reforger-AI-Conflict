@@ -2,6 +2,9 @@
 /.idea/
 /.cache/
 /.codex-runtime/builders-*/
+/.codex-runtime/construction-*/
+/.codex-runtime/play-*/
+/.codex-runtime/current-play-evidence.txt
 .DS_Store
 *.log
 **/logs/

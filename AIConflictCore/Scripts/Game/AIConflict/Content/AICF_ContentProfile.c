@@ -35,6 +35,41 @@ class AICF_ContentProfile
 		return "STOCK";
 	}
 
+	// Exact registry allowlist, подтверждён terminal catalog 1.8.0.13.
+	bool PrepareConstructionFaction(IEntity entity, FactionKey stableKey, AICF_EConstructionType type, SCR_CampaignFaction faction)
+	{
+		return Replication.IsServer() && entity && faction && entity.GetPrefabData() &&
+			entity.GetPrefabData().GetPrefabName() == GetConstructionPrefab(stableKey, type) &&
+			SCR_Faction.GetEntityFaction(entity) == faction;
+	}
+
+	ResourceName GetConstructionPrefab(FactionKey stableKey, AICF_EConstructionType type)
+	{
+		if (stableKey == "US")
+		{
+			switch (type)
+			{
+				case AICF_EConstructionType.SMALL_BARRACKS: return "{DB7F01C68EACBEC1}PrefabsEditable/Auto/Compositions/Slotted/SlotFlatSmall/E_LivingArea_S_Conflict_US_01.et";
+				case AICF_EConstructionType.ARMORY: return "{1BED8F81D2FA2137}PrefabsEditable/Auto/Compositions/Slotted/SlotFlatSmall/E_AmmoStorage_S_US_01.et";
+				case AICF_EConstructionType.LIGHT_DEPOT: return "{A0FEA3E718F5B605}PrefabsEditable/Auto/Compositions/Slotted/SlotFlatSmall/E_VehicleMaintenance_S_Conflict_US_01.et";
+				case AICF_EConstructionType.LARGE_BARRACKS: return "{3C2CFF03FF61BE7A}PrefabsEditable/Auto/Compositions/Slotted/SlotFlatLarge/E_LivingArea_L_Conflict_US_01.et";
+				case AICF_EConstructionType.HEAVY_DEPOT: return "{7AD06D9CF2672AC5}PrefabsEditable/Auto/Compositions/Slotted/SlotFlatMedium/E_VehicleMaintenance_M_Conflict_US_01.et";
+			}
+		}
+		if (stableKey == "USSR")
+		{
+			switch (type)
+			{
+				case AICF_EConstructionType.SMALL_BARRACKS: return "{BE3988DF6E3CD0B1}PrefabsEditable/Auto/Compositions/Slotted/SlotFlatSmall/E_LivingArea_S_Conflict_USSR_01.et";
+				case AICF_EConstructionType.ARMORY: return "{CD9004C6229D900B}PrefabsEditable/Auto/Compositions/Slotted/SlotFlatSmall/E_AmmoStorage_S_USSR_01.et";
+				case AICF_EConstructionType.LIGHT_DEPOT: return "{5ACECF41C167567D}PrefabsEditable/Auto/Compositions/Slotted/SlotFlatSmall/E_VehicleMaintenance_S_Conflict_USSR_01.et";
+				case AICF_EConstructionType.LARGE_BARRACKS: return "{D44C687485600B72}PrefabsEditable/Auto/Compositions/Slotted/SlotFlatLarge/E_LivingArea_L_Conflict_USSR_01.et";
+				case AICF_EConstructionType.HEAVY_DEPOT: return "{6676FBB212B337D6}PrefabsEditable/Auto/Compositions/Slotted/SlotFlatMedium/E_VehicleMaintenance_M_Conflict_USSR_01.et";
+			}
+		}
+		return ResourceName.Empty;
+	}
+
 	FactionKey GetRuntimeFactionKey(FactionKey stableKey)
 	{
 		if (stableKey == "US" || stableKey == "USSR")

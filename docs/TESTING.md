@@ -428,6 +428,40 @@ prefab, но визуальное соответствие оружия/форм
 отдельные server/client/JIP verdict. Одних этих filtered events недостаточно для
 общего runtime PASS.
 
+### Автономное строительство
+
+После изменений `Construction`, construction economy/content mappings и
+пространственного контракта vehicles дополнительно запускаются:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-ConstructionStatic.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-ConstructionContracts.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-ConstructionLog.ps1 -LogPath '<полный остановленный console.log>' -ExpectedMode BOTH -RequireCompletion -RequireAllTypes
+```
+
+`Test-ConstructionContracts` проверяет положительные/отрицательные log inputs
+и отдельную копию исходников с нарушенной provider identity. Это проверка
+анализаторов, не runtime доказательство. `-RequireCompletion` требует связь
+layout с `BUILDER_PROGRESS/BUILDER_COMPLETED`, активным инструментом и online
+service. Без него анализатор допускает корректные отказы поиска без построек;
+такой PASS не доказывает end-to-end строительство.
+
+Fixture `tools/fixtures/AICF_ConstructionRuntimeProbe.c` временно копируется в
+Core `Construction` и запускается только через `Start-AICFRuntime.ps1` с
+`-aicfConstructionProbe 1`. Она готовит supplies; решения, поиск, spawn, debit,
+rollback и progress выполняет production path. Параметры test-only:
+`aicfConstructionProbeMs`, `aicfConstructionProbeRefill`,
+`aicfConstructionProbeType` (0..4), `aicfConstructionProbeFault partial_debit`.
+`aicfConstructionProbeSupplies` задаёт supply target для граничных/отказных
+проверок. `CONSTRUCTION_DEFERRED_PROBE` повторно читает props и supplies через
+пять секунд; анализатор обнаруживает повторное изменение props и оставшийся
+непринятый root. Client probe проверяет stock entity state, но не заменяет
+ручной visual verdict.
+В конце fixture печатает elapsed/tick/query measurements и штатно закрывает
+процесс. После удаления копии обязательны финальные Workbench gates для трёх
+addon graphs. Матрица, точные команды и evidence:
+[CONSTRUCTION_VALIDATION.md](CONSTRUCTION_VALIDATION.md).
+
 ### Runtime matrix: строители баз
 
 | Сценарий | Обязательное evidence |

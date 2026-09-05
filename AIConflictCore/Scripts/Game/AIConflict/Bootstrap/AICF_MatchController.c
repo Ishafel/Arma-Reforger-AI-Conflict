@@ -85,6 +85,7 @@ class AICF_MatchController
 	protected ref AICF_TargetSelector m_TargetSelector;
 	protected ref AICF_GroupSpawner m_GroupSpawner;
 	protected ref AICF_BaseBuilderService m_BaseBuilders;
+	protected ref AICF_ConstructionPlanner m_Construction;
 	protected ref AICF_GroupCohesionPolicy m_GroupCohesionPolicy;
 	protected ref AICF_ManagedAILODPolicy m_ManagedAILODPolicy;
 	protected ref AICF_ReinforcementSystem m_ReinforcementSystem;
@@ -259,6 +260,8 @@ class AICF_MatchController
 		CacheBaseOwners(graphBases);
 		m_BaseBuilders = new AICF_BaseBuilderService();
 		m_BaseBuilders.Start(m_Campaign, m_OrderPlanner, m_Config.GetMaxManagedAgents());
+		m_Construction = new AICF_ConstructionPlanner();
+		m_Construction.Start(m_Campaign, m_BaseBuilders, m_EconomySystem, m_USAICommander, m_USSRAICommander);
 		Subscribe();
 
 		string expectedPlayerFaction = m_Config.GetExpectedPlayerFaction();
@@ -1428,6 +1431,8 @@ class AICF_MatchController
 		if (m_GroupMapMarkers)
 			m_GroupMapMarkers.Sync(m_USState, m_USSRState, m_VehicleCoordinator);
 		TryLogRosterReady();
+		if (m_bRosterReady && m_Construction)
+			m_Construction.Update();
 		if (m_bRosterReady && m_BaseBuilders)
 			m_BaseBuilders.Update();
 		SyncStage4State();
@@ -7206,6 +7211,11 @@ class AICF_MatchController
 			return;
 
 		m_bStopped = true;
+		if (m_Construction)
+		{
+			m_Construction.Stop();
+			m_Construction = null;
+		}
 		if (m_BaseBuilders)
 		{
 			m_BaseBuilders.Stop();

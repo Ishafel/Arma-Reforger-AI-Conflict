@@ -62,6 +62,12 @@ Source runtime использует штатную mission
   server, а без параметра используется `BOTH`;
 - ground vehicles всегда включены;
 - economy/supply pacing всегда включены; CLI opt-out для этих subsystems нет;
+- AI-командиры планируют малые казармы, арсенал, лёгкий depot, большие казармы
+  и тяжёлый depot. Решение для базы принимается не чаще раза в минуту после
+  `ROSTER_READY`; поиск полной площадки распределён по ticks. Supplies и budgets
+  проверяются повторно перед единственным платным unfinished layout. Готовые
+  службы и очередь игрока исключают дублирование. Контракты, mappings и текущие
+  gates описаны в [CONSTRUCTION_VALIDATION.md](docs/CONSTRUCTION_VALIDATION.md);
 - на каждой захваченной базе при появлении незавершённого проекта появляется
   один строитель своей фракции. Он последовательно достраивает объекты в
   штатном building radius, возвращается к главной палатке и исчезает после
@@ -105,7 +111,7 @@ AIConflictCore/Scripts/Game/AIConflict/
   Bootstrap/     composition root и server loops
   Command/       immutable authority policy и faction-scoped AI commanders
   Config/        defaults и aicf* CLI overrides
-  Construction/  один временный строитель на базу и очередь stock layouts
+  Construction/  planner, bounded site search, stock adapter и один строитель на базу
   Content/       stock profile и runtime faction -> stable side mapping boundary
   Diagnostics/   стабильные [AICF][STAGE...] события
   Economy/       supply network, транзакции и abstract deliveries
