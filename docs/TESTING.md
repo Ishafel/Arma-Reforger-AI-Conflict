@@ -128,6 +128,12 @@ Workbench shutdown resource leaks совпали с последним baseline 
 
 ## Выбор проверок по области
 
+Проверка навыка `VETERAN` у управляемых групп, команды и ограничения smoke:
+[AI_COMBAT_VALIDATION.md](AI_COMBAT_VALIDATION.md). Для нового прогона требуется
+полное покрытие `GROUP_COMBAT_POLICY_APPLIED` по stable slots до `ROSTER_READY`;
+для подкрепления — отдельное событие с `deployment=REPLACEMENT_DEPLOYMENT` и
+новой generation. Измерение точности в бою является отдельным gate.
+
 | Изменение | Минимум |
 |---|---|
 | Только Markdown | проверить ссылки/команды, `git diff --check` |

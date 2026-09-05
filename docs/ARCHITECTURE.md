@@ -292,6 +292,15 @@ Reforger 1.8 асинхронна: готовность доказывается
 faction/replication checks и callback/generation fencing, а не самим вызовом
 `RequestSpawn()`.
 
+`AICF_ManagedAICombatPolicy` применяет штатный `EAISkill.VETERAN` к живым
+участникам управляемой боевой группы. Controller вызывает её синхронно в
+`CompleteReadyDeployment()` после readiness/faction gates для initial и
+replacement deployment обеих сторон, включая RHS. Policy проверяет server
+authority; новых callbacks или циклов нет. Она не меняет perception,
+подавление или weapon handling. `GROUP_COMBAT_POLICY_APPLIED` фиксирует
+прочитанный обратно навык полного состава; неполное применение даёт
+`GROUP_COMBAT_POLICY_INCOMPLETE`, не блокируя существующий deployment lifecycle.
+
 Перед initial roster authoritative `AICF_MatchController` проверяет глобальный
 active-AI limit `AIWorld` и при необходимости поднимает его до настроенного
 `max_managed_agents`, не уменьшая более высокий world limit. Если effective

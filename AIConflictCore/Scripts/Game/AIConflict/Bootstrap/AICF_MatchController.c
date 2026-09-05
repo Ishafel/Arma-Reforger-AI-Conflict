@@ -1576,6 +1576,20 @@ class AICF_MatchController
 		}
 
 		bool cohesionApplied = m_GroupCohesionPolicy.Apply(slot.GetGroup());
+		int combatConfiguredAgents = AICF_ManagedAICombatPolicy.Apply(slot.GetGroup());
+		string combatPolicyDetails = string.Format(
+			"faction=%1 slot=%2 generation=%3 deployment=%4 skill=VETERAN configured_agents=%5 expected_agents=%6",
+			faction.GetFactionKey(),
+			slot.GetSlotId(),
+			slot.GetSpawnGeneration(),
+			reason,
+			combatConfiguredAgents,
+			slot.GetDesiredSize());
+		if (combatConfiguredAgents == slot.GetDesiredSize())
+			AICF_Stage35Diagnostics.Info("GROUP_COMBAT_POLICY_APPLIED", combatPolicyDetails);
+		else
+			AICF_Stage35Diagnostics.Error("GROUP_COMBAT_POLICY_INCOMPLETE", combatPolicyDetails);
+
 		AICF_Stage2Diagnostics.Info(
 			"GROUP_COHESION_POLICY_APPLIED",
 			string.Format(
