@@ -2209,4 +2209,48 @@ class AICF_VehicleTransitFlow
 			return "TURRET";
 		return "UNSUPPORTED";
 	}
+
+	// Вспомогательные physical logistics jobs того же domain owner.
+
+	AICF_TripOutcome TickLogistics(AICF_LogisticsWorker w, AICF_LogisticsConfig config)
+	{
+		string token = string.Format("L%1_G%2", w.m_iSlot, w.m_iGeneration);
+		if (!w.Ready() || w.HasForeignOccupant()) return AICF_TripOutcome.TerminalFailClosed("DRIVER_OR_VEHICLE_CONTROL_LOST", token);
+		int now = System.GetTickCount();
+		SCR_AIVehicleUsageComponent usage = SCR_AIVehicleUsageComponent.Cast(w.m_Vehicle.FindComponent(SCR_AIVehicleUsageComponent));
+		if (!usage || usage.GetDamageState() == EDamageState.DESTROYED || SCR_AIVehicleUsability.VehicleIsOnFire(w.m_Vehicle))
+			return AICF_TripOutcome.TerminalFailClosed("VEHICLE_DESTROYED_OR_BURNING", token);
+		vector position = w.m_Vehicle.GetOrigin();
+		if (vector.DistanceXZ(position, w.m_vProgressPosition) >= 3)
+		{
+			w.m_vProgressPosition = position;
+			w.m_iProgressAtMs = now;
+		}
+		if (now - w.m_iPhaseAtMs > AICF_LogisticsConfig.LEG_TIMEOUT_MS) return AICF_TripOutcome.TerminalFailClosed("LEG_DEADLINE", token);
+		float threat;
+		if (!m_Watchdog.IsHiddenRecoveryCombatSafe(w.m_Group, threat))
+		{
+			w.m_iStationaryAtMs = 0;
+			if (now - w.m_iProgressAtMs >= AICF_LogisticsConfig.PROGRESS_TIMEOUT_MS) return AICF_TripOutcome.TerminalFailClosed("COMBAT_PROGRESS_TIMEOUT", token);
+			return AICF_TripOutcome.Wait("COMBAT", token);
+		}
+		Physics physics = w.m_Vehicle.GetPhysics();
+		if (physics && vector.DistanceXZ(position, w.m_vEndpoint) <= config.m_fArrivalRadiusM && physics.GetVelocity().Length() <= config.m_fStationarySpeedMps)
+		{
+			if (!w.m_iStationaryAtMs) w.m_iStationaryAtMs = now;
+			w.m_iProgressAtMs = now;
+			if (now - w.m_iStationaryAtMs >= config.m_iStationaryHoldMs) return AICF_TripOutcome.CompleteTrip("PHYSICAL_ARRIVAL_STATIONARY", token);
+			return AICF_TripOutcome.Wait("STATIONARY_HOLD", token);
+		}
+		w.m_iStationaryAtMs = 0;
+		if (now - w.m_iProgressAtMs >= AICF_LogisticsConfig.PROGRESS_TIMEOUT_MS)
+		{
+			if (w.m_iRouteRetries >= AICF_LogisticsConfig.MAX_ROUTE_RETRIES) return AICF_TripOutcome.TerminalFailClosed("BOUNDED_ROUTE_RECOVERY_EXHAUSTED", token);
+			w.m_iRouteRetries++;
+			w.m_iProgressAtMs = now;
+			return AICF_TripOutcome.Retry("REISSUE_EXACT_VEHICLE_LEG", token, now);
+		}
+		return AICF_TripOutcome.Wait("IN_TRANSIT", token);
+	}
+
 }

@@ -104,4 +104,14 @@ class AICF_VehicleWaypointFactory
 			AICF_Stage3Diagnostics.Error("VEHICLE_WAYPOINT_SPAWN_FAILED", string.Format("prefab=%1", prefab));
 		return waypoint;
 	}
+
+	// Вспомогательные physical logistics jobs того же domain owner.
+
+	AIWaypoint CreateLogisticsWaypoint(vector endpoint)
+	{
+		AIWaypoint waypoint = SpawnWaypoint(MOVE_WAYPOINT_PREFAB, endpoint);
+		if (waypoint) waypoint.SetCompletionRadius(3);
+		return waypoint;
+	}
+
 }

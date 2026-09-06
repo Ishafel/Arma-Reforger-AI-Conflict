@@ -1,0 +1,5 @@
+ENGINE : CLI Params: -client fixture
+[AICF][LOGISTICS_PROBE_CLIENT_STARTED] test_only=1
+[AICF][LOGISTICS_PROBE_CLIENT] test_only=1 slot=1000000 generation=1 driver_rpl=DR1 vehicle_rpl=VR1 pilot=1 supplies=1 cargo=100.125 capacity=500 position=<10,0,10>
+[AICF][LOGISTICS_PROBE_CLIENT_FINISHED] test_only=1
+ENGINE : Game destroyed.

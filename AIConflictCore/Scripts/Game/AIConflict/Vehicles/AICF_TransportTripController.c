@@ -2030,4 +2030,156 @@ class AICF_TransportTripController
 			typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase()));
 		return details;
 	}
+
+	// Вспомогательные physical logistics jobs того же domain owner.
+
+	protected ref AICF_LogisticsAcquisitionFlow m_LogisticsAcquisition = new AICF_LogisticsAcquisitionFlow();
+	protected ref AICF_VehicleWatchdog m_LogisticsWatchdog = new AICF_VehicleWatchdog();
+
+	bool LogisticsTransferSafe(AICF_LogisticsWorker w)
+	{
+		if (!IsAuthorityReady() || !w.Ready() || w.HasForeignOccupant()) return false;
+		float threat;
+		return m_LogisticsWatchdog.IsHiddenRecoveryCombatSafe(w.m_Group, threat);
+	}
+
+	void LogisticsPhase(AICF_LogisticsWorker w, AICF_ELogisticsPhase phase, string reason)
+	{
+		if (!Replication.IsServer() || !w || w.m_ePhase == phase) return;
+		w.m_ePhase = phase;
+		w.m_iPhaseAtMs = System.GetTickCount();
+		w.m_iStationaryAtMs = 0;
+		w.Log("LOGISTICS_REPLANNED", "reason=" + reason);
+	}
+
+	protected ref array<AICF_LogisticsWorker> m_aLogisticsSpawns = {};
+
+	bool BeginLogisticsSpawn(AICF_LogisticsWorker w, AICF_FactionFleet fleet)
+	{
+		if (!IsAuthorityReady() || !w || w.m_Lease || w.m_Group || w.m_Vehicle || !AICF_LogisticsDepotRegistry.Live(w)) return false;
+		for (int i = m_aLogisticsSpawns.Count() - 1; i >= 0; i--)
+		{
+			if (!m_aLogisticsSpawns[i] || m_aLogisticsSpawns[i].m_ePhase != AICF_ELogisticsPhase.SPAWN_PENDING) m_aLogisticsSpawns.Remove(i);
+		}
+		AIWorld world = GetGame().GetAIWorld();
+		if (!world || world.GetCurrentNumOfActiveAIs() + m_aLogisticsSpawns.Count() + 1 > world.GetLimitOfActiveAIs()) return false;
+		w.m_iGeneration++;
+		if (!fleet.TryReserveLogistics(w)) return false;
+		w.m_bCleanupComplete = false;
+		w.m_bCleanupQueued = false;
+		w.m_iSeatAttempts = 0;
+		w.m_iTransferFailures = 0;
+		w.m_iNextSeatMs = 0;
+		w.m_iReturnAttempts = 0;
+		w.m_Search = null;
+		w.m_bRetireAfterCargo = false;
+		LogisticsPhase(w, AICF_ELogisticsPhase.SPAWN_PENDING, "EXACT_DEPOT_ADMITTED");
+		m_aLogisticsSpawns.Insert(w);
+		return true;
+	}
+
+	bool BeginLogisticsLeg(AICF_LogisticsWorker w, vector endpoint, AICF_ELogisticsPhase phase)
+	{
+		if (!IsAuthorityReady() || w.m_bStopped || !w.Ready()) return false;
+		m_Handoff.ClearLogisticsWaypoint(w);
+		w.m_vEndpoint = endpoint;
+		w.m_vProgressPosition = w.m_Vehicle.GetOrigin();
+		w.m_iProgressAtMs = System.GetTickCount();
+		w.m_iRouteRetries = 0;
+		w.m_iIdleAtMs = 0;
+		LogisticsPhase(w, phase, "PHYSICAL_VEHICLE_LEG");
+		AIWaypoint waypoint = m_WaypointFactory.CreateLogisticsWaypoint(endpoint);
+		return m_Handoff.BindLogisticsWaypoint(w, waypoint);
+	}
+
+	void TickLogisticsVehicle(AICF_LogisticsWorker w, AICF_LogisticsConfig config, AICF_LogisticsLedger book, bool graphReady)
+	{
+		if (!IsAuthorityReady() || !w || w.m_bStopped || w.m_bCleanupQueued) return;
+		if (w.m_ePhase == AICF_ELogisticsPhase.SPAWN_PENDING)
+		{
+			if (!graphReady)
+			{
+				RetireLogistics(w, book, "SPAWN_GRAPH_PENDING");
+				return;
+			}
+			AICF_TripOutcome spawn = m_LogisticsAcquisition.Tick(w, book);
+			if (spawn.GetKind() == AICF_ETripOutcomeKind.START_MOVEMENT)
+			{
+				m_LogisticsAcquisition.CancelSite(w);
+				if (!m_Handoff.BindLogisticsUtility(w))
+				{
+					RetireLogistics(w, book, "VEHICLE_UTILITY_FAILED");
+					return;
+				}
+				LogisticsPhase(w, AICF_ELogisticsPhase.DRIVER_READY, "EXACT_DRIVER_SEAT_PROVEN");
+				SCR_VehicleDamageManagerComponent damageAccounting = SCR_VehicleDamageManagerComponent.Cast(w.m_Vehicle.FindComponent(SCR_VehicleDamageManagerComponent));
+				if (damageAccounting) damageAccounting.AICF_SetLogisticsCustody(w);
+				w.Log("LOGISTICS_DRIVER_READY", string.Format("agents=1 cargo=%1 capacity=%2 driver_rpl=%3 ordinal=%4", w.m_CargoPool.Value(), w.m_CargoPool.Capacity(), Replication.FindItemId(w.m_Driver), w.m_iOrdinal));
+			}
+			else if (spawn.IsTerminal()) RetireLogistics(w, book, spawn.GetReason());
+			return;
+		}
+		if (!w.m_Lease) return;
+		if (!w.Ready() || w.HasForeignOccupant())
+		{
+			bool occupied;
+			bool linked;
+			bool gettingOut;
+			if (w.m_Seat) occupied = w.m_Seat.GetOccupant() == w.m_Driver;
+			if (w.m_Driver && w.m_Driver.GetCompartmentAccessComponent())
+			{
+				linked = w.m_Driver.GetCompartmentAccessComponent().IsInCompartment();
+				gettingOut = w.m_Driver.GetCompartmentAccessComponent().IsGettingOut();
+			}
+			w.Log("LOGISTICS_CONTROL_LOST", string.Format("reason=LIVE_POSTCONDITION vehicle_identity=%1 group_identity=%2 driver_identity=%3 driver_alive=%4 exact_occupant=%5 linked=%6 getting_out=%7 foreign_occupant=%8", w.VehicleIdentity(), w.GroupIdentity(), w.DriverIdentity(), AICF_GroupRuntime.IsAliveCharacter(w.m_Driver), occupied, linked, gettingOut, w.HasForeignOccupant()));
+			RetireLogistics(w, book, "LIVE_IDENTITY_OR_DRIVER_LOST");
+			return;
+		}
+		SCR_AIVehicleUsageComponent usage = SCR_AIVehicleUsageComponent.Cast(w.m_Vehicle.FindComponent(SCR_AIVehicleUsageComponent));
+		if (!usage || usage.GetDamageState() == EDamageState.DESTROYED || SCR_AIVehicleUsability.VehicleIsOnFire(w.m_Vehicle))
+		{
+			RetireLogistics(w, book, "VEHICLE_DESTROYED_OR_BURNING");
+			return;
+		}
+		bool moving = w.m_ePhase == AICF_ELogisticsPhase.TO_SOURCE || w.m_ePhase == AICF_ELogisticsPhase.TO_DESTINATION || w.m_ePhase == AICF_ELogisticsPhase.RETURN_HOME;
+		if (!moving) return;
+		AICF_TripOutcome outcome = m_TransitFlow.TickLogistics(w, config);
+		if (outcome.GetKind() == AICF_ETripOutcomeKind.COMPLETE_TRIP)
+		{
+			m_Handoff.ClearLogisticsWaypoint(w);
+			if (w.m_ePhase == AICF_ELogisticsPhase.TO_SOURCE) LogisticsPhase(w, AICF_ELogisticsPhase.LOADING, outcome.GetReason());
+			else if (w.m_ePhase == AICF_ELogisticsPhase.TO_DESTINATION) LogisticsPhase(w, AICF_ELogisticsPhase.UNLOADING, outcome.GetReason());
+			else
+			{
+				LogisticsPhase(w, AICF_ELogisticsPhase.IDLE_AT_DEPOT, outcome.GetReason());
+				w.m_iIdleAtMs = System.GetTickCount();
+				w.Log("LOGISTICS_HOME", "reason=PHYSICAL_HOME_PARKING");
+			}
+		}
+		else if (outcome.GetKind() == AICF_ETripOutcomeKind.RETRY)
+		{
+			m_Handoff.ClearLogisticsWaypoint(w);
+			m_Handoff.BindLogisticsWaypoint(w, m_WaypointFactory.CreateLogisticsWaypoint(w.m_vEndpoint));
+		}
+		else if (outcome.IsTerminal()) RetireLogistics(w, book, outcome.GetReason());
+	}
+
+	void CancelLogisticsLeg(AICF_LogisticsWorker w, string reason)
+	{
+		m_Handoff.ClearLogisticsWaypoint(w);
+		LogisticsPhase(w, AICF_ELogisticsPhase.DRIVER_READY, reason);
+	}
+
+	void RetireLogistics(AICF_LogisticsWorker w, AICF_LogisticsLedger book, string reason)
+	{
+		if (!Replication.IsServer() || !w || w.m_bCleanupQueued) return;
+		book.Cancel(w);
+		w.m_Search = null;
+		m_LogisticsAcquisition.CancelSite(w);
+		m_Handoff.DetachLogisticsUtility(w);
+		m_DismountFlow.BeginLogisticsExit(w);
+		LogisticsPhase(w, AICF_ELogisticsPhase.RETIRING, reason);
+		m_CleanupManager.QueueLogisticsRelease(w, reason);
+	}
+
 }

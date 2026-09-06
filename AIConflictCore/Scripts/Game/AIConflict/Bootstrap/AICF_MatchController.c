@@ -86,6 +86,8 @@ class AICF_MatchController
 	protected ref AICF_GroupSpawner m_GroupSpawner;
 	protected ref AICF_BaseBuilderService m_BaseBuilders;
 	protected ref AICF_ConstructionPlanner m_Construction;
+	protected ref AICF_LogisticsConfig m_LogisticsConfig;
+	protected ref AICF_LogisticsService m_Logistics;
 	protected ref AICF_GroupCohesionPolicy m_GroupCohesionPolicy;
 	protected ref AICF_ManagedAILODPolicy m_ManagedAILODPolicy;
 	protected ref AICF_ReinforcementSystem m_ReinforcementSystem;
@@ -175,6 +177,14 @@ class AICF_MatchController
 		AICF_Stage3Diagnostics.Configure();
 		AICF_Stage35Diagnostics.Configure();
 		AICF_Stage4Diagnostics.Configure();
+		m_LogisticsConfig = new AICF_LogisticsConfig();
+		string logisticsError;
+		if (!m_LogisticsConfig.Validate(logisticsError))
+		{
+			Fail("CONFIG_INVALID", logisticsError);
+			return;
+		}
+		m_LogisticsConfig.Log();
 		if (!EnsureAIWorldCapacity())
 		{
 			Fail(
@@ -265,6 +275,7 @@ class AICF_MatchController
 		m_BaseBuilders.Start(m_Campaign, m_OrderPlanner, m_Config.GetMaxManagedAgents());
 		m_Construction = new AICF_ConstructionPlanner();
 		m_Construction.Start(m_Campaign, m_BaseBuilders, m_EconomySystem, m_USAICommander, m_USSRAICommander);
+		m_Logistics = new AICF_LogisticsService(m_Campaign, m_VehicleCoordinator, m_ObjectiveGraph, m_LogisticsConfig, m_EconomySystem);
 		Subscribe();
 
 		string expectedPlayerFaction = m_Config.GetExpectedPlayerFaction();
@@ -404,14 +415,7 @@ class AICF_MatchController
 			m_Stage4Config.GetIsolatedPacePercent(),
 			m_Stage4Config.GetBlockedPacePercent(),
 			m_Stage4Config.GetRetryIntervalMs());
-		stage4ConfigLine += string.Format(
-			" delivery_interval_ms=%1 delivery_package=%2 delivery_base_travel_ms=%3 delivery_per_hop_ms=%4 max_shipments_per_faction=%5 source_reserve_supplies=%6",
-			m_Stage4Config.GetDeliveryIntervalMs(),
-			m_Stage4Config.GetDeliveryPackageSupplies(),
-			m_Stage4Config.GetDeliveryBaseTravelMs(),
-			m_Stage4Config.GetDeliveryPerHopMs(),
-			m_Stage4Config.GetMaxShipmentsPerFaction(),
-			m_Stage4Config.GetSourceReserveSupplies());
+		stage4ConfigLine += string.Format(" logistics_schema=2 legacy_delivery_ignored=1 source_reserve_supplies=%1", m_Stage4Config.GetSourceReserveSupplies());
 		AICF_Stage4Diagnostics.Info("CONFIG", stage4ConfigLine);
 		if (m_Stage2Config.HasTestDropOrder())
 		{
@@ -1444,6 +1448,8 @@ class AICF_MatchController
 			m_Construction.Update();
 		if (m_bRosterReady && m_BaseBuilders)
 			m_BaseBuilders.Update();
+		if (m_bRosterReady && m_Logistics)
+			m_Logistics.Update(m_USFaction, m_USSRFaction, !m_bReplanScheduled && !m_bGraphRebuildNeeded);
 		SyncStage4State();
 		SyncStrategicUIState();
 		EvaluateVictory();
@@ -7244,6 +7250,11 @@ class AICF_MatchController
 			return;
 
 		m_bStopped = true;
+		if (m_Logistics)
+		{
+			m_Logistics.Stop();
+			m_Logistics = null;
+		}
 		if (m_Construction)
 		{
 			m_Construction.Stop();

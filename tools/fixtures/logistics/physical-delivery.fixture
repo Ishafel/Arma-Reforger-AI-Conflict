@@ -1,0 +1,16 @@
+ENGINE : CLI Params: -server fixture
+[AICF][STAGE1][INFO][ROSTER_READY] run=fixture t_ms=1000
+[AICF][STAGE4][INFO][LOGISTICS_CONFIG] run=fixture t_ms=1000 schema_version=2
+[AICF][LOGISTICS_POLICY_CONTRACT] test_only=1 passed=15 total=15
+[AICF][LOGISTICS_PROBE_LEDGER_CONTRACT] test_only=1 passed=18 total=18 readiness_mock=1
+[AICF][LOGISTICS_PROBE_GRAPH_CONTRACT] test_only=1 passed=12 total=12 ownership_mock=1
+[AICF][LOGISTICS_PROBE_SEARCH_CONTRACT] test_only=1 passed=6 total=6
+[AICF][STAGE4][INFO][LOGISTICS_DRIVER_READY] run=fixture t_ms=2000 faction=US slot=1000000 generation=1 vehicle=V1 driver=D1 vehicle_rpl=VR1 driver_rpl=DR1 phase=DRIVER_READY agents=1 cargo=0 capacity=500
+[AICF][STAGE4][INFO][LOGISTICS_JOB_RESERVED] run=fixture t_ms=3000 faction=US slot=1000000 generation=1 vehicle=V1 driver=D1 phase=DRIVER_READY job=J1 token=J1
+[AICF][STAGE4][INFO][LOGISTICS_LOAD_COMMITTED] run=fixture t_ms=4000 faction=US slot=1000000 generation=1 vehicle=V1 driver=D1 phase=LOADING operation=J1:LOAD purpose=LOAD amount=100.125 from_before=900.5 from_after=800.375 to_before=0 to_after=100.125 from_pool=A to_pool=V discrepancy=0
+[AICF][STAGE4][INFO][LOGISTICS_UNLOAD_COMMITTED] run=fixture t_ms=9000 faction=US slot=1000000 generation=1 vehicle=V1 driver=D1 phase=UNLOADING operation=J1:UNLOAD purpose=DELIVERY amount=75 from_before=100.125 from_after=25.125 to_before=20 to_after=95 from_pool=V to_pool=B discrepancy=0
+[AICF][STAGE4][INFO][LOGISTICS_BALANCE] run=fixture t_ms=10000 schema_version=2 faction=US slot=1000000 generation=1 vehicle=V1 driver=D1 phase=DRIVER_READY loaded=100.125 delivered=75 returned=0 in_transit=25.125 lost=0 released=0 external_in=0 external_out=0 balance_delta=0 discrepancy=0
+[AICF][STAGE4][INFO][LOGISTICS_STOP] run=fixture t_ms=11000
+[AICF][STAGE4][INFO][LOGISTICS_CARGO_RELEASED] run=fixture t_ms=12000 faction=US slot=1000000 generation=1 vehicle=V1 driver=D1 phase=RETIRING amount=25.125
+[AICF][STAGE4][INFO][LOGISTICS_BALANCE] run=fixture t_ms=13000 schema_version=2 faction=US slot=1000000 generation=1 vehicle=V1 driver=D1 phase=RETIRING loaded=100.125 delivered=75 returned=0 in_transit=0 lost=0 released=25.125 external_in=0 external_out=0 balance_delta=0 discrepancy=0
+ENGINE : Game destroyed.

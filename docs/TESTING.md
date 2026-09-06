@@ -304,8 +304,55 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 `Test-Stage4Log.ps1` требует постоянный always-on invariant
 `[AICF][STAGE4][INFO][CONFIG] ... enabled=1` и `SUPPLY_PROBE`.
-`-AllowActiveAtEnd` разрешает только незавершённые reservations/shipments на
-момент остановки; errors он не игнорирует.
+`-AllowActiveAtEnd` разрешает незавершённые deployment reservations и legacy
+shipments в исторических logs; errors он не игнорирует. Для schema 2 обновлён
+float balance. Физические jobs/receipts дополнительно проверяются отдельным
+`Test-LogisticsLog.ps1`; Stage 4 PASS его не заменяет.
+
+### Физическая логистика
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-LogisticsStatic.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-LogisticsContracts.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-LogisticsLog.ps1 -LogPath 'C:\absolute\console.log' -RequireDelivery -RequirePolicy -RequireLedger -RequireGraph -RequireSearch
+```
+
+Static проверяет owners, identity, lifecycle и отсутствие timer transfers.
+Contracts запускает тот же аудитор на повреждённых source fixtures и позитивных/
+негативных float log receipts. Проверка production policy выполняется в Enforce
+через временную `tools/fixtures/AICF_LogisticsRuntimeProbe.c`, а не копией формул
+на PowerShell. Временная копия находится в Core/Economy только на время probe;
+после её удаления необходимы финальные Workbench gates трёх root projects.
+
+`Test-LogisticsLog` требует полный остановленный log, schema 2, paired receipts,
+readiness до jobs, отсутствие transfers после Stop и расширенный cargo balance.
+`-RequireDelivery` запрещает считать отсутствие рейсов доказанной доставкой;
+`-MinimumDurationMs 1800000` проверяет продолжительность soak.
+`RequirePolicy/Ledger/Graph/Search` требуют отдельных Enforce evidence: 15
+policy/parser cases, 18 reservation cases, 12 directed BFS cases и 6 случаев
+bounded candidate preparation/priority. Search probe расширяет только собственный
+test snapshot на маленькой карте; production inventory не изменяется.
+Fixture flags `aicfLogisticsProbeRepeatSource`, `aicfLogisticsProbeDepotAtSource`
+и `aicfLogisticsProbeReturn` создают контролируемые supply/depot условия:
+повторное заполнение источника, depot на базе с избытком и заполнение получателей
+после load для проверки физического RETURN. Вмешательства помечены `test_only=1`.
+Client fixture `aicfLogisticsClientProbe=1` ограничивает сессию пятью минутами;
+опциональный `aicfLogisticsClientSpawnFaction=US|USSR` запрашивает обычный player
+spawn через native faction/respawn RPC, сохраняя серверные проверки. Это отдельный
+player, не logistics driver; streaming не форсируется. Клиент подключается только
+через `Start-AICFRuntime.ps1` с exact свежим `ServerProfileRoot`.
+Наблюдатель удерживает штатный resource subscription handle через inventory
+component local player: чтение generator без подписки может вернуть старое
+aggregate value. После смены машины/окончания наблюдения handle освобождается.
+Server и client должны загружать одинаковую версию fixture; изменение исходника
+между запусками отклоняется native script checksum validation.
+Для сопоставления actual replicated cargo добавь к анализатору
+`-ClientLogPath 'C:\absolute\client\console.log' -RequireLoadedClient`.
+Проверяются exact slot/generation/driver и vehicle RplId, capacity и хотя бы одно
+наблюдение положительного cargo. Только пустая replica этот gate не закрывает.
+Обычный engine teardown и все SCRIPT errors сохраняются и анализируются отдельно.
+Текущие evidence, preparations и `NOT RUN` перечислены в
+[LOGISTICS_VALIDATION.md](LOGISTICS_VALIDATION.md).
 
 ### Rank floor
 

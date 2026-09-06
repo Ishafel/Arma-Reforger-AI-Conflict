@@ -505,6 +505,48 @@ shutdown contract: `Ctrl+C` завершает локальный process, но 
 - отдельные verdict `compile`, `server`, `client`, `JIP`, `soak`;
 - всё, что осталось `NOT RUN`.
 
+## Параметры физической логистики
+
+Логистика постоянно активна для обеих фракций во всех commander modes. Без
+построенного действующего depot подходящего каталога водитель и машина не
+создаются. Создание пары бесплатно; груз всегда загружается из реального pool.
+
+| CLI (префикс `-aicfLogistics`) | Default | Смысл |
+|---|---:|---|
+| `RequestBelowPercent` | 40 | Открывать спрос строго ниже порога |
+| `TargetPercent` | 80 | Закрывать запрос после достижения цели |
+| `DonateAbovePercent` | 90 | Разрешать новый рейс донора строго выше порога |
+| `DonorKeepPercent` | 80 | Неприкосновенная доля обычной базы |
+| `NeutralSourceReserveSupplies` | 0 | Остаток нейтрального SOURCE |
+| `OwnedSourceReserveSupplies` | 500 | Минимальный остаток своего SOURCE |
+| `MinDispatchSupplies` | 50 | Минимум новой загрузки; остаток в машине не удаляется |
+| `MaxCargoPerTrip` | 0 | 0 — фактическая вместимость машины |
+| `WorkersPerDepot` | 1 | Постоянные service slots на здание, 1–4 |
+| `PlannerIntervalMs` | 10000 | Период сверки базы и спроса |
+| `WorkerPollMs` | 1000 | Минимальный интервал worker poll в существующем scheduler |
+| `ReservationTtlMs` | 30000 | TTL source/incoming reservations при отсутствии продления |
+| `ReplacementCooldownMs` | 60000 | Пауза после завершённого cleanup |
+| `BlockedRetryMs` | 60000 | Интервал повторного поиска |
+| `ReturnSearchMaxAttempts` | 3 | 1–10 полностью завершённых неудачных return searches |
+| `IdleRetireMs` | 120000 | Непрерывный простой пустой машины у home parking |
+| `ArrivalRadiusM` | 15 | Радиус физического прибытия внутри exact base |
+| `StationarySpeedMps` | 0.5 | Максимальная скорость transfer |
+| `StationaryHoldMs` | 3000 | Непрерывная неподвижность до transfer |
+
+Пример: `-aicfLogisticsWorkersPerDepot 2 -aicfLogisticsTargetPercent 75`.
+Пороговый порядок: `0 <= request < target <= keep < donate <= 100`.
+CLI принимает конечные неотрицательные десятичные числа, целочисленные поля —
+только целые. Нулевые интервалы и некорректные значения блокируют запуск до roster.
+Polling не может быть чаще родительского server scheduler. `MaxCargoPerTrip=0`
+не означает выключение службы. Общий fleet hard cap 10 не расширяется.
+
+Устарели и игнорируются с `LOGISTICS_CONFIG_DEPRECATED`:
+`aicfSupplyDeliveryIntervalMs`, `aicfSupplyDeliveryPackage`,
+`aicfSupplyDeliveryBaseTravelMs`, `aicfSupplyDeliveryPerHopMs`,
+`aicfMaxSupplyShipmentsPerFaction`. `aicfSupplySourceReserveGroups` сохраняет
+смысл экономического резерва; для своего SOURCE действует больший из него
+и `OwnedSourceReserveSupplies`.
+
 ## Типовые проблемы
 
 | Симптом | Что проверить |

@@ -588,10 +588,54 @@ request
 ошибка до завершения -> ticket/supply rollback + bounded retry
 ```
 
-Supply delivery абстрактна: `AICF_SupplyDeliverySystem` переносит учитываемый
-cargo между stock supply pools по доступному friendly path, не создавая
-физический convoy. Баланс dispatched/delivered/returned/in-transit является
-диагностическим контрактом.
+`AICF_LogisticsService` обслуживает обе стороны независимо от AI commander mode.
+`MatchController` создаёт службу, вызывает её после `ROSTER_READY` и останавливает
+до vehicle/economy teardown. `AICF_SupplyDeliverySystem` теперь только читает
+физические totals для прежнего UI; timer shipments удалены.
+
+`AICF_LogisticsDepotRegistry` владеет identity здания, provider, service component
+и постоянными numeric slots начиная с `1000000`. Slots различаются по
+`faction + root EntityID + ordinal`; replacement увеличивает generation.
+Stock placement/completion/removal/faction events ускоряют bounded reconciliation.
+Каталог production и совместимость stock slot проверяются перед spawn;
+`IsOccupied()` намеренно не вызывается, поскольку в 1.8.0.13 его callback способен
+удалять wrecks. Read-only проверка использует реальные bounds slot.
+
+`AICF_LogisticsPlanner` определяет hysteresis спроса, directed HQ depth и порядок
+кандидатов. Подготовка пар source/destination и road queries распределяются по
+ticks с бюджетом 16; snapshot/cursors сохраняют порядок, перед reserve повторно
+проверяются owner, capture, demand и supplies. Незавершённый поиск не расходует
+return attempts. Приоритет первого донора получает текущая база worker, включая
+промежуточную после предыдущего рейса. Нейтральный источник требует stock `SOURCE_BASE` component и
+подтверждённую невраждебность. Reinforcement `SupplyNetwork` не расширяется.
+Возврат собственного cargo допускает безопасную свою базу без HQ path; исходный
+нейтральный pool разрешён только для его сохранившейся партии.
+
+`AICF_LogisticsLedger` внутри `AICF_EconomySystem` общий для обеих сторон.
+Резервируются source supply и incoming capacity, без списания supplies.
+Resource adapter разворачивает consumer/encapsulator queues до физических leaves;
+проверяет consuming state и права exact native operations. Торговый
+`BuyMultiplier` не является коэффициентом физического debit: штатный
+`VEHICLE_UNLOAD` допускает значение 0.
+Полные aliases имеют общий pool, partial overlap консервативно удерживает весь
+объём пересекающегося резерва. Transfer синхронно измеряет debit/credit и
+компенсирует только доказанный незачисленный debit. Unknown identity или
+discrepancy закрывает дальнейшие transfers. Удаление receipts разрешено только
+после необратимой отмены job, чей уникальный token больше не используется.
+
+Vehicle boundary расширен вспомогательными jobs: существующий Coordinator
+выделяет lease из того же `FactionFleet`; `TransportTripController` меняет phase;
+acquisition/transit/dismount flows возвращают `AICF_TripOutcome`. Создание entity
+остаётся у `VehicleSpawner`, waypoint attach/detach — у `VehicleTaskHandoff`.
+Логистика не создаёт infantry assignment и не меняет controller origin ради движения.
+
+`VehicleCleanupManager` сохраняет ссылку на worker для terminal custody accounting,
+в том числе после Stop. Loaded vehicle переводится в world pool после clearance;
+protected custody не выдаётся за completed cleanup. Все AICF удаления машин
+проверяют surviving cargo, включая slotted containers. Schema 2 проверяет:
+`loaded + external_in = delivered + returned + in_transit + lost + released + external_out`.
+`dispatched` в совместимой Stage4 heartbeat означает фактически загруженный объём.
+Discrepancy остаётся отдельным явным провалом balance gate.
 
 ## Replication, UI и trust boundary
 
@@ -600,7 +644,7 @@ cargo между stock supply pools по доступному friendly path, н�
 
 - authority availability flags для `US` и `USSR`;
 - tickets;
-- Stage 4 supply/tier/request/shipment totals;
+- Stage 4 supply/tier/request и physical logistics totals;
 - strategic objective и допустимые order targets;
 - summaries десяти групп на каждую сторону.
 

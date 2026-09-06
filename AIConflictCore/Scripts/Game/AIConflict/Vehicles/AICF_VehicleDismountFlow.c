@@ -1718,6 +1718,18 @@ class AICF_VehicleDismountFlow
 			lease.GetEntityIdString());
 		return details;
 	}
+
+	// Вспомогательные physical logistics jobs того же domain owner.
+
+	AICF_TripOutcome BeginLogisticsExit(AICF_LogisticsWorker w)
+	{
+		if (!w || !w.Ready()) return AICF_TripOutcome.Wait("EXACT_DRIVER_NOT_SETTLED", "LOGISTICS_EXIT");
+		if (w.HasForeignOccupant()) return AICF_TripOutcome.TerminalFailClosed("PLAYER_PROTECTED", "LOGISTICS_EXIT");
+		CompartmentAccessComponent access = w.m_Driver.GetCompartmentAccessComponent();
+		access.GetOutVehicle(EGetOutType.ANIMATED, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
+		return AICF_TripOutcome.Wait("TERMINAL_ANIMATED_EXIT_REQUESTED", "LOGISTICS_EXIT");
+	}
+
 }
 
 class AICF_DismountClearanceSample

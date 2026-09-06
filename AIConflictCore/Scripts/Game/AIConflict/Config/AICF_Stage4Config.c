@@ -9,11 +9,6 @@ class AICF_Stage4Config
 	static const int DEFAULT_ISOLATED_PACE_PERCENT = 50;
 	static const int DEFAULT_BLOCKED_PACE_PERCENT = 0;
 	static const int DEFAULT_RETRY_INTERVAL_MS = 5000;
-	static const int DEFAULT_DELIVERY_INTERVAL_MS = 60000;
-	static const int DEFAULT_DELIVERY_PACKAGE_SUPPLIES = 500;
-	static const int DEFAULT_DELIVERY_BASE_TRAVEL_MS = 30000;
-	static const int DEFAULT_DELIVERY_PER_HOP_MS = 15000;
-	static const int DEFAULT_MAX_SHIPMENTS_PER_FACTION = 2;
 	static const int DEFAULT_SOURCE_RESERVE_GROUPS = 1;
 	static const int DEFAULT_HEARTBEAT_INTERVAL_MS = 60000;
 
@@ -24,11 +19,6 @@ class AICF_Stage4Config
 	protected int m_iIsolatedPacePercent;
 	protected int m_iBlockedPacePercent;
 	protected int m_iRetryIntervalMs;
-	protected int m_iDeliveryIntervalMs;
-	protected int m_iDeliveryPackageSupplies;
-	protected int m_iDeliveryBaseTravelMs;
-	protected int m_iDeliveryPerHopMs;
-	protected int m_iMaxShipmentsPerFaction;
 	protected int m_iSourceReserveGroups;
 	protected int m_iHeartbeatIntervalMs;
 
@@ -41,11 +31,6 @@ class AICF_Stage4Config
 		m_iIsolatedPacePercent = DEFAULT_ISOLATED_PACE_PERCENT;
 		m_iBlockedPacePercent = DEFAULT_BLOCKED_PACE_PERCENT;
 		m_iRetryIntervalMs = DEFAULT_RETRY_INTERVAL_MS;
-		m_iDeliveryIntervalMs = DEFAULT_DELIVERY_INTERVAL_MS;
-		m_iDeliveryPackageSupplies = DEFAULT_DELIVERY_PACKAGE_SUPPLIES;
-		m_iDeliveryBaseTravelMs = DEFAULT_DELIVERY_BASE_TRAVEL_MS;
-		m_iDeliveryPerHopMs = DEFAULT_DELIVERY_PER_HOP_MS;
-		m_iMaxShipmentsPerFaction = DEFAULT_MAX_SHIPMENTS_PER_FACTION;
 		m_iSourceReserveGroups = DEFAULT_SOURCE_RESERVE_GROUPS;
 		m_iHeartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS;
 		ApplyCLIOverrides();
@@ -74,11 +59,12 @@ class AICF_Stage4Config
 	int GetIsolatedPacePercent() { return m_iIsolatedPacePercent; }
 	int GetBlockedPacePercent() { return m_iBlockedPacePercent; }
 	int GetRetryIntervalMs() { return m_iRetryIntervalMs; }
-	int GetDeliveryIntervalMs() { return m_iDeliveryIntervalMs; }
-	int GetDeliveryPackageSupplies() { return m_iDeliveryPackageSupplies; }
-	int GetDeliveryBaseTravelMs() { return m_iDeliveryBaseTravelMs; }
-	int GetDeliveryPerHopMs() { return m_iDeliveryPerHopMs; }
-	int GetMaxShipmentsPerFaction() { return m_iMaxShipmentsPerFaction; }
+	// Deprecated accessors: таймерная доставка удалена, всегда 0.
+	int GetDeliveryIntervalMs() { return 0; }
+	int GetDeliveryPackageSupplies() { return 0; }
+	int GetDeliveryBaseTravelMs() { return 0; }
+	int GetDeliveryPerHopMs() { return 0; }
+	int GetMaxShipmentsPerFaction() { return 0; }
 	int GetSourceReserveGroups() { return m_iSourceReserveGroups; }
 	int GetHeartbeatIntervalMs() { return m_iHeartbeatIntervalMs; }
 
@@ -116,16 +102,6 @@ class AICF_Stage4Config
 			m_iBlockedPacePercent = ClampInt(value.ToInt(), 0, 100);
 		if (System.GetCLIParam("aicfEconomyRetryMs", value))
 			m_iRetryIntervalMs = ClampInt(value.ToInt(), 1000, 600000);
-		if (System.GetCLIParam("aicfSupplyDeliveryIntervalMs", value))
-			m_iDeliveryIntervalMs = ClampInt(value.ToInt(), 5000, 3600000);
-		if (System.GetCLIParam("aicfSupplyDeliveryPackage", value))
-			m_iDeliveryPackageSupplies = ClampInt(value.ToInt(), 1, 1000000);
-		if (System.GetCLIParam("aicfSupplyDeliveryBaseTravelMs", value))
-			m_iDeliveryBaseTravelMs = ClampInt(value.ToInt(), 1000, 3600000);
-		if (System.GetCLIParam("aicfSupplyDeliveryPerHopMs", value))
-			m_iDeliveryPerHopMs = ClampInt(value.ToInt(), 0, 3600000);
-		if (System.GetCLIParam("aicfMaxSupplyShipmentsPerFaction", value))
-			m_iMaxShipmentsPerFaction = ClampInt(value.ToInt(), 1, 16);
 		if (System.GetCLIParam("aicfSupplySourceReserveGroups", value))
 			m_iSourceReserveGroups = ClampInt(value.ToInt(), 0, 100);
 		if (System.GetCLIParam("aicfEconomyHeartbeatMs", value))

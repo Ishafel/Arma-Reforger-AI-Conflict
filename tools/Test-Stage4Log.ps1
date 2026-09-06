@@ -18,7 +18,14 @@ $reservations = @($lines | Select-String -Pattern '\[DEPLOYMENT_RESERVED\].*requ
 $commits = @($lines | Select-String -Pattern '\[DEPLOYMENT_COMMITTED\].*request=([0-9]+) token=([0-9]+).*faction=(US|USSR).*slot=([0-9]).*ticket_debit=1 supply_debit=([0-9]+) roster=(10|[1-9])\/\6')
 $aborts = @($lines | Select-String -Pattern '\[DEPLOYMENT_ABORTED\].*request=([0-9]+) token=([0-9]+).*ticket_rollback=1 supply_rollback=([0-9]+)')
 $balanceFailures = @($lines | Select-String -SimpleMatch '[SHIPMENT_BALANCE_FAILED]')
-$badHeartbeatBalance = @($lines | Select-String -Pattern '\[AICF\]\[STAGE4\]\[INFO\]\[HEARTBEAT\].*balance_delta=(?!0(?:\s|$))-?[0-9]+')
+$badHeartbeatBalance = @($lines | Select-String -Pattern '\[AICF\]\[STAGE4\]\[INFO\]\[HEARTBEAT\]' | Where-Object {
+    $match = [regex]::Match($_.Line, '\bbalance_delta=([^\s]+)')
+    $number = 0.0
+    if (-not $match.Success -or -not [double]::TryParse($match.Groups[1].Value, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$number)) { return $true }
+    if ([double]::IsNaN($number) -or [double]::IsInfinity($number)) { return $true }
+    if ($_.Line -match '\bschema_version=2\b') { return [Math]::Abs($number) -gt 0.01 }
+    return $number -ne 0
+})
 $approachReissues = @($lines | Select-String -SimpleMatch '[VEHICLE_SPAWN_APPROACH_STARTED]' | Where-Object { $_.Line -match '\breason=REISSUED\b' })
 $occupiedPlans = @($lines | Select-String -SimpleMatch '[VEHICLE_SPAWN_PLAN_CANCELLED]' | Where-Object { $_.Line -match '\breason=[^\s]*SPAWN_PAD_OCCUPIED\b' })
 $padProbes = @($lines | Select-String -SimpleMatch '[VEHICLE_SPAWN_PAD_PROBE]')

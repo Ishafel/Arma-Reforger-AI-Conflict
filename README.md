@@ -70,6 +70,12 @@ Source runtime использует штатную mission
   server, а без параметра используется `BOTH`;
 - ground vehicles всегда включены;
 - economy/supply pacing всегда включены; CLI opt-out для этих subsystems нет;
+- физическая логистика обеих сторон использует отдельного водителя и пустую
+  машину из каталога построенного depot. По умолчанию один service slot на
+  здание, пороги спроса/цели/донорства — `40/80/90%`, общий vehicle cap сохраняется.
+  Порядок снабжения — HQ, затем directed BFS depth; груз перемещается между
+  реальными containers после физического прибытия. Проверки и ограничения:
+  [LOGISTICS_VALIDATION.md](docs/LOGISTICS_VALIDATION.md);
 - AI-командиры планируют малые казармы, арсенал, лёгкий depot, большие казармы
   и тяжёлый depot. Решение для базы принимается не чаще раза в минуту после
   `ROSTER_READY`; поиск полной площадки распределён по ticks. Supplies и budgets
@@ -122,7 +128,7 @@ AIConflictCore/Scripts/Game/AIConflict/
   Construction/  planner, bounded site search, stock adapter и один строитель на базу
   Content/       stock profile и runtime faction -> stable side mapping boundary
   Diagnostics/   стабильные [AICF][STAGE...] события
-  Economy/       supply network, транзакции и abstract deliveries
+  Economy/       supply network, физическая логистика, reservations и receipts
   Forces/        spawn, reinforcement, cohesion и managed AI LOD
   Integration/   адаптер stock Conflict и replicated campaign state
   Objectives/    radio graph и выбор целей

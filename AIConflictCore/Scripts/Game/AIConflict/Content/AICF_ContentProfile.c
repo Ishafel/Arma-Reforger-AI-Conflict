@@ -168,6 +168,23 @@ class AICF_ContentProfile
 		return !suffixes.IsEmpty();
 	}
 
+	void BuildLogisticsSuffixPreference(FactionKey stableKey, array<string> suffixes)
+	{
+		if (stableKey == "US")
+		{
+			suffixes.Insert("Prefabs/Vehicles/Wheeled/M998/M998_covered_long_MERDC.et");
+			suffixes.Insert("Prefabs/Vehicles/Wheeled/M998/M998_covered_long.et");
+			suffixes.Insert("Prefabs/Vehicles/Wheeled/M923A1/M923A1_transport_MERDC.et");
+			suffixes.Insert("Prefabs/Vehicles/Wheeled/M923A1/M923A1_transport.et");
+		}
+		else if (stableKey == "USSR")
+		{
+			suffixes.Insert("Prefabs/Vehicles/Wheeled/UAZ452/UAZ452_cargo.et");
+			suffixes.Insert("Prefabs/Vehicles/Wheeled/UAZ452/UAZ452_transport.et");
+			suffixes.Insert("Prefabs/Vehicles/Wheeled/Ural4320/Ural4320_transport.et");
+		}
+	}
+
 	void BuildVehicleSuffixPreference(
 		FactionKey stableKey,
 		AICF_EVehicleKind kind,

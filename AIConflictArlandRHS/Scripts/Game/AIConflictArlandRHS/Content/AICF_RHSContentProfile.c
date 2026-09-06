@@ -174,6 +174,19 @@ class AICF_RHSContentProfile : AICF_ContentProfile
 		return !suffixes.IsEmpty();
 	}
 
+	override void BuildLogisticsSuffixPreference(FactionKey stableKey, array<string> suffixes)
+	{
+		// Допускаются только entries, которые есть у конкретного RHS depot.
+		BuildVehicleSuffixPreference(stableKey, AICF_EVehicleKind.LIGHT_TRANSPORT, suffixes);
+		if (stableKey == "USSR")
+		{
+			// Native AFRF light catalog: 180 / 120 SUPPLIES, отдельный AI pilot.
+			// Это vehicle entries этого depot; character остаётся строго RHS.
+			suffixes.Insert("Prefabs/Vehicles/Wheeled/UAZ469/UAZ469_Camo.et");
+			suffixes.Insert("Prefabs/Vehicles/Wheeled/UAZ469/UAZ469_Camo_uncovered.et");
+		}
+	}
+
 	override void BuildVehicleSuffixPreference(
 		FactionKey stableKey,
 		AICF_EVehicleKind kind,

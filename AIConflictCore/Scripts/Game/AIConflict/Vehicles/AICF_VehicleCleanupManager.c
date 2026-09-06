@@ -503,6 +503,11 @@ class AICF_VehicleCleanupJob
 		m_Fence.InitializeFromLease(lease, actionToken);
 		m_Scan = new AICF_VehicleCleanupScan();
 	}
+
+	// Вспомогательные physical logistics jobs того же domain owner.
+
+	ref AICF_LogisticsWorker m_LogisticsWorker;
+
 }
 
 class AICF_VehicleCleanupFleetAudit
@@ -896,6 +901,14 @@ class AICF_VehicleCleanupManager
 		AICF_VehicleCleanupJob job,
 		int nowMs)
 	{
+		if (job && job.m_LogisticsWorker)
+		{
+			AICF_LogisticsWorker w = job.m_LogisticsWorker;
+			AICF_LogisticsLedger.Observe(w);
+			if (w.m_bCargoFault) return RetainFailClosed(job, "LOGISTICS_CUSTODY_IDENTITY_OR_DISCREPANCY", "NONE", nowMs);
+			if (w.m_fObservedCargo > 0) job.m_Disposition = AICF_EVehicleReleaseDisposition.FUNCTIONAL_WORLD_POOL;
+		}
+
 		if (!job || job.m_bFailClosed)
 			return AICF_VehicleCleanupOutcome.Retained("RELEASE_JOB_FAIL_CLOSED", "NONE");
 		if (job.m_bReleaseComplete)
@@ -1882,6 +1895,8 @@ class AICF_VehicleCleanupManager
 		Vehicle vehicle,
 		int nowMs)
 	{
+		if (job.m_LogisticsWorker && !AICF_LogisticsResourceAdapter.CanDeleteVehicle(vehicle)) return ReleaseToWorldPool(job, vehicle, nowMs);
+
 		AICF_VehicleRetirementAsset asset;
 		if (!job.m_Fleet.RetireLeaseAt(
 			job.m_Lease,
@@ -1952,6 +1967,17 @@ class AICF_VehicleCleanupManager
 		Vehicle vehicle,
 		int nowMs)
 	{
+		if (job.m_LogisticsWorker)
+		{
+			AICF_LogisticsLedger.Observe(job.m_LogisticsWorker);
+			if (job.m_LogisticsWorker.m_bCargoFault) return;
+			if (!AICF_LogisticsResourceAdapter.CanDeleteVehicle(vehicle))
+			{
+				ReleaseRecoverableRetainedToWorldPool(job, vehicle, nowMs);
+				return;
+			}
+		}
+
 		AICF_VehicleRetirementAsset asset;
 		if (!job.m_Fleet.RetireRetainedLeaseAt(
 			job.m_Lease,
@@ -2436,6 +2462,8 @@ class AICF_VehicleCleanupManager
 		string actualRplId,
 		int nowMs)
 	{
+		if (job && job.m_LogisticsWorker) AICF_LogisticsLedger.LogBalance(job.m_LogisticsWorker);
+
 		if (!job)
 			return AICF_VehicleCleanupOutcome.Retained(reason, "NONE");
 		if (!job.m_Snapshot && job.m_Lease && job.m_Lease.GetCleanupSnapshot())
@@ -2579,6 +2607,8 @@ class AICF_VehicleCleanupManager
 		{
 			return false;
 		}
+		if (!AICF_LogisticsResourceAdapter.CanDeleteVehicle(vehicle))
+			return false;
 		RplComponent.DeleteRplEntity(vehicle, false);
 		if (job.m_WorldPoolAsset && job.m_WorldPoolAsset.GetVehicle())
 		{
@@ -2957,6 +2987,7 @@ class AICF_VehicleCleanupManager
 			job,
 			"RELEASED_TO_WORLD_POOL",
 			System.GetTickCount());
+		if (job.m_bReleaseComplete) CompleteLogisticsOwnership(job);
 	}
 
 	protected void ReportRetirementQuarantined(AICF_VehicleCleanupJob job)
@@ -2972,6 +3003,7 @@ class AICF_VehicleCleanupManager
 			job,
 			"QUARANTINED_FOR_RETIREMENT",
 			System.GetTickCount());
+		if (job.m_bReleaseComplete) CompleteLogisticsOwnership(job);
 	}
 
 	protected void ReportRecoverableRetainedReleased(
@@ -3322,4 +3354,85 @@ class AICF_VehicleCleanupManager
 		m_aFleetAudits.Insert(created);
 		return created;
 	}
+
+	void QueueLogisticsRelease(AICF_LogisticsWorker w, string reason)
+	{
+		if (!IsAuthority() || !w || w.m_bCleanupQueued || !w.m_Fleet || !w.m_Lease ||
+			w.m_Fleet.FindLeaseForSlot(w.m_iSlot, w.m_iGeneration) != w.m_Lease) return;
+		ChimeraAIWorld world = ChimeraAIWorld.Cast(GetGame().GetAIWorld());
+		if (world && w.GroupIdentity()) world.PurgeSpawnRequestsForGroup(w.m_Group);
+		w.m_bCleanupQueued = true;
+		if (w.m_Lease.GetState() == AICF_EVehicleLeaseState.RESERVED)
+		{
+			// Unpublished failed candidate не выдаётся за успешно очищенный asset.
+			if (w.m_Vehicle || w.m_Group)
+			{
+				w.m_bCargoFault = true;
+				w.Log("LOGISTICS_RETIRED", "reason=UNBOUND_CANDIDATE_RETAINED_FAIL_CLOSED slot_released=0");
+				AICF_LogisticsLedger.LogBalance(w);
+				return;
+			}
+			if (w.m_Fleet.ReleaseEmptyReservation(w.m_Lease))
+			{
+				w.m_Lease = null;
+				w.m_bCleanupComplete = true;
+				w.m_iRetryAtMs = System.GetTickCount();
+			}
+			return;
+		}
+		AICF_VehicleCleanupJob job = FindJobByLease(w.m_Lease);
+		if (!job)
+		{
+			int now = System.GetTickCount();
+			job = new AICF_VehicleCleanupJob();
+			job.InitializeCommon(w.m_Fleet, w.m_Lease, w.m_Group, AICF_EVehicleReleaseDisposition.FUNCTIONAL_WORLD_POOL,
+				reason, string.Format("LOGISTICS-%1-%2", w.m_iSlot, w.m_iGeneration), reason, BuildActionToken(w.m_Lease), now,
+				now + Math.Max(STABLE_CLEAR_MS, m_Config.GetCleanupDelayMs()));
+			job.m_LogisticsWorker = w;
+			if (!job.m_Fence || !job.m_Fence.IsComplete())
+			{
+				w.m_bCargoFault = true;
+				w.Log("LOGISTICS_RETIRED", "reason=INVALID_CLEANUP_FENCE slot_released=0");
+				return;
+			}
+			m_aJobs.Insert(job);
+			ReportReleaseQueued(job);
+		}
+		if (w.m_bStopped) PromoteToStop(job, System.GetTickCount());
+	}
+	protected void CompleteLogisticsOwnership(AICF_VehicleCleanupJob job)
+	{
+		AICF_LogisticsWorker w = job.m_LogisticsWorker;
+		if (!w || w.m_bCleanupComplete) return;
+		AICF_LogisticsLedger.ReleaseCargo(w);
+		if (w.m_bCargoFault) return;
+		// Защищённые members и nearby players уже исключены existing clearance.
+		if (w.m_Group)
+		{
+			if (!w.GroupIdentity()) return;
+			array<AIAgent> agents = {};
+			w.m_Group.GetAgents(agents);
+			if (agents.Count() > 1) return;
+			foreach (AIAgent agent : agents)
+			{
+				IEntity entity = agent.GetControlledEntity();
+				if (entity && (entity.GetID() != w.m_DriverId || !m_Watchdog.IsAuthoritativeNonPlayerCharacter(entity) || CompartmentAccessComponent.GetVehicleIn(entity))) return;
+			}
+			AICF_ManagedAILODPolicy lod = new AICF_ManagedAILODPolicy();
+			lod.Release(w.m_Group);
+			w.m_Group.DespawnMembers();
+			RplComponent.DeleteRplEntity(w.m_Group, false);
+		}
+		w.m_Group = null;
+		w.m_Driver = null;
+		w.m_Vehicle = null;
+		w.m_Seat = null;
+		w.m_CargoPool = null;
+		w.m_Lease = null;
+		w.m_bCleanupComplete = true;
+		w.m_iRetryAtMs = System.GetTickCount();
+		w.Log("LOGISTICS_RETIRED", "reason=TERMINAL_CLEANUP_OWNERSHIP_COMPLETE slot_released=1");
+		AICF_LogisticsLedger.LogBalance(w);
+	}
+
 }

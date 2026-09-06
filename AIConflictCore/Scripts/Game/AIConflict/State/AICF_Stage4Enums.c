@@ -5,12 +5,3 @@ enum AICF_ESupplyNetworkTier
 	ISOLATED,
 	BLOCKED
 }
-
-enum AICF_ESupplyShipmentState
-{
-	IN_TRANSIT = 0,
-	PAUSED_ROUTE,
-	RETURN_PENDING,
-	DELIVERED,
-	RETURNED
-}

@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot)
 )
 
@@ -16,7 +16,7 @@ function Read-Required([string]$RelativePath) {
         Add-Failure 'STAGE4_COMPONENT_MISSING' "Missing $RelativePath"
         return ''
     }
-    return Get-Content -LiteralPath $path -Raw
+    return Get-Content -Encoding UTF8 -LiteralPath $path -Raw
 }
 
 function Assert-Contains([string]$Rule, [string]$Text, [string]$Pattern, [string]$Message) {
@@ -35,7 +35,8 @@ $selector = Read-Required 'Economy\AICF_ReinforcementBaseSelector.c'
 $request = Read-Required 'Economy\AICF_ReinforcementRequest.c'
 $reservation = Read-Required 'Economy\AICF_DeploymentReservation.c'
 $economy = Read-Required 'Economy\AICF_EconomySystem.c'
-$shipment = Read-Required 'Economy\AICF_SupplyShipment.c'
+$logistics = Read-Required 'Economy\AICF_LogisticsLedger.c'
+$logisticsConfig = Read-Required 'Config\AICF_LogisticsConfig.c'
 $delivery = Read-Required 'Economy\AICF_SupplyDeliverySystem.c'
 $controller = Read-Required 'Bootstrap\AICF_MatchController.c'
 $campaignState = Read-Required 'Integration\AICF_CampaignState.c'
@@ -70,7 +71,7 @@ $vehiclePhaseStates = Read-Required 'State\Vehicles\AICF_VehiclePhaseStates.c'
 $vehicleBoardingTokens = Read-Required 'State\Vehicles\AICF_VehicleBoardingTokens.c'
 $stage3Config = Read-Required 'Config\AICF_Stage3Config.c'
 $factionFleet = Read-Required 'State\Vehicles\AICF_FactionFleet.c'
-$logAudit = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'tools\Test-Stage4Log.ps1') -Raw
+$logAudit = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $RepositoryRoot 'tools\Test-Stage4Log.ps1') -Raw
 
 Assert-Contains 'STAGE4_ALWAYS_ON' $config 'bool\s+GetEconomyEnabled\s*\(\s*\)\s*\{\s*return\s+true\s*;\s*\}' 'Economy compatibility accessor must remain permanently enabled'
 Assert-NotContains 'STAGE4_ALWAYS_ON' $config 'm_bEconomyEnabled' 'Economy must not retain mutable enable state'
@@ -87,7 +88,7 @@ foreach ($cli in @(
     'aicfSupplyDeliveryBaseTravelMs', 'aicfSupplyDeliveryPerHopMs',
     'aicfMaxSupplyShipmentsPerFaction', 'aicfSupplySourceReserveGroups'
 )) {
-    Assert-Contains 'STAGE4_CLI_CONFIG' $config ([regex]::Escape('"' + $cli + '"')) "Missing CLI option $cli"
+    Assert-Contains 'STAGE4_CLI_CONFIG' ($config + $logisticsConfig) ([regex]::Escape('"' + $cli + '"')) "Missing CLI option or explicit deprecation $cli"
 }
 
 Assert-Contains 'STAGE4_STOCK_SUPPLY_POOL' $network '\.GetSupplies\s*\(' 'Network must read the stock base supply pool'
@@ -125,12 +126,14 @@ foreach ($reason in @('SPAWN_FAILED', 'BIND_FAILED', 'SPAWN_TIMEOUT', 'INVALID_R
     Assert-Contains 'STAGE4_ROLLBACK_PATHS' ($controller + $economy) ([regex]::Escape('"' + $reason + '"')) "Missing rollback reason $reason"
 }
 
-Assert-NotContains 'STAGE4_ABSTRACT_DELIVERY' $delivery 'SpawnEntity|SpawnEntityPrefab|RplComponent\.DeleteRplEntity' 'Stage 4 delivery must not create physical convoy entities'
-Assert-Contains 'STAGE4_ABSTRACT_DELIVERY' $delivery 'sourceBase\.AddSupplies\s*\(\s*-cargo\s*\)' 'Shipment dispatch must debit its source'
-Assert-Contains 'STAGE4_ABSTRACT_DELIVERY' $delivery 'destination\.AddSupplies\s*\(\s*delivered\s*\)' 'Shipment arrival must credit its destination'
-Assert-Contains 'STAGE4_ABSTRACT_DELIVERY' $delivery 'HasDestinationShipment' 'Duplicate destination shipments must be rejected'
-Assert-Contains 'STAGE4_ABSTRACT_DELIVERY' $delivery 'PAUSED_ROUTE' 'Broken routes must pause shipments'
-Assert-Contains 'STAGE4_SHIPMENT_BALANCE' $economy 'dispatched\s*-\s*delivered\s*-\s*returned\s*-\s*inTransit' 'Heartbeat must verify shipment conservation'
+# Schema 2: прежний контракт требовал именно timer debit/credit. Его заменяет
+# физический ledger; facade остаётся read-only для существующего UI.
+Assert-NotContains 'STAGE4_PHYSICAL_DELIVERY' $delivery 'SpawnEntity|DeleteRplEntity|AddSupplies|CallLater|TravelMs|ArrivalMs' 'Aggregate facade must have no timed transfers or entity mutations'
+Assert-Contains 'STAGE4_PHYSICAL_DELIVERY' $logistics 'm_Resources\.Transfer\(' 'Physical receipt must be the transfer owner'
+Assert-Contains 'STAGE4_PHYSICAL_DELIVERY' $logistics 'm_bAccounted' 'Receipts must be accounted once'
+Assert-Contains 'STAGE4_PHYSICAL_DELIVERY' $controller 'm_Logistics\.Update' 'Physical service must run in the authority scheduler'
+Assert-Contains 'STAGE4_SHIPMENT_BALANCE' $economy 'm_DeliverySystem\.BalanceDelta\(' 'Heartbeat must use extended physical conservation'
+Assert-Contains 'STAGE4_SHIPMENT_BALANCE' $delivery 'Total\(faction, 0\) \+ Total\(faction, 6\).*Total\(faction, 7\)' 'Balance must include external transfers, lost and released cargo'
 
 foreach ($field in @(
     'm_bAICFStage4Enabled', 'm_iAICFUSTotalSupplies', 'm_iAICFUSConnectedSupplies',

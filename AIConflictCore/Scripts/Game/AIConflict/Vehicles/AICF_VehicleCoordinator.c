@@ -954,6 +954,33 @@ class AICF_VehicleCoordinator
 			m_ObjectiveGraph && m_TargetSelector && m_Trips && m_Fleets &&
 			m_TripController && m_CleanupManager && m_Diagnostics && m_Acceptance;
 	}
+
+	// Вспомогательные physical logistics jobs того же domain owner.
+
+	bool LogisticsTransferSafe(AICF_LogisticsWorker w) { return IsAuthorityReady() && m_TripController.LogisticsTransferSafe(w); }
+	bool BeginLogisticsSpawn(AICF_LogisticsWorker w)
+	{
+		if (!IsAuthorityReady()) return false;
+		AICF_FactionFleet fleet = m_Fleets.GetOrCreateFleet(w.m_Faction.GetFactionKey(), m_Config.GetMaxVehiclesPerFaction());
+		return m_TripController.BeginLogisticsSpawn(w, fleet);
+	}
+	void TickLogisticsWorker(AICF_LogisticsWorker w, AICF_LogisticsConfig config, AICF_LogisticsLedger book, bool ready)
+	{
+		if (IsAuthorityReady()) m_TripController.TickLogisticsVehicle(w, config, book, ready);
+	}
+	bool BeginLogisticsLeg(AICF_LogisticsWorker w, vector position, AICF_ELogisticsPhase phase)
+	{
+		return IsAuthorityReady() && m_TripController.BeginLogisticsLeg(w, position, phase);
+	}
+	void CancelLogisticsLeg(AICF_LogisticsWorker w, string reason)
+	{
+		if (IsAuthorityReady()) m_TripController.CancelLogisticsLeg(w, reason);
+	}
+	void RetireLogistics(AICF_LogisticsWorker w, AICF_LogisticsLedger book, string reason)
+	{
+		m_TripController.RetireLogistics(w, book, reason);
+	}
+
 }
 
 // Admission diagnostics only. This is neither vehicle state nor a cooldown;

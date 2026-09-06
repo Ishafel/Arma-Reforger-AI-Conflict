@@ -1,7 +1,8 @@
 // Authoritative Stage 4 composition root. It owns request pacing, combined
-// deployment reservations, and abstract supply deliveries.
+// deployment reservations, and physical supply transaction ledger.
 class AICF_EconomySystem
 {
+	protected ref AICF_LogisticsLedger m_LogisticsLedger = new AICF_LogisticsLedger();
 	protected AICF_Stage4Config m_Config;
 	protected SCR_GameModeCampaign m_Campaign;
 	protected AICF_ConflictAdapter m_ConflictAdapter;
@@ -68,13 +69,7 @@ class AICF_EconomySystem
 		if (!IsEnabled())
 			return;
 		TryCompleteInitialSupplyProbe(usFaction, ussrFaction);
-		// A capture invalidates the stock radio snapshot. Keep all abstract cargo
-		// accounted but frozen until the authoritative graph rebuild completes.
-		if (m_bGraphContextReady)
-		{
-			m_DeliverySystem.Update(usFaction);
-			m_DeliverySystem.Update(ussrFaction);
-		}
+		// Physical worker safety continues independently during graph rebuild.
 
 		int nowMs = System.GetTickCount();
 		if (m_iLastHeartbeatAtMs <= 0 ||
@@ -510,7 +505,7 @@ class AICF_EconomySystem
 			AICF_GroupSlot slot = state.GetSlot(reservation.GetSlotId());
 			AbortDeployment(state, faction, slot, "SYSTEM_STOP");
 		}
-		m_DeliverySystem.Stop(usFaction, ussrFaction);
+		m_LogisticsLedger.Stop();
 		m_aRequests.Clear();
 		m_aReservations.Clear();
 	}
@@ -595,12 +590,12 @@ class AICF_EconomySystem
 		if (!faction)
 			return;
 		FactionKey factionKey = faction.GetFactionKey();
-		int dispatched = m_DeliverySystem.GetDispatchedSupplies(factionKey);
-		int delivered = m_DeliverySystem.GetDeliveredSupplies(factionKey);
-		int returned = m_DeliverySystem.GetReturnedSupplies(factionKey);
-		int inTransit = m_DeliverySystem.GetInTransitSupplies(factionKey);
-		int delta = dispatched - delivered - returned - inTransit;
-		if (delta != 0)
+		float dispatched = m_DeliverySystem.GetDispatchedSupplies(factionKey);
+		float delivered = m_DeliverySystem.GetDeliveredSupplies(factionKey);
+		float returned = m_DeliverySystem.GetReturnedSupplies(factionKey);
+		float inTransit = m_DeliverySystem.GetInTransitSupplies(factionKey);
+		float delta = m_DeliverySystem.BalanceDelta(factionKey);
+		if (Math.AbsFloat(delta) > AICF_LogisticsConfig.RESOURCE_EPSILON || Math.AbsFloat(m_DeliverySystem.Total(factionKey, 8)) > AICF_LogisticsConfig.RESOURCE_EPSILON)
 		{
 			AICF_Stage4Diagnostics.Error(
 				"SHIPMENT_BALANCE_FAILED",
@@ -629,7 +624,7 @@ class AICF_EconomySystem
 				delivered,
 				returned,
 				inTransit,
-				delta));
+				delta) + m_DeliverySystem.ExtendedFields(factionKey));
 	}
 
 	protected int CountReservations(FactionKey factionKey)
@@ -642,4 +637,19 @@ class AICF_EconomySystem
 		}
 		return count;
 	}
+
+	// Вспомогательные physical logistics jobs того же domain owner.
+
+	AICF_LogisticsLedger LogisticsLedger() { return m_LogisticsLedger; }
+	void LogisticsWorkers(array<ref AICF_LogisticsWorker> workers) { m_DeliverySystem.SetWorkers(workers); }
+	float LogisticsSourceReserve() { return m_Config.GetSourceReserveSupplies(); }
+	float LogisticsObligations(SCR_CampaignMilitaryBaseComponent base)
+	{
+		if (!base) return 0;
+		SCR_CampaignBuildingProviderComponent provider = base.GetMasterProvider();
+		if (!provider) return 0;
+		// Deployment reservations уже списаны, повторного вычитания нет.
+		return Math.Max(0, provider.GetAccumulatedBudgetChanges(EEditableEntityBudget.CAMPAIGN));
+	}
+
 }

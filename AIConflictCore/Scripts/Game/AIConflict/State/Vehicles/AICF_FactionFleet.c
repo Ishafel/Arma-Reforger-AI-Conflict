@@ -378,6 +378,20 @@ class AICF_FactionFleet
 		return lease && lease.GetFactionKey() == m_sFactionKey &&
 			m_aLeases.Find(lease) >= 0;
 	}
+
+	// Вспомогательные physical logistics jobs того же domain owner.
+
+	bool TryReserveLogistics(AICF_LogisticsWorker w)
+	{
+		if (!Replication.IsServer() || !w || w.m_iSlot < AICF_LogisticsConfig.SERVICE_SLOT_FIRST || w.m_iGeneration <= 0 ||
+			w.m_Faction.GetFactionKey() != m_sFactionKey || HasLeaseForSlot(w.m_iSlot) ||
+			GetActiveOrReservedCount() >= m_iMaximumActiveOrReserved) return false;
+		w.m_Lease = new AICF_VehicleLease(m_sFactionKey, w.m_iSlot, w.m_iGeneration, w.m_iGeneration, ++m_iNextLeaseGeneration);
+		m_aLeases.Insert(w.m_Lease);
+		w.m_Fleet = this;
+		return true;
+	}
+
 }
 
 // Registry keyed by faction identity. It replaces all US/USSR-specific runtime,

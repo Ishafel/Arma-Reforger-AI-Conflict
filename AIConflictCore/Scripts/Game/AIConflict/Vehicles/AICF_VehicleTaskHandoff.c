@@ -589,4 +589,54 @@ class AICF_VehicleTaskHandoff
 			return "NONE";
 		return waypoint.GetID().ToString();
 	}
+
+	// Вспомогательные physical logistics jobs того же domain owner.
+
+	bool BindLogisticsUtility(AICF_LogisticsWorker w)
+	{
+		if (!w.Ready()) return false;
+		SCR_AIVehicleUsageComponent usage = SCR_AIVehicleUsageComponent.Cast(w.m_Vehicle.FindComponent(SCR_AIVehicleUsageComponent));
+		SCR_AIGroupUtilityComponent utility = w.m_Group.GetGroupUtilityComponent();
+		if (!usage || !utility) return false;
+		utility.AddUsableVehicle(usage);
+		return utility.IsUsableVehicle(usage);
+	}
+
+	void ClearLogisticsWaypoint(AICF_LogisticsWorker w)
+	{
+		if (!w || !w.m_Waypoint) return;
+		AIWaypoint waypoint = w.m_Waypoint;
+		if (waypoint.GetID() != w.m_WaypointId) return;
+		if (w.m_Group && !w.GroupIdentity()) return;
+		if (w.GroupIdentity()) w.m_Group.RemoveWaypoint(waypoint);
+		w.m_Waypoint = null;
+		w.m_WaypointId = EntityID.INVALID;
+		RplComponent.DeleteRplEntity(waypoint, false);
+	}
+
+	bool BindLogisticsWaypoint(AICF_LogisticsWorker w, AIWaypoint waypoint)
+	{
+		if (!waypoint) return false;
+		if (!w.Ready() || w.m_Waypoint)
+		{
+			RplComponent.DeleteRplEntity(waypoint, false);
+			return false;
+		}
+		w.m_Waypoint = waypoint;
+		w.m_WaypointId = waypoint.GetID();
+		w.m_Group.AddWaypointAt(waypoint, 0);
+		array<AIWaypoint> queue = {};
+		w.m_Group.GetWaypoints(queue);
+		return queue.Contains(waypoint);
+	}
+
+	void DetachLogisticsUtility(AICF_LogisticsWorker w)
+	{
+		ClearLogisticsWaypoint(w);
+		if (!w.GroupIdentity() || !w.m_Vehicle || w.m_Vehicle.GetID() != w.m_VehicleId) return;
+		SCR_AIVehicleUsageComponent usage = SCR_AIVehicleUsageComponent.Cast(w.m_Vehicle.FindComponent(SCR_AIVehicleUsageComponent));
+		SCR_AIGroupUtilityComponent utility = w.m_Group.GetGroupUtilityComponent();
+		if (usage && utility && utility.IsUsableVehicle(usage)) utility.RemoveUsableVehicle(usage);
+	}
+
 }
