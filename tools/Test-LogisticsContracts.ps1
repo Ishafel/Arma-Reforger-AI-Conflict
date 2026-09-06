@@ -31,6 +31,20 @@ Check-Log 'search-contract-missing' ($fixture.Replace('passed=6 total=6','passed
 Check-Log 'native-bind-error' ($fixture.Replace('ENGINE : Game destroyed.','NETWORK (E): Unable to start replication')) 1 'ENGINE_OR_AICF_ERROR'
 Check-Log 'self-transfer' ($fixture.Replace('from_pool=A to_pool=V','from_pool=V to_pool=V')) 1 'SELF_TRANSFER'
 
+# Синтетические logs проверяют анализатор, а не фактическое открытие шлагбаума.
+$waitIdentity = 'run=fixture faction=US slot=1000000 generation=1 vehicle=V1 driver=D1 phase=TO_SOURCE job=J1 wait_job=J1 wait_generation=1 wait_group=G1 wait_vehicle=V1 wait_driver=D1 target=T1 wait_vehicle_rpl=VR1 wait_driver_rpl=DR1'
+$waitStart = "[AICF][STAGE4][INFO][LOGISTICS_DRIVER_INTERACTION_STARTED] $waitIdentity t_ms=3100 elapsed_ms=0 reason=NATIVE_OPEN_GATE"
+$waitReturn = "[AICF][STAGE4][INFO][LOGISTICS_DRIVER_INTERACTION_RETURNED] $waitIdentity t_ms=3900 elapsed_ms=800 leg_wait_ms=800 exact_return=1 reason=EXACT_DRIVER_RETURNED"
+$waitFailure = $waitReturn.Replace('INTERACTION_RETURNED','INTERACTION_FAILED').Replace('EXACT_DRIVER_RETURNED','DRIVER_INTERACTION_NO_PROGRESS')
+$loadMarker = '[AICF][STAGE4][INFO][LOGISTICS_LOAD_COMMITTED]'
+$waitFixture = $fixture.Replace($loadMarker, "$waitStart`n$waitReturn`n$loadMarker")
+Check-Log 'gate-return-delivery' $waitFixture 0 ''
+Check-Log 'gate-transfer-while-absent' ($fixture.Replace($loadMarker, "$waitStart`n$loadMarker")) 1 'TRANSFER_DURING_DRIVER_INTERACTION'
+Check-Log 'gate-return-wrong-driver' ($waitFixture.Replace($waitReturn, $waitReturn.Replace('driver=D1 phase','driver=D2 phase'))) 1 'DRIVER_INTERACTION_RETURN_IDENTITY'
+Check-Log 'gate-rearmed-wait' ($waitFixture.Replace($waitStart, "$waitStart`n$waitStart")) 1 'DRIVER_INTERACTION_START'
+Check-Log 'gate-hard-timeout-return' ($waitFixture.Replace('elapsed_ms=800','elapsed_ms=120000')) 1 'DRIVER_INTERACTION_RETURN'
+Check-Log 'gate-terminal-then-transfer' ($waitFixture.Replace($waitReturn,$waitFailure)) 1 'TRANSFER_AFTER_DRIVER_INTERACTION_FAILURE'
+
 $clientFixture = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'tools/fixtures/logistics/client-loaded.fixture') -Raw
 $serverFixturePath = Join-Path $evidence 'client-server.fixture'
 [IO.File]::WriteAllText($serverFixturePath, $fixture)
@@ -60,6 +74,19 @@ foreach ($directory in @('Config','Economy','Vehicles','State/Vehicles')) {
     Get-ChildItem -LiteralPath (Join-Path $originalCore $directory) -Filter '*.c' -File | Copy-Item -Destination (Join-Path $targetCore $directory)
 }
 $mutations = @(
+    @('Vehicles/AICF_VehicleTaskHandoff.c','wait.m_Return.m_CompartmentToGetIn.m_Value = null;','// removed','GATE_TERMINAL_FOREIGN_SEAT_PROTECTED'),
+    @('Economy/AICF_LogisticsJob.c','!access.IsGettingOut()','true','DRIVER_READY_STILL_REJECTS_EXIT'),
+    @('Vehicles/AICF_LogisticsDriverInteraction.c','tags.Contains(SCR_AIGoalReaction_OpenNavlinkDoor.SMART_ACTION_TAG)','true','GATE_TAG_EVIDENCE'),
+    @('Vehicles/AICF_LogisticsDriverInteraction.c','current != perform && (!exitAction || current != exitAction)','false','GATE_SELECTED_CHAIN'),
+    @('Vehicles/AICF_LogisticsDriverInteraction.c','getIn.m_CompartmentToGetIn.m_Value == w.m_Seat','true','GATE_EXACT_NATIVE_RETURN'),
+    @('Vehicles/AICF_LogisticsDriverInteraction.c','m_Job.m_sToken != m_sToken','false','GATE_IMMUTABLE_JOB_TOKEN'),
+    @('Vehicles/AICF_LogisticsDriverInteraction.c','w.m_iGeneration != m_iGeneration','false','GATE_IMMUTABLE_GENERATION'),
+    @('Vehicles/AICF_LogisticsDriverInteraction.c','m_iWaitBeforeMs + elapsed >= AICF_LogisticsConfig.DRIVER_INTERACTION_LEG_BUDGET_MS','false','GATE_TOTAL_LEG_BUDGET'),
+    @('Vehicles/AICF_LogisticsDriverInteraction.c','now - m_iProgressAtMs >= AICF_LogisticsConfig.DRIVER_INTERACTION_STALL_MS','false','GATE_STALL_DEADLINE'),
+    @('Vehicles/AICF_LogisticsDriverInteraction.c','opened && w.Ready() && !Live(m_Exit)','opened','GATE_EXACT_SETTLED_RETURN'),
+    @('Economy/AICF_LogisticsLedger.c','job.m_bCancelled || w.m_DriverInteraction || !w.Ready()','job.m_bCancelled || !w.Ready()','GATE_TRANSFER_CLOSED'),
+    @('Economy/AICF_LogisticsJob.c','seat == m_Seat && seat.IsReservedBy(m_Driver)','true','GATE_RESERVATION_EXACT_OWNER'),
+    @('Vehicles/AICF_TransportTripController.c','m_Handoff.CancelLogisticsDriverInteraction(w, reason);','// removed','GATE_TERMINAL_BEFORE_JOB_CANCEL'),
     @('Config/AICF_LogisticsConfig.c','Decimal(text, false, parsed)','true','CONFIG_STRICT_PARSE'),
     @('Economy/AICF_LogisticsPlanner.c','actual < capacity * below / 100','actual <= capacity * below / 100','THRESHOLD_STRICT'),
     @('Economy/AICF_LogisticsPlanner.c','search.m_aEndpoints[search.m_iSourceCursor++]','search.m_aEndpoints[0]','RESUMABLE_CANDIDATE_PREPARATION'),

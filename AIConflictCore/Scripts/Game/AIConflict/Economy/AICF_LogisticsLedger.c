@@ -21,7 +21,7 @@ class AICF_LogisticsLedger
 
 	bool Reserve(AICF_LogisticsWorker w, AICF_LogisticsEndpoint source, AICF_LogisticsEndpoint destination, float amount, bool returning, AICF_LogisticsConfig config, int revision)
 	{
-		if (m_bStopped || !Replication.IsServer() || !w.Ready() || w.m_Job || !destination || !destination.IdentityValid() ||
+		if (m_bStopped || !Replication.IsServer() || w.m_DriverInteraction || !w.Ready() || w.m_Job || !destination || !destination.IdentityValid() ||
 			!(amount > 0) || (source && (!source.IdentityValid() || source.m_Pool.Overlaps(destination.m_Pool)))) return false;
 		float free = destination.m_Pool.Capacity() - destination.m_Pool.Value() - Reserved(destination.m_Pool, true);
 		if (amount > free + AICF_LogisticsConfig.RESOURCE_EPSILON) return false;
@@ -66,8 +66,9 @@ class AICF_LogisticsLedger
 	bool Renew(AICF_LogisticsWorker w, AICF_LogisticsConfig config, int now)
 	{
 		AICF_LogisticsJob job = w.m_Job;
+		bool nativeWait = w.m_DriverInteraction && w.m_DriverInteraction.CanRenew(w, System.GetTickCount());
 		if (m_bStopped || !job || job.m_bCancelled || !m_aJobs.Contains(job) || job.m_iGeneration != w.m_iGeneration ||
-			!w.Ready() || now >= job.m_iExpiresAtMs || now - w.m_iProgressAtMs > AICF_LogisticsConfig.PROGRESS_TIMEOUT_MS) return false;
+			(!w.Ready() && !nativeWait) || (w.m_DriverInteraction && !nativeWait) || now >= job.m_iExpiresAtMs || w.ProgressAgeMs(now) > AICF_LogisticsConfig.PROGRESS_TIMEOUT_MS) return false;
 		job.m_iExpiresAtMs = now + config.m_iReservationTtlMs;
 		return true;
 	}
@@ -183,7 +184,7 @@ class AICF_LogisticsLedger
 	bool Commit(AICF_LogisticsWorker w, bool loading, float allowed, float deficit)
 	{
 		AICF_LogisticsJob job = w.m_Job;
-		if (m_bStopped || !job || job.m_bCancelled || !w.Ready() || job.m_iGeneration != w.m_iGeneration ||
+		if (m_bStopped || !job || job.m_bCancelled || w.m_DriverInteraction || !w.Ready() || job.m_iGeneration != w.m_iGeneration ||
 			System.GetTickCount() >= job.m_iExpiresAtMs || !w.m_CargoPool || !w.m_CargoPool.Valid() || !(allowed > 0)) return false;
 		Observe(w);
 		if (w.m_bCargoFault) return false;

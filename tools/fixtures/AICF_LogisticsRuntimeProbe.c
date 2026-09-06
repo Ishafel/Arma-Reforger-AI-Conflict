@@ -355,6 +355,7 @@ modded class AICF_LogisticsService
 		{
 			m_iAICFProbeStart = now;
 			AICF_ProbePolicy();
+			AICF_ProbeDriverInteractionClocks();
 			string peaceful;
 			if (System.GetCLIParam("aicfLogisticsProbePeace", peaceful) && peaceful == "1")
 			{
@@ -940,6 +941,38 @@ modded class AICF_LogisticsService
 			m_aAICFPreparations.Remove(i);
 		}
 	}
+	// Production clock methods с контролируемым временем; не заменяет physical gate run.
+	protected void AICF_ProbeDriverInteractionClocks()
+	{
+		int passed;
+		AICF_LogisticsWorker worker = new AICF_LogisticsWorker();
+		worker.m_iPhaseAtMs = 1000;
+		worker.MarkProgress(1000);
+		if (worker.ProgressAgeMs(61000) == 60000) passed++;
+		if (worker.LegAgeMs(61000) == 60000) passed++;
+		worker.m_iDriverWaitMs = 20000;
+		if (worker.ProgressAgeMs(61000) == 40000) passed++;
+		if (worker.LegAgeMs(61000) == 40000) passed++;
+		worker.MarkProgress(61000);
+		if (worker.ProgressAgeMs(62000) == 1000) passed++;
+		worker.m_iDriverWaitMs += 10000;
+		if (worker.ProgressAgeMs(72000) == 1000) passed++;
+		AICF_LogisticsDriverInteraction wait = new AICF_LogisticsDriverInteraction();
+		wait.m_iStartedAtMs = 1000;
+		wait.m_iProgressAtMs = 1000;
+		if (wait.DeadlineReason(30999).IsEmpty()) passed++;
+		if (wait.DeadlineReason(31000) == "DRIVER_INTERACTION_NO_PROGRESS") passed++;
+		if (wait.DeadlineReason(32000) == "DRIVER_INTERACTION_NO_PROGRESS") passed++;
+		wait.m_iProgressAtMs = 120000;
+		if (wait.DeadlineReason(120999).IsEmpty()) passed++;
+		if (wait.DeadlineReason(121000) == "DRIVER_INTERACTION_DEADLINE") passed++;
+		wait.m_iProgressAtMs = 1000;
+		wait.m_iWaitBeforeMs = 110000;
+		if (wait.DeadlineReason(10999).IsEmpty()) passed++;
+		if (wait.DeadlineReason(11000) == "DRIVER_INTERACTION_LEG_BUDGET") passed++;
+		Print(string.Format("[AICF][LOGISTICS_PROBE_DRIVER_CLOCK_CONTRACT] test_only=1 passed=%1 total=13 production_clocks=1 physical_interaction=0", passed));
+	}
+
 	protected void AICF_ProbePolicy()
 	{
 		int passed;

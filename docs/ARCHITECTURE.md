@@ -629,6 +629,14 @@ acquisition/transit/dismount flows возвращают `AICF_TripOutcome`. Со
 остаётся у `VehicleSpawner`, waypoint attach/detach — у `VehicleTaskHandoff`.
 Логистика не создаёт infantry assignment и не меняет controller origin ради движения.
 
+Временный выход logistics driver по доказанной штатной цепочке `OpenGate`
+наблюдает `AICF_LogisticsDriverInteraction`. Он сохраняет identity, конечный
+бюджет ожидания и progress; actions и phase не меняет. Controller сохраняет leg,
+ledger ограниченно продлевает прежние reservations, а transfer остаётся закрытым
+до exact возврата и новой stationary проверки. Terminal teardown принадлежит
+handoff/cleanup. Контракт и ограничения:
+[LOGISTICS_DRIVER_INTERACTION.md](LOGISTICS_DRIVER_INTERACTION.md).
+
 `VehicleCleanupManager` сохраняет ссылку на worker для terminal custody accounting,
 в том числе после Stop. Loaded vehicle переводится в world pool после clearance;
 protected custody не выдаётся за completed cleanup. Все AICF удаления машин

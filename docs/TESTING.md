@@ -311,6 +311,13 @@ float balance. Физические jobs/receipts дополнительно п�
 
 ### Физическая логистика
 
+Для выхода водителя к воротам дополнительно применяется
+[LOGISTICS_DRIVER_INTERACTION.md](LOGISTICS_DRIVER_INTERACTION.md).
+`Test-LogisticsLog.ps1 -RequireDriverInteraction` требует в полном остановленном
+логе пару STARTED/RETURNED и delivery того же job/vehicle; отсутствие такого
+эпизода не закрывает gate. Fixture clock contract `passed=13 total=13` проверяет
+production timers отдельно от фактической анимации, возврата и failure lifecycle.
+
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-LogisticsStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-LogisticsContracts.ps1

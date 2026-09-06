@@ -7,6 +7,10 @@ class AICF_LogisticsConfig
 	static const int LEG_TIMEOUT_MS = 600000;
 	static const int PROGRESS_TIMEOUT_MS = 60000;
 	static const int MAX_ROUTE_RETRIES = 2;
+	static const int DRIVER_INTERACTION_TIMEOUT_MS = 120000;
+	static const int DRIVER_INTERACTION_STALL_MS = 30000;
+	static const int DRIVER_INTERACTION_LEG_BUDGET_MS = 120000;
+	static const float DRIVER_INTERACTION_RADIUS_M = 50;
 	static const int REGISTRY_BUDGET = 4;
 	static const int SEARCH_BUDGET = 16;
 	float m_fRequestBelowPercent = 40;
@@ -134,6 +138,7 @@ class AICF_LogisticsConfig
 			m_iPlannerIntervalMs, m_iWorkerPollMs, m_iReservationTtlMs, m_iReplacementCooldownMs, m_iBlockedRetryMs,
 			m_iReturnSearchMaxAttempts, m_iIdleRetireMs, m_fArrivalRadiusM, m_fStationarySpeedMps);
 		details += string.Format(" stationary_hold_ms=%1 resource_epsilon=%2 auxiliary_cost=0 shared_fleet=1 route_cost=EUCLIDEAN_APPROXIMATION", m_iStationaryHoldMs, RESOURCE_EPSILON);
+		details += string.Format(" driver_interaction_ms=%1 driver_interaction_stall_ms=%2 driver_interaction_leg_budget_ms=%3 driver_interaction_radius_m=%4", DRIVER_INTERACTION_TIMEOUT_MS, DRIVER_INTERACTION_STALL_MS, DRIVER_INTERACTION_LEG_BUDGET_MS, DRIVER_INTERACTION_RADIUS_M);
 		AICF_Stage4Diagnostics.Info("LOGISTICS_CONFIG", details);
 	}
 }

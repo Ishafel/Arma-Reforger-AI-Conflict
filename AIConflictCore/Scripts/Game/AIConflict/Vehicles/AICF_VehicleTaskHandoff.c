@@ -639,4 +639,37 @@ class AICF_VehicleTaskHandoff
 		if (usage && utility && utility.IsUsableVehicle(usage)) utility.RemoveUsableVehicle(usage);
 	}
 
+	// Только terminal teardown. Во время ожидания штатные actions не изменяются.
+	void CancelLogisticsDriverInteraction(AICF_LogisticsWorker w, string reason)
+	{
+		if (!Replication.IsServer() || !w || !w.m_DriverInteraction) return;
+		AICF_LogisticsDriverInteraction wait = w.m_DriverInteraction;
+		wait.Log(w, "LOGISTICS_DRIVER_INTERACTION_FAILED", reason, System.GetTickCount());
+		// Не применять старый action к replacement/новому владельцу seat.
+		if (wait.m_Utility && wait.m_Seat && w.DriverIdentity() && w.m_iGeneration == wait.m_iGeneration && w.m_Group == wait.m_Group && w.m_GroupId == wait.m_GroupId &&
+			w.m_Driver == wait.m_Driver && w.m_DriverId == wait.m_DriverId && w.VehicleIdentity() &&
+			w.m_Vehicle == wait.m_Vehicle && w.m_Lease == wait.m_Lease && w.m_Seat == wait.m_Seat &&
+			AICF_LogisticsDriverInteraction.Utility(w) == wait.m_Utility)
+		{
+			array<ref AIActionBase> actions = {};
+			wait.m_Utility.GetActions(actions);
+			// Complete не вызывает GetInVehicle.OnActionFailed с teleport/новым get-out.
+			if (AICF_LogisticsDriverInteraction.Live(wait.m_Return) && actions.Contains(wait.m_Return) &&
+				wait.m_Return.m_CompartmentToGetIn.m_Value == wait.m_Seat && wait.m_Return.m_Vehicle.m_Value == wait.m_Seat.GetOwner())
+			{
+				// Callback Complete штатно снимает reservation и меняет accessibility.
+				// Чужое место защищаем, обнуляя только параметр снимаемого exact action.
+				IEntity occupant = wait.m_Seat.GetOccupant();
+				if ((occupant && occupant != w.m_Driver) || (wait.m_Seat.IsReserved() && !wait.m_Seat.IsReservedBy(w.m_Driver)))
+					wait.m_Return.m_CompartmentToGetIn.m_Value = null;
+				wait.m_Return.Complete();
+			}
+			if (AICF_LogisticsDriverInteraction.Live(wait.m_Action) && actions.Contains(wait.m_Action) &&
+				wait.m_Action.m_SmartActionComponent.m_Value == wait.m_SmartAction && wait.m_SmartAction &&
+				(!wait.m_SmartAction.GetUser() || wait.m_SmartAction.GetUser().GetControlledEntity() == w.m_Driver)) wait.m_Action.Fail();
+			if (AICF_LogisticsDriverInteraction.Live(wait.m_Exit) && actions.Contains(wait.m_Exit)) wait.m_Exit.Complete();
+		}
+		w.m_DriverInteraction = null;
+	}
+
 }

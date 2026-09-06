@@ -6,6 +6,7 @@ param(
     [switch]$RequireLedger,
     [switch]$RequireGraph,
     [switch]$RequireSearch,
+    [switch]$RequireDriverInteraction,
     [string]$ClientLogPath,
     [switch]$RequireLoadedClient,
     [int]$MinimumDurationMs = 0
@@ -29,6 +30,10 @@ $searchContract = $false
 $maxTime = 0
 $rosterReady = $false
 $released = @{}
+$driverWaits = @{}
+$returnedJobs = @{}
+$failedJobs = @{}
+$interactionDeliveries = 0
 # Полный console плюс соседние engine logs: dedicated иногда возвращает 0
 # при compile error, записанной только в error.log/crash.log.
 if ([IO.Path]::GetFileName($LogPath) -eq 'console.log') {
@@ -74,6 +79,36 @@ for ($index=0; $index -lt $lines.Count; $index++) {
         }
     }
     $key = "$($fields['run'])/$($fields['faction'])/$($fields['slot'])/$($fields['generation'])"
+    $slotKey = "$($fields['run'])/$($fields['faction'])/$($fields['slot'])"
+    if ($eventName -match '^LOGISTICS_DRIVER_INTERACTION_(STARTED|RETURNED|FAILED)$') {
+        $state = $Matches[1]
+        foreach ($required in @('wait_job','wait_generation','wait_group','wait_vehicle','wait_driver','target','wait_vehicle_rpl','wait_driver_rpl','reason')) {
+            if (-not $fields.ContainsKey($required)) { $failures.Add("DRIVER_INTERACTION_IDENTITY line=$index field=$required") }
+        }
+        $elapsed = Number $fields 'elapsed_ms' $index
+        if ($elapsed -lt 0) { $failures.Add("DRIVER_INTERACTION_TIME line=$index") }
+        if ($state -eq 'STARTED') {
+            if ($stopped -or -not $rosterReady -or $driverWaits.ContainsKey($slotKey) -or $elapsed -ne 0) { $failures.Add("DRIVER_INTERACTION_START line=$index") }
+            $driverWaits[$slotKey] = $fields
+        } else {
+            if (-not $driverWaits.ContainsKey($slotKey)) { $failures.Add("DRIVER_INTERACTION_UNPAIRED line=$index") }
+            else {
+                $start = $driverWaits[$slotKey]
+                foreach ($identity in @('wait_job','wait_generation','wait_group','wait_vehicle','wait_driver','target','wait_vehicle_rpl','wait_driver_rpl')) {
+                    if ($fields[$identity] -ne $start[$identity]) { $failures.Add("DRIVER_INTERACTION_IDENTITY line=$index field=$identity") }
+                }
+                $waitJobKey = "$slotKey/$($start['wait_generation'])/$($start['wait_job'])"
+                if ($state -eq 'RETURNED') {
+                    if ($stopped -or $fields['exact_return'] -ne '1' -or $elapsed -ge 120000 -or (Number $fields 'leg_wait_ms' $index) -ge 120000) { $failures.Add("DRIVER_INTERACTION_RETURN line=$index") }
+                    foreach ($identity in @('generation','vehicle','driver','job','phase')) {
+                        if ($fields[$identity] -ne $start[$identity]) { $failures.Add("DRIVER_INTERACTION_RETURN_IDENTITY line=$index field=$identity") }
+                    }
+                    $returnedJobs[$waitJobKey] = $start['vehicle']
+                } else { $failedJobs[$waitJobKey] = $true }
+                $driverWaits.Remove($slotKey)
+            }
+        }
+    }
     if ($eventName -in @('LOGISTICS_SPAWN_REQUESTED','LOGISTICS_DRIVER_READY','LOGISTICS_JOB_RESERVED','LOGISTICS_LOAD_COMMITTED','LOGISTICS_UNLOAD_COMMITTED')) {
         if ($stopped) { $failures.Add("WORK_AFTER_STOP line=$index") }
         if (-not $rosterReady) { $failures.Add("WORK_BEFORE_ROSTER_READY line=$index") }
@@ -102,6 +137,14 @@ for ($index=0; $index -lt $lines.Count; $index++) {
         $released[$key] = $true
     }
     if ($eventName -in @('LOGISTICS_LOAD_COMMITTED','LOGISTICS_UNLOAD_COMMITTED')) {
+        $jobToken = ($fields['operation'] -split ':')[0]
+        $jobKey = "$key/$jobToken"
+        if ($driverWaits.ContainsKey($slotKey)) { $failures.Add("TRANSFER_DURING_DRIVER_INTERACTION line=$index") }
+        if ($failedJobs.ContainsKey($jobKey)) { $failures.Add("TRANSFER_AFTER_DRIVER_INTERACTION_FAILURE line=$index") }
+        if ($eventName -eq 'LOGISTICS_UNLOAD_COMMITTED' -and $fields['purpose'] -eq 'DELIVERY' -and $returnedJobs.ContainsKey($jobKey)) {
+            if ($returnedJobs[$jobKey] -ne $fields['vehicle']) { $failures.Add("DRIVER_INTERACTION_DELIVERY_IDENTITY line=$index") }
+            else { $interactionDeliveries++ }
+        }
         $operation = "$($fields['run'])/$($fields['operation'])"
         if (-not $fields.ContainsKey('operation') -or $operations.ContainsKey($operation)) { $failures.Add("DUPLICATE_OPERATION line=$index") }
         $operations[$operation] = $true
@@ -135,6 +178,8 @@ if ($RequirePolicy -and -not $policy) { $failures.Add('PRODUCTION_POLICY_CONTRAC
 if ($RequireLedger -and -not $ledgerContract) { $failures.Add('PRODUCTION_LEDGER_CONTRACT_NOT_OBSERVED') }
 if ($RequireGraph -and -not $graphContract) { $failures.Add('PRODUCTION_GRAPH_CONTRACT_NOT_OBSERVED') }
 if ($RequireSearch -and -not $searchContract) { $failures.Add('PRODUCTION_SEARCH_CONTRACT_NOT_OBSERVED') }
+if (-not $AllowActiveAtEnd -and $driverWaits.Count) { $failures.Add('UNFINISHED_DRIVER_INTERACTION') }
+if ($RequireDriverInteraction -and $interactionDeliveries -eq 0) { $failures.Add('DRIVER_INTERACTION_DELIVERY_NOT_OBSERVED') }
 if ($maxTime -lt $MinimumDurationMs) { $failures.Add("DURATION_TOO_SHORT actual=$maxTime required=$MinimumDurationMs") }
 if ($ClientLogPath) {
     $clientLines = Get-Content -LiteralPath (Resolve-Path -LiteralPath $ClientLogPath)

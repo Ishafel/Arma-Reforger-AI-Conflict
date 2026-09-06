@@ -69,7 +69,7 @@ class AICF_LogisticsService
 			worker.m_iNextPollMs = now + m_Config.m_iWorkerPollMs;
 			AICF_LogisticsLedger.Observe(worker);
 			m_Vehicles.TickLogisticsWorker(worker, m_Config, m_Book, graphReady);
-			if (worker.m_Lease && !worker.m_bCleanupQueued) UpdateJob(worker, now, graphReady);
+			if (worker.m_Lease && !worker.m_bCleanupQueued) UpdateJob(worker, System.GetTickCount(), graphReady);
 		}
 		// Один admission/search на tick, постоянная ротация всех depot slots.
 		if (graphReady && !m_Registry.m_aWorkers.IsEmpty())
@@ -87,7 +87,7 @@ class AICF_LogisticsService
 
 	protected void SelectWork(AICF_LogisticsWorker w, int now)
 	{
-		if (w.m_bCargoFault || now < w.m_iRetryAtMs || w.m_Job) return;
+		if (w.m_bCargoFault || w.m_DriverInteraction || now < w.m_iRetryAtMs || w.m_Job) return;
 		if (w.m_bCleanupComplete)
 		{
 			if (now - w.m_iRetryAtMs < m_Config.m_iReplacementCooldownMs) return;
@@ -220,13 +220,24 @@ class AICF_LogisticsService
 		}
 		if (!AICF_LogisticsDepotRegistry.Live(w)) w.m_bRetireAfterCargo = true;
 		if (!w.m_Job) return;
+		if (!graphReady && w.m_DriverInteraction)
+		{
+			m_Vehicles.RetireLogistics(w, m_Book, "DRIVER_INTERACTION_GRAPH_PENDING");
+			return;
+		}
 		if (!graphReady) return;
 		if (!ValidJob(w) || (w.m_bRetireAfterCargo && !w.m_Job.m_bLoaded) || !m_Book.Renew(w, m_Config, now))
 		{
+			if (w.m_DriverInteraction)
+			{
+				m_Vehicles.RetireLogistics(w, m_Book, "DRIVER_INTERACTION_JOB_CONTEXT_OR_RESERVATION_CHANGED");
+				return;
+			}
 			m_Book.Cancel(w);
 			m_Vehicles.CancelLogisticsLeg(w, "JOB_CONTEXT_OR_RESERVATION_CHANGED");
 			return;
 		}
+		if (w.m_DriverInteraction) return;
 		bool loading = w.m_ePhase == AICF_ELogisticsPhase.LOADING;
 		if (!loading && w.m_ePhase != AICF_ELogisticsPhase.UNLOADING) return;
 		AICF_LogisticsJob job = w.m_Job;
@@ -284,8 +295,8 @@ class AICF_LogisticsService
 		foreach (AICF_LogisticsWorker w : m_Registry.m_aWorkers)
 		{
 			w.m_bStopped = true;
-			m_Book.Cancel(w);
 			if (w.m_Lease) m_Vehicles.RetireLogistics(w, m_Book, "LOGISTICS_STOP");
+			else m_Book.Cancel(w);
 		}
 		m_Book.Stop();
 	}

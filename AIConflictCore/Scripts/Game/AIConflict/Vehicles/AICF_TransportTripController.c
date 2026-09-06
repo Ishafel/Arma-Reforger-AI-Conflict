@@ -2038,7 +2038,7 @@ class AICF_TransportTripController
 
 	bool LogisticsTransferSafe(AICF_LogisticsWorker w)
 	{
-		if (!IsAuthorityReady() || !w.Ready() || w.HasForeignOccupant()) return false;
+		if (!IsAuthorityReady() || w.m_DriverInteraction || !w.Ready() || w.HasForeignOccupant()) return false;
 		float threat;
 		return m_LogisticsWatchdog.IsHiddenRecoveryCombatSafe(w.m_Group, threat);
 	}
@@ -2080,11 +2080,12 @@ class AICF_TransportTripController
 
 	bool BeginLogisticsLeg(AICF_LogisticsWorker w, vector endpoint, AICF_ELogisticsPhase phase)
 	{
-		if (!IsAuthorityReady() || w.m_bStopped || !w.Ready()) return false;
+		if (!IsAuthorityReady() || w.m_bStopped || w.m_DriverInteraction || !w.Ready()) return false;
 		m_Handoff.ClearLogisticsWaypoint(w);
 		w.m_vEndpoint = endpoint;
 		w.m_vProgressPosition = w.m_Vehicle.GetOrigin();
-		w.m_iProgressAtMs = System.GetTickCount();
+		w.m_iDriverWaitMs = 0;
+		w.MarkProgress(System.GetTickCount());
 		w.m_iRouteRetries = 0;
 		w.m_iIdleAtMs = 0;
 		LogisticsPhase(w, phase, "PHYSICAL_VEHICLE_LEG");
@@ -2120,6 +2121,7 @@ class AICF_TransportTripController
 			return;
 		}
 		if (!w.m_Lease) return;
+		if (TickLogisticsDriverInteraction(w, book)) return;
 		if (!w.Ready() || w.HasForeignOccupant())
 		{
 			bool occupied;
@@ -2164,8 +2166,41 @@ class AICF_TransportTripController
 		else if (outcome.IsTerminal()) RetireLogistics(w, book, outcome.GetReason());
 	}
 
+	// Orchestration: наблюдатель не меняет trip phase, waypoint, lease или ledger.
+	protected bool TickLogisticsDriverInteraction(AICF_LogisticsWorker w, AICF_LogisticsLedger book)
+	{
+		int now = System.GetTickCount();
+		if (!w.m_DriverInteraction)
+		{
+			w.m_DriverInteraction = AICF_LogisticsDriverInteraction.TryBegin(w, now);
+			if (!w.m_DriverInteraction) return false;
+			w.m_DriverInteraction.Log(w, "LOGISTICS_DRIVER_INTERACTION_STARTED", "NATIVE_OPEN_GATE", now);
+		}
+		AICF_TripOutcome observation = w.m_DriverInteraction.Poll(w, now);
+		if (observation.IsTerminal())
+		{
+			RetireLogistics(w, book, observation.GetReason());
+			return true;
+		}
+		SCR_AIVehicleUsageComponent usage;
+		if (w.VehicleIdentity()) usage = SCR_AIVehicleUsageComponent.Cast(w.m_Vehicle.FindComponent(SCR_AIVehicleUsageComponent));
+		if (!usage || usage.GetDamageState() == EDamageState.DESTROYED || SCR_AIVehicleUsability.VehicleIsOnFire(w.m_Vehicle))
+		{
+			RetireLogistics(w, book, "VEHICLE_DESTROYED_OR_BURNING");
+			return true;
+		}
+		if (observation.GetKind() == AICF_ETripOutcomeKind.COMPLETE_TRIP)
+		{
+			w.m_DriverInteraction.Log(w, "LOGISTICS_DRIVER_INTERACTION_RETURNED", observation.GetReason(), now);
+			w.m_DriverInteraction = null;
+			return false;
+		}
+		return true;
+	}
+
 	void CancelLogisticsLeg(AICF_LogisticsWorker w, string reason)
 	{
+		m_Handoff.CancelLogisticsDriverInteraction(w, reason);
 		m_Handoff.ClearLogisticsWaypoint(w);
 		LogisticsPhase(w, AICF_ELogisticsPhase.DRIVER_READY, reason);
 	}
@@ -2173,6 +2208,7 @@ class AICF_TransportTripController
 	void RetireLogistics(AICF_LogisticsWorker w, AICF_LogisticsLedger book, string reason)
 	{
 		if (!Replication.IsServer() || !w || w.m_bCleanupQueued) return;
+		m_Handoff.CancelLogisticsDriverInteraction(w, reason);
 		book.Cancel(w);
 		w.m_Search = null;
 		m_LogisticsAcquisition.CancelSite(w);

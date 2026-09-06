@@ -119,6 +119,9 @@ class AICF_LogisticsWorker
 	vector m_vProgressPosition;
 	int m_iPhaseAtMs;
 	int m_iProgressAtMs;
+	int m_iDriverWaitMs;
+	int m_iProgressWaitBaselineMs;
+	ref AICF_LogisticsDriverInteraction m_DriverInteraction;
 	int m_iStationaryAtMs;
 	int m_iNextPollMs;
 	int m_iRetryAtMs;
@@ -168,6 +171,23 @@ class AICF_LogisticsWorker
 			!access.IsGettingOut() && CompartmentAccessComponent.GetVehicleIn(m_Driver) == m_Vehicle;
 	}
 
+	// Учитывается только подтверждённое ожидание, отдельно от физического progress.
+	void MarkProgress(int now)
+	{
+		m_iProgressAtMs = now;
+		m_iProgressWaitBaselineMs = m_iDriverWaitMs;
+	}
+
+	int ProgressAgeMs(int now)
+	{
+		return now - m_iProgressAtMs - (m_iDriverWaitMs - m_iProgressWaitBaselineMs);
+	}
+
+	int LegAgeMs(int now)
+	{
+		return now - m_iPhaseAtMs - m_iDriverWaitMs;
+	}
+
 	float BalanceDelta()
 	{
 		float cargo;
@@ -178,7 +198,7 @@ class AICF_LogisticsWorker
 	// Cleanup считает protected любого живого occupant, включая нашего driver.
 	// Для движения/операций защищается чужое использование; exact driver уже
 	// проверен Ready/DriverIdentity и не является причиной прекратить свой trip.
-	bool HasForeignOccupant()
+	bool HasForeignOccupant(bool allowExactDriverReservation = false)
 	{
 		if (!VehicleIdentity()) return true;
 		BaseCompartmentManagerComponent manager = BaseCompartmentManagerComponent.Cast(m_Vehicle.FindComponent(BaseCompartmentManagerComponent));
@@ -190,7 +210,7 @@ class AICF_LogisticsWorker
 			if (!seat) return true;
 			IEntity occupant = seat.GetOccupant();
 			if (occupant && occupant != m_Driver) return true;
-			if (!occupant && seat.IsReserved()) return true;
+			if (!occupant && seat.IsReserved() && !(allowExactDriverReservation && seat == m_Seat && seat.IsReservedBy(m_Driver))) return true;
 		}
 		return false;
 	}
