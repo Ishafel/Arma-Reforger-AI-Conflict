@@ -311,6 +311,11 @@ float balance. Физические jobs/receipts дополнительно п�
 
 ### Физическая логистика
 
+Для geometry admission logistics spawn применяется
+[LOGISTICS_SPAWN_CLEARANCE.md](LOGISTICS_SPAWN_CLEARANCE.md): непаддированный
+prefab OBB, сохранённые отрицательные collision/reservation contracts и отдельный
+terminal-only probe. Свободные коридоры выезда больше не являются spawn gate.
+
 Для выхода водителя к воротам дополнительно применяется
 [LOGISTICS_DRIVER_INTERACTION.md](LOGISTICS_DRIVER_INTERACTION.md).
 `Test-LogisticsLog.ps1 -RequireDriverInteraction` требует в полном остановленном

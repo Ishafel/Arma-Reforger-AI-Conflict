@@ -1,12 +1,26 @@
 // Cached geometry только transient preview, до создания gameplay vehicle.
-// Stock slot bounds исключают собственные props; этот меньший реальный объём
-// отдельно проверяется со всеми препятствиями, включая props самого depot.
+// Проверяется OBB конкретного prefab без запаса на площадку/выезд.
+// TracePosition проверяет collision geometry, включая props самого depot.
 class AICF_LogisticsVehicleFootprint
 {
 	vector m_vMin;
 	vector m_vMax;
 	bool m_bValid;
 	protected static ref map<ResourceName, ref AICF_LogisticsVehicleFootprint> s_mCache = new map<ResourceName, ref AICF_LogisticsVehicleFootprint>();
+
+	bool IsClear(BaseWorld world, vector transform[4], out TraceOBB body)
+	{
+		if (!world || !m_bValid) return false;
+		body = new TraceOBB();
+		for (int axis; axis < 3; axis++) body.Mat[axis] = transform[axis];
+		body.Start = transform[3];
+		body.Mins = m_vMin;
+		body.Maxs = m_vMax;
+		body.Flags = TraceFlags.ENTS;
+		body.LayerMask = EPhysicsLayerPresets.Vehicle;
+		// Без broadphase veto и исключения здания: важна только penetration.
+		return world.TracePosition(body, null) >= 0;
+	}
 
 	static AICF_LogisticsVehicleFootprint Get(ResourceName prefab)
 	{

@@ -599,7 +599,12 @@ request
 Stock placement/completion/removal/faction events ускоряют bounded reconciliation.
 Каталог production и совместимость stock slot проверяются перед spawn;
 `IsOccupied()` намеренно не вызывается, поскольку в 1.8.0.13 его callback способен
-удалять wrecks. Read-only проверка использует реальные bounds slot.
+удалять wrecks. Read-only проверка использует непаддированный OBB конкретного
+vehicle prefab в точном transform штатного slot и collision geometry препятствий.
+Большой stock slot box и коридоры спереди/сзади не являются admission gates
+логистики. Surface/water и общие spatial reservations сохраняются; road endpoint
+служит необязательной подсказкой парковки. Подробности:
+[LOGISTICS_SPAWN_CLEARANCE.md](LOGISTICS_SPAWN_CLEARANCE.md).
 
 `AICF_LogisticsPlanner` определяет hysteresis спроса, directed HQ depth и порядок
 кандидатов. Подготовка пар source/destination и road queries распределяются по

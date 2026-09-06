@@ -61,8 +61,10 @@ provider и native base. Несколько service components одного зд
 дубликатов ordinal. Catalog admission проверяет конкретный prefab и разрешённый
 stock slot. Stock `IsOccupied()` здесь не вызывается: его callback может удалять
 wrecks и обращается к отсутствующему `Physics`. Собственная read-only проверка
-использует stock bounds/exclusions; отдельно проверяются prefab geometry,
-surface, физический выезд и общие spatial reservations.
+использует OBB конкретного prefab без расширения площадки и без исключения props
+самого depot; отдельно проверяются surface и общие spatial reservations.
+С 2026-09-06 доказательство свободного физического выезда больше не требуется:
+[исправление logistics spawn](LOGISTICS_SPAWN_CLEARANCE.md).
 
 Один driver создаётся через существующий одиночный roster workflow. Fleet lease
 берётся из существующего `AICF_FactionFleet` с cap 10. Идентичность и фактическое

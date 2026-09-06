@@ -74,6 +74,20 @@ foreach ($directory in @('Config','Economy','Vehicles','State/Vehicles')) {
     Get-ChildItem -LiteralPath (Join-Path $originalCore $directory) -Filter '*.c' -File | Copy-Item -Destination (Join-Path $targetCore $directory)
 }
 $mutations = @(
+    @('Vehicles/AICF_LogisticsVehicleFootprint.c','return world.TracePosition(body, null) >= 0;','return true;','SPAWN_PHYSICS_PENETRATION'),
+    @('Vehicles/AICF_LogisticsVehicleFootprint.c','body.Mins = m_vMin;','body.Mins = m_vMin - Vector(2, 0, 2);','SPAWN_BODY_MIN_UNPADDED'),
+    @('Vehicles/AICF_LogisticsVehicleFootprint.c','body.Maxs = m_vMax;','body.Maxs = m_vMax + Vector(2, 0, 2);','SPAWN_BODY_MAX_UNPADDED'),
+    @('Vehicles/AICF_LogisticsVehicleFootprint.c','body.LayerMask = EPhysicsLayerPresets.Vehicle;','body.LayerMask = 0;','SPAWN_BODY_LAYER'),
+    @('Vehicles/AICF_LogisticsVehicleFootprint.c','body.Mat[axis] = transform[axis];','body.Mat[axis] = vector.Zero;','SPAWN_BODY_ORIENTATION'),
+    @('Vehicles/AICF_VehicleSpawner.c','!footprint.IsClear(world, w.m_aSpawnTransform, body)','false','SPAWN_BODY_COLLISION'),
+    @('Vehicles/AICF_VehicleSpawner.c','!IsWheeledSpawnSurfaceSuitable(w.m_aSpawnTransform[3], world, surface, water, delta, probes)','false','SPAWN_SURFACE_REJECTION'),
+    @('Vehicles/AICF_VehicleSpawner.c','if (!LogisticsSpawnClear(w)) return false;','// removed','SPAWN_RESERVE_LIVE_BODY'),
+    @('Vehicles/AICF_VehicleSpawner.c','|| !LogisticsSpawnClear(w)) return false;',') return false;','SPAWN_COMMIT_LIVE_BODY'),
+    @('Vehicles/AICF_VehicleSpawner.c','if (!ai || !ai.GetRoadNetworkManager()) return true;','if (!ai || !ai.GetRoadNetworkManager()) return false;','SPAWN_ROAD_OPTIONAL'),
+    @('Vehicles/AICF_VehicleSpawner.c','w.m_vParking = w.m_aSpawnTransform[3];','return RejectLogisticsSite(w, "EXIT_OBSTACLE");','SPAWN_NO_EXIT_VETO'),
+    @('Vehicles/AICF_VehicleSpawner.c','s_aConstructionSites.Insert(w.m_Site);','// removed','SPAWN_SHARED_RESERVATIONS'),
+    @('Vehicles/AICF_VehicleSpawner.c','!AICF_ConstructionPlanner.VehicleAreaClear(position, 12)','false','SPAWN_CONSTRUCTION_RESERVATIONS'),
+    @('Economy/AICF_LogisticsDepotRegistry.c','slot.AICF_LogisticsClear(entry.GetPrefab())','true','SPAWN_SLOT_PREFAB_IDENTITY'),
     @('Vehicles/AICF_VehicleTaskHandoff.c','wait.m_Return.m_CompartmentToGetIn.m_Value = null;','// removed','GATE_TERMINAL_FOREIGN_SEAT_PROTECTED'),
     @('Economy/AICF_LogisticsJob.c','!access.IsGettingOut()','true','DRIVER_READY_STILL_REJECTS_EXIT'),
     @('Vehicles/AICF_LogisticsDriverInteraction.c','tags.Contains(SCR_AIGoalReaction_OpenNavlinkDoor.SMART_ACTION_TAG)','true','GATE_TAG_EVIDENCE'),

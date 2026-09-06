@@ -29,7 +29,7 @@ modded class SCR_CatalogEntitySpawnerComponent
 		foreach (SCR_EntitySpawnerSlotComponent slot : slots)
 		{
 			if (checked++ >= 16) break;
-			if (AICF_AllowsLogisticsEntry(entry, slot) && (!requireClear || slot.AICF_LogisticsClear())) candidates.Insert(slot);
+			if (AICF_AllowsLogisticsEntry(entry, slot) && (!requireClear || slot.AICF_LogisticsClear(entry.GetPrefab()))) candidates.Insert(slot);
 		}
 	}
 	bool AICF_AllowsLogisticsEntry(SCR_EntityCatalogEntry entry, SCR_EntitySpawnerSlotComponent slot)
@@ -44,29 +44,16 @@ modded class SCR_CatalogEntitySpawnerComponent
 modded class SCR_EntitySpawnerSlotComponent
 {
 	// Stock IsOccupied/TraceCallback удаляет wrecks и dereference null physics.
-	// Этот read-only admission сохраняет stock bounds и препятствия, включая AI.
-	bool AICF_LogisticsClear()
+	// Read-only admission по конкретной машине, а не большому stock slot box.
+	bool AICF_LogisticsClear(ResourceName prefab)
 	{
 		if (!GetOwner()) return false;
-		SCR_EntitySpawnerSlotComponentClass data = SCR_EntitySpawnerSlotComponentClass.Cast(GetComponentData(GetOwner()));
-		if (!data) return false;
-		TraceOBB trace = new TraceOBB();
-		GetOwner().GetWorldTransform(trace.Mat);
-		trace.Start = GetOwner().GetOrigin();
-		trace.Mins = data.GetMinBoundsVector();
-		trace.Maxs = data.GetMaxBoundsVector();
-		trace.Flags = TraceFlags.ENTS;
-		trace.LayerMask = EPhysicsLayerPresets.Projectile;
-		FillExcludedEntities();
-		trace.ExcludeArray = m_aExcludedEntities;
-		GetGame().GetWorld().TracePosition(trace, AICF_LogisticsTrace);
-		return !trace.TraceEnt;
-	}
-	protected bool AICF_LogisticsTrace(IEntity entity)
-	{
-		if (!entity || entity == GetOwner() || SCR_BasePreviewEntity.Cast(entity)) return false;
-		if (entity.IsLoaded() || entity.FindComponent(BaseLoadoutClothComponent) || entity.FindComponent(WeaponComponent)) return false;
-		return entity.GetPhysics() != null;
+		AICF_LogisticsVehicleFootprint footprint = AICF_LogisticsVehicleFootprint.Get(prefab);
+		if (!footprint || !footprint.m_bValid) return false;
+		vector transform[4];
+		GetOwner().GetWorldTransform(transform);
+		TraceOBB body;
+		return footprint.IsClear(GetGame().GetWorld(), transform, body);
 	}
 }
 
