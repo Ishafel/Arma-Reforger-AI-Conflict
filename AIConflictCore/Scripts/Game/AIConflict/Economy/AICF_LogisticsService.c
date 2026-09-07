@@ -98,6 +98,11 @@ class AICF_LogisticsService
 		if (!w.m_Lease)
 		{
 			if (!homeLive || w.m_Group || w.m_Vehicle) return;
+			if (w.m_ExitHistory && w.m_ExitHistory.AllCooling(w, now))
+			{
+				DeferWorker(w, now, "ALL_EXACT_DEPOT_EXITS_COOLING");
+				return;
+			}
 			if (m_Planner.Select(w, true))
 			{
 				if (!m_Vehicles.BeginLogisticsSpawn(w)) DeferWorker(w, now, "SHARED_FLEET_OR_AI_ADMISSION");

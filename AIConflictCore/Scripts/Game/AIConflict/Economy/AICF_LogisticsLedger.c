@@ -67,8 +67,10 @@ class AICF_LogisticsLedger
 	{
 		AICF_LogisticsJob job = w.m_Job;
 		bool nativeWait = w.m_DriverInteraction && w.m_DriverInteraction.CanRenew(w, System.GetTickCount());
+		bool routeRecovery = w.m_RouteRecovery && w.m_RouteRecovery.CanRenew(w, now);
 		if (m_bStopped || !job || job.m_bCancelled || !m_aJobs.Contains(job) || job.m_iGeneration != w.m_iGeneration ||
-			(!w.Ready() && !nativeWait) || (w.m_DriverInteraction && !nativeWait) || now >= job.m_iExpiresAtMs || w.ProgressAgeMs(now) > AICF_LogisticsConfig.PROGRESS_TIMEOUT_MS) return false;
+			(!w.Ready() && !nativeWait) || (w.m_DriverInteraction && !nativeWait) || now >= job.m_iExpiresAtMs ||
+			(w.ProgressAgeMs(now) > AICF_LogisticsConfig.PROGRESS_TIMEOUT_MS && !routeRecovery && !nativeWait)) return false;
 		job.m_iExpiresAtMs = now + config.m_iReservationTtlMs;
 		return true;
 	}

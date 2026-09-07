@@ -7,6 +7,11 @@ class AICF_LogisticsConfig
 	static const int LEG_TIMEOUT_MS = 600000;
 	static const int PROGRESS_TIMEOUT_MS = 60000;
 	static const int MAX_ROUTE_RETRIES = 2;
+	static const int MOTION_STALL_MS = 20000;
+	static const int RECOVERY_ATTEMPT_MS = 20000;
+	static const int RECOVERY_BUDGET_MS = 90000;
+	static const int UNKNOWN_DRIVER_TIMEOUT_MS = 60000;
+	static const int EXIT_SLOT_COOLDOWN_MS = 300000;
 	static const int DRIVER_INTERACTION_TIMEOUT_MS = 120000;
 	static const int DRIVER_INTERACTION_STALL_MS = 30000;
 	static const int DRIVER_INTERACTION_LEG_BUDGET_MS = 120000;

@@ -356,6 +356,7 @@ modded class AICF_LogisticsService
 			m_iAICFProbeStart = now;
 			AICF_ProbePolicy();
 			AICF_ProbeDriverInteractionClocks();
+			AICF_ProbeRecoveryClocks();
 			string peaceful;
 			if (System.GetCLIParam("aicfLogisticsProbePeace", peaceful) && peaceful == "1")
 			{
@@ -430,6 +431,8 @@ modded class AICF_LogisticsService
 		{
 			m_iAICFWarmupNext = now + 5000;
 			if (repeatSource) m_iAICFWarmupNext = now + 60000;
+			string recoveryPreparation;
+			if (System.GetCLIParam("aicfLogisticsRecoveryProbe", recoveryPreparation)) m_iAICFWarmupNext = now + 1000;
 			bool usLoaded, ussrLoaded;
 			foreach (AICF_LogisticsWorker warmupWorker : m_Registry.m_aWorkers)
 			{
@@ -941,6 +944,28 @@ modded class AICF_LogisticsService
 			m_aAICFPreparations.Remove(i);
 		}
 	}
+	protected void AICF_ProbeRecoveryClocks()
+	{
+		int passed;
+		AICF_LogisticsWorker worker = new AICF_LogisticsWorker();
+		AICF_LogisticsRouteRecovery route = new AICF_LogisticsRouteRecovery();
+		route.m_iStartedAtMs = 1000;
+		if (route.RecoveryAge(worker, 21000) == 20000) passed++;
+		worker.m_iDriverWaitMs = 10000;
+		if (route.RecoveryAge(worker, 31000) == 20000) passed++;
+		route.m_vRoute = "12 0 45";
+		if (route.RecoveryAge(worker, 41000) == 30000) passed++;
+		if (route.RecoveryAge(worker, 101000) == AICF_LogisticsConfig.RECOVERY_BUDGET_MS) passed++;
+		AICF_LogisticsDriverRecovery unknown = new AICF_LogisticsDriverRecovery();
+		unknown.m_iStartedAtMs = 1000;
+		if (unknown.DeadlineReason(60999).IsEmpty()) passed++;
+		if (unknown.DeadlineReason(61000) == "UNKNOWN_DRIVER_RECOVERY_DEADLINE") passed++;
+		unknown.m_iWaitBeforeMs = 119000;
+		if (unknown.DeadlineReason(1999).IsEmpty()) passed++;
+		if (unknown.DeadlineReason(2000) == "DRIVER_INTERACTION_LEG_BUDGET") passed++;
+		Print(string.Format("[AICF][LOGISTICS_PROBE_RECOVERY_CLOCKS] test_only=1 passed=%1 total=8 physical_recovery=0", passed));
+	}
+
 	// Production clock methods с контролируемым временем; не заменяет physical gate run.
 	protected void AICF_ProbeDriverInteractionClocks()
 	{

@@ -44,6 +44,18 @@ Check-Log 'gate-return-wrong-driver' ($waitFixture.Replace($waitReturn, $waitRet
 Check-Log 'gate-rearmed-wait' ($waitFixture.Replace($waitStart, "$waitStart`n$waitStart")) 1 'DRIVER_INTERACTION_START'
 Check-Log 'gate-hard-timeout-return' ($waitFixture.Replace('elapsed_ms=800','elapsed_ms=120000')) 1 'DRIVER_INTERACTION_RETURN'
 Check-Log 'gate-terminal-then-transfer' ($waitFixture.Replace($waitReturn,$waitFailure)) 1 'TRANSFER_AFTER_DRIVER_INTERACTION_FAILURE'
+Check-Log 'unknown-exit-return' ($waitFixture.Replace('reason=NATIVE_OPEN_GATE','reason=EXIT_CAUSE_UNRECOGNIZED')) 0 ''
+Check-Log 'unknown-exit-timeout-return' ($waitFixture.Replace('reason=NATIVE_OPEN_GATE','reason=EXIT_CAUSE_UNRECOGNIZED').Replace('elapsed_ms=800','elapsed_ms=60000')) 1 'UNKNOWN_DRIVER_RECOVERY_DEADLINE'
+$recoveryIdentity = 'run=fixture faction=US slot=1000000 generation=1 vehicle=V1 driver=D1 phase=TO_SOURCE job=J1'
+$attemptLog = "[AICF][STAGE4][INFO][LOGISTICS_RECOVERY_ATTEMPT] $recoveryIdentity attempt=1 t_ms=3100"
+$successLog = "[AICF][STAGE4][INFO][LOGISTICS_RECOVERY_SUCCEEDED] $recoveryIdentity attempt=1 t_ms=3900 displacement_m=7 route_progress_m=4"
+$recoveryFixture = $fixture.Replace($loadMarker, "$attemptLog`n$successLog`n$loadMarker")
+Check-Log 'recovery-same-vehicle-delivery' $recoveryFixture 0 ''
+Check-Log 'recovery-without-motion' ($recoveryFixture.Replace('displacement_m=7','displacement_m=0')) 1 'RECOVERY_NO_PHYSICAL_EVIDENCE'
+Check-Log 'recovery-without-route-progress' ($recoveryFixture.Replace('route_progress_m=4','route_progress_m=0')) 1 'RECOVERY_NO_PHYSICAL_EVIDENCE'
+Check-Log 'recovery-wrong-vehicle' ($recoveryFixture.Replace($successLog,$successLog.Replace('vehicle=V1','vehicle=V2'))) 1 'RECOVERY_IDENTITY'
+Check-Log 'recovery-budget-overrun' ($recoveryFixture.Replace('attempt=1','attempt=3')) 1 'RECOVERY_ATTEMPT_BUDGET'
+Check-Log 'recovery-rearm' ($recoveryFixture.Replace($attemptLog,"$attemptLog`n$attemptLog")) 1 'RECOVERY_ATTEMPT_BUDGET'
 
 $clientFixture = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'tools/fixtures/logistics/client-loaded.fixture') -Raw
 $serverFixturePath = Join-Path $evidence 'client-server.fixture'
@@ -74,6 +86,30 @@ foreach ($directory in @('Config','Economy','Vehicles','State/Vehicles')) {
     Get-ChildItem -LiteralPath (Join-Path $originalCore $directory) -Filter '*.c' -File | Copy-Item -Destination (Join-Path $targetCore $directory)
 }
 $mutations = @(
+    @('Vehicles/AICF_TransportTripController.c','observation.IsTerminal() && observation.GetKind() != AICF_ETripOutcomeKind.COMPLETE_TRIP','observation.IsTerminal()','DRIVER_SUCCESS_NOT_RETIREMENT'),
+    @('Vehicles/AICF_LogisticsDriverRecovery.c','!access.GetCompartment() || access.GetCompartment() == m_Seat','true','UNKNOWN_EXIT_NO_OTHER_SEAT'),
+    @('Vehicles/AICF_LogisticsDriverRecovery.c','w.m_Waypoint && !NativeBusy(true)','false','UNKNOWN_PAUSE_OWN_ROUTE'),
+    @('Vehicles/AICF_LogisticsRouteRecovery.c','m_bIntermediate && !m_bActive && vector.DistanceXZ(position, m_vRoute) <= 8','m_bIntermediate && vector.DistanceXZ(position, m_vRoute) <= 8','RECOVERY_INTERMEDIATE_AFTER_EVIDENCE'),
+    @('Vehicles/AICF_LogisticsRouteRecovery.c','m_vRoute = initialRoad;','m_vRoute = vector.Zero;','RECOVERY_QUERY_COMMIT_ON_SUCCESS'),
+    @('Vehicles/AICF_LogisticsDriverRecovery.c','access.IsGettingIn() || (m_Seat.GetOccupant() == m_Driver && CompartmentAccessComponent.GetVehicleIn(m_Driver) == m_Vehicle)','false','UNKNOWN_RETURN_SETTLING'),
+    @('Vehicles/AICF_LogisticsDriverRecovery.c','if (token != m_sToken) same = false;','// removed','UNKNOWN_RETURN_CALLBACK_TOKEN'),
+    @('Vehicles/AICF_LogisticsRouteRecovery.c','w.m_iRouteRetries++;','w.m_iRouteRetries++; w.MarkProgress(now);','RECOVERY_WAYPOINT_NOT_PROGRESS'),
+    @('Vehicles/AICF_LogisticsRouteRecovery.c','!m_Context || !m_Context.Matches(w)','false','RECOVERY_EXACT_CONTEXT'),
+    @('Vehicles/AICF_LogisticsRouteRecovery.c','w.m_iRouteRetries >= AICF_LogisticsConfig.MAX_ROUTE_RETRIES','false','RECOVERY_BOUNDED_ATTEMPTS'),
+    @('Vehicles/AICF_LogisticsRouteRecovery.c','RecoveryAge(w, now) >= AICF_LogisticsConfig.RECOVERY_BUDGET_MS','false','RECOVERY_HARD_BUDGET'),
+    @('Vehicles/AICF_LogisticsRouteRecovery.c','vector.DistanceXZ(position, m_vAttemptPosition) >= 6','true','RECOVERY_PHYSICAL_EVIDENCE'),
+    @('Vehicles/AICF_LogisticsRouteRecovery.c','vector.DistanceXZ(position, m_vRoute) + 3 <= m_fAttemptDistance','true','RECOVERY_ROUTE_EVIDENCE'),
+    @('Economy/AICF_LogisticsLedger.c','now >= job.m_iExpiresAtMs','false','RECOVERY_TTL_NOT_RESURRECTED'),
+    @('Vehicles/AICF_LogisticsDriverRecovery.c','now - m_iStartedAtMs >= AICF_LogisticsConfig.UNKNOWN_DRIVER_TIMEOUT_MS','false','UNKNOWN_EXIT_HARD_BUDGET'),
+    @('Vehicles/AICF_LogisticsDriverRecovery.c','m_iWaitBeforeMs + now - m_iStartedAtMs >= AICF_LogisticsConfig.DRIVER_INTERACTION_LEG_BUDGET_MS','false','UNKNOWN_EXIT_TOTAL_BUDGET'),
+    @('Vehicles/AICF_LogisticsDriverRecovery.c','access.IsInCompartment() || NativeBusy(true)','access.IsInCompartment()','UNKNOWN_EXIT_NATIVE_PRIORITY'),
+    @('Vehicles/AICF_LogisticsDriverRecovery.c','if (w.HasForeignOccupant(true))','if (false)','UNKNOWN_EXIT_FOREIGN_OCCUPANT'),
+    @('Vehicles/AICF_LogisticsDriverRecovery.c','if (w.Ready()) return AICF_TripOutcome.CompleteTrip','if (true) return AICF_TripOutcome.CompleteTrip','UNKNOWN_EXIT_EXACT_RETURN'),
+    @('Economy/AICF_LogisticsExitHistory.c','failure.m_Slot.GetOwner().GetID() != failure.m_SlotId','false','EXIT_COOLDOWN_EXACT_IDENTITY'),
+    @('Economy/AICF_LogisticsExitHistory.c','now >= failure.m_iUntilMs','false','EXIT_COOLDOWN_EXPIRES'),
+    @('Economy/AICF_LogisticsExitHistory.c','w.m_iRouteRetries >= AICF_LogisticsConfig.MAX_ROUTE_RETRIES','true','EXIT_COOLDOWN_PROVEN_FAILURE'),
+    @('Vehicles/AICF_VehicleSpawner.c','w.m_ExitHistory.Cooling(candidate, System.GetTickCount())','false','EXIT_COOLDOWN_SKIP'),
+    @('Economy/AICF_LogisticsService.c','w.m_ExitHistory.AllCooling(w, now)','false','EXIT_COOLDOWN_WAIT_WITHOUT_SPAWN'),
     @('Vehicles/AICF_LogisticsVehicleFootprint.c','return world.TracePosition(body, null) >= 0;','return true;','SPAWN_PHYSICS_PENETRATION'),
     @('Vehicles/AICF_LogisticsVehicleFootprint.c','body.Mins = m_vMin;','body.Mins = m_vMin - Vector(2, 0, 2);','SPAWN_BODY_MIN_UNPADDED'),
     @('Vehicles/AICF_LogisticsVehicleFootprint.c','body.Maxs = m_vMax;','body.Maxs = m_vMax + Vector(2, 0, 2);','SPAWN_BODY_MAX_UNPADDED'),

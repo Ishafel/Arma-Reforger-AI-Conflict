@@ -2089,7 +2089,10 @@ class AICF_TransportTripController
 		w.m_iRouteRetries = 0;
 		w.m_iIdleAtMs = 0;
 		LogisticsPhase(w, phase, "PHYSICAL_VEHICLE_LEG");
-		AIWaypoint waypoint = m_WaypointFactory.CreateLogisticsWaypoint(endpoint);
+		w.m_RouteRecovery = new AICF_LogisticsRouteRecovery();
+		w.m_RouteRecovery.Begin(w, System.GetTickCount());
+		w.Log("LOGISTICS_ROUTE_ASSIGNED", string.Format("reason=INITIAL_ROAD_LEG route_endpoint=%1 endpoint=%2 intermediate=%3 spawn_slot=%4", w.m_RouteRecovery.m_vRoute, endpoint, w.m_RouteRecovery.m_bIntermediate, w.m_SpawnSlotId));
+		AIWaypoint waypoint = m_WaypointFactory.CreateLogisticsWaypoint(w.m_RouteRecovery.m_vRoute);
 		return m_Handoff.BindLogisticsWaypoint(w, waypoint);
 	}
 
@@ -2134,6 +2137,7 @@ class AICF_TransportTripController
 				gettingOut = w.m_Driver.GetCompartmentAccessComponent().IsGettingOut();
 			}
 			w.Log("LOGISTICS_CONTROL_LOST", string.Format("reason=LIVE_POSTCONDITION vehicle_identity=%1 group_identity=%2 driver_identity=%3 driver_alive=%4 exact_occupant=%5 linked=%6 getting_out=%7 foreign_occupant=%8", w.VehicleIdentity(), w.GroupIdentity(), w.DriverIdentity(), AICF_GroupRuntime.IsAliveCharacter(w.m_Driver), occupied, linked, gettingOut, w.HasForeignOccupant()));
+			AICF_LogisticsDriverInteraction.Diagnose(w, "TERMINAL_CONTROL_LOSS", System.GetTickCount());
 			RetireLogistics(w, book, "LIVE_IDENTITY_OR_DRIVER_LOST");
 			return;
 		}
@@ -2148,6 +2152,7 @@ class AICF_TransportTripController
 		AICF_TripOutcome outcome = m_TransitFlow.TickLogistics(w, config);
 		if (outcome.GetKind() == AICF_ETripOutcomeKind.COMPLETE_TRIP)
 		{
+			w.m_RouteRecovery = null;
 			m_Handoff.ClearLogisticsWaypoint(w);
 			if (w.m_ePhase == AICF_ELogisticsPhase.TO_SOURCE) LogisticsPhase(w, AICF_ELogisticsPhase.LOADING, outcome.GetReason());
 			else if (w.m_ePhase == AICF_ELogisticsPhase.TO_DESTINATION) LogisticsPhase(w, AICF_ELogisticsPhase.UNLOADING, outcome.GetReason());
@@ -2161,7 +2166,8 @@ class AICF_TransportTripController
 		else if (outcome.GetKind() == AICF_ETripOutcomeKind.RETRY)
 		{
 			m_Handoff.ClearLogisticsWaypoint(w);
-			m_Handoff.BindLogisticsWaypoint(w, m_WaypointFactory.CreateLogisticsWaypoint(w.m_vEndpoint));
+			if (!w.m_RouteRecovery || !m_Handoff.BindLogisticsWaypoint(w, m_WaypointFactory.CreateLogisticsWaypoint(w.m_RouteRecovery.m_vRoute)))
+				RetireLogistics(w, book, "RECOVERY_WAYPOINT_BIND_FAILED");
 		}
 		else if (outcome.IsTerminal()) RetireLogistics(w, book, outcome.GetReason());
 	}
@@ -2173,11 +2179,17 @@ class AICF_TransportTripController
 		if (!w.m_DriverInteraction)
 		{
 			w.m_DriverInteraction = AICF_LogisticsDriverInteraction.TryBegin(w, now);
+			string cause = "NATIVE_OPEN_GATE";
+			if (!w.m_DriverInteraction)
+			{
+				w.m_DriverInteraction = AICF_LogisticsDriverRecovery.TryRecover(w, now);
+				cause = "EXIT_CAUSE_UNRECOGNIZED";
+			}
 			if (!w.m_DriverInteraction) return false;
-			w.m_DriverInteraction.Log(w, "LOGISTICS_DRIVER_INTERACTION_STARTED", "NATIVE_OPEN_GATE", now);
+			w.m_DriverInteraction.Log(w, "LOGISTICS_DRIVER_INTERACTION_STARTED", cause, now);
 		}
 		AICF_TripOutcome observation = w.m_DriverInteraction.Poll(w, now);
-		if (observation.IsTerminal())
+		if (observation.IsTerminal() && observation.GetKind() != AICF_ETripOutcomeKind.COMPLETE_TRIP)
 		{
 			RetireLogistics(w, book, observation.GetReason());
 			return true;
@@ -2189,10 +2201,22 @@ class AICF_TransportTripController
 			RetireLogistics(w, book, "VEHICLE_DESTROYED_OR_BURNING");
 			return true;
 		}
+		if (observation.GetKind() == AICF_ETripOutcomeKind.RETRY)
+		{
+			if (observation.GetReason() == "SUSPEND_UNKNOWN_EXIT_ROUTE") m_Handoff.PauseLogisticsDriverRoute(w);
+			else m_Handoff.ReturnLogisticsDriver(w);
+			return true;
+		}
 		if (observation.GetKind() == AICF_ETripOutcomeKind.COMPLETE_TRIP)
 		{
 			w.m_DriverInteraction.Log(w, "LOGISTICS_DRIVER_INTERACTION_RETURNED", observation.GetReason(), now);
 			w.m_DriverInteraction = null;
+			if (!w.m_Waypoint && w.m_RouteRecovery &&
+				!m_Handoff.BindLogisticsWaypoint(w, m_WaypointFactory.CreateLogisticsWaypoint(w.m_RouteRecovery.m_vRoute)))
+			{
+				RetireLogistics(w, book, "DRIVER_RETURN_WAYPOINT_BIND_FAILED");
+				return true;
+			}
 			return false;
 		}
 		return true;
@@ -2202,12 +2226,15 @@ class AICF_TransportTripController
 	{
 		m_Handoff.CancelLogisticsDriverInteraction(w, reason);
 		m_Handoff.ClearLogisticsWaypoint(w);
+		w.m_RouteRecovery = null;
 		LogisticsPhase(w, AICF_ELogisticsPhase.DRIVER_READY, reason);
 	}
 
 	void RetireLogistics(AICF_LogisticsWorker w, AICF_LogisticsLedger book, string reason)
 	{
 		if (!Replication.IsServer() || !w || w.m_bCleanupQueued) return;
+		if (w.m_ExitHistory) w.m_ExitHistory.Record(w, reason, System.GetTickCount());
+		w.m_RouteRecovery = null;
 		m_Handoff.CancelLogisticsDriverInteraction(w, reason);
 		book.Cancel(w);
 		w.m_Search = null;

@@ -642,6 +642,14 @@ ledger ограниченно продлевает прежние reservations, 
 handoff/cleanup. Контракт и ограничения:
 [LOGISTICS_DRIVER_INTERACTION.md](LOGISTICS_DRIVER_INTERACTION.md).
 
+Физическое отсутствие движения теперь обслуживает logistics-local
+`AICF_LogisticsRouteRecovery`: конечные последовательные попытки через
+handoff, без признания waypoint прогрессом. Нераспознанный выход допускает
+ограниченный `AICF_LogisticsDriverRecovery` с exact return после завершения
+native actions. Registry разделяет историю неудачных выездов только между
+ordinals одного depot/faction; cooldown принадлежит exact stock spawn slot.
+Clocks, reservations и evidence: [LOGISTICS_RECOVERY.md](LOGISTICS_RECOVERY.md).
+
 `VehicleCleanupManager` сохраняет ссылку на worker для terminal custody accounting,
 в том числе после Stop. Loaded vehicle переводится в world pool после clearance;
 protected custody не выдаётся за completed cleanup. Все AICF удаления машин

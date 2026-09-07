@@ -311,6 +311,12 @@ float balance. Физические jobs/receipts дополнительно п�
 
 ### Физическая логистика
 
+Ограниченное восстановление движения, unknown driver exit и cooldown exact
+spawn slot описаны в [LOGISTICS_RECOVERY.md](LOGISTICS_RECOVERY.md).
+`Test-LogisticsLog.ps1 -RequireRecovery` требует физический recovery и delivery
+того же job/vehicle. Это отдельный runtime gate; static и clock contracts
+его не заменяют.
+
 Для geometry admission logistics spawn применяется
 [LOGISTICS_SPAWN_CLEARANCE.md](LOGISTICS_SPAWN_CLEARANCE.md): непаддированный
 prefab OBB, сохранённые отрицательные collision/reservation contracts и отдельный

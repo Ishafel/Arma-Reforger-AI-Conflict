@@ -104,6 +104,10 @@ class AICF_LogisticsDepotRegistry
 		foreach (AICF_LogisticsDepotWatch watch : m_aWatches) watch.Stop();
 		m_aWatches.Clear();
 		m_aScan.Clear();
+		foreach (AICF_LogisticsWorker worker : m_aWorkers)
+		{
+			if (worker.m_ExitHistory) worker.m_ExitHistory.m_aFailures.Clear();
+		}
 	}
 
 	void MarkDirty() { m_iNextScanMs = 0; }
@@ -265,6 +269,15 @@ class AICF_LogisticsDepotRegistry
 				w.m_Faction = faction;
 				w.m_Depot = root;
 				w.m_DepotId = root.GetID();
+				w.m_ExitHistory = new AICF_LogisticsExitHistory();
+				foreach (AICF_LogisticsWorker sibling : m_aWorkers)
+				{
+					if (sibling.m_Depot == root && sibling.m_DepotId == root.GetID() && sibling.m_Faction == faction)
+					{
+						w.m_ExitHistory = sibling.m_ExitHistory;
+						break;
+					}
+				}
 				w.m_Home = home;
 				w.m_HomeId = home.GetOwner().GetID();
 				w.m_Production = production;

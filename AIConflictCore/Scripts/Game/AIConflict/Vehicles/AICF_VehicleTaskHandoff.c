@@ -639,6 +639,43 @@ class AICF_VehicleTaskHandoff
 		if (usage && utility && utility.IsUsableVehicle(usage)) utility.RemoveUsableVehicle(usage);
 	}
 
+	void PauseLogisticsDriverRoute(AICF_LogisticsWorker w)
+	{
+		AICF_LogisticsDriverRecovery recovery = AICF_LogisticsDriverRecovery.Cast(w.m_DriverInteraction);
+		if (!Replication.IsServer() || !recovery || !recovery.CanRenew(w, System.GetTickCount()) || recovery.NativeBusy(true)) return;
+		ClearLogisticsWaypoint(w);
+		recovery.m_iQuietAtMs = 0;
+		w.Log("LOGISTICS_DRIVER_ROUTE_PAUSED", "reason=UNKNOWN_EXIT_OWN_ROUTE_DETACHED");
+	}
+
+	void ReturnLogisticsDriver(AICF_LogisticsWorker w)
+	{
+		AICF_LogisticsDriverRecovery recovery = AICF_LogisticsDriverRecovery.Cast(w.m_DriverInteraction);
+		if (!Replication.IsServer() || !recovery || recovery.m_bReturnIssued || !recovery.CanRenew(w, System.GetTickCount()) || recovery.NativeBusy(true)) return;
+		CompartmentAccessComponent access = w.m_Driver.GetCompartmentAccessComponent();
+		if (!access || access.IsGettingIn() || access.IsGettingOut() || access.IsInCompartment() || w.m_Seat.GetOccupant() ||
+			w.m_Seat.IsReserved() || !w.m_Seat.IsCompartmentAccessible()) return;
+		if (w.m_Waypoint)
+		{
+			ClearLogisticsWaypoint(w);
+			recovery.m_iQuietAtMs = 0;
+			return; // teardown старого route завершается на отдельном scheduler tick.
+		}
+		if (recovery.NativeBusy()) return;
+		// Один tracked action, без force/teleport и без конкурирующего native action.
+		AICF_LogisticsReturnAction action = new AICF_LogisticsReturnAction(recovery.m_Utility, null, w.m_Seat.GetOwner(), w.m_Seat, EAICompartmentType.Pilot);
+		action.m_Worker = w;
+		action.m_iGeneration = w.m_iGeneration;
+		action.m_DriverId = w.m_DriverId;
+		action.m_VehicleId = w.m_VehicleId;
+		action.m_sToken = recovery.m_sToken;
+		recovery.m_Return = action;
+		recovery.m_bReturnIssued = true;
+		w.m_Seat.SetReserved(w.m_Driver);
+		recovery.m_Utility.AddAction(recovery.m_Return);
+		w.Log("LOGISTICS_DRIVER_RETURN_ISSUED", "reason=UNKNOWN_EXIT_QUIET_EXACT_SEAT attempts=1");
+	}
+
 	// Только terminal teardown. Во время ожидания штатные actions не изменяются.
 	void CancelLogisticsDriverInteraction(AICF_LogisticsWorker w, string reason)
 	{

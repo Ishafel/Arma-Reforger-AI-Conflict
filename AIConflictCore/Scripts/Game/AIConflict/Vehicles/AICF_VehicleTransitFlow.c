@@ -2235,6 +2235,9 @@ class AICF_VehicleTransitFlow
 			if (w.ProgressAgeMs(now) >= AICF_LogisticsConfig.PROGRESS_TIMEOUT_MS) return AICF_TripOutcome.TerminalFailClosed("COMBAT_PROGRESS_TIMEOUT", token);
 			return AICF_TripOutcome.Wait("COMBAT", token);
 		}
+		if (!w.m_RouteRecovery) return AICF_TripOutcome.TerminalFailClosed("ROUTE_CONTEXT_MISSING", token);
+		AICF_TripOutcome movement = w.m_RouteRecovery.Poll(w, now);
+		if (movement.IsTerminal()) return movement;
 		Physics physics = w.m_Vehicle.GetPhysics();
 		if (physics && vector.DistanceXZ(position, w.m_vEndpoint) <= config.m_fArrivalRadiusM && physics.GetVelocity().Length() <= config.m_fStationarySpeedMps)
 		{
@@ -2244,14 +2247,7 @@ class AICF_VehicleTransitFlow
 			return AICF_TripOutcome.Wait("STATIONARY_HOLD", token);
 		}
 		w.m_iStationaryAtMs = 0;
-		if (w.ProgressAgeMs(now) >= AICF_LogisticsConfig.PROGRESS_TIMEOUT_MS)
-		{
-			if (w.m_iRouteRetries >= AICF_LogisticsConfig.MAX_ROUTE_RETRIES) return AICF_TripOutcome.TerminalFailClosed("BOUNDED_ROUTE_RECOVERY_EXHAUSTED", token);
-			w.m_iRouteRetries++;
-			w.MarkProgress(now);
-			return AICF_TripOutcome.Retry("REISSUE_EXACT_VEHICLE_LEG", token, now);
-		}
-		return AICF_TripOutcome.Wait("IN_TRANSIT", token);
+		return movement;
 	}
 
 }

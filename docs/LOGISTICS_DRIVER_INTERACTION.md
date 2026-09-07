@@ -1,5 +1,11 @@
 # Временный выход logistics driver к воротам
 
+Этот отчёт описывает исходный strict OpenGate observer. Последующее расширение
+для нераспознанного выхода, ожидания завершения animated exact-seat return и
+ограниченного восстановления движения описано в
+[LOGISTICS_RECOVERY.md](LOGISTICS_RECOVERY.md). Неизвестная причина больше не
+означает немедленный retirement, но не маркируется как OpenGate.
+
 ## Причина
 
 В hosting evidence `logs_2026-09-06_19-05-27/script.log`, строки 7197–7313,

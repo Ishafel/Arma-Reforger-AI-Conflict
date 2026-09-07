@@ -7,6 +7,7 @@ param(
     [switch]$RequireGraph,
     [switch]$RequireSearch,
     [switch]$RequireDriverInteraction,
+    [switch]$RequireRecovery,
     [string]$ClientLogPath,
     [switch]$RequireLoadedClient,
     [int]$MinimumDurationMs = 0
@@ -34,6 +35,9 @@ $driverWaits = @{}
 $returnedJobs = @{}
 $failedJobs = @{}
 $interactionDeliveries = 0
+$recoveryAttempts = @{}
+$recoveredJobs = @{}
+$recoveryDeliveries = 0
 # Полный console плюс соседние engine logs: dedicated иногда возвращает 0
 # при compile error, записанной только в error.log/crash.log.
 if ([IO.Path]::GetFileName($LogPath) -eq 'console.log') {
@@ -80,6 +84,24 @@ for ($index=0; $index -lt $lines.Count; $index++) {
     }
     $key = "$($fields['run'])/$($fields['faction'])/$($fields['slot'])/$($fields['generation'])"
     $slotKey = "$($fields['run'])/$($fields['faction'])/$($fields['slot'])"
+    $recoveryKey = "$key/$($fields['job'])/$($fields['phase'])"
+    if ($eventName -eq 'LOGISTICS_RECOVERY_ATTEMPT') {
+        $attempt = Number $fields 'attempt' $index
+        $previous = 0
+        if ($recoveryAttempts.ContainsKey($recoveryKey)) { $previous = $recoveryAttempts[$recoveryKey]['attempt'] }
+        if ($stopped -or $attempt -ne $previous + 1 -or $attempt -gt 2) { $failures.Add("RECOVERY_ATTEMPT_BUDGET line=$index") }
+        if ($driverWaits.ContainsKey($slotKey)) { $failures.Add("RECOVERY_DURING_DRIVER_INTERACTION line=$index") }
+        $recoveryAttempts[$recoveryKey] = @{ attempt=$attempt; vehicle=$fields['vehicle']; driver=$fields['driver'] }
+    }
+    if ($eventName -eq 'LOGISTICS_RECOVERY_SUCCEEDED') {
+        if ($stopped -or -not $recoveryAttempts.ContainsKey($recoveryKey)) { $failures.Add("RECOVERY_UNPAIRED_SUCCESS line=$index") }
+        else {
+            $attempt = $recoveryAttempts[$recoveryKey]
+            if ($attempt['vehicle'] -ne $fields['vehicle'] -or $attempt['driver'] -ne $fields['driver'] -or $attempt['attempt'] -ne (Number $fields 'attempt' $index)) { $failures.Add("RECOVERY_IDENTITY line=$index") }
+        }
+        if ((Number $fields 'displacement_m' $index) -lt 6 -or (Number $fields 'route_progress_m' $index) -lt 3) { $failures.Add("RECOVERY_NO_PHYSICAL_EVIDENCE line=$index") }
+        $recoveredJobs["$key/$($fields['job'])"] = $fields['vehicle']
+    }
     if ($eventName -match '^LOGISTICS_DRIVER_INTERACTION_(STARTED|RETURNED|FAILED)$') {
         $state = $Matches[1]
         foreach ($required in @('wait_job','wait_generation','wait_group','wait_vehicle','wait_driver','target','wait_vehicle_rpl','wait_driver_rpl','reason')) {
@@ -99,6 +121,7 @@ for ($index=0; $index -lt $lines.Count; $index++) {
                 }
                 $waitJobKey = "$slotKey/$($start['wait_generation'])/$($start['wait_job'])"
                 if ($state -eq 'RETURNED') {
+                    if ($start['reason'] -eq 'EXIT_CAUSE_UNRECOGNIZED' -and $elapsed -ge 60000) { $failures.Add("UNKNOWN_DRIVER_RECOVERY_DEADLINE line=$index") }
                     if ($stopped -or $fields['exact_return'] -ne '1' -or $elapsed -ge 120000 -or (Number $fields 'leg_wait_ms' $index) -ge 120000) { $failures.Add("DRIVER_INTERACTION_RETURN line=$index") }
                     foreach ($identity in @('generation','vehicle','driver','job','phase')) {
                         if ($fields[$identity] -ne $start[$identity]) { $failures.Add("DRIVER_INTERACTION_RETURN_IDENTITY line=$index field=$identity") }
@@ -141,6 +164,10 @@ for ($index=0; $index -lt $lines.Count; $index++) {
         $jobKey = "$key/$jobToken"
         if ($driverWaits.ContainsKey($slotKey)) { $failures.Add("TRANSFER_DURING_DRIVER_INTERACTION line=$index") }
         if ($failedJobs.ContainsKey($jobKey)) { $failures.Add("TRANSFER_AFTER_DRIVER_INTERACTION_FAILURE line=$index") }
+        if ($eventName -eq 'LOGISTICS_UNLOAD_COMMITTED' -and $fields['purpose'] -eq 'DELIVERY' -and $recoveredJobs.ContainsKey($jobKey)) {
+            if ($recoveredJobs[$jobKey] -ne $fields['vehicle']) { $failures.Add("RECOVERY_DELIVERY_IDENTITY line=$index") }
+            else { $recoveryDeliveries++ }
+        }
         if ($eventName -eq 'LOGISTICS_UNLOAD_COMMITTED' -and $fields['purpose'] -eq 'DELIVERY' -and $returnedJobs.ContainsKey($jobKey)) {
             if ($returnedJobs[$jobKey] -ne $fields['vehicle']) { $failures.Add("DRIVER_INTERACTION_DELIVERY_IDENTITY line=$index") }
             else { $interactionDeliveries++ }
@@ -180,6 +207,7 @@ if ($RequireGraph -and -not $graphContract) { $failures.Add('PRODUCTION_GRAPH_CO
 if ($RequireSearch -and -not $searchContract) { $failures.Add('PRODUCTION_SEARCH_CONTRACT_NOT_OBSERVED') }
 if (-not $AllowActiveAtEnd -and $driverWaits.Count) { $failures.Add('UNFINISHED_DRIVER_INTERACTION') }
 if ($RequireDriverInteraction -and $interactionDeliveries -eq 0) { $failures.Add('DRIVER_INTERACTION_DELIVERY_NOT_OBSERVED') }
+if ($RequireRecovery -and $recoveryDeliveries -eq 0) { $failures.Add('RECOVERY_DELIVERY_NOT_OBSERVED') }
 if ($maxTime -lt $MinimumDurationMs) { $failures.Add("DURATION_TOO_SHORT actual=$maxTime required=$MinimumDurationMs") }
 if ($ClientLogPath) {
     $clientLines = Get-Content -LiteralPath (Resolve-Path -LiteralPath $ClientLogPath)

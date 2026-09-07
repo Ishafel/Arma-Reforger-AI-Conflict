@@ -33,6 +33,74 @@ class AICF_LogisticsDriverInteraction
 	float m_fBestReturnDistance;
 	float m_fBestDoorState;
 
+	void Capture(AICF_LogisticsWorker w, int now)
+	{
+		m_Utility = Utility(w);
+		m_Group = w.m_Group;
+		m_GroupId = w.m_GroupId;
+		m_Driver = w.m_Driver;
+		m_DriverId = w.m_DriverId;
+		m_Vehicle = w.m_Vehicle;
+		m_VehicleId = w.m_VehicleId;
+		m_sVehicleRpl = w.m_sVehicleRpl;
+		m_sDriverRpl = Replication.FindItemId(w.m_Driver).ToString();
+		m_Seat = w.m_Seat;
+		m_Lease = w.m_Lease;
+		m_Job = w.m_Job;
+		m_sToken = "NONE";
+		if (m_Job) m_sToken = m_Job.m_sToken;
+		m_iGeneration = w.m_iGeneration;
+		m_ePhase = w.m_ePhase;
+		m_iStartedAtMs = now;
+		m_iProgressAtMs = now;
+		m_iSampleAtMs = now;
+		m_iWaitBeforeMs = w.m_iDriverWaitMs;
+	}
+
+	static bool Moving(AICF_LogisticsWorker w)
+	{
+		return w.m_ePhase == AICF_ELogisticsPhase.TO_SOURCE || w.m_ePhase == AICF_ELogisticsPhase.TO_DESTINATION || w.m_ePhase == AICF_ELogisticsPhase.RETURN_HOME;
+	}
+
+	static void Diagnose(AICF_LogisticsWorker w, string reason, int now)
+	{
+		vector position;
+		if (w.VehicleIdentity()) position = w.m_Vehicle.GetOrigin();
+		SCR_AIUtilityComponent utility = Utility(w);
+		string behavior = "UNAVAILABLE";
+		array<ref AIActionBase> actions = {};
+		if (utility)
+		{
+			utility.GetActions(actions);
+			if (utility.GetCurrentBehavior()) behavior = utility.GetCurrentBehavior().Type().ToString();
+		}
+		w.Log("LOGISTICS_MOTION_SNAPSHOT", string.Format("reason=%1 behavior=%2 actions=%3 position=%4 endpoint=%5 displacement_m=%6 progress_age_ms=%7 leg_age_ms=%8 spawn_slot=%9",
+			reason, behavior, actions.Count(), position, w.m_vEndpoint, vector.DistanceXZ(position, w.m_vProgressPosition), w.ProgressAgeMs(now), w.LegAgeMs(now), w.m_SpawnSlotId));
+		if (w.m_Driver && w.VehicleIdentity())
+		{
+			CompartmentAccessComponent access = w.m_Driver.GetCompartmentAccessComponent();
+			if (access) w.Log("LOGISTICS_DRIVER_STATE", string.Format("reason=%1 driver_distance_m=%2 getting_in=%3 getting_out=%4 linked=%5 exact_seat=%6 exact_occupant=%7",
+				reason, vector.Distance(w.m_Driver.GetOrigin(), position), access.IsGettingIn(), access.IsGettingOut(),
+				CompartmentAccessComponent.GetVehicleIn(w.m_Driver) == w.m_Vehicle, access.GetCompartment() == w.m_Seat, w.m_Seat && w.m_Seat.GetOccupant() == w.m_Driver));
+		}
+		if (w.m_RouteRecovery && w.VehicleIdentity())
+		{
+			float speed = -1;
+			if (w.m_Vehicle.GetPhysics()) speed = w.m_Vehicle.GetPhysics().GetVelocity().Length();
+			w.Log("LOGISTICS_ROUTE_SAMPLE", string.Format("reason=%1 sample_displacement_m=%2 route_endpoint=%3 speed_mps=%4 intermediate=%5", reason,
+				vector.DistanceXZ(position, w.m_RouteRecovery.m_vDiagnosticPosition), w.m_RouteRecovery.m_vRoute, speed, w.m_RouteRecovery.m_bIntermediate));
+		}
+		foreach (AIActionBase action : actions)
+		{
+			if (!action) continue;
+			EntityID target = EntityID.INVALID;
+			SCR_AIPerformActionBehavior perform = SCR_AIPerformActionBehavior.Cast(action);
+			if (perform && perform.m_SmartActionComponent.m_Value && perform.m_SmartActionComponent.m_Value.GetOwner()) target = perform.m_SmartActionComponent.m_Value.GetOwner().GetID();
+			w.Log("LOGISTICS_DRIVER_ACTION", string.Format("reason=%1 action=%2 state=%3 live=%4 selected=%5 priority=%6 target=%7",
+				reason, action.Type().ToString(), action.GetActionState(), Live(action), utility.GetCurrentBehavior() == action, action.GetPriority(), target));
+		}
+	}
+
 	static bool Live(AIActionBase action)
 	{
 		return action && !action.GetRemoveAction() && action.GetActionState() != EAIActionState.FAILED && action.GetActionState() != EAIActionState.COMPLETED;
@@ -157,6 +225,16 @@ class AICF_LogisticsDriverInteraction
 		if (!deadline.IsEmpty()) return AICF_TripOutcome.TerminalFailClosed(deadline, m_sToken);
 		if (!m_Target || m_Target.GetID() != m_TargetId || !m_SmartAction || m_SmartAction.GetOwner() != m_Target ||
 			m_Action.m_SmartActionComponent.m_Value != m_SmartAction) return AICF_TripOutcome.TerminalFailClosed("DRIVER_INTERACTION_TARGET_LOST", m_sToken);
+		// Завершённая group activity может исчезнуть из очереди на том же tick,
+		// когда native return уже физически завершился. Exact proof остаётся главным.
+		bool opened = m_Action.GetActionState() == EAIActionState.COMPLETED;
+		if (opened && w.Ready() && !Live(m_Exit))
+		{
+			w.m_iDriverWaitMs += now - m_iSampleAtMs;
+			m_iSampleAtMs = now;
+			w.m_iStationaryAtMs = 0;
+			return AICF_TripOutcome.CompleteTrip("EXACT_DRIVER_RETURNED", m_sToken);
+		}
 		if (!Live(m_Activity) || m_Activity.m_Utility != m_Group.GetGroupUtilityComponent() ||
 			m_Action.GetRelatedGroupActivity() != m_Activity || m_Return.GetRelatedGroupActivity() != m_Activity)
 			return AICF_TripOutcome.TerminalFailClosed("DRIVER_INTERACTION_GROUP_ACTIVITY_LOST", m_sToken);
@@ -167,7 +245,6 @@ class AICF_LogisticsDriverInteraction
 			return AICF_TripOutcome.TerminalFailClosed("DRIVER_INTERACTION_PHYSICAL_CONTEXT_LOST", m_sToken);
 		if (m_Action.GetActionState() == EAIActionState.FAILED || m_Return.GetActionState() == EAIActionState.FAILED ||
 			(m_Exit && m_Exit.GetActionState() == EAIActionState.FAILED)) return AICF_TripOutcome.TerminalFailClosed("DRIVER_INTERACTION_NATIVE_ACTION_FAILED", m_sToken);
-		bool opened = m_Action.GetActionState() == EAIActionState.COMPLETED;
 		array<ref AIActionBase> actions = {};
 		m_Utility.GetActions(actions);
 		if ((!opened && (!Live(m_Action) || !actions.Contains(m_Action))) ||

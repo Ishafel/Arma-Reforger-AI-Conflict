@@ -122,6 +122,9 @@ class AICF_LogisticsWorker
 	int m_iDriverWaitMs;
 	int m_iProgressWaitBaselineMs;
 	ref AICF_LogisticsDriverInteraction m_DriverInteraction;
+	ref AICF_LogisticsRouteRecovery m_RouteRecovery;
+	ref AICF_LogisticsExitHistory m_ExitHistory;
+	bool m_bExitedSpawn;
 	int m_iStationaryAtMs;
 	int m_iNextPollMs;
 	int m_iRetryAtMs;

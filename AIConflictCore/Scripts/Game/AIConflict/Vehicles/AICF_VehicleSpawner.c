@@ -1854,6 +1854,11 @@ class AICF_VehicleSpawner
 		w.m_Production.AICF_LogisticsCandidateSlots(w.m_Entry, candidates, false);
 		foreach (SCR_EntitySpawnerSlotComponent candidate : candidates)
 		{
+			if (w.m_ExitHistory && w.m_ExitHistory.Cooling(candidate, System.GetTickCount()))
+			{
+				w.Log("LOGISTICS_EXIT_SKIPPED", string.Format("reason=EXACT_SLOT_COOLDOWN spawn_slot=%1", candidate.GetOwner().GetID()));
+				continue;
+			}
 			if (ReserveLogisticsSlot(w, candidate)) return true;
 		}
 		return RejectLogisticsSite(w, "NO_SAFE_CATALOG_SLOT");
@@ -1920,6 +1925,7 @@ class AICF_VehicleSpawner
 		w.m_Vehicle = SpawnSelectedPrefab(w.m_Entry.GetPrefab(), w.m_aSpawnTransform[3], params);
 		if (!w.m_Vehicle) return false;
 		w.m_VehicleId = w.m_Vehicle.GetID();
+		w.m_bExitedSpawn = false;
 		RplComponent rpl = RplComponent.Cast(w.m_Vehicle.FindComponent(RplComponent));
 		if (rpl) w.m_sVehicleRpl = rpl.Id().ToString();
 		SCR_FactionAffiliationComponent affiliation = SCR_FactionAffiliationComponent.Cast(w.m_Vehicle.FindComponent(SCR_FactionAffiliationComponent));
