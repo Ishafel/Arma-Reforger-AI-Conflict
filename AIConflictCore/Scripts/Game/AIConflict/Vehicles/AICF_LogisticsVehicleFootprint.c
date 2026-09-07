@@ -1,14 +1,16 @@
 // Cached geometry только transient preview, до создания gameplay vehicle.
 // Проверяется OBB конкретного prefab без запаса на площадку/выезд.
-// TracePosition проверяет collision geometry, включая props самого depot.
+// TracePosition проверяет collision geometry с исключениями editable-композиции
+// конкретного stock slot; вызов без exclusions используется для сравнения в fixture.
 class AICF_LogisticsVehicleFootprint
 {
 	vector m_vMin;
 	vector m_vMax;
 	bool m_bValid;
+	protected ref array<IEntity> m_aTraceExclusions;
 	protected static ref map<ResourceName, ref AICF_LogisticsVehicleFootprint> s_mCache = new map<ResourceName, ref AICF_LogisticsVehicleFootprint>();
 
-	bool IsClear(BaseWorld world, vector transform[4], out TraceOBB body)
+	bool IsClear(BaseWorld world, vector transform[4], out TraceOBB body, array<IEntity> excluded = null)
 	{
 		if (!world || !m_bValid) return false;
 		body = new TraceOBB();
@@ -18,8 +20,28 @@ class AICF_LogisticsVehicleFootprint
 		body.Maxs = m_vMax;
 		body.Flags = TraceFlags.ENTS;
 		body.LayerMask = EPhysicsLayerPresets.Vehicle;
-		// Без broadphase veto и исключения здания: важна только penetration.
-		return world.TracePosition(body, null) >= 0;
+		body.ExcludeArray = excluded;
+		// Исключения только из штатной editable-композиции данного slot.
+		m_aTraceExclusions = excluded;
+		float penetration = world.TracePosition(body, KeepExternalObstacle);
+		m_aTraceExclusions = null;
+		return penetration >= 0;
+	}
+
+	protected bool KeepExternalObstacle(IEntity entity)
+	{
+		// ExcludeArray не покрывает автоматически physical children editable prop.
+		// Проверяем ancestry, а не prefab name; все external obstacles остаются.
+		bool ownComposition;
+		IEntity ancestor = entity;
+		for (int depth; ancestor && depth < 32; depth++)
+		{
+			if (Vehicle.Cast(ancestor) || ChimeraCharacter.Cast(ancestor)) return true;
+			if (m_aTraceExclusions && m_aTraceExclusions.Contains(ancestor)) ownComposition = true;
+			ancestor = ancestor.GetParent();
+		}
+		if (ancestor) return true;
+		return !ownComposition;
 	}
 
 	static AICF_LogisticsVehicleFootprint Get(ResourceName prefab)

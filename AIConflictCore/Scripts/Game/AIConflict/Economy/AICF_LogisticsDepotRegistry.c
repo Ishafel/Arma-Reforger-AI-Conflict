@@ -43,6 +43,37 @@ modded class SCR_CatalogEntitySpawnerComponent
 
 modded class SCR_EntitySpawnerSlotComponent
 {
+	// Штатная editable-связь slot -> parent -> children, обновляемая на каждый
+	// probe. Не вызываем IsOccupied/TraceCallback: они могут удалять wrecks.
+	void AICF_LogisticsExclusions(out array<IEntity> excluded)
+	{
+		excluded.Clear();
+		SCR_EditableEntityComponent editable = SCR_EditableEntityComponent.Cast(GetOwner().FindComponent(SCR_EditableEntityComponent));
+		if (!editable) return;
+		SCR_EditableEntityComponent parent = editable.GetParentEntity();
+		if (!parent) return;
+		set<SCR_EditableEntityComponent> children = new set<SCR_EditableEntityComponent>();
+		parent.GetChildren(children);
+		foreach (SCR_EditableEntityComponent child : children)
+		{
+			if (child) AICF_LogisticsExcludeProp(child.GetOwner(), excluded);
+		}
+		AICF_LogisticsExcludeProp(parent.GetOwner(), excluded);
+	}
+
+	protected void AICF_LogisticsExcludeProp(IEntity entity, array<IEntity> excluded)
+	{
+		if (!entity) return;
+		// Даже editable attachment машины/персонажа не становится декорацией.
+		IEntity ancestor = entity;
+		while (ancestor)
+		{
+			if (Vehicle.Cast(ancestor) || ChimeraCharacter.Cast(ancestor)) return;
+			ancestor = ancestor.GetParent();
+		}
+		if (!excluded.Contains(entity)) excluded.Insert(entity);
+	}
+
 	// Stock IsOccupied/TraceCallback удаляет wrecks и dereference null physics.
 	// Read-only admission по конкретной машине, а не большому stock slot box.
 	bool AICF_LogisticsClear(ResourceName prefab)
@@ -53,7 +84,9 @@ modded class SCR_EntitySpawnerSlotComponent
 		vector transform[4];
 		GetOwner().GetWorldTransform(transform);
 		TraceOBB body;
-		return footprint.IsClear(GetGame().GetWorld(), transform, body);
+		array<IEntity> excluded = {};
+		AICF_LogisticsExclusions(excluded);
+		return footprint.IsClear(GetGame().GetWorld(), transform, body, excluded);
 	}
 }
 

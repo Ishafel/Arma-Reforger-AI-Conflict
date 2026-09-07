@@ -601,6 +601,10 @@ Stock placement/completion/removal/faction events ускоряют bounded recon
 `IsOccupied()` намеренно не вызывается, поскольку в 1.8.0.13 его callback способен
 удалять wrecks. Read-only проверка использует непаддированный OBB конкретного
 vehicle prefab в точном transform штатного slot и collision geometry препятствий.
+При каждом reserve/commit заново собираются stock editable parent/children
+исключения композиции slot; машины, персонажи и их children не исключаются.
+Все векторы transform повторно сверяются перед spawn. Обоснование отличий
+от stock admission: [LOGISTICS_SPAWN_PARITY.md](LOGISTICS_SPAWN_PARITY.md).
 Большой stock slot box и коридоры спереди/сзади не являются admission gates
 логистики. Surface/water и общие spatial reservations сохраняются; road endpoint
 служит необязательной подсказкой парковки. Подробности:

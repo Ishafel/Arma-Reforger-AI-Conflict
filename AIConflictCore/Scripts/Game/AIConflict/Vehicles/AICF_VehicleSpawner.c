@@ -1887,12 +1887,22 @@ class AICF_VehicleSpawner
 
 	protected bool LogisticsSpawnClear(AICF_LogisticsWorker w)
 	{
+		if (!w || !w.m_Entry || !w.m_SpawnSlot || !w.m_SpawnSlot.GetOwner() ||
+			w.m_SpawnSlot.GetOwner().GetID() != w.m_SpawnSlotId) return false;
+		vector currentTransform[4];
+		w.m_SpawnSlot.GetOwner().GetWorldTransform(currentTransform);
+		for (int axis; axis < 4; axis++)
+		{
+			if (currentTransform[axis] != w.m_aSpawnTransform[axis]) return RejectLogisticsSite(w, "SLOT_TRANSFORM_CHANGED");
+		}
 		BaseWorld world = GetGame().GetWorld();
 		AICF_LogisticsVehicleFootprint footprint = AICF_LogisticsVehicleFootprint.Get(w.m_Entry.GetPrefab());
 		if (!footprint || !footprint.m_bValid) return RejectLogisticsSite(w, "CARGO_GEOMETRY_UNSUPPORTED");
 		if (!world) return false;
 		TraceOBB body;
-		if (!footprint.IsClear(world, w.m_aSpawnTransform, body)) return RejectLogisticsSite(w, string.Format("VEHICLE_FOOTPRINT_BLOCKED entity=%1 min=%2 max=%3 spawn_position=%4 forward=%5", body.TraceEnt, body.Mins, body.Maxs, body.Start, w.m_aSpawnTransform[2]));
+		array<IEntity> excluded = {};
+		w.m_SpawnSlot.AICF_LogisticsExclusions(excluded);
+		if (!footprint.IsClear(world, w.m_aSpawnTransform, body, excluded)) return RejectLogisticsSite(w, string.Format("VEHICLE_FOOTPRINT_BLOCKED entity=%1 min=%2 max=%3 spawn_position=%4 forward=%5 spawn_slot=%6 prefab=%7 excluded=%8 rule=SLOT_COMPOSITION_EXCLUSIONS", body.TraceEnt, body.Mins, body.Maxs, body.Start, w.m_aSpawnTransform[2], w.m_SpawnSlotId, w.m_Entry.GetPrefab(), excluded.Count()));
 		string surface;
 		bool water;
 		float delta;

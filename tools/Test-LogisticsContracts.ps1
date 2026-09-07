@@ -86,6 +86,12 @@ foreach ($directory in @('Config','Economy','Vehicles','State/Vehicles')) {
     Get-ChildItem -LiteralPath (Join-Path $originalCore $directory) -Filter '*.c' -File | Copy-Item -Destination (Join-Path $targetCore $directory)
 }
 $mutations = @(
+    @('Vehicles/AICF_LogisticsVehicleFootprint.c','return !ownComposition;','return false;','SPAWN_EXTERNAL_OBSTACLES'),
+    @('Vehicles/AICF_LogisticsVehicleFootprint.c','Vehicle.Cast(ancestor) || ChimeraCharacter.Cast(ancestor)','false','SPAWN_PHYSICAL_ACTORS_BLOCK'),
+    @('Vehicles/AICF_LogisticsVehicleFootprint.c','m_aTraceExclusions = null;','// removed','SPAWN_CALLBACK_CLEAR'),
+    @('Economy/AICF_LogisticsDepotRegistry.c','parent.GetChildren(children);','// removed','SPAWN_STOCK_EXCLUSIONS'),
+    @('Economy/AICF_LogisticsDepotRegistry.c','Vehicle.Cast(ancestor) || ChimeraCharacter.Cast(ancestor)','false','SPAWN_OCCUPANTS_NOT_EXCLUDED'),
+    @('Vehicles/AICF_LogisticsVehicleFootprint.c','body.ExcludeArray = excluded;','// removed','SPAWN_APPLY_EXCLUSIONS'),
     @('Vehicles/AICF_TransportTripController.c','observation.IsTerminal() && observation.GetKind() != AICF_ETripOutcomeKind.COMPLETE_TRIP','observation.IsTerminal()','DRIVER_SUCCESS_NOT_RETIREMENT'),
     @('Vehicles/AICF_LogisticsDriverRecovery.c','!access.GetCompartment() || access.GetCompartment() == m_Seat','true','UNKNOWN_EXIT_NO_OTHER_SEAT'),
     @('Vehicles/AICF_LogisticsDriverRecovery.c','w.m_Waypoint && !NativeBusy(true)','false','UNKNOWN_PAUSE_OWN_ROUTE'),
@@ -110,12 +116,12 @@ $mutations = @(
     @('Economy/AICF_LogisticsExitHistory.c','w.m_iRouteRetries >= AICF_LogisticsConfig.MAX_ROUTE_RETRIES','true','EXIT_COOLDOWN_PROVEN_FAILURE'),
     @('Vehicles/AICF_VehicleSpawner.c','w.m_ExitHistory.Cooling(candidate, System.GetTickCount())','false','EXIT_COOLDOWN_SKIP'),
     @('Economy/AICF_LogisticsService.c','w.m_ExitHistory.AllCooling(w, now)','false','EXIT_COOLDOWN_WAIT_WITHOUT_SPAWN'),
-    @('Vehicles/AICF_LogisticsVehicleFootprint.c','return world.TracePosition(body, null) >= 0;','return true;','SPAWN_PHYSICS_PENETRATION'),
+    @('Vehicles/AICF_LogisticsVehicleFootprint.c','return penetration >= 0;','return true;','SPAWN_PHYSICS_PENETRATION'),
     @('Vehicles/AICF_LogisticsVehicleFootprint.c','body.Mins = m_vMin;','body.Mins = m_vMin - Vector(2, 0, 2);','SPAWN_BODY_MIN_UNPADDED'),
     @('Vehicles/AICF_LogisticsVehicleFootprint.c','body.Maxs = m_vMax;','body.Maxs = m_vMax + Vector(2, 0, 2);','SPAWN_BODY_MAX_UNPADDED'),
     @('Vehicles/AICF_LogisticsVehicleFootprint.c','body.LayerMask = EPhysicsLayerPresets.Vehicle;','body.LayerMask = 0;','SPAWN_BODY_LAYER'),
     @('Vehicles/AICF_LogisticsVehicleFootprint.c','body.Mat[axis] = transform[axis];','body.Mat[axis] = vector.Zero;','SPAWN_BODY_ORIENTATION'),
-    @('Vehicles/AICF_VehicleSpawner.c','!footprint.IsClear(world, w.m_aSpawnTransform, body)','false','SPAWN_BODY_COLLISION'),
+    @('Vehicles/AICF_VehicleSpawner.c','!footprint.IsClear(world, w.m_aSpawnTransform, body, excluded)','false','SPAWN_BODY_COLLISION'),
     @('Vehicles/AICF_VehicleSpawner.c','!IsWheeledSpawnSurfaceSuitable(w.m_aSpawnTransform[3], world, surface, water, delta, probes)','false','SPAWN_SURFACE_REJECTION'),
     @('Vehicles/AICF_VehicleSpawner.c','if (!LogisticsSpawnClear(w)) return false;','// removed','SPAWN_RESERVE_LIVE_BODY'),
     @('Vehicles/AICF_VehicleSpawner.c','|| !LogisticsSpawnClear(w)) return false;',') return false;','SPAWN_COMMIT_LIVE_BODY'),

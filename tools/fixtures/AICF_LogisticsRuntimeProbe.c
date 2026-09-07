@@ -373,6 +373,18 @@ modded class AICF_LogisticsService
 		string durationText;
 		int duration = 300000;
 		if (System.GetCLIParam("aicfLogisticsProbeDurationMs", durationText)) duration = durationText.ToInt();
+		string stopAfterUral;
+		if (!m_bAICFProbeStopped && System.GetCLIParam("aicfLogisticsProbeStopAfterUralDelivery", stopAfterUral) && stopAfterUral == "1")
+		{
+			foreach (AICF_LogisticsWorker deliveredWorker : m_Registry.m_aWorkers)
+			{
+				if (!deliveredWorker.m_Entry || deliveredWorker.m_Entry.GetPrefab().IndexOf("/Ural4320/") < 0 || deliveredWorker.m_fDelivered <= 0) continue;
+				Print(string.Format("[AICF][LOGISTICS_PROBE_DELIVERY_FINISH] test_only=1 slot=%1 generation=%2 prefab=%3 delivered=%4", deliveredWorker.m_iSlot, deliveredWorker.m_iGeneration, deliveredWorker.m_Entry.GetPrefab(), deliveredWorker.m_fDelivered));
+				// Только условие завершения fixture; обычный Stop и 60s cleanup ниже.
+				m_iAICFProbeStart = now - duration;
+				break;
+			}
+		}
 		if (now - m_iAICFProbeStart >= duration)
 		{
 			if (!m_bAICFProbeStopped)
@@ -506,9 +518,14 @@ modded class AICF_LogisticsService
 		if (!home) return;
 		AICF_LogisticsEndpoint source;
 		float best = float.MAX;
+		string minimumCapacityText;
+		float minimumCapacity;
+		if (System.GetCLIParam("aicfLogisticsProbeMinSourceCapacity", minimumCapacityText)) minimumCapacity = Math.Max(0, minimumCapacityText.ToFloat());
 		foreach (AICF_LogisticsEndpoint e : m_Planner.m_aEndpoints)
 		{
 			if (e.m_Base.GetType() != SCR_ECampaignBaseType.BASE || e.m_Base == faction.GetMainBase()) continue;
+			// Выбор существующего test source; production thresholds не изменяются.
+			if (!e.m_Pool || e.m_Pool.Capacity() < minimumCapacity) continue;
 			SCR_CampaignFaction owner = SCR_CampaignFaction.Cast(e.m_Owner);
 			if (owner && owner.GetMainBase() == e.m_Base) continue;
 			SCR_AIWorld routeWorld = SCR_AIWorld.Cast(GetGame().GetAIWorld());
