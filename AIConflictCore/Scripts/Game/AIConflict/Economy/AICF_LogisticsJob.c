@@ -81,6 +81,10 @@ class AICF_LogisticsWorker
 	EntityID m_SpawnSlotId = EntityID.INVALID;
 	ref AICF_VehicleSpawnSiteReservation m_Site;
 	vector m_aSpawnTransform[4];
+	vector m_aSlotTransform[4];
+	vector m_vSpawnExit;
+	bool m_bSpawnExitReached;
+	string m_sSpawnRejectReason;
 	vector m_vParking;
 	bool m_bEligible;
 	bool m_bRetireAfterCargo;

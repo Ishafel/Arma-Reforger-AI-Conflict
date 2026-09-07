@@ -1839,9 +1839,10 @@ class AICF_VehicleSpawner
 
 	// Вспомогательные physical logistics jobs того же domain owner.
 
-	protected bool RejectLogisticsSite(AICF_LogisticsWorker w, string reason)
+	protected bool RejectLogisticsSite(AICF_LogisticsWorker w, string reason, bool diagnostic = true)
 	{
-		w.Log("LOGISTICS_SPAWN_REJECTED", "reason=" + reason);
+		w.m_sSpawnRejectReason = reason;
+		if (diagnostic) w.Log("LOGISTICS_SPAWN_REJECTED", "reason=" + reason);
 		return false;
 	}
 	bool ReserveLogisticsSite(AICF_LogisticsWorker w)
@@ -1867,25 +1868,27 @@ class AICF_VehicleSpawner
 	protected bool ReserveLogisticsSlot(AICF_LogisticsWorker w, SCR_EntitySpawnerSlotComponent slot)
 	{
 		if (!slot || !w.m_Production.AICF_AllowsLogisticsEntry(w.m_Entry, slot)) return RejectLogisticsSite(w, "NO_FREE_CATALOG_SLOT");
-		vector position = slot.GetOwner().GetOrigin();
-		if (!AICF_ConstructionPlanner.VehicleAreaClear(position, 12)) return RejectLogisticsSite(w, "CONSTRUCTION_RESERVATION_OVERLAP");
-		foreach (AICF_VehicleSpawnSiteReservation other : s_aConstructionSites)
-		{
-			if (other && !other.IsExpired(System.GetTickCount()) && vector.DistanceXZ(position, other.GetSpawnPosition()) < 20) return RejectLogisticsSite(w, "SHARED_SITE_RESERVED");
-		}
 		w.m_SpawnSlot = slot;
 		w.m_SpawnSlotId = slot.GetOwner().GetID();
-		slot.GetOwner().GetWorldTransform(w.m_aSpawnTransform);
-		if (!LogisticsSpawnClear(w)) return false;
-		int now = System.GetTickCount();
-		w.m_Site = new AICF_VehicleSpawnSiteReservation(string.Format("logistics-site-%1-%2", w.m_iSlot, w.m_iGeneration),
-			w.m_Faction.GetFactionKey(), w.m_iSlot, w.m_iGeneration, w.m_iGeneration, w.m_iGeneration, w.m_Home, position, now, now + AICF_LogisticsConfig.SPAWN_TIMEOUT_MS);
-		m_aSiteReservations.Insert(w.m_Site);
-		s_aConstructionSites.Insert(w.m_Site);
-		return true;
+		slot.GetOwner().GetWorldTransform(w.m_aSlotTransform);
+		AICF_LogisticsVehicleFootprint footprint = AICF_LogisticsVehicleFootprint.Get(w.m_Entry.GetPrefab());
+		w.m_sSpawnRejectReason = "NO_SUPPORTED_SURFACE";
+		for (int candidate; candidate < AICF_LogisticsSpawnGeometry.CANDIDATES; candidate++)
+		{
+			if (!AICF_LogisticsSpawnGeometry.Candidate(GetGame().GetWorld(), footprint, w.m_aSlotTransform, candidate, w.m_aSpawnTransform)) continue;
+			if (!LogisticsSpawnClear(w, false)) continue;
+			int now = System.GetTickCount();
+			w.m_Site = new AICF_VehicleSpawnSiteReservation(string.Format("logistics-site-%1-%2", w.m_iSlot, w.m_iGeneration),
+				w.m_Faction.GetFactionKey(), w.m_iSlot, w.m_iGeneration, w.m_iGeneration, w.m_iGeneration, w.m_Home, w.m_aSpawnTransform[3], now, now + AICF_LogisticsConfig.SPAWN_TIMEOUT_MS);
+			m_aSiteReservations.Insert(w.m_Site);
+			s_aConstructionSites.Insert(w.m_Site);
+			w.Log("LOGISTICS_SPAWN_SITE_SELECTED", string.Format("reason=BODY_AND_EXIT_CLEAR spawn_slot=%1 candidate=%2 spawn_position=%3 forward=%4 exit=%5 offset_m=%6 prefab=%7", w.m_SpawnSlotId, candidate, w.m_aSpawnTransform[3], w.m_aSpawnTransform[2], w.m_vSpawnExit, vector.DistanceXZ(w.m_aSpawnTransform[3], w.m_aSlotTransform[3]), w.m_Entry.GetPrefab()));
+			return true;
+		}
+		return RejectLogisticsSite(w, string.Format("SLOT_SEARCH_EXHAUSTED spawn_slot=%1 candidates=%2 last_rejection=%3", w.m_SpawnSlotId, AICF_LogisticsSpawnGeometry.CANDIDATES, w.m_sSpawnRejectReason));
 	}
 
-	protected bool LogisticsSpawnClear(AICF_LogisticsWorker w)
+	protected bool LogisticsSpawnClear(AICF_LogisticsWorker w, bool diagnostic = true)
 	{
 		if (!w || !w.m_Entry || !w.m_SpawnSlot || !w.m_SpawnSlot.GetOwner() ||
 			w.m_SpawnSlot.GetOwner().GetID() != w.m_SpawnSlotId) return false;
@@ -1893,23 +1896,37 @@ class AICF_VehicleSpawner
 		w.m_SpawnSlot.GetOwner().GetWorldTransform(currentTransform);
 		for (int axis; axis < 4; axis++)
 		{
-			if (currentTransform[axis] != w.m_aSpawnTransform[axis]) return RejectLogisticsSite(w, "SLOT_TRANSFORM_CHANGED");
+			if (currentTransform[axis] != w.m_aSlotTransform[axis]) return RejectLogisticsSite(w, "SLOT_TRANSFORM_CHANGED", diagnostic);
 		}
 		BaseWorld world = GetGame().GetWorld();
 		AICF_LogisticsVehicleFootprint footprint = AICF_LogisticsVehicleFootprint.Get(w.m_Entry.GetPrefab());
-		if (!footprint || !footprint.m_bValid) return RejectLogisticsSite(w, "CARGO_GEOMETRY_UNSUPPORTED");
+		if (!footprint || !footprint.m_bValid) return RejectLogisticsSite(w, "CARGO_GEOMETRY_UNSUPPORTED", diagnostic);
 		if (!world) return false;
+		vector position = w.m_aSpawnTransform[3];
+		if (!w.m_Home || !w.m_Home.GetOwner() || vector.DistanceXZ(position, w.m_aSlotTransform[3]) > AICF_LogisticsSpawnGeometry.MAX_OFFSET_M + 0.1 ||
+			vector.DistanceXZ(position, w.m_Home.GetOwner().GetOrigin()) > w.m_Home.GetRadius() - 5) return RejectLogisticsSite(w, "OUTSIDE_DEPOT_SEARCH_AREA", diagnostic);
 		TraceOBB body;
-		array<IEntity> excluded = {};
-		w.m_SpawnSlot.AICF_LogisticsExclusions(excluded);
-		if (!footprint.IsClear(world, w.m_aSpawnTransform, body, excluded)) return RejectLogisticsSite(w, string.Format("VEHICLE_FOOTPRINT_BLOCKED entity=%1 min=%2 max=%3 spawn_position=%4 forward=%5 spawn_slot=%6 prefab=%7 excluded=%8 rule=SLOT_COMPOSITION_EXCLUSIONS", body.TraceEnt, body.Mins, body.Maxs, body.Start, w.m_aSpawnTransform[2], w.m_SpawnSlotId, w.m_Entry.GetPrefab(), excluded.Count()));
+		if (!footprint.IsClear(world, w.m_aSpawnTransform, body)) return RejectLogisticsSite(w, string.Format("VEHICLE_FOOTPRINT_BLOCKED entity=%1 min=%2 max=%3 spawn_position=%4 forward=%5 spawn_slot=%6 prefab=%7 excluded=0 rule=ALL_PHYSICAL_OBSTACLES", body.TraceEnt, body.Mins, body.Maxs, body.Start, w.m_aSpawnTransform[2], w.m_SpawnSlotId, w.m_Entry.GetPrefab()), diagnostic);
 		string surface;
 		bool water;
 		float delta;
 		int probes;
-		if (!IsWheeledSpawnSurfaceSuitable(w.m_aSpawnTransform[3], world, surface, water, delta, probes)) return RejectLogisticsSite(w, string.Format("SURFACE_REJECTED surface=%1 water=%2 height_delta=%3 probes=%4 spawn_position=%5", surface, water, delta, probes, w.m_aSpawnTransform[3]));
-		// Parking hint не доказывает выезд и не блокирует spawn. Маршрут,
-		// объезд препятствий и ворота после появления обслуживает штатный AI.
+		if (!IsWheeledSpawnSurfaceSuitable(w.m_aSpawnTransform[3], world, surface, water, delta, probes)) return RejectLogisticsSite(w, string.Format("SURFACE_REJECTED surface=%1 water=%2 height_delta=%3 probes=%4 spawn_position=%5", surface, water, delta, probes, w.m_aSpawnTransform[3]), diagnostic);
+		TraceOBB exitTrace;
+		if (!AICF_LogisticsSpawnGeometry.ExitClear(world, footprint, w.m_aSpawnTransform, w.m_vSpawnExit, exitTrace))
+		{
+			IEntity blocker;
+			if (exitTrace) blocker = exitTrace.TraceEnt;
+			return RejectLogisticsSite(w, string.Format("SPAWN_EXIT_BLOCKED entity=%1 spawn_position=%2 spawn_slot=%3", blocker, position, w.m_SpawnSlotId), diagnostic);
+		}
+		if (vector.DistanceXZ(w.m_vSpawnExit, w.m_Home.GetOwner().GetOrigin()) > w.m_Home.GetRadius() - 5) return RejectLogisticsSite(w, "EXIT_OUTSIDE_BASE", diagnostic);
+		if (!AICF_ConstructionPlanner.VehicleAreaClear(position, 12) || !AICF_ConstructionPlanner.VehicleAreaClear(w.m_vSpawnExit, 12)) return RejectLogisticsSite(w, "CONSTRUCTION_RESERVATION_OVERLAP", diagnostic);
+		foreach (AICF_VehicleSpawnSiteReservation other : s_aConstructionSites)
+		{
+			if (other && other != w.m_Site && !other.IsExpired(System.GetTickCount()) &&
+				(vector.DistanceXZ(position, other.GetSpawnPosition()) < 20 || vector.DistanceXZ(w.m_vSpawnExit, other.GetSpawnPosition()) < 20)) return RejectLogisticsSite(w, "SHARED_SITE_RESERVED", diagnostic);
+		}
+		// Parking hint остаётся необязательным; проверенный выезд хранится отдельно.
 		w.m_vParking = w.m_aSpawnTransform[3];
 		SCR_AIWorld ai = SCR_AIWorld.Cast(GetGame().GetAIWorld());
 		if (!ai || !ai.GetRoadNetworkManager()) return true;
@@ -1927,7 +1944,7 @@ class AICF_VehicleSpawner
 		if (!w || w.m_ePhase != AICF_ELogisticsPhase.SPAWN_PENDING || w.m_Vehicle || !w.m_Lease ||
 			!Replication.IsServer() || !AICF_LogisticsDepotRegistry.Live(w) || !w.m_Site || w.m_Site.IsExpired(System.GetTickCount()) ||
 			!w.m_SpawnSlot || !w.m_SpawnSlot.GetOwner() || w.m_SpawnSlot.GetOwner().GetID() != w.m_SpawnSlotId ||
-			w.m_SpawnSlot.GetOwner().GetOrigin() != w.m_aSpawnTransform[3] ||
+			w.m_SpawnSlot.GetOwner().GetOrigin() != w.m_aSlotTransform[3] ||
 			!w.m_Production.AICF_AllowsLogisticsEntry(w.m_Entry, w.m_SpawnSlot) || !LogisticsSpawnClear(w)) return false;
 		EntitySpawnParams params = new EntitySpawnParams();
 		params.TransformMode = ETransformMode.WORLD;
@@ -1936,6 +1953,7 @@ class AICF_VehicleSpawner
 		if (!w.m_Vehicle) return false;
 		w.m_VehicleId = w.m_Vehicle.GetID();
 		w.m_bExitedSpawn = false;
+		w.m_bSpawnExitReached = false;
 		RplComponent rpl = RplComponent.Cast(w.m_Vehicle.FindComponent(RplComponent));
 		if (rpl) w.m_sVehicleRpl = rpl.Id().ToString();
 		SCR_FactionAffiliationComponent affiliation = SCR_FactionAffiliationComponent.Cast(w.m_Vehicle.FindComponent(SCR_FactionAffiliationComponent));

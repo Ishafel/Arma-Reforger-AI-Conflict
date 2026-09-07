@@ -7,6 +7,7 @@ class AICF_LogisticsRouteRecovery
 	vector m_vDiagnosticPosition;
 	float m_fAttemptDistance;
 	bool m_bIntermediate;
+	bool m_bSpawnEgress;
 	bool m_bActive;
 	int m_iStartedAtMs;
 	int m_iAttemptAtMs;
@@ -20,6 +21,13 @@ class AICF_LogisticsRouteRecovery
 		m_Context.Capture(w, now);
 		m_vRoute = w.m_vEndpoint;
 		m_vDiagnosticPosition = w.m_Vehicle.GetOrigin();
+		if (!w.m_bSpawnExitReached && vector.DistanceXZ(w.m_Vehicle.GetOrigin(), w.m_aSpawnTransform[3]) < 5)
+		{
+			m_vRoute = w.m_vSpawnExit;
+			m_bIntermediate = true;
+			m_bSpawnEgress = true;
+			return;
+		}
 		vector initialRoad;
 		if (!w.m_bExitedSpawn && vector.DistanceXZ(w.m_Vehicle.GetOrigin(), w.m_vEndpoint) > 30 && RoadEndpoint(w, 0, initialRoad))
 		{
@@ -78,7 +86,13 @@ class AICF_LogisticsRouteRecovery
 			m_bActive = false;
 			w.Log("LOGISTICS_RECOVERY_SUCCEEDED", string.Format("reason=PHYSICAL_MOTION_AND_ROUTE_PROGRESS attempt=%1 displacement_m=%2 route_endpoint=%3 route_progress_m=%4", w.m_iRouteRetries, vector.DistanceXZ(position, m_vAttemptPosition), m_vRoute, m_fAttemptDistance - vector.DistanceXZ(position, m_vRoute)));
 		}
-		if (m_bIntermediate && !m_bActive && vector.DistanceXZ(position, m_vRoute) <= 8)
+		if (m_bSpawnEgress && !m_bActive && vector.DistanceXZ(position, m_vRoute) <= 5)
+		{
+			m_bSpawnEgress = false;
+			w.m_bSpawnExitReached = true;
+			w.Log("LOGISTICS_SPAWN_EXIT_REACHED", string.Format("reason=PHYSICAL_EXIT_PROGRESS position=%1 exit=%2 spawn_slot=%3", position, w.m_vSpawnExit, w.m_SpawnSlotId));
+		}
+		if (m_bIntermediate && !m_bSpawnEgress && !m_bActive && vector.DistanceXZ(position, m_vRoute) <= 8)
 		{
 			m_bIntermediate = false;
 			m_vRoute = w.m_vEndpoint;
@@ -104,6 +118,7 @@ class AICF_LogisticsRouteRecovery
 			vector alternate;
 			if (RoadEndpoint(w, 1, alternate) || RoadEndpoint(w, 2, alternate))
 			{
+				m_bSpawnEgress = false;
 				m_vRoute = alternate;
 				m_bIntermediate = true;
 			}

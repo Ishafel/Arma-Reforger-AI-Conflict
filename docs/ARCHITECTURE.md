@@ -600,15 +600,16 @@ Stock placement/completion/removal/faction events ускоряют bounded recon
 Каталог production и совместимость stock slot проверяются перед spawn;
 `IsOccupied()` намеренно не вызывается, поскольку в 1.8.0.13 его callback способен
 удалять wrecks. Read-only проверка использует непаддированный OBB конкретного
-vehicle prefab в точном transform штатного slot и collision geometry препятствий.
-При каждом reserve/commit заново собираются stock editable parent/children
-исключения композиции slot; машины, персонажи и их children не исключаются.
-Все векторы transform повторно сверяются перед spawn. Обоснование отличий
-от stock admission: [LOGISTICS_SPAWN_PARITY.md](LOGISTICS_SPAWN_PARITY.md).
-Большой stock slot box и коридоры спереди/сзади не являются admission gates
-логистики. Surface/water и общие spatial reservations сохраняются; road endpoint
-служит необязательной подсказкой парковки. Подробности:
-[LOGISTICS_SPAWN_CLEARANCE.md](LOGISTICS_SPAWN_CLEARANCE.md).
+vehicle prefab против всех физических препятствий, включая props самого depot.
+`AICF_LogisticsSpawnGeometry` перебирает до 26 позиций/направлений на каждый
+совместимый stock slot: исходную, разворот и кольца 6/12/18 м. Проверяются
+опора четырёх углов, вода, границы базы и выезд длиной 12–18 м объёмом машины.
+Разрешённый transform машины хранится отдельно от snapshot штатного slot;
+все четыре вектора slot, body, выезд и spatial reservations повторно проверяются
+перед spawn. Не требуется прямой коридор до дороги: road endpoint остаётся
+необязательной подсказкой парковки. Первый маршрут использует проверенный
+локальный выезд. Подробности и ограничения:
+[LOGISTICS_SPAWN_EGRESS.md](LOGISTICS_SPAWN_EGRESS.md).
 
 `AICF_LogisticsPlanner` определяет hysteresis спроса, directed HQ depth и порядок
 кандидатов. Подготовка пар source/destination и road queries распределяются по

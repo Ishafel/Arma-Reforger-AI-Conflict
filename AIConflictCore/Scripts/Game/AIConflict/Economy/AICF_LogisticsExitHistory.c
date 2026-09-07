@@ -73,8 +73,8 @@ class AICF_LogisticsExitHistory
 		if (routeExhausted) failure.m_iFailures = 2;
 		failure.m_Slot = w.m_SpawnSlot;
 		failure.m_SlotId = w.m_SpawnSlotId;
-		failure.m_vPosition = w.m_aSpawnTransform[3];
-		failure.m_vForward = w.m_aSpawnTransform[2];
+		failure.m_vPosition = w.m_aSlotTransform[3];
+		failure.m_vForward = w.m_aSlotTransform[2];
 		failure.m_iUntilMs = now + AICF_LogisticsConfig.EXIT_SLOT_COOLDOWN_MS;
 		w.Log("LOGISTICS_EXIT_FAILURE", string.Format("reason=%1 spawn_slot=%2 failures=%3 until_ms=%4", reason, w.m_SpawnSlotId, failure.m_iFailures, failure.m_iUntilMs));
 		if (failure.m_iFailures >= 2) w.Log("LOGISTICS_EXIT_COOLDOWN", string.Format("reason=%1 spawn_slot=%2 attempts=%3 until_ms=%4", reason, w.m_SpawnSlotId, failure.m_iFailures, failure.m_iUntilMs));
