@@ -58,7 +58,7 @@ $cases = @(
     @{ Name = 'blocker'; File = 'Vehicles/AICF_VehicleCleanupManager.c'; Before = 'terminalReason + ":" + job.m_Scan.m_sBlockerSignature'; After = 'terminalReason'; Audits = @{ Stage3 = 'STAGE3_BOUNDED_PROTECTED_CLEARANCE'; Stage35 = 'STAGE35_BOUNDED_PROTECTED_CLEARANCE' } },
     @{ Name = 'grace'; File = 'Vehicles/AICF_VehicleCleanupManager.c'; Before = 'if (nowMs >= terminalAtMs)'; After = 'if (false)'; Audits = @{ Stage3 = 'STAGE3_BOUNDED_PROTECTED_CLEARANCE'; Stage35 = 'STAGE35_BOUNDED_PROTECTED_CLEARANCE' } },
     @{ Name = 'marker-state'; File = 'UI/AICF_GroupMapMarkers.c'; Before = 'vehicleCoordinator.GetSlotDisplayStatusText(slot)'; After = 'string.Empty'; Audits = @{ Stage3 = 'STAGE3_MARKER_STATE' } },
-    @{ Name = 'marker-placeholder'; File = 'UI/AICF_GroupMapMarkers.c'; Before = '%5 | %6'; After = '| %6'; Audits = @{ Stage3 = 'STAGE3_MARKER_STATE' } },
+    @{ Name = 'marker-placeholder'; File = 'UI/AICF_GroupMapMarkers.c'; Before = ': %1\n'; After = ':\n'; Audits = @{ Stage3 = 'STAGE3_MARKER_STATE' } },
     @{ Name = 'marker-render'; File = 'UI/AICF_GroupMapMarkers.c'; Before = 'vehicleState,'; After = 'string.Empty,'; Audits = @{ Stage3 = 'STAGE3_MARKER_STATE' } },
     @{ Name = 'queue-read'; File = 'Bootstrap/AICF_MatchController.c'; Before = 'group.GetWaypoints(waypointQueue);'; After = '// group.GetWaypoints(waypointQueue);'; Audits = @{ Stage35 = 'STAGE35_MEANINGFUL_TASK_PROOF' } },
     @{ Name = 'queue-membership'; File = 'Bootstrap/AICF_MatchController.c'; Before = 'return waypointQueue.Contains(waypoint);'; After = 'return true; // waypointQueue.Contains(waypoint)'; Audits = @{ Stage35 = 'STAGE35_MEANINGFUL_TASK_PROOF' } }

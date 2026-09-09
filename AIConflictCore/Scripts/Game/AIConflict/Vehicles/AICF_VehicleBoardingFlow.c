@@ -3437,4 +3437,34 @@ class AICF_VehicleBoardingFlow
 			prefab);
 		return details;
 	}
+
+	AICF_TripOutcome TickLogisticsFallback(AICF_LogisticsWorker w, AICF_LogisticsFallback recovery, int now)
+	{
+		if (!recovery.Safe(w, now)) return AICF_TripOutcome.TerminalFailClosed("FALLBACK_DRIVER_CONTEXT_LOST", recovery.m_sToken);
+		if (w.Ready()) return AICF_TripOutcome.Wait("FALLBACK_DRIVER_READY", recovery.m_sToken);
+		float threat;
+		if (!m_Watchdog.IsHiddenRecoveryCombatSafe(w.m_Group, threat)) return AICF_TripOutcome.Wait("FALLBACK_COMBAT", recovery.m_sToken);
+		if (now < recovery.m_iNextSeatMs || now - recovery.m_iStartedAtMs < 2000)
+			return AICF_TripOutcome.Wait("FALLBACK_DRIVER_SETTLING", recovery.m_sToken);
+		if (recovery.m_iSeatAttempts >= 3) return AICF_TripOutcome.TerminalFailClosed("FALLBACK_DRIVER_SEAT_EXHAUSTED", recovery.m_sToken);
+		Physics physics = w.m_Vehicle.GetPhysics();
+		if (!physics || physics.GetVelocity().Length() > 3 ||
+			!AICF_LogisticsFallback.PlayersClear(w.m_Driver.GetOrigin(), w.m_Vehicle.GetOrigin()))
+			return AICF_TripOutcome.Wait("FALLBACK_DRIVER_PHYSICAL_USE", recovery.m_sToken);
+		CompartmentAccessComponent access = w.m_Driver.GetCompartmentAccessComponent();
+		// Native action cancellation принадлежит handoff и уже завершилась до flow.
+		// Здесь прерываем только очередь посадки этого проверенного AI-водителя.
+		if (!recovery.Safe(w, System.GetTickCount()) || w.HasForeignOccupant(true))
+			return AICF_TripOutcome.TerminalFailClosed("FALLBACK_DRIVER_RECHECK_FAILED", recovery.m_sToken);
+		access.InterruptVehicleActionQueue(true, true, true);
+		if (!recovery.Safe(w, System.GetTickCount()) || w.HasForeignOccupant(true))
+			return AICF_TripOutcome.TerminalFailClosed("FALLBACK_DRIVER_QUEUE_CONTEXT_LOST", recovery.m_sToken);
+		recovery.m_iSeatAttempts++;
+		recovery.m_iNextSeatMs = now + 3000;
+		bool issued = access.GetInVehicle(w.m_Seat.GetOwner(), w.m_Seat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
+		w.Log("LOGISTICS_DRIVER_TELEPORT_ISSUED", string.Format("reason=%1 attempt=%2 issued=%3 cargo=%4 driver_rpl=%5", recovery.m_sCause, recovery.m_iSeatAttempts, issued, recovery.m_CargoPool.Value(), recovery.m_sDriverRpl));
+		// Native return=true не является подтверждением посадки: Ready проверяется
+		// следующим tick, после compartment replication/settling.
+		return AICF_TripOutcome.Wait("FALLBACK_EXACT_SEAT_PENDING", recovery.m_sToken);
+	}
 }

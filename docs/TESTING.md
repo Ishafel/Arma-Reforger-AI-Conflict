@@ -120,6 +120,24 @@ Workbench и runtime для этой правки — `NOT RUN`: изменен�
 ниже и в validation documents описывают результаты на даты своих прогонов;
 их прежние failures не следует переносить в новый baseline.
 
+## Карточки маркеров отрядов — 2026-09-08
+
+Состояние техники перенесено из старой строки `BuildMarkerText` в
+`BuildMarkerDetails` (`Техника: %1`). `STAGE3_MARKER_STATE` проверяет получение,
+форматирование и публикацию подробностей; отрицательные fixtures продолжают
+удалять источник состояния, placeholder и переданный аргумент.
+`STAGE4_MAP_DIRECTION` проверяет текущий вывод расстояния и compass вместо
+прежнего литерала `DIR`. Шесть применимых аудиторов дали PASS до изменения.
+Дополнительная команда для этой области:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-GroupMapMarkersStatic.ps1
+```
+
+Она проверяет authority, JIP, разделение callbacks отрядов/логистики,
+обновление существующих маркеров, живую позицию и lifecycle hover.
+Результаты изменения: [GROUP_MAP_MARKERS.md](GROUP_MAP_MARKERS.md).
+
 ## Исторический baseline — 2026-08-30
 
 Baseline повторно проверен `2026-08-30` на чистом `main`, commit
@@ -311,6 +329,13 @@ float balance. Физические jobs/receipts дополнительно п�
 
 ### Физическая логистика
 
+Возврат exact водителя телепортацией и перенос застрявшей машины проверяются
+по [LOGISTICS_FALLBACK.md](LOGISTICS_FALLBACK.md). Новый
+`Test-LogisticsLog.ps1 -RequireFallback` требует resume, реальное движение
+после переноса и delivery того же job/vehicle. Отдельная test-only fixture
+проверяет обе стороны на загруженной машине; выдача teleport-команды сама
+по себе не закрывает gate.
+
 Ограниченное восстановление движения, unknown driver exit и cooldown exact
 spawn slot описаны в [LOGISTICS_RECOVERY.md](LOGISTICS_RECOVERY.md).
 `Test-LogisticsLog.ps1 -RequireRecovery` требует физический recovery и delivery
@@ -354,6 +379,24 @@ Fixture flags `aicfLogisticsProbeRepeatSource`, `aicfLogisticsProbeDepotAtSource
 и `aicfLogisticsProbeReturn` создают контролируемые supply/depot условия:
 повторное заполнение источника, depot на базе с избытком и заполнение получателей
 после load для проверки физического RETURN. Вмешательства помечены `test_only=1`.
+Для нескольких направлений обеих сторон используется
+`aicfLogisticsProbeRouteMatrix=1` вместе с `Prepare`, `Peace`, `DepotAtSource`,
+`RepeatSource` и `MaintainDemand`. Та же fixture выбирает четыре ближайшие к
+своему HQ дорожные базы с provider/resource pool: два источника и два получателя.
+Чужой HQ и половина карты ближе к нему исключаются. Точки и известные radio
+connectors захватываются подготовкой; фактическую связанность после обновления
+production graph показывает `LOGISTICS_MATRIX_GRAPH depth=… owner_matches=…`.
+`LOGISTICS_MATRIX_READY` подтверждает подготовку, но не факт доставки.
+Источники пополняются, HQ/connectors держатся на 80%; получатели сбрасываются
+до 20% только после заполнения обоих, чтобы первый не вытеснял второй.
+Light/heavy depots размещаются на разных источниках. Стоимость и время их
+строительства пропущены только fixture; spawn geometry, driver, route recovery
+и transfer остаются production. `Peace` в этом режиме делает дружественными
+также `US` и `USSR`, чтобы отделить дорожные проблемы от боя.
+Запускать из замороженной копии addon sources с новым profile для каждой попытки;
+клиент использует ту же копию. Production файлы из-за тестовой подготовки не меняются.
+Матрица Everon, команды текущего запуска и первые результаты:
+[LOGISTICS_ROUTE_MATRIX.md](LOGISTICS_ROUTE_MATRIX.md).
 Client fixture `aicfLogisticsClientProbe=1` ограничивает сессию пятью минутами;
 опциональный `aicfLogisticsClientSpawnFaction=US|USSR` запрашивает обычный player
 spawn через native faction/respawn RPC, сохраняя серверные проверки. Это отдельный
@@ -371,6 +414,22 @@ Server и client должны загружать одинаковую верси
 Обычный engine teardown и все SCRIPT errors сохраняются и анализируются отдельно.
 Текущие evidence, preparations и `NOT RUN` перечислены в
 [LOGISTICS_VALIDATION.md](LOGISTICS_VALIDATION.md).
+
+### Маркеры машин логистики
+
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-LogisticsMapMarkersStatic.ps1`
+проверяет authority, identity, faction streaming, JIP snapshot, live cargo и
+cleanup; он дополняет Stage 3/3.5/4 и существующие logistics contracts.
+`tools/fixtures/AICF_LogisticsMapMarkerProbe.c` копируется только в изолированную
+копию Core/UI. Сервер запускается через `Start-AICFRuntime.ps1` с
+`-AdditionalArguments @('-aicfLogisticsMarkerProbe','1')`, новым profile вне
+репозитория и `RepositoryRoot` этой копии. Fixture создаёт catalog vehicles и
+настоящие fleet leases обеих сторон, проверяет production markers, затем штатно
+закрывает сервер. Она не проверяет driver, доставку или карту клиента.
+Результат — `LOGISTICS_MARKER_PROBE_DONE checks=… failures=0` в полном
+остановленном console log; SCRIPT errors оцениваются отдельно.
+Ручная проверка карты, hover, faction switching и JIP перечислена в
+[LOGISTICS_MAP_MARKERS.md](LOGISTICS_MAP_MARKERS.md).
 
 ### Rank floor
 

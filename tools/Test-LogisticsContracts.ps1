@@ -55,6 +55,22 @@ Check-Log 'recovery-without-motion' ($recoveryFixture.Replace('displacement_m=7'
 Check-Log 'recovery-without-route-progress' ($recoveryFixture.Replace('route_progress_m=4','route_progress_m=0')) 1 'RECOVERY_NO_PHYSICAL_EVIDENCE'
 Check-Log 'recovery-wrong-vehicle' ($recoveryFixture.Replace($successLog,$successLog.Replace('vehicle=V1','vehicle=V2'))) 1 'RECOVERY_IDENTITY'
 Check-Log 'recovery-budget-overrun' ($recoveryFixture.Replace('attempt=1','attempt=3')) 1 'RECOVERY_ATTEMPT_BUDGET'
+$fallbackIdentity = 'run=fixture faction=US slot=1000000 generation=1 vehicle=V1 driver=D1 phase=TO_DESTINATION job=J1 vehicle_rpl=VR1'
+$fallbackStart = "[AICF][STAGE4][INFO][LOGISTICS_FALLBACK_STARTED] $fallbackIdentity attempt=1 t_ms=5000 relocate=1 cargo=100.125"
+$fallbackSeat = "[AICF][STAGE4][INFO][LOGISTICS_DRIVER_TELEPORT_ISSUED] $fallbackIdentity attempt=1 t_ms=6000 issued=1 driver_rpl=DR1 cargo=100.125"
+$fallbackMove = "[AICF][STAGE4][INFO][LOGISTICS_VEHICLE_RELOCATED] $fallbackIdentity attempt=1 t_ms=7000 displacement_m=30 cargo_before=100.125 cargo_after=100.125"
+$fallbackResume = "[AICF][STAGE4][INFO][LOGISTICS_FALLBACK_RESUMED] $fallbackIdentity attempt=1 t_ms=7500 relocated=1 cargo=100.125"
+$fallbackMotion = "[AICF][STAGE4][INFO][LOGISTICS_RECOVERY_SUCCEEDED] $fallbackIdentity attempt=0 t_ms=8500 displacement_m=7 route_progress_m=4"
+$unloadMarker = '[AICF][STAGE4][INFO][LOGISTICS_UNLOAD_COMMITTED]'
+$fallbackFixture = $fixture.Replace($unloadMarker, "$fallbackStart`n$fallbackSeat`n$fallbackMove`n$fallbackResume`n$fallbackMotion`n$unloadMarker")
+Check-Log 'fallback-return-motion-delivery' $fallbackFixture 0 ''
+Check-Log 'fallback-cargo-created' ($fallbackFixture.Replace('cargo_after=100.125','cargo_after=200.125')) 1 'FALLBACK_CARGO_CHANGED'
+Check-Log 'fallback-wrong-driver' ($fallbackFixture.Replace($fallbackSeat,$fallbackSeat.Replace('driver=D1','driver=D2'))) 1 'FALLBACK_IDENTITY'
+Check-Log 'fallback-no-movement' ($fallbackFixture.Replace($fallbackMotion,'')) 1 'FALLBACK_TRANSFER_BEFORE_MOTION'
+Check-Log 'fallback-teleport-not-seat-proof' ($fallbackFixture.Replace($fallbackResume,'')) 1 'TRANSFER_DURING_FALLBACK'
+Check-Log 'fallback-too-far' ($fallbackFixture.Replace('displacement_m=30','displacement_m=300')) 1 'FALLBACK_RELOCATION_BOUND'
+Check-Log 'fallback-expired' ($fallbackFixture.Replace('t_ms=7500','t_ms=50000')) 1 'FALLBACK_DEADLINE'
+Check-Log 'fallback-resume-without-teleport' ($fallbackFixture.Replace($fallbackMove,'')) 1 'FALLBACK_RELOCATION_PROOF'
 Check-Log 'recovery-rearm' ($recoveryFixture.Replace($attemptLog,"$attemptLog`n$attemptLog")) 1 'RECOVERY_ATTEMPT_BUDGET'
 
 $clientFixture = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'tools/fixtures/logistics/client-loaded.fixture') -Raw
@@ -107,6 +123,22 @@ $mutations = @(
     @('Vehicles/AICF_LogisticsRouteRecovery.c','RecoveryAge(w, now) >= AICF_LogisticsConfig.RECOVERY_BUDGET_MS','false','RECOVERY_HARD_BUDGET'),
     @('Vehicles/AICF_LogisticsRouteRecovery.c','vector.DistanceXZ(position, m_vAttemptPosition) >= 6','true','RECOVERY_PHYSICAL_EVIDENCE'),
     @('Vehicles/AICF_LogisticsRouteRecovery.c','vector.DistanceXZ(position, m_vRoute) + 3 <= m_fAttemptDistance','true','RECOVERY_ROUTE_EVIDENCE'),
+    @('Vehicles/AICF_LogisticsFallback.c','!Replication.IsServer() || !Matches(w) || w.HasForeignOccupant(true)','false','FALLBACK_AUTHORITY_IDENTITY'),
+    @('Vehicles/AICF_LogisticsAcquisitionFlow.c','m_Drivers.CreateBuilder(w.m_Faction, driverPosition)','m_Drivers.CreateBuilder(w.m_Faction, w.m_Vehicle.GetOrigin())','DRIVER_SPAWN_OUTSIDE_VEHICLE'),
+    @('Vehicles/AICF_LogisticsFallback.c','w.m_CargoPool != m_CargoPool || !m_CargoPool || !m_CargoPool.Valid()','false','FALLBACK_CARGO_IDENTITY'),
+    @('Vehicles/AICF_LogisticsFallback.c','m_Job && now >= m_Job.m_iExpiresAtMs','false','FALLBACK_TTL_NOT_RESURRECTED'),
+    @('Vehicles/AICF_LogisticsFallback.c','w.m_iFallbackAttempts >= MAX_PER_LEG','false','FALLBACK_BOUNDED_LEG'),
+    @('Vehicles/AICF_LogisticsFallback.c','now - m_iStartedAtMs >= TIMEOUT_MS','false','FALLBACK_BOUNDED_TIME'),
+    @('Vehicles/AICF_LogisticsFallback.c','!linked || linked == m_Vehicle','true','FALLBACK_NO_OTHER_VEHICLE'),
+    @('Vehicles/AICF_LogisticsFallback.c','!access.GetCompartment() || access.GetCompartment() == m_Seat','true','FALLBACK_NO_OTHER_SEAT'),
+    @('Vehicles/AICF_VehicleBoardingFlow.c','!recovery.Safe(w, System.GetTickCount()) || w.HasForeignOccupant(true)','false','FALLBACK_DRIVER_RECHECK'),
+    @('Vehicles/AICF_VehicleBoardingFlow.c','recovery.m_iSeatAttempts >= 3','false','FALLBACK_SEAT_RETRY_BOUND'),
+    @('Vehicles/AICF_VehicleTransitFlow.c','!recovery.Safe(w, System.GetTickCount()) || !w.Ready() || w.HasForeignOccupant()','false','FALLBACK_TRANSFORM_RECHECK'),
+    @('Vehicles/AICF_VehicleTransitFlow.c','!footprint.IsClear(w.m_Vehicle.GetWorld(), pose, body)','false','FALLBACK_DESTINATION_COLLISION'),
+    @('Vehicles/AICF_VehicleTransitFlow.c','Math.AbsFloat(cargoBefore - cargoAfter) > AICF_LogisticsConfig.RESOURCE_EPSILON','false','FALLBACK_CARGO_READBACK'),
+    @('Vehicles/AICF_VehicleTransitFlow.c','!AICF_LogisticsFallback.PlayersClear(source, pose[3])','false','FALLBACK_PLAYER_USE'),
+    @('Vehicles/AICF_VehicleTransitFlow.c','!w.m_RouteRecovery.m_bAwaitingRelocationMotion && physics','physics','FALLBACK_JUMP_NOT_ARRIVAL'),
+    @('Vehicles/AICF_LogisticsRouteRecovery.c','w.m_vProgressPosition = m_vAttemptPosition;','// removed','FALLBACK_JUMP_NOT_MOTION'),
     @('Economy/AICF_LogisticsLedger.c','now >= job.m_iExpiresAtMs','false','RECOVERY_TTL_NOT_RESURRECTED'),
     @('Vehicles/AICF_LogisticsDriverRecovery.c','now - m_iStartedAtMs >= AICF_LogisticsConfig.UNKNOWN_DRIVER_TIMEOUT_MS','false','UNKNOWN_EXIT_HARD_BUDGET'),
     @('Vehicles/AICF_LogisticsDriverRecovery.c','m_iWaitBeforeMs + now - m_iStartedAtMs >= AICF_LogisticsConfig.DRIVER_INTERACTION_LEG_BUDGET_MS','false','UNKNOWN_EXIT_TOTAL_BUDGET'),

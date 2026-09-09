@@ -9,6 +9,7 @@ class AICF_LogisticsRouteRecovery
 	bool m_bIntermediate;
 	bool m_bSpawnEgress;
 	bool m_bActive;
+	bool m_bAwaitingRelocationMotion;
 	int m_iStartedAtMs;
 	int m_iAttemptAtMs;
 	int m_iWaitAtStartMs;
@@ -62,6 +63,27 @@ class AICF_LogisticsRouteRecovery
 			RecoveryAge(w, now) < AICF_LogisticsConfig.RECOVERY_BUDGET_MS && w.LegAgeMs(now) < AICF_LogisticsConfig.LEG_TIMEOUT_MS;
 	}
 
+	void ResumeAfterFallback(AICF_LogisticsWorker w, int now, bool relocated)
+	{
+		// Новый физический baseline исключает скачок координат из доказательства
+		// движения. Бюджет leg и число fallback не сбрасываются.
+		m_bActive = true;
+		m_bAwaitingRelocationMotion = relocated;
+		m_bIntermediate = false;
+		m_bSpawnEgress = false;
+		m_vRoute = w.m_vEndpoint;
+		m_vAttemptPosition = w.m_Vehicle.GetOrigin();
+		m_vDiagnosticPosition = m_vAttemptPosition;
+		w.m_vProgressPosition = m_vAttemptPosition;
+		m_fAttemptDistance = vector.DistanceXZ(m_vAttemptPosition, m_vRoute);
+		m_iStartedAtMs = now;
+		m_iAttemptAtMs = now;
+		m_iWaitAtStartMs = w.m_iDriverWaitMs;
+		m_iWaitAtAttemptMs = w.m_iDriverWaitMs;
+		w.m_iRouteRetries = 0;
+		w.m_iStationaryAtMs = 0;
+	}
+
 	int RecoveryAge(AICF_LogisticsWorker w, int now)
 	{
 		return now - m_iStartedAtMs - (w.m_iDriverWaitMs - m_iWaitAtStartMs);
@@ -84,6 +106,7 @@ class AICF_LogisticsRouteRecovery
 			vector.DistanceXZ(position, m_vRoute) + 3 <= m_fAttemptDistance)
 		{
 			m_bActive = false;
+			m_bAwaitingRelocationMotion = false;
 			w.Log("LOGISTICS_RECOVERY_SUCCEEDED", string.Format("reason=PHYSICAL_MOTION_AND_ROUTE_PROGRESS attempt=%1 displacement_m=%2 route_endpoint=%3 route_progress_m=%4", w.m_iRouteRetries, vector.DistanceXZ(position, m_vAttemptPosition), m_vRoute, m_fAttemptDistance - vector.DistanceXZ(position, m_vRoute)));
 		}
 		if (m_bSpawnEgress && !m_bActive && vector.DistanceXZ(position, m_vRoute) <= 5)

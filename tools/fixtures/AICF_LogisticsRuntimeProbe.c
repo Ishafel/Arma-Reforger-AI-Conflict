@@ -341,6 +341,7 @@ modded class AICF_LogisticsService
 	protected float m_fAICFReturnedBefore;
 	protected ref array<ref AICF_ConstructionOrder> m_aAICFPreparations = {};
 	protected ref AICF_ConstructionSiteSearch m_AICFPreparationSearch;
+	protected ref array<ref AICF_LogisticsRouteMatrix> m_aAICFRouteMatrices = {};
 
 	override void Update(SCR_CampaignFaction us, SCR_CampaignFaction ussr, bool graphReady)
 	{
@@ -366,6 +367,7 @@ modded class AICF_LogisticsService
 				{
 					factions.SetFactionsFriendly(us, fia);
 					factions.SetFactionsFriendly(ussr, fia);
+					if (AICF_LogisticsRouteMatrix.Enabled()) factions.SetFactionsFriendly(us, ussr);
 					Print("[AICF][LOGISTICS_PROBE_RELATIONS] test_only=1 FIA_US_friendly=1 FIA_USSR_friendly=1 driver_unmodified=1");
 				}
 			}
@@ -499,6 +501,12 @@ modded class AICF_LogisticsService
 
 	protected void AICF_ProbeDemand(SCR_CampaignFaction faction)
 	{
+		if (AICF_LogisticsRouteMatrix.Enabled())
+		{
+			AICF_LogisticsRouteMatrix matrix = AICF_ProbeMatrix(faction);
+			if (matrix) matrix.Maintain(m_Planner);
+			return;
+		}
 		if (m_iAICFReturnState == 1 && m_AICFReturnWorker.m_Faction == faction) return;
 		AICF_LogisticsEndpoint home = m_Planner.Find(faction.GetMainBase());
 		if (!home || !home.IdentityValid() || !home.m_Pool.Valid()) return;
@@ -513,6 +521,12 @@ modded class AICF_LogisticsService
 
 	protected void AICF_ProbeSupply(SCR_CampaignFaction faction)
 	{
+		if (AICF_LogisticsRouteMatrix.Enabled())
+		{
+			AICF_LogisticsRouteMatrix matrix = AICF_ProbeMatrix(faction);
+			if (matrix) matrix.Supply(m_Planner);
+			return;
+		}
 		if (m_iAICFReturnState == 1 && m_AICFReturnWorker.m_Faction == faction) return;
 		AICF_LogisticsEndpoint home = m_Planner.Find(faction.GetMainBase());
 		if (!home) return;
@@ -879,7 +893,15 @@ modded class AICF_LogisticsService
 		if (!faction || !faction.GetMainBase()) return;
 		SCR_CampaignMilitaryBaseComponent base = faction.GetMainBase();
 		string sourceDepot;
-		if (!forceHQ && (type == AICF_EConstructionType.HEAVY_DEPOT || (System.GetCLIParam("aicfLogisticsProbeDepotAtSource", sourceDepot) && sourceDepot == "1")))
+		if (AICF_LogisticsRouteMatrix.Enabled() && !forceHQ)
+		{
+			AICF_LogisticsRouteMatrix matrix = AICF_ProbeMatrix(faction);
+			if (!matrix) return;
+			int index;
+			if (type == AICF_EConstructionType.HEAVY_DEPOT) index = 1;
+			base = matrix.m_aBases[index];
+		}
+		else if (!forceHQ && (type == AICF_EConstructionType.HEAVY_DEPOT || (System.GetCLIParam("aicfLogisticsProbeDepotAtSource", sourceDepot) && sourceDepot == "1")))
 		{
 			foreach (AICF_LogisticsEndpoint endpoint : m_Planner.m_aEndpoints)
 			{
@@ -910,6 +932,21 @@ modded class AICF_LogisticsService
 		order.m_Metadata = new AICF_ConstructionMetadata();
 		order.m_Metadata.Load(prefab, type, manager, faction);
 		m_aAICFPreparations.Insert(order);
+	}
+
+	protected AICF_LogisticsRouteMatrix AICF_ProbeMatrix(SCR_CampaignFaction faction)
+	{
+		foreach (AICF_LogisticsRouteMatrix existing : m_aAICFRouteMatrices)
+		{
+			if (existing.m_Faction == faction) return existing;
+		}
+		AICF_LogisticsRouteMatrix matrix = new AICF_LogisticsRouteMatrix();
+		if (!matrix.Prepare(m_Planner, faction)) return null;
+		m_aAICFRouteMatrices.Insert(matrix);
+		m_AICFProbeOwner = faction;
+		foreach (SCR_CampaignMilitaryBaseComponent captured : matrix.m_aClaimed)
+			GetGame().GetWorld().QueryEntitiesBySphere(captured.GetOwner().GetOrigin(), captured.GetRadius() + 100, AICF_ProbePrepareGuard, null, EQueryEntitiesFlags.DYNAMIC);
+		return matrix;
 	}
 
 	protected void AICF_ProbeAdvancePreparation()
@@ -1038,5 +1075,163 @@ modded class AICF_LogisticsService
 		config.m_fTargetPercent = 95;
 		if (!config.Validate(reason)) passed++;
 		Print(string.Format("[AICF][LOGISTICS_POLICY_CONTRACT] test_only=1 passed=%1 total=15", passed));
+	}
+}
+
+// Test-only вместе с AICF_LogisticsRuntimeProbe.c. Подготовка владения,
+// запасов и depot; production jobs, AI driving и transfer не подменяются.
+class AICF_LogisticsRouteMatrix
+{
+	SCR_CampaignFaction m_Faction;
+	ref array<SCR_CampaignMilitaryBaseComponent> m_aBases = {};
+	ref array<SCR_CampaignMilitaryBaseComponent> m_aClaimed = {};
+	protected int m_iDemandRounds;
+
+	static bool Enabled()
+	{
+		string enabled;
+		return System.GetCLIParam("aicfLogisticsProbeRouteMatrix", enabled) && enabled == "1";
+	}
+
+	bool Prepare(AICF_LogisticsPlanner planner, SCR_CampaignFaction faction)
+	{
+		if (!Replication.IsServer() || !faction || !faction.GetMainBase()) return false;
+		m_Faction = faction;
+		AICF_ObjectiveGraph graph = planner.m_Graph;
+		int start = graph.FindNodeId(faction.GetMainBase());
+		if (start < 0) return false;
+		AICF_ContentProfile profile = AICF_ContentProfile.GetActive();
+		string otherKey = "USSR";
+		if (profile.GetStableFactionKey(faction.GetFactionKey()) == "USSR") otherKey = "US";
+		SCR_CampaignFaction other = SCR_CampaignFaction.Cast(GetGame().GetFactionManager().GetFactionByKey(profile.GetRuntimeFactionKey(otherKey)));
+		if (!other || !other.GetMainBase()) return false;
+		// Directed BFS, ограниченный половиной карты ближе к своему HQ. Не
+		// пересекаем чужой HQ или уже принадлежащие другой игровой стороне базы.
+		array<int> parents = {};
+		array<int> queue = {start};
+		for (int n; n < graph.GetNodeCount(); n++) parents.Insert(-2);
+		parents[start] = -1;
+		int cursor;
+		vector home = faction.GetMainBase().GetOwner().GetOrigin();
+		vector otherHome = other.GetMainBase().GetOwner().GetOrigin();
+		while (cursor < queue.Count())
+		{
+			int current = queue[cursor++];
+			foreach (int next : graph.GetNode(current).GetOutgoingNodeIds())
+			{
+				if (parents[next] != -2) continue;
+				SCR_CampaignMilitaryBaseComponent candidate = graph.GetNode(next).GetBase();
+				if (!candidate || !candidate.GetOwner() || candidate.GetFaction() == other) continue;
+				vector position = candidate.GetOwner().GetOrigin();
+				if (vector.DistanceXZ(home, position) > vector.DistanceXZ(otherHome, position)) continue;
+				parents[next] = current;
+				queue.Insert(next);
+			}
+		}
+		SCR_AIWorld world = SCR_AIWorld.Cast(GetGame().GetAIWorld());
+		if (!world || !world.GetRoadNetworkManager()) return false;
+		for (int pick; pick < 4; pick++)
+		{
+			SCR_CampaignMilitaryBaseComponent best;
+			float bestDistance = float.MAX;
+			for (int nodeId; nodeId < graph.GetNodeCount(); nodeId++)
+			{
+				SCR_CampaignMilitaryBaseComponent base = graph.GetNode(nodeId).GetBase();
+				if (nodeId == start || m_aBases.Contains(base) || base.GetType() != SCR_ECampaignBaseType.BASE || !base.GetMasterProvider()) continue;
+				if (base.GetFaction() == other || vector.DistanceXZ(home, base.GetOwner().GetOrigin()) > vector.DistanceXZ(otherHome, base.GetOwner().GetOrigin())) continue;
+				AICF_LogisticsEndpoint endpoint = planner.Find(base);
+				if (!endpoint || !endpoint.m_Pool.Valid() || endpoint.m_Pool.Capacity() < 250) continue;
+				float distance = vector.DistanceXZ(home, base.GetOwner().GetOrigin());
+				if (distance >= bestDistance) continue;
+				vector roadBase, roadHome;
+				if (!world.GetRoadNetworkManager().GetReachableWaypointInRoad(home, base.GetOwner().GetOrigin(), base.GetRadius() - 5, roadBase)) continue;
+				if (!world.GetRoadNetworkManager().GetReachableWaypointInRoad(roadBase, home, faction.GetMainBase().GetRadius() - 5, roadHome)) continue;
+				best = base;
+				bestDistance = distance;
+			}
+			if (!best)
+			{
+				Print(string.Format("[AICF][LOGISTICS_MATRIX_SETUP_WAIT] test_only=1 faction=%1 found=%2 required=4 reachable_nodes=%3", faction.GetFactionKey(), m_aBases.Count(), queue.Count()));
+				return false;
+			}
+			m_aBases.Insert(best);
+		}
+		// Нейтральные radio ranges могут ещё не связывать все четыре базы.
+		// Захватываем выбранные дорожные точки и уже известные connectors;
+		// обновление radio graph и admission маршрутов остаются production.
+		foreach (SCR_CampaignMilitaryBaseComponent selected : m_aBases)
+		{
+			int pathNode = graph.FindNodeId(selected);
+			while (pathNode >= 0)
+			{
+				SCR_CampaignMilitaryBaseComponent captured = graph.GetNode(pathNode).GetBase();
+				if (!m_aClaimed.Contains(captured))
+				{
+					m_aClaimed.Insert(captured);
+					if (captured.GetFaction() != faction) captured.SetFaction(faction);
+					Fill(planner, captured, 0.8, "CONNECTOR_INITIAL");
+				}
+				pathNode = parents[pathNode];
+			}
+		}
+		for (int i; i < m_aBases.Count(); i++)
+		{
+			float fraction = 0.2;
+			string role = "DESTINATION";
+			if (i < 2) { fraction = 1; role = "SOURCE"; }
+			Fill(planner, m_aBases[i], fraction, "MATRIX_INITIAL");
+			Print(string.Format("[AICF][LOGISTICS_MATRIX_BASE] test_only=1 faction=%1 index=%2 role=%3 base=%4 name=%5 position=%6", faction.GetFactionKey(), i, role,
+				m_aBases[i].GetOwner().GetID(), WidgetManager.Translate(m_aBases[i].GetBaseName()), m_aBases[i].GetOwner().GetOrigin()));
+		}
+		Print(string.Format("[AICF][LOGISTICS_MATRIX_READY] test_only=1 faction=%1 sources=2 destinations=2 captured=%2 driver_unmodified=1 radio_paths_pending=1", faction.GetFactionKey(), m_aClaimed.Count()));
+		return true;
+	}
+
+	protected void Fill(AICF_LogisticsPlanner planner, SCR_CampaignMilitaryBaseComponent base, float fraction, string reason)
+	{
+		AICF_LogisticsEndpoint endpoint = planner.Find(base);
+		if (!endpoint || !endpoint.m_Pool || !endpoint.m_Pool.Valid()) return;
+		float before = endpoint.m_Pool.Value();
+		foreach (AICF_LogisticsLeaf leaf : endpoint.m_Pool.m_aLeaves)
+		{
+			float value = leaf.m_Container.GetMaxResourceValue() * fraction;
+			if (leaf.m_Container.GetResourceValue() == value) continue;
+			leaf.m_Container.SetResourceValue(value);
+			leaf.m_Container.GetComponent().Replicate();
+		}
+		Print(string.Format("[AICF][LOGISTICS_MATRIX_STOCK] test_only=1 faction=%1 base=%2 reason=%3 before=%4 after=%5 capacity=%6", m_Faction.GetFactionKey(), base.GetOwner().GetID(), reason, before, endpoint.m_Pool.Value(), endpoint.m_Pool.Capacity()));
+	}
+
+	void Supply(AICF_LogisticsPlanner planner)
+	{
+		for (int i; i < 2; i++)
+		{
+			if (m_aBases[i].GetFaction() == m_Faction) Fill(planner, m_aBases[i], 1, "SOURCE_REFILL");
+		}
+	}
+
+	void Maintain(AICF_LogisticsPlanner planner)
+	{
+		foreach (SCR_CampaignMilitaryBaseComponent check : m_aBases)
+		{
+			AICF_LogisticsEndpoint current = planner.Find(check);
+			if (current) Print(string.Format("[AICF][LOGISTICS_MATRIX_GRAPH] test_only=1 faction=%1 base=%2 depth=%3 owner_matches=%4", m_Faction.GetFactionKey(), check.GetOwner().GetID(), current.m_iDepth, current.m_Owner == m_Faction));
+		}
+		// HQ/connectors держатся выше demand threshold, но не становятся
+		// донорами. Получатели дренируются только после заполнения ОБОИХ:
+		// непрерывный сброс первого получателя не должен вытеснять второй.
+		foreach (SCR_CampaignMilitaryBaseComponent base : m_aClaimed)
+		{
+			if (m_aBases.Contains(base) || base.GetFaction() != m_Faction) continue;
+			Fill(planner, base, 0.8, "CONNECTOR_KEEP");
+		}
+		for (int i = 2; i < 4; i++)
+		{
+			AICF_LogisticsEndpoint e = planner.Find(m_aBases[i]);
+			if (!e || !e.IdentityValid() || e.m_Owner != m_Faction || e.m_Pool.Value() < e.m_Pool.Capacity() * 0.79) return;
+		}
+		m_iDemandRounds++;
+		for (int target = 2; target < 4; target++) Fill(planner, m_aBases[target], 0.2, "DEMAND_ROUND");
+		Print(string.Format("[AICF][LOGISTICS_MATRIX_ROUND] test_only=1 faction=%1 completed=%2", m_Faction.GetFactionKey(), m_iDemandRounds));
 	}
 }

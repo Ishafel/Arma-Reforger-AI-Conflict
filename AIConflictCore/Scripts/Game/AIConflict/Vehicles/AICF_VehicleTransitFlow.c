@@ -2210,6 +2210,45 @@ class AICF_VehicleTransitFlow
 		return "UNSUPPORTED";
 	}
 
+	// Перенос уже существующей логистической машины: никаких spawn или supply effects.
+	AICF_TripOutcome TickLogisticsFallback(AICF_LogisticsWorker w, AICF_LogisticsFallback recovery, int now)
+	{
+		if (!recovery.Safe(w, now) || !w.Ready() || w.HasForeignOccupant())
+			return AICF_TripOutcome.TerminalFailClosed("FALLBACK_RELOCATION_IDENTITY_LOST", recovery.m_sToken);
+		if (!recovery.m_bRelocate || recovery.m_bRelocated) return AICF_TripOutcome.CompleteTrip("FALLBACK_READY", recovery.m_sToken);
+		float threat;
+		if (!m_Watchdog.IsHiddenRecoveryCombatSafe(w.m_Group, threat)) return AICF_TripOutcome.Wait("FALLBACK_COMBAT", recovery.m_sToken);
+		Physics physics = w.m_Vehicle.GetPhysics();
+		if (!physics) return AICF_TripOutcome.TerminalFailClosed("FALLBACK_PHYSICS_MISSING", recovery.m_sToken);
+		if (physics.GetVelocity().Length() > 3) return AICF_TripOutcome.Wait("FALLBACK_VEHICLE_MOVING", recovery.m_sToken);
+		if (recovery.m_iCandidate >= AICF_LogisticsFallback.CANDIDATES)
+			return AICF_TripOutcome.TerminalFailClosed("FALLBACK_NO_CLEAR_ROAD_POSITION", recovery.m_sToken);
+		vector pose[4];
+		int candidate = recovery.m_iCandidate++;
+		if (!recovery.Candidate(w, candidate, pose)) return AICF_TripOutcome.Wait("FALLBACK_SEARCHING", recovery.m_sToken);
+		vector source = w.m_Vehicle.GetOrigin();
+		if (!AICF_LogisticsFallback.PlayersClear(source, pose[3])) return AICF_TripOutcome.Wait("FALLBACK_PLAYER_USE", recovery.m_sToken);
+		// Повторяем identity, seat, cargo и collision непосредственно перед мутацией.
+		if (!recovery.Safe(w, System.GetTickCount()) || !w.Ready() || w.HasForeignOccupant())
+			return AICF_TripOutcome.TerminalFailClosed("FALLBACK_RELOCATION_RECHECK_FAILED", recovery.m_sToken);
+		AICF_LogisticsVehicleFootprint footprint = AICF_LogisticsVehicleFootprint.Get(w.m_Entry.GetPrefab());
+		TraceOBB body;
+		if (!footprint.IsClear(w.m_Vehicle.GetWorld(), pose, body)) return AICF_TripOutcome.Wait("FALLBACK_DESTINATION_OCCUPIED", recovery.m_sToken);
+		float cargoBefore = recovery.m_CargoPool.Value();
+		physics.SetVelocity(vector.Zero);
+		physics.SetAngularVelocity(vector.Zero);
+		if (!w.m_Vehicle.SetWorldTransform(pose)) return AICF_TripOutcome.Wait("FALLBACK_TRANSFORM_REJECTED", recovery.m_sToken);
+		recovery.m_bRelocated = true;
+		w.m_vProgressPosition = w.m_Vehicle.GetOrigin();
+		w.m_iStationaryAtMs = 0;
+		float cargoAfter = recovery.m_CargoPool.Value();
+		w.Log("LOGISTICS_VEHICLE_RELOCATED", string.Format("reason=%1 attempt=%2 candidate=%3 from=%4 to=%5 displacement_m=%6 cargo_before=%7 cargo_after=%8", recovery.m_sCause, w.m_iFallbackAttempts, candidate, source, w.m_Vehicle.GetOrigin(), vector.DistanceXZ(source, w.m_Vehicle.GetOrigin()), cargoBefore, cargoAfter));
+		if (!recovery.Safe(w, System.GetTickCount()) || Math.AbsFloat(cargoBefore - cargoAfter) > AICF_LogisticsConfig.RESOURCE_EPSILON)
+			return AICF_TripOutcome.TerminalFailClosed("FALLBACK_RELOCATION_POSTCONDITION_FAILED", recovery.m_sToken);
+		// Exact seat/settling повторно проверяется следующим tick, не по return SetWorldTransform.
+		return AICF_TripOutcome.Wait("FALLBACK_RELOCATION_SETTLING", recovery.m_sToken);
+	}
+
 	// Вспомогательные physical logistics jobs того же domain owner.
 
 	AICF_TripOutcome TickLogistics(AICF_LogisticsWorker w, AICF_LogisticsConfig config)
@@ -2239,7 +2278,7 @@ class AICF_VehicleTransitFlow
 		AICF_TripOutcome movement = w.m_RouteRecovery.Poll(w, now);
 		if (movement.IsTerminal()) return movement;
 		Physics physics = w.m_Vehicle.GetPhysics();
-		if (physics && vector.DistanceXZ(position, w.m_vEndpoint) <= config.m_fArrivalRadiusM && physics.GetVelocity().Length() <= config.m_fStationarySpeedMps)
+		if (!w.m_RouteRecovery.m_bAwaitingRelocationMotion && physics && vector.DistanceXZ(position, w.m_vEndpoint) <= config.m_fArrivalRadiusM && physics.GetVelocity().Length() <= config.m_fStationarySpeedMps)
 		{
 			if (!w.m_iStationaryAtMs) w.m_iStationaryAtMs = now;
 			w.MarkProgress(now);

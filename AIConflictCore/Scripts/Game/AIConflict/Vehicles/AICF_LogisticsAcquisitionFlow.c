@@ -25,11 +25,15 @@ class AICF_LogisticsAcquisitionFlow
 		{
 			if (!m_Spawner.ReserveLogisticsSite(w) || !m_Spawner.SpawnLogistics(w, book.m_Resources))
 				return AICF_TripOutcome.TerminalFailClosed("EXACT_DEPOT_SPAWN_REJECTED", token);
-			w.m_Group = m_Drivers.CreateBuilder(w.m_Faction, w.m_Vehicle.GetOrigin());
+			// Асинхронный roster появляется до GetInVehicle: origin внутри кузова
+			// оставлял живого персонажа под физикой только что созданной машины.
+			vector driverPosition;
+			if (!DriverSpawnPosition(w, driverPosition)) return AICF_TripOutcome.TerminalFailClosed("DRIVER_CLEAR_POSITION_MISSING", token);
+			w.m_Group = m_Drivers.CreateBuilder(w.m_Faction, driverPosition);
 			if (!w.m_Group) return AICF_TripOutcome.TerminalFailClosed("DRIVER_CONTROLLER_FAILED", token);
 			w.m_GroupId = w.m_Group.GetID();
 			if (!m_Drivers.BeginRosterSpawn(w.m_Group, 1)) return AICF_TripOutcome.TerminalFailClosed("DRIVER_ROSTER_FAILED", token);
-			w.Log("LOGISTICS_SPAWN_REQUESTED", "agents=1 cargo=0 tickets=0 supplies_cost=0");
+			w.Log("LOGISTICS_SPAWN_REQUESTED", string.Format("agents=1 cargo=0 tickets=0 supplies_cost=0 driver_spawn=%1 vehicle_position=%2", driverPosition, w.m_Vehicle.GetOrigin()));
 			return AICF_TripOutcome.Wait("DRIVER_ROSTER_PENDING", token);
 		}
 		if (!w.VehicleIdentity() || !w.GroupIdentity()) return AICF_TripOutcome.TerminalFailClosed("SPAWN_IDENTITY_LOST", token);
@@ -71,5 +75,28 @@ class AICF_LogisticsAcquisitionFlow
 		w.m_iNextSeatMs = now + 1000;
 		access.GetInVehicle(w.m_Vehicle, w.m_Seat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
 		return AICF_TripOutcome.Wait("SPAWN_SEAT_POSTCONDITION_PENDING", token);
+	}
+
+	protected bool DriverSpawnPosition(AICF_LogisticsWorker w, out vector position)
+	{
+		if (!Replication.IsServer() || !w.VehicleIdentity()) return false;
+		vector pose[4];
+		w.m_Vehicle.GetWorldTransform(pose);
+		vector mins, maxs;
+		w.m_Vehicle.GetBounds(mins, maxs);
+		float radius = Math.Max(Math.Max(Math.AbsFloat(mins[0]), Math.AbsFloat(maxs[0])),
+			Math.Max(Math.AbsFloat(mins[2]), Math.AbsFloat(maxs[2]))) + 3;
+		for (int i; i < 8; i++)
+		{
+			float angle = i * 45 * Math.DEG2RAD;
+			vector center = pose[3] + (pose[0] * Math.Cos(angle) + pose[2] * Math.Sin(angle)) * radius;
+			vector candidate;
+			if (!SCR_WorldTools.FindEmptyTerrainPosition(candidate, center, 1.5, 0.75, 2.0, TraceFlags.ENTS | TraceFlags.OCEAN, w.m_Vehicle.GetWorld())) continue;
+			if (vector.DistanceXZ(candidate, pose[3]) < radius - 1.5 || vector.DistanceXZ(candidate, pose[3]) > radius + 2) continue;
+			candidate[1] = candidate[1] + 0.1;
+			position = candidate;
+			return true;
+		}
+		return false;
 	}
 }

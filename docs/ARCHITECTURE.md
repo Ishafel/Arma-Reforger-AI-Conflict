@@ -593,6 +593,19 @@ request
 до vehicle/economy teardown. `AICF_SupplyDeliverySystem` теперь только читает
 физические totals для прежнего UI; timer shipments удалены.
 
+`AICF_LogisticsMapMarkerSystem` — read model службы, вызываемый из её `Update`
+и `Stop`. Он создаёт только marker entities и не меняет jobs, cargo, vehicle
+lifecycle или orders. Маркер следует за exact vehicle; immutable record содержит
+faction, numeric slot, generation, EntityID и RplId. Потеря custody, identity,
+фракции, уничтожение машины или завершение cleanup снимают маркер. Потеря depot
+сама по себе не скрывает машину, пока та возвращает груз под управлением службы.
+Stock `SetFaction` применяет stream rules до `SetGlobalVisible`; подпись и
+подробности — `RplProp`, включая JIP. Снимок пересчитывается раз в 2 секунды,
+`BumpMe` вызывается только при изменении текста. Позицию реплицирует штатный
+dynamic marker. `AICF_GroupMapMarkerEntry` использует отдельный kind `2` для
+логистики; прежние group/objective markers сохраняют kind `0/1`. Программный
+виджет живёт внутри stock layout, без новых resources и дополнительных timers.
+
 `AICF_LogisticsDepotRegistry` владеет identity здания, provider, service component
 и постоянными numeric slots начиная с `1000000`. Slots различаются по
 `faction + root EntityID + ordinal`; replacement увеличивает generation.
@@ -655,6 +668,14 @@ native actions. Registry разделяет историю неудачных в
 ordinals одного depot/faction; cooldown принадлежит exact stock spawn slot.
 Clocks, reservations и evidence: [LOGISTICS_RECOVERY.md](LOGISTICS_RECOVERY.md).
 
+После ограниченных native попыток controller может включить
+`AICF_LogisticsFallback`: boarding flow возвращает exact AI-водителя в его
+машину, transit flow переносит ту же машину на свободную дорогу. Handoff
+сохраняет владение actions/waypoints, ledger — грузом и reservations. Перенос
+разрешён и в поле зрения камеры, но не при чужом occupant или близком
+физическом использовании игроком. Скачок координат не является motion proof
+или доставкой. Политика и проверки: [LOGISTICS_FALLBACK.md](LOGISTICS_FALLBACK.md).
+
 `VehicleCleanupManager` сохраняет ссылку на worker для terminal custody accounting,
 в том числе после Stop. Loaded vehicle переводится в world pool после clearance;
 protected custody не выдаётся за completed cleanup. Все AICF удаления машин
@@ -715,6 +736,15 @@ policy и per-assignment `decision_authority`.
 
 Map markers получают faction streaming и показывают союзные группы/цели.
 Маркер следует за живым leader и перепривязывается после замены группы.
+Группы (kind `0`, «О») и логистика (kind `2`, «Л») используют общий
+`AICF_MapMarkerCardWidget` внутри stock layout: краткая подпись и hover-подробности.
+`AICF_GroupMapMarkerSystem` публикует подпись и `m_sAICFGroupDetails` одним
+authority-only setter с `BumpMe` только при изменении. Позывной и роль берутся
+из текущего slot при каждом Sync, не из первоначального packed config.
+Новый `RplProp` сохраняет подробности для JIP; при создании виджет читает
+последний snapshot, а callbacks разных kinds изолированы друг от друга.
+Расстояние вычисляется от живого участника; origin controller entity не
+используется даже как запасная позиция. Presentation не меняет приказы.
 Для active player `POSITION` marker system дополнительно создаёт faction-filtered
 stock static server marker. Его static-marker serialization обеспечивает JIP;
 новый point/base intent и `Stop()` удаляют прежний marker.

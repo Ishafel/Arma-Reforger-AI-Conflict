@@ -2087,6 +2087,7 @@ class AICF_TransportTripController
 		w.m_iDriverWaitMs = 0;
 		w.MarkProgress(System.GetTickCount());
 		w.m_iRouteRetries = 0;
+		w.m_iFallbackAttempts = 0;
 		w.m_iIdleAtMs = 0;
 		LogisticsPhase(w, phase, "PHYSICAL_VEHICLE_LEG");
 		w.m_RouteRecovery = new AICF_LogisticsRouteRecovery();
@@ -2124,6 +2125,11 @@ class AICF_TransportTripController
 			return;
 		}
 		if (!w.m_Lease) return;
+		if (!graphReady && AICF_LogisticsFallback.Cast(w.m_DriverInteraction))
+		{
+			RetireLogistics(w, book, "FALLBACK_GRAPH_PENDING");
+			return;
+		}
 		if (TickLogisticsDriverInteraction(w, book)) return;
 		if (!w.Ready() || w.HasForeignOccupant())
 		{
@@ -2169,13 +2175,14 @@ class AICF_TransportTripController
 			if (!w.m_RouteRecovery || !m_Handoff.BindLogisticsWaypoint(w, m_WaypointFactory.CreateLogisticsWaypoint(w.m_RouteRecovery.m_vRoute)))
 				RetireLogistics(w, book, "RECOVERY_WAYPOINT_BIND_FAILED");
 		}
-		else if (outcome.IsTerminal()) RetireLogistics(w, book, outcome.GetReason());
+		else if (outcome.IsTerminal() && !BeginLogisticsFallback(w, outcome.GetReason())) RetireLogistics(w, book, outcome.GetReason());
 	}
 
 	// Orchestration: наблюдатель не меняет trip phase, waypoint, lease или ledger.
 	protected bool TickLogisticsDriverInteraction(AICF_LogisticsWorker w, AICF_LogisticsLedger book)
 	{
 		int now = System.GetTickCount();
+		if (AICF_LogisticsFallback.Cast(w.m_DriverInteraction)) return TickLogisticsFallback(w, book, now);
 		if (!w.m_DriverInteraction)
 		{
 			w.m_DriverInteraction = AICF_LogisticsDriverInteraction.TryBegin(w, now);
@@ -2191,7 +2198,7 @@ class AICF_TransportTripController
 		AICF_TripOutcome observation = w.m_DriverInteraction.Poll(w, now);
 		if (observation.IsTerminal() && observation.GetKind() != AICF_ETripOutcomeKind.COMPLETE_TRIP)
 		{
-			RetireLogistics(w, book, observation.GetReason());
+			if (!BeginLogisticsFallback(w, observation.GetReason())) RetireLogistics(w, book, observation.GetReason());
 			return true;
 		}
 		SCR_AIVehicleUsageComponent usage;
@@ -2219,6 +2226,40 @@ class AICF_TransportTripController
 			}
 			return false;
 		}
+		return true;
+	}
+
+	protected bool BeginLogisticsFallback(AICF_LogisticsWorker w, string reason)
+	{
+		if (!IsAuthorityReady()) return false;
+		AICF_LogisticsFallback recovery = AICF_LogisticsFallback.Create(w, reason, System.GetTickCount());
+		if (!recovery) return false;
+		m_Handoff.CancelLogisticsDriverInteraction(w, reason);
+		m_Handoff.ClearLogisticsWaypoint(w);
+		w.m_iFallbackAttempts++;
+		w.m_DriverInteraction = recovery;
+		w.Log("LOGISTICS_FALLBACK_STARTED", string.Format("reason=%1 attempt=%2 relocate=%3 cargo=%4", reason, w.m_iFallbackAttempts, recovery.m_bRelocate, w.m_CargoPool.Value()));
+		return true;
+	}
+
+	protected bool TickLogisticsFallback(AICF_LogisticsWorker w, AICF_LogisticsLedger book, int now)
+	{
+		AICF_LogisticsFallback recovery = AICF_LogisticsFallback.Cast(w.m_DriverInteraction);
+		AICF_TripOutcome outcome = recovery.Poll(w, now);
+		if (outcome.GetKind() == AICF_ETripOutcomeKind.WAIT)
+		{
+			if (!w.Ready()) outcome = m_BoardingFlow.TickLogisticsFallback(w, recovery, now);
+			else outcome = m_TransitFlow.TickLogisticsFallback(w, recovery, now);
+		}
+		if (outcome.GetKind() == AICF_ETripOutcomeKind.COMPLETE_TRIP)
+		{
+			w.m_DriverInteraction = null;
+			w.m_RouteRecovery.ResumeAfterFallback(w, now, recovery.m_bRelocated);
+			if (!m_Handoff.BindLogisticsWaypoint(w, m_WaypointFactory.CreateLogisticsWaypoint(w.m_RouteRecovery.m_vRoute)))
+				RetireLogistics(w, book, "FALLBACK_WAYPOINT_BIND_FAILED");
+			else w.Log("LOGISTICS_FALLBACK_RESUMED", string.Format("reason=SAME_JOB_DRIVER_VEHICLE attempt=%1 relocated=%2 cargo=%3 position=%4", w.m_iFallbackAttempts, recovery.m_bRelocated, w.m_CargoPool.Value(), w.m_Vehicle.GetOrigin()));
+		}
+		else if (outcome.IsTerminal()) RetireLogistics(w, book, outcome.GetReason());
 		return true;
 	}
 

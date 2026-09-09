@@ -41,8 +41,10 @@ Dedicated-прогон выявил ещё один существовавший
 handoff, controller интерпретирует outcome. Ни waypoint, ни retry не вызывают
 `MarkProgress()`. Успех восстановления требует одновременно перемещения
 минимум 6 м от начала попытки и уменьшения расстояния к её endpoint минимум
-на 3 м. Физический leg deadline остаётся 600 с. Teleport, reverse API,
-изменение препятствий и собственное управление рулём не используются.
+на 3 м. Физический leg deadline остаётся 600 с. После исчерпания native
+попыток разрешён перенос той же машины; политика изменена 2026-09-08 по
+запросу владельца и описана в [LOGISTICS_FALLBACK.md](LOGISTICS_FALLBACK.md).
+Изменение препятствий и собственное управление рулём не используются.
 
 Подтверждённая OpenGate цепочка сохраняет прежний read-only observer и
 exact-seat proof. Уже завершённый возврат принимается и после завершения
@@ -70,7 +72,8 @@ leg, без нового job/lease/generation и без обнуления во�
 Ledger продлевает только ещё живые reservations того же job/generation.
 Ограниченный recovery разрешает renewal после обычного progress timeout;
 истёкший TTL не возрождается. Наблюдаемое ожидание водителя исключается из
-progress, leg и recovery clocks, оставаясь ограниченным общими 120 с.
+progress, leg и recovery clocks. Native ожидание ограничено общими 120 с;
+новый fallback имеет отдельные конечные бюджеты из LOGISTICS_FALLBACK.md.
 Transfer требует заново доказанных identity, радиуса, скорости, stationary
 hold, безопасности и ресурсных прав. Во время driver wait transfer закрыт.
 Receipts, cargo custody и компенсация supplies не изменены.

@@ -8,6 +8,7 @@ param(
     [switch]$RequireSearch,
     [switch]$RequireDriverInteraction,
     [switch]$RequireRecovery,
+    [switch]$RequireFallback,
     [string]$ClientLogPath,
     [switch]$RequireLoadedClient,
     [int]$MinimumDurationMs = 0
@@ -38,6 +39,10 @@ $interactionDeliveries = 0
 $recoveryAttempts = @{}
 $recoveredJobs = @{}
 $recoveryDeliveries = 0
+$fallbacks = @{}
+$fallbackAttempts = @{}
+$fallbackJobs = @{}
+$fallbackDeliveries = 0
 # Полный console плюс соседние engine logs: dedicated иногда возвращает 0
 # при compile error, записанной только в error.log/crash.log.
 if ([IO.Path]::GetFileName($LogPath) -eq 'console.log') {
@@ -76,6 +81,7 @@ for ($index=0; $index -lt $lines.Count; $index++) {
         continue
     }
     if ($eventName -match '^LOGISTICS_PROBE|^LOGISTICS_POLICY|^LOGISTICS_CONFIG|^LOGISTICS_STOP') { continue }
+    if ($eventName -match '^LOGISTICS_MATRIX_' -and $fields['test_only'] -eq '1') { continue }
     if ($fields['unknown_state'] -eq '1') { $failures.Add("UNKNOWN_RESOURCE_STATE line=$index") }
     if ($eventName -ne 'HEARTBEAT') {
         foreach ($required in @('faction','slot','generation','vehicle','driver','phase')) {
@@ -85,6 +91,48 @@ for ($index=0; $index -lt $lines.Count; $index++) {
     $key = "$($fields['run'])/$($fields['faction'])/$($fields['slot'])/$($fields['generation'])"
     $slotKey = "$($fields['run'])/$($fields['faction'])/$($fields['slot'])"
     $recoveryKey = "$key/$($fields['job'])/$($fields['phase'])"
+    $jobIdentity = "$key/$($fields['job'])"
+    if ($eventName -eq 'LOGISTICS_FALLBACK_STARTED') {
+        $attempt = Number $fields 'attempt' $index
+        $previous = 0
+        if ($fallbackAttempts.ContainsKey($recoveryKey)) { $previous = $fallbackAttempts[$recoveryKey] }
+        if ($stopped -or $fallbacks.ContainsKey($slotKey) -or $attempt -ne $previous + 1 -or $attempt -gt 4) { $failures.Add("FALLBACK_BUDGET line=$index") }
+        $fallbackAttempts[$recoveryKey] = $attempt
+        $fallbacks[$slotKey] = @{ start=$fields; relocated=$false; seatAttempts=0 }
+    }
+    if ($eventName -in @('LOGISTICS_DRIVER_TELEPORT_ISSUED','LOGISTICS_VEHICLE_RELOCATED','LOGISTICS_FALLBACK_RESUMED')) {
+        if ($stopped -or -not $fallbacks.ContainsKey($slotKey)) { $failures.Add("FALLBACK_UNPAIRED line=$index") }
+        else {
+            $fallback = $fallbacks[$slotKey]
+            $start = $fallback.start
+            foreach ($identity in @('generation','vehicle','driver','job','phase','vehicle_rpl')) {
+                if ($fields[$identity] -ne $start[$identity]) { $failures.Add("FALLBACK_IDENTITY line=$index field=$identity") }
+            }
+            $age = (Number $fields 't_ms' $index) - (Number $start 't_ms' $index)
+            if ($age -lt 0 -or $age -ge 45000) { $failures.Add("FALLBACK_DEADLINE line=$index") }
+            if ($eventName -eq 'LOGISTICS_DRIVER_TELEPORT_ISSUED') {
+                $attempt = Number $fields 'attempt' $index
+                if ($attempt -ne $fallback.seatAttempts + 1 -or $attempt -gt 3) { $failures.Add("FALLBACK_SEAT_BUDGET line=$index") }
+                $fallback.seatAttempts = $attempt
+            }
+            if ($eventName -eq 'LOGISTICS_VEHICLE_RELOCATED') {
+                $distance = Number $fields 'displacement_m' $index
+                if ($start['relocate'] -ne '1' -or $fallback.relocated -or $distance -lt 12 -or $distance -gt 90) { $failures.Add("FALLBACK_RELOCATION_BOUND line=$index") }
+                if ([Math]::Abs((Number $fields 'cargo_before' $index) - (Number $fields 'cargo_after' $index)) -gt 0.01) { $failures.Add("FALLBACK_CARGO_CHANGED line=$index") }
+                $fallback.relocated = $true
+            }
+            if ($eventName -eq 'LOGISTICS_FALLBACK_RESUMED') {
+                if (($start['relocate'] -eq '1') -ne $fallback.relocated -or ($fields['relocated'] -eq '1') -ne $fallback.relocated) { $failures.Add("FALLBACK_RELOCATION_PROOF line=$index") }
+                if ((Number $fields 'attempt' $index) -ne (Number $start 'attempt' $index)) { $failures.Add("FALLBACK_BUDGET line=$index") }
+                $fallbackJobs[$jobIdentity] = @{ vehicle=$fields['vehicle']; relocated=$fallback.relocated }
+                $failedJobs.Remove($jobIdentity)
+                # После переноса baseline уже новый: attempt=0 требует нового физического motion proof.
+                $recoveredJobs.Remove($jobIdentity)
+                $recoveryAttempts[$recoveryKey] = @{ attempt=0; vehicle=$fields['vehicle']; driver=$fields['driver'] }
+                $fallbacks.Remove($slotKey)
+            }
+        }
+    }
     if ($eventName -eq 'LOGISTICS_RECOVERY_ATTEMPT') {
         $attempt = Number $fields 'attempt' $index
         $previous = 0
@@ -113,6 +161,17 @@ for ($index=0; $index -lt $lines.Count; $index++) {
             if ($stopped -or -not $rosterReady -or $driverWaits.ContainsKey($slotKey) -or $elapsed -ne 0) { $failures.Add("DRIVER_INTERACTION_START line=$index") }
             $driverWaits[$slotKey] = $fields
         } else {
+            # Fallback использует тот же identity-safe terminal handoff; у него
+            # собственный STARTED, а не ложная новая native OpenGate цепочка.
+            if ($state -eq 'FAILED' -and -not $driverWaits.ContainsKey($slotKey) -and $fallbacks.ContainsKey($slotKey)) {
+                $start = $fallbacks[$slotKey].start
+                foreach ($identity in @('generation','vehicle','driver','job','phase')) {
+                    if ($fields[$identity] -ne $start[$identity]) { $failures.Add("FALLBACK_IDENTITY line=$index field=$identity") }
+                }
+                $fallbacks.Remove($slotKey)
+                $failedJobs[$jobIdentity] = $true
+                continue
+            }
             if (-not $driverWaits.ContainsKey($slotKey)) { $failures.Add("DRIVER_INTERACTION_UNPAIRED line=$index") }
             else {
                 $start = $driverWaits[$slotKey]
@@ -163,7 +222,14 @@ for ($index=0; $index -lt $lines.Count; $index++) {
         $jobToken = ($fields['operation'] -split ':')[0]
         $jobKey = "$key/$jobToken"
         if ($driverWaits.ContainsKey($slotKey)) { $failures.Add("TRANSFER_DURING_DRIVER_INTERACTION line=$index") }
+        if ($fallbacks.ContainsKey($slotKey)) { $failures.Add("TRANSFER_DURING_FALLBACK line=$index") }
         if ($failedJobs.ContainsKey($jobKey)) { $failures.Add("TRANSFER_AFTER_DRIVER_INTERACTION_FAILURE line=$index") }
+        if ($fallbackJobs.ContainsKey($jobKey)) {
+            $fallback = $fallbackJobs[$jobKey]
+            if ($fallback.vehicle -ne $fields['vehicle']) { $failures.Add("FALLBACK_DELIVERY_IDENTITY line=$index") }
+            if ($fallback.relocated -and -not $recoveredJobs.ContainsKey($jobKey)) { $failures.Add("FALLBACK_TRANSFER_BEFORE_MOTION line=$index") }
+            if ($eventName -eq 'LOGISTICS_UNLOAD_COMMITTED' -and $fields['purpose'] -eq 'DELIVERY') { $fallbackDeliveries++ }
+        }
         if ($eventName -eq 'LOGISTICS_UNLOAD_COMMITTED' -and $fields['purpose'] -eq 'DELIVERY' -and $recoveredJobs.ContainsKey($jobKey)) {
             if ($recoveredJobs[$jobKey] -ne $fields['vehicle']) { $failures.Add("RECOVERY_DELIVERY_IDENTITY line=$index") }
             else { $recoveryDeliveries++ }
@@ -208,6 +274,8 @@ if ($RequireSearch -and -not $searchContract) { $failures.Add('PRODUCTION_SEARCH
 if (-not $AllowActiveAtEnd -and $driverWaits.Count) { $failures.Add('UNFINISHED_DRIVER_INTERACTION') }
 if ($RequireDriverInteraction -and $interactionDeliveries -eq 0) { $failures.Add('DRIVER_INTERACTION_DELIVERY_NOT_OBSERVED') }
 if ($RequireRecovery -and $recoveryDeliveries -eq 0) { $failures.Add('RECOVERY_DELIVERY_NOT_OBSERVED') }
+if (-not $AllowActiveAtEnd -and $fallbacks.Count) { $failures.Add('UNFINISHED_FALLBACK') }
+if ($RequireFallback -and $fallbackDeliveries -eq 0) { $failures.Add('FALLBACK_DELIVERY_NOT_OBSERVED') }
 if ($maxTime -lt $MinimumDurationMs) { $failures.Add("DURATION_TOO_SHORT actual=$maxTime required=$MinimumDurationMs") }
 if ($ClientLogPath) {
     $clientLines = Get-Content -LiteralPath (Resolve-Path -LiteralPath $ClientLogPath)
@@ -240,4 +308,4 @@ if ($ClientLogPath) {
 }
 if ($RequireLoadedClient -and $loadedClientSamples -eq 0) { $failures.Add('LOADED_CLIENT_REPLICA_NOT_OBSERVED') }
 if ($failures.Count) { $failures | ForEach-Object { "FAIL $_" }; exit 1 }
-"PASS Logistics log: deliveries=$deliveryCount balances=$balanceCount duration_ms=$maxTime client_samples=$clientSamples loaded_client_samples=$loadedClientSamples"
+"PASS Logistics log: deliveries=$deliveryCount balances=$balanceCount duration_ms=$maxTime client_samples=$clientSamples loaded_client_samples=$loadedClientSamples fallback_deliveries=$fallbackDeliveries"

@@ -30,6 +30,7 @@ class AICF_LogisticsService
 	protected ref AICF_LogisticsDepotRegistry m_Registry = new AICF_LogisticsDepotRegistry();
 	protected ref AICF_LogisticsPlanner m_Planner;
 	protected ref AICF_LogisticsEndpointSafety m_Safety = new AICF_LogisticsEndpointSafety();
+	protected ref AICF_LogisticsMapMarkerSystem m_MapMarkers = new AICF_LogisticsMapMarkerSystem();
 	protected int m_iNextPlannerMs;
 	protected int m_iNextHeartbeatMs;
 	protected int m_iGraphRevision;
@@ -83,6 +84,7 @@ class AICF_LogisticsService
 			m_iNextHeartbeatMs = now + 60000;
 			foreach (AICF_LogisticsWorker report : m_Registry.m_aWorkers) AICF_LogisticsLedger.LogBalance(report);
 		}
+		m_MapMarkers.Sync(m_Registry.m_aWorkers, now);
 	}
 
 	protected void SelectWork(AICF_LogisticsWorker w, int now)
@@ -295,6 +297,7 @@ class AICF_LogisticsService
 	{
 		if (m_bStopped) return;
 		m_bStopped = true;
+		m_MapMarkers.Stop();
 		AICF_Stage4Diagnostics.Info("LOGISTICS_STOP", string.Format("schema_version=2 workers=%1 transfers_closed=1", m_Registry.m_aWorkers.Count()));
 		m_Registry.Stop();
 		foreach (AICF_LogisticsWorker w : m_Registry.m_aWorkers)

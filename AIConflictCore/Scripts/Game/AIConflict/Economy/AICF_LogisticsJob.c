@@ -135,6 +135,7 @@ class AICF_LogisticsWorker
 	int m_iIdleAtMs;
 	int m_iReturnAttempts;
 	int m_iRouteRetries;
+	int m_iFallbackAttempts;
 	int m_iTransferFailures;
 	int m_iSeatAttempts;
 	int m_iNextSeatMs;

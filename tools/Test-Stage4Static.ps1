@@ -241,7 +241,7 @@ Assert-Contains 'STAGE4_CORPSE_RETENTION' $corpseRetention 'super\.OnInsertReque
 
 Assert-Contains 'STAGE4_ALLIED_MAP' $mapMarkers 'SetFaction\s*\(\s*markerFaction\s*\)' 'Group and objective markers must use allied faction stream rules'
 Assert-Contains 'STAGE4_ALLIED_MAP' $mapMarkers 'visibility=ALLIED' 'Marker diagnostics must preserve the allied-only visibility policy'
-Assert-Contains 'STAGE4_MAP_DIRECTION' $mapMarkers 'DescribeDirection[\s\S]*Math\.Atan2[\s\S]*DIR\s+%1\s+%2m' 'Group markers must expose movement bearing and distance'
+Assert-Contains 'STAGE4_MAP_DIRECTION' $mapMarkers 'DescribeDirection[\s\S]*Math\.Atan2[\s\S]*Math\.Round\(vector\.DistanceXZ\(origin, destination\)\), compass' 'Group marker details must expose live distance and movement bearing'
 Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'SyncFactionObjectiveMarkers[\s\S]*targets\.Find\s*\(\s*target\s*\)' 'Attack targets must be deduplicated before objective markers are created'
 Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'markerKind\s*==\s*1[\s\S]*MarkerIcon[\s\S]*SetVisible\s*\(\s*false\s*\)' 'Attack targets must use a distinct text badge instead of a duplicate faction flag'
 Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'AICF_ATTACK_BADGE_TEXT_NAME[\s\S]*SetTextVisible\s*\(\s*false\s*\)' 'Attack targets must use an independently positioned label instead of stock MarkerText'
