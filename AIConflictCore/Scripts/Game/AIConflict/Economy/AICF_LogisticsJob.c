@@ -56,6 +56,7 @@ class AICF_LogisticsJob
 	float m_fReservedIncoming;
 	bool m_bLoaded;
 	bool m_bReturn;
+	bool m_bManual;
 	bool m_bCancelled;
 }
 

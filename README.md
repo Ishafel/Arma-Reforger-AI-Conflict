@@ -70,13 +70,17 @@ Source runtime использует штатную mission
   server, а без параметра используется `BOTH`;
 - ground vehicles всегда включены;
 - economy/supply pacing всегда включены; CLI opt-out для этих subsystems нет;
-- физическая логистика обеих сторон использует отдельного водителя и пустую
-  машину из каталога построенного depot. По умолчанию один service slot на
-  здание, пороги спроса/цели/донорства — `40/80/90%`, общий vehicle cap сохраняется.
-  Порядок снабжения — HQ, затем directed BFS depth; груз перемещается между
-  реальными containers после физического прибытия. Проверки и ограничения:
-  [LOGISTICS_VALIDATION.md](docs/LOGISTICS_VALIDATION.md);
-- при застревании логистика может переносить ту же машину на свободную дорогу,
+- интерфейс «Снабжение» заменяет автоматическую отправку логистики обеих сторон.
+  Игрок выбирает источник, другую союзную базу назначения, количество и нажимает
+  «Отправить». Сервер выделяет свободную машину из действующего автопарка и
+  запускает физический рейс. Припасы списываются при погрузке. Форма показывает
+  ответ сервера, примерное прибытие к текущей цели и результат; остаток груза
+  возвращается существующей логистикой.
+  Самостоятельный выбор новых доставок отключён; vehicle/economy subsystems
+  продолжают работать.
+  Текущий контракт: [SUPPLY_MAP_UI.md](docs/SUPPLY_MAP_UI.md).
+  Исторические проверки транспорта: [LOGISTICS_VALIDATION.md](docs/LOGISTICS_VALIDATION.md);
+- сохранённый transport runtime при застревании может переносить ту же машину на свободную дорогу,
   а не вернувшегося водителя — на его место; груз и задание сохраняются.
   Ограничения и доказательство реального продолжения рейса:
   [LOGISTICS_FALLBACK.md](docs/LOGISTICS_FALLBACK.md);
@@ -147,7 +151,7 @@ AIConflictCore/Scripts/Game/AIConflict/
   Objectives/    radio graph и выбор целей
   Orders/        infantry waypoint ownership
   State/         faction/group/vehicle state
-  UI/            allied map markers, HUD и strategic command UI
+  UI/            allied map markers, HUD, strategic command UI и форма снабжения
   Vehicles/      transport domain и physical cleanup
 
 AIConflictArland/Scripts/Game/AIConflictArland/Integration/

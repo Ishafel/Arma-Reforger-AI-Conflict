@@ -80,6 +80,13 @@ for ($index=0; $index -lt $lines.Count; $index++) {
         $configured = $fields['schema_version'] -eq '2'
         continue
     }
+    # Startup policy belongs to the service, before any worker/vehicle exists.
+    if ($eventName -eq 'LOGISTICS_DISPATCH_POLICY') {
+        if ($fields['mode'] -notin @('MANUAL', 'MANUAL_PENDING') -or
+            $fields['automatic_dispatch'] -ne '0' -or $fields['existing_jobs'] -ne 'CONTINUE' -or
+            $fields['cargo_recovery'] -ne 'RETURN_ONLY') { $failures.Add("DISPATCH_POLICY line=$index") }
+        continue
+    }
     if ($eventName -match '^LOGISTICS_PROBE|^LOGISTICS_POLICY|^LOGISTICS_CONFIG|^LOGISTICS_STOP') { continue }
     if ($eventName -match '^LOGISTICS_MATRIX_' -and $fields['test_only'] -eq '1') { continue }
     if ($fields['unknown_state'] -eq '1') { $failures.Add("UNKNOWN_RESOURCE_STATE line=$index") }

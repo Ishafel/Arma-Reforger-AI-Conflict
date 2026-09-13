@@ -78,6 +78,8 @@ class AICF_LogisticsMarkerText
 		int speed;
 		if (w.m_Vehicle && w.m_Vehicle.GetPhysics()) speed = Math.Round(w.m_Vehicle.GetPhysics().GetVelocity().Length() * 3.6);
 		details += string.Format("\nДо текущей цели: %1\nСкорость: %2 км/ч\nБаза приписки: %3", destination, speed, BaseName(w.m_Home));
+		string arrival = AICF_LogisticsArrivalEstimate.Text(w);
+		if (!arrival.IsEmpty()) details += "\n" + arrival;
 	}
 }
 

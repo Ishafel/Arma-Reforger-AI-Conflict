@@ -131,8 +131,17 @@ class AICF_LogisticsPlanner
 		return affiliation && !affiliation.GetDefaultAffiliatedFaction();
 	}
 
+	// Ручной выбор не ограничен hysteresis донора. Уже обещанные ресурсы
+	// экономики и других рейсов сохраняются; резерв возвращённого job исключается.
+	float ManualAvailable(AICF_LogisticsEndpoint e, SCR_CampaignFaction faction, AICF_LogisticsJob exclude = null)
+	{
+		if (!OwnedSafe(e, faction)) return 0;
+		return Math.Max(0, e.m_Pool.Value() - m_Economy.LogisticsObligations(e.m_Base) - m_Book.Reserved(e.m_Pool, false, exclude));
+	}
+
 	float Available(AICF_LogisticsEndpoint e, SCR_CampaignFaction faction, AICF_LogisticsJob exclude = null)
 	{
+		if (exclude && exclude.m_bManual) return ManualAvailable(e, faction, exclude);
 		if (!OwnedSafe(e, faction) && !NeutralSource(e, faction)) return 0;
 		float reserved = m_Book.Reserved(e.m_Pool, false, exclude);
 		float commitments = m_Economy.LogisticsObligations(e.m_Base);
@@ -150,7 +159,7 @@ class AICF_LogisticsPlanner
 	{
 		if (!e || !e.IdentityValid()) return 0;
 		float target = m_Config.m_fTargetPercent;
-		if (returning) target = 100;
+		if (returning || (exclude && exclude.m_bManual)) target = 100;
 		return Deficit(e.m_Pool.Value(), e.m_Pool.Capacity(), target, m_Book.Reserved(e.m_Pool, true, exclude));
 	}
 

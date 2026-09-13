@@ -50,6 +50,7 @@ class AICF_StrategicUIController
 	protected static const string RECT_INPUT_NAME = "AICF_RectInput";
 
 	protected SCR_GameModeCampaign m_Campaign;
+	protected ref AICF_SupplyMapUI m_SupplyMapUI;
 	protected Widget m_wHUDRoot;
 	protected Widget m_wHUDAccent;
 	protected TextWidget m_wHUDText;
@@ -104,6 +105,7 @@ class AICF_StrategicUIController
 			return;
 		m_bStarted = true;
 		m_Campaign = campaign;
+		m_SupplyMapUI = new AICF_SupplyMapUI(this);
 		SCR_MapEntity.GetOnMapOpenComplete().Insert(OnMapOpen);
 		SCR_MapEntity.GetOnMapClose().Insert(OnMapClose);
 		GetGame().GetCallqueue().CallLater(Update, UPDATE_INTERVAL_MS, true);
@@ -125,6 +127,7 @@ class AICF_StrategicUIController
 		m_wHUDText = null;
 		m_wHUDObjective = null;
 		m_Campaign = null;
+		m_SupplyMapUI = null;
 	}
 
 	void HandleButton(AICF_EStrategicUIButtonAction action, int value)
@@ -176,6 +179,8 @@ class AICF_StrategicUIController
 	{
 		if (!m_bStarted || !m_Campaign)
 			return;
+		if (m_SupplyMapUI)
+			m_SupplyMapUI.Refresh();
 		Faction localFaction = SCR_FactionManager.SGetLocalPlayerFaction();
 		if (!localFaction)
 		{
@@ -279,6 +284,12 @@ class AICF_StrategicUIController
 	protected void OnMapOpen(MapConfiguration config)
 	{
 		RemoveMapUI();
+		SCR_MapEntity mapEntity = SCR_MapEntity.GetMapInstance();
+		if (!mapEntity || !mapEntity.GetMapMenuRoot())
+			return;
+		Widget mapRoot = mapEntity.GetMapMenuRoot();
+		if (m_SupplyMapUI && config.MapEntityMode == EMapEntityMode.FULLSCREEN)
+			m_SupplyMapUI.Attach(mapRoot);
 		Faction localFaction = SCR_FactionManager.SGetLocalPlayerFaction();
 		if (!localFaction)
 			return;
@@ -287,11 +298,6 @@ class AICF_StrategicUIController
 		if (localFactionKey != "US" && localFactionKey != "USSR")
 			return;
 		m_bLocalUSSR = localFactionKey == "USSR";
-
-		SCR_MapEntity mapEntity = SCR_MapEntity.GetMapInstance();
-		if (!mapEntity || !mapEntity.GetMapMenuRoot())
-			return;
-		Widget mapRoot = mapEntity.GetMapMenuRoot();
 
 		m_wMapToggle = CreateRect(
 			mapRoot,
@@ -483,6 +489,8 @@ class AICF_StrategicUIController
 
 	protected void SetCommandOpen(bool open)
 	{
+		if (open && m_SupplyMapUI)
+			m_SupplyMapUI.Close();
 		m_bCommandOpen = open && m_wCommandPanel;
 		if (m_wCommandScrim)
 			m_wCommandScrim.SetVisible(m_bCommandOpen);
@@ -1156,8 +1164,16 @@ class AICF_StrategicUIController
 		return "UNKNOWN";
 	}
 
+	void CloseCommandForSupplies()
+	{
+		CancelMapPointSelection(false);
+		SetCommandOpen(false);
+	}
+
 	protected void RemoveMapUI()
 	{
+		if (m_SupplyMapUI)
+			m_SupplyMapUI.Detach();
 		DisableMapPointCursor();
 		RemoveMapPointPrompt();
 		m_bSelectingMapPoint = false;
@@ -1251,7 +1267,7 @@ class AICF_StrategicUIController
 		return inputWidget;
 	}
 
-	protected Widget CreateRect(
+	Widget CreateRect(
 		Widget parent,
 		float left,
 		float top,
@@ -1318,7 +1334,7 @@ class AICF_StrategicUIController
 		return widget;
 	}
 
-	protected void SetRectColor(Widget widget, Color color)
+	void SetRectColor(Widget widget, Color color)
 	{
 		if (!widget)
 			return;
@@ -1328,7 +1344,7 @@ class AICF_StrategicUIController
 			background.SetColor(color);
 	}
 
-	protected TextWidget CreateText(
+	TextWidget CreateText(
 		Widget parent,
 		float left,
 		float top,

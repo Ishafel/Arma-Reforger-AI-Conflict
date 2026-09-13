@@ -13,6 +13,12 @@ function Check-Log([string]$name, [string]$text, [int]$expected, [string]$rule) 
     $script:checks++
 }
 Check-Log 'physical-fractional-partial-release' $fixture 0 ''
+$dispatchPolicy = '[AICF][STAGE4][INFO][LOGISTICS_DISPATCH_POLICY] run=fixture mode=MANUAL automatic_dispatch=0 existing_jobs=CONTINUE cargo_recovery=RETURN_ONLY'
+$manualFixture = $fixture.Replace('[AICF][STAGE1][INFO][ROSTER_READY]', "$dispatchPolicy`n[AICF][STAGE1][INFO][ROSTER_READY]")
+Check-Log 'manual-service-policy-without-worker' $manualFixture 0 ''
+Check-Log 'manual-service-policy-automatic' ($manualFixture.Replace('automatic_dispatch=0','automatic_dispatch=1')) 1 'DISPATCH_POLICY'
+Check-Log 'manual-service-policy-mode' ($manualFixture.Replace('mode=MANUAL','mode=UNKNOWN')) 1 'DISPATCH_POLICY'
+Check-Log 'manual-service-policy-forward-recovery' ($manualFixture.Replace('cargo_recovery=RETURN_ONLY','cargo_recovery=DELIVERY')) 1 'DISPATCH_POLICY'
 Check-Log 'nonfinite' ($fixture.Replace('loaded=100.125','loaded=NaN')) 1 'NONFINITE'
 Check-Log 'double-release-hidden-zero' ($fixture.Replace('released=25.125','released=50.25')) 1 'BALANCE_CONSERVATION'
 Check-Log 'unmatched-pair' ($fixture.Replace('from_after=800.375','from_after=800')) 1 'PAIR_CONSERVATION'
@@ -149,7 +155,11 @@ $mutations = @(
     @('Economy/AICF_LogisticsExitHistory.c','now >= failure.m_iUntilMs','false','EXIT_COOLDOWN_EXPIRES'),
     @('Economy/AICF_LogisticsExitHistory.c','w.m_iRouteRetries >= AICF_LogisticsConfig.MAX_ROUTE_RETRIES','true','EXIT_COOLDOWN_PROVEN_FAILURE'),
     @('Vehicles/AICF_VehicleSpawner.c','w.m_ExitHistory.Cooling(candidate, System.GetTickCount())','false','EXIT_COOLDOWN_SKIP'),
-    @('Economy/AICF_LogisticsService.c','w.m_ExitHistory.AllCooling(w, now)','false','EXIT_COOLDOWN_WAIT_WITHOUT_SPAWN'),
+    @('Economy/AICF_LogisticsService.c','w.m_Search = null;','m_Vehicles.BeginLogisticsSpawn(w);','NO_AUTOMATIC_LOGISTICS_SPAWN'),
+    @('Economy/AICF_LogisticsService.c','m_Planner.SelectReturn(w)','m_Planner.Select(w)','NO_AUTOMATIC_LOGISTICS_DELIVERY'),
+    @('Economy/AICF_LogisticsService.c','UpdateJob(worker, System.GetTickCount(), graphReady);','// removed','MANUAL_DISPATCH_RETAINS_JOB_SERVICE'),
+    @('Economy/AICF_LogisticsService.c','m_Planner.SelectReturn(w)','false','MANUAL_DISPATCH_RETAINS_CARGO_RETURN'),
+    @('Economy/AICF_LogisticsService.c','m_Vehicles.TickLogisticsWorker(worker, m_Config, m_Book, graphReady);','// removed','MANUAL_DISPATCH_RETAINS_VEHICLE_TICK'),
     @('Vehicles/AICF_LogisticsVehicleFootprint.c','return penetration >= 0;','return true;','SPAWN_PHYSICS_PENETRATION'),
     @('Vehicles/AICF_LogisticsVehicleFootprint.c','body.Mins = m_vMin;','body.Mins = m_vMin - Vector(2, 0, 2);','SPAWN_BODY_MIN_UNPADDED'),
     @('Vehicles/AICF_LogisticsVehicleFootprint.c','body.Maxs = m_vMax;','body.Maxs = m_vMax + Vector(2, 0, 2);','SPAWN_BODY_MAX_UNPADDED'),

@@ -49,7 +49,7 @@ $strategicRpc = Read-Required 'UI\AICF_StrategicCommandRpc.c'
 $strategicUI = Read-Required 'UI\AICF_StrategicUI.c'
 $createRectMatch = [regex]::Match(
     $strategicUI,
-    'protected\s+Widget\s+CreateRect\s*\([\s\S]*?(?=\r?\n\s*protected\s+void\s+SetRectColor\s*\()'
+    '(?:protected\s+)?Widget\s+CreateRect\s*\([\s\S]*?(?=\r?\n\s*(?:protected\s+)?void\s+SetRectColor\s*\()'
 )
 $createRect = $createRectMatch.Value
 $stage1Config = Read-Required 'Config\AICF_Stage1Config.c'

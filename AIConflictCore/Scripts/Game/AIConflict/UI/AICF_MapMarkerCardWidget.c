@@ -2,10 +2,19 @@
 // и CallLater не нужны; hover не поглощает клики/перетаскивание карты.
 class AICF_MapMarkerCardWidget
 {
+	protected static const float CARD_X = 16;
+	protected static const float LABEL_PADDING_X = 8;
+	protected static const float LABEL_PADDING_Y = 4;
+	protected static const float DETAILS_PADDING = 8;
+	protected static const float LABEL_MAX_TEXT_WIDTH = 240;
+	protected static const float DETAILS_MAX_TEXT_WIDTH = 360;
 	protected Widget m_Root;
+	protected Widget m_LabelBackground;
+	protected Widget m_LabelAccent;
 	protected Widget m_DetailsBackground;
 	protected TextWidget m_Label;
 	protected TextWidget m_Details;
+	protected float m_fLabelHeight = 32;
 	protected int m_iOriginalZOrder;
 
 	void Init(Widget root, Color color, string badge)
@@ -27,18 +36,18 @@ class AICF_MapMarkerCardWidget
 			letter.SetFlags(WidgetFlags.CENTER | WidgetFlags.VCENTER);
 			letter.SetText(badge);
 		}
-		Widget labelBackground = Rectangle(root, Color.FromSRGBA(5, 10, 14, 235), 250, 44, 16, -22);
-		if (labelBackground) labelBackground.ClearFlags(WidgetFlags.IGNORE_CURSOR);
-		Rectangle(root, color, 2, 44, 16, -22);
-		m_Label = Text(root, 232, 36, 26, -18, 13);
+		m_LabelBackground = Rectangle(root, Color.FromSRGBA(5, 10, 14, 235), 1, 1, CARD_X, 0);
+		if (m_LabelBackground) m_LabelBackground.ClearFlags(WidgetFlags.IGNORE_CURSOR);
+		m_LabelAccent = Rectangle(root, color, 2, 1, CARD_X, 0);
+		m_Label = Text(root, LABEL_MAX_TEXT_WIDTH, 1, CARD_X + LABEL_PADDING_X, 0, 13);
 		// Панели соприкасаются: перевод курсора в подробности не закрывает hover.
-		m_DetailsBackground = Rectangle(root, Color.FromSRGBA(5, 10, 14, 250), 500, 184, 16, 22);
+		m_DetailsBackground = Rectangle(root, Color.FromSRGBA(5, 10, 14, 250), 1, 1, CARD_X, 0);
 		if (m_DetailsBackground) m_DetailsBackground.ClearFlags(WidgetFlags.IGNORE_CURSOR);
-		m_Details = Text(root, 476, 164, 28, 32, 15);
+		m_Details = Text(root, DETAILS_MAX_TEXT_WIDTH, 1, CARD_X + DETAILS_PADDING, 0, 15);
 		ShowDetails(false);
 	}
 
-	protected Widget Rectangle(Widget parent, Color color, int width, int height, int x, int y)
+	protected Widget Rectangle(Widget parent, Color color, float width, float height, float x, float y)
 	{
 		Widget widget = GetGame().GetWorkspace().CreateWidget(WidgetType.ImageWidgetTypeID,
 			WidgetFlags.VISIBLE | WidgetFlags.IGNORE_CURSOR | WidgetFlags.BLEND | WidgetFlags.STRETCH, color, 1, parent);
@@ -46,7 +55,7 @@ class AICF_MapMarkerCardWidget
 		return widget;
 	}
 
-	protected TextWidget Text(Widget parent, int width, int height, int x, int y, int size)
+	protected TextWidget Text(Widget parent, float width, float height, float x, float y, int size)
 	{
 		TextWidget text = TextWidget.Cast(GetGame().GetWorkspace().CreateWidget(WidgetType.TextWidgetTypeID,
 			WidgetFlags.VISIBLE | WidgetFlags.IGNORE_CURSOR | WidgetFlags.BLEND | WidgetFlags.NO_LOCALIZATION,
@@ -54,11 +63,13 @@ class AICF_MapMarkerCardWidget
 		if (!text) return null;
 		text.SetFont(AICF_GroupMapMarkerEntry.ATTACK_BADGE_FONT);
 		text.SetExactFontSize(size);
+		text.ClearFlags(WidgetFlags.CENTER | WidgetFlags.VCENTER | WidgetFlags.RALIGN);
+		text.SetTextOffset(0, 0);
 		Place(text, width, height, x, y);
 		return text;
 	}
 
-	protected void Place(Widget widget, int width, int height, int x, int y)
+	protected void Place(Widget widget, float width, float height, float x, float y)
 	{
 		if (!widget) return;
 		FrameSlot.SetAnchor(widget, 0.5, 0.5);
@@ -69,18 +80,60 @@ class AICF_MapMarkerCardWidget
 
 	void SetLabel(string label)
 	{
-		if (m_Label) m_Label.SetText(label);
+		if (!m_Label) return;
+		m_Label.SetText(label);
+		LayoutLabel();
 	}
 
 	void SetDetails(string details)
 	{
-		if (m_Details) m_Details.SetText(details);
+		if (!m_Details) return;
+		m_Details.SetText(details);
+		LayoutDetails();
+	}
+
+	// GetTextSize возвращает размеры в reference resolution, как FrameSlot.
+	// Сначала измеряем строки без переноса, затем высоту при ограниченной ширине.
+	protected void MeasureText(TextWidget text, float maxWidth, out float width, out float height)
+	{
+		text.SetTextWrapping(false);
+		text.GetTextSize(width, height);
+		width = Math.Clamp(Math.Ceil(width), 1, maxWidth);
+		FrameSlot.SetSize(text, width, Math.Max(1, Math.Ceil(height)));
+		text.SetTextWrapping(true);
+		float wrappedWidth;
+		text.GetTextSize(wrappedWidth, height);
+		height = Math.Max(1, Math.Ceil(height));
+	}
+
+	protected void LayoutLabel()
+	{
+		if (!m_Label) return;
+		float width, height;
+		MeasureText(m_Label, LABEL_MAX_TEXT_WIDTH, width, height);
+		m_fLabelHeight = height + 2 * LABEL_PADDING_Y;
+		float top = -m_fLabelHeight * 0.5;
+		Place(m_LabelBackground, width + 2 * LABEL_PADDING_X, m_fLabelHeight, CARD_X, top);
+		Place(m_LabelAccent, 2, m_fLabelHeight, CARD_X, top);
+		Place(m_Label, width, height, CARD_X + LABEL_PADDING_X, top + LABEL_PADDING_Y);
+		LayoutDetails();
+	}
+
+	protected void LayoutDetails()
+	{
+		if (!m_Details) return;
+		float width, height;
+		MeasureText(m_Details, DETAILS_MAX_TEXT_WIDTH, width, height);
+		float top = m_fLabelHeight * 0.5;
+		Place(m_DetailsBackground, width + 2 * DETAILS_PADDING, height + 2 * DETAILS_PADDING, CARD_X, top);
+		Place(m_Details, width, height, CARD_X + DETAILS_PADDING, top + DETAILS_PADDING);
 	}
 
 	void ShowDetails(bool show)
 	{
 		if (m_DetailsBackground) m_DetailsBackground.SetVisible(show);
 		if (m_Details) m_Details.SetVisible(show);
+		if (show) LayoutLabel();
 		if (!m_Root) return;
 		if (show) m_Root.SetZOrder(100);
 		else m_Root.SetZOrder(m_iOriginalZOrder);

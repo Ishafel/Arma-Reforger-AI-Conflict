@@ -582,6 +582,15 @@ class AICF_MatchController
 	// Called by the server RPC on the requesting player's own PlayerController.
 	// Authority re-resolves faction, role, slot and target; the client supplies
 	// only a slot index and a stock Conflict base callsign.
+	bool RequestSupplyTransport(SCR_PlayerController player, int request, RplId source, RplId destination, int amount, out string reason)
+	{
+		if (!Replication.IsServer() || m_bStopped || !m_bRosterReady || !m_Logistics ||
+			m_bReplanScheduled || m_bGraphRebuildNeeded || !player) return false;
+		Faction faction = SCR_FactionManager.SGetPlayerFaction(player.GetPlayerId());
+		if (!faction || (faction != m_USFaction && faction != m_USSRFaction)) return false;
+		return m_Logistics.RequestTransport(player, request, source, destination, amount, reason);
+	}
+
 	bool RequestPlayerOrder(int playerId, int slotId, int targetCallsign)
 	{
 		if (!Replication.IsServer() || m_bStopped || !m_Campaign ||

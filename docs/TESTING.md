@@ -1,5 +1,34 @@
 # Проверки и evidence
 
+## Срез перед тегом 0.1.15 — 2026-09-13
+
+Evidence: `.codex-runtime/release-0.1.15-20260913-144657/`.
+Свежая команда `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+tools/Test-<Name>.ps1` выполнена для следующих аудиторов:
+
+- **PASS / 0:** `ManualSupplyStatic`, `SupplyMapUIStatic`, `LogisticsStatic`,
+  `LogisticsContracts` (142 cases), `LogisticsMapMarkersStatic`,
+  `GroupMapMarkersStatic`, `Stage3Static`, `Stage35Static`, `Stage4Static`,
+  `MapPointOrdersStatic`.
+- **Сохранённый FAIL / 1:** `AICommanderModeStatic`, только
+  `AI_COMMANDER_UI_STATE` — старое требование точной английской подписи
+  ожидания player command. Такой же failure зафиксирован на HEAD до ручных
+  перевозок в `manual-shipping-20260913/head-Test-AICommanderModeStatic.txt`.
+
+Терминальный `ArmaReforgerWorkbenchSteamDiag.exe -noThrow -wbsilent
+-gproj <root>/addon.gproj -addonsDir <paths> -addons <graph>
+-logsDir <evidence> -wbModule=ScriptEditor -run -validate`:
+**Arland, Everon, ArlandRHS — PASS / exit 0**. Во всех трёх полных логах есть
+`Game successfully created`, `Script validation successful`; SCRIPT E/F,
+ENGINE F и VM/null errors — 0. Аргументы сохранены в `workbench-*-args.json`.
+
+Runtime при подготовке тега повторно не запускался. Предыдущий полный
+server audit остаётся FAIL (stock AI `Failed move` и protected cleanup),
+хотя доставка 100/100 и клиентские смены ETA подтверждены. Ручная визуальная
+проверка, JIP/reconnect и полная multiplayer-матрица остаются NOT RUN.
+Подробности и полные ссылки на evidence: [SUPPLY_MAP_UI.md](SUPPLY_MAP_UI.md).
+Тег не меняет эти verdicts и не означает принятия всех runtime gates.
+
 ## Семантика gates
 
 Каждый уровень отвечает на отдельный вопрос:
@@ -137,6 +166,26 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-GroupMapMar
 Она проверяет authority, JIP, разделение callbacks отрядов/логистики,
 обновление существующих маркеров, живую позицию и lifecycle hover.
 Результаты изменения: [GROUP_MAP_MARKERS.md](GROUP_MAP_MARKERS.md).
+
+## Форма снабжения на карте — 2026-09-09
+
+Матрица и свежие результаты: [SUPPLY_MAP_UI.md](SUPPLY_MAP_UI.md).
+Focused audit:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-SupplyMapUIStatic.ps1
+```
+
+Он проверяет stock data/ownership/identity, диапазон количества, обновление
+открытой формы, input isolation, cleanup и config registration модифицированного
+cursor, lifetime штатных label widgets и GUID используемых layouts; содержит восемь отрицательных
+input. Нельзя вызывать `UseLabel(false)` на созданных ComboBox/Slider этой формы:
+stock AutomaticScroll уже хранит animation component удаляемого label.
+`BaseContainerProps` обязателен и на
+`modded class SCR_MapCursorModule`: compile без него проходит, но stock Map*.conf
+не создаёт module, вызывая `Unknown class` и последующие VM exceptions.
+После изменения UI также обязательны Stage 4 и терминальный Workbench.
+Client/JIP/visual проверяются отдельно и не выводятся из static PASS.
 
 ## Исторический baseline — 2026-08-30
 
@@ -361,6 +410,23 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-LogisticsLog.
 ```
 
 Static проверяет owners, identity, lifecycle и отсутствие timer transfers.
+После замены автономной отправки формой снабжения он также запрещает вызовы
+автоматического выбора доставки и spawn в `AICF_LogisticsService`, сохраняя
+проверки обслуживания jobs, vehicle tick и возврата cargo. Contracts повреждает
+каждую из этих границ отдельно. Прежняя проверка ожидания cooldown перед
+автоматическим spawn удалена вместе с этой веткой; cooldown/identity в spawner
+и их negative fixtures остаются. Старые delivery/reuse probes ниже не должны
+ожидать автоматического старта рейсов. Для ручной отправки дополнительно выполняется
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-ManualSupplyStatic.ps1`:
+17 отрицательных входов проверяют RPC authority, reserves, exact endpoints,
+generation, результат и lifecycle, включая ожидание завершения acquisition перед
+Reserve. `tools/fixtures/AICF_ManualSupplyClientProbe.c`
+в изолированной source-копии вместе с `AICF_LogisticsRuntimeProbe.c` отправляет
+через клиентский facade заявки на себя, отрицательное количество, чужую базу,
+затем настоящую перевозку и повторное нажатие. После итогового ответа fixture
+вызывает `RequestClose()`. Fixture не открывает GUI.
+Текущая матрица: [SUPPLY_MAP_UI.md](SUPPLY_MAP_UI.md).
+
 Contracts запускает тот же аудитор на повреждённых source fixtures и позитивных/
 негативных float log receipts. Проверка production policy выполняется в Enforce
 через временную `tools/fixtures/AICF_LogisticsRuntimeProbe.c`, а не копией формул

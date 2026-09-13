@@ -19,7 +19,7 @@ class AICF_LogisticsEndpointSafety
 	}
 }
 
-// Scheduler службы; vehicle mechanics выполняет существующий vehicle domain.
+// Обслуживание принятых рейсов и возврат груза; новые перевозки задаёт игрок.
 class AICF_LogisticsService
 {
 	protected SCR_GameModeCampaign m_Campaign;
@@ -29,12 +29,13 @@ class AICF_LogisticsService
 	protected AICF_LogisticsLedger m_Book;
 	protected ref AICF_LogisticsDepotRegistry m_Registry = new AICF_LogisticsDepotRegistry();
 	protected ref AICF_LogisticsPlanner m_Planner;
+	protected ref AICF_ManualSupplyDispatch m_Manual;
 	protected ref AICF_LogisticsEndpointSafety m_Safety = new AICF_LogisticsEndpointSafety();
 	protected ref AICF_LogisticsMapMarkerSystem m_MapMarkers = new AICF_LogisticsMapMarkerSystem();
 	protected int m_iNextPlannerMs;
 	protected int m_iNextHeartbeatMs;
 	protected int m_iGraphRevision;
-	protected int m_iAdmissionCursor;
+	protected int m_iMaintenanceCursor;
 	protected bool m_bStopped;
 
 	void AICF_LogisticsService(SCR_GameModeCampaign campaign, AICF_VehicleCoordinator vehicles, AICF_ObjectiveGraph graph, AICF_LogisticsConfig config, AICF_EconomySystem economy)
@@ -46,7 +47,15 @@ class AICF_LogisticsService
 		m_Book = economy.LogisticsLedger();
 		m_Registry.Start(campaign);
 		m_Planner = new AICF_LogisticsPlanner(graph, config, economy, m_Book);
+		m_Manual = new AICF_ManualSupplyDispatch(m_Planner, m_Registry, vehicles);
 		economy.LogisticsWorkers(m_Registry.m_aWorkers);
+		AICF_Stage4Diagnostics.Info("LOGISTICS_DISPATCH_POLICY", "mode=MANUAL automatic_dispatch=0 existing_jobs=CONTINUE cargo_recovery=RETURN_ONLY");
+	}
+
+	bool RequestTransport(SCR_PlayerController player, int request, RplId source, RplId destination, int amount, out string reason)
+	{
+		if (m_bStopped || !Replication.IsServer() || !m_Campaign || !m_Campaign.IsMaster() || !m_Campaign.IsRunning()) return false;
+		return m_Manual.Submit(player, request, source, destination, amount, reason);
 	}
 
 	void Update(SCR_CampaignFaction us, SCR_CampaignFaction ussr, bool graphReady)
@@ -72,12 +81,13 @@ class AICF_LogisticsService
 			m_Vehicles.TickLogisticsWorker(worker, m_Config, m_Book, graphReady);
 			if (worker.m_Lease && !worker.m_bCleanupQueued) UpdateJob(worker, System.GetTickCount(), graphReady);
 		}
-		// Один admission/search на tick, постоянная ротация всех depot slots.
+		m_Manual.Update(graphReady);
+		// Один возврат/idle cleanup на tick; новых рейсов и spawn здесь нет.
 		if (graphReady && !m_Registry.m_aWorkers.IsEmpty())
 		{
-			m_iAdmissionCursor = m_iAdmissionCursor % m_Registry.m_aWorkers.Count();
-			AICF_LogisticsWorker candidate = m_Registry.m_aWorkers[m_iAdmissionCursor++];
-			SelectWork(candidate, now);
+			m_iMaintenanceCursor = m_iMaintenanceCursor % m_Registry.m_aWorkers.Count();
+			AICF_LogisticsWorker candidate = m_Registry.m_aWorkers[m_iMaintenanceCursor++];
+			MaintainWorker(candidate, now);
 		}
 		if (now >= m_iNextHeartbeatMs)
 		{
@@ -87,29 +97,15 @@ class AICF_LogisticsService
 		m_MapMarkers.Sync(m_Registry.m_aWorkers, now);
 	}
 
-	protected void SelectWork(AICF_LogisticsWorker w, int now)
+	protected void MaintainWorker(AICF_LogisticsWorker w, int now)
 	{
+		if (m_Manual.OwnsWorker(w)) return;
 		if (w.m_bCargoFault || w.m_DriverInteraction || now < w.m_iRetryAtMs || w.m_Job) return;
-		if (w.m_bCleanupComplete)
-		{
-			if (now - w.m_iRetryAtMs < m_Config.m_iReplacementCooldownMs) return;
-			w.m_bCleanupQueued = false;
-		}
 		if (w.m_bCleanupQueued) return;
 		bool homeLive = w.m_bEligible && AICF_LogisticsDepotRegistry.Live(w);
 		if (!w.m_Lease)
 		{
-			if (!homeLive || w.m_Group || w.m_Vehicle) return;
-			if (w.m_ExitHistory && w.m_ExitHistory.AllCooling(w, now))
-			{
-				DeferWorker(w, now, "ALL_EXACT_DEPOT_EXITS_COOLING");
-				return;
-			}
-			if (m_Planner.Select(w, true))
-			{
-				if (!m_Vehicles.BeginLogisticsSpawn(w)) DeferWorker(w, now, "SHARED_FLEET_OR_AI_ADMISSION");
-			}
-			else if (!w.m_Search) DeferWorker(w, now, w.m_sPlanningReason);
+			w.m_Search = null;
 			return;
 		}
 		if (!w.Ready()) return;
@@ -117,11 +113,8 @@ class AICF_LogisticsService
 			w.m_ePhase != AICF_ELogisticsPhase.RETURN_HOME && w.m_ePhase != AICF_ELogisticsPhase.WAIT_RETRY) return;
 		if (w.m_fObservedCargo > 0)
 		{
-			bool selected;
-			if (!w.m_Search || !w.m_Search.m_bReturn) selected = m_Planner.Select(w);
-			if (!selected && w.m_Search && !w.m_Search.m_bReturn) return;
-			if (!selected) selected = m_Planner.SelectReturn(w);
-			if (selected)
+			// Остаток принятого груза возвращается на склад без нового задания снабжения.
+			if (m_Planner.SelectReturn(w))
 			{
 				BeginJobLeg(w);
 				return;
@@ -133,17 +126,12 @@ class AICF_LogisticsService
 			else DeferWorker(w, now, "NO_SAFE_RETURN_STORAGE");
 			return;
 		}
+		w.m_Search = null;
 		if (!homeLive || w.m_bRetireAfterCargo)
 		{
 			m_Vehicles.RetireLogistics(w, m_Book, "DEPOT_UNAVAILABLE_EMPTY");
 			return;
 		}
-		if (m_Planner.Select(w))
-		{
-			BeginJobLeg(w);
-			return;
-		}
-		if (w.m_Search) return;
 		if (w.m_ePhase == AICF_ELogisticsPhase.RETURN_HOME) return;
 		if (w.m_ePhase == AICF_ELogisticsPhase.IDLE_AT_DEPOT && w.m_iIdleAtMs > 0 &&
 			vector.DistanceXZ(w.m_Vehicle.GetOrigin(), w.m_vParking) <= m_Config.m_fArrivalRadiusM)
@@ -197,7 +185,8 @@ class AICF_LogisticsService
 		if (!job || job.m_bCancelled || !job.m_Destination.IdentityValid()) return false;
 		AICF_LogisticsEndpoint destination = m_Planner.Find(job.m_Destination.m_Base);
 		if (!destination || destination.m_Pool != job.m_Destination.m_Pool) return false;
-		if (!job.m_bReturn && (!AICF_LogisticsPlanner.OwnedSafe(destination, w.m_Faction) || destination.m_iDepth < 0)) return false;
+		if (!job.m_bReturn && (!AICF_LogisticsPlanner.OwnedSafe(destination, w.m_Faction) || (!job.m_bManual && destination.m_iDepth < 0))) return false;
+		if (job.m_bManual && !job.m_bLoaded && !AICF_LogisticsPlanner.OwnedSafe(job.m_Source, w.m_Faction)) return false;
 		if (job.m_bReturn && !AICF_LogisticsPlanner.OwnedSafe(destination, w.m_Faction) &&
 			!(job.m_OriginalSource && job.m_OriginalSource.m_Pool == destination.m_Pool && AICF_LogisticsPlanner.NeutralSource(destination, w.m_Faction))) return false;
 		if (!job.m_bLoaded && (!job.m_Source || !job.m_Source.IdentityValid() ||
@@ -297,6 +286,7 @@ class AICF_LogisticsService
 	{
 		if (m_bStopped) return;
 		m_bStopped = true;
+		m_Manual.Stop();
 		m_MapMarkers.Stop();
 		AICF_Stage4Diagnostics.Info("LOGISTICS_STOP", string.Format("schema_version=2 workers=%1 transfers_closed=1", m_Registry.m_aWorkers.Count()));
 		m_Registry.Stop();

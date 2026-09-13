@@ -593,6 +593,36 @@ request
 до vehicle/economy teardown. `AICF_SupplyDeliverySystem` теперь только читает
 физические totals для прежнего UI; timer shipments удалены.
 
+Форма «Снабжение» заменяет автономную отправку перевозок. Служба больше не вызывает
+`AICF_LogisticsPlanner.Select()` для доставки или `BeginLogisticsSpawn()`.
+Спрос и наличие depot сами по себе не создают рейс; очищенный worker не получает
+replacement автоматически. `MaintainWorker` обслуживает только имеющуюся машину:
+возврат остатка cargo через `SelectReturn`, возврат пустой машины домой и idle
+retirement. `UpdateJob`, vehicle tick, ledger и cleanup сохраняют прежние границы.
+Diagnostic `LOGISTICS_DISPATCH_POLICY` фиксирует `mode=MANUAL`.
+`AICF_SupplyTransportRpc` передаёт `request + source RplId + destination RplId + amount`
+через принадлежащий игроку `SCR_PlayerController`. `MatchController` только
+проверяет готовность матча/графа и поддержанную сторону, затем делегирует службе.
+`AICF_ManualSupplyDispatch` заново разрешает player controller, faction, stock bases,
+reserves/capacity и доступный worker. Один игрок может иметь один активный запрос;
+общая очередь ограничена 16, admission ограничен по времени. Повторы token не
+создают новую работу. Порядок выбора машины — расстояние до источника и numeric slot.
+Запрос вызывает существующий `VehicleCoordinator.BeginLogisticsSpawn` только при
+необходимости. После асинхронной готовности driver/vehicle и повторной проверки
+маршрута создаётся job в общем ledger. Pending request сохраняет worker generation,
+immutable endpoints и requester; отмена проверяет также exact job identity.
+`MaintainWorker` не вмешивается в worker активной заявки.
+
+Ручной job помечен `m_bManual`: donor hysteresis и HQ depth не ограничивают
+явный выбор игрока, но ownership, capture safety, road reachability, экономические
+обязательства, reservations и физическая вместимость сохраняются. Назначение
+заполняется максимум до 100% вместимости. При изменении запасов в пути возможна
+частичная доставка: UI показывает фактический прирост `m_fDelivered` данного job.
+Статус и названия маршрута — authority-owned `RplProp(OwnerOnly)` на player controller.
+Закрытие карты не отменяет рейс. Выход игрока или смена стороны отменяют заявку;
+остаток груза обслуживается существующим возвратом. Reconnect с новым controller
+не возобновляет старую заявку. Общие vehicle/economy subsystems остаются включёнными.
+
 `AICF_LogisticsMapMarkerSystem` — read model службы, вызываемый из её `Update`
 и `Stop`. Он создаёт только marker entities и не меняет jobs, cargo, vehicle
 lifecycle или orders. Маркер следует за exact vehicle; immutable record содержит
@@ -624,8 +654,10 @@ vehicle prefab против всех физических препятствий
 локальный выезд. Подробности и ограничения:
 [LOGISTICS_SPAWN_EGRESS.md](LOGISTICS_SPAWN_EGRESS.md).
 
-`AICF_LogisticsPlanner` определяет hysteresis спроса, directed HQ depth и порядок
-кандидатов. Подготовка пар source/destination и road queries распределяются по
+`AICF_LogisticsPlanner` сохраняет hysteresis спроса, directed HQ depth и порядок
+кандидатов как инфраструктуру; автономный поиск доставки службой больше не вызывается.
+Активный планировщик нужен для проверки принятых jobs и безопасного возврата cargo.
+Подготовка пар source/destination и road queries распределяются по
 ticks с бюджетом 16; snapshot/cursors сохраняют порядок, перед reserve повторно
 проверяются owner, capture, demand и supplies. Незавершённый поиск не расходует
 return attempts. Приоритет первого донора получает текущая база worker, включая
@@ -706,6 +738,14 @@ player-owned `SCR_PlayerController`. Reliable RPC передаёт slot/selectio
 server заново получает `GetPlayerId()`, faction и authoritative slot и проверяет
 role, target, size, rate limit и текущий lifecycle.
 
+Ему также принадлежит `AICF_SupplyMapUI`: форма «Снабжение» читает штатные
+базы/владельцев и реплицируемые resource aggregates через `AICF_SupplyMapData`.
+Она использует существующий UI tick, хранит выбор по component + EntityID,
+ограничивает количество текущим запасом и не меняет economy/logistics state.
+`AICF_SupplyMapInput` ограничивает обработчики карты только на время формы;
+закрытие/Stop возвращает ввод и снимает callbacks. API, границы и ручная
+матрица: [SUPPLY_MAP_UI.md](SUPPLY_MAP_UI.md).
+
 Выбор `POSITION` использует stock `SCR_MapCommandCursor`, поэтому pan/zoom и
 положительный cursor остаются штатными. На время выбора command panel/scrim
 скрыты, отдельный compact prompt имеет явную отмену; cursor callbacks и
@@ -738,6 +778,9 @@ Map markers получают faction streaming и показывают союз�
 Маркер следует за живым leader и перепривязывается после замены группы.
 Группы (kind `0`, «О») и логистика (kind `2`, «Л») используют общий
 `AICF_MapMarkerCardWidget` внутри stock layout: краткая подпись и hover-подробности.
+Размеры панелей вычисляются из размера текста; длинные строки переносятся при
+ограниченной ширине. Measurement работает в reference resolution, повторяется
+при обновлении текста и hover и не создаёт отдельный timer/subscription.
 `AICF_GroupMapMarkerSystem` публикует подпись и `m_sAICFGroupDetails` одним
 authority-only setter с `BumpMe` только при изменении. Позывной и роль берутся
 из текущего slot при каждом Sync, не из первоначального packed config.
