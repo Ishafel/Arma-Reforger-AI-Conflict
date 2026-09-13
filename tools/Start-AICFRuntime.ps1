@@ -5,7 +5,7 @@ param(
     [string]$Role,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Stock', 'Everon', 'RHS')]
+    [ValidateSet('Stock', 'Everon', 'RHS', 'EveronRHS')]
     [string]$Variant,
 
     [string]$RepositoryRoot,
@@ -263,7 +263,7 @@ if ($Role -eq 'Client') {
 }
 
 $rhsRootPath = $null
-if ($Variant -eq 'RHS') {
+if ($Variant -in @('RHS', 'EveronRHS')) {
     if (-not $RhsAddonsRoot) {
         $rhsCandidates = [System.Collections.Generic.List[string]]::new()
         $documentsRoot = [Environment]::GetFolderPath('MyDocuments')
@@ -331,6 +331,13 @@ elseif ($Variant -eq 'RHS') {
     $missionHeader = 'Missions/AICF_RHS_Conflict_Arland.conf'
     $addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C'
     $profileVariant = '-RHS'
+}
+elseif ($Variant -eq 'EveronRHS') {
+    $projectRelativePath = 'AIConflictEveronRHS\addon.gproj'
+    $world = 'Worlds/MP/Conflict/CTI_Campaign_Eden_RHS.ent'
+    $missionHeader = 'Missions/AICF_RHS_Conflict_Everon.conf'
+    $addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E,A4B2E62595F645A4,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C,FA9FDCCA428A43BA'
+    $profileVariant = '-EveronRHS'
 }
 
 $projectPath = Resolve-AICFExistingFile -Path (Join-Path $repositoryPath $projectRelativePath) -Description "$Variant gproj"

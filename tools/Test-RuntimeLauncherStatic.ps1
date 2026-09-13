@@ -95,6 +95,7 @@ try {
         (Join-Path $fakeRepository 'AIConflictArland'),
         (Join-Path $fakeRepository 'AIConflictEveron'),
         (Join-Path $fakeRepository 'AIConflictArlandRHS'),
+        (Join-Path $fakeRepository 'AIConflictEveronRHS'),
         (Join-Path $fakeServerRoot 'addons'),
         (Join-Path $fakeGameRoot 'addons'),
         $fakeRhsRoot
@@ -105,6 +106,7 @@ try {
         (Join-Path $fakeRepository 'AIConflictArland\addon.gproj'),
         (Join-Path $fakeRepository 'AIConflictEveron\addon.gproj'),
         (Join-Path $fakeRepository 'AIConflictArlandRHS\addon.gproj'),
+        (Join-Path $fakeRepository 'AIConflictEveronRHS\addon.gproj'),
         (Join-Path $fakeServerRoot 'ArmaReforgerServerDiag.exe'),
         (Join-Path $fakeGameRoot 'ArmaReforgerSteamDiag.exe')
     )) {
@@ -220,6 +222,39 @@ try {
         }
     }
 
+    foreach ($rhsEveronRole in @('Server', 'Client')) {
+        $rhsEveronProfile = Join-Path $testRoot "Profiles\$rhsEveronRole Everon RHS новый"
+        $rhsEveronInvocation = @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $launcherPath,
+            '-Role', $rhsEveronRole, '-Variant', 'EveronRHS',
+            '-RepositoryRoot', $fakeRepository,
+            '-ServerRoot', $fakeServerRoot, '-GameRoot', $fakeGameRoot,
+            '-RhsAddonsRoot', $fakeRhsRoot, '-ProfileRoot', $rhsEveronProfile, '-DryRun'
+        )
+        $rhsEveronOutput = @(& powershell.exe @rhsEveronInvocation 2>&1 | ForEach-Object { $_.ToString() })
+        $rhsEveronExitCode = $LASTEXITCODE
+        if ($rhsEveronExitCode -ne 0) {
+            Add-Failure 'RUNTIME_LAUNCHER_RHS_EVERON_DRY_RUN' "$rhsEveronRole dry-run exited $rhsEveronExitCode`: $($rhsEveronOutput -join ' | ')"
+            continue
+        }
+        $rhsEveronManifest = Get-ManifestFromOutput -Output $rhsEveronOutput -Rule 'RUNTIME_LAUNCHER_RHS_EVERON_DRY_RUN'
+        if (-not $rhsEveronManifest) { continue }
+        Require-ArgumentPair $rhsEveronManifest '-gproj' (Join-Path $fakeRepository 'AIConflictEveronRHS\addon.gproj') 'RUNTIME_LAUNCHER_RHS_EVERON_GRAPH'
+        Require-ArgumentPair $rhsEveronManifest '-addons' '9178E5822AFE48EA,B52C5F6AEDBF423E,A4B2E62595F645A4,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C,FA9FDCCA428A43BA' 'RUNTIME_LAUNCHER_RHS_EVERON_GRAPH'
+        Require-ArgumentPair $rhsEveronManifest '-profile' $rhsEveronProfile 'RUNTIME_LAUNCHER_FRESH_PROFILE'
+        $expectedRhsEveronDirs = "$fakeRepository,$fakeGameRoot\addons,$fakeRhsRoot"
+        if ($rhsEveronRole -eq 'Server') {
+            $expectedRhsEveronDirs = "$fakeRepository,$fakeServerRoot\addons,$fakeRhsRoot"
+            Require-ArgumentPair $rhsEveronManifest '-server' 'Worlds/MP/Conflict/CTI_Campaign_Eden_RHS.ent' 'RUNTIME_LAUNCHER_RHS_EVERON_WORLD'
+            Require-ArgumentPair $rhsEveronManifest '-MissionHeader' 'Missions/AICF_RHS_Conflict_Everon.conf' 'RUNTIME_LAUNCHER_RHS_EVERON_HEADER'
+            Require-ArgumentPair $rhsEveronManifest '-worldSystemsConfig' 'Configs/Systems/ConflictSystems.conf' 'RUNTIME_LAUNCHER_RHS_EVERON_SYSTEMS'
+        }
+        else {
+            Require-ArgumentPair $rhsEveronManifest '-client' '127.0.0.1' 'RUNTIME_LAUNCHER_CLIENT_TARGET'
+        }
+        Require-ArgumentPair $rhsEveronManifest '-addonsDir' $expectedRhsEveronDirs 'RUNTIME_LAUNCHER_ARGUMENT_INTEGRITY'
+    }
+
     $existingProfile = Join-Path $testRoot 'Profiles\Already exists'
     New-Item -ItemType Directory -Path $existingProfile -Force | Out-Null
     $existingProfileInvocation = @(
@@ -257,5 +292,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Output '[AICF][RUNTIME_LAUNCHER_STATIC][RESULT][PASS] direct_invocation=PASS argument_integrity=PASS spaces=PASS cyrillic=PASS stock_everon_rhs=PASS fresh_profile=PASS ready_gate=PASS'
+Write-Output '[AICF][RUNTIME_LAUNCHER_STATIC][RESULT][PASS] direct_invocation=PASS argument_integrity=PASS spaces=PASS cyrillic=PASS stock_everon_rhs=PASS rhs_everon_server_client=PASS fresh_profile=PASS ready_gate=PASS'
 exit 0

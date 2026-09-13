@@ -5,7 +5,11 @@
 Инструкция описывает два пути: ручной запуск через встроенное меню `Сценарии`
 и локальный development server Arma Reforger Conflict на Arland или Everon с
 исходными аддонами `AIConflictCore`, `AIConflictArland` и выбранным root-addon,
-либо опциональный RHS root-addon `AIConflictArlandRHS`. Сервер запускается из PowerShell напрямую
+либо опциональный RHS root-addon `AIConflictArlandRHS` / `AIConflictEveronRHS`.
+Для полного RHS Everon используй `-Variant EveronRHS` у server и client;
+плитка называется `AI Conflict RHS - Everon`. Полные команды, dependency graph
+и статус проверок: [RHS_EVERON.md](RHS_EVERON.md).
+Сервер запускается из PowerShell напрямую
 через `ArmaReforgerServerDiag.exe`, без Launcher, Host UI, Workbench GUI и
 скриншотов.
 

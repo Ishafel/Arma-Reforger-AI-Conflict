@@ -2,7 +2,7 @@
 
 ## Общая модель
 
-Проект расширяет штатный Conflict преимущественно скриптами. Три собственных
+Проект расширяет штатный Conflict преимущественно скриптами. Четыре собственных
 `MissionHeader` являются только точками запуска и не владеют world topology:
 
 ```text
@@ -16,6 +16,9 @@ Arma Reforger / stock Conflict
        /      |       \
  Arland   AIConflictEveron   AIConflictArlandRHS
  header   + Everon header    + RHS dependencies
+                 \          /
+                AIConflictEveronRHS
+                + RHS Everon header
 ```
 
 `AIConflictCore` не должен знать о конкретных именах или координатах карт.
@@ -44,6 +47,21 @@ Stock-проекты для Workbench и Diag — `AIConflictArland/addon.gproj`
 Опциональный `AIConflictArlandRHS/addon.gproj` использует установленные RHS
 world/mission без копирования ресурсов и зависит от обычного Arland, Core и
 RHS. Обычные проекты RHS не знают.
+
+`AIConflictEveronRHS/addon.gproj` объединяет зависимости `AIConflictEveron`
+и `AIConflictArlandRHS`. Shared bootstrap уже распознаёт
+`CTI_Campaign_Eden_RHS` как Everon, map factory приходит из Everon, content
+factory и RHS adapters — из ArlandRHS. Эти overrides меняют разные методы;
+контроллер, normalizer и server loops по-прежнему создаются в одном lifecycle.
+Локальный `AICF_RHSEveronCallsignPool.c` расширяет только временный stock pool
+до числа initialized bases: иначе короткий RHS callsign catalog исчерпывается
+в `InitializeBases`. Уникальные числовые индексы сохраняются; штатный
+`GetBaseCallsignByIndex` циклически выбирает существующее имя/радиосигнал.
+Adapter ограничен RHS Everon и server/master; topology и реплицируемые
+callsign assignments по-прежнему принадлежат stock.
+`Missions/AICF_RHS_Conflict_Everon.conf` наследует
+`{AAD43C10045857C1}Missions/RHS_Conflict.conf`, который владеет штатным RHS
+Everon world. Точные identities, запуск и evidence: [RHS_EVERON.md](RHS_EVERON.md).
 
 ## Content profile boundary
 

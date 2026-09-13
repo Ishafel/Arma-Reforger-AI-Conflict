@@ -3,7 +3,7 @@
 Scripts-first прототип автономной войны `US` против `USSR` поверх штатного
 режима Conflict. Проект использует существующий мир, базы, радио-граф, фракции
 и prefab-каталоги Arma Reforger. Собственных world/prefab/layout-ресурсов в
-репозитории нет; три тонких `MissionHeader` добавляют запуск из меню сценариев
+репозитории нет; четыре тонких `MissionHeader` добавляют запуск из меню сценариев
 и наследуют штатные stock/RHS missions.
 
 Игровая логика server-authoritative: сервер применяет выбранную при запуске
@@ -22,6 +22,7 @@ Arland загружает Core и stock integration; Everon и RHS добавл�
 | `AIConflictArland` | `B52C5F6AEDBF423E` | Проверенный stock Conflict bootstrap и data-driven one-way radio normalization |
 | `AIConflictEveron` | `A4B2E62595F645A4` | Плитка stock Conflict для Everon и map-specific выход из изолированного radio-компонента |
 | `AIConflictArlandRHS` | `9F88011DA22B471C` | Опциональный RHS USMC против RHS MSV на штатной RHS Arland mission |
+| `AIConflictEveronRHS` | `FA9FDCCA428A43BA` | RHS USMC против RHS MSV на полном Everon; объединяет Everon radio policy и существующий RHS profile |
 
 Core и обычный Arland не имеют RHS dependencies. `AIConflictArlandRHS` зависит
 от них, RHS Content Pack 01 `1337C0DE5DABBEEF`, Content Pack 02
@@ -34,6 +35,14 @@ data-driven one-way radio normalization. Everon через factory boundary до
 bootstrap content profile и содержит
 локальные compatibility adapters для штатных RHS UI/services, не создавая
 второй controller или server loops.
+
+`AIConflictEveronRHS` зависит от `AIConflictEveron` и `AIConflictArlandRHS`
+с их полным dependency graph. Новый addon содержит inherited header и
+локальный adapter ёмкости пула позывных для полного острова; он
+переиспользует обе factory overrides: Everon radio policy и RHS content profile.
+Родитель — `{AAD43C10045857C1}Missions/RHS_Conflict.conf`, мир — штатный
+`Worlds/MP/Conflict/CTI_Campaign_Eden_RHS.ent`. Запуск через canonical launcher:
+`-Variant EveronRHS`. Команды и gates: [RHS_EVERON.md](docs/RHS_EVERON.md).
 
 Stock profile сохраняет текущие `US`/`USSR` catalog mappings. RHS profile
 разрешает `RHS_USAF` как стабильную сторону `US`, `RHS_AFRF` как `USSR`,
@@ -169,6 +178,11 @@ AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/
 AIConflictArlandRHS/Missions/
   игровая плитка AI Conflict RHS - Arland поверх штатной RHS mission
 
+AIConflictEveronRHS/Missions/
+  игровая плитка AI Conflict RHS - Everon
+AIConflictEveronRHS/Scripts/Game/AIConflictEveronRHS/Integration/
+  совместимость ёмкости RHS callsign pool с полным Everon
+
 tools/
   canonical runtime launcher, статические аудиторы, анализаторы логов и API helper
 ```
@@ -191,7 +205,8 @@ Computer Use и скриншотов. Workbench validation, server и client з�
 
 Для ручного source-запуска из самой игры открой Diag-клиент с нужным root
 project и addon graph, затем выбери `Сценарии -> AI Conflict - Arland`,
-`Сценарии -> AI Conflict - Everon` либо `Сценарии -> AI Conflict RHS - Arland`.
+`Сценарии -> AI Conflict - Everon`, `Сценарии -> AI Conflict RHS - Arland`
+либо `Сценарии -> AI Conflict RHS - Everon`.
 Готовые команды и ограничения описаны
 в [`docs/SERVER_SETUP.md`](docs/SERVER_SETUP.md#запуск-из-меню-сценариев).
 После Workshop-публикации те же плитки появляются у включённых packaged addons.

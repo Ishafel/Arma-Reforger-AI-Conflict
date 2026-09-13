@@ -3,7 +3,7 @@
 ## Модель проекта
 
 Репозиторий не имеет обычного compiler/package manager. Он проверяется через
-Diag Workbench и запускается как unpacked source addon. Три inherited
+Diag Workbench и запускается как unpacked source addon. Четыре inherited
 `MissionHeader` дают source addons собственные плитки в меню сценариев, но не
 добавляют world или mission topology. Canonical Workshop metadata и preview
 assets хранятся в `workshop/`, а первая упаковка и upload выполняются владельцем
@@ -14,6 +14,9 @@ Stock рабочие `gproj` — `AIConflictArland/addon.gproj` и
 stock integration в Arland addon; собственного lifecycle-кода в нём нет.
 RHS рабочий `gproj` — `AIConflictArlandRHS/addon.gproj`, постоянный
 GUID `9F88011DA22B471C`; обычные проекты не получают его RHS dependencies.
+Для RHS Everon используй `AIConflictEveronRHS/addon.gproj`, GUID
+`FA9FDCCA428A43BA`: он объединяет Everon integration и ArlandRHS profile.
+Полный Workbench graph и команды запуска: [RHS_EVERON.md](RHS_EVERON.md).
 
 ## Требования
 
@@ -273,7 +276,7 @@ Vehicle и economy subsystems включены всегда. Параметры
 Не переиспользуй старый profile и не заменяй эту схему Host UI или raw world
 без `-MissionHeader`/`-worldSystemsConfig`.
 
-## Direct Diag server: RHS Arland Conflict
+## Direct Diag server: RHS Arland/Everon Conflict
 
 RHS source-run использует штатные RHS world и mission. Не подставляй stock raw
 world: он создаёт stock faction manager даже при RHS `MissionHeader`.
@@ -289,6 +292,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 RHS root определяется среди `My Documents`/OneDrive directories. Если packages
 установлены в другом месте, передай exact `-RhsAddonsRoot`; для нестандартной
 Steam Library аналогично доступны `-ServerRoot` и `-GameRoot`.
+
+Для полного RHS Everon укажи `-Variant EveronRHS` у server и client.
+Launcher выбирает `AIConflictEveronRHS/addon.gproj`, штатный
+`Worlds/MP/Conflict/CTI_Campaign_Eden_RHS.ent` и
+`Missions/AICF_RHS_Conflict_Everon.conf`. Для ручного меню нужна плитка
+`AI Conflict RHS - Everon`; команды приведены в [RHS_EVERON.md](RHS_EVERON.md).
 
 Startup должен дать `[AICF][CONTENT][INFO][PROFILE_SELECTED]` с profile
 `RHS_USMC_MSV_0_16_5150`, runtime sides `RHS_USAF`/`RHS_AFRF` и stable sides

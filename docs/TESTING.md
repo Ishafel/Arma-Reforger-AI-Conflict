@@ -1,5 +1,27 @@
 # Проверки и evidence
 
+## RHS Everon — 2026-09-13
+
+Новый root `AIConflictEveronRHS` объединяет Everon radio policy и существующий
+RHS profile; локальный callsign adapter устраняет исчерпание stock pool на
+полном острове (40 позывных, 41 initialized base). Полный отчёт, точные команды
+и logs: [RHS_EVERON.md](RHS_EVERON.md).
+
+`ScenarioHeadersStatic`, `RuntimeLauncherStatic`, `RHSIntegrationStatic`,
+`RankRestrictionsStatic`, `Stage35Static` — PASS / 0 до и после применимых
+изменений. `AICommanderModeStatic` сохраняет FAIL / 1 только по
+`AI_COMMANDER_UI_STATE`. Три отрицательные копии scenario/callsign контракта
+отклонены ожидаемыми rules. Терминальный Workbench EveronRHS — PASS / exit 0.
+
+Server подтвердил RHS profile, Everon radio policy и 20 READY groups; client
+подключился через canonical readiness gate и получил replicated snapshot.
+Финальные VM/null errors — 0. Общий `Test-AICommanderModeLog` с полными
+остановленными server/client logs — **FAIL / 1**, шесть прежних RHS faction-init
+`SCRIPT (E)`; остальные RHS/stock resource/world errors также сохранены.
+Ручная визуальная проверка, deployment, gameplay JIP/reconnect, soak и
+packaged Workshop build — **NOT RUN**. Ограниченный bootstrap PASS не повышает
+общий runtime verdict.
+
 ## Срез перед тегом 0.1.15 — 2026-09-13
 
 Evidence: `.codex-runtime/release-0.1.15-20260913-144657/`.
