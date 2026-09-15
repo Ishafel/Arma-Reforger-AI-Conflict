@@ -460,6 +460,11 @@ registry budget 4, candidate budget 16, resource epsilon 0.01.
 Полная CLI-таблица и validation:
 [SERVER_SETUP.md](SERVER_SETUP.md#параметры-физической-логистики).
 
+Уточнение 2026-09-14: приведённые выше WorkersPerDepot и shared fleet cap
+описывают исторический прогон. Для ручных перевозок оба лимита машин сняты;
+новые workers выделяются по заявкам, бюджет AI сохранён. Текущая политика и
+проверки — [SUPPLY_MAP_UI.md](SUPPLY_MAP_UI.md), [TESTING.md](TESTING.md).
+
 ## Команды и расположение evidence
 
 Все команды выполняются из

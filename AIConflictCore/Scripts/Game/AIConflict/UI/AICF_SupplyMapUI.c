@@ -435,24 +435,23 @@ class AICF_SupplyMapUI : ScriptedWidgetEventHandler
 		else if (m_iAmount > free || free == 0)
 			status = string.Format("На базе назначения свободно: %1. Уменьшите количество.", free);
 		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
-		bool busy = player && player.AICF_IsSupplyBusy();
-		m_bCanSend = player && !busy && ready && destinationReady && m_iAmount > 0 && m_iAmount <= free &&
+		bool pending = player && player.AICF_IsSupplyRequestPending();
+		m_bCanSend = player && !pending && ready && destinationReady && m_iAmount > 0 && m_iAmount <= free &&
 			m_Selected && m_Destination && m_Selected.m_EntityId != m_Destination.m_EntityId &&
 			m_Selected.NetworkId().IsValid() && m_Destination.NetworkId().IsValid();
 		m_wSend.SetEnabled(m_bCanSend);
 		Color sendColor = Color.FromSRGBA(58, 64, 69, 255);
 		if (m_bCanSend) sendColor = Color.FromSRGBA(181, 123, 35, 255);
 		m_Controller.SetRectColor(m_wSend, sendColor);
-		m_Combo.SetEnabled(!busy && !m_aBases.IsEmpty());
-		m_DestinationCombo.SetEnabled(!busy && !m_aDestinations.IsEmpty());
-		if (busy)
+		m_Combo.SetEnabled(!pending && !m_aBases.IsEmpty());
+		m_DestinationCombo.SetEnabled(!pending && !m_aDestinations.IsEmpty());
+		if (pending)
 		{
 			m_Slider.SetEnabled(false);
 		}
-		// Во время рейса отдаём место маршруту, состоянию и времени прибытия.
-		m_wStatus.SetVisible(!busy);
-		if (busy) PlaceControl(m_wResult, 0.05, 0.70, 0.95, 0.89);
-		else PlaceControl(m_wResult, 0.05, 0.77, 0.95, 0.89);
+		// Валидация редактируемой заявки остаётся над результатом последнего рейса.
+		m_wStatus.SetVisible(true);
+		PlaceControl(m_wResult, 0.05, 0.77, 0.95, 0.89);
 		if (player) m_wResult.SetText(player.AICF_GetSupplyStatus());
 		else m_wResult.SetText("Ожидается подключение игрока.");
 		m_wStatus.SetText(status);

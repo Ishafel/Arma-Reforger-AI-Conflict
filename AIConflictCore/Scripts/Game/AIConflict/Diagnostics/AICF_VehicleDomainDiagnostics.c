@@ -615,6 +615,7 @@ class AICF_VehicleDomainDiagnostics
 		int capHeld;
 		int worldPool;
 		int totalCap;
+		int cappedHeld;
 		int usActive;
 		int usReserved;
 		int usWorldPool;
@@ -635,6 +636,7 @@ class AICF_VehicleDomainDiagnostics
 				releasePending += fleet.GetReleasePendingCount();
 				failedClosed += fleet.GetFailedClosedCount();
 				capHeld += fleet.GetActiveOrReservedCount();
+				cappedHeld += fleet.GetCappedActiveOrReservedCount();
 				worldPool += fleet.GetWorldPoolCount();
 				totalCap += fleet.GetMaximumActiveOrReserved();
 				FactionKey stableKey = AICF_ContentProfile.GetActive().GetStableFactionKey(
@@ -668,6 +670,8 @@ class AICF_VehicleDomainDiagnostics
 					fleet.GetReleasePendingCount(),
 					fleet.GetFailedClosedCount(),
 					fleet.GetActiveOrReservedCount());
+				fleetDetails += string.Format(" fleet_%1_capped_held=%2 fleet_%1_logistics_cap_exempt=%3", index,
+					fleet.GetCappedActiveOrReservedCount(), fleet.GetActiveOrReservedCount() - fleet.GetCappedActiveOrReservedCount());
 			}
 		}
 		string details = string.Format(
@@ -690,6 +694,7 @@ class AICF_VehicleDomainDiagnostics
 			releasePending,
 			failedClosed,
 			capHeld);
+		details += string.Format(" capped_held=%1 logistics_cap_exempt=%2", cappedHeld, capHeld - cappedHeld);
 		details += string.Format(
 			" us_active=%1 us_reserved=%2 us_world_pool=%3 ussr_active=%4 ussr_reserved=%5 ussr_world_pool=%6",
 			usActive,

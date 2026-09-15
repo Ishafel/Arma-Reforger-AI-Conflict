@@ -1,4 +1,5 @@
-// Service lease использует тот же aggregate и cap, без infantry assignment.
+// Service lease сохраняет общий aggregate и custody, без infantry assignment.
+// Число логистических машин не ограничено; admission проверяет бюджет AI.
 
 
 

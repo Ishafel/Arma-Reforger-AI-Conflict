@@ -26,7 +26,6 @@ class AICF_LogisticsConfig
 	float m_fOwnedSourceReserveSupplies = 500;
 	float m_fMinDispatchSupplies = 50;
 	float m_fMaxCargoPerTrip;
-	int m_iWorkersPerDepot = 1;
 	int m_iPlannerIntervalMs = 10000;
 	int m_iWorkerPollMs = 1000;
 	int m_iReservationTtlMs = 30000;
@@ -51,7 +50,6 @@ class AICF_LogisticsConfig
 		ReadFloat("OwnedSourceReserveSupplies", m_fOwnedSourceReserveSupplies);
 		ReadFloat("MinDispatchSupplies", m_fMinDispatchSupplies);
 		ReadFloat("MaxCargoPerTrip", m_fMaxCargoPerTrip);
-		ReadInt("WorkersPerDepot", m_iWorkersPerDepot);
 		ReadInt("PlannerIntervalMs", m_iPlannerIntervalMs);
 		ReadInt("WorkerPollMs", m_iWorkerPollMs);
 		ReadInt("ReservationTtlMs", m_iReservationTtlMs);
@@ -117,8 +115,8 @@ class AICF_LogisticsConfig
 		if (!(m_fRequestBelowPercent >= 0 && m_fRequestBelowPercent < m_fTargetPercent &&
 			m_fTargetPercent <= m_fDonorKeepPercent && m_fDonorKeepPercent < m_fDonateAbovePercent && m_fDonateAbovePercent <= 100))
 			reason = "required: 0 <= request < target <= keep < donate <= 100";
-		else if (m_iWorkersPerDepot < 1 || m_iWorkersPerDepot > 4 || m_iReturnSearchMaxAttempts < 1 || m_iReturnSearchMaxAttempts > 10)
-			reason = "WorkersPerDepot=1..4; ReturnSearchMaxAttempts=1..10";
+		else if (m_iReturnSearchMaxAttempts < 1 || m_iReturnSearchMaxAttempts > 10)
+			reason = "ReturnSearchMaxAttempts=1..10";
 		else if (m_iPlannerIntervalMs <= 0 || m_iWorkerPollMs <= 0 || m_iReservationTtlMs <= 0 ||
 			m_iReplacementCooldownMs <= 0 || m_iBlockedRetryMs <= 0 || m_iIdleRetireMs <= 0 || m_iStationaryHoldMs <= 0 ||
 			!(m_fArrivalRadiusM > 0) || !(m_fStationarySpeedMps > 0))
@@ -130,7 +128,7 @@ class AICF_LogisticsConfig
 
 	void Log()
 	{
-		array<string> obsolete = {"aicfSupplyDeliveryIntervalMs", "aicfSupplyDeliveryPackage", "aicfSupplyDeliveryBaseTravelMs", "aicfSupplyDeliveryPerHopMs", "aicfMaxSupplyShipmentsPerFaction"};
+		array<string> obsolete = {"aicfSupplyDeliveryIntervalMs", "aicfSupplyDeliveryPackage", "aicfSupplyDeliveryBaseTravelMs", "aicfSupplyDeliveryPerHopMs", "aicfMaxSupplyShipmentsPerFaction", "aicfLogisticsWorkersPerDepot"};
 		foreach (string key : obsolete)
 		{
 			string ignored;
@@ -138,7 +136,8 @@ class AICF_LogisticsConfig
 		}
 		string details = string.Format("schema_version=2 request_below_percent=%1 target_percent=%2 donate_above_percent=%3 donor_keep_percent=%4 neutral_reserve=%5 owned_reserve=%6 min_dispatch=%7 max_cargo=%8 workers_per_depot=%9",
 			m_fRequestBelowPercent, m_fTargetPercent, m_fDonateAbovePercent, m_fDonorKeepPercent, m_fNeutralSourceReserveSupplies,
-			m_fOwnedSourceReserveSupplies, m_fMinDispatchSupplies, m_fMaxCargoPerTrip, m_iWorkersPerDepot);
+			m_fOwnedSourceReserveSupplies, m_fMinDispatchSupplies, m_fMaxCargoPerTrip, 0);
+		details += " workers_per_depot_unlimited=1 logistics_fleet_cap=0";
 		details += string.Format(" planner_ms=%1 poll_ms=%2 reservation_ttl_ms=%3 replacement_ms=%4 blocked_retry_ms=%5 return_attempts=%6 idle_retire_ms=%7 arrival_m=%8 stationary_mps=%9",
 			m_iPlannerIntervalMs, m_iWorkerPollMs, m_iReservationTtlMs, m_iReplacementCooldownMs, m_iBlockedRetryMs,
 			m_iReturnSearchMaxAttempts, m_iIdleRetireMs, m_fArrivalRadiusM, m_fStationarySpeedMps);

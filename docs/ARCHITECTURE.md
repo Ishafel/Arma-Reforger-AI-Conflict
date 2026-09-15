@@ -622,9 +622,14 @@ Diagnostic `LOGISTICS_DISPATCH_POLICY` фиксирует `mode=MANUAL`.
 через принадлежащий игроку `SCR_PlayerController`. `MatchController` только
 проверяет готовность матча/графа и поддержанную сторону, затем делегирует службе.
 `AICF_ManualSupplyDispatch` заново разрешает player controller, faction, stock bases,
-reserves/capacity и доступный worker. Один игрок может иметь один активный запрос;
-общая очередь ограничена 16, admission ограничен по времени. Повторы token не
-создают новую работу. Порядок выбора машины — расстояние до источника и numeric slot.
+reserves/capacity и доступный worker. Один игрок может иметь несколько активных
+заявок; отдельного ограничения их числа у игрока или всей службы нет. Лимиты
+логистических машин на автопарк и фракцию сняты; бюджет AI сохраняется.
+При отсутствии свободного worker registry создаёт новый стабильный slot после
+проверки маршрута. Готовые свободные workers переиспользуются первыми.
+Admission ограничен по времени,
+повторы token не создают новую работу. Порядок выбора машины — расстояние до
+источника и numeric slot.
 Запрос вызывает существующий `VehicleCoordinator.BeginLogisticsSpawn` только при
 необходимости. После асинхронной готовности driver/vehicle и повторной проверки
 маршрута создаётся job в общем ledger. Pending request сохраняет worker generation,
@@ -636,7 +641,11 @@ immutable endpoints и requester; отмена проверяет также exa
 обязательства, reservations и физическая вместимость сохраняются. Назначение
 заполняется максимум до 100% вместимости. При изменении запасов в пути возможна
 частичная доставка: UI показывает фактический прирост `m_fDelivered` данного job.
-Статус и названия маршрута — authority-owned `RplProp(OwnerOnly)` на player controller.
+Статус и названия маршрута последней заявки — authority-owned
+`RplProp(OwnerOnly)` на player controller. Более старый token не может заменить
+этот snapshot при обновлении или завершении своего рейса. Новая отправка и
+изменение полей формы блокируются только до ответа сервера; принятый рейс их
+не блокирует. Остальные активные рейсы видны через свои маркеры «Л».
 Закрытие карты не отменяет рейс. Выход игрока или смена стороны отменяют заявку;
 остаток груза обслуживается существующим возвратом. Reconnect с новым controller
 не возобновляет старую заявку. Общие vehicle/economy subsystems остаются включёнными.
@@ -657,6 +666,17 @@ dynamic marker. `AICF_GroupMapMarkerEntry` использует отдельны
 `AICF_LogisticsDepotRegistry` владеет identity здания, provider, service component
 и постоянными numeric slots начиная с `1000000`. Slots различаются по
 `faction + root EntityID + ordinal`; replacement увеличивает generation.
+Reconciliation создаёт один начальный пустой slot и обслуживает все ранее
+выделенные ordinals. Дополнительные slots создаёт `AddManualWorker` по заявке;
+численного лимита нет. Новый worker получает ту же exact depot identity и
+общую историю неудачных выездов, собственные slot/generation/job/lease.
+`aicfLogisticsWorkersPerDepot` устарел и игнорируется.
+`FactionFleet.TryReserveLogistics` проверяет authority, faction и уникальный
+service slot, сохраняя lease/custody без ограничения числа машин. Обычная
+техника отрядов ограничена прежним cap через `GetCappedActiveOrReservedCount`.
+Telemetry `cap_held`/`active_or_reserved` сохраняет полный учёт leases;
+добавленные `capped_held` и `logistics_cap_exempt` показывают применимость cap.
+Ограничение AI и учёт pending spawns остаются в `BeginLogisticsSpawn`.
 Stock placement/completion/removal/faction events ускоряют bounded reconciliation.
 Каталог production и совместимость stock slot проверяются перед spawn;
 `IsOccupied()` намеренно не вызывается, поскольку в 1.8.0.13 его callback способен

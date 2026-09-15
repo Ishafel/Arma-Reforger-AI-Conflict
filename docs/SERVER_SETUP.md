@@ -525,7 +525,6 @@ shutdown contract: `Ctrl+C` завершает локальный process, но 
 | `OwnedSourceReserveSupplies` | 500 | Минимальный остаток своего SOURCE |
 | `MinDispatchSupplies` | 50 | Минимум новой загрузки; остаток в машине не удаляется |
 | `MaxCargoPerTrip` | 0 | 0 — фактическая вместимость машины |
-| `WorkersPerDepot` | 1 | Постоянные service slots на здание, 1–4 |
 | `PlannerIntervalMs` | 10000 | Период сверки базы и спроса |
 | `WorkerPollMs` | 1000 | Минимальный интервал worker poll в существующем scheduler |
 | `ReservationTtlMs` | 30000 | TTL source/incoming reservations при отсутствии продления |
@@ -537,17 +536,21 @@ shutdown contract: `Ctrl+C` завершает локальный process, но 
 | `StationarySpeedMps` | 0.5 | Максимальная скорость transfer |
 | `StationaryHoldMs` | 3000 | Непрерывная неподвижность до transfer |
 
-Пример: `-aicfLogisticsWorkersPerDepot 2 -aicfLogisticsTargetPercent 75`.
+Пример: `-aicfLogisticsTargetPercent 75`.
 Пороговый порядок: `0 <= request < target <= keep < donate <= 100`.
 CLI принимает конечные неотрицательные десятичные числа, целочисленные поля —
 только целые. Нулевые интервалы и некорректные значения блокируют запуск до roster.
 Polling не может быть чаще родительского server scheduler. `MaxCargoPerTrip=0`
-не означает выключение службы. Общий fleet hard cap 10 не расширяется.
+не означает выключение службы. Число логистических машин на автопарк и фракцию
+не ограничено; дополнительные service slots выделяются по заявкам. Бюджет AI,
+физическая вместимость и свободное место при spawn проверяются по-прежнему.
+Fleet hard cap 10 применяется только к обычной технике отрядов.
 
 Устарели и игнорируются с `LOGISTICS_CONFIG_DEPRECATED`:
 `aicfSupplyDeliveryIntervalMs`, `aicfSupplyDeliveryPackage`,
 `aicfSupplyDeliveryBaseTravelMs`, `aicfSupplyDeliveryPerHopMs`,
-`aicfMaxSupplyShipmentsPerFaction`. `aicfSupplySourceReserveGroups` сохраняет
+`aicfMaxSupplyShipmentsPerFaction`, `aicfLogisticsWorkersPerDepot`.
+`aicfSupplySourceReserveGroups` сохраняет
 смысл экономического резерва; для своего SOURCE действует больший из него
 и `OwnedSourceReserveSupplies`.
 

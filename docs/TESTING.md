@@ -1,5 +1,67 @@
 # Проверки и evidence
 
+## Срез перед тегом 0.1.17 — 2026-09-15
+
+Тег объединяет параллельные ручные заявки, снятие обоих лимитов логистических
+машин, постоянную видимость валидации следующей заявки и ожидание всех принятых
+результатов в concurrent-probe. Бюджет AI и ограничения обычной техники сохранены.
+
+На момент подготовки тега 128/128 production-файлов совпадают по SHA-256 с
+прошедшими терминальную компиляцию четырьмя graphs от 2026-09-14. Результаты
+static/compile и их baseline приведены ниже; повторная компиляция неизменных
+исходников не запускалась. `AI_COMMANDER_UI_STATE` остаётся прежним FAIL / 1.
+
+Ручной запуск Everon через `Start-AICFRuntime.ps1`, BOTH, свежие server/client
+profiles: `.codex-runtime/everon-play-20260915-195020/`. В полном срезе обоих
+логов до 20:14:04 MSK подтверждены три независимые заявки СССР одного игрока:
+100/100, 198/198 и 739/739 припасов. Вторая принята до завершения первой,
+третья — до завершения второй. Итого `dispatched=delivered=1037`,
+`in_transit=lost=balance_delta=discrepancy=0`; server Stop для завершения не нужен.
+
+`Test-LogisticsLog.ps1 -AllowActiveAtEnd -RequireDelivery` — **FAIL / 1**:
+после первой доставки `VEHICLE_CLEANUP_RETAINED` и его `CORE_ERROR_BRIDGE`
+дают две SCRIPT E записи в console и две копии в companion `error.log`.
+Через 55 секунд cleanup восстановился, освободил lease и slot; это не отменяет
+зафиксированный failure. Client SCRIPT E/F и VM/null errors обоих процессов — 0;
+native resource/world/pathfinding и client icon-mask errors сохранены.
+
+Полные снимки, индекс событий, хеши и отчёт:
+`inspection-20260915-201330/DIAGNOSIS.md` внутри этого evidence. Сервер и клиент
+на момент среза работают; полный stopped runtime gate, visual UI, JIP/reconnect,
+исчерпание AI budget в живом мире и soak — **NOT RUN**. Срез не объявляется ACCEPTED.
+
+## Перевозки без лимита машин — 2026-09-14
+
+Для ручных перевозок убраны `WorkersPerDepot` и admission cap фракционного
+fleet. Бюджет AI, identity, ledger и physical clearance сохраняются; обычная
+техника отрядов продолжает учитывать собственный cap. Логистические lease
+остаются в полном custody-счётчике и отдельно показываются как
+`logistics_cap_exempt`; `capped_held` используется для ограниченной техники.
+
+Evidence: `.codex-runtime/unlimited-transfer-vehicles-20260914-222953/`.
+Baseline и после правки: `Test-ManualSupplyStatic.ps1`,
+`Test-LogisticsStatic.ps1`, `Test-LogisticsContracts.ps1`,
+`Test-Stage3Static.ps1`, `Test-Stage35Static.ps1`, `Test-Stage4Static.ps1` —
+**PASS / 0**. Manual supply: 30 → 41 отрицательных входов; logistics contracts:
+142 → 145 случаев, включая восстановленный логистический cap, удалённый cap
+отрядов и удалённый AI gate. `Test-AICommanderModeStatic.ps1` сохраняет
+**FAIL / 1** только по прежнему `AI_COMMANDER_UI_STATE`.
+
+Терминальный Workbench Validate/Compile production graphs **Arland, Everon,
+ArlandRHS, EveronRHS — PASS / 0**; isolated Everon с runtime fixtures —
+**PASS / 0**. Полные логи, native argument arrays и сверка 128 production-файлов
+с isolated source сохранены в evidence. Runtime verdict и ограничения
+фиксируются отдельно в `RESULT.md` этого каталога; compile не доказывает рейс.
+
+Isolated Everon с `AICF_LogisticsVehicleLimitProbe.c`: **38/38 runtime contracts
+PASS**, 12 service lease при заполненном обычном cap=1; final server exit 0.
+Полный `Test-LogisticsLog.ps1 -RequirePolicy` — **FAIL / 1** из-за двух ошибок
+штатного `SCR_BaseResupplySupportStationComponent` при shutdown (также в
+companion `error.log`). Полные stopped logs сохранены в `probe-long-full-logs/`.
+Физические параллельные delivery, runtime-исчерпание AI, client/JIP, визуальный
+UI и soak после изменения — **NOT RUN**. Первые две неуспешные попытки сохранены:
+конфликт порта с живым матчем и истечение короткого preparation budget без depot.
+
 ## RHS Everon — 2026-09-13
 
 Новый root `AIConflictEveronRHS` объединяет Everon radio policy и существующий
@@ -440,14 +502,61 @@ Static проверяет owners, identity, lifecycle и отсутствие ti
 и их negative fixtures остаются. Старые delivery/reuse probes ниже не должны
 ожидать автоматического старта рейсов. Для ручной отправки дополнительно выполняется
 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-ManualSupplyStatic.ps1`:
-17 отрицательных входов проверяют RPC authority, reserves, exact endpoints,
+41 отрицательный вход проверяет RPC authority, reserves, exact endpoints,
 generation, результат и lifecycle, включая ожидание завершения acquisition перед
-Reserve. `tools/fixtures/AICF_ManualSupplyClientProbe.c`
+Reserve. Проверяются также разделение pending reply и активного рейса, дедупликация
+по player + token, отсутствие отдельного лимита заявок и защита последнего status
+от завершения более старой заявки. Валидация формы остаётся видимой независимо
+от активного рейса и не перекрывается областью результата.
+`tools/fixtures/AICF_ManualSupplyClientProbe.c`
 в изолированной source-копии вместе с `AICF_LogisticsRuntimeProbe.c` отправляет
 через клиентский facade заявки на себя, отрицательное количество, чужую базу,
 затем настоящую перевозку и повторное нажатие. После итогового ответа fixture
 вызывает `RequestClose()`. Fixture не открывает GUI.
+Для проверки нескольких заявок передай клиенту `-aicfManualSupplyProbeConcurrent 1`:
+через 40 секунд после наблюдения принятого активного рейса fixture отправляет
+новую заявку и повторный клик. Событие `MANUAL_PROBE_CONCURRENT_SENT` само по себе
+не доказывает принятие: в полном server log нужны два `LOGISTICS_MANUAL_ACCEPTED`
+одного player с разными request/slot до завершения первого. Для каждой заявки
+отдельно сверяются readiness, job, transfer и завершение; итог второй не закрывает
+проверку первой. Test-only owner snapshot отдельно считает уникальные принятые
+и завершённые request tokens на сервере, включая результаты старых tokens,
+которые production snapshot последней заявки уже не показывает. Concurrent-probe
+вызывает `RequestClose()` только после отправки второй заявки и получения всех
+результатов принятых заявок, без pending reply. Отказ второй заявки не завершает
+ожидание первой. Deadline 330 секунд фиксирует `MANUAL_PROBE_TIMEOUT` / FAIL,
+прекращает отправку, но ждёт результаты оставшихся заявок; bounded server fixture
+затем выполняет свой Stop. Завершение через server Stop не доказывает доставку.
+Машины выделяются без лимитов количества на автопарк и фракцию; нужны бюджет AI
+и свободные spawn sites. `aicfLogisticsWorkersPerDepot` больше не требуется.
+Fixture требует
+подготовленный склад/автопарк выбранной стороны; отсутствие условий не является PASS.
 Текущая матрица: [SUPPLY_MAP_UI.md](SUPPLY_MAP_UI.md).
+
+Учёт результатов concurrent-probe дополнительно проверяется в Enforce: скопируй
+`AICF_ManualSupplyClientProbe.c` и `AICF_ManualSupplyProbeContracts.c` только в
+`AIConflictArland/Scripts/Game/AIConflict/Tests` изолированной source-копии
+(после Core, чтобы override видел `AICF_SetSupplyStatus`), выполни её terminal
+Workbench Validate, затем запусти `Start-AICFRuntime.ps1 -Role Server -Variant Everon`
+с её `-RepositoryRoot`, свежим `-ProfileRoot` и
+`-AdditionalArguments @('-aicfManualSupplyProbeContracts', '1')`.
+Через пять секунд fixture проверяет 14 сценариев и вызывает `RequestClose()`.
+В полном остановленном логе нужны 14 `MANUAL_PROBE_CONTRACT passed=1` и
+`MANUAL_PROBE_CONTRACTS_FINISHED cases=14 failures=0`.
+Проверяются отказ второй заявки, оба порядка завершения, повторные статусы,
+невалидный token и pending reply. Это gate учёта результатов, не доказательство
+доставки или client replication.
+
+`AICF_LogisticsVehicleLimitProbe.c` в isolated Arland `Scripts/Game/AIConflict/Tests`
+вместе с `AICF_LogisticsRuntimeProbe.c` в isolated Core проверяет создание 12
+workers одного настоящего depot и выдачу logistics leases при заполненном
+обычном fleet cap. CLI: `-aicfVehicleLimitProbe 1 -aicfLogisticsProbe 1
+-aicfLogisticsProbePrepare 1 -aicfLogisticsProbePeace 1`.
+Проверяются уникальность slot/ordinal, неизменность исходной generation,
+общая exit history, повторная reconciliation без лишних slots, отказ чужой
+фракции/повторного slot, release и запрет расширения после Stop. Fixture
+завершает server после результата. Это Enforce admission gate; физические
+перевозки и бюджет AI дополнительно проверяются отдельным runtime.
 
 Contracts запускает тот же аудитор на повреждённых source fixtures и позитивных/
 негативных float log receipts. Проверка production policy выполняется в Enforce

@@ -17,7 +17,13 @@ modded class SCR_PlayerController
 
 	bool AICF_IsSupplyBusy()
 	{
-		return m_bAICFSupplyBusy || m_iAICFSupplySent > m_iAICFSupplyRequest;
+		return m_bAICFSupplyBusy || AICF_IsSupplyRequestPending();
+	}
+
+	// Ожидание ответа блокирует повторный клик; принятый рейс — только статус.
+	bool AICF_IsSupplyRequestPending()
+	{
+		return m_iAICFSupplySent > m_iAICFSupplyRequest;
 	}
 
 	string AICF_GetSupplyStatus()
@@ -38,7 +44,7 @@ modded class SCR_PlayerController
 
 	void AICF_RequestSupplyTransport(RplId source, RplId destination, int amount)
 	{
-		if (this != GetGame().GetPlayerController() || AICF_IsSupplyBusy()) return;
+		if (this != GetGame().GetPlayerController() || AICF_IsSupplyRequestPending()) return;
 		m_iAICFSupplySent = m_iAICFSupplyRequest + 1;
 		Rpc(RpcAsk_AICFSupplyTransport, m_iAICFSupplySent, source, destination, amount);
 	}
@@ -46,7 +52,7 @@ modded class SCR_PlayerController
 	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
 	protected void RpcAsk_AICFSupplyTransport(int request, RplId source, RplId destination, int amount)
 	{
-		if (!Replication.IsServer() || request <= m_iAICFSupplyRequest || m_bAICFSupplyBusy) return;
+		if (!Replication.IsServer() || request <= m_iAICFSupplyRequest) return;
 		AICF_SetSupplyRoute(string.Empty, string.Empty);
 		int now = System.GetTickCount();
 		if (now < m_iAICFSupplyRateAtMs)
@@ -63,6 +69,8 @@ modded class SCR_PlayerController
 
 	void AICF_SetSupplyStatus(int request, bool busy, string status)
 	{
+		// Форма показывает последнюю заявку. Старые рейсы продолжают работу,
+		// но их обновления и завершение не подменяют её ответ.
 		if (!Replication.IsServer() || request < m_iAICFSupplyRequest) return;
 		if (request == m_iAICFSupplyRequest && busy == m_bAICFSupplyBusy && status == m_sAICFSupplyStatus) return;
 		m_iAICFSupplyRequest = request;

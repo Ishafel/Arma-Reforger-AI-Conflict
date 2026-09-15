@@ -1909,7 +1909,7 @@ class AICF_VehicleAcquisitionFlow
 			return "LEASE_FACTION_IDENTITY_MISMATCH";
 		if (fleet.HasLeaseForSlot(assignment.GetSlotId()))
 			return "LEASE_SLOT_COLLISION";
-		if (fleet.GetActiveOrReservedCount() >= fleet.GetMaximumActiveOrReserved())
+		if (fleet.GetCappedActiveOrReservedCount() >= fleet.GetMaximumActiveOrReserved())
 			return "VEHICLE_CAP_UNAVAILABLE";
 		return "LEASE_ADMISSION_REJECTED";
 	}

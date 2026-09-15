@@ -90,14 +90,14 @@ class AICF_ManualSupplyDispatch
 		if (!faction) return false;
 		foreach (AICF_ManualSupplyRequest previous : m_aRequests)
 		{
-			if (previous.m_Player == player)
+			if (previous.m_Player == player && previous.m_iRequest == token)
 			{
-				reason = "Дождитесь завершения текущей перевозки.";
+				reason = "Эта заявка уже принята.";
 				return false;
 			}
 		}
 		int now = System.GetTickCount();
-		if (now < m_iNextAdmissionMs || m_aRequests.Count() >= 16)
+		if (now < m_iNextAdmissionMs)
 		{
 			reason = "Служба занята. Повторите запрос через несколько секунд.";
 			return false;
@@ -107,15 +107,27 @@ class AICF_ManualSupplyDispatch
 		AICF_LogisticsEndpoint destination = m_Planner.Find(ResolveBase(destinationId));
 		if (!EndpointsValid(source, destination, faction, amount, reason)) return false;
 		AICF_LogisticsWorker selected;
+		AICF_LogisticsWorker expansionDepot;
 		float bestDistance;
+		float bestDepotDistance;
 		float maximum;
 		bool depotFound;
 		foreach (AICF_LogisticsWorker w : m_Registry.m_aWorkers)
 		{
-			if (w.m_Faction != faction || !w.m_bEligible || w.m_bStopped || w.m_bCargoFault ||
+			if (w.m_Faction != faction || !w.m_bEligible || w.m_bStopped ||
 				!AICF_LogisticsDepotRegistry.Live(w)) continue;
 			depotFound = true;
-			if (OwnsWorker(w) || w.m_Job || w.m_DriverInteraction || now < w.m_iRetryAtMs ||
+			float newCapacity = w.m_fPrefabCapacity;
+			if (m_Planner.m_Config.m_fMaxCargoPerTrip > 0) newCapacity = Math.Min(newCapacity, m_Planner.m_Config.m_fMaxCargoPerTrip);
+			maximum = Math.Max(maximum, newCapacity);
+			float depotDistance = vector.DistanceXZ(w.m_Depot.GetOrigin(), source.m_Base.GetOwner().GetOrigin());
+			if (amount <= newCapacity && (!expansionDepot || depotDistance < bestDepotDistance ||
+				(depotDistance == bestDepotDistance && w.m_iSlot < expansionDepot.m_iSlot)))
+			{
+				expansionDepot = w;
+				bestDepotDistance = depotDistance;
+			}
+			if (w.m_bCargoFault || OwnsWorker(w) || w.m_Job || w.m_DriverInteraction || now < w.m_iRetryAtMs ||
 				(w.m_bCleanupQueued && !w.m_bCleanupComplete)) continue;
 			if (w.m_Lease && (!w.Ready() || w.m_fObservedCargo > 0)) continue;
 			if (!w.m_Lease && (w.m_Group || w.m_Vehicle || w.m_bCustody)) continue;
@@ -132,24 +144,35 @@ class AICF_ManualSupplyDispatch
 			selected = w;
 			bestDistance = distance;
 		}
+		bool addWorker = !selected;
+		if (addWorker) selected = expansionDepot;
 		if (!selected)
 		{
-			reason = "Нет свободной машины. Дождитесь завершения рейса или освобождения автопарка.";
+			reason = "В автопарке нет подходящей грузовой машины для этой заявки.";
 			if (!depotFound) reason = "Нужен действующий союзный автопарк с грузовой машиной. Постройте его на своей базе.";
 			else if (maximum > 0 && amount > maximum) reason = string.Format("За один рейс можно перевезти не более %1 припасов. Уменьшите количество.", Math.Floor(maximum));
 			return false;
 		}
 		vector start = selected.m_Depot.GetOrigin();
-		if (selected.m_Lease) start = selected.m_Vehicle.GetOrigin();
+		if (!addWorker && selected.m_Lease) start = selected.m_Vehicle.GetOrigin();
 		vector load, unload;
 		if (!m_Planner.Route(start, source, load) || !m_Planner.Route(load, destination, unload))
 		{
 			reason = "Не удалось проложить дорожный маршрут. Выберите другую базу или повторите позже.";
 			return false;
 		}
+		if (addWorker)
+		{
+			selected = m_Registry.AddManualWorker(selected);
+			if (!selected)
+			{
+				reason = "Автопарк больше недоступен. Повторите заявку.";
+				return false;
+			}
+		}
 		if (!selected.m_Lease && !m_Vehicles.BeginLogisticsSpawn(selected))
 		{
-			reason = "Машину создать не удалось: достигнут лимит техники или AI. Повторите позже.";
+			reason = "Не удалось выделить водителя: проверьте свободный бюджет AI и доступность автопарка.";
 			return false;
 		}
 		AICF_ManualSupplyRequest request = new AICF_ManualSupplyRequest();

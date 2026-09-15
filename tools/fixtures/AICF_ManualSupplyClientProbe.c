@@ -1,10 +1,71 @@
-// Только isolated runtime-source вместе с AICF_LogisticsRuntimeProbe.c.
+// Только isolated runtime-source: AIConflictArland/Scripts/Game/AIConflict/Tests.
+// Требует загрузки после Core для override AICF_SetSupplyStatus.
+// Для подготовки рейсов используется вместе с AICF_LogisticsRuntimeProbe.c.
 // GUI не открывается. Используется тот же client intent/RPC, что кнопкой формы.
+class AICF_ManualSupplyProbeResults
+{
+	ref array<int> m_aAccepted = {};
+	ref array<int> m_aFinished = {};
+
+	bool Observe(int request, bool busy)
+	{
+		if (request <= 0) return false;
+		if (busy)
+		{
+			if (m_aAccepted.Contains(request)) return false;
+			m_aAccepted.Insert(request);
+			return true;
+		}
+		if (!m_aAccepted.Contains(request) || m_aFinished.Contains(request)) return false;
+		m_aFinished.Insert(request);
+		return true;
+	}
+
+	static bool CanClose(bool submissionsDone, bool pending, int accepted, int finished)
+	{
+		return submissionsDone && !pending && accepted >= 0 && finished == accepted;
+	}
+}
+
+// Только test-only snapshot: production UI по-прежнему хранит последнюю заявку.
+modded class SCR_PlayerController
+{
+	protected ref AICF_ManualSupplyProbeResults m_AICFManualProbeResults = new AICF_ManualSupplyProbeResults();
+	[RplProp(condition: RplCondition.OwnerOnly)]
+	protected int m_iAICFManualProbeAcceptedCount;
+	[RplProp(condition: RplCondition.OwnerOnly)]
+	protected int m_iAICFManualProbeFinishedCount;
+
+	override void AICF_SetSupplyStatus(int request, bool busy, string status)
+	{
+		super.AICF_SetSupplyStatus(request, busy, status);
+		// Старый token может быть скрыт production snapshot, но его результат
+		// всё равно нужен probe. Повторные статусы одного token считаются один раз.
+		if (!Replication.IsServer() || !m_AICFManualProbeResults.Observe(request, busy)) return;
+		m_iAICFManualProbeAcceptedCount = m_AICFManualProbeResults.m_aAccepted.Count();
+		m_iAICFManualProbeFinishedCount = m_AICFManualProbeResults.m_aFinished.Count();
+		Replication.BumpMe();
+	}
+
+	int AICF_ManualProbeAcceptedCount() { return m_iAICFManualProbeAcceptedCount; }
+	int AICF_ManualProbeFinishedCount() { return m_iAICFManualProbeFinishedCount; }
+
+	bool AICF_ManualProbeCanClose(bool submissionsDone)
+	{
+		return AICF_ManualSupplyProbeResults.CanClose(submissionsDone, AICF_IsSupplyRequestPending(),
+			m_iAICFManualProbeAcceptedCount, m_iAICFManualProbeFinishedCount);
+	}
+}
+
 modded class SCR_GameModeCampaign
 {
 	protected int m_iAICFManualProbeStep;
 	protected int m_iAICFManualProbeAttempts;
 	protected bool m_bAICFManualProbeAccepted;
+	protected bool m_bAICFManualProbeConcurrent;
+	protected bool m_bAICFManualProbeSecondSent;
+	protected bool m_bAICFManualProbeTimedOut;
+	protected int m_iAICFManualProbeConcurrentAtMs;
 	protected string m_sAICFManualProbeLastStatus;
 
 	override void OnGameStart()
@@ -14,8 +75,10 @@ modded class SCR_GameModeCampaign
 		if (Replication.IsServer() || !System.GetCLIParam("aicfManualSupplyProbe", enabled) || enabled != "1") return;
 		string startStep;
 		if (System.GetCLIParam("aicfManualSupplyProbeStartStep", startStep)) m_iAICFManualProbeStep = startStep.ToInt();
+		string concurrent;
+		m_bAICFManualProbeConcurrent = System.GetCLIParam("aicfManualSupplyProbeConcurrent", concurrent) && concurrent == "1";
 		GetGame().GetCallqueue().CallLater(AICF_ManualProbeTick, 20000, true);
-		GetGame().GetCallqueue().CallLater(AICF_ManualProbeClose, 330000, false);
+		GetGame().GetCallqueue().CallLater(AICF_ManualProbeDeadline, 330000, false);
 	}
 
 	protected void AICF_ManualProbeTick()
@@ -23,6 +86,16 @@ modded class SCR_GameModeCampaign
 		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		SCR_CampaignFaction faction = SCR_CampaignFaction.Cast(SCR_FactionManager.SGetLocalPlayerFaction());
 		if (!player) return;
+		if (m_bAICFManualProbeConcurrent)
+		{
+			m_bAICFManualProbeAccepted = player.AICF_ManualProbeAcceptedCount() > 0;
+			if (player.AICF_ManualProbeCanClose(m_bAICFManualProbeSecondSent || m_bAICFManualProbeTimedOut))
+			{
+				AICF_ManualProbeClose();
+				return;
+			}
+			if (m_bAICFManualProbeTimedOut) return;
+		}
 		string stable;
 		if (System.GetCLIParam("aicfLogisticsClientSpawnFaction", stable))
 		{
@@ -43,12 +116,16 @@ modded class SCR_GameModeCampaign
 			Print(string.Format("[AICF][MANUAL_PROBE_RESPONSE] test_only=1 step=%1 busy=%2 status=%3", m_iAICFManualProbeStep, player.AICF_IsSupplyBusy(), status));
 		}
 		if (m_iAICFManualProbeStep >= 4 && player.AICF_IsSupplyBusy() && !status.Contains("Ожидается ответ")) m_bAICFManualProbeAccepted = true;
-		if (m_bAICFManualProbeAccepted && !player.AICF_IsSupplyBusy())
+		if (!m_bAICFManualProbeConcurrent && m_bAICFManualProbeAccepted && !player.AICF_IsSupplyBusy())
 		{
 			AICF_ManualProbeClose();
 			return;
 		}
-		if (player.AICF_IsSupplyBusy() || m_bAICFManualProbeAccepted) return;
+		if (m_bAICFManualProbeAccepted && !m_iAICFManualProbeConcurrentAtMs)
+			m_iAICFManualProbeConcurrentAtMs = System.GetTickCount() + 40000;
+		bool sendConcurrent = m_bAICFManualProbeConcurrent && m_bAICFManualProbeAccepted && !m_bAICFManualProbeSecondSent &&
+			player.AICF_IsSupplyBusy() && !player.AICF_IsSupplyRequestPending() && System.GetTickCount() >= m_iAICFManualProbeConcurrentAtMs;
+		if ((player.AICF_IsSupplyBusy() || m_bAICFManualProbeAccepted) && !sendConcurrent) return;
 		array<ref AICF_SupplyMapBase> bases = {};
 		AICF_SupplyMapData.Collect(faction, bases);
 		AICF_SupplyMapBase source;
@@ -86,6 +163,11 @@ modded class SCR_GameModeCampaign
 		else
 		{
 			if (++m_iAICFManualProbeAttempts > 8) return;
+			if (sendConcurrent)
+			{
+				m_bAICFManualProbeSecondSent = true;
+				Print("[AICF][MANUAL_PROBE_CONCURRENT_SENT] test_only=1 previous_busy=1 pending_reply=0");
+			}
 			player.AICF_RequestSupplyTransport(source.NetworkId(), destination.NetworkId(), 100);
 			player.AICF_RequestSupplyTransport(source.NetworkId(), destination.NetworkId(), 100);
 		}
@@ -93,10 +175,31 @@ modded class SCR_GameModeCampaign
 		m_iAICFManualProbeStep++;
 	}
 
+	protected void AICF_ManualProbeDeadline()
+	{
+		if (!m_bAICFManualProbeConcurrent)
+		{
+			AICF_ManualProbeClose();
+			return;
+		}
+		m_bAICFManualProbeTimedOut = true;
+		Print("[AICF][MANUAL_PROBE_TIMEOUT] test_only=1 verdict=FAIL waiting_for_all_accepted_results=1");
+		// Больше не отправляем заявки, но не отменяем чужим disconnect их работу.
+		// Server fixture имеет свой deadline/Stop и отдаёт оставшиеся результаты.
+		AICF_ManualProbeTick();
+	}
+
 	protected void AICF_ManualProbeClose()
 	{
+		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
+		if (m_bAICFManualProbeConcurrent && (!player ||
+			!player.AICF_ManualProbeCanClose(m_bAICFManualProbeSecondSent || m_bAICFManualProbeTimedOut))) return;
 		GetGame().GetCallqueue().Remove(AICF_ManualProbeTick);
+		GetGame().GetCallqueue().Remove(AICF_ManualProbeDeadline);
 		Print(string.Format("[AICF][MANUAL_PROBE_CLIENT_FINISHED] test_only=1 accepted=%1", m_bAICFManualProbeAccepted));
+		if (m_bAICFManualProbeConcurrent)
+			Print(string.Format("[AICF][MANUAL_PROBE_CONCURRENT_FINISHED] test_only=1 second_sent=%1 server_acceptance_requires_log=1 accepted=%2 finished=%3 timed_out=%4",
+				m_bAICFManualProbeSecondSent, player.AICF_ManualProbeAcceptedCount(), player.AICF_ManualProbeFinishedCount(), m_bAICFManualProbeTimedOut));
 		GetGame().RequestClose();
 	}
 
@@ -104,6 +207,6 @@ modded class SCR_GameModeCampaign
 	{
 		if (!GetGame()) return;
 		GetGame().GetCallqueue().Remove(AICF_ManualProbeTick);
-		GetGame().GetCallqueue().Remove(AICF_ManualProbeClose);
+		GetGame().GetCallqueue().Remove(AICF_ManualProbeDeadline);
 	}
 }

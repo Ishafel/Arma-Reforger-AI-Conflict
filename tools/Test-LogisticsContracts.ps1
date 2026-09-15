@@ -108,6 +108,9 @@ foreach ($directory in @('Config','Economy','Vehicles','State/Vehicles')) {
     Get-ChildItem -LiteralPath (Join-Path $originalCore $directory) -Filter '*.c' -File | Copy-Item -Destination (Join-Path $targetCore $directory)
 }
 $mutations = @(
+	@('State/Vehicles/AICF_FactionFleet.c','HasLeaseForSlot(w.m_iSlot)) return false;', 'HasLeaseForSlot(w.m_iSlot) || GetActiveOrReservedCount() >= m_iMaximumActiveOrReserved) return false;', 'LOGISTICS_UNCAPPED_ADMISSION'),
+	@('State/Vehicles/AICF_FactionFleet.c','GetCappedActiveOrReservedCount() < m_iMaximumActiveOrReserved', 'true', 'INFANTRY_FLEET_CAP'),
+	@('Vehicles/AICF_TransportTripController.c','world.GetCurrentNumOfActiveAIs() + m_aLogisticsSpawns.Count() + 1 > world.GetLimitOfActiveAIs()', 'false', 'LOGISTICS_AI_BUDGET'),
     @('Vehicles/AICF_LogisticsVehicleFootprint.c','float penetration = world.TracePosition(body, null);','body.ExcludeArray = {}; float penetration = world.TracePosition(body, null);','SPAWN_ALL_PHYSICAL_OBSTACLES'),
     @('Vehicles/AICF_LogisticsSpawnGeometry.c','world.TraceMove(trace, null) < 1','false','SPAWN_EXIT_SWEEP'),
     @('Vehicles/AICF_LogisticsSpawnGeometry.c','!FitToSurface(world, footprint, next)','false','SPAWN_EXIT_GROUND'),

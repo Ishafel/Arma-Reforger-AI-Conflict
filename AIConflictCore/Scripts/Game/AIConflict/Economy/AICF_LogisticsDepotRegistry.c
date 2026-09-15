@@ -78,11 +78,13 @@ class AICF_LogisticsDepotRegistry
 	protected int m_iCursor;
 	protected int m_iNextScanMs;
 	protected int m_iNextSlot = AICF_LogisticsConfig.SERVICE_SLOT_FIRST;
+	protected bool m_bStopped;
 	protected ref array<SCR_CatalogEntitySpawnerComponent> m_aScan = {};
 	ref array<ref AICF_LogisticsWorker> m_aWorkers = {};
 
 	void Start(SCR_GameModeCampaign campaign)
 	{
+		m_bStopped = false;
 		m_BaseSystem = SCR_MilitaryBaseSystem.GetInstance();
 		m_Manager = SCR_CampaignBuildingManagerComponent.Cast(campaign.FindComponent(SCR_CampaignBuildingManagerComponent));
 		if (m_BaseSystem) m_BaseSystem.GetOnBaseFactionChanged().Insert(OwnerChanged);
@@ -95,6 +97,7 @@ class AICF_LogisticsDepotRegistry
 
 	void Stop()
 	{
+		m_bStopped = true;
 		if (m_BaseSystem) m_BaseSystem.GetOnBaseFactionChanged().Remove(OwnerChanged);
 		if (m_Manager)
 		{
@@ -226,6 +229,7 @@ class AICF_LogisticsDepotRegistry
 
 	void Update(AICF_LogisticsConfig config, int now)
 	{
+		if (m_bStopped || !Replication.IsServer()) return;
 		if (m_iCursor >= m_aScan.Count())
 		{
 			if (now < m_iNextScanMs) return;
@@ -258,38 +262,11 @@ class AICF_LogisticsDepotRegistry
 		IEntity root = BuildingRoot(production.GetOwner());
 		if (!home || !root) return;
 		Watch(SCR_CampaignBuildingCompositionComponent.Cast(root.FindComponent(SCR_CampaignBuildingCompositionComponent)));
-		for (int ordinal; ordinal < config.m_iWorkersPerDepot; ordinal++)
+		// Один пустой slot для обнаруженного depot. Остальные появляются по заявкам.
+		if (!Find(root, faction, 0)) CreateWorker(root, faction, home, production, 0);
+		foreach (AICF_LogisticsWorker w : m_aWorkers)
 		{
-			AICF_LogisticsWorker w = Find(root, faction, ordinal);
-			if (!w)
-			{
-				w = new AICF_LogisticsWorker();
-				w.m_iSlot = m_iNextSlot++;
-				w.m_iOrdinal = ordinal;
-				w.m_Faction = faction;
-				w.m_Depot = root;
-				w.m_DepotId = root.GetID();
-				w.m_ExitHistory = new AICF_LogisticsExitHistory();
-				foreach (AICF_LogisticsWorker sibling : m_aWorkers)
-				{
-					if (sibling.m_Depot == root && sibling.m_DepotId == root.GetID() && sibling.m_Faction == faction)
-					{
-						w.m_ExitHistory = sibling.m_ExitHistory;
-						break;
-					}
-				}
-				w.m_Home = home;
-				w.m_HomeId = home.GetOwner().GetID();
-				w.m_Production = production;
-				w.m_ProductionId = production.GetOwner().GetID();
-				SCR_CampaignBuildingCompositionComponent composition = SCR_CampaignBuildingCompositionComponent.Cast(root.FindComponent(SCR_CampaignBuildingCompositionComponent));
-				if (composition && composition.GetProviderEntity())
-				{
-					w.m_Provider = SCR_CampaignBuildingProviderComponent.Cast(composition.GetProviderEntity().FindComponent(SCR_CampaignBuildingProviderComponent));
-					w.m_ProviderId = composition.GetProviderEntity().GetID();
-				}
-				m_aWorkers.Insert(w);
-			}
+			if (w.m_Depot != root || w.m_DepotId != root.GetID() || w.m_Faction != faction) continue;
 			// Несколько service components одного root делят ordinals. До acquisition
 			// разрешён другой совместимый компонент, без нового slot/generation.
 			if (w.m_Production != production && !w.m_Lease && !w.m_Group && !w.m_Vehicle && (!Live(w) || !SelectEntry(w)))
@@ -301,12 +278,67 @@ class AICF_LogisticsDepotRegistry
 			bool eligible = Live(w) && SelectEntry(w);
 			if (eligible != w.m_bEligible || w.m_sLastReason.IsEmpty())
 			{
-				if (eligible) w.Log("LOGISTICS_DEPOT_READY", string.Format("ordinal=%1 prefab=%2 capacity_metadata=%3 tier=%4", ordinal, w.m_Entry.GetPrefab(), w.m_fPrefabCapacity, production.GetType()));
+				if (eligible) w.Log("LOGISTICS_DEPOT_READY", string.Format("ordinal=%1 prefab=%2 capacity_metadata=%3 tier=%4", w.m_iOrdinal, w.m_Entry.GetPrefab(), w.m_fPrefabCapacity, production.GetType()));
 				else w.Log("LOGISTICS_DEPOT_REJECTED", "reason=OFFLINE_OR_NO_SUPPORTED_CARGO_PRODUCTION");
 				w.m_sLastReason = "DEPOT_RECONCILED";
 			}
 			w.m_bEligible = eligible;
 		}
+	}
+
+	protected AICF_LogisticsWorker CreateWorker(IEntity root, SCR_CampaignFaction faction,
+		SCR_CampaignMilitaryBaseComponent home, SCR_CatalogEntitySpawnerComponent production, int ordinal)
+	{
+		AICF_LogisticsWorker w = new AICF_LogisticsWorker();
+		w.m_iSlot = m_iNextSlot++;
+		w.m_iOrdinal = ordinal;
+		w.m_Faction = faction;
+		w.m_Depot = root;
+		w.m_DepotId = root.GetID();
+		w.m_ExitHistory = new AICF_LogisticsExitHistory();
+		foreach (AICF_LogisticsWorker sibling : m_aWorkers)
+		{
+			if (sibling.m_Depot == root && sibling.m_DepotId == root.GetID() && sibling.m_Faction == faction)
+			{
+				w.m_ExitHistory = sibling.m_ExitHistory;
+				break;
+			}
+		}
+		w.m_Home = home;
+		w.m_HomeId = home.GetOwner().GetID();
+		w.m_Production = production;
+		w.m_ProductionId = production.GetOwner().GetID();
+		SCR_CampaignBuildingCompositionComponent composition = SCR_CampaignBuildingCompositionComponent.Cast(root.FindComponent(SCR_CampaignBuildingCompositionComponent));
+		if (composition && composition.GetProviderEntity())
+		{
+			w.m_Provider = SCR_CampaignBuildingProviderComponent.Cast(composition.GetProviderEntity().FindComponent(SCR_CampaignBuildingProviderComponent));
+			w.m_ProviderId = composition.GetProviderEntity().GetID();
+		}
+		m_aWorkers.Insert(w);
+		return w;
+	}
+
+	// Создаёт только identity; lease, AI и physical spawn остаются у vehicle domain.
+	AICF_LogisticsWorker AddManualWorker(AICF_LogisticsWorker depot)
+	{
+		if (m_bStopped || !Replication.IsServer() || !depot || !m_aWorkers.Contains(depot) ||
+			depot.m_bStopped || !Live(depot)) return null;
+		int ordinal;
+		foreach (AICF_LogisticsWorker sibling : m_aWorkers)
+		{
+			if (sibling.m_Depot == depot.m_Depot && sibling.m_DepotId == depot.m_DepotId && sibling.m_Faction == depot.m_Faction)
+				ordinal = Math.Max(ordinal, sibling.m_iOrdinal + 1);
+		}
+		AICF_LogisticsWorker w = CreateWorker(depot.m_Depot, depot.m_Faction, depot.m_Home, depot.m_Production, ordinal);
+		w.m_bEligible = Live(w) && SelectEntry(w);
+		if (!w.m_bEligible)
+		{
+			m_aWorkers.RemoveItem(w);
+			return null;
+		}
+		w.Log("LOGISTICS_DEPOT_READY", string.Format("ordinal=%1 prefab=%2 capacity_metadata=%3 tier=%4 reason=MANUAL_WORKER_ADDED", ordinal, w.m_Entry.GetPrefab(), w.m_fPrefabCapacity, w.m_Production.GetType()));
+		w.m_sLastReason = "DEPOT_RECONCILED";
+		return w;
 	}
 
 	protected AICF_LogisticsWorker Find(IEntity root, Faction faction, int ordinal)

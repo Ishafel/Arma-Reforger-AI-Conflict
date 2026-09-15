@@ -345,6 +345,7 @@ class AICF_VehicleCoordinator
 		int releasePending;
 		int failedClosed;
 		int capHeld;
+		int cappedHeld;
 		int pool;
 		int retainedPhysical;
 		for (int fleetIndex; fleetIndex < m_Fleets.GetFleetCount(); fleetIndex++)
@@ -357,6 +358,7 @@ class AICF_VehicleCoordinator
 			releasePending += fleet.GetReleasePendingCount();
 			failedClosed += fleet.GetFailedClosedCount();
 			capHeld += fleet.GetActiveOrReservedCount();
+			cappedHeld += fleet.GetCappedActiveOrReservedCount();
 			pool += fleet.GetWorldPoolCount();
 			if (m_CleanupManager)
 				retainedPhysical += m_CleanupManager.GetRetainedPhysicalCount(fleet.GetFactionKey());
@@ -369,6 +371,7 @@ class AICF_VehicleCoordinator
 			releasePending,
 			failedClosed,
 			capHeld);
+		heartbeatDetails += string.Format(" capped_held=%1 logistics_cap_exempt=%2", cappedHeld, capHeld - cappedHeld);
 		heartbeatDetails += string.Format(
 			" world_pool=%1 retained_physical=%2 managed_agents=%3",
 			pool,
@@ -711,7 +714,7 @@ class AICF_VehicleCoordinator
 			reason = "SLOT_LEASE_ALREADY_PRESENT";
 			return false;
 		}
-		int admissionHeld = fleet.GetActiveOrReservedCount() +
+		int admissionHeld = fleet.GetCappedActiveOrReservedCount() +
 			m_Trips.GetPreLeaseNonTerminalCount(assignment.GetFactionKey());
 		if (admissionHeld >= fleet.GetMaximumActiveOrReserved())
 		{

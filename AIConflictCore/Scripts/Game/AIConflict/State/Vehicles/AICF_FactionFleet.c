@@ -47,6 +47,18 @@ class AICF_FactionFleet
 		return count;
 	}
 
+	// Логистика сохраняет lease/custody учёт, но не занимает лимит машин отрядов.
+	int GetCappedActiveOrReservedCount()
+	{
+		int count;
+		foreach (AICF_VehicleLease lease : m_aLeases)
+		{
+			if (lease && lease.IsCapActive() && lease.GetSlotId() < AICF_LogisticsConfig.SERVICE_SLOT_FIRST)
+				count++;
+		}
+		return count;
+	}
+
 	int GetActiveCount()
 	{
 		int count;
@@ -127,7 +139,7 @@ class AICF_FactionFleet
 		return assignment && assignment.IsValid() &&
 			assignment.GetFactionKey() == m_sFactionKey &&
 			!HasLeaseForSlot(assignment.GetSlotId()) &&
-			GetActiveOrReservedCount() < m_iMaximumActiveOrReserved;
+			GetCappedActiveOrReservedCount() < m_iMaximumActiveOrReserved;
 	}
 
 	bool TryReserveLease(
@@ -383,9 +395,8 @@ class AICF_FactionFleet
 
 	bool TryReserveLogistics(AICF_LogisticsWorker w)
 	{
-		if (!Replication.IsServer() || !w || w.m_iSlot < AICF_LogisticsConfig.SERVICE_SLOT_FIRST || w.m_iGeneration <= 0 ||
-			w.m_Faction.GetFactionKey() != m_sFactionKey || HasLeaseForSlot(w.m_iSlot) ||
-			GetActiveOrReservedCount() >= m_iMaximumActiveOrReserved) return false;
+		if (!Replication.IsServer() || !w || !w.m_Faction || w.m_Lease || w.m_iSlot < AICF_LogisticsConfig.SERVICE_SLOT_FIRST || w.m_iGeneration <= 0 ||
+			w.m_Faction.GetFactionKey() != m_sFactionKey || HasLeaseForSlot(w.m_iSlot)) return false;
 		w.m_Lease = new AICF_VehicleLease(m_sFactionKey, w.m_iSlot, w.m_iGeneration, w.m_iGeneration, ++m_iNextLeaseGeneration);
 		m_aLeases.Insert(w.m_Lease);
 		w.m_Fleet = this;
