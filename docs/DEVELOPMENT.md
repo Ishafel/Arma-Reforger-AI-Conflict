@@ -31,6 +31,12 @@ GUID `9F88011DA22B471C`; обычные проекты не получают е�
 
 ## Workbench Validate из терминала
 
+Для переноса библиотеки экипировки между свежими server profiles используйте
+`Start-AICFRuntime.ps1 -Role Server -LoadoutLibraryPath <старый-profile>/profile/AICF_Loadouts`.
+`AICF_RUNTIME_MANIFEST_JSON` содержит имена и SHA-256 импортированных файлов.
+Bindings текущей кампании не импортируются. Формат и terminal fixtures:
+[AI_LOADOUT_EDITOR.md](AI_LOADOUT_EDITOR.md).
+
 Codex не открывает Launcher, Workbench или Script Editor через GUI и не
 управляет ими через Computer Use. Единственный разрешённый агенту способ
 Workbench validation — терминальный Diag-запуск. Команда ниже пишет артефакты

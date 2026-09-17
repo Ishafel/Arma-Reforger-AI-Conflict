@@ -95,6 +95,22 @@ class AICF_ContentProfile
 		return true;
 	}
 
+	// Только активный faction ITEM catalog. Моды могут сузить этот boundary;
+	// Core не содержит путей вещей stock/RHS и не подставляет другую фракцию.
+	bool AllowsLoadoutItem(FactionKey stableKey, SCR_EntityCatalogEntry entry)
+	{
+		if ((stableKey != "US" && stableKey != "USSR") || !entry || !entry.IsEnabled())
+			return false;
+		SCR_ArsenalItem item = SCR_ArsenalItem.Cast(entry.GetEntityDataOfType(SCR_ArsenalItem));
+		if (!item)
+			return false;
+		if (item.GetItemMode() == SCR_EArsenalItemMode.SUPPORT_STATION || item.GetItemMode() == SCR_EArsenalItemMode.PYLON)
+			return false;
+		int unsupported = SCR_EArsenalItemType.VEHICLE | SCR_EArsenalItemType.HELICOPTER |
+			SCR_EArsenalItemType.MORTARS | SCR_EArsenalItemType.EXPLOSIVES;
+		return (item.GetItemType() & unsupported) == 0;
+	}
+
 	bool AllowsGroupFactionRebinding()
 	{
 		return false;

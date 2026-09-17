@@ -98,6 +98,7 @@ class AICF_MatchController
 	protected ref AICF_VehicleWatchdog m_HiddenRecoveryWatchdog;
 	protected ref AICF_EconomySystem m_EconomySystem;
 	protected ref AICF_InfantryRecruitmentService m_InfantryRecruitment;
+	protected ref AICF_LoadoutService m_Loadouts;
 	protected ref AICF_FactionState m_USState;
 	protected ref AICF_FactionState m_USSRState;
 
@@ -1462,6 +1463,8 @@ class AICF_MatchController
 		SyncStage4State();
 		SyncStrategicUIState();
 		EvaluateVictory();
+		if (m_Loadouts)
+			m_Loadouts.Update();
 	}
 
 	protected void ProcessFaction(AICF_FactionState factionState, SCR_CampaignFaction faction)
@@ -1522,6 +1525,11 @@ class AICF_MatchController
 						actualCount,
 						factionMismatchCount,
 						nonAliveCount);
+					if (rosterValid && !slot.ApplyDeploymentLoadouts(faction))
+					{
+						HandleSpawnTimeout(factionState, faction, slot);
+						continue;
+					}
 					if (rosterValid && slot.MarkReady())
 						CompleteReadyDeployment(factionState, faction, slot);
 					else if (!rosterValid)
@@ -7259,6 +7267,11 @@ class AICF_MatchController
 			return;
 
 		m_bStopped = true;
+		if (m_Loadouts)
+		{
+			m_Loadouts.Stop();
+			m_Loadouts = null;
+		}
 		if (m_Logistics)
 		{
 			m_Logistics.Stop();
@@ -7363,5 +7376,38 @@ class AICF_MatchController
 				RplComponent.DeleteRplEntity(group, false);
 			slot.Reset();
 		}
+	}
+
+	bool ResolveLoadoutContext(SCR_PlayerController player, int slotId, int member, out AICF_GroupSlot slot,
+		out SCR_CampaignFaction faction, out ResourceName source, out string role)
+	{
+		if (!Replication.IsServer() || m_bStopped || !m_bRosterReady || !m_Campaign || !m_Campaign.IsMaster() ||
+			!m_Campaign.IsRunning() || !player || player.GetPlayerId() <= 0 ||
+			GetGame().GetPlayerManager().GetPlayerController(player.GetPlayerId()) != player ||
+			slotId < 0 || slotId >= AICF_Stage1Config.GROUP_SLOTS_PER_FACTION || member < 0 || member >= AICF_Stage1Config.MAX_GROUP_SIZE)
+			return false;
+		faction = SCR_CampaignFaction.Cast(SCR_FactionManager.SGetPlayerFaction(player.GetPlayerId()));
+		if (faction == m_USFaction)
+			slot = m_USState.GetSlot(slotId);
+		else if (faction == m_USSRFaction)
+			slot = m_USSRState.GetSlot(slotId);
+		if (!faction || !slot || member >= slot.GetDesiredSize())
+			return false;
+		source = m_GroupSpawner.ResolveRecruitPrefab(faction, member, role);
+		return !source.IsEmpty();
+	}
+
+	void RequestLoadout(SCR_PlayerController player, int token, int slot, int member, int revision, int operation, string payload)
+	{
+		if (!Replication.IsServer() || !player)
+			return;
+		if (m_bStopped)
+		{
+			player.AICF_LoadoutResult(token, false, "MATCH_OR_FACTION_UNAVAILABLE");
+			return;
+		}
+		if (!m_Loadouts)
+			m_Loadouts = new AICF_LoadoutService(this);
+		m_Loadouts.Request(player, token, slot, member, revision, operation, payload);
 	}
 }

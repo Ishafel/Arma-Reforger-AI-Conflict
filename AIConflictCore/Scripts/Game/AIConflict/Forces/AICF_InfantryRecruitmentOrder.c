@@ -26,6 +26,7 @@ class AICF_InfantryRecruitmentOrder
 	int m_iMemberIndex;
 	string m_sRole;
 	int m_iCost;
+	int m_iLoadoutRevision;
 	float m_fPaid;
 
 	bool IsCurrent(AICF_GroupSlot slot)

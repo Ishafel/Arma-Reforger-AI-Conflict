@@ -1,5 +1,490 @@
 # Проверки и evidence
 
+## Крепления шлемов RHS и цельная одежда — 2026-09-17
+
+Фиксированные `LoadoutSlotInfo` внутри одежды показываются как отдельные места,
+включая пустые. Каталог проверяет native совместимость конкретного места;
+балаклаву больше не пытаются вставить как обычное содержимое кармана.
+КЛМК выбирается из «Куртки» и «Брюк»: снимается конфликтующая одежда,
+сохраняется единственный предмет, поддержаны снятие/содержимое через оба места.
+Перед восстановлением полного snapshot исходная одежда снимается до вставки.
+
+Evidence: `.codex-runtime/loadout-clothing-20260917-210803/RESULT.md`.
+`Test-AILoadoutStatic.ps1` **PASS / 0**, negatives 107 → 115;
+`Test-Stage4Static.ps1` **PASS / 0**. Прежний
+`Test-AICommanderModeStatic.ps1` **FAIL / 1, AI_COMMANDER_UI_STATE** сохранён.
+Production Workbench Arland/Everon/ArlandRHS/EveronRHS (`wb-release-*`) и
+RHS stage с fixtures (`wb-probe-release-*`) — **PASS / 0**, SCRIPT E/F/VM = 0.
+
+Новая `AICF_LoadoutClothingProbe.c` включается только в test stage флагом
+`-aicfClothingProbe 1`. Stock КЛМК: **24/24 server, 22/22 client**.
+Проверены выбор через обе области, замена костюма брюками, снятие, Undo,
+snapshot roundtrip, Validate и реальная выдача ИИ. Финальная прежняя
+клиентская fixture — **109/109**, включая SAVE_ACK и отказы stale/faction/member.
+Первый прогон выявил смешивание бронежилетов и разгрузок; фильтр исправлен,
+финальный прогон подтвердил прежнее разделение категорий.
+
+RHS: **34/34 server, 32/32 client**, обе фракции, MICH2000/Spartan3 и балаклавы.
+Проверены native slot filter из полного каталога, отсутствие изменений от
+фильтрации, установка, сохранение, восстановление, выдача ИИ, удаление и Undo.
+Первый холодный поиск в клиенте: 677/772 ms из 603/805 предметов; после
+предварительной категории HEADWEAR — 278/175 ms из 132/93 предметов,
+совместимые 9/8 балаклав сохранены. Это замер операции, не FPS gate.
+
+Финальные test clients завершились с **exit 0**, серверы остановлены после
+результатов (**exit -1**, не graceful shutdown test). Полные остановленные
+логи и manifests сохранены. Stock final SCRIPT E/F/VM = 0; RHS server сохраняет
+4 известных `SCR_Faction` init errors, client SCRIPT E/F/VM = 0. Native error
+lines: stock 64/117 и RHS 225/267 (server/client); полный runtime не объявляется
+чистым PASS. Внешний вид куклы, подписи и доставка мыши в форме, steady FPS,
+JIP inventory — **NOT RUN**, необходима ручная проверка. Обычная RHS-сессия
+после тестов запущена отдельно, без fixtures и таймера, с прежними шаблонами.
+
+## Бесплатные комплекты ботов — 2026-09-17
+
+Доплата supplies за шаблон удалена из recruitment (включая предварительный
+выбор казармы), replacement reservation и supply pacing. Сохраняются базовые
+цены роли/восстановления, ticket/supply транзакции и rollback. Валидация
+создаёт binding с нулевой стоимостью; лимит по каталожной цене убран,
+вместимость и совместимость остаются обязательными. В редакторе убраны цены
+карточек и расчёт доплаты; показано «Экипировка — бесплатно».
+
+Evidence: `.codex-runtime/loadout-free-20260917-202202/RESULT.md`.
+`Test-AILoadoutStatic.ps1` **PASS / 0**, negatives 103 → 107;
+`Test-Stage4Static.ps1` и `Test-InfantryRecruitmentStatic.ps1` **PASS / 0**.
+Сохранён baseline `Test-AICommanderModeStatic.ps1` **FAIL / 1,
+AI_COMMANDER_UI_STATE**. Прежний контракт `LOADOUT_SURCHARGE` заменён на
+бесплатный комплект по прямому запросу пользователя. Дополнительные guards
+защищают от возврата доплаты в выбор казармы, найм и replacement.
+
+Финальный production Workbench Arland/Everon/ArlandRHS/EveronRHS и Everon stage
+с обеими fixtures — **PASS / 0**, SCRIPT E/F/VM/null/Pointer warnings = 0.
+
+Runtime fixtures обновлены: сервер проверяет нулевой binding обеих фракций
+и deployment, клиент — нулевой owner snapshot до и после сохранения.
+Новые runtime и визуальный прогон — **NOT RUN**: текущая игровая сессия
+оставлена на прежнем stage до решения пользователя о перезапуске. Результат
+Workbench и точные команды сохранены в evidence; runtime не заменяется
+статическим аудитом или компиляцией.
+
+## Упрощение редактора экипировки — 2026-09-17
+
+Убраны три дублирующие кнопки: одежда, оружие и добавление в контейнер.
+Вместо них используются существующий список мест и строка добавления.
+Содержимое, удаление, возврат, количество и очистка фильтров видны по контексту;
+кнопки прокрутки — только при переполнении списка. Области куклы и экипировки
+увеличены. Сохранение выделено цветом и требует изменений, корректного имени и
+актуальной server revision; проверка повторяется перед RPC. Сериализация для
+сравнения обновляется после Rebuild, не на каждом UI refresh.
+
+Evidence: `.codex-runtime/loadout-usability-20260917-195601/RESULT.md`.
+`Test-AILoadoutStatic.ps1` **PASS / 0**, negatives 100 → 103;
+`Test-Stage4Static.ps1` **PASS / 0**. Сохранён baseline
+`Test-AICommanderModeStatic.ps1` **FAIL / 1, AI_COMMANDER_UI_STATE**.
+Production Workbench Arland/Everon/ArlandRHS/EveronRHS и отдельная Everon fixture —
+**PASS / 0**, SCRIPT E/F/VM/null/Pointer warnings при компиляции = 0.
+
+Полная клиентская fixture (без preview-only режима) — **107/107,
+finished=1 failures=0**, client exit 0. Проверены owner snapshot, память
+черновиков, native inventory/attachment/preview операции, `SAVE_ACK`,
+`STALE_RPC_REJECTED`, `WRONG_FACTION_REJECTED`, `OUT_OF_RANGE_REJECTED`.
+Server остановлен после завершения fixture, exit -1 (`Stop-Process`),
+это не graceful shutdown test. Полные остановленные логи и manifests — `final/`.
+SCRIPT E/F/VM/null/Pointer warnings = 0; native error lines — 49 server / 128
+client (stock resources/Hierarchy/pathfinding/network/GUI, preview RPL и
+shutdown resources). Полный runtime не объявляется чистым PASS.
+
+Доставка мыши/клавиатуры в изменённой форме, видимость и читаемость кнопок,
+визуальные цвета, FPS и RHS runtime — **NOT RUN**. Fixture не открывает и
+не управляет GUI; проверяет связанные операции, а не внешний вид нового UI.
+
+## Выбор отряда в редакторе экипировки — 2026-09-16
+
+Отряд выбирается непосредственно в верхнем списке редактора: стабильный номер
+и текущее обозначение, например «Отряд 1 — A0». Список берётся из summary своей
+фракции; при переключении заново запрашивается комплект нужной позиции и
+обновляется число доступных позиций. Несохранённые черновики сохраняются в форме
+раздельно по numeric slot/member и восстанавливаются только при той же server
+revision и совместимой identity рецепта. Закрытие формы очищает эту память.
+Сохранение по-прежнему назначает комплект одной позиции выбранного отряда.
+
+Evidence: `.codex-runtime/loadout-respawn-20260916-223612/RESULT.md`.
+`Test-AILoadoutStatic.ps1` **PASS / 0**, negatives 91 → 100;
+`Test-Stage4Static.ps1` **PASS / 0**. Сохранён baseline
+`Test-AICommanderModeStatic.ps1` **FAIL / 1, AI_COMMANDER_UI_STATE**.
+Production Workbench Arland/Everon/ArlandRHS/EveronRHS и финальная Everon fixture —
+**PASS / 0**, SCRIPT E/F/VM/null/Pointer warnings = 0 при компиляции.
+
+Терминальная server-only fixture проверила read model всех 20 отрядов US/USSR,
+границы выбора и отсутствие campaign, восемь сценариев памяти черновиков:
+**30/30, finished=1 failures=0**, native exit 0 после `RequestClose()`.
+Production-файлы в проверенном stage совпадают с исходниками по SHA-256.
+Полные остановленные логи, manifest и exit — `final/`. В полном console log
+50 error lines, включая два SCRIPT E от stock
+`SCR_BaseResupplySupportStationComponent` во время завершения мира; VM/null/Pointer
+ошибок нет. Полный runtime не объявляется чистым PASS.
+
+Первый прогон не стартовал из-за занятого порта 2001: `-ServerPort` launcher
+используется для проверки подключения клиента и не меняет порт server native CLI.
+Этот запуск сохранён в `probe1-port-collision/` как **FAIL setup**, несмотря на
+native exit 0. После остановки прежнего сервера финальный запуск выполнен с
+обычным портом. Предыдущая игровая сессия и её библиотека сохранены в
+`prior-session-stopped/`; server exit -1, client exit 0.
+
+Ручная доставка событий нового dropdown, внешний вид, FPS, RHS runtime и
+повторная выдача комплекта через recruitment RPC — **NOT RUN**. Новый клиент
+не запускался. Исходная жалоба относилась к выбору другого отряда; ошибка
+выдачи комплекта командиру по этим логам не подтверждена.
+
+## Обвесы по слоту и категории содержимого — 2026-09-16
+
+Каталог обвесов использует native совместимость конкретного attachment slot:
+для пустого места проверяется вставка, для занятого — замена. Магазины берутся
+из AMMUNITION и проверяются по muzzle slot. Проверка только читает изолированный
+draft; campaign world и общий thumbnail cache не участвуют в ней. Имена мест
+соответствуют native типам: магазин, прицел, штык, дульное устройство и т. д.
+Двойной клик сначала открывает содержимое предмета, если оно есть; удаление
+двойным кликом сохраняется для вложенных предметов без содержимого.
+
+В контейнере доступны восемь категорий, текстовый поиск и сброс фильтров.
+Слоты надевания/оружия/обвесов сохраняют автоматический контекст. Поиск не
+сбрасывается при выборе другого предмета в том же контейнере; неизменившийся
+каталог сохраняет прокрутку. Исправлена доступность последнего нечётного ряда;
+пустой список объясняет отсутствие совместимых предметов или результатов поиска.
+
+Evidence: `.codex-runtime/loadout-attachments-20260916/RESULT.md`.
+`Test-AILoadoutStatic.ps1` **PASS / 0**, negatives 77 → 91;
+`Test-Stage4Static.ps1` **PASS / 0**. Сохранён baseline
+`Test-AICommanderModeStatic.ps1` **FAIL / 1, AI_COMMANDER_UI_STATE**.
+Production Workbench Arland/Everon/ArlandRHS/EveronRHS и финальная Everon fixture —
+**PASS / 0**, SCRIPT E/F/VM/null/Pointer warnings = 0.
+
+Финальный client probe **113/113, finished=1 failures=0**, exit 0. На M16A2
+подходят 3 магазина, 6 прицелов, 1 штык и 4 дульных устройства; на AK74_GP25 —
+6 магазинов, 1 подствольный обвес, 0 штыков и 3 дульных устройства. Пустой
+слот штыка с установленным GP25 отклоняет вставку по native inventory check.
+Для каждого непустого списка выполнены реальная установка первого кандидата
+в draft и повторная проверка замены занятого места. Фильтрация не меняет
+inventory signature. Категории содержимого проверены по metadata US/USSR.
+
+Полные остановленные логи, manifests и exits — `final/`. Сервер остановлен
+`Stop-Process`, exit -1; это не graceful shutdown test. SCRIPT E/F/VM/null/Pointer
+warnings = 0; native error lines — 47 server / 117 client: stock resource,
+Hierarchy/pathfinding/network diagnostics, preview RPL/PP и shutdown resources.
+Полный runtime не объявляется чистым PASS. Диагностические `probe1/` и `probe2/`
+сохранены: они выявили, что entity preview manager находится снаружи его
+native prefab-preview world; итоговая проверка сравнивает мир candidate с
+миром storage и отдельно проверяет изоляцию менеджера.
+
+Обычная Everon-пара оставлена без probe flags и таймера; profiles/manifests —
+`play/`. Доставка double-click и dropdown/input, внешний вид/читаемость,
+FPS, RHS runtime и повторный save/recruitment RPC — **NOT RUN**.
+Fixture проверяет данные и native операции без открытия/управления GUI.
+
+## Контекст слота, лицо и удаление из контейнера — 2026-09-16
+
+Редактор сохраняет head/body собственного draft при rebuild, смене головного
+убора и rollback. Ручной выбор категории заменён подписью контекста: список
+предметов определяется выбранным местом. Native weapon type разделяет primary,
+secondary и grenade; UI показывает четыре места, как stock inventory, и скрывает
+пятый технический throwable. Двойной клик по содержимому контейнера вызывает
+тот же проверяемый путь удаления, что кнопка. Local delete отсоединяет предмет
+от слота до удаления entity; campaign entities этим путём не допускаются.
+
+Evidence: `.codex-runtime/loadout-context-20260916/RESULT.md`.
+`Test-AILoadoutStatic.ps1` **PASS / 0**, negatives 70 → 77;
+`Test-Stage4Static.ps1` **PASS / 0**. Сохранён baseline
+`Test-AICommanderModeStatic.ps1` **FAIL / 1, AI_COMMANDER_UI_STATE**.
+Production Workbench Arland/Everon/ArlandRHS/EveronRHS и финальная Everon fixture —
+**PASS / 0**, SCRIPT E/F/VM/null/Pointer warnings = 0.
+
+Финальный client probe **89/89, finished=1 failures=0**, exit 0. Проверены
+типы всех пяти native weapon slots, четыре пользовательских места, каталоги
+US/USSR: primary 27/19, secondary 4/4, grenade 1/1. Три смены головного убора
+сохраняют identity и фактический mesh головы; mannequin copy сохраняет тот же
+mesh. В кармане ALICE удалён магазин объёмом 200 см³: занято 600 → 400 см³,
+вместимость остаётся 800 см³; Undo возвращает предмет и объём.
+
+Полные остановленные логи и manifests — `final/`. Сервер остановлен
+`Stop-Process`, exit -1; это не graceful shutdown test. SCRIPT E/F/VM/null/Pointer
+warnings = 0; native error lines — 47 server / 108 client (stock resources,
+Hierarchy/pathfinding, preview RPL/PP и shutdown resources). Полный runtime
+не объявляется чистым PASS. Диагностические прогоны `probe1/` … `probe4/`
+сохранены; проверка головы уточнена по фактическому mesh, поскольку native
+preview head не имеет prefab, а проверка объёма — по предмету внутри подсумка,
+поскольку ремни ClothNode не занимают объём карманов.
+
+Обычная Everon-пара оставлена без probe flags и таймера; profiles/manifests —
+`play/`. Ручная доставка double-click/input, читаемость автоматического контекста,
+визуальный verdict лица, FPS, RHS runtime и повторный save/recruitment RPC —
+**NOT RUN**. Fixture не открывает и не управляет GUI.
+
+## Камера, вместимость и применение экипировки — 2026-09-16
+
+Добавлены вертикальное перемещение камеры с зажатым колесом, native объём
+контейнера в литрах/процентах и применение двойным левым кликом через общий
+с кнопкой путь проверки и rollback. Высота камеры сохраняется при rebuild;
+панорамирование не меняет направление света на модель и не создаёт entities.
+Отдельные категории «Бронежилеты» / «Разгрузки» используют фактический
+`BaseLoadoutClothComponent.GetAreaType()` с кэшем metadata на время формы:
+stock catalog объединяет обе группы в `VEST_AND_WAIST`. Вместимость не выводится
+для служебных weapon/attachment storages, имеющих формальные native dimensions.
+
+Evidence и итоговые runtime verdict: `.codex-runtime/loadout-controls-20260916/RESULT.md`.
+`Test-AILoadoutStatic.ps1` **PASS / 0**, negatives 62 → 70;
+`Test-Stage4Static.ps1` **PASS / 0**. Сохранён baseline
+`Test-AICommanderModeStatic.ps1` **FAIL / 1, AI_COMMANDER_UI_STATE**.
+Production Workbench Arland/Everon/ArlandRHS/EveronRHS и Everon fixture —
+**PASS / 0**, без SCRIPT E/F и Pointer warnings.
+Финальный client probe: **71/71, finished=1 failures=0**, exit 0. US:
+3 бронежилета / 8 разгрузок; USSR: 3 / 16, без пересечений и потерь из
+native vest category. Проверены камера, сохранение высоты после rebuild,
+границы перемещения, неизменность света и реальные значения объёма.
+Сервер остановлен `Stop-Process`, exit -1; полные остановленные логи сохранены.
+SCRIPT E/F, VM/null и Pointer warnings — 0; native error lines — 47 server /
+107 client (stock resources/pathfinding, preview RPL/PP и shutdown resources).
+Полный runtime не объявляется чистым PASS. Для ручной проверки оставлена
+обычная Everon-пара без probe/таймера, profiles и manifests в `play/`.
+Ручные критерии нового ввода, читаемости объёма и FPS — **NOT RUN**;
+runtime fixture проверяет данные и камеру без открытия/управления GUI.
+
+## Удобство редактора и путь миниатюр — 2026-09-16
+
+Снимок пользователя дал **FAIL** предыдущему визуальному варианту: пустые
+карточки/пейзаж вместо вещи, светлая заливка, нечитаемые стрелки и неясная
+пара «место — предмет». Новая версия использует компактный список 8 мест,
+6 крупных карточек, native LoadoutArea для названия/категории (включая пустые
+места), отдельные категории головных уборов и жилетов, явные действия
+«Надеть»/«Заменить»/«Добавить», отключённые неприменимые кнопки, «К родителю»
+и текстовые «Назад»/«Далее». Выбор сохраняется по фактическому slot ID.
+
+Миниатюры получают только prefab names через stock client-local UI manager,
+не manager изолированного draft. Bind отложен до widget initialization,
+заданы alpha blend/LDR_SRGB и единая SRGBA-палитра. Mutable draft и mannequin
+сохраняют собственные миры; shared thumbnail cache не редактируется и не удаляется.
+
+Evidence: `.codex-runtime/loadout-usability-20260916/RESULT.md`.
+`Test-AILoadoutStatic.ps1` **PASS / 0**, negatives 57 → 62;
+`Test-Stage4Static.ps1` **PASS / 0**. Сохранён baseline
+`Test-AICommanderModeStatic.ps1` **FAIL / 1, AI_COMMANDER_UI_STATE**.
+Production Workbench всех четырёх графов и изолированная Everon fixture —
+**PASS / 0**. Client probe **57/57, finished=1 failures=0**, включая singleton
+UI manager и native head/jacket slot context; клиент завершился **exit 0**.
+Сервер остановлен после probe через Stop-Process, **exit -1**; это не graceful
+shutdown test. Сохранены полные остановленные server/client logs и manifests.
+SCRIPT E/F, VM/null и Pointer warnings — **0**. Полный runtime не объявляется
+PASS: native diagnostics **47 server / 124 client**, включая preview RPL/PP,
+stock resources и resource-leak diagnostics при штатном завершении клиента.
+В логе есть открытие новой формы (`EDIT_LOADOUT`), без последующих script errors;
+это не подтверждение изображения или usability.
+
+После smoke поднята обычная Everon-пара без probe/таймера закрытия, profiles и
+manifests в `play/`. Пользователь подтвердил: **«Да, видны сами предметы»** —
+миниатюры **PASS по ручному verdict**. Выбор/замена/возврат в контейнере,
+отдельная оценка цветов и общего удобства, FPS, полная выдача через новый UI
+и runtime RHS — **NOT RUN**.
+
+## Каталог и карточки экипировки — 2026-09-16
+
+Исправлен UI-фильтр, скрывавший оружие и одежду при выбранном свободном месте
+в уже заполненном clothing storage. Каталог теперь зависит от категории,
+arsenal mode и поиска; совместимость проверяется при операции и на сервере.
+Добавлены ограниченные по числу widgets сетки (6 мест / 9 предметов), native
+превью, выбор занятого места для замены, прокрутка колесом/кнопками и переход
+в содержимое предмета. Перед rebuild/close превью отсоединяются от мира draft.
+
+Evidence: `.codex-runtime/loadout-inventory-ui-20260916/RESULT.md`.
+`Test-AILoadoutStatic.ps1` — **PASS / 0**, negative cases 50 → 57;
+`Test-Stage4Static.ps1` — **PASS / 0**. Сохранён baseline
+`Test-AICommanderModeStatic.ps1` — **FAIL / 1, AI_COMMANDER_UI_STATE**.
+Production Workbench Arland / Everon / ArlandRHS / EveronRHS — **PASS / 0**.
+Client probe на Everon — **54/54 checks, finished=1 failures=0**:
+US — 150 предметов (31 оружие, 38 боеприпасов, 8 torso), USSR — 139
+(23 оружия, 29 боеприпасов, 10 torso). Проверены загрузка sample prefab previews
+в отдельном мире и прежние camera/light/lifecycle checks. Probe не открывает UI.
+
+Сервер и клиент оставлены для ручной проверки; сохранены полные live snapshots,
+CLI manifests и остановленные логи предыдущей сессии. В snapshot SCRIPT E/F,
+VM/null и Pointer warnings — 0. Native diagnostics не исчезли: 47 server / 40
+client, включая hidden-draft RPL и stock resource/PP diagnostics; новых уникальных
+сообщений относительно остановленной предыдущей сессии не обнаружено.
+Финальный runtime gate по остановленной новой паре, изображение карточек,
+обработка ввода, полный сценарий сохранения через новую форму, освещение и FPS
+— **NOT RUN**. Runtime RHS для новой формы — **NOT RUN**.
+
+## Направление dynamic подсветки preview — 2026-09-16
+
+В сессии `Loadout-Play-20260916-191224` пользователь сообщил: свет направлен
+в спину и не следует за камерой. Визуальный verdict предыдущего варианта —
+**FAIL**. Проверка только `GetOrigin` была недостаточна для dynamic spot.
+
+`UpdateFillLight` теперь собирает полную матрицу через `DirectionAndUpMatrix`
+и вызывает `SetWorldTransform` / `Update`, вместо отдельных `SetOrigin` и
+`SetLightDirection`. LV повышен с 3.5 до 6.5 для фронтальной подсветки на 3 м.
+Сохранены отдельный мир, stock fallback, отсутствие shadow pass и 30 FPS.
+Client fixture читает реальный forward источника на 0/90/180/270/360°,
+после rebuild и между callbacks, проверяя направление на модель и сторону камеры.
+
+Evidence: `.codex-runtime/loadout-light-follow-20260916/RESULT.md`.
+`AILoadoutStatic` **PASS / 0**, negative cases 49 → 50; `Stage4Static`
+**PASS / 0**. `AICommanderModeStatic` сохраняет **FAIL / 1, AI_COMMANDER_UI_STATE**.
+Production Workbench Arland / Everon / ArlandRHS / EveronRHS — **PASS / 0**.
+Изолированная Everon fixture также **compile PASS / 0**. В клиенте завершены
+**46/46 checks, finished=1 failures=0**, включая фактическую ось света и
+camera-side на всех углах, callbacks и cleanup. Это functional probe, не
+визуальный PASS. Сервер/клиент оставлены открытыми для пользователя; сохранены
+полные live snapshots, финальный gate по остановленным logs ещё не выполнен.
+На момент snapshot SCRIPT E/F, VM/null и Pointer warnings — 0; client содержит
+2 прежних hidden-draft RPL errors и native resource/PP diagnostics.
+Изображение, итоговая яркость и FPS требуют нового ручного verdict.
+
+## Дополнительная подсветка preview — 2026-09-16
+
+Штатная `InventoryPreviewWorld.et` сохранена вместе с HDR/postprocess.
+В её отдельном мире создаётся один обычный `LightEntity` из штатного dynamic
+`CameraLight.et`. Он даёт нейтральный заполняющий свет со стороны камеры,
+без дополнительного shadow pass и specular; радиус 8 м, LV 3.5. При вращении
+меняется существующая сущность, при zoom её дистанция до центра постоянна.
+Отказ подсветки оставляет штатную сцену и не блокирует отображение бойца.
+Поля `LightHandle` не возвращены. Installed resources читались без изменения
+и не копировались в addon.
+
+Evidence: `.codex-runtime/loadout-lighting-20260916/RESULT.md`.
+`Test-AILoadoutStatic.ps1`: **PASS / 0**, negative cases 46 → 49.
+`Test-Stage4Static.ps1`: **PASS / 0** до/после.
+`Test-AICommanderModeStatic.ps1`: сохранён **FAIL / 1, AI_COMMANDER_UI_STATE**.
+Терминальный Workbench Arland / Everon / ArlandRHS / EveronRHS и отдельная
+изолированная client fixture — **PASS / 0**, SCRIPT E/F, VM/null и `Pointer type`
+warnings — 0. Полные logs находятся в evidence. Сохранились прежний warning
+`AICF_OrderPlanner` об up-cast и Workbench resource-leak diagnostics при выходе;
+список native E/F совпадает с предыдущим compile (25 stock / 26 RHS).
+Client fixture расширен проверками ownership, движения, zoom, повторного
+использования, delayed lifetime и cleanup дополнительного света.
+
+**NOT RUN:** client fixture, изображение и яркость, FPS, runtime/JIP/RHS visual.
+Клиент не запускается по инструкции пользователя. Успешная компиляция не
+подтверждает визуальное качество. Прежние runtime diagnostics hidden draft
+и shutdown из прогона 2026-09-15 этой правкой не исправлялись и не перепроверялись.
+
+## Возврат отображения бойца после регрессии света — 2026-09-15
+
+Пользователь в ручной сессии `loadout-play-20260915-231424` сообщил, что боец
+перестал отображаться. В client compile log обнаружены три предупреждения
+`Pointer type 'LightHandle' can only be used with local variables`.
+Предыдущая проверка учитывала SCRIPT E/F, но пропустила эти предупреждения;
+мгновенный 10/10 fixture не доказывал жизнь сцены между кадрами или её изображение.
+Доработка света из предыдущего раздела отозвана.
+
+`AICF_LoadoutPreview` снова использует штатный `InventoryPreviewWorld.et` в
+своём мире — вариант, для которого пользователь уже подтвердил видимость бойца.
+Убраны поля `LightHandle` и принудительная HDR brightness. Сцена освещения
+удерживается как `IEntity` и удаляется явно. Палитра, слои, `SetWorld` и лимит
+preview 30 FPS сохранены. Качество прежнего света остаётся открытым замечанием.
+
+Evidence: `.codex-runtime/loadout-preview-regression-20260915/RESULT.md`.
+До/после: `AILoadoutStatic` и `Stage4Static` **PASS / 0**;
+`AICommanderModeStatic` сохраняет **FAIL / 1, AI_COMMANDER_UI_STATE**.
+Loadout audit теперь содержит 46 negative cases, включая запрет `LightHandle`
+в полях. Терминальный Workbench **Arland, Everon, ArlandRHS, EveronRHS —
+PASS / 0**, SCRIPT E/F, VM/null и `Pointer type` warnings — 0; fixture отдельно
+скомпилирован. Preview-only fixture расширен проверками на 2/4/6 секунде.
+
+**NOT RUN:** обновлённый client fixture, ручное подтверждение возврата изображения
+после отката и FPS. Пользователь запретил запуск клиента; ожидавший launcher
+отменён до `PROCESS_STARTED`. Server fixture завершился отдельно. Запуск клиента
+для gate не возобновлялся. Отдельная ошибка подготовки: у `Start-AICFRuntime`
+`ServerPort` задаёт readiness check, не actual native bind port; проба с 2003
+не запускала сервер на 2003 и клиент ожидал неверный порт. Launcher в этой задаче
+не менялся. Полные логи и это ограничение сохранены.
+
+## Исправление формы экипировки и preview — 2026-09-15
+
+Evidence: `.codex-runtime/loadout-ui-fix-20260915/RESULT.md`, полные логи
+в `profile-{Server,Client}/logs` и `lighting-profile-{Server,Client}/logs`.
+Первый прогон и поздняя правка света сохранены раздельно.
+
+Исправлены применение цвета и flags программных widgets, порядок
+background/input/text, слой редактора над scrim и штатное поле имени.
+`AICF_LoadoutPreview` создаёт визуальную копию в собственном мире, явно
+привязанном к `RenderTargetWidget`. До привязки renderer скрыт. Лимит preview —
+30 FPS; вращение не пересоздаёт модель и не обновляет камеру при неподвижной
+мыши. Свет нейтральный, из трёх источников своего мира, следует за камерой.
+
+До/после: `AILoadoutStatic`, `Stage4Static`, `Stage35Static`,
+`MapPointOrdersStatic`, `SupplyMapUIStatic` — **PASS / 0**.
+`AILoadoutStatic` теперь включает 45 отрицательных случаев, включая палитру,
+слои, привязку renderer, запрет пересборки при вращении и cleanup света.
+`AICommanderModeStatic` сохраняет прежний **FAIL / 1**: `AI_COMMANDER_UI_STATE`.
+Финальный Workbench Validate/Compile **Arland, Everon, ArlandRHS, EveronRHS —
+PASS / 0**, SCRIPT E/F и VM/null — 0. Fixtures компилировались отдельно.
+
+В реальном клиенте `-aicfLoadoutClientProbe 1 -aicfLoadoutPreviewOnly 1`:
+**10/10, finished=1 failures=0** — owner snapshot, isolated draft,
+визуальная копия, отдельный мир, свет, движение камеры, повторная сборка
+с сохранением мира и cleanup. GUI fixture не открывает. Это не визуальная
+проверка и не замер FPS. Server loadout fixture также завершился без нарушений
+своих contracts. Native diagnostics старого hidden draft manager сохраняются;
+успех этих checks не повышает полный runtime gate до PASS.
+
+Первый смешанный прогон подтвердил `SAVED`, после чего в том же клиенте
+выполнялась ручная работа с формой. Полный RPC probe не завершился до
+планового server shutdown; stale/faction/index часть этого прогона — **NOT RUN**.
+Shutdown dialog errors сохранены. Пользователь подтвердил, что цвета исправились
+и боец появился; сообщил о плохом освещении. После этого освещение переделано.
+**NOT RUN:** ручная оценка финального света, полный набор controls, сравнительный
+client FPS до/после и после закрытия формы, длительный soak и RHS visual/runtime.
+Предыдущие source/RPC/recruitment evidence остаются отдельными gates.
+
+## Редактор экипировки ИИ — 2026-09-15
+
+Реализация и terminal fixtures: [AI_LOADOUT_EDITOR.md](AI_LOADOUT_EDITOR.md).
+Evidence: `.codex-runtime/loadout-editor-20260915/`; полные остановленные
+runtime logs — `full/`, manifest и SHA-256 — `runtime-sha256.csv`, сводка
+диагностик — `runtime-summary.csv`, итог — `RESULT.md`.
+
+До/после: `Stage35Static`, `Stage4Static`, `RHSIntegrationStatic`,
+`InfantryRecruitmentStatic`, `MapPointOrdersStatic`, `RuntimeLauncherStatic` —
+**PASS / 0**. `AICommanderModeStatic` сохраняет единственный прежний
+`AI_COMMANDER_UI_STATE` **FAIL / 1**. Новые `AILoadoutStatic` (32 отрицательные
+копии), расширенный launcher audit с проверками импорта и `SupplyMapUIStatic`
+(8 отрицательных входов) — **PASS / 0**.
+
+Финальные production graphs без fixtures: Workbench Validate/Compile
+**Arland, Everon, ArlandRHS, EveronRHS — PASS / 0**; во всех созданы Game module,
+получен `Script validation successful`, SCRIPT E/F и VM/null — 0.
+Исходники зафиксированы в `final-production-sha256.csv`.
+
+Подтверждённые functional contracts:
+
+- Stock/RHS: другая одежда и оружие, совместимый обвес, два предмета в кармане,
+  roundtrip, сохранение/повторное чтение библиотеки и выдача реальному ИИ.
+- Три exact member indices, отказ stale revision/deployment. В stock MP server
+  создана новая replacement group и получен правильный inventory readback.
+- Stock/RHS recruitment: обе группы достигли 10 бойцов при сохранении group ID;
+  изменённые комплекты медиков выданы перед debit/transfer. Stock стоимость
+  медиков: US `15 + 38 = 53`, USSR `15 + 105 = 120` supplies. RHS: `15 + 0`,
+  `15 + 5`. Повторного debit в проверенном пути нет.
+- Реальный stock client: OwnerOnly snapshot, локальный isolated draft, `SAVED`,
+  отказ stale revision, неправильной faction и member index; native client exit 0.
+- Импорт двух RHS шаблонов в свежий profile сохранил SHA-256 обоих файлов.
+
+Полный runtime gate — **FAIL**. В stock recruitment console — десять
+`SCR_BaseResupplySupportStationComponent` SCRIPT E, в RHS — шесть прежних
+faction-init SCRIPT E. `Test-InfantryRecruitmentLog.ps1 -RequireFullRosters`
+даёт соответственно **FAIL / 1** (10 и 6 diagnostics), без нарушений проверенных
+recruitment/payment contracts. Native RPL сообщает о незарегистрированном
+`SCR_CharacterDamageManagerComponent` preview entity: 13 записей в stock MP
+server и одна в client. Это открытое ограничение новой функции, а не скрытый
+baseline. Остальные native resource/world diagnostics сохранены полностью.
+В финальных functional runs VM/null errors — 0; ранние неудачные прогоны,
+включая исправленный RHS catalogue null и утечки первого прототипа, сохранены.
+
+**NOT RUN:** ручной visual/controls, два одновременно редактирующих союзника,
+gameplay JIP/reconnect и визуальная репликация изменённого ИИ, стрельба/перезарядка
+с разными комплектами, loadout-specific fault injection частичного inventory
+failure/нехватки supplies и длительный soak. Выполненный client snapshot test
+не подменяет эти критерии. Результат не объявляется ACCEPTED.
+
 ## Срез перед тегом 0.1.17 — 2026-09-15
 
 Тег объединяет параллельные ручные заявки, снятие обоих лимитов логистических

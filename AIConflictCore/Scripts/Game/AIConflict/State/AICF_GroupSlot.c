@@ -1,6 +1,57 @@
 // Stable faction-local identity for one managed group across all replacements.
 class AICF_GroupSlot
 {
+	protected ref array<ref AICF_LoadoutBinding> m_aLoadouts = {};
+	protected int m_iLoadoutRevision;
+	protected int m_iDeploymentLoadoutRevision;
+
+	int GetLoadoutRevision() { return m_iLoadoutRevision; }
+	bool IsDeploymentLoadoutCurrent() { return m_iDeploymentLoadoutRevision == m_iLoadoutRevision; }
+
+	AICF_LoadoutBinding GetLoadout(int member)
+	{
+		if (member < 0 || member >= m_aLoadouts.Count())
+			return null;
+		return m_aLoadouts[member];
+	}
+
+	bool SetLoadout(int member, AICF_LoadoutBinding binding, int expectedRevision)
+	{
+		if (!Replication.IsServer() || !binding || member < 0 || member >= AICF_Stage1Config.MAX_GROUP_SIZE ||
+			expectedRevision != m_iLoadoutRevision)
+			return false;
+		m_aLoadouts.Resize(AICF_Stage1Config.MAX_GROUP_SIZE);
+		binding.m_iRevision = ++m_iLoadoutRevision;
+		m_aLoadouts[member] = binding;
+		return true;
+	}
+
+	int GetDeploymentLoadoutCost()
+	{
+		// Экипировка не повышает стоимость initial/replacement deployment.
+		return 0;
+	}
+
+	bool ApplyDeploymentLoadouts(SCR_CampaignFaction faction)
+	{
+		if (!Replication.IsServer() || !m_Group || !IsDeploymentLoadoutCurrent())
+			return false;
+		for (int i; i < GetDeploymentSize(); i++)
+		{
+			AICF_LoadoutBinding binding = GetLoadout(i);
+			if (!binding)
+				continue;
+			string reason;
+			if (!AICF_LoadoutApplicator.Apply(m_Group.AICF_GetSpawnMember(i), m_Group, faction, binding, reason))
+			{
+				AICF_Stage4Diagnostics.Warning("LOADOUT_DEPLOYMENT_REJECTED", string.Format(
+					"slot=%1 member=%2 generation=%3 reason=%4", GetSlotId(), i, GetSpawnGeneration(), reason));
+				return false;
+			}
+		}
+		return true;
+	}
+
 	protected int m_iSlotId;
 	protected int m_iRoleIndex;
 	protected AICF_EGroupRole m_Role;
@@ -186,15 +237,10 @@ class AICF_GroupSlot
 	{
 		m_aRosterMembers.Clear();
 		m_aRosterMembers.Resize(AICF_Stage1Config.MAX_GROUP_SIZE);
-		array<AIAgent> agents = {};
 		if (!m_Group)
 			return;
-		m_Group.GetAgents(agents);
-		for (int index = 0; index < agents.Count() && index < m_aRosterMembers.Count(); index++)
-		{
-			if (agents[index])
-				m_aRosterMembers[index] = agents[index].GetControlledEntity();
-		}
+		for (int index; index < GetDeploymentSize(); index++)
+			m_aRosterMembers[index] = m_Group.AICF_GetSpawnMember(index);
 	}
 
 	bool HasRosterMember(int index)
@@ -1267,6 +1313,7 @@ class AICF_GroupSlot
 
 		ClearRuntimeReferences();
 		m_bReplacementDeployment = false;
+		m_iDeploymentLoadoutRevision = m_iLoadoutRevision;
 		m_iSpawnGeneration++;
 		ResetOrderReliabilityRepairFailureBudget();
 		m_iSpawnStartedAtMs = System.GetTickCount();
@@ -1281,6 +1328,7 @@ class AICF_GroupSlot
 
 		ClearRuntimeReferences();
 		m_bReplacementDeployment = true;
+		m_iDeploymentLoadoutRevision = m_iLoadoutRevision;
 		m_iSpawnGeneration++;
 		ResetOrderReliabilityRepairFailureBudget();
 		m_iSpawnStartedAtMs = System.GetTickCount();
@@ -1294,6 +1342,7 @@ class AICF_GroupSlot
 			return false;
 
 		m_Group = group;
+		m_Group.AICF_TrackMemberPositions();
 		m_Group.GetOnWaypointCompleted().Insert(OnOwnedWaypointCompleted);
 		m_Group.GetOnWaypointRemoved().Insert(OnOwnedWaypointRemoved);
 		return true;

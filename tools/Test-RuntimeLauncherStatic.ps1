@@ -255,6 +255,38 @@ try {
         Require-ArgumentPair $rhsEveronManifest '-addonsDir' $expectedRhsEveronDirs 'RUNTIME_LAUNCHER_ARGUMENT_INTEGRITY'
     }
 
+    $libraryRoot = Join-Path $testRoot 'Библиотека комплектов'
+    New-Item -ItemType Directory -Path $libraryRoot -Force | Out-Null
+    foreach ($libraryName in @('template_0.json', 'template_255.json', 'template_256.json', 'template_01.json', 'unrelated.json')) {
+        [IO.File]::WriteAllText((Join-Path $libraryRoot $libraryName), '{}')
+    }
+    $importInvocation = $serverInvocation + @('-LoadoutLibraryPath', $libraryRoot)
+    $importOutput = @(& powershell.exe @importInvocation 2>&1 | ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { Add-Failure 'LOADOUT_IMPORT' 'Dry-run импорта не выполнен' }
+    else {
+        $importManifest = Get-ManifestFromOutput $importOutput 'LOADOUT_IMPORT'
+        if ($importManifest -and ((@($importManifest.loadoutLibraryFiles.name) -join ',') -cne 'template_0.json,template_255.json' -or
+            $importManifest.loadoutLibrarySource -cne $libraryRoot)) {
+            Add-Failure 'LOADOUT_IMPORT_BOUNDS' 'Импорт допускает только canonical filenames 0..255'
+        }
+        if ($importManifest -and $importManifest.loadoutLibraryFiles[0].sha256 -cne (Get-FileHash (Join-Path $libraryRoot 'template_0.json') -Algorithm SHA256).Hash) {
+            Add-Failure 'LOADOUT_IMPORT_HASH' 'В manifest отсутствует точный hash источника'
+        }
+        if (Test-Path -LiteralPath $rhsProfile) { Add-Failure 'LOADOUT_IMPORT_DRY_RUN' 'Dry-run создал profile' }
+    }
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'SilentlyContinue'
+    $null = & powershell.exe @clientInvocation -LoadoutLibraryPath $libraryRoot 2>&1
+    $clientImportExit = $LASTEXITCODE
+    $ErrorActionPreference = $previousErrorActionPreference
+    if ($clientImportExit -eq 0) { Add-Failure 'LOADOUT_IMPORT_CLIENT' 'Клиент принял серверную библиотеку' }
+    [IO.File]::WriteAllText((Join-Path $libraryRoot 'template_1.json'), ('x' * 24577))
+    $ErrorActionPreference = 'SilentlyContinue'
+    $null = & powershell.exe @importInvocation 2>&1
+    $oversizeImportExit = $LASTEXITCODE
+    $ErrorActionPreference = $previousErrorActionPreference
+    if ($oversizeImportExit -eq 0) { Add-Failure 'LOADOUT_IMPORT_SIZE' 'Импорт принял слишком большой файл' }
+
     $existingProfile = Join-Path $testRoot 'Profiles\Already exists'
     New-Item -ItemType Directory -Path $existingProfile -Force | Out-Null
     $existingProfileInvocation = @(

@@ -14,6 +14,7 @@ param(
     [string]$RhsAddonsRoot,
     [string]$ProfileRoot,
     [string]$ServerProfileRoot,
+    [string]$LoadoutLibraryPath,
     [string]$ClientAddress = '127.0.0.1',
     [ValidateRange(1, 65535)]
     [int]$ServerPort = 2001,
@@ -373,6 +374,22 @@ if (Test-Path -LiteralPath $profilePath) {
     throw "Runtime profile уже существует; укажи новый путь: $profilePath"
 }
 
+# Перенос только библиотеки рецептов; campaign bindings в новый матч не входят.
+$loadoutFiles = @()
+$loadoutLibrarySource = $null
+if ($LoadoutLibraryPath) {
+    if ($Role -ne 'Server') { throw '-LoadoutLibraryPath поддерживается только для Server.' }
+    $loadoutLibrarySource = Resolve-AICFExistingDirectory -Path $LoadoutLibraryPath -Description 'Loadout library'
+    $loadoutFiles = @(Get-ChildItem -LiteralPath $loadoutLibrarySource -File | Where-Object {
+        $_.Name -cmatch '^template_(0|[1-9][0-9]{0,2})\.json$' -and [int]$Matches[1] -lt 256
+    } | Sort-Object Name)
+    foreach ($loadoutFile in $loadoutFiles) {
+        if ($loadoutFile.Length -gt 24576 -or ($loadoutFile.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "Недопустимый файл библиотеки: $($loadoutFile.FullName)"
+        }
+    }
+}
+
 $nativeArguments = @('-gproj', $projectPath)
 if ($Role -eq 'Server') {
     $nativeArguments += @(
@@ -408,6 +425,10 @@ $manifest = [ordered]@{
     profile = $profilePath
     addonsDir = $addonsDir
     arguments = @($nativeArguments)
+    loadoutLibrarySource = $loadoutLibrarySource
+    loadoutLibraryFiles = @($loadoutFiles | ForEach-Object {
+        [ordered]@{ name = $_.Name; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
+    })
 }
 $manifestJson = $manifest | ConvertTo-Json -Depth 4 -Compress
 Write-Output "[AICF][RUNTIME_LAUNCHER][PLAN] role=$Role variant=$Variant profile=$profilePath argument_count=$($nativeArguments.Count)"
@@ -417,6 +438,14 @@ Write-Output "AICF_RUNTIME_MANIFEST_JSON=$manifestJson"
 if ($DryRun) {
     Write-Output '[AICF][RUNTIME_LAUNCHER][RESULT][PASS] mode=DRY_RUN'
     exit 0
+}
+
+if ($loadoutFiles.Count -gt 0) {
+    $loadoutDestination = Join-Path $profilePath 'profile\AICF_Loadouts'
+    New-Item -ItemType Directory -Path $loadoutDestination -Force | Out-Null
+    foreach ($loadoutFile in $loadoutFiles) {
+        Copy-Item -LiteralPath $loadoutFile.FullName -Destination (Join-Path $loadoutDestination $loadoutFile.Name)
+    }
 }
 
 if ($Role -eq 'Client') {

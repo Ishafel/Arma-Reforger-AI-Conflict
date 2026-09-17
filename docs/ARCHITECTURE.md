@@ -28,7 +28,11 @@ bootstrap и data-driven stock radio override; bootstrap разрешает то
 и Everon. `AIConflictEveron` не добавляет второй lifecycle: он содержит
 inherited header и подменяет только radio-normalizer factory на Everon policy.
 
-В production path нет собственного мира. `Missions/AICF_Conflict_Arland.conf`
+Собственных gameplay world resources нет. Редактор экипировки создаёт временный
+изолированный in-memory world для черновика и проверки inventory; этот мир не
+участвует в кампании. Владельцы и контракт выдачи описаны в
+[AI_LOADOUT_EDITOR.md](AI_LOADOUT_EDITOR.md).
+`Missions/AICF_Conflict_Arland.conf`
 наследует штатный `{C41618FD18E9D714}Missions/23_Campaign_Arland.conf`,
 `Missions/AICF_Conflict_Everon.conf` — штатный
 `{ECC61978EDCC2B5A}Missions/23_Campaign.conf`, а

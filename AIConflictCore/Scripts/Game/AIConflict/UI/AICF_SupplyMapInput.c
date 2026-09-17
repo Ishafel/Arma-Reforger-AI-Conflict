@@ -5,6 +5,21 @@
 modded class SCR_MapCursorModule
 {
 	protected AICF_SupplyMapUI m_AICFSupplyDialog;
+	protected AICF_LoadoutEditor m_AICFLoadoutDialog;
+
+	void AICF_SetLoadoutDialog(AICF_LoadoutEditor dialog)
+	{
+		m_AICFLoadoutDialog = dialog;
+		HandleDialog(true);
+	}
+
+	void AICF_ClearLoadoutDialog(AICF_LoadoutEditor dialog)
+	{
+		if (m_AICFLoadoutDialog != dialog)
+			return;
+		m_AICFLoadoutDialog = null;
+		HandleDialog(false);
+	}
 
 	void AICF_SetSupplyDialog(AICF_SupplyMapUI dialog)
 	{
@@ -22,7 +37,8 @@ modded class SCR_MapCursorModule
 
 	protected bool AICF_HasSupplyDialog()
 	{
-		return m_AICFSupplyDialog && m_AICFSupplyDialog.IsInputCaptured();
+		return (m_AICFSupplyDialog && m_AICFSupplyDialog.IsInputCaptured()) ||
+			(m_AICFLoadoutDialog && m_AICFLoadoutDialog.IsInputCaptured());
 	}
 
 	override protected void OnInputZoomIn(float value, EActionTrigger reason)

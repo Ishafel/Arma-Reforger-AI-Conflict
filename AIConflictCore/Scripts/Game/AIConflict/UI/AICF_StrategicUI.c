@@ -8,7 +8,8 @@ enum AICF_EStrategicUIButtonAction
 	CANCEL_MAP_POINT,
 	SET_ROLE,
 	SET_UNIT_TYPE,
-	ADJUST_SIZE
+	ADJUST_SIZE,
+	EDIT_LOADOUT
 }
 
 class AICF_StrategicUIButtonHandler : ScriptedWidgetEventHandler
@@ -51,6 +52,7 @@ class AICF_StrategicUIController
 
 	protected SCR_GameModeCampaign m_Campaign;
 	protected ref AICF_SupplyMapUI m_SupplyMapUI;
+	protected ref AICF_LoadoutEditor m_LoadoutEditor;
 	protected Widget m_wHUDRoot;
 	protected Widget m_wHUDAccent;
 	protected TextWidget m_wHUDText;
@@ -62,6 +64,7 @@ class AICF_StrategicUIController
 	protected Widget m_wCommandPanel;
 	protected Widget m_wCommandAccent;
 	protected Widget m_wCloseButton;
+	protected Widget m_wLoadoutButton;
 	protected TextWidget m_wCommandOverview;
 	protected TextWidget m_wCommandStatus;
 	protected TextWidget m_wTargetTitle;
@@ -106,6 +109,7 @@ class AICF_StrategicUIController
 		m_bStarted = true;
 		m_Campaign = campaign;
 		m_SupplyMapUI = new AICF_SupplyMapUI(this);
+		m_LoadoutEditor = new AICF_LoadoutEditor(this);
 		SCR_MapEntity.GetOnMapOpenComplete().Insert(OnMapOpen);
 		SCR_MapEntity.GetOnMapClose().Insert(OnMapClose);
 		GetGame().GetCallqueue().CallLater(Update, UPDATE_INTERVAL_MS, true);
@@ -128,6 +132,7 @@ class AICF_StrategicUIController
 		m_wHUDObjective = null;
 		m_Campaign = null;
 		m_SupplyMapUI = null;
+		m_LoadoutEditor = null;
 	}
 
 	void HandleButton(AICF_EStrategicUIButtonAction action, int value)
@@ -172,7 +177,30 @@ class AICF_StrategicUIController
 			case AICF_EStrategicUIButtonAction.ADJUST_SIZE:
 				SubmitGroupConfiguration(-1, -1, value);
 				break;
+			case AICF_EStrategicUIButtonAction.EDIT_LOADOUT:
+				if (m_LoadoutEditor && m_wCommandScrim)
+				{
+					SetCommandOpen(false);
+					m_LoadoutEditor.Open(m_wCommandScrim.GetParent(), m_iSelectedSlot);
+				}
+				break;
 		}
+	}
+
+	// Read model своей фракции; slot ID не зависит от роли A/D/R.
+	bool GetLoadoutGroup(int slotId, out string name, out int size)
+	{
+		name = string.Empty;
+		size = 0;
+		if (!m_Campaign || slotId < 0 || slotId >= AICF_Stage1Config.GROUP_SLOTS_PER_FACTION)
+			return false;
+		array<string> fields = {};
+		m_Campaign.AICF_GetStrategicGroupSummary(m_bLocalUSSR, slotId).Split("|", fields, false);
+		if (fields.Count() < 10)
+			return false;
+		size = Math.ClampInt(fields[9].ToInt(), 1, AICF_Stage1Config.MAX_GROUP_SIZE);
+		name = string.Format("Отряд %1 — %2", slotId + 1, fields[0]);
+		return true;
 	}
 
 	protected void Update()
@@ -181,6 +209,8 @@ class AICF_StrategicUIController
 			return;
 		if (m_SupplyMapUI)
 			m_SupplyMapUI.Refresh();
+		if (m_LoadoutEditor)
+			m_LoadoutEditor.Refresh();
 		Faction localFaction = SCR_FactionManager.SGetLocalPlayerFaction();
 		if (!localFaction)
 		{
@@ -476,6 +506,11 @@ class AICF_StrategicUIController
 			m_wCommandPanel, 0.03, 0.84, 0.97, 0.925,
 			"HOW TO USE // SELECT GROUP   CONFIGURE ROLE / TYPE / NEXT SIZE   ISSUE TARGET",
 			15, Color.FromSRGBA(173, 190, 200, 255));
+		Widget loadoutButton = CreateRect(m_wCommandPanel, 0.03, 0.792, 0.47, 0.835,
+			Color.FromSRGBA(46, 74, 91, 255), true);
+		m_wLoadoutButton = loadoutButton;
+		CreateText(loadoutButton, 0, 0, 1, 1, "Экипировка", 19, Color.FromSRGBA(255, 255, 255, 255), true);
+		AttachHandler(loadoutButton, AICF_EStrategicUIButtonAction.EDIT_LOADOUT);
 		AICF_Stage4Diagnostics.Info(
 			"STRATEGIC_UI_READY",
 			string.Format("faction=%1 interaction=BUTTON_WIDGET", localFactionKey));
@@ -1172,6 +1207,8 @@ class AICF_StrategicUIController
 
 	protected void RemoveMapUI()
 	{
+		if (m_LoadoutEditor)
+			m_LoadoutEditor.Close();
 		if (m_SupplyMapUI)
 			m_SupplyMapUI.Detach();
 		DisableMapPointCursor();
@@ -1195,6 +1232,7 @@ class AICF_StrategicUIController
 		m_wCommandScrim = null;
 		m_wCommandAccent = null;
 		m_wCloseButton = null;
+		m_wLoadoutButton = null;
 		m_wCommandOverview = null;
 		m_wCommandStatus = null;
 		m_wTargetTitle = null;
@@ -1224,6 +1262,7 @@ class AICF_StrategicUIController
 		SetRectColor(m_wCommandPanel, Color.FromSRGBA(4, 8, 11, 250));
 		SetRectColor(m_wCommandAccent, Color.FromSRGBA(226, 167, 79, 255));
 		SetRectColor(m_wCloseButton, Color.FromSRGBA(91, 34, 34, 250));
+		SetRectColor(m_wLoadoutButton, Color.FromSRGBA(46, 74, 91, 255));
 		SetRectColor(m_wMapPointPrompt, Color.FromSRGBA(6, 18, 25, 245));
 		SetRectColor(m_wMapPointCancel, Color.FromSRGBA(91, 34, 34, 250));
 		foreach (Widget roleButton : m_aRoleButtons)
@@ -1278,6 +1317,8 @@ class AICF_StrategicUIController
 	{
 		if (!parent)
 			return null;
+		// Сохраняем значение до native вызовов: Color — managed объект.
+		int backgroundColor = color.PackToInt();
 		WidgetFlags flags = WidgetFlags.VISIBLE;
 		if (!clickable)
 			flags = SCR_Enum.SetFlag(flags, WidgetFlags.IGNORE_CURSOR);
@@ -1289,6 +1330,8 @@ class AICF_StrategicUIController
 			parent);
 		if (!widget)
 			return null;
+		widget.SetFlags(flags);
+		widget.SetZOrder(0);
 		FrameSlot.SetAnchorMin(widget, left, top);
 		FrameSlot.SetAnchorMax(widget, right, bottom);
 		FrameSlot.SetOffsets(widget, 0, 0, 0, 0);
@@ -1306,6 +1349,10 @@ class AICF_StrategicUIController
 			return null;
 		}
 		background.SetName(RECT_BACKGROUND_NAME);
+		background.SetFlags(WidgetFlags.VISIBLE | WidgetFlags.IGNORE_CURSOR |
+			WidgetFlags.BLEND | WidgetFlags.STRETCH | WidgetFlags.NOWRAP);
+		background.SetZOrder(0);
+		background.SetColor(Color.FromInt(backgroundColor));
 		FrameSlot.SetAnchorMin(background, 0, 0);
 		FrameSlot.SetAnchorMax(background, 1, 1);
 		FrameSlot.SetOffsets(background, 0, 0, 0, 0);
@@ -1325,6 +1372,8 @@ class AICF_StrategicUIController
 				return null;
 			}
 			inputWidget.SetName(RECT_INPUT_NAME);
+			inputWidget.SetFlags(WidgetFlags.VISIBLE | WidgetFlags.BLEND);
+			inputWidget.SetZOrder(1);
 			inputWidget.SetColor(Color.FromSRGBA(255, 255, 255, 0));
 			inputWidget.SetOpacity(0);
 			FrameSlot.SetAnchorMin(inputWidget, 0, 0);
@@ -1370,6 +1419,7 @@ class AICF_StrategicUIController
 		if (!widget)
 			return null;
 		widget.SetFlags(flags);
+		widget.SetZOrder(2);
 		FrameSlot.SetAnchorMin(widget, left, top);
 		FrameSlot.SetAnchorMax(widget, right, bottom);
 		FrameSlot.SetOffsets(widget, 0, 0, 0, 0);

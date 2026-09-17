@@ -80,7 +80,8 @@ class AICF_InfantryRecruitmentService
 			int memberIndex;
 			if (!m_Spawner.FindMissingMember(slot, faction, prefab, role, memberIndex))
 				continue;
-			AICF_InfantryRecruitmentOrder order = SelectBarracks(slot, faction, leader.GetOrigin(), m_Config.Cost(role));
+			int cost = m_Config.Cost(role);
+			AICF_InfantryRecruitmentOrder order = SelectBarracks(slot, faction, leader.GetOrigin(), cost);
 			if (!order || !m_Planner.BeginInfantryRecruitment(order))
 				continue;
 			m_aOrders.Insert(order);
@@ -184,6 +185,9 @@ class AICF_InfantryRecruitmentService
 		if (!order.m_Donor && !m_Spawner.FindMissingMember(order.m_Slot, order.m_Faction, order.m_sPrefab, order.m_sRole, order.m_iMemberIndex))
 			return "ROSTER_UNAVAILABLE";
 		order.m_iCost = m_Config.Cost(order.m_sRole);
+		AICF_LoadoutBinding loadout = order.m_Slot.GetLoadout(order.m_iMemberIndex);
+		if (order.m_Donor && order.m_iLoadoutRevision != order.m_Slot.GetLoadoutRevision())
+			return "LOADOUT_REVISION_CHANGED";
 		if (!m_Economy.QuoteInfantryRecruit(order))
 			return "SUPPLIES_UNAVAILABLE";
 		if (!order.IsPhysicallyPresent())
@@ -203,6 +207,7 @@ class AICF_InfantryRecruitmentService
 				return string.Empty;
 			if (m_iAvailableAgents <= 0)
 				return "AGENT_LIMIT";
+			order.m_iLoadoutRevision = order.m_Slot.GetLoadoutRevision();
 			if (!m_Spawner.BeginRecruit(order))
 				return "SPAWN_REJECTED";
 			m_iAvailableAgents--;
@@ -237,6 +242,9 @@ class AICF_InfantryRecruitmentService
 		int managed, recovered;
 		if (AICF_ManagedAICombatPolicy.Apply(order.m_Donor) != 1 || !m_LOD.KeepCaptureEligible(order.m_Donor, managed, recovered))
 			return "RECRUIT_NOT_READY";
+		string loadoutReason;
+		if (loadout && !AICF_LoadoutApplicator.Apply(recruit.GetControlledEntity(), order.m_Donor, order.m_Faction, loadout, loadoutReason))
+			return "LOADOUT_" + loadoutReason;
 		if (!m_Economy.DebitInfantryRecruit(order))
 			return "PAYMENT_REJECTED";
 		order.m_Donor.RemoveAgent(recruit);
