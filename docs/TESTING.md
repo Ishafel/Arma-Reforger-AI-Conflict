@@ -1,5 +1,105 @@
 # Проверки и evidence
 
+## Совместимый запасной магазин — 2026-09-18
+
+Для выбранного оружия и внутри его обвесов доступна кнопка «+ Магазин».
+Она добавляет ровно один запасной магазин в конечный карман, включая вложенные
+подсумки RHS; заряженный магазин сохраняется. Приоритет: текущий, штатный,
+остальные разрешённые faction catalog. Используются native magazine well,
+capacity и канонический адрес storage. Подбор read-only, операция проходит
+обычный recipe/Rebuild/rollback и серверную валидацию при сохранении. Каталог
+магазинов не сканируется из кадрового Refresh.
+
+Evidence: `.codex-runtime/loadout-magazine-20260918-193530/`.
+Команды `tools/Test-AILoadoutStatic.ps1` и `tools/Test-Stage4Static.ps1`
+до/после — **PASS / 0**, loadout negatives **122 → 132**.
+`tools/Test-AICommanderModeStatic.ps1` сохраняет **FAIL / 1,
+AI_COMMANDER_UI_STATE**. `git diff --check` — **PASS / 0**.
+
+Терминальный `ArmaReforgerWorkbenchSteamDiag.exe -noThrow -wbsilent ...
+-wbModule=ScriptEditor -run -validate` — **PASS / 0** на всех четырёх production
+graphs (Arland, Everon и RHS), а также на отдельном RHS test stage. Полные
+аргументы и логи находятся в `wb-final-*` и `wb-probe-final-*`.
+Все **140** production scripts совпали по SHA-256 с проверенным runtime stage.
+
+`tools/fixtures/AICF_LoadoutMagazineProbe.c` вместе с clothing fixture копируется
+только в отдельный stage. Запуск обоих peers через `tools/Start-AICFRuntime.ps1
+-Role Server|Client -Variant Everon|EveronRHS -RepositoryRoot <stage>
+-AdditionalArguments @('-aicfMagazineProbe','1')` на свежих profiles.
+Manifests содержат точные CLI; клиент подтверждает server process и ROSTER_READY.
+
+Финальные результаты: **122/122** server и **122/122** client в vanilla;
+**130/130** server и **130/130** client в RHS. Проверены обе фракции, автоматы
+и пистолеты, приоритет заряженного магазина, штатный магазин для разряженного
+оружия, +1 в карман, неизменность заряженного, Undo, snapshot restore/signature,
+серверный Validate, несовместимый magazine well, изоляция миров, отсутствие
+карманов и native заполнение кармана. RHS дополнительно проверяет добавление
+и сохранение магазина во вложенном подсумке 6Sh117 (SL Kit).
+В измеренных вызовах подбор занимал **0–14 мс**; это не FPS/soak gate.
+
+Оба клиента завершились сами с **exit 0**; серверы остановлены по точному
+profile после результатов, **exit -1**. Полные stopped logs: `Everon-final/`
+и `EveronRHS-final/`. VM/fatal = **0**; vanilla SCRIPT errors = **0**;
+RHS server сохраняет **4** штатных `SCR_Faction` ошибки ключей US/USSR,
+RHS client SCRIPT errors = **0**. Полный runtime не объявляется чистым PASS:
+native error lines server/client — vanilla **87/195**, RHS **251/348**;
+есть resource/world, preview RPL, overlapping PP effects и shutdown diagnostics.
+Количество выше предыдущего probe из-за повторных Build/restore, классы
+диагностик сохранены в `*-error-categories.json`.
+
+Неудачные начальные прогоны сохранены: неверная проверка мира manager entity
+исправлена сравнением мира candidate с оружием; тест пистолетов исключает
+одноразовые сигнальные средства. Первый запуск клиента остановился на проверке
+launcher, попытка server через PowerShell 5 — на native stderr; итоговые peers
+успешно запущены через PowerShell 7 без изменения launcher.
+
+**NOT RUN:** ручной клик и видимость новой кнопки на разных разрешениях,
+полная матрица сторонних магазинов/оружия, JIP, respawn с этим конкретным
+действием, FPS и длительный soak. Автоматические проверки не заменяют визуальную
+проверку пользователем; результат не объявляется ACCEPTED.
+
+## Основной список, ПКМ и подсумки 6Sh117 — 2026-09-17
+
+Убраны выпадающий список storages и кнопки «Содержимое»/«Снять». Одежда и оружие
+доступны в одном списке; двойной клик открывает предмет, ПКМ удаляет выбранную
+вещь из черновика, включая контейнер с содержимым; Undo возвращает её.
+`AICF_LoadoutNavigation` объединяет storages одного предмета на общей странице,
+сохраняя отдельные адреса операций. Переход использует identity установленного
+предмета; native `GetItem` заменяет поиск произвольного InventoryItemComponent.
+Пустые служебные страницы не открываются. Подсумки получают native имя либо
+понятный fallback без prefab filename и отсутствующего translation key.
+
+Evidence: `.codex-runtime/loadout-navigation-20260917-223544/`.
+`Test-AILoadoutStatic.ps1`: до **PASS / 0, 115 negatives**, после **PASS / 0, 122**.
+Два прежних контракта удаления двойным кликом заменены по новому запросу
+пользователя на отдельные open/remove handlers; добавлены native addressing,
+ПКМ, lifecycle и отсутствие лишних controls. `Test-Stage4Static.ps1` до/после
+**PASS / 0**; `Test-AICommanderModeStatic.ps1` до/после сохраняет прежний
+**FAIL / 1, AI_COMMANDER_UI_STATE**.
+
+Терминальный Workbench Validate/Compile четырёх production graphs и RHS stage
+с fixtures — **PASS / 0**, SCRIPT E/F/VM = 0. Финальные 139 production scripts
+совпали по SHA-256 с runtime stage (`source-hashes.json`). Команды, args.json,
+exit codes и полные логи сохранены в `wb-final-*` и `wb-probe-final-*`.
+
+`AICF_LoadoutNavigationProbe.c` запускается только в test stage вместе с clothing
+fixture по `-aicfNavigationProbe 1`. RHS финал: **69/69 server и 69/69 client**;
+stock: **8/8 server**, прежняя полная клиентская fixture **109/109** с SAVE_ACK,
+проверкой старой ревизии, чужой фракции, позиции, оружия, preview и сохранения.
+RHS проверяет точный 6Sh117 (SL Kit), 17 креплений, 10 целей наполнения карманов,
+переходы и возврат, все native operation addresses, отсутствие технических имён,
+вместимость, удаление подсумка и Undo. Первый прогон выявил две пустые служебные
+страницы; они скрыты из навигации, финальные проверки проходят. Его логи сохранены.
+
+Оба финальных клиента завершились сами, **exit 0**; тестовые серверы остановлены
+после результатов, **exit -1**. Manifests содержат точные CLI и ROSTER_READY;
+полные stopped logs сохранены в `EveronRHS-final` и `Everon-final`.
+Полный runtime не чистый PASS: native error lines stock **51/117**, RHS **211/239**
+(server/client), включая resource/world/RPL diagnostics. В RHS server остаются
+4 прежних `SCR_Faction` init errors. В stock peers и RHS client SCRIPT E/F/VM = 0.
+Ручная доставка двойного клика/ПКМ, внешний вид, steady FPS, JIP inventory и
+packaged Workshop validation — **NOT RUN**. GUI automation не применялась.
+
 ## Крепления шлемов RHS и цельная одежда — 2026-09-17
 
 Фиксированные `LoadoutSlotInfo` внутри одежды показываются как отдельные места,

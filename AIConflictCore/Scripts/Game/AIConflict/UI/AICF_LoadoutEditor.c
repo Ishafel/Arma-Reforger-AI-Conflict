@@ -1,11 +1,3 @@
-class AICF_LoadoutLocation
-{
-	string m_sPath;
-	string m_sStorage;
-	string m_sName;
-	BaseInventoryStorageComponent m_Storage;
-}
-
 // Черновики живут только до закрытия формы и принадлежат точной позиции.
 // Новая server revision запрещает перенос устаревшего черновика на её данные.
 class AICF_LoadoutDraftMemory
@@ -89,7 +81,10 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected SCR_ComboBoxComponent m_Group;
 	protected SCR_ComboBoxComponent m_Member;
 	protected SCR_ComboBoxComponent m_Library;
-	protected SCR_ComboBoxComponent m_Storage;
+	protected TextWidget m_wLocation;
+	protected string m_sViewPath;
+	protected ref AICF_LoadoutNavigation m_Navigation = new AICF_LoadoutNavigation();
+	protected ref array<int> m_aSlotLocations = {};
 	protected SCR_ComboBoxComponent m_ContentCategory;
 	protected ref array<int> m_aContentTypes = {};
 	protected ref array<int> m_aContentModes = {};
@@ -101,7 +96,6 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected ref array<int> m_aGroupIds = {};
 	protected ref array<string> m_aGroupNames = {};
 	protected ref AICF_LoadoutDraftMemory m_DraftMemory = new AICF_LoadoutDraftMemory();
-	protected ref array<ref AICF_LoadoutLocation> m_aLocations = {};
 	protected ref array<int> m_aSlots = {};
 	protected ref array<string> m_aItems = {};
 	protected ref array<int> m_aTemplateIds = {};
@@ -239,8 +233,10 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		Button("undo", "Отменить шаг", 0.69, 0.09, 0.83, 0.15);
 		Button("reset", "Стандартный", 0.84, 0.09, 0.975, 0.15);
 		Label(0.025, 0.165, 0.29, 0.20, "ПРЕДПРОСМОТР", 17);
-		Label(0.31, 0.165, 0.63, 0.20, "ЭКИПИРОВКА И КОНТЕЙНЕРЫ", 17);
-		m_Storage = Combo(0.31, 0.205, 0.63, 0.265);
+		Label(0.31, 0.165, 0.63, 0.20, "ЭКИПИРОВКА", 17);
+		Button("back", "Назад", 0.31, 0.205, 0.385, 0.255);
+		m_wLocation = Label(0.395, 0.205, 0.63, 0.265, "На бойце", 17);
+		m_wLocation.SetTextWrapping(true);
 		Label(0.65, 0.165, 0.975, 0.20, "КАТАЛОГ ПРЕДМЕТОВ", 17);
 		m_wCatalogContext = Label(0.65, 0.205, 0.975, 0.265, "Выберите место в центре", 17);
 		m_wCatalogContext.SetTextWrapping(true);
@@ -257,18 +253,18 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_Items = new AICF_LoadoutItemGrid();
 		m_wCapacity = Label(0.31, 0.268, 0.63, 0.313, "Вместимость: —", 14);
 		m_wCapacity.SetTextWrapping(true);
-		if (!m_Slots.Create(m_Controller, m_wPanel, 0.31, 0.32, 0.63, 0.715, 1, 8) ||
+		Button("addMagazine", "+ Магазин", 0.475, 0.268, 0.63, 0.313);
+		ShowButton("addMagazine", false);
+		if (!m_Slots.Create(m_Controller, m_wPanel, 0.31, 0.32, 0.63, 0.745, 1, 8) ||
 			!m_Items.Create(m_Controller, m_wPanel, 0.65, 0.34, 0.975, 0.735, 2, 3))
 			return false;
 		m_Slots.m_OnSelected.Insert(OnCardSelected);
 		m_Slots.m_OnActivated.Insert(OnSlotActivated);
+		m_Slots.m_OnRemoved.Insert(OnSlotRemoved);
 		m_Items.m_OnSelected.Insert(OnCardSelected);
 		m_Items.m_OnActivated.Insert(OnItemActivated);
-		m_wTarget = Label(0.31, 0.72, 0.63, 0.775, "Выберите место", 16);
+		m_wTarget = Label(0.31, 0.75, 0.63, 0.835, "Выберите место", 16);
 		m_wTarget.SetTextWrapping(true);
-		Button("back", "Назад", 0.31, 0.79, 0.41, 0.835);
-		Button("inside", "Содержимое", 0.42, 0.79, 0.52, 0.835);
-		Button("delete", "Снять", 0.53, 0.79, 0.63, 0.835);
 		m_wSelection = Label(0.65, 0.735, 0.975, 0.79, "Выберите предмет", 16);
 		m_wSelection.SetTextWrapping(true);
 		Button("less", "-", 0.65, 0.79, 0.68, 0.835);
@@ -278,7 +274,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		Label(0.025, 0.745, 0.29, 0.84, "Поворот — зажать ЛКМ\nМасштаб — колесом\nВверх / вниз — зажать колесо", 16);
 		m_wPreview = RenderTargetWidget.Cast(GetGame().GetWorkspace().CreateWidget(WidgetType.RenderTargetWidgetTypeID,
 			WidgetFlags.VISIBLE | WidgetFlags.BLEND, Color.White, 0, m_wPanel));
-		if (!m_wPreview || !m_Group || !m_Member || !m_Library || !m_Storage || !m_wCatalogContext)
+		if (!m_wPreview || !m_Group || !m_Member || !m_Library || !m_wLocation || !m_wCatalogContext)
 			return false;
 		Place(m_wPreview, 0.025, 0.205, 0.29, 0.735);
 		m_wPreview.SetFlags(WidgetFlags.VISIBLE | WidgetFlags.BLEND);
@@ -373,13 +369,15 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_bRotating = false;
 		m_bPanning = false;
 		GetGame().GetCallqueue().Remove(RotatePreview);
+		GetGame().GetCallqueue().Remove(FocusSlotCatalog);
 		m_bRendering = true;
 		PopulateMembers();
-		m_Storage.ClearAll();
+		m_sViewPath = string.Empty;
 		m_Library.ClearAll();
 		m_bRendering = false;
 		m_aTemplateIds.Clear();
-		m_aLocations.Clear();
+		m_Navigation.Clear();
+		m_aSlotLocations.Clear();
 		m_aSlots.Clear();
 		m_aItems.Clear();
 		array<string> empty = {};
@@ -512,7 +510,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 
 	protected void UpdateActions()
 	{
-		if (!m_Items || !m_Slots || !m_Storage)
+		if (!m_Items || !m_Slots)
 			return;
 		bool ready = !m_bPending && m_bDraftReady;
 		AICF_LoadoutLocation location = SelectedLocation();
@@ -538,16 +536,15 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		else if (!typeMatches)
 			action = "Другой тип предмета";
 		SetButtonState("apply", ready && hasSlot && hasItem && typeMatches, action);
-		string removeCaption = "Снять";
-		if (location && !location.m_sPath.IsEmpty())
-			removeCaption = "Убрать";
-		SetButtonState("delete", ready && occupied, removeCaption);
-		bool nested = location && !location.m_sPath.IsEmpty();
-		bool hasContent = ChildLocation() >= 0;
-		ShowButton("delete", occupied);
-		ShowButton("inside", hasContent);
+		bool magazineAction = FocusedMuzzle() != null;
+		ShowButton("addMagazine", magazineAction);
+		SetButtonState("addMagazine", ready && magazineAction);
+		float capacityRight = 0.63;
+		if (magazineAction)
+			capacityRight = 0.465;
+		Place(m_wCapacity, 0.31, 0.268, capacityRight, 0.313);
+		bool nested = !m_sViewPath.IsEmpty();
 		ShowButton("back", nested);
-		SetButtonState("inside", ready && hasContent);
 		SetButtonState("back", ready && nested);
 		ShowButton("less", adding);
 		ShowButton("more", adding);
@@ -677,6 +674,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 
 	protected bool Rebuild()
 	{
+		GetGame().GetCallqueue().Remove(FocusSlotCatalog);
 		string selectedPath, selectedStorage;
 		int selectedSlot = -2;
 		int previousSelection = m_Slots.GetSelected();
@@ -688,7 +686,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			selectedPath = previous.m_sPath;
 			selectedStorage = previous.m_sStorage;
 		}
-		m_aLocations.Clear();
+		m_Navigation.Clear();
+		m_aSlotLocations.Clear();
 		m_bDraftReady = false;
 		m_wPreview.SetVisible(false);
 		// Отменяем незавершённые binds старых карточек до смены черновика.
@@ -709,23 +708,13 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_wPreview.SetVisible(true);
 		m_bDraftReady = true;
 		m_sDraftData = m_Recipe.Encode();
-		m_aLocations.Clear();
-		Locations(m_Draft.GetCharacter(), "", "На бойце", 0);
-		m_bRendering = true;
-		m_Storage.ClearAll();
-		int selectedIndex;
-		foreach (int locationIndex, AICF_LoadoutLocation location : m_aLocations)
-		{
-			m_Storage.AddItem(location.m_sName);
-			if (location.m_sPath == selectedPath && location.m_sStorage == selectedStorage)
-				selectedIndex = locationIndex;
-		}
-		m_Storage.SetCurrentItem(selectedIndex, false, false, false);
-		m_bRendering = false;
+		m_Navigation.Clear();
+		m_aSlotLocations.Clear();
+		m_Navigation.Build(m_Draft.GetCharacter(), m_Catalog);
+		while (!m_sViewPath.IsEmpty() && m_Navigation.FindPath(m_sViewPath) < 0)
+			m_sViewPath = AICF_LoadoutNavigation.ParentPath(m_sViewPath);
 		Slots();
-		if (selectedIndex < m_aLocations.Count() && m_aSlots.Contains(selectedSlot) &&
-			m_aLocations[selectedIndex].m_sPath == selectedPath && m_aLocations[selectedIndex].m_sStorage == selectedStorage)
-			m_Slots.Select(m_aSlots.Find(selectedSlot));
+		SelectAddress(selectedPath, selectedStorage, selectedSlot);
 		Selection();
 		Items();
 		if (selectedSlot < -1)
@@ -733,88 +722,78 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		return true;
 	}
 
-	protected void Locations(IEntity entity, string path, string name, int depth)
-	{
-		if (!entity || depth > 6 || m_aLocations.Count() > 96)
-			return;
-		set<BaseInventoryStorageComponent> storages = new set<BaseInventoryStorageComponent>();
-		SCR_PlayerArsenalLoadout.FindStorageComponents(entity, storages);
-		foreach (BaseInventoryStorageComponent storage : storages)
-		{
-			if (!AICF_LoadoutInventory.Editable(storage))
-				continue;
-			AICF_LoadoutLocation location = new AICF_LoadoutLocation();
-			location.m_Storage = storage;
-			location.m_sPath = path;
-			location.m_sStorage = AICF_LoadoutInventory.StorageId(entity, storage);
-			string kind = "карманы";
-			if (EquipedLoadoutStorageComponent.Cast(storage) || SCR_CharacterInventoryStorageComponent.Cast(storage))
-				kind = "одежда";
-			else if (EquipedWeaponStorageComponent.Cast(storage))
-				kind = "оружие";
-			else if (AICF_LoadoutSlotView.HasFixedSlots(storage))
-				kind = "обвесы";
-			location.m_sName = name + " — " + kind;
-			m_aLocations.Insert(location);
-			array<InventoryItemComponent> items = {};
-			storage.GetOwnedItems(items, false);
-			foreach (InventoryItemComponent child : items)
-			{
-				if (child && child.GetParentSlot() && child.GetParentSlot().GetStorage() == storage)
-					Locations(child.GetOwner(), path + location.m_sStorage + "#" + child.GetParentSlot().GetID().ToString() + "/",
-						m_Catalog.Name(SCR_ResourceNameUtils.GetPrefabName(child.GetOwner())), depth + 1);
-			}
-		}
-	}
-
 	protected AICF_LoadoutLocation SelectedLocation()
 	{
-		int index = m_Storage.GetCurrentIndex();
-		if (index < 0 || index >= m_aLocations.Count())
+		int selected = m_Slots.GetSelected();
+		if (selected < 0 || selected >= m_aSlotLocations.Count())
 			return null;
-		return m_aLocations[index];
+		return m_Navigation.m_Locations[m_aSlotLocations[selected]];
+	}
+
+	protected void SelectAddress(string path, string storage, int slot)
+	{
+		foreach (int i, int locationIndex : m_aSlotLocations)
+		{
+			AICF_LoadoutLocation location = m_Navigation.m_Locations[locationIndex];
+			if (location.m_sPath == path && location.m_sStorage == storage && m_aSlots[i] == slot)
+			{
+				m_Slots.Select(i);
+				return;
+			}
+		}
 	}
 
 	protected void Slots()
 	{
-		m_aSlots.Clear();
+		m_Navigation.Rows(m_sViewPath, m_aSlotLocations, m_aSlots);
 		array<string> prefabs = {}, names = {}, details = {};
-		AICF_LoadoutLocation location = SelectedLocation();
-		if (location)
+		foreach (int row, int locationIndex : m_aSlotLocations)
 		{
-			if (!location.m_sPath.IsEmpty() && !AICF_LoadoutSlotView.HasFixedSlots(location.m_Storage))
+			AICF_LoadoutLocation location = m_Navigation.m_Locations[locationIndex];
+			int slot = m_aSlots[row];
+			string prefab, name, detail;
+			if (slot < 0)
 			{
-				m_aSlots.Insert(-1);
-				prefabs.Insert("");
-				names.Insert("+ Добавить в контейнер");
-				details.Insert("Выберите предмет справа");
+				name = "+ Добавить в карманы";
+				detail = AICF_LoadoutSlotView.CapacityText(location.m_Storage);
 			}
-			for (int i; i < location.m_Storage.GetSlotsCount(); i++)
+			else
 			{
-				if (!AICF_LoadoutSlotView.VisibleSlot(location.m_Storage, i))
-					continue;
-				IEntity entity = AICF_LoadoutClothing.CoveringItem(location.m_Storage, i);
-				if (!entity && !location.m_sPath.IsEmpty() && !AICF_LoadoutSlotView.HasFixedSlots(location.m_Storage))
-					continue;
-				string name;
-				AICF_LoadoutSlotView.Describe(location.m_Storage, i, name);
-				string prefab, detail = "Не надето";
+				IEntity entity = AICF_LoadoutClothing.CoveringItem(location.m_Storage, slot);
+				AICF_LoadoutSlotView.Describe(location.m_Storage, slot, name);
+				detail = "Не надето";
 				if (entity)
 				{
 					prefab = SCR_ResourceNameUtils.GetPrefabName(entity);
-					detail = m_Catalog.Name(prefab);
-					if (!location.m_sPath.IsEmpty() && !AICF_LoadoutSlotView.HasFixedSlots(location.m_Storage))
+					detail = m_Catalog.EntityName(entity);
+					if (!m_sViewPath.IsEmpty())
 					{
 						name = detail;
+						if (name == "Подсумок")
+							name += " " + (slot + 1).ToString();
 						detail = "В контейнере";
+						if (AICF_LoadoutSlotView.HasFixedSlots(location.m_Storage))
+							detail = "Установлено на снаряжении";
+						if (m_Navigation.Child(location, slot) >= 0)
+							detail += " · двойной клик — открыть";
 					}
 				}
-				prefabs.Insert(prefab);
-				names.Insert(name);
-				details.Insert(detail);
-				m_aSlots.Insert(i);
+				else if (!m_sViewPath.IsEmpty())
+				{
+					name = "Свободно: " + name;
+					detail = "Выберите совместимый предмет справа";
+				}
 			}
+			prefabs.Insert(prefab);
+			names.Insert(name);
+			details.Insert(detail);
 		}
+		string title = "На бойце — одежда и оружие";
+		int current = m_Navigation.FindPath(m_sViewPath);
+		if (!m_sViewPath.IsEmpty() && current >= 0)
+			title = m_Navigation.m_Locations[current].m_sName;
+		m_wLocation.SetText(title);
+		m_Slots.SetEmptyText("В этом предмете нет доступных мест");
 		m_Slots.SetItems(prefabs, names, details);
 		m_Slots.Select(0);
 		Selection();
@@ -880,7 +859,10 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	{
 		Selection();
 		if (grid == m_Slots)
-			FocusSlotCatalog();
+		{
+			GetGame().GetCallqueue().Remove(FocusSlotCatalog);
+			GetGame().GetCallqueue().CallLater(FocusSlotCatalog, 350, false);
+		}
 	}
 
 	protected void OnItemActivated(AICF_LoadoutItemGrid grid, int index)
@@ -894,19 +876,21 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	{
 		if (m_bPending || !m_bDraftReady || grid != m_Slots || index != m_Slots.GetSelected())
 			return;
-		if (ChildLocation() >= 0)
-		{
-			OpenContainer();
-			return;
-		}
-		AICF_LoadoutLocation location = SelectedLocation();
-		if (!location || location.m_sPath.IsEmpty())
+		OpenContainer();
+	}
+
+	protected void OnSlotRemoved(AICF_LoadoutItemGrid grid, int index)
+	{
+		if (m_bPending || !m_bDraftReady || grid != m_Slots || index != m_Slots.GetSelected())
 			return;
 		ApplySelection(true);
 	}
 
 	protected void FocusSlotCatalog()
 	{
+		GetGame().GetCallqueue().Remove(FocusSlotCatalog);
+		if (!m_wRoot || !m_bDraftReady || m_bPending)
+			return;
 		AICF_LoadoutLocation location = SelectedLocation();
 		string focus;
 		if (location)
@@ -963,12 +947,12 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 				if (m_bAttachmentTarget)
 					AICF_LoadoutSlotView.AttachmentCatalog(location.m_Storage, slot, m_iTargetType, m_iTargetMode);
 				if (!location.m_sPath.IsEmpty() && !m_bAttachmentTarget && location.m_Storage.Get(slot))
-					caption = m_Catalog.Name(SCR_ResourceNameUtils.GetPrefabName(location.m_Storage.Get(slot)));
+					caption = m_Catalog.EntityName(location.m_Storage.Get(slot));
 				caption = "Выбрано: " + caption;
 				if (ChildLocation() >= 0)
 					caption += "\nДвойной клик — содержимое";
-				else if (!location.m_sPath.IsEmpty() && location.m_Storage.Get(slot))
-					caption += "\nДвойной клик — убрать предмет";
+				if (AICF_LoadoutClothing.CoveringItem(location.m_Storage, slot))
+					caption += "\nПКМ — убрать · «Отменить шаг» — вернуть";
 			}
 		}
 		m_wTarget.SetText(caption);
@@ -979,44 +963,28 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_ContentCategory.GetRootWidget().SetVisible(m_bContentFilter);
 		// Внутри контейнера показываем его объём, даже когда выбран предмет.
 		// На бойце — карманы выбранной одежды/рюкзака до входа в содержимое.
-		BaseInventoryStorageComponent capacityStorage;
-		if (location && !location.m_sPath.IsEmpty())
-			capacityStorage = location.m_Storage;
-		else
+		string capacityPath = m_sViewPath;
+		if (capacityPath.IsEmpty())
 		{
 			int child = ChildLocation();
 			if (child >= 0)
-				capacityStorage = m_aLocations[child].m_Storage;
+				capacityPath = m_Navigation.m_Locations[child].m_sPath;
 		}
-		m_wCapacity.SetText(AICF_LoadoutSlotView.CapacityText(capacityStorage));
+		string capacityText = "Вместимость: —";
+		if (!capacityPath.IsEmpty())
+			capacityText = m_Navigation.CapacityText(capacityPath);
+		if (FocusedMuzzle())
+			capacityText = m_Navigation.CapacityText(string.Empty);
+		m_wCapacity.SetText(capacityText);
 		UpdateActions();
 	}
 
 	protected int ChildLocation()
 	{
-		AICF_LoadoutLocation location = SelectedLocation();
 		int selected = m_Slots.GetSelected();
-		if (!location || selected < 0 || selected >= m_aSlots.Count() || m_aSlots[selected] < 0)
+		if (selected < 0 || selected >= m_aSlots.Count())
 			return -1;
-		IEntity worn = AICF_LoadoutClothing.CoveringItem(location.m_Storage, m_aSlots[selected]);
-		if (!worn)
-			return -1;
-		InventoryItemComponent wornItem = InventoryItemComponent.Cast(worn.FindComponent(InventoryItemComponent));
-		if (!wornItem || !wornItem.GetParentSlot())
-			return -1;
-		string path = location.m_sPath + location.m_sStorage + "#" + wornItem.GetParentSlot().GetID().ToString() + "/";
-		int fallback = -1;
-		foreach (int i, AICF_LoadoutLocation child : m_aLocations)
-		{
-			if (child.m_sPath != path)
-				continue;
-			if (fallback < 0)
-				fallback = i;
-			float used, capacity;
-			if (AICF_LoadoutSlotView.Capacity(child.m_Storage, used, capacity))
-				return i;
-		}
-		return fallback;
+		return m_Navigation.Child(SelectedLocation(), m_aSlots[selected]);
 	}
 
 	protected void OpenContainer()
@@ -1024,38 +992,30 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		int child = ChildLocation();
 		if (child < 0)
 			return;
-		m_Storage.SetCurrentItem(child, false, false, false);
+		GetGame().GetCallqueue().Remove(FocusSlotCatalog);
+		m_sViewPath = m_Navigation.m_Locations[child].m_sPath;
 		Slots();
 		FocusSlotCatalog();
 	}
 
 	protected void ParentContainer()
 	{
-		AICF_LoadoutLocation location = SelectedLocation();
-		if (!location || location.m_sPath.IsEmpty())
+		if (m_sViewPath.IsEmpty())
 			return;
-		array<string> parts = {};
-		location.m_sPath.Split("/", parts, true);
-		if (parts.IsEmpty())
-			return;
-		array<string> address = {};
-		parts[parts.Count() - 1].Split("#", address, true);
-		if (address.Count() != 2)
-			return;
-		string path;
-		for (int p; p < parts.Count() - 1; p++)
-			path += parts[p] + "/";
-		foreach (int i, AICF_LoadoutLocation parent : m_aLocations)
+		string childPath = m_sViewPath;
+		m_sViewPath = AICF_LoadoutNavigation.ParentPath(childPath);
+		Slots();
+		foreach (int row, int locationIndex : m_aSlotLocations)
 		{
-			if (parent.m_sPath != path || parent.m_sStorage != address[0])
-				continue;
-			m_Storage.SetCurrentItem(i, false, false, false);
-			Slots();
-			m_Slots.Select(m_aSlots.Find(address[1].ToInt()));
-			Selection();
-			FocusSlotCatalog();
-			return;
+			int child = m_Navigation.Child(m_Navigation.m_Locations[locationIndex], m_aSlots[row]);
+			if (child >= 0 && m_Navigation.m_Locations[child].m_sPath == childPath)
+			{
+				m_Slots.Select(row);
+				break;
+			}
 		}
+		Selection();
+		FocusSlotCatalog();
 	}
 
 	override bool OnChange(Widget w, bool finished)
@@ -1082,17 +1042,14 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			SelectTarget(m_aGroupIds[index], 0);
 		else if (component == m_Member && !m_bPending)
 			SelectTarget(m_iSlotId, index);
-		else if (component == m_Storage)
-		{
-			Slots();
-			FocusSlotCatalog();
-		}
 		else if (component == m_ContentCategory && !m_bPending && m_bContentFilter)
 			Items();
 	}
 
 	override bool OnClick(Widget w, int x, int y, int button)
 	{
+		if (button != SCR_EMouseButtons.LEFT)
+			return false;
 		string action = w.GetName();
 		if (action == "close")
 		{
@@ -1122,8 +1079,6 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			m_iQuantity = Math.ClampInt(m_iQuantity + delta, 1, 16);
 			m_wQuantity.SetText("×" + m_iQuantity.ToString());
 		}
-		else if (action == "inside")
-			OpenContainer();
 		else if (action == "back")
 			ParentContainer();
 		else if (action == "undo" || action == "reset")
@@ -1136,8 +1091,10 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			}
 			Rebuild();
 		}
-		else if (action == "apply" || action == "delete")
-			ApplySelection(action == "delete");
+		else if (action == "apply")
+			ApplySelection(false);
+		else if (action == "addMagazine")
+			AddMagazine();
 		else if (action == "clearFilters")
 		{
 			m_wSearch.SetText("");
@@ -1147,6 +1104,73 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		UpdateActions();
 		RefreshColors();
 		return true;
+	}
+
+	protected BaseMuzzleComponent FocusedMuzzle()
+	{
+		if (!m_bDraftReady || !m_Draft || !m_Draft.GetCharacter())
+			return null;
+		AICF_LoadoutLocation location = SelectedLocation();
+		int selected = m_Slots.GetSelected();
+		if (!location || selected < 0 || selected >= m_aSlots.Count())
+			return null;
+		int slot = m_aSlots[selected];
+		IEntity item;
+		if (slot >= 0)
+			item = AICF_LoadoutClothing.CoveringItem(location.m_Storage, slot);
+		BaseWeaponComponent weapon;
+		if (item)
+			weapon = BaseWeaponComponent.Cast(item.FindComponent(BaseWeaponComponent));
+		// Внутри обвесов контекстом остаётся открытое оружие.
+		string path = m_sViewPath;
+		while (!weapon && !path.IsEmpty())
+		{
+			IEntity owner = AICF_LoadoutInventory.ResolvePath(m_Draft.GetCharacter(), path);
+			if (owner)
+				weapon = BaseWeaponComponent.Cast(owner.FindComponent(BaseWeaponComponent));
+			path = AICF_LoadoutNavigation.ParentPath(path);
+		}
+		if (!weapon)
+			return null;
+		BaseMuzzleComponent muzzle = weapon.GetCurrentMuzzle();
+		if (slot >= 0 && location.m_Owner == weapon.GetOwner())
+		{
+			BaseMuzzleComponent focused = BaseMuzzleComponent.Cast(location.m_Storage.GetSlot(slot).GetParentContainer());
+			if (focused)
+				muzzle = focused;
+		}
+		if (!muzzle || muzzle.IsDisposable() || !muzzle.GetMagazineWell())
+			return null;
+		return muzzle;
+	}
+
+	protected void AddMagazine()
+	{
+		if (m_bPending || !m_Recipe || !m_bDraftReady)
+			return;
+		if (m_Recipe.m_aPaths.Count() >= AICF_LoadoutRecipe.MAX_OPERATIONS)
+		{
+			m_wStatus.SetText("Достигнут предел изменений шаблона. Отмените лишний шаг или сбросьте черновик.");
+			return;
+		}
+		ResourceName prefab;
+		AICF_LoadoutLocation destination;
+		string reason;
+		if (!AICF_LoadoutMagazines.Resolve(m_Draft, m_Catalog, m_Navigation, FocusedMuzzle(), prefab, destination, reason))
+		{
+			m_wStatus.SetText(reason);
+			return;
+		}
+		string targetName = destination.m_sName;
+		m_Recipe.Add(destination.m_sPath, destination.m_sStorage, -1, prefab, 1);
+		if (!Rebuild())
+		{
+			m_Recipe.Undo();
+			Rebuild();
+			m_wStatus.SetText(Status("INVENTORY_INCOMPATIBLE"));
+			return;
+		}
+		m_wStatus.SetText(string.Format("Добавлен 1 × %1 → %2. Нажмите «Сохранить», чтобы применить комплект.", m_Catalog.Name(prefab), targetName));
 	}
 
 	protected bool MatchesTarget(ResourceName prefab)
@@ -1290,6 +1314,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_bRotating = false;
 		m_bPanning = false;
 		GetGame().GetCallqueue().Remove(RotatePreview);
+		GetGame().GetCallqueue().Remove(FocusSlotCatalog);
 		if (m_bCaptured)
 			GetGame().GetInputManager().RemoveActionListener(UIConstants.MENU_ACTION_BACK, EActionTrigger.DOWN, Close);
 		foreach (SCR_ComboBoxComponent combo : m_aCombos)
@@ -1312,6 +1337,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		{
 			m_Slots.m_OnSelected.Remove(OnCardSelected);
 			m_Slots.m_OnActivated.Remove(OnSlotActivated);
+			m_Slots.m_OnRemoved.Remove(OnSlotRemoved);
 			m_Slots.Close();
 		}
 		if (m_Items)
@@ -1329,7 +1355,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (m_Preview)
 			m_Preview.Clear();
 		m_Preview = null;
-		m_aLocations.Clear();
+		m_Navigation.Clear();
+		m_aSlotLocations.Clear();
 		if (m_Draft)
 			m_Draft.Clear();
 		m_Draft = null;
@@ -1344,7 +1371,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_DraftMemory.Clear();
 		m_Member = null;
 		m_Library = null;
-		m_Storage = null;
+		m_sViewPath = string.Empty;
+		m_wLocation = null;
 		m_ContentCategory = null;
 		m_aContentTypes.Clear();
 		m_aContentModes.Clear();

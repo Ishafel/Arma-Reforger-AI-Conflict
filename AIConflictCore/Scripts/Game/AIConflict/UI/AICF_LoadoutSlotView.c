@@ -123,6 +123,13 @@ class AICF_LoadoutSlotView
 		float occupied, capacity;
 		if (!Capacity(storage, occupied, capacity))
 			return "Вместимость: —";
+		return FormatCapacity(occupied, capacity);
+	}
+
+	static string FormatCapacity(float occupied, float capacity)
+	{
+		if (capacity <= 0)
+			return "Вместимость: —";
 		// Native dimensions/volume: сантиметры и см³. В UI показываем литры.
 		float usedLitres = Math.Round(occupied / 100) / 10;
 		float maxLitres = Math.Round(capacity / 100) / 10;
@@ -133,7 +140,7 @@ class AICF_LoadoutSlotView
 
 	static int Describe(BaseInventoryStorageComponent storage, int slot, out string label)
 	{
-		label = "Место " + (slot + 1).ToString();
+		label = "Крепление " + (slot + 1).ToString();
 		if (!storage || slot < 0 || slot >= storage.GetSlotsCount())
 			return 0;
 		LoadoutSlotInfo info = LoadoutSlotInfo.Cast(storage.GetSlot(slot));
@@ -184,6 +191,9 @@ class AICF_LoadoutSlotView
 				label = "Разгрузка";
 				return SCR_EArsenalItemType.VEST_AND_WAIST;
 			}
+			// Незнакомые mod areas часто имеют технические SourceName вроде
+			// slot2/arsbelt. Их адрес остаётся внутри модели, а не в подписи.
+			label = "Крепление " + (slot + 1).ToString();
 		}
 		if (EquipedWeaponStorageComponent.Cast(storage))
 		{

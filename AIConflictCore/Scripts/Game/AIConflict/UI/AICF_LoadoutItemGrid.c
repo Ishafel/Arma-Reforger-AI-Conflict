@@ -30,6 +30,7 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 	protected bool m_bEnabled = true;
 	ref ScriptInvoker m_OnSelected = new ScriptInvoker();
 	ref ScriptInvoker m_OnActivated = new ScriptInvoker();
+	ref ScriptInvoker m_OnRemoved = new ScriptInvoker();
 
 	bool Create(AICF_StrategicUIController controller, Widget parent, float l, float t, float r, float b, int columns, int rows)
 	{
@@ -300,6 +301,28 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 			Select(index);
 			m_OnSelected.Invoke(this, index);
 			m_OnActivated.Invoke(this, index);
+			return true;
+		}
+		return false;
+	}
+
+	// ButtonWidget OnClick предназначен для ЛКМ; ПКМ принимаем явно на отпускании.
+	override bool OnMouseButtonUp(Widget w, int x, int y, int button)
+	{
+		if (button != SCR_EMouseButtons.RIGHT)
+			return false;
+		if (!m_bEnabled)
+			return true;
+		foreach (int i, AICF_LoadoutItemCard card : m_aCards)
+		{
+			if (w != card.m_Input)
+				continue;
+			int index = m_iFirst + i;
+			if (index >= m_aPrefabs.Count())
+				return true;
+			Select(index);
+			m_OnSelected.Invoke(this, index);
+			m_OnRemoved.Invoke(this, index);
 			return true;
 		}
 		return false;

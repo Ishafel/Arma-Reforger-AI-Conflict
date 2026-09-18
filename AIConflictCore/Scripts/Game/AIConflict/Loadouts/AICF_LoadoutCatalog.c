@@ -52,6 +52,32 @@ class AICF_LoadoutCatalog
 		return FilePath.StripExtension(FilePath.StripPath(prefab));
 	}
 
+	// Подсумки модов могут отсутствовать в faction catalog, но иметь native UIInfo.
+	string EntityName(IEntity entity)
+	{
+		if (!entity)
+			return string.Empty;
+		InventoryItemComponent item = InventoryItemComponent.Cast(entity.FindComponent(InventoryItemComponent));
+		if (item && item.GetUIInfo() && !item.GetUIInfo().GetName().IsEmpty())
+		{
+			string name = WidgetManager.Translate(item.GetUIInfo().GetName());
+			if (name == "Pouch")
+				return "Подсумок";
+			if (!name.IsEmpty() && !name.StartsWith("#"))
+				return name;
+		}
+		ResourceName prefab = SCR_ResourceNameUtils.GetPrefabName(entity);
+		if (Find(prefab))
+		{
+			string catalogName = Name(prefab);
+			if (!catalogName.IsEmpty() && !catalogName.StartsWith("#"))
+				return catalogName;
+		}
+		if (entity.FindComponent(BaseInventoryStorageComponent))
+			return "Подсумок";
+		return "Предмет";
+	}
+
 	int ItemType(ResourceName prefab)
 	{
 		SCR_EntityCatalogEntry entry = Find(prefab);
