@@ -862,6 +862,13 @@ summary и ownership сетевого состояния сохранены. Т�
 Это внутренний wire contract между server state и программно построенным UI;
 изменение формата требует одновременной правки producer и parser.
 
+Метки отрядов отличают роль от текущей задачи: активный `IsRecruitingInfantry()`
+показывает локализованное «Пополнение состава в казарме». Такой слот исключён
+из сводных маркеров атаки; союзная база также исключается по текущему native
+faction identity даже до replan. Завершение recruitment автоматически возвращает
+обычное отображение следующей задачи. Это read-only presentation, без смены
+приказов, ownership или расходов supplies.
+
 `AICF_StrategicUIController` только отображает состояние и вызывает методы
 player-owned `SCR_PlayerController`. Reliable RPC передаёт slot/selection, но
 server заново получает `GetPlayerId()`, faction и authoritative slot и проверяет

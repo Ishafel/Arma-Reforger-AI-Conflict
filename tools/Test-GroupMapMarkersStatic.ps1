@@ -33,6 +33,11 @@ if ([regex]::Matches($sync, 'AICF_SetGroupMarkerData\s*\(\s*BuildMarkerText\([^;
     $failures.Add('[GROUP_MARKER_REFRESH] New and existing markers must receive live label and details')
 }
 $direction = Method $system 'DescribeDirection'
+$attackObjective = Method $system 'IsAttackObjective'
+Require 'GROUP_MARKER_RECRUITMENT_NOT_ATTACK' $attackObjective 'slot.IsRecruitingInfantry\(\)'
+Require 'GROUP_MARKER_NO_FRIENDLY_ATTACK' $attackObjective 'target.GetFaction\(\) != faction'
+Require 'GROUP_MARKER_OBJECTIVE_FILTER_USED' (Method $system 'SyncFactionObjectiveMarkers') '!IsAttackObjective\(slot, markerFaction\)'
+Require 'GROUP_MARKER_RECRUITMENT_TASK' (Get-AICFMethodBody $system 'DescribeTask') 'if \(slot.IsRecruitingInfantry\(\)\)\s*return "\{AICF:AICF_UI_RecruitingInfantry\}";'
 Require 'GROUP_MARKER_POSITION' $direction 'if \(!leader\) return[\s\S]*origin = leader.GetOrigin\(\)'
 Assert-AICFNotContains $failures 'GROUP_MARKER_POSITION' $system.Code 'group.GetOrigin\(\)' 'Controller origin must not become a group position'
 $presentation = (Method $system 'BuildMarkerText') + (Method $system 'BuildMarkerDetails') + (Method $system 'DescribeTask')

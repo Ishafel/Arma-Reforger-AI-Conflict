@@ -641,6 +641,8 @@ class AICF_GroupMapMarkerSystem
 	{
 		if (slot.IsAwaitingPlayerCommand() || slot.IsSystemHoldOrder())
 			return "{AICF:AICF_UI_Awaiting_orders_05004120}";
+		if (slot.IsRecruitingInfantry())
+			return "{AICF:AICF_UI_RecruitingInfantry}";
 		if (slot.IsRecoveringFromStuck())
 			return "{AICF:AICF_UI_Avoiding_obstacle_250ad729}";
 		if (!slot.HasStrategicDestination()) return "{AICF:AICF_UI_Awaiting_task_48c50794}";
@@ -787,6 +789,18 @@ class AICF_GroupMapMarkerSystem
 				intentRevision));
 	}
 
+	// Временная поездка за пополнением не является атакой. После capture
+	// союзная база исчезает из списка целей даже до следующего replan.
+	protected bool IsAttackObjective(AICF_GroupSlot slot, SCR_Faction faction)
+	{
+		if (!slot || !faction || !slot.IsCombatReady() || slot.IsRecruitingInfantry() ||
+			slot.IsAwaitingPlayerCommand() || slot.IsSystemHoldOrder() ||
+			slot.GetRole() != AICF_EGroupRole.ATTACK)
+			return false;
+		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
+		return target && target.GetOwner() && target.GetFaction() != faction;
+	}
+
 	// One target base owns one marker per faction. Multiple ATTACK slots are
 	// folded into the same label so co-located replicated widgets cannot overlap.
 	protected void SyncFactionObjectiveMarkers(
@@ -801,9 +815,7 @@ class AICF_GroupMapMarkerSystem
 		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
 		{
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
-			if (!slot || !slot.IsCombatReady() ||
-				slot.IsAwaitingPlayerCommand() || slot.IsSystemHoldOrder() ||
-				slot.GetRole() != AICF_EGroupRole.ATTACK)
+			if (!IsAttackObjective(slot, markerFaction))
 			{
 				continue;
 			}

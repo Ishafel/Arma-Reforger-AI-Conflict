@@ -38,6 +38,51 @@ native/RHS resource/world/RPL diagnostics сохранены. Client/JIP, visual
 Evidence: `.codex-runtime/navigation-fix-20260919/`, включая полные logs,
 native manifest, версии, source hashes, baseline/after и exact compile args.
 
+## Метка атаки во время пополнения — 2026-09-19
+
+В пользовательском северном Everon RHS отряд US A2 получил
+`INFANTRY_RECRUITMENT_STARTED base=10` в 16:55:13 и 16:59:13: союзный
+Saint-Philippe был временной целью казарм. Сводная метка `ATK A2` ошибочно
+следовала роли ATTACK без проверки recruitment и владельца базы.
+
+`UI/AICF_GroupMapMarkers.c` теперь исключает текущий `IsRecruitingInfantry()`
+и союзные базы из attack objectives; задача отображается как «Пополнение
+состава в казарме». Изменены также `Language/AICF_Localization.st`, обе runtime
+таблицы (386 записей), `tools/Test-GroupMapMarkersStatic.ps1`, добавлена
+`tools/fixtures/AICF_RecruitmentMapProbe.c`, обновлена ARCHITECTURE.
+Gameplay приказы, waypoint lifecycle и recruitment не изменены.
+
+Команды `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-<Name>Static.ps1`:
+`GroupMapMarkers`, `Localization`, `InfantryRecruitment` — **PASS / 0**
+до/после; `AICommanderMode` — тот же **FAIL / 1, AI_COMMANDER_UI_STATE**.
+Терминальный `ArmaReforgerWorkbenchSteamDiag.exe -noThrow -wbsilent
+-gproj <EveronRHS/addon.gproj> ... -wbModule=ScriptEditor -run -validate`
+для production и отдельного stage с fixture — **PASS / 0**,
+`Script validation successful.`. `git diff --check` — **PASS / 0**.
+
+Runtime: `Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthRHS|Stock
+-RepositoryRoot <stage> -AdditionalArguments @('-aicfRecruitmentMapProbe','1',
+'-addr','127.0.0.1:22199|22200')`, в отдельных terminal sessions —
+**9/9 cases** для каждой карты, оба native exit **0**. Synthetic slot использует
+реальные stock/RHS HQ и faction identities. Проверены enemy/friendly filters,
+скрытие recruitment, восстановление атаки, defender/null guards и RU/EN.
+Производственный roster и ownership fixture не меняет.
+
+Полные остановленные runtime logs проверены. RHS run содержит stock
+`SCR_AIProcessFailedMovementResult.NodeErrorOnce: Failed move` (VM Exception),
+четыре faction-init SCRIPT ошибки и две resupply shutdown ошибки; поэтому
+полный runtime не объявляется error-free. Ошибка движения произошла в native
+behavior tree до вызова fixture и не затрагивает проверяемые методы отображения.
+Stock run сохраняет shutdown resupply ошибки. Успешные 9/9 — только verdict
+функциональных cases меток.
+
+Evidence: `.codex-runtime/recruitment-map-20260919/`, `before-*`, `after-*`,
+`wb-stage*`, `wb-production*`, `runtime-rhs.txt`, `runtime-stock.txt` с manifest,
+полные `rhs-logs/`, `stock-logs/`, индексы `*-errors.txt`,
+`reported-live-server.log` (snapshot пользовательского матча).
+Тестовые процессы закрылись; текущий пользовательский матч не перезапущен.
+**NOT RUN:** новый connected client/JIP и ручная визуальная проверка меток.
+
 ## Скорость захвата баз ×3 — 2026-09-19
 
 `AIConflictCore/Scripts/Game/AIConflict/Integration/AICF_CaptureSpeedPolicy.c`
