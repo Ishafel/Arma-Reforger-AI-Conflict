@@ -93,7 +93,7 @@ if ($failures.Count -eq 0) {
             '(?m)^\s*m_eSaveTypes\s+0\s*$' `
             'Scenario header must disable unsupported session persistence so in-game hosting always starts a fresh campaign'
         Require-Match 'SCENARIO_IDENTITY' $scenario `
-            'm_sName\s+"AI Conflict[^"\r\n]*"[\s\S]*m_sGameMode\s+"AI Conflict"' `
+            'm_sName\s+"#AICF_Scenario_(Arland|Everon|ArlandRHS|EveronRHS)_Name"[\s\S]*m_sGameMode\s+"AI Conflict"' `
             'Scenario header must expose an AI Conflict name and game-mode label'
         Require-Match 'SCENARIO_RANK_UNLOCKS' $scenario `
             'm_bIgnoreMinimumVehicleRank\s+1' `

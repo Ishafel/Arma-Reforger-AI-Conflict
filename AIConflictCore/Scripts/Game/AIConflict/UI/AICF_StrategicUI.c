@@ -199,7 +199,7 @@ class AICF_StrategicUIController
 		if (fields.Count() < 10)
 			return false;
 		size = Math.ClampInt(fields[9].ToInt(), 1, AICF_Stage1Config.MAX_GROUP_SIZE);
-		name = string.Format("Отряд %1 — %2", slotId + 1, fields[0]);
+		name = AICF_Localization.Format("{AICF:AICF_UI_Squad_da9707e5}", string.Format("%1", slotId + 1), string.Format("%1", fields[0]));
 		return true;
 	}
 
@@ -232,9 +232,9 @@ class AICF_StrategicUIController
 		ObservePendingMapPointOrder();
 		if (m_wMapToggleText)
 		{
-			m_wMapToggleText.SetText(string.Format(
-				"%1  [OPEN]",
-				GetCommandAuthorityLabel()));
+			m_wMapToggleText.SetText(AICF_Localization.Resolve(AICF_Localization.Format(
+				"{AICF:AICF_UI_OPEN_3801120f}",
+				string.Format("%1", GetCommandAuthorityLabel()))));
 		}
 		RefreshVisualStyles();
 		if (m_bCommandOpen && !m_bSelectingMapPoint && !m_bMapPointPending)
@@ -269,13 +269,13 @@ class AICF_StrategicUIController
 		m_wHUDText = CreateText(
 			m_wHUDRoot,
 			0.025, 0.12, 0.975, 0.52,
-			"TICKETS  --    SUPPLY  --    SQUADS  --    TROOPS  --",
+			"{AICF:AICF_UI_TICKETS_SUPPLY_SQUADS_TROOPS_0fd0143f}",
 			16,
 			Color.FromSRGBA(232, 241, 247, 255));
 		m_wHUDObjective = CreateText(
 			m_wHUDRoot,
 			0.025, 0.52, 0.975, 0.94,
-			"ORDERS // AWAITING ORDERS",
+			"{AICF:AICF_UI_ORDERS_AWAITING_ORDERS_d5f5f311}",
 			16,
 			Color.FromSRGBA(226, 167, 79, 255));
 	}
@@ -293,22 +293,22 @@ class AICF_StrategicUIController
 			totalSupplies = m_Campaign.AICF_GetUSSRTotalSupplies();
 			connectedSupplies = m_Campaign.AICF_GetUSSRConnectedSupplies();
 		}
-		string supply = "SYNC";
+		string supply = "{AICF:AICF_UI_SYNC_476c685a}";
 		if (m_Campaign.AICF_GetStage4Enabled())
 			supply = string.Format("%1/%2", connectedSupplies, totalSupplies);
 		string objective = m_Campaign.AICF_GetStrategicObjective(m_bLocalUSSR);
 		if (objective.IsEmpty())
-			objective = "AWAITING ORDERS";
-		m_wHUDText.SetText(string.Format(
-			"TICKETS  %1    SUPPLY  %2    SQUADS  %3    TROOPS  %4",
-			tickets,
-			supply,
-			m_Campaign.AICF_GetCombatGroups(m_bLocalUSSR),
-			m_Campaign.AICF_GetManagedAgents(m_bLocalUSSR)));
-		m_wHUDObjective.SetText(string.Format(
+			objective = "{AICF:AICF_UI_AWAITING_ORDERS_d367d918}";
+		m_wHUDText.SetText(AICF_Localization.Resolve(AICF_Localization.Format(
+			"{AICF:AICF_UI_TICKETS_SUPPLY_SQUADS_TROOPS_ce912af3}",
+			string.Format("%1", tickets),
+			string.Format("%1", supply),
+			string.Format("%1", m_Campaign.AICF_GetCombatGroups(m_bLocalUSSR)),
+			string.Format("%1", m_Campaign.AICF_GetManagedAgents(m_bLocalUSSR)))));
+		m_wHUDObjective.SetText(AICF_Localization.Resolve(string.Format(
 			"%1 // %2",
 			GetCommandAuthorityLabel(),
-			objective));
+			objective)));
 	}
 
 	protected void OnMapOpen(MapConfiguration config)
@@ -338,7 +338,7 @@ class AICF_StrategicUIController
 		m_wMapToggle.SetZOrder(220);
 		m_wMapToggleText = CreateText(
 			m_wMapToggle, 0, 0, 1, 1,
-			string.Format("%1  [OPEN]", GetCommandAuthorityLabel()),
+			AICF_Localization.Format("{AICF:AICF_UI_OPEN_3801120f}", string.Format("%1", GetCommandAuthorityLabel())),
 			20,
 			Color.FromSRGBA(236, 242, 245, 255),
 			true);
@@ -369,7 +369,7 @@ class AICF_StrategicUIController
 			false);
 		CreateText(
 			m_wCommandPanel, 0.03, 0.018, 0.7, 0.088,
-			"AI CONFLICT — COMMAND",
+			"{AICF:AICF_UI_AI_CONFLICT_COMMAND_76148726}",
 			26,
 			Color.FromSRGBA(236, 244, 248, 255));
 
@@ -380,7 +380,7 @@ class AICF_StrategicUIController
 			true);
 		CreateText(
 			m_wCloseButton, 0, 0, 1, 1,
-			"CLOSE  [X]", 18,
+			"{AICF:AICF_UI_CLOSE_X_bcaa946f}", 18,
 			Color.FromSRGBA(255, 232, 232, 255),
 			true);
 		AttachHandler(m_wCloseButton, AICF_EStrategicUIButtonAction.CLOSE_COMMAND);
@@ -390,11 +390,11 @@ class AICF_StrategicUIController
 			string.Empty, 17, Color.FromSRGBA(202, 218, 227, 255));
 		CreateText(
 			m_wCommandPanel, 0.03, 0.16, 0.49, 0.205,
-			"ARMY / SELECT GROUP",
+			"{AICF:AICF_UI_ARMY_SELECT_GROUP_ed867378}",
 			18, Color.FromSRGBA(116, 198, 239, 255));
 		CreateText(
 			m_wCommandPanel, 0.515, 0.16, 0.97, 0.205,
-			"GROUP CONFIGURATION",
+			"{AICF:AICF_UI_GROUP_CONFIGURATION_5020d7ae}",
 			18, Color.FromSRGBA(239, 187, 104, 255));
 
 		for (int slotId = 0; slotId < AICF_Stage1Config.GROUP_SLOTS_PER_FACTION; slotId++)
@@ -419,7 +419,7 @@ class AICF_StrategicUIController
 
 		CreateText(
 			m_wCommandPanel, 0.515, 0.21, 0.97, 0.245,
-			"ROLE",
+			"{AICF:AICF_UI_ROLE_4d516719}",
 			14, Color.FromSRGBA(173, 190, 200, 255));
 		array<string> roleLabels = {"ATTACK", "DEFEND", "RESERVE"};
 		for (int roleIndex = 0; roleIndex < roleLabels.Count(); roleIndex++)
@@ -432,7 +432,7 @@ class AICF_StrategicUIController
 				true);
 			CreateText(
 				roleButton, 0, 0, 1, 1,
-				roleLabels[roleIndex],
+				AICF_Localization.Code(roleLabels[roleIndex]),
 				14, Color.FromSRGBA(235, 241, 245, 255), true);
 			m_aRoleButtons.Insert(roleButton);
 			AttachHandler(roleButton, AICF_EStrategicUIButtonAction.SET_ROLE, roleIndex);
@@ -440,7 +440,7 @@ class AICF_StrategicUIController
 
 		CreateText(
 			m_wCommandPanel, 0.515, 0.312, 0.97, 0.347,
-			"UNIT TYPE / NO HEAVY ARMOR",
+			"{AICF:AICF_UI_UNIT_TYPE_NO_HEAVY_ARMOR_9befc517}",
 			14, Color.FromSRGBA(173, 190, 200, 255));
 		array<string> typeLabels = {"INFANTRY", "LIGHT 4X4", "TRUCK", "ARMED 4X4"};
 		for (int typeIndex = 0; typeIndex < typeLabels.Count(); typeIndex++)
@@ -453,7 +453,7 @@ class AICF_StrategicUIController
 				true);
 			CreateText(
 				typeButton, 0, 0, 1, 1,
-				typeLabels[typeIndex],
+				AICF_Localization.Code(typeLabels[typeIndex]),
 				14, Color.FromSRGBA(235, 241, 245, 255), true);
 			m_aUnitTypeButtons.Insert(typeButton);
 			AttachHandler(
@@ -464,7 +464,7 @@ class AICF_StrategicUIController
 
 		CreateText(
 			m_wCommandPanel, 0.515, 0.414, 0.69, 0.449,
-			"NEXT DEPLOYMENT SIZE",
+			"{AICF:AICF_UI_NEXT_DEPLOYMENT_SIZE_d8d92314}",
 			14, Color.FromSRGBA(173, 190, 200, 255));
 		Widget sizeDown = CreateRect(
 			m_wCommandPanel,
@@ -491,25 +491,25 @@ class AICF_StrategicUIController
 		AttachHandler(sizeUp, AICF_EStrategicUIButtonAction.ADJUST_SIZE, 1);
 		CreateText(
 			m_wCommandPanel, 0.895, 0.41, 0.97, 0.461,
-			"MAX 10", 13, Color.FromSRGBA(132, 149, 159, 255), true);
+			"{AICF:AICF_UI_MAX_10_43ad606a}", 13, Color.FromSRGBA(132, 149, 159, 255), true);
 
 		m_wTargetTitle = CreateText(
 			m_wCommandPanel, 0.515, 0.475, 0.97, 0.515,
-			"ORDER TARGETS",
+			"{AICF:AICF_UI_ORDER_TARGETS_4b0b43d1}",
 			17, Color.FromSRGBA(239, 187, 104, 255));
 		m_wTargetEmptyState = CreateText(
 			m_wCommandPanel, 0.515, 0.525, 0.97, 0.605,
-			"SELECT A READY GROUP",
+			"{AICF:AICF_UI_SELECT_A_READY_GROUP_c38cd026}",
 			15, Color.FromSRGBA(132, 149, 159, 255));
 
 		m_wCommandStatus = CreateText(
 			m_wCommandPanel, 0.03, 0.84, 0.97, 0.925,
-			"HOW TO USE // SELECT GROUP   CONFIGURE ROLE / TYPE / NEXT SIZE   ISSUE TARGET",
+			"{AICF:AICF_UI_HOW_TO_USE_SELECT_GROUP_CONFIGURE_ROLE_TYP_201828d4}",
 			15, Color.FromSRGBA(173, 190, 200, 255));
 		Widget loadoutButton = CreateRect(m_wCommandPanel, 0.03, 0.792, 0.47, 0.835,
 			Color.FromSRGBA(46, 74, 91, 255), true);
 		m_wLoadoutButton = loadoutButton;
-		CreateText(loadoutButton, 0, 0, 1, 1, "Экипировка", 19, Color.FromSRGBA(255, 255, 255, 255), true);
+		CreateText(loadoutButton, 0, 0, 1, 1, "{AICF:AICF_UI_Loadout_4e116f01}", 19, Color.FromSRGBA(255, 255, 255, 255), true);
 		AttachHandler(loadoutButton, AICF_EStrategicUIButtonAction.EDIT_LOADOUT);
 		AICF_Stage4Diagnostics.Info(
 			"STRATEGIC_UI_READY",
@@ -559,25 +559,25 @@ class AICF_StrategicUIController
 			totalSupplies = m_Campaign.AICF_GetUSSRTotalSupplies();
 			connectedSupplies = m_Campaign.AICF_GetUSSRConnectedSupplies();
 		}
-		string logistics = "ECONOMY SYNC";
+		string logistics = "{AICF:AICF_UI_ECONOMY_SYNC_c0b65aea}";
 		if (m_Campaign.AICF_GetStage4Enabled())
 			logistics = GetTierName(tier);
-		m_wCommandOverview.SetText(string.Format(
-			"AUTHORITY  %1     OBJECTIVE  %2\nFORCE  %3 squads / %4 personnel     LOGISTICS  %5     SUPPLY  %6/%7     REINFORCEMENTS  %8     SHIPMENTS  %9",
-			GetCommandAuthorityLabel(),
-			m_Campaign.AICF_GetStrategicObjective(m_bLocalUSSR),
-			m_Campaign.AICF_GetCombatGroups(m_bLocalUSSR),
-			m_Campaign.AICF_GetManagedAgents(m_bLocalUSSR),
-			logistics,
-			connectedSupplies,
-			totalSupplies,
-			pending,
-			shipments));
+		m_wCommandOverview.SetText(AICF_Localization.Resolve(AICF_Localization.Format(
+			"{AICF:AICF_UI_AUTHORITY_OBJECTIVE_FORCE_squads_personnel_99a5a480}",
+			string.Format("%1", GetCommandAuthorityLabel()),
+			string.Format("%1", m_Campaign.AICF_GetStrategicObjective(m_bLocalUSSR)),
+			string.Format("%1", m_Campaign.AICF_GetCombatGroups(m_bLocalUSSR)),
+			string.Format("%1", m_Campaign.AICF_GetManagedAgents(m_bLocalUSSR)),
+			string.Format("%1", logistics),
+			string.Format("%1", connectedSupplies),
+			string.Format("%1", totalSupplies),
+			string.Format("%1", pending),
+			string.Format("%1", shipments))));
 
 		for (int slotId = 0; slotId < m_aGroupTexts.Count(); slotId++)
 		{
 			string summary = m_Campaign.AICF_GetStrategicGroupSummary(m_bLocalUSSR, slotId);
-			m_aGroupTexts[slotId].SetText(FormatGroupSummary(summary));
+			m_aGroupTexts[slotId].SetText(AICF_Localization.Resolve(FormatGroupSummary(summary)));
 			if (slotId == m_iSelectedSlot)
 				SetRectColor(m_aGroupButtons[slotId], Color.FromSRGBA(25, 92, 125, 245));
 			else
@@ -595,10 +595,10 @@ class AICF_StrategicUIController
 			m_sRenderedTargetMode = targetMode;
 			RebuildTargetButtons(targets, targetMode);
 		}
-		m_wTargetTitle.SetText(string.Format(
-			"ORDER TARGETS — %1 (%2)",
-			GetSlotKey(selectedSummary),
-			GetRoleName(selectedSummary)));
+		m_wTargetTitle.SetText(AICF_Localization.Resolve(AICF_Localization.Format(
+			"{AICF:AICF_UI_ORDER_TARGETS_451fd325}",
+			string.Format("%1", GetSlotKey(selectedSummary)),
+			string.Format("%1", AICF_Localization.Code(GetRoleName(selectedSummary))))));
 	}
 
 	protected void RebuildTargetButtons(string encodedTargets, string targetMode)
@@ -615,7 +615,7 @@ class AICF_StrategicUIController
 		{
 			if (m_wTargetEmptyState)
 			{
-				m_wTargetEmptyState.SetText("SELECT A READY GROUP");
+				m_wTargetEmptyState.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_SELECT_A_READY_GROUP_c38cd026}"));
 				m_wTargetEmptyState.SetVisible(true);
 			}
 			return;
@@ -628,7 +628,7 @@ class AICF_StrategicUIController
 			true);
 		CreateText(
 			m_wMapPointButton, 0, 0, 1, 1,
-			"MOVE TO MAP POINT / УКАЗАТЬ ТОЧКУ НА КАРТЕ",
+			"{AICF:AICF_UI_MOVE_TO_MAP_POINT_5786eaca}",
 			14, Color.FromSRGBA(220, 244, 255, 255), true);
 		AICF_StrategicUIButtonHandler pointHandler =
 			new AICF_StrategicUIButtonHandler(
@@ -661,7 +661,7 @@ class AICF_StrategicUIController
 				true);
 			CreateText(
 				targetButton, 0, 0, 1, 1,
-				string.Format("ORDER  >  %1", fields[2]),
+				AICF_Localization.Format("{AICF:AICF_UI_ORDER_6d4b20b1}", string.Format("%1", fields[2])),
 				14, Color.FromSRGBA(255, 235, 199, 255), true);
 			int callsign = fields[0].ToInt();
 			AICF_StrategicUIButtonHandler handler = new AICF_StrategicUIButtonHandler(
@@ -680,7 +680,7 @@ class AICF_StrategicUIController
 			}
 			else
 			{
-				m_wTargetEmptyState.SetText("NO VALID TARGETS FOR THIS ROLE");
+				m_wTargetEmptyState.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_NO_VALID_TARGETS_FOR_THIS_ROLE_ff6deb55}"));
 				m_wTargetEmptyState.SetVisible(true);
 			}
 		}
@@ -692,16 +692,16 @@ class AICF_StrategicUIController
 		if (!playerController)
 		{
 			if (m_wCommandStatus)
-				m_wCommandStatus.SetText("ORDER NOT SENT: local player controller is unavailable.");
+				m_wCommandStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_ORDER_NOT_SENT_local_player_controller_is__a52dbb5a}"));
 			return;
 		}
 		playerController.AICF_RequestStrategicOrder(m_iSelectedSlot, targetCallsign);
 		if (m_wCommandStatus)
 		{
-			m_wCommandStatus.SetText(string.Format(
-				"ORDER SENT: slot %1 -> base callsign %2. Awaiting authoritative state update.",
-				m_iSelectedSlot,
-				targetCallsign));
+			m_wCommandStatus.SetText(AICF_Localization.Resolve(AICF_Localization.Format(
+				"{AICF:AICF_UI_ORDER_SENT_slot_base_callsign_Awaiting_aut_d50fb00e}",
+				string.Format("%1", m_iSelectedSlot),
+				string.Format("%1", targetCallsign))));
 		}
 	}
 
@@ -715,7 +715,7 @@ class AICF_StrategicUIController
 		if (GetTargetMode(summary).IsEmpty())
 		{
 			if (m_wCommandStatus)
-				m_wCommandStatus.SetText("POINT ORDER NOT STARTED: select a ready group.");
+				m_wCommandStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_POINT_ORDER_NOT_STARTED_select_a_ready_gro_ee588692}"));
 			return;
 		}
 		array<string> fields = {};
@@ -729,7 +729,7 @@ class AICF_StrategicUIController
 		if (m_wMapToggle)
 			m_wMapToggle.SetVisible(false);
 		CreateMapPointPrompt(
-			"CLICK THE MAP TO MOVE AND HOLD\nЩЁЛКНИТЕ ПО КАРТЕ: ДВИЖЕНИЕ И УДЕРЖАНИЕ",
+			"{AICF:AICF_UI_CLICK_THE_MAP_TO_MOVE_AND_HOLD_d71a24f4}",
 			true);
 		GetGame().GetCallqueue().CallLater(
 			ActivateMapPointCursor,
@@ -773,7 +773,7 @@ class AICF_StrategicUIController
 			RemoveMapPointPrompt();
 			SetCommandOpen(true);
 			if (m_wCommandStatus)
-				m_wCommandStatus.SetText("POINT ORDER NOT SENT: local player controller is unavailable.");
+				m_wCommandStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_POINT_ORDER_NOT_SENT_local_player_controll_9c98b8a4}"));
 			return;
 		}
 
@@ -786,7 +786,7 @@ class AICF_StrategicUIController
 			m_iMapPointPendingSlot,
 			clientPosition);
 		CreateMapPointPrompt(
-			"ORDER SENT — AWAITING SERVER VALIDATION\nПРИКАЗ ОТПРАВЛЕН — ПРОВЕРКА СЕРВЕРОМ",
+			"{AICF:AICF_UI_ORDER_SENT_AWAITING_SERVER_VALIDATION_01832470}",
 			false);
 		AICF_Stage4Diagnostics.Info(
 			"PLAYER_POINT_ORDER_SENT",
@@ -825,7 +825,7 @@ class AICF_StrategicUIController
 			RemoveMapPointPrompt();
 			SetCommandOpen(true);
 			if (m_wCommandStatus)
-				m_wCommandStatus.SetText("POINT ORDER ACCEPTED: MOVING AND HOLDING AT THE AUTHORITATIVE MAP POINT.");
+				m_wCommandStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_POINT_ORDER_ACCEPTED_MOVING_AND_HOLDING_AT_75ccc6b9}"));
 			return;
 		}
 		if (System.GetTickCount(m_iMapPointPendingAtMs) < MAP_POINT_ACK_TIMEOUT_MS)
@@ -835,7 +835,7 @@ class AICF_StrategicUIController
 		RemoveMapPointPrompt();
 		SetCommandOpen(true);
 		if (m_wCommandStatus)
-			m_wCommandStatus.SetText("POINT ORDER RESPONSE TIMED OUT: no owner response or replicated state was received.");
+			m_wCommandStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_POINT_ORDER_RESPONSE_TIMED_OUT_no_owner_re_60a3c681}"));
 	}
 
 	protected bool ObservePointOrderServerResult()
@@ -868,15 +868,15 @@ class AICF_StrategicUIController
 		{
 			if (accepted)
 			{
-				m_wCommandStatus.SetText(string.Format(
-					"POINT ORDER ACCEPTED: MOVING AND HOLDING AT %1/%2.",
-					Math.Round(resolvedPosition[0]),
-					Math.Round(resolvedPosition[2])));
+				m_wCommandStatus.SetText(AICF_Localization.Resolve(AICF_Localization.Format(
+					"{AICF:AICF_UI_POINT_ORDER_ACCEPTED_MOVING_AND_HOLDING_AT_39812901}",
+					string.Format("%1", Math.Round(resolvedPosition[0])),
+					string.Format("%1", Math.Round(resolvedPosition[2])))));
 			}
 			else
 			{
-				m_wCommandStatus.SetText(BuildPointOrderRejectionStatus(
-					rejectionReason));
+				m_wCommandStatus.SetText(AICF_Localization.Resolve(BuildPointOrderRejectionStatus(
+					rejectionReason)));
 			}
 		}
 		AICF_Stage4Diagnostics.Info(
@@ -896,31 +896,31 @@ class AICF_StrategicUIController
 		if (rejectionReason == "NO_NAVMESH_ENDPOINT_NEARBY" ||
 			rejectionReason == "NAVMESH_ENDPOINT_OUT_OF_RANGE")
 		{
-			return string.Format(
-				"POINT ORDER REJECTED: choose nearby road or open ground / ВЫБЕРИТЕ РЯДОМ ДОРОГУ ИЛИ ОТКРЫТУЮ МЕСТНОСТЬ [%1].",
-				rejectionReason);
+			return AICF_Localization.Format(
+				"{AICF:AICF_UI_POINT_ORDER_REJECTED_choose_nearby_road_or_106597c0}",
+				string.Format("%1", rejectionReason));
 		}
 		if (rejectionReason == "NAVMESH_TILE_UNAVAILABLE" ||
 			rejectionReason == "NAVMESH_TILE_TIMEOUT" ||
 			rejectionReason == "NAVMESH_UNAVAILABLE")
 		{
-			return string.Format(
-				"POINT ORDER REJECTED: navmesh could not be loaded here / НАВИГАЦИЯ В ЭТОЙ ТОЧКЕ НЕДОСТУПНА [%1].",
-				rejectionReason);
+			return AICF_Localization.Format(
+				"{AICF:AICF_UI_POINT_ORDER_REJECTED_navigation_could_not__1ccc4395}",
+				string.Format("%1", rejectionReason));
 		}
 		if (rejectionReason == "OUTSIDE_WORLD_BOUNDS")
 		{
-			return "POINT ORDER REJECTED: point is outside the world / ТОЧКА ВНЕ ГРАНИЦ МИРА [OUTSIDE_WORLD_BOUNDS].";
+			return "{AICF:AICF_UI_POINT_ORDER_REJECTED_point_is_outside_the__958c5b93}";
 		}
 		if (rejectionReason == "RATE_LIMITED")
 		{
-			return "POINT ORDER REJECTED: retry shortly / ПОВТОРИТЕ ЧЕРЕЗ НЕСКОЛЬКО СЕКУНД [RATE_LIMITED].";
+			return "{AICF:AICF_UI_POINT_ORDER_REJECTED_retry_shortly_RATE_LI_9bb69f26}";
 		}
 		if (rejectionReason.IsEmpty())
 			rejectionReason = "SERVER_REJECTED";
-		return string.Format(
-			"POINT ORDER REJECTED BY SERVER / ПРИКАЗ ОТКЛОНЁН СЕРВЕРОМ [%1].",
-			rejectionReason);
+		return AICF_Localization.Format(
+			"{AICF:AICF_UI_POINT_ORDER_REJECTED_BY_SERVER_02fad08b}",
+			string.Format("%1", rejectionReason));
 	}
 
 	protected void CancelMapPointSelection(bool reopenPanel)
@@ -934,7 +934,7 @@ class AICF_StrategicUIController
 		{
 			SetCommandOpen(true);
 			if (m_wCommandStatus)
-				m_wCommandStatus.SetText("MAP POINT SELECTION CANCELLED.");
+				m_wCommandStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_MAP_POINT_SELECTION_CANCELLED_700aed34}"));
 		}
 	}
 
@@ -977,7 +977,7 @@ class AICF_StrategicUIController
 		SetRectColor(m_wMapPointCancel, Color.FromSRGBA(91, 34, 34, 250));
 		CreateText(
 			m_wMapPointCancel, 0, 0, 1, 1,
-			"CANCEL / ОТМЕНА",
+			"{AICF:AICF_UI_CANCEL_43a107ec}",
 			13,
 			Color.FromSRGBA(255, 232, 232, 255),
 			true);
@@ -1010,7 +1010,7 @@ class AICF_StrategicUIController
 		if (fields.Count() < 10)
 		{
 			if (m_wCommandStatus)
-				m_wCommandStatus.SetText("CONFIG NOT SENT: selected group state is unavailable.");
+				m_wCommandStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_CONFIG_NOT_SENT_selected_group_state_is_un_fd7f785d}"));
 			return;
 		}
 
@@ -1038,7 +1038,7 @@ class AICF_StrategicUIController
 		if (!playerController)
 		{
 			if (m_wCommandStatus)
-				m_wCommandStatus.SetText("CONFIG NOT SENT: local player controller is unavailable.");
+				m_wCommandStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_CONFIG_NOT_SENT_local_player_controller_is_ff4804ca}"));
 			return;
 		}
 
@@ -1053,16 +1053,16 @@ class AICF_StrategicUIController
 		m_iPendingConfigSize = desiredSize;
 		m_iPendingConfigAtMs = System.GetTickCount();
 		if (m_wSizeValue)
-			m_wSizeValue.SetText(desiredSize.ToString());
+			m_wSizeValue.SetText(AICF_Localization.Resolve(desiredSize.ToString()));
 		m_sRenderedTargetMode = string.Empty;
 		if (m_wCommandStatus)
 		{
-			m_wCommandStatus.SetText(string.Format(
-				"CONFIG SENT: slot %1 role %2 type %3 next size %4. Awaiting server state.",
-				m_iSelectedSlot,
-				roleCode,
-				unitTypeCode,
-				desiredSize));
+			m_wCommandStatus.SetText(AICF_Localization.Resolve(AICF_Localization.Format(
+				"{AICF:AICF_UI_CONFIG_SENT_slot_role_type_next_size_Await_ded75165}",
+				string.Format("%1", m_iSelectedSlot),
+				string.Format("%1", roleCode),
+				string.Format("%1", unitTypeCode),
+				string.Format("%1", desiredSize))));
 		}
 	}
 
@@ -1110,7 +1110,7 @@ class AICF_StrategicUIController
 				SetRectColor(m_aUnitTypeButtons[typeIndex], Color.FromSRGBA(34, 45, 52, 245));
 		}
 		if (m_wSizeValue)
-			m_wSizeValue.SetText(desiredSize.ToString());
+			m_wSizeValue.SetText(AICF_Localization.Resolve(desiredSize.ToString()));
 	}
 
 	protected string FormatGroupSummary(string summary)
@@ -1118,13 +1118,13 @@ class AICF_StrategicUIController
 		array<string> fields = {};
 		summary.Split("|", fields, false);
 		if (fields.Count() < 10)
-			return "UNAVAILABLE";
+			return AICF_Localization.Code("UNAVAILABLE");
 		string result = string.Format(
 			"%1  %2  %3  %4/%5",
-			fields[0], fields[1], fields[2], fields[3], fields[9]);
-		result += string.Format(
-			"\n%1  |  %2\nЗАДАЧА %3  |  ТЕХНИКА %4  |  ПОПОЛН. %5",
-			fields[8], fields[4], fields[5], fields[6], fields[7]);
+			fields[0], AICF_Localization.Code(fields[1]), AICF_Localization.Code(fields[2]), fields[3], fields[9]);
+		result += AICF_Localization.Format(
+			"{AICF:AICF_UI_TASK_VEHICLE_RECRUIT_d74255ca}",
+			string.Format("%1", AICF_Localization.Code(fields[8])), string.Format("%1", AICF_Localization.Code(fields[4])), string.Format("%1", AICF_Localization.Code(fields[5])), string.Format("%1", fields[6]), string.Format("%1", fields[7]));
 		return result;
 	}
 
@@ -1163,10 +1163,10 @@ class AICF_StrategicUIController
 	protected string GetCommandAuthorityLabel()
 	{
 		if (!m_Campaign || !m_Campaign.AICF_HasAICommanderState())
-			return "COMMAND SYNC";
+			return "{AICF:AICF_UI_COMMAND_SYNC_19d3aab5}";
 		if (m_Campaign.AICF_GetAICommanderEnabled(m_bLocalUSSR))
-			return "AI COMMANDER";
-		return "PLAYER COMMAND";
+			return "{AICF:AICF_UI_AI_COMMANDER_c2c1b07d}";
+		return "{AICF:AICF_UI_PLAYER_COMMAND_74e71309}";
 	}
 
 	protected string GetSlotKey(string summary)
@@ -1191,12 +1191,12 @@ class AICF_StrategicUIController
 	{
 		switch (tier)
 		{
-			case AICF_ESupplyNetworkTier.HEALTHY: return "HEALTHY";
-			case AICF_ESupplyNetworkTier.STRAINED: return "STRAINED";
-			case AICF_ESupplyNetworkTier.ISOLATED: return "ISOLATED";
-			case AICF_ESupplyNetworkTier.BLOCKED: return "BLOCKED";
+			case AICF_ESupplyNetworkTier.HEALTHY: return AICF_Localization.Code("HEALTHY");
+			case AICF_ESupplyNetworkTier.STRAINED: return AICF_Localization.Code("STRAINED");
+			case AICF_ESupplyNetworkTier.ISOLATED: return AICF_Localization.Code("ISOLATED");
+			case AICF_ESupplyNetworkTier.BLOCKED: return AICF_Localization.Code("BLOCKED");
 		}
-		return "UNKNOWN";
+		return AICF_Localization.Code("UNKNOWN");
 	}
 
 	void CloseCommandForSupplies()
@@ -1426,7 +1426,7 @@ class AICF_StrategicUIController
 		widget.SetColor(color);
 		widget.SetFont(FONT);
 		widget.SetExactFontSize(fontSize);
-		widget.SetText(text);
+		widget.SetText(AICF_Localization.Resolve(text));
 		return widget;
 	}
 }

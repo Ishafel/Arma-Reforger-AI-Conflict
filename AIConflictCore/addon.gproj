@@ -9,10 +9,90 @@ GameProject
 	}
 	Configurations
 	{
-		GameProjectConfig PC {}
-		GameProjectConfig HEADLESS {}
-		GameProjectConfig XBOX_ONE {}
-		GameProjectConfig XBOX_SERIES {}
-		GameProjectConfig PS4 {}
+		GameProjectConfig PC
+		{
+			WidgetManagerSettings WidgetManagerSettings "{AC4BE58770485E02}"
+			{
+				StringTables
+				{
+					StringTableDefinition "{A1CF190901000004}"
+					{
+						StringTableSource "{A1CF190901000001}Language/AICF_Localization.st"
+						Languages
+						{
+							LanguageDefinition "{A1CF190902000001}"
+							{
+								Code "en_us"
+								StringTableRuntime "{A1CF190901000002}Language/AICF_Localization.en_us.conf"
+							}
+							LanguageDefinition "{A1CF190902000002}"
+							{
+								Code "ru_ru"
+								StringTableRuntime "{A1CF190901000003}Language/AICF_Localization.ru_ru.conf"
+							}
+							LanguageDefinition "{A1CF190902000003}"
+							{
+								Code "fr_fr"
+								StringTableRuntime "{A1CF190901000002}Language/AICF_Localization.en_us.conf"
+							}
+							LanguageDefinition "{A1CF190902000004}"
+							{
+								Code "it_it"
+								StringTableRuntime "{A1CF190901000002}Language/AICF_Localization.en_us.conf"
+							}
+							LanguageDefinition "{A1CF190902000005}"
+							{
+								Code "de_de"
+								StringTableRuntime "{A1CF190901000002}Language/AICF_Localization.en_us.conf"
+							}
+							LanguageDefinition "{A1CF190902000006}"
+							{
+								Code "es_es"
+								StringTableRuntime "{A1CF190901000002}Language/AICF_Localization.en_us.conf"
+							}
+							LanguageDefinition "{A1CF190902000007}"
+							{
+								Code "cs_cz"
+								StringTableRuntime "{A1CF190901000002}Language/AICF_Localization.en_us.conf"
+							}
+							LanguageDefinition "{A1CF190902000008}"
+							{
+								Code "pl_pl"
+								StringTableRuntime "{A1CF190901000002}Language/AICF_Localization.en_us.conf"
+							}
+							LanguageDefinition "{A1CF190902000009}"
+							{
+								Code "ja_jp"
+								StringTableRuntime "{A1CF190901000002}Language/AICF_Localization.en_us.conf"
+							}
+							LanguageDefinition "{A1CF19090200000A}"
+							{
+								Code "ko_kr"
+								StringTableRuntime "{A1CF190901000002}Language/AICF_Localization.en_us.conf"
+							}
+							LanguageDefinition "{A1CF19090200000B}"
+							{
+								Code "pt_br"
+								StringTableRuntime "{A1CF190901000002}Language/AICF_Localization.en_us.conf"
+							}
+							LanguageDefinition "{A1CF19090200000C}"
+							{
+								Code "zh_cn"
+								StringTableRuntime "{A1CF190901000002}Language/AICF_Localization.en_us.conf"
+							}
+							LanguageDefinition "{A1CF19090200000D}"
+							{
+								Code "uk_ua"
+								StringTableRuntime "{A1CF190901000002}Language/AICF_Localization.en_us.conf"
+							}
+						}
+					}
+				}
+			}
+		}
+		GameProjectConfig HEADLESS : PC {}
+		GameProjectConfig XBOX_ONE : PC {}
+		GameProjectConfig XBOX_SERIES : PC {}
+		GameProjectConfig PS4 : PC {}
 	}
 }

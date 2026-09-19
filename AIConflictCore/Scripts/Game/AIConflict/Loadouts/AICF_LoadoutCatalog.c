@@ -62,7 +62,7 @@ class AICF_LoadoutCatalog
 		{
 			string name = WidgetManager.Translate(item.GetUIInfo().GetName());
 			if (name == "Pouch")
-				return "Подсумок";
+				return "{AICF:AICF_UI_Pouch_e1c97d80}";
 			if (!name.IsEmpty() && !name.StartsWith("#"))
 				return name;
 		}
@@ -74,8 +74,8 @@ class AICF_LoadoutCatalog
 				return catalogName;
 		}
 		if (entity.FindComponent(BaseInventoryStorageComponent))
-			return "Подсумок";
-		return "Предмет";
+			return "{AICF:AICF_UI_Pouch_e1c97d80}";
+		return "{AICF:AICF_UI_Item_343a4b56}";
 	}
 
 	int ItemType(ResourceName prefab)

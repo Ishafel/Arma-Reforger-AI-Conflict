@@ -4,6 +4,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Stage3StaticAudit.Common.ps1')
+. (Join-Path $PSScriptRoot 'AICFLocalization.Common.ps1')
+$localizationEntries = Read-AICFLocalization $RepositoryRoot
 
 $failures = [System.Collections.Generic.List[string]]::new()
 
@@ -429,7 +431,7 @@ if (Require-AICommanderClass $campaignState 'SCR_GameModeCampaign') {
 
 if (Require-AICommanderClass $strategicUI 'AICF_StrategicUIController') {
     foreach ($label in @('AI COMMANDER', 'PLAYER COMMAND', 'COMMAND SYNC')) {
-        Assert-AICFContains $failures 'AI_COMMANDER_UI_STATE' $strategicUI.Source ('"' + $label + '"') "Strategic UI omits exact label $label"
+        Assert-AICFContains $failures 'AI_COMMANDER_UI_STATE' (Expand-AICFLocalizedAuditText $strategicUI.Source $localizationEntries) ('"' + $label + '"') "Strategic UI omits localized label $label"
     }
     $refreshPanel = Assert-AICommanderMethodPresent $strategicUI 'RefreshCommandPanel' 'AI_COMMANDER_UI_STATE'
     $targetMode = Assert-AICommanderMethodPresent $strategicUI 'GetTargetMode' 'AI_COMMANDER_UI_STATE'

@@ -11,7 +11,7 @@ modded class SCR_MapMarkerDynamicWComponent
 	{
 		m_iAICFCardKind = AICF_LogisticsMapMarkerSystem.MARKER_KIND;
 		m_AICFCardWidget = new AICF_MapMarkerCardWidget();
-		m_AICFCardWidget.Init(GetRootWidget(), color, "Л");
+		m_AICFCardWidget.Init(GetRootWidget(), color, "{AICF:AICF_UI_L_1e06387a}");
 		AICF_SetLiveText(marker.AICF_GetGroupMarkerText());
 		AICF_SetLogisticsDetails(marker.AICF_GetLogisticsDetails());
 	}
@@ -20,7 +20,7 @@ modded class SCR_MapMarkerDynamicWComponent
 	{
 		m_iAICFCardKind = 0;
 		m_AICFCardWidget = new AICF_MapMarkerCardWidget();
-		m_AICFCardWidget.Init(GetRootWidget(), color, "О");
+		m_AICFCardWidget.Init(GetRootWidget(), color, "{AICF:AICF_UI_S_1b0633c1}");
 		AICF_SetLiveText(marker.AICF_GetGroupMarkerText());
 		AICF_SetGroupDetails(marker.AICF_GetGroupDetails());
 	}
@@ -66,12 +66,12 @@ modded class SCR_MapMarkerDynamicWComponent
 
 		if (attackBadgeText)
 		{
-			attackBadgeText.SetText(text);
+			attackBadgeText.SetText(AICF_Localization.Resolve(text));
 			SetTextVisible(false);
 			return;
 		}
 
-		SetText(text);
+		SetText(AICF_Localization.Resolve(text));
 		SetTextVisible(true);
 	}
 }
@@ -534,9 +534,9 @@ class AICF_GroupMapMarkerSystem
 		AICF_GroupSlot slot,
 		SCR_AIGroup group)
 	{
-		return string.Format("%1 · %2 · %3 чел.\n%4",
-			GetRoleLocalMarkerKey(slot), DescribeRole(slot),
-			AICF_GroupRuntime.CountAliveAgents(group), DescribeTask(factionState, slot, group));
+		return AICF_Localization.Format("{AICF:AICF_UI_troops_c9179bae}",
+			string.Format("%1", GetRoleLocalMarkerKey(slot)), string.Format("%1", DescribeRole(slot)),
+			string.Format("%1", AICF_GroupRuntime.CountAliveAgents(group)), string.Format("%1", DescribeTask(factionState, slot, group)));
 	}
 
 	protected string BuildMarkerDetails(
@@ -545,16 +545,16 @@ class AICF_GroupMapMarkerSystem
 		SCR_AIGroup group,
 		AICF_VehicleCoordinator vehicleCoordinator)
 	{
-		string side = "США";
+		string side = "{AICF:AICF_UI_US_77606a94}";
 		if (AICF_ContentProfile.GetActive().GetStableFactionKey(factionState.GetFactionKey()) == "USSR")
-			side = "СССР";
-		string authority = "Не назначен";
+			side = "{AICF:AICF_UI_USSR_5070c026}";
+		string authority = "{AICF:AICF_UI_Unassigned_c250f377}";
 		if (slot.IsAwaitingPlayerCommand() || slot.IsSystemHoldOrder())
-			authority = "Ожидает приказа игрока";
+			authority = "{AICF:AICF_UI_Awaiting_player_orders_8d41bca5}";
 		else if (slot.HasPlayerStrategicOrder())
-			authority = "Игрок";
+			authority = "{AICF:AICF_UI_Player_585d0a4c}";
 		else if (slot.GetDecisionAuthority() == AICF_EStrategicDecisionAuthority.AI_COMMANDER)
-			authority = "AI-командир";
+			authority = "{AICF:AICF_UI_AI_commander_d99f800b}";
 		int alive = AICF_GroupRuntime.CountAliveAgents(group);
 		int inVehicle = AICF_GroupRuntime.CountAliveAgentsInAnyVehicle(group);
 		string vehicleState;
@@ -562,15 +562,15 @@ class AICF_GroupMapMarkerSystem
 			vehicleState = vehicleCoordinator.GetSlotDisplayStatusText(slot);
 		if (vehicleState.IsEmpty() || vehicleState == "NONE")
 		{
-			vehicleState = "Пешком";
+			vehicleState = "{AICF:AICF_UI_On_foot_dd408061}";
 			if (inVehicle > 0)
-				vehicleState = string.Format("В технике %1/%2", inVehicle, alive);
+				vehicleState = AICF_Localization.Format("{AICF:AICF_UI_In_vehicle_2311c1b1}", string.Format("%1", inVehicle), string.Format("%1", alive));
 		}
-		string details = string.Format("Отряд %1 · %2 · %3\nСостояние: %4\nБойцов: %5 · Плановый состав: %6",
-			GetRoleLocalMarkerKey(slot), side, DescribeRole(slot),
-			DescribeTask(factionState, slot, group), alive, slot.GetDesiredSize());
-		details += string.Format("\nТехника: %1\nЦель: %2\nДо цели по прямой: %3\nПриказ: %4",
-			vehicleState, DescribeObjective(slot), DescribeDirection(group, slot), authority);
+		string details = AICF_Localization.Format("{AICF:AICF_UI_Squad_Status_Troops_Planned_size_1eb24a70}",
+			string.Format("%1", GetRoleLocalMarkerKey(slot)), string.Format("%1", side), string.Format("%1", DescribeRole(slot)),
+			string.Format("%1", DescribeTask(factionState, slot, group)), string.Format("%1", alive), string.Format("%1", slot.GetDesiredSize()));
+		details += AICF_Localization.Format("{AICF:AICF_UI_Vehicle_Objective_Straight_line_distance_O_9317c9ba}",
+			string.Format("%1", vehicleState), string.Format("%1", DescribeObjective(slot)), string.Format("%1", DescribeDirection(group, slot)), string.Format("%1", authority));
 		return details;
 	}
 
@@ -578,25 +578,25 @@ class AICF_GroupMapMarkerSystem
 	{
 		switch (slot.GetRole())
 		{
-			case AICF_EGroupRole.ATTACK: return "Атака";
-			case AICF_EGroupRole.DEFEND: return "Оборона";
-			case AICF_EGroupRole.RESERVE: return "Резерв";
+			case AICF_EGroupRole.ATTACK: return "{AICF:AICF_UI_Attack_018b2a67}";
+			case AICF_EGroupRole.DEFEND: return "{AICF:AICF_UI_Defend_c0c6cfb5}";
+			case AICF_EGroupRole.RESERVE: return "{AICF:AICF_UI_Reserve_d33b7034}";
 		}
-		return "Отряд";
+		return "{AICF:AICF_UI_Squad_ad446338}";
 	}
 
 	protected string DescribeObjective(AICF_GroupSlot slot)
 	{
-		if (!slot.HasStrategicDestination()) return "Не назначена";
+		if (!slot.HasStrategicDestination()) return "{AICF:AICF_UI_Unassigned_2c7544c5}";
 		if (slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
 		{
 			vector position = slot.GetTargetPosition();
-			return string.Format("Точка %1 / %2", Math.Round(position[0]), Math.Round(position[2]));
+			return AICF_Localization.Format("{AICF:AICF_UI_Position_527fdcda}", string.Format("%1", Math.Round(position[0])), string.Format("%1", Math.Round(position[2])));
 		}
 		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
-		if (!target || !target.GetOwner()) return "Не назначена";
-		string name = WidgetManager.Translate(target.GetBaseName());
-		if (name.IsEmpty()) name = "База";
+		if (!target || !target.GetOwner()) return "{AICF:AICF_UI_Unassigned_2c7544c5}";
+		string name = AICF_Localization.Key(target.GetBaseName());
+		if (name.IsEmpty()) name = "{AICF:AICF_UI_Base_90760edb}";
 		return string.Format("%1 [%2]", name, target.GetCallsign());
 	}
 
@@ -618,18 +618,18 @@ class AICF_GroupMapMarkerSystem
 		if (bearing < 0) bearing += 360;
 		int sector = Math.Floor((bearing + 22.5) / 45.0);
 		if (sector >= 8) sector = 0;
-		string compass = "С";
+		string compass = "{AICF:AICF_UI_N_240641ec}";
 		switch (sector)
 		{
-			case 1: compass = "СВ"; break;
-			case 2: compass = "В"; break;
-			case 3: compass = "ЮВ"; break;
-			case 4: compass = "Ю"; break;
-			case 5: compass = "ЮЗ"; break;
-			case 6: compass = "З"; break;
-			case 7: compass = "СЗ"; break;
+			case 1: compass = "{AICF:AICF_UI_NE_b3e02eda}"; break;
+			case 2: compass = "{AICF:AICF_UI_E_17062d75}"; break;
+			case 3: compass = "{AICF:AICF_UI_SE_9de4bd59}"; break;
+			case 4: compass = "{AICF:AICF_UI_S_2b064cf1}"; break;
+			case 5: compass = "{AICF:AICF_UI_SW_a0e4c212}"; break;
+			case 6: compass = "{AICF:AICF_UI_W_12062596}"; break;
+			case 7: compass = "{AICF:AICF_UI_NW_b0e02a21}"; break;
 		}
-		return string.Format("%1 м · %2", Math.Round(vector.DistanceXZ(origin, destination)), compass);
+		return AICF_Localization.Format("{AICF:AICF_UI_m_f302d57d}", string.Format("%1", Math.Round(vector.DistanceXZ(origin, destination))), string.Format("%1", compass));
 	}
 
 	// Краткое действие следует приказу и расстоянию; оно не утверждает,
@@ -640,22 +640,22 @@ class AICF_GroupMapMarkerSystem
 		SCR_AIGroup group)
 	{
 		if (slot.IsAwaitingPlayerCommand() || slot.IsSystemHoldOrder())
-			return "Ожидает приказа";
+			return "{AICF:AICF_UI_Awaiting_orders_05004120}";
 		if (slot.IsRecoveringFromStuck())
-			return "Обходит препятствие";
-		if (!slot.HasStrategicDestination()) return "Ожидает задачи";
+			return "{AICF:AICF_UI_Avoiding_obstacle_250ad729}";
+		if (!slot.HasStrategicDestination()) return "{AICF:AICF_UI_Awaiting_task_48c50794}";
 		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
-		if (!leader) return "Позиция неизвестна";
+		if (!leader) return "{AICF:AICF_UI_Position_unknown_1937b5a2}";
 		if (slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
 		{
 			if (vector.DistanceSqXZ(leader.GetOrigin(), slot.GetTargetPosition()) <=
 				POINT_AT_OBJECTIVE_RADIUS_METERS * POINT_AT_OBJECTIVE_RADIUS_METERS)
-				return "Удерживает точку";
-			return "Идёт к точке";
+				return "{AICF:AICF_UI_Holding_position_902d8992}";
+			return "{AICF:AICF_UI_Moving_to_position_08148170}";
 		}
 
 		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
-		if (!target || !target.GetOwner()) return "Ожидает задачи";
+		if (!target || !target.GetOwner()) return "{AICF:AICF_UI_Awaiting_task_48c50794}";
 		bool atObjective = vector.DistanceSqXZ(leader.GetOrigin(), target.GetOwner().GetOrigin()) <=
 			AT_OBJECTIVE_RADIUS_METERS * AT_OBJECTIVE_RADIUS_METERS;
 		switch (slot.GetRole())
@@ -663,22 +663,22 @@ class AICF_GroupMapMarkerSystem
 			case AICF_EGroupRole.ATTACK:
 				Faction targetFaction = target.GetFaction();
 				if (targetFaction && targetFaction.GetFactionKey() == factionState.GetFactionKey())
-					return "Цель занята союзниками";
-				if (atObjective) return "Захватывает цель";
-				return "Движется к цели";
+					return "{AICF:AICF_UI_Objective_held_by_allies_dcd77907}";
+				if (atObjective) return "{AICF:AICF_UI_Capturing_objective_894693a9}";
+				return "{AICF:AICF_UI_Moving_to_objective_d0cc5326}";
 			case AICF_EGroupRole.DEFEND:
 				if (slot.GetOperationalPosture() == "QRF")
 				{
-					if (atObjective) return "Усиливает оборону";
-					return "Спешит на помощь";
+					if (atObjective) return "{AICF:AICF_UI_Reinforcing_defense_072a12aa}";
+					return "{AICF:AICF_UI_Moving_to_assist_e376a477}";
 				}
-				if (atObjective) return "Обороняет цель";
-				return "Занимает оборону";
+				if (atObjective) return "{AICF:AICF_UI_Defending_objective_04542a4b}";
+				return "{AICF:AICF_UI_Moving_to_defend_2aff2feb}";
 			case AICF_EGroupRole.RESERVE:
-				if (atObjective) return "Держит резерв";
-				return "Следует в резерв";
+				if (atObjective) return "{AICF:AICF_UI_Holding_in_reserve_9243ac77}";
+				return "{AICF:AICF_UI_Moving_to_reserve_position_7f76f7bd}";
 		}
-		return "Ожидает задачи";
+		return "{AICF:AICF_UI_Awaiting_task_48c50794}";
 	}
 
 	protected string GetShortRole(AICF_EGroupRole role)
@@ -765,7 +765,7 @@ class AICF_GroupMapMarkerSystem
 		marker.SetWorldPos(
 			Math.Round(targetPosition[0]),
 			Math.Round(targetPosition[2]));
-		marker.SetCustomText(string.Format("MOVE %1", slotKey));
+		marker.SetCustomText(AICF_Localization.Format("{AICF:AICF_UI_MOVE_3b18d9be}", string.Format("%1", slotKey)));
 		marker.SetCanBeRemovedByOwner(false);
 		marker.AddMarkerFactionFlags(
 			factionManager.GetFactionIndex(markerFaction));
@@ -856,9 +856,9 @@ class AICF_GroupMapMarkerSystem
 				m_aTrackedObjectives[markerIndex] = target;
 			}
 
-			objectiveMarker.AICF_SetGroupMarkerText(string.Format(
-				"ATK  %1",
-				attackers[objectiveIndex]));
+			objectiveMarker.AICF_SetGroupMarkerText(AICF_Localization.Format(
+				"{AICF:AICF_UI_ATK_69f820c7}",
+				string.Format("%1", attackers[objectiveIndex])));
 		}
 	}
 

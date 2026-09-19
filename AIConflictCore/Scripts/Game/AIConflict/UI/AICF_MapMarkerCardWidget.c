@@ -34,7 +34,7 @@ class AICF_MapMarkerCardWidget
 		if (letter)
 		{
 			letter.SetFlags(WidgetFlags.CENTER | WidgetFlags.VCENTER);
-			letter.SetText(badge);
+			letter.SetText(AICF_Localization.Resolve(badge));
 		}
 		m_LabelBackground = Rectangle(root, Color.FromSRGBA(5, 10, 14, 235), 1, 1, CARD_X, 0);
 		if (m_LabelBackground) m_LabelBackground.ClearFlags(WidgetFlags.IGNORE_CURSOR);
@@ -81,14 +81,14 @@ class AICF_MapMarkerCardWidget
 	void SetLabel(string label)
 	{
 		if (!m_Label) return;
-		m_Label.SetText(label);
+		m_Label.SetText(AICF_Localization.Resolve(label));
 		LayoutLabel();
 	}
 
 	void SetDetails(string details)
 	{
 		if (!m_Details) return;
-		m_Details.SetText(details);
+		m_Details.SetText(AICF_Localization.Resolve(details));
 		LayoutDetails();
 	}
 

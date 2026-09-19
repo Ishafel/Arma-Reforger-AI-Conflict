@@ -1,0 +1,12 @@
+MetaFileClass
+{
+	Name "{A1CF190901000001}Language/AICF_Localization.st"
+	Configurations
+	{
+		StringTableResourceClass PC {}
+		StringTableResourceClass HEADLESS : PC {}
+		StringTableResourceClass XBOX_ONE : PC {}
+		StringTableResourceClass XBOX_SERIES : PC {}
+		StringTableResourceClass PS4 : PC {}
+	}
+}

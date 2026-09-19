@@ -104,7 +104,7 @@ Assert-Contains 'MAP_POINT_VEHICLE' $tripController '!currentAssignment\.Matches
 Assert-NotContains 'MAP_POINT_VEHICLE' $transit '!assignment\.GetTargetBase\s*\(\s*\)' 'Transit validity must not require a synthetic base for a point order'
 Assert-Contains 'MAP_POINT_VEHICLE' $handoff 'HasStrategicDestination\s*\(\s*\)' 'Vehicle handoff must restore BASE or POSITION assignments'
 
-Assert-Contains 'MAP_POINT_UI' $ui 'MOVE TO MAP POINT / УКАЗАТЬ ТОЧКУ НА КАРТЕ' 'Command panel must expose the bilingual point-order action'
+Assert-Contains 'MAP_POINT_UI' $ui 'AICF_UI_MOVE_TO_MAP_POINT_' 'Command panel must expose the localized point-order action'
 Assert-Contains 'MAP_POINT_UI' $ui 'new\s+SCR_MapCommandCursor[\s\S]*GetOnCommandExecuted\s*\(\s*\)\.Insert[\s\S]*ShowCursor' 'Selection must reuse the stock map command cursor'
 Assert-Contains 'MAP_POINT_UI_INPUT' $ui 'BeginMapPointSelection[\s\S]*CallLater\s*\(\s*ActivateMapPointCursor[\s\S]*protected\s+void\s+ActivateMapPointCursor' 'Cursor activation must be deferred beyond the button click input event'
 Assert-Contains 'MAP_POINT_UI_INPUT' $ui 'DisableMapPointCursor[\s\S]*Remove\s*\(\s*ActivateMapPointCursor\s*\)' 'All cursor cleanup paths must also cancel deferred activation'

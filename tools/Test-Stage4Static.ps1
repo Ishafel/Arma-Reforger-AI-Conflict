@@ -73,6 +73,14 @@ $stage3Config = Read-Required 'Config\AICF_Stage3Config.c'
 $factionFleet = Read-Required 'State\Vehicles\AICF_FactionFleet.c'
 $logAudit = Get-Content -Encoding UTF8 -LiteralPath (Join-Path $RepositoryRoot 'tools\Test-Stage4Log.ps1') -Raw
 
+. (Join-Path $PSScriptRoot 'AICFLocalization.Common.ps1')
+$translations = Read-AICFLocalization $RepositoryRoot
+$uiLabels = (Expand-AICFLocalizedAuditText $strategicUI $translations 'en_us') +
+    (Expand-AICFLocalizedAuditText $strategicUI $translations 'ru_ru')
+$tripLabels = Expand-AICFLocalizedAuditText $vehicleTripView $translations 'ru_ru'
+$coordinatorLabels = Expand-AICFLocalizedAuditText $vehicleCoordinator $translations 'ru_ru'
+$markerLabels = Expand-AICFLocalizedAuditText $mapMarkers $translations 'en_us'
+
 Assert-Contains 'STAGE4_ALWAYS_ON' $config 'bool\s+GetEconomyEnabled\s*\(\s*\)\s*\{\s*return\s+true\s*;\s*\}' 'Economy compatibility accessor must remain permanently enabled'
 Assert-NotContains 'STAGE4_ALWAYS_ON' $config 'm_bEconomyEnabled' 'Economy must not retain mutable enable state'
 Assert-NotContains 'STAGE4_ALWAYS_ON' $config '"aicfEconomyEnabled"' 'Economy must not expose a CLI opt-out'
@@ -158,7 +166,7 @@ foreach ($field in @(
     Assert-Contains 'STAGE4_STRATEGIC_REPLICATION' $campaignState ("RplProp[\s\S]{0,100}" + [regex]::Escape($field)) "Missing strategic replicated field $field"
 }
 
-Assert-Contains 'STAGE4_HUD' $strategicUI 'TICKETS\s+%1[\s\S]*SUPPLY\s+%2[\s\S]*SQUADS\s+%3[\s\S]*OBJECTIVE' 'Compact HUD must expose tickets, supply, squads, and the current objective'
+Assert-Contains 'STAGE4_HUD' $uiLabels 'TICKETS\s+%1[\s\S]*SUPPLY\s+%2[\s\S]*SQUADS\s+%3[\s\S]*OBJECTIVE' 'Compact HUD must expose tickets, supply, squads, and the current objective'
 Assert-Contains 'STAGE4_WIDGET_HIERARCHY' $strategicUI 'CreateRect[\s\S]*FrameWidgetTypeID[\s\S]*RECT_BACKGROUND_NAME' 'Text and controls must be siblings of a background image inside a FrameWidget container'
 $createRectColorPattern = 'CreateWidget\s*\(\s*WidgetType\.ImageWidgetTypeID\s*,[\s\S]{0,320}?WidgetFlags\.BLEND[\s\S]{0,320}?\bcolor\s*,\s*0\s*,\s*widget\s*\)'
 $redundantCreateRectColorPattern = 'background\.SetColor\s*\(\s*color\s*\)'
@@ -167,10 +175,10 @@ Assert-NotContains 'STAGE4_WIDGET_RENDERING' $createRect $redundantCreateRectCol
 Assert-Contains 'STAGE4_WIDGET_RENDERING' $strategicUI 'RefreshVisualStyles[\s\S]*SetRectColor\s*\(\s*m_wHUDRoot[\s\S]*SetRectColor\s*\(\s*m_wCommandPanel[\s\S]*foreach\s*\(\s*Widget\s+targetButton' 'Top-level and dynamic panel colors must be restored after Enfusion widget initialization'
 Assert-Contains 'STAGE4_WIDGET_INPUT' $strategicUI 'ButtonWidgetTypeID[\s\S]*inputWidget\.SetName\s*\(\s*RECT_INPUT_NAME\s*\)' 'Every clickable rectangle must own a real ButtonWidget input surface'
 Assert-Contains 'STAGE4_WIDGET_INPUT' $strategicUI 'inputWidget\.AddHandler\s*\(\s*handler\s*\)' 'Button input surfaces must receive the strategic action handler'
-Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'ARMY / SELECT GROUP' 'Command surface must expose army composition'
-Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'SELECT A READY GROUP[\s\S]*NO VALID TARGETS FOR THIS ROLE' 'Command surface must explain empty target states'
+Assert-Contains 'STAGE4_COMMAND_SURFACE' $uiLabels 'ARMY / SELECT GROUP' 'Command surface must expose army composition'
+Assert-Contains 'STAGE4_COMMAND_SURFACE' $uiLabels 'SELECT A READY GROUP[\s\S]*NO VALID TARGETS FOR THIS ROLE' 'Command surface must explain empty target states'
 Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'REINFORCEMENTS[\s\S]*SHIPMENTS' 'Command surface must expose reinforcement and logistics state'
-Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'FormatGroupSummary[\s\S]*ЗАДАЧА[\s\S]*ТЕХНИКА[\s\S]*ПОПОЛН\.' 'Unit cards must expose role, state, posture, vehicle phase, and reinforcement ETA with user-facing Russian labels'
+Assert-Contains 'STAGE4_COMMAND_SURFACE' $uiLabels 'FormatGroupSummary[\s\S]*ЗАДАЧА[\s\S]*ТЕХНИКА[\s\S]*ПОПОЛН\.' 'Unit cards must expose role, state, posture, vehicle phase, and reinforcement ETA with user-facing Russian labels'
 Assert-Contains 'STAGE4_COMMAND_SURFACE' $strategicUI 'AICF_RequestStrategicOrder\s*\(' 'Command target buttons must issue a strategic-order RPC'
 
 Assert-Contains 'STAGE4_TEN_GROUPS' $stage1Config 'GROUP_SLOTS_PER_FACTION\s*=\s*10\s*;' 'Each faction must own ten stable group slots'
@@ -185,8 +193,8 @@ Assert-Contains 'STAGE4_VARIABLE_ROSTER' $groupSpawner 'SpawnGroup\s*\([\s\S]*in
 Assert-Contains 'STAGE4_ROLE_ROSTER' $groupSpawner 'EEntityCatalogType\.CHARACTER[\s\S]*BuildCharacterRoleCandidates[\s\S]*FindCharacterPrefab' 'Managed roster must resolve role candidates from the active faction character catalog'
 Assert-Contains 'STAGE4_ROLE_ROSTER' $contentProfile 'SQUAD_LEADER[\s\S]*MEDIC[\s\S]*MACHINE_GUNNER[\s\S]*ANTI_TANK[\s\S]*GRENADIER[\s\S]*AUTOMATIC_RIFLEMAN[\s\S]*MACHINE_GUNNER_ASSISTANT[\s\S]*ANTI_TANK_ASSISTANT[\s\S]*RIFLEMAN' 'Stock content profile must retain the varied ten-position role table'
 Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $strategicUI 'ROLE[\s\S]*ATTACK[\s\S]*DEFEND[\s\S]*RESERVE' 'Commander panel must expose all group roles'
-Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $strategicUI 'UNIT TYPE / NO HEAVY ARMOR[\s\S]*INFANTRY[\s\S]*LIGHT 4X4[\s\S]*TRUCK[\s\S]*ARMED 4X4' 'Commander panel must expose infantry, transport, and armed-light profiles without heavy armor'
-Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $strategicUI 'NEXT DEPLOYMENT SIZE[\s\S]*MAX 10' 'Commander panel must label deferred roster-size changes and show the cap'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $uiLabels 'UNIT TYPE / NO HEAVY ARMOR[\s\S]*INFANTRY[\s\S]*LIGHT 4X4[\s\S]*TRUCK[\s\S]*ARMED 4X4' 'Commander panel must expose infantry, transport, and armed-light profiles without heavy armor'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $uiLabels 'NEXT DEPLOYMENT SIZE[\s\S]*MAX 10' 'Commander panel must label deferred roster-size changes and show the cap'
 Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $unitTypes 'AICF_EGroupUnitType[\s\S]*INFANTRY[\s\S]*MOTORIZED_LIGHT[\s\S]*MOTORIZED_TRUCK[\s\S]*MOTORIZED_ARMED_LIGHT' 'Model must contain infantry, transport, and armed-light profiles without heavy armor'
 Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $vehicleAcquisition 'GetUnitType[\s\S]*MOTORIZED_LIGHT[\s\S]*LIGHT_TRANSPORT[\s\S]*MOTORIZED_TRUCK[\s\S]*TRANSPORT[\s\S]*MOTORIZED_ARMED_LIGHT[\s\S]*ARMED_LIGHT' 'Vehicle acquisition must derive light, truck, and armed-light mobility from commander unit type'
 Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $strategicRpc 'AICF_RequestGroupConfiguration\s*\([\s\S]*RpcAsk_AICFGroupConfiguration' 'Client configuration controls must use a reliable server RPC'
@@ -217,10 +225,10 @@ Assert-Contains 'STAGE4_SPAWN_STAGING_CLEARANCE' $stage3Config '18\.\.68 m pad d
 Assert-Contains 'STAGE4_SPAWN_STAGING_CLEARANCE' $vehicleAcquisition 'minimumOffsetMeters\s*=\s*m_Config\.GetSpawnStagingRadiusMeters\(\)[\s\S]*SPAWN_PAD_CLEARANCE_RADIUS_METERS[\s\S]*STAGING_TO_PAD_MARGIN_METERS' 'Runtime staging geometry must remain valid when radius is overridden by CLI'
 Assert-Contains 'STAGE4_SPAWN_STAGING_CLEARANCE' $vehicleSpawner 'IsRequestingGroupClearOfSpawnPad[\s\S]*REQUESTING_GROUP_IN_SPAWN_CLEARANCE' 'Spawn commit must prove the requesting squad is outside the vehicle cylinder'
 Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $stage3Config 'aicfVehicleSpawnStagingRadiusMeters[\s\S]*ClampFloat\s*\(\s*value\.ToFloat\s*\(\s*\)\s*,\s*5\.0\s*,\s*100\.0\s*\)' 'CLI staging-radius override must permit the twenty-five-metre default and bounded tuning above it'
-Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleTripView 'Площадка выбрана[\s\S]*Следует к месту выдачи[\s\S]*Ожидание бойцов[\s\S]*Выдача техники[\s\S]*Посадка[\s\S]*Движение на технике[\s\S]*Высадка[\s\S]*Возврат к пешему приказу[\s\S]*Задача техники завершена[\s\S]*Переход на пеший порядок[\s\S]*Техника недоступна[\s\S]*Ожидание площадки' 'Commander and map projections must expose every vehicle lifecycle state in Russian'
+Assert-Contains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $tripLabels 'Площадка выбрана[\s\S]*Следует к месту выдачи[\s\S]*Ожидание бойцов[\s\S]*Выдача техники[\s\S]*Посадка[\s\S]*Движение на технике[\s\S]*Высадка[\s\S]*Возврат к пешему приказу[\s\S]*Задача техники завершена[\s\S]*Переход на пеший порядок[\s\S]*Техника недоступна[\s\S]*Ожидание площадки' 'Commander and map projections must expose every vehicle lifecycle state in Russian'
 Assert-NotContains 'STAGE4_DEFERRED_VEHICLE_SPAWN' $vehicleTripView 'return\s+typename\.EnumToString\s*\(\s*AICF_ETransportTripPhase' 'User-facing vehicle status must never fall back to an internal enum name'
-Assert-Contains 'STAGE4_COMMAND_SURFACE' ($strategicUI + $mapMarkers) 'ТЕХНИКА' 'Commander cards and map markers must use a Russian vehicle-status label'
-Assert-Contains 'STAGE4_PHYSICAL_VEHICLE_STATUS' ($groupRuntime + $vehicleCoordinator) 'CountAliveAgentsInAnyVehicle[\s\S]*GetSlotDisplayStatusText[\s\S]*В технике' 'Commander status must prefer physical vehicle occupancy when a terminal or retired Trip no longer describes the group'
+Assert-Contains 'STAGE4_COMMAND_SURFACE' $uiLabels 'ТЕХНИКА' 'Commander cards and map markers must use a Russian vehicle-status label'
+Assert-Contains 'STAGE4_PHYSICAL_VEHICLE_STATUS' ($groupRuntime + $coordinatorLabels) 'CountAliveAgentsInAnyVehicle[\s\S]*GetSlotDisplayStatusText[\s\S]*В технике' 'Commander status must prefer physical vehicle occupancy when a terminal or retired Trip no longer describes the group'
 Assert-Contains 'STAGE4_PHYSICAL_VEHICLE_STATUS' $controller 'GetSlotDisplayStatusText' 'Commander cards must use the physical mobility projection'
 Assert-Contains 'STAGE4_PHYSICAL_VEHICLE_STATUS' $mapMarkers 'GetSlotDisplayStatusText' 'Allied map markers must use the physical mobility projection'
 Assert-Contains 'STAGE4_PHYSICAL_VEHICLE_STATUS' $controller 'physical_vehicle_members=' 'Heartbeat diagnostics must expose physical occupants independently from Trip phase'
@@ -241,12 +249,12 @@ Assert-Contains 'STAGE4_CORPSE_RETENTION' $corpseRetention 'super\.OnInsertReque
 
 Assert-Contains 'STAGE4_ALLIED_MAP' $mapMarkers 'SetFaction\s*\(\s*markerFaction\s*\)' 'Group and objective markers must use allied faction stream rules'
 Assert-Contains 'STAGE4_ALLIED_MAP' $mapMarkers 'visibility=ALLIED' 'Marker diagnostics must preserve the allied-only visibility policy'
-Assert-Contains 'STAGE4_MAP_DIRECTION' $mapMarkers 'DescribeDirection[\s\S]*Math\.Atan2[\s\S]*Math\.Round\(vector\.DistanceXZ\(origin, destination\)\), compass' 'Group marker details must expose live distance and movement bearing'
+Assert-Contains 'STAGE4_MAP_DIRECTION' $mapMarkers 'DescribeDirection[\s\S]*Math\.Atan2[\s\S]*Math\.Round\(vector\.DistanceXZ\(origin, destination\)\)\), string\.Format\("%1", compass\)' 'Group marker details must expose live distance and movement bearing'
 Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'SyncFactionObjectiveMarkers[\s\S]*targets\.Find\s*\(\s*target\s*\)' 'Attack targets must be deduplicated before objective markers are created'
 Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'markerKind\s*==\s*1[\s\S]*MarkerIcon[\s\S]*SetVisible\s*\(\s*false\s*\)' 'Attack targets must use a distinct text badge instead of a duplicate faction flag'
 Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'AICF_ATTACK_BADGE_TEXT_NAME[\s\S]*SetTextVisible\s*\(\s*false\s*\)' 'Attack targets must use an independently positioned label instead of stock MarkerText'
 Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'ATTACK_BADGE_NAME[\s\S]*FrameSlot\.SetAnchor\s*\(\s*attackBadge\s*,\s*0\.5\s*,\s*1\s*\)[\s\S]*FrameSlot\.SetPos\s*\(\s*attackBadge\s*,\s*0\s*,\s*18\s*\)' 'Attack badges must be placed below the stock base marker'
-Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'attackerList\s*\+=\s*string\.Format\s*\(\s*"\+%1"[\s\S]*"ATK  %1"' 'One compact objective badge must aggregate all allied attacker slot keys'
+Assert-Contains 'STAGE4_ATTACKED_BASES' $markerLabels 'attackerList\s*\+=\s*string\.Format\s*\(\s*"\+%1"[\s\S]*"ATK  %1"' 'One compact objective badge must aggregate all allied attacker slot keys'
 
 Assert-Contains 'STAGE4_ORDER_AUTHORITY' $strategicRpc 'AICF_RequestStrategicOrder\s*\(\s*int\s+slotId\s*,\s*int\s+targetCallsign\s*\)' 'The client RPC may supply only slot identity and a base callsign'
 Assert-Contains 'STAGE4_ORDER_AUTHORITY' $strategicRpc 'RplRcver\.Server[\s\S]*GetPlayerId\s*\(' 'Order requests must resolve player identity on the authoritative PlayerController'

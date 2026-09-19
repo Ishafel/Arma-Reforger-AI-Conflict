@@ -29,7 +29,7 @@ modded class SCR_PlayerController
 	string AICF_GetSupplyStatus()
 	{
 		if (m_iAICFSupplySent > m_iAICFSupplyRequest)
-			return "Ожидается ответ сервера…";
+			return "{AICF:AICF_UI_Waiting_for_server_response_ded60968}";
 		if (m_sAICFSupplySource.IsEmpty()) return m_sAICFSupplyStatus;
 		return WidgetManager.Translate(m_sAICFSupplySource) + " → " + WidgetManager.Translate(m_sAICFSupplyDestination) + "\n" + m_sAICFSupplyStatus;
 	}
@@ -57,12 +57,12 @@ modded class SCR_PlayerController
 		int now = System.GetTickCount();
 		if (now < m_iAICFSupplyRateAtMs)
 		{
-			AICF_SetSupplyStatus(request, false, "Слишком частые запросы. Повторите через несколько секунд.");
+			AICF_SetSupplyStatus(request, false, "{AICF:AICF_UI_Too_many_requests_Try_again_in_a_few_secon_6deb233f}");
 			return;
 		}
 		m_iAICFSupplyRateAtMs = now + 2000;
 		AICF_MatchController match = AICF_MatchController.GetActiveController();
-		string reason = "Служба снабжения ещё не готова.";
+		string reason = "{AICF:AICF_UI_Supply_service_is_not_ready_yet_f2e2a91b}";
 		if (match && match.RequestSupplyTransport(this, request, source, destination, amount, reason)) return;
 		AICF_SetSupplyStatus(request, false, reason);
 	}

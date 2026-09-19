@@ -238,9 +238,9 @@ $marker = Find-AICFClassRecord $records 'AICF_GroupMapMarkerSystem'
 if ($marker) {
     $markerBody = Get-AICFMethodBody $marker 'BuildMarkerDetails'
     $markerCode = ConvertTo-AICFCodeText $markerBody
-    Assert-AICFContains $failures 'STAGE3_MARKER_STATE' (Get-AICFStringLiteralText $markerBody) 'Техника: %1' 'Gameplay marker details must expose the localized vehicle-state placeholder'
+    Assert-AICFContains $failures 'STAGE3_MARKER_STATE' (Get-AICFStringLiteralText $markerBody) 'AICF_UI_Vehicle_Objective_Straight_line_distance_O_9317c9ba' 'Gameplay marker details must reference the localized vehicle-state template'
     Assert-AICFContains $failures 'STAGE3_MARKER_STATE' $markerCode 'vehicleState\s*=\s*vehicleCoordinator\.GetSlotDisplayStatusText\s*\(\s*slot\s*\)' 'Gameplay marker must read the current vehicle state'
-    Assert-AICFContains $failures 'STAGE3_MARKER_STATE' $markerCode 'details\s*\+=\s*string\.Format\s*\(\s*,\s*vehicleState\s*,' 'Gameplay marker details must render the current vehicleState'
+    Assert-AICFContains $failures 'STAGE3_MARKER_STATE' $markerCode 'details\s*\+=\s*AICF_Localization\.Format\s*\(\s*,\s*string\.Format\s*\(\s*,\s*vehicleState\s*\)' 'Gameplay marker details must render the current vehicleState'
     Assert-AICFContains $failures 'STAGE3_MARKER_STATE' $markerCode 'return\s+details\s*;' 'Gameplay marker must return the populated details'
     Assert-AICFContains $failures 'STAGE3_MARKER_STATE' (ConvertTo-AICFCodeText (Get-AICFMethodBody $marker 'SyncFaction')) 'AICF_SetGroupMarkerData\s*\(\s*BuildMarkerText\([^;]+BuildMarkerDetails\(' 'Gameplay markers must publish label and details together'
 }

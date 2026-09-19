@@ -1,5 +1,16 @@
 # Проверки и evidence
 
+## Язык клиента — 2026-09-19
+
+Локализованы сценарии и весь AICF UI, включая server-produced метки и ответы.
+Профильные static gates проходят; прежний `AI_COMMANDER_UI_STATE` сохранён.
+Stock/Everon/ArlandRHS/EveronRHS Workbench — PASS / 0.
+Целевая runtime fixture: по 15 checks, 0 failures на dedicated server и
+поздно подключившемся клиенте; оба завершились через `RequestClose`.
+Общий clean-runtime PASS не заявлен из-за stock resource/shutdown diagnostics.
+Команды, полные логи, изменённые файлы и `NOT RUN`:
+[LOCALIZATION.md](LOCALIZATION.md).
+
 ## Плотный поиск и обход препятствий — 2026-09-19
 
 Поиск проверяет 256 различных центров, до 16 рабочих точек, ограниченный

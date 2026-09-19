@@ -6991,7 +6991,7 @@ class AICF_MatchController
 	protected string BuildStrategicObjective(AICF_FactionState factionState)
 	{
 		if (!factionState)
-			return "AWAITING ORDERS";
+			return "{AICF:AICF_UI_AWAITING_ORDERS_d367d918}";
 
 		AICF_GroupSlot fallback;
 		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
@@ -7001,23 +7001,23 @@ class AICF_MatchController
 				slot.IsAwaitingPlayerCommand() || slot.IsSystemHoldOrder())
 				continue;
 			if (slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
-				return string.Format("MOVE %1", BuildPositionLabel(slot.GetTargetPosition()));
+				return AICF_Localization.Format("{AICF:AICF_UI_MOVE_3b18d9be}", string.Format("%1", BuildPositionLabel(slot.GetTargetPosition())));
 			if (!fallback)
 				fallback = slot;
 			if (slot.GetRole() == AICF_EGroupRole.ATTACK && slot.GetRoleIndex() == 0)
-				return string.Format("ATTACK %1", BuildBaseLabel(slot.GetTargetBase()));
+				return AICF_Localization.Format("{AICF:AICF_UI_ATTACK_efaa23f5}", string.Format("%1", BuildBaseLabel(slot.GetTargetBase())));
 		}
 
 		if (fallback)
 		{
 			if (fallback.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
-				return string.Format("MOVE %1", BuildPositionLabel(fallback.GetTargetPosition()));
+				return AICF_Localization.Format("{AICF:AICF_UI_MOVE_3b18d9be}", string.Format("%1", BuildPositionLabel(fallback.GetTargetPosition())));
 			return string.Format(
 				"%1 %2",
-				AICF_Stage1Diagnostics.RoleToString(fallback.GetRole()),
+				AICF_Localization.Code(AICF_Stage1Diagnostics.RoleToString(fallback.GetRole())),
 				BuildBaseLabel(fallback.GetTargetBase()));
 		}
-		return "AWAITING ORDERS";
+		return "{AICF:AICF_UI_AWAITING_ORDERS_d367d918}";
 	}
 
 	protected string BuildGroupSummary(AICF_FactionState factionState, int slotId)
@@ -7045,14 +7045,14 @@ class AICF_MatchController
 			target = BuildPositionLabel(displayTargetPosition);
 		else if (slot.GetTargetBase())
 			target = BuildBaseLabel(slot.GetTargetBase());
-		string vehiclePhase = "Пешком";
+		string vehiclePhase = "{AICF:AICF_UI_On_foot_dd408061}";
 		if (m_VehicleCoordinator)
 			vehiclePhase = m_VehicleCoordinator.GetSlotDisplayStatusText(slot);
 		else
 		{
 			int inVehicle = AICF_GroupRuntime.CountAliveAgentsInAnyVehicle(slot.GetGroup());
 			if (inVehicle > 0)
-				vehiclePhase = string.Format("В технике %1/%2", inVehicle, alive);
+				vehiclePhase = AICF_Localization.Format("{AICF:AICF_UI_In_vehicle_2311c1b1}", string.Format("%1", inVehicle), string.Format("%1", alive));
 		}
 		string reinforcement = "-";
 		string state = AICF_Stage1Diagnostics.StateToString(slot.GetState());
@@ -7065,7 +7065,7 @@ class AICF_MatchController
 			int remainingSeconds = Math.Max(
 				0,
 				(slot.GetReinforcementReadyAtMs() - System.GetTickCount() + 999) / 1000);
-			reinforcement = string.Format("ETA %1s", remainingSeconds);
+			reinforcement = AICF_Localization.Format("{AICF:AICF_UI_ETA_s_4980aff0}", string.Format("%1", remainingSeconds));
 		}
 
 		string summary = string.Format(
@@ -7091,10 +7091,10 @@ class AICF_MatchController
 
 	protected string BuildPositionLabel(vector position)
 	{
-		return string.Format(
-			"MAP POINT %1/%2",
-			Math.Round(position[0]),
-			Math.Round(position[2]));
+		return AICF_Localization.Format(
+			"{AICF:AICF_UI_MAP_POINT_7c6b2bff}",
+			string.Format("%1", Math.Round(position[0])),
+			string.Format("%1", Math.Round(position[2])));
 	}
 
 	protected string DescribeSlotTarget(AICF_GroupSlot slot)
@@ -7177,9 +7177,9 @@ class AICF_MatchController
 	{
 		if (!base)
 			return "NONE";
-		string baseName = WidgetManager.Translate(base.GetBaseName());
+		string baseName = AICF_Localization.Key(base.GetBaseName());
 		if (baseName.IsEmpty())
-			baseName = "BASE";
+			baseName = AICF_Localization.Code("BASE");
 		return string.Format("%1 [%2]", baseName, base.GetCallsign());
 	}
 

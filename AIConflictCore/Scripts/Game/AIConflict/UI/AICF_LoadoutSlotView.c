@@ -122,25 +122,25 @@ class AICF_LoadoutSlotView
 	{
 		float occupied, capacity;
 		if (!Capacity(storage, occupied, capacity))
-			return "Вместимость: —";
+			return "{AICF:AICF_UI_Capacity_879d4588}";
 		return FormatCapacity(occupied, capacity);
 	}
 
 	static string FormatCapacity(float occupied, float capacity)
 	{
 		if (capacity <= 0)
-			return "Вместимость: —";
+			return "{AICF:AICF_UI_Capacity_879d4588}";
 		// Native dimensions/volume: сантиметры и см³. В UI показываем литры.
 		float usedLitres = Math.Round(occupied / 100) / 10;
 		float maxLitres = Math.Round(capacity / 100) / 10;
 		float freeLitres = Math.Floor(Math.Max(0, capacity - occupied) / 100) / 10;
 		int percent = Math.Round(occupied * 100 / capacity);
-		return string.Format("Занято: %1 / %2 л (%3)\nСвободно: %4 л", usedLitres, maxLitres, percent.ToString() + "%", freeLitres);
+		return AICF_Localization.Format("{AICF:AICF_UI_Used_L_Free_L_c153f929}", string.Format("%1", usedLitres), string.Format("%1", maxLitres), string.Format("%1", percent.ToString() + "%"), string.Format("%1", freeLitres));
 	}
 
 	static int Describe(BaseInventoryStorageComponent storage, int slot, out string label)
 	{
-		label = "Крепление " + (slot + 1).ToString();
+		label = "{AICF:AICF_UI_Attachment_slot_119bfff7}" + (slot + 1).ToString();
 		if (!storage || slot < 0 || slot >= storage.GetSlotsCount())
 			return 0;
 		LoadoutSlotInfo info = LoadoutSlotInfo.Cast(storage.GetSlot(slot));
@@ -153,75 +153,75 @@ class AICF_LoadoutSlotView
 			if (area.IsInherited(LoadoutHeadCoverArea))
 			{
 				if (!namedAttachment)
-					label = "Головной убор";
+					label = "{AICF:AICF_UI_Headgear_6bd918f9}";
 				return SCR_EArsenalItemType.HEADWEAR;
 			}
 			if (area.IsInherited(LoadoutJacketArea))
 			{
-				label = "Куртка";
+				label = "{AICF:AICF_UI_Jacket_061db74e}";
 				return SCR_EArsenalItemType.TORSO;
 			}
 			if (area.IsInherited(LoadoutPantsArea))
 			{
-				label = "Брюки";
+				label = "{AICF:AICF_UI_Trousers_c51b7b6c}";
 				return SCR_EArsenalItemType.LEGS;
 			}
 			if (area.IsInherited(LoadoutBootsArea))
 			{
-				label = "Обувь";
+				label = "{AICF:AICF_UI_Footwear_06a18677}";
 				return SCR_EArsenalItemType.FOOTWEAR;
 			}
 			if (area.IsInherited(LoadoutHandwearSlotArea))
 			{
-				label = "Перчатки";
+				label = "{AICF:AICF_UI_Gloves_6d1ed0c0}";
 				return SCR_EArsenalItemType.HANDWEAR;
 			}
 			if (area.IsInherited(LoadoutBackpackArea))
 			{
-				label = "Рюкзак";
+				label = "{AICF:AICF_UI_Backpack_5445a612}";
 				return SCR_EArsenalItemType.BACKPACK | SCR_EArsenalItemType.RADIO_BACKPACK;
 			}
 			if (area.IsInherited(LoadoutArmoredVestSlotArea))
 			{
-				label = "Бронежилет";
+				label = "{AICF:AICF_UI_Body_armor_70dbb340}";
 				return SCR_EArsenalItemType.VEST_AND_WAIST;
 			}
 			if (area.IsInherited(LoadoutVestArea))
 			{
-				label = "Разгрузка";
+				label = "{AICF:AICF_UI_Unloading_671156ed}";
 				return SCR_EArsenalItemType.VEST_AND_WAIST;
 			}
 			// Незнакомые mod areas часто имеют технические SourceName вроде
 			// slot2/arsbelt. Их адрес остаётся внутри модели, а не в подписи.
-			label = "Крепление " + (slot + 1).ToString();
+			label = "{AICF:AICF_UI_Attachment_slot_119bfff7}" + (slot + 1).ToString();
 		}
 		if (EquipedWeaponStorageComponent.Cast(storage))
 		{
-			label = "Служебное место";
+			label = "{AICF:AICF_UI_Utility_slot_5f0dce66}";
 			WeaponSlotComponent weapon = WeaponSlot(storage, slot);
 			if (!weapon || !VisibleSlot(storage, slot))
 				return 0;
 			string type = weapon.GetWeaponSlotType();
 			if (type == "primary")
 			{
-				label = "Основное оружие";
+				label = "{AICF:AICF_UI_Primary_weapon_64c0e42d}";
 				if (weapon.GetWeaponSlotIndex() > 0)
-					label = "Дополнительное основное оружие";
+					label = "{AICF:AICF_UI_Second_primary_weapon_1876114c}";
 			}
 			else if (type == "secondary")
-				label = "Кобура — пистолет";
+				label = "{AICF:AICF_UI_Holster_handgun_584af3e3}";
 			else if (type == "grenade")
-				label = "Гранаты";
+				label = "{AICF:AICF_UI_Grenades_22d4f4dc}";
 			else
-				label = "Дополнительное оружие (" + type + ")";
+				label = "{AICF:AICF_UI_Secondary_weapon_a1d26ab2}" + type + ")";
 		}
 		else if (WeaponAttachmentsStorageComponent.Cast(storage))
 		{
-			label = "Обвес " + (slot + 1).ToString();
+			label = "{AICF:AICF_UI_Attachment_78fdb568}" + (slot + 1).ToString();
 			GenericComponent parent = storage.GetSlot(slot).GetParentContainer();
 			if (BaseMuzzleComponent.Cast(parent))
 			{
-				label = "Магазин";
+				label = "{AICF:AICF_UI_Magazine_b81150f8}";
 				return 0;
 			}
 			AttachmentSlotComponent attachment = AttachmentSlotComponent.Cast(parent);
@@ -229,15 +229,15 @@ class AICF_LoadoutSlotView
 			{
 				typename attachmentType = attachment.GetAttachmentSlotType().Type();
 				if (attachmentType.IsInherited(AttachmentOptics))
-					label = "Прицел";
+					label = "{AICF:AICF_UI_Optic_b7371fec}";
 				else if (attachmentType.IsInherited(AttachmentUnderBarrel))
-					label = "Подствольный обвес";
+					label = "{AICF:AICF_UI_Underbarrel_attachment_7d6bccfc}";
 				else if (attachmentType.IsInherited(AttachmentBayonet))
-					label = "Штык";
+					label = "{AICF:AICF_UI_Bayonet_0959e142}";
 				else if (attachmentType.IsInherited(AttachmentMuzzle))
-					label = "Дульное устройство";
+					label = "{AICF:AICF_UI_Muzzle_attachment_77e6e9c5}";
 				else if (attachmentType.IsInherited(AttachmentHandGuard))
-					label = "Цевьё";
+					label = "{AICF:AICF_UI_Handguard_32b25d01}";
 			}
 			return SCR_EArsenalItemType.WEAPON_ATTACHMENT;
 		}
@@ -363,7 +363,7 @@ class AICF_LoadoutContentCategories
 {
 	static void Fill(array<string> names, array<int> types, array<int> modes)
 	{
-		array<string> labels = {"Все предметы", "Боеприпасы", "Гранаты и дым", "Медицина", "Снаряжение", "Обвесы", "Оружие", "Одежда и контейнеры"};
+		array<string> labels = {"{AICF:AICF_UI_All_items_63c8f01b}", "{AICF:AICF_UI_Ammunition_1e3e21cd}", "{AICF:AICF_UI_Grenades_and_smoke_7db7b67f}", "{AICF:AICF_UI_Medical_a7375e8d}", "{AICF:AICF_UI_Equipment_286b1543}", "{AICF:AICF_UI_Attachments_13f6ca69}", "{AICF:AICF_UI_Weapons_b16fba51}", "{AICF:AICF_UI_Clothing_and_containers_6fc79c8e}"};
 		array<int> categories = {0, 0, SCR_EArsenalItemType.LETHAL_THROWABLE | SCR_EArsenalItemType.NON_LETHAL_THROWABLE,
 			SCR_EArsenalItemType.HEAL, SCR_EArsenalItemType.EQUIPMENT, SCR_EArsenalItemType.WEAPON_ATTACHMENT, 0,
 			SCR_EArsenalItemType.HEADWEAR | SCR_EArsenalItemType.TORSO | SCR_EArsenalItemType.LEGS | SCR_EArsenalItemType.FOOTWEAR |

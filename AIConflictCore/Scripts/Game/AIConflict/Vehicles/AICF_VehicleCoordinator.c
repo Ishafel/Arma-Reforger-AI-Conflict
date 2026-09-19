@@ -178,7 +178,7 @@ class AICF_VehicleCoordinator
 	string GetSlotDisplayStatusText(AICF_GroupSlot slot)
 	{
 		if (!slot)
-			return "Пешком";
+			return "{AICF:AICF_UI_On_foot_dd408061}";
 		SCR_AIGroup group = slot.GetGroup();
 		int alive = AICF_GroupRuntime.CountAliveAgents(group);
 		int inVehicle = AICF_GroupRuntime.CountAliveAgentsInAnyVehicle(group);
@@ -189,16 +189,16 @@ class AICF_VehicleCoordinator
 			if (view)
 				phase = view.GetPhase();
 			if (phase == "BOARDING")
-				return string.Format("Посадка %1/%2", inVehicle, alive);
+				return AICF_Localization.Format("{AICF:AICF_UI_Boarding_c6a1c821}", string.Format("%1", inVehicle), string.Format("%1", alive));
 			if (phase == "DISMOUNT")
-				return string.Format("Высадка, в машине %1/%2", inVehicle, alive);
+				return AICF_Localization.Format("{AICF:AICF_UI_Dismounting_aboard_397f2f93}", string.Format("%1", inVehicle), string.Format("%1", alive));
 			if (phase == "TRANSIT")
-				return string.Format("Движение на технике %1/%2", inVehicle, alive);
-			return string.Format("В технике %1/%2", inVehicle, alive);
+				return AICF_Localization.Format("{AICF:AICF_UI_In_transit_7858c3b9}", string.Format("%1", inVehicle), string.Format("%1", alive));
+			return AICF_Localization.Format("{AICF:AICF_UI_In_vehicle_2311c1b1}", string.Format("%1", inVehicle), string.Format("%1", alive));
 		}
 		if (view)
 			return view.GetStatusText();
-		return "Пешком";
+		return "{AICF:AICF_UI_On_foot_dd408061}";
 	}
 
 	AICF_TransportTrip GetTrip(AICF_GroupSlot slot)

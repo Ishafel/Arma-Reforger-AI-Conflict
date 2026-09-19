@@ -58,24 +58,24 @@ class AICF_ManualSupplyDispatch
 	{
 		if (!AICF_LogisticsPlanner.OwnedSafe(source, faction) || !AICF_LogisticsPlanner.OwnedSafe(destination, faction))
 		{
-			reason = "Обе базы должны принадлежать вашей фракции и быть вне боя.";
+			reason = "{AICF:AICF_UI_Both_bases_must_belong_to_your_faction_and_23444b3f}";
 			return false;
 		}
 		if (source == destination || source.m_Pool.Overlaps(destination.m_Pool))
 		{
-			reason = "Выберите другую базу назначения: склады совпадают.";
+			reason = "{AICF:AICF_UI_Choose_another_destination_both_warehouses_c9a02379}";
 			return false;
 		}
 		int available = Math.Floor(m_Planner.ManualAvailable(source, faction));
 		if (amount <= 0 || amount > available)
 		{
-			reason = string.Format("Недостаточно свободных припасов. С учётом резервов доступно: %1.", available);
+			reason = AICF_Localization.Format("{AICF:AICF_UI_Insufficient_unreserved_supplies_Available_d46fd657}", string.Format("%1", available));
 			return false;
 		}
 		int free = Math.Floor(m_Planner.Need(destination, null, true));
 		if (amount > free)
 		{
-			reason = string.Format("На базе назначения недостаточно места. Доступно: %1.", free);
+			reason = AICF_Localization.Format("{AICF:AICF_UI_Insufficient_space_at_the_destination_Avai_0fea49df}", string.Format("%1", free));
 			return false;
 		}
 		return true;
@@ -92,14 +92,14 @@ class AICF_ManualSupplyDispatch
 		{
 			if (previous.m_Player == player && previous.m_iRequest == token)
 			{
-				reason = "Эта заявка уже принята.";
+				reason = "{AICF:AICF_UI_This_request_has_already_been_accepted_c7655d41}";
 				return false;
 			}
 		}
 		int now = System.GetTickCount();
 		if (now < m_iNextAdmissionMs)
 		{
-			reason = "Служба занята. Повторите запрос через несколько секунд.";
+			reason = "{AICF:AICF_UI_Service_is_busy_Try_again_in_a_few_seconds_83680ad1}";
 			return false;
 		}
 		m_iNextAdmissionMs = now + 500;
@@ -148,9 +148,9 @@ class AICF_ManualSupplyDispatch
 		if (addWorker) selected = expansionDepot;
 		if (!selected)
 		{
-			reason = "В автопарке нет подходящей грузовой машины для этой заявки.";
-			if (!depotFound) reason = "Нужен действующий союзный автопарк с грузовой машиной. Постройте его на своей базе.";
-			else if (maximum > 0 && amount > maximum) reason = string.Format("За один рейс можно перевезти не более %1 припасов. Уменьшите количество.", Math.Floor(maximum));
+			reason = "{AICF:AICF_UI_The_depot_has_no_suitable_cargo_vehicle_fo_281befcb}";
+			if (!depotFound) reason = "{AICF:AICF_UI_An_active_allied_depot_with_a_cargo_vehicl_c76154ed}";
+			else if (maximum > 0 && amount > maximum) reason = AICF_Localization.Format("{AICF:AICF_UI_One_trip_can_carry_at_most_supplies_Reduce_babe0465}", string.Format("%1", Math.Floor(maximum)));
 			return false;
 		}
 		vector start = selected.m_Depot.GetOrigin();
@@ -158,7 +158,7 @@ class AICF_ManualSupplyDispatch
 		vector load, unload;
 		if (!m_Planner.Route(start, source, load) || !m_Planner.Route(load, destination, unload))
 		{
-			reason = "Не удалось проложить дорожный маршрут. Выберите другую базу или повторите позже.";
+			reason = "{AICF:AICF_UI_Unable_to_find_a_road_route_Choose_another_fbf12d5a}";
 			return false;
 		}
 		if (addWorker)
@@ -166,13 +166,13 @@ class AICF_ManualSupplyDispatch
 			selected = m_Registry.AddManualWorker(selected);
 			if (!selected)
 			{
-				reason = "Автопарк больше недоступен. Повторите заявку.";
+				reason = "{AICF:AICF_UI_Vehicle_depot_is_no_longer_available_Submi_e5657f6f}";
 				return false;
 			}
 		}
 		if (!selected.m_Lease && !m_Vehicles.BeginLogisticsSpawn(selected))
 		{
-			reason = "Не удалось выделить водителя: проверьте свободный бюджет AI и доступность автопарка.";
+			reason = "{AICF:AICF_UI_Unable_to_assign_a_driver_check_the_AI_bud_feda7882}";
 			return false;
 		}
 		AICF_ManualSupplyRequest request = new AICF_ManualSupplyRequest();
@@ -188,7 +188,7 @@ class AICF_ManualSupplyDispatch
 		request.m_fDeliveredBefore = selected.m_fDelivered;
 		m_aRequests.Insert(request);
 		player.AICF_SetSupplyRoute(source.m_Base.GetBaseName(), destination.m_Base.GetBaseName());
-		player.AICF_SetSupplyStatus(token, true, string.Format("Принято: %1 припасов. Подготовка машины и водителя…", amount));
+		player.AICF_SetSupplyStatus(token, true, AICF_Localization.Format("{AICF:AICF_UI_Accepted_supplies_Preparing_vehicle_and_dr_213267a2}", string.Format("%1", amount)));
 		selected.Log("LOGISTICS_MANUAL_ACCEPTED", string.Format("player=%1 request=%2 source=%3 destination=%4 amount=%5 automatic_dispatch=0", playerId, token, source.Key(), destination.Key(), amount));
 		return true;
 	}
@@ -203,12 +203,12 @@ class AICF_ManualSupplyDispatch
 			AICF_LogisticsWorker w = request.m_Worker;
 			if (!w || w.m_iGeneration != request.m_iGeneration)
 			{
-				Finish(i, "Рейс отменён: машина была заменена.", false);
+				Finish(i, "{AICF:AICF_UI_Delivery_canceled_vehicle_was_replaced_3338fd9d}", false);
 				continue;
 			}
 			if (!PlayerValid(request))
 			{
-				Finish(i, "Рейс отменён: игрок вышел или сменил фракцию.", true);
+				Finish(i, "{AICF:AICF_UI_Delivery_canceled_player_disconnected_or_c_7a9689a1}", true);
 				continue;
 			}
 			if (request.m_Job)
@@ -216,14 +216,14 @@ class AICF_ManualSupplyDispatch
 				if (w.m_Job != request.m_Job || w.m_bCleanupQueued || w.m_bCargoFault)
 				{
 					int delivered = Math.Floor(Math.Max(0, w.m_fDelivered - request.m_fDeliveredBefore));
-					string result = string.Format("Рейс завершён. Доставлено: %1 / %2.", delivered, request.m_iAmount);
-					if (delivered < request.m_iAmount) result = string.Format("Рейс прерван: изменились условия. Доставлено: %1 / %2. Сохранившаяся машина возвращает остаток.", delivered, request.m_iAmount);
+					string result = AICF_Localization.Format("{AICF:AICF_UI_Delivery_complete_Delivered_a0937734}", string.Format("%1", delivered), string.Format("%1", request.m_iAmount));
+					if (delivered < request.m_iAmount) result = AICF_Localization.Format("{AICF:AICF_UI_Delivery_interrupted_conditions_changed_De_560a4363}", string.Format("%1", delivered), string.Format("%1", request.m_iAmount));
 					Finish(i, result, true);
 				}
 				else
 				{
 					string status = AICF_LogisticsMarkerText.Status(w);
-					if (request.m_Job.m_bLoaded) status += string.Format(". Груз: %1 / %2.", Math.Floor(w.m_fObservedCargo), request.m_iAmount);
+					if (request.m_Job.m_bLoaded) status += AICF_Localization.Format("{AICF:AICF_UI_Cargo_073dba54}", string.Format("%1", Math.Floor(w.m_fObservedCargo)), string.Format("%1", request.m_iAmount));
 					string arrival = AICF_LogisticsArrivalEstimate.Text(w);
 					if (!arrival.IsEmpty()) status += "\n" + arrival;
 					request.m_Player.AICF_SetSupplyStatus(request.m_iRequest, true, status);
@@ -232,12 +232,12 @@ class AICF_ManualSupplyDispatch
 			}
 			if (w.m_bCleanupQueued || w.m_bCargoFault || System.GetTickCount() >= request.m_iDeadlineMs)
 			{
-				Finish(i, "Рейс отменён: подготовить машину и водителя не удалось. Проверьте свободное место у автопарка.", true);
+				Finish(i, "{AICF:AICF_UI_Delivery_canceled_unable_to_prepare_vehicl_200d522b}", true);
 				continue;
 			}
 			if (!AICF_LogisticsPlanner.OwnedSafe(request.m_Source, w.m_Faction) || !AICF_LogisticsPlanner.OwnedSafe(request.m_Destination, w.m_Faction))
 			{
-				Finish(i, "Рейс отменён: источник или назначение потеряны либо находятся под атакой.", true);
+				Finish(i, "{AICF:AICF_UI_Delivery_canceled_source_or_destination_wa_54f5ca73}", true);
 				continue;
 			}
 			// Ready() может стать true между vehicle polls. Acquisition должен
@@ -247,13 +247,13 @@ class AICF_ManualSupplyDispatch
 			if (!EndpointsValid(request.m_Source, request.m_Destination, w.m_Faction, request.m_iAmount, reason) ||
 				!AICF_LogisticsDepotRegistry.Live(w))
 			{
-				if (reason.IsEmpty()) reason = "Автопарк больше недоступен.";
+				if (reason.IsEmpty()) reason = "{AICF:AICF_UI_Vehicle_depot_is_no_longer_available_65f46dde}";
 				Finish(i, reason, true);
 				continue;
 			}
 			if (w.m_fObservedCargo > 0 || request.m_iAmount > w.m_CargoPool.Capacity())
 			{
-				Finish(i, "Грузовой отсек занят или его вместимости недостаточно.", true);
+				Finish(i, "{AICF:AICF_UI_Cargo_space_is_occupied_or_insufficient_e3dffc53}", true);
 				continue;
 			}
 			vector load, unload;
@@ -262,13 +262,13 @@ class AICF_ManualSupplyDispatch
 			request.m_Destination.m_vPosition = unload;
 			if (!m_Planner.m_Book.Reserve(w, request.m_Source, request.m_Destination, request.m_iAmount, false, m_Planner.m_Config, m_Planner.m_Graph.GetRevision()))
 			{
-				Finish(i, "Запас или свободное место уже заняты другой перевозкой. Повторите запрос.", true);
+				Finish(i, "{AICF:AICF_UI_Supplies_or_cargo_space_are_reserved_by_an_d0695a2e}", true);
 				continue;
 			}
 			request.m_Job = w.m_Job;
 			request.m_Job.m_bManual = true;
 			if (!m_Vehicles.BeginLogisticsLeg(w, load, AICF_ELogisticsPhase.TO_SOURCE))
-				Finish(i, "Не удалось начать движение к источнику.", true);
+				Finish(i, "{AICF:AICF_UI_Unable_to_start_moving_to_the_source_59c95a5f}", true);
 		}
 	}
 
@@ -295,6 +295,6 @@ class AICF_ManualSupplyDispatch
 	{
 		if (m_bStopped) return;
 		m_bStopped = true;
-		for (int i = m_aRequests.Count() - 1; i >= 0; i--) Finish(i, "Служба снабжения остановлена.", true);
+		for (int i = m_aRequests.Count() - 1; i >= 0; i--) Finish(i, "{AICF:AICF_UI_Supply_service_has_stopped_a7d87db2}", true);
 	}
 }

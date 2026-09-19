@@ -48,7 +48,7 @@ class AICF_SupplyMapUI : ScriptedWidgetEventHandler
 			return;
 		m_wToggle.SetName("AICF_SupplyToggle");
 		m_wToggle.SetZOrder(221);
-		m_Controller.CreateText(m_wToggle, 0, 0, 1, 1, "Снабжение", 20,
+		m_Controller.CreateText(m_wToggle, 0, 0, 1, 1, "{AICF:AICF_UI_Supplies_23f73547}", 20,
 			Color.FromSRGBA(236, 242, 245, 255), true);
 		BindRect(m_wToggle, true);
 	}
@@ -75,19 +75,19 @@ class AICF_SupplyMapUI : ScriptedWidgetEventHandler
 		m_wPanel.SetName("AICF_SupplyPanel");
 		m_wPanel.SetZOrder(5);
 		BindRect(m_wPanel, true);
-		m_Controller.CreateText(m_wPanel, 0.05, 0.03, 0.72, 0.11, "СНАБЖЕНИЕ", 26,
+		m_Controller.CreateText(m_wPanel, 0.05, 0.03, 0.72, 0.11, "{AICF:AICF_UI_SupplyTitle}", 26,
 			Color.FromSRGBA(226, 167, 79, 255));
 		m_wClose = m_Controller.CreateRect(m_wPanel, 0.77, 0.03, 0.95, 0.11,
 			Color.FromSRGBA(91, 34, 34, 250), true);
 		if (!m_wClose)
 			return false;
 		m_wClose.SetZOrder(5);
-		m_Controller.CreateText(m_wClose, 0, 0, 1, 1, "Закрыть", 18,
+		m_Controller.CreateText(m_wClose, 0, 0, 1, 1, "{AICF:AICF_UI_Close_23b64977}", 18,
 			Color.FromSRGBA(255, 232, 232, 255), true);
 		BindRect(m_wClose, true);
-		m_Controller.CreateText(m_wPanel, 0.05, 0.14, 0.95, 0.19, "Откуда — база-источник", 19,
+		m_Controller.CreateText(m_wPanel, 0.05, 0.14, 0.95, 0.19, "{AICF:AICF_UI_From_source_base_93f0f18e}", 19,
 			Color.FromSRGBA(236, 242, 245, 255));
-		m_Controller.CreateText(m_wPanel, 0.05, 0.30, 0.95, 0.35, "Куда — база назначения", 19,
+		m_Controller.CreateText(m_wPanel, 0.05, 0.30, 0.95, 0.35, "{AICF:AICF_UI_To_destination_base_b5015873}", 19,
 			Color.FromSRGBA(236, 242, 245, 255));
 
 		m_wCombo = GetGame().GetWorkspace().CreateWidgets(COMBO_LAYOUT, m_wPanel);
@@ -129,7 +129,7 @@ class AICF_SupplyMapUI : ScriptedWidgetEventHandler
 		if (!m_wSend) return false;
 		m_wSend.SetName("AICF_SupplySend");
 		m_wSend.SetZOrder(5);
-		m_Controller.CreateText(m_wSend, 0, 0, 1, 1, "Отправить", 20,
+		m_Controller.CreateText(m_wSend, 0, 0, 1, 1, "{AICF:AICF_UI_Send_77882396}", 20,
 			Color.FromSRGBA(255, 255, 255, 255), true);
 		BindRect(m_wSend, true);
 		return m_wAvailable && m_wAmount && m_wStatus && m_wResult;
@@ -347,7 +347,7 @@ class AICF_SupplyMapUI : ScriptedWidgetEventHandler
 		foreach (int index, AICF_SupplyMapBase entry : current)
 		{
 			m_aBases.Insert(entry);
-			m_Combo.AddItem(entry.m_sName);
+			m_Combo.AddItem(AICF_Localization.Resolve(entry.m_sName));
 			if (m_Selected && entry.m_Base == m_Selected.m_Base && entry.m_EntityId == m_Selected.m_EntityId)
 				selectedIndex = index;
 		}
@@ -365,7 +365,7 @@ class AICF_SupplyMapUI : ScriptedWidgetEventHandler
 		}
 		else
 		{
-			m_Combo.AddItem("Нет доступных баз");
+			m_Combo.AddItem(AICF_Localization.Resolve("{AICF:AICF_UI_No_available_bases_7e8ef223}"));
 			m_Combo.SetCurrentItem(0, false, false, false);
 		}
 		m_Combo.SetEnabled(!m_aBases.IsEmpty());
@@ -384,7 +384,7 @@ class AICF_SupplyMapUI : ScriptedWidgetEventHandler
 		{
 			if (m_Selected && entry.m_EntityId == m_Selected.m_EntityId) continue;
 			m_aDestinations.Insert(entry);
-			m_DestinationCombo.AddItem(entry.m_sName);
+			m_DestinationCombo.AddItem(AICF_Localization.Resolve(entry.m_sName));
 			if (m_Destination && entry.m_Base == m_Destination.m_Base && entry.m_EntityId == m_Destination.m_EntityId)
 				selectedIndex = m_aDestinations.Count() - 1;
 		}
@@ -392,7 +392,7 @@ class AICF_SupplyMapUI : ScriptedWidgetEventHandler
 		// Назначение выбирается явно: потеря базы никогда не подменяет адрес доставки.
 		if (selectedIndex < 0)
 		{
-			m_DestinationCombo.AddItem("Выберите базу назначения");
+			m_DestinationCombo.AddItem(AICF_Localization.Resolve("{AICF:AICF_UI_Select_destination_base_0092aefb}"));
 			selectedIndex = m_aDestinations.Count();
 		}
 		else m_Destination = m_aDestinations[selectedIndex];
@@ -412,28 +412,28 @@ class AICF_SupplyMapUI : ScriptedWidgetEventHandler
 		m_bRendering = false;
 		int free;
 		bool destinationReady = AICF_SupplyMapData.ReadFreeSpace(m_Destination, m_Faction, free);
-		m_wAvailable.SetText(string.Format("У источника: %1  •  Место у назначения: %2", m_iMaximum, free));
-		m_wAmount.SetText(string.Format("Выбрано: %1 / %2", m_iAmount, m_iMaximum));
-		string status = "Выберите количество и нажмите «Отправить».";
+		m_wAvailable.SetText(AICF_Localization.Resolve(AICF_Localization.Format("{AICF:AICF_UI_At_source_Destination_space_e6a049f2}", string.Format("%1", m_iMaximum), string.Format("%1", free))));
+		m_wAmount.SetText(AICF_Localization.Resolve(AICF_Localization.Format("{AICF:AICF_UI_Selected_fb9607ce}", string.Format("%1", m_iAmount), string.Format("%1", m_iMaximum))));
+		string status = "{AICF:AICF_UI_Choose_an_amount_and_click_Send_7c84f16e}";
 		if (!m_Faction)
-			status = "Выберите фракцию, чтобы увидеть её базы.";
+			status = "{AICF:AICF_UI_Choose_a_faction_to_see_its_bases_22dfe873}";
 		else if (!m_Selected)
-			status = "Под контролем вашей фракции нет доступных баз.";
+			status = "{AICF:AICF_UI_Your_faction_controls_no_available_bases_3131dadf}";
 		else if (!ready)
 		{
-			m_wAvailable.SetText("Припасы базы: ожидаются данные");
-			status = "Данные о складе пока недоступны.";
+			m_wAvailable.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_Base_supplies_waiting_for_data_3b0deffc}"));
+			status = "{AICF:AICF_UI_Warehouse_data_is_not_available_yet_4684fe02}";
 		}
 		else if (m_iMaximum == 0)
-			status = "На этой базе нет доступных припасов.";
+			status = "{AICF:AICF_UI_This_base_has_no_available_supplies_3422f068}";
 		else if (m_aDestinations.IsEmpty())
-			status = "Нужна ещё одна союзная база для доставки.";
+			status = "{AICF:AICF_UI_Another_allied_base_is_needed_for_delivery_8cdc3d8f}";
 		else if (!m_Destination)
-			status = "Выберите, куда доставить припасы.";
+			status = "{AICF:AICF_UI_Choose_where_to_deliver_supplies_a4a35a3f}";
 		else if (!destinationReady)
-			status = "Ожидаются данные склада назначения.";
+			status = "{AICF:AICF_UI_Waiting_for_destination_warehouse_data_5f9718f6}";
 		else if (m_iAmount > free || free == 0)
-			status = string.Format("На базе назначения свободно: %1. Уменьшите количество.", free);
+			status = AICF_Localization.Format("{AICF:AICF_UI_Destination_free_space_Reduce_the_amount_d62e9283}", string.Format("%1", free));
 		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		bool pending = player && player.AICF_IsSupplyRequestPending();
 		m_bCanSend = player && !pending && ready && destinationReady && m_iAmount > 0 && m_iAmount <= free &&
@@ -452,9 +452,9 @@ class AICF_SupplyMapUI : ScriptedWidgetEventHandler
 		// Валидация редактируемой заявки остаётся над результатом последнего рейса.
 		m_wStatus.SetVisible(true);
 		PlaceControl(m_wResult, 0.05, 0.77, 0.95, 0.89);
-		if (player) m_wResult.SetText(player.AICF_GetSupplyStatus());
-		else m_wResult.SetText("Ожидается подключение игрока.");
-		m_wStatus.SetText(status);
+		if (player) m_wResult.SetText(AICF_Localization.Resolve(player.AICF_GetSupplyStatus()));
+		else m_wResult.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_Waiting_for_player_connection_98846583}"));
+		m_wStatus.SetText(AICF_Localization.Resolve(status));
 	}
 
 	protected void OnBaseChanged(SCR_ComboBoxComponent component, int index)

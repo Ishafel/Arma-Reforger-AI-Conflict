@@ -12,7 +12,7 @@ class AICF_SupplyMapBase
 		m_EntityId = base.GetOwner().GetID();
 		m_sName = WidgetManager.Translate(base.GetBaseName());
 		if (m_sName.IsEmpty())
-			m_sName = "База";
+			m_sName = "{AICF:AICF_UI_Base_90760edb}";
 		m_sSortKey = string.Format("%1|%2", m_sName, m_EntityId);
 	}
 

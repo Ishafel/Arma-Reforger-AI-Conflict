@@ -3,38 +3,38 @@ class AICF_LogisticsMarkerText
 {
 	static string Status(AICF_LogisticsWorker w)
 	{
-		if (w.m_bCargoFault || w.m_ePhase == AICF_ELogisticsPhase.FAILED_CLOSED) return "Неисправность";
-		if (w.m_bCleanupQueued || w.m_ePhase == AICF_ELogisticsPhase.RETIRING) return "Завершает службу";
-		if (AICF_LogisticsFallback.Cast(w.m_DriverInteraction)) return "Восстанавливает рейс";
-		if (w.m_DriverInteraction) return "Водитель у препятствия";
-		if (w.m_RouteRecovery && w.m_RouteRecovery.m_bActive) return "Выбирается из препятствия";
+		if (w.m_bCargoFault || w.m_ePhase == AICF_ELogisticsPhase.FAILED_CLOSED) return "{AICF:AICF_UI_Fault_f0741213}";
+		if (w.m_bCleanupQueued || w.m_ePhase == AICF_ELogisticsPhase.RETIRING) return "{AICF:AICF_UI_Retiring_from_service_7ba75fff}";
+		if (AICF_LogisticsFallback.Cast(w.m_DriverInteraction)) return "{AICF:AICF_UI_Recovering_delivery_765fb859}";
+		if (w.m_DriverInteraction) return "{AICF:AICF_UI_Driver_at_obstacle_258fe07a}";
+		if (w.m_RouteRecovery && w.m_RouteRecovery.m_bActive) return "{AICF:AICF_UI_Navigating_around_obstacle_2972c4e9}";
 		switch (w.m_ePhase)
 		{
-			case AICF_ELogisticsPhase.SPAWN_PENDING: return "Подготовка машины";
-			case AICF_ELogisticsPhase.DRIVER_READY: return "Готов к рейсу";
-			case AICF_ELogisticsPhase.TO_SOURCE: return "Едет за грузом";
-			case AICF_ELogisticsPhase.LOADING: return "Погрузка";
-			case AICF_ELogisticsPhase.TO_DESTINATION: return "Доставляет груз";
-			case AICF_ELogisticsPhase.UNLOADING: return "Разгрузка";
-			case AICF_ELogisticsPhase.RETURN_HOME: return "Возвращается на базу";
-			case AICF_ELogisticsPhase.WAIT_RETRY: return "Ожидает повторной попытки";
+			case AICF_ELogisticsPhase.SPAWN_PENDING: return "{AICF:AICF_UI_Preparing_vehicle_e634fded}";
+			case AICF_ELogisticsPhase.DRIVER_READY: return "{AICF:AICF_UI_Ready_for_delivery_f04d67fa}";
+			case AICF_ELogisticsPhase.TO_SOURCE: return "{AICF:AICF_UI_Driving_to_source_bf1b7d19}";
+			case AICF_ELogisticsPhase.LOADING: return "{AICF:AICF_UI_Loading_0f66eaff}";
+			case AICF_ELogisticsPhase.TO_DESTINATION: return "{AICF:AICF_UI_Delivering_cargo_0d134080}";
+			case AICF_ELogisticsPhase.UNLOADING: return "{AICF:AICF_UI_Unloading_671156ed}";
+			case AICF_ELogisticsPhase.RETURN_HOME: return "{AICF:AICF_UI_Returning_to_base_dacaa882}";
+			case AICF_ELogisticsPhase.WAIT_RETRY: return "{AICF:AICF_UI_Waiting_to_retry_30e4795e}";
 		}
-		return "Ожидает задания";
+		return "{AICF:AICF_UI_Awaiting_task_edef5a93}";
 	}
 
 	static string VehicleName(AICF_LogisticsWorker w)
 	{
-		if (!w.m_Entry) return "Транспорт";
-		string name = WidgetManager.Translate(w.m_Entry.GetEntityName());
+		if (!w.m_Entry) return "{AICF:AICF_UI_Vehicle_6a702f38}";
+		string name = AICF_Localization.Key(w.m_Entry.GetEntityName());
 		if (!name.IsEmpty()) return name;
 		return FilePath.StripExtension(FilePath.StripPath(w.m_Entry.GetPrefab()));
 	}
 
 	static string BaseName(SCR_CampaignMilitaryBaseComponent base)
 	{
-		if (!base || !base.GetOwner()) return "Точка недоступна";
-		string name = WidgetManager.Translate(base.GetBaseName());
-		if (name.IsEmpty()) name = "База";
+		if (!base || !base.GetOwner()) return "{AICF:AICF_UI_Location_unavailable_7c455590}";
+		string name = AICF_Localization.Key(base.GetBaseName());
+		if (name.IsEmpty()) name = "{AICF:AICF_UI_Base_90760edb}";
 		return name;
 	}
 
@@ -46,15 +46,15 @@ class AICF_LogisticsMarkerText
 	static string EndpointName(AICF_LogisticsEndpoint endpoint)
 	{
 		if (!endpoint || !endpoint.m_Base || !endpoint.m_Base.GetOwner() ||
-			endpoint.m_Base.GetOwner().GetID() != endpoint.m_BaseId) return "Точка недоступна";
+			endpoint.m_Base.GetOwner().GetID() != endpoint.m_BaseId) return "{AICF:AICF_UI_Location_unavailable_7c455590}";
 		return BaseName(endpoint.m_Base);
 	}
 
 	static string Route(AICF_LogisticsWorker w)
 	{
-		if (w.m_ePhase == AICF_ELogisticsPhase.RETURN_HOME) return "Возврат → " + BaseName(w.m_Home);
-		if (!HasJob(w)) return "Нет активного рейса";
-		if (w.m_Job.m_bReturn) return "Возврат груза → " + EndpointName(w.m_Job.m_Destination);
+		if (w.m_ePhase == AICF_ELogisticsPhase.RETURN_HOME) return "{AICF:AICF_UI_Return_64cd0550}" + BaseName(w.m_Home);
+		if (!HasJob(w)) return "{AICF:AICF_UI_No_active_delivery_1f9269e4}";
+		if (w.m_Job.m_bReturn) return "{AICF:AICF_UI_Cargo_return_78c69b39}" + EndpointName(w.m_Job.m_Destination);
 		return EndpointName(w.m_Job.m_Source) + " → " + EndpointName(w.m_Job.m_Destination);
 	}
 
@@ -67,17 +67,17 @@ class AICF_LogisticsMarkerText
 		// Не выдаём последнее наблюдение или prefab estimate за текущий груз.
 		if (w.m_CargoPool && w.m_CargoPool.Valid())
 			cargo = string.Format("%1 / %2", Math.Round(w.m_CargoPool.Value()), Math.Round(w.m_CargoPool.Capacity()));
-		label = string.Format("Л%1 · %2\n%3 · %4", number, name, status, cargo);
-		details = string.Format("Логистика %1 · %2\nСостояние: %3\nПрипасы: %4\nМаршрут: %5",
-			number, name, status, cargo, Route(w));
-		string destination = "Нет активной цели";
+		label = AICF_Localization.Format("{AICF:AICF_UI_L_e9f5a504}", string.Format("%1", number), string.Format("%1", name), string.Format("%1", status), string.Format("%1", cargo));
+		details = AICF_Localization.Format("{AICF:AICF_UI_Logistics_Status_Supplies_Route_907d4ddf}",
+			string.Format("%1", number), string.Format("%1", name), string.Format("%1", status), string.Format("%1", cargo), string.Format("%1", Route(w)));
+		string destination = "{AICF:AICF_UI_No_active_destination_9787eb65}";
 		bool moving = w.m_ePhase == AICF_ELogisticsPhase.TO_SOURCE ||
 			w.m_ePhase == AICF_ELogisticsPhase.TO_DESTINATION || w.m_ePhase == AICF_ELogisticsPhase.RETURN_HOME;
 		if (moving && w.m_Vehicle)
-			destination = string.Format("%1 м по прямой", Math.Round(vector.DistanceXZ(w.m_Vehicle.GetOrigin(), w.m_vEndpoint)));
+			destination = AICF_Localization.Format("{AICF:AICF_UI_m_straight_line_c03d1ee5}", string.Format("%1", Math.Round(vector.DistanceXZ(w.m_Vehicle.GetOrigin(), w.m_vEndpoint))));
 		int speed;
 		if (w.m_Vehicle && w.m_Vehicle.GetPhysics()) speed = Math.Round(w.m_Vehicle.GetPhysics().GetVelocity().Length() * 3.6);
-		details += string.Format("\nДо текущей цели: %1\nСкорость: %2 км/ч\nБаза приписки: %3", destination, speed, BaseName(w.m_Home));
+		details += AICF_Localization.Format("{AICF:AICF_UI_To_current_destination_Speed_km_h_Home_bas_d954fdf8}", string.Format("%1", destination), string.Format("%1", speed), string.Format("%1", BaseName(w.m_Home)));
 		string arrival = AICF_LogisticsArrivalEstimate.Text(w);
 		if (!arrival.IsEmpty()) details += "\n" + arrival;
 	}

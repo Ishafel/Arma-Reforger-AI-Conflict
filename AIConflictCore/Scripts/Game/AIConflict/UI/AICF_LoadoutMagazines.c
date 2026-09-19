@@ -52,7 +52,7 @@ class AICF_LoadoutMagazines
 	{
 		prefab = string.Empty;
 		destination = null;
-		reason = "Выберите оружие с магазином.";
+		reason = "{AICF:AICF_UI_Select_a_weapon_that_uses_magazines_d574fbe5}";
 		if (!draft || !draft.GetCharacter() || !draft.GetPreview() || !catalog || !tree || !muzzle ||
 			muzzle.IsDisposable() || !muzzle.GetMagazineWell() ||
 			draft.GetCharacter().GetWorld() == GetGame().GetWorld() ||
@@ -89,9 +89,9 @@ class AICF_LoadoutMagazines
 				return true;
 			}
 		}
-		reason = "В каталоге фракции нет совместимого магазина для этого оружия.";
+		reason = "{AICF:AICF_UI_Your_faction_catalog_has_no_compatible_mag_9a6e7201}";
 		if (compatible)
-			reason = "Для совместимого магазина нет места в карманах. Освободите место или наденьте контейнер.";
+			reason = "{AICF:AICF_UI_No_pocket_space_for_a_compatible_magazine__ce41d065}";
 		return false;
 	}
 }

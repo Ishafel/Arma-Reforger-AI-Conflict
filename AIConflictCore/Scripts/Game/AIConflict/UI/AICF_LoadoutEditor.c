@@ -224,36 +224,36 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			return false;
 		// Выше полноэкранной input-поверхности scrim (z=1).
 		m_wPanel.SetZOrder(5);
-		Label(0.025, 0.02, 0.34, 0.08, "ЭКИПИРОВКА ОТРЯДА", 27);
+		Label(0.025, 0.02, 0.34, 0.08, "{AICF:AICF_UI_SQUAD_LOADOUT_3cb76f02}", 27);
 		m_Group = Combo(0.36, 0.025, 0.82, 0.08);
-		Button("close", "Закрыть", 0.84, 0.025, 0.975, 0.08);
+		Button("close", "{AICF:AICF_UI_Close_23b64977}", 0.84, 0.025, 0.975, 0.08);
 		m_Member = Combo(0.025, 0.09, 0.29, 0.15);
 		m_Library = Combo(0.31, 0.09, 0.56, 0.15);
-		Button("load", "Загрузить", 0.57, 0.09, 0.68, 0.15);
-		Button("undo", "Отменить шаг", 0.69, 0.09, 0.83, 0.15);
-		Button("reset", "Стандартный", 0.84, 0.09, 0.975, 0.15);
-		Label(0.025, 0.165, 0.29, 0.20, "ПРЕДПРОСМОТР", 17);
-		Label(0.31, 0.165, 0.63, 0.20, "ЭКИПИРОВКА", 17);
-		Button("back", "Назад", 0.31, 0.205, 0.385, 0.255);
-		m_wLocation = Label(0.395, 0.205, 0.63, 0.265, "На бойце", 17);
+		Button("load", "{AICF:AICF_UI_Load_8e2c5587}", 0.57, 0.09, 0.68, 0.15);
+		Button("undo", "{AICF:AICF_UI_Undo_950921cc}", 0.69, 0.09, 0.83, 0.15);
+		Button("reset", "{AICF:AICF_UI_Default_c3e32002}", 0.84, 0.09, 0.975, 0.15);
+		Label(0.025, 0.165, 0.29, 0.20, "{AICF:AICF_UI_PREVIEW_7dc4cefd}", 17);
+		Label(0.31, 0.165, 0.63, 0.20, "{AICF:AICF_UI_LOADOUT_6d15a8e1}", 17);
+		Button("back", "{AICF:AICF_UI_Back_b1e3ce09}", 0.31, 0.205, 0.385, 0.255);
+		m_wLocation = Label(0.395, 0.205, 0.63, 0.265, "{AICF:AICF_UI_On_soldier_193813db}", 17);
 		m_wLocation.SetTextWrapping(true);
-		Label(0.65, 0.165, 0.975, 0.20, "КАТАЛОГ ПРЕДМЕТОВ", 17);
-		m_wCatalogContext = Label(0.65, 0.205, 0.975, 0.265, "Выберите место в центре", 17);
+		Label(0.65, 0.165, 0.975, 0.20, "{AICF:AICF_UI_ITEM_CATALOG_073e7c4c}", 17);
+		m_wCatalogContext = Label(0.65, 0.205, 0.975, 0.265, "{AICF:AICF_UI_Select_a_slot_in_the_center_702cc83a}", 17);
 		m_wCatalogContext.SetTextWrapping(true);
 		m_ContentCategory = Combo(0.65, 0.205, 0.975, 0.265);
 		if (!m_ContentCategory)
 			return false;
 		m_ContentCategory.GetRootWidget().SetVisible(false);
-		m_wSearch = Edit(0.65, 0.275, 0.865, 0.33, "Поиск по названию…");
-		Button("clearFilters", "Очистить", 0.875, 0.275, 0.975, 0.33);
+		m_wSearch = Edit(0.65, 0.275, 0.865, 0.33, "{AICF:AICF_UI_Search_by_name_ce5c4685}");
+		Button("clearFilters", "{AICF:AICF_UI_Clear_52ecee71}", 0.875, 0.275, 0.975, 0.33);
 		if (!m_wSearch)
 			return false;
 		m_wSearch.AddHandler(this);
 		m_Slots = new AICF_LoadoutItemGrid();
 		m_Items = new AICF_LoadoutItemGrid();
-		m_wCapacity = Label(0.31, 0.268, 0.63, 0.313, "Вместимость: —", 14);
+		m_wCapacity = Label(0.31, 0.268, 0.63, 0.313, "{AICF:AICF_UI_Capacity_879d4588}", 14);
 		m_wCapacity.SetTextWrapping(true);
-		Button("addMagazine", "+ Магазин", 0.475, 0.268, 0.63, 0.313);
+		Button("addMagazine", "{AICF:AICF_UI_Magazine_1efa5341}", 0.475, 0.268, 0.63, 0.313);
 		ShowButton("addMagazine", false);
 		if (!m_Slots.Create(m_Controller, m_wPanel, 0.31, 0.32, 0.63, 0.745, 1, 8) ||
 			!m_Items.Create(m_Controller, m_wPanel, 0.65, 0.34, 0.975, 0.735, 2, 3))
@@ -263,15 +263,15 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_Slots.m_OnRemoved.Insert(OnSlotRemoved);
 		m_Items.m_OnSelected.Insert(OnCardSelected);
 		m_Items.m_OnActivated.Insert(OnItemActivated);
-		m_wTarget = Label(0.31, 0.75, 0.63, 0.835, "Выберите место", 16);
+		m_wTarget = Label(0.31, 0.75, 0.63, 0.835, "{AICF:AICF_UI_Select_a_slot_bf11638b}", 16);
 		m_wTarget.SetTextWrapping(true);
-		m_wSelection = Label(0.65, 0.735, 0.975, 0.79, "Выберите предмет", 16);
+		m_wSelection = Label(0.65, 0.735, 0.975, 0.79, "{AICF:AICF_UI_Select_an_item_a9a7e1ac}", 16);
 		m_wSelection.SetTextWrapping(true);
 		Button("less", "-", 0.65, 0.79, 0.68, 0.835);
 		m_wQuantity = Label(0.68, 0.79, 0.73, 0.835, "×1", 17);
 		Button("more", "+", 0.73, 0.79, 0.76, 0.835);
-		Button("apply", "Выберите предмет", 0.77, 0.79, 0.975, 0.835);
-		Label(0.025, 0.745, 0.29, 0.84, "Поворот — зажать ЛКМ\nМасштаб — колесом\nВверх / вниз — зажать колесо", 16);
+		Button("apply", "{AICF:AICF_UI_Select_an_item_a9a7e1ac}", 0.77, 0.79, 0.975, 0.835);
+		Label(0.025, 0.745, 0.29, 0.84, "{AICF:AICF_UI_Rotate_hold_left_mouse_button_Zoom_scroll__b1449a1e}", 16);
 		m_wPreview = RenderTargetWidget.Cast(GetGame().GetWorkspace().CreateWidget(WidgetType.RenderTargetWidgetTypeID,
 			WidgetFlags.VISIBLE | WidgetFlags.BLEND, Color.White, 0, m_wPanel));
 		if (!m_wPreview || !m_Group || !m_Member || !m_Library || !m_wLocation || !m_wCatalogContext)
@@ -283,12 +283,12 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_wPreview.SetClearColor(true, Color.BLACK);
 		m_wPreview.SetVisible(false);
 		m_wPreview.AddHandler(this);
-		m_wName = Edit(0.025, 0.855, 0.39, 0.91, "Название комплекта (до 80 символов)");
+		m_wName = Edit(0.025, 0.855, 0.39, 0.91, "{AICF:AICF_UI_Loadout_name_up_to_80_characters_45993fd3}");
 		if (!m_wName)
 			return false;
 		m_wName.AddHandler(this);
-		m_wCost = Label(0.41, 0.855, 0.79, 0.91, "Экипировка — бесплатно", 17);
-		m_wSave = Button("save", "Сохранить", 0.81, 0.855, 0.975, 0.91);
+		m_wCost = Label(0.41, 0.855, 0.79, 0.91, "{AICF:AICF_UI_Loadout_free_9cbed783}", 17);
+		m_wSave = Button("save", "{AICF:AICF_UI_Save_10c5c91a}", 0.81, 0.855, 0.975, 0.91);
 		m_wStatus = Label(0.025, 0.925, 0.975, 0.985, "", 17);
 		m_wStatus.SetTextWrapping(true);
 		m_bRendering = true;
@@ -300,7 +300,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 				continue;
 			m_aGroupIds.Insert(slotId);
 			m_aGroupNames.Insert(name);
-			m_Group.AddItem(name);
+			m_Group.AddItem(AICF_Localization.Resolve(name));
 		}
 		int groupIndex = m_aGroupIds.Find(m_iSlotId);
 		if (groupIndex < 0)
@@ -313,7 +313,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		array<string> categories = {};
 		AICF_LoadoutContentCategories.Fill(categories, m_aContentTypes, m_aContentModes);
 		foreach (string category : categories)
-			m_ContentCategory.AddItem(category);
+			m_ContentCategory.AddItem(AICF_Localization.Resolve(category));
 		m_ContentCategory.SetCurrentItem(0, false, false, false);
 		m_bRendering = false;
 		RefreshColors();
@@ -325,10 +325,10 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		string name;
 		int size;
 		m_Controller.GetLoadoutGroup(m_iSlotId, name, size);
-		array<string> roles = {"Командир", "Медик", "Пулемётчик", "Гранатомётчик AT", "Гренадер", "Автоматчик", "Старший стрелок", "Помощник пулемётчика", "Помощник AT", "Стрелок"};
+		array<string> roles = {"{AICF:AICF_UI_Squad_leader_7b4a4eb4}", "{AICF:AICF_UI_Medic_c00fd754}", "{AICF:AICF_UI_Machine_gunner_108ebf6d}", "{AICF:AICF_UI_AT_specialist_59307692}", "{AICF:AICF_UI_Grenadier_faf2382d}", "{AICF:AICF_UI_Automatic_rifleman_c608ac6e}", "{AICF:AICF_UI_Senior_rifleman_c345ab80}", "{AICF:AICF_UI_Assistant_machine_gunner_3d8f4d8a}", "{AICF:AICF_UI_Assistant_AT_specialist_9a98954f}", "{AICF:AICF_UI_Rifleman_a22efcce}"};
 		m_Member.ClearAll();
 		for (int i; i < Math.Min(size, roles.Count()); i++)
-			m_Member.AddItem((i + 1).ToString() + ". " + roles[i]);
+			m_Member.AddItem(AICF_Localization.Resolve((i + 1).ToString() + ". " + roles[i]));
 		m_iMember = Math.ClampInt(m_iMember, 0, Math.Max(0, size - 1));
 		m_Member.SetCurrentItem(m_iMember, false, false, false);
 	}
@@ -336,10 +336,10 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected string TargetName()
 	{
 		int index = m_aGroupIds.Find(m_iSlotId);
-		string group = "Отряд " + (m_iSlotId + 1).ToString();
+		string group = "{AICF:AICF_UI_Squad_daa7fec8}" + (m_iSlotId + 1).ToString();
 		if (index >= 0)
 			group = m_aGroupNames[index];
-		return group + ", позиция " + (m_iMember + 1).ToString();
+		return group + "{AICF:AICF_UI_position_0f329d22}" + (m_iMember + 1).ToString();
 	}
 
 	protected void RememberDraft()
@@ -385,13 +385,13 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_Items.SetItems(empty, empty, empty);
 		m_wPreview.SetVisible(false);
 		m_wName.SetText("");
-		m_wCapacity.SetText("Вместимость: —");
-		m_wTarget.SetText("Ожидается комплект выбранного отряда…");
+		m_wCapacity.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_Capacity_879d4588}"));
+		m_wTarget.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_Waiting_for_the_selected_squad_loadout_7e943dc9}"));
 		m_wSelection.SetText("");
 		m_wSearch.SetText("");
 		m_ContentCategory.SetCurrentItem(0, false, false, false);
 		m_iQuantity = 1;
-		m_wQuantity.SetText("×1");
+		m_wQuantity.SetText(AICF_Localization.Resolve("×1"));
 		m_sCatalogFocus = string.Empty;
 		Request(0);
 	}
@@ -407,7 +407,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			component.UseLabel(false);
 		EditBoxWidget input = EditBoxWidget.Cast(root.FindAnyWidget("EditBox"));
 		if (input)
-			input.SetPlaceholderText(placeholder);
+			input.SetPlaceholderText(AICF_Localization.Resolve(placeholder));
 		return input;
 	}
 
@@ -447,7 +447,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_iToken = m_Player.AICF_RequestLoadout(m_iSlotId, m_iMember, m_iRevision, operation, payload);
 		m_bPending = m_iToken > 0;
 		m_iRequestAt = System.GetTickCount();
-		m_wStatus.SetText("Ожидается ответ сервера…");
+		m_wStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_Waiting_for_server_response_ded60968}"));
 		m_wSave.SetEnabled(false);
 		SetBusy();
 	}
@@ -481,7 +481,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			frame.SetEnabled(enabled);
 			TextWidget caption = TextWidget.Cast(frame.FindAnyWidget("Caption"));
 			if (caption && !text.IsEmpty())
-				caption.SetText(text);
+				caption.SetText(AICF_Localization.Resolve(text));
 		}
 	}
 
@@ -499,7 +499,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (!m_Recipe || !m_bDraftReady)
 			return false;
 		// Rebuild обновляет сериализацию один раз; refresh не кодирует весь рецепт.
-		return m_sDraftData != m_sAppliedData || m_wName.GetText() != m_Recipe.m_sName;
+		return m_sDraftData != m_sAppliedData || m_wName.GetText() != AICF_Localization.Resolve(m_Recipe.m_sName);
 	}
 
 	protected bool HasValidName()
@@ -526,15 +526,15 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		bool typeMatches = hasItem;
 		if (hasItem && ready)
 			typeMatches = MatchesTarget(m_aItems[item]);
-		string action = "Надеть";
+		string action = "{AICF:AICF_UI_Equip_c8f1e23d}";
 		if (occupied)
-			action = "Заменить";
+			action = "{AICF:AICF_UI_Replace_05ad7ee6}";
 		else if (adding)
-			action = "Добавить";
+			action = "{AICF:AICF_UI_Add_2cbc8982}";
 		if (!hasItem)
-			action = "Выберите предмет";
+			action = "{AICF:AICF_UI_Select_an_item_a9a7e1ac}";
 		else if (!typeMatches)
-			action = "Другой тип предмета";
+			action = "{AICF:AICF_UI_Wrong_item_type_2a9edec4}";
 		SetButtonState("apply", ready && hasSlot && hasItem && typeMatches, action);
 		bool magazineAction = FocusedMuzzle() != null;
 		ShowButton("addMagazine", magazineAction);
@@ -559,20 +559,20 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		ShowButton("clearFilters", filtered);
 		SetButtonState("clearFilters", ready && filtered);
 		bool changed = HasDraftChanges();
-		string saveCaption = "Без изменений";
+		string saveCaption = "{AICF:AICF_UI_No_changes_c9c43ec8}";
 		if (changed)
-			saveCaption = "Сохранить";
+			saveCaption = "{AICF:AICF_UI_Save_10c5c91a}";
 		if (!HasValidName())
-			saveCaption = "Введите имя";
+			saveCaption = "{AICF:AICF_UI_Enter_a_name_8e8e1dc4}";
 		if (!m_bDraftReady)
-			saveCaption = "Недоступно";
+			saveCaption = "{AICF:AICF_UI_Unavailable_3e05df47}";
 		if (m_bPending)
-			saveCaption = "Ожидание…";
+			saveCaption = "{AICF:AICF_UI_Waiting_1b82ef05}";
 		SetButtonState("save", ready && changed && HasValidName() && m_Player && m_Player.AICF_LoadoutRevision() == m_iRevision, saveCaption);
 		if (adding)
-			m_wQuantity.SetText("×" + m_iQuantity.ToString());
+			m_wQuantity.SetText(AICF_Localization.Resolve("×" + m_iQuantity.ToString()));
 		else
-			m_wQuantity.SetText("×1");
+			m_wQuantity.SetText(AICF_Localization.Resolve("×1"));
 	}
 
 	void Refresh()
@@ -614,21 +614,21 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 					m_DraftMemory.Forget(m_iSlotId, m_iMember);
 				if (m_Recipe)
 				{
-					m_wName.SetText(m_Recipe.m_sName);
+					m_wName.SetText(AICF_Localization.Resolve(m_Recipe.m_sName));
 					if (!Rebuild())
 						status = "PREVIEW_BUILD_FAILED";
 					Library();
 				}
 			}
-			m_wStatus.SetText(Status(status));
+			m_wStatus.SetText(AICF_Localization.Resolve(Status(status)));
 		}
 		else if (m_bPending && System.GetTickCount(m_iRequestAt) > 15000)
 		{
 			m_bPending = false;
-			m_wStatus.SetText("Ответ не получен. Закройте и откройте форму, чтобы проверить сохранение.");
+			m_wStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_No_response_received_Reopen_the_form_to_ch_ddc43d41}"));
 		}
 		if (!m_bPending && m_Recipe && m_Player.AICF_LoadoutRevision() != m_iRevision)
-			m_wStatus.SetText("Комплект изменён другим игроком. Откройте позицию заново; ваш черновик сохранён в форме.");
+			m_wStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_Another_player_changed_the_loadout_Reopen__22836f72}"));
 		SetBusy();
 	}
 
@@ -636,24 +636,24 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	{
 		switch (code)
 		{
-			case "SAVED": return TargetName() + ": сохранено. Комплект получит следующий созданный боец этой позиции в этом отряде.";
-			case "READY": return TargetName() + ". Выберите предметы и сохраните комплект. Отряд переключается в списке сверху.";
-			case "DRAFT_RESTORED": return TargetName() + ": восстановлен несохранённый черновик. Нажмите «Сохранить комплект» для назначения.";
-			case "DRAFT_OUTDATED": return TargetName() + ": загружен новый комплект сервера; прежний черновик устарел после изменения ревизии.";
-			case "PREVIEW_BUILD_FAILED": return "Не удалось собрать предпросмотр. Закройте и откройте редактор; сохранение недоступно.";
-			case "TEMPLATE_LOADED": return "Шаблон открыт как черновик. Нажмите «Сохранить», чтобы назначить его позиции.";
-			case "REVISION_CONFLICT": return "Другой игрок изменил комплект. Закройте и откройте позицию перед повторной записью.";
-			case "RATE_LIMITED": return "Слишком частые запросы. Повторите через секунду.";
-			case "ITEM_NOT_ALLOWED": return "Предмет отсутствует в разрешённом каталоге вашей фракции.";
-			case "INVENTORY_INCOMPATIBLE": return "Предмет несовместим с местом или контейнер заполнен. Выберите другое место или уменьшите количество.";
-			case "ITEM_CAPACITY_OR_COMPATIBILITY": return "Предмет не подходит или в контейнере недостаточно места.";
-			case "INVENTORY_RESTORE_FAILED": return "Комплект нельзя полностью восстановить. Прежняя настройка сохранена; отмените последнее изменение.";
-			case "INVENTORY_SIGNATURE_MISMATCH": return "Результат выдачи отличается от черновика. Прежняя настройка сохранена.";
-			case "LIBRARY_FULL": return "Библиотека заполнена (256 версий). Администратор может архивировать старые файлы.";
-			case "LIBRARY_WRITE_FAILED": return "Сервер не смог записать библиотеку. Прежний комплект сохранён.";
-			case "WEAPON_OR_AMMO_MISSING": return "Нужно основное оружие и подходящие боеприпасы к каждому оружию. Добавьте магазины в карманы.";
+			case "SAVED": return TargetName() + "{AICF:AICF_UI_saved_The_next_soldier_spawned_in_this_squ_b04e31ee}";
+			case "READY": return TargetName() + "{AICF:AICF_UI_Choose_items_and_save_the_loadout_Select_a_428e264b}";
+			case "DRAFT_RESTORED": return TargetName() + "{AICF:AICF_UI_unsaved_draft_restored_Save_to_assign_the__e38ea7d5}";
+			case "DRAFT_OUTDATED": return TargetName() + "{AICF:AICF_UI_new_server_loadout_loaded_the_previous_dra_d1139d57}";
+			case "PREVIEW_BUILD_FAILED": return "{AICF:AICF_UI_Unable_to_build_the_preview_Reopen_the_edi_37bfc2dd}";
+			case "TEMPLATE_LOADED": return "{AICF:AICF_UI_Template_opened_as_a_draft_Click_Save_to_a_d9bfd474}";
+			case "REVISION_CONFLICT": return "{AICF:AICF_UI_Another_player_changed_the_loadout_Reopen__90362632}";
+			case "RATE_LIMITED": return "{AICF:AICF_UI_Too_many_requests_Try_again_in_a_second_968cb23c}";
+			case "ITEM_NOT_ALLOWED": return "{AICF:AICF_UI_Item_is_not_in_your_faction_s_allowed_cata_85004335}";
+			case "INVENTORY_INCOMPATIBLE": return "{AICF:AICF_UI_Item_is_incompatible_with_this_slot_or_the_86ddae2c}";
+			case "ITEM_CAPACITY_OR_COMPATIBILITY": return "{AICF:AICF_UI_Item_is_incompatible_or_the_container_has__a42e38e0}";
+			case "INVENTORY_RESTORE_FAILED": return "{AICF:AICF_UI_The_full_loadout_cannot_be_restored_Previo_ecb424b6}";
+			case "INVENTORY_SIGNATURE_MISMATCH": return "{AICF:AICF_UI_Issued_loadout_differs_from_the_draft_Prev_68d39ed2}";
+			case "LIBRARY_FULL": return "{AICF:AICF_UI_Library_is_full_256_versions_An_administra_a077b3f6}";
+			case "LIBRARY_WRITE_FAILED": return "{AICF:AICF_UI_Server_could_not_write_the_library_Previou_86cc46a0}";
+			case "WEAPON_OR_AMMO_MISSING": return "{AICF:AICF_UI_A_primary_weapon_and_compatible_ammunition_36b95035}";
 		}
-		return "Комплект не сохранён: " + code;
+		return "{AICF:AICF_UI_Loadout_not_saved_e19e3fff}" + code;
 	}
 
 	protected void Library()
@@ -666,7 +666,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (context.LoadFromString(m_Player.AICF_LoadoutLibrary()) && context.ReadValue("ids", m_aTemplateIds) && context.ReadValue("names", names))
 		{
 			foreach (string name : names)
-				m_Library.AddItem(name);
+				m_Library.AddItem(AICF_Localization.Resolve(name));
 		}
 		m_Library.SetCurrentItem(0, false, false, false);
 		m_bRendering = false;
@@ -696,12 +696,12 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		string reason;
 		if (!m_Draft.Build(m_Recipe, m_Catalog, reason))
 		{
-			m_wStatus.SetText(Status(reason));
+			m_wStatus.SetText(AICF_Localization.Resolve(Status(reason)));
 			return false;
 		}
 		if (!m_Preview.Build(m_Draft.GetCharacter()))
 		{
-			m_wStatus.SetText(Status("PREVIEW_BUILD_FAILED"));
+			m_wStatus.SetText(AICF_Localization.Resolve(Status("PREVIEW_BUILD_FAILED")));
 			return false;
 		}
 		m_wPreview.SetWorld(m_Preview.GetWorld(), 0);
@@ -754,14 +754,14 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			string prefab, name, detail;
 			if (slot < 0)
 			{
-				name = "+ Добавить в карманы";
+				name = "{AICF:AICF_UI_Add_to_pockets_d8ca509d}";
 				detail = AICF_LoadoutSlotView.CapacityText(location.m_Storage);
 			}
 			else
 			{
 				IEntity entity = AICF_LoadoutClothing.CoveringItem(location.m_Storage, slot);
 				AICF_LoadoutSlotView.Describe(location.m_Storage, slot, name);
-				detail = "Не надето";
+				detail = "{AICF:AICF_UI_Not_equipped_fd8797a7}";
 				if (entity)
 				{
 					prefab = SCR_ResourceNameUtils.GetPrefabName(entity);
@@ -769,31 +769,31 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 					if (!m_sViewPath.IsEmpty())
 					{
 						name = detail;
-						if (name == "Подсумок")
+						if (name == "{AICF:AICF_UI_Pouch_e1c97d80}")
 							name += " " + (slot + 1).ToString();
-						detail = "В контейнере";
+						detail = "{AICF:AICF_UI_Inside_container_de055fff}";
 						if (AICF_LoadoutSlotView.HasFixedSlots(location.m_Storage))
-							detail = "Установлено на снаряжении";
+							detail = "{AICF:AICF_UI_Mounted_on_equipment_a4b7c7f7}";
 						if (m_Navigation.Child(location, slot) >= 0)
-							detail += " · двойной клик — открыть";
+							detail += "{AICF:AICF_UI_double_click_to_open_2a053db9}";
 					}
 				}
 				else if (!m_sViewPath.IsEmpty())
 				{
-					name = "Свободно: " + name;
-					detail = "Выберите совместимый предмет справа";
+					name = "{AICF:AICF_UI_Free_bd8b5b20}" + name;
+					detail = "{AICF:AICF_UI_Select_a_compatible_item_on_the_right_b5b60f6f}";
 				}
 			}
 			prefabs.Insert(prefab);
 			names.Insert(name);
 			details.Insert(detail);
 		}
-		string title = "На бойце — одежда и оружие";
+		string title = "{AICF:AICF_UI_On_soldier_clothing_and_weapons_67780748}";
 		int current = m_Navigation.FindPath(m_sViewPath);
 		if (!m_sViewPath.IsEmpty() && current >= 0)
 			title = m_Navigation.m_Locations[current].m_sName;
-		m_wLocation.SetText(title);
-		m_Slots.SetEmptyText("В этом предмете нет доступных мест");
+		m_wLocation.SetText(AICF_Localization.Resolve(title));
+		m_Slots.SetEmptyText("{AICF:AICF_UI_This_item_has_no_available_slots_13de2bcc}");
 		m_Slots.SetItems(prefabs, names, details);
 		m_Slots.Select(0);
 		Selection();
@@ -836,7 +836,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		array<string> names = {}, details = {};
 		for (int i = m_aItems.Count() - 1; i >= 0; i--)
 		{
-			string searchable = m_Catalog.Name(m_aItems[i]);
+			string searchable = AICF_Localization.Resolve(m_Catalog.Name(m_aItems[i]));
 			searchable.ToLower();
 			if (!query.IsEmpty() && !searchable.Contains(query))
 				m_aItems.Remove(i);
@@ -846,9 +846,9 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			names.Insert(m_Catalog.Name(prefab));
 			details.Insert(string.Empty);
 		}
-		string empty = "Нет подходящих предметов для этого места.";
+		string empty = "{AICF:AICF_UI_No_suitable_items_for_this_slot_c8584863}";
 		if (!query.IsEmpty() || (m_bContentFilter && m_ContentCategory.GetCurrentIndex() > 0))
-			empty = "Нет предметов по выбранным фильтрам.\nНажмите «Сброс» или выберите другую категорию.";
+			empty = "{AICF:AICF_UI_No_items_match_the_selected_filters_Clear__28a8009e}";
 		m_Items.SetEmptyText(empty);
 		bool sameItems = m_Items.SetItems(m_aItems, names, details, true);
 		m_Items.Select(m_aItems.Find(previous), !sameItems);
@@ -909,10 +909,10 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected void Selection()
 	{
 		int item = m_Items.GetSelected();
-		string caption = "Выберите предмет в каталоге";
+		string caption = "{AICF:AICF_UI_Select_an_item_in_the_catalog_71483a5f}";
 		if (item >= 0 && item < m_aItems.Count())
 			caption = m_Catalog.Name(m_aItems[item]);
-		m_wSelection.SetText(caption);
+		m_wSelection.SetText(AICF_Localization.Resolve(caption));
 		AICF_LoadoutLocation location = SelectedLocation();
 		int selected = m_Slots.GetSelected();
 		m_iTargetType = 0;
@@ -922,19 +922,19 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_bContentFilter = location && !location.m_sPath.IsEmpty() && !AICF_LoadoutSlotView.HasFixedSlots(location.m_Storage);
 		m_iTargetMode = 0;
 		m_sTargetWeaponType = string.Empty;
-		caption = "Выберите место слева";
-		string context = "Выберите место в центре";
+		caption = "{AICF:AICF_UI_Select_a_slot_on_the_left_71a62f9e}";
+		string context = "{AICF:AICF_UI_Select_a_slot_in_the_center_702cc83a}";
 		if (location && selected >= 0 && selected < m_aSlots.Count())
 		{
 			int slot = m_aSlots[selected];
-			caption = "Добавление в: " + location.m_sName;
-			context = "Предметы для: " + location.m_sName;
+			caption = "{AICF:AICF_UI_Adding_to_a50f9b24}" + location.m_sName;
+			context = "{AICF:AICF_UI_Items_for_e73a1d77}" + location.m_sName;
 			if (slot >= 0)
 			{
 				m_iTargetType = AICF_LoadoutSlotView.Describe(location.m_Storage, slot, caption);
 				m_TargetArea = AICF_LoadoutSlotView.Area(location.m_Storage, slot);
 				if (location.m_sPath.IsEmpty() || AICF_LoadoutSlotView.HasFixedSlots(location.m_Storage))
-					context = "Подходит: " + caption;
+					context = "{AICF:AICF_UI_Compatible_81a727a9}" + caption;
 				m_bWeaponTarget = EquipedWeaponStorageComponent.Cast(location.m_Storage) != null;
 				if (m_bWeaponTarget)
 				{
@@ -948,15 +948,15 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 					AICF_LoadoutSlotView.AttachmentCatalog(location.m_Storage, slot, m_iTargetType, m_iTargetMode);
 				if (!location.m_sPath.IsEmpty() && !m_bAttachmentTarget && location.m_Storage.Get(slot))
 					caption = m_Catalog.EntityName(location.m_Storage.Get(slot));
-				caption = "Выбрано: " + caption;
+				caption = "{AICF:AICF_UI_Selected_c611549c}" + caption;
 				if (ChildLocation() >= 0)
-					caption += "\nДвойной клик — содержимое";
+					caption += "{AICF:AICF_UI_Double_click_for_contents_f59c8d4a}";
 				if (AICF_LoadoutClothing.CoveringItem(location.m_Storage, slot))
-					caption += "\nПКМ — убрать · «Отменить шаг» — вернуть";
+					caption += "{AICF:AICF_UI_Right_click_to_remove_Undo_to_restore_df2ffb9b}";
 			}
 		}
-		m_wTarget.SetText(caption);
-		m_wCatalogContext.SetText(context);
+		m_wTarget.SetText(AICF_Localization.Resolve(caption));
+		m_wCatalogContext.SetText(AICF_Localization.Resolve(context));
 		m_wCatalogContext.SetVisible(!m_bContentFilter);
 		if (!m_bContentFilter)
 			m_ContentCategory.CloseList();
@@ -970,12 +970,12 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			if (child >= 0)
 				capacityPath = m_Navigation.m_Locations[child].m_sPath;
 		}
-		string capacityText = "Вместимость: —";
+		string capacityText = "{AICF:AICF_UI_Capacity_879d4588}";
 		if (!capacityPath.IsEmpty())
 			capacityText = m_Navigation.CapacityText(capacityPath);
 		if (FocusedMuzzle())
 			capacityText = m_Navigation.CapacityText(string.Empty);
-		m_wCapacity.SetText(capacityText);
+		m_wCapacity.SetText(AICF_Localization.Resolve(capacityText));
 		UpdateActions();
 	}
 
@@ -1077,7 +1077,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			if (action == "less")
 				delta = -1;
 			m_iQuantity = Math.ClampInt(m_iQuantity + delta, 1, 16);
-			m_wQuantity.SetText("×" + m_iQuantity.ToString());
+			m_wQuantity.SetText(AICF_Localization.Resolve("×" + m_iQuantity.ToString()));
 		}
 		else if (action == "back")
 			ParentContainer();
@@ -1150,7 +1150,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			return;
 		if (m_Recipe.m_aPaths.Count() >= AICF_LoadoutRecipe.MAX_OPERATIONS)
 		{
-			m_wStatus.SetText("Достигнут предел изменений шаблона. Отмените лишний шаг или сбросьте черновик.");
+			m_wStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_Template_change_limit_reached_Undo_a_step__c54854ad}"));
 			return;
 		}
 		ResourceName prefab;
@@ -1158,7 +1158,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		string reason;
 		if (!AICF_LoadoutMagazines.Resolve(m_Draft, m_Catalog, m_Navigation, FocusedMuzzle(), prefab, destination, reason))
 		{
-			m_wStatus.SetText(reason);
+			m_wStatus.SetText(AICF_Localization.Resolve(reason));
 			return;
 		}
 		string targetName = destination.m_sName;
@@ -1167,10 +1167,10 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		{
 			m_Recipe.Undo();
 			Rebuild();
-			m_wStatus.SetText(Status("INVENTORY_INCOMPATIBLE"));
+			m_wStatus.SetText(AICF_Localization.Resolve(Status("INVENTORY_INCOMPATIBLE")));
 			return;
 		}
-		m_wStatus.SetText(string.Format("Добавлен 1 × %1 → %2. Нажмите «Сохранить», чтобы применить комплект.", m_Catalog.Name(prefab), targetName));
+		m_wStatus.SetText(AICF_Localization.Resolve(AICF_Localization.Format("{AICF:AICF_UI_Added_1_Click_Save_to_apply_the_loadout_58267f08}", string.Format("%1", m_Catalog.Name(prefab)), string.Format("%1", targetName))));
 	}
 
 	protected bool MatchesTarget(ResourceName prefab)
@@ -1210,7 +1210,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			return;
 		if (m_Recipe.m_aPaths.Count() >= AICF_LoadoutRecipe.MAX_OPERATIONS)
 		{
-			m_wStatus.SetText("Достигнут предел изменений шаблона. Отмените лишний шаг или сбросьте черновик.");
+			m_wStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_Template_change_limit_reached_Undo_a_step__c54854ad}"));
 			return;
 		}
 		ResourceName prefab;
@@ -1219,13 +1219,13 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		{
 			if (item < 0 || item >= m_aItems.Count())
 			{
-				m_wStatus.SetText("Выберите карточку предмета в каталоге справа.");
+				m_wStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_Select_an_item_card_in_the_catalog_on_the__8220ecd1}"));
 				return;
 			}
 			prefab = m_aItems[item];
 			if (!MatchesTarget(prefab))
 			{
-				m_wStatus.SetText(Status("INVENTORY_INCOMPATIBLE"));
+				m_wStatus.SetText(AICF_Localization.Resolve(Status("INVENTORY_INCOMPATIBLE")));
 				return;
 			}
 			if (m_aSlots[selected] < 0)
@@ -1238,10 +1238,10 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		{
 			m_Recipe.Undo();
 			Rebuild();
-			m_wStatus.SetText(Status("INVENTORY_INCOMPATIBLE"));
+			m_wStatus.SetText(AICF_Localization.Resolve(Status("INVENTORY_INCOMPATIBLE")));
 		}
 		else
-			m_wStatus.SetText("Черновик изменён. Нажмите «Сохранить», чтобы назначить комплект позиции.");
+			m_wStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_Draft_changed_Click_Save_to_assign_the_loa_31f65d3e}"));
 		UpdateActions();
 		RefreshColors();
 	}

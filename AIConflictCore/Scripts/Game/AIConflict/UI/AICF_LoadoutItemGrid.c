@@ -85,10 +85,10 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 				FrameSlot.SetAnchorMax(card.m_Detail, 0.97, 0.96);
 			}
 		}
-		m_Previous = PageButton(0.01, 0.23, "Выше");
-		m_Next = PageButton(0.77, 0.99, "Ниже");
+		m_Previous = PageButton(0.01, 0.23, "{AICF:AICF_UI_Up_72fff299}");
+		m_Next = PageButton(0.77, 0.99, "{AICF:AICF_UI_Down_1667ed25}");
 		m_Range = controller.CreateText(m_Root, 0.24, 0.92, 0.76, 1, "", 14, Color.FromSRGBA(170, 194, 206, 255), true);
-		m_Empty = controller.CreateText(m_Root, 0.06, 0.25, 0.94, 0.65, "Нет предметов", 17, Color.FromSRGBA(170, 194, 206, 255), true);
+		m_Empty = controller.CreateText(m_Root, 0.06, 0.25, 0.94, 0.65, "{AICF:AICF_UI_No_items_03a89de6}", 17, Color.FromSRGBA(170, 194, 206, 255), true);
 		m_Empty.SetTextWrapping(true);
 		m_Empty.SetVisible(false);
 		return true;
@@ -104,7 +104,7 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 		return input;
 	}
 
-	void SetEmptyText(string text) { m_Empty.SetText(text); }
+	void SetEmptyText(string text) { m_Empty.SetText(AICF_Localization.Resolve(text)); }
 
 	bool SetItems(array<string> prefabs, array<string> names, array<string> details, bool preserveScroll = false)
 	{
@@ -210,18 +210,18 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 			card.m_Root.SetVisible(visible);
 			if (!visible)
 				continue;
-			card.m_Name.SetText(m_aNames[index]);
-			card.m_Detail.SetText(m_aDetails[index]);
+			card.m_Name.SetText(AICF_Localization.Resolve(m_aNames[index]));
+			card.m_Detail.SetText(AICF_Localization.Resolve(m_aDetails[index]));
 			if (m_Manager && !m_aPrefabs[index].IsEmpty())
 			{
 				card.m_Preview.SetVisible(true);
 				m_Manager.SetPreviewItemFromPrefab(card.m_Preview, m_aPrefabs[index], null, false, 5000);
 			}
 		}
-		string range = "Нет предметов";
+		string range = "{AICF:AICF_UI_No_items_03a89de6}";
 		if (!m_aPrefabs.IsEmpty())
-			range = string.Format("%1–%2 из %3", m_iFirst + 1, Math.Min(m_iFirst + m_aCards.Count(), m_aPrefabs.Count()), m_aPrefabs.Count());
-		m_Range.SetText(range);
+			range = AICF_Localization.Format("{AICF:AICF_UI_of_10c4fe74}", string.Format("%1", m_iFirst + 1), string.Format("%1", Math.Min(m_iFirst + m_aCards.Count(), m_aPrefabs.Count())), string.Format("%1", m_aPrefabs.Count()));
+		m_Range.SetText(AICF_Localization.Resolve(range));
 		m_Empty.SetVisible(m_aPrefabs.IsEmpty());
 		SetEnabled(m_bEnabled);
 		RefreshColors();

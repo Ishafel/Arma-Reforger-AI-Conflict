@@ -803,6 +803,13 @@ Discrepancy остаётся отдельным явным провалом bala
 
 ## Replication, UI и trust boundary
 
+Текст AI Conflict переводится на клиентской границе через
+`AICF_Localization.Resolve`. Серверные producers сохраняют ключи и параметры,
+включая исходные stock/RHS имена баз и техники. В `RplProp` и campaign summary
+не попадает перевод, выбранный языком dedicated server. Формат первых 14 полей
+summary и ownership сетевого состояния сохранены. Таблицы, wire text и
+ограничения описаны в [LOCALIZATION.md](LOCALIZATION.md).
+
 `Integration/AICF_CampaignState.c` расширяет уже реплицируемый
 `SCR_GameModeCampaign`:
 

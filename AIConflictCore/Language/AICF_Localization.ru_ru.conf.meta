@@ -1,0 +1,12 @@
+MetaFileClass
+{
+	Name "{A1CF190901000003}Language/AICF_Localization.ru_ru.conf"
+	Configurations
+	{
+		CONFResourceClass PC {}
+		CONFResourceClass HEADLESS : PC {}
+		CONFResourceClass XBOX_ONE : PC {}
+		CONFResourceClass XBOX_SERIES : PC {}
+		CONFResourceClass PS4 : PC {}
+	}
+}

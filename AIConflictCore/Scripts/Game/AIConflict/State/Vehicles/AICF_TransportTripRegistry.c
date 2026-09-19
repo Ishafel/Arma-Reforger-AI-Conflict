@@ -189,7 +189,7 @@ class AICF_VehicleSlotView
 	protected string ResolveStatusText(AICF_TransportTrip trip)
 	{
 		if (!trip)
-			return "Пешком";
+			return "{AICF:AICF_UI_On_foot_dd408061}";
 		AICF_VehicleSpawnPlan plan = trip.GetRequestState().GetSpawnPlan();
 		switch (trip.GetPhase())
 		{
@@ -197,38 +197,38 @@ class AICF_VehicleSlotView
 				return ResolveWaitingForSiteStatus(
 					trip.GetRequestState().GetLastFailureReason());
 			case AICF_ETransportTripPhase.SITE_PLANNED:
-				return "Площадка выбрана";
+				return "{AICF:AICF_UI_Site_selected_349c8a17}";
 			case AICF_ETransportTripPhase.APPROACHING_SITE:
 				if (plan)
 				{
-					return string.Format(
-						"Следует к месту выдачи %1/%2",
-						plan.GetStagedCount(),
-						plan.GetAliveCount());
+					return AICF_Localization.Format(
+						"{AICF:AICF_UI_Moving_to_pickup_9be5328b}",
+						string.Format("%1", plan.GetStagedCount()),
+						string.Format("%1", plan.GetAliveCount()));
 				}
-				return "Следует к месту выдачи";
+				return "{AICF:AICF_UI_Moving_to_pickup_4d0c4b8f}";
 			case AICF_ETransportTripPhase.STAGING_CONFIRMED:
 				if (plan)
-					return string.Format("Ожидание бойцов %1/%2", plan.GetStagedCount(), plan.GetAliveCount());
-				return "Ожидание бойцов";
+					return AICF_Localization.Format("{AICF:AICF_UI_Waiting_for_troops_a7b15437}", string.Format("%1", plan.GetStagedCount()), string.Format("%1", plan.GetAliveCount()));
+				return "{AICF:AICF_UI_Waiting_for_troops_76733413}";
 			case AICF_ETransportTripPhase.SPAWN_COMMIT:
-				return "Выдача техники";
+				return "{AICF:AICF_UI_Acquiring_vehicle_b41b1a32}";
 			case AICF_ETransportTripPhase.BOARDING:
-				return "Посадка";
+				return "{AICF:AICF_UI_Boarding_ed5ca035}";
 			case AICF_ETransportTripPhase.TRANSIT:
-				return "Движение на технике";
+				return "{AICF:AICF_UI_In_transit_5a91ec5d}";
 			case AICF_ETransportTripPhase.DISMOUNT:
-				return "Высадка";
+				return "{AICF:AICF_UI_Dismounting_04e8e517}";
 			case AICF_ETransportTripPhase.HANDOFF:
-				return "Возврат к пешему приказу";
+				return "{AICF:AICF_UI_Returning_to_infantry_orders_f655062f}";
 			case AICF_ETransportTripPhase.COMPLETE:
-				return "Задача техники завершена";
+				return "{AICF:AICF_UI_Vehicle_task_complete_05eafc76}";
 			case AICF_ETransportTripPhase.FALLBACK:
-				return "Переход на пеший порядок";
+				return "{AICF:AICF_UI_Switching_to_infantry_movement_1716be83}";
 			case AICF_ETransportTripPhase.FAILED_CLOSED:
-				return "Техника недоступна";
+				return "{AICF:AICF_UI_Vehicle_unavailable_8a55aa48}";
 		}
-		return "Пешком";
+		return "{AICF:AICF_UI_On_foot_dd408061}";
 	}
 
 	protected string ResolveWaitingForSiteStatus(string reason)
@@ -236,11 +236,11 @@ class AICF_VehicleSlotView
 		switch (reason)
 		{
 			case "VEHICLE_CAP_UNAVAILABLE":
-				return "Ожидание свободной техники";
+				return "{AICF:AICF_UI_Waiting_for_a_free_vehicle_a11f64ec}";
 			case "SPAWN_PAD_OCCUPIED":
 			case "NO_EMPTY_TERRAIN":
 			case "WATER_OR_UNDRIVABLE_SURFACE":
-				return "Поиск свободной площадки";
+				return "{AICF:AICF_UI_Searching_for_a_free_site_2c51829a}";
 			case "ENEMY_OWNED":
 			case "CONTESTED":
 			case "SPAWN_POINT_MISSING":
@@ -249,14 +249,14 @@ class AICF_VehicleSlotView
 			case "SPAWN_FACTION_INITIALIZING":
 			case "SPAWN_FACTION_MISMATCH":
 			case "NO_SAFE_SPAWN_AVAILABLE":
-				return "Ожидание безопасной базы";
+				return "{AICF:AICF_UI_Waiting_for_a_safe_base_7dd06d37}";
 			case "TOO_FAR":
 			case "NO_BOARDING_SITE_WITHIN_RANGE":
-				return "Ожидание отряда у базы";
+				return "{AICF:AICF_UI_Waiting_for_squad_at_base_44f117be}";
 			case "GROUP_NOT_READY":
-				return "Ожидание готовности отряда";
+				return "{AICF:AICF_UI_Waiting_for_squad_readiness_ab4692ed}";
 		}
-		return "Ожидание площадки";
+		return "{AICF:AICF_UI_Waiting_for_a_site_b0bd3c0e}";
 	}
 
 	protected bool IsSafeSiteReason(string reason)

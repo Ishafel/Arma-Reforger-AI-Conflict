@@ -22,7 +22,7 @@ class AICF_LoadoutService
 		recipe.m_sProfile = AICF_ContentProfile.GetActive().GetProfileKey();
 		recipe.m_sFaction = AICF_ContentProfile.GetActive().GetStableFactionKey(faction.GetFactionKey());
 		recipe.m_sCharacter = source;
-		recipe.m_sName = "Комплект " + (member + 1).ToString();
+		recipe.m_sName = "{AICF:AICF_UI_Loadout_6c772ac0}" + (member + 1).ToString();
 		AICF_LoadoutBinding current = slot.GetLoadout(member);
 		bool accepted = operation == 0;
 		if (operation == 1 || operation == 2)
