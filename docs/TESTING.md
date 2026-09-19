@@ -38,6 +38,95 @@ native/RHS resource/world/RPL diagnostics сохранены. Client/JIP, visual
 Evidence: `.codex-runtime/navigation-fix-20260919/`, включая полные logs,
 native manifest, версии, source hashes, baseline/after и exact compile args.
 
+## Север Эверона без RHS — 2026-09-19
+
+Добавлены `AIConflictEveron/Missions/AICF_Conflict_Everon_North.conf` и `.meta`
+с GUID `A1CF190919300000`, наследованием stock AICF Everon, двумя HQ и шестью
+точками захвата. Андре исключён. Стандартные фракции `US`/`USSR`, content profile
+`STOCK`; gameplay scripts и GUID проектов не менялись.
+
+Изменены `tools/Start-AICFRuntime.ps1` (`-Variant EveronNorth`),
+`Test-RuntimeLauncherStatic.ps1`, `Test-EveronNorthStatic.ps1`,
+`Test-LocalizationStatic.ps1`, каталог `AIConflictCore/Language/AICF_Localization.st`
+и обе runtime таблицы (389 записей), README, ARCHITECTURE, DEVELOPMENT,
+EVERON_NORTH и этот отчёт. В README восстановлены буквы, ошибочно заменённые
+при предыдущем редактировании; содержательные изменения сохранены.
+В EVERON_NORTH исправлено ошибочное описание победы: используется ticket
+exhaustion, а stock territorial countdown отключён.
+
+Команды `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-<Name>Static.ps1`:
+`EveronNorth`, `Localization`, `ScenarioHeaders`, `RuntimeLauncher` — **PASS / 0**
+до и после. Launcher dry-runs проверяют server/client с отсутствующим каталогом
+RHS и точными тремя stock addon GUID. `AICommanderMode` сохраняет **FAIL / 1**,
+два прежних сообщения `AI_COMMANDER_UI_STATE`. `Build-AICFLocalization.ps1`
+и `git diff --check` — **PASS / 0**.
+
+Терминальный `ArmaReforgerWorkbenchSteamDiag.exe -noThrow -wbsilent
+-gproj <AIConflictEveron/addon.gproj> -addons <Core,Arland,Everon>
+... -wbModule=ScriptEditor -run -validate` для production и отдельного stage
+с существующей `AICF_EveronNorthProbe.c` — **PASS / 0**,
+`Script validation successful.`.
+
+`Start-AICFRuntime.ps1 -Role Server -Variant EveronNorth -RepositoryRoot <stage>
+-AdditionalArguments @('-aicfNorthProbe','1','-addr','127.0.0.1:22199')`:
+**10/10 функциональных checks**, `profile=STOCK`, 8 initialized bases,
+2 HQ, 6 control points, `missing=0` для всех пар радиографа,
+`ROSTER_READY` с 10 группами на сторону. RHS отсутствует в CLI addon graph.
+Обнаружены две stock `SCR_AIProcessFailedMovementResult.NodeErrorOnce`
+VM Exception `Failed move` на маршруте от авиабазы к Maiden's Bay;
+проверка топологии не подтверждает исправность всех путей AI.
+Тестовый сервер штатно завершился с native exit **0**. Полный остановленный
+лог проверен: кроме этих двух VM Exception, сохранены stock resource/world
+сообщения, две resupply ошибки при shutdown и resource leak; ENGINE fatal
+не обнаружен. Runtime не объявляется error-free.
+
+Evidence: `.codex-runtime/everon-north-stock-20260919/`, `before-*`, `after-*`,
+`wb-stage*`, `wb-production*`, `server-launch.txt` с manifest, полные
+`server-logs/` и индекс `server-errors.txt`.
+**NOT RUN:** подключённый клиент/JIP, ручная проверка плитки и карты,
+длительный бой/победа и Workshop packaging. Текущий пользовательский RHS
+матч не перезапускался и не переключался на стандартный сценарий.
+
+## Север Эверона без обзорного пункта Андре — 2026-09-19
+
+Из whitelist удалён `SmallBaseAndresBeacon`: теперь 8 активных баз,
+2 HQ и 6 control points. Изменены
+`AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_North.conf`,
+`AIConflictCore/Language/AICF_Localization.st` и обе runtime таблицы,
+`tools/Test-EveronNorthStatic.ps1`, `tools/fixtures/AICF_EveronNorthProbe.c`,
+README, ARCHITECTURE, EVERON_NORTH и этот отчёт. Предыдущие изменения сохранены.
+Исторический прогон ниже с девятью базами относится к первоначальной версии.
+
+Команды `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-<Name>Static.ps1`:
+`EveronNorth`, `Localization`, `ScenarioHeaders` — **PASS / 0** до и после.
+`AICommanderMode` — сохранённый **FAIL / 1**: два сообщения
+`AI_COMMANDER_UI_STATE` (waiting label и SYSTEM_HOLD marker).
+`tools/Build-AICFLocalization.ps1` — **PASS / 0**, 386 записей.
+`git diff --check` — **PASS / 0**.
+
+Терминальный `ArmaReforgerWorkbenchSteamDiag.exe -noThrow -wbsilent
+-gproj <EveronRHS/addon.gproj> ... -wbModule=ScriptEditor -run -validate`:
+production — **PASS / 0**, stage с обновлённой fixture —
+`Script validation successful.` (exit code stage отдельно не получен).
+Production `.c` в этой правке не менялись.
+
+`Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthRHS
+-RepositoryRoot <stage> -AdditionalArguments @('-aicfNorthProbe','1',
+'-addr','127.0.0.1:22199')`: **10/10 функциональных checks**.
+8 initialized bases, 2 нужных HQ, 6 control points, Андре и южные базы
+неактивны; граф содержит 8 nodes / 32 directed edges, `missing=0` для всех пар.
+Тестовый сервер штатно завершился с native exit **0**. Полный остановленный
+лог сохранён и проверен: четыре прежние RHS faction-init SCRIPT ошибки,
+две stock resupply ошибки при shutdown, resource/world/RPL/pathfinding
+сообщения. VM/null и ENGINE fatal не обнаружены; runtime не объявляется
+error-free. Эти ошибки не отменяют результат проверки конфигурации баз.
+
+Evidence: `.codex-runtime/north-without-andre-20260919/`: `before-*`,
+`after-*`, `wb-stage*`, `wb-production*`, `server-launch.txt` с manifest,
+полные `server-logs/` и индекс `server-errors.txt`.
+**NOT RUN:** новый client/JIP, ручной осмотр карты, длительный бой и победа.
+Изменение применяется при новом запуске кампании; текущий матч не перезапускался.
+
 ## Метка атаки во время пополнения — 2026-09-19
 
 В пользовательском северном Everon RHS отряд US A2 получил
@@ -82,6 +171,70 @@ Evidence: `.codex-runtime/recruitment-map-20260919/`, `before-*`, `after-*`,
 `reported-live-server.log` (snapshot пользовательского матча).
 Тестовые процессы закрылись; текущий пользовательский матч не перезапущен.
 **NOT RUN:** новый connected client/JIP и ручная визуальная проверка меток.
+
+## Север Эверона RHS — 2026-09-19
+
+Добавлен inherited `AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_North.conf`
+с `.meta`: две HQ (авиабаза/госпиталь), семь control points, whitelist девяти
+баз, radio range 2000 м и запрет establishing bases. Дополнены RU/EN каталог
+и runtime tables, `Start-AICFRuntime.ps1`, static audits launcher/localization,
+новые `Test-EveronNorthStatic.ps1` и `fixtures/AICF_EveronNorthProbe.c`.
+Обновлены README, ARCHITECTURE, DEVELOPMENT и [EVERON_NORTH.md](EVERON_NORTH.md).
+Предшествующая правка скорости захвата сохранена.
+
+Команды `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-<Name>Static.ps1`:
+
+| Name | До | После |
+|---|---|---|
+| `ScenarioHeaders`, `RuntimeLauncher`, `RHSIntegration`, `Localization` | PASS / 0 | PASS / 0 |
+| `AICommanderMode` | FAIL / 1: `AI_COMMANDER_UI_STATE` | тот же единственный FAIL / 1 |
+| `EveronNorth` | новая проверка | PASS / 0 |
+
+Отдельные отрицательные inputs `wrong-hq`, `whitelist-disabled`,
+`disconnected-radio` — **PASS**, каждый отклонён с exit 1 и нужным rule.
+`git diff --check` — **PASS / 0**. Localization содержит 385 записей.
+
+Терминальный `ArmaReforgerWorkbenchSteamDiag.exe -noThrow -wbsilent
+-gproj <EveronRHS/addon.gproj> ... -wbModule=ScriptEditor -run -validate`
+для production и отдельного stage с fixture — **PASS / 0**, оба вывели
+`Script validation successful.`; SCRIPT E/F, ENGINE F и VM/null — 0.
+
+Runtime через `Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthRHS
+-RepositoryRoot <stage> -AdditionalArguments @('-aicfNorthProbe','1','-addr','127.0.0.1:22199')`
+и отдельный `-Role Client -Variant EveronNorthRHS -RepositoryRoot <stage>
+-ServerProfileRoot <profile> -ServerPort 22199 -ClientAddress '127.0.0.1:22199'
+-AdditionalArguments @('-aicfNorthProbe','1','-language','ru_ru')`:
+
+- сервер **10/10**, клиент **8/8**, native exit обоих **0**;
+- 9 initialized bases, 2 HQ в нужных местах, 7 control points,
+  остальные базы неактивны на обеих сторонах соединения;
+- оба HQ назначены разным фракциям, `ROSTER_READY`, командиры готовы,
+  выданы начальные attack orders;
+- радиограф 9 nodes, `missing=0` для всех пар; client ready gate подтвердил
+  точный CLI, живой PID и готовность roster;
+- начальный диагностический запуск через raw world показал
+  `GetMissionHeader() == null`. Передача GUID header прямо в `-server`
+  подтвердила native whitelist; новый launcher использует этот путь.
+
+Проверены полные остановленные logs. Runtime **не является чистым error-free
+baseline**: сервер содержит четыре знакомых `SCR_Faction` init ошибки US/USSR
+(есть и в предварительном полном Everon), две resupply/catalog ошибки при
+закрытии, RHS/stock resource/world/arsenal RPC сообщения и pathfinding tile
+ошибки; клиент — resource/world/GUI сообщения и shutdown resource leaks.
+VM/null и fatal не обнаружены. Эти сообщения сохранены в evidence, а успешная
+fixture подтверждает только перечисленные свойства сценария.
+
+Evidence: `.codex-runtime/everon-north-20260919/`: `before-*`, `after-*`,
+`negative-*/result.txt`, `wb-probe*`, `wb-production*`, `north-server.txt`,
+`north-client.txt` (включая `AICF_RUNTIME_MANIFEST_JSON`), полные
+`server-logs/`, `client-logs/` и индексы `*-errors.txt`.
+Profiles: `Server-EveronNorthRHS-20260919-163050-080`,
+`Client-EveronNorthRHS-20260919-163133-230`. Тестовые процессы закрылись;
+пользовательские server/client полного Everon не перезапускались.
+
+**NOT RUN:** ручная проверка плитки/карты и читаемости меток, packaged Workshop
+build, длительный бой, фактический захват всех семи точек/победа,
+баланс направлений и полноценный прогон транспортной навигации.
 
 ## Скорость захвата баз ×3 — 2026-09-19
 
@@ -1488,7 +1641,8 @@ header; такой тест должен закончиться `XP_FLOOR_APPLIE
 - новый server profile на каждый run;
 - новый client profile, если нужен клиент;
 - `-backendFreshSession`;
-- raw world выбранной карты вместе с соответствующими `-MissionHeader` и `-worldSystemsConfig`;
+- точный launch target canonical launcher: для `EveronNorthRHS` GUID header
+  в `-server`, для прежних полных вариантов — raw world;
 - exact addon GUID graph выбранного варианта;
 - записанные `aicf*` flags, включая факт отсутствия или exact value
   `aicfAICommanderMode`;
@@ -1498,7 +1652,9 @@ header; такой тест должен закончиться `XP_FLOOR_APPLIE
 `Missions/AICF_Conflict_Everon.conf`, для RHS —
 `Missions/AICF_RHS_Conflict_Arland.conf`. Все headers наследуют официальный
 scenario contract; raw world и `worldSystemsConfig` в terminal-команде должны
-соответствовать выбранному родителю.
+соответствовать выбранному родителю. Наличие `-MissionHeader` в CLI само по
+себе не подтверждает применение его настроек: для северного сценария
+это проверяется по фактическим initialized bases и HQ (см. evidence выше).
 
 ### Scenario menu
 
@@ -1509,7 +1665,7 @@ Scenario gate разделяется на четыре независимых у
    скопированных `.ent`/`.layer`.
 2. Отдельный Arland/Everon/RHS Workbench Validate подтверждает регистрацию ресурсов и
    отсутствие `SCRIPT (E/F)`, `ENGINE (F)`, VM/null ошибок проекта.
-3. Direct source run с новым `-MissionHeader` должен прочитать header и
+3. Direct source run с GUID header в `-server` должен прочитать header и
    загрузить world/systems его официального родителя; это ещё не доказывает
    появление плитки в UI или полный gameplay runtime.
 4. Пользователь вручную проверяет плитку, её название, выбор и начало новой

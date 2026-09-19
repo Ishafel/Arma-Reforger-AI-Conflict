@@ -3,8 +3,8 @@
 Scripts-first прототип автономной войны `US` против `USSR` поверх штатного
 режима Conflict. Проект использует существующий мир, базы, радио-граф, фракции
 и prefab-каталоги Arma Reforger. Собственных world/prefab/layout-ресурсов в
-репозитории нет; четыре тонких `MissionHeader` добавляют запуск из меню сценариев
-и наследуют штатные stock/RHS missions.
+репозитории нет; шесть inherited `MissionHeader` добавляют запуск из меню сценариев.
+Северные stock/RHS Everon выбирают подмножество штатных баз через настройки Conflict.
 
 Игровая логика server-authoritative: сервер применяет выбранную при запуске
 политику командования, создаёт и заменяет группы, управляет транспортом,
@@ -53,6 +53,13 @@ bootstrap content profile и содержит
 Родитель — `{AAD43C10045857C1}Missions/RHS_Conflict.conf`, мир — штатный
 `Worlds/MP/Conflict/CTI_Campaign_Eden_RHS.ent`. Запуск через canonical launcher:
 `-Variant EveronRHS`. Команды и gates: [RHS_EVERON.md](docs/RHS_EVERON.md).
+
+Отдельные сценарии **«AI Conflict — Север Эверона»** (`-Variant EveronNorth`,
+США против СССР, без RHS) и **«AI Conflict RHS — Север Эверона»**
+(`-Variant EveronNorthRHS`) используют HQ на северной авиабазе и в военном
+госпитале, шесть точек захвата. Андре и южные базы не участвуют в кампании;
+ландшафт острова остаётся целым. Список точек, запуск и ограничения:
+[EVERON_NORTH.md](docs/EVERON_NORTH.md).
 
 Stock profile сохраняет текущие `US`/`USSR` catalog mappings. RHS profile
 разрешает `RHS_USAF` как стабильную сторону `US`, `RHS_AFRF` как `USSR`,

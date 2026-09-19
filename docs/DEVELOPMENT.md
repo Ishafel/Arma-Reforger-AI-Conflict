@@ -3,9 +3,10 @@
 ## Модель проекта
 
 Репозиторий не имеет обычного compiler/package manager. Он проверяется через
-Diag Workbench и запускается как unpacked source addon. Четыре inherited
-`MissionHeader` дают source addons собственные плитки в меню сценариев, но не
-добавляют world или mission topology. Canonical Workshop metadata и preview
+Diag Workbench и запускается как unpacked source addon. Шесть inherited
+`MissionHeader` дают source addons собственные плитки в меню сценариев.
+Северные stock/RHS Everon задают whitelist штатных баз; собственных worlds нет.
+Canonical Workshop metadata и preview
 assets хранятся в `workshop/`, а первая упаковка и upload выполняются владельцем
 вручную через Workbench по [`docs/PUBLISHING.md`](PUBLISHING.md).
 
@@ -17,6 +18,15 @@ GUID `9F88011DA22B471C`; обычные проекты не получают е�
 Для RHS Everon используй `AIConflictEveronRHS/addon.gproj`, GUID
 `FA9FDCCA428A43BA`: он объединяет Everon integration и ArlandRHS profile.
 Полный Workbench graph и команды запуска: [RHS_EVERON.md](RHS_EVERON.md).
+Северная версия использует тот же graph и `-Variant EveronNorthRHS`:
+[EVERON_NORTH.md](EVERON_NORTH.md). В её server CLI `-server` получает
+`{A1CF190919100000}Missions/AICF_RHS_Conflict_Everon_North.conf`, чтобы native
+campaign применил whitelist до инициализации баз. Запуск raw `.ent` вместе
+с `-MissionHeader` не эквивалентен этому сценарию.
+
+Стандартный северный Эверон запускается через `-Variant EveronNorth`.
+Использует `AIConflictEveron/addon.gproj` и три stock AICF addons без RHS.
+Native `-server` получает `{A1CF190919300000}Missions/AICF_Conflict_Everon_North.conf`.
 
 ## Требования
 

@@ -32,10 +32,16 @@ foreach ($language in @('en_us', 'ru_ru', 'fr_fr', 'it_it', 'de_de', 'es_es', 'c
 foreach ($platform in @('HEADLESS', 'XBOX_ONE', 'XBOX_SERIES', 'PS4')) {
     Require ($project -match ("GameProjectConfig $platform : PC")) "Platform inheritance: $platform"
 }
-foreach ($variant in @('Arland', 'Everon', 'ArlandRHS', 'EveronRHS')) {
-    $headers = @(Get-ChildItem (Join-Path $RepositoryRoot "AIConflict$variant/Missions") -Filter '*.conf')
-    Require ($headers.Count -eq 1) "Header count: $variant"
-    $header = Get-Content $headers[0].FullName -Raw -Encoding UTF8
+$scenarioPaths = [ordered]@{
+    Arland = 'AIConflictArland/Missions/AICF_Conflict_Arland.conf'
+    Everon = 'AIConflictEveron/Missions/AICF_Conflict_Everon.conf'
+    ArlandRHS = 'AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland.conf'
+    EveronRHS = 'AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon.conf'
+    EveronNorthRHS = 'AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_North.conf'
+    EveronNorth = 'AIConflictEveron/Missions/AICF_Conflict_Everon_North.conf'
+}
+foreach ($variant in $scenarioPaths.Keys) {
+    $header = Get-Content (Join-Path $RepositoryRoot $scenarioPaths[$variant]) -Raw -Encoding UTF8
     foreach ($field in @('Name', 'Description', 'Details')) {
         $id = "AICF_Scenario_${variant}_$field"
         Require ($header.Contains("m_s$field `"#$id`"") -and $entries.Contains($id)) "Header key: $id"

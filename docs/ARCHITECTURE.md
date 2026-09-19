@@ -2,8 +2,9 @@
 
 ## Общая модель
 
-Проект расширяет штатный Conflict преимущественно скриптами. Четыре собственных
-`MissionHeader` являются только точками запуска и не владеют world topology:
+Проект расширяет штатный Conflict преимущественно скриптами. Шесть собственных
+`MissionHeader` наследуют существующие worlds; северный stock/RHS Everon дополнительно
+задаёт whitelist штатных баз, не создавая world или layouts:
 
 ```text
 Arma Reforger / stock Conflict
@@ -39,8 +40,8 @@ inherited header и подменяет только radio-normalizer factory н�
 `Missions/AICF_RHS_Conflict_Arland.conf` — штатный RHS
 `{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf`. Presentation overrides
 ограничены metadata и `m_bShowInScenarioMenu`; world, systems config, базы и
-параметры Conflict остаются у родителей. Единственный behavior override самих
-headers — `m_eSaveTypes 0`: AICF state не имеет persistence serializers и
+параметры Conflict полных карт остаются у родителей. Все headers наследуют
+`m_eSaveTypes 0`: AICF state не имеет persistence serializers и
 resume lifecycle, поэтому все плитки fail-closed отключают штатный session
 save/load и при каждом запуске создают новую кампанию.
 
@@ -66,6 +67,20 @@ callsign assignments по-прежнему принадлежат stock.
 `Missions/AICF_RHS_Conflict_Everon.conf` наследует
 `{AAD43C10045857C1}Missions/RHS_Conflict.conf`, который владеет штатным RHS
 Everon world. Точные identities, запуск и evidence: [RHS_EVERON.md](RHS_EVERON.md).
+
+`Missions/AICF_RHS_Conflict_Everon_North.conf` наследует полный AICF RHS Everon.
+Стандартный `AIConflictEveron/Missions/AICF_Conflict_Everon_North.conf`
+наследует полный stock AICF Everon с теми же восемью базами; загрузка RHS
+для него не требуется. Собственный world или отдельный controller не создаётся.
+Его `m_bCustomBaseWhitelist` и восемь `SCR_CampaignCustomBase` ограничивают
+штатную инициализацию двумя HQ и шестью control points. `m_fRadioRange 2000`
+связывает их без южных relay; `m_bEstablishingBasesEnabled 0` запрещает
+расширять кампанию новыми базами. Выбор HQ, ownership и репликация остаются
+у stock campaign. Неинициализированные южные базы исключаются существующими
+проверками Core; имена баз находятся только в map-specific header.
+Native `-server` получает GUID ресурса header, чтобы `GetMissionHeader()`
+был установлен до stock `InitalBaseSetup`. Отдельный `-MissionHeader` при
+запуске raw `.ent` этого не обеспечивает. Подробности: [EVERON_NORTH.md](EVERON_NORTH.md).
 
 ## Content profile boundary
 
