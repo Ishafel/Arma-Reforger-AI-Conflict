@@ -956,6 +956,14 @@ override `SCR_RankContainer.GetRankByXP()` не используется.
 
 ## Stock campaign integration: Arland и Everon
 
+Общий `AIConflictCore/Scripts/Game/AIConflict/Integration/AICF_CaptureSpeedPolicy.c` уменьшает до трети
+`m_fMaximumSeizingTime`, `m_fMinimumSeizingTime`, `m_fExtraTimePerService` и
+`m_fExtraTimePerRadioConnection` в `OnPostInit` на server authority после
+штатной инициализации. Отношение надбавок к разнице max/min остаётся прежним,
+поэтому итоговая длительность штатного `RefreshSeizingTimer` также делится на 3.
+Число бойцов, contested/radio eligibility, ownership, callbacks и репликация
+timestamps остаются штатными. Изменение применяется при следующем запуске миссии.
+
 `AIConflictArland` содержит четыре чувствительных расширения stock классов,
 проверенных для штатных Arland и Everon Conflict missions:
 

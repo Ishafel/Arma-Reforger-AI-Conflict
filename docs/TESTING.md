@@ -38,6 +38,30 @@ native/RHS resource/world/RPL diagnostics сохранены. Client/JIP, visual
 Evidence: `.codex-runtime/navigation-fix-20260919/`, включая полные logs,
 native manifest, версии, source hashes, baseline/after и exact compile args.
 
+## Скорость захвата баз ×3 — 2026-09-19
+
+`AIConflictCore/Scripts/Game/AIConflict/Integration/AICF_CaptureSpeedPolicy.c`
+делит четыре штатных временных параметра захвата на 3 при server-side
+`OnPostInit`. Ускорение одинаково для AI и игроков, stock и RHS.
+Формула сверена с `SCR_CampaignSeizingComponent.RefreshSeizingTimer`
+закреплённого Script Diff `1.8.0.13`: масштабируются max/min и обе надбавки,
+поэтому множитель служб/радиосвязей сохраняется, а длительность уменьшается втрое.
+Обновлены также defaults в `README.md` и контракт в `ARCHITECTURE.md`.
+
+Команды `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-RHSIntegrationStatic.ps1`
+и `tools/Test-ScenarioHeadersStatic.ps1` — **PASS / 0** до и после.
+`tools/Test-AICommanderModeStatic.ps1` — прежний **FAIL / 1**, только
+`AI_COMMANDER_UI_STATE`. Терминальный Workbench по команде
+`docs/DEVELOPMENT.md` с `-wbModule=ScriptEditor -run -validate` — **PASS / 0**
+для Arland, Everon, ArlandRHS и EveronRHS; SCRIPT E/F, ENGINE F и VM/null — 0.
+`git diff --check` — **PASS / 0**.
+Evidence: `.codex-runtime/capture-speed-20260919/`, baseline/after audits,
+`wb-*-args.json`, `wb-*-output.txt`, полные остановленные `wb-*/console.log`.
+
+**NOT RUN:** runtime-замер времени захвата, contested/reinforcement/JIP проверка
+и визуальная проверка таймера. Текущая пользовательская сессия RHS Everon
+не перезапускалась; изменение вступит в силу со следующим запуском миссии.
+
 ## Язык клиента — 2026-09-19
 
 Локализованы сценарии и весь AICF UI, включая server-produced метки и ответы.
