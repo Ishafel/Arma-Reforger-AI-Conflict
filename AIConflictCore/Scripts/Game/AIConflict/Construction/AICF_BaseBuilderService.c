@@ -253,13 +253,20 @@ class AICF_BaseBuilderService
 		}
 		if (!builder.m_Group)
 		{
-			if (now < builder.m_iRetryAtMs || !SelectTarget(builder, home))
+			if (now < builder.m_iRetryAtMs)
+				return;
+			SCR_CampaignBuildingCompositionComponent firstTarget = SelectTarget(builder, home);
+			if (!firstTarget)
 				return;
 			SCR_SpawnPoint spawnPoint = builder.m_Base.GetSpawnPoint();
 			if (!spawnPoint)
 				return;
 			vector position, rotation;
 			spawnPoint.GetPositionAndRotation(position, rotation);
+			AICF_ConstructionOrder receipt = firstTarget.m_AICFConstructionReceipt;
+			if (receipt && receipt.m_bAccepted && receipt.m_bPathStartReady && receipt.m_Base == builder.m_Base &&
+				receipt.m_Faction == faction && receipt.IdentityValid() && receipt.PlacementUnchanged())
+				position = receipt.m_vPathStart;
 			builder.m_iRetryAtMs = now + RETRY_DELAY_MS;
 			builder.m_Group = m_Spawner.CreateBuilder(faction, position);
 			if (!builder.m_Group)

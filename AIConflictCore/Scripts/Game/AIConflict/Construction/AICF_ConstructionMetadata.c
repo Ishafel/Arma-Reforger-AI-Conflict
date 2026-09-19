@@ -60,6 +60,9 @@ class AICF_ConstructionMetadata
 	vector m_vMin;
 	vector m_vMax;
 	int m_iMeshes;
+	vector m_vOutlineMin = Vector(float.MAX, float.MAX, float.MAX);
+	vector m_vOutlineMax = Vector(-float.MAX, -float.MAX, -float.MAX);
+	bool m_bOutlineBounds;
 	int m_iSpawnSlots;
 	int m_iRequiredServices;
 	bool m_bValid;
@@ -79,6 +82,9 @@ class AICF_ConstructionMetadata
 	protected int m_iGeometryCursor;
 	protected int m_iGeometryCpuMs;
 	protected int m_iOutlineStart;
+	protected ref array<ref AICF_ConstructionVolume> m_aCollisionInput;
+	protected int m_iCollisionCursor;
+	protected bool m_bCollisionPrepared;
 	ResourceName m_sOutline;
 
 	static EEditableEntityLabel ServiceLabel(AICF_EConstructionType type)
@@ -196,10 +202,10 @@ class AICF_ConstructionMetadata
 		{
 			Collect(m_PreviewRoot);
 			m_bGeometryCollected = true;
-			if (m_aCollisionVolumes.Count() > 256)
+			if (m_aCollisionVolumes.Count() > 2048)
 				m_bGeometryError = true;
 		}
-		if (!m_bGeometryError && !CompactCollisionVolumes(sliceMs))
+		if (!m_bGeometryError && !CompactCollisionVolumes(Math.Max(1, sliceMs - (System.GetTickCount() - before))))
 		{
 			m_iGeometryCpuMs += System.GetTickCount() - before;
 			return 0;
@@ -234,6 +240,7 @@ class AICF_ConstructionMetadata
 		m_aPreviewNodes.Clear();
 		m_aEntries.Clear();
 		m_aPreviewResources.Clear();
+		m_aCollisionInput = null;
 	}
 
 	protected bool PrepareEntries()
@@ -323,6 +330,15 @@ class AICF_ConstructionMetadata
 			{
 				vector mins, maxs;
 				node.GetWorldBounds(mins, maxs);
+				if (node.m_bOutline)
+				{
+					m_bOutlineBounds = true;
+					for (int axis; axis < 3; axis++)
+					{
+						m_vOutlineMin[axis] = Math.Min(m_vOutlineMin[axis], mins[axis]);
+						m_vOutlineMax[axis] = Math.Max(m_vOutlineMax[axis], maxs[axis]);
+					}
+				}
 				Include(mins);
 				Include(maxs);
 				AddCollisionVolume(mins, maxs);
@@ -433,10 +449,24 @@ class AICF_ConstructionMetadata
 	protected bool CompactCollisionVolumes(int sliceMs)
 	{
 		// Объединение только расширяет bounds: ни одна часть prefab не теряется.
-		// Лимит даёт конечный live commit/completion без сотен physics queries.
-		int started = System.GetTickCount();
-		while (m_aCollisionVolumes.Count() > 24 && System.GetTickCount() - started < sliceMs)
+		// Поиск пары работает максимум с 48 объёмами, а не со всеми сотнями
+		// meshes большой казармы. Cursor сохраняет необработанную геометрию.
+		if (!m_bCollisionPrepared)
 		{
+			m_bCollisionPrepared = true;
+			m_aCollisionInput = m_aCollisionVolumes;
+			m_aCollisionVolumes = {};
+		}
+		int started = System.GetTickCount();
+		while ((m_iCollisionCursor < m_aCollisionInput.Count() || m_aCollisionVolumes.Count() > 24) && System.GetTickCount() - started < sliceMs)
+		{
+			if (m_aCollisionVolumes.Count() <= 24)
+			{
+				while (m_iCollisionCursor < m_aCollisionInput.Count() && m_aCollisionVolumes.Count() < 48)
+					m_aCollisionVolumes.Insert(m_aCollisionInput[m_iCollisionCursor++]);
+			}
+			if (m_aCollisionVolumes.Count() <= 24)
+				break;
 			float bestCost = float.MAX;
 			int bestA;
 			int bestB = 1;
@@ -468,7 +498,7 @@ class AICF_ConstructionMetadata
 			m_aCollisionVolumes[bestA].m_vMax = bestMax;
 			m_aCollisionVolumes.Remove(bestB);
 		}
-		return m_aCollisionVolumes.Count() <= 24;
+		return m_iCollisionCursor == m_aCollisionInput.Count() && m_aCollisionVolumes.Count() <= 24;
 	}
 
 	bool ExitAvoidsComposition(AICF_ConstructionVolume exitVolume)

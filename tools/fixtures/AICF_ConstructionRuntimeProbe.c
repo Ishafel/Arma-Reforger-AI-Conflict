@@ -1,5 +1,149 @@
 // Только test-only preparation. Все decisions, поиск, оплата, создание layout
 // и worker completion идут через production domain без бесплатного spawn.
+class AICF_ConstructionMatrixProbe
+{
+	protected static ref array<bool> s_aCompleted = {false, false, false, false, false, false, false, false, false, false};
+	protected static int s_iType;
+	protected static int s_iPhaseStarted;
+	protected static bool s_bInitialized;
+	protected static int s_iLastType = AICF_EConstructionType.COUNT - 1;
+
+	static bool Enabled()
+	{
+		string value;
+		return System.GetCLIParam("aicfConstructionProbeMatrix", value) && value == "1";
+	}
+
+	static int CurrentType()
+	{
+		if (!s_bInitialized)
+		{
+			s_bInitialized = true;
+			string type;
+			if (System.GetCLIParam("aicfConstructionProbeMatrixType", type))
+			{
+				s_iType = Math.ClampInt(type.ToInt(), 0, AICF_EConstructionType.COUNT - 1);
+				s_iLastType = s_iType;
+			}
+		}
+		return s_iType;
+	}
+
+	static bool SideCompleted(FactionKey faction, int type)
+	{
+		if (type < 0 || type >= AICF_EConstructionType.COUNT)
+			return true;
+		int side;
+		if (faction == "USSR")
+			side = 1;
+		return s_aCompleted[type * 2 + side];
+	}
+
+	static void Observe(AICF_ConstructionOrder order)
+	{
+		if (!Enabled() || !order.m_bAccepted || !order.m_Composition ||
+			!AICF_ConstructionMetadata.HasOnlineService(order.m_Composition.GetOwner(), order.m_eType))
+			return;
+		int side;
+		if (order.m_sFaction == "USSR")
+			side = 1;
+		else if (order.m_sFaction != "US")
+			return;
+		s_aCompleted[order.m_eType * 2 + side] = true;
+		Print(string.Format("[AICF][CONSTRUCTION_MATRIX_CASE] test_only=1 faction=%1 type=%2 token=%3 completed=1",
+			order.m_sFaction, typename.EnumToString(AICF_EConstructionType, order.m_eType), order.m_sToken));
+	}
+
+	static bool Update(int now)
+	{
+		if (!Enabled())
+			return false;
+		if (CurrentType() > s_iLastType)
+			return true;
+		if (!s_iPhaseStarted)
+		{
+			s_iPhaseStarted = now;
+			Print("[AICF][CONSTRUCTION_MATRIX_PHASE] test_only=1 begin=1 type=" + s_iType);
+		}
+		int phaseMs = 300000;
+		string phaseCLI;
+		if (System.GetCLIParam("aicfConstructionProbeMatrixPhaseMs", phaseCLI))
+			phaseMs = Math.ClampInt(phaseCLI.ToInt(), 60000, 1200000);
+		if ((!SideCompleted("US", s_iType) || !SideCompleted("USSR", s_iType)) && now - s_iPhaseStarted < phaseMs)
+			return false;
+		Print(string.Format("[AICF][CONSTRUCTION_MATRIX_PHASE] test_only=1 end=1 type=%1 us_completed=%2 ussr_completed=%3 elapsed_ms=%4",
+			s_iType, SideCompleted("US", s_iType), SideCompleted("USSR", s_iType), now - s_iPhaseStarted));
+		s_iType++;
+		s_iPhaseStarted = 0;
+		return s_iType > s_iLastType;
+	}
+}
+
+// Matrix задаёт только проверяемую потребность. Coverage/authority не обходятся.
+modded class AICF_AICommander
+{
+	override int SelectConstructionType(array<bool> covered, int startType)
+	{
+		if (!AICF_ConstructionMatrixProbe.Enabled())
+			return super.SelectConstructionType(covered, startType);
+		int type = AICF_ConstructionMatrixProbe.CurrentType();
+		if (!covered || covered.Count() != AICF_EConstructionType.COUNT || type >= covered.Count() ||
+			covered[type] || AICF_ConstructionMatrixProbe.SideCompleted(AICF_ContentProfile.GetActive().GetStableFactionKey(GetFactionKey()), type))
+			return -1;
+		return super.SelectConstructionType(covered, type);
+	}
+}
+
+class AICF_ConstructionMetadataProbe : AICF_ConstructionMetadata
+{
+	static void Run()
+	{
+		AICF_ConstructionMetadataProbe metadata = new AICF_ConstructionMetadataProbe();
+		for (int i; i < 400; i++)
+		{
+			AICF_ConstructionVolume volume = new AICF_ConstructionVolume();
+			int column = i % 20;
+			int row = i / 20;
+			volume.m_vMin = Vector(column * 2, 0.3, row * 2);
+			volume.m_vMax = volume.m_vMin + "1 2 1";
+			metadata.m_aCollisionVolumes.Insert(volume);
+		}
+		bool done;
+		bool bounded = true;
+		for (int tick; tick < 2000 && !done; tick++)
+		{
+			done = metadata.CompactCollisionVolumes(1);
+			if (metadata.m_aCollisionVolumes.Count() > 48)
+				bounded = false;
+		}
+		int covered;
+		for (int i; i < 400; i++)
+		{
+			int column = i % 20;
+			int row = i / 20;
+			vector mins = Vector(column * 2, 0.3, row * 2);
+			vector maxs = mins + "1 2 1";
+			foreach (AICF_ConstructionVolume volume : metadata.m_aCollisionVolumes)
+			{
+				if (volume.m_vMin[0] <= mins[0] && volume.m_vMin[1] <= mins[1] && volume.m_vMin[2] <= mins[2] &&
+					volume.m_vMax[0] >= maxs[0] && volume.m_vMax[1] >= maxs[1] && volume.m_vMax[2] >= maxs[2])
+				{
+					covered++;
+					break;
+				}
+			}
+		}
+		int passed;
+		if (done) passed++;
+		if (bounded) passed++;
+		if (metadata.m_aCollisionVolumes.Count() <= 24) passed++;
+		if (covered == 400) passed++;
+		Print(string.Format("[AICF][CONSTRUCTION_METADATA_CONTRACT] test_only=1 passed=%1 total=4 covered=%2", passed, covered));
+		if (passed != 4)
+			Print("[AICF][CONSTRUCTION_METADATA_CONTRACT] FAILED", LogLevel.ERROR);
+	}
+}
+
 class AICF_ConstructionDeferredProbe
 {
 	protected static ref array<ref AICF_ConstructionDeferredProbe> s_aPending = {};
@@ -48,6 +192,94 @@ modded class AICF_ConstructionPlanner
 	protected int m_iAICFProbeMaxQueries;
 	protected int m_iAICFProbeTicks;
 	protected int m_iAICFProbeRefillAt;
+	protected bool m_bAICFMatrixPrepared;
+	protected ref array<string> m_aAICFMatrixCoverage = {};
+
+	override protected bool Covered(AICF_ConstructionOrder order, AICF_EConstructionType type)
+	{
+		bool covered = super.Covered(order, type);
+		if (!AICF_ConstructionMatrixProbe.Enabled())
+			return covered;
+		string key = order.m_BaseId.ToString() + ":" + order.m_sFaction + ":" + type + ":" + covered;
+		if (!m_aAICFMatrixCoverage.Contains(key))
+		{
+			m_aAICFMatrixCoverage.Insert(key);
+			Print(string.Format("[AICF][CONSTRUCTION_MATRIX_COVERAGE] test_only=1 base=%1 faction=%2 type=%3 covered=%4",
+				order.m_BaseId, order.m_sFaction, typename.EnumToString(AICF_EConstructionType, type), covered));
+			if (type == AICF_EConstructionType.LARGE_BARRACKS && covered)
+			{
+				foreach (IEntity entity : m_aInventory)
+				{
+					if (!entity)
+						continue;
+					SCR_ServicePointComponent service = SCR_ServicePointComponent.Cast(entity.FindComponent(SCR_ServicePointComponent));
+					if (!service || service.GetType() != SCR_EServicePointType.BARRACKS)
+						continue;
+					IEntity root = entity.GetRootParent();
+					if (!root)
+						continue;
+					SCR_EditableEntityComponent editable = SCR_EditableEntityComponent.Cast(root.FindComponent(SCR_EditableEntityComponent));
+					SCR_EditableEntityUIInfo info;
+					if (editable)
+						info = SCR_EditableEntityUIInfo.Cast(editable.GetInfo());
+					bool small = info && info.HasEntityLabel(EEditableEntityLabel.SLOT_FLAT_SMALL);
+					bool large = info && info.HasEntityLabel(EEditableEntityLabel.SLOT_FLAT_LARGE);
+					ResourceName prefab;
+					if (root.GetPrefabData())
+						prefab = root.GetPrefabData().GetPrefabName();
+					Print(string.Format("[AICF][CONSTRUCTION_MATRIX_BARRACKS] test_only=1 base=%1 entity=%2 root=%3 small=%4 large=%5 prefab=%6",
+						order.m_BaseId, entity.GetID(), root.GetID(), small, large, prefab));
+				}
+			}
+		}
+		return covered;
+	}
+
+	protected void AICF_PrepareMatrix()
+	{
+		if (m_bAICFMatrixPrepared || !AICF_ConstructionMatrixProbe.Enabled())
+			return;
+		m_bAICFMatrixPrepared = true;
+		SCR_CampaignFaction us = m_Campaign.GetFactionByEnum(SCR_ECampaignFaction.BLUFOR);
+		SCR_CampaignFaction ussr = m_Campaign.GetFactionByEnum(SCR_ECampaignFaction.OPFOR);
+		if (!us || !ussr || !us.GetMainBase() || !ussr.GetMainBase())
+			return;
+		array<SCR_CampaignMilitaryBaseComponent> bases = {};
+		m_Campaign.GetBaseManager().GetBases(bases);
+		foreach (SCR_CampaignMilitaryBaseComponent base : bases)
+		{
+			if (!base || !base.GetOwner() || !base.IsInitialized() || base.IsControlPoint() || base == us.GetMainBase() || base == ussr.GetMainBase())
+				continue;
+			// Только подготовка isolated world: базы распределяются по близости
+			// к HQ, без координат карты и без изменения installed world resources.
+			vector position = base.GetOwner().GetOrigin();
+			SCR_CampaignFaction owner = us;
+			if (vector.DistanceSqXZ(position, ussr.GetMainBase().GetOwner().GetOrigin()) < vector.DistanceSqXZ(position, us.GetMainBase().GetOwner().GetOrigin()))
+				owner = ussr;
+			base.SetFaction(owner);
+			Print(string.Format("[AICF][CONSTRUCTION_MATRIX_PREPARE] test_only=1 base=%1 faction=%2 position=%3",
+				base.GetOwner().GetID(), owner.GetFactionKey(), position));
+		}
+	}
+
+	override protected void Decide(AICF_ConstructionBaseState state, int now)
+	{
+		if (AICF_ConstructionMatrixProbe.Enabled())
+		{
+			// Одна проверяемая стройка на сторону: не расходуем квоту десятком
+			// одинаковых orders. После отказа доступна следующая штатная база.
+			foreach (AICF_ConstructionBaseState other : m_aBases)
+			{
+				if (other != state && other.m_Order && other.m_Base.GetFaction() == state.m_Base.GetFaction())
+				{
+					state.m_iDueAt = now + 1000;
+					return;
+				}
+			}
+			state.m_iNextType = AICF_ConstructionMatrixProbe.CurrentType();
+		}
+		super.Decide(state, now);
+	}
 
 	override void Stop()
 	{
@@ -60,6 +292,9 @@ modded class AICF_ConstructionPlanner
 		super.InitializeBases(now);
 		AICF_ProbeExitEndpoints();
 		AICF_ProbeCandidateCoverage();
+		AICF_ProbeOrientedBounds();
+		AICF_ProbeTerrainSlope();
+		AICF_ConstructionMetadataProbe.Run();
 		string type;
 		if (System.GetCLIParam("aicfConstructionProbeType", type))
 		{
@@ -98,31 +333,68 @@ modded class AICF_ConstructionPlanner
 			Print("[AICF][CONSTRUCTION_ENDPOINT_CONTRACT] FAILED", LogLevel.ERROR);
 	}
 
+	protected void AICF_ProbeTerrainSlope()
+	{
+		int passed;
+		if (AICF_ConstructionSiteSearch.TerrainEdgeSupported(1, 1, 3, 0.8, 3)) passed++;
+		if (AICF_ConstructionSiteSearch.TerrainEdgeSupported(1.6, 1, 3, 0.8, 3)) passed++;
+		if (!AICF_ConstructionSiteSearch.TerrainEdgeSupported(2, 1, 3, 0.8, 3)) passed++;
+		if (!AICF_ConstructionSiteSearch.TerrainEdgeSupported(1.6, 1, 1, 0.8, 3)) passed++;
+		if (!AICF_ConstructionSiteSearch.TerrainEdgeSupported(1, 1, 0, 0.8, 3)) passed++;
+		bool gentle = true;
+		for (int i = 1; i <= 5; i++)
+			gentle = gentle && AICF_ConstructionSiteSearch.TerrainEdgeSupported(i * 0.6, (i - 1) * 0.6, 3, 0.8, 3);
+		if (gentle) passed++;
+		Print(string.Format("[AICF][CONSTRUCTION_TERRAIN_CONTRACT] test_only=1 passed=%1 total=6", passed));
+		if (passed != 6)
+			Print("[AICF][CONSTRUCTION_TERRAIN_CONTRACT] FAILED", LogLevel.ERROR);
+	}
+
 	protected void AICF_ProbeCandidateCoverage()
 	{
 		array<vector> positions = {};
 		array<int> orientations = {};
 		bool unique = true;
 		bool bounded = true;
-		bool repeated = true;
-		for (int i; i < 128; i++)
+		bool coverage = true;
+		bool nearProvider;
+		bool progressive = true;
+		bool deterministic = true;
+		for (int i; i < 256; i++)
 		{
 			float yaw, nextYaw;
 			vector point = AICF_ConstructionSiteSearch.CandidateOffset(i, 12, 120, yaw);
-			vector next = AICF_ConstructionSiteSearch.CandidateOffset(i + 128, 12, 120, nextYaw);
+			vector next = AICF_ConstructionSiteSearch.CandidateOffset(i + 64, 12, 120, nextYaw);
 			float distance = point.Length();
-			if (distance < 19.99 || distance > 120.01)
+			if (distance < 7.99 || distance > 120.01)
 				bounded = false;
+			if (distance < 20)
+				nearProvider = true;
+			if (vector.DistanceSqXZ(point, next) < 0.01)
+				progressive = false;
 			foreach (vector previous : positions)
 			{
 				if (vector.DistanceSqXZ(previous, point) < 0.01)
 					unique = false;
 			}
 			positions.Insert(point);
-			if (i < 8 && !orientations.Contains(yaw))
+			if (!orientations.Contains(yaw))
 				orientations.Insert(yaw);
-			if (vector.DistanceSqXZ(point, next) > 0.01 || yaw == nextYaw)
-				repeated = false;
+			next = AICF_ConstructionSiteSearch.CandidateOffset(i, 12, 120, nextYaw);
+			if (vector.DistanceSqXZ(point, next) > 0.01 || yaw != nextYaw)
+				deterministic = false;
+		}
+		// Требование к покрытию площади, не повторение формулы генератора.
+		for (int x = -80; x <= 80; x += 20)
+		{
+			for (int z = -80; z <= 80; z += 20)
+			{
+				float nearest = float.MAX;
+				foreach (vector position : positions)
+					nearest = Math.Min(nearest, vector.DistanceSqXZ(Vector(x, 0, z), position));
+				if (nearest > 20 * 20)
+					coverage = false;
+			}
 		}
 		float smallYaw;
 		vector small = AICF_ConstructionSiteSearch.CandidateOffset(15, 12, 5, smallYaw);
@@ -130,11 +402,33 @@ modded class AICF_ConstructionPlanner
 		if (unique) passed++;
 		if (bounded) passed++;
 		if (orientations.Count() == 8) passed++;
-		if (repeated) passed++;
+		if (coverage) passed++;
 		if (small.Length() <= 5.01) passed++;
-		Print(string.Format("[AICF][CONSTRUCTION_CANDIDATE_CONTRACT] test_only=1 passed=%1 total=5", passed));
-		if (passed != 5)
+		if (nearProvider) passed++;
+		if (progressive) passed++;
+		if (deterministic) passed++;
+		Print(string.Format("[AICF][CONSTRUCTION_CANDIDATE_CONTRACT] test_only=1 passed=%1 total=8", passed));
+		if (passed != 8)
 			Print("[AICF][CONSTRUCTION_CANDIDATE_CONTRACT] FAILED", LogLevel.ERROR);
+	}
+
+	protected void AICF_ProbeOrientedBounds()
+	{
+		vector transform[4];
+		Math3D.AnglesToMatrix("45 0 0", transform);
+		transform[3] = "100 0 100";
+		int passed;
+		// Повернутый квадрат помещается в круг 12 м, его world AABB — нет.
+		if (AICF_ConstructionSiteSearch.VolumeInsideBounds("-8 0 -8", "8 4 8", transform, "0 0 0", "200 0 200", "100 0 100", 12)) passed++;
+		if (!AICF_ConstructionSiteSearch.VolumeInsideBounds("-8 0 -8", "8 4 8", transform, "0 0 0", "200 0 200", "100 0 100", 10)) passed++;
+		if (!AICF_ConstructionSiteSearch.VolumeInsideBounds("-8 0 -8", "8 4 8", transform, "90 0 90", "200 0 200", "100 0 100", 12)) passed++;
+		if (!AICF_ConstructionSiteSearch.VolumeInsideBounds("-8 0 -8", "8 4 8", transform, "0 0 0", "110 0 110", "100 0 100", 12)) passed++;
+		// Смещённый provider и выход за пределы круга остаются отказом.
+		if (!AICF_ConstructionSiteSearch.VolumeInsideBounds("-8 0 -8", "8 4 8", transform, "0 0 0", "200 0 200", "110 0 100", 12)) passed++;
+		if (!AICF_ConstructionSiteSearch.VolumeInsideBounds("-2 0 8", "2 4 28", transform, "0 0 0", "200 0 200", "100 0 100", 12)) passed++;
+		Print(string.Format("[AICF][CONSTRUCTION_BOUNDS_CONTRACT] test_only=1 passed=%1 total=6", passed));
+		if (passed != 6)
+			Print("[AICF][CONSTRUCTION_BOUNDS_CONTRACT] FAILED", LogLevel.ERROR);
 	}
 
 	override void Update()
@@ -148,6 +442,7 @@ modded class AICF_ConstructionPlanner
 			return;
 		}
 		int now = System.GetTickCount();
+		AICF_PrepareMatrix();
 		AICF_ConstructionDeferredProbe.Update();
 		string refill;
 		bool refillDue = System.GetCLIParam("aicfConstructionProbeRefill", refill) && refill == "1" && now - m_iAICFProbeRefillAt >= 60000;
@@ -184,6 +479,8 @@ modded class AICF_ConstructionPlanner
 			}
 		}
 		super.Update();
+		if (m_iCandidatesThisTick > m_Config.m_iCandidatesPerTick)
+			Print("[AICF][CONSTRUCTION_SCHEDULER_CONTRACT] candidate budget exceeded", LogLevel.ERROR);
 		int elapsed = System.GetTickCount() - before;
 		if (elapsed > 20)
 			Print(string.Format("[AICF][CONSTRUCTION_PROBE_SLOW_TICK] test_only=1 elapsed_ms=%1 queries=%2", elapsed, AICF_ConstructionSiteSearch.AICF_ProbeQueries()));
@@ -203,7 +500,7 @@ modded class AICF_ConstructionPlanner
 		string durationCLI;
 		if (System.GetCLIParam("aicfConstructionProbeMs", durationCLI))
 			duration = Math.ClampInt(durationCLI.ToInt(), 60000, 3600000);
-		if (now - m_iAICFProbeStart >= duration)
+		if (AICF_ConstructionMatrixProbe.Update(now) || now - m_iAICFProbeStart >= duration)
 		{
 			Print(string.Format("[AICF][CONSTRUCTION_PROBE_DONE] stopped=1 test_only=1 ticks=%1 max_tick_ms=%2 max_window_queries=%3 duration_ms=%4",
 				m_iAICFProbeTicks, m_iAICFProbeMaxTick, m_iAICFProbeMaxQueries, now - m_iAICFProbeStart));
@@ -217,6 +514,13 @@ modded class AICF_ConstructionPlanner
 // Дополнительных geometry queries и изменений gameplay state нет.
 modded class AICF_ConstructionOrder
 {
+	override void Log(string eventName, string extra = "")
+	{
+		super.Log(eventName, extra);
+		if (eventName == "CONSTRUCTION_COMPLETED")
+			AICF_ConstructionMatrixProbe.Observe(this);
+	}
+
 	override void RejectCandidate()
 	{
 		super.RejectCandidate();

@@ -16,6 +16,23 @@ matrix не закрыта. Подробные verdict и оставшиеся �
 зафиксирован в разделе «Подготовка 0.1.10»
 [отчёта поиска площадок](CONSTRUCTION_SITE_SEARCH_VALIDATION.md).
 
+Актуальные исправления scheduler, подготовки крупных построек и границ
+площадки, а также их evidence: [поиск от 2026-09-19](CONSTRUCTION_SEARCH_20260919.md).
+
+Последовательная проверка всех типов на текущем Stock Arland и начатое ручное
+сравнение: [matrix от 2026-09-19](CONSTRUCTION_MATRIX_20260919.md). В этом прогоне
+подтверждены три completion СССР; полная matrix остаётся FAIL, отсутствующие
+пары и runtime SCRIPT errors перечислены в отчёте.
+
+Две ручные площадки больших казарм СССР затем проверены отдельно:
+[повтор geometry/path guards](CONSTRUCTION_MANUAL_REPLAY_20260919.md).
+Установлены пробелы выборки и отказы ограниченной проверки пути;
+на первой площадке также rock/slope. Это диагностика, не новый gameplay фикс.
+
+Последующее исправление плотности поиска и многошагового маршрута строителя:
+[улучшенный поиск](CONSTRUCTION_IMPROVED_SEARCH_20260919.md). В отчёте отдельно
+перечислены native replay, реальное строительство и непроверенные случаи.
+
 ## Поведение и владельцы
 
 Порядок: `SMALL_BARRACKS → ARMORY → LIGHT_DEPOT → LARGE_BARRACKS → HEAVY_DEPOT`.
@@ -107,8 +124,13 @@ stock helper не передаёт этот flag в рекурсивные вы�
 Для depot фактические `SCR_EntitySpawnerSlotComponent` bounds входят в footprint,
 а 20-метровый коридор выбирается отдельно из двух направлений каждого vehicle
 slot. Footprint с запасом 1 метр и выбранные коридоры должны помещаться в
-provider/world bounds. Terrain фундамента проверяется локальной сеткой 3 метра,
-перепад ограничен 0.8 метра. У коридора ограничены перепад 2 метра и изменение
+provider/world bounds. Terrain фундамента проверяется локальной сеткой 3 метра:
+разность соседних высот ограничена 0.8 метра на 3 метра расстояния,
+с пересчётом для фактического шага сетки. Общий перепад всей композиции не
+используется как отказ: stock completion привязывает дочерние объекты в режиме
+`TERRAIN`. Physics bounds при commit/completion консервативно расширяются
+вниз/вверх на измеренный диапазон высот, сохраняя исходные объёмы.
+У коридора ограничены перепад 2 метра и изменение
 высоты между соседними samples (до 25% расстояния). Вода, physics obstacles,
 layouts/services, road segments под зданием и перекрытие подходов отклоняют site.
 Дорога под свободным выездом depot допустима. Проверки
@@ -126,10 +148,10 @@ Worker endpoint проверяется на infantry navmesh. Streaming имее
 |---|---:|---|
 | aicfConstructionDecisionMs | 60000 | 60000..3600000 |
 | aicfConstructionCooldownMs | 60000 | 60000..3600000 |
-| aicfConstructionDeadlineMs | 120000 | 1000..120000 |
+| aicfConstructionDeadlineMs | 120000 | 1000..120000 отдельно на metadata preparation и поиск |
 | aicfConstructionCandidatesPerTick | 4 | 1..4, общий scheduler tick |
 | aicfConstructionQueriesPerTick | 96 | 16..128, общий секундный window |
-| aicfConstructionAttempts | 96 | 4..128 на order |
+| aicfConstructionAttempts | 256 | 4..512 на order |
 | aicfConstructionReserveGroups | 1 | 0..100 |
 | aicfConstructionMetadataEntriesPerTick | 24 | 1..32 |
 | aicfConstructionSliceMs | 8 | 1..16, cooperative batch budget |

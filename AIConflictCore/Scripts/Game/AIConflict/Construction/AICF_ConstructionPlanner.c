@@ -18,6 +18,9 @@ class AICF_ConstructionPlanner
 	protected ref array<IEntity> m_aInventory = {};
 	protected int m_iCursor;
 	protected int m_iNextToken;
+	protected int m_iCandidatesThisTick;
+	protected bool m_bMetadataBatchThisTick;
+	protected bool m_bPlacementAttemptedThisTick;
 	protected bool m_bStopped;
 
 	void Start(SCR_GameModeCampaign campaign, AICF_BaseBuilderService builders, AICF_EconomySystem economy, AICF_AICommander us, AICF_AICommander ussr)
@@ -144,15 +147,32 @@ class AICF_ConstructionPlanner
 		}
 		if (m_aBases.IsEmpty())
 			return;
-		for (int visited; visited < m_aBases.Count(); visited++)
+		int sliceStarted = System.GetTickCount();
+		m_iCandidatesThisTick = 0;
+		m_bMetadataBatchThisTick = false;
+		m_bPlacementAttemptedThisTick = false;
+		int firstBase = m_iCursor;
+		m_iCursor = (m_iCursor + 1) % m_aBases.Count();
+		bool visitedOrder;
+		// Pending orders делят одну квоту queries и времени. Ожидание terrain,
+		// metadata или navmesh одной базы не должно останавливать остальные.
+		for (int visited; visited < m_aBases.Count() && System.GetTickCount() - sliceStarted < m_Config.m_iSliceMs; visited++)
 		{
-			AICF_ConstructionBaseState selected = m_aBases[m_iCursor++ % m_aBases.Count()];
+			AICF_ConstructionBaseState selected = m_aBases[(firstBase + visited) % m_aBases.Count()];
 			if (!selected.m_Order && now >= selected.m_iDueAt)
 				Decide(selected, now);
 			if (selected.m_Order && !selected.m_Order.m_bAccepted)
 			{
-				Search(selected);
-				break;
+				// Следующий tick начинает со следующей активной базы: длинные
+				// промежутки neutral bases не отдают всю квоту одному HQ.
+				if (!visitedOrder)
+				{
+					m_iCursor = (firstBase + visited + 1) % m_aBases.Count();
+					visitedOrder = true;
+				}
+				Search(selected, sliceStarted);
+				if (m_bPlacementAttemptedThisTick)
+					break;
 			}
 		}
 	}
@@ -209,7 +229,13 @@ class AICF_ConstructionPlanner
 		order.m_iDeadline = now + m_Config.m_iDeadlineMs;
 		order.m_iRevision = ++state.m_iRevision;
 		if (!order.IdentityValid() || !ScanInventory(order))
+		{
+			// Общую квоту могли израсходовать другие pending orders. Решение
+			// ещё не принято: не превращаем ожидание queries в минутный cooldown.
+			if (order.m_sReason == "QUERY_BUDGET")
+				state.m_iDueAt = now;
 			return;
+		}
 		array<bool> coverage = {};
 		for (int type; type < AICF_EConstructionType.COUNT; type++)
 			coverage.Insert(Covered(order, type));
@@ -256,21 +282,30 @@ class AICF_ConstructionPlanner
 		return metadata;
 	}
 
-	protected void Search(AICF_ConstructionBaseState state)
+	protected void Search(AICF_ConstructionBaseState state, int sliceStarted)
 	{
 		AICF_ConstructionOrder order = state.m_Order;
 		if (order.m_iStage == -1)
 		{
-			int geometry = order.m_Metadata.StepGeometry(m_Config.m_iMetadataEntriesPerTick, m_Config.m_iSliceMs);
+			if (m_bMetadataBatchThisTick)
+				return;
+			m_bMetadataBatchThisTick = true;
+			int geometry = order.m_Metadata.StepGeometry(m_Config.m_iMetadataEntriesPerTick, Math.Max(1, m_Config.m_iSliceMs - (System.GetTickCount() - sliceStarted)));
 			if (geometry < 0)
 				Cancel(state, "UNSUPPORTED_GEOMETRY");
 			else if (geometry > 0)
+			{
+				// Холодная metadata больших compositions может занять почти весь
+				// deadline. У поиска свой конечный срок после готовности geometry;
+				// подготовка уже ограничена исходным deadline из Decide().
+				order.m_iDeadline = System.GetTickCount() + m_Config.m_iDeadlineMs;
 				order.m_iStage = 0;
+				order.Log("CONSTRUCTION_SEARCH_READY", "search_deadline_ms=" + order.m_iDeadline);
+			}
 			return;
 		}
 		int candidates;
-		int sliceStarted = System.GetTickCount();
-		while (order.m_iStage == 0 && candidates++ < m_Config.m_iCandidatesPerTick && System.GetTickCount() - sliceStarted < m_Config.m_iSliceMs)
+		while (order.m_iStage == 0 && m_iCandidatesThisTick < m_Config.m_iCandidatesPerTick && candidates++ < m_Config.m_iCandidatesPerTick && System.GetTickCount() - sliceStarted < m_Config.m_iSliceMs)
 		{
 			if (order.m_iAttempts >= m_Config.m_iAttempts)
 			{
@@ -283,6 +318,12 @@ class AICF_ConstructionPlanner
 			{
 				order.m_iAttempts = previousAttempts;
 				return;
+			}
+			m_iCandidatesThisTick++;
+			if (found && !AccessClear(order))
+			{
+				order.m_iStage = 0;
+				found = false;
 			}
 			if (!found)
 				order.RejectCandidate();
@@ -310,14 +351,30 @@ class AICF_ConstructionPlanner
 		// Только здесь возможен один layout за общий tick; ни один wait/callback
 		// не находится внутри commit. Повторный token не проходит adapter gate.
 		if (!order.IdentityValid() || !ScanInventory(order) || Covered(order, order.m_eType) ||
-			m_Builders.HasUnfinishedWork(order.m_Base) || !AccessClear(order) ||
-			!m_Search.LiveClear(order, null) || !m_Economy.QuoteConstruction(order, m_Config))
+			m_Builders.HasUnfinishedWork(order.m_Base))
 		{
 			if (order.m_sReason == "QUERY_BUDGET")
 				return;
 			Cancel(state, "COMMIT_REVALIDATION_FAILED");
 			return;
 		}
+		if (!AccessClear(order) || !m_Search.LiveClear(order, null))
+		{
+			if (order.m_sReason == "QUERY_BUDGET")
+				return;
+			// Занятый после поиска участок не отменяет весь заказ с минутным
+			// cooldown: снимаем только его reservation и проверяем следующий.
+			order.RejectCandidate();
+			order.m_bSiteReserved = false;
+			order.m_iStage = 0;
+			return;
+		}
+		if (!m_Economy.QuoteConstruction(order, m_Config))
+		{
+			Cancel(state, "COMMIT_REVALIDATION_FAILED");
+			return;
+		}
+		m_bPlacementAttemptedThisTick = true;
 		if (!m_Adapter.Place(order, m_Config, m_Economy, m_Manager, m_Builders))
 			Cancel(state, "PLACEMENT_FAILED");
 	}

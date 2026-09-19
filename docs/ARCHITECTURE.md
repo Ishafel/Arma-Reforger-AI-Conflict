@@ -430,10 +430,53 @@ server scheduler после `ROSTER_READY`, перед существующей 
 traits. Она один раз раскрывает реальную геометрию composition и outline через
 transient preview без gameplay prefab entries, сохраняя `Resource` lifetime до
 удаления preview. `AICF_ConstructionSiteSearch` проверяет весь объём, terrain,
-воду, дороги, spawn/exit envelopes и конечный navmesh-путь к endpoint строителя.
+воду, дороги, spawn/exit envelopes и navmesh-путь к endpoint строителя.
+`AICF_ConstructionPath` выполняет ограниченный weighted A* с сеткой 2 м и
+переходами 2/4 м: до 512 узлов,
+64 переходов за вызов и общей квотой queries. Состояние принадлежит одному
+кандидату и сбрасывается при его смене; callbacks/entities не создаются.
+Все стартовые варианты одного кандидата дополнительно делят лимит 4096
+path queries. `WORKER_PATH_QUERY_LIMIT` отбрасывает этот кандидат и продвигает
+поиск: сложный обход не должен постоянно возобновляться после общего deadline.
+Все переходы подтверждаются native `RayTrace`, загрузка navmesh tiles имеет
+конечный retry. Исчерпание поиска отмечается `WORKER_PATH_SEARCH_EXHAUSTED`,
+а не доказательством глобальной недостижимости.
+До 12 endpoints выбираются снаружи stock outline; ещё четыре проверяются
+снаружи общего footprint. Все они учитывают те же collision volumes, что и
+completion, с запасом под margin, прибытие и тело рабочего, а также выбранные
+выезды. Маршрут обходит outline будущего unfinished layout;
+общий AABB всей композиции не запрещает движение через свободные промежутки.
+Stock spawn position выбирается один раз на кандидата; при непригодном старте
+проверяются до восьми соседних позиций в радиусе 6 м. Принятый receipt передаёт
+проверенный старт службе строителей после повторной проверки identity/faction
+и transform. Смена pathfinding component сбрасывает проверку fail-closed.
 Physics/navmesh queries имеют общую квоту, включая commit и completion. Поиск
 не резервирует supplies между ticks. Vehicle reservations и construction sites
 учитывают друг друга через узкие пространственные проверки.
+
+Terrain grid ограничивает местный уклон между соседними точками (0.8 м на
+3 м с пересчётом по фактическому шагу), а не общий перепад между дальними
+краями композиции. Это учитывает штатный `TERRAIN` при completion. Измеренный
+диапазон высот расширяет вертикальные physics bounds при commit и completion;
+он сохраняется в receipt. Вода и отдельные проверки выездов остаются отказами.
+
+За один scheduler tick могут продвинуться несколько pending orders: общий
+лимит — четыре новых кандидата, один metadata batch и одна попытка placement,
+включая неудачную. Начало обхода сдвигается после первой обслуженной active base;
+neutral bases не задерживают ротацию. После исчерпания time/query budget cursor
+проверки сохраняется. Занятый перед commit участок снимает только site reservation:
+тот же order продолжает поиск до прежнего deadline/attempt limit.
+
+Кандидаты задают центр footprint независимо от prefab pivot. Детерминированная
+последовательность Halton распределяет центры по площади доступного диска,
+каждая попытка исследует новый центр с одним из восьми поворотов. Поиск
+включает участки рядом с provider; реальная geometry по-прежнему проверяется.
+Building/world bounds проверяются по углам повёрнутого объёма. Metadata крупных
+compositions объединяет все исходные collision volumes до 24, обрабатывая
+рабочий набор не более 48; объединение не удаляет геометрию из проверки.
+Лимит transforms одного order — 256 по умолчанию (CLI `aicfConstructionAttempts`
+4..512); metadata preparation и следующий за ней поиск имеют отдельные
+deadline по 120 секунд, общая квота — 96 queries/window.
 
 `AICF_StockConstructionAdapter` владеет единственным spawn и восстановлением
 временных stock flags. Он создаёт unfinished layout, проверяет postconditions

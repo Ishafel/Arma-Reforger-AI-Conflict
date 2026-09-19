@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory=$true)][string]$LogPath,
     [ValidateSet('BOTH','US','USSR')][string]$ExpectedMode = 'BOTH',
     [switch]$RequireCompletion,
-    [switch]$RequireAllTypes
+    [switch]$RequireAllTypes,
+    [switch]$RequireAllFactions
 )
 $ErrorActionPreference = 'Stop'
 $lines = Get-Content -LiteralPath $LogPath
@@ -16,6 +17,7 @@ $orders = @{}
 $active = @{}
 $lastDecision = @{}
 $completedTypes = @{}
+$completedFactionTypes = @{}
 $placed = 0
 $completed = 0
 $placementsPerTick = @{}
@@ -46,7 +48,7 @@ foreach ($line in $lines) {
             if ($ExpectedMode -ne 'BOTH' -and $fields.faction -ne $ExpectedMode) { $failures.Add('CONSTRUCTION_PLAYER_SIDE') }
             if ($orders.ContainsKey($token) -or $active.ContainsKey($base)) { $failures.Add('CONSTRUCTION_DUPLICATE_ORDER') }
             if ($lastDecision.ContainsKey($base) -and $time - $lastDecision[$base] -lt 60000) { $failures.Add('CONSTRUCTION_DECISION_TOO_EARLY') }
-            $orders[$token] = @{ Paid=0; Placed=0; Completed=0; Reserved=0; Base=$base; Type=$fields.type; Site=$false }
+            $orders[$token] = @{ Paid=0; Placed=0; Completed=0; Reserved=0; Base=$base; Type=$fields.type; Faction=$fields.faction; Site=$false }
             $active[$base] = $token
             $lastDecision[$base] = $time
         }
@@ -82,7 +84,11 @@ foreach ($line in $lines) {
         }
         'CONSTRUCTION_COMPLETED' {
             if (-not $orders.ContainsKey($token) -or $orders[$token].Placed -ne 1 -or $orders[$token].Completed -ne 0) { $failures.Add('CONSTRUCTION_INVALID_COMPLETION') }
-            else { $orders[$token].Completed++; $completed++; $completedTypes[$fields.type] = $true }
+            else {
+                $orders[$token].Completed++; $completed++; $completedTypes[$fields.type] = $true
+                if ($orders[$token].Faction -ne $fields.faction -or $orders[$token].Type -ne $fields.type) { $failures.Add('CONSTRUCTION_COMPLETION_CASE_IDENTITY') }
+                else { $completedFactionTypes[($fields.faction + '/' + $fields.type)] = $true }
+            }
             if ($fields.service_online -ne '1') { $failures.Add('CONSTRUCTION_SERVICE_NOT_ONLINE') }
             if ($orders.ContainsKey($token) -and $orders[$token].Layout -ne $fields.layout) { $failures.Add('CONSTRUCTION_LAYOUT_IDENTITY') }
             if ($RequireCompletion -and -not $builderCompleted.ContainsKey($fields.layout)) { $failures.Add('CONSTRUCTION_NO_BUILDER_COMPLETION') }
@@ -98,6 +104,15 @@ foreach ($line in $lines) {
 if ($orders.Count -eq 0) { $failures.Add('CONSTRUCTION_NO_DECISIONS') }
 if ($RequireCompletion -and $completed -eq 0) { $failures.Add('CONSTRUCTION_NO_COMPLETION') }
 if ($RequireAllTypes -and $completedTypes.Count -ne 5) { $failures.Add('CONSTRUCTION_MISSING_TYPES') }
+if ($RequireAllFactions) {
+    $sides = @($ExpectedMode)
+    if ($ExpectedMode -eq 'BOTH') { $sides = @('US','USSR') }
+    foreach ($side in $sides) {
+        foreach ($type in @('SMALL_BARRACKS','ARMORY','LIGHT_DEPOT','LARGE_BARRACKS','HEAVY_DEPOT')) {
+            if (-not $completedFactionTypes.ContainsKey("$side/$type")) { $failures.Add("CONSTRUCTION_MISSING_FACTION_TYPE:$side/$type") }
+        }
+    }
+}
 if ($active.Count -gt 0) { $failures.Add('CONSTRUCTION_PENDING_AT_STOP') }
 if ($failures.Count) {
     Write-Output "Construction log audit: FAIL ($($failures.Count) issues) placed=$placed completed=$completed"

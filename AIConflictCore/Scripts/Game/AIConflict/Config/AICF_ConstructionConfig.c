@@ -8,7 +8,8 @@ class AICF_ConstructionConfig
 	int m_iMetadataEntriesPerTick = 24;
 	int m_iSliceMs = 8;
 	int m_iQueriesPerTick = 96;
-	int m_iAttempts = 96;
+	// Больше transforms в одном заказе без увеличения нагрузки одного tick.
+	int m_iAttempts = 256;
 	int m_iReserveGroups = 1;
 	float m_fMargin = 1;
 	float m_fHeightDelta = 0.8;
@@ -32,7 +33,7 @@ class AICF_ConstructionConfig
 		if (System.GetCLIParam("aicfConstructionQueriesPerTick", value))
 			m_iQueriesPerTick = Math.ClampInt(value.ToInt(), 16, 128);
 		if (System.GetCLIParam("aicfConstructionAttempts", value))
-			m_iAttempts = Math.ClampInt(value.ToInt(), 4, 128);
+			m_iAttempts = Math.ClampInt(value.ToInt(), 4, 512);
 		if (System.GetCLIParam("aicfConstructionReserveGroups", value))
 			m_iReserveGroups = Math.ClampInt(value.ToInt(), 0, 100);
 	}

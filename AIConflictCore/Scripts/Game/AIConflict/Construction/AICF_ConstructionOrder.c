@@ -37,8 +37,17 @@ class AICF_ConstructionOrder
 	ref array<int> m_aRejectCounts = {};
 	int m_iQueries;
 	int m_iSample;
+	ref array<float> m_aTerrainHeights = {};
 	int m_iNavRetry;
 	int m_iNavPathCursor;
+	ref AICF_ConstructionPath m_Path;
+	ref array<vector> m_aWorkCandidates = {};
+	vector m_vPathStart;
+	bool m_bPathStartSampled;
+	bool m_bPathStartReady;
+	vector m_vSpawnOrigin;
+	int m_iPathStartOption;
+	int m_iPathQueriesAt = -1;
 	int m_iStage;
 	vector m_aTransform[4];
 	vector m_vMin;

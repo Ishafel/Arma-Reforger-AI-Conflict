@@ -19,11 +19,12 @@ $positive = @(
     (Event 'CONSTRUCTION_COMPLETED' 94000 'service_online=1'),
     'ENGINE : Game destroyed.'
 ) -join "`n"
-function CheckLog([string]$Name, [string]$Content, [string]$ExpectedRule='', [string]$Mode='BOTH', [bool]$Completion=$true) {
+function CheckLog([string]$Name, [string]$Content, [string]$ExpectedRule='', [string]$Mode='BOTH', [bool]$Completion=$true, [bool]$AllFactions=$false) {
     $path = Join-Path $EvidenceRoot ($Name + '.log')
     [IO.File]::WriteAllText($path, $Content)
     $arguments = @('-NoProfile','-ExecutionPolicy','Bypass','-File', (Join-Path $PSScriptRoot 'Test-ConstructionLog.ps1'), '-LogPath', $path, '-ExpectedMode', $Mode)
     if ($Completion) { $arguments += '-RequireCompletion' }
+    if ($AllFactions) { $arguments += '-RequireAllFactions' }
     $result = & powershell.exe @arguments 2>&1
     $code = $LASTEXITCODE
     $result | Set-Content -LiteralPath (Join-Path $EvidenceRoot ($Name + '.txt'))
@@ -51,6 +52,20 @@ $rollback = @(
 ) -join "`n"
 CheckLog 'positive-rollback' $rollback '' 'BOTH' $false
 CheckLog 'negative-refund-balance' ($rollback.Replace('supplies_after=1000','supplies_after=999')) 'CONSTRUCTION_ROLLBACK_BALANCE' 'BOTH' $false
+$matrixCases = [System.Collections.Generic.List[string]]::new()
+$caseNumber = 0
+foreach ($side in @('US','USSR')) {
+    foreach ($type in @('SMALL_BARRACKS','ARMORY','LIGHT_DEPOT','LARGE_BARRACKS','HEAVY_DEPOT')) {
+        $caseNumber++
+        $case = $positive.Replace('token=construction-1', "token=matrix-$caseNumber").Replace('base=base1', "base=matrix-base-$caseNumber").Replace('layout1', "matrix-layout-$caseNumber").Replace('faction=US ', "faction=$side ").Replace('type=SMALL_BARRACKS', "type=$type")
+        $offset = $caseNumber * 100000
+        $case = [regex]::Replace($case, 't_ms=(\d+)', { param($match) 't_ms=' + ([int]$match.Groups[1].Value + $offset) })
+        $matrixCases.Add($case)
+    }
+}
+CheckLog 'positive-all-faction-types' ($matrixCases -join "`n") '' 'BOTH' $true $true
+CheckLog 'negative-missing-faction-type' (($matrixCases | Select-Object -First 9) -join "`n") 'CONSTRUCTION_MISSING_FACTION_TYPE:USSR/HEAVY_DEPOT' 'BOTH' $true $true
+CheckLog 'negative-completion-case-identity' ($positive.Replace((Event 'CONSTRUCTION_COMPLETED' 94000 'service_online=1'), (Event 'CONSTRUCTION_COMPLETED' 94000 'service_online=1').Replace('faction=US ', 'faction=USSR '))) 'CONSTRUCTION_COMPLETION_CASE_IDENTITY'
 # Негативный static input — отдельная копия исходников; рабочая реализация не меняется.
 $fixtureRepo = Join-Path $EvidenceRoot 'static-input'
 $fixtureCore = Join-Path $fixtureRepo 'AIConflictCore/Scripts/Game/AIConflict'
@@ -68,5 +83,44 @@ $order = [IO.File]::ReadAllText($orderPath)
 $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool -RepositoryRoot $fixtureRepo
 if ($LASTEXITCODE -ne 1 -or ($result -join "`n") -notmatch '\[CONSTRUCTION_PROVIDER_IDENTITY\]') { $failures.Add('static-negative-identity') }
 $result | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'static-negative-identity.txt')
+[IO.File]::WriteAllText($orderPath, $order)
+$plannerPath = Join-Path $fixtureCore 'Construction/AICF_ConstructionPlanner.c'
+$planner = [IO.File]::ReadAllText($plannerPath)
+foreach ($case in @(
+    @{ Name='candidate-budget'; Before='m_iCandidatesThisTick < m_Config.m_iCandidatesPerTick'; After='true'; Rule='CONSTRUCTION_SHARED_CANDIDATE_BUDGET' },
+    @{ Name='metadata-budget'; Before='if (m_bMetadataBatchThisTick)'; After='if (false)'; Rule='CONSTRUCTION_SHARED_METADATA_BUDGET' },
+    @{ Name='placement-budget'; Before='if (m_bPlacementAttemptedThisTick)'; After='if (false)'; Rule='CONSTRUCTION_SINGLE_PLACEMENT_ATTEMPT' }
+)) {
+    [IO.File]::WriteAllText($plannerPath, $planner.Replace($case.Before, $case.After))
+    $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool -RepositoryRoot $fixtureRepo
+    if ($LASTEXITCODE -ne 1 -or ($result -join "`n") -notmatch [regex]::Escape('[' + $case.Rule + ']')) { $failures.Add('static-negative-' + $case.Name) }
+    $result | Set-Content -LiteralPath (Join-Path $EvidenceRoot ('static-negative-' + $case.Name + '.txt'))
+}
+[IO.File]::WriteAllText($plannerPath, $planner)
+$searchPath = Join-Path $fixtureCore 'Construction/AICF_ConstructionSiteSearch.c'
+$search = [IO.File]::ReadAllText($searchPath)
+foreach ($case in @(
+    @{ Name='terrain-row'; Before='order.m_aTerrainHeights[sample - columns]'; After='point[1]'; Rule='CONSTRUCTION_LOCAL_TERRAIN_SLOPE' },
+    @{ Name='terrain-completion-envelope'; Before='check.m_fMaxHeight = receipt.m_fMaxHeight;'; After='check.m_fMaxHeight = 0;'; Rule='CONSTRUCTION_TERRAIN_COLLISION_ENVELOPE' }
+)) {
+    [IO.File]::WriteAllText($searchPath, $search.Replace($case.Before, $case.After))
+    $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool -RepositoryRoot $fixtureRepo
+    if ($LASTEXITCODE -ne 1 -or ($result -join "`n") -notmatch [regex]::Escape('[' + $case.Rule + ']')) { $failures.Add('static-negative-' + $case.Name) }
+    $result | Set-Content -LiteralPath (Join-Path $EvidenceRoot ('static-negative-' + $case.Name + '.txt'))
+}
+[IO.File]::WriteAllText($searchPath, $search)
+$pathPath = Join-Path $fixtureCore 'Construction/AICF_ConstructionPath.c'
+$pathCode = [IO.File]::ReadAllText($pathPath)
+foreach ($case in @(
+    @{ Name='path-edge'; Before='return pathfinding.RayTrace(from, to, hit);'; After='return true;'; Rule='CONSTRUCTION_PATH_EDGES' },
+    @{ Name='path-budget'; Before='AICF_ConstructionSiteSearch.TakeQueries(order, 3)'; After='true'; Rule='CONSTRUCTION_PATH_BOUNDED' },
+    @{ Name='path-candidate-limit'; Before='order.m_iQueries - order.m_iPathQueriesAt >= MAX_QUERIES'; After='false'; Rule='CONSTRUCTION_PATH_CANDIDATE_LIMIT' }
+)) {
+    [IO.File]::WriteAllText($pathPath, $pathCode.Replace($case.Before, $case.After))
+    $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool -RepositoryRoot $fixtureRepo
+    if ($LASTEXITCODE -ne 1 -or ($result -join "`n") -notmatch [regex]::Escape('[' + $case.Rule + ']')) { $failures.Add('static-negative-' + $case.Name) }
+    $result | Set-Content -LiteralPath (Join-Path $EvidenceRoot ('static-negative-' + $case.Name + '.txt'))
+}
+[IO.File]::WriteAllText($pathPath, $pathCode)
 if ($failures.Count) { Write-Output "Construction contract inputs: FAIL $($failures -join ',')"; exit 1 }
-Write-Output 'Construction contract inputs: PASS (13 log inputs + positive/negative static inputs)'
+Write-Output 'Construction contract inputs: PASS (16 log inputs + positive/9 negative static inputs)'

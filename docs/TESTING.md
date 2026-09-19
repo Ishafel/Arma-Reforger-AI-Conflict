@@ -1,5 +1,117 @@
 # Проверки и evidence
 
+## Плотный поиск и обход препятствий — 2026-09-19
+
+Поиск проверяет 256 различных центров, до 16 рабочих точек, ограниченный
+navmesh A* с шагами 2/4 м и общий лимит пути одного кандидата. AI builder
+получает проверенный старт с прежними identity/readiness guards.
+Вторая ручная площадка Large Barracks СССР проходит все geometry/path guards.
+Окончательный replay: native exit 0, SCRIPT/VM errors 0.
+
+Итоговая статика: ConstructionStatic, ConstructionContracts (16 log +
+positive/9 negative static), BaseBuildersStatic, Stage4Static — **PASS / 0**;
+прежний AICommanderModeStatic `AI_COMMANDER_UI_STATE` — **FAIL / 1**.
+Все четыре production Workbench graphs — **PASS / 0**. Native helpers — 30/30.
+
+Окончательная 15-минутная Stock matrix: native exit 0, четыре оплаченных
+placement/completion — SMALL_BARRACKS и LIGHT_DEPOT обеих сторон; tool use и
+online services подтверждены. ARMORY уже покрыт stock службами. LARGE/HEAVY
+не достроены, Heavy search прерван завершением теста. Runtime audits —
+**FAIL / 1** из-за двух прежних shutdown SCRIPT ошибок; полный matrix audit
+также отмечает недостающие типы. Max window 96 queries, max полный tick 290 мс.
+Это не сравнение частоты строительства в одинаковых матчах.
+
+Визуальные критерии, construction client/JIP test и Everon/RHS runtime —
+**NOT RUN**. Команды, файлы, полные verdict и ограничения:
+[CONSTRUCTION_IMPROVED_SEARCH_20260919.md](CONSTRUCTION_IMPROVED_SEARCH_20260919.md).
+Evidence: `.codex-runtime/construction-improved-20260919/`.
+
+## Повтор двух ручных площадок — 2026-09-19
+
+На двух местах больших казарм СССР повторены production geometry/path guards
+с ручными и горизонтальными transforms: **4/4 cases, native exit 0**.
+Основное расхождение — ограниченный direct/two-segment navmesh тест;
+на первой площадке дополнительно rock/slope, на второй горизонтальной —
+small rock после расширения physics bounds. Ближайшие из 256 кандидатов
+находятся в 34.77/8.39 м. Gameplay исправление на этом шаге не применялось.
+Static до/после: четыре PASS, прежний `AI_COMMANDER_UI_STATE` FAIL;
+Workbench fixture PASS. Полный остановленный runtime содержит E/F и не
+объявляется чистым PASS. Подробности, команды и ограничения:
+[CONSTRUCTION_MANUAL_REPLAY_20260919.md](CONSTRUCTION_MANUAL_REPLAY_20260919.md).
+
+## Остальные здания на Arland — 2026-09-19
+
+Полный 25-минутный прогон с припасами и последовательным запросом всех типов
+завершился штатно, native exit 0. СССР построил малые/большие казармы и Light
+Depot; Heavy Depot обеих сторон не размещён, Armory не получил нового order.
+Полная matrix audit — **FAIL / 1**: неполное покрытие типов и SCRIPT errors.
+Contracts — **PASS / 0**, 16 log inputs; baseline `AI_COMMANDER_UI_STATE`
+сохранён. Пользователь поставил две Large Barracks на северном HQ СССР;
+обе достроены. Результат повторения поисковых проверок приведён выше.
+Команды, изменённые файлы и полные verdict:
+[CONSTRUCTION_MATRIX_20260919.md](CONSTRUCTION_MATRIX_20260919.md).
+
+## Light Factory: местный уклон — 2026-09-19
+
+В пользовательской сессии Arland СССР не находил Light Depot за 201/256
+кандидатов, но поставленный пользователем проект был достроен. Исправлен
+излишне строгий общий перепад 0.8 м: terrain grid проверяет соседние высоты
+по обеим осям (0.8 м на 3 м фактического расстояния). Physics bounds
+commit/completion расширяются по сохранённому диапазону высот.
+
+ConstructionStatic, ConstructionContracts, BaseBuildersStatic и Stage4Static:
+**PASS / 0** до/после; AICommanderModeStatic сохраняет
+**FAIL / 1, AI_COMMANDER_UI_STATE**. Contracts: 13 log inputs и шесть negative
+static inputs; native helper checks — **30/30**. Все четыре production
+Workbench graphs без fixture — **PASS / 0**.
+
+Focused Stock run: четыре оплаченных placement и completion, в том числе
+Light Depot обеих сторон и казарма СССР с `terrain_delta=1.39552`.
+Native exit 0; полный log audit **FAIL / 1**: известные stock shutdown SCRIPT
+errors и `CONSTRUCTION_DECISION_TOO_EARLY` (59998 мс по timestamps).
+Аудитор не ослаблялся. Визуальная проверка, новый client/JIP, runtime Everon/RHS
+и полная типовая matrix — **NOT RUN**. Последующий обычный порядок строительства,
+команды, файлы, полные logs и границы выводов:
+[LIGHT_FACTORY_TERRAIN_20260919.md](LIGHT_FACTORY_TERRAIN_20260919.md).
+В обычном порядке достроены две казармы и Light Depot US; Light Depot USSR
+не завершил поиск до остановки. Native exit 0, log audit **FAIL / 1**, только
+две известные shutdown SCRIPT ошибки. Распределение HQ между фракциями изменилось.
+Evidence: `.codex-runtime/light-factory-20260919/`.
+
+## Поиск площадок строительства — 2026-09-19
+
+Исправлены распределение квот между базами, повтор поиска после занятого
+перед commit участка, центр/повороты кандидатов и oriented bounds. Крупные
+compositions больше не отсекаются лимитом 256 collision volumes: входы
+объединяются порциями до 24 OBB без потери геометрии. Cold metadata и поиск
+получают отдельные deadline по 120 секунд; attempts — 256 при прежних квотах
+4 candidates/tick, 96 queries/window и одной попытке placement/tick.
+
+`Test-ConstructionStatic.ps1`, `Test-ConstructionContracts.ps1`,
+`Test-BaseBuildersStatic.ps1`, `Test-Stage4Static.ps1` — **PASS / 0**.
+Contracts: 13 log inputs, positive и четыре negative static inputs;
+native geometry helpers: **24/24**. Сохранён baseline
+`Test-AICommanderModeStatic.ps1`: **FAIL / 1, AI_COMMANDER_UI_STATE**.
+`git diff --check` — **PASS / 0**. После удаления временной fixture все четыре
+production Workbench graphs — **PASS / 0**.
+
+Stock runtime подтвердил оплату и достройку больших и малых казарм USSR,
+инструмент и online services: `Test-ConstructionLog -RequireCompletion`
+**PASS / 0**, native exit 0. Этот completion-run предшествует последнему
+разделению deadline. Финальный focused run на окончательной версии planner
+подтвердил полный срок поиска после 93–108 секунд metadata: 190/230 кандидатов,
+без размещений на занятых HQ, корректные `NO_SAFE_SITE`, max window 60 queries;
+`Test-ConstructionLog` без `-RequireCompletion` — **PASS / 0**, native exit 0.
+Это не сравнение частоты строительства в одинаковых игровых условиях.
+
+Полные logs сохраняют resource/world diagnostics: 15 error lines каждого
+последующего runtime, SCRIPT/VM/fatal — 0. Baseline содержит ещё две
+shutdown SCRIPT ошибки resupply. **NOT RUN:** runtime Everon/RHS, client/JIP,
+ручная проверка входов/проезда/анимации, полная типовая matrix и длительный soak.
+Команды, profiles, изменённые файлы и границы evidence:
+[CONSTRUCTION_SEARCH_20260919.md](CONSTRUCTION_SEARCH_20260919.md).
+Локальные артефакты: `.codex-runtime/construction-search-20260918/`.
+
 ## Совместимый запасной магазин — 2026-09-18
 
 Для выбранного оружия и внутри его обвесов доступна кнопка «+ Магазин».
@@ -1410,7 +1522,7 @@ prefab, но визуальное соответствие оружия/форм
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-ConstructionStatic.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-ConstructionContracts.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-ConstructionLog.ps1 -LogPath '<полный остановленный console.log>' -ExpectedMode BOTH -RequireCompletion -RequireAllTypes
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-ConstructionLog.ps1 -LogPath '<полный остановленный console.log>' -ExpectedMode BOTH -RequireCompletion -RequireAllTypes -RequireAllFactions
 ```
 
 `Test-ConstructionContracts` проверяет положительные/отрицательные log inputs
@@ -1420,12 +1532,45 @@ layout с `BUILDER_PROGRESS/BUILDER_COMPLETED`, активным инструм�
 service. Без него анализатор допускает корректные отказы поиска без построек;
 такой PASS не доказывает end-to-end строительство.
 
+`-RequireAllFactions` требует completion каждого из пяти типов отдельно для
+`US` и `USSR` (либо только выбранной `-ExpectedMode` стороны). Тип и faction
+completion должны совпадать с исходным order. Наличие готового stock здания
+и пропуск дубликата не засчитываются как новая постройка. Synthetic contracts
+проверяют полную матрицу, пропущенную пару и подменённую faction completion;
+всего 16 log inputs и шесть negative static inputs.
+
 Fixture `tools/fixtures/AICF_ConstructionRuntimeProbe.c` временно копируется в
 Core `Construction` и запускается только через `Start-AICFRuntime.ps1` с
 `-aicfConstructionProbe 1`. Она готовит supplies; решения, поиск, spawn, debit,
 rollback и progress выполняет production path. Параметры test-only:
 `aicfConstructionProbeMs`, `aicfConstructionProbeRefill`,
 `aicfConstructionProbeType` (0..4), `aicfConstructionProbeFault partial_debit`.
+`aicfConstructionProbeMatrix 1` последовательно запрашивает все пять типов,
+не более одного order на faction одновременно. На тип отводится пять минут;
+после completion обеих сторон проверка переходит к следующему типу раньше.
+Для этого изолированного теста обычные базы, кроме HQ и control points,
+распределяются между сторонами по близости к HQ. Припасы пополняются только
+с `aicfConstructionProbeRefill 1`. Coverage, authority, поиск, оплата и работа
+строителя остаются production. Combat может отменить order; отсутствие
+completion нельзя считать PASS. `CONSTRUCTION_MATRIX_PHASE/CASE` — индекс
+проверки, verdict определяется полным остановленным log.
+Для повторной проверки одного типа используется
+`aicfConstructionProbeMatrixType 0..4`; `aicfConstructionProbeMatrixPhaseMs`
+задаёт длительность этого этапа (60000..1200000 мс).
+`CONSTRUCTION_MATRIX_COVERAGE` фиксирует, какие потребности уже закрыты
+stock compositions/services, без дополнительных geometry queries.
+Для ручного сравнения `tools/fixtures/AICF_ConstructionManualProbe.c` в
+изолированной копии пишет `CONSTRUCTION_MANUAL_HQ` и
+`CONSTRUCTION_MANUAL_PLACED`: faction/HQ, prefab, provider, точные position
+и angles принятого player проекта. Probe только наблюдает существующий
+callback `OnPlaced`, новых subscriptions и изменений оплаты не добавляет.
+Для игровой сессии `aicfConstructionProbe` оставляется выключенным, чтобы
+не запускались supply preparation и автоматическая остановка.
+`tools/fixtures/AICF_ConstructionReplayProbe.c` в отдельной копии Core
+повторяет guards на записанных position/angles/provider и фактических work
+endpoints. `aicfConstructionReplay=1` подавляет новые orders и завершает
+сервер после четырёх cases; это диагностика без placement/debit. Точные CLI
+параметры и ограничения восстановления мира приведены в replay report.
 `aicfConstructionProbeSupplies` задаёт supply target для граничных/отказных
 проверок. `CONSTRUCTION_DEFERRED_PROBE` повторно читает props и supplies через
 пять секунд; анализатор обнаруживает повторное изменение props и оставшийся
