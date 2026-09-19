@@ -89,7 +89,10 @@ $planner = [IO.File]::ReadAllText($plannerPath)
 foreach ($case in @(
     @{ Name='candidate-budget'; Before='m_iCandidatesThisTick < m_Config.m_iCandidatesPerTick'; After='true'; Rule='CONSTRUCTION_SHARED_CANDIDATE_BUDGET' },
     @{ Name='metadata-budget'; Before='if (m_bMetadataBatchThisTick)'; After='if (false)'; Rule='CONSTRUCTION_SHARED_METADATA_BUDGET' },
-    @{ Name='placement-budget'; Before='if (m_bPlacementAttemptedThisTick)'; After='if (false)'; Rule='CONSTRUCTION_SINGLE_PLACEMENT_ATTEMPT' }
+    @{ Name='placement-budget'; Before='if (m_bPlacementAttemptedThisTick)'; After='if (false)'; Rule='CONSTRUCTION_SINGLE_PLACEMENT_ATTEMPT' },
+    @{ Name='checkpoint-bound'; Before='order.m_aPendingCandidates.Count() >= 8'; After='false'; Rule='CONSTRUCTION_CHECKPOINT_BOUND' },
+    @{ Name='search-window-bound'; Before='order.m_iSearchWindows < 3'; After='true'; Rule='CONSTRUCTION_UNFINISHED_SEARCH_RETRY' },
+    @{ Name='live-claim-refresh'; Before='AICF_ConstructionSiteSearch.RefreshClaim(order.m_sToken);'; After=''; Rule='CONSTRUCTION_COMMIT_CLAIM_LIFETIME' }
 )) {
     [IO.File]::WriteAllText($plannerPath, $planner.Replace($case.Before, $case.After))
     $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool -RepositoryRoot $fixtureRepo
@@ -101,7 +104,10 @@ $searchPath = Join-Path $fixtureCore 'Construction/AICF_ConstructionSiteSearch.c
 $search = [IO.File]::ReadAllText($searchPath)
 foreach ($case in @(
     @{ Name='terrain-row'; Before='order.m_aTerrainHeights[sample - columns]'; After='point[1]'; Rule='CONSTRUCTION_LOCAL_TERRAIN_SLOPE' },
-    @{ Name='terrain-completion-envelope'; Before='check.m_fMaxHeight = receipt.m_fMaxHeight;'; After='check.m_fMaxHeight = 0;'; Rule='CONSTRUCTION_TERRAIN_COLLISION_ENVELOPE' }
+    @{ Name='terrain-completion-envelope'; Before='check.m_fMaxHeight = receipt.m_fMaxHeight;'; After='check.m_fMaxHeight = 0;'; Rule='CONSTRUCTION_TERRAIN_COLLISION_ENVELOPE' },
+    @{ Name='candidate-resume'; Before='if (!order.m_bCandidateLiveChecked)'; After='if (false)'; Rule='CONSTRUCTION_CANDIDATE_BUDGET_RESUME' },
+    @{ Name='live-budget-reserved'; Before='s_iQueries + count + reserved > s_iLimit'; After='false'; Rule='CONSTRUCTION_LIVE_BUDGET_RESERVATION' },
+    @{ Name='commit-inventory-reserved'; Before='reservedCount++;'; After=''; Rule='CONSTRUCTION_COMMIT_INVENTORY_RESERVATION' }
 )) {
     [IO.File]::WriteAllText($searchPath, $search.Replace($case.Before, $case.After))
     $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool -RepositoryRoot $fixtureRepo
@@ -113,7 +119,7 @@ $pathPath = Join-Path $fixtureCore 'Construction/AICF_ConstructionPath.c'
 $pathCode = [IO.File]::ReadAllText($pathPath)
 foreach ($case in @(
     @{ Name='path-edge'; Before='return pathfinding.RayTrace(from, to, hit);'; After='return true;'; Rule='CONSTRUCTION_PATH_EDGES' },
-    @{ Name='path-budget'; Before='AICF_ConstructionSiteSearch.TakeQueries(order, 3)'; After='true'; Rule='CONSTRUCTION_PATH_BOUNDED' },
+    @{ Name='path-budget'; Before='AICF_ConstructionSiteSearch.TakeQueries(order, 3, false)'; After='true'; Rule='CONSTRUCTION_PATH_BOUNDED' },
     @{ Name='path-candidate-limit'; Before='order.m_iQueries - order.m_iPathQueriesAt >= MAX_QUERIES'; After='false'; Rule='CONSTRUCTION_PATH_CANDIDATE_LIMIT' }
 )) {
     [IO.File]::WriteAllText($pathPath, $pathCode.Replace($case.Before, $case.After))
@@ -122,5 +128,12 @@ foreach ($case in @(
     $result | Set-Content -LiteralPath (Join-Path $EvidenceRoot ('static-negative-' + $case.Name + '.txt'))
 }
 [IO.File]::WriteAllText($pathPath, $pathCode)
+$checkpointPath = Join-Path $fixtureCore 'Construction/AICF_ConstructionCandidate.c'
+$checkpointCode = [IO.File]::ReadAllText($checkpointPath)
+[IO.File]::WriteAllText($checkpointPath, $checkpointCode.Replace('order.m_iPathQueriesAt = order.m_iQueries - m_iPathQueries;', 'order.m_iPathQueriesAt = order.m_iQueries;'))
+$result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool -RepositoryRoot $fixtureRepo
+if ($LASTEXITCODE -ne 1 -or ($result -join "`n") -notmatch '\[CONSTRUCTION_CHECKPOINT_QUERY_IDENTITY\]') { $failures.Add('static-negative-checkpoint-queries') }
+$result | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'static-negative-checkpoint-queries.txt')
+[IO.File]::WriteAllText($checkpointPath, $checkpointCode)
 if ($failures.Count) { Write-Output "Construction contract inputs: FAIL $($failures -join ',')"; exit 1 }
-Write-Output 'Construction contract inputs: PASS (16 log inputs + positive/9 negative static inputs)'
+Write-Output 'Construction contract inputs: PASS (16 log inputs + positive/16 negative static inputs)'

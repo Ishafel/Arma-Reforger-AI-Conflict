@@ -64,6 +64,14 @@ class AICF_ConstructionPath
 		return best;
 	}
 
+	float RemainingDistance()
+	{
+		float best = float.MAX;
+		foreach (AICF_ConstructionPathNode node : m_aNodes)
+			best = Math.Min(best, Heuristic(node.m_vPosition));
+		return best;
+	}
+
 	protected bool ClearSegment(vector from, vector to, AIPathfindingComponent pathfinding)
 	{
 		if (AICF_ConstructionPlanner.SegmentIntersects(from, to, m_vBlockMin, m_vBlockMax))
@@ -117,9 +125,18 @@ class AICF_ConstructionPath
 			// Сначала пробуем все endpoints: один поиск обслуживает все стороны.
 			if (m_iEdge < m_aGoals.Count())
 			{
+				vector goal = m_aGoals[m_iEdge];
+				// Чистая геометрия не расходует native query. Такие отрезки
+				// раньше отнимали квоту у реальных navmesh проверок других баз.
+				if (AICF_ConstructionPlanner.SegmentIntersects(node.m_vPosition, goal, m_vBlockMin, m_vBlockMax))
+				{
+					m_iEdge++;
+					order.m_iPathPruned++;
+					continue;
+				}
 				if (!AICF_ConstructionSiteSearch.TakeQueries(order, 1))
 					return 0;
-				vector goal = m_aGoals[m_iEdge++];
+				m_iEdge++;
 				if (ClearSegment(node.m_vPosition, goal, pathfinding))
 				{
 					order.m_vWork = goal;
@@ -136,8 +153,6 @@ class AICF_ConstructionPath
 				m_iActive = -1;
 				continue;
 			}
-			if (!AICF_ConstructionSiteSearch.TakeQueries(order, 3))
-				return 0;
 			// Сначала длинные шаги, затем промежуточные точки узких проходов.
 			int stride = 2;
 			if (direction >= 8)
@@ -149,6 +164,28 @@ class AICF_ConstructionPath
 			int z = node.m_iZ + dz;
 			vector point = m_vOrigin + Vector(x * STEP, 0, z * STEP);
 			if (point[0] < m_vMin[0] || point[0] > m_vMax[0] || point[2] < m_vMin[2] || point[2] > m_vMax[2])
+			{
+				m_iEdge++;
+				continue;
+			}
+			AICF_ConstructionPathNode next = null;
+			foreach (AICF_ConstructionPathNode existing : m_aNodes)
+			{
+				if (existing.m_iX == x && existing.m_iZ == z)
+				{
+					next = existing;
+					break;
+				}
+			}
+			// Закрытый узел никогда не переоткрывался и раньше. Для открытого
+			// повторно используем его navmesh позицию только в этом candidate.
+			if (next && (next.m_bClosed || next.m_fCost <= node.m_fCost + vector.DistanceXZ(node.m_vPosition, next.m_vPosition)))
+			{
+				m_iEdge++;
+				order.m_iPathPruned++;
+				continue;
+			}
+			if (!next && m_aNodes.Count() >= MAX_NODES)
 			{
 				m_iEdge++;
 				continue;
@@ -165,24 +202,35 @@ class AICF_ConstructionPath
 				continue;
 			}
 			m_iTileRetries = 0;
-			m_iEdge++;
-			point[1] = GetGame().GetWorld().GetSurfaceY(point[0], point[2]);
 			vector corrected;
-			if (!pathfinding.GetClosestPositionOnNavmesh(point, "1.5 3 1.5", corrected) ||
-				vector.DistanceSqXZ(node.m_vPosition, corrected) < 0.04 || !ClearSegment(node.m_vPosition, corrected, pathfinding))
-				continue;
-			float cost = node.m_fCost + vector.DistanceXZ(node.m_vPosition, corrected);
-			AICF_ConstructionPathNode next = null;
-			foreach (AICF_ConstructionPathNode existing : m_aNodes)
+			if (next)
+				corrected = next.m_vPosition;
+			else
 			{
-				if (existing.m_iX == x && existing.m_iZ == z)
+				// Резервируем худший случай, списываем только выполненные вызовы.
+				if (!AICF_ConstructionSiteSearch.TakeQueries(order, 3, false))
+					return 0;
+				AICF_ConstructionSiteSearch.TakeQueries(order, 2);
+				point[1] = GetGame().GetWorld().GetSurfaceY(point[0], point[2]);
+				if (!pathfinding.GetClosestPositionOnNavmesh(point, "1.5 3 1.5", corrected))
 				{
-					next = existing;
-					break;
+					m_iEdge++;
+					continue;
 				}
 			}
-			if (next && (next.m_bClosed || next.m_fCost <= cost))
+			if (vector.DistanceSqXZ(node.m_vPosition, corrected) < 0.04 ||
+				AICF_ConstructionPlanner.SegmentIntersects(node.m_vPosition, corrected, m_vBlockMin, m_vBlockMax))
+			{
+				m_iEdge++;
+				order.m_iPathPruned++;
 				continue;
+			}
+			if (!AICF_ConstructionSiteSearch.TakeQueries(order, 1))
+				return 0;
+			m_iEdge++;
+			if (!ClearSegment(node.m_vPosition, corrected, pathfinding))
+				continue;
+			float cost = node.m_fCost + vector.DistanceXZ(node.m_vPosition, corrected);
 			if (!next)
 			{
 				if (m_aNodes.Count() >= MAX_NODES)

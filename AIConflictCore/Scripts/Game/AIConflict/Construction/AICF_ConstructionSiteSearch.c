@@ -1,10 +1,19 @@
 // Общая квота geometry queries, включая live commit и completion. Никаких
 // gameplay entities для примерки; terrain sampling продолжается со своего cursor.
+class AICF_ConstructionBudgetClaim
+{
+	string m_sToken;
+	int m_iCount;
+	int m_iExpires;
+}
+
 class AICF_ConstructionSiteSearch
 {
 	protected static int s_iWindow;
 	protected static int s_iQueries;
 	protected static int s_iLimit = 96;
+	protected static ref array<ref AICF_ConstructionBudgetClaim> s_aClaims = {};
+	protected static AICF_ConstructionOrder s_AtomicOrder;
 	protected ref AICF_ConstructionConfig m_Config;
 	protected IEntity m_ExcludedRoot;
 	protected vector m_vQueryMin;
@@ -30,16 +39,102 @@ class AICF_ConstructionSiteSearch
 			s_iWindow = window;
 			s_iQueries = 0;
 		}
-		if (s_iQueries + count > s_iLimit)
+		PruneClaims();
+		int reserved;
+		if (!s_AtomicOrder && !s_aClaims.IsEmpty())
+		{
+			reserved = s_aClaims[0].m_iCount;
+			// Commit сначала повторно сканирует inventory. Его единственный
+			// query входит в резерв и не должен ждать свободного остатка поиска.
+			if (order.m_iStage == 4 && order.m_iQueryPhase == 6 && count == 1 && s_aClaims[0].m_sToken == order.m_sToken)
+				reserved--;
+		}
+		if (s_iQueries + count > s_iLimit || (!s_AtomicOrder && s_iQueries + count + reserved > s_iLimit))
 		{
 			order.m_sReason = "QUERY_BUDGET";
+			if (order.m_iLastBudgetWaitWindow != window)
+			{
+				order.m_iLastBudgetWaitWindow = window;
+				order.m_iBudgetWaitWindows++;
+			}
 			return false;
 		}
 		if (charge)
 		{
 			s_iQueries += count;
 			order.m_iQueries += count;
+			int phase = order.m_iQueryPhase;
+			order.m_aPhaseQueries[phase] = order.m_aPhaseQueries[phase] + count;
 		}
+		return true;
+	}
+
+	protected static void PruneClaims()
+	{
+		for (int i = s_aClaims.Count() - 1; i >= 0; i--)
+		{
+			if (System.GetTickCount() >= s_aClaims[i].m_iExpires)
+				s_aClaims.Remove(i);
+		}
+	}
+
+	static void ReleaseClaim(string token)
+	{
+		for (int i = s_aClaims.Count() - 1; i >= 0; i--)
+		{
+			if (s_aClaims[i].m_sToken == token)
+				s_aClaims.Remove(i);
+		}
+	}
+
+	static void RefreshClaim(string token)
+	{
+		foreach (AICF_ConstructionBudgetClaim claim : s_aClaims)
+		{
+			if (claim.m_sToken == token)
+				claim.m_iExpires = System.GetTickCount() + 5000;
+		}
+	}
+
+	protected static bool BeginLiveBudget(AICF_ConstructionOrder order, int count)
+	{
+		PruneClaims();
+		int reservedCount = count;
+		if (order.m_iStage == 4)
+			reservedCount++; // Inventory следующей попытки commit.
+		if (reservedCount > s_iLimit)
+		{
+			order.m_sReason = "LIVE_QUERY_LIMIT_TOO_SMALL";
+			return false;
+		}
+		AICF_ConstructionBudgetClaim claim;
+		foreach (AICF_ConstructionBudgetClaim pending : s_aClaims)
+		{
+			if (pending.m_sToken == order.m_sToken)
+				claim = pending;
+		}
+		if (!claim)
+		{
+			claim = new AICF_ConstructionBudgetClaim();
+			claim.m_sToken = order.m_sToken;
+			s_aClaims.Insert(claim);
+		}
+		claim.m_iCount = reservedCount;
+		claim.m_iExpires = System.GetTickCount() + 5000;
+		if (s_aClaims[0] != claim)
+		{
+			order.m_sReason = "QUERY_BUDGET";
+			return false;
+		}
+		// Синхронная секция: ни callback, ни yield. Остальной поиск сохраняет
+		// квоту для первого ожидающего commit/completion следующего окна.
+		s_AtomicOrder = order;
+		if (!TakeQueries(order, count, false))
+		{
+			s_AtomicOrder = null;
+			return false;
+		}
+		ReleaseClaim(order.m_sToken);
 		return true;
 	}
 
@@ -73,6 +168,7 @@ class AICF_ConstructionSiteSearch
 
 	bool BeginCandidate(AICF_ConstructionOrder order)
 	{
+		order.m_iQueryPhase = 0;
 		if (!TakeQueries(order, 1))
 			return false;
 		int attempt = order.m_iSearchOffset + order.m_iAttempts++;
@@ -88,6 +184,7 @@ class AICF_ConstructionSiteSearch
 		order.m_fMinHeight = order.m_aTransform[3][1];
 		order.m_fMaxHeight = order.m_fMinHeight;
 		order.m_iSample = 0;
+		order.m_bCandidateLiveChecked = false;
 		order.m_aTerrainHeights.Clear();
 		order.m_iNavRetry = 0;
 		order.m_iNavPathCursor = 0;
@@ -103,7 +200,7 @@ class AICF_ConstructionSiteSearch
 		order.m_aExitHeights.Clear();
 		order.m_sObstacle = "NONE";
 		order.m_sReason = "CANDIDATE";
-		if (!InsideBounds(order) || !LiveClear(order, null))
+		if (!InsideBounds(order))
 			return false;
 		order.m_iStage = 1;
 		return true;
@@ -188,10 +285,27 @@ class AICF_ConstructionSiteSearch
 	}
 
 	// -1 отказ, 0 pending, 1 полноценная площадка.
-	int Step(AICF_ConstructionOrder order, AIPathfindingComponent pathfinding)
+	int Step(AICF_ConstructionOrder order, AIPathfindingComponent pathfinding, int sliceMs = -1)
 	{
+		if (sliceMs < 0)
+			sliceMs = m_Config.m_iSliceMs;
+		int sliceStarted = System.GetTickCount();
+		if (sliceMs == 0)
+			return 0;
 		if (order.m_iStage == 4)
 			return 1;
+		if (order.m_iStage == 3)
+			return ValidatePath(order, pathfinding, sliceMs);
+		if (!order.m_bCandidateLiveChecked)
+		{
+			if (!LiveClear(order, null))
+			{
+				if (order.m_sReason == "QUERY_BUDGET")
+					return 0;
+				return -1;
+			}
+			order.m_bCandidateLiveChecked = true;
+		}
 		// Terrain grid следует локальному footprint; пустые углы world AABB и
 		// внешняя полоса отступа не являются фундаментом.
 		vector localMin = order.m_Metadata.m_vMin;
@@ -205,8 +319,8 @@ class AICF_ConstructionSiteSearch
 		}
 		BaseWorld world = GetGame().GetWorld();
 		int samples;
-		int sliceStarted = System.GetTickCount();
-		while (order.m_iStage == 1 && order.m_iSample < columns * rows && samples++ < 32 && System.GetTickCount() - sliceStarted < m_Config.m_iSliceMs)
+		order.m_iQueryPhase = 1;
+		while (order.m_iStage == 1 && order.m_iSample < columns * rows && samples++ < 32 && System.GetTickCount() - sliceStarted < sliceMs)
 		{
 			if (!TakeQueries(order, 2))
 				return 0;
@@ -245,13 +359,17 @@ class AICF_ConstructionSiteSearch
 			order.m_iStage = 2;
 		if (order.m_iStage == 2)
 		{
-			int exits = ValidateExits(order);
+			if (System.GetTickCount() - sliceStarted >= sliceMs)
+				return 0;
+			int exits = ValidateExits(order, sliceMs - (System.GetTickCount() - sliceStarted));
 			if (exits <= 0)
 				return exits;
 			order.m_iStage = 3;
 		}
 		// Проверенный endpoint затем без пересчёта использует worker.
-		return ValidatePath(order, pathfinding);
+		if (System.GetTickCount() - sliceStarted >= sliceMs)
+			return 0;
+		return ValidatePath(order, pathfinding, sliceMs - (System.GetTickCount() - sliceStarted));
 	}
 
 	static bool TerrainEdgeSupported(float first, float second, float distance, float heightDelta, float referenceStep)
@@ -261,8 +379,9 @@ class AICF_ConstructionSiteSearch
 		return Math.AbsFloat(first - second) <= heightDelta * distance / referenceStep;
 	}
 
-	protected int ValidateExits(AICF_ConstructionOrder order)
+	protected int ValidateExits(AICF_ConstructionOrder order, int sliceMs)
 	{
+		order.m_iQueryPhase = 2;
 		int slot = order.m_aExits.Count();
 		if (slot >= order.m_Metadata.m_aExitPairs.Count())
 			return 1;
@@ -289,7 +408,7 @@ class AICF_ConstructionSiteSearch
 		}
 		int started = System.GetTickCount();
 		BaseWorld world = GetGame().GetWorld();
-		for (int batch; order.m_iExitSample < columns * rows && batch < 32 && System.GetTickCount() - started < m_Config.m_iSliceMs; batch++)
+		for (int batch; order.m_iExitSample < columns * rows && batch < 32 && System.GetTickCount() - started < sliceMs; batch++)
 		{
 			if (!TakeQueries(order, 2))
 				return 0;
@@ -347,8 +466,11 @@ class AICF_ConstructionSiteSearch
 		return 0;
 	}
 
-	int ValidatePath(AICF_ConstructionOrder order, AIPathfindingComponent pathfinding)
+	int ValidatePath(AICF_ConstructionOrder order, AIPathfindingComponent pathfinding, int sliceMs = -1)
 	{
+		if (sliceMs < 0)
+			sliceMs = m_Config.m_iSliceMs;
+		order.m_iQueryPhase = 3;
 		if (order.m_iPathQueriesAt < 0)
 			order.m_iPathQueriesAt = order.m_iQueries;
 		if (order.m_iQueries - order.m_iPathQueriesAt >= AICF_ConstructionPath.MAX_QUERIES)
@@ -364,7 +486,7 @@ class AICF_ConstructionSiteSearch
 		}
 		if (order.m_Path)
 		{
-			int result = order.m_Path.Step(order, pathfinding, m_Config.m_iSliceMs);
+			int result = order.m_Path.Step(order, pathfinding, sliceMs);
 			if (result != 0)
 				order.m_Path = null;
 			if (result < 0 && order.m_sReason == "WORKER_PATH_SEARCH_EXHAUSTED")
@@ -494,6 +616,25 @@ class AICF_ConstructionSiteSearch
 	}
 	bool LiveClear(AICF_ConstructionOrder order, IEntity excludedRoot)
 	{
+		if (!excludedRoot)
+		{
+			order.m_iQueryPhase = 0;
+			if (order.m_iStage == 4)
+				order.m_iQueryPhase = 4;
+		}
+		bool atomic = order.m_iStage == 4 || excludedRoot != null;
+		if (atomic && !BeginLiveBudget(order, 2 + order.m_Metadata.m_aCollisionVolumes.Count() + order.m_aExits.Count() * 2))
+			return false;
+		bool clear = LiveClearNow(order, excludedRoot);
+		if (atomic)
+			s_AtomicOrder = null;
+		return clear;
+	}
+
+	protected bool LiveClearNow(AICF_ConstructionOrder order, IEntity excludedRoot)
+	{
+		if (!InsideBounds(order))
+			return false;
 		// Проверяем наличие всей квоты до синхронной live-проверки. Списываются
 		// только фактические queries; ранний blocker не расходует квоту остальных OBB.
 		if (!TakeQueries(order, 2 + order.m_Metadata.m_aCollisionVolumes.Count() + order.m_aExits.Count() * 2, false))
@@ -742,6 +883,7 @@ class AICF_ConstructionSiteSearch
 		vector transform[4];
 		entity.GetWorldTransform(transform);
 		AICF_ConstructionOrder check = new AICF_ConstructionOrder();
+		check.m_iQueryPhase = 5;
 		check.m_Metadata = receipt.m_Metadata;
 		check.m_sToken = receipt.m_sToken;
 		check.m_Provider = receipt.m_Provider;
@@ -752,6 +894,7 @@ class AICF_ConstructionSiteSearch
 		Math3D.MatrixCopy(transform, check.m_aTransform);
 		Bounds(check, transform, config.m_fMargin, check.m_vMin, check.m_vMax);
 		bool clear = search.LiveClear(check, entity);
+		receipt.m_aPhaseQueries[5] = receipt.m_aPhaseQueries[5] + check.m_iQueries;
 		receipt.m_sReason = check.m_sReason;
 		return clear;
 	}

@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 if (-not $RepositoryRoot) { $RepositoryRoot = Split-Path -Parent $PSScriptRoot }
 $core = Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict'
 $files = @{}
-foreach ($path in @('Construction/AICF_ConstructionPlanner.c','Construction/AICF_ConstructionOrder.c',
+foreach ($path in @('Construction/AICF_ConstructionPlanner.c','Construction/AICF_ConstructionOrder.c','Construction/AICF_ConstructionCandidate.c',
     'Construction/AICF_ConstructionMetadata.c','Construction/AICF_ConstructionSiteSearch.c','Construction/AICF_ConstructionPath.c',
     'Construction/AICF_StockConstructionAdapter.c','Construction/AICF_BaseBuilderService.c',
     'Economy/AICF_ConstructionEconomy.c','Config/AICF_ConstructionConfig.c',
@@ -43,11 +43,18 @@ Require 'CONSTRUCTION_SEARCH_DEADLINE_AFTER_METADATA' 'Construction/AICF_Constru
 Require 'CONSTRUCTION_METADATA_CLEANUP' 'Construction/AICF_ConstructionPlanner.c' 'metadata.ReleasePreview\(\)'
 Require 'CONSTRUCTION_DEPOT_ENVELOPE' 'Construction/AICF_ConstructionMetadata.c' '(?s)SCR_EntitySpawnerSlotComponent.*?m_vMinBounds.*?m_vMaxBounds.*?m_iSpawnSlots\+\+'
 Require 'CONSTRUCTION_PROGRESSIVE_SEARCH' 'Construction/AICF_ConstructionPlanner.c' '(?s)m_iSearchOffset = state.m_aSearchOffsets\[type\].*?state.m_aSearchOffsets\[order.m_eType\] = order.m_iSearchOffset \+ order.m_iAttempts'
-Require 'CONSTRUCTION_UNFINISHED_SEARCH_RETRY' 'Construction/AICF_ConstructionPlanner.c' '(?s)order.m_iAttempts = previousAttempts.*?reason == "NO_SAFE_SITE" && order.m_iStage > 0 && !order.m_bAccepted && order.m_iAttempts > 0.*?state.m_aSearchOffsets\[order.m_eType\] - 1'
+Require 'CONSTRUCTION_UNFINISHED_SEARCH_RETRY' 'Construction/AICF_ConstructionPlanner.c' '(?s)order.m_iSearchWindows < 3.*?order.m_iResumeAt = now \+ m_Config.m_iCooldownMs.*?order.m_iDeadline = order.m_iResumeAt \+ m_Config.m_iDeadlineMs.*?CONSTRUCTION_SEARCH_PAUSED.*?now >= selected.m_Order.m_iResumeAt'
+Require 'CONSTRUCTION_CHECKPOINT_BOUND' 'Construction/AICF_ConstructionPlanner.c' '(?s)m_aPendingCandidates.Count\(\) >= 8.*?m_fRemainingDistance < order.m_aPendingCandidates\[best\].m_fRemainingDistance.*?m_aPendingCandidates\[best\].Restore\(order\).*?m_aPendingCandidates.Remove\(best\).*?m_iQueries - order.m_iPathSliceAt >= 128.*?checkpoint.Save\(order\).*?m_aPendingCandidates.Insert\(checkpoint\)'
+Require 'CONSTRUCTION_CHECKPOINT_QUERY_IDENTITY' 'Construction/AICF_ConstructionCandidate.c' '(?s)m_iPathQueries = order.m_iQueries - order.m_iPathQueriesAt.*?order.m_iPathQueriesAt = order.m_iQueries - m_iPathQueries.*?order.m_Path = m_Path'
 Require 'CONSTRUCTION_SEPARATE_EXIT' 'Construction/AICF_ConstructionSiteSearch.c' '(?s)ValidateExits.*?ExitAvoidsComposition.*?m_aExitHeights.*?ClearExit.*?m_aExits.Insert'
 Require 'CONSTRUCTION_EXIT_REVALIDATION' 'Construction/AICF_ConstructionSiteSearch.c' '(?s)bool LiveClear.*?foreach \(AICF_ConstructionVolume exitVolume : order.m_aExits\).*?ClearExit.*?bool CompletionClear.*?receipt.m_aExits.*?check.m_aExits.Insert.*?search.LiveClear'
 Require 'CONSTRUCTION_WORKER_OUTSIDE_EXIT' 'Construction/AICF_ConstructionSiteSearch.c' '(?s)!WorkClearOfExits\(order, endpoint\) \|\| !WorkClearOfSolids\(order, endpoint\).*?continue;.*?m_aWorkCandidates.Insert\(endpoint\).*?static bool WorkClearOfExits.*?LocalPoint.*?exitVolume.m_vMin\[0\] - 2'
-Require 'CONSTRUCTION_PATH_BOUNDED' 'Construction/AICF_ConstructionPath.c' '(?s)MAX_NODES = 512.*?transitions\+\+ < 64.*?System.GetTickCount\(\) - started < sliceMs.*?m_iExpanded >= MAX_NODES.*?TakeQueries\(order, 1\).*?TakeQueries\(order, 3\).*?m_aNodes.Count\(\) >= MAX_NODES'
+Require 'CONSTRUCTION_PATH_BOUNDED' 'Construction/AICF_ConstructionPath.c' '(?s)MAX_NODES = 512.*?transitions\+\+ < 64.*?System.GetTickCount\(\) - started < sliceMs.*?m_iExpanded >= MAX_NODES.*?TakeQueries\(order, 1\).*?m_aNodes.Count\(\) >= MAX_NODES.*?TakeQueries\(order, 3, false\).*?TakeQueries\(order, 2\).*?TakeQueries\(order, 1\)'
+Require 'CONSTRUCTION_PATH_PRUNE_BEFORE_QUERY' 'Construction/AICF_ConstructionPath.c' '(?s)if \(next && \(next.m_bClosed.*?m_iPathPruned\+\+;.*?continue;.*?TakeQueries\(order, 3, false\)'
+Require 'CONSTRUCTION_CANDIDATE_BUDGET_RESUME' 'Construction/AICF_ConstructionSiteSearch.c' '(?s)m_bCandidateLiveChecked = false;.*?if \(!order.m_bCandidateLiveChecked\).*?LiveClear\(order, null\).*?QUERY_BUDGET.*?return 0;.*?m_bCandidateLiveChecked = true;'
+Require 'CONSTRUCTION_LIVE_BUDGET_RESERVATION' 'Construction/AICF_ConstructionSiteSearch.c' '(?s)s_iQueries \+ count \+ reserved > s_iLimit.*?BeginLiveBudget.*?s_aClaims\[0\] != claim.*?s_AtomicOrder = order;.*?TakeQueries\(order, count, false\).*?ReleaseClaim\(order.m_sToken\).*?bool LiveClear.*?BeginLiveBudget.*?LiveClearNow.*?s_AtomicOrder = null;'
+Require 'CONSTRUCTION_COMMIT_INVENTORY_RESERVATION' 'Construction/AICF_ConstructionSiteSearch.c' '(?s)m_iQueryPhase == 6.*?m_sToken == order.m_sToken.*?reserved--;.*?reservedCount\+\+;.*?claim.m_iCount = reservedCount;'
+Require 'CONSTRUCTION_COMMIT_CLAIM_LIFETIME' 'Construction/AICF_ConstructionPlanner.c' '(?s)order.m_iStage < 4 &&.*?state.m_Order == order && order.m_iStage == 4.*?RefreshClaim\(order.m_sToken\)'
 Require 'CONSTRUCTION_PATH_EDGES' 'Construction/AICF_ConstructionPath.c' '(?s)SegmentIntersects.*?return pathfinding.RayTrace.*?GetClosestPositionOnNavmesh.*?!ClearSegment\(node.m_vPosition, corrected, pathfinding\)'
 Require 'CONSTRUCTION_PATH_CANDIDATE_RESET' 'Construction/AICF_ConstructionSiteSearch.c' '(?s)m_iNavPathCursor = 0;.*?m_Path = null;.*?m_aWorkCandidates.Clear\(\)'
 Require 'CONSTRUCTION_PATH_START_BOUND' 'Construction/AICF_ConstructionSiteSearch.c' '(?s)if \(!order.m_bPathStartSampled\).*?m_vSpawnOrigin.*?m_bPathStartSampled = true.*?NextPathStart.*?\+\+order.m_iPathStartOption >= 9'

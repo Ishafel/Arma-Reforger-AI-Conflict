@@ -133,6 +133,7 @@ class AICF_ConstructionPlanner
 						continue;
 					order.m_bSiteReserved = false;
 					order.m_sReason = "STOCK_SERVICE_ONLINE";
+					order.LogSearch();
 					order.Log("CONSTRUCTION_COMPLETED", "service_online=1");
 					state.m_Order = null;
 					state.m_iNextType = 0;
@@ -143,7 +144,25 @@ class AICF_ConstructionPlanner
 				order.m_Base.AreEnemiesPresent() || order.m_Base.IsBeingCaptured() || order.m_Base.GetCaptureState() != SCR_EBaseCaptureState.NONE)
 				Cancel(state, "LIFECYCLE_INVALIDATED");
 			else if (now >= order.m_iDeadline)
-				Cancel(state, "NO_SAFE_SITE");
+			{
+				// Deadline ограничивает одно окно работы, а не уничтожает уже
+				// оплаченные queries незавершённых кандидатов. Не более трёх окон
+				// одного order; ownership/player work проверяются и во время паузы.
+				if (order.m_iStage < 4 && (order.m_iStage > 0 || !order.m_aPendingCandidates.IsEmpty()) && order.m_iSearchWindows < 3)
+				{
+					order.m_iSearchWindows++;
+					order.m_iResumeAt = now + m_Config.m_iCooldownMs;
+					order.m_iDeadline = order.m_iResumeAt + m_Config.m_iDeadlineMs;
+					order.LogSearch();
+					order.Log("CONSTRUCTION_SEARCH_PAUSED", "resume_at=" + order.m_iResumeAt);
+				}
+				else
+					Cancel(state, "NO_SAFE_SITE");
+			}
+			// Живой ожидающий commit сохраняет место в FIFO, даже если общий
+			// slice не позволил посетить его базу. Cancel снимает claim явно.
+			if (state.m_Order == order && order.m_iStage == 4)
+				AICF_ConstructionSiteSearch.RefreshClaim(order.m_sToken);
 		}
 		if (m_aBases.IsEmpty())
 			return;
@@ -161,7 +180,7 @@ class AICF_ConstructionPlanner
 			AICF_ConstructionBaseState selected = m_aBases[(firstBase + visited) % m_aBases.Count()];
 			if (!selected.m_Order && now >= selected.m_iDueAt)
 				Decide(selected, now);
-			if (selected.m_Order && !selected.m_Order.m_bAccepted)
+			if (selected.m_Order && !selected.m_Order.m_bAccepted && now >= selected.m_Order.m_iResumeAt)
 			{
 				// Следующий tick начинает со следующей активной базы: длинные
 				// промежутки neutral bases не отдают всю квоту одному HQ.
@@ -285,6 +304,31 @@ class AICF_ConstructionPlanner
 	protected void Search(AICF_ConstructionBaseState state, int sliceStarted)
 	{
 		AICF_ConstructionOrder order = state.m_Order;
+		int started = System.GetTickCount();
+		int previousAttempts;
+		// После дешёвого отказа используем оставшуюся часть тех же четырёх
+		// кандидатов и общего slice, без рекурсии и нового секундного ожидания.
+		while (state.m_Order == order)
+		{
+			previousAttempts = order.m_iAttempts;
+			SearchStep(state, sliceStarted);
+			if (order.m_iStage != 0 || order.m_iAttempts == previousAttempts ||
+				m_iCandidatesThisTick >= m_Config.m_iCandidatesPerTick || System.GetTickCount() - sliceStarted >= m_Config.m_iSliceMs)
+				break;
+		}
+		int elapsed = System.GetTickCount() - started;
+		order.m_iSearchCpuMs += elapsed;
+		order.m_iMaxSliceMs = Math.Max(order.m_iMaxSliceMs, elapsed);
+	}
+
+	protected void SearchStep(AICF_ConstructionBaseState state, int sliceStarted)
+	{
+		AICF_ConstructionOrder order = state.m_Order;
+		if (order.m_iResumeAt > 0)
+		{
+			order.m_iResumeAt = 0;
+			order.Log("CONSTRUCTION_SEARCH_RESUMED", "window=" + order.m_iSearchWindows);
+		}
 		if (order.m_iStage == -1)
 		{
 			if (m_bMetadataBatchThisTick)
@@ -305,6 +349,22 @@ class AICF_ConstructionPlanner
 			return;
 		}
 		int candidates;
+		if (order.m_iStage == 0 && !order.m_aPendingCandidates.IsEmpty() &&
+			(order.m_aPendingCandidates.Count() >= 8 || order.m_iAttempts >= m_Config.m_iAttempts))
+		{
+			// Возобновляем наиболее продвинувшийся подтверждённый путь.
+			// FIFO tie-break; дальние тупики не делят квоту поровну с почти
+			// достигнутым рабочим endpoint. Проверки пути остаются прежними.
+			int best;
+			for (int i = 1; i < order.m_aPendingCandidates.Count(); i++)
+			{
+				if (order.m_aPendingCandidates[i].m_fRemainingDistance < order.m_aPendingCandidates[best].m_fRemainingDistance)
+					best = i;
+			}
+			order.m_aPendingCandidates[best].Restore(order);
+			order.m_aPendingCandidates.Remove(best);
+			order.m_iPathSliceAt = order.m_iQueries;
+		}
 		while (order.m_iStage == 0 && m_iCandidatesThisTick < m_Config.m_iCandidatesPerTick && candidates++ < m_Config.m_iCandidatesPerTick && System.GetTickCount() - sliceStarted < m_Config.m_iSliceMs)
 		{
 			if (order.m_iAttempts >= m_Config.m_iAttempts)
@@ -314,6 +374,7 @@ class AICF_ConstructionPlanner
 			}
 			int previousAttempts = order.m_iAttempts;
 			bool found = m_Search.BeginCandidate(order);
+			order.m_iPathSliceAt = order.m_iQueries;
 			if (order.m_sReason == "QUERY_BUDGET")
 			{
 				order.m_iAttempts = previousAttempts;
@@ -331,7 +392,7 @@ class AICF_ConstructionPlanner
 		if (order.m_iStage == 0)
 			return;
 		AICF_AICommander commander = Commander(order.m_Faction);
-		int result = m_Search.Step(order, commander.GetConstructionPathfinding());
+		int result = m_Search.Step(order, commander.GetConstructionPathfinding(), Math.Max(0, m_Config.m_iSliceMs - (System.GetTickCount() - sliceStarted)));
 		if (result < 0)
 		{
 			order.RejectCandidate();
@@ -339,7 +400,20 @@ class AICF_ConstructionPlanner
 			return;
 		}
 		if (result == 0)
+		{
+			// Короткий первый проход нескольких площадок: трудный путь одной
+			// не задерживает прямой путь следующей. Сохраняем именно A* state,
+			// поэтому повторный проход не повторяет terrain/physics/nav queries.
+			if (order.m_iStage == 3 && order.m_Path && order.m_iQueries - order.m_iPathSliceAt >= 128)
+			{
+				AICF_ConstructionCandidate checkpoint = new AICF_ConstructionCandidate();
+				checkpoint.Save(order);
+				order.m_aPendingCandidates.Insert(checkpoint);
+				order.m_Path = null;
+				order.m_iStage = 0;
+			}
 			return;
+		}
 		order.m_iStage = 4;
 		if (!order.m_bSiteReserved)
 		{
@@ -377,6 +451,8 @@ class AICF_ConstructionPlanner
 		m_bPlacementAttemptedThisTick = true;
 		if (!m_Adapter.Place(order, m_Config, m_Economy, m_Manager, m_Builders))
 			Cancel(state, "PLACEMENT_FAILED");
+		else
+			order.m_aPendingCandidates.Clear();
 	}
 
 	protected void Cancel(AICF_ConstructionBaseState state, string reason)
@@ -386,11 +462,12 @@ class AICF_ConstructionPlanner
 			return;
 		state.m_aSearchOffsets[order.m_eType] = order.m_iSearchOffset + order.m_iAttempts;
 		order.LogSearch();
+		AICF_ConstructionSiteSearch.ReleaseClaim(order.m_sToken);
 		order.m_bSiteReserved = false;
-		// Deadline мог застать пригодный footprint на terrain/exit/navmesh стадии.
-		// Повторить его с полной свежей проверкой, а не навсегда пропустить точку.
-		if (reason == "NO_SAFE_SITE" && order.m_iStage > 0 && !order.m_bAccepted && order.m_iAttempts > 0)
-			state.m_aSearchOffsets[order.m_eType] = state.m_aSearchOffsets[order.m_eType] - 1;
+		// После конечного числа окон cursor идёт вперёд. Повторное разрушение
+		// и восстановление одного дорогого кандидата больше не образует цикл.
+		order.m_aPendingCandidates.Clear();
+		order.m_Path = null;
 		if (!order.m_bAccepted)
 			order.m_bCancelled = true;
 		string cause = order.m_sReason;
@@ -403,6 +480,7 @@ class AICF_ConstructionPlanner
 
 	protected bool ScanInventory(AICF_ConstructionOrder order)
 	{
+		order.m_iQueryPhase = 6;
 		if (!AICF_ConstructionSiteSearch.TakeQueries(order, 1))
 			return false;
 		m_aInventory.Clear();

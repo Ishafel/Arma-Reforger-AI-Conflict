@@ -24,6 +24,10 @@ class AICF_ConstructionOrder
 	int m_iGraphRevision;
 	int m_iStartedAt;
 	int m_iDeadline;
+	int m_iResumeAt;
+	int m_iSearchWindows = 1;
+	int m_iPathSliceAt;
+	ref array<ref AICF_ConstructionCandidate> m_aPendingCandidates = {};
 	int m_iAttempts;
 	int m_iSearchOffset;
 	int m_iBroadphaseIgnored;
@@ -36,7 +40,15 @@ class AICF_ConstructionOrder
 	ref array<string> m_aRejectReasons = {};
 	ref array<int> m_aRejectCounts = {};
 	int m_iQueries;
+	int m_iPathPruned;
+	int m_iBudgetWaitWindows;
+	int m_iLastBudgetWaitWindow = -1;
+	int m_iQueryPhase;
+	ref array<int> m_aPhaseQueries = {0, 0, 0, 0, 0, 0, 0};
+	int m_iSearchCpuMs;
+	int m_iMaxSliceMs;
 	int m_iSample;
+	bool m_bCandidateLiveChecked;
 	ref array<float> m_aTerrainHeights = {};
 	int m_iNavRetry;
 	int m_iNavPathCursor;
@@ -96,6 +108,10 @@ class AICF_ConstructionOrder
 		foreach (int index, string reason : m_aRejectReasons)
 			counts += " rejected_" + reason + "=" + m_aRejectCounts[index];
 		Log("CONSTRUCTION_SEARCH_SUMMARY", string.Format("search_offset=%1 exits=%2 terrain_delta=%3 broadphase_ignored=%4", m_iSearchOffset, m_aExits.Count(), m_fMaxHeight - m_fMinHeight, m_iBroadphaseIgnored) + counts);
+		string cost = string.Format("candidate_queries=%1 terrain_queries=%2 exit_queries=%3 path_queries=%4 commit_queries=%5 completion_queries=%6 inventory_queries=%7",
+			m_aPhaseQueries[0], m_aPhaseQueries[1], m_aPhaseQueries[2], m_aPhaseQueries[3], m_aPhaseQueries[4], m_aPhaseQueries[5], m_aPhaseQueries[6]);
+		cost += string.Format(" budget_wait_windows=%1 path_pruned=%2 stage=%3 search_cpu_ms=%4 max_slice_ms=%5 checkpoints=%6 search_windows=%7", m_iBudgetWaitWindows, m_iPathPruned, m_iStage, m_iSearchCpuMs, m_iMaxSliceMs, m_aPendingCandidates.Count(), m_iSearchWindows);
+		Log("CONSTRUCTION_SEARCH_COST", cost);
 	}
 
 	static string EntityKey(EntityID id)
