@@ -2289,6 +2289,48 @@ StringTable
 			Target_en_us "Move and hold"
 			Target_ru_ru "Движение и удержание"
 		}
+		CustomStringTableItem "{A1CF190919200001}"
+		{
+			Id "AICF_Scenario_EveronNorthRHS_Name"
+			Target_en_us "AI Conflict RHS - Northern Everon"
+			Target_ru_ru "AI Conflict RHS — Север Эверона"
+		}
+		CustomStringTableItem "{A1CF190919200002}"
+		{
+			Id "AICF_Scenario_EveronNorthRHS_Description"
+			Target_en_us "USMC versus MSV in northern Everon. Two headquarters and six capture points."
+			Target_ru_ru "USMC против МСВ на севере Эверона. Два штаба и шесть точек захвата."
+		}
+		CustomStringTableItem "{A1CF190919200003}"
+		{
+			Id "AICF_Scenario_EveronNorthRHS_Details"
+			Target_en_us "One side starts at the northern airbase, the other at the military hospital. Fight for Saint-Philippe, Maiden's Bay, Meaux, Tyrone, Kermovan and Hornbeam Valley. Southern bases are inactive. The full island terrain remains accessible. Requires RHS - Status Quo."
+			Target_ru_ru "Одна сторона начинает на северной авиабазе, другая — в военном госпитале. Борьба за Сен-Филипп, Девичью бухту, Мо, Тайрон, Кермован и Грабовую долину. Южные базы неактивны. Ландшафт всего острова остаётся доступным. Требуется RHS - Status Quo."
+		}
+		CustomStringTableItem "{A1CF190919310001}"
+		{
+			Id "AICF_Scenario_EveronNorth_Name"
+			Target_en_us "AI Conflict - Northern Everon"
+			Target_ru_ru "AI Conflict — Север Эверона"
+		}
+		CustomStringTableItem "{A1CF190919310002}"
+		{
+			Id "AICF_Scenario_EveronNorth_Description"
+			Target_en_us "US versus USSR in northern Everon. Two headquarters and six capture points. No RHS required."
+			Target_ru_ru "США против СССР на севере Эверона. Два штаба и шесть точек захвата. RHS не требуется."
+		}
+		CustomStringTableItem "{A1CF190919310003}"
+		{
+			Id "AICF_Scenario_EveronNorth_Details"
+			Target_en_us "One side starts at the northern airbase, the other at the military hospital. Fight for Saint-Philippe, Maiden's Bay, Meaux, Tyrone, Kermovan and Hornbeam Valley. Andre's Beacon and southern bases are inactive. The full island terrain remains accessible. Victory requires exhausting the enemy's reinforcement tickets and eliminating its remaining managed combat groups."
+			Target_ru_ru "Одна сторона начинает на северной авиабазе, другая — в военном госпитале. Борьба за Сен-Филипп, Девичью бухту, Мо, Тайрон, Кермован и Грабовую долину. Обзорный пункт Андре и южные базы неактивны. Ландшафт всего острова остаётся доступным. Для победы нужно исчерпать билеты подкрепления противника и уничтожить его оставшиеся управляемые боевые группы."
+		}
+		CustomStringTableItem "{A1CF190919210001}"
+		{
+			Id "AICF_UI_RecruitingInfantry"
+			Target_en_us "Replenishing squad at barracks"
+			Target_ru_ru "Пополнение состава в казарме"
+		}
 		CustomStringTableItem "{A1CF190903000010}"
 		{
 			Id "AICF_UI_SupplyTitle"
