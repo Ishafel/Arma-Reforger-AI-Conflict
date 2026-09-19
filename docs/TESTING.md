@@ -1,5 +1,43 @@
 # Проверки и evidence
 
+## Спавн пехоты вне препятствий — 2026-09-19
+
+В `AICF_GroupSpawner` добавлен opt-in `AICF_InfantrySpawnPlacement`:
+свободное место и выход с navmesh проверяются непосредственно перед каждым
+асинхронным member spawn. Координата застрявшего бойца у авиабазы отклонена;
+отдельный stock EveronNorth runtime дал `passed=1 alive=20 moving_attackers=12`:
+12 атакующих групп сместились на 200–302 м за 90 секунд, `Failed move`/VM нет.
+Native resource/world diagnostics и две resupply ошибки при shutdown сохранены.
+Native exit — 0. Текущий пользовательский матч не перезапускался.
+
+Stage35Static, Stage35RecoveryPolicy, InfantryRecruitmentStatic, Stage3Static —
+PASS до/после; AILoadoutStatic — PASS после. AICommanderModeStatic сохраняет
+две прежние AI_COMMANDER_UI_STATE. Workbench Everon, EveronRHS и test stage —
+PASS / 0. Полные команды, изменённые файлы, evidence и NOT RUN:
+[INFANTRY_SPAWN_PLACEMENT.md](INFANTRY_SPAWN_PLACEMENT.md).
+
+## Восстановление Failed move — 2026-09-19
+
+Изменены infantry route recovery в `AICF_OrderPlanner`, waypoint identity и
+одноразовый budget в `AICF_GroupSlot`, orchestration stuck watchdog и новый
+`AICF_IsolatedNavmeshRecovery`. Причина, границы и fixture описаны в
+[NAVIGATION_RECOVERY.md](NAVIGATION_RECOVERY.md).
+
+Stage3Static, Stage35Static, Stage35RecoveryPolicy, Stage4Static,
+MapPointOrdersStatic — **PASS / 0** до/после. AICommanderModeStatic сохраняет
+**FAIL / 1**, две прежние `AI_COMMANDER_UI_STATE`. Workbench Validate/Compile
+финальных Arland, Everon, ArlandRHS, EveronRHS — **PASS / 0**.
+
+Изолированный RHS navigation probe — **PASS по целевым assertions**:
+US прошёл 92.1914 м, USSR — 406.209 м с сохранением group/generation/intent;
+player fence и single-use budget — PASS. Полный остановленный server log
+содержит одну воспроизведённую исходную `Failed move` до восстановления,
+повторов после восстановления нет. Общий runtime не объявляется чистым:
+native/RHS resource/world/RPL diagnostics сохранены. Client/JIP, visual,
+долгий soak и обновление живого пользовательского матча — **NOT RUN**.
+Evidence: `.codex-runtime/navigation-fix-20260919/`, включая полные logs,
+native manifest, версии, source hashes, baseline/after и exact compile args.
+
 ## Язык клиента — 2026-09-19
 
 Локализованы сценарии и весь AICF UI, включая server-produced метки и ответы.

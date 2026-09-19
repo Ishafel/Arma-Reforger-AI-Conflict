@@ -4170,6 +4170,8 @@ class AICF_MatchController
 			// Long-range ATTACK travel is a durable Move order. Only after the
 			// group reaches the local objective envelope may the planner start the
 			// timed SearchAndDestroy activity.
+			if (m_OrderPlanner.TryAdvanceStuckRoute(slot, faction))
+				continue;
 			m_OrderPlanner.PromoteAttackToObjectiveAction(
 				slot,
 				faction,
@@ -5495,6 +5497,8 @@ class AICF_MatchController
 			}
 		}
 		float arrivalRadiusMeters = STUCK_WATCHDOG_IGNORE_RADIUS_METERS;
+		if (slot.IsStuckRouteWaypoint())
+			arrivalRadiusMeters = waypoint.GetCompletionRadius();
 		if (slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
 			arrivalRadiusMeters = POINT_DESTINATION_RADIUS_METERS;
 		if (distanceMeters <= arrivalRadiusMeters)
@@ -5593,11 +5597,17 @@ class AICF_MatchController
 			return;
 		}
 
+		if (AICF_IsolatedNavmeshRecovery.TryRecover(slot, m_HiddenRecoveryWatchdog, m_Stage3Config))
+		{
+			m_GroupCohesionPolicy.NormalizeAfterMovementFailure(group);
+			leaderPosition = leader.GetOrigin();
+		}
 		bool orderIssueSucceeded = m_OrderPlanner.RebuildCurrentOrder(
 			slot,
 			faction,
-			"STUCK_ROUTE_REBUILD");
-		if (!orderIssueSucceeded)
+			"STUCK_ROUTE_REBUILD",
+			true);
+		if (!orderIssueSucceeded && !m_OrderPlanner.IsCurrentStrategicDestinationValid(slot, faction))
 		{
 			orderIssueSucceeded = m_OrderPlanner.RecoverOrder(
 				slot,

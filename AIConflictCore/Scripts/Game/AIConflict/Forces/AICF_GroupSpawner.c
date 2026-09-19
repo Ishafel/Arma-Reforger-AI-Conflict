@@ -153,6 +153,7 @@ class AICF_GroupSpawner
 		// BeginRosterSpawn(). This prevents a completion callback from racing the
 		// authoritative managed-slot ownership boundary.
 		group.SetSpawnImmediately(false);
+		group.AICF_EnableSafeInfantrySpawn();
 		if (!managedDeployment)
 			return group;
 

@@ -4,6 +4,11 @@ class AICF_GroupSlot
 	protected ref array<ref AICF_LoadoutBinding> m_aLoadouts = {};
 	protected int m_iLoadoutRevision;
 	protected int m_iDeploymentLoadoutRevision;
+	protected AIWaypoint m_StuckRouteWaypoint;
+	protected bool m_bIsolatedNavmeshRecoveryUsed;
+
+	bool HasUsedIsolatedNavmeshRecovery() { return m_bIsolatedNavmeshRecoveryUsed; }
+	void MarkIsolatedNavmeshRecoveryUsed() { m_bIsolatedNavmeshRecoveryUsed = true; }
 
 	int GetLoadoutRevision() { return m_iLoadoutRevision; }
 	bool IsDeploymentLoadoutCurrent() { return m_iDeploymentLoadoutRevision == m_iLoadoutRevision; }
@@ -1382,6 +1387,16 @@ class AICF_GroupSlot
 		return true;
 	}
 
+	void MarkStuckRouteWaypoint()
+	{
+		m_StuckRouteWaypoint = m_Waypoint;
+	}
+
+	bool IsStuckRouteWaypoint()
+	{
+		return m_Waypoint && m_Waypoint == m_StuckRouteWaypoint;
+	}
+
 	bool AssignPointObjective(vector targetPosition, AIWaypoint waypoint)
 	{
 		if (m_State != AICF_EGroupSlotState.READY || !m_Group || !waypoint)
@@ -2252,6 +2267,7 @@ class AICF_GroupSlot
 
 	void ClearObjective()
 	{
+		m_StuckRouteWaypoint = null;
 		ClearPendingOrderRecovery();
 		SupersedePendingStuckRecoveryEvidence("OBJECTIVE_CLEARED");
 		m_TargetKind = AICF_EOrderTargetKind.NONE;
@@ -2264,6 +2280,7 @@ class AICF_GroupSlot
 	// the strategic target needed to restore the infantry order after dismount.
 	void SuspendObjectiveWaypoint()
 	{
+		m_StuckRouteWaypoint = null;
 		ClearPendingOrderRecovery();
 		SupersedePendingStuckRecoveryEvidence("VEHICLE_CONTROL_ACQUIRED");
 		m_Waypoint = null;
@@ -2346,6 +2363,8 @@ class AICF_GroupSlot
 
 	protected void ClearRuntimeReferences()
 	{
+		m_bIsolatedNavmeshRecoveryUsed = false;
+		m_StuckRouteWaypoint = null;
 		m_RecruitmentOrder = null;
 		m_aRosterMembers.Clear();
 		if (m_Group)
