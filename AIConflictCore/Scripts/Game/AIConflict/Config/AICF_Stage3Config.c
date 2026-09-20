@@ -29,7 +29,7 @@ class AICF_Stage3Config
 	static const float DEFAULT_COHESION_DISTANCE_METERS = 100.0;
 	static const int DEFAULT_PASSENGER_STALL_MS = 8000;
 	static const int DEFAULT_PASSENGER_MAX_RETRIES = 1;
-	static const float DEFAULT_HIDDEN_RECOVERY_PLAYER_RADIUS_METERS = 300.0;
+	static const float DEFAULT_HIDDEN_RECOVERY_PLAYER_RADIUS_METERS = 50.0;
 	// The 43 m point and 25 m radius guide the stock group waypoint. Its nominal
 	// 18..68 m pad distance remains inside the 90 m boarding threshold. Physical
 	// readiness is proved independently against the safe 10..90 m pad envelope,
@@ -218,7 +218,7 @@ class AICF_Stage3Config
 		if (System.GetCLIParam("aicfVehiclePassengerMaxRetries", value))
 			m_iPassengerMaxRetries = ClampInt(value.ToInt(), 0, 3);
 		if (System.GetCLIParam("aicfHiddenRecoveryPlayerRadiusMeters", value))
-			m_fHiddenRecoveryPlayerRadiusMeters = ClampFloat(value.ToFloat(), 75.0, 1000.0);
+			m_fHiddenRecoveryPlayerRadiusMeters = ClampFloat(value.ToFloat(), 50.0, 1000.0);
 		if (System.GetCLIParam("aicfHiddenRecoveryEnabled", value))
 			m_bHiddenRecoveryEnabled = value.ToInt() > 0;
 		if (System.GetCLIParam("aicfVehicleSpawnStagingOffsetMeters", value))

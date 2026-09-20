@@ -2,7 +2,7 @@
 // coordinator so this class cannot create waypoints or mutate a group.
 class AICF_VehicleWatchdog
 {
-	protected static const float HIDDEN_RECOVERY_LOS_RADIUS_METERS = 1200.0;
+	protected static const float HIDDEN_RECOVERY_LOS_RADIUS_METERS = 100.0;
 	protected static const float HIDDEN_RECOVERY_MAX_THREAT_MEASURE = 0.01;
 	protected static const float HIDDEN_RECOVERY_TARGET_HEIGHT_METERS = 1.5;
 	protected static const float DISMOUNT_CLEARANCE_MARGIN_METERS = 0.5;
@@ -649,7 +649,7 @@ class AICF_VehicleWatchdog
 	// Hidden recovery is a server-side correction, not gameplay-visible movement.
 	// Check both the currently controlled entity and the possession/main entity so
 	// a GM camera or possession hand-off cannot bypass the privacy radius or the
-	// conservative 1.2 km line-of-sight fence. A connected player without either
+	// 100 m line-of-sight fence. A connected player without either
 	// position makes the scan fail closed.
 	bool CanApplyHiddenRecovery(
 		vector source,

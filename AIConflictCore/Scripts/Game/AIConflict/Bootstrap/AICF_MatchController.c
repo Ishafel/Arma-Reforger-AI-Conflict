@@ -31,9 +31,9 @@ class AICF_MatchController
 	protected static const float LONE_SURVIVOR_RETREAT_ARRIVAL_METERS = 30.0;
 	protected static const int MOB_EGRESS_HARD_DEADLINE_INTERVALS = 4;
 	protected static const int MOB_EGRESS_HIDDEN_RETRY_MS = 5000;
-	protected static const float MOB_EGRESS_HIDDEN_TARGET_STANDOFF_METERS = 15.0;
+	protected static const float MOB_EGRESS_HIDDEN_HOP_STEP_METERS = 50.0;
+	protected static const float MOB_EGRESS_HIDDEN_MAX_HOP_METERS = 200.0;
 	protected static const float MOB_EGRESS_HIDDEN_SEARCH_RADIUS_METERS = 35.0;
-	protected static const float MOB_EGRESS_HIDDEN_SPACING_METERS = 3.5;
 	protected static const float MOB_EGRESS_MAX_THREAT_MEASURE = 0.01;
 
 	protected bool m_bStarted;
@@ -3237,22 +3237,7 @@ class AICF_MatchController
 		}
 
 		vector mobOrigin = mainBase.GetOwner().GetOrigin();
-		vector forward = targetPosition - mobOrigin;
-		forward[1] = 0;
-		if (forward.LengthSq() < 0.01)
-		{
-			rejectionReason = "TARGET_DIRECTION_INVALID";
-			return false;
-		}
-		forward.Normalize();
-		vector right = Vector(forward[2], 0, -forward[0]);
-		// A fixed forward hop can cross one local navmesh break and still leave the
-		// group on another disconnected island. This is the terminal, fully hidden
-		// fallback, so resolve it against the target instead of guessing a map-specific
-		// egress distance.
-		vector recoveryCenter = targetPosition -
-			forward * MOB_EGRESS_HIDDEN_TARGET_STANDOFF_METERS;
-		recoveryDestination = recoveryCenter;
+		vector recoveryCenter;
 
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);
@@ -3304,16 +3289,11 @@ class AICF_MatchController
 				continue;
 			}
 
-			int relocationIndex = relocationAgents.Count();
-			int row = relocationIndex / 3;
-			int column = relocationIndex % 3;
-			vector searchCenter = recoveryCenter +
-				right * ((column - 1) * MOB_EGRESS_HIDDEN_SPACING_METERS) -
-				forward * (row * MOB_EGRESS_HIDDEN_SPACING_METERS);
 			vector destination;
 			if (!TryFindDistinctMobEgressDestination(
 				group.GetWorld(),
-				searchCenter,
+				memberOrigin,
+				targetPosition,
 				mobOrigin,
 				destinations,
 				destination))
@@ -3362,6 +3342,11 @@ class AICF_MatchController
 			}
 			playerClearance = "CLEAR";
 			losClearance = "CLEAR";
+			if (destinations.IsEmpty())
+			{
+				recoveryCenter = destination;
+				recoveryDestination = destination;
+			}
 			relocationAgents.Insert(agent);
 			characters.Insert(character);
 			beforeOrigins.Insert(memberOrigin);
@@ -3415,6 +3400,12 @@ class AICF_MatchController
 				return false;
 			}
 			vector commitOrigin = commitCharacter.GetOrigin();
+			if (vector.DistanceXZ(commitOrigin, destinations[commitIndex]) >
+				MOB_EGRESS_HIDDEN_MAX_HOP_METERS)
+			{
+				rejectionReason = string.Format("COMMIT_HOP_TOO_FAR_%1", commitIndex);
+				return false;
+			}
 			if (vector.DistanceXZ(commitOrigin, mobOrigin) >
 				STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
 			{
@@ -3675,7 +3666,8 @@ class AICF_MatchController
 
 	protected bool TryFindDistinctMobEgressDestination(
 		BaseWorld world,
-		vector searchCenter,
+		vector memberOrigin,
+		vector targetPosition,
 		vector mobOrigin,
 		array<vector> reservedDestinations,
 		out vector destination)
@@ -3684,39 +3676,55 @@ class AICF_MatchController
 		if (!world)
 			return false;
 
-		array<vector> candidates = {};
-		int candidateCount = SCR_WorldTools.FindAllEmptyTerrainPositions(
-			candidates,
-			searchCenter,
-			MOB_EGRESS_HIDDEN_SEARCH_RADIUS_METERS,
-			0.75,
-			2.0,
-			maxResults: 32,
-			flags: TraceFlags.ENTS | TraceFlags.OCEAN,
-			world: world);
-		if (candidateCount <= 0)
+		// Поиск от ближнего участка к дальнему: 50, 100, 150, 200 м.
+		// Первый свободный участок завершает поиск, дальнего fallback к базе нет.
+		vector forward = targetPosition - memberOrigin;
+		forward[1] = 0;
+		float targetDistance = forward.Length();
+		if (targetDistance < 0.1)
 			return false;
-
-		foreach (vector candidate : candidates)
+		forward.Normalize();
+		for (int hopIndex = 1; hopIndex <= 4; hopIndex++)
 		{
-			if (ChimeraWorldUtils.TryGetWaterSurfaceSimple(world, candidate) ||
-				vector.DistanceXZ(candidate, mobOrigin) <= STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
+			float hopMeters = hopIndex * MOB_EGRESS_HIDDEN_HOP_STEP_METERS;
+			vector searchCenter = memberOrigin + forward * Math.Min(hopMeters, targetDistance);
+			array<vector> candidates = {};
+			SCR_WorldTools.FindAllEmptyTerrainPositions(
+				candidates,
+				searchCenter,
+				MOB_EGRESS_HIDDEN_SEARCH_RADIUS_METERS,
+				0.75,
+				2.0,
+				maxResults: 32,
+				flags: TraceFlags.ENTS | TraceFlags.OCEAN,
+				world: world);
+
+			foreach (vector candidate : candidates)
 			{
-				continue;
-			}
-			bool overlapsReserved;
-			foreach (vector reservedDestination : reservedDestinations)
-			{
-				if (vector.DistanceSqXZ(candidate, reservedDestination) < 2.25)
+				if (vector.DistanceXZ(candidate, memberOrigin) > hopMeters ||
+					vector.DistanceXZ(candidate, targetPosition) >= targetDistance)
+					continue;
+				if (ChimeraWorldUtils.TryGetWaterSurfaceSimple(world, candidate) ||
+					vector.DistanceXZ(candidate, mobOrigin) <= STUCK_WATCHDOG_IGNORE_RADIUS_METERS)
 				{
-					overlapsReserved = true;
-					break;
+					continue;
 				}
+				bool overlapsReserved;
+				foreach (vector reservedDestination : reservedDestinations)
+				{
+					if (vector.DistanceSqXZ(candidate, reservedDestination) < 2.25)
+					{
+						overlapsReserved = true;
+						break;
+					}
+				}
+				if (overlapsReserved)
+					continue;
+				destination = candidate;
+				return true;
 			}
-			if (overlapsReserved)
-				continue;
-			destination = candidate;
-			return true;
+			if (hopMeters >= targetDistance)
+				break;
 		}
 		return false;
 	}
@@ -3789,21 +3797,11 @@ class AICF_MatchController
 			return true;
 		}
 		vector mobOrigin = mainBase.GetOwner().GetOrigin();
-		vector forward = targetPosition - mobOrigin;
-		forward[1] = 0;
-		if (forward.LengthSq() < 0.01)
-			forward = "1 0 0";
-		else
-			forward.Normalize();
-		vector right = Vector(forward[2], 0, -forward[0]);
-		vector recoveryCenter = targetPosition -
-			forward * MOB_EGRESS_HIDDEN_TARGET_STANDOFF_METERS;
 		array<vector> reservedDestinations = {};
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);
 		BaseWorld world = GetGame().GetWorld();
 		float hiddenRadiusMeters = m_Stage3Config.GetHiddenRecoveryPlayerRadiusMeters();
-		int insideIndex;
 		foreach (AIAgent agent : agents)
 		{
 			IEntity member;
@@ -3814,15 +3812,11 @@ class AICF_MatchController
 			{
 				continue;
 			}
-			int row = insideIndex / 3;
-			int column = insideIndex % 3;
-			vector searchCenter = recoveryCenter +
-				right * ((column - 1) * MOB_EGRESS_HIDDEN_SPACING_METERS) -
-				forward * (row * MOB_EGRESS_HIDDEN_SPACING_METERS);
 			vector destination;
 			if (!TryFindDistinctMobEgressDestination(
 				world,
-				searchCenter,
+				member.GetOrigin(),
+				targetPosition,
 				mobOrigin,
 				reservedDestinations,
 				destination))
@@ -3849,7 +3843,6 @@ class AICF_MatchController
 				nearestPlayerMeters = memberNearestPlayerMeters;
 			}
 			reservedDestinations.Insert(destination);
-			insideIndex++;
 		}
 		return true;
 	}
