@@ -45,7 +45,7 @@ foreach ($line in $lines) {
         }
         'INFANTRY_RECRUIT_JOINED' {
             if (!$visit.Pending -or $visit.Debit -ne [int]$fields.cost -or $visit.Debit -le 0) { $failures.Add("Unpaid recruit $key") }
-            if ([int]$fields.alive -gt [int]$fields.desired -or [int]$fields.alive -gt 10 -or $fields.skill -ne 'VETERAN') { $failures.Add("Roster/skill violation $key") }
+            if ([int]$fields.alive -gt [int]$fields.desired -or [int]$fields.alive -gt 10 -or $fields.skill -ne 'EXPERT') { $failures.Add("Roster/skill violation $key") }
             $visit.Debit = 0
             $visit.Pending = $null
             $visit.Joins++

@@ -259,7 +259,7 @@ class AICF_InfantryRecruitmentService
 		m_Economy.CommitInfantryRecruit(order);
 		order.m_Slot.RecordRecruitedMember(order.m_iMemberIndex, recruit.GetControlledEntity());
 		order.Log("INFANTRY_RECRUIT_JOINED", string.Format(
-			"role=%1 cost=%2 alive=%3 desired=%4 character=%5 skill=VETERAN",
+			"role=%1 cost=%2 alive=%3 desired=%4 character=%5 skill=EXPERT",
 			order.m_sRole, order.m_iCost, AICF_GroupRuntime.CountAliveAgents(order.m_Group),
 			order.m_Slot.GetDesiredSize(), recruit.GetControlledEntity().GetID()));
 		if (!m_Spawner.ClearRecruit(order))

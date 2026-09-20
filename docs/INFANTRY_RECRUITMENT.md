@@ -63,7 +63,7 @@ Motorized группы, включая их временный infantry fallback
   восстанавливает durable intent. Новый приказ игрока отменяет старый визит.
 - `AICF_InfantryRecruitSpawner` создаёт отдельный одиночный donor, используя
   `RequestSpawn(1)`. Перед передачей требуется точный живой faction roster,
-  физическая близость казармы, AI ownership, replication authority и `VETERAN`.
+  физическая близость казармы, AI ownership, replication authority и `EXPERT`.
 - `AICF_EconomySystem` повторно проверяет supplies и близость, снимает точную
   цену перед синхронным transfer и возвращает фактически снятое при отказе.
   Пока очередь spawn не завершена, деньги не снимаются.

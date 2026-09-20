@@ -384,7 +384,7 @@ Reforger 1.8 асинхронна: готовность доказывается
 faction/replication checks и callback/generation fencing, а не самим вызовом
 `RequestSpawn()`.
 
-`AICF_ManagedAICombatPolicy` применяет штатный `EAISkill.VETERAN` к живым
+`AICF_ManagedAICombatPolicy` применяет штатный `EAISkill.EXPERT` к живым
 участникам управляемой боевой группы. Controller вызывает её синхронно в
 `CompleteReadyDeployment()` после readiness/faction gates для initial и
 replacement deployment обеих сторон, включая RHS. Policy проверяет server
@@ -392,6 +392,12 @@ authority; новых callbacks или циклов нет. Она не меня
 подавление или weapon handling. `GROUP_COMBAT_POLICY_APPLIED` фиксирует
 прочитанный обратно навык полного состава; неполное применение даёт
 `GROUP_COMBAT_POLICY_INCOMPLETE`, не блокируя существующий deployment lifecycle.
+
+`AICF_FIACombatPolicy` дополняет этот путь для нейтральной охраны: одноразовый
+callback `SCR_AICombatComponent` через 1500 мс проверяет EntityID, живое
+состояние, authoritative AI ownership и faction `FIA`, затем задаёт `EXPERT`.
+`OnDelete` снимает callback. Это общий Core-путь для stock/RHS, без изменения
+faction, экипировки, состава группы или player-controlled персонажей.
 
 Перед initial roster authoritative `AICF_MatchController` проверяет глобальный
 active-AI limit `AIWorld` и при необходимости поднимает его до настроенного

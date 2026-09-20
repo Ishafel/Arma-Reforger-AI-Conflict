@@ -23,9 +23,9 @@ class AICF_ManagedAICombatPolicy
 			if (!combat)
 				continue;
 
-			if (combat.GetAISkill() != EAISkill.VETERAN)
-				combat.SetAISkill(EAISkill.VETERAN);
-			if (combat.GetAISkill() == EAISkill.VETERAN)
+			if (combat.GetAISkill() != EAISkill.EXPERT)
+				combat.SetAISkill(EAISkill.EXPERT);
+			if (combat.GetAISkill() == EAISkill.EXPERT)
 				configuredAgents++;
 		}
 

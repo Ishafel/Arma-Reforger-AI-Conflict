@@ -1,5 +1,52 @@
 # Навык управляемых боевых групп — 2026-09-05
 
+## Текущая политика — 2026-09-20
+
+Управляемые отряды США/СССР, их замены и пополнение используют `EXPERT`.
+Охрана FIA в stock и RHS получает тот же навык через `AICF_FIACombatPolicy`
+после инициализации персонажа. Callback проверяет исходный EntityID,
+server/master authority, живое состояние, отсутствие player control/possession
+и faction `FIA`; при удалении компонента callback отменяется.
+Новые события `FIA_COMBAT_POLICY_APPLIED` показывают применённый навык.
+Анализатор пополнения теперь ожидает `skill=EXPERT`.
+
+Штатная sigma случайной ошибки прицеливания: `VETERAN` — 0.5,
+`EXPERT` — 0.25. Изменяется штатный уровень навыка; фактический процент
+попаданий из этих чисел не следует. Подавление и weapon handling не отключены.
+Ниже сохранён исторический отчёт прежней настройки `VETERAN`.
+
+Проверки новой политики:
+
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-<Name>.ps1`:
+  `Stage35Static`, `Stage35RecoveryPolicy`, `InfantryRecruitmentStatic`,
+  `RHSIntegrationStatic` — PASS / 0 до и после; baseline failures нет.
+- Терминальный Workbench `-wbsilent -wbModule=ScriptEditor -run -validate`
+  для Everon, EveronRHS и изолированной fixture — PASS / 0.
+- `Start-AICFRuntime.ps1 -Role Server -Variant EveronNorth|EveronNorthRHS`
+  с `-aicfRequirePlayerForResult 0` и отдельными profiles/ports: 20/20 групп
+  в каждом запуске получили EXPERT; дополнительно 18 stock и 92 RHS recruits.
+  Оба smoke остановлены через точные PID (`Stop-Process`), native exit -1.
+- Изолированная копия `AICF_RHSWardrobeShowcase` с
+  `-aicfWardrobeShowcase 2` прочитала `GetAISkill()` у 13 FIA: 13/13 EXPERT.
+  Десять неуправляемых выставочных RHS персонажей сохранили REGULAR;
+  hook FIA на них не действует. Fixture завершилась сама, native exit 0.
+- `Test-InfantryRecruitmentLog.ps1 -LogPath <stopped-console.log>` — FAIL / 1
+  для обоих smoke из-за незавершённых визитов при остановке; RHS также содержит
+  четыре прежних ошибки stock faction initialization. В FIA fixture сохранены
+  эти четыре ошибки и две stock resupply ошибки при shutdown. Проверка навыка
+  не делает полный runtime чистым PASS.
+- `git diff --check` — PASS / 0. Замена полностью погибшего отряда,
+  естественный спавн охраны в бою, отдельный FIA stock runtime, client/JIP,
+  процент попаданий и длительный бой — NOT RUN.
+
+Evidence: `.codex-runtime/ai-expert-20260920/`: `before-*`, `after-*`,
+`wb-*/console.log`, exact `wb-*-arguments.json`, launcher manifests,
+полные остановленные `server-*-logs/`, результаты recruitment audits и
+`fia-verdict.txt`. Fixture есть только в изолированной копии, production
+содержит только политику навыка.
+
+## Исторический результат VETERAN
+
 Результат: `AICF_ManagedAICombatPolicy` задаёт `EAISkill.VETERAN` живым
 участникам initial/replacement roster обеих сторон после readiness gates.
 Применение server-only, синхронное, без новых subscriptions. Stock подавление,

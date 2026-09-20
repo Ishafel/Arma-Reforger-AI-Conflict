@@ -1611,7 +1611,7 @@ class AICF_MatchController
 		bool cohesionApplied = m_GroupCohesionPolicy.Apply(slot.GetGroup());
 		int combatConfiguredAgents = AICF_ManagedAICombatPolicy.Apply(slot.GetGroup());
 		string combatPolicyDetails = string.Format(
-			"faction=%1 slot=%2 generation=%3 deployment=%4 skill=VETERAN configured_agents=%5 expected_agents=%6",
+			"faction=%1 slot=%2 generation=%3 deployment=%4 skill=EXPERT configured_agents=%5 expected_agents=%6",
 			faction.GetFactionKey(),
 			slot.GetSlotId(),
 			slot.GetSpawnGeneration(),
