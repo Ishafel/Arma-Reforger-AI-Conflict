@@ -1,5 +1,30 @@
 # Проверки и evidence
 
+## Полный инвентарь RHS — 2026-09-20
+
+Проверены все 23 комплекта осмотра: все стволы, совместимость и количество
+патронов с учётом патронника, медицина и функциональное снаряжение до/после.
+Исправлена потеря часов, фонарей, лопаток, биноклей и ранцевой RF-10 при смене
+одежды ЧВК. Финальный stopped inventory audit — 23/23 PASS / 0; native exit 0.
+Четыре профильных static audits до/после и три Workbench graphs — PASS / 0.
+Прежние два AI_COMMANDER_UI_STATE failures и native/RHS/stock runtime errors
+сохранены. Результат по каждому бойцу, команды и NOT RUN:
+[RHS_INVENTORY_AUDIT.md](RHS_INVENTORY_AUDIT.md).
+
+## Экипировка RHS и осмотр ЧВК — 2026-09-20
+
+Российский roster сочетает Summer/Demiseason VKPO и штатные варианты оружия
+MSV. FIA получает три нейтральных комплекта ЧВК через server-only adapter:
+Crye G3, балаклавы, OPSCORE AMP и комплектное RHS оружие с обвесом.
+В отдельной fixture все 23 модели стоят в ряд с отключённым AI.
+Stopped server smoke обновления: 13/13 замен экипировки, 13/13 проверок нового
+вооружения (12 глушителей, ПКМ с EOTech), 23/23 проверок сохранённой медицины,
+ПТ-комплектов и отключённого AI; native exit 0. Static сохраняет два прежних
+`AI_COMMANDER_UI_STATE` failures. Workbench stock, оба RHS graphs и fixture —
+PASS / 0. Полный runtime не чистый PASS: прежние RHS/stock native diagnostics
+и shutdown resupply errors сохранены. Визуальный осмотр — NOT RUN до ответа
+пользователя. Команды, файлы и evidence: [RHS_WARDROBE.md](RHS_WARDROBE.md).
+
 ## Строительство на всех точках stock Everon — 2026-09-20
 
 Изолированный 15-минутный прогон: все 39 активных точек переданы US и полностью

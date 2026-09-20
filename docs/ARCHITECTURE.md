@@ -98,6 +98,24 @@ stable key используется только политикой, CLI, UI и 
 Одно событие `[AICF][CONTENT][INFO][PROFILE_SELECTED]` публикует обе стороны
 mapping как startup evidence.
 
+`AICF_RHSPMCEquipment` в RHS integration владеет заменой экипировки stock
+FIA AI. Одноразовый character callback через 1500 ms проверяет server/master,
+активный RHS profile, faction, prefab, EntityID и отсутствие player control.
+Callback снимается при уничтожении character; второго campaign loop нет.
+Изолированный inventory draft сохраняет медицину, ПТ и прочее содержимое карманов,
+проверяет вместимость нового комплекта до выдачи. `AICF_RHSPMCArmament` заменяет
+основное оружие целым RHS prefab и адаптирует запасные магазины; помощник
+пулемётчика получает коробки для нового ПКМ. Native prefab владеет совместимостью
+обвеса. Commit повторно проверяет identity, полный inventory signature,
+заряженное оружие, глушитель и запас магазинов; при несовпадении восстанавливает
+исходный snapshot. Faction, group ownership, роли и экономика не изменяются.
+Server preview не вызывает damage RPC. Подробности и fixture:
+[RHS_WARDROBE.md](RHS_WARDROBE.md).
+Функциональные gadget items сохраняются независимо от наличия
+`BaseLoadoutClothComponent`: корневые остаются в штатных слотах, вложенные
+переносятся вместе с cargo. Ранцевая рация исключает выдачу обычного рюкзака.
+Полный аудит всех 23 комплектов: [RHS_INVENTORY_AUDIT.md](RHS_INVENTORY_AUDIT.md).
+
 ## Bootstrap
 
 Точка входа — modded `SCR_GameModeCampaign` в

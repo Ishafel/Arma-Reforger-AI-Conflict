@@ -185,7 +185,16 @@ if ($failures.Count -eq 0) {
     }
 
     Forbid-Match 'RHS_SINGLE_LIFECYCLE' $rhsSources '\bOnGameStart\s*\(' 'RHS addon must not add a second OnGameStart lifecycle'
-    Forbid-Match 'RHS_SINGLE_LIFECYCLE' $rhsSources 'new\s+AICF_MatchController|CallLater\s*\(|GetOn\w*\(\)\.Insert\s*\(' 'RHS addon must not add a controller, loop or event subscription'
+    # Одноразовая выдача одежды принадлежит конкретному character, а не
+    # campaign lifecycle. Любой другой CallLater (включая повторный) запрещён.
+    $pmcInitCall = 'GetGame\(\)\.GetCallqueue\(\)\.CallLater\(AICF_ApplyPMCEquipment, 1500, false\);'
+    $rhsCampaignSources = [regex]::Replace($rhsSources, $pmcInitCall, '')
+    Forbid-Match 'RHS_SINGLE_LIFECYCLE' $rhsCampaignSources 'new\s+AICF_MatchController|CallLater\s*\(|GetOn\w*\(\)\.Insert\s*\(' 'RHS addon must not add a controller, loop or event subscription'
+    $pmcPath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/Content/AICF_RHSPMCEquipment.c'
+    $pmc = Get-Content -LiteralPath $pmcPath -Raw
+    Require-Match 'RHS_PMC_CLEANUP' $pmc 'Remove\(AICF_ApplyPMCEquipment\)' 'Character initialization callback lacks destruction cleanup'
+    Require-Match 'RHS_PMC_AUTHORITY' $pmc '!Replication.IsServer\(\)[\s\S]*rpl.IsMaster\(\)[\s\S]*!controller.IsPlayerControlled\(\)' 'PMC equipment must be authority-only and exclude controlled players'
+    Require-Match 'RHS_PMC_IDENTITY' $pmc 'GetID\(\) != identity[\s\S]*GetPrefabName\(character\) != source' 'PMC commit must recheck immutable character identity'
     $controllerCount = ([regex]::Matches($arlandBootstrap, 'new\s+AICF_MatchController\s*\(')).Count
     if ($controllerCount -ne 1) {
         Add-Failure 'RHS_SINGLE_LIFECYCLE' "Arland bootstrap must construct exactly one controller; found $controllerCount"

@@ -101,6 +101,10 @@ class AICF_RHSContentProfile : AICF_ContentProfile
 		else if (stableKey == "USSR")
 		{
 			prefix = "Prefabs/Characters/Factions/OPFOR/RHS_AFRF/MSV/VKPO_Demiseason/Character_RHS_RF_MSV_VKPO_DS_";
+			// Один современный MSV стиль: летняя и демисезонная VKPO/EMR.
+			// Комплектные prefab сохраняют штатные магазины и роль бойца.
+			if (memberIndex == 1 || memberIndex == 3 || memberIndex == 5 || memberIndex == 8)
+				prefix = "Prefabs/Characters/Factions/OPFOR/RHS_AFRF/MSV/VKPO_Summer/Character_RHS_RF_MSV_VKPO_S_";
 		}
 		else
 		{
@@ -171,6 +175,16 @@ class AICF_RHSContentProfile : AICF_ContentProfile
 				break;
 		}
 
+		if (stableKey == "USSR" && (memberIndex == 1 || memberIndex == 4 || memberIndex == 6 || memberIndex == 9))
+		{
+			// Варианты _2/_3 отличаются штатным оружием/обвесом той же роли.
+			string selected = suffixes[0];
+			string variant = "_2.et";
+			if (memberIndex == 6 || memberIndex == 9)
+				variant = "_3.et";
+			selected.Replace(".et", variant);
+			suffixes[0] = selected;
+		}
 		return !suffixes.IsEmpty();
 	}
 

@@ -63,9 +63,13 @@ bootstrap content profile и содержит
 
 Stock profile сохраняет текущие `US`/`USSR` catalog mappings. RHS profile
 разрешает `RHS_USAF` как стабильную сторону `US`, `RHS_AFRF` как `USSR`,
-создаёт USMC MEF и MSV VKPO Demiseason rosters из faction `CHARACTER` catalogs
+создаёт USMC MEF и смешанные MSV VKPO Summer/Demiseason rosters из faction `CHARACTER` catalogs
 и выбирает только явно поддержанные faction `VEHICLE` candidates. RHS
 character/source-roster и vehicle fallback к stock запрещён fail-closed.
+В RHS охрана FIA получает нейтральные комплекты ЧВК: закрытые лица, тёмную
+экипировку и RHS оружие с оптикой, глушителями и подходящим боезапасом.
+Медицина и ПТ-комплекты сохраняются; пулемётный расчёт получает совместимые коробки.
+Состав экипировки и отдельный сценарий осмотра: [RHS_WARDROBE.md](docs/RHS_WARDROBE.md).
 Для малых казарм RHS-only building-browser adapter трактует как
 `GROUPTYPE_ESSENTIAL` по одному уже зарегистрированному минимальному USMC/MSV
 `SentryTeam` на сторону в локальной копии данных фильтра и в локальном массиве
