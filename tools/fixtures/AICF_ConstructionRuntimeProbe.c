@@ -363,10 +363,10 @@ modded class AICF_ConstructionPlanner
 		for (int i; i < 256; i++)
 		{
 			float yaw, nextYaw;
-			vector point = AICF_ConstructionSiteSearch.CandidateOffset(i, 12, 120, yaw);
-			vector next = AICF_ConstructionSiteSearch.CandidateOffset(i + 64, 12, 120, nextYaw);
+			vector point = AICF_ConstructionSiteSearch.CandidateOffset(i * 8, 12, 120, yaw);
+			vector next = AICF_ConstructionSiteSearch.CandidateOffset((i + 64) * 8, 12, 120, nextYaw);
 			float distance = point.Length();
-			if (distance < 7.99 || distance > 120.01)
+			if (distance < 0 || distance > 120.01)
 				bounded = false;
 			if (distance < 20)
 				nearProvider = true;
@@ -378,9 +378,15 @@ modded class AICF_ConstructionPlanner
 					unique = false;
 			}
 			positions.Insert(point);
-			if (!orientations.Contains(yaw))
-				orientations.Insert(yaw);
-			next = AICF_ConstructionSiteSearch.CandidateOffset(i, 12, 120, nextYaw);
+			orientations.Clear();
+			for (int orientation; orientation < 8; orientation++)
+			{
+				next = AICF_ConstructionSiteSearch.CandidateOffset(i * 8 + orientation, 12, 120, nextYaw);
+				if (vector.DistanceSqXZ(point, next) > 0.01 || orientations.Contains(nextYaw))
+					deterministic = false;
+				orientations.Insert(nextYaw);
+			}
+			next = AICF_ConstructionSiteSearch.CandidateOffset(i * 8, 12, 120, nextYaw);
 			if (vector.DistanceSqXZ(point, next) > 0.01 || yaw != nextYaw)
 				deterministic = false;
 		}

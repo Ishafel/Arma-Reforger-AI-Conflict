@@ -1,5 +1,17 @@
 # Проверки и evidence
 
+## Строительство на всех точках stock Everon — 2026-09-20
+
+Изолированный 15-минутный прогон: все 39 активных точек переданы US и полностью
+снабжены, production поиск и физические строители сохранены. Завершены 32
+постройки на 24 точках вне HQ; на 15 точках результата нет. 145 отмен по
+`SEARCH_BUDGET_EXHAUSTED`; отсутствие свободного места этим не доказано.
+Static до/после и Workbench — PASS; native exit 0. Строгие runtime audits —
+FAIL из-за двух stock resupply script errors при shutdown; других нарушений
+целевых construction/builder audits не найдено. Полная таблица всех точек,
+точные команды, source parity, evidence и NOT RUN:
+[CONSTRUCTION_ALL_BASES_20260920.md](CONSTRUCTION_ALL_BASES_20260920.md).
+
 ## Спавн пехоты вне препятствий — 2026-09-19
 
 В `AICF_GroupSpawner` добавлен opt-in `AICF_InfantrySpawnPlacement`:
@@ -1811,7 +1823,20 @@ service. Без него анализатор допускает коррект�
 completion должны совпадать с исходным order. Наличие готового stock здания
 и пропуск дубликата не засчитываются как новая постройка. Synthetic contracts
 проверяют полную матрицу, пропущенную пару и подменённую faction completion;
-всего 16 log inputs и шесть negative static inputs.
+всего 16 log inputs и 25 negative static inputs.
+
+Проверки поиска от 2026-09-20 и их ограничения описаны в
+[CONSTRUCTION_SEARCH_20260920.md](CONSTRUCTION_SEARCH_20260920.md).
+`Test-ConstructionSearchLog.ps1 -LogPath <stopped-console.log> -RequireBothSmall
+-MaxSmallPlacementMs 60000` проверяет обе малые казармы, физическую работу и
+completion, отдельно от общей проверки оплаты `Test-ConstructionLog.ps1`.
+`-Scenario dynamic|owner|provider|cancel|context|no-site` проверяет evidence fault cases.
+Ошибки движка не исключаются из verdict даже при успешных functional checks.
+`Measure-ConstructionSearch.ps1` сохраняет времена этапов, query categories,
+причины отказов, накопленное время script-вызовов и frame samples. Поля
+`*_cpu_ms` основаны на `GetTickCount`, а не на OS CPU profiler.
+Frame time сравнивается только у запусков
+без одновременно работающего Workbench/другого тестового сервера.
 
 Fixture `tools/fixtures/AICF_ConstructionRuntimeProbe.c` временно копируется в
 Core `Construction` и запускается только через `Start-AICFRuntime.ps1` с

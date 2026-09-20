@@ -101,7 +101,7 @@ class AICF_ConstructionBudgetProbe : AICF_ConstructionSiteSearch
 		checkpoint.Save(order);
 		order.m_iQueries = 2000;
 		order.m_iPathQueriesAt = 1900;
-		order.m_iPathStartOption = 0;
+		order.m_iPathStartOption = 7;
 		order.m_iNavPathCursor = 0;
 		order.m_aWorkCandidates.Clear();
 		order.m_aExits.Clear();
@@ -111,7 +111,7 @@ class AICF_ConstructionBudgetProbe : AICF_ConstructionSiteSearch
 		if (order.m_sToken == "identity-retained") passed++;
 		if (order.m_iQueries == 2000 && order.m_iQueries - order.m_iPathQueriesAt == 400) passed++;
 		if (order.m_Path == path && order.m_iStage == 3) passed++;
-		if (order.m_iPathStartOption == 3 && order.m_iNavPathCursor == 16) passed++;
+		if (order.m_iPathStartOption == 7 && order.m_iNavPathCursor == 16) passed++;
 		if (order.m_aExits.Count() == 1 && order.m_aExits[0] == volume) passed++;
 		if (order.m_aWorkCandidates.Count() == 1 && vector.DistanceSq(order.m_aWorkCandidates[0], "40 3 50") == 0) passed++;
 		Print(string.Format("[AICF][CONSTRUCTION_CHECKPOINT_CONTRACT] test_only=1 passed=%1 total=6", passed));
@@ -141,6 +141,33 @@ modded class SCR_CampaignMilitaryBaseManager
 {
 	override void SelectHQs(notnull array<SCR_CampaignMilitaryBaseComponent> candidates, notnull array<SCR_CampaignMilitaryBaseComponent> controlPoints, out notnull array<SCR_CampaignMilitaryBaseComponent> selectedHQs)
 	{
+		string requestedUS, requestedUSSR;
+		if (System.GetCLIParam("aicfConstructionProbeUSBase", requestedUS) && System.GetCLIParam("aicfConstructionProbeUSSRBase", requestedUSSR))
+		{
+			SCR_CampaignMilitaryBaseComponent us, ussr;
+			// Campaign manager ещё не зарегистрировал неинициализированные HQ.
+			// System содержит все штатные базы мира до выбора сторон.
+			array<SCR_MilitaryBaseComponent> worldBases = {};
+			SCR_MilitaryBaseSystem.GetInstance().GetBases(worldBases);
+			foreach (SCR_MilitaryBaseComponent worldBase : worldBases)
+			{
+				SCR_CampaignMilitaryBaseComponent base = SCR_CampaignMilitaryBaseComponent.Cast(worldBase);
+				if (!base || !base.GetOwner())
+					continue;
+				string id = AICF_ConstructionOrder.EntityKey(base.GetOwner().GetID());
+				if (id == requestedUS)
+					us = base;
+				if (id == requestedUSSR)
+					ussr = base;
+			}
+			if (us && ussr && us != ussr)
+			{
+				selectedHQs = {us, ussr};
+				Print("[AICF][CONSTRUCTION_PROBE_HQ] test_only=1 exact_pair=1 us_base=" + requestedUS + " ussr_base=" + requestedUSSR);
+				return;
+			}
+			Print("[AICF][CONSTRUCTION_PROBE_HQ] requested pair unavailable", LogLevel.ERROR);
+		}
 		super.SelectHQs(candidates, controlPoints, selectedHQs);
 		string desired;
 		if (!System.GetCLIParam("aicfConstructionProbeUSBase", desired) || selectedHQs.Count() != 2)

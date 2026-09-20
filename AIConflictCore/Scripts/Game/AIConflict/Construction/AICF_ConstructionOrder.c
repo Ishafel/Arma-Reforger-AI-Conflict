@@ -27,6 +27,19 @@ class AICF_ConstructionOrder
 	int m_iResumeAt;
 	int m_iSearchWindows = 1;
 	int m_iPathSliceAt;
+	int m_iCandidateStartedAt;
+	int m_iCandidateIndex;
+	int m_iPathResumes;
+	int m_iNextPathAttempt = 128;
+	bool m_bPathAdmitted;
+	bool m_bTerrainLiveChecked;
+	ref array<vector> m_aPathStarts = {};
+	ref array<vector> m_aSpawnSeeds = {};
+	AIPathfindingComponent m_PathContext;
+	bool m_bPathContextSet;
+	ref AICF_ConstructionNavigation m_Navigation = new AICF_ConstructionNavigation();
+	int m_iNavCacheHits;
+	int m_iPathSteps;
 	ref array<ref AICF_ConstructionCandidate> m_aPendingCandidates = {};
 	int m_iAttempts;
 	int m_iSearchOffset;
@@ -58,7 +71,7 @@ class AICF_ConstructionOrder
 	bool m_bPathStartSampled;
 	bool m_bPathStartReady;
 	vector m_vSpawnOrigin;
-	int m_iPathStartOption;
+	int m_iPathStartOption; // Cursor общих spawn seeds заказа, не checkpoint кандидата.
 	int m_iPathQueriesAt = -1;
 	int m_iStage;
 	vector m_aTransform[4];
@@ -86,6 +99,22 @@ class AICF_ConstructionOrder
 	int m_iLastBlockedAt;
 	string m_sReason;
 	string m_sObstacle;
+	bool m_bTemporaryObstacle;
+
+	string SearchStatus()
+	{
+		if (m_sReason == "SEARCH_AREA_EXHAUSTED")
+			return "AREA_EXHAUSTED";
+		if (m_sReason == "SEARCH_BUDGET_EXHAUSTED" || m_sReason == "CANDIDATE_COMPUTE_TIMEOUT" || m_sReason == "WORKER_PATH_QUERY_LIMIT")
+			return "COMPUTE_LIMIT";
+		if (m_bTemporaryObstacle && (m_sReason == "PHYSICAL_OBSTRUCTION" || m_sReason == "OBSTACLE_OR_RESERVED_SITE" || m_sReason == "DEPOT_EXIT_BLOCKED" || m_sReason == "WORKER_ENDPOINT_OBSTRUCTED"))
+			return "TEMPORARY_OBSTACLE";
+		if (m_bAccepted || m_sReason == "SITE_VALIDATED")
+			return "SITE_FOUND";
+		if (m_bCancelled)
+			return "CANCELLED";
+		return "COMPUTING";
+	}
 
 	void RejectCandidate()
 	{
@@ -102,6 +131,12 @@ class AICF_ConstructionOrder
 			Log("CONSTRUCTION_SITE_REJECTED", "obstacle=" + m_sObstacle);
 	}
 
+	// Каждый отказ уже выбранной площадки виден, даже при повторе категории.
+	void RejectSelected(string phase)
+	{
+		Log("CONSTRUCTION_SELECTED_REJECTED", "phase=" + phase + " obstacle=" + m_sObstacle + " candidate_index=" + m_iCandidateIndex);
+	}
+
 	void LogSearch()
 	{
 		string counts;
@@ -112,6 +147,7 @@ class AICF_ConstructionOrder
 			m_aPhaseQueries[0], m_aPhaseQueries[1], m_aPhaseQueries[2], m_aPhaseQueries[3], m_aPhaseQueries[4], m_aPhaseQueries[5], m_aPhaseQueries[6]);
 		cost += string.Format(" budget_wait_windows=%1 path_pruned=%2 stage=%3 search_cpu_ms=%4 max_slice_ms=%5 checkpoints=%6 search_windows=%7", m_iBudgetWaitWindows, m_iPathPruned, m_iStage, m_iSearchCpuMs, m_iMaxSliceMs, m_aPendingCandidates.Count(), m_iSearchWindows);
 		Log("CONSTRUCTION_SEARCH_COST", cost);
+		Log("CONSTRUCTION_NAV_CACHE", "hits=" + m_iNavCacheHits);
 	}
 
 	static string EntityKey(EntityID id)
@@ -124,12 +160,19 @@ class AICF_ConstructionOrder
 
 	bool IdentityValid()
 	{
-		return !m_bCancelled && Replication.IsServer() && m_Base && m_Base.GetOwner() &&
-			m_Base.GetOwner().GetID() == m_BaseId && m_Base.IsInitialized() && m_Base.GetFaction() == m_Faction &&
-			m_Provider && m_Provider.GetOwner() && m_Provider.GetOwner().GetID() == m_ProviderId &&
+		if (m_bCancelled || !Replication.IsServer() || !m_Base || !m_Provider)
+			return false;
+		IEntity baseOwner = m_Base.GetOwner();
+		IEntity providerOwner = m_Provider.GetOwner();
+		// Вызов с notnull argument должен находиться после явного guard.
+		// Stock service teardown может оставить component без owner entity.
+		if (!baseOwner || !providerOwner)
+			return false;
+		return baseOwner.GetID() == m_BaseId && m_Base.IsInitialized() && m_Base.GetFaction() == m_Faction &&
+			providerOwner.GetID() == m_ProviderId &&
 			m_Base.GetMasterProvider() == m_Provider && m_Provider.GetCampaignMilitaryBaseComponent() == m_Base &&
-			SCR_Faction.GetEntityFaction(m_Provider.GetOwner()) == m_Faction &&
-			vector.DistanceSq(m_Provider.GetOwner().GetOrigin(), m_vProviderPosition) < 0.01;
+			SCR_Faction.GetEntityFaction(providerOwner) == m_Faction &&
+			vector.DistanceSq(providerOwner.GetOrigin(), m_vProviderPosition) < 0.01;
 	}
 
 	bool PlacementUnchanged()
@@ -156,6 +199,7 @@ class AICF_ConstructionOrder
 			m_iCost, m_fBefore, m_fAfter, m_iReserve, m_iAttempts, m_iQueries, System.GetTickCount() - m_iStartedAt);
 		fields += string.Format(" props_cost=%1 props_before=%2 props_after=%3", m_iPropsCost, m_iPropsBefore, m_iPropsAfter);
 		fields += string.Format(" position=%1 yaw=%2 layout=%3 reason=%4 %5", m_aTransform[3], m_fYaw, EntityKey(m_LayoutId), m_sReason, extra);
+		fields += " search_status=" + SearchStatus();
 		AICF_Stage1Diagnostics.Info(eventName, fields);
 	}
 }
@@ -167,6 +211,7 @@ class AICF_ConstructionBaseState
 	int m_iDueAt;
 	int m_iRevision;
 	int m_iNextType;
+	int m_iSmallFailures;
 	ref array<int> m_aSearchOffsets = {0, 0, 0, 0, 0};
 	ref AICF_ConstructionOrder m_Order;
 }

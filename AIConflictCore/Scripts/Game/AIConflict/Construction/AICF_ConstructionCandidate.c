@@ -3,6 +3,11 @@
 class AICF_ConstructionCandidate
 {
 	float m_fRemainingDistance;
+	int m_iStartedAt;
+	int m_iIndex;
+	bool m_bPathPending;
+	protected bool m_bPathStartReady;
+	protected bool m_bPathStartSampled;
 	protected vector m_aTransform[4];
 	protected vector m_vMin;
 	protected vector m_vMax;
@@ -12,7 +17,6 @@ class AICF_ConstructionCandidate
 	protected float m_fMinHeight;
 	protected float m_fMaxHeight;
 	protected int m_iPathQueries;
-	protected int m_iPathStartOption;
 	protected int m_iNavRetry;
 	protected int m_iNavPathCursor;
 	protected ref array<vector> m_aWorkCandidates = {};
@@ -26,7 +30,8 @@ class AICF_ConstructionCandidate
 		m_vMax = order.m_vMax;
 		m_vStart = order.m_vPathStart;
 		m_vSpawnOrigin = order.m_vSpawnOrigin;
-		m_iPathStartOption = order.m_iPathStartOption;
+		m_iStartedAt = order.m_iCandidateStartedAt;
+		m_iIndex = order.m_iCandidateIndex;
 		m_iNavRetry = order.m_iNavRetry;
 		m_iNavPathCursor = order.m_iNavPathCursor;
 		foreach (vector work : order.m_aWorkCandidates)
@@ -34,9 +39,24 @@ class AICF_ConstructionCandidate
 		m_fYaw = order.m_fYaw;
 		m_fMinHeight = order.m_fMinHeight;
 		m_fMaxHeight = order.m_fMaxHeight;
-		m_iPathQueries = order.m_iQueries - order.m_iPathQueriesAt;
+		m_bPathPending = order.m_iPathQueriesAt >= 0;
+		m_bPathStartReady = order.m_bPathStartReady;
+		m_bPathStartSampled = order.m_bPathStartSampled;
+		m_iPathQueries = 0;
+		if (m_bPathPending)
+			m_iPathQueries = order.m_iQueries - order.m_iPathQueriesAt;
 		m_Path = order.m_Path;
-		m_fRemainingDistance = m_Path.RemainingDistance();
+		m_fRemainingDistance = float.MAX;
+		if (m_Path)
+			m_fRemainingDistance = m_Path.RemainingDistance();
+		else
+		{
+			foreach (vector start : order.m_aSpawnSeeds)
+			{
+				vector nearest = Vector(Math.Clamp(start[0], m_vMin[0], m_vMax[0]), start[1], Math.Clamp(start[2], m_vMin[2], m_vMax[2]));
+				m_fRemainingDistance = Math.Min(m_fRemainingDistance, vector.DistanceXZ(start, nearest));
+			}
+		}
 		foreach (AICF_ConstructionVolume exitVolume : order.m_aExits)
 			m_aExits.Insert(exitVolume);
 	}
@@ -48,7 +68,8 @@ class AICF_ConstructionCandidate
 		order.m_vMax = m_vMax;
 		order.m_vPathStart = m_vStart;
 		order.m_vSpawnOrigin = m_vSpawnOrigin;
-		order.m_iPathStartOption = m_iPathStartOption;
+		order.m_iCandidateStartedAt = m_iStartedAt;
+		order.m_iCandidateIndex = m_iIndex;
 		order.m_iNavRetry = m_iNavRetry;
 		order.m_iNavPathCursor = m_iNavPathCursor;
 		order.m_aWorkCandidates.Clear();
@@ -58,13 +79,20 @@ class AICF_ConstructionCandidate
 		order.m_fMinHeight = m_fMinHeight;
 		order.m_fMaxHeight = m_fMaxHeight;
 		order.m_iPathQueriesAt = order.m_iQueries - m_iPathQueries;
+		if (!m_bPathPending)
+		{
+			order.m_iPathQueriesAt = -1;
+			order.m_iCandidateStartedAt = System.GetTickCount();
+		}
 		order.m_Path = m_Path;
 		order.m_aExits.Clear();
 		foreach (AICF_ConstructionVolume exitVolume : m_aExits)
 			order.m_aExits.Insert(exitVolume);
 		order.m_bCandidateLiveChecked = true;
-		order.m_bPathStartSampled = true;
-		order.m_bPathStartReady = true;
+		order.m_bTerrainLiveChecked = true;
+		order.m_bPathStartSampled = m_bPathStartSampled;
+		order.m_bPathStartReady = m_bPathStartReady;
+		order.m_bPathAdmitted = true;
 		order.m_iStage = 3;
 		order.m_sReason = "PATH_CHECKPOINT_RESUMED";
 		order.m_sObstacle = "NONE";

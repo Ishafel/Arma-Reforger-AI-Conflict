@@ -166,55 +166,90 @@ class AICF_ConstructionSiteSearch
 		maxs += Vector(margin, 1, margin);
 	}
 
+	bool AreaCanFit(AICF_ConstructionOrder order)
+	{
+		vector size = order.m_Metadata.m_vMax - order.m_Metadata.m_vMin + Vector(m_Config.m_fMargin * 2, 0, m_Config.m_fMargin * 2);
+		float radius = order.m_Provider.GetBuildingRadius();
+		if (size[0] * size[0] + size[2] * size[2] <= 4 * radius * radius)
+			return true;
+		order.m_sReason = "FOOTPRINT_EXCEEDS_PROVIDER_DIAMETER";
+		return false;
+	}
+
 	bool BeginCandidate(AICF_ConstructionOrder order)
 	{
 		order.m_iQueryPhase = 0;
-		if (!TakeQueries(order, 1))
-			return false;
 		int attempt = order.m_iSearchOffset + order.m_iAttempts++;
+		order.m_iCandidateIndex = attempt;
+		order.m_iCandidateStartedAt = System.GetTickCount();
 		float extent = vector.DistanceXZ(order.m_Metadata.m_vMin, order.m_Metadata.m_vMax) * 0.5 + m_Config.m_fMargin;
-		float outer = Math.Max(0, order.m_Provider.GetBuildingRadius() - extent);
+		float outer = order.m_Provider.GetBuildingRadius();
 		vector offset = CandidateOffset(attempt, extent, outer, order.m_fYaw);
 		Math3D.AnglesToMatrix(Vector(order.m_fYaw, 0, 0), order.m_aTransform);
+		vector searchCenter = order.m_vProviderPosition;
+		// Первые центры рядом с реальным stock spawn: короткий подход обычно
+		// дешевле обхода всей базы. Это лишь порядок; далее покрывается весь
+		// provider radius, включая центр и внешнюю полосу допустимых углов.
+		if (attempt / 8 < 4 && order.m_Base.GetSpawnPoint())
+		{
+			if (!order.m_bPathStartSampled)
+			{
+				order.m_vSpawnOrigin = order.m_Base.GetSpawnPoint().GetOrigin();
+				order.m_bPathStartSampled = true;
+			}
+			searchCenter = order.m_vSpawnOrigin;
+		}
 		// Кандидат задаёт центр footprint, а не произвольный prefab pivot.
 		vector center = (order.m_Metadata.m_vMin + order.m_Metadata.m_vMax) * 0.5;
-		order.m_aTransform[3] = order.m_vProviderPosition + offset - order.m_aTransform[0] * center[0] - order.m_aTransform[2] * center[2];
-		order.m_aTransform[3][1] = GetGame().GetWorld().GetSurfaceY(order.m_aTransform[3][0], order.m_aTransform[3][2]);
+		order.m_aTransform[3] = searchCenter + offset - order.m_aTransform[0] * center[0] - order.m_aTransform[2] * center[2];
 		Bounds(order, order.m_aTransform, m_Config.m_fMargin, order.m_vMin, order.m_vMax);
-		order.m_fMinHeight = order.m_aTransform[3][1];
-		order.m_fMaxHeight = order.m_fMinHeight;
 		order.m_iSample = 0;
 		order.m_bCandidateLiveChecked = false;
+		order.m_bTerrainLiveChecked = false;
+		order.m_bPathAdmitted = false;
+		if (order.m_aSpawnSeeds.IsEmpty() && order.m_Base.GetSpawnPoint())
+			order.m_Base.GetSpawnPoint().AICF_ConstructionPositions(order.m_aSpawnSeeds);
 		order.m_aTerrainHeights.Clear();
 		order.m_iNavRetry = 0;
 		order.m_iNavPathCursor = 0;
 		order.m_Path = null;
 		order.m_aWorkCandidates.Clear();
-		order.m_bPathStartSampled = false;
 		order.m_bPathStartReady = false;
-		order.m_iPathStartOption = 0;
 		order.m_iPathQueriesAt = -1;
 		order.m_iExitOption = 0;
 		order.m_iExitSample = 0;
 		order.m_aExits.Clear();
 		order.m_aExitHeights.Clear();
 		order.m_sObstacle = "NONE";
+		order.m_bTemporaryObstacle = false;
 		order.m_sReason = "CANDIDATE";
 		if (!InsideBounds(order))
 			return false;
+		if (!TakeQueries(order, 1))
+			return false;
+		order.m_aTransform[3][1] = GetGame().GetWorld().GetSurfaceY(order.m_aTransform[3][0], order.m_aTransform[3][2]);
+		Bounds(order, order.m_aTransform, m_Config.m_fMargin, order.m_vMin, order.m_vMax);
+		order.m_fMinHeight = order.m_aTransform[3][1];
+		order.m_fMaxHeight = order.m_fMinHeight;
 		order.m_iStage = 1;
 		return true;
 	}
 
 	static vector CandidateOffset(int attempt, float extent, float outer, out float yaw)
 	{
-		// Halton покрывает площадь диска: каждая попытка исследует новый центр.
-		// Порядок не зависит от размера order; cursor продолжает ту же выборку.
-		yaw = Math.Floor(Fraction((attempt + 1) * 0.61803399) * 8) * 45;
-		float radial = RadicalInverse(attempt + 1, 2);
-		float angle = RadicalInverse(attempt + 1, 3) * Math.PI2;
-		float inner = Math.Min(8, outer);
-		float radius = Math.Sqrt(Math.Lerp(inner * inner, outer * outer, radial));
+		// У каждого центра восемь ориентаций. Cursor не зависит от размера
+		// order; после ограниченного near-spawn прохода Halton уточняет весь
+		// диск, без прежнего внутреннего отверстия и вычитания circumradius.
+		int sample = attempt / 8;
+		int orientation = (attempt % 8) * 3;
+		orientation = orientation % 8;
+		yaw = orientation * 45;
+		float radial = RadicalInverse(sample + 1, 2);
+		float angle = RadicalInverse(sample + 1, 3) * Math.PI2;
+		float radiusLimit = outer;
+		if (sample < 4)
+			radiusLimit = Math.Min(outer, extent * 3);
+		float radius = Math.Sqrt(radial) * radiusLimit;
 		return Vector(Math.Sin(angle) * radius, 0, Math.Cos(angle) * radius);
 	}
 
@@ -230,11 +265,6 @@ class AICF_ConstructionSiteSearch
 			factor /= radix;
 		}
 		return result;
-	}
-
-	protected static float Fraction(float value)
-	{
-		return value - Math.Floor(value);
 	}
 
 	protected bool InsideBounds(AICF_ConstructionOrder order)
@@ -284,7 +314,7 @@ class AICF_ConstructionSiteSearch
 		return true;
 	}
 
-	// -1 отказ, 0 pending, 1 полноценная площадка.
+	// -1 отказ, 0 pending, 1 полноценная площадка, 2 geometry ready для очереди.
 	int Step(AICF_ConstructionOrder order, AIPathfindingComponent pathfinding, int sliceMs = -1)
 	{
 		if (sliceMs < 0)
@@ -294,8 +324,20 @@ class AICF_ConstructionSiteSearch
 			return 0;
 		if (order.m_iStage == 4)
 			return 1;
+		int candidateLifetime = 60000;
 		if (order.m_iStage == 3)
+			candidateLifetime = 15000;
+		if (System.GetTickCount() - order.m_iCandidateStartedAt >= candidateLifetime)
+		{
+			order.m_sReason = "CANDIDATE_COMPUTE_TIMEOUT";
+			return -1;
+		}
+		if (order.m_iStage == 3 && order.m_bTerrainLiveChecked)
+		{
+			if (!order.m_bPathAdmitted)
+				return 2;
 			return ValidatePath(order, pathfinding, sliceMs);
+		}
 		if (!order.m_bCandidateLiveChecked)
 		{
 			if (!LiveClear(order, null))
@@ -365,8 +407,23 @@ class AICF_ConstructionSiteSearch
 			if (exits <= 0)
 				return exits;
 			order.m_iStage = 3;
+			order.m_iCandidateStartedAt = System.GetTickCount();
+		}
+		// Terrain расширил вертикальный envelope. Не тратим path budget на
+		// площадку, которая уже сейчас не пройдёт ту же геометрию commit.
+		if (!order.m_bTerrainLiveChecked)
+		{
+			if (!LiveClear(order, null))
+			{
+				if (order.m_sReason == "QUERY_BUDGET")
+					return 0;
+				return -1;
+			}
+			order.m_bTerrainLiveChecked = true;
 		}
 		// Проверенный endpoint затем без пересчёта использует worker.
+		if (!order.m_bPathAdmitted)
+			return 2;
 		if (System.GetTickCount() - sliceStarted >= sliceMs)
 			return 0;
 		return ValidatePath(order, pathfinding, sliceMs - (System.GetTickCount() - sliceStarted));
@@ -470,6 +527,8 @@ class AICF_ConstructionSiteSearch
 	{
 		if (sliceMs < 0)
 			sliceMs = m_Config.m_iSliceMs;
+		int started = System.GetTickCount();
+		order.m_sReason = "WORKER_PATH_PENDING";
 		order.m_iQueryPhase = 3;
 		if (order.m_iPathQueriesAt < 0)
 			order.m_iPathQueriesAt = order.m_iQueries;
@@ -479,67 +538,93 @@ class AICF_ConstructionSiteSearch
 			order.m_sReason = "WORKER_PATH_QUERY_LIMIT";
 			return -1;
 		}
+		// Managed component reference может обнулиться после удаления owner.
+		// Это потеря identity, а не первый вызов нового order.
+		if (order.m_bPathContextSet && (!order.m_PathContext || order.m_PathContext != pathfinding))
+		{
+			order.m_aPathStarts.Clear();
+			order.m_Path = null;
+			order.m_sReason = "NAVMESH_CONTEXT_CHANGED";
+			return -1;
+		}
 		if (!pathfinding || !pathfinding.GetNavmeshComponent() || !order.m_Base.GetSpawnPoint())
 		{
 			order.m_sReason = "NAVMESH_UNAVAILABLE";
 			return -1;
 		}
+		order.m_PathContext = pathfinding;
+		order.m_bPathContextSet = true;
 		if (order.m_Path)
 		{
 			int result = order.m_Path.Step(order, pathfinding, sliceMs);
 			if (result != 0)
 				order.m_Path = null;
-			if (result < 0 && order.m_sReason == "WORKER_PATH_SEARCH_EXHAUSTED")
-				return NextPathStart(order);
 			return result;
 		}
 		vector mins, maxs;
 		WorkBounds(order, mins, maxs);
-		if (!TakeQueries(order, 2))
-			return 0;
 		if (!order.m_bPathStartSampled)
 		{
-			vector rotation;
-			order.m_Base.GetSpawnPoint().GetPositionAndRotation(order.m_vSpawnOrigin, rotation);
+			order.m_vSpawnOrigin = order.m_Base.GetSpawnPoint().GetOrigin();
 			order.m_bPathStartSampled = true;
 		}
-		vector start = order.m_vSpawnOrigin;
-		if (order.m_iPathStartOption > 0)
-		{
-			float angle = (order.m_iPathStartOption - 1) * Math.PI / 4;
-			start += Vector(Math.Sin(angle), 0, Math.Cos(angle)) * 6;
-			start[1] = GetGame().GetWorld().GetSurfaceY(start[0], start[2]);
-		}
 		NavmeshWorldComponent navmesh = pathfinding.GetNavmeshComponent();
-		if (!navmesh.IsTileLoaded(start) || !navmesh.IsTileLoaded(order.m_aTransform[3]))
+		if (!navmesh.IsTileLoaded(order.m_vSpawnOrigin) || !navmesh.IsTileLoaded(order.m_aTransform[3]))
 		{
 			if (order.m_iNavRetry++ >= 10)
 			{
 				order.m_sReason = "NAVMESH_TILE_TIMEOUT";
 				return -1;
 			}
-			if (!navmesh.IsTileRequested(start))
-				navmesh.LoadTileIn(start);
+			if (!navmesh.IsTileRequested(order.m_vSpawnOrigin))
+				navmesh.LoadTileIn(order.m_vSpawnOrigin);
 			if (!navmesh.IsTileRequested(order.m_aTransform[3]))
 				navmesh.LoadTileIn(order.m_aTransform[3]);
 			order.m_sReason = "NAVMESH_TILE_LOADING";
 			return 0;
 		}
-		if (!order.m_bPathStartReady && !pathfinding.GetClosestPositionOnNavmesh(start, "1 3 1", order.m_vPathStart))
+		if (order.m_aSpawnSeeds.IsEmpty())
+			order.m_Base.GetSpawnPoint().AICF_ConstructionPositions(order.m_aSpawnSeeds);
+		// Все authored stock spawn варианты обслуживает один multi-source
+		// поиск. Появление worker всё равно проходит физическую проверку spawner.
+		while (order.m_aPathStarts.Count() == 0 || order.m_iPathStartOption < order.m_aSpawnSeeds.Count())
 		{
-			order.m_sReason = "WORKER_START_OFF_NAVMESH";
-			return NextPathStart(order);
+			if (System.GetTickCount() - started >= sliceMs)
+				return 0;
+			if (order.m_iPathStartOption >= order.m_aSpawnSeeds.Count())
+			{
+				order.m_sReason = "WORKER_START_OFF_NAVMESH";
+				return -1;
+			}
+			vector start = order.m_aSpawnSeeds[order.m_iPathStartOption];
+			if (!navmesh.IsTileLoaded(start))
+			{
+				if (!navmesh.IsTileRequested(start) && !navmesh.LoadTileIn(start))
+				{
+					order.m_iPathStartOption++;
+					continue;
+				}
+				order.m_sReason = "NAVMESH_TILE_LOADING";
+				return 0;
+			}
+			if (!TakeQueries(order, 2))
+				return 0;
+			start[1] = GetGame().GetWorld().GetSurfaceY(start[0], start[2]);
+			order.m_iPathStartOption++;
+			vector projected;
+			if (pathfinding.GetClosestPositionOnNavmesh(start, "1 3 1", projected))
+				order.m_aPathStarts.Insert(projected);
 		}
+		order.m_vPathStart = order.m_aPathStarts[0];
 		order.m_bPathStartReady = true;
 		// Контур unfinished layout, а не общий AABB всех будущих объектов.
 		// Три позиции на каждой стороне и четыре внешних fallback endpoints.
 		while (order.m_iNavPathCursor < 16)
 		{
-			if (!TakeQueries(order, 2))
+			if (System.GetTickCount() - started >= sliceMs)
 				return 0;
 			int side = order.m_iNavPathCursor % 4;
 			int option = order.m_iNavPathCursor / 4;
-			order.m_iNavPathCursor++;
 			if (option == 3)
 			{
 				mins = order.m_vMin;
@@ -553,18 +638,37 @@ class AICF_ConstructionSiteSearch
 				z = Math.Lerp(mins[2], maxs[2], option * 0.333333);
 			}
 			vector work;
+			float offset = 2;
+			if (option == 3)
+				offset = 3;
 			switch (side)
 			{
-				case 0: work = Vector(mins[0] - 2, 0, z); break;
-				case 1: work = Vector(maxs[0] + 2, 0, z); break;
-				case 2: work = Vector(x, 0, mins[2] - 2); break;
-				case 3: work = Vector(x, 0, maxs[2] + 2); break;
+				case 0: work = Vector(mins[0] - offset, 0, z); break;
+				case 1: work = Vector(maxs[0] + offset, 0, z); break;
+				case 2: work = Vector(x, 0, mins[2] - offset); break;
+				case 3: work = Vector(x, 0, maxs[2] + offset); break;
 			}
-			work[1] = GetGame().GetWorld().GetSurfaceY(work[0], work[2]);
 			vector endpoint;
+			if (!navmesh.IsTileLoaded(work))
+			{
+				if (!navmesh.IsTileRequested(work) && !navmesh.LoadTileIn(work))
+				{
+					order.m_sReason = "NAVMESH_TILE_UNAVAILABLE";
+					return -1;
+				}
+				order.m_sReason = "NAVMESH_TILE_LOADING";
+				return 0;
+			}
+			if (!TakeQueries(order, 3, false))
+				return 0;
+			TakeQueries(order, 2);
+			order.m_iNavPathCursor++;
+			work[1] = GetGame().GetWorld().GetSurfaceY(work[0], work[2]);
 			if (!pathfinding.GetClosestPositionOnNavmesh(work, "0.5 2 0.5", endpoint) || vector.DistanceSqXZ(work, endpoint) > 0.25)
 				continue;
 			if (!WorkClearOfExits(order, endpoint) || !WorkClearOfSolids(order, endpoint))
+				continue;
+			if (!WorkerClear(order, endpoint))
 				continue;
 			order.m_aWorkCandidates.Insert(endpoint);
 		}
@@ -576,21 +680,10 @@ class AICF_ConstructionSiteSearch
 		order.m_Path = new AICF_ConstructionPath();
 		WorkBounds(order, mins, maxs);
 		order.m_Path.Begin(order.m_vPathStart, order.m_aWorkCandidates, mins - "0.5 0 0.5", maxs + "0.5 0 0.5");
-		return 0;
-	}
-
-	protected int NextPathStart(AICF_ConstructionOrder order)
-	{
-		// Group spawn умеет смещать персонажа от stock marker. Выбираем рядом
-		// реальную navmesh позицию; builder затем получает именно этот старт.
-		if (++order.m_iPathStartOption >= 9)
-			return -1;
-		order.m_Path = null;
-		order.m_bPathStartReady = false;
-		order.m_iNavPathCursor = 0;
-		order.m_aWorkCandidates.Clear();
-		order.m_sReason = "WORKER_START_RETRY";
-		return 0;
+		order.m_Path.AddStarts(order.m_aPathStarts);
+		order.m_Path.IncludeArea(order.m_vProviderPosition, order.m_Provider.GetBuildingRadius() + 32);
+		order.m_Path.Seed(order.m_Navigation);
+		return order.m_Path.Step(order, pathfinding, Math.Max(0, sliceMs - (System.GetTickCount() - started)));
 	}
 
 	static void WorkBounds(AICF_ConstructionOrder order, out vector mins, out vector maxs)
@@ -614,8 +707,35 @@ class AICF_ConstructionSiteSearch
 		}
 		return true;
 	}
+	// Navmesh подтверждает маршрут точки, но не свободное место для тела
+	// у забора/дерева. Проверяем площадку подхода отдельно от будущего здания.
+	protected bool WorkerClear(AICF_ConstructionOrder order, vector endpoint)
+	{
+		if (!TakeQueries(order, 1))
+			return false;
+		TraceOBB trace = new TraceOBB();
+		trace.Mat[0] = "1 0 0";
+		trace.Mat[1] = "0 1 0";
+		trace.Mat[2] = "0 0 1";
+		trace.Start = endpoint;
+		trace.Mins = "-1 0.15 -1";
+		trace.Maxs = "1 2 1";
+		trace.Flags = TraceFlags.ENTS;
+		trace.LayerMask = EPhysicsLayerPresets.Projectile;
+		m_ExcludedRoot = null;
+		if (GetGame().GetWorld().TracePosition(trace, TraceEntity) < 0)
+		{
+			order.m_sReason = "WORKER_ENDPOINT_OBSTRUCTED";
+			order.m_sObstacle = Describe(trace.TraceEnt);
+			order.m_bTemporaryObstacle = IsTemporaryObstacle(trace.TraceEnt);
+			return false;
+		}
+		return true;
+	}
 	bool LiveClear(AICF_ConstructionOrder order, IEntity excludedRoot)
 	{
+		if (order.m_iStage == 4 && !excludedRoot && !InsideBounds(order))
+			return false;
 		if (!excludedRoot)
 		{
 			order.m_iQueryPhase = 0;
@@ -623,9 +743,14 @@ class AICF_ConstructionSiteSearch
 				order.m_iQueryPhase = 4;
 		}
 		bool atomic = order.m_iStage == 4 || excludedRoot != null;
-		if (atomic && !BeginLiveBudget(order, 2 + order.m_Metadata.m_aCollisionVolumes.Count() + order.m_aExits.Count() * 2))
+		int liveQueries = 2 + order.m_Metadata.m_aCollisionVolumes.Count() + order.m_aExits.Count() * 2;
+		if (order.m_iStage == 4 && !excludedRoot)
+			liveQueries++;
+		if (atomic && !BeginLiveBudget(order, liveQueries))
 			return false;
 		bool clear = LiveClearNow(order, excludedRoot);
+		if (clear && order.m_iStage == 4 && !excludedRoot)
+			clear = WorkerClear(order, order.m_vWork);
 		if (atomic)
 			s_AtomicOrder = null;
 		return clear;
@@ -642,6 +767,7 @@ class AICF_ConstructionSiteSearch
 		TakeQueries(order, 2);
 		m_ExcludedRoot = excludedRoot;
 		m_bBlocked = false;
+		order.m_bTemporaryObstacle = false;
 		m_sObstacle = "NONE";
 		m_vQueryMin = order.m_vMin;
 		m_vQueryMax = order.m_vMax;
@@ -726,6 +852,7 @@ class AICF_ConstructionSiteSearch
 			{
 				order.m_sReason = "PHYSICAL_OBSTRUCTION";
 				order.m_sObstacle = Describe(trace.TraceEnt);
+				order.m_bTemporaryObstacle = IsTemporaryObstacle(trace.TraceEnt);
 				return false;
 			}
 		}
@@ -769,6 +896,7 @@ class AICF_ConstructionSiteSearch
 		{
 			order.m_sReason = "DEPOT_EXIT_BLOCKED";
 			order.m_sObstacle = Describe(trace.TraceEnt);
+			order.m_bTemporaryObstacle = order.m_bTemporaryObstacle || IsTemporaryObstacle(trace.TraceEnt);
 			return false;
 		}
 		return true;
@@ -781,6 +909,15 @@ class AICF_ConstructionSiteSearch
 		if (entity.GetPrefabData())
 			return entity.GetPrefabData().GetPrefabName();
 		return entity.ClassName();
+	}
+
+	protected static bool IsTemporaryObstacle(IEntity entity)
+	{
+		if (!entity)
+			return false;
+		IEntity root = entity.GetRootParent();
+		return entity.IsInherited(ChimeraCharacter) || entity.IsInherited(Vehicle) ||
+			(root && (root.IsInherited(ChimeraCharacter) || root.IsInherited(Vehicle)));
 	}
 
 	protected static vector LocalPoint(AICF_ConstructionOrder order, vector point)
@@ -832,12 +969,24 @@ class AICF_ConstructionSiteSearch
 			}
 		}
 		SCR_SpawnPoint spawnPoint = SCR_SpawnPoint.Cast(entity);
+		SCR_SpawnPositionComponent infantrySlot = SCR_SpawnPositionComponent.Cast(entity.FindComponent(SCR_SpawnPositionComponent));
+		if (infantrySlot)
+		{
+			SCR_SpawnPositionComponentClass spawnData = SCR_SpawnPositionComponentClass.Cast(infantrySlot.GetComponentData(entity));
+			if (!spawnData)
+				blocked = true;
+			else
+			{
+				vector spawnTransform[4];
+				entity.GetWorldTransform(spawnTransform);
+				vector spawnMin, spawnMax;
+				TransformBounds(spawnData.GetMinBoundsVector(), spawnData.GetMaxBoundsVector(), spawnTransform, 0, spawnMin, spawnMax);
+				blocked = blocked || (spawnMin[0] <= m_vQueryMax[0] && spawnMax[0] >= m_vQueryMin[0] && spawnMin[2] <= m_vQueryMax[2] && spawnMax[2] >= m_vQueryMin[2]);
+			}
+		}
 		if (entity.FindComponent(SCR_ServicePointComponent) || spawnPoint)
 		{
 			vector position = entity.GetOrigin();
-			vector rotation;
-			if (spawnPoint)
-				spawnPoint.GetPositionAndRotation(position, rotation);
 			vector relative = position - m_aQueryTransform[3];
 			vector local = Vector(vector.Dot(relative, m_aQueryTransform[0]), 0, vector.Dot(relative, m_aQueryTransform[2]));
 			bool inside = local[0] >= m_vLocalQueryMin[0] - 2 && local[0] <= m_vLocalQueryMax[0] + 2 &&
@@ -854,6 +1003,7 @@ class AICF_ConstructionSiteSearch
 		{
 			m_bBlocked = true;
 			m_sObstacle = Describe(entity);
+			m_QueryOrder.m_bTemporaryObstacle = IsTemporaryObstacle(entity);
 			return false;
 		}
 		return true;
@@ -878,6 +1028,7 @@ class AICF_ConstructionSiteSearch
 		if (!receipt.PlacementUnchanged())
 		{
 			receipt.m_sReason = "LAYOUT_TRANSFORM_CHANGED";
+			receipt.RejectSelected("COMPLETION");
 			return false;
 		}
 		vector transform[4];
@@ -896,6 +1047,10 @@ class AICF_ConstructionSiteSearch
 		bool clear = search.LiveClear(check, entity);
 		receipt.m_aPhaseQueries[5] = receipt.m_aPhaseQueries[5] + check.m_iQueries;
 		receipt.m_sReason = check.m_sReason;
+		receipt.m_sObstacle = check.m_sObstacle;
+		receipt.m_bTemporaryObstacle = check.m_bTemporaryObstacle;
+		if (!clear)
+			receipt.RejectSelected("COMPLETION");
 		return clear;
 	}
 }

@@ -22,6 +22,9 @@ class AICF_ConstructionPlanner
 	protected bool m_bMetadataBatchThisTick;
 	protected bool m_bPlacementAttemptedThisTick;
 	protected bool m_bStopped;
+	protected int m_iTotalCpuMs;
+	protected int m_iMaxUpdateMs;
+	protected int m_iUpdates;
 
 	void Start(SCR_GameModeCampaign campaign, AICF_BaseBuilderService builders, AICF_EconomySystem economy, AICF_AICommander us, AICF_AICommander ussr)
 	{
@@ -50,6 +53,7 @@ class AICF_ConstructionPlanner
 		if (m_bStopped)
 			return;
 		m_bStopped = true;
+		AICF_Stage1Diagnostics.Info("CONSTRUCTION_SCHEDULER_COST", string.Format("cpu_ms=%1 max_update_ms=%2 updates=%3", m_iTotalCpuMs, m_iMaxUpdateMs, m_iUpdates));
 		if (m_BaseSystem)
 			m_BaseSystem.GetOnBaseFactionChanged().Remove(OnOwnerChanged);
 		if (m_Manager)
@@ -137,27 +141,31 @@ class AICF_ConstructionPlanner
 					order.Log("CONSTRUCTION_COMPLETED", "service_online=1");
 					state.m_Order = null;
 					state.m_iNextType = 0;
+					state.m_iSmallFailures = 0;
 				}
 				continue;
 			}
 			if (!order.IdentityValid() || !Commander(order.m_Faction) || m_Builders.HasUnfinishedWork(order.m_Base) ||
 				order.m_Base.AreEnemiesPresent() || order.m_Base.IsBeingCaptured() || order.m_Base.GetCaptureState() != SCR_EBaseCaptureState.NONE)
 				Cancel(state, "LIFECYCLE_INVALIDATED");
+			else if (order.m_bPathContextSet && (!order.m_PathContext || order.m_PathContext != Commander(order.m_Faction).GetConstructionPathfinding()))
+				// Включает geometry checkpoint и ожидание commit budget: эти
+				// состояния не обязаны вызывать ValidatePath в текущем tick.
+				Cancel(state, "NAVMESH_CONTEXT_CHANGED");
 			else if (now >= order.m_iDeadline)
 			{
-				// Deadline ограничивает одно окно работы, а не уничтожает уже
-				// оплаченные queries незавершённых кандидатов. Не более трёх окон
-				// одного order; ownership/player work проверяются и во время паузы.
+				// Незавершённое вычисление продолжается без cooldown. Таймер
+				// ограничивает вычисление, но не доказывает отсутствие места.
 				if (order.m_iStage < 4 && (order.m_iStage > 0 || !order.m_aPendingCandidates.IsEmpty()) && order.m_iSearchWindows < 3)
 				{
 					order.m_iSearchWindows++;
-					order.m_iResumeAt = now + m_Config.m_iCooldownMs;
-					order.m_iDeadline = order.m_iResumeAt + m_Config.m_iDeadlineMs;
+					order.m_iResumeAt = now;
+					order.m_iDeadline = now + m_Config.m_iDeadlineMs;
 					order.LogSearch();
-					order.Log("CONSTRUCTION_SEARCH_PAUSED", "resume_at=" + order.m_iResumeAt);
+					order.Log("CONSTRUCTION_SEARCH_CONTINUED", "status=COMPUTING resume_at=" + order.m_iResumeAt);
 				}
 				else
-					Cancel(state, "NO_SAFE_SITE");
+					Cancel(state, "SEARCH_BUDGET_EXHAUSTED");
 			}
 			// Живой ожидающий commit сохраняет место в FIFO, даже если общий
 			// slice не позволил посетить его базу. Cancel снимает claim явно.
@@ -194,6 +202,10 @@ class AICF_ConstructionPlanner
 					break;
 			}
 		}
+		int updateMs = System.GetTickCount() - now;
+		m_iTotalCpuMs += updateMs;
+		m_iMaxUpdateMs = Math.Max(m_iMaxUpdateMs, updateMs);
+		m_iUpdates++;
 	}
 
 	protected void InitializeBases(int now)
@@ -311,9 +323,14 @@ class AICF_ConstructionPlanner
 		while (state.m_Order == order)
 		{
 			previousAttempts = order.m_iAttempts;
+			int previousStage = order.m_iStage;
+			int previousQueries = order.m_iQueries;
+			int previousPathSteps = order.m_iPathSteps;
 			SearchStep(state, sliceStarted);
-			if (order.m_iStage != 0 || order.m_iAttempts == previousAttempts ||
-				m_iCandidatesThisTick >= m_Config.m_iCandidatesPerTick || System.GetTickCount() - sliceStarted >= m_Config.m_iSliceMs)
+			if (state.m_Order != order || order.m_bAccepted || order.m_iStage == 4 ||
+				(order.m_iAttempts == previousAttempts && order.m_iStage == previousStage && order.m_iQueries == previousQueries && order.m_iPathSteps == previousPathSteps) ||
+				order.m_sReason == "QUERY_BUDGET" || System.GetTickCount() - sliceStarted >= m_Config.m_iSliceMs ||
+				(order.m_iStage == 0 && m_iCandidatesThisTick >= m_Config.m_iCandidatesPerTick))
 				break;
 		}
 		int elapsed = System.GetTickCount() - started;
@@ -335,10 +352,19 @@ class AICF_ConstructionPlanner
 				return;
 			m_bMetadataBatchThisTick = true;
 			int geometry = order.m_Metadata.StepGeometry(m_Config.m_iMetadataEntriesPerTick, Math.Max(1, m_Config.m_iSliceMs - (System.GetTickCount() - sliceStarted)));
+			// EntriesPerTick ограничивает один chunk; дешёвые chunks используют
+			// оставшееся время того же slice, вместо секунд простоя между ними.
+			while (geometry == 0 && System.GetTickCount() - sliceStarted < m_Config.m_iSliceMs)
+				geometry = order.m_Metadata.StepGeometry(m_Config.m_iMetadataEntriesPerTick, Math.Max(1, m_Config.m_iSliceMs - (System.GetTickCount() - sliceStarted)));
 			if (geometry < 0)
 				Cancel(state, "UNSUPPORTED_GEOMETRY");
 			else if (geometry > 0)
 			{
+				if (!m_Search.AreaCanFit(order))
+				{
+					Cancel(state, "SEARCH_AREA_EXHAUSTED");
+					return;
+				}
 				// Холодная metadata больших compositions может занять почти весь
 				// deadline. У поиска свой конечный срок после готовности geometry;
 				// подготовка уже ограничена исходным deadline из Decide().
@@ -349,8 +375,19 @@ class AICF_ConstructionPlanner
 			return;
 		}
 		int candidates;
-		if (order.m_iStage == 0 && !order.m_aPendingCandidates.IsEmpty() &&
-			(order.m_aPendingCandidates.Count() >= 8 || order.m_iAttempts >= m_Config.m_iAttempts))
+		// Старые pending states не занимают очередь бесконечно. Время жизни
+		// сохраняется при checkpoint/restore; бюджет кандидата также не обнуляется.
+		for (int expired = order.m_aPendingCandidates.Count() - 1; expired >= 0; expired--)
+		{
+			int lifetime = 60000;
+			if (order.m_aPendingCandidates[expired].m_bPathPending)
+				lifetime = 15000;
+			if (System.GetTickCount() - order.m_aPendingCandidates[expired].m_iStartedAt < lifetime)
+				continue;
+			order.Log("CONSTRUCTION_PENDING_EXPIRED", "candidate_index=" + order.m_aPendingCandidates[expired].m_iIndex + " status=COMPUTE_LIMIT");
+			order.m_aPendingCandidates.Remove(expired);
+		}
+		if (order.m_iStage == 0 && !order.m_aPendingCandidates.IsEmpty())
 		{
 			// Возобновляем наиболее продвинувшийся подтверждённый путь.
 			// FIFO tie-break; дальние тупики не делят квоту поровну с почти
@@ -361,15 +398,22 @@ class AICF_ConstructionPlanner
 				if (order.m_aPendingCandidates[i].m_fRemainingDistance < order.m_aPendingCandidates[best].m_fRemainingDistance)
 					best = i;
 			}
-			order.m_aPendingCandidates[best].Restore(order);
-			order.m_aPendingCandidates.Remove(best);
-			order.m_iPathSliceAt = order.m_iQueries;
+			float nearDistance = vector.DistanceXZ(order.m_Metadata.m_vMin, order.m_Metadata.m_vMax);
+			if (order.m_aPendingCandidates[best].m_fRemainingDistance <= nearDistance ||
+				order.m_aPendingCandidates.Count() >= 32 || order.m_iAttempts >= m_Config.m_iAttempts || order.m_iAttempts >= order.m_iNextPathAttempt)
+			{
+				order.m_aPendingCandidates[best].Restore(order);
+				order.m_aPendingCandidates.Remove(best);
+				order.m_iPathResumes++;
+				order.m_iNextPathAttempt = order.m_iAttempts + 4;
+				order.m_iPathSliceAt = order.m_iQueries;
+			}
 		}
 		while (order.m_iStage == 0 && m_iCandidatesThisTick < m_Config.m_iCandidatesPerTick && candidates++ < m_Config.m_iCandidatesPerTick && System.GetTickCount() - sliceStarted < m_Config.m_iSliceMs)
 		{
 			if (order.m_iAttempts >= m_Config.m_iAttempts)
 			{
-				Cancel(state, "NO_SAFE_SITE");
+				Cancel(state, "SEARCH_BUDGET_EXHAUSTED");
 				return;
 			}
 			int previousAttempts = order.m_iAttempts;
@@ -393,8 +437,22 @@ class AICF_ConstructionPlanner
 			return;
 		AICF_AICommander commander = Commander(order.m_Faction);
 		int result = m_Search.Step(order, commander.GetConstructionPathfinding(), Math.Max(0, m_Config.m_iSliceMs - (System.GetTickCount() - sliceStarted)));
+		if (result == 2)
+		{
+			AICF_ConstructionCandidate ready = new AICF_ConstructionCandidate();
+			ready.Save(order);
+			order.m_aPendingCandidates.Insert(ready);
+			order.m_iStage = 0;
+			order.m_sReason = "GEOMETRY_READY_PATH_QUEUED";
+			return;
+		}
 		if (result < 0)
 		{
+			if (order.m_sReason == "NAVMESH_CONTEXT_CHANGED")
+			{
+				Cancel(state, "NAVMESH_CONTEXT_CHANGED");
+				return;
+			}
 			order.RejectCandidate();
 			order.m_iStage = 0;
 			return;
@@ -406,6 +464,11 @@ class AICF_ConstructionPlanner
 			// поэтому повторный проход не повторяет terrain/physics/nav queries.
 			if (order.m_iStage == 3 && order.m_Path && order.m_iQueries - order.m_iPathSliceAt >= 128)
 			{
+				if (order.m_aPendingCandidates.Count() >= 32)
+				{
+					order.Log("CONSTRUCTION_PENDING_EXPIRED", "candidate_index=" + order.m_aPendingCandidates[0].m_iIndex + " status=QUEUE_LIMIT");
+					order.m_aPendingCandidates.Remove(0);
+				}
 				AICF_ConstructionCandidate checkpoint = new AICF_ConstructionCandidate();
 				checkpoint.Save(order);
 				order.m_aPendingCandidates.Insert(checkpoint);
@@ -429,6 +492,13 @@ class AICF_ConstructionPlanner
 		{
 			if (order.m_sReason == "QUERY_BUDGET")
 				return;
+			if (!order.IdentityValid())
+				order.m_sReason = "COMMIT_IDENTITY_CHANGED";
+			else if (Covered(order, order.m_eType))
+				order.m_sReason = "COMMIT_COVERAGE_CHANGED";
+			else
+				order.m_sReason = "COMMIT_UNFINISHED_WORK";
+			order.RejectSelected("COMMIT_IDENTITY_INVENTORY");
 			Cancel(state, "COMMIT_REVALIDATION_FAILED");
 			return;
 		}
@@ -438,6 +508,7 @@ class AICF_ConstructionPlanner
 				return;
 			// Занятый после поиска участок не отменяет весь заказ с минутным
 			// cooldown: снимаем только его reservation и проверяем следующий.
+			order.RejectSelected("COMMIT_GEOMETRY");
 			order.RejectCandidate();
 			order.m_bSiteReserved = false;
 			order.m_iStage = 0;
@@ -445,14 +516,23 @@ class AICF_ConstructionPlanner
 		}
 		if (!m_Economy.QuoteConstruction(order, m_Config))
 		{
+			order.RejectSelected("COMMIT_ECONOMY");
 			Cancel(state, "COMMIT_REVALIDATION_FAILED");
 			return;
 		}
 		m_bPlacementAttemptedThisTick = true;
 		if (!m_Adapter.Place(order, m_Config, m_Economy, m_Manager, m_Builders))
+		{
+			order.RejectSelected("PLACEMENT");
 			Cancel(state, "PLACEMENT_FAILED");
+		}
 		else
+		{
 			order.m_aPendingCandidates.Clear();
+			order.m_Path = null;
+			order.m_Navigation = null;
+			order.m_aPathStarts.Clear();
+		}
 	}
 
 	protected void Cancel(AICF_ConstructionBaseState state, string reason)
@@ -468,12 +548,24 @@ class AICF_ConstructionPlanner
 		// и восстановление одного дорогого кандидата больше не образует цикл.
 		order.m_aPendingCandidates.Clear();
 		order.m_Path = null;
+		order.m_Navigation = null;
+		order.m_aPathStarts.Clear();
 		if (!order.m_bAccepted)
 			order.m_bCancelled = true;
 		string cause = order.m_sReason;
 		order.m_sReason = reason;
 		order.Log("CONSTRUCTION_CANCELLED", "reservation_released=1 cause=" + cause);
 		state.m_iNextType = (order.m_eType + 1) % AICF_EConstructionType.COUNT;
+		// Временный отказ не вытесняет обязательные казармы другим типом.
+		// После трёх ограниченных попыток разрешён один проход остальных типов.
+		if (order.m_eType == AICF_EConstructionType.SMALL_BARRACKS && !order.m_bAccepted)
+		{
+			state.m_iSmallFailures++;
+			if (state.m_iSmallFailures < 3)
+				state.m_iNextType = AICF_EConstructionType.SMALL_BARRACKS;
+			else
+				state.m_iSmallFailures = 0;
+		}
 		state.m_iDueAt = Math.Max(state.m_iDueAt, System.GetTickCount() + m_Config.m_iCooldownMs);
 		state.m_Order = null;
 	}
@@ -538,23 +630,39 @@ class AICF_ConstructionPlanner
 		{
 			if (!service || !service.GetOwner())
 				continue;
-			if (SegmentIntersects(order.m_vProviderPosition, service.GetOwner().GetOrigin(), order.m_vMin - "3 0 3", order.m_vMax + "3 0 3"))
+			if (AccessIntersects(order, order.m_vProviderPosition, service.GetOwner().GetOrigin()))
 			{
 				order.m_sReason = "BASE_ACCESS_CORRIDOR";
 				return false;
 			}
 		}
-		vector spawn, rotation;
 		if (order.m_Base.GetSpawnPoint())
 		{
-			order.m_Base.GetSpawnPoint().GetPositionAndRotation(spawn, rotation);
-			if (SegmentIntersects(order.m_vProviderPosition, spawn, order.m_vMin - "3 0 3", order.m_vMax + "3 0 3"))
+			array<vector> spawns = {};
+			order.m_Base.GetSpawnPoint().AICF_ConstructionPositions(spawns);
+			foreach (vector spawn : spawns)
 			{
-				order.m_sReason = "BASE_ACCESS_CORRIDOR";
-				return false;
+				if (AccessIntersects(order, order.m_vProviderPosition, spawn))
+				{
+					order.m_sReason = "BASE_ACCESS_CORRIDOR";
+					return false;
+				}
 			}
 		}
 		return true;
+	}
+
+	protected bool AccessIntersects(AICF_ConstructionOrder order, vector start, vector end)
+	{
+		// Та же полоса 3 м плюс footprint margin; повёрнутый объём вместо
+		// пустых углов world AABB. Никаких случайных spawn queries в guard.
+		vector from = start - order.m_aTransform[3];
+		vector to = end - order.m_aTransform[3];
+		from = Vector(vector.Dot(from, order.m_aTransform[0]), 0, vector.Dot(from, order.m_aTransform[2]));
+		to = Vector(vector.Dot(to, order.m_aTransform[0]), 0, vector.Dot(to, order.m_aTransform[2]));
+		float distance = m_Config.m_fMargin + 3;
+		vector margin = Vector(distance, 0, distance);
+		return SegmentIntersects(from, to, order.m_Metadata.m_vMin - margin, order.m_Metadata.m_vMax + margin);
 	}
 
 	static bool SegmentIntersects(vector start, vector end, vector mins, vector maxs)

@@ -6,15 +6,18 @@ class AICF_ConstructionPathNode
 	int m_iX;
 	int m_iZ;
 	vector m_vPosition;
+	vector m_vRoot;
 	float m_fCost;
 	bool m_bClosed;
+	int m_iParent = -1;
+	ref AICF_ConstructionRoute m_Route;
 }
 
 class AICF_ConstructionPath
 {
 	static const float STEP = 2;
 	static const int MAX_NODES = 512;
-	static const int MAX_QUERIES = 4096;
+	static const int MAX_QUERIES = 512;
 	protected ref array<ref AICF_ConstructionPathNode> m_aNodes = {};
 	protected ref array<vector> m_aGoals = {};
 	protected vector m_vOrigin;
@@ -26,7 +29,18 @@ class AICF_ConstructionPath
 	protected int m_iEdge;
 	protected int m_iTileRetries;
 	protected int m_iExpanded;
+	protected int m_iRoots;
+	protected int m_iDirectRoot;
+	protected int m_iDirectGoal;
+	protected ref AICF_ConstructionRoute m_Validate;
+	protected vector m_vGoal;
+	protected vector m_vChosenRoot;
+	protected AICF_ConstructionNavigation m_Seeds;
+	protected int m_iSeedCursor;
+	protected int m_iSeedCount;
+	protected int m_iSeedRevision;
 	protected AIPathfindingComponent m_Pathfinding;
+	protected bool m_bContextSet;
 
 	string Describe()
 	{
@@ -53,7 +67,104 @@ class AICF_ConstructionPath
 		m_vMax += "32 0 32";
 		AICF_ConstructionPathNode node = new AICF_ConstructionPathNode();
 		node.m_vPosition = start;
+		node.m_vRoot = start;
+		node.m_Route = new AICF_ConstructionRoute();
+		node.m_Route.m_vPosition = start;
+		node.m_Route.m_vRoot = start;
 		m_aNodes.Insert(node);
+	}
+
+	void AddStarts(array<vector> starts)
+	{
+		foreach (vector start : starts)
+		{
+			if (vector.DistanceSqXZ(start, m_vOrigin) < 0.04)
+				continue;
+			AICF_ConstructionPathNode node = new AICF_ConstructionPathNode();
+			node.m_iX = Math.Round((start[0] - m_vOrigin[0]) / STEP);
+			node.m_iZ = Math.Round((start[2] - m_vOrigin[2]) / STEP);
+			node.m_vPosition = start;
+			node.m_vRoot = start;
+			node.m_Route = new AICF_ConstructionRoute();
+			node.m_Route.m_vPosition = start;
+			node.m_Route.m_vRoot = start;
+			m_aNodes.Insert(node);
+		}
+		m_iRoots = m_aNodes.Count();
+	}
+
+	void Seed(AICF_ConstructionNavigation navigation)
+	{
+		m_Seeds = navigation;
+		m_iSeedCount = navigation.m_aReached.Count();
+		m_iSeedRevision = navigation.m_iRevision;
+	}
+
+	void IncludeArea(vector center, float radius)
+	{
+		m_vMin[0] = Math.Min(m_vMin[0], center[0] - radius);
+		m_vMin[2] = Math.Min(m_vMin[2], center[2] - radius);
+		m_vMax[0] = Math.Max(m_vMax[0], center[0] + radius);
+		m_vMax[2] = Math.Max(m_vMax[2], center[2] + radius);
+	}
+
+	protected void SeedNext()
+	{
+		AICF_ConstructionRoute route = m_Seeds.m_aReached[m_iSeedCursor++];
+		if (m_aNodes.Count() >= MAX_NODES)
+			return;
+		// Не переносим путь сквозь новый unfinished footprint. Это дешёвая
+		// проверка сохранённой цепочки; native freshness проверяется в конце.
+		AICF_ConstructionRoute current = route;
+		bool blocked;
+		while (current && current.m_Previous)
+		{
+			if (AICF_ConstructionPlanner.SegmentIntersects(current.m_Previous.m_vPosition, current.m_vPosition, m_vBlockMin, m_vBlockMax))
+			{
+				blocked = true;
+				break;
+			}
+			current = current.m_Previous;
+		}
+		if (blocked)
+			return;
+		int x = Math.Round((route.m_vPosition[0] - m_vOrigin[0]) / STEP);
+		int z = Math.Round((route.m_vPosition[2] - m_vOrigin[2]) / STEP);
+		bool duplicate;
+		foreach (AICF_ConstructionPathNode existing : m_aNodes)
+		{
+			if (existing.m_iX == x && existing.m_iZ == z)
+				duplicate = true;
+		}
+		if (duplicate)
+			return;
+		AICF_ConstructionPathNode node = new AICF_ConstructionPathNode();
+		node.m_iX = x;
+		node.m_iZ = z;
+		node.m_vPosition = route.m_vPosition;
+		node.m_vRoot = route.m_vRoot;
+		node.m_fCost = route.m_fCost;
+		node.m_Route = route;
+		m_aNodes.Insert(node);
+	}
+
+	protected vector NearestGoal(vector position, int rank)
+	{
+		int first;
+		int second = -1;
+		for (int i = 1; i < m_aGoals.Count(); i++)
+		{
+			if (vector.DistanceSqXZ(position, m_aGoals[i]) < vector.DistanceSqXZ(position, m_aGoals[first]))
+			{
+				second = first;
+				first = i;
+			}
+			else if (second < 0 || vector.DistanceSqXZ(position, m_aGoals[i]) < vector.DistanceSqXZ(position, m_aGoals[second]))
+				second = i;
+		}
+		if (rank == 1 && second >= 0)
+			return m_aGoals[second];
+		return m_aGoals[first];
 	}
 
 	protected float Heuristic(vector position)
@@ -82,8 +193,16 @@ class AICF_ConstructionPath
 
 	int Step(AICF_ConstructionOrder order, AIPathfindingComponent pathfinding, int sliceMs)
 	{
-		if (!m_Pathfinding && m_aNodes.Count() == 1 && m_iExpanded == 0)
+		if (m_Seeds && m_Seeds.m_iRevision != m_iSeedRevision)
+		{
+			order.m_sReason = "NAVMESH_CACHE_INVALIDATED";
+			return -1;
+		}
+		if (!m_bContextSet)
+		{
 			m_Pathfinding = pathfinding;
+			m_bContextSet = true;
+		}
 		if (!m_Pathfinding || m_Pathfinding != pathfinding)
 		{
 			order.m_sReason = "NAVMESH_CONTEXT_CHANGED";
@@ -93,13 +212,66 @@ class AICF_ConstructionPath
 		int transitions;
 		while (transitions++ < 64 && System.GetTickCount() - started < sliceMs)
 		{
-			// Все запасные старты одного кандидата делят конечный бюджет.
-			// После отказа planner продвигает candidate cursor, а не начинает
-			// тот же дорогой обход в следующем order после общего deadline.
-			if (order.m_iQueries - order.m_iPathQueriesAt >= MAX_QUERIES)
+			if (m_iSeedCursor < m_iSeedCount)
+			{
+				SeedNext();
+				continue;
+			}
+			// Одна итерация может выполнить projection (2) и edge (1).
+			// Резерв не позволяет этой неделимой работе превысить лимит.
+			if (order.m_iQueries - order.m_iPathQueriesAt >= MAX_QUERIES - 2)
 			{
 				order.m_sReason = "WORKER_PATH_QUERY_LIMIT";
 				return -1;
+			}
+			if (m_Validate)
+			{
+				if (!m_Validate.m_Previous)
+				{
+					order.m_vPathStart = m_vChosenRoot;
+					order.m_vWork = m_vGoal;
+					order.m_sReason = "SITE_VALIDATED";
+					order.m_sObstacle = "NONE";
+					order.Log("CONSTRUCTION_PATH_FOUND", Describe() + " fresh_chain=1");
+					return 1;
+				}
+				if (!AICF_ConstructionSiteSearch.TakeQueries(order, 1))
+					return 0;
+				if (!ClearSegment(m_Validate.m_Previous.m_vPosition, m_Validate.m_vPosition, pathfinding))
+				{
+					order.m_Navigation.Invalidate();
+					order.m_sReason = "WORKER_PATH_CHANGED";
+					return -1;
+				}
+				m_Validate = m_Validate.m_Previous;
+				continue;
+			}
+			// Проверяем прямые пути всех стартов до расширения первого. Это
+			// не позволяет близкому, но изолированному старту съесть весь бюджет.
+			if (m_iDirectRoot < m_iRoots)
+			{
+				AICF_ConstructionPathNode root = m_aNodes[m_iDirectRoot];
+				vector directGoal = NearestGoal(root.m_vPosition, m_iDirectGoal);
+				if (!AICF_ConstructionPlanner.SegmentIntersects(root.m_vPosition, directGoal, m_vBlockMin, m_vBlockMax))
+				{
+					if (!AICF_ConstructionSiteSearch.TakeQueries(order, 1))
+						return 0;
+					if (ClearSegment(root.m_vPosition, directGoal, pathfinding))
+					{
+						order.m_vWork = directGoal;
+						order.m_vPathStart = root.m_vRoot;
+						order.m_sReason = "SITE_VALIDATED";
+						order.m_sObstacle = "NONE";
+						order.Log("CONSTRUCTION_PATH_FOUND", Describe() + " direct=1 fresh_chain=1");
+						return 1;
+					}
+				}
+				if (++m_iDirectGoal >= Math.Min(2, m_aGoals.Count()))
+				{
+					m_iDirectGoal = 0;
+					m_iDirectRoot++;
+				}
+				continue;
 			}
 			if (m_iActive < 0)
 			{
@@ -122,10 +294,15 @@ class AICF_ConstructionPath
 				m_iEdge = 0;
 			}
 			AICF_ConstructionPathNode node = m_aNodes[m_iActive];
-			// Сначала пробуем все endpoints: один поиск обслуживает все стороны.
-			if (m_iEdge < m_aGoals.Count())
+			// Два ближайших endpoint каждой вершины; общий поиск обслуживает все стороны.
+			int goalCount = Math.Min(2, m_aGoals.Count());
+			// Дальние повторные прострелы к тем же endpoints не расширяют
+			// достижимую область. Редкие shortcuts плюс полный тест вблизи цели.
+			if (Heuristic(node.m_vPosition) > 12 && m_iExpanded % 8 != 1)
+				goalCount = 0;
+			if (m_iEdge < goalCount)
 			{
-				vector goal = m_aGoals[m_iEdge];
+				vector goal = NearestGoal(node.m_vPosition, m_iEdge);
 				// Чистая геометрия не расходует native query. Такие отрезки
 				// раньше отнимали квоту у реальных navmesh проверок других баз.
 				if (AICF_ConstructionPlanner.SegmentIntersects(node.m_vPosition, goal, m_vBlockMin, m_vBlockMax))
@@ -139,23 +316,24 @@ class AICF_ConstructionPath
 				m_iEdge++;
 				if (ClearSegment(node.m_vPosition, goal, pathfinding))
 				{
-					order.m_vWork = goal;
-					order.m_sReason = "SITE_VALIDATED";
-					order.Log("CONSTRUCTION_PATH_FOUND", Describe());
-					return 1;
+					m_vGoal = goal;
+					m_vChosenRoot = node.m_vRoot;
+					m_Validate = node.m_Route;
 				}
 				continue;
 			}
-			int direction = m_iEdge - m_aGoals.Count();
-			if (direction >= 16)
+			int direction = m_iEdge - goalCount;
+			if (direction >= 24 || node.m_Route.m_iDepth >= 64)
 			{
 				node.m_bClosed = true;
 				m_iActive = -1;
 				continue;
 			}
 			// Сначала длинные шаги, затем промежуточные точки узких проходов.
-			int stride = 2;
+			int stride = 4;
 			if (direction >= 8)
+				stride = 2;
+			if (direction >= 16)
 				stride = 1;
 			int azimuth = direction % 8;
 			int dx = Math.Round(Math.Sin(azimuth * Math.PI / 4)) * stride;
@@ -207,12 +385,10 @@ class AICF_ConstructionPath
 				corrected = next.m_vPosition;
 			else
 			{
-				// Резервируем худший случай, списываем только выполненные вызовы.
-				if (!AICF_ConstructionSiteSearch.TakeQueries(order, 3, false))
+				int projection = order.m_Navigation.Project(order, pathfinding, point, corrected);
+				if (projection == 0)
 					return 0;
-				AICF_ConstructionSiteSearch.TakeQueries(order, 2);
-				point[1] = GetGame().GetWorld().GetSurfaceY(point[0], point[2]);
-				if (!pathfinding.GetClosestPositionOnNavmesh(point, "1.5 3 1.5", corrected))
+				if (projection < 0)
 				{
 					m_iEdge++;
 					continue;
@@ -225,10 +401,11 @@ class AICF_ConstructionPath
 				order.m_iPathPruned++;
 				continue;
 			}
-			if (!AICF_ConstructionSiteSearch.TakeQueries(order, 1))
+			int edge = order.m_Navigation.Edge(order, pathfinding, node.m_vPosition, corrected);
+			if (edge == 0)
 				return 0;
 			m_iEdge++;
-			if (!ClearSegment(node.m_vPosition, corrected, pathfinding))
+			if (edge < 0)
 				continue;
 			float cost = node.m_fCost + vector.DistanceXZ(node.m_vPosition, corrected);
 			if (!next)
@@ -242,7 +419,17 @@ class AICF_ConstructionPath
 			}
 			next.m_fCost = cost;
 			next.m_vPosition = corrected;
+			next.m_vRoot = node.m_vRoot;
+			next.m_iParent = m_iActive;
+			next.m_Route = new AICF_ConstructionRoute();
+			next.m_Route.m_vPosition = corrected;
+			next.m_Route.m_vRoot = node.m_vRoot;
+			next.m_Route.m_fCost = cost;
+			next.m_Route.m_Previous = node.m_Route;
+			next.m_Route.m_iDepth = node.m_Route.m_iDepth + 1;
+			order.m_Navigation.Remember(next.m_Route);
 		}
+		order.m_iPathSteps++;
 		order.m_sReason = "WORKER_PATH_PENDING";
 		return 0;
 	}
