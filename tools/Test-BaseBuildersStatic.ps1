@@ -12,6 +12,7 @@ $planner = $sources['Orders/AICF_OrderPlanner.c']
 $controller = $sources['Bootstrap/AICF_MatchController.c']
 $builderState = Get-Content -LiteralPath (Join-Path $core 'Construction/AICF_BaseBuilder.c') -Raw
 $danger = Get-Content -LiteralPath (Join-Path $core 'Construction/AICF_BaseBuilderDanger.c') -Raw
+$workPolicy = Get-Content -LiteralPath (Join-Path $core 'Construction/AICF_BaseBuilderWorkPolicy.c') -Raw
 $failures = [System.Collections.Generic.List[string]]::new()
 
 function Require-BuilderContract([string]$Id, [string]$Text, [string]$Pattern) {
@@ -36,6 +37,10 @@ foreach ($toolEvent in @('OnToolUseBegan', 'OnToolUseEnded')) {
 Require-BuilderContract 'BUILDERS_WORK_OUTSIDE_FOOTPRINT' $service '!builder.IsOutsideFootprint\(builder.m_Character.GetOrigin\(\)\)'
 Require-BuilderContract 'BUILDERS_DANGER_SCOPED' $danger '(?s)GetID\(\) == m_CharacterId.*?m_iGeneration == m_iGeneration.*?FindWorkingOnLayout\(m_Layout\) == m_Builder'
 Require-BuilderContract 'BUILDERS_OTHER_DANGER_PRESERVED' $danger 'return super.PerformReaction\(utility, threatSystem, dangerEvent, dangerEventCount\)'
+Require-BuilderContract 'BUILDERS_WORKER_POLICY_IDENTITY' $service '(?s)static bool IsDedicatedWorker.*?!Replication.IsServer\(\).*?m_bStopped.*?IsMaster\(\).*?m_Character == character.*?!builder.m_bRetiring.*?GetFaction\(\) == builder.m_Faction.*?IsWorkerValid\(builder\)'
+Require-BuilderContract 'BUILDERS_WORK_PRIORITY' $workPolicy '(?s)override float EvaluatePriorityLevel.*?SCR_AIBehaviorBase.Cast\(this\).*?GetCause\(\) >= SCR_EAIBehaviorCause.DANGER_LOW.*?IsDedicatedWorker\(behavior.m_Utility.m_OwnerEntity\).*?return -1000000;.*?return super.EvaluatePriorityLevel\(\)'
+Require-BuilderContract 'BUILDERS_HOLD_FIRE' $spawner '(?s)SetCombatMode\(EAIGroupCombatMode.HOLD_FIRE\).*?EvaluateCombatMode\(\)'
+if ($service -match 'GetThreatMeasure\(') { $failures.Add('BUILDERS_NO_THREAT_PAUSE') }
 if ($service -match '\.(SpawnComposition|SetBuildingValue|SetAffiliatedFaction)\(') { $failures.Add('BUILDERS_NO_COMPLETION_OR_OWNERSHIP_BYPASS') }
 Require-BuilderContract 'BUILDERS_IDLE_PHYSICAL_GATE' $service '(?s)ReturnHome\(.*?if \(!MoveTo\(builder, home, now, HOME_METERS\)\).*?m_iIdleAtMs = 0;.*?return;.*?now - builder.m_iIdleAtMs >= IDLE_DELAY_MS'
 Require-BuilderContract 'BUILDERS_QUEUE_PURGE' $service 'PurgeSpawnRequestsForGroup\(group\)'

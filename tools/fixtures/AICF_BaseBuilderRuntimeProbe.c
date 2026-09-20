@@ -8,12 +8,42 @@ modded class AICF_BaseBuilderService
 	protected int m_iAICFProbeLastLog;
 	protected int m_iAICFProbeStartedAt;
 	protected int m_iAICFProbePhase;
+	protected int m_iAICFProbeThreatSamples;
+
+	override protected void UpdateBuilder(AICF_BaseBuilder builder)
+	{
+		string mode;
+		if (System.GetCLIParam("aicfBuilderProbe", mode) && mode == "4" && IsWorkerValid(builder))
+		{
+			AIControlComponent control = AIControlComponent.Cast(builder.m_Character.FindComponent(AIControlComponent));
+			SCR_AIUtilityComponent utility = SCR_AIUtilityComponent.Cast(control.GetAIAgent().FindComponent(SCR_AIUtilityComponent));
+			if (utility && utility.m_ThreatSystem)
+			{
+				utility.m_ThreatSystem.ThreatBulletImpact(20);
+				utility.m_ThreatSystem.Update(utility, 0);
+				SCR_AIMoveFromDangerBehavior danger = new SCR_AIMoveFromDangerBehavior(utility, null, builder.m_Character.GetOrigin(), null);
+				danger.SetPriorityLevel(SCR_AIActionBase.PRIORITY_LEVEL_GAMEMASTER);
+				float workerPriority = danger.Evaluate();
+				// Та же action без binding обязана получить штатный положительный score.
+				EntityID savedIdentity = builder.m_CharacterId;
+				builder.m_CharacterId = EntityID.INVALID;
+				float stalePriority = danger.Evaluate();
+				builder.m_CharacterId = savedIdentity;
+				if (m_iAICFProbeThreatSamples++ % 10 == 0)
+					Log(builder, "BUILDER_COMBAT_PROBE", string.Format("threat=%1 worker_priority=%2 stale_priority=%3 moving=%4",
+						utility.m_ThreatSystem.GetThreatMeasure(), workerPriority, stalePriority, builder.m_iWorkAtMs == 0));
+				if (workerPriority > 0 || stalePriority <= 0)
+					Print("[AICF][BUILDER_COMBAT_PROBE] priority contract failed", LogLevel.ERROR);
+			}
+		}
+		super.UpdateBuilder(builder);
+	}
 
 	override void Update()
 	{
 		super.Update();
 		string enabled;
-		if (!System.GetCLIParam("aicfBuilderProbe", enabled) || (enabled != "1" && enabled != "2" && enabled != "3") || !m_Campaign)
+		if (!System.GetCLIParam("aicfBuilderProbe", enabled) || (enabled != "1" && enabled != "2" && enabled != "3" && enabled != "4") || !m_Campaign)
 			return;
 		if (m_iAICFProbeStartedAt == 0)
 			m_iAICFProbeStartedAt = System.GetTickCount();

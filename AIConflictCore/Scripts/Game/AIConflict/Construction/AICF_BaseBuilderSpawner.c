@@ -43,6 +43,14 @@ class AICF_BaseBuilderSpawner : AICF_GroupSpawner
 			return null;
 		}
 		group.SetLifecyclePolicy(SCR_EAIGroupLifecyclePolicy.Manual);
+		SCR_AIGroupUtilityComponent utility = group.GetGroupUtilityComponent();
+		if (!utility)
+		{
+			RplComponent.DeleteRplEntity(group, false);
+			return null;
+		}
+		utility.SetCombatMode(EAIGroupCombatMode.HOLD_FIRE);
+		utility.EvaluateCombatMode();
 		group.SetSpawnImmediately(false);
 		group.m_aUnitPrefabSlots.Clear();
 		group.m_aUnitPrefabSlots.Insert(characterPrefab);

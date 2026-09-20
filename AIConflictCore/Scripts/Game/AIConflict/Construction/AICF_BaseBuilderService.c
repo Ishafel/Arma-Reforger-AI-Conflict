@@ -399,6 +399,22 @@ class AICF_BaseBuilderService
 		return null;
 	}
 
+	// Read-only lookup: исключение не переживает Stop, смену владельца,
+	// retirement, замену entity или передачу управления игроку.
+	static bool IsDedicatedWorker(IEntity character)
+	{
+		if (!Replication.IsServer() || !s_Instance || s_Instance.m_bStopped || !character ||
+			!s_Instance.m_Campaign || !s_Instance.m_Campaign.IsMaster())
+			return false;
+		foreach (AICF_BaseBuilder builder : s_Instance.m_aBuilders)
+		{
+			if (builder.m_Character == character && !builder.m_bRetiring && builder.m_Base &&
+				builder.m_Base.GetFaction() == builder.m_Faction && s_Instance.IsWorkerValid(builder))
+				return true;
+		}
+		return false;
+	}
+
 	protected bool IsWorkerValid(AICF_BaseBuilder builder)
 	{
 		if (!builder.m_Group || builder.m_Group.GetID() != builder.m_GroupId ||
@@ -457,9 +473,8 @@ class AICF_BaseBuilderService
 	protected void Build(AICF_BaseBuilder builder, int now)
 	{
 		CharacterControllerComponent controller = CharacterControllerComponent.Cast(builder.m_Character.FindComponent(CharacterControllerComponent));
-		SCR_AIGroupUtilityComponent utility = SCR_AIGroupUtilityComponent.Cast(builder.m_Group.FindComponent(SCR_AIGroupUtilityComponent));
 		if (!IsWorkerValid(builder) || !IsTargetValid(builder, builder.m_Target) || controller.IsUnconscious() ||
-			!utility || utility.GetThreatMeasure() > 0.01 || CompartmentAccessComponent.GetVehicleIn(builder.m_Character) ||
+			CompartmentAccessComponent.GetVehicleIn(builder.m_Character) ||
 			!builder.IsOutsideFootprint(builder.m_Character.GetOrigin()))
 		{
 			StopTool(builder);

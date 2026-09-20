@@ -12,6 +12,14 @@ FAIL из-за двух stock resupply script errors при shutdown; други
 точные команды, source parity, evidence и NOT RUN:
 [CONSTRUCTION_ALL_BASES_20260920.md](CONSTRUCTION_ALL_BASES_20260920.md).
 
+## Строительство при боевой угрозе — 2026-09-19
+
+Удалён threat gate в `Build()`, отдельная группа строителя получает `HOLD_FIRE`.
+`AICF_BaseBuilderWorkPolicy` по текущей authoritative identity исключает выбор
+боевых и danger behaviors, сохраняя движение и физические проверки работы.
+Команды, baseline, результаты и ограничения:
+[BUILDER_COMBAT_POLICY.md](BUILDER_COMBAT_POLICY.md).
+
 ## Спавн пехоты вне препятствий — 2026-09-19
 
 В `AICF_GroupSpawner` добавлен opt-in `AICF_InfantrySpawnPlacement`:
@@ -1906,7 +1914,13 @@ addon graphs. Матрица, точные команды и evidence:
   -AdditionalArguments @('-aicfBuilderProbe', '1', '-aicfRequirePlayerForResult', '0')
 ```
 
-Значение probe `3` задерживает размещение на 45 секунд после readiness для
+Значение probe `4` предназначено для server-only проверки:
+перед каждым builder tick задаётся `ThreatBulletImpact(20)`, проверяется
+отрицательный priority danger behavior у worker и положительный при stale
+character identity. `BUILDER_COMBAT_PROBE` пишет `threat`, `worker_priority`,
+`stale_priority`, `moving`; завершение должно сохранять `tool_active=1 item_using=1`.
+Этот тест моделирует угрозу, а не полноценную перестрелку.
+Значение `3` задерживает размещение на 45 секунд после readiness для
 подключения клиента через canonical launcher и добавляет временное JIP-поле
 в character controller. `BUILDER_CLIENT_PROBE` читает на клиенте позицию,
 `IsUsingItem`, hand attachment и proxy state конкретного `character_rpl`.
