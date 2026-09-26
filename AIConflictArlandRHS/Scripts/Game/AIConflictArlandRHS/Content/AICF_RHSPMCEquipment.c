@@ -295,6 +295,7 @@ class AICF_RHSPMCEquipment
 modded class SCR_ChimeraCharacter
 {
 	protected EntityID m_iAICFPMCIdentity;
+	protected bool m_bAICFPMCEquipmentPending;
 
 	override void EOnInit(IEntity owner)
 	{
@@ -302,18 +303,44 @@ modded class SCR_ChimeraCharacter
 		if (!Replication.IsServer() || GetWorld() != GetGame().GetWorld() || !SCR_ResourceNameUtils.GetPrefabName(this).Contains("/FIA/"))
 			return;
 		m_iAICFPMCIdentity = GetID();
+		m_bAICFPMCEquipmentPending = true;
 		GetGame().GetCallqueue().CallLater(AICF_ApplyPMCEquipment, 1500, false);
+	}
+
+	bool AICF_IsPMCEquipmentPending()
+	{
+		return m_bAICFPMCEquipmentPending && GetID() == m_iAICFPMCIdentity;
 	}
 
 	protected void AICF_ApplyPMCEquipment()
 	{
 		if (GetID() == m_iAICFPMCIdentity)
 			AICF_RHSPMCEquipment.Apply(this);
+		m_bAICFPMCEquipmentPending = false;
 	}
 
 	void ~SCR_ChimeraCharacter()
 	{
 		if (GetGame())
 			GetGame().GetCallqueue().Remove(AICF_ApplyPMCEquipment);
+	}
+}
+
+// Посадка меняет состояние оружия в руках. Native inventory не обязан
+// разрешать его удаление в этот момент: оба комплекта готовим до посадки.
+modded class AICF_FIAPatrolCrew
+{
+	override bool Board(AICF_FIAPatrol p)
+	{
+		if (!p || !p.GroupIdentity()) return false;
+		array<AIAgent> agents = {};
+		p.m_Group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent) return false;
+			SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (!character || character.AICF_IsPMCEquipmentPending()) return false;
+		}
+		return super.Board(p);
 	}
 }

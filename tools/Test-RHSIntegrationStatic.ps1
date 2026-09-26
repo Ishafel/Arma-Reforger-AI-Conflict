@@ -195,6 +195,8 @@ if ($failures.Count -eq 0) {
     Require-Match 'RHS_PMC_CLEANUP' $pmc 'Remove\(AICF_ApplyPMCEquipment\)' 'Character initialization callback lacks destruction cleanup'
     Require-Match 'RHS_PMC_AUTHORITY' $pmc '!Replication.IsServer\(\)[\s\S]*rpl.IsMaster\(\)[\s\S]*!controller.IsPlayerControlled\(\)' 'PMC equipment must be authority-only and exclude controlled players'
     Require-Match 'RHS_PMC_IDENTITY' $pmc 'GetID\(\) != identity[\s\S]*GetPrefabName\(character\) != source' 'PMC commit must recheck immutable character identity'
+    Require-Match 'RHS_PMC_BEFORE_BOARDING' $pmc 'override bool Board\(AICF_FIAPatrol p\)[\s\S]*p.GroupIdentity\(\)[\s\S]*foreach \(AIAgent agent : agents\)[\s\S]*character.AICF_IsPMCEquipmentPending\(\)\) return false;[\s\S]*return super.Board\(p\)' 'Both crew members must finish equipment preparation before boarding mutates their weapons'
+    Require-Match 'RHS_PMC_PENDING_LIFECYCLE' $pmc 'm_bAICFPMCEquipmentPending = true;[\s\S]*CallLater\(AICF_ApplyPMCEquipment[\s\S]*AICF_RHSPMCEquipment.Apply\(this\);[\s\S]*m_bAICFPMCEquipmentPending = false;' 'Pending equipment must bracket the existing one-shot callback'
     $controllerCount = ([regex]::Matches($arlandBootstrap, 'new\s+AICF_MatchController\s*\(')).Count
     if ($controllerCount -ne 1) {
         Add-Failure 'RHS_SINGLE_LIFECYCLE' "Arland bootstrap must construct exactly one controller; found $controllerCount"
