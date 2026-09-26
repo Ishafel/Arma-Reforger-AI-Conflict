@@ -5502,7 +5502,9 @@ class AICF_MatchController
 			arrivalRadiusMeters = waypoint.GetCompletionRadius();
 		if (slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION)
 			arrivalRadiusMeters = POINT_DESTINATION_RADIUS_METERS;
-		if (distanceMeters <= arrivalRadiusMeters)
+		// Ожидание ALL у промежуточной точки ограничивает planner. Близость одного
+		// лидера не завершает stuck episode и не сбрасывает watchdog каждый tick.
+		if (distanceMeters <= arrivalRadiusMeters && !slot.IsStuckRouteWaypoint())
 		{
 			if (slot.HasPendingStuckRecoveryEvidence())
 				m_iStuckRecoveries++;

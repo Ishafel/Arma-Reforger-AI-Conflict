@@ -7,6 +7,7 @@ class AICF_OrderPlanner
 	protected static const ResourceName RELAY_WAYPOINT_PREFAB = "{EAAE93F98ED5D218}Prefabs/AI/Waypoints/AIWaypoint_CaptureRelay.et";
 	protected static const string RELAY_SMART_ACTION_TAG = "CapturePoint";
 	protected static const float ATTACK_OPERATIONAL_RADIUS_METERS = 20.0;
+	protected static const int STUCK_ROUTE_COMPLETION_WAIT_MS = 30000;
 	protected static const float ATTACK_OBJECTIVE_ACTION_RADIUS_METERS = 20.0;
 	protected static const float ATTACK_OBJECTIVE_PROMOTION_RADIUS_METERS = 100.0;
 	protected static const float ATTACK_OBJECTIVE_HOLDING_TIME_SECONDS = 600.0;
@@ -1531,19 +1532,44 @@ class AICF_OrderPlanner
 			recoverStuckRoute);
 	}
 
-	// Промежуточная точка не завершает стратегический приказ. Переход разрешён
-	// только после физического прибытия и для той же identity waypoint.
+	// Промежуточная точка не завершает стратегический приказ. После прибытия
+	// лидера ALL получает ограниченное окно; timeout не подделывает stock callback.
 	bool TryAdvanceStuckRoute(AICF_GroupSlot slot, SCR_CampaignFaction faction)
 	{
-		if (!Replication.IsServer() || !slot || !slot.IsStuckRouteWaypoint() ||
-			!IsCurrentTargetValid(slot, faction) ||
-			slot.GetOwnedWaypointTerminalOutcome(slot.GetWaypoint()) != "GROUP_CALLBACK_COMPLETED")
+		if (!Replication.IsServer() || !slot || !faction || !slot.IsCombatReady() ||
+			!slot.IsStuckRouteContextCurrent() || !IsCurrentTargetValid(slot, faction))
+			return false;
+		AIWaypoint waypoint = slot.GetWaypoint();
+		string terminalOutcome = slot.GetOwnedWaypointTerminalOutcome(waypoint);
+		bool completed = terminalOutcome == "GROUP_CALLBACK_COMPLETED";
+		if (!completed && (!terminalOutcome.IsEmpty() || slot.GetGroup().GetCurrentWaypoint() != waypoint))
 			return false;
 		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
-		if (!leader || vector.DistanceXZ(leader.GetOrigin(), slot.GetWaypoint().GetOrigin()) >
-			ATTACK_OPERATIONAL_RADIUS_METERS)
+		if (!leader || vector.DistanceXZ(leader.GetOrigin(), waypoint.GetOrigin()) > waypoint.GetCompletionRadius())
 			return false;
-		return RebuildCurrentOrder(slot, faction, "STUCK_ROUTE_LEG_ARRIVED");
+		if (completed)
+			return RebuildCurrentOrder(slot, faction, "STUCK_ROUTE_LEG_ARRIVED");
+
+		if (slot.BeginStuckRouteCompletionWait())
+			LogStuckRouteCompletionWait(slot, faction, "STUCK_ROUTE_COMPLETION_WAIT");
+		if (slot.GetStuckRouteCompletionWaitAgeMs() < STUCK_ROUTE_COMPLETION_WAIT_MS)
+			return false;
+		if (slot.MarkStuckRouteCompletionTimeoutReported())
+			LogStuckRouteCompletionWait(slot, faction, "STUCK_ROUTE_COMPLETION_TIMEOUT");
+		// Если выдача не удалась, исходный waypoint и deadline остаются действующими.
+		// Watchdog продолжает учитывать отсутствие прогресса и свой recovery budget.
+		return RebuildCurrentOrder(slot, faction, "STUCK_ROUTE_COMPLETION_TIMEOUT");
+	}
+
+	protected void LogStuckRouteCompletionWait(AICF_GroupSlot slot, SCR_CampaignFaction faction, string eventName)
+	{
+		string snapshot = AICF_GroupRuntime.BuildWaypointArrivalSnapshot(slot.GetGroup(), slot.GetWaypoint());
+		string details = string.Format("faction=%1 numeric_slot=%2 group=%3 group_generation=%4 assignment_revision=%5 waypoint=%6 wait_age_ms=%7 timeout_ms=%8 completion_policy=ALL",
+			faction.GetFactionKey(), slot.GetSlotId(), slot.GetGroup().GetID(), slot.GetSpawnGeneration(),
+			slot.GetStrategicAssignmentRevision(), slot.GetWaypoint().GetID(),
+			slot.GetStuckRouteCompletionWaitAgeMs(), STUCK_ROUTE_COMPLETION_WAIT_MS);
+		details += snapshot;
+		AICF_Stage2Diagnostics.Info(eventName, details);
 	}
 
 	bool AssignLoneSurvivorRetreat(

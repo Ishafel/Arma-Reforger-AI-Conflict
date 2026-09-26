@@ -2298,14 +2298,14 @@ StringTable
 		CustomStringTableItem "{A1CF190919200002}"
 		{
 			Id "AICF_Scenario_EveronNorthRHS_Description"
-			Target_en_us "USMC versus MSV in northern Everon. Two headquarters and seven capture points."
-			Target_ru_ru "USMC против МСВ на севере Эверона. Два штаба и семь точек захвата."
+			Target_en_us "USMC versus MSV in northern Everon. Two headquarters and six capture points."
+			Target_ru_ru "USMC против МСВ на севере Эверона. Два штаба и шесть точек захвата."
 		}
 		CustomStringTableItem "{A1CF190919200003}"
 		{
 			Id "AICF_Scenario_EveronNorthRHS_Details"
-			Target_en_us "One side starts at the northern airbase, the other at the military hospital. Fight for Saint-Philippe, Maiden's Bay, Meaux, Tyrone, Kermovan, the nearby power plant and the camp near Les Creux. Southern bases are inactive. The full island terrain remains accessible. Requires RHS - Status Quo."
-			Target_ru_ru "Одна сторона начинает на северной авиабазе, другая — в военном госпитале. Борьба за Сен-Филипп, Девичью бухту, Мо, Тайрон, Кермован, электростанцию рядом с ним и лагерь возле Ле Крю. Южные базы неактивны. Ландшафт всего острова остаётся доступным. Требуется RHS - Status Quo."
+			Target_en_us "One side starts at the northern airbase, the other at the military hospital. Fight for Saint-Philippe, Maiden's Bay, Meaux, Tyrone, Kermovan and Hornbeam Valley. Southern bases are inactive. The full island terrain remains accessible. Requires RHS - Status Quo."
+			Target_ru_ru "Одна сторона начинает на северной авиабазе, другая — в военном госпитале. Борьба за Сен-Филипп, Девичью бухту, Мо, Тайрон, Кермован и Грабовую долину. Южные базы неактивны. Ландшафт всего острова остаётся доступным. Требуется RHS - Status Quo."
 		}
 		CustomStringTableItem "{A1CF190919310001}"
 		{
@@ -2316,14 +2316,14 @@ StringTable
 		CustomStringTableItem "{A1CF190919310002}"
 		{
 			Id "AICF_Scenario_EveronNorth_Description"
-			Target_en_us "US versus USSR in northern Everon. Two headquarters and seven capture points. No RHS required."
-			Target_ru_ru "США против СССР на севере Эверона. Два штаба и семь точек захвата. RHS не требуется."
+			Target_en_us "US versus USSR in northern Everon. Two headquarters and six capture points. No RHS required."
+			Target_ru_ru "США против СССР на севере Эверона. Два штаба и шесть точек захвата. RHS не требуется."
 		}
 		CustomStringTableItem "{A1CF190919310003}"
 		{
 			Id "AICF_Scenario_EveronNorth_Details"
-			Target_en_us "One side starts at the northern airbase, the other at the military hospital. Fight for Saint-Philippe, Maiden's Bay, Meaux, Tyrone, Kermovan, the nearby power plant and the camp near Les Creux. Andre's Beacon and southern bases are inactive. The full island terrain remains accessible. Victory requires exhausting the enemy's reinforcement tickets and eliminating its remaining managed combat groups."
-			Target_ru_ru "Одна сторона начинает на северной авиабазе, другая — в военном госпитале. Борьба за Сен-Филипп, Девичью бухту, Мо, Тайрон, Кермован, электростанцию рядом с ним и лагерь возле Ле Крю. Обзорный пункт Андре и южные базы неактивны. Ландшафт всего острова остаётся доступным. Для победы нужно исчерпать билеты подкрепления противника и уничтожить его оставшиеся управляемые боевые группы."
+			Target_en_us "One side starts at the northern airbase, the other at the military hospital. Fight for Saint-Philippe, Maiden's Bay, Meaux, Tyrone, Kermovan and Hornbeam Valley. Andre's Beacon and southern bases are inactive. The full island terrain remains accessible. Victory requires exhausting the enemy's reinforcement tickets and eliminating its remaining managed combat groups."
+			Target_ru_ru "Одна сторона начинает на северной авиабазе, другая — в военном госпитале. Борьба за Сен-Филипп, Девичью бухту, Мо, Тайрон, Кермован и Грабовую долину. Обзорный пункт Андре и южные базы неактивны. Ландшафт всего острова остаётся доступным. Для победы нужно исчерпать билеты подкрепления противника и уничтожить его оставшиеся управляемые боевые группы."
 		}
 		CustomStringTableItem "{A1CF190919210001}"
 		{

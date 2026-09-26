@@ -27,7 +27,7 @@ modded class SCR_GameModeCampaign
 			GetGame().GetCallqueue().CallLater(AICF_RunNorthProbe, 2000, false);
 			return;
 		}
-		array<string> expected = {"MilitaryBaseAirfield", "MilitaryHospital", "MainBaseNorth", "SmallBaseMaidensBay", "TownBaseMeaux", "TownBaseTyrone", "TownBaseKermovan", "StartingPos06", "StartingPos12"};
+		array<string> expected = {"MilitaryBaseAirfield", "MilitaryHospital", "MainBaseNorth", "SmallBaseMaidensBay", "TownBaseMeaux", "TownBaseTyrone", "TownBaseKermovan", "SmallBaseHornbeamValley"};
 		array<SCR_MilitaryBaseComponent> rawBases = {};
 		SCR_MilitaryBaseSystem.GetInstance().GetBases(rawBases);
 		array<SCR_CampaignMilitaryBaseComponent> active = {};
@@ -46,19 +46,20 @@ modded class SCR_GameModeCampaign
 				hqCount++;
 				AICF_CheckNorth("HQ_LOCATION_" + name, name == "MilitaryBaseAirfield" || name == "MilitaryHospital");
 			}
-			else if (base.IsControlPoint()) captureCount++;
-			if (name == "StartingPos06" || name == "StartingPos12")
+			else if (base.IsControlPoint())
 			{
-				AICF_CheckNorth("CAPTURE_LOCATION_" + name, base.IsControlPoint() && !base.CanBeHQ() && base.GetSpawnPoint());
-				Print(string.Format("[AICF][NORTH_LOCATION] entity=%1 pos=%2", name, base.GetOwner().GetOrigin()));
+				captureCount++;
+				array<SCR_SeizingComponent> capturePoints = {};
+				base.GetCapturePoints(capturePoints);
+				AICF_CheckNorth("CAPTURE_MECHANISM_" + name, capturePoints.Count() == 1 && SCR_CampaignSeizingComponent.Cast(capturePoints[0]) && capturePoints[0].GetRadius() > 0);
 			}
 			string faction;
 			if (base.GetFaction()) faction = base.GetFaction().GetFactionKey();
 			Print(string.Format("[AICF][NORTH_BASE] entity=%1 hq=%2 capture=%3 faction=%4", name, base.IsHQ(), base.IsControlPoint(), faction));
 		}
-		AICF_CheckNorth("ACTIVE_NINE", active.Count() == 9);
+		AICF_CheckNorth("ACTIVE_EIGHT", active.Count() == 8);
 		AICF_CheckNorth("HQ_TWO", hqCount == 2);
-		AICF_CheckNorth("CAPTURE_SEVEN", captureCount == 7);
+		AICF_CheckNorth("CAPTURE_SIX", captureCount == 6);
 		AICF_CheckNorth("SOUTH_INACTIVE", excludedActive == 0);
 		AICF_CheckNorth("COMMANDER_READY", AICF_HasAICommanderState());
 		SCR_CampaignFaction west = GetFactionByEnum(SCR_ECampaignFaction.BLUFOR);

@@ -5,6 +5,11 @@ class AICF_GroupSlot
 	protected int m_iLoadoutRevision;
 	protected int m_iDeploymentLoadoutRevision;
 	protected AIWaypoint m_StuckRouteWaypoint;
+	protected SCR_AIGroup m_StuckRouteGroup;
+	protected int m_iStuckRouteGeneration;
+	protected int m_iStuckRouteAssignmentRevision;
+	protected int m_iStuckRouteCompletionWaitStartedAtMs;
+	protected bool m_bStuckRouteCompletionTimeoutReported;
 	protected bool m_bIsolatedNavmeshRecoveryUsed;
 
 	bool HasUsedIsolatedNavmeshRecovery() { return m_bIsolatedNavmeshRecoveryUsed; }
@@ -1390,11 +1395,59 @@ class AICF_GroupSlot
 	void MarkStuckRouteWaypoint()
 	{
 		m_StuckRouteWaypoint = m_Waypoint;
+		m_StuckRouteGroup = m_Group;
+		m_iStuckRouteGeneration = m_iSpawnGeneration;
+		m_iStuckRouteAssignmentRevision = m_iStrategicAssignmentRevision;
+		m_iStuckRouteCompletionWaitStartedAtMs = 0;
+		m_bStuckRouteCompletionTimeoutReported = false;
 	}
 
 	bool IsStuckRouteWaypoint()
 	{
 		return m_Waypoint && m_Waypoint == m_StuckRouteWaypoint;
+	}
+
+	bool IsStuckRouteContextCurrent()
+	{
+		return IsStuckRouteWaypoint() &&
+			m_Group && m_Group == m_StuckRouteGroup &&
+			m_iSpawnGeneration == m_iStuckRouteGeneration &&
+			m_iStrategicAssignmentRevision == m_iStuckRouteAssignmentRevision;
+	}
+
+	// Первое прибытие запускает абсолютный deadline. Движение лидера и повторные
+	// входы в радиус не продлевают ожидание ALL для той же identity.
+	bool BeginStuckRouteCompletionWait()
+	{
+		if (!IsStuckRouteContextCurrent() || m_iStuckRouteCompletionWaitStartedAtMs > 0)
+			return false;
+		m_iStuckRouteCompletionWaitStartedAtMs = System.GetTickCount();
+		return true;
+	}
+
+	int GetStuckRouteCompletionWaitAgeMs()
+	{
+		if (!IsStuckRouteContextCurrent() || m_iStuckRouteCompletionWaitStartedAtMs <= 0)
+			return 0;
+		return System.GetTickCount(m_iStuckRouteCompletionWaitStartedAtMs);
+	}
+
+	bool MarkStuckRouteCompletionTimeoutReported()
+	{
+		if (!IsStuckRouteContextCurrent() || m_bStuckRouteCompletionTimeoutReported)
+			return false;
+		m_bStuckRouteCompletionTimeoutReported = true;
+		return true;
+	}
+
+	protected void ClearStuckRouteWaypoint()
+	{
+		m_StuckRouteWaypoint = null;
+		m_StuckRouteGroup = null;
+		m_iStuckRouteGeneration = 0;
+		m_iStuckRouteAssignmentRevision = 0;
+		m_iStuckRouteCompletionWaitStartedAtMs = 0;
+		m_bStuckRouteCompletionTimeoutReported = false;
 	}
 
 	bool AssignPointObjective(vector targetPosition, AIWaypoint waypoint)
@@ -2267,7 +2320,7 @@ class AICF_GroupSlot
 
 	void ClearObjective()
 	{
-		m_StuckRouteWaypoint = null;
+		ClearStuckRouteWaypoint();
 		ClearPendingOrderRecovery();
 		SupersedePendingStuckRecoveryEvidence("OBJECTIVE_CLEARED");
 		m_TargetKind = AICF_EOrderTargetKind.NONE;
@@ -2280,7 +2333,7 @@ class AICF_GroupSlot
 	// the strategic target needed to restore the infantry order after dismount.
 	void SuspendObjectiveWaypoint()
 	{
-		m_StuckRouteWaypoint = null;
+		ClearStuckRouteWaypoint();
 		ClearPendingOrderRecovery();
 		SupersedePendingStuckRecoveryEvidence("VEHICLE_CONTROL_ACQUIRED");
 		m_Waypoint = null;
@@ -2364,7 +2417,7 @@ class AICF_GroupSlot
 	protected void ClearRuntimeReferences()
 	{
 		m_bIsolatedNavmeshRecoveryUsed = false;
-		m_StuckRouteWaypoint = null;
+		ClearStuckRouteWaypoint();
 		m_RecruitmentOrder = null;
 		m_aRosterMembers.Clear();
 		if (m_Group)

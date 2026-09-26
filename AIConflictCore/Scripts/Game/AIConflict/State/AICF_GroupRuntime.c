@@ -45,6 +45,41 @@ class AICF_GroupRuntime
 		return alive;
 	}
 
+	// Физический snapshot дополняет stock ALL, но не заменяет его completion.
+	static string BuildWaypointArrivalSnapshot(SCR_AIGroup group, AIWaypoint waypoint)
+	{
+		if (!group || !waypoint)
+			return " snapshot_invalid=1";
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		int alive;
+		int arrived;
+		float farthestMeters;
+		string members;
+		foreach (AIAgent agent : agents)
+		{
+			IEntity member;
+			if (agent)
+				member = agent.GetControlledEntity();
+			if (!member)
+			{
+				members += "NONE:NO_CONTROLLED_ENTITY;";
+				continue;
+			}
+			float distanceMeters = vector.DistanceXZ(member.GetOrigin(), waypoint.GetOrigin());
+			if (IsAliveCharacter(member))
+			{
+				alive++;
+				if (distanceMeters <= waypoint.GetCompletionRadius())
+					arrived++;
+				farthestMeters = Math.Max(farthestMeters, distanceMeters);
+			}
+			members += string.Format("%1:%2:%3;", member.GetID(), DescribeLifeState(member), distanceMeters);
+		}
+		return string.Format(" radius_m=%1 agents=%2 alive=%3 arrived_alive=%4 farthest_alive_m=%5 members=[%6]",
+			waypoint.GetCompletionRadius(), agents.Count(), alive, arrived, farthestMeters, members);
+	}
+
 	// Physical UI truth must not depend on the lifetime of a TransportTrip. A
 	// terminal fallback can deliberately retain a protected vehicle while some
 	// managed occupants are still linked to it; calling that group "on foot"
