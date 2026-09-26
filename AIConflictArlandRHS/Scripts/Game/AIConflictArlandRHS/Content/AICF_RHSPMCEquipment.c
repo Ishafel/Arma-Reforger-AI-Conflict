@@ -276,13 +276,15 @@ class AICF_RHSPMCEquipment
 		}
 		if (!Eligible(character) || character.GetID() != identity || SCR_ResourceNameUtils.GetPrefabName(character) != source)
 			return false;
-		bool applied = AICF_LoadoutInventory.Restore(character, snapshot) &&
-			AICF_LoadoutInventory.Signature(character, catalog, ignored) == expected &&
-			AICF_RHSPMCArmament.Validate(character, source, variant);
+		bool inventoryRestored = AICF_LoadoutInventory.Restore(character, snapshot);
+		string actual = AICF_LoadoutInventory.Signature(character, catalog, ignored);
+		bool signatureMatches = actual == expected;
+		bool armamentValid = AICF_RHSPMCArmament.Validate(character, source, variant);
+		bool applied = inventoryRestored && signatureMatches && armamentValid;
 		if (!applied)
 		{
 			bool restored = AICF_LoadoutInventory.Restore(character, before);
-			Print(string.Format("[AICF][PMC_EQUIPMENT_FAILED] entity=%1 rollback=%2", identity, restored), LogLevel.ERROR);
+			Print(string.Format("[AICF][PMC_EQUIPMENT_FAILED] entity=%1 rollback=%2 restored=%3 signature=%4 armament=%5 source=%6", identity, restored, inventoryRestored, signatureMatches, armamentValid, source), LogLevel.ERROR);
 			return false;
 		}
 		Print(string.Format("[AICF][PMC_EQUIPMENT_APPLIED] entity=%1 faction=FIA variant=%2 source=%3 inventory_verified=1", identity, variant, source));

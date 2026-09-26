@@ -76,9 +76,13 @@ class AICF_LoadoutInventory : SCR_PlayerArsenalLoadout
 		{
 			CharacterControllerComponent controller = CharacterControllerComponent.Cast(entity.FindComponent(CharacterControllerComponent));
 			RplComponent rpl = RplComponent.Cast(entity.FindComponent(RplComponent));
-			return Replication.IsServer() && controller && !controller.IsPlayerControlled() && rpl && rpl.IsMaster() &&
-				AICF_LoadoutClothing.ClearForRestore(entity, manager) &&
-				ApplyEntityStorageString(entity, context, manager);
+			if (!Replication.IsServer() || !controller || controller.IsPlayerControlled() || !rpl || !rpl.IsMaster())
+				return false;
+			bool cleared = AICF_LoadoutClothing.ClearForRestore(entity, manager);
+			bool applied = cleared && ApplyEntityStorageString(entity, context, manager);
+			if (!applied)
+				Print(string.Format("[AICF][LOADOUT_NATIVE_RESTORE_FAILED] entity=%1 cleared=%2 changing_item=%3 using_item=%4", entity.GetID(), cleared, controller.IsChangingItem(), controller.IsUsingItem()), LogLevel.WARNING);
+			return applied;
 		}
 		return AICF_LoadoutClothing.ClearForRestore(entity, manager) && RestoreLocal(entity, context, manager, 0);
 	}

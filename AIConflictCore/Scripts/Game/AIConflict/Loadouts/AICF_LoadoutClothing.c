@@ -120,7 +120,10 @@ class AICF_LoadoutClothing
 				if (entity.GetWorld() == GetGame().GetWorld())
 				{
 					if (!manager.TryDeleteItem(item.GetOwner()))
+					{
+						Print(string.Format("[AICF][LOADOUT_CLOTHING_REMOVE_FAILED] entity=%1 item=%2", entity.GetID(), SCR_ResourceNameUtils.GetPrefabName(item.GetOwner())), LogLevel.WARNING);
 						return false;
+					}
 				}
 				else if (!AICF_LoadoutInventory.DeleteLocal(item.GetOwner()))
 					return false;

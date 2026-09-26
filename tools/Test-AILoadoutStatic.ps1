@@ -42,7 +42,7 @@ Require 'LOADOUT_LOCAL_DELETE_ONLY' (Method 'AICF_LoadoutInventory.c' 'DeleteLoc
 Require 'LOADOUT_DETACH_BEFORE_DELETE' (Method 'AICF_LoadoutInventory.c' 'DeleteLocal') 'parent.GetAttachedEntity\(\) != item.*parent.DetachEntity\(\).*component.GetParentSlot\(\).*DeleteEntityAndChildren\(item\)' 'parent.DetachEntity()'
 Require 'LOADOUT_LOCAL_INSERT_ONLY' (Method 'AICF_LoadoutInventory.c' 'InsertLocal') 'storage.GetOwner\(\).GetWorld\(\) == GetGame\(\).GetWorld\(\)' 'storage.GetOwner().GetWorld() == GetGame().GetWorld()'
 $restore = Method 'AICF_LoadoutInventory.c' 'Restore'
-Require 'LOADOUT_SERVER_RESTORE' $restore 'Replication.IsServer\(\).*!controller.IsPlayerControlled\(\).*rpl.IsMaster\(\).*ApplyEntityStorageString' 'rpl.IsMaster()'
+Require 'LOADOUT_SERVER_RESTORE' $restore '!Replication.IsServer\(\).*controller.IsPlayerControlled\(\).*!rpl.IsMaster\(\)\) return false;.*ApplyEntityStorageString' '!rpl.IsMaster()'
 $apply = Method 'AICF_LoadoutApplicator.c' 'Apply'
 Require 'LOADOUT_APPLY_IDENTITY' $apply 'character.GetID\(\) != identity.*control.GetControlAIAgent\(\).GetParentGroup\(\) != group' 'character.GetID() != identity'
 Require 'LOADOUT_APPLY_READBACK' $apply 'Restore\(character, binding.m_sInventory\).*Signature\(character, catalog, ignored\) != binding.m_sSignature' 'Signature(character, catalog, ignored) != binding.m_sSignature'
