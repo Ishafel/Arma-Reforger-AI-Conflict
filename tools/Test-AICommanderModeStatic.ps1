@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot)
 )
 
@@ -446,9 +446,31 @@ if (Require-AICommanderClass $strategicUI 'AICF_StrategicUIController') {
 if (Require-AICommanderClass $groupMapMarkers 'AICF_GroupMapMarkerSystem') {
     $describeTask = Assert-AICommanderMethodPresent $groupMapMarkers 'DescribeTask' 'AI_COMMANDER_UI_STATE'
     $syncObjectives = Assert-AICommanderMethodPresent $groupMapMarkers 'SyncFactionObjectiveMarkers' 'AI_COMMANDER_UI_STATE'
-    Assert-AICFContains $failures 'AI_COMMANDER_UI_STATE' (ConvertTo-AICFCodeText $describeTask) 'IsAwaitingPlayerCommand\s*\(\s*\)\s*\|\|\s*slot\.IsSystemHoldOrder\s*\(\s*\)' 'Map task text must recognize player-command waiting before role-specific labels'
-    Assert-AICFContains $failures 'AI_COMMANDER_UI_STATE' $describeTask '"AWAITING PLAYER COMMAND"' 'Map task text must expose the exact player-command waiting label'
-    Assert-AICFContains $failures 'AI_COMMANDER_UI_STATE' (ConvertTo-AICFCodeText $syncObjectives) 'IsAwaitingPlayerCommand\s*\(\s*\)\s*\|\|\s*slot\.IsSystemHoldOrder\s*\(\s*\)' 'SYSTEM_HOLD ATTACK slots must not create false objective markers on their own HQ'
+    $attackObjective = ConvertTo-AICFCodeText (Assert-AICommanderMethodPresent $groupMapMarkers 'IsAttackObjective' 'AI_COMMANDER_UI_STATE')
+    $details = Assert-AICommanderMethodPresent $groupMapMarkers 'BuildMarkerDetails' 'AI_COMMANDER_UI_STATE'
+    # Краткая карточка: «Ожидает приказа»; hover уточняет источник: «Ожидает приказа игрока».
+    # Проверяем действующую ветку и оба перевода, а не прежний английский literal.
+    $waitingCondition = 'slot\.IsAwaitingPlayerCommand\s*\(\s*\)\s*\|\|\s*slot\.IsSystemHoldOrder\s*\(\s*\)'
+    foreach ($language in @('en_us', 'ru_ru')) {
+        $taskLabel = 'Awaiting orders'
+        $authorityLabel = 'Awaiting player orders'
+        if ($language -eq 'ru_ru') {
+            $taskLabel = 'Ожидает приказа'
+            $authorityLabel = 'Ожидает приказа игрока'
+        }
+        $localizedTask = Expand-AICFLocalizedAuditText $describeTask $localizationEntries $language
+        $localizedDetails = Expand-AICFLocalizedAuditText $details $localizationEntries $language
+        Assert-AICFContains $failures 'AI_COMMANDER_UI_STATE' $localizedTask ('^\s*\{\s*if\s*\(\s*' + $waitingCondition + '\s*\)\s*return\s+"' + [regex]::Escape($taskLabel) + '"\s*;') "Waiting must be the first task branch with the localized $language label"
+        Assert-AICFContains $failures 'AI_COMMANDER_UI_STATE' $localizedDetails ('if\s*\(\s*' + $waitingCondition + '\s*\)\s*authority\s*=\s*"' + [regex]::Escape($authorityLabel) + '"\s*;') "Marker details must explain player-command waiting in $language"
+    }
+    Assert-AICFContains $failures 'AI_COMMANDER_UI_STATE' (ConvertTo-AICFCodeText $details) ('if\s*\(\s*' + $waitingCondition + '\s*\)\s*authority\s*=') 'Marker details must have an executable waiting authority branch'
+    Assert-AICFContains $failures 'AI_COMMANDER_UI_STATE' (ConvertTo-AICFCodeText $details) 'string\.Format\s*\(\s*,\s*authority\s*\)' 'Marker details must render the waiting authority'
+    # Helper сам отклоняет ожидание/пополнение; вызывающий цикл обязан пропустить
+    # слот до добавления target. Простого наличия имени helper недостаточно.
+    Assert-AICFContains $failures 'AI_COMMANDER_UI_STATE' $attackObjective ('^\s*\{\s*if\s*\(\s*!slot\s*\|\|\s*!faction\s*\|\|\s*!slot\.IsCombatReady\(\)\s*\|\|\s*slot\.IsRecruitingInfantry\(\)\s*\|\|\s*' + $waitingCondition + '\s*\|\|\s*slot\.GetRole\(\)\s*!=\s*AICF_EGroupRole\.ATTACK\s*\)\s*return\s+false\s*;') 'Attack objective helper must reject waiting, SYSTEM_HOLD, recruitment and non-ready/non-ATTACK slots'
+    Assert-AICFContains $failures 'AI_COMMANDER_UI_STATE' $attackObjective 'return\s+target\s*&&\s*target\.GetOwner\(\)\s*&&\s*target\.GetFaction\(\)\s*!=\s*faction\s*;' 'Attack objective helper must reject missing and friendly targets'
+    $syncCode = ConvertTo-AICFCodeText $syncObjectives
+    Assert-AICFContains $failures 'AI_COMMANDER_UI_STATE' $syncCode 'AICF_GroupSlot\s+slot\s*=\s*factionState\.GetSlot\(slotId\);\s*if\s*\(\s*!IsAttackObjective\(slot,\s*markerFaction\)\s*\)\s*\{\s*continue;\s*\}\s*SCR_CampaignMilitaryBaseComponent\s+target\s*=\s*slot\.GetTargetBase\(\)' 'Objective marker collection must skip rejected slots before reading their target'
 }
 
 if (Require-AICommanderClass $vehicleHandoff 'AICF_VehicleTaskHandoff') {
