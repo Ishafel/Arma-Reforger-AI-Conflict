@@ -410,7 +410,19 @@ if ($Role -eq 'Server') {
     )
 }
 else {
-    $nativeArguments += @('-client', $ClientAddress)
+    $clientTarget = $ClientAddress
+    if ($ClientAddress -match '^(\[[^\]]+\]|[^:]+):(\d+)$') {
+        if ([int]$Matches[2] -ne $ServerPort) {
+            throw 'Порт в ClientAddress должен совпадать с ServerPort, который проверяет readiness сервера.'
+        }
+    }
+    elseif ($ServerPort -ne 2001) {
+        if ($ClientAddress.Contains(':') -and -not $ClientAddress.StartsWith('[')) {
+            $clientTarget = "[$ClientAddress]"
+        }
+        $clientTarget = "${clientTarget}:$ServerPort"
+    }
+    $nativeArguments += @('-client', $clientTarget)
 }
 $nativeArguments += @(
     '-addonsDir', $addonsDir,

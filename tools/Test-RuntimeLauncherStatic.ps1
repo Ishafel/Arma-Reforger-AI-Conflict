@@ -224,6 +224,37 @@ try {
         }
     }
 
+    foreach ($address in @('127.0.0.1', '127.0.0.1:23204')) {
+        $portInvocation = @($clientInvocation)
+        $addressIndex = [array]::IndexOf($portInvocation, '-ClientAddress') + 1
+        $portInvocation[$addressIndex] = $address
+        $portInvocation += @('-ServerPort', '23204')
+        $portOutput = @(& powershell.exe @portInvocation 2>&1 | ForEach-Object { $_.ToString() })
+        if ($LASTEXITCODE -ne 0) {
+            Add-Failure 'RUNTIME_LAUNCHER_CLIENT_PORT' "Client port dry-run failed: $($portOutput -join ' | ')"
+            continue
+        }
+        $portManifest = Get-ManifestFromOutput -Output $portOutput -Rule 'RUNTIME_LAUNCHER_CLIENT_PORT'
+        if ($portManifest) {
+            Require-ArgumentPair $portManifest '-client' '127.0.0.1:23204' 'RUNTIME_LAUNCHER_CLIENT_PORT'
+        }
+    }
+    $conflictingInvocation = @($clientInvocation)
+    $conflictingInvocation[[array]::IndexOf($conflictingInvocation, '-ClientAddress') + 1] = '127.0.0.1:23205'
+    $conflictingInvocation += @('-ServerPort', '23204')
+    # WinPS превращает stderr ожидаемого отказа в NativeCommandError.
+    # Сохраняем output/exit и проверяем именно отказ, не прерывая весь harness.
+    $portErrorPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $conflictingOutput = @(& powershell.exe @conflictingInvocation 2>&1 | ForEach-Object { $_.ToString() })
+        $conflictingExit = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $portErrorPreference }
+    if ($conflictingExit -eq 0 -or ($conflictingOutput -join ' ') -notmatch 'ClientAddress.*ServerPort') {
+        Add-Failure 'RUNTIME_LAUNCHER_CLIENT_PORT' 'Client must reject a target port different from the checked server port'
+    }
+
     foreach ($northRole in @('Server', 'Client')) {
         $northInvocation = @(
             '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $launcherPath,
