@@ -2976,7 +2976,9 @@ class AICF_OrderPlanner
 		vector endpoint;
 		if (!pathfinding || !pathfinding.GetNavmeshComponent())
 			return false;
-		pathfinding.GetNavmeshComponent().LoadTileIn(order.m_vPosition);
+		NavmeshWorldComponent navmesh = pathfinding.GetNavmeshComponent();
+		if (!navmesh.IsTileLoaded(order.m_vPosition) && !navmesh.IsTileRequested(order.m_vPosition))
+			navmesh.LoadTileIn(order.m_vPosition);
 		if (!pathfinding.GetClosestPositionOnNavmesh(order.m_vPosition, "15 5 15", endpoint) ||
 			vector.DistanceSqXZ(endpoint, order.m_vPosition) > 225)
 			return false;
