@@ -12,7 +12,10 @@
 **/profile/
 **/resourceDatabase.rdb
 /.codex-runtime/
-/workshop/
+/workshop/*
+!/workshop/AIConflictEveronRHS/
+/workshop/AIConflictEveronRHS/*
+!/workshop/AIConflictEveronRHS/metadata.md
 /tools/*
 !/tools/Test-AICommanderUIContracts.ps1
 !/tools/Test-BaseBuilderDangerContracts.ps1

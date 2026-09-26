@@ -65,6 +65,8 @@ How to use:
    required dependencies.
 2. Open `Scenarios` and select `AI Conflict - Everon`, or join a server that
    lists the complete dependency set.
+   For the northern campaign, select `AI Conflict - Northern Everon`: two
+   headquarters and six capture points, with the full island terrain accessible.
 3. Both factions use AI commanders by default. Dedicated-server operators can
    instead enable autonomous target selection for only US or only USSR with the
    exact `aicfAICommanderMode` startup setting.
@@ -96,7 +98,11 @@ AI Conflict Everon превращает официальный Conflict на Eve
 
 Для запуска установите `AI Conflict Everon` вместе с автоматически
 подтягиваемыми зависимостями `AI Conflict Core` и `AI Conflict Arland`, затем
-откройте `Сценарии -> AI Conflict - Everon`. По умолчанию обеими сторонами
+откройте `Сценарии` и выберите `AI Conflict — Эверон` (`AI Conflict - Everon`
+при английском языке игры). Для северной кампании выберите
+`AI Conflict — Север Эверона` (`AI Conflict - Northern Everon`): два штаба и
+шесть точек захвата; ландшафт всего острова остаётся доступным. Оба сценария
+используют стандартные США/СССР и не требуют RHS. По умолчанию обеими сторонами
 управляют AI commanders. Сохранение прогрессии отключено: каждый локальный
 запуск или hosting начинает новую кампанию.
 
