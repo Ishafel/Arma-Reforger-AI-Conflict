@@ -20,6 +20,7 @@
 !/tools/fixtures/
 /tools/fixtures/*
 !/tools/fixtures/AICF_RemainingErrorsProbe.c
+!/tools/fixtures/AICF_RHSPatchesProbe.c
 /docs/*
 !/docs/releases/
 /docs/releases/*

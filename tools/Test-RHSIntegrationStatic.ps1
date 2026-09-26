@@ -189,6 +189,8 @@ if ($failures.Count -eq 0) {
     # campaign lifecycle. Любой другой CallLater (включая повторный) запрещён.
     $pmcInitCall = 'GetGame\(\)\.GetCallqueue\(\)\.CallLater\(AICF_ApplyPMCEquipment, 1500, false\);'
     $rhsCampaignSources = [regex]::Replace($rhsSources, $pmcInitCall, '')
+    $patchInitCall = 'GetGame\(\)\.GetCallqueue\(\)\.CallLater\(AICF_ApplyDefaultPatches, 1500, false\);'
+    $rhsCampaignSources = [regex]::Replace($rhsCampaignSources, $patchInitCall, '')
     Forbid-Match 'RHS_SINGLE_LIFECYCLE' $rhsCampaignSources 'new\s+AICF_MatchController|CallLater\s*\(|GetOn\w*\(\)\.Insert\s*\(' 'RHS addon must not add a controller, loop or event subscription'
     $pmcPath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/Content/AICF_RHSPMCEquipment.c'
     $pmc = Get-Content -LiteralPath $pmcPath -Raw
@@ -197,6 +199,13 @@ if ($failures.Count -eq 0) {
     Require-Match 'RHS_PMC_IDENTITY' $pmc 'GetID\(\) != identity[\s\S]*GetPrefabName\(character\) != source' 'PMC commit must recheck immutable character identity'
     Require-Match 'RHS_PMC_BEFORE_BOARDING' $pmc 'override bool Board\(AICF_FIAPatrol p\)[\s\S]*p.GroupIdentity\(\)[\s\S]*foreach \(AIAgent agent : agents\)[\s\S]*character.AICF_IsPMCEquipmentPending\(\)\) return false;[\s\S]*return super.Board\(p\)' 'Both crew members must finish equipment preparation before boarding mutates their weapons'
     Require-Match 'RHS_PMC_PENDING_LIFECYCLE' $pmc 'm_bAICFPMCEquipmentPending = true;[\s\S]*CallLater\(AICF_ApplyPMCEquipment[\s\S]*AICF_RHSPMCEquipment.Apply\(this\);[\s\S]*m_bAICFPMCEquipmentPending = false;' 'Pending equipment must bracket the existing one-shot callback'
+    $patches = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/Content/AICF_RHSDefaultPatches.c') -Raw
+    Require-Match 'RHS_PATCH_AUTHORITY' $patches '!Replication.IsServer\(\)[\s\S]*AICF_RHSContentProfile.Cast[\s\S]*!rpl.IsMaster\(\)[\s\S]*controller.IsDead\(\)' 'Patches require active RHS profile and live server/master character'
+    Require-Match 'RHS_PATCH_IDENTITY' $patches 'GetID\(\) == m_iAICFPatchIdentity && SCR_ResourceNameUtils.GetPrefabName\(this\) == m_sAICFPatchSource' 'Patch callback must reject stale identity/prefab'
+    Require-Match 'RHS_PATCH_CLEANUP' $patches 'Remove\(AICF_ApplyDefaultPatches\)' 'Patch callback needs destruction cleanup'
+    Require-Match 'RHS_PATCH_ADMISSION' $patches '!slot.IsLocked\(\) && !slot.GetAttachedEntity\(\) && manager.CanInsertResourceInStorage\(patch, storage, i\) &&\s*manager.TrySpawnPrefabToStorage\(patch, storage, i\)' 'Patch spawn must target an empty unlocked compatible slot'
+    Require-Match 'RHS_PATCH_SLOT' $patches 'RHS_LoadoutSlotInfo.Cast\(slot\)[\s\S]*name.EndsWith\("Velcro"\) \|\| name == "TopChestVelctro"' 'Patches must be restricted to native RHS Velcro slots'
+    Forbid-Match 'RHS_PATCH_NONDESTRUCTIVE' $patches 'TryDeleteItem|DeleteEntity|DetachEntity|TryReplaceItem|AttachEntity\(' 'Default patches may only fill empty slots through native inventory'
     $controllerCount = ([regex]::Matches($arlandBootstrap, 'new\s+AICF_MatchController\s*\(')).Count
     if ($controllerCount -ne 1) {
         Add-Failure 'RHS_SINGLE_LIFECYCLE' "Arland bootstrap must construct exactly one controller; found $controllerCount"
