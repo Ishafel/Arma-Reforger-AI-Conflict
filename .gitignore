@@ -19,13 +19,16 @@
 /tools/*
 !/tools/Test-AICommanderUIContracts.ps1
 !/tools/Test-BaseBuilderDangerContracts.ps1
+!/tools/Test-InfantryAdvanceContracts.ps1
 !/tools/Test-InfantrySpawnPlacementStatic.ps1
 !/tools/fixtures/
 /tools/fixtures/*
 !/tools/fixtures/AICF_RemainingErrorsProbe.c
 !/tools/fixtures/AICF_RHSPatchesProbe.c
 !/tools/fixtures/AICF_StuckRouteWaitProbe.c
+!/tools/fixtures/AICF_InfantryAdvanceProbe.c
 /docs/*
+!/docs/INFANTRY_ADVANCE.md
 !/docs/releases/
 /docs/releases/*
 !/docs/releases/[0-9]*.[0-9]*.[0-9]*.md

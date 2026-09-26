@@ -478,6 +478,19 @@ class AICF_MatchController
 		return s_ActiveController;
 	}
 
+	// Только чтение актуального владельца; policy не кеширует slot/group identity.
+	AICF_GroupSlot FindManagedInfantrySlot(SCR_AIGroup group)
+	{
+		if (!Replication.IsServer() || !m_bStarted || !m_bRosterReady || !group)
+			return null;
+		AICF_GroupSlot slot;
+		if (m_USState)
+			slot = m_USState.FindSlotByGroup(group);
+		if (!slot && m_USSRState)
+			slot = m_USSRState.FindSlotByGroup(group);
+		return slot;
+	}
+
 	protected AICF_AICommander GetAICommanderForFaction(
 		SCR_CampaignFaction faction)
 	{
