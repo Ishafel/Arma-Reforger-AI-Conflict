@@ -20,6 +20,7 @@ Assert-Contract 'Forces/AICF_InfantryRecruitmentService.c' 'VISIT_TIMEOUT_MS[\s\
 Assert-Contract 'Economy/AICF_InfantryRecruitmentEconomy.c' 'QuoteInfantryRecruit\(order\) \|\| !order.IsPhysicallyPresent\(\)[\s\S]*AddSupplies\(-order.m_iCost\)[\s\S]*before - after[\s\S]*RefundInfantryRecruit' 'LIVE_EXACT_DEBIT'
 Assert-Contract 'Forces/AICF_InfantryRecruitSpawner.c' 'PurgeSpawnRequestsForGroup[\s\S]*IsPlayerControlled[\s\S]*IsMaster[\s\S]*DespawnMembers[\s\S]*DeleteRplEntity' 'OWNED_PENDING_CLEANUP'
 Assert-Contract 'Orders/AICF_OrderPlanner.c' 'CanRecruitInfantry[\s\S]*HasPlayerStrategicIntent[\s\S]*IsAICommanderEnabled' 'PLAYER_ORDER_PRIORITY'
+Assert-Contract 'Orders/AICF_OrderPlanner.c' 'bool CanRecruitInfantry\([^}]*!slot.HasPendingOrderRecovery\(\)' 'PENDING_RECOVERY_BEFORE_RECRUITMENT'
 Assert-Contract 'Bootstrap/AICF_MatchController.c' 'm_InfantryRecruitment.Stop\(\)[\s\S]*m_EconomySystem.Stop' 'STOP_BEFORE_ECONOMY'
 $service = [IO.File]::ReadAllText((Join-Path $core 'Forces/AICF_InfantryRecruitmentService.c'))
 if ($service -match 'CallLater\s*\(|GetOn\w+\(\)\.Insert') { $failures.Add('UNOWNED_CALLBACK') }

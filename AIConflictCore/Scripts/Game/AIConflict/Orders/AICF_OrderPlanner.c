@@ -2962,6 +2962,7 @@ class AICF_OrderPlanner
 	{
 		return Replication.IsServer() && slot && faction && slot.IsCombatReady() &&
 			slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY && !slot.HasPlayerStrategicIntent() &&
+			!slot.HasPendingOrderRecovery() &&
 			!slot.IsAwaitingPlayerCommand() && !slot.IsLoneSurvivorRetreat() &&
 			m_AuthorityPolicy && m_AuthorityPolicy.IsAICommanderEnabled(faction.GetFactionKey()) &&
 			slot.HasStrategicIntent() && slot.GetStrategicIntentTargetKind() == AICF_EOrderTargetKind.BASE;
