@@ -46,8 +46,8 @@ if (Require-Stage35Record $stage1Config 'AICF_Stage1Config.c') {
         'DEFAULT_GROUP_SIZE\s*=\s*10\s*;' = 'Managed rosters must default to ten members'
         'MAX_GROUP_SIZE\s*=\s*10\s*;' = 'Commander-selected rosters must be capped at ten members'
         'ATTACK_SLOTS_PER_FACTION\s*=\s*6\s*;' = 'Default doctrine must expose six ATTACK slots'
-        'DEFEND_SLOTS_PER_FACTION\s*=\s*3\s*;' = 'Default doctrine must expose three DEFEND/QRF slots'
-        'RESERVE_SLOTS_PER_FACTION\s*=\s*1\s*;' = 'Default doctrine must expose one RESERVE slot'
+        '\bDEFEND_SLOTS_PER_FACTION\s*=\s*4\s*;' = 'Default doctrine must expose four DEFEND/QRF slots'
+        '\bRESERVE_SLOTS_PER_FACTION\s*=\s*0\s*;' = 'Default doctrine must assign the former RESERVE slot to DEFEND'
         'LEGACY_ATTACK_SLOTS_PER_FACTION\s*=\s*5\s*;' = 'Roles-off baseline must retain five ATTACK slots'
         'LEGACY_DEFEND_SLOTS_PER_FACTION\s*=\s*3\s*;' = 'Roles-off baseline must retain three DEFEND slots'
         'LEGACY_RESERVE_SLOTS_PER_FACTION\s*=\s*2\s*;' = 'Roles-off baseline must retain two RESERVE slots'
@@ -387,4 +387,4 @@ if ($failures.Count -gt 0) {
 
 Write-Host 'Stage 3.5 static audit: PASS' -ForegroundColor Green
 Write-Host 'Negative fixture self-check: PASS (COORDINATOR_SIDE_EFFECT, FLOW_CROSS_CALL, WAYPOINT_SIDE_EFFECT_OWNER, TRANSITION_OUTSIDE_CONTROLLER, TRANSITION_EFFECT_ORDER, WAITING_WITH_LEASE, HANDOFF_CLEARANCE_GATE, CLEANUP_CLEARANCE_OWNER, CLEANUP_IDENTITY_SAFETY, VEHICLE_LIVENESS_OWNERSHIP)'
-Write-Host 'Checked: ten stable slots per faction, one-member infantry deployment with configured roster goals up to ten, 200/220 agent budget, 5/3/2 legacy and 6/3/1 active roles, A0/A1/A2/D0 planning, QRF hysteresis, all-slot lease admission and cap, faction vehicle policy, capacity/minimum-roster contracts, meaningful-task deadlines, independent handoff, cleanup-only physical-clearance proof, exclusive vehicle-waypoint queue ownership, ordered transition effects, Repeat-T2 telemetry, architecture ownership, and Enforce language limits.'
+Write-Host 'Checked: ten stable slots per faction, one-member infantry deployment with configured roster goals up to ten, 200/220 agent budget, 5/3/2 legacy and 6/4/0 active roles, A0/A1/A2/D0 planning, QRF hysteresis, all-slot lease admission and cap, faction vehicle policy, capacity/minimum-roster contracts, meaningful-task deadlines, independent handoff, cleanup-only physical-clearance proof, exclusive vehicle-waypoint queue ownership, ordered transition effects, Repeat-T2 telemetry, architecture ownership, and Enforce language limits.'

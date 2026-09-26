@@ -13,8 +13,8 @@ class AICF_Stage1Config
 	// roster gates use each slot's commander-selected desired size.
 	static const int MANAGED_GROUP_SIZE = DEFAULT_GROUP_SIZE;
 	static const int ATTACK_SLOTS_PER_FACTION = 6;
-	static const int DEFEND_SLOTS_PER_FACTION = 3;
-	static const int RESERVE_SLOTS_PER_FACTION = 1;
+	static const int DEFEND_SLOTS_PER_FACTION = 4;
+	static const int RESERVE_SLOTS_PER_FACTION = 0;
 	static const int LEGACY_ATTACK_SLOTS_PER_FACTION = 5;
 	static const int LEGACY_DEFEND_SLOTS_PER_FACTION = 3;
 	static const int LEGACY_RESERVE_SLOTS_PER_FACTION = 2;
