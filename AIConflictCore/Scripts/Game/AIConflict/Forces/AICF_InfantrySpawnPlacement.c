@@ -14,7 +14,10 @@ class AICF_InfantrySpawnPlacement
 		query[1] = world.GetSurfaceY(query[0], query[2]);
 		if (!navmesh.IsTileLoaded(query))
 		{
-			navmesh.LoadTileIn(query);
+			// Соседние candidates часто попадают в один tile. Native request
+			// асинхронный; повторный поиск ждёт уже поставленную загрузку.
+			if (!navmesh.IsTileRequested(query))
+				navmesh.LoadTileIn(query);
 			return false;
 		}
 		if (!path.GetClosestPositionOnNavmesh(query, "1 2 1", position) ||
