@@ -12,3 +12,15 @@
 **/profile/
 **/resourceDatabase.rdb
 /.codex-runtime/
+/workshop/
+/tools/*
+!/tools/Test-AICommanderUIContracts.ps1
+!/tools/Test-BaseBuilderDangerContracts.ps1
+!/tools/Test-InfantrySpawnPlacementStatic.ps1
+!/tools/fixtures/
+/tools/fixtures/*
+!/tools/fixtures/AICF_RemainingErrorsProbe.c
+/docs/*
+!/docs/releases/
+/docs/releases/*
+!/docs/releases/[0-9]*.md
