@@ -403,6 +403,18 @@ class AICF_FactionFleet
 		return true;
 	}
 
+	// Отдельная FIA-квота по точкам, без армейского hard cap десяти машин.
+	bool TryReserveFIAPatrol(AICF_FIAPatrol patrol, int objectiveCount)
+	{
+		if (!Replication.IsServer() || m_sFactionKey != "FIA" || !patrol || patrol.m_Lease ||
+			patrol.m_iSlot < 0 || patrol.m_iSlot >= objectiveCount / 2 || patrol.m_iGeneration <= 0 ||
+			HasLeaseForSlot(patrol.m_iSlot) || GetLeaseCount() >= objectiveCount / 2) return false;
+		patrol.m_Lease = new AICF_VehicleLease(m_sFactionKey, patrol.m_iSlot,
+			patrol.m_iGeneration, patrol.m_iGeneration, ++m_iNextLeaseGeneration);
+		m_aLeases.Insert(patrol.m_Lease);
+		return true;
+	}
+
 }
 
 // Registry keyed by faction identity. It replaces all US/USSR-specific runtime,

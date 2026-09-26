@@ -592,6 +592,50 @@ class AICF_VehicleTaskHandoff
 
 	// Вспомогательные physical logistics jobs того же domain owner.
 
+	void ClearFIAPatrolWaypoint(AICF_FIAPatrol p)
+	{
+		if (!Replication.IsServer() || !p || !p.m_Waypoint || !p.GroupIdentity() || p.m_Waypoint.GetID() != p.m_WaypointId) return;
+		AIWaypoint waypoint = p.m_Waypoint;
+		p.m_Group.RemoveWaypoint(waypoint);
+		p.m_Waypoint = null;
+		p.m_WaypointId = EntityID.INVALID;
+		RplComponent.DeleteRplEntity(waypoint, false);
+	}
+
+	bool MoveFIAPatrol(AICF_FIAPatrol p, vector endpoint)
+	{
+		if (!Replication.IsServer() || !p.m_bReady || !p.VehicleIdentity() || !p.CrewIdentity()) return false;
+		// После боя native Move может вернуть живой экипаж в его машину.
+		// Чужие occupants никогда не вытесняются патрульным приказом.
+		if (!p.m_PilotSeat || !p.m_TurretSeat ||
+			(p.m_PilotSeat.GetOccupant() && p.m_PilotSeat.GetOccupant() != p.m_Driver) ||
+			(p.m_TurretSeat.GetOccupant() && p.m_TurretSeat.GetOccupant() != p.m_Gunner)) return false;
+		ClearFIAPatrolWaypoint(p);
+		if (p.m_Waypoint) return false;
+		SCR_AIVehicleUsageComponent usage = SCR_AIVehicleUsageComponent.Cast(p.m_Vehicle.FindComponent(SCR_AIVehicleUsageComponent));
+		SCR_AIGroupUtilityComponent utility = p.m_Group.GetGroupUtilityComponent();
+		if (!usage || !utility) return false;
+		utility.AddUsableVehicle(usage);
+		AICF_VehicleWaypointFactory factory = new AICF_VehicleWaypointFactory();
+		AIWaypoint waypoint = factory.CreateSpawnStagingWaypoint(endpoint, 25);
+		if (!waypoint) return false;
+		p.m_Waypoint = waypoint;
+		p.m_WaypointId = waypoint.GetID();
+		p.m_Group.AddWaypointAt(waypoint, 0);
+		array<AIWaypoint> queue = {};
+		p.m_Group.GetWaypoints(queue);
+		return queue.Contains(waypoint);
+	}
+
+	void DetachFIAPatrol(AICF_FIAPatrol p)
+	{
+		ClearFIAPatrolWaypoint(p);
+		// Retire сохраняет группу, машину и выживший экипаж. Их native Move /
+		// boarding ещё могут завершать отмену после RemoveWaypoint. Регистрацию
+		// машины сохраняем до штатного удаления группы/vehicle usage component,
+		// иначе SCR_AIGetEmptyCompartment получает уже снятую с учёта машину.
+	}
+
 	bool BindLogisticsUtility(AICF_LogisticsWorker w)
 	{
 		if (!w.Ready()) return false;

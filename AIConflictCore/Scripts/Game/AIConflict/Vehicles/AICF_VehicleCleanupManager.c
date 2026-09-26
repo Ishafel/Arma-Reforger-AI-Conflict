@@ -3355,6 +3355,17 @@ class AICF_VehicleCleanupManager
 		return created;
 	}
 
+	// Боевая потеря FIA не пополняется. Сохраняем машину/выживших в мире:
+	// ни занятый автомобиль, ни захваченный игроком экипаж здесь не удаляются.
+	static void RetainFIAPatrol(AICF_FIAPatrol p)
+	{
+		if (!Replication.IsServer() || !p || !p.GroupIdentity()) return;
+		ChimeraAIWorld world = ChimeraAIWorld.Cast(GetGame().GetAIWorld());
+		if (world) world.PurgeSpawnRequestsForGroup(p.m_Group);
+		AICF_ManagedAILODPolicy lod = new AICF_ManagedAILODPolicy();
+		lod.Release(p.m_Group);
+	}
+
 	void QueueLogisticsRelease(AICF_LogisticsWorker w, string reason)
 	{
 		if (!IsAuthority() || !w || w.m_bCleanupQueued || !w.m_Fleet || !w.m_Lease ||

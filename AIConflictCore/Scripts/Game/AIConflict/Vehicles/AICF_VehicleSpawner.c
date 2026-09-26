@@ -1159,6 +1159,64 @@ class AICF_VehicleSpawner
 		RplComponent.DeleteRplEntity(vehicle, false);
 	}
 
+	// FIA acquisition: проверяем настоящий OBB, поверхность и свободный выезд.
+	bool SpawnFIAPatrol(AICF_FIAPatrol p, AICF_FactionFleet fleet, out vector crewPosition)
+	{
+		if (!Replication.IsServer() || !p || p.m_Vehicle || !p.m_Lease || !fleet ||
+			!p.m_Current || !p.m_Current.GetOwner() || p.m_Current.GetFaction() != p.m_Faction) return false;
+		ResourceName prefab = "{22B327C6752EC4D4}Prefabs/Vehicles/Wheeled/UAZ469/UAZ469_PKM_FIA.et";
+		AICF_LogisticsVehicleFootprint footprint = AICF_LogisticsVehicleFootprint.Get(prefab);
+		SCR_AIWorld ai = SCR_AIWorld.Cast(GetGame().GetAIWorld());
+		if (!footprint || !footprint.m_bValid || !ai || !ai.GetRoadNetworkManager()) return false;
+		BaseWorld world = GetGame().GetWorld();
+		vector center = p.m_Current.GetOwner().GetOrigin();
+		// Ограниченный детерминированный поиск вокруг stock базы.
+		for (int candidate; candidate < 24; candidate++)
+		{
+			int bearing = candidate % 8;
+			float angle = bearing * 45 * Math.DEG2RAD;
+			float radius = 30 + (candidate / 8) * 35;
+			vector requested = center + Vector(Math.Cos(angle) * radius, 0, Math.Sin(angle) * radius);
+			vector road;
+			if (!ai.GetRoadNetworkManager().GetReachableWaypointInRoad(center, requested, 40, road)) continue;
+			if (vector.DistanceXZ(center, road) > 160) continue;
+			vector direction = road - center;
+			direction[1] = 0;
+			if (direction.Length() < 1) continue;
+			direction.Normalize();
+			vector pose[4];
+			Math3D.DirectionAndUpMatrix(direction, "0 1 0", pose);
+			pose[3] = road;
+			if (!AICF_LogisticsSpawnGeometry.FitToSurface(world, footprint, pose)) continue;
+			TraceOBB body, exitTrace;
+			vector exitPosition;
+			if (!footprint.IsClear(world, pose, body) || !AICF_LogisticsSpawnGeometry.ExitClear(world, footprint, pose, exitPosition, exitTrace)) continue;
+			if (!AICF_ConstructionPlanner.VehicleAreaClear(pose[3], 12)) continue;
+			bool reserved;
+			foreach (AICF_VehicleSpawnSiteReservation site : s_aConstructionSites)
+			{
+				if (site && vector.DistanceXZ(site.GetSpawnPosition(), pose[3]) < 20) reserved = true;
+			}
+			if (reserved) continue;
+			vector crewCenter = pose[3] - pose[0] * 6;
+			if (!SCR_WorldTools.FindEmptyTerrainPosition(crewPosition, crewCenter, 2, 1.5, 2, TraceFlags.ENTS | TraceFlags.OCEAN, world)) continue;
+			if (vector.DistanceXZ(crewPosition, pose[3]) < 4) continue;
+			crewPosition[1] = crewPosition[1] + 0.1;
+			// Повтор непосредственно перед spawn, без deferred commit.
+			if (p.m_Current.GetFaction() != p.m_Faction || !footprint.IsClear(world, pose, body)) return false;
+			EntitySpawnParams params = new EntitySpawnParams();
+			params.TransformMode = ETransformMode.WORLD;
+			for (int axis; axis < 4; axis++) params.Transform[axis] = pose[axis];
+			p.m_Vehicle = SpawnSelectedPrefab(prefab, pose[3], params);
+			if (!p.m_Vehicle) return false;
+			p.m_VehicleId = p.m_Vehicle.GetID();
+			RplComponent rpl = RplComponent.Cast(p.m_Vehicle.FindComponent(RplComponent));
+			if (!p.VehicleIdentity() || !rpl || !rpl.IsMaster()) return false;
+			return fleet.BindReservedLeaseVehicle(p.m_Lease, p.m_Vehicle, rpl.Id().ToString(), prefab, AICF_EVehicleKind.ARMED_LIGHT, 2, pose[3]);
+		}
+		return false;
+	}
+
 	protected Vehicle SpawnSelectedPrefab(ResourceName prefab, vector position, EntitySpawnParams spawnParams = null)
 	{
 		if (!Replication.IsServer()) return null;
