@@ -75,10 +75,33 @@ else {
     foreach ($requiredContract in @(
         'CLI Params:', '[AICF][STAGE1][INFO][ROSTER_READY]', 'Get-NetUDPEndpoint',
         '-Encoding UTF8', 'Wait-AICFNewClientProcess', 'WaitForExit()',
-        'PROCESS_OBSERVED_NO_NATIVE_CODE'
+        'PROCESS_OBSERVED_NO_NATIVE_CODE', 'Assert-AICFResourceDatabases -Databases $resourceDatabases'
     )) {
         if (-not $launcherSource.Contains($requiredContract)) {
             Add-Failure 'RUNTIME_LAUNCHER_READY_GATE' "Launcher omits readiness contract $requiredContract"
+        }
+    }
+    # Проверяем поведение preflight отдельно, не запуская native binary.
+    $parseTokens = $null
+    $parseErrors = $null
+    $launcherAst = [Management.Automation.Language.Parser]::ParseInput($launcherSource, [ref]$parseTokens, [ref]$parseErrors)
+    $databaseGuard = $launcherAst.Find({ param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Assert-AICFResourceDatabases'
+    }, $true)
+    if (-not $databaseGuard) {
+        Add-Failure 'RUNTIME_RESOURCE_DATABASE' 'Missing runtime database preflight'
+    }
+    else {
+        . ([scriptblock]::Create($databaseGuard.Extent.Text))
+        foreach ($case in @(
+            @{name='missing'; exists=$false; bytes=0; reject=$true},
+            @{name='empty'; exists=$true; bytes=0; reject=$true},
+            @{name='present'; exists=$true; bytes=32; reject=$false}
+        )) {
+            $rejected = $false
+            try { Assert-AICFResourceDatabases @([pscustomobject]@{path=$case.name; exists=$case.exists; bytes=$case.bytes}) }
+            catch { $rejected = $_.Exception.Message -like 'Source resource database*' }
+            if ($rejected -ne $case.reject) { Add-Failure 'RUNTIME_RESOURCE_DATABASE' "Unexpected preflight result: $($case.name)" }
         }
     }
 }
@@ -111,6 +134,22 @@ try {
         (Join-Path $fakeGameRoot 'ArmaReforgerSteamDiag.exe')
     )) {
         New-Item -ItemType File -Path $file -Force | Out-Null
+    }
+
+    $missingDatabaseInvocation = @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $launcherPath,
+        '-Role', 'Server', '-Variant', 'Stock', '-RepositoryRoot', $fakeRepository,
+        '-ServerRoot', $fakeServerRoot, '-ProfileRoot', (Join-Path $testRoot 'Profiles\Missing database')
+    )
+    $databaseErrorPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $missingDatabaseOutput = @(& powershell.exe @missingDatabaseInvocation 2>&1 | ForEach-Object { $_.ToString() })
+        $missingDatabaseExit = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $databaseErrorPreference }
+    if ($missingDatabaseExit -eq 0 -or ($missingDatabaseOutput -join ' ') -notmatch 'Source resource database') {
+        Add-Failure 'RUNTIME_RESOURCE_DATABASE' 'Real launch did not reject absent indexes before native invocation'
     }
 
     $rhsProfile = Join-Path $testRoot 'Profiles\Server RHS новый'

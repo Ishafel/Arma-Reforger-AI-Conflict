@@ -256,6 +256,16 @@ function Wait-AICFNewClientProcess {
     return $null
 }
 
+function Assert-AICFResourceDatabases {
+    param([object[]]$Databases)
+
+    foreach ($database in $Databases) {
+        if (-not $database.exists -or $database.bytes -le 0) {
+            throw "Source resource database отсутствует или пуста: $($database.path). Выполни терминальный Workbench Validate/Compile для выбранного проекта и повтори запуск."
+        }
+    }
+}
+
 $repositoryPath = Resolve-AICFExistingDirectory -Path $RepositoryRoot -Description 'Repository root'
 $serverRootPath = Resolve-AICFExistingDirectory -Path $ServerRoot -Description 'Arma Reforger Server root'
 $gameRootPath = $null
@@ -368,6 +378,30 @@ if ($rhsRootPath) {
 }
 $addonsDir = $addonsDirectories -join ','
 
+# Source-копия без индексов может стартовать как server, но client не разрешит
+# MissionHeader/world GUID. DryRun остаётся доступен для подготовки Workbench.
+$localProjects = [ordered]@{
+    '9178E5822AFE48EA' = 'AIConflictCore'
+    'B52C5F6AEDBF423E' = 'AIConflictArland'
+    'A4B2E62595F645A4' = 'AIConflictEveron'
+    '9F88011DA22B471C' = 'AIConflictArlandRHS'
+    'FA9FDCCA428A43BA' = 'AIConflictEveronRHS'
+}
+$resourceDatabases = @(
+    foreach ($addonId in $addonIds.Split(',')) {
+        if (-not $localProjects.Contains($addonId)) { continue }
+        $databasePath = Join-Path (Join-Path $repositoryPath $localProjects[$addonId]) 'resourceDatabase.rdb'
+        $databaseFile = Get-Item -LiteralPath $databasePath -ErrorAction SilentlyContinue
+        $databaseBytes = 0
+        $databaseHash = $null
+        if ($databaseFile -and -not $databaseFile.PSIsContainer) {
+            $databaseBytes = $databaseFile.Length
+            $databaseHash = (Get-FileHash -LiteralPath $databasePath -Algorithm SHA256).Hash
+        }
+        [pscustomobject]@{ addonId = $addonId; path = $databasePath; exists = ($null -ne $databaseHash); bytes = $databaseBytes; sha256 = $databaseHash }
+    }
+)
+
 if (-not $ProfileRoot) {
     $localAppData = [Environment]::GetFolderPath('LocalApplicationData')
     if (-not $localAppData) {
@@ -449,6 +483,7 @@ $manifest = [ordered]@{
     addonsDir = $addonsDir
     arguments = @($nativeArguments)
     loadoutLibrarySource = $loadoutLibrarySource
+    resourceDatabases = $resourceDatabases
     loadoutLibraryFiles = @($loadoutFiles | ForEach-Object {
         [ordered]@{ name = $_.Name; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
     })
@@ -462,6 +497,8 @@ if ($DryRun) {
     Write-Output '[AICF][RUNTIME_LAUNCHER][RESULT][PASS] mode=DRY_RUN'
     exit 0
 }
+
+Assert-AICFResourceDatabases -Databases $resourceDatabases
 
 if ($loadoutFiles.Count -gt 0) {
     $loadoutDestination = Join-Path $profilePath 'profile\AICF_Loadouts'
