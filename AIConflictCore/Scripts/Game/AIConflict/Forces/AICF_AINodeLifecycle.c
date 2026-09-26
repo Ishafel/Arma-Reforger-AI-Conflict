@@ -17,3 +17,15 @@ modded class SCR_AIToggleMaxLOD
 		super.OnAbort(owner, nodeCausingAbort);
 	}
 }
+
+// Stable controller переживает потерю последнего бойца. Запоздавший результат
+// движения не должен читать origin отсутствующего лидера или завершать waypoint.
+modded class SCR_AIProcessFailedMovementResult
+{
+	override ENodeResult EOnTaskSimulate(AIAgent owner, float dt)
+	{
+		if (!m_Group || !m_GroupUtilityComponent || !m_Group.GetLeaderEntity())
+			return ENodeResult.FAIL;
+		return super.EOnTaskSimulate(owner, dt);
+	}
+}
