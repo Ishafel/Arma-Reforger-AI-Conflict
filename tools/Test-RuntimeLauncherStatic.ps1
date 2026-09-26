@@ -133,6 +133,7 @@ try {
     else {
         $serverManifest = Get-ManifestFromOutput -Output $serverOutput -Rule 'RUNTIME_LAUNCHER_RHS_DRY_RUN'
         if ($serverManifest) {
+            Require-ArgumentPair $serverManifest '-server' '{97E4BCB73F044C66}Missions/AICF_RHS_Conflict_Arland.conf' 'RUNTIME_LAUNCHER_RHS_SCENARIO'
             $expectedServerAddonsDir = "$fakeRepository,$fakeServerRoot\addons,$fakeRhsRoot"
             Require-ArgumentPair $serverManifest '-addonsDir' $expectedServerAddonsDir 'RUNTIME_LAUNCHER_ARGUMENT_INTEGRITY'
             Require-ArgumentPair $serverManifest '-gproj' (Join-Path $fakeRepository 'AIConflictArlandRHS\addon.gproj') 'RUNTIME_LAUNCHER_RHS_GRAPH'
@@ -163,7 +164,7 @@ try {
         $everonManifest = Get-ManifestFromOutput -Output $everonOutput -Rule 'RUNTIME_LAUNCHER_EVERON_DRY_RUN'
         if ($everonManifest) {
             Require-ArgumentPair $everonManifest '-gproj' (Join-Path $fakeRepository 'AIConflictEveron\addon.gproj') 'RUNTIME_LAUNCHER_EVERON_GRAPH'
-            Require-ArgumentPair $everonManifest '-server' 'worlds/MP/CTI_Campaign_Eden.ent' 'RUNTIME_LAUNCHER_EVERON_WORLD'
+            Require-ArgumentPair $everonManifest '-server' '{4C5D73A5614F41D9}Missions/AICF_Conflict_Everon.conf' 'RUNTIME_LAUNCHER_EVERON_WORLD'
             Require-ArgumentPair $everonManifest '-MissionHeader' 'Missions/AICF_Conflict_Everon.conf' 'RUNTIME_LAUNCHER_EVERON_HEADER'
             Require-ArgumentPair $everonManifest '-addons' '9178E5822AFE48EA,B52C5F6AEDBF423E,A4B2E62595F645A4' 'RUNTIME_LAUNCHER_EVERON_GRAPH'
         }
@@ -187,6 +188,7 @@ try {
     else {
         $stockManifest = Get-ManifestFromOutput -Output $stockOutput -Rule 'RUNTIME_LAUNCHER_STOCK_DRY_RUN'
         if ($stockManifest) {
+            Require-ArgumentPair $stockManifest '-server' '{BC2437E4861B4FD2}Missions/AICF_Conflict_Arland.conf' 'RUNTIME_LAUNCHER_STOCK_SCENARIO'
             $expectedStockAddonsDir = "$fakeRepository,$fakeServerRoot\addons"
             Require-ArgumentPair $stockManifest '-addonsDir' $expectedStockAddonsDir 'RUNTIME_LAUNCHER_ARGUMENT_INTEGRITY'
             Require-ArgumentPair $stockManifest '-gproj' (Join-Path $fakeRepository 'AIConflictArland\addon.gproj') 'RUNTIME_LAUNCHER_STOCK_GRAPH'
@@ -275,7 +277,7 @@ try {
             $expectedRhsEveronDirs = "$fakeRepository,$fakeGameRoot\addons,$fakeRhsRoot"
             if ($rhsEveronRole -eq 'Server') {
                 $expectedRhsEveronDirs = "$fakeRepository,$fakeServerRoot\addons,$fakeRhsRoot"
-                $expectedScenario = 'Worlds/MP/Conflict/CTI_Campaign_Eden_RHS.ent'
+                $expectedScenario = '{57FA3D0337BE47E5}Missions/AICF_RHS_Conflict_Everon.conf'
                 if ($rhsEveronVariant -eq 'EveronNorthRHS') { $expectedScenario = '{A1CF190919100000}Missions/AICF_RHS_Conflict_Everon_North.conf' }
                 Require-ArgumentPair $rhsEveronManifest '-server' $expectedScenario 'RUNTIME_LAUNCHER_RHS_EVERON_WORLD'
                 $expectedHeader = 'Missions/AICF_RHS_Conflict_Everon.conf'

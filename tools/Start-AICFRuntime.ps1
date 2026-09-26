@@ -315,39 +315,39 @@ foreach ($argument in $AdditionalArguments) {
 }
 
 $projectRelativePath = 'AIConflictArland\addon.gproj'
-$world = 'worlds/MP/CTI_Campaign_Arland.ent'
+$scenario = '{BC2437E4861B4FD2}Missions/AICF_Conflict_Arland.conf'
 $missionHeader = 'Missions/AICF_Conflict_Arland.conf'
 $addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E'
 $profileVariant = ''
 if ($Variant -in @('Everon', 'EveronNorth')) {
     $projectRelativePath = 'AIConflictEveron\addon.gproj'
-    $world = 'worlds/MP/CTI_Campaign_Eden.ent'
+    $scenario = '{4C5D73A5614F41D9}Missions/AICF_Conflict_Everon.conf'
     $missionHeader = 'Missions/AICF_Conflict_Everon.conf'
     $addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E,A4B2E62595F645A4'
     $profileVariant = '-Everon'
     if ($Variant -eq 'EveronNorth') {
         $missionHeader = 'Missions/AICF_Conflict_Everon_North.conf'
-        $world = '{A1CF190919300000}Missions/AICF_Conflict_Everon_North.conf'
+        $scenario = '{A1CF190919300000}Missions/AICF_Conflict_Everon_North.conf'
         $profileVariant = '-EveronNorth'
     }
 }
 elseif ($Variant -eq 'RHS') {
     $projectRelativePath = 'AIConflictArlandRHS\addon.gproj'
-    $world = 'Worlds/MP/Conflict/CTI_Campaign_Arland_RHS.ent'
+    $scenario = '{97E4BCB73F044C66}Missions/AICF_RHS_Conflict_Arland.conf'
     $missionHeader = 'Missions/AICF_RHS_Conflict_Arland.conf'
     $addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C'
     $profileVariant = '-RHS'
 }
 elseif ($Variant -in @('EveronRHS', 'EveronNorthRHS')) {
     $projectRelativePath = 'AIConflictEveronRHS\addon.gproj'
-    $world = 'Worlds/MP/Conflict/CTI_Campaign_Eden_RHS.ent'
+    $scenario = '{57FA3D0337BE47E5}Missions/AICF_RHS_Conflict_Everon.conf'
     $missionHeader = 'Missions/AICF_RHS_Conflict_Everon.conf'
     $addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E,A4B2E62595F645A4,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C,FA9FDCCA428A43BA'
     $profileVariant = '-EveronRHS'
     if ($Variant -eq 'EveronNorthRHS') {
         $missionHeader = 'Missions/AICF_RHS_Conflict_Everon_North.conf'
         # Native -server принимает MissionHeader; запуск .ent не применяет whitelist.
-        $world = '{A1CF190919100000}Missions/AICF_RHS_Conflict_Everon_North.conf'
+        $scenario = '{A1CF190919100000}Missions/AICF_RHS_Conflict_Everon_North.conf'
         $profileVariant = '-EveronNorthRHS'
     }
 }
@@ -404,7 +404,7 @@ if ($LoadoutLibraryPath) {
 $nativeArguments = @('-gproj', $projectPath)
 if ($Role -eq 'Server') {
     $nativeArguments += @(
-        '-server', $world,
+        '-server', $scenario,
         '-MissionHeader', $missionHeader,
         '-worldSystemsConfig', 'Configs/Systems/ConflictSystems.conf'
     )
@@ -472,7 +472,7 @@ if ($Role -eq 'Client') {
     $serverAddonsDir = $serverAddonsDirectories -join ','
     $requiredCliFragments = @(
         "-gproj $projectPath",
-        "-server $world",
+        "-server $scenario",
         "-MissionHeader $missionHeader",
         "-addonsDir $serverAddonsDir -addons $addonIds",
         "-profile $serverProfilePath"
