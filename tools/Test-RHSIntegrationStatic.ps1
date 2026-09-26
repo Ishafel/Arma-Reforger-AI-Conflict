@@ -206,6 +206,8 @@ if ($failures.Count -eq 0) {
     Require-Match 'RHS_PATCH_ADMISSION' $patches '!slot.IsLocked\(\) && !slot.GetAttachedEntity\(\) && manager.CanInsertResourceInStorage\(patch, storage, i\) &&\s*manager.TrySpawnPrefabToStorage\(patch, storage, i\)' 'Patch spawn must target an empty unlocked compatible slot'
     Require-Match 'RHS_PATCH_SLOT' $patches 'RHS_LoadoutSlotInfo.Cast\(slot\)[\s\S]*name.EndsWith\("Velcro"\) \|\| name == "TopChestVelctro"' 'Patches must be restricted to native RHS Velcro slots'
     Forbid-Match 'RHS_PATCH_NONDESTRUCTIVE' $patches 'TryDeleteItem|DeleteEntity|DetachEntity|TryReplaceItem|AttachEntity\(' 'Default patches may only fill empty slots through native inventory'
+    Require-Match 'RHS_PATCH_STABLE_SET' $patches 'if \(!AICF_RHSDefaultPatches.Eligible\(this\)\) return -1;[\s\S]*if \(m_iAICFPatchSet < 0\)\s*m_iAICFPatchSet = AICF_RHSDefaultPatches.NextPatchSet\(GetFactionKey\(\)\);' 'Patch set must be assigned once per authoritative character, independently of prefab role'
+    Require-Match 'RHS_PMC_PATCH_COMMIT' $pmc 'PMC_EQUIPMENT_APPLIED[\s\S]*AICF_RHSDefaultPatches.Apply\(character\);\s*return true;' 'PMC patches must follow successful equipment commit'
     $controllerCount = ([regex]::Matches($arlandBootstrap, 'new\s+AICF_MatchController\s*\(')).Count
     if ($controllerCount -ne 1) {
         Add-Failure 'RHS_SINGLE_LIFECYCLE' "Arland bootstrap must construct exactly one controller; found $controllerCount"

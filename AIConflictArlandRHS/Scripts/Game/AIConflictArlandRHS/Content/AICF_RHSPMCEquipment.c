@@ -288,6 +288,9 @@ class AICF_RHSPMCEquipment
 			return false;
 		}
 		Print(string.Format("[AICF][PMC_EQUIPMENT_APPLIED] entity=%1 faction=FIA variant=%2 source=%3 inventory_verified=1", identity, variant, source));
+		// Нашивки получают уже проверенные storages нового комплекта.
+		// Отдельный таймер мог бы сработать до переодевания и потерять результат.
+		AICF_RHSDefaultPatches.Apply(character);
 		return true;
 	}
 }

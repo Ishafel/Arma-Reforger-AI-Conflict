@@ -142,6 +142,13 @@ occupancy/clearance проверки.
 - установленные каталоги Arma Reforger, Server и Tools;
 - `.codex-runtime/active-parallel-batch.txt`, если его создал smoke-helper.
 
+## Патчноуты
+
+- В `docs/releases/` хранятся только номерные версии патчноутов с именем
+  `<major>.<minor>.<patch>.md`, например `0.1.19.md`.
+- Технические отчёты, evidence, handoff и заметки с датами в этот каталог
+  не добавляй.
+
 ## Проверка и передача результата
 
 - Для Enforce-изменения запусти релевантные PowerShell-аудиты из
