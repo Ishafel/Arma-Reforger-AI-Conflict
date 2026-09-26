@@ -3557,6 +3557,9 @@ class AICF_MatchController
 		}
 		bool normalized = m_GroupCohesionPolicy &&
 			m_GroupCohesionPolicy.NormalizeAfterMovementFailure(group);
+		// Перенос завершает старый эпизод поиска обходного endpoint.
+		// Его revision не должен запрещать восстановление того же strategic intent.
+		slot.ResetFalseCompletionRecovery();
 		bool orderRebuilt = m_OrderPlanner.RebuildCurrentOrder(
 			slot,
 			faction,

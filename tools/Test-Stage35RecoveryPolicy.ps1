@@ -552,6 +552,8 @@ if (-not $hiddenMobRecovery.Success) {
     Assert-NotContains $hiddenMobRecovery.Value 'slot.GetStrategicAssignmentRevision() == expectedAssignmentRevision &&' 'MOB_EGRESS_RUNTIME_REVISION_HANDOFF'
     Assert-Ordered $hiddenMobRecovery.Value 'slot.GetStrategicIntentRevision() != expectedStrategicIntentRevision ||' 'slot.MarkMobEgressHiddenMutationConsumed()' 'MOB_EGRESS_COMMIT_BOUNDARY_FENCE'
     Assert-Ordered $hiddenMobRecovery.Value 'm_OrderPlanner.RebuildCurrentOrder(' 'resultingAssignmentRevision == expectedAssignmentRevision + 1;' 'MOB_EGRESS_RUNTIME_REVISION_HANDOFF'
+    Assert-Ordered $hiddenMobRecovery.Value 'NormalizeAfterMovementFailure(group)' 'slot.ResetFalseCompletionRecovery();' 'MOB_EGRESS_RELOCATED_ENDPOINT_EPISODE'
+    Assert-Ordered $hiddenMobRecovery.Value 'slot.ResetFalseCompletionRecovery();' 'm_OrderPlanner.RebuildCurrentOrder(' 'MOB_EGRESS_RELOCATED_ENDPOINT_EPISODE'
 }
 Assert-Contains $groupSlot 'm_bMobEgressHiddenMutationConsumed' 'ONE_SHOT_MOB_EGRESS_MUTATION'
 Assert-Contains $groupSlot 'if (resetHiddenMutation)' 'ONE_SHOT_MOB_EGRESS_MUTATION'
