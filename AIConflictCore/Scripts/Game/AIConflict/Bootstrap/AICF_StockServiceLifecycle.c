@@ -18,3 +18,14 @@ modded class SCR_BaseItemSupportStationComponent
 		return super.InitValidSetup();
 	}
 }
+
+modded class SCR_ArsenalComponent
+{
+	override void RefreshArsenal(bool init = false, SCR_Faction faction = null)
+	{
+		// До регистрации нет получателей RPC. Начальное состояние передаёт
+		// штатный RplSave/RplLoad, включая актуальные types и modes.
+		bool initializing = init || !Replication.FindItemId(this).IsValid();
+		super.RefreshArsenal(initializing, faction);
+	}
+}
