@@ -40,6 +40,7 @@ modded class SCR_CampaignBuildingLayoutComponent
 	}
 }
 
+[BaseContainerProps()]
 modded class SCR_AIDangerReaction_UnsafeArea
 {
 	override bool PerformReaction(notnull SCR_AIUtilityComponent utility, notnull SCR_AIThreatSystem threatSystem, AIDangerEvent dangerEvent, int dangerEventCount)

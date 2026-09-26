@@ -37,6 +37,7 @@ foreach ($toolEvent in @('OnToolUseBegan', 'OnToolUseEnded')) {
 Require-BuilderContract 'BUILDERS_WORK_OUTSIDE_FOOTPRINT' $service '!builder.IsOutsideFootprint\(builder.m_Character.GetOrigin\(\)\)'
 Require-BuilderContract 'BUILDERS_DANGER_SCOPED' $danger '(?s)GetID\(\) == m_CharacterId.*?m_iGeneration == m_iGeneration.*?FindWorkingOnLayout\(m_Layout\) == m_Builder'
 Require-BuilderContract 'BUILDERS_OTHER_DANGER_PRESERVED' $danger 'return super.PerformReaction\(utility, threatSystem, dangerEvent, dangerEventCount\)'
+Require-BuilderContract 'BUILDERS_DANGER_CONFIG_REGISTRATION' $danger '\[BaseContainerProps\(\)\]\s*modded class SCR_AIDangerReaction_UnsafeArea'
 Require-BuilderContract 'BUILDERS_WORKER_POLICY_IDENTITY' $service '(?s)static bool IsDedicatedWorker.*?!Replication.IsServer\(\).*?m_bStopped.*?IsMaster\(\).*?m_Character == character.*?!builder.m_bRetiring.*?GetFaction\(\) == builder.m_Faction.*?IsWorkerValid\(builder\)'
 Require-BuilderContract 'BUILDERS_WORK_PRIORITY' $workPolicy '(?s)override float EvaluatePriorityLevel.*?SCR_AIBehaviorBase.Cast\(this\).*?GetCause\(\) >= SCR_EAIBehaviorCause.DANGER_LOW.*?IsDedicatedWorker\(behavior.m_Utility.m_OwnerEntity\).*?return -1000000;.*?return super.EvaluatePriorityLevel\(\)'
 Require-BuilderContract 'BUILDERS_HOLD_FIRE' $spawner '(?s)SetCombatMode\(EAIGroupCombatMode.HOLD_FIRE\).*?EvaluateCombatMode\(\)'
