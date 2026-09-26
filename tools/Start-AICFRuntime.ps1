@@ -130,6 +130,17 @@ function Get-AICFLatestConsoleLog {
         Select-Object -First 1
 }
 
+function Read-AICFConsoleSnapshot {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    # Native log продолжает расти. Получаем один UTF-8 string, разрешая
+    # engine writer держать файл открытым; provider chunks не становятся array.
+    $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+    $reader = [IO.StreamReader]::new($stream, [Text.Encoding]::UTF8)
+    try { return $reader.ReadToEnd() }
+    finally { $reader.Dispose() }
+}
+
 function Get-AICFLocalServerProcess {
     param(
         [Parameter(Mandatory = $true)]
@@ -184,7 +195,7 @@ function Wait-AICFServerReady {
             continue
         }
 
-        $logText = Get-Content -LiteralPath $log.FullName -Raw -Encoding UTF8
+        $logText = Read-AICFConsoleSnapshot -Path $log.FullName
         $cliLine = @($logText -split "`r?`n" | Where-Object { $_ -match 'CLI Params:' } | Select-Object -First 1)
         if ($cliLine.Count -eq 0) {
             $lastState = "CLI Params ещё не появился в $($log.FullName)"

@@ -74,7 +74,7 @@ else {
     }
     foreach ($requiredContract in @(
         'CLI Params:', '[AICF][STAGE1][INFO][ROSTER_READY]', 'Get-NetUDPEndpoint',
-        '-Encoding UTF8', 'Wait-AICFNewClientProcess', 'WaitForExit()',
+        '[Text.Encoding]::UTF8', '[IO.FileShare]::ReadWrite', 'Wait-AICFNewClientProcess', 'WaitForExit()',
         'PROCESS_OBSERVED_NO_NATIVE_CODE', 'Assert-AICFResourceDatabases -Databases $resourceDatabases'
     )) {
         if (-not $launcherSource.Contains($requiredContract)) {
@@ -134,6 +134,31 @@ try {
         (Join-Path $fakeGameRoot 'ArmaReforgerSteamDiag.exe')
     )) {
         New-Item -ItemType File -Path $file -Force | Out-Null
+    }
+
+    $readerFunction = $launcherAst.Find({ param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Read-AICFConsoleSnapshot'
+    }, $true)
+    if (-not $readerFunction) { Add-Failure 'RUNTIME_LOG_SNAPSHOT' 'Missing UTF-8 snapshot reader' }
+    else {
+        . ([scriptblock]::Create($readerFunction.Extent.Text))
+        $activeLog = Join-Path $testRoot 'active-console.log'
+        $writerStream = [IO.File]::Open($activeLog, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)
+        $writer = [IO.StreamWriter]::new($writerStream, [Text.UTF8Encoding]::new($false))
+        try {
+            $writer.AutoFlush = $true
+            $writer.WriteLine('CLI Params: Кириллица и пробелы')
+            $snapshot = Read-AICFConsoleSnapshot $activeLog
+            if ($snapshot -isnot [string] -or -not $snapshot.Contains('Кириллица и пробелы') -or $snapshot.Contains('[ROSTER_READY]')) {
+                Add-Failure 'RUNTIME_LOG_SNAPSHOT' 'Incomplete log snapshot was misread'
+            }
+            $writer.WriteLine('[AICF][STAGE1][INFO][ROSTER_READY]')
+            $snapshot = Read-AICFConsoleSnapshot $activeLog
+            if ($snapshot -isnot [string] -or -not $snapshot.Contains('[AICF][STAGE1][INFO][ROSTER_READY]')) {
+                Add-Failure 'RUNTIME_LOG_SNAPSHOT' 'Growing log snapshot lost readiness'
+            }
+        }
+        finally { $writer.Dispose() }
     }
 
     $missingDatabaseInvocation = @(
