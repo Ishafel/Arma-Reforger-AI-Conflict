@@ -36,11 +36,6 @@
 !/tools/fixtures/AICF_NorthFailureProbe.c
 !/tools/fixtures/AICF_NativeMoveFailureProbe.c
 /docs/*
-!/docs/INFANTRY_ADVANCE.md
-!/docs/BUILDER_COMPLETION.md
-!/docs/AI_COMBAT_INPUTS.md
-!/docs/BARRACKS_COMBAT.md
-!/docs/NORTH_FAILURE_RECOVERY.md
 !/docs/releases/
 /docs/releases/*
 !/docs/releases/[0-9]*.[0-9]*.[0-9]*.md
@@ -50,5 +45,3 @@
 !/tools/Test-InfantryApproachContracts.ps1
 !/tools/fixtures/AICF_InfantryApproachProbe.c
 !/tools/fixtures/AICF_ApproachRecoveryProbe.c
-!/docs/INFANTRY_APPROACH.md
-!/docs/INFANTRY_MUSTER.md
