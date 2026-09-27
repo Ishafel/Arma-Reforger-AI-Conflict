@@ -1555,6 +1555,17 @@ class AICF_OrderPlanner
 
 	// Промежуточная точка не завершает стратегический приказ. После прибытия
 	// лидера ALL получает ограниченное окно; timeout не подделывает stock callback.
+	bool HasCompletedApproachLeg(AICF_GroupSlot slot, SCR_CampaignFaction faction)
+	{
+		if (!Replication.IsServer() || !slot || !faction || !slot.IsCombatReady() ||
+			!slot.IsApproachRouteWaypoint() || !slot.IsStuckRouteContextCurrent() || !IsCurrentTargetValid(slot, faction))
+			return false;
+		AIWaypoint waypoint = slot.GetWaypoint();
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
+		return leader && slot.GetOwnedWaypointTerminalOutcome(waypoint) == "GROUP_CALLBACK_COMPLETED" &&
+			vector.DistanceXZ(leader.GetOrigin(), waypoint.GetOrigin()) <= waypoint.GetCompletionRadius();
+	}
+
 	bool TryAdvanceStuckRoute(AICF_GroupSlot slot, SCR_CampaignFaction faction)
 	{
 		if (!Replication.IsServer() || !slot || !faction || !slot.IsCombatReady() ||
@@ -1569,7 +1580,11 @@ class AICF_OrderPlanner
 		if (!leader || vector.DistanceXZ(leader.GetOrigin(), waypoint.GetOrigin()) > waypoint.GetCompletionRadius())
 			return false;
 		if (completed)
+		{
+			if (slot.IsApproachRouteWaypoint())
+				return RebuildCurrentOrder(slot, faction, "INFANTRY_APPROACH_LEG_ARRIVED");
 			return RebuildCurrentOrder(slot, faction, "STUCK_ROUTE_LEG_ARRIVED");
+		}
 
 		if (slot.BeginStuckRouteCompletionWait())
 			LogStuckRouteCompletionWait(slot, faction, "STUCK_ROUTE_COMPLETION_WAIT");
@@ -1579,6 +1594,8 @@ class AICF_OrderPlanner
 			LogStuckRouteCompletionWait(slot, faction, "STUCK_ROUTE_COMPLETION_TIMEOUT");
 		// Если выдача не удалась, исходный waypoint и deadline остаются действующими.
 		// Watchdog продолжает учитывать отсутствие прогресса и свой recovery budget.
+		if (slot.IsApproachRouteWaypoint())
+			return RebuildCurrentOrder(slot, faction, "INFANTRY_APPROACH_COMPLETION_TIMEOUT");
 		return RebuildCurrentOrder(slot, faction, "STUCK_ROUTE_COMPLETION_TIMEOUT");
 	}
 
@@ -1590,6 +1607,8 @@ class AICF_OrderPlanner
 			slot.GetStrategicAssignmentRevision(), slot.GetWaypoint().GetID(),
 			slot.GetStuckRouteCompletionWaitAgeMs(), STUCK_ROUTE_COMPLETION_WAIT_MS);
 		details += snapshot;
+		if (slot.IsApproachRouteWaypoint())
+			details += " route_kind=DISTRIBUTED_APPROACH";
 		AICF_Stage2Diagnostics.Info(eventName, details);
 	}
 
@@ -2296,13 +2315,19 @@ class AICF_OrderPlanner
 			return false;
 
 		AIWaypoint newWaypoint;
+		bool approachRoute;
 		bool useStuckRoute = recoverStuckRoute && !loneSurvivorRetreat && !systemHold &&
 			slot.GetRole() == AICF_EGroupRole.ATTACK && target &&
 			target.GetType() != SCR_ECampaignBaseType.RELAY;
 		if (decisionAuthority == AICF_EStrategicDecisionAuthority.AI_COMMANDER && slot.IsRouteTargetDeferred(target))
 			return false;
 		if (useStuckRoute)
+		{
+			AICF_InfantryApproachRoute failedRoute = slot.GetApproachRoute(target);
+			if (failedRoute)
+				failedRoute.Disable();
 			newWaypoint = CreateStuckRouteWaypoint(slot, faction, target);
+		}
 		else if (loneSurvivorRetreat)
 			newWaypoint = CreateLoneSurvivorRetreatWaypoint(slot.GetGroup(), target);
 		else
@@ -2319,7 +2344,8 @@ class AICF_OrderPlanner
 				waypointRole,
 				slot.GetGroup(),
 				endpointRevision,
-				slot);
+				slot,
+				approachRoute);
 		}
 		if (!newWaypoint)
 			return false;
@@ -2368,6 +2394,15 @@ class AICF_OrderPlanner
 			slot.BeginLoneSurvivorRetreat();
 		if (useStuckRoute)
 			slot.MarkStuckRouteWaypoint();
+		else if (approachRoute)
+		{
+			slot.MarkApproachRouteWaypoint();
+			AICF_Stage2Diagnostics.Info("INFANTRY_APPROACH_ASSIGNED",
+				string.Format("faction=%1 numeric_slot=%2 group_generation=%3 assignment_revision=%4 target=%5 waypoint=%6 endpoint=%7 lane_m=%8 tile_wait=%9",
+					faction.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), slot.GetStrategicAssignmentRevision(),
+					AICF_Stage1Diagnostics.BaseKey(target), newWaypoint.GetID(), newWaypoint.GetOrigin(), AICF_InfantryApproachRoute.GetLaneOffset(slot.GetSlotId()),
+					slot.GetApproachRoute(target).IsWaitingForTile()));
+		}
 		LogOrderWaypointCreated(slot, faction, target, newWaypoint, reason, trigger);
 
 		if (oldTarget && oldTarget != target)
@@ -2652,8 +2687,10 @@ class AICF_OrderPlanner
 		AICF_EGroupRole role,
 		SCR_AIGroup group,
 		int endpointRevision,
-		AICF_GroupSlot slot)
+		AICF_GroupSlot slot,
+		out bool approachRoute)
 	{
+		approachRoute = false;
 		if (!target || !target.GetOwner())
 			return null;
 
@@ -2681,6 +2718,22 @@ class AICF_OrderPlanner
 		vector targetPosition;
 		if (!TryResolveTargetPosition(target, role, targetPosition))
 			return null;
+		if (!isRelay && role == AICF_EGroupRole.ATTACK && slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY)
+		{
+			AICF_InfantryApproachRoute route = slot.GetApproachRoute(target);
+			if (route && endpointRevision > 0)
+				route.Disable();
+			if (route && endpointRevision == 0)
+			{
+				vector approachEndpoint;
+				bool pending;
+				approachRoute = route.TryResolve(group, slot.GetSlotId(), targetPosition, approachEndpoint, pending);
+				if (pending)
+					return null;
+				if (approachRoute)
+					targetPosition = approachEndpoint;
+			}
+		}
 		if (!isRelay && endpointRevision > 0)
 		{
 			vector recoveryEndpoint;
@@ -2690,7 +2743,8 @@ class AICF_OrderPlanner
 				targetPosition,
 				endpointRevision,
 				recoveryEndpoint,
-				endpointFailure);
+				endpointFailure,
+				slot.GetLastFalseCompletionEndpoint());
 			if (endpointResolved)
 			{
 				targetPosition = recoveryEndpoint;
@@ -2824,7 +2878,8 @@ class AICF_OrderPlanner
 		vector objectivePosition,
 		int endpointRevision,
 		out vector endpoint,
-		out string failureReason)
+		out string failureReason,
+		vector rejectedEndpoint = vector.Zero)
 	{
 		endpoint = vector.Zero;
 		failureReason = "GROUP_UNAVAILABLE";
@@ -2858,12 +2913,21 @@ class AICF_OrderPlanner
 		{
 			return false;
 		}
+		BaseWorld world = GetGame().GetWorld();
+		failureReason = "ORIGIN_UNSAFE_NAVMESH";
+		if (!world || vector.DistanceSqXZ(origin, navmeshOrigin) > 64.0 ||
+			Math.AbsFloat(origin[1] - navmeshOrigin[1]) > 3.0 ||
+			ChimeraWorldUtils.TryGetWaterSurfaceSimple(world, navmeshOrigin - "0 0.5 0"))
+			return false;
 		float objectiveDistanceMeters = vector.DistanceXZ(origin, objectivePosition);
 		if (objectiveDistanceMeters <= FALSE_COMPLETION_ROUTE_MIN_PROGRESS_METERS)
 		{
 			// A hidden egress recovery can legitimately place the formation inside the
 			// minimum route-leg distance. Finish against the real objective here; the
 			// controller still requires its independent physical completion radius.
+			failureReason = "OBJECTIVE_IN_WATER";
+			if (ChimeraWorldUtils.TryGetWaterSurfaceSimple(world, objectivePosition - "0 0.5 0"))
+				return false;
 			endpoint = objectivePosition;
 			failureReason = string.Empty;
 			return true;
@@ -2891,6 +2955,11 @@ class AICF_OrderPlanner
 				distanceBand * 20.0;
 			vector candidate;
 			if (!navmesh.GetReachablePoint(navmeshOrigin, sampleDistanceMeters, candidate))
+				continue;
+			// Reachable navmesh может включать воду. Повторный запрос рядом с уже
+			// отвергнутой точкой также не является новым маршрутом восстановления.
+			if (ChimeraWorldUtils.TryGetWaterSurfaceSimple(world, candidate - "0 0.5 0") ||
+				(rejectedEndpoint != vector.Zero && vector.DistanceXZ(candidate, rejectedEndpoint) <= ATTACK_OPERATIONAL_RADIUS_METERS))
 				continue;
 			float legMeters = vector.DistanceXZ(origin, candidate);
 			reachableSamples++;

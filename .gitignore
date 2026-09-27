@@ -38,3 +38,7 @@
 !/docs/NORTH_FAILURE_RECOVERY.md
 !/tools/Test-DefendWaypointInputContracts.ps1
 !/tools/fixtures/AICF_DefendWaypointInputProbe.c
+!/tools/Test-InfantryApproachContracts.ps1
+!/tools/fixtures/AICF_InfantryApproachProbe.c
+!/tools/fixtures/AICF_ApproachRecoveryProbe.c
+!/docs/INFANTRY_APPROACH.md

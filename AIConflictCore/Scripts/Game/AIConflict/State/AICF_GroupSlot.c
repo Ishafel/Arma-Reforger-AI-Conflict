@@ -77,6 +77,8 @@ class AICF_GroupSlot
 	protected int m_iLoadoutRevision;
 	protected int m_iDeploymentLoadoutRevision;
 	protected AIWaypoint m_StuckRouteWaypoint;
+	protected bool m_bApproachRouteWaypoint;
+	protected ref AICF_InfantryApproachRoute m_ApproachRoute;
 	protected SCR_AIGroup m_StuckRouteGroup;
 	protected int m_iStuckRouteGeneration;
 	protected int m_iStuckRouteAssignmentRevision;
@@ -554,6 +556,7 @@ class AICF_GroupSlot
 
 	void ClearStrategicIntent()
 	{
+		m_ApproachRoute = null;
 		if (m_StrategicIntentTargetKind != AICF_EOrderTargetKind.NONE ||
 			m_StrategicIntentAuthority != AICF_EStrategicDecisionAuthority.NONE)
 		{
@@ -1466,6 +1469,7 @@ class AICF_GroupSlot
 
 	void MarkStuckRouteWaypoint()
 	{
+		m_bApproachRouteWaypoint = false;
 		m_StuckRouteWaypoint = m_Waypoint;
 		m_StuckRouteGroup = m_Group;
 		m_iStuckRouteGeneration = m_iSpawnGeneration;
@@ -1477,6 +1481,32 @@ class AICF_GroupSlot
 	bool IsStuckRouteWaypoint()
 	{
 		return m_Waypoint && m_Waypoint == m_StuckRouteWaypoint;
+	}
+
+	// Оба вида промежуточных Move используют один identity/deadline boundary.
+	void MarkApproachRouteWaypoint()
+	{
+		MarkStuckRouteWaypoint();
+		m_bApproachRouteWaypoint = true;
+	}
+
+	bool IsApproachRouteWaypoint()
+	{
+		return m_bApproachRouteWaypoint && IsStuckRouteWaypoint();
+	}
+
+	AICF_InfantryApproachRoute GetApproachRoute(SCR_CampaignMilitaryBaseComponent target)
+	{
+		if (!target || !target.GetOwner())
+			return null;
+		if (!m_ApproachRoute || !m_ApproachRoute.IsFor(target))
+		{
+			IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(m_Group);
+			if (!leader)
+				return null;
+			m_ApproachRoute = new AICF_InfantryApproachRoute(target, leader.GetOrigin());
+		}
+		return m_ApproachRoute;
 	}
 
 	bool IsStuckRouteContextCurrent()
@@ -1514,6 +1544,7 @@ class AICF_GroupSlot
 
 	protected void ClearStuckRouteWaypoint()
 	{
+		m_bApproachRouteWaypoint = false;
 		m_StuckRouteWaypoint = null;
 		m_StuckRouteGroup = null;
 		m_iStuckRouteGeneration = 0;
@@ -2492,6 +2523,7 @@ class AICF_GroupSlot
 
 	protected void ClearRuntimeReferences()
 	{
+		m_ApproachRoute = null;
 		m_bIsolatedNavmeshRecoveryUsed = false;
 		ClearStuckRouteWaypoint();
 		m_RecruitmentOrder = null;

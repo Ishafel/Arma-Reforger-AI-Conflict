@@ -2633,6 +2633,11 @@ class AICF_MatchController
 				vehicleView = m_VehicleCoordinator.GetSlotView(slot);
 			bool vehicleLifecycle = IsBoundedVehicleLifecycle(vehicleView);
 			bool safeVehicleSpawnWait = IsSafeVehicleSpawnWait(vehicleView);
+			// Завершённый участок подхода сначала продолжает planner. Иначе быстрый
+			// task audit объявит обычное прибытие потерей приказа раньше reliability tick.
+			if (slot.IsApproachRouteWaypoint() && !slot.HasPendingOrderRecovery() && (!m_VehicleCoordinator ||
+				(!m_VehicleCoordinator.IsControllingMovement(slot) && !m_VehicleCoordinator.IsRestorePending(slot))))
+				m_OrderPlanner.TryAdvanceStuckRoute(slot, faction);
 			bool infantryWaypointBound = IsWaypointBoundToGroup(slot.GetGroup(), slot.GetWaypoint());
 			bool vehicleWaypointBound = vehicleView && vehicleView.GetVehicleWaypoint() &&
 				IsWaypointBoundToGroup(slot.GetGroup(), vehicleView.GetVehicleWaypoint());
@@ -4754,6 +4759,19 @@ class AICF_MatchController
 					terminalAgeMs));
 			slot.ResetFalseCompletionRecovery();
 			slot.ClearPendingOrderRecovery();
+			return;
+		}
+
+		// Короткий участок (в том числе ожидание tile) может закончиться раньше
+		// durability window. Проверяем именно его endpoint и callback, а не базу.
+		if (m_OrderPlanner.HasCompletedApproachLeg(slot, faction))
+		{
+			if (countsAsReliabilityRepair)
+				RecordPendingOrderRepairTerminal(slot, faction, "SUPERSEDED", "INFANTRY_APPROACH_LEG_ARRIVED", "PHYSICAL_ROUTE_ARRIVAL");
+			if (alreadyCountsAsStuck)
+				slot.SupersedePendingStuckRecoveryEvidence("INFANTRY_APPROACH_LEG_ARRIVED");
+			slot.ClearPendingOrderRecovery();
+			m_OrderPlanner.TryAdvanceStuckRoute(slot, faction);
 			return;
 		}
 
