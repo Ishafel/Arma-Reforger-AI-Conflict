@@ -76,6 +76,21 @@ class AICF_RHSPMCArmament
 		return "{0110F6D92703114A}Prefabs/Weapons/Magazines/Box_762x54_PK_100rnd_7N13_4Ball_1Tracer.et";
 	}
 
+	protected static IEntity AddPrimaryLocal(IEntity model, ResourceName prefab, InventoryStorageManagerComponent manager)
+	{
+		if (!model || model.GetWorld() == GetGame().GetWorld() || !manager) return null;
+		EquipedWeaponStorageComponent storage = EquipedWeaponStorageComponent.Cast(model.FindComponent(EquipedWeaponStorageComponent));
+		if (!storage) return null;
+		// AC-охрана может не иметь основного оружия. Выдаём его в свободный
+		// оружейный слот, сохраняя пистолет, гранатомёт и их боезапас.
+		for (int slot; slot < storage.GetSlotsCount(); slot++)
+		{
+			if (storage.Get(slot) || !manager.CanInsertResourceInStorage(prefab, storage, slot)) continue;
+			return AICF_LoadoutInventory.InsertLocal(prefab, storage, slot, manager);
+		}
+		return null;
+	}
+
 	static bool Compatible(BaseMagazineComponent magazine, BaseMuzzleComponent muzzle)
 	{
 		return magazine && muzzle && magazine.GetMagazineWell() && muzzle.GetMagazineWell() &&
@@ -100,10 +115,18 @@ class AICF_RHSPMCArmament
 	{
 		if (!model || model.GetWorld() == GetGame().GetWorld()) return false;
 		BaseWeaponComponent old = Primary(model);
-		if (!old || !old.GetCurrentMuzzle() || !old.GetCurrentMuzzle().GetMagazineWell()) return false;
-		typename oldWell = old.GetCurrentMuzzle().GetMagazineWell().Type();
 		InventoryStorageManagerComponent manager = InventoryStorageManagerComponent.Cast(model.FindComponent(InventoryStorageManagerComponent));
-		IEntity replacement = ReplaceLocal(old.GetOwner(), PrimaryPrefab(source, variant), manager);
+		if (!manager) return false;
+		typename oldWell = typename.Empty;
+		IEntity replacement;
+		if (old)
+		{
+			if (!old.GetCurrentMuzzle() || !old.GetCurrentMuzzle().GetMagazineWell()) return false;
+			oldWell = old.GetCurrentMuzzle().GetMagazineWell().Type();
+			replacement = ReplaceLocal(old.GetOwner(), PrimaryPrefab(source, variant), manager);
+		}
+		else
+			replacement = AddPrimaryLocal(model, PrimaryPrefab(source, variant), manager);
 		if (!replacement) return false;
 		BaseWeaponComponent weapon = BaseWeaponComponent.Cast(replacement.FindComponent(BaseWeaponComponent));
 		if (!weapon) return false;
@@ -111,7 +134,7 @@ class AICF_RHSPMCArmament
 		if (!muzzle || !muzzle.GetMagazine() || !muzzle.GetMagazineWell()) return false;
 		// Удаляем только запасные магазины прежнего основного калибра.
 		// ПТ-боезапас и пулемётные коробки помощника остаются при бойце.
-		if (oldWell != muzzle.GetMagazineWell().Type())
+		if (oldWell != typename.Empty && oldWell != muzzle.GetMagazineWell().Type())
 		{
 			array<IEntity> items = {};
 			Items(model, items);
