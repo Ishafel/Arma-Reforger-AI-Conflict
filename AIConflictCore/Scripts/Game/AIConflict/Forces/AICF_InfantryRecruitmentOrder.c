@@ -52,7 +52,7 @@ class AICF_InfantryRecruitmentOrder
 			return false;
 		array<SCR_ServicePointComponent> services = {};
 		m_Base.GetServices(services);
-		return services.Contains(m_Service);
+		return services.Contains(m_Service) && AICF_BarracksCombatSafety.IsSafe(m_Service);
 	}
 
 	bool IsPhysicallyPresent()

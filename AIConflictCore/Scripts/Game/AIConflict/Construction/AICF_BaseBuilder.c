@@ -24,6 +24,7 @@ class AICF_BaseBuilder
 	int m_iMoveAtMs;
 	int m_iLastOrderAtMs;
 	int m_iWorkAtMs;
+	int m_iBlockedUntilMs;
 	bool m_bReturning;
 	bool m_bRetiring;
 	IEntity m_UsedTool;

@@ -7,6 +7,7 @@ class AICF_BaseBuilderService
 	protected static const int SPAWN_TIMEOUT_MS = 30000;
 	protected static const int MOVE_TIMEOUT_MS = 120000;
 	protected static const int WORK_INTERVAL_MS = 3000;
+	protected static const int BLOCKED_RETRY_MS = 15000;
 	protected static const float ARRIVAL_METERS = 1.0;
 	protected static const float HOME_METERS = 8.0;
 	protected static AICF_BaseBuilderService s_Instance;
@@ -481,6 +482,19 @@ class AICF_BaseBuilderService
 			builder.m_iWorkAtMs = 0;
 			return;
 		}
+		SCR_CampaignBuildingLayoutComponent layout = builder.m_Target.GetCompositionLayout();
+		if (builder.m_iBlockedUntilMs != 0)
+		{
+			if (now < builder.m_iBlockedUntilMs)
+				return;
+			builder.m_iBlockedUntilMs = now + BLOCKED_RETRY_MS;
+			// В ожидании площадки инструмент остаётся убранным. Успешная проверка
+			// разрешает только возобновить работу; stock повторит её перед completion.
+			if (!layout.AICF_CompletionClear())
+				return;
+			builder.m_iBlockedUntilMs = 0;
+			Log(builder, "BUILDER_WORK_RESUMED");
+		}
 		if (!StartTool(builder, controller))
 		{
 			builder.m_iWorkAtMs = 0;
@@ -494,21 +508,50 @@ class AICF_BaseBuilderService
 		if (now - builder.m_iWorkAtMs < WORK_INTERVAL_MS)
 			return;
 		builder.m_iWorkAtMs = now;
-		SCR_CampaignBuildingLayoutComponent layout = builder.m_Target.GetCompositionLayout();
 		SCR_CampaignBuildingGadgetToolComponent tool = SCR_CampaignBuildingGadgetToolComponent.Cast(builder.m_UsedTool.FindComponent(SCR_CampaignBuildingGadgetToolComponent));
 		if (!tool || tool.GetToolConstructionValue() <= 0)
 			return;
 		int value = tool.GetToolConstructionValue();
-		bool completing = layout.GetCurrentBuildValue() + value >= layout.GetToBuildValue();
-		Log(builder, "BUILDER_PROGRESS", string.Format("value=%1 before=%2 total=%3", value, layout.GetCurrentBuildValue(), layout.GetToBuildValue()));
+		float before = layout.GetCurrentBuildValue();
+		int total = layout.GetToBuildValue();
+		string progress = string.Format("value=%1 before=%2 total=%3", value, before, total);
 		// Stock вызывает replication, service activation и удаляет layout при completion.
 		// После вызова не обращаться к layout: он мог быть синхронно уничтожен.
 		layout.AddBuildingValue(value);
-		if (completing && builder.m_Target && builder.m_Target.IsCompositionSpawned())
+		if (!builder.m_Target || !builder.m_Target.GetOwner() || builder.m_Target.GetOwner().GetID() != builder.m_TargetId)
 		{
+			ClearTarget(builder);
+			return;
+		}
+		if (builder.m_Target.IsCompositionSpawned())
+		{
+			Log(builder, "BUILDER_PROGRESS", progress);
 			Log(builder, "BUILDER_COMPLETED");
 			ClearTarget(builder);
+			return;
 		}
+		// Повторно получаем живой layout через ту же composition identity.
+		SCR_CampaignBuildingLayoutComponent remaining = builder.m_Target.GetCompositionLayout();
+		if (!IsTargetValid(builder, builder.m_Target) || !remaining)
+		{
+			ClearTarget(builder);
+			return;
+		}
+		if (remaining.GetCurrentBuildValue() > before)
+		{
+			Log(builder, "BUILDER_PROGRESS", progress);
+			return;
+		}
+		// Отказ completion не является прогрессом. Сохраняем оплаченный проект,
+		// но прекращаем анимацию до освобождения площадки, без повторной оплаты.
+		StopTool(builder);
+		builder.m_iWorkAtMs = 0;
+		builder.m_iBlockedUntilMs = now + BLOCKED_RETRY_MS;
+		string reason = "NO_BUILD_PROGRESS";
+		AICF_ConstructionOrder receipt = builder.m_Target.m_AICFConstructionReceipt;
+		if (receipt && !receipt.m_sReason.IsEmpty())
+			reason = receipt.m_sReason;
+		Log(builder, "BUILDER_WORK_BLOCKED", string.Format("reason=%1 progress=%2 total=%3 retry_ms=%4", reason, before, total, BLOCKED_RETRY_MS));
 	}
 
 	protected bool StartTool(AICF_BaseBuilder builder, CharacterControllerComponent controller)
@@ -587,6 +630,7 @@ class AICF_BaseBuilderService
 		m_Planner.ClearBuilderWaypoint(builder);
 		builder.m_Target = null;
 		builder.m_iWorkAtMs = 0;
+		builder.m_iBlockedUntilMs = 0;
 		builder.m_iLastOrderAtMs = 0;
 	}
 

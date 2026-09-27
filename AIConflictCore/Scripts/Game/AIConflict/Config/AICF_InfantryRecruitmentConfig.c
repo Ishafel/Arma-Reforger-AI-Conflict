@@ -3,6 +3,8 @@ class AICF_InfantryRecruitmentConfig
 {
 	static const float MAX_DISTANCE_METERS = 500;
 	static const float ARRIVAL_METERS = 35;
+	static const float COMBAT_RADIUS_METERS = 100;
+	static const int COMBAT_QUIET_MS = 30000;
 	static const int APPROACH_TIMEOUT_MS = 180000;
 	static const int SPAWN_TIMEOUT_MS = 30000;
 	static const int VISIT_TIMEOUT_MS = 300000;

@@ -10,6 +10,7 @@ class AICF_InfantryRecruitmentService
 	protected ref AICF_InfantryRecruitmentConfig m_Config = new AICF_InfantryRecruitmentConfig();
 	protected ref AICF_InfantryRecruitSpawner m_Spawner = new AICF_InfantryRecruitSpawner();
 	protected ref AICF_ManagedAILODPolicy m_LOD = new AICF_ManagedAILODPolicy();
+	protected ref AICF_BarracksCombatSafety m_CombatSafety = new AICF_BarracksCombatSafety();
 	protected ref array<ref AICF_InfantryRecruitmentOrder> m_aOrders = {};
 	protected ref array<AICF_GroupSlot> m_aRetrySlots = {};
 	protected ref array<int> m_aRetryAtMs = {};
@@ -45,6 +46,7 @@ class AICF_InfantryRecruitmentService
 		if (m_bStopped || !Replication.IsServer() || !m_Campaign || !m_Campaign.IsMaster() || !m_Campaign.IsRunning())
 			return;
 		m_iAvailableAgents = Math.Max(0, availableAgents);
+		m_CombatSafety.Update(m_Campaign, m_Graph);
 		for (int index = m_aOrders.Count() - 1; index >= 0; index--)
 		{
 			AICF_InfantryRecruitmentOrder order = m_aOrders[index];
@@ -170,7 +172,11 @@ class AICF_InfantryRecruitmentService
 		if (!graphReady || order.m_iGraphRevision != m_Graph.GetRevision())
 			return "GRAPH_CHANGED";
 		if (!order.HasSafeBarracks())
+		{
+			if (!AICF_BarracksCombatSafety.IsSafe(order.m_Service))
+				return "BARRACKS_COMBAT_OR_OBSERVATION";
 			return "BARRACKS_UNAVAILABLE";
+		}
 		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(order.m_Group);
 		if (!leader || vector.DistanceSqXZ(leader.GetOrigin(), order.m_vPosition) >
 			AICF_InfantryRecruitmentConfig.MAX_DISTANCE_METERS * AICF_InfantryRecruitmentConfig.MAX_DISTANCE_METERS)
@@ -315,5 +321,6 @@ class AICF_InfantryRecruitmentService
 			Finish(index, "STOP", false);
 		m_aRetrySlots.Clear();
 		m_aRetryAtMs.Clear();
+		m_CombatSafety.Stop();
 	}
 }
