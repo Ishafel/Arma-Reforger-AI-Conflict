@@ -15,6 +15,11 @@
 под стратегическим командованием. Initial join и живой игрок не имеют доступа
 к такому способу возрождения.
 
+Состав включает бойцов основной группы и её штатной подчинённой AI-группы
+(`GetSlave()`): native recruitment хранит приглашённых ИИ именно там.
+Проверяется обратная связь `GetMaster()` и faction. Способ попадания бойца
+в отряд не должен требовать от игрока дополнительных действий.
+
 Штатная игра при передаче управления может добавить предмет личных вещей
 (`PersonalBelongings_US` в проверенном stock US сценарии). Исходные оружие,
 одежда и содержимое инвентаря при этом сохраняются.
@@ -31,12 +36,18 @@
 - `Respawn/AICF_SquadRespawnHandler.c`: native `SCR_PossessSpawnData` проходит
   штатный respawn pipeline и его таймер. Перед окончательным `AssignEntity_S`
   повторно проверяются entity/group identity, membership и death revision.
+  Identity непосредственной AI-группы также сохраняется в попытке: перенос
+  бойца в другую группу или замена slave до callback приводит к отказу.
   Отказ не удаляет AI. Обычные native possess requests сохраняют своё поведение.
 - `UI/AICF_SquadRespawnUI.c`: native `SCR_LoadoutButton` в `SCR_LoadoutGallery`,
   выбор по `RplId` и обычная `RequestRespawn` кнопка `SCR_DeployMenuMain`.
   Карточки ИИ не подменяют player loadout и не отправляют запрос пресета.
   Истёкшая death revision/исчезнувшая цель снимает выбор; cleanup удаляет
   собственные карточки и подписки. Пресеты остаются под управлением vanilla.
+  Карточка получает native icon из prefab, выбранный боец показывается через
+  `ItemPreviewManagerEntity.SetPreviewItem` с его текущей экипировкой. Пока
+  entity не загружена клиентом, используется prefab preview; после streaming
+  он заменяется live preview. На сервере персонаж/экипировка не изменяются.
 
 Pending context сохраняется до native response, даже если наступила следующая
 смерть: устаревший callback должен пройти проверку revision и получить отказ.
@@ -47,6 +58,8 @@ Pending context сохраняется до native response, даже если �
 События: `[AICF][STAGE4][INFO][SQUAD_RESPAWN_REQUEST]` содержит `player`,
 `character`, `group`, `death_revision`, `authority`; `SQUAD_RESPAWN_RESULT`
 содержит `player`, `character`, `result`, `authority`.
+`SQUAD_RESPAWN_LIST` при смене death revision или числа доступных бойцов
+содержит `player`, `death_revision`, `group`, `eligible`, `authority`.
 
 ## Проверки
 
@@ -71,7 +84,8 @@ Workbench Validate/Compile выполняется по `DEVELOPMENT.md`. Для 
 Для сервера укажите также `-addr 127.0.0.1:<port>` и одинаковый `-ServerPort`
 для обоих запусков; клиенту передайте точный `-ServerProfileRoot`.
 
-Fixture создаёт экипированных AI в native player group, убивает игрока и одного
+Fixture добавляет экипированных AI штатным `AddAIToSlaveGroup` в player group,
+проверяет отсутствие этих агентов в старом прямом `GetAgents`, убивает игрока и одного
 из AI, затем вызывает production owner RPC. Проверяет недопустимость живого
 игрока, мёртвой/чужой/вражеской цели, старой death revision и invalid RPC,
 передачу того же персонажа, сохранение inventory entity identities и группы.

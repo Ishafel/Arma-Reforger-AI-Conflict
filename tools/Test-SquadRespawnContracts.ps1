@@ -16,6 +16,10 @@ $rules = @(
     @('Respawn/AICF_SquadRespawnPolicy.c','players.GetPlayerIdFromControlledEntity\(entity\) != 0','OCCUPIED'),
     @('Respawn/AICF_SquadRespawnPolicy.c','SCR_PossessingManagerComponent.GetPlayerIdFromMainEntity\(entity\) != 0','MAIN_ENTITY'),
     @('Respawn/AICF_SquadRespawnPolicy.c','agent.GetControlledEntity\(\) == entity','ACTUAL_AGENT'),
+    @('Respawn/AICF_SquadRespawnPolicy.c','slave.GetMaster\(\) != group','SLAVE_PARENT'),
+    @('Respawn/AICF_SquadRespawnPolicy.c','slave.GetFaction\(\) != group.GetFaction\(\)','SLAVE_FACTION'),
+    @('Respawn/AICF_SquadRespawnRpc.c','AICF_SquadRespawnPolicy.GetSquadAgents\(group, agents\)','SLAVE_LIST'),
+    @('Respawn/AICF_SquadRespawnPolicy.c','MemberGroup\(attempt.m_Group, entity\) == attempt.m_MemberGroup','MEMBER_GROUP_REVALIDATION'),
     @('Respawn/AICF_SquadRespawnPolicy.c','entity.GetID\(\) == attempt.m_CharacterId','ENTITY_IDENTITY'),
     @('Respawn/AICF_SquadRespawnPolicy.c','attempt.m_Group.GetID\(\) == attempt.m_GroupId','GROUP_IDENTITY'),
     @('Respawn/AICF_SquadRespawnPolicy.c','player.AICF_GetSquadDeathRevision\(\) == attempt.m_iDeathRevision','DEATH_GENERATION'),
@@ -28,6 +32,8 @@ $rules = @(
     @('UI/AICF_SquadRespawnUI.c','button.m_OnClicked.Remove\(AICF_OnCharacterClicked\)','UI_CLEANUP'),
     @('UI/AICF_SquadRespawnUI.c','CreateWidgets\(m_sLoadoutButton, GetContentRoot\(\)\)','NATIVE_CARD'),
     @('UI/AICF_SquadRespawnUI.c','AddItem\(card\)','NATIVE_GALLERY'),
+    @('UI/AICF_SquadRespawnUI.c','info.SetIconTo\(GetImageWidget\(\)\)','CARD_ICON'),
+    @('UI/AICF_SquadRespawnUI.c','manager.SetPreviewItem\(preview, entity\)','LIVE_CHARACTER_PREVIEW'),
     @('UI/AICF_SquadRespawnUI.c','override protected void RequestRespawn\(\)','NATIVE_DEPLOY_ACTION'),
     @('UI/AICF_SquadRespawnUI.c','m_iAICFSelectedDeathRevision != player.m_iAICFSquadListDeathRevision','UI_STALE_SELECTION')
 )

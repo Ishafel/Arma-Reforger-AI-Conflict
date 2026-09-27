@@ -4,7 +4,7 @@ modded class SCR_LoadoutButton
 	RplId m_AICFCharacter = RplId.Invalid();
 	string m_sAICFCharacterName;
 
-	void AICF_SetCharacter(RplId character, string name)
+	void AICF_SetCharacter(RplId character, string name, ResourceName prefab)
 	{
 		m_AICFCharacter = character;
 		m_sAICFCharacterName = name;
@@ -12,6 +12,20 @@ modded class SCR_LoadoutButton
 		if (m_wPlayerName) m_wPlayerName.SetVisible(true);
 		if (m_wPlatformIcon) m_wPlatformIcon.SetVisible(false);
 		if (m_wLeaderText) m_wLeaderText.SetVisible(false);
+		Resource resource = Resource.Load(prefab);
+		if (resource && resource.IsValid())
+		{
+			IEntityComponentSource source = SCR_BaseContainerTools.FindComponentSource(resource, "SCR_EditableCharacterComponent");
+			if (source)
+			{
+				SCR_EditableEntityUIInfo info = SCR_EditableEntityUIInfo.Cast(BaseContainerTools.CreateInstanceFromContainer(source.GetObject("m_UIInfo")));
+				if (info && GetImageWidget())
+				{
+					info.SetIconTo(GetImageWidget());
+					GetImageWidget().SetVisible(true);
+				}
+			}
+		}
 		if (m_wSuppliesLoadoutText)
 			m_wSuppliesLoadoutText.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_SquadRespawnTitle}"));
 	}
@@ -60,7 +74,7 @@ modded class SCR_LoadoutGallery
 				if (!button) { card.RemoveFromHierarchy(); continue; }
 				string name = player.m_aAICFSquadRespawnNames[i];
 				if (name.IsEmpty()) name = AICF_Localization.Resolve("{AICF:AICF_UI_SquadRespawnSoldier}");
-				button.AICF_SetCharacter(player.m_aAICFSquadRespawnIds[i], name);
+				button.AICF_SetCharacter(player.m_aAICFSquadRespawnIds[i], name, player.m_aAICFSquadRespawnPrefabs[i]);
 				button.m_OnClicked.Insert(AICF_OnCharacterClicked);
 				AddItem(card);
 				m_aAICFCharacters.Insert(button);
@@ -88,6 +102,10 @@ modded class SCR_LoadoutGallery
 
 modded class SCR_LoadoutRequestUIComponent
 {
+	protected bool m_bAICFCharacterPreview;
+	protected IEntity m_AICFPreviewSource;
+	protected ResourceName m_sAICFPreviewPrefab;
+
 	void AICF_SyncCharacters(SCR_PlayerController player, RplId selected)
 	{
 		if (m_LoadoutSelector) m_LoadoutSelector.AICF_SyncCharacters(player, selected);
@@ -98,10 +116,43 @@ modded class SCR_LoadoutRequestUIComponent
 		if (m_LoadoutSelector) m_LoadoutSelector.AICF_ClearCharacters();
 	}
 
-	void AICF_ShowCharacter(string name, string result)
+	void AICF_ClearCharacterPreview()
 	{
-		// Native preview пресета не должен изображать экипировку выбранного ИИ.
-		if (m_wLoadoutPreview) m_wLoadoutPreview.SetVisible(false);
+		m_bAICFCharacterPreview = false;
+		m_AICFPreviewSource = null;
+		m_sAICFPreviewPrefab = string.Empty;
+	}
+
+	override protected void SetLoadoutPreview(SCR_BasePlayerLoadout loadout)
+	{
+		if (m_bAICFCharacterPreview) return;
+		super.SetLoadoutPreview(loadout);
+	}
+
+	void AICF_ShowCharacter(RplId character, string name, string result)
+	{
+		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
+		if (!player || !m_PreviewComp) return;
+		int index = player.m_aAICFSquadRespawnIds.Find(character);
+		if (!player.m_aAICFSquadRespawnPrefabs.IsIndexValid(index)) return;
+		RplComponent rpl = RplComponent.Cast(Replication.FindItem(character));
+		IEntity entity;
+		if (rpl) entity = rpl.GetEntity();
+		ResourceName prefab = player.m_aAICFSquadRespawnPrefabs[index];
+		ChimeraWorld world = GetGame().GetWorld();
+		ItemPreviewManagerEntity manager = world.GetItemPreviewManager();
+		ItemPreviewWidget preview = m_PreviewComp.GetItemPreviewWidget();
+		if (!manager || !preview) return;
+		if (!m_bAICFCharacterPreview || entity != m_AICFPreviewSource || prefab != m_sAICFPreviewPrefab)
+		{
+			// Native manager создаёт visual copy и отслеживает hierarchy экипировки.
+			if (entity) manager.SetPreviewItem(preview, entity);
+			else manager.SetPreviewItemFromPrefab(preview, prefab);
+			m_bAICFCharacterPreview = true;
+			m_AICFPreviewSource = entity;
+			m_sAICFPreviewPrefab = prefab;
+		}
+		if (m_wLoadoutPreview) m_wLoadoutPreview.SetVisible(true);
 		if (m_wExpandButtonName) m_wExpandButtonName.SetText(name);
 		if (m_wLoadoutNameText) m_wLoadoutNameText.SetText(name);
 		if (m_wSupplies) m_wSupplies.SetVisible(true);
@@ -138,6 +189,7 @@ modded class SCR_DeployMenuMain
 	void AICF_ClearCharacter()
 	{
 		m_AICFSelectedCharacter = RplId.Invalid();
+		if (m_LoadoutRequestUIHandler) m_LoadoutRequestUIHandler.AICF_ClearCharacterPreview();
 		if (m_LoadoutRequestUIHandler) m_LoadoutRequestUIHandler.RefreshLoadoutPreview();
 		if (m_RespawnButton)
 		{
@@ -177,7 +229,7 @@ modded class SCR_DeployMenuMain
 		string label = AICF_Localization.Resolve("{AICF:AICF_UI_SquadRespawnTake}");
 		if (remaining > 0) label = string.Format("%1 (%2)", label, remaining);
 		m_RespawnButton.SetText(enabled, label);
-		if (m_LoadoutRequestUIHandler) m_LoadoutRequestUIHandler.AICF_ShowCharacter(m_sAICFSelectedName, player.m_sAICFSquadRespawnResult);
+		if (m_LoadoutRequestUIHandler) m_LoadoutRequestUIHandler.AICF_ShowCharacter(m_AICFSelectedCharacter, m_sAICFSelectedName, player.m_sAICFSquadRespawnResult);
 	}
 
 	override protected void RequestRespawn()
@@ -193,6 +245,7 @@ modded class SCR_DeployMenuMain
 	override void OnMenuClose()
 	{
 		if (m_LoadoutRequestUIHandler) m_LoadoutRequestUIHandler.AICF_ClearCharacters();
+		if (m_LoadoutRequestUIHandler) m_LoadoutRequestUIHandler.AICF_ClearCharacterPreview();
 		m_AICFSelectedCharacter = RplId.Invalid();
 		super.OnMenuClose();
 	}

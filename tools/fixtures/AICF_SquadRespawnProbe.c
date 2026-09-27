@@ -6,12 +6,20 @@ modded class SCR_LoadoutGallery
 	{
 		return m_aLoadoutButtons.Count() > 0 && m_aAICFCharacters.Count() == 1 &&
 			m_aAICFCharacters[0].m_AICFCharacter == target &&
+			m_aAICFCharacters[0].GetImageWidget() && m_aAICFCharacters[0].GetImageWidget().IsVisible() &&
 			m_aWidgets.Contains(m_aAICFCharacters[0].GetRootWidget());
 	}
 }
 
 modded class SCR_LoadoutRequestUIComponent
 {
+	bool AICF_ProbeCharacterPreview(RplId target)
+	{
+		RplComponent rpl = RplComponent.Cast(Replication.FindItem(target));
+		return rpl && m_bAICFCharacterPreview && m_AICFPreviewSource == rpl.GetEntity() &&
+			m_wLoadoutPreview && m_wLoadoutPreview.IsVisible() && m_PreviewComp.GetItemPreviewWidget();
+	}
+
 	bool AICF_ProbeNativeCards(RplId target)
 	{
 		return m_LoadoutSelector && m_LoadoutSelector.AICF_ProbeNativeCards(target);
@@ -27,7 +35,7 @@ modded class SCR_DeployMenuMain
 		m_LoadoutRequestUIHandler.AICF_SyncCharacters(player, RplId.Invalid());
 		if (!m_LoadoutRequestUIHandler.AICF_ProbeNativeCards(target)) return false;
 		AICF_SelectCharacter(target, "Probe AI");
-		return m_AICFSelectedCharacter == target && !GetRootWidget().FindAnyWidget("AICF_SquadRespawn");
+		return m_AICFSelectedCharacter == target && !GetRootWidget().FindAnyWidget("AICF_SquadRespawn") && m_LoadoutRequestUIHandler.AICF_ProbeCharacterPreview(target);
 	}
 
 	void AICF_ProbeSubmit() { RequestRespawn(); }
@@ -104,6 +112,11 @@ modded class SCR_GameModeCampaign
 		{
 			m_AICFRPGroup = SCR_GroupsManagerComponent.GetInstance().GetPlayerGroup(m_AICFRPPlayer.GetPlayerId());
 			if (!m_AICFRPGroup) return;
+			if (!m_AICFRPGroup.GetSlave())
+			{
+				SCR_PlayerControllerGroupComponent.Cast(m_AICFRPPlayer.FindComponent(SCR_PlayerControllerGroupComponent)).RequestCreateSlaveGroup(RplComponent.Cast(m_AICFRPGroup.FindComponent(RplComponent)).Id());
+				return;
+			}
 			AICF_RPCheck("native_request_component", m_AICFRPPlayer.FindComponent(SCR_PossessSpawnRequestComponent) != null);
 			AICF_RPCheck("native_handler_component", FindComponent(SCR_PossessSpawnHandlerComponent) != null);
 			IEntity body = m_AICFRPPlayer.GetControlledEntity();
@@ -125,8 +138,13 @@ modded class SCR_GameModeCampaign
 			AIControlComponent control = AIControlComponent.Cast(m_AICFRPTarget.FindComponent(AIControlComponent));
 			AIControlComponent deadControl = AIControlComponent.Cast(m_AICFRPDead.FindComponent(AIControlComponent));
 			if (!control || !control.GetAIAgent() || !deadControl || !deadControl.GetAIAgent()) return;
-			m_AICFRPGroup.AddAgent(control.GetAIAgent());
-			m_AICFRPGroup.AddAgent(deadControl.GetAIAgent());
+			SCR_PlayerControllerGroupComponent groupController = SCR_PlayerControllerGroupComponent.Cast(m_AICFRPPlayer.FindComponent(SCR_PlayerControllerGroupComponent));
+			groupController.AddAIToSlaveGroup(SCR_ChimeraCharacter.Cast(m_AICFRPTarget), m_AICFRPGroup);
+			groupController.AddAIToSlaveGroup(SCR_ChimeraCharacter.Cast(m_AICFRPDead), m_AICFRPGroup);
+			array<AIAgent> direct = {};
+			m_AICFRPGroup.GetAgents(direct);
+			AICF_RPCheck("legacy_direct_scan_misses_recruited_ai", !direct.Contains(control.GetAIAgent()));
+			AICF_RPCheck("native_recruit_in_slave", m_AICFRPGroup.IsAIControlledCharacterMember(SCR_ChimeraCharacter.Cast(m_AICFRPTarget)));
 			m_AICFRPTargetId = m_AICFRPTarget.GetID();
 			InventoryStorageManagerComponent inventory = InventoryStorageManagerComponent.Cast(m_AICFRPTarget.FindComponent(InventoryStorageManagerComponent));
 			if (inventory) inventory.GetItems(m_aAICFRPItems);
@@ -149,8 +167,15 @@ modded class SCR_GameModeCampaign
 			stale.m_CharacterId = m_AICFRPTargetId;
 			stale.m_Group = m_AICFRPGroup;
 			stale.m_GroupId = m_AICFRPGroup.GetID();
+			stale.m_MemberGroup = m_AICFRPGroup.GetSlave();
+			stale.m_MemberGroupId = stale.m_MemberGroup.GetID();
 			stale.m_iDeathRevision = m_AICFRPPlayer.AICF_GetSquadDeathRevision() - 1;
 			AICF_RPCheck("old_death_rejected", !AICF_SquadRespawnPolicy.IsCurrent(m_AICFRPPlayer, stale, m_AICFRPTarget));
+			stale.m_iDeathRevision = m_AICFRPPlayer.AICF_GetSquadDeathRevision();
+			AICF_RPCheck("current_slave_identity_allowed", AICF_SquadRespawnPolicy.IsCurrent(m_AICFRPPlayer, stale, m_AICFRPTarget));
+			stale.m_MemberGroup = m_AICFRPGroup;
+			stale.m_MemberGroupId = m_AICFRPGroup.GetID();
+			AICF_RPCheck("wrong_member_group_rejected", !AICF_SquadRespawnPolicy.IsCurrent(m_AICFRPPlayer, stale, m_AICFRPTarget));
 			m_iAICFRPPhase = 3;
 		}
 		if (m_iAICFRPPhase == 3 && m_AICFRPPlayer.GetControlledEntity() == m_AICFRPTarget)

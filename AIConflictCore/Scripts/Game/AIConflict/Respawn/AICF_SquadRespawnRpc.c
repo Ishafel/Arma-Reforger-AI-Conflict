@@ -3,9 +3,12 @@ modded class SCR_PlayerController
 	protected bool m_bAICFSquadDeath;
 	protected int m_iAICFSquadDeathRevision;
 	protected int m_iAICFSquadListAt;
+	protected int m_iAICFListedDeath = -1;
+	protected int m_iAICFListedCount = -1;
 	protected ref AICF_SquadRespawnAttempt m_AICFSquadRespawn;
 	ref array<RplId> m_aAICFSquadRespawnIds = {};
 	ref array<string> m_aAICFSquadRespawnNames = {};
+	ref array<ResourceName> m_aAICFSquadRespawnPrefabs = {};
 	int m_iAICFSquadListRevision;
 	int m_iAICFSquadListDeathRevision;
 	string m_sAICFSquadRespawnResult;
@@ -44,11 +47,12 @@ modded class SCR_PlayerController
 		m_iAICFSquadListAt = System.GetTickCount() + 1000;
 		array<RplId> ids = {};
 		array<string> names = {};
+		array<ResourceName> prefabs = {};
 		SCR_AIGroup group = AICF_SquadRespawnPolicy.PlayerGroup(this);
 		if (group)
 		{
 			array<AIAgent> agents = {};
-			group.GetAgents(agents);
+			AICF_SquadRespawnPolicy.GetSquadAgents(group, agents);
 			foreach (AIAgent agent : agents)
 			{
 				if (!agent) continue;
@@ -62,17 +66,25 @@ modded class SCR_PlayerController
 					label = identity.GetIdentity().GetName() + " " + identity.GetIdentity().GetSurname();
 				ids.Insert(rpl.Id());
 				names.Insert(label);
+				prefabs.Insert(entity.GetPrefabData().GetPrefabName());
 				if (ids.Count() >= 32) break;
 			}
 		}
-		Rpc(RpcDo_AICFSquadRespawnList, ids, names, m_iAICFSquadDeathRevision);
+		if (m_bAICFSquadDeath && (m_iAICFListedDeath != m_iAICFSquadDeathRevision || m_iAICFListedCount != ids.Count()))
+		{
+			m_iAICFListedDeath = m_iAICFSquadDeathRevision;
+			m_iAICFListedCount = ids.Count();
+			AICF_Stage4Diagnostics.Info("SQUAD_RESPAWN_LIST", string.Format("player=%1 death_revision=%2 group=%3 eligible=%4 authority=SERVER", GetPlayerId(), m_iAICFSquadDeathRevision, group, ids.Count()));
+		}
+		Rpc(RpcDo_AICFSquadRespawnList, ids, names, prefabs, m_iAICFSquadDeathRevision);
 	}
 
 	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
-	protected void RpcDo_AICFSquadRespawnList(array<RplId> ids, array<string> names, int deathRevision)
+	protected void RpcDo_AICFSquadRespawnList(array<RplId> ids, array<string> names, array<ResourceName> prefabs, int deathRevision)
 	{
 		m_aAICFSquadRespawnIds.Copy(ids);
 		m_aAICFSquadRespawnNames.Copy(names);
+		m_aAICFSquadRespawnPrefabs.Copy(prefabs);
 		m_iAICFSquadListDeathRevision = deathRevision;
 		m_iAICFSquadListRevision++;
 	}
@@ -107,6 +119,8 @@ modded class SCR_PlayerController
 		m_AICFSquadRespawn.m_RplId = character;
 		m_AICFSquadRespawn.m_Group = group;
 		m_AICFSquadRespawn.m_GroupId = group.GetID();
+		m_AICFSquadRespawn.m_MemberGroup = AICF_SquadRespawnPolicy.MemberGroup(group, entity);
+		m_AICFSquadRespawn.m_MemberGroupId = m_AICFSquadRespawn.m_MemberGroup.GetID();
 		m_AICFSquadRespawn.m_iDeathRevision = deathRevision;
 		AICF_Stage4Diagnostics.Info("SQUAD_RESPAWN_REQUEST", string.Format("player=%1 character=%2 group=%3 death_revision=%4 authority=SERVER", GetPlayerId(), character, group.GetID(), deathRevision));
 		if (!respawn.RequestSpawn(SCR_PossessSpawnData.FromRplId(character)))

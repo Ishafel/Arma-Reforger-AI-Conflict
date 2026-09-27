@@ -7,6 +7,8 @@ class AICF_SquadRespawnAttempt
 	RplId m_RplId;
 	SCR_AIGroup m_Group;
 	EntityID m_GroupId;
+	SCR_AIGroup m_MemberGroup;
+	EntityID m_MemberGroupId;
 	int m_iDeathRevision;
 }
 
@@ -33,6 +35,49 @@ class AICF_SquadRespawnPolicy
 		return group;
 	}
 
+	static SCR_AIGroup SlaveGroup(SCR_AIGroup group)
+	{
+		if (!group) return null;
+		SCR_AIGroup slave = group.GetSlave();
+		if (!slave || slave == group || slave.GetMaster() != group || slave.GetFaction() != group.GetFaction()) return null;
+		return slave;
+	}
+
+	static void GetSquadAgents(SCR_AIGroup group, out array<AIAgent> agents)
+	{
+		agents.Clear();
+		if (!group) return;
+		group.GetAgents(agents);
+		SCR_AIGroup slave = SlaveGroup(group);
+		if (!slave) return;
+		array<AIAgent> recruits = {};
+		slave.GetAgents(recruits);
+		foreach (AIAgent agent : recruits)
+		{
+			if (agent && !agents.Contains(agent)) agents.Insert(agent);
+		}
+	}
+
+	static SCR_AIGroup MemberGroup(SCR_AIGroup group, IEntity entity)
+	{
+		if (!group || !entity) return null;
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (agent && agent.GetControlledEntity() == entity) return group;
+		}
+		SCR_AIGroup slave = SlaveGroup(group);
+		if (!slave) return null;
+		agents.Clear();
+		slave.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (agent && agent.GetControlledEntity() == entity) return slave;
+		}
+		return null;
+	}
+
 	static bool CanTake(SCR_PlayerController player, SCR_AIGroup group, IEntity entity)
 	{
 		if (!group || PlayerGroup(player) != group || !entity ||
@@ -41,20 +86,15 @@ class AICF_SquadRespawnPolicy
 		PlayerManager players = GetGame().GetPlayerManager();
 		if (players.GetPlayerIdFromControlledEntity(entity) != 0 || SCR_PossessingManagerComponent.GetPlayerIdFromMainEntity(entity) != 0)
 			return false;
-		array<AIAgent> agents = {};
-		group.GetAgents(agents);
-		foreach (AIAgent agent : agents)
-		{
-			if (agent && agent.GetControlledEntity() == entity)
-				return true;
-		}
-		return false;
+		return MemberGroup(group, entity) != null;
 	}
 
 	static bool IsCurrent(SCR_PlayerController player, AICF_SquadRespawnAttempt attempt, IEntity entity)
 	{
 		return attempt && entity && entity == attempt.m_Character && entity.GetID() == attempt.m_CharacterId &&
 			attempt.m_Group && attempt.m_Group.GetID() == attempt.m_GroupId &&
+			attempt.m_MemberGroup && attempt.m_MemberGroup.GetID() == attempt.m_MemberGroupId &&
+			MemberGroup(attempt.m_Group, entity) == attempt.m_MemberGroup &&
 			player.AICF_GetSquadDeathRevision() == attempt.m_iDeathRevision &&
 			CanTake(player, attempt.m_Group, entity);
 	}
