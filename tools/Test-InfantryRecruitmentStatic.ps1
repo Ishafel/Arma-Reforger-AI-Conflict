@@ -34,7 +34,11 @@ function Test-MusterContracts([string]$Slot, [string]$Planner, [string]$Service)
         @($Slot, 'return IsWaitingForInfantryMuster\(\) \|\|', 'MUSTER_RECOVERY_EXCLUSION'),
         @($Planner, 'decisionAuthority == AICF_EStrategicDecisionAuthority.AI_COMMANDER && slot.NeedsInfantryMuster\(\)[\s\S]*?return HoldInfantryForMuster\(slot, faction\);[\s\S]*?AIWaypoint newWaypoint;', 'MUSTER_BEFORE_ATTACK'),
         @($Planner, 'bool HoldInfantryForMuster[\s\S]*?ResolveAliveLeader\(slot.GetGroup\(\)\)[\s\S]*?CreatePositionWaypoint\(leader.GetOrigin\(\)\)', 'MUSTER_PHYSICAL_ORIGIN'),
-        @($Service, 'RefreshInfantryMuster\(slot, faction, m_Graph, m_Selector\);', 'MUSTER_UPDATE')
+        @($Service, 'RefreshInfantryMuster\(slot, faction, m_Graph, m_Selector\);', 'MUSTER_UPDATE'),
+        @($Planner, 'bool ConfigureInfantryServiceWaypoint[^}]*SetUseTurrets\(false\);[^}]*SetFractionOfSA\(0\);', 'SERVICE_NO_TURRET_OR_SMART_ACTION'),
+        @($Planner, 'bool HoldInfantryForMuster[\s\S]*?ConfigureInfantryServiceWaypoint\(waypoint\)[\s\S]*?ClearOrder\(slot\);', 'MUSTER_FOOT_POSTURE'),
+        @($Planner, 'bool BeginInfantryRecruitment[\s\S]*?ConfigureInfantryServiceWaypoint\(waypoint\)', 'RECRUITMENT_FOOT_POSTURE'),
+        @($Service, 'ScheduleRetry\(slot\);[\s\S]*?CountAliveAgentsInAnyVehicle[\s\S]*?if \(slot.IsWaitingForInfantryMuster\(\)\)\s*m_Planner.HoldInfantryForMuster\(slot, faction\);\s*continue;', 'MUSTER_TURRET_EXIT_RETRY')
     )
     foreach ($rule in $rules) { if ($rule[0] -notmatch $rule[1]) { $rule[2] } }
 }
@@ -46,7 +50,12 @@ $mutations = @(
     @('slot','return IsWaitingForInfantryMuster() ||', 'return', 'MUSTER_RECOVERY_EXCLUSION'),
     @('planner','return HoldInfantryForMuster(slot, faction);', 'return false;', 'MUSTER_BEFORE_ATTACK'),
     @('planner','CreatePositionWaypoint(leader.GetOrigin())', 'CreatePositionWaypoint(slot.GetGroup().GetOrigin())', 'MUSTER_PHYSICAL_ORIGIN'),
-    @('service','m_Planner.RefreshInfantryMuster(slot, faction, m_Graph, m_Selector);', '', 'MUSTER_UPDATE')
+    @('service','m_Planner.RefreshInfantryMuster(slot, faction, m_Graph, m_Selector);', '', 'MUSTER_UPDATE'),
+    @('planner','preset.SetUseTurrets(false);', 'preset.SetUseTurrets(true);', 'SERVICE_NO_TURRET_OR_SMART_ACTION'),
+    @('planner','preset.SetFractionOfSA(0);', 'preset.SetFractionOfSA(1);', 'SERVICE_NO_TURRET_OR_SMART_ACTION'),
+    @('planner','!ConfigureInfantryServiceWaypoint(waypoint)', 'false', 'MUSTER_FOOT_POSTURE'),
+    @('planner','!ConfigureInfantryServiceWaypoint(waypoint)', 'false', 'RECRUITMENT_FOOT_POSTURE'),
+    @('service','m_Planner.HoldInfantryForMuster(slot, faction);', '', 'MUSTER_TURRET_EXIT_RETRY')
 )
 foreach ($mutation in $mutations) {
     $inputs = @{slot=$slotSource;planner=$plannerSource;service=$service}
@@ -61,4 +70,4 @@ if ($failures.Count) {
     exit 1
 }
 Write-Output 'Infantry recruitment static: PASS (seed, identity, locality, payment, readiness, cleanup, authority)'
-Write-Output 'Infantry muster contracts: PASS (7 negative mutations)'
+Write-Output ('Infantry muster contracts: PASS (' + $mutations.Count + ' negative mutations)')

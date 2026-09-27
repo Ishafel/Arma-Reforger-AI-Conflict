@@ -3089,6 +3089,22 @@ class AICF_OrderPlanner
 	}
 
 	// Удержание у фактического места сбора сохраняет боевое намерение отдельно.
+	protected bool ConfigureInfantryServiceWaypoint(AIWaypoint waypoint)
+	{
+		SCR_DefendWaypoint defend = SCR_DefendWaypoint.Cast(waypoint);
+		if (!defend)
+			return false;
+		SCR_DefendWaypointPreset preset = defend.GetCurrentDefendPreset();
+		if (!preset)
+			return false;
+		// Сбор и набор требуют пехоту у точки. Штатный Defend иначе отдаёт
+		// единственного бойца турели или smart action вне места пополнения.
+		preset.SetUseTurrets(false);
+		preset.SetFractionOfSA(0);
+		defend.SetFastInit(false);
+		return true;
+	}
+
 	bool HoldInfantryForMuster(AICF_GroupSlot slot, SCR_CampaignFaction faction)
 	{
 		if (!Replication.IsServer() || !slot || !faction || !slot.IsCombatReady() ||
@@ -3101,6 +3117,11 @@ class AICF_OrderPlanner
 		AIWaypoint waypoint = CreatePositionWaypoint(leader.GetOrigin());
 		if (!waypoint)
 			return false;
+		if (!ConfigureInfantryServiceWaypoint(waypoint))
+		{
+			RplComponent.DeleteRplEntity(waypoint, false);
+			return false;
+		}
 		ClearOrder(slot);
 		slot.GetGroup().AddWaypointAt(waypoint, 0);
 		slot.AssignObjective(slot.GetStrategicIntentTargetBase(), waypoint);
@@ -3176,6 +3197,11 @@ class AICF_OrderPlanner
 			return false;
 		}
 		waypoint.SetCompletionRadius(15);
+		if (!ConfigureInfantryServiceWaypoint(waypoint))
+		{
+			RplComponent.DeleteRplEntity(waypoint, false);
+			return false;
+		}
 		waypoint.SetCompletionType(EAIWaypointCompletionType.All);
 		waypoint.SetHoldingTime(3600);
 		ClearOrder(order.m_Slot);

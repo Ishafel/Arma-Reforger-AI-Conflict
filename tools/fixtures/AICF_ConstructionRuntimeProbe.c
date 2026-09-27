@@ -292,6 +292,7 @@ modded class AICF_ConstructionPlanner
 		super.InitializeBases(now);
 		AICF_ProbeExitEndpoints();
 		AICF_ProbeCandidateCoverage();
+		AICF_ProbeCandidateOrder();
 		AICF_ProbeOrientedBounds();
 		AICF_ProbeTerrainSlope();
 		AICF_ConstructionMetadataProbe.Run();
@@ -348,6 +349,29 @@ modded class AICF_ConstructionPlanner
 		Print(string.Format("[AICF][CONSTRUCTION_TERRAIN_CONTRACT] test_only=1 passed=%1 total=6", passed));
 		if (passed != 6)
 			Print("[AICF][CONSTRUCTION_TERRAIN_CONTRACT] FAILED", LogLevel.ERROR);
+	}
+
+	protected void AICF_ProbeCandidateOrder()
+	{
+		array<int> transforms = {};
+		array<int> firstCenters = {};
+		bool unique = true;
+		bool progressive = true;
+		for (int i; i < 512; i++)
+		{
+			int index = AICF_ConstructionSiteSearch.CandidateTransformIndex(i);
+			if (transforms.Contains(index) || index < 0 || index >= 512)
+				unique = false;
+			transforms.Insert(index);
+			if (i < 32 && !firstCenters.Contains(index / 8))
+				firstCenters.Insert(index / 8);
+			if (index / 256 != i / 256)
+				progressive = false;
+		}
+		bool passed = unique && progressive && firstCenters.Count() == 32;
+		Print(string.Format("[AICF][CONSTRUCTION_CANDIDATE_ORDER_CONTRACT] test_only=1 passed=%1 unique=%2 progressive=%3 first_centers=%4", passed, unique, progressive, firstCenters.Count()));
+		if (!passed)
+			Print("[AICF][CONSTRUCTION_CANDIDATE_ORDER_CONTRACT] FAILED", LogLevel.ERROR);
 	}
 
 	protected void AICF_ProbeCandidateCoverage()

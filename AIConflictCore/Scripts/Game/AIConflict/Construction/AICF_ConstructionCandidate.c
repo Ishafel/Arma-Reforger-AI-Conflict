@@ -4,6 +4,7 @@ class AICF_ConstructionCandidate
 {
 	float m_fRemainingDistance;
 	int m_iStartedAt;
+	int m_iQueuedAt;
 	int m_iIndex;
 	bool m_bPathPending;
 	protected bool m_bPathStartReady;
@@ -31,6 +32,7 @@ class AICF_ConstructionCandidate
 		m_vStart = order.m_vPathStart;
 		m_vSpawnOrigin = order.m_vSpawnOrigin;
 		m_iStartedAt = order.m_iCandidateStartedAt;
+		m_iQueuedAt = System.GetTickCount();
 		m_iIndex = order.m_iCandidateIndex;
 		m_iNavRetry = order.m_iNavRetry;
 		m_iNavPathCursor = order.m_iNavPathCursor;
@@ -68,7 +70,9 @@ class AICF_ConstructionCandidate
 		order.m_vMax = m_vMax;
 		order.m_vPathStart = m_vStart;
 		order.m_vSpawnOrigin = m_vSpawnOrigin;
-		order.m_iCandidateStartedAt = m_iStartedAt;
+		// Квота кандидата учитывает только время, когда он выбран scheduler.
+		// Очередь ограничена размером и общим deadline authoritative order.
+		order.m_iCandidateStartedAt = m_iStartedAt + System.GetTickCount() - m_iQueuedAt;
 		order.m_iCandidateIndex = m_iIndex;
 		order.m_iNavRetry = m_iNavRetry;
 		order.m_iNavPathCursor = m_iNavPathCursor;

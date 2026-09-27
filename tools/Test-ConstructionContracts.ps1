@@ -77,6 +77,18 @@ $staticTool = Join-Path $PSScriptRoot 'Test-ConstructionStatic.ps1'
 $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool -RepositoryRoot $fixtureRepo
 if ($LASTEXITCODE -ne 0) { $failures.Add('static-positive') }
 $result | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'static-positive.txt')
+$builderPath = Join-Path $fixtureCore 'Construction/AICF_BaseBuilderService.c'
+$builder = [IO.File]::ReadAllText($builderPath)
+foreach ($case in @(
+    @{Name='completion-budget-as-obstacle'; Before='if (reason == "QUERY_BUDGET")'; After='if (false)'},
+    @{Name='completion-claim-expired'; Before='WORK_INTERVAL_MS = 3000;'; After='WORK_INTERVAL_MS = 15000;'}
+)) {
+    [IO.File]::WriteAllText($builderPath, $builder.Replace($case.Before, $case.After))
+    $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool -RepositoryRoot $fixtureRepo
+    if ($LASTEXITCODE -ne 1 -or ($result -join "`n") -notmatch '\[CONSTRUCTION_COMPLETION_BUDGET_RETRY\]') { $failures.Add('static-negative-' + $case.Name) }
+    $result | Set-Content -LiteralPath (Join-Path $EvidenceRoot ('static-negative-' + $case.Name + '.txt'))
+}
+[IO.File]::WriteAllText($builderPath, $builder)
 $orderPath = Join-Path $fixtureCore 'Construction/AICF_ConstructionOrder.c'
 $order = [IO.File]::ReadAllText($orderPath)
 [IO.File]::WriteAllText($orderPath, $order.Replace('providerOwner.GetID() == m_ProviderId','true'))
@@ -89,9 +101,17 @@ $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool 
 if ($LASTEXITCODE -ne 1 -or ($result -join "`n") -notmatch '\[CONSTRUCTION_PROVIDER_OWNER_GUARD\]') { $failures.Add('static-negative-provider-owner') }
 $result | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'static-negative-provider-owner.txt')
 [IO.File]::WriteAllText($orderPath, $order)
+$starved = $order.Replace('int m_iNextPathAttempt;', 'int m_iNextPathAttempt = 128;')
+[IO.File]::WriteAllText($orderPath, $starved)
+$result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool -RepositoryRoot $fixtureRepo
+if ($LASTEXITCODE -ne 1 -or ($result -join "`n") -notmatch '\[CONSTRUCTION_FIRST_PATH_NOT_STARVED\]') { $failures.Add('static-negative-first-path-starvation') }
+$result | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'static-negative-first-path-starvation.txt')
+[IO.File]::WriteAllText($orderPath, $order)
 $plannerPath = Join-Path $fixtureCore 'Construction/AICF_ConstructionPlanner.c'
 $planner = [IO.File]::ReadAllText($plannerPath)
 foreach ($case in @(
+    @{ Name='checkpoint-fifo'; Before='int best = 0;'; After='int best = order.m_aPendingCandidates.Count() - 1;'; Rule='CONSTRUCTION_CHECKPOINT_BOUND' },
+    @{ Name='pending-wall-clock'; Before='order.m_aPendingCandidates[expired].m_iQueuedAt -'; After='System.GetTickCount() -'; Rule='CONSTRUCTION_PENDING_ACTIVE_TIME' },
     @{ Name='candidate-budget'; Before='m_iCandidatesThisTick < m_Config.m_iCandidatesPerTick'; After='true'; Rule='CONSTRUCTION_SHARED_CANDIDATE_BUDGET' },
     @{ Name='metadata-budget'; Before='if (m_bMetadataBatchThisTick)'; After='if (false)'; Rule='CONSTRUCTION_SHARED_METADATA_BUDGET' },
     @{ Name='placement-budget'; Before='if (m_bPlacementAttemptedThisTick)'; After='if (false)'; Rule='CONSTRUCTION_SINGLE_PLACEMENT_ATTEMPT' },
@@ -109,6 +129,7 @@ foreach ($case in @(
 $searchPath = Join-Path $fixtureCore 'Construction/AICF_ConstructionSiteSearch.c'
 $search = [IO.File]::ReadAllText($searchPath)
 foreach ($case in @(
+    @{ Name='center-diversity'; Before='attempt = CandidateTransformIndex(attempt);'; After=''; Rule='CONSTRUCTION_CENTER_DIVERSITY' },
     @{ Name='terrain-row'; Before='order.m_aTerrainHeights[sample - columns]'; After='point[1]'; Rule='CONSTRUCTION_LOCAL_TERRAIN_SLOPE' },
     @{ Name='terrain-completion-envelope'; Before='check.m_fMaxHeight = receipt.m_fMaxHeight;'; After='check.m_fMaxHeight = 0;'; Rule='CONSTRUCTION_TERRAIN_COLLISION_ENVELOPE' },
     @{ Name='candidate-resume'; Before='if (!order.m_bCandidateLiveChecked)'; After='if (false)'; Rule='CONSTRUCTION_CANDIDATE_BUDGET_RESUME' },
@@ -142,6 +163,10 @@ foreach ($case in @(
 [IO.File]::WriteAllText($pathPath, $pathCode)
 $checkpointPath = Join-Path $fixtureCore 'Construction/AICF_ConstructionCandidate.c'
 $checkpointCode = [IO.File]::ReadAllText($checkpointPath)
+[IO.File]::WriteAllText($checkpointPath, $checkpointCode.Replace('m_iStartedAt + System.GetTickCount() - m_iQueuedAt', 'm_iStartedAt'))
+$result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool -RepositoryRoot $fixtureRepo
+if ($LASTEXITCODE -ne 1 -or ($result -join "`n") -notmatch '\[CONSTRUCTION_QUEUE_TIME_PAUSED\]') { $failures.Add('static-negative-queue-time') }
+$result | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'static-negative-queue-time.txt')
 [IO.File]::WriteAllText($checkpointPath, $checkpointCode.Replace('order.m_iPathQueriesAt = order.m_iQueries - m_iPathQueries;', 'order.m_iPathQueriesAt = order.m_iQueries;'))
 $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool -RepositoryRoot $fixtureRepo
 if ($LASTEXITCODE -ne 1 -or ($result -join "`n") -notmatch '\[CONSTRUCTION_CHECKPOINT_QUERY_IDENTITY\]') { $failures.Add('static-negative-checkpoint-queries') }
@@ -153,4 +178,4 @@ if ($LASTEXITCODE -ne 1 -or ($result -join "`n") -notmatch '\[CONSTRUCTION_SHARE
 $result | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'static-negative-shared-start-cursor.txt')
 [IO.File]::WriteAllText($checkpointPath, $checkpointCode)
 if ($failures.Count) { Write-Output "Construction contract inputs: FAIL $($failures -join ',')"; exit 1 }
-Write-Output 'Construction contract inputs: PASS (16 log inputs + positive/25 negative static inputs)'
+Write-Output 'Construction contract inputs: PASS (16 log inputs + positive/32 negative static inputs)'

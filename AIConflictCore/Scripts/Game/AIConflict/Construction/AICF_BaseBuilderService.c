@@ -542,15 +542,23 @@ class AICF_BaseBuilderService
 			Log(builder, "BUILDER_PROGRESS", progress);
 			return;
 		}
-		// Отказ completion не является прогрессом. Сохраняем оплаченный проект,
-		// но прекращаем анимацию до освобождения площадки, без повторной оплаты.
-		StopTool(builder);
-		builder.m_iWorkAtMs = 0;
-		builder.m_iBlockedUntilMs = now + BLOCKED_RETRY_MS;
 		string reason = "NO_BUILD_PROGRESS";
 		AICF_ConstructionOrder receipt = builder.m_Target.m_AICFConstructionReceipt;
 		if (receipt && !receipt.m_sReason.IsEmpty())
 			reason = receipt.m_sReason;
+		// Очередь queries не означает занятую площадку. Повторный stock вызов
+		// через WORK_INTERVAL_MS успевает использовать живой completion claim;
+		// 15-секундная остановка инструмента теряла его и снова уступала поиску.
+		if (reason == "QUERY_BUDGET")
+		{
+			Log(builder, "BUILDER_BUDGET_WAIT", string.Format("reason=%1 progress=%2 total=%3 retry_ms=%4", reason, before, total, WORK_INTERVAL_MS));
+			return;
+		}
+		// Физический отказ completion не является прогрессом. Сохраняем оплаченный
+		// проект, но прекращаем анимацию до освобождения площадки, без второй оплаты.
+		StopTool(builder);
+		builder.m_iWorkAtMs = 0;
+		builder.m_iBlockedUntilMs = now + BLOCKED_RETRY_MS;
 		Log(builder, "BUILDER_WORK_BLOCKED", string.Format("reason=%1 progress=%2 total=%3 retry_ms=%4", reason, before, total, BLOCKED_RETRY_MS));
 	}
 

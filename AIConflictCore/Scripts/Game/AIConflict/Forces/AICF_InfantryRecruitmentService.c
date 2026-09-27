@@ -76,8 +76,17 @@ class AICF_InfantryRecruitmentService
 				continue;
 			ScheduleRetry(slot);
 			IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
-			if (!leader || AICF_GroupRuntime.CountAliveAgentsInAnyVehicle(slot.GetGroup()) > 0)
+			if (!leader)
 				continue;
+			if (AICF_GroupRuntime.CountAliveAgentsInAnyVehicle(slot.GetGroup()) > 0)
+			{
+				// Снятие прежнего Defend вызывает stock OnDeselected: выход из
+				// турели и release compartments. Новый muster запрещает повторную
+				// посадку; ждём физический выход, не обходим recruitment gate.
+				if (slot.IsWaitingForInfantryMuster())
+					m_Planner.HoldInfantryForMuster(slot, faction);
+				continue;
+			}
 			ResourceName prefab;
 			string role;
 			int memberIndex;

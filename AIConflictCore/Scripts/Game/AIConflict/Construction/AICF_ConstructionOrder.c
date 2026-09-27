@@ -30,7 +30,9 @@ class AICF_ConstructionOrder
 	int m_iCandidateStartedAt;
 	int m_iCandidateIndex;
 	int m_iPathResumes;
-	int m_iNextPathAttempt = 128;
+	// Первый geometry-ready кандидат сразу получает проверку пути. Ожидание
+	// 128 transforms могло исчерпать срок очереди до первого path query.
+	int m_iNextPathAttempt;
 	bool m_bPathAdmitted;
 	bool m_bTerrainLiveChecked;
 	ref array<vector> m_aPathStarts = {};

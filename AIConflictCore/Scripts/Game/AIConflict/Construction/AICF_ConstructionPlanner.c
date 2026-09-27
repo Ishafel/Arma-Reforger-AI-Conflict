@@ -394,29 +394,25 @@ class AICF_ConstructionPlanner
 			return;
 		}
 		int candidates;
-		// Старые pending states не занимают очередь бесконечно. Время жизни
-		// сохраняется при checkpoint/restore; бюджет кандидата также не обнуляется.
+		// Активное время сохраняется при checkpoint/restore. Ожидание других
+		// кандидатов не является вычислением; общий deadline и cap очереди
+		// по-прежнему ограничивают удержание pending states.
 		for (int expired = order.m_aPendingCandidates.Count() - 1; expired >= 0; expired--)
 		{
 			int lifetime = 60000;
 			if (order.m_aPendingCandidates[expired].m_bPathPending)
 				lifetime = 15000;
-			if (System.GetTickCount() - order.m_aPendingCandidates[expired].m_iStartedAt < lifetime)
+			if (order.m_aPendingCandidates[expired].m_iQueuedAt - order.m_aPendingCandidates[expired].m_iStartedAt < lifetime)
 				continue;
 			order.Log("CONSTRUCTION_PENDING_EXPIRED", "candidate_index=" + order.m_aPendingCandidates[expired].m_iIndex + " status=COMPUTE_LIMIT");
 			order.m_aPendingCandidates.Remove(expired);
 		}
 		if (order.m_iStage == 0 && !order.m_aPendingCandidates.IsEmpty())
 		{
-			// Возобновляем наиболее продвинувшийся подтверждённый путь.
-			// FIFO tie-break; дальние тупики не делят квоту поровну с почти
-			// достигнутым рабочим endpoint. Проверки пути остаются прежними.
-			int best;
-			for (int i = 1; i < order.m_aPendingCandidates.Count(); i++)
-			{
-				if (order.m_aPendingCandidates[i].m_fRemainingDistance < order.m_aPendingCandidates[best].m_fRemainingDistance)
-					best = i;
-			}
+			// FIFO между квантами: малое расстояние до endpoint за оградой
+			// не доказывает достижимость. Иначе такие пути снова забирают квоту
+			// у давно проверенной геометрии на другой стороне базы.
+			int best = 0;
 			float nearDistance = vector.DistanceXZ(order.m_Metadata.m_vMin, order.m_Metadata.m_vMax);
 			if (order.m_aPendingCandidates[best].m_fRemainingDistance <= nearDistance ||
 				order.m_aPendingCandidates.Count() >= 32 || order.m_iAttempts >= m_Config.m_iAttempts || order.m_iAttempts >= order.m_iNextPathAttempt)

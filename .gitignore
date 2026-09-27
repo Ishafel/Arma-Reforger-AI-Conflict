@@ -35,6 +35,7 @@
 !/tools/fixtures/AICF_BarracksCombatProbe.c
 !/tools/fixtures/AICF_NorthFailureProbe.c
 !/tools/fixtures/AICF_NativeMoveFailureProbe.c
+!/tools/fixtures/AICF_MusterTurretRuntimeProbe.c
 /docs/*
 !/docs/releases/
 /docs/releases/*

@@ -180,6 +180,7 @@ class AICF_ConstructionSiteSearch
 	{
 		order.m_iQueryPhase = 0;
 		int attempt = order.m_iSearchOffset + order.m_iAttempts++;
+		attempt = CandidateTransformIndex(attempt);
 		order.m_iCandidateIndex = attempt;
 		order.m_iCandidateStartedAt = System.GetTickCount();
 		float extent = vector.DistanceXZ(order.m_Metadata.m_vMin, order.m_Metadata.m_vMax) * 0.5 + m_Config.m_fMargin;
@@ -233,6 +234,16 @@ class AICF_ConstructionSiteSearch
 		order.m_fMaxHeight = order.m_fMinHeight;
 		order.m_iStage = 1;
 		return true;
+	}
+
+	static int CandidateTransformIndex(int attempt)
+	{
+		// Те же 32 центра x 8 поворотов за 256 attempts. Сначала проверяем
+		// разные центры: восемь трудных маршрутов к одной площадке не должны
+		// предшествовать первому прямому пути на другой стороне базы.
+		int block = attempt / 256;
+		int within = attempt % 256;
+		return block * 256 + (within % 32) * 8 + within / 32;
 	}
 
 	static vector CandidateOffset(int attempt, float extent, float outer, out float yaw)
