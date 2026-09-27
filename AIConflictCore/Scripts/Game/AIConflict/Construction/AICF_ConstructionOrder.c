@@ -44,6 +44,8 @@ class AICF_ConstructionOrder
 	int m_iPathSteps;
 	ref array<ref AICF_ConstructionCandidate> m_aPendingCandidates = {};
 	int m_iAttempts;
+	int m_iAttemptLimit;
+	bool m_bForcedSmallBarracks;
 	int m_iSearchOffset;
 	int m_iBroadphaseIgnored;
 	int m_iExitOption;

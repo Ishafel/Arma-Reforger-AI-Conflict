@@ -176,6 +176,12 @@ class AICF_BaseBuilderService
 		// Stock registry может ещё содержать удаляемый root после rollback.
 		if (composition && composition.m_AICFConstructionReceipt && !composition.m_AICFConstructionReceipt.m_bAccepted)
 			return false;
+		// Forced order не имеет worker endpoint: его завершает adapter. После
+		// capture прежняя identity недействительна, работает обычный builder.
+		if (composition && composition.m_AICFConstructionReceipt &&
+			composition.m_AICFConstructionReceipt.m_bForcedSmallBarracks &&
+			composition.m_AICFConstructionReceipt.IdentityValid())
+			return false;
 		if (!IsUnfinished(composition) || !builder.m_Base || builder.m_Base.GetFaction() != builder.m_Faction)
 			return false;
 		IEntity owner = composition.GetOwner();
@@ -358,7 +364,7 @@ class AICF_BaseBuilderService
 	{
 		builder.m_Target.GetCompositionLayout().GetOwner().GetWorldBounds(builder.m_vFootprintMin, builder.m_vFootprintMax);
 		AICF_ConstructionOrder receipt = builder.m_Target.m_AICFConstructionReceipt;
-		if (receipt && receipt.m_bAccepted && receipt.PlacementUnchanged())
+		if (receipt && receipt.m_bAccepted && !receipt.m_bForcedSmallBarracks && receipt.PlacementUnchanged())
 		{
 			builder.m_vWorkPosition = receipt.m_vWork;
 			return;

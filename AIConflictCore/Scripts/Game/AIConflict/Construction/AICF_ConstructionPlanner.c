@@ -129,6 +129,8 @@ class AICF_ConstructionPlanner
 				continue;
 			if (order.m_bAccepted)
 			{
+				if (order.m_bForcedSmallBarracks)
+					m_Adapter.CompleteForcedSmall(order);
 				if (!order.m_Composition || !order.m_Composition.GetOwner())
 					Cancel(state, "LAYOUT_REMOVED");
 				else if (order.m_Composition.IsCompositionSpawned())
@@ -154,6 +156,18 @@ class AICF_ConstructionPlanner
 				// Включает geometry checkpoint и ожидание commit budget: эти
 				// состояния не обязаны вызывать ValidatePath в текущем tick.
 				Cancel(state, "NAVMESH_CONTEXT_CHANGED");
+			else if (order.m_eType == AICF_EConstructionType.SMALL_BARRACKS && order.m_iStage != 4)
+			{
+				AICF_SmallBarracksFallback.Activate(order, now, m_Config.m_iAttempts);
+				// Обязательный заказ не уходит в backoff/очередь depot. Slice и
+				// квота queries прежние, cursor продолжает конечные окна поиска.
+				if (now >= order.m_iDeadline)
+				{
+					order.m_iDeadline = now + m_Config.m_iDeadlineMs;
+					order.LogSearch();
+					order.Log("CONSTRUCTION_SEARCH_CONTINUED", "status=COMPUTING mandatory_small=1");
+				}
+			}
 			else if (now >= order.m_iDeadline)
 			{
 				// Незавершённое вычисление продолжается без cooldown. Таймер
@@ -309,6 +323,7 @@ class AICF_ConstructionPlanner
 				continue;
 			}
 			state.m_Order = order;
+			order.m_iAttemptLimit = m_Config.m_iAttempts;
 			order.m_iSearchOffset = state.m_aSearchOffsets[type];
 			order.m_iStage = -1;
 			order.Log("CONSTRUCTION_DECISION");
@@ -426,10 +441,15 @@ class AICF_ConstructionPlanner
 		}
 		while (order.m_iStage == 0 && m_iCandidatesThisTick < m_Config.m_iCandidatesPerTick && candidates++ < m_Config.m_iCandidatesPerTick && System.GetTickCount() - sliceStarted < m_Config.m_iSliceMs)
 		{
-			if (order.m_iAttempts >= m_Config.m_iAttempts)
+			if (order.m_iAttempts >= order.m_iAttemptLimit)
 			{
-				Cancel(state, "SEARCH_BUDGET_EXHAUSTED");
-				return;
+				if (order.m_eType != AICF_EConstructionType.SMALL_BARRACKS)
+				{
+					Cancel(state, "SEARCH_BUDGET_EXHAUSTED");
+					return;
+				}
+				order.LogSearch();
+				order.m_iAttemptLimit += m_Config.m_iAttempts;
 			}
 			int previousAttempts = order.m_iAttempts;
 			bool found = m_Search.BeginCandidate(order);
@@ -650,6 +670,8 @@ class AICF_ConstructionPlanner
 
 	protected bool AccessClear(AICF_ConstructionOrder order)
 	{
+		if (order.m_bForcedSmallBarracks && order.m_eType == AICF_EConstructionType.SMALL_BARRACKS)
+			return true;
 		array<SCR_ServicePointComponent> services = {};
 		order.m_Base.GetServices(services);
 		foreach (SCR_ServicePointComponent service : services)

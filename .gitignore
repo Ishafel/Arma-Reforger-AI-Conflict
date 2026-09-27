@@ -36,19 +36,17 @@
 !/tools/fixtures/AICF_NorthFailureProbe.c
 !/tools/fixtures/AICF_NativeMoveFailureProbe.c
 !/tools/fixtures/AICF_MusterTurretRuntimeProbe.c
-/docs/*
-!/docs/releases/
-/docs/releases/*
-!/docs/releases/[0-9]*.[0-9]*.[0-9]*.md
+/docs/
 
 !/tools/Test-DefendWaypointInputContracts.ps1
 !/tools/fixtures/AICF_DefendWaypointInputProbe.c
 !/tools/Test-InfantryApproachContracts.ps1
 !/tools/fixtures/AICF_InfantryApproachProbe.c
 !/tools/fixtures/AICF_ApproachRecoveryProbe.c
+!/tools/fixtures/AICF_ForcedSmallBarracksProbe.c
+!/tools/Test-ForcedSmallBarracksLog.ps1
+!/tools/Test-ForcedSmallBarracksContracts.ps1
 !/tools/Test-SquadCommandsContracts.ps1
 !/tools/fixtures/AICF_SquadCommandsProbe.c
-!/docs/SQUAD_COMMANDS.md
 !/tools/Test-SquadRespawnContracts.ps1
 !/tools/fixtures/AICF_SquadRespawnProbe.c
-!/docs/SQUAD_RESPAWN.md

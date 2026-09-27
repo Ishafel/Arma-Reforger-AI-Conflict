@@ -345,6 +345,8 @@ class AICF_ConstructionSiteSearch
 		}
 		if (order.m_iStage == 3 && order.m_bTerrainLiveChecked)
 		{
+			if (order.m_bForcedSmallBarracks && order.m_eType == AICF_EConstructionType.SMALL_BARRACKS)
+				return 1;
 			if (!order.m_bPathAdmitted)
 				return 2;
 			return ValidatePath(order, pathfinding, sliceMs);
@@ -433,6 +435,11 @@ class AICF_ConstructionSiteSearch
 			order.m_bTerrainLiveChecked = true;
 		}
 		// Проверенный endpoint затем без пересчёта использует worker.
+		if (order.m_bForcedSmallBarracks && order.m_eType == AICF_EConstructionType.SMALL_BARRACKS)
+		{
+			order.m_sReason = "SITE_VALIDATED";
+			return 1;
+		}
 		if (!order.m_bPathAdmitted)
 			return 2;
 		if (System.GetTickCount() - sliceStarted >= sliceMs)
@@ -760,7 +767,8 @@ class AICF_ConstructionSiteSearch
 		if (atomic && !BeginLiveBudget(order, liveQueries))
 			return false;
 		bool clear = LiveClearNow(order, excludedRoot);
-		if (clear && order.m_iStage == 4 && !excludedRoot)
+		bool forcedSmall = order.m_bForcedSmallBarracks && order.m_eType == AICF_EConstructionType.SMALL_BARRACKS;
+		if (clear && order.m_iStage == 4 && !excludedRoot && !forcedSmall)
 			clear = WorkerClear(order, order.m_vWork);
 		if (atomic)
 			s_AtomicOrder = null;

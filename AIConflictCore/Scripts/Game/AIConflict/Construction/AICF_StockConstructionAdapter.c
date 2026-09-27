@@ -74,6 +74,24 @@ modded class SCR_CampaignBuildingManagerComponent
 
 class AICF_StockConstructionAdapter
 {
+	void CompleteForcedSmall(AICF_ConstructionOrder order)
+	{
+		if (!Replication.IsServer() || !order || !order.m_bForcedSmallBarracks ||
+			order.m_eType != AICF_EConstructionType.SMALL_BARRACKS || !order.m_bAccepted ||
+			!order.m_bPaid || !order.IdentityValid() || !order.PlacementUnchanged() ||
+			order.m_Composition.m_AICFConstructionReceipt != order || order.m_Composition.IsCompositionSpawned() ||
+			order.m_Base.AreEnemiesPresent() || order.m_Base.IsBeingCaptured() ||
+			order.m_Base.GetCaptureState() != SCR_EBaseCaptureState.NONE)
+			return;
+		SCR_CampaignBuildingLayoutComponent layout = order.m_Composition.GetCompositionLayout();
+		if (!layout || layout.GetToBuildValue() <= 0 || layout.GetCurrentBuildValue() >= layout.GetToBuildValue())
+			return;
+		// Штатный callback создаёт composition/service. Override SetBuildingValue
+		// непосредственно повторяет физический completion guard, включая occupancy.
+		layout.SetBuildingValue(layout.GetToBuildValue());
+		order.Log("CONSTRUCTION_FORCED_SMALL_COMPLETION", "completion_requested=1");
+	}
+
 	bool Place(AICF_ConstructionOrder order, AICF_ConstructionConfig config, AICF_EconomySystem economy,
 		SCR_CampaignBuildingManagerComponent manager, AICF_BaseBuilderService builders)
 	{
