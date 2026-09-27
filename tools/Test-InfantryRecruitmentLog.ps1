@@ -20,7 +20,9 @@ foreach ($line in $lines) {
     $key = "$($fields.faction):$($fields.slot):$($fields.generation):$($fields.token)"
     if ($event -eq 'INFANTRY_RECRUITMENT_STARTED') {
         if ($visits.ContainsKey($key)) { $failures.Add("Duplicate visit $key") }
-        if ([double]$fields.distance_m -gt 500 -or [int]$fields.alive -ge [int]$fields.desired) { $failures.Add("Invalid admission $key") }
+        $manual = $fields.player_requested -eq '1'
+        if ((!$manual -and [double]$fields.distance_m -gt 500) -or [double]$fields.distance_m -lt 0 -or [int]$fields.alive -ge [int]$fields.desired) { $failures.Add("Invalid admission $key") }
+        if ($manual -and $fields.max_distance_m -ne '-1') { $failures.Add("Invalid manual distance policy $key") }
         $visits[$key] = @{ Arrived = $false; Pending = $null; Debit = 0; Finished = $false; Group = $fields.group; Joins = 0 }
         continue
     }

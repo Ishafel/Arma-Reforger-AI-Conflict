@@ -2337,5 +2337,113 @@ StringTable
 			Target_en_us "SUPPLIES"
 			Target_ru_ru "СНАБЖЕНИЕ"
 		}
+		CustomStringTableItem "{A1CF260927010001}"
+		{
+			Id "AICF_UI_RecruitSquad"
+			Target_en_us "Replenish squad at nearest barracks"
+			Target_ru_ru "Пополнить отряд в ближайшей казарме"
+		}
+		CustomStringTableItem "{A1CF260927010002}"
+		{
+			Id "AICF_UI_ReturnSquadAI"
+			Target_en_us "Return squad to AI commander"
+			Target_ru_ru "Вернуть отряд ИИ-командиру"
+		}
+		CustomStringTableItem "{A1CF260927010003}"
+		{
+			Id "AICF_UI_SquadCommandSent"
+			Target_en_us "Order sent. Waiting for server response."
+			Target_ru_ru "Приказ отправлен. Ожидание ответа сервера."
+		}
+		CustomStringTableItem "{A1CF260927010004}"
+		{
+			Id "AICF_UI_SquadCommandResult"
+			Target_en_us "Squad %1: %2"
+			Target_ru_ru "Отряд %1: %2"
+		}
+		CustomStringTableItem "{A1CF260927010005}"
+		{
+			Id "AICF_UI_SquadCommand_MATCH_UNAVAILABLE"
+			Target_en_us "Command is not ready. Try again shortly."
+			Target_ru_ru "Командование пока недоступно. Повторите чуть позже."
+		}
+		CustomStringTableItem "{A1CF260927010006}"
+		{
+			Id "AICF_UI_SquadCommand_GROUP_UNAVAILABLE"
+			Target_en_us "Select a ready infantry squad below its target size, on foot and without recovery in progress."
+			Target_ru_ru "Для пополнения нужен готовый неполный пехотный отряд вне техники; дождитесь завершения восстановления."
+		}
+		CustomStringTableItem "{A1CF260927010007}"
+		{
+			Id "AICF_UI_SquadCommand_RATE_LIMITED"
+			Target_en_us "Orders are too frequent. Try again shortly."
+			Target_ru_ru "Слишком частые приказы. Повторите чуть позже."
+		}
+		CustomStringTableItem "{A1CF260927010008}"
+		{
+			Id "AICF_UI_SquadCommand_VEHICLE_ACTIVE"
+			Target_en_us "Wait for the current vehicle trip to finish."
+			Target_ru_ru "Дождитесь завершения текущей поездки."
+		}
+		CustomStringTableItem "{A1CF260927010009}"
+		{
+			Id "AICF_UI_SquadCommand_RECRUITMENT_ACTIVE"
+			Target_en_us "This squad already has a replenishment visit."
+			Target_ru_ru "Этот отряд уже выполняет пополнение."
+		}
+		CustomStringTableItem "{A1CF26092701000A}"
+		{
+			Id "AICF_UI_SquadCommand_ROSTER_UNAVAILABLE"
+			Target_en_us "No recruit is available for the missing roster position."
+			Target_ru_ru "Не удалось подобрать бойца для свободной позиции состава."
+		}
+		CustomStringTableItem "{A1CF26092701000B}"
+		{
+			Id "AICF_UI_SquadCommand_NO_SAFE_BARRACKS"
+			Target_en_us "No safe allied barracks with enough supplies."
+			Target_ru_ru "Нет безопасной союзной казармы с достаточными припасами."
+		}
+		CustomStringTableItem "{A1CF26092701000C}"
+		{
+			Id "AICF_UI_SquadCommand_BARRACKS_ROUTE_UNAVAILABLE"
+			Target_en_us "Barracks route is not ready. Try again shortly."
+			Target_ru_ru "Маршрут к казарме пока недоступен. Повторите чуть позже."
+		}
+		CustomStringTableItem "{A1CF26092701000D}"
+		{
+			Id "AICF_UI_SquadCommand_RECRUITMENT_STARTED"
+			Target_en_us "Moving to the nearest eligible barracks. The previous order will resume after replenishment."
+			Target_ru_ru "Отряд направлен в ближайшую подходящую казарму. После пополнения продолжит прежний приказ."
+		}
+		CustomStringTableItem "{A1CF26092701000E}"
+		{
+			Id "AICF_UI_SquadCommand_AI_COMMANDER_DISABLED"
+			Target_en_us "AI commander is disabled for this faction in this scenario."
+			Target_ru_ru "ИИ-командир этой стороны отключён настройками сценария."
+		}
+		CustomStringTableItem "{A1CF26092701000F}"
+		{
+			Id "AICF_UI_SquadCommand_RECRUITMENT_CLEANUP_PENDING"
+			Target_en_us "Recruitment cleanup is pending. Try again shortly."
+			Target_ru_ru "Завершается отмена пополнения. Повторите чуть позже."
+		}
+		CustomStringTableItem "{A1CF260927010010}"
+		{
+			Id "AICF_UI_SquadCommand_AI_COMMANDER_RESTORED"
+			Target_en_us "Control returned to the AI commander."
+			Target_ru_ru "Управление возвращено ИИ-командиру."
+		}
+		CustomStringTableItem "{A1CF260927010011}"
+		{
+			Id "AICF_UI_SquadCommand_AI_COMMANDER_PENDING_TARGET"
+			Target_en_us "Control returned to AI. Waiting for an available assignment."
+			Target_ru_ru "Управление возвращено ИИ. Ожидание доступной задачи."
+		}
+		CustomStringTableItem "{A1CF260927010012}"
+		{
+			Id "AICF_UI_SquadCommand_INVALID_COMMAND"
+			Target_en_us "Unknown squad command."
+			Target_ru_ru "Неизвестная команда отряда."
+		}
 	}
 }

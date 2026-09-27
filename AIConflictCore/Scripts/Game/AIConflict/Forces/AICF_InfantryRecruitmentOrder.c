@@ -10,6 +10,7 @@ class AICF_InfantryRecruitmentOrder
 	int m_iIntent;
 	int m_iGraphRevision;
 	int m_iToken;
+	bool m_bPlayerRequested;
 	SCR_CampaignMilitaryBaseComponent m_Base;
 	EntityID m_BaseId;
 	SCR_ServicePointComponent m_Service;
@@ -36,7 +37,8 @@ class AICF_InfantryRecruitmentOrder
 			m_Group.GetFaction() == m_Faction && slot.GetSpawnGeneration() == m_iGeneration &&
 			slot.GetStrategicAssignmentRevision() == m_iAssignment &&
 			slot.GetStrategicIntentRevision() == m_iIntent && slot.GetWaypoint() == m_Waypoint &&
-			slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY && !slot.HasPlayerStrategicIntent();
+			slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY &&
+			(m_bPlayerRequested || !slot.HasPlayerStrategicIntent());
 	}
 
 	bool HasSafeBarracks()

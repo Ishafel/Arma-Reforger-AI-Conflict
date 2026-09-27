@@ -3142,7 +3142,14 @@ class AICF_OrderPlanner
 
 	bool BeginInfantryRecruitment(AICF_InfantryRecruitmentOrder order)
 	{
-		if (!order || !CanRecruitInfantry(order.m_Slot, order.m_Faction) || !order.HasSafeBarracks())
+		if (!order || !order.HasSafeBarracks())
+			return false;
+		if (order.m_bPlayerRequested)
+		{
+			if (!CanPlayerRecruitInfantry(order.m_Slot, order.m_Faction))
+				return false;
+		}
+		else if (!CanRecruitInfantry(order.m_Slot, order.m_Faction))
 			return false;
 		AIPathfindingComponent pathfinding = AIPathfindingComponent.Cast(order.m_Group.FindComponent(AIPathfindingComponent));
 		vector endpoint;
@@ -3174,11 +3181,37 @@ class AICF_OrderPlanner
 		ClearOrder(order.m_Slot);
 		order.m_Group.AddWaypointAt(waypoint, 0);
 		order.m_Slot.AssignObjective(order.m_Base, waypoint);
+		if (order.m_bPlayerRequested)
+		{
+			order.m_Slot.BeginPlayerStrategicOrder();
+			order.m_Slot.ClearAwaitingPlayerCommand();
+		}
 		order.m_Slot.RecordStrategicAssignment(order.m_Base, "INFANTRY_RECRUITMENT");
 		order.m_Waypoint = waypoint;
 		order.m_iAssignment = order.m_Slot.GetStrategicAssignmentRevision();
 		order.m_Slot.SetRecruitmentOrder(order);
 		return true;
+	}
+
+	bool CanPlayerRecruitInfantry(AICF_GroupSlot slot, SCR_CampaignFaction faction)
+	{
+		return Replication.IsServer() && slot && faction && slot.IsCombatReady() &&
+			slot.GetGroup() && slot.GetGroup().GetFaction() == faction &&
+			slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY && !slot.HasPendingOrderRecovery() &&
+			AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()) < slot.GetDesiredSize() &&
+			AICF_GroupRuntime.CountAliveAgentsInAnyVehicle(slot.GetGroup()) == 0;
+	}
+
+	// Снимает ручное назначение; новую стратегию выбирает faction commander.
+	void ReleasePlayerCommand(AICF_GroupSlot slot)
+	{
+		if (!Replication.IsServer() || !slot)
+			return;
+		ClearOrder(slot);
+		slot.ClearStrategicIntent();
+		slot.ClearPlayerStrategicOrder();
+		slot.ClearAwaitingPlayerCommand();
+		slot.RecordStrategicAssignment(null, string.Empty);
 	}
 
 	void EndInfantryRecruitment(AICF_InfantryRecruitmentOrder order, AICF_ObjectiveGraph graph,
@@ -3191,6 +3224,8 @@ class AICF_OrderPlanner
 		if (current)
 		{
 			ClearOrder(order.m_Slot);
+			if (order.m_bPlayerRequested)
+				order.m_Slot.ClearPlayerStrategicOrder();
 			if (restore)
 				AssignOrder(order.m_Slot, order.m_Faction, graph, selector, "INFANTRY_RECRUITMENT_FINISHED");
 		}

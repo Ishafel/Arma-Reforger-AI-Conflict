@@ -95,8 +95,53 @@ class AICF_InfantryRecruitmentService
 		}
 	}
 
+	// Ручной визит сохраняет прежний intent и использует ту же платную транзакцию.
+	bool RequestPlayerRecruitment(AICF_GroupSlot slot, SCR_CampaignFaction faction, out string reason)
+	{
+		reason = "GROUP_UNAVAILABLE";
+		if (m_bStopped || !Replication.IsServer() || !m_Campaign || !m_Campaign.IsMaster() ||
+			!m_Campaign.IsRunning() || !m_Planner.CanPlayerRecruitInfantry(slot, faction))
+			return false;
+		reason = "RECRUITMENT_ACTIVE";
+		if (HasOrder(slot))
+			return false;
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
+		ResourceName prefab;
+		string role;
+		int memberIndex;
+		reason = "ROSTER_UNAVAILABLE";
+		if (!leader || !m_Spawner.FindMissingMember(slot, faction, prefab, role, memberIndex))
+			return false;
+		AICF_InfantryRecruitmentOrder order = SelectBarracks(slot, faction, leader.GetOrigin(), m_Config.Cost(role), true);
+		reason = "NO_SAFE_BARRACKS";
+		if (!order)
+			return false;
+		reason = "BARRACKS_ROUTE_UNAVAILABLE";
+		if (!m_Planner.BeginInfantryRecruitment(order))
+			return false;
+		m_aOrders.Insert(order);
+		order.Log("INFANTRY_RECRUITMENT_STARTED", string.Format(
+			"alive=%1 desired=%2 distance_m=%3 max_distance_m=-1 intent_revision=%4 graph_revision=%5 player_requested=1",
+			AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()), slot.GetDesiredSize(),
+			vector.DistanceXZ(leader.GetOrigin(), order.m_vPosition), order.m_iIntent, order.m_iGraphRevision));
+		reason = "RECRUITMENT_STARTED";
+		return true;
+	}
+
+	bool CancelForSlot(AICF_GroupSlot slot)
+	{
+		if (!Replication.IsServer())
+			return false;
+		for (int index = m_aOrders.Count() - 1; index >= 0; index--)
+		{
+			if (m_aOrders[index].m_Slot == slot)
+				Finish(index, "PLAYER_RELEASE", false);
+		}
+		return !HasOrder(slot);
+	}
+
 	protected AICF_InfantryRecruitmentOrder SelectBarracks(AICF_GroupSlot slot, SCR_CampaignFaction faction,
-		vector position, int cost)
+		vector position, int cost, bool playerRequested = false)
 	{
 		SCR_CampaignMilitaryBaseComponent nearest;
 		float nearestDistance = float.MAX;
@@ -114,7 +159,7 @@ class AICF_InfantryRecruitmentService
 		}
 		SCR_CampaignMilitaryBaseComponent target = slot.GetStrategicIntentTargetBase();
 		vector targetPosition;
-		if (!nearest || !target || !m_Planner.TryResolveSlotTargetPosition(slot, target, targetPosition))
+		if (!playerRequested && (!nearest || !target || !m_Planner.TryResolveSlotTargetPosition(slot, target, targetPosition)))
 			return null;
 		float targetDistance = vector.DistanceSqXZ(position, targetPosition);
 		AICF_InfantryRecruitmentOrder best;
@@ -127,7 +172,7 @@ class AICF_InfantryRecruitmentService
 			SCR_CampaignMilitaryBaseComponent base = candidateNode.GetBase();
 			if (!base || !base.GetOwner() || base.GetFaction() != faction || base.GetSupplies() < cost)
 				continue;
-			if (base != nearest && m_Graph.GetHopDistance(nearest, base) != 1 && m_Graph.GetHopDistance(base, nearest) != 1)
+			if (!playerRequested && base != nearest && m_Graph.GetHopDistance(nearest, base) != 1 && m_Graph.GetHopDistance(base, nearest) != 1)
 				continue;
 			array<SCR_ServicePointComponent> services = {};
 			base.GetServices(services);
@@ -137,12 +182,13 @@ class AICF_InfantryRecruitmentService
 					continue;
 				vector servicePosition = service.GetOwner().GetOrigin();
 				float distanceSq = vector.DistanceSqXZ(position, servicePosition);
-				if (distanceSq > AICF_InfantryRecruitmentConfig.MAX_DISTANCE_METERS * AICF_InfantryRecruitmentConfig.MAX_DISTANCE_METERS ||
-					(base != nearest && distanceSq > AICF_InfantryRecruitmentConfig.ARRIVAL_METERS * AICF_InfantryRecruitmentConfig.ARRIVAL_METERS && distanceSq >= targetDistance) ||
+				if ((!playerRequested && (distanceSq > AICF_InfantryRecruitmentConfig.MAX_DISTANCE_METERS * AICF_InfantryRecruitmentConfig.MAX_DISTANCE_METERS ||
+					(base != nearest && distanceSq > AICF_InfantryRecruitmentConfig.ARRIVAL_METERS * AICF_InfantryRecruitmentConfig.ARRIVAL_METERS && distanceSq >= targetDistance))) ||
 					distanceSq >= bestDistance)
 					continue;
 				AICF_InfantryRecruitmentOrder order = new AICF_InfantryRecruitmentOrder();
 				order.m_Slot = slot;
+				order.m_bPlayerRequested = playerRequested;
 				order.m_Faction = faction;
 				order.m_Group = slot.GetGroup();
 				order.m_GroupId = order.m_Group.GetID();
@@ -178,13 +224,20 @@ class AICF_InfantryRecruitmentService
 			return "BARRACKS_UNAVAILABLE";
 		}
 		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(order.m_Group);
-		if (!leader || vector.DistanceSqXZ(leader.GetOrigin(), order.m_vPosition) >
-			AICF_InfantryRecruitmentConfig.MAX_DISTANCE_METERS * AICF_InfantryRecruitmentConfig.MAX_DISTANCE_METERS)
+		if (!leader || (!order.m_bPlayerRequested && vector.DistanceSqXZ(leader.GetOrigin(), order.m_vPosition) >
+			AICF_InfantryRecruitmentConfig.MAX_DISTANCE_METERS * AICF_InfantryRecruitmentConfig.MAX_DISTANCE_METERS))
 			return "BARRACKS_OUT_OF_RANGE";
 		if (order.m_iSpawnAtMs > 0 && !order.m_Donor)
 			return "DONOR_LOST";
 		int now = System.GetTickCount();
-		if (now - order.m_iStartedAtMs >= AICF_InfantryRecruitmentConfig.VISIT_TIMEOUT_MS)
+		int visitTimeout = AICF_InfantryRecruitmentConfig.VISIT_TIMEOUT_MS;
+		int approachTimeout = AICF_InfantryRecruitmentConfig.APPROACH_TIMEOUT_MS;
+		if (order.m_bPlayerRequested)
+		{
+			visitTimeout = AICF_InfantryRecruitmentConfig.PLAYER_VISIT_TIMEOUT_MS;
+			approachTimeout = AICF_InfantryRecruitmentConfig.PLAYER_APPROACH_TIMEOUT_MS;
+		}
+		if (now - order.m_iStartedAtMs >= visitTimeout)
 			return "VISIT_TIMEOUT";
 		int alive = AICF_GroupRuntime.CountAliveAgents(order.m_Group);
 		order.m_Slot.CompleteInfantryMusterIfReady();
@@ -200,7 +253,7 @@ class AICF_InfantryRecruitmentService
 			return "SUPPLIES_UNAVAILABLE";
 		if (!order.IsPhysicallyPresent())
 		{
-			if (order.m_iArrivedAtMs > 0 || now - order.m_iStartedAtMs >= AICF_InfantryRecruitmentConfig.APPROACH_TIMEOUT_MS)
+			if (order.m_iArrivedAtMs > 0 || now - order.m_iStartedAtMs >= approachTimeout)
 				return "APPROACH_INTERRUPTED_OR_TIMEOUT";
 			return string.Empty;
 		}

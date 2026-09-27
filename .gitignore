@@ -45,3 +45,6 @@
 !/tools/Test-InfantryApproachContracts.ps1
 !/tools/fixtures/AICF_InfantryApproachProbe.c
 !/tools/fixtures/AICF_ApproachRecoveryProbe.c
+!/tools/Test-SquadCommandsContracts.ps1
+!/tools/fixtures/AICF_SquadCommandsProbe.c
+!/docs/SQUAD_COMMANDS.md

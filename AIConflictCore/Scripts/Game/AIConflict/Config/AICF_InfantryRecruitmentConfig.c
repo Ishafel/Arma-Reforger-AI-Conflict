@@ -8,6 +8,8 @@ class AICF_InfantryRecruitmentConfig
 	static const int APPROACH_TIMEOUT_MS = 180000;
 	static const int SPAWN_TIMEOUT_MS = 30000;
 	static const int VISIT_TIMEOUT_MS = 300000;
+	static const int PLAYER_APPROACH_TIMEOUT_MS = 900000;
+	static const int PLAYER_VISIT_TIMEOUT_MS = 1200000;
 	static const int RETRY_MS = 60000;
 	static const int PURCHASE_INTERVAL_MS = 3000;
 	int m_iRiflemanCost = 10;

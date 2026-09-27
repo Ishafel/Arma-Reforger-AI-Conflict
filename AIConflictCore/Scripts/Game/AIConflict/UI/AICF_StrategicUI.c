@@ -9,7 +9,9 @@ enum AICF_EStrategicUIButtonAction
 	SET_ROLE,
 	SET_UNIT_TYPE,
 	ADJUST_SIZE,
-	EDIT_LOADOUT
+	EDIT_LOADOUT,
+	RECRUIT,
+	RETURN_TO_AI
 }
 
 class AICF_StrategicUIButtonHandler : ScriptedWidgetEventHandler
@@ -65,6 +67,9 @@ class AICF_StrategicUIController
 	protected Widget m_wCommandAccent;
 	protected Widget m_wCloseButton;
 	protected Widget m_wLoadoutButton;
+	protected Widget m_wRecruitButton;
+	protected Widget m_wReturnAIButton;
+	protected int m_iSquadCommandResultSequence;
 	protected TextWidget m_wCommandOverview;
 	protected TextWidget m_wCommandStatus;
 	protected TextWidget m_wTargetTitle;
@@ -162,6 +167,12 @@ class AICF_StrategicUIController
 			case AICF_EStrategicUIButtonAction.ISSUE_TARGET:
 				IssueOrder(value);
 				break;
+			case AICF_EStrategicUIButtonAction.RECRUIT:
+				IssueSquadCommand(AICF_ESquadCommand.RECRUIT);
+				break;
+			case AICF_EStrategicUIButtonAction.RETURN_TO_AI:
+				IssueSquadCommand(AICF_ESquadCommand.RETURN_TO_AI);
+				break;
 			case AICF_EStrategicUIButtonAction.SELECT_MAP_POINT:
 				BeginMapPointSelection();
 				break;
@@ -230,6 +241,13 @@ class AICF_StrategicUIController
 		EnsureHUD();
 		RefreshHUD();
 		ObservePendingMapPointOrder();
+		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
+		if (player && player.AICF_GetSquadCommandSequence() != m_iSquadCommandResultSequence)
+		{
+			m_iSquadCommandResultSequence = player.AICF_GetSquadCommandSequence();
+			if (m_wCommandStatus)
+				m_wCommandStatus.SetText(AICF_Localization.Resolve(player.AICF_GetSquadCommandMessage()));
+		}
 		if (m_wMapToggleText)
 		{
 			m_wMapToggleText.SetText(AICF_Localization.Resolve(AICF_Localization.Format(
@@ -503,7 +521,7 @@ class AICF_StrategicUIController
 			15, Color.FromSRGBA(132, 149, 159, 255));
 
 		m_wCommandStatus = CreateText(
-			m_wCommandPanel, 0.03, 0.84, 0.97, 0.925,
+			m_wCommandPanel, 0.03, 0.907, 0.97, 0.99,
 			"{AICF:AICF_UI_HOW_TO_USE_SELECT_GROUP_CONFIGURE_ROLE_TYP_201828d4}",
 			15, Color.FromSRGBA(173, 190, 200, 255));
 		Widget loadoutButton = CreateRect(m_wCommandPanel, 0.03, 0.792, 0.47, 0.835,
@@ -511,6 +529,16 @@ class AICF_StrategicUIController
 		m_wLoadoutButton = loadoutButton;
 		CreateText(loadoutButton, 0, 0, 1, 1, "{AICF:AICF_UI_Loadout_4e116f01}", 19, Color.FromSRGBA(255, 255, 255, 255), true);
 		AttachHandler(loadoutButton, AICF_EStrategicUIButtonAction.EDIT_LOADOUT);
+		m_wRecruitButton = CreateRect(m_wCommandPanel, 0.03, 0.843, 0.49, 0.896,
+			Color.FromSRGBA(35, 85, 65, 255), true);
+		CreateText(m_wRecruitButton, 0, 0, 1, 1, "{AICF:AICF_UI_RecruitSquad}",
+			16, Color.FromSRGBA(235, 245, 240, 255), true);
+		AttachHandler(m_wRecruitButton, AICF_EStrategicUIButtonAction.RECRUIT);
+		m_wReturnAIButton = CreateRect(m_wCommandPanel, 0.515, 0.843, 0.97, 0.896,
+			Color.FromSRGBA(24, 79, 105, 255), true);
+		CreateText(m_wReturnAIButton, 0, 0, 1, 1, "{AICF:AICF_UI_ReturnSquadAI}",
+			16, Color.FromSRGBA(220, 244, 255, 255), true);
+		AttachHandler(m_wReturnAIButton, AICF_EStrategicUIButtonAction.RETURN_TO_AI);
 		AICF_Stage4Diagnostics.Info(
 			"STRATEGIC_UI_READY",
 			string.Format("faction=%1 interaction=BUTTON_WIDGET", localFactionKey));
@@ -684,6 +712,16 @@ class AICF_StrategicUIController
 				m_wTargetEmptyState.SetVisible(true);
 			}
 		}
+	}
+
+	protected void IssueSquadCommand(AICF_ESquadCommand command)
+	{
+		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
+		if (!player || !m_Campaign)
+			return;
+		player.AICF_RequestSquadCommand(m_iSelectedSlot, command);
+		if (m_wCommandStatus)
+			m_wCommandStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_SquadCommandSent}"));
 	}
 
 	protected void IssueOrder(int targetCallsign)
@@ -1233,6 +1271,8 @@ class AICF_StrategicUIController
 		m_wCommandAccent = null;
 		m_wCloseButton = null;
 		m_wLoadoutButton = null;
+		m_wRecruitButton = null;
+		m_wReturnAIButton = null;
 		m_wCommandOverview = null;
 		m_wCommandStatus = null;
 		m_wTargetTitle = null;
@@ -1263,6 +1303,8 @@ class AICF_StrategicUIController
 		SetRectColor(m_wCommandAccent, Color.FromSRGBA(226, 167, 79, 255));
 		SetRectColor(m_wCloseButton, Color.FromSRGBA(91, 34, 34, 250));
 		SetRectColor(m_wLoadoutButton, Color.FromSRGBA(46, 74, 91, 255));
+		SetRectColor(m_wRecruitButton, Color.FromSRGBA(35, 85, 65, 255));
+		SetRectColor(m_wReturnAIButton, Color.FromSRGBA(24, 79, 105, 255));
 		SetRectColor(m_wMapPointPrompt, Color.FromSRGBA(6, 18, 25, 245));
 		SetRectColor(m_wMapPointCancel, Color.FromSRGBA(91, 34, 34, 250));
 		foreach (Widget roleButton : m_aRoleButtons)

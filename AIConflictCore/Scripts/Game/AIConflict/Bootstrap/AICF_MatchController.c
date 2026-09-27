@@ -608,6 +608,64 @@ class AICF_MatchController
 		return m_Logistics.RequestTransport(player, request, source, destination, amount, reason);
 	}
 
+	bool RequestPlayerSquadCommand(SCR_PlayerController player, int slotId, AICF_ESquadCommand command, out string reason)
+	{
+		reason = "MATCH_UNAVAILABLE";
+		if (!Replication.IsServer() || m_bStopped || !m_Campaign || !m_Campaign.IsMaster() ||
+			!m_Campaign.IsRunning() || !m_bRosterReady || m_bGraphRebuildNeeded ||
+			!m_OrderPlanner || !m_InfantryRecruitment)
+			return false;
+		reason = "GROUP_UNAVAILABLE";
+		if (!player || player.GetPlayerId() <= 0 ||
+			GetGame().GetPlayerManager().GetPlayerController(player.GetPlayerId()) != player)
+			return false;
+		SCR_CampaignFaction faction = SCR_CampaignFaction.Cast(SCR_FactionManager.SGetPlayerFaction(player.GetPlayerId()));
+		if (!faction)
+			return false;
+		AICF_FactionState state = GetPlayerPointFactionState(m_ContentProfile.GetStableFactionKey(faction.GetFactionKey()));
+		if (!state)
+			return false;
+		AICF_GroupSlot slot = state.GetSlot(slotId);
+		if (!slot || !slot.IsCombatReady() || !slot.GetGroup() || slot.GetGroup().GetFaction() != faction || slot.HasPendingOrderRecovery())
+			return false;
+		reason = "RATE_LIMITED";
+		if (!ConsumePlayerOrderRateLimit(player.GetPlayerId()))
+			return false;
+		if (command == AICF_ESquadCommand.RECRUIT)
+		{
+			reason = "VEHICLE_ACTIVE";
+			if (m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot))
+				return false;
+			if (!m_InfantryRecruitment.RequestPlayerRecruitment(slot, faction, reason))
+				return false;
+		}
+		else if (command == AICF_ESquadCommand.RETURN_TO_AI)
+		{
+			AICF_AICommander commander = GetAICommanderForFaction(faction);
+			reason = "AI_COMMANDER_DISABLED";
+			if (!commander || !commander.OwnsSlot(slot))
+				return false;
+			reason = "RECRUITMENT_CLEANUP_PENDING";
+			if (!m_InfantryRecruitment.CancelForSlot(slot))
+				return false;
+			bool suspended = m_VehicleCoordinator && m_VehicleCoordinator.IsInfantryOrderSuspended(slot);
+			m_OrderPlanner.ReleasePlayerCommand(slot);
+			bool assigned = commander.AssignOrder(slot, "PLAYER_RELEASE", null, suspended);
+			if (m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot))
+				m_VehicleCoordinator.AdoptCurrentStrategicAssignment(slot, faction, "PLAYER_RELEASE", m_iStrategicBaseRevision);
+			reason = "AI_COMMANDER_RESTORED";
+			if (!assigned)
+				reason = "AI_COMMANDER_PENDING_TARGET";
+		}
+		else
+		{
+			reason = "INVALID_COMMAND";
+			return false;
+		}
+		SyncStrategicUIState();
+		return true;
+	}
+
 	bool RequestPlayerOrder(int playerId, int slotId, int targetCallsign)
 	{
 		if (!Replication.IsServer() || m_bStopped || !m_Campaign ||
