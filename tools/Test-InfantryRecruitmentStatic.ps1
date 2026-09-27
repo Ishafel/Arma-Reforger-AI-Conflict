@@ -24,6 +24,35 @@ Assert-Contract 'Orders/AICF_OrderPlanner.c' 'bool CanRecruitInfantry\([^}]*!slo
 Assert-Contract 'Orders/AICF_OrderPlanner.c' '(?s)bool BeginInfantryRecruitment\(.*?if \(!navmesh.IsTileLoaded\(order.m_vPosition\) && !navmesh.IsTileRequested\(order.m_vPosition\)\)\s*navmesh.LoadTileIn\(order.m_vPosition\);\s*if \(!pathfinding.GetClosestPositionOnNavmesh' 'RECRUITMENT_NO_DUPLICATE_TILE_REQUEST'
 Assert-Contract 'Bootstrap/AICF_MatchController.c' 'm_InfantryRecruitment.Stop\(\)[\s\S]*m_EconomySystem.Stop' 'STOP_BEFORE_ECONOMY'
 $service = [IO.File]::ReadAllText((Join-Path $core 'Forces/AICF_InfantryRecruitmentService.c'))
+$slotSource = [IO.File]::ReadAllText((Join-Path $core 'State/AICF_GroupSlot.c'))
+$plannerSource = [IO.File]::ReadAllText((Join-Path $core 'Orders/AICF_OrderPlanner.c'))
+function Test-MusterContracts([string]$Slot, [string]$Planner, [string]$Service) {
+    $rules = @(
+        @($Slot, 'CountAliveAgents\(m_Group\) < GetDesiredSize\(\)[\s\S]*?return false;[\s\S]*?m_bInfantryMusterComplete = true;', 'MUSTER_FULL_ROSTER'),
+        @($Slot, '!m_bInfantryMusterComplete && GetDesiredSize\(\) > 1 && !HasPlayerStrategicIntent\(\)', 'MUSTER_PLAYER_PRIORITY'),
+        @($Slot, 'void ClearRuntimeReferences\(\)[\s\S]*?m_bInfantryMusterComplete = false;', 'MUSTER_NEW_GENERATION'),
+        @($Slot, 'return IsWaitingForInfantryMuster\(\) \|\|', 'MUSTER_RECOVERY_EXCLUSION'),
+        @($Planner, 'decisionAuthority == AICF_EStrategicDecisionAuthority.AI_COMMANDER && slot.NeedsInfantryMuster\(\)[\s\S]*?return HoldInfantryForMuster\(slot, faction\);[\s\S]*?AIWaypoint newWaypoint;', 'MUSTER_BEFORE_ATTACK'),
+        @($Planner, 'bool HoldInfantryForMuster[\s\S]*?ResolveAliveLeader\(slot.GetGroup\(\)\)[\s\S]*?CreatePositionWaypoint\(leader.GetOrigin\(\)\)', 'MUSTER_PHYSICAL_ORIGIN'),
+        @($Service, 'RefreshInfantryMuster\(slot, faction, m_Graph, m_Selector\);', 'MUSTER_UPDATE')
+    )
+    foreach ($rule in $rules) { if ($rule[0] -notmatch $rule[1]) { $rule[2] } }
+}
+foreach ($failure in @(Test-MusterContracts $slotSource $plannerSource $service)) { $failures.Add($failure) }
+$mutations = @(
+    @('slot','CountAliveAgents(m_Group) < GetDesiredSize()', 'false', 'MUSTER_FULL_ROSTER'),
+    @('slot','!m_bInfantryMusterComplete && GetDesiredSize() > 1 && !HasPlayerStrategicIntent()', 'true', 'MUSTER_PLAYER_PRIORITY'),
+    @('slot','m_bInfantryMusterComplete = false;', 'm_bInfantryMusterComplete = true;', 'MUSTER_NEW_GENERATION'),
+    @('slot','return IsWaitingForInfantryMuster() ||', 'return', 'MUSTER_RECOVERY_EXCLUSION'),
+    @('planner','return HoldInfantryForMuster(slot, faction);', 'return false;', 'MUSTER_BEFORE_ATTACK'),
+    @('planner','CreatePositionWaypoint(leader.GetOrigin())', 'CreatePositionWaypoint(slot.GetGroup().GetOrigin())', 'MUSTER_PHYSICAL_ORIGIN'),
+    @('service','m_Planner.RefreshInfantryMuster(slot, faction, m_Graph, m_Selector);', '', 'MUSTER_UPDATE')
+)
+foreach ($mutation in $mutations) {
+    $inputs = @{slot=$slotSource;planner=$plannerSource;service=$service}
+    $inputs[$mutation[0]] = $inputs[$mutation[0]].Replace($mutation[1], $mutation[2])
+    if ($mutation[3] -notin @(Test-MusterContracts $inputs.slot $inputs.planner $inputs.service)) { $failures.Add('MUSTER_MUTATION_ESCAPED: ' + $mutation[3]) }
+}
 if ($service -match 'CallLater\s*\(|GetOn\w+\(\)\.Insert') { $failures.Add('UNOWNED_CALLBACK') }
 if (Test-Path (Join-Path $core 'Forces/AICF_InfantryRecruitmentRuntimeProbe.c')) { $failures.Add('FIXTURE_IN_PRODUCTION') }
 if ($failures.Count) {
@@ -32,3 +61,4 @@ if ($failures.Count) {
     exit 1
 }
 Write-Output 'Infantry recruitment static: PASS (seed, identity, locality, payment, readiness, cleanup, authority)'
+Write-Output 'Infantry muster contracts: PASS (7 negative mutations)'

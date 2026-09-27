@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$LogPath,
-    [switch]$RequireFullRosters
+    [switch]$RequireFullRosters,
+    [switch]$RequireMuster
 )
 $ErrorActionPreference = 'Stop'
 $lines = Get-Content -LiteralPath $LogPath
@@ -65,6 +66,11 @@ if ($RequireFullRosters) {
     if (!($lines -match '\[RECRUIT_PROBE\].*finished=1 full_rosters=1')) { $failures.Add('Probe did not complete') }
 }
 if (!$visits.Count) { $failures.Add('No recruitment visits') }
+if ($RequireMuster) {
+    if (!($lines -match '\[MUSTER_PROBE\] waited_ms=\d+ held=1 us=1 ussr=1')) { $failures.Add('Missing physical hold before barracks') }
+    if (!($lines -match '\[MUSTER_PROBE\] finished=1 held_until_full=1 full_rosters=1')) { $failures.Add('Muster did not hold until full rosters') }
+    if ($lines -match '\[MUSTER_PROBE\].*(?:held=0|held_until_full=0|full_rosters=0)') { $failures.Add('Muster probe reported a failed gate') }
+}
 foreach ($key in $visits.Keys) {
     if (!$visits[$key].Finished) { $failures.Add("Unfinished visit $key") }
 }

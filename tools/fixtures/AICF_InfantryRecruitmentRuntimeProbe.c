@@ -7,6 +7,10 @@ modded class AICF_MatchController
 	protected int m_iRecruitProbeSample;
 	protected EntityID m_RecruitProbeUSGroup;
 	protected EntityID m_RecruitProbeUSSRGroup;
+	protected bool m_bRecruitProbeMusterPlaced;
+	protected bool m_bRecruitProbeMusterFailed;
+	protected vector m_vRecruitProbeUSStart;
+	protected vector m_vRecruitProbeUSSRStart;
 	protected ref array<SCR_CampaignBuildingCompositionComponent> m_aRecruitProbeBuildings = {};
 
 	override protected void Update()
@@ -21,6 +25,8 @@ modded class AICF_MatchController
 	protected void RecruitProbeUpdate()
 	{
 		int now = System.GetTickCount();
+		string musterFlag;
+		bool musterProbe = System.GetCLIParam("aicfRecruitProbeMuster", musterFlag) && musterFlag == "1";
 		if (m_iRecruitProbeStarted == 0)
 		{
 			m_iRecruitProbeStarted = now;
@@ -32,8 +38,13 @@ modded class AICF_MatchController
 				m_USState.GetSlot(i).SetDesiredSize(1);
 				m_USSRState.GetSlot(i).SetDesiredSize(1);
 			}
-			RecruitProbePlace(m_USFaction);
-			RecruitProbePlace(m_USSRFaction);
+			m_vRecruitProbeUSStart = AICF_GroupRuntime.ResolveAliveLeader(m_USState.GetSlot(0).GetGroup()).GetOrigin();
+			m_vRecruitProbeUSSRStart = AICF_GroupRuntime.ResolveAliveLeader(m_USSRState.GetSlot(0).GetGroup()).GetOrigin();
+			if (!musterProbe)
+			{
+				RecruitProbePlace(m_USFaction);
+				RecruitProbePlace(m_USSRFaction);
+			}
 			Print("[AICF][RECRUIT_PROBE] prepared=1 selected_slots=US:0,USSR:0 other_slots_desired=1");
 		}
 		foreach (SCR_CampaignBuildingCompositionComponent composition : m_aRecruitProbeBuildings)
@@ -48,6 +59,29 @@ modded class AICF_MatchController
 		AICF_GroupSlot ussr = m_USSRState.GetSlot(0);
 		int usAlive = AICF_GroupRuntime.CountAliveAgents(us.GetGroup());
 		int ussrAlive = AICF_GroupRuntime.CountAliveAgents(ussr.GetGroup());
+		if (musterProbe)
+		{
+			if ((usAlive < us.GetDesiredSize() && !us.IsRecruitingInfantry()) ||
+				(ussrAlive < ussr.GetDesiredSize() && !ussr.IsRecruitingInfantry()))
+				m_bRecruitProbeMusterFailed = true;
+			if (!m_bRecruitProbeMusterPlaced)
+			{
+				IEntity usLeader = AICF_GroupRuntime.ResolveAliveLeader(us.GetGroup());
+				IEntity ussrLeader = AICF_GroupRuntime.ResolveAliveLeader(ussr.GetGroup());
+				if (!usLeader || !ussrLeader ||
+					vector.DistanceXZ(usLeader.GetOrigin(), m_vRecruitProbeUSStart) > 30 ||
+					vector.DistanceXZ(ussrLeader.GetOrigin(), m_vRecruitProbeUSSRStart) > 30)
+					m_bRecruitProbeMusterFailed = true;
+				if (now - m_iRecruitProbeStarted >= 60000)
+				{
+					Print(string.Format("[AICF][MUSTER_PROBE] waited_ms=%1 held=%2 us=%3 ussr=%4",
+						now - m_iRecruitProbeStarted, !m_bRecruitProbeMusterFailed, usAlive, ussrAlive));
+					RecruitProbePlace(m_USFaction);
+					RecruitProbePlace(m_USSRFaction);
+					m_bRecruitProbeMusterPlaced = true;
+				}
+			}
+		}
 		string faultFlag;
 		bool faults = System.GetCLIParam("aicfRecruitProbeFaults", faultFlag) && faultFlag == "1";
 		bool faultsComplete = faults && now - m_iRecruitProbeStarted >= 20000 &&
@@ -66,6 +100,8 @@ modded class AICF_MatchController
 		}
 		if (m_iRecruitProbePhase == 1 || faultsComplete || now - m_iRecruitProbeStarted >= 240000)
 		{
+			if (musterProbe)
+				Print(string.Format("[AICF][MUSTER_PROBE] finished=1 held_until_full=%1 full_rosters=%2", !m_bRecruitProbeMusterFailed, m_iRecruitProbePhase == 1));
 			if (faults)
 				Print(string.Format("[AICF][RECRUIT_PROBE] negative_complete=%1 us=%2 ussr=%3 pending=%4", faultsComplete, usAlive, ussrAlive, m_InfantryRecruitment.CountPendingAgents()));
 			Print(string.Format("[AICF][RECRUIT_PROBE] finished=1 full_rosters=%1", m_iRecruitProbePhase == 1));

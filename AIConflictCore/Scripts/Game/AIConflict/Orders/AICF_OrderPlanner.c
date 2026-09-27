@@ -2314,6 +2314,14 @@ class AICF_OrderPlanner
 		if (!group || !slot.IsCombatReady())
 			return false;
 
+		slot.CompleteInfantryMusterIfReady();
+		if (decisionAuthority == AICF_EStrategicDecisionAuthority.AI_COMMANDER && slot.NeedsInfantryMuster())
+		{
+			if (updateStrategicIntent)
+				slot.CommitStrategicIntent(target, posture, decisionAuthority);
+			return HoldInfantryForMuster(slot, faction);
+		}
+
 		AIWaypoint newWaypoint;
 		bool approachRoute;
 		bool useStuckRoute = recoverStuckRoute && !loneSurvivorRetreat && !systemHold &&
@@ -3078,6 +3086,48 @@ class AICF_OrderPlanner
 		}
 
 		return objectiveAction;
+	}
+
+	// Удержание у фактического места сбора сохраняет боевое намерение отдельно.
+	bool HoldInfantryForMuster(AICF_GroupSlot slot, SCR_CampaignFaction faction)
+	{
+		if (!Replication.IsServer() || !slot || !faction || !slot.IsCombatReady() ||
+			!slot.NeedsInfantryMuster() || !slot.HasStrategicIntent() ||
+			!m_AuthorityPolicy || !m_AuthorityPolicy.IsAICommanderEnabled(faction.GetFactionKey()))
+			return false;
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
+		if (!leader)
+			return false;
+		AIWaypoint waypoint = CreatePositionWaypoint(leader.GetOrigin());
+		if (!waypoint)
+			return false;
+		ClearOrder(slot);
+		slot.GetGroup().AddWaypointAt(waypoint, 0);
+		slot.AssignObjective(slot.GetStrategicIntentTargetBase(), waypoint);
+		slot.SetDecisionAuthority(AICF_EStrategicDecisionAuthority.AI_COMMANDER);
+		slot.ClearAwaitingPlayerCommand();
+		slot.RecordStrategicAssignment(slot.GetStrategicIntentTargetBase(), "INFANTRY_MUSTER");
+		AICF_Stage4Diagnostics.Info("INFANTRY_MUSTER_WAITING", string.Format(
+			"faction=%1 slot=%2 generation=%3 group=%4 alive=%5 desired=%6 waypoint=%7",
+			faction.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), slot.GetGroup().GetID(),
+			AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()), slot.GetDesiredSize(), waypoint.GetID()));
+		return true;
+	}
+
+	void RefreshInfantryMuster(AICF_GroupSlot slot, SCR_CampaignFaction faction,
+		AICF_ObjectiveGraph graph, AICF_TargetSelector selector)
+	{
+		if (!Replication.IsServer() || !slot || !slot.IsWaitingForInfantryMuster())
+			return;
+		if (slot.CompleteInfantryMusterIfReady())
+		{
+			ClearOrder(slot);
+			slot.RecordStrategicAssignment(slot.GetStrategicIntentTargetBase(), slot.GetStrategicIntentPosture());
+			AssignOrder(slot, faction, graph, selector, "INFANTRY_MUSTER_COMPLETE");
+			return;
+		}
+		if (!slot.GetWaypoint() || slot.GetGroup().GetCurrentWaypoint() != slot.GetWaypoint())
+			HoldInfantryForMuster(slot, faction);
 	}
 
 	bool CanRecruitInfantry(AICF_GroupSlot slot, SCR_CampaignFaction faction)

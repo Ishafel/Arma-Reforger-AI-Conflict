@@ -66,6 +66,7 @@ class AICF_InfantryRecruitmentService
 		for (int index = 0; index < state.GetSlotCount(); index++)
 		{
 			AICF_GroupSlot slot = state.GetSlot(index);
+			m_Planner.RefreshInfantryMuster(slot, faction, m_Graph, m_Selector);
 			if (!m_Planner.CanRecruitInfantry(slot, faction) || HasOrder(slot))
 				continue;
 			int retry = m_aRetrySlots.Find(slot);
@@ -180,6 +181,7 @@ class AICF_InfantryRecruitmentService
 		if (now - order.m_iStartedAtMs >= AICF_InfantryRecruitmentConfig.VISIT_TIMEOUT_MS)
 			return "VISIT_TIMEOUT";
 		int alive = AICF_GroupRuntime.CountAliveAgents(order.m_Group);
+		order.m_Slot.CompleteInfantryMusterIfReady();
 		if (alive <= 0 || alive >= order.m_Slot.GetDesiredSize())
 			return "ROSTER_COMPLETE_OR_EMPTY";
 		if (!order.m_Donor && !m_Spawner.FindMissingMember(order.m_Slot, order.m_Faction, order.m_sPrefab, order.m_sRole, order.m_iMemberIndex))

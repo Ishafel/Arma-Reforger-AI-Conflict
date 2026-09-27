@@ -315,7 +315,29 @@ class AICF_GroupSlot
 	}
 
 	protected AICF_InfantryRecruitmentOrder m_RecruitmentOrder;
+	protected bool m_bInfantryMusterComplete;
 	protected ref array<IEntity> m_aRosterMembers = {};
+
+	bool CompleteInfantryMusterIfReady()
+	{
+		if (!Replication.IsServer() || !IsCombatReady() ||
+			AICF_GroupRuntime.CountAliveAgents(m_Group) < GetDesiredSize())
+			return false;
+		m_bInfantryMusterComplete = true;
+		return true;
+	}
+
+	bool NeedsInfantryMuster()
+	{
+		return GetUnitType() == AICF_EGroupUnitType.INFANTRY &&
+			!m_bInfantryMusterComplete && GetDesiredSize() > 1 && !HasPlayerStrategicIntent();
+	}
+
+	bool IsWaitingForInfantryMuster()
+	{
+		return IsCombatReady() && GetUnitType() == AICF_EGroupUnitType.INFANTRY &&
+			!HasPlayerStrategicIntent() && GetOperationalPosture() == "INFANTRY_MUSTER";
+	}
 
 	void RecordDeploymentMembers()
 	{
@@ -351,7 +373,8 @@ class AICF_GroupSlot
 
 	bool IsRecruitingInfantry()
 	{
-		return m_RecruitmentOrder && m_RecruitmentOrder.IsCurrent(this);
+		// Ожидание первой казармы — часть набора: commander/recovery не уводят seed в бой.
+		return IsWaitingForInfantryMuster() || (m_RecruitmentOrder && m_RecruitmentOrder.IsCurrent(this));
 	}
 
 	void SetRoleAndIndex(AICF_EGroupRole role, int roleIndex)
@@ -2527,6 +2550,7 @@ class AICF_GroupSlot
 		m_bIsolatedNavmeshRecoveryUsed = false;
 		ClearStuckRouteWaypoint();
 		m_RecruitmentOrder = null;
+		m_bInfantryMusterComplete = false;
 		m_aRosterMembers.Clear();
 		if (m_Group)
 		{
