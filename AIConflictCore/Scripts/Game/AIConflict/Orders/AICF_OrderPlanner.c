@@ -626,6 +626,21 @@ class AICF_OrderPlanner
 		{
 			return false;
 		}
+		// Recruitment/vehicle lifecycle мог снять прежний hold. Cooldown
+		// запрещает маршрут, но не должен оставлять живой slot без waypoint.
+		if (authority == AICF_EStrategicDecisionAuthority.AI_COMMANDER && slot.IsRouteTargetDeferred(target))
+		{
+			if (!Replication.IsServer())
+				return false;
+			if (slot.IsTemporaryRouteReplanHold() && slot.GetWaypoint() && slot.GetGroup() &&
+				slot.GetGroup().GetCurrentWaypoint() == slot.GetWaypoint())
+				return true;
+			IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
+			if (!leader)
+				return false;
+			// Восстановление hold не продлевает уже запущенный cooldown.
+			return HoldPositionForTemporaryRouteReplan(slot, faction, target, leader.GetOrigin(), false);
+		}
 
 		return ReplaceOrder(
 			slot,
@@ -1396,6 +1411,8 @@ class AICF_OrderPlanner
 			return "TARGET_INVALID";
 		if (!slot.GetWaypoint())
 			return "WAYPOINT_REFERENCE_MISSING";
+		if (slot.HasFailedMovement())
+			return "WAYPOINT_MOVE_FAILED";
 		if (slot.GetGroup().GetCurrentWaypoint() != slot.GetWaypoint())
 			return "WAYPOINT_NOT_CURRENT";
 		if (slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION &&
@@ -1430,6 +1447,10 @@ class AICF_OrderPlanner
 		if (slot && slot.IsRecruitingInfantry())
 			return true;
 		if (!slot || !faction || !graph || !targetSelector || !slot.IsCombatReady())
+			return false;
+		// Общий route recovery переводит исчерпанный бюджет в физический hold.
+		if (slot.HasFailedMovement() && slot.GetFalseCompletionNoProgressCount() >= 3 &&
+			slot.GetTargetKind() == AICF_EOrderTargetKind.BASE)
 			return false;
 
 		SCR_CampaignMilitaryBaseComponent oldTarget = slot.GetTargetBase();
@@ -1985,7 +2006,8 @@ class AICF_OrderPlanner
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction,
 		SCR_CampaignMilitaryBaseComponent target,
-		vector fieldPosition)
+		vector fieldPosition,
+		bool deferTarget = true)
 	{
 		if (!slot || !faction || !target || !slot.IsCombatReady() || !slot.GetGroup())
 			return false;
@@ -2029,6 +2051,8 @@ class AICF_OrderPlanner
 			return false;
 		}
 		slot.BeginTemporaryRouteReplanHold(fieldPosition);
+		if (deferTarget)
+			slot.DeferFailedRouteTarget(target);
 		return true;
 	}
 
@@ -2275,6 +2299,8 @@ class AICF_OrderPlanner
 		bool useStuckRoute = recoverStuckRoute && !loneSurvivorRetreat && !systemHold &&
 			slot.GetRole() == AICF_EGroupRole.ATTACK && target &&
 			target.GetType() != SCR_ECampaignBaseType.RELAY;
+		if (decisionAuthority == AICF_EStrategicDecisionAuthority.AI_COMMANDER && slot.IsRouteTargetDeferred(target))
+			return false;
 		if (useStuckRoute)
 			newWaypoint = CreateStuckRouteWaypoint(slot, faction, target);
 		else if (loneSurvivorRetreat)
@@ -2599,7 +2625,8 @@ class AICF_OrderPlanner
 				faction,
 				trigger,
 				excludedTarget,
-				preferredIndex);
+				preferredIndex,
+				slot);
 		}
 
 		if (slot.GetRole() == AICF_EGroupRole.DEFEND)

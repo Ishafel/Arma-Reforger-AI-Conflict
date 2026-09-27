@@ -139,6 +139,8 @@ class AICF_ConstructionPlanner
 					order.m_sReason = "STOCK_SERVICE_ONLINE";
 					order.LogSearch();
 					order.Log("CONSTRUCTION_COMPLETED", "service_online=1");
+					state.m_aSearchFailures[order.m_eType] = 0;
+					state.m_aSearchRetryAt[order.m_eType] = 0;
 					state.m_Order = null;
 					state.m_iNextType = 0;
 					state.m_iSmallFailures = 0;
@@ -247,6 +249,17 @@ class AICF_ConstructionPlanner
 		SCR_CampaignBuildingProviderComponent provider = base.GetMasterProvider();
 		if (!commander || !provider || !provider.GetOwner() || m_Builders.HasUnfinishedWork(base))
 			return;
+		if (state.m_RetryFaction != faction || state.m_RetryProviderId != provider.GetOwner().GetID())
+		{
+			state.m_RetryFaction = faction;
+			state.m_RetryProviderId = provider.GetOwner().GetID();
+			for (int resetType; resetType < AICF_EConstructionType.COUNT; resetType++)
+			{
+				state.m_aSearchFailures[resetType] = 0;
+				state.m_aSearchRetryAt[resetType] = 0;
+				state.m_aSearchOffsets[resetType] = 0;
+			}
+		}
 		AICF_ConstructionOrder order = new AICF_ConstructionOrder();
 		order.m_sToken = "construction-" + (++m_iNextToken).ToString();
 		order.m_sFaction = AICF_ContentProfile.GetActive().GetStableFactionKey(faction.GetFactionKey());
@@ -269,7 +282,7 @@ class AICF_ConstructionPlanner
 		}
 		array<bool> coverage = {};
 		for (int type; type < AICF_EConstructionType.COUNT; type++)
-			coverage.Insert(Covered(order, type));
+			coverage.Insert(Covered(order, type) || now < state.m_aSearchRetryAt[type]);
 		for (int attempt; attempt < AICF_EConstructionType.COUNT; attempt++)
 		{
 			int type = commander.SelectConstructionType(coverage, state.m_iNextType);
@@ -281,7 +294,13 @@ class AICF_ConstructionPlanner
 			if (!order.m_Metadata || !order.m_Metadata.m_bValid)
 			{
 				order.m_sReason = "UNSUPPORTED_PREFAB_METADATA";
-				order.Log("CONSTRUCTION_DEFERRED");
+				// Metadata неизменна в пределах запущенной кампании и уже кешируется.
+				// Отказ публикуется один раз на prefab, без новых фиктивных заказов.
+				if (order.m_Metadata && !order.m_Metadata.m_bInvalidReported)
+				{
+					order.m_Metadata.m_bInvalidReported = true;
+					order.Log("CONSTRUCTION_DEFERRED", "metadata_reason=" + order.m_Metadata.m_sInvalidReason);
+				}
 				continue;
 			}
 			if (!m_Economy.QuoteConstruction(order, m_Config))
@@ -553,6 +572,17 @@ class AICF_ConstructionPlanner
 		if (!order.m_bAccepted)
 			order.m_bCancelled = true;
 		string cause = order.m_sReason;
+		if (!order.m_bAccepted && (reason == "SEARCH_BUDGET_EXHAUSTED" || reason == "SEARCH_AREA_EXHAUSTED"))
+		{
+			int failures = Math.Min(4, state.m_aSearchFailures[order.m_eType] + 1);
+			state.m_aSearchFailures[order.m_eType] = failures;
+			int retryMs = m_Config.m_iCooldownMs;
+			for (int backoff = 1; backoff < failures; backoff++)
+				retryMs *= 2;
+			retryMs = Math.Max(m_Config.m_iCooldownMs, Math.Min(480000, retryMs));
+			state.m_aSearchRetryAt[order.m_eType] = System.GetTickCount() + retryMs;
+			order.Log("CONSTRUCTION_SEARCH_BACKOFF", string.Format("failures=%1 retry_ms=%2 terminal_reason=%3 cause=%4", failures, retryMs, reason, cause));
+		}
 		order.m_sReason = reason;
 		order.Log("CONSTRUCTION_CANCELLED", "reservation_released=1 cause=" + cause);
 		state.m_iNextType = (order.m_eType + 1) % AICF_EConstructionType.COUNT;

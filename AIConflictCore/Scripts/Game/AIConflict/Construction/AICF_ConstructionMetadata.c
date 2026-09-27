@@ -66,6 +66,8 @@ class AICF_ConstructionMetadata
 	int m_iSpawnSlots;
 	int m_iRequiredServices;
 	bool m_bValid;
+	string m_sInvalidReason;
+	bool m_bInvalidReported;
 	bool m_bGeometryError;
 	bool m_bGeometryLoaded;
 	ref array<vector> m_aServiceAnchors = {};
@@ -136,19 +138,35 @@ class AICF_ConstructionMetadata
 		m_sPrefab = prefab;
 		m_eType = type;
 		m_iPrefabId = manager.GetCompositionId(prefab);
+		m_sInvalidReason = "COMPOSITION_NOT_REGISTERED";
 		if (m_iPrefabId < 0)
 			return;
 		SCR_EditableEntityUIInfo info = SCR_EditableEntityUIInfo.ExtractEditableUIInfoFromPrefab(prefab);
-		if (!info || info.GetFactionKey() != faction.GetFactionKey() || !info.HasEntityLabel(faction.GetFactionLabel()) ||
-			!info.HasEntityLabel(ServiceLabel(type)) || !info.HasEntityLabel(EEditableEntityLabel.TRAIT_SERVICE))
+		m_sInvalidReason = "EDITABLE_INFO_MISSING";
+		if (!info)
+			return;
+		m_sInvalidReason = "FACTION_KEY_MISMATCH";
+		if (info.GetFactionKey() != faction.GetFactionKey())
+			return;
+		m_sInvalidReason = "FACTION_LABEL_MISSING";
+		if (!info.HasEntityLabel(faction.GetFactionLabel()))
+			return;
+		m_sInvalidReason = "SERVICE_LABEL_MISSING";
+		if (!info.HasEntityLabel(ServiceLabel(type)))
+			return;
+		m_sInvalidReason = "SERVICE_TRAIT_MISSING";
+		if (!info.HasEntityLabel(EEditableEntityLabel.TRAIT_SERVICE))
 			return;
 		info.GetEntityLabels(m_aLabels);
+		m_sInvalidReason = "OUTLINE_MANAGER_MISSING";
 		if (!manager.GetOutlineManager())
 			return;
 		m_sOutline = manager.GetOutlineManager().AICF_ResolveOutline(prefab, info);
+		m_sInvalidReason = "OUTLINE_MISSING";
 		if (m_sOutline.IsEmpty())
 			return;
 		m_bValid = true;
+		m_sInvalidReason = string.Empty;
 	}
 
 	// -1 unsupported, 0 pending, 1 cached. Создание meshes распределено по ticks.
@@ -218,6 +236,16 @@ class AICF_ConstructionMetadata
 			m_bValid = false;
 		if (IsDepot() && (m_aExitPairs.IsEmpty() || m_aExitPairs.Count() > 4))
 			m_bValid = false;
+		if (!m_bValid)
+		{
+			m_sInvalidReason = "GEOMETRY_INVALID";
+			if (m_iRequiredServices <= 0)
+				m_sInvalidReason = "SERVICE_COMPONENT_MISSING";
+			else if (m_aCollisionVolumes.IsEmpty())
+				m_sInvalidReason = "COLLISION_VOLUMES_MISSING";
+			else if (IsDepot() && (m_aExitPairs.IsEmpty() || m_aExitPairs.Count() > 4))
+				m_sInvalidReason = "DEPOT_EXIT_COUNT_UNSUPPORTED";
+		}
 		AICF_Stage1Diagnostics.Info("CONSTRUCTION_METADATA", string.Format("prefab=%1 valid=%2 min=%3 max=%4 meshes=%5 anchors=%6 services=%7 spawn_slots=%8 cpu_ms=%9",
 			m_sPrefab, m_bValid, m_vMin, m_vMax, m_iMeshes, m_aServiceAnchors.Count(), m_iRequiredServices, m_iSpawnSlots, m_iGeometryCpuMs));
 		AICF_Stage1Diagnostics.Info("CONSTRUCTION_COLLISION_METADATA", string.Format("prefab=%1 volumes=%2", m_sPrefab, m_aCollisionVolumes.Count()));

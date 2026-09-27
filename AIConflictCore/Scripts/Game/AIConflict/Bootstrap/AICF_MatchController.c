@@ -4407,7 +4407,7 @@ class AICF_MatchController
 			faction,
 			"FALSE_COMPLETION_FULL_REPLAN",
 			failedTarget);
-		if (!replanned)
+		if (!replanned && !slot.IsRouteTargetDeferred(failedTarget))
 			replanned = m_OrderPlanner.RebuildCurrentOrder(
 				slot,
 				faction,

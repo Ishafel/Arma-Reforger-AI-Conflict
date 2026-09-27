@@ -8,7 +8,8 @@ class AICF_TargetSelector
 		SCR_CampaignFaction faction,
 		out string selectionMode,
 		SCR_CampaignMilitaryBaseComponent excludedTarget = null,
-		int preferredIndex = 0)
+		int preferredIndex = 0,
+		AICF_GroupSlot routeSlot = null)
 	{
 		selectionMode = "NO_REACHABLE_TARGET";
 		if (!graph || !faction || !faction.GetMainBase())
@@ -37,6 +38,7 @@ class AICF_TargetSelector
 			SCR_CampaignMilitaryBaseComponent currentBase = currentNode.GetBase();
 			if (currentNodeId != startNodeId &&
 				currentBase != excludedTarget &&
+				(!routeSlot || !routeSlot.IsRouteTargetDeferred(currentBase)) &&
 				currentBase.IsValidTarget(faction))
 			{
 				if (currentBase.GetType() == SCR_ECampaignBaseType.RELAY ||
@@ -60,7 +62,7 @@ class AICF_TargetSelector
 		}
 
 		if (rankedNodeIds.IsEmpty() && excludedTarget)
-			return SelectAttackTarget(graph, faction, selectionMode, null, preferredIndex);
+			return SelectAttackTarget(graph, faction, selectionMode, null, preferredIndex, routeSlot);
 		if (rankedNodeIds.IsEmpty())
 			return null;
 

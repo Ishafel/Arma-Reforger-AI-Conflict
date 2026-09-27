@@ -206,6 +206,10 @@ class AICF_ConstructionOrder
 
 class AICF_ConstructionBaseState
 {
+	SCR_CampaignFaction m_RetryFaction;
+	EntityID m_RetryProviderId;
+	ref array<int> m_aSearchFailures = {0, 0, 0, 0, 0};
+	ref array<int> m_aSearchRetryAt = {0, 0, 0, 0, 0};
 	SCR_CampaignMilitaryBaseComponent m_Base;
 	EntityID m_BaseId;
 	int m_iDueAt;

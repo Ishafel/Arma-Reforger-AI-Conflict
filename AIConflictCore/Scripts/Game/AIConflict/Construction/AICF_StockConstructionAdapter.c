@@ -30,7 +30,15 @@ modded class SCR_CampaignBuildingCompositionOutlineManager
 			return m_sSlotFlatMediumLayout;
 		if (info.HasEntityLabel(EEditableEntityLabel.SLOT_FLAT_LARGE))
 			return m_sSlotFlatLargeLayout;
-		return ResourceName.Empty;
+		if (info.HasEntityLabel(EEditableEntityLabel.SLOT_ROAD_SMALL))
+			return m_sSlotRoadSmallLayout;
+		if (info.HasEntityLabel(EEditableEntityLabel.SLOT_ROAD_MEDIUM))
+			return m_sSlotRoadMediumLayout;
+		if (info.HasEntityLabel(EEditableEntityLabel.SLOT_ROAD_LARGE))
+			return m_sSlotRoadLargeLayout;
+		// Тот же fail-safe, который stock GetCompositionOutline применит при
+		// paid placement. Полная composition geometry проверяется отдельно.
+		return m_sSlotFlatSmallLayout;
 	}
 }
 

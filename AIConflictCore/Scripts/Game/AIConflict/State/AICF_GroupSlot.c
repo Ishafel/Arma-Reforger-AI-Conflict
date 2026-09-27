@@ -1,6 +1,78 @@
 // Stable faction-local identity for one managed group across all replacements.
 class AICF_GroupSlot
 {
+	protected SCR_AIGroup m_FailedMoveGroup;
+	protected AIWaypoint m_FailedMoveWaypoint;
+	protected int m_iFailedMoveGeneration;
+	protected int m_iFailedMoveAssignment;
+	protected ref array<SCR_CampaignMilitaryBaseComponent> m_aRejectedRouteTargets = {};
+	protected ref array<int> m_aRejectedRouteUntil = {};
+	protected int m_iRejectedRouteGeneration;
+
+	bool ReportFailedMovement(SCR_AIGroup group, AIWaypoint waypoint)
+	{
+		if (!Replication.IsServer() || !group || group != m_Group || !waypoint || waypoint != m_Waypoint ||
+			group.GetCurrentWaypoint() != waypoint || !IsCombatReady() ||
+			GetUnitType() != AICF_EGroupUnitType.INFANTRY || IsRecruitingInfantry() ||
+			IsTemporaryRouteReplanHold() || IsPersistentStuckFieldHold() || IsSystemHoldOrder())
+			return false;
+		if (!HasFailedMovement())
+		{
+			m_FailedMoveGroup = group;
+			m_FailedMoveWaypoint = waypoint;
+			m_iFailedMoveGeneration = m_iSpawnGeneration;
+			m_iFailedMoveAssignment = m_iStrategicAssignmentRevision;
+			RecordFalseWaypointCompletion(waypoint.GetOrigin(), true);
+			AICF_Stage2Diagnostics.Warning("INFANTRY_MOVE_FAILED", string.Format(
+				"slot=%1 group=%2 group_generation=%3 assignment_revision=%4 waypoint=%5 reason=UNKNOWN next_action=ORDER_RECOVERY",
+				GetStableSlotKey(), group.GetID(), m_iSpawnGeneration, m_iStrategicAssignmentRevision, waypoint.GetID()));
+		}
+		return true;
+	}
+
+	bool HasFailedMovement()
+	{
+		return m_FailedMoveGroup && m_FailedMoveGroup == m_Group && m_FailedMoveWaypoint &&
+			m_FailedMoveWaypoint == m_Waypoint && m_iFailedMoveGeneration == m_iSpawnGeneration &&
+			m_iFailedMoveAssignment == m_iStrategicAssignmentRevision;
+	}
+
+	void DeferFailedRouteTarget(SCR_CampaignMilitaryBaseComponent target)
+	{
+		if (!target || HasPlayerStrategicIntent())
+			return;
+		if (m_iRejectedRouteGeneration != m_iSpawnGeneration)
+		{
+			m_aRejectedRouteTargets.Clear();
+			m_aRejectedRouteUntil.Clear();
+		}
+		m_iRejectedRouteGeneration = m_iSpawnGeneration;
+		int now = System.GetTickCount();
+		for (int old = m_aRejectedRouteTargets.Count() - 1; old >= 0; old--)
+		{
+			if (!m_aRejectedRouteTargets[old] || m_aRejectedRouteUntil[old] <= now)
+			{
+				m_aRejectedRouteTargets.RemoveOrdered(old);
+				m_aRejectedRouteUntil.RemoveOrdered(old);
+			}
+		}
+		int index = m_aRejectedRouteTargets.Find(target);
+		if (index < 0)
+		{
+			index = m_aRejectedRouteTargets.Insert(target);
+			m_aRejectedRouteUntil.Insert(0);
+		}
+		m_aRejectedRouteUntil[index] = now + 180000;
+	}
+
+	bool IsRouteTargetDeferred(SCR_CampaignMilitaryBaseComponent target)
+	{
+		if (!target || m_iRejectedRouteGeneration != m_iSpawnGeneration || HasPlayerStrategicIntent())
+			return false;
+		int index = m_aRejectedRouteTargets.Find(target);
+		return index >= 0 && System.GetTickCount() < m_aRejectedRouteUntil[index];
+	}
+
 	protected ref array<ref AICF_LoadoutBinding> m_aLoadouts = {};
 	protected int m_iLoadoutRevision;
 	protected int m_iDeploymentLoadoutRevision;
@@ -2320,6 +2392,8 @@ class AICF_GroupSlot
 
 	void ClearObjective()
 	{
+		m_FailedMoveGroup = null;
+		m_FailedMoveWaypoint = null;
 		ClearStuckRouteWaypoint();
 		ClearPendingOrderRecovery();
 		SupersedePendingStuckRecoveryEvidence("OBJECTIVE_CLEARED");
@@ -2333,6 +2407,8 @@ class AICF_GroupSlot
 	// the strategic target needed to restore the infantry order after dismount.
 	void SuspendObjectiveWaypoint()
 	{
+		m_FailedMoveGroup = null;
+		m_FailedMoveWaypoint = null;
 		ClearStuckRouteWaypoint();
 		ClearPendingOrderRecovery();
 		SupersedePendingStuckRecoveryEvidence("VEHICLE_CONTROL_ACQUIRED");
