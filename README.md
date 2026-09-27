@@ -27,6 +27,11 @@ runtime tables и проверки: [LOCALIZATION.md](docs/LOCALIZATION.md).
 стоимость, перенос библиотеки и ограничения проверок:
 [AI_LOADOUT_EDITOR.md](docs/AI_LOADOUT_EDITOR.md).
 
+После смерти в штатном списке пресетов можно выбрать карточку живого ИИ своего отряда и
+**«Принять управление»**. Игрок получает существующего бойца с его экипировкой;
+штатный таймер возрождения сохраняется. Правила и проверки:
+[SQUAD_RESPAWN.md](docs/SQUAD_RESPAWN.md).
+
 Arland загружает Core и stock integration; Everon и RHS добавляют собственный
 тонкий root-addon:
 

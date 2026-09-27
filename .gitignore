@@ -49,3 +49,6 @@
 !/tools/Test-SquadCommandsContracts.ps1
 !/tools/fixtures/AICF_SquadCommandsProbe.c
 !/docs/SQUAD_COMMANDS.md
+!/tools/Test-SquadRespawnContracts.ps1
+!/tools/fixtures/AICF_SquadRespawnProbe.c
+!/docs/SQUAD_RESPAWN.md

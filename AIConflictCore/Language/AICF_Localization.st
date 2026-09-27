@@ -2445,5 +2445,47 @@ StringTable
 			Target_en_us "Unknown squad command."
 			Target_ru_ru "Неизвестная команда отряда."
 		}
+		CustomStringTableItem "{A1CF260927020001}"
+		{
+			Id "AICF_UI_SquadRespawnTitle"
+			Target_en_us "Respawn as a squad AI"
+			Target_ru_ru "Возродиться за ИИ отряда"
+		}
+		CustomStringTableItem "{A1CF260927020002}"
+		{
+			Id "AICF_UI_SquadRespawnHint"
+			Target_en_us "Take control with this soldier's equipment."
+			Target_ru_ru "Принять управление с экипировкой этого бойца."
+		}
+		CustomStringTableItem "{A1CF260927020003}"
+		{
+			Id "AICF_UI_SquadRespawnTake"
+			Target_en_us "Take control"
+			Target_ru_ru "Принять управление"
+		}
+		CustomStringTableItem "{A1CF260927020004}"
+		{
+			Id "AICF_UI_SquadRespawnSoldier"
+			Target_en_us "AI soldier"
+			Target_ru_ru "Боец ИИ"
+		}
+		CustomStringTableItem "{A1CF260927020005}"
+		{
+			Id "AICF_UI_SquadRespawnPENDING"
+			Target_en_us "Request in progress…"
+			Target_ru_ru "Запрос выполняется…"
+		}
+		CustomStringTableItem "{A1CF260927020006}"
+		{
+			Id "AICF_UI_SquadRespawnUNAVAILABLE"
+			Target_en_us "Soldier unavailable. Select another or refresh."
+			Target_ru_ru "Боец недоступен. Выберите другого или дождитесь обновления."
+		}
+		CustomStringTableItem "{A1CF260927020007}"
+		{
+			Id "AICF_UI_SquadRespawnTIMER"
+			Target_en_us "Wait for the respawn timer, then try again."
+			Target_ru_ru "Дождитесь окончания таймера возрождения и повторите."
+		}
 	}
 }
