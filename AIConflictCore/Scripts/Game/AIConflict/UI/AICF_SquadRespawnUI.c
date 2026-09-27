@@ -47,6 +47,12 @@ modded class SCR_LoadoutGallery
 		}
 		m_aAICFCharacters.Clear();
 		m_aAICFCharacterIds.Clear();
+		// RemoveItem не сбрасывает индекс и видимость оставшихся пресетов.
+		// После сокращения roster старая страница может оказаться за концом списка.
+		m_iSelectedItem = 0;
+		ShowTiles(0, false);
+		SetupHints(m_aWidgets.Count(), false);
+		UpdatePagingButtons();
 	}
 
 	override void ClearAll()
@@ -80,12 +86,15 @@ modded class SCR_LoadoutGallery
 				m_aAICFCharacters.Insert(button);
 				m_aAICFCharacterIds.Insert(button.m_AICFCharacter);
 			}
-			ShowPagingButtons(false);
+			// AddItem обновляет paging до вставки: пересчитать по полному списку.
+			UpdatePagingButtons();
 		}
 		foreach (SCR_LoadoutButton button : m_aAICFCharacters)
 		{
 			button.SetSelected(button.m_AICFCharacter == selected);
-			button.SetEnabled(player.m_sAICFSquadRespawnResult != "PENDING");
+			// Native navigation раскрывает страницу только для disabled widget.
+			// Нельзя включать скрытые карточки во время покадровой синхронизации.
+			button.SetEnabled(button.GetRootWidget().IsVisible() && player.m_sAICFSquadRespawnResult != "PENDING");
 		}
 		if (selected.IsValid())
 		{
