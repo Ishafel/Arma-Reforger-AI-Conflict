@@ -51,3 +51,5 @@
 !/tools/fixtures/AICF_SquadCommandsProbe.c
 !/tools/Test-SquadRespawnContracts.ps1
 !/tools/fixtures/AICF_SquadRespawnProbe.c
+!/tools/Test-PresetRespawnLog.ps1
+!/tools/fixtures/AICF_PresetRespawnProbe.c

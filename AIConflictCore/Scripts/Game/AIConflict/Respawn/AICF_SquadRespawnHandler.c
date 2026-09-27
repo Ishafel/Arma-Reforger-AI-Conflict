@@ -43,8 +43,13 @@ modded class SCR_PossessSpawnRequestComponent
 	{
 		SCR_PlayerController player = SCR_PlayerController.Cast(GetPlayerController());
 		SCR_PossessSpawnData possess = SCR_PossessSpawnData.Cast(data);
+		AICF_SquadRespawnAttempt attempt;
 		if (player && possess && player.AICF_GetSquadRespawnAttempt() && player.AICF_GetSquadRespawnAttempt().m_RplId == possess.GetRplId())
-			player.AICF_FinishSquadRespawn(response);
+			attempt = player.AICF_GetSquadRespawnAttempt();
+		// Сначала native снимает authority lock, затем owner может снова
+		// отправлять запросы пресета и точки возрождения.
 		super.SendResponse_S(response, data);
+		if (attempt && player.AICF_GetSquadRespawnAttempt() == attempt)
+			player.AICF_FinishSquadRespawn(response);
 	}
 }

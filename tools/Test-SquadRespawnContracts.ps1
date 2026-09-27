@@ -28,7 +28,9 @@ $rules = @(
     @('Respawn/AICF_SquadRespawnRpc.c','respawn.RequestSpawn\(SCR_PossessSpawnData.FromRplId\(character\)\)','NATIVE_POSSESSION'),
     @('Respawn/AICF_SquadRespawnHandler.c','GetRespawnSystemComponent\(\).CanRequestSpawn_S\(requestComponent, this, data, result\)','NATIVE_TIMER'),
     @('Respawn/AICF_SquadRespawnHandler.c','(?s)AssignEntity_S\([^}]+IsCurrent\([^}]+return false;[^}]+super.AssignEntity_S','FINAL_REVALIDATION'),
-    @('Respawn/AICF_SquadRespawnHandler.c','(?s)SendResponse_S\([^}]+AICF_FinishSquadRespawn\(response\);[^}]+super.SendResponse_S','REQUEST_CLEANUP'),
+    @('Respawn/AICF_SquadRespawnHandler.c','(?s)SendResponse_S\([^}]+super.SendResponse_S\(response, data\);[^}]+player.AICF_GetSquadRespawnAttempt\(\) == attempt[^}]+AICF_FinishSquadRespawn\(response\);','REQUEST_CLEANUP'),
+    @('Respawn/AICF_SquadRespawnRpc.c','(?s)void AICF_RequestSquadRespawn\([^}]+!Replication.IsServer\(\)[^}]+!lock.TryLock\(this, false\)\) return;[^}]+m_bAICFSquadRequestLocked = true;','OWNER_REQUEST_SERIALIZATION'),
+    @('Respawn/AICF_SquadRespawnRpc.c','(?s)RpcDo_AICFSquadRespawnResult\(string result\)[^}]+result != "PENDING" && m_bAICFSquadRequestLocked[^}]+lock.Unlock\(this, false\);[^}]+m_bAICFSquadRequestLocked = false;','OWNER_REQUEST_RELEASE'),
     @('UI/AICF_SquadRespawnUI.c','button.m_OnClicked.Remove\(AICF_OnCharacterClicked\)','UI_CLEANUP'),
     @('UI/AICF_SquadRespawnUI.c','CreateWidgets\(m_sLoadoutButton, GetContentRoot\(\)\)','NATIVE_CARD'),
     @('UI/AICF_SquadRespawnUI.c','AddItem\(card\)','NATIVE_GALLERY'),
@@ -48,5 +50,6 @@ if ($production -match 'SpawnEntityPrefab|SetOrigin\(|SetHealth\(|SetInitialMain
 if ($files['UI/AICF_SquadRespawnUI.c'] -match 'CreateRect|FrameSlot|SCR_ComboBoxComponent') { $failures += 'SEPARATE_RESPAWN_PANEL' }
 if ($files['Respawn/AICF_SquadRespawnRpc.c'] -match '(?s)void AICF_RecordSquadDeath\(\)[^}]*m_AICFSquadRespawn = null') { $failures += 'LOST_PENDING_IDENTITY' }
 if (Test-Path (Join-Path $core 'Respawn/AICF_SquadRespawnProbe.c')) { $failures += 'FIXTURE_IN_PRODUCTION' }
+if ($production -match 'aicfPresetRespawnProbe|class AICF_PresetRespawnProbe') { $failures += 'PRESET_FIXTURE_IN_PRODUCTION' }
 if ($failures.Count) { Write-Output "Squad respawn contracts: FAIL $($failures -join ', ')"; exit 1 }
 Write-Output "Squad respawn contracts: PASS; negative mutations=$($rules.Count); runtime=NOT_RUN"

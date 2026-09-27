@@ -12,6 +12,7 @@ modded class SCR_PlayerController
 	int m_iAICFSquadListRevision;
 	int m_iAICFSquadListDeathRevision;
 	string m_sAICFSquadRespawnResult;
+	protected bool m_bAICFSquadRequestLocked;
 
 	void AICF_RecordSquadDeath()
 	{
@@ -36,6 +37,16 @@ modded class SCR_PlayerController
 	void AICF_RequestSquadRespawnList() { Rpc(RpcAsk_AICFSquadRespawnList); }
 	void AICF_RequestSquadRespawn(RplId character, int deathRevision)
 	{
+		// Custom RPC также участвует в native owner serialization. Иначе
+		// CanSpawn/RequestLoadout могут попасть на сервер во время possession
+		// и остаться без ответа после отказа занятого authority lock.
+		if (m_bAICFSquadRequestLocked) return;
+		if (!Replication.IsServer())
+		{
+			SCR_SpawnLockComponent lock = SCR_SpawnLockComponent.Cast(FindComponent(SCR_SpawnLockComponent));
+			if (!lock || !lock.TryLock(this, false)) return;
+			m_bAICFSquadRequestLocked = true;
+		}
 		m_sAICFSquadRespawnResult = "PENDING";
 		Rpc(RpcAsk_AICFSquadRespawn, character, deathRevision);
 	}
@@ -139,5 +150,14 @@ modded class SCR_PlayerController
 	}
 
 	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
-	protected void RpcDo_AICFSquadRespawnResult(string result) { m_sAICFSquadRespawnResult = result; }
+	protected void RpcDo_AICFSquadRespawnResult(string result)
+	{
+		if (result != "PENDING" && m_bAICFSquadRequestLocked)
+		{
+			SCR_SpawnLockComponent lock = SCR_SpawnLockComponent.Cast(FindComponent(SCR_SpawnLockComponent));
+			if (lock) lock.Unlock(this, false);
+			m_bAICFSquadRequestLocked = false;
+		}
+		m_sAICFSquadRespawnResult = result;
+	}
 }
