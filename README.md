@@ -3,7 +3,7 @@
 Scripts-first прототип автономной войны `US` против `USSR` поверх штатного
 режима Conflict. Проект использует существующий мир, базы, радио-граф, фракции
 и prefab-каталоги Arma Reforger. Собственных world/prefab/layout-ресурсов в
-репозитории нет; шесть inherited `MissionHeader` добавляют запуск из меню сценариев.
+репозитории нет; семь inherited `MissionHeader` добавляют запуск из меню сценариев.
 Северные stock/RHS Everon выбирают подмножество штатных баз через настройки Conflict.
 
 Игровая логика server-authoritative: сервер применяет выбранную при запуске
@@ -42,6 +42,14 @@ Arland загружает Core и stock integration; Everon и RHS добавл�
 | `AIConflictEveron` | `A4B2E62595F645A4` | Плитка stock Conflict для Everon и map-specific выход из изолированного radio-компонента |
 | `AIConflictArlandRHS` | `9F88011DA22B471C` | Опциональный RHS USMC против RHS MSV на штатной RHS Arland mission |
 | `AIConflictEveronRHS` | `FA9FDCCA428A43BA` | RHS USMC против RHS MSV на полном Everon; объединяет Everon radio policy и существующий RHS profile |
+| `AIConflictArlandWCSRHS` | `A1CF260928100001` | Arland WCS + RHS: комплекты пехоты РФ/НАТО; Abrams, Т-72, БМП-3 и Bradley дополняют технику RHS |
+
+Текущие границы, необходимые пакеты и запуск `-Variant ArlandWCSRHS`:
+[Arland WCS + RHS](AIConflictArlandWCSRHS/README.md).
+Комплекты WCS едины для AI и редактора; доступны вкладки Vanilla/RHS/WCS,
+новые предметы в арсенале и гусеничная техника WCS в тяжёлых заводах.
+В базовых комплектах нет ПНВ, защитные очки и рюкзаки распределены по ролям.
+Стартовый комплект игрока строится на основе командира ИИ той же стороны.
 
 Core и обычный Arland не имеют RHS dependencies. `AIConflictArlandRHS` зависит
 от них, RHS Content Pack 01 `1337C0DE5DABBEEF`, Content Pack 02

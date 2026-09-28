@@ -70,7 +70,8 @@ Require 'LOADOUT_DRAFT_SOURCE' (Method 'AICF_LoadoutEditor.c' 'Refresh') 'draft.
 Require 'LOADOUT_DRAFT_VS_APPLIED' (Method 'AICF_LoadoutEditor.c' 'RememberDraft') 'data != m_sAppliedData.*m_DraftMemory.Remember\(m_iSlotId, m_iMember, m_iRevision, data\)' 'data != m_sAppliedData'
 Require 'LOADOUT_DRAFT_MEMORY_CLEANUP' (Method 'AICF_LoadoutEditor.c' 'Close') 'm_aGroupIds.Clear\(\).*m_aGroupNames.Clear\(\).*m_DraftMemory.Clear\(\)' 'm_DraftMemory.Clear()'
 $items = Method 'AICF_LoadoutEditor.c' 'Items'
-Require 'LOADOUT_CATALOG_MODES' $items 'mode = m_iTargetMode.*m_Catalog.List\(category, m_aItems, mode\)' 'm_iTargetMode'
+Require 'LOADOUT_CATALOG_MODES' $items 'mode = m_iTargetMode.*m_Catalog.List\(category, m_aItems, mode, m_aSources\[m_iSourceIndex\]\)' 'm_iTargetMode'
+Require 'LOADOUT_CATALOG_SOURCE' $items 'm_Catalog.List\(category, m_aItems, mode, m_aSources\[m_iSourceIndex\]\)' 'm_aSources[m_iSourceIndex]'
 $capacityFilter = 'CanInsertResourceInStorage|CanInsertItemInStorage|CanReplaceItem'
 Assert-AICFNotContains $failures 'LOADOUT_CATALOG_INDEPENDENT_OF_CAPACITY' $items $capacityFilter 'Каталог контейнера не фильтруется по заполненности; native compatibility ограничена обвесами'
 if (($items + ' manager.CanInsertResourceInStorage(prefab, storage, slot);') -notmatch $capacityFilter) {

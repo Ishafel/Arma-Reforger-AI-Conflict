@@ -3,6 +3,18 @@ class AICF_LoadoutCatalog
 	protected ref array<SCR_EntityCatalogEntry> m_aEntries = {};
 	protected AICF_ContentProfile m_Profile;
 	protected FactionKey m_sStableFaction;
+	protected ref map<ResourceName, string> m_mSources = new map<ResourceName, string>();
+
+	string Source(ResourceName prefab)
+	{
+		string source;
+		if (!m_mSources.Find(prefab, source))
+		{
+			source = m_Profile.GetLoadoutItemSource(prefab);
+			m_mSources.Insert(prefab, source);
+		}
+		return source;
+	}
 
 	void AICF_LoadoutCatalog(SCR_CampaignFaction faction)
 	{
@@ -89,7 +101,7 @@ class AICF_LoadoutCatalog
 		return 0;
 	}
 
-	void List(int category, array<string> prefabs, int mode = 0)
+	void List(int category, array<string> prefabs, int mode = 0, string source = "")
 	{
 		prefabs.Clear();
 		foreach (SCR_EntityCatalogEntry entry : m_aEntries)
@@ -98,7 +110,7 @@ class AICF_LoadoutCatalog
 				continue;
 			SCR_ArsenalItem item = SCR_ArsenalItem.Cast(entry.GetEntityDataOfType(SCR_ArsenalItem));
 			if (item && (category == 0 || (item.GetItemType() & category) != 0) &&
-				(mode == 0 || (item.GetItemMode() & mode) != 0))
+				(mode == 0 || (item.GetItemMode() & mode) != 0) && (source.IsEmpty() || Source(entry.GetPrefab()) == source))
 				prefabs.Insert(entry.GetPrefab());
 		}
 		prefabs.Sort();

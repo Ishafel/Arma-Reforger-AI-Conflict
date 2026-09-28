@@ -35,6 +35,22 @@ class AICF_ContentProfile
 		return "STOCK";
 	}
 
+	// Один baseline для редактора и выдачи: только local preview inventory.
+	bool PrepareDefaultLoadout(IEntity model, ResourceName source, FactionKey stableKey)
+	{
+		return model && model.GetWorld() != GetGame().GetWorld();
+	}
+
+	void GetLoadoutSources(array<string> sources)
+	{
+		sources.Insert("Vanilla");
+	}
+
+	string GetLoadoutItemSource(ResourceName prefab)
+	{
+		return "Vanilla";
+	}
+
 	// Exact registry allowlist, подтверждён terminal catalog 1.8.0.13.
 	bool PrepareConstructionFaction(IEntity entity, FactionKey stableKey, AICF_EConstructionType type, SCR_CampaignFaction faction)
 	{

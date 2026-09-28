@@ -53,3 +53,7 @@
 !/tools/fixtures/AICF_SquadRespawnProbe.c
 !/tools/Test-PresetRespawnLog.ps1
 !/tools/fixtures/AICF_PresetRespawnProbe.c
+!/tools/Test-WCSIntegrationStatic.ps1
+!/tools/fixtures/AICF_WCSCatalogProbe.c
+!/tools/fixtures/AICF_WCSInfantryProbe.c
+!/tools/fixtures/AICF_WCSAccessProbe.c

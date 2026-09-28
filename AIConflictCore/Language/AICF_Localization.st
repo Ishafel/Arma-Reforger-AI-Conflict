@@ -3,6 +3,24 @@ StringTable
 	ItemClassName "CustomStringTableItem"
 	Items
 	{
+		CustomStringTableItem "{A1CF260928100003}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHS_Name"
+			Target_en_us "AI Conflict WCS + RHS - Arland"
+			Target_ru_ru "AI Conflict WCS + RHS — Арланд"
+		}
+		CustomStringTableItem "{A1CF260928100004}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHS_Description"
+			Target_en_us "NATO versus Russia on Arland with WCS + RHS infantry equipment and vehicles."
+			Target_ru_ru "НАТО против РФ на Арланде: экипировка пехоты и техника WCS + RHS."
+		}
+		CustomStringTableItem "{A1CF260928100005}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHS_Details"
+			Target_en_us "Autonomous Conflict with WCS weapons and uniforms on RHS infantry. Abrams, T-72, BMP-3 and Bradley join the existing faction vehicle catalogs. Every launch starts a new campaign; session progress is not saved."
+			Target_ru_ru "Автономный Conflict: пехота RHS с оружием и формой WCS. Abrams, Т-72, БМП-3 и Bradley дополняют существующие каталоги техники фракций. Каждый запуск начинает новую кампанию; прогресс сессии не сохраняется."
+		}
 		CustomStringTableItem "{A1CF190900000001}"
 		{
 			Id "AICF_Scenario_Arland_Name"

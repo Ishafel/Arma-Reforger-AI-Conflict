@@ -4,6 +4,12 @@ class AICF_RHSPMCArmament
 {
 	static ResourceName PrimaryPrefab(ResourceName source, int variant)
 	{
+		AICF_RHSContentProfile profile = AICF_RHSContentProfile.Cast(AICF_ContentProfile.GetActive());
+		if (profile)
+		{
+			ResourceName overridePrefab = profile.GetPMCPrimaryOverride(source, variant);
+			if (!overridePrefab.IsEmpty()) return overridePrefab;
+		}
 		if (source.EndsWith("_MG.et"))
 			return "{4BE4931DF7B1ABCD}Prefabs/Weapons/MachineGuns/PKM/MG_PKM_B51_Eot.et";
 		if (source.EndsWith("_Sharpshooter.et"))

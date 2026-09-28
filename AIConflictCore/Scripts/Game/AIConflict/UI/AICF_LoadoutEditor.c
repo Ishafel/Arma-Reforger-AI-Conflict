@@ -118,6 +118,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected int m_iToken;
 	protected int m_iRequestAt;
 	protected int m_iQuantity = 1;
+	protected int m_iSourceIndex;
+	protected ref array<string> m_aSources = {};
 	protected int m_iTargetType;
 	protected bool m_bPending;
 	protected bool m_bRendering;
@@ -237,7 +239,13 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		Button("back", "{AICF:AICF_UI_Back_b1e3ce09}", 0.31, 0.205, 0.385, 0.255);
 		m_wLocation = Label(0.395, 0.205, 0.63, 0.265, "{AICF:AICF_UI_On_soldier_193813db}", 17);
 		m_wLocation.SetTextWrapping(true);
-		Label(0.65, 0.165, 0.975, 0.20, "{AICF:AICF_UI_ITEM_CATALOG_073e7c4c}", 17);
+		m_aSources.Clear();
+		AICF_ContentProfile.GetActive().GetLoadoutSources(m_aSources);
+		m_iSourceIndex = m_aSources.Count() - 1;
+		float sourceWidth = 0.325 / Math.Max(1, m_aSources.Count());
+		foreach (int sourceIndex, string sourceName : m_aSources)
+			Button("source_" + sourceIndex.ToString(), sourceName, 0.65 + sourceIndex * sourceWidth, 0.165,
+				0.65 + (sourceIndex + 1) * sourceWidth - 0.005, 0.20);
 		m_wCatalogContext = Label(0.65, 0.205, 0.975, 0.265, "{AICF:AICF_UI_Select_a_slot_in_the_center_702cc83a}", 17);
 		m_wCatalogContext.SetTextWrapping(true);
 		m_ContentCategory = Combo(0.65, 0.205, 0.975, 0.265);
@@ -429,6 +437,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 				color = Color.FromSRGBA(226, 167, 79, 255);
 				textColor = Color.FromSRGBA(9, 19, 28, 255);
 			}
+			else if (frame.GetName() == "source_" + m_iSourceIndex.ToString())
+				color = Color.FromSRGBA(50, 104, 132, 255);
 			m_Controller.SetRectColor(frame, color);
 			TextWidget caption = TextWidget.Cast(frame.FindAnyWidget("Caption"));
 			if (caption)
@@ -820,7 +830,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			category = m_aContentTypes[filter];
 			mode = m_aContentModes[filter];
 		}
-		m_Catalog.List(category, m_aItems, mode);
+		m_Catalog.List(category, m_aItems, mode, m_aSources[m_iSourceIndex]);
 		if (!m_bAttachmentTarget)
 			m_ItemAreas.Filter(m_aItems, m_TargetArea, m_Draft.GetPreview());
 		if (m_bWeaponTarget)
@@ -1058,7 +1068,16 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		}
 		if (m_bPending || !m_Recipe || !m_bDraftReady)
 			return true;
-		if (action == "save")
+		if (action.StartsWith("source_"))
+		{
+			int sourceIndex = action.Substring(7, action.Length() - 7).ToInt(-1);
+			if (m_aSources.IsIndexValid(sourceIndex))
+			{
+				m_iSourceIndex = sourceIndex;
+				Items();
+			}
+		}
+		else if (action == "save")
 		{
 			if (!HasDraftChanges() || !HasValidName() || m_Player.AICF_LoadoutRevision() != m_iRevision)
 				return true;

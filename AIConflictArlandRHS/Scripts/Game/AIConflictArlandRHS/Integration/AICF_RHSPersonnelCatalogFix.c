@@ -9,8 +9,7 @@ class AICF_RHSPersonnelBuildingFix
 	static bool IsActiveProfile()
 	{
 		AICF_ContentProfile contentProfile = AICF_ContentProfile.GetActive();
-		return contentProfile &&
-			contentProfile.GetProfileKey() == "RHS_USMC_MSV_0_16_5150";
+		return AICF_RHSContentProfile.Cast(contentProfile) != null;
 	}
 
 	static bool IsSupportedEssentialGroup(ResourceName prefab)

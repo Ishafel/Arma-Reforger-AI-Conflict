@@ -3,6 +3,29 @@
 // copied and no uncatalogued ResourceName is admitted.
 class AICF_RHSContentProfile : AICF_ContentProfile
 {
+	// Опциональные дочерние profiles могут заменить переопределённый модами
+	// prefab, сохраняя общий PMC inventory transaction и его проверки.
+	ResourceName GetPMCPrimaryOverride(ResourceName source, int variant)
+	{
+		return ResourceName.Empty;
+	}
+
+	override void GetLoadoutSources(array<string> sources)
+	{
+		super.GetLoadoutSources(sources);
+		sources.Insert("RHS");
+	}
+
+	override string GetLoadoutItemSource(ResourceName prefab)
+	{
+		array<string> addons = SCR_AddonTool.GetResourceAddons(prefab);
+		foreach (string addon : addons)
+		{
+			if (addon.StartsWith("RHS")) return "RHS";
+		}
+		return super.GetLoadoutItemSource(prefab);
+	}
+
 	override string GetProfileKey()
 	{
 		return "RHS_USMC_MSV_0_16_5150";

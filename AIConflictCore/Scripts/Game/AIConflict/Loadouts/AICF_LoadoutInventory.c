@@ -383,8 +383,11 @@ class AICF_LoadoutDraft
 			return false;
 		KeepAppearance(recipe.m_sCharacter);
 		DamageManagerComponent damage = DamageManagerComponent.Cast(m_Character.FindComponent(DamageManagerComponent));
-		if (damage)
+		if (damage && !Replication.IsServer())
 			damage.EnableDamageHandling(false);
+		reason = "DEFAULT_LOADOUT_FAILED";
+		if (!AICF_ContentProfile.GetActive().PrepareDefaultLoadout(m_Character, recipe.m_sCharacter, recipe.m_sFaction))
+			return false;
 		AICF_LoadoutInventory.Signature(m_Character, catalog, m_iBaselineCost);
 		if (!AICF_LoadoutInventory.Replay(m_Character, recipe, catalog, reason))
 			return false;
