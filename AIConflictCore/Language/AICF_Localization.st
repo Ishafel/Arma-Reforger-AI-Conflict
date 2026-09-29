@@ -3105,5 +3105,59 @@ StringTable
 			Target_en_us "Ironfist"
 			Target_ru_ru "Ironfist"
 		}
+		CustomStringTableItem "{A1CF260929200000}"
+		{
+			Id "AICF_UI_PersonalName"
+			Target_en_us "My preset"
+			Target_ru_ru "Мой пресет"
+		}
+		CustomStringTableItem "{A1CF260929200001}"
+		{
+			Id "AICF_UI_PersonalDefault"
+			Target_en_us "Default equipment"
+			Target_ru_ru "Снаряжение по умолчанию"
+		}
+		CustomStringTableItem "{A1CF260929200002}"
+		{
+			Id "AICF_UI_PersonalCreate"
+			Target_en_us "Create My preset"
+			Target_ru_ru "Создать Мой пресет"
+		}
+		CustomStringTableItem "{A1CF260929200003}"
+		{
+			Id "AICF_UI_PersonalEdit"
+			Target_en_us "Edit My preset"
+			Target_ru_ru "Изменить Мой пресет"
+		}
+		CustomStringTableItem "{A1CF260929200004}"
+		{
+			Id "AICF_UI_PersonalSaved"
+			Target_en_us "Personal preset saved. Close the editor and select My preset before deploying."
+			Target_ru_ru "Личный пресет сохранён. Закройте редактор и выберите «Мой пресет» перед появлением."
+		}
+		CustomStringTableItem "{A1CF260929200005}"
+		{
+			Id "AICF_UI_PersonalHint"
+			Target_en_us "Edit your personal preset. Default role equipment remains available."
+			Target_ru_ru "Настройте личный пресет. Штатное снаряжение роли остаётся доступным."
+		}
+		CustomStringTableItem "{A1CF260929200006}"
+		{
+			Id "AICF_UI_PersonalDefaultSelected"
+			Target_en_us "Selected: default role equipment."
+			Target_ru_ru "Выбрано штатное снаряжение роли."
+		}
+		CustomStringTableItem "{A1CF260929200007}"
+		{
+			Id "AICF_UI_PersonalSelected"
+			Target_en_us "Selected: My preset. The server will check it again before deployment."
+			Target_ru_ru "Выбран «Мой пресет». Сервер повторно проверит его перед появлением."
+		}
+		CustomStringTableItem "{A1CF260929200008}"
+		{
+			Id "AICF_UI_PersonalUnavailable"
+			Target_en_us "Personal preset unavailable or request rejected. Default equipment remains available."
+			Target_ru_ru "Личный пресет недоступен или запрос отклонён. Можно выбрать штатное снаряжение."
+		}
 	}
 }

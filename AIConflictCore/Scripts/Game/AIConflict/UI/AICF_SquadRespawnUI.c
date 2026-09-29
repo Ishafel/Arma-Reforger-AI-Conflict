@@ -183,9 +183,12 @@ modded class SCR_DeployMenuMain
 	protected int m_iAICFSelectedDeathRevision;
 	protected string m_sAICFSelectedName;
 	protected float m_fAICFRefresh;
+	protected ref AICF_PersonalLoadoutUI m_AICFPersonalUI;
+	protected float m_fAICFPersonalRefresh;
 
 	void AICF_SelectCharacter(RplId character, string name)
 	{
+		if (m_AICFPersonalUI && m_AICFPersonalUI.IsBusy()) return;
 		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		if (!player || !player.m_aAICFSquadRespawnIds.Contains(character)) return;
 		if (player.m_sAICFSquadRespawnResult != "PENDING") player.m_sAICFSquadRespawnResult = string.Empty;
@@ -211,6 +214,13 @@ modded class SCR_DeployMenuMain
 	override void OnMenuUpdate(float tDelta)
 	{
 		super.OnMenuUpdate(tDelta);
+		if (!m_AICFPersonalUI) m_AICFPersonalUI = new AICF_PersonalLoadoutUI();
+		m_fAICFPersonalRefresh -= tDelta;
+		if (m_fAICFPersonalRefresh <= 0)
+		{
+			m_fAICFPersonalRefresh = 0.25;
+			m_AICFPersonalUI.Update(GetRootWidget(), m_AICFSelectedCharacter.IsValid());
+		}
 		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		if (!player || !m_LoadoutRequestUIHandler) return;
 		m_fAICFRefresh -= tDelta;
@@ -243,6 +253,7 @@ modded class SCR_DeployMenuMain
 
 	override protected void RequestRespawn()
 	{
+		if (m_AICFPersonalUI && m_AICFPersonalUI.IsBusy()) return;
 		if (!m_AICFSelectedCharacter.IsValid()) { super.RequestRespawn(); return; }
 		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		UpdateRespawnButton();
@@ -253,6 +264,8 @@ modded class SCR_DeployMenuMain
 
 	override void OnMenuClose()
 	{
+		if (m_AICFPersonalUI) m_AICFPersonalUI.Close();
+		m_AICFPersonalUI = null;
 		if (m_LoadoutRequestUIHandler) m_LoadoutRequestUIHandler.AICF_ClearCharacters();
 		if (m_LoadoutRequestUIHandler) m_LoadoutRequestUIHandler.AICF_ClearCharacterPreview();
 		m_AICFSelectedCharacter = RplId.Invalid();

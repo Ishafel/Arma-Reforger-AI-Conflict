@@ -3,6 +3,37 @@ class AICF_LoadoutCatalog
 	protected ref array<SCR_EntityCatalogEntry> m_aEntries = {};
 	protected AICF_ContentProfile m_Profile;
 	protected FactionKey m_sStableFaction;
+	protected bool m_bPersonalRules;
+	protected ref array<string> m_aDenied = {};
+
+	void SetPersonalRules(string snapshot = "")
+	{
+		m_bPersonalRules = true;
+		m_aDenied.Clear();
+		JsonLoadContext json = new JsonLoadContext();
+		if (!snapshot.IsEmpty() && json.LoadFromString(snapshot)) json.ReadValue("denied", m_aDenied);
+	}
+
+	bool IsDenied(ResourceName prefab)
+	{
+		if (!m_bPersonalRules) return false;
+		if (!Replication.IsServer()) return m_aDenied.Contains(prefab);
+		SCR_BaseGameMode mode = SCR_BaseGameMode.Cast(GetGame().GetGameMode());
+		if (!mode) return true;
+		SCR_ArsenalManagerComponent arsenal = SCR_ArsenalManagerComponent.Cast(mode.FindComponent(SCR_ArsenalManagerComponent));
+		if (!arsenal || !arsenal.GetLoadoutSaveBlackListHolder()) return false;
+		return arsenal.GetLoadoutSaveBlackListHolder().IsPrefabBlacklisted(prefab);
+	}
+
+	string PersonalRulesSnapshot()
+	{
+		array<string> denied = {};
+		foreach (SCR_EntityCatalogEntry entry : m_aEntries)
+			if (entry && IsDenied(entry.GetPrefab())) denied.Insert(entry.GetPrefab());
+		JsonSaveContext json = new JsonSaveContext();
+		json.WriteValue("denied", denied);
+		return json.SaveToString();
+	}
 	protected ref map<ResourceName, string> m_mSources = new map<ResourceName, string>();
 
 	string Source(ResourceName prefab)
@@ -41,7 +72,7 @@ class AICF_LoadoutCatalog
 	bool Allows(ResourceName prefab)
 	{
 		SCR_EntityCatalogEntry entry = Find(prefab);
-		return entry && m_Profile.AllowsLoadoutItem(m_sStableFaction, entry);
+		return entry && m_Profile.AllowsLoadoutItem(m_sStableFaction, entry) && !IsDenied(prefab);
 	}
 
 	int Cost(ResourceName prefab)
@@ -106,7 +137,7 @@ class AICF_LoadoutCatalog
 		prefabs.Clear();
 		foreach (SCR_EntityCatalogEntry entry : m_aEntries)
 		{
-			if (!entry || !entry.IsEnabled() || !m_Profile.AllowsLoadoutItem(m_sStableFaction, entry) || prefabs.Contains(entry.GetPrefab()))
+			if (!entry || !entry.IsEnabled() || !m_Profile.AllowsLoadoutItem(m_sStableFaction, entry) || IsDenied(entry.GetPrefab()) || prefabs.Contains(entry.GetPrefab()))
 				continue;
 			SCR_ArsenalItem item = SCR_ArsenalItem.Cast(entry.GetEntityDataOfType(SCR_ArsenalItem));
 			if (item && (category == 0 || (item.GetItemType() & category) != 0) &&

@@ -234,6 +234,26 @@ class AICF_LoadoutInventory : SCR_PlayerArsenalLoadout
 		return SCR_StringHelper.Join("\n", signature);
 	}
 
+	// Включает вложенные предметы готового prefab, а не только список RPC.
+	static bool AllowsPersonalInventory(IEntity entity, AICF_LoadoutCatalog catalog, int depth = 0)
+	{
+		if (!entity || depth > 6) return false;
+		set<BaseInventoryStorageComponent> storages = new set<BaseInventoryStorageComponent>();
+		FindStorageComponents(entity, storages);
+		foreach (BaseInventoryStorageComponent storage : storages)
+		{
+			if (!Editable(storage)) continue;
+			array<InventoryItemComponent> items = GetSlotItems(storage);
+			foreach (InventoryItemComponent item : items)
+			{
+				if (!item) return false;
+				ResourceName prefab = SCR_ResourceNameUtils.GetPrefabName(item.GetOwner());
+				if (catalog.IsDenied(prefab) || !AllowsPersonalInventory(item.GetOwner(), catalog, depth + 1)) return false;
+			}
+		}
+		return true;
+	}
+
 	static bool HasUsableWeapons(IEntity entity, out string reason)
 	{
 		reason = "WEAPON_OR_AMMO_MISSING";

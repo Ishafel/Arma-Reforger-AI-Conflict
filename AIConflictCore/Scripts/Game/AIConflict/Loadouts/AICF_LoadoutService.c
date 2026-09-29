@@ -80,12 +80,18 @@ class AICF_LoadoutService
 			player.GetPlayerId(), faction.GetFactionKey(), slotId, member, token, slot.GetLoadoutRevision(), accepted, reason));
 	}
 
-	protected AICF_LoadoutBinding Validate(AICF_LoadoutRecipe recipe, SCR_CampaignFaction faction, out string reason)
+	static AICF_LoadoutBinding Validate(AICF_LoadoutRecipe recipe, SCR_CampaignFaction faction, out string reason, bool personal = false)
 	{
 		AICF_LoadoutCatalog catalog = new AICF_LoadoutCatalog(faction);
+		if (personal) catalog.SetPersonalRules();
 		AICF_LoadoutDraft draft = new AICF_LoadoutDraft();
 		if (!draft.Build(recipe, catalog, reason))
 			return null;
+		if (personal && !AICF_LoadoutInventory.AllowsPersonalInventory(draft.GetCharacter(), catalog))
+		{
+			reason = "ITEM_NOT_ALLOWED";
+			return null;
+		}
 		if (!AICF_LoadoutInventory.HasUsableWeapons(draft.GetCharacter(), reason))
 			return null;
 		AICF_LoadoutBinding binding = new AICF_LoadoutBinding();
@@ -122,7 +128,7 @@ class AICF_LoadoutService
 		for (int i = m_aViewers.Count() - 1; i >= 0; i--)
 		{
 			SCR_PlayerController player = m_aViewers[i];
-			if (!player)
+			if (!player || player.AICF_LoadoutSlot() == AICF_PersonalLoadout.SLOT)
 			{
 				m_aViewers.Remove(i);
 				continue;

@@ -58,3 +58,5 @@
 !/tools/fixtures/AICF_WCSInfantryProbe.c
 !/tools/fixtures/AICF_WCSAccessProbe.c
 !/tools/fixtures/AICF_GroupCallsignProbe.c
+!/tools/fixtures/AICF_PersonalLoadoutProbe.c
+!/tools/Test-PersonalLoadoutContracts.ps1

@@ -127,23 +127,36 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected bool m_bRotating;
 	protected bool m_bPanning;
 	protected bool m_bDraftReady;
+	protected bool m_bPersonal;
+	protected ResourceName m_sPersonalSource;
 	protected int m_iMouseX;
 	protected int m_iMouseY;
 
 	void AICF_LoadoutEditor(AICF_StrategicUIController controller) { m_Controller = controller; }
 	bool IsInputCaptured() { return m_bCaptured; }
 
-	void Open(Widget mapRoot, int slotId)
+	void Open(Widget mapRoot, int slotId, bool personal = false)
 	{
 		Close();
+		m_bPersonal = personal;
 		m_Player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		m_Faction = SCR_FactionManager.SGetLocalPlayerFaction();
 		SCR_MapEntity mapEntity = SCR_MapEntity.GetMapInstance();
-		if (!mapRoot || !mapEntity || !mapEntity.IsOpen() || !m_Player || !m_Faction || RplSession.Mode() == RplMode.Dedicated)
+		if (!mapRoot || !m_Player || !m_Faction || RplSession.Mode() == RplMode.Dedicated)
 			return;
-		m_Cursor = SCR_MapCursorModule.Cast(mapEntity.GetMapModule(SCR_MapCursorModule));
-		if (!m_Cursor || (m_Cursor.GetCursorState() & EMapCursorState.CS_DIALOG))
-			return;
+		if (!m_bPersonal)
+		{
+			if (!mapEntity || !mapEntity.IsOpen()) return;
+			m_Cursor = SCR_MapCursorModule.Cast(mapEntity.GetMapModule(SCR_MapCursorModule));
+			if (!m_Cursor || (m_Cursor.GetCursorState() & EMapCursorState.CS_DIALOG)) return;
+		}
+		else
+		{
+			SCR_CampaignFaction faction;
+			AICF_LoadoutRecipe context = AICF_PersonalLoadout.Context(m_Player, faction);
+			if (!context) return;
+			m_sPersonalSource = context.m_sCharacter;
+		}
 		m_PlayerCharacter = m_Player.GetControlledEntity();
 		m_iSlotId = slotId;
 		m_iMember = 0;
@@ -157,7 +170,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			return;
 		}
 		m_bCaptured = true;
-		m_Cursor.AICF_SetLoadoutDialog(this);
+		if (m_Cursor) m_Cursor.AICF_SetLoadoutDialog(this);
 		GetGame().GetInputManager().AddActionListener(UIConstants.MENU_ACTION_BACK, EActionTrigger.DOWN, Close);
 		Request(0);
 	}
@@ -226,7 +239,9 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			return false;
 		// Выше полноэкранной input-поверхности scrim (z=1).
 		m_wPanel.SetZOrder(5);
-		Label(0.025, 0.02, 0.34, 0.08, "{AICF:AICF_UI_SQUAD_LOADOUT_3cb76f02}", 27);
+		string title = "{AICF:AICF_UI_SQUAD_LOADOUT_3cb76f02}";
+		if (m_bPersonal) title = "{AICF:AICF_UI_PersonalName}";
+		Label(0.025, 0.02, 0.34, 0.08, title, 27);
 		m_Group = Combo(0.36, 0.025, 0.82, 0.08);
 		Button("close", "{AICF:AICF_UI_Close_23b64977}", 0.84, 0.025, 0.975, 0.08);
 		m_Member = Combo(0.025, 0.09, 0.29, 0.15);
@@ -300,7 +315,16 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_wStatus = Label(0.025, 0.925, 0.975, 0.985, "", 17);
 		m_wStatus.SetTextWrapping(true);
 		m_bRendering = true;
-		for (int slotId; slotId < AICF_Stage1Config.GROUP_SLOTS_PER_FACTION; slotId++)
+		if (m_bPersonal)
+		{
+			m_aGroupIds.Insert(AICF_PersonalLoadout.SLOT);
+			m_aGroupNames.Insert("{AICF:AICF_UI_PersonalName}");
+			m_Group.GetRootWidget().SetVisible(false);
+			m_Member.GetRootWidget().SetVisible(false);
+			m_Library.GetRootWidget().SetVisible(false);
+			ShowButton("load", false);
+		}
+		for (int slotId; !m_bPersonal && slotId < AICF_Stage1Config.GROUP_SLOTS_PER_FACTION; slotId++)
 		{
 			string name;
 			int size;
@@ -316,8 +340,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			m_bRendering = false;
 			return false;
 		}
-		m_Group.SetCurrentItem(groupIndex, false, false, false);
-		PopulateMembers();
+		if (!m_bPersonal) m_Group.SetCurrentItem(groupIndex, false, false, false);
+		if (!m_bPersonal) PopulateMembers();
 		array<string> categories = {};
 		AICF_LoadoutContentCategories.Fill(categories, m_aContentTypes, m_aContentModes);
 		foreach (string category : categories)
@@ -343,6 +367,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 
 	protected string TargetName()
 	{
+		if (m_bPersonal) return "{AICF:AICF_UI_PersonalName}";
 		int index = m_aGroupIds.Find(m_iSlotId);
 		string group = "{AICF:AICF_UI_Squad_daa7fec8}" + (m_iSlotId + 1).ToString();
 		if (index >= 0)
@@ -590,6 +615,12 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (!m_wRoot)
 			return;
 		RefreshColors();
+		if (m_bPersonal)
+		{
+			SCR_CampaignFaction faction;
+			AICF_LoadoutRecipe context = AICF_PersonalLoadout.Context(m_Player, faction);
+			if (!context || context.m_sCharacter != m_sPersonalSource) { Close(); return; }
+		}
 		if (!m_Player || GetGame().GetPlayerController() != m_Player || SCR_FactionManager.SGetLocalPlayerFaction() != m_Faction ||
 			m_Player.GetControlledEntity() != m_PlayerCharacter)
 		{
@@ -603,6 +634,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			if (m_Player.AICF_LoadoutAccepted() && m_Player.AICF_LoadoutSlot() == m_iSlotId && m_Player.AICF_LoadoutMember() == m_iMember)
 			{
 				m_Recipe = AICF_LoadoutRecipe.Decode(m_Player.AICF_LoadoutData());
+				if (m_bPersonal) m_Catalog.SetPersonalRules(m_Player.AICF_LoadoutLibrary());
 				m_iRevision = m_Player.AICF_LoadoutRevision();
 				// TEMPLATE_LOADED — только черновик, а не новая привязка позиции.
 				if (status == "READY" || status == "SAVED")
@@ -644,6 +676,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 
 	protected string Status(string code)
 	{
+		if (m_bPersonal && code == "SAVED") return "{AICF:AICF_UI_PersonalSaved}";
+		if (m_bPersonal && code == "READY") return "{AICF:AICF_UI_PersonalHint}";
 		switch (code)
 		{
 			case "SAVED": return TargetName() + "{AICF:AICF_UI_saved_The_next_soldier_spawned_in_this_squ_b04e31ee}";
@@ -1408,5 +1442,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_bPending = false;
 		m_bRotating = false;
 		m_bDraftReady = false;
+		m_bPersonal = false;
+		m_sPersonalSource = string.Empty;
 	}
 }

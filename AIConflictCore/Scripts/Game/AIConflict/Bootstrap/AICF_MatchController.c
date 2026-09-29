@@ -7513,6 +7513,11 @@ class AICF_MatchController
 			player.AICF_LoadoutResult(token, false, "MATCH_OR_FACTION_UNAVAILABLE");
 			return;
 		}
+		if (slot == AICF_PersonalLoadout.SLOT)
+		{
+			AICF_PersonalLoadout.Request(player, token, revision, operation, payload);
+			return;
+		}
 		if (!m_Loadouts)
 			m_Loadouts = new AICF_LoadoutService(this);
 		m_Loadouts.Request(player, token, slot, member, revision, operation, payload);

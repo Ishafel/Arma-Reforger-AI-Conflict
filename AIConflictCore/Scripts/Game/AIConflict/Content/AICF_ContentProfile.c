@@ -36,6 +36,11 @@ class AICF_ContentProfile
 	}
 
 	// Один baseline для редактора и выдачи: только local preview inventory.
+	ResourceName GetPersonalLoadoutSource(SCR_CampaignFaction faction, ResourceName roleSource)
+	{
+		return roleSource;
+	}
+
 	bool PrepareDefaultLoadout(IEntity model, ResourceName source, FactionKey stableKey)
 	{
 		return model && model.GetWorld() != GetGame().GetWorld();

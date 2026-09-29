@@ -12,6 +12,14 @@ class AICF_WCSRHSContentProfile : AICF_RHSContentProfile
 		sources.Insert("WCS");
 	}
 
+	// Штатный player kit WCS использует командира ИИ той же стороны.
+	override ResourceName GetPersonalLoadoutSource(SCR_CampaignFaction faction, ResourceName roleSource)
+	{
+		AICF_GroupSpawner roster = new AICF_GroupSpawner();
+		string role;
+		return roster.ResolveRecruitPrefab(faction, 0, role);
+	}
+
 	override bool PrepareDefaultLoadout(IEntity model, ResourceName source, FactionKey stableKey)
 	{
 		if (!super.PrepareDefaultLoadout(model, source, stableKey)) return false;
