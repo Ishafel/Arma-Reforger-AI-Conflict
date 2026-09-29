@@ -6,8 +6,8 @@
 readiness, экономика и lifecycle остаются у прежних владельцев.
 
 Реализованы пехотные комплекты WCS, общий baseline редактора и бойца, вкладки Vanilla/RHS/WCS, дополнение арсенала и реестра строительства техники.
-Server-only проверки подтверждают inventory и catalogs; визуальная проверка,
-client/JIP и покупка техники через меню остаются `NOT RUN`.
+Проверки подтверждают inventory, catalogs и owner RPC личного пресета.
+Визуальная проверка, JIP и покупка техники через меню остаются `NOT RUN`.
 
 ## Пехота
 
@@ -17,9 +17,18 @@ client/JIP и покупка техники через меню остаются
 замены группы и donor пополнения. Callback/timer и второго campaign loop нет.
 Новый персонаж игрока с обычным faction loadout получает комплект командира ИИ
 той же стороны через `SCR_SpawnPointSpawnHandlerComponent.PrepareEntity_S`,
-до передачи управления. Исходный commander prefab выбирается тем же roster
+до вызова native подготовки identity/inventory и передачи управления.
+После native подготовки синхронная замена основного оружия может отклоняться.
+Личный рецепт применяется после WCS baseline, также до native подготовки.
+Исходный commander prefab выбирается тем же roster
 resolver, а inventory собирается общим draft. Сохранённый arsenal loadout
 исключён; при принятии управления существующим AI остаётся его inventory.
+Если выдача WCS не удалась, появление разрешается с исходным штатным комплектом
+только после успешного rollback и совпадения полного inventory signature,
+при неизменных entity identity, faction и authority. Неполный или ложный
+rollback отклоняет появление. `PLAYER_KIT_APPLIED` означает выдачу WCS,
+а отдельный `PLAYER_KIT_FALLBACK verified=1` — проверенный возврат к штатному
+комплекту; это не успешная выдача WCS.
 
 | Сторона | Форма и шлем WCS | Оружие по роли |
 |---|---|---|
@@ -28,6 +37,9 @@ resolver, а inventory собирается общим draft. Сохранённ
 
 Основное оружие и обвес берутся целыми native prefab из `WCS_Weapons` и
 `WCS_RHS_Weapons`. Форма, бронежилет, шлем, перчатки, обувь и рюкзак — WCS.
+Броня JPC AOR2 / TV102 EMR занимает `LoadoutArmoredVestSlotArea`, а подсумки
+по роли — отдельный `LoadoutVestArea`. Проверяется именно надетая броня в
+корневом слоте; наличие одних подсумков больше не считается полным комплектом.
 ПНВ отсутствуют во всех базовых комплектах, включая вложенные NVG шлемов.
 Они остаются доступными для пользовательской настройки через арсенал/редактор.
 РФ: у SL/SR/Medic 6Б50 подняты на шлем, у остальных надеты; используются native
@@ -206,8 +218,22 @@ spawn/respawn и JIP требуют отдельного ручного прог
 stage вместе с infantry probe; не подтверждает физическую покупку через UI.
 
 Evidence актуальных комплектов: `.codex-runtime/wcs-realism/result.md`.
+Evidence исправлений кнопок, брони и player spawn: `.codex-runtime/wcs-presets-armor/result.md`.
 Evidence предыдущих исправлений: `.codex-runtime/wcs-feedback/result.md`.
 Evidence первого этапа комплектов: `.codex-runtime/wcs-complete/result.md`.
 Предыдущий этап: `.codex-runtime/wcs-arland/result.md`.
 Последний server probe: 20/20 kits, 2/2 player presets, 13/13 FIA; арсенал 12/12 обязательных ресурсов на каждой стороне; factory labels/registry 68/68 US и 5/5 USSR. Полный runtime log не чистый: прежние 102 E (WORLD 56, ENTITY 7, RESOURCES 39), без новых уникальных ошибок относительно `wcs-feedback`. SCRIPT E/F и ENGINE F — 0.
 Client/JIP, меню сценариев, реальная покупка/размещение, visual и soak — `NOT RUN`.
+
+Личный пресет сравнивает декодированный `ResourceName`: dedicated serializer
+пишет GUID, клиент — GUID с путём. Сравнение сырых JSON между peers недопустимо.
+Если backend identity отсутствует (локальный diagnostic direct-connect),
+пресет хранится только в конкретном player controller до отключения.
+UI сообщает этот срок при сохранении. Имя и numeric playerId не становятся
+ключом общего файла. С backend identity сохраняется прежняя схема двух файлов.
+
+`tools/fixtures/AICF_PersonalNetworkProbe.c` помещается только в WCS stage.
+Клиент с `-aicfPersonalNetworkProbe 1 -aicfProbeFaction RHS_AFRF` выполняет
+read/save/select/default через owner RPC, проверяет 20 client drafts и native
+spawn. `-aicfProbePersonal 1` дополнительно выбирает личный рецепт перед spawn.
+Это не mouse/UI automation: видимые клики и внешний вид требуют ручной проверки.

@@ -58,12 +58,15 @@ class AICF_PersonalLoadoutUI : ScriptedWidgetEventHandler
 			m_bPending = false;
 			m_wStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_PersonalUnavailable}"));
 		}
-		if (!IsBusy() && m_Player.AICF_PersonalContext() != m_sContext && System.GetTickCount() >= m_iRetryAt)
+		// JsonSaveContext пишет ResourceName как GUID на dedicated server и как
+		// полный путь на клиенте. Сравниваем декодированную идентичность ресурса.
+		bool sameContext = AICF_PersonalLoadout.SameContext(AICF_LoadoutRecipe.Decode(m_Player.AICF_PersonalContext()), context);
+		if (!IsBusy() && !sameContext && System.GetTickCount() >= m_iRetryAt)
 		{
 			m_iRetryAt = System.GetTickCount() + 2000;
 			Request(0);
 		}
-		bool ready = m_Player.AICF_PersonalContext() == m_sContext && !IsBusy() && !m_bPending && System.GetTickCount(m_iRequestedAt) > 800;
+		bool ready = sameContext && !IsBusy() && !m_bPending && System.GetTickCount(m_iRequestedAt) > 800;
 		m_aButtons[0].SetEnabled(!IsBusy() && !m_bPending);
 		m_aButtons[1].SetEnabled(ready && m_Player.AICF_PersonalAvailable());
 		m_aButtons[2].SetEnabled(ready);
@@ -81,6 +84,8 @@ class AICF_PersonalLoadoutUI : ScriptedWidgetEventHandler
 	protected void AddButton(string name, string text, float left, float right)
 	{
 		Widget frame = m_Style.CreateRect(m_wRoot, left, 0.04, right, 0.50, Color.FromSRGBA(46, 74, 91, 255), true);
+		// Выше полноразмерного input панели (z=1), как в общем редакторе.
+		frame.SetZOrder(12);
 		TextWidget label = m_Style.CreateText(frame, 0, 0, 1, 1, text, 17, Color.White, true);
 		m_aLabels.Insert(label);
 		Widget input = frame.FindAnyWidget("AICF_RectInput");

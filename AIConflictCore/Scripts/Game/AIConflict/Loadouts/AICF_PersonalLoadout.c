@@ -50,7 +50,7 @@ class AICF_PersonalLoadout
 		if (player.AICF_PersonalContext() != key) player.AICF_SetPersonalState(key, false, false);
 		string path = AICF_PersonalLoadoutStore.Path(player, context);
 		int storedRevision;
-		AICF_LoadoutRecipe stored = AICF_PersonalLoadoutStore.Load(path, storedRevision);
+		AICF_LoadoutRecipe stored = AICF_PersonalLoadoutStore.LoadFor(player, context, storedRevision);
 		bool available = SameContext(stored, context);
 		if (available && operation == 0)
 		{
@@ -84,7 +84,7 @@ class AICF_PersonalLoadout
 					else if (binding)
 					{
 						reason = "LIBRARY_WRITE_FAILED";
-						if (storedRevision < 2147483646 && AICF_PersonalLoadoutStore.Save(path, candidate, storedRevision + 1))
+						if (storedRevision < 2147483646 && AICF_PersonalLoadoutStore.SaveFor(player, context, candidate, storedRevision + 1))
 						{
 							storedRevision++;
 							stored = candidate;
@@ -100,6 +100,7 @@ class AICF_PersonalLoadout
 		{
 			reason = "READY";
 			if (operation == 1) reason = "SAVED";
+			if (operation == 1 && path.IsEmpty()) reason = "SAVED_SESSION";
 		}
 		if (!available) selected = false;
 		player.AICF_SetPersonalState(key, available, selected);
@@ -111,7 +112,7 @@ class AICF_PersonalLoadout
 		player.AICF_LoadoutResult(token, accepted, reason);
 	}
 
-	// Перед AssignEntity_S повторно строим рецепт по текущему faction catalog.
+	// До native PrepareEntity_S повторно строим рецепт по текущему faction catalog.
 	// Невалидный рецепт оставляет подготовленное штатное снаряжение нетронутым.
 	static bool Apply(SCR_PlayerController player, IEntity entity)
 	{
@@ -120,7 +121,7 @@ class AICF_PersonalLoadout
 		AICF_LoadoutRecipe context = Context(player, faction);
 		if (!context || context.Encode() != player.AICF_PersonalContext()) return true;
 		int revision;
-		AICF_LoadoutRecipe recipe = AICF_PersonalLoadoutStore.Load(AICF_PersonalLoadoutStore.Path(player, context), revision);
+		AICF_LoadoutRecipe recipe = AICF_PersonalLoadoutStore.LoadFor(player, context, revision);
 		string reason = "INVALID_RECIPE";
 		AICF_LoadoutBinding binding;
 		if (SameContext(recipe, context)) binding = AICF_LoadoutService.Validate(recipe, faction, reason, true);
@@ -159,6 +160,9 @@ class AICF_PersonalLoadout
 
 modded class SCR_PlayerController
 {
+	protected ref AICF_PersonalSessionStore m_AICFPersonalSession = new AICF_PersonalSessionStore();
+	AICF_PersonalSessionStore AICF_PersonalSession() { return m_AICFPersonalSession; }
+
 	[RplProp(condition: RplCondition.OwnerOnly)]
 	protected string m_sAICFPersonalContext;
 	[RplProp(condition: RplCondition.OwnerOnly)]
@@ -182,9 +186,9 @@ modded class SCR_PlayerController
 
 modded class SCR_SpawnPointSpawnHandlerComponent
 {
-	override protected bool AssignEntity_S(SCR_SpawnRequestComponent requestComponent, IEntity entity, SCR_SpawnData data)
+	override protected bool PrepareEntity_S(SCR_SpawnRequestComponent requestComponent, IEntity entity, SCR_SpawnData data)
 	{
 		if (AICF_MatchController.GetActiveController() && !AICF_PersonalLoadout.Apply(SCR_PlayerController.Cast(requestComponent.GetPlayerController()), entity)) return false;
-		return super.AssignEntity_S(requestComponent, entity, data);
+		return super.PrepareEntity_S(requestComponent, entity, data);
 	}
 }

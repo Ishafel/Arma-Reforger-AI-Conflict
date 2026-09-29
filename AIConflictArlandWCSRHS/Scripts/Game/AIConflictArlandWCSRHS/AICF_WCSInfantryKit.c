@@ -80,6 +80,13 @@ class AICF_WCSInfantryKit
 		return faction == "RHS_AFRF" && (HasRole(source, "SL") || HasRole(source, "SR") || HasRole(source, "Medic"));
 	}
 
+	// RHS разделяет броню и навесные подсумки на две области loadout.
+	static ResourceName Armor(FactionKey faction)
+	{
+		if (faction == "RHS_AFRF") return "{FAECE2A4CCD7FB96}Prefabs/Characters/Vests/Vest_TV102/Vest_TV102_EMR.et";
+		return "{07223CB6B9212D8A}Prefabs/Characters/Vests/Vest_JPC/Vest_JPC_AOR2.et";
+	}
+
 	static ResourceName Vest(FactionKey faction, ResourceName source)
 	{
 		if (faction == "RHS_AFRF") return "{B89BB29B04D26E70}Prefabs/Characters/Vests/Vest_TV102/Variants/Vest_TV102_rifleman_EMR_7.et";
@@ -102,6 +109,7 @@ class AICF_WCSInfantryKit
 		{
 			clothes.Insert("{14FBE23B34423018}Prefabs/Characters/Uniforms/Shirt_CryeG3_RHS/MC/Shirt_CryeG3_RHS_Tucked_SleevesDown_MC.et");
 			clothes.Insert("{0C0D206E5BC2C74B}Prefabs/Characters/Uniforms/Pants_CryeG3_RHS/MC/Pants_CryeG3_RHS_MC.et");
+			clothes.Insert(Armor(faction));
 			clothes.Insert(Vest(faction, source));
 			clothes.Insert("{B76EAFDBFBA131D9}Prefabs/Characters/HeadGear/Helmets/Helmet_OPSCORE/WCS_Variants/Helmet_OPSCORE_XP_Standard_Issue.et");
 			clothes.Insert("{514585D29848282C}Prefabs/Characters/Handwear/Gloves_MechanixMpact/Gloves_MechanixMpact_Coyote.et");
@@ -112,6 +120,7 @@ class AICF_WCSInfantryKit
 		{
 			clothes.Insert("{02C0CCAC06216B40}Prefabs/Characters/Uniforms/Shirt_VKPO3/Shirt_VKPO3_EMR.et");
 			clothes.Insert("{2B3629EF5CC75ECD}Prefabs/Characters/Uniforms/Pants_VKPO3/Pants_VKPO3_EMR.et");
+			clothes.Insert(Armor(faction));
 			clothes.Insert(Vest(faction, source));
 			clothes.Insert("{F54C67F5761694B5}Prefabs/Characters/HeadGear/Helmets/Helmet_6B47/WCS_Variants/Helmet_6B47_6M2-1_Standard_Issue.et");
 			clothes.Insert("{67D4FA63CF57EB29}Prefabs/Characters/Handwear/Gloves_MechanixMpact/Gloves_MechanixMpact_Covert.et");

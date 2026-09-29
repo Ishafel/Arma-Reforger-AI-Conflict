@@ -16,10 +16,28 @@ class AICF_PersonalLoadoutStore
 	static string Path(SCR_PlayerController player, AICF_LoadoutRecipe context)
 	{
 		if (!Replication.IsServer() || !player || !context) return string.Empty;
-		// Без backend identity сохранение недоступно; штатный spawn остаётся.
+		// Без backend identity недоступен общий файл; остаётся session storage.
 		string uid = GetGame().GetBackendApi().GetPlayerIdentityId(player.GetPlayerId());
+		if (uid == "00000000-0000-0000-0000-000000000000") return string.Empty;
 		if (!SafeKey(uid) || !SafeKey(context.m_sProfile) || !SafeKey(context.m_sFaction)) return string.Empty;
 		return DIRECTORY + "/" + uid + "_" + context.m_sProfile + "_" + context.m_sFaction;
+	}
+
+	static AICF_LoadoutRecipe LoadFor(SCR_PlayerController player, AICF_LoadoutRecipe context, out int revision)
+	{
+		revision = 0;
+		if (!Replication.IsServer() || !player || !context) return null;
+		string path = Path(player, context);
+		if (!path.IsEmpty()) return Load(path, revision);
+		return player.AICF_PersonalSession().Load(context, revision);
+	}
+
+	static bool SaveFor(SCR_PlayerController player, AICF_LoadoutRecipe context, AICF_LoadoutRecipe recipe, int revision)
+	{
+		if (!Replication.IsServer() || !player || !AICF_PersonalLoadout.SameContext(recipe, context)) return false;
+		string path = Path(player, context);
+		if (!path.IsEmpty()) return Save(path, recipe, revision);
+		return player.AICF_PersonalSession().Save(context, recipe, revision);
 	}
 
 	static AICF_LoadoutRecipe Read(string path, out int revision)
@@ -64,5 +82,35 @@ class AICF_PersonalLoadoutStore
 		int actualRevision;
 		AICF_LoadoutRecipe actual = Read(file, actualRevision);
 		return actual && actualRevision == revision && actual.Encode() == recipe.Encode();
+	}
+}
+
+// Нет backend identity — нет общего файла по имени или numeric playerId.
+// Рецепты принадлежат конкретному controller и исчезают с его подключением.
+class AICF_PersonalSessionStore
+{
+	protected ref map<string, ref AICF_LoadoutBinding> m_mPresets = new map<string, ref AICF_LoadoutBinding>();
+
+	AICF_LoadoutRecipe Load(AICF_LoadoutRecipe context, out int revision)
+	{
+		revision = 0;
+		AICF_LoadoutBinding saved;
+		if (!Replication.IsServer() || !context || !m_mPresets.Find(context.Encode(), saved)) return null;
+		revision = saved.m_iRevision;
+		return AICF_LoadoutRecipe.Decode(saved.m_Recipe.Encode());
+	}
+
+	bool Save(AICF_LoadoutRecipe context, AICF_LoadoutRecipe recipe, int revision)
+	{
+		if (!Replication.IsServer() || !AICF_PersonalLoadout.SameContext(recipe, context) || !recipe.HasValidBounds()) return false;
+		int current;
+		Load(context, current);
+		if (current >= 2147483646 || revision != current + 1) return false;
+		AICF_LoadoutBinding saved = new AICF_LoadoutBinding();
+		saved.m_Recipe = AICF_LoadoutRecipe.Decode(recipe.Encode());
+		if (!saved.m_Recipe) return false;
+		saved.m_iRevision = revision;
+		m_mPresets.Set(context.Encode(), saved);
+		return true;
 	}
 }

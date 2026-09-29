@@ -3135,6 +3135,12 @@ StringTable
 			Target_en_us "Personal preset saved. Close the editor and select My preset before deploying."
 			Target_ru_ru "Личный пресет сохранён. Закройте редактор и выберите «Мой пресет» перед появлением."
 		}
+		CustomStringTableItem "{A1CF260929200009}"
+		{
+			Id "AICF_UI_PersonalSavedSession"
+			Target_en_us "Preset saved for this connection. Select My preset before deploying."
+			Target_ru_ru "Пресет сохранён до отключения от сервера. Перед появлением выберите «Мой пресет»."
+		}
 		CustomStringTableItem "{A1CF260929200005}"
 		{
 			Id "AICF_UI_PersonalHint"

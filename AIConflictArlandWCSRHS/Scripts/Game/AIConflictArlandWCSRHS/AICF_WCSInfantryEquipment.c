@@ -202,6 +202,7 @@ class AICF_WCSInfantryEquipment : AICF_RHSPMCEquipment
 
 	static bool ValidateWCS(IEntity model, FactionKey faction, ResourceName source)
 	{
+		if (!HasEquippedArmor(model, faction)) return false;
 		BaseWeaponComponent weapon = AICF_RHSPMCArmament.Primary(model);
 		if (!weapon || SCR_ResourceNameUtils.GetPrefabName(weapon.GetOwner()) != AICF_WCSInfantryKit.Weapon(faction, source)) return false;
 		array<BaseMuzzleComponent> muzzles = {};
@@ -235,6 +236,22 @@ class AICF_WCSInfantryEquipment : AICF_RHSPMCEquipment
 		bool backpackValid = backpacks == 0;
 		if (AICF_WCSInfantryKit.NeedsBackpack(faction, source)) backpackValid = backpacks == 1;
 		return !muzzles.IsEmpty() && clothes.IsEmpty() && backpackValid;
+	}
+
+	static bool HasEquippedArmor(IEntity model, FactionKey faction)
+	{
+		if (!model) return false;
+		set<BaseInventoryStorageComponent> roots = new set<BaseInventoryStorageComponent>();
+		SCR_PlayerArsenalLoadout.FindStorageComponents(model, roots);
+		foreach (BaseInventoryStorageComponent root : roots)
+		{
+			for (int slot; slot < root.GetSlotsCount(); slot++)
+			{
+				if (AICF_LoadoutClothing.Area(root, slot) == LoadoutArmoredVestSlotArea &&
+					SCR_ResourceNameUtils.GetPrefabName(root.Get(slot)) == AICF_WCSInfantryKit.Armor(faction)) return true;
+			}
+		}
+		return false;
 	}
 
 	static bool ApplyWCS(SCR_ChimeraCharacter character, SCR_AIGroup group)

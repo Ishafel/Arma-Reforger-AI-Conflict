@@ -59,4 +59,6 @@
 !/tools/fixtures/AICF_WCSAccessProbe.c
 !/tools/fixtures/AICF_GroupCallsignProbe.c
 !/tools/fixtures/AICF_PersonalLoadoutProbe.c
+!/tools/fixtures/AICF_WCSPlayerDeployProbe.c
+!/tools/fixtures/AICF_PersonalNetworkProbe.c
 !/tools/Test-PersonalLoadoutContracts.ps1

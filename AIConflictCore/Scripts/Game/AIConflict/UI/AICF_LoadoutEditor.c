@@ -637,7 +637,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 				if (m_bPersonal) m_Catalog.SetPersonalRules(m_Player.AICF_LoadoutLibrary());
 				m_iRevision = m_Player.AICF_LoadoutRevision();
 				// TEMPLATE_LOADED — только черновик, а не новая привязка позиции.
-				if (status == "READY" || status == "SAVED")
+				if (status == "READY" || status == "SAVED" || status == "SAVED_SESSION")
 					m_sAppliedData = m_Player.AICF_LoadoutData();
 				if (status == "READY")
 				{
@@ -652,7 +652,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 					else if (stale)
 						status = "DRAFT_OUTDATED";
 				}
-				else if (status == "SAVED" || status == "TEMPLATE_LOADED")
+				else if (status == "SAVED" || status == "SAVED_SESSION" || status == "TEMPLATE_LOADED")
 					m_DraftMemory.Forget(m_iSlotId, m_iMember);
 				if (m_Recipe)
 				{
@@ -677,6 +677,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected string Status(string code)
 	{
 		if (m_bPersonal && code == "SAVED") return "{AICF:AICF_UI_PersonalSaved}";
+		if (m_bPersonal && code == "SAVED_SESSION") return "{AICF:AICF_UI_PersonalSavedSession}";
 		if (m_bPersonal && code == "READY") return "{AICF:AICF_UI_PersonalHint}";
 		switch (code)
 		{
