@@ -160,6 +160,9 @@ class AICF_FactionState
 	protected void BuildDefaultSlots(bool activeForcesRolesEnabled)
 	{
 		m_aGroupSlots.Clear();
+		array<string> callsigns = {};
+		AICF_GroupCallsigns.BuildShuffledPool(
+			AICF_ContentProfile.GetActive().GetStableFactionKey(m_sFactionKey), callsigns);
 		int attackSlots = AICF_Stage1Config.ATTACK_SLOTS_PER_FACTION;
 		int defendSlots = AICF_Stage1Config.DEFEND_SLOTS_PER_FACTION;
 		if (!activeForcesRolesEnabled)
@@ -190,7 +193,10 @@ class AICF_FactionState
 				roleIndex = reserveIndex++;
 			}
 
-			m_aGroupSlots.Insert(new AICF_GroupSlot(slotId, role, roleIndex));
+			string callsignId;
+			if (slotId < callsigns.Count())
+				callsignId = callsigns[slotId];
+			m_aGroupSlots.Insert(new AICF_GroupSlot(slotId, role, roleIndex, callsignId));
 		}
 	}
 

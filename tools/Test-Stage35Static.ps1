@@ -344,7 +344,7 @@ if ($groupSlot) {
 $marker = Find-AICFClassRecord $records 'AICF_GroupMapMarkerSystem'
 if ($marker) {
     $markerText = ConvertTo-AICFCodeText (Get-AICFMethodBody $marker 'BuildMarkerText')
-    Assert-AICFContains $failures 'STAGE35_ROLE_LOCAL_IDENTITY' $markerText 'RoleLocal|ROLE_LOCAL|GetRoleLocalMarkerKey' 'Marker identity must use A0/A1/A2/D0 role-local keys'
+    Assert-AICFContains $failures 'STAGE35_CALLSIGN_PRESENTATION' $markerText 'slot.GetDisplayName\(\)' 'Marker text must use the match-stable localized callsign'
     Assert-AICFContains $failures 'STAGE35_ROLE_LOCAL_IDENTITY' $marker.Code 'GetRoleIndex' 'Dynamic role-local marker numbering must use the reindexed slot role ordinal'
 }
 

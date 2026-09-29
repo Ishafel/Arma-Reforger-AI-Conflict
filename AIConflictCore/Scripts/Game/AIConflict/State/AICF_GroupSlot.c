@@ -137,6 +137,7 @@ class AICF_GroupSlot
 	}
 
 	protected int m_iSlotId;
+	protected string m_sCallsignId;
 	protected int m_iRoleIndex;
 	protected AICF_EGroupRole m_Role;
 	protected AICF_EGroupUnitType m_UnitType;
@@ -276,9 +277,10 @@ class AICF_GroupSlot
 	protected SCR_AIGroup m_PersistentStuckGroup;
 	protected SCR_CampaignMilitaryBaseComponent m_PersistentStuckTargetBase;
 
-	void AICF_GroupSlot(int slotId, AICF_EGroupRole role, int roleIndex = 0)
+	void AICF_GroupSlot(int slotId, AICF_EGroupRole role, int roleIndex = 0, string callsignId = "")
 	{
 		m_iSlotId = slotId;
+		m_sCallsignId = callsignId;
 		m_iRoleIndex = roleIndex;
 		m_Role = role;
 		m_UnitType = AICF_EGroupUnitType.INFANTRY;
@@ -289,6 +291,19 @@ class AICF_GroupSlot
 	int GetSlotId()
 	{
 		return m_iSlotId;
+	}
+
+	string GetCallsignId()
+	{
+		return m_sCallsignId;
+	}
+
+	// Ключ перевода остаётся неизменным; номер — numeric slot в нумерации UI 1..10.
+	string GetDisplayName()
+	{
+		if (m_sCallsignId.IsEmpty())
+			return GetStableSlotKey();
+		return AICF_Localization.Key("#" + m_sCallsignId) + "-" + (m_iSlotId + 1).ToString();
 	}
 
 	AICF_EGroupRole GetRole()
@@ -416,9 +431,9 @@ class AICF_GroupSlot
 		return string.Format("S%1", m_iSlotId);
 	}
 
-	// Role-local labels (A6/D1/R0) are presentation names and may change when a
-	// commander changes a role. This key never changes for the lifetime of the
-	// faction slot and is the primary diagnostic correlation identity.
+	// Role-local codes (A6/D1/R0) remain in diagnostics and can change with role.
+	// This key never changes for the lifetime of the faction slot and remains
+	// the primary diagnostic correlation identity; UI uses GetDisplayName().
 	string GetStableSlotKey()
 	{
 		return string.Format("S%1", m_iSlotId);
@@ -1450,6 +1465,8 @@ class AICF_GroupSlot
 			return false;
 
 		m_Group = group;
+		if (!m_sCallsignId.IsEmpty())
+			m_Group.AICF_SetCallsign(GetDisplayName());
 		m_Group.AICF_TrackMemberPositions();
 		m_Group.GetOnWaypointCompleted().Insert(OnOwnedWaypointCompleted);
 		m_Group.GetOnWaypointRemoved().Insert(OnOwnedWaypointRemoved);

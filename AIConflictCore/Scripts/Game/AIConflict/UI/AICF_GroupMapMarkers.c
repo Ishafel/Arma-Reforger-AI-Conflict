@@ -67,6 +67,15 @@ modded class SCR_MapMarkerDynamicWComponent
 		if (attackBadgeText)
 		{
 			attackBadgeText.SetText(AICF_Localization.Resolve(text));
+			attackBadgeText.SetTextWrapping(true);
+			FrameSlot.SetSize(attackBadgeText, 300, 24);
+			float width, height;
+			attackBadgeText.GetTextSize(width, height);
+			height = Math.Max(24, Math.Ceil(height) + 6);
+			FrameSlot.SetSize(attackBadgeText, 300, height);
+			Widget badge = markerRoot.FindAnyWidget(AICF_GroupMapMarkerEntry.ATTACK_BADGE_NAME);
+			if (badge)
+				FrameSlot.SetSize(badge, 312, height);
 			SetTextVisible(false);
 			return;
 		}
@@ -224,23 +233,9 @@ class AICF_GroupMapMarkerEntry : SCR_MapMarkerEntryDynamic
 				markerColor = Color.FromSRGBA(232, 143, 38, 255);
 		}
 
-		string role = "?";
-		switch (roleCode)
-		{
-			case AICF_EGroupRole.ATTACK:
-				role = "A";
-				break;
-			case AICF_EGroupRole.DEFEND:
-				role = "D";
-				break;
-			case AICF_EGroupRole.RESERVE:
-				role = "R";
-				break;
-		}
-
 		string markerText = marker.AICF_GetGroupMarkerText();
 		if (markerText.IsEmpty())
-			markerText = string.Format("%1 %2%3", factionKey, role, roleLocalIndex);
+			markerText = "...";
 
 		widgetComp.SetColor(markerColor);
 		if (markerKind == 1)
@@ -535,7 +530,7 @@ class AICF_GroupMapMarkerSystem
 		SCR_AIGroup group)
 	{
 		return AICF_Localization.Format("{AICF:AICF_UI_troops_c9179bae}",
-			string.Format("%1", GetRoleLocalMarkerKey(slot)), string.Format("%1", DescribeRole(slot)),
+			string.Format("%1", slot.GetDisplayName()), string.Format("%1", DescribeRole(slot)),
 			string.Format("%1", AICF_GroupRuntime.CountAliveAgents(group)), string.Format("%1", DescribeTask(factionState, slot, group)));
 	}
 
@@ -567,7 +562,7 @@ class AICF_GroupMapMarkerSystem
 				vehicleState = AICF_Localization.Format("{AICF:AICF_UI_In_vehicle_2311c1b1}", string.Format("%1", inVehicle), string.Format("%1", alive));
 		}
 		string details = AICF_Localization.Format("{AICF:AICF_UI_Squad_Status_Troops_Planned_size_1eb24a70}",
-			string.Format("%1", GetRoleLocalMarkerKey(slot)), string.Format("%1", side), string.Format("%1", DescribeRole(slot)),
+			string.Format("%1", slot.GetDisplayName()), string.Format("%1", side), string.Format("%1", DescribeRole(slot)),
 			string.Format("%1", DescribeTask(factionState, slot, group)), string.Format("%1", alive), string.Format("%1", slot.GetDesiredSize()));
 		details += AICF_Localization.Format("{AICF:AICF_UI_Vehicle_Objective_Straight_line_distance_O_9317c9ba}",
 			string.Format("%1", vehicleState), string.Format("%1", DescribeObjective(slot)), string.Format("%1", DescribeDirection(group, slot)), string.Format("%1", authority));
@@ -683,35 +678,6 @@ class AICF_GroupMapMarkerSystem
 		return "{AICF:AICF_UI_Awaiting_task_48c50794}";
 	}
 
-	protected string GetShortRole(AICF_EGroupRole role)
-	{
-		switch (role)
-		{
-			case AICF_EGroupRole.ATTACK:
-				return "A";
-			case AICF_EGroupRole.DEFEND:
-				return "D";
-			case AICF_EGroupRole.RESERVE:
-				return "R";
-		}
-
-		return "?";
-	}
-
-	// Marker identity is role-local, while slotId remains the stable internal
-	// identity used by lifecycle and replication. Commander role changes reindex
-	// all same-role callsigns in AICF_FactionState.
-	protected string GetRoleLocalMarkerKey(AICF_GroupSlot slot)
-	{
-		if (!slot)
-			return "?";
-
-		return string.Format(
-			"%1%2",
-			GetShortRole(slot.GetRole()),
-			slot.GetRoleIndex());
-	}
-
 	protected int PackStableConfig(bool isUSSR, AICF_GroupSlot slot, bool objective = false)
 	{
 		int factionCode;
@@ -745,7 +711,7 @@ class AICF_GroupMapMarkerSystem
 
 		vector targetPosition = slot.GetPlayerStrategicIntentTargetPosition();
 		int intentRevision = slot.GetPlayerStrategicIntentRevision();
-		string slotKey = slot.GetSlotKey();
+		string slotKey = slot.GetDisplayName();
 		if (m_aDestinationMarkers[markerIndex] &&
 			m_aDestinationIntentRevisions[markerIndex] == intentRevision &&
 			m_aDestinationPositions[markerIndex] == targetPosition &&
@@ -829,12 +795,12 @@ class AICF_GroupMapMarkerSystem
 			{
 				targets.Insert(target);
 				representativeSlots.Insert(slot);
-				attackers.Insert(slot.GetSlotKey());
+				attackers.Insert(slot.GetDisplayName());
 			}
 			else
 			{
 				string attackerList = attackers[targetIndex];
-				attackerList += string.Format("+%1", slot.GetSlotKey());
+				attackerList += string.Format(", %1", slot.GetDisplayName());
 				attackers.Set(targetIndex, attackerList);
 			}
 		}

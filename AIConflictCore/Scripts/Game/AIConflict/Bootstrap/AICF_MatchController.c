@@ -7172,7 +7172,7 @@ class AICF_MatchController
 
 		string summary = string.Format(
 			"%1|%2|%3|%4|%5|%6|%7|%8",
-			slot.GetSlotKey(),
+			slot.GetDisplayName(),
 			AICF_Stage1Diagnostics.RoleToString(slot.GetRole()),
 			state,
 			alive,

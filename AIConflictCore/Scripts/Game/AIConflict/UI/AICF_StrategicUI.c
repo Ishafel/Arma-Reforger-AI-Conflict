@@ -738,7 +738,7 @@ class AICF_StrategicUIController
 		{
 			m_wCommandStatus.SetText(AICF_Localization.Resolve(AICF_Localization.Format(
 				"{AICF:AICF_UI_ORDER_SENT_slot_base_callsign_Awaiting_aut_d50fb00e}",
-				string.Format("%1", m_iSelectedSlot),
+				GetSlotKey(m_Campaign.AICF_GetStrategicGroupSummary(m_bLocalUSSR, m_iSelectedSlot)),
 				string.Format("%1", targetCallsign))));
 		}
 	}
@@ -1097,7 +1097,7 @@ class AICF_StrategicUIController
 		{
 			m_wCommandStatus.SetText(AICF_Localization.Resolve(AICF_Localization.Format(
 				"{AICF:AICF_UI_CONFIG_SENT_slot_role_type_next_size_Await_ded75165}",
-				string.Format("%1", m_iSelectedSlot),
+				GetSlotKey(m_Campaign.AICF_GetStrategicGroupSummary(m_bLocalUSSR, m_iSelectedSlot)),
 				string.Format("%1", roleCode),
 				string.Format("%1", unitTypeCode),
 				string.Format("%1", desiredSize))));

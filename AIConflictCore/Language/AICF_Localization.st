@@ -2505,5 +2505,605 @@ StringTable
 			Target_en_us "Wait for the respawn timer, then try again."
 			Target_ru_ru "Дождитесь окончания таймера возрождения и повторите."
 		}
+		CustomStringTableItem "{A1CF290900000000}"
+		{
+			Id "AICF_Callsign_USSR_Berkut"
+			Target_en_us "Berkut"
+			Target_ru_ru "Беркут"
+		}
+		CustomStringTableItem "{A1CF290900000001}"
+		{
+			Id "AICF_Callsign_US_Viper"
+			Target_en_us "Viper"
+			Target_ru_ru "Viper"
+		}
+		CustomStringTableItem "{A1CF290900000002}"
+		{
+			Id "AICF_Callsign_USSR_Bars"
+			Target_en_us "Bars"
+			Target_ru_ru "Барс"
+		}
+		CustomStringTableItem "{A1CF290900000003}"
+		{
+			Id "AICF_Callsign_US_Raptor"
+			Target_en_us "Raptor"
+			Target_ru_ru "Raptor"
+		}
+		CustomStringTableItem "{A1CF290900000004}"
+		{
+			Id "AICF_Callsign_USSR_Buran"
+			Target_en_us "Buran"
+			Target_ru_ru "Буран"
+		}
+		CustomStringTableItem "{A1CF290900000005}"
+		{
+			Id "AICF_Callsign_US_Hammer"
+			Target_en_us "Hammer"
+			Target_ru_ru "Hammer"
+		}
+		CustomStringTableItem "{A1CF290900000006}"
+		{
+			Id "AICF_Callsign_USSR_Granit"
+			Target_en_us "Granit"
+			Target_ru_ru "Гранит"
+		}
+		CustomStringTableItem "{A1CF290900000007}"
+		{
+			Id "AICF_Callsign_US_Anvil"
+			Target_en_us "Anvil"
+			Target_ru_ru "Anvil"
+		}
+		CustomStringTableItem "{A1CF290900000008}"
+		{
+			Id "AICF_Callsign_USSR_Kedr"
+			Target_en_us "Kedr"
+			Target_ru_ru "Кедр"
+		}
+		CustomStringTableItem "{A1CF290900000009}"
+		{
+			Id "AICF_Callsign_US_Falcon"
+			Target_en_us "Falcon"
+			Target_ru_ru "Falcon"
+		}
+		CustomStringTableItem "{A1CF29090000000A}"
+		{
+			Id "AICF_Callsign_USSR_Rubezh"
+			Target_en_us "Rubezh"
+			Target_ru_ru "Рубеж"
+		}
+		CustomStringTableItem "{A1CF29090000000B}"
+		{
+			Id "AICF_Callsign_US_Talon"
+			Target_en_us "Talon"
+			Target_ru_ru "Talon"
+		}
+		CustomStringTableItem "{A1CF29090000000C}"
+		{
+			Id "AICF_Callsign_USSR_Shkval"
+			Target_en_us "Shkval"
+			Target_ru_ru "Шквал"
+		}
+		CustomStringTableItem "{A1CF29090000000D}"
+		{
+			Id "AICF_Callsign_US_Sabre"
+			Target_en_us "Sabre"
+			Target_ru_ru "Sabre"
+		}
+		CustomStringTableItem "{A1CF29090000000E}"
+		{
+			Id "AICF_Callsign_USSR_Korshun"
+			Target_en_us "Korshun"
+			Target_ru_ru "Коршун"
+		}
+		CustomStringTableItem "{A1CF29090000000F}"
+		{
+			Id "AICF_Callsign_US_Raider"
+			Target_en_us "Raider"
+			Target_ru_ru "Raider"
+		}
+		CustomStringTableItem "{A1CF290900000010}"
+		{
+			Id "AICF_Callsign_USSR_Vikhr"
+			Target_en_us "Vikhr"
+			Target_ru_ru "Вихрь"
+		}
+		CustomStringTableItem "{A1CF290900000011}"
+		{
+			Id "AICF_Callsign_US_Nomad"
+			Target_en_us "Nomad"
+			Target_ru_ru "Nomad"
+		}
+		CustomStringTableItem "{A1CF290900000012}"
+		{
+			Id "AICF_Callsign_USSR_Sokol"
+			Target_en_us "Sokol"
+			Target_ru_ru "Сокол"
+		}
+		CustomStringTableItem "{A1CF290900000013}"
+		{
+			Id "AICF_Callsign_US_Ghost"
+			Target_en_us "Ghost"
+			Target_ru_ru "Ghost"
+		}
+		CustomStringTableItem "{A1CF290900000014}"
+		{
+			Id "AICF_Callsign_USSR_Taifun"
+			Target_en_us "Taifun"
+			Target_ru_ru "Тайфун"
+		}
+		CustomStringTableItem "{A1CF290900000015}"
+		{
+			Id "AICF_Callsign_US_Titan"
+			Target_en_us "Titan"
+			Target_ru_ru "Titan"
+		}
+		CustomStringTableItem "{A1CF290900000016}"
+		{
+			Id "AICF_Callsign_USSR_Kaskad"
+			Target_en_us "Kaskad"
+			Target_ru_ru "Каскад"
+		}
+		CustomStringTableItem "{A1CF290900000017}"
+		{
+			Id "AICF_Callsign_US_Sentinel"
+			Target_en_us "Sentinel"
+			Target_ru_ru "Sentinel"
+		}
+		CustomStringTableItem "{A1CF290900000018}"
+		{
+			Id "AICF_Callsign_USSR_Zenit"
+			Target_en_us "Zenit"
+			Target_ru_ru "Зенит"
+		}
+		CustomStringTableItem "{A1CF290900000019}"
+		{
+			Id "AICF_Callsign_US_Havoc"
+			Target_en_us "Havoc"
+			Target_ru_ru "Havoc"
+		}
+		CustomStringTableItem "{A1CF29090000001A}"
+		{
+			Id "AICF_Callsign_USSR_Grom"
+			Target_en_us "Grom"
+			Target_ru_ru "Гром"
+		}
+		CustomStringTableItem "{A1CF29090000001B}"
+		{
+			Id "AICF_Callsign_US_Ranger"
+			Target_en_us "Ranger"
+			Target_ru_ru "Ranger"
+		}
+		CustomStringTableItem "{A1CF29090000001C}"
+		{
+			Id "AICF_Callsign_USSR_Ratnik"
+			Target_en_us "Ratnik"
+			Target_ru_ru "Ратник"
+		}
+		CustomStringTableItem "{A1CF29090000001D}"
+		{
+			Id "AICF_Callsign_US_Coyote"
+			Target_en_us "Coyote"
+			Target_ru_ru "Coyote"
+		}
+		CustomStringTableItem "{A1CF29090000001E}"
+		{
+			Id "AICF_Callsign_USSR_Vostok"
+			Target_en_us "Vostok"
+			Target_ru_ru "Восток"
+		}
+		CustomStringTableItem "{A1CF29090000001F}"
+		{
+			Id "AICF_Callsign_US_Kodiak"
+			Target_en_us "Kodiak"
+			Target_ru_ru "Kodiak"
+		}
+		CustomStringTableItem "{A1CF290900000020}"
+		{
+			Id "AICF_Callsign_USSR_Uragan"
+			Target_en_us "Uragan"
+			Target_ru_ru "Ураган"
+		}
+		CustomStringTableItem "{A1CF290900000021}"
+		{
+			Id "AICF_Callsign_US_Bulldog"
+			Target_en_us "Bulldog"
+			Target_ru_ru "Bulldog"
+		}
+		CustomStringTableItem "{A1CF290900000022}"
+		{
+			Id "AICF_Callsign_USSR_Molniya"
+			Target_en_us "Molniya"
+			Target_ru_ru "Молния"
+		}
+		CustomStringTableItem "{A1CF290900000023}"
+		{
+			Id "AICF_Callsign_US_Raven"
+			Target_en_us "Raven"
+			Target_ru_ru "Raven"
+		}
+		CustomStringTableItem "{A1CF290900000024}"
+		{
+			Id "AICF_Callsign_USSR_Strazh"
+			Target_en_us "Strazh"
+			Target_ru_ru "Страж"
+		}
+		CustomStringTableItem "{A1CF290900000025}"
+		{
+			Id "AICF_Callsign_US_Dagger"
+			Target_en_us "Dagger"
+			Target_ru_ru "Dagger"
+		}
+		CustomStringTableItem "{A1CF290900000026}"
+		{
+			Id "AICF_Callsign_USSR_Oplot"
+			Target_en_us "Oplot"
+			Target_ru_ru "Оплот"
+		}
+		CustomStringTableItem "{A1CF290900000027}"
+		{
+			Id "AICF_Callsign_US_Wraith"
+			Target_en_us "Wraith"
+			Target_ru_ru "Wraith"
+		}
+		CustomStringTableItem "{A1CF290900000028}"
+		{
+			Id "AICF_Callsign_USSR_Almaz"
+			Target_en_us "Almaz"
+			Target_ru_ru "Алмаз"
+		}
+		CustomStringTableItem "{A1CF290900000029}"
+		{
+			Id "AICF_Callsign_US_Spartan"
+			Target_en_us "Spartan"
+			Target_ru_ru "Spartan"
+		}
+		CustomStringTableItem "{A1CF29090000002A}"
+		{
+			Id "AICF_Callsign_USSR_Rys"
+			Target_en_us "Rys"
+			Target_ru_ru "Рысь"
+		}
+		CustomStringTableItem "{A1CF29090000002B}"
+		{
+			Id "AICF_Callsign_US_Hunter"
+			Target_en_us "Hunter"
+			Target_ru_ru "Hunter"
+		}
+		CustomStringTableItem "{A1CF29090000002C}"
+		{
+			Id "AICF_Callsign_USSR_Yastreb"
+			Target_en_us "Yastreb"
+			Target_ru_ru "Ястреб"
+		}
+		CustomStringTableItem "{A1CF29090000002D}"
+		{
+			Id "AICF_Callsign_US_Striker"
+			Target_en_us "Striker"
+			Target_ru_ru "Striker"
+		}
+		CustomStringTableItem "{A1CF29090000002E}"
+		{
+			Id "AICF_Callsign_USSR_Kobra"
+			Target_en_us "Kobra"
+			Target_ru_ru "Кобра"
+		}
+		CustomStringTableItem "{A1CF29090000002F}"
+		{
+			Id "AICF_Callsign_US_Vanguard"
+			Target_en_us "Vanguard"
+			Target_ru_ru "Vanguard"
+		}
+		CustomStringTableItem "{A1CF290900000030}"
+		{
+			Id "AICF_Callsign_USSR_Smerch"
+			Target_en_us "Smerch"
+			Target_ru_ru "Смерч"
+		}
+		CustomStringTableItem "{A1CF290900000031}"
+		{
+			Id "AICF_Callsign_US_Scorpion"
+			Target_en_us "Scorpion"
+			Target_ru_ru "Scorpion"
+		}
+		CustomStringTableItem "{A1CF290900000032}"
+		{
+			Id "AICF_Callsign_USSR_Bastion"
+			Target_en_us "Bastion"
+			Target_ru_ru "Бастион"
+		}
+		CustomStringTableItem "{A1CF290900000033}"
+		{
+			Id "AICF_Callsign_US_Wolfpack"
+			Target_en_us "Wolfpack"
+			Target_ru_ru "Wolfpack"
+		}
+		CustomStringTableItem "{A1CF290900000034}"
+		{
+			Id "AICF_Callsign_USSR_Volk"
+			Target_en_us "Volk"
+			Target_ru_ru "Волк"
+		}
+		CustomStringTableItem "{A1CF290900000035}"
+		{
+			Id "AICF_Callsign_US_Specter"
+			Target_en_us "Specter"
+			Target_ru_ru "Specter"
+		}
+		CustomStringTableItem "{A1CF290900000036}"
+		{
+			Id "AICF_Callsign_USSR_Krechet"
+			Target_en_us "Krechet"
+			Target_ru_ru "Кречет"
+		}
+		CustomStringTableItem "{A1CF290900000037}"
+		{
+			Id "AICF_Callsign_US_Reaper"
+			Target_en_us "Reaper"
+			Target_ru_ru "Reaper"
+		}
+		CustomStringTableItem "{A1CF290900000038}"
+		{
+			Id "AICF_Callsign_USSR_Metel"
+			Target_en_us "Metel"
+			Target_ru_ru "Метель"
+		}
+		CustomStringTableItem "{A1CF290900000039}"
+		{
+			Id "AICF_Callsign_US_Grizzly"
+			Target_en_us "Grizzly"
+			Target_ru_ru "Grizzly"
+		}
+		CustomStringTableItem "{A1CF29090000003A}"
+		{
+			Id "AICF_Callsign_USSR_Fakel"
+			Target_en_us "Fakel"
+			Target_ru_ru "Факел"
+		}
+		CustomStringTableItem "{A1CF29090000003B}"
+		{
+			Id "AICF_Callsign_US_Tombstone"
+			Target_en_us "Tombstone"
+			Target_ru_ru "Tombstone"
+		}
+		CustomStringTableItem "{A1CF29090000003C}"
+		{
+			Id "AICF_Callsign_USSR_Dozor"
+			Target_en_us "Dozor"
+			Target_ru_ru "Дозор"
+		}
+		CustomStringTableItem "{A1CF29090000003D}"
+		{
+			Id "AICF_Callsign_US_Rattler"
+			Target_en_us "Rattler"
+			Target_ru_ru "Rattler"
+		}
+		CustomStringTableItem "{A1CF29090000003E}"
+		{
+			Id "AICF_Callsign_USSR_Klin"
+			Target_en_us "Klin"
+			Target_ru_ru "Клин"
+		}
+		CustomStringTableItem "{A1CF29090000003F}"
+		{
+			Id "AICF_Callsign_US_Pathfinder"
+			Target_en_us "Pathfinder"
+			Target_ru_ru "Pathfinder"
+		}
+		CustomStringTableItem "{A1CF290900000040}"
+		{
+			Id "AICF_Callsign_USSR_Taran"
+			Target_en_us "Taran"
+			Target_ru_ru "Таран"
+		}
+		CustomStringTableItem "{A1CF290900000041}"
+		{
+			Id "AICF_Callsign_US_Deadeye"
+			Target_en_us "Deadeye"
+			Target_ru_ru "Deadeye"
+		}
+		CustomStringTableItem "{A1CF290900000042}"
+		{
+			Id "AICF_Callsign_USSR_Zarya"
+			Target_en_us "Zarya"
+			Target_ru_ru "Заря"
+		}
+		CustomStringTableItem "{A1CF290900000043}"
+		{
+			Id "AICF_Callsign_US_Longbow"
+			Target_en_us "Longbow"
+			Target_ru_ru "Longbow"
+		}
+		CustomStringTableItem "{A1CF290900000044}"
+		{
+			Id "AICF_Callsign_USSR_Tuman"
+			Target_en_us "Tuman"
+			Target_ru_ru "Туман"
+		}
+		CustomStringTableItem "{A1CF290900000045}"
+		{
+			Id "AICF_Callsign_US_Nightwatch"
+			Target_en_us "Nightwatch"
+			Target_ru_ru "Nightwatch"
+		}
+		CustomStringTableItem "{A1CF290900000046}"
+		{
+			Id "AICF_Callsign_USSR_Iskra"
+			Target_en_us "Iskra"
+			Target_ru_ru "Искра"
+		}
+		CustomStringTableItem "{A1CF290900000047}"
+		{
+			Id "AICF_Callsign_US_Wildcat"
+			Target_en_us "Wildcat"
+			Target_ru_ru "Wildcat"
+		}
+		CustomStringTableItem "{A1CF290900000048}"
+		{
+			Id "AICF_Callsign_USSR_Plamya"
+			Target_en_us "Plamya"
+			Target_ru_ru "Пламя"
+		}
+		CustomStringTableItem "{A1CF290900000049}"
+		{
+			Id "AICF_Callsign_US_Thunderbolt"
+			Target_en_us "Thunderbolt"
+			Target_ru_ru "Thunderbolt"
+		}
+		CustomStringTableItem "{A1CF29090000004A}"
+		{
+			Id "AICF_Callsign_USSR_Utyos"
+			Target_en_us "Utyos"
+			Target_ru_ru "Утёс"
+		}
+		CustomStringTableItem "{A1CF29090000004B}"
+		{
+			Id "AICF_Callsign_US_Blackbird"
+			Target_en_us "Blackbird"
+			Target_ru_ru "Blackbird"
+		}
+		CustomStringTableItem "{A1CF29090000004C}"
+		{
+			Id "AICF_Callsign_USSR_Kremen"
+			Target_en_us "Kremen"
+			Target_ru_ru "Кремень"
+		}
+		CustomStringTableItem "{A1CF29090000004D}"
+		{
+			Id "AICF_Callsign_US_Redtail"
+			Target_en_us "Redtail"
+			Target_ru_ru "Redtail"
+		}
+		CustomStringTableItem "{A1CF29090000004E}"
+		{
+			Id "AICF_Callsign_USSR_Step"
+			Target_en_us "Step"
+			Target_ru_ru "Степь"
+		}
+		CustomStringTableItem "{A1CF29090000004F}"
+		{
+			Id "AICF_Callsign_US_Cutlass"
+			Target_en_us "Cutlass"
+			Target_ru_ru "Cutlass"
+		}
+		CustomStringTableItem "{A1CF290900000050}"
+		{
+			Id "AICF_Callsign_USSR_Polyus"
+			Target_en_us "Polyus"
+			Target_ru_ru "Полюс"
+		}
+		CustomStringTableItem "{A1CF290900000051}"
+		{
+			Id "AICF_Callsign_US_Ironwolf"
+			Target_en_us "Ironwolf"
+			Target_ru_ru "Ironwolf"
+		}
+		CustomStringTableItem "{A1CF290900000052}"
+		{
+			Id "AICF_Callsign_USSR_Burya"
+			Target_en_us "Burya"
+			Target_ru_ru "Буря"
+		}
+		CustomStringTableItem "{A1CF290900000053}"
+		{
+			Id "AICF_Callsign_US_Blackout"
+			Target_en_us "Blackout"
+			Target_ru_ru "Blackout"
+		}
+		CustomStringTableItem "{A1CF290900000054}"
+		{
+			Id "AICF_Callsign_USSR_Okhotnik"
+			Target_en_us "Okhotnik"
+			Target_ru_ru "Охотник"
+		}
+		CustomStringTableItem "{A1CF290900000055}"
+		{
+			Id "AICF_Callsign_US_Warhawk"
+			Target_en_us "Warhawk"
+			Target_ru_ru "Warhawk"
+		}
+		CustomStringTableItem "{A1CF290900000056}"
+		{
+			Id "AICF_Callsign_USSR_Skat"
+			Target_en_us "Skat"
+			Target_ru_ru "Скат"
+		}
+		CustomStringTableItem "{A1CF290900000057}"
+		{
+			Id "AICF_Callsign_US_Bonebreaker"
+			Target_en_us "Bonebreaker"
+			Target_ru_ru "Bonebreaker"
+		}
+		CustomStringTableItem "{A1CF290900000058}"
+		{
+			Id "AICF_Callsign_USSR_Volna"
+			Target_en_us "Volna"
+			Target_ru_ru "Волна"
+		}
+		CustomStringTableItem "{A1CF290900000059}"
+		{
+			Id "AICF_Callsign_US_Hellhound"
+			Target_en_us "Hellhound"
+			Target_ru_ru "Hellhound"
+		}
+		CustomStringTableItem "{A1CF29090000005A}"
+		{
+			Id "AICF_Callsign_USSR_Sapsan"
+			Target_en_us "Sapsan"
+			Target_ru_ru "Сапсан"
+		}
+		CustomStringTableItem "{A1CF29090000005B}"
+		{
+			Id "AICF_Callsign_US_Crosshair"
+			Target_en_us "Crosshair"
+			Target_ru_ru "Crosshair"
+		}
+		CustomStringTableItem "{A1CF29090000005C}"
+		{
+			Id "AICF_Callsign_USSR_Voron"
+			Target_en_us "Voron"
+			Target_ru_ru "Ворон"
+		}
+		CustomStringTableItem "{A1CF29090000005D}"
+		{
+			Id "AICF_Callsign_US_Drifter"
+			Target_en_us "Drifter"
+			Target_ru_ru "Drifter"
+		}
+		CustomStringTableItem "{A1CF29090000005E}"
+		{
+			Id "AICF_Callsign_USSR_Zubr"
+			Target_en_us "Zubr"
+			Target_ru_ru "Зубр"
+		}
+		CustomStringTableItem "{A1CF29090000005F}"
+		{
+			Id "AICF_Callsign_US_Vulture"
+			Target_en_us "Vulture"
+			Target_ru_ru "Vulture"
+		}
+		CustomStringTableItem "{A1CF290900000060}"
+		{
+			Id "AICF_Callsign_USSR_Shchit"
+			Target_en_us "Shchit"
+			Target_ru_ru "Щит"
+		}
+		CustomStringTableItem "{A1CF290900000061}"
+		{
+			Id "AICF_Callsign_US_Fang"
+			Target_en_us "Fang"
+			Target_ru_ru "Fang"
+		}
+		CustomStringTableItem "{A1CF290900000062}"
+		{
+			Id "AICF_Callsign_USSR_Krepost"
+			Target_en_us "Krepost"
+			Target_ru_ru "Крепость"
+		}
+		CustomStringTableItem "{A1CF290900000063}"
+		{
+			Id "AICF_Callsign_US_Ironfist"
+			Target_en_us "Ironfist"
+			Target_ru_ru "Ironfist"
+		}
 	}
 }
