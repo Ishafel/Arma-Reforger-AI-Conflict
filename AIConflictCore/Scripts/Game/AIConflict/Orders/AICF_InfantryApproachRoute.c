@@ -6,6 +6,16 @@ class AICF_InfantryApproachRoute
 	protected vector m_vOrigin;
 	protected bool m_bDisabled;
 	protected int m_iTileWaitStartedAtMs;
+	protected vector m_vTileCandidate;
+
+	bool CanResumeTileWait(SCR_AIGroup group)
+	{
+		if (!IsWaitingForTile() || !group) return false;
+		AIPathfindingComponent pathfinding = AIPathfindingComponent.Cast(group.FindComponent(AIPathfindingComponent));
+		if (!pathfinding) return false;
+		NavmeshWorldComponent navmesh = pathfinding.GetNavmeshComponent();
+		return navmesh && (navmesh.IsTileLoaded(m_vTileCandidate) || System.GetTickCount(m_iTileWaitStartedAtMs) >= 30000);
+	}
 
 	void AICF_InfantryApproachRoute(SCR_CampaignMilitaryBaseComponent target, vector origin)
 	{
@@ -82,6 +92,7 @@ class AICF_InfantryApproachRoute
 		bool waitingForTile;
 		if (!navmesh.IsTileLoaded(candidate))
 		{
+			m_vTileCandidate = candidate;
 			if (m_iTileWaitStartedAtMs == 0)
 				m_iTileWaitStartedAtMs = System.GetTickCount();
 			if (System.GetTickCount(m_iTileWaitStartedAtMs) >= 30000)

@@ -70,6 +70,8 @@ modded class SCR_AIProcessFailedMovementResult
 			bool hasRelated = GetVariableIn(PORT_IS_WAYPOINT_RELATED, related);
 			vector location;
 			GetVariableIn(PORT_MOVE_LOCATION, location);
+			if (AICF_FIAPatrolMovementPolicy.Handle(m_Group, m_GroupUtilityComponent, result, handler, related, location))
+				return ENodeResult.FAIL;
 			if (AICF_HandleFailedMovement(result, handler, related, location))
 				return ENodeResult.FAIL;
 			if (result == EMoveError.UNKNOWN && !m_bAICFMoveContextReported)
@@ -143,4 +145,35 @@ modded class SCR_AIProcessFailedMovementResult
 		}
 		return alive > 0;
 	}
+}
+
+// Владелец реакции BT на failed movement только для зарегистрированного FIA patrol.
+class AICF_FIAPatrolMovementPolicy
+{
+	static bool Handle(SCR_AIGroup group, SCR_AIGroupUtilityComponent utility, int result, int handler, bool related, vector location)
+	{
+		if (!Replication.IsServer() || result != EMoveError.UNKNOWN || !related ||
+			!group || !utility) return false;
+		AICF_MatchController controller = AICF_MatchController.GetActiveController();
+		SCR_AIActivityBase activity = SCR_AIActivityBase.Cast(utility.GetCurrentAction());
+		if (!controller || !activity || !activity.m_RelatedWaypoint || group.GetGroupUtilityComponent() != utility) return false;
+		IEntity vehicle;
+		if (handler != AIGroupMovementComponent.DEFAULT_HANDLER_ID)
+		{
+			if (!utility.m_VehicleMgr) return false;
+			SCR_AIGroupVehicle groupVehicle = utility.m_VehicleMgr.FindVehicleBySubgroupId(handler);
+			if (groupVehicle) vehicle = groupVehicle.GetEntity();
+			else if (handler != -1) return false;
+		}
+		AICF_FIAPatrol p = controller.ReportFIAPatrolFailedMovement(group, activity.m_RelatedWaypoint, vehicle);
+		if (!p) return false;
+		AICF_FIAPatrolMoveFailure failure = p.m_MoveFailure;
+		AIActionBase failedAction = utility.GetExecutedAction();
+		utility.OnMoveFailed(result, vehicle, related, location);
+		// Invoker может заменить waypoint, leg или завершить lifecycle синхронно.
+		if (failure && failure.IsCurrent(p) && p.m_MoveFailure == failure && failedAction &&
+			utility.GetExecutedAction() == failedAction) failedAction.Fail();
+		return true;
+	}
+
 }

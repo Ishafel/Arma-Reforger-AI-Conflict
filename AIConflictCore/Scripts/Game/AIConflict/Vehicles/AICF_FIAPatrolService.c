@@ -12,6 +12,39 @@ class AICF_FIAPatrolService
 	protected bool m_bStopped;
 	protected int m_iNextSpawnMs;
 
+	AICF_FIAPatrol ReportFailedMovement(SCR_AIGroup group, AIWaypoint waypoint, IEntity vehicle = null)
+	{
+		if (!Replication.IsServer() || m_bStopped || !m_Graph || !group || !waypoint) return null;
+		foreach (AICF_FIAPatrol p : m_aPatrols)
+		{
+			if (p.m_Group != group || p.m_Waypoint != waypoint || (vehicle && vehicle != p.m_Vehicle) ||
+				p.m_iGraphRevision != m_Graph.GetRevision() || group.GetCurrentWaypoint() != waypoint) continue;
+			AICF_FIAPatrolMoveFailure failure = new AICF_FIAPatrolMoveFailure(p);
+			if (!failure.IsCurrent(p)) return null;
+			p.m_MoveFailure = failure;
+			p.Log("FIA_PATROL_MOVE_FAILED", string.Format("waypoint=%1 retries=%2 position=%3 endpoint=%4 seated=%5 next_action=BOUNDED_ROUTE_RECOVERY",
+				p.m_WaypointId, p.m_iRouteRetries, p.m_Vehicle.GetOrigin(), p.m_vEndpoint, p.Seated()));
+			return p;
+		}
+		return null;
+	}
+
+	protected void RecoverRoute(AICF_FIAPatrol p, int now, string reason)
+	{
+		p.m_MoveFailure = null;
+		if (p.m_iRouteRetries >= 2)
+		{
+			Retire(p, "ROUTE_RECOVERY_EXHAUSTED");
+			return;
+		}
+		p.m_iRouteRetries++;
+		m_Handoff.ClearFIAPatrolWaypoint(p);
+		p.m_iLegAtMs = now;
+		p.Log("FIA_PATROL_ROUTE_RETRY", string.Format("attempt=%1 reason=%2 position=%3 endpoint=%4 seated=%5",
+			p.m_iRouteRetries, reason, p.m_Vehicle.GetOrigin(), p.m_vEndpoint, p.Seated()));
+		// Новый Move выдаётся следующим tick, после teardown старого activity.
+	}
+
 	void Start(SCR_GameModeCampaign campaign, AICF_ObjectiveGraph graph)
 	{
 		if (!Replication.IsServer() || !campaign || !graph || m_Fleet) return;
@@ -117,6 +150,7 @@ class AICF_FIAPatrolService
 		int revision = m_Graph.GetRevision();
 		if (p.m_iGraphRevision != revision)
 		{
+			p.m_MoveFailure = null;
 			m_Handoff.ClearFIAPatrolWaypoint(p);
 			int targetId = m_Graph.FindNodeId(p.m_Target);
 			if (!source.GetOutgoingNodeIds().Contains(targetId)) p.m_Target = null;
@@ -142,19 +176,37 @@ class AICF_FIAPatrolService
 			p.m_iLegAtMs = now;
 			p.m_vLegStart = p.m_Vehicle.GetOrigin();
 			p.m_vProgress = p.m_vLegStart;
+			p.m_fBestEndpointDistance = vector.DistanceXZ(p.m_vLegStart, p.m_vEndpoint);
+			p.m_iRouteRetries = 0;
 			p.Log("FIA_PATROL_LEG", string.Format("from=%1 to=%2 endpoint=%3 directed_edge=1", sourceId, m_Graph.FindNodeId(p.m_Target), p.m_vEndpoint));
 		}
 		array<AIWaypoint> queue = {};
 		p.m_Group.GetWaypoints(queue);
-		if (vector.DistanceXZ(p.m_vProgress, p.m_Vehicle.GetOrigin()) >= 15)
+		float endpointDistance = vector.DistanceXZ(p.m_Vehicle.GetOrigin(), p.m_vEndpoint);
+		if (p.m_fBestEndpointDistance - endpointDistance >= 15)
 		{
 			p.m_vProgress = p.m_Vehicle.GetOrigin();
 			p.m_iLegAtMs = now;
+			p.m_fBestEndpointDistance = endpointDistance;
+			p.m_iRouteRetries = 0;
 		}
-		if (!p.m_Waypoint || !queue.Contains(p.m_Waypoint) || now - p.m_iLegAtMs >= 120000)
+		if (p.m_MoveFailure)
+		{
+			if (p.m_MoveFailure.IsCurrent(p))
+			{
+				RecoverRoute(p, now, "UNKNOWN_MOVE");
+				return;
+			}
+			p.m_MoveFailure = null;
+		}
+		if (now - p.m_iLegAtMs >= 120000 || (p.m_Waypoint && !queue.Contains(p.m_Waypoint)))
+		{
+			RecoverRoute(p, now, "NO_PHYSICAL_PROGRESS");
+			return;
+		}
+		if (!p.m_Waypoint)
 		{
 			m_Handoff.MoveFIAPatrol(p, p.m_vEndpoint);
-			p.m_iLegAtMs = now;
 		}
 	}
 
@@ -187,6 +239,7 @@ class AICF_FIAPatrolService
 	protected void Retire(AICF_FIAPatrol p, string reason)
 	{
 		if (p.m_bRetired) return;
+		p.m_MoveFailure = null;
 		m_Handoff.DetachFIAPatrol(p);
 		AICF_VehicleCleanupManager.RetainFIAPatrol(p);
 		p.m_bRetired = true;

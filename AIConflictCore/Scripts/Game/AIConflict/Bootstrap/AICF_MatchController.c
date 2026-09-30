@@ -491,6 +491,13 @@ class AICF_MatchController
 		return slot;
 	}
 
+	AICF_FIAPatrol ReportFIAPatrolFailedMovement(SCR_AIGroup group, AIWaypoint waypoint, IEntity vehicle = null)
+	{
+		if (!Replication.IsServer() || !m_bStarted || !m_bRosterReady || !m_FIAPatrols)
+			return null;
+		return m_FIAPatrols.ReportFailedMovement(group, waypoint, vehicle);
+	}
+
 	protected AICF_AICommander GetAICommanderForFaction(
 		SCR_CampaignFaction faction)
 	{

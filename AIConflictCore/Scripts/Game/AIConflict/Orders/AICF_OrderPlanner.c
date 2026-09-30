@@ -1576,6 +1576,14 @@ class AICF_OrderPlanner
 		bool completed = terminalOutcome == "GROUP_CALLBACK_COMPLETED";
 		if (!completed && (!terminalOutcome.IsEmpty() || slot.GetGroup().GetCurrentWaypoint() != waypoint))
 			return false;
+		// Временная точка у leader ждёт tile, а не сбора колонны в радиус ALL.
+		// Проверка прежней group/assignment/waypoint identity уже выполнена выше.
+		if (slot.IsApproachRouteWaypoint())
+		{
+			AICF_InfantryApproachRoute route = slot.GetApproachRoute(slot.GetTargetBase());
+			if (route && route.CanResumeTileWait(slot.GetGroup()))
+				return RebuildCurrentOrder(slot, faction, "INFANTRY_APPROACH_TILE_READY");
+		}
 		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
 		if (!leader || vector.DistanceXZ(leader.GetOrigin(), waypoint.GetOrigin()) > waypoint.GetCompletionRadius())
 			return false;
