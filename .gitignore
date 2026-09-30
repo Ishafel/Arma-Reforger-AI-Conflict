@@ -65,6 +65,3 @@
 !/tools/Test-MovementRecoveryContracts.ps1
 !/tools/Watch-AICFRuntimeDiagnostics.ps1
 !/tools/fixtures/AICF_MovementRecoveryProbe.c
-!/docs/
-/docs/*
-!/docs/MOVEMENT_RECOVERY_20260929.md
