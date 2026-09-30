@@ -3,6 +3,19 @@ modded class SCR_LoadoutButton
 {
 	RplId m_AICFCharacter = RplId.Invalid();
 	string m_sAICFCharacterName;
+	bool m_bAICFPersonalPreset;
+
+	void AICF_SetPersonalPreset(SCR_BasePlayerLoadout role)
+	{
+		m_bAICFPersonalPreset = true;
+		SetLoadout(role);
+		string name = AICF_Localization.Resolve("{AICF:AICF_UI_PersonalName}");
+		SetPlayerName(name);
+		if (m_wPlayerName) m_wPlayerName.SetVisible(true);
+		if (m_wPlatformIcon) m_wPlatformIcon.SetVisible(false);
+		if (m_wLeaderText) m_wLeaderText.SetVisible(false);
+		if (m_wSuppliesLoadoutText) m_wSuppliesLoadoutText.SetText(name);
+	}
 
 	void AICF_SetCharacter(RplId character, string name, ResourceName prefab)
 	{
@@ -33,6 +46,93 @@ modded class SCR_LoadoutButton
 
 modded class SCR_LoadoutGallery
 {
+	protected SCR_LoadoutButton m_AICFPersonalCard;
+	protected string m_sAICFPersonalCardContext;
+	protected bool m_bAICFPersonalCardSelected;
+	protected int m_iAICFNativePageSize;
+
+	void AICF_ClearPersonalCard()
+	{
+		if (m_AICFPersonalCard)
+		{
+			m_AICFPersonalCard.m_OnClicked.Remove(AICF_OnPersonalClicked);
+			if (m_SelectedButton == m_AICFPersonalCard) m_SelectedButton = null;
+			int index = m_aWidgets.Find(m_AICFPersonalCard.GetRootWidget());
+			if (index >= 0) RemoveItem(index);
+			if (m_iAICFNativePageSize > 0) m_iCountShownItems = m_iAICFNativePageSize;
+			m_iSelectedItem = 0;
+			ShowTiles(0, false);
+			SetupHints(m_aWidgets.Count(), false);
+			UpdatePagingButtons();
+		}
+		m_AICFPersonalCard = null;
+		m_sAICFPersonalCardContext = string.Empty;
+		m_bAICFPersonalCardSelected = false;
+		m_iAICFNativePageSize = 0;
+	}
+
+	void AICF_SyncPersonalCard(SCR_PlayerController player, SCR_BasePlayerLoadout role, bool characterSelected, bool busy)
+	{
+		SCR_CampaignFaction faction;
+		AICF_LoadoutRecipe context = AICF_PersonalLoadout.Context(player, faction);
+		if (!context || !role || !player.AICF_PersonalAvailable() ||
+			!AICF_PersonalLoadout.SameContext(AICF_LoadoutRecipe.Decode(player.AICF_PersonalContext()), context))
+		{
+			AICF_ClearPersonalCard();
+			return;
+		}
+		if (m_sAICFPersonalCardContext != context.Encode() || (m_AICFPersonalCard && m_AICFPersonalCard.GetLoadout() != role))
+			AICF_ClearPersonalCard();
+		if (!m_AICFPersonalCard)
+		{
+			// Личный вариант идёт после native ролей, перед карточками живых ИИ.
+			// Обычная синхронизация ниже восстановит roster в прежнем порядке.
+			AICF_ClearCharacters();
+			Widget card = GetGame().GetWorkspace().CreateWidgets(m_sLoadoutButton, GetContentRoot());
+			if (!card) return;
+			m_AICFPersonalCard = SCR_LoadoutButton.Cast(card.FindHandler(SCR_LoadoutButton));
+			if (!m_AICFPersonalCard) { card.RemoveFromHierarchy(); return; }
+			m_AICFPersonalCard.AICF_SetPersonalPreset(role);
+			m_AICFPersonalCard.m_OnClicked.Insert(AICF_OnPersonalClicked);
+			m_iAICFNativePageSize = m_iCountShownItems;
+			m_iCountShownItems = Math.Max(2, m_iCountShownItems);
+			AddItem(card);
+			m_sAICFPersonalCardContext = context.Encode();
+			UpdatePagingButtons();
+			Print(string.Format("[AICF][PERSONAL_LOADOUT_CARD] state=CREATED native_gallery=1 visible_cards=%1", m_iCountShownItems));
+		}
+		bool selected = player.AICF_PersonalSelected() && !characterSelected;
+		m_AICFPersonalCard.SetSelected(selected);
+		m_AICFPersonalCard.SetEnabled(m_AICFPersonalCard.GetRootWidget().IsVisible() && !busy);
+		foreach (SCR_LoadoutButton button : m_aLoadoutButtons)
+			button.SetSelected(!selected && !characterSelected && button.GetLoadout() == role);
+		if (selected) m_SelectedButton = m_AICFPersonalCard;
+		else m_SelectedButton = GetButtonForLoadout(role);
+		if (selected != m_bAICFPersonalCardSelected && !busy)
+		{
+			m_bAICFPersonalCardSelected = selected;
+			if (!characterSelected && !busy && m_SelectedButton)
+			{
+				int index = m_aWidgets.Find(m_SelectedButton.GetRootWidget());
+				if (index >= 0)
+				{
+					int pageStart = Math.Floor(index / m_iCountShownItems) * m_iCountShownItems;
+					m_iSelectedItem = pageStart;
+					ShowTiles(pageStart, false);
+					SetupHints(m_aWidgets.Count(), false);
+					UpdatePagingButtons();
+				}
+			}
+			Print(string.Format("[AICF][PERSONAL_LOADOUT_CARD] selected=%1 revision=%2", selected, player.AICF_LoadoutRevision()));
+		}
+	}
+
+	protected void AICF_OnPersonalClicked(SCR_LoadoutButton button)
+	{
+		SCR_DeployMenuMain menu = SCR_DeployMenuMain.GetDeployMenu();
+		if (menu) menu.AICF_SelectPersonalPreset(true);
+	}
+
 	protected ref array<SCR_LoadoutButton> m_aAICFCharacters = {};
 	protected ref array<RplId> m_aAICFCharacterIds = {};
 
@@ -57,6 +157,7 @@ modded class SCR_LoadoutGallery
 
 	override void ClearAll()
 	{
+		AICF_ClearPersonalCard();
 		AICF_ClearCharacters();
 		super.ClearAll();
 	}
@@ -114,6 +215,35 @@ modded class SCR_LoadoutRequestUIComponent
 	protected bool m_bAICFCharacterPreview;
 	protected IEntity m_AICFPreviewSource;
 	protected ResourceName m_sAICFPreviewPrefab;
+	protected bool m_bAICFPersonalPreviewActive;
+	protected bool m_bAICFNativePreviewVisible;
+
+	ItemPreviewWidget AICF_GetSelectedLoadoutImage()
+	{
+		// GetImageWidget у карточки возвращает маленький значок роли.
+		// Геометрия куклы принадлежит отдельному native ItemPreviewWidget.
+		if (m_PreviewComp) return m_PreviewComp.GetItemPreviewWidget();
+		return null;
+	}
+
+	void AICF_SetPersonalPreviewActive(bool active)
+	{
+		bool restore = !active && m_bAICFPersonalPreviewActive;
+		if (active && !m_bAICFPersonalPreviewActive && m_wLoadoutPreview)
+			m_bAICFNativePreviewVisible = m_wLoadoutPreview.IsVisible();
+		if (!active && m_bAICFPersonalPreviewActive && m_wLoadoutPreview)
+			m_wLoadoutPreview.SetVisible(m_bAICFNativePreviewVisible);
+		m_bAICFPersonalPreviewActive = active;
+		if (active && m_wLoadoutPreview) m_wLoadoutPreview.SetVisible(true);
+		if (restore && m_PlyLoadoutComp)
+		{
+			// Native Refresh пропускает preview для KEYBOARD; после освобождения
+			// личной модели явно возвращаем штатный источник для любого ввода.
+			SCR_BasePlayerLoadout role = m_PlyLoadoutComp.GetLoadout();
+			if (role && m_PreviewComp) m_PreviewComp.SetPreviewedLoadout(role);
+			RefreshLoadoutPreview();
+		}
+	}
 
 	void AICF_SyncCharacters(SCR_PlayerController player, RplId selected)
 	{
@@ -125,6 +255,24 @@ modded class SCR_LoadoutRequestUIComponent
 		if (m_LoadoutSelector) m_LoadoutSelector.AICF_ClearCharacters();
 	}
 
+	void AICF_ClearPersonalCard()
+	{
+		if (m_LoadoutSelector) m_LoadoutSelector.AICF_ClearPersonalCard();
+	}
+
+	void AICF_SyncPersonalCard(bool characterSelected, bool busy)
+	{
+		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
+		if (!m_LoadoutSelector || !m_PlyLoadoutComp || !player) return;
+		m_LoadoutSelector.AICF_SyncPersonalCard(player, m_PlyLoadoutComp.GetLoadout(), characterSelected, busy);
+		if (player.AICF_PersonalSelected() && !characterSelected)
+		{
+			string name = AICF_Localization.Resolve("{AICF:AICF_UI_PersonalName}");
+			if (m_wExpandButtonName) m_wExpandButtonName.SetText(name);
+			if (m_wLoadoutNameText) m_wLoadoutNameText.SetText(name);
+		}
+	}
+
 	void AICF_ClearCharacterPreview()
 	{
 		m_bAICFCharacterPreview = false;
@@ -134,12 +282,13 @@ modded class SCR_LoadoutRequestUIComponent
 
 	override protected void SetLoadoutPreview(SCR_BasePlayerLoadout loadout)
 	{
-		if (m_bAICFCharacterPreview) return;
+		if (m_bAICFCharacterPreview || m_bAICFPersonalPreviewActive) return;
 		super.SetLoadoutPreview(loadout);
 	}
 
 	void AICF_ShowCharacter(RplId character, string name, string result)
 	{
+		AICF_SetPersonalPreviewActive(false);
 		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		if (!player || !m_PreviewComp) return;
 		int index = player.m_aAICFSquadRespawnIds.Find(character);
@@ -172,6 +321,12 @@ modded class SCR_LoadoutRequestUIComponent
 	override protected void OnRequestPlayerLoadout(SCR_LoadoutButton loadoutBtn)
 	{
 		SCR_DeployMenuMain menu = SCR_DeployMenuMain.GetDeployMenu();
+		if (loadoutBtn && loadoutBtn.m_bAICFPersonalPreset)
+		{
+			if (menu) menu.AICF_SelectPersonalPreset(true);
+			return;
+		}
+		if (menu && !menu.AICF_SelectPersonalPreset(false)) return;
 		if (menu) menu.AICF_ClearCharacter();
 		super.OnRequestPlayerLoadout(loadoutBtn);
 	}
@@ -186,11 +341,19 @@ modded class SCR_DeployMenuMain
 	protected ref AICF_PersonalLoadoutUI m_AICFPersonalUI;
 	protected float m_fAICFPersonalRefresh;
 
+	bool AICF_SelectPersonalPreset(bool personal)
+	{
+		if (!m_AICFPersonalUI || !m_AICFPersonalUI.SelectPreset(personal)) return false;
+		AICF_ClearCharacter();
+		return true;
+	}
+
 	void AICF_SelectCharacter(RplId character, string name)
 	{
 		if (m_AICFPersonalUI && m_AICFPersonalUI.IsBusy()) return;
 		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		if (!player || !player.m_aAICFSquadRespawnIds.Contains(character)) return;
+		if (m_AICFPersonalUI) m_AICFPersonalUI.ClearPreview();
 		if (player.m_sAICFSquadRespawnResult != "PENDING") player.m_sAICFSquadRespawnResult = string.Empty;
 		m_AICFSelectedCharacter = character;
 		m_iAICFSelectedDeathRevision = player.m_iAICFSquadListDeathRevision;
@@ -219,7 +382,11 @@ modded class SCR_DeployMenuMain
 		if (m_fAICFPersonalRefresh <= 0)
 		{
 			m_fAICFPersonalRefresh = 0.25;
-			m_AICFPersonalUI.Update(GetRootWidget(), m_AICFSelectedCharacter.IsValid());
+			ItemPreviewWidget loadoutImage;
+			if (m_LoadoutRequestUIHandler) loadoutImage = m_LoadoutRequestUIHandler.AICF_GetSelectedLoadoutImage();
+			m_AICFPersonalUI.Update(GetRootWidget(), m_AICFSelectedCharacter.IsValid(), loadoutImage);
+			if (m_LoadoutRequestUIHandler) m_LoadoutRequestUIHandler.AICF_SetPersonalPreviewActive(m_AICFPersonalUI.IsPreviewVisible());
+			if (m_LoadoutRequestUIHandler) m_LoadoutRequestUIHandler.AICF_SyncPersonalCard(m_AICFSelectedCharacter.IsValid(), m_AICFPersonalUI.IsBusy());
 		}
 		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		if (!player || !m_LoadoutRequestUIHandler) return;
@@ -266,6 +433,7 @@ modded class SCR_DeployMenuMain
 	{
 		if (m_AICFPersonalUI) m_AICFPersonalUI.Close();
 		m_AICFPersonalUI = null;
+		if (m_LoadoutRequestUIHandler) m_LoadoutRequestUIHandler.AICF_ClearPersonalCard();
 		if (m_LoadoutRequestUIHandler) m_LoadoutRequestUIHandler.AICF_ClearCharacters();
 		if (m_LoadoutRequestUIHandler) m_LoadoutRequestUIHandler.AICF_ClearCharacterPreview();
 		m_AICFSelectedCharacter = RplId.Invalid();

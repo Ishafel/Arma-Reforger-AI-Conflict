@@ -144,13 +144,11 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		SCR_MapEntity mapEntity = SCR_MapEntity.GetMapInstance();
 		if (!mapRoot || !m_Player || !m_Faction || RplSession.Mode() == RplMode.Dedicated)
 			return;
-		if (!m_bPersonal)
-		{
-			if (!mapEntity || !mapEntity.IsOpen()) return;
-			m_Cursor = SCR_MapCursorModule.Cast(mapEntity.GetMapModule(SCR_MapCursorModule));
-			if (!m_Cursor || (m_Cursor.GetCursorState() & EMapCursorState.CS_DIALOG)) return;
-		}
-		else
+		// Оба редактора захватывают ввод карты, включая карту экрана появления.
+		if (!mapEntity || !mapEntity.IsOpen()) return;
+		m_Cursor = SCR_MapCursorModule.Cast(mapEntity.GetMapModule(SCR_MapCursorModule));
+		if (!m_Cursor || (m_Cursor.GetCursorState() & EMapCursorState.CS_DIALOG)) return;
+		if (m_bPersonal)
 		{
 			SCR_CampaignFaction faction;
 			AICF_LoadoutRecipe context = AICF_PersonalLoadout.Context(m_Player, faction);

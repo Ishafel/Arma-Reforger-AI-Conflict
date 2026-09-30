@@ -89,6 +89,8 @@ class AICF_PersonalLoadout
 							storedRevision++;
 							stored = candidate;
 							available = true;
+							// Выбор меняется только после успешной записи и readback.
+							selected = true;
 							accepted = true;
 						}
 					}

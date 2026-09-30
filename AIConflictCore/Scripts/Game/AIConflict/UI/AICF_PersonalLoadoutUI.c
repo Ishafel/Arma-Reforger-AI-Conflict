@@ -3,6 +3,7 @@ class AICF_PersonalLoadoutUI : ScriptedWidgetEventHandler
 {
 	protected ref AICF_StrategicUIController m_Style = new AICF_StrategicUIController();
 	protected ref AICF_LoadoutEditor m_Editor;
+	protected ref AICF_PersonalLoadoutPreview m_Preview;
 	protected Widget m_wRoot;
 	protected TextWidget m_wStatus;
 	protected ref array<Widget> m_aButtons = {};
@@ -16,8 +17,20 @@ class AICF_PersonalLoadoutUI : ScriptedWidgetEventHandler
 	protected int m_iOperation;
 
 	bool IsBusy() { return (m_bPending && m_iOperation != 0) || (m_Editor && m_Editor.IsInputCaptured()); }
+	bool IsPreviewVisible() { return m_Preview && m_Preview.IsAttached(); }
+	bool SelectPreset(bool personal)
+	{
+		if (IsBusy()) return false;
+		if (!m_Player) return !personal;
+		if (personal == m_Player.AICF_PersonalSelected()) return true;
+		if (m_bPending) return false;
+		if (personal && !m_Player.AICF_PersonalAvailable()) return false;
+		if (personal) Request(3);
+		else Request(4);
+		return true;
+	}
 
-	void Update(Widget parent, bool characterSelected)
+	void Update(Widget parent, bool characterSelected, ItemPreviewWidget loadoutImage = null)
 	{
 		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		SCR_CampaignFaction faction;
@@ -34,9 +47,7 @@ class AICF_PersonalLoadoutUI : ScriptedWidgetEventHandler
 			m_wRoot = m_Style.CreateRect(parent, 0.32, 0.025, 0.74, 0.15, Color.FromSRGBA(9, 19, 28, 245), true);
 			if (!m_wRoot) return;
 			m_wRoot.SetZOrder(200);
-			AddButton("default", "{AICF:AICF_UI_PersonalDefault}", 0.01, 0.42);
-			AddButton("personal", "{AICF:AICF_UI_PersonalName}", 0.43, 0.67);
-			AddButton("edit", "{AICF:AICF_UI_PersonalCreate}", 0.68, 0.99);
+			AddButton("edit", "{AICF:AICF_UI_PersonalCreate}", 0.01, 0.99);
 			m_wStatus = m_Style.CreateText(m_wRoot, 0.02, 0.55, 0.98, 0.98, "", 16, Color.White);
 			m_wStatus.SetTextWrapping(true);
 			m_Editor = new AICF_LoadoutEditor(m_Style);
@@ -44,6 +55,17 @@ class AICF_PersonalLoadoutUI : ScriptedWidgetEventHandler
 		}
 		m_wRoot.SetVisible(!characterSelected);
 		m_Editor.Refresh();
+		// Модель использует существующий viewport, не создавая новый слой UI.
+		// Пока открыт редактор или выбран живой боец, его модель имеет приоритет.
+		if (characterSelected || m_Editor.IsInputCaptured())
+		{
+			ClearPreview();
+		}
+		else
+		{
+			if (!m_Preview) m_Preview = new AICF_PersonalLoadoutPreview();
+			m_Preview.Update(loadoutImage, player, context, faction);
+		}
 		if (m_bPending && m_Player.AICF_LoadoutToken() == m_iToken)
 		{
 			m_bPending = false;
@@ -67,12 +89,10 @@ class AICF_PersonalLoadoutUI : ScriptedWidgetEventHandler
 			Request(0);
 		}
 		bool ready = sameContext && !IsBusy() && !m_bPending && System.GetTickCount(m_iRequestedAt) > 800;
-		m_aButtons[0].SetEnabled(!IsBusy() && !m_bPending);
-		m_aButtons[1].SetEnabled(ready && m_Player.AICF_PersonalAvailable());
-		m_aButtons[2].SetEnabled(ready);
+		m_aButtons[0].SetEnabled(ready);
 		string editLabel = "{AICF:AICF_UI_PersonalCreate}";
 		if (m_Player.AICF_PersonalAvailable()) editLabel = "{AICF:AICF_UI_PersonalEdit}";
-		m_aLabels[2].SetText(AICF_Localization.Resolve(editLabel));
+		m_aLabels[0].SetText(AICF_Localization.Resolve(editLabel));
 		if (ready && m_Player.AICF_LoadoutAccepted())
 		{
 			string status = "{AICF:AICF_UI_PersonalDefaultSelected}";
@@ -108,13 +128,18 @@ class AICF_PersonalLoadoutUI : ScriptedWidgetEventHandler
 	{
 		if (button != 0 || IsBusy() || !m_aButtons.Contains(w)) return false;
 		if (w.GetName() == "edit") m_Editor.Open(m_wRoot.GetParent(), AICF_PersonalLoadout.SLOT, true);
-		else if (w.GetName() == "personal") Request(3);
-		else if (w.GetName() == "default") Request(4);
 		return true;
+	}
+
+	void ClearPreview()
+	{
+		if (m_Preview) m_Preview.Clear();
+		m_Preview = null;
 	}
 
 	void Close()
 	{
+		ClearPreview();
 		if (m_Editor) m_Editor.Close();
 		m_Editor = null;
 		foreach (Widget button : m_aButtons) button.RemoveHandler(this);
