@@ -5,7 +5,7 @@ JPEG без текста, логотипов, insignia и watermarks. PNG-ори
 репозитория не являются release assets; canonical файлы — `preview.jpg` в
 каталогах addon.
 
-Это четыре обложки для Core, Arland, Arland RHS и Everon. Для пятого addon,
+Это четыре обложки для Core, Arland, Arland RHS и Everon. Arland WCS + RHS использует неизменённую копию preview Arland RHS; отдельное изображение не генерировалось. Для пятого addon,
 Everon RHS, локальная обложка и отдельный brief пока не подготовлены.
 При обновлении его Workshop-описания сохраняется текущий опубликованный preview.
 
