@@ -55,13 +55,13 @@ class AICF_WCSRHSContentProfile : AICF_RHSContentProfile
 		return AICF_WCSInfantryEquipment.BuildDefault(model, GetRuntimeFactionKey(stableKey), source);
 	}
 
+	protected ref AICF_WCSItemOrigins m_LoadoutOrigins;
+
 	override string GetLoadoutItemSource(ResourceName prefab)
 	{
-		array<string> addons = SCR_AddonTool.GetResourceAddons(prefab);
-		foreach (string addon : addons)
-		{
-			if (addon.StartsWith("WCS")) return "WCS";
-		}
+		if (!m_LoadoutOrigins) m_LoadoutOrigins = new AICF_WCSItemOrigins();
+		string source;
+		if (m_LoadoutOrigins.Find(prefab, source)) return source;
 		return super.GetLoadoutItemSource(prefab);
 	}
 
