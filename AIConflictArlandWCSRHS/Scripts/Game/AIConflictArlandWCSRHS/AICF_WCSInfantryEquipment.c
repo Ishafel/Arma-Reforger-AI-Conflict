@@ -258,6 +258,7 @@ class AICF_WCSInfantryEquipment : AICF_RHSPMCEquipment
 	{
 		if (!EligibleWCS(character, group)) return false;
 		if (character.m_bAICFWCSKitApplied) return true;
+		int started = System.GetTickCount();
 		EntityID identity = character.GetID();
 		EntityID groupIdentity = group.GetID();
 		ResourceName source = SCR_ResourceNameUtils.GetPrefabName(character);
@@ -269,25 +270,35 @@ class AICF_WCSInfantryEquipment : AICF_RHSPMCEquipment
 			return false;
 		}
 		AICF_LoadoutCatalog catalog = new AICF_LoadoutCatalog(SCR_CampaignFaction.Cast(SCR_Faction.GetEntityFaction(character)));
-		AICF_LoadoutRecipe recipe = new AICF_LoadoutRecipe();
-		recipe.m_sCharacter = source;
-		recipe.m_sFaction = AICF_ContentProfile.GetActive().GetStableFactionKey(faction);
-		AICF_LoadoutDraft draft = new AICF_LoadoutDraft();
-		string reason;
-		bool built = draft.Build(recipe, catalog, reason);
-		bool dressed = built;
-		bool armed = built;
+		int catalogDone = System.GetTickCount();
+		AICF_WCSRHSContentProfile profile = AICF_WCSRHSContentProfile.Cast(AICF_ContentProfile.GetActive());
 		string snapshot;
-		bool ready = armed && ValidateWCS(draft.GetCharacter(), faction, source) && AICF_LoadoutInventory.Capture(draft.GetCharacter(), snapshot);
-		int ignored;
 		string expected;
-		if (ready) expected = AICF_LoadoutInventory.Signature(draft.GetCharacter(), catalog, ignored);
-		draft.Clear();
-		if (!ready || expected.IsEmpty())
+		int ignored;
+		bool cached = profile.FindPreparedKit(faction, source, snapshot, expected);
+		int buildDone = catalogDone;
+		if (!cached)
 		{
-			Print(string.Format("[AICF][WCS][KIT_FAILED] entity=%1 built=%2 dressed=%3 armed=%4 source=%5", identity, built, dressed, armed, source), LogLevel.ERROR);
-			return false;
+			AICF_LoadoutRecipe recipe = new AICF_LoadoutRecipe();
+			recipe.m_sCharacter = source;
+			recipe.m_sFaction = profile.GetStableFactionKey(faction);
+			AICF_LoadoutDraft draft = new AICF_LoadoutDraft();
+			string reason;
+			bool built = draft.Build(recipe, catalog, reason);
+			buildDone = System.GetTickCount();
+			bool dressed = built;
+			bool armed = built;
+			bool ready = armed && ValidateWCS(draft.GetCharacter(), faction, source) && AICF_LoadoutInventory.Capture(draft.GetCharacter(), snapshot);
+			if (ready) expected = AICF_LoadoutInventory.Signature(draft.GetCharacter(), catalog, ignored);
+			draft.Clear();
+			if (!ready || expected.IsEmpty())
+			{
+				Print(string.Format("[AICF][WCS][KIT_FAILED] entity=%1 built=%2 dressed=%3 armed=%4 source=%5", identity, built, dressed, armed, source), LogLevel.ERROR);
+				return false;
+			}
+			profile.StorePreparedKit(faction, source, snapshot, expected);
 		}
+		int prepared = System.GetTickCount();
 		string current;
 		if (!EligibleWCS(character, group) || character.GetID() != identity || group.GetID() != groupIdentity ||
 			character.GetFactionKey() != faction || SCR_ResourceNameUtils.GetPrefabName(character) != source ||
@@ -301,6 +312,9 @@ class AICF_WCSInfantryEquipment : AICF_RHSPMCEquipment
 			return false;
 		}
 		character.m_bAICFWCSKitApplied = true;
+		string performance;
+		if (System.GetCLIParam("aicfWCSProfile", performance) && performance == "1")
+			Print(string.Format("[AICF][WCS][KIT_TIMING] frame=%1 prepare_ms=%2 build_ms=%3 serialize_ms=%4 commit_ms=%5 total_ms=%6 source=%7 cached=%8", GetGame().GetWorld().GetFrameNumber(), catalogDone - started, buildDone - catalogDone, prepared - buildDone, System.GetTickCount(prepared), System.GetTickCount(started), source, cached));
 		Print(string.Format("[AICF][WCS][KIT_APPLIED] entity=%1 faction=%2 source=%3 weapon=%4 inventory_verified=1", identity, faction, source, AICF_WCSInfantryKit.Weapon(faction, source)));
 		return true;
 	}
@@ -320,7 +334,11 @@ modded class SCR_AIGroup
 			return super.SpawnGroupMember(snapToTerrain, index, res, editMode, isLast);
 		array<AIAgent> before = {};
 		GetAgents(before);
+		int started = System.GetTickCount();
 		bool result = super.SpawnGroupMember(snapToTerrain, index, res, editMode, isLast);
+		string performance;
+		if (System.GetCLIParam("aicfWCSProfile", performance) && performance == "1")
+			Print(string.Format("[AICF][WCS][SPAWN_TIMING] frame=%1 native_chain_ms=%2 success=%3 source=%4", GetGame().GetWorld().GetFrameNumber(), System.GetTickCount(started), result, res));
 		if (!result) return result;
 		array<AIAgent> after = {};
 		GetAgents(after);

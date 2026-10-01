@@ -19,6 +19,26 @@ modded class AICF_RHSPMCArmament
 
 modded class AICF_MatchController
 {
+	protected void AICF_WCSCacheCases()
+	{
+		AICF_WCSRHSContentProfile cache = new AICF_WCSRHSContentProfile();
+		string snapshot;
+		string signature;
+		cache.StorePreparedKit("RHS_USAF", "role.et", "inventory", "signature");
+		bool isolated = !cache.FindPreparedKit("RHS_AFRF", "role.et", snapshot, signature) &&
+			!cache.FindPreparedKit("RHS_USAF", "other.et", snapshot, signature);
+		cache.StorePreparedKit("RHS_USAF", "role.et", "overwrite", "overwrite");
+		bool immutable = cache.FindPreparedKit("RHS_USAF", "role.et", snapshot, signature) && snapshot == "inventory" && signature == "signature";
+		for (int index; index < 63; index++) cache.StorePreparedKit("RHS_USAF", index.ToString(), "inventory", "signature");
+		cache.StorePreparedKit("RHS_USAF", "overflow.et", "inventory", "signature");
+		bool bounded = !cache.FindPreparedKit("RHS_USAF", "overflow.et", snapshot, signature);
+		AICF_WCSRHSContentProfile other = new AICF_WCSRHSContentProfile();
+		bool fresh = !other.FindPreparedKit("RHS_USAF", "role.et", snapshot, signature);
+		cache.ClearPreparedKits();
+		bool cleared = !cache.FindPreparedKit("RHS_USAF", "role.et", snapshot, signature);
+		Print(string.Format("[AICF][WCS_CACHE_RESULT] isolated=%1 immutable=%2 bounded=%3 fresh=%4 cleared=%5", isolated, immutable, bounded, fresh, cleared));
+	}
+
 	protected int m_iAICFWCSInfantryTicks;
 	protected ref array<SCR_AIGroup> m_aAICFWCSInfantryGroups = {};
 	protected ref array<SCR_ChimeraCharacter> m_aAICFWCSPMC = {};
@@ -227,6 +247,7 @@ modded class AICF_MatchController
 		}
 		Print(string.Format("[AICF][WCS_PMC_RESULT] expected=13 actual=%1 passed=%2", m_aAICFWCSPMC.Count(), pmcPassed));
 		AICF_WCSPlayerCases();
+		AICF_WCSCacheCases();
 		GetGame().RequestClose();
 	}
 }
