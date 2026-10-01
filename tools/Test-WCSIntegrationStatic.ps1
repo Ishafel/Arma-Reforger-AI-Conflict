@@ -72,6 +72,10 @@ Check 'WCS_SOURCE_TABS' ($editor.Contains('GetLoadoutSources(m_aSources)') -and 
 Check 'WCS_BUILDING_REGISTRY' ($building.Contains('modded class SCR_PlaceableEntitiesRegistry') -and $building.Contains('BaseContainerProps(configRoot: true)') -and $building.Contains('additions.Sort()') -and $building.Contains('prefabs.InsertAll(additions)'))
 Check 'WCS_BUILDING_FACTION' ($building.Contains('modded class SCR_EditableVehicleUIInfo') -and $building.Contains('faction.GetFactionLabel()') -and $building.Contains('rpl.IsMaster()') -and $building.Contains('super.OnEntityCreatedServer(entities)'))
 Check 'WCS_NATIVE_PLACEMENT_GATES' ($building -notmatch 'override.*CanPlaceEntity|override.*AreLabelsMatching|SpawnEntity|DeleteEntity|SetBudgetValue|CallLater')
+$origins = Get-Content "$addon/Scripts/Game/AIConflictArlandWCSRHS/AICF_WCSItemOrigins.c" -Raw
+Check 'WCS_CONCRETE_RESOURCE_SOURCE' ($origins.Contains('ResourceDatabase.SearchResources(filter, RecordResource)') -and $origins.Contains('filter.rootPath = "$" + addon + ":Prefabs"') -and $origins.Contains('!m_mSources.Contains(prefab)'))
+Check 'WCS_SOURCE_PRECEDENCE' ($origins.IndexOf('AddAddon("ArmaReforger", "Vanilla")') -lt $origins.IndexOf('AddAddon(addon, "RHS")') -and $origins.IndexOf('AddAddon(addon, "RHS")') -lt $origins.IndexOf('AddAddon(addon, "WCS")'))
+Check 'WCS_SOURCE_PROFILE_CACHE' ($profile.Contains('if (!m_LoadoutOrigins)') -and $profile.Contains('m_LoadoutOrigins.Find(prefab, source)') -and $profile -notmatch 'GetResourceAddons')
 foreach ($failure in $failures) { Write-Output "[AICF][WCS_STATIC][FAIL] $failure" }
 if ($failures.Count) { exit 1 }
 Write-Output '[AICF][WCS_STATIC][PASS] scope=project_vehicle_catalog_infantry separate_runtime_gate=REQUIRED'

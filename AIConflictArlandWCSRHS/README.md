@@ -278,3 +278,56 @@ UI сообщает этот срок при сохранении. Имя и num
 read/save/select/default через owner RPC, проверяет 20 client drafts и native
 spawn. `-aicfProbePersonal 1` дополнительно выбирает личный рецепт перед spawn.
 Это не mouse/UI automation: видимые клики и внешний вид требуют ручной проверки.
+
+## Источники предметов в редакторе — issue #8, 01.10.2026
+
+Исправлено распределение вкладок: `SCR_AddonTool.GetResourceAddons` возвращает
+моды всей цепочки определения/модификации ресурса, включая предков. Поэтому
+проверка наличия любого WCS относила к WCS даже штатный M9 и RHS Glock 17.
+Выбор первого/последнего элемента этой цепочки также не определяет автора
+конкретного предмета.
+
+`AICF_WCSItemOrigins` один раз на экземпляр content profile индексирует
+конкретные `.et` из `ResourceDatabase.SearchResources` по пространствам addons.
+При совпадении ResourceName действует порядок **Vanilla → RHS → WCS**:
+существующий ресурс сохраняет источник после override; отдельный WCS prefab,
+унаследованный от RHS/Vanilla, относится к WCS. Порядок загрузки addons не
+меняет этот приоритет. Неиндексированные ресурсы сохраняют прежний fallback
+RHS profile; в проверенном допустимом каталоге таких ресурсов нет.
+
+| Сторона / вкладка | До | После |
+|---|---:|---:|
+| US Vanilla | 81 | 143 |
+| US RHS | 328 | 676 |
+| US WCS | 3080 | 2670 |
+| USSR Vanilla | 86 | 146 |
+| USSR RHS | 398 | 799 |
+| USSR WCS | 3118 | 2657 |
+
+Общий допустимый набор не изменился: 3489 US / 3602 USSR. Сравнение 7593
+уникальных пар faction + prefab до/после не нашло пропавших предметов или
+изменений допуска. Исправление меняет только вкладку, не supply cost,
+metadata, рецепты, faction catalog или blacklist.
+
+Граница редактора остаётся прежней: активный faction ITEM catalog, enabled
+entry с `SCR_ArsenalItem`, content policy и для личного пресета arsenal blacklist.
+Техника, миномёты, взрывчатка, SUPPORT_STATION/PYLON и ресурсы без arsenal
+metadata исключаются намеренно. Наличие произвольного prefab в установленном
+моде само по себе не означает его допустимость в редакторе. Фильтры категории,
+режима и совместимости текущего места продолжают сужать видимый список.
+
+Проверки: WCSIntegrationStatic, RHSIntegrationStatic, AILoadoutStatic,
+PersonalLoadoutContracts — PASS до и после; terminal Workbench Validate
+production и fixture — PASS. `AICF_WCSLoadoutCatalogProbe.c` в отдельном stage
+с `-aicfWCSLoadoutCatalogProbe 1` проверяет сохранность native inputs,
+конкретные stock/RHS overrides и WCS descendant, отсутствие пропусков,
+пересечений вкладок и fallback, оружие, боеприпасы, одежду, рюкзаки и обвес.
+`AICF_PersonalLoadoutProbe.c` с `-aicfPersonalLoadoutProbe 1` проверяет server-side
+validation, сохранение/повторное чтение и отказ для запрещённого предмета.
+
+Evidence и точные команды: `.codex-runtime/issue-8/`. Полные остановленные
+логи baseline/after содержат одинаковые 102 ошибки установленного контента
+(WORLD 56, ENTITY 7, RESOURCES 39); SCRIPT E/F и ENGINE F отсутствуют.
+Клиентское нажатие вкладок, выбор/сохранение через owner RPC, повторное
+открытие UI, JIP и visual gate — **NOT RUN**. Server fixture не заменяет их.
+Изменение не опубликовано в Workshop и не применялось на игровом сервере.
