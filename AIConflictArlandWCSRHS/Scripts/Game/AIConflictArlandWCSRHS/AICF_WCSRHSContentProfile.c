@@ -1,6 +1,34 @@
 // Карта, readiness, roster и транспорт сохраняют владельцев из RHS integration.
 class AICF_WCSRHSContentProfile : AICF_RHSContentProfile
 {
+	// Кеш принадлежит экземпляру profile одного матча. Только строки,
+	// без entity, preview world, catalog или изменяемых inventory objects.
+	protected ref map<string, string> m_mKitSnapshots = new map<string, string>();
+	protected ref map<string, string> m_mKitSignatures = new map<string, string>();
+
+	bool FindPreparedKit(FactionKey faction, ResourceName source, out string snapshot, out string signature)
+	{
+		string key = faction + "|" + source;
+		return m_mKitSnapshots.Find(key, snapshot) && m_mKitSignatures.Find(key, signature);
+	}
+
+	void StorePreparedKit(FactionKey faction, ResourceName source, string snapshot, string signature)
+	{
+		if (!Replication.IsServer() || snapshot.IsEmpty() || signature.IsEmpty()) return;
+		// Полный concrete prefab включает роль и сезонный/числовой вариант.
+		// FIFO не нужен: при заполнении новые варианты работают без кеша.
+		string key = faction + "|" + source;
+		if (m_mKitSnapshots.Contains(key) || m_mKitSnapshots.Count() >= 64) return;
+		m_mKitSnapshots.Insert(key, snapshot);
+		m_mKitSignatures.Insert(key, signature);
+	}
+
+	void ClearPreparedKits()
+	{
+		m_mKitSnapshots.Clear();
+		m_mKitSignatures.Clear();
+	}
+
 	override string GetProfileKey()
 	{
 		return "WCS_RHS_ARLAND";
@@ -50,8 +78,25 @@ class AICF_WCSRHSContentProfile : AICF_RHSContentProfile
 
 modded class SCR_GameModeCampaign
 {
+	override void OnGameEnd()
+	{
+		AICF_WCSRHSContentProfile profile = AICF_WCSRHSContentProfile.Cast(AICF_ContentProfile.GetActive());
+		if (profile) profile.ClearPreparedKits();
+		super.OnGameEnd();
+	}
+
 	override protected AICF_ContentProfile AICF_CreateContentProfile()
 	{
 		return new AICF_WCSRHSContentProfile();
+	}
+}
+
+modded class AICF_MatchController
+{
+	override protected void Stop(bool cleanupEntities)
+	{
+		super.Stop(cleanupEntities);
+		AICF_WCSRHSContentProfile profile = AICF_WCSRHSContentProfile.Cast(AICF_ContentProfile.GetActive());
+		if (profile) profile.ClearPreparedKits();
 	}
 }
