@@ -658,6 +658,8 @@ class AICF_MatchController
 				return false;
 			bool suspended = m_VehicleCoordinator && m_VehicleCoordinator.IsInfantryOrderSuspended(slot);
 			m_OrderPlanner.ReleasePlayerCommand(slot);
+			// Снимаем старый episode/hold до проверки guards нового AI приказа.
+			ProcessRouteRecoveryEpisode(slot, faction, false);
 			bool assigned = commander.AssignOrder(slot, "PLAYER_RELEASE", null, suspended);
 			if (m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot))
 				m_VehicleCoordinator.AdoptCurrentStrategicAssignment(slot, faction, "PLAYER_RELEASE", m_iStrategicBaseRevision);
@@ -4510,7 +4512,7 @@ class AICF_MatchController
 	}
 
 	// Общий episode проверяется до pending verification и локального hold timer.
-	protected bool ProcessRouteRecoveryEpisode(AICF_GroupSlot slot, SCR_CampaignFaction faction)
+	protected bool ProcessRouteRecoveryEpisode(AICF_GroupSlot slot, SCR_CampaignFaction faction, bool assignAfterContextChange = true)
 	{
 		AICF_RouteRecoveryEpisode episode = slot.GetRouteRecoveryEpisode();
 		string outcome = episode.Observe(slot, m_ObjectiveGraph.GetRevision());
@@ -4537,7 +4539,8 @@ class AICF_MatchController
 		if (outcome == "CONTEXT_CHANGED" && slot.IsPersistentStuckFieldHold())
 		{
 			ResumePersistentStuckFieldHold(slot, faction, "ROUTE_AVAILABILITY_CHANGED");
-			AssignFactionStrategicOrder(slot, faction, "ROUTE_AVAILABILITY_CHANGED");
+			if (assignAfterContextChange)
+				AssignFactionStrategicOrder(slot, faction, "ROUTE_AVAILABILITY_CHANGED");
 		}
 		return false;
 	}

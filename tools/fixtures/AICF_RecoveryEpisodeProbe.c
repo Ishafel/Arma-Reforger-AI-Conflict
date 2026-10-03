@@ -258,6 +258,66 @@ modded class AICF_MatchController
 			exhausted && changed, exhausted, changed));
 		ResumePersistentStuckFieldHold(slot, m_USFaction, "PROBE_CONTEXT_CHANGED");
 		AssignFactionStrategicOrder(slot, m_USFaction, "PROBE_CONTEXT_CHANGED");
+		PlayerReleaseEpisodeProbe(slot);
 		m_bRouteEpisodeProbeDone = true;
+		string releaseOnly;
+		if (System.GetCLIParam("aicfPlayerReleaseProbeOnly", releaseOnly) && releaseOnly == "1")
+			GetGame().RequestClose();
+	}
+
+	protected void PlayerReleaseEpisodeProbe(AICF_GroupSlot slot)
+	{
+		int graphRevision = m_ObjectiveGraph.GetRevision();
+		EntityID groupId = slot.GetGroup().GetID();
+		int generation = slot.GetSpawnGeneration();
+		int alive = AICF_GroupRuntime.CountAliveAgents(slot.GetGroup());
+		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
+		AICF_RouteRecoveryEpisode episode = slot.GetRouteRecoveryEpisode();
+		slot.RecordPlayerStrategicIntent(target);
+		slot.BeginPlayerStrategicOrder();
+		episode.Begin(slot);
+		episode.Observe(slot, graphRevision);
+		episode.EpisodeProbeExpire(true);
+		bool held = ProcessRouteRecoveryEpisode(slot, m_USFaction) && slot.IsPersistentStuckFieldHold();
+		bool unchangedBlocked = episode.Observe(slot, graphRevision) == "EXHAUSTED" && episode.IsBlocked(slot);
+		// Отдельный snapshot проверяет Observe после очистки без расходования
+		// результата основного episode, который должен обработать controller.
+		AICF_RouteRecoveryEpisode snapshot = new AICF_RouteRecoveryEpisode();
+		snapshot.Begin(slot);
+		snapshot.Observe(slot, graphRevision);
+		snapshot.EpisodeProbeExpire(true);
+		snapshot.Observe(slot, graphRevision);
+		int intentRevision = slot.GetStrategicIntentRevision();
+		m_OrderPlanner.ReleasePlayerCommand(slot);
+		bool cleared = !slot.HasStrategicIntent() && !slot.GetWaypoint() &&
+			slot.GetStrategicIntentRevision() != intentRevision;
+		bool released = snapshot.Observe(slot, graphRevision) == "CONTEXT_CHANGED" && !snapshot.IsBlocked(slot);
+		ProcessRouteRecoveryEpisode(slot, m_USFaction, false);
+		AICF_AICommander commander = GetAICommanderForFaction(m_USFaction);
+		bool assigned = commander && commander.AssignOrder(slot, "PLAYER_RELEASE");
+		bool executable = assigned && slot.GetWaypoint() &&
+			IsWaypointBoundToGroup(slot.GetGroup(), slot.GetWaypoint()) &&
+			slot.GetGroup().GetCurrentWaypoint() == slot.GetWaypoint() &&
+			!slot.IsPersistentStuckFieldHold() && !episode.IsBlocked(slot);
+		bool identity = slot.GetGroup().GetID() == groupId && slot.GetSpawnGeneration() == generation &&
+			AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()) == alive;
+		Print(string.Format("[AICF][EPISODE_PROBE] case=PLAYER_INTENT_CLEARED passed=%1 unchanged_blocked=%2 cleared=%3 released=%4 executable=%5 identity=%6 graph_unchanged=%7",
+			held && unchangedBlocked && cleared && released && executable && identity && m_ObjectiveGraph.GetRevision() == graphRevision,
+			unchangedBlocked, cleared, released, executable, identity, m_ObjectiveGraph.GetRevision() == graphRevision));
+		episode.EpisodeProbeExpire(false);
+
+		// AI-only replan с новой revision не должен обходить прежний deadline.
+		AICF_RouteRecoveryEpisode aiSnapshot = new AICF_RouteRecoveryEpisode();
+		aiSnapshot.Begin(slot);
+		aiSnapshot.Observe(slot, graphRevision);
+		aiSnapshot.EpisodeProbeExpire(true);
+		string posture = slot.GetStrategicIntentPosture();
+		slot.CommitStrategicIntent(slot.GetTargetBase(), "PROBE_AI_REPLAN", AICF_EStrategicDecisionAuthority.AI_COMMANDER);
+		bool aiBlocked = aiSnapshot.Observe(slot, graphRevision) == "EXHAUSTED" && aiSnapshot.IsBlocked(slot);
+		slot.RecordPlayerStrategicIntent(slot.GetTargetBase());
+		bool newPlayerReleases = aiSnapshot.Observe(slot, graphRevision) == "CONTEXT_CHANGED" && !aiSnapshot.IsBlocked(slot);
+		slot.CommitStrategicIntent(slot.GetTargetBase(), posture, AICF_EStrategicDecisionAuthority.AI_COMMANDER);
+		Print(string.Format("[AICF][EPISODE_PROBE] case=AI_REPLAN_PRESERVES_EPISODE passed=%1 ai_blocked=%2 new_player_releases=%3",
+			aiBlocked && newPlayerReleases, aiBlocked, newPlayerReleases));
 	}
 }

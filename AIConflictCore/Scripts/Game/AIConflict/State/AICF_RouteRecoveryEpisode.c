@@ -10,6 +10,7 @@ class AICF_RouteRecoveryEpisode
 	protected int m_iStartedAtMs;
 	protected int m_iGraphRevision = -1;
 	protected int m_iPlayerIntentRevision;
+	protected bool m_bPlayerIntent;
 	protected vector m_vAnchor;
 	protected vector m_vDestination;
 	protected bool m_bExhausted;
@@ -31,6 +32,7 @@ class AICF_RouteRecoveryEpisode
 		m_iStartedAtMs = System.GetTickCount();
 		m_iGraphRevision = -1;
 		m_iPlayerIntentRevision = slot.GetStrategicIntentRevision();
+		m_bPlayerIntent = slot.HasPlayerStrategicIntent();
 		m_vAnchor = leader.GetOrigin();
 		m_vDestination = m_vAnchor;
 		SCR_CampaignMilitaryBaseComponent target = slot.GetTargetBase();
@@ -55,8 +57,10 @@ class AICF_RouteRecoveryEpisode
 		}
 		if (m_iGraphRevision < 0)
 			m_iGraphRevision = graphRevision;
+		// RETURN_TO_AI уже очистил intent: учитываем и прежнего владельца.
+		// Автоматическая смена AI intent не продлевает episode без движения.
 		if ((m_bExhausted && m_iGraphRevision != graphRevision) ||
-			(slot.HasPlayerStrategicIntent() && slot.GetStrategicIntentRevision() != m_iPlayerIntentRevision))
+			((m_bPlayerIntent || slot.HasPlayerStrategicIntent()) && slot.GetStrategicIntentRevision() != m_iPlayerIntentRevision))
 		{
 			m_bActive = false;
 			return "CONTEXT_CHANGED";

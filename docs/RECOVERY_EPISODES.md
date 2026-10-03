@@ -5,7 +5,7 @@
 сохраняют историю кандидатов и их ограничения на момент проверки;
 их `NOT RUN` и промежуточные результаты не заменяют итоговые gates.
 
-Исправление опубликовано в draft [PR #13](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/13).
+Исправление опубликовано в [PR #13](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/13).
 Целевые focused tests — PASS; полный runtime matrix имеет 4 PASS и 3 FAIL
 из-за дополнительных находок [#14](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/issues/14).
 Общий результат не считается полностью зелёным; issues #11/#12 не закрыты,
@@ -582,3 +582,69 @@ EveronNorthRHS 200. Это resource/world/navmesh diagnostics, а не заяв�
 и завершению прогона. Существующий static failure `STAGE4_ATTACKED_BASES`
 также сохранён. Реальная пользовательская сессия на исходной геометрии,
 ручная визуальная приёмка, реальный player/LOS и client/JIP — NOT RUN.
+
+## P1 review: освобождение episode при RETURN_TO_AI — 03.10.2026
+
+Замечание подтвердилось: `ReleasePlayerCommand()` удаляет hold waypoint и
+очищает player intent с увеличением revision. Проверка только нового
+`HasPlayerStrategicIntent()` пропускала смену контекста, оставляя exhausted
+episode и persistent hold; guards отклоняли приказ AI commander.
+
+`AICF_RouteRecoveryEpisode` теперь сохраняет принадлежность intent игроку на
+момент начала episode. Изменение revision освобождает его, если прежний либо
+новый intent принадлежит игроку. Обычная смена AI intent/assignment не сбрасывает
+deadline. В `AICF_MatchController` путь `RETURN_TO_AI` обрабатывает context change
+сразу после `ReleasePlayerCommand`, до `commander.AssignOrder`. Параметр
+`assignAfterContextChange=false` позволяет снять hold без промежуточной повторной
+выдачи приказа: окончательное назначение по-прежнему делает этот commander path.
+
+Изменены два production файла выше, `tools/fixtures/AICF_RecoveryEpisodeProbe.c`,
+`tools/Test-RecoveryEpisodeContracts.ps1` и этот документ. Fixture проверяет
+неизменный player intent, очистку intent при том же graph revision, освобождение
+hold, исполнимый текущий AI waypoint, сохранение group/generation/roster,
+запрет rearm по AI-only revision и rearm при новом player intent.
+
+Evidence: `.codex-runtime/issues-11-12-player-release-20261003/`.
+Шесть аудитов до/после: `Test-RecoveryEpisodeContracts`,
+`Test-Issue12RecoveryContracts`, `Test-AICommanderModeStatic`,
+`Test-MapPointOrdersStatic`, `Test-Stage35RecoveryPolicy` — PASS / 0;
+`Test-Stage4Static` — прежний FAIL / 1 (`STAGE4_ATTACKED_BASES`).
+Workbench Stock, EveronRHS, WCS RHS, новая fixture и контрольная fixture со
+старым `Observe` — native exit 0, `Script validation successful`, SCRIPT(E/F)=0.
+Exact CLI сохранены в `wb-*-args.json`, полные логи — в `wb-*`.
+
+Контрольный `red-stage` отличается от исправленной fixture старым production
+`AICF_RouteRecoveryEpisode.c`: `PLAYER_INTENT_CLEARED passed=0`,
+`released=0 executable=0`, при `cleared=1 identity=1 graph_unchanged=1`.
+Сервер штатно завершился с exit 0; анализатор с `-PlayerReleaseOnly` ожидаемо
+вернул FAIL / 1. Это доказательство обнаружения дефекта, а не runtime PASS.
+
+```powershell
+./tools/Start-AICFRuntime.ps1 -Role Server -Variant RHS -RepositoryRoot '<red-stage>' -AdditionalArguments @('-addr','127.0.0.1:2051','-aicfRecruitProbe','1','-aicfRecoveryEpisodeProbe','1','-aicfPlayerReleaseProbeOnly','1','-aicfRequirePlayerForResult','0')
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-RecoveryEpisodeContracts.ps1 -RuntimeLogPath '<полный red console.log>' -PlayerReleaseOnly
+```
+
+Клиент не подключался. Проверяется production-последовательность после server
+authorization; RPC/UI с реальным игроком — NOT RUN. Семь продолжительных
+прогонов выше относятся к версии до этой P1-правки и повторно не объявляются
+проверкой нового исходника. Находки #14 и native/resource baseline сохраняются.
+
+Исправленная версия (`green-runtime`) завершила полный focused run:
+10 cases PASS, `PLAYER_INTENT_CLEARED released=1 executable=1 identity=1
+graph_unchanged=1`, `AI_REPLAN_PRESERVES_EPISODE ai_blocked=1 new_player_releases=1`.
+Прежние recruitment/hidden cases также прошли; обе стороны 10/10, stable groups.
+Native exit 0, точный CLI из manifest, `Game destroyed`, SCRIPT/VM ошибок 0.
+Остаются 68 прежних native resource/world `(E)` строк. Все 166 production `.c`
+совпадают по SHA256 между checkout, compiled production и runtime stage.
+
+```powershell
+./tools/Start-AICFRuntime.ps1 -Role Server -Variant RHS -RepositoryRoot '<stage>' -AdditionalArguments @('-addr','127.0.0.1:2052','-aicfRecruitProbe','1','-aicfRecoveryEpisodeProbe','1','-aicfRecruitHiddenProbe','1','-aicfRecruitHiddenContinue','1','-aicfRecruitMultiMemberProbe','1','-aicfRequirePlayerForResult','0')
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-RecoveryEpisodeContracts.ps1 -RuntimeLogPath '<полный green console.log>' -RequireHiddenRecovery -HiddenContinuationOnly
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-Issue12RecoveryContracts.ps1 -RuntimeLogPath '<полный green console.log>'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-InfantryRecruitmentLog.ps1 -LogPath '<полный green console.log>' -RequireFullRosters
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-Stage2Log.ps1 -LogPath '<полный green console.log>'
+```
+
+Все четыре анализатора — PASS / 0 (`green-runtime-verdicts.json`).
+`git diff --check` — PASS / 0. RPC/UI и весь семивариантный soak повторно
+не запускались; это focused regression gate P1, не повтор всей матрицы.

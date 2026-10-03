@@ -2,6 +2,7 @@ param(
     [string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot),
     [string]$RuntimeLogPath,
     [switch]$RequireHiddenRecovery,
+    [switch]$PlayerReleaseOnly,
     [switch]$HiddenContinuationOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -22,6 +23,7 @@ Require 'State/AICF_RouteRecoveryEpisode.c' '(?s)m_bActive && m_GroupId == slot.
 Require 'State/AICF_RouteRecoveryEpisode.c' '(?s)GetAgeMs\(\) >= DEADLINE_MS.*?m_bExhausted = true;.*?int GetAgeMs\(\).*?System.GetTickCount\(m_iStartedAtMs\)' 'ABSOLUTE_DEADLINE'
 Require 'State/AICF_RouteRecoveryEpisode.c' '(?s)GetCurrentWaypoint\(\) == slot.GetWaypoint\(\).*?DistanceSqXZ.*?>= 225.*?DistanceXZ.*?>= 5.*?return "PHYSICAL_PROGRESS";' 'PHYSICAL_ROUTE_PROOF'
 Require 'Bootstrap/AICF_MatchController.c' '(?s)ProcessRouteRecoveryEpisode\(slot, faction\)\)\s*continue;\s*if \(slot.HasPendingOrderRecovery' 'EPISODE_BEFORE_LOCAL_TIMERS'
+Require 'Bootstrap/AICF_MatchController.c' '(?s)m_OrderPlanner.ReleasePlayerCommand\(slot\);\s*//[^\r\n]*\s*ProcessRouteRecoveryEpisode\(slot, faction, false\);\s*bool assigned = commander.AssignOrder\(' 'PLAYER_RELEASE_BEFORE_AI_ASSIGNMENT'
 Require 'Bootstrap/AICF_MatchController.c' '(?s)episode.TakeHoldAttempt\(\).*?HasPendingOrderRecovery\(\).*?SupersedePendingOrderRecovery\(slot, faction, "ROUTE_RECOVERY_EXHAUSTED"\).*?HoldPositionForPersistentStuck' 'EXHAUSTION_CLOSES_PENDING_VERIFICATION'
 Require 'Forces/AICF_InfantryRecruitmentRecovery.c' '(?s)Replication.IsServer\(\).*?GetHiddenRecoveryEnabled\(\).*?IsCurrent\(order.m_Slot\).*?HasUsedIsolatedNavmeshRecovery\(\).*?HasSafeBarracks\(\)' 'HIDDEN_POLICY_IDENTITY_BUDGET'
 Require 'Forces/AICF_InfantryRecruitmentRecovery.c' '(?s)IsMemberCurrent\(agents\[index\].*?GetID\(\) != identities\[index\].*?IsHiddenRecoveryCombatSafe.*?CanApplyHiddenRecovery.*?IsUsable.*?MarkIsolatedNavmeshRecoveryUsed\(\).*?Teleport\(transform\)' 'HIDDEN_RECHECK_BEFORE_MUTATION'
@@ -83,24 +85,30 @@ if ($RuntimeLogPath) {
         }
         if ($runtime -notmatch '\[INFANTRY_RECRUITMENT_HIDDEN_MEMBER\]' -or $runtime -notmatch '\[INFANTRY_RECRUITMENT_HIDDEN_OBSERVED\].*paid=0') { $failures.Add('HIDDEN_NO_PHYSICAL_EVIDENCE') }
     }
-    $cases = @('WAYPOINT_LOSS','REPLAN_EPISODE_BOUND')
+    $cases = @('WAYPOINT_LOSS','REPLAN_EPISODE_BOUND','PLAYER_INTENT_CLEARED','AI_REPLAN_PRESERVES_EPISODE')
     if (-not $HiddenContinuationOnly) { $cases += @('APPROACH_EXHAUSTION','BARRACKS_RETRY_CONTEXT') }
+    if ($PlayerReleaseOnly) { $cases = @('REPLAN_EPISODE_BOUND','PLAYER_INTENT_CLEARED','AI_REPLAN_PRESERVES_EPISODE') }
     foreach ($case in $cases) {
         if ($runtime -notmatch "\[EPISODE_PROBE\] case=$case passed=1") { $failures.Add("RUNTIME_MISSING_$case") }
     }
     if ($runtime -match '\[EPISODE_PROBE\].*passed=0') { $failures.Add('RUNTIME_PROBE_FAILURE') }
     $events = @('INFANTRY_RECRUITMENT_APPROACH_REPAIR','INFANTRY_RECRUITMENT_PROGRESS','INFANTRY_RECRUITMENT_ARRIVED','INFANTRY_RECRUIT_JOINED','ROUTE_RECOVERY_EXHAUSTED')
     if (-not $HiddenContinuationOnly) { $events += 'INFANTRY_RECRUITMENT_APPROACH_BLOCKED' }
+    if ($PlayerReleaseOnly) { $events = @('ROUTE_RECOVERY_EXHAUSTED','ROUTE_RECOVERY_EPISODE_FINISHED') }
     foreach ($event in $events) {
         if ($runtime -notmatch "\[$event\]") { $failures.Add("RUNTIME_MISSING_$event") }
     }
-    if ($runtime -notmatch '\[RECRUIT_PROBE\] full_rosters=1 stable_groups=1' -or
+    if (!$PlayerReleaseOnly -and ($runtime -notmatch '\[RECRUIT_PROBE\] full_rosters=1 stable_groups=1' -or
         $runtime -notmatch '\[RECRUIT_PROBE\] finished=1 full_rosters=1' -or
-        $runtime -notmatch 'Game destroyed\.') { $failures.Add('RUNTIME_INCOMPLETE_OR_UNSTOPPED') }
+        $runtime -notmatch 'Game destroyed\.')) { $failures.Add('RUNTIME_INCOMPLETE_OR_UNSTOPPED') }
+    if ($runtime -notmatch 'Game destroyed\.') { $failures.Add('RUNTIME_UNSTOPPED') }
     if ($runtime -match 'SCRIPT\s+\([EF]\)|ENGINE\s+\(F\)|NULL pointer|Unhandled exception|\[AICF\]\[STAGE[^\]]*\]\[ERROR\]') {
         $failures.Add('RUNTIME_SCRIPT_OR_AICF_ERROR')
     }
 }
 if ($failures.Count) { $failures | ForEach-Object { Write-Output "FAIL $_" }; exit 1 }
 Write-Output 'Recovery episode contracts: PASS; route analyzer cases=9; rearm analyzer cases=2'
-if ($RuntimeLogPath) { Write-Output "Recovery episode runtime: PASS; base fault cases=$($cases.Count); hidden cases=$([int]$RequireHiddenRecovery.IsPresent * 2); physical progress, full rosters and normal shutdown confirmed" }
+if ($RuntimeLogPath) {
+    if ($PlayerReleaseOnly) { Write-Output 'Player release runtime: PASS; context release, executable AI order, identity and normal shutdown confirmed' }
+    else { Write-Output "Recovery episode runtime: PASS; base fault cases=$($cases.Count); hidden cases=$([int]$RequireHiddenRecovery.IsPresent * 2); physical progress, full rosters and normal shutdown confirmed" }
+}
