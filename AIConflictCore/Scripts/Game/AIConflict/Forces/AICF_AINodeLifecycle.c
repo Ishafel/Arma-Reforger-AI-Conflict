@@ -25,6 +25,28 @@ modded class SCR_AIGetDefendWaypointParameters
 	}
 }
 
+// Удалённый planner waypoint обнуляет вход ещё исполняющегося ActivityPerformAction.
+// Для управляемой группы завершаем эту ветку и снимаем её smart-action callbacks.
+// Непустой вход и все неуправляемые группы сохраняют stock validation.
+modded class SCR_AIGetSmartActionsState
+{
+	override ENodeResult EOnTaskSimulate(AIAgent owner, float dt)
+	{
+		AIWaypoint waypoint;
+		GetVariableIn(WAYPOINT_ENTITY_IN, waypoint);
+		SCR_AIGroup group = SCR_AIGroup.Cast(owner);
+		AICF_MatchController controller = AICF_MatchController.GetActiveController();
+		if (!waypoint && Replication.IsServer() && group && controller && controller.FindManagedInfantrySlot(group))
+		{
+			// Stock OnAbort вызывает private ResetVariables, включая unregister.
+			super.OnAbort(owner, null);
+			Print("[AICF][AI_SMART_ACTION_CANCELLED] reason=WAYPOINT_INPUT_REMOVED");
+			return ENodeResult.FAIL;
+		}
+		return super.EOnTaskSimulate(owner, dt);
+	}
+}
+
 // При отмене вложенного door/navlink BT вход AgentIn уже может быть снят.
 // Менять LOD без агента нельзя; штатная проверка при исполнении остаётся строгой.
 modded class SCR_AIToggleMaxLOD
@@ -108,12 +130,17 @@ modded class SCR_AIProcessFailedMovementResult
 		if (controller)
 			slot = controller.FindManagedInfantrySlot(m_Group);
 		SCR_AIActivityBase activity = SCR_AIActivityBase.Cast(m_GroupUtilityComponent.GetCurrentAction());
-		if (!slot || !activity || !slot.ReportFailedMovement(m_Group, activity.m_RelatedWaypoint))
+		if (!slot || !activity)
+			return false;
+		AIWaypoint failedWaypoint = activity.m_RelatedWaypoint;
+		bool recruitmentFailure = slot.ReportRecruitmentFailedMovement(m_Group, failedWaypoint);
+		if (!recruitmentFailure && !slot.ReportFailedMovement(m_Group, failedWaypoint))
 			return false;
 		AIActionBase failedAction = m_GroupUtilityComponent.GetExecutedAction();
 		m_GroupUtilityComponent.OnMoveFailed(result, null, related, location);
 		// Invoker может синхронно сменить assignment/action. Новый action не трогаем.
-		if (failedAction && slot.HasFailedMovement() && m_GroupUtilityComponent.GetExecutedAction() == failedAction)
+		if (failedAction && (slot.HasFailedMovement() || slot.HasRecruitmentMovementFailure(failedWaypoint)) &&
+			m_GroupUtilityComponent.GetExecutedAction() == failedAction)
 			failedAction.Fail();
 		return true;
 	}

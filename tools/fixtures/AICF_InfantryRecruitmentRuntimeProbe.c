@@ -137,7 +137,19 @@ modded class AICF_MatchController
 		base.AddSupplies(base.GetSuppliesMax() - base.GetSupplies());
 		vector position, rotation;
 		base.GetSpawnPoint().GetPositionAndRotation(position, rotation);
-		position += "35 0 25";
+		string recoveryProbe;
+		string hiddenContinue;
+		if (System.GetCLIParam("aicfRecruitHiddenContinue", hiddenContinue) && hiddenContinue == "1")
+		{
+			if (AICF_ContentProfile.GetActive().GetStableFactionKey(faction.GetFactionKey()) == "USSR")
+				position += "100 0 60";
+			else
+				position += "35 0 25";
+		}
+		else if (System.GetCLIParam("aicfRecoveryEpisodeProbe", recoveryProbe) && recoveryProbe == "1")
+			position += "60 0 40";
+		else
+			position += "35 0 25";
 		position[1] = GetGame().GetWorld().GetSurfaceY(position[0], position[2]);
 		ResourceName prefab = AICF_ContentProfile.GetActive().GetConstructionPrefab(
 			AICF_ContentProfile.GetActive().GetStableFactionKey(faction.GetFactionKey()), AICF_EConstructionType.SMALL_BARRACKS);

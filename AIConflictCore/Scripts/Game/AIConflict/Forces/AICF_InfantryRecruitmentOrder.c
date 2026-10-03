@@ -19,6 +19,12 @@ class AICF_InfantryRecruitmentOrder
 	AIWaypoint m_Waypoint;
 	int m_iStartedAtMs;
 	int m_iArrivedAtMs;
+	int m_iApproachProgressAtMs;
+	int m_iApproachRepairs;
+	bool m_bMovementFailed;
+	float m_fApproachBestDistance;
+	bool m_bHiddenRecoveryPending;
+	int m_iHiddenRecoverySubmittedAtMs;
 	int m_iNextPurchaseAtMs;
 	SCR_AIGroup m_Donor;
 	EntityID m_DonorId;
@@ -39,6 +45,19 @@ class AICF_InfantryRecruitmentOrder
 			slot.GetStrategicIntentRevision() == m_iIntent && slot.GetWaypoint() == m_Waypoint &&
 			slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY &&
 			(m_bPlayerRequested || !slot.HasPlayerStrategicIntent());
+	}
+
+	// BT только передаёт результат текущего визита. Ремонт выполняет service tick,
+	// чтобы удаление waypoint не происходило внутри stock movement callback.
+	bool ReportFailedMovement(SCR_AIGroup group, AIWaypoint waypoint)
+	{
+		if (!Replication.IsServer() || !IsCurrent(m_Slot) || group != m_Group ||
+			!waypoint || waypoint != m_Waypoint || group.GetCurrentWaypoint() != waypoint)
+			return false;
+		if (!m_bMovementFailed)
+			Log("INFANTRY_RECRUITMENT_MOVE_FAILED", "reason=UNKNOWN next_action=BOUNDED_APPROACH_RECOVERY paid=0");
+		m_bMovementFailed = true;
+		return true;
 	}
 
 	bool HasSafeBarracks()
@@ -70,6 +89,6 @@ class AICF_InfantryRecruitmentOrder
 		AICF_Stage4Diagnostics.Info(eventName, string.Format(
 			"faction=%1 slot=%2 generation=%3 token=%4 base=%5 group=%6",
 			m_Faction.GetFactionKey(), m_Slot.GetSlotId(), m_iGeneration, m_iToken,
-			AICF_Stage1Diagnostics.BaseKey(m_Base), m_GroupId) + " " + details);
+			AICF_Stage1Diagnostics.BaseKey(m_Base), m_GroupId) + string.Format(" service=%1 ", m_ServiceId) + details);
 	}
 }

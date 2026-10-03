@@ -7,6 +7,8 @@ class AICF_InfantryRecruitmentService
 	protected AICF_EconomySystem m_Economy;
 	protected AICF_ObjectiveGraph m_Graph;
 	protected AICF_TargetSelector m_Selector;
+	protected AICF_VehicleWatchdog m_RecoveryWatchdog;
+	protected AICF_Stage3Config m_RecoveryConfig;
 	protected ref AICF_InfantryRecruitmentConfig m_Config = new AICF_InfantryRecruitmentConfig();
 	protected ref AICF_InfantryRecruitSpawner m_Spawner = new AICF_InfantryRecruitSpawner();
 	protected ref AICF_ManagedAILODPolicy m_LOD = new AICF_ManagedAILODPolicy();
@@ -14,6 +16,7 @@ class AICF_InfantryRecruitmentService
 	protected ref array<ref AICF_InfantryRecruitmentOrder> m_aOrders = {};
 	protected ref array<AICF_GroupSlot> m_aRetrySlots = {};
 	protected ref array<int> m_aRetryAtMs = {};
+	protected ref array<ref AICF_RecruitmentApproachFailure> m_aApproachFailures = {};
 	protected int m_iNextToken = 1;
 	protected int m_iAvailableAgents;
 	protected bool m_bStopped;
@@ -40,6 +43,12 @@ class AICF_InfantryRecruitmentService
 		return count;
 	}
 
+	void SetRecoveryPolicy(AICF_VehicleWatchdog watchdog, AICF_Stage3Config config)
+	{
+		m_RecoveryWatchdog = watchdog;
+		m_RecoveryConfig = config;
+	}
+
 	void Update(AICF_FactionState us, SCR_CampaignFaction usFaction, AICF_FactionState ussr,
 		SCR_CampaignFaction ussrFaction, int availableAgents, bool graphReady)
 	{
@@ -47,6 +56,14 @@ class AICF_InfantryRecruitmentService
 			return;
 		m_iAvailableAgents = Math.Max(0, availableAgents);
 		m_CombatSafety.Update(m_Campaign, m_Graph);
+		for (int failureIndex = m_aApproachFailures.Count() - 1; failureIndex >= 0; failureIndex--)
+		{
+			if (!m_aApproachFailures[failureIndex].IsContextCurrent(m_Graph.GetRevision()))
+			{
+				m_aApproachFailures[failureIndex].LogRearmed();
+				m_aApproachFailures.Remove(failureIndex);
+			}
+		}
 		for (int index = m_aOrders.Count() - 1; index >= 0; index--)
 		{
 			AICF_InfantryRecruitmentOrder order = m_aOrders[index];
@@ -94,8 +111,13 @@ class AICF_InfantryRecruitmentService
 				continue;
 			int cost = m_Config.Cost(role);
 			AICF_InfantryRecruitmentOrder order = SelectBarracks(slot, faction, leader.GetOrigin(), cost);
-			if (!order || !m_Planner.BeginInfantryRecruitment(order))
+			if (!order)
 				continue;
+			if (!m_Planner.BeginInfantryRecruitment(order))
+			{
+				// Tile loading само по себе ещё не доказывает непроходимость.
+				continue;
+			}
 			m_aOrders.Insert(order);
 			order.Log("INFANTRY_RECRUITMENT_STARTED", string.Format(
 				"alive=%1 desired=%2 distance_m=%3 max_distance_m=500 intent_revision=%4 graph_revision=%5",
@@ -189,6 +211,8 @@ class AICF_InfantryRecruitmentService
 			{
 				if (!service || !service.GetOwner())
 					continue;
+				if (IsApproachBlocked(slot, service))
+					continue;
 				vector servicePosition = service.GetOwner().GetOrigin();
 				float distanceSq = vector.DistanceSqXZ(position, servicePosition);
 				if ((!playerRequested && (distanceSq > AICF_InfantryRecruitmentConfig.MAX_DISTANCE_METERS * AICF_InfantryRecruitmentConfig.MAX_DISTANCE_METERS ||
@@ -211,6 +235,8 @@ class AICF_InfantryRecruitmentService
 				order.m_ServiceId = service.GetOwner().GetID();
 				order.m_vPosition = servicePosition;
 				order.m_iStartedAtMs = System.GetTickCount();
+				order.m_iApproachProgressAtMs = order.m_iStartedAtMs;
+				order.m_fApproachBestDistance = Math.Sqrt(distanceSq);
 				if (!order.HasSafeBarracks())
 					continue;
 				best = order;
@@ -248,6 +274,21 @@ class AICF_InfantryRecruitmentService
 		}
 		if (now - order.m_iStartedAtMs >= visitTimeout)
 			return "VISIT_TIMEOUT";
+		// После прибытия не возобновляем подход поверх незавершённой покупки.
+		if (order.m_bMovementFailed && (order.m_iArrivedAtMs > 0 || order.m_Donor))
+			return "APPROACH_INTERRUPTED_OR_TIMEOUT";
+		if (order.m_bHiddenRecoveryPending)
+		{
+			if (now - order.m_iHiddenRecoverySubmittedAtMs < 1000)
+				return string.Empty;
+			// Teleport асинхронный. Его смещение исключается из proof движения;
+			// закупка не выполняется в проходе переустановки физического baseline.
+			order.m_fApproachBestDistance = vector.DistanceXZ(leader.GetOrigin(), order.m_vPosition);
+			order.m_iApproachProgressAtMs = now;
+			order.m_bHiddenRecoveryPending = false;
+			order.Log("INFANTRY_RECRUITMENT_HIDDEN_OBSERVED", "movement_confirmation=PENDING paid=0");
+			return string.Empty;
+		}
 		int alive = AICF_GroupRuntime.CountAliveAgents(order.m_Group);
 		order.m_Slot.CompleteInfantryMusterIfReady();
 		if (alive <= 0 || alive >= order.m_Slot.GetDesiredSize())
@@ -264,7 +305,7 @@ class AICF_InfantryRecruitmentService
 		{
 			if (order.m_iArrivedAtMs > 0 || now - order.m_iStartedAtMs >= approachTimeout)
 				return "APPROACH_INTERRUPTED_OR_TIMEOUT";
-			return string.Empty;
+			return CheckApproach(order, leader.GetOrigin(), now);
 		}
 		if (order.m_iArrivedAtMs == 0)
 		{
@@ -338,6 +379,72 @@ class AICF_InfantryRecruitmentService
 		return string.Empty;
 	}
 
+	protected string CheckApproach(AICF_InfantryRecruitmentOrder order, vector position, int now)
+	{
+		float distance = vector.DistanceXZ(position, order.m_vPosition);
+		if (order.m_fApproachBestDistance - distance >= 5)
+		{
+			order.m_fApproachBestDistance = distance;
+			order.m_iApproachProgressAtMs = now;
+			order.Log("INFANTRY_RECRUITMENT_PROGRESS", string.Format("distance_m=%1 movement_confirmation=PHYSICAL_PROGRESS", distance));
+		}
+		array<AIWaypoint> waypoints = {};
+		order.m_Group.GetWaypoints(waypoints);
+		bool bound = order.m_Waypoint && waypoints.Contains(order.m_Waypoint) &&
+			order.m_Group.GetCurrentWaypoint() == order.m_Waypoint;
+		if (bound && !order.m_bMovementFailed && now - order.m_iApproachProgressAtMs < 45000)
+			return string.Empty;
+		if (order.m_iApproachRepairs >= 2)
+			return "APPROACH_RECOVERY_EXHAUSTED";
+		if (order.m_iApproachRepairs == 1 && now - order.m_iApproachProgressAtMs >= 45000 &&
+			AICF_InfantryRecruitmentRecovery.TryRecover(order, m_RecoveryWatchdog, m_RecoveryConfig))
+		{
+			order.m_bHiddenRecoveryPending = true;
+			order.m_iHiddenRecoverySubmittedAtMs = now;
+		}
+		order.m_iApproachRepairs++;
+		bool issued = m_Planner.RepairInfantryRecruitmentApproach(order);
+		order.Log("INFANTRY_RECRUITMENT_APPROACH_REPAIR", string.Format(
+			"attempt=%1 waypoint_present=%2 order_issued=%3 movement_confirmation=PENDING distance_m=%4",
+			order.m_iApproachRepairs, bound, issued, distance));
+		if (!issued)
+			return "APPROACH_REPAIR_REJECTED";
+		order.m_bMovementFailed = false;
+		// Grace ремонта не меняет абсолютный approach timeout и историю посещений.
+		order.m_iApproachProgressAtMs = now;
+		return string.Empty;
+	}
+
+	protected bool IsApproachBlocked(AICF_GroupSlot slot, SCR_ServicePointComponent service)
+	{
+		foreach (AICF_RecruitmentApproachFailure failure : m_aApproachFailures)
+		{
+			if (failure.m_Slot == slot && failure.m_ServiceId == service.GetOwner().GetID() &&
+				failure.IsContextCurrent(m_Graph.GetRevision()))
+				return true;
+		}
+		return false;
+	}
+
+	protected void RememberApproachFailure(AICF_InfantryRecruitmentOrder order)
+	{
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(order.m_Group);
+		if (!leader || !order.IsCurrent(order.m_Slot) || IsApproachBlocked(order.m_Slot, order.m_Service))
+			return;
+		AICF_RecruitmentApproachFailure failure = new AICF_RecruitmentApproachFailure();
+		failure.m_Slot = order.m_Slot;
+		failure.m_sFaction = order.m_Faction.GetFactionKey();
+		failure.m_GroupId = order.m_GroupId;
+		failure.m_iGeneration = order.m_iGeneration;
+		failure.m_Service = order.m_Service;
+		failure.m_ServiceId = order.m_ServiceId;
+		failure.m_vServicePosition = order.m_vPosition;
+		failure.m_vGroupPosition = leader.GetOrigin();
+		failure.m_iGraphRevision = order.m_iGraphRevision;
+		m_aApproachFailures.Insert(failure);
+		order.Log("INFANTRY_RECRUITMENT_APPROACH_BLOCKED", "auto_retry=0 resume=CONTEXT_CHANGE alternative=OTHER_BARRACKS_OR_PRIOR_ORDER movement_confirmation=NONE");
+	}
+
 	protected bool HasOrder(AICF_GroupSlot slot)
 	{
 		foreach (AICF_InfantryRecruitmentOrder order : m_aOrders)
@@ -362,6 +469,9 @@ class AICF_InfantryRecruitmentService
 	protected void Finish(int index, string reason, bool restore)
 	{
 		AICF_InfantryRecruitmentOrder order = m_aOrders[index];
+		if (reason == "APPROACH_INTERRUPTED_OR_TIMEOUT" || reason == "APPROACH_RECOVERY_EXHAUSTED" ||
+			reason == "APPROACH_REPAIR_REJECTED")
+			RememberApproachFailure(order);
 		m_Economy.RefundInfantryRecruit(order);
 		m_Planner.EndInfantryRecruitment(order, m_Graph, m_Selector, restore);
 		if (!m_Spawner.ClearRecruit(order))
@@ -383,6 +493,7 @@ class AICF_InfantryRecruitmentService
 			Finish(index, "STOP", false);
 		m_aRetrySlots.Clear();
 		m_aRetryAtMs.Clear();
+		m_aApproachFailures.Clear();
 		m_CombatSafety.Stop();
 	}
 }

@@ -63,10 +63,17 @@
 !/tools/fixtures/AICF_PersonalNetworkProbe.c
 !/tools/Test-PersonalLoadoutContracts.ps1
 !/tools/Test-MovementRecoveryContracts.ps1
+!/tools/Test-RecoveryEpisodeContracts.ps1
+!/tools/Test-Issue12RecoveryContracts.ps1
+!/tools/fixtures/AICF_RecoveryEpisodeProbe.c
+!/tools/fixtures/AICF_RecoverySoakProbe.c
 !/tools/Watch-AICFRuntimeDiagnostics.ps1
 !/tools/fixtures/AICF_MovementRecoveryProbe.c
 !/workshop/AIConflictArlandWCSRHS/
 /workshop/AIConflictArlandWCSRHS/*
 !/workshop/AIConflictArlandWCSRHS/metadata.md
 !/workshop/AIConflictArlandWCSRHS/preview.jpg
+!/docs/
+/docs/*
+!/docs/RECOVERY_EPISODES.md
 !/tools/fixtures/AICF_WCSLoadoutCatalogProbe.c
