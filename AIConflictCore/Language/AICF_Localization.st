@@ -2340,8 +2340,8 @@ StringTable
 		CustomStringTableItem "{A1CF190919310003}"
 		{
 			Id "AICF_Scenario_EveronNorth_Details"
-			Target_en_us "One side starts at the northern airbase, the other at the military hospital. Fight for Saint-Philippe, Maiden's Bay, Meaux, Tyrone, Kermovan and Hornbeam Valley. Andre's Beacon and southern bases are inactive. The full island terrain remains accessible. Victory requires exhausting the enemy's reinforcement tickets and eliminating its remaining managed combat groups."
-			Target_ru_ru "Одна сторона начинает на северной авиабазе, другая — в военном госпитале. Борьба за Сен-Филипп, Девичью бухту, Мо, Тайрон, Кермован и Грабовую долину. Обзорный пункт Андре и южные базы неактивны. Ландшафт всего острова остаётся доступным. Для победы нужно исчерпать билеты подкрепления противника и уничтожить его оставшиеся управляемые боевые группы."
+			Target_en_us "One side starts at the northern airbase, the other at the military hospital. Fight for Saint-Philippe, Maiden's Bay, Meaux, Tyrone, Kermovan and Hornbeam Valley. Andre's Beacon and southern bases are inactive. The full island terrain remains accessible. Victory requires exhausting the enemy's reinforcement tickets or capturing all active objectives with none contested."
+			Target_ru_ru "Одна сторона начинает на северной авиабазе, другая — в военном госпитале. Борьба за Сен-Филипп, Девичью бухту, Мо, Тайрон, Кермован и Грабовую долину. Обзорный пункт Андре и южные базы неактивны. Ландшафт всего острова остаётся доступным. Для победы нужно исчерпать билеты подкрепления противника или захватить все активные точки так, чтобы ни одна не оспаривалась."
 		}
 		CustomStringTableItem "{A1CF190919210001}"
 		{

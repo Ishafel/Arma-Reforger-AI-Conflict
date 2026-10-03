@@ -315,7 +315,7 @@ class AICF_EconomySystem
 		else if (!reservation.GetBase() || reservation.GetBase().GetSuppliesMax() <= 0)
 			failureReason = "SUPPLY_POOL_MISSING";
 		else
-			failureReason = m_ConflictAdapter.GetSpawnRejectionReason(reservation.GetBase(), faction);
+			failureReason = m_ConflictAdapter.GetReplacementSpawnRejectionReason(reservation.GetBase(), faction);
 
 		if (!failureReason.IsEmpty())
 		{

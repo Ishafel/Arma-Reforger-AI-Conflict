@@ -113,9 +113,10 @@ Assert-Contains 'STAGE4_ROUTE_OPERATIONAL' $network 'FindFriendlyPath[\s\S]*IsOp
 foreach ($filter in @('ENEMY_OWNED', 'CONTESTED', 'SPAWN_POINT_MISSING', 'SPAWN_POINT_DISABLED', 'SPAWN_POINT_INACTIVE', 'INSUFFICIENT_SUPPLIES')) {
     Assert-Contains 'STAGE4_BASE_FILTER' ($selector + $controller + (Read-Required 'Integration\AICF_ConflictAdapter.c')) ([regex]::Escape($filter)) "Missing base rejection $filter"
 }
-Assert-Contains 'STAGE4_BASE_RANKING' $selector 'candidate\.Connected\s*!=\s*best\.Connected' 'Connected bases must rank before isolated bases'
-Assert-Contains 'STAGE4_BASE_RANKING' $selector 'candidate\.TargetHops\s*!=\s*best\.TargetHops' 'Saved-target hop distance must be a ranking key'
-Assert-Contains 'STAGE4_BASE_RANKING' $selector 'candidate\.RemainingSupplies\s*!=\s*best\.RemainingSupplies' 'Post-purchase stock must be a ranking key'
+Assert-Contains 'STAGE4_BASE_RANKING' $selector 'candidate\.DeathDistanceSq\s*<\s*best\.DeathDistanceSq' 'Nearest eligible spawn point to the death position must rank first'
+Assert-Contains 'STAGE4_BASE_RANKING' $selector 'TryGetReplacementOrigin\(deathPosition\)' 'Replacement must have a physical member origin'
+Assert-Contains 'STAGE4_BASE_FILTER' $selector 'GetReplacementSpawnRejectionReason\(base, faction\)' 'Replacement selection must require an online friendly barracks'
+Assert-Contains 'STAGE4_BASE_FILTER' $economy 'GetReplacementSpawnRejectionReason\(reservation.GetBase\(\), faction\)' 'Spawn and commit must revalidate the barracks'
 Assert-Contains 'STAGE4_BASE_RANKING' $selector 'candidate\.NodeId\s*<\s*best\.NodeId' 'Stable node id must be the final tie-break'
 
 Assert-Contains 'STAGE4_PACING' $request 'm_iProgressMs\s*\+=\s*elapsedMs\s*\*\s*pacePercent\s*/\s*100' 'Readiness must accumulate instead of resetting'
@@ -126,7 +127,7 @@ Assert-Contains 'STAGE4_PACING' $network 'BLOCKED' 'Network must classify blocke
 
 Assert-Contains 'STAGE4_TRANSACTION' $economy 'TryReserveDeployment\s*\(\s*AICF_EDeploymentKind\.REPLACEMENT\s*\)' 'Ticket reservation must precede deployment'
 Assert-Contains 'STAGE4_TRANSACTION' $economy 'ValidateReservationForCommit[\s\S]*GRAPH_REVISION_STALE' 'Commit must reject a stale graph revision'
-Assert-Contains 'STAGE4_TRANSACTION' $economy 'ValidateReservationForCommit[\s\S]*GetSpawnRejectionReason' 'Commit must recheck ownership and safety'
+Assert-Contains 'STAGE4_TRANSACTION' $economy 'ValidateReservationForCommit[\s\S]*GetReplacementSpawnRejectionReason' 'Commit must recheck ownership, safety and barracks'
 Assert-Contains 'STAGE4_TRANSACTION' $controller 'ValidateReservationForSpawn[\s\S]*TrySpawnAtBase' 'Reservation, graph, ownership, safety, and stock pool must be revalidated immediately before entity spawn'
 Assert-Contains 'STAGE4_TRANSACTION' $controller 'CanCommitDeploymentReady[\s\S]*TryCommitDeployment[\s\S]*CommitDeploymentReady[\s\S]*FinalizeDeployment' 'Exact roster/slot proof must precede the atomic economy commit'
 Assert-Contains 'STAGE4_TRANSACTION' $ticketLedger 'RollbackCommittedDeployment' 'A failed slot commit must be able to roll back its ticket debit'

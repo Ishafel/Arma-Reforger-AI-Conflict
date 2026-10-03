@@ -1637,6 +1637,7 @@ class AICF_MatchController
 				HandleLostReadyGroup(factionState, faction, slot);
 				continue;
 			}
+			slot.UpdateReplacementOrigin();
 
 			if (slot.GetState() == AICF_EGroupSlotState.WAITING &&
 				m_EconomySystem && m_EconomySystem.IsEnabled())
@@ -6684,7 +6685,10 @@ class AICF_MatchController
 		if (m_bStopped || !m_VictorySystem)
 			return;
 
-		m_VictorySystem.EvaluateAndEnd(m_Campaign, m_USState, m_USSRState);
+		AICF_ObjectiveGraph victoryGraph;
+		if (!m_bGraphRebuildNeeded && !m_bReplanScheduled)
+			victoryGraph = m_ObjectiveGraph;
+		m_VictorySystem.EvaluateAndEnd(m_Campaign, m_USState, m_USSRState, victoryGraph);
 	}
 
 	protected void FinalizeResult()
@@ -7525,6 +7529,7 @@ class AICF_MatchController
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
 			if (!slot)
 				continue;
+			slot.StopReplacementOriginObserver();
 
 			SCR_AIGroup group = slot.GetGroup();
 			if (group)

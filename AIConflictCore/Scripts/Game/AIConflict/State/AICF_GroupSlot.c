@@ -333,6 +333,49 @@ class AICF_GroupSlot
 	protected AICF_InfantryRecruitmentOrder m_RecruitmentOrder;
 	protected bool m_bInfantryMusterComplete;
 	protected ref array<IEntity> m_aRosterMembers = {};
+	protected vector m_vReplacementOrigin;
+	protected bool m_bHasReplacementOrigin;
+	protected EntityID m_ReplacementObservedGroupId;
+	protected int m_iReplacementObservedGeneration;
+
+	// Snapshot переживает cleanup и неудачные попытки replacement.
+	void UpdateReplacementOrigin()
+	{
+		if (!Replication.IsServer() || !IsCombatReady() || m_bReplacementDeployment)
+			return;
+		IEntity member = AICF_GroupRuntime.ResolveAliveLeader(m_Group);
+		if (!member)
+			return;
+		m_vReplacementOrigin = member.GetOrigin();
+		m_bHasReplacementOrigin = true;
+	}
+
+	bool TryGetReplacementOrigin(out vector position)
+	{
+		position = m_vReplacementOrigin;
+		return m_bHasReplacementOrigin;
+	}
+
+	void StopReplacementOriginObserver()
+	{
+		if (m_Group)
+			m_Group.GetOnAgentRemoved().Remove(OnReplacementMemberRemoved);
+	}
+
+	protected void OnReplacementMemberRemoved(SCR_AIGroup group, AIAgent agent)
+	{
+		if (!Replication.IsServer() || !IsCombatReady() || m_bReplacementDeployment ||
+			!group || group != m_Group || group.GetID() != m_ReplacementObservedGroupId ||
+			m_iSpawnGeneration != m_iReplacementObservedGeneration || !agent)
+			return;
+		ChimeraCharacter member = ChimeraCharacter.Cast(agent.GetControlledEntity());
+		if (!member || !member.GetCharacterController() ||
+			member.GetCharacterController().GetLifeState() != ECharacterLifeState.DEAD)
+			return;
+		// Transfer живого AI в другой отряд не является смертью.
+		m_vReplacementOrigin = member.GetOrigin();
+		m_bHasReplacementOrigin = true;
+	}
 
 	bool CompleteInfantryMusterIfReady()
 	{
@@ -1482,6 +1525,9 @@ class AICF_GroupSlot
 			return false;
 
 		m_Group = group;
+		m_ReplacementObservedGroupId = group.GetID();
+		m_iReplacementObservedGeneration = m_iSpawnGeneration;
+		m_Group.GetOnAgentRemoved().Insert(OnReplacementMemberRemoved);
 		if (!m_sCallsignId.IsEmpty())
 			m_Group.AICF_SetCallsign(GetDisplayName());
 		m_Group.AICF_TrackMemberPositions();
@@ -2476,6 +2522,7 @@ class AICF_GroupSlot
 			return false;
 
 		m_bReplacementDeployment = false;
+		UpdateReplacementOrigin();
 		return true;
 	}
 
@@ -2576,6 +2623,8 @@ class AICF_GroupSlot
 	{
 		ClearRuntimeReferences();
 		ClearStrategicIntent();
+		m_bHasReplacementOrigin = false;
+		m_vReplacementOrigin = vector.Zero;
 		m_bReplacementDeployment = false;
 		m_State = AICF_EGroupSlotState.EMPTY;
 	}
@@ -2595,6 +2644,7 @@ class AICF_GroupSlot
 		m_aRosterMembers.Clear();
 		if (m_Group)
 		{
+			StopReplacementOriginObserver();
 			m_Group.GetOnWaypointCompleted().Remove(OnOwnedWaypointCompleted);
 			m_Group.GetOnWaypointRemoved().Remove(OnOwnedWaypointRemoved);
 		}

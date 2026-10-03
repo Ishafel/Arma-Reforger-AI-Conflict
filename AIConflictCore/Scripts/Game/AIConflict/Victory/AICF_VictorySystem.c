@@ -1,4 +1,4 @@
-// Ends a Stage 1 match once exactly one managed faction has exhausted tickets and combat forces.
+// Победа: тикеты противника исчерпаны ИЛИ все активные точки захвачены без оспаривания.
 class AICF_VictorySystem
 {
 	protected bool m_bEnded;
@@ -8,7 +8,8 @@ class AICF_VictorySystem
 	bool EvaluateAndEnd(
 		SCR_GameModeCampaign campaign,
 		AICF_FactionState usState,
-		AICF_FactionState ussrState)
+		AICF_FactionState ussrState,
+		AICF_ObjectiveGraph graph)
 	{
 		if (m_bEnded)
 			return false;
@@ -22,14 +23,14 @@ class AICF_VictorySystem
 			return false;
 		}
 
-		bool usDefeated = IsDefeated(usState);
-		bool ussrDefeated = IsDefeated(ussrState);
-		if (usDefeated == ussrDefeated)
+		bool usWins = ussrState.GetTickets() <= 0 || ControlsAllObjectives(graph, usState.GetFactionKey());
+		bool ussrWins = usState.GetTickets() <= 0 || ControlsAllObjectives(graph, ussrState.GetFactionKey());
+		if (usWins == ussrWins)
 			return false;
 
 		AICF_FactionState winnerState = usState;
 		AICF_FactionState loserState = ussrState;
-		if (usDefeated)
+		if (ussrWins)
 		{
 			winnerState = ussrState;
 			loserState = usState;
@@ -62,13 +63,17 @@ class AICF_VictorySystem
 
 		m_bEnded = true;
 		m_sWinnerKey = winnerState.GetFactionKey();
+		string reason = "ALL_OBJECTIVES_UNCONTESTED";
+		if (loserState.GetTickets() <= 0)
+			reason = "ENEMY_TICKETS_EXHAUSTED";
 		AICF_Stage1Diagnostics.Info(
 			"VICTORY",
 			string.Format(
-				"winner=%1 loser=%2 loser_tickets=%3 reason=REPLACEMENT_UNAFFORDABLE_NO_COMBAT_GROUPS",
+				"winner=%1 loser=%2 loser_tickets=%3 reason=%4",
 				m_sWinnerKey,
 				loserState.GetFactionKey(),
-				loserState.GetTickets()));
+				loserState.GetTickets(),
+				reason));
 
 		campaign.EndGameMode(SCR_GameModeEndData.CreateSimple(
 			EGameOverTypes.ENDREASON_SCORELIMIT,
@@ -97,31 +102,32 @@ class AICF_VictorySystem
 		return m_sWinnerKey;
 	}
 
-	protected bool IsDefeated(AICF_FactionState factionState)
+	protected bool ControlsAllObjectives(AICF_ObjectiveGraph graph, FactionKey factionKey)
 	{
-		if (factionState.CanAffordDeployment(AICF_EDeploymentKind.REPLACEMENT))
+		if (!graph || graph.GetRevision() <= 0 || factionKey.IsEmpty())
 			return false;
 
-		return !HasManagedCombatGroups(factionState);
-	}
-
-	protected bool HasManagedCombatGroups(AICF_FactionState factionState)
-	{
-		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
+		int objectives;
+		for (int nodeId = 0; nodeId < graph.GetNodeCount(); nodeId++)
 		{
-			AICF_GroupSlot slot = factionState.GetSlot(slotId);
-			if (!slot)
+			AICF_ObjectiveNode node = graph.GetNode(nodeId);
+			if (!node)
+				return false;
+			if (!node.IsObjective())
 				continue;
-
-			AICF_EGroupSlotState state = slot.GetState();
-			// SPAWNING also covers the bounded interval before a group is bound. Its reservation
-			// must not make the faction look exhausted before the spawn watchdog resolves it.
-			if (state == AICF_EGroupSlotState.SPAWNING)
-				return true;
-			if (state == AICF_EGroupSlotState.READY && slot.GetGroup())
-				return true;
+			SCR_CampaignMilitaryBaseComponent base = node.GetBase();
+			if (!base || !base.GetOwner() || !base.IsInitialized())
+				return false;
+			// Stock HQ не захватываются; RELAY уже исключены через IsObjective().
+			if (base.IsHQ())
+				continue;
+			objectives++;
+			if (!base.GetFaction() || base.GetFaction().GetFactionKey() != factionKey ||
+				base.GetCaptureState() != SCR_EBaseCaptureState.NONE ||
+				base.IsBeingCaptured() || base.AreEnemiesPresent())
+				return false;
 		}
 
-		return false;
+		return objectives > 0;
 	}
 }

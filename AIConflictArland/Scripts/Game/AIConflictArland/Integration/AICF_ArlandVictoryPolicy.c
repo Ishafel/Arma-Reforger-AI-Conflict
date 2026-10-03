@@ -1,4 +1,4 @@
-// AICF uses ticket exhaustion on supported stock maps; suppress stock Conflict's territorial countdown.
+// AICF завершает матч по тикетам ИЛИ всем неоспариваемым точкам без stock countdown.
 modded class SCR_GameModeCampaign
 {
 	override protected void CheckForWinner()

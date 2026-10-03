@@ -26,7 +26,7 @@ class AICF_ReinforcementSystem
 			!conflictAdapter || !groupSpawner)
 			return false;
 
-		string rejectionReason = conflictAdapter.GetSpawnRejectionReason(selectedBase, faction);
+		string rejectionReason = conflictAdapter.GetReplacementSpawnRejectionReason(selectedBase, faction);
 		if (!rejectionReason.IsEmpty())
 		{
 			if (rejectionReason == "ENEMY_OWNED" || rejectionReason == "CONTESTED")

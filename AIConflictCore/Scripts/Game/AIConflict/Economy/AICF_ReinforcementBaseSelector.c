@@ -5,6 +5,7 @@ class AICF_ReinforcementBaseCandidate
 	int TargetHops;
 	int NodeId;
 	float RemainingSupplies;
+	float DeathDistanceSq;
 }
 
 // Deterministic Stage 4 spawn-base filtering and ranking.
@@ -40,6 +41,9 @@ class AICF_ReinforcementBaseSelector
 		selectedBase = null;
 		if (!faction || !slot || !m_Graph || !m_SupplyNetwork || !m_ConflictAdapter)
 			return false;
+		vector deathPosition;
+		if (!slot.TryGetReplacementOrigin(deathPosition))
+			return false;
 
 		ref AICF_ReinforcementBaseCandidate best;
 		for (int nodeId = 0; nodeId < m_Graph.GetNodeCount(); nodeId++)
@@ -48,7 +52,7 @@ class AICF_ReinforcementBaseSelector
 			SCR_CampaignMilitaryBaseComponent base = null;
 			if (node)
 				base = node.GetBase();
-			string rejectionReason = m_ConflictAdapter.GetSpawnRejectionReason(base, faction);
+			string rejectionReason = m_ConflictAdapter.GetReplacementSpawnRejectionReason(base, faction);
 			if (!rejectionReason.IsEmpty())
 			{
 				if (rejectionReason == "ENEMY_OWNED" || rejectionReason == "CONTESTED")
@@ -83,6 +87,7 @@ class AICF_ReinforcementBaseSelector
 			candidate.Base = base;
 			candidate.NodeId = nodeId;
 			candidate.RemainingSupplies = supplies - supplyCost;
+			candidate.DeathDistanceSq = vector.DistanceSqXZ(deathPosition, base.GetSpawnPoint().GetOrigin());
 			candidate.TargetHops = m_Graph.GetHopDistance(base, savedTargetBase);
 			if (candidate.TargetHops < 0)
 				candidate.TargetHops = 1000000;
@@ -109,7 +114,9 @@ class AICF_ReinforcementBaseSelector
 				best.TargetHops,
 				best.RemainingSupplies,
 				best.NodeId,
-				m_Graph.GetRevision()));
+				m_Graph.GetRevision()) + string.Format(
+				" death_position=%1 death_distance_sq=%2 barracks=1",
+				deathPosition, best.DeathDistanceSq));
 		return true;
 	}
 
@@ -117,12 +124,8 @@ class AICF_ReinforcementBaseSelector
 		AICF_ReinforcementBaseCandidate candidate,
 		AICF_ReinforcementBaseCandidate best)
 	{
-		if (candidate.Connected != best.Connected)
-			return candidate.Connected;
-		if (candidate.TargetHops != best.TargetHops)
-			return candidate.TargetHops < best.TargetHops;
-		if (candidate.RemainingSupplies != best.RemainingSupplies)
-			return candidate.RemainingSupplies > best.RemainingSupplies;
+		if (candidate.DeathDistanceSq != best.DeathDistanceSq)
+			return candidate.DeathDistanceSq < best.DeathDistanceSq;
 		return candidate.NodeId < best.NodeId;
 	}
 }

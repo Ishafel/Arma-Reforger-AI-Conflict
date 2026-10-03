@@ -77,3 +77,6 @@
 /docs/*
 !/docs/RECOVERY_EPISODES.md
 !/tools/fixtures/AICF_WCSLoadoutCatalogProbe.c
+!/tools/Test-VictoryRespawnStatic.ps1
+!/tools/fixtures/AICF_VictoryRespawnProbe.c
+!/docs/VICTORY_RESPAWN.md

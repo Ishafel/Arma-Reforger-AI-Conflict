@@ -170,6 +170,26 @@ class AICF_ConflictAdapter
 		return GetSpawnRejectionReason(base, faction).IsEmpty();
 	}
 
+	// Replacement требует действующую союзную казарму; initial seed строит её сам.
+	string GetReplacementSpawnRejectionReason(
+		SCR_CampaignMilitaryBaseComponent base,
+		SCR_CampaignFaction faction)
+	{
+		string reason = GetSpawnRejectionReason(base, faction);
+		if (!reason.IsEmpty())
+			return reason;
+		array<SCR_ServicePointComponent> services = {};
+		base.GetServices(services);
+		foreach (SCR_ServicePointComponent service : services)
+		{
+			if (service && service.GetOwner() && service.GetFaction() == faction &&
+				service.GetType() == SCR_EServicePointType.BARRACKS &&
+				service.GetServiceState() == SCR_EServicePointStatus.ONLINE)
+				return string.Empty;
+		}
+		return "NO_ONLINE_BARRACKS";
+	}
+
 	string GetSpawnRejectionReason(
 		SCR_CampaignMilitaryBaseComponent base,
 		SCR_CampaignFaction faction)
