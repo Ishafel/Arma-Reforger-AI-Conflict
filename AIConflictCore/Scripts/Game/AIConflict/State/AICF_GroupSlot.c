@@ -211,6 +211,7 @@ class AICF_GroupSlot
 	protected int m_iMobEgressSafetyBlockedStartedAtMs;
 	protected int m_iMobEgressSafetyHeartbeatAtMs;
 	protected int m_iFalseCompletionCount;
+	protected ref AICF_RouteRecoveryEpisode m_RouteRecoveryEpisode = new AICF_RouteRecoveryEpisode();
 	protected int m_iFalseCompletionNoProgressCount;
 	protected int m_iFalseCompletionAssignmentRevision;
 	protected int m_iFalseCompletionGroupGeneration;
@@ -390,6 +391,22 @@ class AICF_GroupSlot
 	{
 		// Ожидание первой казармы — часть набора: commander/recovery не уводят seed в бой.
 		return IsWaitingForInfantryMuster() || (m_RecruitmentOrder && m_RecruitmentOrder.IsCurrent(this));
+	}
+
+	bool HasActiveRecruitmentOrder()
+	{
+		return m_RecruitmentOrder && m_RecruitmentOrder.IsCurrent(this);
+	}
+
+	bool ReportRecruitmentFailedMovement(SCR_AIGroup group, AIWaypoint waypoint)
+	{
+		return HasActiveRecruitmentOrder() && m_RecruitmentOrder.ReportFailedMovement(group, waypoint);
+	}
+
+	bool HasRecruitmentMovementFailure(AIWaypoint waypoint)
+	{
+		return HasActiveRecruitmentOrder() && m_RecruitmentOrder.m_Waypoint == waypoint &&
+			m_RecruitmentOrder.m_bMovementFailed;
 	}
 
 	void SetRoleAndIndex(AICF_EGroupRole role, int roleIndex)
@@ -1975,6 +1992,7 @@ class AICF_GroupSlot
 
 	int RecordFalseWaypointCompletion(vector endpoint, bool noPhysicalProgress)
 	{
+		m_RouteRecoveryEpisode.Begin(this);
 		if (m_iFalseCompletionAssignmentRevision != m_iStrategicAssignmentRevision ||
 			m_iFalseCompletionGroupGeneration != m_iSpawnGeneration)
 		{
@@ -2027,6 +2045,7 @@ class AICF_GroupSlot
 
 	void BeginTemporaryRouteReplanHold(vector anchor)
 	{
+		m_RouteRecoveryEpisode.Begin(this);
 		m_bTemporaryRouteReplanHold = true;
 		m_iTemporaryRouteReplanHoldStartedAtMs = System.GetTickCount();
 		m_vTemporaryRouteReplanAnchor = anchor;
@@ -2035,6 +2054,11 @@ class AICF_GroupSlot
 	bool IsTemporaryRouteReplanHold()
 	{
 		return m_bTemporaryRouteReplanHold;
+	}
+
+	AICF_RouteRecoveryEpisode GetRouteRecoveryEpisode()
+	{
+		return m_RouteRecoveryEpisode;
 	}
 
 	bool IsTemporaryRouteReplanHoldDue(int holdMs)

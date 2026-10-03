@@ -102,6 +102,8 @@ class AICF_OrderPlanner
 		SCR_CampaignMilitaryBaseComponent excludedTarget = null,
 		bool waypointSuspendedByVehicle = false)
 	{
+		if (slot && (slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() || slot.GetRouteRecoveryEpisode().IsBlocked(slot)))
+			return false;
 		if (slot && slot.IsRecruitingInfantry())
 			return true;
 		if (!Replication.IsServer() || !slot || !faction || !graph || !targetSelector ||
@@ -209,6 +211,8 @@ class AICF_OrderPlanner
 		SCR_CampaignMilitaryBaseComponent excludedTarget = null,
 		bool waypointSuspendedByVehicle = false)
 	{
+		if (slot && (slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() || slot.GetRouteRecoveryEpisode().IsBlocked(slot)))
+			return false;
 		if (slot && slot.IsRecruitingInfantry())
 			return true;
 		if (!Replication.IsServer() || !slot || !faction || !graph || !targetSelector ||
@@ -908,6 +912,8 @@ class AICF_OrderPlanner
 		int stableCandidateMs,
 		bool waypointSuspendedByVehicle = false)
 	{
+		if (slot && (slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() || slot.GetRouteRecoveryEpisode().IsBlocked(slot)))
+			return false;
 		if (slot && slot.IsRecruitingInfantry())
 			return true;
 		if (!Replication.IsServer() || !slot || !faction || !graph ||
@@ -953,6 +959,10 @@ class AICF_OrderPlanner
 		int stableCandidateMs,
 		bool waypointSuspendedByVehicle = false)
 	{
+		// Base-owner callbacks обходят CommanderTick. Даже смена posture без
+		// нового waypoint не должна снимать hold через RecordStrategicAssignment.
+		if (slot && (slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() || slot.GetRouteRecoveryEpisode().IsBlocked(slot)))
+			return false;
 		if (slot && slot.IsRecruitingInfantry())
 			return true;
 		if (!Replication.IsServer() || !slot || !faction || !graph ||
@@ -1161,6 +1171,8 @@ class AICF_OrderPlanner
 		int stableCandidateMs,
 		bool waypointSuspendedByVehicle = false)
 	{
+		if (slot && (slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() || slot.GetRouteRecoveryEpisode().IsBlocked(slot)))
+			return false;
 		if (slot && slot.IsRecruitingInfantry())
 			return true;
 		if (!Replication.IsServer() || !slot ||
@@ -1199,6 +1211,8 @@ class AICF_OrderPlanner
 		int stableCandidateMs,
 		bool waypointSuspendedByVehicle = false)
 	{
+		if (slot && (slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() || slot.GetRouteRecoveryEpisode().IsBlocked(slot)))
+			return false;
 		if (slot && slot.IsRecruitingInfantry())
 			return true;
 		if (!Replication.IsServer() || !slot ||
@@ -1513,12 +1527,25 @@ class AICF_OrderPlanner
 		return recovered;
 	}
 
+	// Hidden relocation не должна обходить владельца recruitment/route hold или
+	// переносить бойцов, когда восстановление прежней цели уже запрещено.
+	bool CanRebuildAfterHiddenMobEgress(AICF_GroupSlot slot, SCR_CampaignFaction faction)
+	{
+		return Replication.IsServer() && slot && faction && slot.IsCombatReady() &&
+			!slot.IsRecruitingInfantry() && !slot.IsTemporaryRouteReplanHold() &&
+			!slot.IsPersistentStuckFieldHold() && !slot.GetRouteRecoveryEpisode().IsBlocked(slot) &&
+			!slot.IsRouteTargetDeferred(slot.GetTargetBase()) && IsCurrentTargetValid(slot, faction);
+	}
+
 	bool RebuildCurrentOrder(
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction,
 		string reason,
 		bool recoverStuckRoute = false)
 	{
+		if (slot && (slot.GetRouteRecoveryEpisode().IsBlocked(slot) || slot.IsPersistentStuckFieldHold() ||
+			slot.IsTemporaryRouteReplanHold()))
+			return false;
 		if (slot && slot.IsRecruitingInfantry())
 			return true;
 		if (!Replication.IsServer() || !slot || !faction || !slot.IsCombatReady() ||
@@ -3148,6 +3175,8 @@ class AICF_OrderPlanner
 	{
 		if (!Replication.IsServer() || !slot || !slot.IsWaitingForInfantryMuster())
 			return;
+		if (slot.HasActiveRecruitmentOrder())
+			return;
 		if (slot.CompleteInfantryMusterIfReady())
 		{
 			ClearOrder(slot);
@@ -3164,6 +3193,8 @@ class AICF_OrderPlanner
 		return Replication.IsServer() && slot && faction && slot.IsCombatReady() &&
 			slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY && !slot.HasPlayerStrategicIntent() &&
 			!slot.HasPendingOrderRecovery() &&
+			!slot.IsTemporaryRouteReplanHold() && !slot.IsPersistentStuckFieldHold() &&
+			!slot.GetRouteRecoveryEpisode().IsBlocked(slot) &&
 			!slot.IsAwaitingPlayerCommand() && !slot.IsLoneSurvivorRetreat() &&
 			m_AuthorityPolicy && m_AuthorityPolicy.IsAICommanderEnabled(faction.GetFactionKey()) &&
 			slot.HasStrategicIntent() && slot.GetStrategicIntentTargetKind() == AICF_EOrderTargetKind.BASE;
@@ -3225,6 +3256,17 @@ class AICF_OrderPlanner
 		order.m_iAssignment = order.m_Slot.GetStrategicAssignmentRevision();
 		order.m_Slot.SetRecruitmentOrder(order);
 		return true;
+	}
+
+	// Служба выбирает момент ремонта; только planner меняет infantry waypoint.
+	bool RepairInfantryRecruitmentApproach(AICF_InfantryRecruitmentOrder order)
+	{
+		if (!Replication.IsServer() || !order || !order.IsCurrent(order.m_Slot) ||
+			!order.HasSafeBarracks() || order.m_iArrivedAtMs > 0 || order.m_Donor ||
+			AICF_GroupRuntime.CountAliveAgentsInAnyVehicle(order.m_Group) > 0)
+			return false;
+		// Begin сохраняет token, generation, intent и абсолютный срок визита.
+		return BeginInfantryRecruitment(order);
 	}
 
 	bool CanPlayerRecruitInfantry(AICF_GroupSlot slot, SCR_CampaignFaction faction)

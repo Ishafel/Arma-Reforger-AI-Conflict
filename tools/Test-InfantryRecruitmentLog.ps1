@@ -17,6 +17,16 @@ foreach ($line in $lines) {
     $event = $Matches[1]
     $fields = @{}
     foreach ($field in [regex]::Matches($line, '(\w+)=([^\s]+)')) { $fields[$field.Groups[1].Value] = $field.Groups[2].Value }
+    # Rearm относится к сохранённой истории службы после завершения визита;
+    # у него намеренно нет visit token или group, только stable identity.
+    if ($event -eq 'INFANTRY_RECRUITMENT_APPROACH_REARMED') {
+        if ($fields.faction -notin @('US','USSR') -or $fields.slot -notmatch '^\d+$' -or
+            $fields.generation -notmatch '^\d+$' -or !$fields.service -or
+            $fields.reason -ne 'CONTEXT_CHANGED' -or $fields.movement_confirmation -ne 'NONE') {
+            $failures.Add('Invalid approach rearm context')
+        }
+        continue
+    }
     $key = "$($fields.faction):$($fields.slot):$($fields.generation):$($fields.token)"
     if ($event -eq 'INFANTRY_RECRUITMENT_STARTED') {
         if ($visits.ContainsKey($key)) { $failures.Add("Duplicate visit $key") }

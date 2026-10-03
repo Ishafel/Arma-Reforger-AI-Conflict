@@ -273,6 +273,7 @@ class AICF_MatchController
 		CacheBaseOwners(graphBases);
 		m_InfantryRecruitment = new AICF_InfantryRecruitmentService(
 			m_Campaign, m_OrderPlanner, m_EconomySystem, m_ObjectiveGraph, m_TargetSelector, m_GroupSpawner);
+		m_InfantryRecruitment.SetRecoveryPolicy(m_HiddenRecoveryWatchdog, m_Stage3Config);
 		m_BaseBuilders = new AICF_BaseBuilderService();
 		m_BaseBuilders.Start(m_Campaign, m_OrderPlanner, m_Config.GetMaxManagedAgents());
 		m_FIAPatrols = new AICF_FIAPatrolService();
@@ -657,6 +658,8 @@ class AICF_MatchController
 				return false;
 			bool suspended = m_VehicleCoordinator && m_VehicleCoordinator.IsInfantryOrderSuspended(slot);
 			m_OrderPlanner.ReleasePlayerCommand(slot);
+			// Снимаем старый episode/hold до проверки guards нового AI приказа.
+			ProcessRouteRecoveryEpisode(slot, faction, false);
 			bool assigned = commander.AssignOrder(slot, "PLAYER_RELEASE", null, suspended);
 			if (m_VehicleCoordinator && m_VehicleCoordinator.IsControllingMovement(slot))
 				m_VehicleCoordinator.AdoptCurrentStrategicAssignment(slot, faction, "PLAYER_RELEASE", m_iStrategicBaseRevision);
@@ -3268,6 +3271,11 @@ class AICF_MatchController
 			rejectionReason = "POLICY_OR_AUTHORITY_UNAVAILABLE";
 			return false;
 		}
+		if (!m_OrderPlanner.CanRebuildAfterHiddenMobEgress(slot, faction))
+		{
+			rejectionReason = "ORDER_RECOVERY_OWNER_OR_TARGET_BLOCKED";
+			return false;
+		}
 
 		SCR_AIGroup group = slot.GetGroup();
 		AIWaypoint expectedWaypoint = slot.GetWaypoint();
@@ -3988,6 +3996,8 @@ class AICF_MatchController
 			return "AWAITING_PLAYER_COMMAND";
 		if (slot && slot.IsTemporaryRouteReplanHold())
 			return "TEMPORARY_ROUTE_REPLAN_HOLD";
+		if (slot && slot.IsPersistentStuckFieldHold() && IsWaypointBoundToGroup(slot.GetGroup(), slot.GetWaypoint()))
+			return "PERSISTENT_STUCK_FIELD_HOLD";
 		if (slot && slot.GetRole() == AICF_EGroupRole.DEFEND && slot.GetTargetBase() == mainBase)
 			return "HQ_DEFENSE";
 		if (slot && slot.GetRole() == AICF_EGroupRole.RESERVE && slot.GetTargetBase() == mainBase)
@@ -4075,7 +4085,7 @@ class AICF_MatchController
 			// ReliabilityTick owns the bounded hold and its full-replan transition.
 			// CommanderTick must not reinterpret the temporary Defend waypoint as an
 			// invalid ATTACK/relay order before that transition becomes due.
-			if (slot.IsTemporaryRouteReplanHold())
+			if (slot.GetRouteRecoveryEpisode().IsBlocked(slot) || slot.IsTemporaryRouteReplanHold())
 				continue;
 			// CommanderTick may observe the candidate between reliability polls, but
 			// only ReliabilityTick is allowed to confirm or reject its stability.
@@ -4215,6 +4225,9 @@ class AICF_MatchController
 				(m_VehicleCoordinator.IsControllingMovement(slot) ||
 				m_VehicleCoordinator.IsRestorePending(slot));
 			if (vehicleOwnsMovementOrRestore)
+				continue;
+
+			if (ProcessRouteRecoveryEpisode(slot, faction))
 				continue;
 
 			if (slot.HasPendingOrderRecovery())
@@ -4495,7 +4508,41 @@ class AICF_MatchController
 				slot.GetSpawnGeneration(),
 				AICF_Stage1Diagnostics.BaseKey(failedTarget),
 				holdAgeMs,
-				replanned));
+				replanned) + string.Format(" episode_age_ms=%1 movement_confirmation=PENDING", slot.GetRouteRecoveryEpisode().GetAgeMs()));
+	}
+
+	// Общий episode проверяется до pending verification и локального hold timer.
+	protected bool ProcessRouteRecoveryEpisode(AICF_GroupSlot slot, SCR_CampaignFaction faction, bool assignAfterContextChange = true)
+	{
+		AICF_RouteRecoveryEpisode episode = slot.GetRouteRecoveryEpisode();
+		string outcome = episode.Observe(slot, m_ObjectiveGraph.GetRevision());
+		if (outcome.IsEmpty())
+			return false;
+		if (outcome == "EXHAUSTED")
+		{
+			if (episode.TakeHoldAttempt())
+			{
+				if (slot.HasPendingOrderRecovery())
+					SupersedePendingOrderRecovery(slot, faction, "ROUTE_RECOVERY_EXHAUSTED");
+				IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
+				bool held = leader && m_OrderPlanner.HoldPositionForPersistentStuck(slot, faction, slot.GetTargetBase(), leader.GetOrigin());
+				slot.ClearTemporaryRouteReplanHold();
+				AICF_Stage2Diagnostics.Warning("ROUTE_RECOVERY_EXHAUSTED", string.Format(
+					"faction=%1 numeric_slot=%2 group_generation=%3 episode_age_ms=%4 hold_committed=%5 movement_confirmation=NONE auto_retry=0",
+					faction.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), episode.GetAgeMs(), held));
+			}
+			return true;
+		}
+		AICF_Stage2Diagnostics.Info("ROUTE_RECOVERY_EPISODE_FINISHED", string.Format(
+			"faction=%1 numeric_slot=%2 group_generation=%3 outcome=%4 episode_age_ms=%5",
+			faction.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), outcome, episode.GetAgeMs()));
+		if (outcome == "CONTEXT_CHANGED" && slot.IsPersistentStuckFieldHold())
+		{
+			ResumePersistentStuckFieldHold(slot, faction, "ROUTE_AVAILABILITY_CHANGED");
+			if (assignAfterContextChange)
+				AssignFactionStrategicOrder(slot, faction, "ROUTE_AVAILABILITY_CHANGED");
+		}
+		return false;
 	}
 
 	protected bool TryConfirmPendingOrderRecoveryByRelayCapture(
@@ -5324,7 +5371,9 @@ class AICF_MatchController
 		SCR_CampaignFaction faction,
 		string failureReason)
 	{
-		if (!slot || !faction || slot.HasPendingOrderRecovery())
+		if (!slot || !faction || slot.HasPendingOrderRecovery() || slot.IsRecruitingInfantry() ||
+			slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() ||
+			slot.GetRouteRecoveryEpisode().IsBlocked(slot))
 			return false;
 		// Route-recovery ownership is persistent slot state, not the transient caller
 		// reason. An immediate retry may be rate-limited and return later through the
@@ -5505,7 +5554,10 @@ class AICF_MatchController
 				" attempt_id=%1 fallback_action=%2 reliability_budget_consumed=%3",
 				repairAttemptId,
 				fallbackAction,
-				reliabilityBudgetConsumed));
+				reliabilityBudgetConsumed) + string.Format(
+				" order_issued=%1 safe_hold=%2 movement_confirmation=PENDING",
+				repairCandidateAccepted && !slot.IsTemporaryRouteReplanHold() && !slot.IsPersistentStuckFieldHold(),
+				slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold()));
 		if (recovered && !postconditionMeaningful)
 			AICF_Stage35Diagnostics.Warning("WAYPOINT_BIND_MISMATCH", string.Format("faction=%1 slot=%2 waypoint=%3 queue_count=%4", faction.GetFactionKey(), slot.GetSlotKey(), newWaypointId, queueCount));
 		return repairCandidateAccepted;
