@@ -5,6 +5,12 @@
 сохраняют историю кандидатов и их ограничения на момент проверки;
 их `NOT RUN` и промежуточные результаты не заменяют итоговые gates.
 
+Исправление опубликовано в draft [PR #13](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/13).
+Целевые focused tests — PASS; полный runtime matrix имеет 4 PASS и 3 FAIL
+из-за дополнительных находок [#14](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/issues/14).
+Общий результат не считается полностью зелёным; issues #11/#12 не закрыты,
+PR не merged, статус `ACCEPTED` не присвоен.
+
 ## Исходная реализация #11
 
 `AICF_InfantryRecruitmentService` проверяет подход к казарме до создания donor
@@ -499,3 +505,80 @@ PASS / 0. Окончательная Workbench-компиляция `wb-v3-stock
 `Game destroyed`, script/VM ошибок нет. Команды и полные результаты сохранены
 в `runtime-final-focused-*`; предыдущие focused-прогоны остаются evidence
 для отдельной ветки исчерпания ремонта и context rearm.
+
+### Новые дефекты, найденные в окончательных прогонах
+
+Они записаны в [issue #14](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/issues/14).
+Результаты соответствующих общих runtime gates остаются FAIL; анализаторы
+и их пороги не ослаблялись.
+
+- RHS: пять `ORDER_RECOVERED` к одной базе при лимите три. Отряд DEFEND
+  физически прибыл (около 1,6 м от цели), но новый `DEFEND_ACTION` завершался
+  за 4–10 секунд; после `AT_OBJECTIVE` task audit повторял rebuild. Это отдельный
+  цикл после прибытия, а не false completion далёкого route leg из #11.
+- EveronRHS: два failed-move VM exception. Сопоставление по полному логу
+  `BUILDER_SPAWN_REQUESTED/READY` установило строительную группу; её `slot=NULL`
+  означает отсутствие владельца managed infantry, а не потерю recruitment slot.
+  Позднее строитель вернулся домой и был retired. Оба анализатора FAIL именно
+  из-за двух SCRIPT(E), несмотря на штатное завершение сервера с exit 0.
+- WCS: Stage 2 обнаружил шесть пар «фракция/слот/цель» с 4, 7, 6, 4, 17 и 6
+  подтверждёнными recovery (лимит три). В наиболее частом случае DEFEND снова
+  завершался за 4–10 секунд. Причина каждой агрегированной пары требует
+  отдельного разбора; все они не объявляются автоматически одним дефектом.
+  За 30 минут нет ошибок MOB rebuild/deadline и meaningful-task deadline;
+  есть 18 физических подтверждений MOB egress. Recruitment analyzer PASS,
+  но общий runtime gate остаётся FAIL.
+
+Дополнительная изолированная fixture `defend-stage` переопределяет только
+`SCR_TimedWaypoint.SetHoldingTime` для печати requested/actual. Production
+не изменён. Workbench `wb-defend-probe` — exit 0. Runtime подтвердил
+`requested=3600 actual=3600 parameters=1`: гипотеза отсутствующего параметра
+не подтверждена. После получения диагностики этот дополнительный процесс
+остановлен по точному manifest/PID; его лог **не считается полным runtime PASS**.
+Fixture остаётся только в локальном evidence и не входит в Git.
+
+На EveronNorthRHS десять `Incorrect tile position` и десять `Failed to load ''`,
+а также ошибка material присутствовали и в сохранённом прогоне 30.09.2026,
+и в промежуточном кандидате. Эти native diagnostics не исправлялись изменением
+vendor/world; они сохраняются в полных логах и не объявляются устранёнными.
+
+### Итоговая матрица окончательной версии
+
+Все семь серверов запускались через `tools/Start-AICFRuntime.ps1 -Role Server`
+с соответствующим `-Variant`, отдельным profile и `-RepositoryRoot <soak-stage-v2>`.
+Fixture задавала `-aicfRecoverySoakMs 900000` (WCS: `1800000`),
+`-aicfRequirePlayerForResult 0`; gameplay fault injections отсутствовали.
+В каждом полном остановленном логе подтверждены точные `CLI Params` из manifest,
+`ROSTER_READY`, `RECOVERY_SOAK_FINISHED owner_failures=0`, `Game destroyed`
+и native exit 0. Длительность измерена от готового roster.
+
+| Variant | Минуты | Script/VM ошибки | Stage 2 | Recruitment | Runtime gate |
+|---|---:|---:|---|---|---|
+| Stock | 15 | 0 | PASS / 0 | PASS / 0 | PASS |
+| RHS | 15 | 0 | FAIL / 1: churn | PASS / 0 | FAIL |
+| ArlandWCSRHS | 30 | 0 | FAIL / 1: churn | PASS / 0 | FAIL |
+| Everon | 15 | 0 | PASS / 0 | PASS / 0 | PASS |
+| EveronNorth | 15 | 0 | PASS / 0 | PASS / 0 | PASS |
+| EveronRHS | 15 | 2 | FAIL / 1: builder VM | FAIL / 1: builder VM | FAIL |
+| EveronNorthRHS | 15 | 0 | PASS / 0 | PASS / 0 | PASS |
+
+Для каждого варианта выполнены:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-Stage2Log.ps1 -LogPath '<полный остановленный console.log>'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-InfantryRecruitmentLog.ps1 -LogPath '<полный остановленный console.log>'
+```
+
+`final-*-manifest.json`, `final-*-logs`, `final-*-exit.txt`,
+`final-*-Test-*.txt`, `final-matrix.json` и `final-target-metrics.json`
+хранят полное локальное evidence. Все 166 production `.c` сохранили SHA256
+тестовой версии после коммита (`final-commit-parity.json`, mismatches=0).
+Общий объём окончательной матрицы — 120 серверо-минут, без клиента.
+
+Native `(E)` строки отдельно сохранены: Stock 14, RHS 68, WCS 102,
+Everon 79, EveronNorth 47, EveronRHS 242 (включая две SCRIPT(E)),
+EveronNorthRHS 200. Это resource/world/navmesh diagnostics, а не заявление
+о чистом engine log; PASS таблицы относится к указанным project analyzers
+и завершению прогона. Существующий static failure `STAGE4_ATTACKED_BASES`
+также сохранён. Реальная пользовательская сессия на исходной геометрии,
+ручная визуальная приёмка, реальный player/LOS и client/JIP — NOT RUN.
