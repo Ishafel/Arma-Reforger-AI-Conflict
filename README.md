@@ -394,3 +394,32 @@ Workbench проект продолжает запускаться как unpack
 - [`docs/TESTING.md`](docs/TESTING.md) — gates, команды, baseline и evidence.
 
 Проект распространяется на условиях [`LICENSE`](LICENSE).
+
+## Удалённый source-сервер и обычный клиент
+
+`Start-AICFRuntime.ps1 -Role Client` по умолчанию сохраняет Diag executable
+и локальную проверку `-ServerProfileRoot`. Для сервера с обычным (retail)
+бинарником укажи `-UseRetailClient`: Diag/retail соединение отклоняется движком
+с `isDevBinary value does not match`. Этот параметр не меняет addon graph.
+
+Для удалённого сервера укажи `-RemoteReadinessProbe <локальный .ps1>` и
+`-ExpectedSourceCommit <полный SHA из 40 строчных hex-символов>`, а также
+`-ClientAddress <IP без порта>` и `-ServerPort <порт>`.
+Probe является доверенным локальным кодом, выполняемым с правами пользователя.
+Он получает параметры Address, Port, ExpectedSourceCommit и должен через
+аутентифицированный терминальный канал проверить текущий живой процесс,
+точные CLI Params, свежий profile/log и ROSTER_READY, source SHA/хеши,
+сценарий, addon graph и совпадение внешних версий. Статический сохранённый
+JSON или копия старого лога не являются допустимой реализацией probe.
+
+Probe возвращает один объект с полями: `ok` (bool), `commit`, `address`,
+`port`, `process_id`, `observed_at` (Unix UTC seconds), `log`.
+Launcher проверяет результат и его возраст (не более30с, допуск часов5с).
+Исключение, отрицательный или неполный результат прерывают подключение.
+Адреса, ключи SSH и конкретная реализация probe ведутся в эксплуатационном
+репозитории. Пароли и приватные ключи не передаются в аргументах.
+`-DryRun` только печатает план и не проверяет удалённый сервер.
+
+Проверки новых режимов включены в `tools/Test-RuntimeLauncherStatic.ps1`:
+retail executable, положительный ответ и отказ для ложного/неполного,
+устаревшего ответа, другого SHA/адреса/порта и отсутствующего PID.

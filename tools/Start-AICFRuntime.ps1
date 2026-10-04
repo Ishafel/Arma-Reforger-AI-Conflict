@@ -14,6 +14,9 @@ param(
     [string]$RhsAddonsRoot,
     [string]$ProfileRoot,
     [string]$ServerProfileRoot,
+    [switch]$UseRetailClient,
+    [string]$RemoteReadinessProbe,
+    [string]$ExpectedSourceCommit,
     [string]$LoadoutLibraryPath,
     [string]$ClientAddress = '127.0.0.1',
     [ValidateRange(1, 65535)]
@@ -242,7 +245,7 @@ function Wait-AICFNewClientProcess {
 
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     while ([DateTime]::UtcNow -lt $deadline) {
-        $newProcesses = @(Get-Process -Name 'ArmaReforgerSteamDiag' -ErrorAction SilentlyContinue |
+        $newProcesses = @(Get-Process -Name 'ArmaReforgerSteamDiag','ArmaReforgerSteam' -ErrorAction SilentlyContinue |
             Where-Object { $ExistingProcessIds -notcontains $_.Id })
         foreach ($process in $newProcesses) {
             try {
@@ -388,7 +391,8 @@ if ($Role -eq 'Server') {
     $addonsDirectories += (Join-Path $serverRootPath 'addons')
 }
 else {
-    $executable = Resolve-AICFExistingFile -Path (Join-Path $gameRootPath 'ArmaReforgerSteamDiag.exe') -Description 'Diag client executable'
+    $clientBinary = if ($UseRetailClient) { 'ArmaReforgerSteam.exe' } else { 'ArmaReforgerSteamDiag.exe' }
+    $executable = Resolve-AICFExistingFile -Path (Join-Path $gameRootPath $clientBinary) -Description 'Client executable'
     $addonsDirectories += (Join-Path $gameRootPath 'addons')
 }
 if ($rhsRootPath) {
@@ -527,7 +531,15 @@ if ($loadoutFiles.Count -gt 0) {
     }
 }
 
-if ($Role -eq 'Client') {
+if ($Role -eq 'Client' -and $RemoteReadinessProbe) {
+    if (-not $ExpectedSourceCommit -or $ExpectedSourceCommit -notmatch '^[a-f0-9]{40}$') { throw 'Remote readiness requires exact source commit' }
+    $probe = Resolve-AICFExistingFile -Path $RemoteReadinessProbe -Description 'Remote readiness probe'
+    $ready = & $probe -Address $ClientAddress -Port $ServerPort -ExpectedSourceCommit $ExpectedSourceCommit
+    $age = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - [double]$ready.observed_at
+    if ($ready.ok -isnot [bool] -or $ready.ok -ne $true -or [double]::IsNaN($age) -or [double]::IsInfinity($age) -or $ready.commit -ne $ExpectedSourceCommit -or $ready.address -ne $ClientAddress -or $ready.port -ne $ServerPort -or $ready.process_id -le 0 -or $age -lt -5 -or $age -gt 30) { throw 'Invalid or stale remote readiness evidence' }
+    Write-Output "[AICF][RUNTIME_LAUNCHER][REMOTE_SERVER_READY] process_id=$($ready.process_id) commit=$($ready.commit) log=$($ready.log)"
+}
+elseif ($Role -eq 'Client') {
     if (-not $ServerProfileRoot) {
         throw 'Для Client обязателен -ServerProfileRoot: launcher проверяет server CLI, process и ROSTER_READY до подключения.'
     }
@@ -555,7 +567,7 @@ if ($Role -eq 'Client') {
 
 $existingClientProcessIds = @()
 if ($Role -eq 'Client') {
-    $existingClientProcessIds = @(Get-Process -Name 'ArmaReforgerSteamDiag' -ErrorAction SilentlyContinue |
+    $existingClientProcessIds = @(Get-Process -Name 'ArmaReforgerSteamDiag','ArmaReforgerSteam' -ErrorAction SilentlyContinue |
         Select-Object -ExpandProperty Id)
 }
 

@@ -131,6 +131,7 @@ try {
         (Join-Path $fakeRepository 'AIConflictArlandRHS\addon.gproj'),
         (Join-Path $fakeRepository 'AIConflictEveronRHS\addon.gproj'),
         (Join-Path $fakeServerRoot 'ArmaReforgerServerDiag.exe'),
+        (Join-Path $fakeGameRoot 'ArmaReforgerSteam.exe'),
         (Join-Path $fakeGameRoot 'ArmaReforgerSteamDiag.exe')
     )) {
         New-Item -ItemType File -Path $file -Force | Out-Null
@@ -418,6 +419,50 @@ try {
     $oversizeImportExit = $LASTEXITCODE
     $ErrorActionPreference = $previousErrorActionPreference
     if ($oversizeImportExit -eq 0) { Add-Failure 'LOADOUT_IMPORT_SIZE' 'Импорт принял слишком большой файл' }
+
+    # Exercise the actual remote gate without launching a game or contacting a server.
+    $tokens = $null; $parseErrors = $null
+    $ast = [Management.Automation.Language.Parser]::ParseFile($launcherPath, [ref]$tokens, [ref]$parseErrors)
+    $branch = $ast.Find({ param($node)
+        $node -is [Management.Automation.Language.IfStatementAst] -and
+        $node.Clauses[0].Item1.Extent.Text -eq ('$' + "Role -eq 'Client' -and " + '$RemoteReadinessProbe')
+    }, $true)
+    if (-not $branch) { throw 'Remote readiness branch not found' }
+    $body = $branch.Clauses[0].Item2.Extent.Text
+    $gate = [scriptblock]::Create($body.Substring(1, $body.Length - 2))
+    $resolver = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Resolve-AICFExistingFile' }, $true)
+    . ([scriptblock]::Create($resolver.Extent.Text))
+    $RemoteReadinessProbe = Join-Path $testRoot 'remote-probe.ps1'
+    Set-Content -LiteralPath $RemoteReadinessProbe -Value 'param($Address,$Port,$ExpectedSourceCommit) $global:AICFTestRemoteEvidence' -Encoding UTF8
+    $ExpectedSourceCommit = 'a' * 40; $ClientAddress = '192.0.2.1'; $ServerPort = 2201
+    try {
+        foreach ($case in @('valid','false','string-ok','commit','address','port','pid','stale','future','nan','missing')) {
+            $e = @{ok=$true;commit=$ExpectedSourceCommit;address=$ClientAddress;port=$ServerPort;process_id=123;observed_at=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds();log='/test/console.log'}
+            switch ($case) {
+                'false' {$e.ok=$false}
+                'string-ok' {$e.ok='false'}
+                'commit' {$e.commit='b'*40}
+                'address' {$e.address='192.0.2.2'}
+                'port' {$e.port=2001}
+                'pid' {$e.process_id=0}
+                'stale' {$e.observed_at-=60}
+                'future' {$e.observed_at+=60}
+                'nan' {$e.observed_at=[double]::NaN}
+                'missing' {$e.Remove('observed_at')}
+            }
+            $global:AICFTestRemoteEvidence = [pscustomobject]$e
+            $accepted=$true
+            try { $null = & $gate } catch { $accepted=$false }
+            if ($accepted -ne ($case -eq 'valid')) { Add-Failure 'REMOTE_READINESS' "Unexpected result for $case" }
+        }
+    } finally { Remove-Variable AICFTestRemoteEvidence -Scope Global -ErrorAction SilentlyContinue }
+    $retailOutput = @(& powershell.exe @clientInvocation -UseRetailClient 2>&1 | ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { Add-Failure 'RETAIL_CLIENT' 'Retail dry-run failed' }
+    else {
+        $retailManifest = Get-ManifestFromOutput -Output $retailOutput -Rule 'RETAIL_CLIENT'
+        if ($retailManifest.executable -ne (Join-Path $fakeGameRoot 'ArmaReforgerSteam.exe')) { Add-Failure 'RETAIL_CLIENT' 'Wrong retail executable' }
+    }
+
 
     $existingProfile = Join-Path $testRoot 'Profiles\Already exists'
     New-Item -ItemType Directory -Path $existingProfile -Force | Out-Null
