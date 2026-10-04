@@ -33,6 +33,7 @@ class AICF_OrderPlanner
 	protected static const string POSTURE_PLAYER_RESERVE = "PLAYER_RESERVE";
 	protected static const string POSTURE_SYSTEM_HOLD = "SYSTEM_HOLD";
 	protected static const string POSTURE_MOVE_AND_HOLD = "MOVE_AND_HOLD";
+	protected static const string POSTURE_AREA_SECURITY = "AREA_SECURITY";
 
 	protected ref AICF_CommandAuthorityPolicy m_AuthorityPolicy;
 
@@ -171,7 +172,7 @@ class AICF_OrderPlanner
 			SCR_CampaignMilitaryBaseComponent intentTarget =
 				slot.GetStrategicIntentTargetBase();
 			if (slot.IsStrategicIntentRoleCurrent() &&
-				IsTargetValidForRole(
+				IsAIIntentTargetValid(
 					slot,
 					faction,
 					intentTarget))
@@ -273,7 +274,7 @@ class AICF_OrderPlanner
 			SCR_CampaignMilitaryBaseComponent intentTarget =
 				slot.GetStrategicIntentTargetBase();
 			if (slot.IsStrategicIntentRoleCurrent() &&
-				IsTargetValidForRole(
+				IsAIIntentTargetValid(
 					slot,
 					faction,
 					intentTarget))
@@ -624,7 +625,7 @@ class AICF_OrderPlanner
 			slot.GetStrategicIntentTargetBase();
 		AICF_EStrategicDecisionAuthority authority =
 			slot.GetStrategicIntentAuthority();
-		if (!IsTargetValidForRole(slot, faction, target) ||
+		if (!IsAssignmentTargetValid(slot, faction, target, slot.GetStrategicIntentPosture(), authority) ||
 			authority == AICF_EStrategicDecisionAuthority.NONE ||
 			authority == AICF_EStrategicDecisionAuthority.SYSTEM_HOLD)
 		{
@@ -632,7 +633,7 @@ class AICF_OrderPlanner
 		}
 		// Recruitment/vehicle lifecycle мог снять прежний hold. Cooldown
 		// запрещает маршрут, но не должен оставлять живой slot без waypoint.
-		if (authority == AICF_EStrategicDecisionAuthority.AI_COMMANDER && slot.IsRouteTargetDeferred(target))
+		if (authority == AICF_EStrategicDecisionAuthority.AI_COMMANDER && slot.GetStrategicIntentPosture() != POSTURE_AREA_SECURITY && slot.IsRouteTargetDeferred(target))
 		{
 			if (!Replication.IsServer())
 				return false;
@@ -774,7 +775,7 @@ class AICF_OrderPlanner
 			return false;
 		}
 		if (decisionAuthority != AICF_EStrategicDecisionAuthority.SYSTEM_HOLD &&
-			!IsTargetValidForRole(slot, faction, target))
+			!IsAssignmentTargetValid(slot, faction, target, posture, decisionAuthority))
 		{
 			return false;
 		}
@@ -1042,7 +1043,8 @@ class AICF_OrderPlanner
 
 		SCR_CampaignMilitaryBaseComponent currentTarget = slot.GetTargetBase();
 		string currentPosture = slot.GetOperationalPosture();
-		if (!IsTargetValidForRole(slot, faction, currentTarget))
+		if (!IsCurrentTargetValid(slot, faction) ||
+			(currentPosture == POSTURE_AREA_SECURITY && desiredPosture != POSTURE_AREA_SECURITY))
 		{
 			if (waypointSuspendedByVehicle)
 			{
@@ -1068,7 +1070,7 @@ class AICF_OrderPlanner
 		// Ranked ATTACK selection is deterministic at assignment time. Preserve a
 		// still-valid target so graph churn cannot make all three groups rotate every
 		// commander tick merely because another slot completed an objective.
-		if (slot.GetRole() == AICF_EGroupRole.ATTACK)
+		if (slot.GetRole() == AICF_EGroupRole.ATTACK && currentPosture != POSTURE_AREA_SECURITY)
 			return false;
 
 		if (currentTarget == desiredTarget && currentPosture == desiredPosture)
@@ -2051,7 +2053,7 @@ class AICF_OrderPlanner
 			return true;
 		}
 		AICF_EGroupRole positionRole = slot.GetRole();
-		if (slot.IsLoneSurvivorRetreat() || slot.IsSystemHoldOrder())
+		if (slot.IsLoneSurvivorRetreat() || slot.IsSystemHoldOrder() || slot.GetOperationalPosture() == POSTURE_AREA_SECURITY)
 			positionRole = AICF_EGroupRole.DEFEND;
 		return TryResolveTargetPosition(target, positionRole, targetPosition);
 	}
@@ -2359,10 +2361,10 @@ class AICF_OrderPlanner
 
 		AIWaypoint newWaypoint;
 		bool approachRoute;
-		bool useStuckRoute = recoverStuckRoute && !loneSurvivorRetreat && !systemHold &&
+		bool useStuckRoute = recoverStuckRoute && !loneSurvivorRetreat && !systemHold && posture != POSTURE_AREA_SECURITY &&
 			slot.GetRole() == AICF_EGroupRole.ATTACK && target &&
 			target.GetType() != SCR_ECampaignBaseType.RELAY;
-		if (decisionAuthority == AICF_EStrategicDecisionAuthority.AI_COMMANDER && slot.IsRouteTargetDeferred(target))
+		if (decisionAuthority == AICF_EStrategicDecisionAuthority.AI_COMMANDER && posture != POSTURE_AREA_SECURITY && slot.IsRouteTargetDeferred(target))
 			return false;
 		if (useStuckRoute)
 		{
@@ -2377,7 +2379,7 @@ class AICF_OrderPlanner
 		{
 			AICF_EGroupRole waypointRole = slot.GetRole();
 			int endpointRevision = slot.GetFalseCompletionEndpointRevision();
-			if (systemHold)
+			if (systemHold || posture == POSTURE_AREA_SECURITY)
 			{
 				waypointRole = AICF_EGroupRole.DEFEND;
 				endpointRevision = 0;
@@ -2660,6 +2662,21 @@ class AICF_OrderPlanner
 		return target == faction.GetMainBase() && target.GetFaction() == faction;
 	}
 
+	// Отдельный boundary: допустимые player BASE targets по-прежнему зависят от role.
+	protected bool IsAssignmentTargetValid(AICF_GroupSlot slot, SCR_CampaignFaction faction,
+		SCR_CampaignMilitaryBaseComponent target, string posture, AICF_EStrategicDecisionAuthority authority)
+	{
+		if (authority == AICF_EStrategicDecisionAuthority.AI_COMMANDER && posture == POSTURE_AREA_SECURITY)
+			return slot && faction && target && target.GetOwner() && target.IsInitialized() &&
+				target.GetFaction() == faction && target.GetSpawnPoint() && target.GetType() != SCR_ECampaignBaseType.RELAY;
+		return IsTargetValidForRole(slot, faction, target);
+	}
+
+	protected bool IsAIIntentTargetValid(AICF_GroupSlot slot, SCR_CampaignFaction faction, SCR_CampaignMilitaryBaseComponent target)
+	{
+		return IsAssignmentTargetValid(slot, faction, target, slot.GetStrategicIntentPosture(), slot.GetStrategicIntentAuthority());
+	}
+
 	protected bool IsCurrentTargetValid(
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction)
@@ -2672,7 +2689,7 @@ class AICF_OrderPlanner
 				AICF_EStrategicDecisionAuthority.PLAYER_COMMAND;
 		}
 		if (!slot.IsSystemHoldOrder())
-			return IsTargetValidForRole(slot, faction, slot.GetTargetBase());
+			return IsAssignmentTargetValid(slot, faction, slot.GetTargetBase(), slot.GetOperationalPosture(), slot.GetDecisionAuthority());
 
 		SCR_CampaignMilitaryBaseComponent mainBase = faction.GetMainBase();
 		return mainBase && mainBase.GetOwner() && mainBase.IsInitialized() &&
@@ -2698,13 +2715,19 @@ class AICF_OrderPlanner
 		{
 			int preferredIndex = slot.GetRoleIndex();
 			posture = GetAttackPosture(preferredIndex);
-			return targetSelector.SelectAttackTarget(
+			SCR_CampaignMilitaryBaseComponent attackTarget = targetSelector.SelectAttackTarget(
 				graph,
 				faction,
 				trigger,
 				excludedTarget,
 				preferredIndex,
 				slot);
+			if (attackTarget)
+				return attackTarget;
+			SCR_CampaignMilitaryBaseComponent securityTarget = targetSelector.SelectDefendTarget(graph, faction, posture, trigger);
+			posture = POSTURE_AREA_SECURITY;
+			trigger = "NO_ATTACK_TARGET_" + trigger;
+			return securityTarget;
 		}
 
 		if (slot.GetRole() == AICF_EGroupRole.DEFEND)

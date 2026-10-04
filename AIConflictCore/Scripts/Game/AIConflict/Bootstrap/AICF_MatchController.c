@@ -3999,6 +3999,10 @@ class AICF_MatchController
 			return "TEMPORARY_ROUTE_REPLAN_HOLD";
 		if (slot && slot.IsPersistentStuckFieldHold() && IsWaypointBoundToGroup(slot.GetGroup(), slot.GetWaypoint()))
 			return "PERSISTENT_STUCK_FIELD_HOLD";
+		if (slot && slot.GetDecisionAuthority() == AICF_EStrategicDecisionAuthority.AI_COMMANDER &&
+			slot.GetOperationalPosture() == "AREA_SECURITY" && slot.GetTargetBase() == mainBase &&
+			IsWaypointBoundToGroup(slot.GetGroup(), slot.GetWaypoint()))
+			return "HQ_AREA_SECURITY";
 		if (slot && slot.GetRole() == AICF_EGroupRole.DEFEND && slot.GetTargetBase() == mainBase)
 			return "HQ_DEFENSE";
 		if (slot && slot.GetRole() == AICF_EGroupRole.RESERVE && slot.GetTargetBase() == mainBase)
@@ -4276,6 +4280,18 @@ class AICF_MatchController
 				"OBJECTIVE_RADIUS_ENTERED");
 			if (slot.IsPersistentStuckFieldHold())
 			{
+				if (!m_bGraphRebuildNeeded && !m_bReplanScheduled && slot.ConsumePersistentStuckReview())
+				{
+					ResumePersistentStuckFieldHold(slot, faction, "BOUNDED_REVIEW_DUE");
+					if (!AssignFactionStrategicOrder(slot, faction, "PERSISTENT_STUCK_REVIEW", slot.GetTargetBase()))
+					{
+						IEntity reviewLeader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
+						bool held = reviewLeader && m_OrderPlanner.HoldPositionForPersistentStuck(slot, faction, slot.GetTargetBase(), reviewLeader.GetOrigin());
+						AICF_Stage2Diagnostics.Warning("GROUP_STUCK_REVIEW_DEFERRED",
+							string.Format("faction=%1 slot=%2 held=%3 reason=PLANNER_REJECTED", faction.GetFactionKey(), slot.GetSlotId(), held));
+					}
+					continue;
+				}
 				if (m_OrderPlanner.IsCurrentStrategicDestinationValid(slot, faction))
 					continue;
 				ResumePersistentStuckFieldHold(
@@ -5262,7 +5278,13 @@ class AICF_MatchController
 		SCR_AIGroup group = slot.GetGroup();
 		string fallbackAction = "WAIT_STRATEGIC_REPLAN";
 		bool fallbackCommitted;
-		if (slot.IsPersistentStuckFieldHold())
+		if (!m_OrderPlanner.IsCurrentStrategicDestinationValid(slot, faction) &&
+			!m_bGraphRebuildNeeded && !m_bReplanScheduled)
+		{
+			fallbackAction = "AUTHORITY_REPLAN";
+			fallbackCommitted = AssignFactionStrategicOrder(slot, faction, "REPAIR_BUDGET_TARGET_INVALID");
+		}
+		else if (slot.IsPersistentStuckFieldHold())
 		{
 			fallbackAction = "FIELD_HOLD_ALREADY_ACTIVE";
 			fallbackCommitted = true;
@@ -5881,7 +5903,7 @@ class AICF_MatchController
 				fieldPosition[1],
 				fieldPosition[2],
 				slot.GetSpawnGeneration()) + string.Format(
-				" assignment_revision=%1 episode_id=%2 anchor=%3 anchor_delta_m=0 resume=STRATEGIC_CONTEXT_CHANGE auto_retry=0 offscreen_recovery=NOT_IMPLEMENTED ticket_policy=NONE",
+				" assignment_revision=%1 episode_id=%2 anchor=%3 anchor_delta_m=0 resume=CONTEXT_OR_BOUNDED_REVIEW auto_retry=BOUNDED offscreen_recovery=NOT_IMPLEMENTED ticket_policy=NONE",
 				slot.GetStrategicAssignmentRevision(),
 				slot.GetPersistentStuckEpisodeId(),
 				slot.GetPersistentStuckAnchor()));
@@ -5915,7 +5937,7 @@ class AICF_MatchController
 				assignmentRevision,
 				episodeId,
 				anchor) + string.Format(
-				" trigger=STRATEGIC_CONTEXT_CHANGE reason=%1 auto_retry=0 entity_preserved=1 ticket_policy=NONE",
+				" trigger=CONTEXT_OR_BOUNDED_REVIEW reason=%1 auto_retry=BOUNDED entity_preserved=1 ticket_policy=NONE",
 				reason));
 	}
 
@@ -6251,7 +6273,7 @@ class AICF_MatchController
 							slot.GetStrategicAssignmentRevision(),
 							AICF_Stage1Diagnostics.BaseKey(heldTarget),
 							slot.GetPersistentStuckEpisodeId()) + string.Format(
-							" anchor=%1 anchor_delta_m=%2 changed_base=%3 reason=ROUTE_CONTEXT_UNCHANGED next_action=WAIT_STRATEGIC_CONTEXT_CHANGE offscreen_recovery=NOT_IMPLEMENTED entity_preserved=1 ticket_policy=NONE",
+							" anchor=%1 anchor_delta_m=%2 changed_base=%3 reason=ROUTE_CONTEXT_UNCHANGED next_action=WAIT_CONTEXT_OR_BOUNDED_REVIEW offscreen_recovery=NOT_IMPLEMENTED entity_preserved=1 ticket_policy=NONE",
 							slot.GetPersistentStuckAnchor(),
 							heldAnchorDelta,
 							AICF_Stage1Diagnostics.BaseKey(m_LastChangedBase)));
@@ -6688,6 +6710,8 @@ class AICF_MatchController
 		AICF_ObjectiveGraph victoryGraph;
 		if (!m_bGraphRebuildNeeded && !m_bReplanScheduled)
 			victoryGraph = m_ObjectiveGraph;
+		m_VictorySystem.ReportReadiness(m_ObjectiveGraph, m_USState, m_USSRState,
+			m_bGraphRebuildNeeded, m_bReplanScheduled);
 		m_VictorySystem.EvaluateAndEnd(m_Campaign, m_USState, m_USSRState, victoryGraph);
 	}
 

@@ -4,6 +4,17 @@ class AICF_VictorySystem
 	protected bool m_bEnded;
 	protected bool m_bMatchEndConfirmed;
 	protected FactionKey m_sWinnerKey;
+	protected ref AICF_VictoryDiagnostics m_Diagnostics = new AICF_VictoryDiagnostics();
+
+	void ReportReadiness(AICF_ObjectiveGraph graph, AICF_FactionState usState, AICF_FactionState ussrState, bool rebuild, bool replan)
+	{
+		if (!Replication.IsServer() || m_bEnded)
+			return;
+		if (usState)
+			m_Diagnostics.Report(graph, usState.GetFactionKey(), rebuild, replan);
+		if (ussrState)
+			m_Diagnostics.Report(graph, ussrState.GetFactionKey(), rebuild, replan);
+	}
 
 	bool EvaluateAndEnd(
 		SCR_GameModeCampaign campaign,

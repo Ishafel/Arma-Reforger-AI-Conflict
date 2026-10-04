@@ -160,6 +160,7 @@ class AICF_GroupSlot
 	protected int m_iStuckRecoveryCount;
 	protected int m_iObjectiveHoldStartedAtMs;
 	protected int m_iPersistentStuckFieldHoldStartedAtMs;
+	protected int m_iPersistentStuckReviewCount;
 	protected bool m_bReplacementDeployment;
 	protected bool m_bRosterSpawnRequested;
 	protected bool m_bRosterCompletionCallbackObserved;
@@ -1484,6 +1485,19 @@ class AICF_GroupSlot
 			System.GetTickCount(m_iPersistentStuckFieldHoldStartedAtMs) >= holdMs;
 	}
 
+	bool ConsumePersistentStuckReview()
+	{
+		if (!IsPersistentStuckContextCurrent())
+			return false;
+		int holdMs = 300000;
+		for (int i; i < m_iPersistentStuckReviewCount; i++)
+			holdMs = Math.Min(1800000, holdMs * 2);
+		if (!IsPersistentStuckFieldHoldRetryDue(holdMs))
+			return false;
+		m_iPersistentStuckReviewCount = Math.Min(3, m_iPersistentStuckReviewCount + 1);
+		return true;
+	}
+
 	void ResumeFromPersistentStuckFieldHold(string reason)
 	{
 		ResetProgressTracking(reason);
@@ -2636,6 +2650,7 @@ class AICF_GroupSlot
 
 	protected void ClearRuntimeReferences()
 	{
+		m_iPersistentStuckReviewCount = 0;
 		m_ApproachRoute = null;
 		m_bIsolatedNavmeshRecoveryUsed = false;
 		ClearStuckRouteWaypoint();

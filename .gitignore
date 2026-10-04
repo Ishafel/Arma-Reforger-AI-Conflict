@@ -80,3 +80,6 @@
 !/tools/Test-VictoryRespawnStatic.ps1
 !/tools/fixtures/AICF_VictoryRespawnProbe.c
 !/docs/VICTORY_RESPAWN.md
+!/tools/Test-EndgameContracts.ps1
+!/tools/fixtures/AICF_EndgameProbe.c
+!/docs/ENDGAME_RECOVERY.md
