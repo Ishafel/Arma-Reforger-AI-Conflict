@@ -73,13 +73,8 @@
 /workshop/AIConflictArlandWCSRHS/*
 !/workshop/AIConflictArlandWCSRHS/metadata.md
 !/workshop/AIConflictArlandWCSRHS/preview.jpg
-!/docs/
-/docs/*
-!/docs/RECOVERY_EPISODES.md
 !/tools/fixtures/AICF_WCSLoadoutCatalogProbe.c
 !/tools/Test-VictoryRespawnStatic.ps1
 !/tools/fixtures/AICF_VictoryRespawnProbe.c
-!/docs/VICTORY_RESPAWN.md
 !/tools/Test-EndgameContracts.ps1
 !/tools/fixtures/AICF_EndgameProbe.c
-!/docs/ENDGAME_RECOVERY.md

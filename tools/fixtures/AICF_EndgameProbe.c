@@ -3,6 +3,13 @@
 modded class SCR_CampaignMilitaryBaseComponent
 {
 	int m_iAICFEndgamePresence = -1;
+	bool m_bAICFEndgameContested;
+	override SCR_EBaseCaptureState GetCaptureState()
+	{
+		if (m_bAICFEndgameContested)
+			return SCR_EBaseCaptureState.CONTESTED;
+		return super.GetCaptureState();
+	}
 	override bool AreEnemiesPresent()
 	{
 		if (m_iAICFEndgamePresence >= 0)
@@ -34,6 +41,21 @@ modded class AICF_GroupSlot
 	}
 }
 
+modded class AICF_RouteRecoveryEpisode
+{
+	protected bool m_bEndgameProbeExpired;
+	void EndgameProbeExpire()
+	{
+		m_bEndgameProbeExpired = true;
+	}
+	override int GetAgeMs()
+	{
+		if (m_bEndgameProbeExpired)
+			return DEADLINE_MS + 1;
+		return super.GetAgeMs();
+	}
+}
+
 modded class AICF_MatchController
 {
 	protected int m_iEndgameProbeStart;
@@ -61,6 +83,7 @@ modded class AICF_MatchController
 			}
 			EndgameProbeCheck("TERRITORIAL_MATCH_END", m_iEndgameProbePhase == 3 && m_VictorySystem.GetWinnerKey() == m_USSRFaction.GetFactionKey());
 			EndgameProbeCheck("POSITIVE_TICKETS", m_USState.GetTickets() > 0 && m_USSRState.GetTickets() > 0);
+			EndgameProbeCheck("PRESENCE_DOES_NOT_BLOCK", m_EndgameProbeBase.AreEnemiesPresent());
 			Print(string.Format("[AICF][ENDGAME_PROBE] finished=1 pass=%1", !m_bEndgameProbeFailed));
 			GetGame().RequestClose();
 		}
@@ -100,6 +123,7 @@ modded class AICF_MatchController
 				{
 					m_EndgameProbeBase = base;
 					base.m_iAICFEndgamePresence = 1;
+					base.m_bAICFEndgameContested = true;
 				}
 				base.SetFaction(m_USSRFaction);
 			}
@@ -120,6 +144,26 @@ modded class AICF_MatchController
 			EndgameProbeCheck("FIXTURE_SLOT", m_EndgameProbeSlot && m_EndgameProbeBase);
 			if (!m_EndgameProbeSlot || !m_EndgameProbeBase)
 				return;
+			// Проигрывающая сторона: exhausted episode должен пройти полный
+			// Reliability path, а не только прямой вызов hold timer из fixture.
+			AICF_GroupSlot losingSlot = m_USState.GetSlot(0);
+			EndgameProbeCheck("LOSING_SLOT_READY", losingSlot.CompleteInfantryMusterIfReady() &&
+				m_OrderPlanner.EndgameProbeOldAttack(losingSlot, m_USFaction, m_EndgameProbeBase) && !losingSlot.IsRecruitingInfantry());
+			SCR_AIGroup losingGroup = losingSlot.GetGroup();
+			int losingGeneration = losingSlot.GetSpawnGeneration();
+			AICF_RouteRecoveryEpisode episode = losingSlot.GetRouteRecoveryEpisode();
+			episode.Begin(losingSlot);
+			episode.EndgameProbeExpire();
+			ProcessRouteRecoveryEpisode(losingSlot, m_USFaction);
+			EndgameProbeCheck("EXHAUSTED_EPISODE_HOLD", episode.IsBlocked(losingSlot) && losingSlot.IsPersistentStuckFieldHold());
+			ProcessFactionReliability(m_USState, m_USFaction);
+			EndgameProbeCheck("EXHAUSTED_NO_EARLY_REVIEW", episode.IsBlocked(losingSlot));
+			losingSlot.EndgameProbeAgeHold(300001);
+			ProcessFactionReliability(m_USState, m_USFaction);
+			EndgameProbeCheck("EXHAUSTED_RELIABILITY_REARM", !episode.IsBlocked(losingSlot) && !losingSlot.IsPersistentStuckFieldHold());
+			EndgameProbeCheck("LOSING_SIDE_ATTACK", !losingSlot.IsPersistentStuckFieldHold() && losingSlot.GetOperationalPosture() != "AREA_SECURITY" && m_OrderPlanner.IsOrderValid(losingSlot, m_USFaction));
+			EndgameProbeCheck("REVIEW_IDENTITY_PRESERVED", losingSlot.GetGroup() == losingGroup && losingSlot.GetSpawnGeneration() == losingGeneration);
+			losingSlot.EndgameProbeAgeHold(-1);
 			SCR_AIGroup group = m_EndgameProbeSlot.GetGroup();
 			EndgameProbeCheck("OLD_ATTACK", m_OrderPlanner.EndgameProbeOldAttack(m_EndgameProbeSlot, m_USSRFaction, m_EndgameProbeBase));
 			m_EndgameProbeSlot.RecordOrderReliabilityRepairFailure();
@@ -156,7 +200,7 @@ modded class AICF_MatchController
 		else if (m_iEndgameProbePhase == 2)
 		{
 			EndgameProbeCheck("STILL_CONTESTED", !m_VictorySystem.IsEnded());
-			m_EndgameProbeBase.m_iAICFEndgamePresence = 0;
+			m_EndgameProbeBase.m_bAICFEndgameContested = false;
 			m_iEndgameProbePhase = 3;
 			m_iEndgameProbePhaseAt = now;
 		}

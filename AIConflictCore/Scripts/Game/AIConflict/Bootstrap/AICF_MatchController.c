@@ -4280,18 +4280,8 @@ class AICF_MatchController
 				"OBJECTIVE_RADIUS_ENTERED");
 			if (slot.IsPersistentStuckFieldHold())
 			{
-				if (!m_bGraphRebuildNeeded && !m_bReplanScheduled && slot.ConsumePersistentStuckReview())
-				{
-					ResumePersistentStuckFieldHold(slot, faction, "BOUNDED_REVIEW_DUE");
-					if (!AssignFactionStrategicOrder(slot, faction, "PERSISTENT_STUCK_REVIEW", slot.GetTargetBase()))
-					{
-						IEntity reviewLeader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
-						bool held = reviewLeader && m_OrderPlanner.HoldPositionForPersistentStuck(slot, faction, slot.GetTargetBase(), reviewLeader.GetOrigin());
-						AICF_Stage2Diagnostics.Warning("GROUP_STUCK_REVIEW_DEFERRED",
-							string.Format("faction=%1 slot=%2 held=%3 reason=PLANNER_REJECTED", faction.GetFactionKey(), slot.GetSlotId(), held));
-					}
+				if (TryReviewPersistentStuckHold(slot, faction))
 					continue;
-				}
 				if (m_OrderPlanner.IsCurrentStrategicDestinationValid(slot, faction))
 					continue;
 				ResumePersistentStuckFieldHold(
@@ -4528,7 +4518,33 @@ class AICF_MatchController
 				replanned) + string.Format(" episode_age_ms=%1 movement_confirmation=PENDING", slot.GetRouteRecoveryEpisode().GetAgeMs()));
 	}
 
-	// Общий episode проверяется до pending verification и локального hold timer.
+	protected bool TryReviewPersistentStuckHold(AICF_GroupSlot slot, SCR_CampaignFaction faction)
+	{
+		if (!Replication.IsServer() || m_bGraphRebuildNeeded || m_bReplanScheduled ||
+			!slot.ConsumePersistentStuckReview())
+			return false;
+		AICF_RouteRecoveryEpisode episode = slot.GetRouteRecoveryEpisode();
+		if (episode.IsBlocked(slot))
+		{
+			if (!episode.RearmAfterBoundedHold(slot))
+				return false;
+			AICF_Stage2Diagnostics.Info("ROUTE_RECOVERY_EPISODE_FINISHED", string.Format(
+				"faction=%1 numeric_slot=%2 group_generation=%3 outcome=BOUNDED_REVIEW episode_age_ms=%4 movement_confirmation=NONE",
+				faction.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), episode.GetAgeMs()));
+		}
+		ResumePersistentStuckFieldHold(slot, faction, "BOUNDED_REVIEW_DUE");
+		if (!AssignFactionStrategicOrder(slot, faction, "PERSISTENT_STUCK_REVIEW", slot.GetTargetBase()))
+		{
+			IEntity reviewLeader = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup());
+			bool held = reviewLeader && m_OrderPlanner.HoldPositionForPersistentStuck(slot, faction, slot.GetTargetBase(), reviewLeader.GetOrigin());
+			AICF_Stage2Diagnostics.Warning("GROUP_STUCK_REVIEW_DEFERRED",
+				string.Format("faction=%1 slot=%2 held=%3 reason=PLANNER_REJECTED", faction.GetFactionKey(), slot.GetSlotId(), held));
+		}
+		return true;
+	}
+
+	// Общий episode проверяется до pending verification; его terminal hold тоже
+	// обслуживает bounded review, иначе ранний return поглощает таймер навсегда.
 	protected bool ProcessRouteRecoveryEpisode(AICF_GroupSlot slot, SCR_CampaignFaction faction, bool assignAfterContextChange = true)
 	{
 		AICF_RouteRecoveryEpisode episode = slot.GetRouteRecoveryEpisode();
@@ -4537,6 +4553,8 @@ class AICF_MatchController
 			return false;
 		if (outcome == "EXHAUSTED")
 		{
+			if (assignAfterContextChange && TryReviewPersistentStuckHold(slot, faction))
+				return true;
 			if (episode.TakeHoldAttempt())
 			{
 				if (slot.HasPendingOrderRecovery())
@@ -4545,7 +4563,7 @@ class AICF_MatchController
 				bool held = leader && m_OrderPlanner.HoldPositionForPersistentStuck(slot, faction, slot.GetTargetBase(), leader.GetOrigin());
 				slot.ClearTemporaryRouteReplanHold();
 				AICF_Stage2Diagnostics.Warning("ROUTE_RECOVERY_EXHAUSTED", string.Format(
-					"faction=%1 numeric_slot=%2 group_generation=%3 episode_age_ms=%4 hold_committed=%5 movement_confirmation=NONE auto_retry=0",
+					"faction=%1 numeric_slot=%2 group_generation=%3 episode_age_ms=%4 hold_committed=%5 movement_confirmation=NONE auto_retry=BOUNDED",
 					faction.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), episode.GetAgeMs(), held));
 			}
 			return true;

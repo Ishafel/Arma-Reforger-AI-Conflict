@@ -135,7 +135,7 @@ class AICF_VictorySystem
 			objectives++;
 			if (!base.GetFaction() || base.GetFaction().GetFactionKey() != factionKey ||
 				base.GetCaptureState() != SCR_EBaseCaptureState.NONE ||
-				base.IsBeingCaptured() || base.AreEnemiesPresent())
+				base.IsBeingCaptured())
 				return false;
 		}
 

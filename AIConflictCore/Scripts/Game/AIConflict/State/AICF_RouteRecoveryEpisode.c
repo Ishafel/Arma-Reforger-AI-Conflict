@@ -106,6 +106,16 @@ class AICF_RouteRecoveryEpisode
 			slot.GetGroup().GetID() == m_GroupId && slot.GetSpawnGeneration() == m_iGeneration;
 	}
 
+	// Вызывается только после identity-safe потребления отдельного hold backoff.
+	// Перевыдача waypoint сама по себе по-прежнему не продлевает episode.
+	bool RearmAfterBoundedHold(AICF_GroupSlot slot)
+	{
+		if (!IsBlocked(slot) || !slot.IsPersistentStuckContextCurrent())
+			return false;
+		m_bActive = false;
+		return true;
+	}
+
 	int GetAgeMs()
 	{
 		return System.GetTickCount(m_iStartedAtMs);

@@ -12,6 +12,13 @@ modded class SCR_CampaignMilitaryBaseComponent
 {
 	// Контролируемый contested input только для проверки production predicate.
 	int m_iAICFVictoryProbePresence = -1;
+	bool m_bAICFVictoryProbeContested;
+	override SCR_EBaseCaptureState GetCaptureState()
+	{
+		if (m_bAICFVictoryProbeContested)
+			return SCR_EBaseCaptureState.CONTESTED;
+		return super.GetCaptureState();
+	}
 	override bool AreEnemiesPresent()
 	{
 		if (m_iAICFVictoryProbePresence >= 0)
@@ -130,7 +137,10 @@ modded class AICF_MatchController
 			VictoryProbeCheck("ALL_OWNED_HQ_EXCLUDED", m_VictoryProbePolicy.CheckObjectives(graph, m_USFaction.GetFactionKey()));
 			VictoryProbeCheck("OTHER_OWNER", !m_VictoryProbePolicy.CheckObjectives(graph, m_USSRFaction.GetFactionKey()));
 			objective.m_iAICFVictoryProbePresence = 1;
+			VictoryProbeCheck("PRESENCE_ONLY_ALLOWED", m_VictoryProbePolicy.CheckObjectives(graph, m_USFaction.GetFactionKey()));
+			objective.m_bAICFVictoryProbeContested = true;
 			VictoryProbeCheck("CONTESTED_BLOCKS", !m_VictoryProbePolicy.CheckObjectives(graph, m_USFaction.GetFactionKey()));
+			objective.m_bAICFVictoryProbeContested = false;
 			objective.m_iAICFVictoryProbePresence = -1;
 			objective.SetFaction(oldFaction);
 		}

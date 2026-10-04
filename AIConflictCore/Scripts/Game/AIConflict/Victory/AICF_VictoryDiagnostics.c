@@ -43,8 +43,6 @@ class AICF_VictoryDiagnostics
 					baseReason = "CAPTURE_STATE";
 				else if (base.IsBeingCaptured())
 					baseReason = "CAPTURING";
-				else if (base.AreEnemiesPresent())
-					baseReason = "ENEMIES_PRESENT";
 				if (reason == "NONE" && !baseReason.IsEmpty())
 				{
 					reason = baseReason;

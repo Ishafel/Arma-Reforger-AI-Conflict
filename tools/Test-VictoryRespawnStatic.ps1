@@ -8,6 +8,7 @@ foreach ($entry in @{
     economy='Economy/AICF_EconomySystem.c'; controller='Bootstrap/AICF_MatchController.c'
 }.GetEnumerator()) { $sources[$entry.Key] = Get-Content (Join-Path $core $entry.Value) -Raw -Encoding UTF8 }
 function Test-Contracts($s) {
+    if ($s.victory -match 'base.AreEnemiesPresent\(\)') { 'PRESENCE_ONLY_ALLOWED' }
     $rules = @(
         @('victory', 'bool usWins = ussrState.GetTickets\(\) <= 0 \|\| ControlsAllObjectives', 'US_OR'),
         @('victory', 'bool ussrWins = usState.GetTickets\(\) <= 0 \|\| ControlsAllObjectives', 'USSR_OR'),
@@ -17,7 +18,7 @@ function Test-Contracts($s) {
         @('victory', 'if \(base.IsHQ\(\)\)\s*continue;', 'HQ_EXCLUDED'),
         @('victory', 'base.GetFaction\(\).GetFactionKey\(\) != factionKey', 'OWNER'),
         @('victory', 'base.GetCaptureState\(\) != SCR_EBaseCaptureState.NONE', 'CAPTURE_STATE'),
-        @('victory', 'base.IsBeingCaptured\(\) \|\| base.AreEnemiesPresent\(\)', 'CONTESTED'),
+        @('victory', 'base.IsBeingCaptured\(\)', 'CONTESTED'),
         @('victory', 'return objectives > 0;', 'NONEMPTY'),
         @('selector', 'if \(!slot.TryGetReplacementOrigin\(deathPosition\)\)\s*return false;', 'ORIGIN_REQUIRED'),
         @('selector', 'candidate.DeathDistanceSq < best.DeathDistanceSq', 'NEAREST'),
@@ -34,10 +35,11 @@ function Test-Contracts($s) {
 $failures = @(Test-Contracts $sources)
 if (Test-Path (Join-Path $core 'Victory/AICF_VictoryRespawnProbe.c')) { $failures += 'FIXTURE_IN_PRODUCTION' }
 $mutations = @(
+    @('victory','base.IsBeingCaptured()','base.IsBeingCaptured() || base.AreEnemiesPresent()','PRESENCE_ONLY_ALLOWED'),
     @('victory','<= 0 || ControlsAllObjectives','<= 0 && ControlsAllObjectives','US_OR'),
     @('victory','return objectives > 0;','return true;','NONEMPTY'),
     @('victory','if (base.IsHQ())','if (false)','HQ_EXCLUDED'),
-    @('victory','base.IsBeingCaptured() || base.AreEnemiesPresent()','false','CONTESTED'),
+    @('victory','base.IsBeingCaptured()','false','CONTESTED'),
     @('victory','base.GetCaptureState() != SCR_EBaseCaptureState.NONE','false','CAPTURE_STATE'),
     @('selector','candidate.DeathDistanceSq < best.DeathDistanceSq','candidate.DeathDistanceSq > best.DeathDistanceSq','NEAREST'),
     @('selector','if (!slot.TryGetReplacementOrigin(deathPosition))','if (false)','ORIGIN_REQUIRED'),
