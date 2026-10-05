@@ -63,7 +63,8 @@ class AICF_DefendArrivalHandoff
 			if (!AICF_GroupRuntime.IsAliveCharacter(member))
 				continue;
 			CharacterControllerComponent controller = CharacterControllerComponent.Cast(member.FindComponent(CharacterControllerComponent));
-			if (!controller || controller.IsPlayerControlled() || agent.GetParentGroup() != group)
+			// Игрок учитывается в физическом составе по тем же условиям, что и AI.
+			if (!controller || agent.GetParentGroup() != group)
 				return false;
 			CompartmentAccessComponent access = CompartmentAccessComponent.Cast(member.FindComponent(CompartmentAccessComponent));
 			if (!access || access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut() ||
