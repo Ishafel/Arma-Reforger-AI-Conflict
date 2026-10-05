@@ -9,7 +9,7 @@ class AICF_GroupSlot
 	protected ref array<int> m_aRejectedRouteUntil = {};
 	protected int m_iRejectedRouteGeneration;
 
-	bool ReportFailedMovement(SCR_AIGroup group, AIWaypoint waypoint)
+	bool ReportFailedMovement(SCR_AIGroup group, AIWaypoint waypoint, int result = EMoveError.UNKNOWN)
 	{
 		if (!Replication.IsServer() || !group || group != m_Group || !waypoint || waypoint != m_Waypoint ||
 			group.GetCurrentWaypoint() != waypoint || !IsCombatReady() ||
@@ -24,8 +24,8 @@ class AICF_GroupSlot
 			m_iFailedMoveAssignment = m_iStrategicAssignmentRevision;
 			RecordFalseWaypointCompletion(waypoint.GetOrigin(), true);
 			AICF_Stage2Diagnostics.Warning("INFANTRY_MOVE_FAILED", string.Format(
-				"slot=%1 group=%2 group_generation=%3 assignment_revision=%4 waypoint=%5 reason=UNKNOWN next_action=ORDER_RECOVERY",
-				GetStableSlotKey(), group.GetID(), m_iSpawnGeneration, m_iStrategicAssignmentRevision, waypoint.GetID()));
+				"slot=%1 group=%2 group_generation=%3 assignment_revision=%4 waypoint=%5 reason=%6 next_action=ORDER_RECOVERY",
+				GetStableSlotKey(), group.GetID(), m_iSpawnGeneration, m_iStrategicAssignmentRevision, waypoint.GetID(), SCR_Enum.GetEnumName(EMoveError, result)));
 		}
 		return true;
 	}
@@ -442,9 +442,9 @@ class AICF_GroupSlot
 		return m_RecruitmentOrder && m_RecruitmentOrder.IsCurrent(this);
 	}
 
-	bool ReportRecruitmentFailedMovement(SCR_AIGroup group, AIWaypoint waypoint)
+	bool ReportRecruitmentFailedMovement(SCR_AIGroup group, AIWaypoint waypoint, int result = EMoveError.UNKNOWN)
 	{
-		return HasActiveRecruitmentOrder() && m_RecruitmentOrder.ReportFailedMovement(group, waypoint);
+		return HasActiveRecruitmentOrder() && m_RecruitmentOrder.ReportFailedMovement(group, waypoint, result);
 	}
 
 	bool HasRecruitmentMovementFailure(AIWaypoint waypoint)

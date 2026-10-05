@@ -49,13 +49,13 @@ class AICF_InfantryRecruitmentOrder
 
 	// BT только передаёт результат текущего визита. Ремонт выполняет service tick,
 	// чтобы удаление waypoint не происходило внутри stock movement callback.
-	bool ReportFailedMovement(SCR_AIGroup group, AIWaypoint waypoint)
+	bool ReportFailedMovement(SCR_AIGroup group, AIWaypoint waypoint, int result = EMoveError.UNKNOWN)
 	{
 		if (!Replication.IsServer() || !IsCurrent(m_Slot) || group != m_Group ||
 			!waypoint || waypoint != m_Waypoint || group.GetCurrentWaypoint() != waypoint)
 			return false;
 		if (!m_bMovementFailed)
-			Log("INFANTRY_RECRUITMENT_MOVE_FAILED", "reason=UNKNOWN next_action=BOUNDED_APPROACH_RECOVERY paid=0");
+			Log("INFANTRY_RECRUITMENT_MOVE_FAILED", "reason=" + SCR_Enum.GetEnumName(EMoveError, result) + " next_action=BOUNDED_APPROACH_RECOVERY paid=0");
 		m_bMovementFailed = true;
 		return true;
 	}

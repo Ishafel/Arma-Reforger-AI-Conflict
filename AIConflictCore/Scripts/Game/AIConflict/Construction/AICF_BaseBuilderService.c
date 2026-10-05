@@ -104,6 +104,68 @@ class AICF_BaseBuilderService
 		}
 	}
 
+	// BT только сообщает об отказе. Смена target/waypoint выполняется на следующем service tick.
+	static bool IsMoveFailureCurrent(AICF_BaseBuilder builder, AICF_BaseBuilderMoveFailure failure)
+	{
+		return Replication.IsServer() && s_Instance && !s_Instance.m_bStopped &&
+			builder && s_Instance.m_aBuilders.Contains(builder) && failure &&
+			builder.m_MoveFailure == failure && failure.IsCurrent(builder) && s_Instance.IsWorkerValid(builder);
+	}
+
+	static AICF_BaseBuilder ReportFailedMovement(SCR_AIGroup group, AIWaypoint waypoint)
+	{
+		if (!Replication.IsServer() || !s_Instance || s_Instance.m_bStopped || !group || !waypoint)
+			return null;
+		foreach (AICF_BaseBuilder builder : s_Instance.m_aBuilders)
+		{
+			if (builder.m_Group != group || builder.m_Waypoint != waypoint || builder.m_bRetiring ||
+				!builder.m_Base || builder.m_Base.GetFaction() != builder.m_Faction ||
+				group.GetFaction() != builder.m_Faction || !s_Instance.IsWorkerValid(builder) ||
+				group.GetCurrentWaypoint() != waypoint ||
+				(builder.m_Target && !s_Instance.IsTargetValid(builder, builder.m_Target)))
+				continue;
+			if (!builder.m_MoveFailure || !builder.m_MoveFailure.IsCurrent(builder))
+			{
+				builder.m_MoveFailure = new AICF_BaseBuilderMoveFailure(builder);
+				s_Instance.Log(builder, "BUILDER_MOVE_FAILED", string.Format("waypoint=%1 returning=%2", waypoint.GetID(), builder.m_bReturning));
+			}
+			return builder;
+		}
+		return null;
+	}
+
+	protected void ConsumeMoveFailure(AICF_BaseBuilder builder, vector home, int now)
+	{
+		AICF_BaseBuilderMoveFailure failure = builder.m_MoveFailure;
+		bool current = IsMoveFailureCurrent(builder, failure);
+		builder.m_MoveFailure = null;
+		if (!current)
+			return;
+		if (builder.m_bReturnBlocked)
+		{
+			ClearTarget(builder);
+			Log(builder, "BUILDER_RETURN_BLOCKED", "reason=HOLD_FAILED hold_issued=0");
+			return;
+		}
+		if (builder.m_Target)
+		{
+			builder.m_aDeferredTargets.Insert(builder.m_Target);
+			builder.m_aDeferredUntilMs.Insert(now + RETRY_DELAY_MS);
+			Log(builder, "BUILDER_TARGET_DEFERRED", "reason=MOVE_FAILED");
+		}
+		ClearTarget(builder);
+		builder.m_bFailedWorkReturning = true;
+		if (failure.m_bReturning)
+			builder.m_iReturnMoveFailures++;
+		if (builder.m_iReturnMoveFailures >= 2)
+		{
+			builder.m_bReturnBlocked = true;
+			builder.m_vBlockedHome = home;
+			bool issued = m_Planner.SetBuilderFieldHold(builder);
+			Log(builder, "BUILDER_RETURN_BLOCKED", string.Format("reason=MOVE_FAILED hold_issued=%1 failures=%2", issued, builder.m_iReturnMoveFailures));
+		}
+	}
+
 	protected AICF_BaseBuilder FindBuilder(SCR_CampaignMilitaryBaseComponent base)
 	{
 		foreach (AICF_BaseBuilder builder : m_aBuilders)
@@ -318,6 +380,12 @@ class AICF_BaseBuilderService
 		}
 		int count, recovered;
 		m_LOD.KeepCaptureEligible(builder.m_Group, count, recovered);
+		ConsumeMoveFailure(builder, home, now);
+		if (builder.m_bFailedWorkReturning)
+		{
+			ReturnHome(builder, home, now);
+			return;
+		}
 		if (builder.m_Target && (!IsTargetValid(builder, builder.m_Target) ||
 			builder.m_Target.GetOwner().GetID() != builder.m_TargetId ||
 			vector.DistanceSq(builder.m_Target.GetOwner().GetOrigin(), builder.m_vTargetPosition) > 0.01))
@@ -456,6 +524,18 @@ class AICF_BaseBuilderService
 
 	protected void ReturnHome(AICF_BaseBuilder builder, vector home, int now)
 	{
+		if (builder.m_bReturnBlocked)
+		{
+			// Таймер не разрешает новый failed route и не удаляет живого работника.
+			if (vector.DistanceSq(home, builder.m_vBlockedHome) > 1)
+			{
+				builder.m_bReturnBlocked = false;
+				builder.m_iReturnMoveFailures = 0;
+				builder.m_iLastOrderAtMs = 0;
+			}
+			else if (vector.DistanceSqXZ(builder.m_Character.GetOrigin(), home) > HOME_METERS * HOME_METERS)
+				return;
+		}
 		if (!builder.m_bReturning)
 		{
 			builder.m_bReturning = true;
@@ -640,6 +720,7 @@ class AICF_BaseBuilderService
 
 	protected void ClearTarget(AICF_BaseBuilder builder)
 	{
+		builder.m_MoveFailure = null;
 		StopTool(builder);
 		m_Planner.ClearBuilderWaypoint(builder);
 		builder.m_Target = null;
@@ -698,6 +779,9 @@ class AICF_BaseBuilderService
 		if (reason == "IDLE_AT_MAIN_TENT")
 			builder.m_iRetryAtMs = 0;
 		builder.m_bReturning = false;
+		builder.m_bFailedWorkReturning = false;
+		builder.m_bReturnBlocked = false;
+		builder.m_iReturnMoveFailures = 0;
 		builder.m_bRetiring = false;
 		return true;
 	}

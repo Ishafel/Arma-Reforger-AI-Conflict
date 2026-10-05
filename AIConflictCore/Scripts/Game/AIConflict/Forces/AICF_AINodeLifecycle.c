@@ -94,6 +94,8 @@ modded class SCR_AIProcessFailedMovementResult
 			GetVariableIn(PORT_MOVE_LOCATION, location);
 			if (AICF_FIAPatrolMovementPolicy.Handle(m_Group, m_GroupUtilityComponent, result, handler, related, location))
 				return ENodeResult.FAIL;
+			if (AICF_HandleDefendArrival(result, handler, related, location))
+				return ENodeResult.FAIL;
 			if (AICF_HandleFailedMovement(result, handler, related, location))
 				return ENodeResult.FAIL;
 			if (result == EMoveError.UNKNOWN && !m_bAICFMoveContextReported)
@@ -117,9 +119,23 @@ modded class SCR_AIProcessFailedMovementResult
 		return super.EOnTaskSimulate(owner, dt);
 	}
 
+	protected bool AICF_HandleDefendArrival(int result, int handler, bool related, vector location)
+	{
+		if (!Replication.IsServer() || !related || !AICF_IsInfantryMoveHandler(handler))
+			return false;
+		if (result != EMoveError.STOPPED && result != EMoveError.STUCK && result != EMoveError.UNREACHABLE &&
+			result != EMoveError.ENTITY_CANT_MOVE && result != EMoveError.ENTITY_NOT_MOVABLE)
+			return false;
+		AICF_MatchController controller = AICF_MatchController.GetActiveController();
+		if (!controller)
+			return false;
+		return AICF_OrderPlanner.TryHandoffDefendArrival(controller.FindManagedInfantrySlot(m_Group), m_Group,
+			m_GroupUtilityComponent, result, location);
+	}
+
 	protected bool AICF_HandleFailedMovement(int result, int handler, bool related, vector location)
 	{
-		if (!Replication.IsServer() || result != EMoveError.UNKNOWN ||
+		if (!Replication.IsServer() ||
 			!related ||
 			!m_Group || !m_Group.GetLeaderEntity() || !m_GroupUtilityComponent)
 			return false;
@@ -130,16 +146,44 @@ modded class SCR_AIProcessFailedMovementResult
 		if (controller)
 			slot = controller.FindManagedInfantrySlot(m_Group);
 		SCR_AIActivityBase activity = SCR_AIActivityBase.Cast(m_GroupUtilityComponent.GetCurrentAction());
-		if (!slot || !activity)
+		if (!activity)
 			return false;
 		AIWaypoint failedWaypoint = activity.m_RelatedWaypoint;
-		bool recruitmentFailure = slot.ReportRecruitmentFailedMovement(m_Group, failedWaypoint);
-		if (!recruitmentFailure && !slot.ReportFailedMovement(m_Group, failedWaypoint))
+		if (!slot)
+		{
+			if (result != EMoveError.UNKNOWN)
+				return false;
+			return AICF_HandleBuilderFailedMovement(result, related, location, failedWaypoint);
+		}
+		if (result != EMoveError.UNKNOWN)
+		{
+			if (!SCR_DefendWaypoint.Cast(failedWaypoint) || failedWaypoint != slot.GetWaypoint())
+				return false;
+			if (result != EMoveError.STOPPED && result != EMoveError.STUCK && result != EMoveError.UNREACHABLE &&
+				result != EMoveError.ENTITY_CANT_MOVE && result != EMoveError.ENTITY_NOT_MOVABLE)
+				return false;
+		}
+		bool recruitmentFailure = slot.ReportRecruitmentFailedMovement(m_Group, failedWaypoint, result);
+		if (!recruitmentFailure && !slot.ReportFailedMovement(m_Group, failedWaypoint, result))
 			return false;
 		AIActionBase failedAction = m_GroupUtilityComponent.GetExecutedAction();
 		m_GroupUtilityComponent.OnMoveFailed(result, null, related, location);
 		// Invoker может синхронно сменить assignment/action. Новый action не трогаем.
 		if (failedAction && (slot.HasFailedMovement() || slot.HasRecruitmentMovementFailure(failedWaypoint)) &&
+			m_GroupUtilityComponent.GetExecutedAction() == failedAction)
+			failedAction.Fail();
+		return true;
+	}
+
+	protected bool AICF_HandleBuilderFailedMovement(int result, bool related, vector location, AIWaypoint waypoint)
+	{
+		AICF_BaseBuilder builder = AICF_BaseBuilderService.ReportFailedMovement(m_Group, waypoint);
+		if (!builder)
+			return false;
+		AICF_BaseBuilderMoveFailure failure = builder.m_MoveFailure;
+		AIActionBase failedAction = m_GroupUtilityComponent.GetExecutedAction();
+		m_GroupUtilityComponent.OnMoveFailed(result, null, related, location);
+		if (AICF_BaseBuilderService.IsMoveFailureCurrent(builder, failure) && failedAction &&
 			m_GroupUtilityComponent.GetExecutedAction() == failedAction)
 			failedAction.Fail();
 		return true;

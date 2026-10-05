@@ -42,6 +42,11 @@ class AICF_OrderPlanner
 		m_AuthorityPolicy = authorityPolicy;
 	}
 
+	static bool TryHandoffDefendArrival(AICF_GroupSlot slot, SCR_AIGroup group, SCR_AIGroupUtilityComponent utility, int result, vector location)
+	{
+		return AICF_DefendArrivalHandoff.TryHandle(slot, group, utility, result, location);
+	}
+
 	// Вспомогательный строитель использует тот же boundary владения waypoint,
 	// но не получает стратегический армейский assignment или vehicle admission.
 	bool SetBuilderWaypoint(AICF_BaseBuilder builder, vector position, float radius)
@@ -76,6 +81,37 @@ class AICF_OrderPlanner
 		}
 		waypoint.SetCompletionRadius(radius);
 		waypoint.SetCompletionType(EAIWaypointCompletionType.All);
+		ClearBuilderWaypoint(builder);
+		builder.m_Waypoint = waypoint;
+		builder.m_Group.AddWaypoint(waypoint);
+		return true;
+	}
+
+	bool SetBuilderFieldHold(AICF_BaseBuilder builder)
+	{
+		if (!Replication.IsServer() || !builder || !builder.m_Group ||
+			builder.m_Group.GetID() != builder.m_GroupId || !builder.m_Character ||
+			builder.m_Character.GetID() != builder.m_CharacterId)
+			return false;
+		EntitySpawnParams params = new EntitySpawnParams();
+		params.TransformMode = ETransformMode.WORLD;
+		params.Transform[3] = builder.m_Character.GetOrigin();
+		IEntity entity = GetGame().SpawnEntityPrefabEx(DEFEND_WAYPOINT_PREFAB, false, params: params);
+		SCR_DefendWaypoint waypoint = SCR_DefendWaypoint.Cast(entity);
+		if (!waypoint)
+		{
+			if (entity)
+				RplComponent.DeleteRplEntity(entity, false);
+			return false;
+		}
+		waypoint.SetHoldingTime(DEFEND_HOLDING_TIME_SECONDS);
+		waypoint.SetCompletionRadius(5);
+		waypoint.SetCompletionType(EAIWaypointCompletionType.All);
+		if (!ConfigureInfantryServiceWaypoint(waypoint))
+		{
+			RplComponent.DeleteRplEntity(waypoint, false);
+			return false;
+		}
 		ClearBuilderWaypoint(builder);
 		builder.m_Waypoint = waypoint;
 		builder.m_Group.AddWaypoint(waypoint);
