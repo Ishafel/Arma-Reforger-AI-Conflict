@@ -2094,6 +2094,11 @@ class AICF_OrderPlanner
 		return TryResolveTargetPosition(target, positionRole, targetPosition);
 	}
 
+	bool EnsureTemporaryRouteReplanHold(AICF_GroupSlot slot, SCR_CampaignFaction faction)
+	{
+		return AICF_TemporaryHoldRepair.Ensure(slot, faction, DEFEND_WAYPOINT_PREFAB);
+	}
+
 	bool HoldPositionForTemporaryRouteReplan(
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction,

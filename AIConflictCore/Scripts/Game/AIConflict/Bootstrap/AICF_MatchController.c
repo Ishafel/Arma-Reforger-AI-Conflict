@@ -4260,6 +4260,7 @@ class AICF_MatchController
 				continue;
 			if (slot.IsTemporaryRouteReplanHold())
 			{
+				m_OrderPlanner.EnsureTemporaryRouteReplanHold(slot, faction);
 				if (slot.IsTemporaryRouteReplanHoldDue(FALSE_COMPLETION_REPLAN_HOLD_MS))
 					ResumeAfterFalseCompletionHold(slot, faction);
 				continue;
@@ -4503,7 +4504,10 @@ class AICF_MatchController
 				faction,
 				"FALSE_COMPLETION_ROUTE_REBUILD");
 		if (!replanned)
+		{
 			slot.BeginTemporaryRouteReplanHold(holdAnchor);
+			m_OrderPlanner.EnsureTemporaryRouteReplanHold(slot, faction);
+		}
 		AICF_Stage2Diagnostics.Info(
 			"FALSE_COMPLETION_ROUTE_REPLAN",
 			string.Format(
