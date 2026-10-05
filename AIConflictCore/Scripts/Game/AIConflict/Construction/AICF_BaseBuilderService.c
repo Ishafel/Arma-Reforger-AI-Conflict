@@ -159,9 +159,13 @@ class AICF_BaseBuilderService
 			builder.m_iReturnMoveFailures++;
 		if (builder.m_iReturnMoveFailures >= 2)
 		{
-			builder.m_bReturnBlocked = true;
-			builder.m_vBlockedHome = home;
 			bool issued = m_Planner.SetBuilderFieldHold(builder);
+			// Ошибка создания hold оставляет доступным обычный возврат домой.
+			if (issued)
+			{
+				builder.m_bReturnBlocked = true;
+				builder.m_vBlockedHome = home;
+			}
 			Log(builder, "BUILDER_RETURN_BLOCKED", string.Format("reason=MOVE_FAILED hold_issued=%1 failures=%2", issued, builder.m_iReturnMoveFailures));
 		}
 	}

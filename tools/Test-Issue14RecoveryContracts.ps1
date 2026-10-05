@@ -31,6 +31,7 @@ function Check($s) {
     $node = Body $s.node 'AICF_HandleBuilderFailedMovement'
     if ($node -notmatch 'IsMoveFailureCurrent\(builder, failure\)' -or $node -notmatch 'GetExecutedAction\(\) == failedAction') { $fail.Add('SYNCHRONOUS_CALLBACK_FENCE') }
     $consume = Body $s.service 'ConsumeMoveFailure'
+    if ((ConvertTo-AICFCodeText $consume) -notmatch 'bool issued = m_Planner.SetBuilderFieldHold\(builder\);\s*if \(issued\)\s*\{\s*builder.m_bReturnBlocked = true;\s*builder.m_vBlockedHome = home;\s*\}') { $fail.Add('HOLD_BEFORE_BLOCK') }
     if ($consume -notmatch 'IsMoveFailureCurrent' -or $consume -notmatch 'm_iReturnMoveFailures >= 2' -or $consume -notmatch 'SetBuilderFieldHold') { $fail.Add('BOUNDED_RETURN') }
     $returnHomeBody = Body $s.service 'ReturnHome'
     if ($returnHomeBody -notmatch '(?s)m_bReturnBlocked.*?m_vBlockedHome.*?HOME_METERS \* HOME_METERS.*?return;.*?MoveTo.*?IDLE_AT_MAIN_TENT') { $fail.Add('PHYSICAL_HOME') }
@@ -43,6 +44,8 @@ function Check($s) {
     if ($arrival -notmatch 'new SCR_AIDefendActivity' -or $arrival -notmatch 'utility.AddAction\(activity\)' -or
         $arrival -notmatch 'defend.GetActionState\(\) != EAIActionState.FAILED' -or $arrival -match 'CompleteWaypoint|SetHoldingTime|RecordStrategicAssignment|AssignObjective') { $fail.Add('DEFEND_REAL_ACTIVITY') }
     $physical = Body $s.defend 'IsFormationAtWaypoint'
+    if ($physical -match 'IsPlayerControlled' -or $physical -notmatch 'agent.GetParentGroup\(\) != group' -or
+        $physical -notmatch 'access.IsInCompartment\(\)' -or $physical -notmatch '> radius \* radius') { $fail.Add('PLAYER_PHYSICAL_PRESENCE') }
     if ($physical -notmatch 'GetAgents\(agents\)' -or $physical -notmatch 'member.GetOrigin\(\)' -or
         $physical -notmatch 'alive > 0' -or $physical -match 'group.GetOrigin\(') { $fail.Add('DEFEND_PHYSICAL_FORMATION') }
     $identity = Body $s.defend 'IsCurrent'
@@ -65,6 +68,9 @@ $mutations = @(
     @('SYNCHRONOUS_CALLBACK_FENCE','node','AICF_BaseBuilderService.IsMoveFailureCurrent(builder, failure)'),
     @('SYNCHRONOUS_CALLBACK_FENCE','node','m_GroupUtilityComponent.GetExecutedAction() == failedAction'),
     @('BOUNDED_RETURN','service','builder.m_iReturnMoveFailures >= 2'),
+    @('HOLD_BEFORE_BLOCK','service','if (issued)'),
+    @('PLAYER_PHYSICAL_PRESENCE','defend','agent.GetParentGroup() != group'),
+    @('PLAYER_PHYSICAL_PRESENCE','defend','!controller || agent.GetParentGroup() != group','!controller || controller.IsPlayerControlled() || agent.GetParentGroup() != group'),
     @('PHYSICAL_HOME','service','HOME_METERS * HOME_METERS'),
     @('REAL_HOLD','planner','builder.m_Group.AddWaypoint(waypoint);'),
     @('DEFEND_ARRIVAL_OWNER','defend','!IsFormationAtWaypoint(group, waypoint)'),
@@ -78,7 +84,9 @@ $mutations = @(
 )
 foreach ($mutation in $mutations) {
     $copy = $sources.Clone()
-    $copy[$mutation[1]] = $copy[$mutation[1]].Replace($mutation[2], 'false')
+    $replacement = 'false'
+    if ($mutation.Count -gt 3) { $replacement = $mutation[3] }
+    $copy[$mutation[1]] = $copy[$mutation[1]].Replace($mutation[2], $replacement)
     if (-not (@(Check $copy) -contains $mutation[0])) { $failures += "MUTATION_ESCAPED_$($mutation[0])" }
 }
 if ($BuilderLogPath) {
