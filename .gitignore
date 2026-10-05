@@ -67,6 +67,8 @@
 !/tools/Test-RecoveryEpisodeContracts.ps1
 !/tools/Test-Issue12RecoveryContracts.ps1
 !/tools/Test-Issue14RecoveryContracts.ps1
+!/tools/Test-TemporaryHoldContracts.ps1
+!/tools/fixtures/AICF_TemporaryHoldProbe.c
 !/tools/fixtures/AICF_BuilderMovementProbe.c
 !/tools/fixtures/AICF_DefendArrivalProbe.c
 !/tools/fixtures/AICF_RecoveryEpisodeProbe.c
