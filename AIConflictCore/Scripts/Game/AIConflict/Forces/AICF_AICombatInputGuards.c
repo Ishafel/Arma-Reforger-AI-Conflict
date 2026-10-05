@@ -40,6 +40,38 @@ modded class SCR_AIGetSuppressionVolumeLine
 		GetVariableIn(SUPPRESSION_VOLUME_PORT, volume);
 		if (!volume)
 			return ENodeResult.FAIL;
+		if (!owner)
+			return ENodeResult.FAIL;
+		IEntity shooter = owner.GetControlledEntity();
+		if (!shooter || !AICF_SuppressionInputGuard.CanGenerateLine(volume, shooter.GetOrigin()))
+			return ENodeResult.FAIL;
 		return super.EOnTaskSimulate(owner, dt);
+	}
+}
+
+// Script Diff 1.8.0.13: box делит на slope = rightDir.x / rightDir.z.
+// При совпадении Z стрелка и центра rightDir.x == 0. Stock защищает только
+// rightDir.z, поэтому существующий (в том числе BaseTarget) box ещё не безопасен.
+class AICF_SuppressionInputGuard
+{
+	static bool CanGenerateLine(SCR_AISuppressionVolumeBase volume, vector shooterPos)
+	{
+		if (!volume)
+			return false;
+		vector centerPos = volume.GetCenterPosition();
+		shooterPos[1] = 0;
+		centerPos[1] = 0;
+		// Нет горизонтального направления; также исключает нулевой distancePerDeg.
+		if (!(vector.DistanceXZ(shooterPos, centerPos) > 0.001))
+			return false;
+
+		SCR_AISuppressionVolumeBox box = SCR_AISuppressionVolumeBox.Cast(volume);
+		if (!box)
+			return true;
+		if (!(box.m_vBBMax[0] > box.m_vBBMin[0]) || !(box.m_vBBMax[2] > box.m_vBBMin[2]) || !(box.m_vBBMax[1] >= box.m_vBBMin[1]))
+			return false;
+		vector direction = vector.Direction(shooterPos, centerPos).Normalized();
+		// Безразмерный допуск около нулевого slope; другую ось обрабатывает stock.
+		return Math.AbsFloat(direction[2]) > 0.000001;
 	}
 }

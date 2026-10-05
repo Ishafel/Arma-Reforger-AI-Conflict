@@ -33,6 +33,7 @@
 !/tools/fixtures/AICF_InfantryAdvanceProbe.c
 !/tools/fixtures/AICF_BaseBuilderCompletionProbe.c
 !/tools/fixtures/AICF_AICombatInputProbe.c
+!/tools/fixtures/AICF_SuppressionInputProbe.c
 !/tools/fixtures/AICF_BarracksCombatProbe.c
 !/tools/fixtures/AICF_NorthFailureProbe.c
 !/tools/fixtures/AICF_NativeMoveFailureProbe.c
