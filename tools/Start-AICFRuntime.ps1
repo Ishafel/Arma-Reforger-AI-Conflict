@@ -5,7 +5,7 @@ param(
     [string]$Role,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Stock', 'Everon', 'EveronNorth', 'RHS', 'EveronRHS', 'EveronNorthRHS', 'ArlandWCSRHS')]
+    [ValidateSet('Stock', 'Everon', 'EveronNorth', 'RHS', 'EveronRHS', 'EveronNorthRHS', 'ArlandWCSRHS', 'EveronWCSRHS', 'EveronNorthWCSRHS')]
     [string]$Variant,
 
     [string]$RepositoryRoot,
@@ -288,7 +288,7 @@ if ($Role -eq 'Client') {
 }
 
 $rhsRootPath = $null
-if ($Variant -in @('RHS', 'EveronRHS', 'EveronNorthRHS', 'ArlandWCSRHS')) {
+if ($Variant -in @('RHS', 'EveronRHS', 'EveronNorthRHS', 'ArlandWCSRHS', 'EveronWCSRHS', 'EveronNorthWCSRHS')) {
     if (-not $RhsAddonsRoot) {
         $rhsCandidates = [System.Collections.Generic.List[string]]::new()
         $documentsRoot = [Environment]::GetFolderPath('MyDocuments')
@@ -355,18 +355,30 @@ if ($Variant -in @('Everon', 'EveronNorth')) {
         $profileVariant = '-EveronNorth'
     }
 }
-elseif ($Variant -in @('RHS', 'ArlandWCSRHS')) {
+elseif ($Variant -in @('RHS', 'ArlandWCSRHS', 'EveronWCSRHS', 'EveronNorthWCSRHS')) {
     $projectRelativePath = 'AIConflictArlandRHS\addon.gproj'
     $scenario = '{97E4BCB73F044C66}Missions/AICF_RHS_Conflict_Arland.conf'
     $missionHeader = 'Missions/AICF_RHS_Conflict_Arland.conf'
     $addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C'
     $profileVariant = '-RHS'
-    if ($Variant -eq 'ArlandWCSRHS') {
+    if ($Variant -in @('ArlandWCSRHS', 'EveronWCSRHS', 'EveronNorthWCSRHS')) {
         $projectRelativePath = 'AIConflictArlandWCSRHS\addon.gproj'
         $scenario = '{A1CF260928100002}Missions/AICF_WCS_RHS_Conflict_Arland.conf'
         $missionHeader = 'Missions/AICF_WCS_RHS_Conflict_Arland.conf'
         $addonIds += ',68F006D910E7546F,61C74A8B647617DA,62A668F513428630,631C3C1AEE9C90BC,615806DC6C57AF02,615818DA7C0343FD,629B2BA37EFFD577,5E389BB9F58B79A6,5D1880C4AD410C14,5E0AB16BEB16D6A4,65CF7AE8574E06D2,65F929DF622BAD50,6602C1EC7E5A4A87,6152CB0BD0684837,5B383D4CB27E0D54,63120AE07E6C0966,A1CF260928100001'
         $profileVariant = '-ArlandWCSRHS'
+        if ($Variant -in @('EveronWCSRHS', 'EveronNorthWCSRHS')) {
+            $projectRelativePath = 'AIConflictEveronWCSRHS\addon.gproj'
+            $scenario = '{A1CF261006100002}Missions/AICF_WCS_RHS_Conflict_Everon.conf'
+            $missionHeader = 'Missions/AICF_WCS_RHS_Conflict_Everon.conf'
+            $addonIds += ',A4B2E62595F645A4,FA9FDCCA428A43BA,A1CF261006100001'
+            $profileVariant = '-EveronWCSRHS'
+            if ($Variant -eq 'EveronNorthWCSRHS') {
+                $scenario = '{A1CF261006100003}Missions/AICF_WCS_RHS_Conflict_Everon_North.conf'
+                $missionHeader = 'Missions/AICF_WCS_RHS_Conflict_Everon_North.conf'
+                $profileVariant = '-EveronNorthWCSRHS'
+            }
+        }
     }
 }
 elseif ($Variant -in @('EveronRHS', 'EveronNorthRHS')) {
@@ -409,6 +421,7 @@ $localProjects = [ordered]@{
     '9F88011DA22B471C' = 'AIConflictArlandRHS'
     'FA9FDCCA428A43BA' = 'AIConflictEveronRHS'
     'A1CF260928100001' = 'AIConflictArlandWCSRHS'
+    'A1CF261006100001' = 'AIConflictEveronWCSRHS'
 }
 $resourceDatabases = @(
     foreach ($addonId in $addonIds.Split(',')) {

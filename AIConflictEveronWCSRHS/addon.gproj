@@ -1,0 +1,27 @@
+GameProject
+{
+	ID "AIConflictEveronWCSRHS"
+	GUID "A1CF261006100001"
+	TITLE "AI Conflict Everon WCS + RHS"
+	Dependencies
+	{
+		"58D0FB3206B6F859"
+		"9178E5822AFE48EA"
+		"B52C5F6AEDBF423E"
+		"A4B2E62595F645A4"
+		"1337C0DE5DABBEEF"
+		"BADC0DEDABBEDA5E"
+		"595F2BF2F44836FB"
+		"9F88011DA22B471C"
+		"FA9FDCCA428A43BA"
+		"A1CF260928100001"
+	}
+	Configurations
+	{
+		GameProjectConfig PC {}
+		GameProjectConfig HEADLESS {}
+		GameProjectConfig XBOX_ONE {}
+		GameProjectConfig XBOX_SERIES {}
+		GameProjectConfig PS4 {}
+	}
+}

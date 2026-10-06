@@ -388,6 +388,37 @@ try {
         }
     }
 
+    $wcsProjectRoot = Join-Path $fakeRepository 'AIConflictEveronWCSRHS'
+    New-Item -ItemType Directory -Force $wcsProjectRoot | Out-Null
+    [IO.File]::WriteAllText((Join-Path $wcsProjectRoot 'addon.gproj'), '')
+    foreach ($variant in @('EveronWCSRHS', 'EveronNorthWCSRHS')) {
+        foreach ($role in @('Server', 'Client')) {
+            $output = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $launcherPath `
+                -Role $role -Variant $variant -RepositoryRoot $fakeRepository `
+                -ServerRoot $fakeServerRoot -GameRoot $fakeGameRoot -RhsAddonsRoot $fakeRhsRoot `
+                -ProfileRoot (Join-Path $testRoot "Profiles\$variant-$role") -DryRun 2>&1 | ForEach-Object { $_.ToString() })
+            if ($LASTEXITCODE -ne 0) {
+                Add-Failure 'RUNTIME_WCS_EVERON' "$variant/$role dry-run failed: $($output -join ' | ')"
+                continue
+            }
+            $manifest = Get-ManifestFromOutput $output 'RUNTIME_WCS_EVERON'
+            if (-not $manifest) { continue }
+            Require-ArgumentPair $manifest '-gproj' (Join-Path $wcsProjectRoot 'addon.gproj') 'RUNTIME_WCS_EVERON'
+            $sourceIds = @($manifest.resourceDatabases.addonId)
+            $expectedIds = @('9178E5822AFE48EA', 'B52C5F6AEDBF423E', 'A4B2E62595F645A4', '9F88011DA22B471C', 'FA9FDCCA428A43BA', 'A1CF260928100001', 'A1CF261006100001')
+            if (@(Compare-Object $sourceIds $expectedIds).Count) {
+                Add-Failure 'RUNTIME_WCS_EVERON_GRAPH' 'WCS Everon must include all seven source resource databases'
+            }
+            if ($role -eq 'Server') {
+                $expected = '{A1CF261006100002}Missions/AICF_WCS_RHS_Conflict_Everon.conf'
+                if ($variant -eq 'EveronNorthWCSRHS') { $expected = '{A1CF261006100003}Missions/AICF_WCS_RHS_Conflict_Everon_North.conf' }
+                Require-ArgumentPair $manifest '-server' $expected 'RUNTIME_WCS_EVERON_HEADER'
+                Require-ArgumentPair $manifest '-MissionHeader' $expected.Substring(18) 'RUNTIME_WCS_EVERON_HEADER'
+            }
+            else { Require-ArgumentPair $manifest '-client' '127.0.0.1' 'RUNTIME_WCS_EVERON_CLIENT' }
+        }
+    }
+
     $libraryRoot = Join-Path $testRoot 'Библиотека комплектов'
     New-Item -ItemType Directory -Path $libraryRoot -Force | Out-Null
     foreach ($libraryName in @('template_0.json', 'template_255.json', 'template_256.json', 'template_01.json', 'unrelated.json')) {

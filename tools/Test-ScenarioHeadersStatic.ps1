@@ -163,6 +163,29 @@ else {
         'The adapter must only compose pool data; stock owns initialization and replicated callsign assignment'
 }
 
+$wcsRoot = Join-Path $RepositoryRoot 'AIConflictEveronWCSRHS'
+$wcsProject = Get-Content (Join-Path $wcsRoot 'addon.gproj') -Raw
+foreach ($dependency in @('FA9FDCCA428A43BA', 'A1CF260928100001')) {
+    Require-Match 'SCENARIO_WCS_EVERON_GRAPH' $wcsProject ('"' + $dependency + '"') 'WCS Everon must compose RHS Everon and the existing WCS integration'
+}
+Require-Match 'SCENARIO_WCS_EVERON_ID' $wcsProject 'GUID\s+"A1CF261006100001"' 'WCS Everon project identity changed'
+foreach ($case in @(
+    @('Everon', '57FA3D0337BE47E5', 'A1CF261006100002'),
+    @('Everon_North', 'A1CF190919100000', 'A1CF261006100003')
+)) {
+    $headerPath = Join-Path $wcsRoot ("Missions/AICF_WCS_RHS_Conflict_$($case[0]).conf")
+    $header = Get-Content $headerPath -Raw
+    $parent = '{' + $case[1] + '}Missions/AICF_RHS_Conflict_' + $case[0] + '.conf'
+    Require-Match 'SCENARIO_WCS_EVERON_PARENT' $header ([regex]::Escape($parent)) 'WCS must inherit the corresponding reviewed RHS campaign, including North whitelist'
+    Forbid-Match 'SCENARIO_WCS_EVERON_OWNERSHIP' $header '(?m)^\s*(World|SystemsConfig|m_aCampaignCustomBaseList|m_bCustomBaseWhitelist)\b' 'WCS must not replace inherited world or base topology'
+    Require-Match 'SCENARIO_WCS_EVERON_MENU' $header 'm_bShowInScenarioMenu\s+1' 'WCS scenario must be visible'
+    Require-Match 'SCENARIO_WCS_EVERON_SAVE' $header 'm_eSaveTypes\s+0' 'WCS persistence must remain disabled'
+    $resource = '{' + $case[2] + '}Missions/AICF_WCS_RHS_Conflict_' + $case[0] + '.conf'
+    Require-Match 'SCENARIO_WCS_EVERON_META' (Get-Content ($headerPath + '.meta') -Raw) ([regex]::Escape($resource)) 'WCS scenario resource identity changed'
+}
+$wcsOwned = @(Get-ChildItem $wcsRoot -Recurse -File | Where-Object { $_.Extension -in @('.c', '.ent', '.layer', '.et') })
+if ($wcsOwned.Count) { Add-Failure 'SCENARIO_WCS_EVERON_COMPOSITION' 'WCS Everon must remain a resource-only composition addon' }
+
 if ($failures.Count -gt 0) {
     foreach ($failure in $failures) {
         Write-Output "[AICF][SCENARIO_STATIC][FAIL] $failure"

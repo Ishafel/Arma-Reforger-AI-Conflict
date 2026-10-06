@@ -1,4 +1,4 @@
-﻿param([string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot))
+param([string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot))
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'AICFLocalization.Common.ps1')
 $entries = Read-AICFLocalization $RepositoryRoot
@@ -33,6 +33,8 @@ foreach ($platform in @('HEADLESS', 'XBOX_ONE', 'XBOX_SERIES', 'PS4')) {
     Require ($project -match ("GameProjectConfig $platform : PC")) "Platform inheritance: $platform"
 }
 $scenarioPaths = [ordered]@{
+    EveronWCSRHS = 'AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon.conf'
+    EveronNorthWCSRHS = 'AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_North.conf'
     Arland = 'AIConflictArland/Missions/AICF_Conflict_Arland.conf'
     Everon = 'AIConflictEveron/Missions/AICF_Conflict_Everon.conf'
     ArlandRHS = 'AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland.conf'

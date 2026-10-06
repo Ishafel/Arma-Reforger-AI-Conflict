@@ -3,7 +3,7 @@
 Scripts-first прототип автономной войны `US` против `USSR` поверх штатного
 режима Conflict. Проект использует существующий мир, базы, радио-граф, фракции
 и prefab-каталоги Arma Reforger. Собственных world/prefab/layout-ресурсов в
-репозитории нет; семь inherited `MissionHeader` добавляют запуск из меню сценариев.
+репозитории нет; девять inherited `MissionHeader` добавляют запуск из меню сценариев.
 Северные stock/RHS Everon выбирают подмножество штатных баз через настройки Conflict.
 
 Игровая логика server-authoritative: сервер применяет выбранную при запуске
@@ -74,6 +74,11 @@ Arland загружает Core и stock integration; Everon и RHS добавл�
 | `AIConflictEveronRHS` | `FA9FDCCA428A43BA` | RHS USMC против RHS MSV на полном Everon; объединяет Everon radio policy и существующий RHS profile |
 | `AIConflictArlandWCSRHS` | `A1CF260928100001` | Arland WCS + RHS: комплекты пехоты РФ/НАТО; Abrams, Т-72, БМП-3 и Bradley дополняют технику RHS |
 
+Новый [AIConflictEveronWCSRHS](AIConflictEveronWCSRHS/README.md),
+GUID `A1CF261006100001`, объединяет RHS Everon и WCS integration.
+Два сценария: полный остров (`-Variant EveronWCSRHS`) и север
+(`-Variant EveronNorthWCSRHS`). North наследует существующие два HQ
+и шесть точек захвата; набор контента общий с WCS + RHS Арландом.
 Текущие границы, необходимые пакеты и запуск `-Variant ArlandWCSRHS`:
 [Arland WCS + RHS](AIConflictArlandWCSRHS/README.md).
 Комплекты WCS едины для AI и редактора; доступны вкладки Vanilla/RHS/WCS,

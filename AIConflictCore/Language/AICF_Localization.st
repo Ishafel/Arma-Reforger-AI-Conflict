@@ -3,6 +3,42 @@ StringTable
 	ItemClassName "CustomStringTableItem"
 	Items
 	{
+		CustomStringTableItem "{A1CF261006100010}"
+		{
+			Id "AICF_Scenario_EveronWCSRHS_Name"
+			Target_en_us "AI Conflict WCS + RHS - Everon (Full)"
+			Target_ru_ru "AI Conflict WCS + RHS — Эверон (полный)"
+		}
+		CustomStringTableItem "{A1CF261006100011}"
+		{
+			Id "AICF_Scenario_EveronWCSRHS_Description"
+			Target_en_us "NATO versus Russia on full Everon with WCS + RHS infantry equipment and vehicles."
+			Target_ru_ru "НАТО против РФ на полном Эвероне: экипировка пехоты и техника WCS + RHS."
+		}
+		CustomStringTableItem "{A1CF261006100012}"
+		{
+			Id "AICF_Scenario_EveronWCSRHS_Details"
+			Target_en_us "Full RHS Everon campaign with WCS equipment, arsenal and vehicle catalogs. Every launch starts a new campaign; session progress is not saved."
+			Target_ru_ru "Полная кампания RHS на Эвероне с экипировкой, арсеналом и каталогами техники WCS. Каждый запуск начинает новую кампанию; прогресс сессии не сохраняется."
+		}
+		CustomStringTableItem "{A1CF261006100013}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHS_Name"
+			Target_en_us "AI Conflict WCS + RHS - Everon North"
+			Target_ru_ru "AI Conflict WCS + RHS — Север Эверона"
+		}
+		CustomStringTableItem "{A1CF261006100014}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHS_Description"
+			Target_en_us "NATO versus Russia in northern Everon with WCS + RHS equipment: two HQs and six capture points."
+			Target_ru_ru "НАТО против РФ на севере Эверона с экипировкой WCS + RHS: два штаба и шесть точек захвата."
+		}
+		CustomStringTableItem "{A1CF261006100015}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHS_Details"
+			Target_en_us "Inherits the RHS northern campaign and its base whitelist. The whole island remains accessible. Every launch starts a new campaign; session progress is not saved."
+			Target_ru_ru "Наследует северную кампанию RHS и её список баз. Весь остров остаётся доступным для перемещения. Каждый запуск начинает новую кампанию; прогресс сессии не сохраняется."
+		}
 		CustomStringTableItem "{A1CF260928100003}"
 		{
 			Id "AICF_Scenario_ArlandWCSRHS_Name"
