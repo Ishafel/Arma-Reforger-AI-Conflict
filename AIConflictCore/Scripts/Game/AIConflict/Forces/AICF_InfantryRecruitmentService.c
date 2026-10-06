@@ -66,6 +66,8 @@ class AICF_InfantryRecruitmentService
 		}
 		for (int index = m_aOrders.Count() - 1; index >= 0; index--)
 		{
+			if (graphReady)
+				ReconsiderBarracks(index);
 			AICF_InfantryRecruitmentOrder order = m_aOrders[index];
 			string finished = Tick(order, graphReady);
 			if (!finished.IsEmpty())
@@ -109,10 +111,12 @@ class AICF_InfantryRecruitmentService
 			int memberIndex;
 			if (!m_Spawner.FindMissingMember(slot, faction, prefab, role, memberIndex))
 				continue;
-			int cost = m_Config.Cost(role);
-			AICF_InfantryRecruitmentOrder order = SelectBarracks(slot, faction, leader.GetOrigin(), cost);
+			AICF_InfantryRecruitmentOrder order = SelectBarracks(slot, faction, leader.GetOrigin());
 			if (!order)
+			{
+				LogDeferred(slot, faction);
 				continue;
+			}
 			if (!m_Planner.BeginInfantryRecruitment(order))
 			{
 				// Tile loading само по себе ещё не доказывает непроходимость.
@@ -123,6 +127,7 @@ class AICF_InfantryRecruitmentService
 				"alive=%1 desired=%2 distance_m=%3 max_distance_m=500 intent_revision=%4 graph_revision=%5",
 				AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()), slot.GetDesiredSize(),
 				vector.DistanceXZ(leader.GetOrigin(), order.m_vPosition), order.m_iIntent, order.m_iGraphRevision));
+			order.Log("INFANTRY_RECRUITMENT_PLAN", order.m_Forecast.Describe());
 		}
 	}
 
@@ -143,7 +148,7 @@ class AICF_InfantryRecruitmentService
 		reason = "ROSTER_UNAVAILABLE";
 		if (!leader || !m_Spawner.FindMissingMember(slot, faction, prefab, role, memberIndex))
 			return false;
-		AICF_InfantryRecruitmentOrder order = SelectBarracks(slot, faction, leader.GetOrigin(), m_Config.Cost(role), true);
+		AICF_InfantryRecruitmentOrder order = SelectBarracks(slot, faction, leader.GetOrigin(), true);
 		reason = "NO_SAFE_BARRACKS";
 		if (!order)
 			return false;
@@ -155,6 +160,7 @@ class AICF_InfantryRecruitmentService
 			"alive=%1 desired=%2 distance_m=%3 max_distance_m=-1 intent_revision=%4 graph_revision=%5 player_requested=1",
 			AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()), slot.GetDesiredSize(),
 			vector.DistanceXZ(leader.GetOrigin(), order.m_vPosition), order.m_iIntent, order.m_iGraphRevision));
+		order.Log("INFANTRY_RECRUITMENT_PLAN", order.m_Forecast.Describe());
 		reason = "RECRUITMENT_STARTED";
 		return true;
 	}
@@ -172,8 +178,17 @@ class AICF_InfantryRecruitmentService
 	}
 
 	protected AICF_InfantryRecruitmentOrder SelectBarracks(AICF_GroupSlot slot, SCR_CampaignFaction faction,
-		vector position, int cost, bool playerRequested = false)
+		vector position, bool playerRequested = false, float remainingSeconds = -1)
 	{
+		int ownDemand, members;
+		if (!m_Spawner.QuoteMissingRoster(slot, faction, m_Config, ownDemand, members))
+			return null;
+		if (remainingSeconds < 0)
+		{
+			remainingSeconds = AICF_InfantryRecruitmentConfig.VISIT_TIMEOUT_MS / 1000.0;
+			if (playerRequested)
+				remainingSeconds = AICF_InfantryRecruitmentConfig.PLAYER_VISIT_TIMEOUT_MS / 1000.0;
+		}
 		SCR_CampaignMilitaryBaseComponent nearest;
 		float nearestDistance = float.MAX;
 		for (int index = 0; index < m_Graph.GetNodeCount(); index++)
@@ -194,14 +209,14 @@ class AICF_InfantryRecruitmentService
 			return null;
 		float targetDistance = vector.DistanceSqXZ(position, targetPosition);
 		AICF_InfantryRecruitmentOrder best;
-		float bestDistance = float.MAX;
+		float bestCompletion = float.MAX;
 		for (int nodeId = 0; nodeId < m_Graph.GetNodeCount(); nodeId++)
 		{
 			AICF_ObjectiveNode candidateNode = m_Graph.GetNode(nodeId);
 			if (!candidateNode)
 				continue;
 			SCR_CampaignMilitaryBaseComponent base = candidateNode.GetBase();
-			if (!base || !base.GetOwner() || base.GetFaction() != faction || base.GetSupplies() < cost)
+			if (!base || !base.GetOwner() || base.GetFaction() != faction)
 				continue;
 			if (!playerRequested && base != nearest && m_Graph.GetHopDistance(nearest, base) != 1 && m_Graph.GetHopDistance(base, nearest) != 1)
 				continue;
@@ -216,8 +231,7 @@ class AICF_InfantryRecruitmentService
 				vector servicePosition = service.GetOwner().GetOrigin();
 				float distanceSq = vector.DistanceSqXZ(position, servicePosition);
 				if ((!playerRequested && (distanceSq > AICF_InfantryRecruitmentConfig.MAX_DISTANCE_METERS * AICF_InfantryRecruitmentConfig.MAX_DISTANCE_METERS ||
-					(base != nearest && distanceSq > AICF_InfantryRecruitmentConfig.ARRIVAL_METERS * AICF_InfantryRecruitmentConfig.ARRIVAL_METERS && distanceSq >= targetDistance))) ||
-					distanceSq >= bestDistance)
+					(base != nearest && distanceSq > AICF_InfantryRecruitmentConfig.ARRIVAL_METERS * AICF_InfantryRecruitmentConfig.ARRIVAL_METERS && distanceSq >= targetDistance))))
 					continue;
 				AICF_InfantryRecruitmentOrder order = new AICF_InfantryRecruitmentOrder();
 				order.m_Slot = slot;
@@ -235,19 +249,123 @@ class AICF_InfantryRecruitmentService
 				order.m_ServiceId = service.GetOwner().GetID();
 				order.m_vPosition = servicePosition;
 				order.m_iStartedAtMs = System.GetTickCount();
+				order.m_iLastSelectionAtMs = order.m_iStartedAtMs;
+				order.m_iNextEvaluationAtMs = order.m_iStartedAtMs + AICF_InfantryRecruitmentConfig.REPLAN_INTERVAL_MS;
 				order.m_iApproachProgressAtMs = order.m_iStartedAtMs;
 				order.m_fApproachBestDistance = Math.Sqrt(distanceSq);
 				if (!order.HasSafeBarracks())
 					continue;
+				order.m_Forecast = Forecast(base, slot, ownDemand, members);
+				if (!order.m_Forecast.Evaluate(Math.Sqrt(distanceSq), remainingSeconds) ||
+					order.m_Forecast.m_fCompletionSeconds >= bestCompletion)
+					continue;
 				best = order;
-				bestDistance = distanceSq;
+				bestCompletion = order.m_Forecast.m_fCompletionSeconds;
 			}
 		}
 		return best;
 	}
 
+	// Спрос вычисляется из живых визитов, а не из отдельного ledger: stale
+	// generation/intent/graph, потеря базы и cleanup сразу перестают его создавать.
+	protected int OtherDemand(SCR_CampaignMilitaryBaseComponent base, AICF_GroupSlot excludedSlot)
+	{
+		int total;
+		foreach (AICF_InfantryRecruitmentOrder order : m_aOrders)
+		{
+			if (order.m_bDemandReleased || order.m_Slot == excludedSlot || order.m_Base != base ||
+				order.m_iGraphRevision != m_Graph.GetRevision() || !order.IsCurrent(order.m_Slot) ||
+				!order.HasSafeBarracks() || AICF_GroupRuntime.CountAliveAgents(order.m_Group) <= 0)
+				continue;
+			int cost, members;
+			if (m_Spawner.QuoteMissingRoster(order.m_Slot, order.m_Faction, m_Config, cost, members))
+				total += cost;
+		}
+		return total;
+	}
+
+	protected AICF_RecruitmentSupplyForecast Forecast(SCR_CampaignMilitaryBaseComponent base,
+		AICF_GroupSlot slot, int ownDemand, int members)
+	{
+		AICF_RecruitmentSupplyForecast forecast = new AICF_RecruitmentSupplyForecast();
+		forecast.m_fStock = base.GetSupplies();
+		base.AICF_GetRecruitmentIncome(forecast.m_fIncome, forecast.m_fInterval, forecast.m_fNextArrival);
+		forecast.m_iOwnDemand = ownDemand;
+		forecast.m_iMembers = members;
+		forecast.m_iOtherDemand = OtherDemand(base, slot);
+		return forecast;
+	}
+
+	protected void LogDeferred(AICF_GroupSlot slot, SCR_CampaignFaction faction)
+	{
+		int cost, members;
+		m_Spawner.QuoteMissingRoster(slot, faction, m_Config, cost, members);
+		AICF_Stage4Diagnostics.Info("INFANTRY_RECRUITMENT_DEFERRED", string.Format(
+			"faction=%1 slot=%2 own_demand=%3 reason=NO_FEASIBLE_SAFE_BARRACKS retry_ms=%4 supply_horizon_s=%5",
+			faction.GetFactionKey(), slot.GetSlotId(), cost, AICF_InfantryRecruitmentConfig.RETRY_MS,
+			AICF_InfantryRecruitmentConfig.SUPPLY_HORIZON_SECONDS));
+	}
+
+	protected void ReconsiderBarracks(int index)
+	{
+		AICF_InfantryRecruitmentOrder order = m_aOrders[index];
+		int now = System.GetTickCount();
+		if (order.m_bDemandReleased || order.m_Donor || order.m_iSpawnAtMs > 0 || order.m_bHiddenRecoveryPending ||
+			now < order.m_iNextEvaluationAtMs || !order.IsCurrent(order.m_Slot) || !order.HasSafeBarracks() ||
+			order.m_iGraphRevision != m_Graph.GetRevision())
+			return;
+		order.m_iNextEvaluationAtMs = now + AICF_InfantryRecruitmentConfig.REPLAN_INTERVAL_MS;
+		int cost, members;
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(order.m_Group);
+		if (!leader || !m_Spawner.QuoteMissingRoster(order.m_Slot, order.m_Faction, m_Config, cost, members))
+			return;
+		int deadline = AICF_InfantryRecruitmentConfig.VISIT_TIMEOUT_MS;
+		if (order.m_bPlayerRequested)
+			deadline = AICF_InfantryRecruitmentConfig.PLAYER_VISIT_TIMEOUT_MS;
+		float remaining = (deadline - (now - order.m_iStartedAtMs)) / 1000.0;
+		order.m_Forecast = Forecast(order.m_Base, order.m_Slot, cost, members);
+		bool feasible = order.m_Forecast.Evaluate(vector.DistanceXZ(leader.GetOrigin(), order.m_vPosition), remaining);
+		order.Log("INFANTRY_RECRUITMENT_REEVALUATED", order.m_Forecast.Describe());
+		if (remaining <= 0 || now - order.m_iLastSelectionAtMs < AICF_InfantryRecruitmentConfig.REPLAN_COOLDOWN_MS)
+			return;
+		AICF_InfantryRecruitmentOrder alternative = SelectBarracks(order.m_Slot, order.m_Faction,
+			leader.GetOrigin(), order.m_bPlayerRequested, remaining);
+		if (!alternative || alternative.m_Base == order.m_Base)
+			return;
+		int approachDeadline = AICF_InfantryRecruitmentConfig.APPROACH_TIMEOUT_MS;
+		if (order.m_bPlayerRequested)
+			approachDeadline = AICF_InfantryRecruitmentConfig.PLAYER_APPROACH_TIMEOUT_MS;
+		if (alternative.m_Forecast.m_fTravelSeconds > (approachDeadline - (now - order.m_iStartedAtMs)) / 1000.0)
+			return;
+		float gain = Math.Max(AICF_InfantryRecruitmentConfig.REPLAN_GAIN_SECONDS,
+			order.m_Forecast.m_fCompletionSeconds * AICF_InfantryRecruitmentConfig.REPLAN_GAIN_FRACTION);
+		if (feasible && order.m_Forecast.m_fCompletionSeconds - alternative.m_Forecast.m_fCompletionSeconds < gain)
+			return;
+		// Begin проверяет route до ClearOrder и владеет снятием старого waypoint.
+		// При отказе старый визит остаётся активным. Donor/payment здесь отсутствуют.
+		if (!m_Planner.BeginInfantryRecruitment(alternative))
+			return;
+		alternative.m_iStartedAtMs = order.m_iStartedAtMs;
+		alternative.m_iSupplyWaitStartedAtMs = order.m_iSupplyWaitStartedAtMs;
+		order.m_bDemandReleased = true;
+		order.m_Waypoint = null;
+		order.Log("INFANTRY_RECRUITMENT_FINISHED", "reason=SUPPLY_REPLAN");
+		m_aOrders[index] = alternative;
+		int maxDistance = 500;
+		if (alternative.m_bPlayerRequested)
+			maxDistance = -1;
+		alternative.Log("INFANTRY_RECRUITMENT_STARTED", string.Format(
+			"alive=%1 desired=%2 distance_m=%3 max_distance_m=%4 intent_revision=%5 graph_revision=%6 player_requested=%7 reason=SUPPLY_REPLAN",
+			AICF_GroupRuntime.CountAliveAgents(alternative.m_Group), alternative.m_Slot.GetDesiredSize(),
+			vector.DistanceXZ(leader.GetOrigin(), alternative.m_vPosition), maxDistance,
+			alternative.m_iIntent, alternative.m_iGraphRevision, alternative.m_bPlayerRequested));
+		alternative.Log("INFANTRY_RECRUITMENT_PLAN", alternative.m_Forecast.Describe());
+	}
+
 	protected string Tick(AICF_InfantryRecruitmentOrder order, bool graphReady)
 	{
+		if (order.m_bDemandReleased)
+			return "CLEANUP_PENDING";
 		if (!order.IsCurrent(order.m_Slot))
 			return "IDENTITY_CHANGED";
 		if (!graphReady || order.m_iGraphRevision != m_Graph.GetRevision())
@@ -299,8 +417,6 @@ class AICF_InfantryRecruitmentService
 		AICF_LoadoutBinding loadout = order.m_Slot.GetLoadout(order.m_iMemberIndex);
 		if (order.m_Donor && order.m_iLoadoutRevision != order.m_Slot.GetLoadoutRevision())
 			return "LOADOUT_REVISION_CHANGED";
-		if (!m_Economy.QuoteInfantryRecruit(order))
-			return "SUPPLIES_UNAVAILABLE";
 		if (!order.IsPhysicallyPresent())
 		{
 			if (order.m_iArrivedAtMs > 0 || now - order.m_iStartedAtMs >= approachTimeout)
@@ -312,6 +428,23 @@ class AICF_InfantryRecruitmentService
 			order.m_iArrivedAtMs = now;
 			order.Log("INFANTRY_RECRUITMENT_ARRIVED", "physical_presence=1");
 		}
+		if (!m_Economy.QuoteInfantryRecruit(order))
+		{
+			// Уже запрошенный donor очищается прежним fail-closed путём.
+			if (order.m_Donor || order.m_Base.GetSupplies() >= order.m_iCost)
+				return "SUPPLIES_UNAVAILABLE";
+			if (order.m_iSupplyWaitStartedAtMs == 0)
+			{
+				order.m_iSupplyWaitStartedAtMs = now;
+				order.Log("INFANTRY_RECRUITMENT_SUPPLY_WAIT", string.Format(
+					"stock=%1 next_cost=%2 timeout_ms=%3", order.m_Base.GetSupplies(), order.m_iCost,
+					AICF_InfantryRecruitmentConfig.SUPPLY_WAIT_TIMEOUT_MS));
+			}
+			if (now - order.m_iSupplyWaitStartedAtMs >= AICF_InfantryRecruitmentConfig.SUPPLY_WAIT_TIMEOUT_MS)
+				return "SUPPLY_WAIT_TIMEOUT";
+			return string.Empty;
+		}
+		order.m_iSupplyWaitStartedAtMs = 0;
 		if (!order.m_Donor)
 		{
 			if (now < order.m_iNextPurchaseAtMs || CountPendingAgents() >= 2)
@@ -469,6 +602,7 @@ class AICF_InfantryRecruitmentService
 	protected void Finish(int index, string reason, bool restore)
 	{
 		AICF_InfantryRecruitmentOrder order = m_aOrders[index];
+		order.m_bDemandReleased = true;
 		if (reason == "APPROACH_INTERRUPTED_OR_TIMEOUT" || reason == "APPROACH_RECOVERY_EXHAUSTED" ||
 			reason == "APPROACH_REPAIR_REJECTED")
 			RememberApproachFailure(order);

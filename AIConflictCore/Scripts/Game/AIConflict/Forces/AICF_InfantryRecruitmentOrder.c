@@ -35,6 +35,11 @@ class AICF_InfantryRecruitmentOrder
 	int m_iCost;
 	int m_iLoadoutRevision;
 	float m_fPaid;
+	ref AICF_RecruitmentSupplyForecast m_Forecast;
+	int m_iNextEvaluationAtMs;
+	int m_iLastSelectionAtMs;
+	int m_iSupplyWaitStartedAtMs;
+	bool m_bDemandReleased;
 
 	bool IsCurrent(AICF_GroupSlot slot)
 	{

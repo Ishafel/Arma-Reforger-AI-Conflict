@@ -6,6 +6,29 @@ class AICF_InfantryRecruitSpawner : AICF_GroupSpawner
 	{
 		m_RosterSource = source;
 	}
+
+	// Те же позиции, prefab fallback и цены, что у последовательных покупок.
+	bool QuoteMissingRoster(AICF_GroupSlot slot, SCR_CampaignFaction faction,
+		AICF_InfantryRecruitmentConfig config, out int cost, out int members)
+	{
+		cost = 0;
+		members = 0;
+		if (!slot || !slot.GetGroup() || !faction || !m_RosterSource || !config)
+			return false;
+		int vacancies = slot.GetDesiredSize() - AICF_GroupRuntime.CountAliveAgents(slot.GetGroup());
+		for (int index = 0; index < slot.GetDesiredSize() && members < vacancies; index++)
+		{
+			if (slot.HasRosterMember(index))
+				continue;
+			string role;
+			ResourceName prefab = m_RosterSource.ResolveRecruitPrefab(faction, index, role);
+			if (prefab.IsEmpty())
+				return false;
+			cost += config.Cost(role);
+			members++;
+		}
+		return members > 0 && members == vacancies;
+	}
 	// Выбирается первая отсутствующая позиция уже заданного roster, а не новый состав.
 	bool FindMissingMember(AICF_GroupSlot slot, SCR_CampaignFaction faction, out ResourceName prefab, out string role, out int memberIndex)
 	{

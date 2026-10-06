@@ -81,3 +81,8 @@
 !/tools/fixtures/AICF_VictoryRespawnProbe.c
 !/tools/Test-EndgameContracts.ps1
 !/tools/fixtures/AICF_EndgameProbe.c
+!/tools/Test-RecruitmentSupplyContracts.ps1
+!/tools/fixtures/AICF_RecruitmentSupplyProbe.c
+!/docs/
+/docs/*
+!/docs/RECRUITMENT_SUPPLY_PLANNING.md
