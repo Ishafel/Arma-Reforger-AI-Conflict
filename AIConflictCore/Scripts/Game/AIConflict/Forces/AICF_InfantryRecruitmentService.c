@@ -257,6 +257,7 @@ class AICF_InfantryRecruitmentService
 					continue;
 				order.m_Forecast = Forecast(base, slot, ownDemand, members);
 				if (!order.m_Forecast.Evaluate(Math.Sqrt(distanceSq), remainingSeconds) ||
+					!order.m_Forecast.CanApproach(playerRequested) ||
 					order.m_Forecast.m_fCompletionSeconds >= bestCompletion)
 					continue;
 				best = order;
@@ -268,7 +269,8 @@ class AICF_InfantryRecruitmentService
 
 	// Спрос вычисляется из живых визитов, а не из отдельного ledger: stale
 	// generation/intent/graph, потеря базы и cleanup сразу перестают его создавать.
-	protected int OtherDemand(SCR_CampaignMilitaryBaseComponent base, AICF_GroupSlot excludedSlot)
+	protected int OtherDemand(SCR_CampaignMilitaryBaseComponent base, AICF_GroupSlot excludedSlot,
+		AICF_RecruitmentSupplyForecast forecast = null)
 	{
 		int total;
 		foreach (AICF_InfantryRecruitmentOrder order : m_aOrders)
@@ -278,8 +280,20 @@ class AICF_InfantryRecruitmentService
 				!order.HasSafeBarracks() || AICF_GroupRuntime.CountAliveAgents(order.m_Group) <= 0)
 				continue;
 			int cost, members;
-			if (m_Spawner.QuoteMissingRoster(order.m_Slot, order.m_Faction, m_Config, cost, members))
+			array<int> costs = {};
+			if (m_Spawner.QuoteMissingRoster(order.m_Slot, order.m_Faction, m_Config, cost, members, costs))
+			{
 				total += cost;
+				if (forecast)
+				{
+					foreach (int price : costs) forecast.m_aCosts.Insert(price);
+					IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(order.m_Group);
+					if (leader)
+						forecast.m_fOtherArrival = Math.Max(forecast.m_fOtherArrival,
+							Math.Max(0, vector.DistanceXZ(leader.GetOrigin(), order.m_vPosition) - AICF_InfantryRecruitmentConfig.ARRIVAL_METERS) /
+							AICF_InfantryRecruitmentConfig.PLANNING_SPEED_MPS);
+				}
+			}
 		}
 		return total;
 	}
@@ -289,10 +303,17 @@ class AICF_InfantryRecruitmentService
 	{
 		AICF_RecruitmentSupplyForecast forecast = new AICF_RecruitmentSupplyForecast();
 		forecast.m_fStock = base.GetSupplies();
+		forecast.m_fCeiling = base.AICF_GetRecruitmentCeiling();
 		base.AICF_GetRecruitmentIncome(forecast.m_fIncome, forecast.m_fInterval, forecast.m_fNextArrival);
 		forecast.m_iOwnDemand = ownDemand;
 		forecast.m_iMembers = members;
-		forecast.m_iOtherDemand = OtherDemand(base, slot);
+		forecast.m_iOtherDemand = OtherDemand(base, slot, forecast);
+		array<int> costs = {};
+		int quotedCost, quotedMembers;
+		if (m_Spawner.QuoteMissingRoster(slot, SCR_CampaignFaction.Cast(slot.GetGroup().GetFaction()), m_Config, quotedCost, quotedMembers, costs))
+		{
+			foreach (int price : costs) forecast.m_aCosts.Insert(price);
+		}
 		return forecast;
 	}
 

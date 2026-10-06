@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory = $true)][string]$LogPath,
     [switch]$RequireFullRosters,
     [switch]$RequireMuster,
-    [switch]$RequireSupplyPlanning
+    [switch]$RequireSupplyPlanning,
+    [switch]$RequireSupplyBounds
 )
 $ErrorActionPreference = 'Stop'
 $lines = Get-Content -LiteralPath $LogPath
@@ -93,6 +94,7 @@ if ($RequireFullRosters) {
     if (!($lines -match '\[RECRUIT_PROBE\].*finished=1 full_rosters=1')) { $failures.Add('Probe did not complete') }
 }
 if (!$visits.Count) { $failures.Add('No recruitment visits') }
+if ($RequireSupplyBounds -and !($lines -match '\[RECRUITMENT_BOUNDS_CHECKS\] passed=14 total=14')) { $failures.Add('Missing capacity/approach boundary checks') }
 if ($RequireSupplyPlanning) {
     if (!($lines -match '\[RECRUITMENT_SUPPLY_CHECKS\] passed=15 total=15')) { $failures.Add('Missing demand/forecast checks') }
     if (!($lines -match '\[RECRUITMENT_SUPPLY_PROBE\] finished=1 full=6 stable=1 demand_checks=1')) { $failures.Add('Competing rosters did not complete') }

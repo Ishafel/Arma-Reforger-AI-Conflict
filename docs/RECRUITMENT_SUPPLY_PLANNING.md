@@ -26,7 +26,7 @@ authority, spawn point, двустороннюю HQ-связь для обычн
 Ещё не рассчитанный либо остановленный доход считается нулевым. Обещанные
 доставки логистики не включаются.
 
-Формула `AICF_RecruitmentSupplyForecast`:
+Формула `AICF_RecruitmentSupplyForecast`, когда суммарный спрос помещается в текущий запас или потолок накопления:
 
 - `own_demand` — сумма цен недостающих позиций, `other_demand` — спрос других визитов;
 - `deficit = max(0, own_demand + other_demand - stock)`;
@@ -36,6 +36,33 @@ authority, spawn point, двустороннюю HQ-связь для обычн
 - `wait_s = max(0, supply_s - travel_s)`;
 - `completion_s = max(travel_s, supply_s) + missing_members * 3`.
 
+Если спрос превышает `max(stock, income_ceiling)`, используется побойцовая
+модель склада. `income_ceiling = min(GetSuppliesMax(), replenish threshold)`
+для обычной базы; для HQ — `GetSuppliesMax()`. Запас выше replenish threshold,
+например доставленный логистикой, сохраняется и может быть потрачен.
+
+`QuoteMissingRoster` возвращает также цены конкретных отсутствующих позиций.
+В очередь входят остальные действующие визиты, затем собственный roster.
+Консервативно расход начинается после расчётного прибытия последнего из этих
+покупателей; покупки сериализованы с интервалом 3 s. До каждой покупки модель
+начисляет только вместившиеся штатные пакеты; если цены не хватает, ждёт
+следующую поставку по исходной сетке времени. Поставка в точный момент покупки
+считается пришедшей перед расходом. Пакеты, потерянные при полном складе, не
+переносятся на будущее. Цена, которую нельзя накопить даже до потолка,
+отклоняется. Цикл ограничен числом недостающих бойцов, а не числом поставок.
+
+Такой порядок может завысить ETA: реальные отряды способны покупать параллельно
+и прибывать раньше. Он не обещает освобождение склада ещё идущими покупателями.
+`completion_s` — конец очереди, `wait_s` — задержка собственного отряда сверх
+пути и его времени покупки; в overflow-ветке `supply_s` показывает последний
+момент вынужденного ожидания поставки. Intentions по-прежнему не резервируют
+и не списывают supplies.
+
+Первичный кандидат дополнительно требует `travel_s < approach deadline`:
+180 s для AI, 900 s для ручного визита. Равенство исключается, потому что
+production `Tick` завершает подход при `>= deadline`. Общий срок визита
+проверяется отдельно и не расширяет срок подхода.
+
 Нулевой доход при дефиците отклоняет кандидата. Допустимы ожидание после
 подхода до 120 с и завершение в оставшийся срок визита. Выбирается минимум
 `completion_s`, затем стабильный порядок graph/services. Например, при спросе
@@ -44,7 +71,7 @@ authority, spawn point, двустороннюю HQ-связь для обычн
 заявил на неё спрос 100, запас 150 больше не считается достаточным.
 
 Это оценка, а не гарантия: она не предсказывает бой, точную длину navmesh-пути,
-изменение quick bonus, заполнение склада между пакетами, внешние расходы и
+изменение quick bonus, внешние расходы и
 задержки spawn. Фактическая оплата остаётся побойцовой и повторно проверяется
 Economy непосредственно перед transfer.
 
@@ -284,3 +311,59 @@ stability server не дошёл до roster из-за занятого stock li
 client/JIP, ручной visual gate, естественное движение между базами и
 естественный income timing этим дополнением не проверялись (`NOT RUN`).
 Итоговый статус `ACCEPTED` остаётся решением пользователя.
+
+## Исправления двух P2 замечаний PR #21 — 06.10.2026
+
+- [Предел склада](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/21#discussion_r4194335278):
+  добавлены ceiling и последовательная модель покупок для overflow-спроса.
+  Например, запас/потолок 100, спрос 200, пакет 100 каждые 60 s и подход 200 s:
+  прогноз завершения теперь 243 s вместо 206 s; deadline 230 s отклоняется.
+  Медленные покупки тоже освобождают место только в момент расхода: 20 покупок
+  по 10 дают 270 s вместо прежних 260 s. Внешний запас выше replenish threshold
+  сохраняется. Цены недостающих позиций и спрос берутся из живых визитов.
+- [Первичный срок подхода](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/21#discussion_r4194335291):
+  `SelectBarracks` применяет `CanApproach` до сравнения ETA. Для manual visit
+  путь 1000 s отклоняется даже при достаточном запасе и visit deadline 1200 s;
+  ровно 900 s тоже отклоняется, 899 s допускается.
+
+Изменены `AICF_RecruitmentSupplyForecast.c`, `AICF_InfantryRecruitSpawner.c`,
+`AICF_InfantryRecruitmentService.c`, два PowerShell-аудитора, supply fixture
+и этот документ. Новых денежных или replicated побочных эффектов нет.
+
+Проверки:
+
+- Пять прежних static audits до/после совпали; PASS у InfantryRecruitmentStatic,
+  Stage35Static, BarracksCombatContracts, DefendWaypointInputContracts.
+  Сохранён единственный baseline FAIL `STAGE4_ATTACKED_BASES`.
+- `Test-RecruitmentSupplyContracts.ps1` — PASS, 14 отрицательных мутаций
+  (прежде 10); новые правила покрывают ceiling, расход и initial approach gate.
+- Terminal Workbench production и fixture — exit 0, без script errors:
+  `review-production-workbench/`, `review-fixture-workbench-v2/`.
+- `Start-AICFRuntime.ps1 -Role Server -Variant Stock -RepositoryRoot <issueRoot>/review-stage
+  -ProfileRoot <issueRoot>/review-server-2 -AdditionalArguments
+  @('-aicfRecruitmentSupplyProbe','1','-aicfRequirePlayerForResult','0')` — exit 0.
+  Stage содержит PR Core/Arland и обновлённую supply fixture.
+- `Test-InfantryRecruitmentLog.ps1 -LogPath <console.log> -RequireSupplyPlanning
+  -RequireSupplyBounds` — PASS: 7 visits, 54 joins, 6 полных roster,
+  15/15 прежних проверок и 14/14 новых. Новые проверки выполняют production
+  `Evaluate`, `CanApproach` и два вызова `SelectBarracks` с настоящей казармой.
+  Арифметические overflow-сценарии задают контролируемые входные snapshots;
+  физическое заполнение/опустошение маленького stock склада не воспроизводилось.
+- Анализатор отверг изменённый результат 13/14 с exit 1.
+
+Полный остановленный лог: `.codex-runtime/issue20/review-server-2/logs/
+logs_2026-10-06_14-51-51/console.log` (1433 строки, 356430 байт).
+Manifest/native CLI — `review-launcher-2.txt`, анализ — `review-runtime-analysis.txt`.
+Script/VM errors отсутствуют; прежние stock asset errors и shutdown font leak
+сохранены. Все остальные пути evidence выше относятся к `.codex-runtime/issue20/`.
+
+Первый прогон `review-server` остановлен с exit -1: новые проверки прошли,
+но после тестовой отмены только пять roster достигли полного состава, а
+отменённый slot вошёл в `ORDER_RECOVERY_PENDING`. Этот прогон не считается PASS.
+В повторном сценарии fixture сразу после проверки освобождения спроса вызывает
+штатный `RequestPlayerRecruitment` и получает `RECRUITMENT_STARTED`; это явно
+заданное следующее намерение, а не проверка автоматического recovery после отмены.
+
+WCS/RHS, client/JIP, физический overflow stock склада, повтор полного lifecycle/
+stability matrix на этом исправлении и ручной visual gate — NOT RUN.
+Прежние результаты этих матриц относятся к коммиту `5920c2d`.

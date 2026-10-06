@@ -15,13 +15,17 @@ function Test-Contracts($s) {
         @('Service', '(?s)ReconsiderBarracks\(int index\).*?order.m_Donor.*?order.m_iSpawnAtMs > 0.*?REPLAN_COOLDOWN_MS.*?REPLAN_GAIN_SECONDS.*?REPLAN_GAIN_FRACTION.*?BeginInfantryRecruitment\(alternative\).*?alternative.m_iStartedAtMs = order.m_iStartedAtMs', 'BOUNDED_REPLAN'),
         @('Service', '(?s)if \(!order.IsPhysicallyPresent\(\)\).*?QuoteInfantryRecruit\(order\).*?SUPPLY_WAIT_TIMEOUT_MS.*?return "SUPPLY_WAIT_TIMEOUT"', 'BOUNDED_PHYSICAL_WAIT'),
         @('Service', '(?s)order.m_Forecast.Evaluate\(Math.Sqrt\(distanceSq\), remainingSeconds\).*?m_fCompletionSeconds >= bestCompletion', 'ETA_SELECTION_STABLE_TIE'),
+        @('Service', '(?s)Evaluate\(Math.Sqrt\(distanceSq\), remainingSeconds\).*?!order.m_Forecast.CanApproach\(playerRequested\).*?m_fCompletionSeconds >= bestCompletion', 'INITIAL_APPROACH_DEADLINE'),
+        @('Forecast', '(?s)AICF_GetRecruitmentCeiling.*?GetSuppliesMax.*?!IsHQ\(\).*?GetSuppliesReplenishThreshold', 'INCOME_CEILING'),
+        @('Forecast', '(?s)m_iOwnDemand \+ m_iOtherDemand > Math.Max\(m_fStock, m_fCeiling\).*?return EvaluateOverflow', 'OVERFLOW_DISPATCH'),
+        @('Forecast', '(?s)Math.Max\(m_fTravelSeconds, m_fOtherArrival\).*?Math.Min\(m_fCeiling, stock \+ arrived \* m_fIncome\).*?stock -= cost;.*?now \+= AICF_InfantryRecruitmentConfig.PURCHASE_INTERVAL_MS', 'CAPPED_PURCHASE_TIMELINE'),
         @('Forecast', 'm_iOwnDemand \+ m_iOtherDemand - m_fStock', 'SHARED_STOCK'),
         @('Forecast', 'Math.Ceil\(deficit / m_fIncome\)', 'DISCRETE_INCOME'),
         @('Forecast', 'm_fNextArrival \+ \(packages - 1\) \* m_fInterval', 'ACTUAL_ARRIVAL'),
         @('Forecast', 'Math.Max\(m_fTravelSeconds, m_fSupplySeconds\)', 'TRAVEL_AND_SUPPLIES'),
         @('Forecast', 'm_fIncome <= 0 \|\| m_fInterval <= 0', 'NO_INFINITE_INCOME'),
         @('Forecast', 'm_fWaitSeconds <= AICF_InfantryRecruitmentConfig.SUPPLY_HORIZON_SECONDS', 'HORIZON'),
-        @('Forecast', '(?s)AICF_GetRecruitmentIncome.*?!Replication.IsServer\(\).*?IsHQRadioTrafficPossible.*?m_fRespawnAvailableSince.*?GetSuppliesReplenishThreshold.*?GetSuppliesIncome\(\).*?GetSuppliesArrivalTimer\(\).*?GetSuppliesArrivalTime\(\)', 'STOCK_READ_ONLY_INCOME'),
+        @('Forecast', '(?s)AICF_GetRecruitmentIncome.*?!Replication.IsServer\(\).*?IsHQRadioTrafficPossible.*?m_fRespawnAvailableSince.*?AICF_GetRecruitmentCeiling.*?GetSuppliesIncome\(\).*?GetSuppliesArrivalTimer\(\).*?GetSuppliesArrivalTime\(\)', 'STOCK_READ_ONLY_INCOME'),
         @('Economy', '(?s)DebitInfantryRecruit.*?!QuoteInfantryRecruit\(order\) \|\| !order.IsPhysicallyPresent\(\).*?AddSupplies\(-order.m_iCost\)', 'TRANSACTION_UNCHANGED')
     )
     foreach ($rule in $rules) { if ($s[$rule[0]] -notmatch $rule[1]) { $rule[2] } }
@@ -30,6 +34,10 @@ function Test-Contracts($s) {
 $failures = @(Test-Contracts $sources)
 if ($failures.Count) { $failures; exit 1 }
 $mutations = @(
+    @('Service','!order.m_Forecast.CanApproach(playerRequested)','false','INITIAL_APPROACH_DEADLINE'),
+    @('Forecast','Math.Max(m_fStock, m_fCeiling)','float.MAX','OVERFLOW_DISPATCH'),
+    @('Forecast','Math.Min(m_fCeiling, stock + arrived * m_fIncome)','stock + arrived * m_fIncome','CAPPED_PURCHASE_TIMELINE'),
+    @('Forecast','GetSuppliesReplenishThreshold()','GetSuppliesMax()','INCOME_CEILING'),
     @('Spawner','cost += config.Cost(role)','cost += 10','FULL_ROLE_COST'),
     @('Service','order.m_Slot == excludedSlot','false','LIVE_DEMAND'),
     @('Service','!order.IsCurrent(order.m_Slot)','false','LIVE_DEMAND'),
@@ -47,4 +55,4 @@ foreach ($mutation in $mutations) {
     if (@(Test-Contracts $changed) -notcontains $mutation[3]) { throw "Mutation escaped: $($mutation[3])" }
     Write-Output "PASS mutation=$($mutation[3])"
 }
-Write-Output 'Recruitment supply contracts: PASS; mutations=10; runtime=NOT_RUN'
+Write-Output 'Recruitment supply contracts: PASS; mutations=14; runtime=NOT_RUN'

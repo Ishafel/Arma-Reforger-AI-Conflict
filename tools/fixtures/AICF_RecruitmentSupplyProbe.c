@@ -101,6 +101,7 @@ modded class AICF_MatchController
 
 modded class AICF_InfantryRecruitmentService
 {
+	protected int m_iBoundsPassed;
 	protected bool m_bDemandProbeChecked;
 	protected bool m_bDemandProbeReduced;
 	protected int m_iDemandProbePassed;
@@ -110,7 +111,7 @@ modded class AICF_InfantryRecruitmentService
 
 	bool AICF_DemandProbeComplete()
 	{
-		return m_iDemandProbePassed == 15 && m_bDemandProbeReduced;
+		return m_iDemandProbePassed == 15 && m_bDemandProbeReduced && m_iBoundsPassed == 14;
 	}
 
 	override void Update(AICF_FactionState us, SCR_CampaignFaction usFaction, AICF_FactionState ussr,
@@ -150,8 +151,14 @@ modded class AICF_InfantryRecruitmentService
 			if (OtherDemand(order.m_Base, null) == other) m_iDemandProbePassed++;
 			order.m_bDemandReleased = false;
 			AICF_DemandForecastChecks();
+			AICF_BoundsChecks(order);
 			CancelForSlot(order.m_Slot);
 			if (OtherDemand(order.m_Base, null) == other) m_iDemandProbePassed++;
+			// Сразу выдаём следующее намерение: эта fixture проверяет спрос,
+			// а не восстановление taskless группы между отдельными test steps.
+			string resumeReason;
+			bool resumed = RequestPlayerRecruitment(order.m_Slot, order.m_Faction, resumeReason);
+			Print(string.Format("[AICF][RECRUITMENT_SUPPLY_RESUMED] pass=%1 reason=%2", resumed, resumeReason));
 			Print(string.Format("[AICF][RECRUITMENT_SUPPLY_CHECKS] passed=%1 total=15 own=%2 other=%3 cancel_released=1",
 				m_iDemandProbePassed, own, other));
 			break;
@@ -161,6 +168,7 @@ modded class AICF_InfantryRecruitmentService
 	protected void AICF_DemandForecastChecks()
 	{
 		AICF_RecruitmentSupplyForecast poor = new AICF_RecruitmentSupplyForecast();
+		poor.m_fCeiling = 1000;
 		poor.m_iOwnDemand = 100;
 		poor.m_iMembers = 9;
 		poor.m_fStock = 10;
@@ -172,6 +180,7 @@ modded class AICF_InfantryRecruitmentService
 		poor.m_fIncome = 100;
 		if (poor.Evaluate(35, 300) && poor.m_fCompletionSeconds == 87) m_iDemandProbePassed++;
 		AICF_RecruitmentSupplyForecast rich = new AICF_RecruitmentSupplyForecast();
+		rich.m_fCeiling = 1000;
 		rich.m_iOwnDemand = 100;
 		rich.m_iMembers = 9;
 		rich.m_fStock = 150;
@@ -187,5 +196,52 @@ modded class AICF_InfantryRecruitmentService
 		rich.m_iOtherDemand = 0;
 		if (!rich.Evaluate(185, 76)) m_iDemandProbePassed++;
 		if (rich.Evaluate(185, 300) && rich.m_fCompletionSeconds == 77) m_iDemandProbePassed++;
+	}
+	protected void AICF_BoundsChecks(AICF_InfantryRecruitmentOrder order)
+	{
+		AICF_RecruitmentSupplyForecast f = new AICF_RecruitmentSupplyForecast();
+		f.m_fStock = 100;
+		f.m_fCeiling = 100;
+		f.m_fIncome = 100;
+		f.m_fInterval = 60;
+		f.m_fNextArrival = 60;
+		f.m_iOwnDemand = 200;
+		f.m_iMembers = 2;
+		f.m_aCosts.Insert(100);
+		f.m_aCosts.Insert(100);
+		if (!f.Evaluate(635, 230)) m_iBoundsPassed++;
+		if (f.Evaluate(635, 243) && f.m_fCompletionSeconds == 243) m_iBoundsPassed++;
+		f.m_iOwnDemand = 300;
+		f.m_iMembers = 3;
+		f.m_aCosts.Insert(100);
+		if (!f.Evaluate(635, 300)) m_iBoundsPassed++;
+		if (f.Evaluate(635, 303) && f.m_fCompletionSeconds == 303) m_iBoundsPassed++;
+		f.m_iOwnDemand = 200;
+		f.m_iMembers = 20;
+		f.m_aCosts.Clear();
+		for (int i; i < 20; i++) f.m_aCosts.Insert(10);
+		if (!f.Evaluate(635, 265)) m_iBoundsPassed++;
+		if (f.Evaluate(635, 270) && f.m_fCompletionSeconds == 270) m_iBoundsPassed++;
+		f.m_fCeiling = 50;
+		f.m_fStock = 150;
+		f.m_iMembers = 4;
+		f.m_aCosts.Clear();
+		for (int n; n < 4; n++) f.m_aCosts.Insert(50);
+		if (f.Evaluate(635, 243) && f.m_fCompletionSeconds == 243) m_iBoundsPassed++;
+		f.m_fStock = 50;
+		f.m_iOwnDemand = 100;
+		f.m_iMembers = 1;
+		f.m_aCosts.Clear();
+		f.m_aCosts.Insert(100);
+		if (!f.Evaluate(35, 1200)) m_iBoundsPassed++;
+		f.m_fCeiling = 1000;
+		f.m_fStock = 1000;
+		if (f.Evaluate(3035, 1200) && !f.CanApproach(true)) m_iBoundsPassed++;
+		if (f.Evaluate(2735, 1200) && !f.CanApproach(true)) m_iBoundsPassed++;
+		if (f.Evaluate(2732, 1200) && f.CanApproach(true)) m_iBoundsPassed++;
+		if (f.Evaluate(575, 300) && !f.CanApproach(false)) m_iBoundsPassed++;
+		if (!SelectBarracks(order.m_Slot, order.m_Faction, order.m_vPosition + "3035 0 0", true)) m_iBoundsPassed++;
+		if (SelectBarracks(order.m_Slot, order.m_Faction, order.m_vPosition + "2700 0 0", true)) m_iBoundsPassed++;
+		Print(string.Format("[AICF][RECRUITMENT_BOUNDS_CHECKS] passed=%1 total=14", m_iBoundsPassed));
 	}
 }

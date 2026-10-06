@@ -9,7 +9,7 @@ class AICF_InfantryRecruitSpawner : AICF_GroupSpawner
 
 	// Те же позиции, prefab fallback и цены, что у последовательных покупок.
 	bool QuoteMissingRoster(AICF_GroupSlot slot, SCR_CampaignFaction faction,
-		AICF_InfantryRecruitmentConfig config, out int cost, out int members)
+		AICF_InfantryRecruitmentConfig config, out int cost, out int members, array<int> costs = null)
 	{
 		cost = 0;
 		members = 0;
@@ -25,6 +25,7 @@ class AICF_InfantryRecruitSpawner : AICF_GroupSpawner
 			if (prefab.IsEmpty())
 				return false;
 			cost += config.Cost(role);
+			if (costs) costs.Insert(config.Cost(role));
 			members++;
 		}
 		return members > 0 && members == vacancies;
