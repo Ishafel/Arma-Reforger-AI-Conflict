@@ -1,7 +1,9 @@
 param(
     [Parameter(Mandatory = $true)][string]$LogPath,
     [switch]$RequireFullRosters,
-    [switch]$RequireMuster
+    [switch]$RequireMuster,
+    [switch]$RequireSupplyPlanning,
+    [switch]$RequireSupplyBounds
 )
 $ErrorActionPreference = 'Stop'
 $lines = Get-Content -LiteralPath $LogPath
@@ -17,6 +19,11 @@ foreach ($line in $lines) {
     $event = $Matches[1]
     $fields = @{}
     foreach ($field in [regex]::Matches($line, '(\w+)=([^\s]+)')) { $fields[$field.Groups[1].Value] = $field.Groups[2].Value }
+    if ($event -eq 'INFANTRY_RECRUITMENT_DEFERRED') {
+        if (!$fields.faction -or $fields.slot -notmatch '^\d+$' -or $fields.retry_ms -ne '60000' -or
+            $fields.reason -ne 'NO_FEASIBLE_SAFE_BARRACKS') { $failures.Add('Invalid deferred recruitment context') }
+        continue
+    }
     # Rearm относится к сохранённой истории службы после завершения визита;
     # у него намеренно нет visit token или group, только stable identity.
     if ($event -eq 'INFANTRY_RECRUITMENT_APPROACH_REARMED') {
@@ -40,6 +47,15 @@ foreach ($line in $lines) {
     $visit = $visits[$key]
     if ($visit.Finished -or $visit.Group -ne $fields.group) { $failures.Add("Stale identity $key $event") }
     switch ($event) {
+        { $_ -in @('INFANTRY_RECRUITMENT_PLAN', 'INFANTRY_RECRUITMENT_REEVALUATED') } {
+            foreach ($name in @('stock','income','income_interval_s','next_income_s','own_demand','other_demand','travel_s','supply_s','wait_s','completion_s')) {
+                $value = 0.0
+                if (!$fields.ContainsKey($name) -or ![double]::TryParse($fields[$name], [Globalization.NumberStyles]::Float,
+                    [Globalization.CultureInfo]::InvariantCulture, [ref]$value) -or $value -lt 0 -or [double]::IsNaN($value)) {
+                    $failures.Add("Invalid planning field $key $name")
+                }
+            }
+        }
         'INFANTRY_RECRUITMENT_ARRIVED' { $visit.Arrived = $true }
         'INFANTRY_RECRUIT_SPAWN_REQUESTED' {
             if (!$visit.Arrived -or $visit.Pending -or [int]$fields.paid -ne 0) { $failures.Add("Invalid spawn $key") }
@@ -78,6 +94,12 @@ if ($RequireFullRosters) {
     if (!($lines -match '\[RECRUIT_PROBE\].*finished=1 full_rosters=1')) { $failures.Add('Probe did not complete') }
 }
 if (!$visits.Count) { $failures.Add('No recruitment visits') }
+if ($RequireSupplyBounds -and !($lines -match '\[RECRUITMENT_BOUNDS_CHECKS\] passed=14 total=14')) { $failures.Add('Missing capacity/approach boundary checks') }
+if ($RequireSupplyPlanning) {
+    if (!($lines -match '\[RECRUITMENT_SUPPLY_CHECKS\] passed=15 total=15')) { $failures.Add('Missing demand/forecast checks') }
+    if (!($lines -match '\[RECRUITMENT_SUPPLY_PROBE\] finished=1 full=6 stable=1 demand_checks=1')) { $failures.Add('Competing rosters did not complete') }
+    if (!($lines -match '\[INFANTRY_RECRUITMENT_PLAN\].*other_demand=[1-9]\d*')) { $failures.Add('No competing demand observed') }
+}
 if ($RequireMuster) {
     if (!($lines -match '\[MUSTER_PROBE\] waited_ms=\d+ held=1 us=1 ussr=1')) { $failures.Add('Missing physical hold before barracks') }
     if (!($lines -match '\[MUSTER_PROBE\] finished=1 held_until_full=1 full_rosters=1')) { $failures.Add('Muster did not hold until full rosters') }
