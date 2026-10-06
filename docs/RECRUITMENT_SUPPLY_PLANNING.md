@@ -182,3 +182,105 @@ Manifest сохранён в `pr-server-launcher.txt`. Классы остато
 открытыми: нужны полный capture/death/replacement matrix и проверка отсутствия
 метаний между двумя физическими базами при колебаниях supplies. Численные
 forecast checks и проверки stamps не объявляются заменой этих сценариев.
+
+## Дополнительная приёмочная матрица для критериев 4 и 5
+
+Первая публикация не проверяла эти критерии полностью: изменение сохранённых
+stamps не доказывает игровой lifecycle, а повторный расчёт формулы не доказывает
+устойчивость действующего визита. Для закрытия пробела добавлены отдельные
+terminal fixtures и анализатор `tools/Test-RecruitmentAcceptanceLog.ps1`.
+Production gameplay-код в этом дополнении не меняется.
+
+`AICF_RecruitmentLifecycleProbe.c` проверяет настоящие события: отмену визита,
+смену владельца через native `SetFaction` с последующим production update,
+`Kill()` единственного бойца, штатную replacement deployment в тот же slot,
+новый визит replacement-группы и набор до десяти бойцов. Смерть проверяется
+на первом наблюдаемом tick с пустым живым roster: `Kill()` не синхронен с
+обновлением списка живых агентов. Fixture не меняет stamps заказа.
+
+`AICF_RecruitmentStabilityProbe.c` выбирает две настоящие базы из stock graph,
+создаёт зарегистрированные ONLINE казармы и вызывает production manual visit.
+Ручной путь позволяет изолировать критерий выбора от ограничения 500 m;
+forecast, demand, `ReconsiderBarracks`, cooldown и порог выигрыша общие с AI.
+На каждом sample выбор повторяется десять раз с теми же входами. Запас второй
+базы колеблется на ±1 supply; минимум два production пересмотра после 60 s
+должны встретить более выгодную альтернативу и сохранить прежний token.
+После 125 s запас альтернативы увеличивается существенно: ожидается ровно
+одно переключение и перенос спроса со старой базы на новую.
+
+Управляемые условия stability: income snapshot зафиксирован fixture на
+0.1 supply/s с дискретными пакетами раз в секунду. Это даёт воспроизводимые
+10 s изменения ETA на 1 supply. Supplies читаются с настоящих баз, решение
+и смена waypoint выполняются production кодом; fixture не заменяет selector
+или `ReconsiderBarracks`. Боец физически перемещается fixture, чтобы исключить
+помехи от stuck recovery. Эти проверки не являются evidence навигации,
+естественной периодичности native income, клиентского интерфейса или WCS.
+
+В отдельном `stability-stage` находятся копии PR Core/Arland и обе fixtures
+в `AIConflictCore/Scripts/Game/AIConflict/Diagnostics/`. Серверы запускаются
+последовательно: параметр launcher `ServerPort` используется для client readiness
+и сам по себе не меняет stock server listener 2001.
+
+```powershell
+& ./tools/Start-AICFRuntime.ps1 -Role Server -Variant Stock `
+  -RepositoryRoot "$issueRoot/stability-stage" `
+  -ProfileRoot "$issueRoot/lifecycle-server-final" `
+  -AdditionalArguments @('-aicfRecruitmentLifecycleProbe','1','-aicfRequirePlayerForResult','0')
+
+& ./tools/Start-AICFRuntime.ps1 -Role Server -Variant Stock `
+  -RepositoryRoot "$issueRoot/stability-stage" `
+  -ProfileRoot "$issueRoot/stability-server-final" `
+  -AdditionalArguments @('-aicfRecruitmentStabilityProbe','1','-aicfRequirePlayerForResult','0')
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-RecruitmentAcceptanceLog.ps1 `
+  -Mode Lifecycle -LogPath <полный-остановленный-lifecycle-console.log>
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-RecruitmentAcceptanceLog.ps1 `
+  -Mode Stability -LogPath <полный-остановленный-stability-console.log>
+```
+
+Результаты 06.10.2026 на PR-коде:
+
+| Gate / команда | Verdict |
+|---|---|
+| Шесть `Test-{InfantryRecruitmentStatic,Stage35Static,Stage4Static,BarracksCombatContracts,DefendWaypointInputContracts,RecruitmentSupplyContracts}.ps1` | Выводы до/после полностью совпадают; пять PASS, сохранён `STAGE4_ATTACKED_BASES` FAIL |
+| Terminal Workbench Validate/Compile с обеими fixtures | PASS, exit 0; `acceptance-workbench-verified/` |
+| `Start-AICFRuntime.ps1`, lifecycle | exit 0; 10/10 случаев |
+| `Test-RecruitmentAcceptanceLog.ps1 -Mode Lifecycle` | PASS, exit 0 |
+| `Start-AICFRuntime.ps1`, stability | exit 0; 124 samples × 10 повторов; 60 samples с лучшей альтернативой |
+| `Test-RecruitmentAcceptanceLog.ps1 -Mode Stability` | PASS, exit 0; 5 случаев |
+| `git diff --cached --check` | PASS |
+
+Lifecycle log: `lifecycle-server-final/logs/logs_2026-10-06_13-59-26/console.log`
+(1431 строк, 342382 байт). Stable slot `0` получил replacement generation `2`
+и новую group entity; смерть сняла спрос на первом наблюдаемом tick, старый
+визит завершился, новый набрал девять бойцов, завершение освободило спрос.
+
+Stability log: `stability-server-final/logs/logs_2026-10-06_14-01-47/console.log`
+(1751 строка, 456239 байт). На 60.200 и 90.250 s кандидат выигрывал 10 s,
+но production пересмотры сохранили token `258`. После увеличения запаса
+альтернативы до 135 supplies на 150.350 s выполнен единственный replan:
+ETA 157 → 103.837 s, выигрыш 53.163 s при пороге 39.25 s. Спрос 125 перенесён
+с base `34` на base `54`; старый спрос равен нулю. Это реальные runtime IDs
+данного прогона, а не привязки production к карте.
+
+Все пути evidence относятся к `.codex-runtime/issue20/`. Manifest и native CLI:
+`lifecycle-launcher-final.txt`, `stability-launcher-final.txt`; результаты
+анализаторов — `acceptance-{lifecycle,stability}-result.txt`.
+Проверены полные остановленные логи: script/VM errors отсутствуют. Сохранились
+прежние stock resource сообщения (`Gizmo3D/sphere.xob`, `SlidingTrackMaterial`,
+`Parent`, duplicate Hierarchy) и один font leak при shutdown в каждом runtime.
+Это не полностью чистый engine log.
+
+Подготовительные прогоны сохранены и не считаются PASS: первые lifecycle
+попытки прерваны из-за разрыва между тестовыми действиями; `lifecycle-server-3`
+дал 9/10 из-за слишком ранней синхронной проверки после `Kill()`. Первый
+stability server не дошёл до roster из-за занятого stock listener, второй
+остановлен для усиления проверки совпадения колебаний с моментами replan.
+Отрицательные проверки анализатора должны отвергать неполную матрицу,
+проваленную identity, незавершённый лог, нестабильный sample и отсутствие
+выгодного кандидата в моменты production reevaluation.
+
+Критерии 4 и 5 подтверждены в описанном server-side объёме. WCS/RHS,
+client/JIP, ручной visual gate, естественное движение между базами и
+естественный income timing этим дополнением не проверялись (`NOT RUN`).
+Итоговый статус `ACCEPTED` остаётся решением пользователя.
