@@ -132,26 +132,28 @@ master после штатного placement callback.
 ## Зависимости
 
 Проверены установленные Reforger/Server/Tools `1.8.0.13`, RHS Status Quo
-`0.16.5208` (все три RHS пакета) и следующие пакеты WCS:
+`0.16.5236` (все три RHS пакета) и следующие пакеты WCS:
 
 | Пакет | GUID | Версия |
 |---|---|---|
-| WCS_NATO | `615806DC6C57AF02` | 8.2.0 |
-| WCS_RU | `615818DA7C0343FD` | 8.2.1 |
-| WCS_Weapon_Scripts | `68F006D910E7546F` | 8.2.0 |
-| WCS_Attachments | `61C74A8B647617DA` | 8.2.0 |
-| WCS_Scopes | `62A668F513428630` | 8.2.0 |
-| WCS_Sounds | `631C3C1AEE9C90BC` | 8.2.0 |
-| WCS_Armaments | `629B2BA37EFFD577` | 8.2.1 |
-| WCS_SpaceCore | `5E389BB9F58B79A6` | 8.2.1 |
-| WCS_M1A1 | `5D1880C4AD410C14` | 8.2.3 |
-| WCS_T-72 | `5E0AB16BEB16D6A4` | 8.2.1 |
-| WCS_Weapons | `65CF7AE8574E06D2` | 8.2.1 |
-| WCS_RHS_Weapons | `65F929DF622BAD50` | 8.2.1 |
-| WCS_Clothing | `6152CB0BD0684837` | 8.2.0 |
-| WCS_Clothing_Assets | `6602C1EC7E5A4A87` | 8.2.0 |
-| WCS_BMP-3 | `5B383D4CB27E0D54` | 8.2.1 |
-| WCS_M2A2 | `63120AE07E6C0966` | 8.2.0 |
+| WCS_NATO | `615806DC6C57AF02` | 8.3.0 |
+| WCS_RU | `615818DA7C0343FD` | 8.3.0 |
+| WCS_Weapon_Scripts | `68F006D910E7546F` | 8.3.0 |
+| WCS_Attachments | `61C74A8B647617DA` | 8.3.0 |
+| WCS_Scopes | `62A668F513428630` | 8.3.0 |
+| WCS_Sounds | `631C3C1AEE9C90BC` | 8.3.0 |
+| WCS_Armaments | `629B2BA37EFFD577` | 8.3.0 |
+| WCS_SpaceCore | `5E389BB9F58B79A6` | 8.3.0 |
+| WCS_M1A1 | `5D1880C4AD410C14` | 8.3.0 |
+| WCS_T-72 | `5E0AB16BEB16D6A4` | 8.3.0 |
+| WCS_Weapons | `65CF7AE8574E06D2` | 8.3.0 |
+| WCS_RHS_Attachments | `6A717EEA63A35E67` | 8.3.0 |
+| WCS_RHS_Scopes | `3B8081D9CAD979D2` | 8.3.0 |
+| WCS_RHS_Weapons | `65F929DF622BAD50` | 8.3.0 |
+| WCS_Clothing | `6152CB0BD0684837` | 8.3.0 |
+| WCS_Clothing_Assets | `6602C1EC7E5A4A87` | 8.3.0 |
+| WCS_BMP-3 | `5B383D4CB27E0D54` | 8.3.0 |
+| WCS_M2A2 | `63120AE07E6C0966` | 8.3.0 |
 
 Пакеты пехоты и БМП в Workshop:
 
@@ -170,6 +172,37 @@ master после штатного placement callback.
 Все перечисленные зависимости входят в launcher graph. Дополнительно
 установленный `WCS_M2A2_Upgrade` не требуется и в проверенный graph не включён.
 Установленные файлы не изменяются, контент не копируется в репозиторий.
+
+Проверка обновлений 06.10.2026: версии выше взяты из установленных
+`ServerData.json`, зависимости сверены с `addon.gproj`. Два новых пакета
+`WCS_RHS_Attachments` и `WCS_RHS_Scopes` требуются `WCS_RHS_Weapons 8.3.0`;
+они явно включены в проект и launcher. Полный установленный граф замкнут.
+Из `AICF_WCSItemResources` удалены три отсутствующих в новой базе ресурса:
+`Rifle_SVD_1P21_7N14.et`, `PU_Mount_01.et`, `Rifle_HK416A5.et`.
+Другие варианты этого оружия и исходные faction catalogs сохраняются.
+
+Повторный server probe: 3347/3347 ссылок загружаются, infantry 20/20,
+FIA 13/13, default player kits 2/2, cache guards PASS. Native arsenal
+содержит 13/13 проверяемых предметов каждой стороны; heavy factory registry
+доступен для 68/68 US и 5/5 USSR tracked entries. Vehicle catalog probe
+подтвердил сохранение исходных entries, индексов и metadata (`failures=0`).
+Шесть вкладок источников двух сторон прошли catalog checks. Это серверные
+проверки, а не доказательство покупки техники или работы клиентского UI.
+
+Static до/после: WCSIntegration, RHSIntegration, AILoadout,
+PersonalLoadoutContracts, InfantryRecruitment, Stage35 и RuntimeLauncher —
+PASS. Stage4 сохраняет единственный исходный FAIL `STAGE4_ATTACKED_BASES`.
+Terminal Workbench Validate production WCS и stage — PASS.
+Полный остановленный WCS console log: 127 → 103 сообщения E,
+исчезли 24 сообщения о трёх удалённых ссылках, новых категорий нет.
+Оставшиеся WORLD/ENTITY/RESOURCES ошибки зависимостей не устранены;
+SCRIPT E/F, ENGINE F и VM exceptions отсутствуют.
+Отдельный EveronNorthRHS server probe без WCS: roster ready, FIA 4/4,
+native exit 0; world/pathfinding/resource diagnostics сохранены.
+Команды, manifests, версии и полные логи:
+`.codex-runtime/dependency-update-20261006/`.
+Client, JIP, ручной visual, packaged build, длительный soak и все остальные
+runtime-сценарии с этими версиями — **NOT RUN**.
 
 ## Запуск и проверки
 

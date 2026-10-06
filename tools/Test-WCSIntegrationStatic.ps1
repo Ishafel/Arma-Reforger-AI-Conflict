@@ -16,6 +16,9 @@ $playerKit = Get-Content "$addon/Scripts/Game/AIConflictArlandWCSRHS/AICF_WCSPla
 $pmc = Get-Content (Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/Content/AICF_RHSPMCArmament.c') -Raw
 $launcher = Get-Content (Join-Path $RepositoryRoot 'tools/Start-AICFRuntime.ps1') -Raw
 Check 'WCS_PROJECT_ID' ($project -match 'GUID "A1CF260928100001"')
+foreach ($dependency in @('6A717EEA63A35E67', '3B8081D9CAD979D2')) {
+    Check "WCS_83_DEPENDENCY_$dependency" ($project.Contains('"' + $dependency + '"') -and $launcher.Contains($dependency))
+}
 foreach ($dependency in @('58D0FB3206B6F859','9178E5822AFE48EA','B52C5F6AEDBF423E','9F88011DA22B471C','615806DC6C57AF02','615818DA7C0343FD','629B2BA37EFFD577','5E389BB9F58B79A6','5D1880C4AD410C14','5E0AB16BEB16D6A4','65CF7AE8574E06D2','65F929DF622BAD50','6602C1EC7E5A4A87','6152CB0BD0684837','5B383D4CB27E0D54','63120AE07E6C0966')) {
     Check "WCS_DEPENDENCY_$dependency" ($project.Contains('"' + $dependency + '"'))
 }

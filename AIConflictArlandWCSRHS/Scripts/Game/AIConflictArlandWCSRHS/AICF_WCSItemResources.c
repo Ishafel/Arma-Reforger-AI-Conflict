@@ -1,4 +1,5 @@
-// Ссылки на предметы установленных WCS 8.2.x. Контент принадлежит зависимостям.
+// Ссылки на предметы WCS; проверены с 8.3.0 и RHS 0.16.5236.
+// Удалённые vendor prefab не включаются. Контент принадлежит зависимостям.
 // Admission требует ближайшего предка в native faction ITEM catalog.
 class AICF_WCSItemResources
 {
@@ -429,7 +430,6 @@ class AICF_WCSItemResources
 			"{20ADE54EEAB9258C}Prefabs/Characters/Uniforms/Pants_CryeG3_RHS/MC_Black/Pants_CryeG3_RHS_Empty_MC_Black_wear.et",
 			"{20D29B58DABE99D9}Prefabs/Characters/Uniforms/Shirt_FROG_RHS/Shirt_FROG_RHS_MC_wear.et",
 			"{20DDB7ABE9F2FC00}Prefabs/Weapons/Rifles/MPX/Rifle_MPX_MOD1.et",
-			"{20E0F308CE8953F8}Prefabs/Weapons/Rifles/SVD/Rifle_SVD_1P21_7N14.et",
 			"{20E929B26EF115DE}Prefabs/Weapons/Rifles/AKM/Rifle_AKMN_MOD2_FDE.et",
 			"{20F09CE96441334C}Prefabs/Weapons/Rifles/XM7/Rifle_XM7_BLK.et",
 			"{20F7D8D0E811024C}Prefabs/Weapons/Magazines/556x45_RHS_STANAG_SoftPuller_30rnd/Magazine_556x45_RHS_STANAG_SoftPuller_30rnd_Last_5Tracer_M995_M856.et",
@@ -2001,7 +2001,6 @@ class AICF_WCSItemResources
 			"{9735297405AD1DBE}Prefabs/Weapons/Rifles/AK74M/Rifle_AK105_B10M_B19N_B33.et",
 			"{974D7BDD95883289}Prefabs/Items/Equipment/Backpacks/Backpack_PouchZipOnPanel2/Backpack_PouchZipOnPanel2_OD.et",
 			"{9752DD51391043E9}Prefabs/Weapons/Rifles/AK74M/variants/Rifle_AK74M_B10M_B19N_NPZ_Rail_PERST.et",
-			"{977554D12D18F4B9}Prefabs/Weapons/Attachments/Mounts/PU_Mount_01.et",
 			"{977971B15A20AAA1}Prefabs/Weapons/Magazines/556x45_STANAG_FDE_30rnd/Magazine_556x45_STANAG_FDE_30rnd_Last_5Tracer_M855A1_M856.et",
 			"{97818448994FB9A5}Prefabs/Weapons/Magazines/9x19_RHS_M17_17rnd/Magazine_9x19_M17_17rnd_Ball_M882.et",
 			"{979262A36C5E73CE}Prefabs/Weapons/Rifles/AKM/Rifle_AKMN_MOD2.et",
@@ -3351,7 +3350,6 @@ class AICF_WCSItemResources
 			"{FAFBABE991A32AF0}Prefabs/Characters/Uniforms/Jacket_VKPO_6B51/Jacket_VKPO_6B51_ATACSAU.et",
 			"{FB0222D4CA72A3D3}Prefabs/Weapons/Rifles/M4A1/Variants/Forecon/Rifle_M4A1_RAS_ERGO_Forecon3.et",
 			"{FB02C24FA3618379}Prefabs/Weapons/Magazines/556x45_PMAG_Window_FDE_30rnd/Magazine_556x45_PMAG_Window_FDE_30rnd_Last_5Tracer_M855_M856.et",
-			"{FB1B9943E7809D80}Prefabs/Weapons/Rifles/HK416A5/Rifle_HK416A5.et",
 			"{FB221B8449217E36}Prefabs/Characters/Uniforms/Shirt_CryeG3_Rolled/Shirt_CryeG3_Rolled_ATACSAU_wear.et",
 			"{FB391CE465E49D35}Prefabs/Weapons/Magazines/545x39_AK74_Polymer_20rnd/Magazine_545x39_AK74_Polymer_20rnd_4Ball_1Tracer_7N6_7T3.et",
 			"{FB4C5D429348F1A2}Prefabs/Weapons/MachineGuns/RPK74M/MG_RPK74M_NPZ.et",
