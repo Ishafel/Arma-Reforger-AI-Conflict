@@ -26,7 +26,7 @@ World, whitelist, radio policy, callsign adapter и campaign lifecycle
 ## Запуск
 
 Из корня репозитория, после терминального Workbench Validate нового
-`AIConflictEveronWCSRHS/addon.gproj` по `docs/DEVELOPMENT.md`:
+`AIConflictEveronWCSRHS/addon.gproj` по `agent-notes/DEVELOPMENT.md`:
 
 ```powershell
 ./tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronWCSRHS
@@ -41,7 +41,7 @@ launcher проверяет живой сервер, точный CLI и `ROSTER
 
 ## Проверки — 06.10.2026
 
-Команда `pwsh -NoProfile -File tools/Test-<Audit>Static.ps1`:
+Команда `pwsh -NoProfile -File tests/static/Test-<Audit>Static.ps1`:
 ScenarioHeaders, EveronNorth, WCSIntegration, RHSIntegration,
 RuntimeLauncher и Localization — PASS до и после, exit 0.
 ScenarioHeaders проверяет наследование обоих headers и отсутствие новых

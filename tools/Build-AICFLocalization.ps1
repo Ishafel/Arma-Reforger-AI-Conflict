@@ -3,7 +3,7 @@
     [switch]$Check
 )
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'AICFLocalization.Common.ps1')
+. (Join-Path $PSScriptRoot 'lib/AICFLocalization.Common.ps1')
 $entries = Read-AICFLocalization $RepositoryRoot
 foreach ($language in @('en_us', 'ru_ru')) {
     $lines = @('StringTableRuntime', '{', "`tIds", "`t{")

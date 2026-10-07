@@ -20,7 +20,7 @@ if ($Role -eq 'Server') {
     $addons = @('AIConflictCore', 'AIConflictArland', 'AIConflictEveron', 'AIConflictArlandRHS', 'AIConflictEveronRHS')
     foreach ($addon in $addons) {
         if (-not (Test-Path -LiteralPath (Join-Path $repository "$addon/resourceDatabase.rdb"))) {
-            throw "Отсутствует локальный индекс $addon/resourceDatabase.rdb. Сначала выполните терминальный Workbench Validate/Compile по docs/DEVELOPMENT.md."
+            throw "Отсутствует локальный индекс $addon/resourceDatabase.rdb. Сначала выполните терминальный Workbench Validate/Compile по agent-notes/DEVELOPMENT.md."
         }
     }
     New-Item -ItemType Directory -Path $source -Force | Out-Null
@@ -39,7 +39,7 @@ if ($Role -eq 'Server') {
             }
         }
     }
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fixtures/AICF_RHSWardrobeShowcase.c') `
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../tests/fixtures/AICF_RHSWardrobeShowcase.c') `
         -Destination (Join-Path $source 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/AICF_RHSWardrobeShowcase.c')
     & $launcher -Role Server -Variant EveronNorthRHS -RepositoryRoot $source `
         -ProfileRoot (Join-Path $session 'server') `
