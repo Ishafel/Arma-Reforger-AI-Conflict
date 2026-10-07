@@ -82,13 +82,10 @@ Enforce fixture не входят в автоматическую матрицу
 
 ## Локальные файлы вне набора
 
-На момент реорганизации 2026-10-07 обнаружены четыре ignored/untracked файла.
-Они сохранены по прежним путям, с отдельными точными ignore rules:
+В `tools/` остаются два ignored/untracked скрипта с отдельными точными ignore rules:
 
 - `tools/Test-FIAPatrolContracts.ps1`
 - `tools/Test-FIAPatrolLog.ps1`
-- `tools/fixtures/AICF_FIAPatrolProbe.c`
-- `tools/fixtures/AICF_ReplicationHierarchyProbe.c`
 
 Статус: **LOCAL ONLY / NOT RUN**, не доступны из чистого checkout и не являются
 зависимостями поддерживаемого набора. Их происхождение и готовность не установлены;

@@ -16,7 +16,5 @@
 # Статус и процедура переноса: agent-notes/TOOLS.md.
 /tools/Test-FIAPatrolContracts.ps1
 /tools/Test-FIAPatrolLog.ps1
-/tools/fixtures/AICF_FIAPatrolProbe.c
-/tools/fixtures/AICF_ReplicationHierarchyProbe.c
 /docs/
 /workshop/
