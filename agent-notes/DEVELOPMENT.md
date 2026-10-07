@@ -89,7 +89,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Start-AICFRuntime.
 ```
 
 Сохрани напечатанные `AICF_RUNTIME_PROFILE` и `AICF_RUNTIME_MANIFEST_JSON`.
-Для клиентской проверки укажи этот server profile и тот же Variant в другой сессии:
+Для локальной клиентской проверки укажи этот server profile и тот же Variant
+в другой сессии:
 
 ```powershell
 $serverProfileRoot = '<абсолютный AICF_RUNTIME_PROFILE работающего сервера>'
@@ -99,12 +100,91 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Start-AICFRuntime.
 
 Placeholder заменяется фактическим путём. Перед подключением launcher проверяет
 свежий server log, точный `CLI Params`, живой server process и `[ROSTER_READY]`.
-Порт по умолчанию — 2001; другой `-ServerPort` должен совпадать у обеих ролей.
 `-ClientAddress` задаёт адрес. Не обходи readiness gate ручным native запуском.
+
+**`-ServerPort` не настраивает серверный listener.** Этот параметр используется
+для клиентского подключения и readiness-проверки; роль `Server` не передаёт
+его как настройку порта серверному executable. Например, `-ServerPort 2022`
+сам по себе оставит stock listener на 2001, а клиент будет ждать 2022.
+Указывай фактический порт работающего сервера (по умолчанию 2001). Другой порт
+сначала должен быть отдельно настроен и подтверждён на сервере; разные значения
+`-ServerPort` не изолируют параллельные серверы. Без отдельной настройки listener
+запускай их последовательно.
 
 `-AICommanderMode BOTH|US|USSR` задаётся при старте и не меняется в матче.
 `-LoadoutLibraryPath <старый-profile>/profile/AICF_Loadouts` импортирует библиотеку
 шаблонов в свежий server profile; manifest фиксирует файлы и SHA-256.
+
+## Удалённый source-сервер и Diag/retail
+
+`-Role Client` по умолчанию запускает `ArmaReforgerSteamDiag.exe`. Для сервера
+с обычным (retail) бинарником используй `-UseRetailClient`: он выбирает
+`ArmaReforgerSteam.exe`, сохраняя addon graph. Смешивание Diag/retail отклоняется
+движком с `isDevBinary value does not match`; совпадения номера версии недостаточно.
+Локальная роль `Server` этого launcher выбирает `ArmaReforgerServerDiag.exe`;
+`-UseRetailClient` не переключает серверный executable.
+
+Для удалённого сервера используй `-RemoteReadinessProbe` вместо локального
+`-ServerProfileRoot`. Сам `-ClientAddress` не переключает readiness на удалённый
+хост. Подготовь доверенный локальный `.ps1` probe и согласованный source commit:
+
+```powershell
+$remoteAddress = '<IP удалённого сервера без порта>'
+$remotePort = 2001 # Фактический, отдельно подтверждённый server listener
+$expectedCommit = '<полный source SHA из 40 строчных hex-символов>'
+$probePath = '<абсолютный путь к доверенному локальному readiness probe.ps1>'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Start-AICFRuntime.ps1 `
+  -Role Client -Variant Stock -UseRetailClient `
+  -ClientAddress $remoteAddress -ServerPort $remotePort `
+  -RemoteReadinessProbe $probePath -ExpectedSourceCommit $expectedCommit
+```
+
+Замени placeholders, выбери тот же `-Variant`, что на сервере; для Diag-сервера
+опусти `-UseRetailClient`. На клиенте нужен подготовленный локальный source graph
+с согласованными исходниками и внешними пакетами. Проверки локальных
+`-ServerRoot`, `-GameRoot` и source resource databases сохраняются даже при
+удалённом подключении; при нестандартной установке передай нужные пути.
+
+Probe выполняется с правами пользователя и получает именованные параметры
+`Address`, `Port`, `ExpectedSourceCommit`. Через аутентифицированный терминальный
+канал он обязан проверить на удалённом хосте:
+
+- текущий живой server process и фактический listener по указанному адресу/порту;
+- точный `CLI Params`, свежие profile/log этого процесса и `[ROSTER_READY]`;
+- развёрнутый source SHA и хеши исходников, сценарий и полный addon graph;
+- совпадение версий игры и внешних RHS/WCS пакетов с клиентом и совместимый
+  тип бинарников Diag/retail.
+
+Проверяется действующий процесс с его текущими исходниками и логом. Статический
+сохранённый JSON или копия старого лога не являются реализацией probe.
+Адреса, SSH-настройки и конкретный probe ведутся в эксплуатационном репозитории;
+пароли и приватные ключи не передаются в аргументах launcher.
+
+Probe возвращает **один PowerShell-объект**, а не строку JSON. Не добавляй строки
+диагностики в success pipeline рядом с этим объектом.
+
+| Поле | Контракт |
+|---|---|
+| `ok` | Boolean `$true` только после всех удалённых проверок |
+| `commit` | Проверенный source SHA, совпадающий с `ExpectedSourceCommit` |
+| `address` | Проверенный адрес, совпадающий с `ClientAddress` |
+| `port` | Проверенный порт listener, совпадающий с `ServerPort` |
+| `process_id` | Положительный PID проверенного живого server process |
+| `observed_at` | Числовое время наблюдения в Unix UTC seconds |
+| `log` | Путь к полному текущему server log на удалённом хосте |
+
+Launcher проверяет `ok`, SHA, адрес, порт, положительный PID и возраст ответа:
+не более 30 секунд, допустимое опережение часов — до 5 секунд; `NaN`/Infinity
+отклоняются. Исключение, отрицательный или неполный ответ прерывают подключение.
+Сам launcher не читает удалённый `log` и не проверяет процесс по сети: эти проверки
+принадлежат probe. Принятые PID/SHA/log печатаются в `REMOTE_SERVER_READY`;
+сохрани их вместе с manifest и полными server/client logs.
+
+`-DryRun` только печатает план: он не вызывает probe и не подтверждает readiness,
+совместимость бинарников или успешное подключение. Контракты режимов проверяет
+`tools/Test-RuntimeLauncherStatic.ps1`: retail executable, положительный ответ
+probe и отказ для ложного/неполного, устаревшего/будущего ответа, неверных
+SHA/адреса/порта и неположительного PID. Это статика без реального remote runtime.
 
 ## Завершение работы
 
