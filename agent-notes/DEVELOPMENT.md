@@ -5,6 +5,9 @@ Arma Reforger, Server и Tools одной версии, для API helper — Gi
 Перед изменением запиши `git status`, branch/commit и фактические версии.
 Создай отдельную ветку задачи по [AGENTS.md](../AGENTS.md).
 
+Назначение и статус утилит `tools/`, структура `tests/` и общий offline runner —
+в [TOOLS.md](TOOLS.md). Runtime probes выбираются по [TEST_FIXTURES.md](TEST_FIXTURES.md).
+
 ## API reference
 
 Закреплённый Script Diff — `1.8.0.13`, commit
@@ -182,7 +185,7 @@ Launcher проверяет `ok`, SHA, адрес, порт, положител�
 
 `-DryRun` только печатает план: он не вызывает probe и не подтверждает readiness,
 совместимость бинарников или успешное подключение. Контракты режимов проверяет
-`tools/Test-RuntimeLauncherStatic.ps1`: retail executable, положительный ответ
+`tests/static/Test-RuntimeLauncherStatic.ps1`: retail executable, положительный ответ
 probe и отказ для ложного/неполного, устаревшего/будущего ответа, неверных
 SHA/адреса/порта и неположительного PID. Это статика без реального remote runtime.
 

@@ -120,6 +120,11 @@ Evidence находится в `.codex-runtime/issue20/`. Полные baseline/
 PowerShell-аудит запускался как
 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/<script>.ps1`.
 
+Это исторические пути и результаты. После реорганизации команды берутся из
+[TOOLS.md](TOOLS.md): `tests/static/`, `tests/contracts/`, `tests/log-audits/`;
+probes — в `tests/fixtures/`. Упомянутый ниже `Test-TemporaryHoldContracts.ps1`
+в текущем checkout отсутствует и не входит в поддерживаемый набор.
+
 | Команда / gate | До | После |
 |---|---|---|
 | `Test-InfantryRecruitmentStatic.ps1` | PASS, 0 | PASS, 0 |
@@ -215,7 +220,7 @@ forecast checks и проверки stamps не объявляются заме�
 Первая публикация не проверяла эти критерии полностью: изменение сохранённых
 stamps не доказывает игровой lifecycle, а повторный расчёт формулы не доказывает
 устойчивость действующего визита. Для закрытия пробела добавлены отдельные
-terminal fixtures и анализатор `tools/Test-RecruitmentAcceptanceLog.ps1`.
+terminal fixtures и анализатор `tests/log-audits/Test-RecruitmentAcceptanceLog.ps1`.
 Production gameplay-код в этом дополнении не меняется.
 
 `AICF_RecruitmentLifecycleProbe.c` проверяет настоящие события: отмену визита,
@@ -259,9 +264,9 @@ forecast, demand, `ReconsiderBarracks`, cooldown и порог выигрыша 
   -ProfileRoot "$issueRoot/stability-server-final" `
   -AdditionalArguments @('-aicfRecruitmentStabilityProbe','1','-aicfRequirePlayerForResult','0')
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-RecruitmentAcceptanceLog.ps1 `
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/log-audits/Test-RecruitmentAcceptanceLog.ps1 `
   -Mode Lifecycle -LogPath <полный-остановленный-lifecycle-console.log>
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-RecruitmentAcceptanceLog.ps1 `
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/log-audits/Test-RecruitmentAcceptanceLog.ps1 `
   -Mode Stability -LogPath <полный-остановленный-stability-console.log>
 ```
 

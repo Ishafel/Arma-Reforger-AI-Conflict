@@ -262,19 +262,19 @@ profile, печатает `AICF_RUNTIME_MANIFEST_JSON`. Предваритель
 не подключается.
 
 ```powershell
-pwsh -NoProfile -File tools/Test-WCSIntegrationStatic.ps1
-pwsh -NoProfile -File tools/Test-RHSIntegrationStatic.ps1
-pwsh -NoProfile -File tools/Test-RuntimeLauncherStatic.ps1
+pwsh -NoProfile -File tests/static/Test-WCSIntegrationStatic.ps1
+pwsh -NoProfile -File tests/static/Test-RHSIntegrationStatic.ps1
+pwsh -NoProfile -File tests/static/Test-RuntimeLauncherStatic.ps1
 ```
 
 `Test-WCSIntegrationStatic` проверяет project/catalog boundaries, authority,
 inventory transaction и отсутствие отложенного overwrite. Fixture
-`tools/fixtures/AICF_WCSCatalogProbe.c` копируется **только в отдельный stage**,
+`tests/fixtures/AICF_WCSCatalogProbe.c` копируется **только в отдельный stage**,
 валидируется Workbench и запускается canonical launcher с `-aicfWCSProbe 1`.
 Она проверяет исходный порядок RHS до дополнения, отсутствие дубликатов,
 загрузку WCS ресурсов, native цену/слоты там, где spawner data существуют,
 и закрывает сервер после `ROSTER_READY`.
-Для полного теста добавляется `tools/fixtures/AICF_WCSInfantryProbe.c` с
+Для полного теста добавляется `tests/fixtures/AICF_WCSInfantryProbe.c` с
 `-aicfWCSInfantryProbe 1`: два roster по 10 ролей создаются через production
 async spawn. Проверяются выданный kit, сохранённые медицинские/ПТ/радио
 предметы, совместимый боезапас, идемпотентность, точный baseline редактора и наличие всех обязательных вещей в ITEM catalog; дополнительно создаются
@@ -286,7 +286,7 @@ spawn/respawn и JIP требуют отдельного ручного прог
 в отдельный stage; клиент не нужен. Catalog PASS требует хотя бы один IFV
 с active native spawner data на каждой стороне.
 
-`tools/fixtures/AICF_WCSAccessProbe.c` проверяет native-фильтры конфигурации
+`tests/fixtures/AICF_WCSAccessProbe.c` проверяет native-фильтры конфигурации
 построенного арсенала, регистрацию и faction/trait labels тяжёлого завода,
 а также непустые раздельные списки трёх вкладок. Fixture работает только в
 stage вместе с infantry probe; не подтверждает физическую покупку через UI.
@@ -306,7 +306,7 @@ Client/JIP, меню сценариев, реальная покупка/раз�
 UI сообщает этот срок при сохранении. Имя и numeric playerId не становятся
 ключом общего файла. С backend identity сохраняется прежняя схема двух файлов.
 
-`tools/fixtures/AICF_PersonalNetworkProbe.c` помещается только в WCS stage.
+`tests/fixtures/AICF_PersonalNetworkProbe.c` помещается только в WCS stage.
 Клиент с `-aicfPersonalNetworkProbe 1 -aicfProbeFaction RHS_AFRF` выполняет
 read/save/select/default через owner RPC, проверяет 20 client drafts и native
 spawn. `-aicfProbePersonal 1` дополнительно выбирает личный рецепт перед spawn.

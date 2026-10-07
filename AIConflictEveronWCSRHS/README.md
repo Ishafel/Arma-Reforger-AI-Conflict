@@ -41,7 +41,7 @@ launcher проверяет живой сервер, точный CLI и `ROSTER
 
 ## Проверки — 06.10.2026
 
-Команда `pwsh -NoProfile -File tools/Test-<Audit>Static.ps1`:
+Команда `pwsh -NoProfile -File tests/static/Test-<Audit>Static.ps1`:
 ScenarioHeaders, EveronNorth, WCSIntegration, RHSIntegration,
 RuntimeLauncher и Localization — PASS до и после, exit 0.
 ScenarioHeaders проверяет наследование обоих headers и отсутствие новых

@@ -6,15 +6,24 @@ commit/branch, dirty status и exit codes. После правки повтор�
 
 ## Выбор проверок
 
-Все перечисленные scripts находятся в `tools/`. Шаблон запуска из корня:
+Статика находится в `tests/static/`, контракты — в `tests/contracts/`, анализаторы
+логов — в `tests/log-audits/`. Полный каталог, параметры и статусы:
+[TOOLS.md](TOOLS.md), runtime probes: [TEST_FIXTURES.md](TEST_FIXTURES.md).
+Шаблон запуска из корня:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Test-Stage3Static.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/static/Test-Stage3Static.ps1
 ```
+
+Полный offline набор с сохранением argv, exit codes и полного вывода:
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Invoke-AICFChecks.ps1`.
+`-List` показывает точные пути без запуска, `-Name Test-Stage3Static.ps1`
+выбирает отдельный тест. Известные baseline failures не исключаются из exit code.
 
 | Область | Минимальная статика / contracts |
 |---|---|
 | Markdown и ссылки | `git diff --check`; локальные ссылки должны работать из чистого checkout, команды и пути сверяются с исходниками |
+| Offline runner и размещение скриптов | `Test-CheckRunnerContracts.ps1`; при переносе — весь offline набор до/после и проверка ссылок/зависимостей |
 | Vehicle ownership, trips, cleanup | `Test-Stage3Static.ps1`, `Test-Stage35Static.ps1`, `Test-Stage3StaticContracts.ps1`, `Test-Stage35RecoveryPolicy.ps1` |
 | Экономика, strategic snapshot, RPC | `Test-Stage4Static.ps1` и профильный audit |
 | Bootstrap, command authority | `Test-AICommanderModeStatic.ps1`, `Test-AICommanderUIContracts.ps1` |
@@ -54,7 +63,7 @@ load, отдельно ручная проверка плитки и packaged bu
 визуальные критерии остаются `NOT RUN`; screenshots/GUI automation не используются.
 
 Команды Workbench и launcher: [DEVELOPMENT.md](DEVELOPMENT.md). Runtime fixture
-из `tools/fixtures/` копируется только в изолированный stage; обычный addon не
+из `tests/fixtures/` копируется только в изолированный stage; обычный addon не
 должен содержать probe. Укажи, что fixture моделирует и чего не доказывает.
 
 Анализаторы `Test-Stage2Log.ps1`, `Test-Stage4Log.ps1`,
@@ -64,7 +73,46 @@ load, отдельно ручная проверка плитки и packaged bu
 `param` конкретного script; для recruitment supply используй профильные
 [команды и ограничения](RECRUITMENT_SUPPLY_PLANNING.md).
 
-## Известные результаты до этой реорганизации
+## Baseline реорганизации tools, 2026-10-07
+
+Исходный commit `2cd6bf3abc8b019729f5f3a65e7d013a9d6f6872`, ветка
+`codex/docs-player-readme`, до правки рабочее дерево чистое. Свежий baseline
+46 offline проверок через `powershell.exe`: **41 PASS, 5 FAIL** (exit 1):
+
+| Проверка | Сохранённая причина FAIL |
+|---|---|
+| `Test-InfantryApproachContracts.ps1` | `APPROACH_CLEANUP` |
+| `Test-LocalizationStatic.ps1` | ParserError в Windows PowerShell: UTF-8 без BOM с кириллицей в regex. Через PowerShell 7 файл разбирается; это не PASS выполнения |
+| `Test-NorthFailureContracts.ps1` | `MOVE_CALLBACK_FENCE`, `MOVE_ACTIVITY` |
+| `Test-SquadCommandsContracts.ps1` | `STABLE_NEAREST` |
+| `Test-Stage4Static.ps1` | `STAGE4_ATTACKED_BASES` |
+
+Evidence: `.codex-runtime/tools-reorganization-20261007/`, `before/summary.json`
+и полные `before/*.txt`. FAIL не отключены и не объявлены устаревшими контрактами;
+их причины требуют отдельных исправлений. Общая матрица возвращает exit 1.
+
+Полный повтор после переноса: **42 PASS, те же 5 FAIL** (47 проверок, включая
+новый `Test-CheckRunnerContracts.ps1`), общий exit 1. Вывод — `after/summary.json`
+и `after/*.txt`. После окончательного выбора `tests/log-audits/` ещё раз выполнены
+семь зависимых gates: CheckRunner, Construction, ForcedSmallBarracks, Logistics,
+RecoveryEpisode, SquadCommands contracts и Stage4Static — 5 PASS, прежние 2 FAIL,
+exit 1 (`final-paths-verified/`). Runner проверен через `-File` и вложенный `&`
+в Windows PowerShell 5.1 и PowerShell 7. Сводный `final-summary.json` и
+`comparison.txt` подтверждают прежние exit codes и причины всех пяти FAIL,
+новых регрессий нет. Промежуточный `final-paths/` прерван при отладке runner и
+не является финальным verdict.
+
+`Build-AICFLocalization.ps1 -Check` — PASS/0 до и после,
+вывод в `localization-build-*.txt`. Проверены ссылки на отслеживаемые файлы,
+каталог всех tools/tests, относительные зависимости, PowerShell 7 parsing и
+`git diff --cached --check`; перенесённые fixture и четыре локальных файла
+сохранены побайтово (`layout-verification.txt`).
+
+Production `.c` и содержимое runtime probes не менялись. Workbench, server/client,
+JIP, soak, визуальные проверки, showcase и watchdog — **NOT RUN** в этой задаче.
+Переезд файлов не подтверждает их runtime совместимость.
+
+## Результаты прежних изменений
 
 Источники — [0.1.25](../releases/0.1.25.md) и
 [проверки recruitment](RECRUITMENT_SUPPLY_PLANNING.md). Это сохранённые результаты

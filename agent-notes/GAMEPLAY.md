@@ -71,7 +71,7 @@ backend identity, стороне и content profile. Без backend identity с�
 Rank policy снимает player-rank gates через `GENERAL`/XP floor; остальные
 проверки покупки и размещения сохраняются. RU используется при `ru_ru`,
 для остальных языков — EN; источники локализации ищи через
-`tools/AICFLocalization.Common.ps1` и `tools/Build-AICFLocalization.ps1`.
+`tools/lib/AICFLocalization.Common.ps1` и `tools/Build-AICFLocalization.ps1`.
 
 ## Победа и замена отряда
 

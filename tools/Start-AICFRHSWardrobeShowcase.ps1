@@ -39,7 +39,7 @@ if ($Role -eq 'Server') {
             }
         }
     }
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fixtures/AICF_RHSWardrobeShowcase.c') `
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../tests/fixtures/AICF_RHSWardrobeShowcase.c') `
         -Destination (Join-Path $source 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/AICF_RHSWardrobeShowcase.c')
     & $launcher -Role Server -Variant EveronNorthRHS -RepositoryRoot $source `
         -ProfileRoot (Join-Path $session 'server') `

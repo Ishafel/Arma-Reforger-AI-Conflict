@@ -9,6 +9,8 @@
 |---|---|
 | Найти домен, состояние и границы побочных эффектов | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Проверить игровую механику и defaults | [GAMEPLAY.md](GAMEPLAY.md), затем указанные исходники |
+| Найти утилиту, её статус и запустить offline набор | [TOOLS.md](TOOLS.md) |
+| Выбрать runtime probe и проверить ограничения | [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Подготовить API reference, Workbench, локальный/удалённый runtime и Diag/retail | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | Выбрать проверки и сравнить baseline | [TESTING.md](TESTING.md) |
 | Изменить прогноз снабжения и конкуренцию за казармы | [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md) |
