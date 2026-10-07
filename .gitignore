@@ -12,10 +12,6 @@
 **/profile/
 **/resourceDatabase.rdb
 /.codex-runtime/
-/workshop/*
-!/workshop/AIConflictEveronRHS/
-/workshop/AIConflictEveronRHS/*
-!/workshop/AIConflictEveronRHS/metadata.md
 /tools/*
 !/tools/Test-AICommanderUIContracts.ps1
 !/tools/Test-BaseBuilderDangerContracts.ps1
@@ -37,7 +33,6 @@
 !/tools/fixtures/AICF_NorthFailureProbe.c
 !/tools/fixtures/AICF_NativeMoveFailureProbe.c
 !/tools/fixtures/AICF_MusterTurretRuntimeProbe.c
-/docs/
 
 !/tools/Test-DefendWaypointInputContracts.ps1
 !/tools/fixtures/AICF_DefendWaypointInputProbe.c
@@ -72,10 +67,6 @@
 !/tools/fixtures/AICF_RecoverySoakProbe.c
 !/tools/Watch-AICFRuntimeDiagnostics.ps1
 !/tools/fixtures/AICF_MovementRecoveryProbe.c
-!/workshop/AIConflictArlandWCSRHS/
-/workshop/AIConflictArlandWCSRHS/*
-!/workshop/AIConflictArlandWCSRHS/metadata.md
-!/workshop/AIConflictArlandWCSRHS/preview.jpg
 !/tools/fixtures/AICF_WCSLoadoutCatalogProbe.c
 !/tools/Test-VictoryRespawnStatic.ps1
 !/tools/fixtures/AICF_VictoryRespawnProbe.c
@@ -86,6 +77,5 @@
 !/tools/fixtures/AICF_RecruitmentLifecycleProbe.c
 !/tools/fixtures/AICF_RecruitmentStabilityProbe.c
 !/tools/Test-RecruitmentAcceptanceLog.ps1
-!/docs/
-/docs/*
-!/docs/RECRUITMENT_SUPPLY_PLANNING.md
+/docs/
+/workshop/

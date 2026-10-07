@@ -113,7 +113,7 @@ WCS `addon.gproj`, `Start-AICFRuntime.ps1`, `Test-WCSIntegrationStatic.ps1`
 - `tools/Test-RecruitmentSupplyContracts.ps1`,
   `tools/Test-InfantryRecruitmentLog.ps1`,
   `tools/fixtures/AICF_RecruitmentSupplyProbe.c`, `.gitignore`;
-- `README.md`, `docs/RECRUITMENT_SUPPLY_PLANNING.md`. Локальные игнорируемые справочники `docs/ARCHITECTURE.md`, `docs/INFANTRY_RECRUITMENT.md` и `docs/TESTING.md` также обновлены; в Git они не добавляются.
+- `README.md` и этот отчёт (тогда `docs/RECRUITMENT_SUPPLY_PLANNING.md`). Список описывает историческую проверку; сейчас технический контекст хранится и обновляется в `agent-notes/`.
 
 Evidence находится в `.codex-runtime/issue20/`. Полные baseline/after выводы
 сохранены отдельно и совпадают для всех шести прежних аудиторов. Каждый

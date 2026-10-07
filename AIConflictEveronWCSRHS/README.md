@@ -26,7 +26,7 @@ World, whitelist, radio policy, callsign adapter и campaign lifecycle
 ## Запуск
 
 Из корня репозитория, после терминального Workbench Validate нового
-`AIConflictEveronWCSRHS/addon.gproj` по `docs/DEVELOPMENT.md`:
+`AIConflictEveronWCSRHS/addon.gproj` по `agent-notes/DEVELOPMENT.md`:
 
 ```powershell
 ./tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronWCSRHS

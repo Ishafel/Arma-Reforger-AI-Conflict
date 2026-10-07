@@ -247,7 +247,7 @@ SCRIPT E/F и ENGINE F отсутствуют. Evidence: `.codex-runtime/issue-7
 из необходимых проверок для этого исправления. Полное отсутствие микрофризов
 во всех сценариях этими измерениями не доказывается.
 
-Из корня репозитория, после terminal Workbench Validate по `docs/DEVELOPMENT.md`
+Из корня репозитория, после terminal Workbench Validate по `agent-notes/DEVELOPMENT.md`
 с новым root `AIConflictArlandWCSRHS/addon.gproj`:
 
 ```powershell
