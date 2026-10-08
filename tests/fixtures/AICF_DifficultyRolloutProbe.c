@@ -42,7 +42,8 @@ modded class AICF_FIAGarrisonService
 		{
 			SCR_MissionHeaderCampaign header = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(path));
 			bool legacy = path.Contains("AICF_WCS_RHS_Conflict_Everon_North");
-			AICF_RolloutCheck("HEADER_" + path, header && header.m_eAICFDifficulty == index % 3 && header.m_bAICFFIATank == legacy && header.m_bAICFFIAPassengers == legacy);
+			bool tank = legacy || (path.Contains("AICF_WCS_RHS_Conflict_") && path.Contains("_Hard.conf"));
+			AICF_RolloutCheck("HEADER_" + path, header && header.m_eAICFDifficulty == index % 3 && header.m_bAICFFIATank == tank && header.m_bAICFFIAPassengers == legacy);
 		}
 		array<FactionKey> factionKeys = {"US", "USSR"};
 		foreach (FactionKey faction : factionKeys)

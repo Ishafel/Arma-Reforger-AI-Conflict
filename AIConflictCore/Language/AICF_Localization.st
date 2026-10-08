@@ -246,8 +246,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200041}"
 		{
 			Id "AICF_Scenario_ArlandWCSRHS_Hard_Description"
-			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "Each initial FIA capture point receives a BTR-70 and T-72A, each with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает БТР-70 и Т-72А: только водитель, стрелок и командир в каждой машине, без десанта."
 		}
 		CustomStringTableItem "{A1CF261008200042}"
 		{
@@ -282,8 +282,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200047}"
 		{
 			Id "AICF_Scenario_EveronWCSRHS_Hard_Description"
-			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "Each initial FIA capture point receives a BTR-70 and T-72A, each with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает БТР-70 и Т-72А: только водитель, стрелок и командир в каждой машине, без десанта."
 		}
 		CustomStringTableItem "{A1CF261008200048}"
 		{

@@ -53,10 +53,11 @@ fallback: в штатном каталоге отсутствует `Character_U
 и могут менять оружие; три ПТ — контракт состава по умолчанию.
 
 `AICF_FIAGarrisonService` фиксирует стартовые цели FIA из objective graph без HQ:
-Medium — один БТР-70 FIA, Hard — два БТР-70 FIA. Только header северного WCS+RHS
-сценария включает `m_bAICFFIATank` и `m_bAICFFIAPassengers`: там Hard сохраняет
-БТР + Т-72А, а БТР — десант на Medium/Hard. Оба флага по умолчанию false;
-новые headers явно оставляют их false. Core получает prefab через content profile;
+Medium — один БТР-70 FIA. Hard во всех WCS+RHS — БТР + Т-72А, в vanilla/RHS —
+два БТР-70. Hard headers WCS Arland/полного Everon включают `m_bAICFFIATank`;
+северный WCS header сохраняет оба флага `m_bAICFFIATank` и `m_bAICFFIAPassengers`.
+Десант БТР остаётся только на северном WCS Medium/Hard. Оба флага по умолчанию false;
+vanilla/RHS headers явно оставляют их false. Core получает prefab через content profile;
 WCS profile владеет единственной ссылкой на WCS Т-72А. Поиск площадки
 детерминированный возле дороги в пределах 120 м от базы (кандидаты от 100 м
 к центру с шагом 20 м): ближайшая дорога в пределах 40 м от кандидата,

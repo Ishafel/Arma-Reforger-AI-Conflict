@@ -463,7 +463,12 @@ try {
             $level = 1
             if ($difficultyCase[1] -eq 'Hard') { $level = 2 }
             if ($header -notmatch "m_eAICFDifficulty\s+$level\b" -or $header -notmatch '^SCR_MissionHeaderCampaign\s*:') { Add-Failure 'DIFFICULTY_INHERITANCE' $headerPath }
-            if ($difficultyCase[0] -ne 'EveronNorthWCSRHS' -and ($header -notmatch 'm_bAICFFIATank\s+0' -or $header -notmatch 'm_bAICFFIAPassengers\s+0')) { Add-Failure 'DIFFICULTY_CREW_ONLY' $headerPath }
+            if ($difficultyCase[0] -ne 'EveronNorthWCSRHS') {
+                $tankFlag = 0
+                if ($difficultyCase[0] -in @('ArlandWCSRHS', 'EveronWCSRHS') -and $difficultyCase[1] -eq 'Hard') { $tankFlag = 1 }
+                if ($header -notmatch "m_bAICFFIATank\s+$tankFlag\b") { Add-Failure 'DIFFICULTY_TANK_SCOPE' $headerPath }
+                if ($header -notmatch 'm_bAICFFIAPassengers\s+0') { Add-Failure 'DIFFICULTY_CREW_ONLY' $headerPath }
+            }
         }
     }
 

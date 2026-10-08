@@ -4,6 +4,48 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## Т-72 на сложной сложности всех WCS — 2026-10-09
+
+Продолжение `codex/scenario-difficulties`, baseline `96093a1`.
+В Hard headers WCS Arland и полного WCS Everon включён `m_bAICFFIATank`.
+Medium остаётся с одним БТР, Hard во всех WCS получает БТР + Т-72А.
+Десант сохранён только в North WCS; новые машины имеют по три члена экипажа.
+Production scripts, GUID и `.gproj` dependencies не менялись.
+Обновлены два headers, их RU/EN descriptions и generated string tables,
+RuntimeLauncherStatic, RolloutProbe и текущая документация.
+
+Evidence: `.codex-runtime/wcs-t72-all/`.
+`Invoke-AICFChecks.ps1 -Name` (FIAGarrisonContracts, ScenarioHeaders,
+RuntimeLauncher, WCSIntegration, RHSIntegration, EveronNorth): **6/6 до и после**.
+`Test-LocalizationStatic.ps1` через PowerShell 7: **PASS до/после**, 587 строк.
+Терминальный `compile.ps1 -Variant EveronWCSRHS`: production и fixture **PASS**,
+validation successful, без SCRIPT E/F и ENGINE F. RuntimeLauncherStatic
+отвергает обе отрицательные мутации: выключенный танк в WCS Hard и включённый
+в vanilla Hard, ожидаемый `DIFFICULTY_TANK_SCOPE` FAIL.
+
+Dedicated через `Start-AICFRuntime.ps1`, `run.ps1 -Variants ArlandWCSRHS`
+(2351) и `-Variants EveronWCSRHS` (2353), Hard, отдельный stage с
+`AICF_DifficultyRolloutProbe`: оба завершены, exit 0. Целевой fixture **PASS**:
+Arland — 79 checks, 6 БТР + 6 Т-72А; полный Everon — 327 checks,
+37 БТР + 37 Т-72А, в обоих случаях failures=0. У всех машин crew=3/seats=3,
+по две стационарные машины на карте. Проверены native headers трёх сложностей,
+состав, отсутствие десанта и выборка прибытия патруля после 60 секунд наблюдения
+за полностью созданными гарнизонами. В fixture отключён урон готовым машинам
+и экипажам; это не проверка боевой эффективности.
+
+Полные остановленные console/script/error logs сохранены в `logs-*`, команды
+и `AICF_RUNTIME_MANIFEST_JSON` — в `*-launcher.txt`, сводка — `runtime-summary.json`.
+Общий runtime log gate **FAIL**: повторился `PMC_EQUIPMENT_FAILED`
+с `rollback=1 restored=0` (2 на Arland, 6 на Everon); это все SCRIPT E.
+SCRIPT F, ENGINE F и VM exception — 0. Также присутствуют ошибки ресурсов,
+world/entity и, на Everon, material/pathfinding. Эти ошибки не исправлялись
+в изменении состава техники. Оба тестовых сервера остановлены.
+
+Предыдущие результаты северного WCS ниже относятся к прошлому коммиту;
+северный header в этом уточнении не изменён. Новый client/JIP, ручной вид меню,
+packaged build, бой и длительный soak — **NOT RUN**. Старый Stage4 baseline FAIL
+не исправлялся и в этом узком наборе не перезапускался.
+
 ## Перенос сложностей на все сценарии — 2026-10-09
 
 Ветка `codex/scenario-difficulties`, baseline `ffa0ac2`.
