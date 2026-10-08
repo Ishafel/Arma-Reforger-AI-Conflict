@@ -42,7 +42,7 @@ Server и client используют согласованный stage. Для R
 | [AICF_DefendArrivalProbe.c](../tests/fixtures/AICF_DefendArrivalProbe.c) | Late move result при US system hold; commander USSR | `aicfDefendArrivalProbe` |
 | [AICF_DefendWaypointInputProbe.c](../tests/fixtures/AICF_DefendWaypointInputProbe.c) | Реальные group/waypoint, смена приказа через planner | `aicfDefendInputProbe` |
 | [AICF_EndgameProbe.c](../tests/fixtures/AICF_EndgameProbe.c) | Контролируемые territory/presence/hold time; настоящее завершение матча | `aicfEndgameProbe` |
-| [AICF_EveronNorthProbe.c](../tests/fixtures/AICF_EveronNorthProbe.c) | Инвентаризация whitelist северного Everon | `aicfNorthProbe` |
+| [AICF_EveronNorthProbe.c](../tests/fixtures/AICF_EveronNorthProbe.c) | Северный Everon: 7 активных баз, 2 HQ, 5 механизмов захвата, связность radio graph; Кермован исключён | `aicfNorthProbe` |
 | [AICF_ForcedSmallBarracksProbe.c](../tests/fixtures/AICF_ForcedSmallBarracksProbe.c) | Отказ обычного коридора поиска, forced-small fallback | `aicfForcedSmallProbe` |
 | [AICF_GroupCallsignProbe.c](../tests/fixtures/AICF_GroupCallsignProbe.c) | Три поколения групп в двух factions; group spawn и callsign uniqueness | `aicfCallsignProbe` |
 | [AICF_InfantryAdvanceProbe.c](../tests/fixtures/AICF_InfantryAdvanceProbe.c) | Production infantry advance и подтверждение перемещения | `aicfInfantryAdvanceProbe` |

@@ -27,7 +27,7 @@ modded class SCR_GameModeCampaign
 			GetGame().GetCallqueue().CallLater(AICF_RunNorthProbe, 2000, false);
 			return;
 		}
-		array<string> expected = {"MilitaryBaseAirfield", "MilitaryHospital", "MainBaseNorth", "SmallBaseMaidensBay", "TownBaseMeaux", "TownBaseTyrone", "TownBaseKermovan", "SmallBaseHornbeamValley"};
+		array<string> expected = {"MilitaryBaseAirfield", "MilitaryHospital", "MainBaseNorth", "SmallBaseMaidensBay", "TownBaseMeaux", "TownBaseTyrone", "SmallBaseHornbeamValley"};
 		array<SCR_MilitaryBaseComponent> rawBases = {};
 		SCR_MilitaryBaseSystem.GetInstance().GetBases(rawBases);
 		array<SCR_CampaignMilitaryBaseComponent> active = {};
@@ -57,9 +57,9 @@ modded class SCR_GameModeCampaign
 			if (base.GetFaction()) faction = base.GetFaction().GetFactionKey();
 			Print(string.Format("[AICF][NORTH_BASE] entity=%1 hq=%2 capture=%3 faction=%4", name, base.IsHQ(), base.IsControlPoint(), faction));
 		}
-		AICF_CheckNorth("ACTIVE_EIGHT", active.Count() == 8);
+		AICF_CheckNorth("ACTIVE_SEVEN", active.Count() == 7);
 		AICF_CheckNorth("HQ_TWO", hqCount == 2);
-		AICF_CheckNorth("CAPTURE_SIX", captureCount == 6);
+		AICF_CheckNorth("CAPTURE_FIVE", captureCount == 5);
 		AICF_CheckNorth("SOUTH_INACTIVE", excludedActive == 0);
 		AICF_CheckNorth("COMMANDER_READY", AICF_HasAICommanderState());
 		SCR_CampaignFaction west = GetFactionByEnum(SCR_ECampaignFaction.BLUFOR);
