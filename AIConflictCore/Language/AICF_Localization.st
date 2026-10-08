@@ -3,6 +3,294 @@ StringTable
 	ItemClassName "CustomStringTableItem"
 	Items
 	{
+		CustomStringTableItem "{A1CF261008200001}"
+		{
+			Id "AICF_Scenario_Arland_Medium_Name"
+			Target_en_us "AI Conflict - Arland (Medium)"
+			Target_ru_ru "AI Conflict — Арланд (средний)"
+		}
+		CustomStringTableItem "{A1CF261008200002}"
+		{
+			Id "AICF_Scenario_Arland_Medium_Description"
+			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200003}"
+		{
+			Id "AICF_Scenario_Arland_Medium_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200004}"
+		{
+			Id "AICF_Scenario_Arland_Hard_Name"
+			Target_en_us "AI Conflict - Arland (Hard)"
+			Target_ru_ru "AI Conflict — Арланд (сложный)"
+		}
+		CustomStringTableItem "{A1CF261008200005}"
+		{
+			Id "AICF_Scenario_Arland_Hard_Description"
+			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200006}"
+		{
+			Id "AICF_Scenario_Arland_Hard_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200007}"
+		{
+			Id "AICF_Scenario_Everon_Medium_Name"
+			Target_en_us "AI Conflict - Everon (Medium)"
+			Target_ru_ru "AI Conflict — Эверон (средний)"
+		}
+		CustomStringTableItem "{A1CF261008200008}"
+		{
+			Id "AICF_Scenario_Everon_Medium_Description"
+			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200009}"
+		{
+			Id "AICF_Scenario_Everon_Medium_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200010}"
+		{
+			Id "AICF_Scenario_Everon_Hard_Name"
+			Target_en_us "AI Conflict - Everon (Hard)"
+			Target_ru_ru "AI Conflict — Эверон (сложный)"
+		}
+		CustomStringTableItem "{A1CF261008200011}"
+		{
+			Id "AICF_Scenario_Everon_Hard_Description"
+			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200012}"
+		{
+			Id "AICF_Scenario_Everon_Hard_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200013}"
+		{
+			Id "AICF_Scenario_EveronNorth_Medium_Name"
+			Target_en_us "AI Conflict - Northern Everon (Medium)"
+			Target_ru_ru "AI Conflict — Север Эверона (средний)"
+		}
+		CustomStringTableItem "{A1CF261008200014}"
+		{
+			Id "AICF_Scenario_EveronNorth_Medium_Description"
+			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200015}"
+		{
+			Id "AICF_Scenario_EveronNorth_Medium_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200016}"
+		{
+			Id "AICF_Scenario_EveronNorth_Hard_Name"
+			Target_en_us "AI Conflict - Northern Everon (Hard)"
+			Target_ru_ru "AI Conflict — Север Эверона (сложный)"
+		}
+		CustomStringTableItem "{A1CF261008200017}"
+		{
+			Id "AICF_Scenario_EveronNorth_Hard_Description"
+			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200018}"
+		{
+			Id "AICF_Scenario_EveronNorth_Hard_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200019}"
+		{
+			Id "AICF_Scenario_ArlandRHS_Medium_Name"
+			Target_en_us "AI Conflict RHS - Arland (Medium)"
+			Target_ru_ru "AI Conflict RHS — Арланд (средний)"
+		}
+		CustomStringTableItem "{A1CF261008200020}"
+		{
+			Id "AICF_Scenario_ArlandRHS_Medium_Description"
+			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200021}"
+		{
+			Id "AICF_Scenario_ArlandRHS_Medium_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200022}"
+		{
+			Id "AICF_Scenario_ArlandRHS_Hard_Name"
+			Target_en_us "AI Conflict RHS - Arland (Hard)"
+			Target_ru_ru "AI Conflict RHS — Арланд (сложный)"
+		}
+		CustomStringTableItem "{A1CF261008200023}"
+		{
+			Id "AICF_Scenario_ArlandRHS_Hard_Description"
+			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200024}"
+		{
+			Id "AICF_Scenario_ArlandRHS_Hard_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200025}"
+		{
+			Id "AICF_Scenario_EveronRHS_Medium_Name"
+			Target_en_us "AI Conflict RHS - Everon (Medium)"
+			Target_ru_ru "AI Conflict RHS — Эверон (средний)"
+		}
+		CustomStringTableItem "{A1CF261008200026}"
+		{
+			Id "AICF_Scenario_EveronRHS_Medium_Description"
+			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200027}"
+		{
+			Id "AICF_Scenario_EveronRHS_Medium_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200028}"
+		{
+			Id "AICF_Scenario_EveronRHS_Hard_Name"
+			Target_en_us "AI Conflict RHS - Everon (Hard)"
+			Target_ru_ru "AI Conflict RHS — Эверон (сложный)"
+		}
+		CustomStringTableItem "{A1CF261008200029}"
+		{
+			Id "AICF_Scenario_EveronRHS_Hard_Description"
+			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200030}"
+		{
+			Id "AICF_Scenario_EveronRHS_Hard_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200031}"
+		{
+			Id "AICF_Scenario_EveronNorthRHS_Medium_Name"
+			Target_en_us "AI Conflict RHS - Northern Everon (Medium)"
+			Target_ru_ru "AI Conflict RHS — Север Эверона (средний)"
+		}
+		CustomStringTableItem "{A1CF261008200032}"
+		{
+			Id "AICF_Scenario_EveronNorthRHS_Medium_Description"
+			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200033}"
+		{
+			Id "AICF_Scenario_EveronNorthRHS_Medium_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200034}"
+		{
+			Id "AICF_Scenario_EveronNorthRHS_Hard_Name"
+			Target_en_us "AI Conflict RHS - Northern Everon (Hard)"
+			Target_ru_ru "AI Conflict RHS — Север Эверона (сложный)"
+		}
+		CustomStringTableItem "{A1CF261008200035}"
+		{
+			Id "AICF_Scenario_EveronNorthRHS_Hard_Description"
+			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200036}"
+		{
+			Id "AICF_Scenario_EveronNorthRHS_Hard_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200037}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHS_Medium_Name"
+			Target_en_us "AI Conflict WCS + RHS - Arland (Medium)"
+			Target_ru_ru "AI Conflict WCS + RHS — Арланд (средний)"
+		}
+		CustomStringTableItem "{A1CF261008200038}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHS_Medium_Description"
+			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200039}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHS_Medium_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200040}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHS_Hard_Name"
+			Target_en_us "AI Conflict WCS + RHS - Arland (Hard)"
+			Target_ru_ru "AI Conflict WCS + RHS — Арланд (сложный)"
+		}
+		CustomStringTableItem "{A1CF261008200041}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHS_Hard_Description"
+			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200042}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHS_Hard_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200043}"
+		{
+			Id "AICF_Scenario_EveronWCSRHS_Medium_Name"
+			Target_en_us "AI Conflict WCS + RHS - Everon (Full) (Medium)"
+			Target_ru_ru "AI Conflict WCS + RHS — Эверон (полный) (средний)"
+		}
+		CustomStringTableItem "{A1CF261008200044}"
+		{
+			Id "AICF_Scenario_EveronWCSRHS_Medium_Description"
+			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200045}"
+		{
+			Id "AICF_Scenario_EveronWCSRHS_Medium_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
+		CustomStringTableItem "{A1CF261008200046}"
+		{
+			Id "AICF_Scenario_EveronWCSRHS_Hard_Name"
+			Target_en_us "AI Conflict WCS + RHS - Everon (Full) (Hard)"
+			Target_ru_ru "AI Conflict WCS + RHS — Эверон (полный) (сложный)"
+		}
+		CustomStringTableItem "{A1CF261008200047}"
+		{
+			Id "AICF_Scenario_EveronWCSRHS_Hard_Description"
+			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
+			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+		}
+		CustomStringTableItem "{A1CF261008200048}"
+		{
+			Id "AICF_Scenario_EveronWCSRHS_Hard_Details"
+			Target_en_us "FIA vehicles patrol near their assigned bases and defend them without distant pursuit or replacements. US and USSR squads have three anti-tank soldiers. Recovery teleport is blocked within 50 m of a player. Every launch starts a new campaign."
+			Target_ru_ru "Техника FIA патрулирует окрестности своей базы и обороняет её без дальнего преследования и пополнения потерь. В отрядах US и USSR по три противотанковых бойца. Телепорт для восстановления маршрута запрещён при игроке в радиусе 50 м. Каждый запуск начинает новую кампанию."
+		}
 		CustomStringTableItem "{A1CF261008100010}"
 		{
 			Id "AICF_Scenario_EveronNorthWCSRHS_Medium_Name"
@@ -42,8 +330,8 @@ StringTable
 		CustomStringTableItem "{A1CF261006100010}"
 		{
 			Id "AICF_Scenario_EveronWCSRHS_Name"
-			Target_en_us "AI Conflict WCS + RHS - Everon (Full)"
-			Target_ru_ru "AI Conflict WCS + RHS — Эверон (полный)"
+			Target_en_us "AI Conflict WCS + RHS - Everon (Full) (Easy)"
+			Target_ru_ru "AI Conflict WCS + RHS — Эверон (полный) (лёгкий)"
 		}
 		CustomStringTableItem "{A1CF261006100011}"
 		{
@@ -78,8 +366,8 @@ StringTable
 		CustomStringTableItem "{A1CF260928100003}"
 		{
 			Id "AICF_Scenario_ArlandWCSRHS_Name"
-			Target_en_us "AI Conflict WCS + RHS - Arland"
-			Target_ru_ru "AI Conflict WCS + RHS — Арланд"
+			Target_en_us "AI Conflict WCS + RHS - Arland (Easy)"
+			Target_ru_ru "AI Conflict WCS + RHS — Арланд (лёгкий)"
 		}
 		CustomStringTableItem "{A1CF260928100004}"
 		{
@@ -96,8 +384,8 @@ StringTable
 		CustomStringTableItem "{A1CF190900000001}"
 		{
 			Id "AICF_Scenario_Arland_Name"
-			Target_en_us "AI Conflict - Arland"
-			Target_ru_ru "AI Conflict — Арланд"
+			Target_en_us "AI Conflict - Arland (Easy)"
+			Target_ru_ru "AI Conflict — Арланд (лёгкий)"
 		}
 		CustomStringTableItem "{A1CF190900000002}"
 		{
@@ -114,8 +402,8 @@ StringTable
 		CustomStringTableItem "{A1CF190900000004}"
 		{
 			Id "AICF_Scenario_Everon_Name"
-			Target_en_us "AI Conflict - Everon"
-			Target_ru_ru "AI Conflict — Эверон"
+			Target_en_us "AI Conflict - Everon (Easy)"
+			Target_ru_ru "AI Conflict — Эверон (лёгкий)"
 		}
 		CustomStringTableItem "{A1CF190900000005}"
 		{
@@ -132,8 +420,8 @@ StringTable
 		CustomStringTableItem "{A1CF190900000007}"
 		{
 			Id "AICF_Scenario_ArlandRHS_Name"
-			Target_en_us "AI Conflict RHS - Arland"
-			Target_ru_ru "AI Conflict RHS — Арланд"
+			Target_en_us "AI Conflict RHS - Arland (Easy)"
+			Target_ru_ru "AI Conflict RHS — Арланд (лёгкий)"
 		}
 		CustomStringTableItem "{A1CF190900000008}"
 		{
@@ -150,8 +438,8 @@ StringTable
 		CustomStringTableItem "{A1CF19090000000A}"
 		{
 			Id "AICF_Scenario_EveronRHS_Name"
-			Target_en_us "AI Conflict RHS - Everon"
-			Target_ru_ru "AI Conflict RHS — Эверон"
+			Target_en_us "AI Conflict RHS - Everon (Easy)"
+			Target_ru_ru "AI Conflict RHS — Эверон (лёгкий)"
 		}
 		CustomStringTableItem "{A1CF19090000000B}"
 		{
@@ -2382,8 +2670,8 @@ StringTable
 		CustomStringTableItem "{A1CF190919200001}"
 		{
 			Id "AICF_Scenario_EveronNorthRHS_Name"
-			Target_en_us "AI Conflict RHS - Northern Everon"
-			Target_ru_ru "AI Conflict RHS — Север Эверона"
+			Target_en_us "AI Conflict RHS - Northern Everon (Easy)"
+			Target_ru_ru "AI Conflict RHS — Север Эверона (лёгкий)"
 		}
 		CustomStringTableItem "{A1CF190919200002}"
 		{
@@ -2400,8 +2688,8 @@ StringTable
 		CustomStringTableItem "{A1CF190919310001}"
 		{
 			Id "AICF_Scenario_EveronNorth_Name"
-			Target_en_us "AI Conflict - Northern Everon"
-			Target_ru_ru "AI Conflict — Север Эверона"
+			Target_en_us "AI Conflict - Northern Everon (Easy)"
+			Target_ru_ru "AI Conflict — Север Эверона (лёгкий)"
 		}
 		CustomStringTableItem "{A1CF190919310002}"
 		{

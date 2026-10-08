@@ -341,9 +341,6 @@ foreach ($argument in $AdditionalArguments) {
 }
 
 $projectRelativePath = 'AIConflictArland\addon.gproj'
-if ($Difficulty -ne 'Easy' -and $Variant -ne 'EveronNorthWCSRHS') {
-    throw 'Medium/Hard difficulty requires Variant EveronNorthWCSRHS'
-}
 
 $scenario = '{BC2437E4861B4FD2}Missions/AICF_Conflict_Arland.conf'
 $missionHeader = 'Missions/AICF_Conflict_Arland.conf'
@@ -401,6 +398,24 @@ elseif ($Variant -in @('EveronRHS', 'EveronNorthRHS')) {
         $scenario = '{A1CF190919100000}Missions/AICF_RHS_Conflict_Everon_North.conf'
         $profileVariant = '-EveronNorthRHS'
     }
+}
+
+# Thin inherited headers preserve each variant's existing dependency graph.
+$difficultyHeaders = @{
+    Stock = @('{A1CF261008300001}Missions/AICF_Conflict_Arland_Medium.conf', '{A1CF261008300002}Missions/AICF_Conflict_Arland_Hard.conf')
+    Everon = @('{A1CF261008300003}Missions/AICF_Conflict_Everon_Medium.conf', '{A1CF261008300004}Missions/AICF_Conflict_Everon_Hard.conf')
+    EveronNorth = @('{A1CF261008300005}Missions/AICF_Conflict_Everon_North_Medium.conf', '{A1CF261008300006}Missions/AICF_Conflict_Everon_North_Hard.conf')
+    RHS = @('{A1CF261008300007}Missions/AICF_RHS_Conflict_Arland_Medium.conf', '{A1CF261008300008}Missions/AICF_RHS_Conflict_Arland_Hard.conf')
+    EveronRHS = @('{A1CF261008300009}Missions/AICF_RHS_Conflict_Everon_Medium.conf', '{A1CF261008300010}Missions/AICF_RHS_Conflict_Everon_Hard.conf')
+    EveronNorthRHS = @('{A1CF261008300011}Missions/AICF_RHS_Conflict_Everon_North_Medium.conf', '{A1CF261008300012}Missions/AICF_RHS_Conflict_Everon_North_Hard.conf')
+    ArlandWCSRHS = @('{A1CF261008300013}Missions/AICF_WCS_RHS_Conflict_Arland_Medium.conf', '{A1CF261008300014}Missions/AICF_WCS_RHS_Conflict_Arland_Hard.conf')
+    EveronWCSRHS = @('{A1CF261008300015}Missions/AICF_WCS_RHS_Conflict_Everon_Medium.conf', '{A1CF261008300016}Missions/AICF_WCS_RHS_Conflict_Everon_Hard.conf')
+}
+if ($Difficulty -ne 'Easy' -and $difficultyHeaders.ContainsKey($Variant)) {
+    $difficultyIndex = 0
+    if ($Difficulty -eq 'Hard') { $difficultyIndex = 1 }
+    $scenario = $difficultyHeaders[$Variant][$difficultyIndex]
+    $missionHeader = $scenario.Substring(18)
 }
 
 $projectPath = Resolve-AICFExistingFile -Path (Join-Path $repositoryPath $projectRelativePath) -Description "$Variant gproj"

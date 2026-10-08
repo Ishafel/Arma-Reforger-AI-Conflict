@@ -1,11 +1,26 @@
 # Runtime fixture: каталог и применение
 
+`AICF_DifficultyRolloutProbe.c`: отдельный stage любого Variant,
+`-aicfDifficultyProbe 0|1|2 -aicfDifficultyHeaders '<Easy>;<Medium>;<Hard>'`.
+Загружает три native MissionHeader, проверяет inherited difficulty и flags,
+число запланированных гарнизонов по фактическому objective graph, default роли
+US/USSR и каждый готовый экипаж (три essential, нет десанта при выключенном
+флаге). После общей готовности наблюдает 60 с, требует хотя бы одно прибытие
+патруля. Deadline 300 с; ожидание spawn не считается успехом. Отключает damage
+готовых машин/экипажей. Не доказывает движение каждого БТР, бой, UI или soak.
+
+`AICF_DifficultyInfantryProbe.c`, `-aicfATProbe 1`: аналог пехотного probe ниже
+для любого content profile, без ссылок на RHS/WCS классы. Проверяет 24 бойца,
+включая donors 8/9, фактические prefab/роли и заряженные ракетные установки.
+Не запускать одновременно с `AICF_InfantryATProbe` или другим probe, который
+сам закрывает сервер. Параметр роли определяется заголовком текущего сценария.
+
 `AICF_InfantryATProbe.c`, `-aicfATProbe 1`: отдельный WCS+RHS stage,
 North Easy/Medium/Hard. После штатного ROSTER_READY создаёт по одному полному
 отряду каждой стороны и по два one-member donor (позиции 8/9) через production
 resolver и async spawn. Проверяет все 24 prefab/роли/WCS-комплекта, 1/3/3 ПТ
 в каждом полном отряде, заряженное оружие `WT_ROCKETLAUNCHER` у каждого ПТ,
-сохранение stock/RHS mappings и отказ для FIA. Пишет фактические prefab,
+соответствие stock/RHS mappings выбранной сложности и отказ для FIA. Пишет фактические prefab,
 loaded/spare и завершает сервер через RequestClose. Не моделирует оплату,
 переход donor в боевой отряд, стрельбу, client/JIP или пользовательский шаблон.
 

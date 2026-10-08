@@ -107,12 +107,35 @@ class AICF_FIAGarrisonService
 				g.m_BaseId = base.GetOwner().GetID();
 				g.m_vHome = base.GetOwner().GetOrigin();
 				g.m_Faction = faction;
-				g.m_bTank = kind == 1;
+				g.m_bTank = kind == 1 && AICF_Difficulty.UsesTank();
+				g.m_bPassengers = !g.m_bTank && AICF_Difficulty.HasPassengers();
 				g.m_sPrefab = AICF_ContentProfile.GetActive().GetFIAGarrisonPrefab(g.m_bTank);
 				if (m_Fleet.TryReserveFIAGarrison(g, bases.Count() * perBase)) s_aDefenders.Insert(g);
 			}
 		}
 		AICF_Stage3Diagnostics.Info("FIA_GARRISON_PLAN", string.Format("difficulty=%1 bases=%2 vehicles=%3 per_base=%4 replacement=NONE", difficulty, bases.Count(), s_aDefenders.Count(), perBase));
+		ReserveCrewCapacity(campaign);
+	}
+
+	// Однократная квота initial plan: новые экипажи не вытесняют прежний roster.
+	protected void ReserveCrewCapacity(SCR_GameModeCampaign campaign)
+	{
+		if (s_aDefenders.IsEmpty()) return;
+		AIWorld world = GetGame().GetAIWorld();
+		if (!world || !campaign.GetBaseManager()) return;
+		int crew;
+		foreach (AICF_FIAGarrison g : s_aDefenders)
+		{
+			if (g.m_bPassengers) crew += 10;
+			else crew += 3;
+		}
+		array<SCR_CampaignMilitaryBaseComponent> allBases = {};
+		campaign.GetBaseManager().GetBases(allBases);
+		int previous = world.GetLimitOfActiveAIs();
+		// BaseBuilderService позднее обеспечивает combat + bases; сохраняем этот запас.
+		int required = previous + crew + allBases.Count();
+		world.SetLimitOfActiveAIs(required);
+		AICF_Stage3Diagnostics.Info("FIA_GARRISON_CAPACITY", string.Format("previous_limit=%1 crew=%2 builders=%3 required_limit=%4 effective_limit=%5", previous, crew, allBases.Count(), required, world.GetLimitOfActiveAIs()));
 	}
 
 	void Update()
@@ -138,7 +161,7 @@ class AICF_FIAGarrisonService
 			if (!g.VehicleIdentity() || now - g.m_iRequestedAtMs >= 90000) { Retire(g, "INITIAL_CREW_FAILED"); continue; }
 			if (!m_Crew.BoardGarrison(g)) continue;
 			g.m_bReady = true;
-			g.Log("FIA_GARRISON_READY", string.Format("crew=%1 seats=%2 position=%3 stationary=0 replacement=0", g.m_aCrew.Count(), g.m_aSeats.Count(), g.m_vPosition));
+			g.Log("FIA_GARRISON_READY", string.Format("crew=%1 seats=%2 position=%3 stationary=%4 replacement=0", g.m_aCrew.Count(), g.m_aSeats.Count(), g.m_vPosition, g.m_bStaticDefense));
 		}
 	}
 

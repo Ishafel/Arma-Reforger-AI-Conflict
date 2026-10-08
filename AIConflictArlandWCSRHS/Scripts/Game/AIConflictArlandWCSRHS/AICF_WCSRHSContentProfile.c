@@ -1,17 +1,6 @@
 // Карта, readiness, roster и транспорт сохраняют владельцев из RHS integration.
 class AICF_WCSRHSContentProfile : AICF_RHSContentProfile
 {
-	override bool BuildCharacterRoleCandidates(FactionKey stableKey, int memberIndex, out string role, out array<string> suffixes)
-	{
-		AICF_EDifficulty difficulty = AICF_Difficulty.Get();
-		// Medium/Hard North: три ПТ на десять бойцов. Те же role prefab,
-		// inventory и цены используются начальным roster и пополнением.
-		if ((difficulty == AICF_EDifficulty.MEDIUM || difficulty == AICF_EDifficulty.HARD) &&
-			(memberIndex == 8 || memberIndex == 9))
-			return super.BuildCharacterRoleCandidates(stableKey, 3, role, suffixes);
-		return super.BuildCharacterRoleCandidates(stableKey, memberIndex, role, suffixes);
-	}
-
 	// Кеш принадлежит экземпляру profile одного матча. Только строки,
 	// без entity, preview world, catalog или изменяемых inventory objects.
 	protected ref map<string, string> m_mKitSnapshots = new map<string, string>();

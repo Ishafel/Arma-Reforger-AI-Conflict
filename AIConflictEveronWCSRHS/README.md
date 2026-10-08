@@ -1,6 +1,7 @@
 # AI Conflict Everon WCS + RHS
 
-Отдельный source addon `A1CF261006100001` с двумя сценариями:
+Отдельный source addon `A1CF261006100001`: две карты кампании, по три сложности.
+В таблице указаны неизменные GUID лёгких вариантов:
 
 | Launcher Variant | Сценарий | Resource GUID |
 |---|---|---|
@@ -29,6 +30,10 @@ World, whitelist, radio policy, callsign adapter и campaign lifecycle
 окрестности своих баз на технике, без дальнего преследования и замены потерь. Medium/Hard headers
 наследуют лёгкий North, не копируют whitelist. Реализация остаётся в Core и
 WCS content profile. При подключении клиенту передают ту же `-Difficulty`.
+
+Полный Эверон также имеет Easy/Medium/Hard. Medium добавляет один БТР-70,
+Hard — два на стартовую точку FIA; в каждом только водитель, стрелок и командир,
+без десанта и Т-72. На Medium/Hard обеих карт по три ПТ-бойца в полном отряде.
 
 ## Запуск
 

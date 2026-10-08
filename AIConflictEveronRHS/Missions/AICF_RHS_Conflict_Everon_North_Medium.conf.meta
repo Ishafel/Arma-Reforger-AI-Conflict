@@ -1,0 +1,12 @@
+MetaFileClass
+{
+	Name "{A1CF261008300011}Missions/AICF_RHS_Conflict_Everon_North_Medium.conf"
+	Configurations
+	{
+		CONFResourceClass PC {}
+		CONFResourceClass HEADLESS : PC {}
+		CONFResourceClass XBOX_ONE : PC {}
+		CONFResourceClass XBOX_SERIES : PC {}
+		CONFResourceClass PS4 : PC {}
+	}
+}

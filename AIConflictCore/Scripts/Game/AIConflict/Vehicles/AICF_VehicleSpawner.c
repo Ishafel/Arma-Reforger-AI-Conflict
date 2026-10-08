@@ -1227,22 +1227,27 @@ class AICF_VehicleSpawner
 		if (!footprint || !footprint.m_bValid || !ai || !ai.GetRoadNetworkManager()) return false;
 		BaseWorld world = GetGame().GetWorld();
 		vector center = g.m_Base.GetOwner().GetOrigin();
-		for (int candidate; candidate < 64; candidate++)
+		// Сначала дорожный патруль, затем стационарная оборона без unsafe relocation.
+		for (int candidate; candidate < 128; candidate++)
 		{
+			bool staticDefense = candidate >= 64;
+			int localCandidate = candidate % 64;
 			int bearing = candidate % 16;
 			float angle = bearing * 22.5 * Math.DEG2RAD;
-			float radius = 100 - (candidate / 16) * 20;
+			float radius = 100 - (localCandidate / 16) * 20;
 			vector direction = Vector(Math.Cos(angle), 0, Math.Sin(angle));
 			vector requested = center + direction * radius;
-			vector position;
-			if (!ai.GetRoadNetworkManager().GetReachableWaypointInRoad(center, requested, 40, position)) continue;
+			// Флаг базы может быть вне дорожной сети. Машина появляется уже на дороге;
+			// проезд проверяется от площадки, а не от пешеходного origin базы.
+			vector position = requested;
+			if (!staticDefense && !FIAGarrisonRoadDirection(ai.GetRoadNetworkManager(), position, direction, 40)) continue;
+			if (staticDefense) position[1] = world.GetSurfaceY(position[0], position[2]);
 			if (vector.DistanceXZ(position, center) > 120) continue;
-			if (!FIAGarrisonRoadDirection(ai.GetRoadNetworkManager(), position, direction)) continue;
 			if (vector.DistanceXZ(position, center) > 120 || Math.AbsFloat(position[1] - world.GetSurfaceY(position[0], position[2])) > 1.5) continue;
 			int patrolDirection = 1;
 			vector patrolEndpoint;
-			if (!AICF_FIAGarrisonPatrol.FindRoadEndpoint(ai.GetRoadNetworkManager(), position, center, patrolDirection, patrolEndpoint)) continue;
-			if (!FIAGarrisonTurnSurface(world, position)) continue;
+			if (!staticDefense && !AICF_FIAGarrisonPatrol.FindRoadEndpoint(ai.GetRoadNetworkManager(), position, center, patrolDirection, patrolEndpoint)) continue;
+			if (!staticDefense && !FIAGarrisonTurnSurface(world, position)) continue;
 			float x = position[0];
 			float z = position[2];
 			vector up = Vector(world.GetSurfaceY(x - 1, z) - world.GetSurfaceY(x + 1, z), 2,
@@ -1258,7 +1263,7 @@ class AICF_VehicleSpawner
 			TraceOBB body, exitTrace;
 			vector exitPosition;
 			if (!footprint.IsClear(world, pose, body) || !AICF_ConstructionPlanner.VehicleAreaClear(pose[3], 18)) continue;
-			if (!AICF_LogisticsSpawnGeometry.ExitClear(world, footprint, pose, exitPosition, exitTrace)) continue;
+			if (!staticDefense && !AICF_LogisticsSpawnGeometry.ExitClear(world, footprint, pose, exitPosition, exitTrace)) continue;
 			bool reserved;
 			foreach (AICF_VehicleSpawnSiteReservation site : s_aConstructionSites)
 			{
@@ -1277,6 +1282,7 @@ class AICF_VehicleSpawner
 			if (!g.m_Vehicle) return false;
 			g.m_VehicleId = g.m_Vehicle.GetID();
 			g.m_vPosition = pose[3];
+			g.m_bStaticDefense = staticDefense;
 			RplComponent rpl = RplComponent.Cast(g.m_Vehicle.FindComponent(RplComponent));
 			if (!g.VehicleIdentity() || !rpl || !rpl.IsMaster()) return false;
 			array<BaseCompartmentSlot> seats = {};
@@ -1300,12 +1306,12 @@ class AICF_VehicleSpawner
 		return true;
 	}
 
-	protected bool FIAGarrisonRoadDirection(RoadNetworkManager roads, inout vector position, out vector direction)
+	protected bool FIAGarrisonRoadDirection(RoadNetworkManager roads, inout vector position, out vector direction, float maxDistance = 10)
 	{
 		BaseRoad road;
 		float distance;
 		roads.GetClosestRoad(position, road, distance, true);
-		if (!road || distance > 10) return false;
+		if (!road || distance > maxDistance) return false;
 		array<vector> points = {};
 		road.GetPoints(points);
 		float best = float.MAX;
@@ -1324,7 +1330,7 @@ class AICF_VehicleSpawner
 			projected = nearest;
 			direction = segment.Normalized();
 		}
-		if (best >= 10) return false;
+		if (best >= maxDistance) return false;
 		position = projected;
 		return true;
 	}

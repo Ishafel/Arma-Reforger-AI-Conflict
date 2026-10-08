@@ -9,6 +9,14 @@ class AICF_FIAGarrisonPatrol
 	void Update(AICF_FIAGarrison g, int now)
 	{
 		if (!Replication.IsServer() || !g || g.m_bRetired) return;
+		if (g.m_bStaticDefense)
+		{
+			Stop(g);
+			g.m_bCrewRecoveryPending = false;
+			if (g.m_sPatrolHold != "STATIC_DEFENSE") g.Log("FIA_GARRISON_PATROL_HOLD", "reason=STATIC_DEFENSE");
+			g.m_sPatrolHold = "STATIC_DEFENSE";
+			return;
+		}
 		if (!g.BaseIdentity() || !g.CanDrive() || g.m_bDisembarking)
 		{
 			string reason = "CANNOT_DRIVE";

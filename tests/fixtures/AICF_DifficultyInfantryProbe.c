@@ -1,4 +1,4 @@
-// Только отдельный stage WCS+RHS. Проверяет выдачу, а не эффективность огня.
+// Только отдельный stage любого профиля. Проверяет выдачу ПТ-оружия и recruitment donor.
 modded class AICF_MatchController
 {
 	protected int m_iAICFATTicks;
@@ -25,7 +25,9 @@ modded class AICF_MatchController
 	protected bool AICF_ATLoaded(IEntity character, FactionKey faction, int index)
 	{
 		array<IEntity> items = {};
-		AICF_RHSPMCArmament.Items(character, items);
+		InventoryStorageManagerComponent inventory = InventoryStorageManagerComponent.Cast(character.FindComponent(InventoryStorageManagerComponent));
+		if (!inventory) return false;
+		inventory.GetItems(items);
 		foreach (IEntity item : items)
 		{
 			BaseWeaponComponent weapon = BaseWeaponComponent.Cast(item.FindComponent(BaseWeaponComponent));
@@ -35,7 +37,7 @@ modded class AICF_MatchController
 			foreach (BaseMuzzleComponent muzzle : muzzles)
 			{
 				if (!muzzle) continue;
-				Print(string.Format("[AICF][AT_WEAPON] faction=%1 index=%2 prefab=%3 loaded=%4 spare=%5", faction, index, SCR_ResourceNameUtils.GetPrefabName(item), muzzle.GetAmmoCount(), AICF_RHSPMCArmament.SpareMagazines(character, muzzle)));
+				Print(string.Format("[AICF][AT_WEAPON] faction=%1 index=%2 prefab=%3 loaded=%4", faction, index, SCR_ResourceNameUtils.GetPrefabName(item), muzzle.GetAmmoCount()));
 				if (muzzle.GetAmmoCount() > 0) return true;
 			}
 		}
@@ -76,6 +78,14 @@ modded class AICF_MatchController
 			array<SCR_CampaignFaction> factions = {m_USFaction, m_USSRFaction};
 			foreach (SCR_CampaignFaction faction : factions)
 			{
+				SCR_EntityCatalog catalog = faction.GetFactionEntityCatalogOfType(EEntityCatalogType.CHARACTER);
+				array<SCR_EntityCatalogEntry> entries = {};
+				if (catalog) catalog.GetEntityList(entries);
+				foreach (SCR_EntityCatalogEntry entry : entries)
+				{
+					string prefab = entry.GetPrefab();
+					if (prefab.Contains("Character_US_")) Print("[AICF][AT_CATALOG] prefab=" + prefab);
+				}
 				AICF_ATSpawn(faction, -1);
 				AICF_ATSpawn(faction, 8);
 				AICF_ATSpawn(faction, 9);
@@ -86,7 +96,7 @@ modded class AICF_MatchController
 		foreach (SCR_AIGroup pending : m_aAICFATGroups) total += AICF_GroupRuntime.CountAliveAgents(pending);
 		if (total < 24 && m_iAICFATTicks < 90) return;
 		AICF_ATCheck("ROSTER_24", total == 24);
-		AICF_RHSContentProfile baseline = new AICF_RHSContentProfile();
+		AICF_ContentProfile baseline = AICF_ContentProfile.GetActive();
 		AICF_ContentProfile stock = new AICF_ContentProfile();
 		foreach (int groupIndex, SCR_AIGroup group : m_aAICFATGroups)
 		{
@@ -112,7 +122,6 @@ modded class AICF_MatchController
 				ResourceName expected = m_GroupSpawner.ResolveRecruitPrefab(SCR_CampaignFaction.Cast(group.GetFaction()), index, role);
 				ResourceName actual = SCR_ResourceNameUtils.GetPrefabName(member);
 				AICF_ATCheck("ROLE_" + tag, role == expectedRole && suffixes.Count() == 1 && actual.EndsWith(suffixes[0]) && actual == expected);
-				AICF_ATCheck("WCS_KIT_" + tag, member.m_bAICFWCSKitApplied && AICF_WCSInfantryEquipment.ValidateWCS(member, member.GetFactionKey(), actual));
 				if (role == "ANTI_TANK")
 				{
 					atCount++;
@@ -134,7 +143,7 @@ modded class AICF_MatchController
 			if (reinforced) expectedLastRole = "ANTI_TANK";
 			AICF_ATCheck("STOCK_DIFFICULTY_" + groupIndex, stockRole == expectedLastRole);
 			baseline.BuildCharacterRoleCandidates(stable, 9, stockRole, stockSuffixes);
-			AICF_ATCheck("RHS_DIFFICULTY_" + groupIndex, stockRole == expectedLastRole);
+			AICF_ATCheck("PROFILE_DIFFICULTY_" + groupIndex, stockRole == expectedLastRole);
 		}
 		array<string> invalidSuffixes = {};
 		string invalidRole;

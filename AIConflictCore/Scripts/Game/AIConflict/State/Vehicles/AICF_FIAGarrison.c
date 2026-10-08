@@ -8,6 +8,8 @@ class AICF_FIAGarrison
 	bool m_bReady;
 	bool m_bRetired;
 	bool m_bTank;
+	bool m_bPassengers;
+	bool m_bStaticDefense;
 	SCR_CampaignFaction m_Faction;
 	SCR_CampaignMilitaryBaseComponent m_Base;
 	EntityID m_BaseId;

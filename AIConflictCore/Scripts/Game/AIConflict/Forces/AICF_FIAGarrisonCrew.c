@@ -10,13 +10,15 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 		{
 			if (!seat.IsCompartmentAccessible()) continue;
 			if (seat.GetOccupant() || seat.IsReserved()) return false;
-			g.m_aSeats.Insert(seat);
 			bool essential = IsEssentialSeat(seat, g.m_bTank);
+			if (!essential && !g.m_bPassengers) continue;
+			g.m_aSeats.Insert(seat);
 			g.m_aEssentialSeats.Insert(essential);
 			g.Log("FIA_GARRISON_SEAT", string.Format("index=%1 name=%2 type=%3 essential=%4", g.m_aSeats.Count() - 1, seat.GetCompartmentName(true), seat.GetType(), essential));
 			if (seat.GetType() == ECompartmentType.PILOT) pilots++;
 			if (seat.GetType() == ECompartmentType.TURRET) turrets++;
 		}
+		if (!g.m_bTank && !g.m_bPassengers && g.m_aSeats.Count() != 3) return false;
 		return pilots == 1 && turrets >= 1 && g.m_aSeats.Count() <= 16;
 	}
 
@@ -85,7 +87,7 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 		if (!Replication.IsServer() || !g || g.m_bRetired || !g.m_bReady || !g.VehicleIdentity() || !g.GroupIdentity()) return;
 		SCR_DamageManagerComponent damage = SCR_DamageManagerComponent.Cast(g.m_Vehicle.FindComponent(SCR_DamageManagerComponent));
 		if (damage && damage.IsDestroyed()) return;
-		if (!g.m_bTank && !g.m_bPassengersDeployed && CombatObserved(g))
+		if (g.m_bPassengers && !g.m_bTank && !g.m_bPassengersDeployed && CombatObserved(g))
 		{
 			g.m_bPassengersDeployed = true;
 			g.Log("FIA_GARRISON_DESANT_DEPLOY", "reason=COMBAT reboard=0");

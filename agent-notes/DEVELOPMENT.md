@@ -79,10 +79,11 @@ RHS/WCS версии и каталоги сверяй с установленн�
 сведения WCS: [Arland](../AIConflictArlandWCSRHS/README.md),
 [Everon](../AIConflictEveronWCSRHS/README.md).
 
-Для трёх сложностей северного WCS+RHS сценария используйте
-`-Variant EveronNorthWCSRHS -Difficulty Easy|Medium|Hard` (default `Easy`).
+Для любого из девяти Variant используйте `-Difficulty Easy|Medium|Hard`
+(default `Easy`), например `-Variant EveronNorth -Difficulty Hard`.
 Передавайте одинаковую `Difficulty` серверу и клиенту: readiness gate проверяет
-точный server header. Medium/Hard для других Variant отклоняются. Выбор сценария
+точный server header. На средней/сложной остальные сценарии получают 1/2 БТР
+с тремя членами экипажа; North WCS+RHS сохраняет десант и Т-72А. Выбор сценария
 в меню даёт тот же результат; параметры header определяют состав гарнизонов.
 
 ## Server и client

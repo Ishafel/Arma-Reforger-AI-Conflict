@@ -4,6 +4,92 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## Перенос сложностей на все сценарии — 2026-10-09
+
+Ветка `codex/scenario-difficulties`, baseline `ffa0ac2`.
+Добавлены 16 inherited headers (27 вариантов сложности суммарно), header flags
+танка/десанта, три essential места новых БТР, общая таблица трёх ПТ, stock US LAT,
+стационарный fallback площадки и отдельная квота AIWorld под initial crews.
+Зависимости `.gproj` не изменены. North WCS+RHS сохраняет БТР с десантом и Т-72.
+
+Evidence: `.codex-runtime/scenario-difficulties/`. `before/` и
+`after-capacity/`: `Invoke-AICFChecks.ps1 -Name` с одинаковыми 12 gates
+(FIAGarrisonContracts, ScenarioHeaders, EveronNorth, RuntimeLauncher,
+WCS/RHSIntegration, FIAPatrol, AICombatInput, Stage3, Stage35, Stage35RecoveryPolicy,
+Stage4). До/после: **11 PASS, тот же FAIL STAGE4_ATTACKED_BASES**.
+`pwsh -File tests/static/Test-LocalizationStatic.ps1` и
+`pwsh -File tools/Build-AICFLocalization.ps1 -Check`: **PASS**, 587 строк.
+Первый расширенный запуск runner включал Localization через WinPS 5.1 и получил
+ошибку разбора существующего UTF-8 audit без BOM; прямой PowerShell 7 gate до/после PASS.
+
+Терминальный Workbench: `compile.ps1 -Variant Stock|EveronRHS|EveronWCSRHS`,
+labels `release-stock`, `release-rhs`, `release-production`: **PASS**,
+validation successful, без SCRIPT E/F и ENGINE F. Полные argv и logs сохранены.
+Runtime fixture с обоими probes: `capacity-fixture` — **PASS**.
+Промежуточные compile failures (операции с временным значением array и
+неявным float в выражении modulo) сохранены, исправлены до финальных запусков.
+Native exit 0 в этих неудачных запусках не трактуется как PASS.
+
+`Test-RuntimeLauncherStatic.ps1` проверяет Server/Client manifests для всех
+18 Medium/Hard комбинаций, точные GUID/paths, inherited difficulty/flags.
+Позитивный вход PASS; копия header с запрещённым tank flag даёт ожидаемый
+`DIFFICULTY_CREW_ONLY` FAIL. FIAGarrisonContracts: позитивный PASS,
+отключение preflight в изолированной копии даёт ожидаемый `SPAWN_PATROL_PREFLIGHT` FAIL.
+
+Dedicated запущены только через `Start-AICFRuntime.ps1`, обёртка `run.ps1`
+сохраняет manifest, exit и полную копию остановленного profile `logs-<label>/`.
+`AICF_DifficultyRolloutProbe` читает все три native headers каждого Variant.
+Итоги targeted probe (число готовых машин / checks, failures):
+
+| Сценарий | Hard |
+|---|---|
+| Stock Arland | 12 / 79, 0 |
+| RHS Arland | 12 / 79, 0 |
+| WCS+RHS Arland | 12 / 79, 0 |
+| Stock Everon | 74 / 327, 0 (повтор после зависания) |
+| Stock Everon North | 10 / 70, 0 |
+| RHS Everon | 74 / 326, 0 |
+| RHS Everon North | 10 / 70, 0 |
+| WCS+RHS Everon | 74 / 326, 0 |
+| WCS+RHS Everon North | 10 / 65, 0; пять БТР по 10 бойцов, пять Т-72 по 3 |
+
+Stock Arland Medium: 6 машин, 54/54; Easy: 0 машин, 29/29, без добавления квоты.
+На Арланде Hard две машины стационарны (ближайшая дорога одной базы в 233 м).
+На полном Эвероне стационарны 1–2 машины, на северном — одна. Это
+согласованный fallback, а не успешный дорожный патруль. Остальные проверяются
+по составу; arrival sample подтверждает движение хотя бы одного патруля,
+не всех машин. Deadline/retired guard не отключались ради PASS.
+
+`AICF_DifficultyInfantryProbe -aicfATProbe 1`, Medium stock/RHS/WCS+RHS:
+**60/60 каждый**, по 24 фактических бойца, initial groups и donors позиций 8/9.
+Stock US — заряженный M72A3; USSR — РПГ-7. В первом stock прогоне отсутствующий
+`Character_US_AT.et` приводил к обычному fallback; Medium/Hard исправлены на
+штатный `Character_US_LAT.et`, Easy сохранён. Эти проверки не доказывают огневую
+эффективность, оплату пополнения или переход donor в боевой отряд.
+
+Полный log gate отделён от targeted probe: в WCS Arland зарегистрирован один
+`PMC_EQUIPMENT_FAILED rollback=1 restored=0`, в полном RHS Everon — шесть,
+в полном WCS Everon — девять (одни и те же события дублируются в трёх log-файлах).
+Это ранее наблюдавшийся сбой FIA equipment adapter, в этой задаче не исправлялся;
+**полный combat log gate для этих запусков FAIL**, несмотря на PASS состава.
+Resource/backend/pathfinding errors сохранены отдельно; VM и ENGINE F не обнаружены.
+
+До исправления квоты полные RHS/WCS упирались в 260 активных персонажей и
+`INITIAL_CREW_FAILED`; финальная квота 481 позволила посадить все 74 экипажа.
+Первый полный stock прогон после создания 74 машин перестал обновлять log на
+`t_ms=200753`; процесс принудительно остановлен, диагностика `stock-hang.json`.
+Этот прогон **не PASS**. Отдельный повтор `Everon-Hard-retry` завершился
+327/327, без SCRIPT E/F, VM и ENGINE F; причина первого зависания не установлена,
+единичный успешный повтор не доказывает долгую стабильность.
+
+Все свои серверы завершены, stage и негативные копии удалены после сохранения
+логов. Изменённые файлы перечислены в `changed-files.txt`, итог по полным
+остановленным console logs — `runtime-summary.json` (без тройного учёта дублей).
+
+Client/JIP, реальный игрок у границы 50 м, packaged build, ручной вид меню,
+долгий soak и полный бой до уничтожения гарнизонов — **NOT RUN**. Прежние
+длительные recovery-проблемы этим переносом не объявлены исправленными.
+
 ## Выбор проверок
 
 Статика находится в `tests/static/`, контракты — в `tests/contracts/`, анализаторы
