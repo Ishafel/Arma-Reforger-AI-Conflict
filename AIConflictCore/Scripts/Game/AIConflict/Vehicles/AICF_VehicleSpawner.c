@@ -1223,16 +1223,26 @@ class AICF_VehicleSpawner
 		if (!Replication.IsServer() || !g || g.m_Vehicle || !g.m_Lease || !fleet ||
 			!g.BaseIdentity() || g.m_Base.GetFaction() != g.m_Faction) return false;
 		AICF_LogisticsVehicleFootprint footprint = AICF_LogisticsVehicleFootprint.Get(g.m_sPrefab);
-		if (!footprint || !footprint.m_bValid) return false;
+		SCR_AIWorld ai = SCR_AIWorld.Cast(GetGame().GetAIWorld());
+		if (!footprint || !footprint.m_bValid || !ai || !ai.GetRoadNetworkManager()) return false;
 		BaseWorld world = GetGame().GetWorld();
 		vector center = g.m_Base.GetOwner().GetOrigin();
 		for (int candidate; candidate < 64; candidate++)
 		{
 			int bearing = candidate % 16;
 			float angle = bearing * 22.5 * Math.DEG2RAD;
-			float radius = 20 + (candidate / 16) * 20;
+			float radius = 100 - (candidate / 16) * 20;
 			vector direction = Vector(Math.Cos(angle), 0, Math.Sin(angle));
-			vector position = center + direction * radius;
+			vector requested = center + direction * radius;
+			vector position;
+			if (!ai.GetRoadNetworkManager().GetReachableWaypointInRoad(center, requested, 40, position)) continue;
+			if (vector.DistanceXZ(position, center) > 120) continue;
+			if (!FIAGarrisonRoadDirection(ai.GetRoadNetworkManager(), position, direction)) continue;
+			if (vector.DistanceXZ(position, center) > 120 || Math.AbsFloat(position[1] - world.GetSurfaceY(position[0], position[2])) > 1.5) continue;
+			int patrolDirection = 1;
+			vector patrolEndpoint;
+			if (!AICF_FIAGarrisonPatrol.FindRoadEndpoint(ai.GetRoadNetworkManager(), position, center, patrolDirection, patrolEndpoint)) continue;
+			if (!FIAGarrisonTurnSurface(world, position)) continue;
 			float x = position[0];
 			float z = position[2];
 			vector up = Vector(world.GetSurfaceY(x - 1, z) - world.GetSurfaceY(x + 1, z), 2,
@@ -1245,8 +1255,10 @@ class AICF_VehicleSpawner
 			pose[3] = position;
 			pose[3][1] = world.GetSurfaceY(x, z);
 			if (!AICF_LogisticsSpawnGeometry.FitToSurface(world, footprint, pose)) continue;
-			TraceOBB body;
-			if (!footprint.IsClear(world, pose, body) || !AICF_ConstructionPlanner.VehicleAreaClear(pose[3], 12)) continue;
+			TraceOBB body, exitTrace;
+			vector exitPosition;
+			if (!footprint.IsClear(world, pose, body) || !AICF_ConstructionPlanner.VehicleAreaClear(pose[3], 18)) continue;
+			if (!AICF_LogisticsSpawnGeometry.ExitClear(world, footprint, pose, exitPosition, exitTrace)) continue;
 			bool reserved;
 			foreach (AICF_VehicleSpawnSiteReservation site : s_aConstructionSites)
 			{
@@ -1272,6 +1284,49 @@ class AICF_VehicleSpawner
 			return fleet.BindReservedLeaseVehicle(g.m_Lease, g.m_Vehicle, rpl.Id().ToString(), g.m_sPrefab, AICF_EVehicleKind.ARMED_LIGHT, seats.Count(), pose[3]);
 		}
 		return false;
+	}
+
+	// Мобильной машине нужен запас земли для разворота, не только сухой OBB.
+	protected bool FIAGarrisonTurnSurface(BaseWorld world, vector position)
+	{
+		float centerY = world.GetSurfaceY(position[0], position[2]);
+		for (int bearing; bearing < 8; bearing++)
+		{
+			float angle = bearing * 45 * Math.DEG2RAD;
+			vector point = position + Vector(Math.Cos(angle), 0, Math.Sin(angle)) * 12;
+			point[1] = world.GetSurfaceY(point[0], point[2]);
+			if (Math.AbsFloat(point[1] - centerY) > 3 || ChimeraWorldUtils.TryGetWaterSurfaceSimple(world, point)) return false;
+		}
+		return true;
+	}
+
+	protected bool FIAGarrisonRoadDirection(RoadNetworkManager roads, inout vector position, out vector direction)
+	{
+		BaseRoad road;
+		float distance;
+		roads.GetClosestRoad(position, road, distance, true);
+		if (!road || distance > 10) return false;
+		array<vector> points = {};
+		road.GetPoints(points);
+		float best = float.MAX;
+		vector projected;
+		for (int i = 1; i < points.Count(); i++)
+		{
+			vector segment = points[i] - points[i - 1];
+			segment[1] = 0;
+			float lengthSq = segment.LengthSq();
+			if (lengthSq < 1) continue;
+			float fraction = Math.Clamp(vector.Dot(position - points[i - 1], segment) / lengthSq, 0, 1);
+			vector nearest = points[i - 1] + (points[i] - points[i - 1]) * fraction;
+			float candidate = vector.DistanceXZ(position, nearest);
+			if (candidate >= best) continue;
+			best = candidate;
+			projected = nearest;
+			direction = segment.Normalized();
+		}
+		if (best >= 10) return false;
+		position = projected;
+		return true;
 	}
 
 	protected Vehicle SpawnSelectedPrefab(ResourceName prefab, vector position, EntitySpawnParams spawnParams = null)

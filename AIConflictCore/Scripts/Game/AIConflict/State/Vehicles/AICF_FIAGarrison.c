@@ -17,6 +17,19 @@ class AICF_FIAGarrison
 	EntityID m_GroupId;
 	ResourceName m_sPrefab;
 	vector m_vPosition;
+	vector m_vHome;
+	vector m_vPatrolTarget;
+	vector m_vPatrolProgress;
+	AIWaypoint m_PatrolWaypoint;
+	EntityID m_PatrolWaypointId;
+	int m_iPatrolCandidate;
+	int m_iPatrolDirection = 1;
+	int m_iPatrolLeg;
+	int m_iPatrolArrivals;
+	int m_iPatrolProgressAtMs;
+	int m_iPatrolRetryAtMs;
+	bool m_bReturning;
+	bool m_bPatrolMoveFailed;
 	ref AICF_VehicleLease m_Lease;
 	ref array<BaseCompartmentSlot> m_aSeats = {};
 	ref array<ChimeraCharacter> m_aCrew = {};
@@ -46,6 +59,27 @@ class AICF_FIAGarrison
 		if (index < 0 || entity.GetID() != m_aCrewIds[index]) return false;
 		AIControlComponent control = AIControlComponent.Cast(entity.FindComponent(AIControlComponent));
 		return control && control.GetAIAgent() && control.GetAIAgent().GetParentGroup() == m_Group;
+	}
+
+	bool CanDrive()
+	{
+		if (!m_bReady || !VehicleIdentity() || !GroupIdentity()) return false;
+		SCR_DamageManagerComponent damage = SCR_DamageManagerComponent.Cast(m_Vehicle.FindComponent(SCR_DamageManagerComponent));
+		if (damage && damage.IsDestroyed()) return false;
+		bool driver;
+		foreach (BaseCompartmentSlot seat : m_aSeats)
+		{
+			if (!seat || !seat.GetOwner()) return false;
+			IEntity occupant = seat.GetOccupant();
+			if (occupant && !OwnsMember(occupant)) return false;
+			if (seat.GetType() == ECompartmentType.PILOT) driver = OwnsMember(occupant);
+		}
+		return driver;
+	}
+
+	bool PatrolWaypointIdentity()
+	{
+		return GroupIdentity() && m_PatrolWaypoint && m_PatrolWaypoint.GetID() == m_PatrolWaypointId;
 	}
 
 	void Log(string eventName, string details)

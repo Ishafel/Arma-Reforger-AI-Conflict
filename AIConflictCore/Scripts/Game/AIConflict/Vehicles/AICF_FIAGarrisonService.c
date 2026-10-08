@@ -6,6 +6,7 @@ class AICF_FIAGarrisonService
 	protected ref AICF_FIAGarrisonCrew m_Crew = new AICF_FIAGarrisonCrew();
 	protected ref AICF_VehicleSpawner m_Spawner = new AICF_VehicleSpawner();
 	protected ref AICF_ManagedAILODPolicy m_LOD = new AICF_ManagedAILODPolicy();
+	protected ref AICF_FIAGarrisonPatrol m_Patrol = new AICF_FIAGarrisonPatrol();
 	protected bool m_bStopped;
 	protected int m_iNextSpawnMs;
 
@@ -15,6 +16,62 @@ class AICF_FIAGarrisonService
 		foreach (AICF_FIAGarrison g : s_aDefenders)
 		{
 			if (g.OwnsMember(entity)) return true;
+		}
+		return false;
+	}
+
+	static bool IsLocalPatrolMove(IEntity entity, SCR_AIBehaviorBase behavior)
+	{
+		if (!Replication.IsServer() || !entity || !behavior) return false;
+		SCR_AIMoveActivity activity = SCR_AIMoveActivity.Cast(behavior.GetGroupActivityContext());
+		if (!activity) return false;
+		foreach (AICF_FIAGarrison g : s_aDefenders)
+		{
+			if (g.OwnsMember(entity) && g.CanDrive() && g.PatrolWaypointIdentity() &&
+				activity.m_RelatedWaypoint == g.m_PatrolWaypoint &&
+				vector.DistanceXZ(g.m_vPatrolTarget, g.m_vHome) <= AICF_FIAGarrisonPatrol.ROUTE_RADIUS) return true;
+		}
+		return false;
+	}
+
+	static AICF_FIAGarrison FindPatrol(SCR_AIGroup group, AIWaypoint waypoint, IEntity vehicle)
+	{
+		if (!Replication.IsServer() || !group || !waypoint) return null;
+		foreach (AICF_FIAGarrison g : s_aDefenders)
+		{
+			if (g.m_bRetired || !g.CanDrive() || !g.PatrolWaypointIdentity()) continue;
+			if (g.m_Group == group && g.m_PatrolWaypoint == waypoint && group.GetCurrentWaypoint() == waypoint &&
+				(!vehicle || vehicle == g.m_Vehicle)) return g;
+		}
+		return null;
+	}
+
+	static bool IsLocalPilotAvoidance(IEntity entity, vector position)
+	{
+		if (!Replication.IsServer() || !entity) return false;
+		foreach (AICF_FIAGarrison g : s_aDefenders)
+		{
+			if (!g.OwnsMember(entity) || !g.CanDrive()) continue;
+			if (vector.DistanceXZ(position, g.m_vHome) > AICF_FIAGarrisonPatrol.RETURN_RADIUS ||
+				vector.DistanceXZ(position, g.m_Vehicle.GetOrigin()) > 25) return false;
+			foreach (BaseCompartmentSlot seat : g.m_aSeats)
+			{
+				if (seat && seat.GetType() == ECompartmentType.PILOT && seat.GetOccupant() == entity) return true;
+			}
+		}
+		return false;
+	}
+
+	static bool IsLocalBoarding(IEntity entity, SCR_AIGetInVehicle behavior)
+	{
+		if (!Replication.IsServer() || !entity || !behavior) return false;
+		foreach (AICF_FIAGarrison g : s_aDefenders)
+		{
+			if (!g.OwnsMember(entity) || !g.VehicleIdentity() || behavior.m_Vehicle.m_Value != g.m_Vehicle) continue;
+			BaseCompartmentSlot seat = behavior.m_CompartmentToGetIn.m_Value;
+			if (!seat || !g.m_aSeats.Contains(seat) || (seat.GetOccupant() && seat.GetOccupant() != entity)) return false;
+			return vector.DistanceXZ(entity.GetOrigin(), g.m_Vehicle.GetOrigin()) <= 25 &&
+				vector.DistanceXZ(g.m_Vehicle.GetOrigin(), g.m_vHome) <= AICF_FIAGarrisonPatrol.RETURN_RADIUS;
 		}
 		return false;
 	}
@@ -46,6 +103,7 @@ class AICF_FIAGarrisonService
 				g.m_iSlot = 10000 + s_aDefenders.Count();
 				g.m_Base = base;
 				g.m_BaseId = base.GetOwner().GetID();
+				g.m_vHome = base.GetOwner().GetOrigin();
 				g.m_Faction = faction;
 				g.m_bTank = kind == 1;
 				g.m_sPrefab = AICF_ContentProfile.GetActive().GetFIAGarrisonPrefab(g.m_bTank);
@@ -73,11 +131,11 @@ class AICF_FIAGarrisonService
 			if (!g.GroupIdentity()) { Retire(g, "GROUP_IDENTITY_LOST"); continue; }
 			int agents, recovered;
 			m_LOD.KeepCaptureEligible(g.m_Group, agents, recovered);
-			if (g.m_bReady) continue;
+			if (g.m_bReady) { m_Patrol.Update(g, now); continue; }
 			if (!g.VehicleIdentity() || now - g.m_iRequestedAtMs >= 90000) { Retire(g, "INITIAL_CREW_FAILED"); continue; }
 			if (!m_Crew.BoardGarrison(g)) continue;
 			g.m_bReady = true;
-			g.Log("FIA_GARRISON_READY", string.Format("crew=%1 seats=%2 position=%3 stationary=1 replacement=0", g.m_aCrew.Count(), g.m_aSeats.Count(), g.m_vPosition));
+			g.Log("FIA_GARRISON_READY", string.Format("crew=%1 seats=%2 position=%3 stationary=0 replacement=0", g.m_aCrew.Count(), g.m_aSeats.Count(), g.m_vPosition));
 		}
 	}
 
@@ -107,6 +165,7 @@ class AICF_FIAGarrisonService
 	protected void Retire(AICF_FIAGarrison g, string reason)
 	{
 		if (g.m_bRetired) return;
+		m_Patrol.Stop(g);
 		AICF_VehicleCleanupManager.RetainFIAGarrison(g);
 		g.m_bRetired = true;
 		g.Log("FIA_GARRISON_RETIRED", "reason=" + reason + " entities_retained=1 replacement=0");

@@ -21,6 +21,8 @@ foreach ($entry in $ready) {
     if ([int]$entry.Groups[3].Value -ne $expectedCrew -or [int]$entry.Groups[4].Value -ne $expectedCrew) { $failures += 'FULL_CREW' }
 }
 if (@($ready | Where-Object { $_.Groups[2].Value -eq '1' }).Count -ne ([Math]::Max(0, $Difficulty - 1) * 5)) { $failures += 'TANK_COUNT' }
+if ([regex]::Matches($log, '\[GARRISON_PROBE\] case=PATROL_MOVED_\d+ passed=1').Count -ne $count) { $failures += 'PHYSICAL_PATROL' }
+if ([regex]::Matches($log, '\[GARRISON_PROBE\] case=LOCAL_RADIUS_\d+ passed=1').Count -ne $count) { $failures += 'LOCAL_RADIUS' }
 $finished = [regex]::Matches($log, '\[GARRISON_PROBE_FINISHED\] checks=(\d+) failures=(\d+)')
 $expectedChecks = 2 + $count * 5
 if ($count) { $expectedChecks += 3 }

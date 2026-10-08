@@ -53,7 +53,8 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 
 // Ограничение относится только к зарегистрированным immutable members гарнизона.
 // Штатный выбор цели/оружия и стрельба сохраняются; pursuit, retreat и driver
-// combat-move не исполняются. После выхода из уничтоженной машины боец держится
+// combat-move не исполняются. Move разрешён только от текущего локального waypoint.
+// После выхода из уничтоженной машины боец держится
 // на месте и продолжает огонь. Игрок и чужая группа не попадают под эту policy.
 modded class SCR_AIUtilityComponent
 {
@@ -65,8 +66,15 @@ modded class SCR_AIUtilityComponent
 		if (!behavior || !AICF_FIAGarrisonService.IsDefender(m_OwnerEntity)) return behavior;
 		bool stationary = SCR_AIAttackBehavior.Cast(behavior) || SCR_AISuppressBehavior.Cast(behavior) ||
 			SCR_AIIdleBehavior.Cast(behavior) || SCR_AIWaitBehavior.Cast(behavior);
-		if (!stationary)
+		bool patrolMove = (SCR_AIMoveIndividuallyBehavior.Cast(behavior) || SCR_AIMoveInFormationBehavior.Cast(behavior)) &&
+			AICF_FIAGarrisonService.IsLocalPatrolMove(m_OwnerEntity, behavior);
+		SCR_AIPilotMoveFromIncomingVehicleBehavior avoidance = SCR_AIPilotMoveFromIncomingVehicleBehavior.Cast(behavior);
+		bool localAvoidance = avoidance && AICF_FIAGarrisonService.IsLocalPilotAvoidance(m_OwnerEntity, avoidance.m_vMovePos.m_Value);
+		bool localBoarding = AICF_FIAGarrisonService.IsLocalBoarding(m_OwnerEntity, SCR_AIGetInVehicle.Cast(behavior));
+		if (!stationary && !patrolMove && !localAvoidance && !localBoarding)
 		{
+			// Отклонённое действие иначе снова выигрывает EvaluateActions и блокирует новый маршрут.
+			behavior.Fail();
 			if (!m_AICFGarrisonWait) m_AICFGarrisonWait = new SCR_AIWaitBehavior(this, null);
 			SetCurrentAction(m_AICFGarrisonWait);
 			m_CurrentBehavior = m_AICFGarrisonWait;

@@ -201,5 +201,5 @@ Enforce fixture не входят в автоматическую матрицу
 полный roster, отсутствие замены и наследование Medium/Hard headers.
 `tests/log-audits/Test-FIAGarrisonLog.ps1 -LogPath <полный-остановленный-console.log>
 -Difficulty 0|1|2` анализирует прогон `AICF_FIAGarrisonProbe.c` на North WCS+RHS:
-состав 0/5/10, экипажи 10/3, удержание, захват и casualty. Отдельно сообщает
+состав 0/5/10, экипажи 10/3, физический локальный патруль, захват и casualty. Отдельно сообщает
 число остальных engine/resource errors; PASS не означает отсутствие этих ошибок.

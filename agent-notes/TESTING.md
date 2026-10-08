@@ -317,6 +317,102 @@ log gate — FAIL из-за одной `PMC_EQUIPMENT_FAILED`: выдача но
 Client/JIP, ручная проверка плиток меню, packaged build, долгий soak,
 танковая пушка против бронетехники и полный бой до гибели гарнизона — **NOT RUN**.
 
+## Локальный патруль гарнизонов FIA — 2026-10-08
+
+Продолжение той же ветки от `3d8253a`: прежний тест неподвижной обороны выше
+не подтверждает новое поведение. Добавлен локальный vehicle patrol с immutable
+home, короткими дорожными участками, возвратом при удалении и identity-проверкой
+текущего waypoint. Изменены crew policy, failure recovery, handoff, spawn geometry,
+локализация, профильный probe и заметки. Полные логи и команды:
+`.codex-runtime/fia-local-patrol/`.
+
+Baseline `before/`: AICombatInputContracts, FIAGarrisonContracts, FIAPatrolStatic,
+Stage35RecoveryPolicy, Stage35Static, Stage3Static, Stage3StaticContracts — 7 PASS/0.
+Перед изменением AI node отдельно `before-node/`: NorthFailureContracts —
+FAIL/1, `MOVE_CALLBACK_FENCE` и `MOVE_ACTIVITY`. В `after-final/` те же
+7 PASS/0 и тот же NorthFailure FAIL/1; этот baseline не исправлен.
+Команда: `tools/Invoke-AICFChecks.ps1 -Name <список> -EvidenceRoot <каталог>`;
+точные аргументы и exit codes находятся в `summary.json` каждого каталога.
+Локализация до/после: `pwsh -File tests/static/Test-LocalizationStatic.ps1` и
+`pwsh -File tools/Build-AICFLocalization.ps1 -Check` — PASS/0, 539 записей.
+
+Runtime запускается `runtime.ps1 -Difficulty Hard -Expected 2 -Label <label>`
+через штатный launcher, Variant `EveronNorthWCSRHS`, CLI
+`-aicfGarrisonProbe 2 -aicfRequirePlayerForResult 0`. Источник — отдельный stage,
+полные logs в `server-<label>/logs/*/console.log`, manifest/CLI/native exit —
+`server-<label>-launcher.txt` и `server-<label>-exit.txt`.
+Ранние `Patrol1`–`Patrol4` и короткий `Diagnostic` — FAIL: выявили blocked
+native avoidance, неудачные площадки у берега, слишком длинные участки и
+отклонённые старые действия, конкурирующие с новым приказом. Это сохранённое
+диагностическое evidence, а не успешные проверки. В Patrol1/2/4 также есть
+`PMC_EQUIPMENT_FAILED rollback=1` — ранее наблюдавшийся сбой выдачи экипировки;
+его не исправляли и не исключали из log gate. Подробности ошибок из полных
+остановленных логов сохранены в `runtime-attempt-errors.json`.
+
+`Patrol5` — FAIL/4 cases, `Patrol6` — FAIL/2 cases (и PMC equipment error),
+`Patrol7` — FAIL/1 case: БТР у причала начинал на коротком ответвлении без
+подходящего местного участка. Исправление: продолжение текущей дороги имеет
+приоритет, а такой маршрут проверяется до spawn. Crew policy завершает
+отклонённое действие, сохраняя bounded native avoidance/boarding.
+
+Финальные production Workbench команды:
+`compile.ps1 -Label patrol8-production` и
+`compile.ps1 -Variant EveronNorth -Label stock-patrol8-production` — PASS/0,
+`Script validation successful`, SCRIPT E/F и ENGINE F нет. Версия 1.8.0.13.
+Полные логи: `wb-patrol8-production/`, `wb-stock-patrol8-production/`; точные
+аргументы — `wb-*-argv.json`, сводка — `compile-final-summary.json`.
+Прочих строк (E) 39/25: engine resource logs не чистые.
+`source-hashes-final.json` подтверждает SHA-256 совпадение 241 production файла
+со stage. Fixture добавлен только в stage; его damage protection не входит
+в production. `contracts-patrol8.txt`: FIAGarrisonContracts — PASS/0, 34 guards.
+Анализ старого Hard3 stationary log новым анализатором — ожидаемый FAIL/1
+(`log-audit-old-stationary-negative.txt`): старая проверка неподвижности не может
+подтвердить патруль.
+
+После preflight повторён весь выбранный набор: `after-road-preflight/` —
+7 PASS/0. Финальный `Patrol8` (19:48:46–19:55:12 MSK) — **PASS/0**:
+55/55 cases, пять БТР-70 с 10 бойцами и пять Т-72А с 3 бойцами, каждый выполнил
+не менее двух физических прибытий. Наблюдаемый максимум удаления от домашней
+базы в samples — 153.863 м. Probe затем меняет владельца базы, убивает одного
+защитника и ещё 60 с проверяет сохранение гарнизона без пополнения.
+Полный остановленный лог:
+`server-Patrol8/logs/logs_2026-10-08_19-48-46/console.log`;
+`runtime-final-summary.json`, `Patrol8-analysis.txt`/`-exit.txt` — сводки.
+`pwsh -File tests/log-audits/Test-FIAGarrisonLog.ps1 -LogPath <этот полный лог> -Difficulty 2`
+— PASS/0, `ROSTER_READY` и `Game destroyed.` присутствуют, SCRIPT E/F, ENGINE F
+и VM exceptions отсутствуют; 233 прочих строки (E) сохранены.
+
+Это изолированная навигационная проверка: после READY fixture отключает damage
+машин и экипажей, затем включает его для одного убиваемого бойца. В production
+неуязвимости нет. Допуск probe 250 м учитывает разворот после порога возврата
+200 м; к концу интервала машина обязана находиться внутри 200 м. В финальном
+прогоне запас не понадобился. До этой правки `Patrol3/4` наблюдали временный
+выход до ~230 м и фактический возврат; новый PASS не выдаётся за жёсткий
+физический барьер в 200 м.
+
+Изолированный `CombatFinal`: `compile.ps1 -Label combat-final-fixture -SourceRoot <stage>`
+— Workbench PASS/0; `runtime-combat.ps1 -Difficulty Hard -Label CombatFinal`
+— native exit 0, штатный launcher с `-aicfGarrisonCombatProbe 1`.
+Полный остановленный лог:
+`server-CombatFinal/logs/logs_2026-10-08_19-56-49/console.log`.
+За 90 с наблюдения расход боеприпасов БТР и танка подтверждён, машины оставались
+в пределах 250 м от дома; `GARRISON_FIRE_FINISHED passed=1 btr=1 tank=1`.
+Fixture создаёт десять активных неуязвимых пехотных целей; гарнизоны в этом
+прогоне обычные, damage им не отключён. Пулемётный огонь подтверждён,
+танковая пушка по бронецели не проверялась.
+**Полный combat log gate — FAIL**: одна `PMC_EQUIPMENT_FAILED rollback=1`
+(сбой нового комплекта, восстановление прежнего вернуло true). Это повтор
+наблюдавшейся ранее ошибки, а не новый чистый PASS. VM/null exceptions и
+ENGINE F нет; ещё 233 строки (E) — resource baseline.
+Сводка: `combat-final-summary.json`; fixture сохранена в evidence отдельно.
+
+Полный offline набор, повтор Medium/Easy runtime после этой правки,
+ручная проверка меню, packaged build, долгий soak, JIP, стрельба пушки по
+бронетехнике и бой до гибели всего гарнизона — **NOT RUN**.
+`git diff --check` — PASS/0. Перечень 20 изменённых файлов:
+`changed-files.txt` в evidence. Тестовые процессы завершены через RequestClose;
+stage удаляется перед запуском production server/client для ручной проверки.
+
 ## Результаты прежних изменений
 
 Источники — [0.1.25](../releases/0.1.25.md) и

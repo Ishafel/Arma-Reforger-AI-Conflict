@@ -18,8 +18,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008100012}"
 		{
 			Id "AICF_Scenario_EveronNorthWCSRHS_Medium_Details"
-			Target_en_us "Two HQs and five capture points. FIA vehicles and their occupants hold their initial positions until destroyed, without pursuit or replacements. Every launch starts a new campaign; session progress is not saved."
-			Target_ru_ru "Два штаба и пять точек захвата. Техника FIA и её бойцы обороняют исходные позиции до последнего, без преследования и пополнения потерь. Каждый запуск начинает новую кампанию; прогресс сессии не сохраняется."
+			Target_en_us "Two HQs and five capture points. FIA crews patrol near their assigned bases in vehicles and defend them to the last, without distant pursuit or replacements. Every launch starts a new campaign; session progress is not saved."
+			Target_ru_ru "Два штаба и пять точек захвата. Экипажи FIA патрулируют окрестности своих баз на технике и обороняют их до последнего, без дальнего преследования и пополнения потерь. Каждый запуск начинает новую кампанию; прогресс сессии не сохраняется."
 		}
 		CustomStringTableItem "{A1CF261008100013}"
 		{
@@ -36,8 +36,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008100015}"
 		{
 			Id "AICF_Scenario_EveronNorthWCSRHS_Hard_Details"
-			Target_en_us "Two HQs and five capture points. FIA vehicles and their occupants hold their initial positions until destroyed, without pursuit or replacements. Every launch starts a new campaign; session progress is not saved."
-			Target_ru_ru "Два штаба и пять точек захвата. Техника FIA и её бойцы обороняют исходные позиции до последнего, без преследования и пополнения потерь. Каждый запуск начинает новую кампанию; прогресс сессии не сохраняется."
+			Target_en_us "Two HQs and five capture points. FIA crews patrol near their assigned bases in vehicles and defend them to the last, without distant pursuit or replacements. Every launch starts a new campaign; session progress is not saved."
+			Target_ru_ru "Два штаба и пять точек захвата. Экипажи FIA патрулируют окрестности своих баз на технике и обороняют их до последнего, без дальнего преследования и пополнения потерь. Каждый запуск начинает новую кампанию; прогресс сессии не сохраняется."
 		}
 		CustomStringTableItem "{A1CF261006100010}"
 		{
