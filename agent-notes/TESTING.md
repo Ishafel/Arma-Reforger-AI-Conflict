@@ -112,6 +112,47 @@ Production `.c` и содержимое runtime probes не менялись. Wo
 JIP, soak, визуальные проверки, showcase и watchdog — **NOT RUN** в этой задаче.
 Переезд файлов не подтверждает их runtime совместимость.
 
+## Проверка лагеря у электростанции, 08.10.2026
+
+Исходник — `0bc09b5` (`origin/main`), чистое дерево; ветка задачи
+`codex/everon-north-powerplant`. В эксперименте North headers stock/RHS
+заменяли `TownBaseKermovan` на `StartingPos06`; WCS+RHS наследовал RHS.
+Изменения headers и fixture **отменены после runtime FAIL**, игровой перенос
+не выполнен. Сохраняется исходный состав баз.
+
+Evidence: `.codex-runtime/everon-north-powerplant/`. Запуск
+`tools/Invoke-AICFChecks.ps1 -Name Test-EveronNorthStatic.ps1,Test-ScenarioHeadersStatic.ps1,Test-WCSIntegrationStatic.ps1,Test-RHSIntegrationStatic.ps1`
+с отдельным `-EvidenceRoot` дал 4 PASS/0 до и после эксперимента
+(`before/`, `after/`); baseline failures в этом наборе отсутствуют.
+После отмены эксперимента тот же набор — 4 PASS/0 (`restored/`),
+`git diff --check` — PASS/0. Финальные изменения только в агентских заметках.
+Representative positive/negative для изменённого North audit — 0/1;
+это доказательство проверки списка, а не возможности захвата.
+
+Терминальный Workbench для изолированного stage, варианты `EveronNorth` и
+`EveronNorthWCSRHS`: exit 0, `Script validation successful`, без SCRIPT E/F
+и ENGINE F. Полные логи: `wb-<Variant>/`, команды: `wb-<Variant>-argv.json`.
+Первый stock запуск wrapper прерван обработкой native stderr в PowerShell 5.1;
+он не считается PASS. Успешные повторные прогоны сохранили native exit codes.
+
+Сервер `EveronNorth` 1.8.0.13 через `tools/Start-AICFRuntime.ps1`, PowerShell 7:
+**FAIL, 18/19 checks**, `CAPTURE_MECHANISM_StartingPos06 passed=0`.
+Положение, spawn point, 8 активных баз, 2 HQ, 6 control points, roster и
+radio graph (`nodes=8 missing=0`) прошли. Native exit 0 не отменяет FAIL.
+Fixture в stage завершила сервер через `RequestClose()` спустя 1000 ms после
+проверок; штатная задержка fixture 150000 ms сокращена только в stage.
+Полный stopped log: `server-EveronNorth-run/logs/*/console.log`; точные CLI,
+profile и `AICF_RUNTIME_MANIFEST_JSON` — `server-EveronNorth-launcher.txt`.
+Предварительный запуск в PowerShell 5.1 прервался на native stderr и не даёт
+runtime verdict. SCRIPT E/F и ENGINE F в завершённом прогоне нет;
+ошибки ресурсов, мира и pathfinding сохранены, логи не объявляются чистыми.
+
+RHS/WCS server runtime после выявленного функционального FAIL, client/JIP,
+ручная карта/захват, стройка, soak и packaged build — **NOT RUN**.
+Старые 5 baseline failures полного offline набора не перепроверялись.
+Диагностические копии удалены после сохранения evidence; production `.c`
+не менялись. Вывод по архитектурному ограничению — в [GAMEPLAY.md](GAMEPLAY.md).
+
 ## Результаты прежних изменений
 
 Источники — [0.1.25](../releases/0.1.25.md) и
