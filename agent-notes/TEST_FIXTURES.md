@@ -1,5 +1,14 @@
 # Runtime fixture: каталог и применение
 
+`AICF_FIAGarrisonProbe.c` — новый probe сложности: параметр
+`-aicfGarrisonProbe 0|1|2` задаёт ожидаемый уровень из header. На северном WCS+RHS
+проверяет 0/5/10 машин, полную посадку, 60 с удержания без маршрута, сохранение
+гарнизона после программного захвата и одной боевой потери. Сам завершает сервер
+через `RequestClose()`, deadline 240 с. Запускается только в отдельном stage;
+изменяет владельца первой базы и убивает одного fixture-owned бойца.
+Анализ: `tests/log-audits/Test-FIAGarrisonLog.ps1 -LogPath <console.log> -Difficulty 0|1|2`.
+Это targeted lifecycle probe, не доказательство стрельбы, client/JIP или полного боя.
+
 Все отслеживаемые probes перенесены в `tests/fixtures/` без изменения содержимого.
 Статус при реорганизации: **DIAGNOSTIC / runtime NOT RUN**. Таблица описывает
 назначение, но не обещает актуальный compile или прохождение сценария. Старое

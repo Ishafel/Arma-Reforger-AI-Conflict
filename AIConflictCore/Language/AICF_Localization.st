@@ -3,6 +3,42 @@ StringTable
 	ItemClassName "CustomStringTableItem"
 	Items
 	{
+		CustomStringTableItem "{A1CF261008100010}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHS_Medium_Name"
+			Target_en_us "AI Conflict WCS + RHS - Everon North (Medium)"
+			Target_ru_ru "AI Conflict WCS + RHS — Север Эверона (средний)"
+		}
+		CustomStringTableItem "{A1CF261008100011}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHS_Medium_Description"
+			Target_en_us "Each initial FIA capture point receives a fully crewed FIA BTR-70."
+			Target_ru_ru "Каждая стартовая точка FIA получает БТР-70 FIA с полным экипажем."
+		}
+		CustomStringTableItem "{A1CF261008100012}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHS_Medium_Details"
+			Target_en_us "Two HQs and five capture points. FIA vehicles and their occupants hold their initial positions until destroyed, without pursuit or replacements. Every launch starts a new campaign; session progress is not saved."
+			Target_ru_ru "Два штаба и пять точек захвата. Техника FIA и её бойцы обороняют исходные позиции до последнего, без преследования и пополнения потерь. Каждый запуск начинает новую кампанию; прогресс сессии не сохраняется."
+		}
+		CustomStringTableItem "{A1CF261008100013}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHS_Hard_Name"
+			Target_en_us "AI Conflict WCS + RHS - Everon North (Hard)"
+			Target_ru_ru "AI Conflict WCS + RHS — Север Эверона (сложный)"
+		}
+		CustomStringTableItem "{A1CF261008100014}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHS_Hard_Description"
+			Target_en_us "Each initial FIA capture point receives a fully crewed FIA BTR-70 and T-72A."
+			Target_ru_ru "Каждая стартовая точка FIA получает БТР-70 и Т-72А FIA с полными экипажами."
+		}
+		CustomStringTableItem "{A1CF261008100015}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHS_Hard_Details"
+			Target_en_us "Two HQs and five capture points. FIA vehicles and their occupants hold their initial positions until destroyed, without pursuit or replacements. Every launch starts a new campaign; session progress is not saved."
+			Target_ru_ru "Два штаба и пять точек захвата. Техника FIA и её бойцы обороняют исходные позиции до последнего, без преследования и пополнения потерь. Каждый запуск начинает новую кампанию; прогресс сессии не сохраняется."
+		}
 		CustomStringTableItem "{A1CF261006100010}"
 		{
 			Id "AICF_Scenario_EveronWCSRHS_Name"
@@ -24,8 +60,8 @@ StringTable
 		CustomStringTableItem "{A1CF261006100013}"
 		{
 			Id "AICF_Scenario_EveronNorthWCSRHS_Name"
-			Target_en_us "AI Conflict WCS + RHS - Everon North"
-			Target_ru_ru "AI Conflict WCS + RHS — Север Эверона"
+			Target_en_us "AI Conflict WCS + RHS - Everon North (Easy)"
+			Target_ru_ru "AI Conflict WCS + RHS — Север Эверона (лёгкий)"
 		}
 		CustomStringTableItem "{A1CF261006100014}"
 		{

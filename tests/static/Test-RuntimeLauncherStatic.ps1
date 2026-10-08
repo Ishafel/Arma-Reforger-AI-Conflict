@@ -419,6 +419,31 @@ try {
         }
     }
 
+    foreach ($difficultyCase in @(@('Medium', 'A1CF261008100001'), @('Hard', 'A1CF261008100002'))) {
+        foreach ($difficultyRole in @('Server', 'Client')) {
+            $output = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $launcherPath `
+                -Role $difficultyRole -Variant EveronNorthWCSRHS -Difficulty $difficultyCase[0] `
+                -RepositoryRoot $fakeRepository -ServerRoot $fakeServerRoot -GameRoot $fakeGameRoot `
+                -RhsAddonsRoot $fakeRhsRoot -ProfileRoot (Join-Path $testRoot "Profiles/difficulty-$difficultyRole-$($difficultyCase[0])") -DryRun 2>&1 | ForEach-Object { $_.ToString() })
+            if ($LASTEXITCODE -ne 0) { Add-Failure 'DIFFICULTY_MANIFEST' ($output -join ' | '); continue }
+            $manifest = Get-ManifestFromOutput $output 'DIFFICULTY_MANIFEST'
+            if (-not $manifest) { continue }
+            if ($manifest.difficulty -ne $difficultyCase[0]) { Add-Failure 'DIFFICULTY_MANIFEST' 'Difficulty was not preserved' }
+            if ($difficultyRole -eq 'Server') {
+                $expected = '{' + $difficultyCase[1] + '}Missions/AICF_WCS_RHS_Conflict_Everon_North_' + $difficultyCase[0] + '.conf'
+                Require-ArgumentPair $manifest '-server' $expected 'DIFFICULTY_HEADER'
+                Require-ArgumentPair $manifest '-MissionHeader' $expected.Substring(18) 'DIFFICULTY_HEADER'
+            }
+        }
+    }
+    $ErrorActionPreference = 'Continue'
+    $rejected = @(& powershell.exe @serverInvocation -Difficulty Hard 2>&1 | ForEach-Object { $_.ToString() })
+    $rejectedExit = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    if ($rejectedExit -eq 0 -or ($rejected -join ' ') -notmatch 'requires Variant EveronNorthWCSRHS') {
+        Add-Failure 'DIFFICULTY_UNSUPPORTED_VARIANT' 'Hard must not silently run the RHS easy scenario'
+    }
+
     $libraryRoot = Join-Path $testRoot 'Библиотека комплектов'
     New-Item -ItemType Directory -Path $libraryRoot -Force | Out-Null
     foreach ($libraryName in @('template_0.json', 'template_255.json', 'template_256.json', 'template_01.json', 'unrelated.json')) {

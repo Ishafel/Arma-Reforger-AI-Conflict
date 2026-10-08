@@ -38,6 +38,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/static/Test-Stage3
 | Маркеры, локализация, rank | `Test-GroupMapMarkersStatic.ps1`, `Test-LocalizationStatic.ps1`, `Test-RankRestrictionsStatic.ps1` |
 | Headers, карты, launcher | `Test-ScenarioHeadersStatic.ps1`, `Test-EveronNorthStatic.ps1`, `Test-RuntimeLauncherStatic.ps1` |
 | RHS/WCS content и integration | `Test-RHSIntegrationStatic.ps1`, `Test-WCSIntegrationStatic.ps1`, затронутые scenario/authority/Stage audits |
+| Сложность гарнизонов FIA | `Test-FIAGarrisonContracts.ps1`, `Test-RuntimeLauncherStatic.ps1`, ScenarioHeaders, FIAPatrol, AICombatInput и Stage3/35; runtime `AICF_FIAGarrisonProbe.c` в stage |
 | Combat inputs, FIA | `Test-AICombatInputContracts.ps1`, `Test-FIAPatrolStatic.ps1` |
 
 Изменение аудитора требует позитивного и негативного representative input.
@@ -210,6 +211,111 @@ RHS/WCS server runtime после выявленного функциональ�
 Старые 5 baseline failures полного offline набора не перепроверялись.
 Диагностические копии удалены после сохранения evidence; production `.c`
 не менялись. Вывод по архитектурному ограничению — в [GAMEPLAY.md](GAMEPLAY.md).
+
+## Гарнизоны FIA и три сложности — 2026-10-08
+
+Ветка `codex/fia-difficulty` от `origin/main` `27fc20a`. Baseline снят
+на `9fbf85f`, чей source tree совпадает с этой целевой веткой. Evidence:
+`.codex-runtime/fia-difficulty/`; полные argv/exit codes, manifests и логи
+сохранены там, а не в Git. Изменены Core difficulty/garrison/crew, composition
+root, fleet/spawner/cleanup, WCS content profile, два inherited North header,
+локализация, launcher, профильные проверки и технические заметки.
+
+Команда `tools/Invoke-AICFChecks.ps1 -Name <список> -EvidenceRoot <каталог>`:
+`before/` — 10 PASS/0; `after-final/` — те же 10 плюс новый
+`Test-FIAGarrisonContracts.ps1`, 11 PASS/0. Список: AICombatInputContracts,
+DefendWaypointInputContracts, EveronNorthStatic, FIAPatrolStatic,
+RuntimeLauncherStatic, ScenarioHeadersStatic, Stage35RecoveryPolicy,
+Stage35Static, Stage3Static, Stage3StaticContracts. В `expanded/` также
+CheckRunnerContracts, RHSIntegrationStatic и WCSIntegrationStatic — PASS/0.
+Launcher audit проверяет Medium/Hard server/client manifests и отказ для
+несовместимого Variant. `pwsh -File tests/static/Test-LocalizationStatic.ps1`
+и `pwsh -File tools/Build-AICFLocalization.ps1 -Check` — PASS/0, 539 записей.
+
+В выбранном baseline failures нет. Полный offline набор **NOT RUN**:
+исторические пять failures (InfantryApproach APPROACH_CLEANUP, Localization
+ParserError в PowerShell 5.1, NorthFailure MOVE_CALLBACK_FENCE/MOVE_ACTIVITY,
+SquadCommands STABLE_NEAREST, Stage4 STAGE4_ATTACKED_BASES) не перепроверялись
+и не объявляются исправленными.
+После защиты null-цели повторены AICombatInputContracts, FIAGarrisonContracts
+(20 guards) и FIAPatrolStatic: `after-null-guard/` — 3 PASS/0.
+
+Терминальный Workbench 1.8.0.13: `compile.ps1 -Label production-final` и
+`-Variant EveronNorth -Label stock-production-final` — PASS/0,
+`Script validation successful`, без SCRIPT E/F и ENGINE F. Логи:
+`wb-production-final/`, `wb-stock-production-final/`, аргументы в
+соответствующих `wb-*-argv.json`. Fixture graph `wb-fixture3/` также
+PASS/0. Прочих строк (E) соответственно 39/25/39; resource logs не чистые.
+`source-hashes.json`/`source-match.txt` фиксируют совпадение 240 production
+файлов с runtime stage; диагностические fixture добавлялись отдельно.
+После защиты null-цели `wb-production-guard/`, `wb-stock-production-guard/`
+и `wb-combat-guard/` вновь прошли Validate/Compile, exit 0, validation successful,
+без SCRIPT E/F и ENGINE F. Финальные SHA-256 — `source-hashes-final.json` /
+`source-match-final.txt`, 240/240 совпадений.
+
+Dedicated server 1.8.0.13, Variant `EveronNorthWCSRHS`, источник — stage.
+Запуск через `tools/Start-AICFRuntime.ps1 -Role Server -Difficulty <уровень>`
+с `-aicfGarrisonProbe 0|1|2 -aicfRequirePlayerForResult 0`; точные команды
+в `runtime.ps1`, CLI и `AICF_RUNTIME_MANIFEST_JSON` в
+`server-<label>-launcher.txt`, свежие profiles — `server-<label>/`.
+Все три процесса завершены fixture через `RequestClose()`, native exit 0,
+в полном логе есть `ROSTER_READY` и `Game destroyed.`.
+
+| Уровень / label | Состав на пяти FIA-точках | Проверки | Время MSK | Verdict |
+|---|---|---|---|---|
+| Easy | Без новых гарнизонов | 2/2 | 17:53:08–17:54:41 | PASS |
+| Medium | 5 БТР-70, по 10 бойцов со всеми десантными местами | 30/30 | 17:48:56–17:51:45 | PASS |
+| Hard / Hard3 | 5 БТР-70 + 5 Т-72А, по 3 бойца в танке | 55/55 | 17:45:19–17:48:18 | PASS |
+
+Проверены полный roster/посадка, начальная дистанция до базы, отсутствие
+waypoint и сдвига машины более 5 м за 60 с. Затем fixture захватывает одну
+базу и убивает одного члена экипажа; спустя ещё 60 с проверяет сохранение
+остальных защитников и отсутствие пополнения. Это не тест гибели всего
+гарнизона. Полные остановленные логи: `server-<label>/logs/*/console.log`;
+`runtime-summary.json` содержит их точные пути, CLI и время.
+`pwsh -File tests/log-audits/Test-FIAGarrisonLog.ps1 -LogPath <полный лог> -Difficulty 0|1|2`
+— PASS/0 для трёх логов, SCRIPT E/F и ENGINE F отсутствуют, по 233 прочих
+строки (E) сохранены. Negative input без READY — ожидаемый FAIL/1
+(`log-audit-negative.txt`).
+
+Предварительные попытки не считаются PASS: `wb-initial` — неверный root
+wrapper; `compile1` — ошибка float/modulo, исправлена; `server-Hard` и
+`server-Hard2` — неверные prefab GUID/нулевая lease capacity, исправлены.
+Hard2 остановлен адресно по process/profile, exit -1, запись
+`Hard2-forced-stop.json`. Остальные тестовые серверы останавливает fixture.
+
+Состав/удержание выше проверены до последней защиты null-цели; после неё
+повторён боевой Hard, а полный трёхуровневый probe повторно не запускался.
+
+Дополнительная изолированная `AICF_FIAGarrisonCombatProbe.c` сохранена в evidence.
+Она создаёт активные BLUFOR AI-группы с неуязвимыми пехотными целями в 45 м
+перед машинами, наблюдает расход боеприпасов у стрелков и удержание всех машин
+в пределах 5 м в течение 90 с. Это проверка стрельбы по пехоте, а не всей
+огневой эффективности. Запуск — `runtime-combat.ps1 -Difficulty Hard -Label <label>`,
+штатный launcher с `-aicfGarrisonCombatProbe 1`, остановка через `RequestClose()`.
+
+Ранние `Combat`/`Combat2` — FAIL: цели не были активированы через AI-группы.
+`Combat3` подтвердил огонь БТР/танков, но весь gate — FAIL из-за трёх VM
+exceptions `currentTarget` в stock `SCR_AIUpdateTargetAttackData`. Повтор
+`CombatDiag4` без исправления прошёл: сбой непостоянный. По source API 1.8.0.13
+два threat callback не проверяли пустую цель; добавлен ранний return, при
+существующей цели остаётся super. Финальная fixture отдельно вызывает оба
+callback без цели и отмечает `GARRISON_NULL_GUARD escalation=1 damage=1`.
+`CombatGuard` прошёл функциональные критерии и не имел VM exceptions, но весь
+log gate — FAIL из-за одной `PMC_EQUIPMENT_FAILED`: выдача нового комплекта
+не удалась, `rollback=1` вернул исходный. Этот отдельный сбой RHS equipment
+не исправлялся в данной задаче и не выдаётся за старый подтверждённый baseline.
+`CombatGuard2` — **PASS/0**: 18:18:01–18:20:30 MSK, `btr=1 tank=1`,
+оба null-callback проверены, машины удержались на месте, SCRIPT E/F и ENGINE F
+нет. Полный лог — `server-CombatGuard2/logs/*/console.log`, 233 прочие строки (E).
+Пулемётный огонь подтверждён расходом боеприпасов; стрельба танковой пушки
+по бронецели не проверялась. Ошибка PMC из предыдущего прогона не повторилась,
+но её лог и ограничение сохранены.
+`git diff --check` — PASS/0. Тестовые engine processes остановлены; stage
+удалён после проверки абсолютного пути, полные логи и baseline сохранены.
+Точный список 33 изменённых файлов — `changed-files.txt` в evidence.
+Client/JIP, ручная проверка плиток меню, packaged build, долгий soak,
+танковая пушка против бронетехники и полный бой до гибели гарнизона — **NOT RUN**.
 
 ## Результаты прежних изменений
 

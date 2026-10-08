@@ -30,6 +30,12 @@ class AICF_ContentProfile
 		// replaces it through SetActive before installing any AICF lifecycle.
 	}
 
+	ResourceName GetFIAGarrisonPrefab(bool tank)
+	{
+		if (tank) return ResourceName.Empty;
+		return "{B47110AA1A806556}Prefabs/Vehicles/Wheeled/BTR70/BTR70_FIA.et";
+	}
+
 	string GetProfileKey()
 	{
 		return "STOCK";

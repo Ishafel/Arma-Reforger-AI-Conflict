@@ -29,6 +29,45 @@ building layouts и client/JIP. Собственный слой миссии п�
 нынешней границы «только inherited MissionHeader» в AGENTS.md и ARCHITECTURE.md.
 Свежие проверки и отклонённый эксперимент: [TESTING.md](TESTING.md).
 
+## Сложность гарнизонов FIA
+
+Три пункта меню WCS + RHS North наследуют одну северную кампанию. Существующий
+resource North сохраняет GUID и становится лёгким. Medium/Hard — тонкие inherited
+headers с `m_eAICFDifficulty` 1/2; default 0 сохраняет поведение всех остальных
+сценариев. Launcher `-Difficulty Easy|Medium|Hard` выбирает header, а не переопределяет
+игровую сложность отдельным CLI. Medium/Hard доступны только с `EveronNorthWCSRHS`.
+
+`AICF_FIAGarrisonService` фиксирует стартовые цели FIA из objective graph без HQ:
+Medium — один БТР-70 FIA, Hard — дополнительно Т-72А FIA. Core получает prefab
+через content profile; WCS profile владеет ссылкой на WCS Т-72А. Поиск площадки
+детерминированный в пределах 80 м от базы, с проверкой поверхности, воды, OBB,
+другой техники и строительных reservations. При отсутствии места — повтор через
+30 с; после создания entity повторный spawn запрещён. Чужая база до spawn
+закрывает slot. Захват после spawn не снимает оборону и не пополняет потери.
+
+Все доступные места машины (включая десантные) получают бойцов FIA. Ожидается
+полный asynchronous roster, затем проверяется посадка каждого immutable member.
+`READY` требует заполнения всех мест. Телепорт используется только для первичной
+посадки; после READY принудительной повторной посадки и замены погибших нет. Stock spawn
+queue сохраняет собственные readiness и бюджетные ограничения.
+
+У гарнизона нет маршрутных waypoints. Ограниченная его immutable members policy
+в `SCR_AIUtilityComponent` сохраняет stock выбор оружия/цели, Attack/Suppress и
+idle, но запрещает combat movement и заменяет pursuit/retreat действия ожиданием.
+Оборона продолжается после гибели других членов экипажа. Игрок, чужая группа,
+обычная FIA и дорожные патрули не подпадают под policy.
+Отдельная защита stock `SCR_AIUpdateTargetAttackData` пропускает два threat
+callback при пустой `m_Target`: проверка боя выявила null dereference в API
+1.8.0.13. Эта защита действует для любого AI; при наличии цели вызывается
+штатный обработчик без изменений. Stop отменяет pending
+spawn, снимает LOD pin и очищает registry; entity не удаляются этой службой.
+
+События `FIA_GARRISON_PLAN`, `SPAWN_REQUESTED`, `READY`, `WAIT`, `RETIRED`
+используют префикс `FIA_GARRISON_` и существующий канал `[AICF][STAGE3]`.
+Контекст: `faction numeric_slot generation base vehicle group tank`.
+Состав/удержание/потери проверяет `tests/fixtures/AICF_FIAGarrisonProbe.c`;
+огневая эффективность и поведение в полном бою требуют отдельного verdict.
+
 ## Командование и пехота
 
 - Stable sides — `US` и `USSR`, включая RHS/WCS mapping. При запуске

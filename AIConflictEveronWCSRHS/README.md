@@ -23,6 +23,13 @@ World, whitelist, radio policy, callsign adapter и campaign lifecycle
 Каждый запуск начинает новую кампанию, сохранение сессии отключено.
 Названия и описания имеют RU/EN локализацию.
 
+Северный сценарий представлен тремя сложностями: лёгкий сохраняет прежний
+состав, средний добавляет БТР-70 FIA на каждую стартовую точку FIA, сложный —
+также Т-72А FIA. Все доступные места заняты бойцами. Гарнизоны держат исходные
+позиции до последнего, без преследования и замены потерь. Medium/Hard headers
+наследуют лёгкий North, не копируют whitelist. Реализация остаётся в Core и
+WCS content profile. При подключении клиенту передают ту же `-Difficulty`.
+
 ## Запуск
 
 Из корня репозитория, после терминального Workbench Validate нового
@@ -30,7 +37,9 @@ World, whitelist, radio policy, callsign adapter и campaign lifecycle
 
 ```powershell
 ./tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronWCSRHS
-./tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthWCSRHS
+./tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthWCSRHS -Difficulty Easy
+./tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthWCSRHS -Difficulty Medium
+./tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthWCSRHS -Difficulty Hard
 ```
 
 Это альтернативные запуски; для одновременных серверов нужны разные порты.

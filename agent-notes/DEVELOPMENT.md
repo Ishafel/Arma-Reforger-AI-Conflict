@@ -79,6 +79,12 @@ RHS/WCS версии и каталоги сверяй с установленн�
 сведения WCS: [Arland](../AIConflictArlandWCSRHS/README.md),
 [Everon](../AIConflictEveronWCSRHS/README.md).
 
+Для трёх сложностей северного WCS+RHS сценария используйте
+`-Variant EveronNorthWCSRHS -Difficulty Easy|Medium|Hard` (default `Easy`).
+Передавайте одинаковую `Difficulty` серверу и клиенту: readiness gate проверяет
+точный server header. Medium/Hard для других Variant отклоняются. Выбор сценария
+в меню даёт тот же результат; параметры header определяют состав гарнизонов.
+
 ## Server и client
 
 Запускай только через `tools/Start-AICFRuntime.ps1` в отдельных терминальных

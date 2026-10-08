@@ -403,6 +403,17 @@ class AICF_FactionFleet
 		return true;
 	}
 
+	bool TryReserveFIAGarrison(AICF_FIAGarrison g, int maximum)
+	{
+		if (!Replication.IsServer() || m_sFactionKey != "FIA" || !g || g.m_Lease ||
+			g.m_iSlot < 10000 || g.m_iSlot >= 10000 + maximum || g.m_iGeneration <= 0 ||
+			HasLeaseForSlot(g.m_iSlot) || GetLeaseCount() >= maximum) return false;
+		g.m_Lease = new AICF_VehicleLease(m_sFactionKey, g.m_iSlot,
+			g.m_iGeneration, g.m_iGeneration, ++m_iNextLeaseGeneration);
+		m_aLeases.Insert(g.m_Lease);
+		return true;
+	}
+
 	// Отдельная FIA-квота по точкам, без армейского hard cap десяти машин.
 	bool TryReserveFIAPatrol(AICF_FIAPatrol patrol, int objectiveCount)
 	{

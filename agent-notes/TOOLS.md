@@ -194,3 +194,12 @@ Enforce fixture не входят в автоматическую матрицу
 | [Test-RHSWardrobeInventoryLog.ps1](../tests/log-audits/Test-RHSWardrobeInventoryLog.ps1) | `-LogPath`, `-OutputDirectory` | Inventory showcase; сохраняет отдельный отчёт |
 | [Test-Stage2Log.ps1](../tests/log-audits/Test-Stage2Log.ps1) | `-LogPath` | Приказы, repeated recovery, route replans и failed barracks visits |
 | [Test-Stage4Log.ps1](../tests/log-audits/Test-Stage4Log.ps1) | `-LogPath` | Экономика, tickets/supplies и незавершённые операции |
+
+## Сложность гарнизонов FIA
+
+`tests/contracts/Test-FIAGarrisonContracts.ps1` проверяет authority/identity,
+полный roster, отсутствие замены и наследование Medium/Hard headers.
+`tests/log-audits/Test-FIAGarrisonLog.ps1 -LogPath <полный-остановленный-console.log>
+-Difficulty 0|1|2` анализирует прогон `AICF_FIAGarrisonProbe.c` на North WCS+RHS:
+состав 0/5/10, экипажи 10/3, удержание, захват и casualty. Отдельно сообщает
+число остальных engine/resource errors; PASS не означает отсутствие этих ошибок.

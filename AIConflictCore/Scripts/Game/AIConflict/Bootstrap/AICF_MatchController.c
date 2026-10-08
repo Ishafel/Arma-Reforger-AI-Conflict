@@ -86,6 +86,7 @@ class AICF_MatchController
 	protected ref AICF_GroupSpawner m_GroupSpawner;
 	protected ref AICF_BaseBuilderService m_BaseBuilders;
 	protected ref AICF_FIAPatrolService m_FIAPatrols;
+	protected ref AICF_FIAGarrisonService m_FIAGarrisons;
 	protected ref AICF_ConstructionPlanner m_Construction;
 	protected ref AICF_LogisticsConfig m_LogisticsConfig;
 	protected ref AICF_LogisticsService m_Logistics;
@@ -278,6 +279,8 @@ class AICF_MatchController
 		m_BaseBuilders.Start(m_Campaign, m_OrderPlanner, m_Config.GetMaxManagedAgents());
 		m_FIAPatrols = new AICF_FIAPatrolService();
 		m_FIAPatrols.Start(m_Campaign, m_ObjectiveGraph);
+		m_FIAGarrisons = new AICF_FIAGarrisonService();
+		m_FIAGarrisons.Start(m_Campaign, m_ObjectiveGraph);
 		m_Construction = new AICF_ConstructionPlanner();
 		m_Construction.Start(m_Campaign, m_BaseBuilders, m_EconomySystem, m_USAICommander, m_USSRAICommander);
 		m_Logistics = new AICF_LogisticsService(m_Campaign, m_VehicleCoordinator, m_ObjectiveGraph, m_LogisticsConfig, m_EconomySystem);
@@ -1542,6 +1545,8 @@ class AICF_MatchController
 			m_Construction.Update();
 		if (m_bRosterReady && m_BaseBuilders)
 			m_BaseBuilders.Update();
+		if (m_bRosterReady && m_FIAGarrisons)
+			m_FIAGarrisons.Update();
 		if (m_bRosterReady && m_FIAPatrols)
 			m_FIAPatrols.Update(!m_bReplanScheduled && !m_bGraphRebuildNeeded);
 		if (m_bRosterReady && m_Logistics)
@@ -7488,6 +7493,11 @@ class AICF_MatchController
 		{
 			m_Construction.Stop();
 			m_Construction = null;
+		}
+		if (m_FIAGarrisons)
+		{
+			m_FIAGarrisons.Stop();
+			m_FIAGarrisons = null;
 		}
 		if (m_FIAPatrols)
 		{

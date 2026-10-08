@@ -8,6 +8,8 @@ param(
     [ValidateSet('Stock', 'Everon', 'EveronNorth', 'RHS', 'EveronRHS', 'EveronNorthRHS', 'ArlandWCSRHS', 'EveronWCSRHS', 'EveronNorthWCSRHS')]
     [string]$Variant,
 
+    [ValidateSet('Easy', 'Medium', 'Hard')]
+    [string]$Difficulty = 'Easy',
     [string]$RepositoryRoot,
     [string]$ServerRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger Server',
     [string]$GameRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Arma Reforger',
@@ -339,6 +341,10 @@ foreach ($argument in $AdditionalArguments) {
 }
 
 $projectRelativePath = 'AIConflictArland\addon.gproj'
+if ($Difficulty -ne 'Easy' -and $Variant -ne 'EveronNorthWCSRHS') {
+    throw 'Medium/Hard difficulty requires Variant EveronNorthWCSRHS'
+}
+
 $scenario = '{BC2437E4861B4FD2}Missions/AICF_Conflict_Arland.conf'
 $missionHeader = 'Missions/AICF_Conflict_Arland.conf'
 $addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E'
@@ -375,7 +381,9 @@ elseif ($Variant -in @('RHS', 'ArlandWCSRHS', 'EveronWCSRHS', 'EveronNorthWCSRHS
             $profileVariant = '-EveronWCSRHS'
             if ($Variant -eq 'EveronNorthWCSRHS') {
                 $scenario = '{A1CF261006100003}Missions/AICF_WCS_RHS_Conflict_Everon_North.conf'
-                $missionHeader = 'Missions/AICF_WCS_RHS_Conflict_Everon_North.conf'
+                if ($Difficulty -eq 'Medium') { $scenario = '{A1CF261008100001}Missions/AICF_WCS_RHS_Conflict_Everon_North_Medium.conf' }
+                if ($Difficulty -eq 'Hard') { $scenario = '{A1CF261008100002}Missions/AICF_WCS_RHS_Conflict_Everon_North_Hard.conf' }
+                $missionHeader = $scenario.Substring(18)
                 $profileVariant = '-EveronNorthWCSRHS'
             }
         }
@@ -511,6 +519,7 @@ if (@($AdditionalArguments).Count -gt 0) {
 }
 
 $manifest = [ordered]@{
+    difficulty = $Difficulty
     schema = 1
     role = $Role
     variant = $Variant
