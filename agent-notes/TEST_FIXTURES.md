@@ -1,5 +1,14 @@
 # Runtime fixture: каталог и применение
 
+`AICF_InfantryATProbe.c`, `-aicfATProbe 1`: отдельный WCS+RHS stage,
+North Easy/Medium/Hard. После штатного ROSTER_READY создаёт по одному полному
+отряду каждой стороны и по два one-member donor (позиции 8/9) через production
+resolver и async spawn. Проверяет все 24 prefab/роли/WCS-комплекта, 1/3/3 ПТ
+в каждом полном отряде, заряженное оружие `WT_ROCKETLAUNCHER` у каждого ПТ,
+сохранение stock/RHS mappings и отказ для FIA. Пишет фактические prefab,
+loaded/spare и завершает сервер через RequestClose. Не моделирует оплату,
+переход donor в боевой отряд, стрельбу, client/JIP или пользовательский шаблон.
+
 `AICF_FIAGarrisonRecoveryProbe.c`, `-aicfRecoveryProbe 1`: только отдельный stage,
 Hard North WCS+RHS. Проверяет metadata трёх мест экипажа, геометрию границы
 50 м, synthetic player veto без мутаций, перенос исходной машины,

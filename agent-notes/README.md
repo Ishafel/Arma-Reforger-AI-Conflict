@@ -10,6 +10,7 @@
 | Найти домен, состояние и границы побочных эффектов | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Проверить игровую механику и defaults | [GAMEPLAY.md](GAMEPLAY.md), затем указанные исходники |
 | Изменить сложности и гарнизоны FIA | [GAMEPLAY.md](GAMEPLAY.md#сложность-гарнизонов-fia), [TEST_FIXTURES.md](TEST_FIXTURES.md) |
+| Изменить ПТ-состав отрядов по сложности | [GAMEPLAY.md](GAMEPLAY.md#сложность-гарнизонов-fia), `AICF_WCSRHSContentProfile`, `AICF_InfantryATProbe` в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Найти утилиту, её статус и запустить offline набор | [TOOLS.md](TOOLS.md) |
 | Выбрать runtime probe и проверить ограничения | [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Подготовить API reference, Workbench, локальный/удалённый runtime и Diag/retail | [DEVELOPMENT.md](DEVELOPMENT.md) |

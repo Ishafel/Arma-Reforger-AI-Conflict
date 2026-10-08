@@ -37,6 +37,18 @@ headers с `m_eAICFDifficulty` 1/2; default 0 сохраняет поведен�
 сценариев. Launcher `-Difficulty Easy|Medium|Hard` выбирает header, а не переопределяет
 игровую сложность отдельным CLI. Medium/Hard доступны только с `EveronNorthWCSRHS`.
 
+На Medium/Hard WCS content profile назначает позиции `memberIndex` 3, 8 и 9
+противотанковыми: RHS MSV `AT` у USSR и USMC `LAT` у US. Позиции 8/9 заменяют
+помощника ПТ и стрелка; численность остаётся 10. Родительский RHS resolver
+выбирает комплектный native prefab и его боезапас: US — M72A3 с одним выстрелом,
+USSR — РПГ-7 с одним заряженным и двумя запасными. WCS сохраняет вторичное
+оружие при замене основного. Один boundary `BuildCharacterRoleCandidates`
+обслуживает начальный roster, замену группы, редактор и donor пополнения.
+Новые позиции оплачиваются как `ANTI_TANK` (default 20 supplies каждая).
+Easy, отдельные stock/RHS profiles и FIA сохраняют прежние роли.
+Сохранённые пользовательские шаблоны применяются после стандартного комплекта
+и могут менять оружие; три ПТ — контракт состава по умолчанию.
+
 `AICF_FIAGarrisonService` фиксирует стартовые цели FIA из objective graph без HQ:
 Medium — один БТР-70 FIA, Hard — дополнительно Т-72А FIA. Core получает prefab
 через content profile; WCS profile владеет ссылкой на WCS Т-72А. Поиск площадки

@@ -448,6 +448,56 @@ Helper и manifests сохранены в
 Датированное evidence не переписывай задним числом, новый вывод явно привязывай
 к новому commit и конфигурации.
 
+## Три ПТ-бойца на Medium/Hard — 2026-10-08
+
+Ветка `codex/infantry-at-balance` от `9b03304`, исходное дерево чистое.
+Изменён `AICF_WCSRHSContentProfile.BuildCharacterRoleCandidates`: Medium/Hard
+назначают позиции 8/9 тем же ПТ-prefab, что позиция 3. Добавлена fixture
+`tests/fixtures/AICF_InfantryATProbe.c`; обновлены README обоих уровней,
+GAMEPLAY, указатель, каталог fixtures и эта заметка.
+Evidence: `.codex-runtime/infantry-at-balance/`.
+
+`tools/Invoke-AICFChecks.ps1 -Name <семь проверок> -EvidenceRoot <before|after>`:
+в обоих случаях **6 PASS, 1 прежний FAIL**, exit 1. WCSIntegration,
+RHSIntegration, AILoadout, PersonalLoadoutContracts, InfantryRecruitment,
+FIAGarrisonContracts — PASS/0; Stage4 — тот же `STAGE4_ATTACKED_BASES`, FAIL/1.
+Полные argv, исходный commit, status и вывод сохранены в before/after.
+
+`compile.ps1 -Label production` и `compile.ps1 -Label fixture -SourceRoot <stage>`
+— terminal Workbench **PASS/0**, `Script validation successful`, SCRIPT E/F,
+ENGINE F и VM exceptions отсутствуют. По 39 прочих resource строк (E).
+Manifest графа, argv и полный вывод находятся рядом с wb-production/wb-fixture.
+
+`runtime.ps1 -Difficulty Hard|Medium|Easy -Label hard1|medium1|easy1` вызывает
+canonical launcher с отдельным stage и свежим profile, Variant EveronNorthWCSRHS,
+`-aicfATProbe 1 -aicfRequirePlayerForResult 0`. Все три native exit 0,
+штатное завершение через RequestClose и `Game destroyed.`. Проверки
+Hard **84/84**, Medium **84/84**, Easy **76/76**, failures=0. Полные остановленные
+логи: `hard1-logs/`, `medium1-logs/`, `easy1-logs/`; manifest/CLI — в
+`server-*-launcher.txt`. `collect-runtime.ps1 -Label <label> -Difficulty 0|1|2`
+читает полные логи, сверяет число случаев и ошибки; summary JSON рядом.
+SCRIPT E/F, ENGINE F и VM exceptions — 0, прочих (E) по 233 на запуск.
+
+Каждый запуск проверил 24 бойца: два полных roster и четыре one-member donor,
+prefab/role соответствие, WCS-комплект, 1/3/3 ПТ на сторону в зависимости от
+сложности, фактически заряженный launcher у каждого ПТ. US: M72A3, loaded=1,
+spare=0; USSR: RPG7_PGO7, loaded=1, spare=2. Проверены неизменные stock/RHS
+role mappings и отказ для FIA. Это проверка выдачи и resolver пополнения,
+не полная оплаченная операция набора или проверка боевой эффективности.
+`source-hashes.json`: все 221 production файла совпадают с изолированным stage,
+fixture hash сохранён отдельно. Stage удалён, своих engine processes не осталось.
+`git diff --check` — PASS/0.
+
+Перед runtime по прежнему разрешению пользователя собраны показатели четырёх
+серверов предыдущего кода и выполнена адресная остановка в 21:26:05–21:26:06 MSK.
+Snapshot: `.codex-runtime/fia-four-servers-20261008-210112/snapshot-20261008-212521/`;
+полные остановленные логи — соседний `stopped-logs/`, PID/profile checks —
+`stopped.json`. Принудительный native exit -1 не означает crash. Прогон этих
+серверов не проверяет новый ПТ-состав.
+
+Стрельба ПТ по БТР/танкам, длительный балансный прогон, полная транзакция
+пополнения, client/JIP и ручная визуальная проверка — **NOT RUN**.
+
 ## Передача результата
 
 Отчёт содержит outcome и изменённые файлы, branch/commit и dirty status,
