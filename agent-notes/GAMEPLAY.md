@@ -4,6 +4,31 @@
 технические детали, нужные при изменении поведения; точные defaults проверяй
 в `Config/`, профильных классах и `tools/Start-AICFRuntime.ps1`.
 
+## Север Эверона: состав баз и электростанция
+
+`TownBaseKermovan` исключён из whitelist северных stock/RHS сценариев;
+WCS+RHS наследует RHS North. Остались семь активных баз: два HQ и пять целей
+(Сен-Филипп, Девичья бухта, Мо, Тайрон, Грабовая долина). База Кермована
+не инициализируется и не входит в AI objective/radio graph; полный Эверон
+не меняется. Замена у электростанции не добавляется. Штатный
+`StartingPos06` у электростанции нельзя использовать как готовую замену:
+`m_bIsControlPoint 1` меняет статус базы, но не добавляет механизм захвата.
+Runtime от 08.10.2026 повторно показал FAIL
+`CAPTURE_MECHANISM_StartingPos06` при работающих spawn point и radio graph.
+Положение лагеря vanilla — `<5766.26,7.873,9625.6>`, примерно в 175 м от
+`G_Powerplant`. Наличие маркера, initialized/control-point status и spawn point
+не доказывает возможность захвата.
+
+Такая замена уже была отменена commit `c1029b5`; актуальная fixture
+`tests/fixtures/AICF_EveronNorthProbe.c` намеренно проверяет у каждой цели
+`SCR_CampaignSeizingComponent` с положительным radius. Не ослаблять этот gate.
+`SCR_CampaignCustomBase` в API 1.8.0.13 задаёт только имя, HQ/control-point flags
+и radio range; поля переноса позиции или добавления компонентов нет.
+Полноценный перенос требует отдельно проработать базу, capture, spawn,
+building layouts и client/JIP. Собственный слой миссии потребует пересмотра
+нынешней границы «только inherited MissionHeader» в AGENTS.md и ARCHITECTURE.md.
+Свежие проверки и отклонённый эксперимент: [TESTING.md](TESTING.md).
+
 ## Командование и пехота
 
 - Stable sides — `US` и `USSR`, включая RHS/WCS mapping. При запуске

@@ -112,6 +112,105 @@ Production `.c` и содержимое runtime probes не менялись. Wo
 JIP, soak, визуальные проверки, showcase и watchdog — **NOT RUN** в этой задаче.
 Переезд файлов не подтверждает их runtime совместимость.
 
+## Исключение Кермована, 08.10.2026
+
+Продолжение той же задачи на `codex/everon-north-powerplant`, baseline
+`d3c9baa`, чистое дерево до правки. По уточнённому запросу Кермован удалён
+из обоих North whitelist без замены; WCS+RHS наследует RHS. Остаются 7 баз,
+2 HQ и 5 целей. Полные сценарии и production `.c` не изменены. Обновлены
+RU/EN описания, runtime tables, North audit и fixture, README и эти заметки.
+
+Evidence: `.codex-runtime/everon-north-exclude/`.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-EveronNorthStatic.ps1,Test-ScenarioHeadersStatic.ps1,Test-WCSIntegrationStatic.ps1,Test-RHSIntegrationStatic.ps1,Test-LocalizationStatic.ps1 -EvidenceRoot <before|after>`:
+  4 PASS и прежний 1 FAIL, exit 1 до/после. FAIL — ParserError
+  `Test-LocalizationStatic.ps1` в Windows PowerShell 5.1; новых failures нет.
+- `pwsh -NoProfile -File tests/static/Test-LocalizationStatic.ps1` и
+  `pwsh -NoProfile -File tools/Build-AICFLocalization.ps1 -Check`:
+  PASS/0 до/после, 533 записи. Генерация таблиц тем же builder без `-Check` — PASS.
+- North audit с корректным representative input — PASS/0; возврат Кермована
+  вместо Тайрона при том же числе баз — ожидаемый FAIL/1 `NORTH_BASE_IDENTITIES`.
+- Terminal Workbench stage для `EveronNorth` и `EveronNorthWCSRHS`:
+  PASS/0, `Script validation successful`, SCRIPT E/F и ENGINE F отсутствуют.
+  Команды/полные logs/exit codes: `compile.ps1`, `wb-<Variant>-argv.json`,
+  `wb-<Variant>/`, `compile-summary.json`. Остались 25/39 строк resource errors,
+  включая shutdown leaks; это не error-free verdict.
+
+Runtime запускается последовательно через `runtime.ps1`, вызывающий
+`tools/Start-AICFRuntime.ps1 -Role Server -Variant <Variant> -RepositoryRoot <stage>`
+в PowerShell 7. Дополнительные аргументы: `-aicfNorthProbe 1`
+и `-aicfRequirePlayerForResult 0`. Установленная версия — 1.8.0.13.
+Fixture проверяет активный whitelist, механизмы захвата и radio routes;
+завершение — `RequestClose()`, задержка сокращена с 150000 до 1000 ms только
+в stage. 232 production source-файла stage совпадают с checkout по SHA-256:
+`source-hashes.json`, `source-match.txt`.
+
+Все три остановленных server logs проверены целиком через
+`pwsh -NoProfile -File .codex-runtime/everon-north-exclude/analyze-runtime.ps1`
+(PASS/0, `runtime-summary.json`):
+
+| Variant | Targeted runtime | Native exit | Остальные строки ошибок |
+|---|---|---|---|
+| `EveronNorth` | PASS, 15/15 | 0 | 47 |
+| `EveronNorthRHS` | PASS, 15/15 | 0 | 198 |
+| `EveronNorthWCSRHS` | PASS, 15/15 | 0 | 233 |
+
+Везде `nodes=7 missing=0`, есть `ROSTER_READY`, Кермована нет среди активных
+баз и `GRAPH_NODE`, SCRIPT E/F и ENGINE F отсутствуют. Остальные ошибки
+относятся к ресурсам/свойствам мира, pathfinding и shutdown leaks;
+сохранены `errors-<Variant>.txt`. PASS относится к составу/механизмам/связности,
+а не к отсутствию всех engine errors. Полные logs и временные метки:
+`server-<Variant>-run/logs/*/console.log`; точные CLI, manifest и profiles:
+`server-<Variant>-launcher.txt`. Все тестовые процессы завершились сами;
+stage и negative-input copy удалены после сохранения hashes. `git diff --check`
+и staged diff check — PASS/0.
+
+Client/JIP, ручная карта, боевой захват/победа, строительство, soak и packaged
+build — NOT RUN. Полный offline набор и его остальные известные failures
+не перепроверялись. Старый неудачный опыт с электростанцией приведён ниже
+как история; он не описывает финальную конфигурацию этого изменения.
+
+## Проверка лагеря у электростанции, 08.10.2026
+
+Исходник — `0bc09b5` (`origin/main`), чистое дерево; ветка задачи
+`codex/everon-north-powerplant`. В эксперименте North headers stock/RHS
+заменяли `TownBaseKermovan` на `StartingPos06`; WCS+RHS наследовал RHS.
+Изменения headers и fixture **отменены после runtime FAIL**, игровой перенос
+не выполнен. Сохраняется исходный состав баз.
+
+Evidence: `.codex-runtime/everon-north-powerplant/`. Запуск
+`tools/Invoke-AICFChecks.ps1 -Name Test-EveronNorthStatic.ps1,Test-ScenarioHeadersStatic.ps1,Test-WCSIntegrationStatic.ps1,Test-RHSIntegrationStatic.ps1`
+с отдельным `-EvidenceRoot` дал 4 PASS/0 до и после эксперимента
+(`before/`, `after/`); baseline failures в этом наборе отсутствуют.
+После отмены эксперимента тот же набор — 4 PASS/0 (`restored/`),
+`git diff --check` — PASS/0. Финальные изменения только в агентских заметках.
+Representative positive/negative для изменённого North audit — 0/1;
+это доказательство проверки списка, а не возможности захвата.
+
+Терминальный Workbench для изолированного stage, варианты `EveronNorth` и
+`EveronNorthWCSRHS`: exit 0, `Script validation successful`, без SCRIPT E/F
+и ENGINE F. Полные логи: `wb-<Variant>/`, команды: `wb-<Variant>-argv.json`.
+Первый stock запуск wrapper прерван обработкой native stderr в PowerShell 5.1;
+он не считается PASS. Успешные повторные прогоны сохранили native exit codes.
+
+Сервер `EveronNorth` 1.8.0.13 через `tools/Start-AICFRuntime.ps1`, PowerShell 7:
+**FAIL, 18/19 checks**, `CAPTURE_MECHANISM_StartingPos06 passed=0`.
+Положение, spawn point, 8 активных баз, 2 HQ, 6 control points, roster и
+radio graph (`nodes=8 missing=0`) прошли. Native exit 0 не отменяет FAIL.
+Fixture в stage завершила сервер через `RequestClose()` спустя 1000 ms после
+проверок; штатная задержка fixture 150000 ms сокращена только в stage.
+Полный stopped log: `server-EveronNorth-run/logs/*/console.log`; точные CLI,
+profile и `AICF_RUNTIME_MANIFEST_JSON` — `server-EveronNorth-launcher.txt`.
+Предварительный запуск в PowerShell 5.1 прервался на native stderr и не даёт
+runtime verdict. SCRIPT E/F и ENGINE F в завершённом прогоне нет;
+ошибки ресурсов, мира и pathfinding сохранены, логи не объявляются чистыми.
+
+RHS/WCS server runtime после выявленного функционального FAIL, client/JIP,
+ручная карта/захват, стройка, soak и packaged build — **NOT RUN**.
+Старые 5 baseline failures полного offline набора не перепроверялись.
+Диагностические копии удалены после сохранения evidence; production `.c`
+не менялись. Вывод по архитектурному ограничению — в [GAMEPLAY.md](GAMEPLAY.md).
+
 ## Результаты прежних изменений
 
 Источники — [0.1.25](../releases/0.1.25.md) и
