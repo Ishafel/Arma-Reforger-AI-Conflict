@@ -3359,11 +3359,19 @@ class AICF_VehicleCleanupManager
 	// ни занятый автомобиль, ни захваченный игроком экипаж здесь не удаляются.
 	static void RetainFIAGarrison(AICF_FIAGarrison g)
 	{
-		if (!Replication.IsServer() || !g || !g.GroupIdentity()) return;
+		if (!Replication.IsServer() || !g) return;
 		ChimeraAIWorld world = ChimeraAIWorld.Cast(GetGame().GetAIWorld());
-		if (world) world.PurgeSpawnRequestsForGroup(g.m_Group);
 		AICF_ManagedAILODPolicy lod = new AICF_ManagedAILODPolicy();
-		lod.Release(g.m_Group);
+		if (g.GroupIdentity())
+		{
+			if (world) world.PurgeSpawnRequestsForGroup(g.m_Group);
+			lod.Release(g.m_Group);
+		}
+		if (g.DesantIdentity())
+		{
+			if (world) world.PurgeSpawnRequestsForGroup(g.m_DesantGroup);
+			lod.Release(g.m_DesantGroup);
+		}
 	}
 
 	static void RetainFIAPatrol(AICF_FIAPatrol p)

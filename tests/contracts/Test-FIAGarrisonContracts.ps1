@@ -7,7 +7,7 @@ $rules = @(
     @('EASY_ZERO', 'Vehicles/AICF_FIAGarrisonService.c', 'if (difficulty == AICF_EDifficulty.MEDIUM) perBase = 1;'),
     @('HARD_TWO', 'Vehicles/AICF_FIAGarrisonService.c', 'if (difficulty == AICF_EDifficulty.HARD) perBase = 2;'),
     @('NO_REPLACEMENT', 'Vehicles/AICF_FIAGarrisonService.c', '!g.m_Vehicle && g.m_iRequestedAtMs == 0'),
-    @('SURVIVORS', 'Vehicles/AICF_FIAGarrisonService.c', 'if (g.m_bReady) { m_Patrol.Update(g, now); continue; }'),
+    @('SURVIVORS', 'Vehicles/AICF_FIAGarrisonService.c', 'if (g.m_bReady) { m_Crew.UpdateGarrison(g, now); m_Patrol.Update(g, now); continue; }'),
     @('MEMBER_IDENTITY', 'State/Vehicles/AICF_FIAGarrison.c', 'entity.GetID() != m_aCrewIds[index]'),
     @('PLAYER_FENCE', 'State/Vehicles/AICF_FIAGarrison.c', 'IsAuthoritativeAIEntity(entity)'),
     @('GROUP_MEMBERSHIP', 'State/Vehicles/AICF_FIAGarrison.c', 'control.GetAIAgent().GetParentGroup() == m_Group'),
@@ -35,7 +35,17 @@ $rules = @(
     @('BODY_CLEARANCE', 'Vehicles/AICF_VehicleSpawner.c', '!g.BaseIdentity() || g.m_Base.GetFaction() != g.m_Faction || !footprint.IsClear(world, pose, body)'),
     @('ASYNC_PURGE', 'Vehicles/AICF_VehicleCleanupManager.c', 'world.PurgeSpawnRequestsForGroup(g.m_Group)'),
     @('REGISTRY_STOP', 'Vehicles/AICF_FIAGarrisonService.c', 's_aDefenders.Clear();'),
-    @('LIFECYCLE', 'Bootstrap/AICF_MatchController.c', 'm_FIAGarrisons.Stop();')
+    @('LIFECYCLE', 'Bootstrap/AICF_MatchController.c', 'm_FIAGarrisons.Stop();'),
+    @('RECOVERY_RADIUS', 'Vehicles/AICF_FIAGarrisonRecovery.c', 'static const float PLAYER_RADIUS = 50;'),
+    @('RECOVERY_MAIN_PLAYER', 'Vehicles/AICF_FIAGarrisonRecovery.c', 'SCR_PossessingManagerComponent.GetPlayerMainEntity(id)'),
+    @('RECOVERY_DESTINATION_PLAYER', 'Vehicles/AICF_FIAGarrisonRecovery.c', '!AICF_FIAGarrisonRecovery.PlayersClear(g.m_Vehicle.GetOrigin(), pose[3])'),
+    @('RECOVERY_FOREIGN_OCCUPANT', 'Vehicles/AICF_FIAGarrisonRecovery.c', 'if (seat.GetOccupant() && !g.OwnsMember(seat.GetOccupant())) return false;'),
+    @('RECOVERY_SAME_VEHICLE', 'Vehicles/AICF_FIAGarrisonRecovery.c', 'g.m_Vehicle.SetWorldTransform(pose)'),
+    @('RECOVERY_SETTLED_CREW', 'Vehicles/AICF_FIAGarrisonRecovery.c', 'g.m_aSeats[i].GetOccupant() != g.m_aCrew[i]) return false;'),
+    @('DESANT_ANIMATED', 'Forces/AICF_FIAGarrisonCrew.c', 'access.GetOutVehicle(EGetOutType.ANIMATED'),
+    @('DESANT_NO_REBOARD', 'Vehicles/AICF_FIAGarrisonService.c', 'g.IsDeployedPassenger(entity) || !g.VehicleIdentity()'),
+    @('CREW_PLAYER_FENCE', 'Forces/AICF_FIAGarrisonCrew.c', '!AICF_FIAGarrisonRecovery.PlayersClear(member.GetOrigin(), g.m_Vehicle.GetOrigin())'),
+    @('CREW_EXACT_SLOT', 'Forces/AICF_FIAGarrisonCrew.c', 'seat.GetOccupant() == member || now < g.m_iCrewRecoveryNextMs')
 )
 $failures = @()
 foreach ($rule in $rules) {

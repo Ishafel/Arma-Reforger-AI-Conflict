@@ -4,12 +4,34 @@ class AICF_FIAGarrisonPatrol
 	static const float ROUTE_RADIUS = 140;
 	static const float RETURN_RADIUS = 200;
 	protected ref AICF_VehicleTaskHandoff m_Handoff = new AICF_VehicleTaskHandoff(null, null, null);
+	protected ref AICF_FIAGarrisonRecovery m_Recovery = new AICF_FIAGarrisonRecovery();
 
 	void Update(AICF_FIAGarrison g, int now)
 	{
 		if (!Replication.IsServer() || !g || g.m_bRetired) return;
-		if (!g.BaseIdentity() || !g.CanDrive()) { Stop(g); return; }
+		if (!g.BaseIdentity() || !g.CanDrive() || g.m_bDisembarking)
+		{
+			string reason = "CANNOT_DRIVE";
+			if (g.m_bDisembarking) reason = "DESANT_EXIT";
+			if (g.m_sPatrolHold != reason) g.Log("FIA_GARRISON_PATROL_HOLD", "reason=" + reason);
+			g.m_sPatrolHold = reason;
+			Stop(g);
+			return;
+		}
+		if (!g.m_sPatrolHold.IsEmpty())
+		{
+			g.Log("FIA_GARRISON_PATROL_RESUME", "previous=" + g.m_sPatrolHold);
+			g.m_sPatrolHold = string.Empty;
+		}
 		vector position = g.m_Vehicle.GetOrigin();
+		if (g.m_bCrewRecoveryPending)
+		{
+			Stop(g);
+			if ((vector.DistanceXZ(position, g.m_vPatrolTarget) < 18 || vector.DistanceXZ(g.m_vPatrolTarget, g.m_vHome) > ROUTE_RADIUS) &&
+				!SelectEndpoint(g, g.m_vPatrolTarget)) return;
+			m_Recovery.TryRelocate(g, now, "CREW_RETURN");
+			return;
+		}
 		if (!g.m_bReturning && vector.DistanceXZ(position, g.m_vHome) > RETURN_RADIUS)
 		{
 			m_Handoff.ClearFIAGarrisonWaypoint(g);
@@ -22,6 +44,7 @@ class AICF_FIAGarrisonPatrol
 			if (vector.DistanceXZ(position, g.m_vPatrolTarget) <= 15)
 			{
 				g.m_iPatrolArrivals++;
+				g.m_iPatrolFailures = 0;
 				g.Log("FIA_GARRISON_PATROL_ARRIVED", string.Format("leg=%1 position=%2 home_distance_m=%3", g.m_iPatrolLeg, position, vector.DistanceXZ(position, g.m_vHome)));
 				Stop(g);
 				g.m_bReturning = false;
@@ -37,6 +60,8 @@ class AICF_FIAGarrisonPatrol
 			g.m_Group.GetWaypoints(queue);
 			if (!g.m_bPatrolMoveFailed && queue.Contains(g.m_PatrolWaypoint) && now - g.m_iPatrolProgressAtMs < 45000) return;
 			g.Log("FIA_GARRISON_PATROL_RETRY", string.Format("leg=%1 position=%2 target=%3", g.m_iPatrolLeg, position, g.m_vPatrolTarget));
+			g.m_iPatrolFailures++;
+			if (g.m_iPatrolFailures >= 2 && m_Recovery.TryRelocate(g, now, "ROUTE_STALLED")) return;
 			g.m_iPatrolDirection = -g.m_iPatrolDirection;
 			Stop(g);
 			g.m_iPatrolRetryAtMs = now + 2000;

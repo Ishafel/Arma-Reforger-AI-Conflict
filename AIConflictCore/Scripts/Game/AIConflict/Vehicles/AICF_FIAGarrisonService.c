@@ -27,7 +27,7 @@ class AICF_FIAGarrisonService
 		if (!activity) return false;
 		foreach (AICF_FIAGarrison g : s_aDefenders)
 		{
-			if (g.OwnsMember(entity) && g.CanDrive() && g.PatrolWaypointIdentity() &&
+			if (g.OwnsMember(entity) && !g.IsDeployedPassenger(entity) && g.CanDrive() && g.PatrolWaypointIdentity() &&
 				activity.m_RelatedWaypoint == g.m_PatrolWaypoint &&
 				vector.DistanceXZ(g.m_vPatrolTarget, g.m_vHome) <= AICF_FIAGarrisonPatrol.ROUTE_RADIUS) return true;
 		}
@@ -67,9 +67,11 @@ class AICF_FIAGarrisonService
 		if (!Replication.IsServer() || !entity || !behavior) return false;
 		foreach (AICF_FIAGarrison g : s_aDefenders)
 		{
-			if (!g.OwnsMember(entity) || !g.VehicleIdentity() || behavior.m_Vehicle.m_Value != g.m_Vehicle) continue;
+			if (!g.OwnsMember(entity) || g.IsDeployedPassenger(entity) || !g.VehicleIdentity() || behavior.m_Vehicle.m_Value != g.m_Vehicle) continue;
 			BaseCompartmentSlot seat = behavior.m_CompartmentToGetIn.m_Value;
 			if (!seat || !g.m_aSeats.Contains(seat) || (seat.GetOccupant() && seat.GetOccupant() != entity)) return false;
+			int index = g.m_aCrew.Find(ChimeraCharacter.Cast(entity));
+			if (index < 0 || g.m_aSeats[index] != seat) return false;
 			return vector.DistanceXZ(entity.GetOrigin(), g.m_Vehicle.GetOrigin()) <= 25 &&
 				vector.DistanceXZ(g.m_Vehicle.GetOrigin(), g.m_vHome) <= AICF_FIAGarrisonPatrol.RETURN_RADIUS;
 		}
@@ -131,7 +133,8 @@ class AICF_FIAGarrisonService
 			if (!g.GroupIdentity()) { Retire(g, "GROUP_IDENTITY_LOST"); continue; }
 			int agents, recovered;
 			m_LOD.KeepCaptureEligible(g.m_Group, agents, recovered);
-			if (g.m_bReady) { m_Patrol.Update(g, now); continue; }
+			if (g.DesantIdentity()) m_LOD.KeepCaptureEligible(g.m_DesantGroup, agents, recovered);
+			if (g.m_bReady) { m_Crew.UpdateGarrison(g, now); m_Patrol.Update(g, now); continue; }
 			if (!g.VehicleIdentity() || now - g.m_iRequestedAtMs >= 90000) { Retire(g, "INITIAL_CREW_FAILED"); continue; }
 			if (!m_Crew.BoardGarrison(g)) continue;
 			g.m_bReady = true;

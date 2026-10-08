@@ -15,6 +15,8 @@ class AICF_FIAGarrison
 	EntityID m_VehicleId;
 	SCR_AIGroup m_Group;
 	EntityID m_GroupId;
+	SCR_AIGroup m_DesantGroup;
+	EntityID m_DesantGroupId;
 	ResourceName m_sPrefab;
 	vector m_vPosition;
 	vector m_vHome;
@@ -30,6 +32,18 @@ class AICF_FIAGarrison
 	int m_iPatrolRetryAtMs;
 	bool m_bReturning;
 	bool m_bPatrolMoveFailed;
+	bool m_bPassengersDeployed;
+	bool m_bDisembarking;
+	bool m_bCrewRecoveryPending;
+	int m_iCrewRecoveryNextMs;
+	int m_iDismountNextMs;
+	int m_iRecoveryNextMs;
+	int m_iPatrolFailures;
+	int m_iVehicleTeleports;
+	int m_iCrewTeleports;
+	string m_sRecoveryBlocked;
+	string m_sPatrolHold;
+	ref array<bool> m_aEssentialSeats = {};
 	ref AICF_VehicleLease m_Lease;
 	ref array<BaseCompartmentSlot> m_aSeats = {};
 	ref array<ChimeraCharacter> m_aCrew = {};
@@ -58,7 +72,14 @@ class AICF_FIAGarrison
 		int index = m_aCrew.Find(ChimeraCharacter.Cast(entity));
 		if (index < 0 || entity.GetID() != m_aCrewIds[index]) return false;
 		AIControlComponent control = AIControlComponent.Cast(entity.FindComponent(AIControlComponent));
-		return control && control.GetAIAgent() && control.GetAIAgent().GetParentGroup() == m_Group;
+		if (!control || !control.GetAIAgent()) return false;
+		if (control.GetAIAgent().GetParentGroup() == m_Group) return true;
+		return IsDeployedPassenger(entity) && DesantIdentity() && control.GetAIAgent().GetParentGroup() == m_DesantGroup;
+	}
+
+	bool DesantIdentity()
+	{
+		return Replication.IsServer() && m_DesantGroup && m_DesantGroup.GetID() == m_DesantGroupId && m_DesantGroup.GetFaction() == m_Faction;
 	}
 
 	bool CanDrive()
@@ -75,6 +96,12 @@ class AICF_FIAGarrison
 			if (seat.GetType() == ECompartmentType.PILOT) driver = OwnsMember(occupant);
 		}
 		return driver;
+	}
+
+	bool IsDeployedPassenger(IEntity entity)
+	{
+		int index = m_aCrew.Find(ChimeraCharacter.Cast(entity));
+		return m_bPassengersDeployed && index >= 0 && index < m_aEssentialSeats.Count() && !m_aEssentialSeats[index];
 	}
 
 	bool PatrolWaypointIdentity()

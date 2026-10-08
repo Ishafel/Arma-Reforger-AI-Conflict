@@ -456,3 +456,74 @@ Helper и manifests сохранены в
 точный CLI и `AICF_RUNTIME_MANIFEST_JSON`, profiles, начало/конец и способ остановки,
 пути к полным Workbench/server/client logs. Нужное evidence сохраняй в
 игнорируемом каталоге задачи, временные copies/stages убирай.
+
+## Восстановление и десант гарнизонов FIA — 2026-10-08
+
+Продолжение `codex/fia-difficulty` от `26122a4`. Evidence этой задачи:
+`.codex-runtime/fia-recovery/`. Добавлены `AICF_FIAGarrisonRecovery`,
+exact-seat возврат живого экипажа, обычная высадка семи пассажиров БТР,
+отдельный controller десанта без spawn, диагностика удержания/переноса.
+50 м проверяются через controlled/main player entities у обеих позиций,
+при переносе бойца — также у самого бойца. Погибшие не восстанавливаются.
+
+До изменений `before/`, после окончательного production кода `after-final/`:
+`tools/Invoke-AICFChecks.ps1 -Name <восемь выбранных проверок> -EvidenceRoot <каталог>`.
+В обоих случаях **7 PASS, 1 прежний FAIL**, общий exit 1: AICombatInputContracts,
+FIAGarrisonContracts, FIAPatrolStatic, Stage35RecoveryPolicy, Stage35Static,
+Stage3Static, Stage3StaticContracts — PASS/0. NorthFailureContracts — FAIL/1,
+те же `MOVE_CALLBACK_FENCE`, `MOVE_ACTIVITY`. Точные argv, исходный SHA,
+dirty status, exit codes и полный вывод находятся в evidence. Контракт
+SURVIVORS обновлён под вызов crew update перед patrol update; новый контракт
+не отменяет прежнюю проверку сохранения выживших.
+
+Терминальный Workbench production, `compile.ps1 -Label production-final`
+и `compile.ps1 -Variant EveronNorth -Label stock-final`: **PASS/0**, оба
+`Script validation successful`, SCRIPT E/F и ENGINE F нет; прочих строк (E)
+39/25. Все compile argv и полные логи сохранены, `compile-summary.json`.
+API 1.8.0.13: GetInVehicle/GetOutVehicle, GetCompartmentName, GetAllPlayers,
+threat state, group transfer, SetWorldTransform и physics velocity проверены
+по закреплённому reference и соседним production adapters.
+
+Runtime: `runtime.ps1 -Label probe2`, canonical launcher с отдельным stage,
+Variant `EveronNorthWCSRHS`, Hard, `-aicfRecoveryProbe 1`,
+`-aicfRequirePlayerForResult 0`. **46/46 PASS**, native exit 0;
+20:52:11–20:57:29 MSK. Полный остановленный console.log:
+`probe2-logs/logs_2026-10-08_20-52-11/console.log`; сохранены также script/error
+logs, launcher manifest и exit. `runtime-summary.json`: SCRIPT E/F 0,
+ENGINE F 0, VM exceptions 0, 233 прочих resource/backend строк (E).
+`source-hashes-final.json`: 221 production `.c`/`.conf`/`.gproj` совпадают со
+stage по SHA-256, fixture присутствует только в stage.
+
+Проверены три роли экипажа БТР и танка, точное повторное занятие каждого места
+с последующим переносом машины, отсутствие мутаций при synthetic player veto,
+граница 49/50/51 м, destination и height cases, перенос без изменения entity IDs,
+высадка семи пассажиров, сохранение трёх членов экипажа, физическое прибытие
+БТР после высадки, recovery после failed move, отказ при stale member identity,
+отсутствие восстановления/замены убитого водителя.
+Probe выключает damage только в изолированной копии и задаёт threat искусственно.
+Имитированный player veto не заменяет проверку PlayerManager с реальным клиентом.
+
+`pwsh -File tests/log-audits/Test-FIAGarrisonRecoveryLog.ps1 -LogPath <полный лог>`:
+**PASS/0**. Тот же анализатор на копии без PLAYER_VETO_NO_VEHICLE_MUTATION —
+ожидаемый **FAIL/1**, вывод `negative-audit.txt`. `git diff --check` — PASS/0.
+Ранний `probe1` — **FAIL**, остановлен адресно (native -1): unqualified static
+внутренний вызов обходил synthetic override, а общий controller десанта блокировал
+новое vehicle movement. В production используется единый qualified PlayersClear;
+пешие переведены в собственную identity-проверяемую группу, затем весь probe повторён.
+Не выдавать первый прогон за PASS.
+
+Четыре ранее запущенных сервера остановлены по разрешению пользователя после
+нового сбора показателей; точный process/profile проверен перед Stop-Process.
+Полные остановленные логи: `.codex-runtime/fia-four-servers-20261008-201345/stopped-logs/`.
+В конце 25 минут ownership целей US/USSR/FIA: 2301 — 1/2/2, 2303 — 1/2/2,
+2305 — 3/2/0, 2307 — 2/3/0. На 2307 зарегистрировано 111 MOVE_FAILED;
+на 2303/2305 сохранились две начальные PMC_EQUIPMENT_FAILED, новых SCRIPT E/F нет.
+Это старый код, загруженный до правок, и baseline длительного прогона, не проверка
+нового recovery. Остановка принудительная, native exit -1; сама по себе не crash.
+
+Реальный connected player рядом с телепортом, client/JIP, визуальная проверка
+анимаций, долгий soak нового кода и полный бой до гибели гарнизона — **NOT RUN**.
+Все свои тестовые процессы остановлены, stage удалён после сохранения evidence.
+Изменены Core state/crew/patrol/service/cleanup, новый recovery, README и
+архитектурные/gameplay/testing/fixture заметки, FIAGarrisonContracts,
+RecoveryProbe и RecoveryLog; точный список — `changed-files.txt` в evidence.

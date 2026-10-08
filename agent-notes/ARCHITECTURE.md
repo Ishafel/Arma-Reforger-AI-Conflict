@@ -40,7 +40,7 @@ Core и stock integrations не должны получать обязатель
 | `Objectives/`, `Orders/` | Граф целей, `AICF_OrderPlanner`: infantry intent, target, waypoint, recovery |
 | `State/`, `Forces/` | `AICF_FactionState`, `AICF_GroupSlot`: stable slots, async roster, replacement; `AICF_GroupRuntime`: позиция живого бойца |
 | `Forces/` | `AICF_InfantryRecruitmentService`, `AICF_InfantryRecruitSpawner`: посещение казармы и покупка пополнения |
-| `Vehicles/`, `State/Vehicles/` | Transport trips, fleet, task handoff и cleanup; `AICF_FIAGarrisonService` — отдельный initial гарнизон FIA по сложности header; `AICF_FIAGarrisonPatrol` — его локальные маршруты |
+| `Vehicles/`, `State/Vehicles/` | Transport trips, fleet, task handoff и cleanup; `AICF_FIAGarrisonService` — отдельный initial гарнизон FIA по сложности header; `AICF_FIAGarrisonPatrol` — локальные маршруты; `AICF_FIAGarrisonRecovery` — перенос существующей техники с player/identity/geometry fences; `AICF_FIAGarrisonCrew` — exact-seat возврат и высадка десанта |
 | `Economy/` | `AICF_EconomySystem`: ticket/supply transaction; `AICF_RecruitmentSupplyForecast`: read-only прогноз |
 | `Construction/` | Планирование платных layouts и отдельный worker lifecycle каждой базы |
 | `Content/`, `Integration/` | Content profiles и узкие stock API adapters |

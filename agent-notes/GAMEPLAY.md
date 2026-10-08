@@ -51,9 +51,23 @@ Medium — один БТР-70 FIA, Hard — дополнительно Т-72А F
 
 Все доступные места машины (включая десантные) получают бойцов FIA. Ожидается
 полный asynchronous roster, затем проверяется посадка каждого immutable member.
-`READY` требует заполнения всех мест. Телепорт используется только для первичной
-посадки; после READY принудительной повторной посадки и замены погибших нет. Stock spawn
-queue сохраняет собственные readiness и бюджетные ограничения.
+`READY` требует заполнения всех мест. После READY вышедшие живые водитель,
+стрелок и командир возвращаются forced GetInVehicle на закреплённые места;
+чужие occupants не вытесняются, погибшие не заменяются. Роли определяются
+metadata compartment: PILOT/TURRET, attached turret и commander name/UI key;
+у танка все места относятся к экипажу. Stock spawn queue сохраняет readiness
+и бюджетные ограничения.
+
+При Attack/Suppress либо threat state ALERTED/THREATENED БТР начинает обычную
+анимированную высадку пассажиров: маршрут приостановлен до завершения выхода,
+высадка выдаётся при скорости не выше 1 м/с, по одному запросу каждые 2 с.
+Десант остаётся защищать точку пешком и автоматически обратно не садится;
+ему запрещены vehicle patrol move и native boarding. Три члена экипажа остаются
+в машине. После выхода живые пассажиры переводятся в отдельный manual AI controller
+без spawn и без нового force slot: тот же гарнизон хранит immutable entity IDs,
+проверяет обе group identities и поддерживает LOD обеих групп. Это не даёт
+пешим бойцам блокировать vehicle group activity. Cleanup освобождает оба LOD pin.
+Телепорт для боевой высадки не используется.
 
 `AICF_FIAGarrisonPatrol` сначала продолжает текущую дорогу на участке до 70 м
 по её polyline, меняя направление у границы района или после неудачи движения.
@@ -63,6 +77,19 @@ queue сохраняет собственные readiness и бюджетные 
 более 200 м приказывает возврат на исходную площадку. Waypoint создаёт/снимает
 `AICF_VehicleTaskHandoff`; перед удалением он исключается из очереди группы.
 Через 45 с без перемещения либо при пропаже waypoint выбирается следующий участок.
+После двух последовательных сбоев без прибытия `AICF_FIAGarrisonRecovery`
+пытается перенести ту же машину на 15–80 м дальше по локальному маршруту.
+Возврат исходного члена экипажа также запрашивает перенос машины с последующим
+возобновлением патруля. Кандидат обязан оставаться внутри 140 м от дома,
+иметь пригодную дорогу для продолжения, сухую поверхность, свободные OBB и выезд.
+PlayerManager проверяет controlled и main entities у исходной и конечной
+позиции; DistanceXZ <= 50 м запрещает перенос, включая персонажа на высоте.
+При возврате экипажа проверяется позиция бойца и машины. Перед каждой мутацией
+повторяются authority, immutable identity, occupant/transition и player fences.
+Техника переносится только при скорости не выше 3 м/с; скорость и вращение
+обнуляются, waypoint снимается через handoff, новый выдаётся после settling.
+Неудачный поиск повторяется через 10 с, успешный перенос имеет cooldown 30 с.
+Ни боевой урон, ни lease, ни entity ID, ни состав гарнизона не сбрасываются.
 При отсутствии местной дороги служба ждёт и повторяет поиск.
 `AICF_FIAGarrisonMovementPolicy` принимает native failed movement только от
 текущей группы/машины/waypoint. После синхронного invoker повторно проверяет
@@ -87,7 +114,9 @@ callback при пустой `m_Target`: проверка боя выявила 
 spawn и waypoint, снимает LOD pin и очищает registry; entity не удаляются этой службой.
 
 События `FIA_GARRISON_PLAN`, `SPAWN_REQUESTED`, `READY`, `WAIT`, `RETIRED`,
-`PATROL_LEG`, `PATROL_ARRIVED`, `PATROL_RETRY`, `PATROL_WAIT`, `RETURN`, `MOVE_FAILED`
+`PATROL_LEG`, `PATROL_ARRIVED`, `PATROL_RETRY`, `PATROL_WAIT`, `RETURN`, `MOVE_FAILED`,
+`SEAT`, `DESANT_DEPLOY`, `DESANT_EXIT`, `DESANT_TRANSFER`, `CREW_TELEPORT`, `VEHICLE_TELEPORTED`,
+`RECOVERY_BLOCKED`, `PATROL_HOLD`, `PATROL_RESUME`
 используют префикс `FIA_GARRISON_` и существующий канал `[AICF][STAGE3]`.
 Контекст: `faction numeric_slot generation base vehicle group tank`.
 Состав/удержание/потери проверяет `tests/fixtures/AICF_FIAGarrisonProbe.c`;
