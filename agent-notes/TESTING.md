@@ -413,6 +413,18 @@ ENGINE F нет; ещё 233 строки (E) — resource baseline.
 `changed-files.txt` в evidence. Тестовые процессы завершены через RequestClose;
 stage удаляется перед запуском production server/client для ручной проверки.
 
+Игровой запуск после commit `4779d8d`: Hard / EveronNorthWCSRHS, обе роли
+через `tools/Start-AICFRuntime.ps1` в отдельных терминальных сессиях.
+Helper и manifests сохранены в
+`.codex-runtime/fia-local-patrol-play-20261008-195359/`.
+Свежие profiles: `C:\Users\retar\AppData\Local\AICF\fia-local-patrol-play-20261008-195359\server`
+и соседний `client`. Launcher подтвердил точный CLI, живой PID и ROSTER_READY;
+20:03:23 MSK сервер зарегистрировал игрока, client — `Entered online game state`.
+`connection-evidence.json` фиксирует процессы 28928/15876, пути полных логов и
+10 READY-гарнизонов на сервере. Оба процесса оставлены пользователю по запросу.
+Это подтверждение подключения; полный остановленный client log gate и ручная
+игровая оценка остаются NOT RUN. Тестовые fixture/stage в production отсутствуют.
+
 ## Результаты прежних изменений
 
 Источники — [0.1.25](../releases/0.1.25.md) и
