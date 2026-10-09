@@ -1,6 +1,7 @@
 # AI Conflict Everon WCS + RHS
 
-Отдельный source addon `A1CF261006100001` с двумя сценариями:
+Отдельный source addon `A1CF261006100001`: две карты кампании, по три сложности.
+В таблице указаны неизменные GUID лёгких вариантов:
 
 | Launcher Variant | Сценарий | Resource GUID |
 |---|---|---|
@@ -23,6 +24,17 @@ World, whitelist, radio policy, callsign adapter и campaign lifecycle
 Каждый запуск начинает новую кампанию, сохранение сессии отключено.
 Названия и описания имеют RU/EN локализацию.
 
+Северный сценарий представлен тремя сложностями: лёгкий сохраняет прежний
+состав, средний добавляет БТР-70 FIA на каждую стартовую точку FIA, сложный —
+также Т-72А FIA. Все доступные места заняты бойцами. Гарнизоны патрулируют
+окрестности своих баз на технике, без дальнего преследования и замены потерь. Medium/Hard headers
+наследуют лёгкий North, не копируют whitelist. Реализация остаётся в Core и
+WCS content profile. При подключении клиенту передают ту же `-Difficulty`.
+
+Полный Эверон также имеет Easy/Medium/Hard. Medium добавляет один БТР-70,
+Hard — БТР-70 и Т-72А на стартовую точку FIA; в каждой машине только водитель,
+стрелок и командир, без десанта. На Medium/Hard обеих карт по три ПТ-бойца в полном отряде.
+
 ## Запуск
 
 Из корня репозитория, после терминального Workbench Validate нового
@@ -30,7 +42,9 @@ World, whitelist, radio policy, callsign adapter и campaign lifecycle
 
 ```powershell
 ./tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronWCSRHS
-./tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthWCSRHS
+./tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthWCSRHS -Difficulty Easy
+./tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthWCSRHS -Difficulty Medium
+./tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthWCSRHS -Difficulty Hard
 ```
 
 Это альтернативные запуски; для одновременных серверов нужны разные порты.

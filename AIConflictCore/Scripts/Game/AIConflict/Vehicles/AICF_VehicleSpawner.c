@@ -1217,6 +1217,124 @@ class AICF_VehicleSpawner
 		return false;
 	}
 
+	// Гарнизон ищет площадку в пределах своей базы, без маршрута на соседнюю.
+	bool SpawnFIAGarrison(AICF_FIAGarrison g, AICF_FactionFleet fleet, out vector crewPosition)
+	{
+		if (!Replication.IsServer() || !g || g.m_Vehicle || !g.m_Lease || !fleet ||
+			!g.BaseIdentity() || g.m_Base.GetFaction() != g.m_Faction) return false;
+		AICF_LogisticsVehicleFootprint footprint = AICF_LogisticsVehicleFootprint.Get(g.m_sPrefab);
+		SCR_AIWorld ai = SCR_AIWorld.Cast(GetGame().GetAIWorld());
+		if (!footprint || !footprint.m_bValid || !ai || !ai.GetRoadNetworkManager()) return false;
+		BaseWorld world = GetGame().GetWorld();
+		vector center = g.m_Base.GetOwner().GetOrigin();
+		// Сначала дорожный патруль, затем стационарная оборона без unsafe relocation.
+		for (int candidate; candidate < 128; candidate++)
+		{
+			bool staticDefense = candidate >= 64;
+			int localCandidate = candidate % 64;
+			int bearing = candidate % 16;
+			float angle = bearing * 22.5 * Math.DEG2RAD;
+			float radius = 100 - (localCandidate / 16) * 20;
+			vector direction = Vector(Math.Cos(angle), 0, Math.Sin(angle));
+			vector requested = center + direction * radius;
+			// Флаг базы может быть вне дорожной сети. Машина появляется уже на дороге;
+			// проезд проверяется от площадки, а не от пешеходного origin базы.
+			vector position = requested;
+			if (!staticDefense && !FIAGarrisonRoadDirection(ai.GetRoadNetworkManager(), position, direction, 40)) continue;
+			if (staticDefense) position[1] = world.GetSurfaceY(position[0], position[2]);
+			if (vector.DistanceXZ(position, center) > 120) continue;
+			if (vector.DistanceXZ(position, center) > 120 || Math.AbsFloat(position[1] - world.GetSurfaceY(position[0], position[2])) > 1.5) continue;
+			int patrolDirection = 1;
+			vector patrolEndpoint;
+			if (!staticDefense && !AICF_FIAGarrisonPatrol.FindRoadEndpoint(ai.GetRoadNetworkManager(), position, center, patrolDirection, patrolEndpoint)) continue;
+			if (!staticDefense && !FIAGarrisonTurnSurface(world, position)) continue;
+			float x = position[0];
+			float z = position[2];
+			vector up = Vector(world.GetSurfaceY(x - 1, z) - world.GetSurfaceY(x + 1, z), 2,
+				world.GetSurfaceY(x, z - 1) - world.GetSurfaceY(x, z + 1));
+			up.Normalize();
+			direction[1] = -(up[0] * direction[0] + up[2] * direction[2]) / up[1];
+			direction.Normalize();
+			vector pose[4];
+			Math3D.DirectionAndUpMatrix(direction, up, pose);
+			pose[3] = position;
+			pose[3][1] = world.GetSurfaceY(x, z);
+			if (!AICF_LogisticsSpawnGeometry.FitToSurface(world, footprint, pose)) continue;
+			TraceOBB body, exitTrace;
+			vector exitPosition;
+			if (!footprint.IsClear(world, pose, body) || !AICF_ConstructionPlanner.VehicleAreaClear(pose[3], 18)) continue;
+			if (!staticDefense && !AICF_LogisticsSpawnGeometry.ExitClear(world, footprint, pose, exitPosition, exitTrace)) continue;
+			bool reserved;
+			foreach (AICF_VehicleSpawnSiteReservation site : s_aConstructionSites)
+			{
+				if (site && vector.DistanceXZ(site.GetSpawnPosition(), pose[3]) < 20) reserved = true;
+			}
+			if (reserved) continue;
+			vector crewCenter = pose[3] - pose[0] * 8;
+			if (!SCR_WorldTools.FindEmptyTerrainPosition(crewPosition, crewCenter, 3, 1.5, 2, TraceFlags.ENTS | TraceFlags.OCEAN, world)) continue;
+			if (vector.DistanceXZ(crewPosition, pose[3]) < 5) continue;
+			crewPosition[1] = crewPosition[1] + 0.1;
+			if (!g.BaseIdentity() || g.m_Base.GetFaction() != g.m_Faction || !footprint.IsClear(world, pose, body)) return false;
+			EntitySpawnParams params = new EntitySpawnParams();
+			params.TransformMode = ETransformMode.WORLD;
+			for (int axis; axis < 4; axis++) params.Transform[axis] = pose[axis];
+			g.m_Vehicle = SpawnSelectedPrefab(g.m_sPrefab, pose[3], params);
+			if (!g.m_Vehicle) return false;
+			g.m_VehicleId = g.m_Vehicle.GetID();
+			g.m_vPosition = pose[3];
+			g.m_bStaticDefense = staticDefense;
+			RplComponent rpl = RplComponent.Cast(g.m_Vehicle.FindComponent(RplComponent));
+			if (!g.VehicleIdentity() || !rpl || !rpl.IsMaster()) return false;
+			array<BaseCompartmentSlot> seats = {};
+			AICF_FIAPatrolCrew.Seats(g.m_Vehicle, seats);
+			return fleet.BindReservedLeaseVehicle(g.m_Lease, g.m_Vehicle, rpl.Id().ToString(), g.m_sPrefab, AICF_EVehicleKind.ARMED_LIGHT, seats.Count(), pose[3]);
+		}
+		return false;
+	}
+
+	// Мобильной машине нужен запас земли для разворота, не только сухой OBB.
+	protected bool FIAGarrisonTurnSurface(BaseWorld world, vector position)
+	{
+		float centerY = world.GetSurfaceY(position[0], position[2]);
+		for (int bearing; bearing < 8; bearing++)
+		{
+			float angle = bearing * 45 * Math.DEG2RAD;
+			vector point = position + Vector(Math.Cos(angle), 0, Math.Sin(angle)) * 12;
+			point[1] = world.GetSurfaceY(point[0], point[2]);
+			if (Math.AbsFloat(point[1] - centerY) > 3 || ChimeraWorldUtils.TryGetWaterSurfaceSimple(world, point)) return false;
+		}
+		return true;
+	}
+
+	protected bool FIAGarrisonRoadDirection(RoadNetworkManager roads, inout vector position, out vector direction, float maxDistance = 10)
+	{
+		BaseRoad road;
+		float distance;
+		roads.GetClosestRoad(position, road, distance, true);
+		if (!road || distance > maxDistance) return false;
+		array<vector> points = {};
+		road.GetPoints(points);
+		float best = float.MAX;
+		vector projected;
+		for (int i = 1; i < points.Count(); i++)
+		{
+			vector segment = points[i] - points[i - 1];
+			segment[1] = 0;
+			float lengthSq = segment.LengthSq();
+			if (lengthSq < 1) continue;
+			float fraction = Math.Clamp(vector.Dot(position - points[i - 1], segment) / lengthSq, 0, 1);
+			vector nearest = points[i - 1] + (points[i] - points[i - 1]) * fraction;
+			float candidate = vector.DistanceXZ(position, nearest);
+			if (candidate >= best) continue;
+			best = candidate;
+			projected = nearest;
+			direction = segment.Normalized();
+		}
+		if (best >= maxDistance) return false;
+		position = projected;
+		return true;
+	}
+
 	protected Vehicle SpawnSelectedPrefab(ResourceName prefab, vector position, EntitySpawnParams spawnParams = null)
 	{
 		if (!Replication.IsServer()) return null;

@@ -1,9 +1,9 @@
 // FIA сохраняет собственный stock roster и RHS equipment hook.
 class AICF_FIAPatrolCrew : AICF_GroupSpawner
 {
-	SCR_AIGroup Create(SCR_CampaignFaction faction, vector position)
+	SCR_AIGroup Create(SCR_CampaignFaction faction, vector position, int crewSize = 2)
 	{
-		if (!Replication.IsServer() || !faction || faction.GetFactionKey() != "FIA") return null;
+		if (!Replication.IsServer() || !faction || faction.GetFactionKey() != "FIA" || crewSize < 1 || crewSize > 16) return null;
 		SCR_EntityCatalog catalog = faction.GetFactionEntityCatalogOfType(EEntityCatalogType.CHARACTER);
 		if (!catalog)
 		{
@@ -37,8 +37,7 @@ class AICF_FIAPatrolCrew : AICF_GroupSpawner
 		group.SetLifecyclePolicy(SCR_EAIGroupLifecyclePolicy.Manual);
 		group.SetSpawnImmediately(false);
 		group.m_aUnitPrefabSlots.Clear();
-		group.m_aUnitPrefabSlots.Insert(character);
-		group.m_aUnitPrefabSlots.Insert(character);
+		for (int i; i < crewSize; i++) group.m_aUnitPrefabSlots.Insert(character);
 		SCR_AIGroupUtilityComponent utility = group.GetGroupUtilityComponent();
 		if (utility)
 		{

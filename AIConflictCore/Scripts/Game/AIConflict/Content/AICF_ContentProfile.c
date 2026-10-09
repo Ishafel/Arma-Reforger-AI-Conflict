@@ -30,6 +30,12 @@ class AICF_ContentProfile
 		// replaces it through SetActive before installing any AICF lifecycle.
 	}
 
+	ResourceName GetFIAGarrisonPrefab(bool tank)
+	{
+		if (tank) return ResourceName.Empty;
+		return "{B47110AA1A806556}Prefabs/Vehicles/Wheeled/BTR70/BTR70_FIA.et";
+	}
+
 	string GetProfileKey()
 	{
 		return "STOCK";
@@ -143,6 +149,7 @@ class AICF_ContentProfile
 		out string role,
 		out array<string> suffixes)
 	{
+		memberIndex = AICF_Difficulty.GetInfantryRoleIndex(memberIndex);
 		suffixes.Clear();
 		string prefix = "Character_US_";
 		if (stableKey == "USSR")
@@ -166,7 +173,12 @@ class AICF_ContentProfile
 				break;
 			case 3:
 				role = "ANTI_TANK";
-				suffixes.Insert(prefix + "AT.et");
+				// В штатном US catalog доступен LAT, а не AT. Easy сохраняет старый fallback.
+				AICF_EDifficulty difficulty = AICF_Difficulty.Get();
+				if (stableKey == "US" && (difficulty == AICF_EDifficulty.MEDIUM || difficulty == AICF_EDifficulty.HARD))
+					suffixes.Insert(prefix + "LAT.et");
+				else
+					suffixes.Insert(prefix + "AT.et");
 				break;
 			case 4:
 				role = "GRENADIER";

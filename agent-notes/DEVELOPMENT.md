@@ -79,6 +79,14 @@ RHS/WCS версии и каталоги сверяй с установленн�
 сведения WCS: [Arland](../AIConflictArlandWCSRHS/README.md),
 [Everon](../AIConflictEveronWCSRHS/README.md).
 
+Для любого из девяти Variant используйте `-Difficulty Easy|Medium|Hard`
+(default `Easy`), например `-Variant EveronNorth -Difficulty Hard`.
+Передавайте одинаковую `Difficulty` серверу и клиенту: readiness gate проверяет
+точный server header. Medium добавляет один БТР; Hard во всех WCS — БТР + Т-72А,
+в vanilla/RHS — два БТР. В машинах по три члена экипажа; только North WCS+RHS
+сохраняет десант БТР. Выбор сценария
+в меню даёт тот же результат; параметры header определяют состав гарнизонов.
+
 ## Server и client
 
 Запускай только через `tools/Start-AICFRuntime.ps1` в отдельных терминальных

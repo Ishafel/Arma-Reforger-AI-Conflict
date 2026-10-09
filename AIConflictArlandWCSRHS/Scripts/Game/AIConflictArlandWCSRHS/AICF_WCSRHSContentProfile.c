@@ -29,6 +29,12 @@ class AICF_WCSRHSContentProfile : AICF_RHSContentProfile
 		m_mKitSignatures.Clear();
 	}
 
+	override ResourceName GetFIAGarrisonPrefab(bool tank)
+	{
+		if (tank) return "{2B9DB09AC8BEA673}Prefabs/Vehicles/Tracked/T72A/T72A_FIA.et";
+		return super.GetFIAGarrisonPrefab(tank);
+	}
+
 	override string GetProfileKey()
 	{
 		return "WCS_RHS_ARLAND";

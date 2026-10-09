@@ -92,6 +92,8 @@ modded class SCR_AIProcessFailedMovementResult
 			bool hasRelated = GetVariableIn(PORT_IS_WAYPOINT_RELATED, related);
 			vector location;
 			GetVariableIn(PORT_MOVE_LOCATION, location);
+			if (AICF_FIAGarrisonMovementPolicy.Handle(m_Group, m_GroupUtilityComponent, result, handler, related, location))
+				return ENodeResult.FAIL;
 			if (AICF_FIAPatrolMovementPolicy.Handle(m_Group, m_GroupUtilityComponent, result, handler, related, location))
 				return ENodeResult.FAIL;
 			if (AICF_HandleDefendArrival(result, handler, related, location))

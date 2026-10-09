@@ -115,6 +115,7 @@ class AICF_RHSContentProfile : AICF_ContentProfile
 		out string role,
 		out array<string> suffixes)
 	{
+		memberIndex = AICF_Difficulty.GetInfantryRoleIndex(memberIndex);
 		suffixes.Clear();
 		string prefix;
 		if (stableKey == "US")

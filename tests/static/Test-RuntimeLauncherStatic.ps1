@@ -388,6 +388,9 @@ try {
         }
     }
 
+    $wcsArlandRoot = Join-Path $fakeRepository 'AIConflictArlandWCSRHS'
+    New-Item -ItemType Directory -Force $wcsArlandRoot | Out-Null
+    [IO.File]::WriteAllText((Join-Path $wcsArlandRoot 'addon.gproj'), '')
     $wcsProjectRoot = Join-Path $fakeRepository 'AIConflictEveronWCSRHS'
     New-Item -ItemType Directory -Force $wcsProjectRoot | Out-Null
     [IO.File]::WriteAllText((Join-Path $wcsProjectRoot 'addon.gproj'), '')
@@ -416,6 +419,56 @@ try {
                 Require-ArgumentPair $manifest '-MissionHeader' $expected.Substring(18) 'RUNTIME_WCS_EVERON_HEADER'
             }
             else { Require-ArgumentPair $manifest '-client' '127.0.0.1' 'RUNTIME_WCS_EVERON_CLIENT' }
+        }
+    }
+
+    foreach ($difficultyCase in @(
+        @('Stock', 'Medium', '{A1CF261008300001}Missions/AICF_Conflict_Arland_Medium.conf', 'AIConflictArland'),
+        @('Stock', 'Hard', '{A1CF261008300002}Missions/AICF_Conflict_Arland_Hard.conf', 'AIConflictArland'),
+        @('Everon', 'Medium', '{A1CF261008300003}Missions/AICF_Conflict_Everon_Medium.conf', 'AIConflictEveron'),
+        @('Everon', 'Hard', '{A1CF261008300004}Missions/AICF_Conflict_Everon_Hard.conf', 'AIConflictEveron'),
+        @('EveronNorth', 'Medium', '{A1CF261008300005}Missions/AICF_Conflict_Everon_North_Medium.conf', 'AIConflictEveron'),
+        @('EveronNorth', 'Hard', '{A1CF261008300006}Missions/AICF_Conflict_Everon_North_Hard.conf', 'AIConflictEveron'),
+        @('RHS', 'Medium', '{A1CF261008300007}Missions/AICF_RHS_Conflict_Arland_Medium.conf', 'AIConflictArlandRHS'),
+        @('RHS', 'Hard', '{A1CF261008300008}Missions/AICF_RHS_Conflict_Arland_Hard.conf', 'AIConflictArlandRHS'),
+        @('EveronRHS', 'Medium', '{A1CF261008300009}Missions/AICF_RHS_Conflict_Everon_Medium.conf', 'AIConflictEveronRHS'),
+        @('EveronRHS', 'Hard', '{A1CF261008300010}Missions/AICF_RHS_Conflict_Everon_Hard.conf', 'AIConflictEveronRHS'),
+        @('EveronNorthRHS', 'Medium', '{A1CF261008300011}Missions/AICF_RHS_Conflict_Everon_North_Medium.conf', 'AIConflictEveronRHS'),
+        @('EveronNorthRHS', 'Hard', '{A1CF261008300012}Missions/AICF_RHS_Conflict_Everon_North_Hard.conf', 'AIConflictEveronRHS'),
+        @('ArlandWCSRHS', 'Medium', '{A1CF261008300013}Missions/AICF_WCS_RHS_Conflict_Arland_Medium.conf', 'AIConflictArlandWCSRHS'),
+        @('ArlandWCSRHS', 'Hard', '{A1CF261008300014}Missions/AICF_WCS_RHS_Conflict_Arland_Hard.conf', 'AIConflictArlandWCSRHS'),
+        @('EveronWCSRHS', 'Medium', '{A1CF261008300015}Missions/AICF_WCS_RHS_Conflict_Everon_Medium.conf', 'AIConflictEveronWCSRHS'),
+        @('EveronWCSRHS', 'Hard', '{A1CF261008300016}Missions/AICF_WCS_RHS_Conflict_Everon_Hard.conf', 'AIConflictEveronWCSRHS'),
+        @('EveronNorthWCSRHS', 'Medium', '{A1CF261008100001}Missions/AICF_WCS_RHS_Conflict_Everon_North_Medium.conf', 'AIConflictEveronWCSRHS'),
+        @('EveronNorthWCSRHS', 'Hard', '{A1CF261008100002}Missions/AICF_WCS_RHS_Conflict_Everon_North_Hard.conf', 'AIConflictEveronWCSRHS')
+    )) {
+        foreach ($difficultyRole in @('Server', 'Client')) {
+            $output = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $launcherPath `
+                -Role $difficultyRole -Variant $difficultyCase[0] -Difficulty $difficultyCase[1] `
+                -RepositoryRoot $fakeRepository -ServerRoot $fakeServerRoot -GameRoot $fakeGameRoot `
+                -RhsAddonsRoot $fakeRhsRoot -ProfileRoot (Join-Path $testRoot "Profiles/difficulty-$difficultyRole-$($difficultyCase[0])-$($difficultyCase[1])") -DryRun 2>&1 | ForEach-Object { $_.ToString() })
+            if ($LASTEXITCODE -ne 0) { Add-Failure 'DIFFICULTY_MANIFEST' ($output -join ' | '); continue }
+            $manifest = Get-ManifestFromOutput $output 'DIFFICULTY_MANIFEST'
+            if (-not $manifest) { continue }
+            if ($manifest.difficulty -ne $difficultyCase[1]) { Add-Failure 'DIFFICULTY_MANIFEST' 'Difficulty was not preserved' }
+            $expected = $difficultyCase[2]
+            if ($difficultyRole -eq 'Server') {
+                Require-ArgumentPair $manifest '-server' $expected 'DIFFICULTY_HEADER'
+                Require-ArgumentPair $manifest '-MissionHeader' $expected.Substring(18) 'DIFFICULTY_HEADER'
+            }
+            $headerPath = Join-Path $RepositoryRoot ($difficultyCase[3] + '/' + $expected.Substring(18))
+            $header = Get-Content -LiteralPath $headerPath -Raw
+            $meta = Get-Content -LiteralPath ($headerPath + '.meta') -Raw
+            if (-not $meta.Contains($expected)) { Add-Failure 'DIFFICULTY_RESOURCE_ID' $headerPath }
+            $level = 1
+            if ($difficultyCase[1] -eq 'Hard') { $level = 2 }
+            if ($header -notmatch "m_eAICFDifficulty\s+$level\b" -or $header -notmatch '^SCR_MissionHeaderCampaign\s*:') { Add-Failure 'DIFFICULTY_INHERITANCE' $headerPath }
+            if ($difficultyCase[0] -ne 'EveronNorthWCSRHS') {
+                $tankFlag = 0
+                if ($difficultyCase[0] -in @('ArlandWCSRHS', 'EveronWCSRHS') -and $difficultyCase[1] -eq 'Hard') { $tankFlag = 1 }
+                if ($header -notmatch "m_bAICFFIATank\s+$tankFlag\b") { Add-Failure 'DIFFICULTY_TANK_SCOPE' $headerPath }
+                if ($header -notmatch 'm_bAICFFIAPassengers\s+0') { Add-Failure 'DIFFICULTY_CREW_ONLY' $headerPath }
+            }
         }
     }
 

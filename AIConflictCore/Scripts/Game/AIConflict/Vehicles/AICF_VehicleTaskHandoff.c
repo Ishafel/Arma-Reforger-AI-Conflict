@@ -592,6 +592,39 @@ class AICF_VehicleTaskHandoff
 
 	// Вспомогательные physical logistics jobs того же domain owner.
 
+	void ClearFIAGarrisonWaypoint(AICF_FIAGarrison g)
+	{
+		if (!Replication.IsServer() || !g || !g.PatrolWaypointIdentity()) return;
+		AIWaypoint waypoint = g.m_PatrolWaypoint;
+		g.m_Group.RemoveWaypoint(waypoint);
+		g.m_PatrolWaypoint = null;
+		g.m_PatrolWaypointId = EntityID.INVALID;
+		RplComponent.DeleteRplEntity(waypoint, false);
+	}
+
+	bool MoveFIAGarrison(AICF_FIAGarrison g, vector endpoint)
+	{
+		if (!Replication.IsServer() || !g || g.m_bRetired || !g.CanDrive() ||
+			vector.DistanceXZ(endpoint, g.m_vHome) > AICF_FIAGarrisonPatrol.ROUTE_RADIUS) return false;
+		ClearFIAGarrisonWaypoint(g);
+		if (g.m_PatrolWaypoint) return false;
+		SCR_AIVehicleUsageComponent usage = SCR_AIVehicleUsageComponent.Cast(g.m_Vehicle.FindComponent(SCR_AIVehicleUsageComponent));
+		SCR_AIGroupUtilityComponent utility = g.m_Group.GetGroupUtilityComponent();
+		if (!usage || !utility) return false;
+		utility.AddUsableVehicle(usage);
+		AICF_VehicleWaypointFactory factory = new AICF_VehicleWaypointFactory();
+		AIWaypoint waypoint = factory.CreateSpawnStagingWaypoint(endpoint, 10);
+		if (!waypoint) return false;
+		g.m_vPatrolTarget = endpoint;
+		g.m_bPatrolMoveFailed = false;
+		g.m_PatrolWaypoint = waypoint;
+		g.m_PatrolWaypointId = waypoint.GetID();
+		g.m_Group.AddWaypointAt(waypoint, 0);
+		array<AIWaypoint> queue = {};
+		g.m_Group.GetWaypoints(queue);
+		return queue.Contains(waypoint);
+	}
+
 	void ClearFIAPatrolWaypoint(AICF_FIAPatrol p)
 	{
 		if (!Replication.IsServer() || !p || !p.m_Waypoint || !p.GroupIdentity() || p.m_Waypoint.GetID() != p.m_WaypointId) return;

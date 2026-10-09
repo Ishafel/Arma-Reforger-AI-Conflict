@@ -4,6 +4,150 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## Оформление 0.1.26 — 2026-10-09
+
+По запросу пользователя работа продолжена в `codex/scenario-difficulties`
+без новой ветки. Исходный commit `36ec545`, дерево до правки чистое.
+Добавлены `releases/0.1.26.md` и ссылки в README/указателе; игровой код,
+headers и зависимости не менялись. Состав сверен с `git log 0.1.25..HEAD`
+и сохранёнными результатами ниже. Прежние FAIL и NOT RUN сохранены в патчноутах.
+
+Свежие проверки документации: `git diff --check` до/после — PASS/0;
+PowerShell-проверка локальных ссылок README, указателя и патчноутов — PASS/0.
+Evidence: `.codex-runtime/release-0.1.26/` (исходный SHA/status,
+`before-check.txt`, `after-check.txt`, `links.txt`). Полный offline набор,
+Workbench, server/client runtime, JIP, ручные проверки, soak и packaged build
+при оформлении — NOT RUN. Старые PASS не являются новым прогоном релиза.
+Push и Workshop upload не выполнялись.
+
+## Т-72 на сложной сложности всех WCS — 2026-10-09
+
+Продолжение `codex/scenario-difficulties`, baseline `96093a1`.
+В Hard headers WCS Arland и полного WCS Everon включён `m_bAICFFIATank`.
+Medium остаётся с одним БТР, Hard во всех WCS получает БТР + Т-72А.
+Десант сохранён только в North WCS; новые машины имеют по три члена экипажа.
+Production scripts, GUID и `.gproj` dependencies не менялись.
+Обновлены два headers, их RU/EN descriptions и generated string tables,
+RuntimeLauncherStatic, RolloutProbe и текущая документация.
+
+Evidence: `.codex-runtime/wcs-t72-all/`.
+`Invoke-AICFChecks.ps1 -Name` (FIAGarrisonContracts, ScenarioHeaders,
+RuntimeLauncher, WCSIntegration, RHSIntegration, EveronNorth): **6/6 до и после**.
+`Test-LocalizationStatic.ps1` через PowerShell 7: **PASS до/после**, 587 строк.
+Терминальный `compile.ps1 -Variant EveronWCSRHS`: production и fixture **PASS**,
+validation successful, без SCRIPT E/F и ENGINE F. RuntimeLauncherStatic
+отвергает обе отрицательные мутации: выключенный танк в WCS Hard и включённый
+в vanilla Hard, ожидаемый `DIFFICULTY_TANK_SCOPE` FAIL.
+
+Dedicated через `Start-AICFRuntime.ps1`, `run.ps1 -Variants ArlandWCSRHS`
+(2351) и `-Variants EveronWCSRHS` (2353), Hard, отдельный stage с
+`AICF_DifficultyRolloutProbe`: оба завершены, exit 0. Целевой fixture **PASS**:
+Arland — 79 checks, 6 БТР + 6 Т-72А; полный Everon — 327 checks,
+37 БТР + 37 Т-72А, в обоих случаях failures=0. У всех машин crew=3/seats=3,
+по две стационарные машины на карте. Проверены native headers трёх сложностей,
+состав, отсутствие десанта и выборка прибытия патруля после 60 секунд наблюдения
+за полностью созданными гарнизонами. В fixture отключён урон готовым машинам
+и экипажам; это не проверка боевой эффективности.
+
+Полные остановленные console/script/error logs сохранены в `logs-*`, команды
+и `AICF_RUNTIME_MANIFEST_JSON` — в `*-launcher.txt`, сводка — `runtime-summary.json`.
+Общий runtime log gate **FAIL**: повторился `PMC_EQUIPMENT_FAILED`
+с `rollback=1 restored=0` (2 на Arland, 6 на Everon); это все SCRIPT E.
+SCRIPT F, ENGINE F и VM exception — 0. Также присутствуют ошибки ресурсов,
+world/entity и, на Everon, material/pathfinding. Эти ошибки не исправлялись
+в изменении состава техники. Оба тестовых сервера остановлены.
+
+Предыдущие результаты северного WCS ниже относятся к прошлому коммиту;
+северный header в этом уточнении не изменён. Новый client/JIP, ручной вид меню,
+packaged build, бой и длительный soak — **NOT RUN**. Старый Stage4 baseline FAIL
+не исправлялся и в этом узком наборе не перезапускался.
+
+## Перенос сложностей на все сценарии — 2026-10-09
+
+Ветка `codex/scenario-difficulties`, baseline `ffa0ac2`.
+Добавлены 16 inherited headers (27 вариантов сложности суммарно), header flags
+танка/десанта, три essential места новых БТР, общая таблица трёх ПТ, stock US LAT,
+стационарный fallback площадки и отдельная квота AIWorld под initial crews.
+Зависимости `.gproj` не изменены. North WCS+RHS сохраняет БТР с десантом и Т-72.
+
+Evidence: `.codex-runtime/scenario-difficulties/`. `before/` и
+`after-capacity/`: `Invoke-AICFChecks.ps1 -Name` с одинаковыми 12 gates
+(FIAGarrisonContracts, ScenarioHeaders, EveronNorth, RuntimeLauncher,
+WCS/RHSIntegration, FIAPatrol, AICombatInput, Stage3, Stage35, Stage35RecoveryPolicy,
+Stage4). До/после: **11 PASS, тот же FAIL STAGE4_ATTACKED_BASES**.
+`pwsh -File tests/static/Test-LocalizationStatic.ps1` и
+`pwsh -File tools/Build-AICFLocalization.ps1 -Check`: **PASS**, 587 строк.
+Первый расширенный запуск runner включал Localization через WinPS 5.1 и получил
+ошибку разбора существующего UTF-8 audit без BOM; прямой PowerShell 7 gate до/после PASS.
+
+Терминальный Workbench: `compile.ps1 -Variant Stock|EveronRHS|EveronWCSRHS`,
+labels `release-stock`, `release-rhs`, `release-production`: **PASS**,
+validation successful, без SCRIPT E/F и ENGINE F. Полные argv и logs сохранены.
+Runtime fixture с обоими probes: `capacity-fixture` — **PASS**.
+Промежуточные compile failures (операции с временным значением array и
+неявным float в выражении modulo) сохранены, исправлены до финальных запусков.
+Native exit 0 в этих неудачных запусках не трактуется как PASS.
+
+`Test-RuntimeLauncherStatic.ps1` проверяет Server/Client manifests для всех
+18 Medium/Hard комбинаций, точные GUID/paths, inherited difficulty/flags.
+Позитивный вход PASS; копия header с запрещённым tank flag даёт ожидаемый
+`DIFFICULTY_CREW_ONLY` FAIL. FIAGarrisonContracts: позитивный PASS,
+отключение preflight в изолированной копии даёт ожидаемый `SPAWN_PATROL_PREFLIGHT` FAIL.
+
+Dedicated запущены только через `Start-AICFRuntime.ps1`, обёртка `run.ps1`
+сохраняет manifest, exit и полную копию остановленного profile `logs-<label>/`.
+`AICF_DifficultyRolloutProbe` читает все три native headers каждого Variant.
+Итоги targeted probe (число готовых машин / checks, failures):
+
+| Сценарий | Hard |
+|---|---|
+| Stock Arland | 12 / 79, 0 |
+| RHS Arland | 12 / 79, 0 |
+| WCS+RHS Arland | 12 / 79, 0 |
+| Stock Everon | 74 / 327, 0 (повтор после зависания) |
+| Stock Everon North | 10 / 70, 0 |
+| RHS Everon | 74 / 326, 0 |
+| RHS Everon North | 10 / 70, 0 |
+| WCS+RHS Everon | 74 / 326, 0 |
+| WCS+RHS Everon North | 10 / 65, 0; пять БТР по 10 бойцов, пять Т-72 по 3 |
+
+Stock Arland Medium: 6 машин, 54/54; Easy: 0 машин, 29/29, без добавления квоты.
+На Арланде Hard две машины стационарны (ближайшая дорога одной базы в 233 м).
+На полном Эвероне стационарны 1–2 машины, на северном — одна. Это
+согласованный fallback, а не успешный дорожный патруль. Остальные проверяются
+по составу; arrival sample подтверждает движение хотя бы одного патруля,
+не всех машин. Deadline/retired guard не отключались ради PASS.
+
+`AICF_DifficultyInfantryProbe -aicfATProbe 1`, Medium stock/RHS/WCS+RHS:
+**60/60 каждый**, по 24 фактических бойца, initial groups и donors позиций 8/9.
+Stock US — заряженный M72A3; USSR — РПГ-7. В первом stock прогоне отсутствующий
+`Character_US_AT.et` приводил к обычному fallback; Medium/Hard исправлены на
+штатный `Character_US_LAT.et`, Easy сохранён. Эти проверки не доказывают огневую
+эффективность, оплату пополнения или переход donor в боевой отряд.
+
+Полный log gate отделён от targeted probe: в WCS Arland зарегистрирован один
+`PMC_EQUIPMENT_FAILED rollback=1 restored=0`, в полном RHS Everon — шесть,
+в полном WCS Everon — девять (одни и те же события дублируются в трёх log-файлах).
+Это ранее наблюдавшийся сбой FIA equipment adapter, в этой задаче не исправлялся;
+**полный combat log gate для этих запусков FAIL**, несмотря на PASS состава.
+Resource/backend/pathfinding errors сохранены отдельно; VM и ENGINE F не обнаружены.
+
+До исправления квоты полные RHS/WCS упирались в 260 активных персонажей и
+`INITIAL_CREW_FAILED`; финальная квота 481 позволила посадить все 74 экипажа.
+Первый полный stock прогон после создания 74 машин перестал обновлять log на
+`t_ms=200753`; процесс принудительно остановлен, диагностика `stock-hang.json`.
+Этот прогон **не PASS**. Отдельный повтор `Everon-Hard-retry` завершился
+327/327, без SCRIPT E/F, VM и ENGINE F; причина первого зависания не установлена,
+единичный успешный повтор не доказывает долгую стабильность.
+
+Все свои серверы завершены, stage и негативные копии удалены после сохранения
+логов. Изменённые файлы перечислены в `changed-files.txt`, итог по полным
+остановленным console logs — `runtime-summary.json` (без тройного учёта дублей).
+
+Client/JIP, реальный игрок у границы 50 м, packaged build, ручной вид меню,
+долгий soak и полный бой до уничтожения гарнизонов — **NOT RUN**. Прежние
+длительные recovery-проблемы этим переносом не объявлены исправленными.
+
 ## Выбор проверок
 
 Статика находится в `tests/static/`, контракты — в `tests/contracts/`, анализаторы
@@ -38,6 +182,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/static/Test-Stage3
 | Маркеры, локализация, rank | `Test-GroupMapMarkersStatic.ps1`, `Test-LocalizationStatic.ps1`, `Test-RankRestrictionsStatic.ps1` |
 | Headers, карты, launcher | `Test-ScenarioHeadersStatic.ps1`, `Test-EveronNorthStatic.ps1`, `Test-RuntimeLauncherStatic.ps1` |
 | RHS/WCS content и integration | `Test-RHSIntegrationStatic.ps1`, `Test-WCSIntegrationStatic.ps1`, затронутые scenario/authority/Stage audits |
+| Сложность гарнизонов FIA | `Test-FIAGarrisonContracts.ps1`, `Test-RuntimeLauncherStatic.ps1`, ScenarioHeaders, FIAPatrol, AICombatInput и Stage3/35; runtime `AICF_FIAGarrisonProbe.c` в stage |
 | Combat inputs, FIA | `Test-AICombatInputContracts.ps1`, `Test-FIAPatrolStatic.ps1` |
 
 Изменение аудитора требует позитивного и негативного representative input.
@@ -211,6 +356,219 @@ RHS/WCS server runtime после выявленного функциональ�
 Диагностические копии удалены после сохранения evidence; production `.c`
 не менялись. Вывод по архитектурному ограничению — в [GAMEPLAY.md](GAMEPLAY.md).
 
+## Гарнизоны FIA и три сложности — 2026-10-08
+
+Ветка `codex/fia-difficulty` от `origin/main` `27fc20a`. Baseline снят
+на `9fbf85f`, чей source tree совпадает с этой целевой веткой. Evidence:
+`.codex-runtime/fia-difficulty/`; полные argv/exit codes, manifests и логи
+сохранены там, а не в Git. Изменены Core difficulty/garrison/crew, composition
+root, fleet/spawner/cleanup, WCS content profile, два inherited North header,
+локализация, launcher, профильные проверки и технические заметки.
+
+Команда `tools/Invoke-AICFChecks.ps1 -Name <список> -EvidenceRoot <каталог>`:
+`before/` — 10 PASS/0; `after-final/` — те же 10 плюс новый
+`Test-FIAGarrisonContracts.ps1`, 11 PASS/0. Список: AICombatInputContracts,
+DefendWaypointInputContracts, EveronNorthStatic, FIAPatrolStatic,
+RuntimeLauncherStatic, ScenarioHeadersStatic, Stage35RecoveryPolicy,
+Stage35Static, Stage3Static, Stage3StaticContracts. В `expanded/` также
+CheckRunnerContracts, RHSIntegrationStatic и WCSIntegrationStatic — PASS/0.
+Launcher audit проверяет Medium/Hard server/client manifests и отказ для
+несовместимого Variant. `pwsh -File tests/static/Test-LocalizationStatic.ps1`
+и `pwsh -File tools/Build-AICFLocalization.ps1 -Check` — PASS/0, 539 записей.
+
+В выбранном baseline failures нет. Полный offline набор **NOT RUN**:
+исторические пять failures (InfantryApproach APPROACH_CLEANUP, Localization
+ParserError в PowerShell 5.1, NorthFailure MOVE_CALLBACK_FENCE/MOVE_ACTIVITY,
+SquadCommands STABLE_NEAREST, Stage4 STAGE4_ATTACKED_BASES) не перепроверялись
+и не объявляются исправленными.
+После защиты null-цели повторены AICombatInputContracts, FIAGarrisonContracts
+(20 guards) и FIAPatrolStatic: `after-null-guard/` — 3 PASS/0.
+
+Терминальный Workbench 1.8.0.13: `compile.ps1 -Label production-final` и
+`-Variant EveronNorth -Label stock-production-final` — PASS/0,
+`Script validation successful`, без SCRIPT E/F и ENGINE F. Логи:
+`wb-production-final/`, `wb-stock-production-final/`, аргументы в
+соответствующих `wb-*-argv.json`. Fixture graph `wb-fixture3/` также
+PASS/0. Прочих строк (E) соответственно 39/25/39; resource logs не чистые.
+`source-hashes.json`/`source-match.txt` фиксируют совпадение 240 production
+файлов с runtime stage; диагностические fixture добавлялись отдельно.
+После защиты null-цели `wb-production-guard/`, `wb-stock-production-guard/`
+и `wb-combat-guard/` вновь прошли Validate/Compile, exit 0, validation successful,
+без SCRIPT E/F и ENGINE F. Финальные SHA-256 — `source-hashes-final.json` /
+`source-match-final.txt`, 240/240 совпадений.
+
+Dedicated server 1.8.0.13, Variant `EveronNorthWCSRHS`, источник — stage.
+Запуск через `tools/Start-AICFRuntime.ps1 -Role Server -Difficulty <уровень>`
+с `-aicfGarrisonProbe 0|1|2 -aicfRequirePlayerForResult 0`; точные команды
+в `runtime.ps1`, CLI и `AICF_RUNTIME_MANIFEST_JSON` в
+`server-<label>-launcher.txt`, свежие profiles — `server-<label>/`.
+Все три процесса завершены fixture через `RequestClose()`, native exit 0,
+в полном логе есть `ROSTER_READY` и `Game destroyed.`.
+
+| Уровень / label | Состав на пяти FIA-точках | Проверки | Время MSK | Verdict |
+|---|---|---|---|---|
+| Easy | Без новых гарнизонов | 2/2 | 17:53:08–17:54:41 | PASS |
+| Medium | 5 БТР-70, по 10 бойцов со всеми десантными местами | 30/30 | 17:48:56–17:51:45 | PASS |
+| Hard / Hard3 | 5 БТР-70 + 5 Т-72А, по 3 бойца в танке | 55/55 | 17:45:19–17:48:18 | PASS |
+
+Проверены полный roster/посадка, начальная дистанция до базы, отсутствие
+waypoint и сдвига машины более 5 м за 60 с. Затем fixture захватывает одну
+базу и убивает одного члена экипажа; спустя ещё 60 с проверяет сохранение
+остальных защитников и отсутствие пополнения. Это не тест гибели всего
+гарнизона. Полные остановленные логи: `server-<label>/logs/*/console.log`;
+`runtime-summary.json` содержит их точные пути, CLI и время.
+`pwsh -File tests/log-audits/Test-FIAGarrisonLog.ps1 -LogPath <полный лог> -Difficulty 0|1|2`
+— PASS/0 для трёх логов, SCRIPT E/F и ENGINE F отсутствуют, по 233 прочих
+строки (E) сохранены. Negative input без READY — ожидаемый FAIL/1
+(`log-audit-negative.txt`).
+
+Предварительные попытки не считаются PASS: `wb-initial` — неверный root
+wrapper; `compile1` — ошибка float/modulo, исправлена; `server-Hard` и
+`server-Hard2` — неверные prefab GUID/нулевая lease capacity, исправлены.
+Hard2 остановлен адресно по process/profile, exit -1, запись
+`Hard2-forced-stop.json`. Остальные тестовые серверы останавливает fixture.
+
+Состав/удержание выше проверены до последней защиты null-цели; после неё
+повторён боевой Hard, а полный трёхуровневый probe повторно не запускался.
+
+Дополнительная изолированная `AICF_FIAGarrisonCombatProbe.c` сохранена в evidence.
+Она создаёт активные BLUFOR AI-группы с неуязвимыми пехотными целями в 45 м
+перед машинами, наблюдает расход боеприпасов у стрелков и удержание всех машин
+в пределах 5 м в течение 90 с. Это проверка стрельбы по пехоте, а не всей
+огневой эффективности. Запуск — `runtime-combat.ps1 -Difficulty Hard -Label <label>`,
+штатный launcher с `-aicfGarrisonCombatProbe 1`, остановка через `RequestClose()`.
+
+Ранние `Combat`/`Combat2` — FAIL: цели не были активированы через AI-группы.
+`Combat3` подтвердил огонь БТР/танков, но весь gate — FAIL из-за трёх VM
+exceptions `currentTarget` в stock `SCR_AIUpdateTargetAttackData`. Повтор
+`CombatDiag4` без исправления прошёл: сбой непостоянный. По source API 1.8.0.13
+два threat callback не проверяли пустую цель; добавлен ранний return, при
+существующей цели остаётся super. Финальная fixture отдельно вызывает оба
+callback без цели и отмечает `GARRISON_NULL_GUARD escalation=1 damage=1`.
+`CombatGuard` прошёл функциональные критерии и не имел VM exceptions, но весь
+log gate — FAIL из-за одной `PMC_EQUIPMENT_FAILED`: выдача нового комплекта
+не удалась, `rollback=1` вернул исходный. Этот отдельный сбой RHS equipment
+не исправлялся в данной задаче и не выдаётся за старый подтверждённый baseline.
+`CombatGuard2` — **PASS/0**: 18:18:01–18:20:30 MSK, `btr=1 tank=1`,
+оба null-callback проверены, машины удержались на месте, SCRIPT E/F и ENGINE F
+нет. Полный лог — `server-CombatGuard2/logs/*/console.log`, 233 прочие строки (E).
+Пулемётный огонь подтверждён расходом боеприпасов; стрельба танковой пушки
+по бронецели не проверялась. Ошибка PMC из предыдущего прогона не повторилась,
+но её лог и ограничение сохранены.
+`git diff --check` — PASS/0. Тестовые engine processes остановлены; stage
+удалён после проверки абсолютного пути, полные логи и baseline сохранены.
+Точный список 33 изменённых файлов — `changed-files.txt` в evidence.
+Client/JIP, ручная проверка плиток меню, packaged build, долгий soak,
+танковая пушка против бронетехники и полный бой до гибели гарнизона — **NOT RUN**.
+
+## Локальный патруль гарнизонов FIA — 2026-10-08
+
+Продолжение той же ветки от `3d8253a`: прежний тест неподвижной обороны выше
+не подтверждает новое поведение. Добавлен локальный vehicle patrol с immutable
+home, короткими дорожными участками, возвратом при удалении и identity-проверкой
+текущего waypoint. Изменены crew policy, failure recovery, handoff, spawn geometry,
+локализация, профильный probe и заметки. Полные логи и команды:
+`.codex-runtime/fia-local-patrol/`.
+
+Baseline `before/`: AICombatInputContracts, FIAGarrisonContracts, FIAPatrolStatic,
+Stage35RecoveryPolicy, Stage35Static, Stage3Static, Stage3StaticContracts — 7 PASS/0.
+Перед изменением AI node отдельно `before-node/`: NorthFailureContracts —
+FAIL/1, `MOVE_CALLBACK_FENCE` и `MOVE_ACTIVITY`. В `after-final/` те же
+7 PASS/0 и тот же NorthFailure FAIL/1; этот baseline не исправлен.
+Команда: `tools/Invoke-AICFChecks.ps1 -Name <список> -EvidenceRoot <каталог>`;
+точные аргументы и exit codes находятся в `summary.json` каждого каталога.
+Локализация до/после: `pwsh -File tests/static/Test-LocalizationStatic.ps1` и
+`pwsh -File tools/Build-AICFLocalization.ps1 -Check` — PASS/0, 539 записей.
+
+Runtime запускается `runtime.ps1 -Difficulty Hard -Expected 2 -Label <label>`
+через штатный launcher, Variant `EveronNorthWCSRHS`, CLI
+`-aicfGarrisonProbe 2 -aicfRequirePlayerForResult 0`. Источник — отдельный stage,
+полные logs в `server-<label>/logs/*/console.log`, manifest/CLI/native exit —
+`server-<label>-launcher.txt` и `server-<label>-exit.txt`.
+Ранние `Patrol1`–`Patrol4` и короткий `Diagnostic` — FAIL: выявили blocked
+native avoidance, неудачные площадки у берега, слишком длинные участки и
+отклонённые старые действия, конкурирующие с новым приказом. Это сохранённое
+диагностическое evidence, а не успешные проверки. В Patrol1/2/4 также есть
+`PMC_EQUIPMENT_FAILED rollback=1` — ранее наблюдавшийся сбой выдачи экипировки;
+его не исправляли и не исключали из log gate. Подробности ошибок из полных
+остановленных логов сохранены в `runtime-attempt-errors.json`.
+
+`Patrol5` — FAIL/4 cases, `Patrol6` — FAIL/2 cases (и PMC equipment error),
+`Patrol7` — FAIL/1 case: БТР у причала начинал на коротком ответвлении без
+подходящего местного участка. Исправление: продолжение текущей дороги имеет
+приоритет, а такой маршрут проверяется до spawn. Crew policy завершает
+отклонённое действие, сохраняя bounded native avoidance/boarding.
+
+Финальные production Workbench команды:
+`compile.ps1 -Label patrol8-production` и
+`compile.ps1 -Variant EveronNorth -Label stock-patrol8-production` — PASS/0,
+`Script validation successful`, SCRIPT E/F и ENGINE F нет. Версия 1.8.0.13.
+Полные логи: `wb-patrol8-production/`, `wb-stock-patrol8-production/`; точные
+аргументы — `wb-*-argv.json`, сводка — `compile-final-summary.json`.
+Прочих строк (E) 39/25: engine resource logs не чистые.
+`source-hashes-final.json` подтверждает SHA-256 совпадение 241 production файла
+со stage. Fixture добавлен только в stage; его damage protection не входит
+в production. `contracts-patrol8.txt`: FIAGarrisonContracts — PASS/0, 34 guards.
+Анализ старого Hard3 stationary log новым анализатором — ожидаемый FAIL/1
+(`log-audit-old-stationary-negative.txt`): старая проверка неподвижности не может
+подтвердить патруль.
+
+После preflight повторён весь выбранный набор: `after-road-preflight/` —
+7 PASS/0. Финальный `Patrol8` (19:48:46–19:55:12 MSK) — **PASS/0**:
+55/55 cases, пять БТР-70 с 10 бойцами и пять Т-72А с 3 бойцами, каждый выполнил
+не менее двух физических прибытий. Наблюдаемый максимум удаления от домашней
+базы в samples — 153.863 м. Probe затем меняет владельца базы, убивает одного
+защитника и ещё 60 с проверяет сохранение гарнизона без пополнения.
+Полный остановленный лог:
+`server-Patrol8/logs/logs_2026-10-08_19-48-46/console.log`;
+`runtime-final-summary.json`, `Patrol8-analysis.txt`/`-exit.txt` — сводки.
+`pwsh -File tests/log-audits/Test-FIAGarrisonLog.ps1 -LogPath <этот полный лог> -Difficulty 2`
+— PASS/0, `ROSTER_READY` и `Game destroyed.` присутствуют, SCRIPT E/F, ENGINE F
+и VM exceptions отсутствуют; 233 прочих строки (E) сохранены.
+
+Это изолированная навигационная проверка: после READY fixture отключает damage
+машин и экипажей, затем включает его для одного убиваемого бойца. В production
+неуязвимости нет. Допуск probe 250 м учитывает разворот после порога возврата
+200 м; к концу интервала машина обязана находиться внутри 200 м. В финальном
+прогоне запас не понадобился. До этой правки `Patrol3/4` наблюдали временный
+выход до ~230 м и фактический возврат; новый PASS не выдаётся за жёсткий
+физический барьер в 200 м.
+
+Изолированный `CombatFinal`: `compile.ps1 -Label combat-final-fixture -SourceRoot <stage>`
+— Workbench PASS/0; `runtime-combat.ps1 -Difficulty Hard -Label CombatFinal`
+— native exit 0, штатный launcher с `-aicfGarrisonCombatProbe 1`.
+Полный остановленный лог:
+`server-CombatFinal/logs/logs_2026-10-08_19-56-49/console.log`.
+За 90 с наблюдения расход боеприпасов БТР и танка подтверждён, машины оставались
+в пределах 250 м от дома; `GARRISON_FIRE_FINISHED passed=1 btr=1 tank=1`.
+Fixture создаёт десять активных неуязвимых пехотных целей; гарнизоны в этом
+прогоне обычные, damage им не отключён. Пулемётный огонь подтверждён,
+танковая пушка по бронецели не проверялась.
+**Полный combat log gate — FAIL**: одна `PMC_EQUIPMENT_FAILED rollback=1`
+(сбой нового комплекта, восстановление прежнего вернуло true). Это повтор
+наблюдавшейся ранее ошибки, а не новый чистый PASS. VM/null exceptions и
+ENGINE F нет; ещё 233 строки (E) — resource baseline.
+Сводка: `combat-final-summary.json`; fixture сохранена в evidence отдельно.
+
+Полный offline набор, повтор Medium/Easy runtime после этой правки,
+ручная проверка меню, packaged build, долгий soak, JIP, стрельба пушки по
+бронетехнике и бой до гибели всего гарнизона — **NOT RUN**.
+`git diff --check` — PASS/0. Перечень 20 изменённых файлов:
+`changed-files.txt` в evidence. Тестовые процессы завершены через RequestClose;
+stage удаляется перед запуском production server/client для ручной проверки.
+
+Игровой запуск после commit `4779d8d`: Hard / EveronNorthWCSRHS, обе роли
+через `tools/Start-AICFRuntime.ps1` в отдельных терминальных сессиях.
+Helper и manifests сохранены в
+`.codex-runtime/fia-local-patrol-play-20261008-195359/`.
+Свежие profiles: `C:\Users\retar\AppData\Local\AICF\fia-local-patrol-play-20261008-195359\server`
+и соседний `client`. Launcher подтвердил точный CLI, живой PID и ROSTER_READY;
+20:03:23 MSK сервер зарегистрировал игрока, client — `Entered online game state`.
+`connection-evidence.json` фиксирует процессы 28928/15876, пути полных логов и
+10 READY-гарнизонов на сервере. Оба процесса оставлены пользователю по запросу.
+Это подтверждение подключения; полный остановленный client log gate и ручная
+игровая оценка остаются NOT RUN. Тестовые fixture/stage в production отсутствуют.
+
 ## Результаты прежних изменений
 
 Источники — [0.1.25](../releases/0.1.25.md) и
@@ -234,6 +592,56 @@ RHS/WCS server runtime после выявленного функциональ�
 Датированное evidence не переписывай задним числом, новый вывод явно привязывай
 к новому commit и конфигурации.
 
+## Три ПТ-бойца на Medium/Hard — 2026-10-08
+
+Ветка `codex/infantry-at-balance` от `9b03304`, исходное дерево чистое.
+Изменён `AICF_WCSRHSContentProfile.BuildCharacterRoleCandidates`: Medium/Hard
+назначают позиции 8/9 тем же ПТ-prefab, что позиция 3. Добавлена fixture
+`tests/fixtures/AICF_InfantryATProbe.c`; обновлены README обоих уровней,
+GAMEPLAY, указатель, каталог fixtures и эта заметка.
+Evidence: `.codex-runtime/infantry-at-balance/`.
+
+`tools/Invoke-AICFChecks.ps1 -Name <семь проверок> -EvidenceRoot <before|after>`:
+в обоих случаях **6 PASS, 1 прежний FAIL**, exit 1. WCSIntegration,
+RHSIntegration, AILoadout, PersonalLoadoutContracts, InfantryRecruitment,
+FIAGarrisonContracts — PASS/0; Stage4 — тот же `STAGE4_ATTACKED_BASES`, FAIL/1.
+Полные argv, исходный commit, status и вывод сохранены в before/after.
+
+`compile.ps1 -Label production` и `compile.ps1 -Label fixture -SourceRoot <stage>`
+— terminal Workbench **PASS/0**, `Script validation successful`, SCRIPT E/F,
+ENGINE F и VM exceptions отсутствуют. По 39 прочих resource строк (E).
+Manifest графа, argv и полный вывод находятся рядом с wb-production/wb-fixture.
+
+`runtime.ps1 -Difficulty Hard|Medium|Easy -Label hard1|medium1|easy1` вызывает
+canonical launcher с отдельным stage и свежим profile, Variant EveronNorthWCSRHS,
+`-aicfATProbe 1 -aicfRequirePlayerForResult 0`. Все три native exit 0,
+штатное завершение через RequestClose и `Game destroyed.`. Проверки
+Hard **84/84**, Medium **84/84**, Easy **76/76**, failures=0. Полные остановленные
+логи: `hard1-logs/`, `medium1-logs/`, `easy1-logs/`; manifest/CLI — в
+`server-*-launcher.txt`. `collect-runtime.ps1 -Label <label> -Difficulty 0|1|2`
+читает полные логи, сверяет число случаев и ошибки; summary JSON рядом.
+SCRIPT E/F, ENGINE F и VM exceptions — 0, прочих (E) по 233 на запуск.
+
+Каждый запуск проверил 24 бойца: два полных roster и четыре one-member donor,
+prefab/role соответствие, WCS-комплект, 1/3/3 ПТ на сторону в зависимости от
+сложности, фактически заряженный launcher у каждого ПТ. US: M72A3, loaded=1,
+spare=0; USSR: RPG7_PGO7, loaded=1, spare=2. Проверены неизменные stock/RHS
+role mappings и отказ для FIA. Это проверка выдачи и resolver пополнения,
+не полная оплаченная операция набора или проверка боевой эффективности.
+`source-hashes.json`: все 221 production файла совпадают с изолированным stage,
+fixture hash сохранён отдельно. Stage удалён, своих engine processes не осталось.
+`git diff --check` — PASS/0.
+
+Перед runtime по прежнему разрешению пользователя собраны показатели четырёх
+серверов предыдущего кода и выполнена адресная остановка в 21:26:05–21:26:06 MSK.
+Snapshot: `.codex-runtime/fia-four-servers-20261008-210112/snapshot-20261008-212521/`;
+полные остановленные логи — соседний `stopped-logs/`, PID/profile checks —
+`stopped.json`. Принудительный native exit -1 не означает crash. Прогон этих
+серверов не проверяет новый ПТ-состав.
+
+Стрельба ПТ по БТР/танкам, длительный балансный прогон, полная транзакция
+пополнения, client/JIP и ручная визуальная проверка — **NOT RUN**.
+
 ## Передача результата
 
 Отчёт содержит outcome и изменённые файлы, branch/commit и dirty status,
@@ -242,3 +650,74 @@ RHS/WCS server runtime после выявленного функциональ�
 точный CLI и `AICF_RUNTIME_MANIFEST_JSON`, profiles, начало/конец и способ остановки,
 пути к полным Workbench/server/client logs. Нужное evidence сохраняй в
 игнорируемом каталоге задачи, временные copies/stages убирай.
+
+## Восстановление и десант гарнизонов FIA — 2026-10-08
+
+Продолжение `codex/fia-difficulty` от `26122a4`. Evidence этой задачи:
+`.codex-runtime/fia-recovery/`. Добавлены `AICF_FIAGarrisonRecovery`,
+exact-seat возврат живого экипажа, обычная высадка семи пассажиров БТР,
+отдельный controller десанта без spawn, диагностика удержания/переноса.
+50 м проверяются через controlled/main player entities у обеих позиций,
+при переносе бойца — также у самого бойца. Погибшие не восстанавливаются.
+
+До изменений `before/`, после окончательного production кода `after-final/`:
+`tools/Invoke-AICFChecks.ps1 -Name <восемь выбранных проверок> -EvidenceRoot <каталог>`.
+В обоих случаях **7 PASS, 1 прежний FAIL**, общий exit 1: AICombatInputContracts,
+FIAGarrisonContracts, FIAPatrolStatic, Stage35RecoveryPolicy, Stage35Static,
+Stage3Static, Stage3StaticContracts — PASS/0. NorthFailureContracts — FAIL/1,
+те же `MOVE_CALLBACK_FENCE`, `MOVE_ACTIVITY`. Точные argv, исходный SHA,
+dirty status, exit codes и полный вывод находятся в evidence. Контракт
+SURVIVORS обновлён под вызов crew update перед patrol update; новый контракт
+не отменяет прежнюю проверку сохранения выживших.
+
+Терминальный Workbench production, `compile.ps1 -Label production-final`
+и `compile.ps1 -Variant EveronNorth -Label stock-final`: **PASS/0**, оба
+`Script validation successful`, SCRIPT E/F и ENGINE F нет; прочих строк (E)
+39/25. Все compile argv и полные логи сохранены, `compile-summary.json`.
+API 1.8.0.13: GetInVehicle/GetOutVehicle, GetCompartmentName, GetAllPlayers,
+threat state, group transfer, SetWorldTransform и physics velocity проверены
+по закреплённому reference и соседним production adapters.
+
+Runtime: `runtime.ps1 -Label probe2`, canonical launcher с отдельным stage,
+Variant `EveronNorthWCSRHS`, Hard, `-aicfRecoveryProbe 1`,
+`-aicfRequirePlayerForResult 0`. **46/46 PASS**, native exit 0;
+20:52:11–20:57:29 MSK. Полный остановленный console.log:
+`probe2-logs/logs_2026-10-08_20-52-11/console.log`; сохранены также script/error
+logs, launcher manifest и exit. `runtime-summary.json`: SCRIPT E/F 0,
+ENGINE F 0, VM exceptions 0, 233 прочих resource/backend строк (E).
+`source-hashes-final.json`: 221 production `.c`/`.conf`/`.gproj` совпадают со
+stage по SHA-256, fixture присутствует только в stage.
+
+Проверены три роли экипажа БТР и танка, точное повторное занятие каждого места
+с последующим переносом машины, отсутствие мутаций при synthetic player veto,
+граница 49/50/51 м, destination и height cases, перенос без изменения entity IDs,
+высадка семи пассажиров, сохранение трёх членов экипажа, физическое прибытие
+БТР после высадки, recovery после failed move, отказ при stale member identity,
+отсутствие восстановления/замены убитого водителя.
+Probe выключает damage только в изолированной копии и задаёт threat искусственно.
+Имитированный player veto не заменяет проверку PlayerManager с реальным клиентом.
+
+`pwsh -File tests/log-audits/Test-FIAGarrisonRecoveryLog.ps1 -LogPath <полный лог>`:
+**PASS/0**. Тот же анализатор на копии без PLAYER_VETO_NO_VEHICLE_MUTATION —
+ожидаемый **FAIL/1**, вывод `negative-audit.txt`. `git diff --check` — PASS/0.
+Ранний `probe1` — **FAIL**, остановлен адресно (native -1): unqualified static
+внутренний вызов обходил synthetic override, а общий controller десанта блокировал
+новое vehicle movement. В production используется единый qualified PlayersClear;
+пешие переведены в собственную identity-проверяемую группу, затем весь probe повторён.
+Не выдавать первый прогон за PASS.
+
+Четыре ранее запущенных сервера остановлены по разрешению пользователя после
+нового сбора показателей; точный process/profile проверен перед Stop-Process.
+Полные остановленные логи: `.codex-runtime/fia-four-servers-20261008-201345/stopped-logs/`.
+В конце 25 минут ownership целей US/USSR/FIA: 2301 — 1/2/2, 2303 — 1/2/2,
+2305 — 3/2/0, 2307 — 2/3/0. На 2307 зарегистрировано 111 MOVE_FAILED;
+на 2303/2305 сохранились две начальные PMC_EQUIPMENT_FAILED, новых SCRIPT E/F нет.
+Это старый код, загруженный до правок, и baseline длительного прогона, не проверка
+нового recovery. Остановка принудительная, native exit -1; сама по себе не crash.
+
+Реальный connected player рядом с телепортом, client/JIP, визуальная проверка
+анимаций, долгий soak нового кода и полный бой до гибели гарнизона — **NOT RUN**.
+Все свои тестовые процессы остановлены, stage удалён после сохранения evidence.
+Изменены Core state/crew/patrol/service/cleanup, новый recovery, README и
+архитектурные/gameplay/testing/fixture заметки, FIAGarrisonContracts,
+RecoveryProbe и RecoveryLog; точный список — `changed-files.txt` в evidence.
