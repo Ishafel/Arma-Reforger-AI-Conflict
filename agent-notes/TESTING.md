@@ -4,6 +4,22 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## Оформление 0.1.26 — 2026-10-09
+
+По запросу пользователя работа продолжена в `codex/scenario-difficulties`
+без новой ветки. Исходный commit `36ec545`, дерево до правки чистое.
+Добавлены `releases/0.1.26.md` и ссылки в README/указателе; игровой код,
+headers и зависимости не менялись. Состав сверен с `git log 0.1.25..HEAD`
+и сохранёнными результатами ниже. Прежние FAIL и NOT RUN сохранены в патчноутах.
+
+Свежие проверки документации: `git diff --check` до/после — PASS/0;
+PowerShell-проверка локальных ссылок README, указателя и патчноутов — PASS/0.
+Evidence: `.codex-runtime/release-0.1.26/` (исходный SHA/status,
+`before-check.txt`, `after-check.txt`, `links.txt`). Полный offline набор,
+Workbench, server/client runtime, JIP, ручные проверки, soak и packaged build
+при оформлении — NOT RUN. Старые PASS не являются новым прогоном релиза.
+Push и Workshop upload не выполнялись.
+
 ## Т-72 на сложной сложности всех WCS — 2026-10-09
 
 Продолжение `codex/scenario-difficulties`, baseline `96093a1`.

@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Найти состав последнего оформленного релиза и ограничения | [0.1.26](../releases/0.1.26.md), [TESTING.md](TESTING.md) |
 | Найти домен, состояние и границы побочных эффектов | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Проверить игровую механику и defaults | [GAMEPLAY.md](GAMEPLAY.md), затем указанные исходники |
 | Изменить сложности и гарнизоны FIA | [GAMEPLAY.md](GAMEPLAY.md#сложность-гарнизонов-fia), [TEST_FIXTURES.md](TEST_FIXTURES.md) |
