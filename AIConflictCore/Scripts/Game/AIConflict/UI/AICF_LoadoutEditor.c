@@ -83,6 +83,11 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected SCR_ComboBoxComponent m_Library;
 	protected TextWidget m_wLocation;
 	protected string m_sViewPath;
+	protected bool m_bShowAttachments;
+	protected bool m_bContentsView;
+	protected bool m_bCanShowContents;
+	protected ref array<string> m_aViewPaths = {};
+	protected ref array<bool> m_aViewModes = {};
 	protected ref AICF_LoadoutNavigation m_Navigation = new AICF_LoadoutNavigation();
 	protected ref array<int> m_aSlotLocations = {};
 	protected SCR_ComboBoxComponent m_ContentCategory;
@@ -250,7 +255,9 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		Button("undo", "{AICF:AICF_UI_Undo_950921cc}", 0.69, 0.09, 0.83, 0.15);
 		Button("reset", "{AICF:AICF_UI_Default_c3e32002}", 0.84, 0.09, 0.975, 0.15);
 		Label(0.025, 0.165, 0.29, 0.20, "{AICF:AICF_UI_PREVIEW_7dc4cefd}", 17);
-		Label(0.31, 0.165, 0.63, 0.20, "{AICF:AICF_UI_LOADOUT_6d15a8e1}", 17);
+		Label(0.31, 0.165, 0.465, 0.20, "{AICF:AICF_UI_LOADOUT_6d15a8e1}", 17);
+		Button("contents", "{AICF:AICF_UI_LoadoutMounts}", 0.475, 0.165, 0.63, 0.20);
+		ShowButton("contents", false);
 		Button("back", "{AICF:AICF_UI_Back_b1e3ce09}", 0.31, 0.205, 0.385, 0.255);
 		m_wLocation = Label(0.395, 0.205, 0.63, 0.265, "{AICF:AICF_UI_On_soldier_193813db}", 17);
 		m_wLocation.SetTextWrapping(true);
@@ -407,6 +414,11 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_bRendering = true;
 		PopulateMembers();
 		m_sViewPath = string.Empty;
+		m_aViewPaths.Clear();
+		m_aViewModes.Clear();
+		m_bShowAttachments = false;
+		m_bContentsView = false;
+		m_bCanShowContents = false;
 		m_Library.ClearAll();
 		m_bRendering = false;
 		m_aTemplateIds.Clear();
@@ -584,6 +596,11 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			capacityRight = 0.465;
 		Place(m_wCapacity, 0.31, 0.268, capacityRight, 0.313);
 		bool nested = !m_sViewPath.IsEmpty();
+		ShowButton("contents", m_bCanShowContents);
+		string viewCaption = "{AICF:AICF_UI_LoadoutContents}";
+		if (m_bContentsView)
+			viewCaption = "{AICF:AICF_UI_LoadoutMounts}";
+		SetButtonState("contents", ready && m_bCanShowContents, viewCaption);
 		ShowButton("back", nested);
 		SetButtonState("back", ready && nested);
 		ShowButton("less", adding);
@@ -763,7 +780,12 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_aSlotLocations.Clear();
 		m_Navigation.Build(m_Draft.GetCharacter(), m_Catalog);
 		while (!m_sViewPath.IsEmpty() && m_Navigation.FindPath(m_sViewPath) < 0)
+		{
 			m_sViewPath = AICF_LoadoutNavigation.ParentPath(m_sViewPath);
+			m_aViewPaths.Clear();
+			m_aViewModes.Clear();
+			m_bShowAttachments = false;
+		}
 		Slots();
 		SelectAddress(selectedPath, selectedStorage, selectedSlot);
 		Selection();
@@ -796,7 +818,12 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 
 	protected void Slots()
 	{
-		m_Navigation.Rows(m_sViewPath, m_aSlotLocations, m_aSlots);
+		m_bCanShowContents = m_Navigation.HasContents(m_sViewPath);
+		m_bContentsView = m_bCanShowContents && !m_bShowAttachments;
+		if (m_bContentsView)
+			m_Navigation.ContentRows(m_sViewPath, m_aSlotLocations, m_aSlots);
+		else
+			m_Navigation.Rows(m_sViewPath, m_aSlotLocations, m_aSlots);
 		array<string> prefabs = {}, names = {}, details = {};
 		foreach (int row, int locationIndex : m_aSlotLocations)
 		{
@@ -834,6 +861,14 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 					name = "{AICF:AICF_UI_Free_bd8b5b20}" + name;
 					detail = "{AICF:AICF_UI_Select_a_compatible_item_on_the_right_b5b60f6f}";
 				}
+			}
+			if (m_bContentsView)
+			{
+				string pocket = AICF_Localization.Format("{AICF:AICF_UI_LoadoutPocket}", m_Navigation.PocketNumber(m_sViewPath, locationIndex).ToString());
+				if (slot < 0)
+					name = AICF_Localization.Format("{AICF:AICF_UI_LoadoutAddPocket}", m_Navigation.PocketNumber(m_sViewPath, locationIndex).ToString());
+				else
+					detail = pocket + " · " + detail;
 			}
 			prefabs.Insert(prefab);
 			names.Insert(name);
@@ -968,6 +1003,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (location)
 		{
 			focus = m_iMember.ToString() + "|" + location.m_sPath + "|" + location.m_sStorage;
+			if (m_bContentsView)
+				focus = m_iMember.ToString() + "|contents|" + m_sViewPath;
 			if (!m_bContentFilter)
 				focus += "|" + m_Slots.GetSelected().ToString();
 		}
@@ -1065,7 +1102,10 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (child < 0)
 			return;
 		GetGame().GetCallqueue().Remove(FocusSlotCatalog);
+		m_aViewPaths.Insert(m_sViewPath);
+		m_aViewModes.Insert(m_bShowAttachments);
 		m_sViewPath = m_Navigation.m_Locations[child].m_sPath;
+		m_bShowAttachments = false;
 		Slots();
 		FocusSlotCatalog();
 	}
@@ -1075,7 +1115,19 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (m_sViewPath.IsEmpty())
 			return;
 		string childPath = m_sViewPath;
-		m_sViewPath = AICF_LoadoutNavigation.ParentPath(childPath);
+		int last = m_aViewPaths.Count() - 1;
+		if (last >= 0)
+		{
+			m_sViewPath = m_aViewPaths[last];
+			m_bShowAttachments = m_aViewModes[last];
+			m_aViewPaths.Remove(last);
+			m_aViewModes.Remove(last);
+		}
+		else
+		{
+			m_sViewPath = AICF_LoadoutNavigation.ParentPath(childPath);
+			m_bShowAttachments = false;
+		}
 		Slots();
 		foreach (int row, int locationIndex : m_aSlotLocations)
 		{
@@ -1168,6 +1220,14 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		}
 		else if (action == "back")
 			ParentContainer();
+		else if (action == "contents" && m_bCanShowContents)
+		{
+			CancelSearch();
+			GetGame().GetCallqueue().Remove(FocusSlotCatalog);
+			m_bShowAttachments = !m_bShowAttachments;
+			Slots();
+			FocusSlotCatalog();
+		}
 		else if (action == "undo" || action == "reset")
 		{
 			m_Recipe.Undo();
@@ -1463,6 +1523,11 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_Library = null;
 		m_sViewPath = string.Empty;
 		m_wLocation = null;
+		m_aViewPaths.Clear();
+		m_aViewModes.Clear();
+		m_bShowAttachments = false;
+		m_bContentsView = false;
+		m_bCanShowContents = false;
 		m_ContentCategory = null;
 		m_aContentTypes.Clear();
 		m_aContentModes.Clear();

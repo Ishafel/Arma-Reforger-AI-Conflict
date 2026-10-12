@@ -3,6 +3,30 @@ StringTable
 	ItemClassName "CustomStringTableItem"
 	Items
 	{
+		CustomStringTableItem "{A1CF261012270001}"
+		{
+			Id "AICF_UI_LoadoutContents"
+			Target_en_us "Contents"
+			Target_ru_ru "Содержимое"
+		}
+		CustomStringTableItem "{A1CF261012270002}"
+		{
+			Id "AICF_UI_LoadoutMounts"
+			Target_en_us "Mounts"
+			Target_ru_ru "Крепления"
+		}
+		CustomStringTableItem "{A1CF261012270003}"
+		{
+			Id "AICF_UI_LoadoutPocket"
+			Target_en_us "Pocket %1"
+			Target_ru_ru "Карман %1"
+		}
+		CustomStringTableItem "{A1CF261012270004}"
+		{
+			Id "AICF_UI_LoadoutAddPocket"
+			Target_en_us "Add to pocket %1"
+			Target_ru_ru "Добавить в карман %1"
+		}
 		CustomStringTableItem "{A1CF261008200001}"
 		{
 			Id "AICF_Scenario_Arland_Medium_Name"

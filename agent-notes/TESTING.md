@@ -4,6 +4,67 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## Общее содержимое разгрузки — 2026-10-12
+
+Ветка `codex/loadout-contents-view` от `e1d5dab` (оптимизация issue #27),
+исходное дерево чистое. Изменены `AICF_LoadoutNavigation`, `AICF_LoadoutEditor`,
+локализация RU/EN, static audit; добавлен `AICF_LoadoutContentsProbe` и обновлены
+README/агентские заметки. Контракт и ручной gate:
+[LOADOUT_CONTENTS.md](LOADOUT_CONTENTS.md). Evidence: `.codex-runtime/loadout-contents/`.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-AILoadoutStatic.ps1,Test-PersonalLoadoutContracts.ps1,Test-LocalizationStatic.ps1
+  -EvidenceRoot <before|after-final-clean>`: **2 PASS / 1 FAIL, exit 1** до и после.
+  Сохранён baseline FAIL: runner запускает Windows PowerShell 5, который неверно
+  читает UTF-8 regex существующего LocalizationStatic и получает parse error.
+  Финальные loadout/personal audits — **PASS**, 159/54 отрицательных мутации.
+- `pwsh -NoProfile -File tests/static/Test-LocalizationStatic.ps1` и
+  `pwsh -NoProfile -File tools/Build-AICFLocalization.ps1 -Check`: **PASS**, 591 запись.
+- Evidence `compile.ps1 -Variant Stock -Label final-production-stock` и
+  `-Variant EveronNorthWCSRHS -Label final-production-wcs`: окончательный production
+  Workbench Validate/Compile **PASS / exit 0**. `-Label final-fixture -SourceRoot <stage>`:
+  fixture compile **PASS / 0**. Версия движка/Workbench 1.8.0.13.
+  SCRIPT E/F, ENGINE F и VM exceptions — 0; resource errors в production console:
+  stock 25, WCS 39. Полные logs, argv и manifest сохранены в `wb-<label>/` и рядом.
+- Evidence `runtime.ps1 -Variant Stock -Tag final` и
+  `runtime.ps1 -Variant EveronNorthWCSRHS -Tag final`: canonical
+  `tools/Start-AICFRuntime.ps1 -Role Server -Difficulty Easy -RepositoryRoot <stage>`
+  с fresh profile и `-addr 127.0.0.1:2301 -aicfContentsProbe 1 -aicfRequirePlayerForResult 0`.
+  Полные остановленные логи подтверждают listener, ROSTER_READY, probe completion
+  и Game destroyed; native exit **0**. Manifest сохранён в launcher output.
+  Stock **24/27 PASS**, WCS **62/65 PASS**; общий runtime verdict — **FAIL**.
+  Новое представление, точные адреса, отсутствие дубликатов, сохранность остальных
+  предметов после удаления и Undo проходят. В обеих конфигурациях US:
+  `CONTENTS_REMOVED_RESTORE`, `CONTENTS_REMOVED_SIGNATURE`,
+  `CONTENTS_REMOVED_VALIDATE` — **FAIL / INVENTORY_RESTORE_FAILED**.
+  Это выявленное ограничение прежнего restore: WCS stage-диагностика подтверждает
+  сохранённый slot 1 при создании slot 0 в пустом native-кармане. Тот же адрес
+  доступен через прежний Rows; production Inventory/Restore не изменены.
+  Сохранение/чтение файла рецепта проходит, но не заменяет runtime restore.
+
+Полные финальные логи относительно evidence:
+
+- `profile-Stock-final/logs/logs_2026-10-12_14-09-15/console.log`;
+- `profile-EveronNorthWCSRHS-final/logs/logs_2026-10-12_14-06-15/console.log`.
+
+`collect.ps1` читает полные logs и сохраняет `runtime-summary.json` и все E/F.
+SCRIPT/fatal gate — **PASS**; прочие resource/shutdown ошибки: stock 14, WCS 233,
+соответствуют ранее наблюдавшемуся baseline. Общий error-free gate не заявляется.
+Промежуточные attempts сохранены: первый fixture compile не прошёл из-за
+зарезервированного имени `owned` (исправлено); runtime `first` — 3 FAIL;
+`restore-fixed` и `diagnostic` — 4 FAIL, включая неверное fixture-ожидание
+вложенных предметов непосредственно в wearable TV-102. Оно заменено проверкой
+фактически надетого wearable; точный Pouch Preset [7] со снимка не проверен.
+Эксперимент с порядком удаления/вставки не исправил restore и полностью отменён.
+
+`final-stage-hashes.json` подтверждает 283 совпадающих production/resource файла;
+fixture hashes сохранены отдельно. Stage после проверок удалён, тестовые серверы
+завершились сами через RequestClose. Ранее запущенную игровую сессию эти probes
+не перезапускали. `git diff --check` — **PASS**.
+
+**NOT RUN:** ручное отображение и input в клиенте, точный Pouch Preset [7] EMR,
+длинные RU/EN подписи, client RPC save/respawn/JIP, packaged build, полная матрица
+и soak. Save/reopen после удаления ограничен описанным restore FAIL.
+
 ## Issue #27: каталог редактора пресетов — 2026-10-12
 
 Ветка `codex/issue-27-preset-performance` от обновлённой `origin/main`,

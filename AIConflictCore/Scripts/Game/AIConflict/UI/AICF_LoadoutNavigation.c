@@ -144,6 +144,76 @@ class AICF_LoadoutNavigation
 		}
 	}
 
+	// Объединяем только карманы выбранного предмета. Оружейные крепления
+	// и сами смонтированные подсумки остаются в обычном Rows.
+	bool IsContentPocket(AICF_LoadoutLocation location, string path)
+	{
+		return location && !path.IsEmpty() && location.m_sPath.StartsWith(path) &&
+			SCR_UniversalInventoryStorageComponent.Cast(location.m_Storage) &&
+			!AICF_LoadoutSlotView.HasFixedSlots(location.m_Storage);
+	}
+
+	bool HasContents(string path)
+	{
+		int index = FindPath(path);
+		if (path.IsEmpty() || index < 0 || m_Locations[index].m_Owner.FindComponent(BaseWeaponComponent))
+			return false;
+		foreach (AICF_LoadoutLocation location : m_Locations)
+			if (IsContentPocket(location, path))
+				return true;
+		return false;
+	}
+
+	void ContentRows(string path, array<int> locations, array<int> slots)
+	{
+		locations.Clear();
+		slots.Clear();
+		if (!HasContents(path))
+			return;
+		set<IEntity> items = new set<IEntity>();
+		set<BaseInventoryStorageComponent> pockets = new set<BaseInventoryStorageComponent>();
+		array<int> additions = {};
+		foreach (int index, AICF_LoadoutLocation location : m_Locations)
+		{
+			BaseInventoryStorageComponent storage = location.m_Storage;
+			if (!IsContentPocket(location, path) || pockets.Contains(storage))
+				continue;
+			pockets.Insert(storage);
+			additions.Insert(index);
+			for (int slot; slot < storage.GetSlotsCount(); slot++)
+			{
+				InventoryItemComponent item = storage.GetItem(slot);
+				if (!item || !item.GetParentSlot() || item.GetParentSlot().GetStorage() != storage ||
+					item.GetParentSlot().GetID() != slot || items.Contains(item.GetOwner()))
+					continue;
+				items.Insert(item.GetOwner());
+				locations.Insert(index);
+				slots.Insert(slot);
+			}
+		}
+		// Предметы идут первыми, добавление в конкретные карманы — в конце.
+		// Операция по-прежнему адресуется настоящим path + storage + slot.
+		foreach (int addition : additions)
+		{
+			locations.Insert(addition);
+			slots.Insert(-1);
+		}
+	}
+
+	int PocketNumber(string path, int locationIndex)
+	{
+		int number;
+		foreach (int index, AICF_LoadoutLocation location : m_Locations)
+		{
+			if (!IsContentPocket(location, path))
+				continue;
+			number++;
+			if (index == locationIndex)
+				return number;
+		}
+		return 0;
+	}
+
 	string CapacityText(string path)
 	{
 		float used, capacity;
