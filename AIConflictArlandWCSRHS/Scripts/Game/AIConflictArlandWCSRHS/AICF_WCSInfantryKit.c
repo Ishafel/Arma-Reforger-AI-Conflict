@@ -46,12 +46,12 @@ class AICF_WCSInfantryKit
 		return 6;
 	}
 
-	static ResourceName AdditionalLauncher(FactionKey faction, ResourceName source)
+	static ResourceName SecondaryLauncher(FactionKey faction, ResourceName source)
 	{
-		// Два дополнительных носителя, а не замена их основных ролей.
+		// Штатные LAT и два дополнительных носителя; основные роли сохраняются.
 		if (faction == "RHS_USAF" && source.Contains("/RHS_USAF_USMC_MEF/") &&
-			(HasRole(source, "TL") || HasRole(source, "AMG")))
-			return "{9C5C20FB0E01E64F}Prefabs/Weapons/Launchers/M72/Launcher_M72A3.et";
+			(HasRole(source, "LAT") || HasRole(source, "TL") || HasRole(source, "AMG")))
+			return "{DA376E83952F1DFD}Prefabs/Weapons/Launchers/M2CG/Launcher_M2CG.et";
 		return ResourceName.Empty;
 	}
 

@@ -47,20 +47,25 @@ modded class AICF_MatchController
 						IEntity item = storage.Get(slots[row]);
 						ResourceName prefab;
 						int ammo;
+						int spare;
 						if (item)
 						{
 							prefab = SCR_ResourceNameUtils.GetPrefabName(item);
 							BaseWeaponComponent weapon = BaseWeaponComponent.Cast(item.FindComponent(BaseWeaponComponent));
-							if (weapon && weapon.GetCurrentMuzzle()) ammo = weapon.GetCurrentMuzzle().GetAmmoCount();
+							if (weapon && weapon.GetCurrentMuzzle())
+							{
+								ammo = weapon.GetCurrentMuzzle().GetAmmoCount();
+								spare = AICF_RHSPMCArmament.SpareMagazines(draft.GetCharacter(), weapon.GetCurrentMuzzle());
+							}
 						}
 						Print(string.Format("[AICF][EXTRA_LAT_SLOT] faction=%1 index=%2 weapon_slot=%3 prefab=%4 ammo=%5", recipe.m_sFaction, index, slot.GetWeaponSlotIndex(), prefab, ammo));
-						if (recipe.m_sFaction == "US" && (index == 6 || index == 7) && slot.GetWeaponSlotIndex() == 1)
-							AICF_ExtraLATCheck("ADDED_" + index, prefab == "{9C5C20FB0E01E64F}Prefabs/Weapons/Launchers/M72/Launcher_M72A3.et" && ammo == 1);
+						if (recipe.m_sFaction == "US" && (role == "ANTI_TANK" || index == 6 || index == 7) && slot.GetWeaponSlotIndex() == 1)
+							AICF_ExtraLATCheck("CARL_GUSTAF_" + index, prefab == "{DA376E83952F1DFD}Prefabs/Weapons/Launchers/M2CG/Launcher_M2CG.et" && ammo == 1 && spare == 0);
 						if (recipe.m_sFaction == "USSR" && (index == 6 || index == 7) && slot.GetWeaponSlotIndex() == 1)
 							AICF_ExtraLATCheck("USSR_UNCHANGED_" + index, prefab.IsEmpty());
 					}
 					tree.Clear();
-					if (recipe.m_sFaction == "US" && (index == 6 || index == 7))
+					if (recipe.m_sFaction == "US" && (role == "ANTI_TANK" || index == 6 || index == 7))
 					{
 						int ignored;
 						string signature = AICF_LoadoutInventory.Signature(draft.GetCharacter(), catalog, ignored);

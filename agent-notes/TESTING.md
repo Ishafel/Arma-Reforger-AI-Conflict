@@ -4,6 +4,68 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## Carl Gustaf вместо M72 US — 2026-10-12
+
+Ветка `codex/us-carl-gustaf` от `ac8c801`, исходное дерево чистое.
+WCS `AICF_WCSInfantryKit`/`AICF_WCSInfantryEquipment` выдают USMC LAT/TL/AMG
+M2 Carl Gustaf (`{DA376E83952F1DFD}Prefabs/Weapons/Launchers/M2CG/Launcher_M2CG.et`)
+с одним заряженным выстрелом и без запасных. Разрешена замена только точного
+штатного M72 в local draft; остальные authority/identity/rollback границы прежние.
+Обновлены WCS static audit и три fixtures: InfantryAT, USExtraLauncher,
+WCSInfantry; README/WCS README/GAMEPLAY/TEST_FIXTURES описывают новый default.
+Evidence: `.codex-runtime/us-carl-gustaf/`.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-WCSIntegrationStatic.ps1,Test-RHSIntegrationStatic.ps1,Test-AILoadoutStatic.ps1,Test-InfantryRecruitmentStatic.ps1
+  -EvidenceRoot <before|after>`: **4 PASS / exit 0** до и после. Baseline failures
+  выбранного набора отсутствуют. Старый запрет любой замены второго оружия
+  уточнён до замены только M72 согласно новому контракту; неизвестное оружие
+  по-прежнему отклоняется.
+- Evidence `compile.ps1 -Label final-fixture -SourceRoot <stage>` и
+  `compile.ps1 -Label final-production-wcs`: Workbench Validate/Compile
+  **PASS / native exit 0**, версия 1.8.0.13. SCRIPT/fatal — 0,
+  прочие resource E/F — 39, как в предыдущем наблюдении.
+- `runtime.ps1 -Tag draft`: **32/32 PASS**, 20 стандартных draft обеих сторон,
+  точные M2CG/заряд/отсутствие запасных у US 3/6/7/8/9, прежний пустой второй
+  слот РФ 6/7, полная signature Capture/Restore всех пяти комплектов с M2CG.
+- `runtime.ps1 -Tag live-hard -Probe aicfATProbe -Difficulty Hard`:
+  **104/104 PASS**, 26 живых бойцов полного roster и donors. У всех US LAT/TL/AMG
+  точный M2CG с `loaded=1 spare=0`, у РФ прежний РПГ-7 с `loaded=1 spare=2`;
+  роли, комплекты, повторный Apply, mappings и FIA reject прошли.
+- `runtime.ps1 -Tag retention -Probe aicfWCSInfantryProbe -Difficulty Hard`:
+  WCS roster **20/20 PASS**, сохранность остальных защищённых предметов,
+  совпадение editor/live kit и catalog; PMC **13/13**, player preparation **2/2**,
+  пять cache guards — **PASS**. Это серверная проверка preparation без клиента.
+- `runtime.ps1 -Tag live-easy -Probe aicfATProbe -Difficulty Easy`:
+  **96/96 PASS**, три Carl Gustaf в полном US roster, donors и прежние роли.
+
+Runtime использует canonical `tools/Start-AICFRuntime.ps1`, отдельный stage,
+fresh profiles, `EveronNorthWCSRHS`, `-addr 127.0.0.1:2301 -<Probe> 1
+-aicfRequirePlayerForResult 0`. Аргументы/manifest, полный console/script log
+и native exit сохранены. `collect.ps1` читает полные логи и сохраняет все E/F
+вместе с `runtime-summary.json`/`compile-summary.json`.
+`final-stage-hashes.json`: 282 production/resource файла, 0 расхождений;
+три fixture hashes сохранены отдельно.
+Полные console logs относительно evidence:
+
+- `profile-EveronNorthWCSRHS-draft/logs/logs_2026-10-12_15-04-42/console.log`;
+- `profile-EveronNorthWCSRHS-live-hard/logs/logs_2026-10-12_15-06-07/console.log`;
+- `profile-EveronNorthWCSRHS-retention/logs/logs_2026-10-12_15-07-34/console.log`;
+- `profile-EveronNorthWCSRHS-live-easy/logs/logs_2026-10-12_15-08-36/console.log`.
+
+Все четыре тестовых сервера завершились с native exit 0; listener,
+ROSTER_READY и Game destroyed подтверждены полными остановленными логами.
+SCRIPT/fatal — 0, прочие resource/shutdown E/F — 233 в каждом запуске,
+как в предыдущем наблюдении; общий error-free gate не заявляется.
+Тестовый stage удалён после завершения процессов, полные логи сохранены.
+`git diff --check` — **PASS**.
+
+**NOT RUN:** стрельба/перезарядка в бою, client/UI/JIP, пользовательский Save/Apply,
+переход donor в отряд и оплата, отдельный Medium runtime, packaged build и soak.
+Прежний sparse-slot restore FAIL не затронут: новые проверки не создают дырки
+в native-карманах. Сохранённые пользовательские шаблоны не переписываются
+и могут переопределить новый default. Игровая сессия на порту 2001 остаётся
+на предыдущем коде до перезапуска.
+
 ## Два дополнительных M72 у US — 2026-10-12
 
 Ветка `codex/us-at-ammunition` от `1cae572`, исходное дерево чистое.

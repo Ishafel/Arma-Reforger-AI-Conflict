@@ -36,6 +36,9 @@ modded class AICF_MatchController
 			{
 				if (!muzzle) continue;
 				Print(string.Format("[AICF][AT_WEAPON] faction=%1 index=%2 prefab=%3 loaded=%4 spare=%5", faction, index, SCR_ResourceNameUtils.GetPrefabName(item), muzzle.GetAmmoCount(), AICF_RHSPMCArmament.SpareMagazines(character, muzzle)));
+				if (faction == "US")
+					return SCR_ResourceNameUtils.GetPrefabName(item) == "{DA376E83952F1DFD}Prefabs/Weapons/Launchers/M2CG/Launcher_M2CG.et" &&
+						muzzle.GetAmmoCount() == 1 && AICF_RHSPMCArmament.SpareMagazines(character, muzzle) == 0;
 				if (muzzle.GetAmmoCount() > 0) return true;
 			}
 		}
