@@ -8,11 +8,11 @@ if ($finished.Count -ne 1 -or [int]$finished[0].Groups[2].Value -ne 0 -or [int]$
 if ($log -match '\[FIA_RANDOM_PROBE\][^\r\n]*passed=0') { $failures += 'PROBE_CASE' }
 $plans = [regex]::Matches($log, '\[FIA_GARRISON_PLAN\][^\r\n]*difficulty=(\d+) bases=(\d+) vehicles=(\d+)')
 if ($plans.Count -ne 1) { $failures += 'ONE_PLAN_REQUIRED' }
+if ($log -notmatch '\[ROSTER_READY\]') { $failures += 'ROSTER_READY' }
 if (-not $PlanOnly -and $plans.Count -eq 1) {
     $count = [int]$plans[0].Groups[3].Value
     $ready = [regex]::Matches($log, '\[FIA_GARRISON_READY\][^\r\n]*numeric_slot=(\d+)')
     if ($ready.Count -ne $count -or @($ready | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique).Count -ne $count) { $failures += 'READY_COUNT' }
-    if ($log -notmatch '\[ROSTER_READY\]') { $failures += 'ROSTER_READY' }
 }
 if ($failures.Count) { $failures | ForEach-Object { "FAIL $_" } }
 else { 'PASS FIA random garrison targeted probe; client/JIP/combat/soak=NOT_RUN' }

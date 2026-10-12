@@ -37,6 +37,18 @@ Essential seats заполняются экипажем; пассажиры за
 действуют прежние async `RequestSpawn`, exact faction roster и boarding gates.
 `FIA_GARRISON_ROSTER` сообщает фактическое число пассажиров и экипажа.
 
+RHS/PMC барьер применяется к обоим входам посадки: `Board` у дорожного патруля
+и отдельному `BoardGarrison` у гарнизона. Пока хотя бы один боец ожидает
+`AICF_ApplyPMCEquipment`, группа не начинает посадку. Иначе native inventory
+может отказать в замене оружия уже сидящего бойца. Pending снимается прежним
+identity-safe callback; дополнительных таймеров и повторной выдачи нет.
+
+`AICF_AIMagazineSwitchGuard` проверяет владельца текущего compartment перед
+штатным `SCR_AISwitchMagazine`. Если у места нет `BaseWeaponManagerComponent`,
+задача возвращает FAIL: stock 1.8.0.13 разыменовывает этот manager без проверки.
+Пехота вне машины и места с manager проходят через исходную реализацию,
+включая цепочку WCS. Guard не меняет оружие, магазины и AI ownership.
+
 ## Усиленная точка и настройка графа
 
 `AICF_FIAStrongpointPolicy`: два HQ, минимум два разных соседа, связность с обоими

@@ -93,6 +93,11 @@ Integration `AICF_FIAStrongpointRadioSetup` готовит реальный radi
 MatchController. Immutable snapshot реплицируется на stock base. Подробности:
 [FIA_GARRISONS.md](FIA_GARRISONS.md).
 
+Узкий stock adapter `AICF_AIMagazineSwitchGuard` отклоняет magazine-switch task
+на compartment без weapon manager до вызова vanilla/WCS цепочки. RHS integration
+владеет PMC readiness перед обоими входами посадки (`Board` и `BoardGarrison`);
+перенос экипировки и vehicle lifecycle остаются в своих доменах.
+
 Recruitment прогнозирует полную стоимость и время набора с учётом спроса других
 визитов, но не резервирует supplies. Оплата проверяется перед каждым transfer:
 [точная модель и evidence](RECRUITMENT_SUPPLY_PLANNING.md).

@@ -255,7 +255,8 @@ Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'SyncFactionObjectiveMarkers
 Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'markerKind\s*==\s*1[\s\S]*MarkerIcon[\s\S]*SetVisible\s*\(\s*false\s*\)' 'Attack targets must use a distinct text badge instead of a duplicate faction flag'
 Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'AICF_ATTACK_BADGE_TEXT_NAME[\s\S]*SetTextVisible\s*\(\s*false\s*\)' 'Attack targets must use an independently positioned label instead of stock MarkerText'
 Assert-Contains 'STAGE4_ATTACKED_BASES' $mapMarkers 'ATTACK_BADGE_NAME[\s\S]*FrameSlot\.SetAnchor\s*\(\s*attackBadge\s*,\s*0\.5\s*,\s*1\s*\)[\s\S]*FrameSlot\.SetPos\s*\(\s*attackBadge\s*,\s*0\s*,\s*18\s*\)' 'Attack badges must be placed below the stock base marker'
-Assert-Contains 'STAGE4_ATTACKED_BASES' $markerLabels 'attackerList\s*\+=\s*string\.Format\s*\(\s*"\+%1"[\s\S]*"ATK  %1"' 'One compact objective badge must aggregate all allied attacker slot keys'
+$attackBadgeAggregationPattern = 'attackers\.Insert\(slot\.GetDisplayName\(\)\)[\s\S]*attackerList\s*\+=\s*string\.Format\s*\(\s*", %1",\s*slot\.GetDisplayName\(\)\)[\s\S]*attackers\.Set\(targetIndex, attackerList\)[\s\S]*"ATK  %1"[\s\S]*attackers\[objectiveIndex\]'
+Assert-Contains 'STAGE4_ATTACKED_BASES' $markerLabels $attackBadgeAggregationPattern 'One objective badge must aggregate all allied attacker display names, separated by commas'
 
 Assert-Contains 'STAGE4_ORDER_AUTHORITY' $strategicRpc 'AICF_RequestStrategicOrder\s*\(\s*int\s+slotId\s*,\s*int\s+targetCallsign\s*\)' 'The client RPC may supply only slot identity and a base callsign'
 Assert-Contains 'STAGE4_ORDER_AUTHORITY' $strategicRpc 'RplRcver\.Server[\s\S]*GetPlayerId\s*\(' 'Order requests must resolve player identity on the authoritative PlayerController'
@@ -269,6 +270,12 @@ Assert-Contains 'STAGE4_ORDER_PERSISTENCE' $groupSlot 'm_bPlayerStrategicOrder[\
 Assert-Contains 'STAGE4_DIAGNOSTICS' $diagnostics '\[AICF\]\[STAGE4\]' 'Stage 4 must use its own log prefix'
 Assert-NotContains 'STAGE4_NO_STATIC_PASS' ($config + $network + $selector + $economy + $delivery + $controller) 'status\s*=\s*PASS|\[RESULT\]\[PASS\]' 'Production/static code must not manufacture runtime acceptance'
 
+# Обновлённый формат обязан сохранять объединение, а не только текст ATK.
+foreach ($removed in @('attackerList += string.Format(", %1", slot.GetDisplayName());', 'attackers.Set(targetIndex, attackerList);')) {
+    if (-not $markerLabels.Contains($removed) -or $markerLabels.Replace($removed, '') -match $attackBadgeAggregationPattern) {
+        Add-Failure 'STAGE4_NEGATIVE_FIXTURE' 'Attacker aggregation mutation was not rejected'
+    }
+}
 # Negative-fixture self-check: removing the stock supply rollback must be caught.
 $brokenEconomy = $economy -replace 'reservation\.GetBase\(\)\.AddSupplies\s*\(\s*reservation\.GetSupplyCost\(\)\s*\)\s*;', ''
 $negativeDetected = $brokenEconomy -notmatch 'reservation\.GetBase\(\)\.AddSupplies\s*\(\s*reservation\.GetSupplyCost\(\)\s*\)'

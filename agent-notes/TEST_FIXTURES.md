@@ -6,11 +6,29 @@ plan, все три composition rules/fallback, детерминизм PRNG и �
 последовательность, synthetic directed graph (HQ, оба направления ребра, тупик,
 изолированный узел, отсутствие кандидата), повторный Start и immutable snapshot.
 `full` ждёт actual READY/посадки всех выбранных мест (deadline 360 с), `plan`
-завершает после планирования. Сам закрывает сервер. Отключает damage готовых
+проверяет план сразу, но закрывает сервер только на первом Update после
+`ROSTER_READY`, до spawn гарнизонов. Закрытие прямо из `Start` воспроизводило
+shutdown leak `BridgeRoad` во время незавершённой инициализации. Отключает damage готовых
 машин/бойцов; не доказывает бой, движение, client/JIP или soak.
 Анализ полного остановленного лога: `Test-FIARandomGarrisonLog.ps1 -LogPath ...`
 (для `plan` добавить `-PlanOnly`). Целевой probe и общий SCRIPT/fatal gate
 выводятся отдельно, общий exit сохраняет любые ошибки.
+
+Дополнения для regression issue #25, применяются только вместе с этим probe:
+
+- `AICF_MagazineGuardProbe.c` в Core `Diagnostics/`: вызывает production
+  magazine task с отсутствующим access и на фактических занятых местах без
+  weapon manager; ожидает FAIL без VM exception и сообщает число проверенных мест.
+- `AICF_RHSPMCGarrisonProbe.c` в RHS `Content/`, после `AICF_RHSPMCEquipment.c`
+  по порядку имён: проверяет armament всех готовых бойцов, отсутствие новых
+  посадок при pending, а также принудительный pending у одного готового бойца.
+  Fault injection восстанавливает исходный флаг сразу после вызова; не меняет
+  inventory, identity и seats. Требует full с непустым гарнизоном для покрытия.
+- `AICF_BridgeLifecycleProbe.c` отдельно в Arland `Integration/`:
+  `-aicfBridgeProbe native|native-settled|native-ended` отключает AICF bootstrap,
+  сравнивает закрытие после первого кадра, после 10 с и после `EndGameMode`.
+  Это диагностическая изоляция lifecycle; остальные scripts addon остаются
+  загруженными, поэтому результат не называется запуском без модов.
 
 Следующие три старых probes (`DifficultyRollout`, `FIAGarrison`,
 `FIAGarrisonRecovery`) и `Test-FIAGarrisonLog.ps1` описывают исторический

@@ -12,6 +12,7 @@ modded class AICF_FIAGarrisonService
 {
 	protected bool m_bRandomProbe;
 	protected bool m_bRandomProbeDone;
+	protected bool m_bRandomProbePlanOnly;
 	protected int m_iRandomProbeStart;
 	protected int m_iRandomProbeChecks;
 	protected int m_iRandomProbeFailures;
@@ -82,6 +83,7 @@ modded class AICF_FIAGarrisonService
 		string enabled;
 		m_bRandomProbe = System.GetCLIParam("aicfRandomGarrisonProbe", enabled);
 		if (!m_bRandomProbe) return;
+		m_bRandomProbePlanOnly = enabled == "plan";
 		m_iRandomProbeStart = System.GetTickCount();
 		RandomPolicyChecks();
 		RandomCheck("PLAN_VALID", IsPlanValid());
@@ -116,11 +118,17 @@ modded class AICF_FIAGarrisonService
 			RandomCheck("IMMUTABLE_SNAPSHOT_" + i, !snapshot.IsEmpty() && snapshot == base.AICF_GetInitialGarrisonPlan());
 			m_sRandomProbePlan += snapshot;
 		}
-		if (enabled == "plan") RandomFinish();
+		// Не прерываем startup посреди MatchController.Start: road/bridge entities
+		// ещё проходят native initialization. Первый Update приходит после ROSTER_READY.
 	}
 
 	override void Update()
 	{
+		if (m_bRandomProbe && m_bRandomProbePlanOnly)
+		{
+			if (!m_bRandomProbeDone) RandomFinish();
+			return;
+		}
 		super.Update();
 		if (!m_bRandomProbe || m_bRandomProbeDone) return;
 		if (System.GetTickCount() - m_iRandomProbeStart > 360000) { RandomCheck("DEADLINE", false); RandomFinish(); return; }

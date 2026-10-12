@@ -6,6 +6,96 @@ commit/branch, dirty status и exit codes. После правки повтор�
 
 ## Issue #25: случайные гарнизоны — 2026-10-12
 
+### Дополнительное исправление ошибок проверок и runtime
+
+По запросу пользователя работа продолжена в той же ветке от `f5d2dd1`,
+исходное дерево чистое. Evidence отдельного продолжения:
+`.codex-runtime/issue25-fixes/`. Исторические FAIL ниже не переписаны.
+
+Причины и изменения:
+
+- `STAGE4_ATTACKED_BASES`: после `ceabc6a` маркеры объединяют display names
+  через запятую, а regex всё ещё требовал `+` и slot keys. Обновлён только
+  контракт теста; негативные мутации удаляют накопление/сохранение списка
+  и обязаны отвергаться. Production UI не изменён.
+- PMC: гарнизон вызывает `BoardGarrison`, минуя patrol `Board`, где уже был
+  pending-барьер. RHS adapter теперь проверяет всех членов перед обоими входами.
+  Diagnostic baseline повторил семь `PMC_EQUIPMENT_FAILED`; ожидаемый/фактический
+  inventory совпадал до основного оружия, которое native restore не заменил.
+- `NULL weapMgr`: новый Core `AICF_AIMagazineSwitchGuard` отклоняет task до
+  вызова super, если у текущего compartment отсутствует weapon manager.
+  Сигнатуры/путь отказа сверены с закреплённым Script Diff 1.8.0.13.
+- `BridgeRoad`: ранний `RequestClose` внутри `MatchController.Start` в режиме
+  plan воспроизвёл leak в одном из трёх запусков Everon. Три диагностических
+  запуска с отключённым AICF bootstrap ошибок не имели. Plan probe теперь
+  закрывается на первом Update после `ROSTER_READY`, до spawn гарнизонов.
+  Три повторных запуска завершились без leak; проверки 167/167/166, failures=0.
+  Это исправление преждевременного shutdown теста, не изменение native bridge
+  lifetime и не гарантия отсутствия любых engine leaks во всех условиях.
+
+Команды и результаты:
+
+- `tools/Invoke-AICFChecks.ps1 -Name` с Stage4, RHSIntegration, WCSIntegration,
+  AICombatInputContracts, FIAGarrisonContracts, FIARandomGarrisonContracts:
+  `before/` — **5 PASS / 1 FAIL**, `after-final/` — **6 PASS / 0 FAIL**.
+  Единственный baseline FAIL `STAGE4_ATTACKED_BASES` устранён.
+- `compile.ps1 -Variant Stock|RHS|EveronWCSRHS`: production **PASS**, labels
+  `final-stock`, `final-rhs`, `fixes-production`; native exit 0 и успешная
+  validation. Stage с regression probes также компилируется отдельно.
+- `runtime.ps1` вызывает только `tools/Start-AICFRuntime.ps1 -Role Server`
+  с fresh profile, `-Difficulty Hard`, `-RepositoryRoot <stage>` и
+  `-aicfRandomGarrisonProbe full|plan`. Сохранены argv/manifests/exit codes и
+  полные остановленные логи; `stage-source-hashes.json` сверяет 207 production
+  scripts с checkout. `bridge.ps1` использует тот же launcher и отдельный stage.
+- `Test-FIARandomGarrisonLog.ps1 -LogPath ... [-PlanOnly]` требует
+  `ROSTER_READY` также для plan. Synthetic positive — PASS; отрицательная копия
+  без readiness — ожидаемый FAIL. SCRIPT/fatal errors не подавляются.
+
+Финальные full-прогоны, все native exit 0, целевой probe и полный SCRIPT/fatal
+gate — **PASS**; PMC/VM/BridgeRoad errors отсутствуют:
+
+| Variant / tag | Checks / failures | Машины READY | Бойцы с проверенным PMC armament | Pending checks / failures |
+|---|---|---|---|---|
+| EveronWCSRHS / fixed2 | 244 / 0 | 75 / 75 | 289 / 289 | 250 / 0 |
+| EveronNorthWCSRHS / fixed | 54 / 0 | 12 / 12 | 60 / 60 | 50 / 0 |
+| RHS / fixed | 58 / 0 | 13 / 13 | 85 / 85 | 66 / 0 |
+| EveronNorthWCSRHS / magazine-bound | 54 / 0 | 12 / 12 | 51 / 51 | 44 / 0 |
+
+Во всех четырёх прогонах отдельная fault injection подтверждает отказ
+`BoardGarrison` при pending и сохранение identity/занятых мест. Последний
+`magazine-bound` дополнительно привязывает все штатные компоненты AI в task:
+на 27 фактических местах без weapon manager получен FAIL без VM exception,
+а не ранний отказ из-за незаданного character controller/inventory.
+Его stage с окончательными fixtures прошёл compile `magazine-bound-fixture`;
+`final-stage-hashes.json` фиксирует 207 production scripts и три fixtures.
+Предыдущий full WCS `fixed1` также имел 75/75 READY, 338 проверенных бойцов
+и чистый SCRIPT gate, но ещё без fault injection и полного binding в magazine
+fixture; он не заменяет эти проверки.
+
+Три финальных plan-прогона Everon — полный gate **PASS**, `ROSTER_READY`
+предшествует завершению; число READY машин 0, как и требуется plan-режиму.
+`runtime-summary.json` сохраняет также исходные FAIL: семь PMC в diagnostic
+baseline и преждевременные plan-логи. `regression-summary.json` содержит счётчики
+дополнительных probes. Полные Resource/WORLD/native `(E)` сохранены: SCRIPT/fatal
+PASS не означает error-free verdict для всех подсистем движка.
+
+Промежуточная компиляция `fixes-fixture-injection` выявила неверный порядок
+modded-классов теста; fixture переименован в `AICF_RHSPMCGarrisonProbe.c`, после
+production equipment source, и повторно прошёл compile/runtime.
+
+Затронутые файлы: `AICF_RHSPMCEquipment.c`, новый
+`Integration/AICF_AIMagazineSwitchGuard.c`, Stage4/RHS static audits,
+`Test-FIARandomGarrisonLog.ps1`, `AICF_FIARandomGarrisonProbe.c`; новые fixtures
+`AICF_MagazineGuardProbe.c`, `AICF_RHSPMCGarrisonProbe.c`,
+`AICF_BridgeLifecycleProbe.c`; заметки ARCHITECTURE, FIA_GARRISONS,
+TEST_FIXTURES и этот отчёт. Client/JIP, ручная UI-проверка, packaged build,
+длительный soak и отдельный combat gate — **NOT RUN**.
+Локальные Markdown links и `git diff --check` — PASS. Свои тестовые процессы
+завершены, `stage/` и `bridge-stage/` удалены; profiles/logs и helpers сохранены
+в evidence. Push, merge и публикация не выполнялись.
+
+### Исходная реализация
+
 Ветка `codex/issue-25-fia-random-garrisons` от обновлённого `origin/main`,
 baseline `fe69fca69e5ab1d0e407ebcc02bc2af68ca6ddd6`, исходное дерево чистое.
 Game/Server/Workbench — 1.8.0.13. Правила состава, fallback без танков и
