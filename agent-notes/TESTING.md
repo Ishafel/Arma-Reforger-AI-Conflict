@@ -4,6 +4,31 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## Оформление 0.1.27 — 2026-10-12
+
+Отдельная ветка `codex/release-0.1.27` от обновлённого `origin/main` `1bb3b35`;
+исходное дерево чистое. Добавлены `releases/0.1.27.md` и ссылки в README/
+указателе. Игровой код, headers и зависимости не менялись. Состав сверен
+с `git log 0.1.26..HEAD`, diff и сохранёнными результатами изменений ниже.
+В патчноутах отражены итоговый Carl Gustaf вместо промежуточного M72,
+исправленный `STAGE4_ATTACKED_BASES`, открытый sparse-slot restore FAIL
+и границы каждого targeted PASS.
+
+Свежие проверки: `git diff --check` до/после — **PASS/0**; проверка локальных
+Markdown-ссылок до/после — **PASS/0**, включая наличие целей в Git для чистого
+checkout. Команда: `pwsh -NoProfile -File
+.codex-runtime/release-0.1.27/Verify-ReleaseDocs.ps1 -Phase before|after`.
+Evidence: `.codex-runtime/release-0.1.27/` — helper, исходный SHA/status,
+история релиза и полные `before-check.txt`/`after-check.txt`.
+Baseline failures выбранных проверок документации отсутствуют; исторические
+runtime/static failures сохранены в патчноутах, заново не проверялись.
+
+Полный offline набор, Workbench, server/client runtime, JIP, ручные проверки,
+soak и packaged build при оформлении — **NOT RUN**. Старые PASS не являются
+новым прогоном релиза. Push, merge, Git-тег и Workshop upload не выполнялись.
+По запросу пользователя тег `0.1.27` создаётся на итоговом commit `main`
+после слияния патчноутов отдельным действием.
+
 ## Issue #28: начальная погода — 2026-10-12
 
 Ветка `codex/issue-28-random-weather` от актуального `origin/main` `44cead0`,
