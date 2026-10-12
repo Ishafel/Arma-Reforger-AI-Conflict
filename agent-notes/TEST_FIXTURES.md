@@ -77,12 +77,20 @@ US/USSR и каждый готовый экипаж (три essential, нет д
 
 `AICF_InfantryATProbe.c`, `-aicfATProbe 1`: отдельный WCS+RHS stage,
 North Easy/Medium/Hard. После штатного ROSTER_READY создаёт по одному полному
-отряду каждой стороны и по два one-member donor (позиции 8/9) через production
-resolver и async spawn. Проверяет все 24 prefab/роли/WCS-комплекта, 1/3/3 ПТ
+отряду каждой стороны, по два one-member donor (индексы 8/9) и US donors 6/7 через production
+resolver и async spawn. Проверяет все 26 prefab/роли/WCS-комплекта, 1/3/3 ПТ
 в каждом полном отряде, заряженное оружие `WT_ROCKETLAUNCHER` у каждого ПТ,
+дополнительные M72 у US 6/7 и неизменность inventory при повторном ApplyWCS,
 соответствие stock/RHS mappings выбранной сложности и отказ для FIA. Пишет фактические prefab,
 loaded/spare и завершает сервер через RequestClose. Не моделирует оплату,
 переход donor в боевой отряд, стрельбу, client/JIP или пользовательский шаблон.
+
+`AICF_USExtraLauncherProbe.c`, `-aicfExtraLATProbe 1`: отдельный WCS+RHS stage.
+После ROSTER_READY строит 20 стандартных draft, проверяет комплекты всех ролей,
+точный M72 с одним зарядом во втором слоте US 6/7, прежний пустой слот РФ 6/7
+и полную signature после Capture/Restore двух усиленных комплектов (26 checks).
+Печатает слоты всех ролей и завершает сервер. Не включать одновременно с другими
+самозавершающимися probes; клиент, стрельба и file Save не проверяются.
 
 `AICF_FIAGarrisonRecoveryProbe.c`, `-aicfRecoveryProbe 1`: только отдельный stage,
 Hard North WCS+RHS. Проверяет metadata трёх мест экипажа, геометрию границы

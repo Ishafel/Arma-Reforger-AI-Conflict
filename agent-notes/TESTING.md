@@ -4,6 +4,69 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## Два дополнительных M72 у US — 2026-10-12
+
+Ветка `codex/us-at-ammunition` от `1cae572`, исходное дерево чистое.
+Изменены WCS `AICF_WCSInfantryKit`/`AICF_WCSInfantryEquipment`, WCS static audit,
+fixtures `AICF_InfantryATProbe`/`AICF_WCSInfantryProbe`; добавлен
+`AICF_USExtraLauncherProbe`. README, WCS README, GAMEPLAY и TEST_FIXTURES
+обновлены вместе с кодом. Контракт: USMC TL/AMG получают по M72 с одним зарядом
+во втором native primary slot, без изменения ролей и основного оружия.
+Evidence: `.codex-runtime/us-at-ammunition/`.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-WCSIntegrationStatic.ps1,Test-RHSIntegrationStatic.ps1,Test-AILoadoutStatic.ps1,Test-InfantryRecruitmentStatic.ps1
+  -EvidenceRoot <before|after-final>`: **4 PASS / exit 0** до и после;
+  baseline failures выбранного набора отсутствуют. Первая попытка `after`
+  остановилась до audits на Git dubious ownership sandbox-пользователя;
+  повторена в штатном контексте пользователя, без изменения правил проверок.
+- Evidence `compile.ps1 -Label baseline-fixture -SourceRoot <stage>`:
+  исходный код с диагностикой — **PASS / 0**. `runtime.ps1 -Tag baseline`:
+  20 draft построены, у US/USSR 6/7 второй слот пуст; `failures=0`, native exit 0.
+- `compile.ps1 -Label final-fixture -SourceRoot <stage>` и
+  `compile.ps1 -Label final-production-wcs`: финальный stage и production
+  Workbench Validate/Compile **PASS / native exit 0**. SCRIPT/fatal — 0,
+  resource errors — 39, как в baseline. Движок/Workbench 1.8.0.13.
+- `runtime.ps1 -Tag draft-final`: **26/26 PASS**, включая точный M72/заряд,
+  неизменный второй слот РФ 6/7 и полную signature Capture/Restore у US 6/7.
+- `runtime.ps1 -Tag live-hard -Probe aicfATProbe -Difficulty Hard`:
+  **104/104 PASS**; `-Tag live-easy -Probe aicfATProbe -Difficulty Easy`:
+  **96/96 PASS**. По 26 живых бойцов: полные US/USSR roster и donors,
+  включая US 6/7. Prefab, роли, WCS kit, заряженное ПТ-оружие, повторный Apply,
+  mappings stock/RHS и FIA reject прошли. US Hard: M72 у индексов 3/6/7/8/9;
+  Easy: 3/6/7. РФ Hard сохранила РПГ-7 с `loaded=1 spare=2` у 3/8/9.
+- `runtime.ps1 -Tag retention -Probe aicfWCSInfantryProbe -Difficulty Hard`:
+  **20/20 PASS** для WCS roster (прочие защищённые предметы, одинаковые комплекты
+  редактора/бойца, catalog, повторная выдача); PMC **13/13**, player preparation
+  **2/2**, пять cache guards — **PASS**. Это серверная проверка preparation,
+  а не подключение клиента.
+
+Все runtime команды используют canonical `tools/Start-AICFRuntime.ps1`,
+Variant `EveronNorthWCSRHS`, отдельный stage/fresh profile,
+`-addr 127.0.0.1:2301 -<Probe> 1 -aicfRequirePlayerForResult 0`.
+Manifests и аргументы сохранены в launcher outputs. Полные остановленные логи,
+все E/F и анализ находятся в evidence; `collect.ps1` формирует
+`runtime-summary.json`/`compile-summary.json`. В baseline/draft/Hard/Easy/retention
+native exit 0, listener/ROSTER_READY/Game destroyed подтверждены;
+SCRIPT/fatal — 0, прочие resource/shutdown E/F — 233, как до изменения.
+Общий error-free gate не заявляется. `final-stage-hashes.json`: 282
+production/resource файла, 0 расхождений; три fixture hashes сохранены отдельно.
+Финальные console logs относительно evidence:
+
+- `profile-EveronNorthWCSRHS-draft-final/logs/logs_2026-10-12_14-49-40/console.log`;
+- `profile-EveronNorthWCSRHS-live-hard/logs/logs_2026-10-12_14-50-51/console.log`;
+- `profile-EveronNorthWCSRHS-live-easy/` — точный путь в `runtime-summary.json`;
+- `profile-EveronNorthWCSRHS-retention/logs/logs_2026-10-12_14-52-43/console.log`.
+
+Тестовые серверы завершились сами, собственный stage удалён.
+`git diff --check` — **PASS**. Полные evidence logs сохранены.
+
+**NOT RUN:** реальная стрельба по бронетехнике, client/UI/JIP, пользовательские
+шаблоны через Save/Apply, переход donor в отряд и оплата, отдельный Medium runtime,
+packaged build и soak. Известный sparse-slot restore FAIL из проверки общего
+содержимого разгрузки не затронут; новый Capture/Restore не удаляет предметы
+из середины native-кармана и не доказывает исправление этого ограничения.
+Текущая пользовательская игровая сессия остаётся на прежнем коде до перезапуска.
+
 ## Категории основного и второго оружия — 2026-10-12
 
 Ветка `codex/loadout-weapon-categories` от `378f257`, исходное дерево чистое;

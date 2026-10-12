@@ -60,6 +60,11 @@ $patches = Get-Content "$addon/Scripts/Game/AIConflictArlandWCSRHS/AICF_WCSPatch
 $inventory = Get-Content (Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/Loadouts/AICF_LoadoutInventory.c') -Raw
 $editor = Get-Content (Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/UI/AICF_LoadoutEditor.c') -Raw
 Check 'WCS_SHARED_DEFAULT' ($inventory -match 'PrepareDefaultLoadout[\s\S]*Signature\(m_Character[\s\S]*Replay\(m_Character' -and $profile.Contains('AICF_WCSInfantryEquipment.BuildDefault'))
+Check 'WCS_EXTRA_LAT_SCOPE' ($kit.Contains('faction == "RHS_USAF"') -and $kit.Contains('(HasRole(source, "TL") || HasRole(source, "AMG"))') -and $kit.Contains('Launcher_M72A3.et'))
+Check 'WCS_EXTRA_LAT_LOCAL' ($equipment -match 'ArmAdditionalLauncher\(IEntity model[\s\S]*model.GetWorld\(\) == GetGame\(\).GetWorld\(\).*return false')
+Check 'WCS_EXTRA_LAT_SLOT' ($equipment.Contains('slot.GetWeaponSlotIndex() == 1 && slot.GetWeaponSlotType() == "primary"') -and $equipment.Contains('info.GetStorage().GetOwner() == model'))
+Check 'WCS_EXTRA_LAT_NO_REPLACE' ($equipment.Contains('if (slot.GetAttachedEntity()) return HasAdditionalLauncher(model, faction, source)') -and $equipment.Contains('InsertLocal(prefab, slot.GetStorage(), slot.GetID(), manager)'))
+Check 'WCS_EXTRA_LAT_VALIDATED' ($equipment.Contains('if (!HasAdditionalLauncher(model, faction, source)) return false') -and $equipment.Contains('weapon.GetCurrentMuzzle().GetAmmoCount() == 1'))
 Check 'WCS_PATCH_BASELINE' ($equipment.Contains('AICF_WCSPatches.ApplyLocal') -and $patches.Contains('IsPatchSlot') -and $patches.Contains('slot.GetAttachedEntity()') -and $patches.Contains('model.GetWorld() == GetGame().GetWorld()'))
 Check 'WCS_COMPACT_BACKPACK' ($kit.Contains('Backpack_Rush12_MC.et') -and $kit.Contains('Backpack_Rush12_Olive.et') -and $kit -notmatch '6sh118|FILBE|ronin_1_AOR2')
 Check 'WCS_ROLE_BACKPACKS' ($kit.Contains('static bool NeedsBackpack') -and ([regex]::Matches($kit, 'if \(NeedsBackpack\(faction, source\)\) clothes.Insert').Count -eq 2))

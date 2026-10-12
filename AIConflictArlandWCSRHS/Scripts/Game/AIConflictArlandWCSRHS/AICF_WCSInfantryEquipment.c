@@ -197,11 +197,56 @@ class AICF_WCSInfantryEquipment : AICF_RHSPMCEquipment
 
 			if (!AddMagazinesLocal(model, manager, magazine, count)) return false;
 		}
-		return !muzzles.IsEmpty();
+		return !muzzles.IsEmpty() && ArmAdditionalLauncher(model, faction, source);
+	}
+
+	protected static InventoryStorageSlot AdditionalLauncherSlot(IEntity model)
+	{
+		if (!model) return null;
+		array<Managed> components = {};
+		model.FindComponents(WeaponSlotComponent, components);
+		foreach (Managed component : components)
+		{
+			WeaponSlotComponent slot = WeaponSlotComponent.Cast(component);
+			if (slot && slot.GetWeaponSlotIndex() == 1 && slot.GetWeaponSlotType() == "primary")
+			{
+				InventoryStorageSlot info = slot.GetSlotInfo();
+				if (info && info.GetStorage() && info.GetStorage().GetOwner() == model)
+					return info;
+			}
+		}
+		return null;
+	}
+
+	protected static bool ArmAdditionalLauncher(IEntity model, FactionKey faction, ResourceName source)
+	{
+		if (!model || model.GetWorld() == GetGame().GetWorld()) return false;
+		ResourceName prefab = AICF_WCSInfantryKit.AdditionalLauncher(faction, source);
+		if (prefab.IsEmpty()) return true;
+		InventoryStorageSlot slot = AdditionalLauncherSlot(model);
+		if (!slot) return false;
+		// Не заменяем существующее оружие; повторный вызов не создаёт дубль.
+		if (slot.GetAttachedEntity()) return HasAdditionalLauncher(model, faction, source);
+		InventoryStorageManagerComponent manager = InventoryStorageManagerComponent.Cast(model.FindComponent(InventoryStorageManagerComponent));
+		if (!manager || !AICF_LoadoutInventory.InsertLocal(prefab, slot.GetStorage(), slot.GetID(), manager)) return false;
+		return HasAdditionalLauncher(model, faction, source);
+	}
+
+	static bool HasAdditionalLauncher(IEntity model, FactionKey faction, ResourceName source)
+	{
+		ResourceName prefab = AICF_WCSInfantryKit.AdditionalLauncher(faction, source);
+		if (prefab.IsEmpty()) return true;
+		InventoryStorageSlot slot = AdditionalLauncherSlot(model);
+		if (!slot || !slot.GetAttachedEntity()) return false;
+		IEntity item = slot.GetAttachedEntity();
+		if (SCR_ResourceNameUtils.GetPrefabName(item) != prefab) return false;
+		BaseWeaponComponent weapon = BaseWeaponComponent.Cast(item.FindComponent(BaseWeaponComponent));
+		return weapon && weapon.GetCurrentMuzzle() && weapon.GetCurrentMuzzle().GetAmmoCount() == 1;
 	}
 
 	static bool ValidateWCS(IEntity model, FactionKey faction, ResourceName source)
 	{
+		if (!HasAdditionalLauncher(model, faction, source)) return false;
 		if (!HasEquippedArmor(model, faction)) return false;
 		BaseWeaponComponent weapon = AICF_RHSPMCArmament.Primary(model);
 		if (!weapon || SCR_ResourceNameUtils.GetPrefabName(weapon.GetOwner()) != AICF_WCSInfantryKit.Weapon(faction, source)) return false;

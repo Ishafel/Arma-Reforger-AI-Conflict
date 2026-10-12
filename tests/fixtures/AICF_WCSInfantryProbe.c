@@ -166,6 +166,9 @@ modded class AICF_MatchController
 				array<string> actual = {};
 				bool built = draft.BuildEquipment(source);
 				if (built) AICF_WCSProtectedItems(draft.GetCharacter(), expected);
+				ResourceName additionalLauncher = AICF_WCSInfantryKit.AdditionalLauncher(faction, source);
+				if (built && !additionalLauncher.IsEmpty()) expected.Insert(additionalLauncher);
+				expected.Sort();
 				AICF_WCSProtectedItems(character, actual);
 				bool retained = built && expected.Count() == actual.Count();
 				foreach (int i, string value : expected)
@@ -195,6 +198,7 @@ modded class AICF_MatchController
 					before == AICF_LoadoutInventory.Signature(editor.GetCharacter(), catalog, ignored);
 				editor.Clear();
 				array<ResourceName> required = {AICF_WCSInfantryKit.Weapon(faction, source)};
+				if (!additionalLauncher.IsEmpty()) required.Insert(additionalLauncher);
 				AICF_WCSInfantryKit.Clothes(faction, source, required);
 				bool catalogComplete = true;
 				foreach (ResourceName prefab : required)

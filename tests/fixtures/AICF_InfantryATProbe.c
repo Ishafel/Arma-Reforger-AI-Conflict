@@ -79,13 +79,18 @@ modded class AICF_MatchController
 				AICF_ATSpawn(faction, -1);
 				AICF_ATSpawn(faction, 8);
 				AICF_ATSpawn(faction, 9);
+				if (faction == m_USFaction)
+				{
+					AICF_ATSpawn(faction, 6);
+					AICF_ATSpawn(faction, 7);
+				}
 			}
 			return;
 		}
 		int total;
 		foreach (SCR_AIGroup pending : m_aAICFATGroups) total += AICF_GroupRuntime.CountAliveAgents(pending);
-		if (total < 24 && m_iAICFATTicks < 90) return;
-		AICF_ATCheck("ROSTER_24", total == 24);
+		if (total < 26 && m_iAICFATTicks < 90) return;
+		AICF_ATCheck("ROSTER_26", total == 26);
 		AICF_RHSContentProfile baseline = new AICF_RHSContentProfile();
 		AICF_ContentProfile stock = new AICF_ContentProfile();
 		foreach (int groupIndex, SCR_AIGroup group : m_aAICFATGroups)
@@ -113,6 +118,15 @@ modded class AICF_MatchController
 				ResourceName actual = SCR_ResourceNameUtils.GetPrefabName(member);
 				AICF_ATCheck("ROLE_" + tag, role == expectedRole && suffixes.Count() == 1 && actual.EndsWith(suffixes[0]) && actual == expected);
 				AICF_ATCheck("WCS_KIT_" + tag, member.m_bAICFWCSKitApplied && AICF_WCSInfantryEquipment.ValidateWCS(member, member.GetFactionKey(), actual));
+				if (stable == "US" && (index == 6 || index == 7))
+				{
+					AICF_ATCheck("EXTRA_LAT_LOADED_" + tag, AICF_ATLoaded(member, stable, index));
+					AICF_LoadoutCatalog loadoutCatalog = new AICF_LoadoutCatalog(SCR_CampaignFaction.Cast(group.GetFaction()));
+					int ignored;
+					string before = AICF_LoadoutInventory.Signature(member, loadoutCatalog, ignored);
+					AICF_ATCheck("EXTRA_LAT_IDEMPOTENT_" + tag, AICF_WCSInfantryEquipment.ApplyWCS(member, group) &&
+						before == AICF_LoadoutInventory.Signature(member, loadoutCatalog, ignored));
+				}
 				if (role == "ANTI_TANK")
 				{
 					atCount++;
@@ -124,7 +138,7 @@ modded class AICF_MatchController
 			if (donorIndex >= 0)
 			{
 				expectedAT = 0;
-				if (reinforced) expectedAT = 1;
+				if (reinforced && donorIndex >= 8) expectedAT = 1;
 			}
 			AICF_ATCheck("AT_COUNT_" + stable + "_" + groupIndex, atCount == expectedAT);
 			array<string> stockSuffixes = {};
