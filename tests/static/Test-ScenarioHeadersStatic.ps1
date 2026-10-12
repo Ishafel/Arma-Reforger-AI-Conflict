@@ -86,6 +86,12 @@ if ($failures.Count -eq 0) {
     }
 
     foreach ($scenario in @($stockHeader, $everonHeader, $rhsHeader, $rhsEveronHeader)) {
+        Require-Match 'SCENARIO_RANDOM_WEATHER' $scenario `
+            '(?m)^\s*m_bRandomStartingWeather\s+1\s*$' `
+            'Base headers must enable native random starting weather for inherited variants and difficulties'
+        Require-Match 'SCENARIO_WEATHER_PROGRESSION' $scenario `
+            '(?m)^\s*m_bRandomWeatherChanges\s+1\s*$' `
+            'Random initial weather must retain natural weather progression instead of locking the selected state'
         Require-Match 'SCENARIO_MENU_VISIBILITY' $scenario `
             'm_bShowInScenarioMenu\s+1' `
             'Scenario header must be visible in the in-game Scenarios menu'
