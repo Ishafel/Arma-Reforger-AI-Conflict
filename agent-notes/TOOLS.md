@@ -67,6 +67,12 @@ Enforce fixture не входят в автоматическую матрицу
 
 ## Рабочие утилиты
 
+Противотанковая тактика: `tests/contracts/Test-AntiTankContracts.ps1` входит
+в offline runner и проверяет границы новой политики с отрицательными мутациями.
+`tests/log-audits/Test-AntiTankLog.ps1 -LogPath <полный остановленный console.log>`
+проверяет выстрел на дальней дистанции и SCRIPT/fatal gate; fixture и ограничения
+описаны в [TEST_FIXTURES.md](TEST_FIXTURES.md).
+
 | Файл | Вход, результат и побочные эффекты |
 |---|---|
 | [Start-AICFRuntime.ps1](../tools/Start-AICFRuntime.ps1) | `-Role`, `-Variant`; foreground server/client, свежий profile, manifest и readiness. Полный контракт в DEVELOPMENT. `-DryRun` только строит план |

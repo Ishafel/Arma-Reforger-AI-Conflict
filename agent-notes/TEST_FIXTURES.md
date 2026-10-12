@@ -1,5 +1,25 @@
 # Runtime fixture: каталог и применение
 
+`AICF_AntiTankProbe.c`, `-aicfAntiTankProbe 1`: отдельный Core stage, северный
+Everon, Hard. Создаёт одного ПТ-бойца USSR, переносит его и готовый FIA БТР
+на выбранную линию 350 м, назначает defend waypoint стрелку, отключает damage
+стрелка и AI экипажа мишени; физика БТР остаётся в `COLLISION`, чтобы он не
+скатывался после переноса. Штатный selector и perception остаются включены.
+Фиксирует распознавание, native/effective range и реальное событие
+`OnWeaponFired` с projectile и текущей целью. Завершается после выстрела либо
+через 180 тиков после ROSTER_READY; успешное раннее завершение также требует
+проверок aim/move. `AICF_ATProbeAim` сравнивает допуски на одних и тех же
+реальных observer/target с подключённой и отключённой policy dependency;
+винтовочный допуск должен совпасть. `AICF_ATProbeMove` вызывает production task
+на отдельном `SCR_AICombatMoveState`: ожидание до 10 с и запрос 2 с с остановкой
+для прицеливания. Запрос не отправляется живому AI и не доказывает проходимость
+маршрута. Callback и weapon invoker снимаются при
+завершении/Stop. Сам расход магазина не считается выстрелом.
+`Test-AntiTankLog.ps1 -LogPath ...` требует фактический projectile на 300–400 м
+и полный остановленный лог, а также оба runtime contract markers. Попадания,
+движущаяся цель, client/JIP — отдельные
+проверки; этот probe их не подтверждает. Политика: [ANTI_TANK_TACTICS.md](ANTI_TANK_TACTICS.md).
+
 `AICF_FIARandomGarrisonProbe.c`, `-aicfRandomGarrisonProbe full|plan`: текущий probe
 issue #25 для любого Variant/сложности. В отдельном stage проверяет production
 plan, все три composition rules/fallback, детерминизм PRNG и контрольную

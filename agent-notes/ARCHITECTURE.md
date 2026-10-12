@@ -98,6 +98,11 @@ MatchController. Immutable snapshot реплицируется на stock base. 
 владеет PMC readiness перед обоими входами посадки (`Board` и `BoardGarrison`);
 перенос экипировки и vehicle lifecycle остаются в своих доменах.
 
+`AICF_AntiTankPolicy` меняет дальность выбранного РПГ, допуск наведения и
+локальные combat move requests только у пешего AI против бронетехники.
+Владение infantry waypoint остаётся у OrderPlanner, movement — у штатного
+combat move state. Параметры и gates: [ANTI_TANK_TACTICS.md](ANTI_TANK_TACTICS.md).
+
 Recruitment прогнозирует полную стоимость и время набора с учётом спроса других
 визитов, но не резервирует supplies. Оплата проверяется перед каждым transfer:
 [точная модель и evidence](RECRUITMENT_SUPPLY_PLANNING.md).

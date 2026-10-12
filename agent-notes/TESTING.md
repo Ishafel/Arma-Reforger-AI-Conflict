@@ -4,6 +4,72 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## Тактика РПГ — 2026-10-12
+
+Продолжение той же ветки от `71ab985`, исходное дерево чистое. Реализация и
+границы: [ANTI_TANK_TACTICS.md](ANTI_TANK_TACTICS.md). Evidence:
+`.codex-runtime/at-engagement/`; результаты ниже относятся к этому изменению.
+
+Команды и verdict:
+
+- `tools/Invoke-AICFChecks.ps1 -Name` с `Test-AICombatInputContracts.ps1`,
+  `Test-RHSIntegrationStatic.ps1`, `Test-Stage4Static.ps1`,
+  `Test-WCSIntegrationStatic.ps1`: baseline `before/` — **4 PASS**.
+  `after-final/` повторяет их и добавляет `Test-AntiTankContracts.ps1` —
+  **5 PASS**. После добавления проверки возврата к waypoint новый audit
+  повторён в `after-waypoint-contract/`: **PASS**, 13 отрицательных мутаций.
+- Evidence helper `compile.ps1 -Variant Stock|RHS|EveronNorthWCSRHS`, labels
+  `final-stock-waypoint`, `final-rhs`, `final-wcs`: production Workbench
+  Validate/Compile **PASS**, native exit 0, `Script validation successful`.
+  Окончательный stage с fixture отдельно прошёл `fixture10`, exit 0.
+- `tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthWCSRHS
+  -Difficulty Hard -RepositoryRoot <stage> -ProfileRoot <fresh-profile>
+  -AdditionalArguments @('-aicfAntiTankProbe','1','-aicfRequirePlayerForResult','0')`:
+  `profile-probe9` и `profile-probe10`, native exit **0**, `ROSTER_READY`,
+  штатный `Game destroyed`.
+  Сохранены полный launcher output с `AICF_RUNTIME_MANIFEST_JSON`, полные
+  console/script/error logs и `final-stage-hashes.json`.
+- `tests/log-audits/Test-AntiTankLog.ps1 -LogPath <probe10-console>`:
+  целевой engagement и SCRIPT/fatal gate **PASS**. AI самостоятельно распознал
+  `UnitType_VehicleMedium` как `ENEMY`, выбрал РПГ и выпустил реальный
+  `RHS_AmmoRocket_PG7VL` с **347,651 м**; предыдущий probe9 подтвердил выстрел
+  с **348,603 м**. Accessor вернул 400 м при native
+  значении 10000 м; native minimum в selector — 14 м. Ручного назначения target,
+  подмены perception/skill или команды на выстрел в fixture нет.
+  В probe10 отдельный aim task на тех же observer/target подтвердил допуск
+  РПГ `0,25 -> 0,125`, винтовки `0,5 -> 0,5` при angular size 1°.
+  Production move task на отдельном move state подтвердил ожидание на 9 с,
+  готовность перемещения на 10 с и request длительностью 2 с с `CROUCH` и
+  прицеливанием после остановки. Это проверка построения запроса, не маршрута.
+- `check-log-audit.ps1` в evidence: synthetic positive PASS; отсутствие projectile,
+  незавершённый shutdown, близкий выстрел, отрицательный move marker и SCRIPT
+  error дают ожидаемый FAIL.
+
+Общий runtime gate **не полностью зелёный**: probe9/10 содержат по 233 строки `(E/F)`,
+как завершённые диагностические probe3/6/7/8. Это resource/addon/navmesh errors и
+shutdown leak `ui/fonts/robotomono_msdf_28.edds`; полные сообщения сохранены, а не
+исключены из логов. `PMC_EQUIPMENT_FAILED`, `NULL weapMgr`, SCRIPT/VM/fatal и
+`BridgeRoad` в успешных probe9/10 не обнаружены. Старые общие FAIL не объявляются
+исправленными этим изменением.
+
+Неуспешные попытки сохранены: probe1 не стартовал replication на занятом порту;
+probe2/4/5 остановлены при отладке стенда (не PASS); probe3/7/8 завершились без
+выстрела из-за видимости/нераспознанной цели, probe6 не нашёл линию для размещения.
+В probe8 перенесённый БТР скатился со склона; окончательный fixture фиксирует
+мишень в `SimulationState.COLLISION`, оставляя collision и штатное восприятие.
+`registration-negative` — намеренная ошибка типа в stage, ожидаемый compile FAIL;
+ошибочная строка удалена до последующих запусков. Это диагностика регистрации
+fixture, а не production compile failure.
+
+**NOT RUN:** сравнение hit rate до/после, подтверждение попадания, движущаяся
+бронецель, отдельный runtime-тест обхода препятствия/выхода без укрытия,
+стрельба stock/RHS и multiplayer client/JIP. Статические guards и compile не
+заменяют эти проверки. Клиентский прежний disconnect `REPLICATION/FLOODED` с
+последующей diagnostic assertion этим серверным probe не проверялся;
+evidence остаётся в `.codex-runtime/north-wcs-play-20261012-01/disconnect-114020/`.
+Прежний игровой сервер остановлен с явного разрешения пользователя; полные
+логи — `north-wcs-play-20261012-01/stopped-server/` внутри `.codex-runtime/`.
+
 ## Issue #25: случайные гарнизоны — 2026-10-12
 
 ### Дополнительное исправление ошибок проверок и runtime
