@@ -40,7 +40,7 @@ class AICF_FIAStrongpointRadioSetup
 		array<int> headquarters = {};
 		array<int> candidates = {};
 		AICF_FIAStrongpointPolicy.Collect(graph, headquarters, candidates);
-		if (!candidates.IsEmpty()) return true;
+		if (AICF_FIAStrongpointPolicy.IsGraphReady(graph, headquarters, candidates)) return true;
 		// Randomized Everon HQs могут начинать в разных компонентах. Сокращение
 		// ranges их не соединит: сначала создаём минимальные физические bridges.
 		array<float> originalRanges = {};
@@ -56,8 +56,10 @@ class AICF_FIAStrongpointRadioSetup
 			return false;
 		}
 		AICF_FIAStrongpointPolicy.Collect(graph, headquarters, candidates);
-		if (!candidates.IsEmpty()) return true;
-		AICF_Stage1Diagnostics.Warning("FIA_STRONGPOINT_RADIO_SETUP", "reason=NO_ELIGIBLE_NODE action=TRY_BOUNDED_RANGE_REDUCTION");
+		if (AICF_FIAStrongpointPolicy.IsGraphReady(graph, headquarters, candidates)) return true;
+		string reason = "NO_ELIGIBLE_NODE";
+		if (!candidates.IsEmpty()) reason = "GRAPH_NOT_READY";
+		AICF_Stage1Diagnostics.Warning("FIA_STRONGPOINT_RADIO_SETUP", string.Format("reason=%1 action=TRY_BOUNDED_RANGE_REDUCTION", reason));
 		if (headquarters.Count() != 2) { Restore(bases, originalRanges, originalDefaults); return false; }
 		foreach (SCR_CampaignMilitaryBaseComponent candidate : objectives)
 		{
@@ -84,20 +86,7 @@ class AICF_FIAStrongpointRadioSetup
 			SCR_RadioCoverageSystem.UpdateAll(true);
 			graph.Build(bases, objectives);
 			AICF_FIAStrongpointPolicy.Collect(graph, headquarters, candidates);
-			bool connected = applied && !candidates.IsEmpty();
-			for (int i; connected && i < graph.GetNodeCount(); i++)
-			{
-				if (!AICF_FIAStrongpointPolicy.Reachable(graph, 0, i)) connected = false;
-			}
-			foreach (int hqId : headquarters)
-			{
-				bool exit;
-				foreach (int next : graph.GetNode(hqId).GetOutgoingNodeIds())
-				{
-					if (graph.GetNode(next).IsObjective() && !headquarters.Contains(next)) exit = true;
-				}
-				if (!exit) connected = false;
-			}
+			bool connected = applied && AICF_FIAStrongpointPolicy.IsGraphReady(graph, headquarters, candidates);
 			if (connected)
 			{
 				for (int i; i < changed.Count(); i++)

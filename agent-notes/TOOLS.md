@@ -30,6 +30,10 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Единый offline запуск
 
+`tests/contracts/Test-FIAStrongpointGraphContracts.ps1` проверяет общий graph gate
+в трёх успешных путях radio setup и в Hard planner. Шесть отрицательных мутаций
+отклоняют bypass; поведение графа отдельно проверяет `AICF_FIARandomGarrisonProbe`.
+
 Из корня checkout:
 
 ```powershell

@@ -4,6 +4,52 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## PR #26: полный graph gate усиленной точки — 2026-10-12
+
+Исправление review P1 в той же ветке от `f177309`, исходное дерево чистое.
+Evidence: `.codex-runtime/issue25-graph-review/`. `Eligible` проверял только
+компоненту кандидата, поэтому оба ранних выхода radio setup могли принять
+изолированную objective или HQ без исходящего ребра. Новый общий `IsGraphReady`
+проверяет весь граф и оба HQ exits во всех трёх успешных путях setup. Hard
+planner повторяет gate: отказ setup больше нельзя обойти через сохранённого
+кандидата после rollback.
+
+- `tools/Invoke-AICFChecks.ps1 -Name` с FIARandomGarrisonContracts,
+  FIAGarrisonContracts, EveronNorthStatic, WCSIntegrationStatic:
+  `before/` — **4 PASS**, `after-final/` с новым FIAStrongpointGraphContracts —
+  **5 PASS**. Новый audit содержит шесть отрицательных мутаций; на исходниках
+  `f177309` даёт ожидаемый **FAIL** (`baseline-regression.txt`, exit 1).
+  Промежуточный `after/` сохранён: проверка диагностической строки ошибочно
+  искала её в code-only тексте аудитора; исправлена проверка строки, не production.
+- Evidence `compile.ps1 -Variant Stock|RHS|EveronNorthWCSRHS`, labels
+  `production-stock`, `production-rhs`, `production-wcs`: Workbench
+  Validate/Compile **PASS**, native exit 0. Отдельный stage с обновлённым
+  `AICF_FIARandomGarrisonProbe.c` — `fixture`, **PASS**.
+- `runtime.ps1 -Variant <variant> -Mode plan -Tag graph-fixed` вызывает только
+  `tools/Start-AICFRuntime.ps1 -Role Server -Difficulty Hard` с fresh profile и
+  `-aicfRandomGarrisonProbe plan`. `Test-FIARandomGarrisonLog.ps1 -PlanOnly`
+  на полных остановленных логах: **PASS**, native exit 0 во всех трёх запусках.
+
+| Variant | Checks / failures | SCRIPT/fatal gate | Сохранённые native/resource `(E/F)` |
+|---|---|---|---|
+| Stock | 48 / 0 | PASS | 14 |
+| Everon | 171 / 0 | PASS | 47 |
+| EveronNorthWCSRHS | 43 / 0 | PASS | 233 |
+
+В каждом запуске проверены шесть synthetic graph cases: пригодный кандидат с
+изолированной целью; исправный связный граф; HQ только с входящими рёбрами;
+HQ с выходом только к другому HQ; пустой список кандидатов; null graph.
+`LIVE_GRAPH_READY` отдельно подтверждает готовность реального Hard graph.
+`runtime-summary.json` содержит пути полных логов, `final-stage-hashes.json` —
+совпадение 245 production/fixture/resource files со stage. Manifest/argv/exit
+сохранены; временный stage удалён, тестовые процессы завершены.
+
+Общий error-free runtime gate не заявляется: native/resource baseline выше
+сохранён. Full spawn/boarding, бой, client/JIP и остальные шесть вариантов
+сценария в этом исправлении — **NOT RUN**; прежние результаты не повторно
+обозначены как свежие. Изменены policy, radio setup, planner, graph audit,
+существующий runtime fixture и соответствующие агентские заметки.
+
 ## Тактика РПГ — 2026-10-12
 
 Продолжение той же ветки от `71ab985`, исходное дерево чистое. Реализация и

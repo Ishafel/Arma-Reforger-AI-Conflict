@@ -88,7 +88,9 @@ Waypoint сначала снимается с группы, затем удал�
 ## Соседние контракты
 
 Начальный FIA состав принадлежит `AICF_FIAGarrisonPlanner`, допустимость
-усиленной точки — `AICF_FIAStrongpointPolicy`, доступность prefab — catalog/profile.
+усиленной точки и готовность полного графа — `AICF_FIAStrongpointPolicy`, доступность
+prefab — catalog/profile. Единая проверка связности и HQ exits используется во
+всех успешных путях radio setup и повторно в Hard planner.
 Integration `AICF_FIAStrongpointRadioSetup` готовит реальный radio graph до
 MatchController. Immutable snapshot реплицируется на stock base. Подробности:
 [FIA_GARRISONS.md](FIA_GARRISONS.md).

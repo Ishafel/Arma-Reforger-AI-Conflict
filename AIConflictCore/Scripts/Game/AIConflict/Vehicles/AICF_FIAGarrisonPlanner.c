@@ -62,6 +62,12 @@ class AICF_FIAGarrisonPlanner
 				AICF_Stage3Diagnostics.Warning("FIA_STRONGPOINT_UNAVAILABLE", string.Format("nodes=%1 hqs=%2 candidates=0 action=RECONFIGURE_HQ_OR_BASE_WHITELIST", graph.GetNodeCount(), headquarters.Count()));
 				return false;
 			}
+			if (!AICF_FIAStrongpointPolicy.IsGraphReady(graph, headquarters, candidates))
+			{
+				m_sError = "STRONGPOINT_GRAPH_NOT_READY";
+				AICF_Stage3Diagnostics.Warning("FIA_STRONGPOINT_UNAVAILABLE", string.Format("nodes=%1 hqs=%2 candidates=%3 action=RECONFIGURE_HQ_OR_BASE_WHITELIST", graph.GetNodeCount(), headquarters.Count(), candidates.Count()));
+				return false;
+			}
 			m_iStrongpoint = candidates[m_Random.Next(candidates.Count())];
 			AICF_Stage3Diagnostics.Info("FIA_STRONGPOINT_SELECTED", string.Format("node=%1 candidates=%2 graph_revision=%3 seed=%4", m_iStrongpoint, candidates.Count(), graph.GetRevision(), m_iSeed));
 			if (catalog.m_aTanks.IsEmpty()) AICF_Stage3Diagnostics.Warning("FIA_GARRISON_TANK_FALLBACK", "reason=PROFILE_HAS_NO_FIA_TANK replacement=APC");

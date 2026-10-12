@@ -41,6 +41,30 @@ class AICF_FIAStrongpointPolicy
 		return true;
 	}
 
+	// Вызывается после Collect: пригодного кандидата недостаточно для всего матча.
+	static bool IsGraphReady(AICF_ObjectiveGraph graph, array<int> headquarters, array<int> candidates)
+	{
+		if (!graph || graph.GetNodeCount() == 0 || headquarters.Count() != 2 ||
+			headquarters[0] == headquarters[1] || candidates.IsEmpty()) return false;
+		for (int i; i < graph.GetNodeCount(); i++)
+		{
+			if (!Reachable(graph, 0, i)) return false;
+		}
+		foreach (int hqId : headquarters)
+		{
+			AICF_ObjectiveNode hq = graph.GetNode(hqId);
+			if (!hq) return false;
+			bool hasExit;
+			foreach (int next : hq.GetOutgoingNodeIds())
+			{
+				AICF_ObjectiveNode node = graph.GetNode(next);
+				if (node && node.IsObjective() && !headquarters.Contains(next)) hasExit = true;
+			}
+			if (!hasExit) return false;
+		}
+		return true;
+	}
+
 	static void Collect(AICF_ObjectiveGraph graph, array<int> headquarters, array<int> candidates)
 	{
 		headquarters.Clear();

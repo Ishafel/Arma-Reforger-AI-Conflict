@@ -38,6 +38,20 @@ modded class AICF_FIAGarrisonService
 		RandomCheck("HQ_EDGE_OUTBOUND", !AICF_FIAStrongpointPolicy.Eligible(graph, 4, hqs));
 		RandomCheck("DEAD_END", !AICF_FIAStrongpointPolicy.Eligible(graph, 5, hqs));
 		RandomCheck("ISOLATED", !AICF_FIAStrongpointPolicy.Eligible(graph, 6, hqs));
+		array<int> eligible = {3};
+		// Кандидат достигает обоих HQ, но 6 изолирован, а HQ 1 имеет только вход.
+		graph.Link(1, 4);
+		RandomCheck("GRAPH_DISCONNECTED_WITH_CANDIDATE", AICF_FIAStrongpointPolicy.Eligible(graph, 3, hqs) && !AICF_FIAStrongpointPolicy.IsGraphReady(graph, hqs, eligible));
+		graph.Link(5, 6);
+		RandomCheck("GRAPH_CONNECTED_WITH_HQ_EXITS", AICF_FIAStrongpointPolicy.IsGraphReady(graph, hqs, eligible));
+		graph.GetNode(1).GetOutgoingNodeIds().Clear();
+		RandomCheck("GRAPH_INBOUND_ONLY_HQ_WITH_CANDIDATE", AICF_FIAStrongpointPolicy.Eligible(graph, 3, hqs) && !AICF_FIAStrongpointPolicy.IsGraphReady(graph, hqs, eligible));
+		graph.Link(1, 0);
+		RandomCheck("GRAPH_HQ_TO_HQ_IS_NOT_EXIT", !AICF_FIAStrongpointPolicy.IsGraphReady(graph, hqs, eligible));
+		graph.Link(1, 4);
+		array<int> emptyCandidates = {};
+		RandomCheck("GRAPH_NO_CANDIDATE", !AICF_FIAStrongpointPolicy.IsGraphReady(graph, hqs, emptyCandidates));
+		RandomCheck("GRAPH_NULL", !AICF_FIAStrongpointPolicy.IsGraphReady(null, hqs, eligible));
 		graph.Link(0, 3);
 		RandomCheck("NO_ELIGIBLE_NODE", !AICF_FIAStrongpointPolicy.Eligible(graph, 3, hqs));
 		array<int> invalidHQs = {0};
@@ -97,6 +111,7 @@ modded class AICF_FIAGarrisonService
 		AICF_FIAStrongpointPolicy.Collect(graph, headquarters, candidates);
 		int difficulty = AICF_Difficulty.Get();
 		RandomCheck("STRONGPOINT_SCOPE", (difficulty == 2 && candidates.Contains(m_Planner.m_iStrongpoint)) || (difficulty != 2 && m_Planner.m_iStrongpoint == -1));
+		if (difficulty == 2) RandomCheck("LIVE_GRAPH_READY", AICF_FIAStrongpointPolicy.IsGraphReady(graph, headquarters, candidates));
 		for (int i; i < graph.GetNodeCount(); i++)
 		{
 			AICF_ObjectiveNode node = graph.GetNode(i);
