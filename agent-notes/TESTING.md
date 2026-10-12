@@ -4,6 +4,78 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## Issue #27: каталог редактора пресетов — 2026-10-12
+
+Ветка `codex/issue-27-preset-performance` от обновлённой `origin/main`,
+`fb6f3e12fcac614e0d259aaeb6246588bcb31a0a`; исходное дерево чистое.
+Изменены `AICF_LoadoutCatalog`, `AICF_LoadoutEditor`, `AICF_LoadoutItemGrid`,
+AILoadout static audit, добавлен `AICF_LoadoutPerformanceProbe`; обновлены
+README и агентские заметки. Контракты и ручной gate:
+[LOADOUT_PERFORMANCE.md](LOADOUT_PERFORMANCE.md).
+Evidence: `.codex-runtime/issue27/`.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-AILoadoutStatic.ps1,Test-PersonalLoadoutContracts.ps1
+  -EvidenceRoot <before|after-final>`: **2 PASS / exit 0** до и после.
+  Baseline failures в выбранном наборе отсутствуют. Финальные audits:
+  150 и 54 отрицательных мутации. Устаревшее требование detach на каждый
+  SetItems заменено отменой предыдущего Render; guards lifecycle detach сохранены.
+- Evidence `compile.ps1 -Variant Stock -Label final-stock` и
+  `-Variant EveronNorthWCSRHS -Label final-production-wcs`: production
+  Workbench Validate/Compile **PASS / native exit 0**, validation successful.
+  `-Label final-fixture-wcs -SourceRoot <stage>`: отдельный fixture compile
+  **PASS / 0**. SCRIPT E/F, ENGINE F и VM exceptions отсутствуют.
+  Полные console/script/error logs и argv сохранены в `wb-<label>/` и рядом.
+  Resource errors сохранены: 25 в stock console.log и 39 в WCS.
+- Evidence `runtime.ps1 -Variant EveronNorthWCSRHS -Probe performance -Tag measured`
+  и `-Variant Stock -Probe performance -Tag final`: canonical
+  `tools/Start-AICFRuntime.ps1 -Role Server -Difficulty Easy -RepositoryRoot <stage>`
+  с fresh profile, `-aicfLoadoutPerformanceProbe 1 -aicfRequirePlayerForResult 0`.
+  WCS **80/80**, stock **48/48**, native exit **0**, ROSTER_READY и штатный
+  RequestClose / Game destroyed. Проверены все записи обеих фракций и точный
+  порядок выдачи по source/category/mode. SCRIPT/fatal gate **PASS**.
+- `runtime.ps1 -Variant EveronNorthWCSRHS -Probe personal -Tag final` использует
+  `-aicfPersonalLoadoutProbe 1`: **37/37 PASS / native exit 0**. Проверены
+  validation, неизвестный предмет, blacklist, owner/context/revision isolation,
+  save/readback и восстановление после прерванной записи. SCRIPT/fatal gate **PASS**.
+  Это существующий server probe, не клиентский RPC/input pipeline.
+
+Медианы шести замеров, каждый — пять проходов List(0)+Name; legacy Find/List
+из `fb6f3e1` и новый код исполнялись попеременно в одном процессе на прогретых
+данных. Checksums совпали во всех samples. Это **не время кадра/клика**:
+
+| Каталог | Записей | До, мс | После, мс | Отношение |
+|---|---:|---:|---:|---:|
+| WCS RHS_USAF | 3704 | 6447 | 142 | 45,4× |
+| WCS RHS_AFRF | 3897 | 7381,5 | 154,5 | 47,8× |
+| Stock US | 187 | 15 | 4,5 | 3,3× |
+| Stock USSR | 166 | 13 | 4 | 3,25× |
+
+Полные остановленные логи относительно evidence:
+
+- `profile-EveronNorthWCSRHS-performance-measured/logs/logs_2026-10-12_13-34-27/console.log`;
+- `profile-EveronNorthWCSRHS-personal-final/logs/logs_2026-10-12_13-36-55/console.log`;
+- `profile-Stock-performance-final/logs/logs_2026-10-12_13-37-56/console.log`.
+
+В каждом profile сохранены также script/error logs; launcher output содержит
+`AICF_RUNTIME_MANIFEST_JSON`, точный CLI и native exit. `collect.ps1` читает
+полные логи, сохраняет ошибки и `runtime-summary.json`. В WCS по **233** прочих
+строки (E), в stock **14**, включая resource/shutdown font leak; общий error-free
+gate не заявляется. Это соответствует ранее наблюдавшемуся baseline, не исправлено
+этой задачей. Неполных или неуспешных runtime attempts в этой задаче нет.
+
+WCS benchmark выполнялся до последней UI-only правки flush перед RPC;
+код каталога в нём окончательный. Personal и stock probes — с окончательным
+stage. `stage-hashes.json` и `final-stage-hashes.json` фиксируют совпадение
+283 production/resource files с соответствующим stage, fixtures сохранены
+в tests и имеют отдельные hashes. Версия движка/Workbench — 1.8.0.13.
+`git diff --check` — PASS. Stage после проверок удалён; свои процессы завершены.
+
+**NOT RUN:** ручная плавность и latency всего интерфейса до/после, отображение
+native thumbnails, быстрый ввод в реальном клиенте, client RPC save/respawn/JIP,
+полная offline матрица, packaged build и soak. Полная пересборка draft/3D-персонажа
+остаётся потенциально затратной; ускорение каталога не гарантирует устранения
+всех задержек. Критерий ручной проверки issue #27 остаётся открытым.
+
 ## PR #26: полный graph gate усиленной точки — 2026-10-12
 
 Исправление review P1 в той же ветке от `f177309`, исходное дерево чистое.

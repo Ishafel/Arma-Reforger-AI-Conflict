@@ -122,6 +122,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected ref array<string> m_aSources = {};
 	protected int m_iTargetType;
 	protected bool m_bPending;
+	protected bool m_bSearchPending;
+	protected int m_iSearchRevision;
 	protected bool m_bRendering;
 	protected bool m_bCaptured;
 	protected bool m_bRotating;
@@ -390,6 +392,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (m_bPending || slotId < 0 || !m_aGroupIds.Contains(slotId) || member < 0 || member >= AICF_Stage1Config.MAX_GROUP_SIZE)
 			return;
 		RememberDraft();
+		CancelSearch();
 		m_iSlotId = slotId;
 		m_iMember = member;
 		m_iRevision = -1;
@@ -477,6 +480,10 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	{
 		if (!m_Player || m_bPending)
 			return;
+		// Даже при отказе RPC выдача должна соответствовать введённому тексту.
+		if (m_bSearchPending && m_bDraftReady)
+			Items();
+		CancelSearch();
 		m_iToken = m_Player.AICF_RequestLoadout(m_iSlotId, m_iMember, m_iRevision, operation, payload);
 		m_bPending = m_iToken > 0;
 		m_iRequestAt = System.GetTickCount();
@@ -501,7 +508,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (m_Slots)
 			m_Slots.SetEnabled(!m_bPending && m_bDraftReady);
 		if (m_Items)
-			m_Items.SetEnabled(!m_bPending && m_bDraftReady);
+			m_Items.SetEnabled(!m_bPending && m_bDraftReady && !m_bSearchPending);
 		UpdateActions();
 	}
 
@@ -555,7 +562,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		bool occupied = hasSlot && slot >= 0 && AICF_LoadoutClothing.CoveringItem(location.m_Storage, slot);
 		bool adding = hasSlot && slot < 0;
 		int item = m_Items.GetSelected();
-		bool hasItem = item >= 0 && item < m_aItems.Count();
+		bool hasItem = !m_bSearchPending && item >= 0 && item < m_aItems.Count();
 		bool typeMatches = hasItem;
 		if (hasItem && ready)
 			typeMatches = MatchesTarget(m_aItems[item]);
@@ -717,6 +724,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 
 	protected bool Rebuild()
 	{
+		CancelSearch();
 		GetGame().GetCallqueue().Remove(FocusSlotCatalog);
 		string selectedPath, selectedStorage;
 		int selectedSlot = -2;
@@ -844,6 +852,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 
 	protected void Items()
 	{
+		CancelSearch();
 		if (!m_bDraftReady)
 			return;
 		string previous;
@@ -864,6 +873,20 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			mode = m_aContentModes[filter];
 		}
 		m_Catalog.List(category, m_aItems, mode, m_aSources[m_iSourceIndex]);
+		// Дешёвый поиск по имени предшествует native compatibility, которая
+		// может создавать preview entities для каждого кандидата.
+		string query = m_wSearch.GetText();
+		query.ToLower();
+		if (!query.IsEmpty())
+		{
+			for (int i = m_aItems.Count() - 1; i >= 0; i--)
+			{
+				string searchable = AICF_Localization.Resolve(m_Catalog.Name(m_aItems[i]));
+				searchable.ToLower();
+				if (!searchable.Contains(query))
+					m_aItems.Remove(i);
+			}
+		}
 		if (!m_bAttachmentTarget)
 			m_ItemAreas.Filter(m_aItems, m_TargetArea, m_Draft.GetPreview());
 		if (m_bWeaponTarget)
@@ -874,16 +897,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			InventoryStorageManagerComponent manager = InventoryStorageManagerComponent.Cast(m_Draft.GetCharacter().FindComponent(InventoryStorageManagerComponent));
 			m_ItemAreas.FilterAttachments(m_aItems, location.m_Storage, m_aSlots[m_Slots.GetSelected()], m_Draft.GetPreview(), manager);
 		}
-		string query = m_wSearch.GetText();
-		query.ToLower();
 		array<string> names = {}, details = {};
-		for (int i = m_aItems.Count() - 1; i >= 0; i--)
-		{
-			string searchable = AICF_Localization.Resolve(m_Catalog.Name(m_aItems[i]));
-			searchable.ToLower();
-			if (!query.IsEmpty() && !searchable.Contains(query))
-				m_aItems.Remove(i);
-		}
 		foreach (string prefab : m_aItems)
 		{
 			names.Insert(m_Catalog.Name(prefab));
@@ -895,7 +909,22 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_Items.SetEmptyText(empty);
 		bool sameItems = m_Items.SetItems(m_aItems, names, details, true);
 		m_Items.Select(m_aItems.Find(previous), !sameItems);
+		m_Items.SetEnabled(!m_bPending && m_bDraftReady);
 		Selection();
+	}
+
+	protected void CancelSearch()
+	{
+		GetGame().GetCallqueue().Remove(UpdateSearch);
+		m_iSearchRevision++;
+		m_bSearchPending = false;
+	}
+
+	protected void UpdateSearch(int revision)
+	{
+		if (revision != m_iSearchRevision || !m_bSearchPending || !m_wRoot || m_bPending || !m_bDraftReady)
+			return;
+		Items();
 	}
 
 	protected void OnCardSelected(AICF_LoadoutItemGrid grid, int index)
@@ -1073,7 +1102,13 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		}
 		if (w != m_wSearch)
 			return false;
-		Items();
+		CancelSearch();
+		m_bSearchPending = true;
+		// Текст остаётся в widget; callback читает последнее значение.
+		// До обновления запрещён выбор предмета из прежней выдачи.
+		m_Items.SetEnabled(false);
+		UpdateActions();
+		GetGame().GetCallqueue().CallLater(UpdateSearch, 150, false, m_iSearchRevision);
 		return true;
 	}
 
@@ -1255,6 +1290,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	{
 		if (m_bPending || !m_Recipe || !m_bDraftReady)
 			return;
+		if (!removeItem && m_bSearchPending)
+			return;
 		AICF_LoadoutLocation location = SelectedLocation();
 		int selected = m_Slots.GetSelected();
 		int item = m_Items.GetSelected();
@@ -1363,6 +1400,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 
 	void Close()
 	{
+		CancelSearch();
 		m_bRotating = false;
 		m_bPanning = false;
 		GetGame().GetCallqueue().Remove(RotatePreview);

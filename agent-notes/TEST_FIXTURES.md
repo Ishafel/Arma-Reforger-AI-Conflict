@@ -179,6 +179,7 @@ Server и client используют согласованный stage. Для R
 | [AICF_NavigationRecoveryProbe.c](../tests/fixtures/AICF_NavigationRecoveryProbe.c) | Координатный snapshot 2026-09-19; не универсальный тест карты | `aicfNavigationProbe` |
 | [AICF_NorthFailureProbe.c](../tests/fixtures/AICF_NorthFailureProbe.c) | Прямая подача failed movement inputs; wiring портов проверяется отдельно статикой | `aicfNorthFailureProbe` |
 | [AICF_PersonalLoadoutProbe.c](../tests/fixtures/AICF_PersonalLoadoutProbe.c) | Personal catalog/recipe validation; не имитирует UI/player/JIP | `aicfPersonalLoadoutProbe` |
+| [AICF_LoadoutPerformanceProbe.c](../tests/fixtures/AICF_LoadoutPerformanceProbe.c) | Сравнение Find/List со старой реализацией и замеры каталога без UI; после ROSTER_READY завершает сервер | `aicfLoadoutPerformanceProbe` |
 | [AICF_PersonalNetworkProbe.c](../tests/fixtures/AICF_PersonalNetworkProbe.c) | WCS native owner RPC без управления UI | `aicfPersonalNetworkProbe`, `aicfProbeFaction`, `aicfProbePersonal` |
 | [AICF_PresetRespawnProbe.c](../tests/fixtures/AICF_PresetRespawnProbe.c) | Добавляется в staging AICF_SquadRespawnUI.c; создаёт recruit и убивает test characters | `aicfPresetProbeFaction`, `aicfPresetRespawnProbe` |
 | [AICF_RecoveryEpisodeProbe.c](../tests/fixtures/AICF_RecoveryEpisodeProbe.c) | Episode, hidden continuation и player release; требует чтения связанных recruitment fixtures | `aicfPlayerReleaseProbeOnly`, `aicfRecoveryEpisodeProbe`, `aicfRecruitHiddenContinue`, `aicfRecruitHiddenProbe`, `aicfRecruitMultiMemberProbe` |
