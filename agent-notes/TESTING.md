@@ -4,6 +4,66 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## Категории основного и второго оружия — 2026-10-12
+
+Ветка `codex/loadout-weapon-categories` от `378f257`, исходное дерево чистое;
+сохранены ранее сделанные общий список и оптимизация каталога. Изменены
+`AICF_LoadoutEditor`, добавлен `AICF_LoadoutWeaponCategories`; уточнения типов
+в Core/RHS/WCS content profiles, RU/EN строки и таблицы, static audit,
+`AICF_LoadoutWeaponCategoriesProbe`, README и агентские заметки.
+Правила и ручной gate: [LOADOUT_WEAPON_CATEGORIES.md](LOADOUT_WEAPON_CATEGORIES.md).
+Evidence: `.codex-runtime/weapon-categories/`.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-AILoadoutStatic.ps1,Test-PersonalLoadoutContracts.ps1
+  -EvidenceRoot <before|after-ordered>`: **2 PASS / exit 0** до и после.
+  Финальные audits: 164/54 отрицательных мутации. Baseline failures выбранного
+  набора отсутствуют. Scope dropdown расширен с карманов на native primary slots;
+  прежние guards карманов и совместимости сохранены.
+- `pwsh -NoProfile -File tests/static/Test-LocalizationStatic.ps1`: **PASS / 0**,
+  до 591, после 602 записей; встроенный `Build-AICFLocalization.ps1 -Check` — PASS.
+  Известный PowerShell 5 parse FAIL LocalizationStatic из предыдущей задачи
+  не исправлялся; в этой задаче проверка выполнялась напрямую через pwsh.
+- Evidence `compile.ps1 -Variant Stock -Label final-production-stock`,
+  `-Variant EveronNorthWCSRHS -Label final-production-wcs`,
+  `-Variant EveronNorthWCSRHS -Label final-ordered -SourceRoot <stage>`:
+  production и fixture Workbench Validate/Compile **PASS / native exit 0**.
+  SCRIPT E/F, ENGINE F, VM/null exceptions — 0; resource E в console.log:
+  stock 25, WCS/fixture 39. Полные logs, argv и manifests сохранены.
+- Evidence `runtime.ps1 -Variant EveronNorthWCSRHS -Tag ordered` и
+  `runtime.ps1 -Variant Stock -Tag ordered`: canonical launcher Server/Easy,
+  отдельный stage/fresh profile, `-addr 127.0.0.1:2301 -aicfWeaponCategoriesProbe 1
+  -aicfRequirePlayerForResult 0`. **WCS 36/36 PASS**, **stock 16/16 PASS**;
+  проверено 1480 (683 US / 797 USSR) и 46 primary catalog записей соответственно.
+  Два primary slots, ALL, полное разбиение с сохранением порядка, контрольные
+  prefab и source intersection прошли. Native exit 0, ROSTER_READY, listener
+  и Game destroyed подтверждены полными остановленными логами.
+
+Финальные runtime logs относительно evidence:
+
+- `profile-EveronNorthWCSRHS-ordered/logs/logs_2026-10-12_14-29-17/console.log`;
+- `profile-Stock-ordered/logs/logs_2026-10-12_14-30-07/console.log`.
+
+`collect.ps1` читает полные логи и сохраняет все E/F, `runtime-summary.json`
+и `compile-summary.json`. SCRIPT/fatal gate — **PASS**. Прочие resource/shutdown
+ошибки соответствуют наблюдавшемуся baseline: stock 14, WCS 233; общий error-free
+gate не заявляется. `final-stage-hashes.json`: 284 production/resource файла,
+0 расхождений. Fixture hash сохранён отдельно. Движок/Workbench 1.8.0.13.
+Тестовые процессы завершились, собственный stage удалён; игровая сессия на 2001
+продолжает работать с предыдущим кодом. `git diff --check` — PASS.
+
+Промежуточные отказы сохранены: первая diagnostic fixture не задавала faction
+рецепта и получила DEFAULT_LOADOUT_FAILED (исправлена); первый audit новой
+scope-проверки ошибочно искал строковый literal после его удаления parser helper
+(исправлена проверка). Runtime `final` выявил 8 FAIL: новый Filter переставлял
+элементы через Remove, а source assertion сравнивал порядок после старой native
+compatibility. Filter заменён линейным сохранением порядка; source проверяет
+состав, порядок Filter проверяется отдельно. Финальные проверки повторены.
+
+**NOT RUN:** реальный client dropdown/input, личный/отрядный Apply/Undo/Save,
+Close/reopen, визуальные RU/EN подписи, JIP/respawn, packaged build, soak;
+runtime дробовиков и отдельных гранатомётов — таких записей в этих каталогах нет.
+Ранее выявленный sparse-slot restore FAIL не затронут этой задачей.
+
 ## Общее содержимое разгрузки — 2026-10-12
 
 Ветка `codex/loadout-contents-view` от `e1d5dab` (оптимизация issue #27),

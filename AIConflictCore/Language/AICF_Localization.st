@@ -3549,5 +3549,71 @@ StringTable
 			Target_en_us "Personal preset unavailable or request rejected. Default equipment remains available."
 			Target_ru_ru "Личный пресет недоступен или запрос отклонён. Можно выбрать штатное снаряжение."
 		}
+		CustomStringTableItem "{A1CF261012280001}"
+		{
+			Id "AICF_UI_AllWeapons"
+			Target_en_us "All weapons"
+			Target_ru_ru "Всё оружие"
+		}
+		CustomStringTableItem "{A1CF261012280011}"
+		{
+			Id "AICF_UI_RiflesCarbines"
+			Target_en_us "Rifles and carbines"
+			Target_ru_ru "Винтовки и карабины"
+		}
+		CustomStringTableItem "{A1CF261012280002}"
+		{
+			Id "AICF_UI_AssaultRifles"
+			Target_en_us "Assault rifles"
+			Target_ru_ru "Штурмовые винтовки"
+		}
+		CustomStringTableItem "{A1CF261012280003}"
+		{
+			Id "AICF_UI_MarksmanRifles"
+			Target_en_us "Marksman rifles"
+			Target_ru_ru "Марксманские винтовки"
+		}
+		CustomStringTableItem "{A1CF261012280004}"
+		{
+			Id "AICF_UI_SniperRifles"
+			Target_en_us "Sniper rifles"
+			Target_ru_ru "Снайперские винтовки"
+		}
+		CustomStringTableItem "{A1CF261012280005}"
+		{
+			Id "AICF_UI_MachineGuns"
+			Target_en_us "Machine guns"
+			Target_ru_ru "Пулемёты"
+		}
+		CustomStringTableItem "{A1CF261012280006}"
+		{
+			Id "AICF_UI_SubmachineGuns"
+			Target_en_us "Submachine guns"
+			Target_ru_ru "Пистолеты-пулемёты"
+		}
+		CustomStringTableItem "{A1CF261012280007}"
+		{
+			Id "AICF_UI_Shotguns"
+			Target_en_us "Shotguns"
+			Target_ru_ru "Дробовики"
+		}
+		CustomStringTableItem "{A1CF261012280008}"
+		{
+			Id "AICF_UI_RocketLaunchers"
+			Target_en_us "Rocket launchers"
+			Target_ru_ru "Реактивные гранатомёты"
+		}
+		CustomStringTableItem "{A1CF261012280009}"
+		{
+			Id "AICF_UI_GrenadeLaunchers"
+			Target_en_us "Grenade launchers"
+			Target_ru_ru "Гранатомёты"
+		}
+		CustomStringTableItem "{A1CF261012280010}"
+		{
+			Id "AICF_UI_OtherWeapons"
+			Target_en_us "Other weapons"
+			Target_ru_ru "Другое оружие"
+		}
 	}
 }

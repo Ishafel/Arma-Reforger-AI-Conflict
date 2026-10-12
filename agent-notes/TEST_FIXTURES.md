@@ -163,6 +163,7 @@ Server и client используют согласованный stage. Для R
 | [AICF_LoadoutMagazineProbe.c](../tests/fixtures/AICF_LoadoutMagazineProbe.c) | Magazines, ammo и runtime inventory | `aicfMagazineProbe` |
 | [AICF_LoadoutNavigationProbe.c](../tests/fixtures/AICF_LoadoutNavigationProbe.c) | Loadout navigation regression; одноимённый CLI есть у другого probe | `aicfNavigationProbe` |
 | [AICF_LoadoutContentsProbe.c](../tests/fixtures/AICF_LoadoutContentsProbe.c) | Общий список, точные адреса, remove/Undo, restore/validate и save/readback; требует ClothingProbe в том же stage, завершает сервер | `aicfContentsProbe` |
+| [AICF_LoadoutWeaponCategoriesProbe.c](../tests/fixtures/AICF_LoadoutWeaponCategoriesProbe.c) | Реальные stock/WCS primary weapons, два native slots, полное разбиение без потерь и перестановок, контрольные prefab и пересечение с source; после ROSTER_READY завершает сервер | `aicfWeaponCategoriesProbe` |
 | [AICF_LoadoutRuntimeProbe.c](../tests/fixtures/AICF_LoadoutRuntimeProbe.c) | Runtime выдача/проверка loadout; optional recruit/hold | `aicfLoadoutProbe`, `aicfLoadoutProbeHoldSeconds`, `aicfLoadoutRecruitProbe` |
 | [AICF_LocalizationProbe.c](../tests/fixtures/AICF_LocalizationProbe.c) | Runtime локализация и форматирование строк | `aicfLocalizationProbe` |
 | [AICF_LogisticsFallbackProbe.c](../tests/fixtures/AICF_LogisticsFallbackProbe.c) | Инъекция logistics fallback; используется с logistics runtime setup | `aicfLogisticsProbeFallback` |

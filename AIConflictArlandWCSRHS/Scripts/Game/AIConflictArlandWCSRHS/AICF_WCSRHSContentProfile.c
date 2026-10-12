@@ -56,6 +56,18 @@ class AICF_WCSRHSContentProfile : AICF_RHSContentProfile
 		sources.Insert("WCS");
 	}
 
+	override int GetLoadoutWeaponCategory(ResourceName prefab)
+	{
+		if (prefab.Contains("/Rifles/G28/") || prefab.Contains("/Rifles/MK14MOD1/") || prefab.Contains("/Rifles/SVCh/"))
+			return AICF_ELoadoutWeaponCategory.MARKSMAN;
+		if (prefab.Contains("/Rifles/MP7/") || prefab.Contains("/Rifles/MPX/") ||
+			prefab.Contains("/Rifles/P90/") || prefab.Contains("/Rifles/PP19/"))
+			return AICF_ELoadoutWeaponCategory.SUBMACHINE_GUN;
+		if (prefab.Contains("/Rifles/VPO185/"))
+			return AICF_ELoadoutWeaponCategory.RIFLE;
+		return super.GetLoadoutWeaponCategory(prefab);
+	}
+
 	// Штатный player kit WCS использует командира ИИ той же стороны.
 	override ResourceName GetPersonalLoadoutSource(SCR_CampaignFaction faction, ResourceName roleSource)
 	{

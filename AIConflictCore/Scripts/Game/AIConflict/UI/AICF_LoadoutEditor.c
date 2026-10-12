@@ -91,6 +91,9 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected ref AICF_LoadoutNavigation m_Navigation = new AICF_LoadoutNavigation();
 	protected ref array<int> m_aSlotLocations = {};
 	protected SCR_ComboBoxComponent m_ContentCategory;
+	protected bool m_bWeaponFilter;
+	protected bool m_bWeaponCategoryOptions;
+	protected ref AICF_LoadoutWeaponCategories m_WeaponCategories = new AICF_LoadoutWeaponCategories();
 	protected ref array<int> m_aContentTypes = {};
 	protected ref array<int> m_aContentModes = {};
 	protected ref AICF_LoadoutItemGrid m_Slots;
@@ -611,8 +614,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		SetButtonState("undo", ready && m_Recipe && !m_Recipe.m_aPaths.IsEmpty());
 		SetButtonState("reset", ready && m_Recipe && !m_Recipe.m_aPaths.IsEmpty());
 		SetButtonState("load", !m_bPending && !m_aTemplateIds.IsEmpty());
-		m_ContentCategory.SetEnabled(ready && m_bContentFilter);
-		bool filtered = !m_wSearch.GetText().IsEmpty() || (m_bContentFilter && m_ContentCategory.GetCurrentIndex() > 0);
+		m_ContentCategory.SetEnabled(ready && HasCategoryFilter());
+		bool filtered = !m_wSearch.GetText().IsEmpty() || (HasCategoryFilter() && m_ContentCategory.GetCurrentIndex() > 0);
 		ShowButton("clearFilters", filtered);
 		SetButtonState("clearFilters", ready && filtered);
 		bool changed = HasDraftChanges();
@@ -926,6 +929,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			m_ItemAreas.Filter(m_aItems, m_TargetArea, m_Draft.GetPreview());
 		if (m_bWeaponTarget)
 			m_ItemAreas.FilterWeapons(m_aItems, m_sTargetWeaponType, m_Draft.GetPreview());
+		if (m_bWeaponFilter)
+			m_WeaponCategories.Filter(m_aItems, m_ContentCategory.GetCurrentIndex(), m_Draft.GetPreview());
 		if (m_bAttachmentTarget)
 		{
 			AICF_LoadoutLocation location = SelectedLocation();
@@ -939,7 +944,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			details.Insert(string.Empty);
 		}
 		string empty = "{AICF:AICF_UI_No_suitable_items_for_this_slot_c8584863}";
-		if (!query.IsEmpty() || (m_bContentFilter && m_ContentCategory.GetCurrentIndex() > 0))
+		if (!query.IsEmpty() || (HasCategoryFilter() && m_ContentCategory.GetCurrentIndex() > 0))
 			empty = "{AICF:AICF_UI_No_items_match_the_selected_filters_Clear__28a8009e}";
 		m_Items.SetEmptyText(empty);
 		bool sameItems = m_Items.SetItems(m_aItems, names, details, true);
@@ -1066,10 +1071,12 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		}
 		m_wTarget.SetText(AICF_Localization.Resolve(caption));
 		m_wCatalogContext.SetText(AICF_Localization.Resolve(context));
-		m_wCatalogContext.SetVisible(!m_bContentFilter);
-		if (!m_bContentFilter)
+		m_bWeaponFilter = m_bWeaponTarget && m_sTargetWeaponType == "primary";
+		UpdateCategoryOptions();
+		m_wCatalogContext.SetVisible(!HasCategoryFilter());
+		if (!HasCategoryFilter())
 			m_ContentCategory.CloseList();
-		m_ContentCategory.GetRootWidget().SetVisible(m_bContentFilter);
+		m_ContentCategory.GetRootWidget().SetVisible(HasCategoryFilter());
 		// Внутри контейнера показываем его объём, даже когда выбран предмет.
 		// На бойце — карманы выбранной одежды/рюкзака до входа в содержимое.
 		string capacityPath = m_sViewPath;
@@ -1086,6 +1093,33 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			capacityText = m_Navigation.CapacityText(string.Empty);
 		m_wCapacity.SetText(AICF_Localization.Resolve(capacityText));
 		UpdateActions();
+	}
+
+	protected bool HasCategoryFilter()
+	{
+		return m_bContentFilter || m_bWeaponFilter;
+	}
+
+	protected void UpdateCategoryOptions()
+	{
+		if (m_bWeaponCategoryOptions == m_bWeaponFilter)
+			return;
+		// Список для карманов и список для двух primary slots независимы.
+		// Между основным и вторым оружием сохраняем выбранную категорию.
+		m_bWeaponCategoryOptions = m_bWeaponFilter;
+		bool rendering = m_bRendering;
+		m_bRendering = true;
+		m_ContentCategory.CloseList();
+		m_ContentCategory.ClearAll();
+		array<string> names = {};
+		if (m_bWeaponFilter)
+			AICF_LoadoutWeaponCategories.Fill(names);
+		else
+			AICF_LoadoutContentCategories.Fill(names, m_aContentTypes, m_aContentModes);
+		foreach (string name : names)
+			m_ContentCategory.AddItem(AICF_Localization.Resolve(name));
+		m_ContentCategory.SetCurrentItem(0, false, false, false);
+		m_bRendering = rendering;
 	}
 
 	protected int ChildLocation()
@@ -1172,7 +1206,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			SelectTarget(m_aGroupIds[index], 0);
 		else if (component == m_Member && !m_bPending)
 			SelectTarget(m_iSlotId, index);
-		else if (component == m_ContentCategory && !m_bPending && m_bContentFilter)
+		else if (component == m_ContentCategory && !m_bPending && HasCategoryFilter())
 			Items();
 	}
 
@@ -1529,6 +1563,9 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_bContentsView = false;
 		m_bCanShowContents = false;
 		m_ContentCategory = null;
+		m_bWeaponFilter = false;
+		m_bWeaponCategoryOptions = false;
+		m_WeaponCategories.Clear();
 		m_aContentTypes.Clear();
 		m_aContentModes.Clear();
 		m_sCatalogFocus = string.Empty;
