@@ -1,5 +1,23 @@
 # Runtime fixture: каталог и применение
 
+`AICF_MatchWeatherProbe.c`, `-aicfWeatherProbe baseline|random`: отдельный Core
+stage любого Variant, `-aicfWeatherHeaders '<resource>;<resource>;...'` передаёт
+доступные в его addon graph headers. Наблюдает штатные SetupDaytimeAndWeather
+и ForceWeatherTo, не подменяя погоду, PRNG или часы. Проверяет время после
+инициализации против header, дату, day duration и auto advance; один выбор,
+фактическое применение погоды, сохранение естественной смены состояний,
+наследование headers и отсутствие повторного выбора при дублирующем Start.
+После ROSTER_READY наблюдает ещё 10 секунд clock самого weather manager и
+проверяет скорость часов, затем завершает сервер через RequestClose.
+`baseline` — 12 проверок исходного кода; `random` — 13, включая выбранное состояние.
+`tests/log-audits/Test-MatchWeatherLog.ps1 -LogPath <полные остановленные логи>`
+проверяет каждый case; `-Baseline` выбирает старый контракт, `-RequireVariation`
+требует минимум две различные погоды среди новых матчей. Повторы случайной
+погоды допустимы; для доказательства вариативности может понадобиться ещё запуск.
+Не подтверждает client/JIP, визуальный вид погоды, ночную смену ускорения или
+длительный погодный цикл. Если bootstrap/roster не готов, probe не завершится:
+launcher/process необходимо контролировать отдельным терминальным watchdog.
+
 `AICF_AntiTankProbe.c`, `-aicfAntiTankProbe 1`: отдельный Core stage, северный
 Everon, Hard. Создаёт одного ПТ-бойца USSR, переносит его и готовый FIA БТР
 на выбранную линию 350 м, назначает defend waypoint стрелку, отключает damage

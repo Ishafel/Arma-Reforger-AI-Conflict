@@ -71,6 +71,11 @@ Enforce fixture не входят в автоматическую матрицу
 
 ## Рабочие утилиты
 
+Начальная погода: `tests/log-audits/Test-MatchWeatherLog.ps1` читает один или
+несколько полных остановленных server logs с `AICF_MatchWeatherProbe`.
+`-Baseline` проверяет исходный код, `-RequireVariation` — разные результаты
+при нескольких новых матчах. Подробности probe: [TEST_FIXTURES.md](TEST_FIXTURES.md).
+
 Противотанковая тактика: `tests/contracts/Test-AntiTankContracts.ps1` входит
 в offline runner и проверяет границы новой политики с отрицательными мутациями.
 `tests/log-audits/Test-AntiTankLog.ps1 -LogPath <полный остановленный console.log>`

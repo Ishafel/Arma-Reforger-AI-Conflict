@@ -4,6 +4,76 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## Issue #28: начальная погода — 2026-10-12
+
+Ветка `codex/issue-28-random-weather` от актуального `origin/main` `44cead0`,
+исходное дерево чистое. Четыре базовых stock/RHS MissionHeader включают
+`m_bRandomStartingWeather` и `m_bRandomWeatherChanges`; поля времени и production
+`.c` не изменены. North/WCS/Medium/Hard наследуют настройку. Обновлены
+ScenarioHeaders audit, README и агентские заметки; добавлены MatchWeatherProbe
+и MatchWeatherLog. Evidence: `.codex-runtime/issue-28-random-weather/`.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-AICommanderModeStatic.ps1,Test-AICommanderUIContracts.ps1,Test-ScenarioHeadersStatic.ps1,Test-RHSIntegrationStatic.ps1,Test-WCSIntegrationStatic.ps1
+  -EvidenceRoot <before|after-headers>` — **5 PASS / exit 0** до и после.
+  Baseline failures выбранного набора отсутствуют. Новый ScenarioHeaders audit
+  на исходном stage — ожидаемый **FAIL / 1**, восемь нарушений новых погодных
+  правил; `headers-negative-baseline.txt`. Прежние guards не ослаблены.
+- Evidence `compile.ps1 -Variant Stock -Label headers-production-stock`,
+  `-Variant EveronNorthWCSRHS -Label headers-production-wcs` и
+  `-Variant EveronNorthWCSRHS -Label headers-fixture -SourceRoot <stage>`:
+  терминальный Workbench **PASS / native exit 0**, `Script validation successful`.
+  Версия 1.8.0.13; SCRIPT/fatal — 0, прочих E/F — 25/39/39. Полные logs,
+  source graph manifests и argv сохранены в `wb-headers-*` и соседних файлах.
+- `runtime.ps1 -Variant Stock|EveronNorthWCSRHS -Tag header-baseline -Mode baseline
+  -Stage stage-baseline`: исходный код — **12/12 PASS** в каждом сценарии.
+  `runtime-matrix.ps1` запускает финальные `runtime.ps1 -Variant <тот же Variant>
+  -Tag headers1|headers2`: четыре новых матча — **13/13 PASS** каждый.
+  Погода по порядку: `Overcast`, `Rainy`, `Cloudy`, `Clear`. Stock загрузил три
+  своих headers, WCS/RHS — все 27; везде random daytime выключен, старт 08:00,
+  day/night acceleration 6/24. Фактическая длительность суток днём 14400 с,
+  дата и auto advance сохранены; скорость часов измерена за 10 с engine time.
+- `tests/log-audits/Test-MatchWeatherLog.ps1 -LogPath <четыре финальных полных лога>
+  -RequireVariation` — **PASS / 0**. Отдельный `-Baseline` — **PASS / 0** для
+  обоих исходных логов. Шесть отрицательных копий лога (failed/missing case,
+  duplicate result, отсутствие shutdown, SCRIPT error, отсутствие вариативности)
+  отклонены с exit 1; `negative-audit/summary.json`.
+
+Canonical launcher, Easy, отдельные stages и свежие profiles, listener
+`-addr 127.0.0.1:2301`, `-aicfWeatherProbe baseline|random`,
+`-aicfWeatherHeaders <ресурсы>`, `-aicfRequirePlayerForResult 0`.
+Точные `AICF_RUNTIME_MANIFEST_JSON`/CLI находятся в `*-launcher.txt`.
+Все шесть итоговых серверов завершены через RequestClose, native exit 0;
+ROSTER_READY, listener и Game destroyed подтверждены полными логами.
+SCRIPT/fatal — 0; прочие resource/world/shutdown E/F — 14 stock / 233 WCS,
+полностью совпадают с новым baseline после удаления timestamp. Это сохранённые
+ошибки движка, а не общий error-free PASS; `error-baseline-comparison.json`.
+
+Финальные console logs относительно evidence:
+
+- `profile-Stock-headers1/logs/logs_2026-10-12_15-51-48/console.log`;
+- `profile-Stock-headers2/logs/logs_2026-10-12_15-52-11/console.log`;
+- `profile-EveronNorthWCSRHS-headers1/logs/logs_2026-10-12_15-52-36/console.log`;
+- `profile-EveronNorthWCSRHS-headers2/logs/logs_2026-10-12_15-53-18/console.log`.
+
+`collect-final.ps1`, `runtime-summary.json`, `compile-summary.json` сохраняют
+команды и раздельные verdict. `final-source-hashes.json`: 282 production/resource
+файла совпадают со stage после нормализации CRLF/LF; у 218 файлов raw SHA различается
+только из-за `git archive` LF против рабочего CRLF. Fixture hash отдельный.
+Тестовые процессы завершены; временные stages удалены после сохранения evidence.
+`git diff --check` — **PASS / 0**.
+
+Отброшенные эксперименты сохранены отдельно: поздний `ForceWeatherTo` сдвигал
+часы на шаг 0.1 с engine time, обычный queue API ограничивал переход минимумом
+0.167 игрового часа. Эти варианты не входят в production. Первый compile probe
+получил ошибку типа World вместо ChimeraWorld; старое сравнение скорости по world
+time дало FAIL на WCS из-за разных фаз update. Итоговый probe использует
+синхронный `GetEngineTime`; начальные часы проверяются строго по header.
+Старые FAIL не выдаются за новые PASS.
+
+**NOT RUN:** client/JIP, визуальная проверка погоды/меню, ночной переход ускорения,
+долгий погодный цикл/soak, отдельный runtime каждой из 27 плиток, packaged build,
+полный offline набор и публикация. Чтение всех headers не заменяет 27 runtime.
+
 ## Carl Gustaf вместо M72 US — 2026-10-12
 
 Ветка `codex/us-carl-gustaf` от `ac8c801`, исходное дерево чистое.
@@ -818,6 +888,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/static/Test-Stage3
 | Loadouts и личные пресеты | `Test-AILoadoutStatic.ps1`, `Test-PersonalLoadoutContracts.ps1` |
 | Маркеры, локализация, rank | `Test-GroupMapMarkersStatic.ps1`, `Test-LocalizationStatic.ps1`, `Test-RankRestrictionsStatic.ps1` |
 | Headers, карты, launcher | `Test-ScenarioHeadersStatic.ps1`, `Test-EveronNorthStatic.ps1`, `Test-RuntimeLauncherStatic.ps1` |
+| Начальная погода | ScenarioHeaders, RHSIntegration, WCSIntegration; runtime `AICF_MatchWeatherProbe` и `Test-MatchWeatherLog.ps1`, повторные новые матчи с `-RequireVariation` |
 | RHS/WCS content и integration | `Test-RHSIntegrationStatic.ps1`, `Test-WCSIntegrationStatic.ps1`, затронутые scenario/authority/Stage audits |
 | Сложность гарнизонов FIA | `Test-FIAGarrisonContracts.ps1`, `Test-FIARandomGarrisonContracts.ps1`, `Test-RuntimeLauncherStatic.ps1`, ScenarioHeaders, FIAPatrol, AICombatInput и Stage3/35; runtime `AICF_FIARandomGarrisonProbe.c` в stage |
 | Combat inputs, FIA | `Test-AICombatInputContracts.ps1`, `Test-FIAPatrolStatic.ps1` |

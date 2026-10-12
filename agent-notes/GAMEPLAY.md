@@ -4,6 +4,23 @@
 технические детали, нужные при изменении поведения; точные defaults проверяй
 в `Config/`, профильных классах и `tools/Start-AICFRuntime.ps1`.
 
+## Начальная погода
+
+Четыре базовых MissionHeader stock/RHS для Арланда и Эверона включают
+`m_bRandomStartingWeather 1`. North, WCS и Medium/Hard наследуют настройку:
+она действует во всех 27 сценариях меню и при запуске через canonical launcher.
+Штатный `SCR_TimeAndWeatherHandlerComponent.SetupDaytimeAndWeather` выбирает
+состояние из списка мира на authority при инициализации нового матча.
+Повторное выпадение той же погоды допустимо. `m_bRandomWeatherChanges 1`
+сохраняет естественную смену погоды, иначе штатный random-start включает looping.
+
+Поля времени не изменены: старт в 08:00, random daytime выключен, ускорение
+днём 6, ночью 24. Штатная настройка часов выполняется после выбора погоды;
+отдельных AICF weather callbacks, clock setters, RPC или повторного выбора при
+старте controller/JIP нет. Сетевая синхронизация принадлежит штатному менеджеру.
+Runtime probe и анализатор: [TEST_FIXTURES.md](TEST_FIXTURES.md), результаты и
+ограничения проверки: [TESTING.md](TESTING.md).
+
 ## Север Эверона: состав баз и электростанция
 
 `TownBaseKermovan` исключён из whitelist северных stock/RHS сценариев;
