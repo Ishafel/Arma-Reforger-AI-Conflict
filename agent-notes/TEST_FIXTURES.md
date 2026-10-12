@@ -1,5 +1,23 @@
 # Runtime fixture: каталог и применение
 
+`AICF_FIARandomGarrisonProbe.c`, `-aicfRandomGarrisonProbe full|plan`: текущий probe
+issue #25 для любого Variant/сложности. В отдельном stage проверяет production
+plan, все три composition rules/fallback, детерминизм PRNG и контрольную
+последовательность, synthetic directed graph (HQ, оба направления ребра, тупик,
+изолированный узел, отсутствие кандидата), повторный Start и immutable snapshot.
+`full` ждёт actual READY/посадки всех выбранных мест (deadline 360 с), `plan`
+завершает после планирования. Сам закрывает сервер. Отключает damage готовых
+машин/бойцов; не доказывает бой, движение, client/JIP или soak.
+Анализ полного остановленного лога: `Test-FIARandomGarrisonLog.ps1 -LogPath ...`
+(для `plan` добавить `-PlanOnly`). Целевой probe и общий SCRIPT/fatal gate
+выводятся отдельно, общий exit сохраняет любые ошибки.
+
+Следующие три старых probes (`DifficultyRollout`, `FIAGarrison`,
+`FIAGarrisonRecovery`) и `Test-FIAGarrisonLog.ps1` описывают исторический
+фиксированный состав 0.1.26 (5/10 машин, 7 пассажиров). Для случайного состава
+issue #25 они не являются актуальными gates; их сохранённые результаты ниже
+нельзя переносить на новую реализацию. Для новых запусков использовать probe выше.
+
 `AICF_DifficultyRolloutProbe.c`: отдельный stage любого Variant,
 `-aicfDifficultyProbe 0|1|2 -aicfDifficultyHeaders '<Easy>;<Medium>;<Hard>'`.
 Загружает три native MissionHeader, проверяет inherited difficulty и flags,

@@ -12,8 +12,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200002}"
 		{
 			Id "AICF_Scenario_Arland_Medium_Description"
-			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "One FIA APC per initial capture point, with a random existing infantry template and up to 2 or 4 passengers (50/50). No tanks or strongpoint."
+			Target_ru_ru "Один БТР FIA на стартовую точку, случайный готовый шаблон десанта и до 2 или 4 пассажиров (50/50). Без танков и усиленной точки."
 		}
 		CustomStringTableItem "{A1CF261008200003}"
 		{
@@ -30,8 +30,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200005}"
 		{
 			Id "AICF_Scenario_Arland_Hard_Description"
-			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "Two FIA APCs with random infantry templates per initial capture point. One intermediate strongpoint away from both HQs receives three or four APCs. Unavailable tanks are replaced by APCs."
+			Target_ru_ru "Два БТР FIA со случайными шаблонами десанта на стартовую точку. Одна промежуточная усиленная точка без прямой связи с HQ получает три или четыре БТР. Недоступные танки заменяются БТР."
 		}
 		CustomStringTableItem "{A1CF261008200006}"
 		{
@@ -48,8 +48,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200008}"
 		{
 			Id "AICF_Scenario_Everon_Medium_Description"
-			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "One FIA APC per initial capture point, with a random existing infantry template and up to 2 or 4 passengers (50/50). No tanks or strongpoint."
+			Target_ru_ru "Один БТР FIA на стартовую точку, случайный готовый шаблон десанта и до 2 или 4 пассажиров (50/50). Без танков и усиленной точки."
 		}
 		CustomStringTableItem "{A1CF261008200009}"
 		{
@@ -66,8 +66,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200011}"
 		{
 			Id "AICF_Scenario_Everon_Hard_Description"
-			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "Two FIA APCs with random infantry templates per initial capture point. One intermediate strongpoint away from both HQs receives three or four APCs. Unavailable tanks are replaced by APCs."
+			Target_ru_ru "Два БТР FIA со случайными шаблонами десанта на стартовую точку. Одна промежуточная усиленная точка без прямой связи с HQ получает три или четыре БТР. Недоступные танки заменяются БТР."
 		}
 		CustomStringTableItem "{A1CF261008200012}"
 		{
@@ -84,8 +84,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200014}"
 		{
 			Id "AICF_Scenario_EveronNorth_Medium_Description"
-			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "One FIA APC per initial capture point, with a random existing infantry template and up to 2 or 4 passengers (50/50). No tanks or strongpoint."
+			Target_ru_ru "Один БТР FIA на стартовую точку, случайный готовый шаблон десанта и до 2 или 4 пассажиров (50/50). Без танков и усиленной точки."
 		}
 		CustomStringTableItem "{A1CF261008200015}"
 		{
@@ -102,8 +102,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200017}"
 		{
 			Id "AICF_Scenario_EveronNorth_Hard_Description"
-			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "Two FIA APCs with random infantry templates per initial capture point. One intermediate strongpoint away from both HQs receives three or four APCs. Unavailable tanks are replaced by APCs."
+			Target_ru_ru "Два БТР FIA со случайными шаблонами десанта на стартовую точку. Одна промежуточная усиленная точка без прямой связи с HQ получает три или четыре БТР. Недоступные танки заменяются БТР."
 		}
 		CustomStringTableItem "{A1CF261008200018}"
 		{
@@ -120,8 +120,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200020}"
 		{
 			Id "AICF_Scenario_ArlandRHS_Medium_Description"
-			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "One FIA APC per initial capture point, with a random existing infantry template and up to 2 or 4 passengers (50/50). No tanks or strongpoint."
+			Target_ru_ru "Один БТР FIA на стартовую точку, случайный готовый шаблон десанта и до 2 или 4 пассажиров (50/50). Без танков и усиленной точки."
 		}
 		CustomStringTableItem "{A1CF261008200021}"
 		{
@@ -138,8 +138,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200023}"
 		{
 			Id "AICF_Scenario_ArlandRHS_Hard_Description"
-			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "Two FIA APCs with random infantry templates per initial capture point. One intermediate strongpoint away from both HQs receives three or four APCs. Unavailable tanks are replaced by APCs."
+			Target_ru_ru "Два БТР FIA со случайными шаблонами десанта на стартовую точку. Одна промежуточная усиленная точка без прямой связи с HQ получает три или четыре БТР. Недоступные танки заменяются БТР."
 		}
 		CustomStringTableItem "{A1CF261008200024}"
 		{
@@ -156,8 +156,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200026}"
 		{
 			Id "AICF_Scenario_EveronRHS_Medium_Description"
-			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "One FIA APC per initial capture point, with a random existing infantry template and up to 2 or 4 passengers (50/50). No tanks or strongpoint."
+			Target_ru_ru "Один БТР FIA на стартовую точку, случайный готовый шаблон десанта и до 2 или 4 пассажиров (50/50). Без танков и усиленной точки."
 		}
 		CustomStringTableItem "{A1CF261008200027}"
 		{
@@ -174,8 +174,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200029}"
 		{
 			Id "AICF_Scenario_EveronRHS_Hard_Description"
-			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "Two FIA APCs with random infantry templates per initial capture point. One intermediate strongpoint away from both HQs receives three or four APCs. Unavailable tanks are replaced by APCs."
+			Target_ru_ru "Два БТР FIA со случайными шаблонами десанта на стартовую точку. Одна промежуточная усиленная точка без прямой связи с HQ получает три или четыре БТР. Недоступные танки заменяются БТР."
 		}
 		CustomStringTableItem "{A1CF261008200030}"
 		{
@@ -192,8 +192,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200032}"
 		{
 			Id "AICF_Scenario_EveronNorthRHS_Medium_Description"
-			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "One FIA APC per initial capture point, with a random existing infantry template and up to 2 or 4 passengers (50/50). No tanks or strongpoint."
+			Target_ru_ru "Один БТР FIA на стартовую точку, случайный готовый шаблон десанта и до 2 или 4 пассажиров (50/50). Без танков и усиленной точки."
 		}
 		CustomStringTableItem "{A1CF261008200033}"
 		{
@@ -210,8 +210,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200035}"
 		{
 			Id "AICF_Scenario_EveronNorthRHS_Hard_Description"
-			Target_en_us "Each initial FIA capture point receives 2 BTR-70s, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает два БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "Two FIA APCs with random infantry templates per initial capture point. One intermediate strongpoint away from both HQs receives three or four APCs. Unavailable tanks are replaced by APCs."
+			Target_ru_ru "Два БТР FIA со случайными шаблонами десанта на стартовую точку. Одна промежуточная усиленная точка без прямой связи с HQ получает три или четыре БТР. Недоступные танки заменяются БТР."
 		}
 		CustomStringTableItem "{A1CF261008200036}"
 		{
@@ -228,8 +228,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200038}"
 		{
 			Id "AICF_Scenario_ArlandWCSRHS_Medium_Description"
-			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "One FIA APC per initial capture point, with a random existing infantry template and up to 2 or 4 passengers (50/50). No tanks or strongpoint."
+			Target_ru_ru "Один БТР FIA на стартовую точку, случайный готовый шаблон десанта и до 2 или 4 пассажиров (50/50). Без танков и усиленной точки."
 		}
 		CustomStringTableItem "{A1CF261008200039}"
 		{
@@ -246,8 +246,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200041}"
 		{
 			Id "AICF_Scenario_ArlandWCSRHS_Hard_Description"
-			Target_en_us "Each initial FIA capture point receives a BTR-70 and T-72A, each with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает БТР-70 и Т-72А: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "Random FIA garrisons: two tanks, two APCs with infantry, or one of each. One intermediate strongpoint away from both HQs receives two APCs and one or two tanks."
+			Target_ru_ru "Случайные гарнизоны FIA: два танка, два БТР с десантом или по одной машине. Одна промежуточная усиленная точка без прямой связи с HQ получает два БТР и один или два танка."
 		}
 		CustomStringTableItem "{A1CF261008200042}"
 		{
@@ -264,8 +264,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200044}"
 		{
 			Id "AICF_Scenario_EveronWCSRHS_Medium_Description"
-			Target_en_us "Each initial FIA capture point receives 1 BTR-70, with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает один БТР-70: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "One FIA APC per initial capture point, with a random existing infantry template and up to 2 or 4 passengers (50/50). No tanks or strongpoint."
+			Target_ru_ru "Один БТР FIA на стартовую точку, случайный готовый шаблон десанта и до 2 или 4 пассажиров (50/50). Без танков и усиленной точки."
 		}
 		CustomStringTableItem "{A1CF261008200045}"
 		{
@@ -282,8 +282,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008200047}"
 		{
 			Id "AICF_Scenario_EveronWCSRHS_Hard_Description"
-			Target_en_us "Each initial FIA capture point receives a BTR-70 and T-72A, each with a driver, gunner and commander only."
-			Target_ru_ru "Каждая стартовая точка FIA получает БТР-70 и Т-72А: только водитель, стрелок и командир в каждой машине, без десанта."
+			Target_en_us "Random FIA garrisons: two tanks, two APCs with infantry, or one of each. One intermediate strongpoint away from both HQs receives two APCs and one or two tanks."
+			Target_ru_ru "Случайные гарнизоны FIA: два танка, два БТР с десантом или по одной машине. Одна промежуточная усиленная точка без прямой связи с HQ получает два БТР и один или два танка."
 		}
 		CustomStringTableItem "{A1CF261008200048}"
 		{
@@ -300,8 +300,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008100011}"
 		{
 			Id "AICF_Scenario_EveronNorthWCSRHS_Medium_Description"
-			Target_en_us "Each initial FIA capture point receives a fully crewed FIA BTR-70."
-			Target_ru_ru "Каждая стартовая точка FIA получает БТР-70 FIA с полным экипажем."
+			Target_en_us "One FIA APC per initial capture point, with a random existing infantry template and up to 2 or 4 passengers (50/50). No tanks or strongpoint."
+			Target_ru_ru "Один БТР FIA на стартовую точку, случайный готовый шаблон десанта и до 2 или 4 пассажиров (50/50). Без танков и усиленной точки."
 		}
 		CustomStringTableItem "{A1CF261008100012}"
 		{
@@ -318,8 +318,8 @@ StringTable
 		CustomStringTableItem "{A1CF261008100014}"
 		{
 			Id "AICF_Scenario_EveronNorthWCSRHS_Hard_Description"
-			Target_en_us "Each initial FIA capture point receives a fully crewed FIA BTR-70 and T-72A."
-			Target_ru_ru "Каждая стартовая точка FIA получает БТР-70 и Т-72А FIA с полными экипажами."
+			Target_en_us "Random FIA garrisons: two tanks, two APCs with infantry, or one of each. One intermediate strongpoint away from both HQs receives two APCs and one or two tanks."
+			Target_ru_ru "Случайные гарнизоны FIA: два танка, два БТР с десантом или по одной машине. Одна промежуточная усиленная точка без прямой связи с HQ получает два БТР и один или два танка."
 		}
 		CustomStringTableItem "{A1CF261008100015}"
 		{

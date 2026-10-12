@@ -48,6 +48,11 @@ class AICF_FIAPatrolService
 	void Start(SCR_GameModeCampaign campaign, AICF_ObjectiveGraph graph)
 	{
 		if (!Replication.IsServer() || !campaign || !graph || m_Fleet) return;
+		if (AICF_Difficulty.Get() == AICF_EDifficulty.EASY)
+		{
+			AICF_Stage3Diagnostics.Info("FIA_PATROL_PLAN", "faction=FIA objectives=0 vehicles=0 crew_per_vehicle=2 rounding=FLOOR replacement=NONE reason=EASY");
+			return;
+		}
 		SCR_CampaignFaction faction = campaign.GetFactionByEnum(SCR_ECampaignFaction.INDFOR);
 		if (!faction || faction.GetFactionKey() != "FIA") return;
 		m_Graph = graph;

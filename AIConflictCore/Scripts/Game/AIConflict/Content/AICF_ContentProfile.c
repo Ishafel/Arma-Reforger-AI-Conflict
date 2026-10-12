@@ -36,6 +36,35 @@ class AICF_ContentProfile
 		return "{B47110AA1A806556}Prefabs/Vehicles/Wheeled/BTR70/BTR70_FIA.et";
 	}
 
+	void GetFIAGarrisonCandidates(SCR_CampaignFaction faction, array<ResourceName> apcs, array<ResourceName> tanks)
+	{
+		apcs.Insert(GetFIAGarrisonPrefab(false));
+		ResourceName tank = GetFIAGarrisonPrefab(true);
+		if (!tank.IsEmpty()) tanks.Insert(tank);
+		SCR_EntityCatalog catalog = faction.GetFactionEntityCatalogOfType(EEntityCatalogType.VEHICLE);
+		array<SCR_EntityCatalogEntry> entries = {};
+		if (catalog) catalog.GetEntityList(entries);
+		foreach (SCR_EntityCatalogEntry entry : entries)
+		{
+			if (!entry || !entry.IsEnabled()) continue;
+			ResourceName prefab = entry.GetPrefab();
+			// В stock нет типа TANK. Дополнительные танки классифицирует integration profile.
+			if (IsFIAGarrisonTank(prefab)) tanks.Insert(prefab);
+			else if (entry.HasEditableEntityLabel(EEditableEntityLabel.VEHICLE_APC) && IsFIAGarrisonAPC(prefab)) apcs.Insert(prefab);
+		}
+	}
+
+	bool IsFIAGarrisonTank(ResourceName prefab)
+	{
+		return !GetFIAGarrisonPrefab(true).IsEmpty() && prefab == GetFIAGarrisonPrefab(true);
+	}
+
+	bool IsFIAGarrisonAPC(ResourceName prefab)
+	{
+		// Штатная метка APC включает также разведывательный BRDM. Нужен БТР с десантом.
+		return prefab.Contains("Prefabs/Vehicles/Wheeled/BTR");
+	}
+
 	string GetProfileKey()
 	{
 		return "STOCK";

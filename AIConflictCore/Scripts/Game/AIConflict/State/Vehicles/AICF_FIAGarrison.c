@@ -8,6 +8,10 @@ class AICF_FIAGarrison
 	bool m_bReady;
 	bool m_bRetired;
 	bool m_bTank;
+	int m_iNode;
+	bool m_bStrongpoint;
+	ResourceName m_sPassengerTemplate;
+	ref array<ResourceName> m_aPassengerPrefabs = {};
 	bool m_bPassengers;
 	bool m_bStaticDefense;
 	SCR_CampaignFaction m_Faction;

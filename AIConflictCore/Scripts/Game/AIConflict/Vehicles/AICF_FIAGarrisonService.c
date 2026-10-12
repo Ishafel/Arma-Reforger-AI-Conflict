@@ -9,6 +9,10 @@ class AICF_FIAGarrisonService
 	protected ref AICF_FIAGarrisonPatrol m_Patrol = new AICF_FIAGarrisonPatrol();
 	protected bool m_bStopped;
 	protected int m_iNextSpawnMs;
+	protected ref AICF_FIAGarrisonPlanner m_Planner;
+	protected bool m_bPlanValid;
+
+	bool IsPlanValid() { return m_bPlanValid; }
 
 	static bool IsDefender(IEntity entity)
 	{
@@ -80,13 +84,19 @@ class AICF_FIAGarrisonService
 
 	void Start(SCR_GameModeCampaign campaign, AICF_ObjectiveGraph graph)
 	{
-		if (!Replication.IsServer() || !campaign || !graph || m_Fleet) return;
+		if (!Replication.IsServer() || !campaign || !graph || m_Planner || m_bStopped) return;
 		AICF_EDifficulty difficulty = AICF_Difficulty.Get();
 		int perBase;
 		if (difficulty == AICF_EDifficulty.MEDIUM) perBase = 1;
 		if (difficulty == AICF_EDifficulty.HARD) perBase = 2;
 		SCR_CampaignFaction faction = campaign.GetFactionByEnum(SCR_ECampaignFaction.INDFOR);
 		if (!faction || faction.GetFactionKey() != "FIA") return;
+		m_Planner = new AICF_FIAGarrisonPlanner();
+		if (!m_Planner.Build(faction, graph, difficulty))
+		{
+			AICF_Stage3Diagnostics.Warning("FIA_GARRISON_PLAN_REJECTED", "reason=" + m_Planner.m_sError);
+			return;
+		}
 		m_Fleet = new AICF_FactionFleet("FIA");
 		array<SCR_CampaignMilitaryBaseComponent> bases = {};
 		for (int i; i < graph.GetNodeCount(); i++)
@@ -97,24 +107,25 @@ class AICF_FIAGarrisonService
 			if (!base || !base.GetOwner() || base.IsHQ() || base.GetFaction() != faction) continue;
 			bases.Insert(base);
 		}
+		foreach (AICF_FIAGarrison g : m_Planner.m_aPlan)
+		{
+			if (!m_Fleet.TryReserveFIAGarrison(g, m_Planner.m_aPlan.Count())) return;
+			s_aDefenders.Insert(g);
+		}
+		// Небольшой immutable snapshot на каждой штатной replicated base, включая JIP.
 		foreach (SCR_CampaignMilitaryBaseComponent base : bases)
 		{
-			for (int kind; kind < perBase; kind++)
+			string snapshot = string.Format("v=1 seed=%1 difficulty=%2", m_Planner.m_iSeed, difficulty);
+			foreach (AICF_FIAGarrison g : s_aDefenders)
 			{
-				AICF_FIAGarrison g = new AICF_FIAGarrison();
-				g.m_iSlot = 10000 + s_aDefenders.Count();
-				g.m_Base = base;
-				g.m_BaseId = base.GetOwner().GetID();
-				g.m_vHome = base.GetOwner().GetOrigin();
-				g.m_Faction = faction;
-				g.m_bTank = kind == 1 && AICF_Difficulty.UsesTank();
-				g.m_bPassengers = !g.m_bTank && AICF_Difficulty.HasPassengers();
-				g.m_sPrefab = AICF_ContentProfile.GetActive().GetFIAGarrisonPrefab(g.m_bTank);
-				if (m_Fleet.TryReserveFIAGarrison(g, bases.Count() * perBase)) s_aDefenders.Insert(g);
+				if (g.m_Base != base) continue;
+				snapshot += string.Format("\nslot=%1 node=%2 strongpoint=%3 tank=%4 prefab=%5 passenger_template=%6 passengers_max=%7", g.m_iSlot, g.m_iNode, g.m_bStrongpoint, g.m_bTank, g.m_sPrefab, g.m_sPassengerTemplate, g.m_aPassengerPrefabs.Count());
 			}
+			base.AICF_SetInitialGarrisonPlan(snapshot);
 		}
 		AICF_Stage3Diagnostics.Info("FIA_GARRISON_PLAN", string.Format("difficulty=%1 bases=%2 vehicles=%3 per_base=%4 replacement=NONE", difficulty, bases.Count(), s_aDefenders.Count(), perBase));
 		ReserveCrewCapacity(campaign);
+		m_bPlanValid = true;
 	}
 
 	// Однократная квота initial plan: новые экипажи не вытесняют прежний roster.
@@ -126,8 +137,8 @@ class AICF_FIAGarrisonService
 		int crew;
 		foreach (AICF_FIAGarrison g : s_aDefenders)
 		{
-			if (g.m_bPassengers) crew += 10;
-			else crew += 3;
+			// Верхняя граница DiscoverSeats, включая вариативную вместимость prefab.
+			crew += 16;
 		}
 		array<SCR_CampaignMilitaryBaseComponent> allBases = {};
 		campaign.GetBaseManager().GetBases(allBases);
@@ -141,6 +152,7 @@ class AICF_FIAGarrisonService
 	void Update()
 	{
 		if (!Replication.IsServer() || m_bStopped || !m_Fleet) return;
+		if (!m_bPlanValid) return;
 		int now = System.GetTickCount();
 		foreach (AICF_FIAGarrison g : s_aDefenders)
 		{
@@ -181,7 +193,7 @@ class AICF_FIAGarrisonService
 		}
 		g.m_iRequestedAtMs = now;
 		if (!m_Crew.DiscoverSeats(g)) { Retire(g, "SEATS_INVALID"); return; }
-		g.m_Group = m_Crew.Create(g.m_Faction, crewPosition, g.m_aSeats.Count());
+		g.m_Group = m_Crew.CreateGarrison(g, crewPosition);
 		if (!g.m_Group) { Retire(g, "CREW_CONTROLLER_FAILED"); return; }
 		g.m_GroupId = g.m_Group.GetID();
 		if (!m_Crew.BeginRosterSpawn(g.m_Group, g.m_aSeats.Count())) { Retire(g, "CREW_REQUEST_FAILED"); return; }

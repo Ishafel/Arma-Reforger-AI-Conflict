@@ -5,21 +5,39 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 		if (!g.VehicleIdentity()) return false;
 		array<BaseCompartmentSlot> seats = {};
 		Seats(g.m_Vehicle, seats);
-		int pilots, turrets;
+		int pilots, turrets, passengers;
 		foreach (BaseCompartmentSlot seat : seats)
 		{
 			if (!seat.IsCompartmentAccessible()) continue;
 			if (seat.GetOccupant() || seat.IsReserved()) return false;
 			bool essential = IsEssentialSeat(seat, g.m_bTank);
 			if (!essential && !g.m_bPassengers) continue;
+			if (!essential)
+			{
+				if (passengers >= g.m_aPassengerPrefabs.Count()) continue;
+				passengers++;
+			}
 			g.m_aSeats.Insert(seat);
 			g.m_aEssentialSeats.Insert(essential);
 			g.Log("FIA_GARRISON_SEAT", string.Format("index=%1 name=%2 type=%3 essential=%4", g.m_aSeats.Count() - 1, seat.GetCompartmentName(true), seat.GetType(), essential));
 			if (seat.GetType() == ECompartmentType.PILOT) pilots++;
 			if (seat.GetType() == ECompartmentType.TURRET) turrets++;
 		}
-		if (!g.m_bTank && !g.m_bPassengers && g.m_aSeats.Count() != 3) return false;
+		if (g.m_bPassengers && passengers == 0) return false;
 		return pilots == 1 && turrets >= 1 && g.m_aSeats.Count() <= 16;
+	}
+
+	SCR_AIGroup CreateGarrison(AICF_FIAGarrison g, vector position)
+	{
+		SCR_AIGroup group = Create(g.m_Faction, position, g.m_aSeats.Count());
+		if (!group) return null;
+		int passenger;
+		for (int i; i < g.m_aSeats.Count(); i++)
+		{
+			if (!g.m_aEssentialSeats[i]) group.m_aUnitPrefabSlots[i] = g.m_aPassengerPrefabs[passenger++];
+		}
+		g.Log("FIA_GARRISON_ROSTER", string.Format("passenger_template=%1 passengers=%2 crew=%3 capacity=%4", g.m_sPassengerTemplate, passenger, g.m_aSeats.Count() - passenger, g.m_aSeats.Count()));
+		return group;
 	}
 
 	bool BoardGarrison(AICF_FIAGarrison g)

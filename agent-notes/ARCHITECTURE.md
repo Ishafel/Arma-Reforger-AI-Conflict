@@ -87,6 +87,12 @@ Waypoint сначала снимается с группы, затем удал�
 
 ## Соседние контракты
 
+Начальный FIA состав принадлежит `AICF_FIAGarrisonPlanner`, допустимость
+усиленной точки — `AICF_FIAStrongpointPolicy`, доступность prefab — catalog/profile.
+Integration `AICF_FIAStrongpointRadioSetup` готовит реальный radio graph до
+MatchController. Immutable snapshot реплицируется на stock base. Подробности:
+[FIA_GARRISONS.md](FIA_GARRISONS.md).
+
 Recruitment прогнозирует полную стоимость и время набора с учётом спроса других
 визитов, но не резервирует supplies. Оплата проверяется перед каждым transfer:
 [точная модель и evidence](RECRUITMENT_SUPPLY_PLANNING.md).

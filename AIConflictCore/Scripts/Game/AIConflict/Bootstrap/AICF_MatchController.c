@@ -281,6 +281,11 @@ class AICF_MatchController
 		m_FIAPatrols.Start(m_Campaign, m_ObjectiveGraph);
 		m_FIAGarrisons = new AICF_FIAGarrisonService();
 		m_FIAGarrisons.Start(m_Campaign, m_ObjectiveGraph);
+		if (!m_FIAGarrisons.IsPlanValid())
+		{
+			Fail("FIA_GARRISON_PLAN_FAILED", "Check FIA_GARRISON_PLAN_REJECTED; configure a connected intermediate FIA base outside both HQ neighborhoods");
+			return;
+		}
 		m_Construction = new AICF_ConstructionPlanner();
 		m_Construction.Start(m_Campaign, m_BaseBuilders, m_EconomySystem, m_USAICommander, m_USSRAICommander);
 		m_Logistics = new AICF_LogisticsService(m_Campaign, m_VehicleCoordinator, m_ObjectiveGraph, m_LogisticsConfig, m_EconomySystem);
