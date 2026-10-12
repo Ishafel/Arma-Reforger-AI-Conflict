@@ -91,6 +91,19 @@ class AICF_ContentProfile
 		return "Vanilla";
 	}
 
+	// Native EWeaponType не различает DMR, ПП и дробовики.
+	// Уточнения content profiles используют стабильный resource path, не перевод имени.
+	int GetLoadoutWeaponCategory(ResourceName prefab)
+	{
+		if (prefab.Contains("/Weapons/Shotguns/"))
+			return AICF_ELoadoutWeaponCategory.SHOTGUN;
+		if (AICF_LoadoutWeaponCategories.Model(prefab, "Rifle_M21") || prefab.Contains("/Rifles/SVD/"))
+			return AICF_ELoadoutWeaponCategory.MARKSMAN;
+		if (prefab.Contains("/Rifles/M14/") || prefab.Contains("/Rifles/SKS/"))
+			return AICF_ELoadoutWeaponCategory.RIFLE;
+		return AICF_ELoadoutWeaponCategory.OTHER;
+	}
+
 	// Exact registry allowlist, подтверждён terminal catalog 1.8.0.13.
 	bool PrepareConstructionFaction(IEntity entity, FactionKey stableKey, AICF_EConstructionType type, SCR_CampaignFaction faction)
 	{

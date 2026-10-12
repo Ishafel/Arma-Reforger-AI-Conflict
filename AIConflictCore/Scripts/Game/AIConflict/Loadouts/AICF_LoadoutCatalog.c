@@ -1,6 +1,14 @@
+// Индекс хранит все дубликаты в исходном порядке: IsEnabled проверяется
+// при каждом чтении, а разрешения/blacklist никогда не кэшируются.
+class AICF_LoadoutCatalogBucket
+{
+	ref array<SCR_EntityCatalogEntry> m_aEntries = {};
+}
+
 class AICF_LoadoutCatalog
 {
 	protected ref array<SCR_EntityCatalogEntry> m_aEntries = {};
+	protected ref map<ResourceName, ref AICF_LoadoutCatalogBucket> m_mEntries = new map<ResourceName, ref AICF_LoadoutCatalogBucket>();
 	protected AICF_ContentProfile m_Profile;
 	protected FactionKey m_sStableFaction;
 	protected bool m_bPersonalRules;
@@ -56,11 +64,26 @@ class AICF_LoadoutCatalog
 		SCR_EntityCatalog catalog = faction.GetFactionEntityCatalogOfType(EEntityCatalogType.ITEM);
 		if (catalog)
 			catalog.GetEntityList(m_aEntries);
+		foreach (SCR_EntityCatalogEntry entry : m_aEntries)
+		{
+			if (!entry)
+				continue;
+			AICF_LoadoutCatalogBucket bucket;
+			if (!m_mEntries.Find(entry.GetPrefab(), bucket))
+			{
+				bucket = new AICF_LoadoutCatalogBucket();
+				m_mEntries.Insert(entry.GetPrefab(), bucket);
+			}
+			bucket.m_aEntries.Insert(entry);
+		}
 	}
 
 	SCR_EntityCatalogEntry Find(ResourceName prefab)
 	{
-		foreach (SCR_EntityCatalogEntry entry : m_aEntries)
+		AICF_LoadoutCatalogBucket bucket;
+		if (!m_mEntries.Find(prefab, bucket))
+			return null;
+		foreach (SCR_EntityCatalogEntry entry : bucket.m_aEntries)
 		{
 			if (entry && entry.IsEnabled() && entry.GetPrefab() == prefab &&
 				entry.GetEntityDataOfType(SCR_ArsenalItem))
@@ -135,14 +158,18 @@ class AICF_LoadoutCatalog
 	void List(int category, array<string> prefabs, int mode = 0, string source = "")
 	{
 		prefabs.Clear();
+		set<ResourceName> included = new set<ResourceName>();
 		foreach (SCR_EntityCatalogEntry entry : m_aEntries)
 		{
-			if (!entry || !entry.IsEnabled() || !m_Profile.AllowsLoadoutItem(m_sStableFaction, entry) || IsDenied(entry.GetPrefab()) || prefabs.Contains(entry.GetPrefab()))
+			if (!entry || !entry.IsEnabled() || !m_Profile.AllowsLoadoutItem(m_sStableFaction, entry) || IsDenied(entry.GetPrefab()) || included.Contains(entry.GetPrefab()))
 				continue;
 			SCR_ArsenalItem item = SCR_ArsenalItem.Cast(entry.GetEntityDataOfType(SCR_ArsenalItem));
 			if (item && (category == 0 || (item.GetItemType() & category) != 0) &&
 				(mode == 0 || (item.GetItemMode() & mode) != 0) && (source.IsEmpty() || Source(entry.GetPrefab()) == source))
+			{
 				prefabs.Insert(entry.GetPrefab());
+				included.Insert(entry.GetPrefab());
+			}
 		}
 		prefabs.Sort();
 	}

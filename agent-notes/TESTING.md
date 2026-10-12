@@ -4,6 +4,324 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## Carl Gustaf вместо M72 US — 2026-10-12
+
+Ветка `codex/us-carl-gustaf` от `ac8c801`, исходное дерево чистое.
+WCS `AICF_WCSInfantryKit`/`AICF_WCSInfantryEquipment` выдают USMC LAT/TL/AMG
+M2 Carl Gustaf (`{DA376E83952F1DFD}Prefabs/Weapons/Launchers/M2CG/Launcher_M2CG.et`)
+с одним заряженным выстрелом и без запасных. Разрешена замена только точного
+штатного M72 в local draft; остальные authority/identity/rollback границы прежние.
+Обновлены WCS static audit и три fixtures: InfantryAT, USExtraLauncher,
+WCSInfantry; README/WCS README/GAMEPLAY/TEST_FIXTURES описывают новый default.
+Evidence: `.codex-runtime/us-carl-gustaf/`.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-WCSIntegrationStatic.ps1,Test-RHSIntegrationStatic.ps1,Test-AILoadoutStatic.ps1,Test-InfantryRecruitmentStatic.ps1
+  -EvidenceRoot <before|after>`: **4 PASS / exit 0** до и после. Baseline failures
+  выбранного набора отсутствуют. Старый запрет любой замены второго оружия
+  уточнён до замены только M72 согласно новому контракту; неизвестное оружие
+  по-прежнему отклоняется.
+- Evidence `compile.ps1 -Label final-fixture -SourceRoot <stage>` и
+  `compile.ps1 -Label final-production-wcs`: Workbench Validate/Compile
+  **PASS / native exit 0**, версия 1.8.0.13. SCRIPT/fatal — 0,
+  прочие resource E/F — 39, как в предыдущем наблюдении.
+- `runtime.ps1 -Tag draft`: **32/32 PASS**, 20 стандартных draft обеих сторон,
+  точные M2CG/заряд/отсутствие запасных у US 3/6/7/8/9, прежний пустой второй
+  слот РФ 6/7, полная signature Capture/Restore всех пяти комплектов с M2CG.
+- `runtime.ps1 -Tag live-hard -Probe aicfATProbe -Difficulty Hard`:
+  **104/104 PASS**, 26 живых бойцов полного roster и donors. У всех US LAT/TL/AMG
+  точный M2CG с `loaded=1 spare=0`, у РФ прежний РПГ-7 с `loaded=1 spare=2`;
+  роли, комплекты, повторный Apply, mappings и FIA reject прошли.
+- `runtime.ps1 -Tag retention -Probe aicfWCSInfantryProbe -Difficulty Hard`:
+  WCS roster **20/20 PASS**, сохранность остальных защищённых предметов,
+  совпадение editor/live kit и catalog; PMC **13/13**, player preparation **2/2**,
+  пять cache guards — **PASS**. Это серверная проверка preparation без клиента.
+- `runtime.ps1 -Tag live-easy -Probe aicfATProbe -Difficulty Easy`:
+  **96/96 PASS**, три Carl Gustaf в полном US roster, donors и прежние роли.
+
+Runtime использует canonical `tools/Start-AICFRuntime.ps1`, отдельный stage,
+fresh profiles, `EveronNorthWCSRHS`, `-addr 127.0.0.1:2301 -<Probe> 1
+-aicfRequirePlayerForResult 0`. Аргументы/manifest, полный console/script log
+и native exit сохранены. `collect.ps1` читает полные логи и сохраняет все E/F
+вместе с `runtime-summary.json`/`compile-summary.json`.
+`final-stage-hashes.json`: 282 production/resource файла, 0 расхождений;
+три fixture hashes сохранены отдельно.
+Полные console logs относительно evidence:
+
+- `profile-EveronNorthWCSRHS-draft/logs/logs_2026-10-12_15-04-42/console.log`;
+- `profile-EveronNorthWCSRHS-live-hard/logs/logs_2026-10-12_15-06-07/console.log`;
+- `profile-EveronNorthWCSRHS-retention/logs/logs_2026-10-12_15-07-34/console.log`;
+- `profile-EveronNorthWCSRHS-live-easy/logs/logs_2026-10-12_15-08-36/console.log`.
+
+Все четыре тестовых сервера завершились с native exit 0; listener,
+ROSTER_READY и Game destroyed подтверждены полными остановленными логами.
+SCRIPT/fatal — 0, прочие resource/shutdown E/F — 233 в каждом запуске,
+как в предыдущем наблюдении; общий error-free gate не заявляется.
+Тестовый stage удалён после завершения процессов, полные логи сохранены.
+`git diff --check` — **PASS**.
+
+**NOT RUN:** стрельба/перезарядка в бою, client/UI/JIP, пользовательский Save/Apply,
+переход donor в отряд и оплата, отдельный Medium runtime, packaged build и soak.
+Прежний sparse-slot restore FAIL не затронут: новые проверки не создают дырки
+в native-карманах. Сохранённые пользовательские шаблоны не переписываются
+и могут переопределить новый default. Игровая сессия на порту 2001 остаётся
+на предыдущем коде до перезапуска.
+
+## Два дополнительных M72 у US — 2026-10-12
+
+Ветка `codex/us-at-ammunition` от `1cae572`, исходное дерево чистое.
+Изменены WCS `AICF_WCSInfantryKit`/`AICF_WCSInfantryEquipment`, WCS static audit,
+fixtures `AICF_InfantryATProbe`/`AICF_WCSInfantryProbe`; добавлен
+`AICF_USExtraLauncherProbe`. README, WCS README, GAMEPLAY и TEST_FIXTURES
+обновлены вместе с кодом. Контракт: USMC TL/AMG получают по M72 с одним зарядом
+во втором native primary slot, без изменения ролей и основного оружия.
+Evidence: `.codex-runtime/us-at-ammunition/`.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-WCSIntegrationStatic.ps1,Test-RHSIntegrationStatic.ps1,Test-AILoadoutStatic.ps1,Test-InfantryRecruitmentStatic.ps1
+  -EvidenceRoot <before|after-final>`: **4 PASS / exit 0** до и после;
+  baseline failures выбранного набора отсутствуют. Первая попытка `after`
+  остановилась до audits на Git dubious ownership sandbox-пользователя;
+  повторена в штатном контексте пользователя, без изменения правил проверок.
+- Evidence `compile.ps1 -Label baseline-fixture -SourceRoot <stage>`:
+  исходный код с диагностикой — **PASS / 0**. `runtime.ps1 -Tag baseline`:
+  20 draft построены, у US/USSR 6/7 второй слот пуст; `failures=0`, native exit 0.
+- `compile.ps1 -Label final-fixture -SourceRoot <stage>` и
+  `compile.ps1 -Label final-production-wcs`: финальный stage и production
+  Workbench Validate/Compile **PASS / native exit 0**. SCRIPT/fatal — 0,
+  resource errors — 39, как в baseline. Движок/Workbench 1.8.0.13.
+- `runtime.ps1 -Tag draft-final`: **26/26 PASS**, включая точный M72/заряд,
+  неизменный второй слот РФ 6/7 и полную signature Capture/Restore у US 6/7.
+- `runtime.ps1 -Tag live-hard -Probe aicfATProbe -Difficulty Hard`:
+  **104/104 PASS**; `-Tag live-easy -Probe aicfATProbe -Difficulty Easy`:
+  **96/96 PASS**. По 26 живых бойцов: полные US/USSR roster и donors,
+  включая US 6/7. Prefab, роли, WCS kit, заряженное ПТ-оружие, повторный Apply,
+  mappings stock/RHS и FIA reject прошли. US Hard: M72 у индексов 3/6/7/8/9;
+  Easy: 3/6/7. РФ Hard сохранила РПГ-7 с `loaded=1 spare=2` у 3/8/9.
+- `runtime.ps1 -Tag retention -Probe aicfWCSInfantryProbe -Difficulty Hard`:
+  **20/20 PASS** для WCS roster (прочие защищённые предметы, одинаковые комплекты
+  редактора/бойца, catalog, повторная выдача); PMC **13/13**, player preparation
+  **2/2**, пять cache guards — **PASS**. Это серверная проверка preparation,
+  а не подключение клиента.
+
+Все runtime команды используют canonical `tools/Start-AICFRuntime.ps1`,
+Variant `EveronNorthWCSRHS`, отдельный stage/fresh profile,
+`-addr 127.0.0.1:2301 -<Probe> 1 -aicfRequirePlayerForResult 0`.
+Manifests и аргументы сохранены в launcher outputs. Полные остановленные логи,
+все E/F и анализ находятся в evidence; `collect.ps1` формирует
+`runtime-summary.json`/`compile-summary.json`. В baseline/draft/Hard/Easy/retention
+native exit 0, listener/ROSTER_READY/Game destroyed подтверждены;
+SCRIPT/fatal — 0, прочие resource/shutdown E/F — 233, как до изменения.
+Общий error-free gate не заявляется. `final-stage-hashes.json`: 282
+production/resource файла, 0 расхождений; три fixture hashes сохранены отдельно.
+Финальные console logs относительно evidence:
+
+- `profile-EveronNorthWCSRHS-draft-final/logs/logs_2026-10-12_14-49-40/console.log`;
+- `profile-EveronNorthWCSRHS-live-hard/logs/logs_2026-10-12_14-50-51/console.log`;
+- `profile-EveronNorthWCSRHS-live-easy/` — точный путь в `runtime-summary.json`;
+- `profile-EveronNorthWCSRHS-retention/logs/logs_2026-10-12_14-52-43/console.log`.
+
+Тестовые серверы завершились сами, собственный stage удалён.
+`git diff --check` — **PASS**. Полные evidence logs сохранены.
+
+**NOT RUN:** реальная стрельба по бронетехнике, client/UI/JIP, пользовательские
+шаблоны через Save/Apply, переход donor в отряд и оплата, отдельный Medium runtime,
+packaged build и soak. Известный sparse-slot restore FAIL из проверки общего
+содержимого разгрузки не затронут; новый Capture/Restore не удаляет предметы
+из середины native-кармана и не доказывает исправление этого ограничения.
+Текущая пользовательская игровая сессия остаётся на прежнем коде до перезапуска.
+
+## Категории основного и второго оружия — 2026-10-12
+
+Ветка `codex/loadout-weapon-categories` от `378f257`, исходное дерево чистое;
+сохранены ранее сделанные общий список и оптимизация каталога. Изменены
+`AICF_LoadoutEditor`, добавлен `AICF_LoadoutWeaponCategories`; уточнения типов
+в Core/RHS/WCS content profiles, RU/EN строки и таблицы, static audit,
+`AICF_LoadoutWeaponCategoriesProbe`, README и агентские заметки.
+Правила и ручной gate: [LOADOUT_WEAPON_CATEGORIES.md](LOADOUT_WEAPON_CATEGORIES.md).
+Evidence: `.codex-runtime/weapon-categories/`.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-AILoadoutStatic.ps1,Test-PersonalLoadoutContracts.ps1
+  -EvidenceRoot <before|after-ordered>`: **2 PASS / exit 0** до и после.
+  Финальные audits: 164/54 отрицательных мутации. Baseline failures выбранного
+  набора отсутствуют. Scope dropdown расширен с карманов на native primary slots;
+  прежние guards карманов и совместимости сохранены.
+- `pwsh -NoProfile -File tests/static/Test-LocalizationStatic.ps1`: **PASS / 0**,
+  до 591, после 602 записей; встроенный `Build-AICFLocalization.ps1 -Check` — PASS.
+  Известный PowerShell 5 parse FAIL LocalizationStatic из предыдущей задачи
+  не исправлялся; в этой задаче проверка выполнялась напрямую через pwsh.
+- Evidence `compile.ps1 -Variant Stock -Label final-production-stock`,
+  `-Variant EveronNorthWCSRHS -Label final-production-wcs`,
+  `-Variant EveronNorthWCSRHS -Label final-ordered -SourceRoot <stage>`:
+  production и fixture Workbench Validate/Compile **PASS / native exit 0**.
+  SCRIPT E/F, ENGINE F, VM/null exceptions — 0; resource E в console.log:
+  stock 25, WCS/fixture 39. Полные logs, argv и manifests сохранены.
+- Evidence `runtime.ps1 -Variant EveronNorthWCSRHS -Tag ordered` и
+  `runtime.ps1 -Variant Stock -Tag ordered`: canonical launcher Server/Easy,
+  отдельный stage/fresh profile, `-addr 127.0.0.1:2301 -aicfWeaponCategoriesProbe 1
+  -aicfRequirePlayerForResult 0`. **WCS 36/36 PASS**, **stock 16/16 PASS**;
+  проверено 1480 (683 US / 797 USSR) и 46 primary catalog записей соответственно.
+  Два primary slots, ALL, полное разбиение с сохранением порядка, контрольные
+  prefab и source intersection прошли. Native exit 0, ROSTER_READY, listener
+  и Game destroyed подтверждены полными остановленными логами.
+
+Финальные runtime logs относительно evidence:
+
+- `profile-EveronNorthWCSRHS-ordered/logs/logs_2026-10-12_14-29-17/console.log`;
+- `profile-Stock-ordered/logs/logs_2026-10-12_14-30-07/console.log`.
+
+`collect.ps1` читает полные логи и сохраняет все E/F, `runtime-summary.json`
+и `compile-summary.json`. SCRIPT/fatal gate — **PASS**. Прочие resource/shutdown
+ошибки соответствуют наблюдавшемуся baseline: stock 14, WCS 233; общий error-free
+gate не заявляется. `final-stage-hashes.json`: 284 production/resource файла,
+0 расхождений. Fixture hash сохранён отдельно. Движок/Workbench 1.8.0.13.
+Тестовые процессы завершились, собственный stage удалён; игровая сессия на 2001
+продолжает работать с предыдущим кодом. `git diff --check` — PASS.
+
+Промежуточные отказы сохранены: первая diagnostic fixture не задавала faction
+рецепта и получила DEFAULT_LOADOUT_FAILED (исправлена); первый audit новой
+scope-проверки ошибочно искал строковый literal после его удаления parser helper
+(исправлена проверка). Runtime `final` выявил 8 FAIL: новый Filter переставлял
+элементы через Remove, а source assertion сравнивал порядок после старой native
+compatibility. Filter заменён линейным сохранением порядка; source проверяет
+состав, порядок Filter проверяется отдельно. Финальные проверки повторены.
+
+**NOT RUN:** реальный client dropdown/input, личный/отрядный Apply/Undo/Save,
+Close/reopen, визуальные RU/EN подписи, JIP/respawn, packaged build, soak;
+runtime дробовиков и отдельных гранатомётов — таких записей в этих каталогах нет.
+Ранее выявленный sparse-slot restore FAIL не затронут этой задачей.
+
+## Общее содержимое разгрузки — 2026-10-12
+
+Ветка `codex/loadout-contents-view` от `e1d5dab` (оптимизация issue #27),
+исходное дерево чистое. Изменены `AICF_LoadoutNavigation`, `AICF_LoadoutEditor`,
+локализация RU/EN, static audit; добавлен `AICF_LoadoutContentsProbe` и обновлены
+README/агентские заметки. Контракт и ручной gate:
+[LOADOUT_CONTENTS.md](LOADOUT_CONTENTS.md). Evidence: `.codex-runtime/loadout-contents/`.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-AILoadoutStatic.ps1,Test-PersonalLoadoutContracts.ps1,Test-LocalizationStatic.ps1
+  -EvidenceRoot <before|after-final-clean>`: **2 PASS / 1 FAIL, exit 1** до и после.
+  Сохранён baseline FAIL: runner запускает Windows PowerShell 5, который неверно
+  читает UTF-8 regex существующего LocalizationStatic и получает parse error.
+  Финальные loadout/personal audits — **PASS**, 159/54 отрицательных мутации.
+- `pwsh -NoProfile -File tests/static/Test-LocalizationStatic.ps1` и
+  `pwsh -NoProfile -File tools/Build-AICFLocalization.ps1 -Check`: **PASS**, 591 запись.
+- Evidence `compile.ps1 -Variant Stock -Label final-production-stock` и
+  `-Variant EveronNorthWCSRHS -Label final-production-wcs`: окончательный production
+  Workbench Validate/Compile **PASS / exit 0**. `-Label final-fixture -SourceRoot <stage>`:
+  fixture compile **PASS / 0**. Версия движка/Workbench 1.8.0.13.
+  SCRIPT E/F, ENGINE F и VM exceptions — 0; resource errors в production console:
+  stock 25, WCS 39. Полные logs, argv и manifest сохранены в `wb-<label>/` и рядом.
+- Evidence `runtime.ps1 -Variant Stock -Tag final` и
+  `runtime.ps1 -Variant EveronNorthWCSRHS -Tag final`: canonical
+  `tools/Start-AICFRuntime.ps1 -Role Server -Difficulty Easy -RepositoryRoot <stage>`
+  с fresh profile и `-addr 127.0.0.1:2301 -aicfContentsProbe 1 -aicfRequirePlayerForResult 0`.
+  Полные остановленные логи подтверждают listener, ROSTER_READY, probe completion
+  и Game destroyed; native exit **0**. Manifest сохранён в launcher output.
+  Stock **24/27 PASS**, WCS **62/65 PASS**; общий runtime verdict — **FAIL**.
+  Новое представление, точные адреса, отсутствие дубликатов, сохранность остальных
+  предметов после удаления и Undo проходят. В обеих конфигурациях US:
+  `CONTENTS_REMOVED_RESTORE`, `CONTENTS_REMOVED_SIGNATURE`,
+  `CONTENTS_REMOVED_VALIDATE` — **FAIL / INVENTORY_RESTORE_FAILED**.
+  Это выявленное ограничение прежнего restore: WCS stage-диагностика подтверждает
+  сохранённый slot 1 при создании slot 0 в пустом native-кармане. Тот же адрес
+  доступен через прежний Rows; production Inventory/Restore не изменены.
+  Сохранение/чтение файла рецепта проходит, но не заменяет runtime restore.
+
+Полные финальные логи относительно evidence:
+
+- `profile-Stock-final/logs/logs_2026-10-12_14-09-15/console.log`;
+- `profile-EveronNorthWCSRHS-final/logs/logs_2026-10-12_14-06-15/console.log`.
+
+`collect.ps1` читает полные logs и сохраняет `runtime-summary.json` и все E/F.
+SCRIPT/fatal gate — **PASS**; прочие resource/shutdown ошибки: stock 14, WCS 233,
+соответствуют ранее наблюдавшемуся baseline. Общий error-free gate не заявляется.
+Промежуточные attempts сохранены: первый fixture compile не прошёл из-за
+зарезервированного имени `owned` (исправлено); runtime `first` — 3 FAIL;
+`restore-fixed` и `diagnostic` — 4 FAIL, включая неверное fixture-ожидание
+вложенных предметов непосредственно в wearable TV-102. Оно заменено проверкой
+фактически надетого wearable; точный Pouch Preset [7] со снимка не проверен.
+Эксперимент с порядком удаления/вставки не исправил restore и полностью отменён.
+
+`final-stage-hashes.json` подтверждает 283 совпадающих production/resource файла;
+fixture hashes сохранены отдельно. Stage после проверок удалён, тестовые серверы
+завершились сами через RequestClose. Ранее запущенную игровую сессию эти probes
+не перезапускали. `git diff --check` — **PASS**.
+
+**NOT RUN:** ручное отображение и input в клиенте, точный Pouch Preset [7] EMR,
+длинные RU/EN подписи, client RPC save/respawn/JIP, packaged build, полная матрица
+и soak. Save/reopen после удаления ограничен описанным restore FAIL.
+
+## Issue #27: каталог редактора пресетов — 2026-10-12
+
+Ветка `codex/issue-27-preset-performance` от обновлённой `origin/main`,
+`fb6f3e12fcac614e0d259aaeb6246588bcb31a0a`; исходное дерево чистое.
+Изменены `AICF_LoadoutCatalog`, `AICF_LoadoutEditor`, `AICF_LoadoutItemGrid`,
+AILoadout static audit, добавлен `AICF_LoadoutPerformanceProbe`; обновлены
+README и агентские заметки. Контракты и ручной gate:
+[LOADOUT_PERFORMANCE.md](LOADOUT_PERFORMANCE.md).
+Evidence: `.codex-runtime/issue27/`.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-AILoadoutStatic.ps1,Test-PersonalLoadoutContracts.ps1
+  -EvidenceRoot <before|after-final>`: **2 PASS / exit 0** до и после.
+  Baseline failures в выбранном наборе отсутствуют. Финальные audits:
+  150 и 54 отрицательных мутации. Устаревшее требование detach на каждый
+  SetItems заменено отменой предыдущего Render; guards lifecycle detach сохранены.
+- Evidence `compile.ps1 -Variant Stock -Label final-stock` и
+  `-Variant EveronNorthWCSRHS -Label final-production-wcs`: production
+  Workbench Validate/Compile **PASS / native exit 0**, validation successful.
+  `-Label final-fixture-wcs -SourceRoot <stage>`: отдельный fixture compile
+  **PASS / 0**. SCRIPT E/F, ENGINE F и VM exceptions отсутствуют.
+  Полные console/script/error logs и argv сохранены в `wb-<label>/` и рядом.
+  Resource errors сохранены: 25 в stock console.log и 39 в WCS.
+- Evidence `runtime.ps1 -Variant EveronNorthWCSRHS -Probe performance -Tag measured`
+  и `-Variant Stock -Probe performance -Tag final`: canonical
+  `tools/Start-AICFRuntime.ps1 -Role Server -Difficulty Easy -RepositoryRoot <stage>`
+  с fresh profile, `-aicfLoadoutPerformanceProbe 1 -aicfRequirePlayerForResult 0`.
+  WCS **80/80**, stock **48/48**, native exit **0**, ROSTER_READY и штатный
+  RequestClose / Game destroyed. Проверены все записи обеих фракций и точный
+  порядок выдачи по source/category/mode. SCRIPT/fatal gate **PASS**.
+- `runtime.ps1 -Variant EveronNorthWCSRHS -Probe personal -Tag final` использует
+  `-aicfPersonalLoadoutProbe 1`: **37/37 PASS / native exit 0**. Проверены
+  validation, неизвестный предмет, blacklist, owner/context/revision isolation,
+  save/readback и восстановление после прерванной записи. SCRIPT/fatal gate **PASS**.
+  Это существующий server probe, не клиентский RPC/input pipeline.
+
+Медианы шести замеров, каждый — пять проходов List(0)+Name; legacy Find/List
+из `fb6f3e1` и новый код исполнялись попеременно в одном процессе на прогретых
+данных. Checksums совпали во всех samples. Это **не время кадра/клика**:
+
+| Каталог | Записей | До, мс | После, мс | Отношение |
+|---|---:|---:|---:|---:|
+| WCS RHS_USAF | 3704 | 6447 | 142 | 45,4× |
+| WCS RHS_AFRF | 3897 | 7381,5 | 154,5 | 47,8× |
+| Stock US | 187 | 15 | 4,5 | 3,3× |
+| Stock USSR | 166 | 13 | 4 | 3,25× |
+
+Полные остановленные логи относительно evidence:
+
+- `profile-EveronNorthWCSRHS-performance-measured/logs/logs_2026-10-12_13-34-27/console.log`;
+- `profile-EveronNorthWCSRHS-personal-final/logs/logs_2026-10-12_13-36-55/console.log`;
+- `profile-Stock-performance-final/logs/logs_2026-10-12_13-37-56/console.log`.
+
+В каждом profile сохранены также script/error logs; launcher output содержит
+`AICF_RUNTIME_MANIFEST_JSON`, точный CLI и native exit. `collect.ps1` читает
+полные логи, сохраняет ошибки и `runtime-summary.json`. В WCS по **233** прочих
+строки (E), в stock **14**, включая resource/shutdown font leak; общий error-free
+gate не заявляется. Это соответствует ранее наблюдавшемуся baseline, не исправлено
+этой задачей. Неполных или неуспешных runtime attempts в этой задаче нет.
+
+WCS benchmark выполнялся до последней UI-only правки flush перед RPC;
+код каталога в нём окончательный. Personal и stock probes — с окончательным
+stage. `stage-hashes.json` и `final-stage-hashes.json` фиксируют совпадение
+283 production/resource files с соответствующим stage, fixtures сохранены
+в tests и имеют отдельные hashes. Версия движка/Workbench — 1.8.0.13.
+`git diff --check` — PASS. Stage после проверок удалён; свои процессы завершены.
+
+**NOT RUN:** ручная плавность и latency всего интерфейса до/после, отображение
+native thumbnails, быстрый ввод в реальном клиенте, client RPC save/respawn/JIP,
+полная offline матрица, packaged build и soak. Полная пересборка draft/3D-персонажа
+остаётся потенциально затратной; ускорение каталога не гарантирует устранения
+всех задержек. Критерий ручной проверки issue #27 остаётся открытым.
+
 ## PR #26: полный graph gate усиленной точки — 2026-10-12
 
 Исправление review P1 в той же ветке от `f177309`, исходное дерево чистое.

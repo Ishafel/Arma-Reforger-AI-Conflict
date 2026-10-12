@@ -31,6 +31,15 @@ class AICF_RHSContentProfile : AICF_ContentProfile
 		return "RHS_USMC_MSV_0_16_5150";
 	}
 
+	override int GetLoadoutWeaponCategory(ResourceName prefab)
+	{
+		if (AICF_LoadoutWeaponCategories.Model(prefab, "Rifle_VSS") || AICF_LoadoutWeaponCategories.Model(prefab, "Rifle_M38SDMR"))
+			return AICF_ELoadoutWeaponCategory.MARKSMAN;
+		if (prefab.Contains("/Rifles/M27IAR/"))
+			return AICF_ELoadoutWeaponCategory.MACHINE_GUN;
+		return super.GetLoadoutWeaponCategory(prefab);
+	}
+
 	override FactionKey GetRuntimeFactionKey(FactionKey stableKey)
 	{
 		if (stableKey == "US")

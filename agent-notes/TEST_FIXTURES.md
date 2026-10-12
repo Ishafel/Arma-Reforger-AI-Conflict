@@ -77,12 +77,22 @@ US/USSR и каждый готовый экипаж (три essential, нет д
 
 `AICF_InfantryATProbe.c`, `-aicfATProbe 1`: отдельный WCS+RHS stage,
 North Easy/Medium/Hard. После штатного ROSTER_READY создаёт по одному полному
-отряду каждой стороны и по два one-member donor (позиции 8/9) через production
-resolver и async spawn. Проверяет все 24 prefab/роли/WCS-комплекта, 1/3/3 ПТ
+отряду каждой стороны, по два one-member donor (индексы 8/9) и US donors 6/7 через production
+resolver и async spawn. Проверяет все 26 prefab/роли/WCS-комплекта, 1/3/3 ПТ
 в каждом полном отряде, заряженное оружие `WT_ROCKETLAUNCHER` у каждого ПТ,
+точный M2 Carl Gustaf у всех US LAT/TL/AMG с одним зарядом без запасных,
+неизменность inventory при повторном ApplyWCS у US 6/7,
 соответствие stock/RHS mappings выбранной сложности и отказ для FIA. Пишет фактические prefab,
 loaded/spare и завершает сервер через RequestClose. Не моделирует оплату,
 переход donor в боевой отряд, стрельбу, client/JIP или пользовательский шаблон.
+
+`AICF_USExtraLauncherProbe.c`, `-aicfExtraLATProbe 1`: отдельный WCS+RHS stage.
+После ROSTER_READY строит 20 стандартных draft, проверяет комплекты всех ролей,
+точный M2 Carl Gustaf с одним зарядом без запасных во втором слоте US LAT/TL/AMG,
+прежний пустой слот РФ 6/7 и полную signature после Capture/Restore всех
+комплектов US с гранатомётом (32 checks на Medium/Hard, 28 на Easy).
+Печатает слоты всех ролей и завершает сервер. Не включать одновременно с другими
+самозавершающимися probes; клиент, стрельба и file Save не проверяются.
 
 `AICF_FIAGarrisonRecoveryProbe.c`, `-aicfRecoveryProbe 1`: только отдельный stage,
 Hard North WCS+RHS. Проверяет metadata трёх мест экипажа, геометрию границы
@@ -162,6 +172,8 @@ Server и client используют согласованный stage. Для R
 | [AICF_LoadoutClothingProbe.c](../tests/fixtures/AICF_LoadoutClothingProbe.c) | Клиентские/серверные проверки одежды и inventory; stage обоих peers | `aicfClothingProbe` |
 | [AICF_LoadoutMagazineProbe.c](../tests/fixtures/AICF_LoadoutMagazineProbe.c) | Magazines, ammo и runtime inventory | `aicfMagazineProbe` |
 | [AICF_LoadoutNavigationProbe.c](../tests/fixtures/AICF_LoadoutNavigationProbe.c) | Loadout navigation regression; одноимённый CLI есть у другого probe | `aicfNavigationProbe` |
+| [AICF_LoadoutContentsProbe.c](../tests/fixtures/AICF_LoadoutContentsProbe.c) | Общий список, точные адреса, remove/Undo, restore/validate и save/readback; требует ClothingProbe в том же stage, завершает сервер | `aicfContentsProbe` |
+| [AICF_LoadoutWeaponCategoriesProbe.c](../tests/fixtures/AICF_LoadoutWeaponCategoriesProbe.c) | Реальные stock/WCS primary weapons, два native slots, полное разбиение без потерь и перестановок, контрольные prefab и пересечение с source; после ROSTER_READY завершает сервер | `aicfWeaponCategoriesProbe` |
 | [AICF_LoadoutRuntimeProbe.c](../tests/fixtures/AICF_LoadoutRuntimeProbe.c) | Runtime выдача/проверка loadout; optional recruit/hold | `aicfLoadoutProbe`, `aicfLoadoutProbeHoldSeconds`, `aicfLoadoutRecruitProbe` |
 | [AICF_LocalizationProbe.c](../tests/fixtures/AICF_LocalizationProbe.c) | Runtime локализация и форматирование строк | `aicfLocalizationProbe` |
 | [AICF_LogisticsFallbackProbe.c](../tests/fixtures/AICF_LogisticsFallbackProbe.c) | Инъекция logistics fallback; используется с logistics runtime setup | `aicfLogisticsProbeFallback` |
@@ -179,6 +191,7 @@ Server и client используют согласованный stage. Для R
 | [AICF_NavigationRecoveryProbe.c](../tests/fixtures/AICF_NavigationRecoveryProbe.c) | Координатный snapshot 2026-09-19; не универсальный тест карты | `aicfNavigationProbe` |
 | [AICF_NorthFailureProbe.c](../tests/fixtures/AICF_NorthFailureProbe.c) | Прямая подача failed movement inputs; wiring портов проверяется отдельно статикой | `aicfNorthFailureProbe` |
 | [AICF_PersonalLoadoutProbe.c](../tests/fixtures/AICF_PersonalLoadoutProbe.c) | Personal catalog/recipe validation; не имитирует UI/player/JIP | `aicfPersonalLoadoutProbe` |
+| [AICF_LoadoutPerformanceProbe.c](../tests/fixtures/AICF_LoadoutPerformanceProbe.c) | Сравнение Find/List со старой реализацией и замеры каталога без UI; после ROSTER_READY завершает сервер | `aicfLoadoutPerformanceProbe` |
 | [AICF_PersonalNetworkProbe.c](../tests/fixtures/AICF_PersonalNetworkProbe.c) | WCS native owner RPC без управления UI | `aicfPersonalNetworkProbe`, `aicfProbeFaction`, `aicfProbePersonal` |
 | [AICF_PresetRespawnProbe.c](../tests/fixtures/AICF_PresetRespawnProbe.c) | Добавляется в staging AICF_SquadRespawnUI.c; создаёт recruit и убивает test characters | `aicfPresetProbeFaction`, `aicfPresetRespawnProbe` |
 | [AICF_RecoveryEpisodeProbe.c](../tests/fixtures/AICF_RecoveryEpisodeProbe.c) | Episode, hidden continuation и player release; требует чтения связанных recruitment fixtures | `aicfPlayerReleaseProbeOnly`, `aicfRecoveryEpisodeProbe`, `aicfRecruitHiddenContinue`, `aicfRecruitHiddenProbe`, `aicfRecruitMultiMemberProbe` |

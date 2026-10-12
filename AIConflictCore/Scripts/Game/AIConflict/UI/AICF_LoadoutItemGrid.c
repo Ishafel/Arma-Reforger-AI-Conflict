@@ -9,6 +9,7 @@ class AICF_LoadoutItemCard
 	ItemPreviewWidget m_Preview;
 	TextWidget m_Name;
 	TextWidget m_Detail;
+	ResourceName m_sBoundPrefab;
 }
 
 class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
@@ -120,8 +121,9 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 				}
 			}
 		}
-		ReleasePreviews();
-		m_Manager = ResolveThumbnailManager();
+		GetGame().GetCallqueue().Remove(Render);
+		if (!m_Manager)
+			m_Manager = ResolveThumbnailManager();
 		m_aPrefabs.Copy(prefabs);
 		m_aNames.Copy(names);
 		m_aDetails.Copy(details);
@@ -202,21 +204,30 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 		for (int i; i < m_aCards.Count(); i++)
 		{
 			AICF_LoadoutItemCard card = m_aCards[i];
-			card.m_Preview.SetVisible(false);
-			if (m_Manager)
-				m_Manager.SetPreviewItem(card.m_Preview, null);
 			int index = m_iFirst + i;
 			bool visible = index < m_aPrefabs.Count();
+			ResourceName prefab;
+			if (visible)
+				prefab = m_aPrefabs[index];
+			// Один и тот же prefab уже привязан к этому widget. Обновление
+			// текста/selection не требует сброса native thumbnail cache.
+			if (card.m_sBoundPrefab != prefab)
+			{
+				card.m_Preview.SetVisible(false);
+				if (m_Manager)
+				{
+					m_Manager.SetPreviewItem(card.m_Preview, null);
+					if (!prefab.IsEmpty())
+						m_Manager.SetPreviewItemFromPrefab(card.m_Preview, prefab, null, false, 5000);
+					card.m_sBoundPrefab = prefab;
+				}
+			}
+			card.m_Preview.SetVisible(m_Manager && !prefab.IsEmpty());
 			card.m_Root.SetVisible(visible);
 			if (!visible)
 				continue;
 			card.m_Name.SetText(AICF_Localization.Resolve(m_aNames[index]));
 			card.m_Detail.SetText(AICF_Localization.Resolve(m_aDetails[index]));
-			if (m_Manager && !m_aPrefabs[index].IsEmpty())
-			{
-				card.m_Preview.SetVisible(true);
-				m_Manager.SetPreviewItemFromPrefab(card.m_Preview, m_aPrefabs[index], null, false, 5000);
-			}
 		}
 		string range = "{AICF:AICF_UI_No_items_03a89de6}";
 		if (!m_aPrefabs.IsEmpty())
@@ -257,6 +268,7 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 			card.m_Preview.SetVisible(false);
 			if (m_Manager)
 				m_Manager.SetPreviewItem(card.m_Preview, null);
+			card.m_sBoundPrefab = string.Empty;
 		}
 		m_Manager = null;
 	}
