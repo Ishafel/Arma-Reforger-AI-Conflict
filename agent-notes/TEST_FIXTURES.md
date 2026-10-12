@@ -1,5 +1,65 @@
 # Runtime fixture: каталог и применение
 
+`AICF_AntiTankProbe.c`, `-aicfAntiTankProbe 1`: отдельный Core stage, северный
+Everon, Hard. Создаёт одного ПТ-бойца USSR, переносит его и готовый FIA БТР
+на выбранную линию 350 м, назначает defend waypoint стрелку, отключает damage
+стрелка и AI экипажа мишени; физика БТР остаётся в `COLLISION`, чтобы он не
+скатывался после переноса. Штатный selector и perception остаются включены.
+Фиксирует распознавание, native/effective range и реальное событие
+`OnWeaponFired` с projectile и текущей целью. Завершается после выстрела либо
+через 180 тиков после ROSTER_READY; успешное раннее завершение также требует
+проверок aim/move. `AICF_ATProbeAim` сравнивает допуски на одних и тех же
+реальных observer/target с подключённой и отключённой policy dependency;
+винтовочный допуск должен совпасть. `AICF_ATProbeMove` вызывает production task
+на отдельном `SCR_AICombatMoveState`: ожидание до 10 с и запрос 2 с с остановкой
+для прицеливания. Запрос не отправляется живому AI и не доказывает проходимость
+маршрута. Callback и weapon invoker снимаются при
+завершении/Stop. Сам расход магазина не считается выстрелом.
+`Test-AntiTankLog.ps1 -LogPath ...` требует фактический projectile на 300–400 м
+и полный остановленный лог, а также оба runtime contract markers. Попадания,
+движущаяся цель, client/JIP — отдельные
+проверки; этот probe их не подтверждает. Политика: [ANTI_TANK_TACTICS.md](ANTI_TANK_TACTICS.md).
+
+`AICF_FIARandomGarrisonProbe.c`, `-aicfRandomGarrisonProbe full|plan`: текущий probe
+issue #25 для любого Variant/сложности. В отдельном stage проверяет production
+plan, все три composition rules/fallback, детерминизм PRNG и контрольную
+последовательность, synthetic directed graph (HQ, оба направления ребра, тупик,
+изолированный узел, отсутствие кандидата), повторный Start и immutable snapshot.
+Регрессии PR #26 проверяют граф с пригодным кандидатом, но изолированной целью,
+HQ только с входящими рёбрами и HQ с выходом только к другому HQ. Положительный
+контроль — связный граф с обоими HQ exits; `LIVE_GRAPH_READY` проверяет весь
+реальный Hard graph после integration setup.
+`full` ждёт actual READY/посадки всех выбранных мест (deadline 360 с), `plan`
+проверяет план сразу, но закрывает сервер только на первом Update после
+`ROSTER_READY`, до spawn гарнизонов. Закрытие прямо из `Start` воспроизводило
+shutdown leak `BridgeRoad` во время незавершённой инициализации. Отключает damage готовых
+машин/бойцов; не доказывает бой, движение, client/JIP или soak.
+Анализ полного остановленного лога: `Test-FIARandomGarrisonLog.ps1 -LogPath ...`
+(для `plan` добавить `-PlanOnly`). Целевой probe и общий SCRIPT/fatal gate
+выводятся отдельно, общий exit сохраняет любые ошибки.
+
+Дополнения для regression issue #25, применяются только вместе с этим probe:
+
+- `AICF_MagazineGuardProbe.c` в Core `Diagnostics/`: вызывает production
+  magazine task с отсутствующим access и на фактических занятых местах без
+  weapon manager; ожидает FAIL без VM exception и сообщает число проверенных мест.
+- `AICF_RHSPMCGarrisonProbe.c` в RHS `Content/`, после `AICF_RHSPMCEquipment.c`
+  по порядку имён: проверяет armament всех готовых бойцов, отсутствие новых
+  посадок при pending, а также принудительный pending у одного готового бойца.
+  Fault injection восстанавливает исходный флаг сразу после вызова; не меняет
+  inventory, identity и seats. Требует full с непустым гарнизоном для покрытия.
+- `AICF_BridgeLifecycleProbe.c` отдельно в Arland `Integration/`:
+  `-aicfBridgeProbe native|native-settled|native-ended` отключает AICF bootstrap,
+  сравнивает закрытие после первого кадра, после 10 с и после `EndGameMode`.
+  Это диагностическая изоляция lifecycle; остальные scripts addon остаются
+  загруженными, поэтому результат не называется запуском без модов.
+
+Следующие три старых probes (`DifficultyRollout`, `FIAGarrison`,
+`FIAGarrisonRecovery`) и `Test-FIAGarrisonLog.ps1` описывают исторический
+фиксированный состав 0.1.26 (5/10 машин, 7 пассажиров). Для случайного состава
+issue #25 они не являются актуальными gates; их сохранённые результаты ниже
+нельзя переносить на новую реализацию. Для новых запусков использовать probe выше.
+
 `AICF_DifficultyRolloutProbe.c`: отдельный stage любого Variant,
 `-aicfDifficultyProbe 0|1|2 -aicfDifficultyHeaders '<Easy>;<Medium>;<Hard>'`.
 Загружает три native MissionHeader, проверяет inherited difficulty и flags,

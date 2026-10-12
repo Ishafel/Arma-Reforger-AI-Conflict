@@ -347,3 +347,22 @@ modded class AICF_FIAPatrolCrew
 		return super.Board(p);
 	}
 }
+
+// Гарнизон использует exact-seat BoardGarrison и не проходит через Board.
+// Тот же барьер нужен до первой посадки и при повторной попытке посадки.
+modded class AICF_FIAGarrisonCrew
+{
+	override bool BoardGarrison(AICF_FIAGarrison g)
+	{
+		if (!g || !g.GroupIdentity()) return false;
+		array<AIAgent> agents = {};
+		g.m_Group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent) return false;
+			SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (!character || character.AICF_IsPMCEquipmentPending()) return false;
+		}
+		return super.BoardGarrison(g);
+	}
+}

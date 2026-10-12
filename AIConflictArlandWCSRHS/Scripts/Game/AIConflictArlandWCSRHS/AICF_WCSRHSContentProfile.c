@@ -35,6 +35,16 @@ class AICF_WCSRHSContentProfile : AICF_RHSContentProfile
 		return super.GetFIAGarrisonPrefab(tank);
 	}
 
+	override bool IsFIAGarrisonTank(ResourceName prefab)
+	{
+		return prefab.Contains("Prefabs/Vehicles/Tracked/T72") || super.IsFIAGarrisonTank(prefab);
+	}
+
+	override bool IsFIAGarrisonAPC(ResourceName prefab)
+	{
+		return prefab.Contains("Prefabs/Vehicles/Tracked/BMP") || super.IsFIAGarrisonAPC(prefab);
+	}
+
 	override string GetProfileKey()
 	{
 		return "WCS_RHS_ARLAND";

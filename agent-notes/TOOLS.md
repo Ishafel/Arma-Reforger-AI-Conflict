@@ -30,6 +30,10 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Единый offline запуск
 
+`tests/contracts/Test-FIAStrongpointGraphContracts.ps1` проверяет общий graph gate
+в трёх успешных путях radio setup и в Hard planner. Шесть отрицательных мутаций
+отклоняют bypass; поведение графа отдельно проверяет `AICF_FIARandomGarrisonProbe`.
+
 Из корня checkout:
 
 ```powershell
@@ -66,6 +70,12 @@ Enforce fixture не входят в автоматическую матрицу
 критерии остаются отдельными gates.
 
 ## Рабочие утилиты
+
+Противотанковая тактика: `tests/contracts/Test-AntiTankContracts.ps1` входит
+в offline runner и проверяет границы новой политики с отрицательными мутациями.
+`tests/log-audits/Test-AntiTankLog.ps1 -LogPath <полный остановленный console.log>`
+проверяет выстрел на дальней дистанции и SCRIPT/fatal gate; fixture и ограничения
+описаны в [TEST_FIXTURES.md](TEST_FIXTURES.md).
 
 | Файл | Вход, результат и побочные эффекты |
 |---|---|
@@ -199,6 +209,12 @@ Enforce fixture не входят в автоматическую матрицу
 
 `tests/contracts/Test-FIAGarrisonContracts.ps1` проверяет authority/identity,
 полный roster, отсутствие замены и наследование Medium/Hard headers.
+`tests/contracts/Test-FIARandomGarrisonContracts.ps1` добавляет границы PRNG plan,
+JIP state, catalog, topology и rollback radio setup для issue #25.
+`tests/log-audits/Test-FIARandomGarrisonLog.ps1 -LogPath <console.log>` анализирует
+текущий `AICF_FIARandomGarrisonProbe.c`; для режима plan нужен `-PlanOnly`.
+Targeted probe и полный SCRIPT/fatal gate различаются в выводе, ошибки сохраняют exit 1.
+Следующий анализатор исторический, для фиксированного состава до issue #25:
 `tests/log-audits/Test-FIAGarrisonLog.ps1 -LogPath <полный-остановленный-console.log>
 -Difficulty 0|1|2` анализирует прогон `AICF_FIAGarrisonProbe.c` на North WCS+RHS:
 состав 0/5/10, экипажи 10/3, физический локальный патруль, захват и casualty. Отдельно сообщает

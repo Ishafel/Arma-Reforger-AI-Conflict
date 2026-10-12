@@ -10,10 +10,11 @@ modded class SCR_MissionHeaderCampaign
 	[Attribute("0", UIWidgets.ComboBox, "FIA garrison difficulty", "", ParamEnumArray.FromEnum(AICF_EDifficulty))]
 	AICF_EDifficulty m_eAICFDifficulty;
 
-	[Attribute("0", UIWidgets.CheckBox, "Use profile tank for second FIA defender")]
+	// Legacy header fields сохранены для совместимости ресурсов; planner использует catalog.
+	[Attribute("0", UIWidgets.CheckBox, "Legacy FIA tank flag (composition uses difficulty and catalog)")]
 	bool m_bAICFFIATank;
 
-	[Attribute("0", UIWidgets.CheckBox, "Fill FIA BTR passenger seats")]
+	[Attribute("0", UIWidgets.CheckBox, "Legacy FIA passenger flag (composition uses difficulty and catalog)")]
 	bool m_bAICFFIAPassengers;
 }
 

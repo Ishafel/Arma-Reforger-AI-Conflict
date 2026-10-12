@@ -63,6 +63,8 @@ class AICF_StockRadioBridgeNormalizer
 
 		int initialNormalizations = NormalizeAllPlayableOwnedBases("BOOTSTRAP");
 		initialNormalizations += NormalizeMapSpecificFrontiers("BOOTSTRAP");
+		AICF_FIAStrongpointRadioSetup.Prepare(campaign);
+		RefreshAuthoritativeCoverage();
 		AICF_Stage1Diagnostics.Info(
 			"RADIO_BRIDGE_READY",
 			string.Format(
