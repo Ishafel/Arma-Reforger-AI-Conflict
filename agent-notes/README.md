@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Выполнить критерии issue и привязать PR | [AGENTS.md: работа по issue](../AGENTS.md#работа-по-issue-и-привязка-pr), [TESTING.md](TESTING.md) |
 | Найти состав последнего оформленного релиза и ограничения | [0.1.27](../releases/0.1.27.md), [TESTING.md](TESTING.md) |
 | Найти домен, состояние и границы побочных эффектов | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Проверить игровую механику и defaults | [GAMEPLAY.md](GAMEPLAY.md), затем указанные исходники |
