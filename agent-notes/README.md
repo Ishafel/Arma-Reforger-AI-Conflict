@@ -10,6 +10,7 @@
 | Найти состав последнего оформленного релиза и ограничения | [0.1.27](../releases/0.1.27.md), [TESTING.md](TESTING.md) |
 | Найти домен, состояние и границы побочных эффектов | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Проверить игровую механику и defaults | [GAMEPLAY.md](GAMEPLAY.md), затем указанные исходники |
+| Изменить цены штатного заказа пехоты и техники RHS/WCS | [MENU_PRICES.md](MENU_PRICES.md), [полная таблица](MENU_PRICE_TABLE.csv), RHS/WCS menu price policy и integration |
 | Изменить случайную начальную погоду без изменения времени | [GAMEPLAY.md](GAMEPLAY.md#начальная-погода), четыре базовых stock/RHS `MissionHeader`, [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить сложности, случайный состав и усиленную точку FIA | [FIA_GARRISONS.md](FIA_GARRISONS.md), [GAMEPLAY.md](GAMEPLAY.md#сложность-гарнизонов-fia), [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить ПТ-состав и Carl Gustaf US | [GAMEPLAY.md](GAMEPLAY.md#сложность-гарнизонов-fia), `AICF_Difficulty`, Core/RHS content profiles, `AICF_WCSInfantryKit`/`AICF_WCSInfantryEquipment`; probes в [TEST_FIXTURES.md](TEST_FIXTURES.md) |

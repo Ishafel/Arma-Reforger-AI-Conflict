@@ -4,6 +4,92 @@
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
 
+## Issue #33: цены штатных меню RHS/WCS — 2026-10-13
+
+Ветка `codex/issue-33-menu-prices` от обновлённого `origin/main` `381501c`,
+исходное дерево чистое. RHS/WCS integration нормализует возвращаемый CAMPAIGN
+quote; native permissions, faction/provider/traits, debit/refund и registry
+сохраняются. Core, доход баз, тикеты и auto reinforcement 10/15/20 не менялись.
+Политика и вся таблица: [MENU_PRICES.md](MENU_PRICES.md).
+Evidence: `.codex-runtime/issue-33-menu-prices/`; исходный анализ —
+`.codex-runtime/price-audit-20261013/`. Версии: 1.8.0.13, RHS 0.16.5237
+(packs 0.16.5236), WCS 8.3.0. Ниже только новые прогоны этой задачи.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-RHSIntegrationStatic.ps1,Test-WCSIntegrationStatic.ps1,Test-Stage4Static.ps1,Test-InfantryRecruitmentStatic.ps1
+  -EvidenceRoot <before>` — **4 PASS / exit 0**. После изменения тот же набор
+  плюс `Test-MenuPriceStatic.ps1`, `<after-final>` — **5 PASS / exit 0**.
+  Baseline failures выбранного набора отсутствуют. Полный offline набор не
+  перезапускался; прежние несвязанные failures, включая sparse-slot restore,
+  не исправлялись и не считаются закрытыми.
+- Evidence `compile.ps1 -Variant Stock|RHS|EveronNorthWCSRHS -Attempt production
+  -SourceRoot .` — терминальный Workbench **PASS / native exit 0** для всех
+  трёх production graphs, `Script validation successful`, SCRIPT/fatal = 0.
+  Fixture compile `-Variant EveronNorthWCSRHS -Attempt final-contracts` —
+  **PASS / 0**. Production compile сохраняет 25/26/39 прочих E/F соответственно;
+  это не полностью чистая validation ресурсов. JSON команд и полные логи
+  находятся рядом с `compile-exit-*`.
+- `runtime.ps1 -Variant <вариант> -Attempt matrix -Mode client`, затем в другой
+  терминальной сессии `runtime.ps1 -Variant <тот же> -Attempt matrix -Role Client
+  -ServerProfileRoot <свежий server-profile>` — **12 native exit 0**.
+  Только canonical launcher, Easy, `-addr 127.0.0.1:2301`, отдельные profiles;
+  подтверждены живой process, CLI Params и ROSTER_READY. Manifests и readiness
+  сохранены в `launcher-*.txt`.
+
+| Variant | Server / JIP client: строки с PASS | Native E/F server / client | SCRIPT/fatal |
+|---|---:|---:|---:|
+| RHS | 115 / 115 | 69 / 94 | 0 / 0 |
+| ArlandWCSRHS | 189 / 189 | 104 / 127 | 0 / 0 |
+| EveronRHS | 115 / 115 | 199 / 201 | 0 / 0 |
+| EveronWCSRHS | 189 / 189 | 234 / 234 | 0 / 0 |
+| EveronNorthRHS | 115 / 115 | 199 / 201 | 0 / 0 |
+| EveronNorthWCSRHS | 189 / 189 | 234 / 234 | 0 / 0 |
+
+`tests/log-audits/Test-MenuPriceLog.ps1 -LogPath <полный console.log>
+[-ExpectedVehicles 48] [-Client -CompareLogPath <server-console.log>]` —
+**12 PASS / 0**. Проверены все 67 roster, 48/122 spawner entries,
+server/client prefab/index/цены, group debit budget, повторные чтения,
+накопление в непустой массив и CopyFrom. North WCS и финальный RHS probe
+дополнительно сравнивают non-CAMPAIGN budgets с native snapshot.
+`summarize.ps1` сохраняет verdict, пути и SHA-256 в `final-summary.json`.
+
+Native E/F не скрыты: resource/material/world/hierarchy/pathfinding ошибки,
+при direct-connect — `Trying to register connection of possibly unauthorized
+client` до успешного подключения. Arland baseline содержит 69/104 E/F;
+в новом Arland добавлен этот network marker, отсутствует старый WORLD
+`m_bShowDebugShape` marker. Everon/North и клиентские E/F — фактические
+наблюдения этих прогонов, не доказанно идентичный старый baseline.
+
+- `runtime.ps1 -Variant ArlandWCSRHS -Attempt final -Transactions -Measure`
+  и `-Variant RHS -Attempt final-measure -Transactions -Measure`:
+  **native exit 0**, audits `-Transactions -Measurements` — **PASS / 0**.
+  122/48 actual vehicle instances, compartments и weapon entities;
+  все 48 общих измерений RHS/WCS совпали. Четыре native building транзакции:
+  US FireTeam **300**, M1025 M2HB **400**, RF FireGroup **275**, БТР-70 **1000**.
+  В каждом случае один callback и реальный расход полной цены; отказ при
+  `price-1`, разрешение при точном запасе, отмена preflight без расхода.
+  North WCS matrix повторяет четыре транзакции: **4/4 PASS**.
+- `build-table.ps1` сверяет все 189 старых цен с исходными CSV анализа,
+  общие цены/roster с новым RHS и формирует отслеживаемую
+  `agent-notes/MENU_PRICE_TABLE.csv` — **PASS / 0**.
+- `negative-audit.ps1`: положительный контроль **PASS/0**, все **14**
+  отрицательных копий полного лога отклонены с exit 1: failed/missing case,
+  result, shutdown, SCRIPT error, цена/debit, measurement, transaction,
+  лишний failed marker и неверный peer; `negative-audit/summary.json`.
+
+Подготовительные compile и Steam/PowerShell startup failures сохранены
+отдельно и не дают PASS. Runtime выявил и помог исправить native merge mutation
+при повторных чтениях US group budgets и базовый UIInfo у Mi8MTT-A;
+финальные аудиты не ослаблены ради результата.
+
+**NOT RUN:** визуальное открытие/повторное открытие меню, реальная покупка через
+игрока и vehicle factory RPC/PerformSpawn, интерактивная отмена, неудачный spawn
+после подтверждения, фактический refund action и его процент/условия;
+combat balance/penetration, soak, packaged build. Терминальная fixture
+доказывает каталог и native building preflight/debit, но не заменяет эти
+приёмочные сценарии. Stock runtime и runtime auto reinforcement отдельно не
+перезапускались; stock compile и неизменность sources/dependencies проверены.
+Работа самостоятельно не объявляется ACCEPTED.
+
 ## Оформление 0.1.27 — 2026-10-12
 
 Отдельная ветка `codex/release-0.1.27` от обновлённого `origin/main` `1bb3b35`;

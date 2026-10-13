@@ -1,5 +1,40 @@
 # Runtime fixture: каталог и применение
 
+`AICF_MenuPriceProbe.c` вместе с `AICF_MenuTransactionProbe.c` копируются только
+в изолированный RHS stage `Scripts/Game/AIConflictArlandRHS/Integration/`.
+`-aicfMenuPriceProbe 1` после ROSTER_READY проверяет 67 native BUILDING групп
+и 48/122 vehicle spawner entries RHS/WCS обеих сторон; сохраняет реальные
+prefab/index/roster, старые native и новые цены. Проверяет UI total, own/children,
+group debit budget, spawner, повторные и накопленные чтения, CopyFrom и возврат
+цены после переключения active profile. Смена profile — локальная проверка
+getters, не отдельный runtime stock. Закрывает сервер через RequestClose.
+
+`-aicfMenuVehicleMeasure 1` дополнительно создаёт локальный экземпляр каждой
+машины, рекурсивно снимает реальные compartments и weapon entities, сразу
+удаляет их. Измерение включает inventory weapons, не только mounted armament;
+source resource traversal отдельно сохраняет ammo/ERA. Не измеряет бронепробитие.
+`-aicfMenuTransactions 1` использует реальные HQ providers обеих сторон:
+native preflight при supplies `price-1` отказывает; при точном запасе разрешает,
+очистка accumulated budget отменяет preflight без расхода. Затем создаёт одну
+группу и одну машину каждой стороны с temporary provider и наблюдает изменение
+физического supply pool непосредственно внутри native entity-core callback.
+Наблюдение между кадрами недостаточно: HQ может начислить доход. Каждый случай
+требует ровно одно списание полной цены; fixture удаляет свои entities/agents
+и восстанавливает исходные supplies, cleanup повторяется при Stop.
+
+Для client/JIP серверу передать `-aicfMenuPriceProbe client` (окно 60 с после
+проверки), клиенту — `-aicfMenuPriceProbe 1`. Клиент запускается отдельной
+терминальной сессией через canonical launcher с живым ServerProfileRoot;
+после выбора profile читает тот же native каталог и закрывается. Повторный
+CallLater снимается в OnGameEnd. Не запускать вместе с другой закрывающей
+сервер fixture. Перед применением подтвердить Workbench compile.
+
+`Test-MenuPriceLog.ps1` описан в [TOOLS.md](TOOLS.md). Native budget/debit probe
+не подтверждает пользовательские menu/RPC, vehicle-factory PerformSpawn,
+ошибку создания после подтверждения, интерактивную отмену или refund action.
+Визуальные цены/доступность, эти транзакции и боевой баланс требуют отдельных
+ручных проверок; терминальная каталогизация их не заменяет.
+
 `AICF_MatchWeatherProbe.c`, `-aicfWeatherProbe baseline|random`: отдельный Core
 stage любого Variant, `-aicfWeatherHeaders '<resource>;<resource>;...'` передаёт
 доступные в его addon graph headers. Наблюдает штатные SetupDaytimeAndWeather

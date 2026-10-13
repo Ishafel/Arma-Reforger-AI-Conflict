@@ -30,6 +30,19 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Единый offline запуск
 
+`tests/static/Test-MenuPriceStatic.ps1` проверяет границы RHS/WCS price policy:
+фактический roster, единый CAMPAIGN quote, native fallback, lifecycle sources,
+отсутствие side effects транзакций и зависимости Core от RHS.
+`tests/log-audits/Test-MenuPriceLog.ps1 -LogPath <console.log>` анализирует полный
+остановленный лог: 67 групп и 122 машины (RHS-only: `-ExpectedVehicles 48`),
+повторы/getter accumulation/CopyFrom, цену spawner и debit budget. `-Client`
+требует client marker, `-CompareLogPath <server-console.log>` сравнивает каждый
+prefab, index, roster и цену. `-Measurements` требует actual compartments всех
+машин, `-Transactions` — четыре native building preflight/debit случая.
+`-CsvPath <file.csv>` экспортирует проверяемый snapshot; при FAIL экспорт
+сохраняет диагностические строки и не подтверждает корректность таблицы.
+Автоматический runner запускает только static audit, а не игру и log auditor.
+
 `tests/contracts/Test-FIAStrongpointGraphContracts.ps1` проверяет общий graph gate
 в трёх успешных путях radio setup и в Hard planner. Шесть отрицательных мутаций
 отклоняют bypass; поведение графа отдельно проверяет `AICF_FIARandomGarrisonProbe`.
