@@ -22,6 +22,11 @@ Vanilla dependency — `58D0FB3206B6F859`. Точный граф зависим�
 `addon.gproj` каждого addon и `tools/Start-AICFRuntime.ps1`; GUID не меняются.
 Core и stock integrations не должны получать обязательные RHS/WCS dependencies.
 
+Цены штатных RHS/WCS меню принадлежат integration policy/UIInfo adapter,
+см. [MENU_PRICES.md](MENU_PRICES.md). Adapter возвращает CAMPAIGN quote;
+сами списания/возвраты и проверки прав остаются в native building/spawner.
+Он не является частью AICF economy и не меняет стоимость auto reinforcement.
+
 Общий вход — `AIConflictArland/Scripts/Game/AIConflictArland/Integration/`
 `AICF_ArlandCampaignBootstrap.c`. Он допускает штатные Conflict worlds Arland
 и Everon. Integration addons подменяют нужные factory boundaries, сохраняя
