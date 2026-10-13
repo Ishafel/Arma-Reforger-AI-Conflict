@@ -4,9 +4,11 @@ param(
     [string]$JIPLogPath,
     [switch]$Policy,
     [switch]$GreetingPriority,
-    [switch]$ExitGuard
+    [switch]$ExitGuard,
+    [switch]$ClientExit
 )
 $ErrorActionPreference = 'Stop'
+if ($ClientExit -and !$ClientLogPath) { throw '-ClientExit requires -ClientLogPath' }
 function Read-Stopped([string]$Path) {
     $text = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $Path))
     if ($text -notmatch 'Game destroyed\.') { throw "Incomplete log: $Path" }
@@ -31,6 +33,10 @@ if ($GreetingPriority) { $cases += 'SALUTE_ORDER_CANCEL' }
 if ($ClientLogPath) {
     $cases += @('LIVE_SALUTE_FREE','GREETING_BOUNDED_4','LIVE_PLAYER','RECONNECT_STABLE','REUSED_NUMERIC_ID','LATE_BACKEND_IDENTITY','REAL_RESPAWN_COOLDOWN')
     0..3 | ForEach-Object { $cases += "VOICE_ONLY_$_"; $cases += "IDLE_CONTINUES_$_"; $cases += "GREETING_BOUNDED_$_" }
+    if ($ClientExit) {
+        0..3 | ForEach-Object { $cases += "IDLE_ORDER_CANCEL_$_" }
+        $cases += 'EARLY_PUSHUPS_ORDER_CANCEL'
+    }
 }
 if ($Policy) {
     $cases += @('POLICY_NEAREST_ALLY','POLICY_ENEMY','POLICY_STABLE_TIE','TWO_BOT_RESERVATION','TWO_BOT_SHARED_COOLDOWN',
@@ -45,6 +51,15 @@ if ($ClientLogPath) {
     $client = Read-Stopped $ClientLogPath
     if ($client -notmatch '\[SOCIAL_RESOURCE\] project=1 us=\S+ ussr=\S+ mapped=1') { throw 'Resource/faction mapping unresolved' }
     if ($client -notmatch '\[SOCIAL_CLIENT\] finished=1 jip=0 audio=5 duplicates=5') { throw 'Incomplete client matrix' }
+    if ($ClientExit) {
+        if ($client -match '\[SOCIAL_EXIT\][^\r\n]*pass=0') { throw 'Client loiter animation survived cancellation' }
+        0..3 | ForEach-Object {
+            if ($client -notmatch "\[SOCIAL_EXIT\] variant=$_ seen=1 tag=0 command=0 pass=1") { throw "Missing observed client exit: $_" }
+            if ($log -notmatch "\[SOCIAL_PROBE\] case=IDLE_ORDER_CANCEL_$_ pass=1") { throw "Missing order cancellation: $_" }
+        }
+        if ($log -notmatch '\[SOCIAL_PROBE\] case=EARLY_PUSHUPS_ORDER_CANCEL pass=1' -or
+            $client -notmatch '\[SOCIAL_EXIT\] variant=4 seen=1 tag=0 command=0 pass=1') { throw 'Missing early pushups cancellation' }
+    }
     $starts = [regex]::Matches($log, '\[GREETING_STARTED\][^\r\n]*token=(\d+)[^\r\n]*now_ms=(\d+)')
     if ($starts.Count -ne 5) { throw "Wrong greeting count: $($starts.Count)" }
     $previous = -30000

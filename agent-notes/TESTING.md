@@ -10,6 +10,61 @@ commit/branch, dirty status и exit codes. После правки повтор�
 `NOT RUN` в отдельном разделе issue, без ожидания игрока/тестировщика. Исторические
 verdict ниже сохраняют фактический статус; отклонение критерия не даёт новый PASS.
 
+## Issue #38: исправление скольжения с активным idle — 2026-10-13
+
+Продолжение `codex/issue-38-idle-greetings`, baseline `71ae38e`, чистое дерево.
+После сообщения игрока о US бойце, который отжимался при движении по приказу,
+добавлена проверка именно client graph. Прежний server command gate не доказывал
+его завершения. `AICF_SocialLoiterExit` завершает собственный idle через native
+`CMD_Gestures=-2` и DONE, с ordered reliable start/stop на character controller.
+
+Evidence: `.codex-runtime/issue-38-loiter-exit/`. Game/Server/Tools `1.8.0.13`.
+Helpers `compile.ps1`, `runtime.ps1`, `client.ps1`, `audit.ps1` находятся там же;
+manifest/argv, native exits и полные остановленные logs сохранены.
+
+- `Invoke-AICFChecks.ps1 -Name Test-SocialContracts.ps1,Test-SquadCommandsContracts.ps1,Test-AICombatInputContracts.ps1 -EvidenceRoot <before|after>`:
+  **2 PASS, 1 прежний FAIL / exit 1**. `STABLE_NEAREST` сохранён;
+  `static-comparison.json`. Social: **22 правила, 18 отрицательных мутаций PASS**.
+- `compile.ps1 -Variant Stock -Attempt production-second -SourceRoot .` и
+  `-Variant ArlandWCSRHS -Attempt production-final -SourceRoot .`:
+  **PASS / native exit 0**, validation successful, SCRIPT E/F = 0;
+  прочие resource E/F — **25 / 39**. Финальный WCS fixture
+  `-Attempt final-fixture-movement -SourceRoot <stage-after>` — **PASS / 0**.
+- Исходный Stock US, `runtime.ps1 -Attempt before -Stage stage-before -Probe aicfSocialProbe -ClientProbe -Commander USSR -Port 2311`,
+  `client.ps1 -Attempt client-before -Server before -Stage stage-before -Port 2311`,
+  затем `client-jip-before -JIP`: старые 52 server cases прошли, но новая
+  диагностика воспроизвела **4/4 client graph FAIL**: через 1500 ms после отмены
+  `tag=1 command=0` для Smoke, Pushups, Chair и Sit. Полные logs остановлены;
+  `baseline-regression-verdict.txt`, `baseline-client-exit-failures.txt`.
+- Финальный WCS + RHS US (Easy fixture):
+  `runtime.ps1 -Attempt verified-wcs -Stage stage-after -Variant ArlandWCSRHS -Probe aicfSocialProbe -ClientProbe -Commander USSR -Port 2314`,
+  `client.ps1 -Attempt client-verified-wcs -Server verified-wcs -Stage stage-after -Variant ArlandWCSRHS -Port 2314`,
+  затем `client-jip-verified-wcs -JIP`: **57/57 server cases**, пять client exit
+  observations **PASS**. Каждый emote отменён strategic assignment с сохранением
+  waypoint, отдельно Pushups отменён через 500 ms. Клиент видел активный tag
+  перед отменой; через 1500 ms tag и command отсутствовали. Свободный SALUTE,
+  5 audio events, 5 dedupe, respawn/cooldown и JIP без replay также прошли.
+  Все три native exits 0. `audit.ps1` запускает
+  `Test-SocialLog.ps1 -GreetingPriority -ExitGuard -ClientExit` — **PASS / 0**;
+  отрицательные полные logs с зависшим graph и отсутствующим early exit отклонены.
+  Server/client SCRIPT E/F = 0, прочие resource E/F — **105 / 174**;
+  engine logs не полностью чистые.
+
+Промежуточные попытки не объявляются финальным PASS: первый adapter нельзя было
+скомпилировать из-за modded native serialization; первое расширение fixture
+загружалось раньше своего базового modded класса. Один JIP запуск получил эту
+ошибку компиляции, несмотря на native exit 0. Ранний observer принимал следующий
+emote предварительной matrix за продолжение предыдущего; финальный observer
+связан только с live greeting/order cases. В `final-wcs` пять exit observations
+прошли, но старый тест свободного SALUTE ждал уже ушедшего бойца и завершился
+timeout; исправлен только выбор допустимого кандидата в fixture.
+
+Изменённые production scripts сверены с final stage по SHA256
+(`production-stage-hashes.json`). Полный offline набор, отдельный Stock runtime
+на новом коде, визуальная оценка blending и прослушивание — **NOT RUN**.
+Ранее заявленные результаты ниже исторические; они не подтверждали отсутствие
+оставшегося idle tag на клиенте. `ACCEPTED` не объявлялся.
+
 ## Issue #38: idle emotes и независимое приветствие — 2026-10-13
 
 Ветка `codex/issue-38-idle-greetings` от обновлённого `origin/main` `80a1403`,

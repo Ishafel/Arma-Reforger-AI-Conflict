@@ -20,6 +20,16 @@ Client сам вызывает штатные faction/group/spawn APIs. Пози
 свежими profile, client `-noFocus -forceUpdate` (штатные параметры PeerTool) и проверкой `ROSTER_READY`/manifest. Verdict берётся из полных
 остановленных logs, а не из одного успешного вызова API.
 
+Для регрессии client idle exit дополнительно копируется
+`AICF_SocialProbeExit.c` (имя обеспечивает загрузку после `AICF_SocialProbe.c`).
+Live matrix отменяет каждый из четырёх emotes через strategic assignment и
+проверяет сохранение waypoint. Дополнительный случай отменяет вход в Pushups
+через 500 ms. Клиент наблюдает `IsLoitering` перед отменой и через 1500 ms
+проверяет отсутствие tag и scripted command; `Test-SocialLog.ps1 -ClientExit`
+требует все пять наблюдений и server order cases. Предварительная server matrix
+с немедленным запуском следующего emote не входит в эти client observations.
+Animation tag — терминальная проверка графа, не визуальная оценка blending.
+
 `AICF_MenuPriceProbe.c` вместе с `AICF_MenuTransactionProbe.c` копируются только
 в изолированный RHS stage `Scripts/Game/AIConflictArlandRHS/Integration/`.
 `-aicfMenuPriceProbe 1` после ROSTER_READY проверяет 67 native BUILDING групп

@@ -2,7 +2,7 @@ param([string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScrip
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../lib/Stage3StaticAudit.Common.ps1')
 $core = Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict'
-$files = @('Config/AICF_SocialConfig.c','State/AICF_GreetingGate.c','Forces/AICF_SocialActor.c','Forces/AICF_SocialService.c','Integration/AICF_GreetingAudio.c')
+$files = @('Config/AICF_SocialConfig.c','State/AICF_GreetingGate.c','Forces/AICF_SocialActor.c','Forces/AICF_SocialService.c','Integration/AICF_GreetingAudio.c','Integration/AICF_SocialLoiterExit.c')
 $source = ($files | ForEach-Object { [IO.File]::ReadAllText((Join-Path $core $_)) }) -join "`n"
 
 function Test-Social([string]$Source) {
@@ -20,6 +20,9 @@ function Test-Social([string]$Source) {
         PARTIAL = '(?s)candidate.BeginSalute\(\).*?player.Commit\(token, now\).*?AICF_PlayGreeting'
         SALUTE_FREE = 'm_iPhase != 0 \|\| controller.IsLoitering\(\) \|\| controller.IsPlayingGesture\(\)'
         OUT_TRANSITION = 'System.GetTickCount\(\) < m_iSaluteBlockedUntil'
+        HARD_EXIT = '(?s)m_eState = ELoiterCommandState.DONE;.*?CallCommand\(m_pStaticTable.m_CommandGesture, -2, 0.0\);.*?FinishLoiter\(\);'
+        EXIT_IDENTITY = 'GetScrInputContext\(\).m_CustomAnimData != expected'
+        EXIT_REPLICATED = 'Rpc\(AICF_StopSocialLoiter_Broadcast, type, expected\)'
         STALE_PLAYER = 'GetPlayerControlledEntity\(actor.m_iPlayerId\) != actor.m_PlayerEntity'
         ONE_BOT = 'actor.m_iToken > 0 \|\| !actor.Available\(\)'
         AUTHORITY = '!Replication.IsServer\(\) \|\| !m_Campaign \|\| !m_Campaign.IsMaster\(\)'
@@ -49,6 +52,9 @@ $mutations = @(
     @('STALE_PLAYER','GetPlayerControlledEntity(actor.m_iPlayerId) != actor.m_PlayerEntity','GetPlayerControlledEntity(actor.m_iPlayerId) == actor.m_PlayerEntity'),
     @('SALUTE_FREE','m_iPhase != 0 || controller.IsLoitering() || controller.IsPlayingGesture()', 'false'),
     @('OUT_TRANSITION','System.GetTickCount() < m_iSaluteBlockedUntil','false'),
+    @('HARD_EXIT','m_CommandGesture, -2, 0.0','m_CommandGesture, -1, 0.0'),
+    @('EXIT_IDENTITY','GetScrInputContext().m_CustomAnimData != expected','false'),
+    @('EXIT_REPLICATED','Rpc(AICF_StopSocialLoiter_Broadcast, type, expected)','Print("no broadcast")'),
     @('ONE_BOT','actor.m_iToken > 0 || !actor.Available()','!actor.Available()'),
     @('CLEANUP','Remove(Tick)','Remove(Advance)'),
     @('DEDUP','token <= m_iAICFLastGreetingToken','token < 0'),
@@ -58,4 +64,4 @@ foreach ($mutation in $mutations) {
     $rejected = @(Test-Social ($source.Replace($mutation[1], $mutation[2])))
     if (-not ($rejected -match ('\[' + $mutation[0] + '\]'))) { throw "Mutation escaped: $($mutation[0])" }
 }
-Write-Output "Social contracts: PASS; rules=19; negative mutations=$($mutations.Count); runtime=NOT_RUN"
+Write-Output "Social contracts: PASS; rules=22; negative mutations=$($mutations.Count); runtime=NOT_RUN"

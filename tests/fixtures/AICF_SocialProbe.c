@@ -327,6 +327,13 @@ modded class AICF_MatchController
 		}
 		if (m_iSocialLivePhase == 2)
 		{
+			// После hard exit native AI может уйти к своему waypoint между ticks.
+			// Свободный SALUTE проверяем на новом допустимом бойце, не ждём ушедшего.
+			if (m_iSocialLiveVariant == 4 && (!actor.Available() || vector.Distance(actor.m_Member.GetOrigin(), m_SocialLivePlayer.GetOrigin()) > 5))
+			{
+				m_iSocialLivePhase = 0;
+				return;
+			}
 			if (actor.m_iPhase == 0 && m_iSocialLiveVariant < 4) { m_iSocialLivePhase = 0; return; }
 			m_Social.AICF_ProbeObserve(now);
 			Print(string.Format("[AICF][SOCIAL_LIVE_WAIT] phase=%1 actor_phase=%2 token=%3 available=%4 stance=%5 loiter=%6 item=%7 distance=%8", m_iSocialLivePhase, actor.m_iPhase, actor.m_iToken, actor.Available(), actor.Controller().GetStance(), actor.Controller().IsLoitering(), actor.Controller().IsChangingItem(), vector.Distance(actor.m_Member.GetOrigin(), m_SocialLivePlayer.GetOrigin())));
@@ -352,7 +359,12 @@ modded class AICF_MatchController
 		{
 			AICF_SocialCheck("GREETING_BOUNDED_" + m_iSocialLiveVariant, actor.m_iToken == 0 && !actor.m_bOwnsGesture);
 			if (m_iSocialLiveVariant < 4)
+			{
 				AICF_SocialCheck("IDLE_CONTINUES_" + m_iSocialLiveVariant, actor.m_iPhase == 2 && actor.Controller().IsLoitering());
+				AIWaypoint unchanged = actor.m_Slot.GetWaypoint();
+				actor.m_Slot.RecordStrategicAssignment(actor.m_Slot.GetTargetBase(), "ATTACK");
+				AICF_SocialCheck("IDLE_ORDER_CANCEL_" + m_iSocialLiveVariant, actor.m_iPhase == 0 && !actor.m_bOwnsLoiter && actor.m_Slot.GetWaypoint() == unchanged);
+			}
 			actor.Cancel(m_Campaign, now);
 			if (m_iSocialLiveVariant == 0)
 			{

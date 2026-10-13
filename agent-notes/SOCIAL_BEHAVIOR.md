@@ -30,9 +30,20 @@ Threat state должен быть SAFE, threat measure не выше 0.01. Пр
 снятии waypoint и передаче waypoint технике. Анимация отменяется в этом же
 вызове. Остальная допустимость перепроверяется каждые 250 ms. Stop снимает
 подписки и таймер. Старый member/generation не получает нового запуска.
-Native `StopLoitering(true)` в 1.8 всё ещё ждёт animation tag; для освобождения
-бойца используется `FinishLoiter` и штатный broadcast завершения. Очищается
-также ожидающий holster/align запрос. Сервис не ставит delayed callback на бойца.
+Native `StopLoitering(true)` в 1.8 всё ещё делает мягкий выход, а `FinishLoiter`
+снимает scripted command без гарантированного выхода client graph. Это давало
+скольжение с продолжающимися отжиманиями после приказа. `AICF_SocialLoiterExit`
+для собственного idle переводит command в DONE и вызывает `CMD_Gestures=-2`
+(переход `Gestures -> Locomotion` vanilla 1.8.0.13), затем `FinishLoiter`.
+DONE не позволяет `OnDeactivate` перезаписать hard exit мягким `-1`; штатное
+удаление локального предмета и снятие attachment сохраняются.
+
+Отмена доставляется reliable RPC на том же character controller, что native
+start: порядок start/stop сохраняется. Authority проверяет ownership и точный
+объект `m_CustomAnimData`; receiver проверяет type/config текущего context.
+Ожидающая holster/align заявка очищается вместе с context; повтор без context
+ничего не меняет. Retry и delayed callback на бойца не используются. Обычные
+чужие loiter не получают нового поведения через глобальный override остановки.
 
 ## Четыре варианта vanilla 1.8.0.13
 

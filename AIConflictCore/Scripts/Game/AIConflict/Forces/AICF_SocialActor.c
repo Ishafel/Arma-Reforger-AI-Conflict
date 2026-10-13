@@ -175,17 +175,7 @@ class AICF_SocialActor
 		{
 			if (m_bOwnsLoiter && controller.GetScrInputContext().m_CustomAnimData == m_LoiterData)
 			{
-				// Убираем также ещё не начатую native holster/align заявку.
-				controller.GetScrInputContext().m_iLoiteringType = -1;
-				controller.StopLoitering(true);
-				// В 1.8 StopLoitering(true) всё ещё ждёт animation tag. Приказы не ждут soft exit.
-				SCR_CharacterCommandLoiter loiter = SCR_CharacterCommandLoiter.Cast(controller.GetAnimationComponent().GetCommandScripted());
-				SCR_CharacterCommandHandlerComponent handler = SCR_CharacterCommandHandlerComponent.Cast(controller.GetAnimationComponent().GetCommandHandler());
-				if (loiter && handler)
-				{
-					loiter.FinishLoiter();
-					handler.BroadCastLoiterFinish();
-				}
+				controller.AICF_StopSocialLoiter(m_LoiterData);
 			}
 			if (m_bOwnsGesture)
 			{
