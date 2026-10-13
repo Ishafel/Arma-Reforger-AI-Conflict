@@ -23,7 +23,7 @@
 | Выбрать runtime probe и проверить ограничения | [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Подготовить API reference, Workbench, локальный/удалённый runtime и Diag/retail | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | Выбрать проверки и сравнить baseline | [TESTING.md](TESTING.md) |
-| Изменить прогноз снабжения, приоритет пополнения и конкуренцию за казармы | [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md) |
+| Изменить последовательную очередь фракции, шаг 5 секунд и прогноз пополнения | [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md) |
 | Изменить WCS content profile или зависимости | [Arland WCS + RHS](../AIConflictArlandWCSRHS/README.md) |
 | Изменить полный или северный WCS Everon | [Everon WCS + RHS](../AIConflictEveronWCSRHS/README.md) |
 

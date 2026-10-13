@@ -15,6 +15,14 @@ modded class AICF_InfantryRecruitmentService
 	{
 		return OtherDemand(base, null);
 	}
+
+	bool AICF_LifecycleRejectStale(AICF_InfantryRecruitmentOrder order)
+	{
+		float stock = order.m_Base.GetSupplies();
+		return !order.ReportFailedMovement(order.m_Group, order.m_Waypoint) &&
+			!m_Spawner.BeginRecruit(order) && !m_Economy.DebitInfantryRecruit(order) &&
+			order.m_Base.GetSupplies() == stock;
+	}
 }
 
 modded class AICF_MatchController
@@ -140,6 +148,7 @@ modded class AICF_MatchController
 		{
 			AICF_LifecycleCheck("REPLACEMENT_IDENTITY", slot == m_USState.GetSlot(0) && slot.GetGroup().GetID() != m_LifecycleGroupId && !m_LifecycleOldOrder.IsCurrent(slot));
 			AICF_LifecycleCheck("OLD_VISIT_RELEASED", m_LifecycleOldOrder.m_bDemandReleased);
+			AICF_LifecycleCheck("REPLACEMENT_STALE_CALLBACK", m_InfantryRecruitment.AICF_LifecycleRejectStale(m_LifecycleOldOrder));
 			m_iLifecyclePhase = 5;
 		}
 		else if (m_iLifecyclePhase == 5)
@@ -202,7 +211,7 @@ modded class AICF_MatchController
 
 	protected void AICF_LifecycleClose()
 	{
-		Print(string.Format("[AICF][RECRUITMENT_LIFECYCLE_PROBE] finished=1 passed=%1 total=10 phase=%2", m_iLifecyclePassed, m_iLifecyclePhase));
+		Print(string.Format("[AICF][RECRUITMENT_LIFECYCLE_PROBE] finished=1 passed=%1 total=11 phase=%2", m_iLifecyclePassed, m_iLifecyclePhase));
 		Stop(true);
 		GetGame().RequestClose();
 	}

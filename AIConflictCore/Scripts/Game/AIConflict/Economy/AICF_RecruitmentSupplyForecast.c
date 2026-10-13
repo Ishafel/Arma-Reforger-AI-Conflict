@@ -53,6 +53,11 @@ class AICF_RecruitmentSupplyForecast
 	float m_fSupplySeconds;
 	float m_fWaitSeconds;
 	float m_fCompletionSeconds;
+	float m_fQueueSeconds;
+	bool m_bSequential;
+	SCR_CampaignMilitaryBaseComponent m_Base;
+	ref array<int> m_aOwnCosts = {};
+	ref array<ref AICF_RecruitmentSupplyForecast> m_aPredecessors = {};
 
 	bool Evaluate(float distance, float remainingSeconds)
 	{
@@ -61,6 +66,9 @@ class AICF_RecruitmentSupplyForecast
 		m_fSupplySeconds = 0;
 		m_fCompletionSeconds = float.MAX;
 		m_fWaitSeconds = float.MAX;
+		m_fQueueSeconds = 0;
+		if (m_bSequential)
+			return EvaluateSequential(remainingSeconds);
 		if (m_iOwnDemand + m_iOtherDemand > Math.Max(m_fStock, m_fCeiling))
 			return EvaluateOverflow(remainingSeconds);
 		float deficit = Math.Max(0, m_iOwnDemand + m_iOtherDemand - m_fStock);
@@ -76,6 +84,55 @@ class AICF_RecruitmentSupplyForecast
 			m_iMembers * AICF_InfantryRecruitmentConfig.PURCHASE_INTERVAL_MS / 1000.0;
 		return m_iOwnDemand > 0 && m_fWaitSeconds <= AICF_InfantryRecruitmentConfig.SUPPLY_HORIZON_SECONDS &&
 			m_fCompletionSeconds <= remainingSeconds;
+	}
+
+	// Каждая база имеет собственный read-only склад, а фракция — общую шкалу.
+	// При повторном посещении базы расход предыдущих отрядов не теряется.
+	protected bool EvaluateSequential(float remainingSeconds)
+	{
+		array<ref AICF_RecruitmentForecastStock> stocks = {};
+		float now;
+		foreach (AICF_RecruitmentSupplyForecast earlier : m_aPredecessors)
+		{
+			if (!EvaluateJob(earlier, stocks, now, remainingSeconds)) return false;
+		}
+		m_fQueueSeconds = now;
+		if (!EvaluateJob(this, stocks, now, remainingSeconds)) return false;
+		m_fCompletionSeconds = now;
+		m_fWaitSeconds = Math.Max(0, now - m_fTravelSeconds -
+			m_iMembers * AICF_InfantryRecruitmentConfig.PURCHASE_INTERVAL_MS / 1000.0);
+		return m_iOwnDemand > 0 && m_fWaitSeconds <= AICF_InfantryRecruitmentConfig.SUPPLY_HORIZON_SECONDS && now <= remainingSeconds;
+	}
+
+	protected bool EvaluateJob(AICF_RecruitmentSupplyForecast job, array<ref AICF_RecruitmentForecastStock> stocks,
+		inout float now, float deadline)
+	{
+		AICF_RecruitmentForecastStock stock;
+		foreach (AICF_RecruitmentForecastStock existing : stocks)
+			if (existing.m_Base == job.m_Base) stock = existing;
+		if (!stock)
+		{
+			stock = new AICF_RecruitmentForecastStock();
+			stock.m_Base = job.m_Base;
+			stock.m_fStock = job.m_fStock;
+			stock.m_fCeiling = job.m_fCeiling;
+			stock.m_fIncome = job.m_fIncome;
+			stock.m_fInterval = job.m_fInterval;
+			stock.m_fNext = Math.Max(0, job.m_fNextArrival);
+			stocks.Insert(stock);
+		}
+		int quoted;
+		foreach (int price : job.m_aOwnCosts) quoted += price;
+		if (quoted != job.m_iOwnDemand || job.m_aOwnCosts.Count() != job.m_iMembers) return false;
+		now = Math.Max(now, job.m_fTravelSeconds);
+		foreach (int cost : job.m_aOwnCosts)
+		{
+			// Первый заказ также после полного шага; spawn/tick latency неизвестна.
+			now += AICF_InfantryRecruitmentConfig.PURCHASE_INTERVAL_MS / 1000.0;
+			if (cost <= 0 || now > deadline || !stock.Purchase(cost, now)) return false;
+		}
+		m_fSupplySeconds = Math.Max(m_fSupplySeconds, stock.m_fLastWait);
+		return now <= deadline;
 	}
 
 	bool CanApproach(bool playerRequested)
@@ -134,6 +191,41 @@ class AICF_RecruitmentSupplyForecast
 			m_fStock, m_fIncome, m_fInterval, m_fNextArrival, m_iOwnDemand, m_iOtherDemand) +
 			string.Format(" travel_s=%1 supply_s=%2 wait_s=%3 completion_s=%4", m_fTravelSeconds,
 				m_fSupplySeconds, m_fWaitSeconds, m_fCompletionSeconds) +
-			string.Format(" income_ceiling=%1 other_arrival_s=%2", m_fCeiling, m_fOtherArrival);
+			string.Format(" income_ceiling=%1 other_arrival_s=%2 queue_s=%3 step_ms=%4", m_fCeiling, m_fOtherArrival,
+				m_fQueueSeconds, AICF_InfantryRecruitmentConfig.PURCHASE_INTERVAL_MS);
+	}
+}
+
+// Локальный ledger только прогноза: никаких изменений stock или replication.
+class AICF_RecruitmentForecastStock
+{
+	SCR_CampaignMilitaryBaseComponent m_Base;
+	float m_fStock;
+	float m_fCeiling;
+	float m_fIncome;
+	float m_fInterval;
+	float m_fNext;
+	float m_fLastWait;
+
+	bool Purchase(int cost, inout float now)
+	{
+		bool income = m_fIncome > 0 && m_fInterval > 0 && m_fCeiling > 0;
+		if (income && m_fNext <= now)
+		{
+			float arrived = Math.Floor((now - m_fNext) / m_fInterval) + 1;
+			m_fStock = Math.Max(m_fStock, Math.Min(m_fCeiling, m_fStock + arrived * m_fIncome));
+			m_fNext += arrived * m_fInterval;
+		}
+		if (m_fStock < cost)
+		{
+			if (!income || cost > m_fCeiling) return false;
+			float packages = Math.Ceil((cost - m_fStock) / m_fIncome);
+			now = m_fNext + (packages - 1) * m_fInterval;
+			m_fStock = Math.Min(m_fCeiling, m_fStock + packages * m_fIncome);
+			m_fNext = now + m_fInterval;
+			m_fLastWait = now;
+		}
+		m_fStock -= cost;
+		return true;
 	}
 }

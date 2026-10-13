@@ -15,6 +15,7 @@ class AICF_InfantryRecruitmentOrder
 	bool m_bAwaitingSupplyPlan;
 	string m_sPriorityWaitReason;
 	bool m_bPlayerRequested;
+	bool m_bAutoServing;
 	SCR_CampaignMilitaryBaseComponent m_Base;
 	EntityID m_BaseId;
 	SCR_ServicePointComponent m_Service;
@@ -44,6 +45,17 @@ class AICF_InfantryRecruitmentOrder
 	int m_iLastSelectionAtMs;
 	int m_iSupplyWaitStartedAtMs;
 	bool m_bDemandReleased;
+
+	// Время передаётся явно для проверки границ. Пропущенные шаги не копятся.
+	void DelayPurchase(int now)
+	{
+		m_iNextPurchaseAtMs = now + AICF_InfantryRecruitmentConfig.PURCHASE_INTERVAL_MS;
+	}
+
+	bool IsPurchaseDue(int now)
+	{
+		return m_iNextPurchaseAtMs > 0 && now >= m_iNextPurchaseAtMs;
+	}
 
 	bool IsCurrent(AICF_GroupSlot slot)
 	{
@@ -101,6 +113,6 @@ class AICF_InfantryRecruitmentOrder
 			AICF_Stage1Diagnostics.BaseKey(m_Base), m_GroupId) + string.Format(
 			" service=%1 source=%2 priority=%3 queue=%4 ", m_ServiceId,
 			AICF_RecruitmentPriority.Source(m_bPlayerRequested), AICF_RecruitmentPriority.Rank(m_Slot, m_bPlayerRequested),
-			m_iQueueSequence) + details);
+			m_iQueueSequence) + string.Format("now_ms=%1 ", System.GetTickCount()) + details);
 	}
 }

@@ -61,12 +61,15 @@ modded class AICF_InfantryRecruitmentService
 		AICF_PriorityCheck("THREE_REQUESTS", d.m_Base == a.m_Base && a.m_Base == b.m_Base);
 		int price = a.m_Forecast.m_iOwnDemand;
 		AICF_PriorityCheck("AUTO_ORDER", AICF_RecruitmentPriority.Precedes(a, b) && AICF_RecruitmentPriority.Precedes(b, d));
+		defense.SetRoleAndIndex(AICF_EGroupRole.RESERVE, 0);
+		AICF_PriorityCheck("RESERVE_AFTER_ATTACK", AICF_RecruitmentPriority.Rank(defense, false) == 2 && AICF_RecruitmentPriority.Precedes(b, d));
+		defense.SetRoleAndIndex(AICF_EGroupRole.DEFEND, 0);
 		AICF_PriorityCheck("PENDING_DEMAND", b.m_bAwaitingSupplyPlan && d.m_bAwaitingSupplyPlan && AICF_PriorityDemand(a.m_Base, d) == 2 * price);
 		AICF_PriorityCheck("ATTACK_FORECAST", a.m_Forecast.m_iOtherDemand == 0 && d.m_Forecast.m_iOtherDemand == 2 * price);
 		defense.SetRoleAndIndex(AICF_EGroupRole.ATTACK, 8);
 		AICF_PriorityCheck("ROLE_CHANGE", AICF_RecruitmentPriority.Rank(defense, false) == 1 && AICF_PriorityDemand(a.m_Base, d) == 2 * price);
 		attack.SetRoleAndIndex(AICF_EGroupRole.DEFEND, 7);
-		AICF_PriorityCheck("ROLE_REALLOCATION", AICF_PriorityDemand(a.m_Base, b) == 0 && AICF_PriorityDemand(a.m_Base, a) == 2 * price);
+		AICF_PriorityCheck("ACTIVE_ROLE_HELD", AICF_PriorityDemand(a.m_Base, b) == price && AICF_PriorityDemand(a.m_Base, a) == 0);
 		defense.SetRoleAndIndex(AICF_EGroupRole.DEFEND, 0);
 		attack.SetRoleAndIndex(AICF_EGroupRole.ATTACK, 0);
 		defense.BeginPlayerStrategicOrder();
@@ -270,13 +273,15 @@ modded class AICF_MatchController
 			if (m_PriorityPreempted && m_PriorityPreempted.m_Donor)
 			{
 				a.SetDesiredSize(3);
+				string manualReason;
+				m_InfantryRecruitment.RequestPlayerRecruitment(a, m_USFaction, manualReason);
 				m_fPriorityStock = m_iPriorityNextCost;
 				AICF_PriorityNext(6);
 			}
 		}
 		else if (m_iPriorityPhase == 6 && aa == 3)
 		{
-			m_InfantryRecruitment.AICF_PriorityCheck("NEW_ATTACK_PREEMPTS", da == 2 && m_bPriorityPreemptionObserved && !m_PriorityPreempted.m_Donor && m_fPriorityStock == 0);
+			m_InfantryRecruitment.AICF_PriorityCheck("MANUAL_PREEMPTS", da == 2 && m_bPriorityPreemptionObserved && !m_PriorityPreempted.m_Donor && m_fPriorityStock == 0);
 			m_InfantryRecruitment.AICF_PriorityCheck("PAID_MEMBERS_PRESERVED", aa == 3 && ba == 2 && da == 2);
 			m_fPriorityStock = 100;
 			b.SetDesiredSize(3);

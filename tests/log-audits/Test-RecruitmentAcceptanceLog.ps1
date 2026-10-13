@@ -11,8 +11,8 @@ if ($log -match "\[$prefix\] case=\S+ pass=0") { throw 'Fixture зафиксир
 if ($Mode -eq 'Lifecycle') {
     $cases = @('LIVE_DEMAND','CANCEL_RELEASE','OWNER_CHANGED_RELEASE','OWNER_CHANGED_FINISHED',
         'DEATH_RELEASE','REPLACEMENT_IDENTITY','OLD_VISIT_RELEASED','REPLACEMENT_NEW_DEMAND',
-        'RECRUIT_REDUCES_DEMAND','COMPLETION_RELEASE')
-    if ($log -notmatch '\[RECRUITMENT_LIFECYCLE_PROBE\] finished=1 passed=10 total=10 phase=6') { throw 'Нет завершённой матрицы 10/10.' }
+        'RECRUIT_REDUCES_DEMAND','COMPLETION_RELEASE','REPLACEMENT_STALE_CALLBACK')
+    if ($log -notmatch '\[RECRUITMENT_LIFECYCLE_PROBE\] finished=1 passed=11 total=11 phase=6') { throw 'Нет завершённой матрицы 11/11.' }
     if ($log -notmatch 'INFANTRY_RECRUIT_JOINED') { throw 'Нет фактической передачи recruits.' }
 } else {
     $cases = @('TWO_REGISTERED_BASES','DETERMINISTIC_SAMPLES','SMALL_GAIN_HELD','LARGE_GAIN_REPLAN','REPLAN_DEMAND_TRANSFER')

@@ -70,7 +70,7 @@ class AICF_InfantryRecruitmentService
 			ConsiderFaction(us, usFaction);
 			ConsiderFaction(ussr, ussrFaction);
 		}
-		SortOrders();
+		RefreshAutoService();
 		for (int index = 0; index < m_aOrders.Count();)
 		{
 			if (graphReady && !m_aOrders[index].m_bAwaitingSupplyPlan)
@@ -96,6 +96,40 @@ class AICF_InfantryRecruitmentService
 				j--;
 			}
 			m_aOrders[j + 1] = order;
+		}
+	}
+
+	protected bool IsServiceEligible(AICF_InfantryRecruitmentOrder order)
+	{
+		if (!order || order.m_bDemandReleased || !order.IsCurrent(order.m_Slot) ||
+			order.m_iGraphRevision != m_Graph.GetRevision() || !order.HasSafeBarracks() || !IsDemandWithinDeadline(order))
+			return false;
+		int alive = AICF_GroupRuntime.CountAliveAgents(order.m_Group);
+		return alive > 0 && alive < order.m_Slot.GetDesiredSize();
+	}
+
+	protected AICF_InfantryRecruitmentOrder AutoServiceOwner(SCR_CampaignFaction faction)
+	{
+		foreach (AICF_InfantryRecruitmentOrder order : m_aOrders)
+			if (order.m_Faction == faction && !order.m_bPlayerRequested && order.m_bAutoServing && IsServiceEligible(order))
+				return order;
+		return null;
+	}
+
+	// Владелец сохраняется при временном дефиците, ожидании плана и смене роли.
+	// Stale/expired записи освобождают очередь до следующего выбора.
+	protected void RefreshAutoService()
+	{
+		foreach (AICF_InfantryRecruitmentOrder existing : m_aOrders)
+			if (existing.m_bPlayerRequested || !IsServiceEligible(existing)) existing.m_bAutoServing = false;
+		SortOrders();
+		foreach (AICF_InfantryRecruitmentOrder order : m_aOrders)
+		{
+			if (order.m_bPlayerRequested || !IsServiceEligible(order) || AutoServiceOwner(order.m_Faction))
+				continue;
+			order.m_bAutoServing = true;
+			order.m_iNextPurchaseAtMs = 0;
+			order.Log("INFANTRY_RECRUITMENT_SERVICE_GRANTED", "scope=FACTION first_delay_ms=5000");
 		}
 	}
 
@@ -175,6 +209,7 @@ class AICF_InfantryRecruitmentService
 			if (active.m_bPlayerRequested)
 				return false;
 			active.m_bPlayerRequested = true;
+			active.m_bAutoServing = false;
 			active.m_iNextEvaluationAtMs = 0;
 			slot.BeginPlayerStrategicOrder();
 			if (active.m_bAwaitingSupplyPlan)
@@ -300,6 +335,9 @@ class AICF_InfantryRecruitmentService
 				order.m_iGraphRevision = m_Graph.GetRevision();
 				order.m_iToken = m_iNextToken++;
 				order.m_iQueueSequence = queueSequence;
+				// Пересмотр казармы не отдаёт действующее обслуживание другой заявке.
+				AICF_InfantryRecruitmentOrder serving = AutoServiceOwner(faction);
+				order.m_bAutoServing = serving && serving.m_Slot == slot && serving.m_iQueueSequence == queueSequence;
 				order.m_RecruitmentService = this;
 				order.m_iAssignment = slot.GetStrategicAssignmentRevision();
 				order.m_Waypoint = slot.GetWaypoint();
@@ -398,12 +436,52 @@ class AICF_InfantryRecruitmentService
 		base.AICF_GetRecruitmentIncome(forecast.m_fIncome, forecast.m_fInterval, forecast.m_fNextArrival);
 		forecast.m_iOwnDemand = ownDemand;
 		forecast.m_iMembers = members;
+		forecast.m_Base = base;
 		forecast.m_iOtherDemand = OtherDemand(base, slot, forecast, requester);
 		array<int> costs = {};
 		int quotedCost, quotedMembers;
 		if (m_Spawner.QuoteMissingRoster(slot, SCR_CampaignFaction.Cast(slot.GetGroup().GetFaction()), m_Config, quotedCost, quotedMembers, costs))
 		{
-			foreach (int price : costs) forecast.m_aCosts.Insert(price);
+			foreach (int price : costs)
+			{
+				forecast.m_aCosts.Insert(price);
+				forecast.m_aOwnCosts.Insert(price);
+			}
+		}
+		if (requester && !requester.m_bPlayerRequested)
+		{
+			forecast.m_bSequential = true;
+			array<AICF_InfantryRecruitmentOrder> preceding = {};
+			foreach (AICF_InfantryRecruitmentOrder order : m_aOrders)
+			{
+				if (order.m_Slot == slot || order.m_Faction != requester.m_Faction || !IsServiceEligible(order) ||
+					!AICF_RecruitmentPriority.Precedes(order, requester))
+					continue;
+				if (order.m_bPlayerRequested && order.m_Base != base)
+				{
+					// Ручной спрос на другой базе может задержать предыдущий AI-отряд.
+					bool affectsEarlier;
+					foreach (AICF_InfantryRecruitmentOrder automatic : m_aOrders)
+						if (!automatic.m_bPlayerRequested && automatic.m_Base == order.m_Base &&
+							automatic.m_Faction == requester.m_Faction && automatic.m_Slot != slot &&
+							IsServiceEligible(automatic) && AICF_RecruitmentPriority.Precedes(automatic, requester)) affectsEarlier = true;
+					if (!affectsEarlier) continue;
+				}
+				int insertAt = preceding.Count();
+				for (int i = 0; i < preceding.Count(); i++)
+					if (AICF_RecruitmentPriority.Precedes(order, preceding[i])) { insertAt = i; break; }
+				preceding.InsertAt(order, insertAt);
+			}
+			foreach (AICF_InfantryRecruitmentOrder earlier : preceding)
+			{
+				int priorCost, priorMembers;
+				m_Spawner.QuoteMissingRoster(earlier.m_Slot, earlier.m_Faction, m_Config, priorCost, priorMembers);
+				AICF_RecruitmentSupplyForecast job = Forecast(earlier.m_Base, earlier.m_Slot, priorCost, priorMembers);
+				IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(earlier.m_Group);
+				job.m_fTravelSeconds = Math.Max(0, vector.DistanceXZ(leader.GetOrigin(), earlier.m_vPosition) -
+					AICF_InfantryRecruitmentConfig.ARRIVAL_METERS) / AICF_InfantryRecruitmentConfig.PLANNING_SPEED_MPS;
+				forecast.m_aPredecessors.Insert(job);
+			}
 		}
 		return forecast;
 	}
@@ -433,6 +511,8 @@ class AICF_InfantryRecruitmentService
 	bool CanFund(AICF_InfantryRecruitmentOrder order)
 	{
 		return Replication.IsServer() && !m_bStopped && order && order.m_Base &&
+			m_aOrders.Contains(order) && order.IsCurrent(order.m_Slot) &&
+			(order.m_bPlayerRequested || AutoServiceOwner(order.m_Faction) == order) &&
 			!order.m_bDemandReleased && !order.m_bAwaitingSupplyPlan && IsDemandWithinDeadline(order) &&
 			order.m_iGraphRevision == m_Graph.GetRevision() &&
 			order.m_Base.GetSupplies() - OtherDemand(order.m_Base, order.m_Slot, null, order) >= order.m_iCost;
@@ -564,6 +644,11 @@ class AICF_InfantryRecruitmentService
 		}
 		if (now - order.m_iStartedAtMs >= visitTimeout)
 			return "VISIT_TIMEOUT";
+		// Deadline действует и после потери обслуживания: очередь не удерживает
+		// просроченный визит/waypoint до общего VISIT_TIMEOUT.
+		if (order.m_iSupplyWaitStartedAtMs > 0 &&
+			now - order.m_iSupplyWaitStartedAtMs >= AICF_InfantryRecruitmentConfig.SUPPLY_WAIT_TIMEOUT_MS)
+			return "SUPPLY_WAIT_TIMEOUT";
 		if (order.m_bAwaitingSupplyPlan)
 		{
 			int pendingAlive = AICF_GroupRuntime.CountAliveAgents(order.m_Group);
@@ -606,6 +691,13 @@ class AICF_InfantryRecruitmentService
 		{
 			order.m_iArrivedAtMs = now;
 			order.Log("INFANTRY_RECRUITMENT_ARRIVED", "physical_presence=1");
+		}
+		if (!order.m_bPlayerRequested && AutoServiceOwner(order.m_Faction) != order)
+			return string.Empty;
+		if (order.m_iNextPurchaseAtMs == 0)
+		{
+			order.DelayPurchase(now);
+			order.Log("INFANTRY_RECRUITMENT_STEP_WAIT", string.Format("admitted_ms=%1 due_ms=%2", now, order.m_iNextPurchaseAtMs));
 		}
 		int ahead = OtherDemand(order.m_Base, order.m_Slot, null, order);
 		if (ahead > 0 && order.m_Base.GetSupplies() - ahead < order.m_iCost)
@@ -650,7 +742,7 @@ class AICF_InfantryRecruitmentService
 		order.m_iSupplyWaitStartedAtMs = 0;
 		if (!order.m_Donor)
 		{
-			if (now < order.m_iNextPurchaseAtMs || CountPendingAgents() >= 2)
+			if (!order.IsPurchaseDue(now) || CountPendingAgents() >= 2)
 				return string.Empty;
 			if (m_iAvailableAgents <= 0)
 				return "AGENT_LIMIT";
@@ -711,7 +803,7 @@ class AICF_InfantryRecruitmentService
 			order.m_Slot.GetDesiredSize(), recruit.GetControlledEntity().GetID()));
 		if (!m_Spawner.ClearRecruit(order))
 			return "DONOR_CLEANUP_BLOCKED";
-		order.m_iNextPurchaseAtMs = now + AICF_InfantryRecruitmentConfig.PURCHASE_INTERVAL_MS;
+		order.DelayPurchase(System.GetTickCount());
 		return string.Empty;
 	}
 
@@ -806,6 +898,7 @@ class AICF_InfantryRecruitmentService
 	{
 		AICF_InfantryRecruitmentOrder order = m_aOrders[index];
 		order.m_bDemandReleased = true;
+		order.m_bAutoServing = false;
 		if (reason == "APPROACH_INTERRUPTED_OR_TIMEOUT" || reason == "APPROACH_RECOVERY_EXHAUSTED" ||
 			reason == "APPROACH_REPAIR_REJECTED")
 			RememberApproachFailure(order);

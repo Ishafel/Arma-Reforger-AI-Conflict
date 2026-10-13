@@ -8,7 +8,7 @@ foreach ($name in @('Forces/AICF_RecruitmentPriority.c','Forces/AICF_InfantryRec
 $rules = @(
     @('AICF_RecruitmentPriority.c','(?s)if \(playerRequested\)\s*return 0;.*?slot.GetRole\(\) == AICF_EGroupRole.ATTACK.*?return 1;.*?return 2;', 'SOURCE_AND_LIVE_ROLE'),
     @('AICF_RecruitmentPriority.c','first.m_iQueueSequence < second.m_iQueueSequence', 'FIFO'),
-    @('AICF_InfantryRecruitmentService.c','(?s)ConsiderFaction\(us, usFaction\);.*?SortOrders\(\);.*?Tick\(order, graphReady\)', 'ADMIT_BEFORE_PURCHASE'),
+    @('AICF_InfantryRecruitmentService.c','(?s)ConsiderFaction\(us, usFaction\);.*?RefreshAutoService\(\);.*?Tick\(order, graphReady\)', 'ADMIT_BEFORE_PURCHASE'),
     @('AICF_InfantryRecruitmentService.c','(?s)void ConsiderFaction.*?FindMissingMember\(slot, faction, prefab, role, memberIndex\).*?ScheduleRetry\(slot\);', 'NO_FULL_ROSTER_RETRY'),
     @('AICF_InfantryRecruitmentService.c','(?s)if \(reason == "ROSTER_COMPLETE_OR_EMPTY"\).*?m_aRetrySlots.Remove\(retry\);.*?m_aRetryAtMs.Remove\(retry\);', 'COMPLETE_RETRY_RELEASE'),
     @('AICF_InfantryRecruitmentService.c','(?s)active.m_bPlayerRequested = true;.*?INFANTRY_RECRUITMENT_PRIORITY_CHANGED', 'EXPLICIT_PROMOTION'),

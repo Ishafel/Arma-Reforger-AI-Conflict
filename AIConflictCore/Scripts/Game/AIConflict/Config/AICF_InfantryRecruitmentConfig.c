@@ -11,7 +11,7 @@ class AICF_InfantryRecruitmentConfig
 	static const int PLAYER_APPROACH_TIMEOUT_MS = 900000;
 	static const int PLAYER_VISIT_TIMEOUT_MS = 1200000;
 	static const int RETRY_MS = 60000;
-	static const int PURCHASE_INTERVAL_MS = 3000;
+	static const int PURCHASE_INTERVAL_MS = 5000;
 	static const float PLANNING_SPEED_MPS = 3;
 	static const float SUPPLY_HORIZON_SECONDS = 120;
 	static const int SUPPLY_WAIT_TIMEOUT_MS = 120000;
