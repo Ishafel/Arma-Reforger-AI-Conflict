@@ -4,7 +4,8 @@ modded class AICF_EconomySystem
 	{
 		return Replication.IsServer() && m_Campaign && m_Campaign.IsMaster() && m_Campaign.IsRunning() &&
 			m_bGraphContextReady && order && order.IsCurrent(order.m_Slot) && order.HasSafeBarracks() &&
-			order.m_iCost > 0 && order.m_fPaid == 0 && order.m_Base.GetSupplies() >= order.m_iCost;
+			order.m_iCost > 0 && order.m_fPaid == 0 && order.m_Base.GetSupplies() >= order.m_iCost &&
+			order.m_RecruitmentService && order.m_RecruitmentService.CanFund(order);
 	}
 
 	// Цена снимается только после materialisation, непосредственно перед передачей бойца.

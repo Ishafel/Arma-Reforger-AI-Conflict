@@ -10,6 +10,91 @@ commit/branch, dirty status и exit codes. После правки повтор�
 `NOT RUN` в отдельном разделе issue, без ожидания игрока/тестировщика. Исторические
 verdict ниже сохраняют фактический статус; отклонение критерия не даёт новый PASS.
 
+## Issue #32: приоритет пополнения — 2026-10-13
+
+Ветка `codex/issue-32-recruitment-priority` от обновлённого `origin/main`
+`2711c00`, исходное дерево чистое. Очередь: ручное пополнение, автоматическая
+атака, оборона/резерв; FIFO внутри ранга. Приоритет действует в прогнозе,
+ожидании плана, допуске donor и непосредственно перед оплатой. Ручная очередь
+защищена от AI commander, неоплаченный donor может быть отменён; купленные
+бойцы сохраняются. Контракт: [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md).
+
+Изменены Core `AICF_RecruitmentPriority`, `AICF_InfantryRecruitmentOrder`,
+`AICF_InfantryRecruitmentService`, `AICF_InfantryRecruitmentEconomy`;
+`Test-RecruitmentPriorityContracts.ps1`, `AICF_RecruitmentPriorityProbe.c`,
+`Test-RecruitmentPriorityLog.ps1`, `Test-InfantryRecruitmentLog.ps1`;
+README, ARCHITECTURE, указатель agent-notes, профильная заметка, TOOLS,
+TEST_FIXTURES и этот отчёт. Stock/world/layout и RHS/WCS integration не менялись.
+
+Evidence: `.codex-runtime/issue-32-recruitment-priority/`. Game/Server/Tools:
+`1.8.0.13`. Команды ниже запускались из корня репозитория; helper scripts,
+точные аргументы, manifests, native exits, полные логи и SHA-256 сохранены
+в evidence. Только новые прогоны этой задачи:
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-RecruitmentSupplyContracts.ps1,Test-InfantryRecruitmentStatic.ps1,Test-BarracksCombatContracts.ps1,Test-Stage35Static.ps1,Test-Stage4Static.ps1,Test-SquadCommandsContracts.ps1,Test-DefendWaypointInputContracts.ps1 -EvidenceRoot <before>`:
+  **6 PASS, 1 прежний FAIL / exit 1**. Повтор с дополнительным
+  `Test-RecruitmentPriorityContracts.ps1`, `<after-authority>`:
+  **7 PASS, тот же 1 FAIL / exit 1**. Сохранён `STABLE_NEAREST` в
+  SquadCommandsContracts; семь прежних exit codes совпали. Новый контракт:
+  **15 правил и 15 отрицательных мутаций PASS**. Полный offline набор не
+  запускался; несвязанные прежние failures не считаются исправленными.
+- Evidence `compile.ps1 -Variant Stock|EveronNorthWCSRHS -Attempt production-authority -SourceRoot .`:
+  терминальный Workbench **PASS / native exit 0**, `Script validation successful`,
+  SCRIPT/fatal = 0. Соответственно 25/39 прочих resource E/F сохранены;
+  это не полностью чистая validation ресурсов.
+- `compile.ps1 -Variant Stock -Attempt priority-authority -SourceRoot <stage>`:
+  fixture **PASS / 0**, SCRIPT/fatal = 0, 25 прочих resource E/F.
+- `runtime.ps1 -Attempt priority-authority`: только `Start-AICFRuntime.ps1`,
+  Stock Easy, отдельный server profile, native **exit 0**. Полный остановленный
+  лог `server-priority-authority/logs/logs_2026-10-13_13-35-03/console.log`:
+  **30/30 сценариев**, 6 реальных списаний и transfer (3 × 15, 3 × 20),
+  одна отмена неоплаченного donor. SCRIPT/fatal = 0; 14 native resource/world/
+  shutdown E/F сохранены и не выдаются за полностью чистый runtime.
+- `tests/log-audits/Test-RecruitmentPriorityLog.ps1 -LogPath <этот полный лог>`
+  и `Test-InfantryRecruitmentLog.ps1 -LogPath <тот же лог>` — **PASS / 0**;
+  9 заявок/визитов, 6 joins. Проверены порядок покупок, exact debit,
+  дефицит/остаток, FIFO, достаточный запас, динамическая роль, ручное повышение
+  и отмена, защита от commander, stale identities/deadlines и native gates.
+- `negative-audits.ps1 -LogPath <этот полный лог>` — **PASS / 0**:
+  два положительных контроля и десять отрицательных копий полного лога.
+  Missing/failed case, shutdown, SCRIPT error, finish, debit, source, join,
+  paid cancellation и покупка без визита отклонены с exit 1.
+- Existing `AICF_RecruitmentLifecycleProbe.c` в отдельном `lifecycle-stage`:
+  `compile.ps1 -Variant Stock -Attempt lifecycle -SourceRoot <lifecycle-stage>`
+  — **PASS / native 0**, SCRIPT/fatal = 0; `runtime.ps1 -Attempt lifecycle
+  -Probe aicfRecruitmentLifecycleProbe -Stage lifecycle-stage` — **native 0**.
+  Полный остановленный лог `server-lifecycle/logs/logs_2026-10-13_13-37-36/console.log`:
+  `Test-RecruitmentAcceptanceLog.ps1 -LogPath <лог> -Mode Lifecycle` —
+  **10/10 PASS / 0**, `Test-InfantryRecruitmentLog.ps1 -LogPath <лог>` —
+  **PASS / 0**, 4 визита, 9 joins и полный roster replacement. Проверены
+  фактическая смерть seed, новая generation/entity, освобождение старого спроса,
+  новая заявка, смена владельца базы и окончание набора. Fixture не изменялась.
+  SCRIPT/fatal = 0; те же 14 native E/F категорий ENTITY/RESOURCES/WORLD,
+  включая stock resource GUID, world keywords/hierarchy и shutdown font leak.
+- `git diff --check` и проверка локальных ссылок изменённых Markdown — **PASS / 0**.
+  Свои процессы завершены, обе stage-копии удалены после сохранения source hashes.
+  Полные логи, commands, manifests и `final-summary.json` сохранены в evidence.
+
+Оба runtime helper вызывают canonical launcher с отдельными stage/profile:
+`tools/Start-AICFRuntime.ps1 -Role Server -Variant Stock -RepositoryRoot <stage>
+-ProfileRoot <свежий profile> -AdditionalArguments @('-aicfRecruitmentPriorityProbe','1',
+'-aicfRequirePlayerForResult','0','-addr','127.0.0.1:2302')`.
+Для lifecycle имя probe заменено на `-aicfRecruitmentLifecycleProbe`.
+Stages содержат Core/Arland и только соответствующую test fixture;
+подготовка и терминальный compile следуют [DEVELOPMENT.md](DEVELOPMENT.md).
+
+Подготовительные прогоны, включая SteamAPI failure в sandbox, неверный
+массив CLI wrapper и исправленные условия fixture, сохранены отдельно;
+они не дают PASS финальному коду. `priority-final` относится к версии до
+последней защиты ручного ожидания; итоговый verdict — `priority-authority`.
+
+**NOT RUN:** реальный player UI/RPC, client/JIP, естественная навигация в
+priority fixture, длительный soak, RHS/WCS runtime, packaged build.
+Fixture вызывает authoritative manual API, задаёт роли, запас/доход и позиции,
+приостанавливает стратегический loop и отдельно вызывает настоящий commander.
+Она доказывает очередность и транзакции, а не перечисленные внешние сценарии.
+Работа самостоятельно не объявляется ACCEPTED.
+
 ## Issue #33: цены штатных меню RHS/WCS — 2026-10-13
 
 Ветка `codex/issue-33-menu-prices` от обновлённого `origin/main` `381501c`,
@@ -997,7 +1082,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/static/Test-Stage3
 | Bootstrap, command authority | `Test-AICommanderModeStatic.ps1`, `Test-AICommanderUIContracts.ps1` |
 | Приказы в точку, навигация, recovery | `Test-MapPointOrdersStatic.ps1`, `Test-DefendWaypointInputContracts.ps1`, `Test-MovementRecoveryContracts.ps1`, `Test-RecoveryEpisodeContracts.ps1`, `Test-Issue12RecoveryContracts.ps1`, `Test-Issue14RecoveryContracts.ps1`, `Test-EndgameContracts.ps1` — выбери затронутые контракты |
 | Пехотный spawn, движение и набор | `Test-InfantrySpawnPlacementStatic.ps1`, `Test-InfantryAdvanceContracts.ps1`, `Test-InfantryApproachContracts.ps1`, `Test-InfantryRecruitmentStatic.ps1`, `Test-BarracksCombatContracts.ps1` |
-| Прогноз снабжения казарм | `Test-RecruitmentSupplyContracts.ps1`, InfantryRecruitment, BarracksCombat, Stage35, Stage4 |
+| Прогноз снабжения и приоритет набора | `Test-RecruitmentSupplyContracts.ps1`, `Test-RecruitmentPriorityContracts.ps1`, InfantryRecruitment, BarracksCombat, Stage35, Stage4 |
 | Команды отряда и respawn | `Test-SquadCommandsContracts.ps1`, `Test-SquadRespawnContracts.ps1` |
 | Победа и полная замена группы | `Test-VictoryRespawnStatic.ps1`, `Test-EndgameContracts.ps1`, Stage35, Stage4 |
 | Логистика и карта снабжения | `Test-LogisticsStatic.ps1`, `Test-LogisticsContracts.ps1`, `Test-ManualSupplyStatic.ps1`, `Test-SupplyMapUIStatic.ps1`, `Test-LogisticsMapMarkersStatic.ps1` |

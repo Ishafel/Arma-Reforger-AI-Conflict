@@ -110,8 +110,10 @@ MatchController. Immutable snapshot реплицируется на stock base. 
 Владение infantry waypoint остаётся у OrderPlanner, movement — у штатного
 combat move state. Параметры и gates: [ANTI_TANK_TACTICS.md](ANTI_TANK_TACTICS.md).
 
-Recruitment прогнозирует полную стоимость и время набора с учётом спроса других
-визитов, но не резервирует supplies. Оплата проверяется перед каждым transfer:
+Recruitment прогнозирует полную стоимость и время набора с учётом приоритета
+ручного пополнения, атаки и обороны и FIFO внутри ранга; ожидающая плана заявка
+не владеет waypoint. Supplies не резервируются, остаток после спроса более ранних
+заявок и оплата проверяются перед каждым transfer:
 [точная модель и evidence](RECRUITMENT_SUPPLY_PLANNING.md).
 
 Construction planner оплачивает unfinished layout один раз; отдельный worker
