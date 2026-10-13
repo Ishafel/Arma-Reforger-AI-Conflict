@@ -4,11 +4,11 @@ $log = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $LogPath))
 if ($log -notmatch 'Game destroyed\.') { throw 'Full stopped server log required.' }
 if ($log -match 'SCRIPT\s+\((E|F)\)|ENGINE\s+\(F\)|NULL pointer|Virtual Machine Exception') { throw 'Script/VM error in full log.' }
 if ($log -match '\[RECRUITMENT_PRIORITY_PROBE\] case=\S+ pass=0') { throw 'Fixture failure.' }
-$cases = @('THREE_REQUESTS','AUTO_ORDER','PENDING_DEMAND','ATTACK_FORECAST','ROLE_CHANGE','ROLE_REALLOCATION',
+$cases = @('THREE_REQUESTS','AUTO_ORDER','RESERVE_AFTER_ATTACK','PENDING_DEMAND','ATTACK_FORECAST','ROLE_CHANGE','ACTIVE_ROLE_HELD',
     'UNRELATED_MANUAL','STALE_GENERATION','STALE_ASSIGNMENT','STALE_INTENT','STALE_GRAPH','REPLACED_GROUP',
     'RELEASE_BEFORE_CLEANUP','EXPIRED_DEMAND','NO_STOCK_DEBIT','PHYSICAL_GATE','BASE_IDENTITY_GATE','ECONOMY_GRAPH_GATE',
     'SCARCE_ATTACK_FIRST','MANUAL_PROMOTION','PENDING_MANUAL_PROTECTED','MANUAL_CANCEL','MANUAL_REQUEUE','MANUAL_DEFENSE_FIRST','FIFO_EVENTUAL',
-    'COMPLETE_RELEASE','NEW_ATTACK_PREEMPTS','PAID_MEMBERS_PRESERVED','RICH_BOTH_ROLES','STABLE_GROUPS')
+    'COMPLETE_RELEASE','MANUAL_PREEMPTS','PAID_MEMBERS_PRESERVED','RICH_BOTH_ROLES','STABLE_GROUPS')
 foreach ($case in $cases) {
     if ([regex]::Matches($log,"\[RECRUITMENT_PRIORITY_PROBE\] case=$case pass=1\b").Count -ne 1) { throw "Missing/duplicate case: $case" }
 }

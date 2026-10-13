@@ -19,6 +19,10 @@ class AICF_RecruitmentPriority
 
 	static bool Precedes(AICF_InfantryRecruitmentOrder first, AICF_InfantryRecruitmentOrder second)
 	{
+		if (first.m_bPlayerRequested != second.m_bPlayerRequested)
+			return first.m_bPlayerRequested;
+		if (!first.m_bPlayerRequested && first.m_bAutoServing != second.m_bAutoServing)
+			return first.m_bAutoServing;
 		int firstRank = Rank(first.m_Slot, first.m_bPlayerRequested);
 		int secondRank = Rank(second.m_Slot, second.m_bPlayerRequested);
 		if (firstRank != secondRank)

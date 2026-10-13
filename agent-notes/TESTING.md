@@ -10,6 +10,125 @@ commit/branch, dirty status и exit codes. После правки повтор�
 `NOT RUN` в отдельном разделе issue, без ожидания игрока/тестировщика. Исторические
 verdict ниже сохраняют фактический статус; отклонение критерия не даёт новый PASS.
 
+## Issue #37: последовательный набор — 2026-10-13
+
+Ветка `codex/issue-37-sequential-recruitment` от обновлённого `origin/main`
+`6f86130`, исходное дерево чистое. Одна автоматическая заявка на фракцию,
+независимо от казарм; закреплённый владелец не вытесняется новой атакой.
+Ручной приоритет #32 сохранён. Первый и последующие шаги — 5000 ms;
+прогноз моделирует предшествующие заявки и отдельный склад каждой базы.
+Timeout завершается до gate ожидания очереди, поэтому просроченный визит
+не удерживает waypoint до общего VISIT_TIMEOUT.
+
+Evidence: `.codex-runtime/issue-37-sequential-recruitment/`. Game/Server/Tools
+`1.8.0.13`. Команды ниже выполняются из корня репозитория; `compile.ps1`,
+`runtime.ps1`, `collect.ps1` и negative helpers находятся в этом evidence.
+Полные logs, argv, native exits и launcher `AICF_RUNTIME_MANIFEST_JSON`
+сохранены рядом. Fixture только в отдельных stage, после Core в Arland
+integration; production не содержит тестовых overrides.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-RecruitmentSupplyContracts.ps1,Test-RecruitmentPriorityContracts.ps1,Test-InfantryRecruitmentStatic.ps1,Test-BarracksCombatContracts.ps1,Test-Stage35Static.ps1,Test-Stage4Static.ps1,Test-SquadCommandsContracts.ps1,Test-DefendWaypointInputContracts.ps1 -EvidenceRoot <before>`:
+  **7 PASS, 1 FAIL / exit 1**. Повтор с дополнительным
+  `Test-RecruitmentSequenceContracts.ps1`, `<after-timeout-final>`:
+  **8 PASS, тот же 1 FAIL / exit 1**. Baseline `STABLE_NEAREST` в
+  SquadCommandsContracts сохранён, все восемь прежних exit codes совпали.
+  SequenceContracts — **14 правил / 14 отрицательных мутаций PASS**;
+  PriorityContracts — 15/15, SupplyContracts — 14 мутаций PASS.
+- `compile.ps1 -Variant Stock|EveronNorthWCSRHS -Attempt production-timeout-final -SourceRoot .`:
+  обе terminal Workbench validation **PASS / native exit 0**,
+  `Script validation successful`, SCRIPT/fatal = 0; прочих resource E/F —
+  **25/39**. Это не полностью чистые resource logs.
+- Fixture compile: `-Variant Stock -Attempt sequence-isolated-final`,
+  `-Attempt priority-timeout-final -SourceRoot <priority-stage>` и
+  `-Attempt lifecycle-timeout-final -SourceRoot <lifecycle-stage>`:
+  **3 PASS / native exit 0**, validation successful, SCRIPT/fatal = 0,
+  по 25 прочих resource E/F. Сводка — `compile-summary.json`.
+- `runtime.ps1 -Attempt sequence-isolated-final -Probe aicfRecruitmentSequenceProbe`:
+  **native exit 0**, `RequestClose`, полный остановленный лог
+  `server-sequence-isolated-final/logs/logs_2026-10-13_14-31-04/console.log`.
+  `Test-RecruitmentSequenceLog.ps1 -LogPath <лог>` и
+  `Test-InfantryRecruitmentLog.ps1 -LogPath <лог>` — **PASS / 0**:
+  **33/33 cases**, 12 визитов, 21 debit/transfer. Подтверждены общая и разные
+  физические базы/казармы, ATTACK/FIFO, удержание начатой обороны при новой атаке,
+  независимый USSR, ручное повышение, временный дефицит без обхода, timeout,
+  отмена и stale generation; следующие заявки продолжают покупки.
+  Девять вакансий дают **45000 ms** в управляемых production clock checks,
+  forecast — 45 s собственного набора и 50 s с последующей одной вакансией.
+  В runtime первый запрос был через **5016 ms**, девятый — через **56165 ms**,
+  состав 10/10 — через **57181 ms** после допуска. Join→следующий spawn:
+  **5001–14082 ms** (верхняя задержка включает manual wait); spawn→join:
+  **998–1017 ms**. Нет мгновенного первого заказа или догоняющих пакетов.
+  `nine-member-timeline.json` сохраняет все девять пар, roles/costs и времена.
+  SCRIPT/fatal = 0, 14 native resource/world/shutdown E/F сохранены.
+  `negative-audits.ps1 -LogPath <лог>` — **PASS/0**: положительный контроль
+  и 12 отрицательных копий, в том числе ранний spawn, неверный первый срок,
+  отсутствие владельца, оплаты/transfer, неверный roster и незавершённый лог.
+- `runtime.ps1 -Attempt lifecycle-timeout-final -Probe aicfRecruitmentLifecycleProbe -Stage lifecycle-stage`:
+  **native exit 0**, `RequestClose`, полный остановленный лог
+  `server-lifecycle-timeout-final/logs/logs_2026-10-13_14-28-33/console.log`.
+  `Test-RecruitmentAcceptanceLog.ps1 -Mode Lifecycle -LogPath <лог>` и
+  `Test-InfantryRecruitmentLog.ps1 -LogPath <лог>` — **PASS / 0**:
+  **11/11 cases**, 9 debit/transfer. Настоящие native ownership/death/replacement,
+  новая generation/entity, новая заявка и отказ старых callback/spawn/debit.
+  SCRIPT/fatal = 0, 14 native resource/world/shutdown E/F сохранены.
+  Копия без `REPLACEMENT_STALE_CALLBACK` отклонена с exit 1.
+- `runtime.ps1 -Attempt priority-timeout-final -Probe aicfRecruitmentPriorityProbe -Stage priority-stage`:
+  **native exit 0**, `RequestClose`, полный остановленный лог
+  `server-priority-timeout-final/logs/logs_2026-10-13_14-35-00/console.log`.
+  `Test-RecruitmentPriorityLog.ps1 -LogPath <лог>` и
+  `Test-InfantryRecruitmentLog.ps1 -LogPath <лог>` — **PASS / 0**:
+  **31/31 cases**, 6 debit/transfer и одна отмена неоплаченного donor.
+  Включены RESERVE, удержание активной заявки после изменения роли,
+  manual promotion/preemption, pending authority, FIFO, identity/deadline
+  fences и точные списания. SCRIPT/fatal = 0, те же 14 native E/F.
+  `priority-negative-audits.ps1 -LogPath <лог>` — **PASS / 0**:
+  два положительных контроля и десять отрицательных копий (exit 1).
+
+Все runtime запущены последовательно через canonical
+`tools/Start-AICFRuntime.ps1 -Role Server -Variant Stock -RepositoryRoot <stage>
+-ProfileRoot <fresh-profile> -AdditionalArguments @('-<probe>','1',
+'-aicfRequirePlayerForResult','0','-addr','127.0.0.1:2302')`, Easy.
+Launcher manifests и точные CLI сохранены в `launcher-<attempt>.txt`.
+`stage-source-hashes.json`: 195 production `.c`/`.conf`/`.gproj` файлов совпали
+с каждой из трёх stage (585 сравнений); `fixture-hashes.json` отдельно сверяет
+три fixture. Static/compile/runtime остаются разными gates.
+14 native E/F совпали после удаления timestamps с сохранённым полным логом
+#32 `server-priority-authority`; `native-baseline-comparison.json` фиксирует
+источник и отсутствие различий. Это сохранённый resource baseline, не новый
+чистый engine PASS. Сводки итоговых server gates — `*-summary.json`.
+`git diff --check` и локальные ссылки Markdown — **PASS / 0**.
+Все свои engine процессы завершены, три stage удалены после сохранения SHA-256;
+полные profiles/logs и helper-команды остались в evidence.
+
+Подготовительные `sequence-1/2/3`, `sequence-final`, `sequence-final2` и
+`sequence-timeout-final` не являются итоговым PASS. Сохранены compile/fixture
+ошибки, ранний отказ до загрузки navigation tile, неготовность отменённого slot
+к новому приказу и контролируемые остановки. `sequence-final2` — **31/33 FAIL**:
+выявил отсутствие немедленного Finish после supply timeout и неверный запас
+fixture (stock fallback стоил дешевле предположенного). Timeout исправлен в
+production, budget берётся из production quote. Это не ослабление проверок.
+Первый sandbox Workbench завершился `SteamAPI_Init failed`, exit -1;
+успешные terminal повторы выполнялись с доступом к Steam.
+
+**NOT RUN:** полный offline набор, естественная навигация/боевые потери во время
+sequence matrix, client/JIP и player UI/RPC, WCS/RHS runtime, долгий soak,
+packaged build и публикация. Sequence fixture управляет admission, arrival,
+ролями, запасом и income snapshot; expiry и stale generation задаются явно.
+Lifecycle отдельно подтверждает настоящую гибель и replacement. Плановые
+45 секунд не выдаются за реальное wall-clock время с async spawn/tick.
+
+Изменённые файлы (22): Core `AICF_InfantryRecruitmentConfig.c`,
+`AICF_RecruitmentSupplyForecast.c`, `AICF_InfantryRecruitSpawner.c`,
+`AICF_InfantryRecruitmentOrder.c`, `AICF_InfantryRecruitmentService.c`,
+`AICF_RecruitmentPriority.c`; README; agent-notes `ARCHITECTURE.md`, `GAMEPLAY.md`,
+`README.md`, `RECRUITMENT_SUPPLY_PLANNING.md`, `TEST_FIXTURES.md`, `TOOLS.md`,
+`TESTING.md`; tests contracts `Test-RecruitmentPriorityContracts.ps1`,
+`Test-RecruitmentSequenceContracts.ps1`; fixtures `AICF_RecruitmentLifecycleProbe.c`,
+`AICF_RecruitmentPriorityProbe.c`, `AICF_RecruitmentSequenceProbe.c`; log-audits
+`Test-RecruitmentAcceptanceLog.ps1`, `Test-RecruitmentPriorityLog.ps1`,
+`Test-RecruitmentSequenceLog.ps1`. Точные пути — `changed-files.txt` в evidence.
+Работа самостоятельно не объявляется ACCEPTED.
+
 ## Issue #32: приоритет пополнения — 2026-10-13
 
 Ветка `codex/issue-32-recruitment-priority` от обновлённого `origin/main`

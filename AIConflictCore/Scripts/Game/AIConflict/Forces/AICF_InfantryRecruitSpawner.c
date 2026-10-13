@@ -56,7 +56,8 @@ class AICF_InfantryRecruitSpawner : AICF_GroupSpawner
 	bool BeginRecruit(AICF_InfantryRecruitmentOrder order)
 	{
 		if (!Replication.IsServer() || !order || order.m_Donor || !order.IsCurrent(order.m_Slot) ||
-			!order.HasSafeBarracks() || !order.IsPhysicallyPresent() || order.m_sPrefab.IsEmpty())
+			!order.HasSafeBarracks() || !order.IsPhysicallyPresent() || order.m_sPrefab.IsEmpty() ||
+			!order.m_RecruitmentService || !order.m_RecruitmentService.CanFund(order) || !order.IsPurchaseDue(System.GetTickCount()))
 			return false;
 		AIPathfindingComponent pathfinding = AIPathfindingComponent.Cast(order.m_Group.FindComponent(AIPathfindingComponent));
 		vector position;
