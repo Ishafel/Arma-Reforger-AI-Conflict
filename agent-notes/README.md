@@ -24,6 +24,7 @@
 | Подготовить API reference, Workbench, локальный/удалённый runtime и Diag/retail | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | Выбрать проверки и сравнить baseline | [TESTING.md](TESTING.md) |
 | Изменить последовательную очередь фракции, шаг 5 секунд и прогноз пополнения | [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md) |
+| Изменить начальные emotes, салют, общий cooldown игрока и звук | [SOCIAL_BEHAVIOR.md](SOCIAL_BEHAVIOR.md) |
 | Изменить WCS content profile или зависимости | [Arland WCS + RHS](../AIConflictArlandWCSRHS/README.md) |
 | Изменить полный или северный WCS Everon | [Everon WCS + RHS](../AIConflictEveronWCSRHS/README.md) |
 

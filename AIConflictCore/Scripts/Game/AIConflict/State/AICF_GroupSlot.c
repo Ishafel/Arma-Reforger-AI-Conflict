@@ -1,6 +1,13 @@
 // Stable faction-local identity for one managed group across all replacements.
 class AICF_GroupSlot
 {
+	protected ref ScriptInvoker m_OnPresentationInvalidated = new ScriptInvoker();
+
+	ScriptInvoker GetOnPresentationInvalidated()
+	{
+		return m_OnPresentationInvalidated;
+	}
+
 	protected SCR_AIGroup m_FailedMoveGroup;
 	protected AIWaypoint m_FailedMoveWaypoint;
 	protected int m_iFailedMoveGeneration;
@@ -782,6 +789,7 @@ class AICF_GroupSlot
 		SCR_CampaignMilitaryBaseComponent targetBase,
 		string posture)
 	{
+		m_OnPresentationInvalidated.Invoke(this);
 		m_sOperationalPosture = posture;
 		m_iStrategicAssignmentAtMs = System.GetTickCount();
 		m_iStrategicAssignmentRevision++;
@@ -2548,6 +2556,7 @@ class AICF_GroupSlot
 
 	void ClearObjective()
 	{
+		m_OnPresentationInvalidated.Invoke(this);
 		m_FailedMoveGroup = null;
 		m_FailedMoveWaypoint = null;
 		ClearStuckRouteWaypoint();
@@ -2563,6 +2572,7 @@ class AICF_GroupSlot
 	// the strategic target needed to restore the infantry order after dismount.
 	void SuspendObjectiveWaypoint()
 	{
+		m_OnPresentationInvalidated.Invoke(this);
 		m_FailedMoveGroup = null;
 		m_FailedMoveWaypoint = null;
 		ClearStuckRouteWaypoint();

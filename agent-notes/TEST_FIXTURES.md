@@ -1,5 +1,25 @@
 # Runtime fixture: каталог и применение
 
+`AICF_SocialProbe.c` и `AICF_SocialClientProbe.c` копируются вместе только в
+изолированный `AIConflictArland/Scripts/Game/AIConflictArland/Integration/`.
+`-aicfSocialProbe 1` проверяет production gate с управляемыми часами, четыре
+native emote и policy/lifecycle на реальных initial groups. Для replacement
+fixture создаёт временную казарму и пополняет supplies; это постановка теста,
+не production поведение. Probe завершается через `RequestClose`.
+
+С `-aicfSocialClientProbe 1` на server и client запускается отдельная матрица
+четырёх реплик без прерывания idle, отдельного SALUTE свободного бойца, общего
+cooldown и настоящего respawn игрока.
+Client сам вызывает штатные faction/group/spawn APIs. Позиции тестового игрока
+задаются fixture относительно бота; естественная навигация игрока не проверяется.
+`-aicfSocialFaction US|USSR` выбирает сторону (default US). После завершения
+первого client подключается новый профиль с `-aicfSocialJIP 1`, наблюдает 15 s
+без старого audio token и закрывается; затем закрывается server.
+Частота probe совпадает с production `TICK_MS=250`; callbacks снимаются при Stop.
+Каждый процесс запускается отдельной terminal-сессией через canonical launcher,
+свежими profile, client `-noFocus -forceUpdate` (штатные параметры PeerTool) и проверкой `ROSTER_READY`/manifest. Verdict берётся из полных
+остановленных logs, а не из одного успешного вызова API.
+
 `AICF_MenuPriceProbe.c` вместе с `AICF_MenuTransactionProbe.c` копируются только
 в изолированный RHS stage `Scripts/Game/AIConflictArlandRHS/Integration/`.
 `-aicfMenuPriceProbe 1` после ROSTER_READY проверяет 67 native BUILDING групп
