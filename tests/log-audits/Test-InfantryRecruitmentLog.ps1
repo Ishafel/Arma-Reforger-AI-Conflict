@@ -35,6 +35,14 @@ foreach ($line in $lines) {
         continue
     }
     $key = "$($fields.faction):$($fields.slot):$($fields.generation):$($fields.token)"
+    if ($event -eq 'INFANTRY_RECRUITMENT_QUEUED') {
+        if ($visits.ContainsKey($key) -or $fields.reason -ne 'SUPPLY_PLAN_PENDING' -or
+            $fields.source -notin @('AUTO','PLAYER_RECRUIT') -or $fields.priority -notin @('0','1','2')) {
+            $failures.Add("Invalid queued request $key")
+        }
+        $visits[$key] = @{ Arrived = $false; Pending = $null; Debit = 0; Finished = $false; Group = $fields.group; Joins = 0; Queued = $true }
+        continue
+    }
     if ($event -eq 'INFANTRY_RECRUITMENT_STARTED') {
         if ($visits.ContainsKey($key)) { $failures.Add("Duplicate visit $key") }
         $manual = $fields.player_requested -eq '1'
@@ -46,6 +54,9 @@ foreach ($line in $lines) {
     if (!$visits.ContainsKey($key)) { $failures.Add("Event without visit $key $event"); continue }
     $visit = $visits[$key]
     if ($visit.Finished -or $visit.Group -ne $fields.group) { $failures.Add("Stale identity $key $event") }
+    if ($visit.Queued -and $event -in @('INFANTRY_RECRUITMENT_ARRIVED','INFANTRY_RECRUIT_SPAWN_REQUESTED','INFANTRY_RECRUIT_DEBITED','INFANTRY_RECRUIT_JOINED')) {
+        $failures.Add("Purchase before admitted visit $key")
+    }
     switch ($event) {
         { $_ -in @('INFANTRY_RECRUITMENT_PLAN', 'INFANTRY_RECRUITMENT_REEVALUATED') } {
             foreach ($name in @('stock','income','income_interval_s','next_income_s','own_demand','other_demand','travel_s','supply_s','wait_s','completion_s')) {
@@ -71,6 +82,12 @@ foreach ($line in $lines) {
         'INFANTRY_RECRUIT_REFUNDED' {
             if ($visit.Debit -ne [double]$fields.amount) { $failures.Add("Wrong refund $key") }
             $visit.Debit = 0
+        }
+        'INFANTRY_RECRUIT_SPAWN_CANCELLED' {
+            if (!$visit.Pending -or $visit.Debit -ne 0 -or $fields.paid -ne '0' -or $fields.reason -ne 'PRIORITY_DEMAND') {
+                $failures.Add("Invalid unpaid cancellation $key")
+            }
+            $visit.Pending = $null
         }
         'INFANTRY_RECRUIT_JOINED' {
             if (!$visit.Pending -or $visit.Debit -ne [int]$fields.cost -or $visit.Debit -le 0) { $failures.Add("Unpaid recruit $key") }

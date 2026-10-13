@@ -186,6 +186,7 @@ Enforce fixture не входят в автоматическую матрицу
 | [Test-RankRestrictionsStatic.ps1](../tests/static/Test-RankRestrictionsStatic.ps1) | Rank gates; опционально -PolicyPath |
 | [Test-RecoveryEpisodeContracts.ps1](../tests/contracts/Test-RecoveryEpisodeContracts.ps1) | Episode fencing и synthetic logs; дополнительные runtime switches в param |
 | [Test-RecruitmentSupplyContracts.ps1](../tests/contracts/Test-RecruitmentSupplyContracts.ps1) | Прогноз казарм и отрицательные мутации supply model |
+| [Test-RecruitmentPriorityContracts.ps1](../tests/contracts/Test-RecruitmentPriorityContracts.ps1) | Приоритет, FIFO, pending demand, preemption и повторный gate перед оплатой; отрицательные мутации |
 | [Test-RHSIntegrationStatic.ps1](../tests/static/Test-RHSIntegrationStatic.ps1) | RHS dependencies и compatibility adapters |
 | [Test-RuntimeLauncherStatic.ps1](../tests/static/Test-RuntimeLauncherStatic.ps1) | Manifests, readiness и отказы preflight без native запуска |
 | [Test-ScenarioHeadersStatic.ps1](../tests/static/Test-ScenarioHeadersStatic.ps1) | Inherited headers и сценарные resources |
@@ -219,6 +220,7 @@ Enforce fixture не входят в автоматическую матрицу
 | [Test-LogisticsLog.ps1](../tests/log-audits/Test-LogisticsLog.ps1) | `-LogPath` | Physical delivery, ledger, recovery, fallback и exact client identity |
 | [Test-PresetRespawnLog.ps1](../tests/log-audits/Test-PresetRespawnLog.ps1) | `-ServerLogPath`, `-ClientLogPath` | Сохранение preset и respawn через server/client pipeline |
 | [Test-RecruitmentAcceptanceLog.ps1](../tests/log-audits/Test-RecruitmentAcceptanceLog.ps1) | `-LogPath`, `-Mode` | Матрица -Mode Lifecycle или Stability |
+| [Test-RecruitmentPriorityLog.ps1](../tests/log-audits/Test-RecruitmentPriorityLog.ps1) | `-LogPath` | Полный остановленный лог priority fixture, порядок реальных покупок и точные списания |
 | [Test-RHSWardrobeInventoryLog.ps1](../tests/log-audits/Test-RHSWardrobeInventoryLog.ps1) | `-LogPath`, `-OutputDirectory` | Inventory showcase; сохраняет отдельный отчёт |
 | [Test-Stage2Log.ps1](../tests/log-audits/Test-Stage2Log.ps1) | `-LogPath` | Приказы, repeated recovery, route replans и failed barracks visits |
 | [Test-Stage4Log.ps1](../tests/log-audits/Test-Stage4Log.ps1) | `-LogPath` | Экономика, tickets/supplies и незавершённые операции |

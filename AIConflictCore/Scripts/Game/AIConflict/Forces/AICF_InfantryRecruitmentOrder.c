@@ -10,6 +10,10 @@ class AICF_InfantryRecruitmentOrder
 	int m_iIntent;
 	int m_iGraphRevision;
 	int m_iToken;
+	int m_iQueueSequence;
+	AICF_InfantryRecruitmentService m_RecruitmentService;
+	bool m_bAwaitingSupplyPlan;
+	string m_sPriorityWaitReason;
 	bool m_bPlayerRequested;
 	SCR_CampaignMilitaryBaseComponent m_Base;
 	EntityID m_BaseId;
@@ -56,7 +60,7 @@ class AICF_InfantryRecruitmentOrder
 	// чтобы удаление waypoint не происходило внутри stock movement callback.
 	bool ReportFailedMovement(SCR_AIGroup group, AIWaypoint waypoint, int result = EMoveError.UNKNOWN)
 	{
-		if (!Replication.IsServer() || !IsCurrent(m_Slot) || group != m_Group ||
+		if (!Replication.IsServer() || m_bAwaitingSupplyPlan || !IsCurrent(m_Slot) || group != m_Group ||
 			!waypoint || waypoint != m_Waypoint || group.GetCurrentWaypoint() != waypoint)
 			return false;
 		if (!m_bMovementFailed)
@@ -94,6 +98,9 @@ class AICF_InfantryRecruitmentOrder
 		AICF_Stage4Diagnostics.Info(eventName, string.Format(
 			"faction=%1 slot=%2 generation=%3 token=%4 base=%5 group=%6",
 			m_Faction.GetFactionKey(), m_Slot.GetSlotId(), m_iGeneration, m_iToken,
-			AICF_Stage1Diagnostics.BaseKey(m_Base), m_GroupId) + string.Format(" service=%1 ", m_ServiceId) + details);
+			AICF_Stage1Diagnostics.BaseKey(m_Base), m_GroupId) + string.Format(
+			" service=%1 source=%2 priority=%3 queue=%4 ", m_ServiceId,
+			AICF_RecruitmentPriority.Source(m_bPlayerRequested), AICF_RecruitmentPriority.Rank(m_Slot, m_bPlayerRequested),
+			m_iQueueSequence) + details);
 	}
 }

@@ -253,6 +253,7 @@ Server и client используют согласованный stage. Для R
 | [AICF_RecruitmentMapProbe.c](../tests/fixtures/AICF_RecruitmentMapProbe.c) | Synthetic slot с настоящими faction/base identities | `aicfRecruitmentMapProbe` |
 | [AICF_RecruitmentStabilityProbe.c](../tests/fixtures/AICF_RecruitmentStabilityProbe.c) | Вместе с LifecycleProbe; управляемый income snapshot и стабильность replan | `aicfRecruitmentStabilityProbe` |
 | [AICF_RecruitmentSupplyProbe.c](../tests/fixtures/AICF_RecruitmentSupplyProbe.c) | Шесть конкурирующих отрядов; stock казармы/transactions, test supplies | `aicfRecruitmentSupplyProbe` |
+| [AICF_RecruitmentPriorityProbe.c](../tests/fixtures/AICF_RecruitmentPriorityProbe.c) | Три настоящих отряда на одной базе: очередь, ручное повышение, preemption и оплата; задаёт роли/запас/доход/позиции и приостанавливает стратегический loop; не проверяет UI/RPC игрока или навигацию | `aicfRecruitmentPriorityProbe` |
 | [AICF_RemainingErrorsProbe.c](../tests/fixtures/AICF_RemainingErrorsProbe.c) | Диагностика identity/parent/physics; отсутствие CLI не гарантирует бездействие | `aicfRemainingProbeSeconds` |
 | [AICF_RHSPatchesProbe.c](../tests/fixtures/AICF_RHSPatchesProbe.c) | RHS роли, inventory, повторная выдача и разнообразие patches | `aicfPatchProbe` |
 | [AICF_RHSPMCScenarioProbe.c](../tests/fixtures/AICF_RHSPMCScenarioProbe.c) | RHS AC охрана без исходного primary и FIA стрелок; без отдельного CLI guard | Нет собственного GetCLIParam; читай hooks |
