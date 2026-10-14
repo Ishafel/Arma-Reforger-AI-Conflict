@@ -207,7 +207,26 @@ loaded/spare и завершает сервер через RequestClose. Не м
 Печатает слоты всех ролей и завершает сервер. Не включать одновременно с другими
 самозавершающимися probes; клиент, стрельба и file Save не проверяются.
 
-`AICF_FIAGarrisonRecoveryProbe.c`, `-aicfRecoveryProbe 1`: только отдельный stage,
+`AICF_FIAGarrisonDamageProbe.c`, `-aicfDamageRecoveryProbe damage|identity`:
+только отдельный stage последнего WCS addon, Hard North WCS+RHS. После production
+plan выбирает детерминированные танк/БТР из FIA catalog, сохраняя production
+spawn/boarding. После READY приостанавливает scheduler и фоновые damage handlers;
+для тестового воздействия включает damage и вызывает настоящий HandleDamage
+(TRUE, 5% выбранного hit zone), Kill и DeleteRplEntity. Результат recovery
+не подменяет. Режим damage проверяет корпус/двигатель обеих машин, ранение,
+лечение/ремонт между ticks, отдельную гибель driver/gunner/commander/passenger,
+retry/leg, обычную высадку и positive recovery. Режим identity проверяет
+missing/stale/replaced members, unknown observer/roster, stale vehicle/generation,
+synthetic player veto, 49/50/51 м, отсутствие кандидата и настоящий урон,
+инъецированный после Candidate/на player fence перед forced boarding.
+Завершает сервер RequestClose, deadline 420 с. Анализ полного остановленного
+лога: `Test-FIAGarrisonRecoveryLog.ps1 -LogPath <console.log> -DamageMode damage|identity`.
+Наблюдения после первого ban сверяются с numeric_slot/generation/vehicle;
+никаких последующих vehicle/crew teleport events быть не должно. Не проверяет
+реального connected player, client/JIP и исходный игровой эпизод пользователя.
+
+`AICF_FIAGarrisonRecoveryProbe.c` — историческая матрица,
+`-aicfRecoveryProbe 1`: только отдельный stage,
 Hard North WCS+RHS. Проверяет metadata трёх мест экипажа, геометрию границы
 50 м, synthetic player veto без мутаций, перенос исходной машины,
 возврат на каждое из трёх мест БТР и танка с последующим переносом,

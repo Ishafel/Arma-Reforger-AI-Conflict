@@ -14,6 +14,7 @@
 | Изменить цены штатного заказа пехоты и техники RHS/WCS | [MENU_PRICES.md](MENU_PRICES.md), [полная таблица](MENU_PRICE_TABLE.csv), RHS/WCS menu price policy и integration |
 | Изменить случайную начальную погоду без изменения времени | [GAMEPLAY.md](GAMEPLAY.md#начальная-погода), четыре базовых stock/RHS `MissionHeader`, [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить сложности, случайный состав и усиленную точку FIA | [FIA_GARRISONS.md](FIA_GARRISONS.md), [GAMEPLAY.md](GAMEPLAY.md#сложность-гарнизонов-fia), [TEST_FIXTURES.md](TEST_FIXTURES.md) |
+| Изменить запрет recovery FIA после урона/потерь (issue #48) | [GAMEPLAY.md](GAMEPLAY.md), `AICF_FIAGarrison`/`AICF_FIAGarrisonIntegrity`, `AICF_FIAGarrisonRecovery`/`AICF_FIAGarrisonCrew`, [TESTING.md](TESTING.md), DamageProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить ПТ-состав и Carl Gustaf US | [GAMEPLAY.md](GAMEPLAY.md#сложность-гарнизонов-fia), `AICF_Difficulty`, Core/RHS content profiles, `AICF_WCSInfantryKit`/`AICF_WCSInfantryEquipment`; probes в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить дальность и тактику применения РПГ против бронетехники | [ANTI_TANK_TACTICS.md](ANTI_TANK_TACTICS.md), `Orders/AICF_AntiTankPolicy.c` |
 | Оптимизировать каталог и редактор пресетов экипировки | [LOADOUT_PERFORMANCE.md](LOADOUT_PERFORMANCE.md), `Loadouts/AICF_LoadoutCatalog.c`, `UI/AICF_LoadoutEditor.c` |

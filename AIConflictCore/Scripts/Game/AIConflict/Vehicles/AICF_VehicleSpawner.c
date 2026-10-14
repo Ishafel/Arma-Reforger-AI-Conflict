@@ -1281,6 +1281,7 @@ class AICF_VehicleSpawner
 			g.m_Vehicle = SpawnSelectedPrefab(g.m_sPrefab, pose[3], params);
 			if (!g.m_Vehicle) return false;
 			g.m_VehicleId = g.m_Vehicle.GetID();
+			g.WatchVehicleIntegrity();
 			g.m_vPosition = pose[3];
 			g.m_bStaticDefense = staticDefense;
 			RplComponent rpl = RplComponent.Cast(g.m_Vehicle.FindComponent(RplComponent));

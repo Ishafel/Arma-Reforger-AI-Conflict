@@ -1,5 +1,96 @@
 # Проверки и baseline
 
+## Issue #48: постоянный запрет recovery FIA после урона/потерь — 2026-10-14
+
+Ветка `codex/fia-damage-recovery` от актуальной `origin/main` (`07350fc`).
+Game/Server/Workbench **1.8.0.13**. Evidence: `.codex-runtime/issue48/`;
+helpers `compile.ps1`, `runtime.ps1`, `collect.ps1`, `negative-audits.ps1`,
+полные argv/manifests/native exits, console/script/error logs и source hashes.
+Результат: server-only latch исходной vehicle identity/generation, события
+здоровья всего hit-zone hierarchy, полный исходный roster и повторные gates
+до поиска и перед transform/forced boarding, включая синхронные callbacks.
+Первый reason сохраняется. Repair/heal не снимают ban; CanDrive независим,
+ожидание запрещённого crew recovery снимается. Replacement нет.
+
+Только новые проверки этой задачи:
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-AICombatInputContracts.ps1,
+  Test-FIAGarrisonContracts.ps1,Test-FIAPatrolStatic.ps1,
+  Test-Stage35RecoveryPolicy.ps1,Test-Stage35Static.ps1,Test-Stage3Static.ps1,
+  Test-Stage3StaticContracts.ps1,Test-NorthFailureContracts.ps1
+  -EvidenceRoot .codex-runtime/issue48/before`: **7 PASS, 1 FAIL**, exit 1.
+  `after-final/` с добавленным `Test-FIAGarrisonIntegrityContracts.ps1`:
+  **8 PASS, 1 тот же FAIL**, exit 1. Сохранённые baseline failures:
+  `NorthFailureContracts` — `MOVE_CALLBACK_FENCE`, `MOVE_ACTIVITY`, без изменений.
+  Новый integrity audit: **24 правила и 25 отрицательных мутаций PASS/0**;
+  дополнительно проверяет initial/post-queue/post-waypoint gates.
+- `compile.ps1 -Variant Stock|EveronNorthRHS|EveronNorthWCSRHS
+  -Label final-<Variant>` — три production Workbench **PASS/native exit 0**,
+  `Script validation successful`; SCRIPT E/F, ENGINE F, VM exceptions — 0.
+  Прочих (E) строк соответственно 25/26/39. Stage с DamageProbe,
+  `-Label fixture-final-complete -SourceRoot <stage>` — **PASS/0**, 39 прочих (E).
+  Точные аргументы и полные логи: `compile-summary.json`, `wb-*-argv.json`.
+- `runtime.ps1 -Mode damage -Label damage-final-complete` — canonical
+  `tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthWCSRHS
+  -Difficulty Hard -RepositoryRoot <stage> -ProfileRoot <fresh profile>
+  -AdditionalArguments -addr,127.0.0.1:2348,-aicfDamageRecoveryProbe,damage,
+  -aicfRequirePlayerForResult,0`: **37/37 PASS/native exit 0**.
+  Настоящий HandleDamage: Hull и Engine_01 танка Т-72А/БТР-70, 5% здоровья;
+  сохранение CanDrive, оба recovery reasons, отсутствие transform/counter
+  изменений, ремонт между ticks, leg и три retry. Ранение/лечение живого
+  essential crew блокируют forced return; отдельно Kill водителя, наводчика,
+  командира и пассажира. Обычная высадка живого десанта и positive recovery
+  исходного БТР проходят без ban. Ban reason после Kill essential crew может
+  быть CREW_WOUNDED: health callback фиксирует первое повреждение до death state.
+- `runtime.ps1 -Mode identity -Label identity-final-complete` с тем же launcher
+  и отдельным fresh profile: **25/25 PASS/native exit 0**. Реальное удаление
+  member, stale/replaced roster identity, stale vehicle/generation, отсутствие
+  damage observer/полного roster; synthetic player veto, 49/50/51 м и отказ
+  без geometry candidate. HandleDamage инъецирован после production Candidate
+  и перед forced return после физического завершения выхода из compartment;
+  финальные gates предотвращают мутации.
+- `tests/log-audits/Test-FIAGarrisonRecoveryLog.ps1 -LogPath <полный console.log>
+  -DamageMode damage|identity` — оба **PASS/0**, по 9 banned identities;
+  после ban нет vehicle/crew teleport events для этой identity. Оба сервера
+  сами завершились через RequestClose, listener 127.0.0.1:2348 подтверждён.
+  В каждом полном log SCRIPT E/F, ENGINE F, VM exceptions — 0;
+  233 прочих (E) из ресурсов/keyword compatibility/pathfinding/shutdown.
+  `runtime-summary.json`, `damage-audit-final.txt`, `identity-audit-final.txt`.
+- `negative-audits.ps1`: 3 копии полного лога с teleport после ban,
+  отсутствующим required case или удалёнными ban diagnostics дают ожидаемый
+  **FAIL/1** с конкретной причиной; negative regression **PASS/0**.
+- `collect.ps1` — **PASS/0**: все **259** production `.c`/`.conf`/`.gproj`
+  совпали со stage по SHA-256. Fixture присутствует только в stage.
+  `git diff --check` — **PASS/0**.
+
+Финальные остановленные console logs относительно evidence root:
+
+- `profile-damage-final-complete/logs/logs_2026-10-14_23-03-09/console.log`;
+- `profile-identity-final-complete/logs/logs_2026-10-14_23-04-36/console.log`.
+
+Ранние `damage-first`, `damage-second`, `damage-port` не являются runtime PASS:
+replication listener 2001 был занят пользовательским сервером; `-bindPort`
+в source режиме не изменил listener. После перехода на `-addr` фактический
+listener проверен в полном log. `identity-final` — **FAIL, 1 case**: probe
+проверял final boarding fence до завершения GetOutVehicle. Fixture исправлена
+с ожиданием физического transition; `identity-async-final` и окончательный
+`identity-final-complete` проходят. Старые и неуспешные логи сохранены отдельно.
+
+Изменённые файлы (15): Core `AICF_FIAGarrison.c`, новый
+`AICF_FIAGarrisonIntegrity.c`, `AICF_FIAGarrisonCrew.c`,
+`AICF_FIAGarrisonRecovery.c`, `AICF_FIAGarrisonService.c`,
+`AICF_VehicleSpawner.c`; tests новый `AICF_FIAGarrisonDamageProbe.c`, новый
+`Test-FIAGarrisonIntegrityContracts.ps1`, `Test-FIAGarrisonRecoveryLog.ps1`;
+`README.md`, `agent-notes/README.md`, `ARCHITECTURE.md`, `GAMEPLAY.md`,
+`TEST_FIXTURES.md`, эта `TESTING.md`.
+
+Полный offline набор, реальный connected player возле переноса, client/JIP,
+визуальные проверки, soak и исходный игровой эпизод пользователя — **NOT RUN**.
+Synthetic player veto не заменяет discovery реального PlayerManager.
+Все активные критерии issue проверены терминально; исходный эпизод не объявляется
+воспроизведённым. Свои процессы завершены; stage удалён после сохранения
+evidence. Пользовательский сервер на 2001 не останавливался.
+
 Перед правкой выполни относящиеся к домену проверки и сохрани полный вывод,
 commit/branch, dirty status и exit codes. После правки повтори тот же набор и
 сравни конкретные rule IDs. Известный FAIL не скрывай и не исправляй regex ради PASS.
