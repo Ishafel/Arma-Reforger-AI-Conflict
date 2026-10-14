@@ -10,6 +10,64 @@ commit/branch, dirty status и exit codes. После правки повтор�
 `NOT RUN` в отдельном разделе issue, без ожидания игрока/тестировщика. Исторические
 verdict ниже сохраняют фактический статус; отклонение критерия не даёт новый PASS.
 
+## Issue #44: владельцы состояния и стабильный выбор — 2026-10-14
+
+Ветка `codex/issue-44-audit-contracts` от свежего `origin/main`
+`6466e10d32a0ea2a36da2383ba967b777c746234`, исходное дерево чистое.
+Объём — tests/docs: production `.c`, resources и общий
+`Stage3StaticAudit.Common.ps1` не изменены. Evidence: `.codex-runtime/issue44/`.
+
+Прежний `AI_COMMANDER_COMPONENT` был следствием двух допустимых modded
+расширений `SCR_GameModeCampaign`. Теперь локальный selector выбирает ровно
+одно тело этого класса с объявлениями commander state/API, отклоняя отсутствие,
+полное/частичное второе владение и совпадение в чужом классе. Оба callback-backed
+RplProp проверяются на исполняемом объявлении; setter — на ранний server/master
+return, unchanged return до assignments и один BumpMe; getters и callback
+продолжают проверяться. Общий unique-class helper не ослаблен.
+
+Прежний `STABLE_NEAREST` требовал отменённый distance-only ranking казармы.
+Новые method-scoped checks проверяют возрастающий обход graph и исходный порядок
+services, строгое улучшение nearest/pending distance, forecast/approach gates,
+минимальный feasible completion ETA и приоритет best над pending. Равенство
+сохраняет первый кандидат. Production selection не менялся; контракт:
+[RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md).
+
+Команды из корня checkout и фактические verdict:
+
+- `& tools/Invoke-AICFChecks.ps1 -Name @('Test-AICommanderModeStatic.ps1', 'Test-SquadCommandsContracts.ps1', 'Test-RecruitmentSupplyContracts.ps1', 'Test-RecruitmentPriorityContracts.ps1', 'Test-AdaptiveCommanderContracts.ps1') -EvidenceRoot .codex-runtime/issue44/before`:
+  **3 PASS / 2 FAIL, exit 1**. Воспроизведены только `AI_COMMANDER_COMPONENT`
+  и `STABLE_NEAREST`; полные outputs, SHA/branch/status и argv — в `before/`.
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/contracts/Test-AuditSelectionContracts.ps1 -EvidenceRoot .codex-runtime/issue44/mutations-third`:
+  **PASS/0**, 6 положительных контролей, **20 commander / 17 recruitment**
+  отрицательных source mutations. Каждый испорченный вход дал **FAIL/1 с нужным
+  rule ID**. PASS проверяет переименование state-файла, нейтральное modded
+  расширение и исходные/восстановленные sources. Отрицательные случаи включают
+  missing/wrong/duplicate/partial owner, оба RplProp, неверный/отсутствующий
+  callback, authority/unchanged guards, преждевременный/лишний bump, getters,
+  равный/худший nearest/pending/ETA, distance-only ranking и comment decoys.
+  Полные outputs и argv/exits каждого входа — `mutations-third/summary.json`,
+  runner output — `mutations-third-runner.txt`.
+- `& tools/Invoke-AICFChecks.ps1 -Name @('Test-AICommanderModeStatic.ps1', 'Test-SquadCommandsContracts.ps1', 'Test-RecruitmentSupplyContracts.ps1', 'Test-RecruitmentPriorityContracts.ps1', 'Test-AdaptiveCommanderContracts.ps1', 'Test-AICommanderUIContracts.ps1') -EvidenceRoot .codex-runtime/issue44/after-final`:
+  **6 PASS / 0 FAIL, exit 0**. Дополнительно проверен существующий UI runner:
+  18 его отрицательных мутаций отклонены. `after-final/` содержит полный вывод
+  каждого теста и commands/exits; `verification.json` — сравнение и scope.
+- `git diff --check` — **PASS/0**. Семь изменённых файлов — `changed-files.txt`:
+  два исправленных аудитора, новый mutation runner, TESTING, TOOLS, указатель
+  agent-notes и заметка recruitment. Production изменения отсутствуют.
+
+Ранние попытки runner не PASS: `mutations-first` остановлен отказом sandbox при
+rename в системном temp; `mutations-second` выявил доступ к необязательному ключу
+hashtable под StrictMode. Копия перенесена внутрь нового evidence root; optional
+keys читаются через indexer. Полная матрица `mutations-third` повторена после
+обоих исправлений. Все временные source-copy удалены, своих тестовых процессов
+не осталось; полные outputs неудачных попыток сохранены.
+
+Исторические FAIL ниже сохраняются как исторические. В свежем выбранном наборе
+прежних failures и новых regressions нет. Полный offline набор, Workbench,
+runtime/client/JIP/gameplay/visual — **NOT RUN**; они не требуются для этого
+tests/docs изменения и не заявлены подтверждёнными статикой. Merge/релиз
+не выполнялись; новой версии нет.
+
 ## PR #43: срочность и очистка manual intent — 2026-10-14
 
 Продолжение `codex/issue-42-adaptive-targets` от `b16b792`; исходное дерево чистое.

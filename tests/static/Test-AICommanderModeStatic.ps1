@@ -19,6 +19,32 @@ function Get-AICommanderRecordByName {
     return $null
 }
 
+function Find-AICommanderStateOwner {
+    param([object[]]$Records)
+
+    # Несколько modded расширений допустимы. Владельцем считается тело
+    # именно SCR_GameModeCampaign с любым объявлением commander state/API.
+    # Частичное второе владение также неоднозначно; имя файла не является API.
+    $owners = @(
+        foreach ($record in $Records) {
+            foreach ($declaration in [regex]::Matches($record.Code, '\bclass\s+SCR_GameModeCampaign\b')) {
+                $body = Get-AICFBracedBody $record.Source.Substring($declaration.Index) '^class\s+SCR_GameModeCampaign\b' -Code $record.Code.Substring($declaration.Index)
+                $candidate = [pscustomobject]@{
+                    Source = $body
+                    Code = (ConvertTo-AICFCodeText $body)
+                }
+                $ownsState = $candidate.Code -match '\bbool\s+m_bAICF(?:US|USSR)AICommanderEnabled\s*;'
+                foreach ($method in @('AICF_SetAICommanderState', 'AICF_GetAICommanderEnabled', 'AICF_HasAICommanderState', 'AICF_OnAICommanderStateReplicated')) {
+                    if (Get-AICFMethodBody $candidate $method) { $ownsState = $true }
+                }
+                if ($ownsState) { $candidate }
+            }
+        }
+    )
+    if ($owners.Count -eq 1) { return $owners[0] }
+    return $null
+}
+
 function Require-AICommanderRecord {
     param([object]$Record, [string]$Name)
 
@@ -83,7 +109,7 @@ $authorityPolicy = Find-AICFClassRecord $records 'AICF_CommandAuthorityPolicy'
 $aiCommander = Find-AICFClassRecord $records 'AICF_AICommander'
 $orderPlanner = Find-AICFClassRecord $records 'AICF_OrderPlanner'
 $groupSlot = Find-AICFClassRecord $records 'AICF_GroupSlot'
-$campaignState = Find-AICFClassRecord $records 'SCR_GameModeCampaign'
+$campaignState = Find-AICommanderStateOwner $records
 $strategicUI = Find-AICFClassRecord $records 'AICF_StrategicUIController'
 $groupMapMarkers = Find-AICFClassRecord $records 'AICF_GroupMapMarkerSystem'
 $vehicleHandoff = Find-AICFClassRecord $records 'AICF_VehicleTaskHandoff'
@@ -405,13 +431,19 @@ if ($matchController) {
     Assert-AICommanderOrdered 'AI_COMMANDER_REPLICATION' $stopCode 'm_Campaign.AICF_SetAICommanderState(false, false)' 'if (m_GroupMapMarkers)' 'Stop must clear authority availability before subsystem cleanup'
 }
 
-if (Require-AICommanderClass $campaignState 'SCR_GameModeCampaign') {
+if (Require-AICommanderClass $campaignState 'SCR_GameModeCampaign commander state owner') {
     foreach ($field in @(
         'm_bAICFUSAICommanderEnabled',
         'm_bAICFUSSRAICommanderEnabled'
     )) {
-        $fieldPattern = '\[RplProp\(onRplName:\s*"AICF_OnAICommanderStateReplicated"\)\]\s*protected\s+bool\s+' + $field + '\s*;'
-        Assert-AICFContains $failures 'AI_COMMANDER_REPLICATION' $campaignState.Source $fieldPattern "Campaign flag $field must be a callback-backed RplProp"
+        # Code сохраняет offsets, скрывая comments/strings. Проверяем реальное
+        # объявление attribute и его callback literal в том же диапазоне Source.
+        $fieldPattern = '\[RplProp\(onRplName:\s*\)\]\s*protected\s+bool\s+' + $field + '\s*;'
+        $attributes = @([regex]::Matches($campaignState.Code, $fieldPattern))
+        if ($attributes.Count -ne 1 -or
+            $campaignState.Source.Substring($attributes[0].Index, $attributes[0].Length) -notmatch '\[RplProp\(onRplName:\s*"AICF_OnAICommanderStateReplicated"\)\]') {
+            Add-AICFAuditFailure $failures 'AI_COMMANDER_REPLICATION' "Campaign flag $field must be a callback-backed RplProp"
+        }
     }
 
     $setState = Assert-AICommanderMethodPresent $campaignState 'AICF_SetAICommanderState' 'AI_COMMANDER_REPLICATION'
@@ -422,11 +454,13 @@ if (Require-AICommanderClass $campaignState 'SCR_GameModeCampaign') {
     $getEnabledCode = ConvertTo-AICFCodeText $getEnabled
     $hasStateCode = ConvertTo-AICFCodeText $hasState
 
-    Assert-AICFContains $failures 'AI_COMMANDER_REPLICATION' $setStateCode '!Replication\.IsServer\s*\(\s*\)\s*\|\|\s*!IsMaster\s*\(\s*\)' 'Campaign command flags may change only on authoritative server/master'
-    Assert-AICFContains $failures 'AI_COMMANDER_REPLICATION' $setStateCode 'm_bAICFUSAICommanderEnabled\s*==\s*usEnabled\s*&&\s*m_bAICFUSSRAICommanderEnabled\s*==\s*ussrEnabled[\s\S]*return\s*;' 'Campaign setter must avoid redundant replication bumps'
-    Assert-AICFContains $failures 'AI_COMMANDER_REPLICATION' $setStateCode 'm_bAICFUSAICommanderEnabled\s*=\s*usEnabled[\s\S]*m_bAICFUSSRAICommanderEnabled\s*=\s*ussrEnabled[\s\S]*Replication\.BumpMe\s*\(\s*\)' 'Campaign setter must assign both flags before one replication bump'
-    Assert-AICFContains $failures 'AI_COMMANDER_REPLICATION' $getEnabledCode 'if\s*\(\s*isUSSR\s*\)[\s\S]*m_bAICFUSSRAICommanderEnabled[\s\S]*m_bAICFUSAICommanderEnabled' 'Campaign getter must select the requested faction flag'
-    Assert-AICFContains $failures 'AI_COMMANDER_REPLICATION' $hasStateCode 'm_bAICFUSAICommanderEnabled\s*\|\|\s*m_bAICFUSSRAICommanderEnabled' 'false/false must remain the pre-snapshot COMMAND SYNC sentinel'
+    $authorityGuard = '^\s*\{\s*if\s*\(\s*!Replication\.IsServer\s*\(\s*\)\s*\|\|\s*!IsMaster\s*\(\s*\)\s*\)\s*return\s*;'
+    $unchangedGuard = 'if\s*\(\s*m_bAICFUSAICommanderEnabled\s*==\s*usEnabled\s*&&\s*m_bAICFUSSRAICommanderEnabled\s*==\s*ussrEnabled\s*\)\s*\{\s*return\s*;\s*\}'
+    $assignAndBump = 'm_bAICFUSAICommanderEnabled\s*=\s*usEnabled\s*;\s*m_bAICFUSSRAICommanderEnabled\s*=\s*ussrEnabled\s*;\s*Replication\.BumpMe\s*\(\s*\)\s*;\s*\}\s*$'
+    Assert-AICFContains $failures 'AI_COMMANDER_REPLICATION' $setStateCode $authorityGuard 'Campaign command flags must return immediately outside authoritative server/master'
+    Assert-AICFContains $failures 'AI_COMMANDER_REPLICATION' $setStateCode ($authorityGuard + '\s*' + $unchangedGuard + '\s*' + $assignAndBump) 'Campaign setter must reject unchanged flags before assignments and exactly one replication bump'
+    Assert-AICFContains $failures 'AI_COMMANDER_REPLICATION' $getEnabledCode '^\s*\{\s*if\s*\(\s*isUSSR\s*\)\s*return\s+m_bAICFUSSRAICommanderEnabled\s*;\s*return\s+m_bAICFUSAICommanderEnabled\s*;\s*\}\s*$' 'Campaign getter must return the requested faction flag'
+    Assert-AICFContains $failures 'AI_COMMANDER_REPLICATION' $hasStateCode '^\s*\{\s*return\s+m_bAICFUSAICommanderEnabled\s*\|\|\s*m_bAICFUSSRAICommanderEnabled\s*;\s*\}\s*$' 'false/false must remain the pre-snapshot COMMAND SYNC sentinel'
 }
 
 if (Require-AICommanderClass $strategicUI 'AICF_StrategicUIController') {
