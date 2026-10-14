@@ -10,6 +10,59 @@ commit/branch, dirty status и exit codes. После правки повтор�
 `NOT RUN` в отдельном разделе issue, без ожидания игрока/тестировщика. Исторические
 verdict ниже сохраняют фактический статус; отклонение критерия не даёт новый PASS.
 
+## PR #40: возврат оружия после idle — отчёт 2026-10-14
+
+Продолжение `codex/issue-38-idle-greetings`, baseline `1d265b8`, исходное дерево
+чистое. Проверки выполнены 2026-10-13 на Game/Server/Tools `1.8.0.13`, полные
+результаты оформлены после возобновления задачи. Evidence:
+`.codex-runtime/issue-38-weapon-restore/`; команды, manifests, native exits и
+полные остановленные logs сохранены. Старые результаты ниже не заменяют этот gate.
+
+`SelectWeapon(null)` заменён native contextual holster внутри `StartLoitering`.
+Для отмены до начала loiter controller ждёт завершения принятого unequip в
+`OnApplyControls`, проверяет исходные member/generation/weapon identity и наличие
+оружия, затем возвращает его. Ожидание ограничено 4000 ms; player control,
+другой предмет и потеря identity прекращают восстановление. Новых таймеров нет.
+
+- `Invoke-AICFChecks.ps1 -Name Test-SocialContracts.ps1,Test-SquadCommandsContracts.ps1,Test-AICombatInputContracts.ps1 -EvidenceRoot <before|after-final>`:
+  **2 PASS, прежний FAIL `STABLE_NEAREST`, exit 1** до/после. Social —
+  **24 правила / 20 отрицательных мутаций PASS**; `static-comparison.json`.
+- `compile.ps1 -Variant Stock|ArlandWCSRHS -Attempt production-final -SourceRoot .`:
+  обе **PASS / native exit 0**, validation successful, SCRIPT E/F = 0;
+  прочие E/F **25/39**. WCS fixture `-Attempt fixture-final -SourceRoot <stage>`
+  также **PASS / 0**.
+- `runtime.ps1 -Attempt baseline -Stage stage-before -Probe aicfSocialProbe -Commander USSR -Port 2316`:
+  исходный Stock код воспроизвёл **8 failures возврата оружия**, 26/34 assertions
+  PASS; исключение — уже безоружный боец. Native exit 0 означает завершение
+  процесса, не успешную проверку. SCRIPT E/F = 0, прочие E/F 14.
+- `runtime.ps1 -Attempt final-wcs -Probe aicfSocialProbe -Commander USSR -Port 2315 -Variant ArlandWCSRHS -ClientProbe`,
+  отдельная сессия `client.ps1 -Attempt client-final-wcs -Server final-wcs -Variant ArlandWCSRHS -Port 2315`:
+  **34/34 server assertions и 9/9 client observations PASS**, оба native exits 0.
+  WCS + RHS US, Easy fixture. Проверены четыре idle deadline, приказ, угроза,
+  отмена в том же frame, изначально безоружный боец и Stop. На время проверки
+  выбранный AI agent приостановлен, чтобы его weapon behavior не скрывал дефект;
+  предмет в руках через 4000 ms сравнивается с исходной entity. Deadline ускорен,
+  полного ожидания 20 секунд для каждого emote нет. Клиент сравнивает RplId.
+  SCRIPT E/F = 0; прочие E/F server/client **104/173**, engine logs не чистые.
+- `audit.ps1` запускает `Test-SocialWeaponLog.ps1 -LogPath ... -ClientLogPath ...`:
+  **PASS / 0**, исходный дефект и отрицательное client observation отклонены.
+  Production/stage SHA256 совпали; `summary.json`, `production-stage-hashes.json`.
+
+Промежуточные попытки не PASS: первоначальный fixture не включал обязательный
+client companion; затем ошибочно выбирал гранату либо ждал продолжающего движение
+бойца. Три зависшие подготовительные попытки остановлены принудительно; их logs
+не используются для приёмки. Приостановка AI устранила также возможность ложного
+PASS от его собственного перевооружения. Первый native contextual вариант дал
+33/34: немедленный recover не отменял ещё ожидающий unequip. Финальный путь через
+`OnApplyControls` подтвердился отдельным Stock early probe (2/2) и полной WCS
+матрицей. У log audit исправлена UTF-8 BOM для Windows PowerShell 5; требования
+к результату не ослаблены.
+
+Полный offline набор, повтор полной greeting/audio/JIP матрицы на этом изменении,
+визуальная оценка и прослушивание — **NOT RUN**. Отдельная полная Stock matrix
+окончательного кода не запускалась: Stock early и WCS full имеют указанные выше
+границы. `ACCEPTED` не объявляется.
+
 ## Issue #38: исправление скольжения с активным idle — 2026-10-13
 
 Продолжение `codex/issue-38-idle-greetings`, baseline `71ae38e`, чистое дерево.

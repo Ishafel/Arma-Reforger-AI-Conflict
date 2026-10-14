@@ -21,9 +21,10 @@ class AICF_SocialActor
 	bool m_bOwnsLoiter;
 	bool m_bOwnsGesture;
 	bool m_bPreparingStance;
-	bool m_bPreparingHands;
 	TAnimGraphTag m_GestureTag;
 	ref SCR_LoiterCustomAnimData m_LoiterData;
+	IEntity m_HolsteredWeapon;
+	EntityID m_HolsteredWeaponId;
 
 	void AICF_SocialActor(AICF_GroupSlot slot, ChimeraCharacter member, int seed, int index, int now)
 	{
@@ -93,6 +94,7 @@ class AICF_SocialActor
 			return false;
 		SCR_CharacterControllerComponent controller = Controller();
 		if (!controller || controller.GetLifeState() != ECharacterLifeState.ALIVE ||
+			controller.AICF_HasSocialWeaponRecovery() ||
 			GetGame().GetPlayerManager().GetPlayerIdFromControlledEntity(m_Member) > 0 ||
 			controller.IsFalling() || controller.IsClimbing() || controller.IsSwimming() ||
 			controller.IsUsingItem() || controller.IsWeaponADS() || controller.GetVelocity().Length() > 0.1 ||
@@ -144,15 +146,6 @@ class AICF_SocialActor
 			type = LoiterType(m_iVariant);
 			if (!controller.CanPlayLoiterAnimation(type)) return false;
 		}
-		if (controller.GetCurrentItemInHands())
-		{
-			if (!controller.SelectWeapon(null)) return false;
-			m_bPreparingHands = true;
-			m_iPhase = 1;
-			m_iDeadline = now + AICF_SocialConfig.PREPARE_MS;
-			SnapshotOrder();
-			return true;
-		}
 		SCR_LoiterCustomAnimData data = SCR_LoiterCustomAnimData.CreateInstance();
 		if (m_iVariant == 0) data = SCR_LoiterCustomAnimData.CreateInstance(itemPreset: SCR_ELoiterItemID.CIGAR);
 		if (m_iVariant == 2) data = SCR_LoiterCustomAnimData.CreateInstance(itemPreset: SCR_ELoiterItemID.CHAIR);
@@ -161,7 +154,10 @@ class AICF_SocialActor
 		m_iPhase = 1;
 		m_iDeadline = now + AICF_SocialConfig.PREPARE_MS;
 		SnapshotOrder();
-		controller.StartLoitering(null, type, false, true, false, customAnimData: data);
+		// Native contextual holster сохраняет оружие и возвращает его после loiter.
+		m_HolsteredWeapon = controller.GetCurrentItemInHands();
+		if (m_HolsteredWeapon) m_HolsteredWeaponId = m_HolsteredWeapon.GetID();
+		controller.StartLoitering(null, type, true, true, false, customAnimData: data);
 		Log("IDLE_REQUESTED", now);
 		return true;
 	}
@@ -175,7 +171,7 @@ class AICF_SocialActor
 		{
 			if (m_bOwnsLoiter && controller.GetScrInputContext().m_CustomAnimData == m_LoiterData)
 			{
-				controller.AICF_StopSocialLoiter(m_LoiterData);
+				controller.AICF_StopSocialLoiter(m_LoiterData, this);
 			}
 			if (m_bOwnsGesture)
 			{
@@ -184,9 +180,9 @@ class AICF_SocialActor
 		}
 		m_bOwnsLoiter = false;
 		m_LoiterData = null;
+		m_HolsteredWeapon = null;
 		m_bOwnsGesture = false;
 		m_bPreparingStance = false;
-		m_bPreparingHands = false;
 	}
 
 	void Cancel(SCR_GameModeCampaign campaign, int now)

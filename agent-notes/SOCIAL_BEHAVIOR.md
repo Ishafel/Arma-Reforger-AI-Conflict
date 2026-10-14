@@ -22,9 +22,21 @@ Threat state должен быть SAFE, threat measure не выше 0.01. Пр
 
 Сид матча и индекс бойца дают разные варианты и задержки 750–4999 ms, не
 затрагивая планировщик набора. Активная анимация не перезапускается на tick.
-Перед началом из crouch/prone запрашивается штатная стойка STAND, затем отдельно
-убирается оружие. Каждый этап подготовки ограничен 4000 ms. Неудача освобождает
-состояние без изменения приказа.
+Перед началом из crouch/prone запрашивается штатная стойка STAND, затем native
+`StartLoitering(..., holsterWeapon: true, ...)` временно убирает оружие через
+`EEquipTypeUnarmedContextual`. Native переход владеет возвратом прежнего оружия
+после loiter; постоянный `SelectWeapon(null)` и отдельная подготовка рук удалены.
+Каждый этап подготовки ограничен 4000 ms. Неудача освобождает состояние без
+изменения приказа; отмена очищает также ещё ожидающую holster заявку.
+При отмене до входа в loiter команда holster может ещё ожидать следующий frame,
+даже при `IsChangingItem == false`. Controller временно сохраняет исходное оружие
+и actor identity; штатный `OnApplyControls` ждёт завершения unequip и возвращает
+оружие через `TryEquipRightHandItem`. Ожидание ограничено 4000 ms, не использует
+CallLater и не допускает новый social idle. Проверяются group/generation/member,
+weapon entity ID и наличие в weapon manager; смерть, player control, новый loiter,
+использование предмета или другой предмет в руках прекращают восстановление.
+Уже безоружный боец остаётся таким. Обычный завершившийся idle использует native
+contextual recovery без этого дополнительного пути.
 
 `GetOnPresentationInvalidated` у slot уведомляет сервис при смене assignment,
 снятии waypoint и передаче waypoint технике. Анимация отменяется в этом же
@@ -42,7 +54,7 @@ DONE не позволяет `OnDeactivate` перезаписать hard exit �
 start: порядок start/stop сохраняется. Authority проверяет ownership и точный
 объект `m_CustomAnimData`; receiver проверяет type/config текущего context.
 Ожидающая holster/align заявка очищается вместе с context; повтор без context
-ничего не меняет. Retry и delayed callback на бойца не используются. Обычные
+ничего не меняет. Отдельные таймеры и delayed callback на бойца не используются. Обычные
 чужие loiter не получают нового поведения через глобальный override остановки.
 
 ## Четыре варианта vanilla 1.8.0.13

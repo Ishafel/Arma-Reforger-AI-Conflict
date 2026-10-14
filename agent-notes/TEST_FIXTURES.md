@@ -30,6 +30,19 @@ Live matrix отменяет каждый из четырёх emotes через 
 с немедленным запуском следующего emote не входит в эти client observations.
 Animation tag — терминальная проверка графа, не визуальная оценка blending.
 
+`AICF_SocialProbeWeapon.c` добавляется к двум основным social fixtures;
+`-aicfSocialProbe 1 -aicfSocialWeaponProbe 1` включает отдельную матрицу оружия.
+После выбора допустимого бойца fixture приостанавливает его AI agent и движение,
+вооружает штатной винтовкой/пулемётом и вновь проверяет production `Available`.
+Так последующий AI weapon task не может замаскировать дефект восстановления.
+Проверяются четыре idle deadline (часы deadline ускорены), strategic assignment,
+угроза, отмена сразу после запроса, уже безоружный боец и Stop. Через 4000 ms
+требуется тот же entity в руках и завершённый item change; AI затем возобновляется.
+С `-aicfSocialClientProbe 1` probe ждёт штатный spawn клиента и дополнительно
+сравнивает replicated weapon identity для девяти случаев. Оба процесса закрываются
+автоматически. `Test-SocialWeaponLog.ps1 -LogPath ... [-ClientLogPath ...]` требует
+34 server assertions, полные остановленные logs и все девять client observations.
+
 `AICF_MenuPriceProbe.c` вместе с `AICF_MenuTransactionProbe.c` копируются только
 в изолированный RHS stage `Scripts/Game/AIConflictArlandRHS/Integration/`.
 `-aicfMenuPriceProbe 1` после ROSTER_READY проверяет 67 native BUILDING групп

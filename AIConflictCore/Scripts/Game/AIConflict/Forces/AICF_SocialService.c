@@ -160,12 +160,6 @@ class AICF_SocialService
 			actor.m_iPhase = 0;
 			actor.BeginIdle(now);
 		}
-		if (actor.m_bPreparingHands && actor.m_iPhase == 1 && !controller.IsChangingItem() && !controller.GetCurrentItemInHands())
-		{
-			actor.m_bPreparingHands = false;
-			actor.m_iPhase = 0;
-			actor.BeginIdle(now);
-		}
 		if (actor.m_iPhase == 0)
 		{
 			if (initial && actor.m_iToken == 0 && now >= actor.m_iDueAt)
