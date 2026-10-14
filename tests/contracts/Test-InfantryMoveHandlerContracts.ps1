@@ -11,7 +11,7 @@ $body = ConvertTo-AICFCodeText (Get-AICFMethodBody $record 'AICF_IsInfantryMoveH
 $rules = @(
     @('DEFAULT_HANDLER', 'if \(handler == AIGroupMovementComponent.DEFAULT_HANDLER_ID\)\s*return true;'),
     @('SENTINEL_SCOPE', 'if \(handler != -1 \|\| !m_GroupUtilityComponent.m_VehicleMgr\)\s*return false;'),
-    @('UNASSIGNED_MOVE', 'if \(registered && !SCR_AIMoveActivity.Cast\(m_GroupUtilityComponent.GetCurrentAction\(\)\)\)\s*return false;'),
+    @('AMBIGUOUS_REGISTERED', 'SCR_AIGroupVehicle registered = m_GroupUtilityComponent.m_VehicleMgr.FindVehicleBySubgroupId\(handler\);\s*if \(registered\)\s*return false;'),
     @('LIVE_ROSTER', 'if \(!AICF_GroupRuntime.IsAliveCharacter\(member\)\)\s*continue;'),
     @('MEMBER_IDENTITY', 'if \(agent.GetParentGroup\(\) != m_Group\)\s*return false;'),
     @('PHYSICAL_FOOT', '!access \|\| access.IsInCompartment\(\) \|\| access.IsGettingIn\(\) \|\| access.IsGettingOut\(\) \|\|\s*CompartmentAccessComponent.GetVehicleIn\(member\)'),
@@ -37,8 +37,8 @@ if ($RuntimeLogPath) {
     if (!$cli.Success -or $cli.Groups[1].Value.Trim() -cne ($manifest.arguments -join ' ')) { throw 'Runtime CLI mismatch' }
     if ($log -match 'SCRIPT\s*\((E|F)\)|ENGINE\s*\(F\)|Virtual Machine Exception') { throw 'Runtime script/VM/fatal failure' }
     if (!$log.Contains('[AICF][STAGE1][INFO][ROSTER_READY]')) { throw 'Roster never became ready' }
-    $expected = @('ROSTER_NINE','MUSTER_COMPLETE','POINT_ORDER','CURRENT_MOVE_ACTIVITY','FOOT_SENTINEL','FOREIGN_HANDLER','UNRELATED_REJECTED','UNASSIGNED_REGISTRY','FOOT_WITH_UNUSED_VEHICLE','ASSIGNED_VEHICLE_REJECTED','BOARD_REQUEST','PHYSICAL_OCCUPANT_REJECTED','EXIT_REQUEST','POINT_RESTORED_AFTER_EXIT','FOOT_AFTER_EXIT','FOREIGN_WAYPOINT_REJECTED')
-    $expected += @('FAILURE_REPORTED','FAILURE_VISIBLE','STALE_FAILURE_FENCES')
+    $expected = @('ROSTER_NINE','MUSTER_COMPLETE','POINT_ORDER','CURRENT_MOVE_ACTIVITY','FOOT_SENTINEL','FOREIGN_HANDLER','UNRELATED_REJECTED','UNASSIGNED_REGISTRY','AMBIGUOUS_REGISTERED_REJECTED','ASSIGNED_VEHICLE_REJECTED','BOARD_REQUEST','PHYSICAL_OCCUPANT_REJECTED','EXIT_REQUEST','POINT_RESTORED_AFTER_EXIT','FOOT_AFTER_EXIT','NEW_MOVE_IDENTITY','STALE_VEHICLE_RESULT_REJECTED','NEW_ORDER_UNCHANGED','NEW_ACTION_UNCHANGED','NO_STALE_FAILURE_CALLBACK','FOREIGN_WAYPOINT_REJECTED')
+    $expected += @('FAILURE_REPORTED','FAILURE_CALLBACK_ONCE','FAILURE_VISIBLE','STALE_FAILURE_FENCES')
     $checks = @([regex]::Matches($log, '\[INFANTRY_HANDLER_CHECK\] name=(\w+) passed=([01])'))
     if ($checks.Count -ne $expected.Count) { throw 'Unexpected runtime check count' }
     foreach ($name in $expected) {

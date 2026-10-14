@@ -196,12 +196,13 @@ modded class SCR_AIProcessFailedMovementResult
 		if (handler == AIGroupMovementComponent.DEFAULT_HANDLER_ID)
 			return true;
 		// -1 бывает и у пешего движения, и у записи ещё не назначенной машины.
-		// Запись в registry не доказывает движение в машине: для такого случая
-		// требуется именно Move activity и повторная физическая проверка всех живых.
+		// Native result не несёт identity/generation исходной операции. Текущий
+		// Move и пеший roster не исключают запоздавший vehicle result после выхода.
+		// При зарегистрированном sentinel не переносим failure на новый приказ.
 		if (handler != -1 || !m_GroupUtilityComponent.m_VehicleMgr)
 			return false;
 		SCR_AIGroupVehicle registered = m_GroupUtilityComponent.m_VehicleMgr.FindVehicleBySubgroupId(handler);
-		if (registered && !SCR_AIMoveActivity.Cast(m_GroupUtilityComponent.GetCurrentAction()))
+		if (registered)
 			return false;
 		array<AIAgent> agents = {};
 		m_Group.GetAgents(agents);

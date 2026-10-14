@@ -10,7 +10,65 @@ commit/branch, dirty status и exit codes. После правки повтор�
 `NOT RUN` в отдельном разделе issue, без ожидания игрока/тестировщика. Исторические
 verdict ниже сохраняют фактический статус; отклонение критерия не даёт новый PASS.
 
-## Пеший failed movement с unassigned vehicle — 2026-10-14
+## PR #47: поздний registered sentinel — 2026-10-14
+
+Продолжение `codex/infantry-move-vm-recovery` от `df1d77e`, дерево до правки чистое.
+[Замечание P2](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/47#discussion_r4273866199)
+подтверждено: после выхода и нового point order старый `-1` принимался только
+по текущему Move/roster, затем failure привязывался к новому waypoint.
+Script Diff `1.8.0.13` предоставляет result, handler, waypoint-related flag и
+location; identity/generation исходной операции в этих портах нет.
+
+Выбран fail-closed: при `FindVehicleBySubgroupId(-1)` classifier безусловно
+возвращает false до infantry/recruitment report и `OnMoveFailed`. На native
+границе поведение сохранено; обхода registry по типу нового action больше нет.
+Пеший `-1` без registry entry сохраняет физические/parent-group guards,
+default/positive handlers и callback fences сохранены. Прежняя попытка
+разблокировать ambiguous registry **отозвана**: этот PR не доказывает устранение
+исходной native VM и не объявляет зарегистрированный `-1` пешей операцией.
+Обещание такого восстановления удалено из README; описание PR соответствует
+консервативной защите и regression coverage.
+
+Затронуты `Forces/AICF_AINodeLifecycle.c`, InfantryMoveHandler contract/fixture,
+README и agent-notes ARCHITECTURE/README/TEST_FIXTURES/TOOLS/TESTING. Evidence:
+`.codex-runtime/move-vm-review47/`. Команды из корня checkout:
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-MovementRecoveryContracts.ps1,Test-NorthFailureContracts.ps1,Test-DefendWaypointInputContracts.ps1,Test-Issue12RecoveryContracts.ps1,Test-Issue14RecoveryContracts.ps1,Test-InfantryRecruitmentStatic.ps1,Test-RecruitmentPriorityContracts.ps1,Test-AdaptiveCommanderContracts.ps1,Test-InfantryMoveHandlerContracts.ps1 -EvidenceRoot <before|after>`:
+  оба **7 PASS / 2 прежних FAIL, exit 1**. Ровно прежние `POSTURE_QRF_OWNER`,
+  `MOVE_CALLBACK_FENCE`, `MOVE_ACTIVITY`, новых failures нет. Новый method-scoped
+  audit **PASS/0**, семь отрицательных guard mutations отклонены.
+- Evidence helper `compile.ps1 -Variant EveronNorthWCSRHS -Attempt fixture-before|fixture-after|production -SourceRoot <stage-before|stage-after|.>`:
+  все три терминальных Workbench **PASS/0**, validation successful;
+  SCRIPT E/F, VM и ENGINE F **0**, RESOURCES E **39** на каждом.
+  Exact argv, manifests и полные logs — `compile-summary.json` и соответствующие
+  `workbench-*/console.log`.
+- `runtime.ps1 -Stage stage-before|stage-after -Variant EveronNorthWCSRHS -Difficulty Medium -Attempt baseline|fixed -Port 2337 -Probe aicfInfantryMoveHandlerProbe`:
+  одинаковый новый fixture, девять живых бойцов, реальный APC, посадка/выход,
+  новый Move и waypoint/assignment при той же group generation. Старые location,
+  waypoint identity и action сохранены до замены. **До 25 checks / 5 failures,
+  после 25/25 PASS**, оба native exits 0. До правки принимается registered
+  sentinel, меняются новый failure/action и вызывается callback; после отказа
+  новый waypoint, assignment, executed action/state/remove flag сохраняются,
+  callback не вызывается. Positive control без registry сообщает свежий failure
+  ровно одним callback, generation/assignment fences проходят.
+  Полные остановленные logs — `server-baseline/logs/` и `server-fixed/logs/`;
+  SCRIPT E/F, VM, ENGINE F **0/0**, RESOURCES E **51/51**.
+- `audit.ps1 -Attempt baseline|fixed` вызывает tracked contract с полным
+  `-RuntimeLogPath` и actual `-ManifestPath`: baseline ожидаемый **FAIL/1**,
+  fixed **PASS/0**, exact CLI и все 25 cases проверены. `log-mutations.ps1`:
+  positive **PASS/0**, шесть негативных logs (VM, fatal, failed late-result case,
+  missing case, missing completion, altered CLI) отклонены **FAIL/1**;
+  outputs/argv/exits — `log-mutations/summary.json`.
+- `git diff --check` — **PASS/0**. Свои probe/Workbench процессы завершены,
+  ports свободны. Временные stage удалены после сохранения inputs/hashes.
+  Три ранее остановленных пользователем сервера и heartbeat не запускались.
+
+Native BT replay, клиент/JIP, долгая кампания и полный offline набор — **NOT RUN**.
+Runtime инъецирует вход в production helper, не подменяет native BT wiring.
+Исходная VM, старые Easy deadlines и engine/resource baseline не заявлены
+исправленными. Merge/релиз не выполнялись, новой версии нет.
+
+## Пеший failed movement с unassigned vehicle — исторический `df1d77e`, 2026-10-14
 
 Ветка `codex/infantry-move-vm-recovery` от свежего `origin/main` `62d9b69`;
 исходное дерево чистое. На трёх WCS North серверах полный остановленный log
@@ -22,11 +80,13 @@ Medium содержит **11 VM** из stock `NodeError` в `MoveToLocation.bt`:
 Medium log не логировалось, поэтому исходный случай не является полным доказательством
 внутреннего состояния registry.
 
-Теперь свободная запись допускает только текущий Move с повторной физической
+В первоначальной реализации свободная запись допускала текущий Move с повторной физической
 проверкой всех живых members и их parent group. Positive vehicle handler,
 boarding/dismount, пустой roster, неизвестный handler и missing access остаются
 за native границей. Slot/recruitment ownership, authority и callback fences
-сохранены; global `NodeError` не подавляется.
+сохранены; global `NodeError` не подавлялся. Это допущение отозвано по review #47:
+снимок нового action/roster не является identity исходной операции. Исторические
+PASS ниже относятся к старому fixture и не подтверждают корректность позднего callback.
 
 Изменённые файлы: `Forces/AICF_AINodeLifecycle.c`,
 `tests/contracts/Test-InfantryMoveHandlerContracts.ps1`,

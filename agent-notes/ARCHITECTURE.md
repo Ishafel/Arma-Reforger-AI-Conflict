@@ -85,11 +85,16 @@ Origin `SCR_AIGroup` не означает положение бойцов: ис
 `SCR_AIProcessFailedMovementResult` в `AICF_AINodeLifecycle` передаёт ошибку
 пешего движения владельцу slot/recruitment, сохраняя waypoint, generation и
 assignment fences. `handler=-1` неоднозначен: registry может содержать свободную
-машину с таким же ещё не назначенным subgroup. Такая запись допускает пешую
-обработку только для текущего `SCR_AIMoveActivity`, если каждый живой member
-принадлежит этой группе, имеет `CompartmentAccessComponent`, находится снаружи
-и не входит/выходит. Пустой roster, неизвестный handler и физическая
-неопределённость сохраняют отказ. Обработка не меняет transport trip или fleet.
+машину с таким же ещё не назначенным subgroup. Native result не передаёт
+identity/generation исходной операции: текущий Move и уже пеший roster
+не доказывают, что результат относится к новому приказу. При зарегистрированном
+sentinel classifier безусловно отказывает до чтения waypoint текущего action,
+сообщения failure в slot/recruitment и `OnMoveFailed`. Этот случай остаётся
+на native границе; разрешённой привязки к новой infantry operation нет.
+Для `-1` без registry entry каждый живой member должен принадлежать этой группе,
+иметь `CompartmentAccessComponent`, находиться снаружи и не входить/выходить.
+Пустой roster, неизвестный handler и физическая неопределённость сохраняют отказ.
+Обработка не меняет transport trip или fleet.
 После `OnMoveFailed` повторно сверяются failure identity и executed action;
 синхронно заменённый action не завершается.
 

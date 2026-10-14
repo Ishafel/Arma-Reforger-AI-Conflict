@@ -35,8 +35,13 @@ class AICF_InfantryMoveHandlerProbeNode : SCR_AIProcessFailedMovementResult
 
 	bool Inject(SCR_AIGroup group, int handler, bool related)
 	{
+		return InjectAt(group, handler, related, group.GetLeaderEntity().GetOrigin());
+	}
+
+	bool InjectAt(SCR_AIGroup group, int handler, bool related, vector location)
+	{
 		OnInit(group);
-		return AICF_HandleFailedMovement(EMoveError.UNKNOWN, handler, related, group.GetLeaderEntity().GetOrigin());
+		return AICF_HandleFailedMovement(EMoveError.UNKNOWN, handler, related, location);
 	}
 }
 
@@ -53,6 +58,18 @@ modded class AICF_MatchController
 	protected IEntity m_AICFHandlerProbeMember;
 	protected vector m_vAICFHandlerProbeTransform[4];
 	protected int m_iAICFHandlerProbePhase;
+	protected ref AIActionBase m_AICFHandlerProbeOldAction;
+	protected EntityID m_AICFHandlerProbeOldWaypointId;
+	protected vector m_vAICFHandlerProbeOldLocation;
+	protected int m_iAICFHandlerProbeOldAssignment;
+	protected int m_iAICFHandlerProbeOldGeneration;
+	protected SCR_AIGroupUtilityComponent m_AICFHandlerProbeUtility;
+	protected int m_iAICFHandlerProbeCallbacks;
+
+	protected void AICF_HandlerMoveFailed(int result, IEntity vehicle, bool related, vector location)
+	{
+		m_iAICFHandlerProbeCallbacks++;
+	}
 
 	protected void AICF_HandlerCheck(string name, bool passed)
 	{
@@ -100,6 +117,12 @@ modded class AICF_MatchController
 		}
 		GetGame().GetCallqueue().Remove(AICF_HandlerRun);
 		AICF_HandlerCheck("CURRENT_MOVE_ACTIVITY", true);
+		m_AICFHandlerProbeOldAction = activity;
+		m_AICFHandlerProbeOldWaypointId = slot.GetWaypoint().GetID();
+		m_vAICFHandlerProbeOldLocation = slot.GetWaypoint().GetOrigin();
+		m_iAICFHandlerProbeOldAssignment = slot.GetStrategicAssignmentRevision();
+		m_iAICFHandlerProbeOldGeneration = slot.GetSpawnGeneration();
+		m_AICFHandlerProbeUtility = utility;
 		AICF_InfantryMoveHandlerProbeNode node = new AICF_InfantryMoveHandlerProbeNode();
 		AICF_HandlerCheck("FOOT_SENTINEL", node.Classify(group, -1));
 		AICF_HandlerCheck("FOREIGN_HANDLER", !node.Classify(group, -2) && !node.Classify(group, 1));
@@ -116,7 +139,7 @@ modded class AICF_MatchController
 			registered = m_AICFHandlerProbeManager.TryAddVehicle(m_AICFHandlerProbeUsage);
 		AICF_HandlerCheck("UNASSIGNED_REGISTRY", registered && registered.GetSubgroupHandleId() == -1 && m_AICFHandlerProbeManager.FindVehicleBySubgroupId(-1) == registered);
 		if (!registered) { AICF_HandlerFinish(); return; }
-		AICF_HandlerCheck("FOOT_WITH_UNUSED_VEHICLE", node.Classify(group, -1));
+		AICF_HandlerCheck("AMBIGUOUS_REGISTERED_REJECTED", !node.Classify(group, -1));
 		registered.SetSubgroupHandleId(1);
 		AICF_HandlerCheck("ASSIGNED_VEHICLE_REJECTED", !node.Classify(group, 1));
 		registered.SetSubgroupHandleId(-1);
@@ -162,14 +185,38 @@ modded class AICF_MatchController
 			m_iAICFHandlerProbePolls = 0;
 			return;
 		}
-		// OnCompartmentLeft может снять запись. Восстанавливаем только test registry.
+		SCR_AIMoveActivity activity = SCR_AIMoveActivity.Cast(m_AICFHandlerProbeGroup.GetGroupUtilityComponent().GetCurrentAction());
+		if (!activity || activity.m_RelatedWaypoint != slot.GetWaypoint() || m_AICFHandlerProbeGroup.GetCurrentWaypoint() != slot.GetWaypoint()) return;
+		// Проверяем весь пеший roster тем же production gate без неоднозначной записи.
+		m_AICFHandlerProbeManager.RemoveVehicle(m_AICFHandlerProbeUsage);
+		bool onFoot = node.Classify(m_AICFHandlerProbeGroup, -1);
 		SCR_AIGroupVehicle registered = m_AICFHandlerProbeManager.TryAddVehicle(m_AICFHandlerProbeUsage);
 		registered.SetSubgroupHandleId(-1);
-		SCR_AIMoveActivity activity = SCR_AIMoveActivity.Cast(m_AICFHandlerProbeGroup.GetGroupUtilityComponent().GetCurrentAction());
-		if (!activity || activity.m_RelatedWaypoint != slot.GetWaypoint()) return;
-		AICF_HandlerCheck("FOOT_AFTER_EXIT", node.Classify(m_AICFHandlerProbeGroup, -1));
+		if (!onFoot) return;
+		AICF_HandlerCheck("FOOT_AFTER_EXIT", onFoot);
+		AIWaypoint newWaypoint = slot.GetWaypoint();
+		int newAssignment = slot.GetStrategicAssignmentRevision();
+		AIActionBase newAction = m_AICFHandlerProbeUtility.GetExecutedAction();
+		AICF_HandlerCheck("NEW_MOVE_IDENTITY", newAction && activity != m_AICFHandlerProbeOldAction && newWaypoint.GetID() != m_AICFHandlerProbeOldWaypointId && newAssignment != m_iAICFHandlerProbeOldAssignment && slot.GetSpawnGeneration() == m_iAICFHandlerProbeOldGeneration);
+		if (!newAction) { AICF_HandlerFinish(); return; }
+		EAIActionState newState = newAction.GetActionState();
+		bool removeAction = newAction.GetRemoveAction();
+		m_iAICFHandlerProbeCallbacks = 0;
+		m_AICFHandlerProbeUtility.GetOnMoveFailed().Insert(AICF_HandlerMoveFailed);
+		bool handled = node.InjectAt(m_AICFHandlerProbeGroup, -1, true, m_vAICFHandlerProbeOldLocation);
+		m_AICFHandlerProbeUtility.GetOnMoveFailed().Remove(AICF_HandlerMoveFailed);
+		AICF_HandlerCheck("STALE_VEHICLE_RESULT_REJECTED", !handled);
+		AICF_HandlerCheck("NEW_ORDER_UNCHANGED", !slot.HasFailedMovement() && slot.GetWaypoint() == newWaypoint && m_AICFHandlerProbeGroup.GetCurrentWaypoint() == newWaypoint && slot.GetStrategicAssignmentRevision() == newAssignment);
+		AICF_HandlerCheck("NEW_ACTION_UNCHANGED", m_AICFHandlerProbeUtility.GetCurrentAction() == activity && m_AICFHandlerProbeUtility.GetExecutedAction() == newAction && newAction.GetActionState() == newState && newAction.GetRemoveAction() == removeAction);
+		AICF_HandlerCheck("NO_STALE_FAILURE_CALLBACK", m_iAICFHandlerProbeCallbacks == 0);
 		AICF_HandlerCheck("FOREIGN_WAYPOINT_REJECTED", !slot.ReportFailedMovement(m_AICFHandlerProbeGroup, m_USState.GetSlot(1).GetWaypoint()));
+		// Positive control: свежий пеший failure без зарегистрированного sentinel.
+		m_AICFHandlerProbeManager.RemoveVehicle(m_AICFHandlerProbeUsage);
+		m_iAICFHandlerProbeCallbacks = 0;
+		m_AICFHandlerProbeUtility.GetOnMoveFailed().Insert(AICF_HandlerMoveFailed);
 		AICF_HandlerCheck("FAILURE_REPORTED", node.Inject(m_AICFHandlerProbeGroup, -1, true));
+		m_AICFHandlerProbeUtility.GetOnMoveFailed().Remove(AICF_HandlerMoveFailed);
+		AICF_HandlerCheck("FAILURE_CALLBACK_ONCE", m_iAICFHandlerProbeCallbacks == 1);
 		AICF_HandlerCheck("FAILURE_VISIBLE", slot.HasFailedMovement() && m_OrderPlanner.GetOrderFailureReason(slot, m_USFaction) == "WAYPOINT_MOVE_FAILED");
 		AICF_HandlerCheck("STALE_FAILURE_FENCES", slot.AICF_HandlerProbeStaleFences());
 		AICF_HandlerFinish();
@@ -179,6 +226,10 @@ modded class AICF_MatchController
 	{
 		GetGame().GetCallqueue().Remove(AICF_HandlerPrepare);
 		GetGame().GetCallqueue().Remove(AICF_HandlerRun);
+		if (m_AICFHandlerProbeUtility)
+			m_AICFHandlerProbeUtility.GetOnMoveFailed().Remove(AICF_HandlerMoveFailed);
+		m_AICFHandlerProbeUtility = null;
+		m_AICFHandlerProbeOldAction = null;
 		if (m_AICFHandlerProbeManager && m_AICFHandlerProbeUsage)
 			m_AICFHandlerProbeManager.RemoveVehicle(m_AICFHandlerProbeUsage);
 		m_AICFHandlerProbeManager = null;
