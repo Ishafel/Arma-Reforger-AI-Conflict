@@ -5,7 +5,7 @@ class AICF_IsolatedNavmeshRecovery
 	static bool TryRecover(AICF_GroupSlot slot, AICF_VehicleWatchdog watchdog, AICF_Stage3Config config)
 	{
 		if (!Replication.IsServer() || !slot || !slot.IsCombatReady() ||
-			slot.IsRecruitingInfantry() || slot.HasUsedIsolatedNavmeshRecovery() ||
+			slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment() || slot.HasUsedIsolatedNavmeshRecovery() ||
 			!watchdog || !config || !config.GetHiddenRecoveryEnabled())
 			return false;
 		SCR_AIGroup group = slot.GetGroup();

@@ -141,7 +141,7 @@ class AICF_OrderPlanner
 	{
 		if (slot && (slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() || slot.GetRouteRecoveryEpisode().IsBlocked(slot)))
 			return false;
-		if (slot && slot.IsRecruitingInfantry())
+		if (slot && (slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment()))
 			return true;
 		if (!Replication.IsServer() || !slot || !faction || !graph || !targetSelector ||
 			!m_AuthorityPolicy || !m_AuthorityPolicy.IsValid())
@@ -251,7 +251,7 @@ class AICF_OrderPlanner
 	{
 		if (slot && (slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() || slot.GetRouteRecoveryEpisode().IsBlocked(slot)))
 			return false;
-		if (slot && slot.IsRecruitingInfantry())
+		if (slot && (slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment()))
 			return true;
 		if (!Replication.IsServer() || !slot || !faction || !graph || !targetSelector ||
 			!m_AuthorityPolicy || !m_AuthorityPolicy.IsValid() ||
@@ -874,7 +874,7 @@ class AICF_OrderPlanner
 			return false;
 		if (slot.GetGroup().GetFaction() != faction)
 			return false;
-		if (slot.IsRecruitingInfantry() || slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() ||
+		if (slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment() || slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() ||
 			slot.GetRouteRecoveryEpisode().IsBlocked(slot))
 			return false;
 		if (!slot.HasPlayerStrategicIntent())
@@ -977,7 +977,7 @@ class AICF_OrderPlanner
 	{
 		if (slot && (slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() || slot.GetRouteRecoveryEpisode().IsBlocked(slot)))
 			return false;
-		if (slot && slot.IsRecruitingInfantry())
+		if (slot && (slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment()))
 			return true;
 		if (!Replication.IsServer() || !slot || !faction || !graph ||
 			!targetSelector || !slot.IsCombatReady())
@@ -1027,7 +1027,7 @@ class AICF_OrderPlanner
 		// нового waypoint не должна снимать hold через RecordStrategicAssignment.
 		if (slot && (slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() || slot.GetRouteRecoveryEpisode().IsBlocked(slot)))
 			return false;
-		if (slot && slot.IsRecruitingInfantry())
+		if (slot && (slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment()))
 			return true;
 		if (!Replication.IsServer() || !slot || !faction || !graph ||
 			!targetSelector || !slot.IsCombatReady() ||
@@ -1229,7 +1229,7 @@ class AICF_OrderPlanner
 	{
 		if (slot && (slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() || slot.GetRouteRecoveryEpisode().IsBlocked(slot)))
 			return false;
-		if (slot && slot.IsRecruitingInfantry())
+		if (slot && (slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment()))
 			return true;
 		if (!Replication.IsServer() || !slot ||
 			slot.GetRole() != AICF_EGroupRole.DEFEND || !faction ||
@@ -1343,7 +1343,7 @@ class AICF_OrderPlanner
 		string failureReason,
 		bool countsAsStuckRecovery = false)
 	{
-		if (slot && slot.IsRecruitingInfantry())
+		if (slot && (slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment()))
 			return true;
 		if (!slot || !faction || !graph || !targetSelector || !slot.IsCombatReady())
 			return false;
@@ -1417,7 +1417,7 @@ class AICF_OrderPlanner
 	bool CanRebuildAfterHiddenMobEgress(AICF_GroupSlot slot, SCR_CampaignFaction faction)
 	{
 		return Replication.IsServer() && slot && faction && slot.IsCombatReady() &&
-			!slot.IsRecruitingInfantry() && !slot.IsTemporaryRouteReplanHold() &&
+			!slot.IsRecruitingInfantry() && !slot.IsResupplyingEquipment() && !slot.IsTemporaryRouteReplanHold() &&
 			!slot.IsPersistentStuckFieldHold() && !slot.GetRouteRecoveryEpisode().IsBlocked(slot) &&
 			!slot.IsRouteTargetDeferred(slot.GetTargetBase()) && IsCurrentTargetValid(slot, faction);
 	}
@@ -1431,7 +1431,7 @@ class AICF_OrderPlanner
 		if (slot && (slot.GetRouteRecoveryEpisode().IsBlocked(slot) || slot.IsPersistentStuckFieldHold() ||
 			slot.IsTemporaryRouteReplanHold()))
 			return false;
-		if (slot && slot.IsRecruitingInfantry())
+		if (slot && (slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment()))
 			return true;
 		if (!Replication.IsServer() || !slot || !faction || !slot.IsCombatReady() ||
 			!IsCurrentTargetValid(slot, faction))
@@ -3045,6 +3045,7 @@ class AICF_OrderPlanner
 
 	bool CanRecruitInfantry(AICF_GroupSlot slot, SCR_CampaignFaction faction)
 	{
+		if (slot && (slot.IsResupplyingEquipment() || slot.HasEquipmentInventoryTransaction())) return false;
 		return Replication.IsServer() && slot && faction && slot.IsCombatReady() &&
 			slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY && !slot.HasPlayerStrategicIntent() &&
 			!slot.HasPendingOrderRecovery() &&
@@ -3126,9 +3127,10 @@ class AICF_OrderPlanner
 
 	bool CanPlayerRecruitInfantry(AICF_GroupSlot slot, SCR_CampaignFaction faction)
 	{
+		if (slot && slot.HasEquipmentInventoryTransaction()) return false;
 		return Replication.IsServer() && slot && faction && slot.IsCombatReady() &&
 			slot.GetGroup() && slot.GetGroup().GetFaction() == faction &&
-			slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY && !slot.HasPendingOrderRecovery() &&
+			slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY && !slot.HasPendingOrderRecovery() && !slot.IsResupplyingEquipment() &&
 			AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()) < slot.GetDesiredSize() &&
 			AICF_GroupRuntime.CountAliveAgentsInAnyVehicle(slot.GetGroup()) == 0;
 	}
@@ -3161,6 +3163,93 @@ class AICF_OrderPlanner
 				AssignOrder(order.m_Slot, order.m_Faction, graph, selector, "INFANTRY_RECRUITMENT_FINISHED");
 		}
 		else if (order.m_Waypoint && order.m_Group && order.m_Group.GetID() == order.m_GroupId)
+		{
+			order.m_Group.RemoveWaypoint(order.m_Waypoint);
+			RplComponent.DeleteRplEntity(order.m_Waypoint, false);
+		}
+		order.m_Waypoint = null;
+	}
+
+	bool CanEquipmentService(AICF_GroupSlot slot, SCR_CampaignFaction faction)
+	{
+		if (slot && slot.HasEquipmentInventoryTransaction()) return false;
+		if (!Replication.IsServer() || !slot || !faction || !slot.IsCombatReady() || slot.GetGroup().GetFaction() != faction) return false;
+		if (slot.GetUnitType() != AICF_EGroupUnitType.INFANTRY || slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment() ||
+			slot.NeedsInfantryMuster() || slot.HasPendingOrderRecovery() || slot.IsTemporaryRouteReplanHold()) return false;
+		if (slot.IsPersistentStuckFieldHold() || slot.GetRouteRecoveryEpisode().IsBlocked(slot) ||
+			slot.IsAwaitingPlayerCommand() || slot.IsLoneSurvivorRetreat() || !slot.HasStrategicIntent()) return false;
+		return AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()) >= slot.GetDesiredSize() && AICF_EquipmentInventory.Quiet(slot.GetGroup());
+	}
+
+	// Нагрузка tile и native endpoint admissibility. Ошибка реального маршрута
+	// завершается ограниченным timeout и исключением источника в текущем визите.
+	bool CanEquipmentRoute(SCR_AIGroup group, vector position, float tolerance)
+	{
+		if (!Replication.IsServer() || !group) return false;
+		AIPathfindingComponent pathfinding = AIPathfindingComponent.Cast(group.FindComponent(AIPathfindingComponent));
+		if (!pathfinding || !pathfinding.GetNavmeshComponent()) return false;
+		NavmeshWorldComponent navmesh = pathfinding.GetNavmeshComponent();
+		if (!navmesh.IsTileLoaded(position) && !navmesh.IsTileRequested(position)) navmesh.LoadTileIn(position);
+		vector endpoint;
+		return pathfinding.GetClosestPositionOnNavmesh(position, "10 5 10", endpoint) &&
+			vector.DistanceSqXZ(endpoint, position) <= tolerance * tolerance;
+	}
+
+	bool BeginEquipmentOrder(AICF_EquipmentOrder order)
+	{
+		if (!order || !order.m_Slot || order.m_Slot.GetGroup() != order.m_Group || !order.m_Group ||
+			order.m_Group.GetID() != order.m_GroupId || order.m_Slot.GetSpawnGeneration() != order.m_iGeneration ||
+			order.m_Slot.GetStrategicIntentRevision() != order.m_iIntent ||
+			(!order.Current() && !CanEquipmentService(order.m_Slot, order.m_Faction)) || !AICF_EquipmentInventory.Quiet(order.m_Group)) return false;
+		float radius = 5;
+		if (order.m_Corpse) radius = 1;
+		float tolerance = 10;
+		if (order.m_Corpse) tolerance = 1;
+		if (!CanEquipmentRoute(order.m_Group, order.m_vPosition, tolerance)) return false;
+		AIPathfindingComponent pathfinding = AIPathfindingComponent.Cast(order.m_Group.FindComponent(AIPathfindingComponent));
+		vector endpoint;
+		if (!pathfinding.GetClosestPositionOnNavmesh(order.m_vPosition, "10 5 10", endpoint)) return false;
+		EntitySpawnParams params = new EntitySpawnParams();
+		params.TransformMode = ETransformMode.WORLD;
+		params.Transform[3] = endpoint;
+		IEntity entity = GetGame().SpawnEntityPrefabEx(DEFEND_WAYPOINT_PREFAB, false, params: params);
+		SCR_DefendWaypoint waypoint = SCR_DefendWaypoint.Cast(entity);
+		if (!waypoint || !ConfigureInfantryServiceWaypoint(waypoint))
+		{
+			if (entity) RplComponent.DeleteRplEntity(entity, false);
+			return false;
+		}
+		waypoint.SetCompletionRadius(radius);
+		waypoint.SetCompletionType(EAIWaypointCompletionType.All);
+		waypoint.SetHoldingTime(3600);
+		ClearOrder(order.m_Slot);
+		// Повтор после Remove callbacks прежнего waypoint, до выдачи нового.
+		if (order.m_Slot.GetGroup() != order.m_Group || order.m_Group.GetID() != order.m_GroupId ||
+			order.m_Slot.GetSpawnGeneration() != order.m_iGeneration || order.m_Slot.GetStrategicIntentRevision() != order.m_iIntent)
+		{
+			RplComponent.DeleteRplEntity(waypoint, false);
+			return false;
+		}
+		order.m_Group.AddWaypointAt(waypoint, 0);
+		order.m_Slot.AssignPointObjective(endpoint, waypoint);
+		order.m_Slot.RecordStrategicAssignment(order.m_Base, "EQUIPMENT_SERVICE");
+		order.m_Waypoint = waypoint;
+		order.m_iAssignment = order.m_Slot.GetStrategicAssignmentRevision();
+		order.m_Slot.SetEquipmentOrder(order);
+		return true;
+	}
+
+	void EndEquipmentOrder(AICF_EquipmentOrder order, AICF_ObjectiveGraph graph, AICF_TargetSelector selector, bool restore)
+	{
+		if (!Replication.IsServer() || !order || !order.m_Slot) return;
+		bool current = order.Current();
+		if (order.m_Slot.GetEquipmentOrder() == order) order.m_Slot.SetEquipmentOrder(null);
+		if (current)
+		{
+			ClearOrder(order.m_Slot);
+			if (restore) AssignOrder(order.m_Slot, order.m_Faction, graph, selector, "EQUIPMENT_FINISHED");
+		}
+		else if (order.m_Waypoint && order.m_Group && order.m_Group.GetID() == order.m_GroupId && order.m_Slot.GetWaypoint() != order.m_Waypoint)
 		{
 			order.m_Group.RemoveWaypoint(order.m_Waypoint);
 			RplComponent.DeleteRplEntity(order.m_Waypoint, false);

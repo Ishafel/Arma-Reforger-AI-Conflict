@@ -1,5 +1,82 @@
 # Проверки и baseline
 
+## Issue #6: живое пополнение и трофейный сбор — 2026-10-15
+
+Ветка `codex/issue-6-squad-resupply` от `origin/main` `3ea79c6`.
+Game/Server/Workbench **1.8.0.13**. Evidence: `.codex-runtime/issue6/`:
+полные argv/manifests/native exits, остановленные console/script/error logs,
+log-audit reports, matrices и source hashes. Ниже перечислены новые запуски;
+неудачные промежуточные прогоны также сохранены и не считаются PASS.
+
+- `tools/Invoke-AICFChecks.ps1 -EvidenceRoot <baseline-clean>` на отдельном
+  неизменённом snapshot: **53 PASS / 6 FAIL**, 59 checks, exit 1.
+  `after-final`: **54 PASS / те же 6 FAIL**, 60 checks, exit 1.
+  После последних правок cleanup `after-verified-selected`: **10 PASS**, exit 0:
+  Equipment, AILoadout, PersonalLoadout, SquadCommands, SquadRespawn,
+  InfantryRecruitment, BarracksCombat, Stage3, Stage3Contracts, Stage4.
+  Equipment audit: **16 rules / 11 negative mutations PASS**.
+- Сохранённые baseline failures: Endgame — `ATTACK_FIRST`,
+  `SECURITY_FALLBACK`, `ATTACK_RESUME`; InfantryApproach — `APPROACH_CLEANUP`;
+  Issue12Recovery — `POSTURE_QRF_OWNER`; MapPointOrders —
+  `MAP_POINT_REPLAN_PRIORITY`; NorthFailure — `MOVE_CALLBACK_FENCE`,
+  `MOVE_ACTIVITY`; Localization — прежний UTF-8/PowerShell 5 `ParserError`.
+  Более ранний полный after-final запуск отделён от финального targeted repeat.
+- `compile.ps1 -Variant Stock|EveronNorthRHS|EveronNorthWCSRHS
+  -Label production-verified-<stock|rhs|wcs>`: три production terminal
+  Workbench **PASS/native exit 0**, `Script validation successful`.
+  Stage Compile также выполнен; static, compile и runtime не заменяют друг друга.
+- `runtime.ps1` использует только `tools/Start-AICFRuntime.ps1 -Role Server
+  -Difficulty Medium -RepositoryRoot <isolated stage> -ProfileRoot <fresh profile>`
+  и `-aicfEquipmentProbe <mode> -aicfRequirePlayerForResult 0`.
+  Собственные listeners 2306/2316 подтверждены полными CLI Params и manifests;
+  существующий пользовательский server не останавливался.
+
+| Profile / mode | Новые runtime checks | Что подтверждено |
+|---|---:|---|
+| `stock-final-owned` / `1` | 37/37 PASS | Физический подход, те же item IDs, partial/sufficient loot, последний binding, rollback с исходными IDs/патронами, target, ledger, no-loop/intent |
+| `wcs-detach-preview` / `inventory` | 27/27 PASS | Native живой WCS inventory, safe rollback/retry, последняя revision, target, no-loop и освобождение model worlds |
+| `stock-verified-safety` / `safety` | 48/48 PASS, 3 families | Stock actual launcher/round transfers, spent-source refusal, capacity/slots, combat, competition, enemy/FIA sources |
+| `rhs-verified-safety` / `safety` | 60/60 PASS, 6 families | Та же матрица с фактическими RHS entities |
+| `wcs-verified-safety` / `safety` | 118/118 PASS, 16 families | Все доступные native families US/USSR/FIA текущего WCS/RHS catalog |
+| `stock-complete-lifecycle` / `lifecycle` | 13/13 PASS | Nearest ARMORY, owner loss/delete/offline/retry, manual intent, recruitment/transport fences, death/replacement/Stop |
+| `stock-search` / `search` | 6/6 PASS | Настоящий 45 s timeout заблокированного native movement, radius, identity tie-break, cooldown, сохранение inventory/потребности |
+| `stock-player-unique` / `player` | 5/5 PASS | Connected PlayerController, запрещённый living/dead main source, takeover во время transaction, исходные IDs/rounds, отсутствие stale RestoreNew/revision и released flag |
+
+Все server probes завершены `RequestClose`, native exit 0. Для player case
+canonical Client launcher подтвердил точные server CLI, живой PID и ROSTER_READY;
+`client-player-unique-launcher.txt` содержит readiness и argument manifest.
+Client log сохранён после остановки собственного процесса. Native player
+initialization добавляет radio gadget, а `GetItems` может повторять один ID;
+сравнение проверяет уникальные исходные identities и реальные rounds.
+
+`Test-EquipmentLog.ps1 -Mode <mode> -LogPath <полный остановленный console.log>
+-OutputDirectory <audit> [-ExpectedFamilies <3|6|16>]`: все строки таблицы
+проверяются по обязательным cases, завершению, счётчику failures, exceptions
+и неполному rollback. Один положительный и **7 отрицательных** log inputs PASS.
+Полная E/F-диагностика сохраняется отдельно в каждом report: nonfatal resource/
+particle и unregistered private-preview damage RPC сообщения не скрываются;
+PASS probes не означает отсутствие этих engine diagnostics. VM с удерживаемым
+`MuzzleComponent` в промежуточных WCS runs устранена: equipment draft снимает
+native root attachments до удаления private model, основной rifle muzzle
+получает с owning entity независимо от выбранного UGL. Финальные logs без VM
+и незавершённого inventory recovery.
+
+Family identity — native default projectile/magazine + disposable + well.
+Stock: RPG7, RPG22, M72. RHS: MK153, RPG7 PG7VL, RPG22, M72, RPOA, RPOD.
+WCS: MK153; RPG7 PG7VL/PG7VR/PG7VM/PG7VM-stock/TBG7VL/TBG7V/OG7V;
+RPG18/RPG22/M72; RPOA/RPOD; M2CG; FIM92; 9K38.
+Список определяется enabled catalog и реальным `WT_ROCKETLAUNCHER`, не именем
+ресурса. Ammo entries и другие native weapon types пропускаются; пустые
+одноразовые образцы не переносятся. Точные GUID/prefab/projectile/well и native
+readbacks — `audit-*/families.txt` и полные logs. Это матрица установленного
+content graph, не обещание поддержки отсутствующих или будущих prefabs.
+
+**NOT RUN:** внешний вид, ручное управление/взаимодействие игрока, JIP и полный
+многопользовательский матч. Connected-player identity case не объявляется
+проверкой этих сценариев. GUI, screenshots и ожидание ручного тестировщика не
+использовались. Настройки/стоимость/lifecycle — [EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md),
+scope и постановка — [TEST_FIXTURES.md](TEST_FIXTURES.md).
+
 ## Issue #48: постоянный запрет recovery FIA после урона/потерь — 2026-10-14
 
 Ветка `codex/fia-damage-recovery` от актуальной `origin/main` (`07350fc`).

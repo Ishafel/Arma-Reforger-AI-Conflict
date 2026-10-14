@@ -98,6 +98,43 @@ class AICF_GroupSlot
 
 	int GetLoadoutRevision() { return m_iLoadoutRevision; }
 	bool IsDeploymentLoadoutCurrent() { return m_iDeploymentLoadoutRevision == m_iLoadoutRevision; }
+	protected ref array<int> m_aMemberLoadoutRevisions = {};
+	protected AICF_EquipmentOrder m_EquipmentOrder;
+	protected AICF_EquipmentTransaction m_EquipmentTransaction;
+	bool HasEquipmentInventoryTransaction() { return m_EquipmentTransaction && !m_EquipmentTransaction.m_bFinished; }
+	void SetEquipmentInventoryTransaction(AICF_EquipmentTransaction tx) { m_EquipmentTransaction = tx; }
+	void ClearEquipmentInventoryTransaction(AICF_EquipmentTransaction tx)
+	{
+		if (m_EquipmentTransaction == tx) m_EquipmentTransaction = null;
+	}
+
+	IEntity GetRosterMember(int index)
+	{
+		if (!HasRosterMember(index)) return null;
+		return m_aRosterMembers[index];
+	}
+
+	int GetMemberLoadoutRevision(int index)
+	{
+		if (index < 0 || index >= m_aMemberLoadoutRevisions.Count()) return 0;
+		return m_aMemberLoadoutRevisions[index];
+	}
+
+	bool MarkMemberLoadoutApplied(int index, IEntity member, int revision)
+	{
+		if (!Replication.IsServer() || GetRosterMember(index) != member) return false;
+		AICF_LoadoutBinding binding = GetLoadout(index);
+		int current;
+		if (binding) current = binding.m_iRevision;
+		if (revision != current) return false;
+		m_aMemberLoadoutRevisions.Resize(AICF_Stage1Config.MAX_GROUP_SIZE);
+		m_aMemberLoadoutRevisions[index] = revision;
+		return true;
+	}
+
+	AICF_EquipmentOrder GetEquipmentOrder() { return m_EquipmentOrder; }
+	void SetEquipmentOrder(AICF_EquipmentOrder order) { m_EquipmentOrder = order; }
+	bool IsResupplyingEquipment() { return m_EquipmentOrder && m_EquipmentOrder.Current(); }
 
 	AICF_LoadoutBinding GetLoadout(int member)
 	{
@@ -410,10 +447,16 @@ class AICF_GroupSlot
 	{
 		m_aRosterMembers.Clear();
 		m_aRosterMembers.Resize(AICF_Stage1Config.MAX_GROUP_SIZE);
+		m_aMemberLoadoutRevisions.Clear();
+		m_aMemberLoadoutRevisions.Resize(AICF_Stage1Config.MAX_GROUP_SIZE);
 		if (!m_Group)
 			return;
 		for (int index; index < GetDeploymentSize(); index++)
+		{
 			m_aRosterMembers[index] = m_Group.AICF_GetSpawnMember(index);
+			AICF_LoadoutBinding binding = GetLoadout(index);
+			if (binding) m_aMemberLoadoutRevisions[index] = binding.m_iRevision;
+		}
 	}
 
 	bool HasRosterMember(int index)
@@ -430,7 +473,13 @@ class AICF_GroupSlot
 	void RecordRecruitedMember(int index, IEntity member)
 	{
 		if (Replication.IsServer() && index >= 0 && index < m_aRosterMembers.Count())
+		{
 			m_aRosterMembers[index] = member;
+			AICF_LoadoutBinding binding = GetLoadout(index);
+			int revision;
+			if (binding) revision = binding.m_iRevision;
+			MarkMemberLoadoutApplied(index, member, revision);
+		}
 	}
 
 	void SetRecruitmentOrder(AICF_InfantryRecruitmentOrder order)
@@ -2665,6 +2714,9 @@ class AICF_GroupSlot
 		m_bIsolatedNavmeshRecoveryUsed = false;
 		ClearStuckRouteWaypoint();
 		m_RecruitmentOrder = null;
+		m_EquipmentOrder = null;
+		m_EquipmentTransaction = null;
+		m_aMemberLoadoutRevisions.Clear();
 		m_bInfantryMusterComplete = false;
 		m_aRosterMembers.Clear();
 		if (m_Group)

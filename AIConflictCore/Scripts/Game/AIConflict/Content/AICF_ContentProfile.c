@@ -70,6 +70,36 @@ class AICF_ContentProfile
 		return "STOCK";
 	}
 
+	// Только реальный launcher из доступного семейства profile. Совместимость
+	// выстрелов проверяет native MagazineWell, а не resource name.
+	bool AllowsScavengedLauncher(BaseWeaponComponent weapon)
+	{
+		if (!weapon || weapon.GetWeaponType() != EWeaponType.WT_ROCKETLAUNCHER || !weapon.GetCurrentMuzzle()) return false;
+		array<string> sources = {};
+		GetLoadoutSources(sources);
+		ResourceName prefab = SCR_ResourceNameUtils.GetPrefabName(weapon.GetOwner());
+		Resource resource = Resource.Load(prefab);
+		if (!resource || !resource.IsValid() || !sources.Contains(GetLoadoutItemSource(prefab))) return false;
+		array<string> keys = {"US", "USSR", "FIA"};
+		foreach (string key : keys)
+		{
+			FactionKey runtimeKey = GetRuntimeFactionKey(key);
+			if (key == "FIA") runtimeKey = "FIA";
+			SCR_CampaignFaction faction = SCR_CampaignFaction.Cast(GetGame().GetFactionManager().GetFactionByKey(runtimeKey));
+			if (!faction) continue;
+			SCR_EntityCatalog catalog = faction.GetFactionEntityCatalogOfType(EEntityCatalogType.ITEM);
+			array<SCR_EntityCatalogEntry> entries = {};
+			if (catalog) catalog.GetEntityList(entries);
+			foreach (SCR_EntityCatalogEntry entry : entries)
+			{
+				if (!entry || !entry.IsEnabled() || entry.GetPrefab() != prefab) continue;
+				SCR_ArsenalItem item = SCR_ArsenalItem.Cast(entry.GetEntityDataOfType(SCR_ArsenalItem));
+				if (item && (item.GetItemType() & SCR_EArsenalItemType.ROCKET_LAUNCHER) != 0) return true;
+			}
+		}
+		return false;
+	}
+
 	// Один baseline для редактора и выдачи: только local preview inventory.
 	ResourceName GetPersonalLoadoutSource(SCR_CampaignFaction faction, ResourceName roleSource)
 	{

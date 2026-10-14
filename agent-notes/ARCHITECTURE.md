@@ -50,7 +50,7 @@ Core и stock integrations не должны получать обязатель
 | `Economy/` | `AICF_EconomySystem`: ticket/supply transaction; `AICF_RecruitmentSupplyForecast`: read-only прогноз |
 | `Construction/` | Планирование платных layouts и отдельный worker lifecycle каждой базы |
 | `Content/`, `Integration/` | Content profiles и узкие stock API adapters |
-| `Loadouts/` | Catalog, draft, recipe, binding, применение и хранение экипировки |
+| `Loadouts/` | Catalog/draft/recipe/binding; `AICF_EquipmentService` — живое пополнение, `Inventory` — native перенос, `Applicator` — выдача/rollback |
 | `Respawn/` | `AICF_SquadRespawnPolicy`: передача живого бойца игроку |
 | `UI/` | Карта, командование, снабжение, экипировка и клиентские intents |
 | `Victory/` | `AICF_VictorySystem`, `AICF_VictoryDiagnostics`: завершение матча и причины отказа |
@@ -165,8 +165,16 @@ Social service не владеет waypoint или recruitment: он читае�
 Backend identity ledger не зависит от controlled entity, audio не входит в JIP
 snapshot. Ресурсы, допуск и ограничения: [SOCIAL_BEHAVIOR.md](SOCIAL_BEHAVIOR.md).
 
-Loadout templates назначаются slot/memberIndex и применяются к следующему
-созданному бойцу. Personal recipes хранятся отдельно по backend identity,
+Loadout templates назначаются slot/memberIndex: новые бойцы получают binding
+при создании, живые — при допустимом посещении действующего арсенала.
+`AICF_EquipmentService` владеет потребностью, поиском источников и ограниченным
+визитом; `AICF_OrderPlanner` остаётся единственным владельцем waypoint.
+Slot хранит применённую revision каждой позиции и weak references visit/transaction.
+Трофейный перенос использует существующие entities; экономика не меняется.
+Async native receipts не меняют roster/приказы; identity-safe восстановление
+инвентаря может продолжаться после отмены визита. Контракт и настройки:
+[EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md).
+Personal recipes хранятся отдельно по backend identity,
 faction и content profile. Server validation повторяется перед выдачей;
 ошибки требуют проверяемого rollback. Подробнее о поведении: [GAMEPLAY.md](GAMEPLAY.md).
 

@@ -100,6 +100,7 @@ class AICF_MatchController
 	protected ref AICF_VehicleWatchdog m_HiddenRecoveryWatchdog;
 	protected ref AICF_EconomySystem m_EconomySystem;
 	protected ref AICF_InfantryRecruitmentService m_InfantryRecruitment;
+	protected ref AICF_EquipmentService m_EquipmentService;
 	protected ref AICF_SocialService m_Social;
 	protected ref AICF_LoadoutService m_Loadouts;
 	protected ref AICF_FactionState m_USState;
@@ -276,6 +277,7 @@ class AICF_MatchController
 		m_InfantryRecruitment = new AICF_InfantryRecruitmentService(
 			m_Campaign, m_OrderPlanner, m_EconomySystem, m_ObjectiveGraph, m_TargetSelector, m_GroupSpawner);
 		m_InfantryRecruitment.SetRecoveryPolicy(m_HiddenRecoveryWatchdog, m_Stage3Config);
+		m_EquipmentService = new AICF_EquipmentService(m_Campaign, m_OrderPlanner, m_ObjectiveGraph, m_TargetSelector, m_GroupSpawner);
 		m_Social = new AICF_SocialService();
 		m_Social.Start(m_Campaign, m_USState, m_USSRState);
 		m_BaseBuilders = new AICF_BaseBuilderService();
@@ -1528,6 +1530,9 @@ class AICF_MatchController
 				m_Config.GetMaxManagedAgents() - CountProjectedManagedAgentsForSpawn(null),
 				!m_bReplanScheduled && !m_bGraphRebuildNeeded);
 		}
+		if (m_bRosterReady && m_EquipmentService)
+			m_EquipmentService.Update(m_USState, m_USFaction, m_USSRState, m_USSRFaction, m_VehicleCoordinator,
+				!m_bReplanScheduled && !m_bGraphRebuildNeeded);
 		// The facade always advances independent asset cleanup. During the delayed
 		// graph-rebuild window it suppresses Trip dispatch only, so no stale target
 		// is admitted while protected-clearance and delete confirmation keep moving.
@@ -2629,7 +2634,7 @@ class AICF_MatchController
 		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
 		{
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
-			if (slot && slot.IsRecruitingInfantry())
+			if (slot && (slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment()))
 				continue;
 			if (!slot)
 				continue;
@@ -4051,7 +4056,7 @@ class AICF_MatchController
 		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
 		{
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
-			if (slot && slot.IsRecruitingInfantry())
+			if (slot && (slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment()))
 				continue;
 			if (!slot || !slot.IsCombatReady())
 				continue;
@@ -4235,7 +4240,7 @@ class AICF_MatchController
 		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)
 		{
 			AICF_GroupSlot slot = factionState.GetSlot(slotId);
-			if (slot && slot.IsRecruitingInfantry())
+			if (slot && (slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment()))
 				continue;
 			if (!slot || !slot.IsCombatReady())
 				continue;
@@ -5425,7 +5430,7 @@ class AICF_MatchController
 		SCR_CampaignFaction faction,
 		string failureReason)
 	{
-		if (!slot || !faction || slot.HasPendingOrderRecovery() || slot.IsRecruitingInfantry() ||
+		if (!slot || !faction || slot.HasPendingOrderRecovery() || slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment() ||
 			slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() ||
 			slot.GetRouteRecoveryEpisode().IsBlocked(slot))
 			return false;
@@ -7565,6 +7570,11 @@ class AICF_MatchController
 		{
 			m_InfantryRecruitment.Stop();
 			m_InfantryRecruitment = null;
+		}
+		if (m_EquipmentService)
+		{
+			m_EquipmentService.Stop();
+			m_EquipmentService = null;
 		}
 		if (m_EconomySystem)
 		{

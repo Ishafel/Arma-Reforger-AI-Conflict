@@ -35,7 +35,7 @@ class AICF_InfantryAdvancePolicy
 		if (!slot || slot.GetGroup() != group || !slot.IsCombatReady() ||
 			slot.GetUnitType() != AICF_EGroupUnitType.INFANTRY || !slot.HasStrategicDestination() ||
 			slot.IsSystemHoldOrder() || slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() ||
-			slot.IsLoneSurvivorRetreat() || slot.IsRecruitingInfantry())
+			slot.IsLoneSurvivorRetreat() || slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment())
 			return false;
 		AIWaypoint waypoint = slot.GetWaypoint();
 		if (!waypoint || group.GetCurrentWaypoint() != waypoint ||

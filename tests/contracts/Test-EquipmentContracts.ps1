@@ -1,0 +1,59 @@
+param([string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+$ErrorActionPreference = 'Stop'
+$core = Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict'
+$sources = @{}
+foreach ($file in @('Loadouts/AICF_EquipmentInventory.c','Loadouts/AICF_EquipmentMember.c','Loadouts/AICF_EquipmentOrder.c','Loadouts/AICF_EquipmentService.c','Loadouts/AICF_EquipmentApplicator.c','Orders/AICF_OrderPlanner.c','State/AICF_GroupSlot.c','Vehicles/AICF_VehicleCoordinator.c')) {
+    $sources[$file] = [IO.File]::ReadAllText((Join-Path $core $file))
+}
+function Rules($inputSources) {
+    $inventory = $inputSources['Loadouts/AICF_EquipmentInventory.c']
+    $member = $inputSources['Loadouts/AICF_EquipmentMember.c']
+    $order = $inputSources['Loadouts/AICF_EquipmentOrder.c']
+    $service = $inputSources['Loadouts/AICF_EquipmentService.c']
+    $apply = $inputSources['Loadouts/AICF_EquipmentApplicator.c']
+    $planner = $inputSources['Orders/AICF_OrderPlanner.c']
+    $slot = $inputSources['State/AICF_GroupSlot.c']
+    $vehicle = $inputSources['Vehicles/AICF_VehicleCoordinator.c']
+    [ordered]@{
+        AUTHORITY = $service.Contains('!Replication.IsServer()') -and $service.Contains('!m_Campaign.IsMaster()') -and $service.Contains('!m_Campaign.IsRunning()')
+        CORPSE_SOURCE = $inventory.Contains('ECharacterLifeState.DEAD') -and $inventory.Contains('IsPlayerControlled()') -and $inventory.Contains('GetPlayerIdFromControlledEntity(character)')
+        PHYSICAL_TRANSFER = $inventory.Contains('member.m_Character.GetOrigin(), corpse.GetOrigin(), AICF_EquipmentConfig.TRANSFER_METERS') -and $inventory.Contains('corpse.GetID() != corpseId') -and $inventory.Contains('item.GetID() != itemId')
+        NATIVE_COMPATIBILITY = $inventory.Contains('muzzle.GetMagazineWell().Type() == magazine.GetMagazineWell().Type()') -and $inventory.Contains('magazine.GetAmmoCount()') -and $inventory.Contains('magazine != muzzle.GetMagazine()') -and $inventory.Contains('muzzle.IsBarrelChambered(i)')
+        REAL_TRANSFER = $inventory.Contains('target.TryMoveItemToStorage(item, storage)') -and $inventory.Contains('target.Contains(item) && !source.Contains(item)') -and $inventory -notmatch 'SpawnEntity|AddSupplies|SetAmmoCount|Ticket'
+        MEMBER_REVISION = $member.Contains('m_Slot.GetRosterMember(m_iIndex) != m_Character') -and $member.Contains('binding.m_iRevision == m_iRevision') -and $member.Contains('m_Slot.GetSpawnGeneration() != m_iGeneration')
+        OPERATION_IDENTITY = $order.Contains('m_Slot.GetEquipmentOrder() == this') -and $order.Contains('m_Slot.GetStrategicIntentRevision() == m_iIntent') -and $order.Contains('m_Slot.GetStrategicAssignmentRevision() == m_iAssignment')
+        CORPSE_BOUNDARY = $service -notmatch '\.AddWaypoint|\.RemoveWaypoint|DeleteRplEntity|\.ClearOrder' -and $service.Contains('m_Planner.BeginEquipmentOrder(order)')
+        SERVICE_CAPABILITY = $order.Contains('SCR_EServicePointType.ARMORY') -and $order.Contains('SCR_EServicePointStatus.ONLINE') -and $order.Contains('CollectAvailable') -and $order.Contains('GetAvailablePrefabs') -and $order.Contains('m_Base.GetFaction() != m_Faction')
+        INVENTORY_RECEIPTS = $apply.Contains('class AICF_EquipmentReceipt : ScriptedInventoryOperationCallback') -and $apply.Contains('!tx.m_Receipt.m_bDone') -and $apply.Contains('m_bCancelled') -and $apply.Contains('Recover(member)')
+        PRESERVE_ORIGINALS = $apply.Contains('GetStorage().GetOwner() != character') -and $apply.Contains('m_aOriginal') -and $apply.Contains('manager.Contains(verify.m_Item)') -and $apply -notmatch 'DeleteRplEntity\(member.m_Character|\.Kill\('
+        BOUNDED_RECOVERY = $apply.Contains('System.GetTickCount() >= tx.m_iRecoveryDeadline') -and $apply.Contains('tx.m_iRecoveryDeadline = System.GetTickCount() + 60000')
+        MOVEMENT_RELEASE = $apply.Contains('controller.SetDisableMovementControls(true)') -and $apply.Contains('controller.SetDisableMovementControls(false)') -and $apply.Contains('Release(member);') -and $service.Contains('m_Applicator.Release(remaining)')
+        MODEL_CLEANUP = $member.Contains('class AICF_EquipmentDraft : AICF_LoadoutDraft') -and $member.Contains('m_Character.GetWorld() != GetGame().GetWorld()') -and $member.Contains('DetachRoots();') -and $member.Contains('parent.DetachEntity()')
+        SINGLE_OPERATION = $slot.Contains('HasEquipmentInventoryTransaction()') -and $vehicle.Contains('slot.HasEquipmentInventoryTransaction()') -and $planner.Contains('slot.HasEquipmentInventoryTransaction()')
+        STOP = $service.Contains('m_aRecoveries.Clear()') -and $service.Contains('m_aPlans.Clear()') -and $service -notmatch '\.CallLater\(|\.Insert\(On'
+    }
+}
+$rules = Rules $sources
+$failed = @($rules.Keys | Where-Object {-not $rules[$_]})
+if ($failed.Count) { throw ('Equipment contract failures: ' + ($failed -join ', ')) }
+$mutations = @(
+    @('Loadouts/AICF_EquipmentInventory.c','muzzle.GetMagazineWell().Type() == magazine.GetMagazineWell().Type()', 'true', 'NATIVE_COMPATIBILITY'),
+    @('Loadouts/AICF_EquipmentInventory.c','member.m_Character.GetOrigin(), corpse.GetOrigin(), AICF_EquipmentConfig.TRANSFER_METERS', 'member.m_Character.GetOrigin(), corpse.GetOrigin(), 5000', 'PHYSICAL_TRANSFER'),
+    @('Loadouts/AICF_EquipmentInventory.c','target.Contains(item) && !source.Contains(item)', 'target.Contains(item)', 'REAL_TRANSFER'),
+    @('Loadouts/AICF_EquipmentMember.c','binding.m_iRevision == m_iRevision', 'true', 'MEMBER_REVISION'),
+    @('Loadouts/AICF_EquipmentOrder.c','m_Slot.GetEquipmentOrder() == this', 'true', 'OPERATION_IDENTITY'),
+    @('Loadouts/AICF_EquipmentApplicator.c','GetStorage().GetOwner() != character', 'GetStorage().GetOwner() == null', 'PRESERVE_ORIGINALS'),
+    @('Loadouts/AICF_EquipmentApplicator.c','!tx.m_Receipt.m_bDone', 'false', 'INVENTORY_RECEIPTS'),
+    @('Loadouts/AICF_EquipmentService.c','m_aRecoveries.Clear()', 'm_aSlots.Clear()', 'STOP'),
+    @('Loadouts/AICF_EquipmentApplicator.c','System.GetTickCount() >= tx.m_iRecoveryDeadline', 'false', 'BOUNDED_RECOVERY'),
+    @('Loadouts/AICF_EquipmentApplicator.c','controller.SetDisableMovementControls(false)', 'controller.SetDisableMovementControls(true)', 'MOVEMENT_RELEASE'),
+    @('Loadouts/AICF_EquipmentMember.c','DetachRoots();', '// no detach', 'MODEL_CLEANUP')
+)
+foreach ($mutation in $mutations) {
+    $copy = $sources.Clone()
+    if (-not $copy[$mutation[0]].Contains($mutation[1])) { throw "Missing mutation: $($mutation[3])" }
+    $copy[$mutation[0]] = $copy[$mutation[0]].Replace($mutation[1], $mutation[2])
+    $result = Rules $copy
+    if ($result[$mutation[3]]) { throw "Mutation survived: $($mutation[3])" }
+}
+"PASS Equipment contracts: $($rules.Count) rules, $($mutations.Count) negative mutations; runtime gates separate"
