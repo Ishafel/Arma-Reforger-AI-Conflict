@@ -157,6 +157,7 @@ class AICF_FIAGarrisonService
 		foreach (AICF_FIAGarrison g : s_aDefenders)
 		{
 			if (g.m_bRetired) continue;
+			if (g.m_bReady) g.RecoveryAllowed();
 			if (!g.m_Vehicle && g.m_iRequestedAtMs == 0)
 			{
 				if (now < g.m_iRetryAtMs || now < m_iNextSpawnMs) continue;
@@ -203,6 +204,7 @@ class AICF_FIAGarrisonService
 	protected void Retire(AICF_FIAGarrison g, string reason)
 	{
 		if (g.m_bRetired) return;
+		g.StopIntegrity();
 		m_Patrol.Stop(g);
 		AICF_VehicleCleanupManager.RetainFIAGarrison(g);
 		g.m_bRetired = true;

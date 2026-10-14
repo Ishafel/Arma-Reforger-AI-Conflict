@@ -48,6 +48,9 @@ class AICF_FIAGarrison
 	int m_iVehicleTeleports;
 	int m_iCrewTeleports;
 	string m_sRecoveryBlocked;
+	protected string m_sRecoveryBan;
+	protected ref AICF_FIAGarrisonIntegrity m_VehicleIntegrity;
+	protected ref array<ref AICF_FIAGarrisonIntegrity> m_aMemberIntegrity = {};
 	string m_sPatrolHold;
 	ref array<bool> m_aEssentialSeats = {};
 	ref AICF_VehicleLease m_Lease;
@@ -58,6 +61,68 @@ class AICF_FIAGarrison
 	bool BaseIdentity()
 	{
 		return Replication.IsServer() && m_Base && m_Base.GetOwner() && m_Base.GetOwner().GetID() == m_BaseId;
+	}
+
+	void BlockRecovery(string reason, EntityID memberId = EntityID.INVALID)
+	{
+		if (!Replication.IsServer() || !m_sRecoveryBan.IsEmpty()) return;
+		m_sRecoveryBan = reason;
+		// Не оставляем ходовую машину в бесконечном ожидании запрещённого переноса.
+		m_bCrewRecoveryPending = false;
+		Log("FIA_GARRISON_RECOVERY_BANNED", string.Format("reason=%1 member=%2 permanent=1", reason, memberId));
+	}
+
+	string RecoveryBan() { return m_sRecoveryBan; }
+
+	void WatchVehicleIntegrity()
+	{
+		if (!Replication.IsServer() || m_VehicleIntegrity) return;
+		m_VehicleIntegrity = new AICF_FIAGarrisonIntegrity();
+		m_VehicleIntegrity.Start(this, m_Vehicle, true, true);
+	}
+
+	void WatchMemberIntegrity(ChimeraCharacter member, bool essential)
+	{
+		if (!Replication.IsServer()) return;
+		AICF_FIAGarrisonIntegrity watch = new AICF_FIAGarrisonIntegrity();
+		m_aMemberIntegrity.Insert(watch);
+		watch.Start(this, member, false, essential);
+	}
+
+	bool RecoveryAllowed()
+	{
+		if (!Replication.IsServer() || m_bRetired) return false;
+		if (!m_sRecoveryBan.IsEmpty()) return false;
+		if (!VehicleIdentity() || !GroupIdentity()) { BlockRecovery("STALE_VEHICLE_GROUP_IDENTITY"); return false; }
+		if (!m_VehicleIntegrity || !m_VehicleIntegrity.Check()) { BlockRecovery("UNKNOWN_VEHICLE_DAMAGE"); return false; }
+		int count = m_aSeats.Count();
+		if (count == 0 || m_aCrew.Count() != count || m_aCrewIds.Count() != count ||
+			m_aEssentialSeats.Count() != count || m_aMemberIntegrity.Count() != count)
+		{
+			BlockRecovery("UNKNOWN_ORIGINAL_ROSTER");
+			return false;
+		}
+		for (int i; i < count; i++)
+		{
+			if (m_aMemberIntegrity[i] && !m_aMemberIntegrity[i].Matches(m_aCrew[i], m_aCrewIds[i]))
+			{
+				BlockRecovery("MISSING_OR_STALE_MEMBER");
+				return false;
+			}
+			if (!m_aMemberIntegrity[i] || !m_aMemberIntegrity[i].Check()) { BlockRecovery("UNKNOWN_MEMBER_DAMAGE"); return false; }
+			if (!m_aCrew[i] || m_aCrew[i].GetID() != m_aCrewIds[i] || !OwnsMember(m_aCrew[i]))
+			{
+				BlockRecovery("MISSING_OR_STALE_MEMBER");
+				return false;
+			}
+		}
+		return m_sRecoveryBan.IsEmpty();
+	}
+
+	void StopIntegrity()
+	{
+		if (m_VehicleIntegrity) m_VehicleIntegrity.Stop();
+		foreach (AICF_FIAGarrisonIntegrity watch : m_aMemberIntegrity) { if (watch) watch.Stop(); }
 	}
 
 	bool VehicleIdentity()
@@ -76,7 +141,7 @@ class AICF_FIAGarrison
 	{
 		if (m_bRetired || !GroupIdentity() || !entity || !AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(entity)) return false;
 		int index = m_aCrew.Find(ChimeraCharacter.Cast(entity));
-		if (index < 0 || entity.GetID() != m_aCrewIds[index]) return false;
+		if (index < 0 || index >= m_aCrewIds.Count() || entity.GetID() != m_aCrewIds[index]) return false;
 		AIControlComponent control = AIControlComponent.Cast(entity.FindComponent(AIControlComponent));
 		if (!control || !control.GetAIAgent()) return false;
 		if (control.GetAIAgent().GetParentGroup() == m_Group) return true;

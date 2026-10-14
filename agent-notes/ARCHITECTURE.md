@@ -117,6 +117,17 @@ Waypoint сначала снимается с группы, затем удал�
 
 ## Соседние контракты
 
+`AICF_FIAGarrison` владеет постоянным ban на recovery конкретной vehicle
+identity/generation. `AICF_FIAGarrisonIntegrity` — его наблюдатель здоровья
+исходной машины и исходных members: весь hit-zone hierarchy, immutable entity
+и generation, health/damage invokers с явным Remove при Retire/Stop.
+Плановый desant transfer сохраняет исходную identity. Ранение essential crew,
+гибель любого исходного member, повреждение машины и неизвестное состояние
+закрывают recovery на весь lifecycle. Ordinary patrol/CanDrive независимы от ban.
+Recovery и forced exact-seat return читают один допуск, повторяя его после
+синхронных waypoint/queue callbacks перед физической мутацией; MatchController
+не получает новой ответственности. Подробности — [GAMEPLAY.md](GAMEPLAY.md).
+
 Начальный FIA состав принадлежит `AICF_FIAGarrisonPlanner`, допустимость
 усиленной точки и готовность полного графа — `AICF_FIAStrongpointPolicy`, доступность
 prefab — catalog/profile. Единая проверка связности и HQ exits используется во

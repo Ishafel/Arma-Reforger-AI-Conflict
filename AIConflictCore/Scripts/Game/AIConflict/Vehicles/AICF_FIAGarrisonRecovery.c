@@ -46,13 +46,14 @@ class AICF_FIAGarrisonRecovery
 		}
 		foreach (ChimeraCharacter member : g.m_aCrew)
 		{
-			if (!member || !g.OwnsMember(member)) continue;
+			if (!member || !g.OwnsMember(member)) return false;
 			CompartmentAccessComponent access = member.GetCompartmentAccessComponent();
 			if (!access || access.IsGettingIn() || access.IsGettingOut()) return false;
 		}
 		for (int i; i < g.m_aEssentialSeats.Count(); i++)
 		{
-			if (g.m_aEssentialSeats[i] && g.OwnsMember(g.m_aCrew[i]) && g.m_aSeats[i].GetOccupant() != g.m_aCrew[i]) return false;
+			if (!g.m_aSeats[i]) return false;
+			if (g.m_aEssentialSeats[i] && g.m_aSeats[i].GetOccupant() != g.m_aCrew[i]) return false;
 		}
 		return true;
 	}
@@ -103,6 +104,7 @@ class AICF_FIAGarrisonRecovery
 	{
 		if (!Replication.IsServer() || !g || now < g.m_iRecoveryNextMs) return false;
 		g.m_iRecoveryNextMs = now + 10000;
+		if (!g.RecoveryAllowed()) { Blocked(g, g.RecoveryBan()); return false; }
 		if (!OccupantsSafe(g) || !g.CanDrive() || g.m_bDisembarking) { Blocked(g, "IDENTITY_OCCUPANCY"); return false; }
 		Physics physics = g.m_Vehicle.GetPhysics();
 		if (!physics || physics.GetVelocity().Length() > 3) { Blocked(g, "VEHICLE_MOVING"); return false; }
@@ -116,9 +118,15 @@ class AICF_FIAGarrisonRecovery
 			AICF_LogisticsVehicleFootprint footprint = AICF_LogisticsVehicleFootprint.Get(g.m_sPrefab);
 			TraceOBB body;
 			// Последняя проверка прямо перед синхронной мутацией; чужих occupants не переносим.
+			if (!g.RecoveryAllowed()) { Blocked(g, g.RecoveryBan()); return false; }
 			if (!OccupantsSafe(g) || !g.CanDrive() || !footprint.IsClear(g.m_Vehicle.GetWorld(), pose, body) ||
 				!AICF_FIAGarrisonRecovery.PlayersClear(g.m_Vehicle.GetOrigin(), pose[3])) return false;
 			m_Handoff.ClearFIAGarrisonWaypoint(g);
+			// RemoveWaypoint также может вызвать синхронный callback.
+			if (!g.RecoveryAllowed()) { Blocked(g, g.RecoveryBan()); return false; }
+			if (!OccupantsSafe(g) || !g.CanDrive() || g.m_Vehicle.GetPhysics() != physics ||
+				!footprint.IsClear(g.m_Vehicle.GetWorld(), pose, body) ||
+				!AICF_FIAGarrisonRecovery.PlayersClear(g.m_Vehicle.GetOrigin(), pose[3])) return false;
 			physics.SetVelocity(vector.Zero);
 			physics.SetAngularVelocity(vector.Zero);
 			if (!g.m_Vehicle.SetWorldTransform(pose)) { Blocked(g, "TRANSFORM_REJECTED"); return false; }

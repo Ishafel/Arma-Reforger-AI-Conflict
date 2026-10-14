@@ -166,7 +166,18 @@ PlayerManager проверяет controlled и main entities у исходной
 Техника переносится только при скорости не выше 3 м/с; скорость и вращение
 обнуляются, waypoint снимается через handoff, новый выдаётся после settling.
 Неудачный поиск повторяется через 10 с, успешный перенос имеет cooldown 30 с.
-Ни боевой урон, ни lease, ни entity ID, ни состав гарнизона не сбрасываются.
+`AICF_FIAGarrison` фиксирует постоянный recovery ban для исходной vehicle
+identity/generation при любом уменьшении здоровья машины (включая отдельные
+hit zones), ранении/гибели essential crew, гибели исходного пассажира или
+невозможности достоверно проверить исходный состав/damage. Плановая высадка
+живого пассажира допускается. `AICF_FIAGarrisonIntegrity` наблюдает все hit zones
+в hierarchy с появления машины и регистрации исходных members, включая
+синхронный урон/ремонт между scheduler ticks. Первый reason сохраняется;
+ремонт, лечение, patrol leg, retry и исчезновение игроков не снимают ban.
+Допуск повторяется перед поиском позиции и перед transform/forced boarding,
+в том числе после синхронных waypoint/queue callbacks. Ban не меняет CanDrive,
+не создаёт replacement и снимает ожидание crew recovery у ходовой машины.
+Ни lease, ни entity ID, ни состав гарнизона не сбрасываются.
 При отсутствии местной дороги служба ждёт и повторяет поиск.
 `AICF_FIAGarrisonMovementPolicy` принимает native failed movement только от
 текущей группы/машины/waypoint. После синхронного invoker повторно проверяет

@@ -55,6 +55,7 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 				if (!member) return false;
 				g.m_aCrew.Insert(member);
 				g.m_aCrewIds.Insert(member.GetID());
+				g.WatchMemberIntegrity(member, g.m_aEssentialSeats[g.m_aCrew.Count() - 1]);
 			}
 		}
 		int seated;
@@ -68,6 +69,7 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 			CompartmentAccessComponent access = member.GetCompartmentAccessComponent();
 			if (!access || access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut()) continue;
 			// Первичная посадка; recovery возвращает только исходных живых бойцов.
+			if (!g.RecoveryAllowed()) return false;
 			access.GetInVehicle(seat.GetOwner(), seat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
 		}
 		return seated == g.m_aSeats.Count();
@@ -132,6 +134,7 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 			if (g.m_aEssentialSeats[i])
 			{
 				if (seat.GetOccupant() == member || now < g.m_iCrewRecoveryNextMs) continue;
+				if (!g.RecoveryAllowed()) { AICF_FIAGarrisonRecovery.Blocked(g, g.RecoveryBan()); continue; }
 				if (!seat.IsCompartmentAccessible() || seat.GetOccupant() || (seat.IsReserved() && !seat.IsReservedBy(member)) ||
 					access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut()) continue;
 				if (!AICF_FIAGarrisonRecovery.PlayersClear(member.GetOrigin(), g.m_Vehicle.GetOrigin()))
@@ -140,9 +143,12 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 					continue;
 				}
 				// Повторяем immutable AI/seat/player fences перед forced exact-seat boarding.
-				if (!g.OwnsMember(member) || !g.VehicleIdentity() || seat.GetOccupant() ||
+				if (!g.RecoveryAllowed() || !g.OwnsMember(member) || !g.VehicleIdentity() || seat.GetOccupant() ||
 					!AICF_FIAGarrisonRecovery.PlayersClear(member.GetOrigin(), g.m_Vehicle.GetOrigin())) continue;
 				access.InterruptVehicleActionQueue(true, true, true);
+				// Прерывание queue может синхронно вызвать сторонний invoker.
+				if (!g.RecoveryAllowed() || !g.OwnsMember(member) || !g.VehicleIdentity() || seat.GetOccupant() ||
+					!AICF_FIAGarrisonRecovery.PlayersClear(member.GetOrigin(), g.m_Vehicle.GetOrigin())) continue;
 				bool accepted = access.GetInVehicle(seat.GetOwner(), seat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
 				g.m_iCrewRecoveryNextMs = now + 2000;
 				if (accepted)
