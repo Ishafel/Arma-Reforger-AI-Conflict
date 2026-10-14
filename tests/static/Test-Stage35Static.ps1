@@ -237,10 +237,12 @@ if ($acquisition) {
 
 $selector = Find-AICFClassRecord $records 'AICF_TargetSelector'
 if ($selector) {
-    $attackPlan = Get-AICFMethodBody $selector 'SelectAttackPlanNode'
     $defendPlan = Get-AICFMethodBody $selector 'SelectDefendTarget'
-    Assert-AICFContains $failures 'STAGE35_ATTACK_DISTRIBUTION' $attackPlan 'PRIMARY_RANKED_REACHABLE[\s\S]*ADJACENT_TO_PRIMARY[\s\S]*SUPPORT_ADJACENT_DIRECTION[\s\S]*SUPPORT_SECONDARY_DIRECTION' 'A0/A1/A2 must map deterministically to primary, adjacent, and support directions'
-    Assert-AICFContains $failures 'STAGE35_ATTACK_DISTRIBUTION' $attackPlan 'AreAttackNodesAdjacent' 'Secondary/support choices must remain causally adjacent to the primary direction'
+    # Issue #42 replaces role-index mapping with snapshot score and actual force allocation.
+    $adaptive = Find-AICFClassRecord $records 'AICF_AdaptiveCommanderPolicy'
+    $score = Find-AICFClassRecord $records 'AICF_AdaptiveScore'
+    Assert-AICFContains $failures 'STAGE35_ATTACK_DISTRIBUTION' $adaptive.Code 'AllocatedForce[\s\S]*CollectAttackNodes[\s\S]*AICF_AdaptiveScore\.Choose' 'Selection must score reachable candidates using faction-local applied assignments'
+    Assert-AICFContains $failures 'STAGE35_ATTACK_DISTRIBUTION' $score.Code 'm_fAllocated\s*/\s*demand[\s\S]*SATURATION_COST' 'Surplus concentration must reduce score; unmet demand may justify joint attack'
     Assert-AICFContains $failures 'STAGE35_D0_QRF' $defendPlan 'IsThreatened[\s\S]*QRF[\s\S]*HQ_THREAT[\s\S]*CONTESTED' 'D0 must prioritize threatened friendly bases with explicit QRF triggers'
 }
 

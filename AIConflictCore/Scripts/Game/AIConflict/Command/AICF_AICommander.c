@@ -9,6 +9,7 @@ class AICF_AICommander
 	protected AICF_OrderPlanner m_OrderPlanner;
 	protected AICF_ObjectiveGraph m_ObjectiveGraph;
 	protected AICF_TargetSelector m_TargetSelector;
+	protected ref AICF_AdaptiveCommanderPolicy m_AdaptivePolicy;
 
 	void AICF_AICommander(
 		AICF_FactionState factionState,
@@ -24,6 +25,7 @@ class AICF_AICommander
 		m_OrderPlanner = orderPlanner;
 		m_ObjectiveGraph = objectiveGraph;
 		m_TargetSelector = targetSelector;
+		m_AdaptivePolicy = new AICF_AdaptiveCommanderPolicy(factionState, faction, objectiveGraph, targetSelector);
 		if (m_Faction)
 			m_sFactionKey = m_Faction.GetFactionKey();
 	}
@@ -85,7 +87,7 @@ class AICF_AICommander
 
 	bool Tick(AICF_MatchController matchController, string reason)
 	{
-		if (!IsEnabled() || !matchController)
+		if (!Replication.IsServer() || !IsEnabled() || !matchController)
 			return false;
 
 		return matchController.RunAICommanderTick(this, reason);
@@ -97,10 +99,11 @@ class AICF_AICommander
 		SCR_CampaignMilitaryBaseComponent excludedTarget = null,
 		bool waypointSuspendedByVehicle = false)
 	{
-		if (!OwnsSlot(slot) || !m_OrderPlanner || !m_ObjectiveGraph ||
+		if (!Replication.IsServer() || !OwnsSlot(slot) || !m_OrderPlanner || !m_ObjectiveGraph ||
 			!m_TargetSelector)
 			return false;
 
+		AICF_AdaptiveDecision decision = m_AdaptivePolicy.Select(slot, excludedTarget);
 		return m_OrderPlanner.AssignAICommanderOrder(
 			slot,
 			m_Faction,
@@ -108,7 +111,8 @@ class AICF_AICommander
 			m_TargetSelector,
 			reason,
 			excludedTarget,
-			waypointSuspendedByVehicle);
+			waypointSuspendedByVehicle,
+			decision);
 	}
 
 	bool ReconcileStrategicOrder(
@@ -118,10 +122,11 @@ class AICF_AICommander
 		int stableCandidateMs,
 		bool waypointSuspendedByVehicle = false)
 	{
-		if (!OwnsSlot(slot) || !m_OrderPlanner || !m_ObjectiveGraph ||
+		if (!Replication.IsServer() || !OwnsSlot(slot) || !m_OrderPlanner || !m_ObjectiveGraph ||
 			!m_TargetSelector)
 			return false;
 
+		AICF_AdaptiveDecision decision = m_AdaptivePolicy.Select(slot);
 		return m_OrderPlanner.ReconcileAICommanderOrder(
 			slot,
 			m_Faction,
@@ -130,7 +135,8 @@ class AICF_AICommander
 			reason,
 			minimumDwellMs,
 			stableCandidateMs,
-			waypointSuspendedByVehicle);
+			waypointSuspendedByVehicle,
+			decision);
 	}
 
 	bool AssignLossResponseOrder(
@@ -140,10 +146,12 @@ class AICF_AICommander
 		int stableCandidateMs,
 		bool waypointSuspendedByVehicle = false)
 	{
-		if (!OwnsSlot(slot) || !m_OrderPlanner || !m_ObjectiveGraph ||
+		if (!Replication.IsServer() || !OwnsSlot(slot) || !m_OrderPlanner || !m_ObjectiveGraph ||
 			!m_TargetSelector || !lostBase)
 			return false;
 
+		m_AdaptivePolicy.RecordLoss(lostBase);
+		AICF_AdaptiveDecision decision = m_AdaptivePolicy.Select(slot);
 		return m_OrderPlanner.AssignAICommanderLossResponseOrder(
 			slot,
 			m_Faction,
@@ -152,6 +160,7 @@ class AICF_AICommander
 			lostBase,
 			minimumDwellMs,
 			stableCandidateMs,
-			waypointSuspendedByVehicle);
+			waypointSuspendedByVehicle,
+			decision);
 	}
 }

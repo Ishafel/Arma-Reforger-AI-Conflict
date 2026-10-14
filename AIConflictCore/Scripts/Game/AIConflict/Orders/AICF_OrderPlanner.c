@@ -246,7 +246,8 @@ class AICF_OrderPlanner
 		AICF_TargetSelector targetSelector,
 		string reason,
 		SCR_CampaignMilitaryBaseComponent excludedTarget = null,
-		bool waypointSuspendedByVehicle = false)
+		bool waypointSuspendedByVehicle = false,
+		AICF_AdaptiveDecision decision = null)
 	{
 		if (slot && (slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() || slot.GetRouteRecoveryEpisode().IsBlocked(slot)))
 			return false;
@@ -258,6 +259,8 @@ class AICF_OrderPlanner
 		{
 			return false;
 		}
+		if (decision && !decision.IsCurrent(slot, faction, graph))
+			return false;
 
 		if (slot.HasPlayerStrategicIntent())
 		{
@@ -338,16 +341,12 @@ class AICF_OrderPlanner
 			}
 		}
 
-		string posture;
-		string trigger;
-		SCR_CampaignMilitaryBaseComponent target = SelectOperationalTarget(
-			slot,
-			faction,
-			graph,
-			targetSelector,
-			excludedTarget,
-			posture,
-			trigger);
+		if (!decision || !decision.IsCurrent(slot, faction, graph) ||
+			!IsAssignmentTargetValid(slot, faction, decision.m_Target, decision.m_sPosture, AICF_EStrategicDecisionAuthority.AI_COMMANDER))
+			return false;
+		string posture = decision.m_sPosture;
+		string trigger = decision.m_sReason;
+		SCR_CampaignMilitaryBaseComponent target = decision.m_Target;
 
 		if (!target)
 		{
@@ -994,7 +993,8 @@ class AICF_OrderPlanner
 		string reason,
 		int minimumDwellMs,
 		int stableCandidateMs,
-		bool waypointSuspendedByVehicle = false)
+		bool waypointSuspendedByVehicle = false,
+		AICF_AdaptiveDecision decision = null)
 	{
 		// Base-owner callbacks обходят CommanderTick. Даже смена posture без
 		// нового waypoint не должна снимать hold через RecordStrategicAssignment.
@@ -1009,6 +1009,8 @@ class AICF_OrderPlanner
 		{
 			return false;
 		}
+		if (decision && !decision.IsCurrent(slot, faction, graph))
+			return false;
 
 		if (slot.HasPlayerStrategicIntent())
 		{
@@ -1064,23 +1066,18 @@ class AICF_OrderPlanner
 			return false;
 		}
 
-		string desiredPosture;
-		string trigger;
-		SCR_CampaignMilitaryBaseComponent desiredTarget = SelectOperationalTarget(
-			slot,
-			faction,
-			graph,
-			targetSelector,
-			null,
-			desiredPosture,
-			trigger);
+		if (!decision || !decision.IsCurrent(slot, faction, graph) ||
+			!IsAssignmentTargetValid(slot, faction, decision.m_Target, decision.m_sPosture, AICF_EStrategicDecisionAuthority.AI_COMMANDER))
+			return false;
+		string desiredPosture = decision.m_sPosture;
+		string trigger = decision.m_sReason;
+		SCR_CampaignMilitaryBaseComponent desiredTarget = decision.m_Target;
 		if (!desiredTarget)
 			return false;
 
 		SCR_CampaignMilitaryBaseComponent currentTarget = slot.GetTargetBase();
 		string currentPosture = slot.GetOperationalPosture();
-		if (!IsCurrentTargetValid(slot, faction) ||
-			(currentPosture == POSTURE_AREA_SECURITY && desiredPosture != POSTURE_AREA_SECURITY))
+		if (!IsCurrentTargetValid(slot, faction) || slot.IsRouteTargetDeferred(currentTarget))
 		{
 			if (waypointSuspendedByVehicle)
 			{
@@ -1103,19 +1100,13 @@ class AICF_OrderPlanner
 				false,
 				AICF_EStrategicDecisionAuthority.AI_COMMANDER);
 		}
-		// Ranked ATTACK selection is deterministic at assignment time. Preserve a
-		// still-valid target so graph churn cannot make all three groups rotate every
-		// commander tick merely because another slot completed an objective.
-		if (slot.GetRole() == AICF_EGroupRole.ATTACK && currentPosture != POSTURE_AREA_SECURITY)
-			return false;
-
 		if (currentTarget == desiredTarget && currentPosture == desiredPosture)
 		{
 			slot.ClearStrategicCandidate();
 			return false;
 		}
 
-		bool urgentQRF = desiredPosture == POSTURE_QRF && currentPosture != POSTURE_QRF;
+		bool urgentQRF = decision.m_bUrgent;
 		if (!urgentQRF)
 		{
 			bool candidateReady = slot.IsStrategicCandidateReady(
@@ -1247,187 +1238,16 @@ class AICF_OrderPlanner
 		SCR_CampaignMilitaryBaseComponent lostBase,
 		int minimumDwellMs,
 		int stableCandidateMs,
-		bool waypointSuspendedByVehicle = false)
+		bool waypointSuspendedByVehicle = false,
+		AICF_AdaptiveDecision decision = null)
 	{
-		if (slot && (slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() || slot.GetRouteRecoveryEpisode().IsBlocked(slot)))
-			return false;
-		if (slot && slot.IsRecruitingInfantry())
-			return true;
-		if (!Replication.IsServer() || !slot ||
-			slot.GetRole() != AICF_EGroupRole.DEFEND || !faction ||
-			!graph || !targetSelector || !lostBase || !slot.IsCombatReady() ||
+		if (!Replication.IsServer() || !slot || !faction || !lostBase ||
 			!m_AuthorityPolicy || !m_AuthorityPolicy.IsValid() ||
 			!m_AuthorityPolicy.IsAICommanderEnabled(faction.GetFactionKey()))
-		{
 			return false;
-		}
-
-		if (slot.HasPlayerStrategicIntent())
-		{
-			if (!slot.IsPlayerStrategicIntentRoleCurrent() ||
-				(slot.GetPlayerStrategicIntentTargetKind() == AICF_EOrderTargetKind.BASE &&
-				!IsTargetValidForRole(
-					slot,
-					faction,
-					slot.GetPlayerStrategicIntentTargetBase())) ||
-				(slot.GetPlayerStrategicIntentTargetKind() == AICF_EOrderTargetKind.POSITION &&
-				!IsStrategicIntentDestinationValid(slot, faction)))
-			{
-				InvalidatePlayerStrategicIntent(
-					slot,
-					faction,
-					"BASE_OWNER_CHANGED_QRF");
-			}
-			else if (slot.HasPlayerStrategicOrder() &&
-				GetOrderFailureReason(slot, faction).IsEmpty())
-			{
-				return false;
-			}
-			else
-			{
-				if (waypointSuspendedByVehicle)
-				{
-					if (slot.GetPlayerStrategicIntentTargetKind() ==
-						AICF_EOrderTargetKind.POSITION)
-					{
-						return ApplySuspendedPointAssignment(
-							slot,
-							faction,
-							slot.GetPlayerStrategicIntentTargetPosition(),
-							AICF_EStrategicDecisionAuthority.PLAYER_COMMAND,
-							"BASE_OWNER_CHANGED_QRF",
-							"PLAYER_INTENT_RESTORE",
-							false);
-					}
-					return ApplySuspendedStrategicAssignment(
-						slot,
-						faction,
-						slot.GetPlayerStrategicIntentTargetBase(),
-						ResolvePlayerPosture(slot),
-						AICF_EStrategicDecisionAuthority.PLAYER_COMMAND,
-						"BASE_OWNER_CHANGED_QRF",
-						"PLAYER_INTENT_RESTORE",
-						false);
-				}
-				return RestorePlayerStrategicIntent(
-					slot,
-					faction,
-					"BASE_OWNER_CHANGED_QRF");
-			}
-		}
-		if (slot.HasPlayerStrategicOrder())
-			return false;
-
-		string selectedPosture;
-		string responseTrigger;
-		SCR_CampaignMilitaryBaseComponent responseTarget = targetSelector.SelectDefendTarget(
-			graph,
-			faction,
-			selectedPosture,
-			responseTrigger);
-		if (!responseTarget || selectedPosture != POSTURE_QRF)
-		{
-			responseTrigger = "NEIGHBOR_LOST";
-			responseTarget = targetSelector.SelectLossResponseTarget(graph, faction, lostBase);
-		}
-		if (!responseTarget)
-			return false;
-
-		string oldPosture = slot.GetOperationalPosture();
-		if (slot.GetTargetBase() == responseTarget &&
-			IsTargetValidForRole(slot, faction, responseTarget))
-		{
-			if (oldPosture == POSTURE_QRF)
-			{
-				slot.ClearStrategicCandidate();
-				AICF_Stage35Diagnostics.Info(
-					"STRATEGIC_CANDIDATE_HELD",
-					string.Format(
-						"faction=%1 slot=%2 numeric_slot=%3 current_posture=QRF desired_posture=QRF current_target=%4 desired_target=%4 trigger=%5 lost_base=%6 assignment_age_ms=%7 candidate_age_ms=0 remaining_dwell_ms=0 remaining_stable_ms=0 decision=KEEP_CURRENT_QRF",
-						faction.GetFactionKey(),
-						slot.GetSlotKey(),
-						slot.GetSlotId(),
-						AICF_Stage1Diagnostics.BaseKey(responseTarget),
-						responseTrigger,
-						AICF_Stage1Diagnostics.BaseKey(lostBase),
-						slot.GetStrategicAssignmentAgeMs()));
-				return false;
-			}
-
-			int dwellMs = slot.GetStrategicAssignmentAgeMs();
-			slot.SetDecisionAuthority(
-				AICF_EStrategicDecisionAuthority.AI_COMMANDER);
-			slot.CommitStrategicIntent(
-				responseTarget,
-				POSTURE_QRF,
-				AICF_EStrategicDecisionAuthority.AI_COMMANDER);
-			slot.RecordStrategicAssignment(responseTarget, POSTURE_QRF);
-			AICF_Stage35Diagnostics.Info(
-				"DEFEND_POSTURE_CHANGED",
-				string.Format(
-					"faction=%1 slot=%2 numeric_slot=%3 old_posture=%4 new_posture=%5 target=%6 trigger=%7 lost_base=%8 dwell_ms=%9 waypoint_replaced=0",
-					faction.GetFactionKey(),
-					slot.GetSlotKey(),
-					slot.GetSlotId(),
-					oldPosture,
-					POSTURE_QRF,
-					AICF_Stage1Diagnostics.BaseKey(responseTarget),
-					responseTrigger,
-					AICF_Stage1Diagnostics.BaseKey(lostBase),
-					dwellMs));
-			return true;
-		}
-
-		bool immediateHQEscalation = responseTrigger == "HQ_THREAT";
-		if (oldPosture == POSTURE_QRF && !immediateHQEscalation &&
-			!slot.IsStrategicCandidateReady(
-				responseTarget,
-				POSTURE_QRF,
-				minimumDwellMs,
-				stableCandidateMs))
-		{
-			int assignmentAgeMs = slot.GetStrategicAssignmentAgeMs();
-			int candidateAgeMs = slot.GetStrategicCandidateAgeMs();
-			string heldLossCandidateLine = string.Format(
-				"faction=%1 slot=%2 numeric_slot=%3 current_posture=QRF desired_posture=QRF current_target=%4 desired_target=%5 trigger=%6 lost_base=%7 assignment_age_ms=%8 candidate_age_ms=%9",
-				faction.GetFactionKey(),
-				slot.GetSlotKey(),
-				slot.GetSlotId(),
-				AICF_Stage1Diagnostics.BaseKey(slot.GetTargetBase()),
-				AICF_Stage1Diagnostics.BaseKey(responseTarget),
-				responseTrigger,
-				AICF_Stage1Diagnostics.BaseKey(lostBase),
-				assignmentAgeMs,
-				candidateAgeMs);
-			heldLossCandidateLine += string.Format(
-				" remaining_dwell_ms=%1 remaining_stable_ms=%2 decision=HYSTERESIS",
-				Math.Max(0, minimumDwellMs - assignmentAgeMs),
-				Math.Max(0, stableCandidateMs - candidateAgeMs));
-			AICF_Stage35Diagnostics.Info("STRATEGIC_CANDIDATE_HELD", heldLossCandidateLine);
-			return false;
-		}
-
-		if (waypointSuspendedByVehicle)
-		{
-			return ApplySuspendedStrategicAssignment(
-				slot,
-				faction,
-				responseTarget,
-				POSTURE_QRF,
-				AICF_EStrategicDecisionAuthority.AI_COMMANDER,
-				string.Format("%1_QRF", responseTrigger),
-				responseTrigger);
-		}
-
-		return ReplaceOrder(
-			slot,
-			faction,
-			responseTarget,
-			string.Format("%1_QRF", responseTrigger),
-			POSTURE_QRF,
-			responseTrigger,
-			false,
-			AICF_EStrategicDecisionAuthority.AI_COMMANDER);
+		return ReconcileAICommanderOrder(slot, faction, graph, targetSelector,
+			"BASE_OWNER_CHANGED_LOSS", minimumDwellMs, stableCandidateMs,
+			waypointSuspendedByVehicle, decision);
 	}
 
 	bool IsOrderValid(AICF_GroupSlot slot, SCR_CampaignFaction faction)
@@ -2731,57 +2551,6 @@ class AICF_OrderPlanner
 		return mainBase && mainBase.GetOwner() && mainBase.IsInitialized() &&
 			mainBase.GetFaction() == faction && mainBase.GetSpawnPoint() &&
 			slot.GetTargetBase() == mainBase;
-	}
-
-	protected SCR_CampaignMilitaryBaseComponent SelectOperationalTarget(
-		AICF_GroupSlot slot,
-		SCR_CampaignFaction faction,
-		AICF_ObjectiveGraph graph,
-		AICF_TargetSelector targetSelector,
-		SCR_CampaignMilitaryBaseComponent excludedTarget,
-		out string posture,
-		out string trigger)
-	{
-		posture = string.Empty;
-		trigger = "ASSIGNMENT";
-		if (!slot || !faction || !graph || !targetSelector)
-			return null;
-
-		if (slot.GetRole() == AICF_EGroupRole.ATTACK)
-		{
-			int preferredIndex = slot.GetRoleIndex();
-			posture = GetAttackPosture(preferredIndex);
-			SCR_CampaignMilitaryBaseComponent attackTarget = targetSelector.SelectAttackTarget(
-				graph,
-				faction,
-				trigger,
-				excludedTarget,
-				preferredIndex,
-				slot);
-			if (attackTarget)
-				return attackTarget;
-			SCR_CampaignMilitaryBaseComponent securityTarget = targetSelector.SelectDefendTarget(graph, faction, posture, trigger);
-			posture = POSTURE_AREA_SECURITY;
-			trigger = "NO_ATTACK_TARGET_" + trigger;
-			return securityTarget;
-		}
-
-		if (slot.GetRole() == AICF_EGroupRole.DEFEND)
-			return targetSelector.SelectDefendTarget(graph, faction, posture, trigger);
-
-		posture = POSTURE_IDLE_RESERVE;
-		trigger = "LEGACY_BASELINE";
-		return faction.GetMainBase();
-	}
-
-	protected string GetAttackPosture(int roleIndex)
-	{
-		if (roleIndex == 0)
-			return POSTURE_ATTACK_PRIMARY;
-		if (roleIndex == 1)
-			return POSTURE_ATTACK_SECONDARY;
-
-		return POSTURE_ATTACK_SUPPORT;
 	}
 
 	protected AIWaypoint CreateWaypoint(

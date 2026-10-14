@@ -30,6 +30,13 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Единый offline запуск
 
+`Test-AdaptiveCommanderContracts.ps1` проверяет read-only strategic policy,
+authority/slot/group/revision, данные живого состава, manual allocation, TTL,
+route deferral, score/tie-break, gates, suspension и ограниченную trace.
+`Test-AdaptiveCommanderLog.ps1 -LogPath <полный console.log> [-Baseline]`
+проверяет controlled original selector либо полную production-policy/live-waypoint
+матрицу и остановку. Подробнее: [ADAPTIVE_COMMANDER.md](ADAPTIVE_COMMANDER.md).
+
 `Test-SocialContracts.ps1` проверяет authority, readiness/generation, initial-only
 idle, общий reservation/cooldown, identity, английский event, cleanup и dedupe;
 включает 15 отрицательных мутаций. `tests/log-audits/Test-SocialLog.ps1` принимает

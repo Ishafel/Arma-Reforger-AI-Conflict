@@ -3,6 +3,40 @@
 // converge, and separately selects a threatened QRF base or safe front line.
 class AICF_TargetSelector
 {
+	// Стабильный список допустимого фронта; hops задают connectivity, не путь AI.
+	void CollectAttackNodes(AICF_ObjectiveGraph graph, SCR_CampaignFaction faction, array<int> result)
+	{
+		result.Clear();
+		if (!graph || !faction || !faction.GetMainBase())
+			return;
+		int start = graph.FindNodeId(faction.GetMainBase());
+		if (start < 0)
+			return;
+		array<int> queue = {start};
+		array<int> visited = {};
+		visited.Insert(start);
+		for (int head; head < queue.Count(); head++)
+		{
+			AICF_ObjectiveNode node = graph.GetNode(queue[head]);
+			if (!node || !node.GetBase())
+				continue;
+			SCR_CampaignMilitaryBaseComponent base = node.GetBase();
+			if (queue[head] != start && base.IsValidTarget(faction) &&
+				(base.GetType() == SCR_ECampaignBaseType.RELAY || (node.IsObjective() && !base.IsHQ())))
+				result.Insert(node.GetId());
+			if (queue[head] != start && !CanTransit(base, faction))
+				continue;
+			foreach (int next : node.GetOutgoingNodeIds())
+			{
+				if (!graph.GetNode(next) || visited.Contains(next))
+					continue;
+				visited.Insert(next);
+				queue.Insert(next);
+			}
+		}
+		result.Sort();
+	}
+
 	SCR_CampaignMilitaryBaseComponent SelectAttackTarget(
 		AICF_ObjectiveGraph graph,
 		SCR_CampaignFaction faction,

@@ -41,7 +41,7 @@ Core и stock integrations не должны получать обязатель
 | Каталог | Ответственность и основные владельцы |
 |---|---|
 | `Bootstrap/`, `Config/` | Composition root `AICF_MatchController`, запуск и настройки |
-| `Command/` | `AICF_CommandAuthorityPolicy`, `AICF_AICommander`: разрешения и выбор стратегической задачи |
+| `Command/` | `AICF_CommandAuthorityPolicy`, `AICF_AICommander`: разрешения и orchestration; `AICF_AdaptiveCommanderPolicy` собирает faction snapshot, `AICF_AdaptiveScore` оценивает кандидатов |
 | `Objectives/`, `Orders/` | Граф целей, `AICF_OrderPlanner`: infantry intent, target, waypoint, recovery |
 | `State/`, `Forces/` | `AICF_FactionState`, `AICF_GroupSlot`: stable slots, async roster, replacement; `AICF_GroupRuntime`: позиция живого бойца |
 | `Forces/` | `AICF_InfantryRecruitmentService`, `AICF_InfantryRecruitSpawner`: посещение казармы и покупка пополнения |
@@ -58,6 +58,14 @@ Core и stock integrations не должны получать обязатель
 
 `AICF_MatchController` остаётся composition root. Новое поведение помещай в
 профильный класс; контроллер связывает его с lifecycle, не забирая доменную логику.
+
+Адаптивный commander читает stock radio graph, native capture/threat flags и
+живых бойцов через GroupRuntime. Учёт сил — действующие назначения собственной
+фракции, включая player intent и suspended vehicle intent; успешные назначения
+немедленно видны следующему slot. Policy не владеет waypoint или transport.
+Planner повторно сверяет slot/group entity, generation, graph/assignment revision,
+authority и допустимость цели. Веса, fallback и исключения gates:
+[ADAPTIVE_COMMANDER.md](ADAPTIVE_COMMANDER.md).
 
 ## Authority и identity
 
