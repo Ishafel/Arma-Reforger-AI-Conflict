@@ -303,6 +303,7 @@ Server и client используют согласованный stage. Для R
 | [AICF_NativeMoveFailureProbe.c](../tests/fixtures/AICF_NativeMoveFailureProbe.c) | Сбор native movement failure; перемещение бойцов — подготовка | `aicfNativeMoveProbe` |
 | [AICF_NavigationRecoveryProbe.c](../tests/fixtures/AICF_NavigationRecoveryProbe.c) | Координатный snapshot 2026-09-19; не универсальный тест карты | `aicfNavigationProbe` |
 | [AICF_NorthFailureProbe.c](../tests/fixtures/AICF_NorthFailureProbe.c) | Прямая подача failed movement inputs; wiring портов проверяется отдельно статикой | `aicfNorthFailureProbe` |
+| [AICF_InfantryMoveHandlerProbe.c](../tests/fixtures/AICF_InfantryMoveHandlerProbe.c) | Девять живых бойцов, реальная свободная машина с subgroup `-1`, назначенный handler, посадка/выход, восстановление point order и stale failure fences; инъекция `UNKNOWN` через production helper, native BT wiring отдельно; 19 проверок, завершает сервер | `aicfInfantryMoveHandlerProbe` |
 | [AICF_PersonalLoadoutProbe.c](../tests/fixtures/AICF_PersonalLoadoutProbe.c) | Personal catalog/recipe validation; не имитирует UI/player/JIP | `aicfPersonalLoadoutProbe` |
 | [AICF_LoadoutPerformanceProbe.c](../tests/fixtures/AICF_LoadoutPerformanceProbe.c) | Сравнение Find/List со старой реализацией и замеры каталога без UI; после ROSTER_READY завершает сервер | `aicfLoadoutPerformanceProbe` |
 | [AICF_PersonalNetworkProbe.c](../tests/fixtures/AICF_PersonalNetworkProbe.c) | WCS native owner RPC без управления UI | `aicfPersonalNetworkProbe`, `aicfProbeFaction`, `aicfProbePersonal` |
