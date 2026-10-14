@@ -212,6 +212,7 @@ Enforce fixture не входят в автоматическую матрицу
 | [Test-ManualSupplyStatic.ps1](../tests/static/Test-ManualSupplyStatic.ps1) | Ручное снабжение и клиентские intents |
 | [Test-MapPointOrdersStatic.ps1](../tests/static/Test-MapPointOrdersStatic.ps1) | Приказ в точку и waypoint |
 | [Test-MovementRecoveryContracts.ps1](../tests/contracts/Test-MovementRecoveryContracts.ps1) | Ownership и границы movement recovery |
+| [Test-InfantryMoveHandlerContracts.ps1](../tests/contracts/Test-InfantryMoveHandlerContracts.ps1) | Method-scoped guards, fail-closed registered sentinel и семь отрицательных мутаций; `-RuntimeLogPath` вместе с `-ManifestPath` проверяет все 25 cases полного завершённого probe и точный CLI |
 | [Test-NorthFailureContracts.ps1](../tests/contracts/Test-NorthFailureContracts.ps1) | Recovery regression для failed movement inputs |
 | [Test-PersonalLoadoutContracts.ps1](../tests/contracts/Test-PersonalLoadoutContracts.ps1) | Личные recipes, identity, валидация и RPC |
 | [Test-RankRestrictionsStatic.ps1](../tests/static/Test-RankRestrictionsStatic.ps1) | Rank gates; опционально -PolicyPath |

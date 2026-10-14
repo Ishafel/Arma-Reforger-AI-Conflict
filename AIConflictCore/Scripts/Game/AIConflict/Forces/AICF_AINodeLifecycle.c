@@ -195,10 +195,14 @@ modded class SCR_AIProcessFailedMovementResult
 	{
 		if (handler == AIGroupMovementComponent.DEFAULT_HANDLER_ID)
 			return true;
-		// Native failure без назначенного handler наблюдается как -1. Такой же
-		// sentinel бывает у ещё не назначенной машины: одной проверки знака мало.
-		if (handler != -1 || !m_GroupUtilityComponent.m_VehicleMgr ||
-			m_GroupUtilityComponent.m_VehicleMgr.FindVehicleBySubgroupId(handler))
+		// -1 бывает и у пешего движения, и у записи ещё не назначенной машины.
+		// Native result не несёт identity/generation исходной операции. Текущий
+		// Move и пеший roster не исключают запоздавший vehicle result после выхода.
+		// При зарегистрированном sentinel не переносим failure на новый приказ.
+		if (handler != -1 || !m_GroupUtilityComponent.m_VehicleMgr)
+			return false;
+		SCR_AIGroupVehicle registered = m_GroupUtilityComponent.m_VehicleMgr.FindVehicleBySubgroupId(handler);
+		if (registered)
 			return false;
 		array<AIAgent> agents = {};
 		m_Group.GetAgents(agents);
@@ -210,6 +214,8 @@ modded class SCR_AIProcessFailedMovementResult
 				member = agent.GetControlledEntity();
 			if (!AICF_GroupRuntime.IsAliveCharacter(member))
 				continue;
+			if (agent.GetParentGroup() != m_Group)
+				return false;
 			CompartmentAccessComponent access = CompartmentAccessComponent.Cast(member.FindComponent(CompartmentAccessComponent));
 			if (!access || access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut() ||
 				CompartmentAccessComponent.GetVehicleIn(member))
