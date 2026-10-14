@@ -10,6 +10,48 @@ commit/branch, dirty status и exit codes. После правки повтор�
 `NOT RUN` в отдельном разделе issue, без ожидания игрока/тестировщика. Исторические
 verdict ниже сохраняют фактический статус; отклонение критерия не даёт новый PASS.
 
+## PR #45: индекс узла в stable-order contract — 2026-10-14
+
+Продолжение `codex/issue-44-audit-contracts` от `4b2b8e9`, исходное дерево чистое.
+[Замечание review](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/45#discussion_r4271564663):
+возрастающий counter не гарантирует возрастающий обход, если `GetNode`
+индексируется в обратном порядке. Оба `SELECTION_STABLE_ORDER` теперь требуют
+первое чтение `AICF_ObjectiveNode` непосредственно в теле соответствующего цикла:
+`GetNode(index)` для nearest и `GetNode(nodeId)` для candidates. Маска Code
+исключает подмену comments/strings. Добавлены две source mutations обратных lookup;
+production selection и общий helper не изменены. Evidence:
+`.codex-runtime/issue44/review45/`.
+
+Команды из корня checkout и отдельные verdict:
+
+- `& tools/Invoke-AICFChecks.ps1 -Name @('Test-AICommanderModeStatic.ps1', 'Test-SquadCommandsContracts.ps1', 'Test-RecruitmentSupplyContracts.ps1', 'Test-RecruitmentPriorityContracts.ps1', 'Test-AdaptiveCommanderContracts.ps1') -EvidenceRoot .codex-runtime/issue44/review45/before`:
+  **5/5 PASS, exit 0**, сохранён свежий baseline SHA/branch/status/argv.
+  Он не обнаруживал ошибку порядка обхода, выявленную review.
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .codex-runtime/issue44/review45/reproduce.ps1 -Phase before|after`:
+  helper **PASS/0** на обеих фазах. Две копии текущего production заменяют
+  `GetNode(counter)` на `GetNode(GetNodeCount() - 1 - counter)` независимо для
+  `index`/`nodeId`. До правки полный Squad audit ошибочно давал **PASS/0** на
+  обеих копиях; после правки обе отклонены **FAIL/1, SELECTION_STABLE_ORDER**.
+  Полные mutated sources, output/argv/exits — `reproduction-before/` и
+  `reproduction-after/`, общий output helper — `reproduction-*-runner.txt`.
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/contracts/Test-AuditSelectionContracts.ps1 -EvidenceRoot .codex-runtime/issue44/review45/mutations`:
+  **PASS/0**, 6 позитивных контролей и **20 commander / 19 recruitment**
+  отрицательных мутаций (всего 39); каждый negative input даёт **FAIL/1 с нужным
+  rule ID**, включая `nearest-reversed-lookup` и `candidate-reversed-lookup`.
+  Полные outputs/argv/exits — `mutations/summary.json`, output runner —
+  `mutations-runner.txt`.
+- Тот же `Invoke-AICFChecks.ps1 -Name <пять имён из baseline> -EvidenceRoot .codex-runtime/issue44/review45/after`:
+  **5/5 PASS, exit 0**, свежих failures/regressions нет. Старые исторические
+  failures не удалены; новых baseline failures в выбранном наборе нет.
+- `git diff --check` — **PASS/0**. Изменены четыре файла: SquadCommands audit,
+  AuditSelection runner, TESTING и TOOLS; `changed-files.txt`, `verification.json`.
+  Временные source-copy удалены, свои тестовые процессы завершены.
+
+Полный offline набор, повтор AICommanderUI, Workbench, runtime/client/JIP/
+gameplay/visual — **NOT RUN**. Объём tests/docs; исходники игры не менялись.
+Merge и релиз не выполнялись. Первоначальные 37 отрицательных контролей ниже —
+исторический результат `4b2b8e9`, новый набор содержит 39.
+
 ## Issue #44: владельцы состояния и стабильный выбор — 2026-10-14
 
 Ветка `codex/issue-44-audit-contracts` от свежего `origin/main`

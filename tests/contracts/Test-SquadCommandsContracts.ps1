@@ -29,8 +29,8 @@ function Test-SquadSelectionContracts {
     # Привязка к одному методу, условиям и следующим за ними присваиваниям:
     # похожая строка в comments или другом методе не подтверждает выбор.
     $selectionRules = @(
-        @('float\s+nearestDistance\s*=\s*float\.MAX\s*;\s*for\s*\(\s*int\s+index\s*=\s*0\s*;\s*index\s*<\s*m_Graph\.GetNodeCount\(\)\s*;\s*index\+\+\s*\)', 'SELECTION_STABLE_ORDER'),
-        @('for\s*\(\s*int\s+nodeId\s*=\s*0\s*;\s*nodeId\s*<\s*m_Graph\.GetNodeCount\(\)\s*;\s*nodeId\+\+\s*\)[\s\S]*?base\.GetServices\(services\)\s*;\s*foreach\s*\(\s*SCR_ServicePointComponent\s+service\s*:\s*services\s*\)', 'SELECTION_STABLE_ORDER'),
+        @('float\s+nearestDistance\s*=\s*float\.MAX\s*;\s*for\s*\(\s*int\s+index\s*=\s*0\s*;\s*index\s*<\s*m_Graph\.GetNodeCount\(\)\s*;\s*index\+\+\s*\)\s*\{\s*AICF_ObjectiveNode\s+node\s*=\s*m_Graph\.GetNode\(\s*index\s*\)\s*;', 'SELECTION_STABLE_ORDER'),
+        @('for\s*\(\s*int\s+nodeId\s*=\s*0\s*;\s*nodeId\s*<\s*m_Graph\.GetNodeCount\(\)\s*;\s*nodeId\+\+\s*\)\s*\{\s*AICF_ObjectiveNode\s+candidateNode\s*=\s*m_Graph\.GetNode\(\s*nodeId\s*\)\s*;[\s\S]*?base\.GetServices\(services\)\s*;\s*foreach\s*\(\s*SCR_ServicePointComponent\s+service\s*:\s*services\s*\)', 'SELECTION_STABLE_ORDER'),
         @('float\s+distance\s*=\s*vector\.DistanceSqXZ\(position,\s*node\.GetBase\(\)\.GetOwner\(\)\.GetOrigin\(\)\)\s*;\s*if\s*\(\s*distance\s*<\s*nearestDistance\s*\)\s*\{\s*nearest\s*=\s*node\.GetBase\(\)\s*;\s*nearestDistance\s*=\s*distance\s*;\s*\}', 'NEAREST_GRAPH_STABLE_TIE'),
         @('float\s+pendingDistance\s*=\s*float\.MAX\s*;', 'PENDING_DISTANCE_STABLE_TIE'),
         @('if\s*\(\s*!feasible\s*\)\s*\{\s*if\s*\(\s*allowPending\s*&&\s*distanceSq\s*<\s*pendingDistance\s*\)\s*\{\s*pending\s*=\s*order\s*;\s*pending\.m_bAwaitingSupplyPlan\s*=\s*true\s*;\s*pendingDistance\s*=\s*distanceSq\s*;\s*\}\s*continue\s*;\s*\}', 'PENDING_DISTANCE_STABLE_TIE'),

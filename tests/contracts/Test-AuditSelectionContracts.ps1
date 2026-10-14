@@ -86,6 +86,8 @@ $squadCases = @(
     @{ Name='eta-comment-decoy'; Before='if (order.m_Forecast.m_fCompletionSeconds >= bestCompletion)'; After='if (false) /* if (order.m_Forecast.m_fCompletionSeconds >= bestCompletion) */'; Rule='ETA_SELECTION_STABLE_TIE' },
     @{ Name='graph-order'; Before='index++'; After='index--'; Rule='SELECTION_STABLE_ORDER' },
     @{ Name='candidate-order'; Before='nodeId++'; After='nodeId--'; Rule='SELECTION_STABLE_ORDER' },
+    @{ Name='nearest-reversed-lookup'; Before='m_Graph.GetNode(index)'; After='m_Graph.GetNode(m_Graph.GetNodeCount() - 1 - index)'; Rule='SELECTION_STABLE_ORDER' },
+    @{ Name='candidate-reversed-lookup'; Before='m_Graph.GetNode(nodeId)'; After='m_Graph.GetNode(m_Graph.GetNodeCount() - 1 - nodeId)'; Rule='SELECTION_STABLE_ORDER' },
     @{ Name='forecast-bypass'; Before='bool feasible = order.m_Forecast.Evaluate(Math.Sqrt(distanceSq), remainingSeconds);'; After='bool feasible = true;'; Rule='SELECTION_FEASIBILITY' },
     @{ Name='approach-bypass'; Before='!order.m_Forecast.CanApproach(playerRequested)'; After='false'; Rule='SELECTION_FEASIBILITY' },
     @{ Name='pending-beats-feasible'; Before='if (!best)'; After='if (pending)'; Rule='ETA_SELECTION_STABLE_TIE' }
