@@ -45,6 +45,7 @@ Core и stock integrations не должны получать обязатель
 | `Objectives/`, `Orders/` | Граф целей, `AICF_OrderPlanner`: infantry intent, target, waypoint, recovery |
 | `State/`, `Forces/` | `AICF_FactionState`, `AICF_GroupSlot`: stable slots, async roster, replacement; `AICF_GroupRuntime`: позиция живого бойца |
 | `Forces/` | `AICF_InfantryRecruitmentService`, `AICF_InfantryRecruitSpawner`: посещение казармы и покупка пополнения |
+| `Forces/`, `State/`, `Integration/` | `AICF_SocialService`/`AICF_SocialActor`: начальные emotes и салют; `AICF_GreetingGate`: общий cooldown identity игрока; `AICF_GreetingAudio`: одноразовое клиентское аудио |
 | `Vehicles/`, `State/Vehicles/` | Transport trips, fleet, task handoff и cleanup; `AICF_FIAGarrisonService` — initial гарнизон FIA и его AIWorld квота по сложности header; `AICF_VehicleSpawner` выбирает дорожную или стационарную площадку; `AICF_FIAGarrisonPatrol` — локальные маршруты и запрет движения стационарной обороны; `AICF_FIAGarrisonRecovery` — перенос существующей техники с player/identity/geometry fences; `AICF_FIAGarrisonCrew` — выбранные места, exact-seat возврат и разрешённый header десант |
 | `Economy/` | `AICF_EconomySystem`: ticket/supply transaction; `AICF_RecruitmentSupplyForecast`: read-only прогноз |
 | `Construction/` | Планирование платных layouts и отдельный worker lifecycle каждой базы |
@@ -122,6 +123,12 @@ RecruitmentService закрепляет одну автоматическую з
 Construction planner оплачивает unfinished layout один раз; отдельный worker
 базы подходит к проекту и выполняет stock progress. Recovery не создаёт второй
 worker и не повторяет оплату. Копии runtime fixture в production не остаются.
+
+Social service не владеет waypoint или recruitment: он читает initial muster/
+ожидание приказа и подписывается на `GetOnPresentationInvalidated` slot.
+Переход приказа немедленно освобождает анимацию; Stop снимает подписки.
+Backend identity ledger не зависит от controlled entity, audio не входит в JIP
+snapshot. Ресурсы, допуск и ограничения: [SOCIAL_BEHAVIOR.md](SOCIAL_BEHAVIOR.md).
 
 Loadout templates назначаются slot/memberIndex и применяются к следующему
 созданному бойцу. Personal recipes хранятся отдельно по backend identity,

@@ -10,6 +10,189 @@ commit/branch, dirty status и exit codes. После правки повтор�
 `NOT RUN` в отдельном разделе issue, без ожидания игрока/тестировщика. Исторические
 verdict ниже сохраняют фактический статус; отклонение критерия не даёт новый PASS.
 
+## PR #40: возврат оружия после idle — отчёт 2026-10-14
+
+Продолжение `codex/issue-38-idle-greetings`, baseline `1d265b8`, исходное дерево
+чистое. Проверки выполнены 2026-10-13 на Game/Server/Tools `1.8.0.13`, полные
+результаты оформлены после возобновления задачи. Evidence:
+`.codex-runtime/issue-38-weapon-restore/`; команды, manifests, native exits и
+полные остановленные logs сохранены. Старые результаты ниже не заменяют этот gate.
+
+`SelectWeapon(null)` заменён native contextual holster внутри `StartLoitering`.
+Для отмены до начала loiter controller ждёт завершения принятого unequip в
+`OnApplyControls`, проверяет исходные member/generation/weapon identity и наличие
+оружия, затем возвращает его. Ожидание ограничено 4000 ms; player control,
+другой предмет и потеря identity прекращают восстановление. Новых таймеров нет.
+
+- `Invoke-AICFChecks.ps1 -Name Test-SocialContracts.ps1,Test-SquadCommandsContracts.ps1,Test-AICombatInputContracts.ps1 -EvidenceRoot <before|after-final>`:
+  **2 PASS, прежний FAIL `STABLE_NEAREST`, exit 1** до/после. Social —
+  **24 правила / 20 отрицательных мутаций PASS**; `static-comparison.json`.
+- `compile.ps1 -Variant Stock|ArlandWCSRHS -Attempt production-final -SourceRoot .`:
+  обе **PASS / native exit 0**, validation successful, SCRIPT E/F = 0;
+  прочие E/F **25/39**. WCS fixture `-Attempt fixture-final -SourceRoot <stage>`
+  также **PASS / 0**.
+- `runtime.ps1 -Attempt baseline -Stage stage-before -Probe aicfSocialProbe -Commander USSR -Port 2316`:
+  исходный Stock код воспроизвёл **8 failures возврата оружия**, 26/34 assertions
+  PASS; исключение — уже безоружный боец. Native exit 0 означает завершение
+  процесса, не успешную проверку. SCRIPT E/F = 0, прочие E/F 14.
+- `runtime.ps1 -Attempt final-wcs -Probe aicfSocialProbe -Commander USSR -Port 2315 -Variant ArlandWCSRHS -ClientProbe`,
+  отдельная сессия `client.ps1 -Attempt client-final-wcs -Server final-wcs -Variant ArlandWCSRHS -Port 2315`:
+  **34/34 server assertions и 9/9 client observations PASS**, оба native exits 0.
+  WCS + RHS US, Easy fixture. Проверены четыре idle deadline, приказ, угроза,
+  отмена в том же frame, изначально безоружный боец и Stop. На время проверки
+  выбранный AI agent приостановлен, чтобы его weapon behavior не скрывал дефект;
+  предмет в руках через 4000 ms сравнивается с исходной entity. Deadline ускорен,
+  полного ожидания 20 секунд для каждого emote нет. Клиент сравнивает RplId.
+  SCRIPT E/F = 0; прочие E/F server/client **104/173**, engine logs не чистые.
+- `audit.ps1` запускает `Test-SocialWeaponLog.ps1 -LogPath ... -ClientLogPath ...`:
+  **PASS / 0**, исходный дефект и отрицательное client observation отклонены.
+  Production/stage SHA256 совпали; `summary.json`, `production-stage-hashes.json`.
+
+Промежуточные попытки не PASS: первоначальный fixture не включал обязательный
+client companion; затем ошибочно выбирал гранату либо ждал продолжающего движение
+бойца. Три зависшие подготовительные попытки остановлены принудительно; их logs
+не используются для приёмки. Приостановка AI устранила также возможность ложного
+PASS от его собственного перевооружения. Первый native contextual вариант дал
+33/34: немедленный recover не отменял ещё ожидающий unequip. Финальный путь через
+`OnApplyControls` подтвердился отдельным Stock early probe (2/2) и полной WCS
+матрицей. У log audit исправлена UTF-8 BOM для Windows PowerShell 5; требования
+к результату не ослаблены.
+
+Полный offline набор, повтор полной greeting/audio/JIP матрицы на этом изменении,
+визуальная оценка и прослушивание — **NOT RUN**. Отдельная полная Stock matrix
+окончательного кода не запускалась: Stock early и WCS full имеют указанные выше
+границы. `ACCEPTED` не объявляется.
+
+## Issue #38: исправление скольжения с активным idle — 2026-10-13
+
+Продолжение `codex/issue-38-idle-greetings`, baseline `71ae38e`, чистое дерево.
+После сообщения игрока о US бойце, который отжимался при движении по приказу,
+добавлена проверка именно client graph. Прежний server command gate не доказывал
+его завершения. `AICF_SocialLoiterExit` завершает собственный idle через native
+`CMD_Gestures=-2` и DONE, с ordered reliable start/stop на character controller.
+
+Evidence: `.codex-runtime/issue-38-loiter-exit/`. Game/Server/Tools `1.8.0.13`.
+Helpers `compile.ps1`, `runtime.ps1`, `client.ps1`, `audit.ps1` находятся там же;
+manifest/argv, native exits и полные остановленные logs сохранены.
+
+- `Invoke-AICFChecks.ps1 -Name Test-SocialContracts.ps1,Test-SquadCommandsContracts.ps1,Test-AICombatInputContracts.ps1 -EvidenceRoot <before|after>`:
+  **2 PASS, 1 прежний FAIL / exit 1**. `STABLE_NEAREST` сохранён;
+  `static-comparison.json`. Social: **22 правила, 18 отрицательных мутаций PASS**.
+- `compile.ps1 -Variant Stock -Attempt production-second -SourceRoot .` и
+  `-Variant ArlandWCSRHS -Attempt production-final -SourceRoot .`:
+  **PASS / native exit 0**, validation successful, SCRIPT E/F = 0;
+  прочие resource E/F — **25 / 39**. Финальный WCS fixture
+  `-Attempt final-fixture-movement -SourceRoot <stage-after>` — **PASS / 0**.
+- Исходный Stock US, `runtime.ps1 -Attempt before -Stage stage-before -Probe aicfSocialProbe -ClientProbe -Commander USSR -Port 2311`,
+  `client.ps1 -Attempt client-before -Server before -Stage stage-before -Port 2311`,
+  затем `client-jip-before -JIP`: старые 52 server cases прошли, но новая
+  диагностика воспроизвела **4/4 client graph FAIL**: через 1500 ms после отмены
+  `tag=1 command=0` для Smoke, Pushups, Chair и Sit. Полные logs остановлены;
+  `baseline-regression-verdict.txt`, `baseline-client-exit-failures.txt`.
+- Финальный WCS + RHS US (Easy fixture):
+  `runtime.ps1 -Attempt verified-wcs -Stage stage-after -Variant ArlandWCSRHS -Probe aicfSocialProbe -ClientProbe -Commander USSR -Port 2314`,
+  `client.ps1 -Attempt client-verified-wcs -Server verified-wcs -Stage stage-after -Variant ArlandWCSRHS -Port 2314`,
+  затем `client-jip-verified-wcs -JIP`: **57/57 server cases**, пять client exit
+  observations **PASS**. Каждый emote отменён strategic assignment с сохранением
+  waypoint, отдельно Pushups отменён через 500 ms. Клиент видел активный tag
+  перед отменой; через 1500 ms tag и command отсутствовали. Свободный SALUTE,
+  5 audio events, 5 dedupe, respawn/cooldown и JIP без replay также прошли.
+  Все три native exits 0. `audit.ps1` запускает
+  `Test-SocialLog.ps1 -GreetingPriority -ExitGuard -ClientExit` — **PASS / 0**;
+  отрицательные полные logs с зависшим graph и отсутствующим early exit отклонены.
+  Server/client SCRIPT E/F = 0, прочие resource E/F — **105 / 174**;
+  engine logs не полностью чистые.
+
+Промежуточные попытки не объявляются финальным PASS: первый adapter нельзя было
+скомпилировать из-за modded native serialization; первое расширение fixture
+загружалось раньше своего базового modded класса. Один JIP запуск получил эту
+ошибку компиляции, несмотря на native exit 0. Ранний observer принимал следующий
+emote предварительной matrix за продолжение предыдущего; финальный observer
+связан только с live greeting/order cases. В `final-wcs` пять exit observations
+прошли, но старый тест свободного SALUTE ждал уже ушедшего бойца и завершился
+timeout; исправлен только выбор допустимого кандидата в fixture.
+
+Изменённые production scripts сверены с final stage по SHA256
+(`production-stage-hashes.json`). Полный offline набор, отдельный Stock runtime
+на новом коде, визуальная оценка blending и прослушивание — **NOT RUN**.
+Ранее заявленные результаты ниже исторические; они не подтверждали отсутствие
+оставшегося idle tag на клиенте. `ACCEPTED` не объявлялся.
+
+## Issue #38: idle emotes и независимое приветствие — 2026-10-13
+
+Ветка `codex/issue-38-idle-greetings` от обновлённого `origin/main` `80a1403`,
+исходное дерево чистое. По уточнению пользователя реплика не прерывает emote;
+SALUTE вызывается только без другой анимации. Общий cooldown на игрока 30000 ms,
+радиусы 5/7 м. После собственного loiter действует дополнительный guard 4000 ms
+на native out-переход. Контракты описаны в [SOCIAL_BEHAVIOR.md](SOCIAL_BEHAVIOR.md).
+
+Evidence: `.codex-runtime/issue-38-idle-greetings/`; Game/Server/Tools `1.8.0.13`.
+Все команды из корня репозитория. Helpers `compile.ps1`, `runtime.ps1`,
+`client.ps1`, `negative-logs.ps1` находятся в evidence; argv, native exits,
+launcher manifests и полные logs сохранены. Fixture только в isolated stage.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-RecruitmentSequenceContracts.ps1,Test-RecruitmentPriorityContracts.ps1,Test-InfantryRecruitmentStatic.ps1,Test-SquadCommandsContracts.ps1,Test-Stage35Static.ps1,Test-Stage4Static.ps1,Test-AICombatInputContracts.ps1 -EvidenceRoot <before>`:
+  **6 PASS, 1 FAIL / exit 1**. Повтор с `Test-SocialContracts.ps1`, `<after-final>`:
+  **7 PASS, тот же 1 FAIL / exit 1**. Baseline `STABLE_NEAREST` сохранён,
+  прежние exit codes совпали (`baseline-comparison.json`). SocialContracts:
+  **19 правил, 15 отрицательных мутаций PASS**.
+- `compile.ps1 -Variant Stock|EveronNorthWCSRHS -Attempt production-final -SourceRoot .`:
+  **обе PASS / native exit 0**, `Script validation successful`, SCRIPT E/F = 0.
+  Прочие resource E/F: **25 / 38**; engine resource logs не полностью чистые.
+  Сводка: `compile-summary-final.json`.
+- `runtime.ps1 -Attempt policy-4 -Probe aicfSocialProbe -Port 2303`:
+  **42/42 cases, native exit 0**, `Test-SocialLog.ps1 -Policy` — **PASS**.
+  Реальные initial groups, четыре native emote, запрет рестарта, selection,
+  конкуренция двух ботов, muster/приказ/угроза, смерть, replacement и Stop.
+- Stock US: `runtime.ps1 -Attempt voice-2 -Probe aicfSocialProbe -ClientProbe -Commander USSR`,
+  `client.ps1 -Attempt client-voice-2 -Server voice-2`, затем
+  `client.ps1 -Attempt client-jip-voice-2 -Server voice-2 -JIP`:
+  **47/47 cases**, `Test-SocialLog.ps1 -ClientLogPath ... -JIPLogPath ...` — **PASS**.
+  Четыре реплики без SALUTE при сохранении каждого idle, отдельный SALUTE
+  свободного бойца с клиентским animation tag, 5 проигранных audio events,
+  5 отклонённых дублей, настоящий respawn с прежним cooldown и JIP без replay.
+  Все три native exits 0; сохранён один native support-area SCRIPT diagnostic.
+- WCS + RHS USSR: `runtime.ps1 -Attempt wcs-voice-1 -Probe aicfSocialProbe -ClientProbe -Commander US -Side USSR -Variant ArlandWCSRHS`,
+  соответствующие `client.ps1 -Attempt client-wcs-voice-1 -Server wcs-voice-1 -Variant ArlandWCSRHS -Commander US -Side USSR`
+  и новый client `-JIP`: **48/48 cases**, log audit с `-GreetingPriority` — **PASS**.
+  `RHS_USAF`/`RHS_AFRF` mapping и English project разрешены; подтверждена также
+  немедленная отмена SALUTE/реплики при смене приказа с сохранением waypoint.
+  Этот runtime выполнен до дополнительного out-transition guard; окончательный
+  WCS compile включает guard, его runtime проверяется отдельно на Stock USSR.
+- `negative-logs.ps1`: **PASS / 0** — положительный контроль и 8 отклонённых
+  полных логов с нарушениями playback, SALUTE, idle continuity, dedupe, mapping,
+  JIP, незавершённым логом и отрицательным fixture case.
+
+- Окончательный код, Stock USSR:
+  `runtime.ps1 -Attempt final-ussr -Stage stage-final -Probe aicfSocialProbe -ClientProbe -Commander US -Side USSR -Port 2304`,
+  `client.ps1 -Attempt client-final-ussr -Server final-ussr -Stage stage-final -Port 2304 -Commander US -Side USSR`,
+  затем новый `client-jip-final-ussr` с `-JIP`: **52/52 cases**,
+  `Test-SocialLog.ps1 -ClientLogPath ... -JIPLogPath ... -GreetingPriority -ExitGuard`
+  — **PASS / 0**. Все три native exits 0; два native support-area SCRIPT diagnostics.
+  Подтверждены четыре out-transition отказа SALUTE, voice-only/continuity,
+  native SALUTE + клиентский tag, прерывание приказом, cooldown/respawn/dedupe/JIP.
+  Полные logs: `server-final-ussr/logs/logs_2026-10-13_18-07-54/console.log`,
+  `client-final-ussr/logs/logs_2026-10-13_18-09-17/console.log`; JIP —
+  `client-jip-final-ussr/logs/`. SHA256 всех 188 production scripts и двух
+  fixtures сверены с final stage; `production-stage-final-sha256.json`.
+
+Матрицы `policy-4`, `voice-2` и `wcs-voice-1` предшествовали добавлению только
+out-transition guard. Финальная матрица Stock USSR проверяет guard на каждом
+emote; оба финальных production compile включают его. Статические gates после
+последней production правки повторены в `after-final`.
+
+Предшествующие диагностические попытки сохранены отдельно и не объявляются
+PASS новой концепции. Среди них — отказ клиентского SALUTE при немедленном
+переходе из idle, ошибки компиляции промежуточного fixture и startup crash
+`live-12` в native Rocket_RPG7VM resource до запуска social service.
+Новые production ресурсы не добавлялись; английский ACP/event/sample и четыре
+emote configs прочитаны из vanilla PAK без изменения установленных файлов.
+
+Визуальная естественность/clipping и субъективное прослушивание — **NOT RUN**,
+как отклонённые критерии issue. API/animation tag/audio playback подтверждают
+выполнение, но не эстетическое качество или слышимость для человека. GUI,
+screenshots/video и ручной тестировщик не использовались. `ACCEPTED` не объявлялся.
+
 ## Issue #37: последовательный набор — 2026-10-13
 
 Ветка `codex/issue-37-sequential-recruitment` от обновлённого `origin/main`

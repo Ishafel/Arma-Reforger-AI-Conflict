@@ -100,6 +100,7 @@ class AICF_MatchController
 	protected ref AICF_VehicleWatchdog m_HiddenRecoveryWatchdog;
 	protected ref AICF_EconomySystem m_EconomySystem;
 	protected ref AICF_InfantryRecruitmentService m_InfantryRecruitment;
+	protected ref AICF_SocialService m_Social;
 	protected ref AICF_LoadoutService m_Loadouts;
 	protected ref AICF_FactionState m_USState;
 	protected ref AICF_FactionState m_USSRState;
@@ -275,6 +276,8 @@ class AICF_MatchController
 		m_InfantryRecruitment = new AICF_InfantryRecruitmentService(
 			m_Campaign, m_OrderPlanner, m_EconomySystem, m_ObjectiveGraph, m_TargetSelector, m_GroupSpawner);
 		m_InfantryRecruitment.SetRecoveryPolicy(m_HiddenRecoveryWatchdog, m_Stage3Config);
+		m_Social = new AICF_SocialService();
+		m_Social.Start(m_Campaign, m_USState, m_USSRState);
 		m_BaseBuilders = new AICF_BaseBuilderService();
 		m_BaseBuilders.Start(m_Campaign, m_OrderPlanner, m_Config.GetMaxManagedAgents());
 		m_FIAPatrols = new AICF_FIAPatrolService();
@@ -7484,6 +7487,11 @@ class AICF_MatchController
 			return;
 
 		m_bStopped = true;
+		if (m_Social)
+		{
+			m_Social.Stop();
+			m_Social = null;
+		}
 		if (m_Loadouts)
 		{
 			m_Loadouts.Stop();

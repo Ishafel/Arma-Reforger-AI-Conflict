@@ -1,5 +1,48 @@
 # Runtime fixture: каталог и применение
 
+`AICF_SocialProbe.c` и `AICF_SocialClientProbe.c` копируются вместе только в
+изолированный `AIConflictArland/Scripts/Game/AIConflictArland/Integration/`.
+`-aicfSocialProbe 1` проверяет production gate с управляемыми часами, четыре
+native emote и policy/lifecycle на реальных initial groups. Для replacement
+fixture создаёт временную казарму и пополняет supplies; это постановка теста,
+не production поведение. Probe завершается через `RequestClose`.
+
+С `-aicfSocialClientProbe 1` на server и client запускается отдельная матрица
+четырёх реплик без прерывания idle, отдельного SALUTE свободного бойца, общего
+cooldown и настоящего respawn игрока.
+Client сам вызывает штатные faction/group/spawn APIs. Позиции тестового игрока
+задаются fixture относительно бота; естественная навигация игрока не проверяется.
+`-aicfSocialFaction US|USSR` выбирает сторону (default US). После завершения
+первого client подключается новый профиль с `-aicfSocialJIP 1`, наблюдает 15 s
+без старого audio token и закрывается; затем закрывается server.
+Частота probe совпадает с production `TICK_MS=250`; callbacks снимаются при Stop.
+Каждый процесс запускается отдельной terminal-сессией через canonical launcher,
+свежими profile, client `-noFocus -forceUpdate` (штатные параметры PeerTool) и проверкой `ROSTER_READY`/manifest. Verdict берётся из полных
+остановленных logs, а не из одного успешного вызова API.
+
+Для регрессии client idle exit дополнительно копируется
+`AICF_SocialProbeExit.c` (имя обеспечивает загрузку после `AICF_SocialProbe.c`).
+Live matrix отменяет каждый из четырёх emotes через strategic assignment и
+проверяет сохранение waypoint. Дополнительный случай отменяет вход в Pushups
+через 500 ms. Клиент наблюдает `IsLoitering` перед отменой и через 1500 ms
+проверяет отсутствие tag и scripted command; `Test-SocialLog.ps1 -ClientExit`
+требует все пять наблюдений и server order cases. Предварительная server matrix
+с немедленным запуском следующего emote не входит в эти client observations.
+Animation tag — терминальная проверка графа, не визуальная оценка blending.
+
+`AICF_SocialProbeWeapon.c` добавляется к двум основным social fixtures;
+`-aicfSocialProbe 1 -aicfSocialWeaponProbe 1` включает отдельную матрицу оружия.
+После выбора допустимого бойца fixture приостанавливает его AI agent и движение,
+вооружает штатной винтовкой/пулемётом и вновь проверяет production `Available`.
+Так последующий AI weapon task не может замаскировать дефект восстановления.
+Проверяются четыре idle deadline (часы deadline ускорены), strategic assignment,
+угроза, отмена сразу после запроса, уже безоружный боец и Stop. Через 4000 ms
+требуется тот же entity в руках и завершённый item change; AI затем возобновляется.
+С `-aicfSocialClientProbe 1` probe ждёт штатный spawn клиента и дополнительно
+сравнивает replicated weapon identity для девяти случаев. Оба процесса закрываются
+автоматически. `Test-SocialWeaponLog.ps1 -LogPath ... [-ClientLogPath ...]` требует
+34 server assertions, полные остановленные logs и все девять client observations.
+
 `AICF_MenuPriceProbe.c` вместе с `AICF_MenuTransactionProbe.c` копируются только
 в изолированный RHS stage `Scripts/Game/AIConflictArlandRHS/Integration/`.
 `-aicfMenuPriceProbe 1` после ROSTER_READY проверяет 67 native BUILDING групп

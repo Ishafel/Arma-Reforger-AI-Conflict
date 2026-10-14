@@ -30,6 +30,15 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Единый offline запуск
 
+`Test-SocialContracts.ps1` проверяет authority, readiness/generation, initial-only
+idle, общий reservation/cooldown, identity, английский event, cleanup и dedupe;
+включает 15 отрицательных мутаций. `tests/log-audits/Test-SocialLog.ps1` принимает
+полный остановленный server log через `-LogPath`; `-ClientLogPath` вместе с
+`-JIPLogPath` добавляют проверку sound tokens, cooldown, dedupe и отсутствия replay.
+Опция `-Policy` проверяет selection/lifecycle, `-GreetingPriority` — отмену
+SALUTE приказом, `-ExitGuard` — запрет SALUTE в out-переходе.
+Native script/resource diagnostics сохраняются отдельно от targeted verdict.
+
 `tests/static/Test-MenuPriceStatic.ps1` проверяет границы RHS/WCS price policy:
 фактический roster, единый CAMPAIGN quote, native fallback, lifecycle sources,
 отсутствие side effects транзакций и зависимости Core от RHS.
