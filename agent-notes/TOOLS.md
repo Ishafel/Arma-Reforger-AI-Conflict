@@ -30,6 +30,21 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Единый offline запуск
 
+`Test-AICommanderModeStatic.ps1` выбирает единственного владельца commander
+state/API среди тел `SCR_GameModeCampaign`; нейтральные modded расширения
+допустимы. Общий `Find-AICFClassRecord` по-прежнему требует единственный класс.
+`Test-SquadCommandsContracts.ps1` проверяет внутри `SelectBarracks` строгий
+nearest/pending выбор по расстоянию и feasible выбор по минимальному ETA,
+сохраняя первый кандидат при равенстве в порядке graph/services. Оба graph
+цикла обязаны читать `GetNode` по собственному возрастающему counter;
+обратное индексирование проверяется отдельными мутациями.
+`Test-AuditSelectionContracts.ps1 [-EvidenceRoot <новый каталог>]` запускает
+оба полных аудитора на изолированной копии текущих source: 6 положительных
+контролей и 39 отрицательных мутаций. Проверяет конкретный rule ID и exit 1
+испорченного входа, а не просто отсутствие PASS. Сохраняет полные outputs/argv/
+exit codes в `summary.json`, удаляет только свою `source-copy` в `finally`.
+Без `-EvidenceRoot` использует уникальный `.codex-runtime/audit-selection-*`.
+
 `Test-AdaptiveCommanderContracts.ps1` проверяет read-only strategic policy,
 authority/slot/group/revision, данные живого состава, manual allocation, TTL,
 route deferral, score/tie-break, gates, suspension и ограниченную trace.

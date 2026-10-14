@@ -174,6 +174,17 @@ production `Tick` завершает подход при `>= deadline`. Общи
 87 с; база в 185 м с запасом 150 даёт 77 с и выигрывает. Если второй отряд уже
 заявил на неё спрос 100, запас 150 больше не считается достаточным.
 
+`SelectBarracks` определяет ближайший graph node только при строгом улучшении
+`distance < nearestDistance`. Для невыполнимого плана pending кандидат меняется
+только при `distanceSq < pendingDistance`. Выполнимые кандидаты сравниваются по
+ETA: `m_fCompletionSeconds >= bestCompletion` пропускает равный или худший
+вариант. Graph обходится по возрастающему index/nodeId, services — в исходном
+порядке; равенство сохраняет первый кандидат. Выполнимый `best` имеет приоритет
+над pending. Это не выбор ближайшей казармы только по расстоянию.
+Контракт проверяют `Test-SquadCommandsContracts.ps1` и
+`Test-RecruitmentSupplyContracts.ps1`; адресные source mutations —
+`Test-AuditSelectionContracts.ps1` (issue #44). Новый verdict: [TESTING.md](TESTING.md).
+
 Это оценка, а не гарантия: она не предсказывает бой, точную длину navmesh-пути,
 изменение quick bonus, внешние расходы и
 задержки spawn. Фактическая оплата остаётся побойцовой и повторно проверяется
