@@ -64,6 +64,11 @@ ATTACK может оборонять friendly базу через `AREA_SECURITY
 При потере допустимости/deferred current target и повышении urgency gates
 обходятся. Возврат из обороны, смена между равными threatened anchors и обычный
 retake сохраняют gates. Posture одного target также не меняется каждый tick.
+Если DEFEND уже находится в `FORWARD_DEFEND` на атакуемой цели, новый `QRF`
+является срочной эскалацией той же assignment: сравнение учитывает прежнюю
+posture, а не только два score, уже пересчитанных с новой угрозой. Переход
+немедленный без замены waypoint; повторный `QRF` не повышает revision, возврат
+в `FORWARD_DEFEND` сохраняет dwell/stable gates.
 При отсутствии attack кандидатов выбирается собственный HQ `AREA_SECURITY`
 со штатным Defend waypoint; если нет живого бойца/безопасного anchor, новое
 решение не применяется, существующий lifecycle/hold остаётся владельцем восстановления.
@@ -74,6 +79,13 @@ retake сохраняют gates. Posture одного target также не м�
 group reference и immutable entity ID, spawn generation, graph revision,
 assignment revision, faction и отсутствие ручного intent. Planner повторно
 проверяет target validity перед write. Устаревшая decision отклоняется до мутаций.
+Перед сбором решения commander вызывает planner `PrepareAICommanderSelection`.
+Только недопустимый player intent (смена владельца/роли или invalid point)
+отменяется: штатный release снимает прежний owned waypoint и повышает assignment
+revision. Новая policy decision строится после этой очистки в том же проходе.
+Валидный ручной приказ сохраняется. Если новый waypoint пока не создаётся,
+старый недопустимый приказ уже не продолжает исполнение; retry остаётся у
+существующего lifecycle. Readiness/authority и route/recruitment holds сохранены.
 При vehicle suspension применяется только стратегическое состояние; infantry
 waypoint не создаётся. Economy/recruitment/transport/cleanup не переходят в policy.
 
@@ -111,6 +123,12 @@ RequestSpawn, agent/completion callbacks, exact alive/faction и observation age
 Проверяются настоящие commander/planner assignments и replicated waypoint entities,
 same-cycle/manual allocation, concentration, graph cut/bypass, gates/urgent threat,
 failure expiry, owner change, loss TTL/rebuild, identity rejection и suspension.
+Дополнительные review cases проверяют угрозу уже выбранных HQ/base, мгновенный
+`QRF` с прежним waypoint, повтор без churn и удержание deescalation; owner/role
+invalidation ручного приказа пересчитывается в том же вызове и удаляет старый
+waypoint, включая suspended boundary. Исходная спокойная оборона обычной базы
+создаётся через production planner: native radio может временно выключать
+её spawn point, что не должно подменять проверку существующей assignment.
 Часы gates/expiry ускорены fixture; actual transport trip не создаётся.
 При Stop все собственные callbacks снимаются; fixture отсутствует в production.
 

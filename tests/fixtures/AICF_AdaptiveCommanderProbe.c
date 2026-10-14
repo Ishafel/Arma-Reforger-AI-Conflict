@@ -17,7 +17,19 @@ modded class AICF_AdaptiveCommanderPolicy
 		foreach (AICF_AdaptiveCandidate candidate : candidates)
 		{
 			if (!candidate.m_bAttack)
+			{
+				// A newly captured stock base can still contain FIA. Keep quiet/marked
+				// threat inputs controlled for the same-anchor posture regression.
+				candidate.m_bThreat = candidate.m_Base == AICF_AdaptiveProbeWorld.s_Threat;
+				candidate.m_iThreatAtMs = now;
+				candidate.m_fDemand = AICF_AdaptiveCommanderConfig.UNKNOWN_RESISTANCE;
+				if (candidate.m_bThreat)
+				{
+					candidate.m_fDemand = AICF_AdaptiveCommanderConfig.CONTESTED_DEMAND;
+					if (candidate.m_bHQ) candidate.m_fDemand = AICF_AdaptiveCommanderConfig.HQ_DEMAND;
+				}
 				continue;
+			}
 			// Pairwise scenarios equalise physical approach and graph value. The
 			// live adapter still supplies actual allocation, readiness and cooldown.
 			candidate.m_vPosition = leader.GetOrigin() + "50 0 0";
@@ -72,6 +84,16 @@ modded class AICF_GroupSlot
 	}
 }
 
+modded class AICF_OrderPlanner
+{
+	// Controlled existing assignment, using the production waypoint boundary.
+	// Stock radio can disable spawning at a newly owned fixture base.
+	bool AICF_ProbeForwardAssignment(AICF_GroupSlot slot, SCR_CampaignFaction faction, SCR_CampaignMilitaryBaseComponent base)
+	{
+		return ReplaceOrder(slot, faction, base, "QRF_SETUP", "FORWARD_DEFEND", "QRF_SETUP");
+	}
+}
+
 modded class AICF_MatchController
 {
 	protected int m_iAdaptivePhase;
@@ -112,6 +134,33 @@ modded class AICF_MatchController
 		array<AIWaypoint> waypoints = {};
 		slot.GetGroup().GetWaypoints(waypoints);
 		return slot.GetWaypoint() && waypoints.Contains(slot.GetWaypoint()) && slot.GetWaypoint().GetID() != EntityID.INVALID;
+	}
+	protected bool AICF_AdaptiveWaypointRemoved(AICF_GroupSlot slot, EntityID oldId)
+	{
+		array<AIWaypoint> waypoints = {};
+		slot.GetGroup().GetWaypoints(waypoints);
+		foreach (AIWaypoint waypoint : waypoints)
+		{
+			if (waypoint.GetID() == oldId) return false;
+		}
+		return true;
+	}
+	protected void AICF_AdaptiveSameTargetThreat(AICF_GroupSlot slot, SCR_CampaignMilitaryBaseComponent base, string tag)
+	{
+		AIWaypoint waypoint = slot.GetWaypoint();
+		AICF_AdaptiveCheck(tag + "_prepared", slot.GetTargetBase() == base && slot.GetOperationalPosture() == "FORWARD_DEFEND" && AICF_AdaptiveBound(slot));
+		AICF_AdaptiveProbeWorld.s_Threat = base;
+		AICF_AdaptiveDecision decision = m_AdaptivePolicy.Select(slot);
+		AICF_AdaptiveCheck(tag + "_decision_urgent", decision && decision.m_Target == base && decision.m_sPosture == "QRF" && decision.m_bUrgent);
+		bool changed = m_AdaptiveCommander.ReconcileStrategicOrder(slot, "SAME_TARGET_THREAT", 999999, 999999);
+		AICF_AdaptiveCheck(tag + "_immediate", changed && slot.GetTargetBase() == base && slot.GetOperationalPosture() == "QRF" && slot.GetWaypoint() == waypoint);
+		int revision = slot.GetStrategicAssignmentRevision();
+		AICF_AdaptiveDecision repeated = m_AdaptivePolicy.Select(slot);
+		AICF_AdaptiveCheck(tag + "_repeat_stable", slot.GetOperationalPosture() == "QRF" && repeated && !repeated.m_bUrgent &&
+			!m_AdaptiveCommander.ReconcileStrategicOrder(slot, "SAME_THREAT_AGAIN", 999999, 999999) && slot.GetStrategicAssignmentRevision() == revision && slot.GetWaypoint() == waypoint);
+		AICF_AdaptiveProbeWorld.s_Threat = null;
+		AICF_AdaptiveCheck(tag + "_return_held", !m_AdaptiveCommander.ReconcileStrategicOrder(slot, "THREAT_CLEARED", 999999, 999999) &&
+			slot.GetOperationalPosture() == "QRF" && slot.GetStrategicAssignmentRevision() == revision && slot.GetWaypoint() == waypoint);
 	}
 	protected AICF_AdaptiveCandidate AICF_MakeAdaptiveCandidate(int id)
 	{
@@ -460,6 +509,80 @@ modded class AICF_MatchController
 			if (!ussrAssigned) return;
 			AICF_AdaptiveCheck("live_faction_independence", second.GetStrategicAssignmentRevision() == usRevision && AICF_AdaptiveBound(m_AdaptiveUSSR.GetSlot(0)));
 			AICF_AdaptiveCheck("foreign_slot_rejected", !m_AdaptiveCommander.AssignOrder(m_AdaptiveUSSR.GetSlot(0), "FOREIGN"));
+			m_OrderPlanner.ReleasePlayerCommand(first);
+			m_OrderPlanner.ReleasePlayerCommand(second);
+			second.SetRoleAndIndex(AICF_EGroupRole.DEFEND, 0);
+			AICF_AdaptiveNext();
+			return;
+		}
+		if (m_iAdaptivePhase == 10)
+		{
+			if (!m_AdaptiveCommander.AssignOrder(second, "PRE_QRF_HQ")) return;
+			AICF_AdaptiveNext();
+			return;
+		}
+		if (m_iAdaptivePhase == 11)
+		{
+			AICF_AdaptiveSameTargetThreat(second, m_USFaction.GetMainBase(), "same_target_hq");
+			m_OrderPlanner.ReleasePlayerCommand(second);
+			target1.SetFaction(m_USFaction);
+			m_AdaptiveGraph.AICF_ProbeRevision();
+			AICF_AdaptiveNext();
+			return;
+		}
+		if (m_iAdaptivePhase == 12)
+		{
+			if (!m_OrderPlanner.AICF_ProbeForwardAssignment(second, m_USFaction, target1)) return;
+			AICF_AdaptiveNext();
+			return;
+		}
+		if (m_iAdaptivePhase == 13)
+		{
+			AICF_AdaptiveSameTargetThreat(second, target1, "same_target_base");
+			AICF_AdaptiveNext();
+			return;
+		}
+		if (m_iAdaptivePhase == 14)
+		{
+			if (!m_OrderPlanner.AssignPlayerOrder(first, m_USFaction, target2)) return;
+			EntityID oldId = first.GetWaypoint().GetID();
+			target2.SetFaction(m_USFaction);
+			m_AdaptiveGraph.AICF_ProbeRevision();
+			bool replanned = m_AdaptiveCommander.ReconcileStrategicOrder(first, "MANUAL_OWNER_CHANGED", 999999, 999999);
+			AICF_AdaptiveCheck("manual_owner_same_pass", replanned && !first.HasPlayerStrategicIntent() && first.GetDecisionAuthority() == AICF_EStrategicDecisionAuthority.AI_COMMANDER &&
+				first.GetTargetBase() == m_USFaction.GetMainBase() && AICF_AdaptiveBound(first));
+			AICF_AdaptiveCheck("manual_owner_old_waypoint_removed", AICF_AdaptiveWaypointRemoved(first, oldId));
+			m_OrderPlanner.ReleasePlayerCommand(first);
+			first.SetRoleAndIndex(AICF_EGroupRole.DEFEND, 0);
+			AICF_AdaptiveNext();
+			return;
+		}
+		if (m_iAdaptivePhase == 15)
+		{
+			if (!m_OrderPlanner.AssignPlayerOrder(first, m_USFaction, target1)) return;
+			EntityID oldRoleId = first.GetWaypoint().GetID();
+			first.SetRoleAndIndex(AICF_EGroupRole.ATTACK, 0);
+			bool roleReplanned = m_AdaptiveCommander.AssignOrder(first, "MANUAL_ROLE_CHANGED");
+			AICF_AdaptiveCheck("manual_role_same_pass", roleReplanned && !first.HasPlayerStrategicIntent() && first.GetDecisionAuthority() == AICF_EStrategicDecisionAuthority.AI_COMMANDER &&
+				first.GetTargetBase() == m_USFaction.GetMainBase() && AICF_AdaptiveBound(first));
+			AICF_AdaptiveCheck("manual_role_old_waypoint_removed", AICF_AdaptiveWaypointRemoved(first, oldRoleId));
+			m_OrderPlanner.ReleasePlayerCommand(first);
+			SCR_CampaignFaction originalFaction = SCR_CampaignFaction.Cast(GetGame().GetFactionManager().GetFactionByKey("FIA"));
+			target2.SetFaction(originalFaction);
+			m_AdaptiveGraph.AICF_ProbeRevision();
+			AICF_AdaptiveNext();
+			return;
+		}
+		if (m_iAdaptivePhase == 16)
+		{
+			if (!m_OrderPlanner.AssignPlayerOrder(first, m_USFaction, target2)) return;
+			EntityID oldSuspendedId = first.GetWaypoint().GetID();
+			target2.SetFaction(m_USFaction);
+			m_AdaptiveGraph.AICF_ProbeRevision();
+			bool suspendedReplanned = m_AdaptiveCommander.ReconcileStrategicOrder(first, "MANUAL_SUSPENDED_OWNER_CHANGED", 999999, 999999, true);
+			AICF_AdaptiveCheck("manual_suspended_same_pass", suspendedReplanned && !first.HasPlayerStrategicIntent() && first.GetStrategicIntentAuthority() == AICF_EStrategicDecisionAuthority.AI_COMMANDER &&
+				first.GetStrategicIntentTargetBase() == m_USFaction.GetMainBase() && !first.GetWaypoint());
+			AICF_AdaptiveCheck("manual_suspended_old_waypoint_removed", AICF_AdaptiveWaypointRemoved(first, oldSuspendedId));
 			AICF_AdaptiveFinish();
 		}
 	}

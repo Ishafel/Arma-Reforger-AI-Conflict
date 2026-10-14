@@ -864,6 +864,33 @@ class AICF_OrderPlanner
 		return true;
 	}
 
+	// Commander calls this before capturing a decision, so invalid manual state
+	// cannot suppress selection or leave its old waypoint executing another tick.
+	bool PrepareAICommanderSelection(AICF_GroupSlot slot, SCR_CampaignFaction faction, string reason)
+	{
+		if (!Replication.IsServer() || !slot || !faction || !slot.IsCombatReady() ||
+			!m_AuthorityPolicy || !m_AuthorityPolicy.IsValid() ||
+			!m_AuthorityPolicy.IsAICommanderEnabled(faction.GetFactionKey()))
+			return false;
+		if (slot.GetGroup().GetFaction() != faction)
+			return false;
+		if (slot.IsRecruitingInfantry() || slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() ||
+			slot.GetRouteRecoveryEpisode().IsBlocked(slot))
+			return false;
+		if (!slot.HasPlayerStrategicIntent())
+			return false;
+		bool invalid = !slot.IsPlayerStrategicIntentRoleCurrent();
+		if (slot.GetPlayerStrategicIntentTargetKind() == AICF_EOrderTargetKind.BASE)
+			invalid = invalid || !IsTargetValidForRole(slot, faction, slot.GetPlayerStrategicIntentTargetBase());
+		else if (slot.GetPlayerStrategicIntentTargetKind() == AICF_EOrderTargetKind.POSITION)
+			invalid = invalid || !IsStrategicIntentDestinationValid(slot, faction);
+		if (!invalid)
+			return false;
+		InvalidatePlayerStrategicIntent(slot, faction, reason);
+		ReleasePlayerCommand(slot);
+		return true;
+	}
+
 	protected void InvalidatePlayerStrategicIntent(
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction,

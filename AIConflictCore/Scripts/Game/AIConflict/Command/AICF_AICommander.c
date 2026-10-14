@@ -103,6 +103,7 @@ class AICF_AICommander
 			!m_TargetSelector)
 			return false;
 
+		m_OrderPlanner.PrepareAICommanderSelection(slot, m_Faction, reason);
 		AICF_AdaptiveDecision decision = m_AdaptivePolicy.Select(slot, excludedTarget);
 		return m_OrderPlanner.AssignAICommanderOrder(
 			slot,
@@ -126,6 +127,7 @@ class AICF_AICommander
 			!m_TargetSelector)
 			return false;
 
+		m_OrderPlanner.PrepareAICommanderSelection(slot, m_Faction, reason);
 		AICF_AdaptiveDecision decision = m_AdaptivePolicy.Select(slot);
 		return m_OrderPlanner.ReconcileAICommanderOrder(
 			slot,
@@ -151,6 +153,7 @@ class AICF_AICommander
 			return false;
 
 		m_AdaptivePolicy.RecordLoss(lostBase);
+		m_OrderPlanner.PrepareAICommanderSelection(slot, m_Faction, "BASE_OWNER_CHANGED_LOSS");
 		AICF_AdaptiveDecision decision = m_AdaptivePolicy.Select(slot);
 		return m_OrderPlanner.AssignAICommanderLossResponseOrder(
 			slot,

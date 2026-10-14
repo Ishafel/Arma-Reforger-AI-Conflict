@@ -287,6 +287,11 @@ class AICF_AdaptiveCommanderPolicy
 			if (bestScore.m_iUrgency > 0)
 				decision.m_sPosture = "QRF";
 		}
+		// Current score already contains the new threat. A posture escalation on
+		// the same anchor must be compared with the assignment being replaced.
+		if (decision.m_Target == slot.GetTargetBase() && decision.m_sPosture == "QRF" &&
+			slot.GetOperationalPosture() != "QRF")
+			decision.m_bUrgent = true;
 		Trace(slot, best, bestScore, decision, now);
 		return decision;
 	}

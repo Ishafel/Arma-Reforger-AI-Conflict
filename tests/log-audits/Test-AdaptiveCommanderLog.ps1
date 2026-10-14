@@ -36,14 +36,18 @@ if ($Baseline) {
         'live_failed_route_excluded','live_failure_expired','live_controller_origin_ignored',
         'live_invalid_target_bypasses_gates','loss_signal_survives_rebuild','live_vehicle_suspension',
         'live_faction_independence','foreign_slot_rejected','live_graph_dependency','live_graph_bypass',
-        'live_no_attack_fallback','live_friendly_base_threat','loss_signal_expires'
+        'live_no_attack_fallback','live_friendly_base_threat','loss_signal_expires',
+        'same_target_hq_prepared','same_target_hq_decision_urgent','same_target_hq_immediate','same_target_hq_repeat_stable','same_target_hq_return_held',
+        'same_target_base_prepared','same_target_base_decision_urgent','same_target_base_immediate','same_target_base_repeat_stable','same_target_base_return_held',
+        'manual_owner_same_pass','manual_owner_old_waypoint_removed','manual_role_same_pass','manual_role_old_waypoint_removed',
+        'manual_suspended_same_pass','manual_suspended_old_waypoint_removed'
     )
     foreach ($case in $cases) {
         if ([regex]::Matches($log, '\[ADAPTIVE_PROBE\] case=' + [regex]::Escape($case) + ' passed=1 ').Count -ne 1) { $failures.Add("Missing or repeated case $case") }
     }
     if ([regex]::Matches($log,'\[ADAPTIVE_PROBE\] case=async_roster_request_\S+ passed=1 ').Count -ne 4) { $failures.Add('Missing four async roster requests') }
     if ($log -match '\[ADAPTIVE_PROBE\].*passed=0') { $failures.Add('Failed probe assertion') }
-    if ($log -notmatch '\[ADAPTIVE_PROBE_FINISHED\] checks=59 failures=0 phase=9') { $failures.Add('No successful full probe completion') }
+    if ($log -notmatch '\[ADAPTIVE_PROBE_FINISHED\] checks=75 failures=0 phase=16') { $failures.Add('No successful full probe completion') }
     if ($log -notmatch '\[ADAPTIVE_DECISION\].*allocated=.*strategic=.*approach=.*reason=') { $failures.Add('Missing production decision trace') }
 }
 $other = [regex]::Matches($log, '\([EF]\):').Count

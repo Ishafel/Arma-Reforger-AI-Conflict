@@ -32,9 +32,15 @@ function Test-AdaptiveContracts([string]$InputText) {
         TIE = 'score.m_fTotal == best.m_fTotal && node < bestNode'
         TRACE = 'now - at < AICF_AdaptiveCommanderConfig.TRACE_INTERVAL_MS'
         SUSPENSION = 'waypointSuspendedByVehicle,\s*decision\);'
+        SAME_TARGET_QRF = 'decision.m_Target == slot.GetTargetBase\(\) && decision.m_sPosture == "QRF" &&\s*slot.GetOperationalPosture\(\) != "QRF"\)\s*decision.m_bUrgent = true;'
+        MANUAL_PREPARE = 'm_OrderPlanner.PrepareAICommanderSelection\(slot, m_Faction, reason\);\s*AICF_AdaptiveDecision decision = m_AdaptivePolicy.Select\(slot, excludedTarget\);'
+        MANUAL_RECONCILE = 'm_OrderPlanner.PrepareAICommanderSelection\(slot, m_Faction, reason\);\s*AICF_AdaptiveDecision decision = m_AdaptivePolicy.Select\(slot\);'
+        MANUAL_RELEASE = 'if \(!invalid\)\s*return false;\s*InvalidatePlayerStrategicIntent\(slot, faction, reason\);\s*ReleasePlayerCommand\(slot\);'
     }
     foreach ($rule in $rules.GetEnumerator()) {
-        Assert-AICFContains $failures $rule.Key $code $rule.Value 'Adaptive commander contract missing'
+        $inputCode = $code
+        if ($rule.Key -eq 'SAME_TARGET_QRF') { $inputCode = $InputText }
+        Assert-AICFContains $failures $rule.Key $inputCode $rule.Value 'Adaptive commander contract missing'
     }
     if ($source[1] -match 'SetFaction\(|SpawnEntity|AddWaypoint\(|DeleteRplEntity|CallLater|GetAllPlayers|GetEnemies') {
         $failures.Add('[OWNERSHIP] Policy must stay read-only and avoid enemy enumeration')
@@ -62,12 +68,16 @@ $mutations = @(
     @('urgent', 'bool urgentQRF = decision.m_bUrgent;', 'bool urgentQRF = false;', 'GATES'),
     @('margin', 'AICF_AdaptiveCommanderConfig.SWITCH_MARGIN', '0', 'MARGIN'),
     @('tie', 'node < bestNode', 'node > bestNode', 'TIE'),
-    @('trace', 'now - at < AICF_AdaptiveCommanderConfig.TRACE_INTERVAL_MS', 'false', 'TRACE')
+    @('trace', 'now - at < AICF_AdaptiveCommanderConfig.TRACE_INTERVAL_MS', 'false', 'TRACE'),
+    @('same-target', 'decision.m_Target == slot.GetTargetBase() && decision.m_sPosture == "QRF" &&', 'decision.m_sPosture == "QRF" &&', 'SAME_TARGET_QRF'),
+    @('repeat-qrf', 'slot.GetOperationalPosture() != "QRF")', 'true)', 'SAME_TARGET_QRF'),
+    @('manual-prepare', 'm_OrderPlanner.PrepareAICommanderSelection(slot, m_Faction, reason);', '', 'MANUAL_PREPARE'),
+    @('manual-release', 'ReleasePlayerCommand(slot);', '', 'MANUAL_RELEASE')
 )
 foreach ($case in $mutations) {
     if (-not $text.Contains($case[1])) { throw "Missing mutation input: $($case[0])" }
     $negative = @(Test-AdaptiveContracts ($text.Replace($case[1], $case[2])))
     if (-not ($negative -match ('\[' + $case[3] + '\]'))) { throw "Mutation survived: $($case[0])" }
 }
-Write-Output "Adaptive commander contracts: PASS; 22 rules; $($mutations.Count) negative mutations"
+Write-Output "Adaptive commander contracts: PASS; 26 rules; $($mutations.Count) negative mutations"
 exit 0
