@@ -69,7 +69,7 @@ class AICF_GroupSlot
 			index = m_aRejectedRouteTargets.Insert(target);
 			m_aRejectedRouteUntil.Insert(0);
 		}
-		m_aRejectedRouteUntil[index] = now + 180000;
+		m_aRejectedRouteUntil[index] = now + AICF_AdaptiveCommanderConfig.FAILURE_TTL_MS;
 	}
 
 	bool IsRouteTargetDeferred(SCR_CampaignMilitaryBaseComponent target)

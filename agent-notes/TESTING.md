@@ -10,6 +10,176 @@ commit/branch, dirty status и exit codes. После правки повтор�
 `NOT RUN` в отдельном разделе issue, без ожидания игрока/тестировщика. Исторические
 verdict ниже сохраняют фактический статус; отклонение критерия не даёт новый PASS.
 
+## PR #43: срочность и очистка manual intent — 2026-10-14
+
+Продолжение `codex/issue-42-adaptive-targets` от `b16b792`; исходное дерево чистое.
+Исправлены два замечания review: появление угрозы на уже выбранной цели
+`FORWARD_DEFEND` немедленно переводит её в `QRF`; недопустимый player intent
+очищается planner до Select, вместе со старым waypoint и assignment revision,
+после чего новое AI-решение применяется в том же проходе. Valid manual intent,
+повторный `QRF`, deescalation gates и vehicle suspension сохранены.
+Evidence: `.codex-runtime/issue42-qrf/`; Game/Server/Workbench **1.8.0.13**.
+
+Команды и отдельные verdict (пути helper относительно этого evidence):
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-Stage35Static.ps1,Test-Stage35RecoveryPolicy.ps1,Test-Stage4Static.ps1,Test-AICommanderModeStatic.ps1,Test-SquadCommandsContracts.ps1,Test-AdaptiveCommanderContracts.ps1 -EvidenceRoot <before|after>`:
+  оба **4 PASS / 2 прежних FAIL**, общий exit 1. Сохранены только прежние
+  `AI_COMMANDER_COMPONENT` и `STABLE_NEAREST`; новых failures нет.
+  Adaptive audit расширен с 22/19 до **26 правил / 23 отрицательных source
+  mutations PASS/0**; `static-comparison.json`, полные outputs и argv сохранены.
+- `compile.ps1 -Variant Stock|Everon|EveronNorthWCSRHS -Attempt production-final -SourceRoot .`:
+  три production Workbench **PASS/0**, validation successful, SCRIPT E/F и
+  ENGINE F — 0; прочие resource (E) **25/25/39**. Полные
+  `workbench-*-production-final/console.log`, `compile-command-*.json`,
+  `production-compile-summary.json`. Fixture: `-Variant Stock|Everon
+  -Attempt fixture-verified -SourceRoot <stage-after>` — оба **PASS/0**;
+  frozen baseline `-Variant Stock -Attempt baseline-assignment -SourceRoot
+  <stage-before>` — **PASS/0**.
+- `runtime.ps1 -Stage stage-before -Probe aicfAdaptiveProbe -Attempt baseline-verified -Port 2333`:
+  frozen production `b16b792` с тем же новым fixture. **75 checks / 14 failures**,
+  native exit 0, `audit.ps1 -Attempt baseline-verified` — ожидаемый **FAIL/1**.
+  Preconditions существующих HQ/base `FORWARD_DEFEND` проходят; восемь проверок
+  QRF и шесть проверок нового manual assignment/удаления waypoint воспроизводят
+  оба дефекта. Полный остановленный log:
+  `server-baseline-verified/logs/logs_2026-10-14_16-08-40/console.log`.
+- `runtime.ps1 -Stage stage-after -Probe aicfAdaptiveProbe -Attempt arland-verified -Port 2334`
+  и отдельная сессия `-Variant Everon -Attempt everon-verified -Port 2335`:
+  на каждой карте **75/75 PASS**, native exits 0. Canonical launcher:
+  `tools/Start-AICFRuntime.ps1 -Role Server -Difficulty Easy -AICommanderMode BOTH`,
+  свежие profiles, `-aicfAdaptiveProbe 1 -aicfRequirePlayerForResult 0 -addr
+  127.0.0.1:<port>`. Exact CLI arrays и `AICF_RUNTIME_MANIFEST_JSON` —
+  `launcher-*-verified.txt`. Arland **16:09:54–16:10:38 MSK**, Everon
+  **16:10:06–16:10:53 MSK**, штатные Stop/RequestClose и `Game destroyed.`.
+  Полные logs: `server-arland-verified/logs/logs_2026-10-14_16-09-54/console.log`
+  и `server-everon-verified/logs/logs_2026-10-14_16-10-06/console.log`.
+  `audit.ps1 -Attempt arland-verified|everon-verified` — оба **PASS/0**.
+  SCRIPT E/F, ENGINE F и VM exceptions — 0, прочие (E) **14/47**;
+  engine logs не полностью чистые. `summary-*-verified.json` сохранены.
+- `negative-log-audits.ps1`: **2 позитивных / 17 отрицательных контроля PASS/0**.
+  Реальный baseline и удаление каждого из 16 новых required cases отклонены
+  анализатором, expected exit 1; `negative-logs/summary.json`.
+- `production-stage-hashes.json`: **258/258** production `.c/.conf/.gproj`
+  совпадают со stage по SHA-256; baseline hashes и точный fixture snapshot
+  сохранены. `git diff --check` — **PASS/0**. Два известных stage удалены после
+  сохранения evidence; своих native test/Workbench процессов нет.
+
+Исходная спокойная оборона обычной базы задаётся через production ReplaceOrder
+в stage-only wrapper: stock radio может временно отключать spawn point после
+смены владельца. Threat input controlled, assignment/queue/entity cleanup —
+production. Ранние `baseline`/`baseline-controlled` не PASS: не проходило это
+precondition. Fixture исправлен, frozen baseline и обе матрицы повторены целиком.
+Промежуточные logs сохранены; native exit 0 не заменяет отсутствие test failures.
+
+Изменены восемь файлов: `AICF_AICommander.c`, `AICF_AdaptiveCommanderPolicy.c`,
+`AICF_OrderPlanner.c`, adaptive contracts/probe/log audit, ADAPTIVE_COMMANDER и
+эта заметка; точные пути — `changed-files.txt`. Полный offline набор, client/JIP,
+настоящий transport trip, естественный бой до победы, длительный soak,
+packaged build и visual — **NOT RUN**. Merge и релиз не выполнялись.
+
+## Issue #42: адаптивные цели — 2026-10-14
+
+Ветка `codex/issue-42-adaptive-targets` от полученного `main` `03d08c5`, исходное
+дерево чистое. Контракты, веса и fallback: [ADAPTIVE_COMMANDER.md](ADAPTIVE_COMMANDER.md).
+Evidence: `.codex-runtime/issue42/`; Game/Server/Workbench **1.8.0.13**.
+Outcome: локальная реализация проверена; `ACCEPTED` не объявляется.
+Push, PR, merge и релиз в эту задачу не входят.
+
+Команды и отдельные verdict:
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-Stage35Static.ps1,Test-Stage35RecoveryPolicy.ps1,Test-Stage4Static.ps1,Test-AICommanderModeStatic.ps1,Test-SquadCommandsContracts.ps1 -EvidenceRoot .codex-runtime/issue42/before-main`:
+  **3 PASS / 2 прежних FAIL**, общий exit 1. После добавления
+  `Test-AdaptiveCommanderContracts.ps1`, тот же runner в `after-complete/`:
+  **4 PASS / 2 прежних FAIL**, exit 1. IDs прежних failures:
+  `AI_COMMANDER_COMPONENT` — отсутствует unique `SCR_GameModeCampaign`;
+  `STABLE_NEAREST` — прежний SquadCommands guard. Новых failures нет;
+  `static-comparison.json`. Новый audit: **22 правила / 19 отрицательных source
+  mutations PASS / 0**. Stage35 distribution contract обновлён по #42: score
+  и allocation заменили обязательное распределение по role index. Readiness,
+  vehicle, recovery и authority guards не ослаблены.
+- `.codex-runtime/issue42/compile.ps1 -Variant Stock|Everon|EveronNorthWCSRHS -Attempt production-final -SourceRoot .`:
+  три production Workbench **PASS / native exit 0**, validation successful,
+  SCRIPT E/F и ENGINE F — 0; прочие resource строки (E) **25 / 25 / 39**.
+  `production-compile-summary.json`, `compile-command-*.json` и полные
+  `workbench-*-production-final/console.log` сохранены.
+- `compile.ps1 -Variant Stock|Everon -Attempt fixture-clock-fixed -SourceRoot <stage-after>`:
+  оба fixture graphs **PASS / 0**, validation successful, SCRIPT E/F и ENGINE F
+  — 0. Baseline fixture `-Variant Stock -Attempt baseline-applied -SourceRoot
+  <stage-before>` также **PASS / 0**. Статика и compile не заменяют runtime.
+- `runtime.ps1 -Stage stage-before -Probe aicfAdaptiveBaseline -Attempt baseline-applied -Port 2331`:
+  **native exit 0**, frozen production `03d08c5`, stock Arland/Easy/BOTH.
+  Native initial snapshot имел одну допустимую цель. Controlled три допустимые
+  цели дают **1/2/2** в двух одинаковых snapshot; три настоящих initial seed
+  groups с fixture desired size 1 получают эти AI assignments и bound waypoints.
+  `Test-AdaptiveCommanderLog.ps1 -LogPath <полный log> -Baseline` — **PASS / 0**.
+  Полный остановленный log:
+  `server-baseline-applied/logs/logs_2026-10-14_14-19-00/console.log`.
+  SCRIPT/fatal — 0, прочие (E) — 14. Input, module CRC, версии и source hashes
+  сохранены. Это controlled воспроизведение фиксированной схемы, не подтверждение
+  эпизода игрока в обычном матче. Дополнительный frozen baseline выполнен после
+  разработки fixture; production stage всё время оставался исходным.
+- `runtime.ps1 -Stage stage-after -Probe aicfAdaptiveProbe -Attempt arland-verified -Port 2331`
+  и отдельная сессия `-Variant Everon -Attempt everon-verified -Port 2332`:
+  **59/59 PASS на каждой карте**, native exits 0. Canonical launcher:
+  `Start-AICFRuntime.ps1 -Role Server -Difficulty Easy -AICommanderMode BOTH`,
+  свежие profiles, `-aicfAdaptiveProbe 1 -aicfRequirePlayerForResult 0 -addr
+  127.0.0.1:<port>`; точные CLI arrays и `AICF_RUNTIME_MANIFEST_JSON` —
+  `launcher-*-verified.txt`. Arland **14:16:26–14:17:03 MSK**, Everon
+  **14:16:38–14:17:39 MSK**, Stop/RequestClose и `Game destroyed.`.
+  Полные logs: `server-arland-verified/logs/logs_2026-10-14_14-16-26/console.log`
+  и `server-everon-verified/logs/logs_2026-10-14_14-16-38/console.log`.
+  `audit.ps1 -Attempt arland-verified|everon-verified` вызывает
+  `Test-AdaptiveCommanderLog.ps1`: оба **PASS / 0**. SCRIPT E/F, ENGINE F,
+  VM/null exceptions — 0; прочие resource/backend (E) **14 / 47**.
+  Engine logs не полностью чистые; отдельного native Everon before/after error
+  comparison нет. Сводки: `summary-*-verified.json`.
+- `negative-log-audits.ps1`: **3 позитивных контроля / 14 отрицательных log
+  mutations PASS / 0**. Отсутствие distribution/joint/manual/urgency/fallback/
+  identity/loss cases, неверное число cases, duplicate, fatal, отсутствие
+  Stop/trace/roster request и неверный actual baseline assignment отклоняются.
+  Команды и exits каждого входа: `negative-logs/summary.json`.
+- `production-stage-hashes.json`: **258/258** `.c/.conf/.gproj` совпадают по
+  SHA-256. Frozen baseline hashes и точные fixture snapshots сохранены отдельно.
+  `git diff --check` — **PASS / 0**. Два известных stage удалены после сохранения
+  evidence; собственных native test/Workbench процессов нет.
+
+Pure cases вызывают production Choose/Evaluate: victory/radio value, position,
+unavailable/deferred/known-length route, HQ/base threat, stale/unknown fallback,
+full/weakened/not-ready force, distribution/concentration, continuation/progress,
+deterministic tie и отсутствие кандидатов. Runtime проверяет настоящие full async
+rosters, assignments/replicated waypoints, same-cycle/manual force, graph cut/bypass,
+gates/срочность, failure expiry/HQ fallback, owner change, loss TTL/rebuild,
+stale generation/graph/assignment, независимость фракций и vehicle suspension.
+Radio eligibility/threat и равные pair inputs поданы fixture; это controlled
+проверка, не наблюдение естественного баланса матча.
+
+Ранние попытки не PASS: sandbox Workbench не получил SteamAPI; production compile
+отверг слишком сложное Enforce expression; fixture compiles выявили имя параметра
+Stop, конфликт имени helper с constructor и отсутствие explicit faction cast.
+Неудачный server attempt остановлен адресно. `arland-final`/`everon-final`
+остановлены из-за отрицательных synthetic timestamps: gate считал возраст 0.
+Исправлены только fixture часы, обе полные матрицы повторены на свежих profiles.
+Все промежуточные logs/exits сохранены. `before/` создан до switch и не используется
+вместо согласованного `before-main/`.
+
+Полный offline набор, client/JIP, настоящий transport trip, естественный бой до
+победы, балансный/длительный soak, packaged build и visual — **NOT RUN**. Эти
+границы не входят в выполненные controlled критерии и не превращаются в PASS.
+Новой версии релиза нет.
+
+Изменены **21 файл** (также `changed-files.txt` в evidence):
+
+- Production: `Command/AICF_AICommander.c`, `AICF_AdaptiveCommanderPolicy.c`,
+  `AICF_AdaptiveScore.c`, `Config/AICF_AdaptiveCommanderConfig.c`,
+  `Objectives/AICF_TargetSelector.c`, `Orders/AICF_OrderPlanner.c`,
+  `State/AICF_GroupSlot.c` под `AIConflictCore/Scripts/Game/AIConflict/`.
+- Документация: корневой `README.md`; `agent-notes/README.md`, `ARCHITECTURE.md`,
+  `GAMEPLAY.md`, `ADAPTIVE_COMMANDER.md`, `TESTING.md`, `TEST_FIXTURES.md`, `TOOLS.md`.
+- Проверки: `tests/static/Test-Stage35Static.ps1`,
+  `tests/contracts/Test-AdaptiveCommanderContracts.ps1`,
+  `tests/log-audits/Test-AdaptiveCommanderLog.ps1`,
+  `tests/fixtures/AICF_AdaptiveBaselineProbe.c`, `AICF_AdaptiveCommanderProbe.c`,
+  `AICF_AdaptiveProbeWorld.c`.
+
 ## PR #40: возврат оружия после idle — отчёт 2026-10-14
 
 Продолжение `codex/issue-38-idle-greetings`, baseline `1d265b8`, исходное дерево

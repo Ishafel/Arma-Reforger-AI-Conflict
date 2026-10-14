@@ -1,5 +1,22 @@
 # Runtime fixture: каталог и применение
 
+`AICF_AdaptiveBaselineProbe.c` + `AICF_AdaptiveProbeWorld.c` копируются в
+isolated stock integration stage исходного commit. `-aicfAdaptiveBaseline 1`
+сохраняет native graph/slots и controlled три допустимые цели; baseline code
+не заменяется новым selector. Probe закрывается через RequestClose.
+
+`AICF_AdaptiveCommanderProbe.c` + `AICF_AdaptiveProbeWorld.c` — stock Arland
+или полный Everon stage, `-aicfAdaptiveProbe 1 -aicfRequirePlayerForResult 0`.
+Вызывает production score и настоящие commander/planner, создаёт четыре
+full 10/10 async rosters, проверяет callback + exact faction/alive + observation age.
+Radio eligibility/threat и парные strategic inputs — synthetic; назначения,
+replicated waypoint entities, native base ownership, slot readiness и fences —
+реальные. Gates/expiry используют ускоренные часы; отдельный vehicle trip не
+создаётся. Проверки и ограничения: [ADAPTIVE_COMMANDER.md](ADAPTIVE_COMMANDER.md).
+`Test-AdaptiveCommanderLog.ps1 -LogPath <полный остановленный log> [-Baseline]`
+не заменяет runtime статическим PASS. Fixture callbacks снимаются при Stop;
+файлы не копируются в production.
+
 `AICF_SocialProbe.c` и `AICF_SocialClientProbe.c` копируются вместе только в
 изолированный `AIConflictArland/Scripts/Game/AIConflictArland/Integration/`.
 `-aicfSocialProbe 1` проверяет production gate с управляемыми часами, четыре
