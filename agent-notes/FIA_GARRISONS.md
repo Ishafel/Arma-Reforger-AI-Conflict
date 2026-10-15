@@ -38,10 +38,17 @@ Essential seats заполняются экипажем; пассажиры за
 `FIA_GARRISON_ROSTER` сообщает фактическое число пассажиров и экипажа.
 
 RHS/PMC барьер применяется к обоим входам посадки: `Board` у дорожного патруля
-и отдельному `BoardGarrison` у гарнизона. Пока хотя бы один боец ожидает
-`AICF_ApplyPMCEquipment`, группа не начинает посадку. Иначе native inventory
-может отказать в замене оружия уже сидящего бойца. Pending снимается прежним
-identity-safe callback; дополнительных таймеров и повторной выдачи нет.
+и отдельному `BoardGarrison` у гарнизона. Пока у хотя бы одного бойца
+`AICF_IsPMCEquipmentPending()` возвращает true, группа не начинает посадку:
+native inventory может отказать в замене оружия уже сидящего бойца.
+Одноразовый callback `AICF_ApplyPMCEquipment` вызывает `Apply`; pending снимает
+только `AICF_MarkPMCEquipmentApplied()` после успешного identity-safe commit
+с проверками native restore, inventory signature и вооружения. При отказе
+подготовки или commit pending сохраняется и оба boarding gates остаются
+закрытыми до успешного повторного `Apply`. Автоматических retry-таймеров нет;
+повтор использует сохранённый на бойце выбор оружия. После успешной выдачи
+повторный `Apply` сохраняет последующие изменения inventory. Подробности:
+[вооружение FIA](FIA_ARMAMENT.md#transaction-и-readiness).
 
 `AICF_AIMagazineSwitchGuard` проверяет владельца текущего compartment перед
 штатным `SCR_AISwitchMagazine`. Если у места нет `BaseWeaponManagerComponent`,

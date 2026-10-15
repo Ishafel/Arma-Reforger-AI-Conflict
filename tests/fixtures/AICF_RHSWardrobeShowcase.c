@@ -204,7 +204,9 @@ modded class AICF_MatchController
 				ResourceName source = SCR_ResourceNameUtils.GetPrefabName(model);
 				BaseWeaponComponent weapon = AICF_RHSPMCArmament.Primary(model);
 				BaseMuzzleComponent muzzle = weapon.GetCurrentMuzzle();
-				Print(string.Format("[AICF][PMC_ARMAMENT_CHECK] entity=%1 passed=%2 loaded=%3 suppressed=%4 spare_magazines=%5 primary=%6", model.GetID(), AICF_RHSPMCArmament.Validate(model, source, AICF_RHSPMCEquipment.Variant(source)), muzzle.GetAmmoCount(), muzzle.IsMuzzleSuppressed(), AICF_RHSPMCArmament.SpareMagazines(model, muzzle), SCR_ResourceNameUtils.GetPrefabName(weapon.GetOwner())));
+				SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(model);
+				if (!character) continue;
+				Print(string.Format("[AICF][PMC_ARMAMENT_CHECK] entity=%1 passed=%2 loaded=%3 suppressed=%4 spare_magazines=%5 primary=%6", model.GetID(), AICF_RHSPMCArmament.Validate(model, source, character.AICF_PMCWeaponVariant()), muzzle.GetAmmoCount(), muzzle.IsMuzzleSuppressed(), AICF_RHSPMCArmament.SpareMagazines(model, muzzle), SCR_ResourceNameUtils.GetPrefabName(weapon.GetOwner())));
 			}
 			foreach (IEntity item : items)
 				Print(string.Format("[AICF][WARDROBE_ITEM] entity=%1 prefab=%2", model.GetID(), SCR_ResourceNameUtils.GetPrefabName(item)));

@@ -18,6 +18,118 @@ blocker в отчёте и PR: наблюдаемая проблема, evidence
 этот blocker и не превращает его в PASS. Внешний вид, JIP и ручной матч,
 не входящие в проверенный scope, также перечисляются явно.
 
+## PR #53: документация pending gate — 2026-10-15
+
+Продолжение `codex/issue-52-fia-armament` от `af2269e`. Исправлена устаревшая
+формулировка в `FIA_GARRISONS.md`: оба boarding gates ждут успешный commit;
+отказ `Apply` сохраняет pending после завершения callback. Снятие флага
+принадлежит `AICF_MarkPMCEquipmentApplied`, retry сохраняет выбор бойца.
+Production sources и probes не менялись; изменены только эта заметка и
+`FIA_GARRISONS.md`. Evidence: `.codex-runtime/issue52-doc-review/`.
+
+`Invoke-AICFChecks.ps1 -Name Test-FIAArmamentContracts.ps1,Test-RHSIntegrationStatic.ps1
+-EvidenceRoot <before|after>` — **2 PASS / exit 0** до и после; baseline failures
+нет. `git diff --check` и проверка локальных Markdown links — **PASS**.
+Полный offline набор, Workbench и runtime в этом исправлении документации —
+**NOT RUN**; результаты исходной реализации ниже не являются новым прогоном.
+
+## Issue #52: вооружение FIA RHS/WCS — 2026-10-15
+
+Ветка `codex/issue-52-fia-armament` от актуального `origin/main`
+`207c3341b866c1ff3ccb17558cd97d452e84932e`; исходное дерево чистое.
+Evidence: `.codex-runtime/issue52/`. Game/Server/Tools **1.8.0.13**,
+RHS **0.16.5237**, WCS RHS Weapons **8.3.0**. Пулы, точные canonical weapon/
+magazine prefab и правила выбора — [FIA_ARMAMENT.md](FIA_ARMAMENT.md).
+
+Baseline получен на неизменённом `git archive HEAD` (`before-frozen`):
+`Invoke-AICFChecks.ps1 -Name Test-RHSIntegrationStatic.ps1,Test-WCSIntegrationStatic.ps1,Test-AILoadoutStatic.ps1,Test-FIAGarrisonContracts.ps1,Test-FIAPatrolStatic.ps1,Test-AICommanderModeStatic.ps1,Test-Stage3Static.ps1 -EvidenceRoot <before-frozen>`
+— **7 PASS / exit 0**. После изменения тот же набор и новый
+`Test-FIAArmamentContracts.ps1` (`after-targeted`) — **8 PASS / exit 0**;
+новый audit: **16 правил / 12 отрицательных мутаций PASS**. Сохранённых
+baseline failures профильного набора нет.
+
+Полный финальный offline набор выполнен тем же `tools/Invoke-AICFChecks.ps1`
+в четырёх независимых группах с `-Name <group> -EvidenceRoot <after-parallel/group-N>`:
+**61 PASS / 0 FAIL, exit 0**. `aggregate-checks.ps1` сверяет объединение с полным
+текущим inventory runner: каждый из прежних 60 и новый FIA audit присутствует
+ровно один раз, исключённых checks нет. `after-parallel/summary.json` и
+`offline-verdict.json` содержат commands, native exits и verdict. Группы
+определены в `audit-groups.json`. Начальный `before-full` (60 PASS) читал
+менявшееся дерево и не используется как baseline; последовательный `after-full`
+явно помечен `INCOMPLETE` после перехода на группы. Финальный PASS основан
+только на завершённых `after-parallel`.
+
+`compile.ps1 -Variant Stock|RHS|EveronNorthWCSRHS -Label production-<stock|rhs|wcs>`:
+**3 PASS / native exit 0**, `Script validation successful`, script/fatal/VM
+errors в полных production logs — 0. `-SourceRoot <stage>` также компилирует
+новые fixtures; отдельный `legacy-fixtures` compile подтверждает пять
+обновлённых прежних probes на WCS graph. Runtime этих прежних probes заново
+не запускался: новую выдачу подтверждает новая полная матрица.
+
+`runtime.ps1 -Variant <variant> -Label <label>` вызывает только штатный
+`tools/Start-AICFRuntime.ps1`, Medium, fresh profile, фактический listener
+`-addr 127.0.0.1:2367`, `-aicfFIAArmamentProbe 1`,
+`-aicfRequirePlayerForResult 0`. Запуски серверов последовательные.
+
+| Variant | Label | Проверки / бойцы | Verdict / native exit |
+|---|---|---|---|
+| Stock, исходный source | `baseline-stock` | 45 / 16 | PASS / 0 |
+| Stock, новый source | `stock-after` | 45 / 16 | PASS / 0 |
+| RHS (Arland) | `rhs-verified` | 381 / 61 | PASS / 0 |
+| EveronRHS | `rhs-everon` | 381 / 61 | PASS / 0 |
+| EveronNorthRHS | `rhs-north` | 381 / 61 | PASS / 0 |
+| ArlandWCSRHS | `wcs-arland` | 340 / 54 | PASS / 0 |
+| EveronWCSRHS | `wcs-everon` | 340 / 54 | PASS / 0 |
+| EveronNorthWCSRHS | `wcs-verified` | 340 / 54 | PASS / 0 |
+
+`Test-FIAArmamentLog.ps1 -LogPath <полный console.log> -Profile Stock|RHS|WCS
+-LauncherPath <server-label-launcher.txt> -NativeExitPath <server-label-exit.txt>`:
+**8 PASS / exit 0** по полным остановленным logs. Каждый ресурс реально
+выдан живому actor с loaded magazine и compatible spares; все варианты каждой
+из 13 ролей и трёх AC prefab обязательны. Дополнительно проверены циклическая
+выдача обычным riflemen, MG/AMG, secondary, native insertion refusal с rollback,
+unavailable resource, retry и сохранение изменения боезапаса после commit.
+Реальные patrol/garrison hooks подтверждают pending rejection до посадки и
+готовность экипажа/десанта на всех шести профильных картах.
+
+`collect.ps1` — **PASS / 0**: все восемь audits, manifests/CLI/native exits,
+точное совпадение stock weapon/ammo inventories всех 16 source prefab до/после
+(`stock-comparison.json`), SHA-256 production/stage sources (`source-hashes.json`).
+Всего **2253/2253 cases**. `runtime-results.json` хранит пути полных logs
+`profile-<label>/logs/<session>/console.log` и категории всех ошибок.
+
+Полные runtime logs **не чистые**: сохранены WORLD/ENTITY/RESOURCES/MATERIAL
+diagnostics зависимостей, в WCS также RPL errors, и native script leak reports
+при shutdown. Stock категории и количества ошибок до/после совпали полностью.
+В профильных logs единственная transaction error находится внутри явно
+обозначенного negative section (`restored=0`, `rollback=1`); неожиданных script
+errors, compile/VM/fatal failures и проваленных production cases нет.
+
+Удаление обязательного rollback case или canonical readback из копии полного
+log при неизменном общем числе cases даёт ожидаемый **FAIL / 1**:
+`negative-audit-result.txt`. Это PASS проверки анализатора, не runtime PASS
+мутированных входов. Первый uppercase canonical АК был исправлен по реальному
+native readback; ранние diagnostic FAIL сохранены и не считаются финальными.
+
+`git diff --check` и локальные Markdown links — **PASS**.
+Собственные native test/Workbench процессы завершены; `stage`, `compat-stage`,
+`baseline-source` и известный source-copy прерванного audit удалены после
+сохранения хешей, полного evidence и исходного `baseline.zip` (`cleanup.json`).
+**NOT RUN:** внешний вид, субъективный баланс, client/JIP, soak, packaged build,
+повтор gameplay runtime прежних пяти probes, push/PR/merge/публикация. Активные
+критерии issue не требуют ручного тестировщика; отклонённых критериев нет.
+
+Изменены: RHS `AICF_RHSContentProfile.c`, `AICF_RHSPMCArmament.c`,
+`AICF_RHSPMCEquipment.c`; WCS `AICF_WCSRHSContentProfile.c`; новый
+`Test-FIAArmamentContracts.ps1`, `Test-FIAArmamentLog.ps1`, обновлённый
+`Test-RHSIntegrationStatic.ps1`; новые `AICF_FIAArmamentProbe.c`,
+`AICF_RHSFIAArmamentProbe.c`, `AICF_WCSFIAArmamentProbe.c`; прежние
+`AICF_RHSPMCScenarioProbe.c`, `AICF_RHSPMCGarrisonProbe.c`, `AICF_RHSPatchesProbe.c`,
+`AICF_RHSWardrobeShowcase.c`, `AICF_WCSInfantryProbe.c`; README, WCS/Everon WCS
+README; `agent-notes/README.md`, `ARCHITECTURE.md`, `FIA_ARMAMENT.md`,
+`TEST_FIXTURES.md`, `TOOLS.md` и эта заметка. Точный список — `changed-files.txt`
+в evidence.
+
 ## PR #51: inventory identity и исправление baseline — 2026-10-15
 
 Продолжение `codex/issue-6-squad-resupply`, исходный commit `1b57ec1`.

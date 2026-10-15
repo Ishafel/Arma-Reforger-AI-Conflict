@@ -22,6 +22,15 @@ class AICF_RHSPMCEquipmentDraft : AICF_LoadoutDraft
 	}
 }
 
+// Узкая граница native commit, отдельно от сборки локального черновика.
+class AICF_RHSPMCTransaction
+{
+	bool RestoreNew(SCR_ChimeraCharacter character, string snapshot)
+	{
+		return AICF_LoadoutInventory.Restore(character, snapshot);
+	}
+}
+
 class AICF_RHSPMCEquipment
 {
 	static bool Eligible(SCR_ChimeraCharacter character)
@@ -248,6 +257,8 @@ class AICF_RHSPMCEquipment
 	{
 		if (!Eligible(character))
 			return false;
+		// Успешная initialization одноразова: не стираем последующие изменения.
+		if (character.AICF_PMCEquipmentApplied()) return true;
 		EntityID identity = character.GetID();
 		ResourceName source = SCR_ResourceNameUtils.GetPrefabName(character);
 		string before;
@@ -257,12 +268,14 @@ class AICF_RHSPMCEquipment
 		AICF_LoadoutCatalog catalog = new AICF_LoadoutCatalog(catalogFaction);
 		AICF_RHSPMCEquipmentDraft draft = new AICF_RHSPMCEquipmentDraft();
 		string snapshot;
-		int variant = Variant(source);
+		int variant = character.AICF_PMCWeaponVariant();
+		if (variant < 0) return false;
+		int clothingVariant = Variant(source);
 		ResourceName magazine;
 		int addMagazines;
 		bool built = draft.BuildEquipment(source) && AICF_LoadoutInventory.Restore(draft.GetCharacter(), before);
 		bool armed = built && AICF_RHSPMCArmament.PrepareLocal(draft.GetCharacter(), source, variant, magazine, addMagazines);
-		bool dressed = armed && DressLocal(draft.GetCharacter(), variant, magazine, addMagazines, source);
+		bool dressed = armed && DressLocal(draft.GetCharacter(), clothingVariant, magazine, addMagazines, source);
 		bool ready = dressed && AICF_LoadoutInventory.Capture(draft.GetCharacter(), snapshot);
 		int ignored;
 		string expected;
@@ -276,7 +289,10 @@ class AICF_RHSPMCEquipment
 		}
 		if (!Eligible(character) || character.GetID() != identity || SCR_ResourceNameUtils.GetPrefabName(character) != source)
 			return false;
-		bool inventoryRestored = AICF_LoadoutInventory.Restore(character, snapshot);
+		string current;
+		if (!AICF_LoadoutInventory.Capture(character, current) || current != before) return false;
+		AICF_RHSPMCTransaction transaction = new AICF_RHSPMCTransaction();
+		bool inventoryRestored = transaction.RestoreNew(character, snapshot);
 		string actual = AICF_LoadoutInventory.Signature(character, catalog, ignored);
 		bool signatureMatches = actual == expected;
 		bool armamentValid = AICF_RHSPMCArmament.Validate(character, source, variant);
@@ -288,6 +304,7 @@ class AICF_RHSPMCEquipment
 			return false;
 		}
 		Print(string.Format("[AICF][PMC_EQUIPMENT_APPLIED] entity=%1 faction=FIA variant=%2 source=%3 inventory_verified=1", identity, variant, source));
+		character.AICF_MarkPMCEquipmentApplied();
 		// Нашивки получают уже проверенные storages нового комплекта.
 		// Отдельный таймер мог бы сработать до переодевания и потерять результат.
 		AICF_RHSDefaultPatches.Apply(character);
@@ -299,6 +316,31 @@ modded class SCR_ChimeraCharacter
 {
 	protected EntityID m_iAICFPMCIdentity;
 	protected bool m_bAICFPMCEquipmentPending;
+	protected int m_iAICFPMCWeaponVariant = -1;
+	protected ResourceName m_sAICFPMCSource;
+	protected bool m_bAICFPMCEquipmentApplied;
+
+	int AICF_PMCWeaponVariant()
+	{
+		if (!AICF_RHSPMCEquipment.Eligible(this) || GetID() != m_iAICFPMCIdentity ||
+			SCR_ResourceNameUtils.GetPrefabName(this) != m_sAICFPMCSource) return -1;
+		if (m_iAICFPMCWeaponVariant < 0)
+			m_iAICFPMCWeaponVariant = AICF_RHSPMCArmament.NextVariant(m_sAICFPMCSource);
+		return m_iAICFPMCWeaponVariant;
+	}
+
+	bool AICF_PMCEquipmentApplied()
+	{
+		return m_bAICFPMCEquipmentApplied && GetID() == m_iAICFPMCIdentity &&
+			SCR_ResourceNameUtils.GetPrefabName(this) == m_sAICFPMCSource;
+	}
+
+	void AICF_MarkPMCEquipmentApplied()
+	{
+		if (!AICF_RHSPMCEquipment.Eligible(this) || AICF_PMCWeaponVariant() < 0) return;
+		m_bAICFPMCEquipmentApplied = true;
+		m_bAICFPMCEquipmentPending = false;
+	}
 
 	override void EOnInit(IEntity owner)
 	{
@@ -306,6 +348,7 @@ modded class SCR_ChimeraCharacter
 		if (!Replication.IsServer() || GetWorld() != GetGame().GetWorld() || !SCR_ResourceNameUtils.GetPrefabName(this).Contains("/FIA/"))
 			return;
 		m_iAICFPMCIdentity = GetID();
+		m_sAICFPMCSource = SCR_ResourceNameUtils.GetPrefabName(this);
 		m_bAICFPMCEquipmentPending = true;
 		GetGame().GetCallqueue().CallLater(AICF_ApplyPMCEquipment, 1500, false);
 	}
@@ -319,7 +362,7 @@ modded class SCR_ChimeraCharacter
 	{
 		if (GetID() == m_iAICFPMCIdentity)
 			AICF_RHSPMCEquipment.Apply(this);
-		m_bAICFPMCEquipmentPending = false;
+		// Неудавшаяся подготовка остаётся закрытым boarding gate.
 	}
 
 	void ~SCR_ChimeraCharacter()
