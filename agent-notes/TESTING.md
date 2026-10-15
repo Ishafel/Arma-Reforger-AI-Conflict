@@ -1,5 +1,49 @@
 # Проверки и baseline
 
+## Оформление 0.1.28 — 2026-10-15
+
+Ветка `codex/release-0.1.28` от обновлённого `origin/main`
+`44166247cae4ff129196409dd56e9dc4f6b4ca49`; исходное дерево чистое.
+Добавлены `releases/0.1.28.md`, ссылки на последнюю версию в README/указателе
+и эта запись. Состав сверен с `git log 0.1.27..HEAD`, first-parent историей
+`main`, diff и результатами задач ниже. Production `.c/.conf/.gproj/.st`,
+headers, зависимости, `tests/` и `tools/` не менялись.
+
+Свежий `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+tools/Invoke-AICFChecks.ps1 -EvidenceRoot .codex-runtime/release-0.1.28/before`
+— **62/62 PASS, native exit 0**. Прогон начат до правки документации;
+проверенные исходники и аудиторы остались неизменными до его завершения.
+Все checks включены; `context.json`, `summary.json` и полные outputs
+содержат source SHA, исходный status, точные argv, native exits и verdict.
+Текущих offline baseline failures нет; старые FAIL в записях ниже являются
+историческими. Отдельный sparse-slot restore runtime FAIL этим не закрывается.
+
+`pwsh -NoProfile -File
+.codex-runtime/release-0.1.28/Verify-ReleaseDocs.ps1 -Phase before|after`:
+`git diff --check` и локальные Markdown links — **PASS/0** до/после.
+Проверено наличие целей в Git для чистого checkout, включая новый release file.
+`git diff --cached --check` — **PASS/0** перед коммитом.
+Повтор полного offline набора после правки только Markdown не выполнялся:
+неизменность production/tests/tools отдельно проверена через `git diff
+--exit-code 4416624 -- '*.c' '*.conf' '*.gproj' '*.st' 'tests/**' 'tools/**'`.
+
+Evidence: `.codex-runtime/release-0.1.28/` — исходные SHA/status, история,
+`before/`, `before-check.txt`, `after-check.txt`, `source-scope-check.txt`,
+`offline-verdict.json` и итоговые Git/publication metadata. Релизный тег
+создаётся на итоговом `main` после слияния патчноутов; публикация GitHub Release
+берёт notes из этого commit и проверяет remote tag, текст и статус latest.
+Команда: `pwsh -NoProfile -File
+.codex-runtime/release-0.1.28/Publish-GitHubRelease.ps1
+-ExpectedSourceCommit <полный merged-main SHA>`.
+
+Новые Workbench, server/client runtime, единая runtime-матрица релиза,
+полный multiplayer/client-JIP новых механик, ручная визуальная/аудиопроверка,
+soak, packaged build, чистая установка и Workshop upload — **NOT RUN**.
+Изменение только документации не требует нового compile/runtime gate.
+В патчноутах сохранены открытый `INVENTORY_RESTORE_FAILED` редактора,
+неподтверждённое исправление `REPLICATION/FLOODED` и native/content diagnostics.
+Workshop публикует владелец отдельно; Git-тег не является проверкой пакетов.
+
 ## Штатная охрана при подходе ИИ — issue #54, 2026-10-15
 
 Ветка `codex/issue-54-fia-activation` от актуального `origin/main`
