@@ -36,6 +36,8 @@ WCS content profile. При подключении клиенту передаю
 точка не имела прямых рёбер к HQ и оставалась связной. Правила:
 [гарнизоны FIA](../agent-notes/FIA_GARRISONS.md). На Medium/Hard обеих карт
 по три ПТ-бойца в полном отряде.
+FIA полного и северного Everon использует тот же отдельный WCS пул оружия
+и безопасную RHS PMC transaction, что Arland: [вооружение FIA](../agent-notes/FIA_ARMAMENT.md).
 
 ## Запуск
 

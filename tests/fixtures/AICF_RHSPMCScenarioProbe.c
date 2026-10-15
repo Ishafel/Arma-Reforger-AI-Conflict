@@ -48,7 +48,7 @@ modded class SCR_GameModeCampaign
 			ResourceName source = m_aAICFPMCProbePrefabs[index];
 			bool valid = character && SCR_ResourceNameUtils.GetPrefabName(character) == source &&
 				AICF_RHSPMCEquipment.Eligible(character) && !character.AICF_IsPMCEquipmentPending() &&
-				AICF_RHSPMCArmament.Validate(character, source, AICF_RHSPMCEquipment.Variant(source));
+				AICF_RHSPMCArmament.Validate(character, source, character.AICF_PMCWeaponVariant());
 			if (valid) passed++;
 			Print(string.Format("[AICF][PMC_SCENARIO_CASE] source=%1 passed=%2", source, valid));
 		}

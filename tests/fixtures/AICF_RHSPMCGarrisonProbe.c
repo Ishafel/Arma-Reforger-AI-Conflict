@@ -64,7 +64,8 @@ modded class AICF_FIAGarrisonService
 			{
 				members++;
 				ResourceName source = SCR_ResourceNameUtils.GetPrefabName(member);
-				if (!AICF_RHSPMCArmament.Validate(member, source, AICF_RHSPMCEquipment.Variant(source))) invalid++;
+				SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(member);
+				if (!character || !AICF_RHSPMCArmament.Validate(member, source, character.AICF_PMCWeaponVariant())) invalid++;
 			}
 		}
 		RandomCheck("PMC_PENDING_BOARDING_BLOCKED", AICF_PMCGarrisonProbe.s_iFailures == 0);

@@ -3,6 +3,24 @@
 // copied and no uncatalogued ResourceName is admitted.
 class AICF_RHSContentProfile : AICF_ContentProfile
 {
+	protected ref map<string, int> m_mPMCNextVariant = new map<string, int>();
+
+	int NextPMCVariant(ResourceName source)
+	{
+		int count = GetPMCVariantCount(source);
+		if (!Replication.IsServer() || count <= 0) return -1;
+		int next;
+		m_mPMCNextVariant.Find(source, next);
+		m_mPMCNextVariant.Set(source, (next + 1) % count);
+		return next;
+	}
+
+	int GetPMCVariantCount(ResourceName source)
+	{
+		if (source.EndsWith("_MG.et") || source.EndsWith("_Sharpshooter.et") || source.EndsWith("_Scout.et")) return 1;
+		return 4;
+	}
+
 	// Опциональные дочерние profiles могут заменить переопределённый модами
 	// prefab, сохраняя общий PMC inventory transaction и его проверки.
 	ResourceName GetPMCPrimaryOverride(ResourceName source, int variant)

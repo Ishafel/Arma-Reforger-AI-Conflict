@@ -93,13 +93,26 @@ class AICF_WCSRHSContentProfile : AICF_RHSContentProfile
 		return super.GetLoadoutItemSource(prefab);
 	}
 
+	override int GetPMCVariantCount(ResourceName source)
+	{
+		if (source.EndsWith("_MG.et")) return 1;
+		if (source.EndsWith("_Sharpshooter.et")) return 2;
+		return 3;
+	}
+
 	override ResourceName GetPMCPrimaryOverride(ResourceName source, int variant)
 	{
 		// WCS меняет старые ION variants и canonical spelling PKM.
 		// Сохраняем loaded/spare/suppressed проверки прежнего PMC adapter.
 		if (source.EndsWith("_MG.et"))
 			return "{4BE4931DF7B1ABCD}Prefabs/Weapons/MachineGuns/PKM/MG_PKM_B51_EOT.et";
-		if (source.EndsWith("_Sharpshooter.et")) return ResourceName.Empty;
+		if (source.EndsWith("_Sharpshooter.et"))
+		{
+			if (variant == 0) return "{896DDA7B352187EF}Prefabs/Weapons/Rifles/SVD/Rifle_SVD_1P21_TGPV.et";
+			return "{5C0C95DCC4471208}Prefabs/Weapons/Rifles/G28/Variants/Rifle_G28_Suppressed_SF_SQUAD.et";
+		}
+		if (variant == 1) return "{397B6CBE56D21341}Prefabs/Weapons/Rifles/AK12/Variants/Rifle_AK12_EOTECH_SQUAD.et";
+		if (variant == 2) return "{0A83316977E4E4B7}Prefabs/Weapons/Rifles/AK74M/WCS_Variants/Rifle_AK105_SQUAD.et";
 		return "{4E0FB248B9FB1F5B}Prefabs/Weapons/Rifles/M4A1/Variants/Rifle_M4A1_WCS_URGI_Suppressed_SQUAD.et";
 	}
 }

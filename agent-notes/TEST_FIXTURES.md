@@ -1,5 +1,33 @@
 # Runtime fixture: каталог и применение
 
+## Вооружение FIA RHS/WCS — issue #52
+
+`AICF_FIAArmamentProbe.c` копируется в stage Core `Diagnostics/`.
+`AICF_RHSFIAArmamentProbe.c` получает имя `ZZ_AICF_RHSFIAArmamentProbe.c`
+в stage RHS `Content/`, после production PMC adapter. Для WCS добавляется
+`ZZ_AICF_WCSFIAArmamentProbe.c` после WCS content profile. Stock использует
+только общий Core probe. Ни один probe не размещается в production addon.
+
+`-aicfFIAArmamentProbe 1`, Medium: 13 catalog roles, три AC prefabs, все
+достижимые варианты, обычный цикл riflemen, живой inventory readback и
+сохранение secondary. Negative cases вызывают production transaction:
+invalid token, отсутствующий ресурс, реальный отказ native insertion
+несовместимого prefab в weapon slot, rollback и retry. После успешной
+выдачи расходуется патрон; повторный `Apply` сохраняет изменённый snapshot.
+Наблюдатели реальных patrol/garrison `Board` hooks дополнительно проверяют
+pending gate до посадки и подготовку экипажа/десанта. Stock сравнивает
+фактические weapon/ammo inventories без RHS classes.
+
+`Test-FIAArmamentLog.ps1 -LogPath <console.log> -Profile Stock|RHS|WCS
+-LauncherPath <launcher.txt> -NativeExitPath <exit.txt>` требует полный
+остановленный log, native exit 0, CLI/manifest, точные размеры 16/61/54
+бойцов и 45/381/340 cases. Все 16 source prefab и каждый вариант обязательны.
+Scoped negative errors сохраняются; VM/compile/fatal ошибки запрещены.
+Таблицы и ограничения: [FIA_ARMAMENT.md](FIA_ARMAMENT.md), verdict и матрица
+Arland/Everon/North: [TESTING.md](TESTING.md).
+
+## Пополнение экипировки
+
 `AICF_EquipmentProbe.c`, `AICF_EquipmentSafetyProbe.c`,
 `AICF_EquipmentLifecycleProbe.c`, `AICF_EquipmentPlayerProbe.c` и
 `AICF_EquipmentSearchProbe.c` копируются только в isolated stage

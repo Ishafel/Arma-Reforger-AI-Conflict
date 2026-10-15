@@ -2,8 +2,24 @@
 // Комплектные RHS prefab владеют совместимостью обвеса и заряженным магазином.
 class AICF_RHSPMCArmament
 {
+	static int VariantCount(ResourceName source)
+	{
+		AICF_RHSContentProfile profile = AICF_RHSContentProfile.Cast(AICF_ContentProfile.GetActive());
+		if (!profile) return 0;
+		return profile.GetPMCVariantCount(source);
+	}
+
+	// Независимый цикл для каждой конкретной роли; выбор хранится на бойце.
+	static int NextVariant(ResourceName source)
+	{
+		AICF_RHSContentProfile profile = AICF_RHSContentProfile.Cast(AICF_ContentProfile.GetActive());
+		if (!profile) return -1;
+		return profile.NextPMCVariant(source);
+	}
+
 	static ResourceName PrimaryPrefab(ResourceName source, int variant)
 	{
+		if (variant < 0 || variant >= VariantCount(source)) return ResourceName.Empty;
 		AICF_RHSContentProfile profile = AICF_RHSContentProfile.Cast(AICF_ContentProfile.GetActive());
 		if (profile)
 		{
@@ -16,6 +32,8 @@ class AICF_RHSPMCArmament
 			return "{896DDA7B352187EF}Prefabs/Weapons/Rifles/SVD/Rifle_SVD_1P21_TGPV.et";
 		if (source.EndsWith("_Scout.et"))
 			return "{951E3D5E86826A47}Prefabs/Weapons/Rifles/M4A1/Variants/ION/Variants/Rifle_DOM4A1_ION_ACOG_ReapIR_SD.et";
+		if (variant == 3)
+			return "{805927DD98352C9B}Prefabs/Weapons/Rifles/AK74M/Rifle_AK74M_npz_rail_1p87.et";
 		if (variant == 1)
 			return "{40DC4A6EE53B969E}Prefabs/Weapons/Rifles/M4A1/Variants/ION/Variants/Rifle_DOMk18_ION_RMR_SD.et";
 		if (variant == 2)
@@ -169,9 +187,15 @@ class AICF_RHSPMCArmament
 	static bool Validate(IEntity model, ResourceName source, int variant)
 	{
 		BaseWeaponComponent weapon = Primary(model);
-		if (!weapon || SCR_ResourceNameUtils.GetPrefabName(weapon.GetOwner()) != PrimaryPrefab(source, variant)) return false;
+		if (!weapon) return false;
 		BaseMuzzleComponent muzzle = weapon.GetCurrentMuzzle();
-		if (!muzzle || muzzle.GetAmmoCount() <= 0 || SpareMagazines(model, muzzle) < MinimumSpareMagazines(source)) return false;
+		if (!muzzle || !Compatible(muzzle.GetMagazine(), muzzle)) return false;
+		if (SCR_ResourceNameUtils.GetPrefabName(weapon.GetOwner()) != PrimaryPrefab(source, variant) ||
+			muzzle.GetAmmoCount() <= 0 || SpareMagazines(model, muzzle) < MinimumSpareMagazines(source))
+		{
+			Print(string.Format("[AICF][PMC_ARMAMENT_INVALID] expected=%1 actual=%2 ammo=%3 spares=%4 minimum=%5", PrimaryPrefab(source, variant), SCR_ResourceNameUtils.GetPrefabName(weapon.GetOwner()), muzzle.GetAmmoCount(), SpareMagazines(model, muzzle), MinimumSpareMagazines(source)), LogLevel.WARNING);
+			return false;
+		}
 		if (source.EndsWith("_AMG.et"))
 		{
 			array<IEntity> supportItems = {};
@@ -185,8 +209,8 @@ class AICF_RHSPMCArmament
 			}
 			if (boxes < 3) return false;
 		}
-		// ПКМ с EOTech остаётся ленточным пулемётом; совместимого штатного
-		// suppressed варианта в проверенном каталоге нет.
-		return source.EndsWith("_MG.et") || muzzle.IsMuzzleSuppressed();
+		// АК и ПКМ используют штатный комплектный обвес без требования глушителя.
+		// Сохранённые M-серия, SVD и профильная DMR остаются suppressed.
+		return source.EndsWith("_MG.et") || PrimaryPrefab(source, variant).Contains("/AK") || muzzle.IsMuzzleSuppressed();
 	}
 }

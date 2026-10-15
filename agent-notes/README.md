@@ -16,6 +16,7 @@
 | Изменить сложности, случайный состав и усиленную точку FIA | [FIA_GARRISONS.md](FIA_GARRISONS.md), [GAMEPLAY.md](GAMEPLAY.md#сложность-гарнизонов-fia), [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить запрет recovery FIA после урона/потерь (issue #48) | [GAMEPLAY.md](GAMEPLAY.md), `AICF_FIAGarrison`/`AICF_FIAGarrisonIntegrity`, `AICF_FIAGarrisonRecovery`/`AICF_FIAGarrisonCrew`, [TESTING.md](TESTING.md), DamageProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить ПТ-состав и Carl Gustaf US | [GAMEPLAY.md](GAMEPLAY.md#сложность-гарнизонов-fia), `AICF_Difficulty`, Core/RHS content profiles, `AICF_WCSInfantryKit`/`AICF_WCSInfantryEquipment`; probes в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
+| Изменить разнообразие вооружения FIA в RHS/WCS (issue #52) | [FIA_ARMAMENT.md](FIA_ARMAMENT.md), `AICF_RHSPMCArmament`, `AICF_RHSPMCEquipment`, RHS/WCS content profiles |
 | Изменить дальность и тактику применения РПГ против бронетехники | [ANTI_TANK_TACTICS.md](ANTI_TANK_TACTICS.md), `Orders/AICF_AntiTankPolicy.c` |
 | Оптимизировать каталог и редактор пресетов экипировки | [LOADOUT_PERFORMANCE.md](LOADOUT_PERFORMANCE.md), `Loadouts/AICF_LoadoutCatalog.c`, `UI/AICF_LoadoutEditor.c` |
 | Изменить пополнение экипировки, live revisions и сбор с тел (issue #6) | [EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md), `Loadouts/AICF_EquipmentService.c`, `AICF_EquipmentInventory`/`AICF_EquipmentApplicator`, [TESTING.md](TESTING.md) |

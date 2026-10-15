@@ -88,10 +88,12 @@ group, faction, prefab и исходный inventory повторно прове
 После выдачи сверяются полный signature, оружие, боезапас и одежда;
 при неудаче восстанавливается исходный snapshot. Однократный флаг на character
 не позволяет повторной выдаче отменить пользовательский комплект.
-FIA продолжает использовать прежний RHS PMC adapter. Virtual hook
-`GetPMCPrimaryOverride` нового content profile выбирает suppressed WCS M4A1 URGI: WCS переопределяет старые
-ION prefab, и прежний rifleman-комплект перестаёт проходить проверку глушителя.
-MG сохраняет ПКМ с актуальным canonical spelling, Sharpshooter — прежний SVD.
+FIA использует общую RHS PMC inventory transaction и отдельный WCS weapon pool:
+M4A1 URGI, АК-12 и АК-105 у стрелков, ПКМ у MG, SVD/G28 у Sharpshooter.
+`GetPMCVariantCount` и `GetPMCPrimaryOverride` определяют WCS canonical prefab.
+Вариант выбирается один раз на бойца; повторная выдача сохраняет последующие
+изменения inventory. Таблицы оружия, магазинов, распределение, правила AMG
+и новая матрица проверок: [FIA_ARMAMENT.md](../agent-notes/FIA_ARMAMENT.md).
 Обычный RHS profile возвращает пустой override; проверки не ослабляются.
 Неподдержанные роли
 RHS (например, sniper/crew) не переводятся в обычного стрелка.

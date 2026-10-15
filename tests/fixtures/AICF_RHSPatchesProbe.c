@@ -136,7 +136,7 @@ modded class AICF_MatchController
 			if (model.GetFactionKey() == "FIA")
 			{
 				ResourceName source = SCR_ResourceNameUtils.GetPrefabName(model);
-				armament = !model.AICF_IsPMCEquipmentPending() && AICF_RHSPMCArmament.Validate(model, source, AICF_RHSPMCEquipment.Variant(source));
+				armament = !model.AICF_IsPMCEquipmentPending() && AICF_RHSPMCArmament.Validate(model, source, model.AICF_PMCWeaponVariant());
 			}
 			bool ok = attached > 0 && missing == 0 && preserved && idempotent && armament;
 			if (ok) passed++;

@@ -30,6 +30,14 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Единый offline запуск
 
+`Test-FIAArmamentContracts.ps1` проверяет RHS/WCS weapon pool, стабильный
+выбор на character, authority/identity/snapshot fences, одноразовый commit,
+rollback и оба boarding gates; включает отрицательные мутации.
+`Test-FIAArmamentLog.ps1` проверяет полную живую матрицу с manifest и native
+exit, включая отсутствие WCS в RHS graph. Применение трёх stage probes,
+ожидаемые размеры и ограничения — в [FIA_ARMAMENT.md](FIA_ARMAMENT.md)
+и [TEST_FIXTURES.md](TEST_FIXTURES.md).
+
 `Test-AICommanderModeStatic.ps1` выбирает единственного владельца commander
 state/API среди тел `SCR_GameModeCampaign`; нейтральные modded расширения
 допустимы. Общий `Find-AICFClassRecord` по-прежнему требует единственный класс.

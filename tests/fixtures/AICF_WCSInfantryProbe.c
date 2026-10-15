@@ -241,7 +241,7 @@ modded class AICF_MatchController
 		{
 			if (!character) continue;
 			ResourceName source = SCR_ResourceNameUtils.GetPrefabName(character);
-			bool valid = AICF_RHSPMCArmament.Validate(character, source, AICF_RHSPMCEquipment.Variant(source));
+			bool valid = AICF_RHSPMCArmament.Validate(character, source, character.AICF_PMCWeaponVariant());
 			if (valid) pmcPassed++;
 			BaseWeaponComponent weapon = AICF_RHSPMCArmament.Primary(character);
 			int ammo;

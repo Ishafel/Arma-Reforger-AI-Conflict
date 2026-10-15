@@ -8,6 +8,14 @@ in-memory world для preview; он не является миром кампа
 
 ## Граф addon
 
+Вооружение FIA в RHS/WCS принадлежит integration: profiles владеют пулами
+и счётчиком каждой concrete роли одного матча, character — сохранённым выбором,
+identity и одноразовым флагом commit. `AICF_RHSPMCEquipment` готовит local draft
+и выполняет native inventory transaction с rollback; успешный повтор не
+перезаписывает изменения игрока. Оба FIA boarding owner читают pending gate,
+который снимается только после успешной подготовки. Core и stock FIA этот
+контракт не расширяют. Подробности: [FIA_ARMAMENT.md](FIA_ARMAMENT.md).
+
 | Addon | GUID | Ответственность |
 |---|---|---|
 | `AIConflictCore` | `9178E5822AFE48EA` | Независимые от карты механики, UI, диагностика |
