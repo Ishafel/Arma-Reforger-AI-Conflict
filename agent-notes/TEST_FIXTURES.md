@@ -1,5 +1,16 @@
 # Runtime fixture: каталог и применение
 
+## Штатные ambient patrols — issue #54
+
+`AICF_AmbientPatrolProbe.c` помещается в stage Core `Scripts/Game/ZZTests/`.
+Исходная реализация использует `-aicfAmbientProbe baseline`; исправленная —
+`-aicfAmbientProbe us` и дополнительный `AICF_ManagedObserversProbe.c` в том же
+каталоге. Проверяются обе стороны без игроков, реальный native controller,
+alive/active бойцы, физический подход/уход, 15 lifecycle интервалов удержания,
+повтор без дубликатов, смерть, native base ownership, budget refusal, пустой
+и погибший roster, identity дополнительных гарнизонов и удаление observers.
+Детали controlled inputs и полного log gate — [AMBIENT_PATROLS.md](AMBIENT_PATROLS.md).
+
 ## Вооружение FIA RHS/WCS — issue #52
 
 `AICF_FIAArmamentProbe.c` копируется в stage Core `Diagnostics/`.
