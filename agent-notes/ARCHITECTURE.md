@@ -125,6 +125,13 @@ Waypoint сначала снимается с группы, затем удал�
 
 ## Соседние контракты
 
+`AICF_ManagedObservers` регистрирует серверные native observers для живых READY
+US/USSR slots. Существующий scheduler раз в секунду читает текущую incarnation
+и живого бойца через GroupRuntime; потеря допустимости и Stop удаляют собственные
+ключи. Native ambient system, group lifecycle и spawn queue сохраняют владение
+spawn/despawn, budget и eliminated/respawn правилами. Сервис не меняет дополнительные
+FIA гарнизоны. Контракт и fixture: [AMBIENT_PATROLS.md](AMBIENT_PATROLS.md).
+
 `AICF_FIAGarrison` владеет постоянным ban на recovery конкретной vehicle
 identity/generation. `AICF_FIAGarrisonIntegrity` — его наблюдатель здоровья
 исходной машины и исходных members: весь hit-zone hierarchy, immutable entity

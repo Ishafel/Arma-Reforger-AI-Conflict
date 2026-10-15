@@ -1,5 +1,94 @@
 # Проверки и baseline
 
+## Штатная охрана при подходе ИИ — issue #54, 2026-10-15
+
+Ветка `codex/issue-54-fia-activation` от актуального `origin/main`
+`d30629d`. Evidence: `.codex-runtime/issue54-fia-activation/`.
+Production: новый `AICF_ManagedObservers` и десять строк orchestration в
+MatchController. Native observers следуют за живыми READY US/USSR силами;
+состав, spawn queue, budget, elimination и respawn остаются native.
+Контракт и запуск fixture: [AMBIENT_PATROLS.md](AMBIENT_PATROLS.md).
+
+Baseline `tools/Invoke-AICFChecks.ps1 -EvidenceRoot <before>` —
+**61/61 PASS, exit 0**, включая FIA, authority и lifecycle audits.
+Исходных offline FAIL нет. Финальный `Invoke-AICFChecks.ps1 -EvidenceRoot
+<after>` — **62/62 PASS, exit 0**; полный вывод и argv каждого check в `after/`.
+Новый `Test-ManagedObserversContracts.ps1`: **14 rules / 14 negative
+mutations PASS**. Никакой обязательный check не исключался из runner.
+
+Исходный дефект воспроизведён тем же общим stage-only probe на production
+`d30629d`: `runtime.ps1 -Label baseline-proof -Port 2375` — native exit 0,
+**5/5 reproduction checks**, штатный RequestClose. В полном stopped log
+`profile-baseline-proof/logs/logs_2026-10-15_13-59-16/console.log` живой US
+боец находится на суше в 525 м от native FIA точки, observer отсутствует при
+native радиусе 776.209 м и доступном AI budget. Spawn point не eliminated,
+controller отсутствует, живых FIA 0. `AMBIENT_REPRO` явно фиксирует
+expected_active=1 / actual_active=0 и `NO_NATIVE_OBSERVER`.
+
+`compile.ps1 -Variant <Stock|Everon|RHS|ArlandWCSRHS>
+-Label production-<Variant>` — terminal Workbench **4 PASS / native exit 0**,
+`Script validation successful`, SCRIPT E/F и ENGINE F/VM — 0. Прочих resource
+строк (E) — соответственно 25/25/26/39. Полные logs `wb-production-*/`,
+точные argv `wb-*-argv.json`, итоги `compile-summary-final.json`.
+Изолированные fixtures также прошли Workbench; версия игры/API 1.8.0.13.
+
+Итоговые `runtime.ps1` вызывают canonical launcher с fresh profiles,
+отдельным stage, реальным listener через `-addr` и `-aicfAmbientProbe us`:
+
+| Variant / difficulty | Label | Checks | Native / log-audit exit |
+|---|---|---|---|
+| Stock / Easy | final-Stock | 41/41 | 0 / 0 |
+| Everon / Easy | final-Everon | 41/41 | 0 / 0 |
+| RHS / Medium | rhs-matrix2 | 41/41 | 0 / 0 |
+| ArlandWCSRHS / Medium | final-ArlandWCSRHS | 41/41 | 0 / 0 |
+
+Каждый прогон проверил US и USSR: физический подход, живых активных бойцов
+через 20 секунд, удержание 15 lifecycle интервалов, native dematerialization
+после ухода, повтор без новых controller/лишних бойцов, реальную смерть и
+повтор без воскрешения, native отказ при budget limit 1, пустой/погибший roster
+с controller у точки. Отдельная исходная база меняет faction и штатно
+eliminates ещё не появившуюся охрану. Дополнительные гарнизоны RHS/WCS
+сравниваются по исходным vehicle/group/member identities до и после подходов.
+В RHS/WCS каждый прочитанный native FIA member сопоставлен с
+`PMC_EQUIPMENT_APPLIED inventory_verified=1` того же entity ID.
+Повторный Stop и Update после Stop не возвращают observers; native readback
+через секунду сохраняет исходное число чужих observers (0).
+
+Все серверы завершены штатным RequestClose и `Game destroyed.`. Полные
+console/script/error logs сохранены в `profile-<Label>/logs/`, launcher commands
+и `AICF_RUNTIME_MANIFEST_JSON` — `server-<Label>-launcher.txt`; native exits
+рядом. `Test-AmbientPatrolLog.ps1 -LogPath <console.log> [-Baseline]` —
+**5 PASS / exit 0** с baseline. `check-log-negatives.ps1` — **12 ожидаемых
+FAIL/1**, включая missing cases, inactive members, budget/CLI/profile evidence,
+незавершённый log, VM error, leaked AICF type и PMC failure. Это PASS проверки
+анализатора, а не дополнительные runtime cases.
+
+`runtime-summary-final.json`, `companion-logs-final.json` и `*-analysis.txt`
+фиксируют полное чтение 15 остановленных log files. Script execution/VM/fatal
+errors, PMC failures и leaked AICF types — 0. **Native/content gate — WARN**:
+native leak reports / прочие (E) в console.log: baseline 246/216,
+Stock 327/353, Everon 323/336, RHS 387/500, WCS 436/660. Уже исходный код
+печатает эту категорию shutdown/resource diagnostics; различающиеся числа
+и типы объектов не объявляются неизменным baseline или clean-log PASS.
+
+Ранние попытки не являются финальным PASS: fixture исправлена после неверного
+перемещения, чтения death/observer cache в том же кадре, восстановления builder
+capacity floor и попытки negative spawn на неподготовленной позиции.
+Первый RHS выявил ошибку новой policy: runtime faction state тоже требует
+нормализации через content profile; исправлено и повторено обеими сторонами.
+Первый расширенный stock log audit ошибочно определял RHS по упоминанию GUID
+в resource diagnostics; теперь читает точный `-addons` native CLI, отрицательный
+profile case сохранён. Исходные outputs и failed/invalid попытки не удалены.
+
+`source-hashes-final.json`: все **267** production `.c/.conf/.gproj/.st`
+совпадают со stage; fixture hashes отдельно. Baseline controller Git blob
+точно совпал с `d30629d`; его полный source snapshot hashes сохранён перед
+удалением. Оба stage удалены; своих engine processes 0, чужие не затрагивались.
+`git diff --check` и 230 local Markdown links — PASS.
+Точный перечень затронутых файлов — `changed-files.txt` в evidence.
+Client/JIP, визуальный бой, долгий soak и packaged build — **NOT RUN**;
+они не входят в server-only checklist issue #54. Отклонённых критериев нет.
+
 ## Правила выпуска PR
 
 Известный baseline FAIL не является разрешением на выпуск PR. До создания

@@ -102,6 +102,7 @@ class AICF_MatchController
 	protected ref AICF_InfantryRecruitmentService m_InfantryRecruitment;
 	protected ref AICF_EquipmentService m_EquipmentService;
 	protected ref AICF_SocialService m_Social;
+	protected ref AICF_ManagedObservers m_ManagedObservers;
 	protected ref AICF_LoadoutService m_Loadouts;
 	protected ref AICF_FactionState m_USState;
 	protected ref AICF_FactionState m_USSRState;
@@ -278,6 +279,8 @@ class AICF_MatchController
 			m_Campaign, m_OrderPlanner, m_EconomySystem, m_ObjectiveGraph, m_TargetSelector, m_GroupSpawner);
 		m_InfantryRecruitment.SetRecoveryPolicy(m_HiddenRecoveryWatchdog, m_Stage3Config);
 		m_EquipmentService = new AICF_EquipmentService(m_Campaign, m_OrderPlanner, m_ObjectiveGraph, m_TargetSelector, m_GroupSpawner);
+		m_ManagedObservers = new AICF_ManagedObservers();
+		m_ManagedObservers.Start(m_Campaign);
 		m_Social = new AICF_SocialService();
 		m_Social.Start(m_Campaign, m_USState, m_USSRState);
 		m_BaseBuilders = new AICF_BaseBuilderService();
@@ -1554,6 +1557,8 @@ class AICF_MatchController
 		if (m_GroupMapMarkers)
 			m_GroupMapMarkers.Sync(m_USState, m_USSRState, m_VehicleCoordinator);
 		TryLogRosterReady();
+		if (m_ManagedObservers)
+			m_ManagedObservers.Update(m_USState, m_USSRState);
 		if (m_bRosterReady && m_Construction)
 			m_Construction.Update();
 		if (m_bRosterReady && m_BaseBuilders)
@@ -7492,6 +7497,11 @@ class AICF_MatchController
 			return;
 
 		m_bStopped = true;
+		if (m_ManagedObservers)
+		{
+			m_ManagedObservers.Stop();
+			m_ManagedObservers = null;
+		}
 		if (m_Social)
 		{
 			m_Social.Stop();

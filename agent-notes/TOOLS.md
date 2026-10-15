@@ -191,6 +191,7 @@ Enforce fixture не входят в автоматическую матрицу
 
 | Проверка | Назначение |
 |---|---|
+| [Test-ManagedObserversContracts.ps1](../tests/contracts/Test-ManagedObserversContracts.ps1) | Authority/live roster и cleanup native observers для штатной охраны; отрицательные мутации |
 | [Test-AICombatInputContracts.ps1](../tests/contracts/Test-AICombatInputContracts.ps1) | Пустые combat/weapon inputs native BT |
 | [Test-AICommanderModeStatic.ps1](../tests/static/Test-AICommanderModeStatic.ps1) | CLI режима, authority и UI состояния командующего |
 | [Test-AICommanderUIContracts.ps1](../tests/contracts/Test-AICommanderUIContracts.ps1) | Положительные и отрицательные мутации UI authority/markers |
