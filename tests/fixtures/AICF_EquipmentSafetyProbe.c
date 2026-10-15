@@ -162,6 +162,31 @@ modded class AICF_MatchController
 		AICF_EQSCheck("PARTIAL_MAGAZINES_ROUNDS", magazines.Count() > 1 && AICF_EquipmentInventory.Rounds(member.m_Character, weapon) == 4 + chamber,
 			string.Format("actual=%1 expected=%2 native=%3 magazine=%4 muzzle_type=%5", AICF_EquipmentInventory.Rounds(member.m_Character, weapon), 4 + chamber, muzzle.GetAmmoCount(), loaded.GetAmmoCount(), muzzle.GetMuzzleType()));
 		AICF_EQSCheck("PARTIAL_MAGAZINES_THRESHOLD", config.Low(AICF_EquipmentInventory.Rounds(member.m_Character, weapon), member.m_Plan.m_iPrimaryRounds, false, false));
+		if (magazines.Count() > 1)
+		{
+			array<IEntity> repeated = {loaded.GetOwner(), magazines[1].GetOwner(), loaded.GetOwner(), magazines[1].GetOwner(), null};
+			int expected = 4 + chamber;
+			AICF_EQSCheck("DUPLICATE_MAGAZINES_ONCE", AICF_EquipmentInventory.RoundsIn(repeated, weapon) == expected);
+			AICF_EQSCheck("DUPLICATE_MAGAZINES_LOW", config.Low(AICF_EquipmentInventory.RoundsIn(repeated, weapon), expected * 4, false, false));
+			AICF_EQSCheck("COUNT_INPUT_UNCHANGED", repeated.Count() == 5 && loaded.GetAmmoCount() == 3 && magazines[1].GetAmmoCount() == 1);
+		}
+		IEntity consumable, other;
+		foreach (IEntity candidate : items)
+			if (candidate && SCR_ConsumableItemComponent.Cast(candidate.FindComponent(SCR_ConsumableItemComponent))) { consumable = candidate; break; }
+		if (consumable)
+		{
+			ResourceName prefab = SCR_ResourceNameUtils.GetPrefabName(consumable);
+			array<IEntity> modelItems = {};
+			AICF_EquipmentInventory.Manager(member.m_Plan.m_Draft.GetCharacter()).GetItems(modelItems);
+			foreach (IEntity modelItem : modelItems)
+				if (modelItem && modelItem != consumable && SCR_ResourceNameUtils.GetPrefabName(modelItem) == prefab) { other = modelItem; break; }
+			array<IEntity> repeatedConsumables = {consumable, consumable, null};
+			AICF_EQSCheck("DUPLICATE_CONSUMABLES_ONCE", member.ConsumablesIn(repeatedConsumables, prefab) == 1);
+			AICF_EQSCheck("DUPLICATE_CONSUMABLES_LOW", config.Low(member.ConsumablesIn(repeatedConsumables, prefab), 4, false, false));
+			repeatedConsumables.Insert(other);
+			AICF_EQSCheck("DISTINCT_SAME_PREFAB_COUNTED", other && member.ConsumablesIn(repeatedConsumables, prefab) == 2);
+		}
+		else AICF_EQSCheck("DUPLICATE_CONSUMABLES_ONCE", false, "reason=NO_NATIVE_CONSUMABLE");
 		foreach (int index, BaseMagazineComponent restore : magazines) restore.SetAmmoCount(counts[index]);
 	}
 
@@ -244,6 +269,13 @@ modded class AICF_MatchController
 		AICF_EQSCheck("LOADED_READBACK", AICF_EquipmentInventory.Loaded(muzzle) == loaded);
 		if (muzzle.IsDisposable())
 		{
+			IEntity spare = GetGame().SpawnEntityPrefabLocal(Resource.Load(prefab), member.m_Plan.m_Draft.GetCharacter().GetWorld());
+			BaseWeaponComponent spareWeapon;
+			if (spare) spareWeapon = BaseWeaponComponent.Cast(spare.FindComponent(BaseWeaponComponent));
+			array<IEntity> repeatedLaunchers = {launcher.GetOwner(), spare, spare, launcher.GetOwner(), null};
+			AICF_EQSCheck("DUPLICATE_DISPOSABLES_ONCE", spareWeapon &&
+				AICF_EquipmentInventory.RoundsIn(repeatedLaunchers, launcher) == loaded + AICF_EquipmentInventory.Loaded(spareWeapon.GetCurrentMuzzle()), "prefab=" + prefab);
+			if (spare) SCR_EntityHelper.DeleteEntityAndChildren(spare);
 			BaseMagazineComponent magazine = muzzle.GetMagazine();
 			if (magazine) magazine.SetAmmoCount(0);
 			for (int barrel; barrel < muzzle.GetBarrelsCount(); barrel++) muzzle.ClearChamber(barrel);
@@ -328,7 +360,7 @@ modded class AICF_MatchController
 	{
 		super.Update();
 		string enabled;
-		if (!System.GetCLIParam("aicfEquipmentProbe", enabled) || enabled != "safety" || !m_bRosterReady || m_iEQSafetyPhase == 99) return;
+		if (!System.GetCLIParam("aicfEquipmentProbe", enabled) || (enabled != "safety" && enabled != "counts") || !m_bRosterReady || m_iEQSafetyPhase == 99) return;
 		int now = System.GetTickCount();
 		if (!m_iEQSafetyStarted)
 		{
@@ -405,6 +437,7 @@ modded class AICF_MatchController
 				m_aEQSafetyMembers.Insert(member);
 				if (i == 0) AICF_EQSAmmoPolicy(member);
 			}
+			if (enabled == "counts") { AICF_EQSFinish(); return; }
 			AICF_EQSCheck("LIVING_SOURCE", !AICF_EquipmentInventory.Corpse(m_EQSafetyCorpse));
 			SCR_CharacterDamageManagerComponent damage = SCR_CharacterDamageManagerComponent.Cast(m_EQSafetyCorpse.FindComponent(SCR_CharacterDamageManagerComponent));
 			damage.GetDefaultHitZone().SetHealthScaled(0.5);

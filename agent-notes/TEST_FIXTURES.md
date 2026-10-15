@@ -8,7 +8,7 @@
 `AICF_ZZZEquipmentSearchProbe.c`: общий modded class должен загрузиться первым.
 В production addon этих файлов нет.
 
-`-aicfEquipmentProbe 1|inventory|safety|lifecycle|player|search` выбирает один
+`-aicfEquipmentProbe 1|inventory|safety|counts|lifecycle|player|search` выбирает один
 probe; `-aicfRequirePlayerForResult 0` сохраняет server-only сценарий активным.
 Общий fixture вызывает production service/planner/applicator, создаёт настоящие
 async rosters, corpses и stock/profile armory compositions. `1` проверяет
@@ -16,6 +16,15 @@ async rosters, corpses и stock/profile armory compositions. `1` проверя�
 RestoreNew, тот же inventory после rollback, успешный retry и несколько
 периодов без нового визита. `inventory` изолирует выдачу свежему живому actor
 у реального арсенала; этот mode сам по себе не доказывает физический подход.
+
+`counts` запускает короткую часть safety: native частичные магазины, loaded
+magazine/chambers и расходники. В production counters передаются перечисления
+с повторными ссылками и null: ожидается один вклад каждой entity, отдельный
+вклад разных entities одного prefab, правильный low threshold и неизменность
+исходного массива/боезапаса. Полный `safety` дополнительно повторяет одноразовые
+launcher entities. Для отрицательного runtime regression в отдельном stage
+отключается только identity filter: тот же `counts` обязан дать FAIL. Это
+инъекция повторного перечисления, а не заявление, что getter всегда даёт дубли.
 
 `safety` перечисляет enabled catalog launchers, классифицирует реальным
 `EWeaponType`/muzzle/projectile/well и проверяет по одному представителю каждого

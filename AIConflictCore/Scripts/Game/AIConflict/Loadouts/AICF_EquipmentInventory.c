@@ -1,6 +1,14 @@
 // Реальное состояние оружия; shared magazine не считается дважды с muzzle.
 class AICF_EquipmentInventory
 {
+	// GetItems может повторять entity из нескольких managed storages. Два
+	// разных предмета одного prefab сохраняются, одна ссылка учитывается один раз.
+	static void UniqueItems(array<IEntity> items, array<IEntity> unique)
+	{
+		foreach (IEntity item : items)
+			if (item && !unique.Contains(item)) unique.Insert(item);
+	}
+
 	static InventoryStorageManagerComponent Manager(IEntity entity)
 	{
 		if (!entity) return null;
@@ -45,14 +53,20 @@ class AICF_EquipmentInventory
 	{
 		InventoryStorageManagerComponent manager = Manager(character);
 		if (!manager || !weapon) return 0;
+		array<IEntity> items = {};
+		manager.GetItems(items);
+		return RoundsIn(items, weapon);
+	}
+
+	static int RoundsIn(array<IEntity> items, BaseWeaponComponent weapon)
+	{
 		BaseMuzzleComponent muzzle = Muzzle(weapon);
 		if (!muzzle) return 0;
 		int rounds = Loaded(muzzle);
-		array<IEntity> items = {};
-		manager.GetItems(items);
-		foreach (IEntity item : items)
+		array<IEntity> unique = {};
+		UniqueItems(items, unique);
+		foreach (IEntity item : unique)
 		{
-			if (!item) continue;
 			if (muzzle.IsDisposable())
 			{
 				BaseWeaponComponent spare = BaseWeaponComponent.Cast(item.FindComponent(BaseWeaponComponent));

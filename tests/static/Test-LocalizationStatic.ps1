@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../../tools/lib/AICFLocalization.Common.ps1')
 $entries = Read-AICFLocalization $RepositoryRoot
 $failures = [Collections.Generic.List[string]]::new()
+$cyrillicPattern = '[\u0410-\u044F\u0401\u0451]'
 function Require([bool]$Condition, [string]$Message) {
     if (-not $Condition) { $failures.Add($Message) }
 }
@@ -16,8 +17,12 @@ foreach ($id in $entries.Keys) {
     Require (-not [string]::IsNullOrWhiteSpace($entries[$id].en_us)) "Empty English: $id"
     Require (-not [string]::IsNullOrWhiteSpace($entries[$id].ru_ru)) "Empty Russian: $id"
     Require (Same-Placeholders $entries[$id].en_us $entries[$id].ru_ru) "Placeholder mismatch: $id"
-    Require ($entries[$id].en_us -notmatch '[А-Яа-яЁё]') "Russian text in English: $id"
+    Require ($entries[$id].en_us -notmatch $cyrillicPattern) "Russian text in English: $id"
 }
+foreach ($codepoint in @(0x0410, 0x044F, 0x0401, 0x0451)) {
+    Require (([string][char]$codepoint) -match $cyrillicPattern) "Cyrillic detection failed: $codepoint"
+}
+Require ('English' -notmatch $cyrillicPattern) 'English incorrectly detected as Cyrillic'
 Require (-not (Same-Placeholders '%1 / %2' '%1')) 'Negative missing parameter was not detected'
 Require (-not (Same-Placeholders '%1 / %2' '%1 / %1')) 'Negative duplicate parameter was not detected'
 
@@ -59,7 +64,7 @@ foreach ($file in $sourceFiles) {
     }
     foreach ($token in [regex]::Matches($source, '(?s)//[^\r\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"')) {
         if ($token.Value.StartsWith('"')) {
-            Require ($token.Value -notmatch '[А-Яа-яЁё]') "Hardcoded Russian literal: $($file.Name): $($token.Value)"
+            Require ($token.Value -notmatch $cyrillicPattern) "Hardcoded Russian literal: $($file.Name): $($token.Value)"
         }
     }
     Require ($source -notmatch 'string\.Format\(\s*"\{AICF:') "Native formatting loses localized parameters: $($file.Name)"

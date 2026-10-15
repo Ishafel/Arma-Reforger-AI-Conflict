@@ -1,5 +1,6 @@
 param([string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../lib/Stage3StaticAudit.Common.ps1')
 $core = Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict'
 $sources = @{}
 foreach ($file in @('Loadouts/AICF_EquipmentInventory.c','Loadouts/AICF_EquipmentMember.c','Loadouts/AICF_EquipmentOrder.c','Loadouts/AICF_EquipmentService.c','Loadouts/AICF_EquipmentApplicator.c','Orders/AICF_OrderPlanner.c','State/AICF_GroupSlot.c','Vehicles/AICF_VehicleCoordinator.c')) {
@@ -14,11 +15,17 @@ function Rules($inputSources) {
     $planner = $inputSources['Orders/AICF_OrderPlanner.c']
     $slot = $inputSources['State/AICF_GroupSlot.c']
     $vehicle = $inputSources['Vehicles/AICF_VehicleCoordinator.c']
+    $rounds = Get-AICFMethodBody ([pscustomobject]@{Source=$inventory;Code=$inventory}) 'RoundsIn'
+    $consumables = Get-AICFMethodBody ([pscustomobject]@{Source=$member;Code=$member}) 'ConsumablesIn'
     [ordered]@{
         AUTHORITY = $service.Contains('!Replication.IsServer()') -and $service.Contains('!m_Campaign.IsMaster()') -and $service.Contains('!m_Campaign.IsRunning()')
         CORPSE_SOURCE = $inventory.Contains('ECharacterLifeState.DEAD') -and $inventory.Contains('IsPlayerControlled()') -and $inventory.Contains('GetPlayerIdFromControlledEntity(character)')
         PHYSICAL_TRANSFER = $inventory.Contains('member.m_Character.GetOrigin(), corpse.GetOrigin(), AICF_EquipmentConfig.TRANSFER_METERS') -and $inventory.Contains('corpse.GetID() != corpseId') -and $inventory.Contains('item.GetID() != itemId')
         NATIVE_COMPATIBILITY = $inventory.Contains('muzzle.GetMagazineWell().Type() == magazine.GetMagazineWell().Type()') -and $inventory.Contains('magazine.GetAmmoCount()') -and $inventory.Contains('magazine != muzzle.GetMagazine()') -and $inventory.Contains('muzzle.IsBarrelChambered(i)')
+        UNIQUE_IDENTITY = $inventory.Contains('item && !unique.Contains(item)') -and $inventory.Contains('unique.Insert(item)')
+        UNIQUE_ROUNDS = $inventory.Contains('return RoundsIn(items, weapon);') -and $rounds.Contains('UniqueItems(items, unique);') -and $rounds.Contains('foreach (IEntity item : unique)')
+        UNIQUE_CONSUMABLES = $member.Contains('return ConsumablesIn(items, prefab);') -and $consumables.Contains('AICF_EquipmentInventory.UniqueItems(items, unique);') -and $consumables.Contains('foreach (IEntity item : unique)')
+        UNIQUE_TARGET = $member.Contains('AICF_EquipmentInventory.UniqueItems(rawItems, items);')
         REAL_TRANSFER = $inventory.Contains('target.TryMoveItemToStorage(item, storage)') -and $inventory.Contains('target.Contains(item) && !source.Contains(item)') -and $inventory -notmatch 'SpawnEntity|AddSupplies|SetAmmoCount|Ticket'
         MEMBER_REVISION = $member.Contains('m_Slot.GetRosterMember(m_iIndex) != m_Character') -and $member.Contains('binding.m_iRevision == m_iRevision') -and $member.Contains('m_Slot.GetSpawnGeneration() != m_iGeneration')
         OPERATION_IDENTITY = $order.Contains('m_Slot.GetEquipmentOrder() == this') -and $order.Contains('m_Slot.GetStrategicIntentRevision() == m_iIntent') -and $order.Contains('m_Slot.GetStrategicAssignmentRevision() == m_iAssignment')
@@ -37,6 +44,10 @@ $rules = Rules $sources
 $failed = @($rules.Keys | Where-Object {-not $rules[$_]})
 if ($failed.Count) { throw ('Equipment contract failures: ' + ($failed -join ', ')) }
 $mutations = @(
+    @('Loadouts/AICF_EquipmentInventory.c','item && !unique.Contains(item)', 'item', 'UNIQUE_IDENTITY'),
+    @('Loadouts/AICF_EquipmentInventory.c','foreach (IEntity item : unique)', 'foreach (IEntity item : items)', 'UNIQUE_ROUNDS'),
+    @('Loadouts/AICF_EquipmentMember.c','foreach (IEntity item : unique)', 'foreach (IEntity item : items)', 'UNIQUE_CONSUMABLES'),
+    @('Loadouts/AICF_EquipmentMember.c','AICF_EquipmentInventory.UniqueItems(rawItems, items);', 'items = rawItems;', 'UNIQUE_TARGET'),
     @('Loadouts/AICF_EquipmentInventory.c','muzzle.GetMagazineWell().Type() == magazine.GetMagazineWell().Type()', 'true', 'NATIVE_COMPATIBILITY'),
     @('Loadouts/AICF_EquipmentInventory.c','member.m_Character.GetOrigin(), corpse.GetOrigin(), AICF_EquipmentConfig.TRANSFER_METERS', 'member.m_Character.GetOrigin(), corpse.GetOrigin(), 5000', 'PHYSICAL_TRANSFER'),
     @('Loadouts/AICF_EquipmentInventory.c','target.Contains(item) && !source.Contains(item)', 'target.Contains(item)', 'REAL_TRANSFER'),

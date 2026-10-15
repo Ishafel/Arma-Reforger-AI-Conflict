@@ -12,7 +12,7 @@ foreach ($entry in @(
     @('node','Forces/AICF_AINodeLifecycle.c'),
     @('planner','Orders/AICF_OrderPlanner.c'),
     @('controller','Bootstrap/AICF_MatchController.c')
-)) { $sources[$entry[0]] = Get-Content (Join-Path $core $entry[1]) -Raw }
+)) { $sources[$entry[0]] = Get-Content (Join-Path $core $entry[1]) -Raw -Encoding UTF8 }
 function Body($source, $method) {
     Get-AICFMethodBody ([pscustomobject]@{Source=$source; Code=(ConvertTo-AICFCodeText $source)}) $method
 }
@@ -37,10 +37,13 @@ function Check($s) {
     if ($preflight -notmatch '!slot.IsRouteTargetDeferred\(slot.GetTargetBase\(\)\)' -or $preflight -notmatch '!slot.GetRouteRecoveryEpisode\(\).IsBlocked\(slot\)') { $fail.Add('EGRESS_TARGET_AND_EPISODE') }
     $recover = Body $s.controller 'TryRecoverOrder'
     if ($recover -notmatch '(?s)GetRouteRecoveryEpisode\(\).IsBlocked\(slot\).*?return false;') { $fail.Add('TASK_AUDIT_OWNER') }
-    foreach ($method in @('AssignOrder','AssignAICommanderOrder','ReconcileStrategicOrder','ReconcileAICommanderOrder','AssignLossResponseOrder','AssignAICommanderLossResponseOrder')) {
+    foreach ($method in @('AssignOrder','AssignAICommanderOrder','ReconcileStrategicOrder','ReconcileAICommanderOrder','AssignLossResponseOrder')) {
         $boundary = Body $s.planner $method
         if ($boundary -notmatch '(?s)IsTemporaryRouteReplanHold\(\).*?IsPersistentStuckFieldHold\(\).*?GetRouteRecoveryEpisode\(\).IsBlocked\(slot\).*?return false;.*?IsRecruitingInfantry') { $fail.Add('POSTURE_QRF_OWNER') }
     }
+    # Loss response delegates to the same guarded reconcile boundary.
+    $loss = Body $s.planner 'AssignAICommanderLossResponseOrder'
+    if ($loss -notmatch 'return ReconcileAICommanderOrder\(slot, faction, graph, targetSelector,\s*"BASE_OWNER_CHANGED_LOSS", minimumDwellMs, stableCandidateMs,\s*waypointSuspendedByVehicle, decision\);') { $fail.Add('POSTURE_QRF_OWNER') }
     return $fail.ToArray()
 }
 $failures = @(Check $sources)
@@ -54,7 +57,9 @@ $mutations = @(
     @('EGRESS_PREFLIGHT','controller','m_OrderPlanner.CanRebuildAfterHiddenMobEgress(slot, faction)'),
     @('EGRESS_TARGET_AND_EPISODE','planner','!slot.IsRouteTargetDeferred(slot.GetTargetBase())'),
     @('TASK_AUDIT_OWNER','controller','slot.GetRouteRecoveryEpisode().IsBlocked(slot)'),
-    @('POSTURE_QRF_OWNER','planner','slot.IsTemporaryRouteReplanHold()')
+    @('POSTURE_QRF_OWNER','planner','slot.IsTemporaryRouteReplanHold()'),
+    @('POSTURE_QRF_OWNER','planner','slot.IsPersistentStuckFieldHold()'),
+    @('POSTURE_QRF_OWNER','planner','return ReconcileAICommanderOrder(slot, faction, graph, targetSelector,')
 )
 foreach ($mutation in $mutations) {
     $copy = $sources.Clone()

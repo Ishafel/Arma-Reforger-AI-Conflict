@@ -86,8 +86,10 @@ class AICF_EquipmentPlan
 			for (int barrel; barrel < AICF_EquipmentInventory.Muzzle(modelPrimary).GetBarrelsCount(); barrel++)
 				if (AICF_EquipmentInventory.Muzzle(modelPrimary).IsBarrelChambered(barrel)) m_iPrimaryRounds--;
 		m_iLauncherRounds = AICF_EquipmentInventory.Rounds(model, AICF_EquipmentInventory.Weapon(model, true));
+		array<IEntity> rawItems = {};
 		array<IEntity> items = {};
-		AICF_EquipmentInventory.Manager(model).GetItems(items);
+		AICF_EquipmentInventory.Manager(model).GetItems(rawItems);
+		AICF_EquipmentInventory.UniqueItems(rawItems, items);
 		set<BaseInventoryStorageComponent> roots = new set<BaseInventoryStorageComponent>();
 		SCR_PlayerArsenalLoadout.FindStorageComponents(model, roots);
 		foreach (BaseInventoryStorageComponent root : roots)
@@ -175,8 +177,15 @@ class AICF_EquipmentMember
 	{
 		array<IEntity> items = {};
 		AICF_EquipmentInventory.Manager(m_Character).GetItems(items);
+		return ConsumablesIn(items, prefab);
+	}
+
+	int ConsumablesIn(array<IEntity> items, ResourceName prefab)
+	{
+		array<IEntity> unique = {};
+		AICF_EquipmentInventory.UniqueItems(items, unique);
 		int count;
-		foreach (IEntity item : items)
+		foreach (IEntity item : unique)
 		{
 			if (SCR_ResourceNameUtils.GetPrefabName(item) != prefab) continue;
 			BaseWeaponComponent throwable = BaseWeaponComponent.Cast(item.FindComponent(BaseWeaponComponent));
