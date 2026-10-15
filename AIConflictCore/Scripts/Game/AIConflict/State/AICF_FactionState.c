@@ -76,6 +76,46 @@ class AICF_FactionState
 		return count;
 	}
 
+	// Завершение initial materialization не означает живой полный roster.
+	// WAITING и replacement SPAWNING сохраняют обычную платную recovery цепочку.
+	bool IsInitialSpawnQueueSettled()
+	{
+		if (m_aGroupSlots.Count() != AICF_Stage1Config.GROUP_SLOTS_PER_FACTION)
+			return false;
+		for (int slotIndex; slotIndex < m_aGroupSlots.Count(); slotIndex++)
+		{
+			AICF_GroupSlot slot = m_aGroupSlots[slotIndex];
+			if (!slot || slot.GetSlotId() != slotIndex)
+				return false;
+			AICF_EGroupSlotState state = slot.GetState();
+			if (state == AICF_EGroupSlotState.READY || state == AICF_EGroupSlotState.WAITING)
+				continue;
+			if (state == AICF_EGroupSlotState.SPAWNING && slot.IsReplacementDeployment())
+				continue;
+			return false;
+		}
+		return true;
+	}
+
+	string DescribeInitialSpawnQueueStates()
+	{
+		string states;
+		foreach (int index, AICF_GroupSlot slot : m_aGroupSlots)
+		{
+			if (!states.IsEmpty())
+				states += ",";
+			if (!slot)
+			{
+				states += string.Format("%1:NULL:0:0", index);
+				continue;
+			}
+			states += string.Format("%1:%2:%3:%4", slot.GetSlotId(),
+				typename.EnumToString(AICF_EGroupSlotState, slot.GetState()),
+				slot.GetSpawnGeneration(), slot.IsReplacementDeployment());
+		}
+		return states;
+	}
+
 	bool ApplyCommanderConfiguration(
 		int slotId,
 		AICF_EGroupRole role,

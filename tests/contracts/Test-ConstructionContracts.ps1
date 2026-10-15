@@ -40,6 +40,28 @@ CheckLog 'negative-prop-balance' ($positive.Replace('props_after=81','props_afte
 CheckLog 'negative-deferred-prop-balance' ($positive.Replace('ENGINE : Game destroyed.', "SCRIPT : [AICF][CONSTRUCTION_DEFERRED_PROBE] accepted=1 props_current=152 props_expected=81 root_present=1`nENGINE : Game destroyed.")) 'CONSTRUCTION_DEFERRED_PROP_BALANCE'
 CheckLog 'negative-premature-service' ($positive.Replace('service_online=0','service_online=1')) 'CONSTRUCTION_PREMATURE_SERVICE'
 CheckLog 'negative-before-roster' ($positive.Replace('[ROSTER_READY]','[NOT_READY]')) 'CONSTRUCTION_BEFORE_ROSTER'
+$queueReadyStates = ((0..9 | ForEach-Object { "${_}:READY:1:0" }) -join ',')
+$queueWaitingStates = $queueReadyStates.Replace('1:READY:1:0','1:WAITING:1:0').Replace('2:READY:1:0','2:WAITING:1:0')
+$queueBarrier = "SCRIPT : [AICF][INITIAL_SPAWN_QUEUE_SETTLED] t_ms=59000 authority=server_master us_slots=10 ussr_slots=10 us_states=$queueReadyStates ussr_states=$queueWaitingStates roster_ready=0 construction_only=1"
+$queuePositive = $positive.Replace('SCRIPT : [AICF][ROSTER_READY]', $queueBarrier)
+CheckLog 'positive-initial-queue-before-roster' $queuePositive
+CheckLog 'positive-replacement-spawning-queue' ($queuePositive.Replace('2:WAITING:1:0','2:SPAWNING:2:1'))
+foreach ($case in @(
+    @{Name='queue-empty'; Before='1:WAITING:1:0'; After='1:EMPTY:1:0'},
+    @{Name='queue-destroyed'; Before='1:WAITING:1:0'; After='1:DESTROYED:1:0'},
+    @{Name='queue-initial-spawning'; Before='1:WAITING:1:0'; After='1:SPAWNING:1:0'},
+    @{Name='queue-null'; Before='1:WAITING:1:0'; After='1:NULL:0:0'},
+    @{Name='queue-slot-count'; Before='us_slots=10'; After='us_slots=9'},
+    @{Name='queue-short-snapshot'; Before=',9:READY:1:0'; After=''},
+    @{Name='queue-duplicate-slot'; Before='1:WAITING:1:0'; After='0:WAITING:1:0'},
+    @{Name='queue-zero-generation'; Before='1:WAITING:1:0'; After='1:WAITING:0:0'},
+    @{Name='queue-authority'; Before='authority=server_master'; After='authority=client'}
+)) {
+    CheckLog ('negative-' + $case.Name) ($queuePositive.Replace($case.Before,$case.After)) 'CONSTRUCTION_INVALID_INITIAL_QUEUE_BARRIER'
+}
+CheckLog 'negative-queue-duplicate-event' ($queuePositive.Replace($queueBarrier, "$queueBarrier`n$queueBarrier")) 'CONSTRUCTION_INVALID_INITIAL_QUEUE_BARRIER'
+CheckLog 'negative-queue-after-construction' ($queuePositive.Replace($queueBarrier,'').Replace('ENGINE : Game destroyed.', "$queueBarrier`nENGINE : Game destroyed.")) 'CONSTRUCTION_BEFORE_ROSTER'
+CheckLog 'negative-bare-queue-event' ($queuePositive.Replace($queueBarrier,'SCRIPT : [AICF][INITIAL_SPAWN_QUEUE_SETTLED]')) 'CONSTRUCTION_INVALID_INITIAL_QUEUE_BARRIER'
 CheckLog 'negative-player-side' $positive 'CONSTRUCTION_PLAYER_SIDE' 'USSR'
 CheckLog 'negative-unconfirmed-tool' ($positive.Replace('tool_active=1','tool_active=0')) 'CONSTRUCTION_NO_BUILDER_COMPLETION'
 CheckLog 'negative-layout-identity' ($positive.Replace((Event 'CONSTRUCTION_COMPLETED' 94000 'service_online=1'), (Event 'CONSTRUCTION_COMPLETED' 94000 'service_online=1').Replace('layout=layout1','layout=layout2'))) 'CONSTRUCTION_LAYOUT_IDENTITY'
@@ -70,13 +92,35 @@ CheckLog 'negative-completion-case-identity' ($positive.Replace((Event 'CONSTRUC
 $fixtureRepo = Join-Path $EvidenceRoot 'static-input'
 $fixtureCore = Join-Path $fixtureRepo 'AIConflictCore/Scripts/Game/AIConflict'
 New-Item -ItemType Directory -Path $fixtureCore -Force | Out-Null
-foreach ($domain in @('Construction','Economy','Config','Command','Bootstrap','Vehicles')) {
+foreach ($domain in @('Construction','Economy','Config','Command','Bootstrap','State','Vehicles')) {
     Copy-Item -LiteralPath (Join-Path $repo "AIConflictCore/Scripts/Game/AIConflict/$domain") -Destination $fixtureCore -Recurse -Force
 }
 $staticTool = Join-Path $PSScriptRoot '../static/Test-ConstructionStatic.ps1'
 $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool -RepositoryRoot $fixtureRepo
 if ($LASTEXITCODE -ne 0) { $failures.Add('static-positive') }
 $result | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'static-positive.txt')
+foreach ($case in @(
+    @{Name='queue-count'; File='State/AICF_FactionState.c'; Before='m_aGroupSlots.Count() != AICF_Stage1Config.GROUP_SLOTS_PER_FACTION'; After='false'; Rule='CONSTRUCTION_INITIAL_QUEUE_SHAPE'},
+    @{Name='queue-slot-identity'; File='State/AICF_FactionState.c'; Before='!slot || slot.GetSlotId() != slotIndex'; After='!slot'; Rule='CONSTRUCTION_INITIAL_QUEUE_SHAPE'},
+    @{Name='queue-free-initial-spawning'; File='State/AICF_FactionState.c'; Before='state == AICF_EGroupSlotState.SPAWNING && slot.IsReplacementDeployment()'; After='state == AICF_EGroupSlotState.SPAWNING'; Rule='CONSTRUCTION_INITIAL_QUEUE_STATES'},
+    @{Name='queue-empty-state'; File='State/AICF_FactionState.c'; Before='state == AICF_EGroupSlotState.WAITING'; After='state == AICF_EGroupSlotState.EMPTY'; Rule='CONSTRUCTION_INITIAL_QUEUE_STATES'},
+    @{Name='queue-one-faction'; File='Bootstrap/AICF_MatchController.c'; Before='!m_USState.IsInitialSpawnQueueSettled() || !m_USSRState.IsInitialSpawnQueueSettled()'; After='!m_USState.IsInitialSpawnQueueSettled()'; Rule='CONSTRUCTION_INITIAL_QUEUE_BARRIER'},
+    @{Name='queue-no-master'; File='Bootstrap/AICF_MatchController.c'; Before='!m_Campaign || !m_Campaign.IsMaster() || !m_USState || !m_USSRState'; After='!m_Campaign || !m_USState || !m_USSRState'; Rule='CONSTRUCTION_INITIAL_QUEUE_BARRIER'},
+    @{Name='queue-not-latched'; File='Bootstrap/AICF_MatchController.c'; Before='m_bInitialSpawnQueueSettled = true;'; After='m_bInitialSpawnQueueSettled = false;'; Rule='CONSTRUCTION_INITIAL_QUEUE_BARRIER'},
+    @{Name='queue-construction-ungated'; File='Bootstrap/AICF_MatchController.c'; Before='if ((m_bRosterReady || m_bInitialSpawnQueueSettled) && m_Construction)'; After='if (m_Construction)'; Rule='CONSTRUCTION_ROSTER_GATE'},
+    @{Name='queue-global-roster-waiting'; File='Bootstrap/AICF_MatchController.c'; Before='m_USState.CountSlotsByState(AICF_EGroupSlotState.READY) != AICF_Stage1Config.GROUP_SLOTS_PER_FACTION'; After='m_USState.CountSlotsByState(AICF_EGroupSlotState.WAITING) != AICF_Stage1Config.GROUP_SLOTS_PER_FACTION'; Rule='CONSTRUCTION_ROSTER_NOT_WEAKENED'}
+)) {
+    $path = Join-Path $fixtureCore $case.File
+    $original = [IO.File]::ReadAllText($path)
+    if (-not $original.Contains($case.Before)) { throw "Mutation target missing: $($case.Name)" }
+    try {
+        [IO.File]::WriteAllText($path, $original.Replace($case.Before,$case.After))
+        $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool -RepositoryRoot $fixtureRepo
+        if ($LASTEXITCODE -ne 1 -or ($result -join "`n") -notmatch [regex]::Escape('[' + $case.Rule + ']')) { $failures.Add('static-negative-' + $case.Name) }
+        $result | Set-Content -LiteralPath (Join-Path $EvidenceRoot ('static-negative-' + $case.Name + '.txt'))
+    }
+    finally { [IO.File]::WriteAllText($path, $original) }
+}
 $builderPath = Join-Path $fixtureCore 'Construction/AICF_BaseBuilderService.c'
 $builder = [IO.File]::ReadAllText($builderPath)
 foreach ($case in @(
@@ -178,4 +222,6 @@ if ($LASTEXITCODE -ne 1 -or ($result -join "`n") -notmatch '\[CONSTRUCTION_SHARE
 $result | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'static-negative-shared-start-cursor.txt')
 [IO.File]::WriteAllText($checkpointPath, $checkpointCode)
 if ($failures.Count) { Write-Output "Construction contract inputs: FAIL $($failures -join ',')"; exit 1 }
-Write-Output 'Construction contract inputs: PASS (16 log inputs + positive/32 negative static inputs)'
+$logInputs = @(Get-ChildItem -LiteralPath $EvidenceRoot -File -Filter '*.log').Count
+$staticNegativeInputs = @(Get-ChildItem -LiteralPath $EvidenceRoot -File -Filter 'static-negative-*.txt').Count
+Write-Output "Construction contract inputs: PASS ($logInputs log inputs + positive/$staticNegativeInputs negative static inputs)"

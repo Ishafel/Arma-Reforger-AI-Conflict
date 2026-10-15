@@ -1,5 +1,136 @@
 # Проверки и baseline
 
+## Подготовка 0.1.29: полная матрица запуска — 2026-10-15
+
+Задача: [issue #57](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/issues/57),
+[PR #58](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/58).
+Evidence остаётся в `.codex-runtime/dependency-check-20261015/`.
+
+На WCS-исправлении `2ed3a67` выполнен свежий полный offline runner:
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Invoke-AICFChecks.ps1
+-EvidenceRoot .codex-runtime/dependency-check-20261015/offline-final-all` —
+**62/62 PASS, native exit 0**. Набор имён совпал с baseline, пропущенных
+проверок и baseline failures нет; production snapshot 266 файлов сохранён.
+Полные stdout и отдельные outputs — `offline-final-all/`, сопоставление —
+`offline-final-all-verdict.json`.
+
+Три независимых stage и listener 2395/2397/2399 использованы параллельно:
+Stock/Everon/EveronNorth **9/9 PASS**, RHS/EveronRHS/EveronNorthRHS
+**9/9 PASS**, WCS **8/9 PASS, 1 FAIL**. Каждый успешный запуск подтвердил
+точные CLI/manifests, header/world/difficulty, production `ROSTER_READY`,
+десять faction-correct READY slots каждой стороны, не менее 20 секунд
+после готовности и штатные `RequestClose`/`Game destroyed.`, native exit 0.
+Fixtures прошли terminal Workbench Validate/Compile. Полные результаты,
+argv, hashes и остановленные console/script/error logs —
+`matrix-stock/summary.json`, `matrix-rhs/summary.json`, `matrix-wcs/summary.json`.
+Предварительные более короткие запуски сохранены отдельно и не заменяют gate.
+
+**Сохранённый исходный FAIL:** `EveronWCSRHS / Easy`, profile
+`matrix-wcs/profile-EveronWCSRHS-Easy/logs/logs_2026-10-15_17-56-52/`.
+USSR slots 1/2 перешли в READY при `t_ms=6914/6915`, затем погибли
+в Physics simulation (`SCRIPT E: INSTIGATOR_OTHER`, две строки),
+`GROUP_EMPTY` при `t_ms=7563/7896`. Глобальный `ROSTER_READY` не достигнут,
+fixture закрыла сервер через 180 секунд с native exit 0; это **FAIL**.
+Replacement ждёт `NO_ONLINE_BARRACKS`, а construction/builders ждут
+глобальный roster: подтверждён цикл bootstrap. Исходный failure-index,
+полные логи и 266 hashes сохранены; повтор до случайного PASS не выполнялся.
+Диагностическая fixture с той же парой HQ воспроизвела физическую причину:
+оседающий stock BTR70 `{C012BB3488BEA0C2}` ударяет бойцов, native damage
+`COLLISION`, instigator `INSTIGATOR_OTHER`. Обычный Projectile trace, затем
+отдельно проверенные Character/Vehicle masks возвращали clear даже в опасной
+точке. Эти неудачные эксперименты и отличия timing global READY сохранены
+в `matrix-rhs/spawn-damage/`; их нельзя считать startup PASS.
+
+Финальный guard `AICF_InfantryVehicleClearance` читает свежие vehicle bounds
+в query radius 16 м и исключает горизонтальный footprint с запасом 2 м.
+Exact-HQ regression на окончательных **267 production файлах** — **PASS/0**:
+оба исходных slots сохранили generation 1 и живого бойца не менее 64 секунд;
+contact/damage/destroyed=0, ordinary SCRIPT E/F, ENGINE F и VM=0, штатное
+закрытие. `spawn-damage/verdict-release.json`, `summary.json` и полные
+остановленные profiles сохраняют команды, argv, listener и source hashes.
+
+Construction/builders получили отдельный server/master barrier
+`INITIAL_SPAWN_QUEUE_SETTLED`; полный `ROSTER_READY` по-прежнему требует
+20 текущих READY slots. Fresh targeted baseline и after — **4/4 PASS/0**
+(ConstructionStatic, ConstructionContracts, BaseBuildersStatic, Stage4Static).
+В after — 30 log inputs и 41 negative source mutation. Placement baseline —
+**PASS/0**, три mutations; after — **PASS/0**, десять mutations. Первый запуск
+нового static harness упал из-за отсутствующего optional `rule` key при
+StrictMode; исправление harness и исходный вывод сохранены отдельно в
+`placement-after-harness-failed1.txt`, этот FAIL не был baseline дефектом.
+
+Forced early-loss regression с неизменными fixture/HQ и native AI kill:
+baseline 266 файлов — **ожидаемый FAIL**, after 267 — **PASS/0**.
+До правки — три ранние смерти, 180 секунд без construction/builders и READY.
+После — только одна injected death, barrier с `USSR slot 0=WAITING` при
+`roster_ready=0`; реальная казарма построена за 275 supplies, worker завершил
+layout и `service_online=1`. Затем оплаченный replacement того же slot:
+`ticket_debit=1 supply_debit=50`, generation 39, `ROSTER_READY us=10 ussr=10`.
+Fixture наблюдала ещё 10 секунд, общий elapsed 233736 мс. Native exit 0
+не использован как замена условий gate; полные after logs/terminal содержат
+ordinary SCRIPT/VM/F/AICF errors=0. Evidence —
+`matrix-wcs/early-loss/{baseline-summary,after-summary,final-verdict}.json`.
+
+`compile-release-final.ps1 -Variant Stock|EveronRHS|ArlandWCSRHS|EveronWCSRHS`
+— **4/4 production Workbench PASS/0**, validation successful, execution
+SCRIPT E/F, ENGINE F и VM отсутствуют. Source freeze —
+`production-hashes-release.json`, 267 файлов, SHA-256
+`7E4A62D8FC7FAAD90E2A8EDBCBD73D93F6E032410D38218BE5F3990A20562E3F`.
+Свежая параллельная матрица на окончательных 267 файлах — **27/27 startup
+PASS, native exits 0**: `release-final-stock`, `matrix-rhs/summary.json`,
+`matrix-wcs/release-matrix`. Каждый запуск удерживался не менее 20 секунд
+после production READY; точные CLI/header/world/difficulty, listener и
+десять faction-correct READY slots каждой стороны подтверждены.
+
+| Variant | Easy | Medium | Hard |
+|---|---|---|---|
+| Stock | PASS | PASS | PASS |
+| Everon | PASS | PASS | PASS |
+| EveronNorth | PASS | PASS | PASS |
+| RHS | PASS | PASS | PASS |
+| EveronRHS | PASS | PASS | PASS |
+| EveronNorthRHS | PASS | PASS | PASS |
+| ArlandWCSRHS | PASS | PASS | PASS |
+| EveronWCSRHS | PASS | PASS | PASS |
+| EveronNorthWCSRHS | PASS | PASS | PASS |
+
+Объединённый индекс — `release-final-runtime-summary.json`. Stock выполнил
+198/198 assertions, включая проверку нового queue barrier. Все 267 source
+hashes совпали до/после с fixture stages; stages удалены, собственные engine
+processes отсутствуют. Полный offline runner после финального source —
+**62/62 PASS, native exit 0**, 18:23–18:39 MSK. Команда:
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Invoke-AICFChecks.ps1
+-EvidenceRoot .codex-runtime/dependency-check-20261015/release-final-offline-all`.
+Все исходные checks сохранены, набор имён совпал с baseline, дубликатов 0;
+baseline failures отсутствуют. `release-final-offline-verdict.json` содержит
+сопоставление 267 hashes и полные результаты. Новый итог не заменяет первый
+WCS FAIL и не использует прежний PASS как результат окончательного source.
+
+Дополнительный terminal direct-connect `ArlandWCSRHS/Easy` — **PASS/0**
+для server и Diag client (18:31–18:33 MSK). Canonical launcher перед клиентом
+подтвердил точные server CLI, живой PID, listener 2405 и `ROSTER_READY`.
+Client загрузил штатный RHS Arland world, получил player ID 1, разрешил
+3347/3347 ресурсов, invalid=0/renamed=0, создал два локальных default preview
+US/USSR через production `PrepareDefaultLoadout`; оба PASS. Оба процесса
+закрылись через `RequestClose`, native exits 0, `Game destroyed.` подтверждён.
+Все полные console/script/error и terminal scopes проверены: ordinary
+SCRIPT E/F, ENGINE F/VM, equipment failures и AICF ERROR отсутствуют.
+Server log содержит 834 (E), включая 358 shutdown leak строк;
+client — 162 (E), shutdown leaks=0. Это **не full clean-log PASS**.
+Команды: `compile-stage.ps1 -Label release-client -Stage release-client/stage`,
+`release-client/runtime.ps1 -Role Server|Client`, `release-client/collect.ps1`;
+точные manifests/CLI, полные logs, summary, fixture и 267 hashes —
+`release-client/`. GUI automation и визуальная оценка не выполнялись.
+Собственных процессов после закрытия 0, stage удалён после сохранения evidence.
+
+Resource/RPL и shutdown diagnostics сохранены отдельно: startup PASS
+не означает full clean-log PASS. Stock: 465 (E), Everon/North: 498 (E),
+в том числе 249 SCRIPT shutdown leak строк. RHS: 349/479 прочих (E)
+и 352 shutdown leak строки. В успешных WCS запусках 358 SCRIPT shutdown
+leak строк; обычных SCRIPT execution errors/VM/ENGINE F нет.
+Host UI, JIP, визуальная проверка, soak, packaged build
+и Workshop upload — **NOT RUN**.
+
 ## Зависимости и вылеты после обновления WCS — 2026-10-15
 
 Ветка `codex/dependency-check-20261015` от свежего `origin/main`

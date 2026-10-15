@@ -8,7 +8,7 @@ foreach ($path in @('Construction/AICF_ConstructionPlanner.c','Construction/AICF
     'Construction/AICF_ConstructionMetadata.c','Construction/AICF_ConstructionSiteSearch.c','Construction/AICF_ConstructionPath.c','Construction/AICF_ConstructionNavigation.c',
     'Construction/AICF_StockConstructionAdapter.c','Construction/AICF_BaseBuilderService.c',
     'Economy/AICF_ConstructionEconomy.c','Config/AICF_ConstructionConfig.c',
-    'Command/AICF_AICommander.c','Bootstrap/AICF_MatchController.c','Vehicles/AICF_VehicleSpawner.c')) {
+    'Command/AICF_AICommander.c','Bootstrap/AICF_MatchController.c','State/AICF_FactionState.c','Vehicles/AICF_VehicleSpawner.c')) {
     $files[$path] = Get-Content -LiteralPath (Join-Path $core $path) -Raw
 }
 $failures = [System.Collections.Generic.List[string]]::new()
@@ -17,7 +17,13 @@ function Require([string]$rule, [string]$file, [string]$pattern) {
 }
 Require 'CONSTRUCTION_AUTHORITY' 'Construction/AICF_ConstructionPlanner.c' '!Replication.IsServer\(\).*?!m_Campaign.IsMaster\(\).*?!m_Campaign.IsRunning\(\)'
 Require 'CONSTRUCTION_COMMANDER_POLICY' 'Command/AICF_AICommander.c' '(?s)SelectConstructionType.*?!Replication.IsServer\(\).*?!IsEnabled\(\)'
-Require 'CONSTRUCTION_ROSTER_GATE' 'Bootstrap/AICF_MatchController.c' 'if \(m_bRosterReady && m_Construction\)\s*m_Construction.Update\(\)'
+Require 'CONSTRUCTION_ROSTER_GATE' 'Bootstrap/AICF_MatchController.c' 'if \(\(m_bRosterReady \|\| m_bInitialSpawnQueueSettled\) && m_Construction\)\s*m_Construction.Update\(\)'
+Require 'CONSTRUCTION_INITIAL_QUEUE_SHAPE' 'State/AICF_FactionState.c' '(?s)bool IsInitialSpawnQueueSettled\(\).*?m_aGroupSlots.Count\(\) != AICF_Stage1Config.GROUP_SLOTS_PER_FACTION.*?if \(!slot \|\| slot.GetSlotId\(\) != slotIndex\)\s*return false;'
+Require 'CONSTRUCTION_INITIAL_QUEUE_STATES' 'State/AICF_FactionState.c' '(?s)bool IsInitialSpawnQueueSettled\(\).*?if \(state == AICF_EGroupSlotState.READY \|\| state == AICF_EGroupSlotState.WAITING\)\s*continue;\s*if \(state == AICF_EGroupSlotState.SPAWNING && slot.IsReplacementDeployment\(\)\)\s*continue;\s*return false;'
+Require 'CONSTRUCTION_INITIAL_QUEUE_BARRIER' 'Bootstrap/AICF_MatchController.c' '(?s)void TryLogInitialSpawnQueueSettled\(\).*?if \(m_bInitialSpawnQueueSettled \|\| !Replication.IsServer\(\) \|\| !m_Campaign \|\| !m_Campaign.IsMaster\(\) \|\| !m_USState \|\| !m_USSRState\).*?if \(!m_USState.IsInitialSpawnQueueSettled\(\) \|\| !m_USSRState.IsInitialSpawnQueueSettled\(\)\).*?m_bInitialSpawnQueueSettled = true;.*?Info\("INITIAL_SPAWN_QUEUE_SETTLED"'
+Require 'CONSTRUCTION_INITIAL_QUEUE_SNAPSHOT' 'Bootstrap/AICF_MatchController.c' '(?s)authority=server_master us_slots=%1 ussr_slots=%2 us_states=%3 ussr_states=%4 roster_ready=%5 construction_only=1.*?m_USState.DescribeInitialSpawnQueueStates\(\), m_USSRState.DescribeInitialSpawnQueueStates\(\)'
+Require 'CONSTRUCTION_QUEUE_BEFORE_WORK' 'Bootstrap/AICF_MatchController.c' '(?s)TryLogInitialSpawnQueueSettled\(\);\s*TryLogRosterReady\(\);.*?m_Construction.Update\(\);.*?m_BaseBuilders.Update\(\);'
+Require 'CONSTRUCTION_ROSTER_NOT_WEAKENED' 'Bootstrap/AICF_MatchController.c' '(?s)protected void TryLogRosterReady\(\).*?m_USState.CountSlotsByState\(AICF_EGroupSlotState.READY\) != AICF_Stage1Config.GROUP_SLOTS_PER_FACTION \|\|.*?m_USSRState.CountSlotsByState\(AICF_EGroupSlotState.READY\) != AICF_Stage1Config.GROUP_SLOTS_PER_FACTION'
 Require 'CONSTRUCTION_CHEAP_BEFORE_GEOMETRY' 'Construction/AICF_ConstructionPlanner.c' '(?s)QuoteConstruction\(order, m_Config\).*?m_iStage = -1.*?StepGeometry\(m_Config.m_iMetadataEntriesPerTick, Math.Max\(1, m_Config.m_iSliceMs - \(System.GetTickCount\(\) - sliceStarted\)\)\)'
 Require 'CONSTRUCTION_FINAL_REVALIDATION' 'Construction/AICF_ConstructionPlanner.c' '(?s)!order.IdentityValid\(\).*?!ScanInventory\(order\).*?Covered\(order, order.m_eType\).*?HasUnfinishedWork.*?LiveClear.*?QuoteConstruction.*?m_Adapter.Place'
 Require 'CONSTRUCTION_TOKEN_GUARD' 'Construction/AICF_StockConstructionAdapter.c' '(?s)order.m_bCommitStarted.*?order.m_bCommitStarted = true;'

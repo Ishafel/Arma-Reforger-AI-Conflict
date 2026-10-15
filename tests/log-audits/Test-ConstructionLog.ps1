@@ -13,6 +13,7 @@ $failures = [System.Collections.Generic.List[string]]::new()
 if ($raw -match 'SCRIPT\s+\([EF]\)|ENGINE\s+\(F\)|Virtual Machine Exception|NULL pointer') { $failures.Add('CONSTRUCTION_ENGINE_ERROR') }
 if ($raw -notmatch 'Game destroyed\.') { $failures.Add('CONSTRUCTION_LOG_NOT_STOPPED') }
 $ready = $false
+$initialQueueSettled = $false
 $orders = @{}
 $active = @{}
 $lastDecision = @{}
@@ -23,12 +24,32 @@ $completed = 0
 $placementsPerTick = @{}
 $builderProgress = @{}
 $builderCompleted = @{}
+function Test-InitialQueueSnapshot([hashtable]$Fields) {
+    if ($Fields.authority -ne 'server_master' -or $Fields.construction_only -ne '1') { return $false }
+    foreach ($side in @('us','ussr')) {
+        if ($Fields[$side + '_slots'] -ne '10' -or -not $Fields.ContainsKey($side + '_states')) { return $false }
+        $states = @($Fields[$side + '_states'].Split(','))
+        if ($states.Count -ne 10) { return $false }
+        for ($index = 0; $index -lt 10; $index++) {
+            if ($states[$index] -notmatch '^(\d+):(READY|WAITING|SPAWNING):(\d+):([01])$') { return $false }
+            if ([int]$Matches[1] -ne $index -or [int]$Matches[3] -lt 1) { return $false }
+            if ($Matches[2] -eq 'SPAWNING' -and $Matches[4] -ne '1') { return $false }
+        }
+    }
+    return $true
+}
 foreach ($line in $lines) {
     if ($line -match '\[CONSTRUCTION_DEFERRED_PROBE\].*?accepted=(\d+).*?props_current=(-?\d+) props_expected=(-?\d+).*?root_present=(\d+)') {
         if ($Matches[2] -ne $Matches[3]) { $failures.Add('CONSTRUCTION_DEFERRED_PROP_BALANCE') }
         if ($Matches[1] -eq '0' -and $Matches[4] -ne '0') { $failures.Add('CONSTRUCTION_FAILED_ROOT_RETAINED') }
     }
     if ($line -match '\[ROSTER_READY\]') { $ready = $true }
+    if ($line -match '\[INITIAL_SPAWN_QUEUE_SETTLED\]') {
+        $queueFields = @{}
+        foreach ($match in [regex]::Matches($line, '(\w+)=(\S+)')) { $queueFields[$match.Groups[1].Value] = $match.Groups[2].Value }
+        if ($initialQueueSettled -or -not (Test-InitialQueueSnapshot $queueFields)) { $failures.Add('CONSTRUCTION_INVALID_INITIAL_QUEUE_BARRIER') }
+        else { $initialQueueSettled = $true }
+    }
     if ($line -match '\[(BUILDER_PROGRESS|BUILDER_COMPLETED)\].*?target=(\S+)') {
         $builderEvent = $Matches[1]; $layout = $Matches[2]
         if ($line -match 'tool_active=1 item_using=1') {
@@ -44,7 +65,7 @@ foreach ($line in $lines) {
     $token = $fields.token; $base = $fields.base
     switch ($event) {
         'CONSTRUCTION_DECISION' {
-            if (-not $ready) { $failures.Add('CONSTRUCTION_BEFORE_ROSTER') }
+            if (-not $ready -and -not $initialQueueSettled) { $failures.Add('CONSTRUCTION_BEFORE_ROSTER') }
             if ($ExpectedMode -ne 'BOTH' -and $fields.faction -ne $ExpectedMode) { $failures.Add('CONSTRUCTION_PLAYER_SIDE') }
             if ($orders.ContainsKey($token) -or $active.ContainsKey($base)) { $failures.Add('CONSTRUCTION_DUPLICATE_ORDER') }
             if ($lastDecision.ContainsKey($base) -and $time - $lastDecision[$base] -lt 60000) { $failures.Add('CONSTRUCTION_DECISION_TOO_EARLY') }

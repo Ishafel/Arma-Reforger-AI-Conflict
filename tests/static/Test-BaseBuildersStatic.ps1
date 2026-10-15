@@ -47,7 +47,7 @@ Require-BuilderContract 'BUILDERS_IDLE_PHYSICAL_GATE' $service '(?s)ReturnHome\(
 Require-BuilderContract 'BUILDERS_QUEUE_PURGE' $service 'PurgeSpawnRequestsForGroup\(group\)'
 Require-BuilderContract 'BUILDERS_SAFE_RETIRE' $service '(?s)controller.IsPlayerControlled\(\).*?!rpl.IsMaster\(\).*?agent.GetParentGroup\(\) != group.*?return false;.*?group.DespawnMembers\(\)'
 Require-BuilderContract 'BUILDERS_WAYPOINT_DETACH_FIRST' $planner '(?s)void ClearBuilderWaypoint.*?RemoveWaypoint\(builder.m_Waypoint\).*?DeleteRplEntity\(builder.m_Waypoint'
-Require-BuilderContract 'BUILDERS_AFTER_ARMY_READY' $controller 'if \(m_bRosterReady && m_BaseBuilders\)\s*m_BaseBuilders.Update\(\)'
+Require-BuilderContract 'BUILDERS_AFTER_INITIAL_QUEUE' $controller 'if \(\(m_bRosterReady \|\| m_bInitialSpawnQueueSettled\) && m_BaseBuilders\)\s*m_BaseBuilders.Update\(\)'
 Require-BuilderContract 'BUILDERS_STOP' $controller '(?s)m_bStopped = true;.*?m_BaseBuilders.Stop\(\)'
 foreach ($event in @('OnPlaced')) {
     Require-BuilderContract 'BUILDERS_SUBSCRIBE' $service ('\.Insert\(' + $event + '\)')
