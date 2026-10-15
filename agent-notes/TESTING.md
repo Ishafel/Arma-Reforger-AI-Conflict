@@ -18,6 +18,21 @@ blocker в отчёте и PR: наблюдаемая проблема, evidence
 этот blocker и не превращает его в PASS. Внешний вид, JIP и ручной матч,
 не входящие в проверенный scope, также перечисляются явно.
 
+## PR #53: документация pending gate — 2026-10-15
+
+Продолжение `codex/issue-52-fia-armament` от `af2269e`. Исправлена устаревшая
+формулировка в `FIA_GARRISONS.md`: оба boarding gates ждут успешный commit;
+отказ `Apply` сохраняет pending после завершения callback. Снятие флага
+принадлежит `AICF_MarkPMCEquipmentApplied`, retry сохраняет выбор бойца.
+Production sources и probes не менялись; изменены только эта заметка и
+`FIA_GARRISONS.md`. Evidence: `.codex-runtime/issue52-doc-review/`.
+
+`Invoke-AICFChecks.ps1 -Name Test-FIAArmamentContracts.ps1,Test-RHSIntegrationStatic.ps1
+-EvidenceRoot <before|after>` — **2 PASS / exit 0** до и после; baseline failures
+нет. `git diff --check` и проверка локальных Markdown links — **PASS**.
+Полный offline набор, Workbench и runtime в этом исправлении документации —
+**NOT RUN**; результаты исходной реализации ниже не являются новым прогоном.
+
 ## Issue #52: вооружение FIA RHS/WCS — 2026-10-15
 
 Ветка `codex/issue-52-fia-armament` от актуального `origin/main`
