@@ -86,6 +86,9 @@ class AICF_SquadRespawnPolicy
 		PlayerManager players = GetGame().GetPlayerManager();
 		if (players.GetPlayerIdFromControlledEntity(entity) != 0 || SCR_PossessingManagerComponent.GetPlayerIdFromMainEntity(entity) != 0)
 			return false;
+		AICF_MatchController match = AICF_MatchController.GetActiveController();
+		AICF_GroupSlot slot = match.FindManagedInfantrySlot(MemberGroup(group, entity));
+		if (slot && slot.HasEquipmentInventoryTransaction()) return false;
 		return MemberGroup(group, entity) != null;
 	}
 

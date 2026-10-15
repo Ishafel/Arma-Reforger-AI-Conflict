@@ -775,6 +775,8 @@ class AICF_VehicleCoordinator
 	{
 		if (!slot)
 			return string.Empty;
+		if (slot.IsResupplyingEquipment() || slot.HasEquipmentInventoryTransaction())
+			return "EQUIPMENT_SERVICE";
 		if (slot.IsTemporaryRouteReplanHold())
 			return "TEMPORARY_ROUTE_REPLAN_HOLD";
 		if (slot.HasPendingOrderRecovery())

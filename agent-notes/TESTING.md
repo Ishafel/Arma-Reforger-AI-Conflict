@@ -1,5 +1,194 @@
 # Проверки и baseline
 
+## Правила выпуска PR
+
+Известный baseline FAIL не является разрешением на выпуск PR. До создания
+готового к review PR или перевода draft в ready полный offline набор и
+обязательные compile/runtime gates должны пройти. Каждое падение нужно
+разобрать: исправить дефект либо доказать устаревание проверки по реализации,
+истории и актуальному контракту. Проверка после исправления должна по-прежнему
+отклонять отрицательные мутации; исключение теста или ослабление ради PASS
+не допускаются. Старые отчёты ниже описывают исторические результаты и
+не устанавливают исключений из этого правила.
+
+Если исправление либо обязательная проверка требуют игрока, явно выдели
+blocker в отчёте и PR: наблюдаемая проблема, evidence, конкретное действие
+игрока и оставшийся недоказанный результат. Сохрани `FAIL`/`NOT RUN`, продолжи
+доступную работу и оставь PR draft. Перенос критерия в отклонённые не снимает
+этот blocker и не превращает его в PASS. Внешний вид, JIP и ручной матч,
+не входящие в проверенный scope, также перечисляются явно.
+
+## PR #51: inventory identity и исправление baseline — 2026-10-15
+
+Продолжение `codex/issue-6-squad-resupply`, исходный commit `1b57ec1`.
+Evidence: `.codex-runtime/issue6-review/`. PR переведён в draft на время
+исправлений; отсутствие новых FAIL больше не считается разрешением выпуска.
+
+`AICF_EquipmentInventory.UniqueItems` исключает null и повторные ссылки на
+entity перед накоплением патронов, запасных одноразовых launcher и расходников.
+Разные entities одного prefab сохраняются. Оба текущих counter и target
+`EquipmentPlan` используют этот контракт. Native getter остаётся штатным;
+`RoundsIn`/`ConsumablesIn` позволяют проверить именно production accumulation
+на детерминированном перечислении с дублями.
+
+Причины всех шести прежних FAIL установлены до изменения ожиданий:
+
+| Аудит | Причина и исправление |
+|---|---|
+| Endgame | Commit `b16b792` (#42) перенёс выбор в adaptive policy и ввёл dwell/stable gates обычного возврата из обороны. Тест искал удалённые `attackTarget`/`securityTarget` и немедленный обход gates. Теперь проверяет реальные `BuildCandidates`, `Select`, `ReconcileAICommanderOrder`: пригодные attack candidates, HQ fallback, выбранную posture и gates. 15 отрицательных мутаций. |
+| InfantryApproach | `ClearRuntimeReferences` очищает `m_ApproachRoute`, но `73c8339` добавил перед этим сброс счётчика. Прежний regex требовал очистку первой строкой. Теперь проверяется тело метода; удаление очистки отвергается отдельной мутацией. |
+| Issue12Recovery | `AssignAICommanderLossResponseOrder` делегирует guarded `ReconcileAICommanderOrder`. Тест требовал inline guards в обёртке. Теперь проверяются и фактический владелец holds, и точная делегация, с мутациями каждого из них. |
+| MapPointOrders | Та же делегация: проверка ручного POSITION intent находится в reconcile, а не в loss-response wrapper. Оба звена обязательны; три мутации удаляют делегацию, destination validation или restore. |
+| NorthFailure | `df1d77e` и соседние исправления добавили recruitment branch, захваченный `failedWaypoint` и `result`. Проверка искала прежние сигнатуру и callback expression. Обновлена к текущим identity/action fences; отдельно проверяется захват waypoint. Все 28 guards проверяются отрицательными мутациями. |
+| Localization | Windows PowerShell 5.1 читал UTF-8 без BOM как ANSI и ломал parse на кириллице в regex. Unicode escapes сохраняют тот же диапазон, включая Ё/ё. Добавлены положительные/отрицательная проверки диапазона; audit исполняется в 5.1 и 7. |
+
+Свежий preflight на неизменённом `git archive HEAD` (`before-frozen`):
+7 проверок, **1 PASS / 6 FAIL**, exit 1. Те же 7 после исправлений
+(`after-targeted`): **7 PASS**, exit 0. Новые Equipment contracts:
+**20 правил / 15 отрицательных мутаций PASS**. Ранний полный preflight `before/`
+прерван перед правками ради frozen snapshot, содержит `INCOMPLETE.txt` и
+не является завершённым прогоном. Исходный полный baseline задачи сохранён
+ниже и в `.codex-runtime/issue6/baseline-clean/`.
+
+Полный `tools/Invoke-AICFChecks.ps1 -EvidenceRoot <after-full>`:
+**60 PASS / 0 FAIL**, exit 0. Все исходные 60 проверок включены, runner и
+список не сокращались. Сохранённых незакрытых baseline failures больше нет;
+исторические 53/6 и 54/6 ниже остаются историческими, а не текущим verdict.
+
+Новые терминальные проверки:
+
+- `compile.ps1 -Variant Stock|RHS|EveronNorthWCSRHS -Label production-<variant>`:
+  **3 PASS/native exit 0**, `Script validation successful`; script/fatal/VM
+  errors в production validation отсутствуют.
+- `runtime.ps1 -Variant Stock -Mode counts -Label counts-stock -Port 2366`:
+  **11/11 PASS**, native exit 0. Loaded magazine и chambers, дубль запасного
+  магазина, low threshold, расходники, две entities одного prefab и отсутствие
+  мутации входного массива/боезапаса.
+- В отдельном stage выключен только identity filter (`inventory-mutant.c`).
+  Тот же `counts-mutant` имеет native exit 0, но **5 failed cases**, log audit
+  возвращает ожидаемый **FAIL/1**. Это **PASS отрицательного regression**,
+  зафиксированный в `native-mutation-regression.json`; mutant не является
+  production PASS. Перед остальными запусками stage восстановлен и пересобран.
+- `runtime.ps1 -Mode safety -Variant Stock|RHS|EveronNorthWCSRHS -Port 2366`:
+  **56/56, 67/67, 129/129 PASS**, native exits 0, **3/6/16 native families**.
+  `Test-EquipmentLog.ps1 -Mode Safety -ExpectedFamilies 3|6|16` — **PASS/0**
+  по полным остановленным logs. Повторные disposable launchers также
+  проверяются: одна entity не добавляет несколько выстрелов.
+- `runtime.ps1 -Variant Stock -Mode 1 -Label full-stock -Port 2366`:
+  **37/37 PASS/native exit 0**. Повторены физический подход/loot, частичное и
+  достаточное пополнение, armory visit, принудительный отказ native выдачи,
+  сохранение исходных entities при rollback, последующая актуальная revision
+  и отсутствие повторного цикла. `Test-EquipmentLog.ps1 -Mode Full` — **PASS/0**.
+- `runtime.ps1 -Variant EveronNorthWCSRHS -Mode inventory -Label inventory-wcs
+  -Port 2366`: **27/27 PASS/native exit 0**. Живой actor получает актуальный
+  WCS preset, native отказ выдачи восстанавливает прежний inventory, retry
+  завершается; повторный визит не возникает. Полный log audit — **PASS/0**.
+- Удаление обязательного `DUPLICATE_MAGAZINES_ONCE` из копии полного `counts`
+  log при сохранении количества строк даёт ожидаемый **FAIL/1**, причина
+  `Missing case`; `missing-case-regression.json` — **PASS отрицательной проверки**.
+- `pwsh -NoProfile -File tests/static/Test-LocalizationStatic.ps1`:
+  **PASS/0**, 602 записи; Windows PowerShell 5.1 проходит тот же audit
+  в `after-targeted`.
+
+Полные commands/argv, launcher manifests/native exits, console/script/error
+logs и reports сохраняются в evidence. `collect.ps1` — **PASS/0**: CLI всех
+семи runtime совпали с сохранёнными manifests, все **265** production
+`.c`/`.conf`/`.gproj` и оба fixture совпали со stage по SHA-256. `results.json`,
+`source-hashes.json`, `fixture-hashes.json` и `snapshot-provenance.json` фиксируют
+проверенные входы; `changed-files.txt` — перечень 16 затронутых файлов.
+Свои server/test процессы завершены; stage/frozen snapshot удалены после
+сохранения provenance и полных logs. Пользовательские процессы сохранены.
+`git diff --check` — **PASS/0**.
+
+`SCRIPT (E)` leaked-instance/total-leak
+диагностика при shutdown и resource/native keyword/RPC diagnostics не скрыты:
+они отдельно классифицированы в `engine-diagnostics.json`. Например, исходный
+Stock safety и новый имеют по 422 engine diagnostics, включая 259 shutdown
+leak строк. Это не заявление об отсутствии всех native `(E)`; VM/null/fatal
+ошибок и неизвестных script errors в новых успешных прогонах нет.
+
+Участие игрока для исправлений и перечисленных проверок не потребовалось.
+**NOT RUN:** визуальное взаимодействие, JIP, полный multiplayer матч; native
+Endgame/recovery gameplay probes в этом продолжении отдельно не повторялись.
+Обновлённые static contracts не выдаются за новый runtime verdict этих механик.
+
+## Issue #6: живое пополнение и трофейный сбор — 2026-10-15
+
+Ветка `codex/issue-6-squad-resupply` от `origin/main` `3ea79c6`.
+Game/Server/Workbench **1.8.0.13**. Evidence: `.codex-runtime/issue6/`:
+полные argv/manifests/native exits, остановленные console/script/error logs,
+log-audit reports, matrices и source hashes. Ниже перечислены новые запуски;
+неудачные промежуточные прогоны также сохранены и не считаются PASS.
+
+- `tools/Invoke-AICFChecks.ps1 -EvidenceRoot <baseline-clean>` на отдельном
+  неизменённом snapshot: **53 PASS / 6 FAIL**, 59 checks, exit 1.
+  `after-final`: **54 PASS / те же 6 FAIL**, 60 checks, exit 1.
+  После последних правок cleanup `after-verified-selected`: **10 PASS**, exit 0:
+  Equipment, AILoadout, PersonalLoadout, SquadCommands, SquadRespawn,
+  InfantryRecruitment, BarracksCombat, Stage3, Stage3Contracts, Stage4.
+  Equipment audit: **16 rules / 11 negative mutations PASS**.
+- Сохранённые baseline failures: Endgame — `ATTACK_FIRST`,
+  `SECURITY_FALLBACK`, `ATTACK_RESUME`; InfantryApproach — `APPROACH_CLEANUP`;
+  Issue12Recovery — `POSTURE_QRF_OWNER`; MapPointOrders —
+  `MAP_POINT_REPLAN_PRIORITY`; NorthFailure — `MOVE_CALLBACK_FENCE`,
+  `MOVE_ACTIVITY`; Localization — прежний UTF-8/PowerShell 5 `ParserError`.
+  Более ранний полный after-final запуск отделён от финального targeted repeat.
+- `compile.ps1 -Variant Stock|EveronNorthRHS|EveronNorthWCSRHS
+  -Label production-verified-<stock|rhs|wcs>`: три production terminal
+  Workbench **PASS/native exit 0**, `Script validation successful`.
+  Stage Compile также выполнен; static, compile и runtime не заменяют друг друга.
+- `runtime.ps1` использует только `tools/Start-AICFRuntime.ps1 -Role Server
+  -Difficulty Medium -RepositoryRoot <isolated stage> -ProfileRoot <fresh profile>`
+  и `-aicfEquipmentProbe <mode> -aicfRequirePlayerForResult 0`.
+  Собственные listeners 2306/2316 подтверждены полными CLI Params и manifests;
+  существующий пользовательский server не останавливался.
+
+| Profile / mode | Новые runtime checks | Что подтверждено |
+|---|---:|---|
+| `stock-final-owned` / `1` | 37/37 PASS | Физический подход, те же item IDs, partial/sufficient loot, последний binding, rollback с исходными IDs/патронами, target, ledger, no-loop/intent |
+| `wcs-detach-preview` / `inventory` | 27/27 PASS | Native живой WCS inventory, safe rollback/retry, последняя revision, target, no-loop и освобождение model worlds |
+| `stock-verified-safety` / `safety` | 48/48 PASS, 3 families | Stock actual launcher/round transfers, spent-source refusal, capacity/slots, combat, competition, enemy/FIA sources |
+| `rhs-verified-safety` / `safety` | 60/60 PASS, 6 families | Та же матрица с фактическими RHS entities |
+| `wcs-verified-safety` / `safety` | 118/118 PASS, 16 families | Все доступные native families US/USSR/FIA текущего WCS/RHS catalog |
+| `stock-complete-lifecycle` / `lifecycle` | 13/13 PASS | Nearest ARMORY, owner loss/delete/offline/retry, manual intent, recruitment/transport fences, death/replacement/Stop |
+| `stock-search` / `search` | 6/6 PASS | Настоящий 45 s timeout заблокированного native movement, radius, identity tie-break, cooldown, сохранение inventory/потребности |
+| `stock-player-unique` / `player` | 5/5 PASS | Connected PlayerController, запрещённый living/dead main source, takeover во время transaction, исходные IDs/rounds, отсутствие stale RestoreNew/revision и released flag |
+
+Все server probes завершены `RequestClose`, native exit 0. Для player case
+canonical Client launcher подтвердил точные server CLI, живой PID и ROSTER_READY;
+`client-player-unique-launcher.txt` содержит readiness и argument manifest.
+Client log сохранён после остановки собственного процесса. Native player
+initialization добавляет radio gadget, а `GetItems` может повторять один ID;
+сравнение проверяет уникальные исходные identities и реальные rounds.
+
+`Test-EquipmentLog.ps1 -Mode <mode> -LogPath <полный остановленный console.log>
+-OutputDirectory <audit> [-ExpectedFamilies <3|6|16>]`: все строки таблицы
+проверяются по обязательным cases, завершению, счётчику failures, exceptions
+и неполному rollback. Один положительный и **7 отрицательных** log inputs PASS.
+Полная E/F-диагностика сохраняется отдельно в каждом report: nonfatal resource/
+particle и unregistered private-preview damage RPC сообщения не скрываются;
+PASS probes не означает отсутствие этих engine diagnostics. VM с удерживаемым
+`MuzzleComponent` в промежуточных WCS runs устранена: equipment draft снимает
+native root attachments до удаления private model, основной rifle muzzle
+получает с owning entity независимо от выбранного UGL. Финальные logs без VM
+и незавершённого inventory recovery.
+
+Family identity — native default projectile/magazine + disposable + well.
+Stock: RPG7, RPG22, M72. RHS: MK153, RPG7 PG7VL, RPG22, M72, RPOA, RPOD.
+WCS: MK153; RPG7 PG7VL/PG7VR/PG7VM/PG7VM-stock/TBG7VL/TBG7V/OG7V;
+RPG18/RPG22/M72; RPOA/RPOD; M2CG; FIM92; 9K38.
+Список определяется enabled catalog и реальным `WT_ROCKETLAUNCHER`, не именем
+ресурса. Ammo entries и другие native weapon types пропускаются; пустые
+одноразовые образцы не переносятся. Точные GUID/prefab/projectile/well и native
+readbacks — `audit-*/families.txt` и полные logs. Это матрица установленного
+content graph, не обещание поддержки отсутствующих или будущих prefabs.
+
+**NOT RUN:** внешний вид, ручное управление/взаимодействие игрока, JIP и полный
+многопользовательский матч. Connected-player identity case не объявляется
+проверкой этих сценариев. GUI, screenshots и ожидание ручного тестировщика не
+использовались. Настройки/стоимость/lifecycle — [EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md),
+scope и постановка — [TEST_FIXTURES.md](TEST_FIXTURES.md).
+
 ## Issue #48: постоянный запрет recovery FIA после урона/потерь — 2026-10-14
 
 Ветка `codex/fia-damage-recovery` от актуальной `origin/main` (`07350fc`).
@@ -1922,7 +2111,8 @@ load и packaged build; недоступная агенту ручная про�
 ошибок в коротком фрагменте лога не образуют runtime PASS. `NOT RUN` не означает
 `PASS`, агент самостоятельно не присваивает `ACCEPTED`. Недоступные агенту визуальные
 проверки остаются `NOT RUN` в отчёте и отклоняются из активных критериев issue
-с объяснением; ожидание ручного verdict не является gate завершения issue.
+с объяснением. Если они нужны для исправления дефекта или обязательного gate,
+участие игрока явно обозначается как blocker, а PR остаётся draft по правилам выше.
 Screenshots/GUI automation не используются.
 
 Команды Workbench и launcher: [DEVELOPMENT.md](DEVELOPMENT.md). Runtime fixture

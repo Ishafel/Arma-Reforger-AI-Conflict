@@ -69,7 +69,7 @@ class AICF_AdaptiveCommanderPolicy
 		for (int i; i < m_State.GetSlotCount(); i++)
 		{
 			AICF_GroupSlot other = m_State.GetSlot(i);
-			if (!other || other == requesting || !other.IsCombatReady() || other.IsRecruitingInfantry() ||
+			if (!other || other == requesting || !other.IsCombatReady() || other.IsRecruitingInfantry() || other.IsResupplyingEquipment() ||
 				other.IsLoneSurvivorRetreat() || other.IsTemporaryRouteReplanHold() ||
 				other.IsPersistentStuckFieldHold() || other.HasPendingOrderRecovery() ||
 				other.GetRouteRecoveryEpisode().IsBlocked(other))
@@ -214,7 +214,7 @@ class AICF_AdaptiveCommanderPolicy
 			return null;
 		if (m_State.GetSlot(slot.GetSlotId()) != slot || !slot.IsCombatReady() || !slot.GetGroup() || slot.GetGroup().GetFaction() != m_Faction)
 			return null;
-		if (slot.HasPlayerStrategicIntent() || slot.HasPlayerStrategicOrder() || slot.IsRecruitingInfantry() || slot.IsLoneSurvivorRetreat())
+		if (slot.HasPlayerStrategicIntent() || slot.HasPlayerStrategicOrder() || slot.IsRecruitingInfantry() || slot.IsResupplyingEquipment() || slot.IsLoneSurvivorRetreat())
 			return null;
 		if (slot.IsTemporaryRouteReplanHold() || slot.IsPersistentStuckFieldHold() ||
 			slot.HasPendingOrderRecovery() || slot.GetRouteRecoveryEpisode().IsBlocked(slot))

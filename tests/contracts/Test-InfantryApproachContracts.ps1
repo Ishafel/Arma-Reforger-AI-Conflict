@@ -16,7 +16,8 @@ function Test-Approach([string]$Route, [string]$Planner, [string]$Slot) {
     Assert-AICFContains $failures 'APPROACH_LOAD_ONCE' $Route '!navmesh.IsTileRequested\(candidate\) && !navmesh.LoadTileIn\(candidate\)' 'Do not duplicate a pending load'
     Assert-AICFContains $failures 'APPROACH_IDENTITY' $Route 'target.GetOwner\(\).GetID\(\) == m_TargetId' 'Fence target entity identity'
     Assert-AICFContains $failures 'APPROACH_SHARED_FENCE' $Slot 'void MarkApproachRouteWaypoint\(\)\s*\{\s*MarkStuckRouteWaypoint\(\);' 'Reuse group/generation/revision/deadline fence'
-    Assert-AICFContains $failures 'APPROACH_CLEANUP' $Slot 'protected void ClearRuntimeReferences\(\)\s*\{\s*m_ApproachRoute = null;' 'New group generation cannot retain route geometry'
+    $cleanup = Get-AICFMethodBody ([pscustomobject]@{Source=$Slot;Code=$Slot}) 'ClearRuntimeReferences'
+    Assert-AICFContains $failures 'APPROACH_CLEANUP' $cleanup '\bm_ApproachRoute\s*=\s*null;' 'New group generation cannot retain route geometry'
     if ((ConvertTo-AICFCodeText $Route) -match 'CallLater|SpawnEntity|AddWaypoint|DeleteRplEntity|SetOrigin') { $failures.Add('[APPROACH_OWNER] Geometry helper cannot mutate entities or schedule callbacks') }
     return $failures.ToArray()
 }
@@ -32,7 +33,8 @@ $cases = @(
 foreach ($case in $cases) {
     if (-not (@(Test-Approach $route.Replace($case.Old,$case.New) $planner $slot) -match $case.Rule)) { throw "Mutation escaped: $($case.Rule)" }
 }
-'Infantry approach contracts: PASS; negative mutations=5'
+if (-not (@(Test-Approach $route $planner ($slot.Replace('m_ApproachRoute = null;', 'm_ApproachRoute = m_ApproachRoute;'))) -match 'APPROACH_CLEANUP')) { throw 'Cleanup mutation escaped' }
+'Infantry approach contracts: PASS; negative mutations=6'
 
 function Test-ApproachAuditOrder([string]$Source) {
     $body = Get-AICFMethodBody ([pscustomobject]@{Source=$Source;Code=(ConvertTo-AICFCodeText $Source)}) 'AuditActiveFactionTasking'

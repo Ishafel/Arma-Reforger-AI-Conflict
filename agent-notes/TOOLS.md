@@ -258,6 +258,13 @@ Enforce fixture не входят в автоматическую матрицу
 | [Test-RHSWardrobeInventoryLog.ps1](../tests/log-audits/Test-RHSWardrobeInventoryLog.ps1) | `-LogPath`, `-OutputDirectory` | Inventory showcase; сохраняет отдельный отчёт |
 | [Test-Stage2Log.ps1](../tests/log-audits/Test-Stage2Log.ps1) | `-LogPath` | Приказы, repeated recovery, route replans и failed barracks visits |
 | [Test-Stage4Log.ps1](../tests/log-audits/Test-Stage4Log.ps1) | `-LogPath` | Экономика, tickets/supplies и незавершённые операции |
+| [Test-EquipmentLog.ps1](../tests/log-audits/Test-EquipmentLog.ps1) | `-LogPath`, `-Mode`, `-OutputDirectory`, `-ExpectedFamilies` | Full/inventory/safety/lifecycle/player/search; обязательные native cases, полный остановленный log, matrix и отдельная E/F-диагностика |
+
+`Test-EquipmentContracts.ps1` проверяет authority, identities, реальные transfers,
+receipts/rollback, ограниченное recovery и освобождение собственной movement lock;
+16 правил и 11 отрицательных source mutations. Он не заменяет runtime.
+Порядок staging и scope probes — [TEST_FIXTURES.md](TEST_FIXTURES.md),
+текущие результаты — [TESTING.md](TESTING.md).
 
 ## Сложность гарнизонов FIA
 

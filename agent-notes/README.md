@@ -18,6 +18,7 @@
 | Изменить ПТ-состав и Carl Gustaf US | [GAMEPLAY.md](GAMEPLAY.md#сложность-гарнизонов-fia), `AICF_Difficulty`, Core/RHS content profiles, `AICF_WCSInfantryKit`/`AICF_WCSInfantryEquipment`; probes в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить дальность и тактику применения РПГ против бронетехники | [ANTI_TANK_TACTICS.md](ANTI_TANK_TACTICS.md), `Orders/AICF_AntiTankPolicy.c` |
 | Оптимизировать каталог и редактор пресетов экипировки | [LOADOUT_PERFORMANCE.md](LOADOUT_PERFORMANCE.md), `Loadouts/AICF_LoadoutCatalog.c`, `UI/AICF_LoadoutEditor.c` |
+| Изменить пополнение экипировки, live revisions и сбор с тел (issue #6) | [EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md), `Loadouts/AICF_EquipmentService.c`, `AICF_EquipmentInventory`/`AICF_EquipmentApplicator`, [TESTING.md](TESTING.md) |
 | Изменить общий список содержимого разгрузки и навигацию подсумков | [LOADOUT_CONTENTS.md](LOADOUT_CONTENTS.md), `UI/AICF_LoadoutNavigation.c` |
 | Изменить адаптивные цели, потребность в силах и стратегические gates | [ADAPTIVE_COMMANDER.md](ADAPTIVE_COMMANDER.md), `Command/AICF_AdaptiveCommanderPolicy.c`, `AICF_AdaptiveScore.c` |
 | Изменить категории основного/второго оружия | [LOADOUT_WEAPON_CATEGORIES.md](LOADOUT_WEAPON_CATEGORIES.md), `UI/AICF_LoadoutWeaponCategories.c` и content profiles |
@@ -26,6 +27,7 @@
 | Проверить identity failed movement и неоднозначный handler | [ARCHITECTURE.md](ARCHITECTURE.md#authority-и-identity), `Forces/AICF_AINodeLifecycle.c`, [TESTING.md](TESTING.md), InfantryMoveHandler probe |
 | Подготовить API reference, Workbench, локальный/удалённый runtime и Diag/retail | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | Выбрать проверки и сравнить baseline | [TESTING.md](TESTING.md) |
+| Выпустить PR и разобрать FAIL, включая baseline | [AGENTS.md: проверка и передача](../AGENTS.md#проверка-и-передача-результата), [TESTING.md: правила выпуска PR](TESTING.md#правила-выпуска-pr) |
 | Проверить владельца commander state и стабильный выбор казармы (issue #44) | [TOOLS.md](TOOLS.md#единый-offline-запуск), [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md), [TESTING.md](TESTING.md) |
 | Изменить последовательную очередь фракции, шаг 5 секунд и прогноз пополнения | [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md) |
 | Изменить начальные emotes, салют, общий cooldown игрока и звук | [SOCIAL_BEHAVIOR.md](SOCIAL_BEHAVIOR.md) |

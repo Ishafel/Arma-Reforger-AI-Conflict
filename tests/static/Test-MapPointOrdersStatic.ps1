@@ -92,7 +92,18 @@ Assert-Contains 'MAP_POINT_DURABILITY' $slot 'IsPlayerStrategicIntentRoleCurrent
 Assert-NotContains 'MAP_POINT_DURABILITY' ([regex]::Match($slot, 'protected\s+void\s+ClearRuntimeReferences[\s\S]*?\n\s*\}').Value) 'ClearStrategicIntent|ClearPlayerStrategicIntent' 'Replacement runtime cleanup must preserve point intent'
 Assert-Contains 'MAP_POINT_DURABILITY' $planner 'AssignOrder[\s\S]*HasPlayerStrategicIntent[\s\S]*POSITION[\s\S]*RestorePlayerStrategicIntent' 'AI commander entry must restore valid player point intent before autonomous selection'
 Assert-Contains 'MAP_POINT_REPLAN_PRIORITY' $reconcileAICommander 'GetPlayerStrategicIntentTargetKind\s*\(\s*\)\s*==\s*AICF_EOrderTargetKind\.POSITION[\s\S]*IsStrategicIntentDestinationValid[\s\S]*HasPlayerStrategicOrder[\s\S]*GetOrderFailureReason[\s\S]*ApplySuspendedPointAssignment[\s\S]*RestorePlayerStrategicIntent' 'Periodic commander reconcile must preserve or restore valid POSITION player intent instead of selecting a BASE'
-Assert-Contains 'MAP_POINT_REPLAN_PRIORITY' $lossResponseAICommander 'GetPlayerStrategicIntentTargetKind\s*\(\s*\)\s*==\s*AICF_EOrderTargetKind\.POSITION[\s\S]*IsStrategicIntentDestinationValid[\s\S]*HasPlayerStrategicOrder[\s\S]*GetOrderFailureReason[\s\S]*ApplySuspendedPointAssignment[\s\S]*RestorePlayerStrategicIntent' 'Base-loss response must preserve or restore valid POSITION player intent instead of selecting a QRF BASE'
+function Test-LossPointPriority([string]$Loss, [string]$Reconcile) {
+    return ($Loss -match 'return\s+ReconcileAICommanderOrder\(slot, faction, graph, targetSelector,\s*"BASE_OWNER_CHANGED_LOSS", minimumDwellMs, stableCandidateMs,\s*waypointSuspendedByVehicle, decision\);' -and
+        $Reconcile -match 'GetPlayerStrategicIntentTargetKind\s*\(\s*\)\s*==\s*AICF_EOrderTargetKind\.POSITION[\s\S]*IsStrategicIntentDestinationValid[\s\S]*HasPlayerStrategicOrder[\s\S]*GetOrderFailureReason[\s\S]*ApplySuspendedPointAssignment[\s\S]*RestorePlayerStrategicIntent')
+}
+if (-not (Test-LossPointPriority $lossResponseAICommander $reconcileAICommander)) {
+    $failures.Add('[MAP_POINT_REPLAN_PRIORITY] Base-loss response must delegate to reconcile that preserves/restores valid POSITION intent')
+}
+if ((Test-LossPointPriority ($lossResponseAICommander.Replace('return ReconcileAICommanderOrder(', 'return AssignAICommanderOrder(')) $reconcileAICommander) -or
+    (Test-LossPointPriority $lossResponseAICommander ($reconcileAICommander.Replace('RestorePlayerStrategicIntent', 'RemovedRestore'))) -or
+    (Test-LossPointPriority $lossResponseAICommander ($reconcileAICommander.Replace('IsStrategicIntentDestinationValid', 'RemovedValidation')))) {
+    throw 'Loss-response point-priority mutation escaped'
+}
 Assert-Contains 'MAP_POINT_DURABILITY' $controller 'roleChanged[\s\S]*waypointSuspendedByVehicle[\s\S]*POSITION[\s\S]*TouchCommanderConfiguration' 'A role change under vehicle ownership must advance point assignment identity without clearing intent'
 Assert-Contains 'MAP_POINT_DURABILITY' $controller 'HasMeaningfulTask[\s\S]*HasStrategicDestination' 'Reliability must treat a point destination as a meaningful strategic task'
 Assert-Contains 'MAP_POINT_DURABILITY' $controller 'ObserveCurrentDestinationProgress[\s\S]*RebuildCurrentOrder' 'Point progress must use the normal bounded stuck-recovery path'
