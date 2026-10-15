@@ -22,7 +22,7 @@ function Rules($s) {
         BOARDING = ([regex]::Matches($equipment, 'character.AICF_IsPMCEquipmentPending\(\)\) return false;').Count -eq 2)
         CANDIDATE_BOUNDS = $arms.Contains('variant < 0 || variant >= VariantCount(source)')
         RHS_POOL = $arms.Contains('/AK74M/') -and $arms.Contains('Rifle_DOMk18_ION_RMR_SD.et') -and $arms.Contains('Rifle_AR15_GA_UD145_BLK_ION1.et') -and $arms.Contains('Rifle_DOM4A1_FSP_ION_VCOGRMR_SD.et') -and $arms.Contains('/SVD/') -and $arms.Contains('/PKM/')
-        WCS_POOL = $s['wcs'].Contains('Rifle_AK12_EOTECH_SQUAD.et') -and $s['wcs'].Contains('Rifle_AK105_SQUAD.et') -and $s['wcs'].Contains('Rifle_M4A1_WCS_URGI_Suppressed_SQUAD.et') -and $s['wcs'].Contains('Rifle_G28_Suppressed_SF_SQUAD.et')
+        WCS_POOL = $s['wcs'].Contains('Rifle_AK12_EOTECH_SQUAD.et') -and $s['wcs'].Contains('Rifle_AK105_SQUAD.et') -and $s['wcs'].Contains('{4E0FB248B9FB1F5B}Prefabs/Weapons/Rifles/M4A1_URGI/Variants/Rifle_M4A1_URGI_145_Suppressed_SQUAD.et') -and $s['wcs'].Contains('Rifle_G28_Suppressed_SF_SQUAD.et')
         SUPPORT = $arms.Contains('SupportMagazinePrefab()') -and $arms.Contains('if (boxes < 3) return false;') -and $equipment.Contains('AICF_RHSPMCArmament.SupportMagazinePrefab(), 3')
         MAGAZINES = $arms.Contains('magazine.GetMagazineWell().Type() == muzzle.GetMagazineWell().Type()') -and $arms.Contains('magazine != muzzle.GetMagazine()') -and $arms.Contains('SpareMagazines(model, muzzle) < MinimumSpareMagazines(source)')
         LOCAL_DRAFT = $arms.Contains('model.GetWorld() == GetGame().GetWorld()') -and $equipment.Contains('draft.Clear();')
@@ -43,6 +43,7 @@ $mutations = @(
     @('AICF_RHSPMCEquipment.c','m_bAICFPMCEquipmentPending = false;', '', 'PENDING_SUCCESS'),
     @('AICF_RHSPMCEquipment.c','character.AICF_IsPMCEquipmentPending()) return false;', 'false) return false;', 'BOARDING'),
     @('AICF_RHSPMCArmament.c','variant < 0 || variant >= VariantCount(source)','false','CANDIDATE_BOUNDS'),
+    @('wcs','Rifle_M4A1_URGI_145_Suppressed_SQUAD.et','Rifle_M4A1_WCS_URGI_Suppressed_SQUAD.et','WCS_POOL'),
     @('AICF_RHSPMCArmament.c','magazine.GetMagazineWell().Type() == muzzle.GetMagazineWell().Type()', 'true','MAGAZINES'),
     @('AICF_RHSPMCArmament.c','if (boxes < 3) return false;', '', 'SUPPORT')
 )

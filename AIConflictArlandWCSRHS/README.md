@@ -150,29 +150,34 @@ master после штатного placement callback.
 
 ## Зависимости
 
-Проверены установленные Reforger/Server/Tools `1.8.0.13`, RHS Status Quo
-`0.16.5236` (все три RHS пакета) и следующие пакеты WCS:
+Сверка локальной установки 15.10.2026: Reforger/Server/Tools остаются
+`1.8.0.13`; RHS Content Pack 01/02 — `0.16.5236`, RHS Status Quo —
+`0.16.5237`. Таблица ниже показывает версии из `ServerData.json`.
+После повторной загрузки пользователем все 22 внешних пакета имеют
+`corrupted=false`; 48 файлов 16 обновлённых WCS совпали с манифестами
+по размеру и SHA-512. Исходная установка содержала новые resource databases
+со старыми `data.pak`; этот первоначальный FAIL сохранён отдельно в evidence.
 
 | Пакет | GUID | Версия |
 |---|---|---|
-| WCS_NATO | `615806DC6C57AF02` | 8.3.0 |
+| WCS_NATO | `615806DC6C57AF02` | 8.4.0 |
 | WCS_RU | `615818DA7C0343FD` | 8.3.0 |
-| WCS_Weapon_Scripts | `68F006D910E7546F` | 8.3.0 |
-| WCS_Attachments | `61C74A8B647617DA` | 8.3.0 |
-| WCS_Scopes | `62A668F513428630` | 8.3.0 |
+| WCS_Weapon_Scripts | `68F006D910E7546F` | 8.4.0 |
+| WCS_Attachments | `61C74A8B647617DA` | 8.4.1 |
+| WCS_Scopes | `62A668F513428630` | 8.4.0 |
 | WCS_Sounds | `631C3C1AEE9C90BC` | 8.3.0 |
-| WCS_Armaments | `629B2BA37EFFD577` | 8.3.0 |
-| WCS_SpaceCore | `5E389BB9F58B79A6` | 8.3.0 |
-| WCS_M1A1 | `5D1880C4AD410C14` | 8.3.0 |
-| WCS_T-72 | `5E0AB16BEB16D6A4` | 8.3.0 |
-| WCS_Weapons | `65CF7AE8574E06D2` | 8.3.0 |
-| WCS_RHS_Attachments | `6A717EEA63A35E67` | 8.3.0 |
-| WCS_RHS_Scopes | `3B8081D9CAD979D2` | 8.3.0 |
-| WCS_RHS_Weapons | `65F929DF622BAD50` | 8.3.0 |
-| WCS_Clothing | `6152CB0BD0684837` | 8.3.0 |
-| WCS_Clothing_Assets | `6602C1EC7E5A4A87` | 8.3.0 |
-| WCS_BMP-3 | `5B383D4CB27E0D54` | 8.3.0 |
-| WCS_M2A2 | `63120AE07E6C0966` | 8.3.0 |
+| WCS_Armaments | `629B2BA37EFFD577` | 8.4.0 |
+| WCS_SpaceCore | `5E389BB9F58B79A6` | 8.4.0 |
+| WCS_M1A1 | `5D1880C4AD410C14` | 8.4.0 |
+| WCS_T-72 | `5E0AB16BEB16D6A4` | 8.4.0 |
+| WCS_Weapons | `65CF7AE8574E06D2` | 8.4.0 |
+| WCS_RHS_Attachments | `6A717EEA63A35E67` | 8.4.0 |
+| WCS_RHS_Scopes | `3B8081D9CAD979D2` | 8.4.0 |
+| WCS_RHS_Weapons | `65F929DF622BAD50` | 8.4.0 |
+| WCS_Clothing | `6152CB0BD0684837` | 8.4.0 |
+| WCS_Clothing_Assets | `6602C1EC7E5A4A87` | 8.4.0 |
+| WCS_BMP-3 | `5B383D4CB27E0D54` | 8.4.0 |
+| WCS_M2A2 | `63120AE07E6C0966` | 8.4.0 |
 
 Пакеты пехоты и БМП в Workshop:
 
@@ -192,7 +197,28 @@ master после штатного placement callback.
 установленный `WCS_M2A2_Upgrade` не требуется и в проверенный graph не включён.
 Установленные файлы не изменяются, контент не копируется в репозиторий.
 
-Проверка обновлений 06.10.2026: версии выше взяты из установленных
+Сверка 15.10.2026: все девять Variant для обеих ролей имеют замкнутый граф
+по `addon.gproj` и `ServerData.json`; новых обязательных GUID не обнаружено.
+Stock, Everon RHS и оба production WCS graph прошли terminal Workbench.
+WCS 8.4 переименовал 388 ресурсов с сохранением GUID; ссылки в проекте
+обновлены по canonical names реального runtime. В том числе исправлен путь
+M4A1 URGI в infantry kit и FIA pool: прежняя строка нарушала проверку
+комплекта после загрузки ресурса по GUID.
+На целой установке старый source воспроизвёл native crash RHS equipment
+refresh. Тот же dedicated probe с новыми путями прошёл до `ROSTER_READY`
+и штатно завершился; 3347/3347 ссылок загружаются без переименований.
+Отдельная server матрица: infantry 20/20, FIA 13/13, default player kits 2/2,
+cache guards, шесть вкладок, arsenal/heavy provider и vehicle catalogs — PASS.
+Resource diagnostics и shutdown leaks сохранены; это не полностью чистый
+engine log. Client/Host UI, JIP, soak и packaged build после исправления —
+**NOT RUN**. Опубликованный пакет этой source-правкой не обновляется.
+Evidence: `.codex-runtime/dependency-check-20261015/`, подробности —
+[TESTING.md](../agent-notes/TESTING.md#зависимости-и-вылеты-после-обновления-wcs--2026-10-15).
+
+### Историческая проверка 06.10.2026
+
+Следующие результаты относятся к WCS `8.3.0` и RHS `0.16.5236`,
+а не к обновлённой таблице выше. Версии взяты из установленных
 `ServerData.json`, зависимости сверены с `addon.gproj`. Два новых пакета
 `WCS_RHS_Attachments` и `WCS_RHS_Scopes` требуются `WCS_RHS_Weapons 8.3.0`;
 они явно включены в проект и launcher. Полный установленный граф замкнут.

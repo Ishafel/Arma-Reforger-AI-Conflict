@@ -33,7 +33,7 @@
 | Проверить владельца commander state и стабильный выбор казармы (issue #44) | [TOOLS.md](TOOLS.md#единый-offline-запуск), [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md), [TESTING.md](TESTING.md) |
 | Изменить последовательную очередь фракции, шаг 5 секунд и прогноз пополнения | [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md) |
 | Изменить начальные emotes, салют, общий cooldown игрока и звук | [SOCIAL_BEHAVIOR.md](SOCIAL_BEHAVIOR.md) |
-| Изменить WCS content profile или зависимости | [Arland WCS + RHS](../AIConflictArlandWCSRHS/README.md) |
+| Изменить WCS content profile или проверить зависимости и повреждение обновлений | [Arland WCS + RHS](../AIConflictArlandWCSRHS/README.md#зависимости), [проверка 15.10.2026](TESTING.md#зависимости-и-вылеты-после-обновления-wcs--2026-10-15) |
 | Изменить полный или северный WCS Everon | [Everon WCS + RHS](../AIConflictEveronWCSRHS/README.md) |
 
 Перед правкой прочитай соседние классы выбранного домена и сними новый baseline.

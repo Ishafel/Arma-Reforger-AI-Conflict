@@ -113,7 +113,7 @@ class AICF_WCSRHSContentProfile : AICF_RHSContentProfile
 		}
 		if (variant == 1) return "{397B6CBE56D21341}Prefabs/Weapons/Rifles/AK12/Variants/Rifle_AK12_EOTECH_SQUAD.et";
 		if (variant == 2) return "{0A83316977E4E4B7}Prefabs/Weapons/Rifles/AK74M/WCS_Variants/Rifle_AK105_SQUAD.et";
-		return "{4E0FB248B9FB1F5B}Prefabs/Weapons/Rifles/M4A1/Variants/Rifle_M4A1_WCS_URGI_Suppressed_SQUAD.et";
+		return "{4E0FB248B9FB1F5B}Prefabs/Weapons/Rifles/M4A1_URGI/Variants/Rifle_M4A1_URGI_145_Suppressed_SQUAD.et";
 	}
 }
 

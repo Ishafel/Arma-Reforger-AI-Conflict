@@ -1,5 +1,121 @@
 # Проверки и baseline
 
+## Зависимости и вылеты после обновления WCS — 2026-10-15
+
+Ветка `codex/dependency-check-20261015` от свежего `origin/main`
+`8819dddb0cba6e0f2bf2995d8397efb538458c0a`, исходное дерево чистое.
+Изменены три WCS `.c`: canonical пути 388 ресурсов, включая M4A1 URGI
+в infantry kit и FIA pool. GUID и порядок записей сохранены;
+`.gproj`, launcher, Core и RHS production не менялись. Обновлены README,
+указатель, FIA_ARMAMENT и контракт WCS_POOL с отрицательной мутацией старого пути.
+Evidence: `.codex-runtime/dependency-check-20261015/`.
+
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+.codex-runtime/dependency-check-20261015/check-graph.ps1` — **18/18 PASS,
+exit 0**: девять Variant для Server/Client, каждый прямой и транзитивный GUID
+из `addon.gproj` и `ServerData.json` входит в launcher graph. DryRun manifests
+сохранены целиком; это структурная проверка, а не запуск игры.
+
+На момент исходного snapshot установка содержала 22 внешних RHS/WCS пакета,
+включая необязательный M2A2 Upgrade.
+RHS Status Quo — `0.16.5237`, два Content Pack — `0.16.5236`.
+WCS RU/Sounds остались `8.3.0`, Attachments — `8.4.1`, прочие WCS — `8.4.0`.
+У 16 обязательных обновлённых WCS `corrupted=true`; все 16 `data.pak`
+не совпадают по размеру с новым манифестом и датированы 05.10.2026.
+Для 44 проверенных остальных файлов, включая RHS Status Quo `data.pak`,
+SHA-512 совпал. RHS manifest `resourceDatabase.rdb` пустой; его целостность
+этим способом не подтверждена. Полные inventory, sizes, hashes и точный
+список повреждённых пакетов сохранены в JSON/CSV. Статус corrupted и
+несовпадение файлов — **FAIL целостности**, графовый PASS их не отменяет.
+
+`compile.ps1 -Variant Stock|EveronRHS` с доступом к Steam — terminal Workbench
+**2 PASS, native exit 0**, `Script validation successful`, SCRIPT E/F,
+ENGINE F и VM exceptions — 0. Прочих resource (E) — 25/26.
+Полные `wb-*-verified/`, manifests, argv и `compile-summary.json` сохранены.
+Первый sandbox Stock завершился -1 из-за `SteamAPI_Init failed`; это
+не compile PASS, его лог оставлен отдельно в `wb-Stock/`.
+
+Скопированы три полных остановленных пользовательских набора logs с dumps
+в `user-crashes/`. В 15:02:22 MSK `ENGINE (F): Crashed` непосредственно после
+`Corrupted Addon Repair started: ... WCS_Scopes`; до этого native workshop
+download sequence давал `NULL pointer ... m_Dependency`. В 15:04:02 crash
+имеет стек `SCR_RadioComponent.UpdateVisibility` через RHS equipment refresh;
+до него повторяются WCS `DEFAULT_FAILED`/missing URGI resource. Эти наблюдения
+не доказывают единую причину обоих native crashes. Пользовательские запуски
+использовали установленный контент; они не являются тестом текущего source SHA.
+
+Во время переустановки `check-files.ps1` завершился с exit 1 на исчезнувшем
+`ServerData.json`; это не verdict законченной установки. Пользователь
+самостоятельно перекачал пакеты. `verify-reinstalled.ps1` — **PASS/0**:
+все 48 файлов 16 ранее повреждённых WCS совпали по размеру и SHA-512
+с сохранёнными манифестами, у всех 22 пакетов `corrupted=false`.
+`check-graph-after.ps1` — повторные **18/18 PASS/0**, corrupted=0.
+Исходный FAIL не переписан. Файлы установленных модов агент не изменял.
+Во время неудачной загрузки Windows возвращала `0x80070020` при открытии
+трёх `data.pak` без записи; Restart Manager не определил владельца блокировки.
+Workbench PID 29668 был запущен пользователем в 14:44, до работы агента;
+считать его доказанным владельцем блокировки нельзя. Настройки загрузки,
+ACL и процессы пользователя не менялись.
+
+После восстановления пользовательский crash в 17:27:31 сохранил стек
+`RHS_MorphedEquipmentStorageSlot.RefreshAttachedVisualState`; missing URGI
+уже нет, но `DEFAULT_FAILED dressed=1 armed=1 patched=1` повторяется.
+Этот полный набор с dump также скопирован в `user-crashes/`.
+
+`compile-stage.ps1 -Label baseline2 -Stage baseline-stage` — **PASS/0**.
+`runtime-stage.ps1 -Label baseline-repro -Stage baseline-stage` — воспроизведён
+native crash, exit `-1073741819`, тот же RHS stack. Probe загружает 3347/3347
+ресурсов, фиксирует **388 canonical переименований** (`resource-renames.json`).
+После этого старый source отклоняет default kit из-за сравнения полного
+старого имени URGI с новым именем entity. Проектные пути обновлены только
+по этим наблюдениям; `rewrite-resource-paths.ps1` проверен на сохранение GUID.
+API `Resource.GetResource().GetResourceName()` проверен в reference 1.8.0.13.
+
+`compile-after.ps1 -Variant ArlandWCSRHS|EveronWCSRHS` и
+`compile-stage.ps1 -Label fixed|matrix -Stage fixed-stage|matrix-stage` —
+**4 PASS/0**, `Script validation successful`. До правки оба production WCS
+также компилировались: compile не обнаруживал runtime несовместимость путей.
+Аргументы берутся из canonical launcher Client DryRun; manifests и полные
+`wb-*-after/`, `wb-stage-fixed/`, `wb-stage-matrix/` сохранены.
+
+`runtime-stage.ps1 -Label fixed -Stage fixed-stage` — **PASS targeted gate,
+native exit 0**: 3347 ссылок, invalid=0, renamed=0, ROSTER_READY,
+нет DEFAULT_FAILED/KIT_FAILED, штатный RequestClose и `Game destroyed.`.
+`runtime-stage.ps1 -Label matrix -Stage matrix-stage -Matrix` — **PASS targeted
+gate, native exit 0**: infantry 20/20, FIA 13/13, default player kits 2/2,
+пять cache guards, шесть source tabs, arsenal 13/13 обеих сторон,
+heavy provider 68/68 US и 5/5 USSR, vehicle catalog failures=0.
+Использованы штатные WCSInfantry/Catalog/Access fixtures только в stage.
+Server manifest содержит точный CLI, ArlandWCSRHS/Easy и listener 2395.
+Полные остановленные логи — `profile-baseline-repro/`, `profile-fixed/`,
+`profile-matrix/`; exit codes и transcripts находятся рядом.
+ENGINE F и VM exceptions после исправления отсутствуют. Resource/RPL
+diagnostics и SCRIPT shutdown leaks сохранены отдельно: targeted PASS
+не означает полностью чистые engine logs. В обоих исправленных логах
+833 строки (E), из них 358 строк SCRIPT о shutdown leaks; прочих SCRIPT E/F
+нет. До исправления crash обрывал запуск раньше, поэтому эти числа нельзя
+считать сопоставимым улучшением или ухудшением полного log gate.
+Runtime других карт и client/Host,
+JIP, визуальная проверка, soak, packaged build и Workshop upload — **NOT RUN**.
+Опубликованный мод остаётся прежним до отдельного выпуска обновления.
+
+Offline baseline: `Invoke-AICFChecks.ps1` — **62/62 PASS**, 49 checks
+в `offline-before/` до прерывания пользователем, затем 13 оставшихся
+в `offline-remaining/` с native exit 0. До окончания обеих частей production
+и tests не менялись. Итог с уникальными именами — `offline-baseline-combined.json`.
+После правки `Invoke-AICFChecks.ps1 -Name <девять затронутых audits>
+-EvidenceRoot <after-targeted>` — **9/9 PASS, exit 0**: WCSIntegration,
+RHSIntegration, AILoadout, PersonalLoadout, FIAArmament, InfantryRecruitment,
+ScenarioHeaders, Stage35, Stage4. FIAArmament — 16 rules / 13 negative
+mutations, включая возврат старого пути. Baseline failures отсутствуют.
+Полный offline набор после правки не повторялся; все gates и их ограничения
+сохранены раздельно. `git diff --check` и локальные Markdown links — PASS.
+`production-hashes-final.json` / `source-stage-verdict.json`: все 266 production
+`.c/.conf/.gproj` совпали с проверенным matrix stage. Fixture hashes сохранены
+отдельно. Три созданных stage удалены после сохранения полных logs/manifests;
+живых engine processes этой задачи не осталось. Push, merge, упаковка и
+публикация не выполнялись.
+
 ## Оформление 0.1.28 — 2026-10-15
 
 Ветка `codex/release-0.1.28` от обновлённого `origin/main`

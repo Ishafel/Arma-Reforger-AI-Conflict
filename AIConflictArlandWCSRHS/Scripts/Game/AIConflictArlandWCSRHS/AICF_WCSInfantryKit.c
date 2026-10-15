@@ -22,7 +22,7 @@ class AICF_WCSInfantryKit
 				return "{37C1DF2751538357}Prefabs/Weapons/MachineGuns/M249/Variants/MG_M249_HAMR_SQUAD.et";
 			if (source.Contains("_GL."))
 				return "{0F730BC32F4F3CD1}Prefabs/Weapons/Rifles/M4A1/WCS_Variants/Rifle_M4A1_BLOCK_II_M203_SQUAD.et";
-			return "{4E0FB248B9FB1F5B}Prefabs/Weapons/Rifles/M4A1/Variants/Rifle_M4A1_WCS_URGI_Suppressed_SQUAD.et";
+			return "{4E0FB248B9FB1F5B}Prefabs/Weapons/Rifles/M4A1_URGI/Variants/Rifle_M4A1_URGI_145_Suppressed_SQUAD.et";
 		}
 		if (faction == "RHS_AFRF")
 		{
