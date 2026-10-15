@@ -170,9 +170,28 @@ RecruitmentService закрепляет одну автоматическую з
 заявок и оплата проверяются перед каждым transfer:
 [точная модель и evidence](RECRUITMENT_SUPPLY_PLANNING.md).
 
+Перед созданием бойца `AICF_InfantrySpawnPlacement` проверяет navmesh,
+terrain, свободный объём и локальную связность. `AICF_InfantryVehicleClearance`
+дополняет trace свежими world bounds ближайшей техники: query radius 16 м,
+горизонтальный отступ 2 м. Высота не исключает опасность падающей машины.
+Прерванный query или некорректные bounds отклоняют candidate; child и сама
+vehicle проверяются через одну identity. Проверка только читает geometry;
+техника и уже существующие бойцы не перемещаются.
+
 Construction planner оплачивает unfinished layout один раз; отдельный worker
 базы подходит к проекту и выполняет stock progress. Recovery не создаёт второй
 worker и не повторяет оплату. Копии runtime fixture в production не остаются.
+Construction и builders могут работать после server/master barrier
+`INITIAL_SPAWN_QUEUE_SETTLED`: обе стороны имеют ровно десять slots, каждый
+в `READY`, `WAITING` либо `SPAWNING` платного replacement. `EMPTY`, `DESTROYED`,
+null, неверный numeric slot и незаконченный initial `SPAWNING` запрещены.
+Это завершение initial materialization queue, а не готовность живой армии:
+ранняя потеря остаётся обычным replacement с barracks, supply и ticket gates.
+Иначе потерянный slot ждёт barracks, а строительство ждёт потерянный slot.
+Controller публикует barrier один раз со всеми двадцатью состояниями в
+`us_states`/`ussr_states`; запись `slot:state:generation:replacement` сохраняет
+numeric identity. `ROSTER_READY` по-прежнему требует двадцать одновременно
+`READY` slots; остальные subsystem gates не используют новый barrier.
 
 Social service не владеет waypoint или recruitment: он читает initial muster/
 ожидание приказа и подписывается на `GetOnPresentationInvalidated` slot.

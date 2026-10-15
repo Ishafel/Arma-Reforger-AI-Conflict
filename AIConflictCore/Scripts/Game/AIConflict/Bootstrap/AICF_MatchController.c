@@ -40,6 +40,7 @@ class AICF_MatchController
 	protected bool m_bStopped;
 	protected bool m_bSubscribed;
 	protected bool m_bRosterReady;
+	protected bool m_bInitialSpawnQueueSettled;
 	protected bool m_bReplanScheduled;
 	protected bool m_bGraphRebuildNeeded;
 	protected bool m_bResultLogged;
@@ -1556,12 +1557,13 @@ class AICF_MatchController
 		AuditActiveFactionTasking(m_USSRState, m_USSRFaction);
 		if (m_GroupMapMarkers)
 			m_GroupMapMarkers.Sync(m_USState, m_USSRState, m_VehicleCoordinator);
+		TryLogInitialSpawnQueueSettled();
 		TryLogRosterReady();
 		if (m_ManagedObservers)
 			m_ManagedObservers.Update(m_USState, m_USSRState);
-		if (m_bRosterReady && m_Construction)
+		if ((m_bRosterReady || m_bInitialSpawnQueueSettled) && m_Construction)
 			m_Construction.Update();
-		if (m_bRosterReady && m_BaseBuilders)
+		if ((m_bRosterReady || m_bInitialSpawnQueueSettled) && m_BaseBuilders)
 			m_BaseBuilders.Update();
 		if (m_bRosterReady && m_FIAGarrisons)
 			m_FIAGarrisons.Update();
@@ -6442,6 +6444,21 @@ class AICF_MatchController
 		attempt++;
 		if (attempt < MAX_PLAYER_FACTION_ATTEMPTS)
 			GetGame().GetCallqueue().CallLater(TryLogPlayerJoined, PLAYER_FACTION_RETRY_MS, false, playerId, attempt);
+	}
+
+	protected void TryLogInitialSpawnQueueSettled()
+	{
+		if (m_bInitialSpawnQueueSettled || !Replication.IsServer() || !m_Campaign || !m_Campaign.IsMaster() || !m_USState || !m_USSRState)
+			return;
+		if (!m_USState.IsInitialSpawnQueueSettled() || !m_USSRState.IsInitialSpawnQueueSettled())
+			return;
+		// Отдельный bootstrap barrier только для платного строительства.
+		// ROSTER_READY по-прежнему требует двадцать одновременно READY slots.
+		m_bInitialSpawnQueueSettled = true;
+		AICF_Stage1Diagnostics.Info("INITIAL_SPAWN_QUEUE_SETTLED",
+			string.Format("authority=server_master us_slots=%1 ussr_slots=%2 us_states=%3 ussr_states=%4 roster_ready=%5 construction_only=1",
+				m_USState.GetSlotCount(), m_USSRState.GetSlotCount(),
+				m_USState.DescribeInitialSpawnQueueStates(), m_USSRState.DescribeInitialSpawnQueueStates(), m_bRosterReady));
 	}
 
 	protected void TryLogRosterReady()

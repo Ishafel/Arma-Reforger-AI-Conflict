@@ -41,6 +41,8 @@ class AICF_InfantrySpawnPlacement
 		body.Exclude = group;
 		if (world.TracePosition(body, null) < 0)
 			return false;
+		if (!AICF_InfantryVehicleClearance.IsClear(world, position))
+			return false;
 		// Свободный объём внутри закрытого контейнера недостаточен: нужен выход
 		// с локального navmesh-полигона. Неуспешные queries не считаются проходом.
 		for (int probe; probe < 8; probe++)
