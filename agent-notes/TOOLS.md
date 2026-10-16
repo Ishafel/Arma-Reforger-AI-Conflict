@@ -230,7 +230,8 @@ Script/VM/fatal/shutdown leak ошибки не исключаются из gate
 | [Test-CheckRunnerContracts.ps1](../tests/contracts/Test-CheckRunnerContracts.ps1) | Выбор offline набора, продолжение после FAIL и сохранность evidence |
 | [Test-ConstructionContracts.ps1](../tests/contracts/Test-ConstructionContracts.ps1) | Synthetic logs и source mutations строительства |
 | [Test-ConstructionStatic.ps1](../tests/static/Test-ConstructionStatic.ps1) | Planner, оплата, search, path и worker completion |
-| [Test-DefendWaypointInputContracts.ps1](../tests/contracts/Test-DefendWaypointInputContracts.ps1) | Входы native defend waypoint |
+| [Test-DefendAllocationLogContracts.ps1](../tests/contracts/Test-DefendAllocationLogContracts.ps1) | 2 positive / 12 negative cases полного allocation log audit |
+| [Test-DefendWaypointInputContracts.ps1](../tests/contracts/Test-DefendWaypointInputContracts.ps1) | Входы native defend waypoint и scoped allocation guard; 11 mutations |
 | [Test-EndgameContracts.ps1](../tests/contracts/Test-EndgameContracts.ps1) | Terminal hold и завершение матча |
 | [Test-EveronNorthStatic.ps1](../tests/static/Test-EveronNorthStatic.ps1) | Whitelist северного Everon |
 | [Test-FIAPatrolStatic.ps1](../tests/static/Test-FIAPatrolStatic.ps1) | Stock FIA patrol lifecycle |
@@ -281,6 +282,7 @@ Script/VM/fatal/shutdown leak ошибки не исключаются из gate
 
 | Анализатор | Обязательный вход | Назначение |
 |---|---|---|
+| [Test-DefendAllocationLog.ps1](../tests/log-audits/Test-DefendAllocationLog.ps1) | `-LogPath`, `-LauncherPath`, `-NativeExitPath` | Exact CLI, native allocation, 128 late calls, 22 readbacks, full script/fatal gate; baseline отдельно через `-ExpectReproduction` |
 | [Test-ShutdownLog.ps1](../tests/log-audits/Test-ShutdownLog.ps1) | `-LogPath`, `-LauncherPath`, `-NativeExitPath` | Stopped full log, script/fatal/leaks, memory snapshots и native cleanup; optional `-Batches`, `-RequireStop`, `-Client` |
 | [Test-AICommanderModeLog.ps1](../tests/log-audits/Test-AICommanderModeLog.ps1) | `-ServerLogPath` + `-ExpectedMode` либо `-ExpectedInvalidValue` | CLI BOTH/US/USSR либо ожидаемое невалидное значение; optional client и initial coverage |
 | [Test-BaseBuildersLog.ps1](../tests/log-audits/Test-BaseBuildersLog.ps1) | `-LogPath` | Worker completion, lifecycle и tool use; optional client |

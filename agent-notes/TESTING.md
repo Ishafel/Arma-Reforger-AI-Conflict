@@ -1,5 +1,97 @@
 # Проверки и baseline
 
+## Defend allocation dialog — продолжение PR #64, 2026-10-16
+
+После игрового запуска North WCS Hard на `8d199ec` server дважды выдал
+`Defend Waypoint not provided to the node!` (13:45:53 и 13:45:59). Снимки полных
+живых logs и stack сохранены в `.codex-runtime/everon-north-hard-wcs-20261016-1337/`.
+`Debug.Error` вызывается native allocation node, а прежний guard относится к
+другому BT node. Контракт: [DEFEND_ALLOCATION.md](DEFEND_ALLOCATION.md).
+
+Изолированный checkout — `.codex-runtime/defend-allocate/checkout`, ветка
+`codex/defend-allocate-waypoint` от head текущего PR `8d199ec`. Файлы работающего
+матча в основном checkout не редактируются. Production изменён только
+`Forces/AICF_AINodeLifecycle.c`: invalid allocation input управляемой server
+infantry завершается FAIL с bounded warning; native valid/unmanaged delegate
+сохранён. Guard не меняет waypoint, activity или callbacks.
+
+Свежий selected baseline: четыре contracts/static audits — **4/4 PASS/0**,
+`before/summary.json`. Это не доказывало корректность позднего allocation.
+Native final oracle на исходном source (`baseline-checked`) даёт 22/22 readbacks,
+exits 0, но две VM exceptions с исходной причиной: обычный full-script gate
+должен отклонить этот run. `-ExpectReproduction` подтверждает воспроизведение
+и явно печатает `runtime_gate=FAIL`, а не PASS исходного source.
+
+`Compile.ps1 -Stage checkout -Variant Stock|RHS|EveronNorthWCSRHS -Label <label>`
+в evidence берёт точный graph из canonical launcher DryRun и вызывает terminal
+Workbench `-noThrow -wbsilent ... -wbModule=ScriptEditor -run -validate`.
+Production graphs — **3/3 PASS/0**, validation successful, script/VM/fatal 0.
+Окончательная fixture отдельно скомпилирована на baseline Stock и after
+Stock/North WCS: `compile-baseline-checked/`, `compile-checked-stock/`,
+`compile-checked-north-wcs/`, все **PASS/0**.
+
+`Run.ps1 -Stage <stage> -Case <case> -Variant <variant> -Port 2003` использует
+только `Start-AICFRuntime.ps1 -Role Server -Difficulty Hard`, fresh profile и
+отдельный `-addr 127.0.0.1:2003`. `-noThrow` одинаков на before/after и не
+исключает VM diagnostics из full log. `source-*.json` фиксируют hashes;
+final baseline production совпадает с `8d199ec`, after — с checkout.
+Native positive control исполняется реальным BT, затем planner удаляет прежний
+waypoint; late input проверяется 64 раза на сторону и спустя 30 секунд.
+
+Окончательные `checked-stock` и `checked-north-wcs` — **22/22 PASS** каждый,
+128 late calls с ожидаемым FAIL, два bounded warnings, сохранность новых
+waypoints и штатные native exits **0**. Строгий `Test-DefendAllocationLog.ps1`
+на обоих полных stopped logs — **PASS/0**, script/VM/fatal 0. Тот же обычный
+аудит исходного `baseline-checked` — **FAIL/1** с двумя исходными exceptions.
+Exact commands, hashes, exits, error counts и outputs — `runtime-verdicts.json`;
+вспомогательный `Audit.ps1` сохраняет оба вида verdict. Native asset/RPL
+diagnostics считаются отдельно; общий engine/assets error-free gate не заявлен.
+Все 308 tracked addon files checkout совпали с проверенным final stage;
+единственная production разница с baseline — `AICF_AINodeLifecycle.c`.
+Fixture hash тоже совпадает: `production-source-equality.json`,
+`final-source-equality.json` и `source-*.json`.
+
+Все ранние неуспешные попытки сохранены. Первый standalone node prototype
+завершился native access violation в `Node.GetCallstackStr`: такой объект
+не имел native BT context; dump и logs — `profile-before/`, это **FAIL**.
+Следующие prototype assertions ошибочно требовали MOVE waypoint другого класса
+и совпадения cached activity waypoint с input; native API таких контрактов не
+задаёт. Эти неуспешные runs не выдаются за final PASS. Финальная fixture
+использует настоящие BT nodes без повторного OnInit и проверяет native
+preconditions, новые entity IDs, queue и отложенный current waypoint.
+
+Первый полный offline запуск из длинного nested checkout имеет **FAIL**
+`Test-AuditSelectionContracts.ps1`: Windows PowerShell не скопировал путь
+длиннее MAX_PATH. Только собственное дерево offline-runner было остановлено;
+его точные PID сохранены, защищённые 7768/29440 в нём отсутствуют.
+Повтор использует временный `subst X: <checkout>` и тот же набор без исключений;
+полные commands/context/results — `offline-final/`.
+
+Окончательный полный offline-набор из `X:` — **66/66 PASS/0**, без исключённых
+проверок и без оставшихся static failures. Synthetic allocation log contracts —
+**2 positive / 12 negative**, source contracts — **11 mutations**. Production
+adapter не менялся в течение compile/runtime/offline gates. `git diff --check`
+— **PASS/0**, 279 локальных ссылок затронутых заметок проверены, битых нет.
+
+Полное evidence этой правки — `.codex-runtime/defend-allocate/`: commands,
+manifests, exits, compile logs, полные stopped runtime logs, `runtime-verdicts.json`,
+`binaries.json`, source hashes и результаты offline runner. Все девять созданных
+source stages удалены после проверки отсутствия использующих их процессов;
+исходники production adapter и всех вариантов fixture сохранены в `sources/`,
+перечень удаления — `removed-stages.json`. Изолированный Git checkout сохранён
+для продолжения работы, основной checkout работающего server не обновлялся.
+
+Игровой server PID 7768 на порту 2001 сохраняется. Исходный client PID 29440
+разорвал соединение в 14:05:58: `Connection is flooded by data ... Terminating
+connection`, затем процесс завершился exit 0. Команд его остановки агент не
+вызывал; остановка offline-runner была позже, в 14:07:02. Причина сетевой
+перегрузки не установлена. В полном client shutdown log также **36 leaked Color
+instances** и отдельный FUEL mesh-offset SCRIPT(E). Эти реальные diagnostics
+не объявляются безвредными/исправленными и блокируют ready PR до отдельного
+воспроизведения и устранения. Оригинальный клиентский log сохранён полностью;
+`NOT RUN`: повтор реального client UI/игрового ввода на исправленном source,
+packaged build, длительный soak. Короткий server oracle не заменяет эти gates.
+
 ## Shutdown equipment worlds — issue #63, 2026-10-16
 
 Ветка `codex/issue-63-shutdown-leaks` от актуального `origin/main` `7703d4e`;
