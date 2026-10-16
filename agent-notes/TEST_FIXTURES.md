@@ -9,6 +9,9 @@ draft counters и readback удаления всех inventory entities. Equipme
 Control `aicfShutdownNoEquipment 1` существует только в fixture.
 Команды, lifecycle и ограничения — [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md).
 Полный stopped log проверяется `Test-ShutdownLog.ps1`; script leaks не исключаются.
+При `-Batches` аудит требует в manifest `-aicfShutdownMode batches` и
+`-aicfShutdownEquipmentBatch 1`; обычный LoadoutDraft batch не подтверждает
+EquipmentDraft cleanup.
 
 ## Дополнительные силы FIA — issue #59
 

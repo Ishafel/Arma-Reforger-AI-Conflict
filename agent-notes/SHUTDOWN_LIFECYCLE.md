@@ -72,6 +72,12 @@ gproj/addonsDir/addons из DryRun manifest по [DEVELOPMENT.md](DEVELOPMENT.md
 ошибок, включая любые leaked instances. `-RequireStop` требует ноль живых draft,
 равенство created/destroyed и ноль native items после Clear. Его synthetic
 positive/negative contracts проверяют строгость анализатора отдельно от runtime.
+При `-Batches` manifest обязан содержать точные пары `-aicfShutdownMode batches`
+и `-aicfShutdownEquipmentBatch 1`, каждую ровно один раз; `SHUTDOWN_DONE` также
+должен иметь `mode=batches`. Отсутствующее, неверное, непарное или повторное
+значение отклоняется. Сами 24 operation records и readback фоновых service
+models не доказывают, что пакеты выполнялись через `AICF_EquipmentDraft`:
+без equipment-флага fixture использует обычный `AICF_LoadoutDraft`.
 Weak `array<IEntity>` не удерживает world; snapshots удаляют повторы по native
 pointer identity и проверяют liveness через следующие кадры и период покоя.
 На baseline после каждого пакета остаются ещё 536 уникальных entities;

@@ -119,6 +119,41 @@ DamageManager пытается RPC из unregistered local models: baseline conn
 save/respawn/JIP pipeline, packaged build, длительный soak. В active acceptance
 checklist issue таких ручных критериев нет.
 
+### P2 PR #64: обязательный EquipmentDraft batch manifest — 2026-10-16
+
+[Замечание](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/64#discussion_r4293307638)
+воспроизведено на `e20db8a`: `Test-ShutdownLogContracts.ps1` проходит, однако
+synthetic batch с 24 успешными operations, `idle` manifest и без equipment-флага
+ошибочно получает audit **PASS/0**. Это дефект проверяющего правила; реальный
+`unique-batches-server` уже запускался с обоими правильными параметрами.
+
+Теперь `Test-ShutdownLog.ps1 -Batches` требует ровно одну точную пару
+`-aicfShutdownMode batches` и `-aicfShutdownEquipmentBatch 1` в manifest,
+а также `SHUTDOWN_DONE mode=batches`. Positive batch fixture исправлена;
+contracts проверяют **3 positive / 22 negative cases**, включая отсутствие,
+неверное/непарное значение, дубликаты и несовпадение completion mode.
+
+Evidence — `.codex-runtime/issue63-review-batch/`. Baseline targeted runner
+`Invoke-AICFChecks.ps1 -Name Test-ShutdownLogContracts.ps1 -EvidenceRoot <root>/before`
+— **1/1 PASS/0**; ошибочный synthetic input до изменения — **PASS/0**, после
+изменения — ожидаемый **FAIL/1**. `Replay.ps1` повторно анализирует все восемь
+сохранённых полных final runtime logs — **8/8 PASS/0**. Подмена реального batch
+manifest на idle и удаление equipment-флага дают ожидаемые **FAIL/1**;
+исходный native-leak baseline по-прежнему отклоняется с `SCRIPT_FATAL`
+(358 script errors / 35619 leaked instances). Exact commands, audit hashes,
+exits и outputs — `replay-verdicts.json`, исходный false positive сохранён
+в `misconfigured-before.txt`.
+
+Полный `Invoke-AICFChecks.ps1 -EvidenceRoot <root>/offline-after` после изменения
+— **65/65 PASS/0**, без исключений и baseline failures. `git diff --check` —
+**PASS/0**; проверены 206 локальных Markdown-ссылок затронутых заметок,
+битых нет. Два PowerShell-аудита и четыре заметки — весь scope этой правки.
+
+Production `.c`, Enfusion API и runtime fixture не изменялись. Workbench и
+новые native процессы **NOT RUN**: здесь проверяется усиленный анализ уже
+остановленных logs, прежние runtime результаты не выдаются за новые запуски.
+Ограничения и исходные native diagnostics предыдущего отчёта сохраняются.
+
 ## Issue #61: магазины исходного комплекта ВС РФ — 2026-10-16
 
 Ветка `codex/issue-61-loadout-magazines` от актуальной `origin/main`

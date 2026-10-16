@@ -7,6 +7,10 @@ param(
     [switch]$RequireStop
 )
 $ErrorActionPreference='Stop'
+function Test-ManifestArgument([string[]]$Arguments,[string]$Name,[string]$Value) {
+    $indices=@(for ($i=0; $i -lt $Arguments.Count; $i++) { if ($Arguments[$i] -ceq $Name) { $i } })
+    return ($indices.Count -eq 1 -and $indices[0]+1 -lt $Arguments.Count -and $Arguments[$indices[0]+1] -ceq $Value)
+}
 $failures=[Collections.Generic.List[string]]::new()
 $log=Get-Content -LiteralPath $LogPath -Raw
 $launcher=Get-Content -LiteralPath $LauncherPath -Raw
@@ -18,6 +22,10 @@ else {
     $manifest=$matches[1]|ConvertFrom-Json
     $role='Server'; if ($Client) {$role='Client'}
     if ($manifest.role -ne $role -or $manifest.arguments -notcontains '-aicfShutdownMode') { $failures.Add('WRONG_LAUNCH') }
+    if ($Batches) {
+        if (-not (Test-ManifestArgument $manifest.arguments '-aicfShutdownMode' 'batches')) { $failures.Add('BATCH_MODE_REQUIRED') }
+        if (-not (Test-ManifestArgument $manifest.arguments '-aicfShutdownEquipmentBatch' '1')) { $failures.Add('EQUIPMENT_BATCH_REQUIRED') }
+    }
 }
 if ($Client) {
     if ($launcher -notmatch '\[SERVER_READY\] process_id=\d+ port=\d+ log=') { $failures.Add('READINESS_GATE') }
@@ -25,6 +33,7 @@ if ($Client) {
 } else {
     $done=[regex]::Matches($log,'\[SHUTDOWN_DONE\] mode=(idle|batches) steps=4 connected=([01]) elapsed_ms=(\d+)')
     if ($done.Count -ne 1 -or [int]$done[0].Groups[3].Value -lt 55000) { $failures.Add('SERVER_COMPLETION') }
+    if ($Batches -and $done.Count -eq 1 -and $done[0].Groups[1].Value -ne 'batches') { $failures.Add('BATCH_COMPLETION_MODE') }
     foreach ($phase in @('ready','cleanup_0','cleanup_1','cleanup_2','cleanup_3','rest')) {
         if ($log -notmatch ('\[SHUTDOWN_MEMORY\] phase='+$phase+' name=MemC value=\d+')) { $failures.Add("MEMORY_$phase") }
     }

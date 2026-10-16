@@ -30,18 +30,30 @@ Check 'delayed-retained-items' ($positive.Replace('phase=rest sampled=75 alive=0
 Check 'retained-draft' ($positive.Replace('drafts=0 created=2 destroyed=2','drafts=1 created=2 destroyed=1')) 'DRAFTS_RETAINED'
 Check 'missing-readback' ($positive.Replace('phase=rest name=MemC','phase=other name=MemC')) 'MEMORY_rest'
 Check 'missing-manifest' $positive 'MANIFEST' 'no manifest'
-$batch=$positive
+$batch=$positive.Replace('mode=idle','mode=batches')
+$batchLauncher='AICF_RUNTIME_MANIFEST_JSON={"role":"Server","arguments":["-aicfShutdownMode","batches","-aicfShutdownEquipmentBatch","1"]}'
 foreach($number in 1..3){
     foreach($iteration in 0..3){foreach($side in @('USSR','US')){$batch+="`n[AICF][SHUTDOWN_OPERATION] batch=$number iteration=$iteration side=$side passed=1"}}
     $batch+="`n[AICF][SHUTDOWN_BATCH] batch=$number operations=8 failures=0"
 }
-Check 'positive-batches' $batch '' -Batches
-Check 'missing-batch' ($batch.Replace('batch=3 operations=8 failures=0','batch=0 operations=8 failures=0')) 'BATCH_3' -Batches
-Check 'failed-operation' ($batch.Replace('side=US passed=1','side=US passed=0')) 'OPERATIONS' -Batches
-Check 'duplicate-operation' ($batch.Replace('iteration=3','iteration=0')) 'OPERATION_IDENTITIES' -Batches
+Check 'positive-batches' $batch '' $batchLauncher -Batches
+Check 'batches-idle-manifest' $batch 'BATCH_MODE_REQUIRED' $launcher -Batches
+Check 'batches-wrong-mode' $batch 'BATCH_MODE_REQUIRED' ($batchLauncher.Replace('"batches"','"idle"')) -Batches
+Check 'batches-missing-mode' $batch 'BATCH_MODE_REQUIRED' ($batchLauncher.Replace('"-aicfShutdownMode","batches",','')) -Batches
+Check 'batches-missing-equipment' $batch 'EQUIPMENT_BATCH_REQUIRED' ($batchLauncher.Replace(',"-aicfShutdownEquipmentBatch","1"','')) -Batches
+Check 'batches-disabled-equipment' $batch 'EQUIPMENT_BATCH_REQUIRED' ($batchLauncher.Replace('"1"','"0"')) -Batches
+Check 'batches-missing-mode-value' $batch 'BATCH_MODE_REQUIRED' ($batchLauncher.Replace('"batches",','')) -Batches
+Check 'batches-missing-equipment-value' $batch 'EQUIPMENT_BATCH_REQUIRED' ($batchLauncher.Replace(',"1"','')) -Batches
+Check 'batches-duplicate-mode' $batch 'BATCH_MODE_REQUIRED' ($batchLauncher.Replace('"batches",','"batches","-aicfShutdownMode","idle",')) -Batches
+Check 'batches-duplicate-equipment' $batch 'EQUIPMENT_BATCH_REQUIRED' ($batchLauncher.Replace('"1"]','"1","-aicfShutdownEquipmentBatch","0"]')) -Batches
+Check 'batches-unpaired-equipment-value' $batch 'EQUIPMENT_BATCH_REQUIRED' ($batchLauncher.Replace('"-aicfShutdownEquipmentBatch","1"','"-aicfShutdownEquipmentBatch","-other","1"')) -Batches
+Check 'batches-wrong-completion-mode' ($batch.Replace('mode=batches','mode=idle')) 'BATCH_COMPLETION_MODE' $batchLauncher -Batches
+Check 'missing-batch' ($batch.Replace('batch=3 operations=8 failures=0','batch=0 operations=8 failures=0')) 'BATCH_3' $batchLauncher -Batches
+Check 'failed-operation' ($batch.Replace('side=US passed=1','side=US passed=0')) 'OPERATIONS' $batchLauncher -Batches
+Check 'duplicate-operation' ($batch.Replace('iteration=3','iteration=0')) 'OPERATION_IDENTITIES' $batchLauncher -Batches
 $client='[AICF][SHUTDOWN_CLIENT_DONE]'+"`nENGINE : Game destroyed."
 $clientLauncher='AICF_RUNTIME_MANIFEST_JSON={"role":"Client","arguments":["-aicfShutdownMode","idle"]}'+"`n[AICF][RUNTIME_LAUNCHER][SERVER_READY] process_id=123 port=2361 log=fixture"
 Check 'positive-client' $client '' $clientLauncher -Client
 Check 'client-no-gate' $client 'READINESS_GATE' ($clientLauncher.Replace('[SERVER_READY]','[PENDING]')) -Client
-Write-Output 'PASS Shutdown log contracts: 3 positive and 11 negative cases; real runtime is a separate gate'
+Write-Output 'PASS Shutdown log contracts: 3 positive and 22 negative cases; real runtime is a separate gate'
 exit 0
