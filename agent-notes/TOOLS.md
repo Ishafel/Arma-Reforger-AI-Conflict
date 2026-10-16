@@ -194,6 +194,14 @@ Enforce fixture не входят в автоматическую матрицу
    результат описываются отдельно. Удаление допустимо после проверки всех
    callers, замещающего покрытия и ссылок в текущей документации.
 
+`tests/log-audits/Test-LoadoutContentsInventoryLog.ps1` проверяет полные
+остановленные logs исходного personal kit: independent native oracle,
+ContentRows, точные адреса, remove/Undo, Capture/Restore, manifest и native exit.
+`-WCS` требует шесть исходных запасных магазинов АК-12, `-Client` выбирает client
+peer. `-Baseline -WCS` подтверждает только старое расхождение rows.
+Script/VM/fatal/shutdown leak ошибки не исключаются из gate. Fixture и
+ограничения описаны в [LOADOUT_CONTENTS.md](LOADOUT_CONTENTS.md).
+
 ## Каталог offline проверок
 
 Все файлы в таблице поддерживаются как отдельные gates. `Static` и `Contracts`

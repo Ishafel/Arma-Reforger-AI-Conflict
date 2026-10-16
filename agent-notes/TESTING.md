@@ -1,5 +1,71 @@
 # Проверки и baseline
 
+## Issue #61: магазины исходного комплекта ВС РФ — 2026-10-16
+
+Ветка `codex/issue-61-loadout-magazines` от актуальной `origin/main`
+`6a8b8fb`; исходное дерево чистое. Evidence — `.codex-runtime/issue61/`.
+Причина: `IsContentPocket` отбрасывал `EquipmentStorageComponent`, включая
+native `RHS_EquipmentStorageComponent` трёх magazine pouches и pouch TV-115.
+Исправление расширяет типы cargo, сохраняя subtree, fixed-slot, weapon и
+native entity/storage/slot gates. Имена оружия в production не проверяются.
+
+Исходный комплект: `{F0F0A8C16C9901B8}` MSV VKPO DS SL, personal source через
+production content profile; исходный Pouch Preset [7]
+`{B89BB29B04D26E70}Vest_TV102_rifleman_EMR_7.et` в native clothing slot 6.
+Шесть запасных `{62DEC638B985B3FE}` AK12 magazines лежат в equipment storage
+`5222CB03D1147687`: MP103 (slot 0), два ArsArma pouches (slots 0/1), TV-115
+(slot 0). Загруженный магазин оружия не входит в cargo subtree.
+Baseline `EveronWCSRHS-baseline-final` на исходном production: native cargo
+**11**, ContentRows **5**, шесть магазинов отсутствуют. После удаления выбранного
+магазина baseline показывает **5 вместо 10**; после Undo — снова **5 вместо 11**.
+Native GetAll/FindItemSlot oracle не использует locations/типовой whitelist
+проверяемого списка. Native entity IDs, parent IDs, prefab и полный адрес
+записаны в `[MAG_NATIVE]` полного лога.
+
+Stock regression также воспроизвела прежний sparse-slot restore FAIL:
+`Stock-regression` — шесть проваленных restore/signature/validate checks.
+Причина устранена: preview Restore сохраняет совпадающие контейнеры и согласует
+snapshot по native IDs; при замене одежды очищает пересекающиеся LoadoutArea.
+Authority/server restore сохраняет прежнюю очистку перед native serializer.
+
+Команды запускались из `.codex-runtime/issue61/` через evidence helpers:
+`compile.ps1 -Variant <Stock|RHS|EveronWCSRHS> -Label <label> -SourceRoot <stage>`
+переносит точные gproj/addonsDir/addons из canonical DryRun manifest в terminal
+Workbench Validate/Compile. `runtime.ps1 -Variant <variant> -Tag <tag>
+-Stage <stage>` вызывает только `tools/Start-AICFRuntime.ps1 -Role Server
+-Difficulty Hard`; `connected.ps1 [-Client]` использует тот же launcher и
+readiness gate. Вся матрица использует fresh profiles. Точные argv, launcher
+manifests, native exits и полные logs сохранены рядом с каждым profile.
+
+
+Результаты:
+
+- Baseline `Invoke-AICFChecks.ps1 -Name Test-AILoadoutStatic.ps1,Test-PersonalLoadoutContracts.ps1 -EvidenceRoot .codex-runtime/issue61/before-native` — **2/2 PASS/0**.
+- Полный `Invoke-AICFChecks.ps1 -EvidenceRoot .codex-runtime/issue61/offline-after` — **63/63 PASS/0**. После изменения preview Restore отдельный полный `offline-final` — **63/63 PASS/0**, без исключённых проверок; итог в `summary.json`. Выбранные финальные loadout contracts включают **167** отрицательных мутаций.
+- Terminal Workbench `final-stock`, `final-rhs`, `final-wcs` и финальная connected fixture `frozen-connected` — **PASS/0**, `Script validation successful`, script/VM/fatal errors — 0. Production во всех stages совпадает с checkout: `source-hashes.json`, **308** tracked файлов, ровно два production отличия от baseline.
+- `runtime.ps1 -Variant Stock -Tag frozen -Stage stage-final` — **127/127 PASS**, RHS с теми же параметрами — **234/234 PASS**, `EveronWCSRHS` — **283/283 PASS**. Полные stopped logs, native exits **0**; script/fatal/VM errors — 0. `Test-LoadoutContentsInventoryLog.ps1` — **PASS/0** на всех трёх.
+- `connected.ps1` и `connected.ps1 -Client` — canonical ready gate подтверждён (`SERVER_READY`, PID, exact CLI, ROSTER_READY, port 2361). Исправленный WCS server и client: **283/283 loadout checks PASS** на каждом, native exits **0**. Client full-log audit — **PASS/0**.
+- **Connected server full script/shutdown gate — FAIL/1:** в остановленном WCS server log **358** сообщений `SCRIPT (E)` исключительно о native shutdown leaks, `AICF` classes — 0, VM/non-leak script errors — 0. Тот же final harness на исходном production (`baseline-connected-*`) даёт **те же 358** native leak сообщений; исходные server/client дополнительно имеют **54** `MAG_ROWS_EXACT` failures, исправленные — 0. `native-leak-comparison.json` и оба полных server logs сохранены. Shutdown не объявляется PASS и остаётся blocker для ready PR; установленный код игры/RHS/WCS не изменялся. Resource/material/backend E/F отдельно посчитаны в `runtime-summary.json`; общий error-free gate не заявляется.
+- Negative-control audit раннего `EveronWCSRHS-after` с VM exception отклонён (**exit 1**, ожидаемо): fixture тогда не задала обязательное имя рецепта. Исправленная fixture задаёт имя, проверяет Decode и отдельно сравнивает native rows после Restore. Этот ранний прогон не входит в PASS.
+
+Основные полные логи — `profile-Stock-frozen/logs/`, `profile-RHS-frozen/logs/`,
+`profile-EveronWCSRHS-frozen/logs/`, `profile-frozen-connected-server/logs/`,
+`profile-frozen-connected-client/logs/` внутри evidence. Baseline —
+`profile-EveronWCSRHS-baseline-final/logs/`, `profile-Stock-regression/logs/`,
+`profile-baseline-connected-{server,client}/logs/`. `runtime-summary.json`
+содержит абсолютные пути, counts, native exits и отдельные errors.
+Промежуточный sandbox Workbench `before` не прошёл SteamAPI_Init; повтор
+`before-owner` из окружения владельца — PASS. Зависший sandbox server остановлен
+адресно; остальные probes закрылись сами через RequestClose. Финальные
+stage hashes сохранены перед удалением временных копий.
+
+**NOT RUN:** визуальная отрисовка и фактический ввод игрока, полный RPC
+save/respawn/JIP pipeline, packaged build, soak. Terminal oracle подтверждает
+native inventory/draft/rows, адресное редактирование и snapshot, а не пиксели UI.
+Визуальная проверка остаётся отдельно отклонённым критерием issue; она не
+объявляется PASS. Issue остаётся открытым, ready PR/push/merge не выполнялись.
+
+
 ## PR #60: rollback переноса десанта и runtime-файлы — 2026-10-16
 
 Замечание [P2](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/60#discussion_r4291674923)

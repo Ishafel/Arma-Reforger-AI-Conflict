@@ -7,7 +7,8 @@ native адресов. При открытии одежды и контейне�
 
 ## Адреса и навигация
 
-- В общий список входят `SCR_UniversalInventoryStorageComponent` в поддереве
+- В общий список входят `SCR_UniversalInventoryStorageComponent` и native
+  `EquipmentStorageComponent` (включая RHS magazine pouches) в поддереве
   открытого path, кроме fixed slots. Path состоит из полных сегментов с `/`,
   поэтому проверка StartsWith не включает соседний slot с похожим номером.
 - Каждый предмет проверяется по native parent storage и slot. Повторяющиеся
@@ -27,19 +28,35 @@ native адресов. При открытии одежды и контейне�
 
 ## Восстановление после удаления
 
-Проверка удаления выявила `INVENTORY_RESTORE_FAILED` в прежней реализации
-восстановления комплектов US stock и WCS. Для WCS диагностика показывает:
-после удаления slot 0 оставшийся Smoke_M18_Yellow имеет slot 1.
-В пустой native universal storage FindSuitableSlotForItem создаёт slot 0,
-а InsertLocal требует исходный slot 1 и отклоняет восстановление. Диагностика:
-`slot=1 slots=0 can=1 used=0 capacity=400`, затем `wanted=1 actual=0 occupied=0`.
-Тот же адрес доступен через прежний Rows. Этот дефект не создан объединением;
-production Inventory/Restore в задаче не менялись. Исправление требует
-отдельного решения по sparse native slot IDs и совместимости сохранённых рецептов.
-Перестановка удаления лишних предметов была проверена и не устранила сбой;
-эта экспериментальная правка отменена. Полный save/restore gate US остаётся FAIL.
+Исторический FAIL при удалении slot 0 описан в [TESTING.md](TESTING.md):
+после пересоздания одежды пустая universal storage предлагала slot 0 вместо
+сохранённого slot 1. Preview `Restore` теперь согласует snapshot с существующим
+inventory через `RestoreLocal`, сохраняя совпадающие контейнеры и native IDs.
+При замене самой одежды освобождаются только конфликтующие LoadoutArea;
+server restore сохраняет прежний authority guard и `ClearForRestore` перед
+native `ApplyEntityStorageString`. Номера slots в snapshot не перенумеровываются.
+Свежие результаты issue #61 приведены в [TESTING.md](TESTING.md).
 
 ## Проверка
+
+`AICF_LoadoutContentsInventoryProbe` с ClothingProbe проверяет исходный personal
+kit без подмены разгрузки. Независимый oracle использует native `GetAll(false)`
+и `FindItemSlot`, не читает navigation locations и не повторяет whitelist
+типов `ContentRows`. Он сверяет каждую страницу с native subtree, экземпляры
+одинаковых prefab, адреса, порядок, remove/Undo и rows после Capture/Restore.
+Также повторяются существующие stock multi-area и RHS/WCS helmet cases.
+Для ВС РФ WCS обязательны шесть исходных запасных магазинов АК-12.
+Включение: `-aicfContentsInventoryProbe 1`; сервер закрывается после проверки.
+Для direct-connect добавь серверу `-aicfContentsInventoryHoldServer 1`:
+он ждёт до 180 секунд и закрывается после отключения подключившегося клиента;
+клиент с тем же probe закрывается самостоятельно.
+Client callback снимается в `OnGameEnd`.
+
+`Test-LoadoutContentsInventoryLog.ps1 -LogPath <полный остановленный console.log>
+-LauncherPath <launcher.txt> -NativeExitPath <exit.txt> [-WCS] [-Client]`
+требует native exit 0, manifest, завершённые проверки обеих сторон и отсутствие
+script/fatal/VM ошибок. `-Baseline -WCS` допускает только воспроизведённые
+`MAG_ROWS_EXACT` failures исходного кода; это не PASS поведения.
 
 `Test-AILoadoutStatic.ps1`: subtree/weapon boundary, parent identity, точные
 адреса, default view, история и cleanup.

@@ -24,6 +24,7 @@
 | Оптимизировать каталог и редактор пресетов экипировки | [LOADOUT_PERFORMANCE.md](LOADOUT_PERFORMANCE.md), `Loadouts/AICF_LoadoutCatalog.c`, `UI/AICF_LoadoutEditor.c` |
 | Изменить пополнение экипировки, live revisions и сбор с тел (issue #6) | [EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md), `Loadouts/AICF_EquipmentService.c`, `AICF_EquipmentInventory`/`AICF_EquipmentApplicator`, [TESTING.md](TESTING.md) |
 | Изменить общий список содержимого разгрузки и навигацию подсумков | [LOADOUT_CONTENTS.md](LOADOUT_CONTENTS.md), `UI/AICF_LoadoutNavigation.c` |
+| Исправить пропавшие магазины RHS в исходном WCS kit и проверить preview restore (issue #61) | [LOADOUT_CONTENTS.md](LOADOUT_CONTENTS.md), `AICF_LoadoutContentsInventoryProbe`, `Loadouts/AICF_LoadoutInventory.c` |
 | Изменить адаптивные цели, потребность в силах и стратегические gates | [ADAPTIVE_COMMANDER.md](ADAPTIVE_COMMANDER.md), `Command/AICF_AdaptiveCommanderPolicy.c`, `AICF_AdaptiveScore.c` |
 | Изменить категории основного/второго оружия | [LOADOUT_WEAPON_CATEGORIES.md](LOADOUT_WEAPON_CATEGORIES.md), `UI/AICF_LoadoutWeaponCategories.c` и content profiles |
 | Найти утилиту, её статус и запустить offline набор | [TOOLS.md](TOOLS.md) |

@@ -84,7 +84,10 @@ class AICF_LoadoutInventory : SCR_PlayerArsenalLoadout
 				Print(string.Format("[AICF][LOADOUT_NATIVE_RESTORE_FAILED] entity=%1 cleared=%2 changing_item=%3 using_item=%4", entity.GetID(), cleared, controller.IsChangingItem(), controller.IsUsingItem()), LogLevel.WARNING);
 			return applied;
 		}
-		return AICF_LoadoutClothing.ClearForRestore(entity, manager) && RestoreLocal(entity, context, manager, 0);
+		// Сохраняем совпадающие native containers и их slot IDs. Удаление всей
+		// одежды создаёт пустые universal storages: snapshot со slot 1 без slot 0
+		// больше не восстанавливается по исходному адресу.
+		return RestoreLocal(entity, context, manager, 0);
 	}
 
 	// В preview-world inventory tasks не исполняются. Как stock preview,
@@ -170,6 +173,21 @@ class AICF_LoadoutInventory : SCR_PlayerArsenalLoadout
 				IEntity item = storage.Get(slot);
 				if (SCR_ResourceNameUtils.GetPrefabName(item) != prefab)
 				{
+					// При замене одежды освобождаем только пересекающиеся области.
+					// Совпадающая одежда с неплотными cargo slots остаётся на месте.
+					if (EquipedLoadoutStorageComponent.Cast(storage))
+					{
+						Resource resource = Resource.Load(prefab);
+						if (!resource || !resource.IsValid())
+							return false;
+						IEntity candidate = GetGame().SpawnEntityPrefabLocal(resource, entity.GetWorld());
+						bool prepared = candidate && AICF_LoadoutClothing.TargetSlot(storage, slot, candidate) == slot &&
+							AICF_LoadoutClothing.RemoveConflictsLocal(storage, candidate);
+						DeleteLocal(candidate);
+						if (!prepared)
+							return false;
+						item = storage.Get(slot);
+					}
 					if (item && !DeleteLocal(item))
 						return false;
 					item = InsertLocal(prefab, storage, slot, manager);
