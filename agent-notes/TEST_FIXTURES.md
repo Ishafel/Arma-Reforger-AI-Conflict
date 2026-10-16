@@ -11,6 +11,10 @@ identity/generation, отмену queued spawn и реального подкл�
 полный client log сохраняется и анализируется отдельно. Новые случаи
 FIA/controller-origin в ManagedObserversProbe остаются регрессией #54.
 
+`AICF_FIADesantTransferProbe.c` добавляет native callback rejection,
+production rollback и retry для P2 PR #60. Порядок загрузки, CLI и полный
+log gate — [FIA_PROXIMITY.md](FIA_PROXIMITY.md).
+
 ## Штатные ambient patrols — issue #54
 
 `AICF_AmbientPatrolProbe.c` помещается в stage Core `Scripts/Game/ZZTests/`.

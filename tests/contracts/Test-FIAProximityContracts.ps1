@@ -41,7 +41,14 @@ $rules = @(
     @('GARRISON_PROXIMITY', 'Vehicles/AICF_FIAGarrisonService.c', 'AICF_FIAProximityLifecycle.CanAcquire(g.m_vHome)'),
     @('PATROL_PROXIMITY', 'Vehicles/AICF_FIAPatrolService.c', 'AICF_FIAProximityLifecycle.CanAcquire(p.m_Current.GetOwner().GetOrigin())'),
     @('STOP_QUEUE', $lifecycle, 'world.PurgeSpawnRequestsForGroup(m_Group)'),
-    @('DESANT_TRANSFER', 'Forces/AICF_FIAGarrisonCrew.c', 'g.m_Lifecycle.Transfer(member, g.m_DesantLifecycle)')
+    @('DESANT_TRANSFER', 'Forces/AICF_FIAGarrisonCrew.c', 'g.m_Lifecycle.Transfer(member, g.m_DesantLifecycle)'),
+    @('TRANSFER_BEGIN', 'Forces/AICF_FIAGarrisonCrew.c', 'g.m_Lifecycle.BeginTransfer(member, g.m_DesantLifecycle)'),
+    @('TRANSFER_MUTATION_FENCE', 'Forces/AICF_FIAGarrisonCrew.c', 'g.m_Lifecycle.TransferCurrent(member, g.m_DesantLifecycle)'),
+    @('PLANNED_REMOVAL', $lifecycle, 'if (member == m_TransferMember && member.m_Entity'),
+    @('INCOMING_MEMBER', $lifecycle, 'if (m_IncomingMember && m_IncomingMember.m_Entity == entity'),
+    @('TRANSFER_FROZEN_LIFECYCLE', $lifecycle, 'if (!Current() || m_TransferMember || m_IncomingMember) return false;'),
+    @('TRANSFER_ROLLBACK', $lifecycle, 'if (member.m_Agent.GetParentGroup() == m_Group) return;'),
+    @('TRANSFER_CLEANUP', $lifecycle, 'm_TransferTarget.m_IncomingMember = null;')
 )
 function Get-ProximityFailures([hashtable]$inputSources) {
     foreach ($rule in $rules) {
@@ -54,6 +61,8 @@ function Get-ProximityFailures([hashtable]$inputSources) {
     if ($adapter -match 'DeleteRplEntity|SpawnEntityPrefab|SetLimitOfActiveAIs|CallLater\(') { 'DOMAIN_OWNERSHIP' }
     if (([regex]::Matches($adapter,'CanDormantFIA\(vehicle, vehicleId, m_Group, known, knownIds, companion, reason\)')).Count -ne 2) { 'REPEATED_OCCUPANCY_CHECK' }
     if ($adapter -notmatch '(?s)void Stop\(\).*m_bStopped = true.*SCR_EAIGroupLifecyclePolicy.Manual.*PurgeSpawnRequestsForGroup') { 'STOP_LIFECYCLE' }
+    $transfer = [regex]::Match($adapter, '(?s)void Transfer\(.*?(?=\s+void Stop\()').Value
+    if (!$transfer -or $transfer -match 'm_bLost\s*=\s*false') { 'TRANSFER_NO_REVIVAL' }
 }
 $failures = @(Get-ProximityFailures $sources)
 foreach ($rule in $rules) {
@@ -62,5 +71,8 @@ foreach ($rule in $rules) {
     $rejected = @(Get-ProximityFailures $mutated)
     if ($rule[0] -notin $rejected) { $failures += "NEGATIVE_$($rule[0])" }
 }
+$revival = $sources.Clone()
+$revival[$lifecycle] = $revival[$lifecycle].Replace('m_aMembers.RemoveItem(member);', 'member.m_bLost = false; m_aMembers.RemoveItem(member);')
+if ('TRANSFER_NO_REVIVAL' -notin @(Get-ProximityFailures $revival)) { $failures += 'NEGATIVE_TRANSFER_NO_REVIVAL' }
 if ($failures.Count) { $failures | ForEach-Object { Write-Output "FAIL $_" }; exit 1 }
-Write-Output "PASS FIA proximity contracts: $($rules.Count) positive/negative guards; runtime=NOT_RUN"
+Write-Output "PASS FIA proximity contracts: $($rules.Count) positive/negative guards + no-revival mutation; runtime=NOT_RUN"

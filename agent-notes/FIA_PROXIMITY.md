@@ -29,6 +29,20 @@ agent и постоянный флаг потери. Native `OnAgentRemoved` в�
 plan и generation не перебрасываются. Передача пассажира в desant controller
 переносит ту же запись; она не создаёт нового бойца или места.
 
+Плановый desant transfer начинается с `BeginTransfer` до native `RemoveAgent`.
+Source удерживает logical seat, destination помечает входящую identity и не
+привязывает её к другому свободному месту. Пока remove/add не завершены,
+expansion и dormancy обеих сторон откладываются. Перед destination Add и
+rollback Add повторяется `TransferCurrent`: обе group/generation/vehicle
+identities, та же entity/ID/agent, живой authoritative AI.
+
+`Transfer` завершает попытку при любом результате native Add: исходный parent
+означает rollback без изменения logical seat, destination parent — перенос той
+же записи. Неплановая потеря, смерть и неизвестный parent остаются потерями;
+флаг `m_bLost` не сбрасывается. Pending references снимаются при завершении
+попытки и Stop. Это закрывает P2 PR #60: повторный `OnAgentAdded` исходной группы
+сам по себе не восстанавливает ошибочно потерянное место.
+
 Перед dematerialization сохраняются server-generated inventory snapshot
 штатного arsenal serializer и здоровье hit zones. После native materialization
 adapter привязывает новую entity identity к тому же месту, ждёт integration
@@ -122,3 +136,15 @@ VM/fatal/AICF leaks запрещены во всём логе. Финальны�
 реальный native request, меняет faction базы до dispatch, затем проверяет
 отказ expansion, retirement, очищенную очередь и нулевой roster. Для его лога
 используется `Test-FIAProximityLog.ps1 -Ownership`.
+
+Для регрессии P2 добавь `AICF_FIADesantTransferProbe.c` после common/safety
+как `ZZZ_AICF_FIADesantTransferProbe.c` и флаг
+`-aicfFIADesantTransferProbe baseline|after` вместе с common `us` mode.
+Штатный `GetOnAgentAdded()` callback первого destination Add синхронно
+удаляет принятого agent до возврата Add; production видит отказ и выполняет
+свой rollback. Проверяются тот же parent/entity/ID, capacity=agents, Ready,
+retry и общий roster без дубликатов; затем идут обычные loss/dormancy/road cases.
+Subscription явно снимается при Stop. Baseline заканчивается после readback
+исходного несоответствия. `Test-FIADesantTransferLog.ps1` проверяет полный
+остановленный log/manifest/exit, исходный дефект через `-Baseline` либо все
+семь transfer cases и полный existing proximity log gate после исправления.

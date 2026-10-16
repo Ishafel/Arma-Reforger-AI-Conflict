@@ -11,6 +11,9 @@ class AICF_FIAProximityLifecycle
 	protected bool m_bStopped;
 	protected bool m_bDespawning;
 	protected bool m_bReactivating;
+	protected AICF_FIALifecycleMember m_TransferMember;
+	protected AICF_FIAProximityLifecycle m_TransferTarget;
+	protected AICF_FIALifecycleMember m_IncomingMember;
 	protected string m_sHold;
 	protected ref array<ref AICF_FIALifecycleMember> m_aMembers = {};
 
@@ -107,7 +110,7 @@ class AICF_FIAProximityLifecycle
 
 	bool PrepareExpansion()
 	{
-		if (!Current()) return false;
+		if (!Current() || m_TransferMember || m_IncomingMember) return false;
 		// Новые entries не переживают retirement/ownership до первого появления.
 		if (m_Garrison && (m_Garrison.m_bRetired || (!m_Garrison.m_bReady &&
 			(!m_Garrison.BaseIdentity() || m_Garrison.m_Base.GetFaction() != m_Garrison.m_Faction)))) return false;
@@ -130,6 +133,9 @@ class AICF_FIAProximityLifecycle
 		if (!Current() || !agent) return;
 		ChimeraCharacter entity = ChimeraCharacter.Cast(agent.GetControlledEntity());
 		if (!entity || agent.GetParentGroup() != m_Group || !AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(entity)) return;
+		// До commit входящий боец ещё принадлежит logical roster исходной группы.
+		if (m_IncomingMember && m_IncomingMember.m_Entity == entity &&
+			m_IncomingMember.m_Id == entity.GetID() && m_IncomingMember.m_Agent == agent) return;
 		foreach (AICF_FIALifecycleMember member : m_aMembers)
 		{
 			if (member.m_Entity == entity) return;
@@ -160,6 +166,8 @@ class AICF_FIAProximityLifecycle
 		foreach (AICF_FIALifecycleMember member : m_aMembers)
 		{
 			if (member.m_Agent != agent) continue;
+			if (member == m_TransferMember && member.m_Entity && member.m_Entity.GetID() == member.m_Id &&
+				AICF_GroupRuntime.IsAliveCharacter(member.m_Entity)) return;
 			// Любая неплановая потеря ownership закрывает место навсегда.
 			member.m_bLost = true;
 			if (LivingCapacity() == 0) m_Group.SetDormantCounts(0, m_aMembers.Count());
@@ -169,7 +177,7 @@ class AICF_FIAProximityLifecycle
 
 	bool PrepareDormancy()
 	{
-		if (!Current()) return false;
+		if (!Current() || m_TransferMember || m_IncomingMember) return false;
 		Vehicle vehicle;
 		EntityID vehicleId;
 		if (m_Garrison) { vehicle = m_Garrison.m_Vehicle; vehicleId = m_Garrison.m_VehicleId; }
@@ -244,23 +252,74 @@ class AICF_FIAProximityLifecycle
 		return m_Patrol.m_VehicleId;
 	}
 
-	// Передача десанта меняет group ownership, сохраняя logical seat и snapshot.
-	void Transfer(ChimeraCharacter entity, AICF_FIAProximityLifecycle target)
+	// Native Remove/Add синхронно вызывают чужие invokers. До результата
+	// планового переноса исходное logical seat не считается боевой потерей.
+	bool BeginTransfer(ChimeraCharacter entity, AICF_FIAProximityLifecycle target)
 	{
-		if (!Current() || !target || !target.Current()) return;
+		if (!Current() || !target || target == this || !target.Current() || m_TransferMember || target.m_IncomingMember ||
+			!m_Garrison || target.m_Garrison != m_Garrison || !AICF_GroupRuntime.IsAliveCharacter(entity) ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(entity)) return false;
 		foreach (AICF_FIALifecycleMember member : m_aMembers)
 		{
-			if (member.m_Entity != entity || entity.GetID() != member.m_Id) continue;
-			m_aMembers.RemoveItem(member);
-			target.m_aMembers.Insert(member);
-			member.m_bLost = false;
-			return;
+			if (member.m_bLost || member.m_Entity != entity || member.m_Id != entity.GetID() || !member.m_Agent ||
+				member.m_Agent.GetControlledEntity() != entity || member.m_Agent.GetParentGroup() != m_Group) continue;
+			m_TransferMember = member;
+			m_TransferTarget = target;
+			target.m_IncomingMember = member;
+			return true;
 		}
+		return false;
+	}
+
+	protected bool TransferIdentity(ChimeraCharacter entity, AICF_FIAProximityLifecycle target)
+	{
+		return Current() && target && target == m_TransferTarget && target.Current() && m_TransferMember &&
+			target.m_IncomingMember == m_TransferMember && entity && m_TransferMember.m_Entity == entity &&
+			m_TransferMember.m_Id == entity.GetID() && m_TransferMember.m_Agent;
+	}
+
+	bool TransferCurrent(ChimeraCharacter entity, AICF_FIAProximityLifecycle target)
+	{
+		return TransferIdentity(entity, target) && !m_TransferMember.m_bLost &&
+			m_TransferMember.m_Agent.GetControlledEntity() == entity && AICF_GroupRuntime.IsAliveCharacter(entity) &&
+			AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(entity);
+	}
+
+	protected void ClearTransfer()
+	{
+		if (m_TransferTarget && m_TransferTarget.m_IncomingMember == m_TransferMember) m_TransferTarget.m_IncomingMember = null;
+		m_TransferMember = null;
+		m_TransferTarget = null;
+	}
+
+	// Завершение вызывается и после commit, и после native rollback.
+	void Transfer(ChimeraCharacter entity, AICF_FIAProximityLifecycle target)
+	{
+		bool current = TransferIdentity(entity, target);
+		AICF_FIALifecycleMember member = m_TransferMember;
+		ClearTransfer();
+		if (!current || member.m_bLost) return;
+		if (AICF_GroupRuntime.IsAliveCharacter(entity) && AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(entity) &&
+			member.m_Agent.GetControlledEntity() == entity)
+		{
+			if (member.m_Agent.GetParentGroup() == m_Group) return;
+			if (member.m_Agent.GetParentGroup() == target.m_Group)
+			{
+				m_aMembers.RemoveItem(member);
+				target.m_aMembers.Insert(member);
+				return;
+			}
+		}
+		// Смерть, передача игроку/чужой группе или отказ обоих Add — потеря.
+		member.m_bLost = true;
+		if (LivingCapacity() == 0) m_Group.SetDormantCounts(0, m_aMembers.Count());
 	}
 
 	void Stop()
 	{
 		if (m_bStopped) return;
+		ClearTransfer();
+		m_IncomingMember = null;
 		m_bStopped = true;
 		if (m_Group && m_Group.GetID() == m_GroupId)
 		{

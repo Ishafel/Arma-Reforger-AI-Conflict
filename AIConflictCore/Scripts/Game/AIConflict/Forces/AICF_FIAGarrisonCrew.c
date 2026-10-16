@@ -171,13 +171,13 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 			{
 				AIControlComponent control = AIControlComponent.Cast(member.FindComponent(AIControlComponent));
 				AIAgent agent = control.GetAIAgent();
-				if (agent.GetParentGroup() == g.m_Group && g.DesantIdentity())
+				if (agent.GetParentGroup() == g.m_Group && g.DesantIdentity() && g.m_Lifecycle &&
+					g.m_Lifecycle.BeginTransfer(member, g.m_DesantLifecycle))
 				{
 					g.m_Group.RemoveAgent(agent);
-					g.m_DesantGroup.AddAgent(agent);
-					if (agent.GetParentGroup() == g.m_DesantGroup && g.m_Lifecycle)
-						g.m_Lifecycle.Transfer(member, g.m_DesantLifecycle);
-					if (!agent.GetParentGroup()) g.m_Group.AddAgent(agent);
+					if (!agent.GetParentGroup() && g.m_Lifecycle.TransferCurrent(member, g.m_DesantLifecycle)) g.m_DesantGroup.AddAgent(agent);
+					if (!agent.GetParentGroup() && g.m_Lifecycle.TransferCurrent(member, g.m_DesantLifecycle)) g.m_Group.AddAgent(agent);
+					g.m_Lifecycle.Transfer(member, g.m_DesantLifecycle);
 					g.Log("FIA_GARRISON_DESANT_TRANSFER", string.Format("member=%1 desant_group=%2 success=%3", member.GetID(), g.m_DesantGroupId, agent.GetParentGroup() == g.m_DesantGroup));
 				}
 				if (!g.DesantIdentity() || agent.GetParentGroup() != g.m_DesantGroup) g.m_bDisembarking = true;

@@ -1,5 +1,83 @@
 # Проверки и baseline
 
+## PR #60: rollback переноса десанта и runtime-файлы — 2026-10-16
+
+Замечание [P2](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/60#discussion_r4291674923)
+воспроизведено на `66b08ba`: native destination Add вызывает внешний
+`GetOnAgentAdded` callback, который синхронно снимает agent с destination до
+возврата Add. Production rollback возвращает того же бойца в source, но
+прежний OnAgentRemoved уже уменьшил logical capacity: **capacity=4, agents=5,
+Ready=0**. Baseline `runtime-before`: 10 check events, ровно два ожидаемых FAIL
+(`TRANSFER_ROLLBACK_CAPACITY`, `TRANSFER_ROLLBACK_READY`), native exit 0.
+Baseline log audit подтверждает воспроизведение, а не PASS исходного кода.
+
+Evidence: `.codex-runtime/issue59-transfer-rollback-20261016/`.
+Перед правкой `Invoke-AICFChecks.ps1 -Name <семь FIA/observers/Stage3 audits>
+-EvidenceRoot <root>/before` — **7/7 PASS/0**, baseline static FAIL нет.
+Production изменены только `AICF_FIAProximityLifecycle.c` и
+`AICF_FIAGarrisonCrew.c`: planned transfer удерживает logical seat до результата,
+fences повторяются перед обоими Add, receiver не присваивает входящую identity
+чужому свободному месту. Rollback не сбрасывает настоящие потери.
+Pending state снимается при завершении и Stop; native expansion/dormancy
+приостанавливаются на время синхронной попытки.
+
+`ArmaReforgerWorkbenchSteamDiag.exe -noThrow -wbsilent ... -wbModule=ScriptEditor
+-run -validate` — production Stock/EveronRHS/EveronWCSRHS **3/3 PASS/0**,
+validation successful, script/VM/fatal ошибок нет. Полные argv/logs:
+`compile-production-stock/`, `compile-production-rhs/`, `compile-production-wcs/`.
+Baseline fixture и отдельные Stock/WCS stages также прошли compile.
+Первый `compile-baseline/` содержит FAIL fixture: прямой доступ к protected
+invoker заменён проверенным публичным `GetOnAgentAdded()`. Это не PASS.
+
+Runtime через canonical `Start-AICFRuntime.ps1 -Role Server`, fresh profiles,
+`-aicfFIAProximityProbe us -aicfFIADesantTransferProbe baseline|after
+-aicfRequirePlayerForResult 0`. `Run.ps1` в evidence сохраняет точные arguments,
+launcher manifests и native exits; source stages изолированы.
+
+| Case | Graph / difficulty / port | Результат |
+|---|---|---|
+| `runtime-before` | Stock / Medium / 2363, baseline | Дефект воспроизведён, 2 ожидаемых FAIL, native exit 0 |
+| `runtime-stock-after` | Stock / Medium / 2363 | 31/31 PASS, native exit 0 |
+| `runtime-wcs-after` | Full Everon WCS / Hard / 2365 | 31/31 PASS, native exit 0 |
+
+Оба after проверили native отказ, возвращённый parent, **capacity=5, agents=5,
+Ready=1**, последующий успешный retry с тем же entity/ID и неизменным общим
+roster. Затем прошли все existing proximity cases: budget, retention, desant,
+identity, две dormancy/return итерации, partial/full losses, destroyed vehicle
+и road lifecycle. 31 включает семь новых transfer checks.
+
+Свежий полный `Invoke-AICFChecks.ps1 -EvidenceRoot <root>/offline-after` —
+**63/63 PASS/0** на окончательном production коде, без пропущенных проверок.
+`Test-FIAProximityContracts.ps1` теперь проверяет 40 guards и отдельную
+отрицательную мутацию запрета `m_bLost=false` при transfer.
+
+`Test-FIADesantTransferLog.ps1 -LogPath <console.log> -LauncherPath <terminal.txt>
+-NativeExitPath <exit.txt> [-Baseline]` — **PASS/0** для всех трёх остановленных
+полных логов; after дополнительно запускает полный `Test-FIAProximityLog.ps1`.
+Unexpected script/VM/fatal/AICF leaks отсутствуют, native resource/shutdown
+diagnostics сохранены отдельно. После удаления TRANSFER_RETRY из копии WCS log
+тот же audit даёт ожидаемый **FAIL/1 CASE_TRANSFER_RETRY**; negative вывод
+сохранён, временная копия удалена. Точные команды after — `verdict.json`.
+`production-hashes.json`: оба production файла совпадают с обоими after stages.
+
+По отдельному запросу пользователя сняты с отслеживания четыре старых файла:
+`.codex-runtime/parallel-armed-server.json`, `parallel-transport-server.json`,
+`start-parallel-vehicle-servers.ps1`, `stop-parallel-vehicle-servers.ps1`.
+Commit `1f14ffa`, `git rm --cached`: локальные файлы сохранены с прежними hashes,
+уже существующее `/.codex-runtime/` в `.gitignore` их исключает. Проверка
+`git ls-files .codex-runtime` возвращает пустой список. Evidence
+`runtime-files-before.json` и `runtime-files-history.txt` фиксирует их прежнее
+состояние и происхождение; новые evidence-файлы не добавляются в Git.
+
+Client/JIP, визуальный тест и длительный soak этого исправления — **NOT RUN**.
+Прежний client gate ниже относится к `66b08ba`, не к новому запуску. Runtime
+этого исправления проверяет server/master group transfer, клиентские RPC/UI
+и реплицируемые поля не менялись.
+
+`git diff --check` — PASS/0. Собственные native процессы завершены штатно,
+три source stages удалены после сохранения hashes и исходных двух классов;
+полные profiles/logs, manifest, baseline и первый compile FAIL сохранены.
+
 ## Proximity дополнительных сил FIA — issue #59, 2026-10-16
 
 Ветка `codex/fia-proximity` от `dc1de5e`. Evidence: `.codex-runtime/issue59/`;
