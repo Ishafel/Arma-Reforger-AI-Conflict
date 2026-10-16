@@ -1,5 +1,15 @@
 # Runtime fixture: каталог и применение
 
+## Shutdown private equipment worlds — issue #63
+
+`AICF_ShutdownProbe.c`: только isolated Core stage, `aicfShutdownMode idle|batches`,
+три пакета по восемь inventory/preview операций, native memory snapshots,
+draft counters и readback удаления всех inventory entities. Equipment batch —
+`aicfShutdownEquipmentBatch 1`, standalone — `aicfShutdownStandalone 1`.
+Control `aicfShutdownNoEquipment 1` существует только в fixture.
+Команды, lifecycle и ограничения — [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md).
+Полный stopped log проверяется `Test-ShutdownLog.ps1`; script leaks не исключаются.
+
 ## Дополнительные силы FIA — issue #59
 
 `AICF_FIAProximityProbe.c` задаёт повторяемые HQ/plan inputs и реальные

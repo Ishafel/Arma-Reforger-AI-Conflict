@@ -7508,6 +7508,13 @@ class AICF_MatchController
 		Stop(true);
 	}
 
+	// World teardown не даёт следующего Update: остановка служб нужна,
+	// пока native entities и миры read-only equipment plans ещё существуют.
+	void Shutdown()
+	{
+		Stop(false);
+	}
+
 	protected void Stop(bool cleanupEntities)
 	{
 		if (m_bStopped)

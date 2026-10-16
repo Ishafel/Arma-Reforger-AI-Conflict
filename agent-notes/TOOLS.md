@@ -194,6 +194,13 @@ Enforce fixture не входят в автоматическую матрицу
    результат описываются отдельно. Удаление допустимо после проверки всех
    callers, замещающего покрытия и ссылок в текущей документации.
 
+`tests/contracts/Test-MatchShutdownContracts.ps1` проверяет остановку controller
+до native teardown и пять отрицательных lifecycle mutations.
+`tests/contracts/Test-ShutdownLogContracts.ps1` проверяет strict full-log gate,
+native/отложенный entity readback и уникальность 24 операций на positive/negative
+inputs. `tests/log-audits/Test-ShutdownLog.ps1` анализирует полные stopped logs
+`AICF_ShutdownProbe`; параметры и границы — [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md).
+
 `tests/log-audits/Test-LoadoutContentsInventoryLog.ps1` проверяет полные
 остановленные logs исходного personal kit: independent native oracle,
 ContentRows, точные адреса, remove/Undo, Capture/Restore, manifest и native exit.
@@ -209,6 +216,8 @@ Script/VM/fatal/shutdown leak ошибки не исключаются из gate
 
 | Проверка | Назначение |
 |---|---|
+| [Test-MatchShutdownContracts.ps1](../tests/contracts/Test-MatchShutdownContracts.ps1) | Early controller Stop, native entity owner и отрицательные teardown mutations |
+| [Test-ShutdownLogContracts.ps1](../tests/contracts/Test-ShutdownLogContracts.ps1) | Full shutdown log, unique batches, немедленный/отложенный native cleanup readback |
 | [Test-ManagedObserversContracts.ps1](../tests/contracts/Test-ManagedObserversContracts.ps1) | Authority/live roster и cleanup native observers для штатной охраны; отрицательные мутации |
 | [Test-AICombatInputContracts.ps1](../tests/contracts/Test-AICombatInputContracts.ps1) | Пустые combat/weapon inputs native BT |
 | [Test-AICommanderModeStatic.ps1](../tests/static/Test-AICommanderModeStatic.ps1) | CLI режима, authority и UI состояния командующего |
@@ -271,6 +280,7 @@ Script/VM/fatal/shutdown leak ошибки не исключаются из gate
 
 | Анализатор | Обязательный вход | Назначение |
 |---|---|---|
+| [Test-ShutdownLog.ps1](../tests/log-audits/Test-ShutdownLog.ps1) | `-LogPath`, `-LauncherPath`, `-NativeExitPath` | Stopped full log, script/fatal/leaks, memory snapshots и native cleanup; optional `-Batches`, `-RequireStop`, `-Client` |
 | [Test-AICommanderModeLog.ps1](../tests/log-audits/Test-AICommanderModeLog.ps1) | `-ServerLogPath` + `-ExpectedMode` либо `-ExpectedInvalidValue` | CLI BOTH/US/USSR либо ожидаемое невалидное значение; optional client и initial coverage |
 | [Test-BaseBuildersLog.ps1](../tests/log-audits/Test-BaseBuildersLog.ps1) | `-LogPath` | Worker completion, lifecycle и tool use; optional client |
 | [Test-ConstructionLog.ps1](../tests/log-audits/Test-ConstructionLog.ps1) | `-LogPath` | Транзакции, identity, завершение; optional all types/factions |

@@ -1,5 +1,124 @@
 # Проверки и baseline
 
+## Shutdown equipment worlds — issue #63, 2026-10-16
+
+Ветка `codex/issue-63-shutdown-leaks` от актуального `origin/main` `7703d4e`;
+дерево при начале чистое. Его production tree совпадал с `eef5f74` (#61).
+Game/Server/Workbench — **1.8.0.13**, RHS Status Quo **0.16.5237**,
+WCS Weapon Scripts/NATO/Weapons **8.4.0**, Attachments **8.4.1**, RU **8.3.0**.
+Полные версии, metadata и hashes — `.codex-runtime/issue63/binaries.json`,
+`dependency-versions.json`, `dependencies.json`. Механизм и команды fixtures:
+[SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md).
+
+Свежий baseline `baseline3-{server,client}` повторил исходный reproducer:
+по **283/283** native loadout checks, exits **0**, но server full-log audit —
+**FAIL/1**, 358 `SCRIPT (E)`, 355 leaked-class lines, **5170 экземпляров**.
+Client — 0 script errors. Это новый запуск, а не прежнее evidence #61.
+
+Изоляция на том же WCS/Hard source graph:
+
+| Case | Условие | Server script errors / leaked objects |
+|---|---|---|
+| `idle-traced` | Без loadout fixture/preview редактора, connected, `-checkInstance` | 358 leak diagnostics + allocation records; 5170 objects |
+| `idle-standalone` | Без клиента и loadout fixture, equipment service работает | 358 / 5170 |
+| `grace-idle` | Пауза 10 секунд после disconnect | 358 / 5170 |
+| `lifecycle-before`, `lifecycle-hook`, `nocache` | Clear кеша цен, ранний world-cleanup Clear, полное исключение кеша | Каждый сохраняет 358 / 5170 |
+| `noplans` | Baseline, fixture исключает update equipment service | **0 / 0**, native exit 0 |
+| `native-clear`, `stop-idle` | Явный Stop без удаления detached roots | Raw GetItems: **75 и 67 live entries** (71/63 уникальных entities после дедупликации); 358 ошибок сохраняются |
+| `delete-roots` | Явное удаление тех же native roots | **0 / 0**, все items null, drafts 2 → 0, exit 0 |
+| `unique-baseline` | Тот же final oracle и три пакета по 8 на исходном production | 358 / **35619**; удержано **536 → 1072 → 1608 уникальных entities**, сохраняются спустя 10 секунд и после 15 секунд покоя |
+
+`idle-traced-client` исходного control также содержит 12 shutdown script errors
+(35 native objects); это не PASS. После исправления три свежих connected client
+runs ниже имеют 0 script errors. Сводка обычных попыток — `results.json`;
+прерванный полный DumpInstances хранится отдельно.
+Ошибки native allocation trace не исключаются из error counts.
+
+`Compile.ps1 -Stage <stage> -Variant <Stock|RHS|EveronWCSRHS> -Label <label>`
+в evidence извлекает graph из canonical launcher DryRun и вызывает только
+terminal Workbench `-noThrow -wbsilent ... -wbModule=ScriptEditor -run -validate`.
+Финальные `regression-stock`, `regression-rhs`, `regression-wcs` — **3/3 PASS/0**,
+validation successful, script/VM/fatal ошибок нет. Measurement fixture дополнительно
+прошла `final-fixture`, затем окончательная версия unique oracle — `unique-final`
+**PASS/0**. Baseline с тем же oracle — `unique-baseline` **PASS/0**.
+Сохраняются exact argv, native exits и полные
+Workbench logs. Source/fixture hashes не подменяются generated rdb hashes.
+
+`Run.ps1 -Stage <stage> -Case <case> [-Client] [-Standalone] [-Variant <variant>]
+[-Port <port>] -Extra <arguments>` использует только `Start-AICFRuntime.ps1`,
+fresh profiles и одинаковые Difficulty/graph. Каждый client прошёл exact CLI,
+live server PID и `ROSTER_READY` gate. Manifests и native exits сохранены.
+
+| Окончательный run | Native checks / verdict |
+|---|---|
+| `regression-stock` | **127/127**, contents log audit PASS/0 |
+| `regression-rhs` | **234/234**, contents log audit PASS/0 |
+| `reproduced-final-1-{server,client}` | По **283/283**, оба полных contents audits PASS/0 |
+| `reproduced-final-2-{server,client}` | По **283/283**, оба полных contents audits PASS/0 |
+| `fixed-connected-{server,client}` | До расширения oracle: full script/fatal gate PASS/0, native items после Clear — 0, drafts после Stop — 0 |
+| `unique-idle`, `unique-batches` | Окончательные полные shutdown audits PASS/0, включая delayed readback; три пакета по 8 EquipmentDraft операций, **24/24**, все 24 operation identities уникальны |
+
+Все эти процессы завершились штатно с native exit **0**, script/fatal/VM errors
+и leaked instances — **0**. В исходных kits сохранены exact native addresses,
+remove/Undo/Capture/Restore и шесть запасных WCS AK-12 magazines обеих connected
+проверок. Анализаторы читают полные остановленные console logs, включая shutdown.
+
+План размеров/расписания, периода покоя и idle envelope сохранён **до** измерений
+в `measurement-plan.json`. Ранние frozen/tracked runs сохранены отдельно;
+окончательные unique runs дедуплицируют GetItems и weak witnesses по IEntity
+identity. До/после каждого пакета живых drafts **2 → 2**, после Stop **0**,
+created = destroyed = **55**. Native readback каждого EquipmentDraft.Clear,
+включая пакеты, имеет **alive=0**. После последнего пакета есть не менее 15 секунд
+покоя: **0 из 1608** unique sampled entities остаются живы; после Stop —
+**0 из 1742**, включая две service models. Baseline после того же покоя сохраняет
+все **1608**, то есть накопление во время работы подтверждено native identities.
+Сравнение всех шести native stats — `memory-unique-comparison.json`:
+`MemC` ready→rest **+711374 idle / +263167 batches**, `Mem (KB)` **+184986 / +85162**.
+Рост counts, memory, small-block counts/size и pages находится в idle envelope.
+Small-block overhead уменьшился: **−5695 / −6778 KB**; это отдельно сохранённое
+отличие, а не рост памяти.
+Проверка подтверждает отсутствие удержания собственных native items и добавочных
+drafts на этих пакетах; длительный soak и влияние на FPS не заявляются.
+
+Полный baseline `Invoke-AICFChecks.ps1 -EvidenceRoot .codex-runtime/issue63/offline-before`
+— **63/63 PASS/0**; полный `offline-final` и повторный окончательный
+`offline-frozen` — **65/65 PASS/0** каждый,
+без исключённых проверок. Production source в течение финального runner не менялся.
+Новые shutdown contracts отклоняют пять lifecycle mutations; equipment contracts —
+21 rule / 17 mutations, включая удаление root delete и world fence. Full-log
+contracts: три positive / одиннадцать negative inputs; реальный baseline server log
+по-прежнему отклоняется аудитом (**FAIL/1 SCRIPT_FATAL**). `NOT RUN` не считается PASS.
+
+Ранние неуспешные попытки сохранены: первый comparable `baseline-equipment`
+выполнил три пакета, затем завершился native access violation **−1073741819**
+без штатного shutdown; log и mdmp сохранены как **FAIL**, не memory PASS.
+Повтор с unique oracle (`unique-baseline`) завершился exit 0, сохранив все
+native leaks и количественное удержание; исправленный source проходит те же
+операции и покой. Причина отдельного native crash по одному dump не объявляется
+доказанной. Windows PowerShell redirection прерывала
+две launcher попытки до полного runtime; canonical launcher из PowerShell 7 прошёл.
+Первый Workbench helper не дождался GUI-subsystem executable, затем исправлен
+по documented pipeline. Unbounded `DumpInstances` задержал simulation и дал
+413 MB diagnostic log; только его собственные server/client остановлены адресно,
+run не используется как memory PASS. `final-idle-server` имел две VM exceptions
+из-за empty optional grace parameter в fixture; параметр исправлен,
+`fixed-connected` полностью повторён и проходит. Эти ранние FAIL не скрыты.
+
+Основное evidence: `.codex-runtime/issue63/`: `*-command.json`, `*-launcher.txt`,
+`*-exit.txt`, `profile-*/logs/`, `compile-*/`, `offline-*/summary.json`,
+`results.json`, `stage-hashes.json`, `memory-unique-comparison.json`,
+`runtime-verdicts.json`, `final-source-equality.json` и `audit-*.txt`.
+Все девять source/fixture hash comparisons совпадают с проверенными final stages.
+Native diagnostics WORLD/ENTITY/RPL/NETWORK/RESOURCES/MATERIAL посчитаны отдельно;
+общий error-free engine/assets/backend gate не заявляется. В частности native
+DamageManager пытается RPC из unregistered local models: baseline connected —
+2 сообщения, после явного удаления models — 4; в unique batch — 50/52.
+Эти сообщения не вырезаны, нулевой RPL-error gate не заявляется.
+Установленные game/Server/Tools и dependencies
+не изменялись. **NOT RUN:** визуальная оценка/FPS, player input, полный
+save/respawn/JIP pipeline, packaged build, длительный soak. В active acceptance
+checklist issue таких ручных критериев нет.
+
 ## Issue #61: магазины исходного комплекта ВС РФ — 2026-10-16
 
 Ветка `codex/issue-61-loadout-magazines` от актуальной `origin/main`

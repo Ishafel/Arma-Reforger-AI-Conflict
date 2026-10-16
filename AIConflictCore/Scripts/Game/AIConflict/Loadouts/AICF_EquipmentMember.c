@@ -12,8 +12,15 @@ class AICF_EquipmentDraft : AICF_LoadoutDraft
 			storage.GetOwnedItems(items, false);
 			foreach (InventoryItemComponent item : items)
 			{
+				if (!item) continue;
 				InventoryStorageSlot parent = item.GetParentSlot();
-				if (parent && parent.GetStorage().GetOwner() == m_Character) parent.DetachEntity();
+				if (!parent || parent.GetStorage().GetOwner() != m_Character) continue;
+				IEntity entity = item.GetOwner();
+				parent.DetachEntity();
+				// Detached root больше не является child бойца. Удаляем его
+				// вместе с nested inventory до освобождения собственного world.
+				if (entity && item && !item.GetParentSlot() && entity.GetWorld() == m_Character.GetWorld())
+					SCR_EntityHelper.DeleteEntityAndChildren(entity);
 			}
 		}
 	}

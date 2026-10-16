@@ -36,6 +36,7 @@ function Rules($inputSources) {
         BOUNDED_RECOVERY = $apply.Contains('System.GetTickCount() >= tx.m_iRecoveryDeadline') -and $apply.Contains('tx.m_iRecoveryDeadline = System.GetTickCount() + 60000')
         MOVEMENT_RELEASE = $apply.Contains('controller.SetDisableMovementControls(true)') -and $apply.Contains('controller.SetDisableMovementControls(false)') -and $apply.Contains('Release(member);') -and $service.Contains('m_Applicator.Release(remaining)')
         MODEL_CLEANUP = $member.Contains('class AICF_EquipmentDraft : AICF_LoadoutDraft') -and $member.Contains('m_Character.GetWorld() != GetGame().GetWorld()') -and $member.Contains('DetachRoots();') -and $member.Contains('parent.DetachEntity()')
+        MODEL_ROOT_DELETE = $member.Contains('!parent || parent.GetStorage().GetOwner() != m_Character') -and $member.Contains('entity && item && !item.GetParentSlot() && entity.GetWorld() == m_Character.GetWorld()') -and $member.Contains('SCR_EntityHelper.DeleteEntityAndChildren(entity);')
         SINGLE_OPERATION = $slot.Contains('HasEquipmentInventoryTransaction()') -and $vehicle.Contains('slot.HasEquipmentInventoryTransaction()') -and $planner.Contains('slot.HasEquipmentInventoryTransaction()')
         STOP = $service.Contains('m_aRecoveries.Clear()') -and $service.Contains('m_aPlans.Clear()') -and $service -notmatch '\.CallLater\(|\.Insert\(On'
     }
@@ -44,6 +45,8 @@ $rules = Rules $sources
 $failed = @($rules.Keys | Where-Object {-not $rules[$_]})
 if ($failed.Count) { throw ('Equipment contract failures: ' + ($failed -join ', ')) }
 $mutations = @(
+    @('Loadouts/AICF_EquipmentMember.c','SCR_EntityHelper.DeleteEntityAndChildren(entity);', '', 'MODEL_ROOT_DELETE'),
+    @('Loadouts/AICF_EquipmentMember.c','entity.GetWorld() == m_Character.GetWorld()', 'true', 'MODEL_ROOT_DELETE'),
     @('Loadouts/AICF_EquipmentInventory.c','item && !unique.Contains(item)', 'item', 'UNIQUE_IDENTITY'),
     @('Loadouts/AICF_EquipmentInventory.c','foreach (IEntity item : unique)', 'foreach (IEntity item : items)', 'UNIQUE_ROUNDS'),
     @('Loadouts/AICF_EquipmentMember.c','foreach (IEntity item : unique)', 'foreach (IEntity item : items)', 'UNIQUE_CONSUMABLES'),
