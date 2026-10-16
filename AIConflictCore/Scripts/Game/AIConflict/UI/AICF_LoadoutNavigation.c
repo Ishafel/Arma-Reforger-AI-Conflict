@@ -149,7 +149,7 @@ class AICF_LoadoutNavigation
 	bool IsContentPocket(AICF_LoadoutLocation location, string path)
 	{
 		return location && !path.IsEmpty() && location.m_sPath.StartsWith(path) &&
-			SCR_UniversalInventoryStorageComponent.Cast(location.m_Storage) &&
+			(SCR_UniversalInventoryStorageComponent.Cast(location.m_Storage) || EquipmentStorageComponent.Cast(location.m_Storage)) &&
 			!AICF_LoadoutSlotView.HasFixedSlots(location.m_Storage);
 	}
 
