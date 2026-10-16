@@ -1,5 +1,20 @@
 # Runtime fixture: каталог и применение
 
+## Дополнительные силы FIA — issue #59
+
+`AICF_FIAProximityProbe.c` задаёт повторяемые HQ/plan inputs и реальные
+подход/уход живого actor. Safety, Ownership и Player extensions проверяют
+identity/generation, отмену queued spawn и реального подключённого игрока.
+Порядок копирования в isolated stage, CLI modes и границы каждого случая —
+в [FIA_PROXIMITY.md](FIA_PROXIMITY.md). Production addon не содержит fixtures.
+`Test-FIAProximityLog.ps1` проверяет полный остановленный server log;
+полный client log сохраняется и анализируется отдельно. Новые случаи
+FIA/controller-origin в ManagedObserversProbe остаются регрессией #54.
+
+`AICF_FIADesantTransferProbe.c` добавляет native callback rejection,
+production rollback и retry для P2 PR #60. Порядок загрузки, CLI и полный
+log gate — [FIA_PROXIMITY.md](FIA_PROXIMITY.md).
+
 ## Штатные ambient patrols — issue #54
 
 `AICF_AmbientPatrolProbe.c` помещается в stage Core `Scripts/Game/ZZTests/`.

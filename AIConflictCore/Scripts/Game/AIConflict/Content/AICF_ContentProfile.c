@@ -36,6 +36,11 @@ class AICF_ContentProfile
 		return "{B47110AA1A806556}Prefabs/Vehicles/Wheeled/BTR70/BTR70_FIA.et";
 	}
 
+	bool IsFIAEquipmentReady(ChimeraCharacter character)
+	{
+		return character != null;
+	}
+
 	void GetFIAGarrisonCandidates(SCR_CampaignFaction faction, array<ResourceName> apcs, array<ResourceName> tanks)
 	{
 		apcs.Insert(GetFIAGarrisonPrefab(false));

@@ -43,8 +43,11 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 	bool BoardGarrison(AICF_FIAGarrison g)
 	{
 		if (!g.VehicleIdentity() || !g.GroupIdentity()) return false;
+		if (g.m_Lifecycle && !g.m_Lifecycle.Ready()) return false;
 		int actual, wrong, dead;
-		if (!AICF_GroupRuntime.HasExactFactionRoster(g.m_Group, "FIA", g.m_aSeats.Count(), actual, wrong, dead)) return false;
+		int expected = g.m_aSeats.Count();
+		if (g.m_Lifecycle) expected = g.m_Lifecycle.LivingCapacity();
+		if (!AICF_GroupRuntime.HasExactFactionRoster(g.m_Group, "FIA", expected, actual, wrong, dead)) return false;
 		if (g.m_aCrew.IsEmpty())
 		{
 			array<AIAgent> agents = {};
@@ -62,6 +65,7 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 		for (int i; i < g.m_aCrew.Count(); i++)
 		{
 			ChimeraCharacter member = g.m_aCrew[i];
+			if (!AICF_GroupRuntime.IsAliveCharacter(member) || g.IsDeployedPassenger(member)) continue;
 			BaseCompartmentSlot seat = g.m_aSeats[i];
 			if (!g.OwnsMember(member) || !seat || !seat.IsCompartmentAccessible()) return false;
 			if (seat.GetOccupant() == member) { seated++; continue; }
@@ -69,10 +73,11 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 			CompartmentAccessComponent access = member.GetCompartmentAccessComponent();
 			if (!access || access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut()) continue;
 			// Первичная посадка; recovery возвращает только исходных живых бойцов.
-			if (!g.RecoveryAllowed()) return false;
+			if (!g.RecoveryAllowed() && (!g.m_Lifecycle || !g.m_Lifecycle.IsReactivating())) return false;
+			if (g.m_Lifecycle && !g.m_Lifecycle.Current()) return false;
 			access.GetInVehicle(seat.GetOwner(), seat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
 		}
-		return seated == g.m_aSeats.Count();
+		return seated == expected;
 	}
 
 	static bool IsEssentialSeat(BaseCompartmentSlot seat, bool tank)
@@ -121,6 +126,8 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 			{
 				g.m_DesantGroupId = g.m_DesantGroup.GetID();
 				g.m_DesantGroup.m_aUnitPrefabSlots.Clear();
+				g.m_DesantLifecycle = new AICF_FIAProximityLifecycle();
+				g.m_DesantLifecycle.Start(g.m_DesantGroup, g, null, true);
 			}
 		}
 		for (int i; i < g.m_aCrew.Count(); i++)
@@ -164,11 +171,13 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 			{
 				AIControlComponent control = AIControlComponent.Cast(member.FindComponent(AIControlComponent));
 				AIAgent agent = control.GetAIAgent();
-				if (agent.GetParentGroup() == g.m_Group && g.DesantIdentity())
+				if (agent.GetParentGroup() == g.m_Group && g.DesantIdentity() && g.m_Lifecycle &&
+					g.m_Lifecycle.BeginTransfer(member, g.m_DesantLifecycle))
 				{
 					g.m_Group.RemoveAgent(agent);
-					g.m_DesantGroup.AddAgent(agent);
-					if (!agent.GetParentGroup()) g.m_Group.AddAgent(agent);
+					if (!agent.GetParentGroup() && g.m_Lifecycle.TransferCurrent(member, g.m_DesantLifecycle)) g.m_DesantGroup.AddAgent(agent);
+					if (!agent.GetParentGroup() && g.m_Lifecycle.TransferCurrent(member, g.m_DesantLifecycle)) g.m_Group.AddAgent(agent);
+					g.m_Lifecycle.Transfer(member, g.m_DesantLifecycle);
 					g.Log("FIA_GARRISON_DESANT_TRANSFER", string.Format("member=%1 desant_group=%2 success=%3", member.GetID(), g.m_DesantGroupId, agent.GetParentGroup() == g.m_DesantGroup));
 				}
 				if (!g.DesantIdentity() || agent.GetParentGroup() != g.m_DesantGroup) g.m_bDisembarking = true;

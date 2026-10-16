@@ -30,6 +30,8 @@ modded class AICF_MatchController
 
 	override protected void AmbientPolicyNegatives()
 	{
+		// Реальный managed controller у точки при живом roster вдалеке.
+		m_AICFAmbientAttack.SetOrigin(m_AICFAmbientPoint.GetOwner().GetOrigin());
 		AICF_AmbientProbe.Check("POLICY_NULL", !m_AICFObserverPolicy.Resolve(null, "US"));
 		FactionKey expected = "US";
 		FactionKey wrong = "USSR";
@@ -56,6 +58,19 @@ modded class AICF_MatchController
 	override protected void AmbientSnapshot(string phase)
 	{
 		super.AmbientSnapshot(phase);
+		if (phase == "FAR")
+		{
+			IEntity member = AICF_GroupRuntime.ResolveAliveLeader(m_AICFAmbientAttack);
+			vector point = m_AICFAmbientPoint.GetOwner().GetOrigin();
+			AICF_AmbientProbe.Check("CONTROLLER_ORIGIN_MEMBERS_FAR", member && vector.DistanceXZ(m_AICFAmbientAttack.GetOrigin(), point) < 1 &&
+				vector.DistanceXZ(member.GetOrigin(), point) > SCR_AmbientPatrolSystem.GetInstance().GetDespawnDistance());
+		}
+		if (phase == "APPROACH")
+		{
+			SCR_AIGroup fia = m_AICFAmbientPoint.GetSpawnedGroup();
+			AICF_AmbientProbe.Check("POLICY_LIVE_FIA_ROSTER", fia && AICF_GroupRuntime.CountAliveAgents(fia) > 0 &&
+				!m_AICFObserverPolicy.Resolve(fia, "US") && !m_AICFObserverPolicy.Resolve(fia, "USSR"));
+		}
 		if (phase == "HELD")
 		{
 			Print(string.Format("[AICF][AMBIENT_DEAD_POLICY] group=%1 member_alive=%2 resolved=%3", AICF_GroupRuntime.FormatEntityId(m_AICFObserverNegative), AICF_GroupRuntime.IsAliveCharacter(m_AICFObserverVictim), m_AICFObserverPolicy.Resolve(m_AICFObserverNegative, "US") != null));

@@ -46,7 +46,9 @@ Native very-near запрет pop-in и elimination у недоматериал�
 
 Дополнительные машины, экипажи и десант остаются у
 `AICF_FIAGarrisonService`/`AICF_FIAPatrolService`; RHS/WCS вооружение — у
-профильных adapters. Сервис не меняет их план или identity.
+профильных adapters. Их controllers также используют native proximity lifecycle
+через [AICF_FIAProximityLifecycle](FIA_PROXIMITY.md), без нового observer
+механизма. Сервис не меняет их immutable план.
 
 ## Проверки
 

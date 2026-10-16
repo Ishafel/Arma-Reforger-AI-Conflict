@@ -3,6 +3,12 @@
 // copied and no uncatalogued ResourceName is admitted.
 class AICF_RHSContentProfile : AICF_ContentProfile
 {
+	override bool IsFIAEquipmentReady(ChimeraCharacter character)
+	{
+		SCR_ChimeraCharacter scripted = SCR_ChimeraCharacter.Cast(character);
+		return scripted && !scripted.AICF_IsPMCEquipmentPending();
+	}
+
 	protected ref map<string, int> m_mPMCNextVariant = new map<string, int>();
 
 	int NextPMCVariant(ResourceName source)
