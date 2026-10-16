@@ -1,5 +1,114 @@
 # Проверки и baseline
 
+## Proximity дополнительных сил FIA — issue #59, 2026-10-16
+
+Ветка `codex/fia-proximity` от `dc1de5e`. Evidence: `.codex-runtime/issue59/`;
+исходные offline/Workbench outputs — `.codex-runtime/issue59-baseline/`
+и `.codex-runtime/issue59-workbench-baseline-host/`. Контракт и воспроизведение
+fixtures описаны в [FIA_PROXIMITY.md](FIA_PROXIMITY.md).
+
+Исходный полный runner стартовал на чистом дереве и завершил **62/62 PASS/0**;
+FIA/observers audits выполнены до правок, поздние несвязанные проверки шли
+параллельно реализации. Это не frozen baseline всего набора. После реализации
+`tools/Invoke-AICFChecks.ps1 -EvidenceRoot .codex-runtime/issue59/offline-final`
+— **63/63 PASS/0**, включая новый proximity audit. После последних
+callback/health fences отдельно повторены семь затронутых FIA/observers/Stage3
+аудитов: **7/7 PASS/0**, `targeted-final/`. Затем на окончательном production
+коде и исправленном negative self-check выполнен свежий полный runner:
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Invoke-AICFChecks.ps1
+-EvidenceRoot .codex-runtime/issue59/offline-frozen-final` — **63/63 PASS/0**,
+без исключённых проверок. Сохранённых offline baseline FAIL нет.
+`offline-after-1/` содержит прежний `INITIAL_BOARDING_GATE` FAIL: требование
+initial RecoveryAllowed сохранено, проверка расширена под fenced native
+reactivation с отрицательной мутацией. Ранний FAIL не считается PASS.
+
+Терминальный `ArmaReforgerWorkbenchSteamDiag.exe -noThrow -wbsilent ...
+-wbModule=ScriptEditor -run -validate` на production graphs Stock,
+EveronRHS и EveronWCSRHS — **3/3 PASS/0**, `Script validation successful`;
+script compile/VM/fatal ошибок нет. Точные argv и полные логи:
+`production-final-Stock/`, `production-final-EveronRHS/`,
+`production-final-EveronWCSRHS/`. Fixtures компилировались отдельно.
+`production-hashes-final.json` фиксирует 233 production `.c`.
+
+Каждый runtime запуск использовал `tools/Start-AICFRuntime.ps1 -Role Server`
+со свежим profile и isolated source stage, точные аргументы/manifest сохранены
+в `command.json`/`terminal.txt`, native exit — `exit.txt`. Общие CLI:
+`-aicfFIAProximityProbe <mode> -aicfRequirePlayerForResult 0`.
+Остановленные console/script/error logs остаются в `<case>/profile/logs/`.
+`Test-FIAProximityLog.ps1 -LogPath <console.log> -LauncherPath <terminal.txt>
+-NativeExitPath <exit.txt>` требует завершение, exit 0 и все native readbacks;
+сохранённый вывод — `<case>/audit.txt`, сводка — `runtime-verdicts.json`.
+
+| Case | Variant / difficulty / actor | Verdict |
+|---|---|---|
+| `stock-medium-us-final` | Stock (Arland) / Medium / US | 24/24, PASS/0 |
+| `rhs-everon-medium-final` | EveronRHS / Medium / USSR | 24/24, PASS/0 |
+| `wcs-full-hard-final` | EveronWCSRHS / Hard / US (`scale`) | 24/24, PASS/0 |
+| `wcs-north-hard-final` | EveronNorthWCSRHS / Hard / USSR | 24/24, PASS/0 |
+| `easy-north-final` | EveronNorth / Easy / US | 2/2, PASS/0 (`-Easy`) |
+| `ownership-final` | Stock / Medium / queued ownership change | 3/3, PASS/0 (`-Ownership`) |
+| `wcs-player-occupancy-final-10` | ArlandWCSRHS / Medium / реальный client | 14 уникальных cases, PASS/0 (`-Player`) |
+| `ambient-managed-final` | Stock / Medium / US и USSR, regression #54 | 45/45, PASS/0 |
+
+Player case: server/client **native exit 0**, клиент подтвердил реальную
+controlled entity при подходе и после передачи уже сидящего исходного члена
+экипажа FIA. Readback `occupied=1 allowed=0 alive_before=5 alive_after=5`,
+та же vehicle identity. При передаче управления native engine передаёт
+authority техники владельцу character; server dormancy отказывает уже на
+authority/identity gate. Direct `DespawnMembers` также не удаляет бойцов.
+Полные server и `wcs-player-occupancy-client-final-10/` client logs проверены
+с `-ClientLogPath`, `-ClientLauncherPath`, `-ClientNativeExitPath`; точная
+команда и verdict — `<server-case>/verdict.json`. Все 76 check events (включая
+повторяющийся TARGET до подключения) успешны. Script/VM/fatal/AICF leak ошибок
+в обоих финальных логах нет, client post-world-destruction script diagnostics=0.
+Сервер реплицирует завершение и ждёт штатного client RequestClose перед своим
+закрытием; CallLater явно снимается в callback и Stop.
+Тот же log audit на копии client log без occupancy readback даёт ожидаемый
+FAIL/1 `CLIENT_NATIVE_READBACK`; вывод и точные аргументы сохранены в
+`negative-audit.txt`/`negative-verdict.json`, временная копия удалена.
+
+Четыре полных FIA cases проверяют дальний пустой roster, native budget refusal
+и последующее появление, retention, фактическую высадку/transfer десанта,
+две dormancy/return итерации, неизменный план, частичные/полные потери,
+уничтоженную машину без замены и дорожный crew active/dormant/return.
+Safety cases отвергают stale generation/vehicle ID и unknown occupancy identity.
+Ownership case меняет faction после реального queued RequestSpawn и читает
+отказ expansion, retirement и пустой roster. Regression #54 дополнительно
+проверяет actual FIA observer и controller origin у точки при бойцах далеко,
+пустой/погибший roster и Stop/removal observers. Анализ полного лога:
+`Test-AmbientPatrolLog.ps1 -LogPath <console.log>` — PASS/0;
+330 native shutdown leaks и 378 прочих resource/backend diagnostics сохранены
+отдельно; обычных runtime script/VM/fatal/AICF leak ошибок нет.
+
+Full Everon сравнивается с `baseline-wcs-full-hard-fixed-hq/` на `dc1de5e`:
+одинаковые HQ, PRNG input `590013`, **буквально одинаковый план 75 entries**,
+80 секунд наблюдения. Baseline: materialized **195**, active **193**,
+far_materialized **195**; исправление: materialized/active **19/19**,
+far_materialized **0** (19 возле HQ допустимы). Подход: **27/27**, far **0**;
+уход: **19/19**, dormant groups **3**, far **0**.
+`full-everon-comparison.json` содержит планы и readbacks. Baseline probe
+намеренно воспроизводит два исходных нарушения; `-Baseline` audit PASS/0
+подтверждает воспроизведение, а не корректность исходного поведения.
+Первый scale run выполнен до двух дополнительных callback guards;
+последние guards проверены fresh North/Easy/ambient/client, compile и audits.
+
+История разработки сохранена: ранние `stock-medium-us-*` выявили блокировку
+общего acquisition cadence дальним slot, null occupancy и удержание survivors
+исходным погибшим телом; причины исправлены до финальных прогонов. Ошибки
+fixtures (порядок modded classes, ранний readiness readback, client movement
+и local-only boarding) также сохранены отдельно. Эти прогоны не входят в PASS.
+В ранних client logs после `Game destroyed.` сохранены native menu ошибки
+`SCR_FilterCategory`/`REPLICATION_SHUTDOWN`; финальный client закрывается до
+server disconnect. Client #8 после возврата в menu остановлен адресно по
+проверенному PID/profile, native -1; это не PASS и не crash production.
+Первый sandbox Workbench не инициализировал SteamAPI; host CLI прошёл.
+
+FPS/визуальная плавность, длительный soak, JIP и полная persistence физиологии —
+**NOT RUN**, вне критериев issue. Readback активности не доказывает прирост FPS.
+`git diff --check` — PASS/0. Свои игровые процессы завершены, пять isolated
+source stages удалены после сохранения hashes и baseline fixture в
+`source-manifests/`; profiles, полные логи и история FAIL сохранены.
+
 ## Подготовка 0.1.29: полная матрица запуска — 2026-10-15
 
 Задача: [issue #57](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/issues/57),

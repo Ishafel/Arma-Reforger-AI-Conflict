@@ -3374,6 +3374,64 @@ class AICF_VehicleCleanupManager
 		}
 	}
 
+	// Dormancy удаляет только AI characters. Машина/lease остаются с прежней
+	// identity, здоровьем и inventory; player/foreign/unknown occupancy — veto.
+	static bool CanDormantFIA(Vehicle vehicle, EntityID identity, SCR_AIGroup group,
+		array<ChimeraCharacter> known, array<EntityID> knownIds, SCR_AIGroup companion, out string reason)
+	{
+		reason = "IDENTITY";
+		if (!Replication.IsServer() || !vehicle || vehicle.GetID() != identity || !group ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle)) return false;
+		if (!known || !knownIds || known.Count() != knownIds.Count()) return false;
+		array<BaseCompartmentSlot> seats = {};
+		AICF_FIAPatrolCrew.Seats(vehicle, seats);
+		reason = "UNKNOWN_SEATS";
+		if (seats.IsEmpty()) return false;
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (BaseCompartmentSlot seat : seats)
+		{
+			reason = "UNKNOWN_SEAT";
+			if (!seat || !seat.GetOwner()) return false;
+			IEntity occupant = seat.GetOccupant();
+			if (occupant)
+			{
+				reason = "FOREIGN_OR_PLAYER_" + seat.GetCompartmentName(true);
+				int index = known.Find(ChimeraCharacter.Cast(occupant));
+				if (index < 0 || occupant.GetID() != knownIds[index] ||
+					!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(occupant)) return false;
+				if (GetGame().GetPlayerManager().GetPlayerIdFromControlledEntity(occupant) > 0 ||
+					SCR_PossessingManagerComponent.GetPlayerIdFromMainEntity(occupant) > 0) return false;
+				// Исходное тело в кресле не удаляется. Оно не должно навечно
+				// удерживать оставшихся живых AI в активной симуляции.
+				if (AICF_GroupRuntime.IsAliveCharacter(occupant))
+				{
+					AIControlComponent control = AIControlComponent.Cast(occupant.FindComponent(AIControlComponent));
+					if (!control || !control.GetAIAgent() ||
+						(control.GetAIAgent().GetParentGroup() != group && control.GetAIAgent().GetParentGroup() != companion)) return false;
+				}
+			}
+			else if (seat.IsReserved())
+			{
+				reason = "RESERVED_" + seat.GetCompartmentName(true);
+				return false;
+			}
+		}
+		foreach (AIAgent agent : agents)
+		{
+			reason = "UNKNOWN_OR_PLAYER_MEMBER";
+			if (!agent || !agent.GetControlledEntity() ||
+				!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(agent.GetControlledEntity())) return false;
+			CompartmentAccessComponent access = CompartmentAccessComponent.Cast(agent.GetControlledEntity().FindComponent(CompartmentAccessComponent));
+			reason = "MEMBER_TRANSITION";
+			if (!access || access.IsGettingIn() || access.IsGettingOut()) return false;
+			reason = "MEMBER_OTHER_VEHICLE";
+			if (access.IsInCompartment() && CompartmentAccessComponent.GetVehicleIn(agent.GetControlledEntity()) != vehicle) return false;
+		}
+		reason = string.Empty;
+		return true;
+	}
+
 	static void RetainFIAPatrol(AICF_FIAPatrol p)
 	{
 		if (!Replication.IsServer() || !p || !p.GroupIdentity()) return;

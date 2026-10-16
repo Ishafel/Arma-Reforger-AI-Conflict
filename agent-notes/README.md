@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Изменить proximity lifecycle дополнительных сил FIA (issue #59) | [FIA_PROXIMITY.md](FIA_PROXIMITY.md), [FIA_GARRISONS.md](FIA_GARRISONS.md), [AMBIENT_PATROLS.md](AMBIENT_PATROLS.md) |
 | Изменить активацию штатной охраны FIA при подходе ИИ (issue #54) | [AMBIENT_PATROLS.md](AMBIENT_PATROLS.md), `Forces/AICF_ManagedObservers.c`, native ambient spawn/lifecycle в API 1.8.0.13 |
 | Выполнить критерии issue и привязать PR | [AGENTS.md: работа по issue](../AGENTS.md#работа-по-issue-и-привязка-pr), [TESTING.md](TESTING.md) |
 | Найти состав последнего оформленного релиза и ограничения | [0.1.29](../releases/0.1.29.md), [TESTING.md](TESTING.md) |

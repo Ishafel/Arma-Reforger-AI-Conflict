@@ -86,13 +86,14 @@ modded class AICF_FIAGarrisonService
 		string snapshot;
 		foreach (AICF_FIAGarrison g : s_aDefenders)
 		{
-			if (!g.m_bReady) return "PENDING";
-			snapshot += string.Format("%1:%2:%3:%4:", g.m_iSlot, g.m_iGeneration, AICF_GroupRuntime.FormatEntityId(g.m_Vehicle), AICF_GroupRuntime.FormatEntityId(g.m_Group));
-			SCR_DamageManagerComponent damage = SCR_DamageManagerComponent.Cast(g.m_Vehicle.FindComponent(SCR_DamageManagerComponent));
+			// Issue #59: immutable plan сохраняется, entity могут ещё не появиться
+			// либо находиться в native dormancy. Это не повод ждать всю карту.
+			snapshot += string.Format("%1:%2:%3:%4:", g.m_iSlot, g.m_iGeneration, g.m_sPrefab, g.m_sPassengerTemplate);
+			SCR_DamageManagerComponent damage;
+			if (g.m_Vehicle) damage = SCR_DamageManagerComponent.Cast(g.m_Vehicle.FindComponent(SCR_DamageManagerComponent));
 			if (damage) damage.EnableDamageHandling(false);
 			foreach (ChimeraCharacter member : g.m_aCrew)
 			{
-				snapshot += AICF_GroupRuntime.FormatEntityId(member) + ";";
 				if (member) member.GetDamageManager().EnableDamageHandling(false);
 			}
 		}

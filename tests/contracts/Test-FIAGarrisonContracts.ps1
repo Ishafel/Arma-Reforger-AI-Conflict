@@ -11,7 +11,7 @@ $rules = @(
     @('MEMBER_IDENTITY', 'State/Vehicles/AICF_FIAGarrison.c', 'entity.GetID() != m_aCrewIds[index]'),
     @('PLAYER_FENCE', 'State/Vehicles/AICF_FIAGarrison.c', 'IsAuthoritativeAIEntity(entity)'),
     @('GROUP_MEMBERSHIP', 'State/Vehicles/AICF_FIAGarrison.c', 'control.GetAIAgent().GetParentGroup() == m_Group'),
-    @('FULL_ROSTER', 'Forces/AICF_FIAGarrisonCrew.c', 'HasExactFactionRoster(g.m_Group, "FIA", g.m_aSeats.Count(),'),
+    @('FULL_SURVIVING_ROSTER', 'Forces/AICF_FIAGarrisonCrew.c', 'HasExactFactionRoster(g.m_Group, "FIA", expected,'),
     @('FOREIGN_OCCUPANT', 'Forces/AICF_FIAGarrisonCrew.c', 'if (seat.GetOccupant() || seat.IsReserved()) return false;'),
     @('NO_COMBAT_MOVE', 'Forces/AICF_FIAGarrisonCrew.c', 'behavior.m_bUseCombatMove = false;'),
     @('SCOPED_POLICY', 'Forces/AICF_FIAGarrisonCrew.c', '!AICF_FIAGarrisonService.IsDefender(m_OwnerEntity)'),

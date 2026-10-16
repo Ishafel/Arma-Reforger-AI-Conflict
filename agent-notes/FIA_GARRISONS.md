@@ -4,6 +4,11 @@ Issue #25. `AICF_FIAGarrisonPlanner` один раз на authoritative server �
 состав стартовых objective-баз FIA, исключая HQ. Scheduler, fleet, spawn geometry,
 boarding, patrol, recovery и retain cleanup сохраняют владельцев.
 
+Материализация экипажа/десанта зависит от общих native observers и штатного
+`ProximityDriven` lifecycle; повторный подход возвращает только выжившие
+логические места. Машина остаётся той же entity, новый asset не создаётся.
+Контракт dormancy, snapshot и occupancy: [FIA_PROXIMITY.md](FIA_PROXIMITY.md).
+
 | Сложность | Обычная база | Усиленная база |
 |---|---|---|
 | Easy | Только штатная пехота; машины и дорожные патрули отключены | Нет |

@@ -57,6 +57,24 @@ class AICF_FIAGarrison
 	ref array<BaseCompartmentSlot> m_aSeats = {};
 	ref array<ChimeraCharacter> m_aCrew = {};
 	ref array<EntityID> m_aCrewIds = {};
+	ref AICF_FIAProximityLifecycle m_Lifecycle;
+	ref AICF_FIAProximityLifecycle m_DesantLifecycle;
+
+	void SuspendMemberIntegrity(int index)
+	{
+		if (index < m_aMemberIntegrity.Count() && m_aMemberIntegrity[index]) m_aMemberIntegrity[index].Stop();
+		if (index < m_aMemberIntegrity.Count()) m_aMemberIntegrity[index] = null;
+	}
+
+	void EnsureMemberIntegrity(int index, ChimeraCharacter member)
+	{
+		if (!Replication.IsServer() || index < 0 || index >= m_aCrew.Count() || m_aCrew[index] != member) return;
+		while (m_aMemberIntegrity.Count() < m_aCrew.Count()) m_aMemberIntegrity.Insert(null);
+		if (m_aMemberIntegrity[index]) return;
+		AICF_FIAGarrisonIntegrity watch = new AICF_FIAGarrisonIntegrity();
+		m_aMemberIntegrity[index] = watch;
+		watch.Start(this, member, false, m_aEssentialSeats[index]);
+	}
 
 	bool BaseIdentity()
 	{

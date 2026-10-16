@@ -5,7 +5,6 @@ class AICF_FIAGarrisonService
 	protected ref AICF_FactionFleet m_Fleet;
 	protected ref AICF_FIAGarrisonCrew m_Crew = new AICF_FIAGarrisonCrew();
 	protected ref AICF_VehicleSpawner m_Spawner = new AICF_VehicleSpawner();
-	protected ref AICF_ManagedAILODPolicy m_LOD = new AICF_ManagedAILODPolicy();
 	protected ref AICF_FIAGarrisonPatrol m_Patrol = new AICF_FIAGarrisonPatrol();
 	protected bool m_bStopped;
 	protected int m_iNextSpawnMs;
@@ -157,21 +156,33 @@ class AICF_FIAGarrisonService
 		foreach (AICF_FIAGarrison g : s_aDefenders)
 		{
 			if (g.m_bRetired) continue;
-			if (g.m_bReady) g.RecoveryAllowed();
+			if (!g.m_bReady && (!g.BaseIdentity() || g.m_Base.GetFaction() != g.m_Faction))
+			{
+				Retire(g, "BASE_LOST_BEFORE_SPAWN");
+				continue;
+			}
+			if (g.m_Lifecycle) g.m_Lifecycle.Update();
+			if (g.m_DesantLifecycle) g.m_DesantLifecycle.Update();
+			if (g.m_bReady && g.m_Lifecycle && g.m_Lifecycle.Ready() &&
+				(!g.m_DesantLifecycle || g.m_DesantLifecycle.Ready())) g.RecoveryAllowed();
 			if (!g.m_Vehicle && g.m_iRequestedAtMs == 0)
 			{
 				if (now < g.m_iRetryAtMs || now < m_iNextSpawnMs) continue;
-				m_iNextSpawnMs = now + 2000;
 				Acquire(g, now);
+				if (g.m_Vehicle) m_iNextSpawnMs = now + 2000;
 				continue;
 			}
 			// Потеря машины не прекращает оборону оставшихся бойцов.
 			if (!g.GroupIdentity()) { Retire(g, "GROUP_IDENTITY_LOST"); continue; }
-			int agents, recovered;
-			m_LOD.KeepCaptureEligible(g.m_Group, agents, recovered);
-			if (g.DesantIdentity()) m_LOD.KeepCaptureEligible(g.m_DesantGroup, agents, recovered);
+			if (!g.m_Lifecycle || !g.m_Lifecycle.Ready()) continue;
+			if (g.m_Lifecycle.IsReactivating())
+			{
+				if (!m_Crew.BoardGarrison(g)) continue;
+				g.m_Lifecycle.Boarded();
+				g.m_iPatrolProgressAtMs = now;
+			}
 			if (g.m_bReady) { m_Crew.UpdateGarrison(g, now); m_Patrol.Update(g, now); continue; }
-			if (!g.VehicleIdentity() || now - g.m_iRequestedAtMs >= 90000) { Retire(g, "INITIAL_CREW_FAILED"); continue; }
+			if (!g.VehicleIdentity()) { Retire(g, "INITIAL_CREW_FAILED"); continue; }
 			if (!m_Crew.BoardGarrison(g)) continue;
 			g.m_bReady = true;
 			g.Log("FIA_GARRISON_READY", string.Format("crew=%1 seats=%2 position=%3 stationary=%4 replacement=0", g.m_aCrew.Count(), g.m_aSeats.Count(), g.m_vPosition, g.m_bStaticDefense));
@@ -182,6 +193,7 @@ class AICF_FIAGarrisonService
 	{
 		g.m_iRetryAtMs = now + 30000;
 		if (!g.BaseIdentity() || g.m_Base.GetFaction() != g.m_Faction) { Retire(g, "BASE_LOST_BEFORE_SPAWN"); return; }
+		if (!AICF_FIAProximityLifecycle.CanAcquire(g.m_vHome)) { g.m_iRetryAtMs = now + 1000; return; }
 		if (g.m_sPrefab.IsEmpty()) { Retire(g, "PREFAB_UNAVAILABLE"); return; }
 		Resource resource = Resource.Load(g.m_sPrefab);
 		if (!resource || !resource.IsValid() || resource.GetResource().GetResourceName() != g.m_sPrefab) { Retire(g, "PREFAB_UNAVAILABLE"); return; }
@@ -197,7 +209,10 @@ class AICF_FIAGarrisonService
 		g.m_Group = m_Crew.CreateGarrison(g, crewPosition);
 		if (!g.m_Group) { Retire(g, "CREW_CONTROLLER_FAILED"); return; }
 		g.m_GroupId = g.m_Group.GetID();
-		if (!m_Crew.BeginRosterSpawn(g.m_Group, g.m_aSeats.Count())) { Retire(g, "CREW_REQUEST_FAILED"); return; }
+		g.m_aCrew.Resize(g.m_aSeats.Count());
+		g.m_aCrewIds.Resize(g.m_aSeats.Count());
+		g.m_Lifecycle = new AICF_FIAProximityLifecycle();
+		g.m_Lifecycle.Start(g.m_Group, g, null);
 		g.Log("FIA_GARRISON_SPAWN_REQUESTED", string.Format("crew=%1 position=%2 prefab=%3", g.m_aSeats.Count(), g.m_vPosition, g.m_sPrefab));
 	}
 
@@ -205,6 +220,8 @@ class AICF_FIAGarrisonService
 	{
 		if (g.m_bRetired) return;
 		g.StopIntegrity();
+		if (g.m_Lifecycle) g.m_Lifecycle.Stop();
+		if (g.m_DesantLifecycle) g.m_DesantLifecycle.Stop();
 		m_Patrol.Stop(g);
 		AICF_VehicleCleanupManager.RetainFIAGarrison(g);
 		g.m_bRetired = true;

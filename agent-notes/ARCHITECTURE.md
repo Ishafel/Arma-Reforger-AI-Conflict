@@ -106,6 +106,12 @@ sentinel classifier безусловно отказывает до чтения 
 После `OnMoveFailed` повторно сверяются failure identity и executed action;
 синхронно заменённый action не завершается.
 
+Дополнительные FIA crew/desant controllers передают материализацию native
+`ProximityDriven` через `AICF_FIAProximityLifecycle`. Logical seats и потери
+переживают смену member entity; vehicle/lease не заменяются. Safety gate native
+despawn остаётся у CleanupManager, initial content readiness — у profile.
+Подробности: [FIA_PROXIMITY.md](FIA_PROXIMITY.md).
+
 ## Границы vehicle domain
 
 | Владелец | Обязанность |

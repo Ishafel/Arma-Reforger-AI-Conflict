@@ -71,6 +71,16 @@ class AICF_FIAPatrolCrew : AICF_GroupSpawner
 	bool Board(AICF_FIAPatrol p)
 	{
 		if (!p.VehicleIdentity() || !p.GroupIdentity()) return false;
+		if (p.m_Lifecycle && !p.m_Lifecycle.Ready()) return false;
+		if (p.m_Lifecycle && p.m_Lifecycle.LivingCapacity() < 2)
+		{
+			Seat(p, p.m_Driver, p.m_PilotSeat);
+			Seat(p, p.m_Gunner, p.m_TurretSeat);
+			bool seated = true;
+			if (AICF_GroupRuntime.IsAliveCharacter(p.m_Driver)) seated = p.m_PilotSeat && p.m_PilotSeat.GetOccupant() == p.m_Driver;
+			if (AICF_GroupRuntime.IsAliveCharacter(p.m_Gunner)) seated = seated && p.m_TurretSeat && p.m_TurretSeat.GetOccupant() == p.m_Gunner;
+			return seated;
+		}
 		int actual, wrong, dead;
 		if (!AICF_GroupRuntime.HasExactFactionRoster(p.m_Group, "FIA", 2, actual, wrong, dead)) return false;
 		if (!p.m_Driver && !p.m_Gunner)
@@ -100,7 +110,11 @@ class AICF_FIAPatrolCrew : AICF_GroupSpawner
 
 	protected void Seat(AICF_FIAPatrol p, ChimeraCharacter character, BaseCompartmentSlot seat)
 	{
-		if (!p.CrewIdentity() || !p.VehicleIdentity() || !seat || seat.GetOccupant() || seat.IsReserved() || !seat.IsCompartmentAccessible()) return;
+		if (!p.GroupIdentity() || !p.VehicleIdentity() || !AICF_GroupRuntime.IsAliveCharacter(character) ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(character) ||
+			!seat || seat.GetOccupant() || seat.IsReserved() || !seat.IsCompartmentAccessible()) return;
+		AIControlComponent control = AIControlComponent.Cast(character.FindComponent(AIControlComponent));
+		if (!control || !control.GetAIAgent() || control.GetAIAgent().GetParentGroup() != p.m_Group) return;
 		CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
 		if (!access || access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut()) return;
 		access.GetInVehicle(seat.GetOwner(), seat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);

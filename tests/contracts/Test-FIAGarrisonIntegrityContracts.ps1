@@ -41,7 +41,10 @@ function Test-Sources($candidate) {
     if ([regex]::Matches($candidate[$recovery], 'if \(!g\.RecoveryAllowed\(\)\)').Count -ne 3) { $failed += 'RELOCATE_THREE_GATES' }
     if ($candidate[$recovery] -notmatch 'ClearFIAGarrisonWaypoint\(g\);[\s\S]*?RecoveryAllowed\(\)[\s\S]*?SetVelocity') { $failed += 'POST_WAYPOINT_GATE' }
     if ($candidate[$crew] -notmatch 'InterruptVehicleActionQueue\(true, true, true\);[\s\S]*?RecoveryAllowed\(\)[\s\S]*?access.GetInVehicle') { $failed += 'POST_QUEUE_GATE' }
-    if ($candidate[$crew] -notmatch 'if \(!g.RecoveryAllowed\(\)\) return false;\s*access.GetInVehicle') { $failed += 'INITIAL_BOARDING_GATE' }
+    # Native re-materialization — новая incarnation выжившего, не recovery
+    # существующего бойца. Initial boarding по-прежнему требует RecoveryAllowed;
+    # единственное исключение — fenced native reactivation после Ready/restore.
+    if ($candidate[$crew] -notmatch 'if \(!g.RecoveryAllowed\(\) && \(!g.m_Lifecycle \|\| !g.m_Lifecycle.IsReactivating\(\)\)\) return false;\s*if \(g.m_Lifecycle && !g.m_Lifecycle.Current\(\)\) return false;\s*access.GetInVehicle') { $failed += 'INITIAL_BOARDING_GATE' }
     if ($candidate[$recovery] -notmatch 'RecoveryAllowed\(\)[\s\S]*?OccupantsSafe\(g\)[\s\S]*?Candidate\(g' -or
         $candidate[$recovery] -notmatch 'Candidate\(g[\s\S]*?RecoveryAllowed\(\)[\s\S]*?SetWorldTransform\(pose\)') { $failed += 'RELOCATE_GATE_ORDER' }
     if ($candidate[$state] -match 'm_sRecoveryBan\s*=\s*(string\.Empty|""|reason)' -and [regex]::Matches($candidate[$state], 'm_sRecoveryBan\s*=').Count -ne 1) { $failed += 'BAN_RESET' }
@@ -59,6 +62,10 @@ foreach ($rule in $rules) {
 $copy = $sources.Clone()
 $copy[$recovery] = $copy[$recovery].Replace('if (!g.RecoveryAllowed()) { Blocked(g, g.RecoveryBan()); return false; }', '')
 if ('RELOCATE_THREE_GATES' -notin @(Test-Sources $copy)) { $failures += 'MUTATION_THREE_GATES' }
+$mutations++
+$copy = $sources.Clone()
+$copy[$crew] = $copy[$crew].Replace('!g.m_Lifecycle.IsReactivating()', 'false')
+if ('INITIAL_BOARDING_GATE' -notin @(Test-Sources $copy)) { $failures += 'MUTATION_INITIAL_BOARDING_GATE' }
 $mutations++
 if ($failures.Count) { $failures | ForEach-Object { "FAIL $_" }; exit 1 }
 "FIA integrity contracts: PASS; rules=$($rules.Count); negative_mutations=$mutations; runtime=NOT_RUN"

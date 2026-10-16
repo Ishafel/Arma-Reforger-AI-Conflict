@@ -6,7 +6,6 @@ class AICF_FIAPatrolService
 	protected ref AICF_VehicleSpawner m_Spawner = new AICF_VehicleSpawner();
 	protected ref AICF_FIAPatrolCrew m_Crew = new AICF_FIAPatrolCrew();
 	protected ref AICF_VehicleTaskHandoff m_Handoff = new AICF_VehicleTaskHandoff(null, null, null);
-	protected ref AICF_ManagedAILODPolicy m_LOD = new AICF_ManagedAILODPolicy();
 	protected AICF_ObjectiveGraph m_Graph;
 	protected int m_iObjectives;
 	protected bool m_bStopped;
@@ -80,29 +79,40 @@ class AICF_FIAPatrolService
 		foreach (AICF_FIAPatrol p : m_aPatrols)
 		{
 			if (p.m_bRetired) continue;
+			if (!p.m_bReady && p.m_iRequestedAtMs > 0 &&
+				(!p.m_Current || !p.m_Current.GetOwner() || p.m_Current.GetFaction() != p.m_Faction))
+			{
+				Retire(p, "BASE_LOST_BEFORE_SPAWN");
+				continue;
+			}
+			if (p.m_Lifecycle) p.m_Lifecycle.Update();
 			if (!p.m_Vehicle)
 			{
 				if (p.m_iRequestedAtMs > 0) { Retire(p, "VEHICLE_LOST"); continue; }
 				if (graphReady && now >= p.m_iRetryAtMs && now >= m_iNextSpawnMs)
 				{
-					m_iNextSpawnMs = now + 2000;
 					Acquire(p, now);
+					if (p.m_Vehicle) m_iNextSpawnMs = now + 2000;
 				}
 				continue;
 			}
 			if (!p.VehicleIdentity() || !p.GroupIdentity()) { Retire(p, "IDENTITY_LOST"); continue; }
 			SCR_DamageManagerComponent damage = SCR_DamageManagerComponent.Cast(p.m_Vehicle.FindComponent(SCR_DamageManagerComponent));
 			if (damage && damage.IsDestroyed()) { Retire(p, "VEHICLE_DESTROYED"); continue; }
-			int agents, recovered;
-			m_LOD.KeepCaptureEligible(p.m_Group, agents, recovered);
+			if (!p.m_Lifecycle || !p.m_Lifecycle.Ready()) continue;
+			if (p.m_Lifecycle.IsReactivating())
+			{
+				if (!m_Crew.Board(p)) continue;
+				p.m_Lifecycle.Boarded();
+				p.m_iLegAtMs = now;
+			}
 			if (!p.m_bReady)
 			{
-				if (now - p.m_iRequestedAtMs >= 90000) { Retire(p, "CREW_TIMEOUT"); continue; }
 				if (!m_Crew.Board(p)) continue;
 				p.m_bReady = true;
 				p.Log("FIA_PATROL_READY", "driver=1 gunner=1 agents=2 armed=1");
 			}
-			if (!p.CrewIdentity()) { Retire(p, "CREW_LOST"); continue; }
+			if (!p.CrewIdentity()) { m_Handoff.ClearFIAPatrolWaypoint(p); continue; }
 			if (!graphReady)
 			{
 				m_Handoff.ClearFIAPatrolWaypoint(p);
@@ -132,6 +142,12 @@ class AICF_FIAPatrolService
 		}
 		int attempt = p.m_iSpawnAttempt++ + p.m_iSlot * 2;
 		p.m_Current = bases[attempt % bases.Count()];
+		if (!AICF_FIAProximityLifecycle.CanAcquire(p.m_Current.GetOwner().GetOrigin()))
+		{
+			p.m_iSpawnAttempt--;
+			p.m_iRetryAtMs = now + 1000;
+			return;
+		}
 		vector crewPosition;
 		if (!m_Spawner.SpawnFIAPatrol(p, m_Fleet, crewPosition))
 		{
@@ -143,7 +159,8 @@ class AICF_FIAPatrolService
 		p.m_Group = m_Crew.Create(p.m_Faction, crewPosition);
 		if (!p.m_Group) { Retire(p, "CREW_CONTROLLER_FAILED"); return; }
 		p.m_GroupId = p.m_Group.GetID();
-		if (!m_Crew.BeginRosterSpawn(p.m_Group, 2)) { Retire(p, "CREW_REQUEST_FAILED"); return; }
+		p.m_Lifecycle = new AICF_FIAProximityLifecycle();
+		p.m_Lifecycle.Start(p.m_Group, null, p);
 		p.Log("FIA_PATROL_SPAWN_REQUESTED", string.Format("agents=2 position=%1 base=%2", p.m_Vehicle.GetOrigin(), p.m_Current.GetOwner().GetID()));
 	}
 
@@ -245,6 +262,7 @@ class AICF_FIAPatrolService
 	{
 		if (p.m_bRetired) return;
 		p.m_MoveFailure = null;
+		if (p.m_Lifecycle) p.m_Lifecycle.Stop();
 		m_Handoff.DetachFIAPatrol(p);
 		AICF_VehicleCleanupManager.RetainFIAPatrol(p);
 		p.m_bRetired = true;

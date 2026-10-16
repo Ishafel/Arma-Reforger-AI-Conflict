@@ -124,6 +124,9 @@ Medium — один БТР с лимитом десанта 2/4 (50/50), Hard �
 и запас по числу баз для строителей. Easy лимит не меняет. Событие
 `FIA_GARRISON_CAPACITY` показывает previous/required/effective limits. Без этой
 квоты полный Hard Everon упирался в 260 активных персонажей до посадки всех экипажей.
+Квота не материализует план: дополнительные бойцы появляются только возле
+native observers и уходят в штатную dormancy после их ухода, см.
+[FIA_PROXIMITY.md](FIA_PROXIMITY.md). Vehicle entity и потери сохраняются.
 
 Essential места остаются экипажу; доступные cargo seats заполняются готовым
 шаблоном десанта до выбранного лимита. У танка все места essential. Ожидается
@@ -140,10 +143,11 @@ metadata compartment: PILOT/TURRET, attached turret и commander name/UI key;
 высадка выдаётся при скорости не выше 1 м/с, по одному запросу каждые 2 с.
 Десант остаётся защищать точку пешком и автоматически обратно не садится;
 ему запрещены vehicle patrol move и native boarding. Три члена экипажа остаются
-в машине. После выхода живые пассажиры переводятся в отдельный manual AI controller
+в машине. После выхода живые пассажиры переводятся в отдельный AI controller
 без spawn и без нового force slot: тот же гарнизон хранит immutable entity IDs,
-проверяет обе group identities и поддерживает LOD обеих групп. Это не даёт
-пешим бойцам блокировать vehicle group activity. Cleanup освобождает оба LOD pin.
+проверяет обе group identities и передаёт logical member в его proximity lifecycle.
+Это не даёт пешим бойцам блокировать vehicle group activity. Обе группы используют
+native budget/dormancy, постоянные AICF LOD pins для FIA отсутствуют.
 Телепорт для боевой высадки не используется.
 
 `AICF_FIAGarrisonPatrol` сначала продолжает текущую дорогу на участке до 70 м

@@ -35,6 +35,7 @@ class AICF_FIAPatrol
 	vector m_vProgress;
 	ref map<SCR_CampaignMilitaryBaseComponent, int> m_mVisits = new map<SCR_CampaignMilitaryBaseComponent, int>();
 	ref AICF_VehicleLease m_Lease;
+	ref AICF_FIAProximityLifecycle m_Lifecycle;
 
 	bool VehicleIdentity()
 	{

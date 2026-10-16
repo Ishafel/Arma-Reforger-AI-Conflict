@@ -30,6 +30,12 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Единый offline запуск
 
+`Test-FIAProximityContracts.ps1` проверяет scoped native lifecycle, logical
+losses, authority/identity, snapshot/equipment, occupancy и Stop (33 guards).
+`Test-FIAProximityLog.ps1` требует полный остановленный log, manifest, exit 0
+и native readback обязательных случаев. Режимы baseline/player/ownership/Easy
+и порядок stage fixtures — в [FIA_PROXIMITY.md](FIA_PROXIMITY.md).
+
 `Test-FIAArmamentContracts.ps1` проверяет RHS/WCS weapon pool, стабильный
 выбор на character, authority/identity/snapshot fences, одноразовый commit,
 rollback и оба boarding gates; включает отрицательные мутации.
