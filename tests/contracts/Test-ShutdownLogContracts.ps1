@@ -37,6 +37,16 @@ foreach($number in 1..3){
     $batch+="`n[AICF][SHUTDOWN_BATCH] batch=$number operations=8 failures=0"
 }
 Check 'positive-batches' $batch '' $batchLauncher -Batches
+Check 'idle-batch-manifest' $positive 'IDLE_MODE_REQUIRED' $batchLauncher
+Check 'idle-batch-completion' $batch 'IDLE_COMPLETION_MODE'
+Check 'idle-batch-run' $batch '(?s)IDLE_MODE_REQUIRED.*IDLE_COMPLETION_MODE' $batchLauncher
+Check 'idle-wrong-mode' $positive 'IDLE_MODE_REQUIRED' ($launcher.Replace('"idle"','"other"'))
+Check 'idle-missing-mode' $positive 'IDLE_MODE_REQUIRED' ($launcher.Replace('"-aicfShutdownMode","idle"',''))
+Check 'idle-missing-mode-value' $positive 'IDLE_MODE_REQUIRED' ($launcher.Replace(',"idle"',''))
+Check 'idle-unpaired-mode-value' $positive 'IDLE_MODE_REQUIRED' ($launcher.Replace('"-aicfShutdownMode","idle"','"-aicfShutdownMode","-other","idle"'))
+Check 'idle-duplicate-mode' $positive 'IDLE_MODE_REQUIRED' ($launcher.Replace('"idle"]','"idle","-aicfShutdownMode","idle"]'))
+Check 'idle-conflicting-mode' $positive 'IDLE_MODE_REQUIRED' ($launcher.Replace('"idle"]','"idle","-aicfShutdownMode","batches"]'))
+Check 'idle-mode-case' $positive 'IDLE_MODE_REQUIRED' ($launcher.Replace('"idle"','"Idle"'))
 Check 'batches-idle-manifest' $batch 'BATCH_MODE_REQUIRED' $launcher -Batches
 Check 'batches-wrong-mode' $batch 'BATCH_MODE_REQUIRED' ($batchLauncher.Replace('"batches"','"idle"')) -Batches
 Check 'batches-missing-mode' $batch 'BATCH_MODE_REQUIRED' ($batchLauncher.Replace('"-aicfShutdownMode","batches",','')) -Batches
@@ -54,6 +64,7 @@ Check 'duplicate-operation' ($batch.Replace('iteration=3','iteration=0')) 'OPERA
 $client='[AICF][SHUTDOWN_CLIENT_DONE]'+"`nENGINE : Game destroyed."
 $clientLauncher='AICF_RUNTIME_MANIFEST_JSON={"role":"Client","arguments":["-aicfShutdownMode","idle"]}'+"`n[AICF][RUNTIME_LAUNCHER][SERVER_READY] process_id=123 port=2361 log=fixture"
 Check 'positive-client' $client '' $clientLauncher -Client
+Check 'positive-batches-client' $client '' ($clientLauncher.Replace('"idle"','"batches"')) -Client
 Check 'client-no-gate' $client 'READINESS_GATE' ($clientLauncher.Replace('[SERVER_READY]','[PENDING]')) -Client
-Write-Output 'PASS Shutdown log contracts: 3 positive and 22 negative cases; real runtime is a separate gate'
+Write-Output 'PASS Shutdown log contracts: 4 positive and 32 negative cases; real runtime is a separate gate'
 exit 0

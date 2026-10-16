@@ -25,6 +25,8 @@ else {
     if ($Batches) {
         if (-not (Test-ManifestArgument $manifest.arguments '-aicfShutdownMode' 'batches')) { $failures.Add('BATCH_MODE_REQUIRED') }
         if (-not (Test-ManifestArgument $manifest.arguments '-aicfShutdownEquipmentBatch' '1')) { $failures.Add('EQUIPMENT_BATCH_REQUIRED') }
+    } elseif (-not $Client) {
+        if (-not (Test-ManifestArgument $manifest.arguments '-aicfShutdownMode' 'idle')) { $failures.Add('IDLE_MODE_REQUIRED') }
     }
 }
 if ($Client) {
@@ -34,6 +36,7 @@ if ($Client) {
     $done=[regex]::Matches($log,'\[SHUTDOWN_DONE\] mode=(idle|batches) steps=4 connected=([01]) elapsed_ms=(\d+)')
     if ($done.Count -ne 1 -or [int]$done[0].Groups[3].Value -lt 55000) { $failures.Add('SERVER_COMPLETION') }
     if ($Batches -and $done.Count -eq 1 -and $done[0].Groups[1].Value -ne 'batches') { $failures.Add('BATCH_COMPLETION_MODE') }
+    if (-not $Batches -and $done.Count -eq 1 -and $done[0].Groups[1].Value -ne 'idle') { $failures.Add('IDLE_COMPLETION_MODE') }
     foreach ($phase in @('ready','cleanup_0','cleanup_1','cleanup_2','cleanup_3','rest')) {
         if ($log -notmatch ('\[SHUTDOWN_MEMORY\] phase='+$phase+' name=MemC value=\d+')) { $failures.Add("MEMORY_$phase") }
     }

@@ -78,6 +78,11 @@ positive/negative contracts проверяют строгость анализа
 значение отклоняется. Сами 24 operation records и readback фоновых service
 models не доказывают, что пакеты выполнялись через `AICF_EquipmentDraft`:
 без equipment-флага fixture использует обычный `AICF_LoadoutDraft`.
+Для server audit без `-Batches` обязательна ровно одна точная пара
+`-aicfShutdownMode idle` в manifest и единственный `SHUTDOWN_DONE mode=idle`.
+Batch manifest либо batch completion отклоняются независимо друг от друга:
+пакеты операций не должны попадать в idle envelope. Это ограничение не
+распространяется на `-Client`, который может сопровождать оба server mode.
 Weak `array<IEntity>` не удерживает world; snapshots удаляют повторы по native
 pointer identity и проверяют liveness через следующие кадры и период покоя.
 На baseline после каждого пакета остаются ещё 536 уникальных entities;

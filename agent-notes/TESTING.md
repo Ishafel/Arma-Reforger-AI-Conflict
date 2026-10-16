@@ -246,6 +246,50 @@ Production `.c`, Enfusion API и runtime fixture не изменялись. Work
 остановленных logs, прежние runtime результаты не выдаются за новые запуски.
 Ограничения и исходные native diagnostics предыдущего отчёта сохраняются.
 
+### P2 PR #64: точный idle mode для server audit — 2026-10-16
+
+[Замечание](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/64#discussion_r4294297490)
+воспроизведено на `278b658`: существующие shutdown contracts дают **PASS/0**,
+и сохранённый настоящий `unique-batches-server` без audit-флага `-Batches`
+ошибочно получает **PASS/0**. Сам measurement run не менялся: в его manifest
+и completion указано batches. Значит, анализатор мог принять batch за idle
+и разрешить загрязнённый idle envelope.
+
+Теперь server audit без `-Batches` требует ровно одну точную пару
+`-aicfShutdownMode idle` в manifest и `SHUTDOWN_DONE mode=idle`.
+Ошибки `IDLE_MODE_REQUIRED` и `IDLE_COMPLETION_MODE` независимы.
+Batch/equipment validation сохранена; client может сопровождать оба mode.
+Contracts: **4 positive / 32 negative cases**. Десять новых отрицательных
+случаев покрывают неверные mode, отсутствие/непарное значение, дубликаты,
+регистр и несовпадение manifest/completion; новый positive client batches
+проверяет прежнее допустимое поведение.
+
+Evidence — `.codex-runtime/issue63-review-idle/`. Свежий selected baseline
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+tests/contracts/Test-ShutdownLogContracts.ps1` — **PASS/0**; исходный
+false positive и argv сохранены в `misconfigured-before*`, baseline source —
+в `baseline-*.ps1`. После исправления тот же real batch без `-Batches` —
+ожидаемый **FAIL/1** с обеими новыми причинами. Отдельно real batch с idle
+manifest отклоняется по completion, а real idle с batch manifest — по аргументу.
+
+`Replay.ps1` повторно анализирует восемь сохранённых полных final runtime
+logs — **8/8 PASS/0**. Все семь negative controls отклонены ожидаемо, включая
+исходный leaked-instance baseline с `SCRIPT_FATAL`; дефект не исключается
+из gate. Exact commands, audit hashes, exits и outputs — `replay-verdicts.json`.
+Это новый запуск анализаторов прежних остановленных logs, не новый native run.
+
+Полный `RunChecks.ps1` вызывает `tools/Invoke-AICFChecks.ps1 -EvidenceRoot
+<root>/offline-after` через временный `X:` alias изолированного checkout,
+чтобы избежать ранее установленного Windows PowerShell MAX_PATH.
+Итог: **66/66 PASS/0**, без исключённых проверок и baseline failures. Alias снят.
+`git diff --check` — **PASS/0**; локальные ссылки заметок — **211/211 PASS**.
+
+Scope — два PowerShell-аудита и четыре заметки. Production `.c`, API и
+runtime fixture не менялись. Workbench и новые game/server/client runs —
+**NOT RUN**, не требуются для этой правки анализатора. Основной игровой
+процесс не останавливался и его checkout не обновлялся. Ранее описанные
+runtime diagnostics, FAIL baseline и ограничения остаются в отчёте.
+
 ## Issue #61: магазины исходного комплекта ВС РФ — 2026-10-16
 
 Ветка `codex/issue-61-loadout-magazines` от актуальной `origin/main`

@@ -198,8 +198,9 @@ Enforce fixture не входят в автоматическую матрицу
 до native teardown и пять отрицательных lifecycle mutations.
 `tests/contracts/Test-ShutdownLogContracts.ps1` проверяет strict full-log gate,
 native/отложенный entity readback и уникальность 24 операций на positive/negative
-inputs, включая обязательные точные batch/equipment пары в launcher manifest
-и соответствующий completion mode. `tests/log-audits/Test-ShutdownLog.ps1` анализирует полные stopped logs
+inputs, включая обязательные точные batch/equipment пары либо server idle mode
+в launcher manifest и соответствующий completion mode. Client допускается
+для обоих modes. `tests/log-audits/Test-ShutdownLog.ps1` анализирует полные stopped logs
 `AICF_ShutdownProbe`; параметры и границы — [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md).
 
 `tests/log-audits/Test-LoadoutContentsInventoryLog.ps1` проверяет полные

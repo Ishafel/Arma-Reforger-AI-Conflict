@@ -12,6 +12,8 @@ Control `aicfShutdownNoEquipment 1` существует только в fixture
 При `-Batches` аудит требует в manifest `-aicfShutdownMode batches` и
 `-aicfShutdownEquipmentBatch 1`; обычный LoadoutDraft batch не подтверждает
 EquipmentDraft cleanup.
+Server audit без `-Batches` требует точный `-aicfShutdownMode idle` и
+`SHUTDOWN_DONE mode=idle`, чтобы batch run не считался idle control.
 
 ## Дополнительные силы FIA — issue #59
 
