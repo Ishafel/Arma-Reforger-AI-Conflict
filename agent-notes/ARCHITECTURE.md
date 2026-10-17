@@ -106,6 +106,12 @@ sentinel classifier безусловно отказывает до чтения 
 После `OnMoveFailed` повторно сверяются failure identity и executed action;
 синхронно заменённый action не завершается.
 
+Native defend allocation может получить удалённый вход после смены приказа.
+`AICF_AINodeLifecycle` возвращает FAIL только для invalid input управляемой
+server infantry, сохраняя native delegate валидных/чужих nodes. Он не подменяет
+input текущим waypoint и не меняет новый приказ. Контракт и native BT oracle:
+[DEFEND_ALLOCATION.md](DEFEND_ALLOCATION.md).
+
 Дополнительные FIA crew/desant controllers передают материализацию native
 `ProximityDriven` через `AICF_FIAProximityLifecycle`. Logical seats и потери
 переживают смену member entity; vehicle/lease не заменяются. Safety gate native

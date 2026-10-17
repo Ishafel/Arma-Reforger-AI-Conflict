@@ -13,6 +13,10 @@ Target строится в изолированном `AICF_EquipmentDraft` бе
 Перед удалением private model её native storage attachments снимаются, пока
 weapon/muzzle существуют; это освобождает ссылки WCS на muzzle. Путь очистки
 всегда проверяет, что model не принадлежит миру кампании.
+Отсоединённый root явно удаляется вместе с вложенными предметами до освобождения
+world: одного удаления character недостаточно. Bootstrap останавливает controller
+до native teardown. Причина shutdown leaks, readback и memory controls:
+[SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md).
 
 `AICF_EquipmentInventory` суммирует фактические `BaseMagazineComponent.GetAmmoCount`,
 боезапас muzzle и патронники. Загруженный magazine не считается второй раз.

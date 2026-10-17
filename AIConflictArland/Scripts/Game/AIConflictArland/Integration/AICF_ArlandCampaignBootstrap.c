@@ -56,6 +56,11 @@ modded class SCR_GameModeCampaign
 
 	override void OnGameEnd()
 	{
+		if (m_AICFMatchController)
+		{
+			m_AICFMatchController.Shutdown();
+			m_AICFMatchController = null;
+		}
 		if (m_AICFStrategicUIController)
 		{
 			m_AICFStrategicUIController.Stop();

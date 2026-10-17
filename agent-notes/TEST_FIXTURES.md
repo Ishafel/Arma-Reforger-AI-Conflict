@@ -1,5 +1,20 @@
 # Runtime fixture: каталог и применение
 
+## Shutdown private equipment worlds — issue #63
+
+`AICF_ShutdownProbe.c`: только isolated Core stage, `aicfShutdownMode idle|batches`,
+три пакета по восемь inventory/preview операций, native memory snapshots,
+draft counters и readback удаления всех inventory entities. Equipment batch —
+`aicfShutdownEquipmentBatch 1`, standalone — `aicfShutdownStandalone 1`.
+Control `aicfShutdownNoEquipment 1` существует только в fixture.
+Команды, lifecycle и ограничения — [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md).
+Полный stopped log проверяется `Test-ShutdownLog.ps1`; script leaks не исключаются.
+При `-Batches` аудит требует в manifest `-aicfShutdownMode batches` и
+`-aicfShutdownEquipmentBatch 1`; обычный LoadoutDraft batch не подтверждает
+EquipmentDraft cleanup.
+Server audit без `-Batches` требует точный `-aicfShutdownMode idle` и
+`SHUTDOWN_DONE mode=idle`, чтобы batch run не считался idle control.
+
 ## Дополнительные силы FIA — issue #59
 
 `AICF_FIAProximityProbe.c` задаёт повторяемые HQ/plan inputs и реальные
@@ -394,6 +409,7 @@ Server и client используют согласованный stage. Для R
 | [AICF_ConstructionRuntimeProbe.c](../tests/fixtures/AICF_ConstructionRuntimeProbe.c) | Подготовка supplies/матрицы; production поиск, оплата и завершение | `aicfConstructionClientProbe`, `aicfConstructionProbe`, `aicfConstructionProbeFault`, `aicfConstructionProbeMatrix`, `aicfConstructionProbeMatrixPhaseMs`, `aicfConstructionProbeMatrixType`, `aicfConstructionProbeMs`, `aicfConstructionProbeRefill`, `aicfConstructionProbeRepeatType`, `aicfConstructionProbeSupplies`, `aicfConstructionProbeTrace`, `aicfConstructionProbeType` |
 | [AICF_ConstructionSearchProbe.c](../tests/fixtures/AICF_ConstructionSearchProbe.c) | Trace и fault injection поиска; применяется с runtime preparation | `aicfConstructionProbeMoveArmories`, `aicfConstructionProbeRemoveArmories`, `aicfConstructionSearchFault`, `aicfConstructionSearchTrace` |
 | [AICF_DefendArrivalProbe.c](../tests/fixtures/AICF_DefendArrivalProbe.c) | Late move result при US system hold; commander USSR | `aicfDefendArrivalProbe` |
+| [AICF_DefendAllocationProbe.c](../tests/fixtures/AICF_DefendAllocationProbe.c) | Настоящий BT node, planner replacement, 128 late calls и 22 readbacks; [контракт](DEFEND_ALLOCATION.md) | `aicfDefendAllocationProbe 1` |
 | [AICF_DefendWaypointInputProbe.c](../tests/fixtures/AICF_DefendWaypointInputProbe.c) | Реальные group/waypoint, смена приказа через planner | `aicfDefendInputProbe` |
 | [AICF_EndgameProbe.c](../tests/fixtures/AICF_EndgameProbe.c) | Контролируемые territory/presence/hold time; настоящее завершение матча | `aicfEndgameProbe` |
 | [AICF_EveronNorthProbe.c](../tests/fixtures/AICF_EveronNorthProbe.c) | Северный Everon: 7 активных баз, 2 HQ, 5 механизмов захвата, связность radio graph; Кермован исключён | `aicfNorthProbe` |

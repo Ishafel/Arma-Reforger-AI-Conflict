@@ -25,6 +25,39 @@ modded class SCR_AIGetDefendWaypointParameters
 	}
 }
 
+// ActivityDefend может дойти до allocation после удаления своего waypoint.
+// Для управляемой infantry возвращаем штатный FAIL до native NodeError/dialog;
+// валидный вход и чужие группы сохраняют native allocation и validation.
+modded class SCR_AIAllocateActionsForDefendActivity
+{
+	protected bool m_bAICFDefendInputReported;
+
+	override ENodeResult EOnTaskSimulate(AIAgent owner, float dt)
+	{
+		IEntity waypoint;
+		GetVariableIn(PORT_WAYPOINT, waypoint);
+		if (AICF_IsInvalidManagedDefendInput(waypoint))
+		{
+			if (!m_bAICFDefendInputReported)
+			{
+				m_bAICFDefendInputReported = true;
+				Print(string.Format("[AICF][AI_DEFEND_ALLOCATION_CANCELLED] group=%1 input=%2 reason=INVALID_DEFEND_INPUT", m_groupOwner.GetID(), waypoint), LogLevel.WARNING);
+			}
+			return ENodeResult.FAIL;
+		}
+		m_bAICFDefendInputReported = false;
+		return super.EOnTaskSimulate(owner, dt);
+	}
+
+	protected bool AICF_IsInvalidManagedDefendInput(IEntity waypoint)
+	{
+		if (SCR_DefendWaypoint.Cast(waypoint) || !Replication.IsServer() || !m_groupOwner)
+			return false;
+		AICF_MatchController controller = AICF_MatchController.GetActiveController();
+		return controller && controller.FindManagedInfantrySlot(m_groupOwner);
+	}
+}
+
 // Удалённый planner waypoint обнуляет вход ещё исполняющегося ActivityPerformAction.
 // Для управляемой группы завершаем эту ветку и снимаем её smart-action callbacks.
 // Непустой вход и все неуправляемые группы сохраняют stock validation.
