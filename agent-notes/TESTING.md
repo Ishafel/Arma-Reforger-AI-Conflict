@@ -1,5 +1,94 @@
 # Проверки и baseline
 
+## Co-op: найм оплаченного отделения Guard из казармы — 2026-10-18
+
+Продолжение `codex/arland-coop-ussr` от чистого `22410e7`. Evidence:
+`.codex-runtime/coop-barracks-recruit-20261018/`. Game/Server/Workbench
+**1.8.0.13**, `binaries.json`. Перед production правкой релевантный
+`Invoke-AICFChecks.ps1 -Name Test-CoopScenarioStatic.ps1,Test-CoopScenarioLogContracts.ps1,Test-SquadCommandsContracts.ps1,Test-RuntimeLauncherStatic.ps1 -EvidenceRoot <evidence>/before`
+— **4/4 PASS/0**.
+
+Установленная причина: `Group_USSR_FireGroup_Guard` создаёт четыре
+`Character_USSR_*_Guard` с `Recruitable=0`; обычные FireGroup/ManeuverGroup
+создают recruitable characters. Предыдущий probe использовал другой GROUP
+catalog и проверил только одного обычного бойца. Он не проверял Guard из
+реального списка казармы, поэтому этот дефект остался незамеченным.
+Серверный `source-prefabs` подтвердил различие prefab flags. `native-before`
+прошёл настоящий заказ Guard через native building RPC: лидер 1, slave 0,
+max AI 4, но native Recruit вернул отказ с recruitable 0. Это намеренный
+baseline отказ, не PASS исправления; при раннем закрытии editor клиент также
+получил две cleanup SCRIPT(E), исправленные в lifecycle финальной fixture.
+
+Production `Integration/AICF_CoopRecruitment.c` разрешает найм только группе,
+созданной native player order на human side Co-op, после повторной проверки
+authority, provider, controlled player и faction. Native callback faction
+у группы **null**: она не имеет FactionAffiliationComponent. Фракция берётся
+через `SCR_AIGroup.GetFaction`, ненулевое несовпадение отклоняется. Marker
+конкретной группы распространяется на готовых и async members с повторной
+parent/faction проверкой. `SetRecruitable` вызывается только при изменении;
+native лидерство, ownership RPC, лимит и `SetRecruited` не подменяются.
+
+Терминальные compile gates:
+
+- `Compile.ps1 -Label production-final` — **PASS/0**, production без fixtures.
+- `Compile.ps1 -SourceRoot <acceptance-stage> -Label acceptance` и
+  `-SourceRoot <standard-stage> -Label standard-regression` — **PASS/0**.
+- Co-op static — **38 negative mutations PASS**; log contracts —
+  **8 positive / 52 negative PASS**. Полный
+  `Invoke-AICFChecks.ps1 -EvidenceRoot <evidence>/offline-final` — **68/68 PASS/0**,
+  без исключений; `<evidence>/offline-final/summary.json`.
+
+Runtime запускается только `Run.ps1` → `tools/Start-AICFRuntime.ps1` из отдельных
+терминальных сессий. Для `native-final`/`acceptance2` — `StockCoopUSSR`, Easy,
+170000/180000 ms, client `-Player`, подтверждённые listeners 2423/2425.
+Client launcher проверил свежий CLI, PID и ROSTER_READY; manifests сохранены.
+
+- `native-final`: реальная покупка Guard, четыре последовательных native
+  `RequestAddAIAgent`, readback recruited/membership и AIAgent parent на сервере;
+  native limit 4 сохранён, отдельные неоплаченные Guard остались unrecruitable.
+  Оба полных stopped logs имеют **0 script errors**, 16 server / 78 client
+  прочих `(E)`. Client `Test-CoopScenarioLog.ps1 -Client -RequireBarracks` —
+  **PASS/0**. Server strict gate — **FAIL/1** из-за ошибочного чтения цены 0
+  в ранней fixture; это не оплата 0 в игре и не зелёная пара gates.
+- Цена Guard берётся через `SCR_EditableGroupUIInfo.GetGroupBudgetCost`:
+  обычный `GetEntityBudgetCost` намеренно возвращает пустой список для группы.
+  `acceptance2` подтвердил quote **300**, supplies **625 → 325**, всю покупку,
+  найм **4/4**, cap **4** и неизменённых неоплаченных Guard. Resource invoker
+  фиксирует изменения агрегата, включая пересборку графа: `debited=925` и
+  `credited=625` дают net 300, это не журнал валовых денежных транзакций.
+  Server strict `-RequireBarracks` — **PASS/0**, script errors 0.
+- **Открытый runtime blocker:** `acceptance2` client strict gate — **FAIL/1**:
+  stock `SCR_SupportStationAreaMeshComponent` для REPAIR в `<2265.115967,
+  88.860016,1216.567871>` сравнивает local offset `<0.000610352,-0.00376129,
+  -2.50098>` с `<0,0,-2.5>` точным равенством. Полный client log содержит одну
+  SCRIPT(E); отказ не исключён из анализатора. Дефект stock asset/float precision
+  ранее уже наблюдался и в этой задаче не исправлен. Финальная **пара** strict
+  barracks gates не объявляется PASS; ready PR/release этим отчётом не разрешён.
+- `acceptance` ранее упал **до покупки** с `DXGI_ERROR_DEVICE_HUNG` и native
+  exit `-1073741819`. Полные console/error logs и dump сохранены, PASS не заявлен.
+- `Run.ps1 -Case standard-regression -Variant Stock -Duration 45000 -Port 2426`:
+  **14/14**, roster **10+10**, full stopped audit **PASS/0**, script errors 0.
+  Дополнительная попытка `AICF_AllowPurchasedRecruitment` в STANDARD не меняет
+  Guard flags: отдельный readback **4/4 остаются unrecruitable**.
+
+`runtime-verdicts.json` и `*-audit.txt` содержат все verdicts, без объединения
+логов разных запусков в вымышленную успешную пару. `source-integrity.json`
+подтвердил **235/235** одинаковых production Core/Arland файлов для
+native-final, acceptance и STANDARD; hash barracks fixture совпал. Все 12
+task stages адресно архивированы и удалены; ZIP SHA-256 — `stage-archives.json`.
+Тестовых игровых процессов нет. Неудачные compile/diagnostic runs сохранены,
+включая неверный BaseGameMode cast, имя fixture variable `owned`, prototype
+parameter names и занятый listener; их исправление подтверждено новыми gates.
+
+**NOT RUN:** ручной UI input/визуальная оценка игроком (terminal-only workflow),
+новый packaged/Workshop build, RHS/WCS/Everon, длительный soak и сохранение/
+загрузка кампании. Они не выдаются за PASS. Новые client runs заранее объяснялись
+пользователю как автоматические; участия игрока в этих проверках не требовалось.
+
+Изменены Core `AICF_CoopRecruitment.c`; `AICF_CoopBarracksProbe.c`, Co-op
+static/log audit/log contracts; README и agent-notes ARCHITECTURE,
+COOP_SCENARIO, README, TEST_FIXTURES, TESTING. Push/PR/merge/публикация не выполнялись.
+
 ## Co-op: стартовый список фракций, группы игроков и найм — 2026-10-18
 
 Продолжение `codex/arland-coop-ussr` от `279e2d2`, начальное дерево чистое.

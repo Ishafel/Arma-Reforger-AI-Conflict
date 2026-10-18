@@ -64,6 +64,20 @@ Welcome/Deployment Setup — отдельный список `SCR_WelcomeScreenF
 Назначение лидера, состав slave group, лимит ИИ и найм остаются у native систем.
 Автоматически забирать ИИ у других игроков, армии AICF или рабочих не разрешается.
 
+Штатный список казармы включает `Group_USSR_FireGroup_Guard`: его четыре
+`Character_USSR_*_Guard` имеют `Recruitable=0`, поэтому native Recruit отказывает
+даже лидеру пустой группы. `AICF_CoopRecruitment.OnEntityRequested` после native
+обработки допускает только server/master, human-side Co-op, troop provider
+с `CanCommandAI` и текущий controlled entity игрока той же фракции.
+Фракция определяется через `SCR_AIGroup.GetFaction`: штатный callback получает
+null, поскольку `SCR_Faction.GetEntityFaction` ищет отсутствующий у группы
+`FactionAffiliationComponent`. Ненулевое несовпадение callback faction отклоняется.
+Server-only marker на конкретной группе позволяет выставить `SetRecruitable(true)`
+существующим и новым async members при точном parent group и faction совпадении.
+Неизменённые флаги не вызывают BumpMe. Обычные Guard, helpers, чужие группы и
+STANDARD разрешение не получают. Найм выполняет native `RequestAddAIAgent`;
+права лидера и штатный лимит **4 ИИ на player group** сохраняются.
+
 `AICF_ConstructionPlanner.Commander` явно применяет
 `AllowsAutomaticConstruction`: для СССР возвращает null до выбора типа, поиска
 места и commit заказа. Тот же gate инвалидирует pending orders. Строительство
@@ -117,5 +131,20 @@ Auto construction останавливается fixture для изоляции
 mesh-offset диагностики; production construction policy этим не проверяется.
 `Test-CoopScenarioLog.ps1 -RequireRecruit` требует полный stopped log обеих ролей,
 точный manifest, readiness клиента, intro visibility и native readbacks.
+
+`AICF_CoopBarracksProbe.c` проверяет другой, реальный путь покупки: готовит
+штатную казарму и звание как fixture setup, затем клиент вызывает
+`RequestEnterBuildingMode`, выбирает native вкладку групп и `CreateEntity`
+для Guard. Он не вызывает lifecycle редактора вручную и не выставляет
+Recruitable/Recruited. Server resource invoker сверяет цену с балансом изменений
+агрегата consumer; `debited`/`credited` включают его пересборку и не являются
+журналом денежных транзакций. Каждый Insert снимается при OnGameEnd. После заполнения
+группы клиент штатно нанимает всех четырёх бойцов; сервер сверяет slave membership
+и настоящий AIAgent parent. Отдельные неоплаченные Guard сохраняют запрет,
+native Recruit отказывает при заполнении лимита 4. Клиент закрывает редактор
+до RequestClose, чтобы завершение не оставляло pending editor callbacks.
+`Test-CoopScenarioLog.ps1 -RequireBarracks` требует эти readbacks, цену/списание,
+полные остановленные логи, manifest и readiness. Он не заменяет прежний
+probe голоса лидера/intro; `-RequireRecruit` и `-RequireBarracks` взаимоисключаются.
 
 Результаты свежих проверок, полные логи и ограничения — в [TESTING.md](TESTING.md).

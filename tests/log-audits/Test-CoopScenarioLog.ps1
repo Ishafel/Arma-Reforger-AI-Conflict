@@ -5,12 +5,14 @@ param(
     [switch]$Client,
     [switch]$RequirePlayer,
     [switch]$RequireRecruit,
+    [switch]$RequireBarracks,
     [string]$ExpectedWinner,
     [int]$MinimumObservationMs=30000
 )
 $ErrorActionPreference='Stop'
 $failures=[Collections.Generic.List[string]]::new()
 if($RequirePlayer -and -not $Client) { $failures.Add('PLAYER_ROLE') }
+if($RequireRecruit -and $RequireBarracks) { $failures.Add('RECRUIT_PROBE_CONFLICT') }
 $log=[IO.File]::ReadAllText($LogPath)
 $launcher=[IO.File]::ReadAllText($LauncherPath)
 if((Get-Content -LiteralPath $NativeExitPath -Raw).Trim() -ne '0') { $failures.Add('NATIVE_EXIT') }
@@ -18,6 +20,7 @@ if($log -notmatch 'Game destroyed\.') { $failures.Add('STOPPED_LOG_REQUIRED') }
 if($log -match 'SCRIPT\s+\([EF]\):|ENGINE\s+\(F\):|NULL pointer|Virtual Machine Exception|Unhandled exception') { $failures.Add('SCRIPT_FATAL') }
 if($log -match '\[COOP_TIMEOUT\]|\[COOP_CASE\] case=\w+ pass=0') { $failures.Add('PROBE_FAILURE') }
 if($RequireRecruit -and $log -match '\[JOIN_TIMEOUT\]|\[JOIN_(?:ADMISSION|RESULT|SERVER)\][^\r\n]*pass=0') { $failures.Add('RECRUIT_FAILED') }
+if($RequireBarracks -and $log -match '\[BUY_TIMEOUT\]|\[BUY_(?:ADMISSION|RESULT|SERVER|LIMIT|UNPAID_GUARD|PAYMENT)\][^\r\n]*pass=0') { $failures.Add('BARRACKS_FAILED') }
 $manifest=$null
 if($launcher -notmatch 'AICF_RUNTIME_MANIFEST_JSON=({[^\r\n]+})') { $failures.Add('MANIFEST') }
 else { $manifest=$matches[1] | ConvertFrom-Json }
@@ -25,13 +28,24 @@ if($manifest) {
     $expectedRole='Server'; if($Client) { $expectedRole='Client' }
     if($manifest.role -cne $expectedRole -or $manifest.variant -notin @('Stock','StockCoopUSSR')) { $failures.Add('LAUNCH_ROLE_VARIANT') }
     if($RequireRecruit -and $manifest.variant -cne 'StockCoopUSSR') { $failures.Add('RECRUIT_VARIANT') }
+    if($RequireBarracks -and $manifest.variant -cne 'StockCoopUSSR') { $failures.Add('BARRACKS_VARIANT') }
     $mode='USSR'; if($manifest.variant -eq 'Stock') { $mode='STANDARD' }
     $argsList=@($manifest.arguments)
     $indices=@(for($i=0;$i -lt $argsList.Count;$i++) { if($argsList[$i] -ceq '-aicfCoopProbe') {$i} })
     if($indices.Count -ne 1 -or $indices[0]+1 -ge $argsList.Count -or $argsList[$indices[0]+1] -cne $mode) { $failures.Add('PROBE_MODE') }
     if($Client) {
         if($manifest.variant -ne 'StockCoopUSSR' -or $launcher -notmatch '\[SERVER_READY\] process_id=\d+ port=\d+ log=') { $failures.Add('CLIENT_READINESS') }
-        if(!$RequireRecruit -and [regex]::Matches($log,'\[COOP_CLIENT_DONE\] pass=1 samples=\d+').Count -ne 1) { $failures.Add('CLIENT_READBACK') }
+        if(!$RequireRecruit -and !$RequireBarracks -and [regex]::Matches($log,'\[COOP_CLIENT_DONE\] pass=1 samples=\d+').Count -ne 1) { $failures.Add('CLIENT_READBACK') }
+        if($RequireBarracks) {
+            if([regex]::Matches($log,'\[BUY_ENTER_REQUEST\] sent=1').Count -ne 1 -or [regex]::Matches($log,'\[BUY_SENT\] pass=1 leader=1 members=0 max=4').Count -ne 1) { $failures.Add('BARRACKS_ORDER') }
+            foreach($count in 0..3) {
+                if([regex]::Matches($log,"\[BUY_ADMISSION\] pass=1 leader=1 recruitable=1 members=$count max=4").Count -ne 1) { $failures.Add("BARRACKS_ADMISSION_$count") }
+            }
+            if([regex]::Matches($log,'\[BUY_ADMISSION\]').Count -ne 4) { $failures.Add('BARRACKS_ADMISSION_COUNT') }
+            if([regex]::Matches($log,'\[BUY_RESULT\] pass=1 recruited=1 members=4').Count -ne 1) { $failures.Add('BARRACKS_READBACK') }
+            if([regex]::Matches($log,'\[BUY_LIMIT\] pass=1 members=4 max=4').Count -ne 1) { $failures.Add('BARRACKS_LIMIT') }
+            if($log -notmatch '\[COOP_CLIENT_PLAYER\] pass=1 entity=') { $failures.Add('PLAYER_SPAWN') }
+        }
         if($RequireRecruit) {
             if([regex]::Matches($log,'\[JOIN_VOLUNTEER\] pass=1 leader=0').Count -ne 1) { $failures.Add('LEADER_VOTE_REQUEST') }
             if([regex]::Matches($log,'\[JOIN_ADMISSION\] pass=1 leader=1 menu=1 volunteer=1 recruitable=1').Count -ne 1) { $failures.Add('RECRUIT_ADMISSION') }
@@ -50,11 +64,18 @@ if($manifest) {
             }
             if($log -match '\[COOP_CLIENT_FACTION\][^\r\n]*pass=0') { $failures.Add('FACTION_ACCESS_FAILED') }
         }
-        if($RequirePlayer -or $RequireRecruit) {
+        if($RequirePlayer -or $RequireRecruit -or $RequireBarracks) {
             $playerIndices=@(for($i=0;$i -lt $argsList.Count;$i++) { if($argsList[$i] -ceq '-aicfCoopProbePlayer') {$i} })
             if($playerIndices.Count -ne 1 -or $playerIndices[0]+1 -ge $argsList.Count -or $argsList[$playerIndices[0]+1] -cne '1') { $failures.Add('PLAYER_MODE') }
         }
     } else {
+        if($RequireBarracks) {
+            if([regex]::Matches($log,'\[BUY_CREATED\] prefab=\{6F72F05752ED62A8\}Prefabs/Groups/OPFOR/Group_USSR_FireGroup_Guard.et').Count -ne 1) { $failures.Add('BARRACKS_SOURCE') }
+            if([regex]::Matches($log,'\[BUY_ROSTER\] count=4 recruitable=4').Count -ne 1 -or [regex]::Matches($log,'\[BUY_SERVER\] pass=1 members=4').Count -ne 1) { $failures.Add('BARRACKS_AUTHORITY') }
+            if([regex]::Matches($log,'\[BUY_UNPAID_GUARD\] pass=1 count=4').Count -ne 1) { $failures.Add('BARRACKS_UNPAID_GUARD') }
+            $payment=[regex]::Matches($log,'\[BUY_PAYMENT\] pass=1 before=(\d+) after=(\d+) cost=(\d+) debited=(\d+) credited=(\d+)')
+            if($payment.Count -ne 1 -or [int]$payment[0].Groups[3].Value -le 0 -or [int]$payment[0].Groups[4].Value -lt [int]$payment[0].Groups[3].Value -or [int]$payment[0].Groups[1].Value - [int]$payment[0].Groups[2].Value -ne [int]$payment[0].Groups[4].Value - [int]$payment[0].Groups[5].Value) { $failures.Add('BARRACKS_PAYMENT') }
+        }
         if($RequireRecruit -and ([regex]::Matches($log,'\[JOIN_SERVER\] pass=1 player=[1-9]\d* recruited=1').Count -ne 1 -or $log -notmatch '\[JOIN_TARGET\] entity=-?\d+ recruitable=1 prefab=' -or $log -notmatch '\[JOIN_SOURCE\] kind=STOCK_GROUP_CATALOG prefab=')) { $failures.Add('RECRUIT_AUTHORITY') }
         if($RequireRecruit -and ([regex]::Matches($log,'\[JOIN_LEADER_SETUP\] removed=1').Count -ne 1 -or [regex]::Matches($log,'\[JOIN_LEADER_RECOVERED\] pass=1').Count -ne 1)) { $failures.Add('LEADER_VOTE_AUTHORITY') }
         $done=[regex]::Matches($log,'\[COOP_DONE\] mode=(USSR|STANDARD) checks=(\d+) failed=0 elapsed_ms=(\d+)')

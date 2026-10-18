@@ -13,6 +13,17 @@ stock service mesh diagnostics из этой проверки. Строгий ga
 Контракт и свежие результаты — [COOP_SCENARIO.md](COOP_SCENARIO.md),
 [TESTING.md](TESTING.md).
 
+`AICF_CoopBarracksProbe.c` копировать в UI stage как `AICF_ZBarracksProbe.c`
+после основного Co-op probe, без `AICF_CoopRecruitProbe`. Это штатный заказ
+Guard через `RequestEnterBuildingMode`/`CreateEntity`, оплата через native
+resource consumer и найм всех четырёх через `RequestAddAIAgent`. Подготовка
+создаёт казарму, повышает звание и перемещает test player к поставщику;
+не заменяет оплату и разрешения сервера. Отдельный неоплаченный Guard остаётся
+недоступным для найма; native limit 4 проверяется после заполнения player slave.
+`Test-CoopScenarioLog.ps1 -RequireBarracks` запускается по обеим ролям после
+их остановки. Клиентский запуск видим пользователю: до запуска объясни,
+что тест автоматический, действий игрока не требует и сам завершится.
+
 `AICF_CoopScenarioProbe.c`: только isolated `Core/UI/` stage,
 `-aicfCoopProbe USSR|STANDARD`, необязательные `aicfCoopProbeDurationMs` и
 `aicfCoopProbeWinner US|USSR`. Проверяет bootstrap/roster/readiness, ticket
