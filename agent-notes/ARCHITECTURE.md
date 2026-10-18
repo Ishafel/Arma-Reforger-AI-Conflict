@@ -30,6 +30,11 @@ Vanilla dependency — `58D0FB3206B6F859`. Точный граф зависим�
 `addon.gproj` каждого addon и `tools/Start-AICFRuntime.ps1`; GUID не меняются.
 Core и stock integrations не должны получать обязательные RHS/WCS dependencies.
 
+Ванильный Arland Co-op СССР выбирается inherited header. Общая immutable
+`AICF_MatchRules` задаёт 0/10 боевых slots и ticket defeat по стороне;
+faction state и helpers сохраняются. Владение roster остаётся у FactionState,
+условиями победы — у VictorySystem. Контракт: [COOP_SCENARIO.md](COOP_SCENARIO.md).
+
 Цены штатных RHS/WCS меню принадлежат integration policy/UIInfo adapter,
 см. [MENU_PRICES.md](MENU_PRICES.md). Adapter возвращает CAMPAIGN quote;
 сами списания/возвраты и проверки прав остаются в native building/spawner.

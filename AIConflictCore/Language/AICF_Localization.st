@@ -3,6 +3,55 @@ StringTable
 	ItemClassName "CustomStringTableItem"
 	Items
 	{
+		CustomStringTableItem "{A1CF261018461001}"
+		{
+			Id "AICF_Scenario_ArlandCoopUSSR_Name"
+			Target_en_us "AI Conflict - Arland Co-op USSR"
+			Target_ru_ru "AI Conflict — Арланд Co-op СССР"
+		}
+
+		CustomStringTableItem "{A1CF261018461002}"
+		{
+			Id "AICF_Scenario_ArlandCoopUSSR_Description"
+			Target_en_us "Play USSR with human players against the US AI commander and FIA garrisons."
+			Target_ru_ru "Играйте за СССР против ИИ-командира США и гарнизонов FIA."
+		}
+
+		CustomStringTableItem "{A1CF261018461003}"
+		{
+			Id "AICF_Scenario_ArlandCoopUSSR_Details"
+			Target_en_us "USSR has no managed AI combat squads. Builders and requested supply deliveries remain available. USSR loses only by territory; US tickets and territorial victory retain their usual rules. Join USSR for co-op."
+			Target_ru_ru "У СССР нет управляемых модом боевых отрядов ИИ. Строители и заказанная доставка припасов доступны. СССР проигрывает только по территории; билеты и территориальная победа США сохраняют обычные правила. Для кооператива вступайте в СССР."
+		}
+
+		CustomStringTableItem "{A1CF261018461004}"
+		{
+			Id "AICF_Scenario_ArlandCoopUSSR_Medium_Name"
+			Target_en_us "AI Conflict - Arland Co-op USSR (Medium)"
+			Target_ru_ru "AI Conflict — Арланд Co-op СССР (средний)"
+		}
+
+		CustomStringTableItem "{A1CF261018461005}"
+		{
+			Id "AICF_Scenario_ArlandCoopUSSR_Hard_Name"
+			Target_en_us "AI Conflict - Arland Co-op USSR (Hard)"
+			Target_ru_ru "AI Conflict — Арланд Co-op СССР (сложный)"
+		}
+
+		CustomStringTableItem "{A1CF261018461006}"
+		{
+			Id "AICF_UI_CoopHUD"
+			Target_en_us "Co-op // Supplies %1"
+			Target_ru_ru "Co-op // Припасы %1"
+		}
+
+		CustomStringTableItem "{A1CF261018461007}"
+		{
+			Id "AICF_UI_CoopObjective"
+			Target_en_us "Capture all objectives. Defeat: loss of all objectives."
+			Target_ru_ru "Захватите все точки. Поражение: потеря всех точек."
+		}
+
 		CustomStringTableItem "{A1CF261012270001}"
 		{
 			Id "AICF_UI_LoadoutContents"

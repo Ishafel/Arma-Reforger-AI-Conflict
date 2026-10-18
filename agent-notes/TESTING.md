@@ -1,5 +1,124 @@
 # Проверки и baseline
 
+## Ванильный Arland Co-op СССР — 2026-10-18
+
+Ветка `codex/arland-coop-ussr` от актуального `origin/main`
+`bb081ebae639beea09a6c85c10be9cc0bbeae38a`; начальное дерево чистое.
+Добавлены три inherited headers, Core match policy, пустой roster стороны
+игроков, per-faction ticket defeat, replicated mode и UI gate.
+Контракты и запуск — [COOP_SCENARIO.md](COOP_SCENARIO.md).
+Evidence: `.codex-runtime/arland-coop/`. Binaries game/server/Workbench —
+**1.8.0.13**, версии сохранены в `binaries.json`.
+
+**BLOCKER:** полный runtime gate завершения матча остаётся **FAIL**.
+После успешной production территориальной победы `AICF_EquipmentDraft.Clear`
+выдаёт `Can't delete instance (of class: 'MuzzleComponent') with 1 references`,
+VM exception и leaked native classes. Это воспроизводится также в обычном
+Stock / STANDARD на данной ветке; production equipment cleanup не изменялся.
+Отдельный контроль на неизменённом `bb081eb` воспроизвёл ту же ошибку (ниже).
+Это сохранённый baseline FAIL, а не разрешённое исключение: Co-op не готов к ready PR.
+
+Baseline `Invoke-AICFChecks.ps1 -Name <шесть профильных audits>
+-EvidenceRoot .codex-runtime/arland-coop/targeted-before` — **6/6 PASS/0**:
+AICommanderModeStatic, ConstructionStatic, RuntimeLauncherStatic,
+ScenarioHeadersStatic, Stage35Static, VictoryRespawnStatic. Baseline failures нет.
+Избыточный полный `offline-before` остановлен адресно; его неполный результат
+не является полным baseline (`NOT-COMPLETE.txt`, список PID сохранён).
+
+Первый полный `offline-after1` — **65 PASS / 2 FAIL из 67**, exit 1:
+RuntimeLauncher требовал явных legacy tank/passenger flags в новых headers;
+Stage4 требовал hardcoded десять slots в цикле создания faction state.
+В headers добавлены нулевые flags, Stage4 проверяет предусмотренное scenario
+число slots, а новый Co-op audit отдельно сохраняет STANDARD=10+10.
+Проверки не исключались. `Invoke-AICFChecks.ps1 -Suite Static
+-EvidenceRoot <root>/static-final` — **27/27 PASS/0**.
+`-Name <CoopScenarioLogContracts,RuntimeLauncherStatic,Stage4Static>
+-EvidenceRoot <root>/offline-corrections` — **3/3 PASS/0**.
+`latest-offline-results.json` содержит актуальные **68/68 PASS** по объединённым
+результатам этих запусков; это не один чистый полный запуск.
+
+Окончательный полный `Invoke-AICFChecks.ps1 -EvidenceRoot
+.codex-runtime/arland-coop/offline-final` — **68/68 PASS/0**, без исключений.
+После расширения player readback отдельно повторён Co-op log contract —
+**3 positive / 18 negative PASS/0**, `coop-log-contracts-final2.txt`.
+Изменение не затрагивало production source после полного runner.
+
+`Compile.ps1 -Label production-final` и
+`Compile.ps1 -SourceRoot <root>/stage -Label fixture-final` — **PASS/0**,
+`Script validation successful`, script/VM/fatal ошибок нет.
+Exact argv, stdout, exits и полные logs — `wb-*-argv.json`, `wb-*`.
+`final-source-hashes.json`: **229/229** production файлов Core/Arland совпадают
+со stage, единственное дополнительное `.c` — test-only Co-op fixture в UI.
+
+`Run.ps1` вызывает только canonical launcher, fresh profiles, порт 2411.
+Сервер и client запускаются отдельными терминальными сессиями; launcher
+подтверждает CLI, живой PID и ROSTER_READY до подключения. Commands, manifests
+и exits — `<case>-{server,client}-{command.json,launcher.txt,exit.txt}`;
+полные stopped logs — `profile-<case>-<role>/logs/logs_*/console.log`.
+
+Первый `easy` server — **15/15 cases**, 120 секунд наблюдения, native exit 0,
+полный `Test-CoopScenarioLog.ps1` **PASS/0**. Connected JIP client — native exit 0,
+replicated readback **PASS**, полный log audit **PASS/0**. Script errors — 0;
+прочие native `(E)` — 16 server / 82 client, общий engine/assets error-free gate
+не заявляется. Это наблюдение bootstrap/JIP, не завершение боя.
+
+`medium3` и `hard-final` проверяют реальные headers и готовность 10/0 slots,
+нулевой SSR roster, budget 100, отсутствие ticket defeat СССР, helpers и
+production territorial winner US / USSR соответственно: по **16/16 cases**.
+Ownership целей подготавливает fixture. Оба **full runtime gates — FAIL/1**:
+10 script errors после COOP_DONE, несмотря на native exit 0 / Game destroyed.
+`audit-medium3-server.txt`, `audit-hard-final-server.txt` сохраняют отказ.
+Нельзя выдавать положительные cases за полный runtime PASS.
+
+Финальный `easy-final-server` — **15/15**, 90 секунд, полный log audit **PASS/0**.
+`easy-final-client` подтвердил snapshot, но полный audit — **FAIL/1**:
+одна stock `SCR_SupportStationAreaMeshComponent` SCRIPT(E) об offset REPAIR зоны.
+Эта строка не исключена из gate; native prefab не изменялся.
+Следующий `player-final`: server **15/15**, 180 секунд, полный audit **PASS/0**;
+connected client штатно вступил в СССР, запросил native respawn и получил
+controlled character своей фракции. `COOP_CLIENT_PLAYER pass=1` и JIP snapshot
+с 0 managed SSR agents подтверждены. Строгий audit `-Client -RequirePlayer`
+требует точный manifest flag и native readback — **PASS/0**. Script errors 0;
+прочие native `(E)` — 16 server / 87 client. Это initial spawn, не смерть/повторный respawn.
+`standard-final`: **12/12**, 90 секунд, roster 10+10, floor 200,
+обычная остановка и полный audit **PASS/0**. Все native exits — 0.
+
+Контроль ошибки завершения: `git archive bb081eb` создал отдельный
+`baseline-source.tar`; в baseline stage добавлена только `BaselineEndProbe.c`
+без Co-op API. `Compile.ps1 -SourceRoot <baseline-stage> -Label baseline-control`
+— **PASS/0**. `RunBaseline.ps1` вызывает canonical launcher Stock, тот же graph
+и версии: `[BASELINE_END_CASE] ended=1 us_slots=10 ussr_slots=10`, native exit 0,
+но **10 SCRIPT(E), MuzzleComponent VM и leaks**, обычный full runtime gate — **FAIL**.
+Exact archive hash, full stopped log и verdict — `baseline-runtime-verdict.json`.
+Первый запуск был отклонён по тайм-ауту auto-review до старта процесса;
+разрешённый повтор выполнен. Это не runtime failure запуска до его исполнения.
+
+Все неудачные attempts сохранены. Fixture сначала загружалась раньше campaign
+state и не компилировалась; перенесена в UI. Исправлены отдельный owner victory
+и порядок явного fixture cleanup. Первое изменение PowerShell audit потеряло
+BOM и дало parser error; BOM восстановлен. Эксперименты cleanup затронули только
+stage: late weapon action, selected weapon release, private AI controller,
+local delete, освобождение native collections и nested attachments. Они не
+дали доказанного исправления и полностью удалены из финального stage.
+`medium4` с экспериментальным SelectWeapon(null) — native access violation
+**-1073741819**, это FAIL, dump и crash logs сохранены.
+Остальные failed runs имеют полные logs; `runtime-attempts.json` — индекс.
+
+**NOT RUN:** визуальная оценка пунктов меню/HUD и ручной input игрока — требуется
+человек, GUI workflow запрещён; физический захват всех целей игроками;
+завершённая доставка припасов и достройка layout в Co-op; смерть и повторный respawn игрока
+pipeline, packaged build/Workshop, долгий soak. Наличие services не объявляется
+доказательством законченной доставки или строительства. Нет нового релиза,
+push, merge или готового PR.
+
+Для ручного UI smoke требуется выбрать Co-op СССР в меню, вступить в СССР,
+открыть карту и проверить отсутствие панели боевых отрядов при доступном
+снабжении. Эта визуальная проверка агенту недоступна по terminal-only правилам.
+`git diff --check` — **PASS/0**, проверены 210 локальных Markdown-ссылок, битых нет.
+Полный список 35 изменённых файлов — `changed-files.txt` в evidence.
+Тестовые процессы завершены, собственные `stage` / `baseline-stage` удалены;
+логи, profiles, baseline archive и hashes сохранены (`cleanup.txt`).
+
 ## Defend allocation dialog — продолжение PR #64, 2026-10-16
 
 После игрового запуска North WCS Hard на `8d199ec` server дважды выдал

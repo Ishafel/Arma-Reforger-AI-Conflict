@@ -4,6 +4,14 @@
 технические детали, нужные при изменении поведения; точные defaults проверяй
 в `Config/`, профильных классах и `tools/Start-AICFRuntime.ps1`.
 
+## Co-op СССР на ванильном Арланде
+
+Отдельные Easy/Medium/Hard headers оставляют СССР без managed combat roster
+и включают автономного командира США. Строители и заказанная доставка
+сохраняются. СССР проигрывает только по территории; билетная победа против США
+сохраняется. Обычные сценарии не меняются. Подробности и ограничения:
+[COOP_SCENARIO.md](COOP_SCENARIO.md).
+
 ## Стоимость штатного заказа RHS/WCS
 
 Группы обеих сторон оцениваются по фактическому prefab roster: 50/75/100
@@ -17,7 +25,7 @@ supplies за штатную роль. Техника использует об�
 
 Четыре базовых MissionHeader stock/RHS для Арланда и Эверона включают
 `m_bRandomStartingWeather 1`. North, WCS и Medium/Hard наследуют настройку:
-она действует во всех 27 сценариях меню и при запуске через canonical launcher.
+она действует во всех 30 сценариях меню и при запуске через canonical launcher.
 Штатный `SCR_TimeAndWeatherHandlerComponent.SetupDaytimeAndWeather` выбирает
 состояние из списка мира на authority при инициализации нового матча.
 Повторное выпадение той же погоды допустимо. `m_bRandomWeatherChanges 1`
@@ -57,7 +65,7 @@ building layouts и client/JIP. Собственный слой миссии п�
 
 ## Сложность гарнизонов FIA
 
-Все девять Variant имеют три пункта меню: 27 тонких inherited headers.
+Все десять Variant имеют три пункта меню: 30 тонких inherited headers.
 Существующие ресурсы сохраняют GUID и соответствуют Easy. Medium/Hard наследуют
 свой прежний header с `m_eAICFDifficulty` 1/2; default 0 сохраняет лёгкий вариант.
 Launcher `-Difficulty Easy|Medium|Hard` выбирает header для любого Variant,

@@ -423,6 +423,8 @@ try {
     }
 
     foreach ($difficultyCase in @(
+        @('StockCoopUSSR', 'Medium', '{A1CF261018460002}Missions/AICF_Conflict_Arland_Coop_USSR_Medium.conf', 'AIConflictArland'),
+        @('StockCoopUSSR', 'Hard', '{A1CF261018460003}Missions/AICF_Conflict_Arland_Coop_USSR_Hard.conf', 'AIConflictArland'),
         @('Stock', 'Medium', '{A1CF261008300001}Missions/AICF_Conflict_Arland_Medium.conf', 'AIConflictArland'),
         @('Stock', 'Hard', '{A1CF261008300002}Missions/AICF_Conflict_Arland_Hard.conf', 'AIConflictArland'),
         @('Everon', 'Medium', '{A1CF261008300003}Missions/AICF_Conflict_Everon_Medium.conf', 'AIConflictEveron'),

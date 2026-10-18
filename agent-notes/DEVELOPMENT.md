@@ -67,6 +67,7 @@ manifest использует game resources, подходящие Workbench. П
 | `-Variant` | Source root |
 |---|---|
 | `Stock` | `AIConflictArland` |
+| `StockCoopUSSR` | `AIConflictArland`, отдельный inherited Co-op header |
 | `Everon`, `EveronNorth` | `AIConflictEveron` |
 | `RHS` | `AIConflictArlandRHS` |
 | `EveronRHS`, `EveronNorthRHS` | `AIConflictEveronRHS` |
@@ -79,7 +80,7 @@ RHS/WCS версии и каталоги сверяй с установленн�
 сведения WCS: [Arland](../AIConflictArlandWCSRHS/README.md),
 [Everon](../AIConflictEveronWCSRHS/README.md).
 
-Для любого из девяти Variant используйте `-Difficulty Easy|Medium|Hard`
+Для любого из десяти Variant используйте `-Difficulty Easy|Medium|Hard`
 (default `Easy`), например `-Variant EveronNorth -Difficulty Hard`.
 Передавайте одинаковую `Difficulty` серверу и клиенту: readiness gate проверяет
 точный server header. Medium добавляет один БТР со случайным десантом до 2/4;

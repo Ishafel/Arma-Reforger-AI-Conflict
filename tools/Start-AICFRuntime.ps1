@@ -5,7 +5,7 @@ param(
     [string]$Role,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Stock', 'Everon', 'EveronNorth', 'RHS', 'EveronRHS', 'EveronNorthRHS', 'ArlandWCSRHS', 'EveronWCSRHS', 'EveronNorthWCSRHS')]
+    [ValidateSet('Stock', 'StockCoopUSSR', 'Everon', 'EveronNorth', 'RHS', 'EveronRHS', 'EveronNorthRHS', 'ArlandWCSRHS', 'EveronWCSRHS', 'EveronNorthWCSRHS')]
     [string]$Variant,
 
     [ValidateSet('Easy', 'Medium', 'Hard')]
@@ -328,6 +328,12 @@ if ($rhsRootPath) {
 if ($UseDefaultAICommanderMode -and $PSBoundParameters.ContainsKey('AICommanderMode')) {
     throw 'Нельзя одновременно задавать -UseDefaultAICommanderMode и -AICommanderMode.'
 }
+if ($Variant -eq 'StockCoopUSSR') {
+    if ($PSBoundParameters.ContainsKey('AICommanderMode') -and $AICommanderMode -cne 'US') {
+        throw 'StockCoopUSSR требует AICommanderMode US: СССР управляют игроки.'
+    }
+    $AICommanderMode = 'US'
+}
 
 $managedArguments = @(
     '-gproj', '-server', '-MissionHeader', '-worldSystemsConfig', '-client',
@@ -346,6 +352,11 @@ $scenario = '{BC2437E4861B4FD2}Missions/AICF_Conflict_Arland.conf'
 $missionHeader = 'Missions/AICF_Conflict_Arland.conf'
 $addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E'
 $profileVariant = ''
+if ($Variant -eq 'StockCoopUSSR') {
+    $scenario = '{A1CF261018460001}Missions/AICF_Conflict_Arland_Coop_USSR.conf'
+    $missionHeader = $scenario.Substring(18)
+    $profileVariant = '-CoopUSSR'
+}
 if ($Variant -in @('Everon', 'EveronNorth')) {
     $projectRelativePath = 'AIConflictEveron\addon.gproj'
     $scenario = '{4C5D73A5614F41D9}Missions/AICF_Conflict_Everon.conf'
@@ -402,6 +413,7 @@ elseif ($Variant -in @('EveronRHS', 'EveronNorthRHS')) {
 
 # Thin inherited headers preserve each variant's existing dependency graph.
 $difficultyHeaders = @{
+    StockCoopUSSR = @('{A1CF261018460002}Missions/AICF_Conflict_Arland_Coop_USSR_Medium.conf', '{A1CF261018460003}Missions/AICF_Conflict_Arland_Coop_USSR_Hard.conf')
     Stock = @('{A1CF261008300001}Missions/AICF_Conflict_Arland_Medium.conf', '{A1CF261008300002}Missions/AICF_Conflict_Arland_Hard.conf')
     Everon = @('{A1CF261008300003}Missions/AICF_Conflict_Everon_Medium.conf', '{A1CF261008300004}Missions/AICF_Conflict_Everon_Hard.conf')
     EveronNorth = @('{A1CF261008300005}Missions/AICF_Conflict_Everon_North_Medium.conf', '{A1CF261008300006}Missions/AICF_Conflict_Everon_North_Hard.conf')

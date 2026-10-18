@@ -240,6 +240,11 @@ class AICF_StrategicUIController
 		m_bLocalUSSR = key == "USSR";
 		EnsureHUD();
 		RefreshHUD();
+		if (m_Campaign.AICF_IsPlayerOnlyFaction(m_bLocalUSSR))
+		{
+			if (m_bCommandOpen) SetCommandOpen(false);
+			if (m_wMapToggle) m_wMapToggle.SetVisible(false);
+		}
 		ObservePendingMapPointOrder();
 		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		if (player && player.AICF_GetSquadCommandSequence() != m_iSquadCommandResultSequence)
@@ -314,6 +319,13 @@ class AICF_StrategicUIController
 		string supply = "{AICF:AICF_UI_SYNC_476c685a}";
 		if (m_Campaign.AICF_GetStage4Enabled())
 			supply = string.Format("%1/%2", connectedSupplies, totalSupplies);
+		if (m_Campaign.AICF_IsPlayerOnlyFaction(m_bLocalUSSR))
+		{
+			m_wHUDText.SetText(AICF_Localization.Resolve(AICF_Localization.Format(
+				"{AICF:AICF_UI_CoopHUD}", supply)));
+			m_wHUDObjective.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_CoopObjective}"));
+			return;
+		}
 		string objective = m_Campaign.AICF_GetStrategicObjective(m_bLocalUSSR);
 		if (objective.IsEmpty())
 			objective = "{AICF:AICF_UI_AWAITING_ORDERS_d367d918}";
@@ -346,6 +358,8 @@ class AICF_StrategicUIController
 		if (localFactionKey != "US" && localFactionKey != "USSR")
 			return;
 		m_bLocalUSSR = localFactionKey == "USSR";
+		if (m_Campaign.AICF_IsPlayerOnlyFaction(m_bLocalUSSR))
+			return;
 
 		m_wMapToggle = CreateRect(
 			mapRoot,
@@ -552,6 +566,7 @@ class AICF_StrategicUIController
 
 	protected void SetCommandOpen(bool open)
 	{
+		if (open && m_Campaign && m_Campaign.AICF_IsPlayerOnlyFaction(m_bLocalUSSR)) open = false;
 		if (open && m_SupplyMapUI)
 			m_SupplyMapUI.Close();
 		m_bCommandOpen = open && m_wCommandPanel;
@@ -560,7 +575,7 @@ class AICF_StrategicUIController
 		if (m_wCommandPanel)
 			m_wCommandPanel.SetVisible(m_bCommandOpen);
 		if (m_wMapToggle)
-			m_wMapToggle.SetVisible(!m_bCommandOpen);
+			m_wMapToggle.SetVisible(!m_bCommandOpen && !m_Campaign.AICF_IsPlayerOnlyFaction(m_bLocalUSSR));
 		RefreshVisualStyles();
 		AICF_Stage4Diagnostics.Info(
 			"STRATEGIC_UI_TOGGLED",

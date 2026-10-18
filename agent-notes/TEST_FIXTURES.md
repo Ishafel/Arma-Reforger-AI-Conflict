@@ -1,5 +1,16 @@
 # Runtime fixture: каталог и применение
 
+## Co-op СССР на ванильном Арланде
+
+`AICF_CoopScenarioProbe.c`: только isolated `Core/UI/` stage,
+`-aicfCoopProbe USSR|STANDARD`, необязательные `aicfCoopProbeDurationMs` и
+`aicfCoopProbeWinner US|USSR`. Проверяет bootstrap/roster/readiness, ticket
+policy, budget, JIP snapshot и завершение по подготовленному ownership целей.
+Физический захват, UI input и законченный supply trip эта fixture не доказывает.
+Команды и контракты — [COOP_SCENARIO.md](COOP_SCENARIO.md).
+Client `-aicfCoopProbePlayer 1` проверяет реальный вход/respawn за СССР через
+native intents; log audit с `-Client -RequirePlayer` требует controlled character.
+
 ## Shutdown private equipment worlds — issue #63
 
 `AICF_ShutdownProbe.c`: только isolated Core stage, `aicfShutdownMode idle|batches`,
