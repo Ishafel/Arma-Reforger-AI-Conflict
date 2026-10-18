@@ -1,5 +1,5 @@
 // Native barracks can sell Guard characters whose prefab forbids recruitment.
-// Only a human-requested group on the Co-op player side receives this permission.
+// Only a human-requested group for an allowed player faction gets this permission.
 modded class SCR_GameModeCampaign
 {
 	override void OnEntityRequested(notnull IEntity spawnedEntity, IEntity user, SCR_Faction faction, SCR_MilitaryBaseLogicComponent service)
@@ -13,7 +13,7 @@ modded class SCR_GameModeCampaign
 		Faction requestedFaction = group.GetFaction();
 		if (!requestedFaction || (faction && faction != requestedFaction)) return;
 		AICF_MatchRules rules = AICF_MatchRules.FromMissionHeader();
-		if (rules.GetMode() == AICF_EMatchMode.STANDARD || !rules.AllowsPlayerFaction(requestedFaction.GetFactionKey())) return;
+		if (!rules.AllowsPlayerFaction(requestedFaction.GetFactionKey())) return;
 		SCR_CampaignBuildingProviderComponent provider = SCR_CampaignBuildingProviderComponent.Cast(service);
 		if (!provider || !provider.CanCommandAI()) return;
 		PlayerManager players = GetGame().GetPlayerManager();
@@ -33,7 +33,7 @@ modded class SCR_AIGroup
 	{
 		if (!Replication.IsServer() || !faction || GetFaction() != faction) return;
 		AICF_MatchRules rules = AICF_MatchRules.FromMissionHeader();
-		if (rules.GetMode() == AICF_EMatchMode.STANDARD || !rules.AllowsPlayerFaction(faction.GetFactionKey())) return;
+		if (!rules.AllowsPlayerFaction(faction.GetFactionKey())) return;
 		m_sAICFPurchasedRecruitFaction = faction.GetFactionKey();
 		array<AIAgent> agents = {};
 		GetAgents(agents);
@@ -53,7 +53,7 @@ modded class SCR_AIGroup
 		SCR_BaseGameMode mode = SCR_BaseGameMode.Cast(GetGame().GetGameMode());
 		if (!mode || !mode.IsMaster()) return;
 		AICF_MatchRules rules = AICF_MatchRules.FromMissionHeader();
-		if (rules.GetMode() == AICF_EMatchMode.STANDARD || !rules.AllowsPlayerFaction(m_sAICFPurchasedRecruitFaction)) return;
+		if (!rules.AllowsPlayerFaction(m_sAICFPurchasedRecruitFaction)) return;
 		Faction faction = GetGame().GetFactionManager().GetFactionByKey(m_sAICFPurchasedRecruitFaction);
 		if (!faction || GetFaction() != faction) return;
 		SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(agent.GetControlledEntity());

@@ -6,6 +6,8 @@ param(
     [switch]$RequirePlayer,
     [switch]$RequireRecruit,
     [switch]$RequireBarracks,
+    [switch]$RequireSupportArea,
+    [ValidateSet('US','USSR')][string]$BarracksFaction='USSR',
     [string]$ExpectedWinner,
     [int]$MinimumObservationMs=30000
 )
@@ -20,7 +22,24 @@ if($log -notmatch 'Game destroyed\.') { $failures.Add('STOPPED_LOG_REQUIRED') }
 if($log -match 'SCRIPT\s+\([EF]\):|ENGINE\s+\(F\):|NULL pointer|Virtual Machine Exception|Unhandled exception') { $failures.Add('SCRIPT_FATAL') }
 if($log -match '\[COOP_TIMEOUT\]|\[COOP_CASE\] case=\w+ pass=0') { $failures.Add('PROBE_FAILURE') }
 if($RequireRecruit -and $log -match '\[JOIN_TIMEOUT\]|\[JOIN_(?:ADMISSION|RESULT|SERVER)\][^\r\n]*pass=0') { $failures.Add('RECRUIT_FAILED') }
-if($RequireBarracks -and $log -match '\[BUY_TIMEOUT\]|\[BUY_(?:ADMISSION|RESULT|SERVER|LIMIT|UNPAID_GUARD|PAYMENT)\][^\r\n]*pass=0') { $failures.Add('BARRACKS_FAILED') }
+if($RequireBarracks -and $log -match '\[BUY_TIMEOUT\]|\[BUY_(?:ADMISSION|RESULT|SERVER|LIMIT|UNPAID_GUARD|PAYMENT|FACTION)\][^\r\n]*pass=0') { $failures.Add('BARRACKS_FAILED') }
+if($RequireSupportArea) {
+    if($log -match '\[AREA_(?:CASE|SPAWN)\][^\r\n]*pass=0') { $failures.Add('SUPPORT_AREA_FAILED') }
+    if($Client) {
+        foreach($part in @('Ural4320_FIA_repair_box.et','Ural4320_repair_box.et','M923A1_repair_box.et')) {
+            if($log -notmatch ('\[AREA_CASE\] pass=1 server=0 before_mismatch=[01] station_unchanged=1 center_error=[\d.eE+-]+ prefab=[^\r\n]*'+[regex]::Escape($part))) { $failures.Add("SUPPORT_AREA_$part") }
+        }
+        if($log -notmatch '\[AREA_CASE\] pass=1 server=0 before_mismatch=1') { $failures.Add('SUPPORT_AREA_REPRODUCTION') }
+        foreach($area in [regex]::Matches($log,'\[AREA_CASE\][^\r\n]*center_error=([\d.eE+-]+)')) {
+            $distance=[double]::Parse($area.Groups[1].Value,[Globalization.CultureInfo]::InvariantCulture)
+            if($distance -lt 0 -or $distance -ge 0.002) { $failures.Add('SUPPORT_AREA_CENTER') }
+        }
+    } else {
+        foreach($vehicle in @('Ural4320_repair_FIA.et','Ural4320_repair.et','M923A1_repair.et')) {
+            if($log -notmatch ('\[AREA_SPAWN\] pass=1 prefab=[^\r\n]*'+[regex]::Escape($vehicle))) { $failures.Add("SUPPORT_AREA_$vehicle") }
+        }
+    }
+}
 $manifest=$null
 if($launcher -notmatch 'AICF_RUNTIME_MANIFEST_JSON=({[^\r\n]+})') { $failures.Add('MANIFEST') }
 else { $manifest=$matches[1] | ConvertFrom-Json }
@@ -28,13 +47,18 @@ if($manifest) {
     $expectedRole='Server'; if($Client) { $expectedRole='Client' }
     if($manifest.role -cne $expectedRole -or $manifest.variant -notin @('Stock','StockCoopUSSR')) { $failures.Add('LAUNCH_ROLE_VARIANT') }
     if($RequireRecruit -and $manifest.variant -cne 'StockCoopUSSR') { $failures.Add('RECRUIT_VARIANT') }
-    if($RequireBarracks -and $manifest.variant -cne 'StockCoopUSSR') { $failures.Add('BARRACKS_VARIANT') }
+    if($RequireBarracks -and $manifest.variant -eq 'StockCoopUSSR' -and $BarracksFaction -ne 'USSR') { $failures.Add('BARRACKS_VARIANT') }
     $mode='USSR'; if($manifest.variant -eq 'Stock') { $mode='STANDARD' }
     $argsList=@($manifest.arguments)
     $indices=@(for($i=0;$i -lt $argsList.Count;$i++) { if($argsList[$i] -ceq '-aicfCoopProbe') {$i} })
     if($indices.Count -ne 1 -or $indices[0]+1 -ge $argsList.Count -or $argsList[$indices[0]+1] -cne $mode) { $failures.Add('PROBE_MODE') }
+    if($RequireBarracks) {
+        $factionIndices=@(for($i=0;$i -lt $argsList.Count;$i++) { if($argsList[$i] -ceq '-aicfBarracksFaction') {$i} })
+        if(($factionIndices.Count -eq 0 -and $BarracksFaction -ne 'USSR') -or $factionIndices.Count -gt 1 -or
+            ($factionIndices.Count -eq 1 -and ($factionIndices[0]+1 -ge $argsList.Count -or $argsList[$factionIndices[0]+1] -cne $BarracksFaction))) { $failures.Add('BARRACKS_FACTION_ARGUMENT') }
+    }
     if($Client) {
-        if($manifest.variant -ne 'StockCoopUSSR' -or $launcher -notmatch '\[SERVER_READY\] process_id=\d+ port=\d+ log=') { $failures.Add('CLIENT_READINESS') }
+        if($launcher -notmatch '\[SERVER_READY\] process_id=\d+ port=\d+ log=') { $failures.Add('CLIENT_READINESS') }
         if(!$RequireRecruit -and !$RequireBarracks -and [regex]::Matches($log,'\[COOP_CLIENT_DONE\] pass=1 samples=\d+').Count -ne 1) { $failures.Add('CLIENT_READBACK') }
         if($RequireBarracks) {
             if([regex]::Matches($log,'\[BUY_ENTER_REQUEST\] sent=1').Count -ne 1 -or [regex]::Matches($log,'\[BUY_SENT\] pass=1 leader=1 members=0 max=4').Count -ne 1) { $failures.Add('BARRACKS_ORDER') }
@@ -70,7 +94,10 @@ if($manifest) {
         }
     } else {
         if($RequireBarracks) {
-            if([regex]::Matches($log,'\[BUY_CREATED\] prefab=\{6F72F05752ED62A8\}Prefabs/Groups/OPFOR/Group_USSR_FireGroup_Guard.et').Count -ne 1) { $failures.Add('BARRACKS_SOURCE') }
+            $source='{6F72F05752ED62A8}Prefabs/Groups/OPFOR/Group_USSR_FireGroup_Guard.et'
+            if($BarracksFaction -eq 'US') { $source='{0A8E20F50DA233E1}Prefabs/Groups/BLUFOR/Group_US_FireTeam_Guard.et' }
+            if([regex]::Matches($log,('\[BUY_CREATED\] prefab='+[regex]::Escape($source))).Count -ne 1) { $failures.Add('BARRACKS_SOURCE') }
+            if([regex]::Matches($log,"\[BUY_FACTION\] pass=1 faction=$BarracksFaction\b").Count -ne 1) { $failures.Add('BARRACKS_FACTION') }
             if([regex]::Matches($log,'\[BUY_ROSTER\] count=4 recruitable=4').Count -ne 1 -or [regex]::Matches($log,'\[BUY_SERVER\] pass=1 members=4').Count -ne 1) { $failures.Add('BARRACKS_AUTHORITY') }
             if([regex]::Matches($log,'\[BUY_UNPAID_GUARD\] pass=1 count=4').Count -ne 1) { $failures.Add('BARRACKS_UNPAID_GUARD') }
             $payment=[regex]::Matches($log,'\[BUY_PAYMENT\] pass=1 before=(\d+) after=(\d+) cost=(\d+) debited=(\d+) credited=(\d+)')

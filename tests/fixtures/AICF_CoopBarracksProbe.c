@@ -1,4 +1,19 @@
 // Isolated diagnostic: normal building-editor order, followed by native recruitment.
+class AICF_BarracksProbeConfig
+{
+	static string FactionKey()
+	{
+		string key;
+		if (System.GetCLIParam("aicfBarracksFaction", key)) return key;
+		return "USSR";
+	}
+	static ResourceName GuardPrefab()
+	{
+		if (FactionKey() == "US") return "{0A8E20F50DA233E1}Prefabs/Groups/BLUFOR/Group_US_FireTeam_Guard.et";
+		return "{6F72F05752ED62A8}Prefabs/Groups/OPFOR/Group_USSR_FireGroup_Guard.et";
+	}
+}
+
 modded class SCR_CampaignBuildingPlacingEditorComponent
 {
 	override protected bool CanPlaceEntityServer(IEntityComponentSource editableEntitySource, out EEditableEntityBudget blockingBudget, bool updatePreview, bool showNotification, int prefabID = -1, int playerID = -1, SCR_EditorPreviewParams params = null)
@@ -60,7 +75,8 @@ modded class AICF_MatchController
 		{
 			m_bAICFBarracksPrepared = true;
 			m_Construction.Stop();
-			SCR_CampaignMilitaryBaseComponent base = m_USSRFaction.GetMainBase();
+			SCR_CampaignFaction faction = SCR_CampaignFaction.Cast(GetGame().GetFactionManager().GetFactionByKey(AICF_BarracksProbeConfig.FactionKey()));
+			SCR_CampaignMilitaryBaseComponent base = faction.GetMainBase();
 			base.AddSupplies(base.GetSuppliesMax() - base.GetSupplies());
 			vector position, rotation;
 			base.GetSpawnPoint().GetPositionAndRotation(position, rotation);
@@ -69,19 +85,19 @@ modded class AICF_MatchController
 			EntitySpawnParams params = new EntitySpawnParams();
 			params.TransformMode = ETransformMode.WORLD;
 			params.Transform[3] = position;
-			ResourceName prefab = AICF_ContentProfile.GetActive().GetConstructionPrefab("USSR", AICF_EConstructionType.LARGE_BARRACKS);
+			ResourceName prefab = AICF_ContentProfile.GetActive().GetConstructionPrefab(faction.GetFactionKey(), AICF_EConstructionType.LARGE_BARRACKS);
 			SCR_EditorLinkComponent.IgnoreSpawning(true);
 			IEntity entity = GetGame().SpawnEntityPrefabEx(prefab, false, params: params);
 			SCR_EditorLinkComponent.IgnoreSpawning(false);
 			if (entity)
 			{
-				FactionAffiliationComponent.Cast(entity.FindComponent(FactionAffiliationComponent)).SetAffiliatedFaction(m_USSRFaction);
+				FactionAffiliationComponent.Cast(entity.FindComponent(FactionAffiliationComponent)).SetAffiliatedFaction(faction);
 				m_AICFBarracks = SCR_CampaignBuildingCompositionComponent.Cast(entity.FindComponent(SCR_CampaignBuildingCompositionComponent));
 				if (m_AICFBarracks) m_AICFBarracks.SetProviderEntity(base.GetMasterProvider().GetOwner());
 			}
 			Print("[BUY_SETUP] barracks=" + (m_AICFBarracks != null));
 			params.Transform[3] = position + "20 0 20";
-			m_AICFUnpaidGuard = SCR_AIGroup.Cast(GetGame().SpawnEntityPrefab(Resource.Load("{6F72F05752ED62A8}Prefabs/Groups/OPFOR/Group_USSR_FireGroup_Guard.et"), null, params));
+			m_AICFUnpaidGuard = SCR_AIGroup.Cast(GetGame().SpawnEntityPrefab(Resource.Load(AICF_BarracksProbeConfig.GuardPrefab()), null, params));
 			if (m_AICFUnpaidGuard) m_AICFUnpaidGuard.RequestSpawn();
 		}
 		if (m_AICFUnpaidGuard && !m_bAICFUnpaidChecked)
@@ -182,6 +198,8 @@ modded class SCR_GameModeCampaign
 		if (!Replication.IsServer() || !SCR_AIGroup.Cast(spawnedEntity)) return;
 		m_AICFBuyGroup = SCR_AIGroup.Cast(spawnedEntity);
 		Print("[BUY_CREATED] prefab=" + SCR_ResourceNameUtils.GetPrefabName(spawnedEntity));
+		Faction actual = m_AICFBuyGroup.GetFaction();
+		Print(string.Format("[BUY_FACTION] pass=%1 faction=%2", actual && actual.GetFactionKey() == AICF_BarracksProbeConfig.FactionKey() && SCR_Faction.GetEntityFaction(user) == actual, AICF_BarracksProbeConfig.FactionKey()));
 		Print(string.Format("[BUY_REQUEST_CONTEXT] event_faction_present=%1 group_faction_present=%2", faction != null, m_AICFBuyGroup.GetFaction() != null));
 	}
 	void AICF_BuyObserve()
@@ -245,12 +263,13 @@ modded class SCR_GameModeCampaign
 	{
 		PlayerController player = GetGame().GetPlayerController();
 		if (!player) return false;
-		SCR_CampaignFaction faction = SCR_CampaignFaction.Cast(GetGame().GetFactionManager().GetFactionByKey("USSR"));
+		SCR_CampaignFaction faction = SCR_CampaignFaction.Cast(GetGame().GetFactionManager().GetFactionByKey(AICF_BarracksProbeConfig.FactionKey()));
 		SCR_PlayerFactionAffiliationComponent affiliation = SCR_PlayerFactionAffiliationComponent.Cast(player.FindComponent(SCR_PlayerFactionAffiliationComponent));
 		if (!affiliation || !faction) return false;
 		if (affiliation.GetAffiliatedFaction() != faction) { affiliation.RequestFaction(faction); return false; }
 		SCR_PlayerControllerGroupComponent groups = SCR_PlayerControllerGroupComponent.Cast(player.FindComponent(SCR_PlayerControllerGroupComponent));
-		if (!groups || !groups.GetPlayersGroup()) return false;
+		if (!groups) return false;
+		if (!groups.GetPlayersGroup()) { groups.CreateAndJoinGroup(faction, true); return false; }
 		array<ref SCR_BasePlayerLoadout> loadouts = {};
 		GetGame().GetLoadoutManager().GetPlayerLoadoutsByFaction(faction, loadouts);
 		SCR_BasePlayerLoadout loadout;
@@ -301,9 +320,7 @@ modded class SCR_GameModeCampaign
 			ResourceName selected;
 			foreach (ResourceName prefab : prefabs)
 			{
-				if (!prefab.Contains("USSR") || !prefab.Contains("Group")) continue;
-				Print("[BUY_CANDIDATE] prefab=" + prefab);
-				if (prefab.Contains("Group_USSR_FireGroup_Guard.et")) selected = prefab;
+				if (prefab == AICF_BarracksProbeConfig.GuardPrefab()) selected = prefab;
 			}
 			Print(string.Format("[BUY_CATALOG] count=%1 selected=%2", prefabs.Count(), selected));
 			if (selected.IsEmpty()) { GetGame().RequestClose(); return; }

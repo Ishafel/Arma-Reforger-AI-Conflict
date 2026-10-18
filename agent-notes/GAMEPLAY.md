@@ -12,6 +12,22 @@
 сохраняется. Обычные сценарии не меняются. Подробности и ограничения:
 [COOP_SCENARIO.md](COOP_SCENARIO.md).
 
+## Найм купленных в казарме бойцов
+
+`AICF_BarracksRecruitment` в Core распространяется на STANDARD и Co-op всех
+integration addons. После штатного `OnEntityRequested` он разрешает найм
+бойцов заказанного игроком отделения, включая Guard с исходным `Recruitable=0`.
+Server/master проверяет troop provider `CanCommandAI`, текущий controlled entity
+игрока, faction map, faction группы и разрешение MatchRules.
+
+Server-only marker принадлежит конкретной купленной группе; текущие и async
+members допускаются только при совпадении parent group/faction, живом character
+и отсутствии player control. Setter вызывается только при изменении флага.
+Обычная охрана, строители и managed AICF roster не получают marker.
+Штатные `RequestAddAIAgent`, права лидера, ownership и лимит ИИ сохраняются.
+Stock лимит — 4. Снабжение и оплату выполняет native building system.
+Runtime-матрица и ограничения RHS/WCS — [TESTING.md](TESTING.md).
+
 ## Стоимость штатного заказа RHS/WCS
 
 Группы обеих сторон оцениваются по фактическому prefab roster: 50/75/100

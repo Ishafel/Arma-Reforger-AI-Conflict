@@ -178,7 +178,10 @@ modded class SCR_GameModeCampaign
 	protected bool AICF_CoopClientSpawn()
 	{
 		PlayerController player = GetGame().GetPlayerController();
-		SCR_CampaignFaction faction = SCR_CampaignFaction.Cast(GetGame().GetFactionManager().GetFactionByKey("USSR"));
+		string factionKey = "USSR";
+		string testFaction;
+		if (System.GetCLIParam("aicfBarracksFaction", testFaction)) factionKey = testFaction;
+		SCR_CampaignFaction faction = SCR_CampaignFaction.Cast(GetGame().GetFactionManager().GetFactionByKey(factionKey));
 		if (!player || !faction || !faction.GetMainBase()) return false;
 		if (player.GetControlledEntity())
 		{
@@ -199,7 +202,7 @@ modded class SCR_GameModeCampaign
 		catalog.GetEntityList(entries);
 		array<string> suffixes = {};
 		string role;
-		if (!AICF_ContentProfile.GetActive().BuildCharacterRoleCandidates("USSR", 9, role, suffixes)) return false;
+		if (!AICF_ContentProfile.GetActive().BuildCharacterRoleCandidates(factionKey, 9, role, suffixes)) return false;
 		ResourceName prefab;
 		foreach (string suffix : suffixes)
 		{
@@ -210,7 +213,7 @@ modded class SCR_GameModeCampaign
 		if (prefab.IsEmpty()) return false;
 		SCR_SpawnPoint chosen;
 		float nearest = float.MAX;
-		foreach (SCR_SpawnPoint point : SCR_SpawnPoint.GetSpawnPointsForFaction("USSR"))
+		foreach (SCR_SpawnPoint point : SCR_SpawnPoint.GetSpawnPointsForFaction(factionKey))
 		{
 			if (!point || !point.IsSpawnPointActive()) continue;
 			float distance = vector.DistanceXZ(point.GetOrigin(), faction.GetMainBase().GetOwner().GetOrigin());

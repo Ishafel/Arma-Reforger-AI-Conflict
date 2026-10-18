@@ -10,11 +10,12 @@ foreach($entry in @{
     access='Integration/AICF_CoopFactionAccess.c'; construction='Construction/AICF_ConstructionPlanner.c'
     factionMenu='UI/AICF_CoopFactionMenu.c'
     playerGroups='Integration/AICF_CoopPlayerGroups.c'
-    recruitment='Integration/AICF_CoopRecruitment.c'
+    recruitment='Integration/AICF_BarracksRecruitment.c'
 }.GetEnumerator()) { $sources[$entry.Key]=ConvertTo-AICFCodeText ([IO.File]::ReadAllText((Join-Path $core $entry.Value))) }
 function Test-CoopContracts($s) {
     if($s.access -match 'class SCR_Faction\b|override bool IsPlayable\(') { 'NATIVE_FACTION_SETUP' }
     if($s.recruitment -match 'SetRecruited\(|SetMaxAIPerGroup\(|RequestAddAIAgent\(|override bool IsRecruitable\(') { 'NATIVE_RECRUIT_RULES' }
+    if($s.recruitment -match 'GetMode\(\)|AICF_EMatchMode') { 'PURCHASE_ALL_MODES' }
     foreach($rule in @(
         @('rules','if \(factionKey == GetPlayerOnlyFaction\(\)\) return 0;\s*return AICF_Stage1Config.GROUP_SLOTS_PER_FACTION;','ROSTER_POLICY'),
         @('rules','bool UsesTicketDefeat.*?return GetManagedSlotCount\(factionKey\) > 0;','TICKET_POLICY'),
@@ -25,10 +26,10 @@ function Test-CoopContracts($s) {
         @('playerGroups','OnGameEnd\(\).*?Remove\(AICF_EnsureCoopPlayerGroup\);.*?super.OnGameEnd\(\);','GROUP_JOIN_CLEANUP'),
         @('playerGroups','IsGroupMenuAllowed\(\).*?GetMode\(\) != AICF_EMatchMode.STANDARD\) return true;\s*return super.IsGroupMenuAllowed\(\);','GROUP_MENU_ACCESS'),
         @('playerGroups','IsGroupLeaderVolunteeringAllowed\(\).*?GetMode\(\) != AICF_EMatchMode.STANDARD\) return true;\s*return super.IsGroupLeaderVolunteeringAllowed\(\);','GROUP_LEADER_ACCESS'),
-        @('recruitment','super.OnEntityRequested\(spawnedEntity, user, faction, service\);\s*if \(!Replication.IsServer\(\) \|\| !IsMaster\(\) \|\| !user\) return;.*?rules.GetMode\(\) == AICF_EMatchMode.STANDARD \|\| !rules.AllowsPlayerFaction\(requestedFaction.GetFactionKey\(\)\)\) return;','PURCHASE_AUTHORITY'),
+        @('recruitment','super.OnEntityRequested\(spawnedEntity, user, faction, service\);\s*if \(!Replication.IsServer\(\) \|\| !IsMaster\(\) \|\| !user\) return;.*?if \(!rules.AllowsPlayerFaction\(requestedFaction.GetFactionKey\(\)\)\) return;','PURCHASE_AUTHORITY'),
         @('recruitment','if \(!requestedFaction \|\| \(faction && faction != requestedFaction\)\) return;.*?if \(!provider \|\| !provider.CanCommandAI\(\)\) return;.*?playerId <= 0 \|\| players.GetPlayerControlledEntity\(playerId\) != user.*?factions.GetPlayerFaction\(playerId\) != requestedFaction \|\| SCR_Faction.GetEntityFaction\(user\) != requestedFaction.*?group.AICF_AllowPurchasedRecruitment\(requestedFaction\);','PURCHASE_IDENTITY'),
         @('recruitment','GetAgents\(agents\);\s*foreach \(AIAgent agent : agents\) AICF_AllowPurchasedMember\(agent\);.*?OnAgentAdded\(AIAgent child\).*?super.OnAgentAdded\(child\);\s*AICF_AllowPurchasedMember\(child\);','PURCHASE_ASYNC_MEMBERS'),
-        @('recruitment','m_sAICFPurchasedRecruitFaction.IsEmpty\(\) \|\| !agent \|\| agent.GetParentGroup\(\) != this.*?!mode.IsMaster\(\).*?rules.GetMode\(\) == AICF_EMatchMode.STANDARD.*?!rules.AllowsPlayerFaction\(m_sAICFPurchasedRecruitFaction\).*?GetFaction\(\) != faction.*?character.GetFaction\(\) != faction.*?GetPlayerIdFromControlledEntity\(character\) != 0','PURCHASE_MEMBER_FENCE'),
+        @('recruitment','m_sAICFPurchasedRecruitFaction.IsEmpty\(\) \|\| !agent \|\| agent.GetParentGroup\(\) != this.*?!mode.IsMaster\(\).*?!rules.AllowsPlayerFaction\(m_sAICFPurchasedRecruitFaction\).*?GetFaction\(\) != faction.*?character.GetFaction\(\) != faction.*?GetPlayerIdFromControlledEntity\(character\) != 0','PURCHASE_MEMBER_FENCE'),
         @('recruitment','if \(!character.IsRecruitable\(\)\) character.SetRecruitable\(true\);','PURCHASE_CHANGED_ONLY'),
         @('factionMenu','!factionButton.GetFaction\(\) \|\| rules.AllowsPlayerFaction\(factionButton.GetFaction\(\).GetFactionKey\(\)\)\) continue;.*?SetVisible\(false, false\);.*?m_aActiveFactionButtons.RemoveItem\(factionButton\);','FACTION_MENU'),
         @('access','CanRequestFaction_S\(Faction faction\).*?if \(faction && !AICF_MatchRules.FromMissionHeader\(\).AllowsPlayerFaction\(faction.GetFactionKey\(\)\)\) return false;.*?super.CanRequestFaction_S\(faction\)','FACTION_REQUEST'),
@@ -64,6 +65,7 @@ $mutations=@(
     @('playerGroups','return super.IsGroupMenuAllowed();','return true;','GROUP_MENU_ACCESS'),
     @('playerGroups','return super.IsGroupLeaderVolunteeringAllowed();','return true;','GROUP_LEADER_ACCESS'),
     @('recruitment','!Replication.IsServer() || !IsMaster() || !user','false','PURCHASE_AUTHORITY'),
+    @('recruitment','if (!rules.AllowsPlayerFaction(requestedFaction.GetFactionKey()))','if (rules.GetMode() == AICF_EMatchMode.STANDARD || !rules.AllowsPlayerFaction(requestedFaction.GetFactionKey()))','PURCHASE_ALL_MODES'),
     @('recruitment','!provider.CanCommandAI()','false','PURCHASE_IDENTITY'),
     @('recruitment','players.GetPlayerControlledEntity(playerId) != user','false','PURCHASE_IDENTITY'),
     @('recruitment','AICF_AllowPurchasedMember(child);','','PURCHASE_ASYNC_MEMBERS'),

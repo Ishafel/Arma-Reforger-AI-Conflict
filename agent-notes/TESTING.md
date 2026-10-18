@@ -1,5 +1,111 @@
 # Проверки и baseline
 
+## Казармы во всех режимах и support station area — 2026-10-18
+
+Ветка `codex/barracks-support-zone` от чистого `d5c8f90`. Evidence:
+`.codex-runtime/barracks-support-zone-20261018/`; game/server/Workbench
+**1.8.0.13**, `binaries.json`. Это продолжение пользовательских исправлений
+Arland; исходный Everon WCS Co-op из issue #46 не объявляется реализованным.
+
+До production правки:
+`Invoke-AICFChecks.ps1 -Name @('Test-CoopScenarioStatic.ps1',
+'Test-CoopScenarioLogContracts.ps1','Test-SquadCommandsContracts.ps1',
+'Test-ConstructionStatic.ps1') -EvidenceRoot <evidence>/before` — **4/4 PASS/0**.
+Первая передача имён внешнему PowerShell как одной строки отклонена до аудитов;
+запуск с массивом выполнил все четыре. Baseline Workbench и диагностические
+graphs `baseline`, `lookup`, `vehicles` — **PASS/0**.
+
+**Причина runtime error установлена по реальным repair trucks:** на сервере
+visual child станции имеет точное `<0,0,-2.5>`, на клиенте после сетевого spawn
+local position уже отличается, до первого GenerateAreaMesh. В `vehicles-before`
+штатный Init дал три SCRIPT(E): FIA Ural `<-0.00286865,0.0183182,-2.49963>`,
+USSR Ural `<0.00140381,0.00782013,-2.49927>`, M923
+`<-0.00354004,-0.00318909,-2.5014>`. Точный механизм округления внутри движка
+не измерялся. Это проблема клиентской привязки visual child, а не доказанный
+дефект авторинга prefab, как слишком категорично говорилось в старом отчёте.
+Первый обычный повтор `baseline` дал 0/0 SCRIPT(E), поэтому отсутствие ошибки
+в случайном запуске не использовалось как доказательство исправления.
+`baseline-runtime.json` сохраняет все полные stopped logs, counts и native exits.
+
+Production `AICF_SupportStationArea` восстанавливает local translation visual
+child из offset непосредственного parent station до native Init и генерации.
+Сам station/vehicle, offset/range и gameplay state не меняются; native validation
+и enabled lifecycle остаются. Логи не фильтруют эту ошибку.
+`AICF_CoopRecruitment` переименован в общий `AICF_BarracksRecruitment`: снят
+STANDARD opt-out во всех трёх gates. Разрешение остаётся только у группы,
+заказанной текущим игроком через troop provider своей разрешённой фракции;
+async membership/identity, native лидерство, ownership и cap сохраняются.
+
+`Compile.ps1 -Label production-stock`, `-Variant EveronRHS -Label production-rhs`,
+`-Variant EveronWCSRHS -Label production-wcs` — terminal Workbench **3/3 PASS/0**,
+Script validation successful, SCRIPT/VM/fatal 0. Graph берётся из canonical
+launcher DryRun, exact argv/manifest/full logs сохранены. Финальный fixture
+graph `fixed-fixture2` — **PASS/0**. Первая `fixed-fixture` — **FAIL/-1** из-за
+дублирования тестовых файлов в Integration и UI при подготовке stage; дубли
+удалены, production дефекта здесь не было. Неудачный compile log сохранён.
+`source-integrity.json`: **233/233** production `.c/.gproj/.conf/.meta` Core/Arland
+совпали со stage; `fixture-integrity.json`: **3/3** точные tracked fixtures.
+
+Все игровые запуски — только `Run.ps1` → `tools/Start-AICFRuntime.ps1`, server
+и client в отдельных сессиях, свежие profiles. Перед каждым видимым client
+пользователь уведомлён, что тест автоматический и действий не требует.
+Exact CLI/live PID/ROSTER_READY подтверждены launcher, manifests сохранены.
+
+| Run | Server/client strict gates | Native roster checks | Script errors | Прочие `(E)` server/client |
+|---|---|---|---|---|
+| `fixed-coop`, port 2430 | **PASS/0 + PASS/0** | **17/17**, US 10 / USSR 0 | **0/0** | 16/78 |
+| `fixed-standard-ussr`, port 2431 | **PASS/0 + PASS/0** | **14/14**, 10+10 | **0/0** | 24/79 |
+| `fixed-standard-us`, port 2432 | **PASS/0 + PASS/0** | **14/14**, 10+10 | **0/0** | 25/81 |
+
+Команды: `Run.ps1 -Case <run> -Variant StockCoopUSSR|Stock -Faction USSR|US
+-Duration 130000|140000 -SourceRoot <evidence>/fixed-stage -Port <port>` и
+отдельно те же аргументы с `-Client -Player`. `Audit.ps1 -Case <run>
+[-Faction US]` выполняет по обеим ролям
+`Test-CoopScenarioLog.ps1 -RequireBarracks -RequireSupportArea
+[-BarracksFaction US]` на полных остановленных logs с native exits **0**.
+`runtime-verdicts.json`: все **6/6 PASS/0**; это три успешные пары, а не
+объединение ролей из разных запусков. Указанный выше stock area blocker снят
+этим новым evidence; прежние FAIL остаются историческими FAIL.
+
+В каждом run: native покупка Guard за **300** supplies; реальный найм **4/4**,
+native cap **4**, неоплаченные Guard **4/4** сохранили `Recruitable=0`.
+Цена и balance проверены native consumer: Co-op **685→385**,
+STANDARD USSR **645→345**, STANDARD US **665→365**. Суммы raw debit/credit
+включают пересборку агрегата, это не отдельные денежные транзакции.
+Все три клиентские зоны в каждом run пришли с исходным расхождением и получили
+точный local offset, `center_error=0`, неизменный station transform/range и
+созданную native mesh. Остальные resource/backend/world/shutdown `(E)` не
+устранялись и сохранены; это не заявление о полностью чистом engine log.
+
+Полный `Invoke-AICFChecks.ps1 -EvidenceRoot <evidence>/offline-final` —
+**69/69 PASS/0**, runner exit **0**, без исключений. `offline-verdict.json`
+сверяет точное множество checks с текущим полным набором.
+Профильные проверки: Co-op static **39** negative mutations, support area static
+**9** negative mutations, log contracts **14 positive / 63 negative**.
+
+**NOT RUN:** ручной UI input/внешний вид — запрещены terminal-only workflow,
+native readbacks их не заменяют. Runtime покупки RHS/WCS/Everon, save/load,
+packaged/Workshop build и долгий soak не запускались; RHS/WCS подтверждены
+компиляцией, а не такой runtime матрицей.
+
+Тестовые game/Workbench процессы завершены. Три task stages архивированы
+с SHA-256 (`stage-archives.json`) и адресно удалены. Для повторного запуска
+нужно восстановить соответствующий source ZIP и использовать свежие profiles;
+полные logs/argv/manifests/native exits сохранены в evidence.
+Изменённые файлы:
+
+- Production `Integration/AICF_BarracksRecruitment.c` (rename прежнего
+  `AICF_CoopRecruitment.c`) и `Integration/AICF_SupportStationArea.c`.
+- `tests/fixtures/AICF_CoopScenarioProbe.c`, `AICF_CoopBarracksProbe.c`,
+  `AICF_SupportStationAreaProbe.c`; `tests/static/Test-CoopScenarioStatic.ps1`,
+  `Test-SupportStationAreaStatic.ps1`; `tests/log-audits/Test-CoopScenarioLog.ps1`;
+  `tests/contracts/Test-CoopScenarioLogContracts.ps1`.
+- `README.md`; `agent-notes/ARCHITECTURE.md`, `COOP_SCENARIO.md`, `GAMEPLAY.md`,
+  `README.md`, [SUPPORT_STATION_AREA.md](SUPPORT_STATION_AREA.md), `TESTING.md`,
+  `TEST_FIXTURES.md`.
+
+Push, PR, merge и публикация не выполнялись.
+
 ## Co-op: найм оплаченного отделения Guard из казармы — 2026-10-18
 
 Продолжение `codex/arland-coop-ussr` от чистого `22410e7`. Evidence:

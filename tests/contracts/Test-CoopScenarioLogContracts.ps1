@@ -8,7 +8,7 @@ $names=@('US_ROSTER','USSR_ROSTER','QUEUE_SETTLED','US_TICKETS','USSR_TICKETS','
 $positive=(@('[AICF][ROSTER_READY] us_groups=10 ussr_groups=0')+@($names | ForEach-Object {"[AICF][COOP_CASE] case=$_ pass=1"})+@('[AICF][COOP_DONE] mode=USSR checks=17 failed=0 elapsed_ms=30000','ENGINE : Game destroyed.')) -join "`n"
 $manifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Server';variant='StockCoopUSSR';arguments=@('-aicfCoopProbe','USSR')} | ConvertTo-Json -Compress)
 $positiveCases=0; $negativeCases=0
-function Check([string]$Name,[string]$Log,[string]$Launch,[int]$Expected,[string]$Rule,[switch]$Client,[switch]$RequirePlayer,[switch]$RequireRecruit,[switch]$RequireBarracks) {
+function Check([string]$Name,[string]$Log,[string]$Launch,[int]$Expected,[string]$Rule,[switch]$Client,[switch]$RequirePlayer,[switch]$RequireRecruit,[switch]$RequireBarracks,[string]$BarracksFaction='USSR',[switch]$RequireSupportArea) {
     [IO.File]::WriteAllText("$work/log.txt",$Log)
     [IO.File]::WriteAllText("$work/launcher.txt",$Launch)
     $invoke=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$audit,'-LogPath',"$work/log.txt",'-LauncherPath',"$work/launcher.txt",'-NativeExitPath',"$work/exit.txt")
@@ -16,6 +16,8 @@ function Check([string]$Name,[string]$Log,[string]$Launch,[int]$Expected,[string
     if($RequirePlayer){$invoke+='-RequirePlayer'}
     if($RequireRecruit){$invoke+='-RequireRecruit'}
     if($RequireBarracks){$invoke+='-RequireBarracks'}
+    if($RequireSupportArea){$invoke+='-RequireSupportArea'}
+    $invoke+=@('-BarracksFaction',$BarracksFaction)
     $output=& powershell.exe @invoke 2>&1
     if($LASTEXITCODE -ne $Expected -or ($Rule -and ($output -join "`n") -notmatch $Rule)) {throw "Unexpected case ${Name}: $output"}
     if($Expected -eq 0){$script:positiveCases++}else{$script:negativeCases++}
@@ -79,7 +81,7 @@ try {
     $barracksClient="[COOP_CLIENT_PLAYER] pass=1 entity=123`n[BUY_ENTER_REQUEST] sent=1`n[BUY_SENT] pass=1 leader=1 members=0 max=4`n"
     $barracksClient+=(@(0..3 | ForEach-Object {"[BUY_ADMISSION] pass=1 leader=1 recruitable=1 members=$_ max=4"}) -join "`n")
     $barracksClient+="`n[BUY_RESULT] pass=1 recruited=1 members=4`n[BUY_LIMIT] pass=1 members=4 max=4`nGame destroyed."
-    $barracksServer=$positive+"`n[BUY_CREATED] prefab={6F72F05752ED62A8}Prefabs/Groups/OPFOR/Group_USSR_FireGroup_Guard.et`n[BUY_ROSTER] count=4 recruitable=4`n[BUY_PAYMENT] pass=1 before=625 after=325 cost=300 debited=300 credited=0`n[BUY_UNPAID_GUARD] pass=1 count=4`n[BUY_SERVER] pass=1 members=4"
+    $barracksServer=$positive+"`n[BUY_CREATED] prefab={6F72F05752ED62A8}Prefabs/Groups/OPFOR/Group_USSR_FireGroup_Guard.et`n[BUY_FACTION] pass=1 faction=USSR`n[BUY_ROSTER] count=4 recruitable=4`n[BUY_PAYMENT] pass=1 before=625 after=325 cost=300 debited=300 credited=0`n[BUY_UNPAID_GUARD] pass=1 count=4`n[BUY_SERVER] pass=1 members=4"
     Check 'barracks-client-positive' $barracksClient $playerLaunch 0 '' -Client -RequireBarracks
     Check 'barracks-server-positive' $barracksServer $manifest 0 '' -RequireBarracks
     Check 'barracks-income-positive' ($barracksServer.Replace('after=325','after=335').Replace('credited=0','credited=10')) $manifest 0 '' -RequireBarracks
@@ -94,6 +96,7 @@ try {
     )) { Check $case[0] $case[1] $playerLaunch 1 $case[2] -Client -RequireBarracks }
     foreach($case in @(
         @('barracks-wrong-source',$barracksServer.Replace('Group_USSR_FireGroup_Guard.et','Group_USSR_FireGroup.et'),'BARRACKS_SOURCE'),
+        @('barracks-wrong-faction',$barracksServer.Replace('faction=USSR','faction=US'),'BARRACKS_FACTION'),
         @('barracks-no-authority',$barracksServer.Replace('[BUY_SERVER]','[OTHER]'),'BARRACKS_AUTHORITY'),
         @('barracks-stole-guards',$barracksServer.Replace('[BUY_UNPAID_GUARD] pass=1','[BUY_UNPAID_GUARD] pass=0'),'BARRACKS_UNPAID_GUARD'),
         @('barracks-free',$barracksServer.Replace('cost=300','cost=0'),'BARRACKS_PAYMENT'),
@@ -101,7 +104,40 @@ try {
         @('barracks-no-debit',$barracksServer.Replace('after=325','after=625'),'BARRACKS_PAYMENT')
     )) { Check $case[0] $case[1] $manifest 1 $case[2] -RequireBarracks }
     Check 'barracks-missing-player-mode' $barracksClient $clientLaunch 1 'PLAYER_MODE' -Client -RequireBarracks
-    Check 'barracks-wrong-variant' $barracksClient ($playerLaunch.Replace('StockCoopUSSR','Stock')) 1 'BARRACKS_VARIANT' -Client -RequireBarracks
+    Check 'barracks-wrong-variant' $barracksClient ($playerLaunch.Replace('StockCoopUSSR','Everon')) 1 'LAUNCH_ROLE_VARIANT' -Client -RequireBarracks
+    $standardServer=$barracksServer.Replace('us_groups=10 ussr_groups=0','us_groups=10 ussr_groups=10').Replace('mode=USSR checks=17','mode=STANDARD checks=14')
+    foreach($name in @('ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','NO_GROUP_SUMMARY')) {
+        $standardServer=$standardServer.Replace("[AICF][COOP_CASE] case=$name pass=1`n",'')
+    }
+    $standardManifest=$manifest.Replace('StockCoopUSSR','Stock').Replace('"USSR"','"STANDARD"')
+    $standardClientLaunch=$playerLaunch.Replace('StockCoopUSSR','Stock').Replace('"USSR"','"STANDARD"')
+    Check 'barracks-standard-server' $standardServer $standardManifest 0 '' -RequireBarracks
+    Check 'barracks-standard-client' $barracksClient $standardClientLaunch 0 '' -RequireBarracks -Client
+    $usServer=$standardServer.Replace('{6F72F05752ED62A8}Prefabs/Groups/OPFOR/Group_USSR_FireGroup_Guard.et','{0A8E20F50DA233E1}Prefabs/Groups/BLUFOR/Group_US_FireTeam_Guard.et').Replace('[BUY_FACTION] pass=1 faction=USSR','[BUY_FACTION] pass=1 faction=US')
+    $usManifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Server';variant='Stock';arguments=@('-aicfCoopProbe','STANDARD','-aicfBarracksFaction','US')} | ConvertTo-Json -Compress)
+    $usClientLaunch='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Client';variant='Stock';arguments=@('-aicfCoopProbe','STANDARD','-aicfCoopProbePlayer','1','-aicfBarracksFaction','US')} | ConvertTo-Json -Compress)+"`n[SERVER_READY] process_id=123 port=2431 log=server.log"
+    Check 'barracks-us-server' $usServer $usManifest 0 '' -RequireBarracks -BarracksFaction US
+    Check 'barracks-us-client' $barracksClient $usClientLaunch 0 '' -RequireBarracks -Client -BarracksFaction US
+    Check 'barracks-us-missing-faction-argument' $barracksClient $standardClientLaunch 1 'BARRACKS_FACTION_ARGUMENT' -RequireBarracks -Client -BarracksFaction US
+    Check 'barracks-us-forbidden-coop' $barracksClient $playerLaunch 1 'BARRACKS_VARIANT' -RequireBarracks -Client -BarracksFaction US
+    Check 'barracks-standard-script-error' ($barracksClient+"`nSCRIPT (E): SupportStationAreaMesh") $standardClientLaunch 1 'SCRIPT_FATAL' -RequireBarracks -Client
+    $areaClient=$barracksClient
+    foreach($part in @('Ural4320_FIA_repair_box.et','Ural4320_repair_box.et','M923A1_repair_box.et')) {
+        $areaClient+="`n[AREA_CASE] pass=1 server=0 before_mismatch=1 station_unchanged=1 center_error=0 prefab=$part"
+    }
+    $areaServer=$barracksServer
+    foreach($vehicle in @('Ural4320_repair_FIA.et','Ural4320_repair.et','M923A1_repair.et')) { $areaServer+="`n[AREA_SPAWN] pass=1 prefab=$vehicle" }
+    Check 'area-client-positive' $areaClient $playerLaunch 0 '' -RequireBarracks -RequireSupportArea -Client
+    Check 'area-server-positive' $areaServer $manifest 0 '' -RequireBarracks -RequireSupportArea
+    foreach($case in @(
+        @('area-not-reproduced',$areaClient.Replace('before_mismatch=1','before_mismatch=0'),'SUPPORT_AREA_REPRODUCTION'),
+        @('area-missing-truck',$areaClient.Replace('M923A1_repair_box.et','other.et'),'SUPPORT_AREA_M923A1'),
+        @('area-moved-station',$areaClient.Replace('station_unchanged=1','station_unchanged=0'),'SUPPORT_AREA_Ural4320'),
+        @('area-bad-center',$areaClient.Replace('center_error=0','center_error=0.01'),'SUPPORT_AREA_CENTER'),
+        @('area-failed',$areaClient.Replace('[AREA_CASE] pass=1','[AREA_CASE] pass=0'),'SUPPORT_AREA_FAILED'),
+        @('area-script-error',($areaClient+"`nSCRIPT (E): SupportStationAreaMesh"),'SCRIPT_FATAL')
+    )) { Check $case[0] $case[1] $playerLaunch 1 $case[2] -RequireBarracks -RequireSupportArea -Client }
+    Check 'area-spawn-failed' ($areaServer.Replace('[AREA_SPAWN] pass=1','[AREA_SPAWN] pass=0')) $manifest 1 'SUPPORT_AREA_FAILED' -RequireBarracks -RequireSupportArea
     '1' | Set-Content "$work/exit.txt"
     Check 'native-exit' $positive $manifest 1 'NATIVE_EXIT'
 }

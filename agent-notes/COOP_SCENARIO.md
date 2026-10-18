@@ -66,16 +66,17 @@ Welcome/Deployment Setup — отдельный список `SCR_WelcomeScreenF
 
 Штатный список казармы включает `Group_USSR_FireGroup_Guard`: его четыре
 `Character_USSR_*_Guard` имеют `Recruitable=0`, поэтому native Recruit отказывает
-даже лидеру пустой группы. `AICF_CoopRecruitment.OnEntityRequested` после native
-обработки допускает только server/master, human-side Co-op, troop provider
+даже лидеру пустой группы. `AICF_BarracksRecruitment.OnEntityRequested` после native
+обработки допускает только server/master, разрешённую MatchRules фракцию, troop provider
 с `CanCommandAI` и текущий controlled entity игрока той же фракции.
 Фракция определяется через `SCR_AIGroup.GetFaction`: штатный callback получает
 null, поскольку `SCR_Faction.GetEntityFaction` ищет отсутствующий у группы
 `FactionAffiliationComponent`. Ненулевое несовпадение callback faction отклоняется.
 Server-only marker на конкретной группе позволяет выставить `SetRecruitable(true)`
 существующим и новым async members при точном parent group и faction совпадении.
-Неизменённые флаги не вызывают BumpMe. Обычные Guard, helpers, чужие группы и
-STANDARD разрешение не получают. Найм выполняет native `RequestAddAIAgent`;
+Неизменённые флаги не вызывают BumpMe. Обычные Guard, helpers и чужие группы
+разрешение не получают. Купленные игроком группы допускаются также в STANDARD.
+Найм выполняет native `RequestAddAIAgent`;
 права лидера и штатный лимит **4 ИИ на player group** сохраняются.
 
 `AICF_ConstructionPlanner.Commander` явно применяет
@@ -146,5 +147,8 @@ native Recruit отказывает при заполнении лимита 4. 
 `Test-CoopScenarioLog.ps1 -RequireBarracks` требует эти readbacks, цену/списание,
 полные остановленные логи, manifest и readiness. Он не заменяет прежний
 probe голоса лидера/intro; `-RequireRecruit` и `-RequireBarracks` взаимоисключаются.
+Этот же barracks probe допускает STANDARD, `-aicfBarracksFaction US|USSR`
+(default USSR). Для US log audit требует `-BarracksFaction US`; фракция сверяется
+с manifest и authority readback. Механика общая: [GAMEPLAY.md](GAMEPLAY.md#найм-купленных-в-казарме-бойцов).
 
 Результаты свежих проверок, полные логи и ограничения — в [TESTING.md](TESTING.md).

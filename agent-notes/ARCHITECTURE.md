@@ -40,12 +40,20 @@ Co-op фильтрует меню и authority faction requests, сохраня�
 `AICF_CoopPlayerGroups` сохраняет штатного владельца player groups: включает
 их меню и выдвижение в лидеры, а после faction callbacks выполняет native
 join/create для игрока без группы. Roster AICF и права других лидеров не меняет.
-`AICF_CoopRecruitment` после native `OnEntityRequested` разрешает найм членов
+`AICF_BarracksRecruitment` после native `OnEntityRequested` разрешает найм членов
 оплаченной player-side группы из казармы, включая Guard prefabs. Фракция группы
 берётся через `SCR_AIGroup.GetFaction`, а не через отсутствующий у неё affiliation
 component. Authority повторно сверяет текущего игрока и его faction; разрешение
 применяется к существующим и асинхронно добавленным members той же группы.
 Native лидерство, лимит и ownership RPC сохраняют свои проверки.
+Это общая Core механика для STANDARD и Co-op; ограничения player faction
+по-прежнему задаёт MatchRules. Контракт: [GAMEPLAY.md](GAMEPLAY.md#найм-купленных-в-казарме-бойцов).
+
+`AICF_SupportStationArea` восстанавливает local position визуального child
+по offset непосредственного parent support station до native Init/GenerateAreaMesh.
+Сама станция, дальность и её gameplay state сохраняются. Вложенные и ошибочные
+иерархии остаются под native validation. Причина и проверка:
+[SUPPORT_STATION_AREA.md](SUPPORT_STATION_AREA.md).
 
 Цены штатных RHS/WCS меню принадлежат integration policy/UIInfo adapter,
 см. [MENU_PRICES.md](MENU_PRICES.md). Adapter возвращает CAMPAIGN quote;

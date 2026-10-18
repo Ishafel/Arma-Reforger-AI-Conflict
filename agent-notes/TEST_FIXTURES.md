@@ -21,8 +21,23 @@ resource consumer и найм всех четырёх через `RequestAddAIAg
 не заменяет оплату и разрешения сервера. Отдельный неоплаченный Guard остаётся
 недоступным для найма; native limit 4 проверяется после заполнения player slave.
 `Test-CoopScenarioLog.ps1 -RequireBarracks` запускается по обеим ролям после
-их остановки. Клиентский запуск видим пользователю: до запуска объясни,
+их остановки. Допускает STANDARD и Co-op: `-aicfBarracksFaction US|USSR`
+(default USSR), log audit `-BarracksFaction US|USSR`. Выбираются faction HQ,
+loadout и соответствующий Guard prefab; отсутствие player group устраняется
+штатным `CreateAndJoinGroup`, не назначением лидера вручную.
+Клиентский запуск видим пользователю: до запуска объясни,
 что тест автоматический, действий игрока не требует и сам завершится.
+
+`AICF_SupportStationAreaProbe.c` копировать в UI stage как
+`AICF_ZSupportStationAreaProbe.c` вместе с основным probe, при необходимости
+с barracks probe. Создаёт реальные Ural repair USSR/FIA и M923 repair рядом
+с HQ тестовой фракции. Нативная клиентская инициализация проверяет исходное
+расхождение, точное равенство local offset, world center с допуском 2 мм,
+сохранность world transform станции, radius и создание mesh.
+Полные stopped logs обеих ролей проверяются дополнительным
+`Test-CoopScenarioLog.ps1 -RequireSupportArea`; SCRIPT(E) остаётся FAIL.
+Проверка требует хотя бы одно реальное исходное расхождение, а не только
+отсутствие сообщений. Контракт: [SUPPORT_STATION_AREA.md](SUPPORT_STATION_AREA.md).
 
 `AICF_CoopScenarioProbe.c`: только isolated `Core/UI/` stage,
 `-aicfCoopProbe USSR|STANDARD`, необязательные `aicfCoopProbeDurationMs` и
