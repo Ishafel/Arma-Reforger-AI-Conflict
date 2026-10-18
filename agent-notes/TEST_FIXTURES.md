@@ -9,7 +9,9 @@ policy, budget, JIP snapshot и завершение по подготовлен
 Физический захват, UI input и законченный supply trip эта fixture не доказывает.
 Команды и контракты — [COOP_SCENARIO.md](COOP_SCENARIO.md).
 Client `-aicfCoopProbePlayer 1` проверяет реальный вход/respawn за СССР через
-native intents; log audit с `-Client -RequirePlayer` требует controlled character.
+native intents; log audit с `-Client -RequirePlayer` требует controlled character
+и два отрицательных authority ответа на реальные запросы US/FIA. Фильтр меню
+и запрет auto construction игроков защищены отдельными static contracts.
 
 ## Shutdown private equipment worlds — issue #63
 
@@ -23,6 +25,9 @@ Control `aicfShutdownNoEquipment 1` существует только в fixture
 При `-Batches` аудит требует в manifest `-aicfShutdownMode batches` и
 `-aicfShutdownEquipmentBatch 1`; обычный LoadoutDraft batch не подтверждает
 EquipmentDraft cleanup.
+Equipment batch также обязан выполнить 24 уникальных Build/destructor цикла
+EquipmentPlan с `SHUTDOWN_PLAN_CLEAR passed=1`. Отсутствие, отказ или дубликат
+этого readback отклоняются отдельно от прежних Draft operations.
 Server audit без `-Batches` требует точный `-aicfShutdownMode idle` и
 `SHUTDOWN_DONE mode=idle`, чтобы batch run не считался idle control.
 

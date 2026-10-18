@@ -56,6 +56,10 @@ if ($Client) {
         if ($operations.Count -ne 24 -or @($operations|Where-Object {$_.Groups[4].Value -ne '1'}).Count) { $failures.Add('OPERATIONS') }
         $keys=@($operations|ForEach-Object {$_.Groups[1].Value+':'+$_.Groups[2].Value+':'+$_.Groups[3].Value}|Select-Object -Unique)
         if ($keys.Count -ne 24) { $failures.Add('OPERATION_IDENTITIES') }
+        $plans=[regex]::Matches($log,'\[SHUTDOWN_PLAN_CLEAR\] batch=(\d) iteration=(\d) side=(USSR|US) passed=([01])')
+        if ($plans.Count -ne 24 -or @($plans|Where-Object {$_.Groups[4].Value -ne '1'}).Count) { $failures.Add('PLAN_OPERATIONS') }
+        $planKeys=@($plans|ForEach-Object {$_.Groups[1].Value+':'+$_.Groups[2].Value+':'+$_.Groups[3].Value}|Select-Object -Unique)
+        if ($planKeys.Count -ne 24) { $failures.Add('PLAN_IDENTITIES') }
         foreach ($batch in 1..3) {
             if ($log -notmatch ('\[SHUTDOWN_BATCH\] batch='+$batch+' operations=8 failures=0')) { $failures.Add("BATCH_$batch") }
         }

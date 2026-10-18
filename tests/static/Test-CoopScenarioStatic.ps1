@@ -7,11 +7,19 @@ foreach($entry in @{
     rules='Config/AICF_MatchRules.c'; config='Config/AICF_Stage1Config.c'; state='State/AICF_FactionState.c'
     controller='Bootstrap/AICF_MatchController.c'; campaign='Integration/AICF_CampaignState.c'
     ui='UI/AICF_StrategicUI.c'; victory='Victory/AICF_VictorySystem.c'
+    access='Integration/AICF_CoopFactionAccess.c'; construction='Construction/AICF_ConstructionPlanner.c'
+    factionMenu='UI/AICF_CoopFactionMenu.c'
 }.GetEnumerator()) { $sources[$entry.Key]=ConvertTo-AICFCodeText ([IO.File]::ReadAllText((Join-Path $core $entry.Value))) }
 function Test-CoopContracts($s) {
+    if($s.access -match 'class SCR_Faction\b|override bool IsPlayable\(') { 'NATIVE_FACTION_SETUP' }
     foreach($rule in @(
         @('rules','if \(factionKey == GetPlayerOnlyFaction\(\)\) return 0;\s*return AICF_Stage1Config.GROUP_SLOTS_PER_FACTION;','ROSTER_POLICY'),
         @('rules','bool UsesTicketDefeat.*?return GetManagedSlotCount\(factionKey\) > 0;','TICKET_POLICY'),
+        @('rules','bool AllowsPlayerFaction.*?if \(!IsValid\(\)\) return false;.*?if \(m_eMode == AICF_EMatchMode.STANDARD\) return true;.*?GetStableFactionKey\(factionKey\) == GetPlayerOnlyFaction\(\)','FACTION_POLICY'),
+        @('factionMenu','!factionButton.GetFaction\(\) \|\| rules.AllowsPlayerFaction\(factionButton.GetFaction\(\).GetFactionKey\(\)\)\) continue;.*?SetVisible\(false, false\);.*?m_aActiveFactionButtons.RemoveItem\(factionButton\);','FACTION_MENU'),
+        @('access','CanRequestFaction_S\(Faction faction\).*?if \(faction && !AICF_MatchRules.FromMissionHeader\(\).AllowsPlayerFaction\(faction.GetFactionKey\(\)\)\) return false;.*?super.CanRequestFaction_S\(faction\)','FACTION_REQUEST'),
+        @('access','SetFaction_S\(Faction faction\).*?if \(faction && !AICF_MatchRules.FromMissionHeader\(\).AllowsPlayerFaction\(faction.GetFactionKey\(\)\)\) return false;.*?super.SetFaction_S\(faction\)','FACTION_ASSIGNMENT'),
+        @('construction','Commander\(SCR_CampaignFaction faction\).*?!m_MatchRules.AllowsAutomaticConstruction\(faction.GetFactionKey\(\)\)\)\s*return null;','CONSTRUCTION_POLICY'),
         @('config','m_MatchRules.GetMode\(\) == AICF_EMatchMode.STANDARD \|\| m_sAICommanderMode == m_MatchRules.GetAICommanderMode\(\)','COMMANDER_CONFLICT'),
         @('config','ClampInt\(value, GetMinimumManagedAgents\(\), MAX_MANAGED_AGENTS\)','BUDGET'),
         @('state','m_iExpectedSlotCount = resolvedConfig.GetMatchRules\(\).GetManagedSlotCount\(factionKey\);','SLOT_POLICY'),
@@ -30,6 +38,12 @@ $failures=@(Test-CoopContracts $sources)
 $mutations=@(
     @('rules','if (factionKey == GetPlayerOnlyFaction()) return 0;','','ROSTER_POLICY'),
     @('rules','return GetManagedSlotCount(factionKey) > 0;','return true;','TICKET_POLICY'),
+    @('rules','GetStableFactionKey(factionKey) == GetPlayerOnlyFaction()','true','FACTION_POLICY'),
+    @('factionMenu','m_aActiveFactionButtons.RemoveItem(factionButton);','','FACTION_MENU'),
+    @('access','return super.CanRequestFaction_S(faction);','return true;','FACTION_REQUEST'),
+    @('access','return super.SetFaction_S(faction);','return true;','FACTION_ASSIGNMENT'),
+    @('access','modded class SCR_PlayerFactionAffiliationComponent','modded class SCR_Faction { override bool IsPlayable() { return false; } } modded class SCR_PlayerFactionAffiliationComponent','NATIVE_FACTION_SETUP'),
+    @('construction','!m_MatchRules.AllowsAutomaticConstruction(faction.GetFactionKey())','false','CONSTRUCTION_POLICY'),
     @('config','m_sAICommanderMode == m_MatchRules.GetAICommanderMode()','true','COMMANDER_CONFLICT'),
     @('config','ClampInt(value, GetMinimumManagedAgents(), MAX_MANAGED_AGENTS)','ClampInt(value, MIN_MANAGED_AGENTS, MAX_MANAGED_AGENTS)','BUDGET'),
     @('state','slotId < m_iExpectedSlotCount','slotId < AICF_Stage1Config.GROUP_SLOTS_PER_FACTION','SLOT_CREATION'),

@@ -26,6 +26,25 @@ class AICF_MatchRules
 		return m_eMode;
 	}
 
+	static AICF_MatchRules FromMissionHeader()
+	{
+		SCR_MissionHeaderCampaign header = SCR_MissionHeaderCampaign.Cast(GetGame().GetMissionHeader());
+		if (header) return new AICF_MatchRules(header.m_eAICFMatchMode);
+		return new AICF_MatchRules();
+	}
+
+	bool AllowsPlayerFaction(FactionKey factionKey)
+	{
+		if (!IsValid()) return false;
+		if (m_eMode == AICF_EMatchMode.STANDARD) return true;
+		return AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey) == GetPlayerOnlyFaction();
+	}
+
+	bool AllowsAutomaticConstruction(FactionKey factionKey)
+	{
+		return GetManagedSlotCount(factionKey) > 0;
+	}
+
 	bool IsValid()
 	{
 		return m_eMode >= AICF_EMatchMode.STANDARD && m_eMode <= AICF_EMatchMode.COOP_USSR;

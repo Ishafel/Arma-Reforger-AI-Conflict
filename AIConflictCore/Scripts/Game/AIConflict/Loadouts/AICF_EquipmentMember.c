@@ -89,9 +89,13 @@ class AICF_EquipmentPlan
 		if (m_sSignature.IsEmpty() || !AICF_LoadoutInventory.Capture(model, m_sInventory)) return false;
 		BaseWeaponComponent modelPrimary = AICF_EquipmentInventory.Weapon(model, false);
 		m_iPrimaryRounds = AICF_EquipmentInventory.Rounds(model, modelPrimary);
-		if (modelPrimary)
-			for (int barrel; barrel < AICF_EquipmentInventory.Muzzle(modelPrimary).GetBarrelsCount(); barrel++)
-				if (AICF_EquipmentInventory.Muzzle(modelPrimary).IsBarrelChambered(barrel)) m_iPrimaryRounds--;
+		// Inline native return в условии for удерживает последнюю временную
+		// muzzle reference после выхода из цикла. Явно ограничиваем её lifetime.
+		BaseMuzzleComponent modelMuzzle = AICF_EquipmentInventory.Muzzle(modelPrimary);
+		if (modelMuzzle)
+			for (int barrel; barrel < modelMuzzle.GetBarrelsCount(); barrel++)
+				if (modelMuzzle.IsBarrelChambered(barrel)) m_iPrimaryRounds--;
+		modelMuzzle = null;
 		m_iLauncherRounds = AICF_EquipmentInventory.Rounds(model, AICF_EquipmentInventory.Weapon(model, true));
 		array<IEntity> rawItems = {};
 		array<IEntity> items = {};

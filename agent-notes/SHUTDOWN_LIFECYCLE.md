@@ -38,6 +38,22 @@ Control без обновления equipment service устранял leaks; п
 - `EquipmentPlan` продолжает разрывать hand/weapon связь перед освобождением
   модели. Само исчезновение script draft не заменяет native entity readback.
 
+## Lifetime muzzle в EquipmentPlan
+
+В `EquipmentPlan.Build` inline-вызов `AICF_EquipmentInventory.Muzzle(modelPrimary)`
+в условии `for` оставлял одну native reference после выхода из цикла. Ранний
+`Stop(true)` давал `Can't delete instance (of class: 'MuzzleComponent') with 1 references`
+и VM exception при удалении модели. Порядок удаления roots и поздний unarm
+этого удержания не устраняли. Muzzle теперь берётся в локальную переменную,
+цикл обращается к ней, после чтения ссылка явно обнуляется. Данные боезапаса,
+владельцы world и существующий cleanup не меняются.
+
+Предыдущий PASS issue #63 проверял обычный OnGameEnd и пакеты операций над
+Draft. Он не подтверждал ранний Stop и полный цикл Build/destructor именно
+EquipmentPlan внутри каждого пакета. Теперь эти циклы входят в native oracle;
+контроль с возвратом одного inline-вызова проверяет, что gate ловит дефект.
+Свежие verdict и evidence — в [TESTING.md](TESTING.md).
+
 ## Терминальная проверка
 
 `tests/fixtures/AICF_ShutdownProbe.c` добавляется только в isolated Core stage.
@@ -47,6 +63,9 @@ constructor/destructor counters и weak entity readback всех inventory items
 сторонам), пакетов — 3; каждый выполняет Build/Signature/Capture/Restore,
 сравнение signature, navigation Build/Clear и Draft.Clear. Флаг
 `-aicfShutdownEquipmentBatch 1` выбирает direct EquipmentDraft вместо UI draft.
+В этом режиме каждая операция также строит EquipmentPlan, освобождает его
+и проверяет weak character readback: 24 уникальных `SHUTDOWN_PLAN_CLEAR`
+с `passed=1` обязательны для `Test-ShutdownLog.ps1 -Batches`.
 Snapshots снимаются до/после пакетов и после не менее 15 секунд покоя.
 
 Для control без постоянных models используется только fixture-флаг

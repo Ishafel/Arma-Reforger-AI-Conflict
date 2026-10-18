@@ -26,6 +26,7 @@ function Rules($inputSources) {
         UNIQUE_ROUNDS = $inventory.Contains('return RoundsIn(items, weapon);') -and $rounds.Contains('UniqueItems(items, unique);') -and $rounds.Contains('foreach (IEntity item : unique)')
         UNIQUE_CONSUMABLES = $member.Contains('return ConsumablesIn(items, prefab);') -and $consumables.Contains('AICF_EquipmentInventory.UniqueItems(items, unique);') -and $consumables.Contains('foreach (IEntity item : unique)')
         UNIQUE_TARGET = $member.Contains('AICF_EquipmentInventory.UniqueItems(rawItems, items);')
+        MODEL_MUZZLE_LIFETIME = $member.Contains('BaseMuzzleComponent modelMuzzle = AICF_EquipmentInventory.Muzzle(modelPrimary);') -and $member.Contains('modelMuzzle = null;') -and $member -notmatch 'for\s*\([^;]*;[^;]*AICF_EquipmentInventory\.Muzzle\('
         REAL_TRANSFER = $inventory.Contains('target.TryMoveItemToStorage(item, storage)') -and $inventory.Contains('target.Contains(item) && !source.Contains(item)') -and $inventory -notmatch 'SpawnEntity|AddSupplies|SetAmmoCount|Ticket'
         MEMBER_REVISION = $member.Contains('m_Slot.GetRosterMember(m_iIndex) != m_Character') -and $member.Contains('binding.m_iRevision == m_iRevision') -and $member.Contains('m_Slot.GetSpawnGeneration() != m_iGeneration')
         OPERATION_IDENTITY = $order.Contains('m_Slot.GetEquipmentOrder() == this') -and $order.Contains('m_Slot.GetStrategicIntentRevision() == m_iIntent') -and $order.Contains('m_Slot.GetStrategicAssignmentRevision() == m_iAssignment')
@@ -51,6 +52,8 @@ $mutations = @(
     @('Loadouts/AICF_EquipmentInventory.c','foreach (IEntity item : unique)', 'foreach (IEntity item : items)', 'UNIQUE_ROUNDS'),
     @('Loadouts/AICF_EquipmentMember.c','foreach (IEntity item : unique)', 'foreach (IEntity item : items)', 'UNIQUE_CONSUMABLES'),
     @('Loadouts/AICF_EquipmentMember.c','AICF_EquipmentInventory.UniqueItems(rawItems, items);', 'items = rawItems;', 'UNIQUE_TARGET'),
+    @('Loadouts/AICF_EquipmentMember.c','modelMuzzle = null;', '', 'MODEL_MUZZLE_LIFETIME'),
+    @('Loadouts/AICF_EquipmentMember.c','barrel < modelMuzzle.GetBarrelsCount()', 'barrel < AICF_EquipmentInventory.Muzzle(modelPrimary).GetBarrelsCount()', 'MODEL_MUZZLE_LIFETIME'),
     @('Loadouts/AICF_EquipmentInventory.c','muzzle.GetMagazineWell().Type() == magazine.GetMagazineWell().Type()', 'true', 'NATIVE_COMPATIBILITY'),
     @('Loadouts/AICF_EquipmentInventory.c','member.m_Character.GetOrigin(), corpse.GetOrigin(), AICF_EquipmentConfig.TRANSFER_METERS', 'member.m_Character.GetOrigin(), corpse.GetOrigin(), 5000', 'PHYSICAL_TRANSFER'),
     @('Loadouts/AICF_EquipmentInventory.c','target.Contains(item) && !source.Contains(item)', 'target.Contains(item)', 'REAL_TRANSFER'),

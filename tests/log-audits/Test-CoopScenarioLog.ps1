@@ -31,13 +31,19 @@ if($manifest) {
         if([regex]::Matches($log,'\[COOP_CLIENT_DONE\] pass=1 samples=\d+').Count -ne 1) { $failures.Add('CLIENT_READBACK') }
         if($RequirePlayer -and $log -notmatch '\[COOP_CLIENT_PLAYER\] pass=1 entity=') { $failures.Add('PLAYER_SPAWN') }
         if($RequirePlayer) {
+            foreach($side in @('US','FIA')) {
+                if([regex]::Matches($log,("\[COOP_CLIENT_FACTION\] faction=$side accepted=0 pass=1")).Count -ne 1) { $failures.Add("FACTION_DENIED_$side") }
+            }
+            if($log -match '\[COOP_CLIENT_FACTION\][^\r\n]*pass=0') { $failures.Add('FACTION_ACCESS_FAILED') }
+        }
+        if($RequirePlayer) {
             $playerIndices=@(for($i=0;$i -lt $argsList.Count;$i++) { if($argsList[$i] -ceq '-aicfCoopProbePlayer') {$i} })
             if($playerIndices.Count -ne 1 -or $playerIndices[0]+1 -ge $argsList.Count -or $argsList[$playerIndices[0]+1] -cne '1') { $failures.Add('PLAYER_MODE') }
         }
     } else {
         $done=[regex]::Matches($log,'\[COOP_DONE\] mode=(USSR|STANDARD) checks=(\d+) failed=0 elapsed_ms=(\d+)')
         if($done.Count -ne 1 -or $done[0].Groups[1].Value -cne $mode -or [int]$done[0].Groups[3].Value -lt $MinimumObservationMs) { $failures.Add('COMPLETION') }
-        $expected=@('US_ROSTER','USSR_ROSTER','QUEUE_SETTLED','US_TICKETS','USSR_TICKETS','COMMANDERS','HELPERS','BUDGET_FLOOR','STANDARD_POLICY','MIRROR_POLICY','STABLE_ROSTER','REPLICATED_MODE')
+        $expected=@('US_ROSTER','USSR_ROSTER','QUEUE_SETTLED','US_TICKETS','USSR_TICKETS','COMMANDERS','HELPERS','BUDGET_FLOOR','STANDARD_POLICY','MIRROR_POLICY','STABLE_ROSTER','REPLICATED_MODE','FACTION_ACCESS','AUTO_CONSTRUCTION')
         if($mode -eq 'USSR') { $expected+=@('ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','NO_GROUP_SUMMARY') }
         if($ExpectedWinner) { $expected+='TERRITORIAL_WINNER' }
         $cases=[regex]::Matches($log,'\[COOP_CASE\] case=(\w+) pass=1')

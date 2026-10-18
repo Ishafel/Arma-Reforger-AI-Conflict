@@ -40,8 +40,18 @@ Match mode реплицируется через RplProp штатного campai
 не создаётся, HUD показывает Co-op/припасы/территориальную цель. Supply UI
 сохраняется. Server handlers повторно определяют фракцию игрока и получают
 slot из её state: несуществующий slot нельзя настроить или пополнить.
-Штатный выбор фракции и native заказ ИИ не запрещены; это отключение managed
-combat roster AICF. Игроки выбирают СССР.
+`AICF_CoopFactionMenu` исключает остальные стороны из native списка выбора,
+его active buttons и случайного выбора. `CanRequestFaction_S` и `SetFaction_S`
+на authority отдельно отвергают чужую сторону, включая прямой запрос клиента;
+null для снятия affiliation сохраняет native обработку. STANDARD делегирует
+штатному поведению. Глобальный `SCR_Faction.IsPlayable` не меняется: он также
+нужен native Conflict для определения противников и HQ. Native заказ ИИ не запрещён.
+
+`AICF_ConstructionPlanner.Commander` явно применяет
+`AllowsAutomaticConstruction`: для СССР возвращает null до выбора типа, поиска
+места и commit заказа. Тот же gate инвалидирует pending orders. Строительство
+США сохраняется. `AICF_BaseBuilderService` не отключается и продолжает достройку
+оплаченных stock layouts, в том числе поставленных игроком за СССР.
 
 ## Запуск и проверки
 
@@ -63,15 +73,17 @@ Medium/Hard headers для обеих ролей.
 
 `tests/fixtures/AICF_CoopScenarioProbe.c` копируется только в `Core/UI/`
 изолированного stage. `-aicfCoopProbe USSR|STANDARD` проверяет реальный запуск,
-число slots, readiness, ticket policy, helpers, budget, стабильность roster и
+число slots, readiness, ticket policy, helpers, budget, faction access,
+допуск автоматического строительства по каждой стороне, стабильность roster и
 replicated state. `-aicfCoopProbeDurationMs` задаёт интервал наблюдения.
 `-aicfCoopProbeWinner US|USSR` в конце меняет владельца реальных целей и
 проверяет production territorial end. Это подготовка fixture, не доказательство
 физического захвата игроком. Клиент с тем же probe читает JIP snapshot и
 закрывается. Fixture callbacks удаляются в OnGameEnd.
 
-Client-флаг `-aicfCoopProbePlayer 1` дополнительно отправляет штатные faction и
-respawn intents за СССР и ждёт реального controlled character этой фракции.
+Client-флаг `-aicfCoopProbePlayer 1` сначала отправляет настоящие native запросы
+на вступление в US и FIA и проверяет отрицательные ответы сервера. Затем
+отправляет faction/respawn intents за СССР и ждёт реального controlled character.
 `Test-CoopScenarioLog.ps1 -Client -RequirePlayer` требует этот native readback.
 Он не обходит server validation и не использует GUI input.
 

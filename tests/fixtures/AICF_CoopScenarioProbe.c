@@ -31,6 +31,8 @@ modded class AICF_MatchController
 			AICF_CoopCheck("USSR_TICKETS", m_USSRState.UsesTicketDefeat() == (expectedUSSR > 0));
 			AICF_CoopCheck("COMMANDERS", m_USAICommander && ((expectedUSSR > 0) == (m_USSRAICommander != null)));
 			AICF_CoopCheck("HELPERS", m_BaseBuilders && m_Logistics && m_Construction && m_EconomySystem && m_VehicleCoordinator);
+			AICF_CoopCheck("FACTION_ACCESS", m_USFaction.IsPlayable() && m_USSRFaction.IsPlayable() && m_Config.GetMatchRules().AllowsPlayerFaction("US") == (expectedUSSR > 0) && m_Config.GetMatchRules().AllowsPlayerFaction("USSR") && m_Config.GetMatchRules().AllowsPlayerFaction("FIA") == (expectedUSSR > 0));
+			AICF_CoopCheck("AUTO_CONSTRUCTION", m_Construction.AICF_CoopProbeAutomatic(m_USFaction) && m_Construction.AICF_CoopProbeAutomatic(m_USSRFaction) == (expectedUSSR > 0));
 			AICF_Stage1Config budget = new AICF_Stage1Config();
 			budget.SetMaxManagedAgents(1);
 			AICF_CoopCheck("BUDGET_FLOOR", budget.GetMaxManagedAgents() == (10 + expectedUSSR) * 10);
@@ -84,6 +86,44 @@ modded class SCR_GameModeCampaign
 {
 	protected int m_iCoopClientSamples;
 	protected bool m_bCoopClientFinished;
+	protected SCR_PlayerFactionAffiliationComponent m_AICFCoopAffiliation;
+	protected int m_iAICFCoopDenied;
+	protected bool m_bAICFCoopRequestPending;
+	protected bool m_bAICFCoopAccessFailed;
+
+	protected void AICF_CoopFactionResponse(SCR_PlayerFactionAffiliationComponent component, int factionIndex, bool response)
+	{
+		Faction faction = GetGame().GetFactionManager().GetFactionByIndex(factionIndex);
+		string expected = "US";
+		if (m_iAICFCoopDenied == 1) expected = "FIA";
+		bool passed = faction && faction.GetFactionKey() == expected && !response && !component.GetAffiliatedFaction();
+		Print(string.Format("[AICF][COOP_CLIENT_FACTION] faction=%1 accepted=%2 pass=%3", expected, response, passed));
+		if (!passed) m_bAICFCoopAccessFailed = true;
+		m_bAICFCoopRequestPending = false;
+		m_iAICFCoopDenied++;
+		if (m_iAICFCoopDenied == 2) component.GetOnPlayerFactionResponseInvoker_O().Remove(AICF_CoopFactionResponse);
+	}
+
+	protected bool AICF_CoopClientAccess()
+	{
+		if (m_iAICFCoopDenied == 2) return !m_bAICFCoopAccessFailed;
+		PlayerController player = GetGame().GetPlayerController();
+		if (!player) return false;
+		if (!m_AICFCoopAffiliation)
+		{
+			m_AICFCoopAffiliation = SCR_PlayerFactionAffiliationComponent.Cast(player.FindComponent(SCR_PlayerFactionAffiliationComponent));
+			if (!m_AICFCoopAffiliation) return false;
+			m_AICFCoopAffiliation.GetOnPlayerFactionResponseInvoker_O().Insert(AICF_CoopFactionResponse);
+		}
+		if (m_bAICFCoopRequestPending) return false;
+		string key = "US";
+		if (m_iAICFCoopDenied == 1) key = "FIA";
+		Faction faction = GetGame().GetFactionManager().GetFactionByKey(key);
+		if (!faction) return false;
+		m_bAICFCoopRequestPending = true;
+		if (!m_AICFCoopAffiliation.RequestFaction(faction)) m_bAICFCoopRequestPending = false;
+		return false;
+	}
 
 	void AICF_CoopProbeCloseSoon()
 	{
@@ -118,7 +158,7 @@ modded class SCR_GameModeCampaign
 		string playerFlag;
 		bool requirePlayer = System.GetCLIParam("aicfCoopProbePlayer", playerFlag) && playerFlag == "1";
 		bool playerReady = !requirePlayer;
-		if (requirePlayer && m_iCoopClientSamples % 5 == 0) playerReady = AICF_CoopClientSpawn();
+		if (requirePlayer && m_iCoopClientSamples % 5 == 0 && AICF_CoopClientAccess()) playerReady = AICF_CoopClientSpawn();
 		if (AICF_HasAICommanderState() && m_iCoopClientSamples >= 15 && playerReady)
 		{
 			bool passed = AICF_IsPlayerOnlyFaction(true) && !AICF_IsPlayerOnlyFaction(false) &&
@@ -186,9 +226,32 @@ modded class SCR_GameModeCampaign
 
 	override void OnGameEnd()
 	{
+		if (m_AICFCoopAffiliation) m_AICFCoopAffiliation.GetOnPlayerFactionResponseInvoker_O().Remove(AICF_CoopFactionResponse);
 		GetGame().GetCallqueue().Remove(AICF_CoopClientReadback);
 		GetGame().GetCallqueue().Remove(AICF_CoopProbeDeadline);
 		GetGame().GetCallqueue().Remove(AICF_CoopProbeClose);
 		super.OnGameEnd();
+	}
+}
+
+modded class AICF_ConstructionPlanner
+{
+	bool AICF_CoopProbeAutomatic(SCR_CampaignFaction faction)
+	{
+		return Commander(faction) != null;
+	}
+}
+
+modded class SCR_FactionRequestUIComponent
+{
+	override void ShowAvailableFactions()
+	{
+		super.ShowAvailableFactions();
+		string mode;
+		if (!System.GetCLIParam("aicfCoopProbe", mode) || mode != "USSR") return;
+		bool passed = m_aActiveFactionButtons.Count() == 1;
+		foreach (SCR_FactionButton button : m_aActiveFactionButtons)
+			passed = passed && button && button.GetFaction() && button.GetFaction().GetFactionKey() == "USSR";
+		Print(string.Format("[AICF][COOP_FACTION_MENU] active=%1 pass=%2", m_aActiveFactionButtons.Count(), passed));
 	}
 }

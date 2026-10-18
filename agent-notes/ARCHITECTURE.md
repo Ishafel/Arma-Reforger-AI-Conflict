@@ -34,6 +34,9 @@ Core и stock integrations не должны получать обязатель
 `AICF_MatchRules` задаёт 0/10 боевых slots и ticket defeat по стороне;
 faction state и helpers сохраняются. Владение roster остаётся у FactionState,
 условиями победы — у VictorySystem. Контракт: [COOP_SCENARIO.md](COOP_SCENARIO.md).
+Co-op фильтрует меню и authority faction requests, сохраняя native IsPlayable
+для HQ/opponent setup. Auto construction policy применяется в ConstructionPlanner;
+служба рабочих остаётся отдельным владельцем достройки player layouts.
 
 Цены штатных RHS/WCS меню принадлежат integration policy/UIInfo adapter,
 см. [MENU_PRICES.md](MENU_PRICES.md). Adapter возвращает CAMPAIGN quote;

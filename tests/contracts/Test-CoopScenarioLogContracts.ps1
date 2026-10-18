@@ -4,8 +4,8 @@ $tempBase=[IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $work=Join-Path $tempBase ('aicf-coop-log-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work | Out-Null
 $audit=Join-Path $RepositoryRoot 'tests/log-audits/Test-CoopScenarioLog.ps1'
-$names=@('US_ROSTER','USSR_ROSTER','QUEUE_SETTLED','US_TICKETS','USSR_TICKETS','COMMANDERS','HELPERS','BUDGET_FLOOR','STANDARD_POLICY','MIRROR_POLICY','STABLE_ROSTER','REPLICATED_MODE','ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','NO_GROUP_SUMMARY')
-$positive=(@('[AICF][ROSTER_READY] us_groups=10 ussr_groups=0')+@($names | ForEach-Object {"[AICF][COOP_CASE] case=$_ pass=1"})+@('[AICF][COOP_DONE] mode=USSR checks=15 failed=0 elapsed_ms=30000','ENGINE : Game destroyed.')) -join "`n"
+$names=@('US_ROSTER','USSR_ROSTER','QUEUE_SETTLED','US_TICKETS','USSR_TICKETS','COMMANDERS','HELPERS','BUDGET_FLOOR','STANDARD_POLICY','MIRROR_POLICY','STABLE_ROSTER','REPLICATED_MODE','ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','NO_GROUP_SUMMARY','FACTION_ACCESS','AUTO_CONSTRUCTION')
+$positive=(@('[AICF][ROSTER_READY] us_groups=10 ussr_groups=0')+@($names | ForEach-Object {"[AICF][COOP_CASE] case=$_ pass=1"})+@('[AICF][COOP_DONE] mode=USSR checks=17 failed=0 elapsed_ms=30000','ENGINE : Game destroyed.')) -join "`n"
 $manifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Server';variant='StockCoopUSSR';arguments=@('-aicfCoopProbe','USSR')} | ConvertTo-Json -Compress)
 function Check([string]$Name,[string]$Log,[string]$Launch,[int]$Expected,[string]$Rule,[switch]$Client,[switch]$RequirePlayer) {
     [IO.File]::WriteAllText("$work/log.txt",$Log)
@@ -39,10 +39,12 @@ try {
     $clientLaunch=$clientManifest+"`n[AICF][RUNTIME_LAUNCHER][SERVER_READY] process_id=123 port=2411 log=server.log"
     $playerManifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Client';variant='StockCoopUSSR';arguments=@('-aicfCoopProbe','USSR','-aicfCoopProbePlayer','1')} | ConvertTo-Json -Compress)
     $playerLaunch=$playerManifest+"`n[AICF][RUNTIME_LAUNCHER][SERVER_READY] process_id=123 port=2411 log=server.log"
-    $playerLog=$clientLog+"`n[AICF][COOP_CLIENT_PLAYER] pass=1 entity=123"
+    $playerLog=$clientLog+"`n[AICF][COOP_CLIENT_PLAYER] pass=1 entity=123`n[AICF][COOP_CLIENT_FACTION] faction=US accepted=0 pass=1`n[AICF][COOP_CLIENT_FACTION] faction=FIA accepted=0 pass=1"
     Check 'client-positive' $clientLog $clientLaunch 0 '' -Client
     Check 'client-player-positive' $playerLog $playerLaunch 0 '' -Client -RequirePlayer
     Check 'client-missing-player' $clientLog $playerLaunch 1 'PLAYER_SPAWN' -Client -RequirePlayer
+    Check 'client-accepted-enemy' ($playerLog.Replace('faction=US accepted=0 pass=1','faction=US accepted=1 pass=0')) $playerLaunch 1 'FACTION_ACCESS_FAILED' -Client -RequirePlayer
+    Check 'client-missing-fia' ($playerLog.Replace('faction=FIA accepted=0 pass=1','faction=OTHER accepted=0 pass=1')) $playerLaunch 1 'FACTION_DENIED_FIA' -Client -RequirePlayer
     Check 'client-missing-player-mode' $playerLog $clientLaunch 1 'PLAYER_MODE' -Client -RequirePlayer
     Check 'client-wrong-player-mode' $playerLog ($playerLaunch.Replace('"1"','"0"')) 1 'PLAYER_MODE' -Client -RequirePlayer
     Check 'server-player-mode' $positive $manifest 1 'PLAYER_ROLE' -RequirePlayer
@@ -55,4 +57,4 @@ finally {
     if(!$resolved.StartsWith($tempBase,[StringComparison]::OrdinalIgnoreCase) -or (Split-Path -Leaf $resolved) -notlike 'aicf-coop-log-*') {throw 'Unsafe cleanup path'}
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
-'Co-op log contracts: PASS; positive=3 negative=18'
+'Co-op log contracts: PASS; positive=3 negative=20'

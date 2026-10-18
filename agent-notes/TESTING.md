@@ -1,5 +1,90 @@
 # Проверки и baseline
 
+## Arland Co-op: выбор фракции, строительство и Muzzle lifetime — 2026-10-18
+
+Продолжение `codex/arland-coop-ussr` от `e73da70`, начальное дерево чистое.
+Evidence: `.codex-runtime/arland-coop-followup/`; game/server/Workbench —
+**1.8.0.13**, `binaries.json`. Production изменения: policy player access и
+auto construction, фильтр native faction menu, authority request/assignment
+guards и локальная muzzle reference в EquipmentPlan.Build.
+Workers, native IsPlayable/HQ/opponents и gameplay entity cleanup не меняются.
+
+Свежий selected baseline через `Invoke-AICFChecks.ps1 -Name ... -EvidenceRoot
+<root>/baseline` — **6/6 PASS/0**: Co-op, construction, builders, equipment,
+match shutdown и shutdown log contracts. Первый вызов с ошибочным именем audit
+отклонён runner до проверок; это не тестовый FAIL.
+`access-after` — **4/4 PASS/0**, `access-ui-after` — **2/2 PASS/0**.
+После защиты native IsPlayable отдельно повторён Co-op static — **PASS/0**,
+19 negative mutations, `coop-static-final2.txt`.
+Полный `Invoke-AICFChecks.ps1 -EvidenceRoot <root>/offline-final` —
+**68/68 PASS/0**, без исключений; `offline-final-verdict.json`.
+Последнее усиление только Co-op static (запрет глобального IsPlayable override)
+проверено отдельным повтором с 19 mutations выше; production после full runner
+не менялся. Equipment contracts: 22 rules / 19 negative mutations; Co-op log
+contracts: 3 positive / 20 negative; shutdown log: 4 positive / 35 negative.
+
+Терминальный `Compile.ps1 -Label production-final` без fixtures и
+`-SourceRoot <root>/stage -Label final-fixture`, а также
+`-SourceRoot <root>/shutdown-stage -Label shutdown-plan-batches` — **PASS/0**:
+`Script validation successful`, script/VM/fatal errors нет. Первые два
+sandbox Workbench attempts завершились `-1 / SteamAPI_Init failed`, validation
+не завершена; разрешённые повторные terminal runs дали PASS. Все logs сохранены.
+`final-source-hashes.json`: **233/233** production Core/Arland файлов совпадают
+с Co-op stage; test-only fixture проверяется отдельным SHA-256.
+
+Runtime запускается только canonical launcher из отдельных server/client
+сессий. `Run.ps1 -Case coop-final -Difficulty Hard -Duration 150000 -Winner US`:
+**18/18 cases**, native exit 0, full stopped log audit **PASS/0**,
+script errors **0**, прочие native `(E)` **16**. Client `-Client -Player`
+прошёл exact CLI/live PID/ROSTER_READY gate, получил authority отказ US и FIA,
+затем вступил в СССР и получил controlled character. Его строгий
+`Test-CoopScenarioLog.ps1 -Client -RequirePlayer` — **PASS/0**, script errors **0**,
+прочие native `(E)` **86**. Это initial spawn и native intents, не ручной UI input.
+В runtime подтверждён допуск auto construction только США при работающем
+BaseBuilderService; законченная player construction операция не заявляется.
+
+`Run.ps1 -Case standard-final -Variant Stock -Difficulty Medium -Duration 30000
+-Winner USSR`: **15/15 cases**, roster 10+10, native HQ/IsPlayable сохранены,
+production territorial winner USSR, full stopped audit **PASS/0**, script errors
+**0**, прочие native `(E)` **16**. `muzzle-local` — первый контроль минимальной
+правки, **18/18**, full stopped audit **PASS/0**, script errors **0**.
+
+`RunShutdown.ps1` / `shutdown-fixed`: три пакета по 8 Draft операций плюс
+**24/24 EquipmentPlan Build/destructor**. Full `Test-ShutdownLog.ps1 -Batches
+-RequireStop` — **PASS/0**, script errors и leaked objects **0**; native exit 0.
+Через 15 секунд покоя **0 из 2160** sampled entities живы; после Stop —
+**0 из 2250**, drafts **0**, created=destroyed=**50**.
+
+Причина Muzzle подтверждена контролем `shutdown-mutant`: в отдельном stage
+возвращён только inline-вызов Muzzle в условие for, все остальные source files
+совпадают (`mutant-source-comparison.json`). Compile — **PASS/0**, native exit 0,
+но full runtime audit — **FAIL/1**: **41 script errors / 128 leaked objects**,
+неполные operation/plan records и completion. Этот FAIL ожидаемо доказывает,
+что расширенный native gate отклоняет дефект; он не является production PASS.
+Прежние Draft batches не вызывали Plan.Build/destructor в каждой операции;
+обычная остановка OnGameEnd не доказывала раннюю Stop(true). Старые результаты
+ниже сохраняются как исторические, а не подтверждение этого пути.
+
+Все диагностические неудачи сохранены: перестановка roots, ранний unarm,
+transient plan и очистка до EndGameMode не устранили удержание. Первая попытка
+ограничить глобальный IsPlayable нарушила native HQ/opponent setup; вариант
+полностью исключён, запрет перенесён в меню и authority. Индекс —
+`runtime-attempts.json`; production не содержит этих экспериментов.
+
+**NOT RUN:** визуальный осмотр меню/HUD и ручной input — terminal-only workflow
+запрещает GUI automation; нужен игрок, который открывает выбор фракции и
+проверяет единственный вариант СССР. Static UI contracts и authority RPC
+readbacks не выдаются за визуальный PASS. Также не проверялись физический бой
+до победы, законченная доставка/строительство, смерть и повторный respawn,
+новые RHS/WCS runtime runs, packaged build/Workshop и длительный soak.
+Команды, manifests, exit codes и полные stopped logs находятся в evidence;
+resource/asset diagnostics не исключены из сохранённых logs, общий engine
+error-free gate не заявляется. Push, merge, PR и публикация не выполнялись.
+Собственные native процессы завершены; три известных stage-каталога сохранены
+в source zip с SHA-256 и удалены. Полные profiles/logs оставлены в evidence.
+`git diff --check` — **PASS/0**; проверены 356 локальных Markdown file links,
+битых нет. Список изменённых файлов — `changed-files.txt` в evidence.
+
 ## Ванильный Arland Co-op СССР — 2026-10-18
 
 Ветка `codex/arland-coop-ussr` от актуального `origin/main`
