@@ -7,7 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
-| Изменить ванильный Arland Co-op СССР: roster, выбор фракции, строительство и поражение | [COOP_SCENARIO.md](COOP_SCENARIO.md), `AICF_MatchRules`, `AICF_CoopFactionAccess`, `AICF_CoopFactionMenu`, `AICF_ConstructionPlanner` |
+| Изменить ванильный Arland Co-op СССР: roster, выбор фракции, группы игроков, строительство и поражение | [COOP_SCENARIO.md](COOP_SCENARIO.md), `AICF_MatchRules`, `AICF_CoopFactionAccess`, `AICF_CoopFactionMenu`, `AICF_CoopPlayerGroups`, `AICF_ConstructionPlanner` |
 | Исправить окно `Defend Waypoint not provided to the node!` после смены приказа | [DEFEND_ALLOCATION.md](DEFEND_ALLOCATION.md), `AICF_AINodeLifecycle`, native allocation node в Script Diff 1.8.0.13 |
 | Исправить shutdown leaks и проверить lifetime private equipment worlds (issue #63) | [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), [EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md), `AICF_EquipmentDraft`, bootstrap OnGameEnd |
 | Изменить proximity lifecycle дополнительных сил FIA (issue #59) | [FIA_PROXIMITY.md](FIA_PROXIMITY.md), [FIA_GARRISONS.md](FIA_GARRISONS.md), [AMBIENT_PATROLS.md](AMBIENT_PATROLS.md) |

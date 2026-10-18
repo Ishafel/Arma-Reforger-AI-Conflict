@@ -47,6 +47,23 @@ null для снятия affiliation сохраняет native обработк�
 штатному поведению. Глобальный `SCR_Faction.IsPlayable` не меняется: он также
 нужен native Conflict для определения противников и HQ. Native заказ ИИ не запрещён.
 
+Welcome/Deployment Setup — отдельный список `SCR_WelcomeScreenFactionContent`.
+Его `FillFactionWidget` сначала выполняет native создание, затем скрывает
+запрещённый tile. Элементы остаются в массиве: удаление или пропуск нарушил бы
+соответствие sorted faction indices при обновлении числа игроков и playability.
+Таким образом US/FIA скрыты и в intro, и в последующем выборе стороны.
+
+`AICF_CoopPlayerGroups` явно разрешает native меню групп и
+`IsGroupLeaderVolunteeringAllowed` в Co-op. STANDARD делегирует обоим native
+методам. Первый участник пустой штатной группы получает native лидерство;
+остальные могут выдвинуться через штатное голосование. Звание GENERAL само по
+себе не означает лидерство. `OnPlayerFactionChanged` после native обработки
+планирует join/create для игрока без действующей группы. Callback повторно
+проверяет authority/master, точный controller, affiliation и faction map;
+существующую группу сохраняет, при OnGameEnd удаляется из callqueue.
+Назначение лидера, состав slave group, лимит ИИ и найм остаются у native систем.
+Автоматически забирать ИИ у других игроков, армии AICF или рабочих не разрешается.
+
 `AICF_ConstructionPlanner.Commander` явно применяет
 `AllowsAutomaticConstruction`: для СССР возвращает null до выбора типа, поиска
 места и commit заказа. Тот же gate инвалидирует pending orders. Строительство
@@ -86,5 +103,19 @@ Client-флаг `-aicfCoopProbePlayer 1` сначала отправляет н�
 отправляет faction/respawn intents за СССР и ждёт реального controlled character.
 `Test-CoopScenarioLog.ps1 -Client -RequirePlayer` требует этот native readback.
 Он не обходит server validation и не использует GUI input.
+
+`AICF_CoopRecruitProbe.c` дополняет этот probe: копируется в том же UI stage
+под именем `AICF_ZCoopRecruitProbe.c`, чтобы загружаться после основного probe.
+Fixture выбирает штатное отделение из faction GROUP catalog, ждёт асинхронного
+spawn, передаёт ID бойца через test-only RplProp, выбирает native loadout перед
+spawn игрока и проверяет штатный `RequestAddAIAgent`. На сервере проверяются
+IsRecruited, slave membership и фактический parent AIAgent; клиент подтверждает
+membership и доступность native команды. Она также снимает лидерство как
+test setup и запрашивает штатное голосование из состояния обычного участника.
+Это проверка native найма и лидерства, **не проверка оплаты заказа из казармы**.
+Auto construction останавливается fixture для изоляции от посторонней stock
+mesh-offset диагностики; production construction policy этим не проверяется.
+`Test-CoopScenarioLog.ps1 -RequireRecruit` требует полный stopped log обеих ролей,
+точный manifest, readiness клиента, intro visibility и native readbacks.
 
 Результаты свежих проверок, полные логи и ограничения — в [TESTING.md](TESTING.md).

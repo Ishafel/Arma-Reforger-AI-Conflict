@@ -1,3 +1,19 @@
+// WelcomeScreen has its own faction list, independent of deployment buttons.
+modded class SCR_WelcomeScreenFactionContent
+{
+	override protected void FillFactionWidget(notnull SCR_Faction faction, notnull Widget content, Color color)
+	{
+		int previousCount = m_aFactionWidgets.Count();
+		super.FillFactionWidget(faction, content, color);
+		if (AICF_MatchRules.FromMissionHeader().AllowsPlayerFaction(faction.GetFactionKey()) ||
+			m_aFactionWidgets.Count() == previousCount) return;
+		// Keep native sorted-faction/widget indices aligned for count/playability callbacks.
+		Widget factionWidget = m_aFactionWidgets[previousCount];
+		factionWidget.SetVisible(false);
+		factionWidget.SetEnabled(false);
+	}
+}
+
 modded class SCR_FactionRequestUIComponent
 {
 	protected void AICF_FilterCoopFactions()

@@ -37,6 +37,9 @@ faction state и helpers сохраняются. Владение roster ост�
 Co-op фильтрует меню и authority faction requests, сохраняя native IsPlayable
 для HQ/opponent setup. Auto construction policy применяется в ConstructionPlanner;
 служба рабочих остаётся отдельным владельцем достройки player layouts.
+`AICF_CoopPlayerGroups` сохраняет штатного владельца player groups: включает
+их меню и выдвижение в лидеры, а после faction callbacks выполняет native
+join/create для игрока без группы. Roster AICF и права других лидеров не меняет.
 
 Цены штатных RHS/WCS меню принадлежат integration policy/UIInfo adapter,
 см. [MENU_PRICES.md](MENU_PRICES.md). Adapter возвращает CAMPAIGN quote;

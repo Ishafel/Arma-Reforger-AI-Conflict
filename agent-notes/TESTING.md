@@ -1,5 +1,97 @@
 # Проверки и baseline
 
+## Co-op: стартовый список фракций, группы игроков и найм — 2026-10-18
+
+Продолжение `codex/arland-coop-ussr` от `279e2d2`, начальное дерево чистое.
+Evidence: `.codex-runtime/coop-join-recruit-20261018/`; binaries game/server/
+Workbench **1.8.0.13**, `binaries.json`. Пользователь подтвердил заказ отделения
+из списка казармы и отсутствие прав лидера; его снимки и симптомы не заменяют
+терминальный native readback.
+
+Production: WelcomeScreen скрывает US/FIA после native создания tiles,
+сохраняя соответствие sorted indices. Co-op явно разрешает native меню групп
+и выдвижение в лидеры; server join/create страхует отсутствие membership после
+faction callbacks и не меняет существующую группу. STANDARD делегирует native
+policy; лимит ИИ и проверки найма не ослаблялись. В обычном native UI контроль
+уже получал группу и лидера: гипотеза о безусловно сломанном автовступлении
+не подтвердилась. Исправление не приписывает этому единственную причину отказа.
+
+Свежий `Invoke-AICFChecks.ps1 -Name Test-CoopScenarioStatic.ps1,
+Test-SquadCommandsContracts.ps1,Test-SquadRespawnContracts.ps1,
+Test-VictoryRespawnStatic.ps1 -EvidenceRoot <evidence>/baseline` — **4/4 PASS/0**.
+Первое ошибочное имя check было отклонено runner до выполнения, не тестовый FAIL.
+Полный `Invoke-AICFChecks.ps1 -EvidenceRoot <evidence>/offline-final` —
+**68/68 PASS/0**, без исключений; `offline-verdict.json`.
+После расширения log gate отдельно повторены Co-op static и log contracts:
+`-Name Test-CoopScenarioStatic.ps1,Test-CoopScenarioLogContracts.ps1
+-EvidenceRoot <evidence>/leader-contracts` — **2/2 PASS/0**;
+**29 negative static mutations**, **5 positive / 37 negative log contracts**.
+Последнее расширение log gate проверено этим отдельным повтором; production
+после полного runner не менялся. Это не второй чистый полный запуск.
+
+`Compile.ps1 -Label final-production`, `-SourceRoot <evidence>/stage
+-Label leader-fixture` и `-SourceRoot <evidence>/standard-stage
+-Label standard-control` — **Workbench PASS/0**, `Script validation successful`,
+script/VM/fatal ошибок нет. Exact argv, stdout, exit и полные logs — `wb-*`.
+`production-stage-hashes.json`: **234/234** production Core/Arland файлов
+совпадают с обоими stage. Fixtures в production отсутствуют.
+
+`Run.ps1 -Case leader-final -Duration 160000` и отдельная клиентская сессия
+с `-Case leader-final -Client -Player -Duration 160000` используют только
+canonical launcher, fresh profiles и listener 2412. Клиент прошёл точный
+CLI/live PID/ROSTER_READY gate. Native intro callbacks дали US=hidden,
+USSR=visible, FIA=hidden. Fixture сняла лидерство на сервере; клиент из состояния
+`leader=0` отправил **штатное голосование**, сервер подтвердил нового лидера.
+Затем `CanBeExecuted` native Recruit разрешил бойца, клиент отправил
+`RequestAddAIAgent`, сервер подтвердил IsRecruited + slave membership + реальный
+parent AIAgent, клиент подтвердил membership. Ни оплаты, ни штатных authority
+проверок fixture не подменяет; NPC подготовлен из stock GROUP catalog.
+
+Оба `Test-CoopScenarioLog.ps1 -RequireRecruit` по **полным остановленным** logs
+— **PASS/0**, server **17/17** scenario cases; script errors **0/0**, прочие
+native `(E)` **16 server / 71 client**. Commands, manifest, native exit 0,
+full logs и `leader-final-*-audit.txt` сохранены. Предыдущие `native-recruit3`
+и `final` также подтвердили native найм; последний gate дополнительно требует
+непосредственно голосование из состояния без лидера.
+
+Обычный сценарий: `Run.ps1 -Case standard-control -Variant Stock -Duration
+30000 -SourceRoot <evidence>/standard-stage -Port 2413` — **14/14**, roster
+10+10, native exit 0, полный `Test-CoopScenarioLog.ps1` **PASS/0**, script errors
+**0**, прочие native `(E)` **16**. Сценарии не делили listener.
+
+Диагностические неудачи сохранены, не объявляются PASS: первые fixtures имели
+ошибки сигнатуры/порядка загрузки; ранний spawn без выбранного native loadout
+дал VM в stock CanPlayerSpawn_S; исходный purchase probe не дошёл до покупки,
+а выбор старого catalog spawner не соответствовал доступным services. Один
+контроль был запущен до освобождения 2412: server exit 0 без ROSTER_READY,
+client readiness корректно отказал. В ранних runs встречалась stock
+SupportStationAreaMesh offset SCRIPT(E) при auto construction США. Этот дефект
+asset/precision не исправлялся: финальная recruitment fixture останавливает
+auto construction для изоляции, не доказывая отсутствие этой диагностики в
+полном матче. Свежий обычный Stock control прошёл без SCRIPT(E).
+Снимки прежнего пользовательского матча — `manual-*-logs/`, это не stopped gate.
+
+**NOT RUN:** внешний вид и ручной input меню — workflow запрещает GUI automation;
+проверено native состояние widgets, не визуальная раскладка. Повторная оплата и
+создание полного отделения через интерфейс казармы не проверялись; это не новый
+PASS оплаты. Также не выполнялись бой до победы, respawn после смерти, RHS/WCS,
+packaged build/Workshop и длительный soak. Общий engine error-free gate не
+заявляется. Push, merge, PR и публикация не выполнялись.
+
+Изменённые файлы: production
+`UI/AICF_CoopFactionMenu.c`, `Integration/AICF_CoopPlayerGroups.c`;
+`tests/fixtures/AICF_CoopRecruitProbe.c`,
+`tests/static/Test-CoopScenarioStatic.ps1`,
+`tests/log-audits/Test-CoopScenarioLog.ps1`,
+`tests/contracts/Test-CoopScenarioLogContracts.ps1`;
+`README.md`, `agent-notes/README.md`, `ARCHITECTURE.md`, `COOP_SCENARIO.md`,
+`TEST_FIXTURES.md` и этот отчёт.
+`git diff --check` — **PASS/0**. Тестовые native процессы завершены; оба stage
+сохранены в source ZIP с SHA-256 (`source-archives.json`) и удалены адресно.
+Полные profiles/logs, manifests, команды, native exits и индекс неудачных
+попыток оставлены в evidence. Игровой сеанс по запросу пользователя запускается
+отдельно из production без fixtures и не является stopped runtime gate.
+
 ## Arland Co-op: выбор фракции, строительство и Muzzle lifetime — 2026-10-18
 
 Продолжение `codex/arland-coop-ussr` от `e73da70`, начальное дерево чистое.

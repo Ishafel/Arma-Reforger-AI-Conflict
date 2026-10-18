@@ -2,6 +2,17 @@
 
 ## Co-op СССР на ванильном Арланде
 
+`AICF_CoopRecruitProbe.c` — дополнение к основному probe, копировать в UI stage
+как `AICF_ZCoopRecruitProbe.c`. Выбирает штатный GROUP catalog, проверяет
+welcome visibility, native меню групп, голосование из состояния без лидера и
+`RequestAddAIAgent` с readback обеих ролей. Test setup снимает лидерство,
+создаёт NPC и выбирает native loadout до spawn игрока; оплату казармы не проверяет.
+Auto construction остановлено только fixture, чтобы исключить посторонние
+stock service mesh diagnostics из этой проверки. Строгий gate:
+`Test-CoopScenarioLog.ps1 -RequireRecruit` отдельно для server и client.
+Контракт и свежие результаты — [COOP_SCENARIO.md](COOP_SCENARIO.md),
+[TESTING.md](TESTING.md).
+
 `AICF_CoopScenarioProbe.c`: только isolated `Core/UI/` stage,
 `-aicfCoopProbe USSR|STANDARD`, необязательные `aicfCoopProbeDurationMs` и
 `aicfCoopProbeWinner US|USSR`. Проверяет bootstrap/roster/readiness, ticket

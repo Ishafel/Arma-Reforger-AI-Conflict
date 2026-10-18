@@ -9,6 +9,7 @@ foreach($entry in @{
     ui='UI/AICF_StrategicUI.c'; victory='Victory/AICF_VictorySystem.c'
     access='Integration/AICF_CoopFactionAccess.c'; construction='Construction/AICF_ConstructionPlanner.c'
     factionMenu='UI/AICF_CoopFactionMenu.c'
+    playerGroups='Integration/AICF_CoopPlayerGroups.c'
 }.GetEnumerator()) { $sources[$entry.Key]=ConvertTo-AICFCodeText ([IO.File]::ReadAllText((Join-Path $core $entry.Value))) }
 function Test-CoopContracts($s) {
     if($s.access -match 'class SCR_Faction\b|override bool IsPlayable\(') { 'NATIVE_FACTION_SETUP' }
@@ -16,6 +17,12 @@ function Test-CoopContracts($s) {
         @('rules','if \(factionKey == GetPlayerOnlyFaction\(\)\) return 0;\s*return AICF_Stage1Config.GROUP_SLOTS_PER_FACTION;','ROSTER_POLICY'),
         @('rules','bool UsesTicketDefeat.*?return GetManagedSlotCount\(factionKey\) > 0;','TICKET_POLICY'),
         @('rules','bool AllowsPlayerFaction.*?if \(!IsValid\(\)\) return false;.*?if \(m_eMode == AICF_EMatchMode.STANDARD\) return true;.*?GetStableFactionKey\(factionKey\) == GetPlayerOnlyFaction\(\)','FACTION_POLICY'),
+        @('factionMenu','modded class SCR_WelcomeScreenFactionContent.*?int previousCount = m_aFactionWidgets.Count\(\);\s*super.FillFactionWidget\(faction, content, color\);.*?AllowsPlayerFaction\(faction.GetFactionKey\(\)\).*?m_aFactionWidgets.Count\(\) == previousCount\) return;.*?Widget factionWidget = m_aFactionWidgets\[previousCount\];\s*factionWidget.SetVisible\(false\);\s*factionWidget.SetEnabled\(false\);','WELCOME_FACTIONS'),
+        @('playerGroups','super.OnPlayerFactionChanged\(owner, previousFaction, newFaction\);.*?!Replication.IsServer\(\).*?!GetGameMode\(\).IsMaster\(\).*?rules.GetMode\(\) == AICF_EMatchMode.STANDARD.*?CallLater\(AICF_EnsureCoopPlayerGroup, 0, false, owner, newFaction\);','GROUP_JOIN_BOUNDARY'),
+        @('playerGroups','owner.GetAffiliatedFaction\(\) != faction.*?GetPlayerController\(player.GetPlayerId\(\)\) != player.*?factions.GetPlayerFaction\(player.GetPlayerId\(\)\) != faction.*?group.IsPlayerInGroup\(player.GetPlayerId\(\)\)\) return;.*?component.CreateAndJoinGroup\(faction, true\);','GROUP_JOIN_IDENTITY'),
+        @('playerGroups','OnGameEnd\(\).*?Remove\(AICF_EnsureCoopPlayerGroup\);.*?super.OnGameEnd\(\);','GROUP_JOIN_CLEANUP'),
+        @('playerGroups','IsGroupMenuAllowed\(\).*?GetMode\(\) != AICF_EMatchMode.STANDARD\) return true;\s*return super.IsGroupMenuAllowed\(\);','GROUP_MENU_ACCESS'),
+        @('playerGroups','IsGroupLeaderVolunteeringAllowed\(\).*?GetMode\(\) != AICF_EMatchMode.STANDARD\) return true;\s*return super.IsGroupLeaderVolunteeringAllowed\(\);','GROUP_LEADER_ACCESS'),
         @('factionMenu','!factionButton.GetFaction\(\) \|\| rules.AllowsPlayerFaction\(factionButton.GetFaction\(\).GetFactionKey\(\)\)\) continue;.*?SetVisible\(false, false\);.*?m_aActiveFactionButtons.RemoveItem\(factionButton\);','FACTION_MENU'),
         @('access','CanRequestFaction_S\(Faction faction\).*?if \(faction && !AICF_MatchRules.FromMissionHeader\(\).AllowsPlayerFaction\(faction.GetFactionKey\(\)\)\) return false;.*?super.CanRequestFaction_S\(faction\)','FACTION_REQUEST'),
         @('access','SetFaction_S\(Faction faction\).*?if \(faction && !AICF_MatchRules.FromMissionHeader\(\).AllowsPlayerFaction\(faction.GetFactionKey\(\)\)\) return false;.*?super.SetFaction_S\(faction\)','FACTION_ASSIGNMENT'),
@@ -39,6 +46,16 @@ $mutations=@(
     @('rules','if (factionKey == GetPlayerOnlyFaction()) return 0;','','ROSTER_POLICY'),
     @('rules','return GetManagedSlotCount(factionKey) > 0;','return true;','TICKET_POLICY'),
     @('rules','GetStableFactionKey(factionKey) == GetPlayerOnlyFaction()','true','FACTION_POLICY'),
+    @('factionMenu','super.FillFactionWidget(faction, content, color);','','WELCOME_FACTIONS'),
+    @('factionMenu','factionWidget.SetVisible(false);','factionWidget.SetVisible(true);','WELCOME_FACTIONS'),
+    @('factionMenu','m_aFactionWidgets[previousCount]','m_aFactionWidgets[0]','WELCOME_FACTIONS'),
+    @('playerGroups','!Replication.IsServer()','false','GROUP_JOIN_BOUNDARY'),
+    @('playerGroups','rules.GetMode() == AICF_EMatchMode.STANDARD','false','GROUP_JOIN_BOUNDARY'),
+    @('playerGroups','owner.GetAffiliatedFaction() != faction','false','GROUP_JOIN_IDENTITY'),
+    @('playerGroups','group.IsPlayerInGroup(player.GetPlayerId())','true','GROUP_JOIN_IDENTITY'),
+    @('playerGroups','GetGame().GetCallqueue().Remove(AICF_EnsureCoopPlayerGroup);','','GROUP_JOIN_CLEANUP'),
+    @('playerGroups','return super.IsGroupMenuAllowed();','return true;','GROUP_MENU_ACCESS'),
+    @('playerGroups','return super.IsGroupLeaderVolunteeringAllowed();','return true;','GROUP_LEADER_ACCESS'),
     @('factionMenu','m_aActiveFactionButtons.RemoveItem(factionButton);','','FACTION_MENU'),
     @('access','return super.CanRequestFaction_S(faction);','return true;','FACTION_REQUEST'),
     @('access','return super.SetFaction_S(faction);','return true;','FACTION_ASSIGNMENT'),
