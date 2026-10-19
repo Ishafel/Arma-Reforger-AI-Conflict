@@ -1,5 +1,99 @@
 # Проверки и baseline
 
+## Исправление Instigator OTHER — 2026-10-19
+
+Ветка `codex/instigator-other-context` от чистого `dc087a3`. Evidence:
+`.codex-runtime/instigator-context-20261019/`; game/server/Workbench **1.8.0.13**,
+`binaries.json`. Контракт: [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md).
+
+До production правки `Invoke-AICFChecks.ps1 -Name @('Test-CoopScenarioStatic.ps1',
+'Test-CoopScenarioLogContracts.ps1','Test-SquadRespawnContracts.ps1',
+'Test-VictoryRespawnStatic.ps1','Test-WCSIntegrationStatic.ps1')`
+с evidence `before/` — **5/5 PASS/0**.
+
+**Дефект воспроизведён детерминированно:** `baseline-stock`, неизменённый
+production Standard. Fixture создала настоящий GenericEntity и получила
+`InstigatorType.INSTIGATOR_OTHER`, построила native contexts и убила реального
+managed ИИ через `Kill` с этим источником. Native exit **0**, strict audit
+**FAIL/1**, **4 SCRIPT(E)** той же сигнатуры и **4/18** ошибочных context cases.
+OTHER_RELATION, REUSED_CONTEXT, OTHER_CHARACTER_OVERRIDE и NATIVE_DEATH_RELATION
+провалились; обычные AI/GM/NONE/suicide/deletion cases прошли. Полные logs,
+source manifest, argv и native exit сохранены в `baseline-runtime.json`.
+Это воспроизведение исходного classifier defect, а не ожидание случайной коллизии.
+
+В Core добавлен `Integration/AICF_InstigatorContext.c`. Только OTHER для
+character получает дополнительную классификацию. Распознанный character
+source проходит штатную AI/PLAYER логику с восстановлением исходного Instigator;
+источник окружения сохраняет metadata и получает UNKNOWN killer / OTHER_DEATH.
+Производные control/disguise поля очищаются при reuse. Остальные instigator
+types, deletion и non-character пути делегируются native с исходными аргументами.
+Ни исходный Instigator, ни damage/health/ownership не изменяются adapter.
+
+`Compile.ps1 -SourceRoot <stage> -Label <label> -Variant <variant>` — terminal
+Workbench baseline, fixed-stock, fixed-rhs (EveronRHS), fixed-wcs
+(EveronWCSRHS) и обновлённая player fixture: **5/5 PASS/0**. В каждом — Script
+validation successful, SCRIPT/VM/fatal 0; source graphs/argv/full logs сохранены.
+`source-integrity.json`: **415/415** production игровых файлов совпали с fixed
+stage; `fixture-integrity.json`: **2/2** точные tracked fixtures.
+
+Все server/client процессы запущены только `Run.ps1` → canonical
+`tools/Start-AICFRuntime.ps1`, отдельные сессии и свежие profiles. CLI:
+`-aicfInstigatorProbe 1 -aicfCoopProbe STANDARD|US`, observation 35000/180000 ms;
+player server дополнительно `-aicfInstigatorPlayer 1`, client —
+`-aicfCoopProbePlayer 1`. До видимого client пользователь предупреждён, что
+тест автоматический и сам завершится. Exact CLI/live PID/ROSTER_READY и
+`AICF_RUNTIME_MANIFEST_JSON` подтверждены launcher.
+
+`Audit.ps1` выполняет `Test-InstigatorContextLog.ps1 [-Player]`, включая полный
+Co-op stopped-log audit; client — `Test-CoopScenarioLog.ps1 -Client -RequirePlayer
+-RequireWelcome`. Все итоговые native exits и strict gates **0/PASS**:
+
+| Run | Сценарий | Context cases | SCRIPT E/F | Прочие engine `(E)` |
+|---|---|---|---|---|
+| fixed-stock server | Stock Standard | 18/18 | 0 | 16 |
+| fixed-rhs server | Everon RHS Standard | 18/18 | 0 | 200 |
+| fixed-wcs server | Everon WCS Standard | 18/18 | 0 | 237 |
+| fixed-wcs-player server | Everon WCS Co-op US | 20/20 | 0 | 236 |
+| fixed-wcs-player client | та же server/client пара | native player/JIP/Welcome | 0 | 264 |
+
+В каждом server run подтверждена настоящая смерть ИИ и исходный context из
+native `GetOnControllableDestroyed`: оригинальные Instigator/victim/source,
+OTHER_DEATH, UNKNOWN killer и отсутствие teamkill attribution. Обычные
+friendly/enemy AI, suicide, GM, NONE, deleted/non-character/null и reuse cases
+проверены. С реальным игроком дополнительно проверены native enemy player,
+OTHER с caller player override и context с player victim, включая настоящие
+player ID/control metadata. Сам игрок не убивался. Стратегия, потери и обычная
+очередь восстановления продолжали работать. Никакой остановки боя/invincibility
+или исключения SCRIPT(E) из анализа нет.
+
+`runtime-verdicts.json`: **5/5 PASS/0**, суммарно SCRIPT/VM/fatal **0**. Прочие
+953 engine `(E)` строки полностью сохранены в `other-engine-errors.json` и
+исходных logs: world Parent, Hierarchy, resources и shutdown RPC diagnostics.
+Общий error-free engine gate не заявляется.
+
+Полный offline набор `Invoke-AICFChecks.ps1 -EvidenceRoot <evidence>/offline-all`
+— **72/72 PASS/0**, runner exit **0**. `offline-verdict.json` подтверждает точное
+совпадение выполненного набора с текущими 72 проверками без исключений.
+Новые static guards прошли **14 negative mutations**, log contracts —
+**14 cases**; оба профильных теста включены в полный runner.
+
+**Предыдущий Instigator OTHER blocker снят новым воспроизведением и исправлением.**
+Старые FAIL не переписаны в PASS: baseline вновь даёт четыре ошибки, fixed
+проходит тот же путь. Конкретный физический источник исторической потери в
+первом WCS run по-прежнему неизвестен; исправлена обработка допустимого типа
+источника, а не физика столкновений или сам факт гибели бойца.
+
+**NOT RUN:** настоящая смерть/respawn игрока и ручной экран смерти, визуальный
+UI input (запрещён terminal-only workflow), packaged/Workshop build и длительный
+soak. Player context проверен native readbacks, это не визуальный PASS.
+Архивы baseline/fixed stages с SHA-256 — `stage-archives.json`; полные logs,
+manifests/exits/source hashes сохранены. Игровые/Workbench процессы завершены.
+Обе временные папки `baseline-stage` и `fixed-stage` адресно удалены после
+проверки архивов и явного разрешения пользователя; `cleanup-final.txt`.
+Изменены Core adapter, три профильных test/audit scripts и fixture, README,
+архитектурные/testing/fixture/tool заметки и новый INSTIGATOR_CONTEXT.
+Push, PR, merge и публикация не выполнялись.
+
 ## Co-op: обе стороны, карты и integrations — 2026-10-18/19
 
 Ветка `codex/coop-scenario-matrix` от чистого `aeafb17`. Evidence:
@@ -75,13 +169,14 @@ Stage1Diagnostics нормализует RHS runtime faction keys в US/USSR; и
 ошибка audit ожидала RHS_AFRF в логе. Исправлен именно log contract,
 добавлены positive/negative cases; winner resolution в игре не менялся.
 
-**Сохранённый runtime FAIL и открытый blocker:** первый `EveronWCSRHS-CoopUS`
+**Сохранённый runtime FAIL и исторический blocker:** первый `EveronWCSRHS-CoopUS`
 получил SCRIPT(E) `SCR_InstigatorContextData: ... INSTIGATOR_OTHER ... is not supported!`
 во время Physics simulation, после чего slot 2 дал GROUP_EMPTY и штатную очередь
 восстановления. Точный источник физического повреждения не установлен.
-Это native damage context в закреплённом API, ошибка не исправлена и не подавлена.
-Чистый `EveronWCSRHS-CoopUS-retry` не доказывает её устранение. Она остаётся
-blocker для ready PR/релиза, хотя добавленные сценарии и итоговая матрица работают.
+На этом этапе native damage context в закреплённом API не был исправлен.
+Чистый `EveronWCSRHS-CoopUS-retry` не доказывал его устранение. Последующее
+детерминированное воспроизведение и исправление описаны в разделе Instigator OTHER
+выше; сам первоначальный FAIL сохраняется.
 
 Тот же первый run выявил неверное требование fixture: STABLE_ROSTER ожидал
 сохранения всех живых NPC после начала боя. Initial READY/наличие бойцов теперь

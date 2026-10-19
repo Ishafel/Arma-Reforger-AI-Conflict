@@ -1,5 +1,18 @@
 # Runtime fixture: каталог и применение
 
+## Instigator OTHER
+
+`AICF_InstigatorContextProbe.c` копировать в isolated Core/UI stage как
+`AICF_ZInstigatorContextProbe.c` вместе с основным Co-op probe.
+`-aicfInstigatorProbe 1`: native OTHER object, context reuse, caller override,
+AI/GM/NONE/suicide/deletion/non-character и реальная смерть managed ИИ с
+readback настоящего `GetOnControllableDestroyed`. Standard — 18 cases.
+`-aicfInstigatorPlayer 1` ждёт реального player; Co-op — 20 cases, включая
+player attribution и context с player victim (сам игрок не убивается).
+Subscription и test entity убираются в Stop. Строгий gate:
+`Test-InstigatorContextLog.ps1 [-Player]`, полные stopped logs/native exits/manifest.
+Контракт и ограничения: [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md).
+
 ## Co-op на разных картах и профилях контента
 
 `AICF_CoopRecruitProbe.c` — дополнение к основному probe, копировать в UI stage

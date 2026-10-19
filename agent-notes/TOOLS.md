@@ -159,6 +159,11 @@ Enforce fixture не входят в автоматическую матрицу
 | [Start-AICFRHSWardrobeShowcase.ps1](../tools/Start-AICFRHSWardrobeShowcase.ps1) | `-Role Server|Client`, `-SessionRoot`; создаёт отдельный source stage EveronNorthRHS и копирует showcase fixture. Нужны RHS и generated databases. Оба peers — отдельными терминальными сессиями с одним SessionRoot; запуск через canonical launcher |
 | [Watch-AICFRuntimeDiagnostics.ps1](../tools/Watch-AICFRuntimeDiagnostics.ps1) | `-Profile`, `-DeadlineSeconds` (650 по умолчанию); ищет сервер по profile и **принудительно останавливает** его при диагностической ошибке/дедлайне. Только для своего тестового server profile. Exit 0 — наблюдал выход; 2 — ошибка; 3 — дедлайн. Это не graceful shutdown и не runtime PASS |
 
+`Test-InstigatorContextStatic.ps1` и `Test-InstigatorContextContracts.ps1`
+входят в полный offline набор. Отдельный `tests/log-audits/Test-InstigatorContextLog.ps1`
+проверяет полные stopped runtime logs и не входит в offline runner.
+Native probe/CLI и требования: [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md).
+
 ## Локальные файлы вне набора
 
 В `tools/` остаются два ignored/untracked скрипта с отдельными точными ignore rules:

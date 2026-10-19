@@ -71,6 +71,12 @@ Native лидерство, лимит и ownership RPC сохраняют сво
 
 ## Домены Core
 
+`AICF_InstigatorContext` — узкий compatibility boundary transient death context.
+OTHER с известным character передаётся штатной AI/PLAYER классификации;
+источник без управляющего получает OTHER_DEATH с сохранённым Instigator и
+исходными entities. Damage/score/ownership остаются у native владельцев.
+Контракт: [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md).
+
 Корень: `AIConflictCore/Scripts/Game/AIConflict/`. Начинай с владельца домена,
 затем читай его конфигурацию и соседние классы.
 

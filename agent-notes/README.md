@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Исправить классификацию смерти INSTIGATOR_OTHER | [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md), `AICF_InstigatorContext`, pinned `SCR_InstigatorContextData` и native Instigator API |
 | Добавить карту/мод или сторону Co-op; изменить roster, выбор фракции, группы игроков, строительство и поражение | [COOP_SCENARIO.md](COOP_SCENARIO.md), `tools/config/AICF_Scenarios.json`, `AICF_MatchRules`, `AICF_CoopFactionAccess`, `AICF_CoopFactionMenu`, `AICF_CoopPlayerGroups`, `AICF_ConstructionPlanner` |
 | Изменить найм купленных в казарме бойцов во всех сценариях | [GAMEPLAY.md](GAMEPLAY.md#найм-купленных-в-казарме-бойцов), `AICF_BarracksRecruitment`, barracks fixture в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Исправить смещение визуальной зоны ремонтной станции | [SUPPORT_STATION_AREA.md](SUPPORT_STATION_AREA.md), `AICF_SupportStationArea`, support area fixture в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
