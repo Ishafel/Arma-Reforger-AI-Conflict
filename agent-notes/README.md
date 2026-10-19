@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Изменить пример frontend-настройки сценария Arland | [SCENARIO_SETUP.md](SCENARIO_SETUP.md), `AICF_ScenarioSetupHeader`, `AICF_ScenarioSetupSelection`, `AICF_ScenarioSetupScreen`, `AICF_ScenarioSetupEntry` |
 | Исправить классификацию смерти INSTIGATOR_OTHER | [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md), `AICF_InstigatorContext`, pinned `SCR_InstigatorContextData` и native Instigator API |
 | Добавить карту/мод или сторону Co-op; изменить roster, выбор фракции, группы игроков, строительство и поражение | [COOP_SCENARIO.md](COOP_SCENARIO.md), `tools/config/AICF_Scenarios.json`, `AICF_MatchRules`, `AICF_CoopFactionAccess`, `AICF_CoopFactionMenu`, `AICF_CoopPlayerGroups`, `AICF_ConstructionPlanner` |
 | Изменить найм купленных в казарме бойцов во всех сценариях | [GAMEPLAY.md](GAMEPLAY.md#найм-купленных-в-казарме-бойцов), `AICF_BarracksRecruitment`, barracks fixture в [TEST_FIXTURES.md](TEST_FIXTURES.md) |

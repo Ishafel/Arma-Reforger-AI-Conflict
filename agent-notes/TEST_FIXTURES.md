@@ -1,5 +1,14 @@
 # Runtime fixture: каталог и применение
 
+## Пример настройки Arland
+
+`AICF_ScenarioSetupProbe.c` копировать в isolated Core/UI как
+`AICF_ZScenarioSetupProbe.c` вместе с Co-op probe. CLI `-aicfSetupProbe 1`:
+server native header/selection — 18 cases, client native widget/modal/choice/cleanup
+readbacks — 15. Client использует обычный `-aicfCoopProbePlayer 1`.
+Не вызывает Play/Host и не имитирует GUI input. Full stopped-log gate:
+`Test-ScenarioSetupLog.ps1 [-Client]`. Контракт: [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+
 ## Instigator OTHER
 
 `AICF_InstigatorContextProbe.c` копировать в isolated Core/UI stage как

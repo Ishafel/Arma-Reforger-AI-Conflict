@@ -164,6 +164,11 @@ Enforce fixture не входят в автоматическую матрицу
 проверяет полные stopped runtime logs и не входит в offline runner.
 Native probe/CLI и требования: [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md).
 
+`Test-ScenarioSetupStatic.ps1` входит в полный offline набор. Отдельный
+`tests/log-audits/Test-ScenarioSetupLog.ps1 [-Client]` проверяет stopped runtime
+logs примера Arland; UI readbacks не подменяют ручной frontend Play/Host.
+Описание: [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+
 ## Локальные файлы вне набора
 
 В `tools/` остаются два ignored/untracked скрипта с отдельными точными ignore rules:

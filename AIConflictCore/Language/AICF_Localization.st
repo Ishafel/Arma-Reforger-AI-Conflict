@@ -321,6 +321,126 @@ StringTable
 			Target_en_us "AI Conflict - Everon North WCS + RHS Co-op Russia (Hard)"
 			Target_ru_ru "AI Conflict — Север Эверона WCS + RHS Co-op РФ (сложный)"
 		}
+		CustomStringTableItem "{A1CF261019500101}"
+		{
+			Id "AICF_Setup_Arland_Name"
+			Target_en_us "AI Conflict - Arland: setup example"
+			Target_ru_ru "AI Conflict — Арланд: пример настройки"
+		}
+		CustomStringTableItem "{A1CF261019500102}"
+		{
+			Id "AICF_Setup_Description"
+			Target_en_us "Choose match mode, player side and garrison difficulty before starting."
+			Target_ru_ru "Выберите режим, сторону игроков и сложность гарнизонов перед запуском."
+		}
+		CustomStringTableItem "{A1CF261019500103}"
+		{
+			Id "AICF_Setup_Details"
+			Target_en_us "Example setup screen for vanilla Arland. Play or Host opens the settings before loading the selected operation. Direct launch without the menu uses Co-op Soviet Army, Medium. Dedicated servers should use the regular scenario presets."
+			Target_ru_ru "Пример экрана настройки для vanilla Arland. Играть или Создать сервер открывает параметры до загрузки выбранной операции. Прямой запуск без меню использует Co-op СССР, среднюю сложность. Для выделенного сервера используйте обычные сценарии."
+		}
+		CustomStringTableItem "{A1CF261019500104}"
+		{
+			Id "AICF_Setup_Title"
+			Target_en_us "Operation setup"
+			Target_ru_ru "Настройка операции"
+		}
+		CustomStringTableItem "{A1CF261019500105}"
+		{
+			Id "AICF_Setup_Mode"
+			Target_en_us "Mode"
+			Target_ru_ru "Режим"
+		}
+		CustomStringTableItem "{A1CF261019500106}"
+		{
+			Id "AICF_Setup_Standard"
+			Target_en_us "Conflict"
+			Target_ru_ru "Conflict"
+		}
+		CustomStringTableItem "{A1CF261019500107}"
+		{
+			Id "AICF_Setup_Side"
+			Target_en_us "Player side"
+			Target_ru_ru "Сторона игроков"
+		}
+		CustomStringTableItem "{A1CF261019500108}"
+		{
+			Id "AICF_Setup_US"
+			Target_en_us "US Army"
+			Target_ru_ru "США"
+		}
+		CustomStringTableItem "{A1CF261019500109}"
+		{
+			Id "AICF_Setup_USSR"
+			Target_en_us "Soviet Army"
+			Target_ru_ru "СССР"
+		}
+		CustomStringTableItem "{A1CF26101950010A}"
+		{
+			Id "AICF_Setup_Difficulty"
+			Target_en_us "Garrison difficulty"
+			Target_ru_ru "Сложность гарнизонов"
+		}
+		CustomStringTableItem "{A1CF26101950010B}"
+		{
+			Id "AICF_Setup_Easy"
+			Target_en_us "Easy"
+			Target_ru_ru "Лёгкая"
+		}
+		CustomStringTableItem "{A1CF26101950010C}"
+		{
+			Id "AICF_Setup_Medium"
+			Target_en_us "Medium"
+			Target_ru_ru "Средняя"
+		}
+		CustomStringTableItem "{A1CF26101950010D}"
+		{
+			Id "AICF_Setup_Hard"
+			Target_en_us "Hard"
+			Target_ru_ru "Высокая"
+		}
+		CustomStringTableItem "{A1CF26101950010E}"
+		{
+			Id "AICF_Setup_Play"
+			Target_en_us "Start operation"
+			Target_ru_ru "Начать операцию"
+		}
+		CustomStringTableItem "{A1CF26101950010F}"
+		{
+			Id "AICF_Setup_Host"
+			Target_en_us "Create session"
+			Target_ru_ru "Создать сессию"
+		}
+		CustomStringTableItem "{A1CF261019500110}"
+		{
+			Id "AICF_Setup_Cancel"
+			Target_en_us "Cancel"
+			Target_ru_ru "Отмена"
+		}
+		CustomStringTableItem "{A1CF261019500111}"
+		{
+			Id "AICF_Setup_StandardSummary"
+			Target_en_us "Players can join either side. AI commanders operate on both sides."
+			Target_ru_ru "Игрокам доступны обе стороны. ИИ-командиры действуют за обе стороны."
+		}
+		CustomStringTableItem "{A1CF261019500112}"
+		{
+			Id "AICF_Setup_USSummary"
+			Target_en_us "Players: US Army. Opponent: Soviet AI. Your side has no managed combat squads or automatic construction; builders and barracks orders remain available."
+			Target_ru_ru "Игроки: США. Противник: ИИ СССР. У вашей стороны нет управляемых боевых отрядов и автостроительства; рабочие и заказы в казарме доступны."
+		}
+		CustomStringTableItem "{A1CF261019500113}"
+		{
+			Id "AICF_Setup_USSRSummary"
+			Target_en_us "Players: Soviet Army. Opponent: US AI. Your side has no managed combat squads or automatic construction; builders and barracks orders remain available."
+			Target_ru_ru "Игроки: СССР. Противник: ИИ США. У вашей стороны нет управляемых боевых отрядов и автостроительства; рабочие и заказы в казарме доступны."
+		}
+		CustomStringTableItem "{A1CF261019500114}"
+		{
+			Id "AICF_Setup_Unavailable"
+			Target_en_us "Scenario unavailable. Check enabled addons and multiplayer services."
+			Target_ru_ru "Сценарий недоступен. Проверьте подключённые моды и сетевые службы."
+		}
 		CustomStringTableItem "{A1CF261018461001}"
 		{
 			Id "AICF_Scenario_ArlandCoopUSSR_Name"

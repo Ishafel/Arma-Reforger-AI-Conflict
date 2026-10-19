@@ -139,6 +139,14 @@ Placeholder заменяется фактическим путём. Перед �
 ```
 
 Добавление нового сочетания карты/контента описано в [COOP_SCENARIO.md](COOP_SCENARIO.md).
+
+Отдельный vanilla Arland prototype «AI Conflict — Арланд: пример настройки»
+открывается игроком через Play/Host в меню и выбирает существующий leaf header
+до загрузки мира. Canonical launcher frontend не открывает: для server/client
+остаются `-Variant Stock -MatchMode ... -Difficulty ...`. Прямой ID prototype
+получает Co-op USSR Medium. Полный контракт и NOT RUN frontend gate —
+[SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+
 `-LoadoutLibraryPath <старый-profile>/profile/AICF_Loadouts` импортирует библиотеку
 шаблонов в свежий server profile; manifest фиксирует файлы и SHA-256.
 

@@ -71,6 +71,12 @@ Native лидерство, лимит и ownership RPC сохраняют сво
 
 ## Домены Core
 
+Прототип `AICF_ScenarioSetup` владеет только локальным frontend выбором и
+маршрутизацией в существующий native preset до начала матча. Concrete targets
+задаёт тонкий Arland header; shared gameplay config и репликация не меняются.
+Обычный запуск проходит через прежние native TryPlay/TryHost. Границы проверки
+frontend и правила очистки — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+
 `AICF_InstigatorContext` — узкий compatibility boundary transient death context.
 OTHER с известным character передаётся штатной AI/PLAYER классификации;
 источник без управляющего получает OTHER_DEATH с сохранённым Instigator и

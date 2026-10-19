@@ -1,5 +1,113 @@
 # Проверки и baseline
 
+## Пример frontend-настройки Arland — 2026-10-19
+
+Ветка `codex/arland-setup-example` от чистого `30be812`. Evidence:
+`.codex-runtime/arland-setup-example-20261019/`. Бинарники game/server/Workbench
+**1.8.0.13**, `binaries.json`. Контракт: [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+Добавлен один пункт **AI Conflict — Арланд: пример настройки**. Play/Host
+перехватываются только для нового header subtype; локальный выбор разрешает
+один из девяти существующих Arland presets до native запуска. Остальная матрица
+81 сценария пока сохранена. Runtime config текущего матча не меняется.
+
+До изменений `Invoke-AICFChecks.ps1 -Name @('Test-CoopScenarioStatic.ps1',
+'Test-CoopScenarioMatrix.ps1','Test-ScenarioHeadersStatic.ps1',
+'Test-RuntimeLauncherStatic.ps1','Test-LocalizationStatic.ps1')`
+с evidence `before/` — **5/5 PASS/0**.
+
+Полный `Invoke-AICFChecks.ps1 -EvidenceRoot <evidence>/offline-all`:
+**72/73 PASS, runner exit 1**. Co-op generator -Check обнаружил, что новые
+переводы вставлены перед принадлежащим генератору блоком. Штатный
+`tools/Update-AICFCoopScenarios.ps1` восстановил порядок; gameplay headers
+не менялись. `-Check` после генерации — **PASS/0**, 54 headers, changed=0,
+локализация **682** entries. Source и runtime таблицы согласованы.
+`locale-equivalence.json`: **682/682** RU/EN значений идентичны первому stage;
+изменилась только последовательность записей.
+
+Повтор четырёх затронутых checks через `Invoke-AICFChecks.ps1 -Name ...
+-EvidenceRoot <evidence>/after-selected` — **4/4 PASS/0**: CoopScenarioMatrix,
+LocalizationStatic, ScenarioHeadersStatic, ScenarioSetupStatic.
+`offline-verdict.json` сверяет точное множество текущего runner:
+последние результаты **73/73 PASS**, прежний FAIL сохранён. Это не второй
+чистый полный запуск. Новый ScenarioSetupStatic — **16 negative mutations**,
+девять target resources сверены с общим каталогом.
+
+Терминальный Workbench Validate/Compile:
+
+- финальные production Stock и полный Everon WCS+RHS graph — **2/2 PASS/0**,
+  `wb-final-stock`, `wb-final-wcs`;
+- изолированный Stock graph с Co-op и Setup fixtures — **PASS/0**,
+  `wb-fixture-authorized`; все production `.c` соответствуют финальным;
+- ранний production `wb-production` — PASS/0 до дополнительных allocation guards;
+  повтор финального Stock выше подтверждает их;
+- `wb-first` — FAIL/-1 из-за отсутствовавших override modifiers static hooks,
+  исправлено; `wb-second` — FAIL/-1 на SteamAPI_Init в sandbox, не compile PASS.
+  Успешные проверки выполнены с разрешённым доступом к работающему Steam.
+
+Финальные successful logs содержат Script validation successful, SCRIPT/VM/fatal 0.
+Графы/argv, native exits и полные логи сохранены. Автоматический approval несколько
+раз истекал до запуска команд; это не runtime failure или успешная компиляция.
+После явного разрешения владельца проверки завершены терминально.
+
+Server/client запущены только `Run.ps1` → `tools/Start-AICFRuntime.ps1`, отдельные
+сессии, fresh profiles и listener ports. CLI `-aicfSetupProbe 1
+-aicfCoopProbe STANDARD|US|USSR -aicfCoopProbeDurationMs 35000|180000`;
+client дополнительно `-aicfCoopProbePlayer 1`. Launcher перед соединением
+проверил точные CLI, живой server PID, ROSTER_READY и сохранил manifest.
+Клиент объяснён пользователю заранее и закрылся автоматически.
+
+| Итоговый run | Setup cases | Основной Co-op gate | SCRIPT E/F | Прочие `(E)` |
+|---|---|---|---|---|
+| standard server, Medium, 2480 | 18/18 | 16/16 | 0 | 16 |
+| coop-us server, Easy, 2481 | 18/18 | 19/19 | 0 | 15 |
+| coop-ussr-final server, Hard, 2483 | 18/18 | 19/19 | 0 | 16 |
+| coop-ussr-final client | 15/15 | player/Welcome/JIP, samples=30 | 0 | 71 |
+
+`Audit.ps1 -Case <case> [-Client]` выполняет `Test-ScenarioSetupLog.ps1`, включая
+полный Co-op stopped-log audit. Итоговая матрица **4/4 PASS/0**, все native exits 0.
+Server native readbacks проверили defaults, все девять headers, реально запущенный
+mode/difficulty и bounds/null/incomplete/metadata/recursion отказы. Client создал
+настоящий экран, проверил его размеры/modal, девять выборов, локализованную сводку,
+disabled side buttons в STANDARD, отказ неверному выбору и идемпотентный Close.
+Действий mouse/keyboard/controller, вызовов Play/Host fixture не выполняла.
+
+**Первое подключение — отдельный сохранённый FAIL:** `coop-ussr`, 2482,
+150000 ms. Server: 18/18 и 19/19, strict PASS/0. Задержка approval client
+оставила слишком мало времени до окончания сервера. UI cases прошли 15/15,
+но player/readback не завершились до REPLICATION_SHUTDOWN; strict client
+**FAIL/1**, три native frontend SCRIPT(E): два private SCR_FilterCategory
+constructor и отсутствующий REPLICATION_SHUTDOWN preset. Native exit 0 не
+отменяет FAIL. Эти native frontend ошибки не исправлялись и не объявляются
+устранёнными чистым повтором. Повторная пара стартовала своевременно с 180000 ms
+и целиком прошла strict gates; логи двух пар не объединяются.
+
+`AuditNegatives.ps1` по двум полным stopped logs финальной пары — **20/20 PASS**:
+positive controls и отказы для failed/missing/duplicate case, missing/failed
+completion, missing CLI, SCRIPT(E), live log и native exit != 0, по обеим ролям.
+Это synthetic mutations анализатора, не дополнительные игровые прогоны.
+
+`source-integrity.json`: **246/246** production Core/Arland игровых файлов
+побайтно совпали с финальным stage; `fixture-integrity.json`: **2/2**.
+Первые Standard/US runs использовали первый stage, отличающийся только порядком
+локализации; полное совпадение всех её значений подтверждено выше. Финальная
+USSR server/client пара использует окончательную версию.
+Прочие **118** engine `(E)` строк итоговой матрицы сохранены: world/resource и
+shutdown RPC diagnostics. Полностью error-free engine log не заявляется.
+
+**NOT RUN / frontend blocker:** настоящий ручной переход из «Сценарии» через
+Play и Host, отмена/подтверждение ввода мышью, клавиатурой или controller и
+визуальное размещение на разных разрешениях. Игроку нужно открыть новый пункт,
+изменить режим/сложность, отменить и повторно запустить через оба штатных действия,
+проверив полученный режим. Terminal-only workflow запрещает GUI automation и
+запуск через Host UI; native headers/widgets и canonical direct-connect runtime
+не доказывают этот переход. Прототип не объявляется готовым UI для релиза.
+Также NOT RUN: новый packaged/Workshop build, другие карты/моды в runtime и soak.
+
+Полные baseline/final logs, manifests, команды, exits и source ZIP с SHA-256
+сохранены в evidence. Тестовые игровые/Workbench процессы завершены.
+Временный stage адресно удалён после проверки обоих ZIP; `cleanup-final.txt`.
+Push, PR, merge и публикация не выполнялись.
+
 ## Исправление Instigator OTHER — 2026-10-19
 
 Ветка `codex/instigator-other-context` от чистого `dc087a3`. Evidence:
