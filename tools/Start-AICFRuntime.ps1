@@ -5,8 +5,11 @@ param(
     [string]$Role,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Stock', 'StockCoopUSSR', 'Everon', 'EveronNorth', 'RHS', 'EveronRHS', 'EveronNorthRHS', 'ArlandWCSRHS', 'EveronWCSRHS', 'EveronNorthWCSRHS')]
+    [ValidateNotNullOrEmpty()]
     [string]$Variant,
+
+    [ValidateSet('Standard', 'CoopUS', 'CoopUSSR')]
+    [string]$MatchMode = 'Standard',
 
     [ValidateSet('Easy', 'Medium', 'Hard')]
     [string]$Difficulty = 'Easy',
@@ -38,6 +41,13 @@ $ErrorActionPreference = 'Stop'
 if (-not $RepositoryRoot) {
     $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 }
+. (Join-Path $PSScriptRoot 'AICF_Scenarios.ps1')
+if ($Variant -eq 'StockCoopUSSR' -and $PSBoundParameters.ContainsKey('MatchMode') -and $MatchMode -ne 'CoopUSSR') {
+    throw 'StockCoopUSSR требует MatchMode CoopUSSR.'
+}
+$scenarioCatalog = Get-AICFScenarioCatalog
+$scenarioPlan = Resolve-AICFScenario -Catalog $scenarioCatalog -Variant $Variant -MatchMode $MatchMode -Difficulty $Difficulty
+$MatchMode = $scenarioPlan.matchMode
 
 function Resolve-AICFExistingDirectory {
     param(
@@ -290,7 +300,7 @@ if ($Role -eq 'Client') {
 }
 
 $rhsRootPath = $null
-if ($Variant -in @('RHS', 'EveronRHS', 'EveronNorthRHS', 'ArlandWCSRHS', 'EveronWCSRHS', 'EveronNorthWCSRHS')) {
+if ($scenarioPlan.externalAddons) {
     if (-not $RhsAddonsRoot) {
         $rhsCandidates = [System.Collections.Generic.List[string]]::new()
         $documentsRoot = [Environment]::GetFolderPath('MyDocuments')
@@ -328,11 +338,11 @@ if ($rhsRootPath) {
 if ($UseDefaultAICommanderMode -and $PSBoundParameters.ContainsKey('AICommanderMode')) {
     throw 'Нельзя одновременно задавать -UseDefaultAICommanderMode и -AICommanderMode.'
 }
-if ($Variant -eq 'StockCoopUSSR') {
-    if ($PSBoundParameters.ContainsKey('AICommanderMode') -and $AICommanderMode -cne 'US') {
-        throw 'StockCoopUSSR требует AICommanderMode US: СССР управляют игроки.'
+if ($MatchMode -ne 'Standard') {
+    if ($PSBoundParameters.ContainsKey('AICommanderMode') -and $AICommanderMode -cne $scenarioPlan.commander) {
+        throw "$MatchMode требует AICommanderMode $($scenarioPlan.commander): сторона $($scenarioPlan.playerSide) принадлежит игрокам."
     }
-    $AICommanderMode = 'US'
+    $AICommanderMode = $scenarioPlan.commander
 }
 
 $managedArguments = @(
@@ -346,90 +356,11 @@ foreach ($argument in $AdditionalArguments) {
     }
 }
 
-$projectRelativePath = 'AIConflictArland\addon.gproj'
-
-$scenario = '{BC2437E4861B4FD2}Missions/AICF_Conflict_Arland.conf'
-$missionHeader = 'Missions/AICF_Conflict_Arland.conf'
-$addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E'
-$profileVariant = ''
-if ($Variant -eq 'StockCoopUSSR') {
-    $scenario = '{A1CF261018460001}Missions/AICF_Conflict_Arland_Coop_USSR.conf'
-    $missionHeader = $scenario.Substring(18)
-    $profileVariant = '-CoopUSSR'
-}
-if ($Variant -in @('Everon', 'EveronNorth')) {
-    $projectRelativePath = 'AIConflictEveron\addon.gproj'
-    $scenario = '{4C5D73A5614F41D9}Missions/AICF_Conflict_Everon.conf'
-    $missionHeader = 'Missions/AICF_Conflict_Everon.conf'
-    $addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E,A4B2E62595F645A4'
-    $profileVariant = '-Everon'
-    if ($Variant -eq 'EveronNorth') {
-        $missionHeader = 'Missions/AICF_Conflict_Everon_North.conf'
-        $scenario = '{A1CF190919300000}Missions/AICF_Conflict_Everon_North.conf'
-        $profileVariant = '-EveronNorth'
-    }
-}
-elseif ($Variant -in @('RHS', 'ArlandWCSRHS', 'EveronWCSRHS', 'EveronNorthWCSRHS')) {
-    $projectRelativePath = 'AIConflictArlandRHS\addon.gproj'
-    $scenario = '{97E4BCB73F044C66}Missions/AICF_RHS_Conflict_Arland.conf'
-    $missionHeader = 'Missions/AICF_RHS_Conflict_Arland.conf'
-    $addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C'
-    $profileVariant = '-RHS'
-    if ($Variant -in @('ArlandWCSRHS', 'EveronWCSRHS', 'EveronNorthWCSRHS')) {
-        $projectRelativePath = 'AIConflictArlandWCSRHS\addon.gproj'
-        $scenario = '{A1CF260928100002}Missions/AICF_WCS_RHS_Conflict_Arland.conf'
-        $missionHeader = 'Missions/AICF_WCS_RHS_Conflict_Arland.conf'
-        $addonIds += ',68F006D910E7546F,61C74A8B647617DA,62A668F513428630,631C3C1AEE9C90BC,615806DC6C57AF02,615818DA7C0343FD,629B2BA37EFFD577,5E389BB9F58B79A6,5D1880C4AD410C14,5E0AB16BEB16D6A4,65CF7AE8574E06D2,6A717EEA63A35E67,3B8081D9CAD979D2,65F929DF622BAD50,6602C1EC7E5A4A87,6152CB0BD0684837,5B383D4CB27E0D54,63120AE07E6C0966,A1CF260928100001'
-        $profileVariant = '-ArlandWCSRHS'
-        if ($Variant -in @('EveronWCSRHS', 'EveronNorthWCSRHS')) {
-            $projectRelativePath = 'AIConflictEveronWCSRHS\addon.gproj'
-            $scenario = '{A1CF261006100002}Missions/AICF_WCS_RHS_Conflict_Everon.conf'
-            $missionHeader = 'Missions/AICF_WCS_RHS_Conflict_Everon.conf'
-            $addonIds += ',A4B2E62595F645A4,FA9FDCCA428A43BA,A1CF261006100001'
-            $profileVariant = '-EveronWCSRHS'
-            if ($Variant -eq 'EveronNorthWCSRHS') {
-                $scenario = '{A1CF261006100003}Missions/AICF_WCS_RHS_Conflict_Everon_North.conf'
-                if ($Difficulty -eq 'Medium') { $scenario = '{A1CF261008100001}Missions/AICF_WCS_RHS_Conflict_Everon_North_Medium.conf' }
-                if ($Difficulty -eq 'Hard') { $scenario = '{A1CF261008100002}Missions/AICF_WCS_RHS_Conflict_Everon_North_Hard.conf' }
-                $missionHeader = $scenario.Substring(18)
-                $profileVariant = '-EveronNorthWCSRHS'
-            }
-        }
-    }
-}
-elseif ($Variant -in @('EveronRHS', 'EveronNorthRHS')) {
-    $projectRelativePath = 'AIConflictEveronRHS\addon.gproj'
-    $scenario = '{57FA3D0337BE47E5}Missions/AICF_RHS_Conflict_Everon.conf'
-    $missionHeader = 'Missions/AICF_RHS_Conflict_Everon.conf'
-    $addonIds = '9178E5822AFE48EA,B52C5F6AEDBF423E,A4B2E62595F645A4,1337C0DE5DABBEEF,BADC0DEDABBEDA5E,595F2BF2F44836FB,9F88011DA22B471C,FA9FDCCA428A43BA'
-    $profileVariant = '-EveronRHS'
-    if ($Variant -eq 'EveronNorthRHS') {
-        $missionHeader = 'Missions/AICF_RHS_Conflict_Everon_North.conf'
-        # Native -server принимает MissionHeader; запуск .ent не применяет whitelist.
-        $scenario = '{A1CF190919100000}Missions/AICF_RHS_Conflict_Everon_North.conf'
-        $profileVariant = '-EveronNorthRHS'
-    }
-}
-
-# Thin inherited headers preserve each variant's existing dependency graph.
-$difficultyHeaders = @{
-    StockCoopUSSR = @('{A1CF261018460002}Missions/AICF_Conflict_Arland_Coop_USSR_Medium.conf', '{A1CF261018460003}Missions/AICF_Conflict_Arland_Coop_USSR_Hard.conf')
-    Stock = @('{A1CF261008300001}Missions/AICF_Conflict_Arland_Medium.conf', '{A1CF261008300002}Missions/AICF_Conflict_Arland_Hard.conf')
-    Everon = @('{A1CF261008300003}Missions/AICF_Conflict_Everon_Medium.conf', '{A1CF261008300004}Missions/AICF_Conflict_Everon_Hard.conf')
-    EveronNorth = @('{A1CF261008300005}Missions/AICF_Conflict_Everon_North_Medium.conf', '{A1CF261008300006}Missions/AICF_Conflict_Everon_North_Hard.conf')
-    RHS = @('{A1CF261008300007}Missions/AICF_RHS_Conflict_Arland_Medium.conf', '{A1CF261008300008}Missions/AICF_RHS_Conflict_Arland_Hard.conf')
-    EveronRHS = @('{A1CF261008300009}Missions/AICF_RHS_Conflict_Everon_Medium.conf', '{A1CF261008300010}Missions/AICF_RHS_Conflict_Everon_Hard.conf')
-    EveronNorthRHS = @('{A1CF261008300011}Missions/AICF_RHS_Conflict_Everon_North_Medium.conf', '{A1CF261008300012}Missions/AICF_RHS_Conflict_Everon_North_Hard.conf')
-    ArlandWCSRHS = @('{A1CF261008300013}Missions/AICF_WCS_RHS_Conflict_Arland_Medium.conf', '{A1CF261008300014}Missions/AICF_WCS_RHS_Conflict_Arland_Hard.conf')
-    EveronWCSRHS = @('{A1CF261008300015}Missions/AICF_WCS_RHS_Conflict_Everon_Medium.conf', '{A1CF261008300016}Missions/AICF_WCS_RHS_Conflict_Everon_Hard.conf')
-}
-if ($Difficulty -ne 'Easy' -and $difficultyHeaders.ContainsKey($Variant)) {
-    $difficultyIndex = 0
-    if ($Difficulty -eq 'Hard') { $difficultyIndex = 1 }
-    $scenario = $difficultyHeaders[$Variant][$difficultyIndex]
-    $missionHeader = $scenario.Substring(18)
-}
-
+$projectRelativePath = $scenarioPlan.project.Replace('/', [IO.Path]::DirectorySeparatorChar)
+$scenario = $scenarioPlan.scenario
+$missionHeader = $scenarioPlan.missionHeader
+$addonIds = $scenarioPlan.addonIds
+$profileVariant = $scenarioPlan.profileSuffix
 $projectPath = Resolve-AICFExistingFile -Path (Join-Path $repositoryPath $projectRelativePath) -Description "$Variant gproj"
 $executable = $null
 $addonsDirectories = @($repositoryPath)
@@ -449,14 +380,9 @@ $addonsDir = $addonsDirectories -join ','
 
 # Source-копия без индексов может стартовать как server, но client не разрешит
 # MissionHeader/world GUID. DryRun остаётся доступен для подготовки Workbench.
-$localProjects = [ordered]@{
-    '9178E5822AFE48EA' = 'AIConflictCore'
-    'B52C5F6AEDBF423E' = 'AIConflictArland'
-    'A4B2E62595F645A4' = 'AIConflictEveron'
-    '9F88011DA22B471C' = 'AIConflictArlandRHS'
-    'FA9FDCCA428A43BA' = 'AIConflictEveronRHS'
-    'A1CF260928100001' = 'AIConflictArlandWCSRHS'
-    'A1CF261006100001' = 'AIConflictEveronWCSRHS'
+$localProjects = [ordered]@{}
+foreach ($project in $scenarioCatalog.localProjects.PSObject.Properties) {
+    $localProjects[$project.Name] = $project.Value
 }
 $resourceDatabases = @(
     foreach ($addonId in $addonIds.Split(',')) {
@@ -550,6 +476,10 @@ $manifest = [ordered]@{
     schema = 1
     role = $Role
     variant = $Variant
+    baseVariant = $scenarioPlan.baseVariant
+    matchMode = $MatchMode
+    playerSide = $scenarioPlan.playerSide
+    scenario = $scenario
     executable = $executable
     profile = $profilePath
     addonsDir = $addonsDir

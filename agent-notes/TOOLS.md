@@ -146,7 +146,9 @@ Enforce fixture не входят в автоматическую матрицу
 
 | Файл | Вход, результат и побочные эффекты |
 |---|---|
-| [Start-AICFRuntime.ps1](../tools/Start-AICFRuntime.ps1) | `-Role`, `-Variant`; foreground server/client, свежий profile, manifest и readiness. Полный контракт в DEVELOPMENT. `-DryRun` только строит план |
+| [Start-AICFRuntime.ps1](../tools/Start-AICFRuntime.ps1) | `-Role`, `-Variant`, `-MatchMode Standard/CoopUS/CoopUSSR`, `-Difficulty`; foreground server/client, свежий profile, manifest и readiness. Полный контракт в DEVELOPMENT. `-DryRun` только строит план |
+| [AICF_Scenarios.ps1](../tools/AICF_Scenarios.ps1), [каталог](../tools/config/AICF_Scenarios.json) | Единый resolver карты/контента, режима, сложности, ресурсов и addon graph; без запуска игры. Recipe расширения — COOP_SCENARIO |
+| [Update-AICFCoopScenarios.ps1](../tools/Update-AICFCoopScenarios.ps1) | Генерация тонких Co-op headers/meta, RU/EN строк и native header probe из каталога; `-Check` проверяет актуальность без записи |
 | [Invoke-AICFChecks.ps1](../tools/Invoke-AICFChecks.ps1) | Offline набор и evidence, контракт выше |
 | [fetch_reforger_api_reference.sh](../tools/fetch_reforger_api_reference.sh) | Git Bash, сеть при отсутствии кэша; закреплённые version/commit/SHA-256, результат только в `.cache/reforger-api/` |
 | [Build-AICFLocalization.ps1](../tools/Build-AICFLocalization.ps1) | `-RepositoryRoot`, `-Check`; без `-Check` обновляет производные localization файлы. С `-Check` проверяет соответствие |

@@ -67,22 +67,26 @@ manifest использует game resources, подходящие Workbench. П
 | `-Variant` | Source root |
 |---|---|
 | `Stock` | `AIConflictArland` |
-| `StockCoopUSSR` | `AIConflictArland`, отдельный inherited Co-op header |
 | `Everon`, `EveronNorth` | `AIConflictEveron` |
 | `RHS` | `AIConflictArlandRHS` |
 | `EveronRHS`, `EveronNorthRHS` | `AIConflictEveronRHS` |
 | `ArlandWCSRHS` | `AIConflictArlandWCSRHS` |
 | `EveronWCSRHS`, `EveronNorthWCSRHS` | `AIConflictEveronWCSRHS` |
 
-Точный граф и ресурс `.conf` определяет launcher. Не заменяй сценарий raw `.ent`
+Точный граф и ресурс `.conf` определяет каталог `tools/config/AICF_Scenarios.json`.
+`-MatchMode Standard|CoopUS|CoopUSSR` выбирает режим для любого из девяти Variant;
+default `Standard`. Стороны US/USSR логические: RHS использует USMC/МСВ,
+WCS — НАТО/РФ. Старый `-Variant StockCoopUSSR` сохраняется как alias
+`-Variant Stock -MatchMode CoopUSSR`; несовместимый явно переданный режим отклоняется.
+Не заменяй сценарий raw `.ent`
 с отдельным `-MissionHeader`: whitelist должен применяться до инициализации баз.
 RHS/WCS версии и каталоги сверяй с установленными пакетами и addon dependencies;
 сведения WCS: [Arland](../AIConflictArlandWCSRHS/README.md),
 [Everon](../AIConflictEveronWCSRHS/README.md).
 
-Для любого из десяти Variant используйте `-Difficulty Easy|Medium|Hard`
+Для любого Variant и MatchMode используйте `-Difficulty Easy|Medium|Hard`
 (default `Easy`), например `-Variant EveronNorth -Difficulty Hard`.
-Передавайте одинаковую `Difficulty` серверу и клиенту: readiness gate проверяет
+Передавайте одинаковые `Variant`, `MatchMode` и `Difficulty` серверу и клиенту: readiness gate проверяет
 точный server header. Medium добавляет один БТР со случайным десантом до 2/4;
 Hard — случайные пары бронетехники и одну усиленную точку с 3/4 машинами.
 Недоступные танки заменяются БТР. Правила и подготовка графа описаны в
@@ -102,7 +106,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Start-AICFRuntime.
 ```
 
 Сохрани напечатанные `AICF_RUNTIME_PROFILE` и `AICF_RUNTIME_MANIFEST_JSON`.
-Для локальной клиентской проверки укажи этот server profile и тот же Variant
+Для локальной клиентской проверки укажи этот server profile и тот же Variant/MatchMode/Difficulty
 в другой сессии:
 
 ```powershell
@@ -125,6 +129,16 @@ Placeholder заменяется фактическим путём. Перед �
 запускай их последовательно.
 
 `-AICommanderMode BOTH|US|USSR` задаётся при старте и не меняется в матче.
+В Co-op launcher по умолчанию выбирает противоположную людям сторону;
+явный несовместимый commander отклоняется. Пример за US на Севере Эверона WCS:
+
+```powershell
+& tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthWCSRHS -MatchMode CoopUS -Difficulty Medium
+# В другой сессии, с фактическим свежим server profile:
+& tools/Start-AICFRuntime.ps1 -Role Client -Variant EveronNorthWCSRHS -MatchMode CoopUS -Difficulty Medium -ServerProfileRoot $serverProfileRoot
+```
+
+Добавление нового сочетания карты/контента описано в [COOP_SCENARIO.md](COOP_SCENARIO.md).
 `-LoadoutLibraryPath <старый-profile>/profile/AICF_Loadouts` импортирует библиотеку
 шаблонов в свежий server profile; manifest фиксирует файлы и SHA-256.
 

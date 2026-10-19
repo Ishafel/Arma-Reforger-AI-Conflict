@@ -1,0 +1,445 @@
+{
+  "schema": 1,
+  "graphs": {
+    "AIConflictArland": {
+      "project": "AIConflictArland/addon.gproj",
+      "addons": [
+        "9178E5822AFE48EA",
+        "B52C5F6AEDBF423E"
+      ],
+      "externalAddons": false,
+      "factions": {
+        "USSR": "USSR",
+        "US": "US"
+      }
+    },
+    "AIConflictEveron": {
+      "project": "AIConflictEveron/addon.gproj",
+      "addons": [
+        "9178E5822AFE48EA",
+        "B52C5F6AEDBF423E",
+        "A4B2E62595F645A4"
+      ],
+      "externalAddons": false,
+      "factions": {
+        "USSR": "USSR",
+        "US": "US"
+      }
+    },
+    "AIConflictArlandRHS": {
+      "project": "AIConflictArlandRHS/addon.gproj",
+      "addons": [
+        "9178E5822AFE48EA",
+        "B52C5F6AEDBF423E",
+        "1337C0DE5DABBEEF",
+        "BADC0DEDABBEDA5E",
+        "595F2BF2F44836FB",
+        "9F88011DA22B471C"
+      ],
+      "externalAddons": true,
+      "factions": {
+        "USSR": "RHS_AFRF",
+        "US": "RHS_USAF"
+      }
+    },
+    "AIConflictEveronRHS": {
+      "project": "AIConflictEveronRHS/addon.gproj",
+      "addons": [
+        "9178E5822AFE48EA",
+        "B52C5F6AEDBF423E",
+        "A4B2E62595F645A4",
+        "1337C0DE5DABBEEF",
+        "BADC0DEDABBEDA5E",
+        "595F2BF2F44836FB",
+        "9F88011DA22B471C",
+        "FA9FDCCA428A43BA"
+      ],
+      "externalAddons": true,
+      "factions": {
+        "USSR": "RHS_AFRF",
+        "US": "RHS_USAF"
+      }
+    },
+    "AIConflictArlandWCSRHS": {
+      "project": "AIConflictArlandWCSRHS/addon.gproj",
+      "addons": [
+        "9178E5822AFE48EA",
+        "B52C5F6AEDBF423E",
+        "1337C0DE5DABBEEF",
+        "BADC0DEDABBEDA5E",
+        "595F2BF2F44836FB",
+        "9F88011DA22B471C",
+        "68F006D910E7546F",
+        "61C74A8B647617DA",
+        "62A668F513428630",
+        "631C3C1AEE9C90BC",
+        "615806DC6C57AF02",
+        "615818DA7C0343FD",
+        "629B2BA37EFFD577",
+        "5E389BB9F58B79A6",
+        "5D1880C4AD410C14",
+        "5E0AB16BEB16D6A4",
+        "65CF7AE8574E06D2",
+        "6A717EEA63A35E67",
+        "3B8081D9CAD979D2",
+        "65F929DF622BAD50",
+        "6602C1EC7E5A4A87",
+        "6152CB0BD0684837",
+        "5B383D4CB27E0D54",
+        "63120AE07E6C0966",
+        "A1CF260928100001"
+      ],
+      "externalAddons": true,
+      "factions": {
+        "USSR": "RHS_AFRF",
+        "US": "RHS_USAF"
+      }
+    },
+    "AIConflictEveronWCSRHS": {
+      "project": "AIConflictEveronWCSRHS/addon.gproj",
+      "addons": [
+        "9178E5822AFE48EA",
+        "B52C5F6AEDBF423E",
+        "1337C0DE5DABBEEF",
+        "BADC0DEDABBEDA5E",
+        "595F2BF2F44836FB",
+        "9F88011DA22B471C",
+        "68F006D910E7546F",
+        "61C74A8B647617DA",
+        "62A668F513428630",
+        "631C3C1AEE9C90BC",
+        "615806DC6C57AF02",
+        "615818DA7C0343FD",
+        "629B2BA37EFFD577",
+        "5E389BB9F58B79A6",
+        "5D1880C4AD410C14",
+        "5E0AB16BEB16D6A4",
+        "65CF7AE8574E06D2",
+        "6A717EEA63A35E67",
+        "3B8081D9CAD979D2",
+        "65F929DF622BAD50",
+        "6602C1EC7E5A4A87",
+        "6152CB0BD0684837",
+        "5B383D4CB27E0D54",
+        "63120AE07E6C0966",
+        "A1CF260928100001",
+        "A4B2E62595F645A4",
+        "FA9FDCCA428A43BA",
+        "A1CF261006100001"
+      ],
+      "externalAddons": true,
+      "factions": {
+        "USSR": "RHS_AFRF",
+        "US": "RHS_USAF"
+      }
+    }
+  },
+  "variants": [
+    {
+      "name": "Stock",
+      "graph": "AIConflictArland",
+      "standard": [
+        "{BC2437E4861B4FD2}Missions/AICF_Conflict_Arland.conf",
+        "{A1CF261008300001}Missions/AICF_Conflict_Arland_Medium.conf",
+        "{A1CF261008300002}Missions/AICF_Conflict_Arland_Hard.conf"
+      ],
+      "coop": {
+        "US": [
+          "A1CF261018460111",
+          "A1CF261018460112",
+          "A1CF261018460113"
+        ],
+        "USSR": [
+          "A1CF261018460001",
+          "A1CF261018460002",
+          "A1CF261018460003"
+        ]
+      },
+      "profileSuffix": "",
+      "titleRu": "Арланд",
+      "titleEn": "Arland",
+      "sideRu": {
+        "US": "США",
+        "USSR": "СССР"
+      },
+      "sideEn": {
+        "US": "US Army",
+        "USSR": "Soviet Army"
+      },
+      "stringGuidPrefix": "A1CF2610184701"
+    },
+    {
+      "name": "Everon",
+      "graph": "AIConflictEveron",
+      "standard": [
+        "{4C5D73A5614F41D9}Missions/AICF_Conflict_Everon.conf",
+        "{A1CF261008300003}Missions/AICF_Conflict_Everon_Medium.conf",
+        "{A1CF261008300004}Missions/AICF_Conflict_Everon_Hard.conf"
+      ],
+      "coop": {
+        "US": [
+          "A1CF261018460211",
+          "A1CF261018460212",
+          "A1CF261018460213"
+        ],
+        "USSR": [
+          "A1CF261018460221",
+          "A1CF261018460222",
+          "A1CF261018460223"
+        ]
+      },
+      "profileSuffix": "-Everon",
+      "titleRu": "Эверон",
+      "titleEn": "Everon",
+      "sideRu": {
+        "US": "США",
+        "USSR": "СССР"
+      },
+      "sideEn": {
+        "US": "US Army",
+        "USSR": "Soviet Army"
+      },
+      "stringGuidPrefix": "A1CF2610184702"
+    },
+    {
+      "name": "EveronNorth",
+      "graph": "AIConflictEveron",
+      "standard": [
+        "{A1CF190919300000}Missions/AICF_Conflict_Everon_North.conf",
+        "{A1CF261008300005}Missions/AICF_Conflict_Everon_North_Medium.conf",
+        "{A1CF261008300006}Missions/AICF_Conflict_Everon_North_Hard.conf"
+      ],
+      "coop": {
+        "US": [
+          "A1CF261018460311",
+          "A1CF261018460312",
+          "A1CF261018460313"
+        ],
+        "USSR": [
+          "A1CF261018460321",
+          "A1CF261018460322",
+          "A1CF261018460323"
+        ]
+      },
+      "profileSuffix": "-EveronNorth",
+      "titleRu": "Север Эверона",
+      "titleEn": "Everon North",
+      "sideRu": {
+        "US": "США",
+        "USSR": "СССР"
+      },
+      "sideEn": {
+        "US": "US Army",
+        "USSR": "Soviet Army"
+      },
+      "stringGuidPrefix": "A1CF2610184703"
+    },
+    {
+      "name": "RHS",
+      "graph": "AIConflictArlandRHS",
+      "standard": [
+        "{97E4BCB73F044C66}Missions/AICF_RHS_Conflict_Arland.conf",
+        "{A1CF261008300007}Missions/AICF_RHS_Conflict_Arland_Medium.conf",
+        "{A1CF261008300008}Missions/AICF_RHS_Conflict_Arland_Hard.conf"
+      ],
+      "coop": {
+        "US": [
+          "A1CF261018460411",
+          "A1CF261018460412",
+          "A1CF261018460413"
+        ],
+        "USSR": [
+          "A1CF261018460421",
+          "A1CF261018460422",
+          "A1CF261018460423"
+        ]
+      },
+      "profileSuffix": "-RHS",
+      "titleRu": "Арланд RHS",
+      "titleEn": "Arland RHS",
+      "sideRu": {
+        "US": "USMC",
+        "USSR": "МСВ"
+      },
+      "sideEn": {
+        "US": "USMC",
+        "USSR": "MSV"
+      },
+      "stringGuidPrefix": "A1CF2610184704"
+    },
+    {
+      "name": "EveronRHS",
+      "graph": "AIConflictEveronRHS",
+      "standard": [
+        "{57FA3D0337BE47E5}Missions/AICF_RHS_Conflict_Everon.conf",
+        "{A1CF261008300009}Missions/AICF_RHS_Conflict_Everon_Medium.conf",
+        "{A1CF261008300010}Missions/AICF_RHS_Conflict_Everon_Hard.conf"
+      ],
+      "coop": {
+        "US": [
+          "A1CF261018460511",
+          "A1CF261018460512",
+          "A1CF261018460513"
+        ],
+        "USSR": [
+          "A1CF261018460521",
+          "A1CF261018460522",
+          "A1CF261018460523"
+        ]
+      },
+      "profileSuffix": "-EveronRHS",
+      "titleRu": "Эверон RHS",
+      "titleEn": "Everon RHS",
+      "sideRu": {
+        "US": "USMC",
+        "USSR": "МСВ"
+      },
+      "sideEn": {
+        "US": "USMC",
+        "USSR": "MSV"
+      },
+      "stringGuidPrefix": "A1CF2610184705"
+    },
+    {
+      "name": "EveronNorthRHS",
+      "graph": "AIConflictEveronRHS",
+      "standard": [
+        "{A1CF190919100000}Missions/AICF_RHS_Conflict_Everon_North.conf",
+        "{A1CF261008300011}Missions/AICF_RHS_Conflict_Everon_North_Medium.conf",
+        "{A1CF261008300012}Missions/AICF_RHS_Conflict_Everon_North_Hard.conf"
+      ],
+      "coop": {
+        "US": [
+          "A1CF261018460611",
+          "A1CF261018460612",
+          "A1CF261018460613"
+        ],
+        "USSR": [
+          "A1CF261018460621",
+          "A1CF261018460622",
+          "A1CF261018460623"
+        ]
+      },
+      "profileSuffix": "-EveronNorthRHS",
+      "titleRu": "Север Эверона RHS",
+      "titleEn": "Everon North RHS",
+      "sideRu": {
+        "US": "USMC",
+        "USSR": "МСВ"
+      },
+      "sideEn": {
+        "US": "USMC",
+        "USSR": "MSV"
+      },
+      "stringGuidPrefix": "A1CF2610184706"
+    },
+    {
+      "name": "ArlandWCSRHS",
+      "graph": "AIConflictArlandWCSRHS",
+      "standard": [
+        "{A1CF260928100002}Missions/AICF_WCS_RHS_Conflict_Arland.conf",
+        "{A1CF261008300013}Missions/AICF_WCS_RHS_Conflict_Arland_Medium.conf",
+        "{A1CF261008300014}Missions/AICF_WCS_RHS_Conflict_Arland_Hard.conf"
+      ],
+      "coop": {
+        "US": [
+          "A1CF261018460711",
+          "A1CF261018460712",
+          "A1CF261018460713"
+        ],
+        "USSR": [
+          "A1CF261018460721",
+          "A1CF261018460722",
+          "A1CF261018460723"
+        ]
+      },
+      "profileSuffix": "-ArlandWCSRHS",
+      "titleRu": "Арланд WCS + RHS",
+      "titleEn": "Arland WCS + RHS",
+      "sideRu": {
+        "US": "НАТО",
+        "USSR": "РФ"
+      },
+      "sideEn": {
+        "US": "NATO",
+        "USSR": "Russia"
+      },
+      "stringGuidPrefix": "A1CF2610184707"
+    },
+    {
+      "name": "EveronWCSRHS",
+      "graph": "AIConflictEveronWCSRHS",
+      "standard": [
+        "{A1CF261006100002}Missions/AICF_WCS_RHS_Conflict_Everon.conf",
+        "{A1CF261008300015}Missions/AICF_WCS_RHS_Conflict_Everon_Medium.conf",
+        "{A1CF261008300016}Missions/AICF_WCS_RHS_Conflict_Everon_Hard.conf"
+      ],
+      "coop": {
+        "US": [
+          "A1CF261018460811",
+          "A1CF261018460812",
+          "A1CF261018460813"
+        ],
+        "USSR": [
+          "A1CF261018460821",
+          "A1CF261018460822",
+          "A1CF261018460823"
+        ]
+      },
+      "profileSuffix": "-EveronWCSRHS",
+      "titleRu": "Эверон WCS + RHS",
+      "titleEn": "Everon WCS + RHS",
+      "sideRu": {
+        "US": "НАТО",
+        "USSR": "РФ"
+      },
+      "sideEn": {
+        "US": "NATO",
+        "USSR": "Russia"
+      },
+      "stringGuidPrefix": "A1CF2610184708"
+    },
+    {
+      "name": "EveronNorthWCSRHS",
+      "graph": "AIConflictEveronWCSRHS",
+      "standard": [
+        "{A1CF261006100003}Missions/AICF_WCS_RHS_Conflict_Everon_North.conf",
+        "{A1CF261008100001}Missions/AICF_WCS_RHS_Conflict_Everon_North_Medium.conf",
+        "{A1CF261008100002}Missions/AICF_WCS_RHS_Conflict_Everon_North_Hard.conf"
+      ],
+      "coop": {
+        "US": [
+          "A1CF261018460911",
+          "A1CF261018460912",
+          "A1CF261018460913"
+        ],
+        "USSR": [
+          "A1CF261018460921",
+          "A1CF261018460922",
+          "A1CF261018460923"
+        ]
+      },
+      "profileSuffix": "-EveronNorthWCSRHS",
+      "titleRu": "Север Эверона WCS + RHS",
+      "titleEn": "Everon North WCS + RHS",
+      "sideRu": {
+        "US": "НАТО",
+        "USSR": "РФ"
+      },
+      "sideEn": {
+        "US": "NATO",
+        "USSR": "Russia"
+      },
+      "stringGuidPrefix": "A1CF2610184709"
+    }
+  ],
+  "localProjects": {
+    "9178E5822AFE48EA": "AIConflictCore",
+    "B52C5F6AEDBF423E": "AIConflictArland",
+    "A4B2E62595F645A4": "AIConflictEveron",
+    "9F88011DA22B471C": "AIConflictArlandRHS",
+    "FA9FDCCA428A43BA": "AIConflictEveronRHS",
+    "A1CF260928100001": "AIConflictArlandWCSRHS",
+    "A1CF261006100001": "AIConflictEveronWCSRHS"
+  }
+}

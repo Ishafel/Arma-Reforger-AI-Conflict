@@ -27,11 +27,14 @@ identity и одноразовым флагом commit. `AICF_RHSPMCEquipment` �
 | `AIConflictEveronWCSRHS` | `A1CF261006100001` | Полный и северный Everon с общим WCS + RHS profile |
 
 Vanilla dependency — `58D0FB3206B6F859`. Точный граф зависимостей принадлежит
-`addon.gproj` каждого addon и `tools/Start-AICFRuntime.ps1`; GUID не меняются.
+`addon.gproj` каждого addon и `tools/config/AICF_Scenarios.json`; launcher читает
+этот каталог через `AICF_Scenarios.ps1`. GUID не меняются.
 Core и stock integrations не должны получать обязательные RHS/WCS dependencies.
 
-Ванильный Arland Co-op СССР выбирается inherited header. Общая immutable
-`AICF_MatchRules` задаёт 0/10 боевых slots и ticket defeat по стороне;
+Co-op за US/USSR выбирается тонким inherited header для каждого из девяти
+сочетаний карты и контента. Генератор наследует соответствующий standard header
+той же сложности, сохраняя world, North whitelist и content flags. Общая immutable
+`AICF_MatchRules` задаёт 0 боевых slots у людей и 10 у противника, ticket defeat по стороне;
 faction state и helpers сохраняются. Владение roster остаётся у FactionState,
 условиями победы — у VictorySystem. Контракт: [COOP_SCENARIO.md](COOP_SCENARIO.md).
 Co-op фильтрует меню и authority faction requests, сохраняя native IsPlayable

@@ -1,6 +1,6 @@
 # Runtime fixture: каталог и применение
 
-## Co-op СССР на ванильном Арланде
+## Co-op на разных картах и профилях контента
 
 `AICF_CoopRecruitProbe.c` — дополнение к основному probe, копировать в UI stage
 как `AICF_ZCoopRecruitProbe.c`. Выбирает штатный GROUP catalog, проверяет
@@ -40,15 +40,35 @@ loadout и соответствующий Guard prefab; отсутствие pla
 отсутствие сообщений. Контракт: [SUPPORT_STATION_AREA.md](SUPPORT_STATION_AREA.md).
 
 `AICF_CoopScenarioProbe.c`: только isolated `Core/UI/` stage,
-`-aicfCoopProbe USSR|STANDARD`, необязательные `aicfCoopProbeDurationMs` и
+`-aicfCoopProbe US|USSR|STANDARD`, необязательные `aicfCoopProbeDurationMs` и
 `aicfCoopProbeWinner US|USSR`. Проверяет bootstrap/roster/readiness, ticket
-policy, budget, JIP snapshot и завершение по подготовленному ownership целей.
+policy, budget, content faction mapping, header mode, JIP snapshot и завершение
+по подготовленному ownership целей. Работает со всеми Variant из каталога.
+Начальные roster cases требуют READY и живых участников; STABLE_ROSTER сохраняет
+число, numeric IDs и identity исходных slot objects, а у людей — ноль managed agents.
+Он допускает потери/замену группы противника: число живых ИИ после начала боя
+не является постоянным контрактом. COOP_ROSTER_OBSERVATION сохраняет реальные counts.
 Физический захват, UI input и законченный supply trip эта fixture не доказывает.
 Команды и контракты — [COOP_SCENARIO.md](COOP_SCENARIO.md).
-Client `-aicfCoopProbePlayer 1` проверяет реальный вход/respawn за СССР через
+Client `-aicfCoopProbePlayer 1` проверяет реальный вход/respawn за выбранную сторону через
 native intents; log audit с `-Client -RequirePlayer` требует controlled character
-и два отрицательных authority ответа на реальные запросы US/FIA. Фильтр меню
-и запрет auto construction игроков защищены отдельными static contracts.
+и два отрицательных authority ответа на реальные запросы противника/FIA.
+`-RequireWelcome` дополнительно проверяет видимость только человеческой стороны
+в native Welcome callbacks. Native loadout выбирается до respawn. Deployment
+callback логируется только при реальном создании этого окна; probe его не открывает.
+Визуальный вид и ручной UI input этим не доказаны.
+Фильтр меню и запрет auto construction защищены отдельными static contracts.
+
+`AICF_CoopHeadersProbe.c`: копировать в isolated `Core/UI/` stage как
+`AICF_ZCoopHeadersProbe.c` после основного probe,
+`-aicfCoopHeaderProbe 1` на сервере. Через `MissionHeader.ReadMissionHeader`
+сравнивает все 54 Co-op ресурса с standard parents: world, mode, difficulty,
+legacy FIA flags, whitelist и все custom base поля. Текущий полный graph —
+`EveronWCSRHS` (North использует тот же graph); при расширении каталога новым
+независимым integration нужен test graph со всеми parents. Список случаев
+генерирует `tools/Update-AICFCoopScenarios.ps1`. Stopped-log audit:
+`Test-CoopScenarioLog.ps1 -RequireHeaderMatrix`. Полный runtime боя всех 54
+вариантов эта ресурсная проверка не заменяет.
 
 ## Shutdown private equipment worlds — issue #63
 

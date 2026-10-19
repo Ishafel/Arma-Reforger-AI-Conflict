@@ -1,5 +1,121 @@
 # Проверки и baseline
 
+## Co-op: обе стороны, карты и integrations — 2026-10-18/19
+
+Ветка `codex/coop-scenario-matrix` от чистого `aeafb17`. Evidence:
+`.codex-runtime/coop-matrix-20261018/`. Все три бинарника game/server/Workbench
+**1.8.0.13**, `binaries.json`. Production `.c` не менялись.
+
+Добавлен единый `tools/config/AICF_Scenarios.json` и resolver
+`AICF_Scenarios.ps1`: девять Variant × Standard/CoopUS/CoopUSSR × три сложности.
+Генератор `Update-AICFCoopScenarios.ps1` создаёт **54 Co-op headers** (51 новый,
+три прежних Stock USSR сохранены), metadata, локализацию и список native probe.
+Вместе со Standard в меню **81** сценарий. Новые Co-op наследуют standard
+parent той же сложности; North сохраняет whitelist, RHS/WCS — свой content graph.
+Launcher выбирает режим через `-MatchMode`, старый `StockCoopUSSR` остаётся alias.
+`standard-compatibility.json`: **9/9** исходных Standard Easy argv совпали
+побайтно после замены единственного свежего profile path на placeholder.
+
+Baseline до правки: `Invoke-AICFChecks.ps1 -Name @('Test-CoopScenarioStatic.ps1',
+'Test-CoopScenarioLogContracts.ps1','Test-FIARandomGarrisonContracts.ps1',
+'Test-RuntimeLauncherStatic.ps1','Test-ScenarioHeadersStatic.ps1')`
+с evidence `before/` — **5/5 PASS/0**.
+
+Полный `Invoke-AICFChecks.ps1 -EvidenceRoot <evidence>/offline-all-final`:
+**69/70 PASS, runner exit 1**. Три правила WCSIntegrationStatic устарели:
+искали IDs/resource непосредственно в launcher после переноса данных в каталог.
+Проверка теперь сверяет те же точные dependencies и ресурс через resolver,
+а также использование его полей launcher. Ничего не исключено из runner.
+Повтор Co-op log/matrix/static и WCS static в `verification-final/` —
+**4/4 PASS/0**. `offline-verdict.json` сверяет полное множество текущих checks:
+последние результаты **70/70 PASS**, с явным сохранением первоначального FAIL.
+Профильные итоги: matrix — **54 headers, 36 launcher manifests, 8 negative catalog
+mutations**, synthetic FutureMap; log contracts — **20 positive / 75 negative**;
+Co-op static — **39 negative mutations**. Новый каталог защищает также
+уникальность generated localization GUID prefixes. Generator `-Check` и
+RU/EN runtime localization **662** entries прошли; повторная генерация не меняет файлы.
+
+`CompileAll.ps1` → `Compile.ps1 -SourceRoot <stage> -Variant <variant>`:
+terminal Workbench **6/6 PASS/0** для Stock, Everon, RHS, EveronRHS,
+ArlandWCSRHS, EveronWCSRHS. Graph/argv взяты из canonical launcher DryRun;
+полные logs, validation success и native exit сохранены. После уточнения roster
+fixture дополнительный `Compile.ps1 -Label matrix-stability -Variant EveronWCSRHS`
+— **PASS/0**. Это компиляция production + test-only fixtures, не packaged build.
+`source-integrity.json`: все **414/414** production `.c/.gproj/.conf/.meta/.st/.layout`
+совпали со stage. Обе fixture revisions сохранены отдельно:
+`fixture-integrity-original.json`, `fixture-integrity.json`, **2/2** совпадения.
+
+Все игровые запуски: `Run.ps1 -Case <case> -Variant <variant> -MatchMode <mode>
+-Difficulty Easy -Duration 35000|180000 -Port <port>` → только
+`tools/Start-AICFRuntime.ps1`, свежие profiles. Четыре direct-connect клиента
+запущены из отдельных сессий с `-Client -Player` после уведомления пользователя;
+launcher подтвердил exact CLI, live server PID и ROSTER_READY. Manifests сохранены.
+
+`FinalizeRuntime.ps1` → `Audit.ps1` → `Test-CoopScenarioLog.ps1` по полным
+остановленным logs: **20 итоговых серверных и 4 клиентских gates PASS/0**,
+native exits 0, SCRIPT/VM/fatal **0** в этих итоговых runs. Server: все девять
+Variant на обеих Co-op сторонах плюс Standard Stock и North WCS. Co-op —
+**19/19** cases, два территориальных runs — **20/20**, Standard — **16/16**.
+North везде имеет семь nodes. Сторона людей — 0 slots, противник — 10;
+Standard — 10+10. Helpers, budget, строительство, content mapping, replicated
+mode и запрет command summary людей проверены. Это короткая контрактная матрица.
+
+Все четыре реальные client пары (Stock/CoopUS, RHS/CoopUSSR,
+EveronNorthWCSRHS/CoopUS, EveronWCSRHS/CoopUSSR) прошли
+`-Client -RequirePlayer -RequireWelcome`: только выбранная native faction tile
+видима, сервер отверг opponent/FIA requests, персонаж нужной стороны появился.
+Каждая пара использует server/client одного запуска. Native resource probe
+в North WCS US прошёл `-RequireHeaderMatrix`: **54/54** headers прочитаны через
+`MissionHeader.ReadMissionHeader`, mode/difficulty/world/legacy flags и вся
+base whitelist совпали с parents. Это не 54 полноценных игровых матча.
+
+`Stock-CoopUSSR` и `EveronRHS-CoopUS` дополнительно прошли `-ExpectedWinner USSR`:
+fixture подготовила ownership реальных целей, production VictorySystem завершил матч.
+Stage1Diagnostics нормализует RHS runtime faction keys в US/USSR; исходная
+ошибка audit ожидала RHS_AFRF в логе. Исправлен именно log contract,
+добавлены positive/negative cases; winner resolution в игре не менялся.
+
+**Сохранённый runtime FAIL и открытый blocker:** первый `EveronWCSRHS-CoopUS`
+получил SCRIPT(E) `SCR_InstigatorContextData: ... INSTIGATOR_OTHER ... is not supported!`
+во время Physics simulation, после чего slot 2 дал GROUP_EMPTY и штатную очередь
+восстановления. Точный источник физического повреждения не установлен.
+Это native damage context в закреплённом API, ошибка не исправлена и не подавлена.
+Чистый `EveronWCSRHS-CoopUS-retry` не доказывает её устранение. Она остаётся
+blocker для ready PR/релиза, хотя добавленные сценарии и итоговая матрица работают.
+
+Тот же первый run выявил неверное требование fixture: STABLE_ROSTER ожидал
+сохранения всех живых NPC после начала боя. Initial READY/наличие бойцов теперь
+проверяются отдельно; стабильность проверяет число, numeric IDs и identity
+исходных slot objects, а у людей — ноль managed agents. Потери и replacement
+противника допустимы, invincibility/остановка боя не добавлялись. Новая fixture
+прошла compile, WCS retry и отдельный Stock-CoopUS-stability — **PASS/0**.
+Старый FAIL сохранён целиком. Также исправлен guard анализатора при failed/missing
+completion: скобки предотвращают null indexing, два новых negative cases проходят.
+
+Прочие engine `(E)` сохраняются отдельно в `other-engine-errors.json`:
+итоговые servers **15–254**, clients **71/124/264/264**. Среди них world Parent,
+Hierarchy, resource/font и shutdown RPC diagnostics; общий error-free engine
+не заявляется. Полные counts каждого run — `runtime-verdicts.json`.
+История неудачных подготовок/проверок — `validation-history.json`: stale runtime
+localization и UTF-8 BOM исправлены; первый offline запуск не дошёл до checks
+из-за Git safe.directory; прерванный North USSR сохранён и повторён в свежем profile.
+
+**NOT RUN / отклонённые визуальные критерии:** manual UI input и внешний вид
+меню недоступны в terminal-only workflow. Действие игрока для отдельной проверки:
+открыть оба окна выбора стороны и проверить единственный разрешённый вариант;
+native Welcome visibility и RPC readbacks не доказывают внешний вид Deployment.
+Полные Medium/Hard кампании, физический бой до победы, законченные supply/build
+операции, покупка/найм RHS/WCS/Everon, смерть/повторный respawn, save/load,
+packaged/Workshop build и долгий soak здесь не запускались. Прежняя проверка
+stock покупки/найма не превращается в новый PASS для модов.
+
+Исходный и финальный stage архивированы с SHA-256 и адресно убраны;
+игровые/Workbench процессы задачи завершены. Полные logs/argv/manifests/exits
+сохранены. Изменены: Co-op MissionHeader/meta шести integrations, три файла
+локализации Core, каталог/resolver/генератор/launcher, Co-op fixtures/log/static
+contracts, WCS static, README и соответствующие agent-notes.
+Push, PR, merge и публикация не выполнялись.
+
 ## Казармы во всех режимах и support station area — 2026-10-18
 
 Ветка `codex/barracks-support-zone` от чистого `d5c8f90`. Evidence:

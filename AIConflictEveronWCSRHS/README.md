@@ -1,12 +1,18 @@
 # AI Conflict Everon WCS + RHS
 
-Отдельный source addon `A1CF261006100001`: две карты кампании, по три сложности.
-В таблице указаны неизменные GUID лёгких вариантов:
+Отдельный source addon `A1CF261006100001`: две карты кампании, по три сложности
+для Standard, Co-op за НАТО и Co-op за РФ. В таблице указаны неизменные GUID
+лёгких Standard вариантов:
 
 | Launcher Variant | Сценарий | Resource GUID |
 |---|---|---|
 | `EveronWCSRHS` | Эверон (полный) | `A1CF261006100002` |
 | `EveronNorthWCSRHS` | Север Эверона | `A1CF261006100003` |
+
+Launcher выбирает сторону Co-op через `-MatchMode CoopUS|CoopUSSR`.
+У людей нет автоматической боевой армии и размещения построек; рабочие,
+заказанная доставка и казарма доступны. Обе карты сохраняют свои границы кампании.
+Каталог и контракт: [COOP_SCENARIO.md](../agent-notes/COOP_SCENARIO.md).
 
 Проект объединяет `AIConflictEveronRHS` и `AIConflictArlandWCSRHS` с их
 зависимостями. Установленные RHS/WCS пакеты нужны те же, что для

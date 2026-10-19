@@ -4,11 +4,11 @@ $tempBase=[IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $work=Join-Path $tempBase ('aicf-coop-log-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work | Out-Null
 $audit=Join-Path $RepositoryRoot 'tests/log-audits/Test-CoopScenarioLog.ps1'
-$names=@('US_ROSTER','USSR_ROSTER','QUEUE_SETTLED','US_TICKETS','USSR_TICKETS','COMMANDERS','HELPERS','BUDGET_FLOOR','STANDARD_POLICY','MIRROR_POLICY','STABLE_ROSTER','REPLICATED_MODE','ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','NO_GROUP_SUMMARY','FACTION_ACCESS','AUTO_CONSTRUCTION')
-$positive=(@('[AICF][ROSTER_READY] us_groups=10 ussr_groups=0')+@($names | ForEach-Object {"[AICF][COOP_CASE] case=$_ pass=1"})+@('[AICF][COOP_DONE] mode=USSR checks=17 failed=0 elapsed_ms=30000','ENGINE : Game destroyed.')) -join "`n"
+$names=@('US_ROSTER','USSR_ROSTER','QUEUE_SETTLED','US_TICKETS','USSR_TICKETS','COMMANDERS','HELPERS','BUDGET_FLOOR','STANDARD_POLICY','MIRROR_POLICY','STABLE_ROSTER','REPLICATED_MODE','ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','NO_GROUP_SUMMARY','FACTION_ACCESS','AUTO_CONSTRUCTION','CONTENT_FACTIONS','HEADER_MODE')
+$positive=(@('[AICF][ROSTER_READY] us_groups=10 ussr_groups=0')+@($names | ForEach-Object {"[AICF][COOP_CASE] case=$_ pass=1"})+@('[AICF][COOP_DONE] mode=USSR checks=19 failed=0 elapsed_ms=30000','ENGINE : Game destroyed.')) -join "`n"
 $manifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Server';variant='StockCoopUSSR';arguments=@('-aicfCoopProbe','USSR')} | ConvertTo-Json -Compress)
 $positiveCases=0; $negativeCases=0
-function Check([string]$Name,[string]$Log,[string]$Launch,[int]$Expected,[string]$Rule,[switch]$Client,[switch]$RequirePlayer,[switch]$RequireRecruit,[switch]$RequireBarracks,[string]$BarracksFaction='USSR',[switch]$RequireSupportArea) {
+function Check([string]$Name,[string]$Log,[string]$Launch,[int]$Expected,[string]$Rule,[switch]$Client,[switch]$RequirePlayer,[switch]$RequireRecruit,[switch]$RequireBarracks,[string]$BarracksFaction='USSR',[switch]$RequireSupportArea,[switch]$RequireWelcome,[switch]$RequireHeaderMatrix,[string]$Winner) {
     [IO.File]::WriteAllText("$work/log.txt",$Log)
     [IO.File]::WriteAllText("$work/launcher.txt",$Launch)
     $invoke=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$audit,'-LogPath',"$work/log.txt",'-LauncherPath',"$work/launcher.txt",'-NativeExitPath',"$work/exit.txt")
@@ -17,6 +17,9 @@ function Check([string]$Name,[string]$Log,[string]$Launch,[int]$Expected,[string
     if($RequireRecruit){$invoke+='-RequireRecruit'}
     if($RequireBarracks){$invoke+='-RequireBarracks'}
     if($RequireSupportArea){$invoke+='-RequireSupportArea'}
+    if($RequireWelcome){$invoke+='-RequireWelcome'}
+    if($RequireHeaderMatrix){$invoke+='-RequireHeaderMatrix'}
+    if($Winner){$invoke+=@('-ExpectedWinner',$Winner)}
     $invoke+=@('-BarracksFaction',$BarracksFaction)
     $output=& powershell.exe @invoke 2>&1
     if($LASTEXITCODE -ne $Expected -or ($Rule -and ($output -join "`n") -notmatch $Rule)) {throw "Unexpected case ${Name}: $output"}
@@ -32,6 +35,8 @@ try {
         @('missing-case',$positive.Replace('case=HELPERS','case=OTHER'),'CASE_HELPERS'),
         @('duplicate-case',($positive+"`n[AICF][COOP_CASE] case=HELPERS pass=1"),'CASE_HELPERS'),
         @('failed-case',$positive.Replace('case=US_TICKETS pass=1','case=US_TICKETS pass=0'),'PROBE_FAILURE'),
+        @('failed-completion',$positive.Replace('failed=0','failed=1'),'COMPLETION'),
+        @('missing-completion',($positive -replace '\[AICF\]\[COOP_DONE\][^\r\n]*',''),'COMPLETION'),
         @('short-observation',$positive.Replace('elapsed_ms=30000','elapsed_ms=29999'),'COMPLETION'),
         @('wrong-mode',$positive.Replace('mode=USSR','mode=STANDARD'),'COMPLETION'),
         @('wrong-roster',$positive.Replace('ussr_groups=0','ussr_groups=10'),'ROSTER'),
@@ -104,8 +109,8 @@ try {
         @('barracks-no-debit',$barracksServer.Replace('after=325','after=625'),'BARRACKS_PAYMENT')
     )) { Check $case[0] $case[1] $manifest 1 $case[2] -RequireBarracks }
     Check 'barracks-missing-player-mode' $barracksClient $clientLaunch 1 'PLAYER_MODE' -Client -RequireBarracks
-    Check 'barracks-wrong-variant' $barracksClient ($playerLaunch.Replace('StockCoopUSSR','Everon')) 1 'LAUNCH_ROLE_VARIANT' -Client -RequireBarracks
-    $standardServer=$barracksServer.Replace('us_groups=10 ussr_groups=0','us_groups=10 ussr_groups=10').Replace('mode=USSR checks=17','mode=STANDARD checks=14')
+    Check 'barracks-wrong-variant' $barracksClient ($playerLaunch.Replace('StockCoopUSSR','Everon')) 1 'BARRACKS_VARIANT' -Client -RequireBarracks
+    $standardServer=$barracksServer.Replace('us_groups=10 ussr_groups=0','us_groups=10 ussr_groups=10').Replace('mode=USSR checks=19','mode=STANDARD checks=16')
     foreach($name in @('ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','NO_GROUP_SUMMARY')) {
         $standardServer=$standardServer.Replace("[AICF][COOP_CASE] case=$name pass=1`n",'')
     }
@@ -138,6 +143,36 @@ try {
         @('area-script-error',($areaClient+"`nSCRIPT (E): SupportStationAreaMesh"),'SCRIPT_FATAL')
     )) { Check $case[0] $case[1] $playerLaunch 1 $case[2] -RequireBarracks -RequireSupportArea -Client }
     Check 'area-spawn-failed' ($areaServer.Replace('[AREA_SPAWN] pass=1','[AREA_SPAWN] pass=0')) $manifest 1 'SUPPORT_AREA_FAILED' -RequireBarracks -RequireSupportArea
+    $rhsServer=$positive+"`n[COOP_CONTEXT] mode=USSR us_faction=RHS_USAF ussr_faction=RHS_AFRF nodes=7"
+    $rhsManifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Server';variant='EveronNorthWCSRHS';matchMode='CoopUSSR';arguments=@('-aicfCoopProbe','USSR')}|ConvertTo-Json -Compress)
+    Check 'rhs-server-ussr' $rhsServer $rhsManifest 0 ''
+    Check 'rhs-server-wrong-context' ($rhsServer.Replace('ussr_faction=RHS_AFRF','ussr_faction=USSR')) $rhsManifest 1 'CONTENT_CONTEXT'
+    Check 'rhs-server-wrong-north-scope' ($rhsServer.Replace('nodes=7','nodes=8')) $rhsManifest 1 'NORTH_SCOPE'
+    $rhsUS=$rhsServer.Replace('us_groups=10 ussr_groups=0','us_groups=0 ussr_groups=10').Replace('mode=USSR','mode=US')
+    $rhsUSManifest=$rhsManifest.Replace('CoopUSSR','CoopUS').Replace('"USSR"','"US"')
+    Check 'rhs-server-us' $rhsUS $rhsUSManifest 0 ''
+    $rhsVictory=$rhsUS.Replace('checks=19','checks=20')+"`n[COOP_CASE] case=TERRITORIAL_WINNER pass=1`n[VICTORY] winner=USSR loser=US loser_tickets=12 reason=ALL_OBJECTIVES_UNCONTESTED"
+    Check 'rhs-victory-stable-key' $rhsVictory $rhsUSManifest 0 '' -Winner USSR
+    Check 'rhs-victory-runtime-key' ($rhsVictory.Replace('winner=USSR','winner=RHS_AFRF')) $rhsUSManifest 1 'TERRITORIAL_RESULT' -Winner USSR
+    Check 'rhs-server-spawned-player-side' ($rhsUS+"`n[SPAWN_ATTEMPT_STARTED] faction=RHS_USAF slot=0") $rhsUSManifest 1 'PLAYER_COMBAT_SPAWN'
+    $rhsClient=$playerLog+"`n[COOP_WELCOME] faction=RHS_USAF visible=0 playable=1`n[COOP_WELCOME] faction=RHS_AFRF visible=1 playable=1`n[COOP_WELCOME] faction=FIA visible=0 playable=1"
+    $rhsClientManifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Client';variant='EveronNorthWCSRHS';matchMode='CoopUSSR';arguments=@('-aicfCoopProbe','USSR','-aicfCoopProbePlayer','1')}|ConvertTo-Json -Compress)+"`n[SERVER_READY] process_id=123 port=2440 log=server.log"
+    Check 'rhs-client-ussr' $rhsClient $rhsClientManifest 0 '' -Client -RequirePlayer -RequireWelcome
+    $rhsUSClient=$rhsClient.Replace('faction=US accepted=0','faction=USSR accepted=0').Replace('faction=RHS_USAF visible=0','faction=RHS_USAF visible=1').Replace('faction=RHS_AFRF visible=1','faction=RHS_AFRF visible=0')
+    $rhsUSClientManifest=$rhsClientManifest.Replace('CoopUSSR','CoopUS').Replace('"USSR"','"US"')
+    Check 'rhs-client-us' $rhsUSClient $rhsUSClientManifest 0 '' -Client -RequirePlayer -RequireWelcome
+    Check 'rhs-client-welcome-extra' ($rhsClient+"`n[COOP_WELCOME] faction=US visible=1 playable=1") $rhsClientManifest 1 'FACTION_WELCOME_EXTRA' -Client -RequirePlayer -RequireWelcome
+    Check 'rhs-client-welcome-human-hidden' ($rhsClient.Replace('faction=RHS_AFRF visible=1','faction=RHS_AFRF visible=0')) $rhsClientManifest 1 'FACTION_WELCOME_RHS_AFRF' -Client -RequirePlayer -RequireWelcome
+    Check 'rhs-client-missing-denial' ($rhsUSClient.Replace('faction=USSR accepted=0','faction=OTHER accepted=0')) $rhsUSClientManifest 1 'FACTION_DENIED_USSR' -Client -RequirePlayer -RequireWelcome
+    $headers=$rhsServer
+    $catalog=Get-Content "$RepositoryRoot/tools/config/AICF_Scenarios.json" -Raw -Encoding UTF8|ConvertFrom-Json
+    foreach($variant in $catalog.variants){foreach($side in @('US','USSR')){foreach($difficulty in @('Easy','Medium','Hard')){$headers+="`n[COOP_HEADER_CASE] variant=$($variant.name) side=$side difficulty=$difficulty pass=1"}}}
+    $headerCount=$catalog.variants.Count*6
+    $headers+="`n[COOP_HEADERS_DONE] count=$headerCount failed=0"
+    Check 'headers-positive' $headers $rhsManifest 0 '' -RequireHeaderMatrix
+    Check 'headers-missing' ($headers.Replace('variant=Stock side=US difficulty=Hard','variant=UNKNOWN side=US difficulty=Hard')) $rhsManifest 1 'HEADER_MATRIX_Stock_US_Hard' -RequireHeaderMatrix
+    Check 'headers-failed' ($headers.Replace('difficulty=Hard pass=1','difficulty=Hard pass=0')) $rhsManifest 1 'HEADER_MATRIX_' -RequireHeaderMatrix
+    Check 'headers-not-complete' ($headers.Replace(("count=$headerCount failed=0"),("count=$($headerCount-1) failed=0"))) $rhsManifest 1 'HEADER_MATRIX_COMPLETION' -RequireHeaderMatrix
     '1' | Set-Content "$work/exit.txt"
     Check 'native-exit' $positive $manifest 1 'NATIVE_EXIT'
 }
