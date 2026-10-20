@@ -3,7 +3,7 @@ modded class AICF_ScenarioSetupScreen
 {
 	bool AICF_UniversalWidgets()
 	{
-		return m_aButtons.Count() == 15 && m_aFlags.Count() == 2 && m_iFlagFailures == 0 && m_wHelp && !m_wHelp.GetText().IsEmpty() && !m_wHelp.GetText().Contains("{AICF:");
+		return m_aButtons.Count() == 25 && m_aFlags.Count() == 2 && m_iFlagFailures == 0 && m_wHelp && !m_wHelp.GetText().IsEmpty() && !m_wHelp.GetText().Contains("{AICF:");
 	}
 	bool AICF_UniversalSides() { return m_aButtons[8].IsEnabled() && m_aButtons[9].IsEnabled(); }
 	bool AICF_UniversalStart() { return m_aButtons[13].IsEnabled(); }
@@ -98,6 +98,23 @@ class AICF_UniversalScenarioProbe
 		Check("UI_MODAL", root && GetGame().GetWorkspace().GetModal() == root);
 		Check("UI_FLAGS_HELP", m_Screen.AICF_UniversalWidgets());
 		Check("UI_START_ENABLED", m_Screen.AICF_UniversalStart());
+		bool environmentValid = m_Screen.GetSelection().GetEnvironment().m_iTime == 0 && m_Screen.GetSelection().GetEnvironment().m_iWeather == 0;
+		for (int time; time < 5; time++)
+			for (int weather; weather < 5; weather++)
+			{
+				if (!m_Screen.SelectEnvironment(time, weather) || m_Screen.GetSelection().GetEnvironment().m_iTime != time || m_Screen.GetSelection().GetEnvironment().m_iWeather != weather) environmentValid = false;
+			}
+		if (m_Screen.SelectEnvironment(-1, 0) || m_Screen.SelectEnvironment(0, 5) || m_Screen.GetSelection().GetEnvironment().m_iTime != 4 || m_Screen.GetSelection().GetEnvironment().m_iWeather != 4) environmentValid = false;
+		Check("UI_ENVIRONMENT", environmentValid && !m_Screen.AICF_UniversalSummary().Contains("{AICF:"));
+		ResourceName target = m_Selection.GetResource();
+		AICF_ScenarioEnvironment settings = m_Screen.GetSelection().GetEnvironment();
+		bool queued = AICF_ScenarioEnvironment.Queue(target, settings);
+		AICF_ScenarioEnvironment consumed = AICF_ScenarioEnvironment.Consume(target);
+		bool roundTrip = queued && consumed && consumed.m_iTime == 4 && consumed.m_iWeather == 4 && !AICF_ScenarioEnvironment.Consume(target);
+		AICF_ScenarioEnvironment.Queue(target, settings);
+		bool wrongTarget = !AICF_ScenarioEnvironment.Consume("unknown") && !AICF_ScenarioEnvironment.Consume(target);
+		GameSessionStorage.s_Data[AICF_ScenarioEnvironment.SESSION_KEY] = "{}";
+		Check("ENVIRONMENT_STORAGE", roundTrip && wrongTarget && !AICF_ScenarioEnvironment.Consume(target));
 		for (int mode; mode < 3; mode++)
 		{
 			for (int difficulty; difficulty < 3; difficulty++)
@@ -107,7 +124,7 @@ class AICF_UniversalScenarioProbe
 			}
 		}
 		bool allHelp = true;
-		for (int index; index < 15; index++)
+		for (int index; index < 25; index++)
 		{
 			m_Screen.AICF_UniversalHelp(index);
 			if (!m_Screen.AICF_UniversalWidgets()) allHelp = false;

@@ -1,5 +1,94 @@
 # Проверки и baseline
 
+## Время суток и погода в универсальном меню — 2026-10-20
+
+Ветка `codex/scenario-time-weather` от чистого `c85995b`. Добавлены независимые
+параметры времени (08/12/18/00/random) и начальной погоды
+(random/Clear/Cloudy/Overcast/Rainy). Defaults сохранены: 08:00, random weather.
+Контракт — [SCENARIO_SETUP.md](SCENARIO_SETUP.md#передача-времени-и-погоды).
+Evidence: `.codex-runtime/scenario-environment-20261020/`.
+
+До правки `Invoke-AICFChecks.ps1 -Name Test-ScenarioSetupStatic.ps1,
+Test-UniversalScenarioStatic.ps1,Test-ScenarioHeadersStatic.ps1,
+Test-LocalizationStatic.ps1,Test-UniversalScenarioLogContracts.ps1` дал
+**5/5 PASS/0**, `baseline-final/summary.json`. Сохранённых code baseline FAIL нет.
+Две предварительные попытки runner остановились до checks из-за Git ownership;
+использован process-local `GIT_CONFIG_COUNT` с точным slash-normalized
+safe.directory, глобальные настройки Git не менялись.
+
+Финальный `Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/offline-all`
+— **77/77 PASS/0**: Static **33/33**, Contracts **44/44**, missing/FAIL **0**.
+`Test-ScenarioEnvironmentStatic.ps1` проверяет 15 guarded mutations;
+`Test-UniversalScenarioLogContracts.ps1` — 39 positive/negative cases, включая
+неверные часы/погоду/readback, пропавший apply, fallback, clock/repeat/save-load.
+Exact commands/exits/full outputs — `offline-all/summary.json` и отдельные `.txt`;
+сводка с проверкой полноты — `offline-final-verdict.json`.
+
+Final production Workbench `Compile.ps1 -Label final-production-stock -Variant
+Stock` и `-Label final-production-wcs -Variant EveronWCSRHS`: **2/2 PASS/0**.
+`-SourceRoot <fixture-stage> -Label final-fixture-wcs -Variant EveronWCSRHS` —
+**PASS/0**. Exact source manifests, argv, exits и полные console/error/script
+logs сохранены; inventory проверяет все логи, SCRIPT/VM/fatal **0**.
+
+Native frontend `RunFrontend.ps1 -Label env-menu-fixed -Probe Universal` и
+`Test-UniversalScenarioLog.ps1`: **45/45 PASS/0**, все 9 установленных вариантов,
+25 widgets, все 25 сочетаний time/weather, bounds/atomic invalid selection,
+one-shot storage, чужой target, malformed payload, flags/help/modal/cleanup.
+
+Пять финальных native local Play переходов, все `-Probe Transition
+-Difficulty 0`; по каждому `Test-UniversalScenarioLog.ps1 -Transition` —
+**PASS/0**, PREFLIGHT/ACCEPTED/ACTIVE_HEADER/EXACT_GRAPH, затем ROSTER_READY:
+
+| Label / карта и контент | Параметры | Фактическое начало |
+|---|---|---|
+| `env-arland-night-final`, Arland Vanilla | `-Map 0 -Content 0 -Mode 2 -Time 3 -Weather 4` | 00:00 / Rainy |
+| `env-rhs-noon-final`, Everon RHS | `-Map 1 -Content 1 -Mode 2 -Time 1 -Weather 2` | 12:00 / Cloudy |
+| `env-north-wcs-evening-clear`, North Everon WCS + RHS | `-Map 2 -Content 2 -Mode 1 -Time 2 -Weather 1` | 18:00 / Clear |
+| `env-arland-morning-overcast`, Arland Vanilla | `-Map 0 -Content 0 -Mode 1 -Time 0 -Weather 3` | 08:00 / Overcast |
+| `env-arland-random`, Arland Vanilla | `-Map 0 -Content 0 -Mode 2 -Time 4 -Weather 0` | 16.3886 / Overcast |
+
+Каждый финальный transition дополнительно подтверждает один authority
+`ENVIRONMENT_APPLIED`, фактический readback после roster, native day/night
+acceleration и auto-advance, weather looping выключен, повтор не меняет часы,
+native handler save/load имеет приоритет. Это terminal вызов save/load boundary,
+не полная запись/загрузка файла сохранения. Native loaded graph — 2/8/28 addons
+соответственно контенту. Все native exits **0**, логи полные и остановлены,
+SCRIPT/VM/fatal и собственных resource errors **0**. Verdict/команды —
+`runtime-final-verdict.json`, SHA-256/categories — `native-log-inventory.json`.
+
+Полные engine logs сохраняют ранее известные stock/vendor diagnostics:
+GUI hierarchy/SCR_WidgetExportRuleRoot и shutdown texture refs; RHS/WCS —
+deprecated m_fAILimitThreshold и десять streaming-navmesh tile errors.
+Arland: WORLD 7, ENTITY 4, GUI 2, RESOURCES 54; RHS: WORLD 167, ENTITY 11,
+GUI 2, RESOURCES 93, PATHFINDING 10; WCS: те же категории с RESOURCES 126.
+Они не исключены из полных evidence и не объявляются отсутствующими; отсутствия
+влияния каждого vendor diagnostic на длительную игру этот прогон не доказывает.
+
+Промежуточные failures сохранены: первый isolated fixture имел ошибочную
+вставку `world` в OnGameStart (`wb-fixture-wcs`, exit -1); его native запуск
+`env-menu-45` вернул 0, но имел **33 SCRIPT(E)** и **не является PASS**.
+Исправлена только fixture-копия, повторная compilation/runtime прошли.
+Два ранних environment smoke запуска до добавления `ENVIRONMENT_CLOCK` сохранены
+отдельно и не заменяют финальную матрицу. Сборный audit сначала ошибочно читал
+пустой ambient LASTEXITCODE у UI analyzer без явного exit; финальные audits
+выполнены отдельными powershell.exe и имеют реальные native exits 0.
+
+Cleanup: все **496** файлов временного stage и **9** test profiles архивированы
+в `temporary-stage-and-profiles.zip`, каждый entry сверён по SHA-256; после
+проверки удалены точные временные пути. Полные logs сохранены отдельно.
+`production-stage-integrity.json` подтверждает побайтное совпадение пяти
+изменённых production `.c` с tested stage; `cleanup-result.json` — адреса и hash.
+Автоматические тестовые процессы завершены. Открытый пользователю клиент
+PID 15560 и его профиль Universal-Manual сохранены; он загрузил прежние скрипты,
+обновлённый экран доступен после перезапуска.
+
+**NOT RUN:** внешний вид и реальные mouse/keyboard/controller действия, public
+Host, новое JIP-подключение, полный save-file restore, packaged Workshop,
+длительный soak и замер FPS при загрузке. Terminal-only запрещает GUI automation;
+widget/state readbacks не заменяют эти критерии. Для визуальной проверки игрок
+перезапускает production клиент и проверяет два новых ряда меню, подписи/фокус
+и запуск с выбранными часами/погодой. Новых MissionHeader ресурсов не добавлено.
+
 ## Универсальное меню и pause-safe local Play — 2026-10-20
 
 Ветка `codex/universal-scenario-menu` от чистого `f549b28`. Запрос: один

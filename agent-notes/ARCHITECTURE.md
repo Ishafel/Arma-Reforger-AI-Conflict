@@ -75,7 +75,10 @@ Native лидерство, лимит и ownership RPC сохраняют сво
 Concrete targets и dependency graphs генерируются в Arland integration из общего
 JSON каталога. `AICF_ScenarioLaunch` проверяет native permissions входного item,
 зависимости, download/platform/forced-CLI gates и передаёт точный граф native
-Play/Host transition. Gameplay config и репликация не меняются. Границы,
+Play/Host transition. Окружение передаётся одноразовым process-local intent через
+native GameSessionStorage в точный header. `AICF_ScenarioEnvironmentHandler`
+на authority передаёт начальные часы/погоду штатному handler; native manager
+сохраняет ускорение, погодные переходы, save/load и репликацию. Границы,
 исключение прежнего leaf TryPlay/TryHost пути и cleanup — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
 Arland integration регистрирует один вход в native default catalog, сохраняя
 stock записи и прежние leaf GUID; UI фильтрует точные legacy IDs. Это необходимо

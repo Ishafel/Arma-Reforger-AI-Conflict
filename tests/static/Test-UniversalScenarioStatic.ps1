@@ -19,7 +19,7 @@ $rules=@(
  @(2,'RequestScenarioChangeTransition\(resource,\s*, variant.GetAddonList\(\)\)','PLAY_GRAPH'),
  @(2,'config.game.mods = variant.BuildHostMods\(\);.*?RequestPublicServerTransition\(config\)','HOST_GRAPH'),
  @(2,'if \(!accepted\).*?scenarioId = oldScenario;.*?hostedScenarioModId = oldOwner;.*?mods = oldMods;','HOST_ROLLBACK'),
- @(2,'if \(!accepted\) return false;.*?AICF_CloseSetup\(\);.*?CloseAllMenus\(\)','CLOSE_AFTER_ACCEPT'),
+ @(2,'if \(!accepted\)\s*\{\s*AICF_ScenarioEnvironment.Clear\(\);\s*return false;\s*\}.*?AICF_CloseSetup\(\);.*?CloseAllMenus\(\)','CLOSE_AFTER_ACCEPT'),
  @(3,'OnFocus\(.*?Help\(index\).*?OnMouseEnter\(.*?Help\(index\)','HELP_INPUT'),
  @(3,'Flag\(8, westFlag\);.*?Flag\(9, eastFlag\);','FLAGS'),
  @(3,'m_aButtons\[contentButton \+ 3\].SetEnabled\(available\)','DISABLED_CONTENT'),

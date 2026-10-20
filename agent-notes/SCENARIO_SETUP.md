@@ -10,7 +10,11 @@ Host. Это игровой экран, отдельного лаунчера н
 3. Выбрать Conflict или Co-op. В Co-op флаг определяет сторону всех игроков:
    US/СССР, USMC/МСВ РФ либо НАТО/РФ соответственно контенту. В Conflict
    обе стороны доступны позднее в штатном deployment.
-4. Выбрать сложность гарнизонов. Справа — пояснение варианта под курсором/фокусом,
+4. Выбрать сложность гарнизонов, время суток и начальную погоду.
+   Время: 08:00, 12:00, 18:00, 00:00 либо случайное с учётом восхода/заката.
+   Погода: случайная, Clear, Cloudy, Overcast, Rainy. Defaults — 08:00 и random.
+   Погода продолжает меняться; ускорение времени остаётся по сценарию.
+   Справа — пояснение варианта под курсором/фокусом,
    внизу — сводка параметров. Начать операцию загружает её; Создать сессию
    использует прежние настройки сети/пароля/player limit. Отмена закрывает экран.
    При отказе запуска выбор сохраняется.
@@ -51,7 +55,8 @@ Downloaded, отсутствие corruption и IsReadyToRun. Source addon мож
 placeholder WorkshopItem без revision: тогда native GameProject подтверждает
 локальное наличие. Пустой scan не считается наличием модов.
 
-`AICF_ScenarioSetupSelection` хранит карту/контент/режим/сложность. Ошибочный
+`AICF_ScenarioSetupSelection` хранит карту/контент/режим/сложность и независимые
+time/weather индексы 0..4. Смена карты/контента не сбрасывает их. Ошибочный
 выбор сохраняет прошлый. Defaults: Арланд / Vanilla / Co-op USSR / Medium,
 если запуск не закрепил несовместимый контент. При смене карты контент
 сохраняется либо выбирается первый допустимый набор в стабильном порядке.
@@ -80,7 +85,36 @@ gameProperties сохраняются. Setup и native menus закрывают�
 в native каталоге, а загруженные RHS/WCS меняют content profile factory.
 Разрешения проверяются на реальном входном item, выбранные зависимости —
 отдельно; загрузкой/перекомпиляцией занимается native transition. Gameplay,
-authority, roster и replicated state здесь не меняются.
+roster и replicated state здесь не меняются.
+
+## Передача времени и погоды
+
+`AICF_ScenarioEnvironment` записывает одноразовый intent в native
+`GameSessionStorage.s_Data` перед Play/Host transition. Это память текущего
+executable, переживающая scripts/addons reload; файлы профиля и новые MissionHeader
+варианты не создаются. Payload содержит schema, точный target resource, issued
+tick и time/weather. При отказе native transition payload удаляется.
+`ArmaReforgerScripted.OnMissionSet` потребляет его до валидации: принимает только
+совпадающий leaf header, валидные bounds и возраст до 10 минут. Чужой сценарий,
+повторный старт и malformed payload не наследуют параметры. Данные прикрепляются
+к transient полю экземпляра header, без изменения исходного ресурса.
+
+`AICF_ScenarioEnvironmentHandler` использует штатный
+`SCR_TimeAndWeatherHandlerComponent.SetupDaytimeAndWeather` на authority.
+Фиксированный час и native random daytime независимы от выбранного weather state;
+готовые presets не должны подменять оба измерения одновременно. Имя погоды
+проверяется в `GetWeatherStatesList` мира; недоступное состояние даёт WARNING
+`ENVIRONMENT_FALLBACK` и native random. Native матрица покрывает три карты и все
+четыре фиксированных состояния выбранными сочетаниями; полный перебор состояний
+на каждой карте не запускался. `ENVIRONMENT_APPLIED` пишет
+фактические часы/погоду. Повторный вызов не сбрасывает выбор; native save/load
+имеет приоритет. JIP-клиент не меняет часы/погоду; сетевой синхронизацией,
+дальнейшей сменой погоды и скоростью времени владеет native manager.
+
+Host сохраняет network/password/player limits/gameProperties. Окружение передаётся
+внутри того же executable; фактический public Host и JIP остаются отдельными
+runtime gates. Dedicated CLI без frontend intent использует прежние настройки
+MissionHeader: 08:00, random weather, acceleration 6/24.
 
 Обнаруженный при native local Play startup defect исправлен отдельно от меню:
 Welcome останавливает SP simulation, а прежний timeout группы считал 30 секунд
@@ -130,12 +164,18 @@ BaseContainer adapter, callbacks Remove/Insert и override OnGameStart для
   repeat/dedup, native type/manw tag maps; 15 cases.
 - `AICF_UniversalScenarioProbe.c`: каждый dependency ID, все 81 plan, ожидаемая
   доступность установленных вариантов, forced subset, host mods, настоящие
-  widgets/modal/bounds, флаги, 15 пояснений, выбор/cleanup; 43 cases.
+  widgets/modal/bounds, флаги, 25 пояснений, все 25 time/weather choices,
+  atomic invalid choices, одноразовый storage/чужой target, cleanup; 45 cases.
   CLI `-aicfUniversalProbe 1 -aicfExpectedReadyVariants 9`.
 - `AICF_ScenarioTransitionProbe.c`: production preflight/launch, active header,
   точный GetLoadedAddons без лишних неванильных addons, ROSTER_READY; четыре cases.
   CLI `-aicfTransitionProbe 1 -aicfProbeMap 0 -aicfProbeContent 2
   -aicfProbeMode 1 -aicfProbeDifficulty 0`.
+  Дополнительные `-aicfProbeTime 3 -aicfProbeWeather 4` проверяют перенос через
+  reload, фактическое начальное окружение, повтор и native save/load priority.
+  В этом fixture-only режиме Welcome pause снимается через world API.
+- `Test-ScenarioEnvironmentStatic.ps1`: 15 guarded mutations для authority,
+  target/TTL/one-shot, rejected transition cleanup, native owner и независимого UI.
 - `Test-UniversalScenarioLog.ps1 [-Transition]`: полный stopped log, native exit,
   exact CLI/UTF-8 manifest, уникальные cases/completion, SCRIPT/VM/fatal и
   собственные resource errors. Transition сверяет реальный ресурс и загруженные

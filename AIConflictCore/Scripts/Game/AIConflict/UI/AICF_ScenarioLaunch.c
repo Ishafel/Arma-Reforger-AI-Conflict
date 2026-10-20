@@ -28,7 +28,7 @@ class AICF_ScenarioLaunch
 
 	static bool CanStart(AICF_ScenarioSetupSelection selection, MissionWorkshopItem entry, SCR_DSConfig config = null)
 	{
-		if (!selection || !entry || selection.GetResource().IsEmpty()) return false;
+		if (!selection || !entry || selection.GetResource().IsEmpty() || !selection.GetEnvironment().IsValid()) return false;
 		if (!GameStateTransitions.IsInsideMainMenu() || GameStateTransitions.IsTransitionRequestedOrInProgress()) return false;
 		if (config)
 		{
@@ -50,6 +50,7 @@ class AICF_ScenarioLaunch
 		if (!CanStart(selection, entry, config)) return false;
 		AICF_ScenarioVariant variant = selection.GetVariant();
 		ResourceName resource = selection.GetResource();
+		if (!AICF_ScenarioEnvironment.Queue(resource, selection.GetEnvironment())) return false;
 		bool accepted;
 		if (!config)
 			accepted = GameStateTransitions.RequestScenarioChangeTransition(resource, "", variant.GetAddonList());
@@ -70,7 +71,11 @@ class AICF_ScenarioLaunch
 				config.game.mods = oldMods;
 			}
 		}
-		if (!accepted) return false;
+		if (!accepted)
+		{
+			AICF_ScenarioEnvironment.Clear();
+			return false;
+		}
 		Print(string.Format("[AICF][SCENARIO_LAUNCH] variant=%1 mode=%2 difficulty=%3 resource=%4 addons=%5", variant.m_sKey, selection.GetMode(), selection.GetDifficulty(), resource, variant.GetAddonList()));
 		SCR_ScenarioUICommon.AICF_CloseSetup();
 		GetGame().GetMenuManager().CloseAllMenus();

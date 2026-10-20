@@ -6,7 +6,7 @@ New-Item -ItemType Directory -Path $work|Out-Null
 $audit=Join-Path $RepositoryRoot 'tests/log-audits/Test-UniversalScenarioLog.ps1'
 $manifest=@{arguments=@('-gproj','C:\source\addon.gproj','-profile','C:\fresh','-addonsDir','C:\source,C:\mods','-addons','CORE,MAP','-aicfUniversalProbe','1','-aicfExpectedReadyVariants','9')}|ConvertTo-Json -Compress
 $variants=@('Stock','Everon','EveronNorth','RHS','EveronRHS','EveronNorthRHS','ArlandWCSRHS','EveronWCSRHS','EveronNorthWCSRHS')
-$names=@('REGISTRY')+@($variants|ForEach-Object {'PLAN_'+$_})+@('EXPECTED_AVAILABLE','VANILLA_READY','BASE_SOURCE_COMPATIBLE','ATOMIC_INVALID','HOST_GRAPH','NULL_ENTRY_BLOCKED','FORCED_GRAPH','UI_OPEN','UI_BOUNDS','UI_MODAL','UI_FLAGS_HELP','UI_START_ENABLED')
+$names=@('REGISTRY')+@($variants|ForEach-Object {'PLAN_'+$_})+@('EXPECTED_AVAILABLE','VANILLA_READY','BASE_SOURCE_COMPATIBLE','ATOMIC_INVALID','HOST_GRAPH','NULL_ENTRY_BLOCKED','FORCED_GRAPH','UI_OPEN','UI_BOUNDS','UI_MODAL','UI_FLAGS_HELP','UI_START_ENABLED','UI_ENVIRONMENT','ENVIRONMENT_STORAGE')
 for($mode=0;$mode -lt 3;$mode++){for($difficulty=0;$difficulty -lt 3;$difficulty++){$names+="UI_${mode}_${difficulty}"}}
 $names+=@('UI_ALL_HELP')+@($variants|ForEach-Object {'UI_VARIANT_'+$_})+@('UI_CLOSED','UI_IDEMPOTENT')
 $log=(@('CLI Params: -gproj C:\source\addon.gproj -profile C:\fresh -addonsDir C:\source,C:\mods -addons CORE,MAP -aicfUniversalProbe 1 -aicfExpectedReadyVariants 9')+@($names|ForEach-Object {"[UNIVERSAL_CASE] case=$_ pass=1"})+@($variants|ForEach-Object {"[UNIVERSAL_AVAILABLE] variant=$_ available=1 missing= graph=CORE,MAP"})+@("[UNIVERSAL_DONE] checks=$($names.Count) failed=0",'Game destroyed.'))-join "`n"
@@ -63,6 +63,18 @@ try{
  Check pausefailed ($pauseLog.Replace('TRANSITION_PAUSE] pass=1','TRANSITION_PAUSE] pass=0')) $pauseManifest 0 1 PAUSE_OBSERVATION -Transition
  Check pauserealtime ($pauseLog.Replace('real_ms=35050','real_ms=30000')) $pauseManifest 0 1 PAUSE_OBSERVATION -Transition
  Check pausesimulation ($pauseLog.Replace('simulation_ms=33','simulation_ms=35000')) $pauseManifest 0 1 PAUSE_OBSERVATION -Transition
+ $environmentArgs=$transitionArgs+@('-aicfProbeTime','3','-aicfProbeWeather','4')
+ $environmentManifest=@{arguments=$environmentArgs}|ConvertTo-Json -Compress
+ $environmentLog=$transitionLog.Replace('CLI Params: '+($transitionArgs -join ' '),'CLI Params: '+($environmentArgs -join ' '))+"`n[ENVIRONMENT_APPLIED] time_mode=3 weather_mode=4 hour=0 weather=Rainy authority=server`n[TRANSITION_ENVIRONMENT] pass=1 time_mode=3 weather_mode=4 hour=0.01 weather=Rainy`n[ENVIRONMENT_REPEAT] pass=1`n[ENVIRONMENT_SAVE_RESTORE] pass=1`n[ENVIRONMENT_CLOCK] pass=1"
+ Check environment $environmentLog $environmentManifest 0 0 '' -Transition
+ Check environmenttime ($environmentLog.Replace('hour=0 weather','hour=8 weather')) $environmentManifest 0 1 ENVIRONMENT_TIME -Transition
+ Check environmentweather ($environmentLog.Replace('weather=Rainy authority','weather=Clear authority')) $environmentManifest 0 1 ENVIRONMENT_WEATHER -Transition
+ Check environmentrepeat ($environmentLog.Replace('ENVIRONMENT_REPEAT] pass=1','ENVIRONMENT_REPEAT] pass=0')) $environmentManifest 0 1 ENVIRONMENT_REPEAT -Transition
+ Check environmentsave ($environmentLog.Replace('ENVIRONMENT_SAVE_RESTORE] pass=1','ENVIRONMENT_SAVE_RESTORE] pass=0')) $environmentManifest 0 1 ENVIRONMENT_SAVE_RESTORE -Transition
+ Check environmentread ($environmentLog.Replace('TRANSITION_ENVIRONMENT] pass=1','TRANSITION_ENVIRONMENT] pass=0')) $environmentManifest 0 1 ENVIRONMENT_READBACK -Transition
+ Check environmentmissing ($environmentLog.Replace('[ENVIRONMENT_APPLIED]','[MISSING]')) $environmentManifest 0 1 ENVIRONMENT_COUNT -Transition
+ Check environmentfallback ($environmentLog+"`n[ENVIRONMENT_FALLBACK]") $environmentManifest 0 1 ENVIRONMENT_FALLBACK -Transition
+ Check environmentclock ($environmentLog.Replace('ENVIRONMENT_CLOCK] pass=1','ENVIRONMENT_CLOCK] pass=0')) $environmentManifest 0 1 ENVIRONMENT_CLOCK -Transition
 }
 finally{
  $target=[IO.Path]::GetFullPath($work)

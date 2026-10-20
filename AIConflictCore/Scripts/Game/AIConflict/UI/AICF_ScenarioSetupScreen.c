@@ -40,34 +40,38 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		m_wRoot.AddHandler(this);
 		m_Style.CreateText(m_wRoot, 0.05, 0.04, 0.95, 0.10, "AI Conflict", 36, Color.White);
 		m_Style.CreateText(m_wRoot, 0.05, 0.11, 0.95, 0.16, "{AICF:AICF_Setup_Title}", 23, Color.White);
-		string headings[5] = {"Map", "Content", "Mode", "Side", "Difficulty"};
-		for (int row; row < 5; row++)
-			m_Style.CreateText(m_wRoot, 0.05, 0.21 + row * 0.115, 0.22, 0.26 + row * 0.115, "{AICF:AICF_Setup_" + headings[row] + "}", 18, Color.White);
+		string headings[7] = {"Map", "Content", "Mode", "Side", "Difficulty", "Time", "Weather"};
+		for (int row; row < 7; row++)
+			m_Style.CreateText(m_wRoot, 0.05, 0.19 + row * 0.08, 0.22, 0.235 + row * 0.08, "{AICF:AICF_Setup_" + headings[row] + "}", 18, Color.White);
 		for (int mapIndex; mapIndex < 3; mapIndex++)
 		{
 			AICF_ScenarioVariant variant = m_Selection.GetRegistry().Find(mapIndex, 0);
 			if (!variant) { Close(); return false; }
-			AddButton(variant.m_sMapLabel, 0.23 + mapIndex * 0.145, 0.20, 0.365 + mapIndex * 0.145, 0.275);
+			AddButton(variant.m_sMapLabel, 0.23 + mapIndex * 0.145, 0.18, 0.365 + mapIndex * 0.145, 0.245);
 		}
-		AddButton("Vanilla", 0.23, 0.315, 0.365, 0.39);
-		AddButton("RHS", 0.375, 0.315, 0.51, 0.39);
-		AddButton("WCS + RHS", 0.52, 0.315, 0.655, 0.39);
-		AddButton("Conflict", 0.23, 0.43, 0.435, 0.505);
-		AddButton("Co-op", 0.45, 0.43, 0.655, 0.505);
-		AddButton("", 0.23, 0.545, 0.435, 0.62);
-		AddButton("", 0.45, 0.545, 0.655, 0.62);
-		AddButton("{AICF:AICF_Setup_Easy}", 0.23, 0.66, 0.365, 0.735);
-		AddButton("{AICF:AICF_Setup_Medium}", 0.375, 0.66, 0.51, 0.735);
-		AddButton("{AICF:AICF_Setup_Hard}", 0.52, 0.66, 0.655, 0.735);
-		m_Style.CreateRect(m_wRoot, 0.69, 0.20, 0.95, 0.735, Color.FromSRGBA(30, 46, 49, 255), false);
+		AddButton("Vanilla", 0.23, 0.26, 0.365, 0.325);
+		AddButton("RHS", 0.375, 0.26, 0.51, 0.325);
+		AddButton("WCS + RHS", 0.52, 0.26, 0.655, 0.325);
+		AddButton("Conflict", 0.23, 0.34, 0.435, 0.405);
+		AddButton("Co-op", 0.45, 0.34, 0.655, 0.405);
+		AddButton("", 0.23, 0.42, 0.435, 0.485);
+		AddButton("", 0.45, 0.42, 0.655, 0.485);
+		AddButton("{AICF:AICF_Setup_Easy}", 0.23, 0.50, 0.365, 0.565);
+		AddButton("{AICF:AICF_Setup_Medium}", 0.375, 0.50, 0.51, 0.565);
+		AddButton("{AICF:AICF_Setup_Hard}", 0.52, 0.50, 0.655, 0.565);
+		m_Style.CreateRect(m_wRoot, 0.69, 0.18, 0.95, 0.725, Color.FromSRGBA(30, 46, 49, 255), false);
 		m_wHelp = m_Style.CreateText(m_wRoot, 0.71, 0.22, 0.93, 0.71, "", 19, Color.White);
-		m_wSummary = m_Style.CreateText(m_wRoot, 0.05, 0.76, 0.95, 0.815, "", 20, Color.White);
+		m_wSummary = m_Style.CreateText(m_wRoot, 0.05, 0.75, 0.95, 0.82, "", 19, Color.White);
 		m_wStatus = m_Style.CreateText(m_wRoot, 0.05, 0.825, 0.95, 0.88, "", 17, Color.White);
 		string start = "{AICF:AICF_Setup_Play}";
 		if (m_bHost) start = "{AICF:AICF_Setup_Host}";
 		AddButton(start, 0.70, 0.90, 0.95, 0.97);
 		AddButton("{AICF:AICF_Setup_Cancel}", 0.05, 0.90, 0.25, 0.97);
-		if (!m_wSummary || !m_wStatus || !m_wHelp || m_aButtons.Count() != 15) { Close(); return false; }
+		for (int time; time < 5; time++)
+			AddButton("{AICF:AICF_Setup_Time" + time.ToString() + "}", 0.23 + time * 0.087, 0.58, 0.307 + time * 0.087, 0.645, 15);
+		for (int weather; weather < 5; weather++)
+			AddButton("{AICF:AICF_Setup_Weather" + weather.ToString() + "}", 0.23 + weather * 0.087, 0.66, 0.307 + weather * 0.087, 0.725, 15);
+		if (!m_wSummary || !m_wStatus || !m_wHelp || m_aButtons.Count() != 25) { Close(); return false; }
 		m_wSummary.SetTextWrapping(true);
 		m_wStatus.SetTextWrapping(true);
 		m_wHelp.SetTextWrapping(true);
@@ -77,12 +81,12 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		return true;
 	}
 
-	protected void AddButton(string text, float left, float top, float right, float bottom)
+	protected void AddButton(string text, float left, float top, float right, float bottom, int fontSize = 20)
 	{
 		Widget frame = m_Style.CreateRect(m_wRoot, left, top, right, bottom, Color.FromSRGBA(42, 60, 62, 255), true);
 		if (!frame) return;
 		frame.SetZOrder(10);
-		TextWidget label = m_Style.CreateText(frame, 0, 0, 1, 1, text, 20, Color.White, true);
+		TextWidget label = m_Style.CreateText(frame, 0, 0, 1, 1, text, fontSize, Color.White, true);
 		Widget input = frame.FindAnyWidget("AICF_RectInput");
 		if (!input || !label) return;
 		m_aFrames.Insert(frame);
@@ -134,6 +138,12 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		Refresh();
 		return true;
 	}
+	bool SelectEnvironment(int time, int weather)
+	{
+		if (!m_Selection || !m_Selection.SelectEnvironment(time, weather)) return false;
+		Refresh();
+		return true;
+	}
 
 	protected void Refresh()
 	{
@@ -144,7 +154,7 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		AICF_ScenarioVariant variant = m_Selection.GetVariant();
 		foreach (int index, Widget frame : m_aFrames)
 		{
-			bool selected = index == mapIndex || index == content + 3 || (index == 6 && mode == 0) || (index == 7 && mode > 0) || (index == mode + 7 && mode > 0) || index == difficulty + 10;
+			bool selected = index == mapIndex || index == content + 3 || (index == 6 && mode == 0) || (index == 7 && mode > 0) || (index == mode + 7 && mode > 0) || index == difficulty + 10 || index == m_Selection.GetEnvironment().m_iTime + 15 || index == m_Selection.GetEnvironment().m_iWeather + 20;
 			Color color = Color.FromSRGBA(42, 60, 62, 255);
 			if (selected) color = Color.FromSRGBA(111, 85, 36, 255);
 			m_Style.SetRectColor(frame, color);
@@ -193,7 +203,7 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		if (mode == 2) side = AICF_Localization.Resolve(variant.m_sEastLabel);
 		string modeLabel = "Conflict";
 		if (mode > 0) modeLabel = "Co-op";
-		m_wSummary.SetText(string.Format("%1 · %2 · %3 · %4 · %5", AICF_Localization.Resolve(variant.m_sMapLabel), m_aLabels[content + 3].GetText(), modeLabel, side, m_aLabels[difficulty + 10].GetText()));
+		m_wSummary.SetText(string.Format("%1 · %2 · %3 · %4 · %5 · %6 · %7", AICF_Localization.Resolve(variant.m_sMapLabel), m_aLabels[content + 3].GetText(), modeLabel, side, m_aLabels[difficulty + 10].GetText(), m_aLabels[m_Selection.GetEnvironment().m_iTime + 15].GetText(), m_aLabels[m_Selection.GetEnvironment().m_iWeather + 20].GetText()));
 		string status = AICF_Localization.Resolve("{AICF:AICF_Setup_Reload}");
 		if (!unavailable.IsEmpty()) status = AICF_Localization.Resolve("{AICF:AICF_Setup_Missing}") + " " + unavailable;
 		if (!AICF_ScenarioLaunch.IsForcedGraphCompatible(m_Selection.GetRegistry().Find(mapIndex, 0))) status = AICF_Localization.Resolve("{AICF:AICF_Setup_Pinned}");
@@ -210,6 +220,8 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		else if (index < 10) key = "CoopHelp";
 		else if (index < 13) key = "DifficultyHelp" + (index - 10).ToString();
 		else if (index == 14) key = "CancelHelp";
+		else if (index >= 15 && index < 20) key = "TimeHelp";
+		else if (index >= 20) key = "WeatherHelp";
 		else
 		{
 			key = "PlayHelp";
@@ -243,6 +255,8 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		else if (index >= 10 && index <= 12) Select(mode, index - 10);
 		else if (index == 13) Launch();
 		else if (index == 14) SCR_ScenarioUICommon.AICF_CloseSetup();
+		else if (index >= 15 && index < 20) SelectEnvironment(index - 15, m_Selection.GetEnvironment().m_iWeather);
+		else if (index >= 20) SelectEnvironment(m_Selection.GetEnvironment().m_iTime, index - 20);
 		if (m_wRoot) Help(index);
 		return true;
 	}

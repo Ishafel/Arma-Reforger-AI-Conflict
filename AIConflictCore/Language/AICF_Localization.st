@@ -4234,5 +4234,89 @@ StringTable
 			Target_en_us "Other weapons"
 			Target_ru_ru "Другое оружие"
 		}
+		CustomStringTableItem "{A1CF261020700001}"
+		{
+			Id "AICF_Setup_Time"
+			Target_en_us "Time of day"
+			Target_ru_ru "Время суток"
+		}
+		CustomStringTableItem "{A1CF261020700002}"
+		{
+			Id "AICF_Setup_Weather"
+			Target_en_us "Weather"
+			Target_ru_ru "Погода"
+		}
+		CustomStringTableItem "{A1CF261020700003}"
+		{
+			Id "AICF_Setup_Time0"
+			Target_en_us "08:00"
+			Target_ru_ru "08:00"
+		}
+		CustomStringTableItem "{A1CF261020700004}"
+		{
+			Id "AICF_Setup_Time1"
+			Target_en_us "12:00"
+			Target_ru_ru "12:00"
+		}
+		CustomStringTableItem "{A1CF261020700005}"
+		{
+			Id "AICF_Setup_Time2"
+			Target_en_us "18:00"
+			Target_ru_ru "18:00"
+		}
+		CustomStringTableItem "{A1CF261020700006}"
+		{
+			Id "AICF_Setup_Time3"
+			Target_en_us "00:00"
+			Target_ru_ru "00:00"
+		}
+		CustomStringTableItem "{A1CF261020700007}"
+		{
+			Id "AICF_Setup_Time4"
+			Target_en_us "Random"
+			Target_ru_ru "Случайно"
+		}
+		CustomStringTableItem "{A1CF261020700008}"
+		{
+			Id "AICF_Setup_Weather0"
+			Target_en_us "Random"
+			Target_ru_ru "Случайно"
+		}
+		CustomStringTableItem "{A1CF261020700009}"
+		{
+			Id "AICF_Setup_Weather1"
+			Target_en_us "Clear"
+			Target_ru_ru "Ясно"
+		}
+		CustomStringTableItem "{A1CF261020700010}"
+		{
+			Id "AICF_Setup_Weather2"
+			Target_en_us "Cloudy"
+			Target_ru_ru "Облачно"
+		}
+		CustomStringTableItem "{A1CF261020700011}"
+		{
+			Id "AICF_Setup_Weather3"
+			Target_en_us "Overcast"
+			Target_ru_ru "Пасмурно"
+		}
+		CustomStringTableItem "{A1CF261020700012}"
+		{
+			Id "AICF_Setup_Weather4"
+			Target_en_us "Rain"
+			Target_ru_ru "Дождь"
+		}
+		CustomStringTableItem "{A1CF261020700013}"
+		{
+			Id "AICF_Setup_TimeHelp"
+			Target_en_us "Starting time: morning 08:00, noon 12:00, evening 18:00 or midnight 00:00. Random uses the world's sunrise and sunset. Time continues at the scenario's normal speed."
+			Target_ru_ru "Время начала: утро 08:00, день 12:00, вечер 18:00 или полночь 00:00. Случайный выбор учитывает восход и закат на карте. Время продолжит идти со скоростью сценария."
+		}
+		CustomStringTableItem "{A1CF261020700014}"
+		{
+			Id "AICF_Setup_WeatherHelp"
+			Target_en_us "Weather at the start of the operation. Random chooses a state supported by the map. Weather can change naturally during the match. The host's choice applies to every player."
+			Target_ru_ru "Погода в начале операции. Случайный выбор использует состояния, доступные на карте. Во время матча погода продолжит меняться естественным образом. Выбор хозяина действует для всех игроков."
+		}
 	}
 }

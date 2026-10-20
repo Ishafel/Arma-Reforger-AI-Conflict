@@ -7,7 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
-| Изменить универсальное меню карт/контента, зависимости и native launch, видимость сценариев или ошибки SCR_FilterCategory | [SCENARIO_SETUP.md](SCENARIO_SETUP.md), `AICF_ScenarioRegistry`, `AICF_ScenarioLaunch`, `AICF_ScenarioSetupSelection`, `AICF_ScenarioSetupScreen`, `AICF_ScenarioSetupEntry`, `AICF_ArlandScenarioCatalog`, `AICF_WorkshopTagMetadata` |
+| Изменить универсальное меню карт/контента, время/погоду, зависимости и native launch, видимость сценариев или ошибки SCR_FilterCategory | [SCENARIO_SETUP.md](SCENARIO_SETUP.md), `AICF_ScenarioEnvironment`/`AICF_ScenarioEnvironmentHandler`, `AICF_ScenarioRegistry`, `AICF_ScenarioLaunch`, `AICF_ScenarioSetupSelection`, `AICF_ScenarioSetupScreen`, `AICF_ScenarioSetupEntry`, `AICF_ArlandScenarioCatalog`, `AICF_WorkshopTagMetadata` |
 | Исправить классификацию смерти INSTIGATOR_OTHER | [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md), `AICF_InstigatorContext`, pinned `SCR_InstigatorContextData` и native Instigator API |
 | Добавить карту/мод или сторону Co-op; изменить roster, выбор фракции, группы игроков, строительство и поражение | [COOP_SCENARIO.md](COOP_SCENARIO.md), `tools/config/AICF_Scenarios.json`, `AICF_MatchRules`, `AICF_CoopFactionAccess`, `AICF_CoopFactionMenu`, `AICF_CoopPlayerGroups`, `AICF_ConstructionPlanner` |
 | Изменить найм купленных в казарме бойцов во всех сценариях | [GAMEPLAY.md](GAMEPLAY.md#найм-купленных-в-казарме-бойцов), `AICF_BarracksRecruitment`, barracks fixture в [TEST_FIXTURES.md](TEST_FIXTURES.md) |

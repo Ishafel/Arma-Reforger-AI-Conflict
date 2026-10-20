@@ -8,6 +8,9 @@ class AICF_ScenarioTransitionProbe
 		string mapIndex, content, mode, difficulty;
 		if (!System.GetCLIParam("aicfProbeMap", mapIndex) || !System.GetCLIParam("aicfProbeContent", content) || !System.GetCLIParam("aicfProbeMode", mode) || !System.GetCLIParam("aicfProbeDifficulty", difficulty)) return null;
 		if (!selection.SelectVariant(mapIndex.ToInt(), content.ToInt()) || !selection.Select(mode.ToInt(), difficulty.ToInt())) return null;
+		string time, weather;
+		if (System.GetCLIParam("aicfProbeTime", time) && System.GetCLIParam("aicfProbeWeather", weather))
+			if (!selection.SelectEnvironment(time.ToInt(), weather.ToInt())) return null;
 		return selection;
 	}
 	static void Launch()
@@ -73,6 +76,8 @@ modded class AICF_MatchController
 	override protected void Update()
 	{
 		ChimeraWorld world = ChimeraWorld.CastFrom(GetGame().GetWorld());
+		// Только fixture: Welcome pause не должна блокировать автоматический readback.
+		if (System.IsCLIParam("aicfProbeTime") && world) world.PauseGameTime(false);
 		if (System.IsCLIParam("aicfTransitionProbe"))
 		{
 			if (!m_iAICFTransitionObservedAt && m_USState && m_USSRState && m_USState.GetSlotCount() + m_USSRState.GetSlotCount() > 0)
@@ -116,6 +121,29 @@ modded class AICF_MatchController
 		if (System.IsCLIParam("aicfProbeResumeAfter") && !m_bAICFTransitionPauseChecked) return;
 		m_bAICFTransitionRead = true;
 		AICF_ScenarioSetupSelection selection = AICF_ScenarioTransitionProbe.Selection();
+		if (System.IsCLIParam("aicfProbeTime"))
+		{
+			TimeAndWeatherManagerEntity manager = world.GetTimeAndWeatherManager();
+			AICF_ScenarioEnvironment expected = selection.GetEnvironment();
+			string weather = manager.GetCurrentWeatherState().GetStateName();
+			float hour = manager.GetTimeOfTheDay();
+			bool matches = expected.m_iTime == 4 || Math.AbsFloat(hour - expected.GetHour()) < 0.25 || (expected.GetHour() == 0 && hour > 23.75);
+			matches = matches && (expected.m_iWeather == 0 || weather == expected.GetWeatherName());
+			Print(string.Format("[AICF][TRANSITION_ENVIRONMENT] pass=%1 time_mode=%2 weather_mode=%3 hour=%4 weather=%5", matches, expected.m_iTime, expected.m_iWeather, hour, weather));
+			SCR_MissionHeader environmentHeader = SCR_MissionHeader.Cast(GetGame().GetMissionHeader());
+			float acceleration = environmentHeader.m_fDayTimeAcceleration;
+			if (manager.IsNightHour(hour)) acceleration = environmentHeader.m_fNightTimeAcceleration;
+			bool clock = manager.GetIsDayAutoAdvanced() && Math.AbsFloat(manager.GetDayDuration() - 86400.0 / acceleration) < 0.001 && !manager.IsWeatherLooping();
+			Print(string.Format("[AICF][ENVIRONMENT_CLOCK] pass=%1", clock));
+			// Повторная инициализация не должна сбрасывать часы и погоду.
+			SCR_TimeAndWeatherHandlerComponent.GetInstance().SetupDaytimeAndWeather(7, 15);
+			bool unchanged = manager.GetTimeOfTheDay() == hour && manager.GetCurrentWeatherState().GetStateName() == weather;
+			Print(string.Format("[AICF][ENVIRONMENT_REPEAT] pass=%1", unchanged));
+			SCR_TimeAndWeatherHandlerComponent.GetInstance().SetupDaytimeAndWeather(6, 30, 0, weather, true);
+			bool restored = Math.AbsFloat(manager.GetTimeOfTheDay() - 6.5) < 0.001 && manager.GetCurrentWeatherState().GetStateName() == weather;
+			SCR_TimeAndWeatherHandlerComponent.GetInstance().SetupDaytimeAndWeather(15, 0);
+			Print(string.Format("[AICF][ENVIRONMENT_SAVE_RESTORE] pass=%1", restored && Math.AbsFloat(manager.GetTimeOfTheDay() - 6.5) < 0.001));
+		}
 		SCR_MissionHeaderCampaign header = SCR_MissionHeaderCampaign.Cast(GetGame().GetMissionHeader());
 		bool target = selection && header && header.GetHeaderResourceName() == selection.GetResource() && header.m_eAICFMatchMode == selection.GetMode() && header.m_eAICFDifficulty == selection.GetDifficulty();
 		Print(string.Format("[AICF][TRANSITION_CASE] case=ACTIVE_HEADER pass=%1", target));

@@ -180,6 +180,11 @@ control и 13 отрицательных случаев отдельного `Te
 включая UTF-8 пути, лишние/недостающие addons и неправильный launch resource.
 `Test-UniversalScenarioLog.ps1 [-Transition]` анализирует полный stopped native
 log универсального меню; в offline runner не входит.
+`Test-ScenarioEnvironmentStatic.ps1` проверяет authority и одноразовую передачу
+времени/погоды через GameSessionStorage, exact target/TTL, cleanup отказа и native
+weather boundary. Transition analyzer с `-aicfProbeTime/-aicfProbeWeather` в
+manifest требует реальные начальные часы/погоду, repeat и save/load readbacks;
+его отрицательные контракты входят в общий offline набор.
 
 ## Локальные файлы вне набора
 

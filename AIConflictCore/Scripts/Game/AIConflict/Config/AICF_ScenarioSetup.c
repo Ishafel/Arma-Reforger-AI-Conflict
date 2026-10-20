@@ -26,12 +26,21 @@ class AICF_ScenarioSetupSelection
 	protected ref AICF_ScenarioRegistry m_Registry = new AICF_ScenarioRegistry();
 	protected int m_iMap;
 	protected int m_iContent;
+	protected ref AICF_ScenarioEnvironment m_Environment = new AICF_ScenarioEnvironment();
 
 	void AICF_ScenarioSetupSelection(AICF_ScenarioSetupHeader header) { m_Header = header; }
 	int GetMode() { return m_iMode; }
 	int GetDifficulty() { return m_iDifficulty; }
 	int GetMap() { return m_iMap; }
 	int GetContent() { return m_iContent; }
+	AICF_ScenarioEnvironment GetEnvironment() { return m_Environment; }
+	bool SelectEnvironment(int time, int weather)
+	{
+		if (time < 0 || time > 4 || weather < 0 || weather > 4) return false;
+		m_Environment.m_iTime = time;
+		m_Environment.m_iWeather = weather;
+		return true;
+	}
 	AICF_ScenarioRegistry GetRegistry() { return m_Registry; }
 	AICF_ScenarioVariant GetVariant() { return m_Registry.Find(m_iMap, m_iContent); }
 	ResourceName GetResource()
