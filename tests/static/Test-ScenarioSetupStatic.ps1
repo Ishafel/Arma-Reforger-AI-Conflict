@@ -23,6 +23,7 @@ function Test-SetupGuards([string]$a,[string]$b,[string]$c) {
         @($b,'AddModal\(m_wRoot, m_aButtons\[0\]\)','MODAL'),
         @($b,'m_wRoot.RemoveHandler\(this\);.*?RemoveModal\(m_wRoot\);.*?m_wRoot.RemoveFromHierarchy\(\);','CLEANUP'),
         @($c,'if \(!header\) return false;','OPT_IN'),
+        @($c,'AICF_GetSetupHeader\(MissionWorkshopItem scenario\).*?MissionHeader.ReadMissionHeader\(scenario.Id\(\)\)','CATALOG_HEADER'),
         @($c,'if \(AICF_OpenSetup\(scenario\)\) return;\s*super.TryPlayScenario\(scenario\);','PLAY_PASSTHROUGH'),
         @($c,'if \(AICF_OpenSetup\(scenario, config\)\) return;\s*super.TryHostScenario\(scenario, config\);','HOST_PASSTHROUGH')
     )){if($rule[0] -notmatch ('(?s)'+$rule[1])){$rule[2]}}
@@ -42,6 +43,7 @@ $mutations=@(
     @('b','m_aButtons[2].SetEnabled(mode != 0);','m_aButtons[2].SetEnabled(true);','STANDARD_SIDES'),
     @('b','RemoveModal(m_wRoot);','GetModal();','CLEANUP'),
     @('c','if (!header) return false;','if (!header) return true;','OPT_IN'),
+    @('c','MissionHeader.ReadMissionHeader(scenario.Id())','scenario.GetHeader()','CATALOG_HEADER'),
     @('c','super.TryPlayScenario(scenario);','','PLAY_PASSTHROUGH'),
     @('c','super.TryHostScenario(scenario, config);','','HOST_PASSTHROUGH'),
     @('b','Refresh();','GetGame().GetCallqueue().CallLater(Refresh, 1000);','PRELAUNCH_ONLY')

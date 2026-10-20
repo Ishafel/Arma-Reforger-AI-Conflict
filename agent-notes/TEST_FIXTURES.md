@@ -9,6 +9,17 @@ readbacks — 15. Client использует обычный `-aicfCoopProbePlay
 Не вызывает Play/Host и не имитирует GUI input. Full stopped-log gate:
 `Test-ScenarioSetupLog.ps1 [-Client]`. Контракт: [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
 
+`AICF_ScenarioCatalogProbe.c` копировать отдельно в isolated Core/UI как
+`AICF_ZScenarioCatalogProbe.c`. CLI `-aicfCatalogProbe 1 -listScenarios`.
+Проверяет native catalog и tag maps: 15 cases, без Play/Host и GUI input.
+Отдельный Managed object выполняет readback через 5 s и RequestClose через 1 s;
+timeout — 30 s. Все callbacks снимаются в OnGameEnd. Dedicated запускается
+canonical launcher; frontend — с тем же Client graph без подключения, заранее
+объяснив владельцу короткое окно и автоматическое закрытие. Строгий gate
+`Test-ScenarioCatalogLog.ps1 -LogPath ... -ManifestPath ... -NativeExitPath ...`:
+полный stopped log, exact source/profile/addons CLI, 15/15 и отсутствие SCRIPT/VM/fatal.
+Реальные нажатия игрока эта проверка не подтверждает.
+
 ## Instigator OTHER
 
 `AICF_InstigatorContextProbe.c` копировать в isolated Core/UI stage как

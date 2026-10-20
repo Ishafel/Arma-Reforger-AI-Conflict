@@ -1,5 +1,82 @@
 # Проверки и baseline
 
+## Видимость примера Arland в локальном frontend — 2026-10-19/20
+
+Продолжение `codex/arland-setup-example` от `0a3dad6`. Evidence:
+`.codex-runtime/scenario-discovery-20261019/`. Отчёт относится к исправлению
+отсутствующего пункта, а не к повторному подтверждению всей Co-op механики.
+
+Причина: `-gproj/-addons` загрузили Core/Arland и resource database с новым
+`.conf`, но source addons не имели установленного WorkshopItem. Native каталог
+содержал только **31** stock сценарий. `AICF_ArlandScenarioCatalog` сохраняет
+этот список и регистрирует prototype + 9 presets через `InsertNewScenario`.
+Вторая найденная граница: у реальной записи `GetInGameScenario` может быть
+`GetHeader() == null`. Entry разрешает subtype чтением ресурса по ID.
+
+`SCR_FilterCategory` воспроизведён отдельно: native `InitAddonTagMaps` создавал
+standalone config root с protected constructor. `AICF_WorkshopTagMetadata`
+читает те же metadata из BaseContainer, сохраняя оба tag maps и native
+OnGameStart callback lifecycle. Конструктор класса категории не меняется.
+
+До правки `Invoke-AICFChecks.ps1 -Name @('Test-ScenarioSetupStatic.ps1',
+'Test-ScenarioHeadersStatic.ps1','Test-RuntimeLauncherStatic.ps1',
+'Test-LocalizationStatic.ps1') -EvidenceRoot <evidence>/before` — **4/4 PASS/0**.
+Реальный baseline catalog probe: **2/15**, **13 failed**, **2 SCRIPT(E)**,
+native exit 0, строгий audit **FAIL/1**; полный log сохранён. Это показывает,
+почему прежний static/header/widget PASS не доказывал наличия в меню.
+
+Финальные проверки:
+
+- `Compile.ps1 -Label final-stock` и `-Label final-wcs -Variant EveronWCSRHS`:
+  production terminal Workbench **2/2 PASS/0**, 1.8.0.13, validation successful,
+  SCRIPT/VM/fatal 0. Окончательный isolated fixture:
+  `-Label final-fixture-confirmed` — **PASS/0**.
+- `RunCatalog.ps1 -Label catalog-server-final ...` через canonical launcher и
+  `-Label catalog-frontend-final ... -Frontend`: native exits **0/0**, по **15/15**
+  cases. Native каталог содержит **41** запись; пример имеет локализованное имя,
+  все девять launch targets доступны, дубликатов нет, stock Arland сохранён.
+  Два readbacks сверяют все native tag images/thumbnails с исходными конфигами.
+- `Test-ScenarioCatalogLog.ps1 -LogPath ... -ManifestPath ... -NativeExitPath ...`
+  по каждому полному stopped log — **2/2 PASS/0**, SCRIPT/VM/fatal **0**.
+  Прочие engine `(E)` сохранены: **15** server + **37** frontend; общий engine
+  error-free PASS не заявляется.
+- `after-selected-final/`: ScenarioSetupStatic **PASS/0**, **17** negative
+  mutations; новый ScenarioCatalogLogContracts **PASS/0**, positive control и
+  **13** negatives, всего **14** cases. Проверяются case/completion, CLI,
+  незавершённый log, SCRIPT/VM/fatal и native exit.
+- `production-stage-integrity.json`: **250/250** production Core/Arland файлов
+  побайтно соответствуют финальному stage; fixture SHA также совпал.
+
+Общий offline запуск был прерван после **40** завершённых PASS. Ещё **2**
+затронутых checks выполнены отдельно. Оставшиеся **32** возобновлены независимыми
+группами `resume-0..3-20261020`; это продолжение набора, не новый единый запуск.
+Окончательное множество и exits сохраняются в `offline-final-verdict.json`.
+Итог: **74/74 PASS**, пропусков и повторов в объединённом множестве нет.
+Возобновлённые groups — **32/32 PASS/0**, включая **145** положительных и
+отрицательных Logistics contracts. Исходное прерывание не объявляется exit 0.
+
+Сохранённые промежуточные FAIL: первая новая fixture пыталась ставить callback
+на unmanaged Game и не компилировалась; исправлена отдельным Managed owner.
+Диагностическая попытка разыменовать nullable GetHeader вызвала VM/crash в
+изолированном probe, native `-1073741819`; исправлено, лог и dump path сохранены.
+Ранние public-constructor adapters не устранили protected/native static boundary;
+первый frontend прошёл 15 cases, но имел 2 SCRIPT(E), strict **FAIL/1**. После
+исправления фактического caller повторный полный frontend log чист по script gate.
+Эти FAIL не исключены из evidence и не смешиваются с финальными logs.
+
+Обычный production client открыт по запросу владельца 19.10 в 23:07 МСК, без
+fixture/auto-close. Его `-listScenarios` подтвердил нужное имя в native каталоге;
+впоследствии журнал содержит запуск Co-op СССР Hard. Сам факт этого запуска не
+доказывает показ нового экрана и нажатия Play/Host. После прерывания клиент уже
+закрыт; 20.10 повторно не открывался. Собственные native test processes завершены.
+Оба stage адресно удалены после ZIP-архивации и SHA-256, `stage-archives.json`.
+
+**NOT RUN / прежний frontend blocker:** визуальная проверка, реальные нажатия
+Play/Host/отмена, клавиатура/controller и разные разрешения остаются без явного
+подтверждения игрока. Terminal-only workflow запрещает GUI automation;
+native catalog readbacks и наблюдение запуска их не заменяют. Packaged/Workshop
+и soak также NOT RUN. Прототип не объявляется готовым UI для релиза.
+
 ## Пример frontend-настройки Arland — 2026-10-19
 
 Ветка `codex/arland-setup-example` от чистого `30be812`. Evidence:

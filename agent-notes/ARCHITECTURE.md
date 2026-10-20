@@ -76,6 +76,11 @@ Native лидерство, лимит и ownership RPC сохраняют сво
 задаёт тонкий Arland header; shared gameplay config и репликация не меняются.
 Обычный запуск проходит через прежние native TryPlay/TryHost. Границы проверки
 frontend и правила очистки — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+Arland integration регистрирует prototype и его targets в native default catalog,
+сохраняя исходные записи и GUID. Это необходимо для source addons без WorkshopItem.
+Core разрешает subtype чтением ресурса по ID; nullable catalog `GetHeader()` не
+определяет доступность примера. `AICF_WorkshopTagMetadata` — узкий адаптер чтения
+штатных UI tag maps, избегающий standalone protected constructor SCR_FilterCategory.
 
 `AICF_InstigatorContext` — узкий compatibility boundary transient death context.
 OTHER с известным character передаётся штатной AI/PLAYER классификации;

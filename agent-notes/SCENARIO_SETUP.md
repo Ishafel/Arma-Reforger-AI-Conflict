@@ -38,6 +38,14 @@ runtime config** и не сокращение числа файлов на ди�
   `SCR_ScenarioUICommon.TryPlayScenario/TryHostScenario`. Для обычных headers
   вызов идёт в super с исходными аргументами. Закрытие ScenarioMenu/ServerHostingUI
   также закрывает экран.
+  `AICF_GetSetupHeader` читает ресурс по `scenario.Id()`: реальная запись каталога
+  может возвращать `null` из `MissionWorkshopItem.GetHeader()` даже при наличии metadata.
+- `AIConflictArland/.../Integration/AICF_ArlandScenarioCatalog.c`: дополняет
+  `ArmaReforgerScripted.GetDefaultGameConfigs` примером и девятью валидными presets.
+  Исходные addons, загруженные через `-gproj/-addons`, не имеют установленного
+  `WorkshopItem`; одного присутствия `.conf` в resource database недостаточно
+  для появления в frontend. Родительский каталог сохраняется, добавление использует
+  native `InsertNewScenario` без повторов. При неполном header дополнение отменяется.
 - Подтверждение заново разрешает native `MissionWorkshopItem` и CanPlay/CanHost.
   Существующий `SCR_DSConfig` сохраняется; меняется только `game.scenarioId`
   на ID выбранного native mission. После закрытия экрана вызываются штатные
@@ -54,7 +62,23 @@ world/base/layout topology. Прямой запуск ID в обход игро�
 
 `Test-ScenarioSetupStatic.ps1`: соответствие девяти targets общему каталогу,
 passthrough, opt-in, native permission/launch boundary, atomic choice и cleanup;
-16 отрицательных mutations. Входит в общий offline набор.
+17 отрицательных mutations, включая отказ от nullable catalog header в пользу
+чтения ресурса по ID. Входит в общий offline набор.
+
+`AICF_ScenarioCatalogProbe.c` проверяет настоящий `GetPageScenarios` и
+`GetInGameScenario`, имя и видимость примера, все девять targets, отсутствие
+дубликатов, повторный вызов и сохранение stock Arland. Это отдельный gate:
+чтение `.conf` и создание widgets сами по себе регистрацию не доказывают.
+Два дополнительных readbacks проверяют полное заполнение native tag image/thumbnail
+maps из штатных `category_type.conf` и `category_manw.conf`.
+
+`Integration/AICF_WorkshopTagMetadata.c` устраняет обнаруженные при входе в frontend
+ошибки `SCR_FilterCategory`: native `InitAddonTagMaps` пытается создать эту категорию
+как standalone config root с protected constructor в 1.8.0.13. Adapter читает
+metadata через `BaseContainer`, сохраняя lowercase keys, изображения и thumbnails.
+`OnGameStart` также переопределён с сохранением native callback Remove/Insert:
+внутренний static caller иначе продолжает вызывать исходный метод. Сам класс
+категории, вложенные фильтры и их конструкторы не меняются.
 
 `AICF_ScenarioSetupProbe.c` добавляется только в isolated Core/UI stage как
 `AICF_ZScenarioSetupProbe.c` после основного Co-op probe. CLI `-aicfSetupProbe 1`.
