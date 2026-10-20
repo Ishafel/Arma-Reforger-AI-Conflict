@@ -1,5 +1,47 @@
 # Проверки и baseline
 
+## Draft PR #65: полный offline после ползунка — 2026-10-20
+
+По запросу владельца опубликован [draft PR #65](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/65)
+из `codex/scenario-time-weather` в `main`. Он содержит накопленные Co-op,
+общий найм, исправления native ошибок и универсальное меню с окружением.
+Связь `Refs #46` и обратная ссылка в issue проверены; issue остаётся открытым.
+Merge, ready-for-review и Workshop release не выполнялись.
+
+Свежий `Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot
+.codex-runtime/pr-issue46-20261020/offline-all` на `ba165ab`:
+**77/77 PASS/0**, Static **33/33**, Contracts **44/44**, FAIL/missing **0**.
+Полные команды и outputs — `offline-all/context.json`, `summary.json` и
+отдельные `*.txt`; проверка точного множества — `offline-verdict.json`.
+Это новый полный прогон после slider, в отличие от предыдущего `ecad123`.
+Добавленный после него commit меняет только эту заметку.
+
+`git fetch origin` и `git diff --check origin/main...HEAD` — **PASS/0**.
+Target `bb081eb` является предком source, GitHub подтвердил отсутствие
+конфликтов. `production-integrity.json` повторно подтверждает SHA-256 четырёх
+environment/setup production файлов относительно tested stage. Workbench
+**3/3**, menu **46/46** и четыре native transitions ниже не запускались заново
+для публикации PR; их итоговые logs остаются evidence того же production source.
+
+Сохраняются исторические baseline/intermediate FAIL и stock/vendor engine
+diagnostics, подробно перечисленные в разделах задач ниже; прежние неудачные
+runs не переименованы в PASS. Нового code baseline FAIL при подготовке PR нет.
+PR остаётся **draft**: реальные mouse/keyboard/controller input, drag/focus,
+внешний вид и public Host требуют игрока, недоступны в terminal-only workflow
+и остаются **NOT RUN**. Новые JIP/direct-connect для slider, loading FPS,
+полная per-map environment runtime matrix, RHS/WCS purchase, player death/respawn,
+save-file restore, packaged Workshop и soak также **NOT RUN**.
+Programmatic readbacks не доказывают эти критерии; приоритет manual blockers
+не снят новым offline PASS. Исходные формулировки и нужные действия игрока
+сохранены в отклонённых критериях issue и описании PR.
+
+Клиент, ранее открытый для владельца, адресно завершён перед запрошенным
+выключением; игровых/Workbench процессов **0**. История publication и проверки
+ссылок — `publication.json`; process readbacks — `native-processes-final.json`,
+все в `.codex-runtime/pr-issue46-20261020/`. Полные прежние logs/архивы
+не удалены, GitHub Actions runs/statuses для source не обнаружены и не
+выдаются за CI PASS.
+
 ## Ползунок времени суток — 2026-10-20
 
 Продолжение `codex/scenario-time-weather` от чистого `ecad123`: кнопки времени
