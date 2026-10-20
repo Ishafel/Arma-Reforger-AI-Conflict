@@ -3,7 +3,11 @@ modded class AICF_ScenarioSetupScreen
 {
 	bool AICF_UniversalWidgets()
 	{
-		return m_aButtons.Count() == 25 && m_aFlags.Count() == 2 && m_iFlagFailures == 0 && m_wHelp && !m_wHelp.GetText().IsEmpty() && !m_wHelp.GetText().Contains("{AICF:");
+		return m_aButtons.Count() == 21 && m_aFlags.Count() == 2 && m_iFlagFailures == 0 && m_wHelp && !m_wHelp.GetText().IsEmpty() && !m_wHelp.GetText().Contains("{AICF:");
+	}
+	bool AICF_TimeSliderReadback(int minutes, string label)
+	{
+		return m_wTimeSlider && m_wTimeSlider.GetMin() == 0 && m_wTimeSlider.GetMax() == 1439 && m_wTimeSlider.GetStep() == 1 && !m_wTimeSlider.IsVertical() && m_wTimeSlider.GetCurrent() == minutes && m_wTimeValue.GetText() == label;
 	}
 	bool AICF_UniversalSides() { return m_aButtons[8].IsEnabled() && m_aButtons[9].IsEnabled(); }
 	bool AICF_UniversalStart() { return m_aButtons[13].IsEnabled(); }
@@ -98,23 +102,44 @@ class AICF_UniversalScenarioProbe
 		Check("UI_MODAL", root && GetGame().GetWorkspace().GetModal() == root);
 		Check("UI_FLAGS_HELP", m_Screen.AICF_UniversalWidgets());
 		Check("UI_START_ENABLED", m_Screen.AICF_UniversalStart());
-		bool environmentValid = m_Screen.GetSelection().GetEnvironment().m_iTime == 0 && m_Screen.GetSelection().GetEnvironment().m_iWeather == 0;
-		for (int time; time < 5; time++)
+		bool environmentValid = m_Screen.GetSelection().GetEnvironment().m_iStartMinutes == 480 && m_Screen.GetSelection().GetEnvironment().m_iWeather == 0;
+		for (int time; time <= 1440; time++)
 			for (int weather; weather < 5; weather++)
 			{
-				if (!m_Screen.SelectEnvironment(time, weather) || m_Screen.GetSelection().GetEnvironment().m_iTime != time || m_Screen.GetSelection().GetEnvironment().m_iWeather != weather) environmentValid = false;
+				AICF_ScenarioSetupSelection source = m_Screen.GetSelection();
+				if (!source.SelectEnvironment(time, weather) || source.GetEnvironment().m_iStartMinutes != time || source.GetEnvironment().m_iWeather != weather) environmentValid = false;
+				if (time < 1440 && source.GetEnvironment().GetHour() * 60 + source.GetEnvironment().GetMinute() != time) environmentValid = false;
 			}
-		if (m_Screen.SelectEnvironment(-1, 0) || m_Screen.SelectEnvironment(0, 5) || m_Screen.GetSelection().GetEnvironment().m_iTime != 4 || m_Screen.GetSelection().GetEnvironment().m_iWeather != 4) environmentValid = false;
+		m_Screen.SelectEnvironment(817, 4);
+		if (m_Screen.SelectEnvironment(-1, 0) || m_Screen.SelectEnvironment(1441, 0) || m_Screen.SelectEnvironment(0, 5) || m_Screen.GetSelection().GetEnvironment().m_iStartMinutes != 817 || m_Screen.GetSelection().GetEnvironment().m_iWeather != 4) environmentValid = false;
 		Check("UI_ENVIRONMENT", environmentValid && !m_Screen.AICF_UniversalSummary().Contains("{AICF:"));
+		bool sliderValid = m_Screen.AICF_TimeSliderReadback(817, "13:37") && m_Screen.AICF_UniversalSummary().Contains("13:37");
+		m_Screen.SelectEnvironment(0, 4);
+		sliderValid = sliderValid && m_Screen.AICF_TimeSliderReadback(0, "00:00");
+		m_Screen.SelectEnvironment(1439, 4);
+		sliderValid = sliderValid && m_Screen.AICF_TimeSliderReadback(1439, "23:59");
+		m_Screen.SelectEnvironment(817, 4);
+		m_Screen.SelectEnvironment(AICF_ScenarioEnvironment.RANDOM_TIME, 4);
+		sliderValid = sliderValid && m_Screen.AICF_TimeSliderReadback(817, AICF_Localization.Resolve("{AICF:AICF_Setup_Time4}"));
+		m_Screen.SelectEnvironment(817, 4);
+		Check("UI_TIME_SLIDER", sliderValid && m_Screen.AICF_TimeSliderReadback(817, "13:37"));
 		ResourceName target = m_Selection.GetResource();
 		AICF_ScenarioEnvironment settings = m_Screen.GetSelection().GetEnvironment();
 		bool queued = AICF_ScenarioEnvironment.Queue(target, settings);
 		AICF_ScenarioEnvironment consumed = AICF_ScenarioEnvironment.Consume(target);
-		bool roundTrip = queued && consumed && consumed.m_iTime == 4 && consumed.m_iWeather == 4 && !AICF_ScenarioEnvironment.Consume(target);
+		bool roundTrip = queued && consumed && consumed.m_iStartMinutes == 817 && consumed.m_iWeather == 4 && !AICF_ScenarioEnvironment.Consume(target);
 		AICF_ScenarioEnvironment.Queue(target, settings);
 		bool wrongTarget = !AICF_ScenarioEnvironment.Consume("unknown") && !AICF_ScenarioEnvironment.Consume(target);
 		GameSessionStorage.s_Data[AICF_ScenarioEnvironment.SESSION_KEY] = "{}";
-		Check("ENVIRONMENT_STORAGE", roundTrip && wrongTarget && !AICF_ScenarioEnvironment.Consume(target));
+		bool malformed = !AICF_ScenarioEnvironment.Consume(target);
+		JsonSaveContext legacy = new JsonSaveContext();
+		legacy.WriteValue("schema", 1);
+		legacy.WriteValue("target", target);
+		legacy.WriteValue("issued", System.GetTickCount());
+		legacy.WriteValue("minutes", 817);
+		legacy.WriteValue("weather", 4);
+		GameSessionStorage.s_Data[AICF_ScenarioEnvironment.SESSION_KEY] = legacy.SaveToString();
+		Check("ENVIRONMENT_STORAGE", roundTrip && wrongTarget && malformed && !AICF_ScenarioEnvironment.Consume(target));
 		for (int mode; mode < 3; mode++)
 		{
 			for (int difficulty; difficulty < 3; difficulty++)
@@ -124,7 +149,7 @@ class AICF_UniversalScenarioProbe
 			}
 		}
 		bool allHelp = true;
-		for (int index; index < 25; index++)
+		for (int index; index < 21; index++)
 		{
 			m_Screen.AICF_UniversalHelp(index);
 			if (!m_Screen.AICF_UniversalWidgets()) allHelp = false;

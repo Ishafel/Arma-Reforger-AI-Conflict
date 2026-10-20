@@ -61,19 +61,19 @@ if($Transition){
  $timeIndex=[array]::IndexOf($argv,'-aicfProbeTime')
  $weatherIndex=[array]::IndexOf($argv,'-aicfProbeWeather')
  if($timeIndex -ge 0 -or $weatherIndex -ge 0){
-  if($timeIndex -lt 0 -or $weatherIndex -lt 0 -or $argv[$timeIndex+1] -notmatch '^[0-4]$' -or $argv[$weatherIndex+1] -notmatch '^[0-4]$'){throw 'Invalid environment manifest'}
+  if($timeIndex -lt 0 -or $weatherIndex -lt 0 -or $argv[$timeIndex+1] -notmatch '^\d{1,4}$' -or [int]$argv[$timeIndex+1] -gt 1440 -or $argv[$weatherIndex+1] -notmatch '^[0-4]$'){throw 'Invalid environment manifest'}
   $time=[int]$argv[$timeIndex+1];$weather=[int]$argv[$weatherIndex+1]
   foreach($flag in @('-aicfProbeTime','-aicfProbeWeather')){
    $index=[array]::IndexOf($argv,$flag)
    if($cli.Count -ne 1 -or !$cli[0].Groups[1].Value.Contains($flag+' '+$argv[$index+1])){$failures+='CLI_MISMATCH'}
   }
-  $applied=@([regex]::Matches($log,'\[ENVIRONMENT_APPLIED\] time_mode=(\d) weather_mode=(\d) hour=([\d.]+) weather=(\w+) authority=server'))
-  $observed=@([regex]::Matches($log,'\[TRANSITION_ENVIRONMENT\] pass=([01]) time_mode=(\d) weather_mode=(\d) hour=([\d.]+) weather=(\w+)'))
+  $applied=@([regex]::Matches($log,'\[ENVIRONMENT_APPLIED\] time_minutes=(\d{1,4}) weather_mode=(\d) hour=([\d.]+) weather=(\w+) authority=server'))
+  $observed=@([regex]::Matches($log,'\[TRANSITION_ENVIRONMENT\] pass=([01]) time_minutes=(\d{1,4}) weather_mode=(\d) hour=([\d.]+) weather=(\w+)'))
   if($applied.Count -ne 1 -or $observed.Count -ne 1){$failures+='ENVIRONMENT_COUNT'}
   else{
    $record=$applied[0];$hour=[double]$record.Groups[3].Value
    if([int]$record.Groups[1].Value -ne $time -or [int]$record.Groups[2].Value -ne $weather -or $hour -lt 0 -or $hour -ge 24){$failures+='ENVIRONMENT_SELECTION'}
-   if($time -lt 4 -and [math]::Abs($hour-@(8,12,18,0)[$time]) -gt 0.001){$failures+='ENVIRONMENT_TIME'}
+   if($time -lt 1440 -and [math]::Abs($hour-$time/60.0) -gt 0.001){$failures+='ENVIRONMENT_TIME'}
    if($weather -gt 0 -and $record.Groups[4].Value -cne @('','Clear','Cloudy','Overcast','Rainy')[$weather]){$failures+='ENVIRONMENT_WEATHER'}
    if($observed[0].Groups[1].Value -ne '1' -or [int]$observed[0].Groups[2].Value -ne $time -or [int]$observed[0].Groups[3].Value -ne $weather){$failures+='ENVIRONMENT_READBACK'}
   }
@@ -88,7 +88,7 @@ if($Transition){
  exit 0
 }
 $variants=@('Stock','Everon','EveronNorth','RHS','EveronRHS','EveronNorthRHS','ArlandWCSRHS','EveronWCSRHS','EveronNorthWCSRHS')
-$names=@('REGISTRY')+@($variants|ForEach-Object {'PLAN_'+$_})+@('EXPECTED_AVAILABLE','VANILLA_READY','BASE_SOURCE_COMPATIBLE','ATOMIC_INVALID','HOST_GRAPH','NULL_ENTRY_BLOCKED','FORCED_GRAPH','UI_OPEN','UI_BOUNDS','UI_MODAL','UI_FLAGS_HELP','UI_START_ENABLED','UI_ENVIRONMENT','ENVIRONMENT_STORAGE')
+$names=@('REGISTRY')+@($variants|ForEach-Object {'PLAN_'+$_})+@('EXPECTED_AVAILABLE','VANILLA_READY','BASE_SOURCE_COMPATIBLE','ATOMIC_INVALID','HOST_GRAPH','NULL_ENTRY_BLOCKED','FORCED_GRAPH','UI_OPEN','UI_BOUNDS','UI_MODAL','UI_FLAGS_HELP','UI_START_ENABLED','UI_ENVIRONMENT','UI_TIME_SLIDER','ENVIRONMENT_STORAGE')
 for($mode=0;$mode -lt 3;$mode++){for($difficulty=0;$difficulty -lt 3;$difficulty++){$names+="UI_${mode}_${difficulty}"}}
 $names+=@('UI_ALL_HELP')+@($variants|ForEach-Object {'UI_VARIANT_'+$_})+@('UI_CLOSED','UI_IDEMPOTENT')
 $cases=@([regex]::Matches($log,'\[UNIVERSAL_CASE\] case=(\w+) pass=([01])'))

@@ -127,9 +127,12 @@ modded class AICF_MatchController
 			AICF_ScenarioEnvironment expected = selection.GetEnvironment();
 			string weather = manager.GetCurrentWeatherState().GetStateName();
 			float hour = manager.GetTimeOfTheDay();
-			bool matches = expected.m_iTime == 4 || Math.AbsFloat(hour - expected.GetHour()) < 0.25 || (expected.GetHour() == 0 && hour > 23.75);
+			float wanted = expected.GetHour() + expected.GetMinute() / 60.0;
+			float difference = Math.AbsFloat(hour - wanted);
+			if (difference > 12) difference = 24 - difference;
+			bool matches = expected.m_iStartMinutes == AICF_ScenarioEnvironment.RANDOM_TIME || difference < 0.25;
 			matches = matches && (expected.m_iWeather == 0 || weather == expected.GetWeatherName());
-			Print(string.Format("[AICF][TRANSITION_ENVIRONMENT] pass=%1 time_mode=%2 weather_mode=%3 hour=%4 weather=%5", matches, expected.m_iTime, expected.m_iWeather, hour, weather));
+			Print(string.Format("[AICF][TRANSITION_ENVIRONMENT] pass=%1 time_minutes=%2 weather_mode=%3 hour=%4 weather=%5", matches, expected.m_iStartMinutes, expected.m_iWeather, hour, weather));
 			SCR_MissionHeader environmentHeader = SCR_MissionHeader.Cast(GetGame().GetMissionHeader());
 			float acceleration = environmentHeader.m_fDayTimeAcceleration;
 			if (manager.IsNightHour(hour)) acceleration = environmentHeader.m_fNightTimeAcceleration;

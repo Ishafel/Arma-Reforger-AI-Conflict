@@ -1,5 +1,75 @@
 # Проверки и baseline
 
+## Ползунок времени суток — 2026-10-20
+
+Продолжение `codex/scenario-time-weather` от чистого `ecad123`: кнопки времени
+заменены native SliderWidget 00:00–23:59 с шагом 1 минута, подписью HH:MM,
+мгновенной сводкой и отдельным random toggle с возвратом последнего точного времени.
+Default 08:00 сохранён. Drag обновляет только окружение/summary, без scan addons
+и пересоздания флагов. Payload schema 2 передаёт `minutes`; старый schema 1
+отклоняется. Диагностика использует `time_minutes` вместо прежнего `time_mode`.
+Контракт — [SCENARIO_SETUP.md](SCENARIO_SETUP.md), evidence:
+`.codex-runtime/scenario-time-slider-20261020/`.
+
+`Invoke-AICFChecks.ps1 -Name Test-ScenarioSetupStatic.ps1,
+Test-ScenarioEnvironmentStatic.ps1,Test-UniversalScenarioStatic.ps1,
+Test-LocalizationStatic.ps1,Test-UniversalScenarioLogContracts.ps1` — до и после
+**5/5 PASS/0** (`baseline/summary.json`, `after-first/summary.json`). Baseline code
+FAIL нет; новых промежуточных code/runtime FAIL в этом продолжении не было.
+Environment static — **19** guarded mutations, log contracts — **41** cases.
+Полный 77-check набор этого продолжения **NOT RUN**: предыдущий результат относится
+к `ecad123`, не выдаётся за новый. Проверены затронутые domain gates.
+
+Terminal Workbench `Compile.ps1 -Label production-stock -Variant Stock`,
+`-Label production-wcs -Variant EveronWCSRHS` и
+`-SourceRoot <fixture-stage> -Label fixture-wcs -Variant EveronWCSRHS`:
+**3/3 PASS/0**, Script validation successful, SCRIPT/VM/fatal **0** по полным
+console/error/script logs. Source manifests/argv/exits — рядом с logs;
+`workbench-log-inventory.json` содержит итог. API SliderWidget и формат HH:MM
+проверены в pinned Script Diff 1.8.0.13 до реализации.
+
+`RunFrontend.ps1 -Label slider-menu -Probe Universal`, затем
+`Test-UniversalScenarioLog.ps1` — **46/46 PASS/0**: все 9 installed вариантов,
+21 button + native slider, min/max/step/current, HH:MM для 00:00/13:37/23:59,
+random с сохранением последней точки, **7200** fixed minute/weather combinations
+и **5** random choices, atomic bounds, schema-2 roundtrip/schema-1 rejection,
+flags/help/modal/cleanup. Native readbacks не являются GUI input.
+
+Четыре `RunFrontend.ps1 -Probe Transition -Difficulty 0`, по каждому полный
+`Test-UniversalScenarioLog.ps1 -Transition` — **PASS/0**:
+
+| Label | Map/Content/Mode/Time/Weather | Native ENVIRONMENT_APPLIED |
+|---|---|---|
+| `slider-arland-min` | 0 / 0 / 2 / 0 / 4 | hour=0, Rainy |
+| `slider-rhs-1337` | 1 / 1 / 2 / 817 / 2 | hour=13.6167, Cloudy |
+| `slider-wcs-max` | 2 / 2 / 1 / 1439 / 1 | hour=23.9833, Clear |
+| `slider-random` | 0 / 0 / 2 / 1440 / 0 | hour=12.9256, Clear |
+
+Подтверждены schema-2 handoff через scripts/addons reload, точный initial hour,
+ROSTER_READY и loaded graph (2/8/28 addons), subsequent clock readback, native
+ускорение/auto-advance/weather progression, repeat без сброса и приоритет native
+save/load boundary. Все native exits **0**, stopped logs, SCRIPT/VM/fatal и
+собственные resource errors **0**. Полные команды/verdict —
+`runtime-final-verdict.json`, все logs/SHA-256/categories — `full-logs/` и
+`native-log-inventory.json`. Сохраняются stock/vendor GUI/resource/hierarchy,
+RHS deprecated fields и десять streaming-navmesh tile diagnostics; это не
+утверждение об отсутствии всех engine errors. Количества сохранены в inventory.
+
+Четыре production `.c` побайтно соответствовали tested stage
+(`production-stage-integrity.json`). Все **474** файла stage и пяти test profiles
+сохранены в `temporary-stage-and-profiles.zip`; каждый entry проверен SHA-256,
+после чего точные временные пути удалены. `cleanup-result.json` содержит hash
+и адреса. Автоматические native процессы завершены; пользовательский клиент
+PID 16584 и его Universal-Manual profile сохранены.
+
+**NOT RUN:** физическое перетаскивание мышью, keyboard/controller/focus/внешний
+вид на разных разрешениях, public Host/JIP, полный save-file restore, packaged
+Workshop, soak, loading FPS и полная runtime матрица времени/погоды на каждой
+карте. Terminal-only запрещает GUI automation; игроку нужно перезапустить
+production client и проверить drag, значение HH:MM, random toggle и запуск.
+Новые MissionHeader ресурсы не добавлялись; эпоха старых preset logs ниже
+сохраняет прежнюю семантику `time_mode` и не проверяется новым analyzer как schema 2.
+
 ## Время суток и погода в универсальном меню — 2026-10-20
 
 Ветка `codex/scenario-time-weather` от чистого `c85995b`. Добавлены независимые

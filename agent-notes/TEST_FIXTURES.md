@@ -5,7 +5,9 @@
 `AICF_UniversalScenarioProbe.c` копировать отдельно в isolated Core/UI как
 `AICF_ZUniversalScenarioProbe.c`: `-aicfUniversalProbe 1
 -aicfExpectedReadyVariants 9`. Native graph/selection/widgets/modal/help/flags/
-cleanup, time/weather 25 choices и одноразовый session storage: 45 cases.
+cleanup, 7200 fixed minute/weather choices, 5 random choices и одноразовый session
+storage: 46 cases. Native SliderWidget проверяется по range/step/current и HH:MM;
+физическое перетаскивание/keyboard/controller требует отдельной ручной проверки.
 ExpectedReadyVariants отражает фактически
 подготовленное окружение, не подменяется количеством прошедших readbacks.
 Окно открывается на короткое время и закрывается само; GUI input не имитируется.
@@ -17,11 +19,15 @@ ROSTER_READY и точный loaded addon graph. Четыре cases; затем 
 Он не проверяет public Host. `Test-UniversalScenarioLog.ps1 [-Transition]`
 требует полный stopped log, manifest/native exit и не пропускает SCRIPT/VM/fatal
 или собственные resource errors. Подробности — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
-`-aicfProbeTime 0..4 -aicfProbeWeather 0..4` выбирают окружение перед настоящим
+`-aicfProbeTime 0..1440 -aicfProbeWeather 0..4` выбирают окружение перед настоящим
 переходом. Fixture снимает Welcome pause через native world API; analyzer
 требует один authority `ENVIRONMENT_APPLIED`, фактические часы/состояние после
 ROSTER_READY, сохранение при повторном вызове и приоритет native save/load.
 Отсутствующий, неверный или fallback readback не считается PASS.
+Time — минуты после полуночи; 1440 означает random и не является правым краем
+ползунка. Произвольная точка 817 = 13:37; границы — 0 и 1439. Analyzer сверяет
+`time_minutes`, начальный hour = minutes/60 и readback с учётом возможного перехода
+через полночь. Payload schema 2; прежний schema-1 intent не применяется.
 Дополнительный `-aicfProbeResumeAfter 35` сохраняет native Welcome pause 35 s
 после RUNNING, затем снимает simulation pause без GUI input. Analyzer требует
 real_ms >= 35000, simulation_ms < 2000 и последующий полный transition verdict.

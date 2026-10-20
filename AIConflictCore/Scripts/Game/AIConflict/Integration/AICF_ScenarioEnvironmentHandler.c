@@ -22,13 +22,13 @@ modded class SCR_TimeAndWeatherHandlerComponent
 			return;
 		}
 		m_bAICFEnvironmentApplied = true;
-		m_bRandomStartingDaytime = settings.m_iTime == 4;
+		m_bRandomStartingDaytime = settings.m_iStartMinutes == AICF_ScenarioEnvironment.RANDOM_TIME;
 		m_bRandomStartingDaytimeRange = false;
 		m_bUsePredefineStartingTimeAndWeather = false;
 		if (!m_bRandomStartingDaytime)
 		{
 			hours = settings.GetHour();
-			minutes = 0;
+			minutes = settings.GetMinute();
 			seconds = 0;
 		}
 		string weather = settings.GetWeatherName();
@@ -47,6 +47,6 @@ modded class SCR_TimeAndWeatherHandlerComponent
 		string actual;
 		WeatherState current = manager.GetCurrentWeatherState();
 		if (current) actual = current.GetStateName();
-		Print(string.Format("[AICF][ENVIRONMENT_APPLIED] time_mode=%1 weather_mode=%2 hour=%3 weather=%4 authority=server", settings.m_iTime, settings.m_iWeather, manager.GetTimeOfTheDay(), actual));
+		Print(string.Format("[AICF][ENVIRONMENT_APPLIED] time_minutes=%1 weather_mode=%2 hour=%3 weather=%4 authority=server", settings.m_iStartMinutes, settings.m_iWeather, manager.GetTimeOfTheDay(), actual));
 	}
 }

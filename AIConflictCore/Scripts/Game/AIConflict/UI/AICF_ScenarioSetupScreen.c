@@ -10,6 +10,13 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 	protected TextWidget m_wSummary;
 	protected TextWidget m_wStatus;
 	protected TextWidget m_wHelp;
+	protected SliderWidget m_wTimeSlider;
+	protected TextWidget m_wTimeValue;
+	protected Widget m_wTimeTrack;
+	protected Widget m_wTimeFill;
+	protected Widget m_wTimeThumb;
+	protected int m_iLastFixedMinutes = 480;
+	protected bool m_bTimeRefreshing;
 	protected ref array<Widget> m_aFrames = {};
 	protected ref array<Widget> m_aButtons = {};
 	protected ref array<TextWidget> m_aLabels = {};
@@ -67,11 +74,28 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		if (m_bHost) start = "{AICF:AICF_Setup_Host}";
 		AddButton(start, 0.70, 0.90, 0.95, 0.97);
 		AddButton("{AICF:AICF_Setup_Cancel}", 0.05, 0.90, 0.25, 0.97);
-		for (int time; time < 5; time++)
-			AddButton("{AICF:AICF_Setup_Time" + time.ToString() + "}", 0.23 + time * 0.087, 0.58, 0.307 + time * 0.087, 0.645, 15);
+		AddButton("{AICF:AICF_Setup_Time4}", 0.58, 0.58, 0.655, 0.645, 15);
+		m_wTimeTrack = m_Style.CreateRect(m_wRoot, 0.23, 0.604, 0.50, 0.613, Color.FromSRGBA(60, 79, 81, 255), false);
+		m_wTimeFill = m_Style.CreateRect(m_wTimeTrack, 0, 0, 0.333, 1, Color.FromSRGBA(231, 175, 74, 255), false);
+		m_wTimeThumb = m_Style.CreateRect(m_wRoot, 0.31, 0.59, 0.32, 0.627, Color.FromSRGBA(231, 175, 74, 255), false);
+		m_wTimeValue = m_Style.CreateText(m_wRoot, 0.505, 0.585, 0.577, 0.635, "08:00", 20, Color.White, true);
+		m_Style.CreateText(m_wRoot, 0.23, 0.625, 0.29, 0.648, "00:00", 12, Color.White);
+		m_Style.CreateText(m_wRoot, 0.455, 0.625, 0.51, 0.648, "23:59", 12, Color.White);
+		m_wTimeSlider = SliderWidget.Cast(GetGame().GetWorkspace().CreateWidget(WidgetType.SliderWidgetTypeID, WidgetFlags.VISIBLE | WidgetFlags.BLEND, Color.White, 20, m_wRoot));
+		if (!m_wTimeSlider) { Close(); return false; }
+		m_wTimeSlider.SetName("AICF_TimeSlider");
+		m_wTimeSlider.SetOpacity(0);
+		m_bTimeRefreshing = true;
+		m_wTimeSlider.SetVertical(false);
+		m_wTimeSlider.SetRange(0, 1439);
+		m_wTimeSlider.SetStep(1);
+		m_bTimeRefreshing = false;
+		FrameSlot.SetAnchorMin(m_wTimeSlider, 0.23, 0.58);
+		FrameSlot.SetAnchorMax(m_wTimeSlider, 0.50, 0.645);
+		FrameSlot.SetOffsets(m_wTimeSlider, 0, 0, 0, 0);
 		for (int weather; weather < 5; weather++)
 			AddButton("{AICF:AICF_Setup_Weather" + weather.ToString() + "}", 0.23 + weather * 0.087, 0.66, 0.307 + weather * 0.087, 0.725, 15);
-		if (!m_wSummary || !m_wStatus || !m_wHelp || m_aButtons.Count() != 25) { Close(); return false; }
+		if (!m_wSummary || !m_wStatus || !m_wHelp || !m_wTimeValue || !m_wTimeTrack || !m_wTimeFill || !m_wTimeThumb || m_aButtons.Count() != 21) { Close(); return false; }
 		m_wSummary.SetTextWrapping(true);
 		m_wStatus.SetTextWrapping(true);
 		m_wHelp.SetTextWrapping(true);
@@ -141,8 +165,42 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 	bool SelectEnvironment(int time, int weather)
 	{
 		if (!m_Selection || !m_Selection.SelectEnvironment(time, weather)) return false;
-		Refresh();
+		// Перетаскивание не пересоздаёт флаги и не сканирует установленные addons.
+		RefreshEnvironment();
 		return true;
+	}
+	protected string TimeLabel()
+	{
+		AICF_ScenarioEnvironment settings = m_Selection.GetEnvironment();
+		if (settings.m_iStartMinutes == AICF_ScenarioEnvironment.RANDOM_TIME)
+			return AICF_Localization.Resolve("{AICF:AICF_Setup_Time4}");
+		return settings.GetHour().ToString(2) + ":" + settings.GetMinute().ToString(2);
+	}
+	protected void RefreshEnvironment()
+	{
+		AICF_ScenarioEnvironment settings = m_Selection.GetEnvironment();
+		bool random = settings.m_iStartMinutes == AICF_ScenarioEnvironment.RANDOM_TIME;
+		if (!random) m_iLastFixedMinutes = settings.m_iStartMinutes;
+		m_bTimeRefreshing = true;
+		m_wTimeSlider.SetCurrent(m_iLastFixedMinutes);
+		m_bTimeRefreshing = false;
+		m_wTimeValue.SetText(TimeLabel());
+		float ratio = m_iLastFixedMinutes / 1439.0;
+		FrameSlot.SetAnchorMax(m_wTimeFill, ratio, 1);
+		float thumbLeft = 0.23 + 0.26 * ratio;
+		FrameSlot.SetAnchorMin(m_wTimeThumb, thumbLeft, 0.59);
+		FrameSlot.SetAnchorMax(m_wTimeThumb, thumbLeft + 0.01, 0.627);
+		float opacity = 1;
+		if (random) opacity = 0.45;
+		m_wTimeTrack.SetOpacity(opacity);
+		m_wTimeThumb.SetOpacity(opacity);
+		for (int index = 15; index < 21; index++)
+		{
+			Color color = Color.FromSRGBA(42, 60, 62, 255);
+			if ((index == 15 && random) || index == settings.m_iWeather + 16) color = Color.FromSRGBA(111, 85, 36, 255);
+			m_Style.SetRectColor(m_aFrames[index], color);
+		}
+		RefreshSummary();
 	}
 
 	protected void Refresh()
@@ -154,7 +212,7 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		AICF_ScenarioVariant variant = m_Selection.GetVariant();
 		foreach (int index, Widget frame : m_aFrames)
 		{
-			bool selected = index == mapIndex || index == content + 3 || (index == 6 && mode == 0) || (index == 7 && mode > 0) || (index == mode + 7 && mode > 0) || index == difficulty + 10 || index == m_Selection.GetEnvironment().m_iTime + 15 || index == m_Selection.GetEnvironment().m_iWeather + 20;
+			bool selected = index == mapIndex || index == content + 3 || (index == 6 && mode == 0) || (index == 7 && mode > 0) || (index == mode + 7 && mode > 0) || index == difficulty + 10;
 			Color color = Color.FromSRGBA(42, 60, 62, 255);
 			if (selected) color = Color.FromSRGBA(111, 85, 36, 255);
 			m_Style.SetRectColor(frame, color);
@@ -198,17 +256,25 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		if (content == 2) westFlag = 3;
 		Flag(8, westFlag);
 		Flag(9, eastFlag);
-		string side = AICF_Localization.Resolve("{AICF:AICF_Setup_BothSides}");
-		if (mode == 1) side = AICF_Localization.Resolve(variant.m_sWestLabel);
-		if (mode == 2) side = AICF_Localization.Resolve(variant.m_sEastLabel);
-		string modeLabel = "Conflict";
-		if (mode > 0) modeLabel = "Co-op";
-		m_wSummary.SetText(string.Format("%1 · %2 · %3 · %4 · %5 · %6 · %7", AICF_Localization.Resolve(variant.m_sMapLabel), m_aLabels[content + 3].GetText(), modeLabel, side, m_aLabels[difficulty + 10].GetText(), m_aLabels[m_Selection.GetEnvironment().m_iTime + 15].GetText(), m_aLabels[m_Selection.GetEnvironment().m_iWeather + 20].GetText()));
+		RefreshEnvironment();
 		string status = AICF_Localization.Resolve("{AICF:AICF_Setup_Reload}");
 		if (!unavailable.IsEmpty()) status = AICF_Localization.Resolve("{AICF:AICF_Setup_Missing}") + " " + unavailable;
 		if (!AICF_ScenarioLaunch.IsForcedGraphCompatible(m_Selection.GetRegistry().Find(mapIndex, 0))) status = AICF_Localization.Resolve("{AICF:AICF_Setup_Pinned}");
 		m_wStatus.SetText(status);
 		m_aButtons[13].SetEnabled(variant.IsAvailable(missing) && AICF_ScenarioLaunch.IsForcedGraphCompatible(variant) && !m_Selection.GetResource().IsEmpty());
+	}
+
+	protected void RefreshSummary()
+	{
+		int mode = m_Selection.GetMode();
+		int content = m_Selection.GetContent();
+		AICF_ScenarioVariant variant = m_Selection.GetVariant();
+		string side = AICF_Localization.Resolve("{AICF:AICF_Setup_BothSides}");
+		if (mode == 1) side = AICF_Localization.Resolve(variant.m_sWestLabel);
+		if (mode == 2) side = AICF_Localization.Resolve(variant.m_sEastLabel);
+		string modeLabel = "Conflict";
+		if (mode > 0) modeLabel = "Co-op";
+		m_wSummary.SetText(string.Format("%1 · %2 · %3 · %4 · %5 · %6 · %7", AICF_Localization.Resolve(variant.m_sMapLabel), m_aLabels[content + 3].GetText(), modeLabel, side, m_aLabels[m_Selection.GetDifficulty() + 10].GetText(), TimeLabel(), m_aLabels[m_Selection.GetEnvironment().m_iWeather + 16].GetText()));
 	}
 
 	protected void Help(int index)
@@ -220,8 +286,8 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		else if (index < 10) key = "CoopHelp";
 		else if (index < 13) key = "DifficultyHelp" + (index - 10).ToString();
 		else if (index == 14) key = "CancelHelp";
-		else if (index >= 15 && index < 20) key = "TimeHelp";
-		else if (index >= 20) key = "WeatherHelp";
+		else if (index == 15) key = "TimeHelp";
+		else if (index >= 16) key = "WeatherHelp";
 		else
 		{
 			key = "PlayHelp";
@@ -255,19 +321,32 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		else if (index >= 10 && index <= 12) Select(mode, index - 10);
 		else if (index == 13) Launch();
 		else if (index == 14) SCR_ScenarioUICommon.AICF_CloseSetup();
-		else if (index >= 15 && index < 20) SelectEnvironment(index - 15, m_Selection.GetEnvironment().m_iWeather);
-		else if (index >= 20) SelectEnvironment(m_Selection.GetEnvironment().m_iTime, index - 20);
+		else if (index == 15)
+		{
+			int time = AICF_ScenarioEnvironment.RANDOM_TIME;
+			if (m_Selection.GetEnvironment().m_iStartMinutes == time) time = m_iLastFixedMinutes;
+			SelectEnvironment(time, m_Selection.GetEnvironment().m_iWeather);
+		}
+		else if (index >= 16) SelectEnvironment(m_Selection.GetEnvironment().m_iStartMinutes, index - 16);
 		if (m_wRoot) Help(index);
+		return true;
+	}
+	override bool OnChange(Widget w, bool finished)
+	{
+		if (w != m_wTimeSlider || m_bClosing || m_bTimeRefreshing) return false;
+		SelectEnvironment(Math.Round(m_wTimeSlider.GetCurrent()), m_Selection.GetEnvironment().m_iWeather);
 		return true;
 	}
 	override bool OnFocus(Widget w, int x, int y)
 	{
+		if (w == m_wTimeSlider) Help(15);
 		int index = m_aButtons.Find(w);
 		if (index >= 0) Help(index);
 		return false;
 	}
 	override bool OnMouseEnter(Widget w, int x, int y)
 	{
+		if (w == m_wTimeSlider) Help(15);
 		int index = m_aButtons.Find(w);
 		if (index >= 0) Help(index);
 		return false;
@@ -292,6 +371,11 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		m_wSummary = null;
 		m_wStatus = null;
 		m_wHelp = null;
+		m_wTimeSlider = null;
+		m_wTimeValue = null;
+		m_wTimeTrack = null;
+		m_wTimeFill = null;
+		m_wTimeThumb = null;
 		m_aButtons.Clear();
 		m_aFrames.Clear();
 		m_aLabels.Clear();

@@ -17,9 +17,13 @@ $rules=@(
  @(1,'m_bRandomStartingWeather = weather.IsEmpty\(\);.*?super.SetupDaytimeAndWeather\(hours, minutes, seconds, weather, false\)','NATIVE_OWNER'),
  @(2,'!CanStart\(selection, entry, config\)\) return false;.*?ScenarioEnvironment.Queue\(resource, selection.GetEnvironment\(\)\).*?RequestScenarioChangeTransition.*?RequestPublicServerTransition','QUEUE_BEFORE_TRANSITION'),
  @(2,'if \(!accepted\)\s*\{\s*AICF_ScenarioEnvironment.Clear\(\);\s*return false;','REJECT_CLEANUP'),
- @(3,'time < 0 \|\| time > 4 \|\| weather < 0 \|\| weather > 4\) return false;.*?m_Environment.m_iTime = time;.*?m_Environment.m_iWeather = weather','ATOMIC_SELECTION'),
- @(4,'headings\[7\].*?m_aButtons.Count\(\) != 25','UI_CONTROLS'),
- @(4,'SelectEnvironment\(index - 15, m_Selection.GetEnvironment\(\).m_iWeather\).*?SelectEnvironment\(m_Selection.GetEnvironment\(\).m_iTime, index - 20\)','UI_INDEPENDENT_AXES')
+ @(0,'WriteValue\(.*, 2\).*?ReadValue\(.*, schema\) \|\| schema != 2','MINUTE_SCHEMA'),
+ @(1,'minutes = settings.GetMinute\(\);','MINUTE_APPLICATION'),
+ @(3,'minutes < 0 \|\| minutes > AICF_ScenarioEnvironment.RANDOM_TIME \|\| weather < 0 \|\| weather > 4\) return false;.*?m_Environment.m_iStartMinutes = minutes;.*?m_Environment.m_iWeather = weather','ATOMIC_SELECTION'),
+ @(4,'headings\[7\].*?m_aButtons.Count\(\) != 21','UI_CONTROLS'),
+ @(4,'SetRange\(0, 1439\);.*?SetStep\(1\)','MINUTE_SLIDER'),
+ @(4,'OnChange\(Widget w, bool finished\).*?w != m_wTimeSlider \|\| m_bClosing \|\| m_bTimeRefreshing.*?SelectEnvironment\(Math.Round\(m_wTimeSlider.GetCurrent\(\)\), m_Selection.GetEnvironment\(\).m_iWeather\)','UI_INDEPENDENT_AXES'),
+ @(4,'bool SelectEnvironment\(int time, int weather\).*?RefreshEnvironment\(\);\s*return true;','LIGHTWEIGHT_DRAG')
 )
 $failures=@();$mutations=0
 foreach($rule in $rules){

@@ -4309,8 +4309,8 @@ StringTable
 		CustomStringTableItem "{A1CF261020700013}"
 		{
 			Id "AICF_Setup_TimeHelp"
-			Target_en_us "Starting time: morning 08:00, noon 12:00, evening 18:00 or midnight 00:00. Random uses the world's sunrise and sunset. Time continues at the scenario's normal speed."
-			Target_ru_ru "Время начала: утро 08:00, день 12:00, вечер 18:00 или полночь 00:00. Случайный выбор учитывает восход и закат на карте. Время продолжит идти со скоростью сценария."
+			Target_en_us "Drag the slider to choose a starting time from 00:00 to 23:59. The value and summary update immediately. Random uses sunrise and sunset; press it again to restore your time. Time continues at the scenario's normal speed."
+			Target_ru_ru "Выберите время начала ползунком от 00:00 до 23:59. Значение и сводка обновляются сразу. Случайный выбор учитывает восход и закат; повторное нажатие вернёт выбранное время. Скорость времени остаётся по сценарию."
 		}
 		CustomStringTableItem "{A1CF261020700014}"
 		{

@@ -34,10 +34,10 @@ class AICF_ScenarioSetupSelection
 	int GetMap() { return m_iMap; }
 	int GetContent() { return m_iContent; }
 	AICF_ScenarioEnvironment GetEnvironment() { return m_Environment; }
-	bool SelectEnvironment(int time, int weather)
+	bool SelectEnvironment(int minutes, int weather)
 	{
-		if (time < 0 || time > 4 || weather < 0 || weather > 4) return false;
-		m_Environment.m_iTime = time;
+		if (minutes < 0 || minutes > AICF_ScenarioEnvironment.RANDOM_TIME || weather < 0 || weather > 4) return false;
+		m_Environment.m_iStartMinutes = minutes;
 		m_Environment.m_iWeather = weather;
 		return true;
 	}
