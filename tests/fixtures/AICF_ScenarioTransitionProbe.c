@@ -1,0 +1,141 @@
+// Isolated frontend only. Invokes production launch without GUI input.
+class AICF_ScenarioTransitionProbe
+{
+	static AICF_ScenarioSetupSelection Selection()
+	{
+		AICF_ScenarioSetupHeader header = AICF_ScenarioSetupHeader.Cast(MissionHeader.ReadMissionHeader("{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf"));
+		AICF_ScenarioSetupSelection selection = new AICF_ScenarioSetupSelection(header);
+		string mapIndex, content, mode, difficulty;
+		if (!System.GetCLIParam("aicfProbeMap", mapIndex) || !System.GetCLIParam("aicfProbeContent", content) || !System.GetCLIParam("aicfProbeMode", mode) || !System.GetCLIParam("aicfProbeDifficulty", difficulty)) return null;
+		if (!selection.SelectVariant(mapIndex.ToInt(), content.ToInt()) || !selection.Select(mode.ToInt(), difficulty.ToInt())) return null;
+		return selection;
+	}
+	static void Launch()
+	{
+		if (!GameStateTransitions.IsInsideMainMenu()) return;
+		AICF_ScenarioSetupSelection selection = Selection();
+		MissionWorkshopItem entry = SCR_ScenarioUICommon.GetInGameScenario("{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf");
+		int complete, total;
+		SCR_DownloadManager.GetInstance().GetDownloadQueueState(complete, total);
+		string missing;
+		if (selection) Print(string.Format("[AICF][TRANSITION_PREFLIGHT] entry=%1 native=%2 dependencies=%3 forced=%4 completed=%5 total=%6", entry != null, SCR_ScenarioUICommon.CanPlay(entry), selection.GetVariant().IsAvailable(missing), AICF_ScenarioLaunch.IsForcedGraphCompatible(selection.GetVariant()), complete, total));
+		string project;
+		if (System.GetCLIParam("gproj", project))
+		{
+			BaseContainer settings = GameProject.GetGameProjectSettings();
+			if (settings)
+			{
+				string guid;
+				if (settings.GetVarIndex("GUID") >= 0) settings.Get("GUID", guid);
+				Print(string.Format("[AICF][TRANSITION_PROJECT] class=%1 guid=%2 count=%3", settings.GetClassName(), guid, settings.GetNumVars()));
+			}
+		}
+		bool ready = AICF_ScenarioLaunch.CanStart(selection, entry);
+		Print(string.Format("[AICF][TRANSITION_CASE] case=PREFLIGHT pass=%1", ready));
+		bool accepted = AICF_ScenarioLaunch.Start(selection, entry);
+		Print(string.Format("[AICF][TRANSITION_CASE] case=ACCEPTED pass=%1", accepted));
+		if (!accepted) GetGame().RequestClose();
+	}
+	static void Close() { GetGame().RequestClose(); }
+	static void Timeout() { Print("[AICF][TRANSITION_TIMEOUT]"); Close(); }
+}
+
+modded class ArmaReforgerScripted
+{
+	override bool OnGameStart()
+	{
+		bool started = super.OnGameStart();
+		if (System.IsCLIParam("aicfTransitionProbe"))
+		{
+			WorkshopApi workshop = GetGame().GetBackendApi().GetWorkshop();
+			if (workshop.NeedAddonsScan()) workshop.ScanOfflineItems();
+			GetGame().GetCallqueue().CallLater(AICF_ScenarioTransitionProbe.Launch, 12000, false);
+			GetGame().GetCallqueue().CallLater(AICF_ScenarioTransitionProbe.Timeout, 180000, false);
+		}
+		return started;
+	}
+	override void OnGameEnd()
+	{
+		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.Launch);
+		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.Timeout);
+		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.Close);
+		super.OnGameEnd();
+	}
+}
+
+modded class AICF_MatchController
+{
+	protected bool m_bAICFTransitionRead;
+	protected int m_iAICFTransitionFrameSample;
+	protected int m_iAICFTransitionObservedAt;
+	protected ref AICF_GroupSlot m_AICFTransitionClock;
+	protected bool m_bAICFTransitionPauseChecked;
+	override protected void Update()
+	{
+		ChimeraWorld world = ChimeraWorld.CastFrom(GetGame().GetWorld());
+		if (System.IsCLIParam("aicfTransitionProbe"))
+		{
+			if (!m_iAICFTransitionObservedAt && m_USState && m_USSRState && m_USState.GetSlotCount() + m_USSRState.GetSlotCount() > 0)
+			{
+				m_iAICFTransitionObservedAt = System.GetTickCount();
+				m_AICFTransitionClock = new AICF_GroupSlot(99, AICF_EGroupRole.ATTACK);
+				m_AICFTransitionClock.BeginInitialSpawn();
+			}
+			string resume;
+			if (world && m_iAICFTransitionObservedAt && System.GetCLIParam("aicfProbeResumeAfter", resume))
+			{
+				if (System.GetTickCount(m_iAICFTransitionObservedAt) < resume.ToInt() * 1000)
+					world.PauseGameTime(true);
+				else
+				{
+					if (!m_bAICFTransitionPauseChecked)
+					{
+						bool pausePassed = world.IsGameTimePaused() && resume.ToInt() >= 35 && m_AICFTransitionClock.GetSpawnSimulationAgeMs() < 2000;
+						Print(string.Format("[AICF][TRANSITION_PAUSE] pass=%1 real_ms=%2 simulation_ms=%3", pausePassed, System.GetTickCount(m_iAICFTransitionObservedAt), m_AICFTransitionClock.GetSpawnSimulationAgeMs()));
+						m_bAICFTransitionPauseChecked = true;
+					}
+					world.PauseGameTime(false);
+				}
+			}
+		}
+		super.Update();
+		if (m_bAICFTransitionRead || !System.IsCLIParam("aicfTransitionProbe")) return;
+		if (System.GetTickCount(m_iAICFTransitionFrameSample) >= 5000)
+		{
+			m_iAICFTransitionFrameSample = System.GetTickCount();
+			Print(string.Format("[AICF][TRANSITION_FRAME] fps=%1 frame_ms=%2 roster=%3 paused=%4", System.GetFPS(), System.GetFrameTimeS() * 1000, m_bRosterReady, world && world.IsGameTimePaused()));
+		}
+		if (m_bStopped)
+		{
+			m_bAICFTransitionRead = true;
+			Print("[AICF][TRANSITION_ABORT] controller_stopped=1");
+			GetGame().RequestClose();
+			return;
+		}
+		if (!m_bRosterReady) return;
+		if (System.IsCLIParam("aicfProbeResumeAfter") && !m_bAICFTransitionPauseChecked) return;
+		m_bAICFTransitionRead = true;
+		AICF_ScenarioSetupSelection selection = AICF_ScenarioTransitionProbe.Selection();
+		SCR_MissionHeaderCampaign header = SCR_MissionHeaderCampaign.Cast(GetGame().GetMissionHeader());
+		bool target = selection && header && header.GetHeaderResourceName() == selection.GetResource() && header.m_eAICFMatchMode == selection.GetMode() && header.m_eAICFDifficulty == selection.GetDifficulty();
+		Print(string.Format("[AICF][TRANSITION_CASE] case=ACTIVE_HEADER pass=%1", target));
+		array<string> loaded = {};
+		GameProject.GetLoadedAddons(loaded);
+		bool graph = selection != null;
+		if (selection)
+		{
+			array<string> expected = selection.GetVariant().m_aAddons;
+			foreach (string id : expected) if (loaded.Find(id) < 0) graph = false;
+			foreach (string id : loaded)
+			{
+				if (!GameProject.IsVanillaAddon(id) && expected.Find(id) < 0) graph = false;
+				Print(string.Format("[AICF][TRANSITION_LOADED] id=%1 vanilla=%2", id, GameProject.IsVanillaAddon(id)));
+			}
+		}
+		Print(string.Format("[AICF][TRANSITION_CASE] case=EXACT_GRAPH pass=%1", graph));
+		Print(string.Format("[AICF][TRANSITION_DONE] header=%1 graph=%2 roster=1", target, graph));
+		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.Launch);
+		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.Timeout);
+		GetGame().GetCallqueue().CallLater(AICF_ScenarioTransitionProbe.Close, 3000, false);
+	}
+}

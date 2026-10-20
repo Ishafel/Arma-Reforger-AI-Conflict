@@ -1,5 +1,5 @@
 // Source addons loaded by -gproj/-addons have no installed WorkshopItem.
-// Register the example and its launch targets in the native frontend catalog.
+// Register one universal entry. Leaf resources remain available by GUID for CLI.
 modded class ArmaReforgerScripted
 {
 	override array<ResourceName> GetDefaultGameConfigs()
@@ -9,20 +9,8 @@ modded class ArmaReforgerScripted
 		AICF_ScenarioSetupHeader header = AICF_ScenarioSetupHeader.Cast(MissionHeader.ReadMissionHeader(setup));
 		if (!header) return resources;
 
-		array<ResourceName> presets = {setup};
-		for (int mode; mode < 3; mode++)
-		{
-			for (int difficulty; difficulty < 3; difficulty++)
-			{
-				ResourceName preset = header.ResolvePreset(mode, difficulty);
-				if (preset.IsEmpty()) return resources;
-				presets.Insert(preset);
-			}
-		}
-
 		if (!resources) resources = {};
-		foreach (ResourceName resource : presets)
-			InsertNewScenario(resource, resources);
+		InsertNewScenario(setup, resources);
 		return resources;
 	}
 }

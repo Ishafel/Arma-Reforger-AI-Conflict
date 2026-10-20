@@ -62,20 +62,19 @@ class AICF_ScenarioCatalogProbe
 		MissionWorkshopItem example = workshop.GetInGameScenario(setup);
 		if (example) Print(string.Format("[AICF][CATALOG_ITEM] default=%1 page=%2 native_header=%3", first.Find(setup), AICF_CatalogCount(items, setup), example.GetHeader() != null));
 		AICF_CatalogCheck("EXAMPLE", header && first.Find(setup) >= 0 && example && AICF_CatalogCount(items, setup) == 1 && SCR_ScenarioUICommon.AICF_GetSetupHeader(example));
-		AICF_CatalogCheck("VISIBLE_NAME", example && header.m_bShowInScenarioMenu && WidgetManager.Translate(example.Name()) == "AI Conflict - Arland: setup example");
+		AICF_CatalogCheck("VISIBLE_NAME", example && header.m_bShowInScenarioMenu && WidgetManager.Translate(example.Name()) == "AI Conflict");
 		AICF_CatalogCheck("REPEAT", first.Count() == second.Count() && first.Find(setup) == second.Find(setup));
 		ResourceName stock = "{C41618FD18E9D714}Missions/23_Campaign_Arland.conf";
 		AICF_CatalogCheck("STOCK_PRESERVED", first.Find(stock) >= 0 && workshop.GetInGameScenario(stock));
+		AICF_ScenarioRegistry registry = new AICF_ScenarioRegistry();
 		for (int mode; mode < 3; mode++)
 		{
 			for (int difficulty; difficulty < 3; difficulty++)
 			{
 				ResourceName preset;
 				if (header) preset = header.ResolvePreset(mode, difficulty);
-				MissionWorkshopItem target = workshop.GetInGameScenario(preset);
-				SCR_MissionHeaderCampaign targetHeader;
-				if (target) targetHeader = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(target.Id()));
-				AICF_CatalogCheck(string.Format("TARGET_%1_%2", mode, difficulty), !preset.IsEmpty() && first.Find(preset) >= 0 && targetHeader && targetHeader.m_eAICFMatchMode == mode && targetHeader.m_eAICFDifficulty == difficulty && AICF_CatalogCount(items, preset) == 1);
+				SCR_MissionHeaderCampaign targetHeader = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(preset));
+				AICF_CatalogCheck(string.Format("TARGET_%1_%2", mode, difficulty), !preset.IsEmpty() && registry.IsLeaf(preset) && first.Find(preset) < 0 && targetHeader && targetHeader.m_eAICFMatchMode == mode && targetHeader.m_eAICFDifficulty == difficulty && AICF_CatalogCount(items, preset) == 0);
 			}
 		}
 		AICF_CatalogFilter("FILTER_TYPE", SCR_WorkshopUiCommon.ADDON_TYPE_FILTER_CATEGORY_CONFIG);

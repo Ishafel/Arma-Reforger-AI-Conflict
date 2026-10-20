@@ -166,7 +166,9 @@
         "US": "US Army",
         "USSR": "Soviet Army"
       },
-      "stringGuidPrefix": "A1CF2610184701"
+      "stringGuidPrefix": "A1CF2610184701",
+      "mapIndex": 0,
+      "contentIndex": 0
     },
     {
       "name": "Everon",
@@ -199,7 +201,9 @@
         "US": "US Army",
         "USSR": "Soviet Army"
       },
-      "stringGuidPrefix": "A1CF2610184702"
+      "stringGuidPrefix": "A1CF2610184702",
+      "mapIndex": 1,
+      "contentIndex": 0
     },
     {
       "name": "EveronNorth",
@@ -232,7 +236,9 @@
         "US": "US Army",
         "USSR": "Soviet Army"
       },
-      "stringGuidPrefix": "A1CF2610184703"
+      "stringGuidPrefix": "A1CF2610184703",
+      "mapIndex": 2,
+      "contentIndex": 0
     },
     {
       "name": "RHS",
@@ -265,7 +271,9 @@
         "US": "USMC",
         "USSR": "MSV"
       },
-      "stringGuidPrefix": "A1CF2610184704"
+      "stringGuidPrefix": "A1CF2610184704",
+      "mapIndex": 0,
+      "contentIndex": 1
     },
     {
       "name": "EveronRHS",
@@ -298,7 +306,9 @@
         "US": "USMC",
         "USSR": "MSV"
       },
-      "stringGuidPrefix": "A1CF2610184705"
+      "stringGuidPrefix": "A1CF2610184705",
+      "mapIndex": 1,
+      "contentIndex": 1
     },
     {
       "name": "EveronNorthRHS",
@@ -331,7 +341,9 @@
         "US": "USMC",
         "USSR": "MSV"
       },
-      "stringGuidPrefix": "A1CF2610184706"
+      "stringGuidPrefix": "A1CF2610184706",
+      "mapIndex": 2,
+      "contentIndex": 1
     },
     {
       "name": "ArlandWCSRHS",
@@ -364,7 +376,9 @@
         "US": "NATO",
         "USSR": "Russia"
       },
-      "stringGuidPrefix": "A1CF2610184707"
+      "stringGuidPrefix": "A1CF2610184707",
+      "mapIndex": 0,
+      "contentIndex": 2
     },
     {
       "name": "EveronWCSRHS",
@@ -397,7 +411,9 @@
         "US": "NATO",
         "USSR": "Russia"
       },
-      "stringGuidPrefix": "A1CF2610184708"
+      "stringGuidPrefix": "A1CF2610184708",
+      "mapIndex": 1,
+      "contentIndex": 2
     },
     {
       "name": "EveronNorthWCSRHS",
@@ -430,7 +446,9 @@
         "US": "NATO",
         "USSR": "Russia"
       },
-      "stringGuidPrefix": "A1CF2610184709"
+      "stringGuidPrefix": "A1CF2610184709",
+      "mapIndex": 2,
+      "contentIndex": 2
     }
   ],
   "localProjects": {

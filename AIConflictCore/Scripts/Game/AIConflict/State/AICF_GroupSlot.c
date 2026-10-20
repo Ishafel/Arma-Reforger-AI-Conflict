@@ -189,6 +189,7 @@ class AICF_GroupSlot
 	protected AICF_EGroupSlotState m_State;
 	protected int m_iReinforcementReadyAtMs;
 	protected int m_iSpawnStartedAtMs;
+	protected WorldTimestamp m_tSpawnStartedAt;
 	protected int m_iSpawnGeneration;
 	protected int m_iRosterSpawnRequestedAtMs;
 	protected int m_iLastRosterProgressAtMs;
@@ -1260,6 +1261,14 @@ class AICF_GroupSlot
 		return m_iSpawnStartedAtMs;
 	}
 
+	// Native AI spawn queue stops with SP simulation (Welcome/pause menus).
+	// Keep wall-clock diagnostics, but charge the deadline only for world time.
+	float GetSpawnSimulationAgeMs()
+	{
+		if (m_State != AICF_EGroupSlotState.SPAWNING || !GetGame() || !GetGame().GetWorld()) return 0;
+		return GetGame().GetWorld().GetTimestamp().DiffMilliseconds(m_tSpawnStartedAt);
+	}
+
 	int GetSpawnGeneration()
 	{
 		return m_iSpawnGeneration;
@@ -1571,6 +1580,7 @@ class AICF_GroupSlot
 		m_iSpawnGeneration++;
 		ResetOrderReliabilityRepairFailureBudget();
 		m_iSpawnStartedAtMs = System.GetTickCount();
+		m_tSpawnStartedAt = GetGame().GetWorld().GetTimestamp();
 		m_State = AICF_EGroupSlotState.SPAWNING;
 		return true;
 	}
@@ -1586,6 +1596,7 @@ class AICF_GroupSlot
 		m_iSpawnGeneration++;
 		ResetOrderReliabilityRepairFailureBudget();
 		m_iSpawnStartedAtMs = System.GetTickCount();
+		m_tSpawnStartedAt = GetGame().GetWorld().GetTimestamp();
 		m_State = AICF_EGroupSlotState.SPAWNING;
 		return true;
 	}

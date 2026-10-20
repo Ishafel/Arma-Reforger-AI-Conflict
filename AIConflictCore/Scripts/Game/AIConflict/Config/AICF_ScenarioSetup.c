@@ -23,20 +23,38 @@ class AICF_ScenarioSetupSelection
 	protected ref AICF_ScenarioSetupHeader m_Header;
 	protected int m_iMode = 2;
 	protected int m_iDifficulty = 1;
+	protected ref AICF_ScenarioRegistry m_Registry = new AICF_ScenarioRegistry();
+	protected int m_iMap;
+	protected int m_iContent;
 
 	void AICF_ScenarioSetupSelection(AICF_ScenarioSetupHeader header) { m_Header = header; }
 	int GetMode() { return m_iMode; }
 	int GetDifficulty() { return m_iDifficulty; }
+	int GetMap() { return m_iMap; }
+	int GetContent() { return m_iContent; }
+	AICF_ScenarioRegistry GetRegistry() { return m_Registry; }
+	AICF_ScenarioVariant GetVariant() { return m_Registry.Find(m_iMap, m_iContent); }
 	ResourceName GetResource()
 	{
 		if (!m_Header) return "";
-		return m_Header.ResolvePreset(m_iMode, m_iDifficulty);
+		AICF_ScenarioVariant variant = GetVariant();
+		if (!variant) return "";
+		return variant.Resolve(m_iMode, m_iDifficulty);
 	}
 	bool Select(int mode, int difficulty)
 	{
-		if (!m_Header || m_Header.ResolvePreset(mode, difficulty).IsEmpty()) return false;
+		if (!m_Header || !GetVariant() || GetVariant().Resolve(mode, difficulty).IsEmpty()) return false;
 		m_iMode = mode;
 		m_iDifficulty = difficulty;
+		return true;
+	}
+	bool SelectVariant(int mapIndex, int content)
+	{
+		AICF_ScenarioVariant variant = m_Registry.Find(mapIndex, content);
+		string missing;
+		if (!m_Header || !variant || variant.Resolve(m_iMode, m_iDifficulty).IsEmpty() || !variant.IsAvailable(missing)) return false;
+		m_iMap = mapIndex;
+		m_iContent = content;
 		return true;
 	}
 }

@@ -1,5 +1,111 @@
 # Проверки и baseline
 
+## Универсальное меню и pause-safe local Play — 2026-10-20
+
+Ветка `codex/universal-scenario-menu` от чистого `f549b28`. Запрос: один
+AI Conflict вместо матрицы меню, карты/Vanilla/RHS/WCS + RHS, флаги и пояснения.
+Контракт и границы — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+Evidence: `.codex-runtime/universal-menu-20261020/`. Fixtures только в isolated
+`fixture-stage`, production source без probe-кода.
+
+До правки `Invoke-AICFChecks.ps1 -Name Test-ScenarioSetupStatic.ps1,
+Test-ScenarioCatalogLogContracts.ps1,Test-ScenarioHeadersStatic.ps1,
+Test-RuntimeLauncherStatic.ps1,Test-LocalizationStatic.ps1,Test-CoopScenarioMatrix.ps1`
+дал **6/6 PASS** (`before/summary.json`), сохранённых baseline FAIL нет.
+
+Завершённый offline набор: `-Suite Static` **32/32**, `-Suite Contracts`
+**44/44**, всего **76/76 PASS/0**, без missing. После последних правок повторены
+затронутые setup/universal/localization checks, Stage3/Stage35/Co-op,
+Stage3StaticContracts и VictoryRespawn. Точные команды/exits/полные outputs —
+`offline-static`, `offline-contracts`, `offline-final-source-registry`,
+`offline-pause-fix`, `offline-pause-lifecycle`; объединение — `offline-final-verdict.json`.
+Universal static: **24 guarded mutations**, generator **9 variants/81 presets**.
+Universal log contracts: **30 cases**, включая UTF-8 paths, неверные targets,
+лишние/недостающие addons, dedicated scope и неверные pause observations.
+
+Terminal Workbench `Compile.ps1 -Label final-clock-stock -Variant Stock` и
+`-Label final-clock-wcs -Variant EveronWCSRHS`: production **2/2 PASS/0**,
+Script validation successful, SCRIPT/VM/fatal **0** по полным логам. Fixture
+`-SourceRoot .../fixture-stage -Label fixture-held-pause -Variant Stock` также
+**PASS/0**. Команды получали -gproj/-addonsDir/-addons из canonical Client DryRun.
+Все промежуточные Workbench console/error/script logs сохранены; сводка —
+`workbench-log-inventory.json`.
+
+| Native gate / команда | Результат |
+|---|---|
+| `RunCatalog.ps1 -Label catalog-server -SourceRoot .../fixture-stage`, canonical Server; `Test-ScenarioCatalogLog.ps1` | **15/15 PASS/0**: единственный AI Conflict, stock сохранены, default leaves скрыты, repeat/dedup/tag maps |
+| `RunFrontend.ps1 -Label menu-verified-43 -InitialVariant Stock`; `Test-UniversalScenarioLog.ps1` | **43/43 PASS/0**, все **9/9** установленных вариантов доступны даже при загруженных только Core/Arland; настоящие widgets/modal/флаги/help/disabled sides/start/cleanup |
+| `-Label transition-stock-to-wcs -Probe Transition -Map 0 -Content 2 -Mode 1 -Difficulty 0`; audit `-Transition` | **4/4 PASS/0**, Arland WCS + RHS Co-op NATO, точный loaded graph **25 addons**. Этот routing-прогон выполнен до отдельной правки spawn clock; не выдаётся за новый WCS pause/soak test |
+| `-Label rhs-held-pause-final -Probe Transition -Map 1 -Content 1 -Mode 2 -Difficulty 1 -ResumeAfter 35`; audit `-Transition` | **4/4 PASS/0**, Everon RHS Co-op MSV Medium, graph **8 addons**; pause **35005 ms real / 0 ms simulation**, затем ROSTER_READY |
+| `-Label north-vanilla-final -Probe Transition -Map 2 -Content 0 -Mode 2 -Difficulty 0 -ResumeAfter 35`; audit `-Transition` | **4/4 PASS/0**, North Everon Vanilla Co-op USSR Easy, graph **3 addons**; pause **35037 / 0 ms**, затем ROSTER_READY |
+| canonical `Start-AICFRuntime.ps1 -Role Server -Variant EveronRHS -MatchMode CoopUSSR -Difficulty Medium`; audit `-Transition -Dedicated` | Reference до clock-правки: **2/2 PASS/0**, header/graph/ROSTER_READY. Это сравнение с dedicated, не четыре frontend cases |
+
+Все таблицы означают указанный scope, а не ручной UI PASS. У финальных menu,
+RHS и North logs native exits **0**, stopped marker присутствует,
+SCRIPT/VM/fatal **0**, собственных resource errors **0**. Полные остановленные
+логи и exact manifests сохранены в `full-logs/<label>/` и `<label>-console.log`,
+SHA-256/category counts — `native-log-inventory.json`. Изменение клиента не
+проверялось только по отфильтрованным AICF строкам.
+
+Обнаруженные дефекты и исправления:
+
+- Plain flag texture paths возвращали успешный LoadImageTexture, но полный лог
+  содержал **26 Wrong GUID/name**. Исправлены реальные stock GUID; первый прогон
+  `menu-stock-first` не считается PASS флагов, его полный log сохранён.
+- CLI source addons могут иметь placeholder WorkshopItem без local revision.
+  Первое определение ошибочно скрывало установленный RHS; native GameProject scan
+  и отдельная проверка каждого dependency ID устранили ложный отказ.
+- `-gproj` и `-addons` принудительно удерживают соответствующий контент.
+  Два обратных WCS→Vanilla controls имели **4 SCRIPT(E)** с FACTION_MISMATCH.
+  Выбор несовместимого графа теперь блокируется до перехода. Одной замены gproj
+  при сохранении полного принудительного WCS CSV недостаточно. Для всех опций
+  используется базовый source graph, пакеты модов только добавляются в addonsDir.
+- В RHS Everon local Play passive Welcome ставил simulation на паузу при
+  **~140 FPS**. Ранее wall-clock timeout прекращал старт через 30 s
+  (`rhs-everon-verified`, `rhs-everon-frame`: по **3 SCRIPT(E)**). Dedicated с
+  тем же leaf header становился готов за несколько секунд. GroupSlot deadline
+  переведён на WorldTimestamp для initial/replacement; лимит остаётся 30 s
+  активной симуляции. Финальные контролируемые 35 s pauses выше подтверждают
+  исправление. Probe снимает simulation pause, не нажимает GUI и не подменяет
+  проверки faction/spawn/readiness.
+- Диагностические fixture-итерации имели compile failures: World не предоставляет
+  PauseGameTime/IsGameTimePaused, а ChimeraWorld использует **CastFrom**, не Cast.
+  Исправлено по pinned API и повторно скомпилировано; ошибочные logs сохранены.
+- Manifest reading в Windows PowerShell исправлено на явный UTF-8 ReadAllText;
+  кириллический addonsDir больше не даёт ложный CLI_MISMATCH.
+
+Не объявляется «вообще 0 ошибок движка»: полный RHS log содержит WORLD **167**,
+RESOURCES **93**, ENTITY **11**, GUI **2**, PATHFINDING **10**; North — WORLD **7**,
+RESOURCES **92**, ENTITY **14**, GUI **2**, PATHFINDING **10**; menu — GUI **1**,
+RESOURCES **34**. Сохраняются diagnostics установленных/stock resources:
+устаревший RHS m_fAILimitThreshold, SCR_WidgetExportRuleRoot, hierarchy/PP,
+streaming navmesh `Incorrect tile position` (одинаковые десять индексов в RHS и
+vanilla Everon), shutdown texture refs. Они не исправлялись в установленных
+файлах. Native connected spawn placement и ROSTER_READY подтверждены;
+длительная навигация и отсутствие влияния каждого vendor diagnostic не доказаны.
+Это ограничение scope, не исключение SCRIPT/VM/fatal из строгих gates.
+
+**NOT RUN / отклонённые ручные критерии:** внешний вид и реальные mouse/keyboard/
+controller действия, ручной путь выбора/отмены/Play, фактический public Host,
+packaged Workshop build, новые JIP/direct-connect проверки и длительный soak.
+Terminal-only правила запрещают GUI/Host UI automation. Игроку нужно открыть
+AI Conflict, проверить выбор/отмену и Host; native readbacks и programmatic local
+Play не доказывают нажатия и public hosting. Новая задача не перепроверяла найм
+в казарме; gameplay найма не менялся. Готовность UI для релиза не объявляется.
+
+Изменены frontend registry/selection/launch/UI, generated integration catalog,
+RU/EN localization, GroupSlot spawn clock и одна timeout boundary controller,
+generation tool/JSON, probes/audits и затронутые agent notes/README. Production
+world/bases/layouts не добавлялись, 81 legacy GUID сохранены.
+
+Cleanup завершён: собственных native test processes **0**; stage **443 файла**
+сохранён в `final-fixture-stage.zip`, проверены пути и SHA-256 каждого entry,
+после чего удалён адресно. До clock-правки сохранён отдельный
+`before-pause-fix-stage.zip`. Все **20** свежих test profiles (**116 файлов**)
+сохранены в `test-profiles.zip` с проверкой каждого SHA-256 и удалены только по
+точным manifest paths. Полные logs остаются в evidence. Итоги —
+`stage-archive.json`, `profile-archive.json`, `profile-cleanup-result.json`.
+
 ## Видимость примера Arland в локальном frontend — 2026-10-19/20
 
 Продолжение `codex/arland-setup-example` от `0a3dad6`. Evidence:

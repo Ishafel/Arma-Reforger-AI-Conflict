@@ -71,16 +71,24 @@ Native лидерство, лимит и ownership RPC сохраняют сво
 
 ## Домены Core
 
-Прототип `AICF_ScenarioSetup` владеет только локальным frontend выбором и
-маршрутизацией в существующий native preset до начала матча. Concrete targets
-задаёт тонкий Arland header; shared gameplay config и репликация не меняются.
-Обычный запуск проходит через прежние native TryPlay/TryHost. Границы проверки
-frontend и правила очистки — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
-Arland integration регистрирует prototype и его targets в native default catalog,
-сохраняя исходные записи и GUID. Это необходимо для source addons без WorkshopItem.
+`AICF_ScenarioRegistry`/`AICF_ScenarioSetup` владеют локальным frontend выбором.
+Concrete targets и dependency graphs генерируются в Arland integration из общего
+JSON каталога. `AICF_ScenarioLaunch` проверяет native permissions входного item,
+зависимости, download/platform/forced-CLI gates и передаёт точный граф native
+Play/Host transition. Gameplay config и репликация не меняются. Границы,
+исключение прежнего leaf TryPlay/TryHost пути и cleanup — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+Arland integration регистрирует один вход в native default catalog, сохраняя
+stock записи и прежние leaf GUID; UI фильтрует точные legacy IDs. Это необходимо
+для source addons без WorkshopItem.
 Core разрешает subtype чтением ресурса по ID; nullable catalog `GetHeader()` не
-определяет доступность примера. `AICF_WorkshopTagMetadata` — узкий адаптер чтения
+определяет доступность входа. `AICF_WorkshopTagMetadata` — узкий адаптер чтения
 штатных UI tag maps, избегающий standalone protected constructor SCR_FilterCategory.
+
+Spawn deadline managed slot измеряется WorldTimestamp текущего мира с момента
+BeginInitialSpawn/BeginReplacementSpawn, через GetSpawnSimulationAgeMs. Это
+сохраняет 30 секунд активной симуляции при Welcome/SP pause; существующие
+System.GetTickCount getters остаются wall-clock диагностикой. Смена generation
+начинает новый timestamp, readiness/native spawn queue не обходятся.
 
 `AICF_InstigatorContext` — узкий compatibility boundary transient death context.
 OTHER с известным character передаётся штатной AI/PLAYER классификации;

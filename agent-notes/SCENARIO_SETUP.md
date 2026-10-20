@@ -1,103 +1,162 @@
-# Пример экрана настройки Arland
+# Универсальное меню AI Conflict
 
-Запрос владельца: показать рабочий пример одного пункта сценария с выбором
-режима, стороны и сложности вместо отдельного пункта для каждой комбинации.
-Это локальный прототип для vanilla Arland. Он не заменяет прежнюю матрицу
-81 сценария: добавлен один новый пункт, старые GUID и запуск сохранены.
+Один пункт **AI Conflict** в штатном меню открывает настройку перед Play или
+Host. Это игровой экран, отдельного лаунчера нет.
 
 ## Путь игрока
 
-В «Сценарии» выбрать **AI Conflict — Арланд: пример настройки**. Штатные
-действия Play или Host открывают отдельный экран до загрузки операции.
-В Host сначала задаются обычные сетевые настройки сервера, затем параметры
-операции. Экран предлагает Conflict или Co-op, США/СССР для Co-op и три
-сложности гарнизонов. В Conflict сторона выбирается позднее в штатном deployment.
-По умолчанию выбран Co-op СССР / Medium. Отмена возвращает в исходное меню.
+1. Выбрать AI Conflict → Play либо Host с обычными сетевыми настройками.
+2. Выбрать Арланд, Эверон или Север Эверона; Vanilla, RHS или WCS + RHS.
+3. Выбрать Conflict или Co-op. В Co-op флаг определяет сторону всех игроков:
+   US/СССР, USMC/МСВ РФ либо НАТО/РФ соответственно контенту. В Conflict
+   обе стороны доступны позднее в штатном deployment.
+4. Выбрать сложность гарнизонов. Справа — пояснение варианта под курсором/фокусом,
+   внизу — сводка параметров. Начать операцию загружает её; Создать сессию
+   использует прежние настройки сети/пароля/player limit. Отмена закрывает экран.
+   При отказе запуска выбор сохраняется.
 
-После подтверждения запускается соответствующий существующий inherited header.
-Подключающийся игрок использует обычный браузер/direct connect и получает
-штатные Welcome, faction и group UI выбранного режима. Новый экран ему не
-показывается. Сторона людей, roster, стройка и победа по-прежнему принадлежат
-[COOP_SCENARIO.md](COOP_SCENARIO.md), найм — [GAMEPLAY.md](GAMEPLAY.md).
+WCS-only профиля нет: интеграция WCS требует RHS. Серые варианты означают
+отсутствие зависимостей, неготовый local revision или несовместимость с
+принудительными параметрами запуска. Экран ничего не скачивает. После установки
+модов нужно переоткрыть настройку. Флаги США/СССР используют stock texture GUID,
+РФ — native tricolor widgets, НАТО — стилизованный компас на синем поле.
 
-Это пример маршрутизации до запуска, **не перенос всех параметров на новый
-runtime config** и не сокращение числа файлов на диске. Старые presets пока
-нужны как проверенные launch targets. Следующий этап консолидации должен отдельно
-решить, какие пункты скрывать и как сохранять совместимость конфигураций.
+Подключающиеся игроки используют обычный браузер/direct connect и штатные
+Welcome/faction/group UI. Новый экран не перенастраивает текущую сессию и не
+показывается JIP-клиенту. Co-op — [COOP_SCENARIO.md](COOP_SCENARIO.md), найм —
+[GAMEPLAY.md](GAMEPLAY.md). Автостройка своей стороны в Co-op отключена;
+рабочие и заказы бойцов в казарме сохранены.
 
-## Владельцы и native boundary
+## Каталог и расширение
 
-- `Config/AICF_ScenarioSetup.c`: `AICF_ScenarioSetupHeader` хранит девять ссылок
-  integration; порядок — STANDARD/COOP_US/COOP_USSR × Easy/Medium/Hard.
-  `ResolvePreset` проверяет границы, полноту, native metadata и тот же world;
-  рекурсивный setup target запрещён. Неудачный Select сохраняет прошлый выбор.
-- `UI/AICF_ScenarioSetupScreen.c`: локальные widgets, выбор и итоговая сводка.
-  Использует существующие CreateRect/CreateText, штатные modal/focus API;
-  Close удаляет handler/modal/widgets и допускает повторный вызов.
-- `UI/AICF_ScenarioSetupEntry.c`: только собственный header subtype перехватывает
-  `SCR_ScenarioUICommon.TryPlayScenario/TryHostScenario`. Для обычных headers
-  вызов идёт в super с исходными аргументами. Закрытие ScenarioMenu/ServerHostingUI
-  также закрывает экран.
-  `AICF_GetSetupHeader` читает ресурс по `scenario.Id()`: реальная запись каталога
-  может возвращать `null` из `MissionWorkshopItem.GetHeader()` даже при наличии metadata.
-- `AIConflictArland/.../Integration/AICF_ArlandScenarioCatalog.c`: дополняет
-  `ArmaReforgerScripted.GetDefaultGameConfigs` примером и девятью валидными presets.
-  Исходные addons, загруженные через `-gproj/-addons`, не имеют установленного
-  `WorkshopItem`; одного присутствия `.conf` в resource database недостаточно
-  для появления в frontend. Родительский каталог сохраняется, добавление использует
-  native `InsertNewScenario` без повторов. При неполном header дополнение отменяется.
-- Подтверждение заново разрешает native `MissionWorkshopItem` и CanPlay/CanHost.
-  Существующий `SCR_DSConfig` сохраняется; меняется только `game.scenarioId`
-  на ID выбранного native mission. После закрытия экрана вызываются штатные
-  TryPlay/TryHost, включая platform/download gates. Прямых Play/Host в обход
-  этих gates, RPC, изменений текущего матча или нового replicated состояния нет.
+`tools/config/AICF_Scenarios.json` — единый источник CLI и frontend targets:
+девять сочетаний карты/контента, семь dependency graphs, 81 leaf header.
+`mapIndex`/`contentIndex` задают текущую матрицу 3×3.
+`tools/Update-AICFScenarioRegistry.ps1 [-Check]` генерирует
+`AIConflictArland/.../Integration/AICF_ScenarioVariants.c`: точный addon CSV,
+owner, метки сторон, девять ресурсов Standard/CoopUS/CoopUSSR × Easy/Medium/Hard.
+Generated `.c` отслеживается; ручная правка будет обнаружена `-Check`.
 
-Конкретный ресурс: `AIConflictArland/Missions/AICF_Conflict_Arland_Setup.conf`,
-GUID `A1CF261019500001`. Он наследует прежний Co-op USSR Medium без собственной
-world/base/layout topology. Прямой запуск ID в обход игрового меню получает
-этот default; для dedicated server остаются canonical launcher и обычные presets.
-Прототип не добавляет настройки в JSON `missionHeader` и не требует внешнего launcher.
+Core `AICF_ScenarioRegistry` хранит generic descriptors. Integration расширяет
+виртуальный instance `Build`, без static dispatch ловушки и второго controller.
+Карты, world, GUID targets и dependency IDs не переносятся в Core. Новому
+integration нужны профиль, thin headers и запись каталога; добавление нового
+измерения меню требует расширить три текущих колонки/строки, generator validation
+и тестовую матрицу. Неизвестный Workshop мод сам по названию профилем не становится.
 
-## Проверки и ограничения
+`AICF_ScenarioVariant.Resolve` проверяет bounds, девять targets и owner в графе.
+`HasDependencies` требует каждый ID. `IsAvailable` использует native
+`GameProject.GetAvailableAddons`; при наличии Workshop local revision требует
+Downloaded, отсутствие corruption и IsReadyToRun. Source addon может иметь
+placeholder WorkshopItem без revision: тогда native GameProject подтверждает
+локальное наличие. Пустой scan не считается наличием модов.
 
-`Test-ScenarioSetupStatic.ps1`: соответствие девяти targets общему каталогу,
-passthrough, opt-in, native permission/launch boundary, atomic choice и cleanup;
-17 отрицательных mutations, включая отказ от nullable catalog header в пользу
-чтения ресурса по ID. Входит в общий offline набор.
+`AICF_ScenarioSetupSelection` хранит карту/контент/режим/сложность. Ошибочный
+выбор сохраняет прошлый. Defaults: Арланд / Vanilla / Co-op USSR / Medium,
+если запуск не закрепил несовместимый контент. При смене карты контент
+сохраняется либо выбирается первый допустимый набор в стабильном порядке.
 
-`AICF_ScenarioCatalogProbe.c` проверяет настоящий `GetPageScenarios` и
-`GetInGameScenario`, имя и видимость примера, все девять targets, отсутствие
-дубликатов, повторный вызов и сохранение stock Arland. Это отдельный gate:
-чтение `.conf` и создание widgets сами по себе регистрацию не доказывают.
-Два дополнительных readbacks проверяют полное заполнение native tag image/thumbnail
-maps из штатных `category_type.conf` и `category_manw.conf`.
+## Native launch boundary
 
-`Integration/AICF_WorkshopTagMetadata.c` устраняет обнаруженные при входе в frontend
-ошибки `SCR_FilterCategory`: native `InitAddonTagMaps` пытается создать эту категорию
-как standalone config root с protected constructor в 1.8.0.13. Adapter читает
-metadata через `BaseContainer`, сохраняя lowercase keys, изображения и thumbnails.
-`OnGameStart` также переопределён с сохранением native callback Remove/Insert:
-внутренний static caller иначе продолжает вызывать исходный метод. Сам класс
-категории, вложенные фильтры и их конструкторы не меняются.
+`AICF_ScenarioSetupEntry` перехватывает только собственный header subtype в
+`SCR_ScenarioUICommon.TryPlayScenario/TryHostScenario`; остальные сценарии идут
+в super с исходными аргументами. Header читается по `scenario.Id()`:
+`MissionWorkshopItem.GetHeader()` может быть null при наличии native metadata.
 
-`AICF_ScenarioSetupProbe.c` добавляется только в isolated Core/UI stage как
-`AICF_ZScenarioSetupProbe.c` после основного Co-op probe. CLI `-aicfSetupProbe 1`.
-Server проверяет 18 cases: native чтение subtype, defaults, девять leaf headers,
-сопоставление реально запущенного header, bounds/null/incomplete/metadata/recursion
-и сохранение прошлого выбора. Client проверяет 15 cases: создание настоящих
-widgets, ненулевые bounds, native modal, девять комбинаций, локализованную сводку,
-disabled стороны в STANDARD, неверный выбор и полную идемпотентную очистку.
-UI input, нажатия клавиш, Play и Host fixture не эмулирует.
+`AICF_ScenarioLaunch.CanStart` заново проверяет main menu, отсутствие перехода,
+native CanPlay/CanHost входного MissionWorkshopItem, hosting platform gate,
+пустую download queue и зависимости выбранного descriptor. Неготовый набор
+не запускается; download dialog не запускает по ошибке default entry.
 
-Строгий `Test-ScenarioSetupLog.ps1 [-Client]` сначала проверяет весь stopped log
-через Co-op audit, затем exact CLI, cases и completion. Для client обязательны
-настоящий player, Welcome и JIP readbacks. SCRIPT/VM/fatal не исключаются.
+Play передаёт leaf resource и **точный** addon CSV в штатный
+`GameStateTransitions.RequestScenarioChangeTransition`, используемый native
+`PlayGameConfig`. Host передаёт SCR_DSConfig в `RequestPublicServerTransition`:
+меняет только scenarioId, hostedScenarioModId и mods с локальными версиями,
+при отказе возвращает прежние значения. Network/password/player limits и
+gameProperties сохраняются. Setup и native menus закрываются после принятия.
 
-**NOT RUN / ограничение прототипа:** ручной путь из frontend через Play/Host,
-mouse/keyboard/controller input, внешний вид на разных разрешениях. Игроку нужно
-открыть новый пункт, проверить выбор/отмену и запуск нужного режима через оба
-штатных действия. Terminal-only workflow запрещает Host UI/GUI automation;
-canonical server/client запуск и native widget readbacks не доказывают этот
-frontend переход. До такой проверки полноценная готовность UI не заявляется.
-Packaged/Workshop build, другие карты/моды и длительный soak также не запускались.
-Свежие команды и verdict — [TESTING.md](TESTING.md).
+Старый прототип вызывал leaf MissionWorkshopItem.Play/Host. Универсальному
+варианту это не подходит: header незагруженной интеграции ещё не обязан быть
+в native каталоге, а загруженные RHS/WCS меняют content profile factory.
+Разрешения проверяются на реальном входном item, выбранные зависимости —
+отдельно; загрузкой/перекомпиляцией занимается native transition. Gameplay,
+authority, roster и replicated state здесь не меняются.
+
+Обнаруженный при native local Play startup defect исправлен отдельно от меню:
+Welcome останавливает SP simulation, а прежний timeout группы считал 30 секунд
+через System.GetTickCount. `AICF_GroupSlot` теперь сохраняет WorldTimestamp при
+BeginInitialSpawn/BeginReplacementSpawn; controller сравнивает
+GetSpawnSimulationAgeMs с прежними 30000 ms. Пауза не считается зависанием,
+wall-clock getters и существующие поля audit сохранены. Identity/readiness,
+native RequestSpawn и длительность timeout активной симуляции не меняются.
+
+Принудительные `-gproj` и `-addons` нельзя считать выгружаемыми. Проверяется
+включение их GUID в выбранный граф; GUID source-проекта разрешается по известному suffix пути в integration registry;
+неизвестный source-проект закрывает запуск. Обязательный неванильный
+addon вне выбранного графа блокирует выбор с отдельным пояснением.
+Для универсального source frontend нужны базовый `AIConflictArland/addon.gproj`,
+`-addons 9178E5822AFE48EA,B52C5F6AEDBF423E` и `-addonsDir` с репозиторием,
+game resources и установленными RHS/WCS. Смена только `-gproj` при сохранении
+принудительного полного WCS CSV недостаточна. Installed frontend не требует
+отдельного запускающего приложения.
+
+## Видимость и совместимость
+
+Стабильный вход: `{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf`.
+Он остаётся thin inherited vanilla Arland Co-op USSR Medium: CLI запуск ID
+без меню использует этот default. Dedicated server использует canonical
+launcher с Variant/MatchMode/Difficulty и существующие leaf GUID.
+
+`AICF_ArlandScenarioCatalog` дополняет GetDefaultGameConfigs только входом,
+сохраняя stock entries и native InsertNewScenario dedup. Source addon не имеет
+installed WorkshopItem; одного `.rdb` недостаточно для меню. В packaged списке
+legacy leaf ресурсы фильтруются только по точным IDs registry:
+`SCR_ContentBrowser_ScenarioSubMenu.CreateLine` и оба списка
+`SCR_ServerConfigListComponent`. Физические 81 headers и их GUID сохранены.
+Сценарии других модов и сохранения не совпадают с этими IDs.
+
+`AICF_WorkshopTagMetadata` сохраняет исправление SCR_FilterCategory:
+BaseContainer adapter, callbacks Remove/Insert и override OnGameStart для
+правильного static caller. Native category constructors не меняются.
+
+## Проверки
+
+- `Test-ScenarioSetupStatic.ps1`: legacy default, atomic mode/difficulty,
+  opt-in/passthrough, modal/cleanup; 15 отрицательных mutations.
+- `Test-UniversalScenarioStatic.ps1`: generator/catalog agreement, полный граф,
+  native/platform/download/forced gates, rollback, flags/help и leaf filters.
+- `AICF_ScenarioCatalogProbe.c`: настоящий GetPageScenarios/GetInGameScenario,
+  один вход, девять скрытых default leaf targets, stock preservation,
+  repeat/dedup, native type/manw tag maps; 15 cases.
+- `AICF_UniversalScenarioProbe.c`: каждый dependency ID, все 81 plan, ожидаемая
+  доступность установленных вариантов, forced subset, host mods, настоящие
+  widgets/modal/bounds, флаги, 15 пояснений, выбор/cleanup; 43 cases.
+  CLI `-aicfUniversalProbe 1 -aicfExpectedReadyVariants 9`.
+- `AICF_ScenarioTransitionProbe.c`: production preflight/launch, active header,
+  точный GetLoadedAddons без лишних неванильных addons, ROSTER_READY; четыре cases.
+  CLI `-aicfTransitionProbe 1 -aicfProbeMap 0 -aicfProbeContent 2
+  -aicfProbeMode 1 -aicfProbeDifficulty 0`.
+- `Test-UniversalScenarioLog.ps1 [-Transition]`: полный stopped log, native exit,
+  exact CLI/UTF-8 manifest, уникальные cases/completion, SCRIPT/VM/fatal и
+  собственные resource errors. Transition сверяет реальный ресурс и загруженные
+  IDs с общим каталогом. Contract mutations проверяют отказы.
+
+`-aicfProbeResumeAfter 35` в transition fixture удерживает штатную Welcome pause
+35 секунд после RUNNING, проверяет разницу real/simulation времени и снимает
+native simulation pause. Это terminal runtime probe, не GUI input и не
+подтверждение ручного Welcome. При этом флаге analyzer требует один успешный
+TRANSITION_PAUSE, real_ms >= 35000 и simulation_ms < 2000, затем обычный
+ROSTER_READY и четыре cases. Без флага fixture не снимает паузу.
+`-Transition -Dedicated` — отдельный reference gate: exact canonical server/
+MissionHeader CLI, два header/loaded-graph cases и ROSTER_READY; frontend Play
+он не проверяет. Нельзя выдавать его за четыре transition cases.
+
+Probes находятся только в isolated stage Core/UI как AICF_Z*.c. Полные логи
+сохраняются; счётчик readbacks не отменяет script/resource ошибки всего лога.
+
+**NOT RUN:** ручные mouse/keyboard/controller input, внешний вид на разных
+разрешениях, фактический public Host, packaged Workshop build, длительный soak.
+Terminal-only правила запрещают GUI/Host UI automation. Игроку нужно открыть
+AI Conflict, пройти выбор/отмену и запустить Host. Native widget readbacks и
+local Play не доказывают эти действия. Свежие результаты и неуспешные
+промежуточные прогоны — [TESTING.md](TESTING.md).

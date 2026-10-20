@@ -1655,7 +1655,7 @@ class AICF_MatchController
 							factionMismatchCount,
 							nonAliveCount);
 				}
-				else if (System.GetTickCount(slot.GetSpawnStartedAtMs()) >= GROUP_SPAWN_TIMEOUT_MS)
+				else if (slot.GetSpawnSimulationAgeMs() >= GROUP_SPAWN_TIMEOUT_MS)
 					HandleSpawnTimeout(factionState, faction, slot);
 				continue;
 			}

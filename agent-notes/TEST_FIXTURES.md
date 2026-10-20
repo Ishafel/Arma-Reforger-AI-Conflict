@@ -1,6 +1,28 @@
 # Runtime fixture: каталог и применение
 
-## Пример настройки Arland
+## Универсальное меню и native переход
+
+`AICF_UniversalScenarioProbe.c` копировать отдельно в isolated Core/UI как
+`AICF_ZUniversalScenarioProbe.c`: `-aicfUniversalProbe 1
+-aicfExpectedReadyVariants 9`. Native graph/selection/widgets/modal/help/flags/
+cleanup и forced subset: 43 cases. ExpectedReadyVariants отражает фактически
+подготовленное окружение, не подменяется количеством прошедших readbacks.
+Окно открывается на короткое время и закрывается само; GUI input не имитируется.
+
+`AICF_ScenarioTransitionProbe.c` копировать как `AICF_ZScenarioTransitionProbe.c`.
+`-aicfTransitionProbe 1 -aicfProbeMap 0 -aicfProbeContent 2 -aicfProbeMode 1
+-aicfProbeDifficulty 0`: запускает production local Play, сверяет active header,
+ROSTER_READY и точный loaded addon graph. Четыре cases; затем RequestClose.
+Он не проверяет public Host. `Test-UniversalScenarioLog.ps1 [-Transition]`
+требует полный stopped log, manifest/native exit и не пропускает SCRIPT/VM/fatal
+или собственные resource errors. Подробности — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+Дополнительный `-aicfProbeResumeAfter 35` сохраняет native Welcome pause 35 s
+после RUNNING, затем снимает simulation pause без GUI input. Analyzer требует
+real_ms >= 35000, simulation_ms < 2000 и последующий полный transition verdict.
+`-Transition -Dedicated` проверяет только canonical direct server reference:
+два header/graph cases, не frontend переход.
+
+## Legacy default header и каталог
 
 `AICF_ScenarioSetupProbe.c` копировать в isolated Core/UI как
 `AICF_ZScenarioSetupProbe.c` вместе с Co-op probe. CLI `-aicfSetupProbe 1`:

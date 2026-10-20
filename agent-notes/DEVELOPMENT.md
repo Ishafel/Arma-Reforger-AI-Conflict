@@ -140,20 +140,25 @@ Placeholder заменяется фактическим путём. Перед �
 
 Добавление нового сочетания карты/контента описано в [COOP_SCENARIO.md](COOP_SCENARIO.md).
 
-Отдельный vanilla Arland prototype «AI Conflict — Арланд: пример настройки»
-открывается игроком через Play/Host в меню и выбирает существующий leaf header
-до загрузки мира. Canonical launcher frontend не открывает: для server/client
-остаются `-Variant Stock -MatchMode ... -Difficulty ...`. Прямой ID prototype
-получает Co-op USSR Medium. Полный контракт и NOT RUN frontend gate —
+Единый пункт «AI Conflict» открывается через Play/Host в меню: карта, установленный
+контент, режим, сторона и сложность разрешаются в leaf header и точный addon graph.
+Canonical launcher frontend не открывает: для server/client остаются
+`-Variant Stock -MatchMode ... -Difficulty ...`. Прямой ID setup получает vanilla
+Arland Co-op USSR Medium. Полный контракт и NOT RUN gates —
 [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
 
-Для ручной проверки frontend владелец открывает клиент с тем же source graph,
+Для ручной проверки frontend владелец открывает клиент с базовым source graph,
 но без `-client`/`-server`, и сам управляет меню. Граф берётся из Client `-DryRun`;
 фактические argv и свежий внешний profile сохраняются в отдельном manifest.
 Это открытие меню по запросу владельца, не direct connect и не GUI automation
 агента. Диагностический `-listScenarios` печатает каталог из native Game API.
-У исправленного stock source graph — 31 штатная запись и 10 Arland resources,
-в том числе `A1CF261019500001`; наличие файла в `.rdb` не заменяет этой проверки.
+У универсального stock source graph — 31 штатная запись и один AI Conflict
+`A1CF261019500001`; наличие файла в `.rdb` не заменяет этой проверки.
+Для выбора всех установленных профилей используй `AIConflictArland/addon.gproj`
+и базовый CSV `9178E5822AFE48EA,B52C5F6AEDBF423E`; добавь существующий каталог
+RHS/WCS в `-addonsDir`, не в принудительный `-addons`. Принудительный WCS CSV
+не выгружается native transition и закономерно блокирует выбор Vanilla/RHS.
+Все local `.rdb` выбранных интеграций заранее генерируются терминальным Workbench.
 Подключение к dedicated по-прежнему требует canonical launcher и readiness gate.
 
 `-LoadoutLibraryPath <старый-profile>/profile/AICF_Loadouts` импортирует библиотеку

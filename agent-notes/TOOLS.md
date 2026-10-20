@@ -166,12 +166,20 @@ Native probe/CLI и требования: [INSTIGATOR_CONTEXT.md](INSTIGATOR_CON
 
 `Test-ScenarioSetupStatic.ps1` входит в полный offline набор. Отдельный
 `tests/log-audits/Test-ScenarioSetupLog.ps1 [-Client]` проверяет stopped runtime
-logs примера Arland; UI readbacks не подменяют ручной frontend Play/Host.
+logs legacy default Arland; UI readbacks не подменяют ручной input/Host.
 Описание: [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
 `Test-ScenarioCatalogLogContracts.ps1` входит в offline набор: положительный
 control и 13 отрицательных случаев отдельного `Test-ScenarioCatalogLog.ps1`.
 Последний проверяет native регистрацию 15 cases, точные CLI и stopped log,
 отклоняет SCRIPT/VM/fatal; описание fixture — [TEST_FIXTURES.md](TEST_FIXTURES.md).
+
+`tools/Update-AICFScenarioRegistry.ps1 [-Check]` генерирует frontend descriptors
+из `tools/config/AICF_Scenarios.json`; проверка входит в новый
+`Test-UniversalScenarioStatic.ps1`. `Test-UniversalScenarioLogContracts.ps1`
+проверяет UI/transition анализатор на положительных и отрицательных логах,
+включая UTF-8 пути, лишние/недостающие addons и неправильный launch resource.
+`Test-UniversalScenarioLog.ps1 [-Transition]` анализирует полный stopped native
+log универсального меню; в offline runner не входит.
 
 ## Локальные файлы вне набора
 

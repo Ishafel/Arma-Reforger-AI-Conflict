@@ -1,7 +1,7 @@
 param([Parameter(Mandatory)][string]$LogPath,[Parameter(Mandatory)][string]$ManifestPath,[Parameter(Mandatory)][string]$NativeExitPath)
 $ErrorActionPreference='Stop'
 $log=[IO.File]::ReadAllText($LogPath)
-$manifest=Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
+$manifest=[IO.File]::ReadAllText($ManifestPath) | ConvertFrom-Json
 $failures=@()
 if((Get-Content -LiteralPath $NativeExitPath -Raw).Trim() -ne '0'){$failures+='NATIVE_EXIT'}
 if($log -notmatch 'Game destroyed\.'){$failures+='STOPPED_LOG'}

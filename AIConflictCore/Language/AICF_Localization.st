@@ -321,23 +321,155 @@ StringTable
 			Target_en_us "AI Conflict - Everon North WCS + RHS Co-op Russia (Hard)"
 			Target_ru_ru "AI Conflict — Север Эверона WCS + RHS Co-op РФ (сложный)"
 		}
+		CustomStringTableItem "{A1CF261020500001}"
+		{
+			Id "AICF_Setup_Map"
+			Target_en_us "Map"
+			Target_ru_ru "Карта"
+		}
+		CustomStringTableItem "{A1CF261020500002}"
+		{
+			Id "AICF_Setup_Content"
+			Target_en_us "Content"
+			Target_ru_ru "Контент"
+		}
+		CustomStringTableItem "{A1CF261020500003}"
+		{
+			Id "AICF_Setup_Map_Arland"
+			Target_en_us "Arland"
+			Target_ru_ru "Арланд"
+		}
+		CustomStringTableItem "{A1CF261020500004}"
+		{
+			Id "AICF_Setup_Map_Everon"
+			Target_en_us "Everon"
+			Target_ru_ru "Эверон"
+		}
+		CustomStringTableItem "{A1CF261020500005}"
+		{
+			Id "AICF_Setup_Map_EveronNorth"
+			Target_en_us "North Everon"
+			Target_ru_ru "Север Эверона"
+		}
+		CustomStringTableItem "{A1CF261020500006}"
+		{
+			Id "AICF_Setup_USMC"
+			Target_en_us "USMC"
+			Target_ru_ru "КМП США"
+		}
+		CustomStringTableItem "{A1CF261020500007}"
+		{
+			Id "AICF_Setup_MSV"
+			Target_en_us "MSV"
+			Target_ru_ru "МСВ РФ"
+		}
+		CustomStringTableItem "{A1CF261020500008}"
+		{
+			Id "AICF_Setup_NATO"
+			Target_en_us "NATO"
+			Target_ru_ru "НАТО"
+		}
+		CustomStringTableItem "{A1CF261020500009}"
+		{
+			Id "AICF_Setup_Russia"
+			Target_en_us "Russia"
+			Target_ru_ru "РФ"
+		}
+		CustomStringTableItem "{A1CF26102050000A}"
+		{
+			Id "AICF_Setup_BothSides"
+			Target_en_us "Both sides"
+			Target_ru_ru "Обе стороны"
+		}
+		CustomStringTableItem "{A1CF26102050000B}"
+		{
+			Id "AICF_Setup_Reload"
+			Target_en_us "Start loads exactly this addon set. Other enabled addons are excluded from the operation."
+			Target_ru_ru "При запуске загрузится именно выбранный набор модов. Остальные включённые моды не войдут в операцию."
+		}
+		CustomStringTableItem "{A1CF26102050000C}"
+		{
+			Id "AICF_Setup_Missing"
+			Target_en_us "Unavailable: install all dependencies for"
+			Target_ru_ru "Недоступно: установите все зависимости для"
+		}
+		CustomStringTableItem "{A1CF26102050000D}"
+		{
+			Id "AICF_Setup_MapHelp"
+			Target_en_us "Select the area of operations. North Everon limits objectives to the northern part of the island. Changing map keeps your content choice when available; otherwise the first available set is selected."
+			Target_ru_ru "Выберите район операции. Север Эверона ограничивает цели северной частью острова. При смене карты набор контента сохраняется, если доступен; иначе выбирается первый доступный набор."
+		}
+		CustomStringTableItem "{A1CF26102050000E}"
+		{
+			Id "AICF_Setup_ContentHelp"
+			Target_en_us "Vanilla uses stock equipment. RHS uses USMC and MSV. WCS + RHS uses NATO and Russia with both mod packs. A grey option is missing dependencies or is not ready locally. No mods are downloaded by this screen."
+			Target_ru_ru "Vanilla — штатное вооружение. RHS — КМП США и МСВ РФ. WCS + RHS — НАТО и РФ с обоими наборами модов. Серому варианту недостаёт зависимостей либо он ещё не готов. Этот экран не скачивает моды."
+		}
+		CustomStringTableItem "{A1CF26102050000F}"
+		{
+			Id "AICF_Setup_CoopHelp"
+			Target_en_us "All players fight for the selected side against the AI. Your side has no autonomous combat squads or automatic construction. Builders and barracks orders remain available. Select a flag to change player side."
+			Target_ru_ru "Все игроки воюют за выбранную сторону против ИИ. У своей стороны нет автономных боевых отрядов и автостроительства. Рабочие и заказы солдат в казарме доступны. Выберите флаг, чтобы сменить сторону игроков."
+		}
+		CustomStringTableItem "{A1CF261020500010}"
+		{
+			Id "AICF_Setup_DifficultyHelp0"
+			Target_en_us "Easy: FIA infantry garrisons, without vehicles or road patrols. Difficulty affects defenders, not your shooting accuracy."
+			Target_ru_ru "Лёгкая: пехотные гарнизоны FIA без техники и дорожных патрулей. Сложность меняет защитников, а не точность вашей стрельбы."
+		}
+		CustomStringTableItem "{A1CF261020500011}"
+		{
+			Id "AICF_Setup_DifficultyHelp1"
+			Target_en_us "Medium: one APC per garrison with crew and up to 2 or 4 dismounts. No tanks or reinforced objective. FIA road patrols are enabled."
+			Target_ru_ru "Средняя: по одному БТР на гарнизон с экипажем и десантом до 2 или 4 бойцов. Без танков и усиленной точки. Включены дорожные патрули FIA."
+		}
+		CustomStringTableItem "{A1CF261020500012}"
+		{
+			Id "AICF_Setup_DifficultyHelp2"
+			Target_en_us "Hard: two vehicles per garrison; one intermediate objective is reinforced. Tanks are used where the content profile provides them; otherwise APCs replace them. FIA road patrols are enabled."
+			Target_ru_ru "Высокая: по две машины в гарнизоне; одна промежуточная точка усилена. Если профиль контента содержит танки, используются и они; иначе их заменяют БТР. Включены дорожные патрули FIA."
+		}
+		CustomStringTableItem "{A1CF261020500013}"
+		{
+			Id "AICF_Setup_PlayHelp"
+			Target_en_us "Start operation launches a local game with these settings and the exact selected addon set. Hover or focus any option to read its explanation."
+			Target_ru_ru "Начать операцию — запустить локальную игру с указанными параметрами и выбранным набором модов. Наведите курсор или переведите фокус на вариант, чтобы прочитать пояснение."
+		}
+		CustomStringTableItem "{A1CF261020500014}"
+		{
+			Id "AICF_Setup_HostHelp"
+			Target_en_us "Create session starts a multiplayer operation with these settings. The server name, password, player limit and network settings from the previous screen are preserved."
+			Target_ru_ru "Создать сессию — запустить сетевую операцию с этими параметрами. Название сервера, пароль, число игроков и сетевые настройки с предыдущего экрана сохраняются."
+		}
+		CustomStringTableItem "{A1CF261020500015}"
+		{
+			Id "AICF_Setup_CancelHelp"
+			Target_en_us "Cancel returns to the previous menu without starting an operation or changing the loaded addons."
+			Target_ru_ru "Отмена возвращает в предыдущее меню без запуска операции и смены загруженных модов."
+		}
+		CustomStringTableItem "{A1CF261020500016}"
+		{
+			Id "AICF_Setup_Pinned"
+			Target_en_us "Startup parameters pin this content. Open the game with the base AI Conflict addon to unlock every installed option."
+			Target_ru_ru "Параметры запуска закрепляют этот контент. Для выбора всех установленных вариантов откройте игру с базовым модом AI Conflict."
+		}
 		CustomStringTableItem "{A1CF261019500101}"
 		{
 			Id "AICF_Setup_Arland_Name"
-			Target_en_us "AI Conflict - Arland: setup example"
-			Target_ru_ru "AI Conflict — Арланд: пример настройки"
+			Target_en_us "AI Conflict"
+			Target_ru_ru "AI Conflict"
 		}
 		CustomStringTableItem "{A1CF261019500102}"
 		{
 			Id "AICF_Setup_Description"
-			Target_en_us "Choose match mode, player side and garrison difficulty before starting."
-			Target_ru_ru "Выберите режим, сторону игроков и сложность гарнизонов перед запуском."
+			Target_en_us "Choose a map, installed content, mode, side and garrison difficulty."
+			Target_ru_ru "Выберите карту, установленный контент, режим, сторону и сложность гарнизонов."
 		}
 		CustomStringTableItem "{A1CF261019500103}"
 		{
 			Id "AICF_Setup_Details"
-			Target_en_us "Example setup screen for vanilla Arland. Play or Host opens the settings before loading the selected operation. Direct launch without the menu uses Co-op Soviet Army, Medium. Dedicated servers should use the regular scenario presets."
-			Target_ru_ru "Пример экрана настройки для vanilla Arland. Играть или Создать сервер открывает параметры до загрузки выбранной операции. Прямой запуск без меню использует Co-op СССР, среднюю сложность. Для выделенного сервера используйте обычные сценарии."
+			Target_en_us "Play or Host opens the universal operation setup. Available content requires all installed dependencies. The game loads exactly the selected addon set. Direct launch without the menu defaults to Arland, Vanilla, Co-op USSR, Medium."
+			Target_ru_ru "Играть или Создать сервер открывает общую настройку операции. Контент доступен при наличии всех зависимостей. Игра загрузит выбранный набор модов. Прямой запуск без меню: Арланд, Vanilla, Co-op СССР, средняя сложность."
 		}
 		CustomStringTableItem "{A1CF261019500104}"
 		{
@@ -438,8 +570,8 @@ StringTable
 		CustomStringTableItem "{A1CF261019500114}"
 		{
 			Id "AICF_Setup_Unavailable"
-			Target_en_us "Scenario unavailable. Check enabled addons and multiplayer services."
-			Target_ru_ru "Сценарий недоступен. Проверьте подключённые моды и сетевые службы."
+			Target_en_us "Cannot start: wait for addon scans/downloads and check dependencies or multiplayer services. Your selection has been kept."
+			Target_ru_ru "Запуск недоступен: дождитесь проверки и загрузки модов, проверьте зависимости или сетевые службы. Ваш выбор сохранён."
 		}
 		CustomStringTableItem "{A1CF261018461001}"
 		{

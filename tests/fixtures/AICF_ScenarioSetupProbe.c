@@ -64,7 +64,7 @@ modded class AICF_MatchController
 
 modded class AICF_ScenarioSetupScreen
 {
-	bool AICF_ProbeSideEnabled() { return m_aButtons[2].IsEnabled() && m_aButtons[3].IsEnabled(); }
+	bool AICF_ProbeSideEnabled() { return m_aButtons[8].IsEnabled() && m_aButtons[9].IsEnabled(); }
 	string AICF_ProbeSummary() { return m_wSummary.GetText(); }
 }
 

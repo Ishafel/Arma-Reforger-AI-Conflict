@@ -5,6 +5,7 @@ $ErrorActionPreference='Stop'
 $selection=ConvertTo-AICFCodeText ([IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/Config/AICF_ScenarioSetup.c')))
 $screen=ConvertTo-AICFCodeText ([IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/UI/AICF_ScenarioSetupScreen.c')))
 $entry=ConvertTo-AICFCodeText ([IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/UI/AICF_ScenarioSetupEntry.c')))
+$launch=ConvertTo-AICFCodeText ([IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/UI/AICF_ScenarioLaunch.c')))
 function Test-SetupGuards([string]$a,[string]$b,[string]$c) {
     $combined=$a+$b+$c
     if($combined -match 'Rpc\(|BumpMe|SetFaction|SetHealth|CallLater|GetOrigin|SpawnEntity|RequestClose|SetAICommanderMode|m_On\w+\.Insert|GetOn\w+\([^)]*\)\.Insert'){'PRELAUNCH_ONLY'}
@@ -16,10 +17,9 @@ function Test-SetupGuards([string]$a,[string]$b,[string]$c) {
         @($a,'!target \|\| AICF_ScenarioSetupHeader.Cast\(target\)','NO_RECURSION'),
         @($a,'target.m_eAICFMatchMode != mode \|\| target.m_eAICFDifficulty != difficulty','METADATA'),
         @($a,'target.GetWorldResourceName\(\) != GetWorldResourceName\(\)','WORLD'),
-        @($a,'if \(!m_Header \|\| m_Header.ResolvePreset\(mode, difficulty\).IsEmpty\(\)\) return false;\s*m_iMode = mode;\s*m_iDifficulty = difficulty;','ATOMIC_CHOICE'),
-        @($b,'SCR_ScenarioUICommon.CanHost\(mission\).*?SCR_ScenarioUICommon.CanPlay\(mission\)','NATIVE_PERMISSION'),
-        @($b,'if \(!PrepareLaunch\(mission\)\).*?return;.*?if \(host\) config.game.scenarioId = mission.Id\(\);.*?AICF_CloseSetup\(\);.*?TryHostScenario\(mission, config\);.*?TryPlayScenario\(mission\);','NATIVE_LAUNCH'),
-        @($b,'m_aButtons\[2\].SetEnabled\(mode != 0\);\s*m_aButtons\[3\].SetEnabled\(mode != 0\);','STANDARD_SIDES'),
+        @($a,'if \(!m_Header \|\| !GetVariant\(\) \|\| GetVariant\(\).Resolve\(mode, difficulty\).IsEmpty\(\)\) return false;\s*m_iMode = mode;\s*m_iDifficulty = difficulty;','ATOMIC_CHOICE'),
+        @($b,'AICF_ScenarioLaunch.Start\(m_Selection, m_Entry, m_Config\)','NATIVE_LAUNCH'),
+        @($b,'m_aButtons\[8\].SetEnabled\(mode != 0\);\s*m_aButtons\[9\].SetEnabled\(mode != 0\);','STANDARD_SIDES'),
         @($b,'AddModal\(m_wRoot, m_aButtons\[0\]\)','MODAL'),
         @($b,'m_wRoot.RemoveHandler\(this\);.*?RemoveModal\(m_wRoot\);.*?m_wRoot.RemoveFromHierarchy\(\);','CLEANUP'),
         @($c,'if \(!header\) return false;','OPT_IN'),
@@ -36,11 +36,9 @@ $mutations=@(
     @('a','|| AICF_ScenarioSetupHeader.Cast(target)','','NO_RECURSION'),
     @('a','target.m_eAICFMatchMode != mode','false','METADATA'),
     @('a','target.GetWorldResourceName() != GetWorldResourceName()','false','WORLD'),
-    @('a','if (!m_Header || m_Header.ResolvePreset(mode, difficulty).IsEmpty()) return false;','','ATOMIC_CHOICE'),
-    @('b','SCR_ScenarioUICommon.CanHost(mission)','true','NATIVE_PERMISSION'),
-    @('b','if (!PrepareLaunch(mission))','if (false)','NATIVE_LAUNCH'),
-    @('b','config.game.scenarioId = mission.Id();','config.game.scenarioId = "";','NATIVE_LAUNCH'),
-    @('b','m_aButtons[2].SetEnabled(mode != 0);','m_aButtons[2].SetEnabled(true);','STANDARD_SIDES'),
+    @('a','if (!m_Header || !GetVariant() || GetVariant().Resolve(mode, difficulty).IsEmpty()) return false;','','ATOMIC_CHOICE'),
+    @('b','AICF_ScenarioLaunch.Start(m_Selection, m_Entry, m_Config)','false','NATIVE_LAUNCH'),
+    @('b','m_aButtons[8].SetEnabled(mode != 0);','m_aButtons[8].SetEnabled(true);','STANDARD_SIDES'),
     @('b','RemoveModal(m_wRoot);','GetModal();','CLEANUP'),
     @('c','if (!header) return false;','if (!header) return true;','OPT_IN'),
     @('c','MissionHeader.ReadMissionHeader(scenario.Id())','scenario.GetHeader()','CATALOG_HEADER'),
