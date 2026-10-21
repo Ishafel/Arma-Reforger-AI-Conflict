@@ -16,7 +16,14 @@ ExpectedReadyVariants отражает фактически
 `-aicfTransitionProbe 1 -aicfProbeMap 0 -aicfProbeContent 2 -aicfProbeMode 1
 -aicfProbeDifficulty 0`: запускает production local Play, сверяет active header,
 ROSTER_READY и точный loaded addon graph. Четыре cases; затем RequestClose.
-Он не проверяет public Host. `Test-UniversalScenarioLog.ps1 [-Transition]`
+С `-aicfProbeHost 1` проверяет private Listen Host, HOST_REQUEST/MODE и
+RPL socket на 24021; внешний public Host не проверяет. Тестовые пароль/лимит/
+third-person сверяются на сохранённом request. Config/ServerInfo API не дали
+Listen readback: применение password/player limit/прочих settings engine —
+NOT RUN. Без Host-флага сохраняется Play. Analyzer определяет Host из CLI
+manifest, дополнительно требует HOST_REQUEST/MODE и RPL socket. После roster
+fixture закрывает клиент, lifecycle отменяет callbacks.
+`Test-UniversalScenarioLog.ps1 [-Transition]`
 требует полный stopped log, manifest/native exit и не пропускает SCRIPT/VM/fatal
 или собственные resource errors. Подробности — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
 `-aicfProbeTime 0..1440 -aicfProbeWeather 0..4` выбирают окружение перед настоящим

@@ -48,7 +48,8 @@ class AICF_UniversalScenarioProbe
 		WorkshopItem rhs = GetGame().GetBackendApi().GetWorkshop().FindItem("1337C0DE5DABBEEF");
 		if (rhs)
 		{
-			Revision revision = rhs.GetLocalRevision();
+			Revision revision = rhs.GetActiveRevision();
+			if (!revision) revision = rhs.GetLocalRevision();
 			Print(string.Format("[AICF][UNIVERSAL_RHS] local_revision=%1 ready=%2 enabled=%3 loaded=%4", revision != null, rhs.IsReadyToRun(), rhs.IsEnabled(), rhs.IsLoaded()));
 			if (revision) Print(string.Format("[AICF][UNIVERSAL_RHS_REVISION] downloaded=%1 corrupted=%2 version=%3", revision.IsDownloaded(), revision.IsCorrupted(), revision.GetVersion()));
 		}

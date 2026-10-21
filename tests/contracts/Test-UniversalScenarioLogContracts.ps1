@@ -50,6 +50,18 @@ try{
  Check wronggraph ($transitionLog.Replace('case=EXACT_GRAPH pass=1','case=EXACT_GRAPH pass=0')) $transitionManifest 0 1 CASE_EXACT_GRAPH -Transition
  Check noroster ($transitionLog.Replace('[ROSTER_READY]','')) $transitionManifest 0 1 COMPLETION -Transition
  Check lateerror ($transitionLog+"`nSCRIPT (E): after transition") $transitionManifest 0 1 SCRIPT_VM_FATAL -Transition
+ $hostArgs=$transitionArgs+@('-aicfProbeHost','1')
+ $hostManifest=@{arguments=$hostArgs}|ConvertTo-Json -Compress
+ $hostLog=$transitionLog.Replace('CLI Params: '+($transitionArgs -join ' '),'CLI Params: '+($hostArgs -join ' '))+"`nStarting RPL server, listening 0.0.0.0:24021`n[HOST_MODE] mode=2 listen=1`n[HOST_REQUEST] pass=1"
+ Check host $hostLog $hostManifest 0 0 '' -Transition
+ Check hostplay ($hostLog.Replace('[HOST_MODE] mode=2 listen=1','[HOST_MODE] mode=0 listen=0')) $hostManifest 0 1 HOST_LISTEN -Transition
+ Check hostnosocket ($hostLog.Replace('Starting RPL server, listening','Missing socket')) $hostManifest 0 1 HOST_LISTEN -Transition
+ Check hostrequest ($hostLog.Replace('HOST_REQUEST] pass=1','HOST_REQUEST] pass=0')) $hostManifest 0 1 HOST_REQUEST -Transition
+ Check hostmissing ($hostLog.Replace('[HOST_REQUEST] pass=1','')) $hostManifest 0 1 HOST_REQUEST -Transition
+ Check hosttimeout ($hostLog+"`n[TRANSITION_TIMEOUT]") $hostManifest 0 1 COMPLETION -Transition
+ Check hostlateerror ($hostLog+"`nSCRIPT (E): host late error") $hostManifest 0 1 SCRIPT_VM_FATAL -Transition
+ Check hostduplicate ($hostLog+"`n[HOST_MODE] mode=0 listen=0") $hostManifest 0 1 HOST_LISTEN -Transition
+ Check hostrequestduplicate ($hostLog+"`n[HOST_REQUEST] pass=0") $hostManifest 0 1 HOST_REQUEST -Transition
  $dedicatedArgs=$transitionArgs+@('-server',$target,'-MissionHeader',$target.Substring(18))
  $dedicatedManifest=@{arguments=$dedicatedArgs}|ConvertTo-Json -Compress
  $dedicatedLines=@($transitionLog -split "`n"|Where-Object {$_ -notmatch '^CLI Params|\[SCENARIO_LAUNCH\]|case=PREFLIGHT|case=ACCEPTED'})

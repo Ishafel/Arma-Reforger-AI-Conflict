@@ -9,6 +9,8 @@ if($log -notmatch 'Game destroyed\.'){$failures+='STOPPED_LOG'}
 if($log -match 'SCRIPT\s*\([EF]\)|ENGINE\s*\(F\)|SCRIPT EXCEPTION|NULL pointer|VM exception|Unhandled exception'){$failures+='SCRIPT_VM_FATAL'}
 if($log -match 'RESOURCES\s*\(E\):[^\r\n]*(?:Flags/|AICF_)'){$failures+='PROJECT_RESOURCE'}
 $argv=@($manifest.arguments)
+$hostProbe=[array]::IndexOf($argv,'-aicfProbeHost') -ge 0
+if($hostProbe -and (!$Transition -or $Dedicated)){throw 'Host requires frontend Transition mode'}
 $probe='-aicfUniversalProbe';if($Transition){$probe='-aicfTransitionProbe'}
 if(@($argv|Where-Object {$_ -ceq $probe}).Count -ne 1){$failures+='PROBE_CLI'}
 $cli=@([regex]::Matches($log,'CLI Params: ([^\r\n]+)'))
@@ -53,6 +55,15 @@ if($Transition){
  foreach($id in $required){if(@($loaded|Where-Object {$_.Groups[1].Value -ceq $id}).Count -ne 1){$failures+='LOADED_'+$id}}
  foreach($addon in $loaded){if($addon.Groups[2].Value -eq '0' -and $addon.Groups[1].Value -cnotin $required){$failures+='EXTRA_ADDON'}}
  if(@([regex]::Matches($log,'\[TRANSITION_DONE\] header=1 graph=1 roster=1')).Count -ne 1 -or $log -notmatch '\[ROSTER_READY\]' -or $log -match '\[TRANSITION_TIMEOUT\]'){$failures+='COMPLETION'}
+ if($hostProbe){
+  $hostIndex=[array]::IndexOf($argv,'-aicfProbeHost')
+  if($argv[$hostIndex+1] -cne '1' -or @($argv|Where-Object {$_ -ceq '-aicfProbeHost'}).Count -ne 1){throw 'Invalid Host manifest'}
+  if($cli.Count -ne 1 -or !$cli[0].Groups[1].Value.Contains('-aicfProbeHost 1')){$failures+='CLI_MISMATCH'}
+  $hostMode=@([regex]::Matches($log,'\[HOST_MODE\] mode=(\d+) listen=([01])'))
+  if($hostMode.Count -ne 1 -or $hostMode[0].Value -cne '[HOST_MODE] mode=2 listen=1' -or $log -notmatch 'Starting RPL server, listening .*:24021'){$failures+='HOST_LISTEN'}
+  $hostRequest=@([regex]::Matches($log,'\[HOST_REQUEST\] pass=([01])'))
+  if($hostRequest.Count -ne 1 -or $hostRequest[0].Groups[1].Value -ne '1'){$failures+='HOST_REQUEST'}
+ }
  $resumeIndex=[array]::IndexOf($argv,'-aicfProbeResumeAfter')
  if($resumeIndex -ge 0){
   $pause=@([regex]::Matches($log,'\[TRANSITION_PAUSE\] pass=([01]) real_ms=(\d+) simulation_ms=([\d.]+)'))

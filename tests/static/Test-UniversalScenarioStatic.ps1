@@ -8,6 +8,8 @@ $rules=@(
  @(0,'available.Find\(id\) >= 0.*?missing = id;.*?return false;','ALL_DEPENDENCIES'),
  @(0,'GetAvailableAddons\(available\);.*?!HasDependencies\(available, missing\)','LOCAL_AVAILABILITY'),
  @(0,'revision.IsDownloaded\(\) && !revision.IsCorrupted\(\) && item.IsReadyToRun\(\)','REVISION_READY'),
+ @(0,'Revision revision = item.GetActiveRevision\(\);\s*if \(revision\)\s*\{\s*if \(revision.IsDownloaded\(\) && !revision.IsCorrupted\(\)\) continue;\s*missing = id;\s*return false;\s*\}\s*revision = item.GetLocalRevision\(\);','ACTIVE_REVISION_READY'),
+ @(0,'array<ref DSMod> BuildHostMods\(\).*?Revision revision = item.GetActiveRevision\(\);\s*if \(!revision\) revision = item.GetLocalRevision\(\);\s*if \(revision\) mod.version = revision.GetVersion\(\);','HOST_ACTIVE_VERSION'),
  @(0,'foreach \(string id : m_aAddons\).*?result \+= id;','EXACT_GRAPH'),
  @(1,'!variant.IsAvailable\(missing\)\) return false;\s*m_iMap = mapIndex;\s*m_iContent = content;','ATOMIC_VARIANT'),
  @(2,'!CanStart\(selection, entry, config\)\) return false;','PREFLIGHT'),
@@ -18,6 +20,7 @@ $rules=@(
  @(2,'!GameProject.IsVanillaAddon\(id\) && variant.m_aAddons.Find\(id\) < 0\) return false;','FORCED_SUBSET'),
  @(2,'RequestScenarioChangeTransition\(resource,\s*, variant.GetAddonList\(\)\)','PLAY_GRAPH'),
  @(2,'config.game.mods = variant.BuildHostMods\(\);.*?RequestPublicServerTransition\(config\)','HOST_GRAPH'),
+ @(2,'accepted = GameStateTransitions.RequestPublicServerTransition\(config\);\s*if \(accepted\) GetGame\(\).RequestReload\(variant.m_aAddons\);\s*if \(!accepted\)','HOST_RELOAD_GRAPH'),
  @(2,'if \(!accepted\).*?scenarioId = oldScenario;.*?hostedScenarioModId = oldOwner;.*?mods = oldMods;','HOST_ROLLBACK'),
  @(2,'if \(!accepted\)\s*\{\s*AICF_ScenarioEnvironment.Clear\(\);\s*return false;\s*\}.*?AICF_CloseSetup\(\);.*?CloseAllMenus\(\)','CLOSE_AFTER_ACCEPT'),
  @(3,'OnFocus\(.*?Help\(index\).*?OnMouseEnter\(.*?Help\(index\)','HELP_INPUT'),
@@ -39,7 +42,8 @@ foreach($rule in $rules){
  if($changed -match $pattern){$failures+='MUTATION_'+$rule[2]}
  $mutations++
 }
-if(($sources[0..4] -join '') -match 'RequestReload\(|Rpc\(|BumpMe\(|SpawnEntity|SetAICommanderMode'){$failures+='PRELAUNCH_ONLY'}
+if(($sources[0..4] -join '') -match 'Rpc\(|BumpMe\(|SpawnEntity|SetAICommanderMode'){$failures+='PRELAUNCH_ONLY'}
+if(@([regex]::Matches(($sources[0..4] -join ''),'RequestReload\(')).Count -ne 1){$failures+='HOST_RELOAD_ONLY'}
 if($sources[0] -match 'Arland|Everon|Missions/'){$failures+='INTEGRATION_BOUNDARY'}
 & (Join-Path $RepositoryRoot 'tools/Update-AICFScenarioRegistry.ps1') -RepositoryRoot $RepositoryRoot -Check
 if($failures.Count){$failures;exit 1}

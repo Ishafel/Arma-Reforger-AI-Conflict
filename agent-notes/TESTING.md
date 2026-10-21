@@ -1,5 +1,112 @@
 # Проверки и baseline
 
+## Host: WORLD_LOAD_ERROR — 2026-10-21
+
+Продолжение PR #65 в `codex/scenario-time-weather`, baseline HEAD `84bde7a`.
+Пользовательский Host North Everon / WCS + RHS / Co-op USSR / Medium
+принимал запрос, затем native reload оставлял только vanilla core/data.
+Core, integrations и целевой MissionHeader исчезали: WORLD_LOAD_ERROR.
+То же воспроизведено для Arland Vanilla. Прежние четыре перехода проверяли
+Play; подтверждением Host они не являлись.
+
+Исправлены `UI/AICF_ScenarioLaunch.c` и `Config/AICF_ScenarioRegistry.c`:
+после принятого Public transition передаётся точный граф в RequestReload,
+в Host mods записываются downloaded active версии. Проверка downloaded/
+corrupted применяется и к Workshop active revision. Native IsReadyToRun
+зависит также от online/selected metadata: целый WCS Attachments 8.4.1
+возвращал false, хотя Downloaded=true/Corrupted=false. Для exact downloaded
+графа этот selected gate не подходит; source local pseudo-revision сохраняет
+старый readiness gate. Полное наличие каждого dependency ID проверяется отдельно.
+Deprecated RequestReload — вынужденное исключение для Public API 1.8.0.13,
+где нет addonList; Play сохраняет современный RequestScenarioChangeTransition.
+Контракт и ограничения — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+
+Evidence: `.codex-runtime/scenario-host-20261021/`. Полные native logs,
+argv/manifest, exits, Workbench logs и все неуспешные прогоны сохранены.
+Изменены также transition/menu fixtures, static/log contracts, README и
+scenario/testing/fixture заметки. Fixtures отсутствуют в production.
+
+Команды и verdict:
+
+- До production правки: `Invoke-AICFChecks.ps1 -Name
+  Test-ScenarioSetupStatic.ps1,Test-ScenarioEnvironmentStatic.ps1,
+  Test-UniversalScenarioStatic.ps1,Test-UniversalScenarioLogContracts.ps1
+  -EvidenceRoot <evidence>/baseline-checks` — **4/4 PASS/0**.
+- После: те же domain checks, финальные Universal static/log contracts —
+  **PASS/0**, 27 guarded mutations и 50 positive/negative log cases.
+  Каталоги `fixed-domain-final/`, `fixed-host-contracts/`.
+- `Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/fixed-offline` —
+  **77/77 PASS/0**, Static 33/33, Contracts 44/44, FAIL/missing 0;
+  19,4 минуты. Exact set проверен в `offline-verdict.json`; полные команды
+  каждого audit находятся в summary.json. Общий прогон начат до последнего
+  уточнения Host fixture; затронутые Universal gates выполнены на финальных
+  файлах в конце прогона и дополнительно отдельно.
+- `<evidence>/Compile.ps1 -Label host-production-final-stock -Variant Stock`,
+  `-Label host-production-final-wcsrhs -Variant EveronWCSRHS` и
+  `-SourceRoot <evidence>/fixture-stage -Label host-fixture-verified
+  -Variant EveronWCSRHS` — **3/3 PASS/0**, Script validation successful,
+  SCRIPT E/F, ENGINE F, VM/null 0. Полные argv и stdout сохранены;
+  obsolete warning RequestReload ожидаем и документирован.
+- `<evidence>/RunIsolated.ps1 -Label host-verified-arland -Probe Transition
+  -Map 0 -Content 0 -Mode 2 -Difficulty 0 -Time 817 -Weather 4 -ListenHost`:
+  Arland Vanilla, Co-op USSR Easy, 13:37/Rainy — **PASS/0**, 2 addons.
+- `<evidence>/RunFrontend.ps1 -Label host-verified-everon-rhs -Probe Transition
+  -Map 1 -Content 1 -Mode 1 -Difficulty 2 -Time 720 -Weather 2 -ListenHost`:
+  Everon RHS, Co-op US Hard, 12:00/Cloudy — **PASS/0**, 8 addons.
+- Тот же helper, `-Label host-verified-north-wcsrhs -Map 2 -Content 2
+  -Mode 2 -Difficulty 1 -Time 1439 -Weather 1 -ListenHost`:
+  North Everon WCS + RHS, Co-op USSR Medium, 23:59/Clear — **PASS/0**, 28 addons.
+- `RunFrontend.ps1 -Label play-verified-everon -Probe Transition -Map 1
+  -Content 0 -Mode 0 -Difficulty 1 -Time 0 -Weather 3`:
+  контроль Play Everon Vanilla Standard Medium, 00:00/Overcast — **PASS/0**, 3 addons.
+- Для каждого из четырёх запусков `Test-UniversalScenarioLog.ps1 -Transition
+  -LogPath <полный остановленный console.log> -ManifestPath <label>-manifest.json
+  -NativeExitPath <label>-exit.txt` — **4/4 PASS/0**. Каждый имеет четыре
+  transition cases, exact loaded graph, ROSTER_READY и фактическое окружение;
+  Host дополнительно имеет Listen mode, socket на 24021 и сохранённый request.
+  Итог: `runtime-final-verdict.json`, `<label>-audit.txt`, полные `<label>-logs/`.
+- `production-stage-integrity.json`: все **435 tracked addon artifacts**
+  совпадают с tested stage по SHA-256. Fixtures добавлены только в stage.
+
+В полных runtime logs SCRIPT/VM/fatal 0, но остаются stock/vendor
+WORLD/GUI/Hierarchy/navmesh/resource и shutdown RPL diagnostics. Они сохранены
+в `<label>-all-errors.txt`, `<label>-diagnostics.json` и log inventories;
+«0 любых engine errors» не заявляется.
+
+Сохранённые FAIL: исходный source Host и отрицательные controls теряли граф;
+native MissionWorkshopItem.Host, JSON Pack, addon flags/enable, installed-copy,
+парные transition calls и другие изолированные варианты ошибку не устранили.
+Первая расширенная fixture имела неверного владельца SetDefaultIpPort,
+исправленного на BackendApi; compile FAIL и последующие PASS сохранены отдельно.
+Попытки читать GetRunningDSConfig, ServerLobbyApi.GetServerConfig и ServerInfo
+в Listen дали false/null, поэтому первоначальные HOST_CONFIG runs — **FAIL**,
+не PASS. Эти API не годятся как oracle в данном окружении; проверка request
+не выдаётся за доказательство применения engine settings. Ранние ошибки имени
+параметра runner и safe.directory — инфраструктурные, результаты не подменены.
+
+**Отклонённые критерии / NOT RUN:** ручной путь Host через UI, физический ввод,
+внешний вид, публичная регистрация/подключение другого игрока/JIP; применение
+password/admin password, maxPlayers, visibility и third-person самим engine.
+Terminal-only запрещает GUI automation, доступные config getters не дают
+Listen config; требуется игрок: создать Host, проверить параметры и подключение
+второго клиента с правильным/неправильным паролем. Request и socket проверены,
+остальное остаётся недоказанным. Также NOT RUN: packaged Workshop, FPS benchmark,
+полная per-map матрица, новый найм RHS/WCS, сохранение кампании и soak.
+PR остаётся draft, issue #46 открытым; merge и Workshop publish не выполняются.
+
+Пользователю открыт production frontend через `RunManualFrontend.ps1`:
+canonical Client DryRun graph без `-client`, полный addon search path,
+без fixture/автоперехода. Manifest — `manual-fixed-client-manifest.json`.
+Главное меню подтверждено native log; ручные действия игрока не автоматизируются.
+Тестовые процессы завершены. Известные временные `fixture-stage`,
+`packaged-control`, `diagnostic-libs` архивированы с проверкой всех 567 файлов
+и SHA-256, затем удалены (`temporary-archives.json`). Все 40 собственных
+test profiles также сохранены целиком в `profile-archives/`, проверены и удалены;
+их полные logs дополнительно лежат отдельно. Junction тестового профиля удалён
+без рекурсии, target установленных модов сохранён. Ручной frontend пользователя
+исключён из cleanup и оставлен открытым. Остальные helper-команды сохраняются
+в evidence для воспроизведения, а не в production/Git.
+
 ## Draft PR #65: полный offline после ползунка — 2026-10-20
 
 По запросу владельца опубликован [draft PR #65](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/65)

@@ -52,10 +52,14 @@ integration нужны профиль, thin headers и запись катало
 
 `AICF_ScenarioVariant.Resolve` проверяет bounds, девять targets и owner в графе.
 `HasDependencies` требует каждый ID. `IsAvailable` использует native
-`GameProject.GetAvailableAddons`; при наличии Workshop local revision требует
-Downloaded, отсутствие corruption и IsReadyToRun. Source addon может иметь
-placeholder WorkshopItem без revision: тогда native GameProject подтверждает
-локальное наличие. Пустой scan не считается наличием модов.
+`GameProject.GetAvailableAddons`; при наличии Workshop active revision требует
+Downloaded и отсутствие corruption. Точная active version передаётся Host.
+`IsReadyToRun` зависит также от online/selected metadata: у целого offline
+WCS Attachments 8.4.1 он вернул false при Downloaded=true/Corrupted=false.
+Этот selected-revision gate применяется только к source local pseudo-revision,
+как прежде. Полный локальный граф независимо требует каждый ID из GameProject.
+Source placeholder WorkshopItem без revision подтверждается GameProject.
+Пустой scan не считается наличием модов.
 
 `AICF_ScenarioSetupSelection` хранит карту/контент/режим/сложность и независимые
 `m_iStartMinutes` (0..1439, sentinel 1440 = random) и weather index 0..4.
@@ -79,9 +83,20 @@ native CanPlay/CanHost входного MissionWorkshopItem, hosting platform ga
 Play передаёт leaf resource и **точный** addon CSV в штатный
 `GameStateTransitions.RequestScenarioChangeTransition`, используемый native
 `PlayGameConfig`. Host передаёт SCR_DSConfig в `RequestPublicServerTransition`:
-меняет только scenarioId, hostedScenarioModId и mods с локальными версиями,
+меняет только scenarioId, hostedScenarioModId и mods с загруженными active версиями
+(local pseudo-revision используется только как fallback для source),
 при отказе возвращает прежние значения. Network/password/player limits и
 gameProperties сохраняются. Setup и native menus закрываются после принятия.
+
+В API 1.8.0.13 `RequestPublicServerTransition` не принимает addonList. Сразу после
+принятия Host-запроса, в том же кадре, вызывается `GetGame().RequestReload`
+с точным `variant.m_aAddons`. Это заполняет граф pending Host-перехода,
+сохраняя Listen mode и его конфигурацию. Без этого source Host перезагружался
+с двумя vanilla addons, терял Core/integrations и завершался WORLD_LOAD_ERROR.
+`RequestReload` помечен obsolete («Pass addon GUIDs to the transition request
+directly»); у Public API такого аргумента пока нет. Это локальное исключение
+для Host, не замена современного Play-перехода. При отклонённом запросе reload
+не вызывается. Workshop Enable и изменение установленных файлов не нужны.
 
 Старый прототип вызывал leaf MissionWorkshopItem.Play/Host. Универсальному
 варианту это не подходит: header незагруженной интеграции ещё не обязан быть
@@ -181,6 +196,15 @@ BaseContainer adapter, callbacks Remove/Insert и override OnGameStart для
   Дополнительные `-aicfProbeTime 817 -aicfProbeWeather 4` (13:37, дождь) проверяют перенос через
   reload, фактическое начальное окружение, повтор и native save/load priority.
   В этом fixture-only режиме Welcome pause снимается через world API.
+  `-aicfProbeHost 1` запускает production Host вместо Play: требует Listen mode,
+  реальный RPL socket на заданном нестандартном порту 24021 и точный loaded graph.
+  Сохранение name, player limit, password/admin password, visibility, BattlEye
+  и third-person проверяется на переданном request, не выдаётся за readback engine.
+  `GetRunningDSConfig` в этом Listen возвращает false, `ServerLobbyApi.GetServerConfig`
+  и `GetGame().GetServerInfo()` — null. Первые попытки fixture с такими oracle
+  сохранены как FAIL; заменить ими проверку settings нельзя. Фактическая
+  авторизация паролем, применение лимита и прочих settings — NOT RUN.
+  Fixture задаёт частную сессию и закрывает её после readback.
 - `Test-ScenarioEnvironmentStatic.ps1`: guarded mutations для authority,
   target/TTL/one-shot/schema, rejected transition cleanup, native owner,
   минутной точности, binding ползунка и независимого UI.
@@ -203,8 +227,8 @@ Probes находятся только в isolated stage Core/UI как AICF_Z*.
 сохраняются; счётчик readbacks не отменяет script/resource ошибки всего лога.
 
 **NOT RUN:** ручные mouse/keyboard/controller input, внешний вид на разных
-разрешениях, фактический public Host, packaged Workshop build, длительный soak.
+разрешениях, внешний public Host с другим игроком/JIP, packaged Workshop build, длительный soak.
 Terminal-only правила запрещают GUI/Host UI automation. Игроку нужно открыть
 AI Conflict, пройти выбор/отмену и запустить Host. Native widget readbacks и
-local Play не доказывают эти действия. Свежие результаты и неуспешные
+local Play и программный private Host не доказывают эти действия. Свежие результаты и неуспешные
 промежуточные прогоны — [TESTING.md](TESTING.md).

@@ -64,6 +64,9 @@ class AICF_ScenarioLaunch
 			config.game.hostedScenarioModId = variant.m_sOwner;
 			config.game.mods = variant.BuildHostMods();
 			accepted = GameStateTransitions.RequestPublicServerTransition(config);
+			// Public transition не принимает addonList. В том же кадре передаём граф
+			// pending Host-переходу; иначе engine перезагружает только vanilla.
+			if (accepted) GetGame().RequestReload(variant.m_aAddons);
 			if (!accepted)
 			{
 				config.game.scenarioId = oldScenario;

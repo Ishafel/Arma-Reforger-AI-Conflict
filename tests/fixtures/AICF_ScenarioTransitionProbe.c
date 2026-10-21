@@ -1,13 +1,57 @@
 // Isolated frontend only. Invokes production launch without GUI input.
 class AICF_ScenarioTransitionProbe
 {
+	static SCR_DSConfig HostConfig()
+	{
+		if (!System.IsCLIParam("aicfProbeHost")) return null;
+		SCR_DSConfig config = new SCR_DSConfig();
+		GetGame().GetBackendApi().SetDefaultIpPort(config);
+		config.bindPort = 24021;
+		config.publicPort = 24021;
+		config.game.name = "AICF Host terminal probe";
+		config.game.password = "fixture-only";
+		config.game.passwordAdmin = "fixture-admin";
+		config.game.maxPlayers = 4;
+		config.game.visible = false;
+		config.game.gameProperties.battlEye = false;
+		SCR_DSGameProperties.Cast(config.game.gameProperties).disableThirdPerson = true;
+		return config;
+	}
+
+	static void ReadHostConfig(AICF_ScenarioSetupSelection selection)
+	{
+		if (!System.IsCLIParam("aicfProbeHost")) return;
+		bool listen = RplSession.Mode() == RplMode.Listen;
+		Print(string.Format("[AICF][HOST_MODE] mode=%1 listen=%2", RplSession.Mode(), listen));
+		// GetRunningDSConfig, ServerLobbyApi и GetServerInfo здесь не дают config.
+		// Не выдаём request readback за подтверждение engine password/player limit.
+	}
+
 	static AICF_ScenarioSetupSelection Selection()
 	{
 		AICF_ScenarioSetupHeader header = AICF_ScenarioSetupHeader.Cast(MissionHeader.ReadMissionHeader("{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf"));
 		AICF_ScenarioSetupSelection selection = new AICF_ScenarioSetupSelection(header);
 		string mapIndex, content, mode, difficulty;
 		if (!System.GetCLIParam("aicfProbeMap", mapIndex) || !System.GetCLIParam("aicfProbeContent", content) || !System.GetCLIParam("aicfProbeMode", mode) || !System.GetCLIParam("aicfProbeDifficulty", difficulty)) return null;
-		if (!selection.SelectVariant(mapIndex.ToInt(), content.ToInt()) || !selection.Select(mode.ToInt(), difficulty.ToInt())) return null;
+		if (!selection.SelectVariant(mapIndex.ToInt(), content.ToInt()))
+		{
+			AICF_ScenarioVariant unavailable = selection.GetRegistry().Find(mapIndex.ToInt(), content.ToInt());
+			string missing;
+			if (unavailable)
+			{
+				unavailable.IsAvailable(missing);
+				Print(string.Format("[AICF][TRANSITION_UNAVAILABLE] variant=%1 missing=%2", unavailable.m_sKey, missing));
+				WorkshopItem item = GetGame().GetBackendApi().GetWorkshop().FindItem(missing);
+				if (item)
+				{
+					Revision revision = item.GetActiveRevision();
+					Print(string.Format("[AICF][TRANSITION_REVISION] active=%1 local=%2 ready=%3", revision != null, item.GetLocalRevision() != null, item.IsReadyToRun()));
+					if (revision) Print(string.Format("[AICF][TRANSITION_REVISION_STATE] version=%1 downloaded=%2 corrupted=%3", revision.GetVersion(), revision.IsDownloaded(), revision.IsCorrupted()));
+				}
+			}
+			return null;
+		}
+		if (!selection.Select(mode.ToInt(), difficulty.ToInt())) return null;
 		string time, weather;
 		if (System.GetCLIParam("aicfProbeTime", time) && System.GetCLIParam("aicfProbeWeather", weather))
 			if (!selection.SelectEnvironment(time.ToInt(), weather.ToInt())) return null;
@@ -33,10 +77,20 @@ class AICF_ScenarioTransitionProbe
 				Print(string.Format("[AICF][TRANSITION_PROJECT] class=%1 guid=%2 count=%3", settings.GetClassName(), guid, settings.GetNumVars()));
 			}
 		}
-		bool ready = AICF_ScenarioLaunch.CanStart(selection, entry);
+		SCR_DSConfig config = HostConfig();
+		bool ready = AICF_ScenarioLaunch.CanStart(selection, entry, config);
 		Print(string.Format("[AICF][TRANSITION_CASE] case=PREFLIGHT pass=%1", ready));
-		bool accepted = AICF_ScenarioLaunch.Start(selection, entry);
+		bool accepted = AICF_ScenarioLaunch.Start(selection, entry, config);
 		Print(string.Format("[AICF][TRANSITION_CASE] case=ACCEPTED pass=%1", accepted));
+		if (config)
+		{
+			SCR_DSConfig expectedConfig = HostConfig();
+			bool retained = config.bindPort == expectedConfig.bindPort && config.publicPort == expectedConfig.publicPort;
+			retained = retained && config.game.name == expectedConfig.game.name && config.game.maxPlayers == expectedConfig.game.maxPlayers;
+			retained = retained && config.game.password == expectedConfig.game.password && config.game.passwordAdmin == expectedConfig.game.passwordAdmin;
+			retained = retained && !config.game.visible && !config.game.gameProperties.battlEye && SCR_DSGameProperties.Cast(config.game.gameProperties).disableThirdPerson;
+			Print(string.Format("[AICF][HOST_REQUEST] pass=%1", retained));
+		}
 		if (!accepted) GetGame().RequestClose();
 	}
 	static void Close() { GetGame().RequestClose(); }
@@ -164,6 +218,7 @@ modded class AICF_MatchController
 			}
 		}
 		Print(string.Format("[AICF][TRANSITION_CASE] case=EXACT_GRAPH pass=%1", graph));
+		AICF_ScenarioTransitionProbe.ReadHostConfig(selection);
 		Print(string.Format("[AICF][TRANSITION_DONE] header=%1 graph=%2 roster=1", target, graph));
 		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.Launch);
 		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.Timeout);

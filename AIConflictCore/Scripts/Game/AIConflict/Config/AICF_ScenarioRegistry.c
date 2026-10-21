@@ -43,7 +43,17 @@ class AICF_ScenarioVariant
 			WorkshopItem item = workshop.FindItem(id);
 			// Source projects have no WorkshopItem; their presence was checked above.
 			if (!item) continue;
-			Revision revision = item.GetLocalRevision();
+			Revision revision = item.GetActiveRevision();
+			if (revision)
+			{
+				// Запускаем именно downloaded revision, не selected backend revision.
+				// IsReadyToRun также зависит от online/selected metadata и может быть
+				// false для целого offline пакета; полный локальный граф проверен выше.
+				if (revision.IsDownloaded() && !revision.IsCorrupted()) continue;
+				missing = id;
+				return false;
+			}
+			revision = item.GetLocalRevision();
 			// CLI/source roots can have a placeholder item with no backend revision.
 			// In that case native GameProject availability is the local evidence.
 			if (!revision) continue;
@@ -74,7 +84,12 @@ class AICF_ScenarioVariant
 			mod.modId = id;
 			mod.name = GameProject.GetAddonTitle(id);
 			WorkshopItem item = GetGame().GetBackendApi().GetWorkshop().FindItem(id);
-			if (item && item.GetLocalRevision()) mod.version = item.GetLocalRevision().GetVersion();
+			if (item)
+			{
+				Revision revision = item.GetActiveRevision();
+				if (!revision) revision = item.GetLocalRevision();
+				if (revision) mod.version = revision.GetVersion();
+			}
 			mods.Insert(mod);
 		}
 		return mods;
