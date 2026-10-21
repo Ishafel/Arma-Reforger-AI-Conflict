@@ -1,5 +1,115 @@
 # Проверки и baseline
 
+## Полный автономный прогон — 21–22.10.2026
+
+Продолжение PR #65, проверенный production HEAD `983931d`, Game/Server/Tools
+`1.8.0.13`. Игрок не участвовал, GUI automation не применялась. Gameplay,
+resources, tracked fixtures и анализаторы не менялись; этот commit добавляет
+только отчёт. Evidence: `.codex-runtime/full-autonomous-20261021/REPORT.md`.
+
+**Outcome: общий runtime gate FAIL, PR остаётся draft.** Из 73 итоговых runtime
+gates — **72 PASS / 1 FAIL**. Успешные проверки не устраняют найденный native
+assertion в длительном `EveronRHS / Standard / Medium`; исправление не заявляется.
+
+### Найденный blocker
+
+На примерно 12-й минуте Everon RHS остановился на `Assertion failed`,
+`enf_entity.cpp:280`: `GenericEntity` без parent, объект `RHS_M4A1_LOWER.xob`,
+координаты `4921.987305 -34011.648438 9185.187500`, причина
+`Entity out of world bounds`. Последний controller `t_ms=720278`.
+В `crash.log` сохранён native stack. SCRIPT/VM ошибок перед assert нет;
+все 32 потока ожидали, CPU за 5 s не изменился. Это реальный FAIL, не
+исключённый baseline и не доказанная регрессия Host-исправления.
+
+После сохранения process identity и SHA-256 полных открытых logs остановлен
+только точный assertion-блокированный процесс. Native exit **-1**, штатных
+`COOP_DONE`/`Game destroyed.` нет; strict audit закономерно отклонил run.
+Оставшаяся матрица выполнена. Причина выпадения RHS entity под мир и владелец
+её lifecycle не установлены; speculative delete/teleport по неизвестной identity
+не добавлялся. Для следующей терминальной диагностики нужны воспроизведение
+и наблюдение конкретных RHS M4A1 parts. Другой чистый run этот FAIL не закрывает.
+
+Evidence: `EveronRHS-Standard-server-verdict.json`, `everon-rhs-stall-process.json`,
+`everon-rhs-assert-*.json` и `archives/profile-EveronRHS-Standard-server.zip`
+с полными console/script/error/crash logs. PR нельзя переводить в ready,
+пока причина и обязательный runtime gate не исправлены/подтверждены.
+
+### Команды и результаты
+
+| Gate | Команда/матрица | Verdict |
+|---|---|---|
+| Полный offline | `tools/Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/offline` | **77/77 PASS/0**, Static 33 + Contracts 44, missing/FAIL 0, 24.9 min |
+| Workbench | `Compile.ps1` → `ArmaReforgerWorkbenchSteamDiag.exe -noThrow -wbsilent ... -wbModule=ScriptEditor -run -validate` | **13/13 финальных PASS/0**: 6 production graphs, 6 isolated graphs, отдельный barracks stage; полные logs без SCRIPT/VM/fatal |
+| Серверы | `ServerLane.ps1 -Lane 0\|1\|2 -Count 3` → `Run.ps1` → canonical `Start-AICFRuntime.ps1 -Role Server` | 9 Variant × Standard/CoopUS/CoopUSSR = **27 runs, 26 PASS / 1 FAIL**; 3 параллельные сессии, свежие profiles, ports 2500–2526 |
+| Сетевые пары | `PairServer.ps1` + `PairClient.ps1` → canonical launcher, отдельные сессии, ports 2600–2607 | **8 server + 8 client PASS/0**, exact server CLI/live PID/ROSTER_READY до подключения, manifests сохранены |
+| Frontend | `FrontendMatrix.ps1`, `RecoverPausePlan.ps1` → `RunFrontend.ps1`, canonical Client DryRun argv без `-client` | **30/30 итоговых PASS/0**: 18 private Listen Host, 9 Play, дополнительный Play с pause, catalog и universal menu |
+| Итоговые полные логи | `Finalize.ps1` → `Audit.ps1` → `Test-CoopScenarioLog.ps1`, `Test-InstigatorContextLog.ps1`; frontend strict audits | **FAIL/1**, только EveronRHS assertion; `RuntimeMetrics.ps1` также FAIL/1 из-за аварийного run |
+
+В четырёх stock сетевых парах US/USSR × Standard/Co-op проверены native заказ
+Guard, оплата, найм **4/4**, серверный ownership, лимит 4 и отказ неоплаченным.
+В четырёх RHS/WCS парах после readiness проверены native player spawn, JIP
+snapshot режима и отказ opponent/FIA affiliation; Instigator player context —
+**20/20** в каждой. Это локальные dedicated/client пары, не public Listen Host
+и не несколько людей. Native header matrix — **54/54 PASS** в North WCS graph.
+Два Co-op runs подтвердили подготовленную территориальную победу US/USSR;
+естественный бой до победы этим не проверен. Сложности распределены между
+режимами/картами; это не 81 отдельных полных матча.
+
+Все 18 Host загрузили точный выбранный addon graph и active header, создали
+roster и применили окружение; native RPL listener подтверждён на 24021.
+Catalog — **15/15**, universal native widgets/plans — **46/46**, включая
+7200 fixed minute/weather combinations и 5 random choices. Физический ввод
+и внешний вид меню этим не доказаны.
+
+Standard наблюдался по `System.GetTickCount` от readiness; 8 успешных runs:
+Stock **900837**, Everon **900946**, North **900719**, RHS **900772**,
+North RHS **900961**, Arland WCS **900056**, Everon WCS **900793**,
+North WCS **900453 ms**. Everon RHS не завершил 900000 ms и остался FAIL.
+Infantry recruitment и native строительство реально продолжались; counters
+и все engine/resource diagnostics находятся в `runtime-metrics.json` и
+`runtime-all-error-groups.json`, не подменяют профильные функциональные gates.
+
+### Сохранённые ошибки подготовки и целостность
+
+- Первый isolated compile FAIL: barracks extension оказался раньше base Co-op
+  probe по имени файла. Base скопирован под исходным именем, barracks/support
+  вынесены в отдельный stage; затем все 13 compile gates прошли. Production
+  не менялся, первоначальные compile logs сохранены.
+- Первый `frontend-EveronRHS-2` ошибочно совмещал Listen Host с 35 s simulation
+  pause. World остался unpaused: **34060 ms** simulation за **35752 ms** real;
+  часы штатно перешли через полночь за допуск немедленного readback. Исходный
+  strict FAIL сохранён. Тот же Host без pause прошёл, отдельный local Play
+  подтвердил **35105 ms real / 0 ms simulation**, затем roster и **13:37/Cloudy**.
+  Assertions и analyzer не ослаблялись.
+- Только в isolated Co-op fixture watchdog увеличен `240000 → 1200000 ms`,
+  чтобы разрешить `900000 ms` observation. Все проверяемые условия сохранены.
+  Production **435/435** artifacts совпали по SHA-256 в обоих stages;
+  `final-source-integrity.json` содержит 870 сравнений.
+
+`final-summary.json`, `runtime-final-verdicts.json`, `soak-verdicts.json`,
+`offline-verdict.json`, `workbench-final-verdicts.json`, полный `REPORT.md`,
+manifests/argv/commands/exits/audits и log inventories сохранены в evidence.
+**76** profiles/stages архивированы с проверкой SHA-256 каждого ZIP entry,
+затем адресно удалены; `archives/index.json` хранит прежний путь и archive hash.
+Полные Workbench logs остаются отдельно. Подтверждено отсутствие своих
+native game/tool процессов; crash watcher остановлен. Исходные FAIL не удалены.
+В 73 итоговых logs SCRIPT/VM и `[AICF]...[ERROR]` — 0, native assertion — 1;
+это не общий error-free PASS: WORLD/GUI/resource/navmesh/shutdown diagnostics
+движка и контента сохранены без исключения из evidence.
+
+**NOT RUN:** ручные mouse/keyboard/controller действия, внешний вид и реальный
+Deployment UI — terminal-only правила запрещают GUI automation. Для отдельной
+ручной проверки нужны открытие AI Conflict, выбор/отмена, drag/focus slider,
+random и Play/Host; в этот прогон человек не привлекался. Не доказаны public
+listing, второй участник private/public Listen Host и применение engine
+password/player limit/third-person: request fields проверены, доступные Listen
+config APIs возвращают false/null. Полный death/respawn/save-file restore,
+чистая установка/packaged Workshop, каждый из 81 вариантов и окружение на каждой
+карте отдельным runtime, естественный матч до победы и изолированный loading FPS
+benchmark — NOT RUN. Совместный запуск не является одиночным performance test.
+Прежние NOT RUN по dedicated/client JIP и soak заменены только конкретными
+результатами выше; не распространяются на public Host или Workshop.
+
 ## Host: WORLD_LOAD_ERROR — 2026-10-21
 
 Продолжение PR #65 в `codex/scenario-time-weather`, baseline HEAD `84bde7a`.
