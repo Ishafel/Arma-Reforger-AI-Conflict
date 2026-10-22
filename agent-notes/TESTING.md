@@ -1,5 +1,87 @@
 # Проверки и baseline
 
+## Полный повторный прогон PR #65 после merge — 2026-10-22
+
+Проверен source `7004932` в `codex/scenario-time-weather`, после merge main
+`aada6ed`. Game/Server/Workbench — 1.8.0.13. Production, tracked fixtures и
+аудиторы не менялись; этот commit добавляет только отчёт. Основной checkout
+другой задачи сохранён. Терминальные checks использовали отдельный checkout
+и временный `subst X:`; GUI automation и ручное участие не использовались.
+Evidence: `.codex-runtime/pr65-full-retest-20261022/REPORT.md`.
+
+**Outcome текущего прогона: FAIL.** Runtime: **74 PASS / 1 FAIL из 75**.
+Штатное завершение Game destroyed: **74/75**. Полные runtime logs:
+SCRIPT/VM/fatal **0**, native assertion **1**, AICF ERROR **0**.
+Остальные engine/resource/navmesh/backend/shutdown diagnostics сохранены в
+`runtime-all-error-groups.json`; общий ноль любых engine errors не заявляется.
+
+Найденные FAIL текущего прогона не скрываются и не заменяются чистыми соседними
+запусками. PR остаётся draft; причины и все failed profiles/crash stacks сохранены.
+
+- `SERVER_EveronNorthRHS-Standard`
+- `RUNTIME_EveronNorthRHS-Standard-server`
+- `SOAK_EveronNorthRHS-Standard`
+- `FULL_RUNTIME_METRICS`
+
+Сохранённые native причины до адресной остановки по process identity:
+
+- `29588-232918`: Reason: Entity out of world bounds. Type 'GenericEntity', Name '', Parent '', Object 'ak74m_bebra.xob' Coords 4937.013672 -34012.394531 11559.812500
+
+`EveronNorthRHS / Standard / Hard`, `Assertion failed`, `enf_entity.cpp:280`,
+23:29:15 MSK; последний controller `t_ms=746390`, примерно 12 минут.
+Повтор класса out-of-bounds не устанавливает причину или владельца lifecycle.
+Native exits -1 после точной остановки assertion-блокированного процесса остаются FAIL; исходные crash.log и native stack сохранены.
+
+### Команды и свежие результаты
+
+- `tools/Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/offline`: **78/78 PASS/0**, runner exit в offline-exit.txt. Полный набор без исключений, Static 33 + Contracts 45.
+- `CompileMatrix.ps1` → `Compile.ps1` → terminal Workbench `-noThrow -wbsilent ... -wbModule=ScriptEditor -run -validate`: **15/15 PASS/0**; шесть production graphs, шесть основных fixture graphs, barracks graph и два equipment stages. Точные argv/native exits и полные logs сохранены.
+- `ServerLane.ps1 -Lane 0|1|2 -Count 3` → `Run.ps1` → canonical `Start-AICFRuntime.ps1 -Role Server`: **27 cases**, 9 Variant × Standard/CoopUS/CoopUSSR; fresh profiles, отдельные реальные listeners 2500–2526. Сложности распределены между cases; это не 81 полных матча.
+- Standard soak: **8/9** выдержали >=900000 ms от roster readiness. Длительности каждого run ниже; это длительный server gate, стабильность всех retail путей этим не доказана.
+- `PairServer.ps1` + `PairClient.ps1`: **8 server/client pairs**, canonical CLI/live PID/ROSTER_READY barrier до подключения, exact manifests. Stock US/USSR × Standard/Co-op: native покупка Guard, оплата, найм 4/4, ownership/limit/отказ неоплаченным. Четыре RHS/WCS пары: player spawn после readiness, mode/JIP snapshot, Welcome и отрицательные faction intents; Instigator player context.
+- `FrontendMatrix.ps1` → `RunFrontend.ps1`: **30 native frontend cases**, 18 private Listen Host, 9 Play, дополнительный local Play с 35 s pause, catalog и universal menu. Canonical Client DryRun argv без -client, точные addon graph/header/environment, native widgets/plans и RPL listener; mouse/keyboard input не имитируется.
+- `EquipmentMatrix.ps1` → canonical server Arland WCS+RHS Medium Standard: отдельные FailureProbe и CleanupProbe без Build wrapper, strict full stopped-log audits в equipment-*-audit.json. Числа native checks и weak entity readbacks сохранены без замены oracle.
+- `FinalizeExtended.ps1` → base `Finalize.ps1`, профильные Co-op/Instigator/frontend audits и `RuntimeMetrics.ps1`: 75 итоговых runtime verdicts, 15 Workbench verdicts, full-log inventories и SHA-256, без исключения найденных ошибок.
+
+Equipment FailureProbe — **79 checks / 1209 weak entities / alive=0**,
+CleanupProbe — **20 plans / 938 weak entities / alive=0**, оба **PASS/0**.
+Catalog — **15/15**, universal menu — **46/46**, native header matrix —
+**54/54**; это не ручная проверка внешнего вида или полного боя всех вариантов.
+
+| Standard Variant | Difficulty | Завершённое наблюдение, ms |
+|---|---|---:|
+| Stock | Easy | 900663 |
+| Everon | Medium | 900682 |
+| EveronNorth | Hard | 900222 |
+| RHS | Easy | 900444 |
+| EveronRHS | Medium | 900759 |
+| EveronNorthRHS | Hard | 0 |
+| ArlandWCSRHS | Easy | 900216 |
+| EveronWCSRHS | Medium | 900172 |
+| EveronNorthWCSRHS | Hard | 900772 |
+
+Ноль для North RHS означает отсутствие штатного completion, а не нулевое время
+работы: реальное последнее наблюдение controller — `t_ms=746390` до assertion.
+
+### Целостность и уборка
+
+**437/437** production artifacts в каждой из четырёх копий, **1748** сравнений SHA-256 до/после native tests. Co-op fixture watchdog только в stage увеличен 240000 → 1200000 ms для 15-minute observation; assertions и production не менялись.
+**80** profiles/stages архивированы с проверкой SHA-256 каждого ZIP entry и адресно удалены; archives/index.json хранит исходные пути и archive hashes. Полные Workbench logs и native launcher outputs сохранены. Generated offline evidence сохраняется перед удалением собственного checkout; чужие процессы/файлы не удаляются.
+Первые неудачные попытки подготовки сохранены в preparation-history.txt:
+ошибка PowerShell -replace и splatting JSON object в frontend helper. Первый
+frontend завершился native exit 0 под ошибочным Label, но не считается
+canonical PASS; его профиль сохранён отдельно. План повторён с hashtable
+и свежими canonical profiles. Исходные FAIL прежних прогонов не удалены.
+
+**NOT RUN:** ручные mouse/keyboard/controller действия и внешний вид Deployment,
+public listing и второй человек в Listen Host, полное engine применение
+password/player limit/third-person, death/respawn/save-file restore, packaged
+Workshop/чистая установка, естественный бой до победы и изолированный loading
+FPS benchmark. Terminal-only workflow запрещает GUI automation; native
+readbacks не подтверждают внешний вид и физический ввод. Прежние native
+crash evidence остаются историческими FAIL с неустановленной причиной.
+
+
 ## Разрешение конфликтов PR #65 с main — 2026-10-22
 
 Продолжение `codex/scenario-time-weather`, исходный head `eea4939` и актуальный
