@@ -25,6 +25,7 @@ class AICF_EquipmentService
 	protected ref AICF_EquipmentApplicator m_Applicator = new AICF_EquipmentApplicator();
 	protected ref array<ref AICF_EquipmentSlot> m_aSlots = {};
 	protected ref array<ref AICF_EquipmentPlan> m_aPlans = {};
+	protected ref AICF_EquipmentPlanFailures m_PlanFailures = new AICF_EquipmentPlanFailures();
 	protected ref array<IEntity> m_aCorpses = {};
 	protected ref array<SCR_ArsenalComponent> m_aArsenals = {};
 	protected ref array<ref AICF_EquipmentMember> m_aRecoveries = {};
@@ -46,13 +47,21 @@ class AICF_EquipmentService
 		string role;
 		ResourceName source = m_RosterSource.ResolveRecruitPrefab(faction, index, role);
 		AICF_LoadoutBinding binding = slot.GetLoadout(index);
-		string key = faction.GetFactionKey() + source;
-		if (binding) key += binding.m_sInventory;
+		string key = faction.GetFactionKey() + "|" + source;
+		if (binding) key += "|" + binding.m_sInventory;
 		foreach (AICF_EquipmentPlan existing : m_aPlans)
 			if (existing.m_sKey == key) return existing;
+		int now = System.GetTickCount();
+		if (!m_PlanFailures.CanAttempt(key, now)) return null;
 		AICF_EquipmentPlan plan = new AICF_EquipmentPlan();
 		plan.m_sKey = key;
-		if (!plan.Build(source, faction, binding)) return null;
+		if (!plan.Build(source, faction, binding))
+		{
+			m_PlanFailures.Record(key, System.GetTickCount());
+			Print(string.Format("[AICF][EQUIPMENT][PLAN_FAILED] faction=%1 source=%2 retry_ms=%3 reason=%4", faction.GetFactionKey(), source, AICF_EquipmentPlanFailures.RETRY_MS, plan.m_sFailureReason), LogLevel.WARNING);
+			return null;
+		}
+		m_PlanFailures.Forget(key);
 		m_aPlans.Insert(plan);
 		return plan;
 	}
@@ -442,6 +451,7 @@ class AICF_EquipmentService
 		foreach (AICF_EquipmentSlot record : m_aSlots) Finish(record, "STOP", false);
 		m_aSlots.Clear();
 		m_aPlans.Clear();
+		m_PlanFailures.Clear();
 		m_aCorpses.Clear();
 		m_aArsenals.Clear();
 		m_Vehicles = null;

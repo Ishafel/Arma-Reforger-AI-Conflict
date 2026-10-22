@@ -11,8 +11,12 @@ Issue #6. Owner — `AICF_EquipmentService` в Core. `MatchController` толь�
 Target строится в изолированном `AICF_EquipmentDraft` без UI preview cache; этот мир не является
 источником трофейных entities. Кэш освобождает неиспользуемые preview worlds.
 Перед удалением private model её native storage attachments снимаются, пока
-weapon/muzzle существуют; это освобождает ссылки WCS на muzzle. Путь очистки
-всегда проверяет, что model не принадлежит миру кампании.
+weapon/muzzle существуют. Путь очистки всегда проверяет, что model не принадлежит
+миру кампании. При расчёте target `EquipmentPlan.Build` получает primary muzzle
+в локальную переменную и явно освобождает её после чтения chambers. Chained
+`Muzzle(modelPrimary).GetBarrelsCount()` в условии цикла на API 1.8.0.13 удерживал
+последний `MuzzleComponent` после Build и вызывал VM exception при удалении
+модели. Сам detach не устраняет такую ссылку.
 Отсоединённый root явно удаляется вместе с вложенными предметами до освобождения
 world: одного удаления character недостаточно. Bootstrap останавливает controller
 до native teardown. Причина shutdown leaks, readback и memory controls:
@@ -47,7 +51,28 @@ world: одного удаления character недостаточно. Bootstr
 принимает только текущую member identity и текущую revision. Новые deployments
 и recruits сохраняют существующий spawn-time путь применения binding.
 
-## Источники
+## Отказы сборки target — issue #67
+
+`AICF_EquipmentPlanFailures` хранит только строки и время отказа. Ключ включает
+runtime faction, concrete source и inventory snapshot binding. Неудачная сборка
+одного ключа повторяется не раньше чем через 120000 мс после отказа; другой
+source/faction/snapshot имеет независимое окно. Успешный cache проверяется до
+negative cache. Новая revision с тем же snapshot не меняет target и не обходит
+паузу; изменённый snapshot получает отдельный ключ.
+
+Кэш ограничен 256 записями, истёкшие записи удаляются перед admission. При
+заполнении новые ключи ждут освобождения места: действующий отказ не вытесняется
+ради раннего retry. `Stop` очищает оба кэша. `[AICF][EQUIPMENT][PLAN_FAILED]`
+пишется один раз на реальную попытку с `faction`, `source`, `retry_ms`, `reason`.
+Причины разделяют default Build, binding Restore, Capture, отсутствие muzzle
+и пустой primary target. Эта пауза отличается от retry визита к источнику.
+
+В RHS integration `AICF_RHSPreviewStorage` выполняет visual refresh private
+inventory синхронно и снимает отложенный refresh этого component. Штатный путь
+кампании делегируется RHS. Native callbacks не должны переживать удаление
+private slots; Core не получает обязательной зависимости от RHS.
+
+## Источники пополнения
 
 Тело — настоящий мёртвый `ChimeraCharacter` под master authority. Живые,
 раненые живые, player-controlled и possessing main entities исключены.

@@ -181,23 +181,46 @@ class AICF_WCSInfantryEquipment : AICF_RHSPMCEquipment
 		if (!model || model.GetWorld() == GetGame().GetWorld()) return false;
 		BaseWeaponComponent old = AICF_RHSPMCArmament.Primary(model);
 		InventoryStorageManagerComponent manager = InventoryStorageManagerComponent.Cast(model.FindComponent(InventoryStorageManagerComponent));
-		if (!old || !manager) return false;
+		if (!old || !manager) return ArmFailure(model, faction, source, "PRIMARY_OR_MANAGER");
 		IEntity replacement = AICF_RHSPMCArmament.ReplaceLocal(old.GetOwner(), AICF_WCSInfantryKit.Weapon(faction, source), manager);
-		if (!replacement) return false;
+		if (!replacement) return ArmFailure(model, faction, source, "PRIMARY_REPLACE");
 		BaseWeaponComponent weapon = BaseWeaponComponent.Cast(replacement.FindComponent(BaseWeaponComponent));
-		if (!weapon) return false;
+		if (!weapon) return ArmFailure(model, faction, source, "PRIMARY_COMPONENT");
 		array<BaseMuzzleComponent> muzzles = {};
 		weapon.GetMuzzlesList(muzzles);
 		foreach (int index, BaseMuzzleComponent muzzle : muzzles)
 		{
-			if (!muzzle || !muzzle.GetMagazine() || muzzle.GetAmmoCount() <= 0) return false;
+			if (!muzzle || !muzzle.GetMagazine() || muzzle.GetAmmoCount() <= 0) return ArmFailure(model, faction, source, "PRIMARY_LOADED");
 			ResourceName magazine = SCR_ResourceNameUtils.GetPrefabName(muzzle.GetMagazine().GetOwner());
 			int count = 6;
 			if (index == 0) count = AICF_WCSInfantryKit.MinimumMagazines(source);
 
-			if (!AddMagazinesLocal(model, manager, magazine, count)) return false;
+			if (!AddMagazinesLocal(model, manager, magazine, count)) return ArmFailure(model, faction, source, "PRIMARY_SPARES");
 		}
-		return !muzzles.IsEmpty() && ArmSecondaryLauncher(model, faction, source);
+		if (muzzles.IsEmpty()) return ArmFailure(model, faction, source, "PRIMARY_MUZZLES");
+		return ArmSecondaryLauncher(model, faction, source);
+	}
+
+	protected static bool ArmFailure(IEntity model, FactionKey faction, ResourceName source, string stage)
+	{
+		InventoryStorageSlot slot = SecondaryLauncherSlot(model);
+		IEntity item;
+		if (slot) item = slot.GetAttachedEntity();
+		ResourceName secondary;
+		int ammo = -1;
+		int spare = -1;
+		if (item)
+		{
+			secondary = SCR_ResourceNameUtils.GetPrefabName(item);
+			BaseWeaponComponent weapon = BaseWeaponComponent.Cast(item.FindComponent(BaseWeaponComponent));
+			if (weapon && weapon.GetCurrentMuzzle())
+			{
+				ammo = weapon.GetCurrentMuzzle().GetAmmoCount();
+				spare = AICF_RHSPMCArmament.SpareMagazines(model, weapon.GetCurrentMuzzle());
+			}
+		}
+		Print(string.Format("[AICF][WCS][ARM_FAILED] faction=%1 stage=%2 source=%3 secondary=%4 ammo=%5 spare=%6", faction, stage, source, secondary, ammo, spare), LogLevel.WARNING);
+		return false;
 	}
 
 	protected static InventoryStorageSlot SecondaryLauncherSlot(IEntity model)
@@ -224,19 +247,28 @@ class AICF_WCSInfantryEquipment : AICF_RHSPMCEquipment
 		ResourceName prefab = AICF_WCSInfantryKit.SecondaryLauncher(faction, source);
 		if (prefab.IsEmpty()) return true;
 		InventoryStorageSlot slot = SecondaryLauncherSlot(model);
-		if (!slot) return false;
+		if (!slot) return ArmFailure(model, faction, source, "SECONDARY_SLOT");
 		InventoryStorageManagerComponent manager = InventoryStorageManagerComponent.Cast(model.FindComponent(InventoryStorageManagerComponent));
-		if (!manager) return false;
+		if (!manager) return ArmFailure(model, faction, source, "SECONDARY_MANAGER");
 		IEntity old = slot.GetAttachedEntity();
 		if (old)
 		{
-			if (SCR_ResourceNameUtils.GetPrefabName(old) == prefab) return HasSecondaryLauncher(model, faction, source);
-			// Меняем только штатный M72 в local default, до пользовательского рецепта.
-			if (SCR_ResourceNameUtils.GetPrefabName(old) != "{9C5C20FB0E01E64F}Prefabs/Weapons/Launchers/M72/Launcher_M72A3.et") return false;
-			if (!AICF_RHSPMCArmament.ReplaceLocal(old, prefab, manager)) return false;
+			if (SCR_ResourceNameUtils.GetPrefabName(old) == prefab)
+			{
+				if (HasSecondaryLauncher(model, faction, source)) return true;
+				return ArmFailure(model, faction, source, "SECONDARY_EXISTING_AMMO");
+			}
+			// Только disposable launcher исходного private default. Вариант M72
+			// определяется native типом, а не единственным GUID M72A3.
+			BaseWeaponComponent disposable = BaseWeaponComponent.Cast(old.FindComponent(BaseWeaponComponent));
+			if (!disposable || disposable.GetWeaponType() != EWeaponType.WT_ROCKETLAUNCHER ||
+				!disposable.GetCurrentMuzzle() || !disposable.GetCurrentMuzzle().IsDisposable())
+				return ArmFailure(model, faction, source, "SECONDARY_OCCUPIED");
+			if (!AICF_RHSPMCArmament.ReplaceLocal(old, prefab, manager)) return ArmFailure(model, faction, source, "SECONDARY_REPLACE");
 		}
-		else if (!AICF_LoadoutInventory.InsertLocal(prefab, slot.GetStorage(), slot.GetID(), manager)) return false;
-		return HasSecondaryLauncher(model, faction, source);
+		else if (!AICF_LoadoutInventory.InsertLocal(prefab, slot.GetStorage(), slot.GetID(), manager)) return ArmFailure(model, faction, source, "SECONDARY_INSERT");
+		if (!HasSecondaryLauncher(model, faction, source)) return ArmFailure(model, faction, source, "SECONDARY_READBACK");
+		return true;
 	}
 
 	static bool HasSecondaryLauncher(IEntity model, FactionKey faction, ResourceName source)

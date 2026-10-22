@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../lib/Stage3StaticAudit.Common.ps1')
 $core = Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict'
 $sources = @{}
-foreach ($file in @('Loadouts/AICF_EquipmentInventory.c','Loadouts/AICF_EquipmentMember.c','Loadouts/AICF_EquipmentOrder.c','Loadouts/AICF_EquipmentService.c','Loadouts/AICF_EquipmentApplicator.c','Orders/AICF_OrderPlanner.c','State/AICF_GroupSlot.c','Vehicles/AICF_VehicleCoordinator.c')) {
+foreach ($file in @('Loadouts/AICF_EquipmentInventory.c','Loadouts/AICF_EquipmentMember.c','Loadouts/AICF_EquipmentOrder.c','Loadouts/AICF_EquipmentService.c','Loadouts/AICF_EquipmentPlanFailures.c','Loadouts/AICF_EquipmentApplicator.c','Orders/AICF_OrderPlanner.c','State/AICF_GroupSlot.c','Vehicles/AICF_VehicleCoordinator.c')) {
     $sources[$file] = [IO.File]::ReadAllText((Join-Path $core $file))
 }
 function Rules($inputSources) {
@@ -11,6 +11,7 @@ function Rules($inputSources) {
     $member = $inputSources['Loadouts/AICF_EquipmentMember.c']
     $order = $inputSources['Loadouts/AICF_EquipmentOrder.c']
     $service = $inputSources['Loadouts/AICF_EquipmentService.c']
+    $failures = $inputSources['Loadouts/AICF_EquipmentPlanFailures.c']
     $apply = $inputSources['Loadouts/AICF_EquipmentApplicator.c']
     $planner = $inputSources['Orders/AICF_OrderPlanner.c']
     $slot = $inputSources['State/AICF_GroupSlot.c']
@@ -19,6 +20,10 @@ function Rules($inputSources) {
     $consumables = Get-AICFMethodBody ([pscustomobject]@{Source=$member;Code=$member}) 'ConsumablesIn'
     [ordered]@{
         AUTHORITY = $service.Contains('!Replication.IsServer()') -and $service.Contains('!m_Campaign.IsMaster()') -and $service.Contains('!m_Campaign.IsRunning()')
+        PLAN_FAILURE_KEY = $service.Contains('faction.GetFactionKey() + "|" + source') -and $service.Contains('key += "|" + binding.m_sInventory')
+        PLAN_BACKOFF = $service.Contains('if (!m_PlanFailures.CanAttempt(key, now)) return null;') -and $service.IndexOf('m_PlanFailures.CanAttempt') -lt $service.IndexOf('new AICF_EquipmentPlan()') -and $service.Contains('m_PlanFailures.Record(key, System.GetTickCount())') -and $service.Contains('m_PlanFailures.Forget(key)')
+        PLAN_BACKOFF_BOUND = $failures.Contains('RETRY_MS = 120000') -and $failures.Contains('MAX_ENTRIES = 256') -and $failures.Contains('if (age >= RETRY_MS) m_aEntries.Remove(index)') -and $failures.Contains('return m_aEntries.Count() < MAX_ENTRIES') -and $failures -notmatch 'IEntity|SharedItemRef|CallLater'
+        PLAN_FAILURE_STOP = $service.Contains('m_PlanFailures.Clear();')
         CORPSE_SOURCE = $inventory.Contains('ECharacterLifeState.DEAD') -and $inventory.Contains('IsPlayerControlled()') -and $inventory.Contains('GetPlayerIdFromControlledEntity(character)')
         PHYSICAL_TRANSFER = $inventory.Contains('member.m_Character.GetOrigin(), corpse.GetOrigin(), AICF_EquipmentConfig.TRANSFER_METERS') -and $inventory.Contains('corpse.GetID() != corpseId') -and $inventory.Contains('item.GetID() != itemId')
         NATIVE_COMPATIBILITY = $inventory.Contains('muzzle.GetMagazineWell().Type() == magazine.GetMagazineWell().Type()') -and $inventory.Contains('magazine.GetAmmoCount()') -and $inventory.Contains('magazine != muzzle.GetMagazine()') -and $inventory.Contains('muzzle.IsBarrelChambered(i)')
@@ -26,7 +31,7 @@ function Rules($inputSources) {
         UNIQUE_ROUNDS = $inventory.Contains('return RoundsIn(items, weapon);') -and $rounds.Contains('UniqueItems(items, unique);') -and $rounds.Contains('foreach (IEntity item : unique)')
         UNIQUE_CONSUMABLES = $member.Contains('return ConsumablesIn(items, prefab);') -and $consumables.Contains('AICF_EquipmentInventory.UniqueItems(items, unique);') -and $consumables.Contains('foreach (IEntity item : unique)')
         UNIQUE_TARGET = $member.Contains('AICF_EquipmentInventory.UniqueItems(rawItems, items);')
-        MODEL_MUZZLE_LIFETIME = $member.Contains('BaseMuzzleComponent modelMuzzle = AICF_EquipmentInventory.Muzzle(modelPrimary);') -and $member.Contains('modelMuzzle = null;') -and $member -notmatch 'for\s*\([^;]*;[^;]*AICF_EquipmentInventory\.Muzzle\('
+        MODEL_MUZZLE_LIFETIME = $member.Contains('BaseMuzzleComponent primaryMuzzle = AICF_EquipmentInventory.Muzzle(modelPrimary);') -and $member.Contains('primaryMuzzle = null;') -and $member -notmatch 'for\s*\([^;]*;[^;]*AICF_EquipmentInventory\.Muzzle\('
         REAL_TRANSFER = $inventory.Contains('target.TryMoveItemToStorage(item, storage)') -and $inventory.Contains('target.Contains(item) && !source.Contains(item)') -and $inventory -notmatch 'SpawnEntity|AddSupplies|SetAmmoCount|Ticket'
         MEMBER_REVISION = $member.Contains('m_Slot.GetRosterMember(m_iIndex) != m_Character') -and $member.Contains('binding.m_iRevision == m_iRevision') -and $member.Contains('m_Slot.GetSpawnGeneration() != m_iGeneration')
         OPERATION_IDENTITY = $order.Contains('m_Slot.GetEquipmentOrder() == this') -and $order.Contains('m_Slot.GetStrategicIntentRevision() == m_iIntent') -and $order.Contains('m_Slot.GetStrategicAssignmentRevision() == m_iAssignment')
@@ -38,6 +43,7 @@ function Rules($inputSources) {
         MOVEMENT_RELEASE = $apply.Contains('controller.SetDisableMovementControls(true)') -and $apply.Contains('controller.SetDisableMovementControls(false)') -and $apply.Contains('Release(member);') -and $service.Contains('m_Applicator.Release(remaining)')
         MODEL_CLEANUP = $member.Contains('class AICF_EquipmentDraft : AICF_LoadoutDraft') -and $member.Contains('m_Character.GetWorld() != GetGame().GetWorld()') -and $member.Contains('DetachRoots();') -and $member.Contains('parent.DetachEntity()')
         MODEL_ROOT_DELETE = $member.Contains('!parent || parent.GetStorage().GetOwner() != m_Character') -and $member.Contains('entity && item && !item.GetParentSlot() && entity.GetWorld() == m_Character.GetWorld()') -and $member.Contains('SCR_EntityHelper.DeleteEntityAndChildren(entity);')
+        MODEL_MUZZLE_RELEASE = $member.Contains('BaseMuzzleComponent primaryMuzzle = AICF_EquipmentInventory.Muzzle(modelPrimary);') -and $member.Contains('primaryMuzzle = null;') -and $member -notmatch 'Muzzle\(modelPrimary\)\.(GetBarrelsCount|IsBarrelChambered)'
         SINGLE_OPERATION = $slot.Contains('HasEquipmentInventoryTransaction()') -and $vehicle.Contains('slot.HasEquipmentInventoryTransaction()') -and $planner.Contains('slot.HasEquipmentInventoryTransaction()')
         STOP = $service.Contains('m_aRecoveries.Clear()') -and $service.Contains('m_aPlans.Clear()') -and $service -notmatch '\.CallLater\(|\.Insert\(On'
     }
@@ -46,14 +52,24 @@ $rules = Rules $sources
 $failed = @($rules.Keys | Where-Object {-not $rules[$_]})
 if ($failed.Count) { throw ('Equipment contract failures: ' + ($failed -join ', ')) }
 $mutations = @(
+    @('Loadouts/AICF_EquipmentMember.c','primaryMuzzle = null;', '', 'MODEL_MUZZLE_RELEASE'),
+    @('Loadouts/AICF_EquipmentMember.c','primaryMuzzle.GetBarrelsCount()', 'AICF_EquipmentInventory.Muzzle(modelPrimary).GetBarrelsCount()', 'MODEL_MUZZLE_RELEASE'),
+    @('Loadouts/AICF_EquipmentService.c','faction.GetFactionKey() + "|" + source', 'source', 'PLAN_FAILURE_KEY'),
+    @('Loadouts/AICF_EquipmentService.c','key += "|" + binding.m_sInventory', 'key += ""', 'PLAN_FAILURE_KEY'),
+    @('Loadouts/AICF_EquipmentService.c','if (!m_PlanFailures.CanAttempt(key, now)) return null;', '', 'PLAN_BACKOFF'),
+    @('Loadouts/AICF_EquipmentService.c','m_PlanFailures.Record(key, System.GetTickCount())', 'm_PlanFailures.Forget(key)', 'PLAN_BACKOFF'),
+    @('Loadouts/AICF_EquipmentService.c','m_PlanFailures.Clear();', '', 'PLAN_FAILURE_STOP'),
+    @('Loadouts/AICF_EquipmentPlanFailures.c','RETRY_MS = 120000', 'RETRY_MS = 0', 'PLAN_BACKOFF_BOUND'),
+    @('Loadouts/AICF_EquipmentPlanFailures.c','MAX_ENTRIES = 256', 'MAX_ENTRIES = 0', 'PLAN_BACKOFF_BOUND'),
+    @('Loadouts/AICF_EquipmentPlanFailures.c','return m_aEntries.Count() < MAX_ENTRIES', 'return true', 'PLAN_BACKOFF_BOUND'),
     @('Loadouts/AICF_EquipmentMember.c','SCR_EntityHelper.DeleteEntityAndChildren(entity);', '', 'MODEL_ROOT_DELETE'),
     @('Loadouts/AICF_EquipmentMember.c','entity.GetWorld() == m_Character.GetWorld()', 'true', 'MODEL_ROOT_DELETE'),
     @('Loadouts/AICF_EquipmentInventory.c','item && !unique.Contains(item)', 'item', 'UNIQUE_IDENTITY'),
     @('Loadouts/AICF_EquipmentInventory.c','foreach (IEntity item : unique)', 'foreach (IEntity item : items)', 'UNIQUE_ROUNDS'),
     @('Loadouts/AICF_EquipmentMember.c','foreach (IEntity item : unique)', 'foreach (IEntity item : items)', 'UNIQUE_CONSUMABLES'),
     @('Loadouts/AICF_EquipmentMember.c','AICF_EquipmentInventory.UniqueItems(rawItems, items);', 'items = rawItems;', 'UNIQUE_TARGET'),
-    @('Loadouts/AICF_EquipmentMember.c','modelMuzzle = null;', '', 'MODEL_MUZZLE_LIFETIME'),
-    @('Loadouts/AICF_EquipmentMember.c','barrel < modelMuzzle.GetBarrelsCount()', 'barrel < AICF_EquipmentInventory.Muzzle(modelPrimary).GetBarrelsCount()', 'MODEL_MUZZLE_LIFETIME'),
+    @('Loadouts/AICF_EquipmentMember.c','primaryMuzzle = null;', '', 'MODEL_MUZZLE_LIFETIME'),
+    @('Loadouts/AICF_EquipmentMember.c','barrel < primaryMuzzle.GetBarrelsCount()', 'barrel < AICF_EquipmentInventory.Muzzle(modelPrimary).GetBarrelsCount()', 'MODEL_MUZZLE_LIFETIME'),
     @('Loadouts/AICF_EquipmentInventory.c','muzzle.GetMagazineWell().Type() == magazine.GetMagazineWell().Type()', 'true', 'NATIVE_COMPATIBILITY'),
     @('Loadouts/AICF_EquipmentInventory.c','member.m_Character.GetOrigin(), corpse.GetOrigin(), AICF_EquipmentConfig.TRANSFER_METERS', 'member.m_Character.GetOrigin(), corpse.GetOrigin(), 5000', 'PHYSICAL_TRANSFER'),
     @('Loadouts/AICF_EquipmentInventory.c','target.Contains(item) && !source.Contains(item)', 'target.Contains(item)', 'REAL_TRANSFER'),

@@ -144,6 +144,42 @@ legacy FIA flags, whitelist и все custom base поля. Текущий по�
 `Test-CoopScenarioLog.ps1 -RequireHeaderMatrix`. Полный runtime боя всех 54
 вариантов эта ресурсная проверка не заменяет.
 
+## Ошибки EquipmentPlan и WCS M2CG — issue #67
+
+`tests/fixtures/AICF_EquipmentFailureProbe.c` копируется только в isolated
+Arland WCS + RHS `Scripts/Game/AIConflictArlandWCSRHS/`. CLI
+`-aicfEquipmentFailureProbe inspect`; canonical server Medium, fresh profile,
+сначала terminal Workbench Validate/Compile stage. Fixture использует существующий
+authority Update и закрывает сервер после 30 секунд от roster readiness.
+
+Проверки: все concrete roster roles, точный заряженный M2CG на USMC LAT/TL/AMG,
+идемпотентный повтор, отказ пустого M2CG без ложного успеха, сохранность rifle и
+reloadable launcher в занятом slot, native disposable варианты из установленного
+resource catalog, пустой secondary slot. Затем реальные failed Plan builds
+проверяют suppression 32 повторов и независимость source/binding; pure native
+policy cases задают точные времена 119999/120000 мс, другой faction, обратный ход
+часов, capacity/expiry/Forget/Clear. Это не wall-clock ожидание двух минут.
+
+Weak inventory readback проверяется сразу после каждого Clear и через 30 секунд
+после eviction/late failure. RHS fixture считает фактические deferred visual
+calls вне синхронного Request: private — ноль, campaign — больше нуля. Проверка
+без production visual adapter должна отклоняться тем же oracle. Полный stopped
+console/script/error/crash log и native exit обязательны: одних `CHECK passed=1`
+недостаточно. Fixture не исправляет ошибки production и не отключает подсистемы.
+
+Для lifetime muzzle обязателен отдельный `AICF_EquipmentCleanupProbe.c` в stage
+без FailureProbe. Он строит 20 реальных Plan и читает weak inventory после
+eviction. Он не переопределяет `AICF_EquipmentPlan.Build`: обёртка, используемая
+FailureProbe для injection, маскирует исходный native lifetime defect. Пара
+оригинального/исправленного чтения muzzle проверяется с одинаковой standalone
+fixture и полными логами. Если исходная VM прерывает Update раньше observer
+close, отрицательный контроль адресно останавливается и остаётся FAIL.
+
+Восьмиминутный обычный матч запускается отдельно с observer-only fixture из
+evidence: она только отмечает roster-ready, ждёт 480000 мс и вызывает
+`RequestClose`. Она не строит дополнительные plans и не вводит отказы. Такой
+server run не доказывает точный retail Play/Host UI пользователя.
+
 ## Shutdown private equipment worlds — issue #63
 
 `AICF_ShutdownProbe.c`: только isolated Core stage, `aicfShutdownMode idle|batches`,

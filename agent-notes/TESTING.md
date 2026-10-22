@@ -1,5 +1,65 @@
 # Проверки и baseline
 
+## Разрешение конфликтов PR #65 с main — 2026-10-22
+
+Продолжение `codex/scenario-time-weather`, исходный head `eea4939` и актуальный
+`origin/main` `aada6ed` после PR #69. Основной checkout `codex/issue67-main-retest`
+не менялся. Merge выполнен в отдельном checkout под `.codex-runtime/`;
+терминальные offline checks используют `subst X:` для исключения MAX_PATH.
+Evidence: `.codex-runtime/pr65-conflicts-20261022/REPORT.md`.
+
+Пять конфликтов: `AICF_EquipmentMember.c`, `agent-notes/README.md`,
+`SHUTDOWN_LIFECYCLE.md`, `TESTING.md`, `TEST_FIXTURES.md`. В EquipmentMember
+сохранена реализация main: одна `primaryMuzzle`, guard отсутствующего muzzle,
+явный release и детальные причины отказа. Все пять импортированных production
+файлов побайтно по Git совпадают с main; сценарии и их GUID сохранены из PR.
+Оба набора документации и прежние отчёты FAIL/NOT RUN сохранены. Две проверки
+lifetime из разных веток остаются активны, прежние negative mutations используют
+общее имя `primaryMuzzle`; ни один lifetime gate не удалён/ослаблен.
+
+### Свежие проверки объединённого source
+
+- `tools/Invoke-AICFChecks.ps1 -Name <8 профильных checks> -EvidenceRoot <evidence>/baseline`:
+  **8/8 PASS/0** до merge; Equipment, WCS/RHS, Co-op, Instigator и shutdown.
+- Полный `Invoke-AICFChecks.ps1 -Suite All`: **78/78 PASS/0**, Static 33 +
+  Contracts 45, без исключений и оставшихся FAIL. Equipment contracts: **27 rules /
+  29 negative mutations**, interop — **4 rules / 8 negative mutations**.
+- `CompileAll.ps1` → `Compile.ps1 -Label <label> -SourceRoot <source> -Variant <variant>`:
+  **5/5 PASS/0** terminal Workbench Validate/Compile. Stock, RHS, Arland WCS+RHS
+  production и два отдельных fixture stage; validation successful, SCRIPT/VM/fatal 0.
+  Аргументы gproj/addonsDir/addons взяты из canonical Client DryRun manifest.
+- `RunAll.ps1` → `Run.ps1` → canonical `Start-AICFRuntime.ps1 -Role Server
+  -Variant ArlandWCSRHS -Difficulty Medium -MatchMode Standard`, свежие profiles,
+  фактический listener `-addr 127.0.0.1:2491`, probe flag `inspect`.
+  FailureProbe — **79 checks / 1209 weak entities / alive=0**, CleanupProbe
+  без Build wrapper — **20 plans / 938 weak entities / alive=0**. Оба native
+  exits 0, `Game destroyed.`, точный CLI/manifest и полные stopped-log audits
+  **PASS/0**, SCRIPT/VM/fatal 0. Других resource/engine E — **144 / 135**;
+  полное отсутствие любых engine diagnostics не заявляется.
+- `git diff --check` и отсутствие unmerged paths/маркеров — **PASS/0**;
+  **218** локальных ссылок затронутых Markdown файлов, broken=0.
+
+Game/Server/Workbench — 1.8.0.13. Все **437/437** production artifacts совпали
+с обоими isolated stages до и после проверок: **874** SHA-256 сравнения.
+Пять profiles/stages архивированы с проверкой SHA-256 каждого ZIP entry и
+адресно удалены; полные native logs также сохранены отдельно, native processes=0.
+Generated offline evidence сохраняется перед удалением временного merge checkout.
+
+Ошибки подготовки не скрыты: первый Workbench helper вернул управление раньше
+появления logs из-за отсутствия pipeline; исправлен на документированный Out-File,
+Stock повторён под новым label. Первый launcher вызов отклонён до native запуска
+из-за неверного имени параметра; затем Windows PowerShell 5 преобразовал обычный
+ENGINE stderr в terminating NativeCommandError. Его неполный profile сохранён,
+runtime повторён через PowerShell 7 со свежими profiles. Эти попытки не объявляются
+PASS; production для повторов не менялся. См. `preparation-history.txt`.
+
+**NOT RUN:** повтор полной девятикартовой runtime матрицы, длительный Everon RHS
+soak, client/JIP, retail Host/Play UI и packaged Workshop. Это исправление merge
+конфликтов и проверка equipment boundary; короткие Arland WCS probes не закрывают
+прежний `RHS_M4A1_LOWER.xob` out-of-bounds assertion на Everon RHS. Причина того
+сбоя остаётся неподтверждённой; PR сохраняет draft и прежние blockers. Ручное
+участие и GUI automation не использовались, выключение компьютера не выполнялось.
+
 ## Полный автономный прогон — 21–22.10.2026
 
 Продолжение PR #65, проверенный production HEAD `983931d`, Game/Server/Tools
@@ -1410,6 +1470,80 @@ push, merge или готового PR.
 Полный список 35 изменённых файлов — `changed-files.txt` в evidence.
 Тестовые процессы завершены, собственные `stage` / `baseline-stage` удалены;
 логи, profiles, baseline archive и hashes сохранены (`cleanup.txt`).
+
+## WCS equipment failures — issue #67, 2026-10-22
+
+Ветка `codex/issue67-equipment-fix` от актуального `main`
+`bb081ebae639beea09a6c85c10be9cc0bbeae38a`; GitHub API повторно подтвердил тот же
+head после проверок. Транспортные пункты вынесены в
+[#68](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/issues/68).
+M2CG сохранён на USMC LAT/TL/AMG. Production: native disposable admission вместо
+единственного M72A3 GUID, подробный `ARM_FAILED`, ограниченный negative cache
+EquipmentPlan на 120 секунд, явный muzzle reference lifetime и RHS private
+visual adapter. `DetachRoots` из #63 сохранён.
+
+Свежий полный baseline — **66/66 PASS/0**, после изменения полный набор —
+**67/67 PASS/0**, без исключений и baseline FAIL. Добавлен interop contract с
+negative mutations; после окончательного уточнения fixture/контракта отдельно
+повторены пять профильных checks — **5/5 PASS/0**. Equipment contracts:
+26 правил / 27 negative mutations; interop: 4 / 8. Прежний static контракт
+`WCS_US_LAT_REPLACE_M72_ONLY` заменён native disposable boundary: native probe
+подтверждает две дополнительные допустимые трубы и сохранность rifle/reloadable.
+Это изменение контракта совместимости, а не исключение найденного FAIL.
+
+Terminal Workbench production Stock/RHS/ArlandWCSRHS — **3/3 PASS/0**, `Script
+validation successful`, SCRIPT/VM/fatal 0; других resource E — 25/26/39.
+Final FailureProbe, standalone CleanupProbe и observer-only soak fixture
+скомпилированы отдельно — **3/3 PASS/0**, по 39 других resource E.
+Game/Server/Workbench и закреплённый API — **1.8.0.13**. Во всех четырёх final
+stages совпали **310/310** production addon files, всего 1240 сравнений.
+
+Native `final-probe` — **79 checks, failures=0**, **1209** weak inventory entities,
+немедленное и отложенное удаление, alive=0, exit 0, полный script/VM/fatal gate
+**PASS**. Проверены M2CG, empty/occupied/idempotent paths, реальные late failed
+builds, suppression 32 повторов, другой source/binding, Stop, synthetic tick
+boundary 119999/120000 мс и capacity/expiry. RHS private deferred calls — **0**,
+campaign — **714**. Без visual adapter тот же oracle получает **472** private
+deferred calls и **FAIL**. С прежним M72A3-only guard — **FAIL** двух native
+replacement cases. Остальные 144 engine/resource E сохранены и не объявляются
+полностью чистым engine log.
+
+Для muzzle lifetime выполнена независимая пара `cleanup-original` /
+`cleanup-final` **без переопределения Plan.Build**. Исходное чтение повторило
+`MuzzleComponent with non-zero references`, оборвало Update до observer close;
+процесс адресно остановлен, exit -1, полный gate **FAIL**. Исправленный source:
+**20/20 Plan**, **938** weak entities, alive=0, штатный exit 0, SCRIPT/VM/fatal 0,
+gate **PASS**. Build wrapper, нужный FailureProbe для injection, маскирует
+старую ошибку: ранние `muzzle-original`/`no-muzzle-release` с этой обёрткой
+проходят и не считаются доказательством отсутствия дефекта. Scope/local release
+подтверждён отдельной парой, порядок native delete и снятие RHS queue сами по
+себе его не заменяют.
+
+Обычный Arland WCS+RHS Medium/BOTH с observer-only fixture — **480761 ms** после
+ROSTER_READY, LAT/TL/AMG `KIT_APPLIED` **16/5/5**, DEFAULT_FAILED/KIT_FAILED/
+PLAN_FAILED **0**, SCRIPT/VM/fatal/crash **0**, штатный exit **0**, gate **PASS**.
+Других engine/resource E — **135**, как в сохранённом исходном dedicated run.
+Native CLI полностью совпал с массивом аргументов canonical manifest. Observer
+только ждёт восемь минут и закрывает матч; дополнительные Plan/отказы не вводит.
+
+Evidence — `.codex-runtime/issue67-fix-20261022/`: `baseline/`, `offline-final/`,
+`selected-final/`, `compile-verdicts.json`, `final-source-equality.json`,
+`*-audit.json`, manifests/commands/exits, полные native и Workbench logs,
+исходники всех контролей и `REPORT.md`. Ранние неудачные controls сохранены;
+в частности, диагностический `GetRemainingTimeByName` для protected RHS метода
+дал VM exceptions только в отвергнутой fixture. Итоговый oracle считает реальные
+вызовы, без такого обращения. Initial soak launcher до создания resource DB
+отклонил запуск; после обязательного terminal compile использован fresh profile.
+
+**NOT RUN / отклонённые ручные критерии:** точный retail Play/Host/deployment
+автора, client/JIP, packaged Workshop и длительный soak. Игроку нужно повторить
+исходный retail Arland WCS+RHS Medium, выполнить deployment, дождаться найма
+LAT/TL/AMG и предоставить полный console/crash/addon manifest. Terminal-only
+workflow не позволяет воспроизвести этот UI-путь; dedicated/probes не доказывают
+его исправление. Ранее найденные local Play `SCR_CigaretAnimationComponent`
+assertions этим server run не закрываются. Причина исходного retail illegal
+write не объявляется доказанной: устранены проверенные механизмы отказов и
+отложенный RHS путь, M2CG в этом окружении работает без удаления.
 
 ## Defend allocation dialog — продолжение PR #64, 2026-10-16
 

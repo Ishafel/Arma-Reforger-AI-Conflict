@@ -54,6 +54,14 @@ EquipmentPlan внутри каждого пакета. Теперь эти ци
 контроль с возвратом одного inline-вызова проверяет, что gate ловит дефект.
 Свежие verdict и evidence — в [TESTING.md](TESTING.md).
 
+Дополнительный reproducer #67 строит все concrete роли и затем вытесняет plans.
+Он независимо подтверждает тот же lifetime defect и сохранность удаления roots
+из #63. Обе ветки используют одну локальную `primaryMuzzle`, освобождаемую до
+следующей inventory операции; диагностика причин отказа из #67 сохранена.
+Изменение порядка удаления, один `SelectWeapon(null)`, пауза 10 секунд и снятие
+RHS visual queue сами по себе этот reproducer не исправляли. Отмена UI/weapon
+callbacks и корректный lifetime script references — разные проверки.
+
 ## Терминальная проверка
 
 `tests/fixtures/AICF_ShutdownProbe.c` добавляется только в isolated Core stage.
