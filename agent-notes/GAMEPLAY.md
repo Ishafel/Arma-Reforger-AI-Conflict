@@ -86,8 +86,12 @@ Medium/Hard. Основное оружие, роли и стоимость по�
 stock, RHS-only и РФ не затронуты.
 `AICF_WCSInfantryKit.SecondaryLauncher` выбирает точные роли USMC;
 `AICF_WCSInfantryEquipment` добавляет оружие в свободный второй native primary
-slot локального draft либо заменяет точный штатный prefab M72. Другое оружие
-не перезаписывается. Валидатор требует точный M2CG, один заряд и ноль запасных.
+slot локального draft либо заменяет исходный disposable launcher по native
+`WT_ROCKETLAUNCHER` и `IsDisposable`, включая варианты вне единственного M72A3
+GUID. Reloadable launcher и оружие других классов не перезаписываются.
+Валидатор требует точный M2CG, один заряд и ноль запасных. `[AICF][WCS][ARM_FAILED]`
+разделяет отказ primary/spares и вторичного slot/replace/insert/readback;
+включает concrete source, фактический secondary prefab, ammo и spare.
 Общий WCS commit с authority/identity/rollback обслуживает
 начальный roster, замену группы, donors и стандартный комплект редактора.
 Повторный Apply не дублирует и не перезаряжает Carl Gustaf; пользовательский шаблон
