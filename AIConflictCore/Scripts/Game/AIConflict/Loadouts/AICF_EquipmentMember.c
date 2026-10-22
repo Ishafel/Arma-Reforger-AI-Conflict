@@ -63,6 +63,7 @@ class AICF_EquipmentDraft : AICF_LoadoutDraft
 class AICF_EquipmentPlan
 {
 	string m_sKey;
+	string m_sFailureReason;
 	ref AICF_LoadoutDraft m_Draft;
 	string m_sInventory;
 	string m_sSignature;
@@ -78,20 +79,27 @@ class AICF_EquipmentPlan
 		recipe.m_sFaction = AICF_ContentProfile.GetActive().GetStableFactionKey(faction.GetFactionKey());
 		AICF_LoadoutCatalog catalog = new AICF_LoadoutCatalog(faction);
 		m_Draft = new AICF_EquipmentDraft();
-		string reason;
-		if (!m_Draft.Build(recipe, catalog, reason)) return false;
+		if (!m_Draft.Build(recipe, catalog, m_sFailureReason)) return false;
 		IEntity model = m_Draft.GetCharacter();
 		AIControlComponent control = AIControlComponent.Cast(model.FindComponent(AIControlComponent));
 		if (control) control.DeactivateAI();
+		m_sFailureReason = "BINDING_RESTORE_FAILED";
 		if (binding && !AICF_LoadoutInventory.Restore(model, binding.m_sInventory)) return false;
 		int ignored;
 		m_sSignature = AICF_LoadoutInventory.Signature(model, catalog, ignored);
+		m_sFailureReason = "INVENTORY_CAPTURE_FAILED";
 		if (m_sSignature.IsEmpty() || !AICF_LoadoutInventory.Capture(model, m_sInventory)) return false;
 		BaseWeaponComponent modelPrimary = AICF_EquipmentInventory.Weapon(model, false);
+		m_sFailureReason = "PRIMARY_MUZZLE_MISSING";
+		BaseMuzzleComponent primaryMuzzle = AICF_EquipmentInventory.Muzzle(modelPrimary);
+		if (!modelPrimary || !primaryMuzzle) return false;
 		m_iPrimaryRounds = AICF_EquipmentInventory.Rounds(model, modelPrimary);
-		if (modelPrimary)
-			for (int barrel; barrel < AICF_EquipmentInventory.Muzzle(modelPrimary).GetBarrelsCount(); barrel++)
-				if (AICF_EquipmentInventory.Muzzle(modelPrimary).IsBarrelChambered(barrel)) m_iPrimaryRounds--;
+		// В native probe chained getter в условии цикла удерживал последний
+		// MuzzleComponent после Build и ломал delete private model. Ссылка
+		// имеет явный scope и освобождается до следующей inventory операции.
+		for (int barrel; barrel < primaryMuzzle.GetBarrelsCount(); barrel++)
+			if (primaryMuzzle.IsBarrelChambered(barrel)) m_iPrimaryRounds--;
+		primaryMuzzle = null;
 		m_iLauncherRounds = AICF_EquipmentInventory.Rounds(model, AICF_EquipmentInventory.Weapon(model, true));
 		array<IEntity> rawItems = {};
 		array<IEntity> items = {};
@@ -126,7 +134,10 @@ class AICF_EquipmentPlan
 			m_mConsumables.Find(prefab, count);
 			m_mConsumables.Set(prefab, count + 1);
 		}
-		return m_iPrimaryRounds > 0;
+		m_sFailureReason = "PRIMARY_AMMUNITION_EMPTY";
+		if (m_iPrimaryRounds <= 0) return false;
+		m_sFailureReason = string.Empty;
+		return true;
 	}
 
 	BaseWeaponComponent ModelWeapon(bool launcher)

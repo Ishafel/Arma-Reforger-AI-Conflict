@@ -38,6 +38,15 @@ Control без обновления equipment service устранял leaks; п
 - `EquipmentPlan` продолжает разрывать hand/weapon связь перед освобождением
   модели. Само исчезновение script draft не заменяет native entity readback.
 
+Дополнительный reproducer #67 строит все concrete роли и затем вытесняет plans.
+Chained `AICF_EquipmentInventory.Muzzle(modelPrimary)` в условии цикла подсчёта
+chambers удерживал последний `MuzzleComponent`: модель удалялась с VM exception,
+затем shutdown сообщал leaked instances. Явная локальная ссылка и её обнуление
+после подсчёта устраняют этот отдельный дефект; удаление roots #63 сохраняется.
+Изменение порядка удаления, один `SelectWeapon(null)`, пауза 10 секунд и снятие
+RHS visual queue сами по себе этот reproducer не исправляли. Отмена UI/weapon
+callbacks и корректный lifetime script references — разные проверки.
+
 ## Терминальная проверка
 
 `tests/fixtures/AICF_ShutdownProbe.c` добавляется только в isolated Core stage.

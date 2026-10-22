@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Исправить WCS M2CG, повторные EquipmentPlan и удаление private models (issue #67) | [EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md), [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), [GAMEPLAY.md](GAMEPLAY.md), EquipmentFailureProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Исправить окно `Defend Waypoint not provided to the node!` после смены приказа | [DEFEND_ALLOCATION.md](DEFEND_ALLOCATION.md), `AICF_AINodeLifecycle`, native allocation node в Script Diff 1.8.0.13 |
 | Исправить shutdown leaks и проверить lifetime private equipment worlds (issue #63) | [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), [EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md), `AICF_EquipmentDraft`, bootstrap OnGameEnd |
 | Изменить proximity lifecycle дополнительных сил FIA (issue #59) | [FIA_PROXIMITY.md](FIA_PROXIMITY.md), [FIA_GARRISONS.md](FIA_GARRISONS.md), [AMBIENT_PATROLS.md](AMBIENT_PATROLS.md) |
