@@ -6,10 +6,14 @@ New-Item -ItemType Directory -Path $work|Out-Null
 $audit=Join-Path $RepositoryRoot 'tests/log-audits/Test-UniversalScenarioLog.ps1'
 $manifest=@{arguments=@('-gproj','C:\source\addon.gproj','-profile','C:\fresh','-addonsDir','C:\source,C:\mods','-addons','CORE,MAP','-aicfUniversalProbe','1','-aicfExpectedReadyVariants','9')}|ConvertTo-Json -Compress
 $variants=@('Stock','Everon','EveronNorth','RHS','EveronRHS','EveronNorthRHS','ArlandWCSRHS','EveronWCSRHS','EveronNorthWCSRHS')
-$names=@('REGISTRY')+@($variants|ForEach-Object {'PLAN_'+$_})+@('EXPECTED_AVAILABLE','VANILLA_READY','BASE_SOURCE_COMPATIBLE','ATOMIC_INVALID','HOST_GRAPH','NULL_ENTRY_BLOCKED','FORCED_GRAPH','UI_OPEN','UI_BOUNDS','UI_MODAL','UI_FLAGS_HELP','UI_START_ENABLED','UI_ENVIRONMENT','UI_TIME_SLIDER','ENVIRONMENT_STORAGE')
+$names=@('REGISTRY','ENABLED_MATRIX')+@($variants|ForEach-Object {'PLAN_'+$_})+@('EXPECTED_AVAILABLE','VANILLA_READY','BASE_SOURCE_COMPATIBLE','ATOMIC_INVALID','HOST_GRAPH','NULL_ENTRY_BLOCKED','FORCED_GRAPH','UI_OPEN','UI_BOUNDS','UI_MODAL','UI_FLAGS_HELP','UI_START_ENABLED','UI_CONTENT_MASK','UI_ENVIRONMENT','UI_TIME_SLIDER','ENVIRONMENT_STORAGE')
 for($mode=0;$mode -lt 3;$mode++){for($difficulty=0;$difficulty -lt 3;$difficulty++){$names+="UI_${mode}_${difficulty}"}}
 $names+=@('UI_ALL_HELP')+@($variants|ForEach-Object {'UI_VARIANT_'+$_})+@('UI_CLOSED','UI_IDEMPOTENT')
 $log=(@('CLI Params: -gproj C:\source\addon.gproj -profile C:\fresh -addonsDir C:\source,C:\mods -addons CORE,MAP -aicfUniversalProbe 1 -aicfExpectedReadyVariants 9')+@($names|ForEach-Object {"[UNIVERSAL_CASE] case=$_ pass=1"})+@($variants|ForEach-Object {"[UNIVERSAL_AVAILABLE] variant=$_ available=1 missing= graph=CORE,MAP"})+@("[UNIVERSAL_DONE] checks=$($names.Count) failed=0",'Game destroyed.'))-join "`n"
+$maskManifest=$manifest|ConvertFrom-Json
+$maskManifest.arguments+=@('-aicfExpectedContentMask','7')
+$manifest=$maskManifest|ConvertTo-Json -Compress
+$log=$log.Replace('-aicfExpectedReadyVariants 9','-aicfExpectedReadyVariants 9 -aicfExpectedContentMask 7')+[Environment]::NewLine+'[UNIVERSAL_CONTENT] expected=7 visible=7'
 $count=0
 function Check([string]$name,[string]$value,[string]$plan,[int]$native,[int]$expected,[string]$rule,[switch]$Transition,[switch]$Dedicated){
  [IO.File]::WriteAllText("$work/log.txt",$value);[IO.File]::WriteAllText("$work/manifest.json",$plan);[IO.File]::WriteAllText("$work/exit.txt","$native")
@@ -89,6 +93,10 @@ try{
  Check environmentclock ($environmentLog.Replace('ENVIRONMENT_CLOCK] pass=1','ENVIRONMENT_CLOCK] pass=0')) $environmentManifest 0 1 ENVIRONMENT_CLOCK -Transition
  Check environmentminute ($environmentLog.Replace('time_minutes=817 weather_mode=4 hour=13.616667','time_minutes=816 weather_mode=4 hour=13.616667')) $environmentManifest 0 1 ENVIRONMENT_SELECTION -Transition
  Check environmentslider ($log.Replace('UI_TIME_SLIDER pass=1','UI_TIME_SLIDER pass=0')) $manifest 0 1 CASE_UI_TIME_SLIDER
+ Check enabledmatrix ($log.Replace('ENABLED_MATRIX pass=1','ENABLED_MATRIX pass=0')) $manifest 0 1 CASE_ENABLED_MATRIX
+ Check hiddencontent ($log.Replace('visible=7','visible=3')) $manifest 0 1 CONTENT_MASK
+ Check missingcontent ($log.Replace('[UNIVERSAL_CONTENT] expected=7 visible=7','')) $manifest 0 1 CONTENT_MASK
+ Check contentcli ($log.Replace('-aicfExpectedContentMask 7','-aicfExpectedContentMask 3')) $manifest 0 1 CLI_MISMATCH
 }
 finally{
  $target=[IO.Path]::GetFullPath($work)

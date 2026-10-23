@@ -9,6 +9,8 @@ class AICF_ScenarioVariant
 	string m_sEastLabel;
 	string m_sOwner;
 	ref array<string> m_aAddons = {};
+	// Только внешние content dependencies; собственные integrations загружает transition.
+	ref array<string> m_aContentAddons = {};
 	ref array<ResourceName> m_aPresets = {};
 
 	ResourceName Resolve(int mode, int difficulty)
@@ -62,6 +64,32 @@ class AICF_ScenarioVariant
 			return false;
 		}
 		return true;
+	}
+
+	bool HasEnabledContent(array<string> enabled)
+	{
+		if (!enabled) return false;
+		foreach (string id : m_aContentAddons)
+			if (enabled.Find(id) < 0) return false;
+		return true;
+	}
+
+	bool IsContentEnabled()
+	{
+		if (m_aContentAddons.IsEmpty()) return true;
+		WorkshopApi workshop = GetGame().GetBackendApi().GetWorkshop();
+		if (!workshop || workshop.NeedAddonsScan()) return false;
+		array<string> loaded = {};
+		GameProject.GetLoadedAddons(loaded);
+		array<string> enabled = {};
+		foreach (string id : m_aContentAddons)
+		{
+			WorkshopItem item = workshop.FindItem(id);
+			if (item && item.IsEnabled()) enabled.Insert(id);
+			// Source addon без WorkshopItem должен быть действительно загружен.
+			else if (!item && loaded.Find(id) >= 0) enabled.Insert(id);
+		}
+		return HasEnabledContent(enabled);
 	}
 
 	string GetAddonList()

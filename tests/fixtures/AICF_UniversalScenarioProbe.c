@@ -11,6 +11,7 @@ modded class AICF_ScenarioSetupScreen
 	}
 	bool AICF_UniversalSides() { return m_aButtons[8].IsEnabled() && m_aButtons[9].IsEnabled(); }
 	bool AICF_UniversalStart() { return m_aButtons[13].IsEnabled(); }
+	bool AICF_ContentVisible(int content) { return m_aFrames[content + 3].IsVisible(); }
 	string AICF_UniversalSummary() { return m_wSummary.GetText(); }
 	void AICF_UniversalHelp(int index) { Help(index); }
 }
@@ -22,6 +23,8 @@ class AICF_UniversalScenarioProbe
 	protected ref AICF_ScenarioSetupScreen m_Screen;
 	protected Widget m_PreviousModal;
 	protected ref AICF_ScenarioSetupSelection m_Selection;
+	protected ref array<WorkshopItem> m_aContentItems = {};
+	protected ref array<bool> m_aContentEnabled = {};
 
 	void Check(string name, bool passed)
 	{
@@ -33,8 +36,39 @@ class AICF_UniversalScenarioProbe
 	{
 		WorkshopApi workshop = GetGame().GetBackendApi().GetWorkshop();
 		if (workshop.NeedAddonsScan()) workshop.ScanOfflineItems();
+		GetGame().GetCallqueue().CallLater(ConfigureContent, 4000, false);
 		GetGame().GetCallqueue().CallLater(Readback, 8000, false);
 		GetGame().GetCallqueue().CallLater(Timeout, 90000, false);
+	}
+	// Только isolated fixture и свежий profile. После проверки возвращает enable state.
+	protected void ConfigureContent()
+	{
+		string requested;
+		if (!System.GetCLIParam("aicfProbeEnabledContent", requested)) return;
+		AICF_ScenarioRegistry registry = new AICF_ScenarioRegistry();
+		array<string> enabled = {};
+		if (requested == "RHS") enabled.Copy(registry.Find(0, 1).m_aContentAddons);
+		if (requested == "WCSRHS" || requested == "WCSOnly" || requested == "PartialWCS") enabled.Copy(registry.Find(0, 2).m_aContentAddons);
+		if (requested == "WCSOnly")
+			foreach (string rhs : registry.Find(0, 1).m_aContentAddons) enabled.RemoveItem(rhs);
+		if (requested == "PartialRHS")
+		{
+			enabled.Copy(registry.Find(0, 1).m_aContentAddons);
+			enabled.Remove(0);
+		}
+		if (requested == "PartialWCS") enabled.Remove(enabled.Count() - 1);
+		bool configured = requested == "Vanilla" || requested == "RHS" || requested == "WCSRHS" || requested == "WCSOnly" || requested == "PartialRHS" || requested == "PartialWCS";
+		WorkshopApi workshop = GetGame().GetBackendApi().GetWorkshop();
+		foreach (string id : registry.Find(0, 2).m_aContentAddons)
+		{
+			WorkshopItem item = workshop.FindItem(id);
+			if (!item || item.IsLoaded()) { configured = false; continue; }
+			m_aContentItems.Insert(item);
+			m_aContentEnabled.Insert(item.IsEnabled());
+			item.Enable(enabled.Find(id) >= 0);
+			if (item.IsEnabled() != (enabled.Find(id) >= 0)) configured = false;
+		}
+		Check("ENABLED_CONFIGURATION", configured);
 	}
 	protected void Readback()
 	{
@@ -42,6 +76,24 @@ class AICF_UniversalScenarioProbe
 		m_Selection = new AICF_ScenarioSetupSelection(header);
 		AICF_ScenarioRegistry registry = m_Selection.GetRegistry();
 		Check("REGISTRY", registry.GetVariants().Count() == 9);
+		array<string> none = {};
+		array<string> rhsEnabled = registry.Find(0, 1).m_aContentAddons;
+		array<string> allEnabled = registry.Find(0, 2).m_aContentAddons;
+		bool enabledMatrix = true;
+		foreach (AICF_ScenarioVariant contentVariant : registry.GetVariants())
+		{
+			if (contentVariant.HasEnabledContent(none) != (contentVariant.m_iContent == 0)) enabledMatrix = false;
+			if (contentVariant.HasEnabledContent(rhsEnabled) != (contentVariant.m_iContent < 2)) enabledMatrix = false;
+			if (!contentVariant.HasEnabledContent(allEnabled)) enabledMatrix = false;
+			foreach (string omitted : contentVariant.m_aContentAddons)
+			{
+				array<string> partial = {};
+				partial.Copy(contentVariant.m_aContentAddons);
+				partial.RemoveItem(omitted);
+				if (contentVariant.HasEnabledContent(partial)) enabledMatrix = false;
+			}
+		}
+		Check("ENABLED_MATRIX", enabledMatrix);
 		array<string> available = {};
 		GameProject.GetAvailableAddons(available);
 		Print(string.Format("[AICF][UNIVERSAL_SCAN] available_count=%1 rhs_in_scan=%2", available.Count(), available.Find("1337C0DE5DABBEEF")));
@@ -103,6 +155,13 @@ class AICF_UniversalScenarioProbe
 		Check("UI_MODAL", root && GetGame().GetWorkspace().GetModal() == root);
 		Check("UI_FLAGS_HELP", m_Screen.AICF_UniversalWidgets());
 		Check("UI_START_ENABLED", m_Screen.AICF_UniversalStart());
+		string expectedMask;
+		bool hasMask = System.GetCLIParam("aicfExpectedContentMask", expectedMask);
+		int actualMask;
+		for (int visibleContent; visibleContent < 3; visibleContent++)
+			if (m_Screen.AICF_ContentVisible(visibleContent)) actualMask = actualMask | (1 << visibleContent);
+		Check("UI_CONTENT_MASK", hasMask && actualMask == expectedMask.ToInt());
+		Print(string.Format("[AICF][UNIVERSAL_CONTENT] expected=%1 visible=%2", expectedMask, actualMask));
 		bool environmentValid = m_Screen.GetSelection().GetEnvironment().m_iStartMinutes == 480 && m_Screen.GetSelection().GetEnvironment().m_iWeather == 0;
 		for (int time; time <= 1440; time++)
 			for (int weather; weather < 5; weather++)
@@ -159,9 +218,9 @@ class AICF_UniversalScenarioProbe
 		foreach (AICF_ScenarioVariant variant : m_Selection.GetRegistry().GetVariants())
 		{
 			string missing;
-			bool available = variant.IsAvailable(missing) && AICF_ScenarioLaunch.IsForcedGraphCompatible(variant);
+			bool available = variant.IsContentEnabled() && variant.IsAvailable(missing) && AICF_ScenarioLaunch.IsForcedGraphCompatible(variant);
 			bool selected = m_Screen.SelectVariant(variant.m_iMap, variant.m_iContent);
-			Check("UI_VARIANT_" + variant.m_sKey, selected == available && m_Screen.AICF_UniversalWidgets());
+			Check("UI_VARIANT_" + variant.m_sKey, selected == available && m_Screen.AICF_UniversalWidgets() && m_Screen.AICF_ContentVisible(variant.m_iContent) == variant.IsContentEnabled());
 		}
 		m_Screen.Close();
 		Check("UI_CLOSED", !m_Screen.GetRoot() && GetGame().GetWorkspace().GetModal() == m_PreviousModal);
@@ -174,6 +233,10 @@ class AICF_UniversalScenarioProbe
 	protected void Close() { GetGame().RequestClose(); }
 	void Stop()
 	{
+		foreach (int index, WorkshopItem item : m_aContentItems) item.Enable(m_aContentEnabled[index]);
+		m_aContentItems.Clear();
+		m_aContentEnabled.Clear();
+		GetGame().GetCallqueue().Remove(ConfigureContent);
 		if (m_Screen) m_Screen.Close();
 		m_Screen = null;
 		GetGame().GetCallqueue().Remove(Readback);

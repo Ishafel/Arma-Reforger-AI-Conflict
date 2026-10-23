@@ -225,16 +225,23 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 			for (int candidate; candidate < 3; candidate++)
 			{
 				mapVariant = m_Selection.GetRegistry().Find(mapButton, candidate);
-				if (mapVariant && mapVariant.IsAvailable(missing) && AICF_ScenarioLaunch.IsForcedGraphCompatible(mapVariant)) mapAvailable = true;
+				if (mapVariant && mapVariant.IsContentEnabled() && mapVariant.IsAvailable(missing) && AICF_ScenarioLaunch.IsForcedGraphCompatible(mapVariant)) mapAvailable = true;
 			}
 			m_aButtons[mapButton].SetEnabled(mapAvailable);
 		}
 		string unavailable;
+		int visibleContent;
 		for (int contentButton; contentButton < 3; contentButton++)
 		{
 			AICF_ScenarioVariant contentVariant = m_Selection.GetRegistry().Find(mapIndex, contentButton);
-			bool available = contentVariant && contentVariant.IsAvailable(missing) && AICF_ScenarioLaunch.IsForcedGraphCompatible(contentVariant);
+			bool visible = contentVariant && contentVariant.IsContentEnabled();
+			m_aFrames[contentButton + 3].SetVisible(visible);
+			bool available = visible && contentVariant.IsAvailable(missing) && AICF_ScenarioLaunch.IsForcedGraphCompatible(contentVariant);
 			m_aButtons[contentButton + 3].SetEnabled(available);
+			if (!visible) continue;
+			FrameSlot.SetAnchorMin(m_aFrames[contentButton + 3], 0.23 + visibleContent * 0.145, 0.26);
+			FrameSlot.SetAnchorMax(m_aFrames[contentButton + 3], 0.365 + visibleContent * 0.145, 0.325);
+			visibleContent++;
 			m_aFrames[contentButton + 3].SetOpacity(1);
 			if (!available)
 			{
@@ -261,7 +268,7 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		if (!unavailable.IsEmpty()) status = AICF_Localization.Resolve("{AICF:AICF_Setup_Missing}") + " " + unavailable;
 		if (!AICF_ScenarioLaunch.IsForcedGraphCompatible(m_Selection.GetRegistry().Find(mapIndex, 0))) status = AICF_Localization.Resolve("{AICF:AICF_Setup_Pinned}");
 		m_wStatus.SetText(status);
-		m_aButtons[13].SetEnabled(variant.IsAvailable(missing) && AICF_ScenarioLaunch.IsForcedGraphCompatible(variant) && !m_Selection.GetResource().IsEmpty());
+		m_aButtons[13].SetEnabled(variant.IsContentEnabled() && variant.IsAvailable(missing) && AICF_ScenarioLaunch.IsForcedGraphCompatible(variant) && !m_Selection.GetResource().IsEmpty());
 	}
 
 	protected void RefreshSummary()

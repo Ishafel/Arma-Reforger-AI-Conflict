@@ -61,7 +61,7 @@ class AICF_ScenarioSetupSelection
 	{
 		AICF_ScenarioVariant variant = m_Registry.Find(mapIndex, content);
 		string missing;
-		if (!m_Header || !variant || variant.Resolve(m_iMode, m_iDifficulty).IsEmpty() || !variant.IsAvailable(missing)) return false;
+		if (!m_Header || !variant || !variant.IsContentEnabled() || variant.Resolve(m_iMode, m_iDifficulty).IsEmpty() || !variant.IsAvailable(missing)) return false;
 		m_iMap = mapIndex;
 		m_iContent = content;
 		return true;

@@ -74,7 +74,8 @@ Native лидерство, лимит и ownership RPC сохраняют сво
 `AICF_ScenarioRegistry`/`AICF_ScenarioSetup` владеют локальным frontend выбором.
 Concrete targets и dependency graphs генерируются в Arland integration из общего
 JSON каталога. `AICF_ScenarioLaunch` проверяет native permissions входного item,
-зависимости, download/platform/forced-CLI gates и передаёт точный граф native
+enabled state внешнего content graph, зависимости, download/platform/forced-CLI
+gates и передаёт точный граф native
 Play/Host transition. Окружение передаётся одноразовым process-local intent через
 native GameSessionStorage в точный header. `AICF_ScenarioEnvironmentHandler`
 на authority передаёт начальные часы/погоду штатному handler; native manager

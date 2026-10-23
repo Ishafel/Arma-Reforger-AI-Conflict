@@ -99,7 +99,8 @@ if($Transition){
  exit 0
 }
 $variants=@('Stock','Everon','EveronNorth','RHS','EveronRHS','EveronNorthRHS','ArlandWCSRHS','EveronWCSRHS','EveronNorthWCSRHS')
-$names=@('REGISTRY')+@($variants|ForEach-Object {'PLAN_'+$_})+@('EXPECTED_AVAILABLE','VANILLA_READY','BASE_SOURCE_COMPATIBLE','ATOMIC_INVALID','HOST_GRAPH','NULL_ENTRY_BLOCKED','FORCED_GRAPH','UI_OPEN','UI_BOUNDS','UI_MODAL','UI_FLAGS_HELP','UI_START_ENABLED','UI_ENVIRONMENT','UI_TIME_SLIDER','ENVIRONMENT_STORAGE')
+$names=@('REGISTRY','ENABLED_MATRIX')+@($variants|ForEach-Object {'PLAN_'+$_})+@('EXPECTED_AVAILABLE','VANILLA_READY','BASE_SOURCE_COMPATIBLE','ATOMIC_INVALID','HOST_GRAPH','NULL_ENTRY_BLOCKED','FORCED_GRAPH','UI_OPEN','UI_BOUNDS','UI_MODAL','UI_FLAGS_HELP','UI_START_ENABLED','UI_CONTENT_MASK','UI_ENVIRONMENT','UI_TIME_SLIDER','ENVIRONMENT_STORAGE')
+if([array]::IndexOf($argv,'-aicfProbeEnabledContent') -ge 0){$names+='ENABLED_CONFIGURATION'}
 for($mode=0;$mode -lt 3;$mode++){for($difficulty=0;$difficulty -lt 3;$difficulty++){$names+="UI_${mode}_${difficulty}"}}
 $names+=@('UI_ALL_HELP')+@($variants|ForEach-Object {'UI_VARIANT_'+$_})+@('UI_CLOSED','UI_IDEMPOTENT')
 $cases=@([regex]::Matches($log,'\[UNIVERSAL_CASE\] case=(\w+) pass=([01])'))
@@ -110,6 +111,13 @@ foreach($variant in $variants){if(@($ready|Where-Object {$_.Groups[1].Value -ceq
 $expectedIndex=[array]::IndexOf($argv,'-aicfExpectedReadyVariants')
 if($expectedIndex -lt 0 -or @($ready|Where-Object {$_.Groups[2].Value -eq '1'}).Count -ne [int]$argv[$expectedIndex+1]){$failures+='AVAILABLE_COUNT'}
 $done=@([regex]::Matches($log,'\[UNIVERSAL_DONE\] checks=(\d+) failed=(\d+)'))
+$maskIndex=[array]::IndexOf($argv,'-aicfExpectedContentMask')
+$content=@([regex]::Matches($log,'\[UNIVERSAL_CONTENT\] expected=(\d+) visible=(\d+)'))
+if($maskIndex -lt 0 -or $argv[$maskIndex+1] -notin @('1','3','7') -or $content.Count -ne 1 -or $content[0].Groups[1].Value -cne $argv[$maskIndex+1] -or $content[0].Groups[2].Value -cne $argv[$maskIndex+1]){$failures+='CONTENT_MASK'}
+foreach($flag in @('-aicfExpectedContentMask','-aicfProbeEnabledContent')){
+ $index=[array]::IndexOf($argv,$flag)
+ if($index -ge 0 -and ($cli.Count -ne 1 -or !$cli[0].Groups[1].Value.Contains($flag+' '+$argv[$index+1]))){$failures+='CLI_MISMATCH'}
+}
 if($done.Count -ne 1 -or $done[0].Groups[1].Value -ne "$($names.Count)" -or $done[0].Groups[2].Value -ne '0'){$failures+='COMPLETION'}
 if($failures.Count){$failures;exit 1}
 "Universal scenario full stopped log: PASS; cases=$($names.Count); available=$($argv[$expectedIndex+1])"

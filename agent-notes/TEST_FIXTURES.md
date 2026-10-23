@@ -4,13 +4,24 @@
 
 `AICF_UniversalScenarioProbe.c` копировать отдельно в isolated Core/UI как
 `AICF_ZUniversalScenarioProbe.c`: `-aicfUniversalProbe 1
--aicfExpectedReadyVariants 9`. Native graph/selection/widgets/modal/help/flags/
+-aicfExpectedReadyVariants 9 -aicfExpectedContentMask 1`. Native graph/selection/widgets/modal/help/flags/
 cleanup, 7200 fixed minute/weather choices, 5 random choices и одноразовый session
-storage: 46 cases. Native SliderWidget проверяется по range/step/current и HH:MM;
+storage и enabled dependency matrix: 48 cases. Native SliderWidget проверяется по range/step/current и HH:MM;
 физическое перетаскивание/keyboard/controller требует отдельной ручной проверки.
 ExpectedReadyVariants отражает фактически
 подготовленное окружение, не подменяется количеством прошедших readbacks.
 Окно открывается на короткое время и закрывается само; GUI input не имитируется.
+Content mask: 1 = Vanilla, 3 = Vanilla/RHS, 7 = все три. Analyzer сверяет
+фактическую видимость native frames с mask из manifest и точным CLI.
+`-aicfProbeEnabledContent Vanilla|RHS|WCSRHS|WCSOnly|PartialRHS|PartialWCS`
+добавляет 49-й case: в свежем Stock profile с установленными RHS/WCS fixture
+вызывает native `Enable` только для ещё не загруженных внешних dependencies.
+Expected masks соответственно 1/3/7/1/1/3. Production `Enable` не вызывает.
+Исходные enable states восстанавливаются в `Stop`; loaded item или отказ
+native переключения даёт FAIL, а не имитацию наличия. Каждая отдельная missing
+dependency проверяется дополнительно чистой matrix. Без этого флага fixture
+читает существующее состояние; RHS/WCS initial CLI graph закрепляет content
+и оставляет более узкие варианты видимыми, но несовместимыми для запуска.
 
 `AICF_ScenarioTransitionProbe.c` копировать как `AICF_ZScenarioTransitionProbe.c`.
 `-aicfTransitionProbe 1 -aicfProbeMap 0 -aicfProbeContent 2 -aicfProbeMode 1

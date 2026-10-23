@@ -11,12 +11,16 @@ $rules=@(
  @(0,'Revision revision = item.GetActiveRevision\(\);\s*if \(revision\)\s*\{\s*if \(revision.IsDownloaded\(\) && !revision.IsCorrupted\(\)\) continue;\s*missing = id;\s*return false;\s*\}\s*revision = item.GetLocalRevision\(\);','ACTIVE_REVISION_READY'),
  @(0,'array<ref DSMod> BuildHostMods\(\).*?Revision revision = item.GetActiveRevision\(\);\s*if \(!revision\) revision = item.GetLocalRevision\(\);\s*if \(revision\) mod.version = revision.GetVersion\(\);','HOST_ACTIVE_VERSION'),
  @(0,'foreach \(string id : m_aAddons\).*?result \+= id;','EXACT_GRAPH'),
+ @(0,'foreach \(string id : m_aContentAddons\)\s*if \(enabled.Find\(id\) < 0\) return false;','ALL_ENABLED_CONTENT'),
+ @(0,'if \(m_aContentAddons.IsEmpty\(\)\) return true;.*?GameProject.GetLoadedAddons\(loaded\);.*?item && item.IsEnabled\(\).*?!item && loaded.Find\(id\) >= 0.*?return HasEnabledContent\(enabled\);','NATIVE_ENABLED_CONTENT'),
+ @(1,'!variant.IsContentEnabled\(\).*?!variant.IsAvailable\(missing\)\) return false;','ENABLED_SELECTION'),
  @(1,'!variant.IsAvailable\(missing\)\) return false;\s*m_iMap = mapIndex;\s*m_iContent = content;','ATOMIC_VARIANT'),
  @(2,'!CanStart\(selection, entry, config\)\) return false;','PREFLIGHT'),
  @(2,'IsInsideMainMenu\(\).*?IsTransitionRequestedOrInProgress\(\)','FRONTEND_ONLY'),
  @(2,'IsHostingDisabledOnPlatform\(\).*?CanHost\(entry\).*?CanPlay\(entry\)','NATIVE_GATES'),
  @(2,'GetDownloadQueueState\(completed, total\);\s*if \(total > 0\) return false;','DOWNLOAD_GATE'),
  @(2,'variant.IsAvailable\(missing\) && IsForcedGraphCompatible\(variant\)','FORCED_GRAPH_GATE'),
+ @(2,'return variant && variant.IsContentEnabled\(\) && variant.IsAvailable\(missing\)','ENABLED_LAUNCH'),
  @(2,'!GameProject.IsVanillaAddon\(id\) && variant.m_aAddons.Find\(id\) < 0\) return false;','FORCED_SUBSET'),
  @(2,'RequestScenarioChangeTransition\(resource,\s*, variant.GetAddonList\(\)\)','PLAY_GRAPH'),
  @(2,'config.game.mods = variant.BuildHostMods\(\);.*?RequestPublicServerTransition\(config\)','HOST_GRAPH'),
@@ -26,6 +30,8 @@ $rules=@(
  @(3,'OnFocus\(.*?Help\(index\).*?OnMouseEnter\(.*?Help\(index\)','HELP_INPUT'),
  @(3,'Flag\(8, westFlag\);.*?Flag\(9, eastFlag\);','FLAGS'),
  @(3,'m_aButtons\[contentButton \+ 3\].SetEnabled\(available\)','DISABLED_CONTENT'),
+ @(3,'bool visible = contentVariant && contentVariant.IsContentEnabled\(\);\s*m_aFrames\[contentButton \+ 3\].SetVisible\(visible\);.*?if \(!visible\) continue;.*?visibleContent\+\+;','HIDDEN_CONTENT'),
+ @(3,'mapVariant && mapVariant.IsContentEnabled\(\) && mapVariant.IsAvailable\(missing\)','ENABLED_MAP'),
  @(4,'registry.IsLeaf\(scenario.Id\(\)\)\) return null;.*?super.CreateLine','HIDE_LEAVES'),
  @(4,'GetDefaultScenarios\(\).*?AICF_FilterPresets.*?GetModdedScenarios\(\).*?AICF_FilterPresets','HOST_LISTS'),
  @(5,'bool BeginInitialSpawn\(\).*?m_tSpawnStartedAt = GetGame\(\).GetWorld\(\).GetTimestamp\(\);','INITIAL_CLOCK'),
@@ -46,5 +52,14 @@ if(($sources[0..4] -join '') -match 'Rpc\(|BumpMe\(|SpawnEntity|SetAICommanderMo
 if(@([regex]::Matches(($sources[0..4] -join ''),'RequestReload\(')).Count -ne 1){$failures+='HOST_RELOAD_ONLY'}
 if($sources[0] -match 'Arland|Everon|Missions/'){$failures+='INTEGRATION_BOUNDARY'}
 & (Join-Path $RepositoryRoot 'tools/Update-AICFScenarioRegistry.ps1') -RepositoryRoot $RepositoryRoot -Check
+$catalog=Get-Content (Join-Path $RepositoryRoot 'tools/config/AICF_Scenarios.json') -Raw|ConvertFrom-Json
+$generated=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictArland/Scripts/Game/AIConflictArland/Integration/AICF_ScenarioVariants.c'))
+foreach($variant in $catalog.variants){
+ $body=[regex]::Match($generated,'(?s)variant.m_sKey = "'+[regex]::Escape($variant.name)+'";(.*?)variants.Insert\(variant\);').Value
+ $actual=@([regex]::Matches($body,'m_aContentAddons.Insert\("([^"]+)"\)')|ForEach-Object {$_.Groups[1].Value})
+ $graph=$catalog.graphs.PSObject.Properties[$variant.graph].Value
+ $expected=@($graph.addons|Where-Object {$_ -notin $catalog.localProjects.PSObject.Properties.Name})
+ if(($actual -join ',') -cne ($expected -join ',') -or (($actual.Count -eq 0) -ne ($variant.contentIndex -eq 0))){$failures+='CONTENT_GRAPH_'+$variant.name}
+}
 if($failures.Count){$failures;exit 1}
 "Universal scenario static: PASS; guarded mutations=$mutations; variants=9; presets=81"

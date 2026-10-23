@@ -42,7 +42,7 @@ class AICF_ScenarioLaunch
 		if (total > 0) return false;
 		string missing;
 		AICF_ScenarioVariant variant = selection.GetVariant();
-		return variant && variant.IsAvailable(missing) && IsForcedGraphCompatible(variant);
+		return variant && variant.IsContentEnabled() && variant.IsAvailable(missing) && IsForcedGraphCompatible(variant);
 	}
 
 	static bool Start(AICF_ScenarioSetupSelection selection, MissionWorkshopItem entry, SCR_DSConfig config = null)

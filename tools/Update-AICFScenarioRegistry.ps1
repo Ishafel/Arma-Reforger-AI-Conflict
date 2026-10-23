@@ -32,6 +32,11 @@ foreach($entry in $catalog.variants){
     $lines.Add("`t`tvariant.m_sEastLabel = `"{AICF:AICF_Setup_$east}`";")
     $lines.Add("`t`tvariant.m_sOwner = `"$owner`";")
     foreach($id in $graph.addons){$lines.Add("`t`tvariant.m_aAddons.Insert(`"$id`");")}
+    foreach($id in $graph.addons){
+        if($id -notin $catalog.localProjects.PSObject.Properties.Name){
+            $lines.Add("`t`tvariant.m_aContentAddons.Insert(`"$id`");")
+        }
+    }
     foreach($mode in @('Standard','CoopUS','CoopUSSR')){
         foreach($difficulty in @('Easy','Medium','Hard')){
             $preset=Resolve-AICFScenario -Catalog $catalog -Variant $entry.name -MatchMode $mode -Difficulty $difficulty

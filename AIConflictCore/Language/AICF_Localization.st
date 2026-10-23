@@ -402,8 +402,8 @@ StringTable
 		CustomStringTableItem "{A1CF26102050000E}"
 		{
 			Id "AICF_Setup_ContentHelp"
-			Target_en_us "Vanilla uses stock equipment. RHS uses USMC and MSV. WCS + RHS uses NATO and Russia with both mod packs. A grey option is missing dependencies or is not ready locally. No mods are downloaded by this screen."
-			Target_ru_ru "Vanilla — штатное вооружение. RHS — КМП США и МСВ РФ. WCS + RHS — НАТО и РФ с обоими наборами модов. Серому варианту недостаёт зависимостей либо он ещё не готов. Этот экран не скачивает моды."
+			Target_en_us "Vanilla uses stock equipment. RHS uses USMC and MSV. WCS + RHS uses NATO and Russia. Only enabled mod packs are shown; WCS requires RHS. Enable all dependencies in Workshop, then reopen setup. Grey options are not ready or conflict with startup parameters. No mods are downloaded here."
+			Target_ru_ru "Vanilla — штатное вооружение. RHS — КМП США и МСВ РФ. WCS + RHS — НАТО и РФ. Показаны только включённые наборы; WCS требует RHS. Включите все зависимости в Мастерской и переоткройте настройку. Серые варианты не готовы либо конфликтуют с параметрами запуска. Моды здесь не скачиваются."
 		}
 		CustomStringTableItem "{A1CF26102050000F}"
 		{

@@ -1,5 +1,67 @@
 # Проверки и baseline
 
+## Фильтр контента по включённым модам — 2026-10-23
+
+Продолжение PR #65, ветка `codex/scenario-time-weather`, baseline `1255bde`.
+Основной checkout `codex/issue67-main-retest` сохранён. Evidence:
+`.codex-runtime/scenario-active-mods-20261023/`. Game/Server/Workbench 1.8.0.13,
+terminal-only, отдельные source checkout/stage. Компьютер не выключается.
+
+Vanilla видна всегда. RHS и WCS + RHS появляются только при включённых внешних
+зависимостях; установленные, но отключённые или неполные наборы скрыты вместе
+с input. Индексы вариантов стабильны. SelectVariant, доступность карты и CanStart
+повторяют enabled gate. Собственные integrations загружает точный transition;
+их наличие/готовность проверяется полным dependency graph. Генератор берёт IDs
+из общего каталога; Core не содержит RHS/WCS GUID. Production не включает моды
+и не скачивает их. Подробный контракт — agent-notes/SCENARIO_SETUP.md.
+
+### Команды и свежие результаты
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-UniversalScenarioStatic.ps1,Test-ScenarioSetupStatic.ps1,Test-UniversalScenarioLogContracts.ps1,Test-ScenarioCatalogLogContracts.ps1 -EvidenceRoot <evidence>/baseline`: **4/4 PASS/0** до правки.
+- Тот же runner после правки с этими четырьмя и `Test-ScenarioEnvironmentStatic.ps1`, `Test-ScenarioHeadersStatic.ps1`, `Test-RHSIntegrationStatic.ps1`, `Test-WCSIntegrationStatic.ps1`, `<evidence>/after`: **8/8 PASS/0**. Universal static: **33 guarded mutations**; log contracts: **54 cases**. Generator `Update-AICFScenarioRegistry.ps1 -Check` PASS.
+- `Compile.ps1 -Label <label> -Variant <variant> [-SourceRoot <stage>]` → canonical Client DryRun graph → terminal `ArmaReforgerWorkbenchSteamDiag.exe -noThrow -wbsilent ... -wbModule=ScriptEditor -run -validate`: **9/9 PASS/0**. Production Stock/RHS/ArlandWCSRHS и шесть stage graphs с Everon/EveronRHS/EveronWCSRHS. Полные argv/manifests/native exits/logs сохранены.
+- `FrontendMatrix.ps1` → `RunFrontend.ps1`: финальные **10/10 PASS/0** по полным stopped logs: шесть enabled configurations, два local Play, один private Listen Host, native catalog. Native exits 0, SCRIPT/VM/fatal/assertions 0. Общий ноль vendor engine/resource diagnostics не заявляется.
+- Шесть controlled configurations: все внешние пакеты установлены; fixture вызывает native `WorkshopItem.Enable` в свежем Stock profile до загрузки и возвращает исходные states в Stop. Production этого не делает. **49/49 native checks** в каждом run: видимость frames, отказ скрытому SelectVariant, matrix с исключением каждой dependency. Expected masks задаются заранее manifest и сверяются analyzer с точным CLI/readback.
+- Play: Arland Vanilla и Everon RHS, Co-op USSR Medium, 13:37/Cloudy. Host: North Everon WCS+RHS, тот же режим/окружение, private Listen/RPL port 24021. Exact loaded graph/header/ROSTER_READY/окружение подтверждены. Catalog **15/15**. GUI input не имитируется.
+- **437/437** production artifacts совпали со stage до и после runtime. `git diff --check` PASS/0. Полные profiles/stage сохранены в ZIP с проверкой SHA-256 каждого entry перед адресным удалением; index — `archives/index.json`. Свои native процессы завершены.
+
+| Включённые внешние моды | Фактический список | Mask |
+|---|---|---:|
+| Нет | Vanilla | 1 |
+| Полный RHS | Vanilla, RHS | 3 |
+| Полный WCS + RHS | Vanilla, RHS, WCS + RHS | 7 |
+| WCS без RHS | Vanilla | 1 |
+| RHS без одной зависимости | Vanilla | 1 |
+| Неполный WCS, полный RHS | Vanilla, RHS | 3 |
+
+### Сохранённые FAIL и ограничения
+
+Первые `play-rhs` и `host-wcs`: strict **FAIL/PROJECT_RESOURCE**, хотя native
+exit 0 и header/graph/roster/environment прошли. В stage не были сгенерированы
+resourceDatabase.rdb трёх Everon integrations: агент подготовил только Arland
+graphs перед сменой карты. `rdb-before.json` фиксирует отсутствие. Workbench
+скомпилировал три Everon graphs, `rdb-after.json` фиксирует databases.
+Те же scenarios/arguments повторены под свежими labels/profiles
+`play-rhs-rdb` и `host-wcs-rdb`: strict PASS/0. Production, fixtures и analyzer
+между попытками не менялись; 437 исходных SHA-256 подтверждены. Первые полные
+логи/verdicts сохранены отдельно: всего **12 попыток — 10 PASS и 2 FAIL
+подготовки**, финальный план 10/10 PASS. Oracle не ослаблялся.
+
+**NOT RUN:** полный offline 78 checks, новые 15-minute soaks/полная боевая матрица,
+dedicated/JIP/найм/respawn/save-file restore, packaged Workshop/чистая установка,
+ручные mouse/keyboard/controller действия, внешний вид/фокус разных разрешений,
+второй игрок/public Host и фактическое engine применение password/player limit.
+Для визуальной проверки игроку нужно открыть AI Conflict и пройти выбор/отмену/
+Play/Host; AGENTS.md запрещает GUI automation, native readbacks этого не доказывают.
+Старые PASS не выдаются за новые.
+
+Прежние `enf_entity.cpp:280` / out-of-bounds `RHS_M4A1_LOWER.xob` и
+`ak74m_bebra.xob` **не исправлены** этой UI-правкой, причина неизвестна.
+Crash evidence и FAIL остаются в прежних отчётах. **PR #65 остаётся draft**,
+issue #46 открыто; merge/Workshop publish не выполнялись. Новые menu gates
+не снимают прежний runtime blocker.
+
+
 ## Полный повторный прогон PR #65 после merge — 2026-10-22
 
 Проверен source `7004932` в `codex/scenario-time-weather`, после merge main
