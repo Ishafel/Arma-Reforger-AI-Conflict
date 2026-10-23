@@ -29,6 +29,43 @@ modded class AICF_ScenarioSetupScreen
 	{
 		return m_wTimeValue.GetColorInt() == Gold().PackToInt() && m_wSummary.GetColorInt() == Color.FromSRGBA(237, 240, 242, 255).PackToInt();
 	}
+	bool AICF_MapCardIdentity()
+	{
+		if (m_aMapTags.Count() != 3 || m_aMapDescriptions.Count() != 3) return false;
+		array<int> colors = {};
+		array<string> descriptions = {};
+		for (int mapIndex; mapIndex < 3; mapIndex++)
+		{
+			TextWidget tag = m_aMapTags[mapIndex];
+			TextWidget description = m_aMapDescriptions[mapIndex];
+			if (!tag || !description || tag.GetText().IsEmpty() || description.GetText().IsEmpty()) return false;
+			if (tag.GetText().Contains("{AICF:") || description.GetText().Contains("{AICF:")) return false;
+			if (colors.Find(tag.GetColorInt()) >= 0 || descriptions.Find(description.GetText()) >= 0) return false;
+			colors.Insert(tag.GetColorInt());
+			descriptions.Insert(description.GetText());
+			bool grid = m_aFrames[mapIndex].FindAnyWidget("AICF_CardSectorGrid") != null;
+			if (grid != (mapIndex == 2)) return false;
+			array<TextWidget> labels = { m_aLabels[mapIndex], tag, description };
+			float cardX, cardY, cardWidth, cardHeight;
+			m_aFrames[mapIndex].GetScreenPos(cardX, cardY);
+			m_aFrames[mapIndex].GetScreenSize(cardWidth, cardHeight);
+			foreach (TextWidget label : labels)
+			{
+				float x, y, width, height;
+				label.GetScreenPos(x, y);
+				label.GetScreenSize(width, height);
+				if (width <= 0 || height <= 0 || x < cardX - 1 || y < cardY - 1 || x + width > cardX + cardWidth + 1 || y + height > cardY + cardHeight + 1) return false;
+				float textWidth, textHeight;
+				label.GetTextSize(textWidth, textHeight);
+				bool fits = textWidth <= GetGame().GetWorkspace().DPIUnscale(width) + 2 && textHeight <= GetGame().GetWorkspace().DPIUnscale(height) + 2;
+				Print(string.Format("[AICF][UNIVERSAL_CARD_TEXT] map=%1 text=%2 width=%3 height=%4 glyph_width=%5 glyph_height=%6 fits=%7", mapIndex, label.GetText(), width, height, textWidth, textHeight, fits));
+				if (!fits) return false;
+			}
+			Print(string.Format("[AICF][UNIVERSAL_CARD] map=%1 tag=%2 description=%3 color=%4 grid=%5", mapIndex, tag.GetText(), description.GetText(), tag.GetColorInt(), grid));
+		}
+		SCR_MissionHeader source = SCR_MissionHeader.Cast(MissionHeader.ReadMissionHeader(m_Selection.GetRegistry().Find(1, 0).m_sPreviewHeader));
+		return source && !source.m_sLoadingScreen.IsEmpty() && source.m_sLoadingScreen != source.m_sPreviewImage;
+	}
 	bool AICF_BriefingLayout()
 	{
 		float rootX, rootY, rootWidth, rootHeight;
@@ -202,6 +239,7 @@ class AICF_UniversalScenarioProbe
 		Check("UI_MODAL", root && GetGame().GetWorkspace().GetModal() == root);
 		Check("UI_FLAGS_HELP", m_Screen.AICF_UniversalWidgets());
 		Check("UI_MAP_PREVIEWS", m_Screen.AICF_MapPreviews());
+		Check("UI_CARD_IDENTITY", m_Screen.AICF_MapCardIdentity());
 		Check("UI_BRIEFING_LAYOUT", m_Screen.AICF_BriefingLayout());
 		Check("UI_TEXT_PALETTE", m_Screen.AICF_TextPalette());
 		Check("UI_START_ENABLED", m_Screen.AICF_UniversalStart());

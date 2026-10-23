@@ -6,6 +6,11 @@ class AICF_ScenarioVariant
 	int m_iContent;
 	string m_sMapLabel;
 	ResourceName m_sPreviewHeader;
+	string m_sMapTag;
+	string m_sMapDescription;
+	vector m_vMapAccent;
+	bool m_bPreviewArtwork;
+	bool m_bPreviewSectorGrid;
 	string m_sWestLabel;
 	string m_sEastLabel;
 	string m_sOwner;

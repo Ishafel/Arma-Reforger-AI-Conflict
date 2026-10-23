@@ -4342,5 +4342,41 @@ StringTable
 			Target_en_us "HOST SESSION"
 			Target_ru_ru "СЕТЕВАЯ СЕССИЯ"
 		}
+		CustomStringTableItem "{A1CF261023710001}"
+		{
+			Id "AICF_Setup_Tag_Arland"
+			Target_en_us "ISLAND OPERATION"
+			Target_ru_ru "ОСТРОВНАЯ ОПЕРАЦИЯ"
+		}
+		CustomStringTableItem "{A1CF261023710002}"
+		{
+			Id "AICF_Setup_Tag_Everon"
+			Target_en_us "FULL THEATER"
+			Target_ru_ru "БОЛЬШОЙ ТЕАТР"
+		}
+		CustomStringTableItem "{A1CF261023710003}"
+		{
+			Id "AICF_Setup_Tag_EveronNorth"
+			Target_en_us "NORTHERN SECTOR"
+			Target_ru_ru "СЕВЕРНЫЙ СЕКТОР"
+		}
+		CustomStringTableItem "{A1CF261023710004}"
+		{
+			Id "AICF_Setup_Description_Arland"
+			Target_en_us "Compact area of operations"
+			Target_ru_ru "Компактный район операции"
+		}
+		CustomStringTableItem "{A1CF261023710005}"
+		{
+			Id "AICF_Setup_Description_Everon"
+			Target_en_us "The entire island and radio network"
+			Target_ru_ru "Весь остров и радиосеть"
+		}
+		CustomStringTableItem "{A1CF261023710006}"
+		{
+			Id "AICF_Setup_Description_EveronNorth"
+			Target_en_us "Objectives in the north of the island"
+			Target_ru_ru "Цели на севере острова"
+		}
 	}
 }

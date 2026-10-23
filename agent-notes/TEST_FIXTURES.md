@@ -6,7 +6,7 @@
 `AICF_ZUniversalScenarioProbe.c`: `-aicfUniversalProbe 1
 -aicfExpectedReadyVariants 9 -aicfExpectedContentMask 1`. Native graph/selection/widgets/modal/help/flags/
 cleanup, 7200 fixed minute/weather choices, 5 random choices и одноразовый session
-storage и enabled dependency matrix: 52 cases. Native SliderWidget проверяется по range/step/current и HH:MM;
+storage и enabled dependency matrix: 53 cases. Native SliderWidget проверяется по range/step/current и HH:MM;
 физическое перетаскивание/keyboard/controller требует отдельной ручной проверки.
 ExpectedReadyVariants отражает фактически
 подготовленное окружение, не подменяется количеством прошедших readbacks.
@@ -14,7 +14,7 @@ ExpectedReadyVariants отражает фактически
 Content mask: 1 = Vanilla, 3 = Vanilla/RHS, 7 = все три. Analyzer сверяет
 фактическую видимость native frames с mask из manifest и точным CLI.
 `-aicfProbeEnabledContent Vanilla|RHS|WCSRHS|WCSOnly|PartialRHS|PartialWCS`
-добавляет 53-й case: в свежем Stock profile с установленными RHS/WCS fixture
+добавляет 54-й case: в свежем Stock profile с установленными RHS/WCS fixture
 вызывает native `Enable` только для ещё не загруженных внешних dependencies.
 Expected masks соответственно 1/3/7/1/1/3. Production `Enable` не вызывает.
 Исходные enable states восстанавливаются в `Stop`; loaded item или отказ
@@ -24,7 +24,11 @@ dependency проверяется дополнительно чистой matrix
 и оставляет более узкие варианты видимыми, но несовместимыми для запуска.
 Новые layout readbacks проверяют 20 кнопок без пересечений/выхода за root,
 многострочную сводку, три загруженных preview с сохранёнными пропорциями и
-фактические цвета текста. UI отвергает время 1440, отдельной random-кнопки нет;
+фактические цвета текста. `UI_CARD_IDENTITY` дополнительно проверяет три
+локализованных tag/description с разными цветами, сетку только северной карты,
+размещение подписей и размер glyph bounds через native DPIUnscale.
+Отдельная loading illustration Эверона должна отличаться от его preview.
+UI отвергает время 1440, отдельной random-кнопки нет;
 model/storage matrix сохраняет пять legacy random-time choices для совместимости.
 Размеры widgets и Color readbacks не доказывают внешний вид или физический ввод.
 

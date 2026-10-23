@@ -6,7 +6,7 @@ New-Item -ItemType Directory -Path $work|Out-Null
 $audit=Join-Path $RepositoryRoot 'tests/log-audits/Test-UniversalScenarioLog.ps1'
 $manifest=@{arguments=@('-gproj','C:\source\addon.gproj','-profile','C:\fresh','-addonsDir','C:\source,C:\mods','-addons','CORE,MAP','-aicfUniversalProbe','1','-aicfExpectedReadyVariants','9')}|ConvertTo-Json -Compress
 $variants=@('Stock','Everon','EveronNorth','RHS','EveronRHS','EveronNorthRHS','ArlandWCSRHS','EveronWCSRHS','EveronNorthWCSRHS')
-$names=@('REGISTRY','ENABLED_MATRIX')+@($variants|ForEach-Object {'PLAN_'+$_})+@('EXPECTED_AVAILABLE','VANILLA_READY','BASE_SOURCE_COMPATIBLE','ATOMIC_INVALID','HOST_GRAPH','NULL_ENTRY_BLOCKED','FORCED_GRAPH','UI_OPEN','UI_BOUNDS','UI_MODAL','UI_FLAGS_HELP','UI_MAP_PREVIEWS','UI_BRIEFING_LAYOUT','UI_TEXT_PALETTE','UI_NO_RANDOM_TIME','UI_START_ENABLED','UI_CONTENT_MASK','UI_ENVIRONMENT','UI_TIME_SLIDER','ENVIRONMENT_STORAGE')
+$names=@('REGISTRY','ENABLED_MATRIX')+@($variants|ForEach-Object {'PLAN_'+$_})+@('EXPECTED_AVAILABLE','VANILLA_READY','BASE_SOURCE_COMPATIBLE','ATOMIC_INVALID','HOST_GRAPH','NULL_ENTRY_BLOCKED','FORCED_GRAPH','UI_OPEN','UI_BOUNDS','UI_MODAL','UI_FLAGS_HELP','UI_MAP_PREVIEWS','UI_CARD_IDENTITY','UI_BRIEFING_LAYOUT','UI_TEXT_PALETTE','UI_NO_RANDOM_TIME','UI_START_ENABLED','UI_CONTENT_MASK','UI_ENVIRONMENT','UI_TIME_SLIDER','ENVIRONMENT_STORAGE')
 for($mode=0;$mode -lt 3;$mode++){for($difficulty=0;$difficulty -lt 3;$difficulty++){$names+="UI_${mode}_${difficulty}"}}
 $names+=@('UI_ALL_HELP')+@($variants|ForEach-Object {'UI_VARIANT_'+$_})+@('UI_CLOSED','UI_IDEMPOTENT')
 $log=(@('CLI Params: -gproj C:\source\addon.gproj -profile C:\fresh -addonsDir C:\source,C:\mods -addons CORE,MAP -aicfUniversalProbe 1 -aicfExpectedReadyVariants 9')+@($names|ForEach-Object {"[UNIVERSAL_CASE] case=$_ pass=1"})+@($variants|ForEach-Object {"[UNIVERSAL_AVAILABLE] variant=$_ available=1 missing= graph=CORE,MAP"})+@("[UNIVERSAL_DONE] checks=$($names.Count) failed=0",'Game destroyed.'))-join "`n"
@@ -95,6 +95,7 @@ try{
  Check environmentslider ($log.Replace('UI_TIME_SLIDER pass=1','UI_TIME_SLIDER pass=0')) $manifest 0 1 CASE_UI_TIME_SLIDER
  Check enabledmatrix ($log.Replace('ENABLED_MATRIX pass=1','ENABLED_MATRIX pass=0')) $manifest 0 1 CASE_ENABLED_MATRIX
  Check previews ($log.Replace('UI_MAP_PREVIEWS pass=1','UI_MAP_PREVIEWS pass=0')) $manifest 0 1 CASE_UI_MAP_PREVIEWS
+ Check cardidentity ($log.Replace('UI_CARD_IDENTITY pass=1','UI_CARD_IDENTITY pass=0')) $manifest 0 1 CASE_UI_CARD_IDENTITY
  Check briefinglayout ($log.Replace('UI_BRIEFING_LAYOUT pass=1','UI_BRIEFING_LAYOUT pass=0')) $manifest 0 1 CASE_UI_BRIEFING_LAYOUT
  Check textpalette ($log.Replace('UI_TEXT_PALETTE pass=1','UI_TEXT_PALETTE pass=0')) $manifest 0 1 CASE_UI_TEXT_PALETTE
  Check norandomtime ($log.Replace('UI_NO_RANDOM_TIME pass=1','UI_NO_RANDOM_TIME pass=0')) $manifest 0 1 CASE_UI_NO_RANDOM_TIME

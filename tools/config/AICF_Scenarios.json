@@ -5,6 +5,29 @@
     "1": "{ECC61978EDCC2B5A}Missions/23_Campaign.conf",
     "2": "{ECC61978EDCC2B5A}Missions/23_Campaign.conf"
   },
+  "mapCards": {
+    "0": {
+      "tag": "{AICF:AICF_Setup_Tag_Arland}",
+      "description": "{AICF:AICF_Setup_Description_Arland}",
+      "accent": [89, 190, 171],
+      "artwork": false,
+      "sectorGrid": false
+    },
+    "1": {
+      "tag": "{AICF:AICF_Setup_Tag_Everon}",
+      "description": "{AICF:AICF_Setup_Description_Everon}",
+      "accent": [221, 168, 103],
+      "artwork": true,
+      "sectorGrid": false
+    },
+    "2": {
+      "tag": "{AICF:AICF_Setup_Tag_EveronNorth}",
+      "description": "{AICF:AICF_Setup_Description_EveronNorth}",
+      "accent": [123, 180, 225],
+      "artwork": false,
+      "sectorGrid": true
+    }
+  },
   "graphs": {
     "AIConflictArland": {
       "project": "AIConflictArland/addon.gproj",

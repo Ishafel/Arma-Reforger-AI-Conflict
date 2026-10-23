@@ -24,6 +24,8 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 	protected ref array<Widget> m_aSurfaces = {};
 	protected ref array<Widget> m_aAccents = {};
 	protected ref array<ImageWidget> m_aMapImages = {};
+	protected ref array<TextWidget> m_aMapTags = {};
+	protected ref array<TextWidget> m_aMapDescriptions = {};
 	protected ref array<TextWidget> m_aTextWidgets = {};
 	protected ref array<int> m_aTextSizes = {};
 	protected float m_fLayoutWidth;
@@ -177,21 +179,48 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 	}
 	protected void AddMapPreview(int button, AICF_ScenarioVariant variant)
 	{
-		FrameSlot.SetAnchorMin(m_aLabels[button], 0.04, 0.72);
-		FrameSlot.SetAnchorMax(m_aLabels[button], 0.96, 0.97);
+		FrameSlot.SetAnchorMin(m_aLabels[button], 0.055, 0.65);
+		FrameSlot.SetAnchorMax(m_aLabels[button], 0.945, 0.82);
+		m_aLabels[button].ClearFlags(WidgetFlags.CENTER);
+		ref Color accent = Color.FromSRGBA(variant.m_vMapAccent[0], variant.m_vMapAccent[1], variant.m_vMapAccent[2], 255);
+		m_aMapDescriptions.Insert(Text(m_aFrames[button], 0.055, 0.82, 0.945, 0.96, variant.m_sMapDescription, 14, Muted()));
 		string missing;
 		if (!variant.IsAvailable(missing)) return;
 		SCR_MissionHeader source = SCR_MissionHeader.Cast(MissionHeader.ReadMissionHeader(variant.m_sPreviewHeader));
 		if (!source) { m_iPreviewFailures++; return; }
-		Widget area = m_Style.CreateRect(m_aFrames[button], 0.008, 0.012, 0.992, 0.70, Color.White, false);
+		Widget area = m_Style.CreateRect(m_aFrames[button], 0.008, 0.012, 0.992, 0.63, Color.White, false);
 		ImageWidget image;
 		if (area) image = ImageWidget.Cast(area.FindAnyWidget("AICF_RectBackground"));
-		if (!image || !image.LoadImageTexture(0, source.m_sPreviewImage)) { m_iPreviewFailures++; return; }
+		ResourceName texture = source.m_sPreviewImage;
+		if (variant.m_bPreviewArtwork) texture = source.m_sLoadingScreen;
+		if (!image || !image.LoadImageTexture(0, texture)) { m_iPreviewFailures++; return; }
 		area.SetFlags(WidgetFlags.CLIPCHILDREN);
 		image.SetFlags(WidgetFlags.INHERIT_CLIPPING);
 		image.SetSaturation(0.65);
 		image.SetColor(Color.White);
 		m_aMapImages.Insert(image);
+		Widget tint = m_Style.CreateRect(area, 0, 0, 1, 1, Color.FromSRGBA(variant.m_vMapAccent[0], variant.m_vMapAccent[1], variant.m_vMapAccent[2], 45), false);
+		if (tint) tint.SetZOrder(1);
+		if (variant.m_bPreviewSectorGrid) AddSectorGrid(area, accent);
+		Widget badge = m_Style.CreateRect(area, 0.04, 0.08, 0.94, 0.36, Color.FromSRGBA(12, 21, 27, 230), false);
+		if (!badge) { m_iPreviewFailures++; return; }
+		badge.SetZOrder(3);
+		m_Style.CreateRect(badge, 0, 0, 0.015, 1, accent, false);
+		m_aMapTags.Insert(Text(badge, 0.045, 0, 0.965, 1, variant.m_sMapTag, 13, accent));
+		m_Style.CreateRect(m_aFrames[button], 0.055, 0.615, 0.23, 0.635, accent, false);
+	}
+	// Декоративная сетка обозначает ограниченный сектор, без world-координат.
+	protected void AddSectorGrid(Widget area, Color accent)
+	{
+		Widget grid = m_Style.CreateRect(area, 0, 0, 1, 1, Color.FromSRGBA(11, 27, 42, 110), false);
+		if (!grid) return;
+		grid.SetName("AICF_CardSectorGrid");
+		grid.SetZOrder(2);
+		for (int column = 1; column < 6; column++)
+			m_Style.CreateRect(grid, column / 6.0, 0, column / 6.0 + 0.002, 1, Color.FromSRGBA(174, 208, 231, 75), false);
+		for (int row = 1; row < 4; row++)
+			m_Style.CreateRect(grid, 0, row / 4.0, 1, row / 4.0 + 0.004, Color.FromSRGBA(174, 208, 231, 75), false);
+		Text(grid, 0.8, 0.56, 0.94, 0.93, "N", 24, accent, true);
 	}
 	// Размеры новых widgets становятся окончательными после native layout pass.
 	// При неизменном размере root работа выполняется только один раз.
@@ -523,6 +552,8 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		m_aSurfaces.Clear();
 		m_aAccents.Clear();
 		m_aMapImages.Clear();
+		m_aMapTags.Clear();
+		m_aMapDescriptions.Clear();
 		m_aTextWidgets.Clear();
 		m_aTextSizes.Clear();
 		m_fLayoutWidth = 0;

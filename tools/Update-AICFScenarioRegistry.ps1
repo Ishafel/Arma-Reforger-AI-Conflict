@@ -31,6 +31,15 @@ foreach($entry in $catalog.variants){
     $preview=$catalog.previewHeaders.PSObject.Properties[[string]$entry.mapIndex].Value
     if($preview -notmatch '^\{[A-F0-9]{16}\}Missions/[^\r\n"]+\.conf$'){throw 'Invalid preview header'}
     $lines.Add("`t`tvariant.m_sPreviewHeader = `"$preview`";")
+    $card=$catalog.mapCards.PSObject.Properties[[string]$entry.mapIndex].Value
+    if(!$card -or $card.tag -notmatch '^\{AICF:AICF_Setup_Tag_\w+\}$' -or $card.description -notmatch '^\{AICF:AICF_Setup_Description_\w+\}$'){throw 'Invalid map card labels'}
+    if(@($card.accent).Count -ne 3 -or @($card.accent | Where-Object {($_ -isnot [int] -and $_ -isnot [long]) -or $_ -lt 0 -or $_ -gt 255}).Count){throw 'Invalid map card accent'}
+    if($card.artwork -isnot [bool] -or $card.sectorGrid -isnot [bool]){throw 'Invalid map card presentation'}
+    $lines.Add("`t`tvariant.m_sMapTag = `"$($card.tag)`";")
+    $lines.Add("`t`tvariant.m_sMapDescription = `"$($card.description)`";")
+    $lines.Add("`t`tvariant.m_vMapAccent = `"$($card.accent -join ' ')`";")
+    $lines.Add("`t`tvariant.m_bPreviewArtwork = $($card.artwork.ToString().ToLowerInvariant());")
+    $lines.Add("`t`tvariant.m_bPreviewSectorGrid = $($card.sectorGrid.ToString().ToLowerInvariant());")
     $lines.Add("`t`tvariant.m_sWestLabel = `"{AICF:AICF_Setup_$west}`";")
     $lines.Add("`t`tvariant.m_sEastLabel = `"{AICF:AICF_Setup_$east}`";")
     $lines.Add("`t`tvariant.m_sOwner = `"$owner`";")

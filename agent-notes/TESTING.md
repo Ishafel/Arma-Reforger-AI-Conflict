@@ -1,5 +1,37 @@
 # Проверки и baseline
 
+## Различимые карточки карт — 2026-10-23
+
+Продолжение оформления PR #65, baseline `03fcff6`, та же ветка
+`codex/scenario-time-weather`. Evidence:
+`.codex-runtime/scenario-cards-20261023/`. Game/Workbench **1.8.0.13**.
+Основной checkout и его ветка сохранены; работа terminal-only.
+
+Арланд: бирюзовый accent и stock preview; Эверон: песочный accent и отдельная
+stock loading illustration; Север Эверона: голубой accent, preview с сеткой/N.
+У каждой карты свой локализованный tag/description. Золото сохраняет значение
+выбора. `mapCards` принадлежит общему каталогу/integration generator; Core
+получает generic descriptors. Legacy MissionHeader и addon.gproj не менялись.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-UniversalScenarioStatic.ps1,Test-ScenarioSetupStatic.ps1,Test-ScenarioEnvironmentStatic.ps1,Test-UniversalScenarioLogContracts.ps1,Test-LocalizationStatic.ps1 -EvidenceRoot <evidence>/baseline`: **5/5 PASS/0** до изменений. Тот же runner, `after-final`: **5/5 PASS/0**. Universal static: 37 guarded mutations; log contracts: **59 cases**; localization: **728 entries**, EN/RU. Generator `-Check` и `git diff --check`: PASS/0.
+- `Compile.ps1 -Label <label> -Variant Stock|RHS|ArlandWCSRHS [-SourceRoot <stage>]` → canonical Client DryRun → terminal Workbench Validate/Compile: **6/6 PASS/0**, три production и три stage graphs. Полные manifests/argv/native exits/logs сохранены.
+- `FrontendMatrix.ps1` → `RunFrontend.ps1`: **3/3 PASS/0** в свежих profiles Vanilla/RHS/WCS+RHS. По **54/54** native checks: новая card identity, загрузка трёх изображений и пропорции, цвета, подписи, bounds, все mode/difficulty/variant choices, enabled content masks 1/3/7, slider, summary, modal/help/flags и cleanup. Физический ввод не имитировался.
+- `UI_CARD_IDENTITY` подтверждает разные tag/description/colors, grid только на северной карточке, отличающиеся stock artwork/preview Эверона. Для девяти подписей native glyph bounds помещаются в widgets после DPIUnscale. Это подтверждает размеры в фактическом тестовом окружении, не все разрешения/языки.
+- Полные остановленные native logs: **SCRIPT/VM/fatal/assertions 0**. Прочие vendor GUI/resource/shutdown E diagnostics сохранены, **210 строк с дублирующими error logs**; общий error-free engine gate не заявляется.
+- **437/437** production artifacts совпали со stage; SHA-256 трёх fixture также совпали. Свои native процессы и watcher остановлены. Три profiles и stage архивированы: SHA-256 каждого ZIP entry проверен до адресного удаления; `archives/index.json`. Сводка: `final-summary.json`, inventory: `final-log-inventory.json`.
+
+Relevant baseline failures: **нет**. При подготовке PowerShell 7 прочитал JSON
+RGB как Int64, первый generator ошибочно отверг их. Проверка принимает Int32/
+Int64, сохраняя запрет дробных/выходящих за диапазон значений; финальный generator
+и Windows PowerShell audits прошли. Детали: `preparation-notes.txt`.
+
+**NOT RUN:** ручная оценка внешнего вида, mouse/keyboard/controller, все физические
+разрешения и языки; полный offline набор, новые Play/Host/dedicated/JIP/найм/
+бой/15-minute soak, packaged Workshop и FPS benchmark. Изменение касается
+оформления карточек. Прежние native out-of-bounds и неизвестное зависание
+предыдущего прототипа не исправлены этим изменением; их evidence сохранено.
+PR #65 остаётся **draft**, issue #46 открыто.
+
 ## Обновление меню подготовки операции — 2026-10-23
 
 Продолжение PR #65 в `codex/scenario-time-weather`, baseline `f2733b5`.
