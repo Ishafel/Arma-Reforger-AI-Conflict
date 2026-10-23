@@ -1,5 +1,30 @@
 # Runtime fixture: каталог и применение
 
+## Второе оружие и быстрые слоты
+
+`AICF_WeaponQuickslotProbe.c` копировать в isolated Core/Integration как
+`AICF_ZWeaponQuickslotProbe.c`; canonical server `-aicfQuickslotProbe 1`.
+Native component control создаёт две винтовки, сохраняет/читает recipe JSON
+и файл PersonalLoadoutStore, пересобирает preset, вызывает native InitAsPlayer
+и проверяет обе привязки, пользовательское назначение и занятый slot.
+12 cases; это проверка компонента, не подмена полноценного player deployment.
+
+`AICF_QuickslotNetworkProbe.c` → `AICF_ZQuickslotNetworkProbe.c`.
+`-aicfQuickslotNetworkProbe 1` на canonical dedicated server и direct client:
+native faction/group/loadout requests, owner RPC read/save, выбор personal,
+настоящий spawn, readback SVD в quickslot 1 и native UseItem/оружие в руках.
+Client закрывается сам, server — после disconnect либо через 240 s.
+Callbacks снимаются при Close/destruction. Клиенту -noFocus/-forceUpdate;
+launcher до подключения проверяет server CLI/PID/ROSTER_READY.
+Если backend UID недоступен, native store честно возвращает SAVED_SESSION:
+это подтверждает session RPC, не persistent account path. Файловая roundtrip
+проверяется отдельно компонентной fixture.
+
+`Test-WeaponQuickslotLog.ps1` требует полный stopped log, canonical manifest/
+native exit, все cases, CLI integrity; читает также соседние native logs,
+включая crash.log. С -Network требует launcher SERVER_READY, save status и
+7/7 client cases. Физическая клавиша 2 и пиксельный вид hotbar — NOT RUN.
+
 ## Дым сигареты и thread-lock assertion
 
 `AICF_CigaretteProbe.c` копировать в isolated Core/Integration как

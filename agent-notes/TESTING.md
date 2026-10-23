@@ -1,5 +1,60 @@
 # Проверки и baseline
 
+## SVD во втором оружейном месте без quickslot — 2026-10-23
+
+Baseline `f04049b`, отдельная ветка `codex/personal-weapon-quickslots`.
+Игрок показал СВД в inventory/на спине при пустом quickbar «2». Evidence:
+`.codex-runtime/svd-slots-20261023/`; копия исходного personal preset —
+`user-presets/`, исходный файл пользователя сохранён.
+
+Native `InitAsPlayer` отмечает default quickslot двух винтовок одинаковым
+ключом и пропускает вторую. До правки component control на RHS сохранил/
+прочитал recipe, восстановил обе винтовки, но получил quick1=NULL:
+`SECONDARY_QUICKSLOT pass=0`, остальные 9 cases прошли. Это воспроизведение
+дефекта, не допустимый baseline для выпуска. `AICF_WeaponQuickslots`
+дополняет только отсутствующую привязку по фактическому weapon slot index;
+сохранение inventory/schema/authority RPC не меняются.
+
+- `Invoke-AICFChecks.ps1`: baseline PersonalLoadoutContracts/AILoadoutStatic
+  **2/2 PASS/0**; final с WeaponQuickslotLogContracts/CigaretteLogContracts
+  **4/4 PASS/0**. Новые quickslot log contracts — **20 cases**.
+- `Compile.ps1` → terminal Workbench Validate/Compile: production Stock/RHS/
+  ArlandWCSRHS/EveronRHS **4/4 PASS/0**. Final stage Stock и network-stage RHS
+  прошли отдельно. Source graph/argv/native exits и полные logs сохранены.
+- Canonical `Start-AICFRuntime.ps1 -Role Server -Variant Stock|RHS
+  -MatchMode Standard -Difficulty Easy -AdditionalArguments
+  @('-aicfQuickslotProbe','1')`: final native component **2/2 PASS/0**, по
+  **12/12 cases**. Настоящий SVD prefab, encode/decode, файловый Save/Load,
+  две actual weapons, обе quickslot bindings, custom binding и occupied slot.
+- Canonical dedicated server + direct client `RHS / CoopUSSR / Easy` с
+  `-aicfQuickslotNetworkProbe 1`, client -noFocus/-forceUpdate:
+  **7/7 client cases**, native exits server/client **0**. Launcher подтвердил
+  точные server CLI/PID/ROSTER_READY до подключения. Native owner RPC прочитал/
+  сохранил personal preset, настоящий spawn получил СВД в quickslot 1,
+  UseItem прошёл и фактический item в руках — СВД. Server зафиксировал
+  PERSONAL_LOADOUT_APPLIED revision=1 и штатно закрылся после disconnect.
+- Backend UID в этой dedicated-сессии отсутствовал: фактический ответ
+  **SAVED_SESSION**, не SAVED. Account persistence через owner RPC не заявляется;
+  файловый Save/Load с СВД проверен отдельной component fixture.
+- Итоговые stopped logs всех четырёх native процессов, включая crash/error/
+  script: SCRIPT/VM/fatal/assertions **0**. Прочие engine/resource diagnostics
+  сохраняются отдельно; чистый engine log не заявляется.
+
+Сохранённые FAIL: первый prototype fixture не задал name рецепта; Decode
+вернул null, последующий Build вызвал VM. Добавлены корректное имя и guard,
+это не production bug. Второй baseline component run воспроизвёл настоящий
+пустой quickslot, fixed run на том же native кейсе прошёл 10/10; final расширен
+файловым roundtrip до 12/12. Первый wrapper log-auditor после PASS прочитал
+неинициализированный LASTEXITCODE как отказ; анализатор теперь явно exit 0,
+полные stopped logs повторно проверены. Ни один FAIL не переименован в PASS.
+
+**NOT RUN:** физическая клавиша 2/мышь, внешний вид quickbar, turret/vehicle
+player transition, account persistence/перезапуск authenticated server,
+полный offline, JIP, 15-minute soak, packaged Workshop. Native cache readback
+и UseItem не объявляются проверкой физического ввода. Legacy headers/GUID не
+менялись. Старые weapon out-of-bounds и cigarette particle velocity diagnostics
+остаются отдельно; PR #65 остаётся draft.
+
 ## Cigarette thread-lock assertion — 2026-10-23
 
 В ручном local Play `EveronNorthRHS / Standard / Hard` на `d5de657`
