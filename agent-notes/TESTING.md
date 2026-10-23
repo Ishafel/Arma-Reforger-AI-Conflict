@@ -1,5 +1,58 @@
 # Проверки и baseline
 
+## Параллельные серверные прогоны по пять минут — 2026-10-23
+
+По запросу владельца клиент закрыт, выполнены девять dedicated runs без
+подключений: Arland/Everon/North Everon × Vanilla/RHS/WCS + RHS. Source
+`f5d296612486248790fc36197db810f281e0d3f9`, отчётная ветка
+`codex/server-soak-five-minutes`, Game/Workbench **1.8.0.13**. Основной checkout
+не менялся. Evidence: `.codex-runtime/server-soak-20261023-215418/REPORT.md`.
+
+Три параллельные очереди, отдельные native `-addr 127.0.0.1:2600..2608`.
+Фактические listeners, live PID, точные CLI и ROSTER_READY сохранены для каждого
+run. Режим **Standard**, сложность **Hard**; это не повтор Co-op матрицы.
+Production gameplay не менялся: в отдельный stage добавлена только существующая
+observer fixture `AICF_RecoverySoakProbe.c`, `-aicfRecoverySoakMs 300000`.
+Таймер идёт от готовности roster, fixture запрашивает штатное закрытие.
+
+- `Compile.ps1 -SourceRoot <evidence>/stage -Variant Stock|Everon|RHS|EveronRHS|ArlandWCSRHS|EveronWCSRHS` → terminal Workbench Validate/Compile: **6/6 PASS/0**, полные logs и argv сохранены.
+- `Lane.ps1 -Lane 0|1|2` → canonical `tools/Start-AICFRuntime.ps1 -Role Server -MatchMode Standard -Difficulty Hard`: **9/9** native exits **0**, observation **300217–300866 ms**, owner failures **0**. Сверка CLI/manifest и фактически загруженного addon graph — **9/9 PASS**.
+- `Audit.ps1` и `Finalize.ps1`: полные остановленные console/error/script logs **27 файлов**, SCRIPT E/F, VM/fatal/assertions **0**. Во всех console logs есть `Game destroyed.`. Native observation gate **9/9 PASS**; **clean-log gate 0/9, FAIL**.
+- Всего **1325** console E diagnostics: startup **1123**, observation **54**, shutdown **148**. С дубликатами в error.log — **2650**, это не число разных дефектов. Категории: unknown fields **795**, unregistered RPC **180**, resource GUID **134**, resource load/material **73**, navigation **61**, duplicate Hierarchy **58**, resource/font shutdown leaks **18**, unknown class **6**. Полные строки, фазы и предупреждения сохранены, исключений из анализа нет.
+- **439/439** production artifacts совпали с исходными SHA-256 в source и stage после прогонов. Свои процессы остановлены; stage и девять тестовых profiles архивированы: **10 ZIP**, SHA-256 каждого entry проверен до адресного удаления. Полные logs также оставлены отдельно в `<evidence>/logs/`. Пользовательские profiles и пресеты сохранены.
+
+| Variant | Observation, ms | Console E |
+|---|---:|---:|
+| Stock | 300528 | 23 |
+| Everon | 300866 | 63 |
+| EveronNorth | 300485 | 64 |
+| RHS | 300217 | 84 |
+| EveronRHS | 300555 | 209 |
+| EveronNorthRHS | 300355 | 217 |
+| ArlandWCSRHS | 300794 | 135 |
+| EveronWCSRHS | 300270 | 265 |
+| EveronNorthWCSRHS | 300504 | 265 |
+
+На EveronRHS во время observation зафиксированы
+`PATHFINDING(E): Incorrect tile position calculated for idx: <0, -1>` и
+`RESOURCES (E): Failed to load ''`. Первое точное сообщение отсутствует в
+сохранённом предыдущем Standard run; это не доказательство новой регрессии.
+Причина/владелец не установлены. Другие исторически не встреченные signatures
+перечислены в `historical-message-comparison.json`; настройки/длительности старых
+и новых runs различаются, сравнение не заменяет изолированный baseline.
+
+Сохранённый FAIL тестового инструмента: первоначальный watcher сравнивал
+Contains(profile), перепутал Everon с EveronRHS и завершился fail-closed без
+остановки сервера. Исправлен полный `-profile` token matcher, **162** quoted/
+unquoted positive/negative cases PASS. Повторный watcher подтвердил тот же
+живой Vanilla Everon по PID/CLI/port/roster; штатный native completion и полные
+logs проверены повторно. Ошибка исходного job и история восстановления сохранены.
+
+**NOT RUN:** новый offline набор, client/JIP/Co-op, UI и физический ввод,
+найм/экипировка игрока, бой до победы, packaged Workshop и soak дольше пяти минут.
+Прежний out-of-bounds примерно на 12-й минуте этим прогоном не опровергнут.
+Чистые engine logs не заявляются; PR #65 остаётся draft, публикация/merge не выполнялись.
+
 ## SVD во втором оружейном месте без quickslot — 2026-10-23
 
 Baseline `f04049b`, отдельная ветка `codex/personal-weapon-quickslots`.
