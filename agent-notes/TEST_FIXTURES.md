@@ -1,5 +1,254 @@
 # Runtime fixture: каталог и применение
 
+## Брифинг на карте
+
+`AICF_MissionBriefingProbe.c` копировать только в isolated Core как
+`UI/AICF_ZMissionBriefingProbe.c`. Canonical server и direct client:
+`-aicfBriefingProbe 1`. После 15 секунд проверяет настоящий
+`SCR_RespawnBriefingComponent`, повторный Load/Reset, десять страниц, выбор
+STANDARD/Co-op, native faction fallback, уникальные IDs, null/stock header.
+Для всех загруженных integration owners читает presets из registry и
+проверяет все режимы/сложности без изменения active mission header.
+
+Client создаёт штатные Journal/JournalButton/JournalEntryDefault layouts,
+назначает entry через native button и читает title/text для всех десяти страниц
+на RU/EN и английском fallback (`de_de`), затем восстанавливает язык.
+Это проверка данных/виджетов, без открытия карты вводом игрока или GUI automation.
+Fixture вызывает RequestClose, снимает свои callbacks на OnGameEnd.
+Server оставляет 150 секунд после своих checks для canonical late connection.
+Полный stopped log должен содержать один `BRIEFING_DONE failed=0`, только
+`BRIEFING_CASE pass=1`, `Game destroyed.`, exit 0 и canonical CLI/manifest;
+SCRIPT/VM/fatal/RPC errors запрещены. Проверять также sibling logs.
+
+## Повреждение босых ног и private models
+
+`AICF_FeetDamageProbe.c` копировать в isolated Core как
+`UI/AICF_ZFeetDamageProbe.c`, после integration `AICF_FeetDamageLifecycle`.
+Canonical server `-aicfFeetProbe 1`: 11 checks — private draft/запрет эффекта/
+Clear и живой зарегистрированный боец, настоящий detach/attach обуви,
+появление/удаление `SCR_ExposedFeetDamageEffect`. Та же обувь возвращается;
+native RequestClose вызывается после readback. Это component/server gate,
+не физический ввод игрока или проверка client/JIP эффекта.
+
+`Test-FeetDamageLog.ps1` требует полный stopped log, native exit 0, canonical
+CLI/manifest и все 11 cases; читает также соседние error/script/crash logs.
+Любой unregistered RPC или SCRIPT/VM/assertion делает gate FAIL.
+`Test-FeetDamageLogContracts.ps1` проверяет positive/negative cases oracle.
+Connected клиентский preview проверяется отдельно QuickslotNetworkProbe;
+источник и границы изменения — [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md).
+
+## Второе оружие и быстрые слоты
+
+`AICF_WeaponQuickslotProbe.c` копировать в isolated Core/Integration как
+`AICF_ZWeaponQuickslotProbe.c`; canonical server `-aicfQuickslotProbe 1`.
+Native component control создаёт две винтовки, сохраняет/читает recipe JSON
+и файл PersonalLoadoutStore, пересобирает preset, вызывает native InitAsPlayer
+и проверяет обе привязки, пользовательское назначение и занятый slot.
+12 cases; это проверка компонента, не подмена полноценного player deployment.
+
+`AICF_QuickslotNetworkProbe.c` → `AICF_ZQuickslotNetworkProbe.c`.
+`-aicfQuickslotNetworkProbe 1` на canonical dedicated server и direct client:
+native faction/group/loadout requests, owner RPC read/save, выбор personal,
+настоящий spawn, readback SVD в quickslot 1 и native UseItem/оружие в руках.
+Client закрывается сам, server — после disconnect либо через 240 s.
+Callbacks снимаются при Close/destruction. Клиенту -noFocus/-forceUpdate;
+launcher до подключения проверяет server CLI/PID/ROSTER_READY.
+Если backend UID недоступен, native store честно возвращает SAVED_SESSION:
+это подтверждает session RPC, не persistent account path. Файловая roundtrip
+проверяется отдельно компонентной fixture.
+
+`Test-WeaponQuickslotLog.ps1` требует полный stopped log, canonical manifest/
+native exit, все cases, CLI integrity; читает также соседние native logs,
+включая crash.log. С -Network требует launcher SERVER_READY, save status и
+7/7 client cases. Физическая клавиша 2 и пиксельный вид hotbar — NOT RUN.
+
+## Дым сигареты и thread-lock assertion
+
+`AICF_CigaretteProbe.c` копировать в isolated Core/Integration как
+`AICF_ZCigaretteProbe.c` вместе с Core/UI `AICF_ZScenarioTransitionProbe.c`.
+`-aicfCigaretteProbe 1 -aicfTransitionProbe 1` и обычные transition map/content/
+mode/difficulty flags запускают local Play. Transition fixture оставляет
+закрытие cigarette probe; без нового флага прежний 3 s Close сохраняется.
+Использовать `-noFocus -forceUpdate` и последовательный native запуск.
+
+Шесть циклов чередуют US/USSR leader. В каждом настоящий stock cigar prop:
+parent, spawn, component/emitters, FRAME mask, native playback обоих emitter
+после восьми горячих/холодных переходов, detach без дальнейших callbacks,
+delete обоих emitter. Всего 42 cases, тайм-аут 240 s после roster. Подмена
+эмиссивного счётчика существует только в fixture; production timestep остаётся
+native. Stop удаляет оставшийся prop. GUI input и player spawn не имитируются.
+
+`tests/log-audits/Test-CigaretteLog.ps1` требует полный stopped console,
+manifest/native exit, обычный exact transition/header/roster gate и 42/42
+шести циклов. Проверяет также все соседние native logs, включая crash.log:
+assertion не обязан появиться в console. Contract fixtures отвергают пропуски,
+дубликаты, failed case, неверное завершение, thread assertion и отдельный
+crash.log при чистом console. Визуальный вид дыма/жеста — NOT RUN.
+
+## Универсальное меню и native переход
+
+`AICF_UniversalScenarioProbe.c` копировать отдельно в isolated Core/UI как
+`AICF_ZUniversalScenarioProbe.c`: `-aicfUniversalProbe 1
+-aicfExpectedReadyVariants 9 -aicfExpectedContentMask 1`. Native graph/selection/widgets/modal/help/flags/
+cleanup, 7200 fixed minute/weather choices, 5 random choices и одноразовый session
+storage и enabled dependency matrix: 53 cases. Native SliderWidget проверяется по range/step/current и HH:MM;
+физическое перетаскивание/keyboard/controller требует отдельной ручной проверки.
+ExpectedReadyVariants отражает фактически
+подготовленное окружение, не подменяется количеством прошедших readbacks.
+Окно открывается на короткое время и закрывается само; GUI input не имитируется.
+Content mask: 1 = Vanilla, 3 = Vanilla/RHS, 7 = все три. Analyzer сверяет
+фактическую видимость native frames с mask из manifest и точным CLI.
+`-aicfProbeEnabledContent Vanilla|RHS|WCSRHS|WCSOnly|PartialRHS|PartialWCS`
+добавляет 54-й case: в свежем Stock profile с установленными RHS/WCS fixture
+вызывает native `Enable` только для ещё не загруженных внешних dependencies.
+Expected masks соответственно 1/3/7/1/1/3. Production `Enable` не вызывает.
+Исходные enable states восстанавливаются в `Stop`; loaded item или отказ
+native переключения даёт FAIL, а не имитацию наличия. Каждая отдельная missing
+dependency проверяется дополнительно чистой matrix. Без этого флага fixture
+читает существующее состояние; RHS/WCS initial CLI graph закрепляет content
+и оставляет более узкие варианты видимыми, но несовместимыми для запуска.
+Новые layout readbacks проверяют 20 кнопок без пересечений/выхода за root,
+многострочную сводку, три загруженных preview с сохранёнными пропорциями и
+фактические цвета текста. `UI_CARD_IDENTITY` дополнительно проверяет три
+локализованных tag/description с разными цветами, сетку только северной карты,
+размещение подписей и размер glyph bounds через native DPIUnscale.
+Отдельная loading illustration Эверона должна отличаться от его preview.
+UI отвергает время 1440, отдельной random-кнопки нет;
+model/storage matrix сохраняет пять legacy random-time choices для совместимости.
+Размеры widgets и Color readbacks не доказывают внешний вид или физический ввод.
+
+`AICF_ScenarioTransitionProbe.c` копировать как `AICF_ZScenarioTransitionProbe.c`.
+`-aicfTransitionProbe 1 -aicfProbeMap 0 -aicfProbeContent 2 -aicfProbeMode 1
+-aicfProbeDifficulty 0`: запускает production local Play, сверяет active header,
+ROSTER_READY и точный loaded addon graph. Четыре cases; затем RequestClose.
+С `-aicfProbeHost 1` проверяет private Listen Host, HOST_REQUEST/MODE и
+RPL socket на 24021; внешний public Host не проверяет. Тестовые пароль/лимит/
+third-person сверяются на сохранённом request. Config/ServerInfo API не дали
+Listen readback: применение password/player limit/прочих settings engine —
+NOT RUN. Без Host-флага сохраняется Play. Analyzer определяет Host из CLI
+manifest, дополнительно требует HOST_REQUEST/MODE и RPL socket. После roster
+fixture закрывает клиент, lifecycle отменяет callbacks.
+`Test-UniversalScenarioLog.ps1 [-Transition]`
+требует полный stopped log, manifest/native exit и не пропускает SCRIPT/VM/fatal
+или собственные resource errors. Подробности — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+`-aicfProbeTime 0..1440 -aicfProbeWeather 0..4` выбирают окружение перед настоящим
+переходом. Fixture снимает Welcome pause через native world API; analyzer
+требует один authority `ENVIRONMENT_APPLIED`, фактические часы/состояние после
+ROSTER_READY, сохранение при повторном вызове и приоритет native save/load.
+Отсутствующий, неверный или fallback readback не считается PASS.
+Time — минуты после полуночи; 1440 означает random и не является правым краем
+ползунка. Произвольная точка 817 = 13:37; границы — 0 и 1439. Analyzer сверяет
+`time_minutes`, начальный hour = minutes/60 и readback с учётом возможного перехода
+через полночь. Payload schema 2; прежний schema-1 intent не применяется.
+Дополнительный `-aicfProbeResumeAfter 35` сохраняет native Welcome pause 35 s
+после RUNNING, затем снимает simulation pause без GUI input. Analyzer требует
+real_ms >= 35000, simulation_ms < 2000 и последующий полный transition verdict.
+`-Transition -Dedicated` проверяет только canonical direct server reference:
+два header/graph cases, не frontend переход.
+
+## Legacy default header и каталог
+
+`AICF_ScenarioSetupProbe.c` копировать в isolated Core/UI как
+`AICF_ZScenarioSetupProbe.c` вместе с Co-op probe. CLI `-aicfSetupProbe 1`:
+server native header/selection — 18 cases, client native widget/modal/choice/cleanup
+readbacks — 15. Client использует обычный `-aicfCoopProbePlayer 1`.
+Не вызывает Play/Host и не имитирует GUI input. Full stopped-log gate:
+`Test-ScenarioSetupLog.ps1 [-Client]`. Контракт: [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+
+`AICF_ScenarioCatalogProbe.c` копировать отдельно в isolated Core/UI как
+`AICF_ZScenarioCatalogProbe.c`. CLI `-aicfCatalogProbe 1 -listScenarios`.
+Проверяет native catalog и tag maps: 15 cases, без Play/Host и GUI input.
+Отдельный Managed object выполняет readback через 5 s и RequestClose через 1 s;
+timeout — 30 s. Все callbacks снимаются в OnGameEnd. Dedicated запускается
+canonical launcher; frontend — с тем же Client graph без подключения, заранее
+объяснив владельцу короткое окно и автоматическое закрытие. Строгий gate
+`Test-ScenarioCatalogLog.ps1 -LogPath ... -ManifestPath ... -NativeExitPath ...`:
+полный stopped log, exact source/profile/addons CLI, 15/15 и отсутствие SCRIPT/VM/fatal.
+Реальные нажатия игрока эта проверка не подтверждает.
+
+## Instigator OTHER
+
+`AICF_InstigatorContextProbe.c` копировать в isolated Core/UI stage как
+`AICF_ZInstigatorContextProbe.c` вместе с основным Co-op probe.
+`-aicfInstigatorProbe 1`: native OTHER object, context reuse, caller override,
+AI/GM/NONE/suicide/deletion/non-character и реальная смерть managed ИИ с
+readback настоящего `GetOnControllableDestroyed`. Standard — 18 cases.
+`-aicfInstigatorPlayer 1` ждёт реального player; Co-op — 20 cases, включая
+player attribution и context с player victim (сам игрок не убивается).
+Subscription и test entity убираются в Stop. Строгий gate:
+`Test-InstigatorContextLog.ps1 [-Player]`, полные stopped logs/native exits/manifest.
+Контракт и ограничения: [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md).
+
+## Co-op на разных картах и профилях контента
+
+`AICF_CoopRecruitProbe.c` — дополнение к основному probe, копировать в UI stage
+как `AICF_ZCoopRecruitProbe.c`. Выбирает штатный GROUP catalog, проверяет
+welcome visibility, native меню групп, голосование из состояния без лидера и
+`RequestAddAIAgent` с readback обеих ролей. Test setup снимает лидерство,
+создаёт NPC и выбирает native loadout до spawn игрока; оплату казармы не проверяет.
+Auto construction остановлено только fixture, чтобы исключить посторонние
+stock service mesh diagnostics из этой проверки. Строгий gate:
+`Test-CoopScenarioLog.ps1 -RequireRecruit` отдельно для server и client.
+Контракт и свежие результаты — [COOP_SCENARIO.md](COOP_SCENARIO.md),
+[TESTING.md](TESTING.md).
+
+`AICF_CoopBarracksProbe.c` копировать в UI stage как `AICF_ZBarracksProbe.c`
+после основного Co-op probe, без `AICF_CoopRecruitProbe`. Это штатный заказ
+Guard через `RequestEnterBuildingMode`/`CreateEntity`, оплата через native
+resource consumer и найм всех четырёх через `RequestAddAIAgent`. Подготовка
+создаёт казарму, повышает звание и перемещает test player к поставщику;
+не заменяет оплату и разрешения сервера. Отдельный неоплаченный Guard остаётся
+недоступным для найма; native limit 4 проверяется после заполнения player slave.
+`Test-CoopScenarioLog.ps1 -RequireBarracks` запускается по обеим ролям после
+их остановки. Допускает STANDARD и Co-op: `-aicfBarracksFaction US|USSR`
+(default USSR), log audit `-BarracksFaction US|USSR`. Выбираются faction HQ,
+loadout и соответствующий Guard prefab; отсутствие player group устраняется
+штатным `CreateAndJoinGroup`, не назначением лидера вручную.
+Клиентский запуск видим пользователю: до запуска объясни,
+что тест автоматический, действий игрока не требует и сам завершится.
+
+`AICF_SupportStationAreaProbe.c` копировать в UI stage как
+`AICF_ZSupportStationAreaProbe.c` вместе с основным probe, при необходимости
+с barracks probe. Создаёт реальные Ural repair USSR/FIA и M923 repair рядом
+с HQ тестовой фракции. Нативная клиентская инициализация проверяет исходное
+расхождение, точное равенство local offset, world center с допуском 2 мм,
+сохранность world transform станции, radius и создание mesh.
+Полные stopped logs обеих ролей проверяются дополнительным
+`Test-CoopScenarioLog.ps1 -RequireSupportArea`; SCRIPT(E) остаётся FAIL.
+Проверка требует хотя бы одно реальное исходное расхождение, а не только
+отсутствие сообщений. Контракт: [SUPPORT_STATION_AREA.md](SUPPORT_STATION_AREA.md).
+
+`AICF_CoopScenarioProbe.c`: только isolated `Core/UI/` stage,
+`-aicfCoopProbe US|USSR|STANDARD`, необязательные `aicfCoopProbeDurationMs` и
+`aicfCoopProbeWinner US|USSR`. Проверяет bootstrap/roster/readiness, ticket
+policy, budget, content faction mapping, header mode, JIP snapshot и завершение
+по подготовленному ownership целей. Работает со всеми Variant из каталога.
+Начальные roster cases требуют READY и живых участников; STABLE_ROSTER сохраняет
+число, numeric IDs и identity исходных slot objects, а у людей — ноль managed agents.
+Он допускает потери/замену группы противника: число живых ИИ после начала боя
+не является постоянным контрактом. COOP_ROSTER_OBSERVATION сохраняет реальные counts.
+Физический захват, UI input и законченный supply trip эта fixture не доказывает.
+Команды и контракты — [COOP_SCENARIO.md](COOP_SCENARIO.md).
+Client `-aicfCoopProbePlayer 1` проверяет реальный вход/respawn за выбранную сторону через
+native intents; log audit с `-Client -RequirePlayer` требует controlled character
+и два отрицательных authority ответа на реальные запросы противника/FIA.
+`-RequireWelcome` дополнительно проверяет видимость только человеческой стороны
+в native Welcome callbacks. Native loadout выбирается до respawn. Deployment
+callback логируется только при реальном создании этого окна; probe его не открывает.
+Визуальный вид и ручной UI input этим не доказаны.
+Фильтр меню и запрет auto construction защищены отдельными static contracts.
+
+`AICF_CoopHeadersProbe.c`: копировать в isolated `Core/UI/` stage как
+`AICF_ZCoopHeadersProbe.c` после основного probe,
+`-aicfCoopHeaderProbe 1` на сервере. Через `MissionHeader.ReadMissionHeader`
+сравнивает все 54 Co-op ресурса с standard parents: world, mode, difficulty,
+legacy FIA flags, whitelist и все custom base поля. Текущий полный graph —
+`EveronWCSRHS` (North использует тот же graph); при расширении каталога новым
+независимым integration нужен test graph со всеми parents. Список случаев
+генерирует `tools/Update-AICFCoopScenarios.ps1`. Stopped-log audit:
+`Test-CoopScenarioLog.ps1 -RequireHeaderMatrix`. Полный runtime боя всех 54
+вариантов эта ресурсная проверка не заменяет.
+
 ## Ошибки EquipmentPlan и WCS M2CG — issue #67
 
 `tests/fixtures/AICF_EquipmentFailureProbe.c` копируется только в isolated
@@ -48,6 +297,9 @@ Control `aicfShutdownNoEquipment 1` существует только в fixture
 При `-Batches` аудит требует в manifest `-aicfShutdownMode batches` и
 `-aicfShutdownEquipmentBatch 1`; обычный LoadoutDraft batch не подтверждает
 EquipmentDraft cleanup.
+Equipment batch также обязан выполнить 24 уникальных Build/destructor цикла
+EquipmentPlan с `SHUTDOWN_PLAN_CLEAR passed=1`. Отсутствие, отказ или дубликат
+этого readback отклоняются отдельно от прежних Draft operations.
 Server audit без `-Batches` требует точный `-aicfShutdownMode idle` и
 `SHUTDOWN_DONE mode=idle`, чтобы batch run не считался idle control.
 

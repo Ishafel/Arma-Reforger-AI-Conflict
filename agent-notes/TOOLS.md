@@ -146,7 +146,9 @@ Enforce fixture не входят в автоматическую матрицу
 
 | Файл | Вход, результат и побочные эффекты |
 |---|---|
-| [Start-AICFRuntime.ps1](../tools/Start-AICFRuntime.ps1) | `-Role`, `-Variant`; foreground server/client, свежий profile, manifest и readiness. Полный контракт в DEVELOPMENT. `-DryRun` только строит план |
+| [Start-AICFRuntime.ps1](../tools/Start-AICFRuntime.ps1) | `-Role`, `-Variant`, `-MatchMode Standard/CoopUS/CoopUSSR`, `-Difficulty`; foreground server/client, свежий profile, manifest и readiness. Полный контракт в DEVELOPMENT. `-DryRun` только строит план |
+| [AICF_Scenarios.ps1](../tools/AICF_Scenarios.ps1), [каталог](../tools/config/AICF_Scenarios.json) | Единый resolver карты/контента, режима, сложности, ресурсов и addon graph; без запуска игры. Recipe расширения — COOP_SCENARIO |
+| [Update-AICFCoopScenarios.ps1](../tools/Update-AICFCoopScenarios.ps1) | Генерация тонких Co-op headers/meta, RU/EN строк и native header probe из каталога; `-Check` проверяет актуальность без записи |
 | [Invoke-AICFChecks.ps1](../tools/Invoke-AICFChecks.ps1) | Offline набор и evidence, контракт выше |
 | [fetch_reforger_api_reference.sh](../tools/fetch_reforger_api_reference.sh) | Git Bash, сеть при отсутствии кэша; закреплённые version/commit/SHA-256, результат только в `.cache/reforger-api/` |
 | [Build-AICFLocalization.ps1](../tools/Build-AICFLocalization.ps1) | `-RepositoryRoot`, `-Check`; без `-Check` обновляет производные localization файлы. С `-Check` проверяет соответствие |
@@ -156,6 +158,33 @@ Enforce fixture не входят в автоматическую матрицу
 | [Measure-ConstructionAllBases.ps1](../tools/Measure-ConstructionAllBases.ps1) | Те же параметры; snapshot полного лога, вызывает Search, строит статистику баз. Live snapshot допускается для наблюдения, не для итогового runtime verdict |
 | [Start-AICFRHSWardrobeShowcase.ps1](../tools/Start-AICFRHSWardrobeShowcase.ps1) | `-Role Server|Client`, `-SessionRoot`; создаёт отдельный source stage EveronNorthRHS и копирует showcase fixture. Нужны RHS и generated databases. Оба peers — отдельными терминальными сессиями с одним SessionRoot; запуск через canonical launcher |
 | [Watch-AICFRuntimeDiagnostics.ps1](../tools/Watch-AICFRuntimeDiagnostics.ps1) | `-Profile`, `-DeadlineSeconds` (650 по умолчанию); ищет сервер по profile и **принудительно останавливает** его при диагностической ошибке/дедлайне. Только для своего тестового server profile. Exit 0 — наблюдал выход; 2 — ошибка; 3 — дедлайн. Это не graceful shutdown и не runtime PASS |
+
+`Test-InstigatorContextStatic.ps1` и `Test-InstigatorContextContracts.ps1`
+входят в полный offline набор. Отдельный `tests/log-audits/Test-InstigatorContextLog.ps1`
+проверяет полные stopped runtime logs и не входит в offline runner.
+Native probe/CLI и требования: [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md).
+
+`Test-ScenarioSetupStatic.ps1` входит в полный offline набор. Отдельный
+`tests/log-audits/Test-ScenarioSetupLog.ps1 [-Client]` проверяет stopped runtime
+logs legacy default Arland; UI readbacks не подменяют ручной input/Host.
+Описание: [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+`Test-ScenarioCatalogLogContracts.ps1` входит в offline набор: положительный
+control и 13 отрицательных случаев отдельного `Test-ScenarioCatalogLog.ps1`.
+Последний проверяет native регистрацию 15 cases, точные CLI и stopped log,
+отклоняет SCRIPT/VM/fatal; описание fixture — [TEST_FIXTURES.md](TEST_FIXTURES.md).
+
+`tools/Update-AICFScenarioRegistry.ps1 [-Check]` генерирует frontend descriptors
+из `tools/config/AICF_Scenarios.json`; проверка входит в новый
+`Test-UniversalScenarioStatic.ps1`. `Test-UniversalScenarioLogContracts.ps1`
+проверяет UI/transition анализатор на положительных и отрицательных логах,
+включая UTF-8 пути, лишние/недостающие addons и неправильный launch resource.
+`Test-UniversalScenarioLog.ps1 [-Transition]` анализирует полный stopped native
+log универсального меню; в offline runner не входит.
+`Test-ScenarioEnvironmentStatic.ps1` проверяет authority и одноразовую передачу
+времени/погоды через GameSessionStorage, exact target/TTL, cleanup отказа и native
+weather boundary. Transition analyzer с `-aicfProbeTime/-aicfProbeWeather` в
+manifest требует реальные начальные часы/погоду, repeat и save/load readbacks;
+его отрицательные контракты входят в общий offline набор.
 
 ## Локальные файлы вне набора
 

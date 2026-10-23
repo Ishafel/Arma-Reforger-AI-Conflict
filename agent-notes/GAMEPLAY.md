@@ -4,6 +4,32 @@
 технические детали, нужные при изменении поведения; точные defaults проверяй
 в `Config/`, профильных классах и `tools/Start-AICFRuntime.ps1`.
 
+## Co-op за US или USSR
+
+Все девять сочетаний карты/контента имеют Easy/Medium/Hard для обеих сторон.
+Co-op оставляет сторону людей без managed combat roster и автоматического
+размещения построек, включает автономного командира противника. Строители,
+заказанная доставка и казарма сохраняются. Люди проигрывают только по территории;
+противник также может проиграть по билетам. Обычные сценарии сохраняют STANDARD.
+Единый каталог позволяет добавлять integration без веток launcher. Подробности:
+[COOP_SCENARIO.md](COOP_SCENARIO.md).
+
+## Найм купленных в казарме бойцов
+
+`AICF_BarracksRecruitment` в Core распространяется на STANDARD и Co-op всех
+integration addons. После штатного `OnEntityRequested` он разрешает найм
+бойцов заказанного игроком отделения, включая Guard с исходным `Recruitable=0`.
+Server/master проверяет troop provider `CanCommandAI`, текущий controlled entity
+игрока, faction map, faction группы и разрешение MatchRules.
+
+Server-only marker принадлежит конкретной купленной группе; текущие и async
+members допускаются только при совпадении parent group/faction, живом character
+и отсутствии player control. Setter вызывается только при изменении флага.
+Обычная охрана, строители и managed AICF roster не получают marker.
+Штатные `RequestAddAIAgent`, права лидера, ownership и лимит ИИ сохраняются.
+Stock лимит — 4. Снабжение и оплату выполняет native building system.
+Runtime-матрица и ограничения RHS/WCS — [TESTING.md](TESTING.md).
+
 ## Стоимость штатного заказа RHS/WCS
 
 Группы обеих сторон оцениваются по фактическому prefab roster: 50/75/100
@@ -17,16 +43,22 @@ supplies за штатную роль. Техника использует об�
 
 Четыре базовых MissionHeader stock/RHS для Арланда и Эверона включают
 `m_bRandomStartingWeather 1`. North, WCS и Medium/Hard наследуют настройку:
-она действует во всех 27 сценариях меню и при запуске через canonical launcher.
+она действует во всех 81 сценарии меню и при запуске через canonical launcher.
 Штатный `SCR_TimeAndWeatherHandlerComponent.SetupDaytimeAndWeather` выбирает
 состояние из списка мира на authority при инициализации нового матча.
 Повторное выпадение той же погоды допустимо. `m_bRandomWeatherChanges 1`
 сохраняет естественную смену погоды, иначе штатный random-start включает looping.
 
-Поля времени не изменены: старт в 08:00, random daytime выключен, ускорение
+Прямой CLI запуск сохраняет старт в 08:00, random daytime выключен, ускорение
 днём 6, ночью 24. Штатная настройка часов выполняется после выбора погоды;
-отдельных AICF weather callbacks, clock setters, RPC или повторного выбора при
-старте controller/JIP нет. Сетевая синхронизация принадлежит штатному менеджеру.
+при старте controller/JIP повторного выбора нет. Сетевая синхронизация принадлежит
+штатному менеджеру. Frontend позволяет независимо выбрать начальные часы
+(ползунок 00:00–23:59 с шагом 1 минута либо random) и погоду
+(random/Clear/Cloudy/Overcast/Rainy). Случайный выбор не теряет последнее точное
+время; повторное нажатие возвращает его. Перетаскивание обновляет только
+представление окружения и сводку, без повторного scan addons или загрузки флагов.
+Одноразовая передача через reload и authority adapter штатного handler описаны
+в [SCENARIO_SETUP.md](SCENARIO_SETUP.md#передача-времени-и-погоды).
 Runtime probe и анализатор: [TEST_FIXTURES.md](TEST_FIXTURES.md), результаты и
 ограничения проверки: [TESTING.md](TESTING.md).
 
@@ -57,9 +89,12 @@ building layouts и client/JIP. Собственный слой миссии п�
 
 ## Сложность гарнизонов FIA
 
-Все девять Variant имеют три пункта меню: 27 тонких inherited headers.
-Существующие ресурсы сохраняют GUID и соответствуют Easy. Medium/Hard наследуют
-свой прежний header с `m_eAICFDifficulty` 1/2; default 0 сохраняет лёгкий вариант.
+Девять Variant имеют по три сложности для Standard, Co-op US и Co-op USSR:
+81 тонкий inherited header (27 standard + 54 Co-op).
+Прежние ресурсы сохраняют GUID. Standard Medium/Hard наследуют базовый header
+с `m_eAICFDifficulty` 1/2; default 0 сохраняет лёгкий вариант. Новые Co-op
+наследуют соответствующий Standard той же сложности; старый Stock Co-op USSR
+сохраняет свою исходную inheritance chain.
 Launcher `-Difficulty Easy|Medium|Hard` выбирает header для любого Variant,
 а не переопределяет игровую сложность отдельным CLI. Зависимости не расширены.
 

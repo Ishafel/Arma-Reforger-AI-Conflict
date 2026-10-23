@@ -55,6 +55,7 @@ class AICF_Stage1Config
 	protected bool m_bRequirePlayerForResult;
 	protected bool m_bActiveForcesRolesEnabled;
 	protected bool m_bAICommanderModeValid;
+	protected ref AICF_MatchRules m_MatchRules;
 
 	void AICF_Stage1Config()
 	{
@@ -76,6 +77,26 @@ class AICF_Stage1Config
 		m_bRequirePlayerForResult = true;
 		m_bActiveForcesRolesEnabled = true;
 		m_bAICommanderModeValid = true;
+		AICF_EMatchMode matchMode = AICF_EMatchMode.STANDARD;
+		SCR_MissionHeaderCampaign header = SCR_MissionHeaderCampaign.Cast(GetGame().GetMissionHeader());
+		if (header) matchMode = header.m_eAICFMatchMode;
+		m_MatchRules = new AICF_MatchRules(matchMode);
+		if (matchMode != AICF_EMatchMode.STANDARD)
+		{
+			m_sAICommanderMode = m_MatchRules.GetAICommanderMode();
+			m_sExpectedPlayerFaction = m_MatchRules.GetPlayerOnlyFaction();
+			m_iMaxManagedAgents = GetMinimumManagedAgents() + DEFAULT_MAX_MANAGED_AGENTS - MIN_MANAGED_AGENTS;
+		}
+	}
+
+	AICF_MatchRules GetMatchRules()
+	{
+		return m_MatchRules;
+	}
+
+	int GetMinimumManagedAgents()
+	{
+		return (m_MatchRules.GetManagedSlotCount("US") + m_MatchRules.GetManagedSlotCount("USSR")) * MAX_GROUP_SIZE;
 	}
 
 	int GetInitialTickets()
@@ -125,7 +146,7 @@ class AICF_Stage1Config
 
 	void SetMaxManagedAgents(int value)
 	{
-		m_iMaxManagedAgents = ClampInt(value, MIN_MANAGED_AGENTS, MAX_MANAGED_AGENTS);
+		m_iMaxManagedAgents = ClampInt(value, GetMinimumManagedAgents(), MAX_MANAGED_AGENTS);
 	}
 
 	int GetWarTempoPercent()
@@ -190,11 +211,13 @@ class AICF_Stage1Config
 
 	bool IsAICommanderModeValid()
 	{
-		return m_bAICommanderModeValid;
+		return m_bAICommanderModeValid && m_MatchRules.IsValid() &&
+			(m_MatchRules.GetMode() == AICF_EMatchMode.STANDARD || m_sAICommanderMode == m_MatchRules.GetAICommanderMode());
 	}
 
 	string GetInvalidAICommanderMode()
 	{
+		if (m_sInvalidAICommanderMode.IsEmpty()) return m_sAICommanderMode;
 		return m_sInvalidAICommanderMode;
 	}
 

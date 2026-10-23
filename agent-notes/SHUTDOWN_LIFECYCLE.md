@@ -38,16 +38,66 @@ Control без обновления equipment service устранял leaks; п
 - `EquipmentPlan` продолжает разрывать hand/weapon связь перед освобождением
   модели. Само исчезновение script draft не заменяет native entity readback.
 
+## Lifetime muzzle в EquipmentPlan
+
+В `EquipmentPlan.Build` inline-вызов `AICF_EquipmentInventory.Muzzle(modelPrimary)`
+в условии `for` оставлял одну native reference после выхода из цикла. Ранний
+`Stop(true)` давал `Can't delete instance (of class: 'MuzzleComponent') with 1 references`
+и VM exception при удалении модели. Порядок удаления roots и поздний unarm
+этого удержания не устраняли. Muzzle теперь берётся в локальную переменную,
+цикл обращается к ней, после чтения ссылка явно обнуляется. Данные боезапаса,
+владельцы world и существующий cleanup не меняются.
+
+Предыдущий PASS issue #63 проверял обычный OnGameEnd и пакеты операций над
+Draft. Он не подтверждал ранний Stop и полный цикл Build/destructor именно
+EquipmentPlan внутри каждого пакета. Теперь эти циклы входят в native oracle;
+контроль с возвратом одного inline-вызова проверяет, что gate ловит дефект.
+Свежие verdict и evidence — в [TESTING.md](TESTING.md).
+
 Дополнительный reproducer #67 строит все concrete роли и затем вытесняет plans.
-Chained `AICF_EquipmentInventory.Muzzle(modelPrimary)` в условии цикла подсчёта
-chambers удерживал последний `MuzzleComponent`: модель удалялась с VM exception,
-затем shutdown сообщал leaked instances. Явная локальная ссылка и её обнуление
-после подсчёта устраняют этот отдельный дефект; удаление roots #63 сохраняется.
+Он независимо подтверждает тот же lifetime defect и сохранность удаления roots
+из #63. Обе ветки используют одну локальную `primaryMuzzle`, освобождаемую до
+следующей inventory операции; диагностика причин отказа из #67 сохранена.
 Изменение порядка удаления, один `SelectWeapon(null)`, пауза 10 секунд и снятие
 RHS visual queue сами по себе этот reproducer не исправляли. Отмена UI/weapon
 callbacks и корректный lifetime script references — разные проверки.
 
 ## Терминальная проверка
+
+### Смена обуви и незарегистрированный damage RPC
+
+`SCR_FeetLoadoutSlotInfo.OnDetachedEntity` штатно добавляет
+`SCR_ExposedFeetDamageEffect`; при надевании обуви эффект снимается. На server
+те же callbacks вызывались у private equipment models и при удалении уже
+незарегистрированных персонажей. Трассировка WCS привязала Error к удалению
+`Footwear_USMC_Combat.et`, а не к звуковому/fire RPC или emitter.
+
+`AICF_FeetDamageLifecycle` допускает native callbacks на server, пока персонаж
+не удаляется, принадлежит миру кампании и его damage manager зарегистрирован.
+Private/deleted/unregistered owner не получает сетевой эффект босых ног. Client
+путь делегируется native; отсутствие character/damage component сохраняет native
+guard. Constructor callback `OnSlotPostInit` снимается при разрушении slot info.
+Новые таймеры, RPC, replicated fields и изменения health не добавлены.
+
+В клиентском `AICF_LoadoutDraft.Build` отдельно удалён вызов сетевого
+`EnableDamageHandling(false)` для local ItemPreviewManager model. API работает
+через server; у preview нет зарегистрированного адресата. Симуляцией модели
+продолжает управлять native ItemPreviewManager. Connected test с реальным owner
+RPC/read/save/spawn обнаружил этот второй источник после устранения footwear
+callbacks; отсутствие client/server unregistered RPC теперь входит в строгий
+`Test-WeaponQuickslotLog.ps1`, отрицательный contract сохранён отдельно.
+
+`tests/fixtures/AICF_FeetDamageProbe.c` копируется в isolated Core stage под
+`UI/AICF_ZFeetDamageProbe.c`, **после** integration adapter по порядку загрузки.
+`-aicfFeetProbe 1`: 11 native checks private draft и живого зарегистрированного
+бойца, реальный detach/attach обуви, наличие/отсутствие damage effect. Probe
+возвращает ту же обувь, затем закрывает процесс; физический ввод не имитируется.
+`Test-FeetDamageLog.ps1` проверяет CLI/manifest, все 11 cases, native exit 0,
+полные stopped logs и отсутствие unregistered RPC, включая соседние crash logs.
+`Test-FeetDamageLogContracts.ps1` отдельно проверяет строгость oracle.
+
+Внешние resource/navigation/font errors не смешиваются с этим исправлением:
+[EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md).
 
 `tests/fixtures/AICF_ShutdownProbe.c` добавляется только в isolated Core stage.
 Он поддерживает `-aicfShutdownMode idle|batches`, native `MemoryStatsSnapshot`,
@@ -56,6 +106,9 @@ constructor/destructor counters и weak entity readback всех inventory items
 сторонам), пакетов — 3; каждый выполняет Build/Signature/Capture/Restore,
 сравнение signature, navigation Build/Clear и Draft.Clear. Флаг
 `-aicfShutdownEquipmentBatch 1` выбирает direct EquipmentDraft вместо UI draft.
+В этом режиме каждая операция также строит EquipmentPlan, освобождает его
+и проверяет weak character readback: 24 уникальных `SHUTDOWN_PLAN_CLEAR`
+с `passed=1` обязательны для `Test-ShutdownLog.ps1 -Batches`.
 Snapshots снимаются до/после пакетов и после не менее 15 секунд покоя.
 
 Для control без постоянных models используется только fixture-флаг

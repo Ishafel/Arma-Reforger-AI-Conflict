@@ -7,6 +7,14 @@
 
 | Задача | Что читать |
 |---|---|
+| Изменить внутриигровой брифинг на карте | [MISSION_BRIEFING.md](MISSION_BRIEFING.md), `UI/AICF_MissionBriefing.c`, MissionBriefingProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
+| Разобрать resource/navmesh/Hierarchy ошибки и границу внешнего baseline | [EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md), [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), [TESTING.md](TESTING.md) |
+| Исправить damage RPC при смене обуви у private model или при shutdown | [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), `Integration/AICF_FeetDamageLifecycle.c`, FeetDamageProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
+| Изменить универсальное меню карт/контента, подсказку «Как настроить», время/погоду, зависимости и native launch, видимость сценариев или ошибки SCR_FilterCategory | [SCENARIO_SETUP.md](SCENARIO_SETUP.md), `AICF_ScenarioEnvironment`/`AICF_ScenarioEnvironmentHandler`, `AICF_ScenarioRegistry`, `AICF_ScenarioLaunch`, `AICF_ScenarioSetupSelection`, `AICF_ScenarioSetupScreen`, `AICF_ScenarioSetupEntry`, `AICF_ArlandScenarioCatalog`, `AICF_WorkshopTagMetadata` |
+| Исправить классификацию смерти INSTIGATOR_OTHER | [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md), `AICF_InstigatorContext`, pinned `SCR_InstigatorContextData` и native Instigator API |
+| Добавить карту/мод или сторону Co-op; изменить roster, выбор фракции, группы игроков, строительство и поражение | [COOP_SCENARIO.md](COOP_SCENARIO.md), `tools/config/AICF_Scenarios.json`, `AICF_MatchRules`, `AICF_CoopFactionAccess`, `AICF_CoopFactionMenu`, `AICF_CoopPlayerGroups`, `AICF_ConstructionPlanner` |
+| Изменить найм купленных в казарме бойцов во всех сценариях | [GAMEPLAY.md](GAMEPLAY.md#найм-купленных-в-казарме-бойцов), `AICF_BarracksRecruitment`, barracks fixture в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
+| Исправить смещение визуальной зоны ремонтной станции | [SUPPORT_STATION_AREA.md](SUPPORT_STATION_AREA.md), `AICF_SupportStationArea`, support area fixture в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Исправить WCS M2CG, повторные EquipmentPlan и удаление private models (issue #67) | [EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md), [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), [GAMEPLAY.md](GAMEPLAY.md), EquipmentFailureProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Исправить окно `Defend Waypoint not provided to the node!` после смены приказа | [DEFEND_ALLOCATION.md](DEFEND_ALLOCATION.md), `AICF_AINodeLifecycle`, native allocation node в Script Diff 1.8.0.13 |
 | Исправить shutdown leaks и проверить lifetime private equipment worlds (issue #63) | [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), [EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md), `AICF_EquipmentDraft`, bootstrap OnGameEnd |
@@ -29,7 +37,7 @@
 | Изменить общий список содержимого разгрузки и навигацию подсумков | [LOADOUT_CONTENTS.md](LOADOUT_CONTENTS.md), `UI/AICF_LoadoutNavigation.c` |
 | Исправить пропавшие магазины RHS в исходном WCS kit и проверить preview restore (issue #61) | [LOADOUT_CONTENTS.md](LOADOUT_CONTENTS.md), `AICF_LoadoutContentsInventoryProbe`, `Loadouts/AICF_LoadoutInventory.c` |
 | Изменить адаптивные цели, потребность в силах и стратегические gates | [ADAPTIVE_COMMANDER.md](ADAPTIVE_COMMANDER.md), `Command/AICF_AdaptiveCommanderPolicy.c`, `AICF_AdaptiveScore.c` |
-| Изменить категории основного/второго оружия | [LOADOUT_WEAPON_CATEGORIES.md](LOADOUT_WEAPON_CATEGORIES.md), `UI/AICF_LoadoutWeaponCategories.c` и content profiles |
+| Изменить категории основного/второго оружия или пропущенный быстрый слот второй винтовки | [LOADOUT_WEAPON_CATEGORIES.md](LOADOUT_WEAPON_CATEGORIES.md), `UI/AICF_LoadoutWeaponCategories.c`, `Integration/AICF_WeaponQuickslots.c` и content profiles |
 | Найти утилиту, её статус и запустить offline набор | [TOOLS.md](TOOLS.md) |
 | Выбрать runtime probe и проверить ограничения | [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Проверить identity failed movement и неоднозначный handler | [ARCHITECTURE.md](ARCHITECTURE.md#authority-и-identity), `Forces/AICF_AINodeLifecycle.c`, [TESTING.md](TESTING.md), InfantryMoveHandler probe |
@@ -38,7 +46,7 @@
 | Выпустить PR и разобрать FAIL, включая baseline | [AGENTS.md: проверка и передача](../AGENTS.md#проверка-и-передача-результата), [TESTING.md: правила выпуска PR](TESTING.md#правила-выпуска-pr) |
 | Проверить владельца commander state и стабильный выбор казармы (issue #44) | [TOOLS.md](TOOLS.md#единый-offline-запуск), [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md), [TESTING.md](TESTING.md) |
 | Изменить последовательную очередь фракции, шаг 5 секунд и прогноз пополнения | [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md) |
-| Изменить начальные emotes, салют, общий cooldown игрока и звук | [SOCIAL_BEHAVIOR.md](SOCIAL_BEHAVIOR.md) |
+| Изменить начальные emotes, салют, cooldown, звук и безопасное обновление дыма сигареты | [SOCIAL_BEHAVIOR.md](SOCIAL_BEHAVIOR.md) |
 | Изменить WCS content profile или проверить зависимости и повреждение обновлений | [Arland WCS + RHS](../AIConflictArlandWCSRHS/README.md#зависимости), [проверка 15.10.2026](TESTING.md#зависимости-и-вылеты-после-обновления-wcs--2026-10-15) |
 | Изменить полный или северный WCS Everon | [Everon WCS + RHS](../AIConflictEveronWCSRHS/README.md) |
 

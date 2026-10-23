@@ -33,7 +33,7 @@ Check 'missing-manifest' $positive 'MANIFEST' 'no manifest'
 $batch=$positive.Replace('mode=idle','mode=batches')
 $batchLauncher='AICF_RUNTIME_MANIFEST_JSON={"role":"Server","arguments":["-aicfShutdownMode","batches","-aicfShutdownEquipmentBatch","1"]}'
 foreach($number in 1..3){
-    foreach($iteration in 0..3){foreach($side in @('USSR','US')){$batch+="`n[AICF][SHUTDOWN_OPERATION] batch=$number iteration=$iteration side=$side passed=1"}}
+    foreach($iteration in 0..3){foreach($side in @('USSR','US')){$batch+="`n[AICF][SHUTDOWN_OPERATION] batch=$number iteration=$iteration side=$side passed=1`n[AICF][SHUTDOWN_PLAN_CLEAR] batch=$number iteration=$iteration side=$side passed=1"}}
     $batch+="`n[AICF][SHUTDOWN_BATCH] batch=$number operations=8 failures=0"
 }
 Check 'positive-batches' $batch '' $batchLauncher -Batches
@@ -61,10 +61,13 @@ Check 'batches-wrong-completion-mode' ($batch.Replace('mode=batches','mode=idle'
 Check 'missing-batch' ($batch.Replace('batch=3 operations=8 failures=0','batch=0 operations=8 failures=0')) 'BATCH_3' $batchLauncher -Batches
 Check 'failed-operation' ($batch.Replace('side=US passed=1','side=US passed=0')) 'OPERATIONS' $batchLauncher -Batches
 Check 'duplicate-operation' ($batch.Replace('iteration=3','iteration=0')) 'OPERATION_IDENTITIES' $batchLauncher -Batches
+Check 'missing-plan' ($batch.Replace('[SHUTDOWN_PLAN_CLEAR]','[OTHER_PLAN_CLEAR]')) 'PLAN_OPERATIONS' $batchLauncher -Batches
+Check 'failed-plan' ($batch.Replace('[SHUTDOWN_PLAN_CLEAR] batch=1 iteration=0 side=US passed=1','[SHUTDOWN_PLAN_CLEAR] batch=1 iteration=0 side=US passed=0')) 'PLAN_OPERATIONS' $batchLauncher -Batches
+Check 'duplicate-plan' ($batch.Replace('[SHUTDOWN_PLAN_CLEAR] batch=1 iteration=3','[SHUTDOWN_PLAN_CLEAR] batch=1 iteration=0')) 'PLAN_IDENTITIES' $batchLauncher -Batches
 $client='[AICF][SHUTDOWN_CLIENT_DONE]'+"`nENGINE : Game destroyed."
 $clientLauncher='AICF_RUNTIME_MANIFEST_JSON={"role":"Client","arguments":["-aicfShutdownMode","idle"]}'+"`n[AICF][RUNTIME_LAUNCHER][SERVER_READY] process_id=123 port=2361 log=fixture"
 Check 'positive-client' $client '' $clientLauncher -Client
 Check 'positive-batches-client' $client '' ($clientLauncher.Replace('"idle"','"batches"')) -Client
 Check 'client-no-gate' $client 'READINESS_GATE' ($clientLauncher.Replace('[SERVER_READY]','[PENDING]')) -Client
-Write-Output 'PASS Shutdown log contracts: 4 positive and 32 negative cases; real runtime is a separate gate'
+Write-Output 'PASS Shutdown log contracts: 4 positive and 35 negative cases; real runtime is a separate gate'
 exit 0

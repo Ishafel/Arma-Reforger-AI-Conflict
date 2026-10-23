@@ -27,8 +27,36 @@ identity и одноразовым флагом commit. `AICF_RHSPMCEquipment` �
 | `AIConflictEveronWCSRHS` | `A1CF261006100001` | Полный и северный Everon с общим WCS + RHS profile |
 
 Vanilla dependency — `58D0FB3206B6F859`. Точный граф зависимостей принадлежит
-`addon.gproj` каждого addon и `tools/Start-AICFRuntime.ps1`; GUID не меняются.
+`addon.gproj` каждого addon и `tools/config/AICF_Scenarios.json`; launcher читает
+этот каталог через `AICF_Scenarios.ps1`. GUID не меняются.
 Core и stock integrations не должны получать обязательные RHS/WCS dependencies.
+
+Co-op за US/USSR выбирается тонким inherited header для каждого из девяти
+сочетаний карты и контента. Генератор наследует соответствующий standard header
+той же сложности, сохраняя world, North whitelist и content flags. Общая immutable
+`AICF_MatchRules` задаёт 0 боевых slots у людей и 10 у противника, ticket defeat по стороне;
+faction state и helpers сохраняются. Владение roster остаётся у FactionState,
+условиями победы — у VictorySystem. Контракт: [COOP_SCENARIO.md](COOP_SCENARIO.md).
+Co-op фильтрует меню и authority faction requests, сохраняя native IsPlayable
+для HQ/opponent setup. Auto construction policy применяется в ConstructionPlanner;
+служба рабочих остаётся отдельным владельцем достройки player layouts.
+`AICF_CoopPlayerGroups` сохраняет штатного владельца player groups: включает
+их меню и выдвижение в лидеры, а после faction callbacks выполняет native
+join/create для игрока без группы. Roster AICF и права других лидеров не меняет.
+`AICF_BarracksRecruitment` после native `OnEntityRequested` разрешает найм членов
+оплаченной player-side группы из казармы, включая Guard prefabs. Фракция группы
+берётся через `SCR_AIGroup.GetFaction`, а не через отсутствующий у неё affiliation
+component. Authority повторно сверяет текущего игрока и его faction; разрешение
+применяется к существующим и асинхронно добавленным members той же группы.
+Native лидерство, лимит и ownership RPC сохраняют свои проверки.
+Это общая Core механика для STANDARD и Co-op; ограничения player faction
+по-прежнему задаёт MatchRules. Контракт: [GAMEPLAY.md](GAMEPLAY.md#найм-купленных-в-казарме-бойцов).
+
+`AICF_SupportStationArea` восстанавливает local position визуального child
+по offset непосредственного parent support station до native Init/GenerateAreaMesh.
+Сама станция, дальность и её gameplay state сохраняются. Вложенные и ошибочные
+иерархии остаются под native validation. Причина и проверка:
+[SUPPORT_STATION_AREA.md](SUPPORT_STATION_AREA.md).
 
 Цены штатных RHS/WCS меню принадлежат integration policy/UIInfo adapter,
 см. [MENU_PRICES.md](MENU_PRICES.md). Adapter возвращает CAMPAIGN quote;
@@ -42,6 +70,35 @@ Core и stock integrations не должны получать обязатель
 имена и координаты конкретных баз в Core запрещены.
 
 ## Домены Core
+
+`AICF_ScenarioRegistry`/`AICF_ScenarioSetup` владеют локальным frontend выбором.
+Concrete targets и dependency graphs генерируются в Arland integration из общего
+JSON каталога. `AICF_ScenarioLaunch` проверяет native permissions входного item,
+enabled state внешнего content graph, зависимости, download/platform/forced-CLI
+gates и передаёт точный граф native
+Play/Host transition. Окружение передаётся одноразовым process-local intent через
+native GameSessionStorage в точный header. `AICF_ScenarioEnvironmentHandler`
+на authority передаёт начальные часы/погоду штатному handler; native manager
+сохраняет ускорение, погодные переходы, save/load и репликацию. Границы,
+исключение прежнего leaf TryPlay/TryHost пути и cleanup — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+Arland integration регистрирует один вход в native default catalog, сохраняя
+stock записи и прежние leaf GUID; UI фильтрует точные legacy IDs. Это необходимо
+для source addons без WorkshopItem.
+Core разрешает subtype чтением ресурса по ID; nullable catalog `GetHeader()` не
+определяет доступность входа. `AICF_WorkshopTagMetadata` — узкий адаптер чтения
+штатных UI tag maps, избегающий standalone protected constructor SCR_FilterCategory.
+
+Spawn deadline managed slot измеряется WorldTimestamp текущего мира с момента
+BeginInitialSpawn/BeginReplacementSpawn, через GetSpawnSimulationAgeMs. Это
+сохраняет 30 секунд активной симуляции при Welcome/SP pause; существующие
+System.GetTickCount getters остаются wall-clock диагностикой. Смена generation
+начинает новый timestamp, readiness/native spawn queue не обходятся.
+
+`AICF_InstigatorContext` — узкий compatibility boundary transient death context.
+OTHER с известным character передаётся штатной AI/PLAYER классификации;
+источник без управляющего получает OTHER_DEATH с сохранённым Instigator и
+исходными entities. Damage/score/ownership остаются у native владельцев.
+Контракт: [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md).
 
 Корень: `AIConflictCore/Scripts/Game/AIConflict/`. Начинай с владельца домена,
 затем читай его конфигурацию и соседние классы.

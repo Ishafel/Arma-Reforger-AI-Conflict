@@ -5,6 +5,15 @@ Arma Reforger, Server и Tools одной версии, для API helper — Gi
 Перед изменением запиши `git status`, branch/commit и фактические версии.
 Создай отдельную ветку задачи по [AGENTS.md](../AGENTS.md).
 
+Для полного offline набора из глубоко вложенного checkout используй временный
+`subst` в свободной букве диска: legacy WinPS 5 `Copy-Item` в source fixtures
+может превысить MAX_PATH. Например, после проверки свободного `X:` создай
+`subst X: <checkout>` и запускай `X:/tools/Invoke-AICFChecks.ps1` с новым
+EvidenceRoot. Сохрани mapping вместе с context/commands, после завершения
+дочерних проверок удали только свой alias: `subst X: /D`. Production и auditors
+при таком повторе не меняются. Для native server/client сохраняй canonical
+launcher и проверку точного CLI/manifest, не подменяй их этим offline приёмом.
+
 Назначение и статус утилит `tools/`, структура `tests/` и общий offline runner —
 в [TOOLS.md](TOOLS.md). Runtime probes выбираются по [TEST_FIXTURES.md](TEST_FIXTURES.md).
 
@@ -73,15 +82,20 @@ manifest использует game resources, подходящие Workbench. П
 | `ArlandWCSRHS` | `AIConflictArlandWCSRHS` |
 | `EveronWCSRHS`, `EveronNorthWCSRHS` | `AIConflictEveronWCSRHS` |
 
-Точный граф и ресурс `.conf` определяет launcher. Не заменяй сценарий raw `.ent`
+Точный граф и ресурс `.conf` определяет каталог `tools/config/AICF_Scenarios.json`.
+`-MatchMode Standard|CoopUS|CoopUSSR` выбирает режим для любого из девяти Variant;
+default `Standard`. Стороны US/USSR логические: RHS использует USMC/МСВ,
+WCS — НАТО/РФ. Старый `-Variant StockCoopUSSR` сохраняется как alias
+`-Variant Stock -MatchMode CoopUSSR`; несовместимый явно переданный режим отклоняется.
+Не заменяй сценарий raw `.ent`
 с отдельным `-MissionHeader`: whitelist должен применяться до инициализации баз.
 RHS/WCS версии и каталоги сверяй с установленными пакетами и addon dependencies;
 сведения WCS: [Arland](../AIConflictArlandWCSRHS/README.md),
 [Everon](../AIConflictEveronWCSRHS/README.md).
 
-Для любого из девяти Variant используйте `-Difficulty Easy|Medium|Hard`
+Для любого Variant и MatchMode используйте `-Difficulty Easy|Medium|Hard`
 (default `Easy`), например `-Variant EveronNorth -Difficulty Hard`.
-Передавайте одинаковую `Difficulty` серверу и клиенту: readiness gate проверяет
+Передавайте одинаковые `Variant`, `MatchMode` и `Difficulty` серверу и клиенту: readiness gate проверяет
 точный server header. Medium добавляет один БТР со случайным десантом до 2/4;
 Hard — случайные пары бронетехники и одну усиленную точку с 3/4 машинами.
 Недоступные танки заменяются БТР. Правила и подготовка графа описаны в
@@ -101,7 +115,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Start-AICFRuntime.
 ```
 
 Сохрани напечатанные `AICF_RUNTIME_PROFILE` и `AICF_RUNTIME_MANIFEST_JSON`.
-Для локальной клиентской проверки укажи этот server profile и тот же Variant
+Для локальной клиентской проверки укажи этот server profile и тот же Variant/MatchMode/Difficulty
 в другой сессии:
 
 ```powershell
@@ -124,6 +138,38 @@ Placeholder заменяется фактическим путём. Перед �
 запускай их последовательно.
 
 `-AICommanderMode BOTH|US|USSR` задаётся при старте и не меняется в матче.
+В Co-op launcher по умолчанию выбирает противоположную людям сторону;
+явный несовместимый commander отклоняется. Пример за US на Севере Эверона WCS:
+
+```powershell
+& tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronNorthWCSRHS -MatchMode CoopUS -Difficulty Medium
+# В другой сессии, с фактическим свежим server profile:
+& tools/Start-AICFRuntime.ps1 -Role Client -Variant EveronNorthWCSRHS -MatchMode CoopUS -Difficulty Medium -ServerProfileRoot $serverProfileRoot
+```
+
+Добавление нового сочетания карты/контента описано в [COOP_SCENARIO.md](COOP_SCENARIO.md).
+
+Единый пункт «AI Conflict» открывается через Play/Host в меню: карта, установленный
+контент, режим, сторона и сложность разрешаются в leaf header и точный addon graph.
+Canonical launcher frontend не открывает: для server/client остаются
+`-Variant Stock -MatchMode ... -Difficulty ...`. Прямой ID setup получает vanilla
+Arland Co-op USSR Medium. Полный контракт и NOT RUN gates —
+[SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+
+Для ручной проверки frontend владелец открывает клиент с базовым source graph,
+но без `-client`/`-server`, и сам управляет меню. Граф берётся из Client `-DryRun`;
+фактические argv и свежий внешний profile сохраняются в отдельном manifest.
+Это открытие меню по запросу владельца, не direct connect и не GUI automation
+агента. Диагностический `-listScenarios` печатает каталог из native Game API.
+У универсального stock source graph — 31 штатная запись и один AI Conflict
+`A1CF261019500001`; наличие файла в `.rdb` не заменяет этой проверки.
+Для выбора всех установленных профилей используй `AIConflictArland/addon.gproj`
+и базовый CSV `9178E5822AFE48EA,B52C5F6AEDBF423E`; добавь существующий каталог
+RHS/WCS в `-addonsDir`, не в принудительный `-addons`. Принудительный WCS CSV
+не выгружается native transition и закономерно блокирует выбор Vanilla/RHS.
+Все local `.rdb` выбранных интеграций заранее генерируются терминальным Workbench.
+Подключение к dedicated по-прежнему требует canonical launcher и readiness gate.
+
 `-LoadoutLibraryPath <старый-profile>/profile/AICF_Loadouts` импортирует библиотеку
 шаблонов в свежий server profile; manifest фиксирует файлы и SHA-256.
 

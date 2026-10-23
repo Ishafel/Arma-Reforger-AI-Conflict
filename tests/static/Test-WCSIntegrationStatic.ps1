@@ -15,9 +15,12 @@ $kit = Get-Content "$addon/Scripts/Game/AIConflictArlandWCSRHS/AICF_WCSInfantryK
 $playerKit = Get-Content "$addon/Scripts/Game/AIConflictArlandWCSRHS/AICF_WCSPlayerEquipment.c" -Raw
 $pmc = Get-Content (Join-Path $RepositoryRoot 'AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/Content/AICF_RHSPMCArmament.c') -Raw
 $launcher = Get-Content (Join-Path $RepositoryRoot 'tools/Start-AICFRuntime.ps1') -Raw
+. (Join-Path $RepositoryRoot 'tools/AICF_Scenarios.ps1')
+$scenarios = Get-AICFScenarioCatalog -Path (Join-Path $RepositoryRoot 'tools/config/AICF_Scenarios.json')
+$launchPlan = Resolve-AICFScenario -Catalog $scenarios -Variant ArlandWCSRHS
 Check 'WCS_PROJECT_ID' ($project -match 'GUID "A1CF260928100001"')
 foreach ($dependency in @('6A717EEA63A35E67', '3B8081D9CAD979D2')) {
-    Check "WCS_83_DEPENDENCY_$dependency" ($project.Contains('"' + $dependency + '"') -and $launcher.Contains($dependency))
+    Check "WCS_83_DEPENDENCY_$dependency" ($project.Contains('"' + $dependency + '"') -and $dependency -cin $launchPlan.addonIds.Split(','))
 }
 foreach ($dependency in @('58D0FB3206B6F859','9178E5822AFE48EA','B52C5F6AEDBF423E','9F88011DA22B471C','615806DC6C57AF02','615818DA7C0343FD','629B2BA37EFFD577','5E389BB9F58B79A6','5D1880C4AD410C14','5E0AB16BEB16D6A4','65CF7AE8574E06D2','65F929DF622BAD50','6602C1EC7E5A4A87','6152CB0BD0684837','5B383D4CB27E0D54','63120AE07E6C0966')) {
     Check "WCS_DEPENDENCY_$dependency" ($project.Contains('"' + $dependency + '"'))
@@ -47,7 +50,7 @@ Check 'WCS_KIT_ROLES_AND_AMMO' ($kit.Contains('_MG.') -and $kit.Contains('_AR.')
 Check 'WCS_KIT_CARGO' ($equipment.Contains('CollectCargo(model, retained)') -and $equipment.Contains('StoreLocal(model, cargo, manager)'))
 Check 'WCS_KIT_ROLE_SCOPE' ($equipment.Contains('AICF_WCSInfantryKit.SupportsRole(source)') -and $kit.Contains('static bool SupportsRole'))
 Check 'WCS_PMC_COMPATIBILITY' ($pmc.Contains('profile.GetPMCPrimaryOverride(source, variant)') -and $profile.Contains('override ResourceName GetPMCPrimaryOverride') -and $pmc.Contains('muzzle.IsMuzzleSuppressed()') -and $pmc -notmatch 'WCS')
-Check 'WCS_LAUNCHER' ($launcher.Contains("'ArlandWCSRHS'") -and $launcher.Contains("'A1CF260928100001' = 'AIConflictArlandWCSRHS'") -and $launcher.Contains('{A1CF260928100002}Missions/AICF_WCS_RHS_Conflict_Arland.conf'))
+Check 'WCS_LAUNCHER' ($launchPlan.project -ceq 'AIConflictArlandWCSRHS/addon.gproj' -and 'A1CF260928100001' -cin $launchPlan.addonIds.Split(',') -and $launchPlan.scenario -ceq '{A1CF260928100002}Missions/AICF_WCS_RHS_Conflict_Arland.conf' -and $launcher.Contains('$scenario = $scenarioPlan.scenario') -and $launcher.Contains('$addonIds = $scenarioPlan.addonIds'))
 foreach ($name in @('AIConflictCore','AIConflictArland','AIConflictEveron','AIConflictArlandRHS','AIConflictEveronRHS')) {
     $other = Get-Content (Join-Path $RepositoryRoot "$name/addon.gproj") -Raw
     Check "WCS_OPTIONAL_$name" ($other -notmatch 'A1CF260928100001|615806DC6C57AF02|615818DA7C0343FD|5D1880C4AD410C14|5E0AB16BEB16D6A4')

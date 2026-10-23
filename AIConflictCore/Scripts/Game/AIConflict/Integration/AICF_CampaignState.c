@@ -18,6 +18,24 @@ modded class SCR_GameModeCampaign
 	[RplProp(onRplName: "AICF_OnAICommanderStateReplicated")]
 	protected bool m_bAICFUSSRAICommanderEnabled;
 
+	[RplProp()]
+	protected AICF_EMatchMode m_eAICFMatchMode;
+
+	void AICF_SetMatchMode(AICF_EMatchMode mode)
+	{
+		if (!Replication.IsServer() || !IsMaster()) return;
+		if (mode < AICF_EMatchMode.STANDARD || mode > AICF_EMatchMode.COOP_USSR) return;
+		if (m_eAICFMatchMode == mode) return;
+		m_eAICFMatchMode = mode;
+		Replication.BumpMe();
+	}
+
+	bool AICF_IsPlayerOnlyFaction(bool isUSSR)
+	{
+		if (isUSSR) return m_eAICFMatchMode == AICF_EMatchMode.COOP_USSR;
+		return m_eAICFMatchMode == AICF_EMatchMode.COOP_US;
+	}
+
 	[RplProp(onRplName: "AICF_OnStage4StateReplicated")]
 	protected bool m_bAICFStage4Enabled;
 

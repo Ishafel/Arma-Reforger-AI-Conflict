@@ -34,8 +34,8 @@ class AICF_VictorySystem
 			return false;
 		}
 
-		bool usWins = ussrState.GetTickets() <= 0 || ControlsAllObjectives(graph, usState.GetFactionKey());
-		bool ussrWins = usState.GetTickets() <= 0 || ControlsAllObjectives(graph, ussrState.GetFactionKey());
+		bool usWins = (ussrState.UsesTicketDefeat() && ussrState.GetTickets() <= 0) || ControlsAllObjectives(graph, usState.GetFactionKey());
+		bool ussrWins = (usState.UsesTicketDefeat() && usState.GetTickets() <= 0) || ControlsAllObjectives(graph, ussrState.GetFactionKey());
 		if (usWins == ussrWins)
 			return false;
 
@@ -75,7 +75,7 @@ class AICF_VictorySystem
 		m_bEnded = true;
 		m_sWinnerKey = winnerState.GetFactionKey();
 		string reason = "ALL_OBJECTIVES_UNCONTESTED";
-		if (loserState.GetTickets() <= 0)
+		if (loserState.UsesTicketDefeat() && loserState.GetTickets() <= 0)
 			reason = "ENEMY_TICKETS_EXHAUSTED";
 		AICF_Stage1Diagnostics.Info(
 			"VICTORY",

@@ -189,7 +189,7 @@ Assert-Contains 'STAGE4_DEFAULT_FULL_GROUPS' $stage1Config 'DEFAULT_FULL_SIZE_GR
 Assert-Contains 'STAGE4_DEFAULT_FULL_GROUPS' $groupSlot 'm_iDesiredSize\s*=\s*AICF_Stage1Config\.GetDefaultGroupSizeForSlot\s*\(\s*slotId\s*\)' 'Each group slot must retain its slot-specific desired size for replacement spawns'
 Assert-Contains 'STAGE4_DEFAULT_FULL_GROUPS' $stage1Config 'MIN_MANAGED_AGENTS\s*=\s*200\s*;' 'Admission cap must fit twenty ten-agent groups across both factions'
 Assert-Contains 'STAGE4_TEN_GROUPS' $factionFleet 'HARD_MAX_ACTIVE_OR_RESERVED\s*=\s*10\s*;' 'Fleet hard cap must not silently clamp the ten configurable groups back to four'
-Assert-Contains 'STAGE4_TEN_GROUPS' $factionState 'for\s*\([^)]*GROUP_SLOTS_PER_FACTION' 'Default faction state must construct every configured group slot'
+Assert-Contains 'STAGE4_TEN_GROUPS' $factionState 'for\s*\([^)]*m_iExpectedSlotCount' 'Faction state must construct every scenario-configured group slot'
 Assert-Contains 'STAGE4_VARIABLE_ROSTER' $groupSpawner 'SpawnGroup\s*\([\s\S]*int\s+desiredSize[\s\S]*ConfigureManagedRoster\s*\(\s*group\s*,\s*faction\s*,\s*desiredSize' 'Spawner must shape the faction-correct roster to the selected size'
 Assert-Contains 'STAGE4_ROLE_ROSTER' $groupSpawner 'EEntityCatalogType\.CHARACTER[\s\S]*BuildCharacterRoleCandidates[\s\S]*FindCharacterPrefab' 'Managed roster must resolve role candidates from the active faction character catalog'
 Assert-Contains 'STAGE4_ROLE_ROSTER' $contentProfile 'SQUAD_LEADER[\s\S]*MEDIC[\s\S]*MACHINE_GUNNER[\s\S]*ANTI_TANK[\s\S]*GRENADIER[\s\S]*AUTOMATIC_RIFLEMAN[\s\S]*MACHINE_GUNNER_ASSISTANT[\s\S]*ANTI_TANK_ASSISTANT[\s\S]*RIFLEMAN' 'Stock content profile must retain the varied ten-position role table'

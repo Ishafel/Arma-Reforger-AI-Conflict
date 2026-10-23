@@ -59,6 +59,19 @@ class AICF_ShutdownProbe
 				ItemPreviewManagerEntity preview = draft.GetPreview();
 				draft.Clear();
 				passed = passed && !draft.GetCharacter() && !draft.GetPreview() && !character && !preview;
+				if (equipment == "1")
+				{
+					// Draft-only batches never execute EquipmentPlan's native muzzle
+					// reads. Include that owner and its destructor in every operation.
+					AICF_EquipmentPlan plan = new AICF_EquipmentPlan();
+					bool built = plan.Build(recipe.m_sCharacter, faction, null);
+					IEntity model;
+					if (plan.m_Draft) model = plan.m_Draft.GetCharacter();
+					plan = null;
+					bool cleared = built && !model;
+					passed = passed && cleared;
+					Print(string.Format("[AICF][SHUTDOWN_PLAN_CLEAR] batch=%1 iteration=%2 side=%3 passed=%4", batch, iteration, side, cleared));
+				}
 				if (!passed) failures++;
 				Print(string.Format("[AICF][SHUTDOWN_OPERATION] batch=%1 iteration=%2 side=%3 passed=%4 reason=%5", batch, iteration, side, passed, reason));
 			}

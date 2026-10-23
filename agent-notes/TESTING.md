@@ -1,5 +1,2178 @@
 # Проверки и baseline
 
+## Подготовка обновления PR #65 — 2026-10-24
+
+Production source `fe72fb2`, продолжение существующего draft PR #65:
+remote head `f5d2966`, base `aada6ed`, оба являются предками source.
+Evidence: `.codex-runtime/pr65-briefing-20261024/` в основном workspace.
+Новых production/API изменений при подготовке нет.
+
+- `X:/tools/Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/offline-short`:
+  **81/81 PASS/0**, Static **33/33**, Contracts **48/48**, без исключений.
+  Runner context подтверждает `fe72fb2` и чистое дерево перед запуском.
+  Полные commands/outputs/exits, plan и `final-verdict.json` сохранены.
+  AuditSelection — **45** positive/negative cases; Logistics — **145**.
+- Первая попытка из полного вложенного пути: **42 PASS / 1 FAIL** из 43
+  завершённых checks, затем runner адресно остановлен, exit -1.
+  `Test-AuditSelectionContracts.ps1` не смог скопировать файл в target длиной
+  **261 символ**. Полный свежий повтор через временный `subst X:` использует
+  те же source/auditors и весь набор. Исходный FAIL и identity остановленного
+  дерева сохранены; незавершённый Logistics case исходной попытки не PASS.
+- В runner summary для корня `X:/` поле relative `path` теряет начальную `t`
+  (`ests/...`): это только отображение, `command` содержит настоящий
+  `X:/tests/...`. Полнота проверена по всем 81 уникальным `name` и plan;
+  Static/Contracts сверены по каталогам, реальные команды/exit не исправлялись.
+- `ArchiveInputs.ps1`: **9 ZIP** с per-entry bytes/SHA-256 до удаления только
+  новых contract-каталогов и известной production fixture copy Logistics.
+  Старые evidence и пользовательские profiles не удаляются. У **22** файлов
+  Logistics fixture WinPS 5 `Get-Content` меняет кодировку русских comments;
+  исходные fixture bytes архивированы, сравнение всего текста вне comments
+  (включая string literals) подтвердило идентичность production. Это не новый
+  runtime/compile gate и не изменение production ради PASS.
+
+Workbench/native gates брифинга и Setup guide — в следующих разделах,
+здесь не выдаются за новый прогон: **6/6 compile**, **583/583 briefing cases**,
+**6/6 menu runs × 61 cases / 108 hit queries** для соответствующих source.
+Report-only продолжение меняет эти заметки и рекомендацию короткого offline
+пути в DEVELOPMENT; повтор compile/runtime для неизменных `.c` не запускался.
+
+**Draft/blockers:** прежний native out-of-bounds North Everon RHS на примерно
+12-й минуте не исправлен/не опровергнут; чистый engine log остаётся FAIL.
+**NOT RUN:** новый 15-minute soak, физический ввод и визуальная оценка меню/
+брифинга, packaged Workshop/обычный Steam-путь, public Host со вторым игроком,
+authenticated persistence/restart, естественный матч до победы и отдельный FPS
+benchmark. Подготовка PR сохраняет `Refs #46`, без automatic close/merge/release.
+
+## Внутриигровой брифинг на карте — 2026-10-24
+
+Ветка `codex/mission-briefing` от `dc8ab9c`. Добавлены десять native journal
+pages, отдельные правила STANDARD/Co-op и 21 RU/EN localization entry.
+Контракт — [MISSION_BRIEFING.md](MISSION_BRIEFING.md). Evidence:
+`.codex-runtime/mission-briefing-20261024/REPORT.md` в основном workspace.
+
+- `Invoke-AICFChecks.ps1 -Name Test-LocalizationStatic.ps1,
+  Test-ScenarioHeadersStatic.ps1,Test-CoopScenarioStatic.ps1`: baseline **3/3 PASS**,
+  final и final-after-docs **3/3 PASS**, exit 0; localization **758 entries**.
+- `Compile.ps1`: final production Stock/RHS/EveronWCSRHS **3/3 PASS/0**;
+  isolated fixture Stock/RHS/EveronWCSRHS **3/3 PASS/0**. Terminal Workbench
+  1.8.0.13, `Script validation successful`; manifests/argv/full logs сохранены.
+  Первая sandbox попытка Stock получила `SteamAPI_Init failed`, exit -1;
+  исходный FAIL сохранён, повтор в пользовательском контексте Steam прошёл.
+- `Run.ps1` → canonical `Start-AICFRuntime.ps1`: Stock STANDARD,
+  RHS COOP_US и EveronWCSRHS COOP_USSR, каждый dedicated + late direct client.
+  Точный CLI, живой PID, ROSTER_READY и launcher manifests проверены до подключения.
+  Все **6/6 native exits 0** и штатные stopped logs. `Audit.ps1`: server cases
+  **32/51/114**, client **95/114/177**, всего **583/583 PASS**.
+- Native component проверяет active journal, повторный Load/Reset, fallback
+  фракций, уникальность IDs и исключение stock/null headers. RHS fixture
+  читает **18** loaded presets, WCS **81**, все режимы/сложности; никаких
+  подмен active header. Client читает native journal/button/page title/text
+  для десяти страниц на RU/EN/de_de fallback; язык восстанавливается.
+- Полные **18** stopped server/client logs, включая sibling error/script,
+  не содержат SCRIPT/VM/fatal/assertion/unregistered RPC. Сохранены **1558**
+  остальных Error lines с повторами error.log: resource GUID/fields, Hierarchy,
+  navigation tiles, native GUI export metadata/font leak. Чистый engine log
+  не заявляется; прежняя scripts-first граница и внешние дефекты остаются
+  в [EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md).
+- `Archive.ps1`: **441/441** production source/stage hashes и fixture hash
+  совпали; **7 ZIP** проверены по bytes/SHA-256 каждого entry до адресного
+  удаления stage и шести profiles. **18/18** полных логов скопированы с SHA-256.
+  Первая локальная версия oracle неверно складывала PowerShell arrays имён;
+  исходные два FAIL JSON сохранены, expression исправлен, тот же полный лог
+  прошёл строгий пересчёт без исключения cases. Это дефект evidence helper,
+  а не изменение production для желаемого PASS.
+
+**NOT RUN:** физическое открытие карты/клик/прокрутка, визуальная оценка на
+всех разрешениях, смена языка без повторного показа страницы, обычный Steam/
+packaged Workshop/Host, полный offline suite и длительные игровые soaks.
+Native component/widget readbacks не объявляются проверкой физического ввода.
+Ранее открытый manual client остановлен по PID/CLI/creation identity;
+обновлённый production frontend возвращается отдельно без fixture/автозавершения.
+Это не новый stopped-log verdict. Push/PR/merge не выполнялись.
+
+## Setup guide: перекрытый input и сетка северного сектора — 2026-10-23
+
+Ветка `codex/scenario-guide-input` от `8c142f4`, сообщение владельца о
+неработающей кнопке и полосах на North Everon. Evidence:
+`.codex-runtime/scenario-guide-input-20261023-234235/REPORT.md`.
+
+У guide frame был default ZOrder 0, у прозрачного root `AICF_RectInput` — 1.
+Нативный read-only `WidgetManager.TraceWidgets` подтвердил: в центре кнопки
+первый ButtonWidget принадлежит AICF_ScenarioSetupScreen, а не guide frame.
+`guideButton.SetZOrder(10)` поднимает её над root, как остальные `AddButton`.
+Полосы/отметка N отключены presentation-флагом sectorGrid=false в каталоге;
+registry перегенерирован для всех трёх North variants. World/whitelist не менялись.
+
+- До правки профильные offline checks **6/6 PASS/0**. Новый native baseline
+  на исходном production source: Workbench PASS, native exit 0, **61 checks,
+  failed=2**, строгий oracle **FAIL/1** — UI_GUIDE_HIT_TARGET и UI_CARD_IDENTITY
+  (новое требование отсутствия сетки). Исходный FAIL сохранён. Прежние 59/59
+  readbacks проверяли OpenGuide напрямую и видимость кнопки; hit order ими
+  не проверялся, поэтому прошлый PASS не доказывал доступность клика.
+- `Invoke-AICFChecks.ps1` с UniversalScenarioStatic, ScenarioSetupStatic,
+  UniversalScenarioLogContracts, LocalizationStatic, ScenarioEnvironmentStatic,
+  ScenarioHeadersStatic: после правки **6/6 PASS/0**, log contracts **66 cases**.
+  `Update-AICFScenarioRegistry.ps1` и его Check прошли, 9 variants/81 presets.
+- `Compile.ps1`: final production Stock/RHS/ArlandWCSRHS **3/3 PASS/0**;
+  final stage тех же трёх плюс Everon/EveronRHS/EveronWCSRHS **6/6 PASS/0**.
+  Terminal Workbench 1.8.0.13, validation success, полные argv/manifests/logs сохранены.
+- `FrontendMatrix.ps1` → `RunFrontend.ps1`: RU/EN × Vanilla/RHS/WCS + RHS,
+  **6/6 PASS/0**, по **61/61 cases**. UI_GUIDE_HIT_TARGET/UI_GUIDE_HIT_CLOSE
+  проверяют по девять точек каждой кнопки: **108/108** native hit queries PASS.
+  Нет движения мыши/клавиш или генерации input. Все карточки без grid widget;
+  переводы, modal/focus/selection, повтор, размеры и прежняя UI матрица прошли.
+- `Finalize.ps1`: **18** final stopped logs, SCRIPT/VM/fatal/assertions/RPC
+  **0**. Остальные resource/engine diagnostics — **420 Error lines** с повторами,
+  чистый engine log не заявляется. **440/440** production hashes source/stage
+  и fixture hash совпали; baseline/final отличаются только двумя production
+  `.c` (UI и generated registry). Catalog JSON сверяется генератором отдельно.
+- `Archive.ps1`: **9 ZIP** (два stage, семь profiles), каждый entry проверен
+  bytes/SHA-256 до адресного удаления. **21/21** copied full logs (18 final и
+  3 baseline) совпали по SHA-256. Watcher с явным root завершился штатно;
+  собственных native тестовых процессов не осталось.
+
+Ручной клиент предыдущей сборки остановлен по точной PID/creation/CLI identity
+для исправления; native exit -1 отмечен как намеренный Stop-Process, не crash
+gate. После сохранения исправления production клиент открывается отдельно для
+владельца без probes/автозавершения; это не новый stopped-log runtime verdict.
+
+**NOT RUN:** физический клик/клавиши/Esc, все разрешения и визуальная оценка,
+packaged Workshop/обычный Steam-путь, полный offline набор, Host/direct-connect/
+JIP, игровые soaks. Native hit query не объявляется физическим вводом, но
+проверяет именно перехватчик input, пропущенный старой fixture. Старые внешние
+resource/длительные runtime дефекты сохранены; push/PR/merge не выполнялись.
+
+## Подсказка «Как настроить» в setup — 2026-10-23
+
+Ветка `codex/scenario-setup-help` от `36c6183`, продолжение текущей версии
+универсального меню; основной checkout не менялся. Evidence:
+`.codex-runtime/scenario-setup-help-20261023-231820/REPORT.md`.
+
+В шапке setup добавлена отдельная кнопка. Вложенная modal содержит подготовку
+модов/зависимостей, ожидаемые Vanilla/RHS/WCS варианты, выбор карты/режима/
+окружения и Play/Host. Кнопка «Понятно» возвращает к настройкам. Основные
+20 control indices, selection и launch/dependency gates сохранены. RU/EN
+тексты и generated runtime tables обновлены вместе. Контракт —
+[SCENARIO_SETUP.md](SCENARIO_SETUP.md#подсказка-игроку).
+
+- `Invoke-AICFChecks.ps1 -Name Test-UniversalScenarioStatic.ps1,
+  Test-ScenarioSetupStatic.ps1,Test-UniversalScenarioLogContracts.ps1,
+  Test-LocalizationStatic.ps1,Test-ScenarioEnvironmentStatic.ps1,
+  Test-ScenarioHeadersStatic.ps1`: baseline **6/6 PASS/0**, окончательный
+  after-final **6/6 PASS/0**. Universal log oracle — **64 contract cases**,
+  включая пять новых отрицательных guide cases. `Build-AICFLocalization.ps1`
+  сгенерировал **737** RU/EN entries, static проверяет актуальность таблиц.
+- `Compile.ps1 -Label final-production-<variant> -Variant <variant>`:
+  production Stock/RHS/ArlandWCSRHS **3/3 PASS/0**. Final stage тех же трёх
+  плюс Everon/EveronRHS/EveronWCSRHS **6/6 PASS/0**. Терминальный Workbench
+  1.8.0.13, validation successful; полные argv/source manifests/exits/logs
+  сохранены. Ранние девять PASS до дополнительного guide handler не выдаются
+  за проверку окончательных bytes.
+- `FrontendMatrix.ps1` → `RunFrontend.ps1`: **6/6 PASS/0** — ru_ru/en_us ×
+  Vanilla/RHS/WCS + RHS, свежие profiles, native frontend из canonical Client
+  DryRun без direct-connect. По **59/59 cases**: actual modal, переводы,
+  glyph bounds текста, idempotent open/close, focus/selection restore, reopen,
+  закрытие setup с открытой подсказкой и прежняя полная widget/plan матрица.
+  Expected content masks **1/3/7**, actual language и перевод label сверены
+  с manifest. Изменения enable state/языка — только isolated fixture, Stop
+  возвращает исходные значения; production этого не делает.
+- `Finalize.ps1`: полные stopped console/error/script logs **18 файлов**,
+  native/strict oracle exits **0**, SCRIPT/VM/fatal/assertions/unregistered RPC
+  **0**. Остальные engine/resource Error — **420 lines**, включая дубликаты;
+  полностью чистый engine log не заявляется. Все **440/440** production
+  artifacts совпали между source/stage и исходным SHA-256 manifest,
+  fixture hash также совпал. Собственных native процессов нет.
+
+Сохранённый отказ вспомогательного watcher: background `Start-Job -FilePath`
+не передал PSScriptRoot, поэтому наблюдатель не стартовал. Все шесть UI runs
+завершились собственным native RequestClose; их полные logs/exits проверены
+повторно. Helper теперь получает root явно; отдельный start/stop self-check
+**PASS**. Это не повтор UI runs с исправленным watchdog и не доказательство
+его аварийной остановки зависшего native процесса. Production не менялся.
+
+Stage и шесть тестовых profiles архивированы: **7 ZIP**, SHA-256 каждого
+entry проверен до адресного удаления. Полные logs также сохранены отдельно в
+`<evidence>/logs/`, все **18/18** hashes повторно совпали после копирования.
+Source checkout и пользовательские presets/profiles сохранены.
+
+**NOT RUN:** полный offline набор, физические клики/клавиши и Esc, визуальная
+оценка/все разрешения, packaged Workshop/обычный Steam-путь, Host/direct-connect/
+JIP и новые игровые soaks. Native modal/glyph readbacks не выдаются за эти
+действия. Новые server/gameplay gates для локальной prelaunch подсказки не
+запускались; прежние external resource и длительные runtime дефекты остаются
+в отдельных baseline. Push/PR/merge не выполнялись.
+
+## Damage RPC у private models и shutdown — 2026-10-23
+
+По запросу «исправить все ошибки» владелец выбрал границу **scripts-first**:
+исправить код проекта, внешние дефекты ресурсов зафиксировать. Ветка
+`codex/runtime-log-fixes` от `233e547` (production baseline `f5d2966`),
+Game/Server/Workbench **1.8.0.13**. Основной checkout не менялся. Evidence:
+`.codex-runtime/runtime-log-fixes-20261023-222235/REPORT.md`.
+
+Найдены две причины `Attempting to send an RPC through unregistred item`:
+native footwear callbacks добавляли damage effect private/unregistered server
+characters; клиентский `AICF_LoadoutDraft.Build` вызывал сетевой
+`EnableDamageHandling(false)` для local preview. Добавлен узкий
+`AICF_FeetDamageLifecycle`, неверный вызов удалён. Живой зарегистрированный
+персонаж сохраняет native эффект босых ног. Контракт и воспроизведение:
+[SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md),
+[EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md).
+
+- `Invoke-AICFChecks.ps1 -Suite All`: baseline **80/80 PASS/0**,
+  after **81/81 PASS/0**, включая новый `Test-FeetDamageLogContracts.ps1`
+  (**20 cases**). После последней клиентской правки отдельно повторены
+  AILoadoutStatic, EquipmentContracts, FeetDamageLogContracts,
+  WeaponQuickslotLogContracts и MatchShutdownContracts: **5/5 PASS/0**.
+  Quickslot log oracle теперь отвергает unregistered RPC во всех соседних
+  полных logs; **21 contract cases**.
+- Terminal `Compile.ps1` → Workbench Validate/Compile: server stage
+  Stock/Everon/RHS/EveronRHS/ArlandWCSRHS/EveronWCSRHS **6/6 PASS/0**;
+  окончательный production Stock/RHS/ArlandWCSRHS **3/3 PASS/0**;
+  окончательный connected stage RHS **PASS/0**. Полные logs/argv сохранены.
+- Canonical `Start-AICFRuntime.ps1 -Role Server -MatchMode Standard
+  -Difficulty Hard -AdditionalArguments @('-aicfFeetProbe','1')`:
+  Stock/RHS/ArlandWCSRHS **3/3 PASS/0**, по **11/11 native cases**.
+  Проверены private model и реальный registered damage manager, настоящий
+  detach/attach обуви и появление/удаление `SCR_ExposedFeetDamageEffect`.
+  Два отрицательных runtime controls с always-allow/always-deny guard
+  компилируются и штатно закрываются, но строгий oracle отвергает оба:
+  **expected FAIL**. Следовательно, ни возврат старого RPC, ни отключение
+  native gameplay не дают ложного PASS. После runs fixture получила только
+  форматирование Allman/guard; это не новый native прогон её окончательных байтов.
+- Canonical dedicated server + direct client **RHS / CoopUSSR / Easy**:
+  **7/7 cases**, native exits **0/0**, полные server/client logs —
+  unregistered RPC/SCRIPT/VM/fatal/assertions **0**. Перед connect подтверждены
+  live PID, exact CLI и ROSTER_READY; manifest сохранён. Owner RPC read/save,
+  spawn двух weapons, quickslot и СВД в руках проверены. Ответ **SAVED_SESSION**:
+  authenticated account persistence не заявляется.
+- `Lane.ps1 -Lane 0|1|2` → canonical launcher, девять variants
+  Arland/Everon/North × Vanilla/RHS/WCS + RHS, **Standard/Hard**, по
+  **300142–301012 ms** после roster. Native exit/owner/CLI/graph gate
+  **9/9 PASS**, SCRIPT/VM/fatal/assertions **0** во всех **27** stopped logs.
+  Server console unregistered RPC **180 → 0**. Console Error **1325 → 1141**;
+  **clean-log gate 0/9, FAIL**. Оставшиеся resource/engine diagnostics не
+  исключены из анализа и не объявляются исправленными.
+
+Полный offline набор и server matrix начинались на server fix A. Последняя
+правка B удаляет исключительно client-only `EnableDamageHandling` и unused
+lookup; server branch не меняется. **440/440** production artifacts сверены,
+единственное отличие A/B записано в `matrix-final-source-delta.json`. Final B
+проверен production compile, connected run и focused 5/5. Прежние 9 runs не
+выдаются за запуск идентичных final B bytes.
+
+Внешний control без игровых AICF scripts: Vanilla Everon compile/native
+shutdown **PASS/0**, **49** resource/engine Errors, SCRIPT 0. RHS/WCS compile
+PASS, но native faction/base init без compatibility adapters получает VM;
+watcher stops, native exits **-1/-1, FAIL**. Их resource errors до GameStart
+сохранены, последующая стабильность этим control не доказана. Runtime tile
+`<0, -1>` исходного EveronRHS не повторился; причина остаётся неизвестной.
+
+Сохранённые подготовительные FAIL: trace fixture с неверным именем overload
+parameter (`effect` вместо SDK `broadcastingEffect`); первый FeetDamage stage
+с неправильным порядком script loading; первый connected client с одним
+damage RPC (дублируется в error.log). Исправлены сигнатура/расположение fixture
+и production client вызов; исходные logs не заменены успешными. Строгий oracle
+повторно отверг исходный connected log как **FAIL/1**.
+
+Все свои native процессы остановлены. Полные logs сохранены отдельно в
+`<evidence>/logs/`; **33 ZIP** stage/profile с SHA-256 каждого entry проверены
+до адресного удаления временных каталогов. Source checkout сохранён;
+пользовательские presets/profiles и установленные файлы не менялись.
+
+**NOT RUN:** физический ввод/внешний вид UI, JIP/client presentation эффекта
+босых ног, authenticated account persistence, полный матч до победы,
+packaged Workshop, soak дольше пяти минут. Старые out-of-bounds примерно на
+12-й минуте и particle velocity warnings этим прогоном не опровергнуты.
+Чистый engine log и готовность PR #65 не заявляются; push/merge не выполнялись.
+
+## Параллельные серверные прогоны по пять минут — 2026-10-23
+
+По запросу владельца клиент закрыт, выполнены девять dedicated runs без
+подключений: Arland/Everon/North Everon × Vanilla/RHS/WCS + RHS. Source
+`f5d296612486248790fc36197db810f281e0d3f9`, отчётная ветка
+`codex/server-soak-five-minutes`, Game/Workbench **1.8.0.13**. Основной checkout
+не менялся. Evidence: `.codex-runtime/server-soak-20261023-215418/REPORT.md`.
+
+Три параллельные очереди, отдельные native `-addr 127.0.0.1:2600..2608`.
+Фактические listeners, live PID, точные CLI и ROSTER_READY сохранены для каждого
+run. Режим **Standard**, сложность **Hard**; это не повтор Co-op матрицы.
+Production gameplay не менялся: в отдельный stage добавлена только существующая
+observer fixture `AICF_RecoverySoakProbe.c`, `-aicfRecoverySoakMs 300000`.
+Таймер идёт от готовности roster, fixture запрашивает штатное закрытие.
+
+- `Compile.ps1 -SourceRoot <evidence>/stage -Variant Stock|Everon|RHS|EveronRHS|ArlandWCSRHS|EveronWCSRHS` → terminal Workbench Validate/Compile: **6/6 PASS/0**, полные logs и argv сохранены.
+- `Lane.ps1 -Lane 0|1|2` → canonical `tools/Start-AICFRuntime.ps1 -Role Server -MatchMode Standard -Difficulty Hard`: **9/9** native exits **0**, observation **300217–300866 ms**, owner failures **0**. Сверка CLI/manifest и фактически загруженного addon graph — **9/9 PASS**.
+- `Audit.ps1` и `Finalize.ps1`: полные остановленные console/error/script logs **27 файлов**, SCRIPT E/F, VM/fatal/assertions **0**. Во всех console logs есть `Game destroyed.`. Native observation gate **9/9 PASS**; **clean-log gate 0/9, FAIL**.
+- Всего **1325** console E diagnostics: startup **1123**, observation **54**, shutdown **148**. С дубликатами в error.log — **2650**, это не число разных дефектов. Категории: unknown fields **795**, unregistered RPC **180**, resource GUID **134**, resource load/material **73**, navigation **61**, duplicate Hierarchy **58**, resource/font shutdown leaks **18**, unknown class **6**. Полные строки, фазы и предупреждения сохранены, исключений из анализа нет.
+- **439/439** production artifacts совпали с исходными SHA-256 в source и stage после прогонов. Свои процессы остановлены; stage и девять тестовых profiles архивированы: **10 ZIP**, SHA-256 каждого entry проверен до адресного удаления. Полные logs также оставлены отдельно в `<evidence>/logs/`. Пользовательские profiles и пресеты сохранены.
+
+| Variant | Observation, ms | Console E |
+|---|---:|---:|
+| Stock | 300528 | 23 |
+| Everon | 300866 | 63 |
+| EveronNorth | 300485 | 64 |
+| RHS | 300217 | 84 |
+| EveronRHS | 300555 | 209 |
+| EveronNorthRHS | 300355 | 217 |
+| ArlandWCSRHS | 300794 | 135 |
+| EveronWCSRHS | 300270 | 265 |
+| EveronNorthWCSRHS | 300504 | 265 |
+
+На EveronRHS во время observation зафиксированы
+`PATHFINDING(E): Incorrect tile position calculated for idx: <0, -1>` и
+`RESOURCES (E): Failed to load ''`. Первое точное сообщение отсутствует в
+сохранённом предыдущем Standard run; это не доказательство новой регрессии.
+Причина/владелец не установлены. Другие исторически не встреченные signatures
+перечислены в `historical-message-comparison.json`; настройки/длительности старых
+и новых runs различаются, сравнение не заменяет изолированный baseline.
+
+Сохранённый FAIL тестового инструмента: первоначальный watcher сравнивал
+Contains(profile), перепутал Everon с EveronRHS и завершился fail-closed без
+остановки сервера. Исправлен полный `-profile` token matcher, **162** quoted/
+unquoted positive/negative cases PASS. Повторный watcher подтвердил тот же
+живой Vanilla Everon по PID/CLI/port/roster; штатный native completion и полные
+logs проверены повторно. Ошибка исходного job и история восстановления сохранены.
+
+**NOT RUN:** новый offline набор, client/JIP/Co-op, UI и физический ввод,
+найм/экипировка игрока, бой до победы, packaged Workshop и soak дольше пяти минут.
+Прежний out-of-bounds примерно на 12-й минуте этим прогоном не опровергнут.
+Чистые engine logs не заявляются; PR #65 остаётся draft, публикация/merge не выполнялись.
+
+## SVD во втором оружейном месте без quickslot — 2026-10-23
+
+Baseline `f04049b`, отдельная ветка `codex/personal-weapon-quickslots`.
+Игрок показал СВД в inventory/на спине при пустом quickbar «2». Evidence:
+`.codex-runtime/svd-slots-20261023/`; копия исходного personal preset —
+`user-presets/`, исходный файл пользователя сохранён.
+
+Native `InitAsPlayer` отмечает default quickslot двух винтовок одинаковым
+ключом и пропускает вторую. До правки component control на RHS сохранил/
+прочитал recipe, восстановил обе винтовки, но получил quick1=NULL:
+`SECONDARY_QUICKSLOT pass=0`, остальные 9 cases прошли. Это воспроизведение
+дефекта, не допустимый baseline для выпуска. `AICF_WeaponQuickslots`
+дополняет только отсутствующую привязку по фактическому weapon slot index;
+сохранение inventory/schema/authority RPC не меняются.
+
+- `Invoke-AICFChecks.ps1`: baseline PersonalLoadoutContracts/AILoadoutStatic
+  **2/2 PASS/0**; final с WeaponQuickslotLogContracts/CigaretteLogContracts
+  **4/4 PASS/0**. Новые quickslot log contracts — **20 cases**.
+- `Compile.ps1` → terminal Workbench Validate/Compile: production Stock/RHS/
+  ArlandWCSRHS/EveronRHS **4/4 PASS/0**. Final stage Stock и network-stage RHS
+  прошли отдельно. Source graph/argv/native exits и полные logs сохранены.
+- Canonical `Start-AICFRuntime.ps1 -Role Server -Variant Stock|RHS
+  -MatchMode Standard -Difficulty Easy -AdditionalArguments
+  @('-aicfQuickslotProbe','1')`: final native component **2/2 PASS/0**, по
+  **12/12 cases**. Настоящий SVD prefab, encode/decode, файловый Save/Load,
+  две actual weapons, обе quickslot bindings, custom binding и occupied slot.
+- Canonical dedicated server + direct client `RHS / CoopUSSR / Easy` с
+  `-aicfQuickslotNetworkProbe 1`, client -noFocus/-forceUpdate:
+  **7/7 client cases**, native exits server/client **0**. Launcher подтвердил
+  точные server CLI/PID/ROSTER_READY до подключения. Native owner RPC прочитал/
+  сохранил personal preset, настоящий spawn получил СВД в quickslot 1,
+  UseItem прошёл и фактический item в руках — СВД. Server зафиксировал
+  PERSONAL_LOADOUT_APPLIED revision=1 и штатно закрылся после disconnect.
+- Backend UID в этой dedicated-сессии отсутствовал: фактический ответ
+  **SAVED_SESSION**, не SAVED. Account persistence через owner RPC не заявляется;
+  файловый Save/Load с СВД проверен отдельной component fixture.
+- Итоговые stopped logs всех четырёх native процессов, включая crash/error/
+  script: SCRIPT/VM/fatal/assertions **0**. Прочие engine/resource diagnostics
+  сохраняются отдельно; чистый engine log не заявляется.
+
+Сохранённые FAIL: первый prototype fixture не задал name рецепта; Decode
+вернул null, последующий Build вызвал VM. Добавлены корректное имя и guard,
+это не production bug. Второй baseline component run воспроизвёл настоящий
+пустой quickslot, fixed run на том же native кейсе прошёл 10/10; final расширен
+файловым roundtrip до 12/12. Первый wrapper log-auditor после PASS прочитал
+неинициализированный LASTEXITCODE как отказ; анализатор теперь явно exit 0,
+полные stopped logs повторно проверены. Ни один FAIL не переименован в PASS.
+
+**NOT RUN:** физическая клавиша 2/мышь, внешний вид quickbar, turret/vehicle
+player transition, account persistence/перезапуск authenticated server,
+полный offline, JIP, 15-minute soak, packaged Workshop. Native cache readback
+и UseItem не объявляются проверкой физического ввода. Legacy headers/GUID не
+менялись. Старые weapon out-of-bounds и cigarette particle velocity diagnostics
+остаются отдельно; PR #65 остаётся draft.
+
+## Cigarette thread-lock assertion — 2026-10-23
+
+В ручном local Play `EveronNorthRHS / Standard / Hard` на `d5de657`
+получены четыре native assertions `Attempt to modify locked entity from a
+different thread`, `SCR_CigaretAnimationComponent.EOnPostFixedFrame:74/75`
+(enf_entity.cpp 415/575/1894). Evidence:
+`.codex-runtime/cigarette-thread-20261023/manual-error/`. Сессия остановлена
+по точной process identity, полные logs и CLI сохранены. Ручной preset игрока
+в прежнем profile не удалялся.
+
+`AICF_CigaretteAnimation` переводит native cosmetic update с POSTFIXEDFRAME
+на FRAME, сохраняет эмиссию/накал и native delete. Контракт —
+`SOCIAL_BEHAVIOR.md`, focused fixture — `TEST_FIXTURES.md`.
+
+- Baseline `Invoke-AICFChecks.ps1`: SocialContracts, MatchShutdownContracts,
+  UniversalScenarioStatic, UniversalScenarioLogContracts — **4/4 PASS/0**.
+  Final с новым CigaretteLogContracts, `after-final`: **5/5 PASS/0**;
+  новый log oracle — **17 cases**, включая отдельный crash.log.
+- Production terminal Workbench: Stock/EveronRHS/ArlandWCSRHS **3/3 PASS/0**.
+  Stage compile с final fixture: EveronRHS и Stock **2/2 PASS/0**. Native
+  graph/argv/exits и полные logs сохранены. Дополнительные ранние PASS отдельно.
+- Final local Play: `final-rhs-north` (исходный Standard Hard) и
+  `final2-vanilla-standard` (Arland Standard Medium), **2/2 PASS/0**, по
+  **42/42** cigarette cases и обычный exact header/loaded graph/roster gate.
+  Шесть циклов US/USSR, многократный Play обоих emitter, FRAME mask, отсутствие
+  fixed callback, detach и delete. Production source в обоих runs одинаков.
+  Финальная fixture ванилы дополнительно защищает отсутствие slot; старый RHS
+  run использовал ту же логику для заведомо существующих Standard slots.
+- Final полные stopped logs, включая crash/error/script: SCRIPT/VM/fatal/
+  assertions **0**. Прочие engine/resource diagnostics сохранены; сообщения
+  `Suspicious parent velocity` у cigarette particles остаются и не объявляются
+  исправленными. Чистый engine log не заявляется.
+
+Сохранённые FAIL: первый stage compile отверг несуществующий
+`IEntity.SetLocalOrigin` в fixture; заменён проверенным `SetOrigin(CoordToParent)`.
+Первый RHS native run прошёл playback/detach пяти циклов, но истёк 120 s fixture
+timeout на последнем DELETE при параллельной production compilation — FAIL.
+Повторные native runs последовательные, с -noFocus/-forceUpdate и 240 s watchdog.
+Первый vanilla run ошибочно выбран Co-op USSR: у человеческой стороны нет
+боевых slots, fixture вызвала GetGroup у null slot и получила VM/FAIL.
+Добавлена null-защита, для двухсторонней матрицы выбран Standard. Production
+после первой реализации между runs не менялся; oracle не ослаблялся.
+
+**NOT RUN:** ручной визуальный вид дыма/анимации, полный offline набор,
+dedicated/JIP/15-minute soak и packaged Workshop. Старые weapon out-of-bounds
+и particle velocity diagnostics остаются отдельно. Это исправление не относится
+к сообщённому позднее пустому quickslot второго оружия; тот баг расследуется
+отдельно. PR #65 остаётся draft, issue #46 открыто.
+
+## Различимые карточки карт — 2026-10-23
+
+Продолжение оформления PR #65, baseline `03fcff6`, та же ветка
+`codex/scenario-time-weather`. Evidence:
+`.codex-runtime/scenario-cards-20261023/`. Game/Workbench **1.8.0.13**.
+Основной checkout и его ветка сохранены; работа terminal-only.
+
+Арланд: бирюзовый accent и stock preview; Эверон: песочный accent и отдельная
+stock loading illustration; Север Эверона: голубой accent, preview с сеткой/N.
+У каждой карты свой локализованный tag/description. Золото сохраняет значение
+выбора. `mapCards` принадлежит общему каталогу/integration generator; Core
+получает generic descriptors. Legacy MissionHeader и addon.gproj не менялись.
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-UniversalScenarioStatic.ps1,Test-ScenarioSetupStatic.ps1,Test-ScenarioEnvironmentStatic.ps1,Test-UniversalScenarioLogContracts.ps1,Test-LocalizationStatic.ps1 -EvidenceRoot <evidence>/baseline`: **5/5 PASS/0** до изменений. Тот же runner, `after-final`: **5/5 PASS/0**. Universal static: 37 guarded mutations; log contracts: **59 cases**; localization: **728 entries**, EN/RU. Generator `-Check` и `git diff --check`: PASS/0.
+- `Compile.ps1 -Label <label> -Variant Stock|RHS|ArlandWCSRHS [-SourceRoot <stage>]` → canonical Client DryRun → terminal Workbench Validate/Compile: **6/6 PASS/0**, три production и три stage graphs. Полные manifests/argv/native exits/logs сохранены.
+- `FrontendMatrix.ps1` → `RunFrontend.ps1`: **3/3 PASS/0** в свежих profiles Vanilla/RHS/WCS+RHS. По **54/54** native checks: новая card identity, загрузка трёх изображений и пропорции, цвета, подписи, bounds, все mode/difficulty/variant choices, enabled content masks 1/3/7, slider, summary, modal/help/flags и cleanup. Физический ввод не имитировался.
+- `UI_CARD_IDENTITY` подтверждает разные tag/description/colors, grid только на северной карточке, отличающиеся stock artwork/preview Эверона. Для девяти подписей native glyph bounds помещаются в widgets после DPIUnscale. Это подтверждает размеры в фактическом тестовом окружении, не все разрешения/языки.
+- Полные остановленные native logs: **SCRIPT/VM/fatal/assertions 0**. Прочие vendor GUI/resource/shutdown E diagnostics сохранены, **210 строк с дублирующими error logs**; общий error-free engine gate не заявляется.
+- **437/437** production artifacts совпали со stage; SHA-256 трёх fixture также совпали. Свои native процессы и watcher остановлены. Три profiles и stage архивированы: SHA-256 каждого ZIP entry проверен до адресного удаления; `archives/index.json`. Сводка: `final-summary.json`, inventory: `final-log-inventory.json`.
+
+Relevant baseline failures: **нет**. При подготовке PowerShell 7 прочитал JSON
+RGB как Int64, первый generator ошибочно отверг их. Проверка принимает Int32/
+Int64, сохраняя запрет дробных/выходящих за диапазон значений; финальный generator
+и Windows PowerShell audits прошли. Детали: `preparation-notes.txt`.
+
+**NOT RUN:** ручная оценка внешнего вида, mouse/keyboard/controller, все физические
+разрешения и языки; полный offline набор, новые Play/Host/dedicated/JIP/найм/
+бой/15-minute soak, packaged Workshop и FPS benchmark. Изменение касается
+оформления карточек. Прежние native out-of-bounds и неизвестное зависание
+предыдущего прототипа не исправлены этим изменением; их evidence сохранено.
+PR #65 остаётся **draft**, issue #46 открыто.
+
+## Обновление меню подготовки операции — 2026-10-23
+
+Продолжение PR #65 в `codex/scenario-time-weather`, baseline `f2733b5`.
+Основной checkout `codex/issue67-main-retest` сохранён. Game и Workbench
+**1.8.0.13**. Evidence: `.codex-runtime/scenario-menu-visual-20261023/`.
+Работа и проверки — terminal-only, без GUI automation, screenshots и игрока.
+
+### Изменение
+
+Убрана кнопка случайного времени. UI принимает только 00:00–23:59 с шагом
+в минуту; weather random остаётся. Model/storage сохраняет sentinel 1440 для
+совместимости, но frontend его отвергает. Legacy headers и их GUID не менялись.
+
+Новый экран: графитовая палитра, карточки карт с приглушёнными stock preview,
+золотая рамка/полоса выбранного варианта, hover/focus, флаги, отдельная правая
+панель с названием карты, многострочной сводкой и пояснением. Footer содержит
+статус, отмену и основной CTA. Изображения заполняют карточку с обрезкой без
+искажения пропорций. Font scaling и crop рассчитываются после native layout
+и повторяются при изменении размеров root. Изменение времени не сканирует mods.
+
+`previewHeaders` в общем каталоге задаёт штатный header каждой карты;
+integration generator передаёт его Core descriptor. Поэтому preview доступен
+до загрузки integration; конкретных карт/GUID в Core не добавлено.
+CreateText сохраняет packed Color до native CreateWidget, тема возвращает
+managed ref Color, default color удерживается на время вызова.
+Ориентиры и контракт — `agent-notes/SCENARIO_SETUP.md`.
+
+### Команды и свежие результаты
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-UniversalScenarioStatic.ps1,Test-ScenarioSetupStatic.ps1,Test-ScenarioEnvironmentStatic.ps1,Test-UniversalScenarioLogContracts.ps1 -EvidenceRoot <evidence>/baseline`: **4/4 PASS/0** до правки. `Test-SupplyMapUIStatic.ps1 -RepositoryRoot <prototype-stage>`: дополнительный baseline shared UI helper **PASS/0** до его изменения.
+- Финальный `Invoke-AICFChecks.ps1` с четырьмя baseline checks и `Test-LocalizationStatic.ps1`, `Test-SupplyMapUIStatic.ps1`, `<evidence>/after-ready-fixed-encoding`: **6/6 PASS/0**. Universal — **37 guarded mutations**, environment — **20**, universal log contracts — **58 cases**. Localization runtime tables: **722 entries**, RU/EN. Generator `Update-AICFScenarioRegistry.ps1 -Check` и `git diff --check`: PASS/0.
+- `Compile.ps1 -Label ready-<label> -Variant <variant> [-SourceRoot <stage>]` → canonical Client DryRun graph → terminal `ArmaReforgerWorkbenchSteamDiag.exe -noThrow -wbsilent ... -wbModule=ScriptEditor -run -validate`: финальные **9/9 PASS/0**. Три production graphs Stock/RHS/ArlandWCSRHS и шесть stage graphs, включая Everon/EveronRHS/EveronWCSRHS. Полные commands/manifests/native exits/logs сохранены. Ранние compile PASS не выдаются за проверку финального source.
+- `FirstReady.ps1` + `CompleteReady.ps1` → `FrontendMatrix.ps1` → `RunFrontend.ps1`: финальные **10/10 native gates PASS/0** по полным stopped logs: шесть enabled configurations, два Play, один private Listen Host и catalog. GUI input не имитируется; argv взяты из canonical Client DryRun без -client для frontend.
+- В каждом из шести menu runs **53/53 checks**: 20 кнопок без пересечений/выхода за root, три native preview с правильными пропорциями, фактическая палитра текста, сводка, modal/help/flags/cleanup, отсутствие random time UI, границы slider, все девять mode/difficulty choices, фильтрация enabled packs и программный отказ скрытым вариантам. Matrix model/storage дополнительно покрывает 7200 fixed minute/weather choices и пять legacy random-time choices.
+- Enable states: Vanilla → mask 1; полный RHS → 3; WCS + RHS → 7; WCS без RHS → 1; неполный RHS → 1; неполный WCS при полном RHS → 3. Fixture использует native Enable только в своём свежем profile, затем возвращает исходные states; production этого не делает.
+- Play Arland Vanilla **00:00/Rainy**, Play Everon RHS **13:37/Cloudy**, private Listen Host North Everon WCS + RHS **23:59/Clear**, Co-op USSR Medium: exact loaded graph/header, ROSTER_READY и окружение подтверждены. Host — RPL port 24021 и сохранение request settings. Catalog **15/15**.
+- SCRIPT/VM/fatal/assertions в финальных полных logs: **0**. Прочие engine/resource diagnostics сохранены: **900 строк E в 10 console logs**, 1800 с дублирующими error logs; общий error-free engine gate не заявляется.
+- **437/437** production artifacts совпали со stage до/после финальных runs. Все свои native процессы и watcher остановлены. **18 profiles + stage** архивированы с проверкой SHA-256 каждого ZIP entry и удалены; `archives/index.json`. Дополнительно сохранён ZIP отвергнутой preview-stage и исходники прототипа. Финальные сводки — `final-summary.json`, `final-log-inventory.json`, `versions.json`, `source-hashes.json`.
+
+### Сохранённые FAIL
+
+Шесть первых menu runs получили strict FAIL: `NULL pointer to instance.
+Variable 'color'` в CreateText и отсутствие preview. Compile этого не обнаружил.
+Ref lifetime и snapshot Color исправлены; финальные native palette и full-log
+gates прошли без ошибок. Старые logs сохранены отдельно и не переименованы в PASS.
+
+Первый повтор `final-menu-vanilla` подтвердил исправление Color, но остался
+FAIL/`UI_MAP_PREVIEWS`: images=0, failures=3. Source headers незагруженного Everon
+integration были недоступны, размеры новых widgets до layout ещё не готовы.
+Добавлены integration-owned stock previewHeaders и native OnUpdate с cache размеров.
+Финальные шесть runs: images=3, failures=0, aspect/readbacks PASS. Oracle не ослаблялся.
+
+Первый prototype Play Arland 00:00/Rainy остановил продвижение log на
+`t_ms=2755`; процесс оставался живым более 300 секунд. Его runner и native PID
+20416 остановлены по точной identity; native exit -1 и FAIL сохранены с полным
+profile и `prototype-stall-process.json`. Причина этого зависания **не установлена**.
+Тот же финальный Play прошёл полный stopped-log gate; чистый повтор не объявляется
+доказательством исправления причины зависания. Прочие три prototype cases после
+остановки runner не запускались; финальный план выполнен целиком. Всего **18 native
+попыток: 8 неудачных/прерванных и 10 финальных PASS**.
+
+Терминальная подготовка также обнаружила неверное escaping regex и потерю UTF-8
+BOM генератора, из-за которой Windows PowerShell 5 не разбирал русский literal.
+Причины исправлены; исходные outputs в evidence. Финальный полный набор из шести
+профильных checks проходит без исключений. Первоначальный сбор числовой суммы E
+из OrderedDictionary дал null; итоговая сумма заново вычислена из сохранённого
+inventory как PSCustomObject. Null не трактовался как ноль ошибок.
+
+### NOT RUN / blockers
+
+Ручной ввод мышью/клавиатурой/controller, внешний вид и чтение на разных реальных
+разрешениях — **NOT RUN**: AGENTS.md запрещает GUI automation. Для визуальной
+проверки игроку нужно открыть AI Conflict, проверить карточки, фокус, slider,
+отмену и запуск. Native geometry/color/image readbacks этого не доказывают.
+
+Полный offline набор, новый dedicated/JIP/найм/бой/15-minute soak, public/второй
+игрок Listen Host, фактическое engine применение password/player limit,
+packaged Workshop/чистая установка и loading FPS benchmark — **NOT RUN**.
+Прежние native out-of-bounds `RHS_M4A1_LOWER.xob` / `ak74m_bebra.xob` не исправлены;
+старое evidence сохранено. **PR #65 остаётся draft**, issue #46 открыто; эта UI-правка
+не снимает прежних runtime blockers. Merge/Workshop publish не выполнялись.
+
+
+## Фильтр контента по включённым модам — 2026-10-23
+
+Продолжение PR #65, ветка `codex/scenario-time-weather`, baseline `1255bde`.
+Основной checkout `codex/issue67-main-retest` сохранён. Evidence:
+`.codex-runtime/scenario-active-mods-20261023/`. Game/Server/Workbench 1.8.0.13,
+terminal-only, отдельные source checkout/stage. Компьютер не выключается.
+
+Vanilla видна всегда. RHS и WCS + RHS появляются только при включённых внешних
+зависимостях; установленные, но отключённые или неполные наборы скрыты вместе
+с input. Индексы вариантов стабильны. SelectVariant, доступность карты и CanStart
+повторяют enabled gate. Собственные integrations загружает точный transition;
+их наличие/готовность проверяется полным dependency graph. Генератор берёт IDs
+из общего каталога; Core не содержит RHS/WCS GUID. Production не включает моды
+и не скачивает их. Подробный контракт — agent-notes/SCENARIO_SETUP.md.
+
+### Команды и свежие результаты
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-UniversalScenarioStatic.ps1,Test-ScenarioSetupStatic.ps1,Test-UniversalScenarioLogContracts.ps1,Test-ScenarioCatalogLogContracts.ps1 -EvidenceRoot <evidence>/baseline`: **4/4 PASS/0** до правки.
+- Тот же runner после правки с этими четырьмя и `Test-ScenarioEnvironmentStatic.ps1`, `Test-ScenarioHeadersStatic.ps1`, `Test-RHSIntegrationStatic.ps1`, `Test-WCSIntegrationStatic.ps1`, `<evidence>/after`: **8/8 PASS/0**. Universal static: **33 guarded mutations**; log contracts: **54 cases**. Generator `Update-AICFScenarioRegistry.ps1 -Check` PASS.
+- `Compile.ps1 -Label <label> -Variant <variant> [-SourceRoot <stage>]` → canonical Client DryRun graph → terminal `ArmaReforgerWorkbenchSteamDiag.exe -noThrow -wbsilent ... -wbModule=ScriptEditor -run -validate`: **9/9 PASS/0**. Production Stock/RHS/ArlandWCSRHS и шесть stage graphs с Everon/EveronRHS/EveronWCSRHS. Полные argv/manifests/native exits/logs сохранены.
+- `FrontendMatrix.ps1` → `RunFrontend.ps1`: финальные **10/10 PASS/0** по полным stopped logs: шесть enabled configurations, два local Play, один private Listen Host, native catalog. Native exits 0, SCRIPT/VM/fatal/assertions 0. Общий ноль vendor engine/resource diagnostics не заявляется.
+- Шесть controlled configurations: все внешние пакеты установлены; fixture вызывает native `WorkshopItem.Enable` в свежем Stock profile до загрузки и возвращает исходные states в Stop. Production этого не делает. **49/49 native checks** в каждом run: видимость frames, отказ скрытому SelectVariant, matrix с исключением каждой dependency. Expected masks задаются заранее manifest и сверяются analyzer с точным CLI/readback.
+- Play: Arland Vanilla и Everon RHS, Co-op USSR Medium, 13:37/Cloudy. Host: North Everon WCS+RHS, тот же режим/окружение, private Listen/RPL port 24021. Exact loaded graph/header/ROSTER_READY/окружение подтверждены. Catalog **15/15**. GUI input не имитируется.
+- **437/437** production artifacts совпали со stage до и после runtime. `git diff --check` PASS/0. Полные profiles/stage сохранены в ZIP с проверкой SHA-256 каждого entry перед адресным удалением; index — `archives/index.json`. Свои native процессы завершены.
+
+| Включённые внешние моды | Фактический список | Mask |
+|---|---|---:|
+| Нет | Vanilla | 1 |
+| Полный RHS | Vanilla, RHS | 3 |
+| Полный WCS + RHS | Vanilla, RHS, WCS + RHS | 7 |
+| WCS без RHS | Vanilla | 1 |
+| RHS без одной зависимости | Vanilla | 1 |
+| Неполный WCS, полный RHS | Vanilla, RHS | 3 |
+
+### Сохранённые FAIL и ограничения
+
+Первые `play-rhs` и `host-wcs`: strict **FAIL/PROJECT_RESOURCE**, хотя native
+exit 0 и header/graph/roster/environment прошли. В stage не были сгенерированы
+resourceDatabase.rdb трёх Everon integrations: агент подготовил только Arland
+graphs перед сменой карты. `rdb-before.json` фиксирует отсутствие. Workbench
+скомпилировал три Everon graphs, `rdb-after.json` фиксирует databases.
+Те же scenarios/arguments повторены под свежими labels/profiles
+`play-rhs-rdb` и `host-wcs-rdb`: strict PASS/0. Production, fixtures и analyzer
+между попытками не менялись; 437 исходных SHA-256 подтверждены. Первые полные
+логи/verdicts сохранены отдельно: всего **12 попыток — 10 PASS и 2 FAIL
+подготовки**, финальный план 10/10 PASS. Oracle не ослаблялся.
+
+**NOT RUN:** полный offline 78 checks, новые 15-minute soaks/полная боевая матрица,
+dedicated/JIP/найм/respawn/save-file restore, packaged Workshop/чистая установка,
+ручные mouse/keyboard/controller действия, внешний вид/фокус разных разрешений,
+второй игрок/public Host и фактическое engine применение password/player limit.
+Для визуальной проверки игроку нужно открыть AI Conflict и пройти выбор/отмену/
+Play/Host; AGENTS.md запрещает GUI automation, native readbacks этого не доказывают.
+Старые PASS не выдаются за новые.
+
+Прежние `enf_entity.cpp:280` / out-of-bounds `RHS_M4A1_LOWER.xob` и
+`ak74m_bebra.xob` **не исправлены** этой UI-правкой, причина неизвестна.
+Crash evidence и FAIL остаются в прежних отчётах. **PR #65 остаётся draft**,
+issue #46 открыто; merge/Workshop publish не выполнялись. Новые menu gates
+не снимают прежний runtime blocker.
+
+
+## Полный повторный прогон PR #65 после merge — 2026-10-22
+
+Проверен source `7004932` в `codex/scenario-time-weather`, после merge main
+`aada6ed`. Game/Server/Workbench — 1.8.0.13. Production, tracked fixtures и
+аудиторы не менялись; этот commit добавляет только отчёт. Основной checkout
+другой задачи сохранён. Терминальные checks использовали отдельный checkout
+и временный `subst X:`; GUI automation и ручное участие не использовались.
+Evidence: `.codex-runtime/pr65-full-retest-20261022/REPORT.md`.
+
+**Outcome текущего прогона: FAIL.** Runtime: **74 PASS / 1 FAIL из 75**.
+Штатное завершение Game destroyed: **74/75**. Полные runtime logs:
+SCRIPT/VM/fatal **0**, native assertion **1**, AICF ERROR **0**.
+Остальные engine/resource/navmesh/backend/shutdown diagnostics сохранены в
+`runtime-all-error-groups.json`; общий ноль любых engine errors не заявляется.
+
+Найденные FAIL текущего прогона не скрываются и не заменяются чистыми соседними
+запусками. PR остаётся draft; причины и все failed profiles/crash stacks сохранены.
+
+- `SERVER_EveronNorthRHS-Standard`
+- `RUNTIME_EveronNorthRHS-Standard-server`
+- `SOAK_EveronNorthRHS-Standard`
+- `FULL_RUNTIME_METRICS`
+
+Сохранённые native причины до адресной остановки по process identity:
+
+- `29588-232918`: Reason: Entity out of world bounds. Type 'GenericEntity', Name '', Parent '', Object 'ak74m_bebra.xob' Coords 4937.013672 -34012.394531 11559.812500
+
+`EveronNorthRHS / Standard / Hard`, `Assertion failed`, `enf_entity.cpp:280`,
+23:29:15 MSK; последний controller `t_ms=746390`, примерно 12 минут.
+Повтор класса out-of-bounds не устанавливает причину или владельца lifecycle.
+Native exits -1 после точной остановки assertion-блокированного процесса остаются FAIL; исходные crash.log и native stack сохранены.
+
+### Команды и свежие результаты
+
+- `tools/Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/offline`: **78/78 PASS/0**, runner exit в offline-exit.txt. Полный набор без исключений, Static 33 + Contracts 45.
+- `CompileMatrix.ps1` → `Compile.ps1` → terminal Workbench `-noThrow -wbsilent ... -wbModule=ScriptEditor -run -validate`: **15/15 PASS/0**; шесть production graphs, шесть основных fixture graphs, barracks graph и два equipment stages. Точные argv/native exits и полные logs сохранены.
+- `ServerLane.ps1 -Lane 0|1|2 -Count 3` → `Run.ps1` → canonical `Start-AICFRuntime.ps1 -Role Server`: **27 cases**, 9 Variant × Standard/CoopUS/CoopUSSR; fresh profiles, отдельные реальные listeners 2500–2526. Сложности распределены между cases; это не 81 полных матча.
+- Standard soak: **8/9** выдержали >=900000 ms от roster readiness. Длительности каждого run ниже; это длительный server gate, стабильность всех retail путей этим не доказана.
+- `PairServer.ps1` + `PairClient.ps1`: **8 server/client pairs**, canonical CLI/live PID/ROSTER_READY barrier до подключения, exact manifests. Stock US/USSR × Standard/Co-op: native покупка Guard, оплата, найм 4/4, ownership/limit/отказ неоплаченным. Четыре RHS/WCS пары: player spawn после readiness, mode/JIP snapshot, Welcome и отрицательные faction intents; Instigator player context.
+- `FrontendMatrix.ps1` → `RunFrontend.ps1`: **30 native frontend cases**, 18 private Listen Host, 9 Play, дополнительный local Play с 35 s pause, catalog и universal menu. Canonical Client DryRun argv без -client, точные addon graph/header/environment, native widgets/plans и RPL listener; mouse/keyboard input не имитируется.
+- `EquipmentMatrix.ps1` → canonical server Arland WCS+RHS Medium Standard: отдельные FailureProbe и CleanupProbe без Build wrapper, strict full stopped-log audits в equipment-*-audit.json. Числа native checks и weak entity readbacks сохранены без замены oracle.
+- `FinalizeExtended.ps1` → base `Finalize.ps1`, профильные Co-op/Instigator/frontend audits и `RuntimeMetrics.ps1`: 75 итоговых runtime verdicts, 15 Workbench verdicts, full-log inventories и SHA-256, без исключения найденных ошибок.
+
+Equipment FailureProbe — **79 checks / 1209 weak entities / alive=0**,
+CleanupProbe — **20 plans / 938 weak entities / alive=0**, оба **PASS/0**.
+Catalog — **15/15**, universal menu — **46/46**, native header matrix —
+**54/54**; это не ручная проверка внешнего вида или полного боя всех вариантов.
+
+| Standard Variant | Difficulty | Завершённое наблюдение, ms |
+|---|---|---:|
+| Stock | Easy | 900663 |
+| Everon | Medium | 900682 |
+| EveronNorth | Hard | 900222 |
+| RHS | Easy | 900444 |
+| EveronRHS | Medium | 900759 |
+| EveronNorthRHS | Hard | 0 |
+| ArlandWCSRHS | Easy | 900216 |
+| EveronWCSRHS | Medium | 900172 |
+| EveronNorthWCSRHS | Hard | 900772 |
+
+Ноль для North RHS означает отсутствие штатного completion, а не нулевое время
+работы: реальное последнее наблюдение controller — `t_ms=746390` до assertion.
+
+### Целостность и уборка
+
+**437/437** production artifacts в каждой из четырёх копий, **1748** сравнений SHA-256 до/после native tests. Co-op fixture watchdog только в stage увеличен 240000 → 1200000 ms для 15-minute observation; assertions и production не менялись.
+**80** profiles/stages архивированы с проверкой SHA-256 каждого ZIP entry и адресно удалены; archives/index.json хранит исходные пути и archive hashes. Полные Workbench logs и native launcher outputs сохранены. Generated offline evidence сохраняется перед удалением собственного checkout; чужие процессы/файлы не удаляются.
+Первые неудачные попытки подготовки сохранены в preparation-history.txt:
+ошибка PowerShell -replace и splatting JSON object в frontend helper. Первый
+frontend завершился native exit 0 под ошибочным Label, но не считается
+canonical PASS; его профиль сохранён отдельно. План повторён с hashtable
+и свежими canonical profiles. Исходные FAIL прежних прогонов не удалены.
+
+**NOT RUN:** ручные mouse/keyboard/controller действия и внешний вид Deployment,
+public listing и второй человек в Listen Host, полное engine применение
+password/player limit/third-person, death/respawn/save-file restore, packaged
+Workshop/чистая установка, естественный бой до победы и изолированный loading
+FPS benchmark. Terminal-only workflow запрещает GUI automation; native
+readbacks не подтверждают внешний вид и физический ввод. Прежние native
+crash evidence остаются историческими FAIL с неустановленной причиной.
+
+
+## Разрешение конфликтов PR #65 с main — 2026-10-22
+
+Продолжение `codex/scenario-time-weather`, исходный head `eea4939` и актуальный
+`origin/main` `aada6ed` после PR #69. Основной checkout `codex/issue67-main-retest`
+не менялся. Merge выполнен в отдельном checkout под `.codex-runtime/`;
+терминальные offline checks используют `subst X:` для исключения MAX_PATH.
+Evidence: `.codex-runtime/pr65-conflicts-20261022/REPORT.md`.
+
+Пять конфликтов: `AICF_EquipmentMember.c`, `agent-notes/README.md`,
+`SHUTDOWN_LIFECYCLE.md`, `TESTING.md`, `TEST_FIXTURES.md`. В EquipmentMember
+сохранена реализация main: одна `primaryMuzzle`, guard отсутствующего muzzle,
+явный release и детальные причины отказа. Все пять импортированных production
+файлов побайтно по Git совпадают с main; сценарии и их GUID сохранены из PR.
+Оба набора документации и прежние отчёты FAIL/NOT RUN сохранены. Две проверки
+lifetime из разных веток остаются активны, прежние negative mutations используют
+общее имя `primaryMuzzle`; ни один lifetime gate не удалён/ослаблен.
+
+### Свежие проверки объединённого source
+
+- `tools/Invoke-AICFChecks.ps1 -Name <8 профильных checks> -EvidenceRoot <evidence>/baseline`:
+  **8/8 PASS/0** до merge; Equipment, WCS/RHS, Co-op, Instigator и shutdown.
+- Полный `Invoke-AICFChecks.ps1 -Suite All`: **78/78 PASS/0**, Static 33 +
+  Contracts 45, без исключений и оставшихся FAIL. Equipment contracts: **27 rules /
+  29 negative mutations**, interop — **4 rules / 8 negative mutations**.
+- `CompileAll.ps1` → `Compile.ps1 -Label <label> -SourceRoot <source> -Variant <variant>`:
+  **5/5 PASS/0** terminal Workbench Validate/Compile. Stock, RHS, Arland WCS+RHS
+  production и два отдельных fixture stage; validation successful, SCRIPT/VM/fatal 0.
+  Аргументы gproj/addonsDir/addons взяты из canonical Client DryRun manifest.
+- `RunAll.ps1` → `Run.ps1` → canonical `Start-AICFRuntime.ps1 -Role Server
+  -Variant ArlandWCSRHS -Difficulty Medium -MatchMode Standard`, свежие profiles,
+  фактический listener `-addr 127.0.0.1:2491`, probe flag `inspect`.
+  FailureProbe — **79 checks / 1209 weak entities / alive=0**, CleanupProbe
+  без Build wrapper — **20 plans / 938 weak entities / alive=0**. Оба native
+  exits 0, `Game destroyed.`, точный CLI/manifest и полные stopped-log audits
+  **PASS/0**, SCRIPT/VM/fatal 0. Других resource/engine E — **144 / 135**;
+  полное отсутствие любых engine diagnostics не заявляется.
+- `git diff --check` и отсутствие unmerged paths/маркеров — **PASS/0**;
+  **218** локальных ссылок затронутых Markdown файлов, broken=0.
+
+Game/Server/Workbench — 1.8.0.13. Все **437/437** production artifacts совпали
+с обоими isolated stages до и после проверок: **874** SHA-256 сравнения.
+Пять profiles/stages архивированы с проверкой SHA-256 каждого ZIP entry и
+адресно удалены; полные native logs также сохранены отдельно, native processes=0.
+Generated offline evidence сохраняется перед удалением временного merge checkout.
+
+Ошибки подготовки не скрыты: первый Workbench helper вернул управление раньше
+появления logs из-за отсутствия pipeline; исправлен на документированный Out-File,
+Stock повторён под новым label. Первый launcher вызов отклонён до native запуска
+из-за неверного имени параметра; затем Windows PowerShell 5 преобразовал обычный
+ENGINE stderr в terminating NativeCommandError. Его неполный profile сохранён,
+runtime повторён через PowerShell 7 со свежими profiles. Эти попытки не объявляются
+PASS; production для повторов не менялся. См. `preparation-history.txt`.
+
+**NOT RUN:** повтор полной девятикартовой runtime матрицы, длительный Everon RHS
+soak, client/JIP, retail Host/Play UI и packaged Workshop. Это исправление merge
+конфликтов и проверка equipment boundary; короткие Arland WCS probes не закрывают
+прежний `RHS_M4A1_LOWER.xob` out-of-bounds assertion на Everon RHS. Причина того
+сбоя остаётся неподтверждённой; PR сохраняет draft и прежние blockers. Ручное
+участие и GUI automation не использовались, выключение компьютера не выполнялось.
+
+## Полный автономный прогон — 21–22.10.2026
+
+Продолжение PR #65, проверенный production HEAD `983931d`, Game/Server/Tools
+`1.8.0.13`. Игрок не участвовал, GUI automation не применялась. Gameplay,
+resources, tracked fixtures и анализаторы не менялись; этот commit добавляет
+только отчёт. Evidence: `.codex-runtime/full-autonomous-20261021/REPORT.md`.
+
+**Outcome: общий runtime gate FAIL, PR остаётся draft.** Из 73 итоговых runtime
+gates — **72 PASS / 1 FAIL**. Успешные проверки не устраняют найденный native
+assertion в длительном `EveronRHS / Standard / Medium`; исправление не заявляется.
+
+### Найденный blocker
+
+На примерно 12-й минуте Everon RHS остановился на `Assertion failed`,
+`enf_entity.cpp:280`: `GenericEntity` без parent, объект `RHS_M4A1_LOWER.xob`,
+координаты `4921.987305 -34011.648438 9185.187500`, причина
+`Entity out of world bounds`. Последний controller `t_ms=720278`.
+В `crash.log` сохранён native stack. SCRIPT/VM ошибок перед assert нет;
+все 32 потока ожидали, CPU за 5 s не изменился. Это реальный FAIL, не
+исключённый baseline и не доказанная регрессия Host-исправления.
+
+После сохранения process identity и SHA-256 полных открытых logs остановлен
+только точный assertion-блокированный процесс. Native exit **-1**, штатных
+`COOP_DONE`/`Game destroyed.` нет; strict audit закономерно отклонил run.
+Оставшаяся матрица выполнена. Причина выпадения RHS entity под мир и владелец
+её lifecycle не установлены; speculative delete/teleport по неизвестной identity
+не добавлялся. Для следующей терминальной диагностики нужны воспроизведение
+и наблюдение конкретных RHS M4A1 parts. Другой чистый run этот FAIL не закрывает.
+
+Evidence: `EveronRHS-Standard-server-verdict.json`, `everon-rhs-stall-process.json`,
+`everon-rhs-assert-*.json` и `archives/profile-EveronRHS-Standard-server.zip`
+с полными console/script/error/crash logs. PR нельзя переводить в ready,
+пока причина и обязательный runtime gate не исправлены/подтверждены.
+
+### Команды и результаты
+
+| Gate | Команда/матрица | Verdict |
+|---|---|---|
+| Полный offline | `tools/Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/offline` | **77/77 PASS/0**, Static 33 + Contracts 44, missing/FAIL 0, 24.9 min |
+| Workbench | `Compile.ps1` → `ArmaReforgerWorkbenchSteamDiag.exe -noThrow -wbsilent ... -wbModule=ScriptEditor -run -validate` | **13/13 финальных PASS/0**: 6 production graphs, 6 isolated graphs, отдельный barracks stage; полные logs без SCRIPT/VM/fatal |
+| Серверы | `ServerLane.ps1 -Lane 0\|1\|2 -Count 3` → `Run.ps1` → canonical `Start-AICFRuntime.ps1 -Role Server` | 9 Variant × Standard/CoopUS/CoopUSSR = **27 runs, 26 PASS / 1 FAIL**; 3 параллельные сессии, свежие profiles, ports 2500–2526 |
+| Сетевые пары | `PairServer.ps1` + `PairClient.ps1` → canonical launcher, отдельные сессии, ports 2600–2607 | **8 server + 8 client PASS/0**, exact server CLI/live PID/ROSTER_READY до подключения, manifests сохранены |
+| Frontend | `FrontendMatrix.ps1`, `RecoverPausePlan.ps1` → `RunFrontend.ps1`, canonical Client DryRun argv без `-client` | **30/30 итоговых PASS/0**: 18 private Listen Host, 9 Play, дополнительный Play с pause, catalog и universal menu |
+| Итоговые полные логи | `Finalize.ps1` → `Audit.ps1` → `Test-CoopScenarioLog.ps1`, `Test-InstigatorContextLog.ps1`; frontend strict audits | **FAIL/1**, только EveronRHS assertion; `RuntimeMetrics.ps1` также FAIL/1 из-за аварийного run |
+
+В четырёх stock сетевых парах US/USSR × Standard/Co-op проверены native заказ
+Guard, оплата, найм **4/4**, серверный ownership, лимит 4 и отказ неоплаченным.
+В четырёх RHS/WCS парах после readiness проверены native player spawn, JIP
+snapshot режима и отказ opponent/FIA affiliation; Instigator player context —
+**20/20** в каждой. Это локальные dedicated/client пары, не public Listen Host
+и не несколько людей. Native header matrix — **54/54 PASS** в North WCS graph.
+Два Co-op runs подтвердили подготовленную территориальную победу US/USSR;
+естественный бой до победы этим не проверен. Сложности распределены между
+режимами/картами; это не 81 отдельных полных матча.
+
+Все 18 Host загрузили точный выбранный addon graph и active header, создали
+roster и применили окружение; native RPL listener подтверждён на 24021.
+Catalog — **15/15**, universal native widgets/plans — **46/46**, включая
+7200 fixed minute/weather combinations и 5 random choices. Физический ввод
+и внешний вид меню этим не доказаны.
+
+Standard наблюдался по `System.GetTickCount` от readiness; 8 успешных runs:
+Stock **900837**, Everon **900946**, North **900719**, RHS **900772**,
+North RHS **900961**, Arland WCS **900056**, Everon WCS **900793**,
+North WCS **900453 ms**. Everon RHS не завершил 900000 ms и остался FAIL.
+Infantry recruitment и native строительство реально продолжались; counters
+и все engine/resource diagnostics находятся в `runtime-metrics.json` и
+`runtime-all-error-groups.json`, не подменяют профильные функциональные gates.
+
+### Сохранённые ошибки подготовки и целостность
+
+- Первый isolated compile FAIL: barracks extension оказался раньше base Co-op
+  probe по имени файла. Base скопирован под исходным именем, barracks/support
+  вынесены в отдельный stage; затем все 13 compile gates прошли. Production
+  не менялся, первоначальные compile logs сохранены.
+- Первый `frontend-EveronRHS-2` ошибочно совмещал Listen Host с 35 s simulation
+  pause. World остался unpaused: **34060 ms** simulation за **35752 ms** real;
+  часы штатно перешли через полночь за допуск немедленного readback. Исходный
+  strict FAIL сохранён. Тот же Host без pause прошёл, отдельный local Play
+  подтвердил **35105 ms real / 0 ms simulation**, затем roster и **13:37/Cloudy**.
+  Assertions и analyzer не ослаблялись.
+- Только в isolated Co-op fixture watchdog увеличен `240000 → 1200000 ms`,
+  чтобы разрешить `900000 ms` observation. Все проверяемые условия сохранены.
+  Production **435/435** artifacts совпали по SHA-256 в обоих stages;
+  `final-source-integrity.json` содержит 870 сравнений.
+
+`final-summary.json`, `runtime-final-verdicts.json`, `soak-verdicts.json`,
+`offline-verdict.json`, `workbench-final-verdicts.json`, полный `REPORT.md`,
+manifests/argv/commands/exits/audits и log inventories сохранены в evidence.
+**76** profiles/stages архивированы с проверкой SHA-256 каждого ZIP entry,
+затем адресно удалены; `archives/index.json` хранит прежний путь и archive hash.
+Полные Workbench logs остаются отдельно. Подтверждено отсутствие своих
+native game/tool процессов; crash watcher остановлен. Исходные FAIL не удалены.
+В 73 итоговых logs SCRIPT/VM и `[AICF]...[ERROR]` — 0, native assertion — 1;
+это не общий error-free PASS: WORLD/GUI/resource/navmesh/shutdown diagnostics
+движка и контента сохранены без исключения из evidence.
+
+**NOT RUN:** ручные mouse/keyboard/controller действия, внешний вид и реальный
+Deployment UI — terminal-only правила запрещают GUI automation. Для отдельной
+ручной проверки нужны открытие AI Conflict, выбор/отмена, drag/focus slider,
+random и Play/Host; в этот прогон человек не привлекался. Не доказаны public
+listing, второй участник private/public Listen Host и применение engine
+password/player limit/third-person: request fields проверены, доступные Listen
+config APIs возвращают false/null. Полный death/respawn/save-file restore,
+чистая установка/packaged Workshop, каждый из 81 вариантов и окружение на каждой
+карте отдельным runtime, естественный матч до победы и изолированный loading FPS
+benchmark — NOT RUN. Совместный запуск не является одиночным performance test.
+Прежние NOT RUN по dedicated/client JIP и soak заменены только конкретными
+результатами выше; не распространяются на public Host или Workshop.
+
+## Host: WORLD_LOAD_ERROR — 2026-10-21
+
+Продолжение PR #65 в `codex/scenario-time-weather`, baseline HEAD `84bde7a`.
+Пользовательский Host North Everon / WCS + RHS / Co-op USSR / Medium
+принимал запрос, затем native reload оставлял только vanilla core/data.
+Core, integrations и целевой MissionHeader исчезали: WORLD_LOAD_ERROR.
+То же воспроизведено для Arland Vanilla. Прежние четыре перехода проверяли
+Play; подтверждением Host они не являлись.
+
+Исправлены `UI/AICF_ScenarioLaunch.c` и `Config/AICF_ScenarioRegistry.c`:
+после принятого Public transition передаётся точный граф в RequestReload,
+в Host mods записываются downloaded active версии. Проверка downloaded/
+corrupted применяется и к Workshop active revision. Native IsReadyToRun
+зависит также от online/selected metadata: целый WCS Attachments 8.4.1
+возвращал false, хотя Downloaded=true/Corrupted=false. Для exact downloaded
+графа этот selected gate не подходит; source local pseudo-revision сохраняет
+старый readiness gate. Полное наличие каждого dependency ID проверяется отдельно.
+Deprecated RequestReload — вынужденное исключение для Public API 1.8.0.13,
+где нет addonList; Play сохраняет современный RequestScenarioChangeTransition.
+Контракт и ограничения — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+
+Evidence: `.codex-runtime/scenario-host-20261021/`. Полные native logs,
+argv/manifest, exits, Workbench logs и все неуспешные прогоны сохранены.
+Изменены также transition/menu fixtures, static/log contracts, README и
+scenario/testing/fixture заметки. Fixtures отсутствуют в production.
+
+Команды и verdict:
+
+- До production правки: `Invoke-AICFChecks.ps1 -Name
+  Test-ScenarioSetupStatic.ps1,Test-ScenarioEnvironmentStatic.ps1,
+  Test-UniversalScenarioStatic.ps1,Test-UniversalScenarioLogContracts.ps1
+  -EvidenceRoot <evidence>/baseline-checks` — **4/4 PASS/0**.
+- После: те же domain checks, финальные Universal static/log contracts —
+  **PASS/0**, 27 guarded mutations и 50 positive/negative log cases.
+  Каталоги `fixed-domain-final/`, `fixed-host-contracts/`.
+- `Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/fixed-offline` —
+  **77/77 PASS/0**, Static 33/33, Contracts 44/44, FAIL/missing 0;
+  19,4 минуты. Exact set проверен в `offline-verdict.json`; полные команды
+  каждого audit находятся в summary.json. Общий прогон начат до последнего
+  уточнения Host fixture; затронутые Universal gates выполнены на финальных
+  файлах в конце прогона и дополнительно отдельно.
+- `<evidence>/Compile.ps1 -Label host-production-final-stock -Variant Stock`,
+  `-Label host-production-final-wcsrhs -Variant EveronWCSRHS` и
+  `-SourceRoot <evidence>/fixture-stage -Label host-fixture-verified
+  -Variant EveronWCSRHS` — **3/3 PASS/0**, Script validation successful,
+  SCRIPT E/F, ENGINE F, VM/null 0. Полные argv и stdout сохранены;
+  obsolete warning RequestReload ожидаем и документирован.
+- `<evidence>/RunIsolated.ps1 -Label host-verified-arland -Probe Transition
+  -Map 0 -Content 0 -Mode 2 -Difficulty 0 -Time 817 -Weather 4 -ListenHost`:
+  Arland Vanilla, Co-op USSR Easy, 13:37/Rainy — **PASS/0**, 2 addons.
+- `<evidence>/RunFrontend.ps1 -Label host-verified-everon-rhs -Probe Transition
+  -Map 1 -Content 1 -Mode 1 -Difficulty 2 -Time 720 -Weather 2 -ListenHost`:
+  Everon RHS, Co-op US Hard, 12:00/Cloudy — **PASS/0**, 8 addons.
+- Тот же helper, `-Label host-verified-north-wcsrhs -Map 2 -Content 2
+  -Mode 2 -Difficulty 1 -Time 1439 -Weather 1 -ListenHost`:
+  North Everon WCS + RHS, Co-op USSR Medium, 23:59/Clear — **PASS/0**, 28 addons.
+- `RunFrontend.ps1 -Label play-verified-everon -Probe Transition -Map 1
+  -Content 0 -Mode 0 -Difficulty 1 -Time 0 -Weather 3`:
+  контроль Play Everon Vanilla Standard Medium, 00:00/Overcast — **PASS/0**, 3 addons.
+- Для каждого из четырёх запусков `Test-UniversalScenarioLog.ps1 -Transition
+  -LogPath <полный остановленный console.log> -ManifestPath <label>-manifest.json
+  -NativeExitPath <label>-exit.txt` — **4/4 PASS/0**. Каждый имеет четыре
+  transition cases, exact loaded graph, ROSTER_READY и фактическое окружение;
+  Host дополнительно имеет Listen mode, socket на 24021 и сохранённый request.
+  Итог: `runtime-final-verdict.json`, `<label>-audit.txt`, полные `<label>-logs/`.
+- `production-stage-integrity.json`: все **435 tracked addon artifacts**
+  совпадают с tested stage по SHA-256. Fixtures добавлены только в stage.
+
+В полных runtime logs SCRIPT/VM/fatal 0, но остаются stock/vendor
+WORLD/GUI/Hierarchy/navmesh/resource и shutdown RPL diagnostics. Они сохранены
+в `<label>-all-errors.txt`, `<label>-diagnostics.json` и log inventories;
+«0 любых engine errors» не заявляется.
+
+Сохранённые FAIL: исходный source Host и отрицательные controls теряли граф;
+native MissionWorkshopItem.Host, JSON Pack, addon flags/enable, installed-copy,
+парные transition calls и другие изолированные варианты ошибку не устранили.
+Первая расширенная fixture имела неверного владельца SetDefaultIpPort,
+исправленного на BackendApi; compile FAIL и последующие PASS сохранены отдельно.
+Попытки читать GetRunningDSConfig, ServerLobbyApi.GetServerConfig и ServerInfo
+в Listen дали false/null, поэтому первоначальные HOST_CONFIG runs — **FAIL**,
+не PASS. Эти API не годятся как oracle в данном окружении; проверка request
+не выдаётся за доказательство применения engine settings. Ранние ошибки имени
+параметра runner и safe.directory — инфраструктурные, результаты не подменены.
+
+**Отклонённые критерии / NOT RUN:** ручной путь Host через UI, физический ввод,
+внешний вид, публичная регистрация/подключение другого игрока/JIP; применение
+password/admin password, maxPlayers, visibility и third-person самим engine.
+Terminal-only запрещает GUI automation, доступные config getters не дают
+Listen config; требуется игрок: создать Host, проверить параметры и подключение
+второго клиента с правильным/неправильным паролем. Request и socket проверены,
+остальное остаётся недоказанным. Также NOT RUN: packaged Workshop, FPS benchmark,
+полная per-map матрица, новый найм RHS/WCS, сохранение кампании и soak.
+PR остаётся draft, issue #46 открытым; merge и Workshop publish не выполняются.
+
+Пользователю открыт production frontend через `RunManualFrontend.ps1`:
+canonical Client DryRun graph без `-client`, полный addon search path,
+без fixture/автоперехода. Manifest — `manual-fixed-client-manifest.json`.
+Главное меню подтверждено native log; ручные действия игрока не автоматизируются.
+Тестовые процессы завершены. Известные временные `fixture-stage`,
+`packaged-control`, `diagnostic-libs` архивированы с проверкой всех 567 файлов
+и SHA-256, затем удалены (`temporary-archives.json`). Все 40 собственных
+test profiles также сохранены целиком в `profile-archives/`, проверены и удалены;
+их полные logs дополнительно лежат отдельно. Junction тестового профиля удалён
+без рекурсии, target установленных модов сохранён. Ручной frontend пользователя
+исключён из cleanup и оставлен открытым. Остальные helper-команды сохраняются
+в evidence для воспроизведения, а не в production/Git.
+
+## Draft PR #65: полный offline после ползунка — 2026-10-20
+
+По запросу владельца опубликован [draft PR #65](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/65)
+из `codex/scenario-time-weather` в `main`. Он содержит накопленные Co-op,
+общий найм, исправления native ошибок и универсальное меню с окружением.
+Связь `Refs #46` и обратная ссылка в issue проверены; issue остаётся открытым.
+Merge, ready-for-review и Workshop release не выполнялись.
+
+Свежий `Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot
+.codex-runtime/pr-issue46-20261020/offline-all` на `ba165ab`:
+**77/77 PASS/0**, Static **33/33**, Contracts **44/44**, FAIL/missing **0**.
+Полные команды и outputs — `offline-all/context.json`, `summary.json` и
+отдельные `*.txt`; проверка точного множества — `offline-verdict.json`.
+Это новый полный прогон после slider, в отличие от предыдущего `ecad123`.
+Добавленный после него commit меняет только эту заметку.
+
+`git fetch origin` и `git diff --check origin/main...HEAD` — **PASS/0**.
+Target `bb081eb` является предком source, GitHub подтвердил отсутствие
+конфликтов. `production-integrity.json` повторно подтверждает SHA-256 четырёх
+environment/setup production файлов относительно tested stage. Workbench
+**3/3**, menu **46/46** и четыре native transitions ниже не запускались заново
+для публикации PR; их итоговые logs остаются evidence того же production source.
+
+Сохраняются исторические baseline/intermediate FAIL и stock/vendor engine
+diagnostics, подробно перечисленные в разделах задач ниже; прежние неудачные
+runs не переименованы в PASS. Нового code baseline FAIL при подготовке PR нет.
+PR остаётся **draft**: реальные mouse/keyboard/controller input, drag/focus,
+внешний вид и public Host требуют игрока, недоступны в terminal-only workflow
+и остаются **NOT RUN**. Новые JIP/direct-connect для slider, loading FPS,
+полная per-map environment runtime matrix, RHS/WCS purchase, player death/respawn,
+save-file restore, packaged Workshop и soak также **NOT RUN**.
+Programmatic readbacks не доказывают эти критерии; приоритет manual blockers
+не снят новым offline PASS. Исходные формулировки и нужные действия игрока
+сохранены в отклонённых критериях issue и описании PR.
+
+Клиент, ранее открытый для владельца, адресно завершён перед запрошенным
+выключением; игровых/Workbench процессов **0**. История publication и проверки
+ссылок — `publication.json`; process readbacks — `native-processes-final.json`,
+все в `.codex-runtime/pr-issue46-20261020/`. Полные прежние logs/архивы
+не удалены, GitHub Actions runs/statuses для source не обнаружены и не
+выдаются за CI PASS.
+
+## Ползунок времени суток — 2026-10-20
+
+Продолжение `codex/scenario-time-weather` от чистого `ecad123`: кнопки времени
+заменены native SliderWidget 00:00–23:59 с шагом 1 минута, подписью HH:MM,
+мгновенной сводкой и отдельным random toggle с возвратом последнего точного времени.
+Default 08:00 сохранён. Drag обновляет только окружение/summary, без scan addons
+и пересоздания флагов. Payload schema 2 передаёт `minutes`; старый schema 1
+отклоняется. Диагностика использует `time_minutes` вместо прежнего `time_mode`.
+Контракт — [SCENARIO_SETUP.md](SCENARIO_SETUP.md), evidence:
+`.codex-runtime/scenario-time-slider-20261020/`.
+
+`Invoke-AICFChecks.ps1 -Name Test-ScenarioSetupStatic.ps1,
+Test-ScenarioEnvironmentStatic.ps1,Test-UniversalScenarioStatic.ps1,
+Test-LocalizationStatic.ps1,Test-UniversalScenarioLogContracts.ps1` — до и после
+**5/5 PASS/0** (`baseline/summary.json`, `after-first/summary.json`). Baseline code
+FAIL нет; новых промежуточных code/runtime FAIL в этом продолжении не было.
+Environment static — **19** guarded mutations, log contracts — **41** cases.
+Полный 77-check набор этого продолжения **NOT RUN**: предыдущий результат относится
+к `ecad123`, не выдаётся за новый. Проверены затронутые domain gates.
+
+Terminal Workbench `Compile.ps1 -Label production-stock -Variant Stock`,
+`-Label production-wcs -Variant EveronWCSRHS` и
+`-SourceRoot <fixture-stage> -Label fixture-wcs -Variant EveronWCSRHS`:
+**3/3 PASS/0**, Script validation successful, SCRIPT/VM/fatal **0** по полным
+console/error/script logs. Source manifests/argv/exits — рядом с logs;
+`workbench-log-inventory.json` содержит итог. API SliderWidget и формат HH:MM
+проверены в pinned Script Diff 1.8.0.13 до реализации.
+
+`RunFrontend.ps1 -Label slider-menu -Probe Universal`, затем
+`Test-UniversalScenarioLog.ps1` — **46/46 PASS/0**: все 9 installed вариантов,
+21 button + native slider, min/max/step/current, HH:MM для 00:00/13:37/23:59,
+random с сохранением последней точки, **7200** fixed minute/weather combinations
+и **5** random choices, atomic bounds, schema-2 roundtrip/schema-1 rejection,
+flags/help/modal/cleanup. Native readbacks не являются GUI input.
+
+Четыре `RunFrontend.ps1 -Probe Transition -Difficulty 0`, по каждому полный
+`Test-UniversalScenarioLog.ps1 -Transition` — **PASS/0**:
+
+| Label | Map/Content/Mode/Time/Weather | Native ENVIRONMENT_APPLIED |
+|---|---|---|
+| `slider-arland-min` | 0 / 0 / 2 / 0 / 4 | hour=0, Rainy |
+| `slider-rhs-1337` | 1 / 1 / 2 / 817 / 2 | hour=13.6167, Cloudy |
+| `slider-wcs-max` | 2 / 2 / 1 / 1439 / 1 | hour=23.9833, Clear |
+| `slider-random` | 0 / 0 / 2 / 1440 / 0 | hour=12.9256, Clear |
+
+Подтверждены schema-2 handoff через scripts/addons reload, точный initial hour,
+ROSTER_READY и loaded graph (2/8/28 addons), subsequent clock readback, native
+ускорение/auto-advance/weather progression, repeat без сброса и приоритет native
+save/load boundary. Все native exits **0**, stopped logs, SCRIPT/VM/fatal и
+собственные resource errors **0**. Полные команды/verdict —
+`runtime-final-verdict.json`, все logs/SHA-256/categories — `full-logs/` и
+`native-log-inventory.json`. Сохраняются stock/vendor GUI/resource/hierarchy,
+RHS deprecated fields и десять streaming-navmesh tile diagnostics; это не
+утверждение об отсутствии всех engine errors. Количества сохранены в inventory.
+
+Четыре production `.c` побайтно соответствовали tested stage
+(`production-stage-integrity.json`). Все **474** файла stage и пяти test profiles
+сохранены в `temporary-stage-and-profiles.zip`; каждый entry проверен SHA-256,
+после чего точные временные пути удалены. `cleanup-result.json` содержит hash
+и адреса. Автоматические native процессы завершены; пользовательский клиент
+PID 16584 и его Universal-Manual profile сохранены.
+
+**NOT RUN:** физическое перетаскивание мышью, keyboard/controller/focus/внешний
+вид на разных разрешениях, public Host/JIP, полный save-file restore, packaged
+Workshop, soak, loading FPS и полная runtime матрица времени/погоды на каждой
+карте. Terminal-only запрещает GUI automation; игроку нужно перезапустить
+production client и проверить drag, значение HH:MM, random toggle и запуск.
+Новые MissionHeader ресурсы не добавлялись; эпоха старых preset logs ниже
+сохраняет прежнюю семантику `time_mode` и не проверяется новым analyzer как schema 2.
+
+## Время суток и погода в универсальном меню — 2026-10-20
+
+Ветка `codex/scenario-time-weather` от чистого `c85995b`. Добавлены независимые
+параметры времени (08/12/18/00/random) и начальной погоды
+(random/Clear/Cloudy/Overcast/Rainy). Defaults сохранены: 08:00, random weather.
+Контракт — [SCENARIO_SETUP.md](SCENARIO_SETUP.md#передача-времени-и-погоды).
+Evidence: `.codex-runtime/scenario-environment-20261020/`.
+
+До правки `Invoke-AICFChecks.ps1 -Name Test-ScenarioSetupStatic.ps1,
+Test-UniversalScenarioStatic.ps1,Test-ScenarioHeadersStatic.ps1,
+Test-LocalizationStatic.ps1,Test-UniversalScenarioLogContracts.ps1` дал
+**5/5 PASS/0**, `baseline-final/summary.json`. Сохранённых code baseline FAIL нет.
+Две предварительные попытки runner остановились до checks из-за Git ownership;
+использован process-local `GIT_CONFIG_COUNT` с точным slash-normalized
+safe.directory, глобальные настройки Git не менялись.
+
+Финальный `Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/offline-all`
+— **77/77 PASS/0**: Static **33/33**, Contracts **44/44**, missing/FAIL **0**.
+`Test-ScenarioEnvironmentStatic.ps1` проверяет 15 guarded mutations;
+`Test-UniversalScenarioLogContracts.ps1` — 39 positive/negative cases, включая
+неверные часы/погоду/readback, пропавший apply, fallback, clock/repeat/save-load.
+Exact commands/exits/full outputs — `offline-all/summary.json` и отдельные `.txt`;
+сводка с проверкой полноты — `offline-final-verdict.json`.
+
+Final production Workbench `Compile.ps1 -Label final-production-stock -Variant
+Stock` и `-Label final-production-wcs -Variant EveronWCSRHS`: **2/2 PASS/0**.
+`-SourceRoot <fixture-stage> -Label final-fixture-wcs -Variant EveronWCSRHS` —
+**PASS/0**. Exact source manifests, argv, exits и полные console/error/script
+logs сохранены; inventory проверяет все логи, SCRIPT/VM/fatal **0**.
+
+Native frontend `RunFrontend.ps1 -Label env-menu-fixed -Probe Universal` и
+`Test-UniversalScenarioLog.ps1`: **45/45 PASS/0**, все 9 установленных вариантов,
+25 widgets, все 25 сочетаний time/weather, bounds/atomic invalid selection,
+one-shot storage, чужой target, malformed payload, flags/help/modal/cleanup.
+
+Пять финальных native local Play переходов, все `-Probe Transition
+-Difficulty 0`; по каждому `Test-UniversalScenarioLog.ps1 -Transition` —
+**PASS/0**, PREFLIGHT/ACCEPTED/ACTIVE_HEADER/EXACT_GRAPH, затем ROSTER_READY:
+
+| Label / карта и контент | Параметры | Фактическое начало |
+|---|---|---|
+| `env-arland-night-final`, Arland Vanilla | `-Map 0 -Content 0 -Mode 2 -Time 3 -Weather 4` | 00:00 / Rainy |
+| `env-rhs-noon-final`, Everon RHS | `-Map 1 -Content 1 -Mode 2 -Time 1 -Weather 2` | 12:00 / Cloudy |
+| `env-north-wcs-evening-clear`, North Everon WCS + RHS | `-Map 2 -Content 2 -Mode 1 -Time 2 -Weather 1` | 18:00 / Clear |
+| `env-arland-morning-overcast`, Arland Vanilla | `-Map 0 -Content 0 -Mode 1 -Time 0 -Weather 3` | 08:00 / Overcast |
+| `env-arland-random`, Arland Vanilla | `-Map 0 -Content 0 -Mode 2 -Time 4 -Weather 0` | 16.3886 / Overcast |
+
+Каждый финальный transition дополнительно подтверждает один authority
+`ENVIRONMENT_APPLIED`, фактический readback после roster, native day/night
+acceleration и auto-advance, weather looping выключен, повтор не меняет часы,
+native handler save/load имеет приоритет. Это terminal вызов save/load boundary,
+не полная запись/загрузка файла сохранения. Native loaded graph — 2/8/28 addons
+соответственно контенту. Все native exits **0**, логи полные и остановлены,
+SCRIPT/VM/fatal и собственных resource errors **0**. Verdict/команды —
+`runtime-final-verdict.json`, SHA-256/categories — `native-log-inventory.json`.
+
+Полные engine logs сохраняют ранее известные stock/vendor diagnostics:
+GUI hierarchy/SCR_WidgetExportRuleRoot и shutdown texture refs; RHS/WCS —
+deprecated m_fAILimitThreshold и десять streaming-navmesh tile errors.
+Arland: WORLD 7, ENTITY 4, GUI 2, RESOURCES 54; RHS: WORLD 167, ENTITY 11,
+GUI 2, RESOURCES 93, PATHFINDING 10; WCS: те же категории с RESOURCES 126.
+Они не исключены из полных evidence и не объявляются отсутствующими; отсутствия
+влияния каждого vendor diagnostic на длительную игру этот прогон не доказывает.
+
+Промежуточные failures сохранены: первый isolated fixture имел ошибочную
+вставку `world` в OnGameStart (`wb-fixture-wcs`, exit -1); его native запуск
+`env-menu-45` вернул 0, но имел **33 SCRIPT(E)** и **не является PASS**.
+Исправлена только fixture-копия, повторная compilation/runtime прошли.
+Два ранних environment smoke запуска до добавления `ENVIRONMENT_CLOCK` сохранены
+отдельно и не заменяют финальную матрицу. Сборный audit сначала ошибочно читал
+пустой ambient LASTEXITCODE у UI analyzer без явного exit; финальные audits
+выполнены отдельными powershell.exe и имеют реальные native exits 0.
+
+Cleanup: все **496** файлов временного stage и **9** test profiles архивированы
+в `temporary-stage-and-profiles.zip`, каждый entry сверён по SHA-256; после
+проверки удалены точные временные пути. Полные logs сохранены отдельно.
+`production-stage-integrity.json` подтверждает побайтное совпадение пяти
+изменённых production `.c` с tested stage; `cleanup-result.json` — адреса и hash.
+Автоматические тестовые процессы завершены. Открытый пользователю клиент
+PID 15560 и его профиль Universal-Manual сохранены; он загрузил прежние скрипты,
+обновлённый экран доступен после перезапуска.
+
+**NOT RUN:** внешний вид и реальные mouse/keyboard/controller действия, public
+Host, новое JIP-подключение, полный save-file restore, packaged Workshop,
+длительный soak и замер FPS при загрузке. Terminal-only запрещает GUI automation;
+widget/state readbacks не заменяют эти критерии. Для визуальной проверки игрок
+перезапускает production клиент и проверяет два новых ряда меню, подписи/фокус
+и запуск с выбранными часами/погодой. Новых MissionHeader ресурсов не добавлено.
+
+## Универсальное меню и pause-safe local Play — 2026-10-20
+
+Ветка `codex/universal-scenario-menu` от чистого `f549b28`. Запрос: один
+AI Conflict вместо матрицы меню, карты/Vanilla/RHS/WCS + RHS, флаги и пояснения.
+Контракт и границы — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+Evidence: `.codex-runtime/universal-menu-20261020/`. Fixtures только в isolated
+`fixture-stage`, production source без probe-кода.
+
+До правки `Invoke-AICFChecks.ps1 -Name Test-ScenarioSetupStatic.ps1,
+Test-ScenarioCatalogLogContracts.ps1,Test-ScenarioHeadersStatic.ps1,
+Test-RuntimeLauncherStatic.ps1,Test-LocalizationStatic.ps1,Test-CoopScenarioMatrix.ps1`
+дал **6/6 PASS** (`before/summary.json`), сохранённых baseline FAIL нет.
+
+Завершённый offline набор: `-Suite Static` **32/32**, `-Suite Contracts`
+**44/44**, всего **76/76 PASS/0**, без missing. После последних правок повторены
+затронутые setup/universal/localization checks, Stage3/Stage35/Co-op,
+Stage3StaticContracts и VictoryRespawn. Точные команды/exits/полные outputs —
+`offline-static`, `offline-contracts`, `offline-final-source-registry`,
+`offline-pause-fix`, `offline-pause-lifecycle`; объединение — `offline-final-verdict.json`.
+Universal static: **24 guarded mutations**, generator **9 variants/81 presets**.
+Universal log contracts: **30 cases**, включая UTF-8 paths, неверные targets,
+лишние/недостающие addons, dedicated scope и неверные pause observations.
+
+Terminal Workbench `Compile.ps1 -Label final-clock-stock -Variant Stock` и
+`-Label final-clock-wcs -Variant EveronWCSRHS`: production **2/2 PASS/0**,
+Script validation successful, SCRIPT/VM/fatal **0** по полным логам. Fixture
+`-SourceRoot .../fixture-stage -Label fixture-held-pause -Variant Stock` также
+**PASS/0**. Команды получали -gproj/-addonsDir/-addons из canonical Client DryRun.
+Все промежуточные Workbench console/error/script logs сохранены; сводка —
+`workbench-log-inventory.json`.
+
+| Native gate / команда | Результат |
+|---|---|
+| `RunCatalog.ps1 -Label catalog-server -SourceRoot .../fixture-stage`, canonical Server; `Test-ScenarioCatalogLog.ps1` | **15/15 PASS/0**: единственный AI Conflict, stock сохранены, default leaves скрыты, repeat/dedup/tag maps |
+| `RunFrontend.ps1 -Label menu-verified-43 -InitialVariant Stock`; `Test-UniversalScenarioLog.ps1` | **43/43 PASS/0**, все **9/9** установленных вариантов доступны даже при загруженных только Core/Arland; настоящие widgets/modal/флаги/help/disabled sides/start/cleanup |
+| `-Label transition-stock-to-wcs -Probe Transition -Map 0 -Content 2 -Mode 1 -Difficulty 0`; audit `-Transition` | **4/4 PASS/0**, Arland WCS + RHS Co-op NATO, точный loaded graph **25 addons**. Этот routing-прогон выполнен до отдельной правки spawn clock; не выдаётся за новый WCS pause/soak test |
+| `-Label rhs-held-pause-final -Probe Transition -Map 1 -Content 1 -Mode 2 -Difficulty 1 -ResumeAfter 35`; audit `-Transition` | **4/4 PASS/0**, Everon RHS Co-op MSV Medium, graph **8 addons**; pause **35005 ms real / 0 ms simulation**, затем ROSTER_READY |
+| `-Label north-vanilla-final -Probe Transition -Map 2 -Content 0 -Mode 2 -Difficulty 0 -ResumeAfter 35`; audit `-Transition` | **4/4 PASS/0**, North Everon Vanilla Co-op USSR Easy, graph **3 addons**; pause **35037 / 0 ms**, затем ROSTER_READY |
+| canonical `Start-AICFRuntime.ps1 -Role Server -Variant EveronRHS -MatchMode CoopUSSR -Difficulty Medium`; audit `-Transition -Dedicated` | Reference до clock-правки: **2/2 PASS/0**, header/graph/ROSTER_READY. Это сравнение с dedicated, не четыре frontend cases |
+
+Все таблицы означают указанный scope, а не ручной UI PASS. У финальных menu,
+RHS и North logs native exits **0**, stopped marker присутствует,
+SCRIPT/VM/fatal **0**, собственных resource errors **0**. Полные остановленные
+логи и exact manifests сохранены в `full-logs/<label>/` и `<label>-console.log`,
+SHA-256/category counts — `native-log-inventory.json`. Изменение клиента не
+проверялось только по отфильтрованным AICF строкам.
+
+Обнаруженные дефекты и исправления:
+
+- Plain flag texture paths возвращали успешный LoadImageTexture, но полный лог
+  содержал **26 Wrong GUID/name**. Исправлены реальные stock GUID; первый прогон
+  `menu-stock-first` не считается PASS флагов, его полный log сохранён.
+- CLI source addons могут иметь placeholder WorkshopItem без local revision.
+  Первое определение ошибочно скрывало установленный RHS; native GameProject scan
+  и отдельная проверка каждого dependency ID устранили ложный отказ.
+- `-gproj` и `-addons` принудительно удерживают соответствующий контент.
+  Два обратных WCS→Vanilla controls имели **4 SCRIPT(E)** с FACTION_MISMATCH.
+  Выбор несовместимого графа теперь блокируется до перехода. Одной замены gproj
+  при сохранении полного принудительного WCS CSV недостаточно. Для всех опций
+  используется базовый source graph, пакеты модов только добавляются в addonsDir.
+- В RHS Everon local Play passive Welcome ставил simulation на паузу при
+  **~140 FPS**. Ранее wall-clock timeout прекращал старт через 30 s
+  (`rhs-everon-verified`, `rhs-everon-frame`: по **3 SCRIPT(E)**). Dedicated с
+  тем же leaf header становился готов за несколько секунд. GroupSlot deadline
+  переведён на WorldTimestamp для initial/replacement; лимит остаётся 30 s
+  активной симуляции. Финальные контролируемые 35 s pauses выше подтверждают
+  исправление. Probe снимает simulation pause, не нажимает GUI и не подменяет
+  проверки faction/spawn/readiness.
+- Диагностические fixture-итерации имели compile failures: World не предоставляет
+  PauseGameTime/IsGameTimePaused, а ChimeraWorld использует **CastFrom**, не Cast.
+  Исправлено по pinned API и повторно скомпилировано; ошибочные logs сохранены.
+- Manifest reading в Windows PowerShell исправлено на явный UTF-8 ReadAllText;
+  кириллический addonsDir больше не даёт ложный CLI_MISMATCH.
+
+Не объявляется «вообще 0 ошибок движка»: полный RHS log содержит WORLD **167**,
+RESOURCES **93**, ENTITY **11**, GUI **2**, PATHFINDING **10**; North — WORLD **7**,
+RESOURCES **92**, ENTITY **14**, GUI **2**, PATHFINDING **10**; menu — GUI **1**,
+RESOURCES **34**. Сохраняются diagnostics установленных/stock resources:
+устаревший RHS m_fAILimitThreshold, SCR_WidgetExportRuleRoot, hierarchy/PP,
+streaming navmesh `Incorrect tile position` (одинаковые десять индексов в RHS и
+vanilla Everon), shutdown texture refs. Они не исправлялись в установленных
+файлах. Native connected spawn placement и ROSTER_READY подтверждены;
+длительная навигация и отсутствие влияния каждого vendor diagnostic не доказаны.
+Это ограничение scope, не исключение SCRIPT/VM/fatal из строгих gates.
+
+**NOT RUN / отклонённые ручные критерии:** внешний вид и реальные mouse/keyboard/
+controller действия, ручной путь выбора/отмены/Play, фактический public Host,
+packaged Workshop build, новые JIP/direct-connect проверки и длительный soak.
+Terminal-only правила запрещают GUI/Host UI automation. Игроку нужно открыть
+AI Conflict, проверить выбор/отмену и Host; native readbacks и programmatic local
+Play не доказывают нажатия и public hosting. Новая задача не перепроверяла найм
+в казарме; gameplay найма не менялся. Готовность UI для релиза не объявляется.
+
+Изменены frontend registry/selection/launch/UI, generated integration catalog,
+RU/EN localization, GroupSlot spawn clock и одна timeout boundary controller,
+generation tool/JSON, probes/audits и затронутые agent notes/README. Production
+world/bases/layouts не добавлялись, 81 legacy GUID сохранены.
+
+Cleanup завершён: собственных native test processes **0**; stage **443 файла**
+сохранён в `final-fixture-stage.zip`, проверены пути и SHA-256 каждого entry,
+после чего удалён адресно. До clock-правки сохранён отдельный
+`before-pause-fix-stage.zip`. Все **20** свежих test profiles (**116 файлов**)
+сохранены в `test-profiles.zip` с проверкой каждого SHA-256 и удалены только по
+точным manifest paths. Полные logs остаются в evidence. Итоги —
+`stage-archive.json`, `profile-archive.json`, `profile-cleanup-result.json`.
+
+## Видимость примера Arland в локальном frontend — 2026-10-19/20
+
+Продолжение `codex/arland-setup-example` от `0a3dad6`. Evidence:
+`.codex-runtime/scenario-discovery-20261019/`. Отчёт относится к исправлению
+отсутствующего пункта, а не к повторному подтверждению всей Co-op механики.
+
+Причина: `-gproj/-addons` загрузили Core/Arland и resource database с новым
+`.conf`, но source addons не имели установленного WorkshopItem. Native каталог
+содержал только **31** stock сценарий. `AICF_ArlandScenarioCatalog` сохраняет
+этот список и регистрирует prototype + 9 presets через `InsertNewScenario`.
+Вторая найденная граница: у реальной записи `GetInGameScenario` может быть
+`GetHeader() == null`. Entry разрешает subtype чтением ресурса по ID.
+
+`SCR_FilterCategory` воспроизведён отдельно: native `InitAddonTagMaps` создавал
+standalone config root с protected constructor. `AICF_WorkshopTagMetadata`
+читает те же metadata из BaseContainer, сохраняя оба tag maps и native
+OnGameStart callback lifecycle. Конструктор класса категории не меняется.
+
+До правки `Invoke-AICFChecks.ps1 -Name @('Test-ScenarioSetupStatic.ps1',
+'Test-ScenarioHeadersStatic.ps1','Test-RuntimeLauncherStatic.ps1',
+'Test-LocalizationStatic.ps1') -EvidenceRoot <evidence>/before` — **4/4 PASS/0**.
+Реальный baseline catalog probe: **2/15**, **13 failed**, **2 SCRIPT(E)**,
+native exit 0, строгий audit **FAIL/1**; полный log сохранён. Это показывает,
+почему прежний static/header/widget PASS не доказывал наличия в меню.
+
+Финальные проверки:
+
+- `Compile.ps1 -Label final-stock` и `-Label final-wcs -Variant EveronWCSRHS`:
+  production terminal Workbench **2/2 PASS/0**, 1.8.0.13, validation successful,
+  SCRIPT/VM/fatal 0. Окончательный isolated fixture:
+  `-Label final-fixture-confirmed` — **PASS/0**.
+- `RunCatalog.ps1 -Label catalog-server-final ...` через canonical launcher и
+  `-Label catalog-frontend-final ... -Frontend`: native exits **0/0**, по **15/15**
+  cases. Native каталог содержит **41** запись; пример имеет локализованное имя,
+  все девять launch targets доступны, дубликатов нет, stock Arland сохранён.
+  Два readbacks сверяют все native tag images/thumbnails с исходными конфигами.
+- `Test-ScenarioCatalogLog.ps1 -LogPath ... -ManifestPath ... -NativeExitPath ...`
+  по каждому полному stopped log — **2/2 PASS/0**, SCRIPT/VM/fatal **0**.
+  Прочие engine `(E)` сохранены: **15** server + **37** frontend; общий engine
+  error-free PASS не заявляется.
+- `after-selected-final/`: ScenarioSetupStatic **PASS/0**, **17** negative
+  mutations; новый ScenarioCatalogLogContracts **PASS/0**, positive control и
+  **13** negatives, всего **14** cases. Проверяются case/completion, CLI,
+  незавершённый log, SCRIPT/VM/fatal и native exit.
+- `production-stage-integrity.json`: **250/250** production Core/Arland файлов
+  побайтно соответствуют финальному stage; fixture SHA также совпал.
+
+Общий offline запуск был прерван после **40** завершённых PASS. Ещё **2**
+затронутых checks выполнены отдельно. Оставшиеся **32** возобновлены независимыми
+группами `resume-0..3-20261020`; это продолжение набора, не новый единый запуск.
+Окончательное множество и exits сохраняются в `offline-final-verdict.json`.
+Итог: **74/74 PASS**, пропусков и повторов в объединённом множестве нет.
+Возобновлённые groups — **32/32 PASS/0**, включая **145** положительных и
+отрицательных Logistics contracts. Исходное прерывание не объявляется exit 0.
+
+Сохранённые промежуточные FAIL: первая новая fixture пыталась ставить callback
+на unmanaged Game и не компилировалась; исправлена отдельным Managed owner.
+Диагностическая попытка разыменовать nullable GetHeader вызвала VM/crash в
+изолированном probe, native `-1073741819`; исправлено, лог и dump path сохранены.
+Ранние public-constructor adapters не устранили protected/native static boundary;
+первый frontend прошёл 15 cases, но имел 2 SCRIPT(E), strict **FAIL/1**. После
+исправления фактического caller повторный полный frontend log чист по script gate.
+Эти FAIL не исключены из evidence и не смешиваются с финальными logs.
+
+Обычный production client открыт по запросу владельца 19.10 в 23:07 МСК, без
+fixture/auto-close. Его `-listScenarios` подтвердил нужное имя в native каталоге;
+впоследствии журнал содержит запуск Co-op СССР Hard. Сам факт этого запуска не
+доказывает показ нового экрана и нажатия Play/Host. После прерывания клиент уже
+закрыт; 20.10 повторно не открывался. Собственные native test processes завершены.
+Оба stage адресно удалены после ZIP-архивации и SHA-256, `stage-archives.json`.
+
+**NOT RUN / прежний frontend blocker:** визуальная проверка, реальные нажатия
+Play/Host/отмена, клавиатура/controller и разные разрешения остаются без явного
+подтверждения игрока. Terminal-only workflow запрещает GUI automation;
+native catalog readbacks и наблюдение запуска их не заменяют. Packaged/Workshop
+и soak также NOT RUN. Прототип не объявляется готовым UI для релиза.
+
+## Пример frontend-настройки Arland — 2026-10-19
+
+Ветка `codex/arland-setup-example` от чистого `30be812`. Evidence:
+`.codex-runtime/arland-setup-example-20261019/`. Бинарники game/server/Workbench
+**1.8.0.13**, `binaries.json`. Контракт: [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+Добавлен один пункт **AI Conflict — Арланд: пример настройки**. Play/Host
+перехватываются только для нового header subtype; локальный выбор разрешает
+один из девяти существующих Arland presets до native запуска. Остальная матрица
+81 сценария пока сохранена. Runtime config текущего матча не меняется.
+
+До изменений `Invoke-AICFChecks.ps1 -Name @('Test-CoopScenarioStatic.ps1',
+'Test-CoopScenarioMatrix.ps1','Test-ScenarioHeadersStatic.ps1',
+'Test-RuntimeLauncherStatic.ps1','Test-LocalizationStatic.ps1')`
+с evidence `before/` — **5/5 PASS/0**.
+
+Полный `Invoke-AICFChecks.ps1 -EvidenceRoot <evidence>/offline-all`:
+**72/73 PASS, runner exit 1**. Co-op generator -Check обнаружил, что новые
+переводы вставлены перед принадлежащим генератору блоком. Штатный
+`tools/Update-AICFCoopScenarios.ps1` восстановил порядок; gameplay headers
+не менялись. `-Check` после генерации — **PASS/0**, 54 headers, changed=0,
+локализация **682** entries. Source и runtime таблицы согласованы.
+`locale-equivalence.json`: **682/682** RU/EN значений идентичны первому stage;
+изменилась только последовательность записей.
+
+Повтор четырёх затронутых checks через `Invoke-AICFChecks.ps1 -Name ...
+-EvidenceRoot <evidence>/after-selected` — **4/4 PASS/0**: CoopScenarioMatrix,
+LocalizationStatic, ScenarioHeadersStatic, ScenarioSetupStatic.
+`offline-verdict.json` сверяет точное множество текущего runner:
+последние результаты **73/73 PASS**, прежний FAIL сохранён. Это не второй
+чистый полный запуск. Новый ScenarioSetupStatic — **16 negative mutations**,
+девять target resources сверены с общим каталогом.
+
+Терминальный Workbench Validate/Compile:
+
+- финальные production Stock и полный Everon WCS+RHS graph — **2/2 PASS/0**,
+  `wb-final-stock`, `wb-final-wcs`;
+- изолированный Stock graph с Co-op и Setup fixtures — **PASS/0**,
+  `wb-fixture-authorized`; все production `.c` соответствуют финальным;
+- ранний production `wb-production` — PASS/0 до дополнительных allocation guards;
+  повтор финального Stock выше подтверждает их;
+- `wb-first` — FAIL/-1 из-за отсутствовавших override modifiers static hooks,
+  исправлено; `wb-second` — FAIL/-1 на SteamAPI_Init в sandbox, не compile PASS.
+  Успешные проверки выполнены с разрешённым доступом к работающему Steam.
+
+Финальные successful logs содержат Script validation successful, SCRIPT/VM/fatal 0.
+Графы/argv, native exits и полные логи сохранены. Автоматический approval несколько
+раз истекал до запуска команд; это не runtime failure или успешная компиляция.
+После явного разрешения владельца проверки завершены терминально.
+
+Server/client запущены только `Run.ps1` → `tools/Start-AICFRuntime.ps1`, отдельные
+сессии, fresh profiles и listener ports. CLI `-aicfSetupProbe 1
+-aicfCoopProbe STANDARD|US|USSR -aicfCoopProbeDurationMs 35000|180000`;
+client дополнительно `-aicfCoopProbePlayer 1`. Launcher перед соединением
+проверил точные CLI, живой server PID, ROSTER_READY и сохранил manifest.
+Клиент объяснён пользователю заранее и закрылся автоматически.
+
+| Итоговый run | Setup cases | Основной Co-op gate | SCRIPT E/F | Прочие `(E)` |
+|---|---|---|---|---|
+| standard server, Medium, 2480 | 18/18 | 16/16 | 0 | 16 |
+| coop-us server, Easy, 2481 | 18/18 | 19/19 | 0 | 15 |
+| coop-ussr-final server, Hard, 2483 | 18/18 | 19/19 | 0 | 16 |
+| coop-ussr-final client | 15/15 | player/Welcome/JIP, samples=30 | 0 | 71 |
+
+`Audit.ps1 -Case <case> [-Client]` выполняет `Test-ScenarioSetupLog.ps1`, включая
+полный Co-op stopped-log audit. Итоговая матрица **4/4 PASS/0**, все native exits 0.
+Server native readbacks проверили defaults, все девять headers, реально запущенный
+mode/difficulty и bounds/null/incomplete/metadata/recursion отказы. Client создал
+настоящий экран, проверил его размеры/modal, девять выборов, локализованную сводку,
+disabled side buttons в STANDARD, отказ неверному выбору и идемпотентный Close.
+Действий mouse/keyboard/controller, вызовов Play/Host fixture не выполняла.
+
+**Первое подключение — отдельный сохранённый FAIL:** `coop-ussr`, 2482,
+150000 ms. Server: 18/18 и 19/19, strict PASS/0. Задержка approval client
+оставила слишком мало времени до окончания сервера. UI cases прошли 15/15,
+но player/readback не завершились до REPLICATION_SHUTDOWN; strict client
+**FAIL/1**, три native frontend SCRIPT(E): два private SCR_FilterCategory
+constructor и отсутствующий REPLICATION_SHUTDOWN preset. Native exit 0 не
+отменяет FAIL. Эти native frontend ошибки не исправлялись и не объявляются
+устранёнными чистым повтором. Повторная пара стартовала своевременно с 180000 ms
+и целиком прошла strict gates; логи двух пар не объединяются.
+
+`AuditNegatives.ps1` по двум полным stopped logs финальной пары — **20/20 PASS**:
+positive controls и отказы для failed/missing/duplicate case, missing/failed
+completion, missing CLI, SCRIPT(E), live log и native exit != 0, по обеим ролям.
+Это synthetic mutations анализатора, не дополнительные игровые прогоны.
+
+`source-integrity.json`: **246/246** production Core/Arland игровых файлов
+побайтно совпали с финальным stage; `fixture-integrity.json`: **2/2**.
+Первые Standard/US runs использовали первый stage, отличающийся только порядком
+локализации; полное совпадение всех её значений подтверждено выше. Финальная
+USSR server/client пара использует окончательную версию.
+Прочие **118** engine `(E)` строк итоговой матрицы сохранены: world/resource и
+shutdown RPC diagnostics. Полностью error-free engine log не заявляется.
+
+**NOT RUN / frontend blocker:** настоящий ручной переход из «Сценарии» через
+Play и Host, отмена/подтверждение ввода мышью, клавиатурой или controller и
+визуальное размещение на разных разрешениях. Игроку нужно открыть новый пункт,
+изменить режим/сложность, отменить и повторно запустить через оба штатных действия,
+проверив полученный режим. Terminal-only workflow запрещает GUI automation и
+запуск через Host UI; native headers/widgets и canonical direct-connect runtime
+не доказывают этот переход. Прототип не объявляется готовым UI для релиза.
+Также NOT RUN: новый packaged/Workshop build, другие карты/моды в runtime и soak.
+
+Полные baseline/final logs, manifests, команды, exits и source ZIP с SHA-256
+сохранены в evidence. Тестовые игровые/Workbench процессы завершены.
+Временный stage адресно удалён после проверки обоих ZIP; `cleanup-final.txt`.
+Push, PR, merge и публикация не выполнялись.
+
+## Исправление Instigator OTHER — 2026-10-19
+
+Ветка `codex/instigator-other-context` от чистого `dc087a3`. Evidence:
+`.codex-runtime/instigator-context-20261019/`; game/server/Workbench **1.8.0.13**,
+`binaries.json`. Контракт: [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md).
+
+До production правки `Invoke-AICFChecks.ps1 -Name @('Test-CoopScenarioStatic.ps1',
+'Test-CoopScenarioLogContracts.ps1','Test-SquadRespawnContracts.ps1',
+'Test-VictoryRespawnStatic.ps1','Test-WCSIntegrationStatic.ps1')`
+с evidence `before/` — **5/5 PASS/0**.
+
+**Дефект воспроизведён детерминированно:** `baseline-stock`, неизменённый
+production Standard. Fixture создала настоящий GenericEntity и получила
+`InstigatorType.INSTIGATOR_OTHER`, построила native contexts и убила реального
+managed ИИ через `Kill` с этим источником. Native exit **0**, strict audit
+**FAIL/1**, **4 SCRIPT(E)** той же сигнатуры и **4/18** ошибочных context cases.
+OTHER_RELATION, REUSED_CONTEXT, OTHER_CHARACTER_OVERRIDE и NATIVE_DEATH_RELATION
+провалились; обычные AI/GM/NONE/suicide/deletion cases прошли. Полные logs,
+source manifest, argv и native exit сохранены в `baseline-runtime.json`.
+Это воспроизведение исходного classifier defect, а не ожидание случайной коллизии.
+
+В Core добавлен `Integration/AICF_InstigatorContext.c`. Только OTHER для
+character получает дополнительную классификацию. Распознанный character
+source проходит штатную AI/PLAYER логику с восстановлением исходного Instigator;
+источник окружения сохраняет metadata и получает UNKNOWN killer / OTHER_DEATH.
+Производные control/disguise поля очищаются при reuse. Остальные instigator
+types, deletion и non-character пути делегируются native с исходными аргументами.
+Ни исходный Instigator, ни damage/health/ownership не изменяются adapter.
+
+`Compile.ps1 -SourceRoot <stage> -Label <label> -Variant <variant>` — terminal
+Workbench baseline, fixed-stock, fixed-rhs (EveronRHS), fixed-wcs
+(EveronWCSRHS) и обновлённая player fixture: **5/5 PASS/0**. В каждом — Script
+validation successful, SCRIPT/VM/fatal 0; source graphs/argv/full logs сохранены.
+`source-integrity.json`: **415/415** production игровых файлов совпали с fixed
+stage; `fixture-integrity.json`: **2/2** точные tracked fixtures.
+
+Все server/client процессы запущены только `Run.ps1` → canonical
+`tools/Start-AICFRuntime.ps1`, отдельные сессии и свежие profiles. CLI:
+`-aicfInstigatorProbe 1 -aicfCoopProbe STANDARD|US`, observation 35000/180000 ms;
+player server дополнительно `-aicfInstigatorPlayer 1`, client —
+`-aicfCoopProbePlayer 1`. До видимого client пользователь предупреждён, что
+тест автоматический и сам завершится. Exact CLI/live PID/ROSTER_READY и
+`AICF_RUNTIME_MANIFEST_JSON` подтверждены launcher.
+
+`Audit.ps1` выполняет `Test-InstigatorContextLog.ps1 [-Player]`, включая полный
+Co-op stopped-log audit; client — `Test-CoopScenarioLog.ps1 -Client -RequirePlayer
+-RequireWelcome`. Все итоговые native exits и strict gates **0/PASS**:
+
+| Run | Сценарий | Context cases | SCRIPT E/F | Прочие engine `(E)` |
+|---|---|---|---|---|
+| fixed-stock server | Stock Standard | 18/18 | 0 | 16 |
+| fixed-rhs server | Everon RHS Standard | 18/18 | 0 | 200 |
+| fixed-wcs server | Everon WCS Standard | 18/18 | 0 | 237 |
+| fixed-wcs-player server | Everon WCS Co-op US | 20/20 | 0 | 236 |
+| fixed-wcs-player client | та же server/client пара | native player/JIP/Welcome | 0 | 264 |
+
+В каждом server run подтверждена настоящая смерть ИИ и исходный context из
+native `GetOnControllableDestroyed`: оригинальные Instigator/victim/source,
+OTHER_DEATH, UNKNOWN killer и отсутствие teamkill attribution. Обычные
+friendly/enemy AI, suicide, GM, NONE, deleted/non-character/null и reuse cases
+проверены. С реальным игроком дополнительно проверены native enemy player,
+OTHER с caller player override и context с player victim, включая настоящие
+player ID/control metadata. Сам игрок не убивался. Стратегия, потери и обычная
+очередь восстановления продолжали работать. Никакой остановки боя/invincibility
+или исключения SCRIPT(E) из анализа нет.
+
+`runtime-verdicts.json`: **5/5 PASS/0**, суммарно SCRIPT/VM/fatal **0**. Прочие
+953 engine `(E)` строки полностью сохранены в `other-engine-errors.json` и
+исходных logs: world Parent, Hierarchy, resources и shutdown RPC diagnostics.
+Общий error-free engine gate не заявляется.
+
+Полный offline набор `Invoke-AICFChecks.ps1 -EvidenceRoot <evidence>/offline-all`
+— **72/72 PASS/0**, runner exit **0**. `offline-verdict.json` подтверждает точное
+совпадение выполненного набора с текущими 72 проверками без исключений.
+Новые static guards прошли **14 negative mutations**, log contracts —
+**14 cases**; оба профильных теста включены в полный runner.
+
+**Предыдущий Instigator OTHER blocker снят новым воспроизведением и исправлением.**
+Старые FAIL не переписаны в PASS: baseline вновь даёт четыре ошибки, fixed
+проходит тот же путь. Конкретный физический источник исторической потери в
+первом WCS run по-прежнему неизвестен; исправлена обработка допустимого типа
+источника, а не физика столкновений или сам факт гибели бойца.
+
+**NOT RUN:** настоящая смерть/respawn игрока и ручной экран смерти, визуальный
+UI input (запрещён terminal-only workflow), packaged/Workshop build и длительный
+soak. Player context проверен native readbacks, это не визуальный PASS.
+Архивы baseline/fixed stages с SHA-256 — `stage-archives.json`; полные logs,
+manifests/exits/source hashes сохранены. Игровые/Workbench процессы завершены.
+Обе временные папки `baseline-stage` и `fixed-stage` адресно удалены после
+проверки архивов и явного разрешения пользователя; `cleanup-final.txt`.
+Изменены Core adapter, три профильных test/audit scripts и fixture, README,
+архитектурные/testing/fixture/tool заметки и новый INSTIGATOR_CONTEXT.
+Push, PR, merge и публикация не выполнялись.
+
+## Co-op: обе стороны, карты и integrations — 2026-10-18/19
+
+Ветка `codex/coop-scenario-matrix` от чистого `aeafb17`. Evidence:
+`.codex-runtime/coop-matrix-20261018/`. Все три бинарника game/server/Workbench
+**1.8.0.13**, `binaries.json`. Production `.c` не менялись.
+
+Добавлен единый `tools/config/AICF_Scenarios.json` и resolver
+`AICF_Scenarios.ps1`: девять Variant × Standard/CoopUS/CoopUSSR × три сложности.
+Генератор `Update-AICFCoopScenarios.ps1` создаёт **54 Co-op headers** (51 новый,
+три прежних Stock USSR сохранены), metadata, локализацию и список native probe.
+Вместе со Standard в меню **81** сценарий. Новые Co-op наследуют standard
+parent той же сложности; North сохраняет whitelist, RHS/WCS — свой content graph.
+Launcher выбирает режим через `-MatchMode`, старый `StockCoopUSSR` остаётся alias.
+`standard-compatibility.json`: **9/9** исходных Standard Easy argv совпали
+побайтно после замены единственного свежего profile path на placeholder.
+
+Baseline до правки: `Invoke-AICFChecks.ps1 -Name @('Test-CoopScenarioStatic.ps1',
+'Test-CoopScenarioLogContracts.ps1','Test-FIARandomGarrisonContracts.ps1',
+'Test-RuntimeLauncherStatic.ps1','Test-ScenarioHeadersStatic.ps1')`
+с evidence `before/` — **5/5 PASS/0**.
+
+Полный `Invoke-AICFChecks.ps1 -EvidenceRoot <evidence>/offline-all-final`:
+**69/70 PASS, runner exit 1**. Три правила WCSIntegrationStatic устарели:
+искали IDs/resource непосредственно в launcher после переноса данных в каталог.
+Проверка теперь сверяет те же точные dependencies и ресурс через resolver,
+а также использование его полей launcher. Ничего не исключено из runner.
+Повтор Co-op log/matrix/static и WCS static в `verification-final/` —
+**4/4 PASS/0**. `offline-verdict.json` сверяет полное множество текущих checks:
+последние результаты **70/70 PASS**, с явным сохранением первоначального FAIL.
+Профильные итоги: matrix — **54 headers, 36 launcher manifests, 8 negative catalog
+mutations**, synthetic FutureMap; log contracts — **20 positive / 75 negative**;
+Co-op static — **39 negative mutations**. Новый каталог защищает также
+уникальность generated localization GUID prefixes. Generator `-Check` и
+RU/EN runtime localization **662** entries прошли; повторная генерация не меняет файлы.
+
+`CompileAll.ps1` → `Compile.ps1 -SourceRoot <stage> -Variant <variant>`:
+terminal Workbench **6/6 PASS/0** для Stock, Everon, RHS, EveronRHS,
+ArlandWCSRHS, EveronWCSRHS. Graph/argv взяты из canonical launcher DryRun;
+полные logs, validation success и native exit сохранены. После уточнения roster
+fixture дополнительный `Compile.ps1 -Label matrix-stability -Variant EveronWCSRHS`
+— **PASS/0**. Это компиляция production + test-only fixtures, не packaged build.
+`source-integrity.json`: все **414/414** production `.c/.gproj/.conf/.meta/.st/.layout`
+совпали со stage. Обе fixture revisions сохранены отдельно:
+`fixture-integrity-original.json`, `fixture-integrity.json`, **2/2** совпадения.
+
+Все игровые запуски: `Run.ps1 -Case <case> -Variant <variant> -MatchMode <mode>
+-Difficulty Easy -Duration 35000|180000 -Port <port>` → только
+`tools/Start-AICFRuntime.ps1`, свежие profiles. Четыре direct-connect клиента
+запущены из отдельных сессий с `-Client -Player` после уведомления пользователя;
+launcher подтвердил exact CLI, live server PID и ROSTER_READY. Manifests сохранены.
+
+`FinalizeRuntime.ps1` → `Audit.ps1` → `Test-CoopScenarioLog.ps1` по полным
+остановленным logs: **20 итоговых серверных и 4 клиентских gates PASS/0**,
+native exits 0, SCRIPT/VM/fatal **0** в этих итоговых runs. Server: все девять
+Variant на обеих Co-op сторонах плюс Standard Stock и North WCS. Co-op —
+**19/19** cases, два территориальных runs — **20/20**, Standard — **16/16**.
+North везде имеет семь nodes. Сторона людей — 0 slots, противник — 10;
+Standard — 10+10. Helpers, budget, строительство, content mapping, replicated
+mode и запрет command summary людей проверены. Это короткая контрактная матрица.
+
+Все четыре реальные client пары (Stock/CoopUS, RHS/CoopUSSR,
+EveronNorthWCSRHS/CoopUS, EveronWCSRHS/CoopUSSR) прошли
+`-Client -RequirePlayer -RequireWelcome`: только выбранная native faction tile
+видима, сервер отверг opponent/FIA requests, персонаж нужной стороны появился.
+Каждая пара использует server/client одного запуска. Native resource probe
+в North WCS US прошёл `-RequireHeaderMatrix`: **54/54** headers прочитаны через
+`MissionHeader.ReadMissionHeader`, mode/difficulty/world/legacy flags и вся
+base whitelist совпали с parents. Это не 54 полноценных игровых матча.
+
+`Stock-CoopUSSR` и `EveronRHS-CoopUS` дополнительно прошли `-ExpectedWinner USSR`:
+fixture подготовила ownership реальных целей, production VictorySystem завершил матч.
+Stage1Diagnostics нормализует RHS runtime faction keys в US/USSR; исходная
+ошибка audit ожидала RHS_AFRF в логе. Исправлен именно log contract,
+добавлены positive/negative cases; winner resolution в игре не менялся.
+
+**Сохранённый runtime FAIL и исторический blocker:** первый `EveronWCSRHS-CoopUS`
+получил SCRIPT(E) `SCR_InstigatorContextData: ... INSTIGATOR_OTHER ... is not supported!`
+во время Physics simulation, после чего slot 2 дал GROUP_EMPTY и штатную очередь
+восстановления. Точный источник физического повреждения не установлен.
+На этом этапе native damage context в закреплённом API не был исправлен.
+Чистый `EveronWCSRHS-CoopUS-retry` не доказывал его устранение. Последующее
+детерминированное воспроизведение и исправление описаны в разделе Instigator OTHER
+выше; сам первоначальный FAIL сохраняется.
+
+Тот же первый run выявил неверное требование fixture: STABLE_ROSTER ожидал
+сохранения всех живых NPC после начала боя. Initial READY/наличие бойцов теперь
+проверяются отдельно; стабильность проверяет число, numeric IDs и identity
+исходных slot objects, а у людей — ноль managed agents. Потери и replacement
+противника допустимы, invincibility/остановка боя не добавлялись. Новая fixture
+прошла compile, WCS retry и отдельный Stock-CoopUS-stability — **PASS/0**.
+Старый FAIL сохранён целиком. Также исправлен guard анализатора при failed/missing
+completion: скобки предотвращают null indexing, два новых negative cases проходят.
+
+Прочие engine `(E)` сохраняются отдельно в `other-engine-errors.json`:
+итоговые servers **15–254**, clients **71/124/264/264**. Среди них world Parent,
+Hierarchy, resource/font и shutdown RPC diagnostics; общий error-free engine
+не заявляется. Полные counts каждого run — `runtime-verdicts.json`.
+История неудачных подготовок/проверок — `validation-history.json`: stale runtime
+localization и UTF-8 BOM исправлены; первый offline запуск не дошёл до checks
+из-за Git safe.directory; прерванный North USSR сохранён и повторён в свежем profile.
+
+**NOT RUN / отклонённые визуальные критерии:** manual UI input и внешний вид
+меню недоступны в terminal-only workflow. Действие игрока для отдельной проверки:
+открыть оба окна выбора стороны и проверить единственный разрешённый вариант;
+native Welcome visibility и RPC readbacks не доказывают внешний вид Deployment.
+Полные Medium/Hard кампании, физический бой до победы, законченные supply/build
+операции, покупка/найм RHS/WCS/Everon, смерть/повторный respawn, save/load,
+packaged/Workshop build и долгий soak здесь не запускались. Прежняя проверка
+stock покупки/найма не превращается в новый PASS для модов.
+
+Исходный и финальный stage архивированы с SHA-256 и адресно убраны;
+игровые/Workbench процессы задачи завершены. Полные logs/argv/manifests/exits
+сохранены. Изменены: Co-op MissionHeader/meta шести integrations, три файла
+локализации Core, каталог/resolver/генератор/launcher, Co-op fixtures/log/static
+contracts, WCS static, README и соответствующие agent-notes.
+Push, PR, merge и публикация не выполнялись.
+
+## Казармы во всех режимах и support station area — 2026-10-18
+
+Ветка `codex/barracks-support-zone` от чистого `d5c8f90`. Evidence:
+`.codex-runtime/barracks-support-zone-20261018/`; game/server/Workbench
+**1.8.0.13**, `binaries.json`. Это продолжение пользовательских исправлений
+Arland; исходный Everon WCS Co-op из issue #46 не объявляется реализованным.
+
+До production правки:
+`Invoke-AICFChecks.ps1 -Name @('Test-CoopScenarioStatic.ps1',
+'Test-CoopScenarioLogContracts.ps1','Test-SquadCommandsContracts.ps1',
+'Test-ConstructionStatic.ps1') -EvidenceRoot <evidence>/before` — **4/4 PASS/0**.
+Первая передача имён внешнему PowerShell как одной строки отклонена до аудитов;
+запуск с массивом выполнил все четыре. Baseline Workbench и диагностические
+graphs `baseline`, `lookup`, `vehicles` — **PASS/0**.
+
+**Причина runtime error установлена по реальным repair trucks:** на сервере
+visual child станции имеет точное `<0,0,-2.5>`, на клиенте после сетевого spawn
+local position уже отличается, до первого GenerateAreaMesh. В `vehicles-before`
+штатный Init дал три SCRIPT(E): FIA Ural `<-0.00286865,0.0183182,-2.49963>`,
+USSR Ural `<0.00140381,0.00782013,-2.49927>`, M923
+`<-0.00354004,-0.00318909,-2.5014>`. Точный механизм округления внутри движка
+не измерялся. Это проблема клиентской привязки visual child, а не доказанный
+дефект авторинга prefab, как слишком категорично говорилось в старом отчёте.
+Первый обычный повтор `baseline` дал 0/0 SCRIPT(E), поэтому отсутствие ошибки
+в случайном запуске не использовалось как доказательство исправления.
+`baseline-runtime.json` сохраняет все полные stopped logs, counts и native exits.
+
+Production `AICF_SupportStationArea` восстанавливает local translation visual
+child из offset непосредственного parent station до native Init и генерации.
+Сам station/vehicle, offset/range и gameplay state не меняются; native validation
+и enabled lifecycle остаются. Логи не фильтруют эту ошибку.
+`AICF_CoopRecruitment` переименован в общий `AICF_BarracksRecruitment`: снят
+STANDARD opt-out во всех трёх gates. Разрешение остаётся только у группы,
+заказанной текущим игроком через troop provider своей разрешённой фракции;
+async membership/identity, native лидерство, ownership и cap сохраняются.
+
+`Compile.ps1 -Label production-stock`, `-Variant EveronRHS -Label production-rhs`,
+`-Variant EveronWCSRHS -Label production-wcs` — terminal Workbench **3/3 PASS/0**,
+Script validation successful, SCRIPT/VM/fatal 0. Graph берётся из canonical
+launcher DryRun, exact argv/manifest/full logs сохранены. Финальный fixture
+graph `fixed-fixture2` — **PASS/0**. Первая `fixed-fixture` — **FAIL/-1** из-за
+дублирования тестовых файлов в Integration и UI при подготовке stage; дубли
+удалены, production дефекта здесь не было. Неудачный compile log сохранён.
+`source-integrity.json`: **233/233** production `.c/.gproj/.conf/.meta` Core/Arland
+совпали со stage; `fixture-integrity.json`: **3/3** точные tracked fixtures.
+
+Все игровые запуски — только `Run.ps1` → `tools/Start-AICFRuntime.ps1`, server
+и client в отдельных сессиях, свежие profiles. Перед каждым видимым client
+пользователь уведомлён, что тест автоматический и действий не требует.
+Exact CLI/live PID/ROSTER_READY подтверждены launcher, manifests сохранены.
+
+| Run | Server/client strict gates | Native roster checks | Script errors | Прочие `(E)` server/client |
+|---|---|---|---|---|
+| `fixed-coop`, port 2430 | **PASS/0 + PASS/0** | **17/17**, US 10 / USSR 0 | **0/0** | 16/78 |
+| `fixed-standard-ussr`, port 2431 | **PASS/0 + PASS/0** | **14/14**, 10+10 | **0/0** | 24/79 |
+| `fixed-standard-us`, port 2432 | **PASS/0 + PASS/0** | **14/14**, 10+10 | **0/0** | 25/81 |
+
+Команды: `Run.ps1 -Case <run> -Variant StockCoopUSSR|Stock -Faction USSR|US
+-Duration 130000|140000 -SourceRoot <evidence>/fixed-stage -Port <port>` и
+отдельно те же аргументы с `-Client -Player`. `Audit.ps1 -Case <run>
+[-Faction US]` выполняет по обеим ролям
+`Test-CoopScenarioLog.ps1 -RequireBarracks -RequireSupportArea
+[-BarracksFaction US]` на полных остановленных logs с native exits **0**.
+`runtime-verdicts.json`: все **6/6 PASS/0**; это три успешные пары, а не
+объединение ролей из разных запусков. Указанный выше stock area blocker снят
+этим новым evidence; прежние FAIL остаются историческими FAIL.
+
+В каждом run: native покупка Guard за **300** supplies; реальный найм **4/4**,
+native cap **4**, неоплаченные Guard **4/4** сохранили `Recruitable=0`.
+Цена и balance проверены native consumer: Co-op **685→385**,
+STANDARD USSR **645→345**, STANDARD US **665→365**. Суммы raw debit/credit
+включают пересборку агрегата, это не отдельные денежные транзакции.
+Все три клиентские зоны в каждом run пришли с исходным расхождением и получили
+точный local offset, `center_error=0`, неизменный station transform/range и
+созданную native mesh. Остальные resource/backend/world/shutdown `(E)` не
+устранялись и сохранены; это не заявление о полностью чистом engine log.
+
+Полный `Invoke-AICFChecks.ps1 -EvidenceRoot <evidence>/offline-final` —
+**69/69 PASS/0**, runner exit **0**, без исключений. `offline-verdict.json`
+сверяет точное множество checks с текущим полным набором.
+Профильные проверки: Co-op static **39** negative mutations, support area static
+**9** negative mutations, log contracts **14 positive / 63 negative**.
+
+**NOT RUN:** ручной UI input/внешний вид — запрещены terminal-only workflow,
+native readbacks их не заменяют. Runtime покупки RHS/WCS/Everon, save/load,
+packaged/Workshop build и долгий soak не запускались; RHS/WCS подтверждены
+компиляцией, а не такой runtime матрицей.
+
+Тестовые game/Workbench процессы завершены. Три task stages архивированы
+с SHA-256 (`stage-archives.json`) и адресно удалены. Для повторного запуска
+нужно восстановить соответствующий source ZIP и использовать свежие profiles;
+полные logs/argv/manifests/native exits сохранены в evidence.
+Изменённые файлы:
+
+- Production `Integration/AICF_BarracksRecruitment.c` (rename прежнего
+  `AICF_CoopRecruitment.c`) и `Integration/AICF_SupportStationArea.c`.
+- `tests/fixtures/AICF_CoopScenarioProbe.c`, `AICF_CoopBarracksProbe.c`,
+  `AICF_SupportStationAreaProbe.c`; `tests/static/Test-CoopScenarioStatic.ps1`,
+  `Test-SupportStationAreaStatic.ps1`; `tests/log-audits/Test-CoopScenarioLog.ps1`;
+  `tests/contracts/Test-CoopScenarioLogContracts.ps1`.
+- `README.md`; `agent-notes/ARCHITECTURE.md`, `COOP_SCENARIO.md`, `GAMEPLAY.md`,
+  `README.md`, [SUPPORT_STATION_AREA.md](SUPPORT_STATION_AREA.md), `TESTING.md`,
+  `TEST_FIXTURES.md`.
+
+Push, PR, merge и публикация не выполнялись.
+
+## Co-op: найм оплаченного отделения Guard из казармы — 2026-10-18
+
+Продолжение `codex/arland-coop-ussr` от чистого `22410e7`. Evidence:
+`.codex-runtime/coop-barracks-recruit-20261018/`. Game/Server/Workbench
+**1.8.0.13**, `binaries.json`. Перед production правкой релевантный
+`Invoke-AICFChecks.ps1 -Name Test-CoopScenarioStatic.ps1,Test-CoopScenarioLogContracts.ps1,Test-SquadCommandsContracts.ps1,Test-RuntimeLauncherStatic.ps1 -EvidenceRoot <evidence>/before`
+— **4/4 PASS/0**.
+
+Установленная причина: `Group_USSR_FireGroup_Guard` создаёт четыре
+`Character_USSR_*_Guard` с `Recruitable=0`; обычные FireGroup/ManeuverGroup
+создают recruitable characters. Предыдущий probe использовал другой GROUP
+catalog и проверил только одного обычного бойца. Он не проверял Guard из
+реального списка казармы, поэтому этот дефект остался незамеченным.
+Серверный `source-prefabs` подтвердил различие prefab flags. `native-before`
+прошёл настоящий заказ Guard через native building RPC: лидер 1, slave 0,
+max AI 4, но native Recruit вернул отказ с recruitable 0. Это намеренный
+baseline отказ, не PASS исправления; при раннем закрытии editor клиент также
+получил две cleanup SCRIPT(E), исправленные в lifecycle финальной fixture.
+
+Production `Integration/AICF_CoopRecruitment.c` разрешает найм только группе,
+созданной native player order на human side Co-op, после повторной проверки
+authority, provider, controlled player и faction. Native callback faction
+у группы **null**: она не имеет FactionAffiliationComponent. Фракция берётся
+через `SCR_AIGroup.GetFaction`, ненулевое несовпадение отклоняется. Marker
+конкретной группы распространяется на готовых и async members с повторной
+parent/faction проверкой. `SetRecruitable` вызывается только при изменении;
+native лидерство, ownership RPC, лимит и `SetRecruited` не подменяются.
+
+Терминальные compile gates:
+
+- `Compile.ps1 -Label production-final` — **PASS/0**, production без fixtures.
+- `Compile.ps1 -SourceRoot <acceptance-stage> -Label acceptance` и
+  `-SourceRoot <standard-stage> -Label standard-regression` — **PASS/0**.
+- Co-op static — **38 negative mutations PASS**; log contracts —
+  **8 positive / 52 negative PASS**. Полный
+  `Invoke-AICFChecks.ps1 -EvidenceRoot <evidence>/offline-final` — **68/68 PASS/0**,
+  без исключений; `<evidence>/offline-final/summary.json`.
+
+Runtime запускается только `Run.ps1` → `tools/Start-AICFRuntime.ps1` из отдельных
+терминальных сессий. Для `native-final`/`acceptance2` — `StockCoopUSSR`, Easy,
+170000/180000 ms, client `-Player`, подтверждённые listeners 2423/2425.
+Client launcher проверил свежий CLI, PID и ROSTER_READY; manifests сохранены.
+
+- `native-final`: реальная покупка Guard, четыре последовательных native
+  `RequestAddAIAgent`, readback recruited/membership и AIAgent parent на сервере;
+  native limit 4 сохранён, отдельные неоплаченные Guard остались unrecruitable.
+  Оба полных stopped logs имеют **0 script errors**, 16 server / 78 client
+  прочих `(E)`. Client `Test-CoopScenarioLog.ps1 -Client -RequireBarracks` —
+  **PASS/0**. Server strict gate — **FAIL/1** из-за ошибочного чтения цены 0
+  в ранней fixture; это не оплата 0 в игре и не зелёная пара gates.
+- Цена Guard берётся через `SCR_EditableGroupUIInfo.GetGroupBudgetCost`:
+  обычный `GetEntityBudgetCost` намеренно возвращает пустой список для группы.
+  `acceptance2` подтвердил quote **300**, supplies **625 → 325**, всю покупку,
+  найм **4/4**, cap **4** и неизменённых неоплаченных Guard. Resource invoker
+  фиксирует изменения агрегата, включая пересборку графа: `debited=925` и
+  `credited=625` дают net 300, это не журнал валовых денежных транзакций.
+  Server strict `-RequireBarracks` — **PASS/0**, script errors 0.
+- **Открытый runtime blocker:** `acceptance2` client strict gate — **FAIL/1**:
+  stock `SCR_SupportStationAreaMeshComponent` для REPAIR в `<2265.115967,
+  88.860016,1216.567871>` сравнивает local offset `<0.000610352,-0.00376129,
+  -2.50098>` с `<0,0,-2.5>` точным равенством. Полный client log содержит одну
+  SCRIPT(E); отказ не исключён из анализатора. Дефект stock asset/float precision
+  ранее уже наблюдался и в этой задаче не исправлен. Финальная **пара** strict
+  barracks gates не объявляется PASS; ready PR/release этим отчётом не разрешён.
+- `acceptance` ранее упал **до покупки** с `DXGI_ERROR_DEVICE_HUNG` и native
+  exit `-1073741819`. Полные console/error logs и dump сохранены, PASS не заявлен.
+- `Run.ps1 -Case standard-regression -Variant Stock -Duration 45000 -Port 2426`:
+  **14/14**, roster **10+10**, full stopped audit **PASS/0**, script errors 0.
+  Дополнительная попытка `AICF_AllowPurchasedRecruitment` в STANDARD не меняет
+  Guard flags: отдельный readback **4/4 остаются unrecruitable**.
+
+`runtime-verdicts.json` и `*-audit.txt` содержат все verdicts, без объединения
+логов разных запусков в вымышленную успешную пару. `source-integrity.json`
+подтвердил **235/235** одинаковых production Core/Arland файлов для
+native-final, acceptance и STANDARD; hash barracks fixture совпал. Все 12
+task stages адресно архивированы и удалены; ZIP SHA-256 — `stage-archives.json`.
+Тестовых игровых процессов нет. Неудачные compile/diagnostic runs сохранены,
+включая неверный BaseGameMode cast, имя fixture variable `owned`, prototype
+parameter names и занятый listener; их исправление подтверждено новыми gates.
+
+**NOT RUN:** ручной UI input/визуальная оценка игроком (terminal-only workflow),
+новый packaged/Workshop build, RHS/WCS/Everon, длительный soak и сохранение/
+загрузка кампании. Они не выдаются за PASS. Новые client runs заранее объяснялись
+пользователю как автоматические; участия игрока в этих проверках не требовалось.
+
+Изменены Core `AICF_CoopRecruitment.c`; `AICF_CoopBarracksProbe.c`, Co-op
+static/log audit/log contracts; README и agent-notes ARCHITECTURE,
+COOP_SCENARIO, README, TEST_FIXTURES, TESTING. Push/PR/merge/публикация не выполнялись.
+
+## Co-op: стартовый список фракций, группы игроков и найм — 2026-10-18
+
+Продолжение `codex/arland-coop-ussr` от `279e2d2`, начальное дерево чистое.
+Evidence: `.codex-runtime/coop-join-recruit-20261018/`; binaries game/server/
+Workbench **1.8.0.13**, `binaries.json`. Пользователь подтвердил заказ отделения
+из списка казармы и отсутствие прав лидера; его снимки и симптомы не заменяют
+терминальный native readback.
+
+Production: WelcomeScreen скрывает US/FIA после native создания tiles,
+сохраняя соответствие sorted indices. Co-op явно разрешает native меню групп
+и выдвижение в лидеры; server join/create страхует отсутствие membership после
+faction callbacks и не меняет существующую группу. STANDARD делегирует native
+policy; лимит ИИ и проверки найма не ослаблялись. В обычном native UI контроль
+уже получал группу и лидера: гипотеза о безусловно сломанном автовступлении
+не подтвердилась. Исправление не приписывает этому единственную причину отказа.
+
+Свежий `Invoke-AICFChecks.ps1 -Name Test-CoopScenarioStatic.ps1,
+Test-SquadCommandsContracts.ps1,Test-SquadRespawnContracts.ps1,
+Test-VictoryRespawnStatic.ps1 -EvidenceRoot <evidence>/baseline` — **4/4 PASS/0**.
+Первое ошибочное имя check было отклонено runner до выполнения, не тестовый FAIL.
+Полный `Invoke-AICFChecks.ps1 -EvidenceRoot <evidence>/offline-final` —
+**68/68 PASS/0**, без исключений; `offline-verdict.json`.
+После расширения log gate отдельно повторены Co-op static и log contracts:
+`-Name Test-CoopScenarioStatic.ps1,Test-CoopScenarioLogContracts.ps1
+-EvidenceRoot <evidence>/leader-contracts` — **2/2 PASS/0**;
+**29 negative static mutations**, **5 positive / 37 negative log contracts**.
+Последнее расширение log gate проверено этим отдельным повтором; production
+после полного runner не менялся. Это не второй чистый полный запуск.
+
+`Compile.ps1 -Label final-production`, `-SourceRoot <evidence>/stage
+-Label leader-fixture` и `-SourceRoot <evidence>/standard-stage
+-Label standard-control` — **Workbench PASS/0**, `Script validation successful`,
+script/VM/fatal ошибок нет. Exact argv, stdout, exit и полные logs — `wb-*`.
+`production-stage-hashes.json`: **234/234** production Core/Arland файлов
+совпадают с обоими stage. Fixtures в production отсутствуют.
+
+`Run.ps1 -Case leader-final -Duration 160000` и отдельная клиентская сессия
+с `-Case leader-final -Client -Player -Duration 160000` используют только
+canonical launcher, fresh profiles и listener 2412. Клиент прошёл точный
+CLI/live PID/ROSTER_READY gate. Native intro callbacks дали US=hidden,
+USSR=visible, FIA=hidden. Fixture сняла лидерство на сервере; клиент из состояния
+`leader=0` отправил **штатное голосование**, сервер подтвердил нового лидера.
+Затем `CanBeExecuted` native Recruit разрешил бойца, клиент отправил
+`RequestAddAIAgent`, сервер подтвердил IsRecruited + slave membership + реальный
+parent AIAgent, клиент подтвердил membership. Ни оплаты, ни штатных authority
+проверок fixture не подменяет; NPC подготовлен из stock GROUP catalog.
+
+Оба `Test-CoopScenarioLog.ps1 -RequireRecruit` по **полным остановленным** logs
+— **PASS/0**, server **17/17** scenario cases; script errors **0/0**, прочие
+native `(E)` **16 server / 71 client**. Commands, manifest, native exit 0,
+full logs и `leader-final-*-audit.txt` сохранены. Предыдущие `native-recruit3`
+и `final` также подтвердили native найм; последний gate дополнительно требует
+непосредственно голосование из состояния без лидера.
+
+Обычный сценарий: `Run.ps1 -Case standard-control -Variant Stock -Duration
+30000 -SourceRoot <evidence>/standard-stage -Port 2413` — **14/14**, roster
+10+10, native exit 0, полный `Test-CoopScenarioLog.ps1` **PASS/0**, script errors
+**0**, прочие native `(E)` **16**. Сценарии не делили listener.
+
+Диагностические неудачи сохранены, не объявляются PASS: первые fixtures имели
+ошибки сигнатуры/порядка загрузки; ранний spawn без выбранного native loadout
+дал VM в stock CanPlayerSpawn_S; исходный purchase probe не дошёл до покупки,
+а выбор старого catalog spawner не соответствовал доступным services. Один
+контроль был запущен до освобождения 2412: server exit 0 без ROSTER_READY,
+client readiness корректно отказал. В ранних runs встречалась stock
+SupportStationAreaMesh offset SCRIPT(E) при auto construction США. Этот дефект
+asset/precision не исправлялся: финальная recruitment fixture останавливает
+auto construction для изоляции, не доказывая отсутствие этой диагностики в
+полном матче. Свежий обычный Stock control прошёл без SCRIPT(E).
+Снимки прежнего пользовательского матча — `manual-*-logs/`, это не stopped gate.
+
+**NOT RUN:** внешний вид и ручной input меню — workflow запрещает GUI automation;
+проверено native состояние widgets, не визуальная раскладка. Повторная оплата и
+создание полного отделения через интерфейс казармы не проверялись; это не новый
+PASS оплаты. Также не выполнялись бой до победы, respawn после смерти, RHS/WCS,
+packaged build/Workshop и длительный soak. Общий engine error-free gate не
+заявляется. Push, merge, PR и публикация не выполнялись.
+
+Изменённые файлы: production
+`UI/AICF_CoopFactionMenu.c`, `Integration/AICF_CoopPlayerGroups.c`;
+`tests/fixtures/AICF_CoopRecruitProbe.c`,
+`tests/static/Test-CoopScenarioStatic.ps1`,
+`tests/log-audits/Test-CoopScenarioLog.ps1`,
+`tests/contracts/Test-CoopScenarioLogContracts.ps1`;
+`README.md`, `agent-notes/README.md`, `ARCHITECTURE.md`, `COOP_SCENARIO.md`,
+`TEST_FIXTURES.md` и этот отчёт.
+`git diff --check` — **PASS/0**. Тестовые native процессы завершены; оба stage
+сохранены в source ZIP с SHA-256 (`source-archives.json`) и удалены адресно.
+Полные profiles/logs, manifests, команды, native exits и индекс неудачных
+попыток оставлены в evidence. Игровой сеанс по запросу пользователя запускается
+отдельно из production без fixtures и не является stopped runtime gate.
+
+## Arland Co-op: выбор фракции, строительство и Muzzle lifetime — 2026-10-18
+
+Продолжение `codex/arland-coop-ussr` от `e73da70`, начальное дерево чистое.
+Evidence: `.codex-runtime/arland-coop-followup/`; game/server/Workbench —
+**1.8.0.13**, `binaries.json`. Production изменения: policy player access и
+auto construction, фильтр native faction menu, authority request/assignment
+guards и локальная muzzle reference в EquipmentPlan.Build.
+Workers, native IsPlayable/HQ/opponents и gameplay entity cleanup не меняются.
+
+Свежий selected baseline через `Invoke-AICFChecks.ps1 -Name ... -EvidenceRoot
+<root>/baseline` — **6/6 PASS/0**: Co-op, construction, builders, equipment,
+match shutdown и shutdown log contracts. Первый вызов с ошибочным именем audit
+отклонён runner до проверок; это не тестовый FAIL.
+`access-after` — **4/4 PASS/0**, `access-ui-after` — **2/2 PASS/0**.
+После защиты native IsPlayable отдельно повторён Co-op static — **PASS/0**,
+19 negative mutations, `coop-static-final2.txt`.
+Полный `Invoke-AICFChecks.ps1 -EvidenceRoot <root>/offline-final` —
+**68/68 PASS/0**, без исключений; `offline-final-verdict.json`.
+Последнее усиление только Co-op static (запрет глобального IsPlayable override)
+проверено отдельным повтором с 19 mutations выше; production после full runner
+не менялся. Equipment contracts: 22 rules / 19 negative mutations; Co-op log
+contracts: 3 positive / 20 negative; shutdown log: 4 positive / 35 negative.
+
+Терминальный `Compile.ps1 -Label production-final` без fixtures и
+`-SourceRoot <root>/stage -Label final-fixture`, а также
+`-SourceRoot <root>/shutdown-stage -Label shutdown-plan-batches` — **PASS/0**:
+`Script validation successful`, script/VM/fatal errors нет. Первые два
+sandbox Workbench attempts завершились `-1 / SteamAPI_Init failed`, validation
+не завершена; разрешённые повторные terminal runs дали PASS. Все logs сохранены.
+`final-source-hashes.json`: **233/233** production Core/Arland файлов совпадают
+с Co-op stage; test-only fixture проверяется отдельным SHA-256.
+
+Runtime запускается только canonical launcher из отдельных server/client
+сессий. `Run.ps1 -Case coop-final -Difficulty Hard -Duration 150000 -Winner US`:
+**18/18 cases**, native exit 0, full stopped log audit **PASS/0**,
+script errors **0**, прочие native `(E)` **16**. Client `-Client -Player`
+прошёл exact CLI/live PID/ROSTER_READY gate, получил authority отказ US и FIA,
+затем вступил в СССР и получил controlled character. Его строгий
+`Test-CoopScenarioLog.ps1 -Client -RequirePlayer` — **PASS/0**, script errors **0**,
+прочие native `(E)` **86**. Это initial spawn и native intents, не ручной UI input.
+В runtime подтверждён допуск auto construction только США при работающем
+BaseBuilderService; законченная player construction операция не заявляется.
+
+`Run.ps1 -Case standard-final -Variant Stock -Difficulty Medium -Duration 30000
+-Winner USSR`: **15/15 cases**, roster 10+10, native HQ/IsPlayable сохранены,
+production territorial winner USSR, full stopped audit **PASS/0**, script errors
+**0**, прочие native `(E)` **16**. `muzzle-local` — первый контроль минимальной
+правки, **18/18**, full stopped audit **PASS/0**, script errors **0**.
+
+`RunShutdown.ps1` / `shutdown-fixed`: три пакета по 8 Draft операций плюс
+**24/24 EquipmentPlan Build/destructor**. Full `Test-ShutdownLog.ps1 -Batches
+-RequireStop` — **PASS/0**, script errors и leaked objects **0**; native exit 0.
+Через 15 секунд покоя **0 из 2160** sampled entities живы; после Stop —
+**0 из 2250**, drafts **0**, created=destroyed=**50**.
+
+Причина Muzzle подтверждена контролем `shutdown-mutant`: в отдельном stage
+возвращён только inline-вызов Muzzle в условие for, все остальные source files
+совпадают (`mutant-source-comparison.json`). Compile — **PASS/0**, native exit 0,
+но full runtime audit — **FAIL/1**: **41 script errors / 128 leaked objects**,
+неполные operation/plan records и completion. Этот FAIL ожидаемо доказывает,
+что расширенный native gate отклоняет дефект; он не является production PASS.
+Прежние Draft batches не вызывали Plan.Build/destructor в каждой операции;
+обычная остановка OnGameEnd не доказывала раннюю Stop(true). Старые результаты
+ниже сохраняются как исторические, а не подтверждение этого пути.
+
+Все диагностические неудачи сохранены: перестановка roots, ранний unarm,
+transient plan и очистка до EndGameMode не устранили удержание. Первая попытка
+ограничить глобальный IsPlayable нарушила native HQ/opponent setup; вариант
+полностью исключён, запрет перенесён в меню и authority. Индекс —
+`runtime-attempts.json`; production не содержит этих экспериментов.
+
+**NOT RUN:** визуальный осмотр меню/HUD и ручной input — terminal-only workflow
+запрещает GUI automation; нужен игрок, который открывает выбор фракции и
+проверяет единственный вариант СССР. Static UI contracts и authority RPC
+readbacks не выдаются за визуальный PASS. Также не проверялись физический бой
+до победы, законченная доставка/строительство, смерть и повторный respawn,
+новые RHS/WCS runtime runs, packaged build/Workshop и длительный soak.
+Команды, manifests, exit codes и полные stopped logs находятся в evidence;
+resource/asset diagnostics не исключены из сохранённых logs, общий engine
+error-free gate не заявляется. Push, merge, PR и публикация не выполнялись.
+Собственные native процессы завершены; три известных stage-каталога сохранены
+в source zip с SHA-256 и удалены. Полные profiles/logs оставлены в evidence.
+`git diff --check` — **PASS/0**; проверены 356 локальных Markdown file links,
+битых нет. Список изменённых файлов — `changed-files.txt` в evidence.
+
+## Ванильный Arland Co-op СССР — 2026-10-18
+
+Ветка `codex/arland-coop-ussr` от актуального `origin/main`
+`bb081ebae639beea09a6c85c10be9cc0bbeae38a`; начальное дерево чистое.
+Добавлены три inherited headers, Core match policy, пустой roster стороны
+игроков, per-faction ticket defeat, replicated mode и UI gate.
+Контракты и запуск — [COOP_SCENARIO.md](COOP_SCENARIO.md).
+Evidence: `.codex-runtime/arland-coop/`. Binaries game/server/Workbench —
+**1.8.0.13**, версии сохранены в `binaries.json`.
+
+**BLOCKER:** полный runtime gate завершения матча остаётся **FAIL**.
+После успешной production территориальной победы `AICF_EquipmentDraft.Clear`
+выдаёт `Can't delete instance (of class: 'MuzzleComponent') with 1 references`,
+VM exception и leaked native classes. Это воспроизводится также в обычном
+Stock / STANDARD на данной ветке; production equipment cleanup не изменялся.
+Отдельный контроль на неизменённом `bb081eb` воспроизвёл ту же ошибку (ниже).
+Это сохранённый baseline FAIL, а не разрешённое исключение: Co-op не готов к ready PR.
+
+Baseline `Invoke-AICFChecks.ps1 -Name <шесть профильных audits>
+-EvidenceRoot .codex-runtime/arland-coop/targeted-before` — **6/6 PASS/0**:
+AICommanderModeStatic, ConstructionStatic, RuntimeLauncherStatic,
+ScenarioHeadersStatic, Stage35Static, VictoryRespawnStatic. Baseline failures нет.
+Избыточный полный `offline-before` остановлен адресно; его неполный результат
+не является полным baseline (`NOT-COMPLETE.txt`, список PID сохранён).
+
+Первый полный `offline-after1` — **65 PASS / 2 FAIL из 67**, exit 1:
+RuntimeLauncher требовал явных legacy tank/passenger flags в новых headers;
+Stage4 требовал hardcoded десять slots в цикле создания faction state.
+В headers добавлены нулевые flags, Stage4 проверяет предусмотренное scenario
+число slots, а новый Co-op audit отдельно сохраняет STANDARD=10+10.
+Проверки не исключались. `Invoke-AICFChecks.ps1 -Suite Static
+-EvidenceRoot <root>/static-final` — **27/27 PASS/0**.
+`-Name <CoopScenarioLogContracts,RuntimeLauncherStatic,Stage4Static>
+-EvidenceRoot <root>/offline-corrections` — **3/3 PASS/0**.
+`latest-offline-results.json` содержит актуальные **68/68 PASS** по объединённым
+результатам этих запусков; это не один чистый полный запуск.
+
+Окончательный полный `Invoke-AICFChecks.ps1 -EvidenceRoot
+.codex-runtime/arland-coop/offline-final` — **68/68 PASS/0**, без исключений.
+После расширения player readback отдельно повторён Co-op log contract —
+**3 positive / 18 negative PASS/0**, `coop-log-contracts-final2.txt`.
+Изменение не затрагивало production source после полного runner.
+
+`Compile.ps1 -Label production-final` и
+`Compile.ps1 -SourceRoot <root>/stage -Label fixture-final` — **PASS/0**,
+`Script validation successful`, script/VM/fatal ошибок нет.
+Exact argv, stdout, exits и полные logs — `wb-*-argv.json`, `wb-*`.
+`final-source-hashes.json`: **229/229** production файлов Core/Arland совпадают
+со stage, единственное дополнительное `.c` — test-only Co-op fixture в UI.
+
+`Run.ps1` вызывает только canonical launcher, fresh profiles, порт 2411.
+Сервер и client запускаются отдельными терминальными сессиями; launcher
+подтверждает CLI, живой PID и ROSTER_READY до подключения. Commands, manifests
+и exits — `<case>-{server,client}-{command.json,launcher.txt,exit.txt}`;
+полные stopped logs — `profile-<case>-<role>/logs/logs_*/console.log`.
+
+Первый `easy` server — **15/15 cases**, 120 секунд наблюдения, native exit 0,
+полный `Test-CoopScenarioLog.ps1` **PASS/0**. Connected JIP client — native exit 0,
+replicated readback **PASS**, полный log audit **PASS/0**. Script errors — 0;
+прочие native `(E)` — 16 server / 82 client, общий engine/assets error-free gate
+не заявляется. Это наблюдение bootstrap/JIP, не завершение боя.
+
+`medium3` и `hard-final` проверяют реальные headers и готовность 10/0 slots,
+нулевой SSR roster, budget 100, отсутствие ticket defeat СССР, helpers и
+production territorial winner US / USSR соответственно: по **16/16 cases**.
+Ownership целей подготавливает fixture. Оба **full runtime gates — FAIL/1**:
+10 script errors после COOP_DONE, несмотря на native exit 0 / Game destroyed.
+`audit-medium3-server.txt`, `audit-hard-final-server.txt` сохраняют отказ.
+Нельзя выдавать положительные cases за полный runtime PASS.
+
+Финальный `easy-final-server` — **15/15**, 90 секунд, полный log audit **PASS/0**.
+`easy-final-client` подтвердил snapshot, но полный audit — **FAIL/1**:
+одна stock `SCR_SupportStationAreaMeshComponent` SCRIPT(E) об offset REPAIR зоны.
+Эта строка не исключена из gate; native prefab не изменялся.
+Следующий `player-final`: server **15/15**, 180 секунд, полный audit **PASS/0**;
+connected client штатно вступил в СССР, запросил native respawn и получил
+controlled character своей фракции. `COOP_CLIENT_PLAYER pass=1` и JIP snapshot
+с 0 managed SSR agents подтверждены. Строгий audit `-Client -RequirePlayer`
+требует точный manifest flag и native readback — **PASS/0**. Script errors 0;
+прочие native `(E)` — 16 server / 87 client. Это initial spawn, не смерть/повторный respawn.
+`standard-final`: **12/12**, 90 секунд, roster 10+10, floor 200,
+обычная остановка и полный audit **PASS/0**. Все native exits — 0.
+
+Контроль ошибки завершения: `git archive bb081eb` создал отдельный
+`baseline-source.tar`; в baseline stage добавлена только `BaselineEndProbe.c`
+без Co-op API. `Compile.ps1 -SourceRoot <baseline-stage> -Label baseline-control`
+— **PASS/0**. `RunBaseline.ps1` вызывает canonical launcher Stock, тот же graph
+и версии: `[BASELINE_END_CASE] ended=1 us_slots=10 ussr_slots=10`, native exit 0,
+но **10 SCRIPT(E), MuzzleComponent VM и leaks**, обычный full runtime gate — **FAIL**.
+Exact archive hash, full stopped log и verdict — `baseline-runtime-verdict.json`.
+Первый запуск был отклонён по тайм-ауту auto-review до старта процесса;
+разрешённый повтор выполнен. Это не runtime failure запуска до его исполнения.
+
+Все неудачные attempts сохранены. Fixture сначала загружалась раньше campaign
+state и не компилировалась; перенесена в UI. Исправлены отдельный owner victory
+и порядок явного fixture cleanup. Первое изменение PowerShell audit потеряло
+BOM и дало parser error; BOM восстановлен. Эксперименты cleanup затронули только
+stage: late weapon action, selected weapon release, private AI controller,
+local delete, освобождение native collections и nested attachments. Они не
+дали доказанного исправления и полностью удалены из финального stage.
+`medium4` с экспериментальным SelectWeapon(null) — native access violation
+**-1073741819**, это FAIL, dump и crash logs сохранены.
+Остальные failed runs имеют полные logs; `runtime-attempts.json` — индекс.
+
+**NOT RUN:** визуальная оценка пунктов меню/HUD и ручной input игрока — требуется
+человек, GUI workflow запрещён; физический захват всех целей игроками;
+завершённая доставка припасов и достройка layout в Co-op; смерть и повторный respawn игрока
+pipeline, packaged build/Workshop, долгий soak. Наличие services не объявляется
+доказательством законченной доставки или строительства. Нет нового релиза,
+push, merge или готового PR.
+
+Для ручного UI smoke требуется выбрать Co-op СССР в меню, вступить в СССР,
+открыть карту и проверить отсутствие панели боевых отрядов при доступном
+снабжении. Эта визуальная проверка агенту недоступна по terminal-only правилам.
+`git diff --check` — **PASS/0**, проверены 210 локальных Markdown-ссылок, битых нет.
+Полный список 35 изменённых файлов — `changed-files.txt` в evidence.
+Тестовые процессы завершены, собственные `stage` / `baseline-stage` удалены;
+логи, profiles, baseline archive и hashes сохранены (`cleanup.txt`).
+
 ## WCS equipment failures — issue #67, 2026-10-22
 
 Ветка `codex/issue67-equipment-fix` от актуального `main`

@@ -4,6 +4,8 @@ class AICF_FactionState
 	protected FactionKey m_sFactionKey;
 	protected ref array<ref AICF_GroupSlot> m_aGroupSlots = {};
 	protected ref AICF_TicketLedger m_TicketLedger;
+	protected int m_iExpectedSlotCount;
+	protected bool m_bTicketDefeatEnabled;
 
 	void AICF_FactionState(FactionKey factionKey, AICF_Stage1Config config)
 	{
@@ -17,6 +19,8 @@ class AICF_FactionState
 			resolvedConfig.GetInitialTickets(),
 			resolvedConfig.GetReplacementTicketCost());
 
+		m_iExpectedSlotCount = resolvedConfig.GetMatchRules().GetManagedSlotCount(factionKey);
+		m_bTicketDefeatEnabled = resolvedConfig.GetMatchRules().UsesTicketDefeat(factionKey);
 		BuildDefaultSlots(resolvedConfig.GetActiveForcesRolesEnabled());
 	}
 
@@ -28,6 +32,16 @@ class AICF_FactionState
 	int GetSlotCount()
 	{
 		return m_aGroupSlots.Count();
+	}
+
+	int GetExpectedSlotCount()
+	{
+		return m_iExpectedSlotCount;
+	}
+
+	bool UsesTicketDefeat()
+	{
+		return m_bTicketDefeatEnabled;
 	}
 
 	AICF_GroupSlot GetSlot(int slotId)
@@ -80,7 +94,7 @@ class AICF_FactionState
 	// WAITING и replacement SPAWNING сохраняют обычную платную recovery цепочку.
 	bool IsInitialSpawnQueueSettled()
 	{
-		if (m_aGroupSlots.Count() != AICF_Stage1Config.GROUP_SLOTS_PER_FACTION)
+		if (m_aGroupSlots.Count() != m_iExpectedSlotCount)
 			return false;
 		for (int slotIndex; slotIndex < m_aGroupSlots.Count(); slotIndex++)
 		{
@@ -214,7 +228,7 @@ class AICF_FactionState
 		int attackIndex;
 		int defendIndex;
 		int reserveIndex;
-		for (int slotId = 0; slotId < AICF_Stage1Config.GROUP_SLOTS_PER_FACTION; slotId++)
+		for (int slotId = 0; slotId < m_iExpectedSlotCount; slotId++)
 		{
 			AICF_EGroupRole role = AICF_EGroupRole.RESERVE;
 			int roleIndex;

@@ -249,6 +249,7 @@ class AICF_MatchController
 
 		m_USState = new AICF_FactionState(m_USFaction.GetFactionKey(), m_Config);
 		m_USSRState = new AICF_FactionState(m_USSRFaction.GetFactionKey(), m_Config);
+		m_Campaign.AICF_SetMatchMode(m_Config.GetMatchRules().GetMode());
 		if (m_CommandAuthorityPolicy.IsAICommanderEnabled("US"))
 		{
 			m_USAICommander = new AICF_AICommander(
@@ -458,7 +459,7 @@ class AICF_MatchController
 
 		if (!SpawnInitialRoster(m_USState, m_USFaction) || !SpawnInitialRoster(m_USSRState, m_USSRFaction))
 		{
-			Fail("INITIAL_ROSTER_FAILED", "All twenty managed groups must be created");
+			Fail("INITIAL_ROSTER_FAILED", "All scenario-managed groups must be created");
 			return;
 		}
 
@@ -1434,6 +1435,8 @@ class AICF_MatchController
 	{
 		if (!factionState || !faction)
 			return false;
+		if (factionState.GetExpectedSlotCount() == 0)
+			return factionState.GetSlotCount() == 0;
 
 		// During the first frames Conflict has initialized HQs but still reports all spawn points
 		// inactive. Initial deployment is free and may use its owned, uncontested HQ directly;
@@ -1652,7 +1655,7 @@ class AICF_MatchController
 							factionMismatchCount,
 							nonAliveCount);
 				}
-				else if (System.GetTickCount(slot.GetSpawnStartedAtMs()) >= GROUP_SPAWN_TIMEOUT_MS)
+				else if (slot.GetSpawnSimulationAgeMs() >= GROUP_SPAWN_TIMEOUT_MS)
 					HandleSpawnTimeout(factionState, faction, slot);
 				continue;
 			}
@@ -6453,7 +6456,7 @@ class AICF_MatchController
 		if (!m_USState.IsInitialSpawnQueueSettled() || !m_USSRState.IsInitialSpawnQueueSettled())
 			return;
 		// Отдельный bootstrap barrier только для платного строительства.
-		// ROSTER_READY по-прежнему требует двадцать одновременно READY slots.
+		// ROSTER_READY требует одновременно READY всех предусмотренных сценарием slots.
 		m_bInitialSpawnQueueSettled = true;
 		AICF_Stage1Diagnostics.Info("INITIAL_SPAWN_QUEUE_SETTLED",
 			string.Format("authority=server_master us_slots=%1 ussr_slots=%2 us_states=%3 ussr_states=%4 roster_ready=%5 construction_only=1",
@@ -6466,13 +6469,13 @@ class AICF_MatchController
 		if (m_bRosterReady || !m_USState || !m_USSRState)
 			return;
 
-		if (m_USState.CountSlotsByState(AICF_EGroupSlotState.READY) != AICF_Stage1Config.GROUP_SLOTS_PER_FACTION ||
-			m_USSRState.CountSlotsByState(AICF_EGroupSlotState.READY) != AICF_Stage1Config.GROUP_SLOTS_PER_FACTION)
+		if (m_USState.CountSlotsByState(AICF_EGroupSlotState.READY) != m_USState.GetExpectedSlotCount() ||
+			m_USSRState.CountSlotsByState(AICF_EGroupSlotState.READY) != m_USSRState.GetExpectedSlotCount())
 			return;
 
 		m_bRosterReady = true;
 		// false/false is the replicated pre-ready/stopped sentinel. Publish the
-		// immutable authority only when all twenty asynchronous slots are READY.
+		// immutable authority only when all configured asynchronous slots are READY.
 		m_Campaign.AICF_SetAICommanderState(
 			m_CommandAuthorityPolicy.IsAICommanderEnabled("US"),
 			m_CommandAuthorityPolicy.IsAICommanderEnabled("USSR"));
@@ -7239,6 +7242,8 @@ class AICF_MatchController
 	{
 		if (!factionState)
 			return "{AICF:AICF_UI_AWAITING_ORDERS_d367d918}";
+		if (factionState.GetExpectedSlotCount() == 0)
+			return "{AICF:AICF_UI_CoopObjective}";
 
 		AICF_GroupSlot fallback;
 		for (int slotId = 0; slotId < factionState.GetSlotCount(); slotId++)

@@ -3,6 +3,679 @@ StringTable
 	ItemClassName "CustomStringTableItem"
 	Items
 	{
+		CustomStringTableItem "{A1CF261018470001}"
+		{
+			Id "AICF_Scenario_Coop_Description"
+			Target_en_us "Human players on one side against the opposing AI commander and FIA garrisons."
+			Target_ru_ru "Игроки на одной стороне против ИИ-командира другой стороны и гарнизонов FIA."
+		}
+		CustomStringTableItem "{A1CF261018470002}"
+		{
+			Id "AICF_Scenario_Coop_Details"
+			Target_en_us "Your side has no managed AI combat squads or automatic construction. Builders, requested supply deliveries and barracks orders remain available. Your side loses by territory; the opposing AI can also lose its tickets. Only your side is available to players."
+			Target_ru_ru "У стороны игроков нет управляемых модом боевых отрядов ИИ и автоматического строительства. Строители, заказанная доставка припасов и заказы в казарме доступны. Игроки проигрывают по территории; противник также может проиграть по билетам. Для игроков доступна только выбранная сторона."
+		}
+		CustomStringTableItem "{A1CF261018470111}"
+		{
+			Id "AICF_Scenario_StockCoopUS_Name"
+			Target_en_us "AI Conflict - Arland Co-op US Army"
+			Target_ru_ru "AI Conflict — Арланд Co-op США"
+		}
+		CustomStringTableItem "{A1CF261018470112}"
+		{
+			Id "AICF_Scenario_StockCoopUS_Medium_Name"
+			Target_en_us "AI Conflict - Arland Co-op US Army (Medium)"
+			Target_ru_ru "AI Conflict — Арланд Co-op США (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470113}"
+		{
+			Id "AICF_Scenario_StockCoopUS_Hard_Name"
+			Target_en_us "AI Conflict - Arland Co-op US Army (Hard)"
+			Target_ru_ru "AI Conflict — Арланд Co-op США (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470211}"
+		{
+			Id "AICF_Scenario_EveronCoopUS_Name"
+			Target_en_us "AI Conflict - Everon Co-op US Army"
+			Target_ru_ru "AI Conflict — Эверон Co-op США"
+		}
+		CustomStringTableItem "{A1CF261018470212}"
+		{
+			Id "AICF_Scenario_EveronCoopUS_Medium_Name"
+			Target_en_us "AI Conflict - Everon Co-op US Army (Medium)"
+			Target_ru_ru "AI Conflict — Эверон Co-op США (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470213}"
+		{
+			Id "AICF_Scenario_EveronCoopUS_Hard_Name"
+			Target_en_us "AI Conflict - Everon Co-op US Army (Hard)"
+			Target_ru_ru "AI Conflict — Эверон Co-op США (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470221}"
+		{
+			Id "AICF_Scenario_EveronCoopUSSR_Name"
+			Target_en_us "AI Conflict - Everon Co-op Soviet Army"
+			Target_ru_ru "AI Conflict — Эверон Co-op СССР"
+		}
+		CustomStringTableItem "{A1CF261018470222}"
+		{
+			Id "AICF_Scenario_EveronCoopUSSR_Medium_Name"
+			Target_en_us "AI Conflict - Everon Co-op Soviet Army (Medium)"
+			Target_ru_ru "AI Conflict — Эверон Co-op СССР (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470223}"
+		{
+			Id "AICF_Scenario_EveronCoopUSSR_Hard_Name"
+			Target_en_us "AI Conflict - Everon Co-op Soviet Army (Hard)"
+			Target_ru_ru "AI Conflict — Эверон Co-op СССР (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470311}"
+		{
+			Id "AICF_Scenario_EveronNorthCoopUS_Name"
+			Target_en_us "AI Conflict - Everon North Co-op US Army"
+			Target_ru_ru "AI Conflict — Север Эверона Co-op США"
+		}
+		CustomStringTableItem "{A1CF261018470312}"
+		{
+			Id "AICF_Scenario_EveronNorthCoopUS_Medium_Name"
+			Target_en_us "AI Conflict - Everon North Co-op US Army (Medium)"
+			Target_ru_ru "AI Conflict — Север Эверона Co-op США (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470313}"
+		{
+			Id "AICF_Scenario_EveronNorthCoopUS_Hard_Name"
+			Target_en_us "AI Conflict - Everon North Co-op US Army (Hard)"
+			Target_ru_ru "AI Conflict — Север Эверона Co-op США (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470321}"
+		{
+			Id "AICF_Scenario_EveronNorthCoopUSSR_Name"
+			Target_en_us "AI Conflict - Everon North Co-op Soviet Army"
+			Target_ru_ru "AI Conflict — Север Эверона Co-op СССР"
+		}
+		CustomStringTableItem "{A1CF261018470322}"
+		{
+			Id "AICF_Scenario_EveronNorthCoopUSSR_Medium_Name"
+			Target_en_us "AI Conflict - Everon North Co-op Soviet Army (Medium)"
+			Target_ru_ru "AI Conflict — Север Эверона Co-op СССР (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470323}"
+		{
+			Id "AICF_Scenario_EveronNorthCoopUSSR_Hard_Name"
+			Target_en_us "AI Conflict - Everon North Co-op Soviet Army (Hard)"
+			Target_ru_ru "AI Conflict — Север Эверона Co-op СССР (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470411}"
+		{
+			Id "AICF_Scenario_RHSCoopUS_Name"
+			Target_en_us "AI Conflict - Arland RHS Co-op USMC"
+			Target_ru_ru "AI Conflict — Арланд RHS Co-op USMC"
+		}
+		CustomStringTableItem "{A1CF261018470412}"
+		{
+			Id "AICF_Scenario_RHSCoopUS_Medium_Name"
+			Target_en_us "AI Conflict - Arland RHS Co-op USMC (Medium)"
+			Target_ru_ru "AI Conflict — Арланд RHS Co-op USMC (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470413}"
+		{
+			Id "AICF_Scenario_RHSCoopUS_Hard_Name"
+			Target_en_us "AI Conflict - Arland RHS Co-op USMC (Hard)"
+			Target_ru_ru "AI Conflict — Арланд RHS Co-op USMC (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470421}"
+		{
+			Id "AICF_Scenario_RHSCoopUSSR_Name"
+			Target_en_us "AI Conflict - Arland RHS Co-op MSV"
+			Target_ru_ru "AI Conflict — Арланд RHS Co-op МСВ"
+		}
+		CustomStringTableItem "{A1CF261018470422}"
+		{
+			Id "AICF_Scenario_RHSCoopUSSR_Medium_Name"
+			Target_en_us "AI Conflict - Arland RHS Co-op MSV (Medium)"
+			Target_ru_ru "AI Conflict — Арланд RHS Co-op МСВ (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470423}"
+		{
+			Id "AICF_Scenario_RHSCoopUSSR_Hard_Name"
+			Target_en_us "AI Conflict - Arland RHS Co-op MSV (Hard)"
+			Target_ru_ru "AI Conflict — Арланд RHS Co-op МСВ (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470511}"
+		{
+			Id "AICF_Scenario_EveronRHSCoopUS_Name"
+			Target_en_us "AI Conflict - Everon RHS Co-op USMC"
+			Target_ru_ru "AI Conflict — Эверон RHS Co-op USMC"
+		}
+		CustomStringTableItem "{A1CF261018470512}"
+		{
+			Id "AICF_Scenario_EveronRHSCoopUS_Medium_Name"
+			Target_en_us "AI Conflict - Everon RHS Co-op USMC (Medium)"
+			Target_ru_ru "AI Conflict — Эверон RHS Co-op USMC (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470513}"
+		{
+			Id "AICF_Scenario_EveronRHSCoopUS_Hard_Name"
+			Target_en_us "AI Conflict - Everon RHS Co-op USMC (Hard)"
+			Target_ru_ru "AI Conflict — Эверон RHS Co-op USMC (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470521}"
+		{
+			Id "AICF_Scenario_EveronRHSCoopUSSR_Name"
+			Target_en_us "AI Conflict - Everon RHS Co-op MSV"
+			Target_ru_ru "AI Conflict — Эверон RHS Co-op МСВ"
+		}
+		CustomStringTableItem "{A1CF261018470522}"
+		{
+			Id "AICF_Scenario_EveronRHSCoopUSSR_Medium_Name"
+			Target_en_us "AI Conflict - Everon RHS Co-op MSV (Medium)"
+			Target_ru_ru "AI Conflict — Эверон RHS Co-op МСВ (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470523}"
+		{
+			Id "AICF_Scenario_EveronRHSCoopUSSR_Hard_Name"
+			Target_en_us "AI Conflict - Everon RHS Co-op MSV (Hard)"
+			Target_ru_ru "AI Conflict — Эверон RHS Co-op МСВ (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470611}"
+		{
+			Id "AICF_Scenario_EveronNorthRHSCoopUS_Name"
+			Target_en_us "AI Conflict - Everon North RHS Co-op USMC"
+			Target_ru_ru "AI Conflict — Север Эверона RHS Co-op USMC"
+		}
+		CustomStringTableItem "{A1CF261018470612}"
+		{
+			Id "AICF_Scenario_EveronNorthRHSCoopUS_Medium_Name"
+			Target_en_us "AI Conflict - Everon North RHS Co-op USMC (Medium)"
+			Target_ru_ru "AI Conflict — Север Эверона RHS Co-op USMC (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470613}"
+		{
+			Id "AICF_Scenario_EveronNorthRHSCoopUS_Hard_Name"
+			Target_en_us "AI Conflict - Everon North RHS Co-op USMC (Hard)"
+			Target_ru_ru "AI Conflict — Север Эверона RHS Co-op USMC (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470621}"
+		{
+			Id "AICF_Scenario_EveronNorthRHSCoopUSSR_Name"
+			Target_en_us "AI Conflict - Everon North RHS Co-op MSV"
+			Target_ru_ru "AI Conflict — Север Эверона RHS Co-op МСВ"
+		}
+		CustomStringTableItem "{A1CF261018470622}"
+		{
+			Id "AICF_Scenario_EveronNorthRHSCoopUSSR_Medium_Name"
+			Target_en_us "AI Conflict - Everon North RHS Co-op MSV (Medium)"
+			Target_ru_ru "AI Conflict — Север Эверона RHS Co-op МСВ (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470623}"
+		{
+			Id "AICF_Scenario_EveronNorthRHSCoopUSSR_Hard_Name"
+			Target_en_us "AI Conflict - Everon North RHS Co-op MSV (Hard)"
+			Target_ru_ru "AI Conflict — Север Эверона RHS Co-op МСВ (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470711}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHSCoopUS_Name"
+			Target_en_us "AI Conflict - Arland WCS + RHS Co-op NATO"
+			Target_ru_ru "AI Conflict — Арланд WCS + RHS Co-op НАТО"
+		}
+		CustomStringTableItem "{A1CF261018470712}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHSCoopUS_Medium_Name"
+			Target_en_us "AI Conflict - Arland WCS + RHS Co-op NATO (Medium)"
+			Target_ru_ru "AI Conflict — Арланд WCS + RHS Co-op НАТО (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470713}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHSCoopUS_Hard_Name"
+			Target_en_us "AI Conflict - Arland WCS + RHS Co-op NATO (Hard)"
+			Target_ru_ru "AI Conflict — Арланд WCS + RHS Co-op НАТО (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470721}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHSCoopUSSR_Name"
+			Target_en_us "AI Conflict - Arland WCS + RHS Co-op Russia"
+			Target_ru_ru "AI Conflict — Арланд WCS + RHS Co-op РФ"
+		}
+		CustomStringTableItem "{A1CF261018470722}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHSCoopUSSR_Medium_Name"
+			Target_en_us "AI Conflict - Arland WCS + RHS Co-op Russia (Medium)"
+			Target_ru_ru "AI Conflict — Арланд WCS + RHS Co-op РФ (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470723}"
+		{
+			Id "AICF_Scenario_ArlandWCSRHSCoopUSSR_Hard_Name"
+			Target_en_us "AI Conflict - Arland WCS + RHS Co-op Russia (Hard)"
+			Target_ru_ru "AI Conflict — Арланд WCS + RHS Co-op РФ (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470811}"
+		{
+			Id "AICF_Scenario_EveronWCSRHSCoopUS_Name"
+			Target_en_us "AI Conflict - Everon WCS + RHS Co-op NATO"
+			Target_ru_ru "AI Conflict — Эверон WCS + RHS Co-op НАТО"
+		}
+		CustomStringTableItem "{A1CF261018470812}"
+		{
+			Id "AICF_Scenario_EveronWCSRHSCoopUS_Medium_Name"
+			Target_en_us "AI Conflict - Everon WCS + RHS Co-op NATO (Medium)"
+			Target_ru_ru "AI Conflict — Эверон WCS + RHS Co-op НАТО (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470813}"
+		{
+			Id "AICF_Scenario_EveronWCSRHSCoopUS_Hard_Name"
+			Target_en_us "AI Conflict - Everon WCS + RHS Co-op NATO (Hard)"
+			Target_ru_ru "AI Conflict — Эверон WCS + RHS Co-op НАТО (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470821}"
+		{
+			Id "AICF_Scenario_EveronWCSRHSCoopUSSR_Name"
+			Target_en_us "AI Conflict - Everon WCS + RHS Co-op Russia"
+			Target_ru_ru "AI Conflict — Эверон WCS + RHS Co-op РФ"
+		}
+		CustomStringTableItem "{A1CF261018470822}"
+		{
+			Id "AICF_Scenario_EveronWCSRHSCoopUSSR_Medium_Name"
+			Target_en_us "AI Conflict - Everon WCS + RHS Co-op Russia (Medium)"
+			Target_ru_ru "AI Conflict — Эверон WCS + RHS Co-op РФ (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470823}"
+		{
+			Id "AICF_Scenario_EveronWCSRHSCoopUSSR_Hard_Name"
+			Target_en_us "AI Conflict - Everon WCS + RHS Co-op Russia (Hard)"
+			Target_ru_ru "AI Conflict — Эверон WCS + RHS Co-op РФ (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470911}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHSCoopUS_Name"
+			Target_en_us "AI Conflict - Everon North WCS + RHS Co-op NATO"
+			Target_ru_ru "AI Conflict — Север Эверона WCS + RHS Co-op НАТО"
+		}
+		CustomStringTableItem "{A1CF261018470912}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHSCoopUS_Medium_Name"
+			Target_en_us "AI Conflict - Everon North WCS + RHS Co-op NATO (Medium)"
+			Target_ru_ru "AI Conflict — Север Эверона WCS + RHS Co-op НАТО (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470913}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHSCoopUS_Hard_Name"
+			Target_en_us "AI Conflict - Everon North WCS + RHS Co-op NATO (Hard)"
+			Target_ru_ru "AI Conflict — Север Эверона WCS + RHS Co-op НАТО (сложный)"
+		}
+		CustomStringTableItem "{A1CF261018470921}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHSCoopUSSR_Name"
+			Target_en_us "AI Conflict - Everon North WCS + RHS Co-op Russia"
+			Target_ru_ru "AI Conflict — Север Эверона WCS + RHS Co-op РФ"
+		}
+		CustomStringTableItem "{A1CF261018470922}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHSCoopUSSR_Medium_Name"
+			Target_en_us "AI Conflict - Everon North WCS + RHS Co-op Russia (Medium)"
+			Target_ru_ru "AI Conflict — Север Эверона WCS + RHS Co-op РФ (средний)"
+		}
+		CustomStringTableItem "{A1CF261018470923}"
+		{
+			Id "AICF_Scenario_EveronNorthWCSRHSCoopUSSR_Hard_Name"
+			Target_en_us "AI Conflict - Everon North WCS + RHS Co-op Russia (Hard)"
+			Target_ru_ru "AI Conflict — Север Эверона WCS + RHS Co-op РФ (сложный)"
+		}
+		CustomStringTableItem "{A1CF261020500001}"
+		{
+			Id "AICF_Setup_Map"
+			Target_en_us "Map"
+			Target_ru_ru "Карта"
+		}
+		CustomStringTableItem "{A1CF261020500002}"
+		{
+			Id "AICF_Setup_Content"
+			Target_en_us "Content"
+			Target_ru_ru "Контент"
+		}
+		CustomStringTableItem "{A1CF261020500003}"
+		{
+			Id "AICF_Setup_Map_Arland"
+			Target_en_us "Arland"
+			Target_ru_ru "Арланд"
+		}
+		CustomStringTableItem "{A1CF261020500004}"
+		{
+			Id "AICF_Setup_Map_Everon"
+			Target_en_us "Everon"
+			Target_ru_ru "Эверон"
+		}
+		CustomStringTableItem "{A1CF261020500005}"
+		{
+			Id "AICF_Setup_Map_EveronNorth"
+			Target_en_us "North Everon"
+			Target_ru_ru "Север Эверона"
+		}
+		CustomStringTableItem "{A1CF261020500006}"
+		{
+			Id "AICF_Setup_USMC"
+			Target_en_us "USMC"
+			Target_ru_ru "КМП США"
+		}
+		CustomStringTableItem "{A1CF261020500007}"
+		{
+			Id "AICF_Setup_MSV"
+			Target_en_us "MSV"
+			Target_ru_ru "МСВ РФ"
+		}
+		CustomStringTableItem "{A1CF261020500008}"
+		{
+			Id "AICF_Setup_NATO"
+			Target_en_us "NATO"
+			Target_ru_ru "НАТО"
+		}
+		CustomStringTableItem "{A1CF261020500009}"
+		{
+			Id "AICF_Setup_Russia"
+			Target_en_us "Russia"
+			Target_ru_ru "РФ"
+		}
+		CustomStringTableItem "{A1CF26102050000A}"
+		{
+			Id "AICF_Setup_BothSides"
+			Target_en_us "Both sides"
+			Target_ru_ru "Обе стороны"
+		}
+		CustomStringTableItem "{A1CF26102050000B}"
+		{
+			Id "AICF_Setup_Reload"
+			Target_en_us "Start loads exactly this addon set. Other enabled addons are excluded from the operation."
+			Target_ru_ru "При запуске загрузится именно выбранный набор модов. Остальные включённые моды не войдут в операцию."
+		}
+		CustomStringTableItem "{A1CF26102050000C}"
+		{
+			Id "AICF_Setup_Missing"
+			Target_en_us "Unavailable: install all dependencies for"
+			Target_ru_ru "Недоступно: установите все зависимости для"
+		}
+		CustomStringTableItem "{A1CF26102050000D}"
+		{
+			Id "AICF_Setup_MapHelp"
+			Target_en_us "Select the area of operations. North Everon limits objectives to the northern part of the island. Changing map keeps your content choice when available; otherwise the first available set is selected."
+			Target_ru_ru "Выберите район операции. Север Эверона ограничивает цели северной частью острова. При смене карты набор контента сохраняется, если доступен; иначе выбирается первый доступный набор."
+		}
+		CustomStringTableItem "{A1CF26102050000E}"
+		{
+			Id "AICF_Setup_ContentHelp"
+			Target_en_us "Vanilla uses stock equipment. RHS uses USMC and MSV. WCS + RHS uses NATO and Russia. Only enabled mod packs are shown; WCS requires RHS. Enable all dependencies in Workshop, then reopen setup. Grey options are not ready or conflict with startup parameters. No mods are downloaded here."
+			Target_ru_ru "Vanilla — штатное вооружение. RHS — КМП США и МСВ РФ. WCS + RHS — НАТО и РФ. Показаны только включённые наборы; WCS требует RHS. Включите все зависимости в Мастерской и переоткройте настройку. Серые варианты не готовы либо конфликтуют с параметрами запуска. Моды здесь не скачиваются."
+		}
+		CustomStringTableItem "{A1CF26102050000F}"
+		{
+			Id "AICF_Setup_CoopHelp"
+			Target_en_us "All players fight for the selected side against the AI. Your side has no autonomous combat squads or automatic construction. Builders and barracks orders remain available. Select a flag to change player side."
+			Target_ru_ru "Все игроки воюют за выбранную сторону против ИИ. У своей стороны нет автономных боевых отрядов и автостроительства. Рабочие и заказы солдат в казарме доступны. Выберите флаг, чтобы сменить сторону игроков."
+		}
+		CustomStringTableItem "{A1CF261020500010}"
+		{
+			Id "AICF_Setup_DifficultyHelp0"
+			Target_en_us "Easy: FIA infantry garrisons, without vehicles or road patrols. Difficulty affects defenders, not your shooting accuracy."
+			Target_ru_ru "Лёгкая: пехотные гарнизоны FIA без техники и дорожных патрулей. Сложность меняет защитников, а не точность вашей стрельбы."
+		}
+		CustomStringTableItem "{A1CF261020500011}"
+		{
+			Id "AICF_Setup_DifficultyHelp1"
+			Target_en_us "Medium: one APC per garrison with crew and up to 2 or 4 dismounts. No tanks or reinforced objective. FIA road patrols are enabled."
+			Target_ru_ru "Средняя: по одному БТР на гарнизон с экипажем и десантом до 2 или 4 бойцов. Без танков и усиленной точки. Включены дорожные патрули FIA."
+		}
+		CustomStringTableItem "{A1CF261020500012}"
+		{
+			Id "AICF_Setup_DifficultyHelp2"
+			Target_en_us "Hard: two vehicles per garrison; one intermediate objective is reinforced. Tanks are used where the content profile provides them; otherwise APCs replace them. FIA road patrols are enabled."
+			Target_ru_ru "Высокая: по две машины в гарнизоне; одна промежуточная точка усилена. Если профиль контента содержит танки, используются и они; иначе их заменяют БТР. Включены дорожные патрули FIA."
+		}
+		CustomStringTableItem "{A1CF261020500013}"
+		{
+			Id "AICF_Setup_PlayHelp"
+			Target_en_us "Start operation launches a local game with these settings and the exact selected addon set. Hover or focus any option to read its explanation."
+			Target_ru_ru "Начать операцию — запустить локальную игру с указанными параметрами и выбранным набором модов. Наведите курсор или переведите фокус на вариант, чтобы прочитать пояснение."
+		}
+		CustomStringTableItem "{A1CF261020500014}"
+		{
+			Id "AICF_Setup_HostHelp"
+			Target_en_us "Create session starts a multiplayer operation with these settings. The server name, password, player limit and network settings from the previous screen are preserved."
+			Target_ru_ru "Создать сессию — запустить сетевую операцию с этими параметрами. Название сервера, пароль, число игроков и сетевые настройки с предыдущего экрана сохраняются."
+		}
+		CustomStringTableItem "{A1CF261020500015}"
+		{
+			Id "AICF_Setup_CancelHelp"
+			Target_en_us "Cancel returns to the previous menu without starting an operation or changing the loaded addons."
+			Target_ru_ru "Отмена возвращает в предыдущее меню без запуска операции и смены загруженных модов."
+		}
+		CustomStringTableItem "{A1CF261020500016}"
+		{
+			Id "AICF_Setup_Pinned"
+			Target_en_us "Startup parameters pin this content. Open the game with the base AI Conflict addon to unlock every installed option."
+			Target_ru_ru "Параметры запуска закрепляют этот контент. Для выбора всех установленных вариантов откройте игру с базовым модом AI Conflict."
+		}
+		CustomStringTableItem "{A1CF261019500101}"
+		{
+			Id "AICF_Setup_Arland_Name"
+			Target_en_us "AI Conflict"
+			Target_ru_ru "AI Conflict"
+		}
+		CustomStringTableItem "{A1CF261019500102}"
+		{
+			Id "AICF_Setup_Description"
+			Target_en_us "Choose a map, installed content, mode, side and garrison difficulty."
+			Target_ru_ru "Выберите карту, установленный контент, режим, сторону и сложность гарнизонов."
+		}
+		CustomStringTableItem "{A1CF261019500103}"
+		{
+			Id "AICF_Setup_Details"
+			Target_en_us "Play or Host opens the universal operation setup. Available content requires all installed dependencies. The game loads exactly the selected addon set. Direct launch without the menu defaults to Arland, Vanilla, Co-op USSR, Medium."
+			Target_ru_ru "Играть или Создать сервер открывает общую настройку операции. Контент доступен при наличии всех зависимостей. Игра загрузит выбранный набор модов. Прямой запуск без меню: Арланд, Vanilla, Co-op СССР, средняя сложность."
+		}
+		CustomStringTableItem "{A1CF261019500104}"
+		{
+			Id "AICF_Setup_Title"
+			Target_en_us "Operation setup"
+			Target_ru_ru "Настройка операции"
+		}
+		CustomStringTableItem "{A1CF261023510001}"
+		{
+			Id "AICF_Setup_GuideButton"
+			Target_en_us "Setup guide"
+			Target_ru_ru "Как настроить"
+		}
+		CustomStringTableItem "{A1CF261023510002}"
+		{
+			Id "AICF_Setup_GuideTitle"
+			Target_en_us "How to prepare an operation"
+			Target_ru_ru "Как подготовить операцию"
+		}
+		CustomStringTableItem "{A1CF261023510003}"
+		{
+			Id "AICF_Setup_GuideModsTitle"
+			Target_en_us "01  Prepare your mods"
+			Target_ru_ru "01  Подготовьте моды"
+		}
+		CustomStringTableItem "{A1CF261023510004}"
+		{
+			Id "AICF_Setup_GuideMods"
+			Target_en_us "In Workshop, download and enable AI Conflict. For RHS or WCS + RHS, enable the complete pack and its dependencies. Downloaded does not mean enabled.\nAfter changing mods, reopen this setup screen. Nothing is downloaded or enabled here."
+			Target_ru_ru "В Мастерской скачайте и включите AI Conflict. Для RHS или WCS + RHS включите весь набор и его зависимости. Скачан — не значит включён.\nПосле изменения модов заново откройте это меню. Здесь моды не скачиваются и не включаются."
+		}
+		CustomStringTableItem "{A1CF261023510005}"
+		{
+			Id "AICF_Setup_GuideOptionsTitle"
+			Target_en_us "02  Choose your settings"
+			Target_ru_ru "02  Выберите параметры"
+		}
+		CustomStringTableItem "{A1CF261023510006}"
+		{
+			Id "AICF_Setup_GuideOptions"
+			Target_en_us "Choose a map and content pack.\nConflict lets players join either side. In Co-op, all players fight for the selected flag.\nSet garrison difficulty, time and weather. Check the briefing before starting."
+			Target_ru_ru "Выберите карту и набор контента.\nВ Conflict игроки выбирают любую сторону. В Co-op все играют за выбранный флаг.\nЗадайте сложность гарнизонов, время и погоду. Перед запуском проверьте сводку."
+		}
+		CustomStringTableItem "{A1CF261023510007}"
+		{
+			Id "AICF_Setup_GuideLaunchTitle"
+			Target_en_us "03  Check and start"
+			Target_ru_ru "03  Проверьте и запустите"
+		}
+		CustomStringTableItem "{A1CF261023510008}"
+		{
+			Id "AICF_Setup_GuideLaunch"
+			Target_en_us "Vanilla only: RHS/WCS are disabled or incomplete. Vanilla + RHS: RHS is enabled. All three: RHS and WCS are enabled.\nGrey option: check dependencies, downloads and the status below.\nStart operation opens a local game. Create session hosts a server using the network settings from the previous screen."
+			Target_ru_ru "Только Vanilla: RHS/WCS выключены или набор неполный. Vanilla + RHS: включён RHS. Все три: включены RHS и WCS.\nСерый вариант: проверьте зависимости, загрузки и статус внизу.\nНачать операцию — локальная игра. Создать сессию — сервер с сетевыми настройками предыдущего экрана."
+		}
+		CustomStringTableItem "{A1CF261023510009}"
+		{
+			Id "AICF_Setup_GuideClose"
+			Target_en_us "Got it"
+			Target_ru_ru "Понятно"
+		}
+		CustomStringTableItem "{A1CF261019500105}"
+		{
+			Id "AICF_Setup_Mode"
+			Target_en_us "Mode"
+			Target_ru_ru "Режим"
+		}
+		CustomStringTableItem "{A1CF261019500106}"
+		{
+			Id "AICF_Setup_Standard"
+			Target_en_us "Conflict"
+			Target_ru_ru "Conflict"
+		}
+		CustomStringTableItem "{A1CF261019500107}"
+		{
+			Id "AICF_Setup_Side"
+			Target_en_us "Player side"
+			Target_ru_ru "Сторона игроков"
+		}
+		CustomStringTableItem "{A1CF261019500108}"
+		{
+			Id "AICF_Setup_US"
+			Target_en_us "US Army"
+			Target_ru_ru "США"
+		}
+		CustomStringTableItem "{A1CF261019500109}"
+		{
+			Id "AICF_Setup_USSR"
+			Target_en_us "Soviet Army"
+			Target_ru_ru "СССР"
+		}
+		CustomStringTableItem "{A1CF26101950010A}"
+		{
+			Id "AICF_Setup_Difficulty"
+			Target_en_us "Garrison difficulty"
+			Target_ru_ru "Сложность гарнизонов"
+		}
+		CustomStringTableItem "{A1CF26101950010B}"
+		{
+			Id "AICF_Setup_Easy"
+			Target_en_us "Easy"
+			Target_ru_ru "Лёгкая"
+		}
+		CustomStringTableItem "{A1CF26101950010C}"
+		{
+			Id "AICF_Setup_Medium"
+			Target_en_us "Medium"
+			Target_ru_ru "Средняя"
+		}
+		CustomStringTableItem "{A1CF26101950010D}"
+		{
+			Id "AICF_Setup_Hard"
+			Target_en_us "Hard"
+			Target_ru_ru "Высокая"
+		}
+		CustomStringTableItem "{A1CF26101950010E}"
+		{
+			Id "AICF_Setup_Play"
+			Target_en_us "Start operation"
+			Target_ru_ru "Начать операцию"
+		}
+		CustomStringTableItem "{A1CF26101950010F}"
+		{
+			Id "AICF_Setup_Host"
+			Target_en_us "Create session"
+			Target_ru_ru "Создать сессию"
+		}
+		CustomStringTableItem "{A1CF261019500110}"
+		{
+			Id "AICF_Setup_Cancel"
+			Target_en_us "Cancel"
+			Target_ru_ru "Отмена"
+		}
+		CustomStringTableItem "{A1CF261019500111}"
+		{
+			Id "AICF_Setup_StandardSummary"
+			Target_en_us "Players can join either side. AI commanders operate on both sides."
+			Target_ru_ru "Игрокам доступны обе стороны. ИИ-командиры действуют за обе стороны."
+		}
+		CustomStringTableItem "{A1CF261019500112}"
+		{
+			Id "AICF_Setup_USSummary"
+			Target_en_us "Players: US Army. Opponent: Soviet AI. Your side has no managed combat squads or automatic construction; builders and barracks orders remain available."
+			Target_ru_ru "Игроки: США. Противник: ИИ СССР. У вашей стороны нет управляемых боевых отрядов и автостроительства; рабочие и заказы в казарме доступны."
+		}
+		CustomStringTableItem "{A1CF261019500113}"
+		{
+			Id "AICF_Setup_USSRSummary"
+			Target_en_us "Players: Soviet Army. Opponent: US AI. Your side has no managed combat squads or automatic construction; builders and barracks orders remain available."
+			Target_ru_ru "Игроки: СССР. Противник: ИИ США. У вашей стороны нет управляемых боевых отрядов и автостроительства; рабочие и заказы в казарме доступны."
+		}
+		CustomStringTableItem "{A1CF261019500114}"
+		{
+			Id "AICF_Setup_Unavailable"
+			Target_en_us "Cannot start: wait for addon scans/downloads and check dependencies or multiplayer services. Your selection has been kept."
+			Target_ru_ru "Запуск недоступен: дождитесь проверки и загрузки модов, проверьте зависимости или сетевые службы. Ваш выбор сохранён."
+		}
+		CustomStringTableItem "{A1CF261018461001}"
+		{
+			Id "AICF_Scenario_ArlandCoopUSSR_Name"
+			Target_en_us "AI Conflict - Arland Co-op USSR"
+			Target_ru_ru "AI Conflict — Арланд Co-op СССР"
+		}
+
+		CustomStringTableItem "{A1CF261018461002}"
+		{
+			Id "AICF_Scenario_ArlandCoopUSSR_Description"
+			Target_en_us "Play USSR with human players against the US AI commander and FIA garrisons."
+			Target_ru_ru "Играйте за СССР против ИИ-командира США и гарнизонов FIA."
+		}
+
+		CustomStringTableItem "{A1CF261018461003}"
+		{
+			Id "AICF_Scenario_ArlandCoopUSSR_Details"
+			Target_en_us "USSR has no managed AI combat squads. Builders and requested supply deliveries remain available. USSR loses only by territory; US tickets and territorial victory retain their usual rules. Join USSR for co-op."
+			Target_ru_ru "У СССР нет управляемых модом боевых отрядов ИИ. Строители и заказанная доставка припасов доступны. СССР проигрывает только по территории; билеты и территориальная победа США сохраняют обычные правила. Для кооператива вступайте в СССР."
+		}
+
+		CustomStringTableItem "{A1CF261018461004}"
+		{
+			Id "AICF_Scenario_ArlandCoopUSSR_Medium_Name"
+			Target_en_us "AI Conflict - Arland Co-op USSR (Medium)"
+			Target_ru_ru "AI Conflict — Арланд Co-op СССР (средний)"
+		}
+
+		CustomStringTableItem "{A1CF261018461005}"
+		{
+			Id "AICF_Scenario_ArlandCoopUSSR_Hard_Name"
+			Target_en_us "AI Conflict - Arland Co-op USSR (Hard)"
+			Target_ru_ru "AI Conflict — Арланд Co-op СССР (сложный)"
+		}
+
+		CustomStringTableItem "{A1CF261018461006}"
+		{
+			Id "AICF_UI_CoopHUD"
+			Target_en_us "Co-op // Supplies %1"
+			Target_ru_ru "Co-op // Припасы %1"
+		}
+
+		CustomStringTableItem "{A1CF261018461007}"
+		{
+			Id "AICF_UI_CoopObjective"
+			Target_en_us "Capture all objectives. Defeat: loss of all objectives."
+			Target_ru_ru "Захватите все точки. Поражение: потеря всех точек."
+		}
+
 		CustomStringTableItem "{A1CF261012270001}"
 		{
 			Id "AICF_UI_LoadoutContents"
@@ -3614,6 +4287,276 @@ StringTable
 			Id "AICF_UI_OtherWeapons"
 			Target_en_us "Other weapons"
 			Target_ru_ru "Другое оружие"
+		}
+		CustomStringTableItem "{A1CF261020700001}"
+		{
+			Id "AICF_Setup_Time"
+			Target_en_us "Time of day"
+			Target_ru_ru "Время суток"
+		}
+		CustomStringTableItem "{A1CF261020700002}"
+		{
+			Id "AICF_Setup_Weather"
+			Target_en_us "Weather"
+			Target_ru_ru "Погода"
+		}
+		CustomStringTableItem "{A1CF261020700003}"
+		{
+			Id "AICF_Setup_Time0"
+			Target_en_us "08:00"
+			Target_ru_ru "08:00"
+		}
+		CustomStringTableItem "{A1CF261020700004}"
+		{
+			Id "AICF_Setup_Time1"
+			Target_en_us "12:00"
+			Target_ru_ru "12:00"
+		}
+		CustomStringTableItem "{A1CF261020700005}"
+		{
+			Id "AICF_Setup_Time2"
+			Target_en_us "18:00"
+			Target_ru_ru "18:00"
+		}
+		CustomStringTableItem "{A1CF261020700006}"
+		{
+			Id "AICF_Setup_Time3"
+			Target_en_us "00:00"
+			Target_ru_ru "00:00"
+		}
+		CustomStringTableItem "{A1CF261020700007}"
+		{
+			Id "AICF_Setup_Time4"
+			Target_en_us "Random"
+			Target_ru_ru "Случайно"
+		}
+		CustomStringTableItem "{A1CF261020700008}"
+		{
+			Id "AICF_Setup_Weather0"
+			Target_en_us "Random"
+			Target_ru_ru "Случайно"
+		}
+		CustomStringTableItem "{A1CF261020700009}"
+		{
+			Id "AICF_Setup_Weather1"
+			Target_en_us "Clear"
+			Target_ru_ru "Ясно"
+		}
+		CustomStringTableItem "{A1CF261020700010}"
+		{
+			Id "AICF_Setup_Weather2"
+			Target_en_us "Cloudy"
+			Target_ru_ru "Облачно"
+		}
+		CustomStringTableItem "{A1CF261020700011}"
+		{
+			Id "AICF_Setup_Weather3"
+			Target_en_us "Overcast"
+			Target_ru_ru "Пасмурно"
+		}
+		CustomStringTableItem "{A1CF261020700012}"
+		{
+			Id "AICF_Setup_Weather4"
+			Target_en_us "Rain"
+			Target_ru_ru "Дождь"
+		}
+		CustomStringTableItem "{A1CF261020700013}"
+		{
+			Id "AICF_Setup_TimeHelp"
+			Target_en_us "Choose the starting time with the slider, from 00:00 to 23:59. The clock and operation briefing update immediately. Time continues at the scenario's normal speed."
+			Target_ru_ru "Выберите время начала ползунком от 00:00 до 23:59. Часы и сводка операции обновляются сразу. Во время матча сохраняется штатная скорость времени."
+		}
+		CustomStringTableItem "{A1CF261020700014}"
+		{
+			Id "AICF_Setup_WeatherHelp"
+			Target_en_us "Weather at the start of the operation. Random chooses a state supported by the map. Weather can change naturally during the match. The host's choice applies to every player."
+			Target_ru_ru "Погода в начале операции. Случайный выбор использует состояния, доступные на карте. Во время матча погода продолжит меняться естественным образом. Выбор хозяина действует для всех игроков."
+		}
+		CustomStringTableItem "{A1CF261023700001}"
+		{
+			Id "AICF_Setup_Briefing"
+			Target_en_us "OPERATION BRIEFING"
+			Target_ru_ru "СВОДКА ОПЕРАЦИИ"
+		}
+		CustomStringTableItem "{A1CF261023700002}"
+		{
+			Id "AICF_Setup_DetailsTitle"
+			Target_en_us "DETAILS"
+			Target_ru_ru "ПОДРОБНОСТИ"
+		}
+		CustomStringTableItem "{A1CF261023700003}"
+		{
+			Id "AICF_Setup_LocalSession"
+			Target_en_us "LOCAL OPERATION"
+			Target_ru_ru "ЛОКАЛЬНАЯ ОПЕРАЦИЯ"
+		}
+		CustomStringTableItem "{A1CF261023700004}"
+		{
+			Id "AICF_Setup_NetworkSession"
+			Target_en_us "HOST SESSION"
+			Target_ru_ru "СЕТЕВАЯ СЕССИЯ"
+		}
+		CustomStringTableItem "{A1CF261023710001}"
+		{
+			Id "AICF_Setup_Tag_Arland"
+			Target_en_us "ISLAND OPERATION"
+			Target_ru_ru "ОСТРОВНАЯ ОПЕРАЦИЯ"
+		}
+		CustomStringTableItem "{A1CF261023710002}"
+		{
+			Id "AICF_Setup_Tag_Everon"
+			Target_en_us "FULL THEATER"
+			Target_ru_ru "БОЛЬШОЙ ТЕАТР"
+		}
+		CustomStringTableItem "{A1CF261023710003}"
+		{
+			Id "AICF_Setup_Tag_EveronNorth"
+			Target_en_us "NORTHERN SECTOR"
+			Target_ru_ru "СЕВЕРНЫЙ СЕКТОР"
+		}
+		CustomStringTableItem "{A1CF261023710004}"
+		{
+			Id "AICF_Setup_Description_Arland"
+			Target_en_us "Compact area of operations"
+			Target_ru_ru "Компактный район операции"
+		}
+		CustomStringTableItem "{A1CF261023710005}"
+		{
+			Id "AICF_Setup_Description_Everon"
+			Target_en_us "The entire island and radio network"
+			Target_ru_ru "Весь остров и радиосеть"
+		}
+		CustomStringTableItem "{A1CF261023710006}"
+		{
+			Id "AICF_Setup_Description_EveronNorth"
+			Target_en_us "Objectives in the north of the island"
+			Target_ru_ru "Цели на севере острова"
+		}
+		CustomStringTableItem "{A1CF261024000001}"
+		{
+			Id "AICF_Briefing_Title_Overview"
+			Target_en_us "01 · Operation"
+			Target_ru_ru "01 · Операция"
+		}
+		CustomStringTableItem "{A1CF261024000002}"
+		{
+			Id "AICF_Briefing_Title_Rules"
+			Target_en_us "02 · Rules and victory"
+			Target_ru_ru "02 · Правила и победа"
+		}
+		CustomStringTableItem "{A1CF261024000003}"
+		{
+			Id "AICF_Briefing_Title_Command"
+			Target_en_us "03 · Command"
+			Target_ru_ru "03 · Командование"
+		}
+		CustomStringTableItem "{A1CF261024000004}"
+		{
+			Id "AICF_Briefing_Title_Recruitment"
+			Target_en_us "04 · Recruiting soldiers"
+			Target_ru_ru "04 · Найм бойцов"
+		}
+		CustomStringTableItem "{A1CF261024000005}"
+		{
+			Id "AICF_Briefing_Title_Equipment"
+			Target_en_us "05 · Equipment and respawn"
+			Target_ru_ru "05 · Экипировка и возрождение"
+		}
+		CustomStringTableItem "{A1CF261024000006}"
+		{
+			Id "AICF_Briefing_Title_Logistics"
+			Target_en_us "06 · Supplies and transport"
+			Target_ru_ru "06 · Снабжение и транспорт"
+		}
+		CustomStringTableItem "{A1CF261024000007}"
+		{
+			Id "AICF_Briefing_Title_Reinforcement"
+			Target_en_us "07 · Reinforcements"
+			Target_ru_ru "07 · Пополнение"
+		}
+		CustomStringTableItem "{A1CF261024000008}"
+		{
+			Id "AICF_Briefing_Title_Construction"
+			Target_en_us "08 · Building bases"
+			Target_ru_ru "08 · Строительство баз"
+		}
+		CustomStringTableItem "{A1CF261024000009}"
+		{
+			Id "AICF_Briefing_Title_Enemy"
+			Target_en_us "09 · Enemy and difficulty"
+			Target_ru_ru "09 · Противник и сложность"
+		}
+		CustomStringTableItem "{A1CF26102400000A}"
+		{
+			Id "AICF_Briefing_Title_Settings"
+			Target_en_us "10 · Setup and limitations"
+			Target_ru_ru "10 · Настройка и ограничения"
+		}
+		CustomStringTableItem "{A1CF26102400000B}"
+		{
+			Id "AICF_Briefing_Text_Overview"
+			Target_en_us "%1<br/><br/>AI Conflict adds an autonomous war to Conflict: commanders capture and defend bases, move infantry and vehicles, bring supplies, replace losses and develop infrastructure. The battlefield stays active without players. You can fight with your squad or coordinate allied forces from the map.<br/><br/>First steps: choose your faction and a player group, deploy at an available allied base, check supplies and the radio network, then choose a nearby objective. Keep your rear supplied and protect captured bases. In Co-op, recruit your own soldiers and place the buildings you need.<br/><br/>This journal is available from the briefing tool on the map. The following pages explain the rules and controls. The map shows the current situation; this is a reference, not a live status report."
+			Target_ru_ru "%1<br/><br/>AI Conflict добавляет в Conflict автономную войну: командиры захватывают и обороняют базы, перемещают пехоту и технику, доставляют снабжение, восполняют потери и развивают инфраструктуру. Боевые действия продолжаются без игроков. Можно воевать со своим отделением или координировать союзные силы с карты.<br/><br/>Первые шаги: выберите фракцию и группу игроков, развернитесь на доступной союзной базе, проверьте снабжение и радиосеть, затем выберите ближайшую цель. Обеспечивайте тыл и защищайте захваченные базы. В Co-op самостоятельно нанимайте бойцов и размещайте нужные постройки.<br/><br/>Этот журнал доступен через инструмент брифинга на карте. На следующих страницах описаны правила и управление. Текущая обстановка показана на карте; здесь находится справка, а не сводка в реальном времени."
+		}
+		CustomStringTableItem "{A1CF26102400000C}"
+		{
+			Id "AICF_Briefing_Text_RulesStandard"
+			Target_en_us "CONFLICT<br/>Players can join either main side. By default, both sides have an AI commander; a server may assign only one side to AI. Autonomous squads attack, defend and replenish while you participate in the campaign.<br/><br/>VICTORY<br/>A side wins when its opponent runs out of reinforcement tickets, or when it owns every active capture objective and none is being captured or contested. Headquarters and radio relay nodes do not count toward territorial victory. Enemy presence alone does not block victory unless an objective is actually contested.<br/><br/>Losing a managed squad and replacing it normally costs one ticket plus supplies; reinforcing its survivors costs supplies only. Capture bases, interrupt enemy logistics and preserve your army. These AI Conflict rules replace the stock strategic-location hold timer; radio coverage still matters for normal base operations."
+			Target_ru_ru "CONFLICT<br/>Игроки могут вступить в любую из двух основных сторон. По умолчанию у обеих сторон есть командир ИИ; сервер может передать ИИ только одну сторону. Автономные отделения атакуют, обороняются и пополняются, пока вы участвуете в кампании.<br/><br/>ПОБЕДА<br/>Сторона побеждает, когда у противника заканчиваются билеты пополнения либо когда она владеет всеми активными захватываемыми целями и ни одна из них не захватывается и не оспаривается. Штабы и узлы радиорелейной сети не входят в территориальное условие. Само присутствие противника не мешает победе без активного оспаривания точки.<br/><br/>Замена уничтоженного управляемого отделения обычно стоит один билет и снабжение; пополнение выживших — только снабжение. Захватывайте базы, нарушайте логистику противника и берегите армию. Эти правила AI Conflict заменяют штатное удержание стратегических точек по таймеру; радиопокрытие по-прежнему важно для работы баз."
+		}
+		CustomStringTableItem "{A1CF26102400000D}"
+		{
+			Id "AICF_Briefing_Text_RulesCoop"
+			Target_en_us "CO-OP<br/>Players fight together on the side selected before launch. Only that side is available to players. The enemy keeps its autonomous army, reinforcements and construction. Your side has no autonomous combat roster, automatic combat replacements or automatic placement of buildings. Builders, requested supply deliveries and barracks orders remain available.<br/><br/>VICTORY AND DEFEAT<br/>Win by exhausting the enemy reinforcement tickets, or by owning every active capture objective with no capture or contest in progress. Headquarters and radio relays are excluded from territorial victory. Your side loses by territory, not by tickets. Losing all members of one player squad does not itself end the campaign.<br/><br/>Organize player groups, recruit purchased soldiers and build your support network. The enemy will keep advancing without waiting for players. These AI Conflict conditions replace the stock strategic-location hold timer."
+			Target_ru_ru "CO-OP<br/>Игроки сражаются вместе за сторону, выбранную перед запуском. Для игроков доступна только она. У противника сохраняются автономная армия, пополнение и строительство. У вашей стороны нет автономного боевого состава, автоматической замены боевых потерь и автоматического размещения построек. Строители, заказанная доставка снабжения и заказы в казарме доступны.<br/><br/>ПОБЕДА И ПОРАЖЕНИЕ<br/>Для победы исчерпайте билеты пополнения противника либо захватите все активные захватываемые цели без продолжающегося захвата или оспаривания. Штабы и радиорелейные узлы исключены из территориального условия. Ваша сторона проигрывает по территории, а не по билетам. Гибель одного отряда игроков сама по себе не завершает кампанию.<br/><br/>Создавайте группы игроков, нанимайте заказанных бойцов и развивайте сеть снабжения. Противник продолжает наступление, не ожидая игроков. Эти условия AI Conflict заменяют штатное удержание стратегических точек по таймеру."
+		}
+		CustomStringTableItem "{A1CF26102400000E}"
+		{
+			Id "AICF_Briefing_Text_Command"
+			Target_en_us "Open the map and the AI Conflict command interface. Select an allied managed squad to inspect its status and available orders. Set a movement, attack or defence objective using the map controls. You can send surviving infantry to reinforce at a barracks, give it priority in the reinforcement queue, or return a squad to AI control.<br/><br/>Manual orders remain in force until completed or changed; the autonomous commander does not simply overwrite them. Returned squads resume the commander's campaign plan. The commander distributes attacks and defence according to objectives, threats, routes and available forces.<br/><br/>Player groups and nearby recruited soldiers also use the native group menu and command wheel. Leadership, ownership and AI limits still apply. In Co-op there is no friendly autonomous combat roster to select; command your recruited soldiers through the native controls."
+			Target_ru_ru "Откройте карту и командный интерфейс AI Conflict. Выберите союзное управляемое отделение, чтобы увидеть его состояние и доступные приказы. Задавайте движение, атаку или оборону средствами карты. Выжившую пехоту можно отправить на пополнение в казарму, повысить её приоритет в очереди или вернуть отделение под управление ИИ.<br/><br/>Ручные приказы сохраняются до выполнения или изменения; автономный командир не перезаписывает их произвольно. Возвращённые ему отделения снова участвуют в плане кампании. Командир распределяет атаки и оборону с учётом целей, угроз, маршрутов и доступных сил.<br/><br/>Для групп игроков и нанятых рядом бойцов также доступны штатные меню группы и колесо команд. Требования лидерства, принадлежности и лимит ИИ сохраняются. В Co-op союзного автономного боевого состава для выбора нет; управляйте нанятыми бойцами штатными средствами."
+		}
+		CustomStringTableItem "{A1CF26102400000F}"
+		{
+			Id "AICF_Briefing_Text_Recruitment"
+			Target_en_us "At an allied barracks, order soldiers or a squad from the troop list and wait for them to appear. Purchased squads can be recruited in both Conflict and Co-op, including purchased Guard squads. Paying for a squad does not automatically add every soldier to your player group.<br/><br/>To recruit, join or create a player group, become its leader, approach a purchased allied soldier and use Recruit in the native command wheel. There must be room within the native AI limit (normally four AI per player group). A full purchased squad may exceed that limit; recruit only as many soldiers as your group allows.<br/><br/>If Recruit is unavailable, check leadership in the group menu, the AI count, faction and whether this soldier belongs to a purchased squad. Ordinary base guards, construction workers and autonomous AI Conflict squads are not made recruitable by this feature. Orders still cost supplies."
+			Target_ru_ru "В союзной казарме закажите бойцов или отделение из списка пехоты и дождитесь их появления. Купленных бойцов можно нанимать и в Conflict, и в Co-op, включая заказанные охранные отделения Guard. Оплата отделения не добавляет всех его бойцов в вашу группу автоматически.<br/><br/>Для найма вступите в группу игроков или создайте её, станьте лидером, подойдите к купленному союзному бойцу и выберите Recruit в штатном колесе команд. В группе должно оставаться место в пределах штатного лимита ИИ (обычно четыре ИИ на группу игроков). Полное заказанное отделение может превышать этот лимит; нанимайте допустимое количество бойцов.<br/><br/>Если Recruit недоступен, проверьте лидерство в меню группы, количество ИИ, фракцию и принадлежность бойца к купленному отделению. Обычная охрана базы, рабочие и автономные отделения AI Conflict этой механикой не становятся доступными для найма. Заказы по-прежнему расходуют снабжение."
+		}
+		CustomStringTableItem "{A1CF261024000010}"
+		{
+			Id "AICF_Briefing_Text_Equipment"
+			Target_en_us "Use the AI Conflict equipment editor to prepare a personal spawn preset or a squad equipment template. Check both weapon slots, ammunition, clothing and the contents of containers and pouches before saving. Equipment is drawn from the active content profile.<br/><br/>A personal preset is applied through respawn. Squad templates equip new soldiers; existing soldiers receive changes at a safe allied arsenal. A saved template does not instantly replace equipment in the middle of combat. Inventory capacity and access rules still apply.<br/><br/>After combat, managed soldiers can replenish ammunition and suitable consumables and collect compatible supplies from nearby bodies. Available items must fit their equipment and template. Following your death, the deployment interface also allows you to take control of a living AI member of your own group with that soldier's current equipment. The normal respawn delay is preserved."
+			Target_ru_ru "В редакторе экипировки AI Conflict можно подготовить личный пресет для появления или шаблон оснащения отделения. Перед сохранением проверьте оба оружейных слота, боеприпасы, одежду и содержимое контейнеров и подсумков. Снаряжение берётся из активного набора контента.<br/><br/>Личный пресет применяется через возрождение. Новые бойцы получают шаблон отделения, а уже живые — изменения у безопасного союзного арсенала. Сохранение шаблона не заменяет экипировку мгновенно посреди боя. Ограничения вместимости и доступности инвентаря сохраняются.<br/><br/>После боя управляемые бойцы могут пополнять боеприпасы и подходящие расходники, собирать совместимое снабжение с ближайших тел. Предметы должны подходить снаряжению и шаблону. После вашей гибели интерфейс развёртывания также позволяет занять живого ИИ из своей группы с его текущим оснащением. Штатная задержка возрождения сохраняется."
+		}
+		CustomStringTableItem "{A1CF261024000011}"
+		{
+			Id "AICF_Briefing_Text_Logistics"
+			Target_en_us "Supplies support construction, vehicle and troop orders, and reinforcement. Check stocks at the base where an action will be performed; a large faction total does not mean every base has supplies. Capture and connect bases through the radio network.<br/><br/>Use the supply interface on the map to choose allied source and destination bases and the amount to deliver. An accepted request sends a real supply vehicle along a route. Supplies do not teleport to the destination when you press the button. Follow the shipment status and protect the truck; unsafe roads, losses and lack of available transport can delay delivery.<br/><br/>Autonomous forces use transport and combat vehicles when suitable assets and routes are available. Logistics and the supply economy remain part of every mode, including Co-op. A supply request does not grant ownership of the delivery vehicle or crew."
+			Target_ru_ru "Снабжение нужно для строительства, заказа техники и бойцов, а также пополнения. Проверяйте запасы на той базе, где выполняется действие: большой общий запас фракции не означает наличие ресурсов на каждой базе. Захватывайте базы и соединяйте их радиосетью.<br/><br/>В интерфейсе снабжения на карте выберите союзные базу отправления и назначения и количество груза. Принятая заявка отправляет реальную машину по маршруту. Нажатие кнопки не переносит снабжение мгновенно на другую базу. Следите за состоянием доставки и защищайте грузовик: опасные дороги, потери и отсутствие свободного транспорта могут задержать рейс.<br/><br/>Автономные силы используют транспортную и боевую технику при наличии подходящих машин и маршрутов. Логистика и экономика снабжения работают во всех режимах, включая Co-op. Заявка на доставку не передаёт игроку машину или экипаж в собственность."
+		}
+		CustomStringTableItem "{A1CF261024000012}"
+		{
+			Id "AICF_Briefing_Text_Reinforcement"
+			Target_en_us "Managed infantry replenishes at a safe allied barracks with enough supplies. Surviving squads move there to receive replacements. Replacing a fully destroyed managed squad normally costs one ticket plus supplies; filling missing members costs supplies without a ticket.<br/><br/>Each faction has one sequential reinforcement queue. One squad is completed before the next is served. Recruitment proceeds one soldier every five seconds; a full ten-person squad takes about 45 seconds of scheduled recruitment, plus travel, queueing and actual spawning. A request does not create an entire squad immediately.<br/><br/>Map status and priority controls help you monitor this queue. Captured or unsafe barracks, unavailable resources and spawn restrictions can postpone service. Co-op players do not receive automatic combat replacements: purchase and recruit soldiers at the barracks. Enemy AI reinforcement remains active."
+			Target_ru_ru "Управляемая пехота пополняется в безопасной союзной казарме при достаточном снабжении. Выжившие отделения направляются туда за заменами. Замена полностью уничтоженного управляемого отделения обычно стоит один билет и снабжение; восполнение недостающих бойцов — снабжение без билета.<br/><br/>У каждой фракции одна последовательная очередь пополнения. Сначала завершается одно отделение, затем обслуживается следующее. Найм идёт по одному бойцу каждые пять секунд; для полного отделения из десяти человек требуется около 45 секунд планового найма плюс дорога, очередь и фактическое появление. Заявка не создаёт всё отделение мгновенно.<br/><br/>Состояние и приоритет очереди доступны на карте. Захват или опасность возле казармы, недостаток ресурсов и ограничения появления могут отложить обслуживание. В Co-op игрокам не выдаются автоматические боевые замены: заказывайте и нанимайте бойцов в казарме. Пополнение противника ИИ продолжает работать."
+		}
+		CustomStringTableItem "{A1CF261024000013}"
+		{
+			Id "AICF_Briefing_Text_Construction"
+			Target_en_us "Develop allied bases with barracks, arsenals, vehicle facilities and other available support structures. These facilities enable recruitment, rearming, repairs and vehicle orders. Rank restrictions on construction and vehicle requests are removed; supply costs and placement rules remain.<br/><br/>On sides controlled by the autonomous commander, AI plans infrastructure and construction workers finish layouts. Work can resume after initial combat losses; building is not limited to the opening of the match.<br/><br/>On the human side in Co-op, automatic placement is disabled. Place the structures you need yourself and provide supplies. Construction workers can still be created to finish your layouts. Protect workers and the construction site. Purchased workers are not combat recruits, and their presence does not automatically place new buildings."
+			Target_ru_ru "Развивайте союзные базы: стройте казармы, арсеналы, площадки техники и другие доступные объекты поддержки. Они дают найм, перевооружение, ремонт и заказ машин. Ограничения по званию на строительство и заказ техники сняты; стоимость снабжения и правила размещения остаются.<br/><br/>На сторонах автономного командира ИИ планирует инфраструктуру, а рабочие достраивают размещённые объекты. Работы могут продолжаться после первых боевых потерь; строительство не ограничено началом матча.<br/><br/>На стороне людей в Co-op автоматическое размещение отключено. Самостоятельно размещайте нужные постройки и доставляйте снабжение. Рабочие по-прежнему могут создаваться для завершения ваших объектов. Защищайте рабочих и стройплощадку. Рабочие не являются бойцами для найма, а их присутствие само по себе не размещает новые постройки."
+		}
+		CustomStringTableItem "{A1CF261024000014}"
+		{
+			Id "AICF_Briefing_Text_Enemy"
+			Target_en_us "Neutral FIA bases resist both main sides. Garrisons activate near players and advancing managed AI groups, so AI can fight them without a player standing nearby. Additional garrisons and road patrols become dormant when observers leave; recorded losses are retained. Vehicle crews defend their area rather than pursuing enemies across the island.<br/><br/>EASY: infantry, without additional garrison vehicles or road patrols.<br/>MEDIUM: one APC per eligible garrison, with a random dismount group of up to two or four soldiers.<br/>HARD: a random pair of tanks/APCs; one eligible strongpoint can have three or four vehicles. If the content has no suitable FIA tanks, APCs substitute for them. Seat availability limits dismounts.<br/><br/>Difficulty changes the garrison composition, not rifle accuracy. Medium and Hard also increase anti-tank roles in standard autonomous squads. Vanilla keeps stock FIA weapons; RHS/WCS use their own equipment mix. Beware of armour and protect your supply routes."
+			Target_ru_ru "Нейтральные базы FIA сопротивляются обеим основным сторонам. Гарнизоны активируются возле игроков и приближающихся управляемых групп ИИ, поэтому ИИ может сражаться с ними без игрока рядом. Дополнительные гарнизоны и дорожные патрули засыпают при уходе наблюдателей; зафиксированные потери сохраняются. Экипажи обороняют свой район, а не преследуют врага по всему острову.<br/><br/>EASY: пехота без дополнительной гарнизонной техники и дорожных патрулей.<br/>MEDIUM: один БТР в подходящем гарнизоне со случайным десантом до двух или четырёх бойцов.<br/>HARD: случайная пара танков/БТР; одна подходящая усиленная точка может иметь три или четыре машины. Если в контенте нет подходящих танков FIA, их заменяют БТР. Число мест ограничивает десант.<br/><br/>Сложность меняет состав гарнизонов, а не точность стрельбы из винтовок. Medium и Hard также увеличивают число противотанковых ролей в стандартных автономных отделениях. В Vanilla у FIA штатное оружие; RHS/WCS используют свой смешанный набор. Учитывайте бронетехнику и защищайте пути снабжения."
+		}
+		CustomStringTableItem "{A1CF261024000015}"
+		{
+			Id "AICF_Briefing_Text_Settings"
+			Target_en_us "Choose the map, enabled content, Conflict or Co-op, player side, garrison difficulty, starting time and weather before launching. The time slider covers 00:00–23:59; weather may be random or a selected preset. Time and weather continue to change during play. The active scenario title on the first page identifies the selected map, mode and difficulty.<br/><br/>Only enabled content with its dependencies is available in setup; downloading a mod alone does not enable it. Vanilla uses US Army/Soviet Army, RHS uses USMC/Russian MSV, and WCS + RHS uses NATO/Russia. Available weapons and vehicles depend on that profile. The operation loads the selected addon set. See Setup guide in the selection menu for preparation steps.<br/><br/>The northern map variant limits active objectives while keeping the landscape accessible. Every launch starts a new campaign; saving and resuming a match is not supported yet. This journal describes default rules: server configuration and native limits can affect availability and timing."
+			Target_ru_ru "Перед запуском выбираются карта, включённый контент, Conflict или Co-op, сторона игроков, сложность гарнизонов, начальное время и погода. Ползунок времени охватывает 00:00–23:59; погоду можно выбрать или оставить случайной. В ходе игры время и погода продолжают меняться. Заголовок сценария на первой странице указывает выбранную карту, режим и сложность.<br/><br/>В настройках доступен только включённый контент с его зависимостями; скачивание мода само по себе его не включает. Vanilla использует армии США/СССР, RHS — USMC/МСВ России, WCS + RHS — НАТО/РФ. Доступное оружие и техника зависят от этого набора. Операция загружает выбранный набор дополнений. Порядок подготовки описан в «Как настроить» в меню выбора.<br/><br/>Северный вариант карты ограничивает активные цели, оставляя ландшафт доступным. Каждый запуск начинает новую кампанию; сохранение и продолжение матча пока не поддерживаются. Здесь описаны правила по умолчанию: параметры сервера и штатные ограничения могут влиять на доступность и сроки."
 		}
 	}
 }

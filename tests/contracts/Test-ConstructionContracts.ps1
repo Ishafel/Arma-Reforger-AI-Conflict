@@ -100,7 +100,7 @@ $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $staticTool 
 if ($LASTEXITCODE -ne 0) { $failures.Add('static-positive') }
 $result | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'static-positive.txt')
 foreach ($case in @(
-    @{Name='queue-count'; File='State/AICF_FactionState.c'; Before='m_aGroupSlots.Count() != AICF_Stage1Config.GROUP_SLOTS_PER_FACTION'; After='false'; Rule='CONSTRUCTION_INITIAL_QUEUE_SHAPE'},
+    @{Name='queue-count'; File='State/AICF_FactionState.c'; Before='m_aGroupSlots.Count() != m_iExpectedSlotCount'; After='false'; Rule='CONSTRUCTION_INITIAL_QUEUE_SHAPE'},
     @{Name='queue-slot-identity'; File='State/AICF_FactionState.c'; Before='!slot || slot.GetSlotId() != slotIndex'; After='!slot'; Rule='CONSTRUCTION_INITIAL_QUEUE_SHAPE'},
     @{Name='queue-free-initial-spawning'; File='State/AICF_FactionState.c'; Before='state == AICF_EGroupSlotState.SPAWNING && slot.IsReplacementDeployment()'; After='state == AICF_EGroupSlotState.SPAWNING'; Rule='CONSTRUCTION_INITIAL_QUEUE_STATES'},
     @{Name='queue-empty-state'; File='State/AICF_FactionState.c'; Before='state == AICF_EGroupSlotState.WAITING'; After='state == AICF_EGroupSlotState.EMPTY'; Rule='CONSTRUCTION_INITIAL_QUEUE_STATES'},
@@ -108,7 +108,7 @@ foreach ($case in @(
     @{Name='queue-no-master'; File='Bootstrap/AICF_MatchController.c'; Before='!m_Campaign || !m_Campaign.IsMaster() || !m_USState || !m_USSRState'; After='!m_Campaign || !m_USState || !m_USSRState'; Rule='CONSTRUCTION_INITIAL_QUEUE_BARRIER'},
     @{Name='queue-not-latched'; File='Bootstrap/AICF_MatchController.c'; Before='m_bInitialSpawnQueueSettled = true;'; After='m_bInitialSpawnQueueSettled = false;'; Rule='CONSTRUCTION_INITIAL_QUEUE_BARRIER'},
     @{Name='queue-construction-ungated'; File='Bootstrap/AICF_MatchController.c'; Before='if ((m_bRosterReady || m_bInitialSpawnQueueSettled) && m_Construction)'; After='if (m_Construction)'; Rule='CONSTRUCTION_ROSTER_GATE'},
-    @{Name='queue-global-roster-waiting'; File='Bootstrap/AICF_MatchController.c'; Before='m_USState.CountSlotsByState(AICF_EGroupSlotState.READY) != AICF_Stage1Config.GROUP_SLOTS_PER_FACTION'; After='m_USState.CountSlotsByState(AICF_EGroupSlotState.WAITING) != AICF_Stage1Config.GROUP_SLOTS_PER_FACTION'; Rule='CONSTRUCTION_ROSTER_NOT_WEAKENED'}
+    @{Name='queue-global-roster-waiting'; File='Bootstrap/AICF_MatchController.c'; Before='m_USState.CountSlotsByState(AICF_EGroupSlotState.READY) != m_USState.GetExpectedSlotCount()'; After='m_USState.CountSlotsByState(AICF_EGroupSlotState.WAITING) != m_USState.GetExpectedSlotCount()'; Rule='CONSTRUCTION_ROSTER_NOT_WEAKENED'}
 )) {
     $path = Join-Path $fixtureCore $case.File
     $original = [IO.File]::ReadAllText($path)

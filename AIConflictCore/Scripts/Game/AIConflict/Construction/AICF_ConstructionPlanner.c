@@ -10,6 +10,7 @@ class AICF_ConstructionPlanner
 	protected AICF_EconomySystem m_Economy;
 	protected AICF_AICommander m_US;
 	protected AICF_AICommander m_USSR;
+	protected ref AICF_MatchRules m_MatchRules;
 	protected ref AICF_ConstructionConfig m_Config = new AICF_ConstructionConfig();
 	protected ref AICF_ConstructionSiteSearch m_Search;
 	protected ref AICF_StockConstructionAdapter m_Adapter = new AICF_StockConstructionAdapter();
@@ -36,6 +37,7 @@ class AICF_ConstructionPlanner
 		m_Economy = economy;
 		m_US = us;
 		m_USSR = ussr;
+		m_MatchRules = AICF_MatchRules.FromMissionHeader();
 		m_Manager = SCR_CampaignBuildingManagerComponent.Cast(campaign.FindComponent(SCR_CampaignBuildingManagerComponent));
 		m_BaseSystem = SCR_MilitaryBaseSystem.GetInstance();
 		if (m_BaseSystem)
@@ -107,6 +109,8 @@ class AICF_ConstructionPlanner
 
 	protected AICF_AICommander Commander(SCR_CampaignFaction faction)
 	{
+		if (!faction || !m_MatchRules || !m_MatchRules.AllowsAutomaticConstruction(faction.GetFactionKey()))
+			return null;
 		if (m_US && m_US.GetFaction() == faction && m_US.IsEnabled())
 			return m_US;
 		if (m_USSR && m_USSR.GetFaction() == faction && m_USSR.IsEnabled())

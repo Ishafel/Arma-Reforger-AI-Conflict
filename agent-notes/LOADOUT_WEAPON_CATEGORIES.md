@@ -1,5 +1,21 @@
 # Категории основного и второго оружия
 
+## Быстрые слоты после появления
+
+У двух длинноствольных оружий может совпадать native default quickslot.
+`SCR_CharacterInventoryStorageComponent.InitAsPlayer` помечает этот default
+инициализированным после первого предмета и пропускает вторую винтовку.
+Оружие при этом присутствует в inventory и native WeaponSlotComponent, но
+quickbar «2» пуст. Native component control с AK74M + SVD подтвердил этот
+путь до исправления.
+
+`Integration/AICF_WeaponQuickslots.c` после native InitAsPlayer дополняет
+пропущенные привязки по `GetWeaponSlotIndex` для видимых оружейных мест.
+Проверяет текущую attached entity и оставляет занятые slots, существующую
+привязку оружия и turret context нетронутыми. При pControlled=false ничего
+не добавляет. Inventory, recipe/schema, сохранение и RPC не меняются;
+это локальное представление управляемого игрока. Отдельных callbacks нет.
+
 Редактор показывает dropdown для обоих native `primary` slots. В кобуре,
 гранатном слоте и креплениях остаётся прежний native контекст, внутри кармана —
 прежние content categories. При переходе между primary slots категория сохраняется;

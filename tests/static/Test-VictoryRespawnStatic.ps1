@@ -10,8 +10,8 @@ foreach ($entry in @{
 function Test-Contracts($s) {
     if ($s.victory -match 'base.AreEnemiesPresent\(\)') { 'PRESENCE_ONLY_ALLOWED' }
     $rules = @(
-        @('victory', 'bool usWins = ussrState.GetTickets\(\) <= 0 \|\| ControlsAllObjectives', 'US_OR'),
-        @('victory', 'bool ussrWins = usState.GetTickets\(\) <= 0 \|\| ControlsAllObjectives', 'USSR_OR'),
+        @('victory', 'bool usWins = \(ussrState.UsesTicketDefeat\(\) && ussrState.GetTickets\(\) <= 0\) \|\| ControlsAllObjectives', 'US_OR'),
+        @('victory', 'bool ussrWins = \(usState.UsesTicketDefeat\(\) && usState.GetTickets\(\) <= 0\) \|\| ControlsAllObjectives', 'USSR_OR'),
         @('victory', 'if \(usWins == ussrWins\)\s*return false;', 'UNIQUE_WINNER'),
         @('victory', '!Replication.IsServer\(\).*!campaign.IsMaster\(\)', 'AUTHORITY'),
         @('victory', 'if \(!node.IsObjective\(\)\)\s*continue;', 'RELAY_EXCLUDED'),
@@ -36,7 +36,7 @@ $failures = @(Test-Contracts $sources)
 if (Test-Path (Join-Path $core 'Victory/AICF_VictoryRespawnProbe.c')) { $failures += 'FIXTURE_IN_PRODUCTION' }
 $mutations = @(
     @('victory','base.IsBeingCaptured()','base.IsBeingCaptured() || base.AreEnemiesPresent()','PRESENCE_ONLY_ALLOWED'),
-    @('victory','<= 0 || ControlsAllObjectives','<= 0 && ControlsAllObjectives','US_OR'),
+    @('victory','<= 0) || ControlsAllObjectives','<= 0) && ControlsAllObjectives','US_OR'),
     @('victory','return objectives > 0;','return true;','NONEMPTY'),
     @('victory','if (base.IsHQ())','if (false)','HQ_EXCLUDED'),
     @('victory','base.IsBeingCaptured()','false','CONTESTED'),
