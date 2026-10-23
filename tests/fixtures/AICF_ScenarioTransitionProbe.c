@@ -222,6 +222,7 @@ modded class AICF_MatchController
 		Print(string.Format("[AICF][TRANSITION_DONE] header=%1 graph=%2 roster=1", target, graph));
 		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.Launch);
 		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.Timeout);
-		GetGame().GetCallqueue().CallLater(AICF_ScenarioTransitionProbe.Close, 3000, false);
+		if (!System.IsCLIParam("aicfCigaretteProbe"))
+			GetGame().GetCallqueue().CallLater(AICF_ScenarioTransitionProbe.Close, 3000, false);
 	}
 }

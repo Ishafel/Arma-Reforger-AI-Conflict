@@ -1,5 +1,54 @@
 # Проверки и baseline
 
+## Cigarette thread-lock assertion — 2026-10-23
+
+В ручном local Play `EveronNorthRHS / Standard / Hard` на `d5de657`
+получены четыре native assertions `Attempt to modify locked entity from a
+different thread`, `SCR_CigaretAnimationComponent.EOnPostFixedFrame:74/75`
+(enf_entity.cpp 415/575/1894). Evidence:
+`.codex-runtime/cigarette-thread-20261023/manual-error/`. Сессия остановлена
+по точной process identity, полные logs и CLI сохранены. Ручной preset игрока
+в прежнем profile не удалялся.
+
+`AICF_CigaretteAnimation` переводит native cosmetic update с POSTFIXEDFRAME
+на FRAME, сохраняет эмиссию/накал и native delete. Контракт —
+`SOCIAL_BEHAVIOR.md`, focused fixture — `TEST_FIXTURES.md`.
+
+- Baseline `Invoke-AICFChecks.ps1`: SocialContracts, MatchShutdownContracts,
+  UniversalScenarioStatic, UniversalScenarioLogContracts — **4/4 PASS/0**.
+  Final с новым CigaretteLogContracts, `after-final`: **5/5 PASS/0**;
+  новый log oracle — **17 cases**, включая отдельный crash.log.
+- Production terminal Workbench: Stock/EveronRHS/ArlandWCSRHS **3/3 PASS/0**.
+  Stage compile с final fixture: EveronRHS и Stock **2/2 PASS/0**. Native
+  graph/argv/exits и полные logs сохранены. Дополнительные ранние PASS отдельно.
+- Final local Play: `final-rhs-north` (исходный Standard Hard) и
+  `final2-vanilla-standard` (Arland Standard Medium), **2/2 PASS/0**, по
+  **42/42** cigarette cases и обычный exact header/loaded graph/roster gate.
+  Шесть циклов US/USSR, многократный Play обоих emitter, FRAME mask, отсутствие
+  fixed callback, detach и delete. Production source в обоих runs одинаков.
+  Финальная fixture ванилы дополнительно защищает отсутствие slot; старый RHS
+  run использовал ту же логику для заведомо существующих Standard slots.
+- Final полные stopped logs, включая crash/error/script: SCRIPT/VM/fatal/
+  assertions **0**. Прочие engine/resource diagnostics сохранены; сообщения
+  `Suspicious parent velocity` у cigarette particles остаются и не объявляются
+  исправленными. Чистый engine log не заявляется.
+
+Сохранённые FAIL: первый stage compile отверг несуществующий
+`IEntity.SetLocalOrigin` в fixture; заменён проверенным `SetOrigin(CoordToParent)`.
+Первый RHS native run прошёл playback/detach пяти циклов, но истёк 120 s fixture
+timeout на последнем DELETE при параллельной production compilation — FAIL.
+Повторные native runs последовательные, с -noFocus/-forceUpdate и 240 s watchdog.
+Первый vanilla run ошибочно выбран Co-op USSR: у человеческой стороны нет
+боевых slots, fixture вызвала GetGroup у null slot и получила VM/FAIL.
+Добавлена null-защита, для двухсторонней матрицы выбран Standard. Production
+после первой реализации между runs не менялся; oracle не ослаблялся.
+
+**NOT RUN:** ручной визуальный вид дыма/анимации, полный offline набор,
+dedicated/JIP/15-minute soak и packaged Workshop. Старые weapon out-of-bounds
+и particle velocity diagnostics остаются отдельно. Это исправление не относится
+к сообщённому позднее пустому quickslot второго оружия; тот баг расследуется
+отдельно. PR #65 остаётся draft, issue #46 открыто.
+
 ## Различимые карточки карт — 2026-10-23
 
 Продолжение оформления PR #65, baseline `03fcff6`, та же ветка

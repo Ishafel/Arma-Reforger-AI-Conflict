@@ -1,5 +1,27 @@
 # Начальные emotes и приветствие игрока
 
+## Поток обновления дыма сигареты
+
+В 1.8.0.13 native `SCR_CigaretAnimationComponent.EOnPostFixedFrame` вызывает
+`ParticleEffectEntity.Play`/StopEmission для отдельных entities. В local Play
+North Everon RHS Standard Hard это дало native assertion `Attempt to modify
+locked entity from a different thread` на строках 74/75 (enf_entity.cpp
+415/575/1894). Это выполняемый игровой путь, не ошибка меню/компиляции.
+
+`Integration/AICF_CigaretteAnimation.c` сохраняет native создание, эмиссию,
+накал и удаление эффектов, но после OnAddedToParent переводит компонент
+с POSTFIXEDFRAME на FRAME. Оставшийся fixed dispatch ничего не делает;
+обычный frame проверяет character parent и оба emitter перед native update.
+Отсоединение и удаление снимают обе event masks. Новых таймеров/RPC нет.
+Адаптер касается локальной косметики всех stock cigarette components;
+authoritative правила матча и выбор idle не меняются.
+
+Отдельная fixture создаёт настоящий stock cigar prop на живых roster бойцах
+обеих сторон, многократно вызывает естественный переход охлаждение → Play,
+проверяет оба emitter, фактическую event mask, FRAME callbacks без fixed
+callbacks, detach и delete. Это не проверка художественного вида дыма или
+точного положения сигареты в руке во всех анимациях.
+
 Общий server-owned `AICF_SocialService` обслуживает только готовые живые
 пехотные slots US/USSR. `AICF_MatchController` создаёт и останавливает сервис.
 Сервис не назначает waypoint, не меняет roster, очередь, цены или темп набора.

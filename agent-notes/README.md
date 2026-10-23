@@ -43,7 +43,7 @@
 | Выпустить PR и разобрать FAIL, включая baseline | [AGENTS.md: проверка и передача](../AGENTS.md#проверка-и-передача-результата), [TESTING.md: правила выпуска PR](TESTING.md#правила-выпуска-pr) |
 | Проверить владельца commander state и стабильный выбор казармы (issue #44) | [TOOLS.md](TOOLS.md#единый-offline-запуск), [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md), [TESTING.md](TESTING.md) |
 | Изменить последовательную очередь фракции, шаг 5 секунд и прогноз пополнения | [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md) |
-| Изменить начальные emotes, салют, общий cooldown игрока и звук | [SOCIAL_BEHAVIOR.md](SOCIAL_BEHAVIOR.md) |
+| Изменить начальные emotes, салют, cooldown, звук и безопасное обновление дыма сигареты | [SOCIAL_BEHAVIOR.md](SOCIAL_BEHAVIOR.md) |
 | Изменить WCS content profile или проверить зависимости и повреждение обновлений | [Arland WCS + RHS](../AIConflictArlandWCSRHS/README.md#зависимости), [проверка 15.10.2026](TESTING.md#зависимости-и-вылеты-после-обновления-wcs--2026-10-15) |
 | Изменить полный или северный WCS Everon | [Everon WCS + RHS](../AIConflictEveronWCSRHS/README.md) |
 

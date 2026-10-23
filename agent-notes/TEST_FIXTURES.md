@@ -1,5 +1,28 @@
 # Runtime fixture: каталог и применение
 
+## Дым сигареты и thread-lock assertion
+
+`AICF_CigaretteProbe.c` копировать в isolated Core/Integration как
+`AICF_ZCigaretteProbe.c` вместе с Core/UI `AICF_ZScenarioTransitionProbe.c`.
+`-aicfCigaretteProbe 1 -aicfTransitionProbe 1` и обычные transition map/content/
+mode/difficulty flags запускают local Play. Transition fixture оставляет
+закрытие cigarette probe; без нового флага прежний 3 s Close сохраняется.
+Использовать `-noFocus -forceUpdate` и последовательный native запуск.
+
+Шесть циклов чередуют US/USSR leader. В каждом настоящий stock cigar prop:
+parent, spawn, component/emitters, FRAME mask, native playback обоих emitter
+после восьми горячих/холодных переходов, detach без дальнейших callbacks,
+delete обоих emitter. Всего 42 cases, тайм-аут 240 s после roster. Подмена
+эмиссивного счётчика существует только в fixture; production timestep остаётся
+native. Stop удаляет оставшийся prop. GUI input и player spawn не имитируются.
+
+`tests/log-audits/Test-CigaretteLog.ps1` требует полный stopped console,
+manifest/native exit, обычный exact transition/header/roster gate и 42/42
+шести циклов. Проверяет также все соседние native logs, включая crash.log:
+assertion не обязан появиться в console. Contract fixtures отвергают пропуски,
+дубликаты, failed case, неверное завершение, thread assertion и отдельный
+crash.log при чистом console. Визуальный вид дыма/жеста — NOT RUN.
+
 ## Универсальное меню и native переход
 
 `AICF_UniversalScenarioProbe.c` копировать отдельно в isolated Core/UI как
