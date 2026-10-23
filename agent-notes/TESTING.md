@@ -1,5 +1,40 @@
 # Проверки и baseline
 
+## Оформление 0.2.1 — 2026-10-24
+
+Ветка `codex/release-0.2.1` от `origin/main`
+`498fda74833b38d05fa001aca82278107dada286`, исходное дерево чистое.
+Код тега `0.2.1` — тот же merged main после PR #71; его Git tree совпадает
+с проверенным `688e2a7`. Новый PR оформляет только `releases/0.2.1.md`, ссылки
+на последнюю версию в README/указателе, формат версии publisher в DEVELOPMENT
+и эту запись. Тег остаётся на коде исправления; документация имеет отдельный
+commit/PR и не требует переноса опубликованного тега.
+
+До правки `Invoke-AICFChecks.ps1 -Name @(WorkshopScenarioNamesStatic,
+WorkshopScenarioNamesContracts,LocalizationStatic,ScenarioHeadersStatic)
+-EvidenceRoot .codex-runtime/release-0.2.1-20261024/before-source` —
+**4/4 PASS, exit 0**. Полные имена, команды и exits — в `context.json`,
+`summary.json` и outputs этого каталога. Проверены те же 82 headers / 246 имён,
+максимум 50; name contracts — 8 cases; localization — 758 entries.
+
+`Verify-ReleaseDocs.ps1 -Phase before|after` проверяет Markdown links,
+tracked targets, `git diff --check` и отсутствие production/tests/tools delta
+от `0.2.1`. До/после правки — **PASS/0**, по 125 links. Свежий полный offline/Workbench
+при оформлении не повторяется: код и аудиторы не меняются. Прежние **83/83**
+offline и **6/6** compile относятся к исправлению, описанному ниже.
+
+Evidence: `.codex-runtime/release-0.2.1-20261024/`. В нём также сохранены
+metadata тега, резервная обложка, imagegen prompt и PNG/JPEG результата.
+GitHub Release создаётся для существующего `0.2.1` с notes из отдельного
+documentation commit; относительные ссылки при публикации заменяются точными
+GitHub URLs этого commit. Это позволяет опубликовать уже слитый код, сохраняя
+патчноуты в reviewable PR. Проверяются remote tag target, опубликованный body,
+draft=false/prerelease=false и Latest. Публикация Workshop этим не подтверждается.
+
+Фактический Workshop upload/packaged build, новый server/client/JIP,
+ручной вид UI и длительный soak — **NOT RUN**. Прежние resource diagnostics
+и native North RHS out-of-bounds не объявляются исправленными.
+
 ## Лимит имён сценариев Workshop — 2026-10-24
 
 Ветка `codex/workshop-scenario-name-limit` от свежего `origin/main`
