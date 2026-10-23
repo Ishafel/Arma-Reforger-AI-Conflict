@@ -420,9 +420,8 @@ class AICF_LoadoutDraft
 		if (!m_Character || m_Character.GetWorld() == GetGame().GetWorld())
 			return false;
 		KeepAppearance(recipe.m_sCharacter);
-		DamageManagerComponent damage = DamageManagerComponent.Cast(m_Character.FindComponent(DamageManagerComponent));
-		if (damage && !Replication.IsServer())
-			damage.EnableDamageHandling(false);
+		// ItemPreviewManager owns this local model's simulation. The networked
+		// EnableDamageHandling API cannot target an unregistered preview entity.
 		reason = "DEFAULT_LOADOUT_FAILED";
 		if (!AICF_ContentProfile.GetActive().PrepareDefaultLoadout(m_Character, recipe.m_sCharacter, recipe.m_sFaction))
 			return false;

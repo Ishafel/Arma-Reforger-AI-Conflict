@@ -1,5 +1,89 @@
 # Проверки и baseline
 
+## Damage RPC у private models и shutdown — 2026-10-23
+
+По запросу «исправить все ошибки» владелец выбрал границу **scripts-first**:
+исправить код проекта, внешние дефекты ресурсов зафиксировать. Ветка
+`codex/runtime-log-fixes` от `233e547` (production baseline `f5d2966`),
+Game/Server/Workbench **1.8.0.13**. Основной checkout не менялся. Evidence:
+`.codex-runtime/runtime-log-fixes-20261023-222235/REPORT.md`.
+
+Найдены две причины `Attempting to send an RPC through unregistred item`:
+native footwear callbacks добавляли damage effect private/unregistered server
+characters; клиентский `AICF_LoadoutDraft.Build` вызывал сетевой
+`EnableDamageHandling(false)` для local preview. Добавлен узкий
+`AICF_FeetDamageLifecycle`, неверный вызов удалён. Живой зарегистрированный
+персонаж сохраняет native эффект босых ног. Контракт и воспроизведение:
+[SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md),
+[EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md).
+
+- `Invoke-AICFChecks.ps1 -Suite All`: baseline **80/80 PASS/0**,
+  after **81/81 PASS/0**, включая новый `Test-FeetDamageLogContracts.ps1`
+  (**20 cases**). После последней клиентской правки отдельно повторены
+  AILoadoutStatic, EquipmentContracts, FeetDamageLogContracts,
+  WeaponQuickslotLogContracts и MatchShutdownContracts: **5/5 PASS/0**.
+  Quickslot log oracle теперь отвергает unregistered RPC во всех соседних
+  полных logs; **21 contract cases**.
+- Terminal `Compile.ps1` → Workbench Validate/Compile: server stage
+  Stock/Everon/RHS/EveronRHS/ArlandWCSRHS/EveronWCSRHS **6/6 PASS/0**;
+  окончательный production Stock/RHS/ArlandWCSRHS **3/3 PASS/0**;
+  окончательный connected stage RHS **PASS/0**. Полные logs/argv сохранены.
+- Canonical `Start-AICFRuntime.ps1 -Role Server -MatchMode Standard
+  -Difficulty Hard -AdditionalArguments @('-aicfFeetProbe','1')`:
+  Stock/RHS/ArlandWCSRHS **3/3 PASS/0**, по **11/11 native cases**.
+  Проверены private model и реальный registered damage manager, настоящий
+  detach/attach обуви и появление/удаление `SCR_ExposedFeetDamageEffect`.
+  Два отрицательных runtime controls с always-allow/always-deny guard
+  компилируются и штатно закрываются, но строгий oracle отвергает оба:
+  **expected FAIL**. Следовательно, ни возврат старого RPC, ни отключение
+  native gameplay не дают ложного PASS. После runs fixture получила только
+  форматирование Allman/guard; это не новый native прогон её окончательных байтов.
+- Canonical dedicated server + direct client **RHS / CoopUSSR / Easy**:
+  **7/7 cases**, native exits **0/0**, полные server/client logs —
+  unregistered RPC/SCRIPT/VM/fatal/assertions **0**. Перед connect подтверждены
+  live PID, exact CLI и ROSTER_READY; manifest сохранён. Owner RPC read/save,
+  spawn двух weapons, quickslot и СВД в руках проверены. Ответ **SAVED_SESSION**:
+  authenticated account persistence не заявляется.
+- `Lane.ps1 -Lane 0|1|2` → canonical launcher, девять variants
+  Arland/Everon/North × Vanilla/RHS/WCS + RHS, **Standard/Hard**, по
+  **300142–301012 ms** после roster. Native exit/owner/CLI/graph gate
+  **9/9 PASS**, SCRIPT/VM/fatal/assertions **0** во всех **27** stopped logs.
+  Server console unregistered RPC **180 → 0**. Console Error **1325 → 1141**;
+  **clean-log gate 0/9, FAIL**. Оставшиеся resource/engine diagnostics не
+  исключены из анализа и не объявляются исправленными.
+
+Полный offline набор и server matrix начинались на server fix A. Последняя
+правка B удаляет исключительно client-only `EnableDamageHandling` и unused
+lookup; server branch не меняется. **440/440** production artifacts сверены,
+единственное отличие A/B записано в `matrix-final-source-delta.json`. Final B
+проверен production compile, connected run и focused 5/5. Прежние 9 runs не
+выдаются за запуск идентичных final B bytes.
+
+Внешний control без игровых AICF scripts: Vanilla Everon compile/native
+shutdown **PASS/0**, **49** resource/engine Errors, SCRIPT 0. RHS/WCS compile
+PASS, но native faction/base init без compatibility adapters получает VM;
+watcher stops, native exits **-1/-1, FAIL**. Их resource errors до GameStart
+сохранены, последующая стабильность этим control не доказана. Runtime tile
+`<0, -1>` исходного EveronRHS не повторился; причина остаётся неизвестной.
+
+Сохранённые подготовительные FAIL: trace fixture с неверным именем overload
+parameter (`effect` вместо SDK `broadcastingEffect`); первый FeetDamage stage
+с неправильным порядком script loading; первый connected client с одним
+damage RPC (дублируется в error.log). Исправлены сигнатура/расположение fixture
+и production client вызов; исходные logs не заменены успешными. Строгий oracle
+повторно отверг исходный connected log как **FAIL/1**.
+
+Все свои native процессы остановлены. Полные logs сохранены отдельно в
+`<evidence>/logs/`; **33 ZIP** stage/profile с SHA-256 каждого entry проверены
+до адресного удаления временных каталогов. Source checkout сохранён;
+пользовательские presets/profiles и установленные файлы не менялись.
+
+**NOT RUN:** физический ввод/внешний вид UI, JIP/client presentation эффекта
+босых ног, authenticated account persistence, полный матч до победы,
+packaged Workshop, soak дольше пяти минут. Старые out-of-bounds примерно на
+12-й минуте и particle velocity warnings этим прогоном не опровергнуты.
+Чистый engine log и готовность PR #65 не заявляются; push/merge не выполнялись.
+
 ## Параллельные серверные прогоны по пять минут — 2026-10-23
 
 По запросу владельца клиент закрыт, выполнены девять dedicated runs без

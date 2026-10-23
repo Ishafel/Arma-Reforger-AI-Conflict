@@ -28,6 +28,7 @@ try{
  [IO.File]::WriteAllText("$work/crash.log",'Assertion failed')
  try{Check crash $good 1 FULL_LOG_FATAL}finally{Remove-Item -LiteralPath "$work/crash.log"}
  Check script ($good+"`nSCRIPT (E): VM failure") 1 FULL_LOG_FATAL
+ Check rpc ($good+"`nRPL (E): Attempting to send an RPC through unregistred item script::Game::SCR_CharacterDamageManagerComponent.") 1 UNREGISTERED_RPC
 }
 finally{
  $target=[IO.Path]::GetFullPath($work)

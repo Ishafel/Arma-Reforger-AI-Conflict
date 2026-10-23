@@ -64,6 +64,41 @@ callbacks и корректный lifetime script references — разные п
 
 ## Терминальная проверка
 
+### Смена обуви и незарегистрированный damage RPC
+
+`SCR_FeetLoadoutSlotInfo.OnDetachedEntity` штатно добавляет
+`SCR_ExposedFeetDamageEffect`; при надевании обуви эффект снимается. На server
+те же callbacks вызывались у private equipment models и при удалении уже
+незарегистрированных персонажей. Трассировка WCS привязала Error к удалению
+`Footwear_USMC_Combat.et`, а не к звуковому/fire RPC или emitter.
+
+`AICF_FeetDamageLifecycle` допускает native callbacks на server, пока персонаж
+не удаляется, принадлежит миру кампании и его damage manager зарегистрирован.
+Private/deleted/unregistered owner не получает сетевой эффект босых ног. Client
+путь делегируется native; отсутствие character/damage component сохраняет native
+guard. Constructor callback `OnSlotPostInit` снимается при разрушении slot info.
+Новые таймеры, RPC, replicated fields и изменения health не добавлены.
+
+В клиентском `AICF_LoadoutDraft.Build` отдельно удалён вызов сетевого
+`EnableDamageHandling(false)` для local ItemPreviewManager model. API работает
+через server; у preview нет зарегистрированного адресата. Симуляцией модели
+продолжает управлять native ItemPreviewManager. Connected test с реальным owner
+RPC/read/save/spawn обнаружил этот второй источник после устранения footwear
+callbacks; отсутствие client/server unregistered RPC теперь входит в строгий
+`Test-WeaponQuickslotLog.ps1`, отрицательный contract сохранён отдельно.
+
+`tests/fixtures/AICF_FeetDamageProbe.c` копируется в isolated Core stage под
+`UI/AICF_ZFeetDamageProbe.c`, **после** integration adapter по порядку загрузки.
+`-aicfFeetProbe 1`: 11 native checks private draft и живого зарегистрированного
+бойца, реальный detach/attach обуви, наличие/отсутствие damage effect. Probe
+возвращает ту же обувь, затем закрывает процесс; физический ввод не имитируется.
+`Test-FeetDamageLog.ps1` проверяет CLI/manifest, все 11 cases, native exit 0,
+полные stopped logs и отсутствие unregistered RPC, включая соседние crash logs.
+`Test-FeetDamageLogContracts.ps1` отдельно проверяет строгость oracle.
+
+Внешние resource/navigation/font errors не смешиваются с этим исправлением:
+[EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md).
+
 `tests/fixtures/AICF_ShutdownProbe.c` добавляется только в isolated Core stage.
 Он поддерживает `-aicfShutdownMode idle|batches`, native `MemoryStatsSnapshot`,
 constructor/destructor counters и weak entity readback всех inventory items

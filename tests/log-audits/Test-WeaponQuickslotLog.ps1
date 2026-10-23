@@ -11,6 +11,7 @@ $argv=@($manifest.arguments)
 if((Get-Content $NativeExitPath -Raw).Trim() -ne '0'){$failures+='NATIVE_EXIT'}
 if($log -notmatch 'Game destroyed\.'){ $failures+='STOPPED_LOG' }
 if($fullLogs -match 'SCRIPT\s+\([EF]\)|ENGINE\s+\(F\)|NULL pointer|Virtual Machine Exception|Assertion failed|Attempt to modify locked entity|Access violation'){$failures+='FULL_LOG_FATAL'}
+if($fullLogs -match 'Attempting to send an RPC through unregistred item'){$failures+='UNREGISTERED_RPC'}
 foreach($flag in @('-gproj','-profile','-addonsDir','-addons')){
  $i=[array]::IndexOf($argv,$flag)
  if($i -lt 0 -or $log -notmatch 'CLI Params:' -or !$log.Contains($flag+' '+$argv[$i+1])){$failures+='CLI_MISMATCH'}

@@ -1,5 +1,22 @@
 # Runtime fixture: каталог и применение
 
+## Повреждение босых ног и private models
+
+`AICF_FeetDamageProbe.c` копировать в isolated Core как
+`UI/AICF_ZFeetDamageProbe.c`, после integration `AICF_FeetDamageLifecycle`.
+Canonical server `-aicfFeetProbe 1`: 11 checks — private draft/запрет эффекта/
+Clear и живой зарегистрированный боец, настоящий detach/attach обуви,
+появление/удаление `SCR_ExposedFeetDamageEffect`. Та же обувь возвращается;
+native RequestClose вызывается после readback. Это component/server gate,
+не физический ввод игрока или проверка client/JIP эффекта.
+
+`Test-FeetDamageLog.ps1` требует полный stopped log, native exit 0, canonical
+CLI/manifest и все 11 cases; читает также соседние error/script/crash logs.
+Любой unregistered RPC или SCRIPT/VM/assertion делает gate FAIL.
+`Test-FeetDamageLogContracts.ps1` проверяет positive/negative cases oracle.
+Connected клиентский preview проверяется отдельно QuickslotNetworkProbe;
+источник и границы изменения — [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md).
+
 ## Второе оружие и быстрые слоты
 
 `AICF_WeaponQuickslotProbe.c` копировать в isolated Core/Integration как
