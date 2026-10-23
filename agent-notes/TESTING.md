@@ -1,5 +1,52 @@
 # Проверки и baseline
 
+## Внутриигровой брифинг на карте — 2026-10-24
+
+Ветка `codex/mission-briefing` от `dc8ab9c`. Добавлены десять native journal
+pages, отдельные правила STANDARD/Co-op и 21 RU/EN localization entry.
+Контракт — [MISSION_BRIEFING.md](MISSION_BRIEFING.md). Evidence:
+`.codex-runtime/mission-briefing-20261024/REPORT.md` в основном workspace.
+
+- `Invoke-AICFChecks.ps1 -Name Test-LocalizationStatic.ps1,
+  Test-ScenarioHeadersStatic.ps1,Test-CoopScenarioStatic.ps1`: baseline **3/3 PASS**,
+  final и final-after-docs **3/3 PASS**, exit 0; localization **758 entries**.
+- `Compile.ps1`: final production Stock/RHS/EveronWCSRHS **3/3 PASS/0**;
+  isolated fixture Stock/RHS/EveronWCSRHS **3/3 PASS/0**. Terminal Workbench
+  1.8.0.13, `Script validation successful`; manifests/argv/full logs сохранены.
+  Первая sandbox попытка Stock получила `SteamAPI_Init failed`, exit -1;
+  исходный FAIL сохранён, повтор в пользовательском контексте Steam прошёл.
+- `Run.ps1` → canonical `Start-AICFRuntime.ps1`: Stock STANDARD,
+  RHS COOP_US и EveronWCSRHS COOP_USSR, каждый dedicated + late direct client.
+  Точный CLI, живой PID, ROSTER_READY и launcher manifests проверены до подключения.
+  Все **6/6 native exits 0** и штатные stopped logs. `Audit.ps1`: server cases
+  **32/51/114**, client **95/114/177**, всего **583/583 PASS**.
+- Native component проверяет active journal, повторный Load/Reset, fallback
+  фракций, уникальность IDs и исключение stock/null headers. RHS fixture
+  читает **18** loaded presets, WCS **81**, все режимы/сложности; никаких
+  подмен active header. Client читает native journal/button/page title/text
+  для десяти страниц на RU/EN/de_de fallback; язык восстанавливается.
+- Полные **18** stopped server/client logs, включая sibling error/script,
+  не содержат SCRIPT/VM/fatal/assertion/unregistered RPC. Сохранены **1558**
+  остальных Error lines с повторами error.log: resource GUID/fields, Hierarchy,
+  navigation tiles, native GUI export metadata/font leak. Чистый engine log
+  не заявляется; прежняя scripts-first граница и внешние дефекты остаются
+  в [EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md).
+- `Archive.ps1`: **441/441** production source/stage hashes и fixture hash
+  совпали; **7 ZIP** проверены по bytes/SHA-256 каждого entry до адресного
+  удаления stage и шести profiles. **18/18** полных логов скопированы с SHA-256.
+  Первая локальная версия oracle неверно складывала PowerShell arrays имён;
+  исходные два FAIL JSON сохранены, expression исправлен, тот же полный лог
+  прошёл строгий пересчёт без исключения cases. Это дефект evidence helper,
+  а не изменение production для желаемого PASS.
+
+**NOT RUN:** физическое открытие карты/клик/прокрутка, визуальная оценка на
+всех разрешениях, смена языка без повторного показа страницы, обычный Steam/
+packaged Workshop/Host, полный offline suite и длительные игровые soaks.
+Native component/widget readbacks не объявляются проверкой физического ввода.
+Ранее открытый manual client остановлен по PID/CLI/creation identity;
+обновлённый production frontend возвращается отдельно без fixture/автозавершения.
+Это не новый stopped-log verdict. Push/PR/merge не выполнялись.
+
 ## Setup guide: перекрытый input и сетка северного сектора — 2026-10-23
 
 Ветка `codex/scenario-guide-input` от `8c142f4`, сообщение владельца о

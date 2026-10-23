@@ -4432,5 +4432,131 @@ StringTable
 			Target_en_us "Objectives in the north of the island"
 			Target_ru_ru "Цели на севере острова"
 		}
+		CustomStringTableItem "{A1CF261024000001}"
+		{
+			Id "AICF_Briefing_Title_Overview"
+			Target_en_us "01 · Operation"
+			Target_ru_ru "01 · Операция"
+		}
+		CustomStringTableItem "{A1CF261024000002}"
+		{
+			Id "AICF_Briefing_Title_Rules"
+			Target_en_us "02 · Rules and victory"
+			Target_ru_ru "02 · Правила и победа"
+		}
+		CustomStringTableItem "{A1CF261024000003}"
+		{
+			Id "AICF_Briefing_Title_Command"
+			Target_en_us "03 · Command"
+			Target_ru_ru "03 · Командование"
+		}
+		CustomStringTableItem "{A1CF261024000004}"
+		{
+			Id "AICF_Briefing_Title_Recruitment"
+			Target_en_us "04 · Recruiting soldiers"
+			Target_ru_ru "04 · Найм бойцов"
+		}
+		CustomStringTableItem "{A1CF261024000005}"
+		{
+			Id "AICF_Briefing_Title_Equipment"
+			Target_en_us "05 · Equipment and respawn"
+			Target_ru_ru "05 · Экипировка и возрождение"
+		}
+		CustomStringTableItem "{A1CF261024000006}"
+		{
+			Id "AICF_Briefing_Title_Logistics"
+			Target_en_us "06 · Supplies and transport"
+			Target_ru_ru "06 · Снабжение и транспорт"
+		}
+		CustomStringTableItem "{A1CF261024000007}"
+		{
+			Id "AICF_Briefing_Title_Reinforcement"
+			Target_en_us "07 · Reinforcements"
+			Target_ru_ru "07 · Пополнение"
+		}
+		CustomStringTableItem "{A1CF261024000008}"
+		{
+			Id "AICF_Briefing_Title_Construction"
+			Target_en_us "08 · Building bases"
+			Target_ru_ru "08 · Строительство баз"
+		}
+		CustomStringTableItem "{A1CF261024000009}"
+		{
+			Id "AICF_Briefing_Title_Enemy"
+			Target_en_us "09 · Enemy and difficulty"
+			Target_ru_ru "09 · Противник и сложность"
+		}
+		CustomStringTableItem "{A1CF26102400000A}"
+		{
+			Id "AICF_Briefing_Title_Settings"
+			Target_en_us "10 · Setup and limitations"
+			Target_ru_ru "10 · Настройка и ограничения"
+		}
+		CustomStringTableItem "{A1CF26102400000B}"
+		{
+			Id "AICF_Briefing_Text_Overview"
+			Target_en_us "%1<br/><br/>AI Conflict adds an autonomous war to Conflict: commanders capture and defend bases, move infantry and vehicles, bring supplies, replace losses and develop infrastructure. The battlefield stays active without players. You can fight with your squad or coordinate allied forces from the map.<br/><br/>First steps: choose your faction and a player group, deploy at an available allied base, check supplies and the radio network, then choose a nearby objective. Keep your rear supplied and protect captured bases. In Co-op, recruit your own soldiers and place the buildings you need.<br/><br/>This journal is available from the briefing tool on the map. The following pages explain the rules and controls. The map shows the current situation; this is a reference, not a live status report."
+			Target_ru_ru "%1<br/><br/>AI Conflict добавляет в Conflict автономную войну: командиры захватывают и обороняют базы, перемещают пехоту и технику, доставляют снабжение, восполняют потери и развивают инфраструктуру. Боевые действия продолжаются без игроков. Можно воевать со своим отделением или координировать союзные силы с карты.<br/><br/>Первые шаги: выберите фракцию и группу игроков, развернитесь на доступной союзной базе, проверьте снабжение и радиосеть, затем выберите ближайшую цель. Обеспечивайте тыл и защищайте захваченные базы. В Co-op самостоятельно нанимайте бойцов и размещайте нужные постройки.<br/><br/>Этот журнал доступен через инструмент брифинга на карте. На следующих страницах описаны правила и управление. Текущая обстановка показана на карте; здесь находится справка, а не сводка в реальном времени."
+		}
+		CustomStringTableItem "{A1CF26102400000C}"
+		{
+			Id "AICF_Briefing_Text_RulesStandard"
+			Target_en_us "CONFLICT<br/>Players can join either main side. By default, both sides have an AI commander; a server may assign only one side to AI. Autonomous squads attack, defend and replenish while you participate in the campaign.<br/><br/>VICTORY<br/>A side wins when its opponent runs out of reinforcement tickets, or when it owns every active capture objective and none is being captured or contested. Headquarters and radio relay nodes do not count toward territorial victory. Enemy presence alone does not block victory unless an objective is actually contested.<br/><br/>Losing a managed squad and replacing it normally costs one ticket plus supplies; reinforcing its survivors costs supplies only. Capture bases, interrupt enemy logistics and preserve your army. These AI Conflict rules replace the stock strategic-location hold timer; radio coverage still matters for normal base operations."
+			Target_ru_ru "CONFLICT<br/>Игроки могут вступить в любую из двух основных сторон. По умолчанию у обеих сторон есть командир ИИ; сервер может передать ИИ только одну сторону. Автономные отделения атакуют, обороняются и пополняются, пока вы участвуете в кампании.<br/><br/>ПОБЕДА<br/>Сторона побеждает, когда у противника заканчиваются билеты пополнения либо когда она владеет всеми активными захватываемыми целями и ни одна из них не захватывается и не оспаривается. Штабы и узлы радиорелейной сети не входят в территориальное условие. Само присутствие противника не мешает победе без активного оспаривания точки.<br/><br/>Замена уничтоженного управляемого отделения обычно стоит один билет и снабжение; пополнение выживших — только снабжение. Захватывайте базы, нарушайте логистику противника и берегите армию. Эти правила AI Conflict заменяют штатное удержание стратегических точек по таймеру; радиопокрытие по-прежнему важно для работы баз."
+		}
+		CustomStringTableItem "{A1CF26102400000D}"
+		{
+			Id "AICF_Briefing_Text_RulesCoop"
+			Target_en_us "CO-OP<br/>Players fight together on the side selected before launch. Only that side is available to players. The enemy keeps its autonomous army, reinforcements and construction. Your side has no autonomous combat roster, automatic combat replacements or automatic placement of buildings. Builders, requested supply deliveries and barracks orders remain available.<br/><br/>VICTORY AND DEFEAT<br/>Win by exhausting the enemy reinforcement tickets, or by owning every active capture objective with no capture or contest in progress. Headquarters and radio relays are excluded from territorial victory. Your side loses by territory, not by tickets. Losing all members of one player squad does not itself end the campaign.<br/><br/>Organize player groups, recruit purchased soldiers and build your support network. The enemy will keep advancing without waiting for players. These AI Conflict conditions replace the stock strategic-location hold timer."
+			Target_ru_ru "CO-OP<br/>Игроки сражаются вместе за сторону, выбранную перед запуском. Для игроков доступна только она. У противника сохраняются автономная армия, пополнение и строительство. У вашей стороны нет автономного боевого состава, автоматической замены боевых потерь и автоматического размещения построек. Строители, заказанная доставка снабжения и заказы в казарме доступны.<br/><br/>ПОБЕДА И ПОРАЖЕНИЕ<br/>Для победы исчерпайте билеты пополнения противника либо захватите все активные захватываемые цели без продолжающегося захвата или оспаривания. Штабы и радиорелейные узлы исключены из территориального условия. Ваша сторона проигрывает по территории, а не по билетам. Гибель одного отряда игроков сама по себе не завершает кампанию.<br/><br/>Создавайте группы игроков, нанимайте заказанных бойцов и развивайте сеть снабжения. Противник продолжает наступление, не ожидая игроков. Эти условия AI Conflict заменяют штатное удержание стратегических точек по таймеру."
+		}
+		CustomStringTableItem "{A1CF26102400000E}"
+		{
+			Id "AICF_Briefing_Text_Command"
+			Target_en_us "Open the map and the AI Conflict command interface. Select an allied managed squad to inspect its status and available orders. Set a movement, attack or defence objective using the map controls. You can send surviving infantry to reinforce at a barracks, give it priority in the reinforcement queue, or return a squad to AI control.<br/><br/>Manual orders remain in force until completed or changed; the autonomous commander does not simply overwrite them. Returned squads resume the commander's campaign plan. The commander distributes attacks and defence according to objectives, threats, routes and available forces.<br/><br/>Player groups and nearby recruited soldiers also use the native group menu and command wheel. Leadership, ownership and AI limits still apply. In Co-op there is no friendly autonomous combat roster to select; command your recruited soldiers through the native controls."
+			Target_ru_ru "Откройте карту и командный интерфейс AI Conflict. Выберите союзное управляемое отделение, чтобы увидеть его состояние и доступные приказы. Задавайте движение, атаку или оборону средствами карты. Выжившую пехоту можно отправить на пополнение в казарму, повысить её приоритет в очереди или вернуть отделение под управление ИИ.<br/><br/>Ручные приказы сохраняются до выполнения или изменения; автономный командир не перезаписывает их произвольно. Возвращённые ему отделения снова участвуют в плане кампании. Командир распределяет атаки и оборону с учётом целей, угроз, маршрутов и доступных сил.<br/><br/>Для групп игроков и нанятых рядом бойцов также доступны штатные меню группы и колесо команд. Требования лидерства, принадлежности и лимит ИИ сохраняются. В Co-op союзного автономного боевого состава для выбора нет; управляйте нанятыми бойцами штатными средствами."
+		}
+		CustomStringTableItem "{A1CF26102400000F}"
+		{
+			Id "AICF_Briefing_Text_Recruitment"
+			Target_en_us "At an allied barracks, order soldiers or a squad from the troop list and wait for them to appear. Purchased squads can be recruited in both Conflict and Co-op, including purchased Guard squads. Paying for a squad does not automatically add every soldier to your player group.<br/><br/>To recruit, join or create a player group, become its leader, approach a purchased allied soldier and use Recruit in the native command wheel. There must be room within the native AI limit (normally four AI per player group). A full purchased squad may exceed that limit; recruit only as many soldiers as your group allows.<br/><br/>If Recruit is unavailable, check leadership in the group menu, the AI count, faction and whether this soldier belongs to a purchased squad. Ordinary base guards, construction workers and autonomous AI Conflict squads are not made recruitable by this feature. Orders still cost supplies."
+			Target_ru_ru "В союзной казарме закажите бойцов или отделение из списка пехоты и дождитесь их появления. Купленных бойцов можно нанимать и в Conflict, и в Co-op, включая заказанные охранные отделения Guard. Оплата отделения не добавляет всех его бойцов в вашу группу автоматически.<br/><br/>Для найма вступите в группу игроков или создайте её, станьте лидером, подойдите к купленному союзному бойцу и выберите Recruit в штатном колесе команд. В группе должно оставаться место в пределах штатного лимита ИИ (обычно четыре ИИ на группу игроков). Полное заказанное отделение может превышать этот лимит; нанимайте допустимое количество бойцов.<br/><br/>Если Recruit недоступен, проверьте лидерство в меню группы, количество ИИ, фракцию и принадлежность бойца к купленному отделению. Обычная охрана базы, рабочие и автономные отделения AI Conflict этой механикой не становятся доступными для найма. Заказы по-прежнему расходуют снабжение."
+		}
+		CustomStringTableItem "{A1CF261024000010}"
+		{
+			Id "AICF_Briefing_Text_Equipment"
+			Target_en_us "Use the AI Conflict equipment editor to prepare a personal spawn preset or a squad equipment template. Check both weapon slots, ammunition, clothing and the contents of containers and pouches before saving. Equipment is drawn from the active content profile.<br/><br/>A personal preset is applied through respawn. Squad templates equip new soldiers; existing soldiers receive changes at a safe allied arsenal. A saved template does not instantly replace equipment in the middle of combat. Inventory capacity and access rules still apply.<br/><br/>After combat, managed soldiers can replenish ammunition and suitable consumables and collect compatible supplies from nearby bodies. Available items must fit their equipment and template. Following your death, the deployment interface also allows you to take control of a living AI member of your own group with that soldier's current equipment. The normal respawn delay is preserved."
+			Target_ru_ru "В редакторе экипировки AI Conflict можно подготовить личный пресет для появления или шаблон оснащения отделения. Перед сохранением проверьте оба оружейных слота, боеприпасы, одежду и содержимое контейнеров и подсумков. Снаряжение берётся из активного набора контента.<br/><br/>Личный пресет применяется через возрождение. Новые бойцы получают шаблон отделения, а уже живые — изменения у безопасного союзного арсенала. Сохранение шаблона не заменяет экипировку мгновенно посреди боя. Ограничения вместимости и доступности инвентаря сохраняются.<br/><br/>После боя управляемые бойцы могут пополнять боеприпасы и подходящие расходники, собирать совместимое снабжение с ближайших тел. Предметы должны подходить снаряжению и шаблону. После вашей гибели интерфейс развёртывания также позволяет занять живого ИИ из своей группы с его текущим оснащением. Штатная задержка возрождения сохраняется."
+		}
+		CustomStringTableItem "{A1CF261024000011}"
+		{
+			Id "AICF_Briefing_Text_Logistics"
+			Target_en_us "Supplies support construction, vehicle and troop orders, and reinforcement. Check stocks at the base where an action will be performed; a large faction total does not mean every base has supplies. Capture and connect bases through the radio network.<br/><br/>Use the supply interface on the map to choose allied source and destination bases and the amount to deliver. An accepted request sends a real supply vehicle along a route. Supplies do not teleport to the destination when you press the button. Follow the shipment status and protect the truck; unsafe roads, losses and lack of available transport can delay delivery.<br/><br/>Autonomous forces use transport and combat vehicles when suitable assets and routes are available. Logistics and the supply economy remain part of every mode, including Co-op. A supply request does not grant ownership of the delivery vehicle or crew."
+			Target_ru_ru "Снабжение нужно для строительства, заказа техники и бойцов, а также пополнения. Проверяйте запасы на той базе, где выполняется действие: большой общий запас фракции не означает наличие ресурсов на каждой базе. Захватывайте базы и соединяйте их радиосетью.<br/><br/>В интерфейсе снабжения на карте выберите союзные базу отправления и назначения и количество груза. Принятая заявка отправляет реальную машину по маршруту. Нажатие кнопки не переносит снабжение мгновенно на другую базу. Следите за состоянием доставки и защищайте грузовик: опасные дороги, потери и отсутствие свободного транспорта могут задержать рейс.<br/><br/>Автономные силы используют транспортную и боевую технику при наличии подходящих машин и маршрутов. Логистика и экономика снабжения работают во всех режимах, включая Co-op. Заявка на доставку не передаёт игроку машину или экипаж в собственность."
+		}
+		CustomStringTableItem "{A1CF261024000012}"
+		{
+			Id "AICF_Briefing_Text_Reinforcement"
+			Target_en_us "Managed infantry replenishes at a safe allied barracks with enough supplies. Surviving squads move there to receive replacements. Replacing a fully destroyed managed squad normally costs one ticket plus supplies; filling missing members costs supplies without a ticket.<br/><br/>Each faction has one sequential reinforcement queue. One squad is completed before the next is served. Recruitment proceeds one soldier every five seconds; a full ten-person squad takes about 45 seconds of scheduled recruitment, plus travel, queueing and actual spawning. A request does not create an entire squad immediately.<br/><br/>Map status and priority controls help you monitor this queue. Captured or unsafe barracks, unavailable resources and spawn restrictions can postpone service. Co-op players do not receive automatic combat replacements: purchase and recruit soldiers at the barracks. Enemy AI reinforcement remains active."
+			Target_ru_ru "Управляемая пехота пополняется в безопасной союзной казарме при достаточном снабжении. Выжившие отделения направляются туда за заменами. Замена полностью уничтоженного управляемого отделения обычно стоит один билет и снабжение; восполнение недостающих бойцов — снабжение без билета.<br/><br/>У каждой фракции одна последовательная очередь пополнения. Сначала завершается одно отделение, затем обслуживается следующее. Найм идёт по одному бойцу каждые пять секунд; для полного отделения из десяти человек требуется около 45 секунд планового найма плюс дорога, очередь и фактическое появление. Заявка не создаёт всё отделение мгновенно.<br/><br/>Состояние и приоритет очереди доступны на карте. Захват или опасность возле казармы, недостаток ресурсов и ограничения появления могут отложить обслуживание. В Co-op игрокам не выдаются автоматические боевые замены: заказывайте и нанимайте бойцов в казарме. Пополнение противника ИИ продолжает работать."
+		}
+		CustomStringTableItem "{A1CF261024000013}"
+		{
+			Id "AICF_Briefing_Text_Construction"
+			Target_en_us "Develop allied bases with barracks, arsenals, vehicle facilities and other available support structures. These facilities enable recruitment, rearming, repairs and vehicle orders. Rank restrictions on construction and vehicle requests are removed; supply costs and placement rules remain.<br/><br/>On sides controlled by the autonomous commander, AI plans infrastructure and construction workers finish layouts. Work can resume after initial combat losses; building is not limited to the opening of the match.<br/><br/>On the human side in Co-op, automatic placement is disabled. Place the structures you need yourself and provide supplies. Construction workers can still be created to finish your layouts. Protect workers and the construction site. Purchased workers are not combat recruits, and their presence does not automatically place new buildings."
+			Target_ru_ru "Развивайте союзные базы: стройте казармы, арсеналы, площадки техники и другие доступные объекты поддержки. Они дают найм, перевооружение, ремонт и заказ машин. Ограничения по званию на строительство и заказ техники сняты; стоимость снабжения и правила размещения остаются.<br/><br/>На сторонах автономного командира ИИ планирует инфраструктуру, а рабочие достраивают размещённые объекты. Работы могут продолжаться после первых боевых потерь; строительство не ограничено началом матча.<br/><br/>На стороне людей в Co-op автоматическое размещение отключено. Самостоятельно размещайте нужные постройки и доставляйте снабжение. Рабочие по-прежнему могут создаваться для завершения ваших объектов. Защищайте рабочих и стройплощадку. Рабочие не являются бойцами для найма, а их присутствие само по себе не размещает новые постройки."
+		}
+		CustomStringTableItem "{A1CF261024000014}"
+		{
+			Id "AICF_Briefing_Text_Enemy"
+			Target_en_us "Neutral FIA bases resist both main sides. Garrisons activate near players and advancing managed AI groups, so AI can fight them without a player standing nearby. Additional garrisons and road patrols become dormant when observers leave; recorded losses are retained. Vehicle crews defend their area rather than pursuing enemies across the island.<br/><br/>EASY: infantry, without additional garrison vehicles or road patrols.<br/>MEDIUM: one APC per eligible garrison, with a random dismount group of up to two or four soldiers.<br/>HARD: a random pair of tanks/APCs; one eligible strongpoint can have three or four vehicles. If the content has no suitable FIA tanks, APCs substitute for them. Seat availability limits dismounts.<br/><br/>Difficulty changes the garrison composition, not rifle accuracy. Medium and Hard also increase anti-tank roles in standard autonomous squads. Vanilla keeps stock FIA weapons; RHS/WCS use their own equipment mix. Beware of armour and protect your supply routes."
+			Target_ru_ru "Нейтральные базы FIA сопротивляются обеим основным сторонам. Гарнизоны активируются возле игроков и приближающихся управляемых групп ИИ, поэтому ИИ может сражаться с ними без игрока рядом. Дополнительные гарнизоны и дорожные патрули засыпают при уходе наблюдателей; зафиксированные потери сохраняются. Экипажи обороняют свой район, а не преследуют врага по всему острову.<br/><br/>EASY: пехота без дополнительной гарнизонной техники и дорожных патрулей.<br/>MEDIUM: один БТР в подходящем гарнизоне со случайным десантом до двух или четырёх бойцов.<br/>HARD: случайная пара танков/БТР; одна подходящая усиленная точка может иметь три или четыре машины. Если в контенте нет подходящих танков FIA, их заменяют БТР. Число мест ограничивает десант.<br/><br/>Сложность меняет состав гарнизонов, а не точность стрельбы из винтовок. Medium и Hard также увеличивают число противотанковых ролей в стандартных автономных отделениях. В Vanilla у FIA штатное оружие; RHS/WCS используют свой смешанный набор. Учитывайте бронетехнику и защищайте пути снабжения."
+		}
+		CustomStringTableItem "{A1CF261024000015}"
+		{
+			Id "AICF_Briefing_Text_Settings"
+			Target_en_us "Choose the map, enabled content, Conflict or Co-op, player side, garrison difficulty, starting time and weather before launching. The time slider covers 00:00–23:59; weather may be random or a selected preset. Time and weather continue to change during play. The active scenario title on the first page identifies the selected map, mode and difficulty.<br/><br/>Only enabled content with its dependencies is available in setup; downloading a mod alone does not enable it. Vanilla uses US Army/Soviet Army, RHS uses USMC/Russian MSV, and WCS + RHS uses NATO/Russia. Available weapons and vehicles depend on that profile. The operation loads the selected addon set. See Setup guide in the selection menu for preparation steps.<br/><br/>The northern map variant limits active objectives while keeping the landscape accessible. Every launch starts a new campaign; saving and resuming a match is not supported yet. This journal describes default rules: server configuration and native limits can affect availability and timing."
+			Target_ru_ru "Перед запуском выбираются карта, включённый контент, Conflict или Co-op, сторона игроков, сложность гарнизонов, начальное время и погода. Ползунок времени охватывает 00:00–23:59; погоду можно выбрать или оставить случайной. В ходе игры время и погода продолжают меняться. Заголовок сценария на первой странице указывает выбранную карту, режим и сложность.<br/><br/>В настройках доступен только включённый контент с его зависимостями; скачивание мода само по себе его не включает. Vanilla использует армии США/СССР, RHS — USMC/МСВ России, WCS + RHS — НАТО/РФ. Доступное оружие и техника зависят от этого набора. Операция загружает выбранный набор дополнений. Порядок подготовки описан в «Как настроить» в меню выбора.<br/><br/>Северный вариант карты ограничивает активные цели, оставляя ландшафт доступным. Каждый запуск начинает новую кампанию; сохранение и продолжение матча пока не поддерживаются. Здесь описаны правила по умолчанию: параметры сервера и штатные ограничения могут влиять на доступность и сроки."
+		}
 	}
 }

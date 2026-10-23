@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Изменить внутриигровой брифинг на карте | [MISSION_BRIEFING.md](MISSION_BRIEFING.md), `UI/AICF_MissionBriefing.c`, MissionBriefingProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Разобрать resource/navmesh/Hierarchy ошибки и границу внешнего baseline | [EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md), [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), [TESTING.md](TESTING.md) |
 | Исправить damage RPC при смене обуви у private model или при shutdown | [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), `Integration/AICF_FeetDamageLifecycle.c`, FeetDamageProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить универсальное меню карт/контента, подсказку «Как настроить», время/погоду, зависимости и native launch, видимость сценариев или ошибки SCR_FilterCategory | [SCENARIO_SETUP.md](SCENARIO_SETUP.md), `AICF_ScenarioEnvironment`/`AICF_ScenarioEnvironmentHandler`, `AICF_ScenarioRegistry`, `AICF_ScenarioLaunch`, `AICF_ScenarioSetupSelection`, `AICF_ScenarioSetupScreen`, `AICF_ScenarioSetupEntry`, `AICF_ArlandScenarioCatalog`, `AICF_WorkshopTagMetadata` |

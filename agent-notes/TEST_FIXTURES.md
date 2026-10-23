@@ -1,5 +1,25 @@
 # Runtime fixture: каталог и применение
 
+## Брифинг на карте
+
+`AICF_MissionBriefingProbe.c` копировать только в isolated Core как
+`UI/AICF_ZMissionBriefingProbe.c`. Canonical server и direct client:
+`-aicfBriefingProbe 1`. После 15 секунд проверяет настоящий
+`SCR_RespawnBriefingComponent`, повторный Load/Reset, десять страниц, выбор
+STANDARD/Co-op, native faction fallback, уникальные IDs, null/stock header.
+Для всех загруженных integration owners читает presets из registry и
+проверяет все режимы/сложности без изменения active mission header.
+
+Client создаёт штатные Journal/JournalButton/JournalEntryDefault layouts,
+назначает entry через native button и читает title/text для всех десяти страниц
+на RU/EN и английском fallback (`de_de`), затем восстанавливает язык.
+Это проверка данных/виджетов, без открытия карты вводом игрока или GUI automation.
+Fixture вызывает RequestClose, снимает свои callbacks на OnGameEnd.
+Server оставляет 150 секунд после своих checks для canonical late connection.
+Полный stopped log должен содержать один `BRIEFING_DONE failed=0`, только
+`BRIEFING_CASE pass=1`, `Game destroyed.`, exit 0 и canonical CLI/manifest;
+SCRIPT/VM/fatal/RPC errors запрещены. Проверять также sibling logs.
+
 ## Повреждение босых ног и private models
 
 `AICF_FeetDamageProbe.c` копировать в isolated Core как
