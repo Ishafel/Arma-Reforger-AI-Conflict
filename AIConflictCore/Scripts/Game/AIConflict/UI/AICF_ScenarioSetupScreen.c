@@ -76,6 +76,7 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		Widget guideButton = m_Style.CreateRect(m_wRoot, 0.76, 0.12, 0.945, 0.156, Border(), true);
 		if (!guideButton) { Close(); return false; }
 		guideButton.SetName("AICF_SetupGuideButton");
+		guideButton.SetZOrder(10);
 		Text(guideButton, 0.03, 0, 0.97, 1, "{AICF:AICF_Setup_GuideButton}", 17, Gold(), true);
 		m_wGuideButton = guideButton.FindAnyWidget("AICF_RectInput");
 		m_Style.CreateRect(m_wRoot, 0.055, 0.16, 0.945, 0.162, Border(), false);

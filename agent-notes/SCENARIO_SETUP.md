@@ -60,6 +60,14 @@ Conflict/Co-op, сложность и окружение; проверка ви�
 Тексты RU/EN принадлежат `AICF_Localization.st`; runtime `.conf` генерируются
 `tools/Build-AICFLocalization.ps1`.
 
+Guide frame, как основные `AddButton`, требует `SetZOrder(10)`: у полноэкранного
+root есть прозрачный `AICF_RectInput` на слое 1. Frame со значением 0 остаётся
+видимым, но его нажатия получает этот root input. Проверка одного `OpenGuide`
+не выявляет перекрытие. Native probe отдельно вызывает read-only
+`WidgetManager.TraceWidgets` в девяти точках каждой guide-кнопки, учитывает
+IGNORE_CURSOR и требует, чтобы ближайший ButtonWidget совпадал с её input.
+Мышь/клавиатура при этом не перемещаются и нажатия не генерируются.
+
 ## Каталог и расширение
 
 `tools/config/AICF_Scenarios.json` — единый источник CLI и frontend targets:
@@ -124,13 +132,13 @@ Default — 480 минут. Смена карты/контента не сбра
 каталог `previewHeaders` задаёт штатный header для каждой карты, generator
 передаёт его как `m_sPreviewHeader`. Карточки читают его `m_sPreviewImage` либо
 `m_sLoadingScreen`: Арланд использует preview, Эверон — отдельную stock иллюстрацию,
-Север Эверона — preview с приглушённой сеткой и отметкой N.
+Север Эверона — preview без наложенной сетки и отметки N.
 Каталог `mapCards` задаёт локализованные tag/description, RGB accent, artwork и
 sectorGrid. Генератор проверяет подписи, три целых RGB 0..255 и boolean-флаги,
 передаёт оформление descriptor каждого content-варианта. Core не содержит
 имён карт, конкретных палитр или ресурсов. Арланд выделен бирюзовым, Эверон —
-песочным, Север — голубым. Сетка декоративная, не является картой world или
-границей whitelist. Название и короткое описание находятся под изображением,
+песочным, Север — голубым. Для текущих карт `sectorGrid=false`; прежняя
+декоративная сетка удалена по запросу владельца. Название и короткое описание находятся под изображением,
 метка операции — на контрастной подложке. Золото по-прежнему обозначает выбор.
 Это не требует чтения header ещё не загруженного integration addon.
 Размер текстуры задаёт масштаб заполнения с сохранением пропорций, parent
@@ -263,6 +271,8 @@ BaseContainer adapter, callbacks Remove/Insert и override OnGameStart для
   choices, schema-2 roundtrip/schema-1 rejection, одноразовый storage/чужой target,
   cleanup. Guide дополнительно проверяет кнопку, nested modal, размеры текста,
   повторное открытие, возврат focus/выбора и Close с открытой подсказкой.
+  Обязательные UI_GUIDE_HIT_TARGET/UI_GUIDE_HIT_CLOSE проверяют порядок input
+  в девяти точках; UI_CARD_IDENTITY требует отсутствие декоративной сетки.
   `-aicfProbeLanguage ru_ru|en_us` меняет язык только в isolated fixture и
   возвращает исходный при Stop. Программные readbacks не доказывают физический ввод.
   CLI `-aicfUniversalProbe 1 -aicfExpectedReadyVariants 9`.

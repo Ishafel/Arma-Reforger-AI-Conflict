@@ -1,5 +1,57 @@
 # Проверки и baseline
 
+## Setup guide: перекрытый input и сетка северного сектора — 2026-10-23
+
+Ветка `codex/scenario-guide-input` от `8c142f4`, сообщение владельца о
+неработающей кнопке и полосах на North Everon. Evidence:
+`.codex-runtime/scenario-guide-input-20261023-234235/REPORT.md`.
+
+У guide frame был default ZOrder 0, у прозрачного root `AICF_RectInput` — 1.
+Нативный read-only `WidgetManager.TraceWidgets` подтвердил: в центре кнопки
+первый ButtonWidget принадлежит AICF_ScenarioSetupScreen, а не guide frame.
+`guideButton.SetZOrder(10)` поднимает её над root, как остальные `AddButton`.
+Полосы/отметка N отключены presentation-флагом sectorGrid=false в каталоге;
+registry перегенерирован для всех трёх North variants. World/whitelist не менялись.
+
+- До правки профильные offline checks **6/6 PASS/0**. Новый native baseline
+  на исходном production source: Workbench PASS, native exit 0, **61 checks,
+  failed=2**, строгий oracle **FAIL/1** — UI_GUIDE_HIT_TARGET и UI_CARD_IDENTITY
+  (новое требование отсутствия сетки). Исходный FAIL сохранён. Прежние 59/59
+  readbacks проверяли OpenGuide напрямую и видимость кнопки; hit order ими
+  не проверялся, поэтому прошлый PASS не доказывал доступность клика.
+- `Invoke-AICFChecks.ps1` с UniversalScenarioStatic, ScenarioSetupStatic,
+  UniversalScenarioLogContracts, LocalizationStatic, ScenarioEnvironmentStatic,
+  ScenarioHeadersStatic: после правки **6/6 PASS/0**, log contracts **66 cases**.
+  `Update-AICFScenarioRegistry.ps1` и его Check прошли, 9 variants/81 presets.
+- `Compile.ps1`: final production Stock/RHS/ArlandWCSRHS **3/3 PASS/0**;
+  final stage тех же трёх плюс Everon/EveronRHS/EveronWCSRHS **6/6 PASS/0**.
+  Terminal Workbench 1.8.0.13, validation success, полные argv/manifests/logs сохранены.
+- `FrontendMatrix.ps1` → `RunFrontend.ps1`: RU/EN × Vanilla/RHS/WCS + RHS,
+  **6/6 PASS/0**, по **61/61 cases**. UI_GUIDE_HIT_TARGET/UI_GUIDE_HIT_CLOSE
+  проверяют по девять точек каждой кнопки: **108/108** native hit queries PASS.
+  Нет движения мыши/клавиш или генерации input. Все карточки без grid widget;
+  переводы, modal/focus/selection, повтор, размеры и прежняя UI матрица прошли.
+- `Finalize.ps1`: **18** final stopped logs, SCRIPT/VM/fatal/assertions/RPC
+  **0**. Остальные resource/engine diagnostics — **420 Error lines** с повторами,
+  чистый engine log не заявляется. **440/440** production hashes source/stage
+  и fixture hash совпали; baseline/final отличаются только двумя production
+  `.c` (UI и generated registry). Catalog JSON сверяется генератором отдельно.
+- `Archive.ps1`: **9 ZIP** (два stage, семь profiles), каждый entry проверен
+  bytes/SHA-256 до адресного удаления. **21/21** copied full logs (18 final и
+  3 baseline) совпали по SHA-256. Watcher с явным root завершился штатно;
+  собственных native тестовых процессов не осталось.
+
+Ручной клиент предыдущей сборки остановлен по точной PID/creation/CLI identity
+для исправления; native exit -1 отмечен как намеренный Stop-Process, не crash
+gate. После сохранения исправления production клиент открывается отдельно для
+владельца без probes/автозавершения; это не новый stopped-log runtime verdict.
+
+**NOT RUN:** физический клик/клавиши/Esc, все разрешения и визуальная оценка,
+packaged Workshop/обычный Steam-путь, полный offline набор, Host/direct-connect/
+JIP, игровые soaks. Native hit query не объявляется физическим вводом, но
+проверяет именно перехватчик input, пропущенный старой fixture. Старые внешние
+resource/длительные runtime дефекты сохранены; push/PR/merge не выполнялись.
+
 ## Подсказка «Как настроить» в setup — 2026-10-23
 
 Ветка `codex/scenario-setup-help` от `36c6183`, продолжение текущей версии

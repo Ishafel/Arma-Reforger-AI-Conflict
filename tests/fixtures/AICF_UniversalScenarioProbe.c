@@ -44,7 +44,7 @@ modded class AICF_ScenarioSetupScreen
 			colors.Insert(tag.GetColorInt());
 			descriptions.Insert(description.GetText());
 			bool grid = m_aFrames[mapIndex].FindAnyWidget("AICF_CardSectorGrid") != null;
-			if (grid != (mapIndex == 2)) return false;
+			if (grid) return false;
 			array<TextWidget> labels = { m_aLabels[mapIndex], tag, description };
 			float cardX, cardY, cardWidth, cardHeight;
 			m_aFrames[mapIndex].GetScreenPos(cardX, cardY);
@@ -102,6 +102,35 @@ modded class AICF_ScenarioSetupScreen
 	{
 		return m_wGuide && m_wGuide.IsVisible() && m_bGuideOpen && GetGame().GetWorkspace().GetModal() == m_wGuide;
 	}
+	protected bool AICF_TraceButton(Widget button)
+	{
+		Widget modal = GetGame().GetWorkspace().GetModal();
+		if (!modal || !button || !button.IsEnabledInHierarchy()) return false;
+		float x, y, width, height;
+		button.GetScreenPos(x, y);
+		button.GetScreenSize(width, height);
+		array<float> fractions = {0.5, 0.2, 0.8};
+		foreach (float horizontal : fractions)
+			foreach (float vertical : fractions)
+			{
+				array<Widget> hits = {};
+				WidgetManager.TraceWidgets(Math.Round(x + width * horizontal), Math.Round(y + height * vertical), modal, hits);
+				Widget first;
+				foreach (Widget candidate : hits)
+				{
+					if (!ButtonWidget.Cast(candidate) || (candidate.GetFlags() & WidgetFlags.IGNORE_CURSOR) != 0) continue;
+					first = candidate;
+					break;
+				}
+				string parent = "NULL";
+				if (first && first.GetParent()) parent = first.GetParent().GetName();
+				Print(string.Format("[AICF][UNIVERSAL_GUIDE_HIT] expected_parent=%1 actual_parent=%2 horizontal=%3 vertical=%4 pass=%5", button.GetParent().GetName(), parent, horizontal, vertical, first == button));
+				if (first != button) return false;
+			}
+		return true;
+	}
+	bool AICF_GuideHitTarget() { return AICF_TraceButton(m_wGuideButton); }
+	bool AICF_GuideCloseHitTarget() { return AICF_TraceButton(m_wGuideClose); }
 	bool AICF_GuideLayout()
 	{
 		if (!AICF_GuideModal() || m_aGuideTexts.Count() != 3) return false;
@@ -268,6 +297,7 @@ class AICF_UniversalScenarioProbe
 	{
 		m_sGuideTarget = m_Selection.GetResource();
 		Check("UI_GUIDE_BUTTON", m_Screen.AICF_GuideButton());
+		Check("UI_GUIDE_HIT_TARGET", m_Screen.AICF_GuideHitTarget());
 		Check("UI_GUIDE_OPEN", m_Screen.OpenGuide() && m_Screen.OpenGuide() && m_Screen.AICF_GuideModal());
 		GetGame().GetCallqueue().CallLater(GuideReadback, 500, false);
 	}
@@ -278,6 +308,7 @@ class AICF_UniversalScenarioProbe
 		WidgetManager.GetLanguage(actual);
 		Print(string.Format("[AICF][UNIVERSAL_GUIDE_LANGUAGE] requested=%1 actual=%2 label=%3", requested, actual, AICF_Localization.Resolve("{AICF:AICF_Setup_GuideButton}")));
 		Check("UI_GUIDE_LAYOUT", m_Screen.AICF_GuideLayout() && (requested.IsEmpty() || requested == actual));
+		Check("UI_GUIDE_HIT_CLOSE", m_Screen.AICF_GuideCloseHitTarget());
 		m_Screen.CloseGuide();
 		m_Screen.CloseGuide();
 		Check("UI_GUIDE_RESTORE", m_Screen.AICF_GuideRestored() && m_Selection.GetResource() == m_sGuideTarget && m_Selection.GetEnvironment().m_iStartMinutes == 480);

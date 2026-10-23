@@ -69,7 +69,7 @@ modded class AICF_ScenarioRegistry
 		variant.m_sMapDescription = "{AICF:AICF_Setup_Description_EveronNorth}";
 		variant.m_vMapAccent = "123 180 225";
 		variant.m_bPreviewArtwork = false;
-		variant.m_bPreviewSectorGrid = true;
+		variant.m_bPreviewSectorGrid = false;
 		variant.m_sWestLabel = "{AICF:AICF_Setup_US}";
 		variant.m_sEastLabel = "{AICF:AICF_Setup_USSR}";
 		variant.m_sOwner = "A4B2E62595F645A4";
@@ -164,7 +164,7 @@ modded class AICF_ScenarioRegistry
 		variant.m_sMapDescription = "{AICF:AICF_Setup_Description_EveronNorth}";
 		variant.m_vMapAccent = "123 180 225";
 		variant.m_bPreviewArtwork = false;
-		variant.m_bPreviewSectorGrid = true;
+		variant.m_bPreviewSectorGrid = false;
 		variant.m_sWestLabel = "{AICF:AICF_Setup_USMC}";
 		variant.m_sEastLabel = "{AICF:AICF_Setup_MSV}";
 		variant.m_sOwner = "FA9FDCCA428A43BA";
@@ -342,7 +342,7 @@ modded class AICF_ScenarioRegistry
 		variant.m_sMapDescription = "{AICF:AICF_Setup_Description_EveronNorth}";
 		variant.m_vMapAccent = "123 180 225";
 		variant.m_bPreviewArtwork = false;
-		variant.m_bPreviewSectorGrid = true;
+		variant.m_bPreviewSectorGrid = false;
 		variant.m_sWestLabel = "{AICF:AICF_Setup_NATO}";
 		variant.m_sEastLabel = "{AICF:AICF_Setup_Russia}";
 		variant.m_sOwner = "A1CF261006100001";
