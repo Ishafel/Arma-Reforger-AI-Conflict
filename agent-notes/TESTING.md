@@ -1,5 +1,69 @@
 # Проверки и baseline
 
+## Лимит имён сценариев Workshop — 2026-10-24
+
+Ветка `codex/workshop-scenario-name-limit` от свежего `origin/main`
+`02489cd657a48ba1d97d71b66470b7900456e0d8`, исходное дерево чистое.
+Владелец получил `CreateAssetUpload` 400/ValidationError:
+`data.asset.scenarios[13].name should NOT be longer than 50 characters`.
+Без тела исходного upload индекс 13 не привязывается к конкретному файлу.
+Проверен весь набор, а не только предполагаемый элемент.
+
+Новый `Test-WorkshopScenarioNamesStatic.ps1` на исходных данных — **FAIL/1**:
+82 headers / 246 raw/RU/EN имён, **21** нарушение в **16** headers —
+20 переводов длиной до 58 и один raw key длиной 52 с `#`.
+Прежние профильные gates не знали этого ограничения: свежий
+`Invoke-AICFChecks.ps1 -Name <CoopScenarioMatrix,CoopScenarioStatic,
+LocalizationStatic,ScenarioHeadersStatic,UniversalScenarioLogContracts,
+UniversalScenarioStatic> -EvidenceRoot <evidence>/before` — **6/6 PASS/0**.
+Имена до изменения и исходный FAIL сохранены в `names-before.csv/.txt`.
+
+Генератор сохраняет уже допустимые имена; длинным даёт компактное имя
+с прежними картой/контентом/Co-op/стороной и `[M]`/`[H]`. Один длинный ключ
+заменён именем на основе прежнего string-item GUID. Source/runtime-таблицы
+перегенерированы. Сохранены все **758** item GUID, resource GUID, paths,
+состав матрицы, legacy IDs, MatchMode и difficulty. Production `.c`, API,
+зависимости и gameplay не менялись. Дельта: **8 EN + 12 RU + 1 raw**,
+ни одно прежнее допустимое имя не изменено.
+
+После генерации `Test-WorkshopScenarioNamesStatic.ps1 -CsvPath <evidence>/names-after.csv`
+— **PASS/0**, те же **82/246**, максимум **50**, нарушений 0.
+`Test-WorkshopScenarioNamesContracts.ps1` — **8/8 PASS/0**: независимые
+fixtures на границе 50/51 для raw/EN/RU/literal, unresolved и пустой перевод.
+`Update-AICFCoopScenarios.ps1 -Check` — **PASS/0**, 54 headers, changed=0;
+localization **758** entries. Полный
+`Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/after` —
+**83/83 PASS, runner exit 0**: Static **34/34**, Contracts **49/49**,
+без исключений и оставшихся offline failures. Исходный length FAIL сохранён
+в baseline, после исправления все 21 нарушения устранены. Полный
+план/argv/exits/outputs находятся в `after/`, полнота — `offline-verdict.json`.
+
+`Compile.ps1` в evidence использует точные gproj/addonsDir/addons canonical
+Client DryRun и terminal `ArmaReforgerWorkbenchSteamDiag.exe` 1.8.0.13:
+Stock/Everon/RHS/EveronRHS/ArlandWCSRHS/EveronWCSRHS — **6/6 PASS/0**,
+`Script validation successful`, SCRIPT E/F, VM/assertions и ENGINE F — 0.
+Полные Workbench logs содержат прежние resource Errors: по **50/50/52/52/78/78**
+строк с учётом дублей error.log; это не полностью чистый engine gate.
+Точные argv, manifests, source hashes и полные stopped logs сохранены.
+
+Evidence: `.codex-runtime/workshop-scenario-names-20261024/`.
+`Verify-Task.ps1` — **PASS/0**: 216 локальных Markdown-ссылок,
+433/433 production hashes после compile совпали, `git diff --check` — 0.
+Собственная Construction static-input копия архивирована с проверкой
+bytes/SHA-256 **102/102** файлов и адресно удалена; свои Workbench processes
+и offline runner завершены. Остальные evidence/пользовательские файлы сохранены.
+Первая локальная версия compact formatter оставляла EN North WCS Russia
+длиной 51; generator guard отклонил её до записи string table. Формат дополнили
+короткими side labels и повторили генерацию/аудит, исходный отказ не считается
+PASS. Новый аудит также сохраняет изначальный FAIL отдельно от исправленного.
+
+**NOT RUN:** фактический Workshop upload/packaged build, игровой server/client,
+ручной вид меню и брифинга, JIP и soak. Исправлены имена, участие в бою не
+менялось. Владелец должен переоткрыть/обновить resources в своём Workbench,
+опубликовать Core, затем сценарные addons; принятие пакета backend этим
+терминальным аудитом не доказано. GUI automation и публикация пакета агентом
+не выполнялись. Тег/GitHub Release 0.2.0 не перемещается.
+
 ## Оформление 0.2.0 — 2026-10-24
 
 Ветка `codex/release-0.2.0` от свежего `origin/main`

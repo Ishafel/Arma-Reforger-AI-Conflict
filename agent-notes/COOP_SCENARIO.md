@@ -99,6 +99,27 @@ Server-only marker на конкретной группе позволяет в�
 
 ## Каталог и добавление карты или мода
 
+Workshop `CreateAssetUpload` ограничивает `data.asset.scenarios[].name`
+50 символами. Проверяем и сырой `m_sName` с `#`, и оба RU/EN текста: publisher
+не должен зависеть от выбранного языка или разворачивания ссылки. Генератор
+сначала сохраняет полное имя; только при превышении лимита сжимает `WCS + RHS`
+до `WCS+RHS`, английские army/Russia метки до US/USSR/RF, сложность до `[M]`/`[H]`.
+Карта, контент, Co-op и сторона остаются в имени; длинный результат отклоняется,
+строка не обрезается. Слишком длинный localization ID заменяется коротким
+`AICF_Scenario_Coop_<string-item GUID>_Name`; сам item GUID, resource GUID,
+пути, режим и difficulty не меняются. Три legacy Stock USSR IDs сохранены.
+
+`Test-WorkshopScenarioNamesStatic.ps1` проверяет все собственные mission headers,
+включая standard и setup, и умеет экспортировать `-CsvPath`. Контрактный тест
+проверяет границы 50/51 для ключей, обоих переводов и literal name, отсутствующий
+ключ и пустой перевод. Generator `-Check` и `Test-CoopScenarioMatrix.ps1`
+по-прежнему проверяют актуальность generated файлов. После исправления source
+нужно заново загрузить/собрать актуальные resources в Workbench перед повтором
+публикации. Сначала обновляется `AIConflictCore` с новыми runtime-таблицами,
+затем сценарные addons: у Everon WCS + RHS появился короткий localization ID,
+которого нет в прежнем Core. Локальный аудит не подтверждает принятие upload
+сервером Workshop.
+
 `tools/config/AICF_Scenarios.json` — единый каталог source graphs, standard ресурсов,
 двух наборов Co-op GUID, названий и runtime faction keys. `AICF_Scenarios.ps1`
 валидирует каталог и разрешает `(Variant, MatchMode, Difficulty)`; launcher и

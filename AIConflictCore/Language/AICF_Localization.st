@@ -96,13 +96,13 @@ StringTable
 		CustomStringTableItem "{A1CF261018470322}"
 		{
 			Id "AICF_Scenario_EveronNorthCoopUSSR_Medium_Name"
-			Target_en_us "AI Conflict - Everon North Co-op Soviet Army (Medium)"
+			Target_en_us "AI Conflict - Everon North Co-op USSR [M]"
 			Target_ru_ru "AI Conflict — Север Эверона Co-op СССР (средний)"
 		}
 		CustomStringTableItem "{A1CF261018470323}"
 		{
 			Id "AICF_Scenario_EveronNorthCoopUSSR_Hard_Name"
-			Target_en_us "AI Conflict - Everon North Co-op Soviet Army (Hard)"
+			Target_en_us "AI Conflict - Everon North Co-op USSR [H]"
 			Target_ru_ru "AI Conflict — Север Эверона Co-op СССР (сложный)"
 		}
 		CustomStringTableItem "{A1CF261018470411}"
@@ -187,13 +187,13 @@ StringTable
 		{
 			Id "AICF_Scenario_EveronNorthRHSCoopUS_Medium_Name"
 			Target_en_us "AI Conflict - Everon North RHS Co-op USMC (Medium)"
-			Target_ru_ru "AI Conflict — Север Эверона RHS Co-op USMC (средний)"
+			Target_ru_ru "AI Conflict — Север Эверона RHS Co-op USMC [M]"
 		}
 		CustomStringTableItem "{A1CF261018470613}"
 		{
 			Id "AICF_Scenario_EveronNorthRHSCoopUS_Hard_Name"
 			Target_en_us "AI Conflict - Everon North RHS Co-op USMC (Hard)"
-			Target_ru_ru "AI Conflict — Север Эверона RHS Co-op USMC (сложный)"
+			Target_ru_ru "AI Conflict — Север Эверона RHS Co-op USMC [H]"
 		}
 		CustomStringTableItem "{A1CF261018470621}"
 		{
@@ -205,13 +205,13 @@ StringTable
 		{
 			Id "AICF_Scenario_EveronNorthRHSCoopUSSR_Medium_Name"
 			Target_en_us "AI Conflict - Everon North RHS Co-op MSV (Medium)"
-			Target_ru_ru "AI Conflict — Север Эверона RHS Co-op МСВ (средний)"
+			Target_ru_ru "AI Conflict — Север Эверона RHS Co-op МСВ [M]"
 		}
 		CustomStringTableItem "{A1CF261018470623}"
 		{
 			Id "AICF_Scenario_EveronNorthRHSCoopUSSR_Hard_Name"
 			Target_en_us "AI Conflict - Everon North RHS Co-op MSV (Hard)"
-			Target_ru_ru "AI Conflict — Север Эверона RHS Co-op МСВ (сложный)"
+			Target_ru_ru "AI Conflict — Север Эверона RHS Co-op МСВ [H]"
 		}
 		CustomStringTableItem "{A1CF261018470711}"
 		{
@@ -223,13 +223,13 @@ StringTable
 		{
 			Id "AICF_Scenario_ArlandWCSRHSCoopUS_Medium_Name"
 			Target_en_us "AI Conflict - Arland WCS + RHS Co-op NATO (Medium)"
-			Target_ru_ru "AI Conflict — Арланд WCS + RHS Co-op НАТО (средний)"
+			Target_ru_ru "AI Conflict — Арланд WCS+RHS Co-op НАТО [M]"
 		}
 		CustomStringTableItem "{A1CF261018470713}"
 		{
 			Id "AICF_Scenario_ArlandWCSRHSCoopUS_Hard_Name"
 			Target_en_us "AI Conflict - Arland WCS + RHS Co-op NATO (Hard)"
-			Target_ru_ru "AI Conflict — Арланд WCS + RHS Co-op НАТО (сложный)"
+			Target_ru_ru "AI Conflict — Арланд WCS+RHS Co-op НАТО [H]"
 		}
 		CustomStringTableItem "{A1CF261018470721}"
 		{
@@ -240,7 +240,7 @@ StringTable
 		CustomStringTableItem "{A1CF261018470722}"
 		{
 			Id "AICF_Scenario_ArlandWCSRHSCoopUSSR_Medium_Name"
-			Target_en_us "AI Conflict - Arland WCS + RHS Co-op Russia (Medium)"
+			Target_en_us "AI Conflict - Arland WCS+RHS Co-op RF [M]"
 			Target_ru_ru "AI Conflict — Арланд WCS + RHS Co-op РФ (средний)"
 		}
 		CustomStringTableItem "{A1CF261018470723}"
@@ -259,13 +259,13 @@ StringTable
 		{
 			Id "AICF_Scenario_EveronWCSRHSCoopUS_Medium_Name"
 			Target_en_us "AI Conflict - Everon WCS + RHS Co-op NATO (Medium)"
-			Target_ru_ru "AI Conflict — Эверон WCS + RHS Co-op НАТО (средний)"
+			Target_ru_ru "AI Conflict — Эверон WCS+RHS Co-op НАТО [M]"
 		}
 		CustomStringTableItem "{A1CF261018470813}"
 		{
 			Id "AICF_Scenario_EveronWCSRHSCoopUS_Hard_Name"
 			Target_en_us "AI Conflict - Everon WCS + RHS Co-op NATO (Hard)"
-			Target_ru_ru "AI Conflict — Эверон WCS + RHS Co-op НАТО (сложный)"
+			Target_ru_ru "AI Conflict — Эверон WCS+RHS Co-op НАТО [H]"
 		}
 		CustomStringTableItem "{A1CF261018470821}"
 		{
@@ -276,7 +276,7 @@ StringTable
 		CustomStringTableItem "{A1CF261018470822}"
 		{
 			Id "AICF_Scenario_EveronWCSRHSCoopUSSR_Medium_Name"
-			Target_en_us "AI Conflict - Everon WCS + RHS Co-op Russia (Medium)"
+			Target_en_us "AI Conflict - Everon WCS+RHS Co-op RF [M]"
 			Target_ru_ru "AI Conflict — Эверон WCS + RHS Co-op РФ (средний)"
 		}
 		CustomStringTableItem "{A1CF261018470823}"
@@ -294,14 +294,14 @@ StringTable
 		CustomStringTableItem "{A1CF261018470912}"
 		{
 			Id "AICF_Scenario_EveronNorthWCSRHSCoopUS_Medium_Name"
-			Target_en_us "AI Conflict - Everon North WCS + RHS Co-op NATO (Medium)"
-			Target_ru_ru "AI Conflict — Север Эверона WCS + RHS Co-op НАТО (средний)"
+			Target_en_us "AI Conflict - Everon North WCS+RHS Co-op NATO [M]"
+			Target_ru_ru "AI Conflict — Север Эверона WCS+RHS Co-op НАТО [M]"
 		}
 		CustomStringTableItem "{A1CF261018470913}"
 		{
 			Id "AICF_Scenario_EveronNorthWCSRHSCoopUS_Hard_Name"
-			Target_en_us "AI Conflict - Everon North WCS + RHS Co-op NATO (Hard)"
-			Target_ru_ru "AI Conflict — Север Эверона WCS + RHS Co-op НАТО (сложный)"
+			Target_en_us "AI Conflict - Everon North WCS+RHS Co-op NATO [H]"
+			Target_ru_ru "AI Conflict — Север Эверона WCS+RHS Co-op НАТО [H]"
 		}
 		CustomStringTableItem "{A1CF261018470921}"
 		{
@@ -311,15 +311,15 @@ StringTable
 		}
 		CustomStringTableItem "{A1CF261018470922}"
 		{
-			Id "AICF_Scenario_EveronNorthWCSRHSCoopUSSR_Medium_Name"
-			Target_en_us "AI Conflict - Everon North WCS + RHS Co-op Russia (Medium)"
-			Target_ru_ru "AI Conflict — Север Эверона WCS + RHS Co-op РФ (средний)"
+			Id "AICF_Scenario_Coop_A1CF261018470922_Name"
+			Target_en_us "AI Conflict - Everon North WCS+RHS Co-op RF [M]"
+			Target_ru_ru "AI Conflict — Север Эверона WCS+RHS Co-op РФ [M]"
 		}
 		CustomStringTableItem "{A1CF261018470923}"
 		{
 			Id "AICF_Scenario_EveronNorthWCSRHSCoopUSSR_Hard_Name"
-			Target_en_us "AI Conflict - Everon North WCS + RHS Co-op Russia (Hard)"
-			Target_ru_ru "AI Conflict — Север Эверона WCS + RHS Co-op РФ (сложный)"
+			Target_en_us "AI Conflict - Everon North WCS+RHS Co-op RF [H]"
+			Target_ru_ru "AI Conflict — Север Эверона WCS+RHS Co-op РФ [H]"
 		}
 		CustomStringTableItem "{A1CF261020500001}"
 		{

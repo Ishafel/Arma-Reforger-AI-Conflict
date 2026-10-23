@@ -13,7 +13,23 @@ function Write-AICFGenerated([string]$Path,[string]$Text) {
     if(!$Check){[IO.File]::WriteAllText($Path,$Text,[Text.UTF8Encoding]::new($false))}
 }
 $items=[Collections.Generic.List[string]]::new()
+function Get-AICFCoopTitle([string]$Title,[string]$Side,[string]$Separator,[int]$DifficultyIndex,[string]$DifficultyLabel) {
+    $baseTitle="AI Conflict $Separator $Title Co-op $Side"
+    $result=$baseTitle
+    if($DifficultyIndex -gt 0){$result+=' ('+$DifficultyLabel+')'}
+    if($result.Length -gt 50) {
+        $compactTitle=$Title.Replace('WCS + RHS','WCS+RHS')
+        $compactSide=$Side.Replace('Russia','RF').Replace('Soviet Army','USSR').Replace('US Army','US')
+        $result="AI Conflict $Separator $compactTitle Co-op $compactSide"
+        if($DifficultyIndex -gt 0){$result+=' ['+@('E','M','H')[$DifficultyIndex]+']'}
+    }
+    if($result.Length -gt 50){throw "Workshop scenario title exceeds 50 characters: $result"}
+    return $result
+}
 function Add-AICFGeneratedString([string]$Guid,[string]$Id,[string]$English,[string]$Russian) {
+    if($Id.EndsWith('_Name') -and ($Id.Length+1 -gt 50 -or $English.Length -gt 50 -or $Russian.Length -gt 50)) {
+        throw "Workshop scenario name exceeds 50 characters: $Id"
+    }
     $items.Add((@("`t`tCustomStringTableItem `"{$Guid}`"","`t`t{","`t`t`tId `"$Id`"","`t`t`tTarget_en_us `"$English`"","`t`t`tTarget_ru_ru `"$Russian`"","`t`t}") -join $newline)+$newline)
 }
 Add-AICFGeneratedString 'A1CF261018470001' 'AICF_Scenario_Coop_Description' 'Human players on one side against the opposing AI commander and FIA garrisons.' 'Игроки на одной стороне против ИИ-командира другой стороны и гарнизонов FIA.'
@@ -26,12 +42,14 @@ foreach($variant in $catalog.variants) {
             $mode='Coop'+$side
             $resolved=Resolve-AICFScenario -Catalog $catalog -Variant $variant.name -MatchMode $mode -Difficulty $difficulty
             $index=$resolved.difficultyIndex
+            $sideId=1; if($side -eq 'USSR'){$sideId=2}
             $addon=Split-Path -Parent $resolved.project
             $name='AICF_Scenario_'+$variant.name+'Coop'+$side
             $difficultySuffix=''; if($index -gt 0){$difficultySuffix="_$difficulty"}
             $legacy=$variant.name -eq 'Stock' -and $side -eq 'USSR'
             if($legacy){$name='AICF_Scenario_ArlandCoopUSSR'}
             $name+=$difficultySuffix+'_Name'
+            if($name.Length+1 -gt 50){$name='AICF_Scenario_Coop_'+$variant.stringGuidPrefix+$sideId+($index+1)+'_Name'}
             $parent=$variant.standard[$index]
             $headerCalls.Add("`t`tAICF_HeaderCase(`"$($resolved.scenario)`", `"$parent`", `"$($variant.name)`", `"$side`", $index);")
             $lines=@("SCR_MissionHeaderCampaign : `"$parent`"",'{',"`tm_sName `"#$name`"")
@@ -43,10 +61,8 @@ foreach($variant in $catalog.variants) {
                 }
             } else {
                 $lines+=@("`tm_sDescription `"#AICF_Scenario_Coop_Description`"","`tm_sDetails `"#AICF_Scenario_Coop_Details`"","`tm_eAICFMatchMode $($resolved.mode)","`tm_eAICFDifficulty $index")
-                $sideId=1; if($side -eq 'USSR'){$sideId=2}
-                $titleEn='AI Conflict - '+$variant.titleEn+' Co-op '+$variant.sideEn.$side
-                $titleRu='AI Conflict — '+$variant.titleRu+' Co-op '+$variant.sideRu.$side
-                if($index -gt 0){$titleEn+=' ('+$difficulty+')'; $titleRu+=' ('+@('лёгкий','средний','сложный')[$index]+')'}
+                $titleEn=Get-AICFCoopTitle $variant.titleEn $variant.sideEn.$side '-' $index $difficulty
+                $titleRu=Get-AICFCoopTitle $variant.titleRu $variant.sideRu.$side '—' $index @('лёгкий','средний','сложный')[$index]
                 Add-AICFGeneratedString ($variant.stringGuidPrefix+$sideId+($index+1)) $name $titleEn $titleRu
             }
             $lines+='}'
