@@ -133,6 +133,13 @@ Enforce fixture не входят в автоматическую матрицу
 
 ## Рабочие утилиты
 
+`tests/static/Test-WorkshopScenarioNamesStatic.ps1` проверяет предел Workshop
+50 символов у сырого `m_sName` и всех RU/EN названий собственных mission headers;
+`-CsvPath` сохраняет полный список и длины, также при FAIL. Отсутствующая
+локализация и пустое имя запрещены. `Test-WorkshopScenarioNamesContracts.ps1`
+проверяет восемь граничных/отрицательных inputs через тот же аудитор. Оба входят
+в полный offline runner. Это проверка метаданных, не реальная публикация.
+
 Начальная погода: `tests/log-audits/Test-MatchWeatherLog.ps1` читает один или
 несколько полных остановленных server logs с `AICF_MatchWeatherProbe`.
 `-Baseline` проверяет исходный код, `-RequireVariation` — разные результаты
