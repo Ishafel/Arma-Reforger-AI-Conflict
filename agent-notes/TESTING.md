@@ -1,5 +1,65 @@
 # Проверки и baseline
 
+## Подсказка «Как настроить» в setup — 2026-10-23
+
+Ветка `codex/scenario-setup-help` от `36c6183`, продолжение текущей версии
+универсального меню; основной checkout не менялся. Evidence:
+`.codex-runtime/scenario-setup-help-20261023-231820/REPORT.md`.
+
+В шапке setup добавлена отдельная кнопка. Вложенная modal содержит подготовку
+модов/зависимостей, ожидаемые Vanilla/RHS/WCS варианты, выбор карты/режима/
+окружения и Play/Host. Кнопка «Понятно» возвращает к настройкам. Основные
+20 control indices, selection и launch/dependency gates сохранены. RU/EN
+тексты и generated runtime tables обновлены вместе. Контракт —
+[SCENARIO_SETUP.md](SCENARIO_SETUP.md#подсказка-игроку).
+
+- `Invoke-AICFChecks.ps1 -Name Test-UniversalScenarioStatic.ps1,
+  Test-ScenarioSetupStatic.ps1,Test-UniversalScenarioLogContracts.ps1,
+  Test-LocalizationStatic.ps1,Test-ScenarioEnvironmentStatic.ps1,
+  Test-ScenarioHeadersStatic.ps1`: baseline **6/6 PASS/0**, окончательный
+  after-final **6/6 PASS/0**. Universal log oracle — **64 contract cases**,
+  включая пять новых отрицательных guide cases. `Build-AICFLocalization.ps1`
+  сгенерировал **737** RU/EN entries, static проверяет актуальность таблиц.
+- `Compile.ps1 -Label final-production-<variant> -Variant <variant>`:
+  production Stock/RHS/ArlandWCSRHS **3/3 PASS/0**. Final stage тех же трёх
+  плюс Everon/EveronRHS/EveronWCSRHS **6/6 PASS/0**. Терминальный Workbench
+  1.8.0.13, validation successful; полные argv/source manifests/exits/logs
+  сохранены. Ранние девять PASS до дополнительного guide handler не выдаются
+  за проверку окончательных bytes.
+- `FrontendMatrix.ps1` → `RunFrontend.ps1`: **6/6 PASS/0** — ru_ru/en_us ×
+  Vanilla/RHS/WCS + RHS, свежие profiles, native frontend из canonical Client
+  DryRun без direct-connect. По **59/59 cases**: actual modal, переводы,
+  glyph bounds текста, idempotent open/close, focus/selection restore, reopen,
+  закрытие setup с открытой подсказкой и прежняя полная widget/plan матрица.
+  Expected content masks **1/3/7**, actual language и перевод label сверены
+  с manifest. Изменения enable state/языка — только isolated fixture, Stop
+  возвращает исходные значения; production этого не делает.
+- `Finalize.ps1`: полные stopped console/error/script logs **18 файлов**,
+  native/strict oracle exits **0**, SCRIPT/VM/fatal/assertions/unregistered RPC
+  **0**. Остальные engine/resource Error — **420 lines**, включая дубликаты;
+  полностью чистый engine log не заявляется. Все **440/440** production
+  artifacts совпали между source/stage и исходным SHA-256 manifest,
+  fixture hash также совпал. Собственных native процессов нет.
+
+Сохранённый отказ вспомогательного watcher: background `Start-Job -FilePath`
+не передал PSScriptRoot, поэтому наблюдатель не стартовал. Все шесть UI runs
+завершились собственным native RequestClose; их полные logs/exits проверены
+повторно. Helper теперь получает root явно; отдельный start/stop self-check
+**PASS**. Это не повтор UI runs с исправленным watchdog и не доказательство
+его аварийной остановки зависшего native процесса. Production не менялся.
+
+Stage и шесть тестовых profiles архивированы: **7 ZIP**, SHA-256 каждого
+entry проверен до адресного удаления. Полные logs также сохранены отдельно в
+`<evidence>/logs/`, все **18/18** hashes повторно совпали после копирования.
+Source checkout и пользовательские presets/profiles сохранены.
+
+**NOT RUN:** полный offline набор, физические клики/клавиши и Esc, визуальная
+оценка/все разрешения, packaged Workshop/обычный Steam-путь, Host/direct-connect/
+JIP и новые игровые soaks. Native modal/glyph readbacks не выдаются за эти
+действия. Новые server/gameplay gates для локальной prelaunch подсказки не
+запускались; прежние external resource и длительные runtime дефекты остаются
+в отдельных baseline. Push/PR/merge не выполнялись.
+
 ## Damage RPC у private models и shutdown — 2026-10-23
 
 По запросу «исправить все ошибки» владелец выбрал границу **scripts-first**:

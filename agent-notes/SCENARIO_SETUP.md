@@ -39,6 +39,27 @@ Welcome/faction/group UI. Новый экран не перенастраива�
 [GAMEPLAY.md](GAMEPLAY.md). Автостройка своей стороны в Co-op отключена;
 рабочие и заказы бойцов в казарме сохранены.
 
+## Подсказка игроку
+
+Кнопка «Как настроить» постоянно видна в верхней правой части setup, под
+индикатором локальной/сетевой сессии. Она открывает отдельную modal-панель
+в том же экране с тремя блоками: подготовка модов в Мастерской; карта/контент,
+Conflict/Co-op, сложность и окружение; проверка видимости наборов и Play/Host.
+Скачанный мод не объявляется включённым. Для RHS/WCS объясняется полный набор
+зависимостей и повторное открытие setup после изменения модов. У серого варианта
+предлагается проверить зависимости, загрузки и статус. Это инструкция, а не
+автоматическая диагностика конкретного отсутствующего пакета.
+
+`AICF_ScenarioSetupScreen.OpenGuide/CloseGuide` меняют только modal/focus.
+Кнопка «Понятно» возвращает к настройкам без их сброса; повторный вызов
+идемпотентен, `Close` снимает вложенную modal перед основной. Guide widgets
+создаются один раз на открытие setup, участвуют в существующем font scaling
+и уничтожаются вместе с root. Основные 20 control indices сохранены: guide
+имеет отдельные input references. Обработчики root/guide снимаются при Close;
+новых таймеров и сетевого состояния нет.
+Тексты RU/EN принадлежат `AICF_Localization.st`; runtime `.conf` генерируются
+`tools/Build-AICFLocalization.ps1`.
+
 ## Каталог и расширение
 
 `tools/config/AICF_Scenarios.json` — единый источник CLI и frontend targets:
@@ -240,7 +261,10 @@ BaseContainer adapter, callbacks Remove/Insert и override OnGameStart для
   widgets/modal/bounds, флаги, пояснения, native SliderWidget range/step/current,
   HH:MM, 7200 fixed minute/weather choices и 5 random choices, atomic invalid
   choices, schema-2 roundtrip/schema-1 rejection, одноразовый storage/чужой target,
-  cleanup; 46 cases. Программные readbacks не доказывают физическое перетаскивание.
+  cleanup. Guide дополнительно проверяет кнопку, nested modal, размеры текста,
+  повторное открытие, возврат focus/выбора и Close с открытой подсказкой.
+  `-aicfProbeLanguage ru_ru|en_us` меняет язык только в isolated fixture и
+  возвращает исходный при Stop. Программные readbacks не доказывают физический ввод.
   CLI `-aicfUniversalProbe 1 -aicfExpectedReadyVariants 9`.
 - `AICF_ScenarioTransitionProbe.c`: production preflight/launch, active header,
   точный GetLoadedAddons без лишних неванильных addons, ROSTER_READY; четыре cases.

@@ -477,6 +477,60 @@ StringTable
 			Target_en_us "Operation setup"
 			Target_ru_ru "Настройка операции"
 		}
+		CustomStringTableItem "{A1CF261023510001}"
+		{
+			Id "AICF_Setup_GuideButton"
+			Target_en_us "Setup guide"
+			Target_ru_ru "Как настроить"
+		}
+		CustomStringTableItem "{A1CF261023510002}"
+		{
+			Id "AICF_Setup_GuideTitle"
+			Target_en_us "How to prepare an operation"
+			Target_ru_ru "Как подготовить операцию"
+		}
+		CustomStringTableItem "{A1CF261023510003}"
+		{
+			Id "AICF_Setup_GuideModsTitle"
+			Target_en_us "01  Prepare your mods"
+			Target_ru_ru "01  Подготовьте моды"
+		}
+		CustomStringTableItem "{A1CF261023510004}"
+		{
+			Id "AICF_Setup_GuideMods"
+			Target_en_us "In Workshop, download and enable AI Conflict. For RHS or WCS + RHS, enable the complete pack and its dependencies. Downloaded does not mean enabled.\nAfter changing mods, reopen this setup screen. Nothing is downloaded or enabled here."
+			Target_ru_ru "В Мастерской скачайте и включите AI Conflict. Для RHS или WCS + RHS включите весь набор и его зависимости. Скачан — не значит включён.\nПосле изменения модов заново откройте это меню. Здесь моды не скачиваются и не включаются."
+		}
+		CustomStringTableItem "{A1CF261023510005}"
+		{
+			Id "AICF_Setup_GuideOptionsTitle"
+			Target_en_us "02  Choose your settings"
+			Target_ru_ru "02  Выберите параметры"
+		}
+		CustomStringTableItem "{A1CF261023510006}"
+		{
+			Id "AICF_Setup_GuideOptions"
+			Target_en_us "Choose a map and content pack.\nConflict lets players join either side. In Co-op, all players fight for the selected flag.\nSet garrison difficulty, time and weather. Check the briefing before starting."
+			Target_ru_ru "Выберите карту и набор контента.\nВ Conflict игроки выбирают любую сторону. В Co-op все играют за выбранный флаг.\nЗадайте сложность гарнизонов, время и погоду. Перед запуском проверьте сводку."
+		}
+		CustomStringTableItem "{A1CF261023510007}"
+		{
+			Id "AICF_Setup_GuideLaunchTitle"
+			Target_en_us "03  Check and start"
+			Target_ru_ru "03  Проверьте и запустите"
+		}
+		CustomStringTableItem "{A1CF261023510008}"
+		{
+			Id "AICF_Setup_GuideLaunch"
+			Target_en_us "Vanilla only: RHS/WCS are disabled or incomplete. Vanilla + RHS: RHS is enabled. All three: RHS and WCS are enabled.\nGrey option: check dependencies, downloads and the status below.\nStart operation opens a local game. Create session hosts a server using the network settings from the previous screen."
+			Target_ru_ru "Только Vanilla: RHS/WCS выключены или набор неполный. Vanilla + RHS: включён RHS. Все три: включены RHS и WCS.\nСерый вариант: проверьте зависимости, загрузки и статус внизу.\nНачать операцию — локальная игра. Создать сессию — сервер с сетевыми настройками предыдущего экрана."
+		}
+		CustomStringTableItem "{A1CF261023510009}"
+		{
+			Id "AICF_Setup_GuideClose"
+			Target_en_us "Got it"
+			Target_ru_ru "Понятно"
+		}
 		CustomStringTableItem "{A1CF261019500105}"
 		{
 			Id "AICF_Setup_Mode"

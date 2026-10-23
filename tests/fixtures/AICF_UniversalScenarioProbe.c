@@ -94,6 +94,32 @@ modded class AICF_ScenarioSetupScreen
 		return m_wTimeSlider && m_wTimeSlider.GetMin() == 0 && m_wTimeSlider.GetMax() == 1439 && m_wTimeSlider.GetStep() == 1 && !m_wTimeSlider.IsVertical() && m_wTimeSlider.GetCurrent() == minutes && m_wTimeValue.GetText() == label;
 	}
 	bool AICF_UniversalSides() { return m_aButtons[8].IsEnabled() && m_aButtons[9].IsEnabled(); }
+	bool AICF_GuideButton()
+	{
+		return m_wGuideButton && m_wGuideButton.IsVisible() && m_wGuide && !m_wGuide.IsVisible() && !m_bGuideOpen;
+	}
+	bool AICF_GuideModal()
+	{
+		return m_wGuide && m_wGuide.IsVisible() && m_bGuideOpen && GetGame().GetWorkspace().GetModal() == m_wGuide;
+	}
+	bool AICF_GuideLayout()
+	{
+		if (!AICF_GuideModal() || m_aGuideTexts.Count() != 3) return false;
+		foreach (TextWidget text : m_aGuideTexts)
+		{
+			float width, height, textWidth, textHeight;
+			text.GetScreenSize(width, height);
+			text.GetTextSize(textWidth, textHeight);
+			bool fits = width > 0 && height > 0 && textWidth <= GetGame().GetWorkspace().DPIUnscale(width) + 2 && textHeight <= GetGame().GetWorkspace().DPIUnscale(height) + 2;
+			Print(string.Format("[AICF][UNIVERSAL_GUIDE_TEXT] width=%1 height=%2 glyph_width=%3 glyph_height=%4 fits=%5", width, height, textWidth, textHeight, fits));
+			if (!fits || text.GetText().IsEmpty() || text.GetText().Contains("{AICF:")) return false;
+		}
+		return true;
+	}
+	bool AICF_GuideRestored()
+	{
+		return AICF_GuideButton() && GetGame().GetWorkspace().GetModal() == m_wRoot && GetGame().GetWorkspace().GetFocusedWidget() == m_wGuideButton;
+	}
 	bool AICF_UniversalStart() { return m_aButtons[13].IsEnabled(); }
 	bool AICF_ContentVisible(int content) { return m_aFrames[content + 3].IsVisible(); }
 	string AICF_UniversalSummary() { return m_wSummary.GetText(); }
@@ -109,6 +135,8 @@ class AICF_UniversalScenarioProbe
 	protected ref AICF_ScenarioSetupSelection m_Selection;
 	protected ref array<WorkshopItem> m_aContentItems = {};
 	protected ref array<bool> m_aContentEnabled = {};
+	protected ResourceName m_sGuideTarget;
+	protected string m_sPreviousLanguage;
 
 	void Check(string name, bool passed)
 	{
@@ -156,6 +184,12 @@ class AICF_UniversalScenarioProbe
 	}
 	protected void Readback()
 	{
+		string language;
+		if (System.GetCLIParam("aicfProbeLanguage", language))
+		{
+			WidgetManager.GetLanguage(m_sPreviousLanguage);
+			WidgetManager.SetLanguage(language);
+		}
 		AICF_ScenarioSetupHeader header = AICF_ScenarioSetupHeader.Cast(MissionHeader.ReadMissionHeader("{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf"));
 		m_Selection = new AICF_ScenarioSetupSelection(header);
 		AICF_ScenarioRegistry registry = m_Selection.GetRegistry();
@@ -228,7 +262,28 @@ class AICF_UniversalScenarioProbe
 		m_PreviousModal = GetGame().GetWorkspace().GetModal();
 		m_Screen = new AICF_ScenarioSetupScreen();
 		Check("UI_OPEN", m_Screen.Open(header));
-		GetGame().GetCallqueue().CallLater(Widgets, 1000, false);
+		GetGame().GetCallqueue().CallLater(Guide, 1000, false);
+	}
+	protected void Guide()
+	{
+		m_sGuideTarget = m_Selection.GetResource();
+		Check("UI_GUIDE_BUTTON", m_Screen.AICF_GuideButton());
+		Check("UI_GUIDE_OPEN", m_Screen.OpenGuide() && m_Screen.OpenGuide() && m_Screen.AICF_GuideModal());
+		GetGame().GetCallqueue().CallLater(GuideReadback, 500, false);
+	}
+	protected void GuideReadback()
+	{
+		string requested, actual;
+		System.GetCLIParam("aicfProbeLanguage", requested);
+		WidgetManager.GetLanguage(actual);
+		Print(string.Format("[AICF][UNIVERSAL_GUIDE_LANGUAGE] requested=%1 actual=%2 label=%3", requested, actual, AICF_Localization.Resolve("{AICF:AICF_Setup_GuideButton}")));
+		Check("UI_GUIDE_LAYOUT", m_Screen.AICF_GuideLayout() && (requested.IsEmpty() || requested == actual));
+		m_Screen.CloseGuide();
+		m_Screen.CloseGuide();
+		Check("UI_GUIDE_RESTORE", m_Screen.AICF_GuideRestored() && m_Selection.GetResource() == m_sGuideTarget && m_Selection.GetEnvironment().m_iStartMinutes == 480);
+		Check("UI_GUIDE_REOPEN", m_Screen.OpenGuide() && m_Screen.AICF_GuideModal());
+		m_Screen.CloseGuide();
+		GetGame().GetCallqueue().CallLater(Widgets, 100, false);
 	}
 	protected void Widgets()
 	{
@@ -308,6 +363,7 @@ class AICF_UniversalScenarioProbe
 			bool selected = m_Screen.SelectVariant(variant.m_iMap, variant.m_iContent);
 			Check("UI_VARIANT_" + variant.m_sKey, selected == available && m_Screen.AICF_UniversalWidgets() && m_Screen.AICF_ContentVisible(variant.m_iContent) == variant.IsContentEnabled());
 		}
+		m_Screen.OpenGuide();
 		m_Screen.Close();
 		Check("UI_CLOSED", !m_Screen.GetRoot() && GetGame().GetWorkspace().GetModal() == m_PreviousModal);
 		m_Screen.Close();
@@ -325,7 +381,10 @@ class AICF_UniversalScenarioProbe
 		GetGame().GetCallqueue().Remove(ConfigureContent);
 		if (m_Screen) m_Screen.Close();
 		m_Screen = null;
+		if (!m_sPreviousLanguage.IsEmpty()) WidgetManager.SetLanguage(m_sPreviousLanguage);
 		GetGame().GetCallqueue().Remove(Readback);
+		GetGame().GetCallqueue().Remove(Guide);
+		GetGame().GetCallqueue().Remove(GuideReadback);
 		GetGame().GetCallqueue().Remove(Widgets);
 		GetGame().GetCallqueue().Remove(Close);
 		GetGame().GetCallqueue().Remove(Timeout);

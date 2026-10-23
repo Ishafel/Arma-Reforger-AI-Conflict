@@ -11,6 +11,11 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 	protected TextWidget m_wBriefingTitle;
 	protected TextWidget m_wStatus;
 	protected TextWidget m_wHelp;
+	protected Widget m_wGuideButton;
+	protected Widget m_wGuide;
+	protected Widget m_wGuideClose;
+	protected bool m_bGuideOpen;
+	protected ref array<TextWidget> m_aGuideTexts = {};
 	protected SliderWidget m_wTimeSlider;
 	protected TextWidget m_wTimeValue;
 	protected Widget m_wTimeTrack;
@@ -68,6 +73,11 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		if (m_bHost) session = "{AICF:AICF_Setup_NetworkSession}";
 		Widget sessionBadge = m_Style.CreateRect(m_wRoot, 0.76, 0.062, 0.945, 0.112, Color.FromSRGBA(28, 38, 43, 255), false);
 		Text(sessionBadge, 0.03, 0, 0.97, 1, session, 16, Muted(), true);
+		Widget guideButton = m_Style.CreateRect(m_wRoot, 0.76, 0.12, 0.945, 0.156, Border(), true);
+		if (!guideButton) { Close(); return false; }
+		guideButton.SetName("AICF_SetupGuideButton");
+		Text(guideButton, 0.03, 0, 0.97, 1, "{AICF:AICF_Setup_GuideButton}", 17, Gold(), true);
+		m_wGuideButton = guideButton.FindAnyWidget("AICF_RectInput");
 		m_Style.CreateRect(m_wRoot, 0.055, 0.16, 0.945, 0.162, Border(), false);
 
 		Heading("01", "Map", 0.055, 0.17, 0.65);
@@ -131,6 +141,7 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		Text(m_wRoot, 0.055, 0.813, 0.20, 0.864, "{AICF:AICF_Setup_Weather}", 17, Muted());
 		for (int weather; weather < 5; weather++)
 			AddButton("{AICF:AICF_Setup_Weather" + weather.ToString() + "}", 0.21 + weather * 0.09, 0.813, 0.29 + weather * 0.09, 0.864, 16);
+		if (!m_wGuideButton || !CreateGuide()) { Close(); return false; }
 		if (!m_wBriefingTitle || !m_wSummary || !m_wStatus || !m_wHelp || !m_wTimeValue || !m_wTimeTrack || !m_wTimeFill || !m_wTimeThumb || m_aButtons.Count() != 20) { Close(); return false; }
 		m_wBriefingTitle.SetTextWrapping(true);
 		m_wSummary.SetTextWrapping(true);
@@ -142,6 +153,54 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		Help(13);
 		GetGame().GetWorkspace().AddModal(m_wRoot, m_aButtons[0]);
 		return true;
+	}
+
+	protected bool CreateGuide()
+	{
+		m_wGuide = m_Style.CreateRect(m_wRoot, 0.04, 0.17, 0.96, 0.885, Color.FromSRGBA(21, 29, 34, 255), true);
+		if (!m_wGuide) return false;
+		m_wGuide.SetName("AICF_SetupGuide");
+		m_wGuide.SetZOrder(100);
+		m_wGuide.AddHandler(this);
+		m_Style.CreateRect(m_wGuide, 0, 0, 1, 0.004, Gold(), false);
+		Text(m_wGuide, 0.035, 0.035, 0.965, 0.105, "{AICF:AICF_Setup_GuideTitle}", 30);
+		GuideSection(0.035, 0.18, 0.485, 0.51, "GuideModsTitle", "GuideMods");
+		GuideSection(0.515, 0.18, 0.965, 0.51, "GuideOptionsTitle", "GuideOptions");
+		m_Style.CreateRect(m_wGuide, 0.035, 0.55, 0.965, 0.552, Border(), false);
+		GuideSection(0.035, 0.59, 0.965, 0.855, "GuideLaunchTitle", "GuideLaunch");
+		Widget close = m_Style.CreateRect(m_wGuide, 0.76, 0.9, 0.965, 0.97, Gold(), true);
+		if (!close) return false;
+		close.SetZOrder(10);
+		Text(close, 0.03, 0, 0.97, 1, "{AICF:AICF_Setup_GuideClose}", 20, Color.FromSRGBA(18, 24, 28, 255), true);
+		m_wGuideClose = close.FindAnyWidget("AICF_RectInput");
+		m_wGuide.SetVisible(false);
+		return m_wGuideClose && m_aGuideTexts.Count() == 3;
+	}
+	protected void GuideSection(float left, float top, float right, float bottom, string title, string body)
+	{
+		Text(m_wGuide, left, top, right, top + 0.055, "{AICF:AICF_Setup_" + title + "}", 21, Gold());
+		TextWidget text = Text(m_wGuide, left, top + 0.075, right, bottom, "{AICF:AICF_Setup_" + body + "}", 19);
+		if (!text) return;
+		text.SetTextWrapping(true);
+		text.ClearFlags(WidgetFlags.VCENTER);
+		m_aGuideTexts.Insert(text);
+	}
+	bool OpenGuide()
+	{
+		if (m_bClosing || !m_wRoot || !m_wGuide) return false;
+		if (m_bGuideOpen) return true;
+		m_bGuideOpen = true;
+		m_wGuide.SetVisible(true);
+		GetGame().GetWorkspace().AddModal(m_wGuide, m_wGuideClose);
+		return true;
+	}
+	void CloseGuide()
+	{
+		if (!m_bGuideOpen) return;
+		m_bGuideOpen = false;
+		GetGame().GetWorkspace().RemoveModal(m_wGuide);
+		m_wGuide.SetVisible(false);
+		if (!m_bClosing) GetGame().GetWorkspace().SetFocusedWidget(m_wGuideButton);
 	}
 
 	protected ref Color Gold() { return Color.FromSRGBA(224, 177, 87, 255); }
@@ -464,6 +523,9 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 	override bool OnClick(Widget w, int x, int y, int button)
 	{
 		if (button != 0 || m_bClosing) return false;
+		if (w == m_wGuideButton) return OpenGuide();
+		if (w == m_wGuideClose) { CloseGuide(); return true; }
+		if (m_bGuideOpen) return false;
 		int index = m_aButtons.Find(w);
 		if (index < 0 || !w.IsEnabled()) return false;
 		int mode = m_Selection.GetMode();
@@ -523,6 +585,7 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 	}
 	override bool OnModalClosed(Widget modalRoot)
 	{
+		if (modalRoot == m_wGuide) { CloseGuide(); return true; }
 		if (!m_bClosing && modalRoot == m_wRoot) SCR_ScenarioUICommon.AICF_CloseSetup();
 		return true;
 	}
@@ -531,6 +594,8 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 	{
 		if (m_bClosing) return;
 		m_bClosing = true;
+		CloseGuide();
+		if (m_wGuide) m_wGuide.RemoveHandler(this);
 		if (m_wRoot)
 		{
 			m_wRoot.RemoveHandler(this);
@@ -542,6 +607,10 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		m_wBriefingTitle = null;
 		m_wStatus = null;
 		m_wHelp = null;
+		m_wGuideButton = null;
+		m_wGuide = null;
+		m_wGuideClose = null;
+		m_aGuideTexts.Clear();
 		m_wTimeSlider = null;
 		m_wTimeValue = null;
 		m_wTimeTrack = null;
