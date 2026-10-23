@@ -1,5 +1,48 @@
 # Проверки и baseline
 
+## Подготовка обновления PR #65 — 2026-10-24
+
+Production source `fe72fb2`, продолжение существующего draft PR #65:
+remote head `f5d2966`, base `aada6ed`, оба являются предками source.
+Evidence: `.codex-runtime/pr65-briefing-20261024/` в основном workspace.
+Новых production/API изменений при подготовке нет.
+
+- `X:/tools/Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/offline-short`:
+  **81/81 PASS/0**, Static **33/33**, Contracts **48/48**, без исключений.
+  Runner context подтверждает `fe72fb2` и чистое дерево перед запуском.
+  Полные commands/outputs/exits, plan и `final-verdict.json` сохранены.
+  AuditSelection — **45** positive/negative cases; Logistics — **145**.
+- Первая попытка из полного вложенного пути: **42 PASS / 1 FAIL** из 43
+  завершённых checks, затем runner адресно остановлен, exit -1.
+  `Test-AuditSelectionContracts.ps1` не смог скопировать файл в target длиной
+  **261 символ**. Полный свежий повтор через временный `subst X:` использует
+  те же source/auditors и весь набор. Исходный FAIL и identity остановленного
+  дерева сохранены; незавершённый Logistics case исходной попытки не PASS.
+- В runner summary для корня `X:/` поле relative `path` теряет начальную `t`
+  (`ests/...`): это только отображение, `command` содержит настоящий
+  `X:/tests/...`. Полнота проверена по всем 81 уникальным `name` и plan;
+  Static/Contracts сверены по каталогам, реальные команды/exit не исправлялись.
+- `ArchiveInputs.ps1`: **9 ZIP** с per-entry bytes/SHA-256 до удаления только
+  новых contract-каталогов и известной production fixture copy Logistics.
+  Старые evidence и пользовательские profiles не удаляются. У **22** файлов
+  Logistics fixture WinPS 5 `Get-Content` меняет кодировку русских comments;
+  исходные fixture bytes архивированы, сравнение всего текста вне comments
+  (включая string literals) подтвердило идентичность production. Это не новый
+  runtime/compile gate и не изменение production ради PASS.
+
+Workbench/native gates брифинга и Setup guide — в следующих разделах,
+здесь не выдаются за новый прогон: **6/6 compile**, **583/583 briefing cases**,
+**6/6 menu runs × 61 cases / 108 hit queries** для соответствующих source.
+Report-only продолжение меняет эти заметки и рекомендацию короткого offline
+пути в DEVELOPMENT; повтор compile/runtime для неизменных `.c` не запускался.
+
+**Draft/blockers:** прежний native out-of-bounds North Everon RHS на примерно
+12-й минуте не исправлен/не опровергнут; чистый engine log остаётся FAIL.
+**NOT RUN:** новый 15-minute soak, физический ввод и визуальная оценка меню/
+брифинга, packaged Workshop/обычный Steam-путь, public Host со вторым игроком,
+authenticated persistence/restart, естественный матч до победы и отдельный FPS
+benchmark. Подготовка PR сохраняет `Refs #46`, без automatic close/merge/release.
+
 ## Внутриигровой брифинг на карте — 2026-10-24
 
 Ветка `codex/mission-briefing` от `dc8ab9c`. Добавлены десять native journal

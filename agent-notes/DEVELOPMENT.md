@@ -5,6 +5,15 @@ Arma Reforger, Server и Tools одной версии, для API helper — Gi
 Перед изменением запиши `git status`, branch/commit и фактические версии.
 Создай отдельную ветку задачи по [AGENTS.md](../AGENTS.md).
 
+Для полного offline набора из глубоко вложенного checkout используй временный
+`subst` в свободной букве диска: legacy WinPS 5 `Copy-Item` в source fixtures
+может превысить MAX_PATH. Например, после проверки свободного `X:` создай
+`subst X: <checkout>` и запускай `X:/tools/Invoke-AICFChecks.ps1` с новым
+EvidenceRoot. Сохрани mapping вместе с context/commands, после завершения
+дочерних проверок удали только свой alias: `subst X: /D`. Production и auditors
+при таком повторе не меняются. Для native server/client сохраняй canonical
+launcher и проверку точного CLI/manifest, не подменяй их этим offline приёмом.
+
 Назначение и статус утилит `tools/`, структура `tests/` и общий offline runner —
 в [TOOLS.md](TOOLS.md). Runtime probes выбираются по [TEST_FIXTURES.md](TEST_FIXTURES.md).
 
