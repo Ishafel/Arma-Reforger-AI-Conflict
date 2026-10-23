@@ -1,5 +1,56 @@
 # Проверки и baseline
 
+## Оформление 0.2.0 — 2026-10-24
+
+Ветка `codex/release-0.2.0` от свежего `origin/main`
+`4be53838d3da16c6d24f61b0f45d77f9b94ac8dd`, исходное дерево чистое.
+Состав сверен с `git log 0.1.29..HEAD --no-merges` и результатами задач ниже.
+Добавлен `releases/0.2.0.md`, обновлены ссылки на последний релиз в README
+и указателе, добавлена эта запись. Production, headers, зависимости, локализация,
+`tests/` и `tools/` не менялись. `git diff fe72fb2..HEAD --name-only` до правок
+показывал только DEVELOPMENT/TESTING: игровые файлы совпадают с source брифинга,
+но прежние native результаты не выдаются за новый прогон.
+
+Полный offline набор запущен до правки Markdown:
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+tools/Invoke-AICFChecks.ps1 -Suite All
+-EvidenceRoot .codex-runtime/release-0.2.0-20261024/before`.
+Проверенные исходники и аудиторы в этой задаче остаются неизменными.
+`before/context.json`, `before/summary.json`, полные `before/*.txt` и
+`offline-verdict.json` сохраняют source/status, план, точные argv, exits
+и проверку полноты набора. Итог — **81/81 PASS, runner exit 0**:
+Static **33/33**, Contracts **48/48**, без исключённых checks, отсутствующих
+logs и текущих offline baseline failures. Logistics — **145** positive/negative
+cases, AuditSelection — **45**. Исторические runtime FAIL ниже сохраняются.
+
+`pwsh -NoProfile -File
+.codex-runtime/release-0.2.0-20261024/Validate-ReleaseDocs.ps1 -Phase before|after`
+проверяет `git diff --check` и локальные Markdown links: до/после —
+**PASS/0**, по 116 ссылок. Финальный отчёт подтвердил также наличие целей
+в tracked дереве с новым release file и отсутствие production/tests/tools delta.
+Повтор полного offline набора после изменения только Markdown не нужен:
+неизменность проверенных исходников сверяется отдельно с `origin/main`.
+
+По отдельному запросу обложка `C:/Users/retar/OneDrive/Рабочий стол/download.jpg`
+заменена JPEG с надписью `0.2.0` снизу. Встроенный `imagegen`, prompt:
+«Сохранить оформление обложки и добавить снизу по центру надпись 0.2.0».
+В evidence сохранены исходник `download-original.jpg`, результат PNG/JPEG,
+prompt/размеры и SHA-256; hash конечного файла на рабочем столе совпадает
+с `cover-0.2.0.jpg`. В Git картинка не добавляется.
+
+Evidence: `.codex-runtime/release-0.2.0-20261024/`. Новая временная копия
+Construction `static-input` архивирована: **102/102** файла проверены по
+bytes/SHA-256 до адресного удаления; исходные contract outputs сохранены.
+Другие старые evidence и пользовательские файлы не удаляются.
+
+Новые Workbench/server/client, единая runtime-матрица релиза, длительный soak,
+полный бой до победы, ручной ввод и визуальная оценка, public Host со вторым
+игроком, packaged build, чистая установка и Workshop upload — **NOT RUN**.
+Открытые native out-of-bounds `EveronNorthRHS / Standard / Hard` примерно
+на 12-й минуте, particle velocity warnings и внешние resource diagnostics
+сохранены в патчноутах как ограничения. Оформление документации их не закрывает.
+Push, merge, Git-тег и GitHub/Workshop публикация в этой задаче не выполняются.
+
 ## Подготовка обновления PR #65 — 2026-10-24
 
 Production source `fe72fb2`, продолжение существующего draft PR #65:
