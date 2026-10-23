@@ -3,7 +3,54 @@ modded class AICF_ScenarioSetupScreen
 {
 	bool AICF_UniversalWidgets()
 	{
-		return m_aButtons.Count() == 21 && m_aFlags.Count() == 2 && m_iFlagFailures == 0 && m_wHelp && !m_wHelp.GetText().IsEmpty() && !m_wHelp.GetText().Contains("{AICF:");
+		return m_aButtons.Count() == 20 && m_aSurfaces.Count() == 20 && m_aAccents.Count() == 20 && m_aFlags.Count() == 2 && m_iFlagFailures == 0 && m_wHelp && !m_wHelp.GetText().IsEmpty() && !m_wHelp.GetText().Contains("{AICF:");
+	}
+	bool AICF_MapPreviews()
+	{
+		Print(string.Format("[AICF][UNIVERSAL_PREVIEWS] images=%1 failures=%2", m_aMapImages.Count(), m_iPreviewFailures));
+		for (int mapIndex; mapIndex < 3; mapIndex++)
+		{
+			SCR_MissionHeader source = SCR_MissionHeader.Cast(MissionHeader.ReadMissionHeader(m_Selection.GetRegistry().Find(mapIndex, 0).m_sPreviewHeader));
+			if (source) Print(string.Format("[AICF][UNIVERSAL_PREVIEW_SOURCE] map=%1 preview=%2 icon=%3 loading=%4", mapIndex, source.m_sPreviewImage, source.m_sIcon, source.m_sLoadingScreen));
+		}
+		if (m_aMapImages.Count() != 3 || m_iPreviewFailures != 0) return false;
+		foreach (ImageWidget image : m_aMapImages)
+		{
+			int textureWidth, textureHeight;
+			float width, height;
+			image.GetImageSize(0, textureWidth, textureHeight);
+			image.GetScreenSize(width, height);
+			if (textureWidth <= 0 || textureHeight <= 0 || width <= 0 || height <= 0) return false;
+			if (Math.AbsFloat(width / height - textureWidth / (float)textureHeight) > 0.02) return false;
+		}
+		return true;
+	}
+	bool AICF_TextPalette()
+	{
+		return m_wTimeValue.GetColorInt() == Gold().PackToInt() && m_wSummary.GetColorInt() == Color.FromSRGBA(237, 240, 242, 255).PackToInt();
+	}
+	bool AICF_BriefingLayout()
+	{
+		float rootX, rootY, rootWidth, rootHeight;
+		m_wRoot.GetScreenPos(rootX, rootY);
+		m_wRoot.GetScreenSize(rootWidth, rootHeight);
+		foreach (int index, Widget frame : m_aFrames)
+		{
+			if (!frame.IsVisible()) continue;
+			float x, y, width, height;
+			frame.GetScreenPos(x, y);
+			frame.GetScreenSize(width, height);
+			if (width <= 0 || height <= 0 || x < rootX - 1 || y < rootY - 1 || x + width > rootX + rootWidth + 1 || y + height > rootY + rootHeight + 1) return false;
+			foreach (int otherIndex, Widget other : m_aFrames)
+			{
+				if (otherIndex <= index || !other.IsVisible()) continue;
+				float otherX, otherY, otherWidth, otherHeight;
+				other.GetScreenPos(otherX, otherY);
+				other.GetScreenSize(otherWidth, otherHeight);
+				if (x < otherX + otherWidth - 1 && x + width > otherX + 1 && y < otherY + otherHeight - 1 && y + height > otherY + 1) return false;
+			}
+		}
+		return m_wBriefingTitle && !m_wBriefingTitle.GetText().IsEmpty() && !m_wBriefingTitle.GetText().Contains("{AICF:") && m_wSummary.GetNumLines() >= 4;
 	}
 	bool AICF_TimeSliderReadback(int minutes, string label)
 	{
@@ -154,6 +201,9 @@ class AICF_UniversalScenarioProbe
 		Check("UI_BOUNDS", root && width > 600 && height > 400);
 		Check("UI_MODAL", root && GetGame().GetWorkspace().GetModal() == root);
 		Check("UI_FLAGS_HELP", m_Screen.AICF_UniversalWidgets());
+		Check("UI_MAP_PREVIEWS", m_Screen.AICF_MapPreviews());
+		Check("UI_BRIEFING_LAYOUT", m_Screen.AICF_BriefingLayout());
+		Check("UI_TEXT_PALETTE", m_Screen.AICF_TextPalette());
 		Check("UI_START_ENABLED", m_Screen.AICF_UniversalStart());
 		string expectedMask;
 		bool hasMask = System.GetCLIParam("aicfExpectedContentMask", expectedMask);
@@ -179,9 +229,7 @@ class AICF_UniversalScenarioProbe
 		m_Screen.SelectEnvironment(1439, 4);
 		sliderValid = sliderValid && m_Screen.AICF_TimeSliderReadback(1439, "23:59");
 		m_Screen.SelectEnvironment(817, 4);
-		m_Screen.SelectEnvironment(AICF_ScenarioEnvironment.RANDOM_TIME, 4);
-		sliderValid = sliderValid && m_Screen.AICF_TimeSliderReadback(817, AICF_Localization.Resolve("{AICF:AICF_Setup_Time4}"));
-		m_Screen.SelectEnvironment(817, 4);
+		Check("UI_NO_RANDOM_TIME", !m_Screen.SelectEnvironment(AICF_ScenarioEnvironment.RANDOM_TIME, 4) && m_Screen.AICF_TimeSliderReadback(817, "13:37"));
 		Check("UI_TIME_SLIDER", sliderValid && m_Screen.AICF_TimeSliderReadback(817, "13:37"));
 		ResourceName target = m_Selection.GetResource();
 		AICF_ScenarioEnvironment settings = m_Screen.GetSelection().GetEnvironment();
@@ -209,7 +257,7 @@ class AICF_UniversalScenarioProbe
 			}
 		}
 		bool allHelp = true;
-		for (int index; index < 21; index++)
+		for (int index = -1; index < 20; index++)
 		{
 			m_Screen.AICF_UniversalHelp(index);
 			if (!m_Screen.AICF_UniversalWidgets()) allHelp = false;

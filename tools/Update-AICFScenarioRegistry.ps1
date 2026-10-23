@@ -28,6 +28,9 @@ foreach($entry in $catalog.variants){
     $lines.Add("`t`tvariant.m_iMap = $($entry.mapIndex);")
     $lines.Add("`t`tvariant.m_iContent = $($entry.contentIndex);")
     $lines.Add("`t`tvariant.m_sMapLabel = `"{AICF:AICF_Setup_Map_$mapKey}`";")
+    $preview=$catalog.previewHeaders.PSObject.Properties[[string]$entry.mapIndex].Value
+    if($preview -notmatch '^\{[A-F0-9]{16}\}Missions/[^\r\n"]+\.conf$'){throw 'Invalid preview header'}
+    $lines.Add("`t`tvariant.m_sPreviewHeader = `"$preview`";")
     $lines.Add("`t`tvariant.m_sWestLabel = `"{AICF:AICF_Setup_$west}`";")
     $lines.Add("`t`tvariant.m_sEastLabel = `"{AICF:AICF_Setup_$east}`";")
     $lines.Add("`t`tvariant.m_sOwner = `"$owner`";")

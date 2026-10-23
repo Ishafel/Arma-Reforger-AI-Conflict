@@ -4309,14 +4309,38 @@ StringTable
 		CustomStringTableItem "{A1CF261020700013}"
 		{
 			Id "AICF_Setup_TimeHelp"
-			Target_en_us "Drag the slider to choose a starting time from 00:00 to 23:59. The value and summary update immediately. Random uses sunrise and sunset; press it again to restore your time. Time continues at the scenario's normal speed."
-			Target_ru_ru "Выберите время начала ползунком от 00:00 до 23:59. Значение и сводка обновляются сразу. Случайный выбор учитывает восход и закат; повторное нажатие вернёт выбранное время. Скорость времени остаётся по сценарию."
+			Target_en_us "Choose the starting time with the slider, from 00:00 to 23:59. The clock and operation briefing update immediately. Time continues at the scenario's normal speed."
+			Target_ru_ru "Выберите время начала ползунком от 00:00 до 23:59. Часы и сводка операции обновляются сразу. Во время матча сохраняется штатная скорость времени."
 		}
 		CustomStringTableItem "{A1CF261020700014}"
 		{
 			Id "AICF_Setup_WeatherHelp"
 			Target_en_us "Weather at the start of the operation. Random chooses a state supported by the map. Weather can change naturally during the match. The host's choice applies to every player."
 			Target_ru_ru "Погода в начале операции. Случайный выбор использует состояния, доступные на карте. Во время матча погода продолжит меняться естественным образом. Выбор хозяина действует для всех игроков."
+		}
+		CustomStringTableItem "{A1CF261023700001}"
+		{
+			Id "AICF_Setup_Briefing"
+			Target_en_us "OPERATION BRIEFING"
+			Target_ru_ru "СВОДКА ОПЕРАЦИИ"
+		}
+		CustomStringTableItem "{A1CF261023700002}"
+		{
+			Id "AICF_Setup_DetailsTitle"
+			Target_en_us "DETAILS"
+			Target_ru_ru "ПОДРОБНОСТИ"
+		}
+		CustomStringTableItem "{A1CF261023700003}"
+		{
+			Id "AICF_Setup_LocalSession"
+			Target_en_us "LOCAL OPERATION"
+			Target_ru_ru "ЛОКАЛЬНАЯ ОПЕРАЦИЯ"
+		}
+		CustomStringTableItem "{A1CF261023700004}"
+		{
+			Id "AICF_Setup_NetworkSession"
+			Target_en_us "HOST SESSION"
+			Target_ru_ru "СЕТЕВАЯ СЕССИЯ"
 		}
 	}
 }

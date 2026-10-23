@@ -20,7 +20,8 @@ $rules=@(
  @(0,'WriteValue\(.*, 2\).*?ReadValue\(.*, schema\) \|\| schema != 2','MINUTE_SCHEMA'),
  @(1,'minutes = settings.GetMinute\(\);','MINUTE_APPLICATION'),
  @(3,'minutes < 0 \|\| minutes > AICF_ScenarioEnvironment.RANDOM_TIME \|\| weather < 0 \|\| weather > 4\) return false;.*?m_Environment.m_iStartMinutes = minutes;.*?m_Environment.m_iWeather = weather','ATOMIC_SELECTION'),
- @(4,'headings\[7\].*?m_aButtons.Count\(\) != 21','UI_CONTROLS'),
+ @(4,'m_aButtons.Count\(\) != 20','UI_CONTROLS'),
+ @(4,'time < 0 \|\| time > 1439\) return false;','FIXED_TIME_UI'),
  @(4,'SetRange\(0, 1439\);.*?SetStep\(1\)','MINUTE_SLIDER'),
  @(4,'OnChange\(Widget w, bool finished\).*?w != m_wTimeSlider \|\| m_bClosing \|\| m_bTimeRefreshing.*?SelectEnvironment\(Math.Round\(m_wTimeSlider.GetCurrent\(\)\), m_Selection.GetEnvironment\(\).m_iWeather\)','UI_INDEPENDENT_AXES'),
  @(4,'bool SelectEnvironment\(int time, int weather\).*?RefreshEnvironment\(\);\s*return true;','LIGHTWEIGHT_DRAG')
@@ -34,5 +35,6 @@ foreach($rule in $rules){
 }
 if(($sources[0..1]-join '') -match 'Rpc\(|BumpMe|CallLater|SaveToFile|LoadFromFile|SetHoursMinutesSeconds|ForceWeatherTo\('){$failures+='NATIVE_STATE_BOUNDARY'}
 if($sources[0] -match 'Arland|Everon|Missions/'){$failures+='MAP_INDEPENDENT'}
+if($sources[4] -match 'RANDOM_TIME|AICF_Setup_Time4|m_iLastFixedMinutes'){$failures+='NO_RANDOM_TIME_UI'}
 if($failures.Count){$failures;exit 1}
 "Scenario environment static: PASS; guarded mutations=$mutations"

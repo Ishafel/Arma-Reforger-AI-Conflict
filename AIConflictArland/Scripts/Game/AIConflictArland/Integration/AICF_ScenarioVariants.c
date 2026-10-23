@@ -11,6 +11,7 @@ modded class AICF_ScenarioRegistry
 		variant.m_iMap = 0;
 		variant.m_iContent = 0;
 		variant.m_sMapLabel = "{AICF:AICF_Setup_Map_Arland}";
+		variant.m_sPreviewHeader = "{C41618FD18E9D714}Missions/23_Campaign_Arland.conf";
 		variant.m_sWestLabel = "{AICF:AICF_Setup_US}";
 		variant.m_sEastLabel = "{AICF:AICF_Setup_USSR}";
 		variant.m_sOwner = "B52C5F6AEDBF423E";
@@ -31,6 +32,7 @@ modded class AICF_ScenarioRegistry
 		variant.m_iMap = 1;
 		variant.m_iContent = 0;
 		variant.m_sMapLabel = "{AICF:AICF_Setup_Map_Everon}";
+		variant.m_sPreviewHeader = "{ECC61978EDCC2B5A}Missions/23_Campaign.conf";
 		variant.m_sWestLabel = "{AICF:AICF_Setup_US}";
 		variant.m_sEastLabel = "{AICF:AICF_Setup_USSR}";
 		variant.m_sOwner = "A4B2E62595F645A4";
@@ -52,6 +54,7 @@ modded class AICF_ScenarioRegistry
 		variant.m_iMap = 2;
 		variant.m_iContent = 0;
 		variant.m_sMapLabel = "{AICF:AICF_Setup_Map_EveronNorth}";
+		variant.m_sPreviewHeader = "{ECC61978EDCC2B5A}Missions/23_Campaign.conf";
 		variant.m_sWestLabel = "{AICF:AICF_Setup_US}";
 		variant.m_sEastLabel = "{AICF:AICF_Setup_USSR}";
 		variant.m_sOwner = "A4B2E62595F645A4";
@@ -73,6 +76,7 @@ modded class AICF_ScenarioRegistry
 		variant.m_iMap = 0;
 		variant.m_iContent = 1;
 		variant.m_sMapLabel = "{AICF:AICF_Setup_Map_Arland}";
+		variant.m_sPreviewHeader = "{C41618FD18E9D714}Missions/23_Campaign_Arland.conf";
 		variant.m_sWestLabel = "{AICF:AICF_Setup_USMC}";
 		variant.m_sEastLabel = "{AICF:AICF_Setup_MSV}";
 		variant.m_sOwner = "9F88011DA22B471C";
@@ -100,6 +104,7 @@ modded class AICF_ScenarioRegistry
 		variant.m_iMap = 1;
 		variant.m_iContent = 1;
 		variant.m_sMapLabel = "{AICF:AICF_Setup_Map_Everon}";
+		variant.m_sPreviewHeader = "{ECC61978EDCC2B5A}Missions/23_Campaign.conf";
 		variant.m_sWestLabel = "{AICF:AICF_Setup_USMC}";
 		variant.m_sEastLabel = "{AICF:AICF_Setup_MSV}";
 		variant.m_sOwner = "FA9FDCCA428A43BA";
@@ -129,6 +134,7 @@ modded class AICF_ScenarioRegistry
 		variant.m_iMap = 2;
 		variant.m_iContent = 1;
 		variant.m_sMapLabel = "{AICF:AICF_Setup_Map_EveronNorth}";
+		variant.m_sPreviewHeader = "{ECC61978EDCC2B5A}Missions/23_Campaign.conf";
 		variant.m_sWestLabel = "{AICF:AICF_Setup_USMC}";
 		variant.m_sEastLabel = "{AICF:AICF_Setup_MSV}";
 		variant.m_sOwner = "FA9FDCCA428A43BA";
@@ -158,6 +164,7 @@ modded class AICF_ScenarioRegistry
 		variant.m_iMap = 0;
 		variant.m_iContent = 2;
 		variant.m_sMapLabel = "{AICF:AICF_Setup_Map_Arland}";
+		variant.m_sPreviewHeader = "{C41618FD18E9D714}Missions/23_Campaign_Arland.conf";
 		variant.m_sWestLabel = "{AICF:AICF_Setup_NATO}";
 		variant.m_sEastLabel = "{AICF:AICF_Setup_Russia}";
 		variant.m_sOwner = "A1CF260928100001";
@@ -222,6 +229,7 @@ modded class AICF_ScenarioRegistry
 		variant.m_iMap = 1;
 		variant.m_iContent = 2;
 		variant.m_sMapLabel = "{AICF:AICF_Setup_Map_Everon}";
+		variant.m_sPreviewHeader = "{ECC61978EDCC2B5A}Missions/23_Campaign.conf";
 		variant.m_sWestLabel = "{AICF:AICF_Setup_NATO}";
 		variant.m_sEastLabel = "{AICF:AICF_Setup_Russia}";
 		variant.m_sOwner = "A1CF261006100001";
@@ -289,6 +297,7 @@ modded class AICF_ScenarioRegistry
 		variant.m_iMap = 2;
 		variant.m_iContent = 2;
 		variant.m_sMapLabel = "{AICF:AICF_Setup_Map_EveronNorth}";
+		variant.m_sPreviewHeader = "{ECC61978EDCC2B5A}Missions/23_Campaign.conf";
 		variant.m_sWestLabel = "{AICF:AICF_Setup_NATO}";
 		variant.m_sEastLabel = "{AICF:AICF_Setup_Russia}";
 		variant.m_sOwner = "A1CF261006100001";

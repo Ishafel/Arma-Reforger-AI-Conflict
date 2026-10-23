@@ -1,5 +1,88 @@
 # Проверки и baseline
 
+## Обновление меню подготовки операции — 2026-10-23
+
+Продолжение PR #65 в `codex/scenario-time-weather`, baseline `f2733b5`.
+Основной checkout `codex/issue67-main-retest` сохранён. Game и Workbench
+**1.8.0.13**. Evidence: `.codex-runtime/scenario-menu-visual-20261023/`.
+Работа и проверки — terminal-only, без GUI automation, screenshots и игрока.
+
+### Изменение
+
+Убрана кнопка случайного времени. UI принимает только 00:00–23:59 с шагом
+в минуту; weather random остаётся. Model/storage сохраняет sentinel 1440 для
+совместимости, но frontend его отвергает. Legacy headers и их GUID не менялись.
+
+Новый экран: графитовая палитра, карточки карт с приглушёнными stock preview,
+золотая рамка/полоса выбранного варианта, hover/focus, флаги, отдельная правая
+панель с названием карты, многострочной сводкой и пояснением. Footer содержит
+статус, отмену и основной CTA. Изображения заполняют карточку с обрезкой без
+искажения пропорций. Font scaling и crop рассчитываются после native layout
+и повторяются при изменении размеров root. Изменение времени не сканирует mods.
+
+`previewHeaders` в общем каталоге задаёт штатный header каждой карты;
+integration generator передаёт его Core descriptor. Поэтому preview доступен
+до загрузки integration; конкретных карт/GUID в Core не добавлено.
+CreateText сохраняет packed Color до native CreateWidget, тема возвращает
+managed ref Color, default color удерживается на время вызова.
+Ориентиры и контракт — `agent-notes/SCENARIO_SETUP.md`.
+
+### Команды и свежие результаты
+
+- `tools/Invoke-AICFChecks.ps1 -Name Test-UniversalScenarioStatic.ps1,Test-ScenarioSetupStatic.ps1,Test-ScenarioEnvironmentStatic.ps1,Test-UniversalScenarioLogContracts.ps1 -EvidenceRoot <evidence>/baseline`: **4/4 PASS/0** до правки. `Test-SupplyMapUIStatic.ps1 -RepositoryRoot <prototype-stage>`: дополнительный baseline shared UI helper **PASS/0** до его изменения.
+- Финальный `Invoke-AICFChecks.ps1` с четырьмя baseline checks и `Test-LocalizationStatic.ps1`, `Test-SupplyMapUIStatic.ps1`, `<evidence>/after-ready-fixed-encoding`: **6/6 PASS/0**. Universal — **37 guarded mutations**, environment — **20**, universal log contracts — **58 cases**. Localization runtime tables: **722 entries**, RU/EN. Generator `Update-AICFScenarioRegistry.ps1 -Check` и `git diff --check`: PASS/0.
+- `Compile.ps1 -Label ready-<label> -Variant <variant> [-SourceRoot <stage>]` → canonical Client DryRun graph → terminal `ArmaReforgerWorkbenchSteamDiag.exe -noThrow -wbsilent ... -wbModule=ScriptEditor -run -validate`: финальные **9/9 PASS/0**. Три production graphs Stock/RHS/ArlandWCSRHS и шесть stage graphs, включая Everon/EveronRHS/EveronWCSRHS. Полные commands/manifests/native exits/logs сохранены. Ранние compile PASS не выдаются за проверку финального source.
+- `FirstReady.ps1` + `CompleteReady.ps1` → `FrontendMatrix.ps1` → `RunFrontend.ps1`: финальные **10/10 native gates PASS/0** по полным stopped logs: шесть enabled configurations, два Play, один private Listen Host и catalog. GUI input не имитируется; argv взяты из canonical Client DryRun без -client для frontend.
+- В каждом из шести menu runs **53/53 checks**: 20 кнопок без пересечений/выхода за root, три native preview с правильными пропорциями, фактическая палитра текста, сводка, modal/help/flags/cleanup, отсутствие random time UI, границы slider, все девять mode/difficulty choices, фильтрация enabled packs и программный отказ скрытым вариантам. Matrix model/storage дополнительно покрывает 7200 fixed minute/weather choices и пять legacy random-time choices.
+- Enable states: Vanilla → mask 1; полный RHS → 3; WCS + RHS → 7; WCS без RHS → 1; неполный RHS → 1; неполный WCS при полном RHS → 3. Fixture использует native Enable только в своём свежем profile, затем возвращает исходные states; production этого не делает.
+- Play Arland Vanilla **00:00/Rainy**, Play Everon RHS **13:37/Cloudy**, private Listen Host North Everon WCS + RHS **23:59/Clear**, Co-op USSR Medium: exact loaded graph/header, ROSTER_READY и окружение подтверждены. Host — RPL port 24021 и сохранение request settings. Catalog **15/15**.
+- SCRIPT/VM/fatal/assertions в финальных полных logs: **0**. Прочие engine/resource diagnostics сохранены: **900 строк E в 10 console logs**, 1800 с дублирующими error logs; общий error-free engine gate не заявляется.
+- **437/437** production artifacts совпали со stage до/после финальных runs. Все свои native процессы и watcher остановлены. **18 profiles + stage** архивированы с проверкой SHA-256 каждого ZIP entry и удалены; `archives/index.json`. Дополнительно сохранён ZIP отвергнутой preview-stage и исходники прототипа. Финальные сводки — `final-summary.json`, `final-log-inventory.json`, `versions.json`, `source-hashes.json`.
+
+### Сохранённые FAIL
+
+Шесть первых menu runs получили strict FAIL: `NULL pointer to instance.
+Variable 'color'` в CreateText и отсутствие preview. Compile этого не обнаружил.
+Ref lifetime и snapshot Color исправлены; финальные native palette и full-log
+gates прошли без ошибок. Старые logs сохранены отдельно и не переименованы в PASS.
+
+Первый повтор `final-menu-vanilla` подтвердил исправление Color, но остался
+FAIL/`UI_MAP_PREVIEWS`: images=0, failures=3. Source headers незагруженного Everon
+integration были недоступны, размеры новых widgets до layout ещё не готовы.
+Добавлены integration-owned stock previewHeaders и native OnUpdate с cache размеров.
+Финальные шесть runs: images=3, failures=0, aspect/readbacks PASS. Oracle не ослаблялся.
+
+Первый prototype Play Arland 00:00/Rainy остановил продвижение log на
+`t_ms=2755`; процесс оставался живым более 300 секунд. Его runner и native PID
+20416 остановлены по точной identity; native exit -1 и FAIL сохранены с полным
+profile и `prototype-stall-process.json`. Причина этого зависания **не установлена**.
+Тот же финальный Play прошёл полный stopped-log gate; чистый повтор не объявляется
+доказательством исправления причины зависания. Прочие три prototype cases после
+остановки runner не запускались; финальный план выполнен целиком. Всего **18 native
+попыток: 8 неудачных/прерванных и 10 финальных PASS**.
+
+Терминальная подготовка также обнаружила неверное escaping regex и потерю UTF-8
+BOM генератора, из-за которой Windows PowerShell 5 не разбирал русский literal.
+Причины исправлены; исходные outputs в evidence. Финальный полный набор из шести
+профильных checks проходит без исключений. Первоначальный сбор числовой суммы E
+из OrderedDictionary дал null; итоговая сумма заново вычислена из сохранённого
+inventory как PSCustomObject. Null не трактовался как ноль ошибок.
+
+### NOT RUN / blockers
+
+Ручной ввод мышью/клавиатурой/controller, внешний вид и чтение на разных реальных
+разрешениях — **NOT RUN**: AGENTS.md запрещает GUI automation. Для визуальной
+проверки игроку нужно открыть AI Conflict, проверить карточки, фокус, slider,
+отмену и запуск. Native geometry/color/image readbacks этого не доказывают.
+
+Полный offline набор, новый dedicated/JIP/найм/бой/15-minute soak, public/второй
+игрок Listen Host, фактическое engine применение password/player limit,
+packaged Workshop/чистая установка и loading FPS benchmark — **NOT RUN**.
+Прежние native out-of-bounds `RHS_M4A1_LOWER.xob` / `ak74m_bebra.xob` не исправлены;
+старое evidence сохранено. **PR #65 остаётся draft**, issue #46 открыто; эта UI-правка
+не снимает прежних runtime blockers. Merge/Workshop publish не выполнялись.
+
+
 ## Фильтр контента по включённым модам — 2026-10-23
 
 Продолжение PR #65, ветка `codex/scenario-time-weather`, baseline `1255bde`.

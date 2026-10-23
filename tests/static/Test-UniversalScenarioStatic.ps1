@@ -2,7 +2,7 @@ param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptR
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../lib/Stage3StaticAudit.Common.ps1')
 $core=Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict'
-$files=@('Config/AICF_ScenarioRegistry.c','Config/AICF_ScenarioSetup.c','UI/AICF_ScenarioLaunch.c','UI/AICF_ScenarioSetupScreen.c','UI/AICF_ScenarioSetupEntry.c','State/AICF_GroupSlot.c','Bootstrap/AICF_MatchController.c')
+$files=@('Config/AICF_ScenarioRegistry.c','Config/AICF_ScenarioSetup.c','UI/AICF_ScenarioLaunch.c','UI/AICF_ScenarioSetupScreen.c','UI/AICF_ScenarioSetupEntry.c','State/AICF_GroupSlot.c','Bootstrap/AICF_MatchController.c','UI/AICF_StrategicUI.c')
 $sources=@($files|ForEach-Object {ConvertTo-AICFCodeText ([IO.File]::ReadAllText((Join-Path $core $_)))})
 $rules=@(
  @(0,'available.Find\(id\) >= 0.*?missing = id;.*?return false;','ALL_DEPENDENCIES'),
@@ -32,6 +32,10 @@ $rules=@(
  @(3,'m_aButtons\[contentButton \+ 3\].SetEnabled\(available\)','DISABLED_CONTENT'),
  @(3,'bool visible = contentVariant && contentVariant.IsContentEnabled\(\);\s*m_aFrames\[contentButton \+ 3\].SetVisible\(visible\);.*?if \(!visible\) continue;.*?visibleContent\+\+;','HIDDEN_CONTENT'),
  @(3,'mapVariant && mapVariant.IsContentEnabled\(\) && mapVariant.IsAvailable\(missing\)','ENABLED_MAP'),
+ @(3,'protected ref Color Gold\(\).*?protected ref Color Muted\(\).*?protected ref Color Border\(\)','PALETTE_LIFETIME'),
+ @(3,'ref Color retainedColor = color;.*?m_Style.CreateText\(.*?retainedColor, centered\)','TEXT_COLOR_OWNER'),
+ @(3,'area.SetFlags\(WidgetFlags.CLIPCHILDREN\);.*?image.SetFlags\(WidgetFlags.INHERIT_CLIPPING\);.*?imageRatio > frameRatio.*?FrameSlot.SetAnchorMin\(image.*?FrameSlot.SetAnchorMax\(image','PREVIEW_ASPECT'),
+ @(7,'TextWidget CreateText\(.*?int textColor = color.PackToInt\(\);.*?CreateWidget\(.*?widget.SetColor\(Color.FromInt\(textColor\)\)','TEXT_COLOR_SNAPSHOT'),
  @(4,'registry.IsLeaf\(scenario.Id\(\)\)\) return null;.*?super.CreateLine','HIDE_LEAVES'),
  @(4,'GetDefaultScenarios\(\).*?AICF_FilterPresets.*?GetModdedScenarios\(\).*?AICF_FilterPresets','HOST_LISTS'),
  @(5,'bool BeginInitialSpawn\(\).*?m_tSpawnStartedAt = GetGame\(\).GetWorld\(\).GetTimestamp\(\);','INITIAL_CLOCK'),

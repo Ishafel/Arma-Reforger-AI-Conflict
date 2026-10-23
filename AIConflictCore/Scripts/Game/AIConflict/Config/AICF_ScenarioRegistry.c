@@ -5,6 +5,7 @@ class AICF_ScenarioVariant
 	int m_iMap;
 	int m_iContent;
 	string m_sMapLabel;
+	ResourceName m_sPreviewHeader;
 	string m_sWestLabel;
 	string m_sEastLabel;
 	string m_sOwner;

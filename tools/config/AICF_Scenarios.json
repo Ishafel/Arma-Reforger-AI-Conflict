@@ -1,5 +1,10 @@
 {
   "schema": 1,
+  "previewHeaders": {
+    "0": "{C41618FD18E9D714}Missions/23_Campaign_Arland.conf",
+    "1": "{ECC61978EDCC2B5A}Missions/23_Campaign.conf",
+    "2": "{ECC61978EDCC2B5A}Missions/23_Campaign.conf"
+  },
   "graphs": {
     "AIConflictArland": {
       "project": "AIConflictArland/addon.gproj",

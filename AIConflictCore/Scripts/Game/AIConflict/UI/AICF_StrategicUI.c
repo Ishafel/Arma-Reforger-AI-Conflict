@@ -1463,6 +1463,8 @@ class AICF_StrategicUIController
 	{
 		if (!parent)
 			return null;
+		// Native CreateWidget не должен определять lifetime временного Color.
+		int textColor = color.PackToInt();
 		WidgetFlags flags = WidgetFlags.VISIBLE | WidgetFlags.IGNORE_CURSOR |
 			WidgetFlags.BLEND | WidgetFlags.VCENTER | WidgetFlags.NO_LOCALIZATION;
 		if (centered)
@@ -1480,7 +1482,7 @@ class AICF_StrategicUIController
 		FrameSlot.SetAnchorMin(widget, left, top);
 		FrameSlot.SetAnchorMax(widget, right, bottom);
 		FrameSlot.SetOffsets(widget, 0, 0, 0, 0);
-		widget.SetColor(color);
+		widget.SetColor(Color.FromInt(textColor));
 		widget.SetFont(FONT);
 		widget.SetExactFontSize(fontSize);
 		widget.SetText(AICF_Localization.Resolve(text));
