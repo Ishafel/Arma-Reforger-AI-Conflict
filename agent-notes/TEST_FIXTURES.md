@@ -109,7 +109,17 @@ metadata. Проверяется host context и сохранение Listen п�
 ошибочном выборе и проверяет точный leaf, фактический world и весь loaded graph.
 `COLD_WORLD` допускает native mount вида `$ArmaReforger:worlds/...`;
 `COLD_ADDON` сохраняет каждый loaded ID. Сам accepted request не означает
-загрузку карты. Существующий `-aicfWarmBootstrapControl 1` вместе с Host проверяет
+загрузку карты. `-aicfHostIntentContracts 1` выполняет 14 native cases для
+roundtrip и отказов по JSON/schema/phase/TTL/entry/indices/environment,
+точного graph и запрета Queue вне preparation Host. Cases имеют отдельный
+`HOST_INTENT_CASE`, не подменяют основные 19 cold Host cases.
+`-aicfExpectHostHandoff 1` требует точную последовательность RETURN/HOST/LEAF/READY.
+`-aicfColdReadyProbe 1` удерживает конечный leaf 45 секунд перед RequestClose,
+печатает COLD_READY после ROSTER_READY; oracle требует Listen, отсутствие pending,
+последний фактический native listener 127.0.0.1:24073 и ENVIRONMENT_APPLIED 577/4.
+`RplSession.TryGetListenAddress` возвращает адрес интерфейса без порта и не
+заменяет строку `Starting RPL server` в полном логе.
+Существующий `-aicfWarmBootstrapControl 1` вместе с Host проверяет
 отдельный путь из main menu с private `SCR_DSConfig`; это не первый cold Host.
 `-aicfColdRetryHost 1` вместе с Host воспроизводит обходной путь целиком:
 native preparation Listen → Cancel → main menu → новая private Host config →

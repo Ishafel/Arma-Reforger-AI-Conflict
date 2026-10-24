@@ -1,5 +1,79 @@
 # Проверки и baseline
 
+## Исправление graph первого Host — 2026-10-24
+
+Продолжение `codex/fix-host-everon-wcs` от диагностического `21fcba8` с чистым
+деревом. Evidence: `.codex-runtime/host-everon-wcs-fix-20261024/REPORT.md`.
+Игровой клиент и Workbench — 1.8.0.13. Новый `AICF_ScenarioHostTransition`
+обходит зависание ScenarioChange в preparation Listen при смене scripts graph:
+GameplayEnd + RequestReload полного graph → main menu → native Host с null
+config → тот же preparation header → конечный leaf с уже загруженными addons.
+Исходную config удерживает engine; defaults/пароли в script payload не копируются.
+Intent содержит phase, TTL, entry/выбор/окружение; callback сверяет payload,
+контекст, точный graph и header identity, ожидание native transition ограничено.
+Подробности — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+
+Свежий baseline шести профильных audits — **6/6 PASS/0**, `before/`.
+Полный `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+tools/Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <task>/after-all` —
+**85/85 PASS, exit 0**, без исключений. WorkshopBootstrapLogContracts —
+**50/50 PASS/0**; WorkshopBootstrapStatic — 29 guarded contracts, PASS/0.
+Все исходные команды/argv/логи/exit codes находятся в evidence.
+
+Терминальный `Compile.ps1 -Label final-production-stock`,
+`-Label final-production-wcs -Variant EveronWCSRHS` и точная окончательная
+fixture `-SourceRoot <stage> -Label final-fixture-exact -Variant EveronWCSRHS` —
+**3/3 PASS/0**. Полные logs подтверждают validation и отсутствие SCRIPT E/F,
+ENGINE F, VM, access violation и hang; `compile-summary.json`.
+
+`Run-Candidate.ps1 -Label final-wcs-host -ListenHost -IntentContracts -Ready` —
+**19/19 cold cases + 14/14 intent cases**, native exit 0 и full stopped-log
+oracle PASS/0. 11:54:10–11:56:09 MSK: точный Everon WCS + RHS / Co-op USSR /
+Hard leaf и RHS world, все 28 addon IDs, Listen, фактический последний listener
+127.0.0.1:24073, 09:37/Rainy, ROSTER_READY и снятый handoff intent. После
+readback выполняется 45 секунд работы, затем fixture вызывает RequestClose.
+RETURN/HOST/LEAF/READY появляются ровно по одному и в правильном порядке.
+
+`handoff-wcs-short` с ранним выходом также дал **19 + 14, native 0, oracle
+PASS/0**. `stock-host-ready -ListenHost -Variant Stock -Ready` — **19/19,
+native 0, oracle PASS/0**, без дополнительного handoff. Эти два прогона
+предшествуют последней правке bounded retry; окончательный WCS повтор выше
+проверяет уже её. Ранний `handoff-wcs-ready` также PASS, но не заменяет final.
+
+В окончательном Host SCRIPT/VM/fatal/hang — 0; прочих console (E) — 373,
+в Stock — 76. Полные группы ошибок сохранены в runtime-error-classification.json:
+native/WCS GUID/resource, Hierarchy, loading UI metadata и shutdown lists.
+Собственных AICF resource errors в final Host нет. Это launch/roster PASS,
+а не заявление о чистоте всех внешних ресурсов.
+
+**Сохранённый FAIL:** `wcs-play-control` загрузил выбранный world/graph и
+окружение, но быстрый RequestClose дал native access violation после Game
+destroyed, exit -1073741819. `baseline-wcs-play` на исходных **348 production
+файлах с совпавшими SHA-256** воспроизвёл тот же crash. Это не новая регрессия
+Host fix; причина и её устранение не заявляются. Диагностический контроль
+`no-match-wcs-play` с отключённым AICF campaign bootstrap после native
+super.OnGameStart завершился с 0: вместе исключены profile, strategic UI,
+radio normalization и match controller, конкретный владелец не установлен.
+Этот runtime FAIL остаётся blocker для ready PR/релиза.
+
+Другие сохранённые неуспехи: `config-debug` — прежний hang после ожидания
+70 секунд, native -1 по watchdog; source `MissionWorkshopItem.Host` в
+`host-callback` — crash -1073740940; первый `native-retain` загрузил world/graph,
+но потерял environment и упал при завершении. Первый restricted Workbench
+не получил SteamAPI и дал -1; повтор с доступом к Steam прошёл. Неуспешные
+прогоны не выдаются за PASS и не перенесены как production варианты.
+
+349 production файлов и окончательная fixture совпали со stage; 14 собственных
+stages/profiles заархивированы, каждый файл zip проверен SHA-256 до удаления
+оригинала. Полные остановленные logs/dumps доступны в `full-logs/<label>/`,
+runtime-summary.json содержит актуальные пути и SHA-256 console. Своих native
+процессов 0; diff check PASS/0. Push, PR, версия и Workshop publication не менялись.
+
+**NOT RUN:** packaged cold Workshop build, физический UI input/внешний вид,
+второй игрок/JIP, фактическая авторизация паролем и player limit, остальные
+сетевые настройки, soak/полный матч. Для них нужны опубликованный пакет и
+отдельный игрок/identity; native source probe и исходный listener их не доказывают.
+
 ## Чёрный экран preparation Host → Everon WCS + RHS — 2026-10-24
 
 Диагностика по сообщению владельца выполнена в `codex/fix-host-everon-wcs`

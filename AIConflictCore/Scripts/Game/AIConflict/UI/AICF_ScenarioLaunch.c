@@ -70,7 +70,9 @@ class AICF_ScenarioLaunch
 		ResourceName resource = selection.GetResource();
 		if (!AICF_ScenarioEnvironment.Queue(resource, selection.GetEnvironment())) return false;
 		bool accepted;
-		if (!config)
+		if (!config && AICF_ScenarioBootstrap.IsHost(entry) && !AICF_ScenarioHostTransition.HasExactGraph(variant))
+			accepted = AICF_ScenarioHostTransition.Queue(selection, entry);
+		else if (!config)
 			accepted = GameStateTransitions.RequestScenarioChangeTransition(resource, "", variant.GetAddonList());
 		else
 		{

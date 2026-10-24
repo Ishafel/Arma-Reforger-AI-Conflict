@@ -34,7 +34,7 @@ class AICF_ScenarioBootstrap
 
 	void Start()
 	{
-		if (!ShouldIntercept()) return;
+		if (!ShouldIntercept() || AICF_ScenarioHostTransition.HasPending()) return;
 		m_sEntry = GetGame().GetMissionHeader().GetHeaderResourceName();
 		GetGame().GetCallqueue().CallLater(Open, 1000, false);
 	}

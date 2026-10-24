@@ -34,7 +34,7 @@ WCS + RHS — при включённом полном наборе обоих �
 РФ — native tricolor widgets, НАТО — стилизованный компас на синем поле.
 
 Подключающиеся игроки используют обычный браузер/direct connect и штатные
-Welcome/faction/group UI. Новый экран не перенастраивает текущую сессию и не
+Welcome/faction/group UI. Новый экран настраивает только локальный запуск и не
 показывается JIP-клиенту. Co-op — [COOP_SCENARIO.md](COOP_SCENARIO.md), найм —
 [GAMEPLAY.md](GAMEPLAY.md). Автостройка своей стороны в Co-op отключена;
 рабочие и заказы бойцов в казарме сохранены.
@@ -174,23 +174,46 @@ frontend `SCR_DownloadManager`: вместо него проверяется nat
 `IsProcessed` и `GetPendingDownload`; main-menu gate сохраняет прежний manager.
 Native CanHost применяется при создании новой сессии с config. Preparation
 Listen уже создан штатным Host: выбор меняет его сценарий через CanPlay и
-сохраняет platform gate. Полный graph, enabled/downloaded/corruption и
+сохраняет platform gate. При изменении graph используется описанный ниже
+`AICF_ScenarioHostTransition`. Полный graph, enabled/downloaded/corruption и
 forced-CLI gates действуют в обоих контекстах. Отмена preparation вызывает
 native GameplayEnd, обычное закрытие/успешный launch только снимает UI.
 Callback снимается в OnGameEnd; UI освобождается до world cleanup.
 
-Ограничение, подтверждённое 24.10.2026: preparation Listen с исходным
-Core + Arland принимает выбор Everon WCS + RHS / Co-op USSR / Hard, но
-не загружает выбранный world и новый graph. Предыдущий Stock/Arland PASS
-этого перехода не проверял. Добавление `RequestReload` после принятого запроса
-и отдельная попытка предварительного reload в isolated stage не устранили
-дефект и в production не перенесены. `GetRunningDSConfig` и
-`ServerLobbyApi.GetServerConfig` в этом source Host не возвращают config;
-пересоздание Host с сохранением всех настроек не подтверждено. Это открытый
-runtime blocker, подробности и полные логи — [TESTING.md](TESTING.md).
-Отдельный сквозной повтор через Cancel вернул vanilla-only main menu и выгрузил
-Core: process-local intent сам по себе не гарантирует, что его обработчик
-останется загруженным. Warm main-menu PASS не выдаётся за доступный игроку обход.
+В API 1.8.0.13 preparation Listen принимает ScenarioChange с новым addon CSV,
+но фактически не меняет scripts graph: Everon WCS + RHS из Core + Arland
+оставался на чёрном экране. Одного `RequestReload` в действующем Listen
+недостаточно. `AICF_ScenarioHostTransition` при несовпадении точного loaded graph
+возвращается в main menu через GameplayEnd и в том же кадре задаёт полный
+graph через RequestReload. Так Core и обработчик intent остаются загружены.
+Затем вызывает `RequestPublicServerTransition(null)`, как штатный
+`ArmaReforgerScripted.HostGameConfig`: engine использует удерживаемую исходную
+Host config. Переданный RequestReload сохраняет новый graph и на этом переходе.
+После повторной загрузки **того же** setup header в Listen конечный
+ScenarioChange уже работает с загруженными integration и content scripts.
+При совпадающем graph дополнительного возврата нет; main-menu Host с явной
+SCR_DSConfig и Play сохраняют прежние пути.
+
+Intent schema 1 хранит только phase, issued tick, точный entry и индексы
+карты/контента/режима/сложности, минуты и погоду в GameSessionStorage. Native
+config и пароли не копируются и не заменяются defaults: GetRunningDSConfig и
+ServerLobbyApi.GetServerConfig по-прежнему недоступны в этом Listen. Descriptor
+и target заново разрешаются через registry, TTL — 10 минут. Callback сверяет
+неизменность payload, phase/context, точный graph, Listen и identity setup/leaf;
+переход на чужой header запрещён. Промежуточные OnMissionSet снимают обычный
+environment intent, поэтому перед leaf он заново ставится из handoff payload.
+Повторный picker во время handoff не открывается; pending снимается после
+проверки конечного header. Fail очищает intent/environment, Stop снимает callback.
+События `HOST_HANDOFF phase=RETURN/HOST/LEAF/READY` фиксируют каждую границу.
+
+Source terminal probe подтвердил первый Everon WCS + RHS / Co-op USSR / Hard,
+все 28 addons, native listener 127.0.0.1:24073, 09:37/Rainy и ROSTER_READY.
+Фактические password/player limit, второй игрок/JIP и packaged cold Workshop
+остаются NOT RUN. Исторические failed experiments и native shutdown crash
+не стираются новым PASS; результаты — [TESTING.md](TESTING.md).
+Быстрый выход из Play повторно дал native access violation и на исходной
+production базе до этого исправления. Причина не установлена; это отдельный
+runtime blocker для ready PR/релиза, а не PASS по сохранению прежнего Play.
 
 Setup использует штатный тип header с явным opt-in flag. Самостоятельный
 `AICF_ScenarioSetupHeader` больше не используется: контроль после native

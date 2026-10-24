@@ -17,6 +17,63 @@ class AICF_WorkshopBootstrapProbe
 	protected int m_iChecks;
 	protected int m_iWaits;
 	protected ref array<string> m_aAICFEnabledForProbe = {};
+	protected void IntentCheck(string name, bool passed)
+	{
+		if (!passed) m_iFailed++;
+		Print(string.Format("[AICF][HOST_INTENT_CASE] case=%1 pass=%2", name, passed));
+	}
+	protected void IntentContracts(ResourceName setup, MissionWorkshopItem entry)
+	{
+		AICF_ScenarioHostIntent intent = new AICF_ScenarioHostIntent();
+		intent.m_iIssued = System.GetTickCount();
+		intent.m_sEntry = setup;
+		intent.m_iMap = 1;
+		intent.m_iContent = 2;
+		intent.m_iMode = 2;
+		intent.m_iDifficulty = 2;
+		intent.m_Environment.m_iStartMinutes = 577;
+		intent.m_Environment.m_iWeather = 4;
+		string data = intent.Encode();
+		AICF_ScenarioHostIntent decoded = AICF_ScenarioHostIntent.Decode(data);
+		IntentCheck("ROUNDTRIP", decoded && decoded.GetTarget() == intent.GetTarget() && decoded.m_sEntry == setup && decoded.m_Environment.m_iStartMinutes == 577 && decoded.m_Environment.m_iWeather == 4);
+		IntentCheck("INVALID_JSON", !AICF_ScenarioHostIntent.Decode("invalid"));
+		string invalid = data;
+		invalid.Replace("\"schema\": 1", "\"schema\": 2");
+		invalid.Replace("\"schema\":1", "\"schema\":2");
+		IntentCheck("SCHEMA", invalid != data && !AICF_ScenarioHostIntent.Decode(invalid));
+		intent.m_iPhase = 3;
+		IntentCheck("PHASE", !AICF_ScenarioHostIntent.Decode(intent.Encode()));
+		intent.m_iPhase = 0;
+		intent.m_iIssued = System.GetTickCount() - 600001;
+		IntentCheck("TTL", !AICF_ScenarioHostIntent.Decode(intent.Encode()));
+		intent.m_iIssued = System.GetTickCount();
+		intent.m_iMap = -1;
+		IntentCheck("MAP", !AICF_ScenarioHostIntent.Decode(intent.Encode()));
+		intent.m_iMap = 1;
+		intent.m_iContent = 3;
+		IntentCheck("CONTENT", !AICF_ScenarioHostIntent.Decode(intent.Encode()));
+		intent.m_iContent = 2;
+		intent.m_iMode = 3;
+		IntentCheck("MODE", !AICF_ScenarioHostIntent.Decode(intent.Encode()));
+		intent.m_iMode = 2;
+		intent.m_iDifficulty = -1;
+		IntentCheck("DIFFICULTY", !AICF_ScenarioHostIntent.Decode(intent.Encode()));
+		intent.m_iDifficulty = 2;
+		intent.m_Environment.m_iStartMinutes = 1441;
+		IntentCheck("MINUTES", !AICF_ScenarioHostIntent.Decode(intent.Encode()));
+		intent.m_Environment.m_iStartMinutes = 577;
+		intent.m_Environment.m_iWeather = 5;
+		IntentCheck("WEATHER", !AICF_ScenarioHostIntent.Decode(intent.Encode()));
+		intent.m_Environment.m_iWeather = 4;
+		AICF_ScenarioRegistry registry = new AICF_ScenarioRegistry();
+		intent.m_sEntry = registry.Find(0, 0).Resolve(0, 0);
+		IntentCheck("ENTRY", !AICF_ScenarioHostIntent.Decode(intent.Encode()));
+		intent.m_sEntry = setup;
+		IntentCheck("GRAPH", AICF_ScenarioHostTransition.HasExactGraph(registry.Find(0, 0)) && !AICF_ScenarioHostTransition.HasExactGraph(intent.GetVariant()));
+		SCR_MissionHeaderCampaign header = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(setup));
+		AICF_ScenarioSetupSelection selection = new AICF_ScenarioSetupSelection(header);
+		IntentCheck("HOST_ONLY", !AICF_ScenarioHostTransition.Queue(selection, entry) && !AICF_ScenarioHostTransition.HasPending());
+	}
 	protected SCR_DSConfig HostConfig()
 	{
 		SCR_DSConfig config = new SCR_DSConfig();
@@ -109,6 +166,7 @@ class AICF_WorkshopBootstrapProbe
 		}
 		if (phase.IsEmpty() && menu)
 		{
+			if (System.IsCLIParam("aicfHostIntentContracts")) IntentContracts(setup, entry);
 			SCR_MissionHeaderCampaign header = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(setup));
 			Check("LITERAL_NAME", header && header.m_sName == "AI Conflict");
 			AICF_ScenarioRegistry baseRegistry = new AICF_ScenarioRegistry();
@@ -231,7 +289,9 @@ class AICF_WorkshopBootstrapProbe
 				Check("TARGET_GRAPH", exact);
 			}
 			Print(string.Format("[AICF][COLD_DONE] checks=%1 failed=%2", m_iChecks, m_iFailed));
-			GetGame().GetCallqueue().CallLater(Close, 2000, false);
+			int closeDelay = 2000;
+			if (System.IsCLIParam("aicfColdReadyProbe")) closeDelay = 45000;
+			GetGame().GetCallqueue().CallLater(Close, closeDelay, false);
 		}
 		if (phase == "CANCEL" && menu)
 		{
@@ -264,6 +324,18 @@ class AICF_WorkshopBootstrapProbe
 		GetGame().GetCallqueue().Remove(Readback);
 		GetGame().GetCallqueue().Remove(Timeout);
 		GetGame().GetCallqueue().Remove(Close);
+	}
+}
+
+modded class AICF_MatchController
+{
+	protected bool m_bAICFColdReady;
+	override protected void Update()
+	{
+		super.Update();
+		if (m_bAICFColdReady || !System.IsCLIParam("aicfColdReadyProbe") || !m_bRosterReady) return;
+		m_bAICFColdReady = true;
+		Print(string.Format("[AICF][COLD_READY] listen=%1 address=%2 pending=%3", RplSession.Mode() == RplMode.Listen, RplSession.TryGetListenAddress(), AICF_ScenarioHostTransition.HasPending()));
 	}
 }
 

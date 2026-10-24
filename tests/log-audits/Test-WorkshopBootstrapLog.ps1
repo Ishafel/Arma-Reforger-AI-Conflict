@@ -62,6 +62,26 @@ foreach ($phase in @('OPEN')) {
     if (@([regex]::Matches($log, '\[SCENARIO_BOOTSTRAP\] phase=' + $phase + '\b')).Count -ne $phaseCount) { $failures += "PHASE_$phase" }
 }
 if ($log -match '\[COLD_TIMEOUT\]|\[SCENARIO_BOOTSTRAP\]\[FAIL\]' -or @([regex]::Matches($log, "\[COLD_DONE\] checks=$doneChecks failed=0\b")).Count -ne 1) { $failures += 'COMPLETION' }
+$handoffPhases = @([regex]::Matches($log, '\[HOST_HANDOFF\] phase=(\w+)') | ForEach-Object { $_.Groups[1].Value })
+if ('-aicfExpectHostHandoff' -in $argv -or $handoffPhases.Count) {
+    if (($handoffPhases -join ',') -cne 'RETURN,HOST,LEAF,READY') { $failures += 'HOST_HANDOFF_PHASES' }
+}
+if ($full -match '\[HOST_HANDOFF\]\[FAIL\]') { $failures += 'HOST_HANDOFF_FAILED' }
+if ('-aicfHostIntentContracts' -in $argv) {
+    $intentExpected = @('ROUNDTRIP','INVALID_JSON','SCHEMA','PHASE','TTL','MAP','CONTENT','MODE','DIFFICULTY','MINUTES','WEATHER','ENTRY','GRAPH','HOST_ONLY')
+    $intentCases = @([regex]::Matches($log, '\[HOST_INTENT_CASE\] case=(\w+) pass=([01])'))
+    if ($intentCases.Count -ne $intentExpected.Count) { $failures += 'INTENT_CASE_COUNT' }
+    foreach ($name in $intentExpected) {
+        $found = @($intentCases | Where-Object { $_.Groups[1].Value -ceq $name })
+        if ($found.Count -ne 1 -or $found[0].Groups[2].Value -cne '1') { $failures += "INTENT_$name" }
+    }
+}
+if ('-aicfColdReadyProbe' -in $argv) {
+    if (@([regex]::Matches($log, '\[COLD_READY\] listen=1 address=\S+ pending=0\b')).Count -ne 1 -or $log -notmatch '\[ROSTER_READY\]') { $failures += 'HOST_ROSTER_READY' }
+    $listeners = @([regex]::Matches($log, 'Starting RPL server, listening on address ([^,\r\n]+)'))
+    if (!$listeners.Count -or $listeners[-1].Groups[1].Value -cne '127.0.0.1:24073') { $failures += 'HOST_LISTENER' }
+    if ($log -notmatch '\[ENVIRONMENT_APPLIED\][^\r\n]*time_minutes=577[^\r\n]*weather_mode=4') { $failures += 'HOST_ENVIRONMENT_APPLIED' }
+}
 $launch = [regex]::Match($log, '\[AICF\]\[SCENARIO_LAUNCH\]')
 if ($cancel) {
     if ($launch.Success -or $log -match '\[BOOTSTRAP_SERVER\]|\[ROSTER_SPAWN_REQUESTED\]') { $failures += 'CANCEL_STARTED_MATCH' }

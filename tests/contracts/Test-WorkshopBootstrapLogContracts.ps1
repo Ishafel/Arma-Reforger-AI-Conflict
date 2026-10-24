@@ -99,6 +99,27 @@ try {
     Check duplicatecli $bad $wcs.log -rule CLI_SELECTION
     $acceptedOnly = ($wcs.log -split "`n" | Where-Object { $_ -notmatch 'case=(SELECTED_HEADER|NO_BOOTSTRAP|APPLIED_ENVIRONMENT|HOST_LISTEN|TARGET_WORLD|TARGET_GRAPH)|\[COLD_(DONE|WORLD|ADDON)\]' }) -join "`n"
     Check acceptedonly $wcs $acceptedOnly -rule COMPLETION
+    $handoffPlan = $wcs.manifest | ConvertFrom-Json
+    $handoffPlan.arguments += @('-aicfExpectHostHandoff','1','-aicfHostIntentContracts','1','-aicfColdReadyProbe','1')
+    $handoff = [pscustomobject]@{ manifest = ($handoffPlan | ConvertTo-Json -Depth 4) }
+    $handoffLog = $wcs.log.Replace('-aicfColdDifficulty 2','-aicfColdDifficulty 2 -aicfExpectHostHandoff 1 -aicfHostIntentContracts 1 -aicfColdReadyProbe 1')
+    $handoffLog += "`n" + (@('RETURN','HOST','LEAF','READY') | ForEach-Object { "[AICF][HOST_HANDOFF] phase=$_" }) -join "`n"
+    $handoffLog += "`n[AICF][COLD_READY] listen=1 address=100.98.58.185 pending=0`nStarting RPL server, listening on address 127.0.0.1:24073, fastValidation=true`n[ROSTER_READY]`n[ENVIRONMENT_APPLIED] time_minutes=577 weather_mode=4"
+    $intentNames = @('ROUNDTRIP','INVALID_JSON','SCHEMA','PHASE','TTL','MAP','CONTENT','MODE','DIFFICULTY','MINUTES','WEATHER','ENTRY','GRAPH','HOST_ONLY')
+    $handoffLog += "`n" + (($intentNames | ForEach-Object { "[AICF][HOST_INTENT_CASE] case=$_ pass=1" }) -join "`n")
+    Check handoff $handoff $handoffLog
+    Check missinghandoff $handoff ($handoffLog.Replace('[AICF][HOST_HANDOFF] phase=READY','')) -rule HOST_HANDOFF_PHASES
+    Check duplicatehandoff $handoff ($handoffLog + "`n[AICF][HOST_HANDOFF] phase=READY") -rule HOST_HANDOFF_PHASES
+    Check reorderedhandoff $handoff ($handoffLog.Replace('phase=HOST','phase=TEMP').Replace('phase=LEAF','phase=HOST').Replace('phase=TEMP','phase=LEAF')) -rule HOST_HANDOFF_PHASES
+    Check failedhandoff $handoff ($handoffLog + "`n[AICF][HOST_HANDOFF][FAIL] reason=GRAPH") -rule HOST_HANDOFF_FAILED
+    Check failedintent $handoff ($handoffLog.Replace('case=TTL pass=1','case=TTL pass=0')) -rule INTENT_TTL
+    Check missingintent $handoff ($handoffLog.Replace('[AICF][HOST_INTENT_CASE] case=HOST_ONLY pass=1','')) -rule INTENT_HOST_ONLY
+    Check duplicintent $handoff ($handoffLog + "`n[AICF][HOST_INTENT_CASE] case=ROUNDTRIP pass=1") -rule INTENT_CASE_COUNT
+    Check wronglisten $handoff ($handoffLog.Replace('listen=1 address=100.98.58.185','listen=0 address=100.98.58.185')) -rule HOST_ROSTER_READY
+    Check wrongport $handoff ($handoffLog.Replace('address 127.0.0.1:24073','address 127.0.0.1:2001')) -rule HOST_LISTENER
+    Check pendingintent $handoff ($handoffLog.Replace('pending=0','pending=1')) -rule HOST_ROSTER_READY
+    Check missingroster $handoff ($handoffLog.Replace('[ROSTER_READY]','')) -rule HOST_ROSTER_READY
+    Check missingapplied $handoff ($handoffLog.Replace('time_minutes=577','time_minutes=480')) -rule HOST_ENVIRONMENT_APPLIED
     "Workshop bootstrap log contracts: PASS; cases=$count"
 }
 finally {
