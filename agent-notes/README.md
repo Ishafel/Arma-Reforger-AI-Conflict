@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Запустить локальные Play/Host через обычный клиент или разобрать native shutdown crash | [DEVELOPMENT.md](DEVELOPMENT.md#локальные-playhost), [TESTING.md](TESTING.md), `tools/Start-AICFRuntime.ps1 -Role Frontend`; успешный offline/compile не заменяет stopped-log runtime gate |
 | Изменить внутриигровой брифинг на карте | [MISSION_BRIEFING.md](MISSION_BRIEFING.md), `UI/AICF_MissionBriefing.c`, MissionBriefingProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Разобрать resource/navmesh/Hierarchy ошибки и границу внешнего baseline | [EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md), [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), [TESTING.md](TESTING.md) |
 | Исправить damage RPC при смене обуви у private model или при shutdown | [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), `Integration/AICF_FeetDamageLifecycle.c`, FeetDamageProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |

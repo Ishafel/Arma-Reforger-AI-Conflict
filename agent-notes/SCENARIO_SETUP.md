@@ -265,6 +265,12 @@ issued tick, minutes и weather. Schema 1 с прежними time presets от�
 повторный старт и malformed payload не наследуют параметры. Данные прикрепляются
 к transient полю экземпляра header, без изменения исходного ресурса.
 
+Target читается из JSON в **ResourceName**, как и при записи. Retail 1.8.0.13
+записывает это значение как один GUID; чтение в `string` оставляло GUID вместо
+полного resource name и ошибочно отклоняло выбранный leaf. Native typed read
+восстанавливает имя через resource database; строгая проверка `target != actual`
+и schema 2 сохранены. Проверка только Diag не подтверждает этот roundtrip.
+
 `AICF_ScenarioEnvironmentHandler` использует штатный
 `SCR_TimeAndWeatherHandlerComponent.SetupDaytimeAndWeather` на authority.
 Часы/минуты и native random daytime независимы от выбранного weather state;

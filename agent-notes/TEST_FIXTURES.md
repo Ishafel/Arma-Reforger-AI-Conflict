@@ -90,6 +90,10 @@ crash.log при чистом console. Визуальный вид дыма/же
 `AICF_WorkshopBootstrapProbe.c` — отдельная fixture для первого native входа.
 Копировать только в isolated Core/UI как `AICF_ZColdBootstrapProbe.c`, CLI
 `-aicfColdBootstrapProbe 1`, frontend без `-client`/`-server`/`-world`.
+Запускать через `Start-AICFRuntime.ps1 -Role Frontend -Variant Stock`, с отдельным
+stage/profile и `-RhsAddonsRoot` для доступности внешних пакетов. Этот режим
+использует обычный игровой binary и сам сохраняет manifest/наблюдает exit;
+собирать frontend из Client DryRun удалением `-client` больше не требуется.
 Начальный source graph нужен для самой fixture; она вызывает
 `MissionWorkshopItem.Play()` напрямую, обходя уже загруженный TryPlay hook.
 Это проверка native границы и последующей настройки, не эмуляция vanilla VM
@@ -102,6 +106,8 @@ listen с fixture password/port через `RequestPublicServerTransition` и т
 source graph: у source `MissionWorkshopItem.Host` не хватает packaged header
 metadata. Проверяется host context и сохранение Listen после выбора.
 Это не проверка публичного Host со вторым игроком или действительности пароля.
+Retail readback обязателен: native JSON представление ResourceName отличается
+от Diag. Exit 0 без `APPLIED_ENVIRONMENT pass=1` и полного completion — FAIL.
 Для смены карты и графа добавлены `-aicfColdVariant EveronWCSRHS
 -aicfColdMode 2 -aicfColdDifficulty 2`: исходный граф остаётся Stock, полный
 внешний graph должен быть доступен через `addonsDir`. Fixture включает только

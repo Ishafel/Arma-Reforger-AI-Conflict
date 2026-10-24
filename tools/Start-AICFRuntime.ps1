@@ -1,7 +1,7 @@
 ﻿[CmdletBinding(PositionalBinding = $false)]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Server', 'Client')]
+    [ValidateSet('Server', 'Client', 'Frontend')]
     [string]$Role,
 
     [Parameter(Mandatory = $true)]
@@ -37,6 +37,17 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# Локальные Play/Host используют обычный игровой binary. Client остаётся
+# direct-connect к Diag server с обязательным readiness gate.
+if ($Role -eq 'Frontend') {
+    foreach ($connectionParameter in @('ClientAddress','ServerPort','ServerProfileRoot','RemoteReadinessProbe','ExpectedSourceCommit')) {
+        if ($PSBoundParameters.ContainsKey($connectionParameter)) {
+            throw "[FRONTEND_CONNECTION_PARAMETER] Frontend не подключается к серверу: параметр -$connectionParameter относится к Client."
+        }
+    }
+    if ('-world' -in $AdditionalArguments) { throw '[FRONTEND_WORLD_PARAMETER] Frontend запускает главное меню; -world не допускается.' }
+}
 
 if (-not $RepositoryRoot) {
     $RepositoryRoot = Split-Path -Parent $PSScriptRoot
@@ -293,14 +304,17 @@ function Assert-AICFResourceDatabases {
 }
 
 $repositoryPath = Resolve-AICFExistingDirectory -Path $RepositoryRoot -Description 'Repository root'
-$serverRootPath = Resolve-AICFExistingDirectory -Path $ServerRoot -Description 'Arma Reforger Server root'
+$serverRootPath = $null
+if ($Role -ne 'Frontend') {
+    $serverRootPath = Resolve-AICFExistingDirectory -Path $ServerRoot -Description 'Arma Reforger Server root'
+}
 $gameRootPath = $null
-if ($Role -eq 'Client') {
+if ($Role -ne 'Server') {
     $gameRootPath = Resolve-AICFExistingDirectory -Path $GameRoot -Description 'Arma Reforger game root'
 }
 
 $rhsRootPath = $null
-if ($scenarioPlan.externalAddons) {
+if ($scenarioPlan.externalAddons -or ($Role -eq 'Frontend' -and $RhsAddonsRoot)) {
     if (-not $RhsAddonsRoot) {
         $rhsCandidates = [System.Collections.Generic.List[string]]::new()
         $documentsRoot = [Environment]::GetFolderPath('MyDocuments')
@@ -323,10 +337,12 @@ if ($scenarioPlan.externalAddons) {
 }
 
 foreach ($pathCheck in @(
-    @{ Path = $repositoryPath; Description = 'Repository root' },
-    @{ Path = $serverRootPath; Description = 'Arma Reforger Server root' }
+    @{ Path = $repositoryPath; Description = 'Repository root' }
 )) {
     Assert-AICFPathCanJoinAddonsDir -Path $pathCheck.Path -Description $pathCheck.Description
+}
+if ($serverRootPath) {
+    Assert-AICFPathCanJoinAddonsDir -Path $serverRootPath -Description 'Arma Reforger Server root'
 }
 if ($gameRootPath) {
     Assert-AICFPathCanJoinAddonsDir -Path $gameRootPath -Description 'Arma Reforger game root'
@@ -369,7 +385,7 @@ if ($Role -eq 'Server') {
     $addonsDirectories += (Join-Path $serverRootPath 'addons')
 }
 else {
-    $clientBinary = if ($UseRetailClient) { 'ArmaReforgerSteam.exe' } else { 'ArmaReforgerSteamDiag.exe' }
+    $clientBinary = if ($Role -eq 'Frontend' -or $UseRetailClient) { 'ArmaReforgerSteam.exe' } else { 'ArmaReforgerSteamDiag.exe' }
     $executable = Resolve-AICFExistingFile -Path (Join-Path $gameRootPath $clientBinary) -Description 'Client executable'
     $addonsDirectories += (Join-Path $gameRootPath 'addons')
 }
@@ -440,7 +456,7 @@ if ($Role -eq 'Server') {
         '-worldSystemsConfig', 'Configs/Systems/ConflictSystems.conf'
     )
 }
-else {
+elseif ($Role -eq 'Client') {
     $clientTarget = $ClientAddress
     if ($ClientAddress -match '^(\[[^\]]+\]|[^:]+):(\d+)$') {
         if ([int]$Matches[2] -ne $ServerPort) {
@@ -545,7 +561,7 @@ elseif ($Role -eq 'Client') {
 }
 
 $existingClientProcessIds = @()
-if ($Role -eq 'Client') {
+if ($Role -ne 'Server') {
     $existingClientProcessIds = @(Get-Process -Name 'ArmaReforgerSteamDiag','ArmaReforgerSteam' -ErrorAction SilentlyContinue |
         Select-Object -ExpandProperty Id)
 }
@@ -554,12 +570,12 @@ if ($Role -eq 'Client') {
 $lastExitCodeVariable = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
 $nativeExitCode = $null
 $exitCodeSource = 'NATIVE'
-if ($Role -eq 'Client') {
+if ($Role -ne 'Server') {
     $clientProcess = Wait-AICFNewClientProcess `
         -ExistingProcessIds $existingClientProcessIds `
         -ExpectedProfilePath $profilePath
     if ($clientProcess) {
-        Write-Output "[AICF][RUNTIME_LAUNCHER][PROCESS_STARTED] role=Client process_id=$($clientProcess.Id) profile=$profilePath"
+        Write-Output "[AICF][RUNTIME_LAUNCHER][PROCESS_STARTED] role=$Role process_id=$($clientProcess.Id) profile=$profilePath"
         $null = $clientProcess.Handle
         $clientProcess.WaitForExit()
         $clientProcess.Refresh()
@@ -570,6 +586,7 @@ if ($Role -eq 'Client') {
             $nativeExitCode = $null
         }
         if ($null -eq $nativeExitCode) {
+            if ($Role -eq 'Frontend') { throw 'Frontend native exit code unavailable; результат не считается успешным.' }
             $nativeExitCode = 0
             $exitCodeSource = 'PROCESS_OBSERVED_NO_NATIVE_CODE'
         }
@@ -577,11 +594,14 @@ if ($Role -eq 'Client') {
             $exitCodeSource = 'PROCESS_API'
         }
     }
+    elseif ($Role -eq 'Frontend') {
+        throw "Frontend process was not observed with profile $profilePath; native exit не подтверждён."
+    }
     elseif ($lastExitCodeVariable) {
         $nativeExitCode = [int]$lastExitCodeVariable.Value
     }
     else {
-        throw "Client invocation returned without LASTEXITCODE and no new process matched profile $profilePath."
+        throw "$Role invocation returned without LASTEXITCODE and no new process matched profile $profilePath."
     }
 }
 elseif ($lastExitCodeVariable) {

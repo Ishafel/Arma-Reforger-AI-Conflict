@@ -1,5 +1,72 @@
 # Проверки и baseline
 
+## Retail environment и native shutdown — 2026-10-24
+
+Ветка `codex/fix-play-shutdown` от `83667ee`. **Частичный результат; native crash
+не устранён и остаётся blocker для ready PR/релиза.** Полный отчёт, все failed
+experiments, stopped logs/dumps и manifests:
+`.codex-runtime/play-shutdown-20261024/REPORT.md`.
+
+Исправлен отдельный воспроизводимый дефект обычного клиента: JSON записывал
+ResourceName target как GUID, но Consume читал его в string. Строгая проверка
+identity отклоняла собственный leaf, теряя 09:37/Rainy. Теперь чтение также
+ResourceName; target/TTL/one-shot/schema 2 и штатный владелец часов сохранены.
+Добавлен `Start-AICFRuntime.ps1 -Role Frontend`: retail, главное меню без
+direct-connect, настоящий process exit, optional Workshop root и для Stock.
+Server/Client сохраняют Diag defaults и прежний readiness gate. Это корректный
+терминальный путь проверки обычной игры, **не исправление native crash**.
+
+Свежий baseline: шесть профильных audits **6/6 PASS**, отдельно
+RuntimeLauncherStatic **PASS/0**, ScenarioEnvironmentStatic **20 contracts,
+PASS/0**. Окончательный `Invoke-AICFChecks.ps1 -Suite All` через временный X:
+— **85/85 PASS, exit 0**, `final-all/`; Environment — 21 guarded contract.
+Workbench Validate/Compile Stock, EveronWCSRHS и точной fixture — **3/3 PASS/0**,
+validation подтверждена по всем логам, SCRIPT E/F, ENGINE F, VM/hang — 0.
+Прочих compile (E) — 50/78/50; классификация сохранена отдельно.
+
+Окончательный ordinary Frontend с исправленным source: пять Play подряд —
+**16 cold + 14 intent cases каждый, native 0, full stopped-log oracle PASS/0**.
+Ещё один первый typed-read probe — те же 16 + 14 и PASS/0. Stock Play —
+**16**, Stock Host с roster — **19**, Cancel — **7**, native 0, oracle PASS/0.
+Перед этим восемь retail выходов имели native 0, но **FAIL по environment**;
+они не считаются успешными Play и не подтверждают исправление.
+
+**Сохранённый FAIL:** `frontend-host` загрузил точный Everon WCS + RHS /
+Co-op USSR / Hard, все 28 IDs, Listen, 127.0.0.1:24073, 09:37/Rainy и
+ROSTER_READY, выполнил 19 + 14 cases без ошибок, но после 45 секунд readback
+упал при завершении: native **-1073741819**, ENGINE F, oracle **FAIL/1**.
+Начальный полный WCS graph тоже не является исправлением:
+`preloaded-host-1/2` — 19 cases и PASS/0, `preloaded-host-3` — те же readbacks,
+затем **native -1073741819 и FAIL/1**.
+
+Изоляция: только семь project descriptors и **один** test-only callback,
+без production scripts/UI/catalogs/environment AICF; штатные Arland → Everon.
+С WCS графом один из четырёх выходов — native AV; с RHS без WCS — один из двух;
+два Vanilla контроля — native 0. В dumps сбой попадает в native функцию
+освобождения значений; Diag RVA 0x9554ef/0x955353, retail RVA 0x866aaf.
+Read-only metadata одного Diag падения содержит TIThermalProfile. Это
+локализация, **не доказательство внутренней причины или конкретного владельца
+ошибки в Enfusion/RHS**. Установленные RHS Status Quo 0.16.5237 и Content Packs
+0.16.5236 заявляют gameVersion 1.8.0.13; размеры и SHA-512 трёх data.pak
+совпали с их download manifests. Файлы игры/модов не изменялись.
+Read-only поиск прямых Material API calls в 486 RHS scripts и двух asset-only
+Content Packs не подтвердил гипотезу неверного SetParamByIndex; подробности
+и использованный PAC1 reader сохранены в evidence.
+
+Отклонены: отключение equipment/UI/controller, purge spawn queue, lifetime
+locals, возврат через main menu с новым и старым graph, graceful termination
+вместо RequestClose, простая замена Diag на retail и начальная предзагрузка.
+Варианты, сначала завершившиеся чисто, проверялись повторно; последующий AV
+сохранён. Production handoff/controller не менялись под эти гипотезы.
+Прерванные промежуточные All-наборы и compile с ошибочным test-only callback
+также сохранены; они не подменяют окончательные 85/85 и 3/3.
+
+349 production файлов совпали со stage по SHA-256. Временные stages/profiles
+архивируются с проверкой каждого файла; полные логи остаются в `full-logs/`.
+Фактические команды, exit codes, paths и cleanup — в отчёте. **NOT RUN:**
+packaged Workshop, физический UI input/вид, второй игрок/JIP, действительность
+пароля/player limit, длительный матч. Push/PR/merge/publication не выполнялись.
+
 ## Исправление graph первого Host — 2026-10-24
 
 Продолжение `codex/fix-host-everon-wcs` от диагностического `21fcba8` с чистым

@@ -33,7 +33,9 @@ class AICF_ScenarioEnvironment
 		JsonLoadContext json = new JsonLoadContext();
 		AICF_ScenarioEnvironment settings = new AICF_ScenarioEnvironment();
 		int schema, issued;
-		string target;
+		// Retail сериализует ResourceName как GUID; typed read восстанавливает
+		// полное имя перед строгой проверкой identity выбранного сценария.
+		ResourceName target;
 		if (!json.LoadFromString(data) || !json.ReadValue("schema", schema) || schema != 2 ||
 			!json.ReadValue("target", target) || target != actual ||
 			!json.ReadValue("issued", issued) || !json.ReadValue("minutes", settings.m_iStartMinutes) ||

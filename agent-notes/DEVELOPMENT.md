@@ -177,6 +177,35 @@ RHS/WCS в `-addonsDir`, не в принудительный `-addons`. При�
 `-LoadoutLibraryPath <старый-profile>/profile/AICF_Loadouts` импортирует библиотеку
 шаблонов в свежий server profile; manifest фиксирует файлы и SHA-256.
 
+## Локальные Play/Host
+
+Для главного меню и локального Play/Host используй `-Role Frontend`. Он запускает
+`ArmaReforgerSteam.exe`, передаёт source graph без `-client`/`-server`/`-world`,
+сохраняет `AICF_RUNTIME_MANIFEST_JSON`, наблюдает процесс и требует настоящий
+native exit code. Установленный dedicated server для этого режима не нужен.
+Пример с доступом picker к уже установленным Workshop пакетам:
+
+```powershell
+$workshopAddons = 'C:\Users\retar\OneDrive\Документы\My Games\ArmaReforger\addons'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Start-AICFRuntime.ps1 `
+  -Role Frontend -Variant EveronWCSRHS -RhsAddonsRoot $workshopAddons
+```
+
+`Variant` задаёт начальный graph. Пример загружает выбранный WCS/RHS профиль
+сразу; это **не исправление native crash**: один из трёх повторов такого Host
+тоже упал при завершении. Принудительный graph
+ограничивает совместимые варианты picker существующим forced-CLI gate.
+Явный `RhsAddonsRoot` добавляет каталог поиска и для Stock, не включает
+и не скачивает моды. Для Vanilla без внешних пакетов его можно опустить.
+Профиль остаётся свежим и вне source root; production resource databases
+проверяются, как для Client. Параметры подключения и `-world` в Frontend
+отклоняются: direct-connect остаётся ролью Client с её readiness gate.
+
+Native shutdown crash 1.8.0.13 воспроизведён без production scripts AICF,
+а затем и в обычном клиенте после первого Host со сменой graph. Переключение
+Diag/retail само по себе его не устраняет. Frontend нужен для проверки игрового
+binary и его JSON поведения; внешний FAIL сохранён в [TESTING.md](TESTING.md).
+
 ## Удалённый source-сервер и Diag/retail
 
 `-Role Client` по умолчанию запускает `ArmaReforgerSteamDiag.exe`. Для сервера

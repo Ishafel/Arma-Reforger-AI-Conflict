@@ -8,6 +8,7 @@ $rules=@(
  @(0,'GameSessionStorage.s_Data\[SESSION_KEY\] = json.SaveToString\(\)','RELOAD_STORAGE'),
  @(0,'Consume\(ResourceName actual\).*?Find\(SESSION_KEY, data\).*?Clear\(\);.*?json.LoadFromString','CONSUME_ONCE'),
  @(0,'ReadValue\(.*, target\) \|\| target != actual','EXACT_TARGET'),
+ @(0,'ResourceName target;.*?ReadValue\(.*, target\)','NATIVE_RESOURCE_ROUNDTRIP'),
  @(0,'age < 0 \|\| age > 600000 \|\| !registry.IsLeaf\(actual\)','FRESH_LEAF'),
  @(0,'OnMissionSet\(MissionHeader mission\).*?super.OnMissionSet\(mission\);.*?Consume\(actual\).*?header.m_AICFEnvironment = settings','MISSION_BOUNDARY'),
  @(1,'if \(!Replication.IsServer\(\).*?loadDone \|\| m_bSavedSettingApplied \|\| !loadedWeatherState.IsEmpty\(\)\).*?super.SetupDaytimeAndWeather.*?return;','AUTHORITY_SAVELOAD'),
