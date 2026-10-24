@@ -152,10 +152,39 @@ pass и повторяет только при смене размера root. �
 
 ## Native launch boundary
 
-`AICF_ScenarioSetupEntry` перехватывает только собственный header subtype в
+`AICF_ScenarioSetupEntry` перехватывает только `SCR_MissionHeaderCampaign` с
+`m_bAICFSetupEntry=1` в
 `SCR_ScenarioUICommon.TryPlayScenario/TryHostScenario`; остальные сценарии идут
 в super с исходными аргументами. Header читается по `scenario.Id()`:
 `MissionWorkshopItem.GetHeader()` может быть null при наличии native metadata.
+
+Первый frontend установленного Workshop мода может работать только с vanilla:
+Core hooks и его StringTable ещё не загружены. Поэтому title и краткие
+описания entry заданы literal; Play сначала штатно загружает addon graph и
+setup header. `AICF_ScenarioBootstrap` на локальной authority открывает picker
+после загрузки. AICF integration пропускает запуск своего match controller для
+этого промежуточного header; stock world остаётся inherited Arland.
+Явные CLI `server`/`client`/`world`, dedicated и remote client не перехватываются.
+
+Picker допускает текущий preparation context только при точном совпадении
+`entry.Id()` с активным flagged header. Metadata берётся через native
+`WorkshopApi.GetCurrentMission`, затем точный catalog lookup. Отсутствующий
+offline scan запускается один раз с ограниченным ожиданием. В мире нет
+frontend `SCR_DownloadManager`: вместо него проверяется native `GetDownloads`,
+`IsProcessed` и `GetPendingDownload`; main-menu gate сохраняет прежний manager.
+Native CanHost применяется при создании новой сессии с config. Preparation
+Listen уже создан штатным Host: выбор меняет его сценарий через CanPlay и
+сохраняет platform gate. Полный graph, enabled/downloaded/corruption и
+forced-CLI gates действуют в обоих контекстах. Отмена preparation вызывает
+native GameplayEnd, обычное закрытие/успешный launch только снимает UI.
+Callback снимается в OnGameEnd; UI освобождается до world cleanup.
+
+Setup использует штатный тип header с явным opt-in flag. Самостоятельный
+`AICF_ScenarioSetupHeader` больше не используется: контроль после native
+Play → setup → leaf с этим subtype получал access violation при завершении;
+тот же путь с `SCR_MissionHeaderCampaign` завершился native exit 0.
+`AICF_ResolveSetupPreset` сохраняет bounds, mode/difficulty, world и запрет
+рекурсивного setup. Core и Arland публикуются согласованной версией вместе.
 
 `AICF_ScenarioLaunch.CanStart` заново проверяет main menu, отсутствие перехода,
 native CanPlay/CanHost входного MissionWorkshopItem, hosting platform gate,
@@ -261,6 +290,10 @@ BaseContainer adapter, callbacks Remove/Insert и override OnGameStart для
   opt-in/passthrough, modal/cleanup; 15 отрицательных mutations.
 - `Test-UniversalScenarioStatic.ps1`: generator/catalog agreement, полный граф,
   native/platform/download/forced gates, rollback, flags/help и leaf filters.
+- `Test-WorkshopBootstrapStatic.ps1`: native тип/flag, literal metadata,
+  authority/identity, scan/download gates, cancel и lifecycle.
+- `AICF_WorkshopBootstrapProbe.c`: прямой native Play/Host без warm UI hook,
+  фактический picker, выбор leaf, применение времени/погоды, cancel и stopped log.
 - `AICF_ScenarioCatalogProbe.c`: настоящий GetPageScenarios/GetInGameScenario,
   один вход, девять скрытых default leaf targets, stock preservation,
   repeat/dedup, native type/manw tag maps; 15 cases.

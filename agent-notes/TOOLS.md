@@ -133,6 +133,13 @@ Enforce fixture не входят в автоматическую матрицу
 
 ## Рабочие утилиты
 
+`Test-WorkshopBootstrapStatic.ps1` защищает первый Workshop вход: стандартный
+header с `m_bAICFSetupEntry`, literal metadata, точный локальный preparation
+context, ограниченный offline scan, native download queue и cleanup/cancel.
+`Test-WorkshopBootstrapLog.ps1 -LogPath ... -ManifestPath ... -NativeExitPath ...`
+проверяет полный native run fixture; сам он игру не запускает. Настройка fixture
+и границы source/packaged проверки — [TEST_FIXTURES.md](TEST_FIXTURES.md#универсальное-меню-и-native-переход).
+
 `tests/static/Test-WorkshopScenarioNamesStatic.ps1` проверяет предел Workshop
 50 символов у сырого `m_sName` и всех RU/EN названий собственных mission headers;
 `-CsvPath` сохраняет полный список и длины, также при FAIL. Отсутствующая

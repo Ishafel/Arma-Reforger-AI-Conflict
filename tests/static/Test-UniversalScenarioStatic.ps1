@@ -16,7 +16,7 @@ $rules=@(
  @(1,'!variant.IsContentEnabled\(\).*?!variant.IsAvailable\(missing\)\) return false;','ENABLED_SELECTION'),
  @(1,'!variant.IsAvailable\(missing\)\) return false;\s*m_iMap = mapIndex;\s*m_iContent = content;','ATOMIC_VARIANT'),
  @(2,'!CanStart\(selection, entry, config\)\) return false;','PREFLIGHT'),
- @(2,'IsInsideMainMenu\(\).*?IsTransitionRequestedOrInProgress\(\)','FRONTEND_ONLY'),
+ @(2,'!GameStateTransitions.IsInsideMainMenu\(\) && !AICF_ScenarioBootstrap.CanConfigure\(entry\).*?IsTransitionRequestedOrInProgress\(\)','FRONTEND_OR_TYPED_SETUP'),
  @(2,'IsHostingDisabledOnPlatform\(\).*?CanHost\(entry\).*?CanPlay\(entry\)','NATIVE_GATES'),
  @(2,'GetDownloadQueueState\(completed, total\);\s*if \(total > 0\) return false;','DOWNLOAD_GATE'),
  @(2,'variant.IsAvailable\(missing\) && IsForcedGraphCompatible\(variant\)','FORCED_GRAPH_GATE'),

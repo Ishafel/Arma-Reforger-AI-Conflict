@@ -87,6 +87,31 @@ crash.log при чистом console. Визуальный вид дыма/же
 
 ## Универсальное меню и native переход
 
+`AICF_WorkshopBootstrapProbe.c` — отдельная fixture для первого native входа.
+Копировать только в isolated Core/UI как `AICF_ZColdBootstrapProbe.c`, CLI
+`-aicfColdBootstrapProbe 1`, frontend без `-client`/`-server`/`-world`.
+Начальный source graph нужен для самой fixture; она вызывает
+`MissionWorkshopItem.Play()` напрямую, обходя уже загруженный TryPlay hook.
+Это проверка native границы и последующей настройки, не эмуляция vanilla VM
+без Core и не подтверждение опубликованного пакета.
+
+Probe читает literal title, native header flag, picker widgets и defaults,
+выбирает Standard/Easy, 09:37/Rainy, проверяет preflight, реальный выбранный
+header и доставленный environment. `-aicfColdHostProbe 1` использует private
+listen с fixture password/port через `RequestPublicServerTransition` и точный
+source graph: у source `MissionWorkshopItem.Host` не хватает packaged header
+metadata. Проверяется host context и сохранение Listen после выбора.
+Это не проверка публичного Host со вторым игроком или действительности пароля.
+`-aicfColdCancelProbe 1` вызывает тот же Cancel, что button/modal handler,
+и проверяет возврат в frontend без старта AICF матча. GUI input не создаётся.
+Своё process-local phase состояние удаляется перед RequestClose.
+
+`Test-WorkshopBootstrapLog.ps1` требует CLI/manifest, все cases ровно по одному,
+native exit 0, полный stopped console и отсутствие SCRIPT/VM/assertions/fatal
+во всех соседних `.log`, включая crash.log. До выбранного launch не допускает
+AICF bootstrap/spawn; при cancel не допускает launch вообще. Свежие результаты
+и сохранённые промежуточные FAIL — [TESTING.md](TESTING.md).
+
 `AICF_UniversalScenarioProbe.c` копировать отдельно в isolated Core/UI как
 `AICF_ZUniversalScenarioProbe.c`: `-aicfUniversalProbe 1
 -aicfExpectedReadyVariants 9 -aicfExpectedContentMask 1`. Native graph/selection/widgets/modal/help/flags/

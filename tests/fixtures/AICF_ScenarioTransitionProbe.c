@@ -29,7 +29,7 @@ class AICF_ScenarioTransitionProbe
 
 	static AICF_ScenarioSetupSelection Selection()
 	{
-		AICF_ScenarioSetupHeader header = AICF_ScenarioSetupHeader.Cast(MissionHeader.ReadMissionHeader("{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf"));
+		SCR_MissionHeaderCampaign header = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader("{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf"));
 		AICF_ScenarioSetupSelection selection = new AICF_ScenarioSetupSelection(header);
 		string mapIndex, content, mode, difficulty;
 		if (!System.GetCLIParam("aicfProbeMap", mapIndex) || !System.GetCLIParam("aicfProbeContent", content) || !System.GetCLIParam("aicfProbeMode", mode) || !System.GetCLIParam("aicfProbeDifficulty", difficulty)) return null;

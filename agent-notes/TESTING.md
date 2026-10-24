@@ -1,5 +1,101 @@
 # Проверки и baseline
 
+## Первый вход в универсальную настройку из Workshop — 2026-10-24
+
+Ветка `codex/workshop-universal-entry` от свежего `origin/main`
+`bb748797d1dd1f898759775d00d3e71ab9b002e6`, исходное дерево чистое.
+Владелец подтвердил два симптома опубликованной 0.2.1: вместо «AI Conflict»
+виден `AICF_Setup_Arland_Name`, а Play сразу загружает Arland без picker.
+В installed `ServerData.json` Arland 0.2.1 entry присутствует, corrupted=false;
+publisher manifest также содержит его. User console сначала загружает только
+vanilla и пишет Missing string ID для setup. Это отдельный дефект первого
+входа; успешная загрузка Workshop из предыдущей задачи его не проверяла.
+
+До правки профильный `Invoke-AICFChecks.ps1 -Name <ScenarioSetupStatic,
+UniversalScenarioStatic,ScenarioEnvironmentStatic,ScenarioHeadersStatic,
+LocalizationStatic,WorkshopScenarioNamesStatic,UniversalScenarioLogContracts>`
+— **7/7 PASS/0**. Source-only и warm UI проверки не выявляли этот дефект.
+Evidence всей задачи: `.codex-runtime/workshop-universal-entry-20261024/`.
+
+Исправление задаёт literal metadata до загрузки StringTable, использует
+`SCR_MissionHeaderCampaign` с opt-in `m_bAICFSetupEntry`, после native Play
+открывает настройку в локальном preparation context. AICF match bootstrap
+пропускается до выбора leaf. В обычном frontend сохраняется прежний hook;
+server/client/world CLI и удалённые peers не перехватываются. Идентификатор
+entry, наследуемый world и все 81 leaf GUID сохранены. В Core нет GUID карт.
+Native permission/platform/dependency gates сохранены; вне main menu нужен
+точный активный flagged header, а очередь проверяется через native Workshop API.
+Во время отказа/отмены default AICF матч не запускается.
+
+Контроль `cold-native-downloads` с самостоятельным header subtype прошёл все
+13 readbacks, но завершился **FAIL**, native -1073741819 и ENGINE F/access
+violation после world transition. Вариант `cold-flag-header` со штатным типом
+и opt-in flag: **13/13 readbacks, native exit 0**, выбран Stock/Standard/Easy,
+доставлены 09:37/Rainy, промежуточного AICF roster нет. Это native source-stage
+контроль; packaged vanilla frontend без загруженной fixture им не доказан.
+
+Другие сохранённые FAIL: первый callback experiment ошибочно размещал CallLater
+на Game, который не является Managed (compile rejected); после переноса в
+helper compile прошёл. Прототип возврата в frontend терял bool из
+WriteValue(expression), затем всё равно получал shutdown crash; он отклонён.
+Открытие picker в мире потребовало GetCurrentMission, offline scan и native
+GetDownloads: frontend catalog lookup и SCR_DownloadManager там отсутствуют.
+Везде сохранены полный вывод, native exits и полные logs; положительные
+readbacks не объявлены общим PASS.
+
+Native source `MissionWorkshopItem.Host` дважды передал пустой mission header
+и вернулся в vanilla с WORLD_LOAD_ERROR; свои оставшиеся процессы адресно
+остановлены по exact profile. Это не PASS Host. Listen context проверяется
+отдельной private fixture через native PublicServerTransition и точный source
+graph. Первый native Host из опубликованного пакета, публичный Host со вторым
+игроком, действенность пароля/лимита, GUI input/визуальная оценка и packaged
+gameplay остаются **NOT RUN**. Сам агент пакет Workshop не публиковал.
+
+Полный offline прогон промежуточной реализации `after-full/`: **84/84 PASS/0**.
+После перехода на итоговый flag/context профильные проверки `after-promoted/`:
+**7/7 PASS/0**. Отдельный полный прогон итогового source, compile и native
+вердикты фиксируются ниже после завершения, старый PASS их не заменяет.
+
+Итоговый `Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/final-full`
+— **84/84 PASS, exit 0** без исключений: Static 35 и Contracts 49.
+`final-context-static` — **3/3 PASS/0**, bootstrap — 15 guarded mutations.
+Итоговый изолированный `final-play-isolated` — **13/13 native cases, exit 0**,
+stopped-log oracle **PASS/0**: picker → выбранный Stock/Standard/Easy,
+09:37/Rainy, без промежуточного AICF match. Совмещённый runtime с другими
+compile-only fixtures дал отдельный access violation; этот FAIL сохранён,
+runtime повторён с одной cold fixture по правилам isolated stage.
+Native input/чистый Workshop этим не подменяются.
+
+`Verify-Oracle.ps1 -Label final-play-isolated` — **6/6 PASS**: исходный полный
+log принимается, отсутствие case, плохой native exit, отдельный crash.log,
+ранний match и чужой CLI отвергаются. `Verify-Final.ps1` — **PASS/0**:
+все результаты/полные logs, 8/8 production source hashes совпадают с stage,
+325 локальных Markdown links и `git diff --check`. Итоговый JSON —
+`final-verification.json`. Нерешённых FAIL выбранного итогового набора нет;
+промежуточные native FAIL остаются отдельными evidence, NOT RUN сохраняются.
+Свои native processes завершены. Две stage копии адресно удалены после zip
+и проверки всех SHA-256: **464/464** и **465/465** файлов; `stage-cleanup.json`.
+Полные native logs/manifest/crash evidence сохранены, пользовательские файлы
+и установленные addons не очищались. Push/PR/merge/публикация не выполнялись.
+
+Итоговая terminal Workbench проверка `final-session-stock` и
+`final-session-wcs` (полный Everon WCS RHS graph), 1.8.0.13 — **2/2 PASS/0**,
+Script validation successful, SCRIPT E/F и ENGINE F — 0. Обновлённые старые
+native fixtures также скомпилированы вместе с их Co-op dependency;
+`final-fixture-all-probes` — **PASS/0**. Первый запуск без этой dependency
+дал compile FAIL и сохранён отдельно. Resource diagnostics в полных logs
+сохраняются; общий engine error-free результат не заявляется.
+
+`final-cancel-2` — **7/7 native cases, exit 0**, полный stopped-log oracle PASS:
+отмена возвращает в main menu, picker закрыт и AICF match не начат. Предыдущий
+cancel сохранял active header в frontend и переоткрывал picker; явный
+IsInsideMainMenu guard устранил это, прежний FAIL сохранён.
+`final-listen-2` — **16/16 native cases, exit 0**, stopped-log oracle PASS:
+реальный private Listen, picker, выбранный leaf и 09:37/Rainy, после перехода
+сохранён RplMode.Listen. Проверка повторного создания Host для уже созданной
+сессии была отклонена preflight; продолжение теперь проверяет native CanPlay,
+platform и полный graph. Native CanHost остаётся gate создания новой сессии.
+
 ## Оформление 0.2.1 — 2026-10-24
 
 Ветка `codex/release-0.2.1` от `origin/main`

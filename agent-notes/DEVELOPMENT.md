@@ -152,8 +152,12 @@ Placeholder заменяется фактическим путём. Перед �
 Единый пункт «AI Conflict» открывается через Play/Host в меню: карта, установленный
 контент, режим, сторона и сложность разрешаются в leaf header и точный addon graph.
 Canonical launcher frontend не открывает: для server/client остаются
-`-Variant Stock -MatchMode ... -Difficulty ...`. Прямой ID setup получает vanilla
-Arland Co-op USSR Medium. Полный контракт и NOT RUN gates —
+`-Variant Stock -MatchMode ... -Difficulty ...`. Явный CLI запуск setup через
+`-world`/`-server` сохраняет vanilla Arland Co-op USSR Medium. Первый Workshop
+Play открывает picker после штатной загрузки модулей; этот путь не требует
+предварительно принудительно загруженного source graph. Core и Arland нужно
+обновлять согласованной версией: меняются и hooks, и формат setup header.
+Полный контракт и NOT RUN gates —
 [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
 
 Для ручной проверки frontend владелец открывает клиент с базовым source graph,
