@@ -436,10 +436,12 @@ if ($LoadoutLibraryPath) {
     if ($Role -ne 'Server') { throw '-LoadoutLibraryPath поддерживается только для Server.' }
     $loadoutLibrarySource = Resolve-AICFExistingDirectory -Path $LoadoutLibraryPath -Description 'Loadout library'
     $loadoutFiles = @(Get-ChildItem -LiteralPath $loadoutLibrarySource -File | Where-Object {
-        $_.Name -cmatch '^template_(0|[1-9][0-9]{0,2})\.json$' -and [int]$Matches[1] -lt 256
+        $_.Name -cmatch '^template_(0|[1-9][0-9]{0,2})(?:_([01]))?\.json$' -and [int]$Matches[1] -lt 256
     } | Sort-Object Name)
     foreach ($loadoutFile in $loadoutFiles) {
-        if ($loadoutFile.Length -gt 24576 -or ($loadoutFile.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        $loadoutMaxBytes = 24576
+        if ($loadoutFile.Name -cmatch '^template_[0-9]+_[01]\.json$') { $loadoutMaxBytes = 600000 }
+        if ($loadoutFile.Length -gt $loadoutMaxBytes -or ($loadoutFile.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
             throw "Недопустимый файл библиотеки: $($loadoutFile.FullName)"
         }
     }

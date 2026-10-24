@@ -1,5 +1,25 @@
 # Изменение сценарного контракта — 2026-10-24
 
+## Пресеты ИИ: issue #66
+
+`AICF_LoadoutQolProbe.c` копировать только в isolated Core/UI как
+`AICF_ZLoadoutQolProbe.c`. Canonical server и client: `-aicfLoadoutQolProbe 1`.
+Storage/batch cases обеих сторон выполняются после ROSTER_READY; затем client
+выбирает US и отправляет 28 настоящих player-owned loadout RPC. Server fixture
+проверяет все десять slots/positions и отрицательный late-member commit.
+Native grant/revoke использует SESSION_ADMINISTRATOR|GAME_MASTER одним mask,
+без вложенного изменения GAME_MASTER из stock EditorManager. Fixture не меняет
+production permissions. Server закрывается после отключения клиента либо
+через 300 s с отсутствующим client verdict; client имеет deadline 240 s.
+Повторный CallLater снимается при Close/OnGameEnd.
+Analyzer: `tests/log-audits/Test-LoadoutQolLog.ps1`; детали, границы и команды —
+[LOADOUT_PRESETS.md](LOADOUT_PRESETS.md). GUI/input/visual verdict не имитируется.
+Дополнительный `AICF_LoadoutFilesProbe.c` → `AICF_ZZLoadoutFilesProbe.c`,
+`-aicfLoadoutFilesProbe 1`: прямое чтение bytes/presence файлов до/после Apply,
+без записи в библиотеку. Analyzer `-Files` требует все 10 дополнительных cases.
+
+## Сценарный контракт
+
 Повторная проверка black-screen regression: aicfColdRetryHost=1 у
 AICF_WorkshopBootstrapProbe требует RETRY_CANCEL_CONTEXT/RETRY_RETURN и
 реальный selected world/graph после отмены preparation Listen. Отдельный

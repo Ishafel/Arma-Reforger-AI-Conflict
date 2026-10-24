@@ -2,6 +2,8 @@
 
 Задача: [issue #27](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/issues/27).
 Общий `AICF_LoadoutEditor` обслуживает личный preset и шаблоны бойцов отряда.
+Текущие Save/Apply/Delete и squad semantics изменены в issue #66:
+[LOADOUT_PRESETS.md](LOADOUT_PRESETS.md); ниже описана оптимизация каталога.
 
 ## Затратные пути и границы оптимизации
 
@@ -27,7 +29,8 @@
   widgets перед уничтожением draft world.
 
 Разрешения, blacklist, native compatibility и server validation не кэшируются.
-Полная сборка draft, replay рецепта, rollback и RPC сохранения сохранены.
+Полная сборка draft, replay рецепта и rollback сохранены. Актуальные операции
+RPC библиотеки и назначения описаны в LOADOUT_PRESETS.md.
 Эта правка не обещает устранить стоимость пересоздания персонажа при смене
 экипировки или загрузке нового ресурса: это отдельные потенциально затратные пути.
 

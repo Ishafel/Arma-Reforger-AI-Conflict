@@ -179,6 +179,11 @@ RHS/WCS в `-addonsDir`, не в принудительный `-addons`. При�
 
 `-LoadoutLibraryPath <старый-profile>/profile/AICF_Loadouts` импортирует библиотеку
 шаблонов в свежий server profile; manifest фиксирует файлы и SHA-256.
+Поддерживаются legacy `template_N.json` и оба поколения `template_N_0.json` /
+`template_N_1.json` для ID 0..255, включая squad presets и tombstones. Они нужны
+вместе: tombstone запрещает восстановление удалённого legacy preset. Legacy
+лимит — 24576 bytes, envelope — 600000 bytes, reparse points отклоняются.
+Протокол, редактирование и ограничения — [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md).
 
 ## Локальные Play/Host
 

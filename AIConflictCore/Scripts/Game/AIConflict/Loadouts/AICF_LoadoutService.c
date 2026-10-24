@@ -6,78 +6,162 @@ class AICF_LoadoutService
 
 	void AICF_LoadoutService(AICF_MatchController match) { m_Match = match; }
 
-	void Request(SCR_PlayerController player, int token, int slotId, int member, int revision, int operation, string payload)
+	// 0 read, 1 apply member, 2 load draft, 3 save member,
+	// 4 delete, 5 apply position to all squads, 6 save squad, 7 apply squad.
+	void Request(SCR_PlayerController player, int token, int slotId, int member, int revision, int operation, string payload,
+		string targetFaction = "", int libraryRevision = -1)
 	{
+		if (!Replication.IsServer() || !player || !m_Match) return;
 		AICF_GroupSlot slot;
 		SCR_CampaignFaction faction;
 		ResourceName source;
 		string role;
 		string reason = "MATCH_OR_FACTION_UNAVAILABLE";
-		if (!m_Match.ResolveLoadoutContext(player, slotId, member, slot, faction, source, role))
+		if (!m_Match.ResolveLoadoutContext(player, slotId, member, slot, faction, source, role, targetFaction))
 		{
 			player.AICF_LoadoutResult(token, false, reason);
 			return;
 		}
-		AICF_LoadoutRecipe recipe = new AICF_LoadoutRecipe();
-		recipe.m_sProfile = AICF_ContentProfile.GetActive().GetProfileKey();
-		recipe.m_sFaction = AICF_ContentProfile.GetActive().GetStableFactionKey(faction.GetFactionKey());
-		recipe.m_sCharacter = source;
-		recipe.m_sName = "{AICF:AICF_UI_Loadout_6c772ac0}" + (member + 1).ToString();
+		AICF_LoadoutRecipe recipe = DefaultRecipe(faction, source, member);
 		AICF_LoadoutBinding current = slot.GetLoadout(member);
 		bool accepted = operation == 0;
-		if (operation == 1 || operation == 2)
+		bool libraryOperation = operation == 2 || operation == 3 || operation == 4 || operation == 6 || operation == 7;
+		if (operation < 0 || operation > 7) reason = "INVALID_REQUEST";
+		else if (operation != 0 && revision != slot.GetLoadoutRevision()) reason = "REVISION_CONFLICT";
+		else if (libraryOperation && libraryRevision != m_Store.GetRevision()) reason = "LIBRARY_CONFLICT";
+		else if (operation == 1 || operation == 3 || operation == 5)
 		{
-			AICF_LoadoutRecipe candidate;
-			if (operation == 1)
-				candidate = AICF_LoadoutRecipe.Decode(payload);
-			else
-			{
-				int id = payload.ToInt(-1);
-				if (id >= 0 && id.ToString() == payload)
-					candidate = m_Store.Get(id);
-			}
+			AICF_LoadoutRecipe candidate = AICF_LoadoutRecipe.Decode(payload);
 			reason = "INVALID_RECIPE";
 			if (candidate && candidate.m_sProfile == recipe.m_sProfile && candidate.m_sFaction == recipe.m_sFaction &&
 				candidate.m_sCharacter == source)
 			{
-				if (revision != slot.GetLoadoutRevision())
-					reason = "REVISION_CONFLICT";
-				else if (operation == 1 && current && current.m_Recipe.Encode() == candidate.Encode())
-					accepted = true;
-				else
+				AICF_LoadoutBinding binding = Validate(candidate, faction, reason);
+				if (binding && revision != slot.GetLoadoutRevision())
 				{
-					AICF_LoadoutBinding binding = Validate(candidate, faction, reason);
-					if (binding && operation == 2)
-					{
-						recipe = candidate;
-						accepted = true;
-					}
-					else if (binding && m_Store.Save(candidate, reason))
-						accepted = slot.SetLoadout(member, binding, revision);
+					reason = "REVISION_CONFLICT";
+					binding = null;
+				}
+				if (binding && operation == 3) accepted = m_Store.Save(candidate, reason);
+				else if (binding && operation == 1) accepted = slot.SetLoadout(member, binding, revision);
+				else if (binding && operation == 5) accepted = ApplyRole(player, candidate, binding, member, reason);
+			}
+		}
+		else if (operation == 2 || operation == 4 || operation == 7)
+		{
+			int id = payload.ToInt(-1);
+			AICF_LoadoutPreset preset;
+			if (id >= 0 && id.ToString() == payload) preset = m_Store.GetPreset(id);
+			reason = "TEMPLATE_UNAVAILABLE";
+			if (preset && preset.m_sProfile == recipe.m_sProfile && preset.m_sFaction == recipe.m_sFaction &&
+				(preset.m_sKind == "squad" || preset.m_sCharacter == source))
+			{
+				if (operation == 4) accepted = m_Store.Delete(id, reason);
+				else if (operation == 7 && preset.m_sKind == "squad")
+					accepted = ApplySquad(player, slotId, AICF_SquadLoadout.Decode(preset.m_sData), reason);
+				else if (operation == 2 && preset.m_sKind == "member")
+				{
+					AICF_LoadoutRecipe loaded = m_Store.Get(id);
+					if (Validate(loaded, faction, reason)) { recipe = loaded; accepted = true; }
 				}
 			}
 		}
+		else if (operation == 6) accepted = SaveSquad(player, slotId, recipe.m_sFaction, payload, reason);
 		current = slot.GetLoadout(member);
-		if (current && !(operation == 2 && accepted))
-			recipe = current.m_Recipe;
+		if (current && !(operation == 2 && accepted)) recipe = current.m_Recipe;
 		int cost;
-		if (current)
-			cost = current.m_iCost;
+		if (current) cost = current.m_iCost;
 		player.AICF_LoadoutView(slotId, member, slot.GetLoadoutRevision(), recipe.Encode(), m_Store.List(recipe), cost);
-		if (!m_aViewers.Contains(player))
-			m_aViewers.Insert(player);
+		if (!m_aViewers.Contains(player)) m_aViewers.Insert(player);
 		if (accepted)
 		{
-			reason = "READY";
-			if (operation == 1)
-				reason = "SAVED";
-			if (operation == 2)
-				reason = "TEMPLATE_LOADED";
+			array<string> statuses = {"READY", "APPLIED", "TEMPLATE_LOADED", "TEMPLATE_SAVED", "TEMPLATE_DELETED", "ROLE_APPLIED", "SQUAD_SAVED", "SQUAD_APPLIED"};
+			reason = statuses[operation];
 		}
 		player.AICF_LoadoutResult(token, accepted, reason);
 		AICF_Stage4Diagnostics.Info("LOADOUT_REQUEST_RESULT", string.Format(
 			"player=%1 faction=%2 slot=%3 member=%4 token=%5 revision=%6 accepted=%7 reason=%8",
 			player.GetPlayerId(), faction.GetFactionKey(), slotId, member, token, slot.GetLoadoutRevision(), accepted, reason));
+	}
+
+	static AICF_LoadoutRecipe DefaultRecipe(SCR_CampaignFaction faction, ResourceName source, int member)
+	{
+		AICF_LoadoutRecipe recipe = new AICF_LoadoutRecipe();
+		recipe.m_sProfile = AICF_ContentProfile.GetActive().GetProfileKey();
+		recipe.m_sFaction = AICF_ContentProfile.GetActive().GetStableFactionKey(faction.GetFactionKey());
+		recipe.m_sCharacter = source;
+		recipe.m_sName = "{AICF:AICF_UI_Loadout_6c772ac0}" + (member + 1).ToString();
+		return recipe;
+	}
+
+	protected bool ApplyRole(SCR_PlayerController player, AICF_LoadoutRecipe recipe, AICF_LoadoutBinding binding, int member, out string reason)
+	{
+		AICF_LoadoutBatch batch = new AICF_LoadoutBatch();
+		reason = "INCOMPATIBLE_TARGET";
+		for (int i; i < AICF_Stage1Config.GROUP_SLOTS_PER_FACTION; i++)
+		{
+			AICF_GroupSlot slot;
+			SCR_CampaignFaction faction;
+			ResourceName source;
+			string role;
+			if (!m_Match.ResolveLoadoutContext(player, i, member, slot, faction, source, role, recipe.m_sFaction, true) ||
+				source != recipe.m_sCharacter) return false;
+			batch.Add(slot, member, binding);
+		}
+		reason = "REVISION_CONFLICT";
+		return batch.Commit();
+	}
+
+	protected bool SaveSquad(SCR_PlayerController player, int slotId, string factionKey, string name, out string reason)
+	{
+		reason = "INVALID_RECIPE";
+		if (!AICF_LoadoutPreset.ValidName(name)) return false;
+		AICF_SquadLoadout squad = new AICF_SquadLoadout();
+		squad.m_sName = name;
+		squad.m_sProfile = AICF_ContentProfile.GetActive().GetProfileKey();
+		squad.m_sFaction = factionKey;
+		for (int i; i < AICF_Stage1Config.MAX_GROUP_SIZE; i++)
+		{
+			AICF_GroupSlot slot;
+			SCR_CampaignFaction faction;
+			ResourceName source;
+			string role;
+			if (!m_Match.ResolveLoadoutContext(player, slotId, i, slot, faction, source, role, factionKey, true)) return false;
+			AICF_LoadoutBinding binding = slot.GetLoadout(i);
+			AICF_LoadoutRecipe recipe = DefaultRecipe(faction, source, i);
+			if (binding) recipe = binding.m_Recipe;
+			if (recipe.m_sCharacter != source || !Validate(recipe, faction, reason)) return false;
+			squad.m_aRecipes.Insert(recipe.Encode());
+		}
+		AICF_LoadoutPreset preset = new AICF_LoadoutPreset();
+		preset.m_sKind = "squad";
+		preset.m_sName = name;
+		preset.m_sProfile = squad.m_sProfile;
+		preset.m_sFaction = factionKey;
+		preset.m_sData = squad.Encode();
+		return m_Store.SavePreset(preset, reason);
+	}
+
+	protected bool ApplySquad(SCR_PlayerController player, int slotId, AICF_SquadLoadout squad, out string reason)
+	{
+		reason = "INVALID_RECIPE";
+		if (!squad || squad.m_sProfile != AICF_ContentProfile.GetActive().GetProfileKey()) return false;
+		AICF_LoadoutBatch batch = new AICF_LoadoutBatch();
+		for (int i; i < AICF_Stage1Config.MAX_GROUP_SIZE; i++)
+		{
+			AICF_GroupSlot slot;
+			SCR_CampaignFaction faction;
+			ResourceName source;
+			string role;
+			AICF_LoadoutRecipe recipe = AICF_LoadoutRecipe.Decode(squad.m_aRecipes[i]);
+			if (!m_Match.ResolveLoadoutContext(player, slotId, i, slot, faction, source, role, squad.m_sFaction, true) ||
+				!recipe || recipe.m_sCharacter != source) return false;
+			AICF_LoadoutBinding binding = Validate(recipe, faction, reason);
+			if (!binding) return false;
+			batch.Add(slot, i, binding);
+		}
+		reason = "REVISION_CONFLICT";
+		return batch.Commit();
 	}
 
 	static AICF_LoadoutBinding Validate(AICF_LoadoutRecipe recipe, SCR_CampaignFaction faction, out string reason, bool personal = false)
@@ -137,7 +221,7 @@ class AICF_LoadoutService
 			SCR_CampaignFaction faction;
 			ResourceName source;
 			string role;
-			if (!m_Match.ResolveLoadoutContext(player, player.AICF_LoadoutSlot(), player.AICF_LoadoutMember(), slot, faction, source, role) ||
+			if (!m_Match.ResolveLoadoutContext(player, player.AICF_LoadoutSlot(), player.AICF_LoadoutMember(), slot, faction, source, role, player.AICF_LoadoutFaction()) ||
 				AICF_ContentProfile.GetActive().GetStableFactionKey(faction.GetFactionKey()) != player.AICF_LoadoutFaction())
 			{
 				player.AICF_LoadoutView(-1, -1, -1, string.Empty, string.Empty, 0);
@@ -145,14 +229,17 @@ class AICF_LoadoutService
 				continue;
 			}
 			AICF_LoadoutBinding binding = slot.GetLoadout(player.AICF_LoadoutMember());
-			if (slot.GetLoadoutRevision() != player.AICF_LoadoutRevision())
+			AICF_LoadoutRecipe viewRecipe = DefaultRecipe(faction, source, player.AICF_LoadoutMember());
+			if (binding) viewRecipe = binding.m_Recipe;
+			string library = m_Store.List(viewRecipe);
+			if (slot.GetLoadoutRevision() != player.AICF_LoadoutRevision() || library != player.AICF_LoadoutLibrary())
 			{
 				if (binding)
 					player.AICF_LoadoutView(slot.GetSlotId(), player.AICF_LoadoutMember(), slot.GetLoadoutRevision(),
-						binding.m_Recipe.Encode(), m_Store.List(binding.m_Recipe), binding.m_iCost);
+						binding.m_Recipe.Encode(), library, binding.m_iCost);
 				else
 					player.AICF_LoadoutView(slot.GetSlotId(), player.AICF_LoadoutMember(), slot.GetLoadoutRevision(),
-						player.AICF_LoadoutData(), player.AICF_LoadoutLibrary(), 0);
+						viewRecipe.Encode(), library, 0);
 			}
 		}
 	}

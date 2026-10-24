@@ -1,5 +1,61 @@
 # Проверки и baseline
 
+## Пресеты ролей и отрядов: issue #66 — 2026-10-24
+
+Ветка codex/issue-66-loadout-qol от актуального main af2a403. Исходный body
+issue сохранён без изменений, выполнение и checklist ведутся комментариями.
+Save/Apply разделены, добавлены Delete, именованное обновление, Role all,
+десятипозиционные squad presets и административная настройка противника.
+Binding каждой позиции имеет независимую revision; batch проверяет все цели
+до первого field write. Library operations сохраняют локальный черновик,
+server GUID/client {GUID}path сравниваются после local canonical Encode.
+Контракт, права, два поколения/tombstones и импорт — LOADOUT_PRESETS.md.
+
+Свежий baseline before/ — **3/3 PASS/0**, baseline failures отсутствуют.
+Первый after-all/ — **89/89 PASS/0**. Окончательный final-all/ —
+**90/90 PASS/0**, без исключений, через временный X:; alias снят.
+final-targeted/ — **7/7 PASS/0**, 29 structural mutations. После расширения
+файлового oracle final-files-targeted/ — **2/2 PASS/0**, 16 log cases
+(13 negative). Последнее расширение затрагивает только fixtures/analyzer,
+production после полного набора не менялся. Старая ссылка TOOLS на удалённый
+Co-op generator доказанно устарела (f91fb02), заменена текущим registry tool;
+documentation-links-baseline.json сохраняет FAIL, current links — PASS.
+
+Финальные terminal Workbench Stock/WCS primary и с файловым probe —
+**4/4 PASS/0**: validation успешна, SCRIPT E/F, ENGINE F и VM отсутствуют.
+Все **261 production .c** и **284 addon files** совпали с compiled/runtime
+stage по SHA-256. Canonical dedicated/direct client Stock и ArlandWCSRHS:
+первичный полный gate 77 server / 34 client cases; окончательный файловый
+повтор — **87/34 на каждый graph**, failures=0, native exits **0/0**.
+Проверены 28 player-owned RPC, все десять slots/positions, обновление/удаление,
+stale library, неподходящий последний recipe без partial commit, foreign scope,
+admin grant/revoke. Дополнительные 10 FILE_IMAGE_UNCHANGED читают реальные
+bytes/presence всех canonical файлов до/после Apply; `-Files` обязателен для
+этого coverage. Анализатор читает полный stopped console и соседние logs.
+
+Исходный Stock FAIL сохранён: 10 ROLE_SLOT сравнений сырых JSON и две VM от
+native вложенного GAME_MASTER role change. Полные EXPECTED/ACTUAL доказали
+GUID normalization; fixture использует единый native admin/game-master mask,
+production права не выдаёт. Ошибка compile changedStatus и первоначальный
+SteamAPI_Init failure также сохранены, финальные gates повторены после правок.
+Неверный client port 24166 был остановлен readiness до запуска игры;
+финальные подключения к подтверждённому listener 2001.
+
+Строгая чистота всех native Error остаётся **FAIL**: resource/world/Hierarchy
+идентичности совпали с historical f5d2966; native handshake, PP/empty GUID и
+UI/font references также есть в issue61 connected baseline. Это доказательство
+происхождения, не новый PASS старых запусков. Vendor/game assets не менялись.
+Прежний retail Host shutdown 0xC0000005 не исправлялся и не повторялся здесь.
+Визуальный RU/EN UI и физический ввод, Co-op map shortcut, новый JIP с bindings,
+полная сценарная матрица, packaged Workshop и длительный бой — **NOT RUN**;
+нужные действия игрока и неподтверждённый результат перечислены в отчёте.
+ACCEPTED, ready PR, push и публикация не заявляются.
+
+Свои процессы завершены; 14 profiles и stage SHA-проверены в архивах, затем
+удалены по проверенным абсолютным путям. Полные logs сохранены развернутыми.
+Evidence, команды, exits, failures и список файлов:
+`.codex-runtime/issue66-20261024/REPORT.md`.
+
 ## Повторная проверка первого Host и отмены — 2026-10-24
 
 Baseline f91fb02, ветка codex/fix-workshop-catalog-pipeline. Свежие семь

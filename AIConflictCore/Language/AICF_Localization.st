@@ -3724,5 +3724,89 @@ StringTable
 			Target_en_us "Choose the map, enabled content, Conflict or Co-op, player side, garrison difficulty, starting time and weather before launching. The time slider covers 00:00–23:59; weather may be random or a selected preset. Time and weather continue to change during play. The active scenario title on the first page identifies the selected map, mode and difficulty.<br/><br/>Only enabled content with its dependencies is available in setup; downloading a mod alone does not enable it. Vanilla uses US Army/Soviet Army, RHS uses USMC/Russian MSV, and WCS + RHS uses NATO/Russia. Available weapons and vehicles depend on that profile. The operation loads the selected addon set. See Setup guide in the selection menu for preparation steps.<br/><br/>The northern map variant limits active objectives while keeping the landscape accessible. Every launch starts a new campaign; saving and resuming a match is not supported yet. This journal describes default rules: server configuration and native limits can affect availability and timing."
 			Target_ru_ru "Перед запуском выбираются карта, включённый контент, Conflict или Co-op, сторона игроков, сложность гарнизонов, начальное время и погода. Ползунок времени охватывает 00:00–23:59; погоду можно выбрать или оставить случайной. В ходе игры время и погода продолжают меняться. Заголовок сценария на первой странице указывает выбранную карту, режим и сложность.<br/><br/>В настройках доступен только включённый контент с его зависимостями; скачивание мода само по себе его не включает. Vanilla использует армии США/СССР, RHS — USMC/МСВ России, WCS + RHS — НАТО/РФ. Доступное оружие и техника зависят от этого набора. Операция загружает выбранный набор дополнений. Порядок подготовки описан в «Как настроить» в меню выбора.<br/><br/>Северный вариант карты ограничивает активные цели, оставляя ландшафт доступным. Каждый запуск начинает новую кампанию; сохранение и продолжение матча пока не поддерживаются. Здесь описаны правила по умолчанию: параметры сервера и штатные ограничения могут влиять на доступность и сроки."
 		}
+		CustomStringTableItem "{A1CF261024660001}"
+		{
+			Id "AICF_UI_PresetDelete"
+			Target_en_us "Delete"
+			Target_ru_ru "Удалить"
+		}
+		CustomStringTableItem "{A1CF261024660002}"
+		{
+			Id "AICF_UI_PresetApply"
+			Target_en_us "Apply"
+			Target_ru_ru "Применить"
+		}
+		CustomStringTableItem "{A1CF261024660003}"
+		{
+			Id "AICF_UI_PresetRoleAll"
+			Target_en_us "Role to all squads"
+			Target_ru_ru "Роль всем отрядам"
+		}
+		CustomStringTableItem "{A1CF261024660004}"
+		{
+			Id "AICF_UI_PresetSaveSquad"
+			Target_en_us "Save squad"
+			Target_ru_ru "Сохранить отряд"
+		}
+		CustomStringTableItem "{A1CF261024660005}"
+		{
+			Id "AICF_UI_PresetApplySquad"
+			Target_en_us "Apply squad"
+			Target_ru_ru "Применить отряд"
+		}
+		CustomStringTableItem "{A1CF261024660006}"
+		{
+			Id "AICF_UI_PresetSquadPrefix"
+			Target_en_us "[Squad] "
+			Target_ru_ru "[Отряд] "
+		}
+		CustomStringTableItem "{A1CF261024660007}"
+		{
+			Id "AICF_UI_PresetHint"
+			Target_en_us "Apply assigns this position. Save stores a named preset; the same name updates it. Apply role assigns this position to all squads. Save squad stores all assigned positions; apply changes first."
+			Target_ru_ru "Применить назначает комплект позиции. Сохранить записывает пресет; то же имя обновляет его. Роль всем отрядам назначает эту позицию всей стороне. Сохранить отряд записывает все назначенные позиции; сначала примените изменения."
+		}
+		CustomStringTableItem "{A1CF261024660008}"
+		{
+			Id "AICF_UI_PresetApplied"
+			Target_en_us "Loadout assigned. New soldiers receive it on spawn; living soldiers at an available arsenal."
+			Target_ru_ru "Экипировка назначена. Новые бойцы получат её при появлении, живые — у доступного арсенала."
+		}
+		CustomStringTableItem "{A1CF261024660009}"
+		{
+			Id "AICF_UI_PresetSaved"
+			Target_en_us "Preset saved to the library. Assignments have not changed. The same name updates this preset."
+			Target_ru_ru "Пресет сохранён в библиотеке. Назначения сохранены. То же имя обновляет этот пресет."
+		}
+		CustomStringTableItem "{A1CF26102466000A}"
+		{
+			Id "AICF_UI_PresetDeleted"
+			Target_en_us "Preset deleted from the library. Assigned loadouts are preserved."
+			Target_ru_ru "Пресет удалён из библиотеки. Назначенная экипировка сохранена."
+		}
+		CustomStringTableItem "{A1CF26102466000B}"
+		{
+			Id "AICF_UI_PresetConflict"
+			Target_en_us "The library changed. The list is refreshed; select the preset and retry."
+			Target_ru_ru "Библиотека изменилась. Список обновлён; выберите пресет и повторите."
+		}
+		CustomStringTableItem "{A1CF26102466000C}"
+		{
+			Id "AICF_UI_PresetDraft"
+			Target_en_us "Draft changed. Apply assigns it; Save stores it in the library."
+			Target_ru_ru "Черновик изменён. Применить назначает его, Сохранить записывает в библиотеку."
+		}
+		CustomStringTableItem "{A1CF26102466000D}"
+		{
+			Id "AICF_UI_PresetLoaded"
+			Target_en_us "Preset loaded as a draft. Apply assigns it to this position."
+			Target_ru_ru "Пресет загружен как черновик. Нажмите Применить для назначения позиции."
+		}
+		CustomStringTableItem "{A1CF261024660014}"
+		{
+			Id "AICF_UI_PresetSquadName"
+			Target_en_us "Squad preset name"
+			Target_ru_ru "Имя пресета отряда"
+		}
 	}
 }

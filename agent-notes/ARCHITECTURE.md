@@ -282,6 +282,11 @@ Slot хранит применённую revision каждой позиции и
 Async native receipts не меняют roster/приказы; identity-safe восстановление
 инвентаря может продолжаться после отмены визита. Контракт и настройки:
 [EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md).
+Library Save/Delete независимы от назначения: LoadoutStore хранит два поколения
+и tombstones; LoadoutService готовит member/squad plans, LoadoutBatch проверяет
+все revisions до commit, GroupSlot копирует binding каждой позиции.
+Admin targetFaction разрешается повторно на server, UI не получает authority.
+Протокол и legacy migration — [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md).
 Personal recipes хранятся отдельно по backend identity,
 faction и content profile. Server validation повторяется перед выдачей;
 ошибки требуют проверяемого rollback. Подробнее о поведении: [GAMEPLAY.md](GAMEPLAY.md).

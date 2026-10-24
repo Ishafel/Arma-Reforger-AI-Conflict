@@ -7664,7 +7664,7 @@ class AICF_MatchController
 	}
 
 	bool ResolveLoadoutContext(SCR_PlayerController player, int slotId, int member, out AICF_GroupSlot slot,
-		out SCR_CampaignFaction faction, out ResourceName source, out string role)
+		out SCR_CampaignFaction faction, out ResourceName source, out string role, string targetFaction = "", bool dormant = false)
 	{
 		if (!Replication.IsServer() || m_bStopped || !m_bRosterReady || !m_Campaign || !m_Campaign.IsMaster() ||
 			!m_Campaign.IsRunning() || !player || player.GetPlayerId() <= 0 ||
@@ -7672,17 +7672,26 @@ class AICF_MatchController
 			slotId < 0 || slotId >= AICF_Stage1Config.GROUP_SLOTS_PER_FACTION || member < 0 || member >= AICF_Stage1Config.MAX_GROUP_SIZE)
 			return false;
 		faction = SCR_CampaignFaction.Cast(SCR_FactionManager.SGetPlayerFaction(player.GetPlayerId()));
+		if (!faction || (faction != m_USFaction && faction != m_USSRFaction)) return false;
+		string ownKey = m_ContentProfile.GetStableFactionKey(faction.GetFactionKey());
+		if (!targetFaction.IsEmpty() && targetFaction != ownKey)
+		{
+			if ((targetFaction != "US" && targetFaction != "USSR") || !SCR_Global.IsAdmin(player.GetPlayerId())) return false;
+			if (targetFaction == "US") faction = m_USFaction;
+			else faction = m_USSRFaction;
+		}
 		if (faction == m_USFaction)
 			slot = m_USState.GetSlot(slotId);
 		else if (faction == m_USSRFaction)
 			slot = m_USSRState.GetSlot(slotId);
-		if (!faction || !slot || member >= slot.GetDesiredSize())
+		if (!faction || !slot || (!dormant && member >= slot.GetDesiredSize()))
 			return false;
 		source = m_GroupSpawner.ResolveRecruitPrefab(faction, member, role);
 		return !source.IsEmpty();
 	}
 
-	void RequestLoadout(SCR_PlayerController player, int token, int slot, int member, int revision, int operation, string payload)
+	void RequestLoadout(SCR_PlayerController player, int token, int slot, int member, int revision, int operation, string payload,
+		string targetFaction = "", int libraryRevision = -1)
 	{
 		if (!Replication.IsServer() || !player)
 			return;
@@ -7698,6 +7707,6 @@ class AICF_MatchController
 		}
 		if (!m_Loadouts)
 			m_Loadouts = new AICF_LoadoutService(this);
-		m_Loadouts.Request(player, token, slot, member, revision, operation, payload);
+		m_Loadouts.Request(player, token, slot, member, revision, operation, payload, targetFaction, libraryRevision);
 	}
 }

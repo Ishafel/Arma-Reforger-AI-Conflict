@@ -67,6 +67,7 @@ class AICF_StrategicUIController
 	protected Widget m_wCommandAccent;
 	protected Widget m_wCloseButton;
 	protected Widget m_wLoadoutButton;
+	protected Widget m_wLoadoutShortcut;
 	protected Widget m_wRecruitButton;
 	protected Widget m_wReturnAIButton;
 	protected int m_iSquadCommandResultSequence;
@@ -194,19 +195,24 @@ class AICF_StrategicUIController
 					SetCommandOpen(false);
 					m_LoadoutEditor.Open(m_wCommandScrim.GetParent(), m_iSelectedSlot);
 				}
+				else if (m_LoadoutEditor && m_wLoadoutShortcut && SCR_Global.IsAdmin())
+					m_LoadoutEditor.Open(m_wLoadoutShortcut.GetParent(), 0, false, true);
 				break;
 		}
 	}
 
 	// Read model своей фракции; slot ID не зависит от роли A/D/R.
-	bool GetLoadoutGroup(int slotId, out string name, out int size)
+	bool GetLoadoutGroup(int slotId, out string name, out int size, string targetFaction = "")
 	{
 		name = string.Empty;
 		size = 0;
 		if (!m_Campaign || slotId < 0 || slotId >= AICF_Stage1Config.GROUP_SLOTS_PER_FACTION)
 			return false;
 		array<string> fields = {};
-		m_Campaign.AICF_GetStrategicGroupSummary(m_bLocalUSSR, slotId).Split("|", fields, false);
+		if (targetFaction.IsEmpty())
+			m_Campaign.AICF_GetStrategicGroupSummary(m_bLocalUSSR, slotId).Split("|", fields, false);
+		else
+			m_Campaign.AICF_GetStrategicGroupSummary(targetFaction == "USSR", slotId).Split("|", fields, false);
 		if (fields.Count() < 10)
 			return false;
 		size = Math.ClampInt(fields[9].ToInt(), 1, AICF_Stage1Config.MAX_GROUP_SIZE);
@@ -238,6 +244,7 @@ class AICF_StrategicUIController
 			return;
 		}
 		m_bLocalUSSR = key == "USSR";
+		if (m_wLoadoutShortcut) m_wLoadoutShortcut.SetVisible(SCR_Global.IsAdmin());
 		EnsureHUD();
 		RefreshHUD();
 		if (m_Campaign.AICF_IsPlayerOnlyFaction(m_bLocalUSSR))
@@ -358,6 +365,12 @@ class AICF_StrategicUIController
 		if (localFactionKey != "US" && localFactionKey != "USSR")
 			return;
 		m_bLocalUSSR = localFactionKey == "USSR";
+		if (m_Campaign.AICF_IsPlayerOnlyFaction(m_bLocalUSSR) && SCR_Global.IsAdmin())
+		{
+			m_wLoadoutShortcut = CreateRect(mapRoot, 0.052, 0.025, 0.22, 0.075, Color.FromSRGBA(12, 25, 34, 238), true);
+			CreateText(m_wLoadoutShortcut, 0, 0, 1, 1, "{AICF:AICF_UI_SQUAD_LOADOUT_3cb76f02}", 17, Color.White, true);
+			AttachHandler(m_wLoadoutShortcut, AICF_EStrategicUIButtonAction.EDIT_LOADOUT);
+		}
 		if (m_Campaign.AICF_IsPlayerOnlyFaction(m_bLocalUSSR))
 			return;
 
@@ -1278,6 +1291,8 @@ class AICF_StrategicUIController
 			m_wCommandScrim.RemoveFromHierarchy();
 		if (m_wMapToggle)
 			m_wMapToggle.RemoveFromHierarchy();
+		if (m_wLoadoutShortcut) m_wLoadoutShortcut.RemoveFromHierarchy();
+		m_wLoadoutShortcut = null;
 		m_wCommandPanel = null;
 		m_wMapToggle = null;
 		m_wMapToggleAccent = null;

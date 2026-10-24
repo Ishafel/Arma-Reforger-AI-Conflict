@@ -38,21 +38,22 @@ modded class SCR_PlayerController
 		return string.Empty;
 	}
 
-	int AICF_RequestLoadout(int slot, int member, int revision, int operation, string payload = "")
+	int AICF_RequestLoadout(int slot, int member, int revision, int operation, string payload = "", string targetFaction = "", int libraryRevision = -1)
 	{
 		if (this != GetGame().GetPlayerController() || payload.Length() > AICF_LoadoutRecipe.MAX_BYTES)
 			return 0;
 		m_iAICFLoadoutSent = Math.Max(m_iAICFLoadoutSent, m_iAICFLoadoutToken) + 1;
-		Rpc(RpcAsk_AICFLoadout, m_iAICFLoadoutSent, slot, member, revision, operation, payload);
+		Rpc(RpcAsk_AICFLoadout, m_iAICFLoadoutSent, slot, member, revision, operation, payload, targetFaction, libraryRevision);
 		return m_iAICFLoadoutSent;
 	}
 
 	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
-	protected void RpcAsk_AICFLoadout(int token, int slot, int member, int revision, int operation, string payload)
+	protected void RpcAsk_AICFLoadout(int token, int slot, int member, int revision, int operation, string payload, string targetFaction, int libraryRevision)
 	{
 		if (!Replication.IsServer() || token <= m_iAICFLoadoutToken)
 			return;
-		if (payload.Length() > AICF_LoadoutRecipe.MAX_BYTES || operation < 0 || operation > 4 || (slot != AICF_PersonalLoadout.SLOT && operation > 2))
+		if (payload.Length() > AICF_LoadoutRecipe.MAX_BYTES || targetFaction.Length() > 4 || operation < 0 || operation > 7 ||
+			(slot == AICF_PersonalLoadout.SLOT && (operation > 4 || !targetFaction.IsEmpty())))
 		{
 			AICF_LoadoutResult(token, false, "INVALID_REQUEST");
 			return;
@@ -70,7 +71,7 @@ modded class SCR_PlayerController
 			AICF_LoadoutResult(token, false, "MATCH_OR_FACTION_UNAVAILABLE");
 			return;
 		}
-		match.RequestLoadout(this, token, slot, member, revision, operation, payload);
+		match.RequestLoadout(this, token, slot, member, revision, operation, payload, targetFaction, libraryRevision);
 	}
 
 	void AICF_LoadoutView(int slot, int member, int revision, string data, string library, int cost)
