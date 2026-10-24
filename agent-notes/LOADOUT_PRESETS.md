@@ -1,7 +1,8 @@
 # Пресеты бойцов и отрядов (issue #66)
 
 Редактор ИИ: карта → отряд → «Экипировка». Сохранение библиотеки и назначение
-binding независимы. Личный редактор сохраняет прежний отдельный протокол.
+binding независимы. Личный редактор использует тот же Inspector и отдельный
+authoritative personal protocol; библиотека ИИ не открывается личному editor.
 
 AI editor использует выбранный макет «Инспектор»: слева десять numeric roles
 и имена назначенных комплектов, в центре preview и прокручиваемые slots,
@@ -55,7 +56,40 @@ catalog. Отзыв прав закрывает чужой editor и очища�
 Co-op), selector возвращается к предыдущей стороне, editor и черновик остаются
 открытыми. Пояснение выводится в status; пустая сторона не вызывает Close.
 
-## Владельцы и протокол
+## Личный «Мой пресет»
+
+Оба editor строятся через CreateInspector: те же anchors preview/catalog,
+virtual grids, колесо/vertical slider и modal sections с focus lifecycle.
+Слева личного editor одна карточка сохранённого active recipe; выбор стороны,
+отряда, RoleAll и squad actions скрыты. «Библиотека», naming, Load/Delete и
+выход с несохранённым draft устроены одинаково. Применение выбирает personal
+recipe для следующего появления; штатный Default loadout остаётся доступным.
+
+`AICF_PersonalPresetLibrary` использует AICF_LoadoutStore в personal root с
+приватным prefix `<server identity>_<profile>_<faction>_library_preset_`.
+Имена: `$profile:AICF_PersonalLoadouts/<prefix><id>_<generation>.json`.
+Плоские файлы не требуют native создания подкаталогов через persistent junction.
+Member presets имеют два поколения, именованный upsert, tombstones и readback.
+Identity/безопасный путь вычисляет AICF_PersonalLoadoutStore.Path на сервере.
+Без backend identity используется private store конкретного controller в памяти,
+без чтения общей библиотеки; UI сообщает ограничение текущим подключением.
+
+Старые `..._<profile>_<faction>_0/1.json` остаются active storage без изменения
+формата. Их содержимое открывается прежним Read; для именованной копии можно
+нажать «Сохранить». Library Save/Delete не перезаписывают active. Load открывает
+draft, а «Применить» использует прежний personal operation1 (запись active с
+readback и выбором). Неизменный active выбирается operation3 без новой записи.
+После закрытия editor personal spawn UI запрашивает active Read с обычным retry
+gate, чтобы временный library draft не оставался в native spawn preview.
+
+Personal operations5/6/7 — Save named / Load draft / Delete. Они проверяют
+active revision и library revision, profile/faction/character, personal blacklist
+и inventory policy. Load повторно валидируется, Delete проверяет тот же context.
+Owner snapshot объединяет ids/names/kinds/revision и прежний denied list.
+Библиотека кэшируется только в SCR_PlayerController по серверному пути; новый
+controller без identity не наследует session store другого подключения.
+
+## Владельцы и протокол ИИ
 
 `AICF_LoadoutService` проверяет контекст и строит план, `AICF_LoadoutStore`
 владеет файлами, `AICF_LoadoutBatch` — синхронным commit подготовленных bindings,
@@ -73,13 +107,13 @@ callbacks. SetLoadout копирует binding, а точный повтор н�
 | operation | ИИ | Личный editor |
 |---|---|---|
 | 0 | Read binding/library | Прежний Read |
-| 1 | Apply member recipe | Прежний Save |
-| 2 | Load member draft | Прежний протокол |
+| 1 | Apply member recipe | Apply active с readback |
+| 2 | Load member draft | Запрещён |
 | 3 | Save member preset | Прежний Select |
 | 4 | Delete member/squad preset | Прежний Default |
-| 5 | Apply position to all slots | Запрещён |
-| 6 | Save squad by name | Запрещён |
-| 7 | Apply saved squad | Запрещён |
+| 5 | Apply position to all slots | Save named personal variant |
+| 6 | Save squad by name | Load personal draft |
+| 7 | Apply saved squad | Delete personal variant |
 
 Library operations 2/3/4/6/7 требуют актуальную global libraryRevision из owner
 snapshot. После конфликта UI обновляет список и сохраняет черновик. Любое
@@ -117,6 +151,15 @@ runtime profile — junction только к этой библиотеке, sett
 игры, запущенной вне launcher. `-PersistentLoadoutLibraryPath <каталог>` выбирает
 такой каталог явно для Frontend/Server; `-IsolatedLoadoutLibrary` отключает
 default Frontend library для диагностического запуска. Client эти файлы не меняет.
+
+Та же exclusive lease защищает `personal/` внутри постоянной библиотеки.
+`profile/AICF_PersonalLoadouts` fresh Server/Frontend profile — отдельный junction
+к этому каталогу. При первом Frontend пустое хранилище копирует canonical active
+и named поколения из штатного Documents personal profile с SHA-256 readback;
+источники не меняются. Непустое хранилище автоматически не сливается с legacy.
+Collector не проходит подкаталоги, сохраняет только personal US/USSR active
+и flat named generations IDs0..255; reparse sources отклоняются.
+Settings/logs остаются свежими.
 
 При первом Frontend, если постоянная библиотека пуста, canonical файлы обычного
 `Documents/My Games/ArmaReforger/profile/AICF_Loadouts` копируются с hash readback.

@@ -436,6 +436,7 @@ if (Test-Path -LiteralPath $profilePath) {
 $loadoutFiles = @()
 $loadoutLibrarySource = $null
 $persistentLoadoutPath = $null
+$legacyPersonalPath = $null
 if ($PersistentLoadoutLibraryPath -and ($Role -eq 'Client' -or $IsolatedLoadoutLibrary)) {
     throw 'Persistent loadout library requires Server/Frontend and cannot be combined with IsolatedLoadoutLibrary.'
 }
@@ -450,6 +451,11 @@ if ($PersistentLoadoutLibraryPath) {
         throw 'Persistent library must be outside the repository and the fresh runtime profile.'
     }
     $null = Get-AICFLoadoutLibraryFiles -Path $persistentLoadoutPath
+    $null = Get-AICFPersonalLoadoutFiles -Path (Join-Path $persistentLoadoutPath 'personal')
+    if ($Role -eq 'Frontend') {
+        $legacyPersonalPath = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'My Games/ArmaReforger/profile/AICF_PersonalLoadouts'
+        $null = Get-AICFPersonalLoadoutFiles -Path $legacyPersonalPath
+    }
 }
 # Первый локальный запуск переносит прежнюю штатную библиотеку копированием.
 # Наличие любого canonical поколения (включая tombstone) запрещает повторный импорт.
@@ -528,6 +534,7 @@ $manifest = [ordered]@{
     arguments = @($nativeArguments)
     loadoutLibrarySource = $loadoutLibrarySource
     persistentLoadoutLibrary = $persistentLoadoutPath
+    personalLibrarySource = $legacyPersonalPath
     resourceDatabases = $resourceDatabases
     loadoutLibraryFiles = @($loadoutFiles | ForEach-Object {
         [ordered]@{ name = $_.Name; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
@@ -547,7 +554,7 @@ Assert-AICFResourceDatabases -Databases $resourceDatabases
 
 $loadoutLibraryLease = $null
 if ($persistentLoadoutPath) {
-    $loadoutLibraryLease = Mount-AICFLoadoutLibrary -LibraryPath $persistentLoadoutPath -ProfilePath $profilePath -ImportFiles $loadoutFiles
+    $loadoutLibraryLease = Mount-AICFLoadoutLibrary -LibraryPath $persistentLoadoutPath -ProfilePath $profilePath -ImportFiles $loadoutFiles -LegacyPersonalPath $legacyPersonalPath
 }
 elseif ($loadoutFiles.Count -gt 0) {
     $loadoutDestination = Join-Path $profilePath 'profile\AICF_Loadouts'

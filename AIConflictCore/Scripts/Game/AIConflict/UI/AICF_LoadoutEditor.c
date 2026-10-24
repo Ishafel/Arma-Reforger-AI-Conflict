@@ -277,103 +277,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 
 	protected bool Create(Widget parent)
 	{
-		if (!m_bPersonal) return CreateInspector(parent);
-		m_wRoot = m_Controller.CreateRect(parent, 0, 0, 1, 1, Color.FromSRGBA(0, 0, 0, 185), true);
-		if (!m_wRoot)
-			return false;
-		m_wRoot.SetZOrder(400);
-		m_wPanel = m_Controller.CreateRect(m_wRoot, 0.045, 0.055, 0.955, 0.945, Color.FromSRGBA(9, 19, 28, 255), true);
-		if (!m_wPanel)
-			return false;
-		// Выше полноэкранной input-поверхности scrim (z=1).
-		m_wPanel.SetZOrder(5);
-		string title = "{AICF:AICF_UI_SQUAD_LOADOUT_3cb76f02}";
-		if (m_bPersonal) title = "{AICF:AICF_UI_PersonalName}";
-		Label(0.025, 0.02, 0.30, 0.08, title, 24);
-		m_Side = Combo(0.31, 0.025, 0.45, 0.08);
-		m_Group = Combo(0.47, 0.025, 0.82, 0.08);
-		Button("close", "{AICF:AICF_UI_Close_23b64977}", 0.84, 0.025, 0.975, 0.08);
-		m_Member = Combo(0.025, 0.09, 0.29, 0.15);
-		m_Library = Combo(0.31, 0.09, 0.56, 0.15);
-		Button("load", "{AICF:AICF_UI_Load_8e2c5587}", 0.57, 0.09, 0.68, 0.15);
-		Button("deletePreset", "{AICF:AICF_UI_PresetDelete}", 0.69, 0.09, 0.78, 0.15);
-		Button("undo", "{AICF:AICF_UI_Undo_950921cc}", 0.79, 0.09, 0.88, 0.15);
-		Button("reset", "{AICF:AICF_UI_Default_c3e32002}", 0.89, 0.09, 0.975, 0.15);
-		Label(0.025, 0.165, 0.29, 0.20, "{AICF:AICF_UI_PREVIEW_7dc4cefd}", 17);
-		Label(0.31, 0.165, 0.465, 0.20, "{AICF:AICF_UI_LOADOUT_6d15a8e1}", 17);
-		Button("contents", "{AICF:AICF_UI_LoadoutMounts}", 0.475, 0.165, 0.63, 0.20);
-		ShowButton("contents", false);
-		Button("back", "{AICF:AICF_UI_Back_b1e3ce09}", 0.31, 0.205, 0.385, 0.255);
-		m_wLocation = Label(0.395, 0.205, 0.63, 0.265, "{AICF:AICF_UI_On_soldier_193813db}", 17);
-		m_wLocation.SetTextWrapping(true);
-		m_aSources.Clear();
-		AICF_ContentProfile.GetActive().GetLoadoutSources(m_aSources);
-		m_iSourceIndex = m_aSources.Count() - 1;
-		float sourceWidth = 0.325 / Math.Max(1, m_aSources.Count());
-		foreach (int sourceIndex, string sourceName : m_aSources)
-			Button("source_" + sourceIndex.ToString(), sourceName, 0.65 + sourceIndex * sourceWidth, 0.165,
-				0.65 + (sourceIndex + 1) * sourceWidth - 0.005, 0.20);
-		m_wCatalogContext = Label(0.65, 0.205, 0.975, 0.265, "{AICF:AICF_UI_Select_a_slot_in_the_center_702cc83a}", 17);
-		m_wCatalogContext.SetTextWrapping(true);
-		m_ContentCategory = Combo(0.65, 0.205, 0.975, 0.265);
-		if (!m_ContentCategory)
-			return false;
-		m_ContentCategory.GetRootWidget().SetVisible(false);
-		m_wSearch = Edit(0.65, 0.275, 0.865, 0.33, "{AICF:AICF_UI_Search_by_name_ce5c4685}");
-		Button("clearFilters", "{AICF:AICF_UI_Clear_52ecee71}", 0.875, 0.275, 0.975, 0.33);
-		if (!m_wSearch)
-			return false;
-		m_wSearch.AddHandler(this);
-		m_Slots = new AICF_LoadoutItemGrid();
-		m_Items = new AICF_LoadoutItemGrid();
-		m_wCapacity = Label(0.31, 0.268, 0.63, 0.313, "{AICF:AICF_UI_Capacity_879d4588}", 14);
-		m_wCapacity.SetTextWrapping(true);
-		Button("addMagazine", "{AICF:AICF_UI_Magazine_1efa5341}", 0.475, 0.268, 0.63, 0.313);
-		ShowButton("addMagazine", false);
-		if (!m_Slots.Create(m_Controller, m_wPanel, 0.31, 0.32, 0.63, 0.745, 1, 8) ||
-			!m_Items.Create(m_Controller, m_wPanel, 0.65, 0.34, 0.975, 0.735, 2, 3))
-			return false;
-		m_Slots.m_OnSelected.Insert(OnCardSelected);
-		m_Slots.m_OnActivated.Insert(OnSlotActivated);
-		m_Slots.m_OnRemoved.Insert(OnSlotRemoved);
-		m_Items.m_OnSelected.Insert(OnCardSelected);
-		m_Items.m_OnActivated.Insert(OnItemActivated);
-		m_wTarget = Label(0.31, 0.75, 0.63, 0.835, "{AICF:AICF_UI_Select_a_slot_bf11638b}", 16);
-		m_wTarget.SetTextWrapping(true);
-		m_wSelection = Label(0.65, 0.735, 0.975, 0.79, "{AICF:AICF_UI_Select_an_item_a9a7e1ac}", 16);
-		m_wSelection.SetTextWrapping(true);
-		Button("less", "-", 0.65, 0.79, 0.68, 0.835);
-		m_wQuantity = Label(0.68, 0.79, 0.73, 0.835, "×1", 17);
-		Button("more", "+", 0.73, 0.79, 0.76, 0.835);
-		Button("apply", "{AICF:AICF_UI_Select_an_item_a9a7e1ac}", 0.77, 0.79, 0.975, 0.835);
-		if (m_bPersonal)
-			Label(0.025, 0.745, 0.29, 0.84, "{AICF:AICF_UI_Rotate_hold_left_mouse_button_Zoom_scroll__b1449a1e}", 16);
-		else
-			m_wSquadName = Edit(0.025, 0.79, 0.29, 0.835, "{AICF:AICF_UI_PresetSquadName}");
-		m_wPreview = RenderTargetWidget.Cast(GetGame().GetWorkspace().CreateWidget(WidgetType.RenderTargetWidgetTypeID,
-			WidgetFlags.VISIBLE | WidgetFlags.BLEND, Color.White, 0, m_wPanel));
-		if (!m_wPreview || !m_Group || !m_Member || !m_Library || !m_wLocation || !m_wCatalogContext)
-			return false;
-		Place(m_wPreview, 0.025, 0.205, 0.29, 0.735);
-		m_wPreview.SetFlags(WidgetFlags.VISIBLE | WidgetFlags.BLEND);
-		m_wPreview.SetMaxFPS(30);
-		m_wPreview.SetResolutionScale(1, 1);
-		m_wPreview.SetClearColor(true, Color.BLACK);
-		m_wPreview.SetVisible(false);
-		m_wPreview.AddHandler(this);
-		m_wName = Edit(0.025, 0.855, 0.29, 0.91, "{AICF:AICF_UI_Loadout_name_up_to_80_characters_45993fd3}");
-		if (!m_wName)
-			return false;
-		m_wName.AddHandler(this);
-		m_wCost = Label(0.41, 0.855, 0.79, 0.91, "{AICF:AICF_UI_Loadout_free_9cbed783}", 17);
-		m_wSave = Button("save", "{AICF:AICF_UI_Save_10c5c91a}", 0.31, 0.855, 0.44, 0.91);
-		Button("assign", "{AICF:AICF_UI_PresetApply}", 0.45, 0.855, 0.58, 0.91);
-		Button("assignAll", "{AICF:AICF_UI_PresetRoleAll}", 0.59, 0.855, 0.77, 0.91);
-		Button("saveSquad", "{AICF:AICF_UI_PresetSaveSquad}", 0.78, 0.855, 0.975, 0.91);
-		m_wCost.SetVisible(m_bPersonal);
-		m_wStatus = Label(0.025, 0.925, 0.975, 0.985, "", 17);
-		m_wStatus.SetTextWrapping(true);
-		return InitializeForm();
+		return CreateInspector(parent);
 	}
 
 	protected bool CreateInspector(Widget parent)
@@ -385,17 +289,33 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (!m_wPanel) return false;
 		m_wPanel.SetZOrder(5);
 		m_Controller.CreateRect(m_wPanel, 0.012, 0.17, 0.233, 0.84, Color.FromSRGBA(16, 27, 34, 255), false);
-		Label(0.025, 0.018, 0.60, 0.072, "{AICF:AICF_UI_SQUAD_LOADOUT_3cb76f02}", 26);
+		string title = "{AICF:AICF_UI_SQUAD_LOADOUT_3cb76f02}";
+		if (m_bPersonal) title = "{AICF:AICF_UI_PersonalName}";
+		Label(0.025, 0.018, 0.60, 0.072, title, 26);
 		Button("library", "{AICF:AICF_UI_PresetLibrary}", 0.70, 0.022, 0.865, 0.077);
 		Button("close", "{AICF:AICF_UI_Close_23b64977}", 0.875, 0.022, 0.975, 0.077);
-		Label(0.025, 0.083, 0.16, 0.108, "{AICF:AICF_UI_InspectorSide}", 15);
-		Label(0.20, 0.083, 0.39, 0.108, "{AICF:AICF_UI_Squad_daa7fec8}", 15);
+		if (!m_bPersonal)
+		{
+			Label(0.025, 0.083, 0.16, 0.108, "{AICF:AICF_UI_InspectorSide}", 15);
+			Label(0.20, 0.083, 0.39, 0.108, "{AICF:AICF_UI_Squad_daa7fec8}", 15);
+		}
 		m_Side = Combo(0.025, 0.108, 0.185, 0.16);
 		m_Group = Combo(0.20, 0.108, 0.46, 0.16);
 		m_wRecipient = Label(0.48, 0.09, 0.975, 0.16, "", 18);
 		m_wRecipient.SetTextWrapping(true);
-		Label(0.025, 0.177, 0.225, 0.215, "{AICF:AICF_UI_InspectorRecipient}", 19);
-		for (int i; i < AICF_Stage1Config.MAX_GROUP_SIZE; i++)
+		string recipientTitle = "{AICF:AICF_UI_InspectorRecipient}";
+		int recipients = AICF_Stage1Config.MAX_GROUP_SIZE;
+		if (m_bPersonal)
+		{
+			recipientTitle = "{AICF:AICF_UI_PersonalName}";
+			recipients = 0;
+			m_aRoleKits.Insert(Label(0.025, 0.225, 0.225, 0.35, "", 18));
+			m_aRoleKits[0].SetTextWrapping(true);
+			TextWidget help = Label(0.025, 0.39, 0.225, 0.76, "{AICF:AICF_UI_PersonalInspectorHelp}", 17);
+			help.SetTextWrapping(true);
+		}
+		Label(0.025, 0.177, 0.225, 0.215, recipientTitle, 19);
+		for (int i; i < recipients; i++)
 		{
 			float y = 0.225 + i * 0.059;
 			Widget row = Button("member_" + i.ToString(), "", 0.022, y, 0.225, y + 0.055);
@@ -469,8 +389,9 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_wSave = Button("save", "{AICF:AICF_UI_Save_10c5c91a}", 0.45, 0.86, 0.61, 0.915);
 		Button("assign", "{AICF:AICF_UI_PresetApply}", 0.64, 0.86, 0.835, 0.915);
 		Button("assignAll", "{AICF:AICF_UI_InspectorMore}", 0.845, 0.86, 0.975, 0.915);
-		m_wCost = Label(0, 0, 0.1, 0.03, "", 16);
-		m_wCost.SetVisible(false);
+		m_wCost = Label(0.25, 0.86, 0.43, 0.915, "{AICF:AICF_UI_Loadout_free_9cbed783}", 16);
+		m_wCost.SetTextWrapping(true);
+		m_wCost.SetVisible(m_bPersonal);
 		m_wStatus = Label(0.025, 0.925, 0.975, 0.99, "", 16);
 		m_wStatus.SetTextWrapping(true);
 		if (!CreateInspectorDialogs()) return false;
@@ -533,13 +454,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			m_aGroupNames.Insert("{AICF:AICF_UI_PersonalName}");
 			m_Group.GetRootWidget().SetVisible(false);
 			m_Member.GetRootWidget().SetVisible(false);
-			m_Library.GetRootWidget().SetVisible(false);
-			ShowButton("load", false);
-			ShowButton("deletePreset", false);
-			ShowButton("assign", false);
 			ShowButton("assignAll", false);
 			ShowButton("saveSquad", false);
-			Place(m_wSave, 0.81, 0.855, 0.975, 0.91);
 		}
 		if (!m_bPersonal) FillGroups();
 		int groupIndex = m_aGroupIds.Find(m_iSlotId);
@@ -649,7 +565,18 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 
 	protected void InspectorRows()
 	{
-		if (m_bPersonal || !m_wRecipient) return;
+		if (!m_wRecipient) return;
+		if (m_bPersonal)
+		{
+			AICF_LoadoutRecipe active = AICF_LoadoutRecipe.Decode(m_sAppliedData);
+			string personalName = "{AICF:AICF_UI_InspectorDefaultKit}";
+			if (active) personalName = active.m_sName;
+			m_aRoleKits[0].SetText(AICF_Localization.Resolve(personalName));
+			string personalRecipient = m_sTargetFaction + " · {AICF:AICF_UI_PersonalName}";
+			if (HasDraftChanges()) personalRecipient += " · {AICF:AICF_UI_InspectorDraft}";
+			m_wRecipient.SetText(AICF_Localization.Resolve(personalRecipient));
+			return;
+		}
 		string recipient = m_sTargetFaction + " · " + TargetName();
 		if (m_iMember < m_aAssignedNames.Count() && !m_aAssignedNames[m_iMember].IsEmpty()) recipient += "\n" + m_aAssignedNames[m_iMember];
 		if (HasDraftChanges()) recipient += " · {AICF:AICF_UI_InspectorDraft}";
@@ -727,9 +654,9 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_sConfirmPayload = payload;
 		ShowModal(4, "{AICF:AICF_UI_InspectorConfirm}", help);
 		string caption = "{AICF:AICF_UI_Load_8e2c5587}";
-		if (operation == 4) caption = "{AICF:AICF_UI_PresetDelete}";
+		if (operation == 4 || (m_bPersonal && operation == 7)) caption = "{AICF:AICF_UI_PresetDelete}";
 		else if (operation == 5) caption = "{AICF:AICF_UI_PresetRoleAll}";
-		else if (operation == 7) caption = "{AICF:AICF_UI_PresetApplySquad}";
+		else if (operation == 7 && !m_bPersonal) caption = "{AICF:AICF_UI_PresetApplySquad}";
 		else if (operation == -1) caption = "{AICF:AICF_UI_Close_23b64977}";
 		SetButtonState("confirmOperation", true, caption);
 	}
@@ -737,7 +664,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected void OnBack()
 	{
 		if (m_iModal != 0) { HideModal(); return; }
-		if (!m_bPersonal && (HasDraftChanges() || m_DraftMemory.HasChanges()))
+		if (HasDraftChanges() || m_DraftMemory.HasChanges())
 		{
 			ConfirmOperation(-1, string.Empty, "{AICF:AICF_UI_InspectorDiscard}");
 			return;
@@ -835,7 +762,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 				color = Color.FromSRGBA(23, 32, 39, 255);
 				textColor = Color.FromSRGBA(142, 158, 170, 255);
 			}
-			else if ((m_bPersonal && frame == m_wSave) || (!m_bPersonal && frame.GetName() == "assign"))
+			else if (frame.GetName() == "assign")
 			{
 				color = Color.FromSRGBA(226, 167, 79, 255);
 				textColor = Color.FromSRGBA(9, 19, 28, 255);
@@ -963,16 +890,9 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		bool magazineAction = FocusedMuzzle() != null;
 		ShowButton("addMagazine", magazineAction);
 		SetButtonState("addMagazine", ready && magazineAction);
-		float capacityRight = 0.63;
-		if (magazineAction)
-			capacityRight = 0.465;
-		if (m_bPersonal) Place(m_wCapacity, 0.31, 0.268, capacityRight, 0.313);
-		else
-		{
-			capacityRight = 0.502;
-			if (magazineAction) capacityRight = 0.392;
-			Place(m_wCapacity, 0.25, 0.55, capacityRight, 0.59);
-		}
+		float capacityRight = 0.502;
+		if (magazineAction) capacityRight = 0.392;
+		Place(m_wCapacity, 0.25, 0.55, capacityRight, 0.59);
 		bool nested = !m_sViewPath.IsEmpty();
 		ShowButton("contents", m_bCanShowContents);
 		string viewCaption = "{AICF:AICF_UI_LoadoutContents}";
@@ -1010,9 +930,11 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (m_bPending)
 			saveCaption = "{AICF:AICF_UI_Waiting_1b82ef05}";
 		bool currentRevision = m_Player && m_Player.AICF_LoadoutRevision() == m_iRevision;
-		if (!m_bPersonal) saveCaption = "{AICF:AICF_UI_Save_10c5c91a}";
-		SetButtonState("save", ready && (changed || !m_bPersonal) && (!m_bPersonal || HasValidName()) && currentRevision, saveCaption);
-		SetButtonState("assign", ready && changed && HasValidName() && currentRevision);
+		saveCaption = "{AICF:AICF_UI_Save_10c5c91a}";
+		SetButtonState("save", ready && currentRevision, saveCaption);
+		bool canAssign = changed;
+		if (m_bPersonal && m_Player && !m_Player.AICF_PersonalSelected()) canAssign = true;
+		SetButtonState("assign", ready && canAssign && HasValidName() && currentRevision);
 		SetButtonState("assignAll", ready && HasValidName() && currentRevision);
 		SetButtonState("saveSquad", ready && m_sDraftData == m_sAppliedData && currentRevision);
 		SetButtonState("confirmSave", ready && HasValidName() && currentRevision);
@@ -1049,7 +971,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			m_bPending = false;
 			string status = m_Player.AICF_LoadoutStatus();
 			bool libraryOnly = !m_bPersonal && (m_iOperation == 3 || m_iOperation == 4 || m_iOperation == 6);
-			if (!m_bPersonal) Library();
+			if (m_bPersonal) libraryOnly = m_iOperation == 5 || m_iOperation == 7;
+			Library();
 			if (!libraryOnly && m_Player.AICF_LoadoutAccepted() && m_Player.AICF_LoadoutSlot() == m_iSlotId && m_Player.AICF_LoadoutMember() == m_iMember)
 			{
 				m_Recipe = AICF_LoadoutRecipe.Decode(m_Player.AICF_LoadoutData());
@@ -1094,12 +1017,13 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		}
 		if (!m_bPending && m_Recipe && m_Player.AICF_LoadoutRevision() != m_iRevision)
 			m_wStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_Another_player_changed_the_loadout_Reopen__22836f72}"));
-		if (!m_bPersonal && !m_bPending && m_sLibraryData != m_Player.AICF_LoadoutLibrary()) Library();
+		if (!m_bPending && m_sLibraryData != m_Player.AICF_LoadoutLibrary()) Library();
 		SetBusy();
 	}
 
 	protected string Status(string code)
 	{
+		if (m_bPersonal && code == "TEMPLATE_SAVED_SESSION") return "{AICF:AICF_UI_PersonalLibrarySession}";
 		if (m_bPersonal && code == "SAVED") return "{AICF:AICF_UI_PersonalSaved}";
 		if (m_bPersonal && code == "SAVED_SESSION") return "{AICF:AICF_UI_PersonalSavedSession}";
 		if (m_bPersonal && code == "READY") return "{AICF:AICF_UI_PersonalHint}";
@@ -1108,7 +1032,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (code == "TEMPLATE_SAVED" || code == "SQUAD_SAVED") return "{AICF:AICF_UI_PresetSaved}";
 		if (code == "TEMPLATE_DELETED") return "{AICF:AICF_UI_PresetDeleted}";
 		if (code == "LIBRARY_CONFLICT") return "{AICF:AICF_UI_PresetConflict}";
-		if (!m_bPersonal && code == "TEMPLATE_LOADED") return "{AICF:AICF_UI_PresetLoaded}";
+		if (code == "TEMPLATE_LOADED") return "{AICF:AICF_UI_PresetLoaded}";
 		if (!m_bPersonal && code == "DRAFT_RESTORED") return "{AICF:AICF_UI_PresetDraft}";
 		switch (code)
 		{
@@ -1653,10 +1577,18 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			int member = action.Substring(7, action.Length() - 7).ToInt(-1);
 			if (member != m_iMember) SelectTarget(m_iSlotId, member);
 		}
-		else if (!m_bPersonal && action == "library")
-			ShowModal(1, "{AICF:AICF_UI_PresetLibrary}", "{AICF:AICF_UI_InspectorLibraryHelp}");
-		else if (!m_bPersonal && action == "save")
-			ShowModal(2, "{AICF:AICF_UI_Save_10c5c91a}", "{AICF:AICF_UI_InspectorSaveHelp}");
+		else if (action == "library")
+		{
+			string libraryHelp = "{AICF:AICF_UI_InspectorLibraryHelp}";
+			if (m_bPersonal) libraryHelp = "{AICF:AICF_UI_PersonalLibraryHelp}";
+			ShowModal(1, "{AICF:AICF_UI_PresetLibrary}", libraryHelp);
+		}
+		else if (action == "save")
+		{
+			string saveHelp = "{AICF:AICF_UI_InspectorSaveHelp}";
+			if (m_bPersonal) saveHelp = "{AICF:AICF_UI_PersonalSaveHelp}";
+			ShowModal(2, "{AICF:AICF_UI_Save_10c5c91a}", saveHelp);
+		}
 		else if (!m_bPersonal && action == "saveSquad")
 		{
 			if (m_wSquadName.GetText().IsEmpty()) m_wSquadName.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_PresetSquadName}"));
@@ -1669,11 +1601,12 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			m_sDraftData = m_Recipe.Encode();
 			ConfirmOperation(5, m_sDraftData, m_sTargetFaction + " · " + TargetName() + "\n{AICF:AICF_UI_InspectorRoleAllHelp}");
 		}
-		else if (!m_bPersonal && action == "confirmOperation")
+		else if (action == "confirmOperation")
 		{
 			int confirmedOperation = m_iConfirmOperation;
 			string confirmedPayload = m_sConfirmPayload;
 			bool libraryOperation = confirmedOperation == 2 || confirmedOperation == 4 || confirmedOperation == 7;
+			if (m_bPersonal) libraryOperation = confirmedOperation == 6 || confirmedOperation == 7;
 			HideModal();
 			if (confirmedOperation == -1) Close();
 			else if (m_iConfirmSlotRevision != m_iRevision || m_Player.AICF_LoadoutRevision() != m_iConfirmSlotRevision ||
@@ -1693,11 +1626,13 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		}
 		else if (action == "save" || action == "assign" || action == "assignAll" || action == "confirmSave")
 		{
-			if ((m_bPersonal && !HasDraftChanges()) || !HasValidName() || m_Player.AICF_LoadoutRevision() != m_iRevision)
+			if (!HasValidName() || m_Player.AICF_LoadoutRevision() != m_iRevision)
 				return true;
 			m_Recipe.m_sName = m_wName.GetText();
 			m_sDraftData = m_Recipe.Encode();
 			int operation = 1;
+			if (m_bPersonal && action == "assign" && !HasDraftChanges()) operation = 3;
+			if (m_bPersonal && action == "confirmSave") operation = 5;
 			if (!m_bPersonal && (action == "save" || action == "confirmSave")) operation = 3;
 			if (!m_bPersonal && action == "assignAll") operation = 5;
 			HideModal();
@@ -1719,11 +1654,16 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 				int libraryOperation = 2;
 				if (m_aTemplateKinds[index] == "squad") libraryOperation = 7;
 				if (action == "deletePreset") libraryOperation = 4;
+				if (m_bPersonal)
+				{
+					libraryOperation = 6;
+					if (action == "deletePreset") libraryOperation = 7;
+				}
 				if (libraryOperation == 7 && m_wSquadName) m_wSquadName.SetText(m_aTemplateNames[index]);
 				string presetName = m_aTemplateNames[index];
-				if (libraryOperation == 4)
+				if (action == "deletePreset")
 					ConfirmOperation(libraryOperation, m_aTemplateIds[index].ToString(), presetName + "\n{AICF:AICF_UI_InspectorDeleteHelp}");
-				else if (libraryOperation == 7)
+				else if (!m_bPersonal && libraryOperation == 7)
 					ConfirmOperation(libraryOperation, m_aTemplateIds[index].ToString(), m_sTargetFaction + " · " + TargetName() + "\n" + presetName + "\n{AICF:AICF_UI_InspectorSquadApplyHelp}");
 				else if (HasDraftChanges())
 					ConfirmOperation(libraryOperation, m_aTemplateIds[index].ToString(), presetName + "\n{AICF:AICF_UI_InspectorLoadHelp}");

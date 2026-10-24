@@ -29,7 +29,7 @@ class AICF_PersonalLoadout
 			recipe.m_sFaction == context.m_sFaction && recipe.m_sCharacter == context.m_sCharacter;
 	}
 
-	static void Request(SCR_PlayerController player, int token, int revision, int operation, string payload)
+	static void Request(SCR_PlayerController player, int token, int revision, int operation, string payload, int libraryRevision = -1)
 	{
 		if (!Replication.IsServer() || !player) return;
 		SCR_SpawnLockComponent lock = SCR_SpawnLockComponent.Cast(player.FindComponent(SCR_SpawnLockComponent));
@@ -60,8 +60,44 @@ class AICF_PersonalLoadout
 		bool selected = player.AICF_PersonalSelected();
 		bool accepted = operation == 0;
 		string reason = "READY";
-		AICF_LoadoutRecipe candidate = AICF_LoadoutRecipe.Decode(payload);
-		if (operation == 4)
+		AICF_LoadoutRecipe candidate;
+		if (operation == 1 || operation == 3 || operation == 5) candidate = AICF_LoadoutRecipe.Decode(payload);
+		AICF_PersonalPresetLibrary library = AICF_PersonalPresetLibrary.ForPlayer(player, context);
+		AICF_LoadoutRecipe draft;
+		if (operation >= 5 && operation <= 7)
+		{
+			reason = "REVISION_CONFLICT";
+			if (library && revision == storedRevision && libraryRevision == library.GetRevision())
+			{
+				reason = "INVALID_RECIPE";
+				if (operation == 5 && SameContext(candidate, context) && AICF_LoadoutService.Validate(candidate, faction, reason, true))
+				{
+					accepted = library.Save(candidate, reason);
+					if (accepted) reason = "TEMPLATE_SAVED";
+					if (accepted && path.IsEmpty()) reason = "TEMPLATE_SAVED_SESSION";
+				}
+				else if (operation == 6 || operation == 7)
+				{
+					reason = "TEMPLATE_UNAVAILABLE";
+					AICF_LoadoutRecipe saved = library.Get(payload.ToInt(-1));
+					if (SameContext(saved, context))
+					{
+						if (operation == 7)
+						{
+							accepted = library.Delete(payload.ToInt(-1), reason);
+							if (accepted) reason = "TEMPLATE_DELETED";
+						}
+						else if (AICF_LoadoutService.Validate(saved, faction, reason, true))
+						{
+							draft = saved;
+							accepted = true;
+							reason = "TEMPLATE_LOADED";
+						}
+					}
+				}
+			}
+		}
+		else if (operation == 4)
 		{
 			selected = false;
 			accepted = true;
@@ -98,7 +134,7 @@ class AICF_PersonalLoadout
 			}
 		}
 		else if (operation != 0) reason = "INVALID_REQUEST";
-		if (accepted)
+		if (accepted && operation < 5)
 		{
 			reason = "READY";
 			if (operation == 1) reason = "SAVED";
@@ -108,9 +144,10 @@ class AICF_PersonalLoadout
 		player.AICF_SetPersonalState(key, available, selected);
 		AICF_LoadoutRecipe view = context;
 		if (available) view = stored;
+		if (draft) view = draft;
 		AICF_LoadoutCatalog catalog = new AICF_LoadoutCatalog(faction);
 		catalog.SetPersonalRules();
-		player.AICF_LoadoutView(SLOT, 0, storedRevision, view.Encode(), catalog.PersonalRulesSnapshot(), 0);
+		player.AICF_LoadoutView(SLOT, 0, storedRevision, view.Encode(), library.Snapshot(context, catalog.PersonalRulesSnapshot()), 0);
 		player.AICF_LoadoutResult(token, accepted, reason);
 	}
 

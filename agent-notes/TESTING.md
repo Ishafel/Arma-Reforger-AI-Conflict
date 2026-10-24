@@ -1,5 +1,59 @@
 # Проверки и baseline
 
+## Личный Inspector и приватная библиотека #66 — 2026-10-25
+
+Продолжение `codex/issue-66-loadout-qol`, baseline `ca04646`, дерево чистое.
+Create() обоих editor вызывает одну CreateInspector: preview/catalog/scroll,
+Save/Library и confirmations общие, personal слева показывает один active.
+Named Save/Load/Delete используют personal operations5/6/7; прежние1/3/4
+по-прежнему отвечают за active/Select/Default. Старый active формат сохранён.
+Private prefix строится из server backend identity/profile/faction; context,
+active/library revisions и personal policy повторно проверяются на authority.
+Scalar payload больше не передаётся native object JSON reader.
+
+Evidence: `.codex-runtime/issue66-personal-inspector-20261025/REPORT.md`.
+Свежий baseline **5/5 PASS/0**. Финальный `after-all-final/` — **91/91 PASS/0**,
+alias X: снят. Personal contracts — **70 negative mutations**, QoL — **44**,
+filesystem — **19 cases**, включая оба mounts, canonical personal import и
+сохранность active/named generations между fresh profiles.
+Финальный terminal Workbench Stock/WCS stage + production Stock без fixtures
+— **3/3 PASS/0**, validation successful, SCRIPT E/F, ENGINE F, VM/null0.
+SHA-256 **285 addon files** (включая README/license) совпали со stage.
+
+Окончательные `stock-flat`/`wcs-flat`: каждый **140 server / 159 client cases**,
+failures0, native exits0/0. Это прежние AI gates плюс30 personal storage cases,
+16 настоящих personal owner RPC (39 assertions) и32 personal hidden widget
+cases. Отдельные `stock-reload`/`wcs-reload` — по **8/8 PASS/0** в свежих
+server profiles с общей библиотекой: member/tombstone/старый active/list.
+`Test-PersonalPresetLog.ps1` —6 positive /18 rejected negative controls.
+Сохранены exact CLI/manifests и полные stopped console/script/error logs.
+
+Промежуточные FAIL не скрыты: старые structural guards ссылались на прежний
+personal Create/layout и точный preview predicate; перенесены к общему builder
+и расширенному ClearPreview gate. Первый полный набор был90/91, финальный
+повтор91/91. Первый Stock server упал0xC0000005 при personal Delete ID1:
+numeric payload ошибочно попадал в recipe Decode/native object ReadValue.
+Добавлены object-root guard и Decode только для recipe operations, scalar
+native regression; оба финальных runtime повторены без crash. Вложенный
+personal namespace под junction не создавал записей (MakeDirectory сообщал
+успех, lookup/file result оставались пустыми); trace сохранён. Используется
+flat private file prefix; native запись/readback/reload подтверждены заново.
+
+Четыре настоящих старых personal файла скопированы в постоянный `personal/`
+с SHA-256 readback; источники и15 существующих AI files не менялись.
+Own12 profiles,3 test libraries и stage убраны после архивации; своих runtime
+процессов нет. Строгая чистота всех native Error остаётся **FAIL**:31 прежний
+log /6 финальных,164 baseline /155 current unique identities, новых нет.
+
+Физический input/focus, RU/EN clipping, controller navigation — **NOT RUN**,
+отклонены отдельно от terminal criteria: GUI automation запрещена. Hidden tree
+не вызывает ShowModal/AddModal и не имитирует ввод. Игроку: открыть личный editor,
+проверить Save/Library/Load/Delete/Apply, закрытие с draft и native preview после
+закрытия. Diag owner RPC использовал session fallback без backend identity;
+диск/restart проверены отдельным server fixture, live backend-auth roundtrip
+не заявляется. JIP, packaged Workshop и длительный бой — **NOT RUN**.
+ACCEPTED/ready PR/push/merge/публикация не заявляются.
+
 ## «Инспектор»: ширина, прокрутка и ввод окон #66 — 2026-10-25
 
 Продолжение `codex/issue-66-loadout-qol`, исходный `6f59d6c`, дерево чистое.

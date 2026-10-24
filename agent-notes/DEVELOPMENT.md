@@ -209,10 +209,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Start-AICFRuntime.
 проверяются, как для Client. Параметры подключения и `-world` в Frontend
 отклоняются: direct-connect остаётся ролью Client с её readiness gate.
 
-Для повторного локального использования Frontend связывает только каталог
-`profile/AICF_Loadouts` с постоянным `%LOCALAPPDATA%/AICF/LoadoutLibrary`.
+Для повторного локального использования Frontend связывает каталог
+`profile/AICF_Loadouts` с постоянным `%LOCALAPPDATA%/AICF/LoadoutLibrary`,
+а `profile/AICF_PersonalLoadouts` — с его `personal/` под той же lease.
 Первый запуск копирует туда canonical файлы обычного игрового профиля, если
 постоянная библиотека пуста; исходные файлы и старый формат сохраняются.
+Personal active и named generations импортируются из Documents personal profile
+отдельно, только в пустой personal каталог, с SHA-256 readback без изменения JSON.
 Manifest содержит `persistentLoadoutLibrary` и hashes импорта. Launcher удерживает
 exclusive lease этой библиотеки до native exit. `-PersistentLoadoutLibraryPath`
 выбирает отдельную постоянную библиотеку для Frontend/Server;

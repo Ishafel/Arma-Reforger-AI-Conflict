@@ -7,6 +7,12 @@
 whitelist, оставляя ландшафт целым. UI редактора экипировки использует временный
 in-memory world для preview; он не является миром кампании.
 
+Личный и AI editor используют одну разметку Inspector; side effects остаются
+раздельными: personal active принадлежит AICF_PersonalLoadoutStore, private
+named variants — AICF_PersonalPresetLibrary с AICF_LoadoutStore и отдельным
+identity prefix файлов. Library Load меняет только owner draft view; spawn по-прежнему
+читает active с повторной server validation. Контракт: [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md).
+
 ## Граф addon
 
 Вооружение FIA в RHS/WCS принадлежит integration: profiles владеют пулами

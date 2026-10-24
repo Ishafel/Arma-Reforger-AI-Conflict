@@ -5,12 +5,18 @@ class AICF_LoadoutStore
 	static const string DIRECTORY = "$profile:AICF_Loadouts";
 	protected ref array<ref AICF_LoadoutPreset> m_aTemplates = {};
 	protected int m_iRevision;
+	protected string m_sDirectory;
+	protected bool m_bPersistent;
+	protected string m_sFilePrefix;
 	int GetRevision() { return m_iRevision; }
 
-	void AICF_LoadoutStore()
+	void AICF_LoadoutStore(string directory = "$profile:AICF_Loadouts", bool persistent = true, string filePrefix = "template_")
 	{
+		m_sDirectory = directory;
+		m_bPersistent = persistent;
+		m_sFilePrefix = filePrefix;
 		m_aTemplates.Resize(MAX_TEMPLATES);
-		if (!Replication.IsServer()) return;
+		if (!Replication.IsServer() || !m_bPersistent) return;
 		for (int i; i < MAX_TEMPLATES; i++)
 		{
 			AICF_LoadoutPreset first = AICF_LoadoutPreset.Read(Path(i, 0));
@@ -22,7 +28,7 @@ class AICF_LoadoutStore
 				// Legacy файлы не переписываются. Tombstone v2 имеет приоритет.
 				JsonLoadContext json = new JsonLoadContext();
 				AICF_LoadoutRecipe recipe = new AICF_LoadoutRecipe();
-				string legacy = DIRECTORY + "/template_" + i.ToString() + ".json";
+					string legacy = m_sDirectory + "/" + m_sFilePrefix + i.ToString() + ".json";
 				if (FileIO.FileExists(legacy) && json.LoadFromFile(legacy) && recipe.Read(json) &&
 					AICF_LoadoutRecipe.Decode(recipe.Encode())) m_aTemplates[i] = MemberPreset(recipe);
 			}
@@ -31,7 +37,7 @@ class AICF_LoadoutStore
 
 	protected string Path(int id, int generation)
 	{
-		return DIRECTORY + "/template_" + id.ToString() + "_" + generation.ToString() + ".json";
+		return m_sDirectory + "/" + m_sFilePrefix + id.ToString() + "_" + generation.ToString() + ".json";
 	}
 
 	AICF_LoadoutPreset GetPreset(int id)
@@ -110,7 +116,15 @@ class AICF_LoadoutStore
 		if (m_aTemplates[id]) version = m_aTemplates[id].m_iVersion + 1;
 		if (version < 1 || version >= 2147483646) return false;
 		preset.m_iVersion = version;
-		if (!FileIO.FileExists(DIRECTORY) && !FileIO.MakeDirectory(DIRECTORY)) return false;
+		// Без стабильной backend identity библиотека принадлежит controller.
+		if (!m_bPersistent)
+		{
+			m_aTemplates[id] = preset;
+			m_iRevision++;
+			reason = string.Empty;
+			return true;
+		}
+		if (!FileIO.FileExists(m_sDirectory) && !FileIO.MakeDirectory(m_sDirectory)) return false;
 		string path = Path(id, version % 2);
 		JsonSaveContext json = new JsonSaveContext();
 		preset.Write(json);

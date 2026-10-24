@@ -353,8 +353,13 @@ native контекст. Правила классификации: [LOADOUT_WEA
 
 На экране появления и возрождения доступны штатный `Default loadout` и
 личный «Мой пресет». Рецепты хранятся в `profile/AICF_PersonalLoadouts` по
-backend identity, стороне и content profile. Без backend identity сохранение
-недоступно. Новый server profile не наследует рецепты автоматически.
+backend identity, стороне и content profile. Именованные варианты открываются
+в той же библиотеке «Инспектора»: Save пишет вариант, Load открывает draft,
+Apply выбирает комплект для появления, Delete сохраняет текущий active.
+Без backend identity доступна только память текущего подключения с явным
+сообщением. Canonical Frontend подключает active и named files к постоянной
+библиотеке, включая копирование прежних personal files без изменения источников.
+Обычный новый server profile без persistent mount рецепты не наследует.
 Каталог, content policy, blacklist и вложенное содержимое проверяются на
 сервере при сохранении, выборе и выдаче; неуспешный rollback блокирует spawn.
 

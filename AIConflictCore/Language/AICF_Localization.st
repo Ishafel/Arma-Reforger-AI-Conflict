@@ -517,8 +517,8 @@ StringTable
 		CustomStringTableItem "{A1CF190900000028}"
 		{
 			Id "AICF_UI_Library_is_full_256_versions_An_administra_a077b3f6"
-			Target_en_us "Library is full (256 versions). An administrator can archive old files."
-			Target_ru_ru "Библиотека заполнена (256 версий). Администратор может архивировать старые файлы."
+			Target_en_us "Library is full (256 presets). Delete presets you no longer need."
+			Target_ru_ru "Библиотека заполнена (256 пресетов). Удалите ненужные пресеты."
 		}
 		CustomStringTableItem "{A1CF190900000029}"
 		{
@@ -3909,6 +3909,30 @@ StringTable
 			Id "AICF_UI_PresetSquadName"
 			Target_en_us "Squad preset name"
 			Target_ru_ru "Имя пресета отряда"
+		}
+		CustomStringTableItem "{A1CF261025660002}"
+		{
+			Id "AICF_UI_PersonalInspectorHelp"
+			Target_en_us "Save named variants in your library. Apply selects the current draft for your next spawn. Your active loadout is shown above."
+			Target_ru_ru "Сохраняйте именованные варианты в библиотеке. «Применить» выбирает текущий черновик для следующего появления. Выше показан активный комплект."
+		}
+		CustomStringTableItem "{A1CF261025660003}"
+		{
+			Id "AICF_UI_PersonalLibraryHelp"
+			Target_en_us "Your presets for this faction and role. Load opens a draft; Apply selects it for your next spawn. Deleting a preset keeps the active loadout."
+			Target_ru_ru "Ваши пресеты для этой стороны и роли. «Загрузить» открывает черновик; «Применить» выбирает его для следующего появления. Удаление пресета сохраняет активный комплект."
+		}
+		CustomStringTableItem "{A1CF261025660004}"
+		{
+			Id "AICF_UI_PersonalSaveHelp"
+			Target_en_us "Save a named variant in your library. The same name updates that variant. Apply separately to use it at your next spawn."
+			Target_ru_ru "Сохранить именованный вариант в библиотеке. То же имя обновляет этот вариант. Для следующего появления отдельно нажмите «Применить»."
+		}
+		CustomStringTableItem "{A1CF261025660005}"
+		{
+			Id "AICF_UI_PersonalLibrarySession"
+			Target_en_us "Preset saved for this connection only: no persistent player identity is available. Apply separately to select it for spawning."
+			Target_ru_ru "Пресет сохранён только до конца подключения: постоянный идентификатор игрока недоступен. Для появления отдельно нажмите «Применить»."
 		}
 	}
 }

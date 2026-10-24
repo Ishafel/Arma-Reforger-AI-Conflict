@@ -4,13 +4,35 @@
 
 `AICF_LoadoutInspectorProbe.c` → isolated Core/UI `AICF_ZZZLoadoutInspectorProbe.c`
 после Qol/Files, `-aicfInspectorProbe 1`. Перед QolClose client создаёт скрытое
-дерево actual Inspector, проверяет 31 metadata/state case и удаляет дерево.
+дерево actual AI и personal Inspector, проверяет 31 +32 metadata/state cases
+и удаляет оба дерева. Personal дополнительно проверяет скрытые Side/Group,
+видимую стоимость и одну карточку получателя.
 Workspace parent невидим до создания детей; ShowModal/focus/input events не
 вызываются. Это terminal native widget structure test, не GUI automation и
 не visual/input verdict. Проверяются 70% ширины, z/input flags modal sections,
 empty managed-side read model, расширенный catalog, scroll
 rows/last/reveal/disabled/empty/cleanup. Переключение стороны покрыто отдельным
 structural guard; этот probe не вызывает SelectSide и не проверяет клики.
+
+`AICF_PersonalLibraryProbe.c` → isolated Core/UI `AICF_ZZZZPersonalLibraryProbe.c`
+после остальных трёх probes, `-aicfPersonalLibraryProbe 1`. На server расширяет
+QolStorage обеих сторон: named upsert/dedupe, partial-generation recovery,
+tombstone/reload, независимые session stores, old active bytes и неизменность
+AI files. На client после прежних 28 AI RPC выбирает штатную personal роль
+через native API и выполняет 16 owner RPC: Read/Apply, Save/Load/Delete,
+stale library/active denial, wrong faction, Default/Select и сохранность active.
+Свой повторный callback снимает при завершении и OnGameEnd.
+
+Для отдельного fresh-profile reload тот же Server graph запускается с общей
+`-PersistentLoadoutLibraryPath` и `-aicfPersonalLibraryReload 1`. Read-only checks
+подтверждают named member/tombstone/старый active/list обеих сторон, затем
+RequestClose. Это отдельный oracle по PERSONAL_RELOAD_DONE, без требования
+подключённого client. Full stopped log и native exit обязательны.
+`Test-PersonalPresetLog.ps1 -LogPath ... -LauncherPath ... -NativeExitPath ...`
+проверяет main server (30 personal cases), `-Client` —71 (39 RPC +32 widgets),
+`-Reload` —8 restart cases. Main сначала проходит полный прежний QoL oracle.
+`-aicfPersonalLibrarySeedOnly 1` завершает отдельную storage диагностику без
+client с PERSONAL_SEED_DONE; это не main server/client verdict.
 
 `AICF_LoadoutQolProbe.c` копировать только в isolated Core/UI как
 `AICF_ZLoadoutQolProbe.c`. Canonical server и client: `-aicfLoadoutQolProbe 1`.

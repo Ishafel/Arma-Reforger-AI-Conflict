@@ -7702,7 +7702,7 @@ class AICF_MatchController
 		}
 		if (slot == AICF_PersonalLoadout.SLOT)
 		{
-			AICF_PersonalLoadout.Request(player, token, revision, operation, payload);
+			AICF_PersonalLoadout.Request(player, token, revision, operation, payload, libraryRevision);
 			return;
 		}
 		if (!m_Loadouts)
