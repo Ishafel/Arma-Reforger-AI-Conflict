@@ -53,9 +53,6 @@ if (-not $RepositoryRoot) {
     $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 }
 . (Join-Path $PSScriptRoot 'AICF_Scenarios.ps1')
-if ($Variant -eq 'StockCoopUSSR' -and $PSBoundParameters.ContainsKey('MatchMode') -and $MatchMode -ne 'CoopUSSR') {
-    throw 'StockCoopUSSR требует MatchMode CoopUSSR.'
-}
 $scenarioCatalog = Get-AICFScenarioCatalog
 $scenarioPlan = Resolve-AICFScenario -Catalog $scenarioCatalog -Variant $Variant -MatchMode $MatchMode -Difficulty $Difficulty
 $MatchMode = $scenarioPlan.matchMode
@@ -364,7 +361,7 @@ if ($MatchMode -ne 'Standard') {
 $managedArguments = @(
     '-gproj', '-server', '-MissionHeader', '-worldSystemsConfig', '-client',
     '-addonsDir', '-addons', '-profile', '-backendFreshSession',
-    '-aicfAICommanderMode', '-maxFPS', '-logStats'
+    '-aicfAICommanderMode', '-aicfScenarioVariant', '-aicfMatchMode', '-aicfDifficulty', '-maxFPS', '-logStats'
 )
 foreach ($argument in $AdditionalArguments) {
     if ($managedArguments -contains $argument) {
@@ -481,6 +478,7 @@ if ($Role -eq 'Server') {
     if (-not $UseDefaultAICommanderMode) {
         $nativeArguments += @('-aicfAICommanderMode', $AICommanderMode)
     }
+    $nativeArguments += $scenarioPlan.selectionArguments
     $nativeArguments += @('-maxFPS', '60', '-logStats', '10000')
 }
 if (@($AdditionalArguments).Count -gt 0) {
@@ -552,6 +550,10 @@ elseif ($Role -eq 'Client') {
         "-addonsDir $serverAddonsDir -addons $addonIds",
         "-profile $serverProfilePath"
     )
+    # Native targets are shared by mode/difficulty and full/North selections.
+    for ($index = 0; $index -lt $scenarioPlan.selectionArguments.Count; $index += 2) {
+        $requiredCliFragments += ($scenarioPlan.selectionArguments[$index] + ' ' + $scenarioPlan.selectionArguments[$index + 1] + ' ')
+    }
     $ready = Wait-AICFServerReady `
         -ProfilePath $serverProfilePath `
         -RequiredCliFragments $requiredCliFragments `

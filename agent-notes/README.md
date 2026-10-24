@@ -23,12 +23,13 @@
 | Изменить активацию штатной охраны FIA при подходе ИИ (issue #54) | [AMBIENT_PATROLS.md](AMBIENT_PATROLS.md), `Forces/AICF_ManagedObservers.c`, native ambient spawn/lifecycle в API 1.8.0.13 |
 | Выполнить критерии issue и привязать PR | [AGENTS.md: работа по issue](../AGENTS.md#работа-по-issue-и-привязка-pr), [TESTING.md](TESTING.md) |
 | Найти состав последнего оформленного релиза и ограничения | [0.2.2](../releases/0.2.2.md), [TESTING.md](TESTING.md) |
-| Убрать старые пункты из публикуемого каталога Workshop до загрузки Core | [SCENARIO_SETUP.md](SCENARIO_SETUP.md#метаданные-публикации-workshop), [Prepare-AICFWorkshopBundle.ps1](../tools/Prepare-AICFWorkshopBundle.ps1), [DEVELOPMENT.md](DEVELOPMENT.md) |
+| Удалить старые сценарии, изменить runtime policy/миграцию | [SCENARIO_SETUP.md](SCENARIO_SETUP.md), `AICF_RuntimeScenario`, [TESTING.md](TESTING.md) |
+| Подготовить и проверить каталог семи Workshop пакетов без загрузки на backend | [SCENARIO_SETUP.md](SCENARIO_SETUP.md#метаданные-публикации-workshop), [Prepare-AICFWorkshopCatalog.ps1](../tools/Prepare-AICFWorkshopCatalog.ps1), [Prepare-AICFWorkshopBundle.ps1](../tools/Prepare-AICFWorkshopBundle.ps1), [DEVELOPMENT.md](DEVELOPMENT.md#подготовка-окончательного-списка-workshop) |
 | Найти домен, состояние и границы побочных эффектов | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Исправить ранние потери при spawn и зависание строительства до готовности roster | [ARCHITECTURE.md](ARCHITECTURE.md), `Forces/AICF_InfantrySpawnPlacement`, `Forces/AICF_InfantryVehicleClearance`, `State/AICF_FactionState`, [матрица запуска](TESTING.md#подготовка-0129-полная-матрица-запуска--2026-10-15) |
 | Проверить игровую механику и defaults | [GAMEPLAY.md](GAMEPLAY.md), затем указанные исходники |
 | Изменить цены штатного заказа пехоты и техники RHS/WCS | [MENU_PRICES.md](MENU_PRICES.md), [полная таблица](MENU_PRICE_TABLE.csv), RHS/WCS menu price policy и integration |
-| Изменить случайную начальную погоду без изменения времени | [GAMEPLAY.md](GAMEPLAY.md#начальная-погода), четыре базовых stock/RHS `MissionHeader`, [TEST_FIXTURES.md](TEST_FIXTURES.md) |
+| Изменить случайную начальную погоду без изменения времени | [GAMEPLAY.md](GAMEPLAY.md#начальная-погода), `AICF_RuntimeScenario` и native time handler, [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить сложности, случайный состав и усиленную точку FIA | [FIA_GARRISONS.md](FIA_GARRISONS.md), [GAMEPLAY.md](GAMEPLAY.md#сложность-гарнизонов-fia), [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить запрет recovery FIA после урона/потерь (issue #48) | [GAMEPLAY.md](GAMEPLAY.md), `AICF_FIAGarrison`/`AICF_FIAGarrisonIntegrity`, `AICF_FIAGarrisonRecovery`/`AICF_FIAGarrisonCrew`, [TESTING.md](TESTING.md), DamageProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить ПТ-состав и Carl Gustaf US | [GAMEPLAY.md](GAMEPLAY.md#сложность-гарнизонов-fia), `AICF_Difficulty`, Core/RHS content profiles, `AICF_WCSInfantryKit`/`AICF_WCSInfantryEquipment`; probes в [TEST_FIXTURES.md](TEST_FIXTURES.md) |

@@ -11,17 +11,12 @@
 | `ArlandWCSRHS` | Arland | WCS + RHS: `RHS_USAF` / `RHS_AFRF` |
 | `EveronWCSRHS`, `EveronNorthWCSRHS` | Everon / север | WCS + RHS: `RHS_USAF` / `RHS_AFRF` |
 
-Для каждого есть Co-op US и USSR на Easy/Medium/Hard: **54** inherited headers,
-вместе с 27 standard — **81** сценарий. Названия учитывают контент:
-США/СССР, USMC/МСВ, НАТО/РФ. World, базы, layouts и project GUID сохраняются.
-Каждый новый Co-op header наследует standard header той же сложности, включая
-North whitelist и content flags; собственная topology ему не принадлежит.
-Три прежних Stock Co-op USSR сохраняют GUID `A1CF261018460001/2/3`,
-inheritance и существующие localization IDs.
+Для каждого доступны Co-op US и USSR на Easy/Medium/Hard: 54 логических
+плана и 27 Standard. Отдельные 81 .conf/.meta, GUID и прежние aliases удалены.
+Один AI Conflict entry передаёт выбор в native mission через runtime selection;
+подробности и миграция — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
 
-`SCR_MissionHeaderCampaign.m_eAICFMatchMode` задаёт `AICF_EMatchMode`:
-`STANDARD=0`, `COOP_US=1`, `COOP_USSR=2`.
-Обычные ресурсы наследуют default `STANDARD`.
+## Политика режима
 
 `AICF_Stage1Config` один раз читает header, затем CLI. Immutable `AICF_MatchRules`
 определяет число slots, default commander и применимость ticket defeat.
@@ -97,76 +92,16 @@ Server-only marker на конкретной группе позволяет в�
 противника сохраняется. `AICF_BaseBuilderService` не отключается и продолжает достройку
 оплаченных stock layouts, в том числе поставленных игроком.
 
-## Каталог и добавление карты или мода
+## Каталог и запуск
 
-Workshop `CreateAssetUpload` ограничивает `data.asset.scenarios[].name`
-50 символами. Проверяем и сырой `m_sName` с `#`, и оба RU/EN текста: publisher
-не должен зависеть от выбранного языка или разворачивания ссылки. Генератор
-сначала сохраняет полное имя; только при превышении лимита сжимает `WCS + RHS`
-до `WCS+RHS`, английские army/Russia метки до US/USSR/RF, сложность до `[M]`/`[H]`.
-Карта, контент, Co-op и сторона остаются в имени; длинный результат отклоняется,
-строка не обрезается. Слишком длинный localization ID заменяется коротким
-`AICF_Scenario_Coop_<string-item GUID>_Name`; сам item GUID, resource GUID,
-пути, режим и difficulty не меняются. Три legacy Stock USSR IDs сохранены.
-
-`Test-WorkshopScenarioNamesStatic.ps1` проверяет все собственные mission headers,
-включая standard и setup, и умеет экспортировать `-CsvPath`. Контрактный тест
-проверяет границы 50/51 для ключей, обоих переводов и literal name, отсутствующий
-ключ и пустой перевод. Generator `-Check` и `Test-CoopScenarioMatrix.ps1`
-по-прежнему проверяют актуальность generated файлов. После исправления source
-нужно заново загрузить/собрать актуальные resources в Workbench перед повтором
-публикации. Сначала обновляется `AIConflictCore` с новыми runtime-таблицами,
-затем сценарные addons: у Everon WCS + RHS появился короткий localization ID,
-которого нет в прежнем Core. Локальный аудит не подтверждает принятие upload
-сервером Workshop.
-
-`tools/config/AICF_Scenarios.json` — единый каталог source graphs, standard ресурсов,
-двух наборов Co-op GUID, названий и runtime faction keys. `AICF_Scenarios.ps1`
-валидирует каталог и разрешает `(Variant, MatchMode, Difficulty)`; launcher и
-генератор используют один resolver. `Variant` больше не перечислен в switch/ValidateSet.
-Core оперирует логическими US/USSR; mapping конкретного мода остаётся у content profile.
-
-1. Сначала подготовь integration addon с тремя standard Conflict headers,
-   штатными базами/radio graph и content profile с обеими логическими сторонами.
-   Для нового world bootstrap integration должен допускать этот Conflict world;
-   одна запись каталога не добавляет поддержку произвольной карты или faction API.
-2. Добавь `localProjects` и `graphs`, если нужен новый addon graph: project,
-   упорядоченные addon IDs, `externalAddons`, реальные faction keys. Dependencies
-   должны соответствовать `addon.gproj`; не добавляй mod dependency в Core.
-3. Добавь `variants`: уникальное имя, graph, три `standard` ресурса Easy/Medium/Hard,
-   по три уникальных `coop.US`/`coop.USSR` GUID, profile suffix, русские/английские
-   названия карты и сторон, уникальный 14-символьный `stringGuidPrefix`.
-   Префикс новых строк находится в зарезервированном диапазоне `A1CF26101847`;
-   два последних символа item GUID задаёт генератор (сторона/сложность).
-4. Выполни `tools/Update-AICFCoopScenarios.ps1`, затем ту же команду с `-Check`.
-   Генератор обновит headers/meta, RU/EN StringTable и runtime language tables,
-   а также native header probe. Ручные правки generated файлов будут обнаружены.
-5. Запусти полный offline набор, terminal Workbench для нового graph и runtime
-   обеих сторон с правильным content mapping. Header probe требует graph,
-   монтирующий все зарегистрированные parent resources; расширь test graph при
-   добавлении независимого мода. Synthetic `FutureMap` проверяет resolver без
-   новой ветки launcher, а не совместимость неизвестного игрового контента.
-
-## Запуск и проверки
-
-```powershell
-& tools/Start-AICFRuntime.ps1 -Role Server -Variant EveronWCSRHS -MatchMode CoopUSSR -Difficulty Easy
-# Клиент — из отдельной терминальной сессии, тот же Difficulty:
-& tools/Start-AICFRuntime.ps1 -Role Client -Variant EveronWCSRHS -MatchMode CoopUSSR -Difficulty Easy -ServerProfileRoot <fresh-server-profile>
-```
-
-Замени `CoopUSSR` на `CoopUS`, чтобы играть за противоположную сторону.
-`Standard` сохраняет обычную кампанию. Alias `StockCoopUSSR` сохраняется.
-Launcher выбирает header, исходный graph и commander противника.
-Manifest дополнительно содержит `baseVariant`, `matchMode`, `playerSide`, `scenario`.
-Явный несовместимый `-AICommanderMode` отклоняется. Direct
-header launch из меню получает ту же policy без CLI.
-
-`Test-CoopScenarioStatic.ps1` защищает roster/budget/victory/UI/replication gates
-и проверяет отрицательные mutations. Существующие construction/commander
-аудиты сохраняют READY и identity guards, заменяя обязательные 20 slots на
-предусмотренное policy число. Runtime launcher audit проверяет новые
-Medium/Hard headers для обеих ролей.
+Schema 2, четыре native targets, девять map/content descriptors и семь graphs
+описаны в SCENARIO_SETUP.md. Update-AICFScenarioRegistry генерирует descriptors;
+генератор отдельных Co-op ресурсов удалён. Режим и difficulty — runtime policy,
+сервер передаёт их по RplProp, client/JIP применяет подтверждённый snapshot.
+Launcher принимает Variant/MatchMode/Difficulty; StockCoopUSSR больше не alias.
+Новый integration добавляет native target/policy, без набора mode headers.
+Workshop name limit 50 остаётся; собственное имя entry — literal AI Conflict.
+Static audits защищают roster/budget/victory/UI/authority и negative mutations.
 
 `tests/fixtures/AICF_CoopScenarioProbe.c` копируется только в `Core/UI/`
 изолированного stage. `-aicfCoopProbe US|USSR|STANDARD` проверяет реальный запуск,
@@ -187,44 +122,7 @@ Client-флаг `-aicfCoopProbePlayer 1` сначала отправляет н�
 если окно создано native UI; автоматический respawn его не открывает.
 Он не обходит server validation и не использует GUI input.
 
-`AICF_CoopHeadersProbe.c` — отдельная test-only fixture в том же stage под именем
-`AICF_ZCoopHeadersProbe.c`,
-`-aicfCoopHeaderProbe 1`. На сервере `MissionHeader.ReadMissionHeader` читает
-все Co-op headers и сравнивает mode, difficulty, world, legacy FIA flags и полную
-base whitelist с соответствующим standard parent. Строгий stopped-log gate:
-`Test-CoopScenarioLog.ps1 -RequireHeaderMatrix`. Это проверка native чтения
-ресурсов всех сложностей, а не 54 полных боевых кампании.
-
-`AICF_CoopRecruitProbe.c` дополняет этот probe: копируется в том же UI stage
-под именем `AICF_ZCoopRecruitProbe.c`, чтобы загружаться после основного probe.
-Fixture выбирает штатное отделение из faction GROUP catalog, ждёт асинхронного
-spawn, передаёт ID бойца через test-only RplProp, выбирает native loadout перед
-spawn игрока и проверяет штатный `RequestAddAIAgent`. На сервере проверяются
-IsRecruited, slave membership и фактический parent AIAgent; клиент подтверждает
-membership и доступность native команды. Она также снимает лидерство как
-test setup и запрашивает штатное голосование из состояния обычного участника.
-Это проверка native найма и лидерства, **не проверка оплаты заказа из казармы**.
-Auto construction останавливается fixture для изоляции от посторонней stock
-mesh-offset диагностики; production construction policy этим не проверяется.
-`Test-CoopScenarioLog.ps1 -RequireRecruit` требует полный stopped log обеих ролей,
-точный manifest, readiness клиента, intro visibility и native readbacks.
-
-`AICF_CoopBarracksProbe.c` проверяет другой, реальный путь покупки: готовит
-штатную казарму и звание как fixture setup, затем клиент вызывает
-`RequestEnterBuildingMode`, выбирает native вкладку групп и `CreateEntity`
-для Guard. Он не вызывает lifecycle редактора вручную и не выставляет
-Recruitable/Recruited. Server resource invoker сверяет цену с балансом изменений
-агрегата consumer; `debited`/`credited` включают его пересборку и не являются
-журналом денежных транзакций. Каждый Insert снимается при OnGameEnd. После заполнения
-группы клиент штатно нанимает всех четырёх бойцов; сервер сверяет slave membership
-и настоящий AIAgent parent. Отдельные неоплаченные Guard сохраняют запрет,
-native Recruit отказывает при заполнении лимита 4. Клиент закрывает редактор
-до RequestClose, чтобы завершение не оставляло pending editor callbacks.
-`Test-CoopScenarioLog.ps1 -RequireBarracks` требует эти readbacks, цену/списание,
-полные остановленные логи, manifest и readiness. Он не заменяет прежний
-probe голоса лидера/intro; `-RequireRecruit` и `-RequireBarracks` взаимоисключаются.
-Этот же barracks probe допускает STANDARD, `-aicfBarracksFaction US|USSR`
-(default USSR). Для US log audit требует `-BarracksFaction US`; фракция сверяется
-с manifest и authority readback. Механика общая: [GAMEPLAY.md](GAMEPLAY.md#найм-купленных-в-казарме-бойцов).
-
-Результаты свежих проверок, полные логи и ограничения — в [TESTING.md](TESTING.md).
+AICF_CoopHeadersProbe.c теперь читает штатный target для каждого из 54
+Co-op планов. Отдельные mode/difficulty headers и legacy FIA flags не читаются.
+Полный выбор и retired GUID проверяет AICF_RuntimeScenarioProbe.c.
+Native чтение логических планов не подтверждает 54 полных боевых кампании.

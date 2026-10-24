@@ -1,13 +1,13 @@
 # AI Conflict Everon WCS + RHS
 
 Отдельный source addon `A1CF261006100001`: две карты кампании, по три сложности
-для Standard, Co-op за НАТО и Co-op за РФ. В таблице указаны неизменные GUID
-лёгких Standard вариантов:
+для Standard, Co-op за НАТО и Co-op за РФ. Старые GUID отдельных сценариев удалены.
+Оба варианта используют штатный RHS target и разную runtime policy:
 
 | Launcher Variant | Сценарий | Resource GUID |
 |---|---|---|
-| `EveronWCSRHS` | Эверон (полный) | `A1CF261006100002` |
-| `EveronNorthWCSRHS` | Север Эверона | `A1CF261006100003` |
+| `EveronWCSRHS` | Эверон (полный) | `AAD43C10045857C1` |
+| `EveronNorthWCSRHS` | Север Эверона, whitelist 7 баз | `AAD43C10045857C1` |
 
 Launcher выбирает сторону Co-op через `-MatchMode CoopUS|CoopUSSR`.
 У людей нет автоматической боевой армии и размещения построек; рабочие,
@@ -34,8 +34,8 @@ World, whitelist, radio policy, callsign adapter и campaign lifecycle
 FIA, Medium — один БТР с десантом до 2/4 на стартовую точку, Hard — случайная
 пара танков/БТР и одна усиленная точка с 2 БТР + 1/2 танками. Десант выбирается
 из готовых FIA templates и ограничен вместимостью. Гарнизоны патрулируют
-окрестности своих баз на технике, без дальнего преследования и замены потерь. Medium/Hard headers
-наследуют лёгкий North, не копируют whitelist. Реализация остаётся в Core и
+окрестности своих баз на технике, без дальнего преследования и замены потерь.
+North whitelist задаётся runtime policy в Everon integration для всех сложностей. Реализация остаётся в Core и
 WCS content profile. При подключении клиенту передают ту же `-Difficulty`.
 
 На Hard при необходимости настраивается живой radio graph, чтобы усиленная

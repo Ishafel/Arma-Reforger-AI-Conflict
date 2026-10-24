@@ -1,0 +1,329 @@
+{
+  "schema": 1,
+  "resources": [
+    {
+      "resource": "{BC2437E4861B4FD2}Missions/AICF_Conflict_Arland.conf",
+      "path": "AIConflictArland/Missions/AICF_Conflict_Arland.conf"
+    },
+    {
+      "resource": "{A1CF261008300001}Missions/AICF_Conflict_Arland_Medium.conf",
+      "path": "AIConflictArland/Missions/AICF_Conflict_Arland_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261008300002}Missions/AICF_Conflict_Arland_Hard.conf",
+      "path": "AIConflictArland/Missions/AICF_Conflict_Arland_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460111}Missions/AICF_Conflict_Arland_Coop_US.conf",
+      "path": "AIConflictArland/Missions/AICF_Conflict_Arland_Coop_US.conf"
+    },
+    {
+      "resource": "{A1CF261018460112}Missions/AICF_Conflict_Arland_Coop_US_Medium.conf",
+      "path": "AIConflictArland/Missions/AICF_Conflict_Arland_Coop_US_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460113}Missions/AICF_Conflict_Arland_Coop_US_Hard.conf",
+      "path": "AIConflictArland/Missions/AICF_Conflict_Arland_Coop_US_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460001}Missions/AICF_Conflict_Arland_Coop_USSR.conf",
+      "path": "AIConflictArland/Missions/AICF_Conflict_Arland_Coop_USSR.conf"
+    },
+    {
+      "resource": "{A1CF261018460002}Missions/AICF_Conflict_Arland_Coop_USSR_Medium.conf",
+      "path": "AIConflictArland/Missions/AICF_Conflict_Arland_Coop_USSR_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460003}Missions/AICF_Conflict_Arland_Coop_USSR_Hard.conf",
+      "path": "AIConflictArland/Missions/AICF_Conflict_Arland_Coop_USSR_Hard.conf"
+    },
+    {
+      "resource": "{4C5D73A5614F41D9}Missions/AICF_Conflict_Everon.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon.conf"
+    },
+    {
+      "resource": "{A1CF261008300003}Missions/AICF_Conflict_Everon_Medium.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261008300004}Missions/AICF_Conflict_Everon_Hard.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460211}Missions/AICF_Conflict_Everon_Coop_US.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_Coop_US.conf"
+    },
+    {
+      "resource": "{A1CF261018460212}Missions/AICF_Conflict_Everon_Coop_US_Medium.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_Coop_US_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460213}Missions/AICF_Conflict_Everon_Coop_US_Hard.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_Coop_US_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460221}Missions/AICF_Conflict_Everon_Coop_USSR.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_Coop_USSR.conf"
+    },
+    {
+      "resource": "{A1CF261018460222}Missions/AICF_Conflict_Everon_Coop_USSR_Medium.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_Coop_USSR_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460223}Missions/AICF_Conflict_Everon_Coop_USSR_Hard.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_Coop_USSR_Hard.conf"
+    },
+    {
+      "resource": "{A1CF190919300000}Missions/AICF_Conflict_Everon_North.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_North.conf"
+    },
+    {
+      "resource": "{A1CF261008300005}Missions/AICF_Conflict_Everon_North_Medium.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_North_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261008300006}Missions/AICF_Conflict_Everon_North_Hard.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_North_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460311}Missions/AICF_Conflict_Everon_North_Coop_US.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_North_Coop_US.conf"
+    },
+    {
+      "resource": "{A1CF261018460312}Missions/AICF_Conflict_Everon_North_Coop_US_Medium.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_North_Coop_US_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460313}Missions/AICF_Conflict_Everon_North_Coop_US_Hard.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_North_Coop_US_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460321}Missions/AICF_Conflict_Everon_North_Coop_USSR.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_North_Coop_USSR.conf"
+    },
+    {
+      "resource": "{A1CF261018460322}Missions/AICF_Conflict_Everon_North_Coop_USSR_Medium.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_North_Coop_USSR_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460323}Missions/AICF_Conflict_Everon_North_Coop_USSR_Hard.conf",
+      "path": "AIConflictEveron/Missions/AICF_Conflict_Everon_North_Coop_USSR_Hard.conf"
+    },
+    {
+      "resource": "{97E4BCB73F044C66}Missions/AICF_RHS_Conflict_Arland.conf",
+      "path": "AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland.conf"
+    },
+    {
+      "resource": "{A1CF261008300007}Missions/AICF_RHS_Conflict_Arland_Medium.conf",
+      "path": "AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261008300008}Missions/AICF_RHS_Conflict_Arland_Hard.conf",
+      "path": "AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460411}Missions/AICF_RHS_Conflict_Arland_Coop_US.conf",
+      "path": "AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland_Coop_US.conf"
+    },
+    {
+      "resource": "{A1CF261018460412}Missions/AICF_RHS_Conflict_Arland_Coop_US_Medium.conf",
+      "path": "AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland_Coop_US_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460413}Missions/AICF_RHS_Conflict_Arland_Coop_US_Hard.conf",
+      "path": "AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland_Coop_US_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460421}Missions/AICF_RHS_Conflict_Arland_Coop_USSR.conf",
+      "path": "AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland_Coop_USSR.conf"
+    },
+    {
+      "resource": "{A1CF261018460422}Missions/AICF_RHS_Conflict_Arland_Coop_USSR_Medium.conf",
+      "path": "AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland_Coop_USSR_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460423}Missions/AICF_RHS_Conflict_Arland_Coop_USSR_Hard.conf",
+      "path": "AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland_Coop_USSR_Hard.conf"
+    },
+    {
+      "resource": "{57FA3D0337BE47E5}Missions/AICF_RHS_Conflict_Everon.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon.conf"
+    },
+    {
+      "resource": "{A1CF261008300009}Missions/AICF_RHS_Conflict_Everon_Medium.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261008300010}Missions/AICF_RHS_Conflict_Everon_Hard.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460511}Missions/AICF_RHS_Conflict_Everon_Coop_US.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_Coop_US.conf"
+    },
+    {
+      "resource": "{A1CF261018460512}Missions/AICF_RHS_Conflict_Everon_Coop_US_Medium.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_Coop_US_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460513}Missions/AICF_RHS_Conflict_Everon_Coop_US_Hard.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_Coop_US_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460521}Missions/AICF_RHS_Conflict_Everon_Coop_USSR.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_Coop_USSR.conf"
+    },
+    {
+      "resource": "{A1CF261018460522}Missions/AICF_RHS_Conflict_Everon_Coop_USSR_Medium.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_Coop_USSR_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460523}Missions/AICF_RHS_Conflict_Everon_Coop_USSR_Hard.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_Coop_USSR_Hard.conf"
+    },
+    {
+      "resource": "{A1CF190919100000}Missions/AICF_RHS_Conflict_Everon_North.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_North.conf"
+    },
+    {
+      "resource": "{A1CF261008300011}Missions/AICF_RHS_Conflict_Everon_North_Medium.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_North_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261008300012}Missions/AICF_RHS_Conflict_Everon_North_Hard.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_North_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460611}Missions/AICF_RHS_Conflict_Everon_North_Coop_US.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_North_Coop_US.conf"
+    },
+    {
+      "resource": "{A1CF261018460612}Missions/AICF_RHS_Conflict_Everon_North_Coop_US_Medium.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_North_Coop_US_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460613}Missions/AICF_RHS_Conflict_Everon_North_Coop_US_Hard.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_North_Coop_US_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460621}Missions/AICF_RHS_Conflict_Everon_North_Coop_USSR.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_North_Coop_USSR.conf"
+    },
+    {
+      "resource": "{A1CF261018460622}Missions/AICF_RHS_Conflict_Everon_North_Coop_USSR_Medium.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_North_Coop_USSR_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460623}Missions/AICF_RHS_Conflict_Everon_North_Coop_USSR_Hard.conf",
+      "path": "AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_North_Coop_USSR_Hard.conf"
+    },
+    {
+      "resource": "{A1CF260928100002}Missions/AICF_WCS_RHS_Conflict_Arland.conf",
+      "path": "AIConflictArlandWCSRHS/Missions/AICF_WCS_RHS_Conflict_Arland.conf"
+    },
+    {
+      "resource": "{A1CF261008300013}Missions/AICF_WCS_RHS_Conflict_Arland_Medium.conf",
+      "path": "AIConflictArlandWCSRHS/Missions/AICF_WCS_RHS_Conflict_Arland_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261008300014}Missions/AICF_WCS_RHS_Conflict_Arland_Hard.conf",
+      "path": "AIConflictArlandWCSRHS/Missions/AICF_WCS_RHS_Conflict_Arland_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460711}Missions/AICF_WCS_RHS_Conflict_Arland_Coop_US.conf",
+      "path": "AIConflictArlandWCSRHS/Missions/AICF_WCS_RHS_Conflict_Arland_Coop_US.conf"
+    },
+    {
+      "resource": "{A1CF261018460712}Missions/AICF_WCS_RHS_Conflict_Arland_Coop_US_Medium.conf",
+      "path": "AIConflictArlandWCSRHS/Missions/AICF_WCS_RHS_Conflict_Arland_Coop_US_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460713}Missions/AICF_WCS_RHS_Conflict_Arland_Coop_US_Hard.conf",
+      "path": "AIConflictArlandWCSRHS/Missions/AICF_WCS_RHS_Conflict_Arland_Coop_US_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460721}Missions/AICF_WCS_RHS_Conflict_Arland_Coop_USSR.conf",
+      "path": "AIConflictArlandWCSRHS/Missions/AICF_WCS_RHS_Conflict_Arland_Coop_USSR.conf"
+    },
+    {
+      "resource": "{A1CF261018460722}Missions/AICF_WCS_RHS_Conflict_Arland_Coop_USSR_Medium.conf",
+      "path": "AIConflictArlandWCSRHS/Missions/AICF_WCS_RHS_Conflict_Arland_Coop_USSR_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460723}Missions/AICF_WCS_RHS_Conflict_Arland_Coop_USSR_Hard.conf",
+      "path": "AIConflictArlandWCSRHS/Missions/AICF_WCS_RHS_Conflict_Arland_Coop_USSR_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261006100002}Missions/AICF_WCS_RHS_Conflict_Everon.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon.conf"
+    },
+    {
+      "resource": "{A1CF261008300015}Missions/AICF_WCS_RHS_Conflict_Everon_Medium.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261008300016}Missions/AICF_WCS_RHS_Conflict_Everon_Hard.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460811}Missions/AICF_WCS_RHS_Conflict_Everon_Coop_US.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_Coop_US.conf"
+    },
+    {
+      "resource": "{A1CF261018460812}Missions/AICF_WCS_RHS_Conflict_Everon_Coop_US_Medium.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_Coop_US_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460813}Missions/AICF_WCS_RHS_Conflict_Everon_Coop_US_Hard.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_Coop_US_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460821}Missions/AICF_WCS_RHS_Conflict_Everon_Coop_USSR.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_Coop_USSR.conf"
+    },
+    {
+      "resource": "{A1CF261018460822}Missions/AICF_WCS_RHS_Conflict_Everon_Coop_USSR_Medium.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_Coop_USSR_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460823}Missions/AICF_WCS_RHS_Conflict_Everon_Coop_USSR_Hard.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_Coop_USSR_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261006100003}Missions/AICF_WCS_RHS_Conflict_Everon_North.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_North.conf"
+    },
+    {
+      "resource": "{A1CF261008100001}Missions/AICF_WCS_RHS_Conflict_Everon_North_Medium.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_North_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261008100002}Missions/AICF_WCS_RHS_Conflict_Everon_North_Hard.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_North_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460911}Missions/AICF_WCS_RHS_Conflict_Everon_North_Coop_US.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_North_Coop_US.conf"
+    },
+    {
+      "resource": "{A1CF261018460912}Missions/AICF_WCS_RHS_Conflict_Everon_North_Coop_US_Medium.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_North_Coop_US_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460913}Missions/AICF_WCS_RHS_Conflict_Everon_North_Coop_US_Hard.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_North_Coop_US_Hard.conf"
+    },
+    {
+      "resource": "{A1CF261018460921}Missions/AICF_WCS_RHS_Conflict_Everon_North_Coop_USSR.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_North_Coop_USSR.conf"
+    },
+    {
+      "resource": "{A1CF261018460922}Missions/AICF_WCS_RHS_Conflict_Everon_North_Coop_USSR_Medium.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_North_Coop_USSR_Medium.conf"
+    },
+    {
+      "resource": "{A1CF261018460923}Missions/AICF_WCS_RHS_Conflict_Everon_North_Coop_USSR_Hard.conf",
+      "path": "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_North_Coop_USSR_Hard.conf"
+    }
+  ]
+}

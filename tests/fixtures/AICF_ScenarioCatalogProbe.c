@@ -67,27 +67,19 @@ class AICF_ScenarioCatalogProbe
 		ResourceName stock = "{C41618FD18E9D714}Missions/23_Campaign_Arland.conf";
 		AICF_CatalogCheck("STOCK_PRESERVED", first.Find(stock) >= 0 && workshop.GetInGameScenario(stock));
 		AICF_ScenarioRegistry registry = new AICF_ScenarioRegistry();
-		int readablePresets, hiddenPresets;
+		int nativeTargets;
 		foreach (AICF_ScenarioVariant variant : registry.GetVariants())
 		{
-			foreach (ResourceName resource : variant.m_aPresets)
-			{
-				SCR_MissionHeaderCampaign presetHeader = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(resource));
-				if (!presetHeader) continue;
-				readablePresets++;
-				if (!presetHeader.m_bShowInScenarioMenu) hiddenPresets++;
-				Print(string.Format("[AICF][CATALOG_HEADER] target=%1 visible=%2", resource, presetHeader.m_bShowInScenarioMenu));
-			}
+			if (MissionHeader.ReadMissionHeader(variant.m_sMission)) nativeTargets++;
 		}
-		AICF_CatalogCheck("HIDDEN_PRESETS", readablePresets == 81 && hiddenPresets == 81);
+		AICF_CatalogCheck("NATIVE_TARGETS", nativeTargets == 9);
 		for (int mode; mode < 3; mode++)
 		{
 			for (int difficulty; difficulty < 3; difficulty++)
 			{
-				ResourceName preset;
-				if (header) preset = header.AICF_ResolveSetupPreset(mode, difficulty);
-				SCR_MissionHeaderCampaign targetHeader = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(preset));
-				AICF_CatalogCheck(string.Format("TARGET_%1_%2", mode, difficulty), !preset.IsEmpty() && registry.IsLeaf(preset) && first.Find(preset) < 0 && targetHeader && targetHeader.m_eAICFMatchMode == mode && targetHeader.m_eAICFDifficulty == difficulty && AICF_CatalogCount(items, preset) == 0);
+				AICF_ScenarioVariant basic = registry.Find(0, 0);
+				ResourceName target = basic.Resolve(mode, difficulty);
+				AICF_CatalogCheck(string.Format("TARGET_%1_%2", mode, difficulty), registry.IsRuntimeTarget(target) && MissionHeader.ReadMissionHeader(target) && target == stock);
 			}
 		}
 		AICF_CatalogFilter("FILTER_TYPE", SCR_WorkshopUiCommon.ADDON_TYPE_FILTER_CATEGORY_CONFIG);

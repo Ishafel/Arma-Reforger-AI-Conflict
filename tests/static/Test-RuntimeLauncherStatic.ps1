@@ -198,7 +198,7 @@ try {
     else {
         $serverManifest = Get-ManifestFromOutput -Output $serverOutput -Rule 'RUNTIME_LAUNCHER_RHS_DRY_RUN'
         if ($serverManifest) {
-            Require-ArgumentPair $serverManifest '-server' '{97E4BCB73F044C66}Missions/AICF_RHS_Conflict_Arland.conf' 'RUNTIME_LAUNCHER_RHS_SCENARIO'
+            Require-ArgumentPair $serverManifest '-server' '{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf' 'RUNTIME_LAUNCHER_RHS_SCENARIO'
             $expectedServerAddonsDir = "$fakeRepository,$fakeServerRoot\addons,$fakeRhsRoot"
             Require-ArgumentPair $serverManifest '-addonsDir' $expectedServerAddonsDir 'RUNTIME_LAUNCHER_ARGUMENT_INTEGRITY'
             Require-ArgumentPair $serverManifest '-gproj' (Join-Path $fakeRepository 'AIConflictArlandRHS\addon.gproj') 'RUNTIME_LAUNCHER_RHS_GRAPH'
@@ -229,8 +229,8 @@ try {
         $everonManifest = Get-ManifestFromOutput -Output $everonOutput -Rule 'RUNTIME_LAUNCHER_EVERON_DRY_RUN'
         if ($everonManifest) {
             Require-ArgumentPair $everonManifest '-gproj' (Join-Path $fakeRepository 'AIConflictEveron\addon.gproj') 'RUNTIME_LAUNCHER_EVERON_GRAPH'
-            Require-ArgumentPair $everonManifest '-server' '{4C5D73A5614F41D9}Missions/AICF_Conflict_Everon.conf' 'RUNTIME_LAUNCHER_EVERON_WORLD'
-            Require-ArgumentPair $everonManifest '-MissionHeader' 'Missions/AICF_Conflict_Everon.conf' 'RUNTIME_LAUNCHER_EVERON_HEADER'
+            Require-ArgumentPair $everonManifest '-server' '{ECC61978EDCC2B5A}Missions/23_Campaign.conf' 'RUNTIME_LAUNCHER_EVERON_WORLD'
+            Require-ArgumentPair $everonManifest '-MissionHeader' '{ECC61978EDCC2B5A}Missions/23_Campaign.conf' 'RUNTIME_LAUNCHER_EVERON_HEADER'
             Require-ArgumentPair $everonManifest '-addons' '9178E5822AFE48EA,B52C5F6AEDBF423E,A4B2E62595F645A4' 'RUNTIME_LAUNCHER_EVERON_GRAPH'
         }
     }
@@ -253,7 +253,7 @@ try {
     else {
         $stockManifest = Get-ManifestFromOutput -Output $stockOutput -Rule 'RUNTIME_LAUNCHER_STOCK_DRY_RUN'
         if ($stockManifest) {
-            Require-ArgumentPair $stockManifest '-server' '{BC2437E4861B4FD2}Missions/AICF_Conflict_Arland.conf' 'RUNTIME_LAUNCHER_STOCK_SCENARIO'
+            Require-ArgumentPair $stockManifest '-server' '{C41618FD18E9D714}Missions/23_Campaign_Arland.conf' 'RUNTIME_LAUNCHER_STOCK_SCENARIO'
             $expectedStockAddonsDir = "$fakeRepository,$fakeServerRoot\addons"
             Require-ArgumentPair $stockManifest '-addonsDir' $expectedStockAddonsDir 'RUNTIME_LAUNCHER_ARGUMENT_INTEGRITY'
             Require-ArgumentPair $stockManifest '-gproj' (Join-Path $fakeRepository 'AIConflictArland\addon.gproj') 'RUNTIME_LAUNCHER_STOCK_GRAPH'
@@ -374,8 +374,8 @@ try {
         $northDirs = "$fakeRepository,$fakeGameRoot\addons"
         if ($northRole -eq 'Server') {
             $northDirs = "$fakeRepository,$fakeServerRoot\addons"
-            Require-ArgumentPair $northManifest '-server' '{A1CF190919300000}Missions/AICF_Conflict_Everon_North.conf' 'RUNTIME_LAUNCHER_NORTH_STOCK'
-            Require-ArgumentPair $northManifest '-MissionHeader' 'Missions/AICF_Conflict_Everon_North.conf' 'RUNTIME_LAUNCHER_NORTH_STOCK'
+            Require-ArgumentPair $northManifest '-server' '{ECC61978EDCC2B5A}Missions/23_Campaign.conf' 'RUNTIME_LAUNCHER_NORTH_STOCK'
+            Require-ArgumentPair $northManifest '-MissionHeader' '{ECC61978EDCC2B5A}Missions/23_Campaign.conf' 'RUNTIME_LAUNCHER_NORTH_STOCK'
         }
         else {
             Require-ArgumentPair $northManifest '-client' '127.0.0.1' 'RUNTIME_LAUNCHER_NORTH_STOCK'
@@ -407,11 +407,11 @@ try {
             $expectedRhsEveronDirs = "$fakeRepository,$fakeGameRoot\addons,$fakeRhsRoot"
             if ($rhsEveronRole -eq 'Server') {
                 $expectedRhsEveronDirs = "$fakeRepository,$fakeServerRoot\addons,$fakeRhsRoot"
-                $expectedScenario = '{57FA3D0337BE47E5}Missions/AICF_RHS_Conflict_Everon.conf'
-                if ($rhsEveronVariant -eq 'EveronNorthRHS') { $expectedScenario = '{A1CF190919100000}Missions/AICF_RHS_Conflict_Everon_North.conf' }
+                $expectedScenario = '{AAD43C10045857C1}Missions/RHS_Conflict.conf'
+                if ($rhsEveronVariant -eq 'EveronNorthRHS') { $expectedScenario = '{AAD43C10045857C1}Missions/RHS_Conflict.conf' }
                 Require-ArgumentPair $rhsEveronManifest '-server' $expectedScenario 'RUNTIME_LAUNCHER_RHS_EVERON_WORLD'
-                $expectedHeader = 'Missions/AICF_RHS_Conflict_Everon.conf'
-                if ($rhsEveronVariant -eq 'EveronNorthRHS') { $expectedHeader = 'Missions/AICF_RHS_Conflict_Everon_North.conf' }
+                $expectedHeader = '{AAD43C10045857C1}Missions/RHS_Conflict.conf'
+                if ($rhsEveronVariant -eq 'EveronNorthRHS') { $expectedHeader = '{AAD43C10045857C1}Missions/RHS_Conflict.conf' }
                 Require-ArgumentPair $rhsEveronManifest '-MissionHeader' $expectedHeader 'RUNTIME_LAUNCHER_RHS_EVERON_HEADER'
                 Require-ArgumentPair $rhsEveronManifest '-worldSystemsConfig' 'Configs/Systems/ConflictSystems.conf' 'RUNTIME_LAUNCHER_RHS_EVERON_SYSTEMS'
             }
@@ -447,36 +447,34 @@ try {
                 Add-Failure 'RUNTIME_WCS_EVERON_GRAPH' 'WCS Everon must include all seven source resource databases'
             }
             if ($role -eq 'Server') {
-                $expected = '{A1CF261006100002}Missions/AICF_WCS_RHS_Conflict_Everon.conf'
-                if ($variant -eq 'EveronNorthWCSRHS') { $expected = '{A1CF261006100003}Missions/AICF_WCS_RHS_Conflict_Everon_North.conf' }
+                $expected = '{AAD43C10045857C1}Missions/RHS_Conflict.conf'
+                if ($variant -eq 'EveronNorthWCSRHS') { $expected = '{AAD43C10045857C1}Missions/RHS_Conflict.conf' }
                 Require-ArgumentPair $manifest '-server' $expected 'RUNTIME_WCS_EVERON_HEADER'
-                Require-ArgumentPair $manifest '-MissionHeader' $expected.Substring(18) 'RUNTIME_WCS_EVERON_HEADER'
+                Require-ArgumentPair $manifest '-MissionHeader' $expected 'RUNTIME_WCS_EVERON_HEADER'
             }
             else { Require-ArgumentPair $manifest '-client' '127.0.0.1' 'RUNTIME_WCS_EVERON_CLIENT' }
         }
     }
 
     foreach ($difficultyCase in @(
-        @('StockCoopUSSR', 'Medium', '{A1CF261018460002}Missions/AICF_Conflict_Arland_Coop_USSR_Medium.conf', 'AIConflictArland'),
-        @('StockCoopUSSR', 'Hard', '{A1CF261018460003}Missions/AICF_Conflict_Arland_Coop_USSR_Hard.conf', 'AIConflictArland'),
-        @('Stock', 'Medium', '{A1CF261008300001}Missions/AICF_Conflict_Arland_Medium.conf', 'AIConflictArland'),
-        @('Stock', 'Hard', '{A1CF261008300002}Missions/AICF_Conflict_Arland_Hard.conf', 'AIConflictArland'),
-        @('Everon', 'Medium', '{A1CF261008300003}Missions/AICF_Conflict_Everon_Medium.conf', 'AIConflictEveron'),
-        @('Everon', 'Hard', '{A1CF261008300004}Missions/AICF_Conflict_Everon_Hard.conf', 'AIConflictEveron'),
-        @('EveronNorth', 'Medium', '{A1CF261008300005}Missions/AICF_Conflict_Everon_North_Medium.conf', 'AIConflictEveron'),
-        @('EveronNorth', 'Hard', '{A1CF261008300006}Missions/AICF_Conflict_Everon_North_Hard.conf', 'AIConflictEveron'),
-        @('RHS', 'Medium', '{A1CF261008300007}Missions/AICF_RHS_Conflict_Arland_Medium.conf', 'AIConflictArlandRHS'),
-        @('RHS', 'Hard', '{A1CF261008300008}Missions/AICF_RHS_Conflict_Arland_Hard.conf', 'AIConflictArlandRHS'),
-        @('EveronRHS', 'Medium', '{A1CF261008300009}Missions/AICF_RHS_Conflict_Everon_Medium.conf', 'AIConflictEveronRHS'),
-        @('EveronRHS', 'Hard', '{A1CF261008300010}Missions/AICF_RHS_Conflict_Everon_Hard.conf', 'AIConflictEveronRHS'),
-        @('EveronNorthRHS', 'Medium', '{A1CF261008300011}Missions/AICF_RHS_Conflict_Everon_North_Medium.conf', 'AIConflictEveronRHS'),
-        @('EveronNorthRHS', 'Hard', '{A1CF261008300012}Missions/AICF_RHS_Conflict_Everon_North_Hard.conf', 'AIConflictEveronRHS'),
-        @('ArlandWCSRHS', 'Medium', '{A1CF261008300013}Missions/AICF_WCS_RHS_Conflict_Arland_Medium.conf', 'AIConflictArlandWCSRHS'),
-        @('ArlandWCSRHS', 'Hard', '{A1CF261008300014}Missions/AICF_WCS_RHS_Conflict_Arland_Hard.conf', 'AIConflictArlandWCSRHS'),
-        @('EveronWCSRHS', 'Medium', '{A1CF261008300015}Missions/AICF_WCS_RHS_Conflict_Everon_Medium.conf', 'AIConflictEveronWCSRHS'),
-        @('EveronWCSRHS', 'Hard', '{A1CF261008300016}Missions/AICF_WCS_RHS_Conflict_Everon_Hard.conf', 'AIConflictEveronWCSRHS'),
-        @('EveronNorthWCSRHS', 'Medium', '{A1CF261008100001}Missions/AICF_WCS_RHS_Conflict_Everon_North_Medium.conf', 'AIConflictEveronWCSRHS'),
-        @('EveronNorthWCSRHS', 'Hard', '{A1CF261008100002}Missions/AICF_WCS_RHS_Conflict_Everon_North_Hard.conf', 'AIConflictEveronWCSRHS')
+        @('Stock', 'Medium', '{C41618FD18E9D714}Missions/23_Campaign_Arland.conf', 'AIConflictArland'),
+        @('Stock', 'Hard', '{C41618FD18E9D714}Missions/23_Campaign_Arland.conf', 'AIConflictArland'),
+        @('Everon', 'Medium', '{ECC61978EDCC2B5A}Missions/23_Campaign.conf', 'AIConflictEveron'),
+        @('Everon', 'Hard', '{ECC61978EDCC2B5A}Missions/23_Campaign.conf', 'AIConflictEveron'),
+        @('EveronNorth', 'Medium', '{ECC61978EDCC2B5A}Missions/23_Campaign.conf', 'AIConflictEveron'),
+        @('EveronNorth', 'Hard', '{ECC61978EDCC2B5A}Missions/23_Campaign.conf', 'AIConflictEveron'),
+        @('RHS', 'Medium', '{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf', 'AIConflictArlandRHS'),
+        @('RHS', 'Hard', '{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf', 'AIConflictArlandRHS'),
+        @('EveronRHS', 'Medium', '{AAD43C10045857C1}Missions/RHS_Conflict.conf', 'AIConflictEveronRHS'),
+        @('EveronRHS', 'Hard', '{AAD43C10045857C1}Missions/RHS_Conflict.conf', 'AIConflictEveronRHS'),
+        @('EveronNorthRHS', 'Medium', '{AAD43C10045857C1}Missions/RHS_Conflict.conf', 'AIConflictEveronRHS'),
+        @('EveronNorthRHS', 'Hard', '{AAD43C10045857C1}Missions/RHS_Conflict.conf', 'AIConflictEveronRHS'),
+        @('ArlandWCSRHS', 'Medium', '{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf', 'AIConflictArlandWCSRHS'),
+        @('ArlandWCSRHS', 'Hard', '{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf', 'AIConflictArlandWCSRHS'),
+        @('EveronWCSRHS', 'Medium', '{AAD43C10045857C1}Missions/RHS_Conflict.conf', 'AIConflictEveronWCSRHS'),
+        @('EveronWCSRHS', 'Hard', '{AAD43C10045857C1}Missions/RHS_Conflict.conf', 'AIConflictEveronWCSRHS'),
+        @('EveronNorthWCSRHS', 'Medium', '{AAD43C10045857C1}Missions/RHS_Conflict.conf', 'AIConflictEveronWCSRHS'),
+        @('EveronNorthWCSRHS', 'Hard', '{AAD43C10045857C1}Missions/RHS_Conflict.conf', 'AIConflictEveronWCSRHS')
     )) {
         foreach ($difficultyRole in @('Server', 'Client')) {
             $output = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $launcherPath `
@@ -490,20 +488,13 @@ try {
             $expected = $difficultyCase[2]
             if ($difficultyRole -eq 'Server') {
                 Require-ArgumentPair $manifest '-server' $expected 'DIFFICULTY_HEADER'
-                Require-ArgumentPair $manifest '-MissionHeader' $expected.Substring(18) 'DIFFICULTY_HEADER'
+                Require-ArgumentPair $manifest '-MissionHeader' $expected 'DIFFICULTY_HEADER'
             }
-            $headerPath = Join-Path $RepositoryRoot ($difficultyCase[3] + '/' + $expected.Substring(18))
-            $header = Get-Content -LiteralPath $headerPath -Raw
-            $meta = Get-Content -LiteralPath ($headerPath + '.meta') -Raw
-            if (-not $meta.Contains($expected)) { Add-Failure 'DIFFICULTY_RESOURCE_ID' $headerPath }
-            $level = 1
-            if ($difficultyCase[1] -eq 'Hard') { $level = 2 }
-            if ($header -notmatch "m_eAICFDifficulty\s+$level\b" -or $header -notmatch '^SCR_MissionHeaderCampaign\s*:') { Add-Failure 'DIFFICULTY_INHERITANCE' $headerPath }
-            if ($difficultyCase[0] -ne 'EveronNorthWCSRHS') {
-                $tankFlag = 0
-                if ($difficultyCase[0] -in @('ArlandWCSRHS', 'EveronWCSRHS') -and $difficultyCase[1] -eq 'Hard') { $tankFlag = 1 }
-                if ($header -notmatch "m_bAICFFIATank\s+$tankFlag\b") { Add-Failure 'DIFFICULTY_TANK_SCOPE' $headerPath }
-                if ($header -notmatch 'm_bAICFFIAPassengers\s+0') { Add-Failure 'DIFFICULTY_CREW_ONLY' $headerPath }
+            if($difficultyRole -eq 'Server'){
+                $level=1;if($difficultyCase[1] -eq 'Hard'){$level=2}
+                Require-ArgumentPair $manifest '-aicfScenarioVariant' $difficultyCase[0] 'RUNTIME_SELECTION'
+                Require-ArgumentPair $manifest '-aicfMatchMode' '0' 'RUNTIME_SELECTION'
+                Require-ArgumentPair $manifest '-aicfDifficulty' ([string]$level) 'RUNTIME_SELECTION'
             }
         }
     }

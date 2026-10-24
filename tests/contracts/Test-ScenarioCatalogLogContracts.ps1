@@ -1,11 +1,11 @@
-param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+﻿param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference='Stop'
 $tempBase=[IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $work=Join-Path $tempBase ('aicf-catalog-log-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work|Out-Null
 $audit=Join-Path $RepositoryRoot 'tests/log-audits/Test-ScenarioCatalogLog.ps1'
 $manifest=@{profile='C:\fresh profile';addonsDir='C:\source,C:\game\addons';arguments=@('-gproj','C:\source\AIConflictArland\addon.gproj','-profile','C:\fresh profile','-addonsDir','C:\source,C:\game\addons','-aicfCatalogProbe','1')}|ConvertTo-Json -Compress
-$names=@('EXAMPLE','VISIBLE_NAME','REPEAT','STOCK_PRESERVED','HIDDEN_PRESETS')
+$names=@('EXAMPLE','VISIBLE_NAME','REPEAT','STOCK_PRESERVED','NATIVE_TARGETS')
 for($mode=0;$mode -lt 3;$mode++){for($difficulty=0;$difficulty -lt 3;$difficulty++){$names+="TARGET_${mode}_${difficulty}"}}
 $names+=@('FILTER_TYPE','FILTER_MANW')
 $log=(@('CLI Params: -gproj C:\source\AIConflictArland\addon.gproj -profile C:\fresh profile -addonsDir C:\source,C:\game\addons -aicfCatalogProbe 1')+@($names|ForEach-Object {"[AICF][CATALOG_CASE] case=$_ pass=1"})+@('[AICF][CATALOG_DONE] checks=16 failed=0','ENGINE : Game destroyed.'))-join "`n"
@@ -24,8 +24,8 @@ try{
     Check 'missing-case' ($log.Replace('[AICF][CATALOG_CASE] case=EXAMPLE pass=1','')) $manifest 0 1 'CASE_EXAMPLE'
     Check 'failed-case' ($log.Replace('case=EXAMPLE pass=1','case=EXAMPLE pass=0')) $manifest 0 1 'CASE_EXAMPLE'
     Check 'duplicate-case' ($log+"`n[AICF][CATALOG_CASE] case=EXAMPLE pass=1") $manifest 0 1 'CASE_EXAMPLE'
-    Check 'missing-hidden-presets' ($log.Replace('[AICF][CATALOG_CASE] case=HIDDEN_PRESETS pass=1','')) $manifest 0 1 'CASE_HIDDEN_PRESETS'
-    Check 'visible-presets' ($log.Replace('case=HIDDEN_PRESETS pass=1','case=HIDDEN_PRESETS pass=0')) $manifest 0 1 'CASE_HIDDEN_PRESETS'
+    Check 'missing-hidden-presets' ($log.Replace('[AICF][CATALOG_CASE] case=NATIVE_TARGETS pass=1','')) $manifest 0 1 'CASE_NATIVE_TARGETS'
+    Check 'visible-presets' ($log.Replace('case=NATIVE_TARGETS pass=1','case=NATIVE_TARGETS pass=0')) $manifest 0 1 'CASE_NATIVE_TARGETS'
     Check 'missing-done' ($log.Replace('[AICF][CATALOG_DONE] checks=16 failed=0','')) $manifest 0 1 'COMPLETION'
     Check 'failed-done' ($log.Replace('checks=16 failed=0','checks=16 failed=1')) $manifest 0 1 'COMPLETION'
     Check 'duplicate-done' ($log+"`n[AICF][CATALOG_DONE] checks=16 failed=0") $manifest 0 1 'COMPLETION'

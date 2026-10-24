@@ -266,7 +266,7 @@ class AICF_UniversalScenarioProbe
 			}
 			for (int mode; mode < 3; mode++)
 				for (int difficulty; difficulty < 3; difficulty++)
-					if (variant.Resolve(mode, difficulty).IsEmpty() || !registry.IsLeaf(variant.Resolve(mode, difficulty))) valid = false;
+					if (variant.Resolve(mode, difficulty).IsEmpty() || !registry.IsRuntimeTarget(variant.Resolve(mode, difficulty))) valid = false;
 			if (!variant.Resolve(3, 0).IsEmpty() || !variant.Resolve(0, -1).IsEmpty()) valid = false;
 			Check("PLAN_" + variant.m_sKey, valid);
 			bool ready = variant.IsAvailable(missing);
@@ -355,23 +355,18 @@ class AICF_UniversalScenarioProbe
 		m_Screen.SelectEnvironment(817, 4);
 		Check("UI_NO_RANDOM_TIME", !m_Screen.SelectEnvironment(AICF_ScenarioEnvironment.RANDOM_TIME, 4) && m_Screen.AICF_TimeSliderReadback(817, "13:37"));
 		Check("UI_TIME_SLIDER", sliderValid && m_Screen.AICF_TimeSliderReadback(817, "13:37"));
-		ResourceName target = m_Selection.GetResource();
-		AICF_ScenarioEnvironment settings = m_Screen.GetSelection().GetEnvironment();
-		bool queued = AICF_ScenarioEnvironment.Queue(target, settings);
-		AICF_ScenarioEnvironment consumed = AICF_ScenarioEnvironment.Consume(target);
-		bool roundTrip = queued && consumed && consumed.m_iStartMinutes == 817 && consumed.m_iWeather == 4 && !AICF_ScenarioEnvironment.Consume(target);
-		AICF_ScenarioEnvironment.Queue(target, settings);
-		bool wrongTarget = !AICF_ScenarioEnvironment.Consume("unknown") && !AICF_ScenarioEnvironment.Consume(target);
-		GameSessionStorage.s_Data[AICF_ScenarioEnvironment.SESSION_KEY] = "{}";
-		bool malformed = !AICF_ScenarioEnvironment.Consume(target);
-		JsonSaveContext legacy = new JsonSaveContext();
-		legacy.WriteValue("schema", 1);
-		legacy.WriteValue("target", target);
-		legacy.WriteValue("issued", System.GetTickCount());
-		legacy.WriteValue("minutes", 817);
-		legacy.WriteValue("weather", 4);
-		GameSessionStorage.s_Data[AICF_ScenarioEnvironment.SESSION_KEY] = legacy.SaveToString();
-		Check("ENVIRONMENT_STORAGE", roundTrip && wrongTarget && malformed && !AICF_ScenarioEnvironment.Consume(target));
+		AICF_ScenarioSetupSelection sourceSelection = m_Screen.GetSelection();
+		bool queued = AICF_RuntimeScenario.Queue(sourceSelection);
+		string stored;
+		GameSessionStorage.s_Data.Find(AICF_RuntimeScenario.SESSION_KEY, stored);
+		AICF_RuntimeScenarioSelection decoded = AICF_RuntimeScenarioSelection.Decode(stored);
+		bool roundTrip = queued && decoded && decoded.GetTarget() == sourceSelection.GetResource() && decoded.m_Environment.m_iStartMinutes == 817 && decoded.m_Environment.m_iWeather == 4;
+		string wrong = stored;
+		wrong.Replace(sourceSelection.GetResource(), "unknown");
+		bool wrongTarget = !AICF_RuntimeScenarioSelection.Decode(wrong);
+		bool malformed = !AICF_RuntimeScenarioSelection.Decode("{}");
+		AICF_RuntimeScenario.ClearPending();
+		Check("ENVIRONMENT_STORAGE", roundTrip && wrongTarget && malformed && !GameSessionStorage.s_Data.Contains(AICF_RuntimeScenario.SESSION_KEY));
 		for (int mode; mode < 3; mode++)
 		{
 			for (int difficulty; difficulty < 3; difficulty++)

@@ -85,8 +85,10 @@ manifest использует game resources, подходящие Workbench. П
 Точный граф и ресурс `.conf` определяет каталог `tools/config/AICF_Scenarios.json`.
 `-MatchMode Standard|CoopUS|CoopUSSR` выбирает режим для любого из девяти Variant;
 default `Standard`. Стороны US/USSR логические: RHS использует USMC/МСВ,
-WCS — НАТО/РФ. Старый `-Variant StockCoopUSSR` сохраняется как alias
-`-Variant Stock -MatchMode CoopUSSR`; несовместимый явно переданный режим отклоняется.
+WCS — НАТО/РФ. Alias `-Variant StockCoopUSSR` удалён. Используй
+`-Variant Stock -MatchMode CoopUSSR`. Все планы запускают один из четырёх
+native targets с отдельными managed `-aicfScenarioVariant`, `-aicfMatchMode`
+и `-aicfDifficulty`. Старые GUID и .conf не поддерживаются.
 Не заменяй сценарий raw `.ent`
 с отдельным `-MissionHeader`: whitelist должен применяться до инициализации баз.
 RHS/WCS версии и каталоги сверяй с установленными пакетами и addon dependencies;
@@ -96,7 +98,7 @@ RHS/WCS версии и каталоги сверяй с установленн�
 Для любого Variant и MatchMode используйте `-Difficulty Easy|Medium|Hard`
 (default `Easy`), например `-Variant EveronNorth -Difficulty Hard`.
 Передавайте одинаковые `Variant`, `MatchMode` и `Difficulty` серверу и клиенту: readiness gate проверяет
-точный server header. Medium добавляет один БТР со случайным десантом до 2/4;
+точный native header, variant/mode/difficulty и graph. Medium добавляет один БТР со случайным десантом до 2/4;
 Hard — случайные пары бронетехники и одну усиленную точку с 3/4 машинами.
 Недоступные танки заменяются БТР. Правила и подготовка графа описаны в
 [FIA_GARRISONS.md](FIA_GARRISONS.md). Выбор сценария
@@ -150,10 +152,11 @@ Placeholder заменяется фактическим путём. Перед �
 Добавление нового сочетания карты/контента описано в [COOP_SCENARIO.md](COOP_SCENARIO.md).
 
 Единый пункт «AI Conflict» открывается через Play/Host в меню: карта, установленный
-контент, режим, сторона и сложность разрешаются в leaf header и точный addon graph.
+контент, режим, сторона и сложность разрешаются в native mission, runtime selection и точный addon graph.
 Canonical launcher frontend не открывает: для server/client остаются
 `-Variant Stock -MatchMode ... -Difficulty ...`. Явный CLI запуск setup через
-`-world`/`-server` сохраняет vanilla Arland Co-op USSR Medium. Первый Workshop
+`-world`/`-server` не открывает picker и не задаёт runtime selection;
+для матча AI Conflict нужен canonical launcher с выбранными параметрами. Первый Workshop
 Play открывает picker после штатной загрузки модулей; этот путь не требует
 предварительно принудительно загруженного source graph. Core и Arland нужно
 обновлять согласованной версией: меняются и hooks, и формат setup header.
@@ -305,6 +308,38 @@ Workshop `CreateAssetUpload` принимает Version только в форм
 должна завершаться проверкой страницы Release, notes, target и статуса Latest.
 
 ### Подготовка окончательного списка Workshop
+
+Обновление до 0.2.3 подтвердило тот же дефект: все семь installed packages имеют
+0.2.3 и corrupted=false, но ServerData и native Publishing manifests содержат
+82 записи. Обычный Publish сформировал список заново. Обновление gameplay
+scripts не очищает этот каталог до загрузки Core.
+
+Для всего набора используй [Prepare-AICFWorkshopCatalog.ps1](../tools/Prepare-AICFWorkshopCatalog.ps1).
+PublishingRoot — каталог с семью native bundles в подкаталогах с addon GUID.
+OutputRoot должен быть новым отдельным каталогом:
+
+    & tools/Prepare-AICFWorkshopCatalog.ps1 -PublishingRoot '<native Publishing>' -OutputRoot '<новый prepared>' -ExpectedVersion 0.2.3
+    & tools/Prepare-AICFWorkshopCatalog.ps1 -OutputRoot '<prepared>' -ExpectedVersion 0.2.3 -Check
+
+Перед созданием output проверяются все семь owners, одинаковая ExpectedVersion
+и все payload, включая native RDB: старые missions запрещены физически,
+даже при уже очищенном manifest. Требуется новая сборка из текущих исходников;
+prepared .pak 0.2.3 со старыми ресурсами не подходит.
+Далее каждый bundle проходит общий single-bundle tool.
+Итоговый catalog.json фиксирует owners, counts и hashes manifests.
+Check повторно проверяет реальные файлы, hashes, полный набор и единственный
+entry: старый manifest после пересборки, лишний/пропущенный owner, смешанная
+версия или повреждённый payload не проходят. Незавершённый output без корректного
+catalog.json также не проходит. Input bundles и их version не меняются.
+
+Этот workflow не запускает Workbench, native uploader или сетевой запрос.
+В отчёте всегда publication=NOT_RUN; PASS означает корректность подготовленного
+каталога. Копии уже опубликованной 0.2.3 диагностические и не являются новой
+версией для повторной загрузки. Для будущей отдельно разрешённой публикации
+нужно использовать подготовленные bundle directories без новой сборки.
+Назначение native publishAddonDir как pre-packed input описано в
+[официальных Startup Parameters](https://community.bistudio.com/wiki/Arma_Reforger%3AStartup_Parameters).
+Фактический приём backend, новое скачивание и cold frontend проверяются отдельно.
 
 В опубликованной 0.2.2 `asset.scenarios` всё ещё содержит старые пункты,
 несмотря на hidden headers. После native bundling и до загрузки на backend

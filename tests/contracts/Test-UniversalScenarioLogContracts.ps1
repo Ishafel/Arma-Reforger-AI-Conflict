@@ -1,4 +1,4 @@
-param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+﻿param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference='Stop'
 $base=[IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $work=Join-Path $base ('aicf-universal-log-'+[guid]::NewGuid().ToString('N'))
@@ -42,7 +42,7 @@ try{
  Check probe $log ($manifest.Replace('-aicfUniversalProbe','-unknown')) 0 1 PROBE_CLI
  Check availability ($log.Replace('variant=RHS available=1','variant=RHS available=0')) $manifest 0 1 AVAILABLE_COUNT
  Check missingvariant ($log.Replace('[UNIVERSAL_AVAILABLE] variant=RHS available=1 missing= graph=CORE,MAP','')) $manifest 0 1 AVAILABILITY_RHS
- $target='{A1CF261018460002}Missions/AICF_Conflict_Arland_Coop_USSR_Medium.conf'
+ $target='{C41618FD18E9D714}Missions/23_Campaign_Arland.conf'
  $graph='9178E5822AFE48EA,B52C5F6AEDBF423E'
  $transitionArgs=@('-gproj','C:\source\addon.gproj','-profile','C:\fresh','-addonsDir','C:\source,C:\mods','-addons',$graph,'-aicfTransitionProbe','1','-aicfExpectedReadyVariants','9','-aicfProbeMap','0','-aicfProbeContent','0','-aicfProbeMode','2','-aicfProbeDifficulty','1')
  $transitionManifest=@{arguments=$transitionArgs}|ConvertTo-Json -Compress
@@ -66,7 +66,7 @@ try{
  Check hostlateerror ($hostLog+"`nSCRIPT (E): host late error") $hostManifest 0 1 SCRIPT_VM_FATAL -Transition
  Check hostduplicate ($hostLog+"`n[HOST_MODE] mode=0 listen=0") $hostManifest 0 1 HOST_LISTEN -Transition
  Check hostrequestduplicate ($hostLog+"`n[HOST_REQUEST] pass=0") $hostManifest 0 1 HOST_REQUEST -Transition
- $dedicatedArgs=$transitionArgs+@('-server',$target,'-MissionHeader',$target.Substring(18))
+ $dedicatedArgs=$transitionArgs+@('-server',$target,'-MissionHeader',$target)
  $dedicatedManifest=@{arguments=$dedicatedArgs}|ConvertTo-Json -Compress
  $dedicatedLines=@($transitionLog -split "`n"|Where-Object {$_ -notmatch '^CLI Params|\[SCENARIO_LAUNCH\]|case=PREFLIGHT|case=ACCEPTED'})
  $dedicatedLog=(@('CLI Params: '+($dedicatedArgs -join ' '))+$dedicatedLines)-join "`n"

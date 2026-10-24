@@ -4,9 +4,10 @@
 
 Этот репозиторий — scripts-first расширение штатного Conflict для автономной
 войны `US` против `USSR`. Разработка выполняется преимущественно в Enforce
-Script; единственные gameplay resources проекта — тонкие inherited
-`MissionHeader` для запуска stock Arland/Everon и RHS вариантов из меню сценариев. Они не
-владеют world, bases или layouts. Общие механики должны оставаться в
+Script; единственный gameplay resource проекта — тонкий inherited
+`MissionHeader` входа AI Conflict. Карта, режим и сложность передаются в штатные
+stock/RHS missions через runtime selection; старые сценарные GUID не поддерживаются.
+Вход не владеет world, bases или layouts. Общие механики должны оставаться в
 `AIConflictCore`, особенности карт — в соответствующем integration addon.
 
 Перед существенным изменением прочитай:

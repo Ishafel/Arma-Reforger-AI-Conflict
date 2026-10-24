@@ -1,3 +1,37 @@
+# Изменение сценарного контракта — 2026-10-24
+
+Повторная проверка black-screen regression: aicfColdRetryHost=1 у
+AICF_WorkshopBootstrapProbe требует RETRY_CANCEL_CONTEXT/RETRY_RETURN и
+реальный selected world/graph после отмены preparation Listen. Отдельный
+aicfColdLifecycleProbe=1 требует ровно по одному COLD_SNAPSHOT_RESTORED pass=1
+и COLD_RUNTIME_CLEARED pass=1 после боевой миссии; при Cancel ожидается ноль.
+Snapshot observer читает результат production Restore, не подменяет его.
+Analyzer проверяет failure markers также в соседних полных логах.
+
+81 старый MissionHeader и его .meta удалены. Старые GUID, server configs и
+alias StockCoopUSSR не поддерживаются. Runtime selection заменяет ресурсы
+на каждый режим/сложность; описание — SCENARIO_SETUP.md.
+
+AICF_RuntimeScenarioProbe.c: isolated Core/UI, aicfRuntimeScenarioProbe=1.
+Проверяет фактическую policy, rank/save, 81 JSON plans; server с
+aicfProbeRetiredResources=1 требует отказ чтения 81 GUID из retired-scenarios.json.
+North требует 7 initialized/2 HQ/5 points. Callback Read/Close снимается в Stop.
+aicfRuntimeHold задаёт дополнительное ожидание сервера для canonical client/JIP.
+Native exit и полные логи обязательны; вывод RUNTIME_DONE сам по себе не PASS.
+
+CoopHeadersProbe читает native targets 54 логических Co-op планов, без старых
+FIA flags и генератора .conf. ScenarioSetupProbe проверяет selection bounds
+и native target; ScenarioCatalogProbe проверяет NATIVE_TARGETS вместо
+HIDDEN_PRESETS. Universal и Bootstrap probes используют атомарный runtime
+storage; Bootstrap отдельно проверяет APPLIED_RULES, поскольку ID общий.
+Старый DifficultyRolloutProbe удалён: его historical фиксированный состав и
+header flags не являются контрактом текущих гарнизонов. Для актуальных FIA
+проверок используются planner/composition/proximity probes, описанные ниже.
+
+Следующие записи — история ранее введённых probes; прежние результаты не
+заменяют новый runtime. Ссылки на удалённый генератор и old headers относятся
+к исходному поведению до удаления поддержки.
+
 # Runtime fixture: каталог и применение
 
 ## Брифинг на карте

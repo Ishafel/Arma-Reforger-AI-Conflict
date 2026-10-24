@@ -21,6 +21,58 @@ modded class SCR_GameModeCampaign
 	[RplProp()]
 	protected AICF_EMatchMode m_eAICFMatchMode;
 
+	[RplProp(onRplName: "AICF_OnRuntimeScenarioReplicated")]
+	protected string m_sAICFRuntimeVariant;
+
+	[RplProp(onRplName: "AICF_OnRuntimeScenarioReplicated")]
+	protected int m_iAICFRuntimeDifficulty;
+
+	[RplProp(onRplName: "AICF_OnRuntimeScenarioReplicated")]
+	protected bool m_bAICFRuntimeReady;
+
+	bool AICF_HasRuntimeScenario() { return m_bAICFRuntimeReady; }
+	string AICF_GetRuntimeVariant() { return m_sAICFRuntimeVariant; }
+	int AICF_GetRuntimeDifficulty() { return m_iAICFRuntimeDifficulty; }
+	int AICF_GetRuntimeMode() { return m_eAICFMatchMode; }
+	void AICF_OnRuntimeScenarioReady() {}
+
+	void AICF_ApplyRuntimeNativeOptions(SCR_MissionHeaderCampaign header)
+	{
+		if (!Replication.IsServer() || !IsMaster() || !header) return;
+		if (m_eStartingRank == header.m_eStartingRank &&
+			m_bIgnoreMinimumVehicleRank == header.m_bIgnoreMinimumVehicleRank &&
+			m_bEstablishingBasesEnabled == header.m_bEstablishingBasesEnabled) return;
+		m_eStartingRank = header.m_eStartingRank;
+		m_bIgnoreMinimumVehicleRank = header.m_bIgnoreMinimumVehicleRank;
+		m_bEstablishingBasesEnabled = header.m_bEstablishingBasesEnabled;
+	}
+	// These native cache fields are local, not RplProp. Mirror verified server policy.
+	void AICF_ApplyRuntimeReplicaOptions()
+	{
+		if (Replication.IsServer() || !m_bAICFRuntimeReady) return;
+		m_eStartingRank = SCR_ECharacterRank.GENERAL;
+		m_bIgnoreMinimumVehicleRank = true;
+	}
+
+	void AICF_SetRuntimeScenario(AICF_RuntimeScenarioSelection selection)
+	{
+		if (!Replication.IsServer() || !IsMaster() || !selection || !selection.IsValid()) return;
+		string key = selection.GetVariant().m_sKey;
+		if (m_bAICFRuntimeReady && m_sAICFRuntimeVariant == key &&
+			m_iAICFRuntimeDifficulty == selection.m_iDifficulty && m_eAICFMatchMode == selection.m_iMode) return;
+		m_sAICFRuntimeVariant = key;
+		m_iAICFRuntimeDifficulty = selection.m_iDifficulty;
+		m_eAICFMatchMode = selection.m_iMode;
+		m_bAICFRuntimeReady = true;
+		Replication.BumpMe();
+	}
+	protected void AICF_OnRuntimeScenarioReplicated()
+	{
+		if (Replication.IsServer() || !m_bAICFRuntimeReady) return;
+		AICF_RuntimeScenario.ApplyReplica();
+		AICF_OnRuntimeScenarioReady();
+	}
+
 	void AICF_SetMatchMode(AICF_EMatchMode mode)
 	{
 		if (!Replication.IsServer() || !IsMaster()) return;

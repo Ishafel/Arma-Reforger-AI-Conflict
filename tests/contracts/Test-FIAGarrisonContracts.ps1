@@ -1,4 +1,4 @@
-param([string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+﻿param([string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference = 'Stop'
 $core = Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict'
 $rules = @(
@@ -56,13 +56,13 @@ foreach ($rule in $rules) {
 }
 $service = Get-Content (Join-Path $core 'Vehicles/AICF_FIAGarrisonService.c') -Raw
 if ($service -match 'CallLater\s*\(|\.AddWaypoint|SpawnEntityPrefab|DeleteRplEntity|GetOutgoingNodeIds') { $failures += 'DOMAIN_BOUNDARY' }
-foreach ($case in @(@('Medium', 1, 'A1CF261008100001'), @('Hard', 2, 'A1CF261008100002'))) {
-    $path = Join-Path $RepositoryRoot "AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_North_$($case[0]).conf"
-    $header = Get-Content $path -Raw
-    if (-not $header.Contains('{A1CF261006100003}Missions/AICF_WCS_RHS_Conflict_Everon_North.conf') -or
-        $header -notmatch "m_eAICFDifficulty\s+$($case[1])\b" -or
-        $header -match 'm_aCampaignCustomBaseList|\bWorld\b') { $failures += "HEADER_$($case[0])" }
-    if (-not (Get-Content "$path.meta" -Raw).Contains($case[2])) { $failures += "META_$($case[0])" }
+. (Join-Path $RepositoryRoot 'tools/AICF_Scenarios.ps1')
+$catalog=Get-AICFScenarioCatalog
+foreach($level in @('Easy','Medium','Hard')){
+ $plan=Resolve-AICFScenario -Catalog $catalog -Variant EveronNorthWCSRHS -Difficulty $level
+ if($plan.scenario -cne '{AAD43C10045857C1}Missions/RHS_Conflict.conf' -or $plan.selectionArguments[-1] -ne [string]$plan.difficultyIndex){$failures+='RUNTIME_DIFFICULTY'}
 }
+$runtime=[IO.File]::ReadAllText((Join-Path $core 'Config/AICF_RuntimeScenario.c'))
+if(!$runtime.Contains('header.m_eAICFDifficulty = value.m_iDifficulty;')){$failures+='DIFFICULTY_APPLICATION'}
 if ($failures.Count) { $failures | ForEach-Object { "FAIL $_" }; exit 1 }
 "FIA garrison contracts: PASS; negative guards=$($rules.Count); runtime=NOT_RUN"

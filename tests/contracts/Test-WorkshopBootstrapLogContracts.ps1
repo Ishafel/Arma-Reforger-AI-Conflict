@@ -1,4 +1,4 @@
-param([string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+﻿param([string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference = 'Stop'
 . (Join-Path $RepositoryRoot 'tools/AICF_Scenarios.ps1')
 $catalog = Get-AICFScenarioCatalog -Path (Join-Path $RepositoryRoot 'tools/config/AICF_Scenarios.json')
@@ -14,11 +14,14 @@ function Fixture([string]$variant = 'Stock', [int]$mode = 0, [int]$difficulty = 
     if ($Explicit) { $argv += @('-aicfColdVariant',$variant,'-aicfColdMode',[string]$mode,'-aicfColdDifficulty',[string]$difficulty) }
     if ($Cancel) { $argv += @('-aicfColdCancelProbe','1') }
     $names = @('LITERAL_NAME','FRONTEND_GRAPH','NATIVE_ENTRY','SETUP_OPEN','BOOTSTRAP_CONTEXT')
-    $done = 3
-    if ($Cancel) { $names += @('CANCEL_RETURN','CANCEL_CLOSED'); $done = 2 }
+    $done = 4
+    if ($Cancel) {
+        $names += @('CANCEL_RETURN','CANCEL_CLOSED'); $done = 2
+        if ($HostFlow) { $names += 'HOST_REQUEST' }
+    }
     else {
-        $names += @('DEFAULTS','SELECT','SELECT_ENVIRONMENT','CAN_START','LAUNCH','SELECTED_HEADER','NO_BOOTSTRAP','APPLIED_ENVIRONMENT')
-        if ($HostFlow) { $names += @('HOST_REQUEST','HOST_CONTEXT','HOST_LISTEN'); $done = 4 }
+        $names += @('DEFAULTS','SELECT','SELECT_ENVIRONMENT','CAN_START','LAUNCH','SELECTED_HEADER','NO_BOOTSTRAP','APPLIED_RULES','APPLIED_ENVIRONMENT')
+        if ($HostFlow) { $names += @('HOST_REQUEST','HOST_CONTEXT','HOST_LISTEN'); $done = 5 }
         if ($Explicit) { $names += @('CONTENT_READY','TARGET_WORLD','TARGET_GRAPH'); $done += 2 }
     }
     $lines = @('CLI Params: ' + ($argv -join ' '), '[AICF][SCENARIO_BOOTSTRAP] phase=OPEN entry=SETUP')
@@ -53,9 +56,12 @@ try {
     $play = Fixture
     $hosted = Fixture -HostFlow
     $cancel = Fixture -Cancel
+    $hostCancel = Fixture -HostFlow -Cancel
     $stock = Fixture -HostFlow -Explicit
     $wcs = Fixture -variant EveronWCSRHS -mode 2 -difficulty 2 -HostFlow -Explicit
-    foreach ($item in @($play,$hosted,$cancel,$stock,$wcs)) { Check positive $item $item.log }
+    foreach ($item in @($play,$hosted,$cancel,$hostCancel,$stock,$wcs)) { Check positive $item $item.log }
+    Check cancelhostrequest $hostCancel ($hostCancel.log.Replace('case=HOST_REQUEST pass=1','case=HOST_REQUEST pass=0')) -rule CASE_HOST_REQUEST
+    Check cancelhostmissingrequest $hostCancel ($hostCancel.log.Replace('[AICF][COLD_CASE] case=HOST_REQUEST pass=1','')) -rule CASE_HOST_REQUEST
     Check defaultroot $wcs $wcs.log -DefaultRoot
     $warmPlan = $wcs.manifest | ConvertFrom-Json
     $warmPlan.arguments += @('-aicfWarmBootstrapControl','1')
@@ -97,7 +103,7 @@ try {
     Check unknown $bad $wcs.log -rule CLI_SELECTION
     $bad.manifest = $wcs.manifest.Replace('"-aicfColdMode",','"-aicfColdMode", "3", "-aicfColdMode",')
     Check duplicatecli $bad $wcs.log -rule CLI_SELECTION
-    $acceptedOnly = ($wcs.log -split "`n" | Where-Object { $_ -notmatch 'case=(SELECTED_HEADER|NO_BOOTSTRAP|APPLIED_ENVIRONMENT|HOST_LISTEN|TARGET_WORLD|TARGET_GRAPH)|\[COLD_(DONE|WORLD|ADDON)\]' }) -join "`n"
+    $acceptedOnly = ($wcs.log -split "`n" | Where-Object { $_ -notmatch 'case=(SELECTED_HEADER|NO_BOOTSTRAP|APPLIED_RULES|APPLIED_ENVIRONMENT|HOST_LISTEN|TARGET_WORLD|TARGET_GRAPH)|\[COLD_(DONE|WORLD|ADDON)\]' }) -join "`n"
     Check acceptedonly $wcs $acceptedOnly -rule COMPLETION
     $handoffPlan = $wcs.manifest | ConvertFrom-Json
     $handoffPlan.arguments += @('-aicfExpectHostHandoff','1','-aicfHostIntentContracts','1','-aicfColdReadyProbe','1')
@@ -120,6 +126,30 @@ try {
     Check pendingintent $handoff ($handoffLog.Replace('pending=0','pending=1')) -rule HOST_ROSTER_READY
     Check missingroster $handoff ($handoffLog.Replace('[ROSTER_READY]','')) -rule HOST_ROSTER_READY
     Check missingapplied $handoff ($handoffLog.Replace('time_minutes=577','time_minutes=480')) -rule HOST_ENVIRONMENT_APPLIED
+    $retryPlan = $wcs.manifest | ConvertFrom-Json
+    $retryPlan.arguments += @('-aicfColdRetryHost','1')
+    $retry = [pscustomobject]@{ manifest = ($retryPlan | ConvertTo-Json -Depth 4) }
+    $retryLog = $wcs.log.Replace('-aicfColdDifficulty 2','-aicfColdDifficulty 2 -aicfColdRetryHost 1')
+    $retryLog += "`n[AICF][COLD_CASE] case=RETRY_CANCEL_CONTEXT pass=1`n[AICF][SCENARIO_BOOTSTRAP] phase=CANCEL`n[AICF][COLD_CASE] case=RETRY_RETURN pass=1"
+    Check cancelretry $retry $retryLog
+    Check retrylosthandler $retry ($retryLog.Replace('case=RETRY_RETURN pass=1','case=RETRY_RETURN pass=0')) -rule CASE_RETRY_RETURN
+    Check retrymissingreturn $retry ($retryLog.Replace('[AICF][COLD_CASE] case=RETRY_RETURN pass=1','')) -rule CASE_RETRY_RETURN
+    Check retrynocancel $retry ($retryLog.Replace('[AICF][SCENARIO_BOOTSTRAP] phase=CANCEL','')) -rule RETRY_FLOW
+    Check retrydoublecancel $retry ($retryLog + "`n[AICF][SCENARIO_BOOTSTRAP] phase=CANCEL") -rule RETRY_FLOW
+    Check retryconstructor $retry $retryLog -rule SCRIPT_VM_FATAL -sideLog "SCRIPT (E): Can't instantiate class 'SCR_FilterCategory', constructor is not public"
+    $lifecyclePlan = $wcs.manifest | ConvertFrom-Json
+    $lifecyclePlan.arguments += @('-aicfColdLifecycleProbe','1')
+    $lifecycle = [pscustomobject]@{ manifest = ($lifecyclePlan | ConvertTo-Json -Depth 4) }
+    $lifecycleLog = $wcs.log.Replace('-aicfColdDifficulty 2','-aicfColdDifficulty 2 -aicfColdLifecycleProbe 1')
+    $lifecycleLog += "`n[AICF][COLD_SNAPSHOT_RESTORED] pass=1`n[AICF][COLD_RUNTIME_CLEARED] pass=1"
+    Check lifecycle $lifecycle $lifecycleLog
+    Check lifecyclecli $lifecycle ($lifecycleLog.Replace('-aicfColdLifecycleProbe 1','')) -rule CLI_MISMATCH
+    Check lifecyclesidelog $lifecycle $lifecycleLog -rule COLD_RUNTIME_CLEARED -sideLog '[AICF][COLD_RUNTIME_CLEARED] pass=0'
+    foreach ($event in @('COLD_SNAPSHOT_RESTORED','COLD_RUNTIME_CLEARED')) {
+        Check ('missing-'+$event) $lifecycle ($lifecycleLog.Replace("[AICF][$event] pass=1",'')) -rule $event
+        Check ('failed-'+$event) $lifecycle ($lifecycleLog.Replace("[AICF][$event] pass=1","[AICF][$event] pass=0")) -rule $event
+        Check ('duplicate-'+$event) $lifecycle ($lifecycleLog + "`n[AICF][$event] pass=1") -rule $event
+    }
     "Workshop bootstrap log contracts: PASS; cases=$count"
 }
 finally {

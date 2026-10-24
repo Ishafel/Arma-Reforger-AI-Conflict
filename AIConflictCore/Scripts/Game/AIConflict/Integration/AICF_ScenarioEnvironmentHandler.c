@@ -3,6 +3,18 @@ modded class SCR_TimeAndWeatherHandlerComponent
 {
 	protected bool m_bAICFEnvironmentApplied;
 
+	void AICF_ApplyRuntimeOptions(SCR_MissionHeaderCampaign header)
+	{
+		if (!Replication.IsServer() || !header || !header.m_AICFEnvironment) return;
+		m_iStartingHours = header.m_iStartingHours;
+		m_iStartingMinutes = header.m_iStartingMinutes;
+		m_bRandomStartingDaytime = header.m_bRandomStartingDaytime;
+		m_fDayTimeAcceleration = header.m_fDayTimeAcceleration;
+		m_fNightTimeAcceleration = header.m_fNightTimeAcceleration;
+		m_bRandomStartingWeather = header.m_bRandomStartingWeather;
+		m_bRandomWeatherChanges = header.m_bRandomWeatherChanges;
+	}
+
 	override void SetupDaytimeAndWeather(int hours, int minutes, int seconds = 0, string loadedWeatherState = "", bool loadDone = false)
 	{
 		SCR_MissionHeader header = SCR_MissionHeader.Cast(GetGame().GetMissionHeader());

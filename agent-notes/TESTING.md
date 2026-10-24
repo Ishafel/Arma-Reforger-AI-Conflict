@@ -1,5 +1,133 @@
 # Проверки и baseline
 
+## Повторная проверка первого Host и отмены — 2026-10-24
+
+Baseline f91fb02, ветка codex/fix-workshop-catalog-pipeline. Свежие семь
+профильных checks — 7/7 PASS. Воспроизведён прежний Host → Cancel → retry FAIL:
+vanilla-only menu выгружает Core, две SCRIPT(E) SCR_FilterCategory, выбранный
+world не загружается, watchdog/native -1. Cancel теперь передаёт текущие
+non-vanilla loaded addons в RequestReload после GameplayEnd; guards сохранены,
+новые моды не включаются. WCS retry до/после: FAIL → 22 cases PASS/native 0.
+Повтор с наблюдением Restore/runtime cleanup и Stock retry также PASS/0.
+
+Первый private Host из Stock graph проверен для всех девяти Variant:
+выбранные world/graph/mode/difficulty, 09:37/Rainy, Listen/RPL listener и
+ROSTER_READY — 9/9. Полный native результат **7 PASS/2 FAIL**: Everon и
+EveronNorthRHS упали на выходе с 0xC0000005, после успешной очистки и Game
+destroyed. Оба retail dump имеют offset ArmaReforgerSteam.exe+0x866aaf,
+как предыдущий f91fb02 и retail pre-retirement контроль. Причина не установлена;
+это не доказательство отсутствия влияния scripts и не исправление native crash.
+Ready PR/релиз не создаётся; общего runtime PASS нет.
+
+Host/Play cancel, WCS Play, оба retry и дополнительный WCS network probe
+завершились native 0. Новый read-only lifecycle observer проверяет восстановление
+полей native header и отсутствие selection/pending handoff; он не меняет Restore.
+Полный offline after-all/ — 88/88 PASS/0 (bootstrap contracts 65 cases).
+Затем исправлено ожидание HOST_REQUEST в анализаторе Host Cancel, первоначальный
+CASE_COUNT log сохранён; final-targeted/ — 2/2 PASS/0, 68 contracts. Это отдельный
+профильный повтор после последней правки анализатора, не новый полный набор.
+Финальные WB: cancel/lifecycle/network full graph и production Stock — PASS/0;
+275 текущих production файлов совпадают с compiled candidate-stage.
+Ошибочные ранние compile диагностических fixtures сохранены отдельно.
+
+ServerLobbyApi.GetServerConfig в выбранной private Listen после ROSTER_READY
+вернул null; пароль/лимит и enforcement — NOT RUN/не доказаны, значения fixture
+не выдаются за native readback. Порт 127.0.0.1:24073 подтверждён listener.
+Новый JIP/второй человек, визуальный UI/soak, packaged Workshop frontend — NOT RUN.
+Прежний JIP f91fb02 не повторялся; Workshop publication запрещена владельцем.
+Все процессы завершены, watchdog остановлен, свои profiles/stages SHA-проверены
+и архивированы; полные logs/dumps и commands:
+.codex-runtime/host-regression-20261024-f91fb02/REPORT.md.
+
+## Полное прекращение поддержки старых сценариев — 2026-10-24
+
+По запросу владельца удалены 81 старый .conf и 81 .meta; остался один AI Conflict
+setup, напрямую inherited от native Arland. Старые GUID, server configs и
+StockCoopUSSR alias больше не поддерживаются. Schema 2 задаёт четыре native
+targets и 81 логический launch plan. RuntimeScenario передаёт атомарный выбор,
+применяет native caches до weather/base init, восстанавливает cached header;
+server RplProp передаёт variant/mode/difficulty/ready клиентам и JIP.
+North whitelist принадлежит Everon integration. Подробности — SCENARIO_SETUP.md.
+139 ненужных сценарных строк удалены, runtime tables — 619 записей.
+Packaging tools отклоняют старые resources в native RDB даже с очищенным manifest.
+
+Свежий baseline before/ — **8/8 PASS/0**. Первый полный after-all/ —
+85 PASS/3 FAIL: audit искал прежнее расположение bootstrap preflight.
+Проверка перенесена на фактический guarded bootstrap с initial/late dispatch;
+оба зависимых mutation contracts сохранены. after-commander/ — **3/3 PASS/0**.
+Финальный tools/Invoke-AICFChecks.ps1 -Suite All — **88/88 PASS, exit 0**,
+final-all/, без исключений. Старые FAIL logs сохранены.
+Workbench production Stock/WCS и два актуальных fixture graphs — **4/4 PASS/0**,
+без SCRIPT E/F, ENGINE F, VM/hang; 275 production файлов совпали с compiled stage.
+Прочие resource (E) перечислены в evidence, не удалены из полных логов.
+
+Canonical runtime: Stock **176/176**, North **97/97** (7 initialized/2 HQ/5 points),
+WCS Standard **176/176** плюс native targets **54/54**, native exit 0.
+Оба content graphs отвергли все 81 retired GUID. WCS Standard roster 10+10,
+Co-op North 0+10; время 09:37/Rainy применилось на authority.
+Server/client JIP **97/95 PASS**, два запуска native exit 0, exact CLI+PID+
+ROSTER_READY и launcher manifest сохранены. Новая readiness проверка отклонила
+три несовпадения map/mode/difficulty до старта клиента, затем верный client PASS.
+Native каталог **16/16 PASS/0**, Stock Play/Host/cancel и WCS Play PASS/0.
+
+**Native shutdown остаётся FAIL/blocker:** повтор final-wcs-host загрузил мир,
+полный graph, runtime rules и ROSTER_READY/listener, затем упал на выходе с
+0xC0000005 (-1073741819), после Game destroyed. Minimal Bootstrap-only WCS
+Host/Play затем PASS/0, но это не доказывает устранение аварии. Dump и полные
+логи сохранены. Ready PR/релиз не создан; самостоятельного ACCEPTED нет.
+
+Все семь pack-only CLI вернули 0 без артефактов: FAIL_NO_ARTIFACT; новый packaged
+catalog/backend/downloaded frontend — NOT RUN. Старый настоящий bundle 0.2.3
+отвергнут по RDB. Workshop upload запрещён владельцем; опубликованная 0.2.3
+не меняется Git-веткой. Пароль/лимиты, ручное меню, второй человеческий игрок
+и боевой soak — NOT RUN; проверенный программный JIP snapshot их не заменяет.
+GUI/screenshot/video не применялись. Временные stages/profiles проверены SHA
+и архивированы, watchdog остановлен; полные logs/dumps сохранены.
+
+Evidence, команды, verdict, counts и полный список файлов:
+.codex-runtime/retire-scenarios-20261024/REPORT.md.
+Нижеследующие записи относятся к прежним source и сохраняются как история.
+
+## Повторный дефект каталога 0.2.3 и общий preparation workflow — 2026-10-24
+
+Владелец подтвердил старые сценарии после обновления. Read-only inspection:
+все семь installed addons 0.2.3, corrupted=false; ServerData и native Publishing
+manifests содержат 82 записи. Все 21 основные bundle files совпали с installed
+по SHA-256. Обновление принято, но опубликованный каталог остался прежним.
+Изначальный evidence: .codex-runtime/catalog-0.2.3-20261024/REPORT.md.
+
+По уточнённому запросу Workshop publication запрещена. Работа выполнена в
+отдельной ветке codex/fix-workshop-catalog-pipeline от актуального main d63bd49.
+Новый Prepare-AICFWorkshopCatalog.ps1 проверяет весь набор до создания output,
+готовит семь копий через прежний single-bundle tool и фиксирует catalog.json.
+Режим -Check проверяет фактические owners/version/payload/manifests и один entry;
+повторно появившиеся legacy после пересборки отклоняются. Input и version
+не меняются, tool не вызывает Workbench/publisher/сеть, publication=NOT_RUN.
+Commands и границы — [DEVELOPMENT.md](DEVELOPMENT.md#подготовка-окончательного-списка-workshop).
+
+Baseline трёх профильных checks — **3/3 PASS/0**, before/.
+После изменения те же плюс новый WorkshopCatalogContracts — **4/4 PASS/0**,
+after-targeted/. Новый contract — **20/20 PASS**, включая отсутствие частичного
+output при поздней ошибке source, mixed version, изменённые report/manifest/
+payload и legacy regeneration. Полный Invoke-AICFChecks.ps1 -Suite All
+через временный X: — **87/87 PASS, exit 0**, без исключений, after-all/.
+Code hashes нового tool и contract зафиксированы и сверены после набора.
+
+Общий workflow и повторный -Check на семи настоящих native bundles 0.2.3 —
+**PASS**: 82 → 1 запись, 55 payload files и исходные manifests неизменны.
+Прочие metadata/version сохранены. real-catalog/catalog.json,
+real-verification.json и real-input-integrity.json содержат counts и hashes.
+Evidence: .codex-runtime/workshop-catalog-pipeline-20261024/REPORT.md.
+Synthetic fixtures очищены в finally с проверкой абсолютного temp path;
+нужные реальные prepared bundles сохранены как evidence.
+
+Production .c/resources и Enfusion API не менялись. Новый Workbench/runtime —
+**NOT RUN**, для PowerShell workflow не требуются. Native uploader/backend/
+новый downloaded catalog — **NOT RUN по прямому указанию владельца**.
+Установленный список 0.2.3 не изменён Git-веткой. Прежний native shutdown
+0xC0000005 остаётся отдельным FAIL; его исправление не заявляется.
+Новый релиз, тег и Workshop upload не создавались.
+
 ## Объединение PR #74 / #75 — 2026-10-24
 
 Ветка codex/fix-play-shutdown, проверенный source **f8f54a9**: изменения

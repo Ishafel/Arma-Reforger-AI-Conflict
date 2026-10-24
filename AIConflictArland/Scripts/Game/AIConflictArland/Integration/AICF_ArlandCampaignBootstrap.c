@@ -11,11 +11,28 @@ modded class SCR_GameModeCampaign
 	protected ref AICF_StrategicUIController m_AICFStrategicUIController;
 	protected ref AICF_ContentProfile m_AICFContentProfile;
 	protected string m_sAICFMapKey;
+	protected bool m_bAICFRuntimeGameStarted;
+	protected bool m_bAICFRuntimeBootstrapStarted;
 
 	override void OnGameStart()
 	{
+		if (AICF_RuntimeScenario.GetSelection())
+			AICF_SetRuntimeScenario(AICF_RuntimeScenario.GetSelection());
 		// Stock Conflict initializes its manager, bases, and radio coverage inside this call.
 		super.OnGameStart();
+		m_bAICFRuntimeGameStarted = true;
+		AICF_TryConfiguredBootstrap();
+	}
+
+	override void AICF_OnRuntimeScenarioReady()
+	{
+		super.AICF_OnRuntimeScenarioReady();
+		if (m_bAICFRuntimeGameStarted) AICF_TryConfiguredBootstrap();
+	}
+
+	protected void AICF_TryConfiguredBootstrap()
+	{
+		if (!AICF_RuntimeScenario.IsActive() || m_bAICFRuntimeBootstrapStarted) return;
 		// A native Workshop launch first loads this header before Core can intercept UI.
 		// The bootstrap returns to the frontend; it must not start an AICF match.
 		if (AICF_ScenarioBootstrap.ShouldIntercept())
@@ -24,6 +41,7 @@ modded class SCR_GameModeCampaign
 		m_sAICFMapKey = AICF_ResolveSupportedMapKey();
 		if (m_sAICFMapKey.IsEmpty())
 			return;
+		m_bAICFRuntimeBootstrapStarted = true;
 
 		string peerRole = "client";
 		if (Replication.IsServer())

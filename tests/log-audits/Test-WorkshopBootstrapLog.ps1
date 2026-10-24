@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory)][string]$LogPath,
     [Parameter(Mandatory)][string]$ManifestPath,
     [Parameter(Mandatory)][string]$NativeExitPath,
@@ -27,10 +27,11 @@ foreach ($entry in $cli) {
 }
 $cancel = '-aicfColdCancelProbe' -in $argv
 $expected = @('LITERAL_NAME','FRONTEND_GRAPH','NATIVE_ENTRY','SETUP_OPEN','BOOTSTRAP_CONTEXT')
-$doneChecks = 3
+$doneChecks = 4
 if ($cancel) { $expected += @('CANCEL_RETURN','CANCEL_CLOSED'); $doneChecks = 2 }
-else { $expected += @('DEFAULTS','SELECT','SELECT_ENVIRONMENT','CAN_START','LAUNCH','SELECTED_HEADER','NO_BOOTSTRAP','APPLIED_ENVIRONMENT') }
-if ('-aicfColdHostProbe' -in $argv -and !$cancel) { $expected += @('HOST_REQUEST','HOST_CONTEXT','HOST_LISTEN'); $doneChecks = 4 }
+else { $expected += @('DEFAULTS','SELECT','SELECT_ENVIRONMENT','CAN_START','LAUNCH','SELECTED_HEADER','NO_BOOTSTRAP','APPLIED_RULES','APPLIED_ENVIRONMENT') }
+if ('-aicfColdHostProbe' -in $argv -and !$cancel) { $expected += @('HOST_REQUEST','HOST_CONTEXT','HOST_LISTEN'); $doneChecks = 5 }
+if ('-aicfColdHostProbe' -in $argv -and $cancel) { $expected += 'HOST_REQUEST' }
 $selectedVariant = 'Stock'
 $selectedMode = 0
 $selectedDifficulty = 0
@@ -61,7 +62,7 @@ foreach ($phase in @('OPEN')) {
     if ('-aicfWarmBootstrapControl' -in $argv) { $phaseCount = 0 }
     if (@([regex]::Matches($log, '\[SCENARIO_BOOTSTRAP\] phase=' + $phase + '\b')).Count -ne $phaseCount) { $failures += "PHASE_$phase" }
 }
-if ($log -match '\[COLD_TIMEOUT\]|\[SCENARIO_BOOTSTRAP\]\[FAIL\]' -or @([regex]::Matches($log, "\[COLD_DONE\] checks=$doneChecks failed=0\b")).Count -ne 1) { $failures += 'COMPLETION' }
+if ([regex]::Matches($log, '\[COLD_DONE\]').Count -ne 1 -or $log -match '\[COLD_TIMEOUT\]|\[SCENARIO_BOOTSTRAP\]\[FAIL\]' -or @([regex]::Matches($log, "\[COLD_DONE\] checks=$doneChecks failed=0\b")).Count -ne 1) { $failures += 'COMPLETION' }
 $handoffPhases = @([regex]::Matches($log, '\[HOST_HANDOFF\] phase=(\w+)') | ForEach-Object { $_.Groups[1].Value })
 if ('-aicfExpectHostHandoff' -in $argv -or $handoffPhases.Count) {
     if (($handoffPhases -join ',') -cne 'RETURN,HOST,LEAF,READY') { $failures += 'HOST_HANDOFF_PHASES' }
@@ -81,6 +82,19 @@ if ('-aicfColdReadyProbe' -in $argv) {
     $listeners = @([regex]::Matches($log, 'Starting RPL server, listening on address ([^,\r\n]+)'))
     if (!$listeners.Count -or $listeners[-1].Groups[1].Value -cne '127.0.0.1:24073') { $failures += 'HOST_LISTENER' }
     if ($log -notmatch '\[ENVIRONMENT_APPLIED\][^\r\n]*time_minutes=577[^\r\n]*weather_mode=4') { $failures += 'HOST_ENVIRONMENT_APPLIED' }
+}
+if ('-aicfColdLifecycleProbe' -in $argv) {
+    foreach ($entry in $cli) {
+        if (!$entry.Groups[1].Value.Contains('-aicfColdLifecycleProbe 1')) { $failures += 'CLI_MISMATCH' }
+    }
+    foreach ($name in @('COLD_SNAPSHOT_RESTORED','COLD_RUNTIME_CLEARED')) {
+        # Count console events once; reject failure markers from any complete log.
+        $states = @([regex]::Matches($log, '\[' + $name + '\] pass=([01])'))
+        $expectedCount = 1
+        if ($cancel) { $expectedCount = 0 }
+        if ($states.Count -ne $expectedCount -or @($states | Where-Object { $_.Groups[1].Value -cne '1' }).Count) { $failures += $name }
+        if ($full -match ('\[' + $name + '\] pass=0')) { $failures += $name }
+    }
 }
 $launch = [regex]::Match($log, '\[AICF\]\[SCENARIO_LAUNCH\]')
 if ($cancel) {

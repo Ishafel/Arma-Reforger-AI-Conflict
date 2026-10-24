@@ -1,4 +1,4 @@
-param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+﻿param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference='Stop'
 $tempBase=[IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $work=Join-Path $tempBase ('aicf-coop-log-'+[guid]::NewGuid().ToString('N'))
@@ -6,7 +6,8 @@ New-Item -ItemType Directory -Path $work | Out-Null
 $audit=Join-Path $RepositoryRoot 'tests/log-audits/Test-CoopScenarioLog.ps1'
 $names=@('US_ROSTER','USSR_ROSTER','QUEUE_SETTLED','US_TICKETS','USSR_TICKETS','COMMANDERS','HELPERS','BUDGET_FLOOR','STANDARD_POLICY','MIRROR_POLICY','STABLE_ROSTER','REPLICATED_MODE','ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','NO_GROUP_SUMMARY','FACTION_ACCESS','AUTO_CONSTRUCTION','CONTENT_FACTIONS','HEADER_MODE')
 $positive=(@('[AICF][ROSTER_READY] us_groups=10 ussr_groups=0')+@($names | ForEach-Object {"[AICF][COOP_CASE] case=$_ pass=1"})+@('[AICF][COOP_DONE] mode=USSR checks=19 failed=0 elapsed_ms=30000','ENGINE : Game destroyed.')) -join "`n"
-$manifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Server';variant='StockCoopUSSR';arguments=@('-aicfCoopProbe','USSR')} | ConvertTo-Json -Compress)
+$manifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Server';variant='Stock';matchMode='CoopUSSR';arguments=@('-aicfCoopProbe','USSR')} | ConvertTo-Json -Compress)
+$positive+="`n[COOP_CONTEXT] mode=USSR us_faction=US ussr_faction=USSR nodes=7"
 $positiveCases=0; $negativeCases=0
 function Check([string]$Name,[string]$Log,[string]$Launch,[int]$Expected,[string]$Rule,[switch]$Client,[switch]$RequirePlayer,[switch]$RequireRecruit,[switch]$RequireBarracks,[string]$BarracksFaction='USSR',[switch]$RequireSupportArea,[switch]$RequireWelcome,[switch]$RequireHeaderMatrix,[string]$Winner) {
     [IO.File]::WriteAllText("$work/log.txt",$Log)
@@ -46,9 +47,9 @@ try {
     Check 'missing-manifest' $positive '' 1 'MANIFEST'
     Check 'wrong-probe' $positive ($manifest.Replace('"USSR"','"STANDARD"')) 1 'PROBE_MODE'
     $clientLog="[AICF][COOP_CLIENT_DONE] pass=1 samples=15`nENGINE : Game destroyed."
-    $clientManifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Client';variant='StockCoopUSSR';arguments=@('-aicfCoopProbe','USSR')} | ConvertTo-Json -Compress)
+    $clientManifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Client';variant='Stock';matchMode='CoopUSSR';arguments=@('-aicfCoopProbe','USSR')} | ConvertTo-Json -Compress)
     $clientLaunch=$clientManifest+"`n[AICF][RUNTIME_LAUNCHER][SERVER_READY] process_id=123 port=2411 log=server.log"
-    $playerManifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Client';variant='StockCoopUSSR';arguments=@('-aicfCoopProbe','USSR','-aicfCoopProbePlayer','1')} | ConvertTo-Json -Compress)
+    $playerManifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Client';variant='Stock';matchMode='CoopUSSR';arguments=@('-aicfCoopProbe','USSR','-aicfCoopProbePlayer','1')} | ConvertTo-Json -Compress)
     $playerLaunch=$playerManifest+"`n[AICF][RUNTIME_LAUNCHER][SERVER_READY] process_id=123 port=2411 log=server.log"
     $playerLog=$clientLog+"`n[AICF][COOP_CLIENT_PLAYER] pass=1 entity=123`n[AICF][COOP_CLIENT_FACTION] faction=US accepted=0 pass=1`n[AICF][COOP_CLIENT_FACTION] faction=FIA accepted=0 pass=1"
     Check 'client-positive' $clientLog $clientLaunch 0 '' -Client
@@ -80,7 +81,7 @@ try {
     Check 'recruit-player-mode' $recruitClient $clientLaunch 1 'PLAYER_MODE' -Client -RequireRecruit
     Check 'recruit-no-authority' ($recruitServer.Replace('[JOIN_SERVER]','[OTHER]')) $manifest 1 'RECRUIT_AUTHORITY' -RequireRecruit
     Check 'recruit-no-source' ($recruitServer.Replace('kind=STOCK_GROUP_CATALOG','kind=OTHER')) $manifest 1 'RECRUIT_AUTHORITY' -RequireRecruit
-    Check 'recruit-wrong-variant' $recruitClient ($playerLaunch.Replace('StockCoopUSSR','Stock')) 1 'RECRUIT_VARIANT' -Client -RequireRecruit
+    Check 'recruit-wrong-variant' $recruitClient ($playerLaunch.Replace('CoopUSSR','Standard')) 1 'RECRUIT_VARIANT' -Client -RequireRecruit
     Check 'recruit-no-vote-request' ($recruitClient.Replace('[JOIN_VOLUNTEER]','[OTHER]')) $playerLaunch 1 'LEADER_VOTE_REQUEST' -Client -RequireRecruit
     Check 'recruit-no-vote-result' ($recruitServer.Replace('[JOIN_LEADER_RECOVERED]','[OTHER]')) $manifest 1 'LEADER_VOTE_AUTHORITY' -RequireRecruit
     $barracksClient="[COOP_CLIENT_PLAYER] pass=1 entity=123`n[BUY_ENTER_REQUEST] sent=1`n[BUY_SENT] pass=1 leader=1 members=0 max=4`n"
@@ -109,13 +110,13 @@ try {
         @('barracks-no-debit',$barracksServer.Replace('after=325','after=625'),'BARRACKS_PAYMENT')
     )) { Check $case[0] $case[1] $manifest 1 $case[2] -RequireBarracks }
     Check 'barracks-missing-player-mode' $barracksClient $clientLaunch 1 'PLAYER_MODE' -Client -RequireBarracks
-    Check 'barracks-wrong-variant' $barracksClient ($playerLaunch.Replace('StockCoopUSSR','Everon')) 1 'BARRACKS_VARIANT' -Client -RequireBarracks
-    $standardServer=$barracksServer.Replace('us_groups=10 ussr_groups=0','us_groups=10 ussr_groups=10').Replace('mode=USSR checks=19','mode=STANDARD checks=16')
+    Check 'barracks-wrong-variant' $barracksClient ($playerLaunch.Replace('Stock','Everon')) 1 'BARRACKS_VARIANT' -Client -RequireBarracks
+    $standardServer=$barracksServer.Replace('us_groups=10 ussr_groups=0','us_groups=10 ussr_groups=10').Replace('mode=USSR checks=19','mode=STANDARD checks=16').Replace('[COOP_CONTEXT] mode=USSR','[COOP_CONTEXT] mode=STANDARD')
     foreach($name in @('ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','NO_GROUP_SUMMARY')) {
         $standardServer=$standardServer.Replace("[AICF][COOP_CASE] case=$name pass=1`n",'')
     }
-    $standardManifest=$manifest.Replace('StockCoopUSSR','Stock').Replace('"USSR"','"STANDARD"')
-    $standardClientLaunch=$playerLaunch.Replace('StockCoopUSSR','Stock').Replace('"USSR"','"STANDARD"')
+    $standardManifest=$manifest.Replace('CoopUSSR','Standard').Replace('"USSR"','"STANDARD"')
+    $standardClientLaunch=$playerLaunch.Replace('CoopUSSR','Standard').Replace('"USSR"','"STANDARD"')
     Check 'barracks-standard-server' $standardServer $standardManifest 0 '' -RequireBarracks
     Check 'barracks-standard-client' $barracksClient $standardClientLaunch 0 '' -RequireBarracks -Client
     $usServer=$standardServer.Replace('{6F72F05752ED62A8}Prefabs/Groups/OPFOR/Group_USSR_FireGroup_Guard.et','{0A8E20F50DA233E1}Prefabs/Groups/BLUFOR/Group_US_FireTeam_Guard.et').Replace('[BUY_FACTION] pass=1 faction=USSR','[BUY_FACTION] pass=1 faction=US')
@@ -143,7 +144,7 @@ try {
         @('area-script-error',($areaClient+"`nSCRIPT (E): SupportStationAreaMesh"),'SCRIPT_FATAL')
     )) { Check $case[0] $case[1] $playerLaunch 1 $case[2] -RequireBarracks -RequireSupportArea -Client }
     Check 'area-spawn-failed' ($areaServer.Replace('[AREA_SPAWN] pass=1','[AREA_SPAWN] pass=0')) $manifest 1 'SUPPORT_AREA_FAILED' -RequireBarracks -RequireSupportArea
-    $rhsServer=$positive+"`n[COOP_CONTEXT] mode=USSR us_faction=RHS_USAF ussr_faction=RHS_AFRF nodes=7"
+    $rhsServer=$positive.Replace('us_faction=US ussr_faction=USSR','us_faction=RHS_USAF ussr_faction=RHS_AFRF')
     $rhsManifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Server';variant='EveronNorthWCSRHS';matchMode='CoopUSSR';arguments=@('-aicfCoopProbe','USSR')}|ConvertTo-Json -Compress)
     Check 'rhs-server-ussr' $rhsServer $rhsManifest 0 ''
     Check 'rhs-server-wrong-context' ($rhsServer.Replace('ussr_faction=RHS_AFRF','ussr_faction=USSR')) $rhsManifest 1 'CONTENT_CONTEXT'

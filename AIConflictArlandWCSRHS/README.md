@@ -1,12 +1,12 @@
 # AI Conflict Arland WCS + RHS
 
 Отдельный source addon `A1CF260928100001` поверх `AIConflictArlandRHS`.
-Сценарий `{A1CF260928100002}Missions/AICF_WCS_RHS_Conflict_Arland.conf`
-наследует существующий AI Conflict RHS Arland. World, базы, controller,
+Штатный target `{7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf`
+получает настройки через runtime selection единого AI Conflict. World, базы, controller,
 readiness, экономика и lifecycle остаются у прежних владельцев.
 
-Для всех трёх сложностей есть отдельные Co-op варианты за НАТО и РФ.
-Сторона игроков выбирается сценарием; её автоматическая боевая армия и
+Для всех трёх сложностей доступны Co-op за НАТО и РФ.
+Сторона игроков выбирается в настройках; её автоматическая боевая армия и
 размещение построек отключены, рабочие и казарма доступны.
 Запуск: `-Variant ArlandWCSRHS -MatchMode CoopUS|CoopUSSR`.
 Каталог и добавление новых integrations: [COOP_SCENARIO.md](../agent-notes/COOP_SCENARIO.md).
@@ -307,7 +307,7 @@ SCRIPT E/F и ENGINE F отсутствуют. Evidence: `.codex-runtime/issue-7
 ```
 
 `RhsAddonsRoot` здесь указывает общий установленный Workshop-каталог RHS/WCS.
-Launcher выбирает новый header, полный dependency graph и отдельный свежий
+Launcher выбирает native header, отдельные runtime mode/difficulty, полный dependency graph и свежий
 profile, печатает `AICF_RUNTIME_MANIFEST_JSON`. Предварительный `-DryRun`
 показывает exact arguments без запуска native process. Клиент автоматически
 не подключается.

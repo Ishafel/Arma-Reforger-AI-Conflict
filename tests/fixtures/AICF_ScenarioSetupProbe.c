@@ -13,7 +13,7 @@ class AICF_ScenarioSetupProbe
 	void Headers()
 	{
 		SCR_MissionHeaderCampaign header = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(HEADER));
-		Check("HEADER", header && header.m_aAICFSetupPresets && header.m_aAICFSetupPresets.Count() == 9 && header.m_bShowInScenarioMenu);
+		Check("HEADER", header && header.m_bAICFSetupEntry && header.m_bShowInScenarioMenu);
 		if (!header) return;
 		AICF_ScenarioSetupSelection selection = new AICF_ScenarioSetupSelection(header);
 		Check("DEFAULT", selection.GetMode() == 2 && selection.GetDifficulty() == 1 && !selection.GetResource().IsEmpty());
@@ -23,26 +23,21 @@ class AICF_ScenarioSetupProbe
 			{
 				bool selected = selection.Select(mode, difficulty);
 				SCR_MissionHeaderCampaign preset = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(selection.GetResource()));
-				Check(string.Format("PRESET_%1_%2", mode, difficulty), selected && preset && !preset.m_bAICFSetupEntry && preset.m_eAICFMatchMode == mode && preset.m_eAICFDifficulty == difficulty && preset.GetWorldResourceName() == header.GetWorldResourceName() && preset.m_eSaveTypes == 0);
+				Check(string.Format("PRESET_%1_%2", mode, difficulty), selected && preset && !preset.m_bAICFSetupEntry && selection.GetMode() == mode && selection.GetDifficulty() == difficulty && preset.GetWorldResourceName() == header.GetWorldResourceName());
 			}
 		}
 		SCR_MissionHeaderCampaign active = SCR_MissionHeaderCampaign.Cast(GetGame().GetMissionHeader());
-		Check("ACTIVE_PRESET", active && header.AICF_ResolveSetupPreset(active.m_eAICFMatchMode, active.m_eAICFDifficulty) == active.GetHeaderResourceName());
-		Check("INVALID_BOUNDS", header.AICF_ResolveSetupPreset(-1, 0).IsEmpty() && header.AICF_ResolveSetupPreset(3, 0).IsEmpty() && header.AICF_ResolveSetupPreset(0, -1).IsEmpty() && header.AICF_ResolveSetupPreset(0, 3).IsEmpty());
+		Check("ACTIVE_PRESET", active && AICF_RuntimeScenario.IsActive() && AICF_RuntimeScenario.GetSelection().GetTarget() == active.GetHeaderResourceName());
+		Check("INVALID_BOUNDS", !selection.Select(-1, 0) && !selection.Select(3, 0) && !selection.Select(0, -1) && !selection.Select(0, 3));
 		ResourceName before = selection.GetResource();
 		Check("FAILURE_PRESERVES_SELECTION", !selection.Select(3, 2) && selection.GetResource() == before);
 		AICF_ScenarioSetupSelection empty = new AICF_ScenarioSetupSelection(null);
 		Check("NULL_HEADER", empty.GetResource().IsEmpty() && !empty.Select(0, 0));
-		ResourceName last = header.m_aAICFSetupPresets[8];
-		header.m_aAICFSetupPresets.Remove(8);
-		Check("INCOMPLETE", header.AICF_ResolveSetupPreset(0, 0).IsEmpty());
-		header.m_aAICFSetupPresets.Insert(last);
-		ResourceName first = header.m_aAICFSetupPresets[0];
-		header.m_aAICFSetupPresets[0] = last;
-		Check("MISMATCH", header.AICF_ResolveSetupPreset(0, 0).IsEmpty());
-		header.m_aAICFSetupPresets[0] = HEADER;
-		Check("RECURSIVE", header.AICF_ResolveSetupPreset(0, 0).IsEmpty());
-		header.m_aAICFSetupPresets[0] = first;
+		AICF_ScenarioRegistry registry = new AICF_ScenarioRegistry();
+		Check("INVALID_MAP", !registry.Find(-1, 0));
+		Check("INVALID_CONTENT", !registry.Find(0, 3));
+		Check("NO_RECURSION", selection.GetResource() != HEADER);
+
 	}
 	void Done() { Print(string.Format("[AICF][SETUP_DONE] checks=%1 failed=%2", m_iChecks, m_iFailed)); }
 }

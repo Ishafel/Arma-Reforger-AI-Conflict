@@ -7,7 +7,6 @@ enum AICF_EMatchMode
 
 modded class SCR_MissionHeaderCampaign
 {
-	[Attribute("0", UIWidgets.ComboBox, "AI Conflict match mode", "", ParamEnumArray.FromEnum(AICF_EMatchMode))]
 	AICF_EMatchMode m_eAICFMatchMode;
 }
 

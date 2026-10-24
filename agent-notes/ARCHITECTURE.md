@@ -1,7 +1,8 @@
 # Архитектура и навигация по исходникам
 
-Проект расширяет stock Conflict скриптами Enforce. Gameplay resources — тонкие
-inherited `MissionHeader`; они выбирают штатный сценарий и его настройки.
+Проект расширяет stock Conflict скриптами Enforce. Единственный gameplay resource —
+тонкий inherited `MissionHeader` входа AI Conflict; runtime selection выбирает
+штатную миссию и применяет её настройки.
 Собственных world/base/layout ресурсов нет. North ограничивает штатные базы
 whitelist, оставляя ландшафт целым. UI редактора экипировки использует временный
 in-memory world для preview; он не является миром кампании.
@@ -20,7 +21,7 @@ identity и одноразовым флагом commit. `AICF_RHSPMCEquipment` �
 |---|---|---|
 | `AIConflictCore` | `9178E5822AFE48EA` | Независимые от карты механики, UI, диагностика |
 | `AIConflictArland` | `B52C5F6AEDBF423E` | Общий bootstrap stock Conflict, radio normalization, Arland header |
-| `AIConflictEveron` | `A4B2E62595F645A4` | Everon headers и policy выхода из изолированного radio-компонента |
+| `AIConflictEveron` | `A4B2E62595F645A4` | Runtime whitelist North и policy выхода из изолированного radio-компонента |
 | `AIConflictArlandRHS` | `9F88011DA22B471C` | RHS content profile и compatibility adapters |
 | `AIConflictEveronRHS` | `FA9FDCCA428A43BA` | Объединение Everon policy и RHS profile, callsign pool adapter |
 | `AIConflictArlandWCSRHS` | `A1CF260928100001` | WCS экипировка, арсенал и техника поверх RHS |
@@ -31,9 +32,9 @@ Vanilla dependency — `58D0FB3206B6F859`. Точный граф зависим�
 этот каталог через `AICF_Scenarios.ps1`. GUID не меняются.
 Core и stock integrations не должны получать обязательные RHS/WCS dependencies.
 
-Co-op за US/USSR выбирается тонким inherited header для каждого из девяти
-сочетаний карты и контента. Генератор наследует соответствующий standard header
-той же сложности, сохраняя world, North whitelist и content flags. Общая immutable
+Co-op за US/USSR выбирается runtime selection для каждого из девяти
+сочетаний карты и контента. Генератор задаёт native target и dependency graph;
+mode/difficulty передаются отдельно, North whitelist задаёт Everon integration. Общая immutable
 `AICF_MatchRules` задаёт 0 боевых slots у людей и 10 у противника, ticket defeat по стороне;
 faction state и helpers сохраняются. Владение roster остаётся у FactionState,
 условиями победы — у VictorySystem. Контракт: [COOP_SCENARIO.md](COOP_SCENARIO.md).
@@ -76,18 +77,18 @@ Concrete targets и dependency graphs генерируются в Arland integra
 JSON каталога. `AICF_ScenarioLaunch` проверяет native permissions входного item,
 enabled state внешнего content graph, зависимости, download/platform/forced-CLI
 gates и передаёт точный граф native
-Play/Host transition. Окружение передаётся одноразовым process-local intent через
-native GameSessionStorage в точный header. При смене scripts graph в preparation
-Listen `AICF_ScenarioHostTransition` владеет переходом через main menu,
-повторным native Host с исходной engine config и конечным leaf; его intent
-содержит выбор/окружение без копии сетевой config или паролей. Каждая граница
-проверяет phase, TTL, graph и header identity. `AICF_ScenarioEnvironmentHandler`
-на authority передаёт начальные часы/погоду штатному handler; native manager
-сохраняет ускорение, погодные переходы, save/load и репликацию. Границы,
-исключение прежнего leaf TryPlay/TryHost пути и cleanup — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
-Arland integration регистрирует один вход в native default catalog, сохраняя
-stock записи и прежние leaf GUID; UI фильтрует точные legacy IDs. Это необходимо
-для source addons без WorkshopItem.
+Play/Host transition. Атомарный выбор передаётся через GameSessionStorage в native target.
+AICF_RuntimeScenario применяет mode/difficulty/rank/save/environment перед
+native weather/base initialization и восстанавливает cached header при cleanup.
+North whitelist принадлежит Everon integration. Server публикует variant,
+mode/difficulty/ready через существующий game mode RplProp; JIP зеркалит только
+локальную presentation и rank caches. Старые 81 ресурса и GUID удалены,
+обратной совместимости с ними и StockCoopUSSR alias нет.
+При смене scripts graph в preparation Listen HostTransition владеет переходом
+через menu, повторным native Host с engine config и native mission; проверяет
+итоговый полный selection, потому что разные режимы/North используют общий ID.
+Arland регистрирует единственный собственный setup; stock записи сохраняются.
+Подробности — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
 Core разрешает subtype чтением ресурса по ID; nullable catalog `GetHeader()` не
 определяет доступность входа. `AICF_WorkshopTagMetadata` — узкий адаптер чтения
 штатных UI tag maps, избегающий standalone protected constructor SCR_FilterCategory.

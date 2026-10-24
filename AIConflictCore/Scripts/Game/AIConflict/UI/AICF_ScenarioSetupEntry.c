@@ -45,31 +45,6 @@ modded class SCR_ScenarioUICommon
 	}
 }
 
-// Packaged legacy headers remain addressable by GUID, but use one menu entry.
-modded class SCR_ContentBrowser_ScenarioSubMenu
-{
-	override protected Widget CreateLine(ResourceName layout, Widget parent, MissionWorkshopItem scenario)
-	{
-		AICF_ScenarioRegistry registry = new AICF_ScenarioRegistry();
-		if (scenario && registry.IsLeaf(scenario.Id())) return null;
-		return super.CreateLine(layout, parent, scenario);
-	}
-}
-
-modded class SCR_ServerConfigListComponent
-{
-	protected array<MissionWorkshopItem> AICF_FilterPresets(array<MissionWorkshopItem> missions)
-	{
-		AICF_ScenarioRegistry registry = new AICF_ScenarioRegistry();
-		array<MissionWorkshopItem> result = {};
-		foreach (MissionWorkshopItem mission : missions)
-			if (mission && !registry.IsLeaf(mission.Id())) result.Insert(mission);
-		return result;
-	}
-	override array<MissionWorkshopItem> GetDefaultScenarios() { return AICF_FilterPresets(super.GetDefaultScenarios()); }
-	override array<MissionWorkshopItem> GetModdedScenarios() { return AICF_FilterPresets(super.GetModdedScenarios()); }
-}
-
 modded class SCR_ScenarioMenu
 {
 	override void OnMenuClose()

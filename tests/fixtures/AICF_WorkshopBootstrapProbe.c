@@ -171,7 +171,7 @@ class AICF_WorkshopBootstrapProbe
 			Check("LITERAL_NAME", header && header.m_sName == "AI Conflict");
 			AICF_ScenarioRegistry baseRegistry = new AICF_ScenarioRegistry();
 			AICF_ScenarioVariant baseVariant = baseRegistry.Find(0, 0);
-			Check("FRONTEND_GRAPH", header && baseVariant && header.AICF_ResolveSetupPreset(0, 0) == baseVariant.Resolve(0, 0) && baseVariant.m_aAddons.Count() == 2);
+			Check("FRONTEND_GRAPH", header && header.m_bAICFSetupEntry && baseVariant && !baseVariant.Resolve(0, 0).IsEmpty() && baseVariant.m_aAddons.Count() == 2);
 			Check("NATIVE_ENTRY", entry != null);
 			if (m_iFailed) { Close(); return; }
 			GameSessionStorage.s_Data[PHASE_KEY] = "BOOT";
@@ -260,6 +260,9 @@ class AICF_WorkshopBootstrapProbe
 			AICF_ScenarioVariant target = Target();
 			Check("SELECTED_HEADER", header && target && header.GetHeaderResourceName() == target.Resolve(TargetMode(), TargetDifficulty()));
 			Check("NO_BOOTSTRAP", !AICF_ScenarioBootstrap.ShouldIntercept());
+			AICF_RuntimeScenarioSelection runtime = AICF_RuntimeScenario.GetSelection();
+			Check("APPLIED_RULES", runtime && target && runtime.GetVariant().m_sKey == target.m_sKey &&
+				runtime.m_iMode == TargetMode() && runtime.m_iDifficulty == TargetDifficulty());
 			SCR_MissionHeader selected = SCR_MissionHeader.Cast(header);
 			Check("APPLIED_ENVIRONMENT", selected && selected.m_AICFEnvironment && selected.m_AICFEnvironment.m_iStartMinutes == 577 && selected.m_AICFEnvironment.m_iWeather == 4);
 			if (System.IsCLIParam("aicfColdHostProbe")) Check("HOST_LISTEN", RplSession.Mode() == RplMode.Listen);
@@ -339,6 +342,31 @@ modded class AICF_MatchController
 	}
 }
 
+// Read-only observer: cached native headers must not retain match settings.
+modded class AICF_RuntimeHeaderSnapshot
+{
+	override void Restore()
+	{
+		SCR_MissionHeaderCampaign header = m_Header;
+		super.Restore();
+		if (!System.IsCLIParam("aicfColdLifecycleProbe")) return;
+		bool restored;
+		if (header)
+		{
+			restored = header.m_sName == m_sName && header.m_sGameMode == m_sGameMode &&
+				header.m_eSaveTypes == m_eSaveTypes && header.m_eStartingRank == m_eRank;
+			if (header.m_bIgnoreMinimumVehicleRank != m_bIgnoreRank || header.m_bOverrideScenarioTimeAndWeather != m_bOverride ||
+				header.m_bRandomStartingDaytime != m_bRandomDay || header.m_bRandomStartingWeather != m_bRandomWeather) restored = false;
+			if (header.m_bRandomWeatherChanges != m_bWeatherChanges || header.m_iStartingHours != m_iHours || header.m_iStartingMinutes != m_iMinutes ||
+				header.m_fDayTimeAcceleration != m_fDay || header.m_fNightTimeAcceleration != m_fNight) restored = false;
+			if (header.m_bCustomBaseWhitelist != m_bWhitelist || header.m_bEstablishingBasesEnabled != m_bEstablish ||
+				header.m_aCampaignCustomBaseList != m_Bases || header.m_eAICFMatchMode != m_eMode || header.m_eAICFDifficulty != m_eDifficulty) restored = false;
+			if (header.m_AICFEnvironment) restored = false;
+		}
+		Print(string.Format("[AICF][COLD_SNAPSHOT_RESTORED] pass=%1", restored));
+	}
+}
+
 modded class ArmaReforgerScripted
 {
 	protected ref AICF_WorkshopBootstrapProbe m_AICFColdProbe;
@@ -354,8 +382,14 @@ modded class ArmaReforgerScripted
 	}
 	override void OnGameEnd()
 	{
+		bool checkRuntime = System.IsCLIParam("aicfColdLifecycleProbe") && AICF_RuntimeScenario.IsActive();
 		if (m_AICFColdProbe) m_AICFColdProbe.Stop();
 		m_AICFColdProbe = null;
 		super.OnGameEnd();
+		if (checkRuntime)
+		{
+			bool cleared = !AICF_RuntimeScenario.IsActive() && !GameSessionStorage.s_Data.Contains(AICF_RuntimeScenario.SESSION_KEY) && !AICF_ScenarioHostTransition.HasPending();
+			Print(string.Format("[AICF][COLD_RUNTIME_CLEARED] pass=%1", cleared));
+		}
 	}
 }
