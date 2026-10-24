@@ -1,5 +1,51 @@
 # Проверки и baseline
 
+## Объединение PR #74 / #75 — 2026-10-24
+
+Ветка codex/fix-play-shutdown, проверенный source **f8f54a9**: изменения
+каталога Workshop из #74 перенесены cherry-pick f657024. Конфликт только в
+этом журнале; обе истории сохранены. Tool, новые contracts/metadata fixture и
+release note совпадают с исходным PR по Git blob. Evidence и точные команды:
+.codex-runtime/consolidate-pr74-20261024/REPORT.md.
+**Native shutdown crash не исправлен; общий результат частичный, PR draft.**
+
+Свежий baseline шести профильных checks — **6/6 PASS/0**. Новый
+Invoke-AICFChecks.ps1 -Suite All через временный X: — **86/86 PASS, exit 0**,
+включая **26/26 Workshop bundle contracts** и 50/50 bootstrap log contracts.
+Это новый объединённый набор; прежние 85/85 ниже относятся к старым source.
+Workbench production Stock, EveronWCSRHS, точной cold fixture и отдельной
+vanilla-dependent metadata fixture — **4/4 PASS/0**: validation успешна,
+SCRIPT E/F, ENGINE F, VM/hang/SteamAPI failure — 0; прочих (E) — 50/78/78/50.
+
+Текущий bundle tool заново применён к точным native snapshots опубликованной
+0.2.2: **7/7 prepare + Check PASS**, 82 → 1 запись, **55/55 payload hashes**,
+семь input manifests, версия и прочие metadata поля неизменны. Это проверка
+подготовки metadata, не новая сборка gameplay и не публикация. Native frontend
+census исходных metadata: own=82/setup=1/legacy=81 (два ожидаемых отрицательных
+readbacks); подготовленной модели: own=1/setup=1/legacy=0, **8/8 PASS**.
+В обоих scripts семи AICF addons unloaded, stock сохранён, CLI точный,
+native exit 0, full stopped logs без fatal/hang. Uploader/backend не проверены.
+
+Окончательный canonical Frontend: Stock Play **16**, Stock Host с roster
+**19**, Cancel **7** — native 0, full-log oracle PASS/0. Три WCS Play дали
+**16 cold + 14 intent cases** каждый: первый после Game destroyed получил
+native **-1073741819 / 0xC0000005**, oracle **FAIL/1**, два следующих — PASS/0.
+WCS Host — **19 + 14**, точный RHS world и все 28 addon IDs, Listen,
+listener 127.0.0.1:24073, 09:37/Rainy, ROSTER_READY, четыре handoff phases и
+снятый intent; после 45 секунд native 0, oracle PASS/0.
+Успешная загрузка и отдельные чистые выходы не снимают нестабильный crash.
+
+349 production файлов и обе fixture совпали со stages по SHA-256. Первые
+ошибки WinPS test harness и остановка зависшего parent pipe после AV сохранены
+отдельно; wrapper exit не заменяет actual native exit. Native timeout/forced
+stops в окончательной матрице — 0. Все полные logs/dumps и manifests сохранены;
+15 собственных directories / 905 файлов архивированы с проверкой каждого SHA,
+stages/profiles удалены, native active=0. Публикация/merge/версия не менялись.
+**NOT RUN:** uploader без регенерации manifest, backend/новый packaged download,
+физический UI/вид, второй игрок/JIP, пароль/player limit и длительный матч.
+Для сетевых критериев нужны отдельная identity и реальные подключения;
+source readbacks их не доказывают. До снятия blockers PR остаётся draft.
+
 ## Retail environment и native shutdown — 2026-10-24
 
 Ветка `codex/fix-play-shutdown` от `83667ee`. **Частичный результат; native crash
