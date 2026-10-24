@@ -1,5 +1,37 @@
 # Проверки и baseline
 
+## Подготовка 0.2.2 — 2026-10-24
+
+По запросу владельца [PR #73](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/73)
+оформляется как выпуск **0.2.2** в существующей ветке
+`codex/workshop-universal-entry`. База оформления — `b54ffb9`, дерево чистое;
+`origin/main` по-прежнему `bb748797d1dd1f898759775d00d3e71ab9b002e6`.
+Добавлены `releases/0.2.2.md`, ссылки в README/указателе и версия publisher
+в DEVELOPMENT. Исторические записи и патчноуты 0.2.1 сохраняются.
+Версия пакета задаётся в publisher, отдельного version field в source нет.
+
+До правки `Invoke-AICFChecks.ps1 -Name @(Test-ScenarioSetupStatic.ps1,
+Test-WorkshopScenarioNamesStatic.ps1,Test-LocalizationStatic.ps1,
+Test-ScenarioHeadersStatic.ps1) -EvidenceRoot <evidence>/before-source` —
+**4/4 PASS, exit 0**. `Verify-ReleaseDocs.ps1 -Phase before` — **PASS/0**, 125
+локальных Markdown links, нет delta production/tests/tools от `b54ffb9`,
+`git diff --check` — 0. Evidence оформления:
+`.codex-runtime/release-0.2.2-20261024/`.
+
+После правки `Verify-ReleaseDocs.ps1 -Phase after` — **PASS/0**: 125 links,
+все targets доступны и tracked либо добавляются этим коммитом,
+production/tests/tools совпадают с `b54ffb9`, `git diff --check` — 0.
+
+Полные **84/84 offline**, **2/2 compile**, native Play **13/13**, Cancel **7/7**
+и private Listen **16/16** относятся к исправлению `b54ffb9`, описанному ниже;
+при оформлении документации полный набор, compile и runtime повторно не
+запускаются. Прежние resource diagnostics 50/78 строк сохраняются.
+Первый Play/Host нового опубликованного пакета в vanilla frontend, public
+Host со вторым игроком/JIP, пароль/лимит, физический UI input и soak —
+**NOT RUN**. Нужны согласованно обновлённые Core и Arland и полный перезапуск
+игры; source-stage не подтверждает packaged сценарий. Git-тег, GitHub Release
+и Workshop публикация в рамках оформления PR не создаются.
+
 ## Первый вход в универсальную настройку из Workshop — 2026-10-24
 
 Ветка `codex/workshop-universal-entry` от свежего `origin/main`
