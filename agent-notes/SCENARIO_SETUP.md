@@ -34,7 +34,7 @@ WCS + RHS — при включённом полном наборе обоих �
 РФ — native tricolor widgets, НАТО — стилизованный компас на синем поле.
 
 Подключающиеся игроки используют обычный браузер/direct connect и штатные
-Welcome/faction/group UI. Новый экран не перенастраивает текущую сессию и не
+Welcome/faction/group UI. Новый экран настраивает только локальный запуск и не
 показывается JIP-клиенту. Co-op — [COOP_SCENARIO.md](COOP_SCENARIO.md), найм —
 [GAMEPLAY.md](GAMEPLAY.md). Автостройка своей стороны в Co-op отключена;
 рабочие и заказы бойцов в казарме сохранены.
@@ -174,10 +174,46 @@ frontend `SCR_DownloadManager`: вместо него проверяется nat
 `IsProcessed` и `GetPendingDownload`; main-menu gate сохраняет прежний manager.
 Native CanHost применяется при создании новой сессии с config. Preparation
 Listen уже создан штатным Host: выбор меняет его сценарий через CanPlay и
-сохраняет platform gate. Полный graph, enabled/downloaded/corruption и
+сохраняет platform gate. При изменении graph используется описанный ниже
+`AICF_ScenarioHostTransition`. Полный graph, enabled/downloaded/corruption и
 forced-CLI gates действуют в обоих контекстах. Отмена preparation вызывает
 native GameplayEnd, обычное закрытие/успешный launch только снимает UI.
 Callback снимается в OnGameEnd; UI освобождается до world cleanup.
+
+В API 1.8.0.13 preparation Listen принимает ScenarioChange с новым addon CSV,
+но фактически не меняет scripts graph: Everon WCS + RHS из Core + Arland
+оставался на чёрном экране. Одного `RequestReload` в действующем Listen
+недостаточно. `AICF_ScenarioHostTransition` при несовпадении точного loaded graph
+возвращается в main menu через GameplayEnd и в том же кадре задаёт полный
+graph через RequestReload. Так Core и обработчик intent остаются загружены.
+Затем вызывает `RequestPublicServerTransition(null)`, как штатный
+`ArmaReforgerScripted.HostGameConfig`: engine использует удерживаемую исходную
+Host config. Переданный RequestReload сохраняет новый graph и на этом переходе.
+После повторной загрузки **того же** setup header в Listen конечный
+ScenarioChange уже работает с загруженными integration и content scripts.
+При совпадающем graph дополнительного возврата нет; main-menu Host с явной
+SCR_DSConfig и Play сохраняют прежние пути.
+
+Intent schema 1 хранит только phase, issued tick, точный entry и индексы
+карты/контента/режима/сложности, минуты и погоду в GameSessionStorage. Native
+config и пароли не копируются и не заменяются defaults: GetRunningDSConfig и
+ServerLobbyApi.GetServerConfig по-прежнему недоступны в этом Listen. Descriptor
+и target заново разрешаются через registry, TTL — 10 минут. Callback сверяет
+неизменность payload, phase/context, точный graph, Listen и identity setup/leaf;
+переход на чужой header запрещён. Промежуточные OnMissionSet снимают обычный
+environment intent, поэтому перед leaf он заново ставится из handoff payload.
+Повторный picker во время handoff не открывается; pending снимается после
+проверки конечного header. Fail очищает intent/environment, Stop снимает callback.
+События `HOST_HANDOFF phase=RETURN/HOST/LEAF/READY` фиксируют каждую границу.
+
+Source terminal probe подтвердил первый Everon WCS + RHS / Co-op USSR / Hard,
+все 28 addons, native listener 127.0.0.1:24073, 09:37/Rainy и ROSTER_READY.
+Фактические password/player limit, второй игрок/JIP и packaged cold Workshop
+остаются NOT RUN. Исторические failed experiments и native shutdown crash
+не стираются новым PASS; результаты — [TESTING.md](TESTING.md).
+Быстрый выход из Play повторно дал native access violation и на исходной
+production базе до этого исправления. Причина не установлена; это отдельный
+runtime blocker для ready PR/релиза, а не PASS по сохранению прежнего Play.
 
 Setup использует штатный тип header с явным opt-in flag. Самостоятельный
 `AICF_ScenarioSetupHeader` больше не используется: контроль после native
@@ -228,6 +264,12 @@ issued tick, minutes и weather. Schema 1 с прежними time presets от�
 совпадающий leaf header, валидные bounds и возраст до 10 минут. Чужой сценарий,
 повторный старт и malformed payload не наследуют параметры. Данные прикрепляются
 к transient полю экземпляра header, без изменения исходного ресурса.
+
+Target читается из JSON в **ResourceName**, как и при записи. Retail 1.8.0.13
+записывает это значение как один GUID; чтение в `string` оставляло GUID вместо
+полного resource name и ошибочно отклоняло выбранный leaf. Native typed read
+восстанавливает имя через resource database; строгая проверка `target != actual`
+и schema 2 сохранены. Проверка только Diag не подтверждает этот roundtrip.
 
 `AICF_ScenarioEnvironmentHandler` использует штатный
 `SCR_TimeAndWeatherHandlerComponent.SetupDaytimeAndWeather` на authority.
@@ -296,6 +338,38 @@ source-only эксперимент без Core не смонтировал эт�
 `AICF_WorkshopTagMetadata` сохраняет исправление SCR_FilterCategory:
 BaseContainer adapter, callbacks Remove/Insert и override OnGameStart для
 правильного static caller. Native category constructors не меняются.
+
+## Метаданные публикации Workshop
+
+Реальный installed 0.2.2 содержит 82 записи в `ServerData.json` →
+`revision.scenarios`: Core 0, Arland 10, Everon 18, Arland RHS 9,
+Everon RHS 18, Arland WCS RHS 9, Everon WCS RHS 18. Соответствующие native
+publishing manifests также содержат их в `asset.scenarios`. Флаг hidden не
+убирает эти записи. Первый frontend ещё не загрузил Core и StringTable:
+он показывает raw names из metadata, а не результат script-фильтра.
+
+`tools/Prepare-AICFWorkshopBundle.ps1` работает с готовым native bundle,
+создаёт отдельную копию и оставляет в `asset.scenarios` только точный setup
+Arland с literal name `AI Conflict`. В копиях остальных шести addons список пуст.
+Все `.pak`, `.gproj`, `.rdb` и изображения копируются с проверкой SHA-256;
+ресурсы внутри пакетов, GUID и version не меняются. Input bundle не редактируется.
+Идентификаторы сверяются с каталогом; неизвестные/чужие/повторные IDs, отсутствие
+setup, неправильный literal title, битые payload hashes и существующий output
+отклоняются. `-Check` запрещает публикацию bundle с legacy entries.
+
+Это подготовка metadata для отдельной публикации. Обычная повторная сборка
+Workbench заново добавляет legacy entries; проверять нужно окончательный
+манифест, который будет передан uploader. Приём backend и поведение native
+`publishAddonDir` с подготовленной копией пока **NOT RUN**. Нельзя выдавать
+проверенный JSON за успешную публикацию или редактировать installed ServerData.
+
+`AICF_WorkshopMetadataProbe.c` — отдельный vanilla-dependent тестовый addon.
+Он включает изолированные копии семи модов, но требует, чтобы их scripts
+оставались незагруженными. Native GetPageScenarios воспроизводит 82/81 legacy
+на исходных metadata и 1/0 на подготовленных; stock entries сохранены.
+В test harness копируется только tag-map adapter для обхода отдельного дефекта
+vanilla constructor, без сценарных фильтров Core. Изменённые ServerData/meta
+в этом опыте — локальная модель ответа backend, а не новая публикация.
 
 ## Проверки
 

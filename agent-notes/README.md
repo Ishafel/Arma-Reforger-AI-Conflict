@@ -7,10 +7,11 @@
 
 | Задача | Что читать |
 |---|---|
+| Запустить локальные Play/Host через обычный клиент или разобрать native shutdown crash | [DEVELOPMENT.md](DEVELOPMENT.md#локальные-playhost), [TESTING.md](TESTING.md), `tools/Start-AICFRuntime.ps1 -Role Frontend`; успешный offline/compile не заменяет stopped-log runtime gate |
 | Изменить внутриигровой брифинг на карте | [MISSION_BRIEFING.md](MISSION_BRIEFING.md), `UI/AICF_MissionBriefing.c`, MissionBriefingProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Разобрать resource/navmesh/Hierarchy ошибки и границу внешнего baseline | [EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md), [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), [TESTING.md](TESTING.md) |
 | Исправить damage RPC при смене обуви у private model или при shutdown | [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), `Integration/AICF_FeetDamageLifecycle.c`, FeetDamageProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
-| Изменить универсальное меню карт/контента, первый вход Workshop, подсказку «Как настроить», время/погоду, зависимости и native launch, видимость сценариев или ошибки SCR_FilterCategory | [SCENARIO_SETUP.md](SCENARIO_SETUP.md), `AICF_ScenarioBootstrap`, `AICF_ScenarioEnvironment`/`AICF_ScenarioEnvironmentHandler`, `AICF_ScenarioRegistry`, `AICF_ScenarioLaunch`, `AICF_ScenarioSetupSelection`, `AICF_ScenarioSetupScreen`, `AICF_ScenarioSetupEntry`, `AICF_ArlandScenarioCatalog`, `AICF_WorkshopTagMetadata` |
+| Изменить универсальное меню карт/контента, первый вход Workshop, подсказку «Как настроить», время/погоду, зависимости и native launch, видимость сценариев или ошибки SCR_FilterCategory | [SCENARIO_SETUP.md](SCENARIO_SETUP.md), `AICF_ScenarioBootstrap`/`AICF_ScenarioHostTransition`, `AICF_ScenarioEnvironment`/`AICF_ScenarioEnvironmentHandler`, `AICF_ScenarioRegistry`, `AICF_ScenarioLaunch`, `AICF_ScenarioSetupSelection`, `AICF_ScenarioSetupScreen`, `AICF_ScenarioSetupEntry`, `AICF_ArlandScenarioCatalog`, `AICF_WorkshopTagMetadata` |
 | Исправить классификацию смерти INSTIGATOR_OTHER | [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md), `AICF_InstigatorContext`, pinned `SCR_InstigatorContextData` и native Instigator API |
 | Добавить карту/мод или сторону Co-op; исправить лимит имён Workshop, roster, выбор фракции, группы игроков, строительство и поражение | [COOP_SCENARIO.md](COOP_SCENARIO.md), `tools/config/AICF_Scenarios.json`, `AICF_MatchRules`, `AICF_CoopFactionAccess`, `AICF_CoopFactionMenu`, `AICF_CoopPlayerGroups`, `AICF_ConstructionPlanner` |
 | Изменить найм купленных в казарме бойцов во всех сценариях | [GAMEPLAY.md](GAMEPLAY.md#найм-купленных-в-казарме-бойцов), `AICF_BarracksRecruitment`, barracks fixture в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
@@ -22,6 +23,7 @@
 | Изменить активацию штатной охраны FIA при подходе ИИ (issue #54) | [AMBIENT_PATROLS.md](AMBIENT_PATROLS.md), `Forces/AICF_ManagedObservers.c`, native ambient spawn/lifecycle в API 1.8.0.13 |
 | Выполнить критерии issue и привязать PR | [AGENTS.md: работа по issue](../AGENTS.md#работа-по-issue-и-привязка-pr), [TESTING.md](TESTING.md) |
 | Найти состав последнего оформленного релиза и ограничения | [0.2.2](../releases/0.2.2.md), [TESTING.md](TESTING.md) |
+| Убрать старые пункты из публикуемого каталога Workshop до загрузки Core | [SCENARIO_SETUP.md](SCENARIO_SETUP.md#метаданные-публикации-workshop), [Prepare-AICFWorkshopBundle.ps1](../tools/Prepare-AICFWorkshopBundle.ps1), [DEVELOPMENT.md](DEVELOPMENT.md) |
 | Найти домен, состояние и границы побочных эффектов | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Исправить ранние потери при spawn и зависание строительства до готовности roster | [ARCHITECTURE.md](ARCHITECTURE.md), `Forces/AICF_InfantrySpawnPlacement`, `Forces/AICF_InfantryVehicleClearance`, `State/AICF_FactionState`, [матрица запуска](TESTING.md#подготовка-0129-полная-матрица-запуска--2026-10-15) |
 | Проверить игровую механику и defaults | [GAMEPLAY.md](GAMEPLAY.md), затем указанные исходники |

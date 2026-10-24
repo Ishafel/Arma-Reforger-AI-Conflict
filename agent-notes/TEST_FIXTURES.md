@@ -90,6 +90,10 @@ crash.log при чистом console. Визуальный вид дыма/же
 `AICF_WorkshopBootstrapProbe.c` — отдельная fixture для первого native входа.
 Копировать только в isolated Core/UI как `AICF_ZColdBootstrapProbe.c`, CLI
 `-aicfColdBootstrapProbe 1`, frontend без `-client`/`-server`/`-world`.
+Запускать через `Start-AICFRuntime.ps1 -Role Frontend -Variant Stock`, с отдельным
+stage/profile и `-RhsAddonsRoot` для доступности внешних пакетов. Этот режим
+использует обычный игровой binary и сам сохраняет manifest/наблюдает exit;
+собирать frontend из Client DryRun удалением `-client` больше не требуется.
 Начальный source graph нужен для самой fixture; она вызывает
 `MissionWorkshopItem.Play()` напрямую, обходя уже загруженный TryPlay hook.
 Это проверка native границы и последующей настройки, не эмуляция vanilla VM
@@ -102,6 +106,33 @@ listen с fixture password/port через `RequestPublicServerTransition` и т
 source graph: у source `MissionWorkshopItem.Host` не хватает packaged header
 metadata. Проверяется host context и сохранение Listen после выбора.
 Это не проверка публичного Host со вторым игроком или действительности пароля.
+Retail readback обязателен: native JSON представление ResourceName отличается
+от Diag. Exit 0 без `APPLIED_ENVIRONMENT pass=1` и полного completion — FAIL.
+Для смены карты и графа добавлены `-aicfColdVariant EveronWCSRHS
+-aicfColdMode 2 -aicfColdDifficulty 2`: исходный граф остаётся Stock, полный
+внешний graph должен быть доступен через `addonsDir`. Fixture включает только
+его установленные content items в отдельном profile, останавливается при
+ошибочном выборе и проверяет точный leaf, фактический world и весь loaded graph.
+`COLD_WORLD` допускает native mount вида `$ArmaReforger:worlds/...`;
+`COLD_ADDON` сохраняет каждый loaded ID. Сам accepted request не означает
+загрузку карты. `-aicfHostIntentContracts 1` выполняет 14 native cases для
+roundtrip и отказов по JSON/schema/phase/TTL/entry/indices/environment,
+точного graph и запрета Queue вне preparation Host. Cases имеют отдельный
+`HOST_INTENT_CASE`, не подменяют основные 19 cold Host cases.
+`-aicfExpectHostHandoff 1` требует точную последовательность RETURN/HOST/LEAF/READY.
+`-aicfColdReadyProbe 1` удерживает конечный leaf 45 секунд перед RequestClose,
+печатает COLD_READY после ROSTER_READY; oracle требует Listen, отсутствие pending,
+последний фактический native listener 127.0.0.1:24073 и ENVIRONMENT_APPLIED 577/4.
+`RplSession.TryGetListenAddress` возвращает адрес интерфейса без порта и не
+заменяет строку `Starting RPL server` в полном логе.
+Существующий `-aicfWarmBootstrapControl 1` вместе с Host проверяет
+отдельный путь из main menu с private `SCR_DSConfig`; это не первый cold Host.
+`-aicfColdRetryHost 1` вместе с Host воспроизводит обходной путь целиком:
+native preparation Listen → Cancel → main menu → новая private Host config →
+выбранный leaf. Проверяет `RETRY_CANCEL_CONTEXT`/`RETRY_RETURN`; не заявляет
+восстановление первоначальных сетевых настроек. CLI retry и warm исключают друг друга.
+После reload fixture снимает собственные callbacks; внешний watchdog обязателен:
+зависший native transition может уже остановить старую script callqueue.
 `-aicfColdCancelProbe 1` вызывает тот же Cancel, что button/modal handler,
 и проверяет возврат в frontend без старта AICF матча. GUI input не создаётся.
 Своё process-local phase состояние удаляется перед RequestClose.
@@ -111,6 +142,10 @@ native exit 0, полный stopped console и отсутствие SCRIPT/VM/as
 во всех соседних `.log`, включая crash.log. До выбранного launch не допускает
 AICF bootstrap/spawn; при cancel не допускает launch вообще. Свежие результаты
 и сохранённые промежуточные FAIL — [TESTING.md](TESTING.md).
+Анализатор сверяет launch с общим каталогом, параметры режима/сложности с manifest,
+для явного variant требует world/loaded IDs, отклоняет native hang и читает
+все соседние `.log`. Его отрицательные cases находятся в
+`Test-WorkshopBootstrapLogContracts.ps1`.
 
 `AICF_UniversalScenarioProbe.c` копировать отдельно в isolated Core/UI как
 `AICF_ZUniversalScenarioProbe.c`: `-aicfUniversalProbe 1
@@ -193,6 +228,19 @@ canonical launcher; frontend — с тем же Client graph без подклю
 `Test-ScenarioCatalogLog.ps1 -LogPath ... -ManifestPath ... -NativeExitPath ...`:
 полный stopped log, exact source/profile/addons CLI, 16/16 и отсутствие SCRIPT/VM/fatal.
 Реальные нажатия игрока эта проверка не подтверждает.
+
+## Каталог Workshop без Core
+
+`AICF_WorkshopMetadataProbe.c` помещается в отдельный vanilla-dependent addon,
+а не Core. CLI `-aicfMetadataProbe 1`, frontend без server/client/world. Использует
+копии installed пакетов и cache metadata в отдельном profile вне checkout;
+не трогает установленные файлы. Test-only tag-map adapter не содержит фильтра
+сценариев. Требует scripts всех семи AICF addons unloaded, включает только
+копии через native WorkshopItem.Enable и читает GetPageScenarios. Восемь cases:
+unloaded/frontend/scan, один entry, setup один раз, нет legacy, literal name,
+stock preserved. `METADATA_RAW/ITEM/ADDON/SCAN/DONE` дают полный census.
+Все CallLater снимаются в Stop. Native process exit и stopped logs — отдельный
+gate; успешные readbacks при зависшем shutdown не дают runtime PASS.
 
 ## Instigator OTHER
 

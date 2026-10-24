@@ -283,11 +283,45 @@ try {
     else {
         $clientManifest = Get-ManifestFromOutput -Output $clientOutput -Rule 'RUNTIME_LAUNCHER_CLIENT_DRY_RUN'
         if ($clientManifest) {
+            if ($clientManifest.executable -ne (Join-Path $fakeGameRoot 'ArmaReforgerSteamDiag.exe')) { Add-Failure 'CLIENT_DIAG_DEFAULT' 'Direct-connect client must remain compatible with Diag server' }
             $expectedClientAddonsDir = "$fakeRepository,$fakeGameRoot\addons,$fakeRhsRoot"
             Require-ArgumentPair $clientManifest '-addonsDir' $expectedClientAddonsDir 'RUNTIME_LAUNCHER_ARGUMENT_INTEGRITY'
             Require-ArgumentPair $clientManifest '-client' '127.0.0.1' 'RUNTIME_LAUNCHER_CLIENT_TARGET'
         }
     }
+
+    foreach ($frontendVariant in @('Stock','RHS')) {
+        $frontendInvocation = @(
+            '-NoProfile','-ExecutionPolicy','Bypass','-File',$launcherPath,
+            '-Role','Frontend','-Variant',$frontendVariant,'-RepositoryRoot',$fakeRepository,
+            '-ServerRoot',(Join-Path $testRoot 'Server not installed'),'-GameRoot',$fakeGameRoot,
+            '-RhsAddonsRoot',$fakeRhsRoot,'-ProfileRoot',(Join-Path $testRoot "Profiles/Frontend-$frontendVariant"),'-DryRun'
+        )
+        $frontendOutput = @(& powershell.exe @frontendInvocation 2>&1 | ForEach-Object { $_.ToString() })
+        if ($LASTEXITCODE -ne 0) { Add-Failure 'FRONTEND_PLAN' ($frontendOutput -join ' | '); continue }
+        $frontendManifest = Get-ManifestFromOutput $frontendOutput 'FRONTEND_PLAN'
+        if (!$frontendManifest) { continue }
+        if ($frontendManifest.role -ne 'Frontend' -or $frontendManifest.executable -ne (Join-Path $fakeGameRoot 'ArmaReforgerSteam.exe')) { Add-Failure 'FRONTEND_RETAIL' 'Local frontend must use retail client' }
+        if (@($frontendManifest.arguments | Where-Object { $_ -in @('-client','-server','-MissionHeader','-world') }).Count) { Add-Failure 'FRONTEND_LOCAL' 'Frontend contains connection or world startup flags' }
+        Require-ArgumentPair $frontendManifest '-addonsDir' "$fakeRepository,$fakeGameRoot\addons,$fakeRhsRoot" 'FRONTEND_SCAN_ROOT'
+        foreach ($connectionCase in @(
+            @('-ClientAddress','127.0.0.1'), @('-ServerPort','2001'), @('-ServerProfileRoot',$fakeServerRoot),
+            @('-RemoteReadinessProbe','unused.ps1'), @('-ExpectedSourceCommit',('a' * 40))
+        )) {
+            $previousPreference = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try { $rejected = @(& powershell.exe @frontendInvocation @connectionCase 2>&1 | ForEach-Object { $_.ToString() }); $rejectedExit = $LASTEXITCODE }
+            finally { $ErrorActionPreference = $previousPreference }
+            if ($rejectedExit -eq 0 -or ($rejected -join ' ') -notmatch 'FRONTEND_CONNECTION_PARAMETER') { Add-Failure 'FRONTEND_CONNECTION_REJECTED' ($connectionCase -join ' ') }
+        }
+    }
+
+    $worldCommand = "& '" + $launcherPath.Replace("'", "''") + "' -Role Frontend -Variant Stock -AdditionalArguments @('-world') -DryRun"
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { $worldOutput = @(& powershell.exe -NoProfile -Command $worldCommand 2>&1 | ForEach-Object { $_.ToString() }); $worldExit = $LASTEXITCODE }
+    finally { $ErrorActionPreference = $previousPreference }
+    if ($worldExit -eq 0 -or ($worldOutput -join ' ') -notmatch 'FRONTEND_WORLD_PARAMETER') { Add-Failure 'FRONTEND_WORLD_REJECTED' 'Frontend accepted a world override' }
 
     foreach ($address in @('127.0.0.1', '127.0.0.1:23204')) {
         $portInvocation = @($clientInvocation)

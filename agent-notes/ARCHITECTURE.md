@@ -77,7 +77,11 @@ JSON каталога. `AICF_ScenarioLaunch` проверяет native permissio
 enabled state внешнего content graph, зависимости, download/platform/forced-CLI
 gates и передаёт точный граф native
 Play/Host transition. Окружение передаётся одноразовым process-local intent через
-native GameSessionStorage в точный header. `AICF_ScenarioEnvironmentHandler`
+native GameSessionStorage в точный header. При смене scripts graph в preparation
+Listen `AICF_ScenarioHostTransition` владеет переходом через main menu,
+повторным native Host с исходной engine config и конечным leaf; его intent
+содержит выбор/окружение без копии сетевой config или паролей. Каждая граница
+проверяет phase, TTL, graph и header identity. `AICF_ScenarioEnvironmentHandler`
 на authority передаёт начальные часы/погоду штатному handler; native manager
 сохраняет ускорение, погодные переходы, save/load и репликацию. Границы,
 исключение прежнего leaf TryPlay/TryHost пути и cleanup — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).

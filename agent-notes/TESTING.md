@@ -1,5 +1,311 @@
 # Проверки и baseline
 
+## Объединение PR #74 / #75 — 2026-10-24
+
+Ветка codex/fix-play-shutdown, проверенный source **f8f54a9**: изменения
+каталога Workshop из #74 перенесены cherry-pick f657024. Конфликт только в
+этом журнале; обе истории сохранены. Tool, новые contracts/metadata fixture и
+release note совпадают с исходным PR по Git blob. Evidence и точные команды:
+.codex-runtime/consolidate-pr74-20261024/REPORT.md.
+**Native shutdown crash не исправлен; общий результат частичный, PR draft.**
+
+Свежий baseline шести профильных checks — **6/6 PASS/0**. Новый
+Invoke-AICFChecks.ps1 -Suite All через временный X: — **86/86 PASS, exit 0**,
+включая **26/26 Workshop bundle contracts** и 50/50 bootstrap log contracts.
+Это новый объединённый набор; прежние 85/85 ниже относятся к старым source.
+Workbench production Stock, EveronWCSRHS, точной cold fixture и отдельной
+vanilla-dependent metadata fixture — **4/4 PASS/0**: validation успешна,
+SCRIPT E/F, ENGINE F, VM/hang/SteamAPI failure — 0; прочих (E) — 50/78/78/50.
+
+Текущий bundle tool заново применён к точным native snapshots опубликованной
+0.2.2: **7/7 prepare + Check PASS**, 82 → 1 запись, **55/55 payload hashes**,
+семь input manifests, версия и прочие metadata поля неизменны. Это проверка
+подготовки metadata, не новая сборка gameplay и не публикация. Native frontend
+census исходных metadata: own=82/setup=1/legacy=81 (два ожидаемых отрицательных
+readbacks); подготовленной модели: own=1/setup=1/legacy=0, **8/8 PASS**.
+В обоих scripts семи AICF addons unloaded, stock сохранён, CLI точный,
+native exit 0, full stopped logs без fatal/hang. Uploader/backend не проверены.
+
+Окончательный canonical Frontend: Stock Play **16**, Stock Host с roster
+**19**, Cancel **7** — native 0, full-log oracle PASS/0. Три WCS Play дали
+**16 cold + 14 intent cases** каждый: первый после Game destroyed получил
+native **-1073741819 / 0xC0000005**, oracle **FAIL/1**, два следующих — PASS/0.
+WCS Host — **19 + 14**, точный RHS world и все 28 addon IDs, Listen,
+listener 127.0.0.1:24073, 09:37/Rainy, ROSTER_READY, четыре handoff phases и
+снятый intent; после 45 секунд native 0, oracle PASS/0.
+Успешная загрузка и отдельные чистые выходы не снимают нестабильный crash.
+
+349 production файлов и обе fixture совпали со stages по SHA-256. Первые
+ошибки WinPS test harness и остановка зависшего parent pipe после AV сохранены
+отдельно; wrapper exit не заменяет actual native exit. Native timeout/forced
+stops в окончательной матрице — 0. Все полные logs/dumps и manifests сохранены;
+15 собственных directories / 905 файлов архивированы с проверкой каждого SHA,
+stages/profiles удалены, native active=0. Публикация/merge/версия не менялись.
+**NOT RUN:** uploader без регенерации manifest, backend/новый packaged download,
+физический UI/вид, второй игрок/JIP, пароль/player limit и длительный матч.
+Для сетевых критериев нужны отдельная identity и реальные подключения;
+source readbacks их не доказывают. До снятия blockers PR остаётся draft.
+
+## Retail environment и native shutdown — 2026-10-24
+
+Ветка `codex/fix-play-shutdown` от `83667ee`. **Частичный результат; native crash
+не устранён и остаётся blocker для ready PR/релиза.** Полный отчёт, все failed
+experiments, stopped logs/dumps и manifests:
+`.codex-runtime/play-shutdown-20261024/REPORT.md`.
+
+Исправлен отдельный воспроизводимый дефект обычного клиента: JSON записывал
+ResourceName target как GUID, но Consume читал его в string. Строгая проверка
+identity отклоняла собственный leaf, теряя 09:37/Rainy. Теперь чтение также
+ResourceName; target/TTL/one-shot/schema 2 и штатный владелец часов сохранены.
+Добавлен `Start-AICFRuntime.ps1 -Role Frontend`: retail, главное меню без
+direct-connect, настоящий process exit, optional Workshop root и для Stock.
+Server/Client сохраняют Diag defaults и прежний readiness gate. Это корректный
+терминальный путь проверки обычной игры, **не исправление native crash**.
+
+Свежий baseline: шесть профильных audits **6/6 PASS**, отдельно
+RuntimeLauncherStatic **PASS/0**, ScenarioEnvironmentStatic **20 contracts,
+PASS/0**. Окончательный `Invoke-AICFChecks.ps1 -Suite All` через временный X:
+— **85/85 PASS, exit 0**, `final-all/`; Environment — 21 guarded contract.
+Workbench Validate/Compile Stock, EveronWCSRHS и точной fixture — **3/3 PASS/0**,
+validation подтверждена по всем логам, SCRIPT E/F, ENGINE F, VM/hang — 0.
+Прочих compile (E) — 50/78/50; классификация сохранена отдельно.
+
+Окончательный ordinary Frontend с исправленным source: пять Play подряд —
+**16 cold + 14 intent cases каждый, native 0, full stopped-log oracle PASS/0**.
+Ещё один первый typed-read probe — те же 16 + 14 и PASS/0. Stock Play —
+**16**, Stock Host с roster — **19**, Cancel — **7**, native 0, oracle PASS/0.
+Перед этим восемь retail выходов имели native 0, но **FAIL по environment**;
+они не считаются успешными Play и не подтверждают исправление.
+
+**Сохранённый FAIL:** `frontend-host` загрузил точный Everon WCS + RHS /
+Co-op USSR / Hard, все 28 IDs, Listen, 127.0.0.1:24073, 09:37/Rainy и
+ROSTER_READY, выполнил 19 + 14 cases без ошибок, но после 45 секунд readback
+упал при завершении: native **-1073741819**, ENGINE F, oracle **FAIL/1**.
+Начальный полный WCS graph тоже не является исправлением:
+`preloaded-host-1/2` — 19 cases и PASS/0, `preloaded-host-3` — те же readbacks,
+затем **native -1073741819 и FAIL/1**.
+
+Изоляция: только семь project descriptors и **один** test-only callback,
+без production scripts/UI/catalogs/environment AICF; штатные Arland → Everon.
+С WCS графом один из четырёх выходов — native AV; с RHS без WCS — один из двух;
+два Vanilla контроля — native 0. В dumps сбой попадает в native функцию
+освобождения значений; Diag RVA 0x9554ef/0x955353, retail RVA 0x866aaf.
+Read-only metadata одного Diag падения содержит TIThermalProfile. Это
+локализация, **не доказательство внутренней причины или конкретного владельца
+ошибки в Enfusion/RHS**. Установленные RHS Status Quo 0.16.5237 и Content Packs
+0.16.5236 заявляют gameVersion 1.8.0.13; размеры и SHA-512 трёх data.pak
+совпали с их download manifests. Файлы игры/модов не изменялись.
+Read-only поиск прямых Material API calls в 486 RHS scripts и двух asset-only
+Content Packs не подтвердил гипотезу неверного SetParamByIndex; подробности
+и использованный PAC1 reader сохранены в evidence.
+
+Отклонены: отключение equipment/UI/controller, purge spawn queue, lifetime
+locals, возврат через main menu с новым и старым graph, graceful termination
+вместо RequestClose, простая замена Diag на retail и начальная предзагрузка.
+Варианты, сначала завершившиеся чисто, проверялись повторно; последующий AV
+сохранён. Production handoff/controller не менялись под эти гипотезы.
+Прерванные промежуточные All-наборы и compile с ошибочным test-only callback
+также сохранены; они не подменяют окончательные 85/85 и 3/3.
+
+349 production файлов совпали со stage по SHA-256. Временные stages/profiles
+архивируются с проверкой каждого файла; полные логи остаются в `full-logs/`.
+Фактические команды, exit codes, paths и cleanup — в отчёте. **NOT RUN:**
+packaged Workshop, физический UI input/вид, второй игрок/JIP, действительность
+пароля/player limit, длительный матч. Push/PR/merge/publication не выполнялись.
+
+## Исправление graph первого Host — 2026-10-24
+
+Продолжение `codex/fix-host-everon-wcs` от диагностического `21fcba8` с чистым
+деревом. Evidence: `.codex-runtime/host-everon-wcs-fix-20261024/REPORT.md`.
+Игровой клиент и Workbench — 1.8.0.13. Новый `AICF_ScenarioHostTransition`
+обходит зависание ScenarioChange в preparation Listen при смене scripts graph:
+GameplayEnd + RequestReload полного graph → main menu → native Host с null
+config → тот же preparation header → конечный leaf с уже загруженными addons.
+Исходную config удерживает engine; defaults/пароли в script payload не копируются.
+Intent содержит phase, TTL, entry/выбор/окружение; callback сверяет payload,
+контекст, точный graph и header identity, ожидание native transition ограничено.
+Подробности — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
+
+Свежий baseline шести профильных audits — **6/6 PASS/0**, `before/`.
+Полный `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+tools/Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <task>/after-all` —
+**85/85 PASS, exit 0**, без исключений. WorkshopBootstrapLogContracts —
+**50/50 PASS/0**; WorkshopBootstrapStatic — 29 guarded contracts, PASS/0.
+Все исходные команды/argv/логи/exit codes находятся в evidence.
+
+Терминальный `Compile.ps1 -Label final-production-stock`,
+`-Label final-production-wcs -Variant EveronWCSRHS` и точная окончательная
+fixture `-SourceRoot <stage> -Label final-fixture-exact -Variant EveronWCSRHS` —
+**3/3 PASS/0**. Полные logs подтверждают validation и отсутствие SCRIPT E/F,
+ENGINE F, VM, access violation и hang; `compile-summary.json`.
+
+`Run-Candidate.ps1 -Label final-wcs-host -ListenHost -IntentContracts -Ready` —
+**19/19 cold cases + 14/14 intent cases**, native exit 0 и full stopped-log
+oracle PASS/0. 11:54:10–11:56:09 MSK: точный Everon WCS + RHS / Co-op USSR /
+Hard leaf и RHS world, все 28 addon IDs, Listen, фактический последний listener
+127.0.0.1:24073, 09:37/Rainy, ROSTER_READY и снятый handoff intent. После
+readback выполняется 45 секунд работы, затем fixture вызывает RequestClose.
+RETURN/HOST/LEAF/READY появляются ровно по одному и в правильном порядке.
+
+`handoff-wcs-short` с ранним выходом также дал **19 + 14, native 0, oracle
+PASS/0**. `stock-host-ready -ListenHost -Variant Stock -Ready` — **19/19,
+native 0, oracle PASS/0**, без дополнительного handoff. Эти два прогона
+предшествуют последней правке bounded retry; окончательный WCS повтор выше
+проверяет уже её. Ранний `handoff-wcs-ready` также PASS, но не заменяет final.
+
+В окончательном Host SCRIPT/VM/fatal/hang — 0; прочих console (E) — 373,
+в Stock — 76. Полные группы ошибок сохранены в runtime-error-classification.json:
+native/WCS GUID/resource, Hierarchy, loading UI metadata и shutdown lists.
+Собственных AICF resource errors в final Host нет. Это launch/roster PASS,
+а не заявление о чистоте всех внешних ресурсов.
+
+**Сохранённый FAIL:** `wcs-play-control` загрузил выбранный world/graph и
+окружение, но быстрый RequestClose дал native access violation после Game
+destroyed, exit -1073741819. `baseline-wcs-play` на исходных **348 production
+файлах с совпавшими SHA-256** воспроизвёл тот же crash. Это не новая регрессия
+Host fix; причина и её устранение не заявляются. Диагностический контроль
+`no-match-wcs-play` с отключённым AICF campaign bootstrap после native
+super.OnGameStart завершился с 0: вместе исключены profile, strategic UI,
+radio normalization и match controller, конкретный владелец не установлен.
+Этот runtime FAIL остаётся blocker для ready PR/релиза.
+
+Другие сохранённые неуспехи: `config-debug` — прежний hang после ожидания
+70 секунд, native -1 по watchdog; source `MissionWorkshopItem.Host` в
+`host-callback` — crash -1073740940; первый `native-retain` загрузил world/graph,
+но потерял environment и упал при завершении. Первый restricted Workbench
+не получил SteamAPI и дал -1; повтор с доступом к Steam прошёл. Неуспешные
+прогоны не выдаются за PASS и не перенесены как production варианты.
+
+349 production файлов и окончательная fixture совпали со stage; 14 собственных
+stages/profiles заархивированы, каждый файл zip проверен SHA-256 до удаления
+оригинала. Полные остановленные logs/dumps доступны в `full-logs/<label>/`,
+runtime-summary.json содержит актуальные пути и SHA-256 console. Своих native
+процессов 0; diff check PASS/0. Push, PR, версия и Workshop publication не менялись.
+
+**NOT RUN:** packaged cold Workshop build, физический UI input/внешний вид,
+второй игрок/JIP, фактическая авторизация паролем и player limit, остальные
+сетевые настройки, soak/полный матч. Для них нужны опубликованный пакет и
+отдельный игрок/identity; native source probe и исходный listener их не доказывают.
+
+## Чёрный экран preparation Host → Everon WCS + RHS — 2026-10-24
+
+Диагностика по сообщению владельца выполнена в `codex/fix-host-everon-wcs`
+от свежего `origin/main` `73ba75e0bb984fc64ecac17d59c085c53fffb8a8`.
+Production не меняется. Evidence:
+`.codex-runtime/host-everon-wcs-20261024/REPORT.md`.
+
+В сохранённом полном пользовательском логе `logs_2026-10-24_09-33-59`
+подготовительный Host загружает только Core + Arland. В 09:34:51 принимает
+EveronWCSRHS / Co-op USSR / Hard, но нового world/graph/матча дальше нет.
+Native `before-host-available` воспроизводит тот же путь с private Listen:
+CONTENT_READY/SELECT/CAN_START/LAUNCH проходят, selected header/world/graph
+и завершение отсутствуют. Процесс адресно остановлен после зависания,
+native exit -1; полный stopped-log oracle возвращает **FAIL/1**.
+Предыдущий Stock Host PASS не подтверждал смену карты и addon graph.
+
+До изменений пять профильных checks через
+`Invoke-AICFChecks.ps1 -Name <UniversalScenarioStatic,ScenarioSetupStatic,
+WorkshopBootstrapStatic,ScenarioEnvironmentStatic,UniversalScenarioLogContracts>`
+дали **5/5 PASS/0**, baseline сохранён в `before/`. Расширена только отдельная
+fixture, её stopped-log oracle и добавлены отрицательные контракты: точный
+target из CLI/catalog, включение установленного внешнего content в отдельном
+profile, запрет default fallback после failed selection, реальный world и
+полный loaded graph. Native mount `$ArmaReforger:worlds/...` нормализуется;
+первый контроль ошибочно отклонил его, сохранён как FAIL fixture и повторён
+после исправления сравнения. Native hang и accepted-only лог отклоняются.
+
+`Run-StockControl.ps1 -Label stock-host-final -ListenHost` — **19/19 cases,
+native exit 0**, полный stopped-log oracle **PASS/0**. Отдельный
+`Run-Before-Available.ps1 -Label warm-wcs-host-control -ListenHost -WarmControl`
+из main menu с уже загруженным Core — **19/19, native exit 0**, oracle **PASS/0**:
+точный Everon Co-op USSR Hard, RHS world, все 28 addon IDs, environment и Listen.
+Это отдельный контроль запуска, не исправление первого preparation перехода.
+Сквозной `Run-RetryControl.ps1 -Label cancel-retry-wcs-host -ListenHost`
+подтвердил preparation Listen и Cancel, но возврат в main menu выгрузил Core;
+последующего Host/target/readback нет. В vanilla frontend снова две ошибки
+`SCR_FilterCategory`. Это **FAIL**, не подтверждённый обходной путь.
+
+Кандидаты в ignored stage — reload после принятого scenario transition,
+предварительный reload и попытка чтения текущей Host config — **не исправили**
+первый переход и в production не перенесены. `GetRunningDSConfig` возвращает
+false/data=0, `ServerLobbyApi.GetServerConfig` — null, что уже было ограничением
+`AICF_ScenarioTransitionProbe`. Подмена отсутствующей config defaults не
+разрешает заявить сохранение пароля/портов/лимитов. Внешний watchdog необходим:
+после принятого transition script callbacks могут быть уже сняты.
+
+Итоговый `Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <task>/after-all` —
+**85/85 PASS, exit 0**, без исключений; новый лог-контракт — **37/37 PASS/0**.
+Последняя fixture отдельно прошла terminal Workbench для Stock
+(`probe-retry-stock-final`) и полного EveronWCSRHS (`probe-retry-final`):
+**2/2 PASS/0**, validation successful, SCRIPT E/F, ENGINE F, VM и hang — 0.
+Stock/warm runtime контроли выполнены до добавления retry-ветки в fixture;
+production между ними и финальной компиляцией не менялся. Они не объявляются
+повторным runtime всей финальной fixture. Проверены 348 production SHA-256,
+fixture и все файлы 12 архивов; собственные stages/profiles удалены после
+проверки, полные логи оставлены отдельно. Ранние Workbench `before-stock` и
+`candidate-stock` с Application hangs сохранены как FAIL, хотя native exit был 0.
+Все команды и неуспехи сохранены в REPORT; отдельные PASS не снимают исходный
+runtime blocker. `git diff --check` — PASS/0.
+**NOT RUN:** первый cold Host опубликованного исправленного пакета (исправления
+нет), физический UI input, второй игрок/JIP, применение пароля/лимитов и soak.
+GitHub/Workshop release, тег и версия в этой диагностике не изменяются.
+## Опубликованный каталог Workshop 0.2.2 — 2026-10-24
+
+Владелец подтвердил скриншотом, что старые строки и raw keys остаются после
+обновления. Read-only проверка installed ServerData: все семь addons имеют
+0.2.2, corrupted=false; количества scenarios — Core 0, Arland 10, Everon 18,
+Arland RHS 9, Everon RHS 18, Arland WCS RHS 9, Everon WCS RHS 18. Всего 82,
+включая setup. Native publishing manifests в Temp/Workbench/Publishing также
+содержат эти записи. Полный user console snapshot 09:29:40 показывает только
+vanilla scripts до выбора миссии и Missing string ID для старых AICF names.
+Оно подтверждает пробел прошлой проверки, а не неудачное обновление владельцем.
+
+Новая ветка `codex/workshop-catalog-metadata` от актуального `origin/main`
+`73ba75e0bb984fc64ecac17d59c085c53fffb8a8` после merge PR #73, дерево чистое.
+Evidence: `.codex-runtime/workshop-catalog-metadata-20261024/`.
+Добавлены tool подготовки отдельного bundle и `-Check`, 26 contract cases,
+vanilla-dependent metadata fixture и инструкции. Production `.c`, headers,
+GUID и версия не меняются. Подготовка будущей публикации не создаёт релиз.
+
+До правки профильные localization/headers/universal/workshop names/контракты
+через `Invoke-AICFChecks.ps1 -Name ... -EvidenceRoot <evidence>/before` —
+**5/5 PASS/0**. Новый полный `-Suite All -EvidenceRoot <evidence>/after-all` —
+**85/85 PASS, exit 0**. Bundle contracts — **26/26 PASS**: все семь owners,
+пустой native Core без scenarios property, неизменность входа/payload/прочих
+полей, повреждения и path/output guards.
+
+Tool применён к семи настоящим native bundles 0.2.2: список 82 → 1,
+все 55 declared payload files совпадают с исходными SHA-256. Version и прочая
+metadata сохранены, input и installed файлы не редактировались. Копии находятся
+в `<evidence>/prepared/<addon GUID>/`; это диагностические bundles уже занятой
+версии 0.2.2, а не готовый новый выпуск для повторной загрузки с тем же номером.
+
+Native metadata experiment использует копии installed пакетов/ServerData/meta,
+адаптированные по списку prepared manifest. Все scripts семи AICF addons
+остаются unloaded; test-only tag-map adapter не фильтрует сценарии. Без явного
+Enable в свежем profile исходные моды скрыты целиком: own=0, невалидная модель
+пользовательского меню. После Enable copied items исходный `before-enabled`
+воспроизводит **own=82/setup=1/legacy=81**, 6/8 cases. `prepared-enabled`
+читает **own=1/setup=1/legacy=0**, **8/8 readbacks**, stock entries сохранены.
+Так выявлена именно metadata причина, которую source/Core фильтры не покрывали.
+
+Это не полный runtime PASS: оба enabled опыта после `Game destroyed` зависли
+и затем завершились access violation, native **-1073741819**, shutdown **FAIL**.
+Четыре Workbench validation попытки успешно проверили scripts; три адресно
+остановлены после зависания (native -1), `wb-metadata-probe-final` сам завершился
+exit 0, но с предупреждением Application hangs. Оно не выдаётся за чистый gate.
+Закрытие владельцем Workbench не устранило зависания; причина не установлена.
+Полные logs/dumps/argv/exits сохраняются, свои процессы завершены. Отдельные
+`before-main` и `before-profile-layout` без Enable завершились exit 0, но не
+воспроизводят нужный список и не считаются подтверждением исправления.
+
+**NOT RUN / blockers:** native upload подготовленного manifest через
+publishAddonDir без повторной генерации списка, приём backend, новая публичная
+версия, физический список/Host/Play из заново скачанного пакета и чистый
+terminal compile/runtime exit. JSON/локальная metadata модель не доказывают
+uploader. Публикация требует отдельного запроса владельца и согласования новой
+версии. Нужен stopped-log анализ shutdown до ready PR; кандидат остаётся draft.
+
 ## Скрытие прежних сценариев в 0.2.2 — 2026-10-24
 
 Владелец попросил скрыть старые пункты в продолжение PR #73 и подготовки
