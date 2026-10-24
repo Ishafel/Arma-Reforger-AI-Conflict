@@ -67,6 +67,19 @@ class AICF_ScenarioCatalogProbe
 		ResourceName stock = "{C41618FD18E9D714}Missions/23_Campaign_Arland.conf";
 		AICF_CatalogCheck("STOCK_PRESERVED", first.Find(stock) >= 0 && workshop.GetInGameScenario(stock));
 		AICF_ScenarioRegistry registry = new AICF_ScenarioRegistry();
+		int readablePresets, hiddenPresets;
+		foreach (AICF_ScenarioVariant variant : registry.GetVariants())
+		{
+			foreach (ResourceName resource : variant.m_aPresets)
+			{
+				SCR_MissionHeaderCampaign presetHeader = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(resource));
+				if (!presetHeader) continue;
+				readablePresets++;
+				if (!presetHeader.m_bShowInScenarioMenu) hiddenPresets++;
+				Print(string.Format("[AICF][CATALOG_HEADER] target=%1 visible=%2", resource, presetHeader.m_bShowInScenarioMenu));
+			}
+		}
+		AICF_CatalogCheck("HIDDEN_PRESETS", readablePresets == 81 && hiddenPresets == 81);
 		for (int mode; mode < 3; mode++)
 		{
 			for (int difficulty; difficulty < 3; difficulty++)

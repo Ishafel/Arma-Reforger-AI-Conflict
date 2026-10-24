@@ -182,13 +182,16 @@ readbacks — 15. Client использует обычный `-aicfCoopProbePlay
 
 `AICF_ScenarioCatalogProbe.c` копировать отдельно в isolated Core/UI как
 `AICF_ZScenarioCatalogProbe.c`. CLI `-aicfCatalogProbe 1 -listScenarios`.
-Проверяет native catalog и tag maps: 15 cases, без Play/Host и GUI input.
+Проверяет native catalog и tag maps: 16 cases, без Play/Host и GUI input.
+`HIDDEN_PRESETS` требует успешного чтения всех 81 headers с hidden flag;
+для всей матрицы запускать полный Everon WCS RHS graph. Stock graph не
+подтверждает наличие остальных ресурсов. `CATALOG_HEADER` пишет каждый ID/flag.
 Отдельный Managed object выполняет readback через 5 s и RequestClose через 1 s;
 timeout — 30 s. Все callbacks снимаются в OnGameEnd. Dedicated запускается
 canonical launcher; frontend — с тем же Client graph без подключения, заранее
 объяснив владельцу короткое окно и автоматическое закрытие. Строгий gate
 `Test-ScenarioCatalogLog.ps1 -LogPath ... -ManifestPath ... -NativeExitPath ...`:
-полный stopped log, exact source/profile/addons CLI, 15/15 и отсутствие SCRIPT/VM/fatal.
+полный stopped log, exact source/profile/addons CLI, 16/16 и отсутствие SCRIPT/VM/fatal.
 Реальные нажатия игрока эта проверка не подтверждает.
 
 ## Instigator OTHER

@@ -21,7 +21,7 @@ else {
         if(-not $cli[0].Groups[1].Value.Contains($fragment)){$failures+='CLI_MISMATCH'}
     }
 }
-$expected=@('EXAMPLE','VISIBLE_NAME','REPEAT','STOCK_PRESERVED')
+$expected=@('EXAMPLE','VISIBLE_NAME','REPEAT','STOCK_PRESERVED','HIDDEN_PRESETS')
 for($mode=0;$mode -lt 3;$mode++){for($difficulty=0;$difficulty -lt 3;$difficulty++){$expected+="TARGET_${mode}_${difficulty}"}}
 $expected+=@('FILTER_TYPE','FILTER_MANW')
 $cases=@([regex]::Matches($log,'\[CATALOG_CASE\] case=(\w+) pass=([01])'))

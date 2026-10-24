@@ -183,8 +183,8 @@ Native probe/CLI и требования: [INSTIGATOR_CONTEXT.md](INSTIGATOR_CON
 logs legacy default Arland; UI readbacks не подменяют ручной input/Host.
 Описание: [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
 `Test-ScenarioCatalogLogContracts.ps1` входит в offline набор: положительный
-control и 13 отрицательных случаев отдельного `Test-ScenarioCatalogLog.ps1`.
-Последний проверяет native регистрацию 15 cases, точные CLI и stopped log,
+control и 15 отрицательных случаев отдельного `Test-ScenarioCatalogLog.ps1`.
+Последний проверяет native регистрацию/hidden presets в 16 cases, точные CLI и stopped log,
 отклоняет SCRIPT/VM/fatal; описание fixture — [TEST_FIXTURES.md](TEST_FIXTURES.md).
 
 `tools/Update-AICFScenarioRegistry.ps1 [-Check]` генерирует frontend descriptors

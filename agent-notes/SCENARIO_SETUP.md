@@ -275,10 +275,23 @@ launcher с Variant/MatchMode/Difficulty и существующие leaf GUID.
 `AICF_ArlandScenarioCatalog` дополняет GetDefaultGameConfigs только входом,
 сохраняя stock entries и native InsertNewScenario dedup. Source addon не имеет
 installed WorkshopItem; одного `.rdb` недостаточно для меню. В packaged списке
-legacy leaf ресурсы фильтруются только по точным IDs registry:
+81 legacy leaf ресурс наследует `m_bShowInScenarioMenu=0` от семи собственных
+base headers. Setup явно задаёт `m_bShowInScenarioMenu=1` поверх скрытого parent.
+Штатный `SCR_ContentBrowser_ScenarioSubMenu.CreateLine` в закреплённом
+Script Diff 1.8.0.13 сам читает доступный header по ID и пропускает hidden resource.
+Прежний script-only фильтр действовал только после загрузки Core. Чтение
+headers ещё не загруженного опубликованного пакета остаётся отдельным gate:
+source-only эксперимент без Core не смонтировал эти ресурсы и не подтверждает
+видимость в настоящем cold Workshop frontend.
+После загрузки Core сохраняется дополнительная фильтрация по точным IDs registry:
 `SCR_ContentBrowser_ScenarioSubMenu.CreateLine` и оба списка
 `SCR_ServerConfigListComponent`. Физические 81 headers и их GUID сохранены.
-Сценарии других модов и сохранения не совпадают с этими IDs.
+Сценарии других модов и сохранения не совпадают с этими IDs. Варианты доступны
+по прежним GUID для picker и CLI; metadata скрывает строку, а не удаляет ресурс.
+Обновить нужно все используемые сценарные addons: старый установленный пакет
+сохраняет прежние visible headers. В native списке Host до загрузки Core
+`GetModdedScenarios` не проверяет этот флаг; packaged cold Host list отдельно
+не доказан. Script-фильтр Host действует после загрузки Core.
 
 `AICF_WorkshopTagMetadata` сохраняет исправление SCR_FilterCategory:
 BaseContainer adapter, callbacks Remove/Insert и override OnGameStart для
@@ -296,7 +309,8 @@ BaseContainer adapter, callbacks Remove/Insert и override OnGameStart для
   фактический picker, выбор leaf, применение времени/погоды, cancel и stopped log.
 - `AICF_ScenarioCatalogProbe.c`: настоящий GetPageScenarios/GetInGameScenario,
   один вход, девять скрытых default leaf targets, stock preservation,
-  repeat/dedup, native type/manw tag maps; 15 cases.
+  repeat/dedup, native type/manw tag maps и чтение hidden metadata всех 81
+  presets; 16 cases. Для всей матрицы нужен полный Everon WCS RHS graph.
 - `AICF_UniversalScenarioProbe.c`: каждый dependency ID, все 81 plan, ожидаемая
   доступность установленных вариантов, forced subset, host mods, настоящие
   widgets/modal/bounds, флаги, пояснения, native SliderWidget range/step/current,

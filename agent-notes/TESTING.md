@@ -1,5 +1,67 @@
 # Проверки и baseline
 
+## Скрытие прежних сценариев в 0.2.2 — 2026-10-24
+
+Владелец попросил скрыть старые пункты в продолжение PR #73 и подготовки
+0.2.2. Работа продолжается в `codex/workshop-universal-entry`, база `7611734`,
+дерево чистое; свежий `origin/main` остаётся `bb748797d1dd1f898759775d00d3e71ab9b002e6`.
+Раньше семь base headers явно задавали `m_bShowInScenarioMenu=1`, а setup
+наследовал видимость; script-фильтр мог работать только с загруженным Core.
+Теперь base headers задают 0, setup явно задаёт 1; все 81 leaf наследуют
+скрытие. GUID, пути, topology и production `.c` не меняются.
+
+Pinned 1.8.0.13 `SCR_ContentBrowser_ScenarioSubMenu.CreateLine` проверяет
+это поле после `MissionHeader.ReadMissionHeader(scenario.Id())`. Старые
+аудиты, требовавшие visible leaf, обновлены под прямое требование владельца;
+в `Test-ScenarioHeadersStatic` добавлена проверка всей локальной цепочки
+наследования всех 81 ресурсов и explicit visible setup.
+
+Evidence: `.codex-runtime/hide-legacy-scenarios-20261024/`. До правки
+`Invoke-AICFChecks.ps1 -Name @(ScenarioHeadersStatic,ScenarioSetupStatic,
+UniversalScenarioStatic,WCSIntegrationStatic,CoopScenarioMatrix,
+WorkshopScenarioNamesStatic,ScenarioCatalogLogContracts)` (имена файлов
+с `Test-`/`.ps1` записаны в context) — **7/7 PASS/0**. После правки шесть
+профильных checks — **6/6 PASS/0**. Новый полный
+`Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/after-all` —
+**84/84 PASS, exit 0**, без исключений. `Verify-VisibilityMutations.ps1` на
+изолированной копии отклонил все **9/9** повреждений: семь visible roots,
+visible child override и удалённый visible flag setup. Каждая правка stage
+возвращена в исходное состояние.
+
+Terminal Workbench `Compile.ps1 -Label catalog-all -Variant EveronWCSRHS` и
+`-Label play-stock -Variant Stock` — **2/2 PASS/0**, включая соответствующие
+изолированные fixtures. Native `catalog-all` — **16/16 cases, exit 0**, полный
+stopped-log oracle PASS: все 81 headers читаются и hidden, setup visible,
+stock entry сохранён. `CATALOG_HEADER` хранит каждый ID/flag. Это source-stage,
+где полный addon graph уже загружен, а не проверка опубликованного пакета.
+
+Native `hidden-leaf-play` прошёл 13 функциональных cases, но дал access
+violation после `Game destroyed`, exit -1073741819: итог **FAIL**, полные logs
+и dump сохранены. Control с прежними visible headers `control-visible` и
+повтор неизменённого нового source `hidden-leaf-play-2` — каждый **13/13,
+exit 0**, stopped-log oracle PASS. Причина первого native shutdown crash
+не установлена и устранение не заявляется; повторный PASS не стирает FAIL.
+
+Отдельный exploratory addon только с vanilla dependency не смог прочитать
+не загруженные source headers по GUID; его штатный frontend также пишет
+две SCRIPT ошибки SCR_FilterCategory без Core adapter. Это не валидная
+замена packaged проверки. Три попытки CLI `packAddon` не создали пакет
+или manifest; native exit 0 последних попыток не объявляется успешной упаковкой.
+Новых вызовов публикации не было. Команды упаковки сверялись с
+[официальными Startup Parameters](https://community.bistudio.com/wiki/Arma_Reforger%3AStartup_Parameters#Workbench).
+
+**NOT RUN:** first cold Workshop scenario list/Play/Host с новыми пакетами,
+физический UI input/визуальная оценка, public Host со вторым игроком/JIP,
+пароль/лимит и soak. Владелец должен обновить Core и все используемые сценарные
+addons до 0.2.2, полностью перезапустить игру и проверить список «Сценарии».
+Cold Host list не проверяет visibility flag в pinned native script; прежний
+script-фильтр Host требует Core. Source flags не выдаются за packaged PASS.
+PR #73 возвращён в draft из-за неразобранного native FAIL и packaged gate.
+`Verify-Task.ps1` — PASS проверки scope, 254 локальных Markdown links,
+8/8 production hashes в обеих stage, native hidden matrix 81/81, полного
+offline/compile evidence и diff check. Его отдельный `release_gate=BLOCKED`
+не выдаёт успешный аудит evidence за готовность релиза.
+
 ## Подготовка 0.2.2 — 2026-10-24
 
 По запросу владельца [PR #73](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/73)

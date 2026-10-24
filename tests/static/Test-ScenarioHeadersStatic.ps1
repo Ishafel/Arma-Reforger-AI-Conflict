@@ -93,8 +93,8 @@ if ($failures.Count -eq 0) {
             '(?m)^\s*m_bRandomWeatherChanges\s+1\s*$' `
             'Random initial weather must retain natural weather progression instead of locking the selected state'
         Require-Match 'SCENARIO_MENU_VISIBILITY' $scenario `
-            'm_bShowInScenarioMenu\s+1' `
-            'Scenario header must be visible in the in-game Scenarios menu'
+            'm_bShowInScenarioMenu\s+0' `
+            'Preset headers must be hidden; the universal setup is the menu entry'
         Require-Match 'SCENARIO_PERSISTENCE_DISABLED' $scenario `
             '(?m)^\s*m_eSaveTypes\s+0\s*$' `
             'Scenario header must disable unsupported session persistence so in-game hosting always starts a fresh campaign'
@@ -184,13 +184,48 @@ foreach ($case in @(
     $parent = '{' + $case[1] + '}Missions/AICF_RHS_Conflict_' + $case[0] + '.conf'
     Require-Match 'SCENARIO_WCS_EVERON_PARENT' $header ([regex]::Escape($parent)) 'WCS must inherit the corresponding reviewed RHS campaign, including North whitelist'
     Forbid-Match 'SCENARIO_WCS_EVERON_OWNERSHIP' $header '(?m)^\s*(World|SystemsConfig|m_aCampaignCustomBaseList|m_bCustomBaseWhitelist)\b' 'WCS must not replace inherited world or base topology'
-    Require-Match 'SCENARIO_WCS_EVERON_MENU' $header 'm_bShowInScenarioMenu\s+1' 'WCS scenario must be visible'
+    Require-Match 'SCENARIO_WCS_EVERON_MENU' $header 'm_bShowInScenarioMenu\s+0' 'WCS preset must be hidden behind the universal setup'
     Require-Match 'SCENARIO_WCS_EVERON_SAVE' $header 'm_eSaveTypes\s+0' 'WCS persistence must remain disabled'
     $resource = '{' + $case[2] + '}Missions/AICF_WCS_RHS_Conflict_' + $case[0] + '.conf'
     Require-Match 'SCENARIO_WCS_EVERON_META' (Get-Content ($headerPath + '.meta') -Raw) ([regex]::Escape($resource)) 'WCS scenario resource identity changed'
 }
 $wcsOwned = @(Get-ChildItem $wcsRoot -Recurse -File | Where-Object { $_.Extension -in @('.c', '.ent', '.layer', '.et') })
 if ($wcsOwned.Count) { Add-Failure 'SCENARIO_WCS_EVERON_COMPOSITION' 'WCS Everon must remain a resource-only composition addon' }
+
+# Resolve visibility through local inheritance: variants need no duplicate overrides.
+. (Join-Path $RepositoryRoot 'tools/AICF_Scenarios.ps1')
+$catalog = Get-AICFScenarioCatalog -Path (Join-Path $RepositoryRoot 'tools/config/AICF_Scenarios.json')
+$headers = @{}
+foreach ($project in $catalog.graphs.PSObject.Properties.Value.project) {
+    $missions = Join-Path $RepositoryRoot ((Split-Path -Parent $project) + '/Missions')
+    foreach ($meta in Get-ChildItem -LiteralPath $missions -Filter '*.conf.meta' -File) {
+        $identity = [regex]::Match([IO.File]::ReadAllText($meta.FullName), 'Name\s+"([^"\r\n]+)"')
+        if ($identity.Success) { $headers[$identity.Groups[1].Value] = [IO.File]::ReadAllText($meta.FullName.Substring(0, $meta.FullName.Length - 5)) }
+    }
+}
+$hiddenPresets = 0
+foreach ($variant in $catalog.variants) {
+    foreach ($mode in @('Standard','CoopUS','CoopUSSR')) {
+        foreach ($difficulty in @('Easy','Medium','Hard')) {
+            $preset = Resolve-AICFScenario -Catalog $catalog -Variant $variant.name -MatchMode $mode -Difficulty $difficulty
+            $resource = $preset.scenario
+            $visited = @{}
+            $visibility = ''
+            while ($headers.ContainsKey($resource) -and !$visited.ContainsKey($resource)) {
+                $visited[$resource] = $true
+                $text = $headers[$resource]
+                $flag = [regex]::Match($text, '(?m)^\s*m_bShowInScenarioMenu\s+([01])\s*$')
+                if ($flag.Success) { $visibility = $flag.Groups[1].Value; break }
+                $resource = [regex]::Match($text, '^SCR_MissionHeaderCampaign\s*:\s*"([^"\r\n]+)"').Groups[1].Value
+            }
+            if ($visibility -ceq '0') { $hiddenPresets++ }
+            else { Add-Failure 'SCENARIO_PRESET_VISIBILITY' "Preset must inherit hidden metadata: $($preset.scenario)" }
+        }
+    }
+}
+if ($hiddenPresets -ne 81) { Add-Failure 'SCENARIO_PRESET_COUNT' "Expected 81 hidden presets, got $hiddenPresets" }
+$setup = [IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictArland/Missions/AICF_Conflict_Arland_Setup.conf'))
+Require-Match 'SCENARIO_SETUP_VISIBLE' $setup '(?m)^\s*m_bShowInScenarioMenu\s+1\s*$' 'Setup must explicitly remain visible over its hidden parent'
 
 if ($failures.Count -gt 0) {
     foreach ($failure in $failures) {
@@ -201,4 +236,5 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Output '[AICF][SCENARIO_STATIC][RESULT][PASS] arland_header=PASS everon_header=PASS rhs_header=PASS rhs_everon_header=PASS menu_visibility=PASS persistence=DISABLED rank_unlocks=PASS inheritance=PASS metadata=PASS world_ownership=PASS'
+Write-Output "Scenario menu metadata: hidden_presets=$hiddenPresets visible_setup=1"
 exit 0
