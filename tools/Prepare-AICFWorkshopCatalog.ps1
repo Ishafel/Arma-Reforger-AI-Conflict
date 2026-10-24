@@ -13,7 +13,7 @@ $projects=@($catalog.localProjects.PSObject.Properties|Sort-Object Name)
 $bundleTool=Join-Path $PSScriptRoot 'Prepare-AICFWorkshopBundle.ps1'
 $output=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputRoot).TrimEnd([char[]]'\/')
 
-function Get-AICFWorkshopCatalogBundle([string]$Path,[string]$Id,[switch]$AllowLegacy){
+function Get-AICFWorkshopCatalogBundle([string]$Path,[string]$Id){
     $directory=Get-Item -LiteralPath $Path
     $manifestPath=Join-Path $Path 'manifest.json'
     $file=Get-Item -LiteralPath $manifestPath
@@ -23,12 +23,7 @@ function Get-AICFWorkshopCatalogBundle([string]$Path,[string]$Id,[switch]$AllowL
     $manifest=[IO.File]::ReadAllText($manifestPath)|ConvertFrom-Json
     if($manifest.asset.id -cne $Id){throw '[WORKSHOP_SET_OWNER] Bundle directory and asset identity differ'}
     if($manifest.asset.version -cne $ExpectedVersion){throw '[WORKSHOP_SET_VERSION] Every addon must match ExpectedVersion'}
-    try { & $bundleTool -BundlePath $Path -Check -RepositoryRoot $RepositoryRoot|Out-Null }
-    catch {
-        # The leaf tool has fully validated identity/schema/payload before this result.
-        $legacyRule='[WORKSHOP_CATALOG_EXPOSED_PRESETS] addon='+$Id+' '
-        if(!$AllowLegacy -or !$_.Exception.Message.StartsWith($legacyRule,[StringComparison]::Ordinal)){throw}
-    }
+    & $bundleTool -BundlePath $Path -Check -RepositoryRoot $RepositoryRoot|Out-Null
     return $manifest
 }
 
@@ -74,7 +69,7 @@ $inputs=@{}
 foreach($project in $projects){
     $path=Join-Path $source $project.Name
     if(!(Test-Path -LiteralPath $path -PathType Container)){throw ('[WORKSHOP_SET_MISSING] Missing addon '+$project.Name)}
-    $manifest=Get-AICFWorkshopCatalogBundle $path $project.Name -AllowLegacy
+    $manifest=Get-AICFWorkshopCatalogBundle $path $project.Name
     $inputs[$project.Name]=@{
         hash=(Get-FileHash -LiteralPath (Join-Path $path 'manifest.json')).Hash
         scenarios=@($manifest.asset.scenarios|Where-Object {$null -ne $_}).Count

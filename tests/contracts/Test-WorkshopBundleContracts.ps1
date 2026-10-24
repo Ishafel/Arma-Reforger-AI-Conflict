@@ -1,4 +1,4 @@
-param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+﻿param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference='Stop'
 . (Join-Path $RepositoryRoot 'tools/AICF_Scenarios.ps1')
 $catalog=Get-AICFScenarioCatalog -Path (Join-Path $RepositoryRoot 'tools/config/AICF_Scenarios.json')
@@ -15,8 +15,9 @@ function New-Bundle([string]$Name,[string]$Id){
  [void](New-Item -ItemType Directory -Path $path)
  $project=@($catalog.localProjects.PSObject.Properties|Where-Object Name -CEQ $Id)[0].Value
  $payload=@{'addon.gproj'=('GameProject { GUID "'+$Id+'" }');'data.pak'='opaque fixture payload';'resourceDatabase.rdb'='opaque fixture resource index'}
+ if($project -ceq 'AIConflictArland'){$payload['resourceDatabase.rdb']='Missions/AICF_Conflict_Arland_Setup.conf'}
  $files=@(foreach($name in $payload.Keys){[IO.File]::WriteAllText((Join-Path $path $name),$payload[$name],$utf8);$item=Get-Item -LiteralPath (Join-Path $path $name);@{name=$name;size=$item.Length;sha256=(Get-FileHash -LiteralPath $item.FullName).Hash}})
- $scenarios=@(foreach($variant in $catalog.variants){if($variant.graph -cne $project){continue};foreach($mode in @('Standard','CoopUS','CoopUSSR')){foreach($difficulty in @('Easy','Medium','Hard')){$preset=Resolve-AICFScenario -Catalog $catalog -Variant $variant.name -MatchMode $mode -Difficulty $difficulty;@{gameId=$preset.scenario;name='legacy';playerCount=64}}}})
+ $scenarios=@()
  if($project -ceq 'AIConflictArland'){$scenarios+=@{gameId=$setup;name='AI Conflict';description='fixture';playerCount=64}}
  $manifest=[pscustomobject]@{version=1;files=$files;asset=[pscustomobject]@{id=$Id;version='0.2.2';type='addon';description='must stay unchanged';scenarios=$scenarios}}
  Save-Manifest $path $manifest
@@ -35,7 +36,6 @@ try{
   $output=Join-Path $work ($project.Value+'-prepared')
   $sourceManifestHash=(Get-FileHash -LiteralPath "$inputPath/manifest.json").Hash
   $before=Get-Content -LiteralPath "$inputPath/manifest.json" -Raw|ConvertFrom-Json
-  if($before.asset.scenarios.Count){Expect-Failure ($project.Value+'-exposed') {& $tool -BundlePath $inputPath -Check -RepositoryRoot $RepositoryRoot} 'WORKSHOP_CATALOG_EXPOSED_PRESETS'}
   & $tool -BundlePath $inputPath -OutputPath $output -RepositoryRoot $RepositoryRoot|Out-Null
   & $tool -BundlePath $output -Check -RepositoryRoot $RepositoryRoot|Out-Null
   $after=Get-Content -LiteralPath "$output/manifest.json" -Raw|ConvertFrom-Json
@@ -55,9 +55,9 @@ try{
  & $tool -BundlePath $core -Check -RepositoryRoot $RepositoryRoot|Out-Null
  & $tool -BundlePath $core -OutputPath "$core-prepared" -RepositoryRoot $RepositoryRoot|Out-Null
  $corePrepared=Get-Content "$core-prepared/manifest.json" -Raw|ConvertFrom-Json
- if($corePrepared.asset.PSObject.Properties['scenarios']){throw 'Native Core schema changed'}
+ if($corePrepared.asset.scenarios -isnot [array] -or $corePrepared.asset.scenarios.Count){throw 'Core must explicitly clear obsolete scenarios'}
  $checks++;'PASS native-core-no-scenarios'
- $cases=@('hash','version','owner','foreign','duplicate-scenario','missing-entry','entry-name','unsafe-file','duplicate-file','schema')
+ $cases=@('hash','version','owner','foreign','duplicate-scenario','missing-entry','entry-name','unsafe-file','duplicate-file','schema','retired-index')
  foreach($case in $cases){
   $inputPath=New-Bundle ('bad-'+$case) 'B52C5F6AEDBF423E'
   $output=Join-Path $work ('bad-output-'+$case)
@@ -74,6 +74,13 @@ try{
    'unsafe-file' {$manifest.files[0].name='../outside';$rule='WORKSHOP_BUNDLE_FILE_NAME'}
    'duplicate-file' {$manifest.files+=@($manifest.files[0]);$rule='WORKSHOP_BUNDLE_FILE_NAME'}
    'schema' {$manifest.asset.scenarios=$null;$rule='WORKSHOP_BUNDLE_SCHEMA'}
+   'retired-index' {
+    [IO.File]::AppendAllText("$inputPath/resourceDatabase.rdb","`nMissions/AICF_Conflict_Arland.conf")
+    $row=@($manifest.files|Where-Object name -CEQ 'resourceDatabase.rdb')[0]
+    $row.size=(Get-Item "$inputPath/resourceDatabase.rdb").Length
+    $row.sha256=(Get-FileHash "$inputPath/resourceDatabase.rdb").Hash
+    $rule='WORKSHOP_CATALOG_RESOURCE_INDEX'
+   }
   }
   Save-Manifest $inputPath $manifest
   Expect-Failure $case {& $tool -BundlePath $inputPath -OutputPath $output -RepositoryRoot $RepositoryRoot} $rule

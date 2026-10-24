@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$LogPath,[Parameter(Mandatory)][string]$LauncherPath,[Parameter(Mandatory)][string]$NativeExitPath,[switch]$Client)
+﻿param([Parameter(Mandatory)][string]$LogPath,[Parameter(Mandatory)][string]$LauncherPath,[Parameter(Mandatory)][string]$NativeExitPath,[switch]$Client)
 $ErrorActionPreference='Stop'
 $base=@{LogPath=$LogPath;LauncherPath=$LauncherPath;NativeExitPath=$NativeExitPath}
 if($Client){$base.Client=$true;$base.RequirePlayer=$true;$base.RequireWelcome=$true}
@@ -14,7 +14,7 @@ $indices=@(for($i=0;$i -lt $argv.Count;$i++){if($argv[$i] -ceq '-aicfSetupProbe'
 if($indices.Count -ne 1 -or $indices[0]+1 -ge $argv.Count -or $argv[$indices[0]+1] -cne '1'){$failures+='SETUP_CLI'}
 $expected=@('HEADER','DEFAULT')
 for($mode=0;$mode -lt 3;$mode++){for($difficulty=0;$difficulty -lt 3;$difficulty++){$expected+="PRESET_${mode}_${difficulty}"}}
-$expected+=@('ACTIVE_PRESET','INVALID_BOUNDS','FAILURE_PRESERVES_SELECTION','NULL_HEADER','INCOMPLETE','MISMATCH','RECURSIVE')
+$expected+=@('ACTIVE_PRESET','INVALID_BOUNDS','FAILURE_PRESERVES_SELECTION','NULL_HEADER','INVALID_MAP','INVALID_CONTENT','NO_RECURSION')
 if($Client){$expected=@('UI_OPEN','UI_BOUNDS','UI_MODAL');for($mode=0;$mode -lt 3;$mode++){for($difficulty=0;$difficulty -lt 3;$difficulty++){$expected+="UI_${mode}_${difficulty}"}};$expected+=@('UI_INVALID','UI_CLOSED','UI_CLOSE_IDEMPOTENT')}
 $cases=@([regex]::Matches($log,'\[SETUP_CASE\] case=(\w+) pass=([01])'))
 if($cases.Count -ne $expected.Count){$failures+='CASE_COUNT'}

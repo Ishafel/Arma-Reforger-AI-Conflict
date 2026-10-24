@@ -1,4 +1,4 @@
-param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+﻿param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../lib/Stage3StaticAudit.Common.ps1')
 . (Join-Path $RepositoryRoot 'tools/AICF_Scenarios.ps1')
@@ -11,12 +11,7 @@ function Test-SetupGuards([string]$a,[string]$b,[string]$c) {
     if($combined -match 'Rpc\(|BumpMe|SetFaction|SetHealth|CallLater|GetOrigin|SpawnEntity|RequestClose|SetAICommanderMode|m_On\w+\.Insert|GetOn\w+\([^)]*\)\.Insert'){'PRELAUNCH_ONLY'}
     if($a -match 'Arland|Everon|Missions/'){ 'MAP_INDEPENDENT' }
     foreach($rule in @(
-        @($a,'mode < 0 \|\| mode > 2 \|\| difficulty < 0 \|\| difficulty > 2','BOUNDS'),
-        @($a,'!m_aAICFSetupPresets \|\| m_aAICFSetupPresets.Count\(\) != 9','COMPLETE'),
-        @($a,'mode \* 3 \+ difficulty','INDEX'),
-        @($a,'!target \|\| target.m_bAICFSetupEntry','NO_RECURSION'),
-        @($a,'target.m_eAICFMatchMode != mode \|\| target.m_eAICFDifficulty != difficulty','METADATA'),
-        @($a,'target.GetWorldResourceName\(\) != GetWorldResourceName\(\)','WORLD'),
+        @($a,'GetVariant\(\).Resolve\(mode, difficulty\).IsEmpty\(\)','BOUNDS'),
         @($a,'if \(!m_Header \|\| !m_Header.m_bAICFSetupEntry \|\| !GetVariant\(\) \|\| GetVariant\(\).Resolve\(mode, difficulty\).IsEmpty\(\)\) return false;\s*m_iMode = mode;\s*m_iDifficulty = difficulty;','ATOMIC_CHOICE'),
         @($b,'AICF_ScenarioLaunch.Start\(m_Selection, m_Entry, m_Config\)','NATIVE_LAUNCH'),
         @($b,'m_aButtons\[8\].SetEnabled\(mode != 0\);\s*m_aButtons\[9\].SetEnabled\(mode != 0\);','STANDARD_SIDES'),
@@ -30,12 +25,7 @@ function Test-SetupGuards([string]$a,[string]$b,[string]$c) {
 }
 $failures=@(Test-SetupGuards $selection $screen $entry)
 $mutations=@(
-    @('a','mode < 0 || mode > 2','false','BOUNDS'),
-    @('a','m_aAICFSetupPresets.Count() != 9','false','COMPLETE'),
-    @('a','mode * 3 + difficulty','mode + difficulty','INDEX'),
-    @('a','|| target.m_bAICFSetupEntry','','NO_RECURSION'),
-    @('a','target.m_eAICFMatchMode != mode','false','METADATA'),
-    @('a','target.GetWorldResourceName() != GetWorldResourceName()','false','WORLD'),
+    @('a','GetVariant().Resolve(mode, difficulty).IsEmpty()','false','BOUNDS'),
     @('a','if (!m_Header || !m_Header.m_bAICFSetupEntry || !GetVariant() || GetVariant().Resolve(mode, difficulty).IsEmpty()) return false;','','ATOMIC_CHOICE'),
     @('b','AICF_ScenarioLaunch.Start(m_Selection, m_Entry, m_Config)','false','NATIVE_LAUNCH'),
     @('b','m_aButtons[8].SetEnabled(mode != 0);','m_aButtons[8].SetEnabled(true);','STANDARD_SIDES'),
@@ -54,13 +44,11 @@ foreach($mutation in $mutations){
 $path=Join-Path $RepositoryRoot 'AIConflictArland/Missions/AICF_Conflict_Arland_Setup.conf'
 $header=[IO.File]::ReadAllText($path)
 $resources=@([regex]::Matches($header,'"(\{[A-F0-9]{16}\}Missions/[^"\r\n]+)"')|ForEach-Object {$_.Groups[1].Value})
-$expected=@('{A1CF261018460002}Missions/AICF_Conflict_Arland_Coop_USSR_Medium.conf')
-$catalog=Get-AICFScenarioCatalog
-foreach($mode in @('Standard','CoopUS','CoopUSSR')){foreach($difficulty in @('Easy','Medium','Hard')){$expected+=(Resolve-AICFScenario -Catalog $catalog -Variant Stock -MatchMode $mode -Difficulty $difficulty).scenario}}
-if(($resources -join '|') -cne ($expected -join '|')){$failures+='PRESET_CATALOG'}
+if(($resources -join '|') -cne '{C41618FD18E9D714}Missions/23_Campaign_Arland.conf'){$failures+='NATIVE_PARENT_ONLY'}
+if($header -match 'm_aAICFSetupPresets'){$failures+='NO_RETIRED_PRESETS'}
 if($header -match '(?m)^\s*(World|SystemsConfig|m_sPath|m_aCampaignCustomBaseList)\b'){$failures+='INHERITED_WORLD'}
 $meta=[IO.File]::ReadAllText($path+'.meta')
 if($meta -notmatch '\{A1CF261019500001\}Missions/AICF_Conflict_Arland_Setup.conf'){$failures+='STABLE_RESOURCE'}
 if($failures.Count){$failures;exit 1}
-"Scenario setup static: PASS; presets=9; negative mutations=$($mutations.Count)"
+"Scenario setup static: PASS; native_parent=1; negative mutations=$($mutations.Count)"
 exit 0

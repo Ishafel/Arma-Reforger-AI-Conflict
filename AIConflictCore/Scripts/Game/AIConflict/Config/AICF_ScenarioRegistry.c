@@ -17,13 +17,14 @@ class AICF_ScenarioVariant
 	ref array<string> m_aAddons = {};
 	// Только внешние content dependencies; собственные integrations загружает transition.
 	ref array<string> m_aContentAddons = {};
-	ref array<ResourceName> m_aPresets = {};
+	ResourceName m_sMission;
+	string m_sMissionOwner;
 
 	ResourceName Resolve(int mode, int difficulty)
 	{
 		if (mode < 0 || mode > 2 || difficulty < 0 || difficulty > 2) return "";
-		if (m_aPresets.Count() != 9 || m_aAddons.IsEmpty() || m_aAddons.Find(m_sOwner) < 0) return "";
-		return m_aPresets[mode * 3 + difficulty];
+		if (m_sMission.IsEmpty() || m_aAddons.IsEmpty() || m_aAddons.Find(m_sOwner) < 0) return "";
+		return m_sMission;
 	}
 
 	bool HasDependencies(array<string> available, out string missing)
@@ -139,6 +140,8 @@ class AICF_ScenarioRegistry
 	void Build(array<ref AICF_ScenarioVariant> variants) {}
 	// Integration maps its known source project suffixes to immutable addon GUIDs.
 	string ResolveSourceProject(string path) { return ""; }
+	// Map-specific whitelist belongs to the corresponding integration.
+	bool ConfigureRuntimeMap(SCR_MissionHeaderCampaign header, AICF_ScenarioVariant variant) { return false; }
 	array<ref AICF_ScenarioVariant> GetVariants() { return m_aVariants; }
 	AICF_ScenarioVariant Find(int mapIndex, int content)
 	{
@@ -146,10 +149,16 @@ class AICF_ScenarioRegistry
 			if (variant.m_iMap == mapIndex && variant.m_iContent == content) return variant;
 		return null;
 	}
-	bool IsLeaf(ResourceName resource)
+	AICF_ScenarioVariant FindKey(string key)
 	{
 		foreach (AICF_ScenarioVariant variant : m_aVariants)
-			if (variant.m_aPresets.Find(resource) >= 0) return true;
+			if (variant.m_sKey == key) return variant;
+		return null;
+	}
+	bool IsRuntimeTarget(ResourceName resource)
+	{
+		foreach (AICF_ScenarioVariant variant : m_aVariants)
+			if (variant.m_sMission == resource) return true;
 		return false;
 	}
 }

@@ -171,7 +171,7 @@ class AICF_WorkshopBootstrapProbe
 			Check("LITERAL_NAME", header && header.m_sName == "AI Conflict");
 			AICF_ScenarioRegistry baseRegistry = new AICF_ScenarioRegistry();
 			AICF_ScenarioVariant baseVariant = baseRegistry.Find(0, 0);
-			Check("FRONTEND_GRAPH", header && baseVariant && header.AICF_ResolveSetupPreset(0, 0) == baseVariant.Resolve(0, 0) && baseVariant.m_aAddons.Count() == 2);
+			Check("FRONTEND_GRAPH", header && header.m_bAICFSetupEntry && baseVariant && !baseVariant.Resolve(0, 0).IsEmpty() && baseVariant.m_aAddons.Count() == 2);
 			Check("NATIVE_ENTRY", entry != null);
 			if (m_iFailed) { Close(); return; }
 			GameSessionStorage.s_Data[PHASE_KEY] = "BOOT";
@@ -260,6 +260,9 @@ class AICF_WorkshopBootstrapProbe
 			AICF_ScenarioVariant target = Target();
 			Check("SELECTED_HEADER", header && target && header.GetHeaderResourceName() == target.Resolve(TargetMode(), TargetDifficulty()));
 			Check("NO_BOOTSTRAP", !AICF_ScenarioBootstrap.ShouldIntercept());
+			AICF_RuntimeScenarioSelection runtime = AICF_RuntimeScenario.GetSelection();
+			Check("APPLIED_RULES", runtime && target && runtime.GetVariant().m_sKey == target.m_sKey &&
+				runtime.m_iMode == TargetMode() && runtime.m_iDifficulty == TargetDifficulty());
 			SCR_MissionHeader selected = SCR_MissionHeader.Cast(header);
 			Check("APPLIED_ENVIRONMENT", selected && selected.m_AICFEnvironment && selected.m_AICFEnvironment.m_iStartMinutes == 577 && selected.m_AICFEnvironment.m_iWeather == 4);
 			if (System.IsCLIParam("aicfColdHostProbe")) Check("HOST_LISTEN", RplSession.Mode() == RplMode.Listen);

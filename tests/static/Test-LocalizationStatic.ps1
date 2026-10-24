@@ -1,4 +1,4 @@
-param([string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+﻿param([string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../../tools/lib/AICFLocalization.Common.ps1')
 $entries = Read-AICFLocalization $RepositoryRoot
@@ -37,24 +37,9 @@ foreach ($language in @('en_us', 'ru_ru', 'fr_fr', 'it_it', 'de_de', 'es_es', 'c
 foreach ($platform in @('HEADLESS', 'XBOX_ONE', 'XBOX_SERIES', 'PS4')) {
     Require ($project -match ("GameProjectConfig $platform : PC")) "Platform inheritance: $platform"
 }
-$scenarioPaths = [ordered]@{
-    EveronWCSRHS = 'AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon.conf'
-    EveronNorthWCSRHS = 'AIConflictEveronWCSRHS/Missions/AICF_WCS_RHS_Conflict_Everon_North.conf'
-    Arland = 'AIConflictArland/Missions/AICF_Conflict_Arland.conf'
-    Everon = 'AIConflictEveron/Missions/AICF_Conflict_Everon.conf'
-    ArlandRHS = 'AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland.conf'
-    EveronRHS = 'AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon.conf'
-    EveronNorthRHS = 'AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon_North.conf'
-    EveronNorth = 'AIConflictEveron/Missions/AICF_Conflict_Everon_North.conf'
-}
-foreach ($variant in $scenarioPaths.Keys) {
-    $header = Get-Content (Join-Path $RepositoryRoot $scenarioPaths[$variant]) -Raw -Encoding UTF8
-    foreach ($field in @('Name', 'Description', 'Details')) {
-        $id = "AICF_Scenario_${variant}_$field"
-        Require ($header.Contains("m_s$field `"#$id`"") -and $entries.Contains($id)) "Header key: $id"
-    }
-    Require ($entries["AICF_Scenario_${variant}_Name"].en_us.StartsWith('AI Conflict')) "Scenario identity: $variant"
-}
+$setup=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictArland/Missions/AICF_Conflict_Arland_Setup.conf'))
+Require ($setup.Contains('m_sName "AI Conflict"')) 'Literal universal entry identity'
+foreach($key in @('AICF_Setup_Map_Arland','AICF_Setup_Map_Everon','AICF_Setup_Map_EveronNorth')){Require ($entries.Contains($key)) "Map label: $key"}
 $sourceFiles = @(Get-ChildItem (Join-Path $core 'Scripts') -Recurse -Filter '*.c' |
     Where-Object { $_.Name -ne 'AICF_LocalizationProbe.c' })
 foreach ($file in $sourceFiles) {

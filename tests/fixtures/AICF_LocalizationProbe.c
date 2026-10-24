@@ -34,12 +34,12 @@ modded class SCR_GameModeCampaign
 		string wire = AICF_Localization.Format("{AICF:AICF_UI_troops_c9179bae}", "A0", "{AICF:AICF_UI_Attack_018b2a67}", "10", "{AICF:AICF_UI_Moving_to_position_08148170}");
 		string savedWire = wire;
 		WidgetManager.SetLanguage("en_us");
-		AICF_CheckLocalization("EN_SCENARIO", WidgetManager.Translate("#AICF_Scenario_Arland_Name"), "AI Conflict - Arland");
+		AICF_CheckLocalization("EN_SCENARIO", WidgetManager.Translate("#AICF_Setup_Map_Arland"), "Arland");
 		AICF_CheckLocalization("EN_NESTED_MARKER", AICF_Localization.Resolve(wire), "A0 · Attack · 10 troops\nMoving to position");
 		AICF_CheckLocalization("EN_BADGE", AICF_Localization.Resolve("{AICF:AICF_UI_L_1e06387a}"), "L");
 		AICF_CheckLocalization("EN_STATE", AICF_Localization.Resolve(AICF_Localization.Code("AWAITING_PLAYER_COMMAND")), "Awaiting player orders");
 		WidgetManager.SetLanguage("ru_ru");
-		AICF_CheckLocalization("RU_SCENARIO", WidgetManager.Translate("#AICF_Scenario_Arland_Name"), "AI Conflict — Арланд");
+		AICF_CheckLocalization("RU_SCENARIO", WidgetManager.Translate("#AICF_Setup_Map_Arland"), "Арланд");
 		AICF_CheckLocalization("RU_NESTED_MARKER", AICF_Localization.Resolve(wire), "A0 · Атака · 10 чел.\nИдёт к точке");
 		AICF_CheckLocalization("RU_BADGE", AICF_Localization.Resolve("{AICF:AICF_UI_L_1e06387a}"), "Л");
 		AICF_CheckLocalization("RU_STATE", AICF_Localization.Resolve(AICF_Localization.Code("AWAITING_PLAYER_COMMAND")), "Ожидает приказа игрока");

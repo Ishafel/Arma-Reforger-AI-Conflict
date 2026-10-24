@@ -1,4 +1,4 @@
-param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+﻿param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference='Stop'
 . (Join-Path $RepositoryRoot 'tools/AICF_Scenarios.ps1')
 $catalog=Get-AICFScenarioCatalog -Path (Join-Path $RepositoryRoot 'tools/config/AICF_Scenarios.json')
@@ -17,18 +17,13 @@ function New-SourceSet([string]$Name){
         $path=Join-Path $root $project.Name
         [void](New-Item -ItemType Directory -Path $path)
         $payload=@{'addon.gproj'=('GameProject { GUID "'+$project.Name+'" }');'data.pak'='opaque native payload';'resourceDatabase.rdb'='opaque resource index'}
+        if($project.Value -ceq 'AIConflictArland'){$payload['resourceDatabase.rdb']='Missions/AICF_Conflict_Arland_Setup.conf'}
         $files=@(foreach($name in $payload.Keys){
             [IO.File]::WriteAllText((Join-Path $path $name),$payload[$name],$utf8)
             $file=Get-Item -LiteralPath (Join-Path $path $name)
             @{name=$name;size=$file.Length;sha256=(Get-FileHash -LiteralPath $file.FullName).Hash}
         })
-        $scenarios=@(foreach($variant in $catalog.variants){
-            if($variant.graph -cne $project.Value){continue}
-            foreach($mode in @('Standard','CoopUS','CoopUSSR')){foreach($difficulty in @('Easy','Medium','Hard')){
-                $preset=Resolve-AICFScenario -Catalog $catalog -Variant $variant.name -MatchMode $mode -Difficulty $difficulty
-                @{gameId=$preset.scenario;name='legacy'}
-            }}
-        })
+        $scenarios=@()
         if($project.Value -ceq 'AIConflictArland'){$scenarios+=@{gameId='{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf';name='AI Conflict'}}
         $asset=@{id=$project.Name;version='0.2.3';type='addon';description='immutable'}
         if($project.Value -cne 'AIConflictCore'){$asset.scenarios=$scenarios}
@@ -55,7 +50,7 @@ try{
     $prepared=Join-Path $work 'prepared'
     & $tool -PublishingRoot $source -OutputRoot $prepared -ExpectedVersion '0.2.3' -RepositoryRoot $RepositoryRoot|Out-Null
     $report=Get-Content "$prepared/catalog.json" -Raw|ConvertFrom-Json
-    if($report.addons.Count -ne 7 -or ($report.addons|Measure-Object scenarios_before -Sum).Sum -ne 82 -or ($report.addons|Measure-Object scenarios -Sum).Sum -ne 1 -or $report.publication -cne 'NOT_RUN'){throw 'Incomplete catalog'}
+    if($report.addons.Count -ne 7 -or ($report.addons|Measure-Object scenarios_before -Sum).Sum -ne 1 -or ($report.addons|Measure-Object scenarios -Sum).Sum -ne 1 -or $report.publication -cne 'NOT_RUN'){throw 'Incomplete catalog'}
     $checks++;'PASS complete-seven-addon-catalog'
     foreach($key in $sourceHashes.Keys){if((Get-FileHash -LiteralPath $key).Hash -cne $sourceHashes[$key]){throw 'Native source changed'}}
     foreach($project in $projects){foreach($name in @('addon.gproj','data.pak','resourceDatabase.rdb')){
@@ -106,12 +101,14 @@ try{
             'manifest' {[IO.File]::AppendAllText($arland,' ');$rule='WORKSHOP_SET_MANIFEST_CHANGED'}
             'payload' {[IO.File]::WriteAllText("$out/9178E5822AFE48EA/data.pak",'tampered');$rule='WORKSHOP_BUNDLE_HASH'}
             'legacy' {
-                Copy-Item -LiteralPath "$source/B52C5F6AEDBF423E/manifest.json" -Destination $arland -Force
+                $m=Get-Content $arland -Raw|ConvertFrom-Json
+                $m.asset.scenarios+=@{gameId='{BC2437E4861B4FD2}Missions/AICF_Conflict_Arland.conf';name='retired'}
+                Save-Json $arland $m
                 $owner=@($r.addons|Where-Object id -CEQ 'B52C5F6AEDBF423E')[0]
                 $owner.manifest_sha256=(Get-FileHash $arland).Hash
                 $owner.scenarios=10
                 Save-Json $reportPath $r
-                $rule='WORKSHOP_CATALOG_EXPOSED_PRESETS'
+                $rule='WORKSHOP_CATALOG_IDENTITY'
             }
             'extra-owner' {[void](New-Item -ItemType Directory -Path "$out/FFFFFFFFFFFFFFFF");$rule='WORKSHOP_SET_OWNERS'}
             'json' {[IO.File]::WriteAllText($reportPath,'{broken');$rule='WORKSHOP_SET_REPORT'}

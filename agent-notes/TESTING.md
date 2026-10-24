@@ -1,5 +1,54 @@
 # Проверки и baseline
 
+## Полное прекращение поддержки старых сценариев — 2026-10-24
+
+По запросу владельца удалены 81 старый .conf и 81 .meta; остался один AI Conflict
+setup, напрямую inherited от native Arland. Старые GUID, server configs и
+StockCoopUSSR alias больше не поддерживаются. Schema 2 задаёт четыре native
+targets и 81 логический launch plan. RuntimeScenario передаёт атомарный выбор,
+применяет native caches до weather/base init, восстанавливает cached header;
+server RplProp передаёт variant/mode/difficulty/ready клиентам и JIP.
+North whitelist принадлежит Everon integration. Подробности — SCENARIO_SETUP.md.
+139 ненужных сценарных строк удалены, runtime tables — 619 записей.
+Packaging tools отклоняют старые resources в native RDB даже с очищенным manifest.
+
+Свежий baseline before/ — **8/8 PASS/0**. Первый полный after-all/ —
+85 PASS/3 FAIL: audit искал прежнее расположение bootstrap preflight.
+Проверка перенесена на фактический guarded bootstrap с initial/late dispatch;
+оба зависимых mutation contracts сохранены. after-commander/ — **3/3 PASS/0**.
+Финальный tools/Invoke-AICFChecks.ps1 -Suite All — **88/88 PASS, exit 0**,
+final-all/, без исключений. Старые FAIL logs сохранены.
+Workbench production Stock/WCS и два актуальных fixture graphs — **4/4 PASS/0**,
+без SCRIPT E/F, ENGINE F, VM/hang; 275 production файлов совпали с compiled stage.
+Прочие resource (E) перечислены в evidence, не удалены из полных логов.
+
+Canonical runtime: Stock **176/176**, North **97/97** (7 initialized/2 HQ/5 points),
+WCS Standard **176/176** плюс native targets **54/54**, native exit 0.
+Оба content graphs отвергли все 81 retired GUID. WCS Standard roster 10+10,
+Co-op North 0+10; время 09:37/Rainy применилось на authority.
+Server/client JIP **97/95 PASS**, два запуска native exit 0, exact CLI+PID+
+ROSTER_READY и launcher manifest сохранены. Новая readiness проверка отклонила
+три несовпадения map/mode/difficulty до старта клиента, затем верный client PASS.
+Native каталог **16/16 PASS/0**, Stock Play/Host/cancel и WCS Play PASS/0.
+
+**Native shutdown остаётся FAIL/blocker:** повтор final-wcs-host загрузил мир,
+полный graph, runtime rules и ROSTER_READY/listener, затем упал на выходе с
+0xC0000005 (-1073741819), после Game destroyed. Minimal Bootstrap-only WCS
+Host/Play затем PASS/0, но это не доказывает устранение аварии. Dump и полные
+логи сохранены. Ready PR/релиз не создан; самостоятельного ACCEPTED нет.
+
+Все семь pack-only CLI вернули 0 без артефактов: FAIL_NO_ARTIFACT; новый packaged
+catalog/backend/downloaded frontend — NOT RUN. Старый настоящий bundle 0.2.3
+отвергнут по RDB. Workshop upload запрещён владельцем; опубликованная 0.2.3
+не меняется Git-веткой. Пароль/лимиты, ручное меню, второй человеческий игрок
+и боевой soak — NOT RUN; проверенный программный JIP snapshot их не заменяет.
+GUI/screenshot/video не применялись. Временные stages/profiles проверены SHA
+и архивированы, watchdog остановлен; полные logs/dumps сохранены.
+
+Evidence, команды, verdict, counts и полный список файлов:
+.codex-runtime/retire-scenarios-20261024/REPORT.md.
+Нижеследующие записи относятся к прежним source и сохраняются как история.
+
 ## Повторный дефект каталога 0.2.3 и общий preparation workflow — 2026-10-24
 
 Владелец подтвердил старые сценарии после обновления. Read-only inspection:

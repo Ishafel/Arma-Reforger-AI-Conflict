@@ -76,18 +76,18 @@ Concrete targets и dependency graphs генерируются в Arland integra
 JSON каталога. `AICF_ScenarioLaunch` проверяет native permissions входного item,
 enabled state внешнего content graph, зависимости, download/platform/forced-CLI
 gates и передаёт точный граф native
-Play/Host transition. Окружение передаётся одноразовым process-local intent через
-native GameSessionStorage в точный header. При смене scripts graph в preparation
-Listen `AICF_ScenarioHostTransition` владеет переходом через main menu,
-повторным native Host с исходной engine config и конечным leaf; его intent
-содержит выбор/окружение без копии сетевой config или паролей. Каждая граница
-проверяет phase, TTL, graph и header identity. `AICF_ScenarioEnvironmentHandler`
-на authority передаёт начальные часы/погоду штатному handler; native manager
-сохраняет ускорение, погодные переходы, save/load и репликацию. Границы,
-исключение прежнего leaf TryPlay/TryHost пути и cleanup — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
-Arland integration регистрирует один вход в native default catalog, сохраняя
-stock записи и прежние leaf GUID; UI фильтрует точные legacy IDs. Это необходимо
-для source addons без WorkshopItem.
+Play/Host transition. Атомарный выбор передаётся через GameSessionStorage в native target.
+AICF_RuntimeScenario применяет mode/difficulty/rank/save/environment перед
+native weather/base initialization и восстанавливает cached header при cleanup.
+North whitelist принадлежит Everon integration. Server публикует variant,
+mode/difficulty/ready через существующий game mode RplProp; JIP зеркалит только
+локальную presentation и rank caches. Старые 81 ресурса и GUID удалены,
+обратной совместимости с ними и StockCoopUSSR alias нет.
+При смене scripts graph в preparation Listen HostTransition владеет переходом
+через menu, повторным native Host с engine config и native mission; проверяет
+итоговый полный selection, потому что разные режимы/North используют общий ID.
+Arland регистрирует единственный собственный setup; stock записи сохраняются.
+Подробности — [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
 Core разрешает subtype чтением ресурса по ID; nullable catalog `GetHeader()` не
 определяет доступность входа. `AICF_WorkshopTagMetadata` — узкий адаптер чтения
 штатных UI tag maps, избегающий standalone protected constructor SCR_FilterCategory.

@@ -168,7 +168,11 @@ if (Require-AICommanderClass $matchController 'AICF_MatchController') {
 }
 
 if (Require-AICommanderRecord $arlandBootstrap 'AICF_ArlandCampaignBootstrap.c') {
-    $onGameStart = Assert-AICommanderMethodPresent $arlandBootstrap 'OnGameStart' 'AI_COMMANDER_EARLY_REJECT'
+    $initialStart = Assert-AICommanderMethodPresent $arlandBootstrap 'OnGameStart' 'AI_COMMANDER_EARLY_REJECT'
+    $runtimeReady = Assert-AICommanderMethodPresent $arlandBootstrap 'AICF_OnRuntimeScenarioReady' 'AI_COMMANDER_EARLY_REJECT'
+    Assert-AICFContains $failures 'AI_COMMANDER_EARLY_REJECT' (ConvertTo-AICFCodeText $initialStart) 'super\.OnGameStart\(\);[\s\S]*m_bAICFRuntimeGameStarted = true;[\s\S]*AICF_TryConfiguredBootstrap\(\);' 'Initial startup must dispatch through configured bootstrap after native initialization'
+    Assert-AICFContains $failures 'AI_COMMANDER_EARLY_REJECT' (ConvertTo-AICFCodeText $runtimeReady) 'if \(m_bAICFRuntimeGameStarted\) AICF_TryConfiguredBootstrap\(\);' 'Late JIP readiness must use the same guarded bootstrap'
+    $onGameStart = Assert-AICommanderMethodPresent $arlandBootstrap 'AICF_TryConfiguredBootstrap' 'AI_COMMANDER_EARLY_REJECT'
     $scheduleStage1 = Assert-AICommanderMethodPresent $arlandBootstrap 'AICF_ScheduleStage1' 'AI_COMMANDER_EARLY_REJECT'
     $validateConfig = Assert-AICommanderMethodPresent $arlandBootstrap 'AICF_ValidateStage1Config' 'AI_COMMANDER_EARLY_REJECT'
     $runStage1 = Assert-AICommanderMethodPresent $arlandBootstrap 'AICF_RunStage1' 'AI_COMMANDER_EARLY_REJECT'

@@ -1,4 +1,4 @@
-param([string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+﻿param([string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference = 'Stop'
 . (Join-Path $RepositoryRoot 'tools/AICF_Scenarios.ps1')
 $catalog = Get-AICFScenarioCatalog -Path (Join-Path $RepositoryRoot 'tools/config/AICF_Scenarios.json')
@@ -14,11 +14,11 @@ function Fixture([string]$variant = 'Stock', [int]$mode = 0, [int]$difficulty = 
     if ($Explicit) { $argv += @('-aicfColdVariant',$variant,'-aicfColdMode',[string]$mode,'-aicfColdDifficulty',[string]$difficulty) }
     if ($Cancel) { $argv += @('-aicfColdCancelProbe','1') }
     $names = @('LITERAL_NAME','FRONTEND_GRAPH','NATIVE_ENTRY','SETUP_OPEN','BOOTSTRAP_CONTEXT')
-    $done = 3
+    $done = 4
     if ($Cancel) { $names += @('CANCEL_RETURN','CANCEL_CLOSED'); $done = 2 }
     else {
-        $names += @('DEFAULTS','SELECT','SELECT_ENVIRONMENT','CAN_START','LAUNCH','SELECTED_HEADER','NO_BOOTSTRAP','APPLIED_ENVIRONMENT')
-        if ($HostFlow) { $names += @('HOST_REQUEST','HOST_CONTEXT','HOST_LISTEN'); $done = 4 }
+        $names += @('DEFAULTS','SELECT','SELECT_ENVIRONMENT','CAN_START','LAUNCH','SELECTED_HEADER','NO_BOOTSTRAP','APPLIED_RULES','APPLIED_ENVIRONMENT')
+        if ($HostFlow) { $names += @('HOST_REQUEST','HOST_CONTEXT','HOST_LISTEN'); $done = 5 }
         if ($Explicit) { $names += @('CONTENT_READY','TARGET_WORLD','TARGET_GRAPH'); $done += 2 }
     }
     $lines = @('CLI Params: ' + ($argv -join ' '), '[AICF][SCENARIO_BOOTSTRAP] phase=OPEN entry=SETUP')
@@ -97,7 +97,7 @@ try {
     Check unknown $bad $wcs.log -rule CLI_SELECTION
     $bad.manifest = $wcs.manifest.Replace('"-aicfColdMode",','"-aicfColdMode", "3", "-aicfColdMode",')
     Check duplicatecli $bad $wcs.log -rule CLI_SELECTION
-    $acceptedOnly = ($wcs.log -split "`n" | Where-Object { $_ -notmatch 'case=(SELECTED_HEADER|NO_BOOTSTRAP|APPLIED_ENVIRONMENT|HOST_LISTEN|TARGET_WORLD|TARGET_GRAPH)|\[COLD_(DONE|WORLD|ADDON)\]' }) -join "`n"
+    $acceptedOnly = ($wcs.log -split "`n" | Where-Object { $_ -notmatch 'case=(SELECTED_HEADER|NO_BOOTSTRAP|APPLIED_RULES|APPLIED_ENVIRONMENT|HOST_LISTEN|TARGET_WORLD|TARGET_GRAPH)|\[COLD_(DONE|WORLD|ADDON)\]' }) -join "`n"
     Check acceptedonly $wcs $acceptedOnly -rule COMPLETION
     $handoffPlan = $wcs.manifest | ConvertFrom-Json
     $handoffPlan.arguments += @('-aicfExpectHostHandoff','1','-aicfHostIntentContracts','1','-aicfColdReadyProbe','1')

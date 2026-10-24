@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory=$true)][string]$LogPath,
     [Parameter(Mandatory=$true)][string]$LauncherPath,
     [Parameter(Mandatory=$true)][string]$NativeExitPath,
@@ -50,10 +50,9 @@ if($launcher -notmatch 'AICF_RUNTIME_MANIFEST_JSON=({[^\r\n]+})') { $failures.Ad
 else { $manifest=$matches[1] | ConvertFrom-Json }
 if($manifest) {
     $expectedRole='Server'; if($Client) { $expectedRole='Client' }
-    if($manifest.role -cne $expectedRole -or $manifest.variant -notin (@($catalog.variants.name)+@('StockCoopUSSR'))) { $failures.Add('LAUNCH_ROLE_VARIANT') }
+    if($manifest.role -cne $expectedRole -or $manifest.variant -notin @($catalog.variants.name)) { $failures.Add('LAUNCH_ROLE_VARIANT') }
     $matchMode='Standard'
     if($manifest.PSObject.Properties['matchMode']){$matchMode=$manifest.matchMode}
-    elseif($manifest.variant -eq 'StockCoopUSSR'){$matchMode='CoopUSSR'}
     $difficulty='Easy'; if($manifest.PSObject.Properties['difficulty']){$difficulty=$manifest.difficulty}
     $plan=$null
     try { $plan=Resolve-AICFScenario -Catalog $catalog -Variant $manifest.variant -MatchMode $matchMode -Difficulty $difficulty }

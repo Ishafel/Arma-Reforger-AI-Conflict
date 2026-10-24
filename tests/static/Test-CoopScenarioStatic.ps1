@@ -1,4 +1,4 @@
-param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+﻿param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../lib/Stage3StaticAudit.Common.ps1')
 $core=Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict'
@@ -97,8 +97,7 @@ foreach($mutation in $mutations) {
     $copy[$mutation[0]]=$copy[$mutation[0]].Replace($mutation[1],$mutation[2])
     if($mutation[3] -notin @(Test-CoopContracts $copy)) { $failures+="MUTATION_ESCAPED $($mutation[3])" }
 }
-$header=Get-Content (Join-Path $RepositoryRoot 'AIConflictArland/Missions/AICF_Conflict_Arland_Coop_USSR.conf') -Raw
-if($header -notmatch '\{BC2437E4861B4FD2\}Missions/AICF_Conflict_Arland.conf' -or $header -notmatch 'm_eAICFMatchMode 2') { $failures+='HEADER_POLICY' }
-if($header -match '(?m)^\s*(World|SystemsConfig|m_aCampaignCustomBaseList)\b') { $failures+='HEADER_OWNERSHIP' }
+$runtime=[IO.File]::ReadAllText((Join-Path $core 'Config/AICF_RuntimeScenario.c'))
+if($runtime -notmatch 'header.m_eAICFMatchMode = value.m_iMode;' -or $runtime -match 'm_aPresets|m_aAICFSetupPresets'){$failures+='RUNTIME_MODE_POLICY'}
 if($failures.Count) { $failures; exit 1 }
 "Co-op static: PASS; negative mutations=$($mutations.Count)"

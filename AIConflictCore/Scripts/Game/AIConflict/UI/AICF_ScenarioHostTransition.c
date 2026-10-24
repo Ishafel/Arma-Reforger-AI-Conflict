@@ -104,7 +104,7 @@ class AICF_ScenarioHostTransition
 	protected void Fail(string reason)
 	{
 		GameSessionStorage.s_Data.Remove(SESSION_KEY);
-		AICF_ScenarioEnvironment.Clear();
+		AICF_RuntimeScenario.ClearPending();
 		Print(string.Format("[AICF][HOST_HANDOFF][FAIL] reason=%1", reason), LogLevel.ERROR);
 		// Возвращаем picker только в той же локальной preparation session.
 		if (!AICF_ScenarioBootstrap.ShouldIntercept()) return;
@@ -148,7 +148,7 @@ class AICF_ScenarioHostTransition
 		{
 			SCR_MissionHeaderCampaign setup = SCR_MissionHeaderCampaign.Cast(active);
 			if (active.GetHeaderResourceName() != intent.m_sEntry || !setup || !setup.m_bAICFSetupEntry) { Fail("ENTRY_IDENTITY"); return; }
-			if (!AICF_ScenarioEnvironment.Queue(intent.GetTarget(), intent.m_Environment)) { Fail("ENVIRONMENT"); return; }
+			if (!AICF_RuntimeScenario.QueueValues(intent.m_iMap, intent.m_iContent, intent.m_iMode, intent.m_iDifficulty, intent.m_Environment)) { Fail("ENVIRONMENT"); return; }
 			intent.m_iPhase = 2;
 			GameSessionStorage.s_Data[SESSION_KEY] = intent.Encode();
 			if (!GameStateTransitions.RequestScenarioChangeTransition(intent.GetTarget(), "", variant.GetAddonList())) { Fail("LEAF_REJECTED"); return; }
@@ -156,7 +156,14 @@ class AICF_ScenarioHostTransition
 			Print("[AICF][HOST_HANDOFF] phase=LEAF");
 			return;
 		}
-		if (active.GetHeaderResourceName() != intent.GetTarget()) { Fail("TARGET_IDENTITY"); return; }
+		AICF_RuntimeScenarioSelection applied = AICF_RuntimeScenario.GetSelection();
+		if (active.GetHeaderResourceName() != intent.GetTarget() || !applied ||
+			applied.m_iMap != intent.m_iMap || applied.m_iContent != intent.m_iContent ||
+			applied.m_iMode != intent.m_iMode || applied.m_iDifficulty != intent.m_iDifficulty)
+		{
+			Fail("TARGET_IDENTITY");
+			return;
+		}
 		GameSessionStorage.s_Data.Remove(SESSION_KEY);
 		Print("[AICF][HOST_HANDOFF] phase=READY");
 	}

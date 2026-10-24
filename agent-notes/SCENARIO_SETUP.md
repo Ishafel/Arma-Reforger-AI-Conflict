@@ -70,58 +70,42 @@ IGNORE_CURSOR и требует, чтобы ближайший ButtonWidget со
 
 ## Каталог и расширение
 
-`tools/config/AICF_Scenarios.json` — единый источник CLI и frontend targets:
-девять сочетаний карты/контента, семь dependency graphs, 81 leaf header.
-`mapIndex`/`contentIndex` задают текущую матрицу 3×3.
-`tools/Update-AICFScenarioRegistry.ps1 [-Check]` генерирует
-`AIConflictArland/.../Integration/AICF_ScenarioVariants.c`: точный addon CSV,
-owner, метки сторон, девять ресурсов Standard/CoopUS/CoopUSSR × Easy/Medium/Hard.
-Generated `.c` отслеживается; ручная правка будет обнаружена `-Check`.
+Каталог tools/config/AICF_Scenarios.json schema 2 задаёт девять сочетаний
+карты/контента, семь dependency graphs и четыре штатных MissionHeader:
 
-Core `AICF_ScenarioRegistry` хранит generic descriptors. Integration расширяет
-виртуальный instance `Build`, без static dispatch ловушки и второго controller.
-Карты, world, GUID targets и dependency IDs не переносятся в Core. Новому
-integration нужны профиль, thin headers и запись каталога; добавление нового
-измерения меню требует расширить три текущих колонки/строки, generator validation
-и тестовую матрицу. Неизвестный Workshop мод сам по названию профилем не становится.
+| Target | ResourceName | Workshop owner |
+|---|---|---|
+| StockArland | {C41618FD18E9D714}Missions/23_Campaign_Arland.conf | пустой |
+| StockEveron | {ECC61978EDCC2B5A}Missions/23_Campaign.conf | пустой |
+| RHSArland | {7577640CD42A00BD}Missions/RHS_Conflict_Arland.conf | 595F2BF2F44836FB |
+| RHSEveron | {AAD43C10045857C1}Missions/RHS_Conflict.conf | 595F2BF2F44836FB |
 
-`AICF_ScenarioVariant.Resolve` проверяет bounds, девять targets и owner в графе.
-`m_aContentAddons` генерируется из полного графа без GUID собственных
-`localProjects`: frontend может загрузить integration при transition, поэтому
-его предварительное включение не является условием видимости. Core не содержит
-RHS/WCS GUID. `IsContentEnabled` требует `WorkshopItem.IsEnabled()` каждого
-внешнего dependency. API учитывает enable state до scripts reload и всегда
-возвращает true для уже загруженного item. Для source addon без WorkshopItem
-требуется присутствие в `GameProject.GetLoadedAddons`; одной available-записи
-недостаточно. Пустой content graph означает Vanilla. Неготовый scan закрывает
-модифицированные варианты до повторного открытия меню.
+WCS использует соответствующий RHS target, северный сектор — Everon target.
+Режим и сложность передаются отдельно: 81 логический план больше не означает
+81 ресурс. Старые .conf/.meta и их GUID удалены; сохранения и server configs
+с этими GUID, а также alias StockCoopUSSR больше не поддерживаются.
+Update-AICFCoopScenarios.ps1 удалён. Старые локализованные имена также удалены.
 
-Скрывается весь frame, включая input; оставшиеся кнопки сдвигаются влево без
-изменения стабильных content indices. Выбор карты, `SelectVariant` и
-`CanStart` независимо применяют enabled gate: скрытый вариант нельзя выбрать
-программно или запустить по устаревшему выбору. Статус перечисляет только
-видимые, но недоступные наборы. CLI launch не ограничивается frontend-фильтром.
+Update-AICFScenarioRegistry.ps1 [-Check] генерирует integration descriptors
+с m_sMission/m_sMissionOwner, addon CSV, content dependencies, метками сторон
+и оформлением карт. Core не содержит конкретных карт или target GUID.
+Для нового integration нужны native target, runtime map policy и запись
+каталога; отдельные сценарии для режимов/сложностей создавать не нужно.
+Resolve проверяет bounds и наличие owner в графе.
 
-`HasDependencies` требует каждый ID. `IsAvailable` использует native
-`GameProject.GetAvailableAddons`; при наличии Workshop active revision требует
-Downloaded и отсутствие corruption. Точная active version передаётся Host.
-`IsReadyToRun` зависит также от online/selected metadata: у целого offline
-WCS Attachments 8.4.1 он вернул false при Downloaded=true/Corrupted=false.
-Этот selected-revision gate применяется только к source local pseudo-revision,
-как прежде. Полный локальный граф независимо требует каждый ID из GameProject.
-Source placeholder WorkshopItem без revision подтверждается GameProject.
-Пустой scan не считается наличием модов.
+m_aContentAddons содержит внешние dependencies без семи localProjects.
+IsContentEnabled требует enabled каждого внешнего WorkshopItem; source addon
+без item подтверждается GameProject.GetLoadedAddons. Пустой граф — Vanilla.
+HasDependencies проверяет каждый ID. IsAvailable проверяет available graph,
+active revision Downloaded и отсутствие corruption; source placeholder без
+revision подтверждается GameProject. Native IsReadyToRun дополнительно нужен
+для local pseudo-revision. Host передаёт версии активных revisions.
 
-`AICF_ScenarioSetupSelection` хранит карту/контент/режим/сложность и независимые
-`m_iStartMinutes` (0..1439, sentinel 1440 = random) и weather index 0..4.
-Sentinel остаётся в model/storage API для совместимости; frontend
-`SelectEnvironment` принимает только 0..1439 и не содержит random control.
-Кнопок теперь 20: map 0..2, content 3..5, mode 6..7, side 8..9, difficulty
-10..12, launch 13, cancel 14, weather 15..19; slider — отдельный native widget.
-Default — 480 минут. Смена карты/контента не сбрасывает их. Ошибочный
-выбор сохраняет прошлый. Defaults: Арланд / Vanilla / Co-op USSR / Medium,
-если запуск не закрепил несовместимый контент. При смене карты контент
-сохраняется либо выбирается первый допустимый набор в стабильном порядке.
+Selection хранит карту/контент/режим/сложность, минуты и weather index 0..4.
+Model/storage допускает sentinel 1440=random, экран — только 0..1439.
+Defaults: Арланд/Vanilla/Co-op USSR/Medium, 08:00/random weather.
+Неверный выбор сохраняет прежнее состояние; смена карты/контента сохраняет
+время и погоду. 20 индексов кнопок и отдельный ползунок не меняются.
 
 ## Оформление экрана
 
@@ -152,305 +136,116 @@ pass и повторяет только при смене размера root. �
 
 ## Native launch boundary
 
-`AICF_ScenarioSetupEntry` перехватывает только `SCR_MissionHeaderCampaign` с
-`m_bAICFSetupEntry=1` в
-`SCR_ScenarioUICommon.TryPlayScenario/TryHostScenario`; остальные сценарии идут
-в super с исходными аргументами. Header читается по `scenario.Id()`:
-`MissionWorkshopItem.GetHeader()` может быть null при наличии native metadata.
+Единственный собственный ресурс:
+{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf.
+Он наследует native Arland напрямую, имеет literal title AI Conflict и
+m_bAICFSetupEntry=1. В нём нет старого массива presets или собственной world.
+Обычные native сценарии сохраняются; фильтры старых IDs в UI удалены.
+Integration регистрирует только setup в GetDefaultGameConfigs с native dedup.
 
-Первый frontend установленного Workshop мода может работать только с vanilla:
-Core hooks и его StringTable ещё не загружены. Поэтому title и краткие
-описания entry заданы literal; Play сначала штатно загружает addon graph и
-setup header. `AICF_ScenarioBootstrap` на локальной authority открывает picker
-после загрузки. AICF integration пропускает запуск своего match controller для
-этого промежуточного header; stock world остаётся inherited Arland.
-Явные CLI `server`/`client`/`world`, dedicated и remote client не перехватываются.
+TryPlayScenario/TryHostScenario перехватывают только flagged header,
+прочитанный по scenario.Id(); nullable catalog GetHeader не определяет тип.
+При холодном запуске штатный Play/Host сначала загружает setup и scripts,
+после чего AICF_ScenarioBootstrap открывает picker на локальной authority.
+Матч AICF в preparation scene не запускается. Dedicated/direct client и
+явные server/client/world не перехватываются. Отмена preparation вызывает
+native GameplayEnd; callbacks и modal удаляются в OnGameEnd.
 
-Picker допускает текущий preparation context только при точном совпадении
-`entry.Id()` с активным flagged header. Metadata берётся через native
-`WorkshopApi.GetCurrentMission`, затем точный catalog lookup. Отсутствующий
-offline scan запускается один раз с ограниченным ожиданием. В мире нет
-frontend `SCR_DownloadManager`: вместо него проверяется native `GetDownloads`,
-`IsProcessed` и `GetPendingDownload`; main-menu gate сохраняет прежний manager.
-Native CanHost применяется при создании новой сессии с config. Preparation
-Listen уже создан штатным Host: выбор меняет его сценарий через CanPlay и
-сохраняет platform gate. При изменении graph используется описанный ниже
-`AICF_ScenarioHostTransition`. Полный graph, enabled/downloaded/corruption и
-forced-CLI gates действуют в обоих контекстах. Отмена preparation вызывает
-native GameplayEnd, обычное закрытие/успешный launch только снимает UI.
-Callback снимается в OnGameEnd; UI освобождается до world cleanup.
+CanStart повторно проверяет entry identity, native CanPlay/CanHost, platform,
+download queue, enabled/downloaded/corruption и forced CLI graph.
+В preparation без SCR_DownloadManager проверяются native GetDownloads,
+IsProcessed/GetPendingDownload. Неизвестный forced gproj или лишний forced
+non-vanilla addon закрывают запуск.
 
-В API 1.8.0.13 preparation Listen принимает ScenarioChange с новым addon CSV,
-но фактически не меняет scripts graph: Everon WCS + RHS из Core + Arland
-оставался на чёрном экране. Одного `RequestReload` в действующем Listen
-недостаточно. `AICF_ScenarioHostTransition` при несовпадении точного loaded graph
-возвращается в main menu через GameplayEnd и в том же кадре задаёт полный
-graph через RequestReload. Так Core и обработчик intent остаются загружены.
-Затем вызывает `RequestPublicServerTransition(null)`, как штатный
-`ArmaReforgerScripted.HostGameConfig`: engine использует удерживаемую исходную
-Host config. Переданный RequestReload сохраняет новый graph и на этом переходе.
-После повторной загрузки **того же** setup header в Listen конечный
-ScenarioChange уже работает с загруженными integration и content scripts.
-При совпадающем graph дополнительного возврата нет; main-menu Host с явной
-SCR_DSConfig и Play сохраняют прежние пути.
+Play передаёт native ResourceName и точный addon CSV через
+RequestScenarioChangeTransition. Host меняет только scenarioId,
+hostedScenarioModId и mods в SCR_DSConfig, откатывает их при отказе,
+передаёт полный graph через RequestReload в том же кадре после принятия
+RequestPublicServerTransition. Порт/пароль/лимиты принадлежат native config.
 
-Intent schema 1 хранит только phase, issued tick, точный entry и индексы
-карты/контента/режима/сложности, минуты и погоду в GameSessionStorage. Native
-config и пароли не копируются и не заменяются defaults: GetRunningDSConfig и
-ServerLobbyApi.GetServerConfig по-прежнему недоступны в этом Listen. Descriptor
-и target заново разрешаются через registry, TTL — 10 минут. Callback сверяет
-неизменность payload, phase/context, точный graph, Listen и identity setup/leaf;
-переход на чужой header запрещён. Промежуточные OnMissionSet снимают обычный
-environment intent, поэтому перед leaf он заново ставится из handoff payload.
-Повторный picker во время handoff не открывается; pending снимается после
-проверки конечного header. Fail очищает intent/environment, Stop снимает callback.
-События `HOST_HANDOFF phase=RETURN/HOST/LEAF/READY` фиксируют каждую границу.
+Если preparation Listen должен изменить scripts graph, HostTransition
+сохраняет immutable intent (phase/issued/entry/selection/environment), завершает
+preparation, загружает main menu с нужным graph, повторяет native Host с
+сохранённой engine config, затем переключает native mission.
+Границы проверяют TTL, graph, Listen context, entry и итоговый selection:
+одного общего Everon target недостаточно для различения full/North и режимов.
+События HOST_HANDOFF phase=RETURN/HOST/LEAF/READY сохранены. Stop снимает retry.
 
-Source terminal probe подтвердил первый Everon WCS + RHS / Co-op USSR / Hard,
-все 28 addons, native listener 127.0.0.1:24073, 09:37/Rainy и ROSTER_READY.
-Фактические password/player limit, второй игрок/JIP и packaged cold Workshop
-остаются NOT RUN. Исторические failed experiments и native shutdown crash
-не стираются новым PASS; результаты — [TESTING.md](TESTING.md).
-Быстрый выход из Play повторно дал native access violation и на исходной
-production базе до этого исправления. Причина не установлена; это отдельный
-runtime blocker для ready PR/релиза, а не PASS по сохранению прежнего Play.
+## Runtime selection и JIP
 
-Setup использует штатный тип header с явным opt-in flag. Самостоятельный
-`AICF_ScenarioSetupHeader` больше не используется: контроль после native
-Play → setup → leaf с этим subtype получал access violation при завершении;
-тот же путь с `SCR_MissionHeaderCampaign` завершился native exit 0.
-`AICF_ResolveSetupPreset` сохраняет bounds, mode/difficulty, world и запрет
-рекурсивного setup. Core и Arland публикуются согласованной версией вместе.
+AICF_RuntimeScenario владеет одной атомарной записью GameSessionStorage
+AICF_RuntimeScenario schema 1. Она содержит полную строку native target,
+map/content/mode/difficulty/issued/minutes/weather. Строка сериализуется как
+string: JSON не должен сокращать ResourceName до GUID до загрузки RHS addon.
+Decode проверяет все поля, bounds, target из registry и TTL 10 минут.
+Перед применением запись удаляется; повторное потребление невозможно.
+Отказ перехода очищает pending, старые environment schemas не читаются.
 
-`AICF_ScenarioLaunch.CanStart` заново проверяет main menu, отсутствие перехода,
-native CanPlay/CanHost входного MissionWorkshopItem, hosting platform gate,
-пустую download queue и зависимости выбранного descriptor. Неготовый набор
-не запускается; download dialog не запускает по ошибке default entry.
+OnWorldPostProcess до super применяет policy перед native weather setup;
+OnGameStart до super служит идемпотентным fallback перед инициализацией баз.
+Прототип только OnMissionSet не сработал при начальном direct server и не
+используется. Native header и ранние caches campaign/time handler получают
+GENERAL, отсутствие vehicle rank gate, save types 0, mode/difficulty,
+начальное время/погоду и ускорение 6/24. Файлы игры не изменяются.
+Snapshot восстанавливает все изменённые поля и исходный base-list в OnGameEnd.
 
-Play передаёт leaf resource и **точный** addon CSV в штатный
-`GameStateTransitions.RequestScenarioChangeTransition`, используемый native
-`PlayGameConfig`. Host передаёт SCR_DSConfig в `RequestPublicServerTransition`:
-меняет только scenarioId, hostedScenarioModId и mods с загруженными active версиями
-(local pseudo-revision используется только как fallback для source),
-при отказе возвращает прежние значения. Network/password/player limits и
-gameProperties сохраняются. Setup и native menus закрываются после принятия.
+Everon integration владеет whitelist северного сектора: семь штатных баз,
+два HQ и пять control points, radio range 2000, establishing отключён.
+Core не содержит их названий. World/layout/entities не копируются.
 
-В API 1.8.0.13 `RequestPublicServerTransition` не принимает addonList. Сразу после
-принятия Host-запроса, в том же кадре, вызывается `GetGame().RequestReload`
-с точным `variant.m_aAddons`. Это заполняет граф pending Host-перехода,
-сохраняя Listen mode и его конфигурацию. Без этого source Host перезагружался
-с двумя vanilla addons, терял Core/integrations и завершался WORLD_LOAD_ERROR.
-`RequestReload` помечен obsolete («Pass addon GUIDs to the transition request
-directly»); у Public API такого аргумента пока нет. Это локальное исключение
-для Host, не замена современного Play-перехода. При отклонённом запросе reload
-не вызывается. Workshop Enable и изменение установленных файлов не нужны.
+Server/master публикует variant/difficulty/mode/ready через RplProp уже
+реплицируемого SCR_GameModeCampaign, с BumpMe только при фактическом изменении.
+Клиент и JIP не читают authority intent: verified snapshot задаёт presentation
+header и локальные native rank caches, не изменяя replicated state.
+Если snapshot приходит после OnGameStart, readiness callback запускает только
+отложенную клиентскую инициализацию. Время/погоду и дальнейшие переходы
+реплицирует native manager; AICF_ScenarioEnvironmentHandler работает на authority.
 
-Старый прототип вызывал leaf MissionWorkshopItem.Play/Host. Универсальному
-варианту это не подходит: header незагруженной интеграции ещё не обязан быть
-в native каталоге, а загруженные RHS/WCS меняют content profile factory.
-Разрешения проверяются на реальном входном item, выбранные зависимости —
-отдельно; загрузкой/перекомпиляцией занимается native transition. Gameplay,
-roster и replicated state здесь не меняются.
-
-## Передача времени и погоды
-
-`AICF_ScenarioEnvironment` записывает одноразовый intent в native
-`GameSessionStorage.s_Data` перед Play/Host transition. Это память текущего
-executable, переживающая scripts/addons reload; файлы профиля и новые MissionHeader
-варианты не создаются. Payload schema **2** содержит точный target resource,
-issued tick, minutes и weather. Schema 1 с прежними time presets отклоняется,
-чтобы старый индекс не стал минутами. При отказе native transition payload удаляется.
-`ArmaReforgerScripted.OnMissionSet` потребляет его до валидации: принимает только
-совпадающий leaf header, валидные bounds и возраст до 10 минут. Чужой сценарий,
-повторный старт и malformed payload не наследуют параметры. Данные прикрепляются
-к transient полю экземпляра header, без изменения исходного ресурса.
-
-Target читается из JSON в **ResourceName**, как и при записи. Retail 1.8.0.13
-записывает это значение как один GUID; чтение в `string` оставляло GUID вместо
-полного resource name и ошибочно отклоняло выбранный leaf. Native typed read
-восстанавливает имя через resource database; строгая проверка `target != actual`
-и schema 2 сохранены. Проверка только Diag не подтверждает этот roundtrip.
-
-`AICF_ScenarioEnvironmentHandler` использует штатный
-`SCR_TimeAndWeatherHandlerComponent.SetupDaytimeAndWeather` на authority.
-Часы/минуты и native random daytime независимы от выбранного weather state;
-готовые presets не должны подменять оба измерения одновременно. Имя погоды
-проверяется в `GetWeatherStatesList` мира; недоступное состояние даёт WARNING
-`ENVIRONMENT_FALLBACK` и native random. Native матрица покрывает три карты и все
-четыре фиксированных состояния выбранными сочетаниями; полный перебор состояний
-на каждой карте не запускался. `ENVIRONMENT_APPLIED` пишет
-`time_minutes`, weather_mode и фактические часы/погоду. Старый `time_mode` относится
-только к историческим preset logs. Повторный вызов не сбрасывает выбор; native save/load
-имеет приоритет. JIP-клиент не меняет часы/погоду; сетевой синхронизацией,
-дальнейшей сменой погоды и скоростью времени владеет native manager.
-
-Host сохраняет network/password/player limits/gameProperties. Окружение передаётся
-внутри того же executable; фактический public Host и JIP остаются отдельными
-runtime gates. Dedicated CLI без frontend intent использует прежние настройки
-MissionHeader: 08:00, random weather, acceleration 6/24.
-
-Обнаруженный при native local Play startup defect исправлен отдельно от меню:
-Welcome останавливает SP simulation, а прежний timeout группы считал 30 секунд
-через System.GetTickCount. `AICF_GroupSlot` теперь сохраняет WorldTimestamp при
-BeginInitialSpawn/BeginReplacementSpawn; controller сравнивает
-GetSpawnSimulationAgeMs с прежними 30000 ms. Пауза не считается зависанием,
-wall-clock getters и существующие поля audit сохранены. Identity/readiness,
-native RequestSpawn и длительность timeout активной симуляции не меняются.
-
-Принудительные `-gproj` и `-addons` нельзя считать выгружаемыми. Проверяется
-включение их GUID в выбранный граф; GUID source-проекта разрешается по известному suffix пути в integration registry;
-неизвестный source-проект закрывает запуск. Обязательный неванильный
-addon вне выбранного графа блокирует выбор с отдельным пояснением.
-Для универсального source frontend нужны базовый `AIConflictArland/addon.gproj`,
-`-addons 9178E5822AFE48EA,B52C5F6AEDBF423E` и `-addonsDir` с репозиторием,
-game resources и установленными RHS/WCS. Смена только `-gproj` при сохранении
-принудительного полного WCS CSV недостаточна. Installed frontend не требует
-отдельного запускающего приложения.
-
-## Видимость и совместимость
-
-Стабильный вход: `{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf`.
-Он остаётся thin inherited vanilla Arland Co-op USSR Medium: CLI запуск ID
-без меню использует этот default. Dedicated server использует canonical
-launcher с Variant/MatchMode/Difficulty и существующие leaf GUID.
-
-`AICF_ArlandScenarioCatalog` дополняет GetDefaultGameConfigs только входом,
-сохраняя stock entries и native InsertNewScenario dedup. Source addon не имеет
-installed WorkshopItem; одного `.rdb` недостаточно для меню. В packaged списке
-81 legacy leaf ресурс наследует `m_bShowInScenarioMenu=0` от семи собственных
-base headers. Setup явно задаёт `m_bShowInScenarioMenu=1` поверх скрытого parent.
-Штатный `SCR_ContentBrowser_ScenarioSubMenu.CreateLine` в закреплённом
-Script Diff 1.8.0.13 сам читает доступный header по ID и пропускает hidden resource.
-Прежний script-only фильтр действовал только после загрузки Core. Чтение
-headers ещё не загруженного опубликованного пакета остаётся отдельным gate:
-source-only эксперимент без Core не смонтировал эти ресурсы и не подтверждает
-видимость в настоящем cold Workshop frontend.
-После загрузки Core сохраняется дополнительная фильтрация по точным IDs registry:
-`SCR_ContentBrowser_ScenarioSubMenu.CreateLine` и оба списка
-`SCR_ServerConfigListComponent`. Физические 81 headers и их GUID сохранены.
-Сценарии других модов и сохранения не совпадают с этими IDs. Варианты доступны
-по прежним GUID для picker и CLI; metadata скрывает строку, а не удаляет ресурс.
-Обновить нужно все используемые сценарные addons: старый установленный пакет
-сохраняет прежние visible headers. В native списке Host до загрузки Core
-`GetModdedScenarios` не проверяет этот флаг; packaged cold Host list отдельно
-не доказан. Script-фильтр Host действует после загрузки Core.
-
-`AICF_WorkshopTagMetadata` сохраняет исправление SCR_FilterCategory:
-BaseContainer adapter, callbacks Remove/Insert и override OnGameStart для
-правильного static caller. Native category constructors не меняются.
+Canonical launcher использует -aicfScenarioVariant, -aicfMatchMode 0..2 и
+-aicfDifficulty 0..2 вместе с полным native -server/-MissionHeader.
+AdditionalArguments не могут переопределить управляемые параметры. Client
+проверяет свежие CLI Params, живой PID и ROSTER_READY перед подключением.
+Старый mission GUID нельзя заменить одним переименованием в server config:
+нужно заново разрешить полный план и graph через launcher.
 
 ## Метаданные публикации Workshop
 
-После реального обновления всех семи пакетов до 0.2.3 дефект подтверждён снова:
-corrupted=false, native Publishing и installed ServerData имеют по 82 записи.
-21/21 основных bundle files совпали с installed файлами по SHA-256.
-Это опубликованный список; script-фильтры Core не исправляют его до загрузки мода.
+В новом исходном наборе собственный mission ровно один. Все 81 старые
+.conf/.meta физически удалены, поэтому обычная новая сборка должна содержать
+только setup в Arland и ноль собственных missions в остальных шести addons.
+Ранее опубликованная 0.2.3 остаётся прежней до отдельной публикации: одна Git
+ветка не очищает installed ServerData или backend catalog.
 
-Общий workflow Prepare-AICFWorkshopCatalog.ps1 готовит все семь owners за один
-запуск. Он требует единую ExpectedVersion, проверяет каждый source до создания
-output и использует существующий Prepare-AICFWorkshopBundle.ps1 для очистки.
-Полученный catalog.json и -Check сверяют именно итоговые prepared manifests,
-полноту owners, содержимое пакетов и один общий entry. Возвращение старого
-manifest после новой сборки отклоняется; исходные bundles остаются неизменными.
-Tool не вызывает publisher и всегда сохраняет publication=NOT_RUN.
-Команды — [DEVELOPMENT.md](DEVELOPMENT.md#подготовка-окончательного-списка-workshop).
+Prepare-AICFWorkshopBundle.ps1 теперь отклоняет старые bundles, даже если
+asset.scenarios уже очищен: проверяет список Missions/*.conf в native RDB.
+Только точный setup допустим у Arland; у остальных owners список пуст.
+Неизвестные/чужие/повторные IDs, неправильное имя, отсутствие entry и битые
+payload hashes отклоняются до создания output. На выходе scenarios явно
+записан как [] для addon без missions, даже если native manifest его опустил.
+Готовые старые .pak с metadata workaround повторно использовать нельзя.
 
-Реальный installed 0.2.2 содержит 82 записи в `ServerData.json` →
-`revision.scenarios`: Core 0, Arland 10, Everon 18, Arland RHS 9,
-Everon RHS 18, Arland WCS RHS 9, Everon WCS RHS 18. Соответствующие native
-publishing manifests также содержат их в `asset.scenarios`. Флаг hidden не
-убирает эти записи. Первый frontend ещё не загрузил Core и StringTable:
-он показывает raw names из metadata, а не результат script-фильтра.
-
-`tools/Prepare-AICFWorkshopBundle.ps1` работает с готовым native bundle,
-создаёт отдельную копию и оставляет в `asset.scenarios` только точный setup
-Arland с literal name `AI Conflict`. В копиях остальных шести addons список пуст.
-Все `.pak`, `.gproj`, `.rdb` и изображения копируются с проверкой SHA-256;
-ресурсы внутри пакетов, GUID и version не меняются. Input bundle не редактируется.
-Идентификаторы сверяются с каталогом; неизвестные/чужие/повторные IDs, отсутствие
-setup, неправильный literal title, битые payload hashes и существующий output
-отклоняются. `-Check` запрещает публикацию bundle с legacy entries.
-
-Это подготовка metadata для отдельной публикации. Обычная повторная сборка
-Workbench заново добавляет legacy entries; проверять нужно окончательный
-манифест, который будет передан uploader. Приём backend и поведение native
-`publishAddonDir` с подготовленной копией пока **NOT RUN**. Нельзя выдавать
-проверенный JSON за успешную публикацию или редактировать installed ServerData.
-
-`AICF_WorkshopMetadataProbe.c` — отдельный vanilla-dependent тестовый addon.
-Он включает изолированные копии семи модов, но требует, чтобы их scripts
-оставались незагруженными. Native GetPageScenarios воспроизводит 82/81 legacy
-на исходных metadata и 1/0 на подготовленных; stock entries сохранены.
-В test harness копируется только tag-map adapter для обхода отдельного дефекта
-vanilla constructor, без сценарных фильтров Core. Изменённые ServerData/meta
-в этом опыте — локальная модель ответа backend, а не новая публикация.
+Prepare-AICFWorkshopCatalog.ps1 сначала проверяет все семь bundles одинаковой
+версии, затем создаёт отдельные копии и catalog.json. Input payload/version
+не меняются. Check повторно сверяет owners, manifests/hashes/index и один entry.
+Tool не вызывает publisher; publication=NOT_RUN. Команды — DEVELOPMENT.md.
+Workshop upload запрещён текущим запросом владельца. Native pack/backend и
+поведение скачанного будущего патча — отдельные gates; JSON PASS их не заменяет.
 
 ## Проверки
 
-- `Test-ScenarioSetupStatic.ps1`: legacy default, atomic mode/difficulty,
-  opt-in/passthrough, modal/cleanup; 15 отрицательных mutations.
-- `Test-UniversalScenarioStatic.ps1`: generator/catalog agreement, полный граф,
-  native/platform/download/forced gates, rollback, flags/help и leaf filters.
-- `Test-WorkshopBootstrapStatic.ps1`: native тип/flag, literal metadata,
-  authority/identity, scan/download gates, cancel и lifecycle.
-- `AICF_WorkshopBootstrapProbe.c`: прямой native Play/Host без warm UI hook,
-  фактический picker, выбор leaf, применение времени/погоды, cancel и stopped log.
-- `AICF_ScenarioCatalogProbe.c`: настоящий GetPageScenarios/GetInGameScenario,
-  один вход, девять скрытых default leaf targets, stock preservation,
-  repeat/dedup, native type/manw tag maps и чтение hidden metadata всех 81
-  presets; 16 cases. Для всей матрицы нужен полный Everon WCS RHS graph.
-- `AICF_UniversalScenarioProbe.c`: каждый dependency ID, все 81 plan, ожидаемая
-  доступность установленных вариантов, forced subset, host mods, настоящие
-  widgets/modal/bounds, флаги, пояснения, native SliderWidget range/step/current,
-  HH:MM, 7200 fixed minute/weather choices и 5 random choices, atomic invalid
-  choices, schema-2 roundtrip/schema-1 rejection, одноразовый storage/чужой target,
-  cleanup. Guide дополнительно проверяет кнопку, nested modal, размеры текста,
-  повторное открытие, возврат focus/выбора и Close с открытой подсказкой.
-  Обязательные UI_GUIDE_HIT_TARGET/UI_GUIDE_HIT_CLOSE проверяют порядок input
-  в девяти точках; UI_CARD_IDENTITY требует отсутствие декоративной сетки.
-  `-aicfProbeLanguage ru_ru|en_us` меняет язык только в isolated fixture и
-  возвращает исходный при Stop. Программные readbacks не доказывают физический ввод.
-  CLI `-aicfUniversalProbe 1 -aicfExpectedReadyVariants 9`.
-- `AICF_ScenarioTransitionProbe.c`: production preflight/launch, active header,
-  точный GetLoadedAddons без лишних неванильных addons, ROSTER_READY; четыре cases.
-  CLI `-aicfTransitionProbe 1 -aicfProbeMap 0 -aicfProbeContent 2
-  -aicfProbeMode 1 -aicfProbeDifficulty 0`.
-  Дополнительные `-aicfProbeTime 817 -aicfProbeWeather 4` (13:37, дождь) проверяют перенос через
-  reload, фактическое начальное окружение, повтор и native save/load priority.
-  В этом fixture-only режиме Welcome pause снимается через world API.
-  `-aicfProbeHost 1` запускает production Host вместо Play: требует Listen mode,
-  реальный RPL socket на заданном нестандартном порту 24021 и точный loaded graph.
-  Сохранение name, player limit, password/admin password, visibility, BattlEye
-  и third-person проверяется на переданном request, не выдаётся за readback engine.
-  `GetRunningDSConfig` в этом Listen возвращает false, `ServerLobbyApi.GetServerConfig`
-  и `GetGame().GetServerInfo()` — null. Первые попытки fixture с такими oracle
-  сохранены как FAIL; заменить ими проверку settings нельзя. Фактическая
-  авторизация паролем, применение лимита и прочих settings — NOT RUN.
-  Fixture задаёт частную сессию и закрывает её после readback.
-- `Test-ScenarioEnvironmentStatic.ps1`: guarded mutations для authority,
-  target/TTL/one-shot/schema, rejected transition cleanup, native owner,
-  минутной точности, binding ползунка и независимого UI.
-- `Test-UniversalScenarioLog.ps1 [-Transition]`: полный stopped log, native exit,
-  exact CLI/UTF-8 manifest, уникальные cases/completion, SCRIPT/VM/fatal и
-  собственные resource errors. Transition сверяет реальный ресурс и загруженные
-  IDs с общим каталогом. Contract mutations проверяют отказы.
+Test-ScenarioHeadersStatic проверяет единственный setup, физическое отсутствие
+81 старого ресурса и ссылок в production, project identities/platforms и
+сохранение composition boundaries. Test-CoopScenarioMatrix проверяет 81 план,
+36 server/client manifests, negative catalog и отклонение старого alias.
+Test-RuntimeScenarioStatic защищает authority/JIP/TTL/identity/snapshot и
+ранние native boundaries. Остальные setup/environment/bootstrap checks
+сохраняют modal, cleanup, permissions, download и forced graph gates.
 
-`-aicfProbeResumeAfter 35` в transition fixture удерживает штатную Welcome pause
-35 секунд после RUNNING, проверяет разницу real/simulation времени и снимает
-native simulation pause. Это terminal runtime probe, не GUI input и не
-подтверждение ручного Welcome. При этом флаге analyzer требует один успешный
-TRANSITION_PAUSE, real_ms >= 35000 и simulation_ms < 2000, затем обычный
-ROSTER_READY и четыре cases. Без флага fixture не снимает паузу.
-`-Transition -Dedicated` — отдельный reference gate: exact canonical server/
-MissionHeader CLI, два header/loaded-graph cases и ROSTER_READY; frontend Play
-он не проверяет. Нельзя выдавать его за четыре transition cases.
-
-Probes находятся только в isolated stage Core/UI как AICF_Z*.c. Полные логи
-сохраняются; счётчик readbacks не отменяет script/resource ошибки всего лога.
-
-**NOT RUN:** ручные mouse/keyboard/controller input, внешний вид на разных
-разрешениях, внешний public Host с другим игроком/JIP, packaged Workshop build, длительный soak.
-Terminal-only правила запрещают GUI/Host UI automation. Игроку нужно открыть
-AI Conflict, пройти выбор/отмену и запустить Host. Native widget readbacks и
-local Play и программный private Host не доказывают эти действия. Свежие результаты и неуспешные
-промежуточные прогоны — [TESTING.md](TESTING.md).
+AICF_RuntimeScenarioProbe.c в isolated stage проверяет фактический active
+target/mode/difficulty/rank/save, все 81 JSON roundtrip, invalid values,
+опционально отказ чтения всех 81 retired GUID и состав North 7/2/5.
+Expected CLI для probe имеет префикс aicfProbeExpected; это не authority input.
+AICF_WorkshopBootstrapProbe проверяет cold Play/Host/cancel, native world,
+точный graph, runtime policy, time/weather и остановленные полные логи.
+Readbacks клиента проверяются отдельно после canonical readiness gate.
+Точные результаты, эксперименты и ограничения — TESTING.md и evidence report.

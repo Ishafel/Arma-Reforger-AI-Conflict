@@ -1,5 +1,5 @@
 // Source addons loaded by -gproj/-addons have no installed WorkshopItem.
-// Register one universal entry. Leaf resources remain available by GUID for CLI.
+// Register the sole owned mission. Runtime choices use native mission targets.
 modded class ArmaReforgerScripted
 {
 	override array<ResourceName> GetDefaultGameConfigs()

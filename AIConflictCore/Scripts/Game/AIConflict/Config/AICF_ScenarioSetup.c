@@ -1,25 +1,8 @@
-// Порядок presets: STANDARD, COOP_US, COOP_USSR; внутри каждого Easy/Medium/Hard.
-// Карта и concrete ресурсы принадлежат integration header, а не Core.
+// One public entry; mode/difficulty are runtime selection, not mission resources.
 modded class SCR_MissionHeaderCampaign
 {
-	[Attribute("", UIWidgets.ResourcePickerThumbnail, "Launch presets ordered by match mode and difficulty", "conf")]
-	ref array<ResourceName> m_aAICFSetupPresets;
-
 	[Attribute("0", desc: "Universal AI Conflict setup entry")]
 	bool m_bAICFSetupEntry;
-
-	ResourceName AICF_ResolveSetupPreset(int mode, int difficulty)
-	{
-		if (!m_bAICFSetupEntry) return "";
-		if (mode < 0 || mode > 2 || difficulty < 0 || difficulty > 2) return "";
-		if (!m_aAICFSetupPresets || m_aAICFSetupPresets.Count() != 9) return "";
-		ResourceName resource = m_aAICFSetupPresets[mode * 3 + difficulty];
-		SCR_MissionHeaderCampaign target = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(resource));
-		if (!target || target.m_bAICFSetupEntry) return "";
-		if (target.m_eAICFMatchMode != mode || target.m_eAICFDifficulty != difficulty) return "";
-		if (target.GetWorldResourceName() != GetWorldResourceName()) return "";
-		return resource;
-	}
 }
 
 class AICF_ScenarioSetupSelection

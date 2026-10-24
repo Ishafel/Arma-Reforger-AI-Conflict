@@ -85,8 +85,10 @@ manifest использует game resources, подходящие Workbench. П
 Точный граф и ресурс `.conf` определяет каталог `tools/config/AICF_Scenarios.json`.
 `-MatchMode Standard|CoopUS|CoopUSSR` выбирает режим для любого из девяти Variant;
 default `Standard`. Стороны US/USSR логические: RHS использует USMC/МСВ,
-WCS — НАТО/РФ. Старый `-Variant StockCoopUSSR` сохраняется как alias
-`-Variant Stock -MatchMode CoopUSSR`; несовместимый явно переданный режим отклоняется.
+WCS — НАТО/РФ. Alias `-Variant StockCoopUSSR` удалён. Используй
+`-Variant Stock -MatchMode CoopUSSR`. Все планы запускают один из четырёх
+native targets с отдельными managed `-aicfScenarioVariant`, `-aicfMatchMode`
+и `-aicfDifficulty`. Старые GUID и .conf не поддерживаются.
 Не заменяй сценарий raw `.ent`
 с отдельным `-MissionHeader`: whitelist должен применяться до инициализации баз.
 RHS/WCS версии и каталоги сверяй с установленными пакетами и addon dependencies;
@@ -150,7 +152,7 @@ Placeholder заменяется фактическим путём. Перед �
 Добавление нового сочетания карты/контента описано в [COOP_SCENARIO.md](COOP_SCENARIO.md).
 
 Единый пункт «AI Conflict» открывается через Play/Host в меню: карта, установленный
-контент, режим, сторона и сложность разрешаются в leaf header и точный addon graph.
+контент, режим, сторона и сложность разрешаются в native mission, runtime selection и точный addon graph.
 Canonical launcher frontend не открывает: для server/client остаются
 `-Variant Stock -MatchMode ... -Difficulty ...`. Явный CLI запуск setup через
 `-world`/`-server` сохраняет vanilla Arland Co-op USSR Medium. Первый Workshop
@@ -319,7 +321,10 @@ OutputRoot должен быть новым отдельным каталого�
     & tools/Prepare-AICFWorkshopCatalog.ps1 -OutputRoot '<prepared>' -ExpectedVersion 0.2.3 -Check
 
 Перед созданием output проверяются все семь owners, одинаковая ExpectedVersion
-и все payload. Далее каждый bundle проходит общий single-bundle tool.
+и все payload, включая native RDB: старые missions запрещены физически,
+даже при уже очищенном manifest. Требуется новая сборка из текущих исходников;
+prepared .pak 0.2.3 со старыми ресурсами не подходит.
+Далее каждый bundle проходит общий single-bundle tool.
 Итоговый catalog.json фиксирует owners, counts и hashes manifests.
 Check повторно проверяет реальные файлы, hashes, полный набор и единственный
 entry: старый manifest после пересборки, лишний/пропущенный owner, смешанная

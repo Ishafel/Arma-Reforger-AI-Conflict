@@ -39,15 +39,15 @@ if($gproj -cnotmatch ('GUID\s+"'+[regex]::Escape($id)+'"')){throw '[WORKSHOP_BUN
 
 $setup='{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf'
 $known=@{}
-foreach($variant in $catalog.variants){
-    if($variant.graph -cne $project[0].Value){continue}
-    foreach($mode in @('Standard','CoopUS','CoopUSSR')){foreach($difficulty in @('Easy','Medium','Hard')){
-        $preset=Resolve-AICFScenario -Catalog $catalog -Variant $variant.name -MatchMode $mode -Difficulty $difficulty
-        $known[$preset.scenario]=$true
-    }}
-}
 $isEntryOwner=$project[0].Value -ceq 'AIConflictArland'
 if($isEntryOwner){$known[$setup]=$true}
+# The native index stores resource paths in clear text. An old payload remains
+# incompatible even when its manifest has already been cleaned.
+$index=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Join-Path $source 'resourceDatabase.rdb')))
+$missions=@([regex]::Matches($index,'[A-Za-z0-9_/]+\.conf')|ForEach-Object Value|Where-Object { $_.StartsWith('Missions/',[StringComparison]::Ordinal) }|Sort-Object -Unique)
+$expectedMissions=@()
+if($isEntryOwner){$expectedMissions=@('Missions/AICF_Conflict_Arland_Setup.conf')}
+if(($missions -join '|') -cne ($expectedMissions -join '|')){throw '[WORKSHOP_CATALOG_RESOURCE_INDEX] Repack from current sources; retired or missing mission resources in native index'}
 $seen=@{}
 $retained=[Collections.Generic.List[object]]::new()
 foreach($scenario in $scenarios){
@@ -78,5 +78,6 @@ foreach($name in $files.Keys){
     if((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ine $files[$name].sha256){throw '[WORKSHOP_BUNDLE_COPY_HASH] Copied payload differs; incomplete output must not be published'}
 }
 if($scenarioProperty){$manifest.asset.scenarios=[object[]]$retained.ToArray()}
+else {$manifest.asset|Add-Member -NotePropertyName scenarios -NotePropertyValue ([object[]]@())}
 [IO.File]::WriteAllText((Join-Path $destination 'manifest.json'),($manifest|ConvertTo-Json -Depth 100),[Text.UTF8Encoding]::new($false))
 "Workshop bundle prepared: addon=$id version=$($manifest.asset.version) scenarios_before=$before scenarios_after=$($retained.Count) removed=$removed payload_files=$($files.Count) output=$destination"

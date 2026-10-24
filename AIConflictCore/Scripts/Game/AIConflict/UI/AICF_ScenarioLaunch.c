@@ -68,7 +68,7 @@ class AICF_ScenarioLaunch
 		if (!CanStart(selection, entry, config)) return false;
 		AICF_ScenarioVariant variant = selection.GetVariant();
 		ResourceName resource = selection.GetResource();
-		if (!AICF_ScenarioEnvironment.Queue(resource, selection.GetEnvironment())) return false;
+		if (!AICF_RuntimeScenario.Queue(selection)) return false;
 		bool accepted;
 		if (!config && AICF_ScenarioBootstrap.IsHost(entry) && !AICF_ScenarioHostTransition.HasExactGraph(variant))
 			accepted = AICF_ScenarioHostTransition.Queue(selection, entry);
@@ -81,7 +81,7 @@ class AICF_ScenarioLaunch
 			string oldOwner = config.game.hostedScenarioModId;
 			array<ref DSMod> oldMods = config.game.mods;
 			config.game.scenarioId = resource;
-			config.game.hostedScenarioModId = variant.m_sOwner;
+			config.game.hostedScenarioModId = variant.m_sMissionOwner;
 			config.game.mods = variant.BuildHostMods();
 			accepted = GameStateTransitions.RequestPublicServerTransition(config);
 			// Public transition не принимает addonList. В том же кадре передаём граф
@@ -96,7 +96,7 @@ class AICF_ScenarioLaunch
 		}
 		if (!accepted)
 		{
-			AICF_ScenarioEnvironment.Clear();
+			AICF_RuntimeScenario.ClearPending();
 			return false;
 		}
 		Print(string.Format("[AICF][SCENARIO_LAUNCH] variant=%1 mode=%2 difficulty=%3 resource=%4 addons=%5", variant.m_sKey, selection.GetMode(), selection.GetDifficulty(), resource, variant.GetAddonList()));

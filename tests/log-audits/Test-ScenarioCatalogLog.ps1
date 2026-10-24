@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$LogPath,[Parameter(Mandatory)][string]$ManifestPath,[Parameter(Mandatory)][string]$NativeExitPath)
+﻿param([Parameter(Mandatory)][string]$LogPath,[Parameter(Mandatory)][string]$ManifestPath,[Parameter(Mandatory)][string]$NativeExitPath)
 $ErrorActionPreference='Stop'
 $log=[IO.File]::ReadAllText($LogPath)
 $manifest=[IO.File]::ReadAllText($ManifestPath) | ConvertFrom-Json
@@ -21,7 +21,7 @@ else {
         if(-not $cli[0].Groups[1].Value.Contains($fragment)){$failures+='CLI_MISMATCH'}
     }
 }
-$expected=@('EXAMPLE','VISIBLE_NAME','REPEAT','STOCK_PRESERVED','HIDDEN_PRESETS')
+$expected=@('EXAMPLE','VISIBLE_NAME','REPEAT','STOCK_PRESERVED','NATIVE_TARGETS')
 for($mode=0;$mode -lt 3;$mode++){for($difficulty=0;$difficulty -lt 3;$difficulty++){$expected+="TARGET_${mode}_${difficulty}"}}
 $expected+=@('FILTER_TYPE','FILTER_MANW')
 $cases=@([regex]::Matches($log,'\[CATALOG_CASE\] case=(\w+) pass=([01])'))

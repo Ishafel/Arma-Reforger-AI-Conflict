@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
     [string]$PolicyPath
 )
@@ -10,10 +10,7 @@ if (-not $PolicyPath) {
 }
 $policyPath = $PolicyPath
 $campaignStatePath = Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/Integration/AICF_CampaignState.c'
-$stockHeaderPath = Join-Path $RepositoryRoot 'AIConflictArland/Missions/AICF_Conflict_Arland.conf'
-$everonHeaderPath = Join-Path $RepositoryRoot 'AIConflictEveron/Missions/AICF_Conflict_Everon.conf'
-$rhsHeaderPath = Join-Path $RepositoryRoot 'AIConflictArlandRHS/Missions/AICF_RHS_Conflict_Arland.conf'
-$rhsEveronHeaderPath = Join-Path $RepositoryRoot 'AIConflictEveronRHS/Missions/AICF_RHS_Conflict_Everon.conf'
+$runtimePath = Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/Config/AICF_RuntimeScenario.c'
 
 function Require-Match {
     param([string]$Rule, [string]$Text, [string]$Pattern, [string]$Message)
@@ -29,7 +26,7 @@ function Forbid-Match {
     }
 }
 
-$requiredPaths = @($policyPath, $campaignStatePath, $stockHeaderPath, $everonHeaderPath, $rhsHeaderPath, $rhsEveronHeaderPath)
+$requiredPaths = @($policyPath, $campaignStatePath, $runtimePath)
 $missingPaths = @($requiredPaths | Where-Object { -not (Test-Path -LiteralPath $_) })
 if ($missingPaths.Count -gt 0) {
     $failures.Add('[RANK_POLICY_FILE] Missing rank policy, campaign-state, or scenario-header source: ' + ($missingPaths -join ', '))
@@ -37,19 +34,14 @@ if ($missingPaths.Count -gt 0) {
 else {
     $policy = Get-Content -LiteralPath $policyPath -Raw
     $campaignState = Get-Content -LiteralPath $campaignStatePath -Raw
-    $stockHeader = Get-Content -LiteralPath $stockHeaderPath -Raw
-    $everonHeader = Get-Content -LiteralPath $everonHeaderPath -Raw
-    $rhsHeader = Get-Content -LiteralPath $rhsHeaderPath -Raw
-    $rhsEveronHeader = Get-Content -LiteralPath $rhsEveronHeaderPath -Raw
 
     Require-Match 'RANK_VEHICLE_REQUEST' $campaignState `
         'CanRequestVehicleWithoutRank\s*\(\s*\)[^}]*return\s+true\s*;' `
         'Vehicle requests must bypass the vanilla rank gate'
-    foreach ($scenarioHeader in @($stockHeader, $everonHeader, $rhsHeader, $rhsEveronHeader)) {
-        Require-Match 'RANK_JOIN_GENERAL' $scenarioHeader `
-            'm_eStartingRank\s+GENERAL' `
-            'Every AICF scenario must grant the GENERAL XP threshold on initial join'
-    }
+    $runtime=[IO.File]::ReadAllText($runtimePath)
+    Require-Match 'RANK_JOIN_GENERAL' $runtime 'header.m_eStartingRank = SCR_ECharacterRank.GENERAL;' 'Runtime selection must grant GENERAL before native campaign startup'
+    Require-Match 'RANK_NATIVE_CACHE' $campaignState 'm_eStartingRank = header.m_eStartingRank;' 'Native starting-rank cache must follow selected policy'
+    Require-Match 'RANK_REPLICA_CACHE' $campaignState 'if \(Replication.IsServer\(\) \|\| !m_bAICFRuntimeReady\) return;' 'Server policy must be replicated persistently'
     Require-Match 'RANK_CHARACTER_VIEW' $policy `
         'modded\s+class\s+SCR_CharacterRankComponent[\s\S]*?GetCharacterRank\s*\(\s*\)[^}]*return\s+SCR_ECharacterRank\.GENERAL\s*;' `
         'Character-based rank checks must observe GENERAL'

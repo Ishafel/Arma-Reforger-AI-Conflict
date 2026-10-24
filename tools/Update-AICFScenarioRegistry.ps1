@@ -49,15 +49,17 @@ foreach($entry in $catalog.variants){
             $lines.Add("`t`tvariant.m_aContentAddons.Insert(`"$id`");")
         }
     }
-    foreach($mode in @('Standard','CoopUS','CoopUSSR')){
-        foreach($difficulty in @('Easy','Medium','Hard')){
-            $preset=Resolve-AICFScenario -Catalog $catalog -Variant $entry.name -MatchMode $mode -Difficulty $difficulty
-            $lines.Add("`t`tvariant.m_aPresets.Insert(`"$($preset.scenario)`");")
-        }
-    }
+    $mission=$catalog.nativeMissions.PSObject.Properties[$entry.mission].Value
+    $lines.Add("`t`tvariant.m_sMission = `"$($mission.resource)`";")
+    $lines.Add("`t`tvariant.m_sMissionOwner = `"$($mission.owner)`";")
     $lines.Add("`t`tvariants.Insert(variant);")
 }
 if($pairs.Count -ne 9){throw 'Incomplete menu matrix'}
+$lines.Add("`t}")
+$lines.Add("`toverride bool ConfigureRuntimeMap(SCR_MissionHeaderCampaign header, AICF_ScenarioVariant variant)")
+$lines.Add("`t{")
+$lines.Add("`t`tif (header && variant && variant.m_iMap == 0) return true;")
+$lines.Add("`t`treturn super.ConfigureRuntimeMap(header, variant);")
 $lines.Add("`t}")
 $lines.Add("`toverride string ResolveSourceProject(string path)")
 $lines.Add("`t{")
@@ -73,4 +75,4 @@ $path=Join-Path $RepositoryRoot 'AIConflictArland/Scripts/Game/AIConflictArland/
 if($Check){
     if(!(Test-Path -LiteralPath $path) -or [IO.File]::ReadAllText($path).Replace("`r`n","`n") -cne $expected){throw 'Scenario registry differs from catalog; run Update-AICFScenarioRegistry.ps1'}
 }else{[IO.File]::WriteAllText($path,$expected,[Text.UTF8Encoding]::new($false))}
-"Scenario registry: PASS; variants=9; presets=81; check=$Check"
+"Scenario registry: PASS; variants=9; native_targets=4; logical_plans=81; check=$Check"

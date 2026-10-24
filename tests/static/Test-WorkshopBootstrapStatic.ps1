@@ -1,4 +1,4 @@
-param([string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+﻿param([string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../lib/Stage3StaticAudit.Common.ps1')
 $path = Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/UI/AICF_ScenarioBootstrap.c'
@@ -35,9 +35,9 @@ $rules = @(
     @($handoff,'IsTransitionRequestedOrInProgress\(\).*?m_iAttempts\+\+ < 120.*?CallLater\(Resume, 250, false\);', 'HANDOFF_BOUNDED_WAIT'),
     @($handoff,'intent.m_iPhase == 0.*?!GameStateTransitions.IsInsideMainMenu\(\).*?intent.m_iPhase = 1;.*?RequestPublicServerTransition\(null\);.*?if \(!accepted\).*?RequestReload\(variant.m_aAddons\)', 'NATIVE_CONFIG_REUSE'),
     @($handoff,'RplSession.Mode\(\) != RplMode.Listen.*?active.GetHeaderResourceName\(\) != intent.m_sEntry \|\| !setup \|\| !setup.m_bAICFSetupEntry', 'REHOST_IDENTITY'),
-    @($handoff,'AICF_ScenarioEnvironment.Queue\(intent.GetTarget\(\), intent.m_Environment\).*?intent.m_iPhase = 2;.*?RequestScenarioChangeTransition\(intent.GetTarget\(\),\s*, variant.GetAddonList\(\)\)', 'RESTORE_BEFORE_LEAF'),
+    @($handoff,'AICF_RuntimeScenario.QueueValues\(intent.m_iMap, intent.m_iContent, intent.m_iMode, intent.m_iDifficulty, intent.m_Environment\).*?intent.m_iPhase = 2;.*?RequestScenarioChangeTransition\(intent.GetTarget\(\),\s*, variant.GetAddonList\(\)\)', 'RESTORE_BEFORE_LEAF'),
     @($handoff,'active.GetHeaderResourceName\(\) != intent.GetTarget\(\).*?GameSessionStorage.s_Data.Remove\(SESSION_KEY\);', 'CONSUME_AFTER_TARGET'),
-    @($handoff,'void Fail\(.*?Remove\(SESSION_KEY\);.*?AICF_ScenarioEnvironment.Clear\(\);', 'FAIL_CLEARS_INTENT'),
+    @($handoff,'void Fail\(.*?Remove\(SESSION_KEY\);.*?AICF_RuntimeScenario.ClearPending\(\);', 'FAIL_CLEARS_INTENT'),
     @($handoff,'Remove\(Resume\);.*?m_AICFHostTransition.Stop\(\);.*?super.OnGameEnd\(\);', 'HANDOFF_CLEANUP')
 )
 $mutations = 0
