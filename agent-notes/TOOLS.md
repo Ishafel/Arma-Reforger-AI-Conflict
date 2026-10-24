@@ -7,6 +7,17 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Структура и статус
 
+Prepare-AICFWorkshopCatalog.ps1 — общий offline workflow для семи native
+Publishing bundles. -PublishingRoot/-OutputRoot/-ExpectedVersion готовят
+отдельные очищенные копии; -OutputRoot/-ExpectedVersion/-Check проверяют весь
+завершённый набор. До копирования проверяются все inputs; после — реальные
+payload, metadata, version, полный список owners и один entry. catalog.json
+содержит hashes и publication=NOT_RUN. Workbench/uploader/сеть не вызываются.
+Test-WorkshopCatalogContracts.ps1 проверяет 20 положительных и отрицательных
+cases: смешанные версии, повреждение позднего input без частичного output,
+неполный/чужой набор, изменённые manifests/payload/report и повторное появление
+legacy после пересборки. Команды и границы — [DEVELOPMENT.md](DEVELOPMENT.md#подготовка-окончательного-списка-workshop).
+
 | Каталог | Назначение | Статус |
 |---|---|---|
 | `tools/` | Подготовка ресурсов, launcher, измерения и watchdog | Поддерживаемые утилиты; запускать явно |

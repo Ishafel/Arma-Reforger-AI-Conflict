@@ -1,5 +1,45 @@
 # Проверки и baseline
 
+## Повторный дефект каталога 0.2.3 и общий preparation workflow — 2026-10-24
+
+Владелец подтвердил старые сценарии после обновления. Read-only inspection:
+все семь installed addons 0.2.3, corrupted=false; ServerData и native Publishing
+manifests содержат 82 записи. Все 21 основные bundle files совпали с installed
+по SHA-256. Обновление принято, но опубликованный каталог остался прежним.
+Изначальный evidence: .codex-runtime/catalog-0.2.3-20261024/REPORT.md.
+
+По уточнённому запросу Workshop publication запрещена. Работа выполнена в
+отдельной ветке codex/fix-workshop-catalog-pipeline от актуального main d63bd49.
+Новый Prepare-AICFWorkshopCatalog.ps1 проверяет весь набор до создания output,
+готовит семь копий через прежний single-bundle tool и фиксирует catalog.json.
+Режим -Check проверяет фактические owners/version/payload/manifests и один entry;
+повторно появившиеся legacy после пересборки отклоняются. Input и version
+не меняются, tool не вызывает Workbench/publisher/сеть, publication=NOT_RUN.
+Commands и границы — [DEVELOPMENT.md](DEVELOPMENT.md#подготовка-окончательного-списка-workshop).
+
+Baseline трёх профильных checks — **3/3 PASS/0**, before/.
+После изменения те же плюс новый WorkshopCatalogContracts — **4/4 PASS/0**,
+after-targeted/. Новый contract — **20/20 PASS**, включая отсутствие частичного
+output при поздней ошибке source, mixed version, изменённые report/manifest/
+payload и legacy regeneration. Полный Invoke-AICFChecks.ps1 -Suite All
+через временный X: — **87/87 PASS, exit 0**, без исключений, after-all/.
+Code hashes нового tool и contract зафиксированы и сверены после набора.
+
+Общий workflow и повторный -Check на семи настоящих native bundles 0.2.3 —
+**PASS**: 82 → 1 запись, 55 payload files и исходные manifests неизменны.
+Прочие metadata/version сохранены. real-catalog/catalog.json,
+real-verification.json и real-input-integrity.json содержат counts и hashes.
+Evidence: .codex-runtime/workshop-catalog-pipeline-20261024/REPORT.md.
+Synthetic fixtures очищены в finally с проверкой абсолютного temp path;
+нужные реальные prepared bundles сохранены как evidence.
+
+Production .c/resources и Enfusion API не менялись. Новый Workbench/runtime —
+**NOT RUN**, для PowerShell workflow не требуются. Native uploader/backend/
+новый downloaded catalog — **NOT RUN по прямому указанию владельца**.
+Установленный список 0.2.3 не изменён Git-веткой. Прежний native shutdown
+0xC0000005 остаётся отдельным FAIL; его исправление не заявляется.
+Новый релиз, тег и Workshop upload не создавались.
+
 ## Объединение PR #74 / #75 — 2026-10-24
 
 Ветка codex/fix-play-shutdown, проверенный source **f8f54a9**: изменения

@@ -306,6 +306,35 @@ Workshop `CreateAssetUpload` принимает Version только в форм
 
 ### Подготовка окончательного списка Workshop
 
+Обновление до 0.2.3 подтвердило тот же дефект: все семь installed packages имеют
+0.2.3 и corrupted=false, но ServerData и native Publishing manifests содержат
+82 записи. Обычный Publish сформировал список заново. Обновление gameplay
+scripts не очищает этот каталог до загрузки Core.
+
+Для всего набора используй [Prepare-AICFWorkshopCatalog.ps1](../tools/Prepare-AICFWorkshopCatalog.ps1).
+PublishingRoot — каталог с семью native bundles в подкаталогах с addon GUID.
+OutputRoot должен быть новым отдельным каталогом:
+
+    & tools/Prepare-AICFWorkshopCatalog.ps1 -PublishingRoot '<native Publishing>' -OutputRoot '<новый prepared>' -ExpectedVersion 0.2.3
+    & tools/Prepare-AICFWorkshopCatalog.ps1 -OutputRoot '<prepared>' -ExpectedVersion 0.2.3 -Check
+
+Перед созданием output проверяются все семь owners, одинаковая ExpectedVersion
+и все payload. Далее каждый bundle проходит общий single-bundle tool.
+Итоговый catalog.json фиксирует owners, counts и hashes manifests.
+Check повторно проверяет реальные файлы, hashes, полный набор и единственный
+entry: старый manifest после пересборки, лишний/пропущенный owner, смешанная
+версия или повреждённый payload не проходят. Незавершённый output без корректного
+catalog.json также не проходит. Input bundles и их version не меняются.
+
+Этот workflow не запускает Workbench, native uploader или сетевой запрос.
+В отчёте всегда publication=NOT_RUN; PASS означает корректность подготовленного
+каталога. Копии уже опубликованной 0.2.3 диагностические и не являются новой
+версией для повторной загрузки. Для будущей отдельно разрешённой публикации
+нужно использовать подготовленные bundle directories без новой сборки.
+Назначение native publishAddonDir как pre-packed input описано в
+[официальных Startup Parameters](https://community.bistudio.com/wiki/Arma_Reforger%3AStartup_Parameters).
+Фактический приём backend, новое скачивание и cold frontend проверяются отдельно.
+
 В опубликованной 0.2.2 `asset.scenarios` всё ещё содержит старые пункты,
 несмотря на hidden headers. После native bundling и до загрузки на backend
 подготовь отдельную копию и проверь её:

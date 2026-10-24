@@ -341,6 +341,20 @@ BaseContainer adapter, callbacks Remove/Insert и override OnGameStart для
 
 ## Метаданные публикации Workshop
 
+После реального обновления всех семи пакетов до 0.2.3 дефект подтверждён снова:
+corrupted=false, native Publishing и installed ServerData имеют по 82 записи.
+21/21 основных bundle files совпали с installed файлами по SHA-256.
+Это опубликованный список; script-фильтры Core не исправляют его до загрузки мода.
+
+Общий workflow Prepare-AICFWorkshopCatalog.ps1 готовит все семь owners за один
+запуск. Он требует единую ExpectedVersion, проверяет каждый source до создания
+output и использует существующий Prepare-AICFWorkshopBundle.ps1 для очистки.
+Полученный catalog.json и -Check сверяют именно итоговые prepared manifests,
+полноту owners, содержимое пакетов и один общий entry. Возвращение старого
+manifest после новой сборки отклоняется; исходные bundles остаются неизменными.
+Tool не вызывает publisher и всегда сохраняет publication=NOT_RUN.
+Команды — [DEVELOPMENT.md](DEVELOPMENT.md#подготовка-окончательного-списка-workshop).
+
 Реальный installed 0.2.2 содержит 82 записи в `ServerData.json` →
 `revision.scenarios`: Core 0, Arland 10, Everon 18, Arland RHS 9,
 Everon RHS 18, Arland WCS RHS 9, Everon WCS RHS 18. Соответствующие native
