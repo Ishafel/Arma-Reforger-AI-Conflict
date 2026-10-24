@@ -187,6 +187,14 @@ control и 15 отрицательных случаев отдельного `Te
 Последний проверяет native регистрацию/hidden presets в 16 cases, точные CLI и stopped log,
 отклоняет SCRIPT/VM/fatal; описание fixture — [TEST_FIXTURES.md](TEST_FIXTURES.md).
 
+`Prepare-AICFWorkshopBundle.ps1 -BundlePath ... -OutputPath ...` копирует
+native bundle с проверенными hashes и очищает только `asset.scenarios`:
+один setup в Arland, 0 в остальных addons. `-Check` требует окончательный
+список без legacy. Input, payload и версия сохраняются, uploader не вызывается.
+`Test-WorkshopBundleContracts.ps1`: 26 cases, семь проектов, native Core schema
+без scenarios field, неизменность payload/прочей metadata и отказы на повреждения.
+Фактический upload подготовленной копии пока не подтверждён.
+
 `tools/Update-AICFScenarioRegistry.ps1 [-Check]` генерирует frontend descriptors
 из `tools/config/AICF_Scenarios.json`; проверка входит в новый
 `Test-UniversalScenarioStatic.ps1`. `Test-UniversalScenarioLogContracts.ps1`

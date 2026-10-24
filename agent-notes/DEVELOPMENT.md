@@ -274,3 +274,25 @@ Workshop `CreateAssetUpload` принимает Version только в форм
 закрой игру и проверь новый первый Play/Host и список «Сценарии».
 Наличие Git-тега также не создаёт GitHub Release автоматически: публикация
 должна завершаться проверкой страницы Release, notes, target и статуса Latest.
+
+### Подготовка окончательного списка Workshop
+
+В опубликованной 0.2.2 `asset.scenarios` всё ещё содержит старые пункты,
+несмотря на hidden headers. После native bundling и до загрузки на backend
+подготовь отдельную копию и проверь её:
+
+```powershell
+powershell.exe -NoProfile -File tools/Prepare-AICFWorkshopBundle.ps1 `
+  -BundlePath '<native working dir с manifest.json>' -OutputPath '<новый каталог>'
+powershell.exe -NoProfile -File tools/Prepare-AICFWorkshopBundle.ps1 `
+  -BundlePath '<новый каталог>' -Check
+```
+
+Повтори для всех семи addons. Tool сохраняет version; новую номерную версию
+согласуют отдельно. Подготовленные в evidence копии 0.2.2 служат воспроизведению
+дефекта и не являются новой опубликованной версией. Нельзя повторно нажимать
+обычный Publish, предполагая, что исправленный список сохранится: Workbench
+пересобирает manifest. Native CLI имеет `publishAddonDir` для подготовленных
+данных, однако его фактическое использование этой metadata и приём backend
+в этой задаче **NOT RUN**. Любая публикация требует отдельного запроса владельца
+и проверки результата на backend; не вызывай uploader как «сухую проверку».

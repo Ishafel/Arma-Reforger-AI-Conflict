@@ -1,5 +1,62 @@
 # Проверки и baseline
 
+## Опубликованный каталог Workshop 0.2.2 — 2026-10-24
+
+Владелец подтвердил скриншотом, что старые строки и raw keys остаются после
+обновления. Read-only проверка installed ServerData: все семь addons имеют
+0.2.2, corrupted=false; количества scenarios — Core 0, Arland 10, Everon 18,
+Arland RHS 9, Everon RHS 18, Arland WCS RHS 9, Everon WCS RHS 18. Всего 82,
+включая setup. Native publishing manifests в Temp/Workbench/Publishing также
+содержат эти записи. Полный user console snapshot 09:29:40 показывает только
+vanilla scripts до выбора миссии и Missing string ID для старых AICF names.
+Оно подтверждает пробел прошлой проверки, а не неудачное обновление владельцем.
+
+Новая ветка `codex/workshop-catalog-metadata` от актуального `origin/main`
+`73ba75e0bb984fc64ecac17d59c085c53fffb8a8` после merge PR #73, дерево чистое.
+Evidence: `.codex-runtime/workshop-catalog-metadata-20261024/`.
+Добавлены tool подготовки отдельного bundle и `-Check`, 26 contract cases,
+vanilla-dependent metadata fixture и инструкции. Production `.c`, headers,
+GUID и версия не меняются. Подготовка будущей публикации не создаёт релиз.
+
+До правки профильные localization/headers/universal/workshop names/контракты
+через `Invoke-AICFChecks.ps1 -Name ... -EvidenceRoot <evidence>/before` —
+**5/5 PASS/0**. Новый полный `-Suite All -EvidenceRoot <evidence>/after-all` —
+**85/85 PASS, exit 0**. Bundle contracts — **26/26 PASS**: все семь owners,
+пустой native Core без scenarios property, неизменность входа/payload/прочих
+полей, повреждения и path/output guards.
+
+Tool применён к семи настоящим native bundles 0.2.2: список 82 → 1,
+все 55 declared payload files совпадают с исходными SHA-256. Version и прочая
+metadata сохранены, input и installed файлы не редактировались. Копии находятся
+в `<evidence>/prepared/<addon GUID>/`; это диагностические bundles уже занятой
+версии 0.2.2, а не готовый новый выпуск для повторной загрузки с тем же номером.
+
+Native metadata experiment использует копии installed пакетов/ServerData/meta,
+адаптированные по списку prepared manifest. Все scripts семи AICF addons
+остаются unloaded; test-only tag-map adapter не фильтрует сценарии. Без явного
+Enable в свежем profile исходные моды скрыты целиком: own=0, невалидная модель
+пользовательского меню. После Enable copied items исходный `before-enabled`
+воспроизводит **own=82/setup=1/legacy=81**, 6/8 cases. `prepared-enabled`
+читает **own=1/setup=1/legacy=0**, **8/8 readbacks**, stock entries сохранены.
+Так выявлена именно metadata причина, которую source/Core фильтры не покрывали.
+
+Это не полный runtime PASS: оба enabled опыта после `Game destroyed` зависли
+и затем завершились access violation, native **-1073741819**, shutdown **FAIL**.
+Четыре Workbench validation попытки успешно проверили scripts; три адресно
+остановлены после зависания (native -1), `wb-metadata-probe-final` сам завершился
+exit 0, но с предупреждением Application hangs. Оно не выдаётся за чистый gate.
+Закрытие владельцем Workbench не устранило зависания; причина не установлена.
+Полные logs/dumps/argv/exits сохраняются, свои процессы завершены. Отдельные
+`before-main` и `before-profile-layout` без Enable завершились exit 0, но не
+воспроизводят нужный список и не считаются подтверждением исправления.
+
+**NOT RUN / blockers:** native upload подготовленного manifest через
+publishAddonDir без повторной генерации списка, приём backend, новая публичная
+версия, физический список/Host/Play из заново скачанного пакета и чистый
+terminal compile/runtime exit. JSON/локальная metadata модель не доказывают
+uploader. Публикация требует отдельного запроса владельца и согласования новой
+версии. Нужен stopped-log анализ shutdown до ready PR; кандидат остаётся draft.
+
 ## Скрытие прежних сценариев в 0.2.2 — 2026-10-24
 
 Владелец попросил скрыть старые пункты в продолжение PR #73 и подготовки
