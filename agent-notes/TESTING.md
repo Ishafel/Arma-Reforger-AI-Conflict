@@ -1,5 +1,37 @@
 # Проверки и baseline
 
+## Оформление 0.2.3 — 2026-10-24
+
+По явному запросу владельца оформляется тег и GitHub Release 0.2.3.
+PR #75 уже merged владельцем; актуальный main — d63bd4962f5436eb0d2da6c512f456cda73fbfa1.
+От него создана отдельная ветка codex/release-0.2.3. Патчноуты объединяют
+изменения после последнего опубликованного GitHub-релиза 0.2.0: прежние
+0.2.1/0.2.2 теги и releases отсутствуют, исторические notes сохраняются.
+Тег 0.2.3 фиксирует release commit с notes; main этой задачей не переписывается.
+
+Добавлен releases/0.2.3.md, обновлены указатели README/agent-notes и инструкция
+отдельной Workshop publication. Production, tools и tests не менялись.
+Свежий Invoke-AICFChecks.ps1 -Name с RuntimeLauncherStatic,
+ScenarioEnvironmentStatic, WorkshopBootstrapStatic, WorkshopBundleContracts и
+WorkshopScenarioNamesStatic — **5/5 PASS/0**, before/summary.json.
+Verify-Release.ps1 -Phase before и -Phase after — **PASS/0**, по 133 локальные
+ссылки; после правки также проверен новый release note и состав файлов.
+Evidence: .codex-runtime/release-0.2.3-20261024/.
+
+Merge tree main совпадает с fb5b994; production/tests/tools также совпадают
+с проверенным f8f54a9. Все 349 production SHA-256 совпали с сохранённой матрицей.
+Её 86/86 offline, 4/4 compile и native результаты ниже — исторические
+проверки того же кода, не новый полный прогон при оформлении.
+Новые полный offline/Workbench/runtime — **NOT RUN**: меняется документация.
+Повторение уже успешных gates без изменения кода не выполнялось.
+
+Native shutdown **FAIL сохранён**: один WCS Play получил 0xC0000005 после
+Game destroyed при успешных readbacks. Merge и запрос на публикацию не
+устраняют дефект и не превращают его в PASS. Uploader/backend/new package,
+визуальный ввод, второй игрок/JIP, пароль/player limit и soak — **NOT RUN**.
+GitHub tag/release не являются Workshop upload; установленная 0.2.2 сохраняет
+старые metadata. Исходный native blocker не объявляется ACCEPTED.
+
 ## Объединение PR #74 / #75 — 2026-10-24
 
 Ветка codex/fix-play-shutdown, проверенный source **f8f54a9**: изменения

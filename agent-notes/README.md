@@ -22,7 +22,7 @@
 | Изменить proximity lifecycle дополнительных сил FIA (issue #59) | [FIA_PROXIMITY.md](FIA_PROXIMITY.md), [FIA_GARRISONS.md](FIA_GARRISONS.md), [AMBIENT_PATROLS.md](AMBIENT_PATROLS.md) |
 | Изменить активацию штатной охраны FIA при подходе ИИ (issue #54) | [AMBIENT_PATROLS.md](AMBIENT_PATROLS.md), `Forces/AICF_ManagedObservers.c`, native ambient spawn/lifecycle в API 1.8.0.13 |
 | Выполнить критерии issue и привязать PR | [AGENTS.md: работа по issue](../AGENTS.md#работа-по-issue-и-привязка-pr), [TESTING.md](TESTING.md) |
-| Найти состав последнего оформленного релиза и ограничения | [0.2.2](../releases/0.2.2.md), [TESTING.md](TESTING.md) |
+| Найти состав последнего оформленного релиза и ограничения | [0.2.3](../releases/0.2.3.md), [TESTING.md](TESTING.md) |
 | Убрать старые пункты из публикуемого каталога Workshop до загрузки Core | [SCENARIO_SETUP.md](SCENARIO_SETUP.md#метаданные-публикации-workshop), [Prepare-AICFWorkshopBundle.ps1](../tools/Prepare-AICFWorkshopBundle.ps1), [DEVELOPMENT.md](DEVELOPMENT.md) |
 | Найти домен, состояние и границы побочных эффектов | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Исправить ранние потери при spawn и зависание строительства до готовности roster | [ARCHITECTURE.md](ARCHITECTURE.md), `Forces/AICF_InfantrySpawnPlacement`, `Forces/AICF_InfantryVehicleClearance`, `State/AICF_FactionState`, [матрица запуска](TESTING.md#подготовка-0129-полная-матрица-запуска--2026-10-15) |
