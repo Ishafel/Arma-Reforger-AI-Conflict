@@ -219,7 +219,7 @@ class AICF_UniversalScenarioProbe
 			WidgetManager.GetLanguage(m_sPreviousLanguage);
 			WidgetManager.SetLanguage(language);
 		}
-		AICF_ScenarioSetupHeader header = AICF_ScenarioSetupHeader.Cast(MissionHeader.ReadMissionHeader("{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf"));
+		SCR_MissionHeaderCampaign header = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader("{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf"));
 		m_Selection = new AICF_ScenarioSetupSelection(header);
 		AICF_ScenarioRegistry registry = m_Selection.GetRegistry();
 		Check("REGISTRY", registry.GetVariants().Count() == 9);

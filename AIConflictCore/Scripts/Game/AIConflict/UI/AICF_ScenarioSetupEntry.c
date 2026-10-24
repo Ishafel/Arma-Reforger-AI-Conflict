@@ -2,17 +2,21 @@ modded class SCR_ScenarioUICommon
 {
 	protected static ref AICF_ScenarioSetupScreen s_AICFSetupScreen;
 
-	static AICF_ScenarioSetupHeader AICF_GetSetupHeader(MissionWorkshopItem scenario)
+	static bool AICF_IsSetupOpen() { return s_AICFSetupScreen != null; }
+
+	static SCR_MissionHeaderCampaign AICF_GetSetupHeader(MissionWorkshopItem scenario)
 	{
 		if (!scenario) return null;
 		// Catalog entries can expose metadata while GetHeader() is still null.
-		return AICF_ScenarioSetupHeader.Cast(MissionHeader.ReadMissionHeader(scenario.Id()));
+		SCR_MissionHeaderCampaign header = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(scenario.Id()));
+		if (!header || !header.m_bAICFSetupEntry) return null;
+		return header;
 	}
 
 	static bool AICF_OpenSetup(MissionWorkshopItem scenario, SCR_DSConfig config = null)
 	{
 		if (!scenario) return false;
-		AICF_ScenarioSetupHeader header = AICF_GetSetupHeader(scenario);
+		SCR_MissionHeaderCampaign header = AICF_GetSetupHeader(scenario);
 		if (!header) return false;
 		AICF_CloseSetup();
 		s_AICFSetupScreen = new AICF_ScenarioSetupScreen();

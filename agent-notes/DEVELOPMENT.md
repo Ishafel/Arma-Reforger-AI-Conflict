@@ -152,8 +152,12 @@ Placeholder заменяется фактическим путём. Перед �
 Единый пункт «AI Conflict» открывается через Play/Host в меню: карта, установленный
 контент, режим, сторона и сложность разрешаются в leaf header и точный addon graph.
 Canonical launcher frontend не открывает: для server/client остаются
-`-Variant Stock -MatchMode ... -Difficulty ...`. Прямой ID setup получает vanilla
-Arland Co-op USSR Medium. Полный контракт и NOT RUN gates —
+`-Variant Stock -MatchMode ... -Difficulty ...`. Явный CLI запуск setup через
+`-world`/`-server` сохраняет vanilla Arland Co-op USSR Medium. Первый Workshop
+Play открывает picker после штатной загрузки модулей; этот путь не требует
+предварительно принудительно загруженного source graph. Core и Arland нужно
+обновлять согласованной версией: меняются и hooks, и формат setup header.
+Полный контракт и NOT RUN gates —
 [SCENARIO_SETUP.md](SCENARIO_SETUP.md).
 
 Для ручной проверки frontend владелец открывает клиент с базовым source graph,
@@ -258,9 +262,15 @@ Workshop metadata/preview и package outputs в репозитории не хр
 публикация является отдельной задачей владельца, её не доказывает Git-тег.
 
 Workshop `CreateAssetUpload` принимает Version только в формате трёх чисел
-без ведущих нулей (кроме самого `0`): `0.2.1`. Суффиксы вроде `0.2.1a`
+без ведущих нулей (кроме самого `0`): `0.2.2`. Суффиксы вроде `0.2.1a`
 отклоняются ValidationError в `data.asset.version` и при cancel в
 `data.assetVersionNumber`. Это отдельное поле publisher; после исправления
 значения нужно начать новую загрузку, прежние retry сохраняют старые данные.
+При публикации исправления первого входа из [0.2.2](../releases/0.2.2.md)
+согласованно обнови **AIConflictCore** и **AIConflictArland**: setup flag в header
+и bootstrap в Core должны принадлежать одному выпуску. Для скрытия старых
+вариантов обнови также все используемые сценарные addons: hidden flag хранится
+в их headers. Укажи `0.2.2` в Version publisher; после обновления полностью
+закрой игру и проверь новый первый Play/Host и список «Сценарии».
 Наличие Git-тега также не создаёт GitHub Release автоматически: публикация
 должна завершаться проверкой страницы Release, notes, target и статуса Latest.

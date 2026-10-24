@@ -27,7 +27,7 @@ foreach ($dependency in @('58D0FB3206B6F859','9178E5822AFE48EA','B52C5F6AEDBF423
 }
 Check 'WCS_HEADER_INHERITANCE' ($header.Contains('{97E4BCB73F044C66}Missions/AICF_RHS_Conflict_Arland.conf'))
 Check 'WCS_HEADER_ID' ($metadata.Contains('{A1CF260928100002}Missions/AICF_WCS_RHS_Conflict_Arland.conf'))
-Check 'WCS_HEADER_MENU' ($header -match 'm_bShowInScenarioMenu\s+1')
+Check 'WCS_HEADER_MENU' ($header -match 'm_bShowInScenarioMenu\s+0')
 Check 'WCS_HEADER_PERSISTENCE' ($header -match 'm_eSaveTypes\s+0')
 Check 'WCS_WORLD_OWNERSHIP' ($header -notmatch '(?m)^\s*(World|SystemsConfig|m_aCampaignCustomBaseList)\b')
 Check 'WCS_RHS_PROFILE_REUSE' ($profile -match 'class AICF_WCSRHSContentProfile : AICF_RHSContentProfile')

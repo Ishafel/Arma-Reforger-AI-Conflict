@@ -42,9 +42,9 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 	protected bool m_bHost;
 	protected int m_iFlagFailures;
 
-	bool Open(AICF_ScenarioSetupHeader header, SCR_DSConfig config = null, MissionWorkshopItem entry = null)
+	bool Open(SCR_MissionHeaderCampaign header, SCR_DSConfig config = null, MissionWorkshopItem entry = null)
 	{
-		if (!header || m_wRoot || !GetGame().GetWorkspace()) return false;
+		if (!header || !header.m_bAICFSetupEntry || m_wRoot || !GetGame().GetWorkspace()) return false;
 		m_bClosing = false;
 		m_iHotButton = -1;
 		m_iPreviewFailures = 0;
@@ -56,7 +56,7 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		}
 		m_Config = config;
 		m_Entry = entry;
-		m_bHost = config != null;
+		m_bHost = config != null || AICF_ScenarioBootstrap.IsHost(entry);
 		m_wPreviousFocus = GetGame().GetWorkspace().GetFocusedWidget();
 		m_wRoot = m_Style.CreateRect(GetGame().GetWorkspace(), 0, 0, 1, 1, Color.FromSRGBA(12, 18, 22, 255), true);
 		if (!m_wRoot) return false;
@@ -543,7 +543,7 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 		else if ((index == 8 || index == 9) && mode > 0) Select(index - 7, difficulty);
 		else if (index >= 10 && index <= 12) Select(mode, index - 10);
 		else if (index == 13) Launch();
-		else if (index == 14) SCR_ScenarioUICommon.AICF_CloseSetup();
+		else if (index == 14) Cancel();
 		else if (index >= 15) SelectEnvironment(m_Selection.GetEnvironment().m_iStartMinutes, index - 15);
 		if (m_wRoot) Help(index);
 		return true;
@@ -587,8 +587,14 @@ class AICF_ScenarioSetupScreen : ScriptedWidgetEventHandler
 	override bool OnModalClosed(Widget modalRoot)
 	{
 		if (modalRoot == m_wGuide) { CloseGuide(); return true; }
-		if (!m_bClosing && modalRoot == m_wRoot) SCR_ScenarioUICommon.AICF_CloseSetup();
+		if (!m_bClosing && modalRoot == m_wRoot) Cancel();
 		return true;
+	}
+
+	void Cancel()
+	{
+		SCR_ScenarioUICommon.AICF_CloseSetup();
+		AICF_ScenarioBootstrap.Cancel();
 	}
 
 	void Close()

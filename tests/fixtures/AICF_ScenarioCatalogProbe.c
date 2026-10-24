@@ -53,7 +53,7 @@ class AICF_ScenarioCatalogProbe
 	protected void AICF_CatalogReadback()
 	{
 		ResourceName setup = "{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf";
-		AICF_ScenarioSetupHeader header = AICF_ScenarioSetupHeader.Cast(MissionHeader.ReadMissionHeader(setup));
+		SCR_MissionHeaderCampaign header = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(setup));
 		WorkshopApi workshop = GetGame().GetBackendApi().GetWorkshop();
 		array<MissionWorkshopItem> items = {};
 		workshop.GetPageScenarios(items, 0, 1000);
@@ -67,12 +67,25 @@ class AICF_ScenarioCatalogProbe
 		ResourceName stock = "{C41618FD18E9D714}Missions/23_Campaign_Arland.conf";
 		AICF_CatalogCheck("STOCK_PRESERVED", first.Find(stock) >= 0 && workshop.GetInGameScenario(stock));
 		AICF_ScenarioRegistry registry = new AICF_ScenarioRegistry();
+		int readablePresets, hiddenPresets;
+		foreach (AICF_ScenarioVariant variant : registry.GetVariants())
+		{
+			foreach (ResourceName resource : variant.m_aPresets)
+			{
+				SCR_MissionHeaderCampaign presetHeader = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(resource));
+				if (!presetHeader) continue;
+				readablePresets++;
+				if (!presetHeader.m_bShowInScenarioMenu) hiddenPresets++;
+				Print(string.Format("[AICF][CATALOG_HEADER] target=%1 visible=%2", resource, presetHeader.m_bShowInScenarioMenu));
+			}
+		}
+		AICF_CatalogCheck("HIDDEN_PRESETS", readablePresets == 81 && hiddenPresets == 81);
 		for (int mode; mode < 3; mode++)
 		{
 			for (int difficulty; difficulty < 3; difficulty++)
 			{
 				ResourceName preset;
-				if (header) preset = header.ResolvePreset(mode, difficulty);
+				if (header) preset = header.AICF_ResolveSetupPreset(mode, difficulty);
 				SCR_MissionHeaderCampaign targetHeader = SCR_MissionHeaderCampaign.Cast(MissionHeader.ReadMissionHeader(preset));
 				AICF_CatalogCheck(string.Format("TARGET_%1_%2", mode, difficulty), !preset.IsEmpty() && registry.IsLeaf(preset) && first.Find(preset) < 0 && targetHeader && targetHeader.m_eAICFMatchMode == mode && targetHeader.m_eAICFDifficulty == difficulty && AICF_CatalogCount(items, preset) == 0);
 			}

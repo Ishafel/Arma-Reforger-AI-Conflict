@@ -1,5 +1,195 @@
 # Проверки и baseline
 
+## Скрытие прежних сценариев в 0.2.2 — 2026-10-24
+
+Владелец попросил скрыть старые пункты в продолжение PR #73 и подготовки
+0.2.2. Работа продолжается в `codex/workshop-universal-entry`, база `7611734`,
+дерево чистое; свежий `origin/main` остаётся `bb748797d1dd1f898759775d00d3e71ab9b002e6`.
+Раньше семь base headers явно задавали `m_bShowInScenarioMenu=1`, а setup
+наследовал видимость; script-фильтр мог работать только с загруженным Core.
+Теперь base headers задают 0, setup явно задаёт 1; все 81 leaf наследуют
+скрытие. GUID, пути, topology и production `.c` не меняются.
+
+Pinned 1.8.0.13 `SCR_ContentBrowser_ScenarioSubMenu.CreateLine` проверяет
+это поле после `MissionHeader.ReadMissionHeader(scenario.Id())`. Старые
+аудиты, требовавшие visible leaf, обновлены под прямое требование владельца;
+в `Test-ScenarioHeadersStatic` добавлена проверка всей локальной цепочки
+наследования всех 81 ресурсов и explicit visible setup.
+
+Evidence: `.codex-runtime/hide-legacy-scenarios-20261024/`. До правки
+`Invoke-AICFChecks.ps1 -Name @(ScenarioHeadersStatic,ScenarioSetupStatic,
+UniversalScenarioStatic,WCSIntegrationStatic,CoopScenarioMatrix,
+WorkshopScenarioNamesStatic,ScenarioCatalogLogContracts)` (имена файлов
+с `Test-`/`.ps1` записаны в context) — **7/7 PASS/0**. После правки шесть
+профильных checks — **6/6 PASS/0**. Новый полный
+`Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/after-all` —
+**84/84 PASS, exit 0**, без исключений. `Verify-VisibilityMutations.ps1` на
+изолированной копии отклонил все **9/9** повреждений: семь visible roots,
+visible child override и удалённый visible flag setup. Каждая правка stage
+возвращена в исходное состояние.
+
+Terminal Workbench `Compile.ps1 -Label catalog-all -Variant EveronWCSRHS` и
+`-Label play-stock -Variant Stock` — **2/2 PASS/0**, включая соответствующие
+изолированные fixtures. Native `catalog-all` — **16/16 cases, exit 0**, полный
+stopped-log oracle PASS: все 81 headers читаются и hidden, setup visible,
+stock entry сохранён. `CATALOG_HEADER` хранит каждый ID/flag. Это source-stage,
+где полный addon graph уже загружен, а не проверка опубликованного пакета.
+
+Native `hidden-leaf-play` прошёл 13 функциональных cases, но дал access
+violation после `Game destroyed`, exit -1073741819: итог **FAIL**, полные logs
+и dump сохранены. Control с прежними visible headers `control-visible` и
+повтор неизменённого нового source `hidden-leaf-play-2` — каждый **13/13,
+exit 0**, stopped-log oracle PASS. Причина первого native shutdown crash
+не установлена и устранение не заявляется; повторный PASS не стирает FAIL.
+
+Отдельный exploratory addon только с vanilla dependency не смог прочитать
+не загруженные source headers по GUID; его штатный frontend также пишет
+две SCRIPT ошибки SCR_FilterCategory без Core adapter. Это не валидная
+замена packaged проверки. Три попытки CLI `packAddon` не создали пакет
+или manifest; native exit 0 последних попыток не объявляется успешной упаковкой.
+Новых вызовов публикации не было. Команды упаковки сверялись с
+[официальными Startup Parameters](https://community.bistudio.com/wiki/Arma_Reforger%3AStartup_Parameters#Workbench).
+
+**NOT RUN:** first cold Workshop scenario list/Play/Host с новыми пакетами,
+физический UI input/визуальная оценка, public Host со вторым игроком/JIP,
+пароль/лимит и soak. Владелец должен обновить Core и все используемые сценарные
+addons до 0.2.2, полностью перезапустить игру и проверить список «Сценарии».
+Cold Host list не проверяет visibility flag в pinned native script; прежний
+script-фильтр Host требует Core. Source flags не выдаются за packaged PASS.
+PR #73 возвращён в draft из-за неразобранного native FAIL и packaged gate.
+`Verify-Task.ps1` — PASS проверки scope, 254 локальных Markdown links,
+8/8 production hashes в обеих stage, native hidden matrix 81/81, полного
+offline/compile evidence и diff check. Его отдельный `release_gate=BLOCKED`
+не выдаёт успешный аудит evidence за готовность релиза.
+
+## Подготовка 0.2.2 — 2026-10-24
+
+По запросу владельца [PR #73](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/73)
+оформляется как выпуск **0.2.2** в существующей ветке
+`codex/workshop-universal-entry`. База оформления — `b54ffb9`, дерево чистое;
+`origin/main` по-прежнему `bb748797d1dd1f898759775d00d3e71ab9b002e6`.
+Добавлены `releases/0.2.2.md`, ссылки в README/указателе и версия publisher
+в DEVELOPMENT. Исторические записи и патчноуты 0.2.1 сохраняются.
+Версия пакета задаётся в publisher, отдельного version field в source нет.
+
+До правки `Invoke-AICFChecks.ps1 -Name @(Test-ScenarioSetupStatic.ps1,
+Test-WorkshopScenarioNamesStatic.ps1,Test-LocalizationStatic.ps1,
+Test-ScenarioHeadersStatic.ps1) -EvidenceRoot <evidence>/before-source` —
+**4/4 PASS, exit 0**. `Verify-ReleaseDocs.ps1 -Phase before` — **PASS/0**, 125
+локальных Markdown links, нет delta production/tests/tools от `b54ffb9`,
+`git diff --check` — 0. Evidence оформления:
+`.codex-runtime/release-0.2.2-20261024/`.
+
+После правки `Verify-ReleaseDocs.ps1 -Phase after` — **PASS/0**: 125 links,
+все targets доступны и tracked либо добавляются этим коммитом,
+production/tests/tools совпадают с `b54ffb9`, `git diff --check` — 0.
+
+Полные **84/84 offline**, **2/2 compile**, native Play **13/13**, Cancel **7/7**
+и private Listen **16/16** относятся к исправлению `b54ffb9`, описанному ниже;
+при оформлении документации полный набор, compile и runtime повторно не
+запускаются. Прежние resource diagnostics 50/78 строк сохраняются.
+Первый Play/Host нового опубликованного пакета в vanilla frontend, public
+Host со вторым игроком/JIP, пароль/лимит, физический UI input и soak —
+**NOT RUN**. Нужны согласованно обновлённые Core и Arland и полный перезапуск
+игры; source-stage не подтверждает packaged сценарий. Git-тег, GitHub Release
+и Workshop публикация в рамках оформления PR не создаются.
+
+## Первый вход в универсальную настройку из Workshop — 2026-10-24
+
+Ветка `codex/workshop-universal-entry` от свежего `origin/main`
+`bb748797d1dd1f898759775d00d3e71ab9b002e6`, исходное дерево чистое.
+Владелец подтвердил два симптома опубликованной 0.2.1: вместо «AI Conflict»
+виден `AICF_Setup_Arland_Name`, а Play сразу загружает Arland без picker.
+В installed `ServerData.json` Arland 0.2.1 entry присутствует, corrupted=false;
+publisher manifest также содержит его. User console сначала загружает только
+vanilla и пишет Missing string ID для setup. Это отдельный дефект первого
+входа; успешная загрузка Workshop из предыдущей задачи его не проверяла.
+
+До правки профильный `Invoke-AICFChecks.ps1 -Name <ScenarioSetupStatic,
+UniversalScenarioStatic,ScenarioEnvironmentStatic,ScenarioHeadersStatic,
+LocalizationStatic,WorkshopScenarioNamesStatic,UniversalScenarioLogContracts>`
+— **7/7 PASS/0**. Source-only и warm UI проверки не выявляли этот дефект.
+Evidence всей задачи: `.codex-runtime/workshop-universal-entry-20261024/`.
+
+Исправление задаёт literal metadata до загрузки StringTable, использует
+`SCR_MissionHeaderCampaign` с opt-in `m_bAICFSetupEntry`, после native Play
+открывает настройку в локальном preparation context. AICF match bootstrap
+пропускается до выбора leaf. В обычном frontend сохраняется прежний hook;
+server/client/world CLI и удалённые peers не перехватываются. Идентификатор
+entry, наследуемый world и все 81 leaf GUID сохранены. В Core нет GUID карт.
+Native permission/platform/dependency gates сохранены; вне main menu нужен
+точный активный flagged header, а очередь проверяется через native Workshop API.
+Во время отказа/отмены default AICF матч не запускается.
+
+Контроль `cold-native-downloads` с самостоятельным header subtype прошёл все
+13 readbacks, но завершился **FAIL**, native -1073741819 и ENGINE F/access
+violation после world transition. Вариант `cold-flag-header` со штатным типом
+и opt-in flag: **13/13 readbacks, native exit 0**, выбран Stock/Standard/Easy,
+доставлены 09:37/Rainy, промежуточного AICF roster нет. Это native source-stage
+контроль; packaged vanilla frontend без загруженной fixture им не доказан.
+
+Другие сохранённые FAIL: первый callback experiment ошибочно размещал CallLater
+на Game, который не является Managed (compile rejected); после переноса в
+helper compile прошёл. Прототип возврата в frontend терял bool из
+WriteValue(expression), затем всё равно получал shutdown crash; он отклонён.
+Открытие picker в мире потребовало GetCurrentMission, offline scan и native
+GetDownloads: frontend catalog lookup и SCR_DownloadManager там отсутствуют.
+Везде сохранены полный вывод, native exits и полные logs; положительные
+readbacks не объявлены общим PASS.
+
+Native source `MissionWorkshopItem.Host` дважды передал пустой mission header
+и вернулся в vanilla с WORLD_LOAD_ERROR; свои оставшиеся процессы адресно
+остановлены по exact profile. Это не PASS Host. Listen context проверяется
+отдельной private fixture через native PublicServerTransition и точный source
+graph. Первый native Host из опубликованного пакета, публичный Host со вторым
+игроком, действенность пароля/лимита, GUI input/визуальная оценка и packaged
+gameplay остаются **NOT RUN**. Сам агент пакет Workshop не публиковал.
+
+Полный offline прогон промежуточной реализации `after-full/`: **84/84 PASS/0**.
+После перехода на итоговый flag/context профильные проверки `after-promoted/`:
+**7/7 PASS/0**. Отдельный полный прогон итогового source, compile и native
+вердикты фиксируются ниже после завершения, старый PASS их не заменяет.
+
+Итоговый `Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <evidence>/final-full`
+— **84/84 PASS, exit 0** без исключений: Static 35 и Contracts 49.
+`final-context-static` — **3/3 PASS/0**, bootstrap — 15 guarded mutations.
+Итоговый изолированный `final-play-isolated` — **13/13 native cases, exit 0**,
+stopped-log oracle **PASS/0**: picker → выбранный Stock/Standard/Easy,
+09:37/Rainy, без промежуточного AICF match. Совмещённый runtime с другими
+compile-only fixtures дал отдельный access violation; этот FAIL сохранён,
+runtime повторён с одной cold fixture по правилам isolated stage.
+Native input/чистый Workshop этим не подменяются.
+
+`Verify-Oracle.ps1 -Label final-play-isolated` — **6/6 PASS**: исходный полный
+log принимается, отсутствие case, плохой native exit, отдельный crash.log,
+ранний match и чужой CLI отвергаются. `Verify-Final.ps1` — **PASS/0**:
+все результаты/полные logs, 8/8 production source hashes совпадают с stage,
+325 локальных Markdown links и `git diff --check`. Итоговый JSON —
+`final-verification.json`. Нерешённых FAIL выбранного итогового набора нет;
+промежуточные native FAIL остаются отдельными evidence, NOT RUN сохраняются.
+Свои native processes завершены. Две stage копии адресно удалены после zip
+и проверки всех SHA-256: **464/464** и **465/465** файлов; `stage-cleanup.json`.
+Полные native logs/manifest/crash evidence сохранены, пользовательские файлы
+и установленные addons не очищались. Push/PR/merge/публикация не выполнялись.
+
+Итоговая terminal Workbench проверка `final-session-stock` и
+`final-session-wcs` (полный Everon WCS RHS graph), 1.8.0.13 — **2/2 PASS/0**,
+Script validation successful, SCRIPT E/F и ENGINE F — 0. Обновлённые старые
+native fixtures также скомпилированы вместе с их Co-op dependency;
+`final-fixture-all-probes` — **PASS/0**. Первый запуск без этой dependency
+дал compile FAIL и сохранён отдельно. Resource diagnostics в полных logs
+сохраняются; общий engine error-free результат не заявляется.
+
+`final-cancel-2` — **7/7 native cases, exit 0**, полный stopped-log oracle PASS:
+отмена возвращает в main menu, picker закрыт и AICF match не начат. Предыдущий
+cancel сохранял active header в frontend и переоткрывал picker; явный
+IsInsideMainMenu guard устранил это, прежний FAIL сохранён.
+`final-listen-2` — **16/16 native cases, exit 0**, stopped-log oracle PASS:
+реальный private Listen, picker, выбранный leaf и 09:37/Rainy, после перехода
+сохранён RplMode.Listen. Проверка повторного создания Host для уже созданной
+сессии была отклонена preflight; продолжение теперь проверяет native CanPlay,
+platform и полный graph. Native CanHost остаётся gate создания новой сессии.
+
 ## Оформление 0.2.1 — 2026-10-24
 
 Ветка `codex/release-0.2.1` от `origin/main`

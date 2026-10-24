@@ -29,17 +29,35 @@ class AICF_ScenarioLaunch
 	static bool CanStart(AICF_ScenarioSetupSelection selection, MissionWorkshopItem entry, SCR_DSConfig config = null)
 	{
 		if (!selection || !entry || selection.GetResource().IsEmpty() || !selection.GetEnvironment().IsValid()) return false;
-		if (!GameStateTransitions.IsInsideMainMenu() || GameStateTransitions.IsTransitionRequestedOrInProgress()) return false;
+		if ((!GameStateTransitions.IsInsideMainMenu() && !AICF_ScenarioBootstrap.CanConfigure(entry)) || GameStateTransitions.IsTransitionRequestedOrInProgress()) return false;
 		if (config)
 		{
 			if (!config.game || SCR_ScenarioUICommon.IsHostingDisabledOnPlatform() || !SCR_ScenarioUICommon.CanHost(entry)) return false;
 		}
-		else if (!SCR_ScenarioUICommon.CanPlay(entry)) return false;
+		else
+		{
+			// A preparation Listen session is already hosted; selection changes its scenario.
+			if (AICF_ScenarioBootstrap.IsHost(entry) && SCR_ScenarioUICommon.IsHostingDisabledOnPlatform()) return false;
+			if (!SCR_ScenarioUICommon.CanPlay(entry)) return false;
+		}
 		SCR_DownloadManager downloads = SCR_DownloadManager.GetInstance();
-		if (!downloads) return false;
-		int completed, total;
-		downloads.GetDownloadQueueState(completed, total);
-		if (total > 0) return false;
+		if (downloads)
+		{
+			int completed, total;
+			downloads.GetDownloadQueueState(completed, total);
+			if (total > 0) return false;
+		}
+		else
+		{
+			if (!AICF_ScenarioBootstrap.CanConfigure(entry)) return false;
+			WorkshopApi workshop = GetGame().GetBackendApi().GetWorkshop();
+			if (!workshop || workshop.NeedAddonsScan()) return false;
+			array<WorkshopItem> nativeDownloads = {};
+			int count = workshop.GetDownloads(nativeDownloads);
+			if (count < 0 || count != nativeDownloads.Count()) return false;
+			foreach (WorkshopItem item : nativeDownloads)
+				if (!item || item.IsProcessed() || item.GetPendingDownload()) return false;
+		}
 		string missing;
 		AICF_ScenarioVariant variant = selection.GetVariant();
 		return variant && variant.IsContentEnabled() && variant.IsAvailable(missing) && IsForcedGraphCompatible(variant);

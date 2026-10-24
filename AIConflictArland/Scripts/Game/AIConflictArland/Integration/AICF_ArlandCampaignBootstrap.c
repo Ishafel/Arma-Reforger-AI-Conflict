@@ -16,6 +16,10 @@ modded class SCR_GameModeCampaign
 	{
 		// Stock Conflict initializes its manager, bases, and radio coverage inside this call.
 		super.OnGameStart();
+		// A native Workshop launch first loads this header before Core can intercept UI.
+		// The bootstrap returns to the frontend; it must not start an AICF match.
+		if (AICF_ScenarioBootstrap.ShouldIntercept())
+			return;
 
 		m_sAICFMapKey = AICF_ResolveSupportedMapKey();
 		if (m_sAICFMapKey.IsEmpty())

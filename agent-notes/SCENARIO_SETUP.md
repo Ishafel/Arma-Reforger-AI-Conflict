@@ -152,10 +152,39 @@ pass и повторяет только при смене размера root. �
 
 ## Native launch boundary
 
-`AICF_ScenarioSetupEntry` перехватывает только собственный header subtype в
+`AICF_ScenarioSetupEntry` перехватывает только `SCR_MissionHeaderCampaign` с
+`m_bAICFSetupEntry=1` в
 `SCR_ScenarioUICommon.TryPlayScenario/TryHostScenario`; остальные сценарии идут
 в super с исходными аргументами. Header читается по `scenario.Id()`:
 `MissionWorkshopItem.GetHeader()` может быть null при наличии native metadata.
+
+Первый frontend установленного Workshop мода может работать только с vanilla:
+Core hooks и его StringTable ещё не загружены. Поэтому title и краткие
+описания entry заданы literal; Play сначала штатно загружает addon graph и
+setup header. `AICF_ScenarioBootstrap` на локальной authority открывает picker
+после загрузки. AICF integration пропускает запуск своего match controller для
+этого промежуточного header; stock world остаётся inherited Arland.
+Явные CLI `server`/`client`/`world`, dedicated и remote client не перехватываются.
+
+Picker допускает текущий preparation context только при точном совпадении
+`entry.Id()` с активным flagged header. Metadata берётся через native
+`WorkshopApi.GetCurrentMission`, затем точный catalog lookup. Отсутствующий
+offline scan запускается один раз с ограниченным ожиданием. В мире нет
+frontend `SCR_DownloadManager`: вместо него проверяется native `GetDownloads`,
+`IsProcessed` и `GetPendingDownload`; main-menu gate сохраняет прежний manager.
+Native CanHost применяется при создании новой сессии с config. Preparation
+Listen уже создан штатным Host: выбор меняет его сценарий через CanPlay и
+сохраняет platform gate. Полный graph, enabled/downloaded/corruption и
+forced-CLI gates действуют в обоих контекстах. Отмена preparation вызывает
+native GameplayEnd, обычное закрытие/успешный launch только снимает UI.
+Callback снимается в OnGameEnd; UI освобождается до world cleanup.
+
+Setup использует штатный тип header с явным opt-in flag. Самостоятельный
+`AICF_ScenarioSetupHeader` больше не используется: контроль после native
+Play → setup → leaf с этим subtype получал access violation при завершении;
+тот же путь с `SCR_MissionHeaderCampaign` завершился native exit 0.
+`AICF_ResolveSetupPreset` сохраняет bounds, mode/difficulty, world и запрет
+рекурсивного setup. Core и Arland публикуются согласованной версией вместе.
 
 `AICF_ScenarioLaunch.CanStart` заново проверяет main menu, отсутствие перехода,
 native CanPlay/CanHost входного MissionWorkshopItem, hosting platform gate,
@@ -246,10 +275,23 @@ launcher с Variant/MatchMode/Difficulty и существующие leaf GUID.
 `AICF_ArlandScenarioCatalog` дополняет GetDefaultGameConfigs только входом,
 сохраняя stock entries и native InsertNewScenario dedup. Source addon не имеет
 installed WorkshopItem; одного `.rdb` недостаточно для меню. В packaged списке
-legacy leaf ресурсы фильтруются только по точным IDs registry:
+81 legacy leaf ресурс наследует `m_bShowInScenarioMenu=0` от семи собственных
+base headers. Setup явно задаёт `m_bShowInScenarioMenu=1` поверх скрытого parent.
+Штатный `SCR_ContentBrowser_ScenarioSubMenu.CreateLine` в закреплённом
+Script Diff 1.8.0.13 сам читает доступный header по ID и пропускает hidden resource.
+Прежний script-only фильтр действовал только после загрузки Core. Чтение
+headers ещё не загруженного опубликованного пакета остаётся отдельным gate:
+source-only эксперимент без Core не смонтировал эти ресурсы и не подтверждает
+видимость в настоящем cold Workshop frontend.
+После загрузки Core сохраняется дополнительная фильтрация по точным IDs registry:
 `SCR_ContentBrowser_ScenarioSubMenu.CreateLine` и оба списка
 `SCR_ServerConfigListComponent`. Физические 81 headers и их GUID сохранены.
-Сценарии других модов и сохранения не совпадают с этими IDs.
+Сценарии других модов и сохранения не совпадают с этими IDs. Варианты доступны
+по прежним GUID для picker и CLI; metadata скрывает строку, а не удаляет ресурс.
+Обновить нужно все используемые сценарные addons: старый установленный пакет
+сохраняет прежние visible headers. В native списке Host до загрузки Core
+`GetModdedScenarios` не проверяет этот флаг; packaged cold Host list отдельно
+не доказан. Script-фильтр Host действует после загрузки Core.
 
 `AICF_WorkshopTagMetadata` сохраняет исправление SCR_FilterCategory:
 BaseContainer adapter, callbacks Remove/Insert и override OnGameStart для
@@ -261,9 +303,14 @@ BaseContainer adapter, callbacks Remove/Insert и override OnGameStart для
   opt-in/passthrough, modal/cleanup; 15 отрицательных mutations.
 - `Test-UniversalScenarioStatic.ps1`: generator/catalog agreement, полный граф,
   native/platform/download/forced gates, rollback, flags/help и leaf filters.
+- `Test-WorkshopBootstrapStatic.ps1`: native тип/flag, literal metadata,
+  authority/identity, scan/download gates, cancel и lifecycle.
+- `AICF_WorkshopBootstrapProbe.c`: прямой native Play/Host без warm UI hook,
+  фактический picker, выбор leaf, применение времени/погоды, cancel и stopped log.
 - `AICF_ScenarioCatalogProbe.c`: настоящий GetPageScenarios/GetInGameScenario,
   один вход, девять скрытых default leaf targets, stock preservation,
-  repeat/dedup, native type/manw tag maps; 15 cases.
+  repeat/dedup, native type/manw tag maps и чтение hidden metadata всех 81
+  presets; 16 cases. Для всей матрицы нужен полный Everon WCS RHS graph.
 - `AICF_UniversalScenarioProbe.c`: каждый dependency ID, все 81 plan, ожидаемая
   доступность установленных вариантов, forced subset, host mods, настоящие
   widgets/modal/bounds, флаги, пояснения, native SliderWidget range/step/current,
