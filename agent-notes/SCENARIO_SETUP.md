@@ -339,6 +339,38 @@ source-only эксперимент без Core не смонтировал эт�
 BaseContainer adapter, callbacks Remove/Insert и override OnGameStart для
 правильного static caller. Native category constructors не меняются.
 
+## Метаданные публикации Workshop
+
+Реальный installed 0.2.2 содержит 82 записи в `ServerData.json` →
+`revision.scenarios`: Core 0, Arland 10, Everon 18, Arland RHS 9,
+Everon RHS 18, Arland WCS RHS 9, Everon WCS RHS 18. Соответствующие native
+publishing manifests также содержат их в `asset.scenarios`. Флаг hidden не
+убирает эти записи. Первый frontend ещё не загрузил Core и StringTable:
+он показывает raw names из metadata, а не результат script-фильтра.
+
+`tools/Prepare-AICFWorkshopBundle.ps1` работает с готовым native bundle,
+создаёт отдельную копию и оставляет в `asset.scenarios` только точный setup
+Arland с literal name `AI Conflict`. В копиях остальных шести addons список пуст.
+Все `.pak`, `.gproj`, `.rdb` и изображения копируются с проверкой SHA-256;
+ресурсы внутри пакетов, GUID и version не меняются. Input bundle не редактируется.
+Идентификаторы сверяются с каталогом; неизвестные/чужие/повторные IDs, отсутствие
+setup, неправильный literal title, битые payload hashes и существующий output
+отклоняются. `-Check` запрещает публикацию bundle с legacy entries.
+
+Это подготовка metadata для отдельной публикации. Обычная повторная сборка
+Workbench заново добавляет legacy entries; проверять нужно окончательный
+манифест, который будет передан uploader. Приём backend и поведение native
+`publishAddonDir` с подготовленной копией пока **NOT RUN**. Нельзя выдавать
+проверенный JSON за успешную публикацию или редактировать installed ServerData.
+
+`AICF_WorkshopMetadataProbe.c` — отдельный vanilla-dependent тестовый addon.
+Он включает изолированные копии семи модов, но требует, чтобы их scripts
+оставались незагруженными. Native GetPageScenarios воспроизводит 82/81 legacy
+на исходных metadata и 1/0 на подготовленных; stock entries сохранены.
+В test harness копируется только tag-map adapter для обхода отдельного дефекта
+vanilla constructor, без сценарных фильтров Core. Изменённые ServerData/meta
+в этом опыте — локальная модель ответа backend, а не новая публикация.
+
 ## Проверки
 
 - `Test-ScenarioSetupStatic.ps1`: legacy default, atomic mode/difficulty,

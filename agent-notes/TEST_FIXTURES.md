@@ -229,6 +229,19 @@ canonical launcher; frontend — с тем же Client graph без подклю
 полный stopped log, exact source/profile/addons CLI, 16/16 и отсутствие SCRIPT/VM/fatal.
 Реальные нажатия игрока эта проверка не подтверждает.
 
+## Каталог Workshop без Core
+
+`AICF_WorkshopMetadataProbe.c` помещается в отдельный vanilla-dependent addon,
+а не Core. CLI `-aicfMetadataProbe 1`, frontend без server/client/world. Использует
+копии installed пакетов и cache metadata в отдельном profile вне checkout;
+не трогает установленные файлы. Test-only tag-map adapter не содержит фильтра
+сценариев. Требует scripts всех семи AICF addons unloaded, включает только
+копии через native WorkshopItem.Enable и читает GetPageScenarios. Восемь cases:
+unloaded/frontend/scan, один entry, setup один раз, нет legacy, literal name,
+stock preserved. `METADATA_RAW/ITEM/ADDON/SCAN/DONE` дают полный census.
+Все CallLater снимаются в Stop. Native process exit и stopped logs — отдельный
+gate; успешные readbacks при зависшем shutdown не дают runtime PASS.
+
 ## Instigator OTHER
 
 `AICF_InstigatorContextProbe.c` копировать в isolated Core/UI stage как
