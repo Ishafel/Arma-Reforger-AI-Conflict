@@ -27,6 +27,10 @@
   обновляются всегда. SetItems отменяет предыдущий отложенный Render.
   ReleasePreviews сбрасывает bindings; Rebuild/Close по-прежнему отсоединяют
   widgets перед уничтожением draft world.
+- Up/Down заменены vertical native SliderWidget и колесом. Видимый thumb отражает
+  долю viewport; native input отделён от декоративных track/thumb. Scroll остаётся
+  по virtual rows: количество ItemPreviewWidget фиксировано. Programmatic SetCurrent
+  ограждён m_bScrollUpdating, disabled state блокирует wheel/slider, Close снимает handler.
 
 Разрешения, blacklist, native compatibility и server validation не кэшируются.
 Полная сборка draft, replay рецепта и rollback сохранены. Актуальные операции

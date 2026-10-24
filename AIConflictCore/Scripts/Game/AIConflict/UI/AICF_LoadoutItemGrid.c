@@ -23,8 +23,10 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 	protected ref array<string> m_aNames = {};
 	protected ref array<string> m_aDetails = {};
 	protected ItemPreviewManagerEntity m_Manager;
-	protected Widget m_Previous;
-	protected Widget m_Next;
+	protected SliderWidget m_Scrollbar;
+	protected Widget m_ScrollTrack;
+	protected Widget m_ScrollThumb;
+	protected bool m_bScrollUpdating;
 	protected int m_iColumns;
 	protected int m_iFirst;
 	protected int m_iSelected = -1;
@@ -46,9 +48,9 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 		{
 			AICF_LoadoutItemCard card = new AICF_LoadoutItemCard();
 			m_aCards.Insert(card);
-			float x = Math.Mod(i, columns) / (float)columns;
+			float x = Math.Mod(i, columns) / (float)columns * 0.91;
 			float y = Math.Floor(i / columns) / rows * 0.91;
-			card.m_Root = controller.CreateRect(m_Root, x + 0.008, y + 0.006, x + 1.0 / columns - 0.008, y + 0.91 / rows - 0.006, Color.FromSRGBA(27, 43, 54, 255), true);
+			card.m_Root = controller.CreateRect(m_Root, x + 0.008, y + 0.006, x + 0.91 / columns - 0.008, y + 0.91 / rows - 0.006, Color.FromSRGBA(27, 43, 54, 255), true);
 			if (!card.m_Root)
 				return false;
 			card.m_Root.SetZOrder(5);
@@ -86,23 +88,49 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 				FrameSlot.SetAnchorMax(card.m_Detail, 0.97, 0.96);
 			}
 		}
-		m_Previous = PageButton(0.01, 0.23, "{AICF:AICF_UI_Up_72fff299}");
-		m_Next = PageButton(0.77, 0.99, "{AICF:AICF_UI_Down_1667ed25}");
-		m_Range = controller.CreateText(m_Root, 0.24, 0.92, 0.76, 1, "", 14, Color.FromSRGBA(170, 194, 206, 255), true);
+		m_ScrollTrack = controller.CreateRect(m_Root, 0.963, 0.01, 0.98, 0.91, Color.FromSRGBA(45, 61, 72, 255), false);
+		m_ScrollThumb = controller.CreateRect(m_Root, 0.948, 0.01, 0.996, 0.15, Color.FromSRGBA(226, 167, 79, 255), false);
+		m_ScrollTrack.SetZOrder(6);
+		m_ScrollThumb.SetZOrder(7);
+		// Native input slider, как в setup time slider; видимый thumb показывает
+		// долю viewport, а карточки остаются виртуализованными.
+		m_Scrollbar = SliderWidget.Cast(GetGame().GetWorkspace().CreateWidget(WidgetType.SliderWidgetTypeID,
+			WidgetFlags.VISIBLE | WidgetFlags.BLEND, Color.White, 20, m_Root));
+		if (!m_Scrollbar) return false;
+		m_Scrollbar.SetName("AICF_LoadoutScroll");
+		m_Scrollbar.SetOpacity(0);
+		m_Scrollbar.SetVertical(true);
+		m_Scrollbar.SetFlipped(true);
+		m_Scrollbar.SetRange(0, 1);
+		m_Scrollbar.SetStep(columns);
+		FrameSlot.SetAnchorMin(m_Scrollbar, 0.925, 0.01);
+		FrameSlot.SetAnchorMax(m_Scrollbar, 1, 0.91);
+		FrameSlot.SetOffsets(m_Scrollbar, 0, 0, 0, 0);
+		m_Scrollbar.AddHandler(this);
+		m_Range = controller.CreateText(m_Root, 0.01, 0.92, 0.91, 1, "", 14, Color.FromSRGBA(170, 194, 206, 255), true);
 		m_Empty = controller.CreateText(m_Root, 0.06, 0.25, 0.94, 0.65, "{AICF:AICF_UI_No_items_03a89de6}", 17, Color.FromSRGBA(170, 194, 206, 255), true);
 		m_Empty.SetTextWrapping(true);
 		m_Empty.SetVisible(false);
 		return true;
 	}
 
-	protected Widget PageButton(float l, float r, string caption)
+	protected void UpdateScrollbar()
 	{
-		Widget frame = m_Controller.CreateRect(m_Root, l, 0.925, r, 0.995, Color.FromSRGBA(34, 49, 59, 255), true);
-		frame.SetZOrder(5);
-		m_Controller.CreateText(frame, 0, 0, 1, 1, caption, 15, Color.FromSRGBA(230, 237, 242, 255), true);
-		Widget input = frame.FindAnyWidget("AICF_RectInput");
-		input.AddHandler(this);
-		return input;
+		int last = LastPageOffset(m_aPrefabs.Count(), m_iColumns, m_aCards.Count());
+		bool overflow = last > 0;
+		m_Scrollbar.SetVisible(overflow);
+		m_ScrollTrack.SetVisible(overflow);
+		m_ScrollThumb.SetVisible(overflow);
+		m_Scrollbar.SetEnabled(m_bEnabled && overflow);
+		m_bScrollUpdating = true;
+		m_Scrollbar.SetRange(0, Math.Max(1, last));
+		m_Scrollbar.SetCurrent(m_iFirst);
+		m_bScrollUpdating = false;
+		if (!overflow) return;
+		float fill = Math.Clamp(m_aCards.Count() / (float)m_aPrefabs.Count(), 0.08, 1);
+		float top = 0.01 + (0.90 - 0.90 * fill) * m_iFirst / last;
+		FrameSlot.SetAnchorMin(m_ScrollThumb, 0.948, top);
+		FrameSlot.SetAnchorMax(m_ScrollThumb, 0.996, top + 0.90 * fill);
 	}
 
 	void SetEmptyText(string text) { m_Empty.SetText(AICF_Localization.Resolve(text)); }
@@ -172,11 +200,7 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 		m_bEnabled = enabled;
 		foreach (AICF_LoadoutItemCard card : m_aCards)
 			card.m_Input.SetEnabled(enabled);
-		bool overflow = m_aPrefabs.Count() > m_aCards.Count();
-		m_Previous.GetParent().SetVisible(overflow);
-		m_Next.GetParent().SetVisible(overflow);
-		m_Previous.SetEnabled(enabled && m_iFirst > 0);
-		m_Next.SetEnabled(enabled && m_iFirst + m_aCards.Count() < m_aPrefabs.Count());
+		UpdateScrollbar();
 	}
 
 	void Scroll(int rows)
@@ -241,10 +265,8 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 	void RefreshColors()
 	{
 		m_Controller.SetRectColor(m_Root, Color.FromSRGBA(12, 25, 35, 255));
-		if (m_Previous)
-			m_Controller.SetRectColor(m_Previous.GetParent(), Color.FromSRGBA(34, 49, 59, 255));
-		if (m_Next)
-			m_Controller.SetRectColor(m_Next.GetParent(), Color.FromSRGBA(34, 49, 59, 255));
+		m_Controller.SetRectColor(m_ScrollTrack, Color.FromSRGBA(45, 61, 72, 255));
+		m_Controller.SetRectColor(m_ScrollThumb, Color.FromSRGBA(226, 167, 79, 255));
 		foreach (int i, AICF_LoadoutItemCard card : m_aCards)
 		{
 			bool selected = m_iFirst + i == m_iSelected;
@@ -277,14 +299,6 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 	{
 		if (!m_bEnabled || button != 0)
 			return true;
-		if (w == m_Previous || w == m_Next)
-		{
-			int rows = m_aCards.Count() / m_iColumns;
-			if (w == m_Previous)
-				rows = -rows;
-			Scroll(rows);
-			return true;
-		}
 		foreach (int i, AICF_LoadoutItemCard card : m_aCards)
 		{
 			if (w != card.m_Input)
@@ -346,6 +360,16 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 		return true;
 	}
 
+	override bool OnChange(Widget w, bool finished)
+	{
+		if (w != m_Scrollbar) return false;
+		if (m_bScrollUpdating || !m_bEnabled) return true;
+		int last = LastPageOffset(m_aPrefabs.Count(), m_iColumns, m_aCards.Count());
+		m_iFirst = Math.ClampInt(Math.Round(m_Scrollbar.GetCurrent() / m_iColumns) * m_iColumns, 0, last);
+		Render();
+		return true;
+	}
+
 	void Close()
 	{
 		ReleasePreviews();
@@ -355,15 +379,15 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 				card.m_Input.RemoveHandler(this);
 		}
 		m_aCards.Clear();
-		if (m_Previous)
-			m_Previous.RemoveHandler(this);
-		if (m_Next)
-			m_Next.RemoveHandler(this);
+		if (m_Scrollbar) m_Scrollbar.RemoveHandler(this);
 		if (m_Root)
 		{
 			m_Root.RemoveHandler(this);
 			m_Root.RemoveFromHierarchy();
 		}
 		m_Root = null;
+		m_Scrollbar = null;
+		m_ScrollTrack = null;
+		m_ScrollThumb = null;
 	}
 }

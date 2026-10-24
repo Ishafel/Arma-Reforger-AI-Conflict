@@ -2,6 +2,16 @@
 
 ## Пресеты ИИ: issue #66
 
+`AICF_LoadoutInspectorProbe.c` → isolated Core/UI `AICF_ZZZLoadoutInspectorProbe.c`
+после Qol/Files, `-aicfInspectorProbe 1`. Перед QolClose client создаёт скрытое
+дерево actual Inspector, проверяет 31 metadata/state case и удаляет дерево.
+Workspace parent невидим до создания детей; ShowModal/focus/input events не
+вызываются. Это terminal native widget structure test, не GUI automation и
+не visual/input verdict. Проверяются 70% ширины, z/input flags modal sections,
+empty managed-side read model, расширенный catalog, scroll
+rows/last/reveal/disabled/empty/cleanup. Переключение стороны покрыто отдельным
+structural guard; этот probe не вызывает SelectSide и не проверяет клики.
+
 `AICF_LoadoutQolProbe.c` копировать только в isolated Core/UI как
 `AICF_ZLoadoutQolProbe.c`. Canonical server и client: `-aicfLoadoutQolProbe 1`.
 Storage/batch cases обеих сторон выполняются после ROSTER_READY; затем client

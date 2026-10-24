@@ -1,5 +1,60 @@
 # Проверки и baseline
 
+## «Инспектор»: ширина, прокрутка и ввод окон #66 — 2026-10-25
+
+Продолжение `codex/issue-66-loadout-qol`, исходный `6f59d6c`, дерево чистое.
+Центральная колонка уменьшена до 70% прежней ширины; catalog расширен до
+трёх колонок. Up/Down заменены вертикальным native SliderWidget и колесом,
+виртуализация карточек сохранена. Четыре modal sections принимают cursor
+выше фонового AICF_RectInput; AddModal/RemoveModal управляют focus lifecycle.
+Выбор стороны без managed AI slots сохраняет текущую сторону и черновик
+с пояснением, не вызывает Close. Протокол и формат постоянных пресетов не менялись.
+
+Evidence: `.codex-runtime/issue66-inspector-fixes-20261025/REPORT.md`.
+Свежий `before/` — **4/4 PASS/0**, baseline failures нет. `after-contracts/`
+— **4/4 PASS/0**, 44 structural mutations. Полный `after-all/` —
+**91/91 PASS/0**, временный X: снят. Полные команды и вывод — в evidence.
+Terminal Workbench production Stock и финальные isolated Stock/WCS graphs —
+**3/3 PASS/0**, `Script validation successful`, SCRIPT E/F, ENGINE F,
+VM/null exceptions нет. 276 production addon files совпали с runtime stage.
+
+Canonical dedicated/direct client Stock и ArlandWCSRHS: **110 server / 88 client
+cases на каждый graph**, failures=0, native exits **0/0**. Из них 31 client case
+проверяет невидимое native widget tree: 70% ширины, расширенный catalog,
+input flags и z четырёх sections, vertical scroll bounds/sync, reveal,
+disabled/empty и cleanup. Inspector oracle отвергает missing/failed/duplicate
+case: **6 отрицательных controls PASS**. Проверка отсутствия managed slots
+использует fake read model; SelectSide не вызывается, порядок early return
+и сохранения draft покрыт structural guard. ShowModal/AddModal и ввод не
+имитировались; это не проверка физических кликов или набора текста.
+
+Строгая чистота всех native Error остаётся **FAIL**: прежние resource GUID,
+world/material/hierarchy, PP и shutdown leaks сохранены. Сравнение с полными
+предыдущими #66 logs — в `native-error-comparison.json`; новых identities нет.
+Промежуточный запуск UTF-8 helper через Windows PowerShell 5.1 дал ParserError
+на пути с кириллицей до запуска Workbench. Штатный PowerShell 7 успешно выполнил
+команду; исходники игры этим сбоем не затрагивались.
+Дополнительный `stock-final` probe дал FAIL измерения catalog: fixture применял
+FrameSlot к внутреннему EditBox с LayoutSlot. Владелец FrameSlot установлен по
+Edit() — контейнер native layout; fixture исправлен, финальный Stock повторён
+как `stock-final2`. Полный неуспешный лог сохранён, production не менялся.
+В `wcs-final` fixture обновлялся после старта server: server log подтвердил
+`remote script source code checksum does not match`, DATA/SCRIPT_MISMATCH.
+Client не подключился, server завершился по probe deadline без игрока,
+зависший client остановлен с проверкой PID/profile. Это FAIL, не новый PASS:
+полные логи/exit -1 сохранены. Финальный gate повторён на свежей паре
+`wcs-final2` с одинаковыми fixture sources и без одновременной компиляции stage.
+
+Физический input/focus Save/RoleAll/Library и переключение US→USSR, внешний вид
+RU/EN и controller navigation — **NOT RUN**, исходные визуальные/input критерии
+отклонены отдельно от terminal checklist. По AGENTS разрешён только terminal
+workflow; widget metadata и статический код не доказывают поведение мыши и
+клавиатуры. Игроку: переключить сторону, открыть три окна, ввести имя, нажать
+действия, прокрутить оба списка и проверить ширину. Также **NOT RUN** здесь:
+повтор persistence seed/reload (хранилище не менялось), JIP, Workshop и долгий бой.
+Предыдущий PASS persistence от 24.10 не считается новым. ACCEPTED, ready PR,
+push/merge/публикация не заявляются.
+
 ## «Инспектор» и постоянная библиотека: продолжение #66 — 2026-10-24
 
 Ветка `codex/issue-66-loadout-qol`, исходное дерево `17808e0` чистое. AI editor

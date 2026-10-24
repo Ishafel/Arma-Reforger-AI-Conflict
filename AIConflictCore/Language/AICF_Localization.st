@@ -3802,6 +3802,12 @@ StringTable
 			Target_en_us "Preset loaded as a draft. Apply assigns it to this position."
 			Target_ru_ru "Пресет загружен как черновик. Нажмите Применить для назначения позиции."
 		}
+		CustomStringTableItem "{A1CF261025660001}"
+		{
+			Id "AICF_UI_InspectorNoGroups"
+			Target_en_us "This faction has no managed AI squads. The current faction and draft have been kept."
+			Target_ru_ru "На выбранной стороне нет управляемых ИИ-отрядов. Текущая сторона и черновик сохранены."
+		}
 		CustomStringTableItem "{A1CF261024670001}"
 		{
 			Id "AICF_UI_PresetLibrary"

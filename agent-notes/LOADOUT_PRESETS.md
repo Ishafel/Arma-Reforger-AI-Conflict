@@ -6,6 +6,10 @@ binding независимы. Личный редактор сохраняет �
 AI editor использует выбранный макет «Инспектор»: слева десять numeric roles
 и имена назначенных комплектов, в центре preview и прокручиваемые slots,
 справа catalog с прежними source/category/search и inventory действиями.
+Центральная колонка занимает 70% прежней ширины (anchors 0.25..0.502),
+catalog начинается с 0.532 и показывает три колонки карточек. Обе grids
+прокручиваются колесом и вертикальным native SliderWidget с отдельным
+видимым thumb; fixed-capacity virtual rows и selection сохраняются.
 Имена приходят в owner snapshot `assignedNames` из bindings разрешённого slot,
 а не из текущего черновика или списка библиотеки. Save/Delete их не подменяют;
 удалённый пресет оставляет имя у уже назначенного binding.
@@ -18,6 +22,12 @@ ApplySquad повторно сверяет captured library и slot revisions, �
 Пока AI editor захватил ввод, автоматический read личного меню появления
 приостанавливается: оба UI используют один owner snapshot/token. Close снимает
 этот gate; серверный протокол и выдача личного комплекта сохраняются.
+Modal sections — interactive frames с z=10 выше AICF_RectInput родителя (z=1).
+Workspace AddModal/RemoveModal ограничивают focus; Hide/Close сначала закрывают
+вложенные combo lists, снимают modal и затем восстанавливают внешний focus.
+Секция с IGNORE_CURSOR или z=0 блокировала Save/RoleAll/Library, оставляя
+работающей отдельную кнопку Close. Guards и native hidden-tree probe проверяют
+эту границу; они не заменяют физическую проверку ввода.
 
 - «Применить» назначает текущую numeric position, не пишет библиотеку.
 - «Сохранить» записывает именованный пресет роли, не меняет назначения.
@@ -41,6 +51,9 @@ ApplySquad повторно сверяет captured library и slot revisions, �
 карте к противнику; боевое командование стороной людей остаётся скрытым.
 Выбор стороны сбрасывает локальную память черновиков и строит соответствующий
 catalog. Отзыв прав закрывает чужой editor и очищает server owner view.
+Если выбранная сторона не имеет managed slots (в частности, сторона людей в
+Co-op), selector возвращается к предыдущей стороне, editor и черновик остаются
+открытыми. Пояснение выводится в status; пустая сторона не вызывает Close.
 
 ## Владельцы и протокол
 
@@ -122,6 +135,11 @@ Legacy file limit 24576 bytes, envelope limit 600000 bytes, reparse points
   `Test-RuntimeLauncherStatic.ps1`, `Test-LocalizationStatic.ps1`.
 - `Test-LoadoutQolLogContracts.ps1`: позитивные controls и отрицательные мутации
   полноты runtime evidence, denials, соседнего script log, exit и readiness.
+- `AICF_LoadoutInspectorProbe.c` после Qol/Files probes, flag `-aicfInspectorProbe 1`:
+  31 client case на невидимом widget tree перед QolClose. Проверяет anchors,
+  z/input flags четырёх modal sections, native scrollbar bounds/sync, reveal,
+  disabled/empty и cleanup; fake read model проверяет наличие/отсутствие AI slots.
+  Не вызывает ShowModal/AddModal, не меняет focus и не имитирует ввод.
 - `Test-LoadoutLibraryContracts.ps1`: два свежих profiles с общей библиотекой,
   exclusive lease, legacy/generations/tombstone hashes и отказ конфликтного импорта.
   Junction требуют обычного Windows filesystem доступа; ограниченный процесс

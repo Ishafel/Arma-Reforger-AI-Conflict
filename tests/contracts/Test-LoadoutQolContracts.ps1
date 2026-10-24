@@ -63,5 +63,13 @@ Guard 'QOL_CONFIRM_LIBRARY_IDENTITY' (Body 'AICF_LoadoutEditor.c' 'OnClick') 'li
 Guard 'QOL_CONFIRM_SLOT_IDENTITY' (Body 'AICF_LoadoutEditor.c' 'OnClick') 'm_Player.AICF_LoadoutRevision\(\) != m_iConfirmSlotRevision' 'm_Player.AICF_LoadoutRevision() != m_iConfirmSlotRevision'
 Guard 'QOL_MODAL_BACK' (Body 'AICF_LoadoutEditor.c' 'OnBack') 'm_iModal != 0\) \{ HideModal\(\); return;' 'HideModal();'
 Guard 'QOL_OWNER_VIEW_EDITOR_ARBITRATION' (Body 'AICF_PersonalLoadoutUI.c' 'Update') 'AICF_LoadoutEditor.IsAIEditorOpen\(\).*ClearPreview\(\); return;' 'AICF_LoadoutEditor.IsAIEditorOpen()'
+Guard 'QOL_MODAL_INPUT_LAYER' (Body 'AICF_LoadoutEditor.c' 'ModalSection') 'CreateRect\(panel,.*true\).*section.SetZOrder\(10\)' 'section.SetZOrder(10)'
+Guard 'QOL_NATIVE_MODAL_REGISTER' (Body 'AICF_LoadoutEditor.c' 'ShowModal') 'AddModal\(m_wModal, focus\)' 'AddModal(m_wModal, focus)'
+Guard 'QOL_NATIVE_MODAL_REMOVE' (Body 'AICF_LoadoutEditor.c' 'HideModal') 'RemoveModal\(m_wModal\).*m_wModal.SetVisible\(false\)' 'RemoveModal(m_wModal)'
+Guard 'QOL_MODAL_LIFECYCLE' (Body 'AICF_LoadoutEditor.c' 'Close') 'HideModal\(\)' 'HideModal();'
+Guard 'QOL_EMPTY_SIDE_PRESERVES_DRAFT' (Body 'AICF_LoadoutEditor.c' 'SelectSide') '!HasLoadoutGroups\(key\).*m_Side.SetCurrentItem\(previous, false, false, false\).*return;.*CancelSearch\(\)' '!HasLoadoutGroups(key)'
+Guard 'QOL_SCROLL_VERTICAL' (Body 'AICF_LoadoutItemGrid.c' 'Create') 'm_Scrollbar.SetVertical\(true\)' 'm_Scrollbar.SetVertical(true)'
+Guard 'QOL_SCROLL_CALLBACK_FENCE' (Body 'AICF_LoadoutItemGrid.c' 'OnChange') 'm_bScrollUpdating \|\| !m_bEnabled' 'm_bScrollUpdating || '
+Guard 'QOL_SCROLL_INPUT_CLEANUP' (Body 'AICF_LoadoutItemGrid.c' 'Close') 'm_Scrollbar.RemoveHandler\(this\)' 'm_Scrollbar.RemoveHandler(this)'
 if ($failures.Count) { $failures | ForEach-Object { "FAIL $_" }; exit 1 }
 Write-Output "PASS Loadout QoL contracts; mutations=$mutations; runtime=NOT_RUN"
