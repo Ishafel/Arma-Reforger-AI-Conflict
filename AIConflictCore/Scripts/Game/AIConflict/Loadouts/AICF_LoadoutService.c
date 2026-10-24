@@ -71,7 +71,7 @@ class AICF_LoadoutService
 		if (current && !(operation == 2 && accepted)) recipe = current.m_Recipe;
 		int cost;
 		if (current) cost = current.m_iCost;
-		player.AICF_LoadoutView(slotId, member, slot.GetLoadoutRevision(), recipe.Encode(), m_Store.List(recipe), cost);
+		player.AICF_LoadoutView(slotId, member, slot.GetLoadoutRevision(), recipe.Encode(), m_Store.List(recipe, slot), cost);
 		if (!m_aViewers.Contains(player)) m_aViewers.Insert(player);
 		if (accepted)
 		{
@@ -231,7 +231,7 @@ class AICF_LoadoutService
 			AICF_LoadoutBinding binding = slot.GetLoadout(player.AICF_LoadoutMember());
 			AICF_LoadoutRecipe viewRecipe = DefaultRecipe(faction, source, player.AICF_LoadoutMember());
 			if (binding) viewRecipe = binding.m_Recipe;
-			string library = m_Store.List(viewRecipe);
+			string library = m_Store.List(viewRecipe, slot);
 			if (slot.GetLoadoutRevision() != player.AICF_LoadoutRevision() || library != player.AICF_LoadoutLibrary())
 			{
 				if (binding)

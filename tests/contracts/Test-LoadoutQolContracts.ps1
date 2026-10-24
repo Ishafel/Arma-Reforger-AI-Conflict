@@ -56,5 +56,12 @@ Guard 'QOL_LIBRARY_ONLY_PRESERVES_DRAFT' (Body 'AICF_LoadoutEditor.c' 'Refresh')
 Guard 'QOL_CLIENT_CANONICAL_COMPARE' (Body 'AICF_LoadoutEditor.c' 'Refresh') 'if \(m_Recipe\) m_sAppliedData = m_Recipe.Encode\(\)' 'm_sAppliedData = m_Recipe.Encode()'
 Guard 'QOL_SIDE_DRAFT_FENCE' (Body 'AICF_LoadoutEditor.c' 'SelectSide') 'm_DraftMemory.Clear\(\); m_Recipe = null;' 'm_DraftMemory.Clear();'
 Guard 'QOL_REVOKED_CLOSE' (Body 'AICF_LoadoutEditor.c' 'Refresh') '!SCR_Global.IsAdmin\(m_Player.GetPlayerId\(\)\)\) \{ Close\(\); return; \}' '!SCR_Global.IsAdmin(m_Player.GetPlayerId())'
+Guard 'QOL_INSPECTOR_ENTRY' (Body 'AICF_LoadoutEditor.c' 'Create') '!m_bPersonal\) return CreateInspector\(parent\)' 'return CreateInspector(parent)'
+Guard 'QOL_ASSIGNED_NAMES_BINDING' (Body 'AICF_LoadoutStore.c' 'List') 'binding = slot.GetLoadout\(member\).*name = binding.m_Recipe.m_sName;.*assignedNames.Insert\(name\)' 'name = binding.m_Recipe.m_sName;'
+Guard 'QOL_ASSIGNED_NAMES_SCOPE' (Body 'AICF_LoadoutEditor.c' 'Library') 'm_Player.AICF_LoadoutSlot\(\) != m_iSlotId.*m_Player.AICF_LoadoutFaction\(\) != m_sTargetFaction.*m_aAssignedNames.Clear\(\)' 'm_Player.AICF_LoadoutFaction() != m_sTargetFaction'
+Guard 'QOL_CONFIRM_LIBRARY_IDENTITY' (Body 'AICF_LoadoutEditor.c' 'OnClick') 'libraryOperation && m_iConfirmLibraryRevision != m_iLibraryRevision' 'm_iConfirmLibraryRevision != m_iLibraryRevision'
+Guard 'QOL_CONFIRM_SLOT_IDENTITY' (Body 'AICF_LoadoutEditor.c' 'OnClick') 'm_Player.AICF_LoadoutRevision\(\) != m_iConfirmSlotRevision' 'm_Player.AICF_LoadoutRevision() != m_iConfirmSlotRevision'
+Guard 'QOL_MODAL_BACK' (Body 'AICF_LoadoutEditor.c' 'OnBack') 'm_iModal != 0\) \{ HideModal\(\); return;' 'HideModal();'
+Guard 'QOL_OWNER_VIEW_EDITOR_ARBITRATION' (Body 'AICF_PersonalLoadoutUI.c' 'Update') 'AICF_LoadoutEditor.IsAIEditorOpen\(\).*ClearPreview\(\); return;' 'AICF_LoadoutEditor.IsAIEditorOpen()'
 if ($failures.Count) { $failures | ForEach-Object { "FAIL $_" }; exit 1 }
 Write-Output "PASS Loadout QoL contracts; mutations=$mutations; runtime=NOT_RUN"

@@ -178,7 +178,7 @@ RHS/WCS в `-addonsDir`, не в принудительный `-addons`. При�
 Подключение к dedicated по-прежнему требует canonical launcher и readiness gate.
 
 `-LoadoutLibraryPath <старый-profile>/profile/AICF_Loadouts` импортирует библиотеку
-шаблонов в свежий server profile; manifest фиксирует файлы и SHA-256.
+шаблонов в свежий Server/Frontend profile; manifest фиксирует файлы и SHA-256.
 Поддерживаются legacy `template_N.json` и оба поколения `template_N_0.json` /
 `template_N_1.json` для ID 0..255, включая squad presets и tombstones. Они нужны
 вместе: tombstone запрещает восстановление удалённого legacy preset. Legacy
@@ -208,6 +208,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Start-AICFRuntime.
 Профиль остаётся свежим и вне source root; production resource databases
 проверяются, как для Client. Параметры подключения и `-world` в Frontend
 отклоняются: direct-connect остаётся ролью Client с её readiness gate.
+
+Для повторного локального использования Frontend связывает только каталог
+`profile/AICF_Loadouts` с постоянным `%LOCALAPPDATA%/AICF/LoadoutLibrary`.
+Первый запуск копирует туда canonical файлы обычного игрового профиля, если
+постоянная библиотека пуста; исходные файлы и старый формат сохраняются.
+Manifest содержит `persistentLoadoutLibrary` и hashes импорта. Launcher удерживает
+exclusive lease этой библиотеки до native exit. `-PersistentLoadoutLibraryPath`
+выбирает отдельную постоянную библиотеку для Frontend/Server;
+`-IsolatedLoadoutLibrary` отключает default Frontend library для теста.
+Изолированные Server/Client probes по умолчанию не используют библиотеку игрока.
+Client не принимает ни import, ни persistent-library flags. Подробности и
+проверка перезапуска — [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md).
 
 Native shutdown crash 1.8.0.13 воспроизведён без production scripts AICF,
 а затем и в обычном клиенте после первого Host со сменой graph. Переключение

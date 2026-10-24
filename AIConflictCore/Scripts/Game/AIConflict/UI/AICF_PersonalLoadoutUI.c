@@ -32,6 +32,14 @@ class AICF_PersonalLoadoutUI : ScriptedWidgetEventHandler
 
 	void Update(Widget parent, bool characterSelected, ItemPreviewWidget loadoutImage = null)
 	{
+		// Оба editor используют один owner snapshot/token. Автоматический read
+		// экрана появления не подменяет ответ активного AI editor.
+		if (AICF_LoadoutEditor.IsAIEditorOpen())
+		{
+			if (m_wRoot) m_wRoot.SetVisible(false);
+			ClearPreview();
+			return;
+		}
 		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		SCR_CampaignFaction faction;
 		AICF_LoadoutRecipe context = AICF_PersonalLoadout.Context(player, faction);

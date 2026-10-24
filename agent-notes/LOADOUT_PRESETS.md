@@ -3,6 +3,22 @@
 Редактор ИИ: карта → отряд → «Экипировка». Сохранение библиотеки и назначение
 binding независимы. Личный редактор сохраняет прежний отдельный протокол.
 
+AI editor использует выбранный макет «Инспектор»: слева десять numeric roles
+и имена назначенных комплектов, в центре preview и прокручиваемые slots,
+справа catalog с прежними source/category/search и inventory действиями.
+Имена приходят в owner snapshot `assignedNames` из bindings разрешённого slot,
+а не из текущего черновика или списка библиотеки. Save/Delete их не подменяют;
+удалённый пресет оставляет имя у уже назначенного binding.
+Текущая роль выделена, черновик имеет текстовую отметку. Неактивные позиции
+малого состава видны, но не принимают выбор. Библиотека, имя member/squad preset
+и подтверждения — отдельные modal panels. Escape сначала закрывает modal;
+выход из editor с черновиками требует подтверждения. Подтверждение Delete/Load/
+ApplySquad повторно сверяет captured library и slot revisions, предотвращая
+операцию по переиспользованному preset ID после обновления списка.
+Пока AI editor захватил ввод, автоматический read личного меню появления
+приостанавливается: оба UI используют один owner snapshot/token. Close снимает
+этот gate; серверный протокол и выдача личного комплекта сохраняются.
+
 - «Применить» назначает текущую numeric position, не пишет библиотеку.
 - «Сохранить» записывает именованный пресет роли, не меняет назначения.
   Совпадающие kind/profile/faction/character/name обновляют один ID;
@@ -11,7 +27,7 @@ binding независимы. Личный редактор сохраняет �
 - «Роль всем отрядам» назначает выбранную numeric position всем десяти
   managed slots стороны, включая временно неразвёрнутые позиции малого состава.
   Это позиция roster, а не имя ATTACK/DEFEND/RESERVE или incarnation группы.
-- «Сохранить отряд» использует отдельное имя под preview и сохраняет назначения
+- «Сохранить отряд» открывает отдельное окно имени и сохраняет назначения
   всех десяти позиций; неназначенная позиция получает исходный recipe своей роли.
   Сначала нужно применить локальные изменения. «[Отряд]» в библиотеке загружается
   кнопкой «Применить отряд» сразу во все позиции выбранного slot. Для обновления:
@@ -75,7 +91,26 @@ Squad payload schemaVersion=1 содержит десять полных огр�
 profile/faction/name; Decode ограничен 300000 символов. Member recipe сохраняет
 лимит 24576. Имя — непустое, не только пробелы, до 80 символов, без CR/LF.
 
-`Start-AICFRuntime.ps1 -LoadoutLibraryPath <каталог>` импортирует legacy и оба
+Обычный игровой profile сохраняет эту библиотеку после выхода. Назначения
+позиций принадлежат конкретному матчу; сохранённый preset можно применить в новом.
+Библиотека принадлежит хосту и content profile; переход на другой сервер или
+другой контент не переносит и не конвертирует recipes.
+
+`Start-AICFRuntime.ps1 -Role Frontend` по умолчанию использует постоянный
+`%LOCALAPPDATA%/AICF/LoadoutLibrary`. `profile/AICF_Loadouts` каждого свежего
+runtime profile — junction только к этой библиотеке, settings/logs остаются
+в свежем profile. Launcher держит exclusive file lease до native exit;
+другой launcher с тем же каталогом отказывает. Это не блокировка отдельной
+игры, запущенной вне launcher. `-PersistentLoadoutLibraryPath <каталог>` выбирает
+такой каталог явно для Frontend/Server; `-IsolatedLoadoutLibrary` отключает
+default Frontend library для диагностического запуска. Client эти файлы не меняет.
+
+При первом Frontend, если постоянная библиотека пуста, canonical файлы обычного
+`Documents/My Games/ArmaReforger/profile/AICF_Loadouts` копируются с hash readback.
+Старые исходники не переписываются; наличие любого поколения/tombstone запрещает
+повторный автоматический импорт. Разные библиотеки не сливаются по совпадающим ID.
+
+`Start-AICFRuntime.ps1 -LoadoutLibraryPath <каталог>` для Server/Frontend импортирует legacy и оба
 canonical поколения 0..255, включая tombstones; manifest фиксирует hashes.
 Legacy file limit 24576 bytes, envelope limit 600000 bytes, reparse points
 отклоняются. Неканонические ID, generation и посторонние файлы не импортируются.
@@ -87,6 +122,14 @@ Legacy file limit 24576 bytes, envelope limit 600000 bytes, reparse points
   `Test-RuntimeLauncherStatic.ps1`, `Test-LocalizationStatic.ps1`.
 - `Test-LoadoutQolLogContracts.ps1`: позитивные controls и отрицательные мутации
   полноты runtime evidence, denials, соседнего script log, exit и readiness.
+- `Test-LoadoutLibraryContracts.ps1`: два свежих profiles с общей библиотекой,
+  exclusive lease, legacy/generations/tombstone hashes и отказ конфликтного импорта.
+  Junction требуют обычного Windows filesystem доступа; ограниченный процесс
+  Codex может дать Access denied, такой запуск не является PASS.
+- `AICF_LoadoutPersistenceProbe.c` в isolated Core/UI после остальных probes:
+  `-aicfPersistenceProbe seed`, затем `reload` через два Server launcher запуска
+  с разными свежими profiles и одним `-PersistentLoadoutLibraryPath`. Проверяет
+  native FileIO, member/squad restart, tombstone и сохранность legacy.
 - `AICF_LoadoutQolProbe.c` только в isolated Core/UI как
   `AICF_ZLoadoutQolProbe.c`; canonical server/client с `-aicfLoadoutQolProbe 1`.
   Проверяет обе стороны, legacy/update/dedupe/reload/partial write/tombstone,

@@ -304,6 +304,15 @@ try {
         if ($frontendManifest.role -ne 'Frontend' -or $frontendManifest.executable -ne (Join-Path $fakeGameRoot 'ArmaReforgerSteam.exe')) { Add-Failure 'FRONTEND_RETAIL' 'Local frontend must use retail client' }
         if (@($frontendManifest.arguments | Where-Object { $_ -in @('-client','-server','-MissionHeader','-world') }).Count) { Add-Failure 'FRONTEND_LOCAL' 'Frontend contains connection or world startup flags' }
         Require-ArgumentPair $frontendManifest '-addonsDir' "$fakeRepository,$fakeGameRoot\addons,$fakeRhsRoot" 'FRONTEND_SCAN_ROOT'
+        $expectedPersistent = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'AICF/LoadoutLibrary'
+        if ($frontendManifest.persistentLoadoutLibrary -ne $expectedPersistent) { Add-Failure 'FRONTEND_PERSISTENT_LIBRARY' 'Frontend must reuse a stable library across fresh profiles' }
+        if (Test-Path -LiteralPath $frontendManifest.profile) { Add-Failure 'FRONTEND_PERSISTENT_DRY_RUN' 'Dry-run created a profile or library mount' }
+        $isolatedOutput = @(& powershell.exe @frontendInvocation -IsolatedLoadoutLibrary 2>&1 | ForEach-Object { $_.ToString() })
+        if ($LASTEXITCODE -ne 0) { Add-Failure 'FRONTEND_ISOLATED_PLAN' ($isolatedOutput -join ' | ') }
+        else {
+            $isolatedManifest = Get-ManifestFromOutput $isolatedOutput 'FRONTEND_ISOLATED_PLAN'
+            if ($isolatedManifest.persistentLoadoutLibrary -or $isolatedManifest.loadoutLibrarySource) { Add-Failure 'FRONTEND_ISOLATED_LIBRARY' 'Isolated frontend must not import the player library' }
+        }
         foreach ($connectionCase in @(
             @('-ClientAddress','127.0.0.1'), @('-ServerPort','2001'), @('-ServerProfileRoot',$fakeServerRoot),
             @('-RemoteReadinessProbe','unused.ps1'), @('-ExpectedSourceCommit',('a' * 40))

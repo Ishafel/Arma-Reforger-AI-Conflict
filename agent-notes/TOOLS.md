@@ -278,7 +278,10 @@ Script/VM/fatal/shutdown leak ошибки не исключаются из gate
 Для issue #66 `Test-LoadoutQolContracts.ps1` проверяет разделение Save/Apply,
 scope/revisions, admin boundary, batch atomicity и независимые bindings;
 `Test-LoadoutQolLogContracts.ps1` — полноту и негативные мутации runtime oracle.
-Оба автоматически входят в All/Contracts. Отдельный
+Оба автоматически входят в All/Contracts. `Test-LoadoutLibraryContracts.ps1`
+проверяет shared library/junction, lease, hashes и сохранность файлов между
+свежими profiles. `tools/AICF_LoadoutLibrary.ps1` владеет filesystem mount/import
+для canonical launcher; JSON schema остаётся у LoadoutStore. Отдельный
 `tests/log-audits/Test-LoadoutQolLog.ps1` читает полный stopped server/client log,
 manifest и native exit; игра не входит в offline runner. Контракт и запуск:
 [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md).

@@ -3802,6 +3802,102 @@ StringTable
 			Target_en_us "Preset loaded as a draft. Apply assigns it to this position."
 			Target_ru_ru "Пресет загружен как черновик. Нажмите Применить для назначения позиции."
 		}
+		CustomStringTableItem "{A1CF261024670001}"
+		{
+			Id "AICF_UI_PresetLibrary"
+			Target_en_us "Preset library"
+			Target_ru_ru "Библиотека пресетов"
+		}
+		CustomStringTableItem "{A1CF261024670002}"
+		{
+			Id "AICF_UI_InspectorSide"
+			Target_en_us "Faction"
+			Target_ru_ru "Сторона"
+		}
+		CustomStringTableItem "{A1CF261024670003}"
+		{
+			Id "AICF_UI_InspectorRecipient"
+			Target_en_us "Who to equip"
+			Target_ru_ru "Кого настраиваем"
+		}
+		CustomStringTableItem "{A1CF261024670004}"
+		{
+			Id "AICF_UI_InspectorPreviewHint"
+			Target_en_us "Drag to rotate; scroll to zoom."
+			Target_ru_ru "Вращение — перетаскивание; масштаб — колесо."
+		}
+		CustomStringTableItem "{A1CF261024670005}"
+		{
+			Id "AICF_UI_InspectorMore"
+			Target_en_us "Role to all..."
+			Target_ru_ru "Роль всем…"
+		}
+		CustomStringTableItem "{A1CF261024670006}"
+		{
+			Id "AICF_UI_InspectorConfirm"
+			Target_en_us "Confirm"
+			Target_ru_ru "Подтвердить"
+		}
+		CustomStringTableItem "{A1CF261024670007}"
+		{
+			Id "AICF_UI_InspectorDraft"
+			Target_en_us "Draft changed"
+			Target_ru_ru "Есть изменения"
+		}
+		CustomStringTableItem "{A1CF261024670008}"
+		{
+			Id "AICF_UI_InspectorDefaultKit"
+			Target_en_us "Standard loadout"
+			Target_ru_ru "Штатный комплект"
+		}
+		CustomStringTableItem "{A1CF261024670009}"
+		{
+			Id "AICF_UI_InspectorDiscard"
+			Target_en_us "Close and discard unapplied drafts? Saving a preset to the library does not assign it to soldiers."
+			Target_ru_ru "Закрыть и сбросить неприменённые черновики? Сохранение пресета в библиотеке не назначает его бойцам."
+		}
+		CustomStringTableItem "{A1CF26102467000A}"
+		{
+			Id "AICF_UI_InspectorLibraryHelp"
+			Target_en_us "Saved presets remain available after restart in this host's library. Select a soldier preset to edit, or a squad preset to assign."
+			Target_ru_ru "Пресеты сохраняются между запусками в библиотеке этого хоста. Выберите пресет бойца для редактирования или отряда для назначения."
+		}
+		CustomStringTableItem "{A1CF26102467000B}"
+		{
+			Id "AICF_UI_InspectorSaveHelp"
+			Target_en_us "Preset name. The same name updates its library entry. Saving preserves current assignments."
+			Target_ru_ru "Название пресета. То же имя обновит запись в библиотеке. Сохранение оставит текущие назначения."
+		}
+		CustomStringTableItem "{A1CF26102467000C}"
+		{
+			Id "AICF_UI_InspectorSquadSaveHelp"
+			Target_en_us "Save all 10 assigned positions of this squad. The same name updates the preset. Apply the current draft first."
+			Target_ru_ru "Сохранить все 10 назначенных позиций этого отряда. То же имя обновит пресет. Сначала примените текущий черновик."
+		}
+		CustomStringTableItem "{A1CF26102467000D}"
+		{
+			Id "AICF_UI_InspectorRoleAllHelp"
+			Target_en_us "Assign this loadout to the same position in all 10 squads of this faction? Other roles keep their loadouts."
+			Target_ru_ru "Назначить комплект этой позиции во всех 10 отрядах выбранной стороны? У остальных ролей останется их экипировка."
+		}
+		CustomStringTableItem "{A1CF26102467000E}"
+		{
+			Id "AICF_UI_InspectorDeleteHelp"
+			Target_en_us "Delete this preset from the library? Assigned loadouts and their names will remain."
+			Target_ru_ru "Удалить пресет из библиотеки? Назначенные комплекты и их имена сохранятся."
+		}
+		CustomStringTableItem "{A1CF26102467000F}"
+		{
+			Id "AICF_UI_InspectorSquadApplyHelp"
+			Target_en_us "Replace loadouts of all 10 positions in the selected squad?"
+			Target_ru_ru "Заменить комплекты всех 10 позиций выбранного отряда?"
+		}
+		CustomStringTableItem "{A1CF261024670010}"
+		{
+			Id "AICF_UI_InspectorLoadHelp"
+			Target_en_us "Replace the current draft with this preset? The assigned loadout will remain until you apply the new draft."
+			Target_ru_ru "Заменить текущий черновик этим пресетом? Назначенный комплект сохранится до применения нового черновика."
+		}
 		CustomStringTableItem "{A1CF261024660014}"
 		{
 			Id "AICF_UI_PresetSquadName"

@@ -18,6 +18,24 @@ Analyzer: `tests/log-audits/Test-LoadoutQolLog.ps1`; детали, границ�
 `-aicfLoadoutFilesProbe 1`: прямое чтение bytes/presence файлов до/после Apply,
 без записи в библиотеку. Analyzer `-Files` требует все 10 дополнительных cases.
 
+`AICF_LoadoutQolProbe.c` также проверяет все `assignedNames` после каждого
+успешного server RPC и наличие десяти имён в client owner snapshot. Это данные
+для левой панели «Инспектора», без открытия GUI и без визуальной приёмки.
+После отзыва admin (step 27) client ждёт и проверяет пустой enemy snapshot.
+Во время AI protocol probe автоматический personal UI read выключен только
+в fixture, чтобы не занимать общий token. Это не проверка личного UI; его
+production arbitration с открытым AI editor проверяется отдельным контрактом.
+
+`AICF_LoadoutPersistenceProbe.c` → `AICF_ZZZLoadoutPersistenceProbe.c` проверяет
+два независимых native запуска: `-aicfPersistenceProbe seed`, затем `reload`.
+Оба через canonical Server, разные fresh profiles и один внешний
+`-PersistentLoadoutLibraryPath`. После ROSTER_READY seed пишет legacy/member/
+squad/tombstone, reload сверяет их через FileIO/LoadoutStore; каждый завершает
+сервер через RequestClose. Долгий бой, client storage и UI этим не проверяются.
+Дополнительная фаза `legacy` читает десять импортированных legacy recipes
+в их исходном RHS content profile и проверяет bounds; исходный каталог
+передаётся только как `-LoadoutLibraryPath`, без записи в пользовательские файлы.
+
 ## Сценарный контракт
 
 Повторная проверка black-screen regression: aicfColdRetryHost=1 у

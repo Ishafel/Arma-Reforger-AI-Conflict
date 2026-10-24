@@ -1,5 +1,64 @@
 # Проверки и baseline
 
+## «Инспектор» и постоянная библиотека: продолжение #66 — 2026-10-24
+
+Ветка `codex/issue-66-loadout-qol`, исходное дерево `17808e0` чистое. AI editor
+перестроен на роли/назначенные имена слева, preview/slots в центре и catalog
+справа. Имена идут из owner snapshot конкретного slot. Modal naming/library,
+подтверждения Delete/RoleAll/ApplySquad/Close и captured revision guards сохраняют
+прежний RPC. Пока AI editor захватил ввод, personal spawn UI не отправляет
+автоматический read в общий token/snapshot. Личный editor сохраняет прежний layout.
+Frontend получает постоянную библиотеку через отдельный filesystem mount;
+подробности и границы — [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md).
+
+Evidence: `.codex-runtime/issue66-inspector-20261024/REPORT.md`. Свежий `before/`
+— **7/7 PASS/0**, baseline failures нет. Полный `after-all/` — **91/91 PASS/0**
+через временный X:, alias снят. После финальных уточнений `final-current-targeted/`
+— **7/7 PASS/0**, 36 structural mutations. Filesystem contracts — 11 cases.
+Команды/argv/полный вывод находятся в context/summary соответствующего каталога.
+
+Terminal Workbench final Stock/WCS fixture graphs, RHS legacy graph и production
+Stock без fixtures — **4/4 PASS/0**, `Script validation successful`, SCRIPT E/F,
+ENGINE F и VM exceptions нет. **276 production addon files** побайтно совпали
+с изолированным compiled/runtime stage. Canonical Stock и ArlandWCSRHS
+`*-final4` server/client — **110/57 cases на каждый graph**, failures=0,
+native exits **0/0**. Все полные stopped console/script/error logs сохранены.
+Включены 28 player-owned RPC, 10 файловых Apply controls и 23 server/client
+проверки назначенных имён. Последний client case после отзыва admin требует
+пустой enemy snapshot. Это не визуальная/input проверка меню.
+
+Native persistence: два fresh Server profiles с одной постоянной библиотекой,
+`seed` **5/5**, полный выход, `reload` **4/4**, native **0/0**. Member/squad presets,
+tombstone и неизменный legacy прочитаны после перезапуска. Дополнительный RHS
+`legacy` — **10/10** реальных старых пользовательских recipes, profile/bounds
+совпали. Копирование не меняло исходники; SHA-256 всех 15 файлов из обычного
+RHS и прежнего тестового Stock profiles сохранены в `player-library-preservation.json`.
+Подготовлена общая библиотека: старые RHS IDs 0..9 и отдельные Stock ID 10..12,
+оба поколения и удаления сохранены без изменения JSON bytes. Исходные каталоги
+остаются на месте. `Audit-Persistence.ps1` — PASS и 9 отрицательных controls.
+
+Сохранённые промежуточные FAIL: первоначальный SteamAPI_Init без доступа к Steam;
+filesystem junction Access denied в ограниченном процессе; structural audit
+не принимал вставку между двумя capture-инструкциями (порядок восстановлен).
+Первый Stock protocol probe был прерван автоматическим personal read общего
+token, а следующий ошибочно ожидал enemy names после отзыва admin. Fixture
+изолирован от personal UI, oracle требует очистку owner view, production
+AI-editor arbitration добавлен отдельно; оба финальных runtime gates повторены.
+
+Строгая чистота всех native Error остаётся **FAIL**: ресурсные GUID/name,
+SlidingTrackMaterial/Parent/Hierarchy, handshake/PP и shutdown font leaks
+сохранены. Сравнение с 26 полными прежними #66 logs: 169 baseline / 155 текущих
+unique error identities, новых нет. Это внешний baseline, а не PASS всех ошибок.
+Прежний retail Host shutdown crash 1.8.0.13 не исправлялся этой задачей.
+
+RU/EN внешний вид и длинные имена, физический ввод и controller navigation,
+реальный Close/reopen, JIP, packaged Workshop и долгий бой — **NOT RUN**.
+Игроку: открыть AI editor, проверить роли/назначенные имена и scroll, окна
+library/member/squad naming, Save/Apply/Delete/RoleAll/ApplySquad, выход с
+черновиком, повторный запуск и загрузку пресета. Screenshots/GUI automation
+не применялись. Визуальная приёмка отклонена из active checklist; ACCEPTED,
+ready PR, push, merge и публикация не заявляются.
+
 ## Пресеты ролей и отрядов: issue #66 — 2026-10-24
 
 Ветка codex/issue-66-loadout-qol от актуального main af2a403. Исходный body

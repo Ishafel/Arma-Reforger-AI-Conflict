@@ -1,4 +1,16 @@
 // Terminal-only fixture. Copy to isolated Core/UI after production sources.
+// Native respawn UI использует тот же player-owned result token. Во время
+// AI protocol probe её автоматический read не должен подменять ожидаемый ответ.
+modded class AICF_PersonalLoadoutUI
+{
+	override void Update(Widget parent, bool characterSelected, ItemPreviewWidget loadoutImage = null)
+	{
+		string enabled;
+		if (System.GetCLIParam("aicfLoadoutQolProbe", enabled) && enabled == "1") return;
+		super.Update(parent, characterSelected, loadoutImage);
+	}
+}
+
 class AICF_QolChecks
 {
 	static int s_iFailures;
@@ -137,7 +149,7 @@ modded class AICF_MatchController
 		string targetFaction = "", int libraryRevision = -1)
 	{
 		string enabled;
-		if (!System.GetCLIParam("aicfLoadoutQolProbe", enabled) || enabled != "1")
+		if (!System.GetCLIParam("aicfLoadoutQolProbe", enabled) || enabled != "1" || slot == AICF_PersonalLoadout.SLOT)
 		{
 			super.RequestLoadout(player, token, slot, member, revision, operation, payload, targetFaction, libraryRevision);
 			return;
@@ -146,6 +158,31 @@ modded class AICF_MatchController
 		if (m_Loadouts) beforeLibrary = m_Loadouts.AICF_QolStore().GetRevision();
 		super.RequestLoadout(player, token, slot, member, revision, operation, payload, targetFaction, libraryRevision);
 		bool accepted = player.AICF_LoadoutAccepted();
+		if (accepted)
+		{
+			AICF_FactionState state = m_USState;
+			if (player.AICF_LoadoutFaction() == "USSR") state = m_USSRState;
+			JsonLoadContext snapshot = new JsonLoadContext();
+			array<string> assignedNames = {};
+			bool exactNames = snapshot.LoadFromString(player.AICF_LoadoutLibrary()) && snapshot.ReadValue("assignedNames", assignedNames) &&
+				assignedNames.Count() == AICF_Stage1Config.MAX_GROUP_SIZE;
+			if (exactNames)
+			{
+				for (int position; position < assignedNames.Count(); position++)
+				{
+					AICF_LoadoutBinding assigned = state.GetSlot(slot).GetLoadout(position);
+					string expectedName = string.Empty;
+					if (assigned) expectedName = assigned.m_Recipe.m_sName;
+					if (assignedNames[position] != expectedName) exactNames = false;
+				}
+			}
+			AICF_QolChecks.Check("ASSIGNED_NAMES_SERVER_" + token.ToString(), exactNames);
+			if (!exactNames)
+			{
+				Print("[AICF][ASSIGNED_NAMES_DEBUG] " + player.AICF_LoadoutLibrary());
+				Print(string.Format("[AICF][ASSIGNED_NAMES_CONTEXT] slot=%1 side=%2 count=%3", slot, player.AICF_LoadoutFaction(), assignedNames.Count()));
+			}
+		}
 		if (operation == 1 || operation == 5 || operation == 7)
 			AICF_QolChecks.Check("APPLY_NO_LIBRARY_WRITE_" + token.ToString(), beforeLibrary == m_Loadouts.AICF_QolStore().GetRevision());
 		if (operation == 5 && accepted)
@@ -242,8 +279,21 @@ modded class SCR_GameModeCampaign
 		if (m_iQolToken)
 		{
 			if (player.AICF_LoadoutToken() != m_iQolToken) return;
+			// После удаления в enemy library fixture отзывает admin. Owner view
+			// должен исчезнуть до оценки клиентского результата этой операции.
+			if (m_iQolStep == 27 && player.AICF_LoadoutSlot() != -1) return;
 			bool expected = m_iQolStep != 12 && m_iQolStep != 13 && m_iQolStep != 20 && m_iQolStep != 25 && m_iQolStep != 28;
 			AICF_QolChecks.Check("RPC_STEP_" + m_iQolStep.ToString(), player.AICF_LoadoutAccepted() == expected);
+			if (player.AICF_LoadoutAccepted())
+			{
+				JsonLoadContext snapshot = new JsonLoadContext();
+				array<string> assignedNames = {};
+				bool correctSnapshot;
+				if (m_iQolStep == 27) correctSnapshot = player.AICF_LoadoutSlot() == -1 && player.AICF_LoadoutLibrary().IsEmpty();
+				else correctSnapshot = snapshot.LoadFromString(player.AICF_LoadoutLibrary()) &&
+					snapshot.ReadValue("assignedNames", assignedNames) && assignedNames.Count() == AICF_Stage1Config.MAX_GROUP_SIZE;
+				AICF_QolChecks.Check("ASSIGNED_NAMES_CLIENT_" + m_iQolStep.ToString(), correctSnapshot);
+			}
 			Print(string.Format("[AICF][QOL_RPC] step=%1 accepted=%2 reason=%3 revision=%4 library=%5", m_iQolStep,
 				player.AICF_LoadoutAccepted(), player.AICF_LoadoutStatus(), player.AICF_LoadoutRevision(), AICF_QolRevision(player)));
 			if (m_iQolStep == 1)

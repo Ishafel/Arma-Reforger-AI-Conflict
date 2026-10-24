@@ -123,7 +123,7 @@ class AICF_LoadoutStore
 		return true;
 	}
 
-	string List(AICF_LoadoutRecipe target)
+	string List(AICF_LoadoutRecipe target, AICF_GroupSlot slot = null)
 	{
 		array<string> names = {};
 		array<string> kinds = {};
@@ -142,6 +142,18 @@ class AICF_LoadoutStore
 		json.WriteValue("ids", ids);
 		json.WriteValue("kinds", kinds);
 		json.WriteValue("revision", m_iRevision);
+		array<string> assignedNames = {};
+		if (slot)
+		{
+			for (int member; member < AICF_Stage1Config.MAX_GROUP_SIZE; member++)
+			{
+				string name = string.Empty;
+				AICF_LoadoutBinding binding = slot.GetLoadout(member);
+				if (binding && binding.m_Recipe) name = binding.m_Recipe.m_sName;
+				assignedNames.Insert(name);
+			}
+		}
+		json.WriteValue("assignedNames", assignedNames);
 		return json.SaveToString();
 	}
 }
