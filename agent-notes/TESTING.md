@@ -1,5 +1,68 @@
 # Проверки и baseline
 
+## Чёрный экран preparation Host → Everon WCS + RHS — 2026-10-24
+
+Диагностика по сообщению владельца выполнена в `codex/fix-host-everon-wcs`
+от свежего `origin/main` `73ba75e0bb984fc64ecac17d59c085c53fffb8a8`.
+Production не меняется. Evidence:
+`.codex-runtime/host-everon-wcs-20261024/REPORT.md`.
+
+В сохранённом полном пользовательском логе `logs_2026-10-24_09-33-59`
+подготовительный Host загружает только Core + Arland. В 09:34:51 принимает
+EveronWCSRHS / Co-op USSR / Hard, но нового world/graph/матча дальше нет.
+Native `before-host-available` воспроизводит тот же путь с private Listen:
+CONTENT_READY/SELECT/CAN_START/LAUNCH проходят, selected header/world/graph
+и завершение отсутствуют. Процесс адресно остановлен после зависания,
+native exit -1; полный stopped-log oracle возвращает **FAIL/1**.
+Предыдущий Stock Host PASS не подтверждал смену карты и addon graph.
+
+До изменений пять профильных checks через
+`Invoke-AICFChecks.ps1 -Name <UniversalScenarioStatic,ScenarioSetupStatic,
+WorkshopBootstrapStatic,ScenarioEnvironmentStatic,UniversalScenarioLogContracts>`
+дали **5/5 PASS/0**, baseline сохранён в `before/`. Расширена только отдельная
+fixture, её stopped-log oracle и добавлены отрицательные контракты: точный
+target из CLI/catalog, включение установленного внешнего content в отдельном
+profile, запрет default fallback после failed selection, реальный world и
+полный loaded graph. Native mount `$ArmaReforger:worlds/...` нормализуется;
+первый контроль ошибочно отклонил его, сохранён как FAIL fixture и повторён
+после исправления сравнения. Native hang и accepted-only лог отклоняются.
+
+`Run-StockControl.ps1 -Label stock-host-final -ListenHost` — **19/19 cases,
+native exit 0**, полный stopped-log oracle **PASS/0**. Отдельный
+`Run-Before-Available.ps1 -Label warm-wcs-host-control -ListenHost -WarmControl`
+из main menu с уже загруженным Core — **19/19, native exit 0**, oracle **PASS/0**:
+точный Everon Co-op USSR Hard, RHS world, все 28 addon IDs, environment и Listen.
+Это отдельный контроль запуска, не исправление первого preparation перехода.
+Сквозной `Run-RetryControl.ps1 -Label cancel-retry-wcs-host -ListenHost`
+подтвердил preparation Listen и Cancel, но возврат в main menu выгрузил Core;
+последующего Host/target/readback нет. В vanilla frontend снова две ошибки
+`SCR_FilterCategory`. Это **FAIL**, не подтверждённый обходной путь.
+
+Кандидаты в ignored stage — reload после принятого scenario transition,
+предварительный reload и попытка чтения текущей Host config — **не исправили**
+первый переход и в production не перенесены. `GetRunningDSConfig` возвращает
+false/data=0, `ServerLobbyApi.GetServerConfig` — null, что уже было ограничением
+`AICF_ScenarioTransitionProbe`. Подмена отсутствующей config defaults не
+разрешает заявить сохранение пароля/портов/лимитов. Внешний watchdog необходим:
+после принятого transition script callbacks могут быть уже сняты.
+
+Итоговый `Invoke-AICFChecks.ps1 -Suite All -EvidenceRoot <task>/after-all` —
+**85/85 PASS, exit 0**, без исключений; новый лог-контракт — **37/37 PASS/0**.
+Последняя fixture отдельно прошла terminal Workbench для Stock
+(`probe-retry-stock-final`) и полного EveronWCSRHS (`probe-retry-final`):
+**2/2 PASS/0**, validation successful, SCRIPT E/F, ENGINE F, VM и hang — 0.
+Stock/warm runtime контроли выполнены до добавления retry-ветки в fixture;
+production между ними и финальной компиляцией не менялся. Они не объявляются
+повторным runtime всей финальной fixture. Проверены 348 production SHA-256,
+fixture и все файлы 12 архивов; собственные stages/profiles удалены после
+проверки, полные логи оставлены отдельно. Ранние Workbench `before-stock` и
+`candidate-stock` с Application hangs сохранены как FAIL, хотя native exit был 0.
+Все команды и неуспехи сохранены в REPORT; отдельные PASS не снимают исходный
+runtime blocker. `git diff --check` — PASS/0.
+**NOT RUN:** первый cold Host опубликованного исправленного пакета (исправления
+нет), физический UI input, второй игрок/JIP, применение пароля/лимитов и soak.
+GitHub/Workshop release, тег и версия в этой диагностике не изменяются.
+
 ## Скрытие прежних сценариев в 0.2.2 — 2026-10-24
 
 Владелец попросил скрыть старые пункты в продолжение PR #73 и подготовки

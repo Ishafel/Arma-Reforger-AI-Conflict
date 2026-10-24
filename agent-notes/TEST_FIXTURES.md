@@ -102,6 +102,21 @@ listen с fixture password/port через `RequestPublicServerTransition` и т
 source graph: у source `MissionWorkshopItem.Host` не хватает packaged header
 metadata. Проверяется host context и сохранение Listen после выбора.
 Это не проверка публичного Host со вторым игроком или действительности пароля.
+Для смены карты и графа добавлены `-aicfColdVariant EveronWCSRHS
+-aicfColdMode 2 -aicfColdDifficulty 2`: исходный граф остаётся Stock, полный
+внешний graph должен быть доступен через `addonsDir`. Fixture включает только
+его установленные content items в отдельном profile, останавливается при
+ошибочном выборе и проверяет точный leaf, фактический world и весь loaded graph.
+`COLD_WORLD` допускает native mount вида `$ArmaReforger:worlds/...`;
+`COLD_ADDON` сохраняет каждый loaded ID. Сам accepted request не означает
+загрузку карты. Существующий `-aicfWarmBootstrapControl 1` вместе с Host проверяет
+отдельный путь из main menu с private `SCR_DSConfig`; это не первый cold Host.
+`-aicfColdRetryHost 1` вместе с Host воспроизводит обходной путь целиком:
+native preparation Listen → Cancel → main menu → новая private Host config →
+выбранный leaf. Проверяет `RETRY_CANCEL_CONTEXT`/`RETRY_RETURN`; не заявляет
+восстановление первоначальных сетевых настроек. CLI retry и warm исключают друг друга.
+После reload fixture снимает собственные callbacks; внешний watchdog обязателен:
+зависший native transition может уже остановить старую script callqueue.
 `-aicfColdCancelProbe 1` вызывает тот же Cancel, что button/modal handler,
 и проверяет возврат в frontend без старта AICF матча. GUI input не создаётся.
 Своё process-local phase состояние удаляется перед RequestClose.
@@ -111,6 +126,10 @@ native exit 0, полный stopped console и отсутствие SCRIPT/VM/as
 во всех соседних `.log`, включая crash.log. До выбранного launch не допускает
 AICF bootstrap/spawn; при cancel не допускает launch вообще. Свежие результаты
 и сохранённые промежуточные FAIL — [TESTING.md](TESTING.md).
+Анализатор сверяет launch с общим каталогом, параметры режима/сложности с manifest,
+для явного variant требует world/loaded IDs, отклоняет native hang и читает
+все соседние `.log`. Его отрицательные cases находятся в
+`Test-WorkshopBootstrapLogContracts.ps1`.
 
 `AICF_UniversalScenarioProbe.c` копировать отдельно в isolated Core/UI как
 `AICF_ZUniversalScenarioProbe.c`: `-aicfUniversalProbe 1

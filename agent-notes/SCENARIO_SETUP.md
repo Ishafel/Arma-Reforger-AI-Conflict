@@ -179,6 +179,19 @@ forced-CLI gates действуют в обоих контекстах. Отме
 native GameplayEnd, обычное закрытие/успешный launch только снимает UI.
 Callback снимается в OnGameEnd; UI освобождается до world cleanup.
 
+Ограничение, подтверждённое 24.10.2026: preparation Listen с исходным
+Core + Arland принимает выбор Everon WCS + RHS / Co-op USSR / Hard, но
+не загружает выбранный world и новый graph. Предыдущий Stock/Arland PASS
+этого перехода не проверял. Добавление `RequestReload` после принятого запроса
+и отдельная попытка предварительного reload в isolated stage не устранили
+дефект и в production не перенесены. `GetRunningDSConfig` и
+`ServerLobbyApi.GetServerConfig` в этом source Host не возвращают config;
+пересоздание Host с сохранением всех настроек не подтверждено. Это открытый
+runtime blocker, подробности и полные логи — [TESTING.md](TESTING.md).
+Отдельный сквозной повтор через Cancel вернул vanilla-only main menu и выгрузил
+Core: process-local intent сам по себе не гарантирует, что его обработчик
+останется загруженным. Warm main-menu PASS не выдаётся за доступный игроку обход.
+
 Setup использует штатный тип header с явным opt-in flag. Самостоятельный
 `AICF_ScenarioSetupHeader` больше не используется: контроль после native
 Play → setup → leaf с этим subtype получал access violation при завершении;
