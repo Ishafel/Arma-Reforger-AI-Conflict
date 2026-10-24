@@ -1,5 +1,13 @@
 # Изменение сценарного контракта — 2026-10-24
 
+Повторная проверка black-screen regression: aicfColdRetryHost=1 у
+AICF_WorkshopBootstrapProbe требует RETRY_CANCEL_CONTEXT/RETRY_RETURN и
+реальный selected world/graph после отмены preparation Listen. Отдельный
+aicfColdLifecycleProbe=1 требует ровно по одному COLD_SNAPSHOT_RESTORED pass=1
+и COLD_RUNTIME_CLEARED pass=1 после боевой миссии; при Cancel ожидается ноль.
+Snapshot observer читает результат production Restore, не подменяет его.
+Analyzer проверяет failure markers также в соседних полных логах.
+
 81 старый MissionHeader и его .meta удалены. Старые GUID, server configs и
 alias StockCoopUSSR не поддерживаются. Runtime selection заменяет ресурсы
 на каждый режим/сложность; описание — SCENARIO_SETUP.md.

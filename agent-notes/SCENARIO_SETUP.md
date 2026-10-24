@@ -149,7 +149,12 @@ TryPlayScenario/TryHostScenario перехватывают только flagged 
 после чего AICF_ScenarioBootstrap открывает picker на локальной authority.
 Матч AICF в preparation scene не запускается. Dedicated/direct client и
 явные server/client/world не перехватываются. Отмена preparation вызывает
-native GameplayEnd; callbacks и modal удаляются в OnGameEnd.
+native GameplayEnd с явным RequestReload текущего non-vanilla graph;
+callbacks и modal удаляются в OnGameEnd. Без сохранения graph GameplayEnd
+возвращает vanilla-only menu, выгружает Core/tag adapter и ломает повторный Host
+ошибками SCR_FilterCategory. Cancel сохраняет уже загруженный набор модов;
+новые зависимости не выбираются и не включаются. До reload проверяется
+ShouldIntercept, отсутствие pending transition и непустой addon list.
 
 CanStart повторно проверяет entry identity, native CanPlay/CanHost, platform,
 download queue, enabled/downloaded/corruption и forced CLI graph.
@@ -247,5 +252,8 @@ target/mode/difficulty/rank/save, все 81 JSON roundtrip, invalid values,
 Expected CLI для probe имеет префикс aicfProbeExpected; это не authority input.
 AICF_WorkshopBootstrapProbe проверяет cold Play/Host/cancel, native world,
 точный graph, runtime policy, time/weather и остановленные полные логи.
+Флаг aicfColdRetryHost проверяет отмену preparation Listen и повторный Host
+в том же процессе. aicfColdLifecycleProbe проверяет восстановление всех полей
+cached header и очистку runtime selection/pending handoff после завершения.
 Readbacks клиента проверяются отдельно после canonical readiness gate.
 Точные результаты, эксперименты и ограничения — TESTING.md и evidence report.

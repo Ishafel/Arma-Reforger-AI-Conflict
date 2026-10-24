@@ -98,7 +98,7 @@ RHS/WCS версии и каталоги сверяй с установленн�
 Для любого Variant и MatchMode используйте `-Difficulty Easy|Medium|Hard`
 (default `Easy`), например `-Variant EveronNorth -Difficulty Hard`.
 Передавайте одинаковые `Variant`, `MatchMode` и `Difficulty` серверу и клиенту: readiness gate проверяет
-точный server header. Medium добавляет один БТР со случайным десантом до 2/4;
+точный native header, variant/mode/difficulty и graph. Medium добавляет один БТР со случайным десантом до 2/4;
 Hard — случайные пары бронетехники и одну усиленную точку с 3/4 машинами.
 Недоступные танки заменяются БТР. Правила и подготовка графа описаны в
 [FIA_GARRISONS.md](FIA_GARRISONS.md). Выбор сценария
@@ -155,7 +155,8 @@ Placeholder заменяется фактическим путём. Перед �
 контент, режим, сторона и сложность разрешаются в native mission, runtime selection и точный addon graph.
 Canonical launcher frontend не открывает: для server/client остаются
 `-Variant Stock -MatchMode ... -Difficulty ...`. Явный CLI запуск setup через
-`-world`/`-server` сохраняет vanilla Arland Co-op USSR Medium. Первый Workshop
+`-world`/`-server` не открывает picker и не задаёт runtime selection;
+для матча AI Conflict нужен canonical launcher с выбранными параметрами. Первый Workshop
 Play открывает picker после штатной загрузки модулей; этот путь не требует
 предварительно принудительно загруженного source graph. Core и Arland нужно
 обновлять согласованной версией: меняются и hooks, и формат setup header.

@@ -1,7 +1,8 @@
 # Архитектура и навигация по исходникам
 
-Проект расширяет stock Conflict скриптами Enforce. Gameplay resources — тонкие
-inherited `MissionHeader`; они выбирают штатный сценарий и его настройки.
+Проект расширяет stock Conflict скриптами Enforce. Единственный gameplay resource —
+тонкий inherited `MissionHeader` входа AI Conflict; runtime selection выбирает
+штатную миссию и применяет её настройки.
 Собственных world/base/layout ресурсов нет. North ограничивает штатные базы
 whitelist, оставляя ландшафт целым. UI редактора экипировки использует временный
 in-memory world для preview; он не является миром кампании.
@@ -20,7 +21,7 @@ identity и одноразовым флагом commit. `AICF_RHSPMCEquipment` �
 |---|---|---|
 | `AIConflictCore` | `9178E5822AFE48EA` | Независимые от карты механики, UI, диагностика |
 | `AIConflictArland` | `B52C5F6AEDBF423E` | Общий bootstrap stock Conflict, radio normalization, Arland header |
-| `AIConflictEveron` | `A4B2E62595F645A4` | Everon headers и policy выхода из изолированного radio-компонента |
+| `AIConflictEveron` | `A4B2E62595F645A4` | Runtime whitelist North и policy выхода из изолированного radio-компонента |
 | `AIConflictArlandRHS` | `9F88011DA22B471C` | RHS content profile и compatibility adapters |
 | `AIConflictEveronRHS` | `FA9FDCCA428A43BA` | Объединение Everon policy и RHS profile, callsign pool adapter |
 | `AIConflictArlandWCSRHS` | `A1CF260928100001` | WCS экипировка, арсенал и техника поверх RHS |
@@ -31,9 +32,9 @@ Vanilla dependency — `58D0FB3206B6F859`. Точный граф зависим�
 этот каталог через `AICF_Scenarios.ps1`. GUID не меняются.
 Core и stock integrations не должны получать обязательные RHS/WCS dependencies.
 
-Co-op за US/USSR выбирается тонким inherited header для каждого из девяти
-сочетаний карты и контента. Генератор наследует соответствующий standard header
-той же сложности, сохраняя world, North whitelist и content flags. Общая immutable
+Co-op за US/USSR выбирается runtime selection для каждого из девяти
+сочетаний карты и контента. Генератор задаёт native target и dependency graph;
+mode/difficulty передаются отдельно, North whitelist задаёт Everon integration. Общая immutable
 `AICF_MatchRules` задаёт 0 боевых slots у людей и 10 у противника, ticket defeat по стороне;
 faction state и helpers сохраняются. Владение roster остаётся у FactionState,
 условиями победы — у VictorySystem. Контракт: [COOP_SCENARIO.md](COOP_SCENARIO.md).

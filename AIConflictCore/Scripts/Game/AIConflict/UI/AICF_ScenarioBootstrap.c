@@ -28,8 +28,16 @@ class AICF_ScenarioBootstrap
 	static void Cancel()
 	{
 		if (!ShouldIntercept() || GameStateTransitions.IsTransitionRequestedOrInProgress()) return;
+		// GameplayEnd otherwise selects vanilla and unloads the local menu adapters.
+		array<string> loaded = {};
+		GameProject.GetLoadedAddons(loaded);
+		array<string> addons = {};
+		foreach (string id : loaded)
+			if (!GameProject.IsVanillaAddon(id)) addons.Insert(id);
+		if (addons.IsEmpty()) return;
 		Print("[AICF][SCENARIO_BOOTSTRAP] phase=CANCEL");
 		GameStateTransitions.RequestGameplayEndTransition();
+		GetGame().RequestReload(addons);
 	}
 
 	void Start()

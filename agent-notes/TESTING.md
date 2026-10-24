@@ -1,5 +1,44 @@
 # Проверки и baseline
 
+## Повторная проверка первого Host и отмены — 2026-10-24
+
+Baseline f91fb02, ветка codex/fix-workshop-catalog-pipeline. Свежие семь
+профильных checks — 7/7 PASS. Воспроизведён прежний Host → Cancel → retry FAIL:
+vanilla-only menu выгружает Core, две SCRIPT(E) SCR_FilterCategory, выбранный
+world не загружается, watchdog/native -1. Cancel теперь передаёт текущие
+non-vanilla loaded addons в RequestReload после GameplayEnd; guards сохранены,
+новые моды не включаются. WCS retry до/после: FAIL → 22 cases PASS/native 0.
+Повтор с наблюдением Restore/runtime cleanup и Stock retry также PASS/0.
+
+Первый private Host из Stock graph проверен для всех девяти Variant:
+выбранные world/graph/mode/difficulty, 09:37/Rainy, Listen/RPL listener и
+ROSTER_READY — 9/9. Полный native результат **7 PASS/2 FAIL**: Everon и
+EveronNorthRHS упали на выходе с 0xC0000005, после успешной очистки и Game
+destroyed. Оба retail dump имеют offset ArmaReforgerSteam.exe+0x866aaf,
+как предыдущий f91fb02 и retail pre-retirement контроль. Причина не установлена;
+это не доказательство отсутствия влияния scripts и не исправление native crash.
+Ready PR/релиз не создаётся; общего runtime PASS нет.
+
+Host/Play cancel, WCS Play, оба retry и дополнительный WCS network probe
+завершились native 0. Новый read-only lifecycle observer проверяет восстановление
+полей native header и отсутствие selection/pending handoff; он не меняет Restore.
+Полный offline after-all/ — 88/88 PASS/0 (bootstrap contracts 65 cases).
+Затем исправлено ожидание HOST_REQUEST в анализаторе Host Cancel, первоначальный
+CASE_COUNT log сохранён; final-targeted/ — 2/2 PASS/0, 68 contracts. Это отдельный
+профильный повтор после последней правки анализатора, не новый полный набор.
+Финальные WB: cancel/lifecycle/network full graph и production Stock — PASS/0;
+275 текущих production файлов совпадают с compiled candidate-stage.
+Ошибочные ранние compile диагностических fixtures сохранены отдельно.
+
+ServerLobbyApi.GetServerConfig в выбранной private Listen после ROSTER_READY
+вернул null; пароль/лимит и enforcement — NOT RUN/не доказаны, значения fixture
+не выдаются за native readback. Порт 127.0.0.1:24073 подтверждён listener.
+Новый JIP/второй человек, визуальный UI/soak, packaged Workshop frontend — NOT RUN.
+Прежний JIP f91fb02 не повторялся; Workshop publication запрещена владельцем.
+Все процессы завершены, watchdog остановлен, свои profiles/stages SHA-проверены
+и архивированы; полные logs/dumps и commands:
+.codex-runtime/host-regression-20261024-f91fb02/REPORT.md.
+
 ## Полное прекращение поддержки старых сценариев — 2026-10-24
 
 По запросу владельца удалены 81 старый .conf и 81 .meta; остался один AI Conflict

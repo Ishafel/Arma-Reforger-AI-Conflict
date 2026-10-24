@@ -23,6 +23,7 @@ $rules = @(
     @($code,'Remove\(Open\);.*?m_AICFScenarioBootstrap.Stop\(\);.*?super.OnGameEnd\(\);', 'CALLBACK_CLEANUP'),
     @($code,'OnBeforeWorldCleanup\(\).*?AICF_CloseSetup\(\);.*?super.OnBeforeWorldCleanup\(\);', 'UI_CLEANUP'),
     @($code,'void Cancel\(\).*?!ShouldIntercept\(\) \|\| GameStateTransitions.IsTransitionRequestedOrInProgress\(\).*?RequestGameplayEndTransition\(\);', 'CANCEL_BOUNDARY'),
+    @($code,'void Cancel\(\).*?GetLoadedAddons\(loaded\);.*?!GameProject.IsVanillaAddon\(id\)\) addons.Insert\(id\);.*?if \(addons.IsEmpty\(\)\) return;.*?RequestGameplayEndTransition\(\);\s*GetGame\(\).RequestReload\(addons\);', 'CANCEL_RETAINS_GRAPH'),
     @($launch,'if \(!AICF_ScenarioBootstrap.CanConfigure\(entry\)\) return false;.*?workshop.GetDownloads\(nativeDownloads\);.*?count < 0 \|\| count != nativeDownloads.Count\(\).*?item.IsProcessed\(\) \|\| item.GetPendingDownload\(\)', 'NATIVE_DOWNLOAD_GATE'),
     @($screen,'index == 14\) Cancel\(\);.*?modalRoot == m_wRoot\) Cancel\(\);.*?void Cancel\(\).*?AICF_CloseSetup\(\);.*?AICF_ScenarioBootstrap.Cancel\(\);', 'CANCEL_ACTION'),
     @($launch,'!config && AICF_ScenarioBootstrap.IsHost\(entry\) && !AICF_ScenarioHostTransition.HasExactGraph\(variant\).*?AICF_ScenarioHostTransition.Queue\(selection, entry\);.*?else if \(!config\).*?RequestScenarioChangeTransition', 'LISTEN_GRAPH_HANDOFF'),

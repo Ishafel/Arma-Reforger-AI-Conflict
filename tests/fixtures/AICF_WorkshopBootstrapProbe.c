@@ -342,6 +342,31 @@ modded class AICF_MatchController
 	}
 }
 
+// Read-only observer: cached native headers must not retain match settings.
+modded class AICF_RuntimeHeaderSnapshot
+{
+	override void Restore()
+	{
+		SCR_MissionHeaderCampaign header = m_Header;
+		super.Restore();
+		if (!System.IsCLIParam("aicfColdLifecycleProbe")) return;
+		bool restored;
+		if (header)
+		{
+			restored = header.m_sName == m_sName && header.m_sGameMode == m_sGameMode &&
+				header.m_eSaveTypes == m_eSaveTypes && header.m_eStartingRank == m_eRank;
+			if (header.m_bIgnoreMinimumVehicleRank != m_bIgnoreRank || header.m_bOverrideScenarioTimeAndWeather != m_bOverride ||
+				header.m_bRandomStartingDaytime != m_bRandomDay || header.m_bRandomStartingWeather != m_bRandomWeather) restored = false;
+			if (header.m_bRandomWeatherChanges != m_bWeatherChanges || header.m_iStartingHours != m_iHours || header.m_iStartingMinutes != m_iMinutes ||
+				header.m_fDayTimeAcceleration != m_fDay || header.m_fNightTimeAcceleration != m_fNight) restored = false;
+			if (header.m_bCustomBaseWhitelist != m_bWhitelist || header.m_bEstablishingBasesEnabled != m_bEstablish ||
+				header.m_aCampaignCustomBaseList != m_Bases || header.m_eAICFMatchMode != m_eMode || header.m_eAICFDifficulty != m_eDifficulty) restored = false;
+			if (header.m_AICFEnvironment) restored = false;
+		}
+		Print(string.Format("[AICF][COLD_SNAPSHOT_RESTORED] pass=%1", restored));
+	}
+}
+
 modded class ArmaReforgerScripted
 {
 	protected ref AICF_WorkshopBootstrapProbe m_AICFColdProbe;
@@ -357,8 +382,14 @@ modded class ArmaReforgerScripted
 	}
 	override void OnGameEnd()
 	{
+		bool checkRuntime = System.IsCLIParam("aicfColdLifecycleProbe") && AICF_RuntimeScenario.IsActive();
 		if (m_AICFColdProbe) m_AICFColdProbe.Stop();
 		m_AICFColdProbe = null;
 		super.OnGameEnd();
+		if (checkRuntime)
+		{
+			bool cleared = !AICF_RuntimeScenario.IsActive() && !GameSessionStorage.s_Data.Contains(AICF_RuntimeScenario.SESSION_KEY) && !AICF_ScenarioHostTransition.HasPending();
+			Print(string.Format("[AICF][COLD_RUNTIME_CLEARED] pass=%1", cleared));
+		}
 	}
 }
