@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory=$true)][string]$LauncherPath,
     [Parameter(Mandatory=$true)][string]$NativeExitPath,
     [switch]$Client,
-    [switch]$Reload
+    [switch]$Reload,
+    [switch]$LibraryPreview
 )
 $ErrorActionPreference='Stop'
 if($Client -and $Reload){throw 'Reload is a server-only probe'}
@@ -12,7 +13,7 @@ $log=Get-Content -LiteralPath $LogPath -Raw
 $launcher=Get-Content -LiteralPath $LauncherPath -Raw
 $peer='Server'; if($Client){$peer='Client'}
 if(-not $Reload){
-    $base=@{LogPath=$LogPath;LauncherPath=$LauncherPath;NativeExitPath=$NativeExitPath;Files=$true;Client=$Client}
+    $base=@{LogPath=$LogPath;LauncherPath=$LauncherPath;NativeExitPath=$NativeExitPath;Files=$true;Client=$Client;LibraryPreview=$LibraryPreview}
     & (Join-Path $PSScriptRoot 'Test-LoadoutQolLog.ps1') @base
     if($LASTEXITCODE -ne 0){exit 1}
 }
@@ -42,7 +43,7 @@ else{
     $required+=@(0..15 | ForEach-Object {"PERSONAL_RPC_STEP_$_"})
     $required+=@('PERSONAL_RPC_BASE','PERSONAL_RPC_LOAD_DRAFT','PERSONAL_RPC_DEFAULT','PERSONAL_RPC_SELECT')
     foreach($step in @((2..9)+@(13,14))){$required+="PERSONAL_RPC_ACTIVE_REVISION_$step"; if($step -ne 4){$required+="PERSONAL_RPC_ACTIVE_DATA_$step"}}
-    foreach($suffix in @('HIDDEN_BUILD','HIDDEN_TREE','WIDTH_70_PERCENT','EDIT_INPUT','SIDE_HIDDEN','GROUP_HIDDEN','COST_VISIBLE','SINGLE_RECIPIENT','CATALOG_EXPANDED','HIDDEN_CLEANUP')){$required+="PERSONAL_INSPECTOR_$suffix"}
+    foreach($suffix in @('HIDDEN_BUILD','HIDDEN_TREE','LARGE_LEFT_PREVIEW','EDIT_INPUT','SIDE_HIDDEN','GROUP_HIDDEN','COST_VISIBLE','NO_REDUNDANT_RECIPIENT','CATALOG_EXPANDED','HIDDEN_CLEANUP')){$required+="PERSONAL_INSPECTOR_$suffix"}
     foreach($section in 0..3){$required+="PERSONAL_INSPECTOR_SECTION_LAYER_$section";$required+="PERSONAL_INSPECTOR_SECTION_INPUT_$section"}
     foreach($part in @('SLOTS','ITEMS')){foreach($rule in @('ROW','NATIVE','SYNC','LAST','REVEAL','DISABLED','EMPTY')){$required+="PERSONAL_INSPECTOR_SCROLL_${rule}_$part"}}
     if(@([regex]::Matches($log,'\[PERSONAL_RPC_DONE\] failures=0 steps=16')).Count -ne 1){$failures.Add('PERSONAL_RPC_DONE')}

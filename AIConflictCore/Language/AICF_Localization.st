@@ -3934,5 +3934,23 @@ StringTable
 			Target_en_us "Preset saved for this connection only: no persistent player identity is available. Apply separately to select it for spawning."
 			Target_ru_ru "Пресет сохранён только до конца подключения: постоянный идентификатор игрока недоступен. Для появления отдельно нажмите «Применить»."
 		}
+		CustomStringTableItem "{A1CF261025660006}"
+		{
+			Id "AICF_UI_LibraryEmptySlot"
+			Target_en_us "Empty"
+			Target_ru_ru "Пусто"
+		}
+		CustomStringTableItem "{A1CF261025660007}"
+		{
+			Id "AICF_UI_LibrarySelectPreview"
+			Target_en_us "Select a preset to view its equipment."
+			Target_ru_ru "Выберите пресет для просмотра экипировки."
+		}
+		CustomStringTableItem "{A1CF261025660008}"
+		{
+			Id "AICF_UI_LibraryPreviewReady"
+			Target_en_us "Preview ready. Your current draft is unchanged."
+			Target_ru_ru "Предпросмотр готов. Текущий черновик сохранён."
+		}
 	}
 }

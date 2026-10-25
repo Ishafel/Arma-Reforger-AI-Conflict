@@ -6,7 +6,7 @@
 после Qol/Files, `-aicfInspectorProbe 1`. Перед QolClose client создаёт скрытое
 дерево actual AI и personal Inspector, проверяет 31 +32 metadata/state cases
 и удаляет оба дерева. Personal дополнительно проверяет скрытые Side/Group,
-видимую стоимость и одну карточку получателя.
+видимую стоимость, крупный левый preview и отсутствие лишней карточки получателя.
 Workspace parent невидим до создания детей; ShowModal/focus/input events не
 вызываются. Это terminal native widget structure test, не GUI automation и
 не visual/input verdict. Проверяются 70% ширины, z/input flags modal sections,
@@ -33,6 +33,31 @@ RequestClose. Это отдельный oracle по PERSONAL_RELOAD_DONE, без
 `-Reload` —8 restart cases. Main сначала проходит полный прежний QoL oracle.
 `-aicfPersonalLibrarySeedOnly 1` завершает отдельную storage диагностику без
 client с PERSONAL_SEED_DONE; это не main server/client verdict.
+
+`AICF_LoadoutLibraryPreviewProbe.c` → isolated Core/UI
+`AICF_ZZZZZLibraryPreviewProbe.c`, после перечисленных четырёх,
+`-aicfLibraryPreviewProbe 1` на обоих peers. Это pre-spawn стенд: только в
+fixture RequestSpawn блокируется до конца цепочки, production spawn guards не
+меняются. Server проверяет фактическое отсутствие weapons/magazines и обе
+Validate policy (12 cases, US/USSR). Client выполняет ещё31 owner RPC:
+Save/Load/Apply обеих неполных форм, member/squad inspect всех10 позиций,
+stale library/active и missing ID. Hidden AI/personal trees проверяют отдельный
+preview world, сводку/scroll/cleanup, сохранность draft и цвета normal/hover/
+pressed/disabled через metadata; событий мыши и ShowModal не вызывают.
+`Test-LoadoutLibraryPreviewLog.ps1 ... [-Client]` требует12/78 новых checks,
+полный прежний Personal/QoL oracle и ровно12 AI Apply/file-image checks вместо10
+(два дополнительных Apply). Missing/failed/duplicate case должны давать FAIL.
+Это не проверка появления бойца, физического ввода или визуального качества.
+Не запускать вместе с полным offline набором: оба потребляют много памяти.
+
+После изменения StringTable запускать `tools/Build-AICFLocalization.ps1`:
+редактируемая `.st` не заменяет отслеживаемые runtime `.en_us/.ru_ru.conf`.
+LocalizationProbe также проверяет три новых Library keys в EN/RU. Параметр
+`-aicfLocalizationProbeServerOnly 1` вместе с `-aicfLocalizationProbe 1` позволяет
+headless server завершиться сразу после21 проверок (обычная client/server цепочка
+по-прежнему оставляет server на180 секунд). Язык меняется только внутри fixture
+и восстанавливается до завершения. Этот probe проверяет разрешение переводов,
+а не clipping или шрифты на экране.
 
 `AICF_LoadoutQolProbe.c` копировать только в isolated Core/UI как
 `AICF_ZLoadoutQolProbe.c`. Canonical server и client: `-aicfLoadoutQolProbe 1`.

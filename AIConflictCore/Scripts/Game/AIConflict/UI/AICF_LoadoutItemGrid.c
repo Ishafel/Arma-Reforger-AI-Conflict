@@ -31,6 +31,8 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 	protected int m_iFirst;
 	protected int m_iSelected = -1;
 	protected bool m_bEnabled = true;
+	protected Widget m_wHovered;
+	protected Widget m_wPressed;
 	ref ScriptInvoker m_OnSelected = new ScriptInvoker();
 	ref ScriptInvoker m_OnActivated = new ScriptInvoker();
 	ref ScriptInvoker m_OnRemoved = new ScriptInvoker();
@@ -273,6 +275,11 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 			Color color = Color.FromSRGBA(23, 36, 46, 255);
 			if (selected)
 				color = Color.FromSRGBA(39, 57, 68, 255);
+			if (m_bEnabled && card.m_Input.IsEnabledInHierarchy())
+			{
+				if (card.m_Input == m_wPressed) color = Color.FromSRGBA(35, 70, 92, 255);
+				else if (card.m_Input == m_wHovered) color = Color.FromSRGBA(55, 88, 105, 255);
+			}
 			m_Controller.SetRectColor(card.m_Root, color);
 			m_Controller.SetRectColor(card.m_Accent, Color.FromSRGBA(226, 167, 79, 255));
 			card.m_Accent.SetVisible(selected);
@@ -332,9 +339,41 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 		return false;
 	}
 
+	override bool OnMouseEnter(Widget w, int x, int y)
+	{
+		foreach (AICF_LoadoutItemCard card : m_aCards)
+		{
+			if (w != card.m_Input || !m_bEnabled || !w.IsEnabledInHierarchy()) continue;
+			m_wHovered = w;
+			RefreshColors();
+			break;
+		}
+		return false;
+	}
+
+	override bool OnMouseLeave(Widget w, Widget enterW, int x, int y)
+	{
+		if (w == m_wHovered) m_wHovered = null;
+		if (w == m_wPressed) m_wPressed = null;
+		RefreshColors();
+		return false;
+	}
+
+	override bool OnMouseButtonDown(Widget w, int x, int y, int button)
+	{
+		if (button == SCR_EMouseButtons.LEFT && m_bEnabled && w.IsEnabledInHierarchy())
+		{
+			m_wPressed = w;
+			RefreshColors();
+		}
+		return false;
+	}
+
 	// ButtonWidget OnClick предназначен для ЛКМ; ПКМ принимаем явно на отпускании.
 	override bool OnMouseButtonUp(Widget w, int x, int y, int button)
 	{
+		m_wPressed = null;
+		RefreshColors();
 		if (button != SCR_EMouseButtons.RIGHT)
 			return false;
 		if (!m_bEnabled)

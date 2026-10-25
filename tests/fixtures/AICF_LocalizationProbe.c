@@ -38,11 +38,17 @@ modded class SCR_GameModeCampaign
 		AICF_CheckLocalization("EN_NESTED_MARKER", AICF_Localization.Resolve(wire), "A0 · Attack · 10 troops\nMoving to position");
 		AICF_CheckLocalization("EN_BADGE", AICF_Localization.Resolve("{AICF:AICF_UI_L_1e06387a}"), "L");
 		AICF_CheckLocalization("EN_STATE", AICF_Localization.Resolve(AICF_Localization.Code("AWAITING_PLAYER_COMMAND")), "Awaiting player orders");
+		AICF_CheckLocalization("EN_LIBRARY_EMPTY", AICF_Localization.Resolve("{AICF:AICF_UI_LibraryEmptySlot}"), "Empty");
+		AICF_CheckLocalization("EN_LIBRARY_SELECT", AICF_Localization.Resolve("{AICF:AICF_UI_LibrarySelectPreview}"), "Select a preset to view its equipment.");
+		AICF_CheckLocalization("EN_LIBRARY_READY", AICF_Localization.Resolve("{AICF:AICF_UI_LibraryPreviewReady}"), "Preview ready. Your current draft is unchanged.");
 		WidgetManager.SetLanguage("ru_ru");
 		AICF_CheckLocalization("RU_SCENARIO", WidgetManager.Translate("#AICF_Setup_Map_Arland"), "Арланд");
 		AICF_CheckLocalization("RU_NESTED_MARKER", AICF_Localization.Resolve(wire), "A0 · Атака · 10 чел.\nИдёт к точке");
 		AICF_CheckLocalization("RU_BADGE", AICF_Localization.Resolve("{AICF:AICF_UI_L_1e06387a}"), "Л");
 		AICF_CheckLocalization("RU_STATE", AICF_Localization.Resolve(AICF_Localization.Code("AWAITING_PLAYER_COMMAND")), "Ожидает приказа игрока");
+		AICF_CheckLocalization("RU_LIBRARY_EMPTY", AICF_Localization.Resolve("{AICF:AICF_UI_LibraryEmptySlot}"), "Пусто");
+		AICF_CheckLocalization("RU_LIBRARY_SELECT", AICF_Localization.Resolve("{AICF:AICF_UI_LibrarySelectPreview}"), "Выберите пресет для просмотра экипировки.");
+		AICF_CheckLocalization("RU_LIBRARY_READY", AICF_Localization.Resolve("{AICF:AICF_UI_LibraryPreviewReady}"), "Предпросмотр готов. Текущий черновик сохранён.");
 		AICF_CheckLocalization("UNICODE_AND_DELIMITERS", AICF_Localization.Resolve(AICF_Localization.Format("{AICF:AICF_UI_MOVE_3b18d9be}", "Альфа}:17:|~;")), "ДВИЖЕНИЕ Альфа}:17:|~;");
 		AICF_CheckLocalization("CONCAT", AICF_Localization.Resolve("{AICF:AICF_UI_Squad_daa7fec8}7"), "Отряд 7");
 		AICF_CheckLocalization("STATIC_POINT", AICF_Localization.Resolve(AICF_Localization.Format("{AICF:AICF_UI_MOVE_3b18d9be}", "A0")), "ДВИЖЕНИЕ A0");
@@ -64,7 +70,9 @@ modded class SCR_GameModeCampaign
 			WidgetManager.SetLanguage(originalLanguage);
 		}
 		Print(string.Format("[AICF][LOCALIZATION_PROBE_FINISHED] server=%1 cases=%2 failures=%3", Replication.IsServer(), m_iAICFLocalizationProbeCases, m_iAICFLocalizationProbeFailures));
-		if (Replication.IsServer()) GetGame().GetCallqueue().CallLater(AICF_CloseLocalizationProbe, 180000, false);
+		string serverOnly;
+		if (Replication.IsServer() && System.GetCLIParam("aicfLocalizationProbeServerOnly", serverOnly) && serverOnly == "1") AICF_CloseLocalizationProbe();
+		else if (Replication.IsServer()) GetGame().GetCallqueue().CallLater(AICF_CloseLocalizationProbe, 180000, false);
 		else AICF_CloseLocalizationProbe();
 	}
 

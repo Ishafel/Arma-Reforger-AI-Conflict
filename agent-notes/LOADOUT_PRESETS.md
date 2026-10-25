@@ -58,12 +58,43 @@ Co-op), selector возвращается к предыдущей стороне
 
 ## Личный «Мой пресет»
 
-Оба editor строятся через CreateInspector: те же anchors preview/catalog,
-virtual grids, колесо/vertical slider и modal sections с focus lifecycle.
-Слева личного editor одна карточка сохранённого active recipe; выбор стороны,
+Оба editor строятся через CreateInspector: virtual grids, колесо/vertical slider
+и modal sections с общим focus lifecycle. В личном editor слева крупный preview
+(0.025..0.225, y=0.22..0.79), в центре восемь строк slots. Избыточные active
+карточка и help убраны; название комплекта остаётся в верхней строке. Выбор стороны,
 отряда, RoleAll и squad actions скрыты. «Библиотека», naming, Load/Delete и
 выход с несохранённым draft устроены одинаково. Применение выбирает personal
 recipe для следующего появления; штатный Default loadout остаётся доступным.
+
+## Предпросмотр библиотеки и неполные комплекты
+
+Пресеты могут не содержать оружия или магазинов. Validate проверяет inventory
+compatibility, personal blacklist и независимый Capture/Restore/readback;
+боеготовность не является условием сохранения или применения.
+Формат файлов, идентичность и upsert старых библиотек не меняются.
+
+Общий Library modal показывает выбранный комплект в отдельном
+`AICF_LoadoutLibraryView`: собственные draft/world, модель и текстовая сводка
+`AICF_LoadoutSummary`. Сводка читает готовый inventory, включая defaults,
+карманы и attachments; fixed slots имеют подписи, прочие предметы сгруппированы
+по prefab с количеством. Видны девять строк, wheel/native slider открывают остальные.
+Для squad доступны все десять позиций, включая позиции вне текущего состава.
+
+Owner operation8 — только inspect. AI payload `<id>:<position>`, personal —
+`<id>`. Сервер повторно проверяет actor/context, revisions, тип/источник;
+inner ResolveLoadoutContext допускает неактивные squad positions, не меняя roster.
+Owner snapshot сохраняет контекст исходной позиции/списка. Editor обрабатывает
+ответ8 до общей загрузки рецепта и не меняет m_Recipe, applied или draft memory.
+Быстрый выбор заменяет отложенный SendInspection; интервал от последнего Request
+сохраняет server cooldown, RATE_LIMITED повторяется не более одного раза.
+Hide/Request снимают callback. Закрытый modal/сменившийся ID/revision запрещает
+поздний bind. Hide отсоединяет
+RenderTarget перед очисткой миров, Close также снимает handlers.
+
+Основной preview теперь подбирает расстояние по высоте модели (90% исходного
+вертикального FOV), а не диагонали bounds с оружием. Orbit/pan/zoom сохранены.
+Action buttons и item cards имеют отдельные hover/pressed цвета; disabled
+контролы не подсвечиваются, leave/release сбрасывают transient state.
 
 `AICF_PersonalPresetLibrary` использует AICF_LoadoutStore в personal root с
 приватным prefix `<server identity>_<profile>_<faction>_library_preset_`.

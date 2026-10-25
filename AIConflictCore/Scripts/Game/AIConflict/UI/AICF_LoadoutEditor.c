@@ -83,6 +83,15 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected ref array<string> m_aAssignedNames = {};
 	protected TextWidget m_wRecipient;
 	protected Widget m_wModal;
+	protected Widget m_wModalPanel;
+	protected ref AICF_LoadoutLibraryView m_LibraryView;
+	protected SCR_ComboBoxComponent m_LibraryMember;
+	protected int m_iInspectId = -1;
+	protected int m_iInspectMember;
+	protected int m_iInspectLibraryRevision;
+	protected int m_iInspectRetries;
+	protected Widget m_wHoveredButton;
+	protected Widget m_wPressedButton;
 	protected Widget m_wLibrarySection;
 	protected Widget m_wMemberSaveSection;
 	protected Widget m_wSquadSaveSection;
@@ -307,12 +316,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		int recipients = AICF_Stage1Config.MAX_GROUP_SIZE;
 		if (m_bPersonal)
 		{
-			recipientTitle = "{AICF:AICF_UI_PersonalName}";
+			recipientTitle = "{AICF:AICF_UI_PREVIEW_7dc4cefd}";
 			recipients = 0;
-			m_aRoleKits.Insert(Label(0.025, 0.225, 0.225, 0.35, "", 18));
-			m_aRoleKits[0].SetTextWrapping(true);
-			TextWidget help = Label(0.025, 0.39, 0.225, 0.76, "{AICF:AICF_UI_PersonalInspectorHelp}", 17);
-			help.SetTextWrapping(true);
 		}
 		Label(0.025, 0.177, 0.225, 0.215, recipientTitle, 19);
 		for (int i; i < recipients; i++)
@@ -332,18 +337,22 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_Member = Combo(0, 0, 0.1, 0.05);
 		if (!m_Member) return false;
 		m_Member.GetRootWidget().SetVisible(false);
-		Label(0.25, 0.177, 0.502, 0.215, "{AICF:AICF_UI_PREVIEW_7dc4cefd}", 18);
+		string centerTitle = "{AICF:AICF_UI_PREVIEW_7dc4cefd}";
+		if (m_bPersonal) centerTitle = "{AICF:AICF_UI_On_soldier_193813db}";
+		Label(0.25, 0.177, 0.502, 0.215, centerTitle, 18);
 		m_wPreview = RenderTargetWidget.Cast(GetGame().GetWorkspace().CreateWidget(WidgetType.RenderTargetWidgetTypeID,
 			WidgetFlags.VISIBLE | WidgetFlags.BLEND, Color.White, 0, m_wPanel));
 		if (!m_wPreview) return false;
 		Place(m_wPreview, 0.25, 0.22, 0.502, 0.455);
+		if (m_bPersonal) Place(m_wPreview, 0.025, 0.22, 0.225, 0.79);
 		m_wPreview.SetFlags(WidgetFlags.VISIBLE | WidgetFlags.BLEND);
 		m_wPreview.SetMaxFPS(30);
 		m_wPreview.SetResolutionScale(1, 1);
 		m_wPreview.SetClearColor(true, Color.BLACK);
 		m_wPreview.SetVisible(false);
 		m_wPreview.AddHandler(this);
-		Label(0.25, 0.458, 0.502, 0.49, "{AICF:AICF_UI_InspectorPreviewHint}", 14);
+		TextWidget previewHint = Label(0.25, 0.458, 0.502, 0.49, "{AICF:AICF_UI_InspectorPreviewHint}", 14);
+		if (m_bPersonal) Place(previewHint, 0.025, 0.80, 0.225, 0.85);
 		Button("back", "{AICF:AICF_UI_Back_b1e3ce09}", 0.25, 0.50, 0.315, 0.548);
 		m_wLocation = Label(0.325, 0.50, 0.392, 0.548, "{AICF:AICF_UI_On_soldier_193813db}", 16);
 		m_wLocation.SetTextWrapping(true);
@@ -352,7 +361,21 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		Button("addMagazine", "{AICF:AICF_UI_Magazine_1efa5341}", 0.402, 0.55, 0.502, 0.59);
 		m_Slots = new AICF_LoadoutItemGrid();
 		m_Items = new AICF_LoadoutItemGrid();
-		if (!m_Slots.Create(m_Controller, m_wPanel, 0.25, 0.595, 0.502, 0.79, 1, 4) ||
+		float slotsTop = 0.595;
+		int slotRows = 4;
+		if (m_bPersonal)
+		{
+			slotsTop = 0.32;
+			slotRows = 8;
+			Place(m_wLocation, 0.325, 0.22, 0.392, 0.268);
+			foreach (Widget frame : m_aButtonFrames)
+			{
+				if (frame.GetName() == "back") Place(frame, 0.25, 0.22, 0.315, 0.268);
+				else if (frame.GetName() == "contents") Place(frame, 0.402, 0.22, 0.502, 0.268);
+				else if (frame.GetName() == "addMagazine") Place(frame, 0.402, 0.27, 0.502, 0.31);
+			}
+		}
+		if (!m_Slots.Create(m_Controller, m_wPanel, 0.25, slotsTop, 0.502, 0.79, 1, slotRows) ||
 			!m_Items.Create(m_Controller, m_wPanel, 0.532, 0.35, 0.975, 0.735, 3, 3)) return false;
 		m_Slots.m_OnSelected.Insert(OnCardSelected);
 		m_Slots.m_OnActivated.Insert(OnSlotActivated);
@@ -405,6 +428,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_wModal.SetZOrder(100);
 		Widget panel = m_Controller.CreateRect(m_wModal, 0.22, 0.23, 0.78, 0.73, Color.FromSRGBA(20, 33, 42, 255), true);
 		if (!panel) return false;
+		m_wModalPanel = panel;
 		panel.SetZOrder(5);
 		m_wModalTitle = Label(0.04, 0.035, 0.96, 0.16, "", 24, panel);
 		m_wModalHelp = Label(0.04, 0.18, 0.96, 0.39, "", 18, panel);
@@ -414,9 +438,17 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_wSquadSaveSection = ModalSection(panel);
 		m_wConfirmSection = ModalSection(panel);
 		if (!m_wLibrarySection || !m_wMemberSaveSection || !m_wSquadSaveSection || !m_wConfirmSection) return false;
-		m_Library = Combo(0, 0, 1, 0.35, m_wLibrarySection);
-		Button("load", "{AICF:AICF_UI_Load_8e2c5587}", 0, 0.55, 0.52, 0.94, m_wLibrarySection);
-		Button("deletePreset", "{AICF:AICF_UI_PresetDelete}", 0.55, 0.55, 1, 0.94, m_wLibrarySection);
+		Place(m_wLibrarySection, 0.04, 0.22, 0.96, 0.84);
+		m_Library = Combo(0, 0, 0.70, 0.10, m_wLibrarySection);
+		m_LibraryMember = Combo(0.73, 0, 1, 0.10, m_wLibrarySection);
+		if (!m_LibraryMember) return false;
+		for (int member; member < AICF_Stage1Config.MAX_GROUP_SIZE; member++)
+			m_LibraryMember.AddItem(AICF_Localization.Resolve("{AICF:AICF_UI_position_0f329d22}") + (member + 1).ToString());
+		m_LibraryMember.SetCurrentItem(0, false, false, false);
+		m_LibraryView = new AICF_LoadoutLibraryView();
+		if (!m_LibraryView.Create(m_Controller, m_wLibrarySection)) return false;
+		Button("load", "{AICF:AICF_UI_Load_8e2c5587}", 0.43, 0.89, 0.70, 1, m_wLibrarySection);
+		Button("deletePreset", "{AICF:AICF_UI_PresetDelete}", 0.73, 0.89, 1, 1, m_wLibrarySection);
 		m_wName = Edit(0, 0, 1, 0.35, "{AICF:AICF_UI_Loadout_name_up_to_80_characters_45993fd3}", m_wMemberSaveSection);
 		m_wSquadName = Edit(0, 0, 1, 0.35, "{AICF:AICF_UI_PresetSquadName}", m_wSquadSaveSection);
 		if (!m_Library || !m_wName || !m_wSquadName) return false;
@@ -568,11 +600,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (!m_wRecipient) return;
 		if (m_bPersonal)
 		{
-			AICF_LoadoutRecipe active = AICF_LoadoutRecipe.Decode(m_sAppliedData);
-			string personalName = "{AICF:AICF_UI_InspectorDefaultKit}";
-			if (active) personalName = active.m_sName;
-			m_aRoleKits[0].SetText(AICF_Localization.Resolve(personalName));
 			string personalRecipient = m_sTargetFaction + " · {AICF:AICF_UI_PersonalName}";
+			if (m_Recipe) personalRecipient += " · " + m_Recipe.m_sName;
 			if (HasDraftChanges()) personalRecipient += " · {AICF:AICF_UI_InspectorDraft}";
 			m_wRecipient.SetText(AICF_Localization.Resolve(personalRecipient));
 			return;
@@ -596,6 +625,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 
 	protected void HideModal()
 	{
+		GetGame().GetCallqueue().Remove(SendInspection);
 		int previousModal = m_iModal;
 		if (previousModal != 0)
 		{
@@ -603,6 +633,10 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		}
 		if (m_iModal != 0 && m_wModal) GetGame().GetWorkspace().RemoveModal(m_wModal);
 		if (m_wModal) m_wModal.SetVisible(false);
+		if (m_LibraryView) m_LibraryView.Clear();
+		m_iInspectId = -1;
+		m_wHoveredButton = null;
+		m_wPressedButton = null;
 		m_iModal = 0;
 		m_sConfirmPayload = string.Empty;
 		if (previousModal != 0)
@@ -623,6 +657,20 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		foreach (SCR_ComboBoxComponent combo : m_aCombos) combo.CloseList();
 		bool alreadyModal = m_iModal != 0;
 		m_iModal = kind;
+		if (kind == 1)
+		{
+			Place(m_wModalPanel, 0.08, 0.06, 0.92, 0.94);
+			Place(m_wModalTitle, 0.04, 0.025, 0.96, 0.09);
+			Place(m_wModalHelp, 0.04, 0.10, 0.96, 0.20);
+		}
+		else
+		{
+			if (m_LibraryView) m_LibraryView.Clear();
+			m_iInspectId = -1;
+			Place(m_wModalPanel, 0.22, 0.23, 0.78, 0.73);
+			Place(m_wModalTitle, 0.04, 0.035, 0.96, 0.16);
+			Place(m_wModalHelp, 0.04, 0.18, 0.96, 0.39);
+		}
 		m_wModalTitle.SetText(AICF_Localization.Resolve(title));
 		m_wModalHelp.SetText(AICF_Localization.Resolve(help));
 		m_wLibrarySection.SetVisible(kind == 1);
@@ -644,6 +692,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		}
 		if (!alreadyModal) GetGame().GetWorkspace().AddModal(m_wModal, focus);
 		else if (focus) GetGame().GetWorkspace().SetFocusedWidget(focus);
+		if (kind == 1) InspectLibrary();
 	}
 
 	protected void ConfirmOperation(int operation, string payload, string help)
@@ -753,7 +802,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	{
 		m_Controller.SetRectColor(m_wRoot, Color.FromSRGBA(0, 0, 0, 185));
 		m_Controller.SetRectColor(m_wPanel, Color.FromSRGBA(9, 19, 28, 255));
-		foreach (Widget frame : m_aButtonFrames)
+		foreach (int buttonIndex, Widget frame : m_aButtonFrames)
 		{
 			Color color = Color.FromSRGBA(34, 49, 59, 255);
 			Color textColor = Color.FromSRGBA(230, 237, 242, 255);
@@ -771,6 +820,20 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 				color = Color.FromSRGBA(50, 104, 132, 255);
 			else if (frame.GetName() == "member_" + m_iMember.ToString())
 				color = Color.FromSRGBA(50, 74, 85, 255);
+			Widget input = m_aButtons[buttonIndex];
+			if (frame.IsEnabledInHierarchy() && input && input.IsEnabledInHierarchy())
+			{
+				if (input == m_wPressedButton)
+				{
+					color = Color.FromSRGBA(35, 70, 92, 255);
+					textColor = Color.FromSRGBA(230, 237, 242, 255);
+				}
+				else if (input == m_wHoveredButton)
+				{
+					color = Color.FromSRGBA(55, 88, 105, 255);
+					textColor = Color.FromSRGBA(230, 237, 242, 255);
+				}
+			}
 			m_Controller.SetRectColor(frame, color);
 			TextWidget caption = TextWidget.Cast(frame.FindAnyWidget("Caption"));
 			if (caption)
@@ -786,6 +849,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	{
 		if (!m_Player || m_bPending)
 			return;
+		GetGame().GetCallqueue().Remove(SendInspection);
 		// Даже при отказе RPC выдача должна соответствовать введённому тексту.
 		if (m_bSearchPending && m_bDraftReady)
 			Items();
@@ -892,7 +956,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		SetButtonState("addMagazine", ready && magazineAction);
 		float capacityRight = 0.502;
 		if (magazineAction) capacityRight = 0.392;
-		Place(m_wCapacity, 0.25, 0.55, capacityRight, 0.59);
+		if (m_bPersonal) Place(m_wCapacity, 0.25, 0.27, capacityRight, 0.31);
+		else Place(m_wCapacity, 0.25, 0.55, capacityRight, 0.59);
 		bool nested = !m_sViewPath.IsEmpty();
 		ShowButton("contents", m_bCanShowContents);
 		string viewCaption = "{AICF:AICF_UI_LoadoutContents}";
@@ -970,6 +1035,12 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		{
 			m_bPending = false;
 			string status = m_Player.AICF_LoadoutStatus();
+			if (m_iOperation == 8)
+			{
+				ReceiveInspection(status);
+				SetBusy();
+				return;
+			}
 			bool libraryOnly = !m_bPersonal && (m_iOperation == 3 || m_iOperation == 4 || m_iOperation == 6);
 			if (m_bPersonal) libraryOnly = m_iOperation == 5 || m_iOperation == 7;
 			Library();
@@ -1013,16 +1084,22 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		else if (m_bPending && System.GetTickCount(m_iRequestAt) > 15000)
 		{
 			m_bPending = false;
+			if (m_iOperation == 8 && m_iModal == 1) m_LibraryView.Message("{AICF:AICF_UI_No_response_received_Reopen_the_form_to_ch_ddc43d41}");
 			m_wStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_No_response_received_Reopen_the_form_to_ch_ddc43d41}"));
 		}
 		if (!m_bPending && m_Recipe && m_Player.AICF_LoadoutRevision() != m_iRevision)
 			m_wStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_Another_player_changed_the_loadout_Reopen__22836f72}"));
-		if (!m_bPending && m_sLibraryData != m_Player.AICF_LoadoutLibrary()) Library();
+		if (!m_bPending && m_sLibraryData != m_Player.AICF_LoadoutLibrary())
+		{
+			Library();
+			if (m_iModal == 1) InspectLibrary();
+		}
 		SetBusy();
 	}
 
 	protected string Status(string code)
 	{
+		if (code == "TEMPLATE_INSPECTED") return "{AICF:AICF_UI_LibraryPreviewReady}";
 		if (m_bPersonal && code == "TEMPLATE_SAVED_SESSION") return "{AICF:AICF_UI_PersonalLibrarySession}";
 		if (m_bPersonal && code == "SAVED") return "{AICF:AICF_UI_PersonalSaved}";
 		if (m_bPersonal && code == "SAVED_SESSION") return "{AICF:AICF_UI_PersonalSavedSession}";
@@ -1087,6 +1164,73 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_Library.SetCurrentItem(Math.Max(0, m_aTemplateIds.Find(selected)), false, false, false);
 		m_bRendering = false;
 		InspectorRows();
+	}
+
+	protected void InspectLibrary()
+	{
+		if (!m_LibraryView || m_iModal != 1 || m_bPending) return;
+		GetGame().GetCallqueue().Remove(SendInspection);
+		int index = m_Library.GetCurrentIndex();
+		bool hasPreset = index >= 0 && index < m_aTemplateIds.Count();
+		bool squad = hasPreset && !m_bPersonal && m_aTemplateKinds[index] == "squad";
+		m_LibraryMember.GetRootWidget().SetVisible(squad);
+		if (!hasPreset)
+		{
+			m_iInspectId = -1;
+			m_LibraryView.Message("{AICF:AICF_UI_LibrarySelectPreview}");
+			return;
+		}
+		m_iInspectId = m_aTemplateIds[index];
+		m_iInspectMember = m_iMember;
+		if (squad) m_iInspectMember = m_LibraryMember.GetCurrentIndex();
+		m_iInspectLibraryRevision = m_iLibraryRevision;
+		m_iInspectRetries = 0;
+		m_LibraryView.Message("{AICF:AICF_UI_Waiting_for_server_response_ded60968}");
+		// Общий server cooldown сохранён. Быстрый выбор заменяет ожидающий
+		// запрос, не показывает RATE_LIMITED вместо выбранного комплекта.
+		int delay = Math.Max(1, 1000 - System.GetTickCount(m_iRequestAt));
+		GetGame().GetCallqueue().CallLater(SendInspection, delay, false);
+	}
+
+	protected void SendInspection()
+	{
+		if (!m_Player || m_iModal != 1 || m_bPending || m_iInspectLibraryRevision != m_iLibraryRevision) return;
+		int index = m_Library.GetCurrentIndex();
+		if (index < 0 || index >= m_aTemplateIds.Count() || m_aTemplateIds[index] != m_iInspectId) return;
+		if (!m_bPersonal && m_aTemplateKinds[index] == "squad" && m_LibraryMember.GetCurrentIndex() != m_iInspectMember) return;
+		string payload = m_iInspectId.ToString();
+		if (!m_bPersonal) payload += ":" + m_iInspectMember.ToString();
+		Request(8, payload);
+	}
+
+	protected void ReceiveInspection(string status)
+	{
+		if (m_iModal != 1 || !m_LibraryView) return;
+		if (status == "RATE_LIMITED" && m_iInspectRetries < 1)
+		{
+			m_iInspectRetries++;
+			GetGame().GetCallqueue().Remove(SendInspection);
+			GetGame().GetCallqueue().CallLater(SendInspection, 1000, false);
+			return;
+		}
+		int index = m_Library.GetCurrentIndex();
+		if (index < 0 || index >= m_aTemplateIds.Count() || m_aTemplateIds[index] != m_iInspectId) return;
+		int revision = -1;
+		JsonLoadContext snapshot = new JsonLoadContext();
+		if (!snapshot.LoadFromString(m_Player.AICF_LoadoutLibrary()) || !snapshot.ReadValue("revision", revision) ||
+			revision != m_iInspectLibraryRevision || m_Player.AICF_LoadoutRevision() != m_iRevision)
+		{
+			m_LibraryView.Message(Status("LIBRARY_CONFLICT"));
+			return;
+		}
+		if (!m_Player.AICF_LoadoutAccepted()) m_LibraryView.Message(Status(status));
+		else
+		{
+			AICF_LoadoutRecipe recipe = AICF_LoadoutRecipe.Decode(m_Player.AICF_LoadoutData());
+			if (m_bPersonal) m_Catalog.SetPersonalRules(m_Player.AICF_LoadoutLibrary());
+			m_LibraryView.Show(recipe, m_Catalog);
+		}
+		m_wStatus.SetText(AICF_Localization.Resolve(Status(status)));
 	}
 
 	protected bool Rebuild()
@@ -1557,6 +1701,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			SelectTarget(m_iSlotId, index);
 		else if (component == m_ContentCategory && !m_bPending && HasCategoryFilter())
 			Items();
+		else if ((component == m_Library || component == m_LibraryMember) && !m_bPending && m_iModal == 1)
+			InspectLibrary();
 	}
 
 	override bool OnClick(Widget w, int x, int y, int button)
@@ -1860,8 +2006,24 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		RefreshColors();
 	}
 
+	override bool OnMouseEnter(Widget w, int x, int y)
+	{
+		if (m_aButtons.Contains(w) && w.IsEnabledInHierarchy())
+		{
+			m_wHoveredButton = w;
+			RefreshColors();
+		}
+		return false;
+	}
+
 	override bool OnMouseButtonDown(Widget w, int x, int y, int button)
 	{
+		if (button == SCR_EMouseButtons.LEFT && m_aButtons.Contains(w) && w.IsEnabledInHierarchy())
+		{
+			m_wPressedButton = w;
+			RefreshColors();
+			return false;
+		}
 		if (w != m_wPreview || (button != SCR_EMouseButtons.LEFT && button != SCR_EMouseButtons.MIDDLE))
 			return false;
 		m_bRotating = button == SCR_EMouseButtons.LEFT;
@@ -1876,6 +2038,11 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	override bool OnMouseButtonUp(Widget w, int x, int y, int button)
 	{
 		if (button == SCR_EMouseButtons.LEFT)
+		{
+			m_wPressedButton = null;
+			RefreshColors();
+		}
+		if (button == SCR_EMouseButtons.LEFT)
 			m_bRotating = false;
 		if (button == SCR_EMouseButtons.MIDDLE)
 			m_bPanning = false;
@@ -1886,6 +2053,12 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 
 	override bool OnMouseLeave(Widget w, Widget enterW, int x, int y)
 	{
+		if (m_wHoveredButton == w || m_wPressedButton == w)
+		{
+			m_wHoveredButton = null;
+			m_wPressedButton = null;
+			RefreshColors();
+		}
 		if (w != m_wPreview)
 			return false;
 		m_bRotating = false;
@@ -1966,10 +2139,14 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		}
 		m_Slots = null;
 		m_Items = null;
+		if (m_LibraryView) m_LibraryView.Close();
 		if (m_wRoot)
 			m_wRoot.RemoveFromHierarchy();
 		m_wRoot = null;
 		m_wPreview = null;
+		m_LibraryView = null;
+		m_LibraryMember = null;
+		m_wModalPanel = null;
 		if (m_Preview)
 			m_Preview.Clear();
 		m_Preview = null;

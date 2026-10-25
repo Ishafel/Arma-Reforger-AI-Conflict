@@ -1,5 +1,67 @@
 # Проверки и baseline
 
+## Предпросмотр библиотеки и неполные комплекты #66 — 2026-10-25
+
+Продолжение `codex/issue-66-loadout-qol`, исходный чистый `5b6d8ed`.
+Убран лишний personal active/help, preview перенесён в крупный левый блок;
+слоты personal показывают8 строк. Validate допускает отсутствие оружия и
+магазинов. LibraryView/Summary строят независимые model/inventory world,
+operation8 только читает member/squad (все10 позиций), не меняя draft/binding.
+SendInspection учитывает cooldown, selection/revision/modal и cleanup.
+Кнопки и карточки имеют hover/pressed/disabled состояния.
+
+Evidence: `.codex-runtime/issue66-library-preview-20261025/REPORT.md`.
+Baseline:3 аудита PASS; filesystem audit сначала denied на temporary junction,
+тот же audit с native доступом PASS. Code baseline failures не обнаружены.
+Полный `after-all-clean/` — **91/91 PASS/0**, без исключений; alias X: снят.
+QoL contracts теперь **58 mutations**, personal70, filesystem19 cases.
+После полного набора изменены только RGB pressed/foreground (читаемость):
+`after-contrast/` **4/4 PASS/0**, production Stock/WCS terminal compile **2/2 PASS/0**.
+Расчёт opaque sRGB contrast: caption8.45:1, detail5.38:1, hover caption6.43:1;
+это не визуальная проверка интерфейса или сертификат соответствия стандартам.
+
+Финальные `stock-pass`/`wcs-pass` — каждый **175 server /237 client checks**,
+failures0, native exits0/0; exact CLI/manifests, readiness и полные stopped logs.
+Сохранены прежние28 AI/16 personal owner RPC; ещё31 owner RPC проверяет
+неполные комплекты, inspect всех10 позиций, stale/missing denials. Новые
+проверки:12 server inventory/Validate,78 client protocol/hidden metadata.
+Library oracle:4 positive /12 rejected missing/failed/duplicate controls.
+Fresh-profile `stock-reload`/`wcs-reload` — по **8/8 PASS/0**.
+
+После protocol обнаружена рассинхронизация `.st` и runtime language conf.
+`Build-AICFLocalization.ps1` обновил en_us/ru_ru до657 entries; отдельный audit
+PASS. Native `locale-stock`/`locale-wcs` — по **21/21 PASS/0**, включая6 checks
+трёх новых keys в EN/RU. Это отдельный gate после обновления assets; production
+логика не менялась. Язык меняется/восстанавливается только в isolated fixture.
+Protocol/locale stage compiles, production после language sync и production
+после RGB — все PASS, validation successful, SCRIPT E/F/ENGINE F/VM/null0.
+Последние RGB проверены compile/audits/расчётом, physical feedback NOT RUN.
+
+Промежуточные FAIL сохранены: fixture constructor/Color типы; native startup
+до успешной fixture compile; OutOfMemory при одновременных offline/runtime;
+выход client из pre-spawn context и затем из тестового сценария;750ms fixture
+cooldown/RATE_LIMITED и special personal slot; stale runtime translation table.
+Первый полный набор прерван14/91 (3 failures/interrupt); следующий46/91 с1
+localization FAIL прерван после обнаружения причины. Финальный полный повтор
+91/91. Pre-spawn guard применяется только в fixture, production не ослаблен.
+
+287 addon files совпадали со stage при каждом Prepare; после protocol отдельно
+обновлены2 runtime language conf и проверены native localization. Старые
+preset schemas/storage не менялись, пользовательские библиотеки не редактировались.
+Убраны15 тестовых profiles,5 библиотек (после архивации), оба stage rounds;
+своих тестовых процессов нет. Native errors:31 прежний /8 финальных stopped logs,
+164 baseline /155 current unique identities, новых нет. Строгая чистота всех
+native Error остаётся **FAIL**, ресурсные/shutdown diagnostics не исправлялись.
+
+Физические hover/click/focus, крупность/clipping RU/EN, controller navigation —
+**NOT RUN**, отклонены отдельно: terminal-only AGENTS запрещает GUI automation.
+Hidden probes не вызывают ShowModal/AddModal или mouse callbacks. Игроку:
+открыть оба editor, выбрать Library presets и squad positions, пролистать вещи,
+проверить preview/подсветку, Save/Load/Apply без weapons/magazines. Фактическое
+появление с неполным комплектом, backend-auth identity, JIP, Workshop package и
+длительный бой NOT RUN. Disk/restart проверены storage fixtures; owner RPC —
+session fallback. ACCEPTED/ready PR/push/merge/release не заявляются.
+
 ## Личный Inspector и приватная библиотека #66 — 2026-10-25
 
 Продолжение `codex/issue-66-loadout-qol`, baseline `ca04646`, дерево чистое.

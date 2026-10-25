@@ -60,7 +60,9 @@ class AICF_LoadoutPreview
 		m_vTarget = vector.Zero;
 		m_fPanLimit = Math.Max(0.25, (maxs[1] - mins[1]) * 0.5);
 		m_fPanY = Math.Clamp(m_fPanY, -m_fPanLimit, m_fPanLimit);
-		m_fDistance = Math.Max(2.5, vector.Distance(mins, maxs) * 1.4);
+		// Высота бойца занимает 90% viewport при исходном FOV. Диагональ
+		// bounds с длинным оружием прежде отодвигала камеру непропорционально.
+		m_fDistance = Math.Max(1.2, (maxs[1] - mins[1]) / (2 * Math.Tan(45 * Math.DEG2RAD * 0.5) * 0.90));
 		UpdateCamera();
 		return IsReady();
 	}

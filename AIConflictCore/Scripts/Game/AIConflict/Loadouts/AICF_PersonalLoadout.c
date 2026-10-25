@@ -64,7 +64,7 @@ class AICF_PersonalLoadout
 		if (operation == 1 || operation == 3 || operation == 5) candidate = AICF_LoadoutRecipe.Decode(payload);
 		AICF_PersonalPresetLibrary library = AICF_PersonalPresetLibrary.ForPlayer(player, context);
 		AICF_LoadoutRecipe draft;
-		if (operation >= 5 && operation <= 7)
+		if (operation >= 5 && operation <= 8)
 		{
 			reason = "REVISION_CONFLICT";
 			if (library && revision == storedRevision && libraryRevision == library.GetRevision())
@@ -76,7 +76,7 @@ class AICF_PersonalLoadout
 					if (accepted) reason = "TEMPLATE_SAVED";
 					if (accepted && path.IsEmpty()) reason = "TEMPLATE_SAVED_SESSION";
 				}
-				else if (operation == 6 || operation == 7)
+				else if (operation == 6 || operation == 7 || operation == 8)
 				{
 					reason = "TEMPLATE_UNAVAILABLE";
 					AICF_LoadoutRecipe saved = library.Get(payload.ToInt(-1));
@@ -92,6 +92,7 @@ class AICF_PersonalLoadout
 							draft = saved;
 							accepted = true;
 							reason = "TEMPLATE_LOADED";
+							if (operation == 8) reason = "TEMPLATE_INSPECTED";
 						}
 					}
 				}

@@ -61,7 +61,9 @@ class AICF_InspectorProbeEditor : AICF_LoadoutEditor
 		AICF_QolChecks.Check(prefix + "HIDDEN_TREE", !m_wRoot.IsVisibleInHierarchy());
 		vector left = FrameSlot.GetAnchorMin(m_wPreview);
 		vector right = FrameSlot.GetAnchorMax(m_wPreview);
-		AICF_QolChecks.Check(prefix + "WIDTH_70_PERCENT", Math.AbsFloat((right[0] - left[0]) / 0.36 - 0.70) < 0.001);
+		if (personal)
+			AICF_QolChecks.Check(prefix + "LARGE_LEFT_PREVIEW", Math.AbsFloat(left[0] - 0.025) < 0.001 && Math.AbsFloat(right[1] - left[1] - 0.57) < 0.001);
+		else AICF_QolChecks.Check(prefix + "WIDTH_70_PERCENT", Math.AbsFloat((right[0] - left[0]) / 0.36 - 0.70) < 0.001);
 		array<Widget> sections = {m_wLibrarySection, m_wMemberSaveSection, m_wSquadSaveSection, m_wConfirmSection};
 		for (int i; i < sections.Count(); i++)
 		{
@@ -74,7 +76,7 @@ class AICF_InspectorProbeEditor : AICF_LoadoutEditor
 			AICF_QolChecks.Check(prefix + "SIDE_HIDDEN", !m_Side.GetRootWidget().IsVisible());
 			AICF_QolChecks.Check(prefix + "GROUP_HIDDEN", !m_Group.GetRootWidget().IsVisible());
 			AICF_QolChecks.Check(prefix + "COST_VISIBLE", m_wCost.IsVisible());
-			AICF_QolChecks.Check(prefix + "SINGLE_RECIPIENT", m_aRoleKits.Count() == 1);
+			AICF_QolChecks.Check(prefix + "NO_REDUNDANT_RECIPIENT", m_aRoleKits.IsEmpty());
 		}
 		else
 		{

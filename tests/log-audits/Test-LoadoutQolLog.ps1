@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory=$true)][string]$LauncherPath,
     [Parameter(Mandatory=$true)][string]$NativeExitPath,
     [switch]$Client,
-    [switch]$Files
+	[switch]$Files,
+	[switch]$LibraryPreview
 )
 $ErrorActionPreference='Stop'
 $failures=[Collections.Generic.List[string]]::new()
@@ -31,7 +32,9 @@ if ($Client -and $launcher -notmatch '\[SERVER_READY\] process_id=\d+ port=2001 
 $checks=@([regex]::Matches($log,'\[QOL_CHECK\] rule=(\w+) passed=([01])'))
 $failed=@($checks | Where-Object { $_.Groups[2].Value -eq '0' })
 if ($failed.Count) { $failures.Add("FAILED_CASES=$($failed.Count)") }
-if ($Files -and -not $Client -and @($checks | Where-Object { $_.Groups[1].Value.StartsWith('FILE_IMAGE_UNCHANGED_') }).Count -ne 10) { $failures.Add('FILE_IMAGE_COVERAGE') }
+$applyCount=10
+if($LibraryPreview){$applyCount=12}
+if ($Files -and -not $Client -and @($checks | Where-Object { $_.Groups[1].Value.StartsWith('FILE_IMAGE_UNCHANGED_') }).Count -ne $applyCount) { $failures.Add('FILE_IMAGE_COVERAGE') }
 $done=[regex]::Matches($log,('\[QOL_'+$peer.ToUpper()+'_DONE\] failures=(\d+)'))
 if ($done.Count -ne 1 -or $done[0].Groups[1].Value -ne '0') { $failures.Add('DONE') }
 $required=@()
@@ -46,7 +49,7 @@ if ($Client) {
         if ($log -notmatch ('\[QOL_RPC\] step='+$step+' accepted=0 reason='+$negative[$step]+' ')) { $failures.Add("NEGATIVE_$step") }
     }
 } else {
-    if (@($checks | Where-Object { $_.Groups[1].Value.StartsWith('APPLY_NO_LIBRARY_WRITE_') }).Count -ne 10) { $failures.Add('APPLY_WRITE_COVERAGE') }
+    if (@($checks | Where-Object { $_.Groups[1].Value.StartsWith('APPLY_NO_LIBRARY_WRITE_') }).Count -ne $applyCount) { $failures.Add('APPLY_WRITE_COVERAGE') }
     foreach ($side in @('US','USSR')) {
         foreach ($rule in @('STORAGE_CHANGED','STORAGE_VALIDATED','LEGACY_WRITE','LEGACY_READ','UPSERT','DEDUPE','RELOAD','PARTIAL_WRITE_PRESERVES','DELETE','NO_LEGACY_REVIVAL','BATCH_STALE_ATOMIC','BATCH_INVALID_ATOMIC','BATCH_COMMIT','BINDING_INDEPENDENCE')) { $required += "${rule}_$side" }
     }
