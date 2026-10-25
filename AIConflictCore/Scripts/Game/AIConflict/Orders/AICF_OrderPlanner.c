@@ -130,6 +130,45 @@ class AICF_OrderPlanner
 		builder.m_Waypoint = null;
 	}
 
+	// Отдельный auxiliary roster возвращает существующего бойца, без spawn.
+	bool SetReturnWaypoint(AICF_ReturningSoldier returning)
+	{
+		if (!Replication.IsServer() || !returning || !returning.m_Group ||
+			returning.m_Group.GetID() != returning.m_GroupId || !returning.m_Base || !returning.m_Base.GetSpawnPoint()) return false;
+		AIPathfindingComponent pathfinding = AIPathfindingComponent.Cast(returning.m_Group.FindComponent(AIPathfindingComponent));
+		if (!pathfinding || !pathfinding.GetNavmeshComponent()) return false;
+		vector position = returning.m_Base.GetSpawnPoint().GetOrigin();
+		pathfinding.GetNavmeshComponent().LoadTileIn(position);
+		vector endpoint;
+		if (!pathfinding.GetClosestPositionOnNavmesh(position, "15 5 15", endpoint) || vector.DistanceSqXZ(endpoint, position) > 225) return false;
+		EntitySpawnParams params = new EntitySpawnParams();
+		params.TransformMode = ETransformMode.WORLD;
+		params.Transform[3] = endpoint;
+		IEntity entity = GetGame().SpawnEntityPrefabEx(ATTACK_OPERATIONAL_WAYPOINT_PREFAB, false, params: params);
+		AIWaypoint waypoint = AIWaypoint.Cast(entity);
+		if (!waypoint)
+		{
+			if (entity) RplComponent.DeleteRplEntity(entity, false);
+			return false;
+		}
+		waypoint.SetCompletionRadius(5);
+		waypoint.SetCompletionType(EAIWaypointCompletionType.All);
+		ClearReturnWaypoint(returning);
+		returning.m_Waypoint = waypoint;
+		returning.m_Group.AddWaypoint(waypoint);
+		returning.m_iLastOrder = System.GetTickCount();
+		return true;
+	}
+
+	void ClearReturnWaypoint(AICF_ReturningSoldier returning)
+	{
+		if (!Replication.IsServer() || !returning || !returning.m_Waypoint || !returning.m_Group ||
+			returning.m_Group.GetID() != returning.m_GroupId) return;
+		returning.m_Group.RemoveWaypoint(returning.m_Waypoint);
+		RplComponent.DeleteRplEntity(returning.m_Waypoint, false);
+		returning.m_Waypoint = null;
+	}
+
 	bool AssignOrder(
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction,

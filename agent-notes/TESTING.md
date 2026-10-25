@@ -1,5 +1,66 @@
 # Проверки и baseline
 
+## Preview, commander slider и подтверждённое сокращение crew: #78 — 2026-10-25
+
+Продолжение `codex/issue-78-vehicle-presets` от clean `ba2d0e9`.
+Пользователь явно изменил прежний запрет сокращения: после подтверждения оставить
+только назначенных в машину бойцов, остальных вернуть к ближайшей безопасной
+союзной точке и despawn. Контракт — [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
+
+Evidence: `.codex-runtime/issue78-editor/REPORT.md`, manifests/exits в корне
+evidence, полные native logs и SHA256 — `evidence/runtime/` и
+`evidence/runtime-hashes.json`. `Compile.ps1` берёт graph из canonical Client
+DryRun, `Run.ps1` вызывает только `tools/Start-AICFRuntime.ps1`, port2478.
+
+- Свежий baseline: **8/8 PASS/0** (VehiclePreset/Log/ClientLog/CatalogLog,
+  AICommanderUI, RecruitmentSequence, SquadCommands, Localization).
+- Окончательный полный offline набор: **96/96 PASS/0**,56 preset guards и32
+  crew log controls. `AllShard.ps1 -Group 0..5` вызывает неизменённый
+  Invoke-AICFChecks по независимым Name subsets, ровно96 разных checks без
+  пропусков. `final-all-0..5/`, `final-summary.json`; финальный SHA256 freeze
+  совпадает. Logistics запускается после завершения предыдущего экземпляра.
+- Финальная production компиляция `final-stock/rhs/wcs`: **3/3 PASS/0**,
+  successful validation, scriptFatal0. Рабочая копия `workspace-final` также
+  **PASS/0**, resource database подготовлена для клиента.
+- `crew-final-replay`: **15 UI +8 server checks PASS**, inventory до/после
+  совпадает, native0/0, stopped2, scriptFatal0. Отдельный roster10, выбран
+  исходный member9; Cancel и неверный challenge не меняют состав, Confirm
+  оставляет того же actor как member0, сохраняет kit/role и отправляет9 AI
+  пешком с40m на safe spawn point.9 разных physical arrivals, ровно1 driver
+  в civilian UAZ и единственный purchase50. Новый strict
+  `Test-VehicleCrewReturnLog.ps1` — **PASS/0**,32 negative/positive controls.
+- `final-ui`: **28 client +5 JIP functional checks PASS**, native0/0/0,
+  оба owner readbacks, все logs остановлены. Strict ClientLog auditor —
+  **FAIL SERVER_FULL_FATAL**, те же8 native persistence serializers при
+  reconnect. Прежний native-only/main reproducer описан ниже; фильтр не ослаблен.
+- Первые compile diagnostics выявили Color вместо packed int в SetClearColor
+  и несовместимый Copy для array<ref binding>; исправлены. Первый crew RPC
+  не допускал новые enum values; исправлен и повторён. Localization сначала
+  имела stale runtime tables; Build-AICFLocalization синхронизировал706 entries.
+- `crew-second` уже проверил13 UI +8 server /9 arrivals /1 driver /purchase50.
+  Следующий `crew-final` прошёл15 UI, kit и все9 returns, но завершился
+  **FAIL TIMEOUT** на прежнем staging approach к площадке, без purchase.
+  Неизменённый replay завершился полностью. Этот FAIL сохранён; успешный replay
+  не доказывает проходимость всех native маршрутов и не скрывает тайм-аут.
+- Предварительный full offline дал **95/96 PASS**, Stage4 обнаружил потерянную
+  видимую подпись MAX10. Подпись восстановлена, Stage4 повторно PASS.
+  Один ранний parallel recheck LogisticsContracts — **FAIL** из-за совпавшей
+  временной source folder двух запусков (20:31:09–20:35:27 и
+  20:34:51–20:35:13). Логи показали чужую отрицательную мутацию; production и
+  анализатор не менялись. Заключительный набор запускается без дублирования
+  checks, логистика отдельно от предыдущего экземпляра; её финальные145 cases PASS.
+
+Cleanup:33 полных log files сверены SHA256;11 test profiles,5 test libraries,
+2 staging directories и6 промежуточных файлов убраны после архивации, subst X
+снят. Пользовательский Frontend/profile и его постоянная библиотека не удалялись.
+
+Строгий all-native resource/font/texture Error gate остаётся **FAIL**; ready PR
+заблокирован, ACCEPTED не объявляется. Visual/input UX, внешний вид preview,
+clipping RU/EN и физический mouse/controller drag — **NOT RUN**: нужен игрок,
+GUI automation/screenshots запрещены. Hidden controls проверяют модель и handlers.
+Длительный бой, заблокированный return path/смена владельца под боем и physical
+matrix всех RHS/WCS моделей — **NOT RUN**; source fences/compile не заменяют их.
+
 ## Категории своей и гражданской техники: продолжение #78 — 2026-10-25
 
 Ветка та же `codex/issue-78-vehicle-presets`, исходный clean `118a5ab`.

@@ -12,9 +12,14 @@ vehicle revision и library revision. Чужая faction в рецепте не 
 полную topology мест и numeric position для каждого места; -1 означает свободное.
 Entity/Rpl IDs не сохраняются. Переназначение освобождает прежнее место бойца.
 Raw дубликаты member/seat, неизвестная topology и неактивные позиции отклоняются.
-Apply требует место каждому живому бойцу, достаточную вместимость для заданного
-desired size и заполненные Pilot/Turret/attached-turret seats. Он не меняет
-desired size, kits или roster и не создаёт отдельный экипаж.
+Apply требует заполненные Pilot/Turret/attached-turret seats. Если назначена лишь
+часть живого состава либо desired size отличается от числа назначенных, server
+публикует отдельное подтверждение сокращения. До подтверждения нет transfer,
+spawn, binding или debit. Cancel сохраняет состав. Подтверждение оставляет только
+назначенных бойцов и устанавливает desired size по их числу; дополнительный crew
+не создаётся. После сокращения обычная полная ValidateRoster/ALL_OR_FALLBACK
+проверяет уже итоговый состав. Read-only partial validation доступна лишь плану
+сокращения, acquisition/boarding её не используют.
 
 `AICF_VehiclePresetCatalog` берёт все enabled ResourceName из native vehicle catalog
 своей стороны и `CIV` текущего content graph. Дополняющий factionless каталог
@@ -67,9 +72,10 @@ Ordinal строится в hierarchy только из entities с compartment 
   точный повтор не пишет файл и не меняет library revision.
 - Load меняет только черновик. Save допускает схему для будущего состава,
   но Apply всегда заново проверяет живой roster. Delete не меняет binding.
-- Apply меняет только отдельный binding stable slot. Совпадающая модель и
+- Apply без сокращения меняет только отдельный binding stable slot. Совпадающая модель и
   рассадка не увеличивают revision и не создают новую заявку/списание.
-- «Автоматика» снимает binding; после cleanup действует обычный unit profile.
+- «Автоматика» снимает binding, сохраняя открытый черновик и несохранённую рассадку;
+  после cleanup действует обычный unit profile.
   Ручной binding имеет приоритет над профилем motorization и сохраняется при
   переименовании роли и замене группы. Новая incarnation проверяется заново.
 
@@ -78,6 +84,45 @@ Launcher import `-LoadoutLibraryPath` пока импортирует тольк
 files; перенос `vehicle_` в новый изолированный profile этим flag не реализован.
 Это ограничение переноса, а не основание считать новые presets сохранёнными
 между произвольными свежими profiles без persistent mount.
+
+## Превью, состав и возврат
+
+`AICF_VehiclePreview` владеет собственной local моделью, камерой и светом в private
+world; native RenderTargetWidget не создаёт машины/crew в кампании. Close очищает
+модель и world. Footer явно разрешает AICF localization перед SetText; native
+EditBox label/placeholder заменены названием пресета. Hover/pressed кнопок формы
+и commander сохраняется при периодической перерисовке. Commander использует
+native SCR_SliderComponent 1..10: число меняется при движении, configuration
+request отправляется на ChangedFinal. Refresh не сбрасывает текущий drag.
+Это прежний desired-size контракт; ограничения автоматического armed profile
+2..4 сохраняются и проверяются сервером.
+
+`AICF_VehicleCrewPlan` — одноразовый owner-bound challenge на 60s: exact encoded
+draft, group ID, spawn generation, assignment/loadout/vehicle revisions, desired
+size и IDs всех живых numeric positions. Любая смена roster/config или новая
+операция отменяет challenge. CONFIRM_CREW/CANCEL_CREW добавлены после прежних
+значений enum; сервер заново проверяет права, каталог, обязательный crew, cap,
+supplies, отсутствие recruitment/equipment/transport операции и занятости людьми.
+
+`AICF_VehicleCrewReturn` владеет auxiliary roster и return polling, OrderPlanner —
+его waypoint. Только после подтверждения подготовляются пустые faction-correct
+controllers без SpawnUnits, по одному на возвращаемого AI. Сначала готовятся все
+маршруты; failure подготовки очищает только пустые controllers. Transfer проверяет
+родительскую группу, при failure выполняется rollback, непустая группа не удаляется.
+Возвращаемые учитываются в MatchController.CountManagedAgents до окончания возврата.
+Ближайшая безопасная owned base выбирается из runtime graph отдельно для каждого
+бойца; tie сохраняет graph order. Смена владельца/угроза отменяет старый маршрут.
+Удаление требует physical distance <=15m от active friendly spawn point, SAFE
+threat, exact group/member identity, authority, отсутствие player possession и
+compartment transitions. Нет timeout deletion или teleport. При блокированном пути
+AI остаётся живым. Stop снимает owned waypoints и LOD pin; не удаляет AI в поле.
+
+GroupSlot компактно перенумеровывает только оставшихся, remaps seats и loadout
+bindings вместе с applied revisions; текущая equipment source role сохраняется
+для того же живого бойца, включая Inspector. Новый recruit получает обычную роль
+своей новой позиции; deployment очищает временную карту ролей. Inventory не пересоздаётся. Spawn generation и assignment
+revision инвалидируют старые callbacks. Stable faction/numeric slot не меняется,
+сохранённые library recipes не переписываются.
 
 ## Lifecycle и экономика
 

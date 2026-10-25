@@ -42,7 +42,7 @@ legacy после пересборки. Команды и границы — [DE
 ## Единый offline запуск
 
 Для issue #78 runner автоматически включает `Test-VehiclePresetContracts.ps1`
-(39 guards), `Test-VehiclePresetLogContracts.ps1` (24 controls),
+(56 guards), `Test-VehiclePresetLogContracts.ps1` (24 controls),
 `Test-VehiclePresetClientLogContracts.ps1` (12 controls) и
 `Test-VehicleCatalogLogContracts.ps1` (13 controls).
 `tests/log-audits/Test-VehiclePresetLog.ps1` принимает `-LogPath`,
@@ -57,6 +57,10 @@ model и CLI. `Test-VehicleCatalogLog.ps1` использует те же три
 завершение. Script errors, в том числе serializers, не фильтруются как baseline.
 `-CatalogFilters` включает28 client/5 JIP oracle и actual CLI проверки фильтров.
 Flags fixtures и порядок stage — в [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
+`Test-VehicleCrewReturnLogContracts.ps1` добавляет32 positive/negative controls.
+`tests/log-audits/Test-VehicleCrewReturnLog.ps1` принимает Server/Client пары
+Log/Launcher/Exit, требует15 UI +8 server checks, неизменный inventory,9 разных
+physical arrivals и один purchase50. Full stopped-log fatal gate не ослаблен.
 
 `Test-FIAProximityContracts.ps1` проверяет scoped native lifecycle, logical
 losses, authority/identity, snapshot/equipment, occupancy, transfer rollback

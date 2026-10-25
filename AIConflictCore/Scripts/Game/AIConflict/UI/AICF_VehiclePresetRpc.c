@@ -29,7 +29,7 @@ modded class SCR_PlayerController
 	{
 		if (!Replication.IsServer() || token <= m_iAICFVehiclePresetToken) return;
 		if (payload.Length() > AICF_VehiclePreset.MAX_BYTES || slot < 0 || slot >= AICF_Stage1Config.GROUP_SLOTS_PER_FACTION ||
-			operation < 0 || operation > AICF_EVehiclePresetOperation.RESET)
+			operation < 0 || operation > AICF_EVehiclePresetOperation.CANCEL_CREW)
 			{ AICF_VehiclePresetResult(token, false, "INVALID_REQUEST", ""); return; }
 		int now = System.GetTickCount();
 		if (now < m_iAICFVehiclePresetRateAt) { AICF_VehiclePresetResult(token, false, "RATE_LIMITED", m_sAICFVehiclePresetView); return; }

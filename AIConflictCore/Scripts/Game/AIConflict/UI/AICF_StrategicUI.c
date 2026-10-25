@@ -20,6 +20,34 @@ class AICF_StrategicUIButtonHandler : ScriptedWidgetEventHandler
 	protected AICF_StrategicUIController m_Controller;
 	protected AICF_EStrategicUIButtonAction m_Action;
 	protected int m_iValue;
+	protected Widget m_Frame;
+	protected int m_iBaseColor;
+	protected bool m_bHovered;
+	protected bool m_bPressed;
+
+	void BindFrame(Widget frame)
+	{
+		m_Frame = frame;
+		ImageWidget background = ImageWidget.Cast(frame.FindAnyWidget("AICF_RectBackground"));
+		if (background) SetBaseColor(background.GetColor());
+	}
+
+	bool Styles(Widget frame) { return frame == m_Frame; }
+	void SetBaseColor(Color color) { m_iBaseColor = color.PackToInt(); Paint(); }
+	protected void Paint()
+	{
+		if (!m_Frame) return;
+		ImageWidget background = ImageWidget.Cast(m_Frame.FindAnyWidget("AICF_RectBackground"));
+		if (!background) return;
+		Color color = Color.FromInt(m_iBaseColor);
+		if (m_bPressed) color = Color.FromSRGBA(30, 58, 78, 255);
+		else if (m_bHovered) color = Color.FromSRGBA(78, 125, 150, 255);
+		background.SetColor(color);
+	}
+	override bool OnMouseEnter(Widget w, int x, int y) { m_bHovered = true; Paint(); return false; }
+	override bool OnMouseLeave(Widget w, Widget enterW, int x, int y) { m_bHovered = false; m_bPressed = false; Paint(); return false; }
+	override bool OnMouseButtonDown(Widget w, int x, int y, int button) { m_bPressed = button == SCR_EMouseButtons.LEFT; Paint(); return false; }
+	override bool OnMouseButtonUp(Widget w, int x, int y, int button) { m_bPressed = false; Paint(); return false; }
 
 	void AICF_StrategicUIButtonHandler(
 		AICF_StrategicUIController controller,
@@ -78,6 +106,10 @@ class AICF_StrategicUIController
 	protected TextWidget m_wTargetTitle;
 	protected TextWidget m_wTargetEmptyState;
 	protected TextWidget m_wSizeValue;
+	protected Widget m_wSizeSlider;
+	protected SCR_SliderComponent m_SizeSlider;
+	protected bool m_bUpdatingSizeSlider;
+	protected bool m_bDraggingSizeSlider;
 	protected Widget m_wMapPointPrompt;
 	protected TextWidget m_wMapPointPromptText;
 	protected Widget m_wMapPointCancel;
@@ -162,6 +194,7 @@ class AICF_StrategicUIController
 				SetCommandOpen(false);
 				break;
 			case AICF_EStrategicUIButtonAction.SELECT_GROUP:
+				m_bDraggingSizeSlider = false;
 				m_iSelectedSlot = Math.ClampInt(
 					value,
 					0,
@@ -521,35 +554,12 @@ class AICF_StrategicUIController
 		}
 
 		CreateText(
-			m_wCommandPanel, 0.515, 0.414, 0.69, 0.449,
+			m_wCommandPanel, 0.515, 0.414, 0.69, 0.438,
 			"{AICF:AICF_UI_NEXT_DEPLOYMENT_SIZE_d8d92314}",
 			14, Color.FromSRGBA(173, 190, 200, 255));
-		Widget sizeDown = CreateRect(
-			m_wCommandPanel,
-			0.705, 0.41, 0.76, 0.461,
-			Color.FromSRGBA(34, 45, 52, 245),
-			true);
-		CreateText(
-			sizeDown, 0, 0, 1, 1,
-			"-", 20, Color.FromSRGBA(235, 241, 245, 255), true);
-		m_aSizeButtons.Insert(sizeDown);
-		AttachHandler(sizeDown, AICF_EStrategicUIButtonAction.ADJUST_SIZE, -1);
-		m_wSizeValue = CreateText(
-			m_wCommandPanel, 0.765, 0.41, 0.825, 0.461,
-			"4", 18, Color.FromSRGBA(239, 187, 104, 255), true);
-		Widget sizeUp = CreateRect(
-			m_wCommandPanel,
-			0.83, 0.41, 0.885, 0.461,
-			Color.FromSRGBA(34, 45, 52, 245),
-			true);
-		CreateText(
-			sizeUp, 0, 0, 1, 1,
-			"+", 20, Color.FromSRGBA(235, 241, 245, 255), true);
-		m_aSizeButtons.Insert(sizeUp);
-		AttachHandler(sizeUp, AICF_EStrategicUIButtonAction.ADJUST_SIZE, 1);
-		CreateText(
-			m_wCommandPanel, 0.895, 0.41, 0.97, 0.461,
-			"{AICF:AICF_UI_MAX_10_43ad606a}", 13, Color.FromSRGBA(132, 149, 159, 255), true);
+		CreateText(m_wCommandPanel, 0.515, 0.441, 0.69, 0.465,
+			"{AICF:AICF_UI_MAX_10_43ad606a}", 11, Color.FromSRGBA(132, 149, 159, 255));
+		CreateSizeSlider();
 
 		m_wTargetTitle = CreateText(
 			m_wCommandPanel, 0.515, 0.475, 0.97, 0.515,
@@ -707,6 +717,7 @@ class AICF_StrategicUIController
 			new AICF_StrategicUIButtonHandler(
 				this,
 				AICF_EStrategicUIButtonAction.SELECT_MAP_POINT);
+		pointHandler.BindFrame(m_wMapPointButton);
 		GetRectInputWidget(m_wMapPointButton).AddHandler(pointHandler);
 		m_aTargetHandlers.Insert(pointHandler);
 		m_aTargetButtons.Insert(m_wMapPointButton);
@@ -739,6 +750,7 @@ class AICF_StrategicUIController
 			int callsign = fields[0].ToInt();
 			AICF_StrategicUIButtonHandler handler = new AICF_StrategicUIButtonHandler(
 				this, AICF_EStrategicUIButtonAction.ISSUE_TARGET, callsign);
+			handler.BindFrame(targetButton);
 			Widget inputWidget = GetRectInputWidget(targetButton);
 			inputWidget.AddHandler(handler);
 			m_aTargetHandlers.Insert(handler);
@@ -1078,10 +1090,46 @@ class AICF_StrategicUIController
 		m_wMapPointCancel = null;
 	}
 
+	protected void CreateSizeSlider()
+	{
+		m_wSizeSlider = GetGame().GetWorkspace().CreateWidgets(
+			"{4A41296C0E9A889F}UI/layouts/WidgetLibrary/WLib_Slider.layout", m_wCommandPanel);
+		if (m_wSizeSlider)
+		{
+			FrameSlot.SetAnchorMin(m_wSizeSlider, 0.70, 0.41);
+			FrameSlot.SetAnchorMax(m_wSizeSlider, 0.91, 0.465);
+			FrameSlot.SetOffsets(m_wSizeSlider, 0, 0, 0, 0);
+			m_SizeSlider = SCR_SliderComponent.Cast(m_wSizeSlider.FindHandler(SCR_SliderComponent));
+			if (m_SizeSlider)
+			{
+				m_SizeSlider.SetLabel("");
+				if (m_SizeSlider.GetLabelWidget()) m_SizeSlider.GetLabelWidget().SetVisible(false);
+				m_SizeSlider.SetSliderSettings(1, 10, 1, "%1");
+				m_SizeSlider.m_OnChanged.Insert(OnSizeChanged);
+				m_SizeSlider.GetOnChangedFinal().Insert(OnSizeFinal);
+			}
+		}
+		m_wSizeValue = CreateText(m_wCommandPanel, 0.92, 0.41, 0.97, 0.461,
+			"4", 18, Color.FromSRGBA(239, 187, 104, 255), true);
+	}
+
+	protected void OnSizeChanged(SCR_SliderComponent component, float value)
+	{
+		if (m_bUpdatingSizeSlider) return;
+		m_bDraggingSizeSlider = true;
+		if (m_wSizeValue) m_wSizeValue.SetText(Math.Round(value).ToString());
+	}
+
+	protected void OnSizeFinal(SCR_SliderComponent component, float value)
+	{
+		m_bDraggingSizeSlider = false;
+		if (!m_bUpdatingSizeSlider) SubmitGroupConfiguration(-1, -1, 0, Math.Round(value));
+	}
+
 	protected void SubmitGroupConfiguration(
 		int requestedRole,
 		int requestedUnitType,
-		int sizeDelta)
+		int sizeDelta, int absoluteSize = -1)
 	{
 		if (!m_Campaign)
 			return;
@@ -1111,6 +1159,7 @@ class AICF_StrategicUIController
 			desiredSize + sizeDelta,
 			AICF_Stage1Config.MIN_GROUP_SIZE,
 			AICF_Stage1Config.MAX_GROUP_SIZE);
+		if (absoluteSize >= 1) desiredSize = Math.ClampInt(absoluteSize, 1, 10);
 		if (requestedRole >= 0)
 			roleCode = requestedRole;
 		if (requestedUnitType >= 0)
@@ -1192,8 +1241,14 @@ class AICF_StrategicUIController
 			else
 				SetRectColor(m_aUnitTypeButtons[typeIndex], Color.FromSRGBA(34, 45, 52, 245));
 		}
-		if (m_wSizeValue)
+		if (m_wSizeValue && !m_bDraggingSizeSlider)
 			m_wSizeValue.SetText(AICF_Localization.Resolve(desiredSize.ToString()));
+		if (m_SizeSlider && !m_bDraggingSizeSlider && m_SizeSlider.GetValue() != desiredSize)
+		{
+			m_bUpdatingSizeSlider = true;
+			m_SizeSlider.SetValue(desiredSize);
+			m_bUpdatingSizeSlider = false;
+		}
 	}
 
 	protected string FormatGroupSummary(string summary)
@@ -1304,6 +1359,11 @@ class AICF_StrategicUIController
 		m_iMapPointPendingIntentRevision = -1;
 		m_iMapPointPendingResultSequence = -1;
 		m_bCommandOpen = false;
+		if (m_SizeSlider)
+		{
+			m_SizeSlider.m_OnChanged.Remove(OnSizeChanged);
+			m_SizeSlider.GetOnChangedFinal().Remove(OnSizeFinal);
+		}
 		if (m_wCommandPanel)
 			m_wCommandPanel.RemoveFromHierarchy();
 		if (m_wCommandScrim)
@@ -1326,6 +1386,9 @@ class AICF_StrategicUIController
 		m_wCommandStatus = null;
 		m_wTargetTitle = null;
 		m_wTargetEmptyState = null;
+		m_SizeSlider = null;
+		m_bDraggingSizeSlider = false;
+		m_wSizeSlider = null;
 		m_wSizeValue = null;
 		m_aGroupButtons.Clear();
 		m_aGroupTexts.Clear();
@@ -1380,6 +1443,7 @@ class AICF_StrategicUIController
 			return;
 		AICF_StrategicUIButtonHandler handler = new AICF_StrategicUIButtonHandler(
 			this, action, value);
+		handler.BindFrame(widget);
 		Widget inputWidget = GetRectInputWidget(widget);
 		inputWidget.AddHandler(handler);
 		m_aHandlers.Insert(handler);
@@ -1476,12 +1540,13 @@ class AICF_StrategicUIController
 
 	void SetRectColor(Widget widget, Color color)
 	{
-		if (!widget)
-			return;
-		ImageWidget background = ImageWidget.Cast(
-			widget.FindAnyWidget(RECT_BACKGROUND_NAME));
-		if (background)
-			background.SetColor(color);
+		if (!widget) return;
+		foreach (AICF_StrategicUIButtonHandler handler : m_aHandlers)
+			if (handler.Styles(widget)) { handler.SetBaseColor(color); return; }
+		foreach (AICF_StrategicUIButtonHandler targetHandler : m_aTargetHandlers)
+			if (targetHandler.Styles(widget)) { targetHandler.SetBaseColor(color); return; }
+		ImageWidget background = ImageWidget.Cast(widget.FindAnyWidget(RECT_BACKGROUND_NAME));
+		if (background) background.SetColor(color);
 	}
 
 	TextWidget CreateText(

@@ -19,6 +19,21 @@ checks, не захватывая focus/input. Последующие client/JIP
 неизменяемый script CRC stage. После matrix удаляй свои stage copies.
 Проверки 2026-10-25 и blockers — в [TESTING.md](TESTING.md).
 
+## Сокращение vehicle crew: продолжение #78
+
+`AICF_VehicleCrewReturnProbe.c` вместе с `AICF_VehiclePresetClientProbe.c` в
+isolated Core, `-aicfVehicleCrewReturnProbe 1 -aicfVehiclePresetClient 1` на обоих
+peers. Отдельный roster10, сохранение только позиции9, настоящий owner RPC,
+Automatic сохраняет несохранённую рассадку, Apply → Cancel → Apply → wrong token
+→ Apply → Confirm. До подтверждения нет сокращения. Hidden native controls
+проверяют preview private world, localization, hover и native slider1..10 без
+focus/input/GUI. Server проверяет exact actor/role remap, неизменный inventory,
+9 managed returns и реальную ходьбу с40m до safe point, затем exact driver в UAZ
+и единственный purchase50. `Test-VehicleCrewReturnLog.ps1` читает оба полных stopped
+logs, native exits и manifests; его отрицательные controls —
+`Test-VehicleCrewReturnLogContracts.ps1`. Этот probe не заменяет visual UX или
+матрицу всех RHS/WCS моделей. При копировании fixtures не оставлять их в production.
+
 ## Пресеты ИИ: issue #66
 
 `AICF_EquipmentIncompleteProbe.c` → isolated Core/UI

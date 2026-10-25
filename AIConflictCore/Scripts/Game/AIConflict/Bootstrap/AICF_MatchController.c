@@ -106,6 +106,7 @@ class AICF_MatchController
 	protected ref AICF_ManagedObservers m_ManagedObservers;
 	protected ref AICF_LoadoutService m_Loadouts;
 	protected ref AICF_VehiclePresetService m_VehiclePresets;
+	protected ref AICF_VehicleCrewReturn m_VehicleCrewReturn;
 	protected ref AICF_FactionState m_USState;
 	protected ref AICF_FactionState m_USSRState;
 
@@ -208,6 +209,7 @@ class AICF_MatchController
 		m_ManagedAILODPolicy = new AICF_ManagedAILODPolicy();
 		m_ReinforcementSystem = new AICF_ReinforcementSystem();
 		m_OrderPlanner = new AICF_OrderPlanner(m_CommandAuthorityPolicy);
+		m_VehicleCrewReturn = new AICF_VehicleCrewReturn(m_ObjectiveGraph, m_OrderPlanner);
 		m_VictorySystem = new AICF_VictorySystem();
 		m_HiddenRecoveryWatchdog = new AICF_VehicleWatchdog();
 		m_VehicleCoordinator = new AICF_VehicleCoordinator(
@@ -1582,6 +1584,7 @@ class AICF_MatchController
 			m_Loadouts.Update();
 		if (m_VehiclePresets)
 			m_VehiclePresets.Update();
+		if (m_VehicleCrewReturn) m_VehicleCrewReturn.Update();
 	}
 
 	protected void ProcessFaction(AICF_FactionState factionState, SCR_CampaignFaction faction)
@@ -7060,7 +7063,9 @@ class AICF_MatchController
 
 	protected int CountManagedAgents()
 	{
-		return CountFactionAgents(m_USState) + CountFactionAgents(m_USSRState);
+		int returning;
+		if (m_VehicleCrewReturn) returning = m_VehicleCrewReturn.CountAgents();
+		return CountFactionAgents(m_USState) + CountFactionAgents(m_USSRState) + returning;
 	}
 
 	protected int CountManagedGroups()
@@ -7116,8 +7121,10 @@ class AICF_MatchController
 		int recruits;
 		if (m_InfantryRecruitment)
 			recruits = m_InfantryRecruitment.CountPendingAgents();
+		int returning;
+		if (m_VehicleCrewReturn) returning = m_VehicleCrewReturn.CountAgents();
 		return CountProjectedFactionAgents(m_USState, pendingSlot) +
-			CountProjectedFactionAgents(m_USSRState, pendingSlot) + recruits;
+			CountProjectedFactionAgents(m_USSRState, pendingSlot) + recruits + returning;
 	}
 
 	protected int CountProjectedFactionAgents(
@@ -7549,6 +7556,11 @@ class AICF_MatchController
 			m_VehiclePresets.Stop();
 			m_VehiclePresets = null;
 		}
+		if (m_VehicleCrewReturn)
+		{
+			m_VehicleCrewReturn.Stop();
+			m_VehicleCrewReturn = null;
+		}
 		if (m_Logistics)
 		{
 			m_Logistics.Stop();
@@ -7692,6 +7704,12 @@ class AICF_MatchController
 	}
 
 	AICF_EconomySystem VehiclePresetEconomy() { return m_EconomySystem; }
+	AICF_VehicleCrewReturn VehicleCrewReturn() { return m_VehicleCrewReturn; }
+	bool CanResizeVehicleCrew(AICF_GroupSlot slot)
+	{
+		return m_VehicleCoordinator && !m_VehicleCoordinator.IsControllingMovement(slot) &&
+			!m_VehicleCoordinator.IsRestorePending(slot) && !m_VehicleCoordinator.IsInfantryOrderSuspended(slot);
+	}
 	string VehiclePresetStatus(AICF_GroupSlot slot)
 	{
 		if (!m_VehicleCoordinator) return "MATCH_UNAVAILABLE";
@@ -7729,7 +7747,9 @@ class AICF_MatchController
 			slot = m_USSRState.GetSlot(slotId);
 		if (!faction || !slot || (!dormant && member >= slot.GetDesiredSize()))
 			return false;
-		source = m_GroupSpawner.ResolveRecruitPrefab(faction, member, role);
+		int sourceIndex = member;
+		if (slot.HasRosterMember(member)) sourceIndex = slot.GetEquipmentSourceIndex(member);
+		source = m_GroupSpawner.ResolveRecruitPrefab(faction, sourceIndex, role);
 		return !source.IsEmpty();
 	}
 

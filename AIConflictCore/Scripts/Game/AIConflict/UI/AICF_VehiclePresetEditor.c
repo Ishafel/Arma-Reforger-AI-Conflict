@@ -17,6 +17,14 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 	protected ref array<SCR_ComboBoxComponent> m_aSeats = {};
 	protected ref array<TextWidget> m_aSeatLabels = {};
 	protected ref array<Widget> m_aButtons = {};
+	protected ref array<Widget> m_aButtonFrames = {};
+	protected Widget m_wHoveredButton;
+	protected Widget m_wPressedButton;
+	protected Widget m_wConfirmation;
+	protected TextWidget m_wConfirmationText;
+	protected int m_iConfirmation;
+	protected RenderTargetWidget m_wPreview;
+	protected ref AICF_VehiclePreview m_Preview;
 	protected ref array<ResourceName> m_aPrefabs = {};
 	protected ref array<string> m_aCatalogNames = {};
 	protected ref array<int> m_aCatalogCosts = {};
@@ -66,15 +74,17 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		return m_Controller.CreateText(m_wPanel, l, t, r, b, text, 18, Color.White);
 	}
 
-	protected void Button(string name, string text, float l, float t, float r, float b)
+	protected void Button(string name, string text, float l, float t, float r, float b, Widget parent = null)
 	{
-		Widget frame = m_Controller.CreateRect(m_wPanel, l, t, r, b, Color.FromSRGBA(46, 74, 91, 255), true);
+		if (!parent) parent = m_wPanel;
+		Widget frame = m_Controller.CreateRect(parent, l, t, r, b, Color.FromSRGBA(46, 74, 91, 255), true);
 		frame.SetZOrder(12);
 		m_Controller.CreateText(frame, 0, 0, 1, 1, text, 18, Color.White, true);
 		Widget input = frame.FindAnyWidget("AICF_RectInput");
 		input.SetName(name);
 		input.AddHandler(this);
 		m_aButtons.Insert(input);
+		m_aButtonFrames.Insert(frame);
 	}
 
 	protected SCR_ComboBoxComponent Combo(float l, float t, float r, float b)
@@ -132,11 +142,20 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		m_CategoryFilter.SetCurrentItem(0, false, false, false);
 		m_Catalog = Combo(0.03, 0.205, 0.61, 0.255);
 		Button("select", "{AICF:AICF_UI_VehicleSelect}", 0.64, 0.205, 0.97, 0.255);
+		m_wPreview = RenderTargetWidget.Cast(GetGame().GetWorkspace().CreateWidget(WidgetType.RenderTargetWidgetTypeID,
+			WidgetFlags.VISIBLE | WidgetFlags.BLEND | WidgetFlags.IGNORE_CURSOR, Color.White, 0, m_wPanel));
+		if (!m_wPreview) return false;
+		Place(m_wPreview, 0.03, 0.28, 0.45, 0.65);
+		m_wPreview.SetMaxFPS(30);
+		m_wPreview.SetResolutionScale(1, 1);
+		m_wPreview.SetClearColor(true, Color.FromSRGBA(9, 19, 28, 255).PackToInt());
+		m_wPreview.SetVisible(false);
+		m_Preview = new AICF_VehiclePreview();
 		for (int row; row < 8; row++)
 		{
 			float y = 0.28 + row * 0.047;
-			m_aSeatLabels.Insert(Label(0.03, y, 0.59, y + 0.043, ""));
-			m_aSeats.Insert(Combo(0.61, y, 0.97, y + 0.043));
+			m_aSeatLabels.Insert(Label(0.48, y, 0.70, y + 0.043, ""));
+			m_aSeats.Insert(Combo(0.72, y, 0.97, y + 0.043));
 		}
 		Button("previous", "<", 0.03, 0.67, 0.09, 0.72);
 		Button("next", ">", 0.10, 0.67, 0.16, 0.72);
@@ -144,6 +163,12 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		Widget edit = GetGame().GetWorkspace().CreateWidgets(EDIT, m_wPanel);
 		Place(edit, 0.03, 0.75, 0.42, 0.81);
 		m_wName = EditBoxWidget.Cast(edit.FindAnyWidget("EditBox"));
+		SCR_EditBoxComponent nameComponent = SCR_EditBoxComponent.Cast(edit.FindHandler(SCR_EditBoxComponent));
+		if (nameComponent)
+		{
+			nameComponent.SetLabel(AICF_Localization.Resolve("{AICF:AICF_UI_VehiclePresetName}"));
+			nameComponent.SetPlaceholderText(AICF_Localization.Resolve("{AICF:AICF_UI_VehiclePresetName}"));
+		}
 		Button("save", "{AICF:AICF_UI_VehicleSave}", 0.44, 0.75, 0.60, 0.81);
 		Button("apply", "{AICF:AICF_UI_VehicleApply}", 0.62, 0.75, 0.79, 0.81);
 		Button("reset", "{AICF:AICF_UI_VehicleReset}", 0.81, 0.75, 0.97, 0.81);
@@ -151,6 +176,14 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		Button("load", "{AICF:AICF_UI_VehicleLoad}", 0.62, 0.83, 0.79, 0.89);
 		Button("delete", "{AICF:AICF_UI_VehicleDelete}", 0.81, 0.83, 0.97, 0.89);
 		m_wStatus = Label(0.03, 0.91, 0.97, 0.99, "{AICF:AICF_UI_VehicleWaiting}");
+		m_wConfirmation = m_Controller.CreateRect(m_wPanel, 0, 0, 1, 1, Color.FromSRGBA(4, 8, 11, 250), false);
+		m_wConfirmation.SetZOrder(30);
+		m_wConfirmationText = m_Controller.CreateText(m_wConfirmation, 0.12, 0.30, 0.88, 0.55, "", 22, Color.White, true);
+		m_wConfirmationText.SetTextWrapping(true);
+		Button("confirmCrew", "{AICF:AICF_UI_VehicleConfirmCrew}", 0.14, 0.60, 0.48, 0.69, m_wConfirmation);
+		Button("cancelCrew", "{AICF:AICF_UI_VehicleCancelCrew}", 0.52, 0.60, 0.86, 0.69, m_wConfirmation);
+		m_wConfirmation.SetVisible(false);
+
 		m_wStatus.SetTextWrapping(true);
 		return m_wName != null;
 	}
@@ -193,11 +226,19 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		if (!json.LoadFromString(view) || !json.ReadValue("slot", slot) || slot != m_iSlot || !json.ReadValue("revision", revision) ||
 			!json.ReadValue("generation", generation)) return;
 		bool changed = revision != m_iRevision || generation != m_iGeneration;
+		bool sameGeneration = generation == m_iGeneration;
 		m_iRevision = revision;
 		m_iGeneration = generation;
 		json.ReadValue("size", m_iSize);
 		json.ReadValue("activeMembers", m_aActiveMembers);
 		json.ReadValue("status", status);
+		json.ReadValue("confirmation", m_iConfirmation);
+		int kept, returning;
+		json.ReadValue("kept", kept);
+		json.ReadValue("returning", returning);
+		m_wConfirmation.SetVisible(m_iConfirmation > 0);
+		m_wConfirmationText.SetText(AICF_Localization.Resolve(AICF_Localization.Format(
+			"{AICF:AICF_UI_VehicleCrewConfirmation}", kept.ToString(), returning.ToString())));
 		json.ReadValue("draft", draft);
 		json.ReadValue("catalog", catalog);
 		json.ReadValue("library", library);
@@ -234,7 +275,8 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 			m_Library.ClearAll();
 			foreach (string caption : captions) m_Library.AddItem(caption);
 		}
-		if (changed || (completed && m_Player.AICF_VehiclePresetAccepted()))
+		bool preserveDraft = completed && sameGeneration && (m_iOperation == AICF_EVehiclePresetOperation.RESET || m_iOperation == AICF_EVehiclePresetOperation.CANCEL_CREW) && m_Draft;
+		if (!preserveDraft && (changed || (completed && m_Player.AICF_VehiclePresetAccepted())))
 		{
 			m_Draft = AICF_VehiclePreset.Decode(draft);
 			m_aSeatNames.Clear();
@@ -300,6 +342,22 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		if (selected < 0 && !m_aVisibleVehicles.IsEmpty()) selected = 0;
 		m_Catalog.SetCurrentItem(selected, false, false, false);
 		m_bRendering = previous;
+		RefreshPreview();
+	}
+
+	protected void RefreshPreview()
+	{
+		if (!m_wPreview || !m_Preview) return;
+		ResourceName prefab = SelectedPrefab();
+		if (prefab.IsEmpty())
+		{
+			m_wPreview.SetVisible(false);
+			m_Preview.Clear();
+			return;
+		}
+		bool ready = m_Preview.BuildVehicle(prefab);
+		if (ready) m_wPreview.SetWorld(m_Preview.GetWorld(), 0);
+		m_wPreview.SetVisible(ready);
 	}
 
 	protected void RevealDraft()
@@ -324,6 +382,9 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 			case "SAVED": message = "{AICF:AICF_UI_VehicleSaved}"; break;
 			case "AUTOMATIC_POLICY_RESTORED":
 			case "AUTOMATIC_POLICY": message = "{AICF:AICF_UI_VehicleAutomatic}"; break;
+			case "CONFIRM_CREW_REDUCTION": message = "{AICF:AICF_UI_VehicleConfirmCrew}"; break;
+			case "CREW_TRANSFER_FAILED":
+			case "CREW_RETURN_UNAVAILABLE": message = "{AICF:AICF_UI_VehicleCrewBusy}"; break;
 			case "INSUFFICIENT_SEATS": message = "{AICF:AICF_UI_VehicleTooSmall}"; break;
 			case "MANDATORY_CREW_MISSING":
 			case "DRIVER_SEAT_MISSING": message = "{AICF:AICF_UI_VehicleCrewMissing}"; break;
@@ -383,13 +444,61 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		string unseated;
 		foreach (int position : m_aActiveMembers)
 			if (!m_Draft || !m_Draft.m_aMembers.Contains(position)) unseated += (position + 1).ToString() + " ";
-		m_wUnseated.SetText(AICF_Localization.Format("{AICF:AICF_UI_VehicleUnseated}", unseated));
+		m_wUnseated.SetText(AICF_Localization.Resolve(AICF_Localization.Format("{AICF:AICF_UI_VehicleUnseated}", unseated)));
 		m_bRendering = previousRendering;
+	}
+
+	protected void RefreshButtonColors()
+	{
+		foreach (int index, Widget input : m_aButtons)
+		{
+			Color color = Color.FromSRGBA(46, 74, 91, 255);
+			if (input == m_wPressedButton) color = Color.FromSRGBA(30, 58, 78, 255);
+			else if (input == m_wHoveredButton) color = Color.FromSRGBA(78, 125, 150, 255);
+			m_Controller.SetRectColor(m_aButtonFrames[index], color);
+		}
+	}
+
+	override bool OnMouseEnter(Widget w, int x, int y)
+	{
+		if (m_aButtons.Contains(w))
+		{
+			m_wHoveredButton = w;
+			RefreshButtonColors();
+		}
+		return false;
+	}
+
+	override bool OnMouseLeave(Widget w, Widget enterW, int x, int y)
+	{
+		if (w == m_wHoveredButton) m_wHoveredButton = null;
+		if (w == m_wPressedButton) m_wPressedButton = null;
+		RefreshButtonColors();
+		return false;
+	}
+
+	override bool OnMouseButtonDown(Widget w, int x, int y, int button)
+	{
+		if (button == SCR_EMouseButtons.LEFT && m_aButtons.Contains(w)) m_wPressedButton = w;
+		RefreshButtonColors();
+		return false;
+	}
+
+	override bool OnMouseButtonUp(Widget w, int x, int y, int button)
+	{
+		m_wPressedButton = null;
+		RefreshButtonColors();
+		return false;
 	}
 
 	protected void OnChanged(SCR_ComboBoxComponent combo, int item)
 	{
-		if (m_bRendering) return;
+		if (m_bRendering || m_iConfirmation > 0) return;
+		if (combo == m_Catalog)
+		{
+			RefreshPreview();
+			return;
+		}
 		if (combo == m_SourceFilter || combo == m_CategoryFilter)
 		{
 			RenderCatalog(SelectedPrefab());
@@ -408,6 +517,12 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		string action = w.GetName();
 		if (action == "close") { Close(); return true; }
 		if (m_bPending || m_bQueued) return true;
+		if (m_iConfirmation > 0)
+		{
+			if (action == "confirmCrew") Request(AICF_EVehiclePresetOperation.CONFIRM_CREW, m_iConfirmation.ToString());
+			else if (action == "cancelCrew") Request(AICF_EVehiclePresetOperation.CANCEL_CREW, "");
+			return true;
+		}
 		if (action == "select")
 		{
 			ResourceName selected = SelectedPrefab();
@@ -444,6 +559,10 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 
 	void Close()
 	{
+		if (m_wPreview) m_wPreview.SetVisible(false);
+		if (m_Preview) m_Preview.Clear();
+		m_Preview = null;
+		m_wPreview = null;
 		if (m_Cursor) m_Cursor.AICF_ClearVehiclePresetDialog(this);
 		m_Cursor = null;
 		if (m_bCaptured && m_wRoot)
@@ -460,6 +579,9 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		m_aSeats.Clear();
 		m_aSeatLabels.Clear();
 		m_aButtons.Clear();
+		m_aButtonFrames.Clear();
+		m_wHoveredButton = null;
+		m_wPressedButton = null;
 		if (m_wRoot) m_wRoot.RemoveFromHierarchy();
 		m_wRoot = null;
 		m_Catalog = null;
@@ -474,6 +596,9 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		m_iNextRequestAt = 0;
 		m_iRevision = -1;
 		m_iGeneration = -1;
+		m_iConfirmation = 0;
+		m_wConfirmation = null;
+		m_wConfirmationText = null;
 		m_sView = "";
 		m_sCatalogData = "";
 		m_sLibraryData = "";

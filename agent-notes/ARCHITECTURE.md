@@ -296,6 +296,14 @@ fallback без мутации budget объектов. Faction в recipe — п
 civilian prefab. Выдача, purchase и boarding остаются у прежних доменных owners.
 Контракт: [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
 
+Явно подтверждённое сокращение vehicle crew принадлежит `AICF_VehicleCrewReturn`:
+одноразовый `AICF_VehicleCrewPlan` проверяет identities/revisions, GroupSlot
+компактно remaps живой roster и kits, auxiliary groups возвращают неназначенных.
+Их waypoint остаётся у OrderPlanner; физическое прибытие и повторная проверка
+authority/possession/compartments обязательны перед despawn. Возвращаемые остаются
+в managed agent cap. До product confirmation нет side effects. Boarding сохраняет
+полный ALL_OR_FALLBACK для итогового состава, а не выполняет частичную перевозку.
+
 Loadout templates назначаются slot/memberIndex: новые бойцы получают binding
 при создании, живые — при допустимом посещении действующего арсенала.
 `AICF_EquipmentService` владеет потребностью, поиском источников и ограниченным

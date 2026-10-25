@@ -144,7 +144,8 @@ class AICF_VehiclePreset
 		return true;
 	}
 
-	bool ValidateRoster(AICF_GroupSlot slot, array<BaseCompartmentSlot> seats, out string reason)
+	// partial — только read-only проверка плана сокращения перед подтверждением.
+	bool ValidateRoster(AICF_GroupSlot slot, array<BaseCompartmentSlot> seats, out string reason, bool partial = false)
 	{
 		if (!ValidateShape(reason)) return false;
 		reason = "SEAT_TOPOLOGY_CHANGED";
@@ -152,7 +153,7 @@ class AICF_VehiclePreset
 		reason = "ROSTER_NOT_READY";
 		if (!slot || !slot.IsCombatReady() || !slot.GetGroup()) return false;
 		reason = "INSUFFICIENT_SEATS";
-		if (slot.GetDesiredSize() > seats.Count()) return false;
+		if (!partial && slot.GetDesiredSize() > seats.Count()) return false;
 		int pilots;
 		for (int seatIndex; seatIndex < seats.Count(); seatIndex++)
 		{
@@ -164,26 +165,26 @@ class AICF_VehiclePreset
 		reason = "DRIVER_SEAT_MISSING";
 		if (pilots != 1) return false;
 		foreach (int assignedMember : m_aMembers)
-			if (assignedMember >= 0 && (assignedMember >= slot.GetDesiredSize() || !AICF_GroupRuntime.IsAliveCharacter(slot.GetRosterMember(assignedMember))))
+			if (assignedMember >= 0 && ((!partial && assignedMember >= slot.GetDesiredSize()) || !AICF_GroupRuntime.IsAliveCharacter(slot.GetRosterMember(assignedMember))))
 				{ reason = "MEMBER_INACTIVE"; return false; }
 		int alive;
 		for (int member; member < AICF_Stage1Config.MAX_GROUP_SIZE; member++)
 		{
 			IEntity entity = slot.GetRosterMember(member);
-			bool active = member < slot.GetDesiredSize() && AICF_GroupRuntime.IsAliveCharacter(entity);
+			bool active = (partial || member < slot.GetDesiredSize()) && AICF_GroupRuntime.IsAliveCharacter(entity);
 			int assigned = m_aMembers.Find(member);
 			if (!active && assigned >= 0) { reason = "MEMBER_INACTIVE"; return false; }
 			if (!active) continue;
 			if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(entity)) { reason = "MEMBER_PLAYER_CONTROLLED"; return false; }
 			alive++;
-			if (assigned < 0) { reason = "MEMBER_WITHOUT_SEAT"; return false; }
+			if (!partial && assigned < 0) { reason = "MEMBER_WITHOUT_SEAT"; return false; }
 			ChimeraCharacter character = ChimeraCharacter.Cast(entity);
 			if (!character || !character.GetAIControlComponent() || !character.GetAIControlComponent().GetControlAIAgent() ||
 				character.GetAIControlComponent().GetControlAIAgent().GetParentGroup() != slot.GetGroup())
 				{ reason = "ROSTER_IDENTITY_CHANGED"; return false; }
 		}
 		reason = "INSUFFICIENT_SEATS";
-		if (alive <= 0 || alive > seats.Count() || alive != AICF_GroupRuntime.CountAliveAgents(slot.GetGroup())) return false;
+		if (alive <= 0 || (!partial && alive > seats.Count()) || alive != AICF_GroupRuntime.CountAliveAgents(slot.GetGroup())) return false;
 		reason = "READY";
 		return true;
 	}

@@ -415,6 +415,50 @@ class AICF_GroupSlot
 	protected AICF_InfantryRecruitmentOrder m_RecruitmentOrder;
 	protected bool m_bInfantryMusterComplete;
 	protected ref array<IEntity> m_aRosterMembers = {};
+	// До следующего deployment сохраняем исходную equipment role живого бойца.
+	protected ref array<int> m_aEquipmentSourceIndices = {};
+	int GetEquipmentSourceIndex(int index)
+	{
+		if (m_aEquipmentSourceIndices.IsIndexValid(index)) return m_aEquipmentSourceIndices[index];
+		return index;
+	}
+
+	// Вызывается после identity-safe transfer всех неназначенных AI.
+	bool CommitVehicleCrew(array<int> kept, AICF_VehiclePreset preset)
+	{
+		if (!Replication.IsServer() || !IsCombatReady() || !m_Group || kept.IsEmpty() ||
+			kept.Count() != AICF_GroupRuntime.CountAliveAgents(m_Group)) return false;
+		array<IEntity> members = {};
+		array<ref AICF_LoadoutBinding> bindings = {};
+		array<int> revisions = {};
+		array<int> sources = {};
+		foreach (int index : kept)
+		{
+			IEntity member = GetRosterMember(index);
+			if (!member || members.Contains(member)) return false;
+			members.Insert(member);
+			bindings.Insert(GetLoadout(index));
+			revisions.Insert(GetMemberLoadoutRevision(index));
+			sources.Insert(GetEquipmentSourceIndex(index));
+		}
+		for (int seat; seat < preset.m_aMembers.Count(); seat++)
+			if (preset.m_aMembers[seat] >= 0) preset.m_aMembers[seat] = kept.Find(preset.m_aMembers[seat]);
+		m_aRosterMembers.Copy(members);
+		m_aRosterMembers.Resize(AICF_Stage1Config.MAX_GROUP_SIZE);
+		m_aLoadouts.Clear();
+		foreach (AICF_LoadoutBinding binding : bindings) m_aLoadouts.Insert(binding);
+		m_aMemberLoadoutRevisions.Copy(revisions);
+		m_aEquipmentSourceIndices.Copy(sources);
+		m_Group.AICF_RebindMemberPositions(members);
+		m_iDesiredSize = kept.Count();
+		m_bInfantryMusterComplete = true;
+		m_iSpawnGeneration++;
+		m_iReplacementObservedGeneration = m_iSpawnGeneration;
+		m_iLoadoutRevision++;
+		m_iDeploymentLoadoutRevision = m_iLoadoutRevision;
+		m_iStrategicAssignmentRevision++;
+		return SetVehiclePreset(preset, m_iVehiclePresetRevision);
+	}
 	protected vector m_vReplacementOrigin;
 	protected bool m_bHasReplacementOrigin;
 	protected EntityID m_ReplacementObservedGroupId;
@@ -482,6 +526,7 @@ class AICF_GroupSlot
 
 	void RecordDeploymentMembers()
 	{
+		m_aEquipmentSourceIndices.Clear();
 		m_aRosterMembers.Clear();
 		m_aRosterMembers.Resize(AICF_Stage1Config.MAX_GROUP_SIZE);
 		m_aMemberLoadoutRevisions.Clear();
@@ -511,6 +556,9 @@ class AICF_GroupSlot
 	{
 		if (Replication.IsServer() && index >= 0 && index < m_aRosterMembers.Count())
 		{
+			// Новый recruit получает обычную роль новой позиции; старый role map
+			// принадлежал конкретному оставленному живому бойцу.
+			if (m_aEquipmentSourceIndices.IsIndexValid(index)) m_aEquipmentSourceIndices[index] = index;
 			m_aRosterMembers[index] = member;
 			AICF_LoadoutBinding binding = GetLoadout(index);
 			int revision;
@@ -2756,6 +2804,7 @@ class AICF_GroupSlot
 
 	protected void ClearRuntimeReferences()
 	{
+		m_aEquipmentSourceIndices.Clear();
 		m_iPersistentStuckReviewCount = 0;
 		m_ApproachRoute = null;
 		m_bIsolatedNavmeshRecoveryUsed = false;

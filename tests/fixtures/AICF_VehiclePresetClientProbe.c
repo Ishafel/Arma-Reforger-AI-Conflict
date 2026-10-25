@@ -2,6 +2,39 @@
 // не захватывает focus и не имитирует физический ввод.
 class AICF_VehiclePresetProbeUIModel : AICF_StrategicUIController
 {
+	protected int m_iSliderRequest = -1;
+	override protected void SubmitGroupConfiguration(int requestedRole, int requestedUnitType, int sizeDelta, int absoluteSize = -1)
+	{
+		m_iSliderRequest = absoluteSize;
+	}
+	bool CheckCommanderControls(Widget hidden)
+	{
+		m_wCommandPanel = CreateRect(hidden, 0, 0, 1, 1, Color.Black, false);
+		CreateSizeSlider();
+		if (!m_SizeSlider || !m_wSizeValue) return false;
+		m_SizeSlider.SetValue(0);
+		bool lower = m_SizeSlider.GetValue() == 1;
+		m_SizeSlider.SetValue(11);
+		bool upper = m_SizeSlider.GetValue() == 10;
+		OnSizeChanged(m_SizeSlider, 7);
+		RefreshConfigurationButtons("A0|ATTACK|READY|1|NONE|NONE|0|0|INFANTRY|4");
+		bool drag = m_bDraggingSizeSlider && m_wSizeValue.GetText() == "7" && m_SizeSlider.GetValue() == 10;
+		OnSizeFinal(m_SizeSlider, 7);
+		bool request = m_iSliderRequest == 7 && !m_bDraggingSizeSlider;
+		Widget button = CreateRect(m_wCommandPanel, 0, 0, 1, 1, Color.Black, true);
+		AttachHandler(button, AICF_EStrategicUIButtonAction.CLOSE_COMMAND);
+		AICF_StrategicUIButtonHandler handler = m_aHandlers[m_aHandlers.Count() - 1];
+		ImageWidget background = ImageWidget.Cast(button.FindAnyWidget("AICF_RectBackground"));
+		handler.OnMouseEnter(button, 0, 0);
+		int hover = background.GetColor().PackToInt();
+		SetRectColor(button, Color.Black);
+		bool held = hover == background.GetColor().PackToInt();
+		handler.OnMouseLeave(button, null, 0, 0);
+		bool restored = background.GetColor().PackToInt() != hover;
+		RemoveMapUI();
+		return lower && upper && drag && request && held && restored;
+	}
+
 	override bool GetLoadoutGroup(int slotId, out string name, out int size, string targetFaction = "")
 	{
 		name = "Alpha";
@@ -77,6 +110,8 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 		json.ReadValue("assigned", assigned);
 		json.ReadValue("faction", faction);
 		json.ReadValue("slot", slot);
+		string crewFlag;
+		if (System.GetCLIParam("aicfVehicleCrewReturnProbe", crewFlag)) { TickCrew(assigned); return; }
 		if (m_bProbeJIP)
 		{
 			AICF_VehiclePreset confirmed = AICF_VehiclePreset.Decode(assigned);
@@ -189,6 +224,77 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 		m_iProbeStep++;
 	}
 
+	protected void CheckPresentation()
+	{
+		RefreshPreview();
+		Check("COMMANDER_SLIDER_AND_PERSISTENT_HOVER", AICF_VehiclePresetProbeUIModel.Cast(m_Controller).CheckCommanderControls(m_wRoot.GetParent()));
+		Check("PRIVATE_VEHICLE_PREVIEW", m_Preview && m_Preview.IsReady() && m_Preview.GetWorld() != GetGame().GetWorld() && m_wPreview.IsVisible());
+		Check("UNSEATED_TEXT_RESOLVED", !m_wUnseated.GetText().Contains("{AICF:"));
+		Widget button = m_aButtons[0];
+		ImageWidget background = ImageWidget.Cast(m_aButtonFrames[0].FindAnyWidget("AICF_RectBackground"));
+		int normal = background.GetColor().PackToInt();
+		OnMouseEnter(button, 0, 0);
+		Check("BUTTON_HOVER_COLOR", normal != background.GetColor().PackToInt());
+		OnMouseLeave(button, null, 0, 0);
+		Check("BUTTON_HOVER_RESTORED", normal == background.GetColor().PackToInt());
+	}
+
+	protected void TickCrew(string assigned)
+	{
+		switch (m_iProbeStep)
+		{
+			case 0:
+				if (m_aActiveMembers.Count() != 10) return;
+				for (int index; index < m_aPrefabs.Count(); index++)
+					if (m_aPrefabs[index].Contains("UAZ469_uncovered_CIV_blue.et")) { m_sProbePrefab = m_aPrefabs[index]; m_Catalog.SetCurrentItem(m_aVisibleVehicles.Find(index), false, false, false); }
+				Check("GROUP10_READY", m_iSize == 10 && !m_sProbePrefab.IsEmpty());
+				Click("select");
+				break;
+			case 1:
+				Check("UAZ_SELECTED", m_Draft && m_Draft.m_sPrefab == m_sProbePrefab);
+				if (!m_Draft) { Finish(); return; }
+				CheckPresentation();
+				for (int seat; seat < m_Draft.m_aSeats.Count(); seat++)
+				{
+					array<string> parts = {};
+					m_Draft.m_aSeats[seat].Split(":", parts, false);
+					if (parts[2].ToInt() == ECompartmentType.PILOT) OnChanged(m_aSeats[seat], 10);
+				}
+				m_wName.SetText("Nonprefix driver");
+				Click("reset");
+				break;
+			case 2:
+				Check("AUTOMATIC_PRESERVES_UNSAVED_SEATS", m_Draft && m_Draft.m_aMembers.Contains(9) && m_wName.GetText() == "Nonprefix driver" && assigned.IsEmpty() && m_aSeatLabels[0].IsVisible());
+				Click("apply");
+				break;
+			case 3:
+				Check("CONFIRMATION_WITHOUT_SIDE_EFFECTS", !m_Player.AICF_VehiclePresetAccepted() && m_iConfirmation > 0 && m_iSize == 10 && m_aActiveMembers.Count() == 10 && assigned.IsEmpty());
+				Click("cancelCrew");
+				break;
+			case 4:
+				Check("CANCEL_PRESERVES_SQUAD_AND_DRAFT", m_iConfirmation == 0 && m_iSize == 10 && m_aActiveMembers.Count() == 10 && assigned.IsEmpty() && m_Draft.m_aMembers.Contains(9));
+				Click("apply");
+				break;
+			case 5:
+				Check("CONFIRM_AGAIN", m_iConfirmation > 0 && m_wConfirmation.IsVisible());
+				Request(AICF_EVehiclePresetOperation.CONFIRM_CREW, (m_iConfirmation + 1).ToString());
+				break;
+			case 6:
+				Check("WRONG_CONFIRMATION_REFUSED", !m_Player.AICF_VehiclePresetAccepted() && m_iConfirmation == 0 && m_iSize == 10 && assigned.IsEmpty());
+				Click("apply");
+				break;
+			case 7:
+				Click("confirmCrew");
+				break;
+			case 8:
+				AICF_VehiclePreset applied = AICF_VehiclePreset.Decode(assigned);
+				Check("CONFIRMED_10_TO_1", m_Player.AICF_VehiclePresetAccepted() && m_iConfirmation == 0 && m_iSize == 1 && m_aActiveMembers.Count() == 1 && applied && applied.m_aMembers.Contains(0) && !applied.m_aMembers.Contains(9));
+				Finish();
+				return;
+		}
+		m_iProbeStep++;
+	}
+
 	protected void Finish()
 	{
 		m_bProbeDone = true;
@@ -236,6 +342,8 @@ modded class AICF_MatchController
 				break;
 			}
 		}
+		string crewFlag;
+		if (System.GetCLIParam("aicfVehicleCrewReturnProbe", crewFlag)) return;
 		if (m_bVehicleClientConfigured) return;
 		m_bVehicleClientConfigured = true;
 		AICF_GroupSlot slot = m_USSRState.GetSlot(0);

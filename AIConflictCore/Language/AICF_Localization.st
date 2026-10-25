@@ -4051,8 +4051,8 @@ StringTable
 		CustomStringTableItem "{A1CF261025780023}"
 		{
 			Id "AICF_UI_VehicleDraft"
-			Target_en_us "Draft: assign every active member, then Apply. Save only updates the library."
-			Target_ru_ru "Черновик: назначьте места всем активным бойцам и примените. Сохранение меняет только библиотеку."
+			Target_en_us "Draft: assign the members to keep, then Apply. Unassigned members return after confirmation. Save only updates the library."
+			Target_ru_ru "Черновик: назначьте места бойцам, которых оставляете, и примените. Остальные вернутся после подтверждения. Сохранение меняет только библиотеку."
 		}
 		CustomStringTableItem "{A1CF261025780024}"
 		{
@@ -4216,5 +4216,36 @@ StringTable
 			Target_en_us "The transport AI does not support this vehicle type yet."
 			Target_ru_ru "Транспортный ИИ пока не поддерживает этот тип техники."
 		}
+		CustomStringTableItem "{A1CF261025790000}"
+		{
+			Id "AICF_UI_VehiclePresetName"
+			Target_en_us "Preset name"
+			Target_ru_ru "Название пресета"
+		}
+		CustomStringTableItem "{A1CF261025790001}"
+		{
+			Id "AICF_UI_VehicleConfirmCrew"
+			Target_en_us "Confirm squad reduction"
+			Target_ru_ru "Подтвердить сокращение отряда"
+		}
+		CustomStringTableItem "{A1CF261025790002}"
+		{
+			Id "AICF_UI_VehicleCancelCrew"
+			Target_en_us "Cancel"
+			Target_ru_ru "Отмена"
+		}
+		CustomStringTableItem "{A1CF261025790003}"
+		{
+			Id "AICF_UI_VehicleCrewConfirmation"
+			Target_en_us "Keep %1 assigned members. Return %2 unassigned members to the nearest safe friendly point for despawn?"
+			Target_ru_ru "Оставить назначенных бойцов: %1. Отправить остальных (%2) на ближайшую безопасную союзную точку для удаления?"
+		}
+		CustomStringTableItem "{A1CF261025790004}"
+		{
+			Id "AICF_UI_VehicleCrewBusy"
+			Target_en_us "Cannot reduce the squad now: it must be ready, on foot, outside recruitment/equipment/transport operations, with a safe return route."
+			Target_ru_ru "Сейчас сократить отряд нельзя: он должен быть готов и находиться вне техники, найма, пополнения и транспортной операции. Нужен безопасный путь возврата."
+		}
+
 	}
 }
