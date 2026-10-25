@@ -1,6 +1,6 @@
 param([Parameter(Mandatory)][string]$ServerLog,[Parameter(Mandatory)][string]$ServerLauncher,[Parameter(Mandatory)][string]$ServerExit,
  [Parameter(Mandatory)][string]$ClientLog,[Parameter(Mandatory)][string]$ClientLauncher,[Parameter(Mandatory)][string]$ClientExit,
- [Parameter(Mandatory)][string]$JIPLog,[Parameter(Mandatory)][string]$JIPLauncher,[Parameter(Mandatory)][string]$JIPExit)
+ [Parameter(Mandatory)][string]$JIPLog,[Parameter(Mandatory)][string]$JIPLauncher,[Parameter(Mandatory)][string]$JIPExit,[switch]$CatalogFilters)
 $ErrorActionPreference='Stop'
 $failures=[Collections.Generic.List[string]]::new()
 function Read-Native([string]$Label,[string]$LogPath,[string]$LauncherPath,[string]$ExitPath,[bool]$Client){
@@ -15,7 +15,9 @@ function Read-Native([string]$Label,[string]$LogPath,[string]$LauncherPath,[stri
  else{
   $manifest=$manifests[0].Groups[1].Value|ConvertFrom-Json
   $argv=@($manifest.arguments)
-  foreach($flag in @('-gproj','-profile','-addonsDir','-addons','-aicfVehiclePresetClient')){
+  $flags=@('-gproj','-profile','-addonsDir','-addons','-aicfVehiclePresetClient')
+  if($CatalogFilters){$flags+='-aicfVehicleCatalogFilters'}
+  foreach($flag in $flags){
    $index=[array]::IndexOf($argv,$flag)
    if($index -lt 0 -or $index+1 -ge $argv.Count -or !$log.Contains($flag+' '+$argv[$index+1])){$failures.Add($Label+'_CLI')}
   }
@@ -35,9 +37,22 @@ foreach($case in @('ALPHA_VEHICLE_FORM','JIP_CONFIRMED_ASSIGNMENT','JIP_STABLE_S
  if(@([regex]::Matches($jip,'\[VEHICLE_UI_CHECK\] rule='+$case+' passed=1')).Count -ne 1){$failures.Add('JIP_CASE_'+$case)}
 }
 if(($client+"`n"+$jip) -match '\[VEHICLE_UI_CHECK\].*passed=0|VEHICLE_UI_TIMEOUT'){$failures.Add('FAILED_CASE')}
-if(@([regex]::Matches($client,'\[VEHICLE_UI_DONE\] checks=20 failures=0 jip=0')).Count -ne 1){$failures.Add('CLIENT_COMPLETION')}
-if(@([regex]::Matches($jip,'\[VEHICLE_UI_DONE\] checks=3 failures=0 jip=1')).Count -ne 1){$failures.Add('JIP_COMPLETION')}
+$clientChecks=20
+$jipChecks=3
+if($CatalogFilters){
+ $clientChecks=28
+ $jipChecks=5
+ foreach($case in @('ALL_NATIVE_CATALOG','CIVILIAN_FILTER','CAR_CATEGORY_FILTER','FACTION_FILTER','EMPTY_FILTER_SAFE','EMPTY_SELECT_NO_RPC','FILTERED_PREFAB_MAPPING','LOAD_REVEALS_DRAFT')){
+  if(@([regex]::Matches($client,'\[VEHICLE_UI_CHECK\] rule='+$case+' passed=1')).Count -ne 1){$failures.Add('FILTER_CASE_'+$case)}
+ }
+ foreach($case in @('JIP_CIVILIAN_AVAILABLE','JIP_FILTERED_SELECTION')){
+  if(@([regex]::Matches($jip,'\[VEHICLE_UI_CHECK\] rule='+$case+' passed=1')).Count -ne 1){$failures.Add('FILTER_CASE_'+$case)}
+ }
+ foreach($launch in @($ServerLauncher,$ClientLauncher,$JIPLauncher)){if(![IO.File]::ReadAllText($launch).Contains('"-aicfVehicleCatalogFilters","1"')){$failures.Add('FILTER_CLI')}}
+}
+if(@([regex]::Matches($client,'\[VEHICLE_UI_DONE\] checks='+$clientChecks+' failures=0 jip=0')).Count -ne 1){$failures.Add('CLIENT_COMPLETION')}
+if(@([regex]::Matches($jip,'\[VEHICLE_UI_DONE\] checks='+$jipChecks+' failures=0 jip=1')).Count -ne 1){$failures.Add('JIP_COMPLETION')}
 foreach($late in @('0','1')){if(@([regex]::Matches($server,'\[VEHICLE_UI_SERVER_READBACK\] player=\d+ failures=0 jip='+$late)).Count -ne 1){$failures.Add('SERVER_READBACK_'+$late)}}
 if($failures.Count){$failures|Sort-Object -Unique;exit 1}
-'PASS Vehicle preset UI/RPC client=20 JIP=3 server_readback=2 native=0/0/0 stopped=3'
+"PASS Vehicle preset UI/RPC client=$clientChecks JIP=$jipChecks server_readback=2 native=0/0/0 stopped=3"
 exit 0

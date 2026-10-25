@@ -1,5 +1,63 @@
 # Проверки и baseline
 
+## Категории своей и гражданской техники: продолжение #78 — 2026-10-25
+
+Ветка та же `codex/issue-78-vehicle-presets`, исходный clean `118a5ab`.
+Пользователь уточнил scope: легковые, грузовики, колёсная бронетехника своей
+faction и гражданские. Air/Tracked/stationary исключены из списка. Каталог
+больше не требует SpawnerData; quote берётся из profile/native CAMPAIGN.
+Контракт — [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
+
+Evidence: `.codex-runtime/issue78-catalog/REPORT.md`; полные launcher manifests,
+native exits и stopped logs сохраняются в `evidence/runtime/`.
+
+- Свежий baseline **5/5 PASS/0**: VehiclePreset/Log/ClientLog, Localization,
+  MenuPrice. Полный `after-all` — **95/95 PASS/0**. Новые/расширенные contracts:
+  39 structural guards,24 physical log controls,12 client/JIP controls,
+  13 native catalog log controls. Localization —701 RU/EN entries.
+- Native каталог `catalog-stock-final`, `catalog-rhs-final`, `catalog-wcs-final`:
+  **21/21 PASS** каждый, native0/stopped/scriptFatal0. Проверены полнота own/CIV
+  источников, parallel metadata, stable quotes, отсутствие budget mutation,
+  enemy rejection, civilian inspection/recipient и отсутствие spawn/purchase.
+  Stock:41 own+55 CIV для US,19+55 для USSR. RHS:18+55 /25+55.
+  Итоговый WCS после исключения legacy tracked:20+58 /26+58.
+- `civilian-physical`: **185/185 PASS**,4 exact occupants civilian UAZ blue,
+  один purchase50. `Test-VehiclePresetLog.ps1 -Civilian -Lifecycle -Policy`
+  **PASS**; native0/stopped/scriptFatal0. Проверены также library/legacy,
+  reset, повтор без второго spawn/debit, новая группа и manual/automatic policy.
+- `civilian-s105`: **186/186 PASS**,1 exact occupant S105 beige, один purchase40,
+  native0/stopped/scriptFatal0; тот же auditor **PASS**. Дополнительный CLI model
+  selector существует только в fixture. После его последней test-only правки
+  полный95 не повторялся; native/compile этой fixture подтверждены отдельно.
+- Окончательный production Workbench Stock/RHS/WCS — **3/3 PASS/0**,
+  successful validation и scriptFatal0 в полных logs, без fixtures.
+- `final-ui`: **28 client +5 JIP checks PASS**, owner readback подтверждает
+  civilian prefab своей USSR. Фильтры source/category, пустой результат без
+  SELECT, перевод visible index в prefab и Load/JIP reveal проверены hidden
+  native handlers. Server/client/JIP native0/0/0, все logs остановлены.
+  Строгий auditor `-CatalogFilters` — **FAIL SERVER_FULL_FATAL**, ровно8 native
+  persistence serializer leaks при reconnect, как установленный native-only
+  baseline предыдущего этапа. Отказ не фильтруется, ready PR остаётся блокирован.
+
+Первый диагностический compile выявил неверный InsertAll для array<ref budget>
+в собственной fixture; исправлен до production. Первый catalog probe нашёл
+ошибку range guard цены; исправлена целочисленным сравнением, поздние quotes/
+inspection прошли. Ранний WCS catalog включал legacy tracked с wheel component;
+уточнение scope потребовало отдельного исключения native tracked и `/Tracked/`.
+Дополнительный S105 fixture сначала имел неверный scope переменной CLI selector;
+исправлен до запуска S105. Diagnostic compile log сохранён отдельно.
+Ранние логи сохранены как diagnostic/FAIL, не выданы за final wheel-only PASS.
+
+Cleanup:18 собственных profiles и stage удалены после SHA256 архивации logs; subst X снят, собственных native процессов0. Полные evidence сохранены.
+
+Baseline offline failures отсутствуют. Строгий all-native resource Error gate
+остаётся **FAIL** по существующим vendor/resource errors; compile0 не заменяет
+его. Visual/input UX и clipping/filter list читаемость RU/EN — **NOT RUN**:
+нужен игрок, который откроет «Техника», переключит обе группы фильтров и загрузит
+сохранённую civilian схему. GUI automation/screenshots запрещены AGENTS.md.
+Длительный бой и physical запуск каждой RHS/WCS модели — **NOT RUN**; native
+catalog/quotes и compile не доказывают физическое выполнение всех моделей.
+
 ## Пресеты техники: issue #78 — 2026-10-25
 
 Ветка `codex/issue-78-vehicle-presets` от актуального `origin/main` `45d0431`.

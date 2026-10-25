@@ -8,11 +8,12 @@ $names=@('US_CATALOG_INSPECTED','USSR_CATALOG_INSPECTED','ARMED_UAZ_TURRET','SEL
 $purchase='[VEHICLE_PRESET_PURCHASE] operation=trip-1 prefab=vehicle.et supplies=125'
 $good=(@('CLI Params: '+($argv -join ' '),'[ROSTER_READY]')+@($names|ForEach-Object{"[VEHICLE_PRESET_CHECK] rule=$_ passed=1"})+@('[VEHICLE_PRESET_OCCUPANT] operation=trip-1 revision=1 position=0 seat=0:2:0 member=123 occupant=123',$purchase,'PRESET_EXACT_OCCUPANTS_CONFIRMED',('[VEHICLE_PRESET_DONE] checks='+$names.Count+' failures=0'),'Game destroyed.')) -join "`n"
 $count=0
-function Check([string]$Name,[string]$Log,[int]$Expected,[string]$Rule,[string]$ExitCode='0',[switch]$Reload,[switch]$Lifecycle,[switch]$Human,[switch]$Policy){
+function Check([string]$Name,[string]$Log,[int]$Expected,[string]$Rule,[string]$ExitCode='0',[switch]$Reload,[switch]$Lifecycle,[switch]$Human,[switch]$Policy,[switch]$Civilian){
  [IO.File]::WriteAllText("$work/console.log",$Log)
  $currentLauncher=$launcher
  if($Reload){$currentLauncher='AICF_RUNTIME_MANIFEST_JSON='+(@{arguments=$argv+@('-aicfVehiclePresetReload','1')}|ConvertTo-Json -Compress)}
  if($Human){$currentLauncher='AICF_RUNTIME_MANIFEST_JSON='+(@{arguments=$argv+@('-aicfVehiclePresetHuman','1')}|ConvertTo-Json -Compress)}
+ if($Civilian){$currentLauncher='AICF_RUNTIME_MANIFEST_JSON='+(@{arguments=$argv+@('-aicfVehiclePresetCivilian','1')}|ConvertTo-Json -Compress)}
  [IO.File]::WriteAllText("$work/launcher.txt",$currentLauncher)
  [IO.File]::WriteAllText("$work/exit.txt",$ExitCode)
  $options=@()
@@ -20,6 +21,7 @@ function Check([string]$Name,[string]$Log,[int]$Expected,[string]$Rule,[string]$
  if($Lifecycle){$options=@('-Lifecycle')}
  if($Human){$options=@('-HumanProtection')}
  if($Policy){$options=@('-Policy')}
+ if($Civilian){$options=@('-Civilian')}
  $output=& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $RepositoryRoot 'tests/log-audits/Test-VehiclePresetLog.ps1') -LogPath "$work/console.log" -LauncherPath "$work/launcher.txt" -NativeExitPath "$work/exit.txt" @options 2>&1
  if($LASTEXITCODE -ne $Expected -or ($Rule -and ($output -join "`n") -notmatch $Rule)){throw "$Name unexpected verdict: $output"}
  $script:count++
@@ -49,6 +51,9 @@ try{
  $policy=$good.Replace('[VEHICLE_PRESET_DONE] checks='+$names.Count+' failures=0','[VEHICLE_PRESET_DONE] checks='+($names.Count+2)+' failures=0')+"`n[VEHICLE_PRESET_CHECK] rule=MANUAL_OVERRIDES_AUTOMATIC_POLICY passed=1`n[VEHICLE_PRESET_CHECK] rule=AUTOMATIC_POLICY_RESTORED passed=1"
  Check 'policy' $policy 0 '' -Policy
  Check 'policy-missing-reset' ($policy.Replace('rule=AUTOMATIC_POLICY_RESTORED','rule=REMOVED')) 1 'MISSING_OR_DUPLICATE_CASE_AUTOMATIC_POLICY_RESTORED' -Policy
+ $civilian=$good.Replace('CLI Params: '+($argv -join ' '),'CLI Params: '+(($argv+@('-aicfVehiclePresetCivilian','1')) -join ' ')).Replace('rule=ARMED_UAZ_TURRET','rule=CIVILIAN_MODEL')
+ Check 'civilian' $civilian 0 '' -Civilian
+ Check 'civilian-missing-permission' ($civilian.Replace('rule=CIVILIAN_MODEL','rule=REMOVED')) 1 'MISSING_OR_DUPLICATE_CASE_CIVILIAN_MODEL' -Civilian
  $restartNames=@('US_CATALOG_INSPECTED','USSR_CATALOG_INSPECTED','RESTART_MODEL_SEATS','RESTART_TOMBSTONE','RESTART_LEGACY','RESTART_NO_ASSIGNMENT','RESTART_NO_VEHICLE')
  $restart=(@('CLI Params: '+(($argv+@('-aicfVehiclePresetReload','1')) -join ' '),'[ROSTER_READY]')+@($restartNames|ForEach-Object{"[VEHICLE_PRESET_CHECK] rule=$_ passed=1"})+@('[VEHICLE_PRESET_DONE] checks=7 failures=0','Game destroyed.')) -join "`n"
  Check 'restart' $restart 0 '' -Reload

@@ -287,6 +287,15 @@ Social service не владеет waypoint или recruitment: он читае�
 Backend identity ledger не зависит от controlled entity, audio не входит в JIP
 snapshot. Ресурсы, допуск и ограничения: [SOCIAL_BEHAVIOR.md](SOCIAL_BEHAVIOR.md).
 
+Ручной vehicle catalog объединяет enabled колёсные entries своей faction и native
+CIV, а factionless entries требует маркировать `FACTION_CIV`. Категории принадлежат
+native metadata; UI фильтрует presentation, server заново разрешает prefab из того
+же whitelist. `AICF_ContentProfile.GetVehiclePresetCostOverride` — vendor boundary:
+RHS/WCS возвращает прежний quote, Core использует native SpawnerData/CAMPAIGN
+fallback без мутации budget объектов. Faction в recipe — получатель, даже для
+civilian prefab. Выдача, purchase и boarding остаются у прежних доменных owners.
+Контракт: [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
+
 Loadout templates назначаются slot/memberIndex: новые бойцы получают binding
 при создании, живые — при допустимом посещении действующего арсенала.
 `AICF_EquipmentService` владеет потребностью, поиском источников и ограниченным

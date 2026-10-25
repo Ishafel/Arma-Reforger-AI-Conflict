@@ -4150,5 +4150,71 @@ StringTable
 			Target_en_us "Waiting for safe dismount and vehicle release. Vehicles occupied by players are protected."
 			Target_ru_ru "Ожидание безопасной высадки и освобождения машины. Техника с игроками защищена."
 		}
+		CustomStringTableItem "{A1CF261025780034}"
+		{
+			Id "AICF_UI_VehicleAllSources"
+			Target_en_us "All available vehicles"
+			Target_ru_ru "Все доступные машины"
+		}
+		CustomStringTableItem "{A1CF261025780035}"
+		{
+			Id "AICF_UI_VehicleFactionSource"
+			Target_en_us "Own faction"
+			Target_ru_ru "Своя фракция"
+		}
+		CustomStringTableItem "{A1CF261025780036}"
+		{
+			Id "AICF_UI_VehicleCivilianSource"
+			Target_en_us "Civilian vehicles"
+			Target_ru_ru "Гражданские машины"
+		}
+		CustomStringTableItem "{A1CF261025780037}"
+		{
+			Id "AICF_UI_VehicleAllCategories"
+			Target_en_us "All categories"
+			Target_ru_ru "Все категории"
+		}
+		CustomStringTableItem "{A1CF261025780038}"
+		{
+			Id "AICF_UI_VehicleCars"
+			Target_en_us "Cars and light vehicles"
+			Target_ru_ru "Легковые и лёгкие машины"
+		}
+		CustomStringTableItem "{A1CF261025780039}"
+		{
+			Id "AICF_UI_VehicleTrucks"
+			Target_en_us "Trucks"
+			Target_ru_ru "Грузовики"
+		}
+		CustomStringTableItem "{A1CF26102578003A}"
+		{
+			Id "AICF_UI_VehicleArmor"
+			Target_en_us "Armoured vehicles"
+			Target_ru_ru "Бронетехника"
+		}
+		CustomStringTableItem "{A1CF26102578003C}"
+		{
+			Id "AICF_UI_VehicleOther"
+			Target_en_us "Other vehicles"
+			Target_ru_ru "Прочая техника"
+		}
+		CustomStringTableItem "{A1CF26102578003D}"
+		{
+			Id "AICF_UI_VehicleNoPrice"
+			Target_en_us "price unavailable"
+			Target_ru_ru "нет цены"
+		}
+		CustomStringTableItem "{A1CF26102578003E}"
+		{
+			Id "AICF_UI_VehicleCostUnavailable"
+			Target_en_us "No valid supply cost is available for this vehicle."
+			Target_ru_ru "Для этой машины не задана допустимая стоимость в supplies."
+		}
+		CustomStringTableItem "{A1CF26102578003F}"
+		{
+			Id "AICF_UI_VehicleUnsupportedType"
+			Target_en_us "The transport AI does not support this vehicle type yet."
+			Target_ru_ru "Транспортный ИИ пока не поддерживает этот тип техники."
+		}
 	}
 }

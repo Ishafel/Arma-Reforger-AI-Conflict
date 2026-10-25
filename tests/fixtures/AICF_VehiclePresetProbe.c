@@ -166,6 +166,8 @@ modded class AICF_MatchController
 
 	protected void AICF_VPModels(SCR_CampaignFaction faction)
 	{
+		string requestedModel;
+		System.GetCLIParam("aicfVehiclePresetModel", requestedModel);
 		AICF_VehiclePresetCatalog catalog = new AICF_VehiclePresetCatalog(faction);
 		JsonLoadContext json = new JsonLoadContext();
 		array<ResourceName> prefabs = {};
@@ -175,7 +177,11 @@ modded class AICF_MatchController
 		string prefix = AICF_ContentProfile.GetActive().GetStableFactionKey(faction.GetFactionKey()) + "_";
 		foreach (ResourceName prefab : prefabs)
 		{
-			if (!prefab.Contains("UAZ") && !prefab.Contains("M1025")) continue;
+			string civilianFlag;
+			bool civilian = System.GetCLIParam("aicfVehiclePresetCivilian", civilianFlag);
+			if (catalog.Source(prefab) == AICF_EVehicleCatalogSource.CIVILIAN && !civilian) continue;
+			if (civilian && catalog.Source(prefab) != AICF_EVehicleCatalogSource.CIVILIAN) continue;
+			if (!prefab.Contains("UAZ") && !prefab.Contains("M1025") && (requestedModel.IsEmpty() || !prefab.Contains(requestedModel))) continue;
 			string reason;
 			bool valid = catalog.Inspect(prefab, reason);
 			Print(string.Format("[AICF][VEHICLE_PRESET_MODEL] prefab=%1 valid=%2 seats=%3 reason=%4", prefab, valid, catalog.Seats().Count(), reason));
@@ -194,9 +200,11 @@ modded class AICF_MatchController
 			else if (prefab.Contains("UAZ")) AICF_VPCheck(prefix + "UNARMED_UAZ_NO_TURRET_" + inspected.ToString(), turret == 0);
 			string crew;
 			System.GetCLIParam("aicfVehiclePresetCrew", crew);
-			if (prefab.Contains("UAZ"))
+			if (!requestedModel.IsEmpty() && prefab.Contains(requestedModel) && faction == m_USSRFaction) m_VehicleProbePreset = preset;
+			else if (requestedModel.IsEmpty() && prefab.Contains("UAZ") && faction == m_USSRFaction)
 			{
-				if (crew == "armed" && prefab.Contains("PKM")) m_VehicleProbePreset = preset;
+				if (civilian && prefab.Contains("UAZ469_uncovered_CIV_blue.et")) m_VehicleProbePreset = preset;
+				else if (!civilian && crew == "armed" && prefab.Contains("PKM")) m_VehicleProbePreset = preset;
 				else if (crew != "armed" && !m_VehicleProbePreset && turret == 0) m_VehicleProbePreset = preset;
 			}
 		}
@@ -323,6 +331,12 @@ modded class AICF_MatchController
 			AICF_VPModels(m_USFaction);
 			AICF_VPModels(m_USSRFaction);
 			AICF_VPCheck("SELECT_UAZ", m_VehicleProbePreset != null);
+			string civilianModel;
+			if (System.GetCLIParam("aicfVehiclePresetCivilian", civilianModel))
+			{
+				AICF_VehiclePresetCatalog civilianCatalog = new AICF_VehiclePresetCatalog(m_USSRFaction);
+				AICF_VPCheck("CIVILIAN_MODEL", m_VehicleProbePreset && civilianCatalog.Source(m_VehicleProbePreset.m_sPrefab) == AICF_EVehicleCatalogSource.CIVILIAN && m_VehicleProbePreset.m_sFaction == "USSR" && civilianCatalog.Cost(m_VehicleProbePreset.m_sPrefab) > 0);
+			}
 			if (!m_VehicleProbePreset) { AICF_VPClose(); return; }
 			m_VehicleProbePreset.m_sName = "Probe vehicle";
 			// Явный выбор состава fixture, до настройки техники; production

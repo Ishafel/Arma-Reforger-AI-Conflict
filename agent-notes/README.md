@@ -7,7 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
-| Изменить ручной выбор машины, numeric рассадку и библиотеку техники (issue #78) | [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md), `AICF_VehiclePreset`/`AICF_VehiclePresetCatalog`, `AICF_VehiclePresetService`/`AICF_VehiclePresetStore`, acquisition/boarding/trip owners |
+| Изменить категории своего/CIV колёсного каталога, ручной выбор машины, numeric рассадку и библиотеку техники (issue #78) | [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md), `AICF_VehiclePreset`/`AICF_VehiclePresetCatalog`, `AICF_VehiclePresetService`/`AICF_VehiclePresetStore`, content price override, acquisition/boarding/trip owners |
 | Изменить «Инспектор», прокрутку, ввод окон, названия назначений, постоянную библиотеку, Save/Apply/Delete, перенос комплекта между ролями, массовое назначение или настройку противника (issue #66) | [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md), `AICF_LoadoutService`/`AICF_LoadoutStore`/`AICF_LoadoutTransfer`, `AICF_LoadoutPreset`/`AICF_LoadoutBatch`, `AICF_LoadoutEditor`/`AICF_LoadoutRpc`, `AICF_LoadoutLibraryView`/`AICF_LoadoutSummary`, `tools/AICF_LoadoutLibrary.ps1` |
 | Запустить локальные Play/Host через обычный клиент или разобрать native shutdown crash | [DEVELOPMENT.md](DEVELOPMENT.md#локальные-playhost), [TESTING.md](TESTING.md), `tools/Start-AICFRuntime.ps1 -Role Frontend`; успешный offline/compile не заменяет stopped-log runtime gate |
 | Изменить внутриигровой брифинг на карте | [MISSION_BRIEFING.md](MISSION_BRIEFING.md), `UI/AICF_MissionBriefing.c`, MissionBriefingProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |

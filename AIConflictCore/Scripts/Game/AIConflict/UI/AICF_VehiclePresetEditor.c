@@ -11,11 +11,19 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 	protected TextWidget m_wUnseated;
 	protected EditBoxWidget m_wName;
 	protected SCR_ComboBoxComponent m_Catalog;
+	protected SCR_ComboBoxComponent m_SourceFilter;
+	protected SCR_ComboBoxComponent m_CategoryFilter;
 	protected SCR_ComboBoxComponent m_Library;
 	protected ref array<SCR_ComboBoxComponent> m_aSeats = {};
 	protected ref array<TextWidget> m_aSeatLabels = {};
 	protected ref array<Widget> m_aButtons = {};
 	protected ref array<ResourceName> m_aPrefabs = {};
+	protected ref array<string> m_aCatalogNames = {};
+	protected ref array<int> m_aCatalogCosts = {};
+	protected ref array<int> m_aCatalogSources = {};
+	protected ref array<int> m_aCatalogCategories = {};
+	protected ref array<int> m_aVisibleVehicles = {};
+	protected ref map<string, int> m_mCatalogNameCounts = new map<string, int>();
 	protected ref array<int> m_aLibraryIds = {};
 	protected ref array<int> m_aActiveMembers = {};
 	protected ref array<string> m_aSeatNames = {};
@@ -112,13 +120,23 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		int size;
 		m_Controller.GetLoadoutGroup(slot, name, size);
 		Label(0.03, 0.08, 0.97, 0.13, name);
-		m_Catalog = Combo(0.03, 0.15, 0.61, 0.21);
-		Button("select", "{AICF:AICF_UI_VehicleSelect}", 0.64, 0.15, 0.97, 0.21);
+		m_SourceFilter = Combo(0.03, 0.14, 0.49, 0.19);
+		m_CategoryFilter = Combo(0.51, 0.14, 0.97, 0.19);
+		array<string> sourceKeys = {"{AICF:AICF_UI_VehicleAllSources}", "{AICF:AICF_UI_VehicleFactionSource}", "{AICF:AICF_UI_VehicleCivilianSource}"};
+		foreach (string sourceKey : sourceKeys)
+			m_SourceFilter.AddItem(AICF_Localization.Resolve(sourceKey));
+		array<string> categoryKeys = {"{AICF:AICF_UI_VehicleAllCategories}", "{AICF:AICF_UI_VehicleCars}", "{AICF:AICF_UI_VehicleTrucks}", "{AICF:AICF_UI_VehicleArmor}", "{AICF:AICF_UI_VehicleOther}"};
+		foreach (string categoryKey : categoryKeys)
+			m_CategoryFilter.AddItem(AICF_Localization.Resolve(categoryKey));
+		m_SourceFilter.SetCurrentItem(0, false, false, false);
+		m_CategoryFilter.SetCurrentItem(0, false, false, false);
+		m_Catalog = Combo(0.03, 0.205, 0.61, 0.255);
+		Button("select", "{AICF:AICF_UI_VehicleSelect}", 0.64, 0.205, 0.97, 0.255);
 		for (int row; row < 8; row++)
 		{
-			float y = 0.24 + row * 0.053;
-			m_aSeatLabels.Insert(Label(0.03, y, 0.59, y + 0.049, ""));
-			m_aSeats.Insert(Combo(0.61, y, 0.97, y + 0.049));
+			float y = 0.28 + row * 0.047;
+			m_aSeatLabels.Insert(Label(0.03, y, 0.59, y + 0.043, ""));
+			m_aSeats.Insert(Combo(0.61, y, 0.97, y + 0.043));
 		}
 		Button("previous", "<", 0.03, 0.67, 0.09, 0.72);
 		Button("next", ">", 0.10, 0.67, 0.16, 0.72);
@@ -188,15 +206,23 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		m_bRendering = true;
 		JsonLoadContext list = new JsonLoadContext();
 		array<string> captions = {};
-		array<int> costs = {};
 		if (catalog != m_sCatalogData && list.LoadFromString(catalog))
 		{
+			ResourceName selectedPrefab = SelectedPrefab();
 			m_sCatalogData = catalog;
 			list.ReadValue("prefabs", m_aPrefabs);
-			list.ReadValue("names", captions);
-			list.ReadValue("costs", costs);
-			m_Catalog.ClearAll();
-			for (int i; i < captions.Count(); i++) m_Catalog.AddItem(AICF_Localization.Resolve(captions[i]) + " (" + costs[i].ToString() + ")");
+			list.ReadValue("names", m_aCatalogNames);
+			list.ReadValue("costs", m_aCatalogCosts);
+			list.ReadValue("sources", m_aCatalogSources);
+			list.ReadValue("categories", m_aCatalogCategories);
+			m_mCatalogNameCounts.Clear();
+			foreach (string catalogName : m_aCatalogNames)
+			{
+				int count = 0;
+				m_mCatalogNameCounts.Find(catalogName, count);
+				m_mCatalogNameCounts.Set(catalogName, count + 1);
+			}
+			RenderCatalog(selectedPrefab);
 		}
 		list = new JsonLoadContext();
 		if (library != m_sLibraryData && list.LoadFromString(library))
@@ -217,13 +243,75 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 			m_iPage = 0;
 			if (m_Draft) m_wName.SetText(m_Draft.m_sName);
 			else m_wName.SetText("");
-			if (m_Draft) m_Catalog.SetCurrentItem(m_aPrefabs.Find(m_Draft.m_sPrefab), false, false, false);
+			if (m_Draft) RevealDraft();
 			RenderSeats();
 		}
 		else RenderSeats();
 		m_bRendering = false;
 		if (completed && !m_Player.AICF_VehiclePresetAccepted()) status = m_Player.AICF_VehiclePresetReason();
 		m_wStatus.SetText(Status(status));
+	}
+
+	protected ResourceName SelectedPrefab()
+	{
+		if (!m_Catalog) return ResourceName.Empty;
+		int visible = m_Catalog.GetCurrentIndex();
+		if (!m_aVisibleVehicles.IsIndexValid(visible)) return ResourceName.Empty;
+		int index = m_aVisibleVehicles[visible];
+		if (!m_aPrefabs.IsIndexValid(index)) return ResourceName.Empty;
+		return m_aPrefabs[index];
+	}
+
+	protected void RenderCatalog(ResourceName selectedPrefab = ResourceName.Empty)
+	{
+		bool previous = m_bRendering;
+		m_bRendering = true;
+		m_Catalog.ClearAll();
+		m_aVisibleVehicles.Clear();
+		int source = m_SourceFilter.GetCurrentIndex();
+		int category = m_CategoryFilter.GetCurrentIndex();
+		int selected = -1;
+		for (int index; index < m_aPrefabs.Count(); index++)
+		{
+			if (!m_aCatalogNames.IsIndexValid(index) || !m_aCatalogCosts.IsIndexValid(index) || !m_aCatalogSources.IsIndexValid(index) || !m_aCatalogCategories.IsIndexValid(index)) continue;
+			if (source > 0 && m_aCatalogSources[index] != source) continue;
+			if (category > 0 && m_aCatalogCategories[index] != category) continue;
+			if (m_aPrefabs[index] == selectedPrefab) selected = m_aVisibleVehicles.Count();
+			m_aVisibleVehicles.Insert(index);
+			string caption = AICF_Localization.Resolve(m_aCatalogNames[index]);
+			int sameName;
+			m_mCatalogNameCounts.Find(m_aCatalogNames[index], sameName);
+			if (sameName > 1)
+			{
+				string variant = FilePath.StripExtension(FilePath.StripPath(m_aPrefabs[index]));
+				variant.Replace("_", " ");
+				caption += " — " + variant;
+			}
+			if (source == AICF_EVehicleCatalogSource.ALL)
+			{
+				string origin = "{AICF:AICF_UI_VehicleFactionSource}";
+				if (m_aCatalogSources[index] == AICF_EVehicleCatalogSource.CIVILIAN) origin = "{AICF:AICF_UI_VehicleCivilianSource}";
+				caption = AICF_Localization.Resolve(origin) + ": " + caption;
+			}
+			string price = m_aCatalogCosts[index].ToString();
+			if (m_aCatalogCosts[index] <= 0) price = AICF_Localization.Resolve("{AICF:AICF_UI_VehicleNoPrice}");
+			m_Catalog.AddItem(caption + " (" + price + ")");
+		}
+		if (selected < 0 && !m_aVisibleVehicles.IsEmpty()) selected = 0;
+		m_Catalog.SetCurrentItem(selected, false, false, false);
+		m_bRendering = previous;
+	}
+
+	protected void RevealDraft()
+	{
+		int index = m_aPrefabs.Find(m_Draft.m_sPrefab);
+		if (index < 0 || !m_aCatalogSources.IsIndexValid(index) || !m_aCatalogCategories.IsIndexValid(index)) return;
+		if (!m_aVisibleVehicles.Contains(index))
+		{
+			m_SourceFilter.SetCurrentItem(m_aCatalogSources[index], false, false, false);
+			m_CategoryFilter.SetCurrentItem(m_aCatalogCategories[index], false, false, false);
+		}
+		RenderCatalog(m_Draft.m_sPrefab);
 	}
 
 	protected string Status(string reason)
@@ -249,7 +337,9 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 			case "DUPLICATE_SEAT": message = "{AICF:AICF_UI_VehicleDuplicate}"; break;
 			case "SEAT_TOPOLOGY_CHANGED":
 			case "PREFAB_UNAVAILABLE":
-			case "UNSUPPORTED_VEHICLE": message = "{AICF:AICF_UI_VehicleUnsupported}"; break;
+				message = "{AICF:AICF_UI_VehicleUnsupported}"; break;
+			case "UNSUPPORTED_VEHICLE": message = "{AICF:AICF_UI_VehicleUnsupportedType}"; break;
+			case "VEHICLE_COST_UNAVAILABLE": message = "{AICF:AICF_UI_VehicleCostUnavailable}"; break;
 			case "WAITING_FOR_ORDER_OR_ADMISSION":
 			case "WAITING_FOR_VEHICLE_LIFECYCLE":
 			case "WAITING_FOR_SITE":
@@ -299,7 +389,13 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 
 	protected void OnChanged(SCR_ComboBoxComponent combo, int item)
 	{
-		if (m_bRendering || m_bPending || m_bQueued || !m_Draft) return;
+		if (m_bRendering) return;
+		if (combo == m_SourceFilter || combo == m_CategoryFilter)
+		{
+			RenderCatalog(SelectedPrefab());
+			return;
+		}
+		if (m_bPending || m_bQueued || !m_Draft) return;
 		int row = m_aSeats.Find(combo);
 		if (row < 0) return;
 		m_Draft.Assign(m_iPage * 8 + row, item - 1);
@@ -314,8 +410,8 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		if (m_bPending || m_bQueued) return true;
 		if (action == "select")
 		{
-			int selected = m_Catalog.GetCurrentIndex();
-			if (m_aPrefabs.IsIndexValid(selected)) Request(AICF_EVehiclePresetOperation.SELECT, m_aPrefabs[selected]);
+			ResourceName selected = SelectedPrefab();
+			if (!selected.IsEmpty()) Request(AICF_EVehiclePresetOperation.SELECT, selected);
 		}
 		else if (action == "load" || action == "delete")
 		{
@@ -356,6 +452,8 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 			GetGame().GetWorkspace().RemoveModal(m_wRoot);
 		}
 		ClearCombo(m_Catalog);
+		ClearCombo(m_SourceFilter);
+		ClearCombo(m_CategoryFilter);
 		ClearCombo(m_Library);
 		foreach (SCR_ComboBoxComponent combo : m_aSeats) ClearCombo(combo);
 		foreach (Widget input : m_aButtons) input.RemoveHandler(this);
@@ -365,6 +463,8 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		if (m_wRoot) m_wRoot.RemoveFromHierarchy();
 		m_wRoot = null;
 		m_Catalog = null;
+		m_SourceFilter = null;
+		m_CategoryFilter = null;
 		m_Library = null;
 		m_Draft = null;
 		m_Player = null;
@@ -378,5 +478,12 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		m_sCatalogData = "";
 		m_sLibraryData = "";
 		m_aActiveMembers.Clear();
+		m_aPrefabs.Clear();
+		m_aCatalogNames.Clear();
+		m_aCatalogCosts.Clear();
+		m_aCatalogSources.Clear();
+		m_aCatalogCategories.Clear();
+		m_aVisibleVehicles.Clear();
+		m_mCatalogNameCounts.Clear();
 	}
 }

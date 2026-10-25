@@ -1,4 +1,20 @@
-// Каталог faction/profile — whitelist, а topology читается с native модели
+enum AICF_EVehicleCatalogSource
+{
+	ALL,
+	FACTION,
+	CIVILIAN
+}
+
+enum AICF_EVehicleCatalogCategory
+{
+	ALL,
+	CARS,
+	TRUCKS,
+	ARMOR,
+	OTHER
+}
+
+// Своя faction + native CIV — whitelist, а topology читается с native модели
 // в private preview world. Кампания не получает пробную машину или экипаж.
 class AICF_VehiclePresetCatalog
 {
@@ -10,28 +26,99 @@ class AICF_VehiclePresetCatalog
 	protected ref array<ResourceName> m_aPrefabs = {};
 	protected ref array<string> m_aNames = {};
 	protected ref array<int> m_aCosts = {};
+	protected ref array<int> m_aSources = {};
+	protected ref array<int> m_aCategories = {};
 
 	void AICF_VehiclePresetCatalog(SCR_CampaignFaction faction)
 	{
 		m_Faction = faction;
 		if (!faction) return;
-		SCR_EntityCatalog catalog = faction.GetFactionEntityCatalogOfType(EEntityCatalogType.VEHICLE);
+		Append(faction.GetFactionEntityCatalogOfType(EEntityCatalogType.VEHICLE), AICF_EVehicleCatalogSource.FACTION);
+		SCR_Faction civilian = SCR_Faction.Cast(GetGame().GetFactionManager().GetFactionByKey("CIV"));
+		if (civilian)
+			Append(civilian.GetFactionEntityCatalogOfType(EEntityCatalogType.VEHICLE, false), AICF_EVehicleCatalogSource.CIVILIAN);
+		SCR_EntityCatalogManagerComponent manager = SCR_EntityCatalogManagerComponent.GetInstance();
+		if (manager)
+			Append(manager.GetEntityCatalogOfType(EEntityCatalogType.VEHICLE, false), AICF_EVehicleCatalogSource.CIVILIAN, true);
+	}
+
+	protected void Append(SCR_EntityCatalog catalog, int source, bool requireCivilianLabel = false)
+	{
 		if (!catalog) return;
 		array<SCR_EntityCatalogEntry> entries = {};
 		catalog.GetEntityList(entries);
 		foreach (SCR_EntityCatalogEntry entry : entries)
 		{
 			if (!entry || !entry.IsEnabled() || entry.GetPrefab().IsEmpty() || m_aPrefabs.Contains(entry.GetPrefab())) continue;
-			SCR_EntityCatalogSpawnerData data = SCR_EntityCatalogSpawnerData.Cast(entry.GetEntityDataOfType(SCR_EntityCatalogSpawnerData));
+			if (requireCivilianLabel && !entry.HasEditableEntityLabel(EEditableEntityLabel.FACTION_CIV)) continue;
 			Resource resource = Resource.Load(entry.GetPrefab());
-			if (!data || data.GetSupplyCost() <= 0 || !resource || !resource.IsValid()) continue;
+			if (!resource || !resource.IsValid()) continue;
+			if (!SCR_BaseContainerTools.FindComponentSource(resource, VehicleWheeledSimulation)) continue;
+			// Legacy модовые tracked prefabs могут наследовать wheel component.
+			string path = entry.GetPrefab();
+			path.ToLower();
+			if (path.Contains("/tracked/") || SCR_BaseContainerTools.FindComponentSource(resource, VehicleTrackedSimulation)) continue;
 			m_aPrefabs.Insert(entry.GetPrefab());
 			string name = FilePath.StripPath(entry.GetPrefab());
 			SCR_UIInfo info = entry.GetEntityUiInfo();
 			if (info && !info.GetName().IsEmpty()) name = info.GetName();
 			m_aNames.Insert(name);
-			m_aCosts.Insert(data.GetSupplyCost());
+			m_aCosts.Insert(EntryCost(entry, resource));
+			m_aSources.Insert(source);
+			m_aCategories.Insert(Category(entry));
 		}
+	}
+
+	static int Category(SCR_EntityCatalogEntry entry)
+	{
+		if (entry.HasEditableEntityLabel(EEditableEntityLabel.VEHICLE_APC) || entry.HasEditableEntityLabel(EEditableEntityLabel.TRAIT_ARMOR))
+			return AICF_EVehicleCatalogCategory.ARMOR;
+		if (entry.HasEditableEntityLabel(EEditableEntityLabel.VEHICLE_TRUCK))
+			return AICF_EVehicleCatalogCategory.TRUCKS;
+		if (entry.HasEditableEntityLabel(EEditableEntityLabel.VEHICLE_CAR))
+			return AICF_EVehicleCatalogCategory.CARS;
+		return AICF_EVehicleCatalogCategory.OTHER;
+	}
+
+	protected int EntryCost(SCR_EntityCatalogEntry entry, Resource resource)
+	{
+		int quote = AICF_ContentProfile.GetActive().GetVehiclePresetCostOverride(entry.GetPrefab());
+		if (quote >= 0) return quote;
+		SCR_EntityCatalogSpawnerData data = SCR_EntityCatalogSpawnerData.Cast(entry.GetEntityDataOfType(SCR_EntityCatalogSpawnerData));
+		if (data) return data.GetSupplyCost();
+		// Тот же native CAMPAIGN budget, который читает SpawnerData.InitData.
+		// Читаем суммы без MergeBudgetCosts: он может менять source objects.
+		IEntityComponentSource component = SCR_EditableEntityComponentClass.GetEditableEntitySource(resource);
+		if (!component) return -1;
+		BaseContainer info = component.GetObject("m_UIInfo");
+		if (!info) return -1;
+		array<ref SCR_EntityBudgetValue> own = {};
+		array<ref SCR_EntityBudgetValue> children = {};
+		info.Get("m_EntityBudgetCost", own);
+		info.Get("m_EntityChildrenBudgetCost", children);
+		int total = -1;
+		if (!ReadCampaignCost(own, total) || !ReadCampaignCost(children, total)) return -1;
+		return total;
+	}
+
+	protected bool ReadCampaignCost(array<ref SCR_EntityBudgetValue> budgets, inout int total)
+	{
+		foreach (SCR_EntityBudgetValue budget : budgets)
+		{
+			if (!budget || budget.GetBudgetType() != EEditableEntityBudget.CAMPAIGN) continue;
+			int value = budget.GetBudgetValue();
+			if (value < 0 || (total >= 0 && value > 2147483646 - total)) return false;
+			if (total < 0) total = 0;
+			total += value;
+		}
+		return true;
+	}
+
+	int Source(ResourceName prefab)
+	{
+		int index = m_aPrefabs.Find(prefab);
+		if (index < 0) return -1;
+		return m_aSources[index];
 	}
 
 	int Cost(ResourceName prefab)
@@ -47,6 +134,8 @@ class AICF_VehiclePresetCatalog
 		json.WriteValue("prefabs", m_aPrefabs);
 		json.WriteValue("names", m_aNames);
 		json.WriteValue("costs", m_aCosts);
+		json.WriteValue("sources", m_aSources);
+		json.WriteValue("categories", m_aCategories);
 		return json.SaveToString();
 	}
 
@@ -54,7 +143,8 @@ class AICF_VehiclePresetCatalog
 	{
 		Clear();
 		reason = "PREFAB_UNAVAILABLE";
-		if (Cost(prefab) <= 0) return false;
+		if (!m_aPrefabs.Contains(prefab)) return false;
+		if (Cost(prefab) <= 0) { reason = "VEHICLE_COST_UNAVAILABLE"; return false; }
 		m_World = BaseWorld.CreateWorld("ChimeraWorld", "AICF_VehiclePreset_" + (++s_iWorldSequence).ToString());
 		if (!m_World || !m_World.IsValid()) { reason = "PREVIEW_WORLD_UNAVAILABLE"; return false; }
 		ChimeraWorld world = m_World.GetRef();
@@ -64,6 +154,7 @@ class AICF_VehiclePresetCatalog
 		m_Model = GetGame().SpawnEntityPrefabLocal(Resource.Load(prefab), world);
 		if (!Vehicle.Cast(m_Model) || m_Model.GetWorld() == GetGame().GetWorld()) { Clear(); return false; }
 		if (!m_Model.FindComponent(VehicleWheeledSimulation)) { reason = "UNSUPPORTED_VEHICLE"; Clear(); return false; }
+		if (m_Model.FindComponent(VehicleTrackedSimulation)) { reason = "UNSUPPORTED_VEHICLE"; Clear(); return false; }
 		AICF_VehiclePreset.Collect(m_Model, m_aSeats);
 		int pilots;
 		foreach (BaseCompartmentSlot seat : m_aSeats)

@@ -9,6 +9,14 @@ Fixtures, flags и native oracles описаны в
 Production copies fixtures не содержит. Оба peers используют один неизменяемый
 stage. Hidden widget tree вызывает handlers без focus/input/screen capture.
 `AICF_VehicleNativeControl.c` используется отдельно, без остальных probes.
+`AICF_VehicleCatalogProbe.c` → Core/Vehicles `AICF_ZCatalogProbe.c`, flag
+`-aicfVehicleCatalogProbe 1`: полный native own/CIV wheeled catalog, metadata,
+stable quotes, немутирующее чтение budgets и enemy rejection,21 cases.
+Physical probe `-aicfVehiclePresetCivilian 1` выбирает точный civilian prefab
+для recipient USSR и проверяет тот же lifecycle. Client probe
+`-aicfVehicleCatalogFilters 1` добавляет source/category/empty/mapping/Load reveal
+checks, не захватывая focus/input. Последующие client/JIP должны видеть тот же
+неизменяемый script CRC stage. После matrix удаляй свои stage copies.
 Проверки 2026-10-25 и blockers — в [TESTING.md](TESTING.md).
 
 ## Пресеты ИИ: issue #66

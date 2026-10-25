@@ -16,13 +16,39 @@ Apply требует место каждому живому бойцу, дост
 desired size и заполненные Pilot/Turret/attached-turret seats. Он не меняет
 desired size, kits или roster и не создаёт отдельный экипаж.
 
-`AICF_VehiclePresetCatalog` берёт whitelist из native vehicle catalog стороны
-текущего content graph и проверяет enabled/resource/cost. SELECT создаёт local
+`AICF_VehiclePresetCatalog` берёт все enabled ResourceName из native vehicle catalog
+своей стороны и `CIV` текущего content graph. Дополняющий factionless каталог
+допускается только для entries с явной меткой `FACTION_CIV`; чужие faction catalogs
+не обходятся. Дубликат получает собственный faction source, стоящий первым.
+До включения проверяются resource и `VehicleWheeledSimulation` в prefab source;
+`VehicleTrackedSimulation` и legacy путь `/Tracked/` исключаются. Пользователь
+уточнил scope: легковые, грузовики и колёсная бронетехника; авиация/гусеничные/
+стационарные установки не входят. Это полный активный whitelist колёсных моделей,
+без прежнего ограничения наличием SpawnerData или curated suffixes.
+
+Owner-only JSON catalog содержит параллельные `prefabs`, `names`, `costs`, `sources`,
+`categories`. UI отдельно фильтрует «Все / Своя фракция / Гражданские» и
+«Все / Легковые / Грузовики / Бронетехника / Прочая техника». Категория берётся
+из native labels `VEHICLE_CAR`, `VEHICLE_TRUCK`, `VEHICLE_APC`/`TRAIT_ARMOR`.
+Отфильтрованный индекс переводится через `m_aVisibleVehicles`, а не используется
+как индекс полного массива. Load раскрывает фильтры, скрывающие модель draft;
+смена фильтра не меняет draft, binding или library. Пустой список не шлёт SELECT.
+При совпадении native имён UI дописывает короткое имя варианта без GUID/пути.
+
+Стоимость: content profile quote override → native SpawnerData → сумма native
+`CAMPAIGN` в `m_EntityBudgetCost` + `m_EntityChildrenBudgetCost` prefab UIInfo.
+RHS/WCS override использует существующий `AICF_RHSMenuPricePolicy.Quote`.
+Core не знает vendor prices/paths. Чтение budget не вызывает `MergeBudgetCosts`
+и не меняет исходные budget objects. Неизвестная/неположительная цена видна как
+недоступная; SELECT не выдаёт такую машину бесплатно. Civilian recipe сохраняет
+faction получателя (`US`/`USSR`), не `CIV`. Проверки Apply и acquisition заново
+строят тот же расширенный whitelist, списание остаётся в EconomySystem.
+
+SELECT создаёт local
 модель в private world и читает native accessible compartments, без глобального
 ItemPreviewManager cache. Поддерживается наземная машина
-с VehicleWheeledSimulation и одним Pilot; воздушные/водные варианты, модели без
-Pilot или с несколькими Pilot отклоняются. В списке могут
-встречаться неподдерживаемые native catalog entries; SELECT сообщает отказ.
+с VehicleWheeledSimulation и одним Pilot; модели без Pilot или с несколькими
+Pilot отклоняются после live inspection, даже если source прошёл фильтр.
 
 Стабильный seat key: `relative compartment-manager owner ordinal:local slot ID:type`.
 Ordinal строится в hierarchy только из entities с compartment manager. Native
@@ -77,15 +103,22 @@ ALL_OR_FALLBACK. Никакого teleport в production preset path нет. Cle
 
 ## Проверки и текущая граница доказательств
 
-`Test-VehiclePresetContracts.ps1` проверяет 29 структурных контрактов;
-`Test-VehiclePresetLogContracts.ps1` — 22 positive/negative controls анализатора.
+`Test-VehiclePresetContracts.ps1` проверяет 39 структурных контрактов;
+`Test-VehiclePresetLogContracts.ps1` — 24 positive/negative controls анализатора.
 `Test-VehiclePresetLog.ps1` требует manifest/CLI, native exit, ROSTER_READY,
 полные stopped logs, обязательные cases и actual occupants до movement.
 Он отклоняет неверного occupant, intent без посадки и повторный debit.
 `-LibraryReload` проверяет отдельный новый процесс, не объявляя физическую
 посадку проверенной в этом режиме. `Test-VehiclePresetClientLog.ps1` требует
 20 client cases, 3 JIP cases и оба server readbacks, точные manifests/CLI,
-native0 и полные stopped logs; его 8 controls включают отказ на serializer leak.
+native0 и полные stopped logs; его 12 controls включают отказ на serializer leak.
+`-CatalogFilters` требует 28 client +5 JIP checks и фактический CLI flag на peers;
+`-Civilian` в physical auditor требует whitelist case и CLI civilian mode.
+`AICF_VehicleCatalogProbe.c` сравнивает catalog с полными native own/CIV источниками,
+categories, независимыми budget snapshots и чужими prefabs; заканчивается21 cases.
+`Test-VehicleCatalogLog.ps1` требует полный stopped log, exact CLI,21 cases и оба
+native totals. Его contracts проверяют13 controls, включая missing civilian,
+изменённый budget, enemy leak, side effects и fatal/unfinished logs.
 `-Lifecycle` дополнительно требует смену модели/роли, реальную новую группу,
 revalidation и cap/funds/library negatives; `-HumanProtection` требует takeover,
 15s retention и сохранённого occupant. Количество уникальных подтверждённых
@@ -99,6 +132,9 @@ Runtime fixtures: `AICF_VehiclePresetProbe.c` (Core/Vehicles, isolated
 -aicfVehiclePresetClient 1`). Дополнительный `-aicfVehiclePresetCrew armed`
 готовит отдельный managed состав из 3 бойцов; другое значение — из 4.
 Значение `driver` создаёт совместимый состав из одного водителя для human probe.
+`-aicfVehiclePresetCivilian 1` выбирает civilian UAZ; fixture-only
+`-aicfVehiclePresetModel S105_beige.et` позволяет проверить другую конкретную
+модель из того же разрешённого каталога. Production CLI эти flags не читает.
 `-aicfVehiclePresetJIP 1` запускает отдельный late owner readback. Менять stage
 между запуском server и подключением клиентов нельзя: script CRC обязан совпадать.
 `-aicfVehiclePresetReload 1` читает сохранённые id1/tombstone id0 и старый member

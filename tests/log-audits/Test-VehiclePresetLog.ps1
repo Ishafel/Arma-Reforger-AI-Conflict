@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$LogPath,[Parameter(Mandatory)][string]$LauncherPath,[Parameter(Mandatory)][string]$NativeExitPath,[switch]$LibraryReload,[switch]$Lifecycle,[switch]$HumanProtection,[switch]$Policy)
+param([Parameter(Mandatory)][string]$LogPath,[Parameter(Mandatory)][string]$LauncherPath,[Parameter(Mandatory)][string]$NativeExitPath,[switch]$LibraryReload,[switch]$Lifecycle,[switch]$HumanProtection,[switch]$Policy,[switch]$Civilian)
 $ErrorActionPreference='Stop'
 $log=[IO.File]::ReadAllText($LogPath)
 $all=(@(Get-ChildItem -LiteralPath (Split-Path -Parent $LogPath) -Filter '*.log' -File)|ForEach-Object{[IO.File]::ReadAllText($_.FullName)}) -join "`n"
@@ -23,6 +23,11 @@ else{
 $cases=@([regex]::Matches($log,'\[VEHICLE_PRESET_CHECK\] rule=(\w+) passed=([01])'))
 foreach($case in $cases){if($case.Groups[2].Value -ne '1'){$failures+='FAILED_CASE_'+$case.Groups[1].Value}}
 $names=@('US_CATALOG_INSPECTED','USSR_CATALOG_INSPECTED','ARMED_UAZ_TURRET','SELECT_UAZ','VALID_ROSTER','UNASSIGN','MANDATORY_CREW_REJECTED','DUPLICATE_MEMBER_REJECTED','DUPLICATE_SEAT_REJECTED','MISSING_SEAT_REJECTED','INACTIVE_MEMBER_REJECTED','REASSIGN_UNIQUE','CAPACITY_REJECTED','VALID_AFTER_NEGATIVES','NEGATIVES_KEEP_BINDING','STORE_SAVE','STORE_LOAD','STORE_REOPEN','APPLY','REPEAT_APPLY','STORE_DELETE','DELETE_KEEPS_BINDING','EXACT_MODEL','PAID','UNCHANGED_LOADOUT_SIZE')
+if($Civilian){
+ $names=@($names|Where-Object{$_ -ne 'ARMED_UAZ_TURRET'})+@('CIVILIAN_MODEL')
+ $civilianFlag=[array]::IndexOf($argv,'-aicfVehiclePresetCivilian')
+ if($civilianFlag -lt 0 -or $argv[$civilianFlag+1] -ne '1'){$failures+='CIVILIAN_CLI'}
+}
 if($LibraryReload){
  $names=@('US_CATALOG_INSPECTED','USSR_CATALOG_INSPECTED','RESTART_MODEL_SEATS','RESTART_TOMBSTONE','RESTART_LEGACY','RESTART_NO_ASSIGNMENT','RESTART_NO_VEHICLE')
  $reloadFlag=[array]::IndexOf($argv,'-aicfVehiclePresetReload')

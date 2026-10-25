@@ -42,15 +42,20 @@ legacy после пересборки. Команды и границы — [DE
 ## Единый offline запуск
 
 Для issue #78 runner автоматически включает `Test-VehiclePresetContracts.ps1`
-(29 guards), `Test-VehiclePresetLogContracts.ps1` (22 controls) и
-`Test-VehiclePresetClientLogContracts.ps1` (8 controls).
+(39 guards), `Test-VehiclePresetLogContracts.ps1` (24 controls),
+`Test-VehiclePresetClientLogContracts.ps1` (12 controls) и
+`Test-VehicleCatalogLogContracts.ps1` (13 controls).
 `tests/log-audits/Test-VehiclePresetLog.ps1` принимает `-LogPath`,
 `-LauncherPath`, `-NativeExitPath`; `-LibraryReload` выбирает restart-only oracle.
 `-Lifecycle` и `-HumanProtection` включают расширенные обязательные cases.
+`-Policy` проверяет manual/automatic admission, `-Civilian` — civilian physical
+model и CLI. `Test-VehicleCatalogLog.ps1` использует те же три path parameters,
+но требует отдельный `-aicfVehicleCatalogProbe 1`,21 checks и own/CIV totals.
 `Test-VehiclePresetClientLog.ps1` принимает пары `-ServerLog/-ServerLauncher/
 -ServerExit`, `-ClientLog/-ClientLauncher/-ClientExit` и
 `-JIPLog/-JIPLauncher/-JIPExit`. Проверяются все соседние полные logs и native
 завершение. Script errors, в том числе serializers, не фильтруются как baseline.
+`-CatalogFilters` включает28 client/5 JIP oracle и actual CLI проверки фильтров.
 Flags fixtures и порядок stage — в [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
 
 `Test-FIAProximityContracts.ps1` проверяет scoped native lifecycle, logical

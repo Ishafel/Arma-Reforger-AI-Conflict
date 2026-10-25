@@ -18,6 +18,8 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 	protected int m_iProbeChecks;
 	protected int m_iProbeFailures;
 	protected int m_iProbeExpectedRevision;
+	protected bool m_bProbeCatalogFilters;
+	protected ResourceName m_sProbePrefab;
 	void AICF_VehiclePresetProbeEditor(AICF_StrategicUIController controller) { m_Controller = controller; }
 	bool Done() { return m_bProbeDone; }
 	int Failures() { return m_iProbeFailures; }
@@ -33,6 +35,8 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 	{
 		m_Player = player;
 		m_bProbeJIP = jip;
+		string catalogFlag;
+		m_bProbeCatalogFilters = System.GetCLIParam("aicfVehicleCatalogFilters", catalogFlag);
 		if (!jip) Check("NO_FACTION_REJECTED", noRightsPassed);
 		Check("ALPHA_VEHICLE_FORM", Create(hidden, 0) && !m_wRoot.IsVisibleInHierarchy());
 		Request(AICF_EVehiclePresetOperation.READ, "");
@@ -43,6 +47,23 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 		foreach (Widget button : m_aButtons)
 			if (button.GetName() == name) { OnClick(button, 0, 0, SCR_EMouseButtons.LEFT); return; }
 		Check("BUTTON_" + name, false);
+	}
+
+	protected void Filter(int source, int category)
+	{
+		m_bRendering = true;
+		m_SourceFilter.SetCurrentItem(source, false, false, false);
+		m_CategoryFilter.SetCurrentItem(category, false, false, false);
+		m_bRendering = false;
+		OnChanged(m_SourceFilter, source);
+	}
+
+	protected bool VisibleMatches(int source, int category)
+	{
+		if (m_aVisibleVehicles.IsEmpty()) return false;
+		foreach (int index : m_aVisibleVehicles)
+			if ((source > 0 && m_aCatalogSources[index] != source) || (category > 0 && m_aCatalogCategories[index] != category)) return false;
+		return true;
 	}
 
 	void Tick()
@@ -61,6 +82,14 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 			AICF_VehiclePreset confirmed = AICF_VehiclePreset.Decode(assigned);
 			Check("JIP_CONFIRMED_ASSIGNMENT", confirmed && confirmed.m_sFaction == "USSR" && confirmed.m_sName == "UI vehicle" && confirmed.m_sPrefab.Contains("UAZ469"));
 			Check("JIP_STABLE_SLOT", slot == 0 && m_iRevision > 0 && faction == "USSR");
+			if (m_bProbeCatalogFilters)
+			{
+				int confirmedIndex = m_aPrefabs.Find(confirmed.m_sPrefab);
+				Check("JIP_CIVILIAN_AVAILABLE", confirmedIndex >= 0 && m_aCatalogSources[confirmedIndex] == AICF_EVehicleCatalogSource.CIVILIAN);
+				Filter(AICF_EVehicleCatalogSource.FACTION, AICF_EVehicleCatalogCategory.TRUCKS);
+				RevealDraft();
+				Check("JIP_FILTERED_SELECTION", SelectedPrefab() == confirmed.m_sPrefab && m_SourceFilter.GetCurrentIndex() == AICF_EVehicleCatalogSource.CIVILIAN);
+			}
 			Finish();
 			return;
 		}
@@ -68,16 +97,40 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 		{
 			case 0:
 				Check("CONTEXT", slot == 0 && faction == "USSR");
+				if (m_bProbeCatalogFilters)
+				{
+					Check("ALL_NATIVE_CATALOG", m_aVisibleVehicles.Count() == m_aPrefabs.Count());
+					Filter(AICF_EVehicleCatalogSource.CIVILIAN, AICF_EVehicleCatalogCategory.ALL);
+					Check("CIVILIAN_FILTER", VisibleMatches(AICF_EVehicleCatalogSource.CIVILIAN, 0));
+					Filter(AICF_EVehicleCatalogSource.CIVILIAN, AICF_EVehicleCatalogCategory.CARS);
+					Check("CAR_CATEGORY_FILTER", VisibleMatches(AICF_EVehicleCatalogSource.CIVILIAN, AICF_EVehicleCatalogCategory.CARS));
+					Filter(AICF_EVehicleCatalogSource.FACTION, AICF_EVehicleCatalogCategory.ALL);
+					Check("FACTION_FILTER", VisibleMatches(AICF_EVehicleCatalogSource.FACTION, 0));
+					Filter(AICF_EVehicleCatalogSource.CIVILIAN, AICF_EVehicleCatalogCategory.ARMOR);
+					Check("EMPTY_FILTER_SAFE", m_aVisibleVehicles.IsEmpty() && SelectedPrefab().IsEmpty());
+					int emptyToken = m_iToken;
+					Click("select");
+					Check("EMPTY_SELECT_NO_RPC", m_iToken == emptyToken && !m_bQueued && !m_bPending);
+					Filter(AICF_EVehicleCatalogSource.CIVILIAN, AICF_EVehicleCatalogCategory.CARS);
+				}
 				int selected = -1;
 				for (int i; i < m_aPrefabs.Count(); i++)
-					if (m_aPrefabs[i].Contains("UAZ469_uncovered.et")) selected = i;
+				{
+					if (m_bProbeCatalogFilters)
+					{
+						if (m_aPrefabs[i].Contains("UAZ469_uncovered_CIV_blue.et")) selected = i;
+					}
+					else if (m_aPrefabs[i].Contains("UAZ469_uncovered.et")) selected = i;
+				}
 				Check("UAZ_WHITELIST", selected >= 0);
 				if (selected < 0) { Finish(); return; }
-				m_Catalog.SetCurrentItem(selected, false, false, false);
+				m_sProbePrefab = m_aPrefabs[selected];
+				m_Catalog.SetCurrentItem(m_aVisibleVehicles.Find(selected), false, false, false);
+				if (m_bProbeCatalogFilters) Check("FILTERED_PREFAB_MAPPING", SelectedPrefab() == m_sProbePrefab);
 				Click("select");
 				break;
 			case 1:
-				Check("SELECT_HANDLER", m_Player.AICF_VehiclePresetAccepted() && m_Draft && m_Draft.m_sPrefab.Contains("UAZ469_uncovered.et"));
+				Check("SELECT_HANDLER", m_Player.AICF_VehiclePresetAccepted() && m_Draft && m_Draft.m_sPrefab == m_sProbePrefab);
 				if (!m_Draft) { Finish(); return; }
 				Check("NATIVE_SEAT_LABELS", m_aSeatNames.Count() == m_Draft.m_aSeats.Count());
 				int driver = -1;
@@ -118,11 +171,13 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 				break;
 			case 6:
 				Check("FOREIGN_FACTION_REJECTED", !m_Player.AICF_VehiclePresetAccepted() && m_iRevision == m_iProbeExpectedRevision);
+				if (m_bProbeCatalogFilters) Filter(AICF_EVehicleCatalogSource.FACTION, AICF_EVehicleCatalogCategory.TRUCKS);
 				m_Library.SetCurrentItem(0, false, false, false);
 				Click("load");
 				break;
 			case 7:
 				Check("LOAD_HANDLER", m_Player.AICF_VehiclePresetAccepted() && m_Draft && m_Draft.m_sName == "UI vehicle" && m_iRevision == m_iProbeExpectedRevision);
+				if (m_bProbeCatalogFilters) Check("LOAD_REVEALS_DRAFT", SelectedPrefab() == m_sProbePrefab && m_SourceFilter.GetCurrentIndex() == AICF_EVehicleCatalogSource.CIVILIAN);
 				m_Library.SetCurrentItem(0, false, false, false);
 				Click("delete");
 				break;
