@@ -41,6 +41,31 @@ class AICF_VehicleBoardingActionToken
 	protected BaseCompartmentSlot m_Compartment;
 	protected EAICompartmentType m_CompartmentType;
 	protected int m_iRetryCount;
+	protected bool m_bPresetQueued;
+	bool WasPresetQueued() { return m_bPresetQueued; }
+	bool CompleteSettledPresetAction()
+	{
+		if (!m_bPresetQueued || !m_GetInAction || !MatchesLiveTargetIdentity() || !IsPhysicalMutationOwnerSafe() ||
+			!IsTrackedActionOwnedByUtility() || !m_Compartment || m_Compartment.GetOccupant() != m_ReservedEntity ||
+			(m_Compartment.IsReserved() && !m_Compartment.IsReservedBy(m_ReservedEntity))) return false;
+		CompartmentAccessComponent access = ResolveAccess(m_ReservedEntity);
+		ChimeraCharacter character = ChimeraCharacter.Cast(m_ReservedEntity);
+		if (!character || !character.IsInVehicle() || !access || access.GetCompartment() != m_Compartment ||
+			access.IsGettingIn() || access.IsGettingOut() || CompartmentAccessComponent.GetVehicleIn(character) != m_TargetVehicle) return false;
+		EAIActionState state = m_GetInAction.GetActionState();
+		if (state == EAIActionState.COMPLETED || state == EAIActionState.FAILED) return false;
+		// Native completion освобождает reservation; Fail может вытолкнуть бойца.
+		m_GetInAction.Complete();
+		return true;
+	}
+	void RecordPresetQueued(float distanceMeters)
+	{
+		m_bPresetQueued = true;
+		m_iIssuedAtMs = System.GetTickCount();
+		m_iLastProgressAtMs = m_iIssuedAtMs;
+		m_fBestDistanceMeters = distanceMeters;
+		m_fCurrentDistanceMeters = distanceMeters;
+	}
 	protected int m_iIssuedAtMs;
 	protected int m_iLastProgressAtMs;
 	protected float m_fBestDistanceMeters = -1.0;

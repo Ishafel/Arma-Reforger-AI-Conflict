@@ -41,8 +41,15 @@ legacy после пересборки. Команды и границы — [DE
 
 ## Единый offline запуск
 
+`tools/Invoke-AICFVehicleScenarios.ps1 -EvidenceRoot <новый каталог>` — отдельный
+native runner шести полных Stock поездок; в offline All он не входит. Готовит
+stage, выполняет Workbench, canonical Server и строгий `Test-VehicleScenarioLog.ps1`.
+Cases/flags и формат group/member trace — [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md).
+Offline All включает `Test-VehicleScenarioLogContracts.ps1` (45 controls) и
+`Test-GroupTraceContracts.ps1` (read-only/authority/rate/lifecycle,7 controls).
+
 Для issue #78 runner автоматически включает `Test-VehiclePresetContracts.ps1`
-(61 guards), `Test-VehiclePresetLogContracts.ps1` (24 controls),
+(78 guards), `Test-VehiclePresetLogContracts.ps1` (24 controls),
 `Test-VehiclePresetClientLogContracts.ps1` (12 controls) и
 `Test-VehicleCatalogLogContracts.ps1` (13 controls).
 `tests/log-audits/Test-VehiclePresetLog.ps1` принимает `-LogPath`,

@@ -1,5 +1,74 @@
 # Проверки и baseline
 
+## Полные поездки и диагностика групп: #78 — 2026-10-26
+
+Добавлены read-only GROUP_TRACE/MEMBER_TRACE, native GetIn/GetOut/message/movement
+failure observers и terminal runner шести сценариев. Контракты/CLI:
+[VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md). Отчёт остаётся локальным по просьбе
+пользователя: `.codex-runtime/issue78-scenarios/REPORT.md`. GitHub не обновлялся.
+
+Исправлены orphan/stalled preset boarding (последовательный exact вход, до2
+identity-safe retries), недостаточный общий budget последовательной посадки
+(default25s × max(3, assigned seats), без rearm), native completion только своего
+settled GetIn и ошибочное отступление намеренного состава из одного водителя.
+Read-only transit observation даёт доказанной native OpenGate цепочке водителя
+ручного preset до60s на exact return, сохраняя абсолютный срок trip и настоящие
+motion/progress timestamps. `driver-gate-both`:14 checks, strict PASS/0, водитель
+вернулся за16086ms и закончил полный маршрут/пеший подход. Обычный native выход
+без paired gate chain такой отсрочки не получает.
+
+- Свежий pre-edit baseline6/6 PASS/0, `baseline/summary.json`.
+- Полный offline `native-final-all-0..5`:99/99 PASS/0. После последних изменений
+  только диагностического callback/immutable log address повторён профильный
+  `movement-final-delta`:7/7 PASS/0. После последней test-only правки repeat
+  destination выполнены fixture compile/native; полный99 снова не запускался.
+- Production Workbench `wb-movement-final-Stock/RHS/ArlandWCSRHS` и
+  `workspace`:4/4 PASS/0, successful validation, scriptFatal0.
+  После EOF-only cleanup конечные Stock/RHS/WCS повторно compiled3/3 PASS/0,
+  successful validation/scriptFatal0; eof-final-compilation.json. Это не runtime
+  проверка всех машин RHS/WCS. Финальная fixture `repeat-destination` compiled0.
+- Preset contracts78 guards, GroupTrace7 controls, ScenarioLog45 controls.
+  Прежний restricted junction FAIL сохранён; native rerun LoadoutLibrary PASS/0.
+
+**Последняя основная runtime матрица:3 PASS /3 FAIL; не release-ready.**
+Все завершённые cases имеют native0 и stopped full logs; FAIL ниже не скрыты.
+
+| Case | Итог |
+|---|---|
+| uaz5 | PASS:5 exact seats,30s mounted wait, дальняя поездка, normal COMPLETE, все5 у точки |
+| armed3 | PASS:driver/gunner/passenger, native gate excursion/return, полный маршрут |
+| solo1 | PASS; отдельные driver-gate-control/both также PASS, включая настоящее открытие ворот водителем |
+| ural5 | FAIL DISEMBARK_TIMEOUT на северном маршруте:1 пассажир остаётся на0:3:2 с GetOut RUNNING, перехода нет;3 других ещё внутри bounds. Прежний южный прогон PASS не отменяет FAIL |
+| retarget5 | FAIL PREMATURE_CREW_EXIT после far retarget:SCR_AIGetOutActivity с PLAYER priority при381m до цели; другой маршрут movement-cause PASS. Причина через native failed-movement handler — inference из pinned source, точный EMoveError прежнего отказа не снят |
+| repeat5 | FAIL SPAWN_SITE_APPROACH_TIMEOUT во второй поездке:новая цель/intent, новый trip generation2,90s не хватило для подхода к площадке. Первая полная поездка и исходные actor IDs подтверждены |
+
+READ-only `NATIVE_GROUP_MOVE_FAILED` теперь пишет фактический EMoveError для
+следующих отказов. Его runtime callback наблюдал STUCK у обычной пешей группы;
+это не объявляется кодом ошибки прежнего vehicle retarget. ROAD_REACHABLE не
+доказывает последующий успех engine pathfinding. Защитные occupancy/authority/
+clearance gates не ослаблены, насильственной высадкой FAIL не подменялся.
+
+Ранние harness failures сохранены отдельно: null unstarted boarding tokens,
+чтение vehicle после lawful cleanup, потеря retired COMPLETE trip; оба последних
+исправлены в fixture. Повтор одинаковой цели идемпотентен и не должен порождать
+второй trip: repeat fixture теперь задаёт другую дальнюю цель. Прерванные старые
+прогоны остаются ABORTED. Добавленному native GetOut observer восстановлен
+BaseContainerProps после обнаруженного WORLD Unknown class; строгий auditor
+отклоняет эту регрессию, финальные logs её не содержат.
+
+Строгий all-native Error gate остаётся FAIL по прежним resource/font/texture
+ошибкам; final logs сравниваются с baseline отдельно. Старый strict JIP FAIL8
+native serializers сохраняется, JIP/client в этом изменении NOT RUN. Визуальная
+проверка и physical input NOT RUN: нужен игрок, GUI/screenshot запрещены.
+Поездка в бою и physical matrix каждой модели RHS/WCS NOT RUN. Default scenario
+fixture использует truce/HOLD_FIRE и invulnerability только собственных actors/
+vehicle; это не production и не доказательство поведения в бою.
+
+Новые runtime FAIL и прежние native blockers запрещают ready PR. Push/PR/merge
+не выполнялись, ACCEPTED не объявляется. Полные logs/manifests/exits, command
+scripts, source hashes, архивы и cleanup receipts находятся в локальном evidence.
+
+
 ## Посадка Зенит-1 в UAZ и немедленная высадка: #78 — 2026-10-25
 
 Продолжение той же ветки от clean `2177416`. Полный snapshot активной пользовательской

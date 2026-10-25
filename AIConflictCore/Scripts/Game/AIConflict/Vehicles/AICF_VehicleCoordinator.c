@@ -14,6 +14,7 @@ class AICF_VehicleCoordinator
 	protected ref AICF_VehicleCleanupManager m_CleanupManager;
 	protected ref AICF_VehicleDomainDiagnostics m_Diagnostics;
 	protected ref AICF_VehicleAcceptanceMonitor m_Acceptance;
+	protected ref AICF_GroupTrace m_GroupTrace = new AICF_GroupTrace();
 	protected ref array<ref AICF_VehicleAdmissionAudit> m_aAdmissionAudits = {};
 	protected ref array<ref AICF_ExplicitVehicleAdmissionIntent> m_aExplicitAdmissionIntents = {};
 	protected int m_iObservedBaseRevision;
@@ -99,6 +100,8 @@ class AICF_VehicleCoordinator
 		for (int fleetIndex; fleetIndex < m_Fleets.GetFleetCount(); fleetIndex++)
 			m_CleanupManager.UpdateFleet(m_Fleets.GetFleet(fleetIndex), nowMs);
 		m_Acceptance.Audit();
+		m_GroupTrace.Update(usState, this);
+		m_GroupTrace.Update(ussrState, this);
 	}
 
 	void NotifyStrategicContextChanged(int baseRevision, string reason)
@@ -425,6 +428,7 @@ class AICF_VehicleCoordinator
 		if (m_bStopped)
 			return;
 		m_bStopped = true;
+		m_GroupTrace.Stop();
 		int nowMs = System.GetTickCount();
 		for (int tripIndex; tripIndex < m_Trips.GetCount(); tripIndex++)
 		{

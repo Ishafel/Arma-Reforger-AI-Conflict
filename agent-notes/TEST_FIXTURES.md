@@ -2,6 +2,13 @@
 
 ## Пресеты техники: issue #78
 
+Полные поездки к неизменной дальней точке и повторная посадка используют
+`AICF_VehicleScenarioProbe.c`, только isolated Core. Tracked runner подготавливает
+его и компилирует автоматически; `-aicfVehicleScenario uaz5/ural5/armed3/solo1/
+retarget5/repeat5`. Никакого retarget к машине для ускорения «прибытия». Все
+бойцы должны пешком дойти до исходной точки после штатной высадки. CLI, native
+receipts, debugger fields и границы изоляции — [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md).
+
 Fixtures, flags и native oracles описаны в
 [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md#проверки-и-текущая-граница-доказательств).
 `AICF_VehiclePresetProbe.c` → isolated Core/Vehicles `AICF_ZVehiclePresetProbe.c`;

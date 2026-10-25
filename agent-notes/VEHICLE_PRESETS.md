@@ -166,7 +166,7 @@ transitions и попадания в расширенные bounds. Если nor
 
 ## Проверки и текущая граница доказательств
 
-`Test-VehiclePresetContracts.ps1` проверяет 61 структурных контрактов;
+`Test-VehiclePresetContracts.ps1` проверяет 78 структурных контрактов;
 `Test-VehiclePresetLogContracts.ps1` — 24 positive/negative controls анализатора.
 `AICF_VehiclePresetTransitProbe.c` с `-aicfVehiclePresetTransitProbe 1` проверяет
 отдельный native roster5 и пятиместный UAZ:30s точного crew внутри у исходной цели,
@@ -177,6 +177,9 @@ transitions и попадания в расширенные bounds. Если nor
 требует16 cases, stopped/full logs, manifest/CLI, native0,5 exact occupants,
 один purchase125, штатный HANDOFF→COMPLETE и порядок движения перед высадкой;
 fallback/failed-closed/latch отклоняются. Его contracts —32 controls.
+Полная поездка до неизменной цели, пешее прибытие всех бойцов и повторная
+посадка проверяются отдельно: [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md).
+Там же описаны новые read-only GROUP_TRACE/MEMBER_TRACE и bounded exact-seat retry.
 `Test-VehiclePresetLog.ps1` требует manifest/CLI, native exit, ROSTER_READY,
 полные stopped logs, обязательные cases и actual occupants до movement.
 Он отклоняет неверного occupant, intent без посадки и повторный debit.

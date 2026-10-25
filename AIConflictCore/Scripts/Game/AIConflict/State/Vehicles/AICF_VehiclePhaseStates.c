@@ -922,6 +922,7 @@ class AICF_VehicleMovementState
 	protected string m_sGunnerSettledLossPredicateSnapshot;
 	protected bool m_bCrewRecoveryRoutePending;
 	protected ref AICF_VehicleCrewRecoveryToken m_CrewRecoveryToken;
+	protected ref AICF_TransportNativeGate m_NativeGate;
 
 	void Reset()
 	{
@@ -971,6 +972,7 @@ class AICF_VehicleMovementState
 		m_sGunnerSettledLossPredicateSnapshot = string.Empty;
 		m_bCrewRecoveryRoutePending = false;
 		m_CrewRecoveryToken = null;
+		m_NativeGate = null;
 	}
 
 	void Begin(int nowMs, int absoluteDeadlineMs, int maximumCrewAttempts, int maximumMobilityAttempts)
@@ -1025,6 +1027,8 @@ class AICF_VehicleMovementState
 	IEntity GetLastGunner() { return m_LastGunner; }
 	bool IsCrewRecoveryRoutePending() { return m_bCrewRecoveryRoutePending; }
 	AICF_VehicleCrewRecoveryToken GetCrewRecoveryToken() { return m_CrewRecoveryToken; }
+	AICF_TransportNativeGate GetNativeGate() { return m_NativeGate; }
+	void SetNativeGate(AICF_TransportNativeGate gate) { m_NativeGate = gate; }
 
 	bool StageRouteWaypoint(
 		AIWaypoint waypoint,

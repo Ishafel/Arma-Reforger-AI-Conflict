@@ -316,6 +316,9 @@ class AICF_VehicleTransitFlow
 
 		AICF_VehicleMovementState state = trip.GetMovementState();
 		EnsureStateStarted(trip, state, nowMs);
+		AICF_TripOutcome gateOutcome = ObserveNativeGate(trip, causationId, nowMs);
+		if (gateOutcome)
+			return gateOutcome;
 		// Exact crew recovery owns a deliberately suspended route. Advance that
 		// token before interpreting superseded/current waypoint shape as route
 		// reconciliation work.
@@ -365,11 +368,38 @@ class AICF_VehicleTransitFlow
 		if (!trip || !trip.GetMovementState())
 			return;
 		AICF_VehicleMovementState state = trip.GetMovementState();
+		state.SetNativeGate(null);
 		AICF_VehicleCrewRecoveryToken token = state.GetCrewRecoveryToken();
 		if (!token)
 			return;
 		token.CancelOwnerSafe();
 		state.ClearCrewRecoveryToken(token);
+	}
+
+	protected AICF_TripOutcome ObserveNativeGate(AICF_TransportTrip trip, string causationId, int nowMs)
+	{
+		AICF_VehicleMovementState state = trip.GetMovementState();
+		AICF_TransportNativeGate gate = state.GetNativeGate();
+		if (!gate && !state.GetCrewRecoveryToken())
+		{
+			gate = AICF_TransportNativeGate.TryBegin(trip);
+			if (gate)
+			{
+				state.SetNativeGate(gate);
+				gate.Log("TRANSPORT_NATIVE_GATE_STARTED");
+			}
+		}
+		if (!gate) return null;
+		if (!gate.Matches(trip) || gate.IsExpired(nowMs))
+		{
+			gate.Log("TRANSPORT_NATIVE_GATE_REJECTED");
+			state.SetNativeGate(null);
+			return AICF_TripOutcome.FallbackToFoot("NATIVE_GATE_IDENTITY_OR_DEADLINE", causationId);
+		}
+		if (!gate.IsReturned()) return AICF_TripOutcome.Wait("NATIVE_OPEN_GATE", causationId);
+		gate.Log("TRANSPORT_NATIVE_GATE_RETURNED");
+		state.SetNativeGate(null);
+		return null;
 	}
 
 	protected void EnsureStateStarted(

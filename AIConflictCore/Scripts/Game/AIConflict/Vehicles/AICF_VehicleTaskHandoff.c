@@ -209,6 +209,7 @@ class AICF_VehicleTaskHandoff
 		// authoritative proof is not another mutation attempt and must remain
 		// available until the handoff deadline.
 		bool requiresLoneSurvivorRetreat = slot &&
+			slot.GetDesiredSize() > 1 &&
 			AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()) == 1 &&
 			!slot.IsLoneSurvivorRetreat();
 		if (!requiresLoneSurvivorRetreat && ObserveExistingInfantryOrder(
@@ -271,7 +272,8 @@ class AICF_VehicleTaskHandoff
 					" alive=0 handoff_mode=GROUP_REPLACEMENT transition_owner=GROUP_LIFECYCLE order_restored=0");
 			return false;
 		}
-		bool loneSurvivorRetreat = alive == 1;
+		// Намеренно заданный одиночный отряд не является остатком потерь.
+		bool loneSurvivorRetreat = alive == 1 && slot.GetDesiredSize() > 1;
 		bool plannerAccepted = IsExactWaypointCurrentAndQueued(slot, slot.GetWaypoint()) &&
 			m_OrderPlanner.IsOrderValid(slot, faction);
 		if (loneSurvivorRetreat && !slot.IsSystemHoldOrder() &&

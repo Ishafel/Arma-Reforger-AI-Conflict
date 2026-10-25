@@ -1,5 +1,15 @@
 # Архитектура и навигация по исходникам
 
+Диагностика групп: `AICF_GroupTrace` у VehicleCoordinator читает authority state
+и реальные позиции живых бойцов, без удержания engine entities в cursor.
+`AICF_NativeVehicleTrace` наблюдает штатные callbacks с однократным super,
+не меняет actions/приказы. Полные транспортные fixtures и их изоляция от боя —
+[VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md).
+`AICF_TransportNativeGate` — read-only observation у transit flow для штатного
+OpenGate водителя/стрелка ручного preset. MovementState владеет observation,
+flow возвращает typed WAIT/fallback, controller по-прежнему владеет переходами.
+Наблюдение не продлевает trip и не выдаёт движение за реальный progress.
+
 Проект расширяет stock Conflict скриптами Enforce. Единственный gameplay resource —
 тонкий inherited `MissionHeader` входа AI Conflict; runtime selection выбирает
 штатную миссию и применяет её настройки.

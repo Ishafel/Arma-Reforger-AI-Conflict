@@ -1,0 +1,90 @@
+param(
+ [Parameter(Mandatory)][string]$LogPath,
+ [Parameter(Mandatory)][string]$LauncherPath,
+ [Parameter(Mandatory)][string]$NativeExitPath,
+ [Parameter(Mandatory)][ValidateSet('uaz5','ural5','armed3','solo1','retarget5','repeat5')][string]$Scenario,
+ [switch]$Combat
+)
+$ErrorActionPreference='Stop'
+$log=[IO.File]::ReadAllText($LogPath)
+$all=(@(Get-ChildItem -LiteralPath (Split-Path -Parent $LogPath) -File -Filter '*.log')|ForEach-Object{[IO.File]::ReadAllText($_.FullName)}) -join "`n"
+$launcher=[IO.File]::ReadAllText($LauncherPath)
+$failures=[Collections.Generic.List[string]]::new()
+function Require([bool]$condition,[string]$rule){if(!$condition){$failures.Add($rule)}}
+function Number([string]$value){[double]::Parse($value,[Globalization.CultureInfo]::InvariantCulture)}
+Require ((Get-Content -LiteralPath $NativeExitPath -Raw).Trim() -eq '0') 'NATIVE_EXIT'
+Require ($log.Contains('Game destroyed.') -and $log.Contains('[ROSTER_READY]')) 'FULL_STOPPED_ROSTER'
+if($Combat){Require ($log -match '\[VEHICLE_SCENARIO_ENV\] scenario='+$Scenario+' combat=1 combat_mode=FIRE_AT_WILL') 'COMBAT_ENVIRONMENT'}
+else{Require ($log -match '\[VEHICLE_SCENARIO_ENV\] scenario='+$Scenario+' combat=0 combat_mode=HOLD_FIRE damage_protection=1 truce=1') 'TRANSPORT_ONLY_ENVIRONMENT'}
+Require ($all -notmatch 'SCRIPT\s+\([EF]\)|ENGINE\s+\(F\)|NULL pointer|Virtual Machine Exception|Assertion failed|Attempt to modify locked entity|Access violation') 'FULL_LOG_FATAL'
+Require ($all -notmatch "Unknown class 'SCR_AIGoalReaction_GetOutVehicle'") 'NATIVE_REACTION_METADATA'
+$manifests=@([regex]::Matches($launcher,'(?m)^AICF_RUNTIME_MANIFEST_JSON=([^\r\n]+)'))
+Require ($manifests.Count -eq 1) 'MANIFEST'
+if($manifests.Count -eq 1){
+ $argv=@(($manifests[0].Groups[1].Value|ConvertFrom-Json).arguments)
+ foreach($flag in @('-gproj','-profile','-addonsDir','-addons','-aicfVehicleScenario')){
+  $i=[array]::IndexOf($argv,$flag)
+  Require ($i -ge 0 -and $i+1 -lt $argv.Count -and $log.Contains($flag+' '+$argv[$i+1])) 'CLI'
+ }
+ $i=[array]::IndexOf($argv,'-aicfVehicleScenario')
+ Require ($i -ge 0 -and $argv[$i+1] -eq $Scenario) 'SCENARIO_CLI'
+}
+$legs=1;$crew=5
+if($Scenario -eq 'repeat5'){$legs=2}
+if($Scenario -eq 'armed3'){$crew=3}
+if($Scenario -eq 'solo1'){$crew=1}
+$checks=@([regex]::Matches($log,'\[VEHICLE_SCENARIO_CHECK\] scenario='+$Scenario+' leg=(\d+) rule=(\S+) passed=(\d)'))
+Require (@($checks|Where-Object{$_.Groups[3].Value -ne '1'}).Count -eq 0) 'FAILED_CHECK'
+$done=@([regex]::Matches($log,'\[VEHICLE_SCENARIO_DONE\] scenario='+$Scenario+' checks=(\d+) failures=0 legs='+$legs))
+Require ($done.Count -eq 1 -and [int]$done[0].Groups[1].Value -eq $checks.Count) 'COMPLETION'
+foreach($rule in @('GROUP_CREATED','EXACT_RECIPE','INITIAL_ORDER','WAITING_MOUNTED','REMOTE_ORDER','PURCHASE_LIMIT')){
+ Require (@($checks|Where-Object{$_.Groups[2].Value -eq $rule}).Count -eq 1) ('CASE_'+$rule)
+}
+if($Scenario -eq 'retarget5'){Require (@($checks|Where-Object{$_.Groups[2].Value -eq 'FAR_RETARGET'}).Count -eq 1) 'FAR_RETARGET'}
+if($Scenario -eq 'repeat5'){
+ foreach($rule in @('REPEAT_ORDER','EXPLICIT_READMISSION')){Require (@($checks|Where-Object{$_.Groups[2].Value -eq $rule}).Count -eq 1) $rule}
+}
+for($leg=1;$leg -le $legs;$leg++){
+ foreach($rule in @('EXACT_BOARDING','GATE_RETURNS_COMPLETE','ARRIVAL_AT_ORIGINAL_GOAL','REAL_TRAVEL','NORMAL_DISMOUNT','FOOT_ORDER_RESTORED','ALL_MEMBERS_AT_POINT')){
+  Require (@($checks|Where-Object{[int]$_.Groups[1].Value -eq $leg -and $_.Groups[2].Value -eq $rule}).Count -eq 1) "LEG_${leg}_$rule"
+ }
+ $prefix='scenario='+$Scenario+' leg='+$leg
+ $boarding=[regex]::Match($log,'\[VEHICLE_SCENARIO_BOARDING\] '+$prefix+' operation_id=(\S+) vehicle=(\S+) group=(\S+) crew=(\d+)')
+ Require ($boarding.Success -and [int]$boarding.Groups[4].Value -eq $crew) "LEG_${leg}_BOARDING"
+ $goals=@([regex]::Matches($log,'\[VEHICLE_SCENARIO_GOAL\] '+$prefix+' target=(<[^>]+>) intent_revision=(\d+) vehicle_start=<[^>]+> dismount_radius_m=([\d.]+)'))
+ $goalCount=1;if($Scenario -eq 'retarget5'){$goalCount=2}
+ Require ($goals.Count -eq $goalCount) "LEG_${leg}_GOALS"
+ $arrival=[regex]::Match($log,'\[VEHICLE_SCENARIO_ARRIVAL\] '+$prefix+' vehicle=(\S+) distance_m=([\d.]+) displacement_m=([\d.]+) moving_polls=(\d+) intent_revision=(\d+) goal=(<[^>]+>)')
+ $foot=[regex]::Match($log,'\[VEHICLE_SCENARIO_FOOT_ARRIVAL\] '+$prefix+' farthest_m=([\d.]+) alive=(\d+) goal=(<[^>]+>)')
+ Require ($arrival.Success -and $foot.Success) "LEG_${leg}_ARRIVAL_RECEIPTS"
+ if($arrival.Success -and $foot.Success -and $goals.Count -and $boarding.Success){
+  $goal=$goals[-1]
+  Require ((Number $arrival.Groups[2].Value) -le (Number $goal.Groups[3].Value)+10 -and (Number $arrival.Groups[3].Value) -ge 100 -and [int]$arrival.Groups[4].Value -ge 5) "LEG_${leg}_PHYSICAL_DRIVE"
+  Require ($arrival.Groups[1].Value -eq $boarding.Groups[2].Value -and $arrival.Groups[5].Value -eq $goal.Groups[2].Value -and $arrival.Groups[6].Value -eq $goal.Groups[1].Value -and $foot.Groups[3].Value -eq $goal.Groups[1].Value) "LEG_${leg}_UNCHANGED_GOAL_AND_VEHICLE"
+  Require ((Number $foot.Groups[1].Value) -le 35 -and [int]$foot.Groups[2].Value -eq $crew -and $foot.Index -gt $arrival.Index) "LEG_${leg}_FULL_FOOT_ARRIVAL"
+  $operation=[regex]::Escape($boarding.Groups[1].Value)
+  $occupants=@([regex]::Matches($log,'\[VEHICLE_PRESET_OCCUPANT\][^\r\n]*?operation='+$operation+' revision=\d+ position=(\d+) seat=(\S+) member=(\S+) occupant=(\S+)'))
+  Require ($occupants.Count -eq $crew -and @($occupants|ForEach-Object{$_.Groups[1].Value}|Sort-Object -Unique).Count -eq $crew) "LEG_${leg}_EXACT_OCCUPANTS"
+  foreach($occupant in $occupants){Require ($occupant.Groups[3].Value -eq $occupant.Groups[4].Value -and $occupant.Index -lt $boarding.Index) "LEG_${leg}_MEMBER_SEAT"}
+  $gates=@([regex]::Matches($log,'\[VEHICLE_SCENARIO_GATE\] '+$prefix+' event=(STARTED|RETURNED) member=(\S+) seat=(\S+) elapsed_ms=(\d+)'))
+  $pending=@{}
+  foreach($gate in $gates){
+   $key=$gate.Groups[2].Value+'|'+$gate.Groups[3].Value
+   Require ($gate.Index -gt $boarding.Index -and $gate.Index -lt $arrival.Index) "LEG_${leg}_GATE_ORDER"
+   if($gate.Groups[1].Value -eq 'STARTED'){Require (!$pending.ContainsKey($key)) "LEG_${leg}_GATE_DUPLICATE";$pending[$key]=$true}
+   else{Require ($pending.ContainsKey($key) -and [int]$gate.Groups[4].Value -le 60000) "LEG_${leg}_GATE_RETURN";$pending.Remove($key)}
+  }
+  Require ($pending.Count -eq 0) "LEG_${leg}_GATE_UNRETURNED"
+  $complete=[regex]::Match($log,'\[DISEMBARK_COMPLETE\][^\r\n]*operation_id='+$operation+'[^\r\n]*logical_occupants=0[^\r\n]*transitions=0[^\r\n]*inside_bounds=0')
+  Require ($complete.Success -and $complete.Index -gt $arrival.Index -and $complete.Index -lt $foot.Index) "LEG_${leg}_PHYSICAL_DISMOUNT"
+  Require ($log -match '\[VEHICLE_STATE_CHANGED\][^\r\n]*operation_id='+$operation+'[^\r\n]*previous_state=HANDOFF state=COMPLETE') "LEG_${leg}_NORMAL_COMPLETE"
+  $group=[regex]::Escape($boarding.Groups[3].Value)
+  Require ($log -match '\[GROUP_TRACE\][^\r\n]*group='+$group+'[^\r\n]*target_pos=') "LEG_${leg}_GROUP_DIAGNOSTICS"
+  $members=@([regex]::Matches($log,'\[MEMBER_TRACE\][^\r\n]*group='+$group+'[^\r\n]*position=(\d+)[^\r\n]*selected_action=\S+ executed_action=\S+'))
+  Require (@($members|ForEach-Object{$_.Groups[1].Value}|Sort-Object -Unique).Count -eq $crew) "LEG_${leg}_MEMBER_DIAGNOSTICS"
+ }
+}
+Require ($log -notmatch '\[ACCEPTANCE_FAILURE_LATCHED\]|\[VEHICLE_STATE_CHANGED\][^\r\n]*previous_state=(?:BOARDING|TRANSIT|DISMOUNT|HANDOFF) state=(?:FALLBACK|FAILED_CLOSED)') 'TRIP_FAILURE'
+if($failures.Count){$failures|Sort-Object -Unique;exit 1}
+"PASS Vehicle scenario=$Scenario legs=$legs crew=${crew}: real boarding, unchanged destination, physical arrival/dismount, all members at point, diagnostics, native0/stopped"
+exit 0

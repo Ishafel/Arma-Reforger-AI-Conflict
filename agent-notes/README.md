@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Прогнать полные поездки/повторную посадку, разобрать действия и координаты бойцов | [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md), GroupTrace, VehicleScenarioProbe и `Invoke-AICFVehicleScenarios.ps1` |
 | Изменить категории своего/CIV колёсного каталога, preview, numeric рассадку, подтверждение сокращения состава и библиотеку техники (issue #78) | [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md), `AICF_VehiclePreset`/`AICF_VehiclePresetCatalog`, `AICF_VehiclePresetService`/`AICF_VehicleCrewReturn`/`AICF_VehiclePresetStore`, content price override, acquisition/boarding/trip owners |
 | Изменить «Инспектор», прокрутку, ввод окон, названия назначений, постоянную библиотеку, Save/Apply/Delete, перенос комплекта между ролями, массовое назначение или настройку противника (issue #66) | [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md), `AICF_LoadoutService`/`AICF_LoadoutStore`/`AICF_LoadoutTransfer`, `AICF_LoadoutPreset`/`AICF_LoadoutBatch`, `AICF_LoadoutEditor`/`AICF_LoadoutRpc`, `AICF_LoadoutLibraryView`/`AICF_LoadoutSummary`, `tools/AICF_LoadoutLibrary.ps1` |
 | Запустить локальные Play/Host через обычный клиент или разобрать native shutdown crash | [DEVELOPMENT.md](DEVELOPMENT.md#локальные-playhost), [TESTING.md](TESTING.md), `tools/Start-AICFRuntime.ps1 -Role Frontend`; успешный offline/compile не заменяет stopped-log runtime gate |
