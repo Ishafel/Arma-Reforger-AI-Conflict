@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Изменить «Инспектор», прокрутку, ввод окон, названия назначений, постоянную библиотеку, Save/Apply/Delete, перенос комплекта между ролями, массовое назначение или настройку противника (issue #66) | [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md), `AICF_LoadoutService`/`AICF_LoadoutStore`/`AICF_LoadoutTransfer`, `AICF_LoadoutPreset`/`AICF_LoadoutBatch`, `AICF_LoadoutEditor`/`AICF_LoadoutRpc`, `AICF_LoadoutLibraryView`/`AICF_LoadoutSummary`, `tools/AICF_LoadoutLibrary.ps1` |
 | Запустить локальные Play/Host через обычный клиент или разобрать native shutdown crash | [DEVELOPMENT.md](DEVELOPMENT.md#локальные-playhost), [TESTING.md](TESTING.md), `tools/Start-AICFRuntime.ps1 -Role Frontend`; успешный offline/compile не заменяет stopped-log runtime gate |
 | Изменить внутриигровой брифинг на карте | [MISSION_BRIEFING.md](MISSION_BRIEFING.md), `UI/AICF_MissionBriefing.c`, MissionBriefingProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Разобрать resource/navmesh/Hierarchy ошибки и границу внешнего baseline | [EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md), [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), [TESTING.md](TESTING.md) |
@@ -35,7 +36,7 @@
 | Изменить ПТ-состав и Carl Gustaf US | [GAMEPLAY.md](GAMEPLAY.md#сложность-гарнизонов-fia), `AICF_Difficulty`, Core/RHS content profiles, `AICF_WCSInfantryKit`/`AICF_WCSInfantryEquipment`; probes в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить разнообразие вооружения FIA в RHS/WCS (issue #52) | [FIA_ARMAMENT.md](FIA_ARMAMENT.md), `AICF_RHSPMCArmament`, `AICF_RHSPMCEquipment`, RHS/WCS content profiles |
 | Изменить дальность и тактику применения РПГ против бронетехники | [ANTI_TANK_TACTICS.md](ANTI_TANK_TACTICS.md), `Orders/AICF_AntiTankPolicy.c` |
-| Оптимизировать каталог и редактор пресетов экипировки | [LOADOUT_PERFORMANCE.md](LOADOUT_PERFORMANCE.md), `Loadouts/AICF_LoadoutCatalog.c`, `UI/AICF_LoadoutEditor.c` |
+| Изменить личную библиотеку и общий Inspector или оптимизировать каталог экипировки | [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md), [LOADOUT_PERFORMANCE.md](LOADOUT_PERFORMANCE.md), `AICF_PersonalPresetLibrary`/`AICF_PersonalLoadout`, `Loadouts/AICF_LoadoutCatalog.c`, `UI/AICF_LoadoutEditor.c` |
 | Изменить пополнение экипировки, live revisions и сбор с тел (issue #6) | [EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md), `Loadouts/AICF_EquipmentService.c`, `AICF_EquipmentInventory`/`AICF_EquipmentApplicator`, [TESTING.md](TESTING.md) |
 | Изменить общий список содержимого разгрузки и навигацию подсумков | [LOADOUT_CONTENTS.md](LOADOUT_CONTENTS.md), `UI/AICF_LoadoutNavigation.c` |
 | Исправить пропавшие магазины RHS в исходном WCS kit и проверить preview restore (issue #61) | [LOADOUT_CONTENTS.md](LOADOUT_CONTENTS.md), `AICF_LoadoutContentsInventoryProbe`, `Loadouts/AICF_LoadoutInventory.c` |

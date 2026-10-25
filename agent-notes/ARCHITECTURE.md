@@ -7,6 +7,12 @@
 whitelist, оставляя ландшафт целым. UI редактора экипировки использует временный
 in-memory world для preview; он не является миром кампании.
 
+Личный и AI editor используют одну разметку Inspector; side effects остаются
+раздельными: personal active принадлежит AICF_PersonalLoadoutStore, private
+named variants — AICF_PersonalPresetLibrary с AICF_LoadoutStore и отдельным
+identity prefix файлов. Library Load меняет только owner draft view; spawn по-прежнему
+читает active с повторной server validation. Контракт: [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md).
+
 ## Граф addon
 
 Вооружение FIA в RHS/WCS принадлежит integration: profiles владеют пулами
@@ -282,6 +288,17 @@ Slot хранит применённую revision каждой позиции и
 Async native receipts не меняют roster/приказы; identity-safe восстановление
 инвентаря может продолжаться после отмены визита. Контракт и настройки:
 [EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md).
+Library Save/Delete независимы от назначения: LoadoutStore хранит два поколения
+и tombstones; LoadoutService готовит member/squad plans, LoadoutBatch проверяет
+все revisions до commit, GroupSlot копирует binding каждой позиции.
+AI member preset доступен любой роли той же faction/profile. Character в recipe
+остаётся исходным prefab сборки, а не ограничением получателя. LoadoutService
+сверяет его с authoritative recruit sources; AICF_LoadoutTransfer восстанавливает
+серверный inventory snapshot на private draft каждого другого recipient source
+и требует полного signature readback. Назначение одного комплекта всем десяти
+позициям выбранного slot использует тот же atomic batch; roster не меняется.
+Admin targetFaction разрешается повторно на server, UI не получает authority.
+Протокол и legacy migration — [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md).
 Personal recipes хранятся отдельно по backend identity,
 faction и content profile. Server validation повторяется перед выдачей;
 ошибки требуют проверяемого rollback. Подробнее о поведении: [GAMEPLAY.md](GAMEPLAY.md).

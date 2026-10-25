@@ -15,6 +15,8 @@ class AICF_PersonalLoadoutUI : ScriptedWidgetEventHandler
 	protected int m_iRetryAt;
 	protected bool m_bPending;
 	protected int m_iOperation;
+	protected bool m_bEditorWasOpen;
+	protected bool m_bReloadAfterEditor;
 
 	bool IsBusy() { return (m_bPending && m_iOperation != 0) || (m_Editor && m_Editor.IsInputCaptured()); }
 	bool IsPreviewVisible() { return m_Preview && m_Preview.IsAttached(); }
@@ -32,6 +34,14 @@ class AICF_PersonalLoadoutUI : ScriptedWidgetEventHandler
 
 	void Update(Widget parent, bool characterSelected, ItemPreviewWidget loadoutImage = null)
 	{
+		// Оба editor используют один owner snapshot/token. Автоматический read
+		// экрана появления не подменяет ответ активного AI editor.
+		if (AICF_LoadoutEditor.IsAIEditorOpen())
+		{
+			if (m_wRoot) m_wRoot.SetVisible(false);
+			ClearPreview();
+			return;
+		}
 		SCR_PlayerController player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		SCR_CampaignFaction faction;
 		AICF_LoadoutRecipe context = AICF_PersonalLoadout.Context(player, faction);
@@ -55,9 +65,17 @@ class AICF_PersonalLoadoutUI : ScriptedWidgetEventHandler
 		}
 		m_wRoot.SetVisible(!characterSelected);
 		m_Editor.Refresh();
+		bool editing = m_Editor.IsInputCaptured();
+		if (m_bEditorWasOpen && !editing)
+		{
+			// Library Load возвращает draft, но вне editor preview читает active.
+			m_bReloadAfterEditor = true;
+			m_iRetryAt = System.GetTickCount() + 800;
+		}
+		m_bEditorWasOpen = editing;
 		// Модель использует существующий viewport, не создавая новый слой UI.
 		// Пока открыт редактор или выбран живой боец, его модель имеет приоритет.
-		if (characterSelected || m_Editor.IsInputCaptured())
+		if (characterSelected || m_Editor.IsInputCaptured() || m_bReloadAfterEditor || (m_bPending && m_iOperation == 0))
 		{
 			ClearPreview();
 		}
@@ -83,12 +101,13 @@ class AICF_PersonalLoadoutUI : ScriptedWidgetEventHandler
 		// JsonSaveContext пишет ResourceName как GUID на dedicated server и как
 		// полный путь на клиенте. Сравниваем декодированную идентичность ресурса.
 		bool sameContext = AICF_PersonalLoadout.SameContext(AICF_LoadoutRecipe.Decode(m_Player.AICF_PersonalContext()), context);
-		if (!IsBusy() && !sameContext && System.GetTickCount() >= m_iRetryAt)
+		if (!IsBusy() && (!sameContext || m_bReloadAfterEditor) && System.GetTickCount() >= m_iRetryAt)
 		{
+			m_bReloadAfterEditor = false;
 			m_iRetryAt = System.GetTickCount() + 2000;
 			Request(0);
 		}
-		bool ready = sameContext && !IsBusy() && !m_bPending && System.GetTickCount(m_iRequestedAt) > 800;
+		bool ready = sameContext && !IsBusy() && !m_bPending && !m_bReloadAfterEditor && System.GetTickCount(m_iRequestedAt) > 800;
 		m_aButtons[0].SetEnabled(ready);
 		string editLabel = "{AICF:AICF_UI_PersonalCreate}";
 		if (m_Player.AICF_PersonalAvailable()) editLabel = "{AICF:AICF_UI_PersonalEdit}";
@@ -150,5 +169,7 @@ class AICF_PersonalLoadoutUI : ScriptedWidgetEventHandler
 		m_Player = null;
 		m_sContext = string.Empty;
 		m_bPending = false;
+		m_bEditorWasOpen = false;
+		m_bReloadAfterEditor = false;
 	}
 }

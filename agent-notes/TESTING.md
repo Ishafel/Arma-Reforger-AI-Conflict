@@ -1,5 +1,402 @@
 # Проверки и baseline
 
+## PR77 review: неполные комплекты живого ИИ — 2026-10-25
+
+Исходный clean `a140f22`, продолжение `codex/issue-66-loadout-qol`.
+Замечание `discussion_r4370295997`: Validate разрешал отсутствие оружия/магазинов,
+но EquipmentPlan отклонял такой binding и останавливал обслуживание живого member.
+Теперь optional primary/target0 допускаются только для явного binding, signature
+проверяется до Capture. Default failure guards сохранены. Loaded без magazine
+перестал учитывать патронник дважды. Replay запрещает скрытые attachment slots
+и встроенные BaseMagazine charges с native CanRemove=false; съёмные магазины
+не обязательны. Fixtures используют те же доступные slots и native query.
+
+Evidence: `.codex-runtime/issue77-review-fixes-20261025/REPORT.md`.
+
+- Baseline6/6 и after-detachable6/6 **PASS/0**: Equipment/interop, AI loadout,
+  QoL, MatchShutdown/ShutdownLog. Equipment31 rules/34 mutations, QoL77 mutations.
+- Полный `after-all` — **91/91 PASS/0**. Временный subst X: снят после children.
+- Терминальный Workbench isolated Stock/WCS — **PASS/0**, полные logs содержат
+  `Script validation successful`, не только успешный process exit.
+- `stock-detachable` / `wcs-detachable`: **45/45 PASS** каждый, native0/stopped,
+  scriptFatal0.20 target checks US/USSR; три последовательных живых комплекта
+  (unarmed, без съёмных magazines, полный), applied revision/inventory/weapon,
+  движение разблокировано,15s no loop и неизменный supplies/tickets ledger.
+- `Test-EquipmentIncompleteLog.ps1`:2 positives PASS,6 missing/failed/duplicate
+  negatives отклонены. Manifest/CLI, roster, native0 и full stopped logs обязательны.
+- Ammo/transfer регрессия: `stock-safety` **56 checks/3 families PASS**,
+  `wcs-safety` **129/16 PASS**, native0/stopped/scriptFatal0; старый
+  `Test-EquipmentLog.ps1 -Mode Safety -ExpectedFamilies 3|16` PASS.
+- Финальная UI/library регрессия: `stock-qol` и `wcs-qol` — каждый
+  **219 server/266 client checks PASS**, failures0, native0/0, полные stopped
+  logs/scriptFatal0. Все прежние oracles включены;4 positives и12 негативных
+  missing/failed/duplicate controls прошли.
+- Сравнение31 baseline logs с4 окончательными UI logs:164/155 Error identities,
+  новых0. Строгий native Error verdict остаётся **FAIL**, не PASS регрессии.
+- Финальный Workbench рабочего аддона Stock/WCS **2/2 PASS/0**, полные logs
+  подтверждают успешную validation. Cleanup:20 profiles,13 test libraries и6
+  stages убраны после архивации, собственных runtime процессов нет.
+
+Stock-first/debug выявили двойной патронник и неверный strip встроенных flare
+charges: native CanRemove различает их и настоящие magazines. Неудачные logs
+сохранены как FAIL/diagnostic; успешный короткий matrix не заменяет полный live.
+Первый UI control столкнулся с занятым портом, client readiness не дал подключиться;
+helper исправлен явным `-addr`, production не менялась. Неудачный startup со
+script leaks сохранён отдельно и не приписывается успешным final runs.
+
+`control2` — полный остановленный server/client без наших editor widgets,
+native0/scriptFatal0. Штатный prefab/API снова дал8 PP HDR/SMAA Error;52 texture
+reference Error остались. Pure Frontend controls без production scripts не дали
+штатного shutdown и **не доказывают** источник font references. См.
+[EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md). Installed files
+и severity не менялись, fixes не подменены фильтрами. Пользователь подтвердил,
+что исходных RHS/WCS projects нет. Остальные vendor defects не исправлены;
+неустановленный источник части font/texture references не объявлен внешним.
+Строгий all-native Error **FAIL**, ready PR остаётся заблокирован.
+
+Визуальная/input/controller оценка, backend-auth roundtrip, JIP, Workshop package
+и длительный бой — **NOT RUN**. GUI/screenshots запрещены AGENTS.md. Доступный
+live armory путь неполных комплектов этим этапом проверен непосредственно.
+
+## Межролевые комплекты и очередь Inspector #66 — 2026-10-25
+
+Продолжение той же ветки, исходный чистый `1db2018`. AI member preset теперь
+виден любой роли своей faction/profile; source whitelist и независимый полный
+inventory transfer/readback заменяют привязку recipient к исходному character.
+Operation9 атомарно назначает kit всем10 позициям выбранного squad. Private
+Restore освобождает чужой default inventory до вставки; Validate уплотняет
+только server snapshot cargo IDs, не меняя editable recipe paths.
+Editor queue1000ms и максимум2 повтора явного RATE_LIMITED устраняют пустой
+экран после быстрого выбора. Target камеры выше, scrollbar тоньше, summary
+имеет resolved категории/имена и обходит содержимое hidden containers.
+
+Evidence: `.codex-runtime/issue66-role-transfer-20261025/REPORT.md`.
+
+- `Invoke-AICFChecks.ps1 -Name Test-AILoadoutStatic.ps1,Test-PersonalLoadoutContracts.ps1,Test-LoadoutQolContracts.ps1,Test-LocalizationStatic.ps1`:
+  baseline4/4 и final4/4 **PASS/0**, QoL75 mutation guards.
+- `Build-AICFLocalization.ps1`:659 entries; обе runtime conf обновлены.
+- Терминальный Workbench Validate/Compile окончательного isolated stage:
+  Stock/WCS **2/2 PASS/0**;288 production файлов совпадают с рабочим деревом.
+  Финальная компиляция самого рабочего аддона Stock/WCS также **2/2 PASS/0**.
+- `Start-AICFRuntime.ps1` через сохранённые `Run.ps1 -Role Server/Client`:
+  `stock-final` и `wcs-final` — каждый **219 server /266 client checks,
+  failures0, native exits0/0**, полные stopped logs, scriptFatal0.
+- `Test-LoadoutRoleTransferLog.ps1` включает все прежние Qol/Files/Inspector/
+  Personal/Library oracles, требует44/29 новых cases, точный manifest/CLI и
+  завершённые logs. Финальные4 positives PASS,12 negative controls отклонены.
+- Проверены sparse cargo, все10 recipient sources обеих сторон, другая роль в
+  Library, новый полный squad, late-invalid/stale atomic отказы, неизменные
+  files, настоящий owner RATE_LIMITED, шесть Ready/model после переключений,
+  camera target/thumb metadata. Это не физическая проверка UI.
+
+Начальные stock1/debug failures Restore и stock3 неверное ожидание retry
+сохранены в evidence с исправлением причин; stock2 client опоздал к server
+deadline и остановлен явно. Они не считаются PASS. Stock4 прошёл, затем summary
+уточнена (Weapons до storage, рекурсия hidden containers); оба final main runs
+проверили уже эту окончательную версию. Формат старых файлов не менялся.
+
+Полный offline91/91, restart8+8 и localization21+21 из предыдущего раздела не
+повторялись на этом этапе (**NOT RUN**), не выдаются за новые PASS. Выполнены
+релевантные4 audits и обязательные compile/runtime gates. Строгий all-native
+Error verdict остаётся **FAIL**:31 baseline log /4 final logs,164/155 unique
+identities, новых нет. Перед ready PR этот baseline blocker не снимается.
+
+Визуальная оценка framing/scrollbar, clipping RU/EN, физический input/focus и
+controller navigation — **NOT RUN/отклонены**: terminal-only AGENTS.md запрещает
+GUI automation/screenshots. Игроку: открыть оба editor, проверить кадр/подписи,
+загрузить старый комплект медика на другую роль, применить «Всем бойцам…» и
+быстро переключить позиции/presets. Не доказаны также живой AI spawn/replenish
+с межролевым kit, backend-auth roundtrip, JIP, package и длительный бой.
+ACCEPTED, ready PR, push/merge/release не выполнялись.
+Все13 тестовых profiles,8 отдельных libraries и stage удалены после архивации;
+пользовательские libraries сохранены, собственных тестовых процессов нет.
+
+## Предпросмотр библиотеки и неполные комплекты #66 — 2026-10-25
+
+Продолжение `codex/issue-66-loadout-qol`, исходный чистый `5b6d8ed`.
+Убран лишний personal active/help, preview перенесён в крупный левый блок;
+слоты personal показывают8 строк. Validate допускает отсутствие оружия и
+магазинов. LibraryView/Summary строят независимые model/inventory world,
+operation8 только читает member/squad (все10 позиций), не меняя draft/binding.
+SendInspection учитывает cooldown, selection/revision/modal и cleanup.
+Кнопки и карточки имеют hover/pressed/disabled состояния.
+
+Evidence: `.codex-runtime/issue66-library-preview-20261025/REPORT.md`.
+Baseline:3 аудита PASS; filesystem audit сначала denied на temporary junction,
+тот же audit с native доступом PASS. Code baseline failures не обнаружены.
+Полный `after-all-clean/` — **91/91 PASS/0**, без исключений; alias X: снят.
+QoL contracts теперь **58 mutations**, personal70, filesystem19 cases.
+После полного набора изменены только RGB pressed/foreground (читаемость):
+`after-contrast/` **4/4 PASS/0**, production Stock/WCS terminal compile **2/2 PASS/0**.
+Расчёт opaque sRGB contrast: caption8.45:1, detail5.38:1, hover caption6.43:1;
+это не визуальная проверка интерфейса или сертификат соответствия стандартам.
+
+Финальные `stock-pass`/`wcs-pass` — каждый **175 server /237 client checks**,
+failures0, native exits0/0; exact CLI/manifests, readiness и полные stopped logs.
+Сохранены прежние28 AI/16 personal owner RPC; ещё31 owner RPC проверяет
+неполные комплекты, inspect всех10 позиций, stale/missing denials. Новые
+проверки:12 server inventory/Validate,78 client protocol/hidden metadata.
+Library oracle:4 positive /12 rejected missing/failed/duplicate controls.
+Fresh-profile `stock-reload`/`wcs-reload` — по **8/8 PASS/0**.
+
+После protocol обнаружена рассинхронизация `.st` и runtime language conf.
+`Build-AICFLocalization.ps1` обновил en_us/ru_ru до657 entries; отдельный audit
+PASS. Native `locale-stock`/`locale-wcs` — по **21/21 PASS/0**, включая6 checks
+трёх новых keys в EN/RU. Это отдельный gate после обновления assets; production
+логика не менялась. Язык меняется/восстанавливается только в isolated fixture.
+Protocol/locale stage compiles, production после language sync и production
+после RGB — все PASS, validation successful, SCRIPT E/F/ENGINE F/VM/null0.
+Последние RGB проверены compile/audits/расчётом, physical feedback NOT RUN.
+
+Промежуточные FAIL сохранены: fixture constructor/Color типы; native startup
+до успешной fixture compile; OutOfMemory при одновременных offline/runtime;
+выход client из pre-spawn context и затем из тестового сценария;750ms fixture
+cooldown/RATE_LIMITED и special personal slot; stale runtime translation table.
+Первый полный набор прерван14/91 (3 failures/interrupt); следующий46/91 с1
+localization FAIL прерван после обнаружения причины. Финальный полный повтор
+91/91. Pre-spawn guard применяется только в fixture, production не ослаблен.
+
+287 addon files совпадали со stage при каждом Prepare; после protocol отдельно
+обновлены2 runtime language conf и проверены native localization. Старые
+preset schemas/storage не менялись, пользовательские библиотеки не редактировались.
+Убраны15 тестовых profiles,5 библиотек (после архивации), оба stage rounds;
+своих тестовых процессов нет. Native errors:31 прежний /8 финальных stopped logs,
+164 baseline /155 current unique identities, новых нет. Строгая чистота всех
+native Error остаётся **FAIL**, ресурсные/shutdown diagnostics не исправлялись.
+
+Физические hover/click/focus, крупность/clipping RU/EN, controller navigation —
+**NOT RUN**, отклонены отдельно: terminal-only AGENTS запрещает GUI automation.
+Hidden probes не вызывают ShowModal/AddModal или mouse callbacks. Игроку:
+открыть оба editor, выбрать Library presets и squad positions, пролистать вещи,
+проверить preview/подсветку, Save/Load/Apply без weapons/magazines. Фактическое
+появление с неполным комплектом, backend-auth identity, JIP, Workshop package и
+длительный бой NOT RUN. Disk/restart проверены storage fixtures; owner RPC —
+session fallback. ACCEPTED/ready PR/push/merge/release не заявляются.
+
+## Личный Inspector и приватная библиотека #66 — 2026-10-25
+
+Продолжение `codex/issue-66-loadout-qol`, baseline `ca04646`, дерево чистое.
+Create() обоих editor вызывает одну CreateInspector: preview/catalog/scroll,
+Save/Library и confirmations общие, personal слева показывает один active.
+Named Save/Load/Delete используют personal operations5/6/7; прежние1/3/4
+по-прежнему отвечают за active/Select/Default. Старый active формат сохранён.
+Private prefix строится из server backend identity/profile/faction; context,
+active/library revisions и personal policy повторно проверяются на authority.
+Scalar payload больше не передаётся native object JSON reader.
+
+Evidence: `.codex-runtime/issue66-personal-inspector-20261025/REPORT.md`.
+Свежий baseline **5/5 PASS/0**. Финальный `after-all-final/` — **91/91 PASS/0**,
+alias X: снят. Personal contracts — **70 negative mutations**, QoL — **44**,
+filesystem — **19 cases**, включая оба mounts, canonical personal import и
+сохранность active/named generations между fresh profiles.
+Финальный terminal Workbench Stock/WCS stage + production Stock без fixtures
+— **3/3 PASS/0**, validation successful, SCRIPT E/F, ENGINE F, VM/null0.
+SHA-256 **285 addon files** (включая README/license) совпали со stage.
+
+Окончательные `stock-flat`/`wcs-flat`: каждый **140 server / 159 client cases**,
+failures0, native exits0/0. Это прежние AI gates плюс30 personal storage cases,
+16 настоящих personal owner RPC (39 assertions) и32 personal hidden widget
+cases. Отдельные `stock-reload`/`wcs-reload` — по **8/8 PASS/0** в свежих
+server profiles с общей библиотекой: member/tombstone/старый active/list.
+`Test-PersonalPresetLog.ps1` —6 positive /18 rejected negative controls.
+Сохранены exact CLI/manifests и полные stopped console/script/error logs.
+
+Промежуточные FAIL не скрыты: старые structural guards ссылались на прежний
+personal Create/layout и точный preview predicate; перенесены к общему builder
+и расширенному ClearPreview gate. Первый полный набор был90/91, финальный
+повтор91/91. Первый Stock server упал0xC0000005 при personal Delete ID1:
+numeric payload ошибочно попадал в recipe Decode/native object ReadValue.
+Добавлены object-root guard и Decode только для recipe operations, scalar
+native regression; оба финальных runtime повторены без crash. Вложенный
+personal namespace под junction не создавал записей (MakeDirectory сообщал
+успех, lookup/file result оставались пустыми); trace сохранён. Используется
+flat private file prefix; native запись/readback/reload подтверждены заново.
+
+Четыре настоящих старых personal файла скопированы в постоянный `personal/`
+с SHA-256 readback; источники и15 существующих AI files не менялись.
+Own12 profiles,3 test libraries и stage убраны после архивации; своих runtime
+процессов нет. Строгая чистота всех native Error остаётся **FAIL**:31 прежний
+log /6 финальных,164 baseline /155 current unique identities, новых нет.
+
+Физический input/focus, RU/EN clipping, controller navigation — **NOT RUN**,
+отклонены отдельно от terminal criteria: GUI automation запрещена. Hidden tree
+не вызывает ShowModal/AddModal и не имитирует ввод. Игроку: открыть личный editor,
+проверить Save/Library/Load/Delete/Apply, закрытие с draft и native preview после
+закрытия. Diag owner RPC использовал session fallback без backend identity;
+диск/restart проверены отдельным server fixture, live backend-auth roundtrip
+не заявляется. JIP, packaged Workshop и длительный бой — **NOT RUN**.
+ACCEPTED/ready PR/push/merge/публикация не заявляются.
+
+## «Инспектор»: ширина, прокрутка и ввод окон #66 — 2026-10-25
+
+Продолжение `codex/issue-66-loadout-qol`, исходный `6f59d6c`, дерево чистое.
+Центральная колонка уменьшена до 70% прежней ширины; catalog расширен до
+трёх колонок. Up/Down заменены вертикальным native SliderWidget и колесом,
+виртуализация карточек сохранена. Четыре modal sections принимают cursor
+выше фонового AICF_RectInput; AddModal/RemoveModal управляют focus lifecycle.
+Выбор стороны без managed AI slots сохраняет текущую сторону и черновик
+с пояснением, не вызывает Close. Протокол и формат постоянных пресетов не менялись.
+
+Evidence: `.codex-runtime/issue66-inspector-fixes-20261025/REPORT.md`.
+Свежий `before/` — **4/4 PASS/0**, baseline failures нет. `after-contracts/`
+— **4/4 PASS/0**, 44 structural mutations. Полный `after-all/` —
+**91/91 PASS/0**, временный X: снят. Полные команды и вывод — в evidence.
+Terminal Workbench production Stock и финальные isolated Stock/WCS graphs —
+**3/3 PASS/0**, `Script validation successful`, SCRIPT E/F, ENGINE F,
+VM/null exceptions нет. 276 production addon files совпали с runtime stage.
+
+Canonical dedicated/direct client Stock и ArlandWCSRHS: **110 server / 88 client
+cases на каждый graph**, failures=0, native exits **0/0**. Из них 31 client case
+проверяет невидимое native widget tree: 70% ширины, расширенный catalog,
+input flags и z четырёх sections, vertical scroll bounds/sync, reveal,
+disabled/empty и cleanup. Inspector oracle отвергает missing/failed/duplicate
+case: **6 отрицательных controls PASS**. Проверка отсутствия managed slots
+использует fake read model; SelectSide не вызывается, порядок early return
+и сохранения draft покрыт structural guard. ShowModal/AddModal и ввод не
+имитировались; это не проверка физических кликов или набора текста.
+
+Строгая чистота всех native Error остаётся **FAIL**: прежние resource GUID,
+world/material/hierarchy, PP и shutdown leaks сохранены. Сравнение с полными
+предыдущими #66 logs — в `native-error-comparison.json`; новых identities нет.
+Промежуточный запуск UTF-8 helper через Windows PowerShell 5.1 дал ParserError
+на пути с кириллицей до запуска Workbench. Штатный PowerShell 7 успешно выполнил
+команду; исходники игры этим сбоем не затрагивались.
+Дополнительный `stock-final` probe дал FAIL измерения catalog: fixture применял
+FrameSlot к внутреннему EditBox с LayoutSlot. Владелец FrameSlot установлен по
+Edit() — контейнер native layout; fixture исправлен, финальный Stock повторён
+как `stock-final2`. Полный неуспешный лог сохранён, production не менялся.
+В `wcs-final` fixture обновлялся после старта server: server log подтвердил
+`remote script source code checksum does not match`, DATA/SCRIPT_MISMATCH.
+Client не подключился, server завершился по probe deadline без игрока,
+зависший client остановлен с проверкой PID/profile. Это FAIL, не новый PASS:
+полные логи/exit -1 сохранены. Финальный gate повторён на свежей паре
+`wcs-final2` с одинаковыми fixture sources и без одновременной компиляции stage.
+
+Физический input/focus Save/RoleAll/Library и переключение US→USSR, внешний вид
+RU/EN и controller navigation — **NOT RUN**, исходные визуальные/input критерии
+отклонены отдельно от terminal checklist. По AGENTS разрешён только terminal
+workflow; widget metadata и статический код не доказывают поведение мыши и
+клавиатуры. Игроку: переключить сторону, открыть три окна, ввести имя, нажать
+действия, прокрутить оба списка и проверить ширину. Также **NOT RUN** здесь:
+повтор persistence seed/reload (хранилище не менялось), JIP, Workshop и долгий бой.
+Предыдущий PASS persistence от 24.10 не считается новым. ACCEPTED, ready PR,
+push/merge/публикация не заявляются.
+
+## «Инспектор» и постоянная библиотека: продолжение #66 — 2026-10-24
+
+Ветка `codex/issue-66-loadout-qol`, исходное дерево `17808e0` чистое. AI editor
+перестроен на роли/назначенные имена слева, preview/slots в центре и catalog
+справа. Имена идут из owner snapshot конкретного slot. Modal naming/library,
+подтверждения Delete/RoleAll/ApplySquad/Close и captured revision guards сохраняют
+прежний RPC. Пока AI editor захватил ввод, personal spawn UI не отправляет
+автоматический read в общий token/snapshot. Личный editor сохраняет прежний layout.
+Frontend получает постоянную библиотеку через отдельный filesystem mount;
+подробности и границы — [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md).
+
+Evidence: `.codex-runtime/issue66-inspector-20261024/REPORT.md`. Свежий `before/`
+— **7/7 PASS/0**, baseline failures нет. Полный `after-all/` — **91/91 PASS/0**
+через временный X:, alias снят. После финальных уточнений `final-current-targeted/`
+— **7/7 PASS/0**, 36 structural mutations. Filesystem contracts — 11 cases.
+Команды/argv/полный вывод находятся в context/summary соответствующего каталога.
+
+Terminal Workbench final Stock/WCS fixture graphs, RHS legacy graph и production
+Stock без fixtures — **4/4 PASS/0**, `Script validation successful`, SCRIPT E/F,
+ENGINE F и VM exceptions нет. **276 production addon files** побайтно совпали
+с изолированным compiled/runtime stage. Canonical Stock и ArlandWCSRHS
+`*-final4` server/client — **110/57 cases на каждый graph**, failures=0,
+native exits **0/0**. Все полные stopped console/script/error logs сохранены.
+Включены 28 player-owned RPC, 10 файловых Apply controls и 23 server/client
+проверки назначенных имён. Последний client case после отзыва admin требует
+пустой enemy snapshot. Это не визуальная/input проверка меню.
+
+Native persistence: два fresh Server profiles с одной постоянной библиотекой,
+`seed` **5/5**, полный выход, `reload` **4/4**, native **0/0**. Member/squad presets,
+tombstone и неизменный legacy прочитаны после перезапуска. Дополнительный RHS
+`legacy` — **10/10** реальных старых пользовательских recipes, profile/bounds
+совпали. Копирование не меняло исходники; SHA-256 всех 15 файлов из обычного
+RHS и прежнего тестового Stock profiles сохранены в `player-library-preservation.json`.
+Подготовлена общая библиотека: старые RHS IDs 0..9 и отдельные Stock ID 10..12,
+оба поколения и удаления сохранены без изменения JSON bytes. Исходные каталоги
+остаются на месте. `Audit-Persistence.ps1` — PASS и 9 отрицательных controls.
+
+Сохранённые промежуточные FAIL: первоначальный SteamAPI_Init без доступа к Steam;
+filesystem junction Access denied в ограниченном процессе; structural audit
+не принимал вставку между двумя capture-инструкциями (порядок восстановлен).
+Первый Stock protocol probe был прерван автоматическим personal read общего
+token, а следующий ошибочно ожидал enemy names после отзыва admin. Fixture
+изолирован от personal UI, oracle требует очистку owner view, production
+AI-editor arbitration добавлен отдельно; оба финальных runtime gates повторены.
+
+Строгая чистота всех native Error остаётся **FAIL**: ресурсные GUID/name,
+SlidingTrackMaterial/Parent/Hierarchy, handshake/PP и shutdown font leaks
+сохранены. Сравнение с 26 полными прежними #66 logs: 169 baseline / 155 текущих
+unique error identities, новых нет. Это внешний baseline, а не PASS всех ошибок.
+Прежний retail Host shutdown crash 1.8.0.13 не исправлялся этой задачей.
+
+RU/EN внешний вид и длинные имена, физический ввод и controller navigation,
+реальный Close/reopen, JIP, packaged Workshop и долгий бой — **NOT RUN**.
+Игроку: открыть AI editor, проверить роли/назначенные имена и scroll, окна
+library/member/squad naming, Save/Apply/Delete/RoleAll/ApplySquad, выход с
+черновиком, повторный запуск и загрузку пресета. Screenshots/GUI automation
+не применялись. Визуальная приёмка отклонена из active checklist; ACCEPTED,
+ready PR, push, merge и публикация не заявляются.
+
+## Пресеты ролей и отрядов: issue #66 — 2026-10-24
+
+Ветка codex/issue-66-loadout-qol от актуального main af2a403. Исходный body
+issue сохранён без изменений, выполнение и checklist ведутся комментариями.
+Save/Apply разделены, добавлены Delete, именованное обновление, Role all,
+десятипозиционные squad presets и административная настройка противника.
+Binding каждой позиции имеет независимую revision; batch проверяет все цели
+до первого field write. Library operations сохраняют локальный черновик,
+server GUID/client {GUID}path сравниваются после local canonical Encode.
+Контракт, права, два поколения/tombstones и импорт — LOADOUT_PRESETS.md.
+
+Свежий baseline before/ — **3/3 PASS/0**, baseline failures отсутствуют.
+Первый after-all/ — **89/89 PASS/0**. Окончательный final-all/ —
+**90/90 PASS/0**, без исключений, через временный X:; alias снят.
+final-targeted/ — **7/7 PASS/0**, 29 structural mutations. После расширения
+файлового oracle final-files-targeted/ — **2/2 PASS/0**, 16 log cases
+(13 negative). Последнее расширение затрагивает только fixtures/analyzer,
+production после полного набора не менялся. Старая ссылка TOOLS на удалённый
+Co-op generator доказанно устарела (f91fb02), заменена текущим registry tool;
+documentation-links-baseline.json сохраняет FAIL, current links — PASS.
+
+Финальные terminal Workbench Stock/WCS primary и с файловым probe —
+**4/4 PASS/0**: validation успешна, SCRIPT E/F, ENGINE F и VM отсутствуют.
+Все **261 production .c** и **284 addon files** совпали с compiled/runtime
+stage по SHA-256. Canonical dedicated/direct client Stock и ArlandWCSRHS:
+первичный полный gate 77 server / 34 client cases; окончательный файловый
+повтор — **87/34 на каждый graph**, failures=0, native exits **0/0**.
+Проверены 28 player-owned RPC, все десять slots/positions, обновление/удаление,
+stale library, неподходящий последний recipe без partial commit, foreign scope,
+admin grant/revoke. Дополнительные 10 FILE_IMAGE_UNCHANGED читают реальные
+bytes/presence всех canonical файлов до/после Apply; `-Files` обязателен для
+этого coverage. Анализатор читает полный stopped console и соседние logs.
+
+Исходный Stock FAIL сохранён: 10 ROLE_SLOT сравнений сырых JSON и две VM от
+native вложенного GAME_MASTER role change. Полные EXPECTED/ACTUAL доказали
+GUID normalization; fixture использует единый native admin/game-master mask,
+production права не выдаёт. Ошибка compile changedStatus и первоначальный
+SteamAPI_Init failure также сохранены, финальные gates повторены после правок.
+Неверный client port 24166 был остановлен readiness до запуска игры;
+финальные подключения к подтверждённому listener 2001.
+
+Строгая чистота всех native Error остаётся **FAIL**: resource/world/Hierarchy
+идентичности совпали с historical f5d2966; native handshake, PP/empty GUID и
+UI/font references также есть в issue61 connected baseline. Это доказательство
+происхождения, не новый PASS старых запусков. Vendor/game assets не менялись.
+Прежний retail Host shutdown 0xC0000005 не исправлялся и не повторялся здесь.
+Визуальный RU/EN UI и физический ввод, Co-op map shortcut, новый JIP с bindings,
+полная сценарная матрица, packaged Workshop и длительный бой — **NOT RUN**;
+нужные действия игрока и неподтверждённый результат перечислены в отчёте.
+ACCEPTED, ready PR, push и публикация не заявляются.
+
+Свои процессы завершены; 14 profiles и stage SHA-проверены в архивах, затем
+удалены по проверенным абсолютным путям. Полные logs сохранены развернутыми.
+Evidence, команды, exits, failures и список файлов:
+`.codex-runtime/issue66-20261024/REPORT.md`.
+
 ## Повторная проверка первого Host и отмены — 2026-10-24
 
 Baseline f91fb02, ветка codex/fix-workshop-catalog-pipeline. Свежие семь

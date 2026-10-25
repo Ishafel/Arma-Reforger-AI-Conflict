@@ -75,6 +75,11 @@ class AICF_LoadoutRecipe
 	{
 		if (value.IsEmpty() || value.Length() > MAX_BYTES)
 			return null;
+		// Native JsonLoadContext.ReadValue требует object root; ID/скаляры
+		// не являются recipe и не должны попадать в обход object API.
+		string objectValue = value;
+		objectValue.TrimInPlace();
+		if (!objectValue.StartsWith("{") || objectValue.Substring(objectValue.Length() - 1, 1) != "}") return null;
 		JsonLoadContext context = new JsonLoadContext();
 		AICF_LoadoutRecipe recipe = new AICF_LoadoutRecipe();
 		if (!context.LoadFromString(value) || !recipe.Read(context) || recipe.m_sName.IsEmpty() ||

@@ -40,7 +40,7 @@ $rules = @(
     @('UI/AICF_PersonalLoadoutPreview.c', 'm_Manager.SetPreviewItem\(m_wPreview, character, null, true\)', 'PREVIEW_NATIVE_VISUAL_COPY'),
     @('UI/AICF_PersonalLoadoutPreview.c', 'm_Manager = world.GetItemPreviewManager\(\);', 'PREVIEW_CAMPAIGN_MANAGER'),
     @('UI/AICF_PersonalLoadoutPreview.c', 'if \(m_Manager && m_wPreview\) m_Manager.SetPreviewItem\(m_wPreview, null\)', 'PREVIEW_RENDER_TARGET_CLEANUP'),
-    @('UI/AICF_PersonalLoadoutUI.c', 'if \(characterSelected \|\| m_Editor.IsInputCaptured\(\)\)\s*\{\s*ClearPreview\(\);', 'PREVIEW_LIVE_CHARACTER_PRIORITY'),
+    @('UI/AICF_PersonalLoadoutUI.c', 'if \(characterSelected \|\| m_Editor.IsInputCaptured\(\) \|\| m_bReloadAfterEditor \|\| \(m_bPending && m_iOperation == 0\)\)\s*\{\s*ClearPreview\(\);', 'PREVIEW_LIVE_CHARACTER_PRIORITY'),
     @('UI/AICF_PersonalLoadoutUI.c', 'void Close\(\)\s*\{\s*ClearPreview\(\);', 'PREVIEW_WIDGET_CLEANUP'),
     @('UI/AICF_PersonalLoadoutUI.c', 'm_Preview.Update\(loadoutImage, player, context, faction\)', 'PREVIEW_PERSONAL_PANEL_OWNER'),
     @('UI/AICF_PersonalLoadoutPreview.c', 'if \(!m_Manager\) \{ Detach\(\); return false; \}', 'PREVIEW_REQUIRES_NATIVE_MANAGER'),
@@ -55,7 +55,23 @@ $rules = @(
     @('UI/AICF_PersonalLoadoutUI.c', 'if \(!m_Player\) return !personal;', 'INITIAL_DEFAULT_ROLE_AVAILABLE'),
     @('UI/AICF_SquadRespawnUI.c', 'm_iCountShownItems = Math.Max\(2, m_iCountShownItems\);', 'BOTH_LOADOUT_CARDS_VISIBLE'),
     @('UI/AICF_SquadRespawnUI.c', 'int pageStart = Math.Floor\(index / m_iCountShownItems\) \* m_iCountShownItems;', 'PERSONAL_SELECTION_PRESERVES_DEFAULT_PAGE'),
-    @('UI/AICF_SquadRespawnUI.c', 'if \(m_iAICFNativePageSize > 0\) m_iCountShownItems = m_iAICFNativePageSize;', 'GALLERY_PAGE_SIZE_RESTORED')
+    @('UI/AICF_SquadRespawnUI.c', 'if \(m_iAICFNativePageSize > 0\) m_iCountShownItems = m_iAICFNativePageSize;', 'GALLERY_PAGE_SIZE_RESTORED'),
+    @('Loadouts/AICF_PersonalLoadout.c', 'revision == storedRevision && libraryRevision == library.GetRevision\(\)', 'LIBRARY_ACTIVE_AND_LIBRARY_REVISIONS'),
+    @('Loadouts/AICF_PersonalLoadout.c', 'operation == 5 && SameContext\(candidate, context\) && AICF_LoadoutService.Validate\(candidate, faction, reason, true\)', 'LIBRARY_SAVE_CONTEXT_AND_BLACKLIST'),
+    @('Loadouts/AICF_PersonalLoadout.c', 'if \(SameContext\(saved, context\)\)', 'LIBRARY_READ_DELETE_CONTEXT'),
+    @('Loadouts/AICF_PersonalLoadout.c', 'else if \(AICF_LoadoutService.Validate\(saved, faction, reason, true\)\)', 'LIBRARY_LOAD_REVALIDATION'),
+    @('Loadouts/AICF_PersonalPresetLibrary.c', 'AICF_PersonalLoadoutStore.Path\(player, context\)', 'LIBRARY_SERVER_IDENTITY'),
+    @('Loadouts/AICF_PersonalPresetLibrary.c', 'if \(!persistent\) key = "session_"', 'LIBRARY_NO_ID_SESSION'),
+    @('Loadouts/AICF_PersonalPresetLibrary.c', 'protected ref map<string, ref AICF_PersonalPresetLibrary> m_mAICFPersonalLibraries', 'LIBRARY_CONTROLLER_OWNER'),
+    @('Loadouts/AICF_LoadoutStore.c', 'if \(!Replication.IsServer\(\) \|\| !m_bPersistent\) return;', 'MEMORY_LIBRARY_NEVER_READS_SHARED_FILES'),
+    @('UI/AICF_LoadoutEditor.c', 'if \(m_bPersonal\) libraryOnly = m_iOperation == 5 \|\| m_iOperation == 7;', 'PERSONAL_LIBRARY_PRESERVES_DRAFT'),
+    @('UI/AICF_LoadoutEditor.c', 'if \(m_bPersonal && action == "confirmSave"\) operation = 5;', 'PERSONAL_SAVE_SEPARATE_FROM_APPLY'),
+    @('UI/AICF_PersonalLoadoutUI.c', '!sameContext \|\| m_bReloadAfterEditor', 'RESTORE_ACTIVE_PREVIEW_AFTER_EDITOR'),
+    @('Bootstrap/AICF_MatchController.c', 'AICF_PersonalLoadout.Request\(player, token, revision, operation, payload, libraryRevision\)', 'PERSONAL_LIBRARY_REVISION_FORWARD'),
+    @('Loadouts/AICF_LoadoutRecipe.c', '!objectValue.StartsWith\("\{"\)', 'RECIPE_OBJECT_ROOT'),
+    @('Loadouts/AICF_PersonalLoadout.c', 'if \(operation == 1 \|\| operation == 3 \|\| operation == 5\) candidate = AICF_LoadoutRecipe.Decode\(payload\);', 'IDS_NOT_DECODED_AS_RECIPES'),
+    @('Loadouts/AICF_PersonalPresetLibrary.c', 'new AICF_LoadoutStore\(AICF_PersonalLoadoutStore.DIRECTORY, persistent, prefix\)', 'PRIVATE_FILE_NAMESPACE'),
+    @('Loadouts/AICF_LoadoutStore.c', 'm_sDirectory \+ "/" \+ m_sFilePrefix \+ id.ToString\(\)', 'PREFIXED_FILE_PATH')
 )
 $failures = @()
 foreach ($rule in $rules) {

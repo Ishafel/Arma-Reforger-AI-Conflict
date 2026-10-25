@@ -27,7 +27,14 @@ class AICF_EquipmentInventory
 		int rounds = muzzle.GetAmmoCount();
 		// Rifle muzzle implementations могут включать патронник в GetAmmoCount.
 		// Native magazine + отдельные chambers дают одинаковый счёт для stock/RHS.
-		if (muzzle.GetMuzzleType() == EMuzzleType.MT_BaseMuzzle && muzzle.GetMagazine()) rounds = muzzle.GetMagazine().GetAmmoCount();
+		if (muzzle.GetMuzzleType() == EMuzzleType.MT_BaseMuzzle)
+		{
+			// Без магазина GetAmmoCount тоже может включать патронник.
+			// Он будет учтён ниже ровно один раз.
+			rounds = 0;
+			BaseMagazineComponent magazine = muzzle.GetMagazine();
+			if (magazine) rounds = magazine.GetAmmoCount();
+		}
 		for (int i; i < muzzle.GetBarrelsCount(); i++)
 			if (muzzle.IsBarrelChambered(i)) rounds++;
 		return rounds;

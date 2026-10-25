@@ -1,5 +1,39 @@
 # Внешние ошибки ресурсов и граница scripts-first
 
+## Повторная проверка PR #77 — 2026-10-25
+
+Разбор прежних401 строк console Error четырёх issue66 logs сохранён в
+`.codex-runtime/issue77-review-fixes-20261025/error-catalog-before.json` с контекстом
+каждой строки. Число155 нормализованных identities не является155 отдельными
+дефектами: offsets полей и имена отдельных ресурсов сохранялись раздельно.
+
+`control2` — canonical Stock server/direct client с production graph, но без
+Inspector и personal widgets (fixture подавляет только personal Update).
+Test script создаёт штатный ItemPreviewManager.et в private world и вызывает
+native ResolvePreviewEntityForPrefab. Непосредственно внутри private_begin/end
+снова возникают8 Overlapping PP HDR/SMAA Error; собственные камера/свет/Library
+этот control не создаёт. Global manager после native инициализации уже существует.
+Оба процесса завершились native0, полные stopped logs, script/VM/fatal0;52
+resource-reference .edds Error сохраняются. Это доказательство происхождения
+PP сообщений у штатного prefab/API, а не PASS чистоты Error и не доказательство
+внешнего владельца каждой оставшейся texture reference.
+
+Чистые Frontend control попытки без production scripts не дали полного штатного
+shutdown: fallback menu не вызвало закрывающий callback, процессы остановлены.
+Они **не подтверждают** чистоту/источник shutdown font references. Второй control
+ошибочно не включал собственные string tables; эти сообщения относятся к стенду.
+Третий сохранил language resources и воспроизвёл native IntroSplashScreen
+SCR_WidgetExportRuleRoot Error без production .c. Signal taskkill без /F не закрыл
+fallback menu; итог force stop/native-1, без stopped-log PASS. Не использовать
+этот диагностический startup как полный контроль стабильности или teardown.
+
+Владелец подтвердил отсутствие редактируемых RHS/WCS projects: доступны только
+установленные пакеты. Их GUID/material/serialized-field дефекты не исправлены
+в этом PR. Установленные файлы, native resources и severity не менялись;
+dummy fields/classes и prefab copies не добавлены. Неустановленный источник
+оставшихся font/texture references также не объявляется исправленным/внешним.
+Строгая all-native-Error проверка остаётся **FAIL** и блокирует ready PR.
+
 Владелец 23.10.2026 подтвердил: сохранить scripts-first, исправить код проекта,
 а внешние дефекты зафиксировать. Собственные копии миров, navmesh, слоёв карт и
 массовые prefab overrides ради чистого лога не добавляются; установленные файлы

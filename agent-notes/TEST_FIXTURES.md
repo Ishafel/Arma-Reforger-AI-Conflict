@@ -1,5 +1,141 @@
 # Изменение сценарного контракта — 2026-10-24
 
+## Пресеты ИИ: issue #66
+
+`AICF_EquipmentIncompleteProbe.c` → isolated Core/UI
+`AICF_ZZEquipmentIncompleteProbe.c` после `AICF_ZEquipmentProbe.c`, flag
+`-aicfEquipmentProbe incomplete`. Проверяет20 target cases US/USSR и настоящий
+цикл живого бойца: unarmed → без съёмных magazines → полный комплект. Для каждого
+нужны новая member revision, точный inventory, ожидаемое оружие, освобождённое
+движение,15 секунд без нового visit и неизменный ledger. Штатные readiness,
+planner, armory и native inventory receipts сохранены. Завершение Stop/RequestClose.
+`Test-EquipmentIncompleteLog.ps1` требует45 уникальных cases, DONE45/0/3,
+native0, точный manifest/CLI, ROSTER_READY и полные stopped logs без script/VM/
+fatal/recovery errors. Native resource Error — отдельный строгий FAIL gate.
+`aicfIncompletePlanOnly`/`aicfIncompleteStartCase` — только диагностика: такие
+запуски не заменяют45-case oracle. BaseMagazine включает встроенные заряды;
+strip использует native CanRemove и те же VisibleSlot, что UI.
+
+`AICF_NativePreviewControlProbe.c` — единственный test script в отдельном
+production stage, `-aicfNativePreviewControl 1` на server/client. Personal Update
+подавляется только fixture; Inspector не создаётся. Client через3s создаёт stock
+ItemPreviewManager в private world, через20s проверяет global manager, закрывается
+через40s; server закрывается через120s. Callbacks снимаются на Close/OnGameEnd.
+Это диагностический reproducer native PP errors, не доказательство UI/input или
+чистоты всех Error. Он использует canonical direct-connect и настоящую готовность
+server roster. Полные logs и phase markers обязательны для атрибуции.
+
+`AICF_LoadoutRoleTransferProbe.c` → isolated Core/UI
+`AICF_ZZZZZZRoleTransferProbe.c`, после Qol/Files/Inspector/PersonalLibrary/
+LibraryPreview; `-aicfRoleTransferProbe 1` на обоих peers. Server строит комплект
+медика с удалённым cargo slot0 и проверяет полный перенос на все10 roles обеих
+сторон, видимость в библиотеке стрелка и resolved summary labels. После прежних
+цепочек client выполняет15 owner RPC: Save, Load на другую роль, Apply, Inspect,
+operation9 на весь squad, SaveSquad/ApplySquad с такими bindings, stale revision,
+invalid profile и запрет personal operation9. Server проверяет неизменность файлов
+на Apply/отказах, все10 bindings и atomic отказ по последней испорченной позиции.
+Затем скрытый Inspector без FocusSlotCatalog/ShowModal/input callbacks отправляет
+production Request после свежего owner read (настоящий RATE_LIMITED), проверяет
+bounded retry, шесть переходов Ready/model, поднятый target и тонкий thumb с широкой
+hit area. Все callbacks/модели/деревья очищаются до shutdown. Не подтверждает ввод
+или визуальную оценку. `Test-LoadoutRoleTransferLog.ps1` включает прежние oracles,
+требует44 server/29 client новых cases ровно по одному, отрицательные причины,
+DONE15/6, native0, точный manifest/CLI и полные остановленные logs обоих peers.
+Прежние file-image diagnostics не повторяются в extra phase; новые имеют свой prefix.
+
+`AICF_LoadoutInspectorProbe.c` → isolated Core/UI `AICF_ZZZLoadoutInspectorProbe.c`
+после Qol/Files, `-aicfInspectorProbe 1`. Перед QolClose client создаёт скрытое
+дерево actual AI и personal Inspector, проверяет 31 +32 metadata/state cases
+и удаляет оба дерева. Personal дополнительно проверяет скрытые Side/Group,
+видимую стоимость, крупный левый preview и отсутствие лишней карточки получателя.
+Workspace parent невидим до создания детей; ShowModal/focus/input events не
+вызываются. Это terminal native widget structure test, не GUI automation и
+не visual/input verdict. Проверяются 70% ширины, z/input flags modal sections,
+empty managed-side read model, расширенный catalog, scroll
+rows/last/reveal/disabled/empty/cleanup. Переключение стороны покрыто отдельным
+structural guard; этот probe не вызывает SelectSide и не проверяет клики.
+
+`AICF_PersonalLibraryProbe.c` → isolated Core/UI `AICF_ZZZZPersonalLibraryProbe.c`
+после остальных трёх probes, `-aicfPersonalLibraryProbe 1`. На server расширяет
+QolStorage обеих сторон: named upsert/dedupe, partial-generation recovery,
+tombstone/reload, независимые session stores, old active bytes и неизменность
+AI files. На client после прежних 28 AI RPC выбирает штатную personal роль
+через native API и выполняет 16 owner RPC: Read/Apply, Save/Load/Delete,
+stale library/active denial, wrong faction, Default/Select и сохранность active.
+Свой повторный callback снимает при завершении и OnGameEnd.
+
+Для отдельного fresh-profile reload тот же Server graph запускается с общей
+`-PersistentLoadoutLibraryPath` и `-aicfPersonalLibraryReload 1`. Read-only checks
+подтверждают named member/tombstone/старый active/list обеих сторон, затем
+RequestClose. Это отдельный oracle по PERSONAL_RELOAD_DONE, без требования
+подключённого client. Full stopped log и native exit обязательны.
+`Test-PersonalPresetLog.ps1 -LogPath ... -LauncherPath ... -NativeExitPath ...`
+проверяет main server (30 personal cases), `-Client` —71 (39 RPC +32 widgets),
+`-Reload` —8 restart cases. Main сначала проходит полный прежний QoL oracle.
+`-aicfPersonalLibrarySeedOnly 1` завершает отдельную storage диагностику без
+client с PERSONAL_SEED_DONE; это не main server/client verdict.
+
+`AICF_LoadoutLibraryPreviewProbe.c` → isolated Core/UI
+`AICF_ZZZZZLibraryPreviewProbe.c`, после перечисленных четырёх,
+`-aicfLibraryPreviewProbe 1` на обоих peers. Это pre-spawn стенд: только в
+fixture RequestSpawn блокируется до конца цепочки, production spawn guards не
+меняются. Server проверяет фактическое отсутствие weapons/magazines и обе
+Validate policy (12 cases, US/USSR). Client выполняет ещё31 owner RPC:
+Save/Load/Apply обеих неполных форм, member/squad inspect всех10 позиций,
+stale library/active и missing ID. Hidden AI/personal trees проверяют отдельный
+preview world, сводку/scroll/cleanup, сохранность draft и цвета normal/hover/
+pressed/disabled через metadata; событий мыши и ShowModal не вызывают.
+`Test-LoadoutLibraryPreviewLog.ps1 ... [-Client]` требует12/78 новых checks,
+полный прежний Personal/QoL oracle и ровно12 AI Apply/file-image checks вместо10
+(два дополнительных Apply). Missing/failed/duplicate case должны давать FAIL.
+Это не проверка появления бойца, физического ввода или визуального качества.
+Не запускать вместе с полным offline набором: оба потребляют много памяти.
+
+После изменения StringTable запускать `tools/Build-AICFLocalization.ps1`:
+редактируемая `.st` не заменяет отслеживаемые runtime `.en_us/.ru_ru.conf`.
+LocalizationProbe также проверяет три новых Library keys в EN/RU. Параметр
+`-aicfLocalizationProbeServerOnly 1` вместе с `-aicfLocalizationProbe 1` позволяет
+headless server завершиться сразу после21 проверок (обычная client/server цепочка
+по-прежнему оставляет server на180 секунд). Язык меняется только внутри fixture
+и восстанавливается до завершения. Этот probe проверяет разрешение переводов,
+а не clipping или шрифты на экране.
+
+`AICF_LoadoutQolProbe.c` копировать только в isolated Core/UI как
+`AICF_ZLoadoutQolProbe.c`. Canonical server и client: `-aicfLoadoutQolProbe 1`.
+Storage/batch cases обеих сторон выполняются после ROSTER_READY; затем client
+выбирает US и отправляет 28 настоящих player-owned loadout RPC. Server fixture
+проверяет все десять slots/positions и отрицательный late-member commit.
+Native grant/revoke использует SESSION_ADMINISTRATOR|GAME_MASTER одним mask,
+без вложенного изменения GAME_MASTER из stock EditorManager. Fixture не меняет
+production permissions. Server закрывается после отключения клиента либо
+через 300 s с отсутствующим client verdict; client имеет deadline 240 s.
+Повторный CallLater снимается при Close/OnGameEnd.
+Analyzer: `tests/log-audits/Test-LoadoutQolLog.ps1`; детали, границы и команды —
+[LOADOUT_PRESETS.md](LOADOUT_PRESETS.md). GUI/input/visual verdict не имитируется.
+Дополнительный `AICF_LoadoutFilesProbe.c` → `AICF_ZZLoadoutFilesProbe.c`,
+`-aicfLoadoutFilesProbe 1`: прямое чтение bytes/presence файлов до/после Apply,
+без записи в библиотеку. Analyzer `-Files` требует все 10 дополнительных cases.
+
+`AICF_LoadoutQolProbe.c` также проверяет все `assignedNames` после каждого
+успешного server RPC и наличие десяти имён в client owner snapshot. Это данные
+для левой панели «Инспектора», без открытия GUI и без визуальной приёмки.
+После отзыва admin (step 27) client ждёт и проверяет пустой enemy snapshot.
+Во время AI protocol probe автоматический personal UI read выключен только
+в fixture, чтобы не занимать общий token. Это не проверка личного UI; его
+production arbitration с открытым AI editor проверяется отдельным контрактом.
+
+`AICF_LoadoutPersistenceProbe.c` → `AICF_ZZZLoadoutPersistenceProbe.c` проверяет
+два независимых native запуска: `-aicfPersistenceProbe seed`, затем `reload`.
+Оба через canonical Server, разные fresh profiles и один внешний
+`-PersistentLoadoutLibraryPath`. После ROSTER_READY seed пишет legacy/member/
+squad/tombstone, reload сверяет их через FileIO/LoadoutStore; каждый завершает
+сервер через RequestClose. Долгий бой, client storage и UI этим не проверяются.
+Дополнительная фаза `legacy` читает десять импортированных legacy recipes
+в их исходном RHS content profile и проверяет bounds; исходный каталог
+передаётся только как `-LoadoutLibraryPath`, без записи в пользовательские файлы.
+
+## Сценарный контракт
+
 Повторная проверка black-screen regression: aicfColdRetryHost=1 у
 AICF_WorkshopBootstrapProbe требует RETRY_CANCEL_CONTEXT/RETRY_RETURN и
 реальный selected world/graph после отмены preparation Listen. Отдельный

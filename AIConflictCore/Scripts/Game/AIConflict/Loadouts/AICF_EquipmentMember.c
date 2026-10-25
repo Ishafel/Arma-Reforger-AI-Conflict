@@ -87,18 +87,26 @@ class AICF_EquipmentPlan
 		if (binding && !AICF_LoadoutInventory.Restore(model, binding.m_sInventory)) return false;
 		int ignored;
 		m_sSignature = AICF_LoadoutInventory.Signature(model, catalog, ignored);
+		m_sFailureReason = "BINDING_SIGNATURE_MISMATCH";
+		if (binding && m_sSignature != binding.m_sSignature) return false;
 		m_sFailureReason = "INVENTORY_CAPTURE_FAILED";
 		if (m_sSignature.IsEmpty() || !AICF_LoadoutInventory.Capture(model, m_sInventory)) return false;
 		BaseWeaponComponent modelPrimary = AICF_EquipmentInventory.Weapon(model, false);
 		m_sFailureReason = "PRIMARY_MUZZLE_MISSING";
 		BaseMuzzleComponent primaryMuzzle = AICF_EquipmentInventory.Muzzle(modelPrimary);
-		if (!modelPrimary || !primaryMuzzle) return false;
-		m_iPrimaryRounds = AICF_EquipmentInventory.Rounds(model, modelPrimary);
+		// Неполный binding — намеренный target. Отсутствующее оружие/боезапас
+		// Default по-прежнему означает отказ подготовки штатного комплекта.
+		if ((!modelPrimary && !binding) || (modelPrimary && !primaryMuzzle)) return false;
+		m_iPrimaryRounds = 0;
 		// В native probe chained getter в условии цикла удерживал последний
 		// MuzzleComponent после Build и ломал delete private model. Ссылка
 		// имеет явный scope и освобождается до следующей inventory операции.
-		for (int barrel; barrel < primaryMuzzle.GetBarrelsCount(); barrel++)
-			if (primaryMuzzle.IsBarrelChambered(barrel)) m_iPrimaryRounds--;
+		if (primaryMuzzle)
+		{
+			m_iPrimaryRounds = AICF_EquipmentInventory.Rounds(model, modelPrimary);
+			for (int barrel; barrel < primaryMuzzle.GetBarrelsCount(); barrel++)
+				if (primaryMuzzle.IsBarrelChambered(barrel)) m_iPrimaryRounds--;
+		}
 		primaryMuzzle = null;
 		m_iLauncherRounds = AICF_EquipmentInventory.Rounds(model, AICF_EquipmentInventory.Weapon(model, true));
 		array<IEntity> rawItems = {};
@@ -135,7 +143,7 @@ class AICF_EquipmentPlan
 			m_mConsumables.Set(prefab, count + 1);
 		}
 		m_sFailureReason = "PRIMARY_AMMUNITION_EMPTY";
-		if (m_iPrimaryRounds <= 0) return false;
+		if (m_iPrimaryRounds <= 0 && !binding) return false;
 		m_sFailureReason = string.Empty;
 		return true;
 	}

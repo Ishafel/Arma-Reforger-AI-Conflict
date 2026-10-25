@@ -517,8 +517,8 @@ StringTable
 		CustomStringTableItem "{A1CF190900000028}"
 		{
 			Id "AICF_UI_Library_is_full_256_versions_An_administra_a077b3f6"
-			Target_en_us "Library is full (256 versions). An administrator can archive old files."
-			Target_ru_ru "Библиотека заполнена (256 версий). Администратор может архивировать старые файлы."
+			Target_en_us "Library is full (256 presets). Delete presets you no longer need."
+			Target_ru_ru "Библиотека заполнена (256 пресетов). Удалите ненужные пресеты."
 		}
 		CustomStringTableItem "{A1CF190900000029}"
 		{
@@ -3723,6 +3723,246 @@ StringTable
 			Id "AICF_Briefing_Text_Settings"
 			Target_en_us "Choose the map, enabled content, Conflict or Co-op, player side, garrison difficulty, starting time and weather before launching. The time slider covers 00:00–23:59; weather may be random or a selected preset. Time and weather continue to change during play. The active scenario title on the first page identifies the selected map, mode and difficulty.<br/><br/>Only enabled content with its dependencies is available in setup; downloading a mod alone does not enable it. Vanilla uses US Army/Soviet Army, RHS uses USMC/Russian MSV, and WCS + RHS uses NATO/Russia. Available weapons and vehicles depend on that profile. The operation loads the selected addon set. See Setup guide in the selection menu for preparation steps.<br/><br/>The northern map variant limits active objectives while keeping the landscape accessible. Every launch starts a new campaign; saving and resuming a match is not supported yet. This journal describes default rules: server configuration and native limits can affect availability and timing."
 			Target_ru_ru "Перед запуском выбираются карта, включённый контент, Conflict или Co-op, сторона игроков, сложность гарнизонов, начальное время и погода. Ползунок времени охватывает 00:00–23:59; погоду можно выбрать или оставить случайной. В ходе игры время и погода продолжают меняться. Заголовок сценария на первой странице указывает выбранную карту, режим и сложность.<br/><br/>В настройках доступен только включённый контент с его зависимостями; скачивание мода само по себе его не включает. Vanilla использует армии США/СССР, RHS — USMC/МСВ России, WCS + RHS — НАТО/РФ. Доступное оружие и техника зависят от этого набора. Операция загружает выбранный набор дополнений. Порядок подготовки описан в «Как настроить» в меню выбора.<br/><br/>Северный вариант карты ограничивает активные цели, оставляя ландшафт доступным. Каждый запуск начинает новую кампанию; сохранение и продолжение матча пока не поддерживаются. Здесь описаны правила по умолчанию: параметры сервера и штатные ограничения могут влиять на доступность и сроки."
+		}
+		CustomStringTableItem "{A1CF261024660001}"
+		{
+			Id "AICF_UI_PresetDelete"
+			Target_en_us "Delete"
+			Target_ru_ru "Удалить"
+		}
+		CustomStringTableItem "{A1CF261024660002}"
+		{
+			Id "AICF_UI_PresetApply"
+			Target_en_us "Apply"
+			Target_ru_ru "Применить"
+		}
+		CustomStringTableItem "{A1CF261024660003}"
+		{
+			Id "AICF_UI_PresetRoleAll"
+			Target_en_us "Role to all squads"
+			Target_ru_ru "Роль всем отрядам"
+		}
+		CustomStringTableItem "{A1CF261024660004}"
+		{
+			Id "AICF_UI_PresetSaveSquad"
+			Target_en_us "Save squad"
+			Target_ru_ru "Сохранить отряд"
+		}
+		CustomStringTableItem "{A1CF261024660005}"
+		{
+			Id "AICF_UI_PresetApplySquad"
+			Target_en_us "Apply squad"
+			Target_ru_ru "Применить отряд"
+		}
+		CustomStringTableItem "{A1CF261024660006}"
+		{
+			Id "AICF_UI_PresetSquadPrefix"
+			Target_en_us "[Squad] "
+			Target_ru_ru "[Отряд] "
+		}
+		CustomStringTableItem "{A1CF261024660007}"
+		{
+			Id "AICF_UI_PresetHint"
+			Target_en_us "Apply assigns this position. Save stores a named preset; the same name updates it. Apply role assigns this position to all squads. Save squad stores all assigned positions; apply changes first."
+			Target_ru_ru "Применить назначает комплект позиции. Сохранить записывает пресет; то же имя обновляет его. Роль всем отрядам назначает эту позицию всей стороне. Сохранить отряд записывает все назначенные позиции; сначала примените изменения."
+		}
+		CustomStringTableItem "{A1CF261024660008}"
+		{
+			Id "AICF_UI_PresetApplied"
+			Target_en_us "Loadout assigned. New soldiers receive it on spawn; living soldiers at an available arsenal."
+			Target_ru_ru "Экипировка назначена. Новые бойцы получат её при появлении, живые — у доступного арсенала."
+		}
+		CustomStringTableItem "{A1CF261024660009}"
+		{
+			Id "AICF_UI_PresetSaved"
+			Target_en_us "Preset saved to the library. Assignments have not changed. The same name updates this preset."
+			Target_ru_ru "Пресет сохранён в библиотеке. Назначения сохранены. То же имя обновляет этот пресет."
+		}
+		CustomStringTableItem "{A1CF26102466000A}"
+		{
+			Id "AICF_UI_PresetDeleted"
+			Target_en_us "Preset deleted from the library. Assigned loadouts are preserved."
+			Target_ru_ru "Пресет удалён из библиотеки. Назначенная экипировка сохранена."
+		}
+		CustomStringTableItem "{A1CF26102466000B}"
+		{
+			Id "AICF_UI_PresetConflict"
+			Target_en_us "The library changed. The list is refreshed; select the preset and retry."
+			Target_ru_ru "Библиотека изменилась. Список обновлён; выберите пресет и повторите."
+		}
+		CustomStringTableItem "{A1CF26102466000C}"
+		{
+			Id "AICF_UI_PresetDraft"
+			Target_en_us "Draft changed. Apply assigns it; Save stores it in the library."
+			Target_ru_ru "Черновик изменён. Применить назначает его, Сохранить записывает в библиотеку."
+		}
+		CustomStringTableItem "{A1CF26102466000D}"
+		{
+			Id "AICF_UI_PresetLoaded"
+			Target_en_us "Preset loaded as a draft. Apply assigns it to this position."
+			Target_ru_ru "Пресет загружен как черновик. Нажмите Применить для назначения позиции."
+		}
+		CustomStringTableItem "{A1CF261025660001}"
+		{
+			Id "AICF_UI_InspectorNoGroups"
+			Target_en_us "This faction has no managed AI squads. The current faction and draft have been kept."
+			Target_ru_ru "На выбранной стороне нет управляемых ИИ-отрядов. Текущая сторона и черновик сохранены."
+		}
+		CustomStringTableItem "{A1CF261024670001}"
+		{
+			Id "AICF_UI_PresetLibrary"
+			Target_en_us "Preset library"
+			Target_ru_ru "Библиотека пресетов"
+		}
+		CustomStringTableItem "{A1CF261024670002}"
+		{
+			Id "AICF_UI_InspectorSide"
+			Target_en_us "Faction"
+			Target_ru_ru "Сторона"
+		}
+		CustomStringTableItem "{A1CF261024670003}"
+		{
+			Id "AICF_UI_InspectorRecipient"
+			Target_en_us "Who to equip"
+			Target_ru_ru "Кого настраиваем"
+		}
+		CustomStringTableItem "{A1CF261024670004}"
+		{
+			Id "AICF_UI_InspectorPreviewHint"
+			Target_en_us "Drag to rotate; scroll to zoom."
+			Target_ru_ru "Вращение — перетаскивание; масштаб — колесо."
+		}
+		CustomStringTableItem "{A1CF261024670005}"
+		{
+			Id "AICF_UI_InspectorMore"
+			Target_en_us "Role to all..."
+			Target_ru_ru "Роль всем…"
+		}
+		CustomStringTableItem "{A1CF261024670006}"
+		{
+			Id "AICF_UI_InspectorConfirm"
+			Target_en_us "Confirm"
+			Target_ru_ru "Подтвердить"
+		}
+		CustomStringTableItem "{A1CF261024670007}"
+		{
+			Id "AICF_UI_InspectorDraft"
+			Target_en_us "Draft changed"
+			Target_ru_ru "Есть изменения"
+		}
+		CustomStringTableItem "{A1CF261024670008}"
+		{
+			Id "AICF_UI_InspectorDefaultKit"
+			Target_en_us "Standard loadout"
+			Target_ru_ru "Штатный комплект"
+		}
+		CustomStringTableItem "{A1CF261024670009}"
+		{
+			Id "AICF_UI_InspectorDiscard"
+			Target_en_us "Close and discard unapplied drafts? Saving a preset to the library does not assign it to soldiers."
+			Target_ru_ru "Закрыть и сбросить неприменённые черновики? Сохранение пресета в библиотеке не назначает его бойцам."
+		}
+		CustomStringTableItem "{A1CF26102467000A}"
+		{
+			Id "AICF_UI_InspectorLibraryHelp"
+			Target_en_us "Saved presets remain available after restart in this host's library. Select a soldier preset to edit, or a squad preset to assign."
+			Target_ru_ru "Пресеты сохраняются между запусками в библиотеке этого хоста. Выберите пресет бойца для редактирования или отряда для назначения."
+		}
+		CustomStringTableItem "{A1CF26102467000B}"
+		{
+			Id "AICF_UI_InspectorSaveHelp"
+			Target_en_us "Preset name. The same name updates its library entry. Saving preserves current assignments."
+			Target_ru_ru "Название пресета. То же имя обновит запись в библиотеке. Сохранение оставит текущие назначения."
+		}
+		CustomStringTableItem "{A1CF26102467000C}"
+		{
+			Id "AICF_UI_InspectorSquadSaveHelp"
+			Target_en_us "Save all 10 assigned positions of this squad. The same name updates the preset. Apply the current draft first."
+			Target_ru_ru "Сохранить все 10 назначенных позиций этого отряда. То же имя обновит пресет. Сначала примените текущий черновик."
+		}
+		CustomStringTableItem "{A1CF26102467000D}"
+		{
+			Id "AICF_UI_InspectorRoleAllHelp"
+			Target_en_us "Assign this loadout to the same position in all 10 squads of this faction? Other roles keep their loadouts."
+			Target_ru_ru "Назначить комплект этой позиции во всех 10 отрядах выбранной стороны? У остальных ролей останется их экипировка."
+		}
+		CustomStringTableItem "{A1CF26102467000E}"
+		{
+			Id "AICF_UI_InspectorDeleteHelp"
+			Target_en_us "Delete this preset from the library? Assigned loadouts and their names will remain."
+			Target_ru_ru "Удалить пресет из библиотеки? Назначенные комплекты и их имена сохранятся."
+		}
+		CustomStringTableItem "{A1CF26102467000F}"
+		{
+			Id "AICF_UI_InspectorSquadApplyHelp"
+			Target_en_us "Replace loadouts of all 10 positions in the selected squad?"
+			Target_ru_ru "Заменить комплекты всех 10 позиций выбранного отряда?"
+		}
+		CustomStringTableItem "{A1CF261024670010}"
+		{
+			Id "AICF_UI_InspectorLoadHelp"
+			Target_en_us "Replace the current draft with this preset? The assigned loadout will remain until you apply the new draft."
+			Target_ru_ru "Заменить текущий черновик этим пресетом? Назначенный комплект сохранится до применения нового черновика."
+		}
+		CustomStringTableItem "{A1CF261024660014}"
+		{
+			Id "AICF_UI_PresetSquadName"
+			Target_en_us "Squad preset name"
+			Target_ru_ru "Имя пресета отряда"
+		}
+		CustomStringTableItem "{A1CF261025660002}"
+		{
+			Id "AICF_UI_PersonalInspectorHelp"
+			Target_en_us "Save named variants in your library. Apply selects the current draft for your next spawn. Your active loadout is shown above."
+			Target_ru_ru "Сохраняйте именованные варианты в библиотеке. «Применить» выбирает текущий черновик для следующего появления. Выше показан активный комплект."
+		}
+		CustomStringTableItem "{A1CF261025660003}"
+		{
+			Id "AICF_UI_PersonalLibraryHelp"
+			Target_en_us "Your presets for this faction and role. Load opens a draft; Apply selects it for your next spawn. Deleting a preset keeps the active loadout."
+			Target_ru_ru "Ваши пресеты для этой стороны и роли. «Загрузить» открывает черновик; «Применить» выбирает его для следующего появления. Удаление пресета сохраняет активный комплект."
+		}
+		CustomStringTableItem "{A1CF261025660004}"
+		{
+			Id "AICF_UI_PersonalSaveHelp"
+			Target_en_us "Save a named variant in your library. The same name updates that variant. Apply separately to use it at your next spawn."
+			Target_ru_ru "Сохранить именованный вариант в библиотеке. То же имя обновляет этот вариант. Для следующего появления отдельно нажмите «Применить»."
+		}
+		CustomStringTableItem "{A1CF261025660005}"
+		{
+			Id "AICF_UI_PersonalLibrarySession"
+			Target_en_us "Preset saved for this connection only: no persistent player identity is available. Apply separately to select it for spawning."
+			Target_ru_ru "Пресет сохранён только до конца подключения: постоянный идентификатор игрока недоступен. Для появления отдельно нажмите «Применить»."
+		}
+		CustomStringTableItem "{A1CF261025660006}"
+		{
+			Id "AICF_UI_LibraryEmptySlot"
+			Target_en_us "Empty"
+			Target_ru_ru "Пусто"
+		}
+		CustomStringTableItem "{A1CF261025660007}"
+		{
+			Id "AICF_UI_LibrarySelectPreview"
+			Target_en_us "Select a preset to view its equipment."
+			Target_ru_ru "Выберите пресет для просмотра экипировки."
+		}
+		CustomStringTableItem "{A1CF261025660008}"
+		{
+			Id "AICF_UI_LibraryPreviewReady"
+			Target_en_us "Preview ready. Your current draft is unchanged."
+			Target_ru_ru "Предпросмотр готов. Текущий черновик сохранён."
+		}
+		CustomStringTableItem "{A1CF261025660009}"
+		{
+			Id "AICF_UI_PresetAllMembers"
+			Target_en_us "One kit to squad..."
+			Target_ru_ru "Всем бойцам…"
+		}
+		CustomStringTableItem "{A1CF26102566000A}"
+		{
+			Id "AICF_UI_PresetAllMembersHelp"
+			Target_en_us "Equip all ten positions of this squad with the current kit. Roles, roster size and orders stay unchanged."
+			Target_ru_ru "Назначить текущий комплект всем десяти позициям этого отряда. Роли, численность и приказы сохраняются."
 		}
 	}
 }

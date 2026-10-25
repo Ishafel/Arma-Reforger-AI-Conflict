@@ -304,6 +304,15 @@ try {
         if ($frontendManifest.role -ne 'Frontend' -or $frontendManifest.executable -ne (Join-Path $fakeGameRoot 'ArmaReforgerSteam.exe')) { Add-Failure 'FRONTEND_RETAIL' 'Local frontend must use retail client' }
         if (@($frontendManifest.arguments | Where-Object { $_ -in @('-client','-server','-MissionHeader','-world') }).Count) { Add-Failure 'FRONTEND_LOCAL' 'Frontend contains connection or world startup flags' }
         Require-ArgumentPair $frontendManifest '-addonsDir' "$fakeRepository,$fakeGameRoot\addons,$fakeRhsRoot" 'FRONTEND_SCAN_ROOT'
+        $expectedPersistent = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'AICF/LoadoutLibrary'
+        if ($frontendManifest.persistentLoadoutLibrary -ne $expectedPersistent) { Add-Failure 'FRONTEND_PERSISTENT_LIBRARY' 'Frontend must reuse a stable library across fresh profiles' }
+        if (Test-Path -LiteralPath $frontendManifest.profile) { Add-Failure 'FRONTEND_PERSISTENT_DRY_RUN' 'Dry-run created a profile or library mount' }
+        $isolatedOutput = @(& powershell.exe @frontendInvocation -IsolatedLoadoutLibrary 2>&1 | ForEach-Object { $_.ToString() })
+        if ($LASTEXITCODE -ne 0) { Add-Failure 'FRONTEND_ISOLATED_PLAN' ($isolatedOutput -join ' | ') }
+        else {
+            $isolatedManifest = Get-ManifestFromOutput $isolatedOutput 'FRONTEND_ISOLATED_PLAN'
+            if ($isolatedManifest.persistentLoadoutLibrary -or $isolatedManifest.loadoutLibrarySource) { Add-Failure 'FRONTEND_ISOLATED_LIBRARY' 'Isolated frontend must not import the player library' }
+        }
         foreach ($connectionCase in @(
             @('-ClientAddress','127.0.0.1'), @('-ServerPort','2001'), @('-ServerProfileRoot',$fakeServerRoot),
             @('-RemoteReadinessProbe','unused.ps1'), @('-ExpectedSourceCommit',('a' * 40))
@@ -501,7 +510,7 @@ try {
 
     $libraryRoot = Join-Path $testRoot 'Библиотека комплектов'
     New-Item -ItemType Directory -Path $libraryRoot -Force | Out-Null
-    foreach ($libraryName in @('template_0.json', 'template_255.json', 'template_256.json', 'template_01.json', 'unrelated.json')) {
+    foreach ($libraryName in @('template_0.json', 'template_255.json', 'template_0_0.json', 'template_255_1.json', 'template_256.json', 'template_01.json', 'template_1_2.json', 'template_256_0.json', 'unrelated.json')) {
         [IO.File]::WriteAllText((Join-Path $libraryRoot $libraryName), '{}')
     }
     $importInvocation = $serverInvocation + @('-LoadoutLibraryPath', $libraryRoot)
@@ -509,7 +518,7 @@ try {
     if ($LASTEXITCODE -ne 0) { Add-Failure 'LOADOUT_IMPORT' 'Dry-run импорта не выполнен' }
     else {
         $importManifest = Get-ManifestFromOutput $importOutput 'LOADOUT_IMPORT'
-        if ($importManifest -and ((@($importManifest.loadoutLibraryFiles.name) -join ',') -cne 'template_0.json,template_255.json' -or
+        if ($importManifest -and ((@($importManifest.loadoutLibraryFiles.name) -join ',') -cne 'template_0.json,template_0_0.json,template_255.json,template_255_1.json' -or
             $importManifest.loadoutLibrarySource -cne $libraryRoot)) {
             Add-Failure 'LOADOUT_IMPORT_BOUNDS' 'Импорт допускает только canonical filenames 0..255'
         }
@@ -524,6 +533,16 @@ try {
     $clientImportExit = $LASTEXITCODE
     $ErrorActionPreference = $previousErrorActionPreference
     if ($clientImportExit -eq 0) { Add-Failure 'LOADOUT_IMPORT_CLIENT' 'Клиент принял серверную библиотеку' }
+    [IO.File]::WriteAllText((Join-Path $libraryRoot 'template_0_0.json'), ('x' * 24577))
+    $null = & powershell.exe @importInvocation 2>&1
+    if ($LASTEXITCODE -ne 0) { Add-Failure 'LOADOUT_IMPORT_ENVELOPE_SIZE' 'Envelope ошибочно ограничен размером member recipe' }
+    [IO.File]::WriteAllText((Join-Path $libraryRoot 'template_0_0.json'), ('x' * 600001))
+    $ErrorActionPreference = 'SilentlyContinue'
+    $null = & powershell.exe @importInvocation 2>&1
+    $oversizeEnvelopeExit = $LASTEXITCODE
+    $ErrorActionPreference = $previousErrorActionPreference
+    if ($oversizeEnvelopeExit -eq 0) { Add-Failure 'LOADOUT_IMPORT_ENVELOPE_BOUND' 'Импорт принял слишком большой envelope' }
+    [IO.File]::WriteAllText((Join-Path $libraryRoot 'template_0_0.json'), '{}')
     [IO.File]::WriteAllText((Join-Path $libraryRoot 'template_1.json'), ('x' * 24577))
     $ErrorActionPreference = 'SilentlyContinue'
     $null = & powershell.exe @importInvocation 2>&1

@@ -173,7 +173,7 @@ context, ограниченный offline scan, native download queue и cleanup
 |---|---|
 | [Start-AICFRuntime.ps1](../tools/Start-AICFRuntime.ps1) | `-Role`, `-Variant`, `-MatchMode Standard/CoopUS/CoopUSSR`, `-Difficulty`; foreground server/client, свежий profile, manifest и readiness. Полный контракт в DEVELOPMENT. `-DryRun` только строит план |
 | [AICF_Scenarios.ps1](../tools/AICF_Scenarios.ps1), [каталог](../tools/config/AICF_Scenarios.json) | Единый resolver карты/контента, режима, сложности, ресурсов и addon graph; без запуска игры. Recipe расширения — COOP_SCENARIO |
-| [Update-AICFCoopScenarios.ps1](../tools/Update-AICFCoopScenarios.ps1) | Генерация тонких Co-op headers/meta, RU/EN строк и native header probe из каталога; `-Check` проверяет актуальность без записи |
+| [Update-AICFScenarioRegistry.ps1](../tools/Update-AICFScenarioRegistry.ps1) | Генерация runtime registry карты/контента, native targets и addon graph из каталога; `-Check` проверяет актуальность без записи. Legacy Co-op headers удалены |
 | [Invoke-AICFChecks.ps1](../tools/Invoke-AICFChecks.ps1) | Offline набор и evidence, контракт выше |
 | [fetch_reforger_api_reference.sh](../tools/fetch_reforger_api_reference.sh) | Git Bash, сеть при отсутствии кэша; закреплённые version/commit/SHA-256, результат только в `.cache/reforger-api/` |
 | [Build-AICFLocalization.ps1](../tools/Build-AICFLocalization.ps1) | `-RepositoryRoot`, `-Check`; без `-Check` обновляет производные localization файлы. С `-Check` проверяет соответствие |
@@ -274,6 +274,17 @@ Script/VM/fatal/shutdown leak ошибки не исключаются из gate
 ограничения описаны в [LOADOUT_CONTENTS.md](LOADOUT_CONTENTS.md).
 
 ## Каталог offline проверок
+
+Для issue #66 `Test-LoadoutQolContracts.ps1` проверяет разделение Save/Apply,
+scope/revisions, admin boundary, batch atomicity и независимые bindings;
+`Test-LoadoutQolLogContracts.ps1` — полноту и негативные мутации runtime oracle.
+Оба автоматически входят в All/Contracts. `Test-LoadoutLibraryContracts.ps1`
+проверяет shared library/junction, lease, hashes и сохранность файлов между
+свежими profiles. `tools/AICF_LoadoutLibrary.ps1` владеет filesystem mount/import
+для canonical launcher; JSON schema остаётся у LoadoutStore. Отдельный
+`tests/log-audits/Test-LoadoutQolLog.ps1` читает полный stopped server/client log,
+manifest и native exit; игра не входит в offline runner. Контракт и запуск:
+[LOADOUT_PRESETS.md](LOADOUT_PRESETS.md).
 
 Все файлы в таблице поддерживаются как отдельные gates. `Static` и `Contracts`
 обозначают размещение, а не verdict. Имена ведут прямо к исходнику и его `param`.

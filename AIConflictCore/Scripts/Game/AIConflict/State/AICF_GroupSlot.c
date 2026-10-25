@@ -145,12 +145,23 @@ class AICF_GroupSlot
 
 	bool SetLoadout(int member, AICF_LoadoutBinding binding, int expectedRevision)
 	{
-		if (!Replication.IsServer() || !binding || member < 0 || member >= AICF_Stage1Config.MAX_GROUP_SIZE ||
+		if (!Replication.IsServer() || !binding || !binding.m_Recipe || member < 0 || member >= AICF_Stage1Config.MAX_GROUP_SIZE ||
 			expectedRevision != m_iLoadoutRevision)
 			return false;
+		AICF_LoadoutRecipe recipe = AICF_LoadoutRecipe.Decode(binding.m_Recipe.Encode());
+		if (!recipe) return false;
 		m_aLoadouts.Resize(AICF_Stage1Config.MAX_GROUP_SIZE);
-		binding.m_iRevision = ++m_iLoadoutRevision;
-		m_aLoadouts[member] = binding;
+		AICF_LoadoutBinding current = m_aLoadouts[member];
+		if (current && current.m_Recipe.Encode() == binding.m_Recipe.Encode() && current.m_sSignature == binding.m_sSignature)
+			return true;
+		// Binding revision принадлежит точной позиции, а не общей validated копии.
+		AICF_LoadoutBinding assigned = new AICF_LoadoutBinding();
+		assigned.m_Recipe = recipe;
+		assigned.m_sInventory = binding.m_sInventory;
+		assigned.m_sSignature = binding.m_sSignature;
+		assigned.m_iCost = binding.m_iCost;
+		assigned.m_iRevision = ++m_iLoadoutRevision;
+		m_aLoadouts[member] = assigned;
 		return true;
 	}
 

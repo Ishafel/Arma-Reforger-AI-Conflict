@@ -23,6 +23,8 @@ param(
     [string]$RemoteReadinessProbe,
     [string]$ExpectedSourceCommit,
     [string]$LoadoutLibraryPath,
+    [string]$PersistentLoadoutLibraryPath,
+    [switch]$IsolatedLoadoutLibrary,
     [string]$ClientAddress = '127.0.0.1',
     [ValidateRange(1, 65535)]
     [int]$ServerPort = 2001,
@@ -53,6 +55,7 @@ if (-not $RepositoryRoot) {
     $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 }
 . (Join-Path $PSScriptRoot 'AICF_Scenarios.ps1')
+. (Join-Path $PSScriptRoot 'AICF_LoadoutLibrary.ps1')
 $scenarioCatalog = Get-AICFScenarioCatalog
 $scenarioPlan = Resolve-AICFScenario -Catalog $scenarioCatalog -Variant $Variant -MatchMode $MatchMode -Difficulty $Difficulty
 $MatchMode = $scenarioPlan.matchMode
@@ -432,14 +435,45 @@ if (Test-Path -LiteralPath $profilePath) {
 # Перенос только библиотеки рецептов; campaign bindings в новый матч не входят.
 $loadoutFiles = @()
 $loadoutLibrarySource = $null
+$persistentLoadoutPath = $null
+$legacyPersonalPath = $null
+if ($PersistentLoadoutLibraryPath -and ($Role -eq 'Client' -or $IsolatedLoadoutLibrary)) {
+    throw 'Persistent loadout library requires Server/Frontend and cannot be combined with IsolatedLoadoutLibrary.'
+}
+if ($Role -eq 'Frontend' -and -not $IsolatedLoadoutLibrary -and -not $PersistentLoadoutLibraryPath) {
+    $PersistentLoadoutLibraryPath = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'AICF/LoadoutLibrary'
+}
+if ($PersistentLoadoutLibraryPath) {
+    $persistentLoadoutPath = Resolve-AICFUnresolvedPath -Path $PersistentLoadoutLibraryPath
+    if ((Test-AICFChildPath -Candidate $persistentLoadoutPath -Parent $repositoryPath) -or
+        (Test-AICFChildPath -Candidate $persistentLoadoutPath -Parent $profilePath) -or
+        (Test-AICFChildPath -Candidate $profilePath -Parent $persistentLoadoutPath)) {
+        throw 'Persistent library must be outside the repository and the fresh runtime profile.'
+    }
+    $null = Get-AICFLoadoutLibraryFiles -Path $persistentLoadoutPath
+    $null = Get-AICFPersonalLoadoutFiles -Path (Join-Path $persistentLoadoutPath 'personal')
+    if ($Role -eq 'Frontend') {
+        $legacyPersonalPath = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'My Games/ArmaReforger/profile/AICF_PersonalLoadouts'
+        $null = Get-AICFPersonalLoadoutFiles -Path $legacyPersonalPath
+    }
+}
+# Первый локальный запуск переносит прежнюю штатную библиотеку копированием.
+# Наличие любого canonical поколения (включая tombstone) запрещает повторный импорт.
+if ($Role -eq 'Frontend' -and $persistentLoadoutPath -and -not $LoadoutLibraryPath -and
+    @(Get-AICFLoadoutLibraryFiles -Path $persistentLoadoutPath).Count -eq 0) {
+    $legacyLoadoutPath = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'My Games/ArmaReforger/profile/AICF_Loadouts'
+    if (Test-Path -LiteralPath $legacyLoadoutPath -PathType Container) { $LoadoutLibraryPath = $legacyLoadoutPath }
+}
 if ($LoadoutLibraryPath) {
-    if ($Role -ne 'Server') { throw '-LoadoutLibraryPath поддерживается только для Server.' }
+    if ($Role -eq 'Client') { throw '-LoadoutLibraryPath поддерживается только для Server/Frontend.' }
     $loadoutLibrarySource = Resolve-AICFExistingDirectory -Path $LoadoutLibraryPath -Description 'Loadout library'
     $loadoutFiles = @(Get-ChildItem -LiteralPath $loadoutLibrarySource -File | Where-Object {
-        $_.Name -cmatch '^template_(0|[1-9][0-9]{0,2})\.json$' -and [int]$Matches[1] -lt 256
+        $_.Name -cmatch '^template_(0|[1-9][0-9]{0,2})(?:_([01]))?\.json$' -and [int]$Matches[1] -lt 256
     } | Sort-Object Name)
     foreach ($loadoutFile in $loadoutFiles) {
-        if ($loadoutFile.Length -gt 24576 -or ($loadoutFile.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        $loadoutMaxBytes = 24576
+        if ($loadoutFile.Name -cmatch '^template_[0-9]+_[01]\.json$') { $loadoutMaxBytes = 600000 }
+        if ($loadoutFile.Length -gt $loadoutMaxBytes -or ($loadoutFile.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
             throw "Недопустимый файл библиотеки: $($loadoutFile.FullName)"
         }
     }
@@ -499,6 +533,8 @@ $manifest = [ordered]@{
     addonsDir = $addonsDir
     arguments = @($nativeArguments)
     loadoutLibrarySource = $loadoutLibrarySource
+    persistentLoadoutLibrary = $persistentLoadoutPath
+    personalLibrarySource = $legacyPersonalPath
     resourceDatabases = $resourceDatabases
     loadoutLibraryFiles = @($loadoutFiles | ForEach-Object {
         [ordered]@{ name = $_.Name; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
@@ -516,7 +552,11 @@ if ($DryRun) {
 
 Assert-AICFResourceDatabases -Databases $resourceDatabases
 
-if ($loadoutFiles.Count -gt 0) {
+$loadoutLibraryLease = $null
+if ($persistentLoadoutPath) {
+    $loadoutLibraryLease = Mount-AICFLoadoutLibrary -LibraryPath $persistentLoadoutPath -ProfilePath $profilePath -ImportFiles $loadoutFiles -LegacyPersonalPath $legacyPersonalPath
+}
+elseif ($loadoutFiles.Count -gt 0) {
     $loadoutDestination = Join-Path $profilePath 'profile\AICF_Loadouts'
     New-Item -ItemType Directory -Path $loadoutDestination -Force | Out-Null
     foreach ($loadoutFile in $loadoutFiles) {
@@ -568,6 +608,7 @@ if ($Role -ne 'Server') {
         Select-Object -ExpandProperty Id)
 }
 
+try {
 & $executable @nativeArguments
 $lastExitCodeVariable = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
 $nativeExitCode = $null
@@ -613,4 +654,8 @@ else {
     throw 'Server process returned without LASTEXITCODE.'
 }
 Write-Output "[AICF][RUNTIME_LAUNCHER][EXIT] role=$Role variant=$Variant exit_code=$nativeExitCode exit_code_source=$exitCodeSource profile=$profilePath"
+}
+finally {
+    if ($loadoutLibraryLease) { $loadoutLibraryLease.Dispose() }
+}
 exit $nativeExitCode
