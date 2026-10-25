@@ -87,7 +87,96 @@ class AICF_LoadoutInventory : SCR_PlayerArsenalLoadout
 		// Сохраняем совпадающие native containers и их slot IDs. Удаление всей
 		// одежды создаёт пустые universal storages: snapshot со slot 1 без slot 0
 		// больше не восстанавливается по исходному адресу.
+		// Сначала освобождаем все заменяемые вещи во всём дереве. Иначе
+		// промежуточный вес/объём чужой роли может заблокировать готовый kit.
+		if (!PrepareRestoreLocal(entity, context, 0)) return false;
+		context = new JsonLoadContext();
+		if (!context.LoadFromString(value)) return false;
 		return RestoreLocal(entity, context, manager, 0);
+	}
+
+	protected static bool PrepareRestoreLocal(IEntity entity, LoadContext context, int depth)
+	{
+		if (!entity || entity.GetWorld() == GetGame().GetWorld() || depth > 6) return false;
+		int storageCount;
+		context.StartArray("storages", storageCount);
+		if (storageCount == 0) return true;
+		for (int n; n < storageCount; n++)
+		{
+			string id;
+			if (!context.StartObject() || !context.ReadValue("id", id)) return false;
+			BaseInventoryStorageComponent storage = FindStorage(entity, id);
+			int count;
+			if (!storage || !context.StartMap("slots", count)) return false;
+			map<int, string> wanted = new map<int, string>();
+			for (int i; i < count; i++)
+			{
+				string key;
+				ResourceName prefab;
+				if (!context.ReadMapKey(i, key) || !context.StartObject(key) || !context.ReadValue("prefab", prefab)) return false;
+				int slot = key.ToInt(-1);
+				if (slot < 0 || slot.ToString() != key) return false;
+				wanted.Insert(slot, prefab);
+				IEntity item = storage.Get(slot);
+				if (item && SCR_ResourceNameUtils.GetPrefabName(item) == prefab && !PrepareRestoreLocal(item, context, depth + 1)) return false;
+				if (!context.EndObject()) return false;
+			}
+			array<InventoryItemComponent> items = {};
+			storage.GetOwnedItems(items, false);
+			foreach (InventoryItemComponent existing : items)
+			{
+				if (!existing || !existing.GetParentSlot()) return false;
+				string prefab;
+				if (!wanted.Find(existing.GetParentSlot().GetID(), prefab) || SCR_ResourceNameUtils.GetPrefabName(existing.GetOwner()) != prefab)
+					if (!DeleteLocal(existing.GetOwner())) return false;
+			}
+			if (!context.EndMap() || !context.EndObject()) return false;
+		}
+		return context.EndArray();
+	}
+
+	// Только серверный снимок для назначения. Сам editable recipe и его
+	// адреса не меняем: плотные cargo IDs нужны переносимому snapshot.
+	static bool PackCargoLocal(IEntity entity, int depth = 0)
+	{
+		if (!entity || entity.GetWorld() == GetGame().GetWorld() || depth > 6) return false;
+		set<BaseInventoryStorageComponent> storages = new set<BaseInventoryStorageComponent>();
+		FindStorageComponents(entity, storages);
+		foreach (BaseInventoryStorageComponent storage : storages)
+		{
+			if (!Editable(storage)) continue;
+			array<InventoryItemComponent> items = GetSlotItems(storage);
+			foreach (InventoryItemComponent child : items)
+				if (!child || !PackCargoLocal(child.GetOwner(), depth + 1)) return false;
+			if (!SCR_UniversalInventoryStorageComponent.Cast(storage)) continue;
+			array<ref SCR_SortableItem<InventoryItemComponent>> ordered = {};
+			foreach (InventoryItemComponent candidate : items)
+			{
+				if (!candidate.GetParentSlot()) return false;
+				ordered.Insert(new SCR_SortableItem<InventoryItemComponent>(candidate, candidate.GetParentSlot().GetID()));
+			}
+			ordered.Sort();
+			items.Clear();
+			foreach (SCR_SortableItem<InventoryItemComponent> sorted : ordered) items.Insert(sorted.m_Item);
+			bool dense = true;
+			for (int i; i < items.Count(); i++)
+				if (!items[i].GetParentSlot() || items[i].GetParentSlot().GetID() != i) dense = false;
+			if (dense) continue;
+			foreach (InventoryItemComponent item : items)
+			{
+				if (!item.GetParentSlot()) return false;
+				item.GetParentSlot().DetachEntity();
+				if (item.GetParentSlot()) return false;
+			}
+			foreach (int index, InventoryItemComponent item : items)
+			{
+				InventoryStorageSlot slot = storage.FindSuitableSlotForItem(item.GetOwner());
+				if (!slot || slot.GetID() != index) return false;
+				slot.AttachEntity(item.GetOwner());
+				if (slot.GetAttachedEntity() != item.GetOwner()) return false;
+			}
+		}
+		return true;
 	}
 
 	// В preview-world inventory tasks не исполняются. Как stock preview,
@@ -116,8 +205,10 @@ class AICF_LoadoutInventory : SCR_PlayerArsenalLoadout
 
 	static IEntity InsertLocal(ResourceName prefab, BaseInventoryStorageComponent storage, int slot, InventoryStorageManagerComponent manager)
 	{
-		if (!storage || storage.GetOwner().GetWorld() == GetGame().GetWorld() ||
-			!manager.CanInsertResourceInStorage(prefab, storage, slot))
+		if (!storage || storage.GetOwner().GetWorld() == GetGame().GetWorld()) return null;
+		int capacitySlot = slot;
+		if (slot >= storage.GetSlotsCount() && SCR_UniversalInventoryStorageComponent.Cast(storage)) capacitySlot = -1;
+		if (!manager.CanInsertResourceInStorage(prefab, storage, capacitySlot))
 			return null;
 		Resource resource = Resource.Load(prefab);
 		if (!resource || !resource.IsValid())

@@ -146,7 +146,7 @@ class AICF_LoadoutStore
 		{
 			AICF_LoadoutPreset preset = GetPreset(i);
 			if (!preset || !target || preset.m_sProfile != target.m_sProfile || preset.m_sFaction != target.m_sFaction ||
-				(preset.m_sKind == "member" && preset.m_sCharacter != target.m_sCharacter)) continue;
+				(!slot && preset.m_sKind == "member" && preset.m_sCharacter != target.m_sCharacter)) continue;
 			names.Insert(preset.m_sName);
 			kinds.Insert(preset.m_sKind);
 			ids.Insert(i);

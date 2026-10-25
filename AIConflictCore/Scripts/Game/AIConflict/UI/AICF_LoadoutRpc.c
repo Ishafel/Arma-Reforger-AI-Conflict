@@ -52,8 +52,13 @@ modded class SCR_PlayerController
 	{
 		if (!Replication.IsServer() || token <= m_iAICFLoadoutToken)
 			return;
-		if (payload.Length() > AICF_LoadoutRecipe.MAX_BYTES || targetFaction.Length() > 4 || operation < 0 || operation > 8 ||
+		if (payload.Length() > AICF_LoadoutRecipe.MAX_BYTES || targetFaction.Length() > 4 || operation < 0 || operation > 9 ||
 			(slot == AICF_PersonalLoadout.SLOT && !targetFaction.IsEmpty()))
+		{
+			AICF_LoadoutResult(token, false, "INVALID_REQUEST");
+			return;
+		}
+		if (slot == AICF_PersonalLoadout.SLOT && operation == 9)
 		{
 			AICF_LoadoutResult(token, false, "INVALID_REQUEST");
 			return;

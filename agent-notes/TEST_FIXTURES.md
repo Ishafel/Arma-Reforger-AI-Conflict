@@ -2,6 +2,24 @@
 
 ## Пресеты ИИ: issue #66
 
+`AICF_LoadoutRoleTransferProbe.c` → isolated Core/UI
+`AICF_ZZZZZZRoleTransferProbe.c`, после Qol/Files/Inspector/PersonalLibrary/
+LibraryPreview; `-aicfRoleTransferProbe 1` на обоих peers. Server строит комплект
+медика с удалённым cargo slot0 и проверяет полный перенос на все10 roles обеих
+сторон, видимость в библиотеке стрелка и resolved summary labels. После прежних
+цепочек client выполняет15 owner RPC: Save, Load на другую роль, Apply, Inspect,
+operation9 на весь squad, SaveSquad/ApplySquad с такими bindings, stale revision,
+invalid profile и запрет personal operation9. Server проверяет неизменность файлов
+на Apply/отказах, все10 bindings и atomic отказ по последней испорченной позиции.
+Затем скрытый Inspector без FocusSlotCatalog/ShowModal/input callbacks отправляет
+production Request после свежего owner read (настоящий RATE_LIMITED), проверяет
+bounded retry, шесть переходов Ready/model, поднятый target и тонкий thumb с широкой
+hit area. Все callbacks/модели/деревья очищаются до shutdown. Не подтверждает ввод
+или визуальную оценку. `Test-LoadoutRoleTransferLog.ps1` включает прежние oracles,
+требует44 server/29 client новых cases ровно по одному, отрицательные причины,
+DONE15/6, native0, точный manifest/CLI и полные остановленные logs обоих peers.
+Прежние file-image diagnostics не повторяются в extra phase; новые имеют свой prefix.
+
 `AICF_LoadoutInspectorProbe.c` → isolated Core/UI `AICF_ZZZLoadoutInspectorProbe.c`
 после Qol/Files, `-aicfInspectorProbe 1`. Перед QolClose client создаёт скрытое
 дерево actual AI и personal Inspector, проверяет 31 +32 metadata/state cases

@@ -14,6 +14,7 @@ modded class AICF_PersonalLoadoutUI
 class AICF_QolChecks
 {
 	static int s_iFailures;
+	static bool s_bExtraPhase;
 	static void Check(string rule, bool passed)
 	{
 		if (!passed) s_iFailures++;
@@ -149,7 +150,7 @@ modded class AICF_MatchController
 		string targetFaction = "", int libraryRevision = -1)
 	{
 		string enabled;
-		if (!System.GetCLIParam("aicfLoadoutQolProbe", enabled) || enabled != "1" || slot == AICF_PersonalLoadout.SLOT)
+		if (!System.GetCLIParam("aicfLoadoutQolProbe", enabled) || enabled != "1" || slot == AICF_PersonalLoadout.SLOT || AICF_QolChecks.s_bExtraPhase)
 		{
 			super.RequestLoadout(player, token, slot, member, revision, operation, payload, targetFaction, libraryRevision);
 			return;
@@ -204,7 +205,7 @@ modded class AICF_MatchController
 					m_USState.GetSlot(slot).GetLoadout(j).m_Recipe.Encode() == squad.m_aRecipes[j]);
 			int before = m_USState.GetSlot(slot).GetLoadoutRevision();
 			AICF_LoadoutRecipe bad = AICF_LoadoutRecipe.Decode(squad.m_aRecipes[9]);
-			bad.m_sCharacter = AICF_LoadoutRecipe.Decode(squad.m_aRecipes[0]).m_sCharacter;
+			bad.m_sProfile = "INVALID";
 			squad.m_aRecipes[9] = bad.Encode();
 			string reason;
 			AICF_QolChecks.Check("SQUAD_BAD_LAST_ATOMIC", !m_Loadouts.AICF_QolApplySquad(player, slot, squad, reason) &&

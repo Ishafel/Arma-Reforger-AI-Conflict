@@ -1,5 +1,58 @@
 # Проверки и baseline
 
+## Межролевые комплекты и очередь Inspector #66 — 2026-10-25
+
+Продолжение той же ветки, исходный чистый `1db2018`. AI member preset теперь
+виден любой роли своей faction/profile; source whitelist и независимый полный
+inventory transfer/readback заменяют привязку recipient к исходному character.
+Operation9 атомарно назначает kit всем10 позициям выбранного squad. Private
+Restore освобождает чужой default inventory до вставки; Validate уплотняет
+только server snapshot cargo IDs, не меняя editable recipe paths.
+Editor queue1000ms и максимум2 повтора явного RATE_LIMITED устраняют пустой
+экран после быстрого выбора. Target камеры выше, scrollbar тоньше, summary
+имеет resolved категории/имена и обходит содержимое hidden containers.
+
+Evidence: `.codex-runtime/issue66-role-transfer-20261025/REPORT.md`.
+
+- `Invoke-AICFChecks.ps1 -Name Test-AILoadoutStatic.ps1,Test-PersonalLoadoutContracts.ps1,Test-LoadoutQolContracts.ps1,Test-LocalizationStatic.ps1`:
+  baseline4/4 и final4/4 **PASS/0**, QoL75 mutation guards.
+- `Build-AICFLocalization.ps1`:659 entries; обе runtime conf обновлены.
+- Терминальный Workbench Validate/Compile окончательного isolated stage:
+  Stock/WCS **2/2 PASS/0**;288 production файлов совпадают с рабочим деревом.
+  Финальная компиляция самого рабочего аддона Stock/WCS также **2/2 PASS/0**.
+- `Start-AICFRuntime.ps1` через сохранённые `Run.ps1 -Role Server/Client`:
+  `stock-final` и `wcs-final` — каждый **219 server /266 client checks,
+  failures0, native exits0/0**, полные stopped logs, scriptFatal0.
+- `Test-LoadoutRoleTransferLog.ps1` включает все прежние Qol/Files/Inspector/
+  Personal/Library oracles, требует44/29 новых cases, точный manifest/CLI и
+  завершённые logs. Финальные4 positives PASS,12 negative controls отклонены.
+- Проверены sparse cargo, все10 recipient sources обеих сторон, другая роль в
+  Library, новый полный squad, late-invalid/stale atomic отказы, неизменные
+  files, настоящий owner RATE_LIMITED, шесть Ready/model после переключений,
+  camera target/thumb metadata. Это не физическая проверка UI.
+
+Начальные stock1/debug failures Restore и stock3 неверное ожидание retry
+сохранены в evidence с исправлением причин; stock2 client опоздал к server
+deadline и остановлен явно. Они не считаются PASS. Stock4 прошёл, затем summary
+уточнена (Weapons до storage, рекурсия hidden containers); оба final main runs
+проверили уже эту окончательную версию. Формат старых файлов не менялся.
+
+Полный offline91/91, restart8+8 и localization21+21 из предыдущего раздела не
+повторялись на этом этапе (**NOT RUN**), не выдаются за новые PASS. Выполнены
+релевантные4 audits и обязательные compile/runtime gates. Строгий all-native
+Error verdict остаётся **FAIL**:31 baseline log /4 final logs,164/155 unique
+identities, новых нет. Перед ready PR этот baseline blocker не снимается.
+
+Визуальная оценка framing/scrollbar, clipping RU/EN, физический input/focus и
+controller navigation — **NOT RUN/отклонены**: terminal-only AGENTS.md запрещает
+GUI automation/screenshots. Игроку: открыть оба editor, проверить кадр/подписи,
+загрузить старый комплект медика на другую роль, применить «Всем бойцам…» и
+быстро переключить позиции/presets. Не доказаны также живой AI spawn/replenish
+с межролевым kit, backend-auth roundtrip, JIP, package и длительный бой.
+ACCEPTED, ready PR, push/merge/release не выполнялись.
+Все13 тестовых profiles,8 отдельных libraries и stage удалены после архивации;
+пользовательские libraries сохранены, собственных тестовых процессов нет.
+
 ## Предпросмотр библиотеки и неполные комплекты #66 — 2026-10-25
 
 Продолжение `codex/issue-66-loadout-qol`, исходный чистый `5b6d8ed`.

@@ -41,7 +41,7 @@ class AICF_LoadoutLibraryView : ScriptedWidgetEventHandler
 			m_aRows.Insert(row);
 		}
 		controller.CreateRect(m_wSummary, 0.95, 0.01, 0.97, 0.99, Color.FromSRGBA(45, 61, 72, 255), false);
-		m_wThumb = controller.CreateRect(m_wSummary, 0.93, 0.01, 0.99, 0.99, Color.FromSRGBA(226, 167, 79, 255), false);
+		m_wThumb = controller.CreateRect(m_wSummary, 0.95, 0.01, 0.97, 0.99, Color.FromSRGBA(226, 167, 79, 255), false);
 		m_wThumb.SetZOrder(6);
 		m_wScroll = SliderWidget.Cast(GetGame().GetWorkspace().CreateWidget(WidgetType.SliderWidgetTypeID,
 			WidgetFlags.VISIBLE | WidgetFlags.BLEND, Color.White, 20, m_wSummary));
@@ -126,8 +126,8 @@ class AICF_LoadoutLibraryView : ScriptedWidgetEventHandler
 		float fill = Math.Min(1, ROWS / (float)Math.Max(1, m_aLines.Count()));
 		float top = 0.01;
 		if (last > 0) top += 0.98 * (1 - fill) * m_iFirst / last;
-		FrameSlot.SetAnchorMin(m_wThumb, 0.93, top);
-		FrameSlot.SetAnchorMax(m_wThumb, 0.99, top + 0.98 * fill);
+		FrameSlot.SetAnchorMin(m_wThumb, 0.95, top);
+		FrameSlot.SetAnchorMax(m_wThumb, 0.97, top + 0.98 * fill);
 	}
 
 	override bool OnChange(Widget w, bool finished)

@@ -35,7 +35,7 @@ modded class AICF_MatchController
 		string targetFaction = "", int libraryRevision = -1)
 	{
 		string enabled;
-		bool apply = slot != AICF_PersonalLoadout.SLOT && (operation == 1 || operation == 5 || operation == 7) &&
+		bool apply = !AICF_QolChecks.s_bExtraPhase && slot != AICF_PersonalLoadout.SLOT && (operation == 1 || operation == 5 || operation == 7) &&
 			System.GetCLIParam("aicfLoadoutFilesProbe", enabled) && enabled == "1";
 		string before, after;
 		bool readable;

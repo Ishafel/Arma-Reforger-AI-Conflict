@@ -291,6 +291,12 @@ Async native receipts не меняют roster/приказы; identity-safe в�
 Library Save/Delete независимы от назначения: LoadoutStore хранит два поколения
 и tombstones; LoadoutService готовит member/squad plans, LoadoutBatch проверяет
 все revisions до commit, GroupSlot копирует binding каждой позиции.
+AI member preset доступен любой роли той же faction/profile. Character в recipe
+остаётся исходным prefab сборки, а не ограничением получателя. LoadoutService
+сверяет его с authoritative recruit sources; AICF_LoadoutTransfer восстанавливает
+серверный inventory snapshot на private draft каждого другого recipient source
+и требует полного signature readback. Назначение одного комплекта всем десяти
+позициям выбранного slot использует тот же atomic batch; roster не меняется.
 Admin targetFaction разрешается повторно на server, UI не получает authority.
 Протокол и legacy migration — [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md).
 Personal recipes хранятся отдельно по backend identity,

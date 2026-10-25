@@ -31,10 +31,17 @@ Workspace AddModal/RemoveModal ограничивают focus; Hide/Close сна
 эту границу; они не заменяют физическую проверку ввода.
 
 - «Применить» назначает текущую numeric position, не пишет библиотеку.
-- «Сохранить» записывает именованный пресет роли, не меняет назначения.
+- «Сохранить» записывает именованный комплект, не меняет назначения.
   Совпадающие kind/profile/faction/character/name обновляют один ID;
   точный повтор не пишет файл и не меняет library revision. Старые дубликаты
   остаются доступны для явного удаления.
+- AI member presets видны и загружаются на любую роль той же faction/profile.
+  Старые файлы читаются без миграции: `character` задаёт исходный prefab сборки,
+  а `member` остаётся metadata. Сервер допускает только известные recruit sources
+  активного profile и заново проверяет совместимость с выбранным получателем.
+- «Всем бойцам…» назначает текущий комплект всем десяти позициям выбранного
+  отряда одной atomic operation9, включая неактивные позиции малого состава.
+  Все контексты/совместимость проверяются до commit; роли и состав сохраняются.
 - «Роль всем отрядам» назначает выбранную numeric position всем десяти
   managed slots стороны, включая временно неразвёрнутые позиции малого состава.
   Это позиция roster, а не имя ATTACK/DEFEND/RESERVE или incarnation группы.
@@ -77,7 +84,11 @@ compatibility, personal blacklist и независимый Capture/Restore/read
 `AICF_LoadoutLibraryView`: собственные draft/world, модель и текстовая сводка
 `AICF_LoadoutSummary`. Сводка читает готовый inventory, включая defaults,
 карманы и attachments; fixed slots имеют подписи, прочие предметы сгруппированы
-по prefab с количеством. Видны девять строк, wheel/native slider открывают остальные.
+по prefab с количеством и категорией. Item labels и категории проходят Resolve
+до объединения текста; невидимые native items исключены через IsVisible.
+Видны девять строк, wheel/native slider открывают остальные. Видимый thumb
+совпадает по ширине с track (grid 0.017, summary 0.02 от ширины); отдельная
+более широкая невидимая область ввода сохраняется.
 Для squad доступны все десять позиций, включая позиции вне текущего состава.
 
 Owner operation8 — только inspect. AI payload `<id>:<position>`, personal —
@@ -85,16 +96,31 @@ Owner operation8 — только inspect. AI payload `<id>:<position>`, persona
 inner ResolveLoadoutContext допускает неактивные squad positions, не меняя roster.
 Owner snapshot сохраняет контекст исходной позиции/списка. Editor обрабатывает
 ответ8 до общей загрузки рецепта и не меняет m_Recipe, applied или draft memory.
-Быстрый выбор заменяет отложенный SendInspection; интервал от последнего Request
-сохраняет server cooldown, RATE_LIMITED повторяется не более одного раза.
-Hide/Request снимают callback. Закрытый modal/сменившийся ID/revision запрещает
+Быстрый выбор заменяет отложенный SendInspection. Все операции editor идут через
+общую очередь DispatchRequest с интервалом не менее1000ms; intent содержит
+captured slot/member/faction, обе revisions и payload. Пока RPC ещё не отправлен,
+нулевой token не может принять старый owner snapshot. Только явный RATE_LIMITED
+повторяется до двух раз с новым token; неизвестный timeout не повторяет запись.
+Hide/Request снимают inspection callback, Close также снимает DispatchRequest.
+Закрытый modal/сменившийся ID/revision запрещает
 поздний bind. Hide отсоединяет
 RenderTarget перед очисткой миров, Close также снимает handlers.
 
 Основной preview теперь подбирает расстояние по высоте модели (90% исходного
-вертикального FOV), а не диагонали bounds с оружием. Orbit/pan/zoom сохранены.
+вертикального FOV), а не диагонали bounds с оружием. После центрирования модели
+target поднят на18% высоты bounds к верхней части корпуса. Orbit/pan/zoom сохранены.
 Action buttons и item cards имеют отдельные hover/pressed цвета; disabled
 контролы не подсвечиваются, leave/release сбрасывают transient state.
+
+При переносе AI комплекта `AICF_LoadoutTransfer.Fits` создаёт независимый draft
+целевой роли и требует точного совпадения inventory signature после Restore.
+Перед Capture/Signature в Validate только серверная копия уплотняет slot IDs
+в SCR_UniversalInventoryStorageComponent, сохраняя порядок и entities; fixed slots,
+editable recipe и его paths не меняются. Restore в private world сначала удаляет
+всё несовпадающее с snapshot по всему дереву, затем вставляет вещи: это исключает
+промежуточное переполнение default kit другого получателя. Live master restore
+использует прежний native путь и authority/rollback guards. Личные presets
+сохраняют отдельный identity/profile/faction/character scope; operation9 запрещён.
 
 `AICF_PersonalPresetLibrary` использует AICF_LoadoutStore в personal root с
 приватным prefix `<server identity>_<profile>_<faction>_library_preset_`.

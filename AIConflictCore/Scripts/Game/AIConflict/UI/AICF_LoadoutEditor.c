@@ -89,7 +89,6 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected int m_iInspectId = -1;
 	protected int m_iInspectMember;
 	protected int m_iInspectLibraryRevision;
-	protected int m_iInspectRetries;
 	protected Widget m_wHoveredButton;
 	protected Widget m_wPressedButton;
 	protected Widget m_wLibrarySection;
@@ -162,6 +161,14 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected int m_iRevision;
 	protected int m_iToken;
 	protected int m_iRequestAt;
+	protected int m_iLastRequestSentAt;
+	protected int m_iRequestRetries;
+	protected int m_iRequestSlot;
+	protected int m_iRequestMember;
+	protected int m_iRequestRevision;
+	protected int m_iRequestLibraryRevision;
+	protected string m_sRequestPayload;
+	protected string m_sRequestFaction;
 	protected int m_iQuantity = 1;
 	protected int m_iSourceIndex;
 	protected ref array<string> m_aSources = {};
@@ -408,10 +415,19 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		Button("apply", "{AICF:AICF_UI_Select_an_item_a9a7e1ac}", 0.765, 0.79, 0.975, 0.84);
 		Button("undo", "{AICF:AICF_UI_Undo_950921cc}", 0.025, 0.86, 0.115, 0.915);
 		Button("reset", "{AICF:AICF_UI_Default_c3e32002}", 0.125, 0.86, 0.225, 0.915);
-		Button("saveSquad", "{AICF:AICF_UI_PresetSaveSquad}", 0.25, 0.86, 0.43, 0.915);
+		Button("saveSquad", "{AICF:AICF_UI_PresetSaveSquad}", 0.25, 0.86, 0.39, 0.915);
 		m_wSave = Button("save", "{AICF:AICF_UI_Save_10c5c91a}", 0.45, 0.86, 0.61, 0.915);
 		Button("assign", "{AICF:AICF_UI_PresetApply}", 0.64, 0.86, 0.835, 0.915);
 		Button("assignAll", "{AICF:AICF_UI_InspectorMore}", 0.845, 0.86, 0.975, 0.915);
+		Button("assignSquad", "{AICF:AICF_UI_PresetAllMembers}", 0.69, 0.86, 0.83, 0.915);
+		if (!m_bPersonal)
+		{
+			foreach (Widget frame : m_aButtonFrames)
+			{
+				if (frame.GetName() == "save") Place(frame, 0.40, 0.86, 0.53, 0.915);
+				else if (frame.GetName() == "assign") Place(frame, 0.54, 0.86, 0.68, 0.915);
+			}
+		}
 		m_wCost = Label(0.25, 0.86, 0.43, 0.915, "{AICF:AICF_UI_Loadout_free_9cbed783}", 16);
 		m_wCost.SetTextWrapping(true);
 		m_wCost.SetVisible(m_bPersonal);
@@ -488,6 +504,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			m_Member.GetRootWidget().SetVisible(false);
 			ShowButton("assignAll", false);
 			ShowButton("saveSquad", false);
+			ShowButton("assignSquad", false);
 		}
 		if (!m_bPersonal) FillGroups();
 		int groupIndex = m_aGroupIds.Find(m_iSlotId);
@@ -706,6 +723,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (operation == 4 || (m_bPersonal && operation == 7)) caption = "{AICF:AICF_UI_PresetDelete}";
 		else if (operation == 5) caption = "{AICF:AICF_UI_PresetRoleAll}";
 		else if (operation == 7 && !m_bPersonal) caption = "{AICF:AICF_UI_PresetApplySquad}";
+		else if (operation == 9) caption = "{AICF:AICF_UI_PresetAllMembers}";
 		else if (operation == -1) caption = "{AICF:AICF_UI_Close_23b64977}";
 		SetButtonState("confirmOperation", true, caption);
 	}
@@ -854,15 +872,32 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (m_bSearchPending && m_bDraftReady)
 			Items();
 		CancelSearch();
-		string faction = m_sTargetFaction;
-		if (m_bPersonal) faction = string.Empty;
+		GetGame().GetCallqueue().Remove(DispatchRequest);
+		m_sRequestFaction = m_sTargetFaction;
+		if (m_bPersonal) m_sRequestFaction = string.Empty;
 		m_iOperation = operation;
-		m_iToken = m_Player.AICF_RequestLoadout(m_iSlotId, m_iMember, m_iRevision, operation, payload, faction, m_iLibraryRevision);
-		m_bPending = m_iToken > 0;
+		m_sRequestPayload = payload;
+		m_iRequestSlot = m_iSlotId;
+		m_iRequestMember = m_iMember;
+		m_iRequestRevision = m_iRevision;
+		m_iRequestLibraryRevision = m_iLibraryRevision;
+		m_iRequestRetries = 0;
+		m_iToken = 0;
+		m_bPending = true;
 		m_iRequestAt = System.GetTickCount();
+		GetGame().GetCallqueue().CallLater(DispatchRequest, Math.Max(1, 1000 - System.GetTickCount(m_iLastRequestSentAt)), false);
 		m_wStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_Waiting_for_server_response_ded60968}"));
 		m_wSave.SetEnabled(false);
 		SetBusy();
+	}
+
+	protected void DispatchRequest()
+	{
+		if (!m_wRoot || !m_Player || !m_bPending || m_iRequestSlot != m_iSlotId || m_iRequestMember != m_iMember) return;
+		m_iToken = m_Player.AICF_RequestLoadout(m_iRequestSlot, m_iRequestMember, m_iRequestRevision,
+			m_iOperation, m_sRequestPayload, m_sRequestFaction, m_iRequestLibraryRevision);
+		m_iLastRequestSentAt = System.GetTickCount();
+		if (m_iToken <= 0) m_bPending = false;
 	}
 
 	protected void SetBusy()
@@ -1001,6 +1036,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (m_bPersonal && m_Player && !m_Player.AICF_PersonalSelected()) canAssign = true;
 		SetButtonState("assign", ready && canAssign && HasValidName() && currentRevision);
 		SetButtonState("assignAll", ready && HasValidName() && currentRevision);
+		SetButtonState("assignSquad", ready && HasValidName() && currentRevision);
 		SetButtonState("saveSquad", ready && m_sDraftData == m_sAppliedData && currentRevision);
 		SetButtonState("confirmSave", ready && HasValidName() && currentRevision);
 		SetButtonState("confirmSquadSave", ready && m_sDraftData == m_sAppliedData && m_wSquadName &&
@@ -1031,10 +1067,18 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		}
 		if (!m_bPersonal && m_sTargetFaction != AICF_ContentProfile.GetActive().GetStableFactionKey(m_Faction.GetFactionKey()) &&
 			!SCR_Global.IsAdmin(m_Player.GetPlayerId())) { Close(); return; }
-		if (m_bPending && m_Player.AICF_LoadoutToken() == m_iToken)
+		if (m_bPending && m_iToken > 0 && m_Player.AICF_LoadoutToken() == m_iToken)
 		{
-			m_bPending = false;
 			string status = m_Player.AICF_LoadoutStatus();
+			if (status == "RATE_LIMITED" && m_iRequestRetries < 2)
+			{
+				m_iRequestRetries++;
+				m_iToken = 0;
+				GetGame().GetCallqueue().Remove(DispatchRequest);
+				GetGame().GetCallqueue().CallLater(DispatchRequest, 1000, false);
+				return;
+			}
+			m_bPending = false;
 			if (m_iOperation == 8)
 			{
 				ReceiveInspection(status);
@@ -1083,6 +1127,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		}
 		else if (m_bPending && System.GetTickCount(m_iRequestAt) > 15000)
 		{
+			GetGame().GetCallqueue().Remove(DispatchRequest);
 			m_bPending = false;
 			if (m_iOperation == 8 && m_iModal == 1) m_LibraryView.Message("{AICF:AICF_UI_No_response_received_Reopen_the_form_to_ch_ddc43d41}");
 			m_wStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_No_response_received_Reopen_the_form_to_ch_ddc43d41}"));
@@ -1184,12 +1229,10 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_iInspectMember = m_iMember;
 		if (squad) m_iInspectMember = m_LibraryMember.GetCurrentIndex();
 		m_iInspectLibraryRevision = m_iLibraryRevision;
-		m_iInspectRetries = 0;
 		m_LibraryView.Message("{AICF:AICF_UI_Waiting_for_server_response_ded60968}");
 		// Общий server cooldown сохранён. Быстрый выбор заменяет ожидающий
 		// запрос, не показывает RATE_LIMITED вместо выбранного комплекта.
-		int delay = Math.Max(1, 1000 - System.GetTickCount(m_iRequestAt));
-		GetGame().GetCallqueue().CallLater(SendInspection, delay, false);
+		GetGame().GetCallqueue().CallLater(SendInspection, 1, false);
 	}
 
 	protected void SendInspection()
@@ -1206,13 +1249,6 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	protected void ReceiveInspection(string status)
 	{
 		if (m_iModal != 1 || !m_LibraryView) return;
-		if (status == "RATE_LIMITED" && m_iInspectRetries < 1)
-		{
-			m_iInspectRetries++;
-			GetGame().GetCallqueue().Remove(SendInspection);
-			GetGame().GetCallqueue().CallLater(SendInspection, 1000, false);
-			return;
-		}
 		int index = m_Library.GetCurrentIndex();
 		if (index < 0 || index >= m_aTemplateIds.Count() || m_aTemplateIds[index] != m_iInspectId) return;
 		int revision = -1;
@@ -1747,6 +1783,13 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			m_sDraftData = m_Recipe.Encode();
 			ConfirmOperation(5, m_sDraftData, m_sTargetFaction + " · " + TargetName() + "\n{AICF:AICF_UI_InspectorRoleAllHelp}");
 		}
+		else if (!m_bPersonal && action == "assignSquad")
+		{
+			if (!HasValidName() || m_Player.AICF_LoadoutRevision() != m_iRevision) return true;
+			m_Recipe.m_sName = m_wName.GetText();
+			m_sDraftData = m_Recipe.Encode();
+			ConfirmOperation(9, m_sDraftData, m_sTargetFaction + " · " + m_aGroupNames[m_aGroupIds.Find(m_iSlotId)] + "\n{AICF:AICF_UI_PresetAllMembersHelp}");
+		}
 		else if (action == "confirmOperation")
 		{
 			int confirmedOperation = m_iConfirmOperation;
@@ -2098,6 +2141,8 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 
 	void Close()
 	{
+		GetGame().GetCallqueue().Remove(DispatchRequest);
+		m_sRequestPayload = string.Empty;
 		HideModal();
 		if (s_CapturedEditor == this) s_CapturedEditor = null;
 		CancelSearch();

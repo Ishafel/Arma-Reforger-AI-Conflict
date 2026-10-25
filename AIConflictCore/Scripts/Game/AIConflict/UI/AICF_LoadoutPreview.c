@@ -57,7 +57,8 @@ class AICF_LoadoutPreview
 		m_Model.GetBounds(mins, maxs);
 		m_Model.SetOrigin(-(mins + maxs) * 0.5);
 		m_Model.Update();
-		m_vTarget = vector.Zero;
+		// Смотрим в верхнюю часть корпуса; zoom больше не приближает живот.
+		m_vTarget = Vector(0, (maxs[1] - mins[1]) * 0.18, 0);
 		m_fPanLimit = Math.Max(0.25, (maxs[1] - mins[1]) * 0.5);
 		m_fPanY = Math.Clamp(m_fPanY, -m_fPanLimit, m_fPanLimit);
 		// Высота бойца занимает 90% viewport при исходном FOV. Диагональ

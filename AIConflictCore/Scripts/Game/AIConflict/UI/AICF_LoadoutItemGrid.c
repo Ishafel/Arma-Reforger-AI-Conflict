@@ -91,7 +91,7 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 			}
 		}
 		m_ScrollTrack = controller.CreateRect(m_Root, 0.963, 0.01, 0.98, 0.91, Color.FromSRGBA(45, 61, 72, 255), false);
-		m_ScrollThumb = controller.CreateRect(m_Root, 0.948, 0.01, 0.996, 0.15, Color.FromSRGBA(226, 167, 79, 255), false);
+		m_ScrollThumb = controller.CreateRect(m_Root, 0.963, 0.01, 0.98, 0.15, Color.FromSRGBA(226, 167, 79, 255), false);
 		m_ScrollTrack.SetZOrder(6);
 		m_ScrollThumb.SetZOrder(7);
 		// Native input slider, как в setup time slider; видимый thumb показывает
@@ -131,8 +131,8 @@ class AICF_LoadoutItemGrid : ScriptedWidgetEventHandler
 		if (!overflow) return;
 		float fill = Math.Clamp(m_aCards.Count() / (float)m_aPrefabs.Count(), 0.08, 1);
 		float top = 0.01 + (0.90 - 0.90 * fill) * m_iFirst / last;
-		FrameSlot.SetAnchorMin(m_ScrollThumb, 0.948, top);
-		FrameSlot.SetAnchorMax(m_ScrollThumb, 0.996, top + 0.90 * fill);
+		FrameSlot.SetAnchorMin(m_ScrollThumb, 0.963, top);
+		FrameSlot.SetAnchorMax(m_ScrollThumb, 0.98, top + 0.90 * fill);
 	}
 
 	void SetEmptyText(string text) { m_Empty.SetText(AICF_Localization.Resolve(text)); }

@@ -3952,5 +3952,17 @@ StringTable
 			Target_en_us "Preview ready. Your current draft is unchanged."
 			Target_ru_ru "Предпросмотр готов. Текущий черновик сохранён."
 		}
+		CustomStringTableItem "{A1CF261025660009}"
+		{
+			Id "AICF_UI_PresetAllMembers"
+			Target_en_us "One kit to squad..."
+			Target_ru_ru "Всем бойцам…"
+		}
+		CustomStringTableItem "{A1CF26102566000A}"
+		{
+			Id "AICF_UI_PresetAllMembersHelp"
+			Target_en_us "Equip all ten positions of this squad with the current kit. Roles, roster size and orders stay unchanged."
+			Target_ru_ru "Назначить текущий комплект всем десяти позициям этого отряда. Роли, численность и приказы сохраняются."
+		}
 	}
 }
