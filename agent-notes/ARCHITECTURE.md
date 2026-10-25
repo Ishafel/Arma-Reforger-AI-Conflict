@@ -145,6 +145,14 @@ authority и допустимость цели. Веса, fallback и исклю
 
 ## Authority и identity
 
+Ручная настройка техники принадлежит stable `AICF_GroupSlot`: отдельная
+vehicle revision и сериализованный рецепт не меняют loadout bindings, роль или
+размер состава. Trip захватывает независимую копию, revision, generation и
+immutable identity каждого назначенного member. Подбор exact prefab остаётся
+в acquisition, точная native посадка — в boarding, списание — в EconomySystem.
+Каталог читает compartments в private world; глобальный native manager ID не
+сохраняется. Контракт и ограничения проверок: [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
+
 Стратегия, spawn/delete, деньги, тикеты, ownership и match result принадлежат
 authoritative server/master. Клиент передаёт намерение; RPC заново проверяет
 игрока, faction, numeric slot, availability, лимиты и цель. Постоянные данные

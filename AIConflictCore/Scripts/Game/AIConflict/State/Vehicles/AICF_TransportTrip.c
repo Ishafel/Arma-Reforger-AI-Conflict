@@ -2,6 +2,57 @@
 // AICF_TransportTripController may call CommitTransition or CommitRetarget.
 class AICF_TransportTrip
 {
+	protected AICF_GroupSlot m_VehiclePresetSlot;
+	protected ref AICF_VehiclePreset m_VehiclePreset;
+	protected int m_iVehiclePresetRevision;
+	protected ref array<IEntity> m_aVehiclePresetMembers = {};
+	protected ref array<EntityID> m_aVehiclePresetMemberIds = {};
+	protected bool m_bVehiclePresetDebited;
+	AICF_VehiclePreset GetVehiclePreset() { return m_VehiclePreset; }
+	int GetVehiclePresetRevision() { return m_iVehiclePresetRevision; }
+	AICF_GroupSlot GetVehiclePresetSlot() { return m_VehiclePresetSlot; }
+	bool IsVehiclePresetDebited() { return m_bVehiclePresetDebited; }
+	void MarkVehiclePresetDebited() { m_bVehiclePresetDebited = true; }
+
+	void CaptureVehiclePreset(AICF_GroupSlot slot)
+	{
+		m_VehiclePresetSlot = slot;
+		m_iVehiclePresetRevision = slot.GetVehiclePresetRevision();
+		m_VehiclePreset = AICF_VehiclePreset.Decode(slot.GetVehiclePresetData());
+		if (!m_VehiclePreset) return;
+		for (int i; i < AICF_Stage1Config.MAX_GROUP_SIZE; i++)
+		{
+			IEntity member = slot.GetRosterMember(i);
+			m_aVehiclePresetMembers.Insert(member);
+			EntityID id = EntityID.INVALID;
+			if (member) id = member.GetID();
+			m_aVehiclePresetMemberIds.Insert(id);
+		}
+	}
+
+	bool IsVehiclePresetCurrent()
+	{
+		if (!m_VehiclePresetSlot || m_VehiclePresetSlot.GetVehiclePresetRevision() != m_iVehiclePresetRevision ||
+			m_VehiclePresetSlot.GetGroup() != m_Assignment.GetGroup() || m_VehiclePresetSlot.GetSpawnGeneration() != GetGroupGeneration()) return false;
+		if (!m_VehiclePreset) return !m_VehiclePresetSlot.HasVehiclePreset();
+		for (int i; i < m_VehiclePreset.m_aMembers.Count(); i++)
+		{
+			int index = m_VehiclePreset.m_aMembers[i];
+			if (index < 0) continue;
+			IEntity member = VehiclePresetMember(index);
+			if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(member) || m_VehiclePresetSlot.GetRosterMember(index) != member) return false;
+		}
+		return true;
+	}
+
+	IEntity VehiclePresetMember(int index)
+	{
+		if (!m_aVehiclePresetMembers.IsIndexValid(index)) return null;
+		IEntity member = m_aVehiclePresetMembers[index];
+		if (!member || member.GetID() != m_aVehiclePresetMemberIds[index]) return null;
+		return member;
+	}
+
 	protected ref AICF_StrategicAssignmentSnapshot m_Assignment;
 	protected int m_iTripGeneration;
 	protected string m_sOperationId;

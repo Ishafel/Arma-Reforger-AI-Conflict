@@ -93,6 +93,8 @@ class AICF_TransportTripController
 		RearmHandoffOrderRestoreForIntent(trip, currentAssignment);
 		if (trip.IsTerminal())
 			return TickTerminalPostconditions(trip, currentAssignment, slot, fleet, faction);
+		if (trip.GetVehiclePresetSlot() && !trip.IsVehiclePresetCurrent())
+			return ApplyOutcome(trip, AICF_TripOutcome.FallbackToFoot("VEHICLE_PRESET_SUPERSEDED", BuildCausationId(trip, "PRESET_CHANGED")), currentAssignment, slot, fleet, faction);
 
 		if (IsAcquisitionPhase(trip.GetPhase()))
 			return TickAcquisition(trip, currentAssignment, slot, fleet, faction);

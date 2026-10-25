@@ -18,6 +18,27 @@ class AICF_VehicleCoordinator
 	protected ref array<ref AICF_ExplicitVehicleAdmissionIntent> m_aExplicitAdmissionIntents = {};
 	protected int m_iObservedBaseRevision;
 	protected bool m_bStopped;
+	bool CanConfigureVehiclePreset(AICF_GroupSlot slot, SCR_CampaignFaction faction, out string reason)
+	{
+		reason = "MATCH_UNAVAILABLE";
+		if (!IsAuthorityReady() || !slot || !faction) return false;
+		AICF_FactionFleet fleet = m_Fleets.FindFleet(faction.GetFactionKey());
+		reason = "FLEET_CAP";
+		if (!fleet || (!fleet.HasLeaseForSlot(slot.GetSlotId()) && fleet.GetCappedActiveOrReservedCount() + m_Trips.GetPreLeaseNonTerminalCount(faction.GetFactionKey()) >= fleet.GetMaximumActiveOrReserved())) return false;
+		reason = "READY";
+		return true;
+	}
+
+	string VehiclePresetStatus(AICF_GroupSlot slot)
+	{
+		if (!slot) return "MATCH_UNAVAILABLE";
+		AICF_TransportTrip trip = FindTripForSlot(slot);
+		if (trip && trip.GetVehiclePresetRevision() != slot.GetVehiclePresetRevision()) return "CLEANUP_PENDING";
+		if (!slot.HasVehiclePreset()) return "AUTOMATIC_POLICY";
+		if (!trip) return "WAITING_FOR_ORDER_OR_ADMISSION";
+		if (trip.IsTerminal()) return trip.GetTerminalReason();
+		return typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase());
+	}
 
 	void AICF_VehicleCoordinator(
 		AICF_Stage3Config config,
@@ -615,6 +636,7 @@ class AICF_VehicleCoordinator
 			"STRATEGIC_ASSIGNMENT_ADMITTED");
 		if (!admitted)
 			return;
+		admitted.CaptureVehiclePreset(slot);
 		ConsumeExplicitVehicleAdmission(assignment);
 		AICF_ETransportTripPhase admittedPhase = admitted.GetPhase();
 		int admittedTransitions = admitted.GetTransitionCount();
@@ -678,13 +700,15 @@ class AICF_VehicleCoordinator
 			reason = orderOwnershipFence;
 			return false;
 		}
-		if (slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY)
+		if (slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY && !slot.HasVehiclePreset())
 		{
 			reason = "COMMANDER_INFANTRY_PROFILE";
 			return false;
 		}
 		int alive = AICF_GroupRuntime.CountAliveAgents(assignment.GetGroup());
-		if (alive < m_Config.GetMinimumVehicleRequestAgents())
+		int minimumAgents = m_Config.GetMinimumVehicleRequestAgents();
+		if (slot.HasVehiclePreset()) minimumAgents = 1;
+		if (alive < minimumAgents)
 		{
 			reason = "MINIMUM_ROSTER_NOT_MET";
 			return false;
@@ -703,7 +727,7 @@ class AICF_VehicleCoordinator
 		float routeMeters = Math.Sqrt(vector.DistanceSqXZ(
 			leader.GetOrigin(),
 			assignment.GetTargetPosition()));
-		bool explicitAdmission = HasExplicitVehicleAdmission(slot, assignment);
+		bool explicitAdmission = HasExplicitVehicleAdmission(slot, assignment) || slot.HasVehiclePreset();
 		if (routeMeters < m_Config.GetMinimumRouteMeters() && !explicitAdmission)
 		{
 			reason = "ROUTE_BELOW_VEHICLE_THRESHOLD";
@@ -790,7 +814,8 @@ class AICF_VehicleCoordinator
 	{
 		if (!trip || !assignment || !m_TripController.CanRetireTrip(trip))
 			return false;
-		return trip.GetAssignment().GetAssignmentRevision() != assignment.GetAssignmentRevision() ||
+		return (trip.GetVehiclePresetSlot() && trip.GetVehiclePresetRevision() != trip.GetVehiclePresetSlot().GetVehiclePresetRevision()) ||
+			trip.GetAssignment().GetAssignmentRevision() != assignment.GetAssignmentRevision() ||
 			trip.GetAssignment().GetBaseRevision() != assignment.GetBaseRevision() ||
 			!trip.GetAssignment().MatchesDestination(assignment);
 	}

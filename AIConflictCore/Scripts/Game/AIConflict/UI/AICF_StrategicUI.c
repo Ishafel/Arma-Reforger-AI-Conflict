@@ -11,7 +11,8 @@ enum AICF_EStrategicUIButtonAction
 	ADJUST_SIZE,
 	EDIT_LOADOUT,
 	RECRUIT,
-	RETURN_TO_AI
+	RETURN_TO_AI,
+	EDIT_VEHICLE
 }
 
 class AICF_StrategicUIButtonHandler : ScriptedWidgetEventHandler
@@ -55,6 +56,7 @@ class AICF_StrategicUIController
 	protected SCR_GameModeCampaign m_Campaign;
 	protected ref AICF_SupplyMapUI m_SupplyMapUI;
 	protected ref AICF_LoadoutEditor m_LoadoutEditor;
+	protected ref AICF_VehiclePresetEditor m_VehiclePresetEditor;
 	protected Widget m_wHUDRoot;
 	protected Widget m_wHUDAccent;
 	protected TextWidget m_wHUDText;
@@ -116,6 +118,7 @@ class AICF_StrategicUIController
 		m_Campaign = campaign;
 		m_SupplyMapUI = new AICF_SupplyMapUI(this);
 		m_LoadoutEditor = new AICF_LoadoutEditor(this);
+		m_VehiclePresetEditor = new AICF_VehiclePresetEditor(this);
 		SCR_MapEntity.GetOnMapOpenComplete().Insert(OnMapOpen);
 		SCR_MapEntity.GetOnMapClose().Insert(OnMapClose);
 		GetGame().GetCallqueue().CallLater(Update, UPDATE_INTERVAL_MS, true);
@@ -139,6 +142,7 @@ class AICF_StrategicUIController
 		m_Campaign = null;
 		m_SupplyMapUI = null;
 		m_LoadoutEditor = null;
+		m_VehiclePresetEditor = null;
 	}
 
 	void HandleButton(AICF_EStrategicUIButtonAction action, int value)
@@ -198,6 +202,13 @@ class AICF_StrategicUIController
 				else if (m_LoadoutEditor && m_wLoadoutShortcut && SCR_Global.IsAdmin())
 					m_LoadoutEditor.Open(m_wLoadoutShortcut.GetParent(), 0, false, true);
 				break;
+			case AICF_EStrategicUIButtonAction.EDIT_VEHICLE:
+				if (m_VehiclePresetEditor && m_wCommandScrim)
+				{
+					SetCommandOpen(false);
+					m_VehiclePresetEditor.Open(m_wCommandScrim.GetParent(), m_iSelectedSlot);
+				}
+				break;
 		}
 	}
 
@@ -228,6 +239,8 @@ class AICF_StrategicUIController
 			m_SupplyMapUI.Refresh();
 		if (m_LoadoutEditor)
 			m_LoadoutEditor.Refresh();
+		if (m_VehiclePresetEditor)
+			m_VehiclePresetEditor.Refresh();
 		Faction localFaction = SCR_FactionManager.SGetLocalPlayerFaction();
 		if (!localFaction)
 		{
@@ -556,6 +569,10 @@ class AICF_StrategicUIController
 		m_wLoadoutButton = loadoutButton;
 		CreateText(loadoutButton, 0, 0, 1, 1, "{AICF:AICF_UI_Loadout_4e116f01}", 19, Color.FromSRGBA(255, 255, 255, 255), true);
 		AttachHandler(loadoutButton, AICF_EStrategicUIButtonAction.EDIT_LOADOUT);
+		Widget vehicleButton = CreateRect(m_wCommandPanel, 0.515, 0.792, 0.97, 0.835,
+			Color.FromSRGBA(46, 74, 91, 255), true);
+		CreateText(vehicleButton, 0, 0, 1, 1, "{AICF:AICF_UI_VehicleTitle}", 19, Color.White, true);
+		AttachHandler(vehicleButton, AICF_EStrategicUIButtonAction.EDIT_VEHICLE);
 		m_wRecruitButton = CreateRect(m_wCommandPanel, 0.03, 0.843, 0.49, 0.896,
 			Color.FromSRGBA(35, 85, 65, 255), true);
 		CreateText(m_wRecruitButton, 0, 0, 1, 1, "{AICF:AICF_UI_RecruitSquad}",
@@ -1273,6 +1290,8 @@ class AICF_StrategicUIController
 
 	protected void RemoveMapUI()
 	{
+		if (m_VehiclePresetEditor)
+			m_VehiclePresetEditor.Close();
 		if (m_LoadoutEditor)
 			m_LoadoutEditor.Close();
 		if (m_SupplyMapUI)

@@ -67,6 +67,39 @@ class AICF_VehicleAcquisitionFlow
 	protected ref AICF_GroupCohesionPolicy m_CohesionPolicy;
 	protected SCR_GameModeCampaign m_Campaign;
 	protected AICF_ConflictAdapter m_ConflictAdapter;
+	protected int MinimumAgents(AICF_TransportTrip trip)
+	{
+		if (trip.GetVehiclePreset()) return 1;
+		return m_Config.GetMinimumVehicleRequestAgents();
+	}
+
+	protected bool ResolveTripKind(AICF_TransportTrip trip, out AICF_EVehicleKind kind)
+	{
+		AICF_VehiclePreset preset = trip.GetVehiclePreset();
+		if (!preset) return TryResolveVehicleKind(trip.GetAssignment(), kind);
+		kind = AICF_EVehicleKind.LIGHT_TRANSPORT;
+		foreach (string key : preset.m_aSeats)
+		{
+			array<string> parts = {};
+			key.Split(":", parts, false);
+			if (parts.Count() == 3 && parts[2].ToInt() == ECompartmentType.TURRET) kind = AICF_EVehicleKind.ARMED_LIGHT;
+		}
+		return true;
+	}
+
+	protected bool ResolveTripCandidates(SCR_CampaignFaction faction, AICF_EVehicleKind kind, AICF_TransportTrip trip, string identity, out array<ResourceName> candidates)
+	{
+		if (!trip.GetVehiclePreset()) return m_Catalog.GetCandidatePrefabsForAcquisition(faction, kind, trip.GetAssignment(), identity, candidates);
+		candidates.Clear();
+		if (!trip.IsVehiclePresetCurrent()) return false;
+		AICF_VehiclePresetCatalog catalog = new AICF_VehiclePresetCatalog(faction);
+		string reason;
+		AICF_VehiclePreset preset = trip.GetVehiclePreset();
+		bool valid = catalog.Inspect(preset.m_sPrefab, reason) && preset.ValidateRoster(trip.GetVehiclePresetSlot(), catalog.Seats(), reason);
+		catalog.Clear();
+		if (valid) candidates.Insert(preset.m_sPrefab);
+		return valid;
+	}
 
 	void AICF_VehicleAcquisitionFlow(
 		AICF_Stage3Config config,
@@ -275,25 +308,25 @@ class AICF_VehicleAcquisitionFlow
 		}
 
 		int aliveCount = AICF_GroupRuntime.CountAliveAgents(trip.GetAssignment().GetGroup());
-		if (aliveCount < m_Config.GetMinimumVehicleRequestAgents())
+		if (aliveCount < MinimumAgents(trip))
 			return EndRequest(trip, fleet, requestState, "GROUP_NOT_COMBAT_READY", nowMs);
 
 		AICF_EVehicleKind kind;
-		if (!TryResolveVehicleKind(trip.GetAssignment(), kind))
+		if (!ResolveTripKind(trip, kind))
 			return FailClosed(trip, "VEHICLE_KIND_NOT_CONFIGURED", "KIND_POLICY");
 		array<ResourceName> candidates = {};
 		string causationId = BuildCausationId(trip, requestState, "WAIT_PREFLIGHT");
 		string identity = BuildIdentityContext(trip, requestState, null, causationId);
-		if (!m_Catalog.GetCandidatePrefabsForAcquisition(
+		if (!ResolveTripCandidates(
 			faction,
 			kind,
-			trip.GetAssignment(),
+			trip,
 			identity,
 			candidates))
 		{
 			return EndRequest(trip, fleet, requestState, "PREFAB_UNAVAILABLE", nowMs);
 		}
-		if (!HasConservativeCapacityCandidate(candidates, kind, aliveCount))
+		if (!trip.GetVehiclePreset() && !HasConservativeCapacityCandidate(candidates, kind, aliveCount))
 			return EndRequest(trip, fleet, requestState, "INSUFFICIENT_COMPARTMENTS", nowMs);
 
 		AICF_VehicleSpawnSiteSelection selection;
@@ -434,7 +467,7 @@ class AICF_VehicleAcquisitionFlow
 			stagedCount,
 			aliveCount,
 			farthestDistanceMeters,
-			memberSamples) || aliveCount < m_Config.GetMinimumVehicleRequestAgents())
+			memberSamples) || aliveCount < MinimumAgents(trip))
 		{
 			return EndRequest(trip, fleet, requestState, "GROUP_NOT_COMBAT_READY", nowMs);
 		}
@@ -508,7 +541,7 @@ class AICF_VehicleAcquisitionFlow
 			plan,
 			m_Config.GetSpawnStagingRadiusMeters(),
 			SPAWN_BOARDING_ENVELOPE_RADIUS_METERS,
-			m_Config.GetMinimumVehicleRequestAgents(),
+			MinimumAgents(trip),
 			stagedCount,
 			aliveCount,
 			farthestDistanceMeters,
@@ -573,7 +606,7 @@ class AICF_VehicleAcquisitionFlow
 			plan,
 			m_Config.GetSpawnStagingRadiusMeters(),
 			SPAWN_BOARDING_ENVELOPE_RADIUS_METERS,
-			m_Config.GetMinimumVehicleRequestAgents(),
+			MinimumAgents(trip),
 			stagedCount,
 			aliveCount,
 			farthestDistanceMeters,
@@ -649,17 +682,17 @@ class AICF_VehicleAcquisitionFlow
 			return FailClosed(trip, "SPAWN_ATTEMPT_REJECTED", "ATTEMPT_GUARD");
 
 		AICF_EVehicleKind kind;
-		if (!TryResolveVehicleKind(trip.GetAssignment(), kind))
+		if (!ResolveTripKind(trip, kind))
 			return EndRequest(trip, fleet, requestState, "VEHICLE_KIND_NOT_CONFIGURED", nowMs);
 		string causationId = BuildCausationId(trip, requestState, "SPAWN_ATTEMPT");
 		string identity = BuildIdentityContext(trip, requestState, lease, causationId);
 		ReportSpawnAttempt(trip, requestState, identity);
 
 		array<ResourceName> candidates = {};
-		if (!m_Catalog.GetCandidatePrefabsForAcquisition(
+		if (!ResolveTripCandidates(
 			faction,
 			kind,
-			trip.GetAssignment(),
+			trip,
 			identity,
 			candidates))
 		{
@@ -813,6 +846,8 @@ class AICF_VehicleAcquisitionFlow
 		AICF_VehicleAcquisitionCandidate candidate,
 		string identity)
 	{
+		if (trip.GetVehiclePreset())
+			return trip.IsVehiclePresetCurrent() && candidates.Count() == 1 && candidate.m_Prefab == trip.GetVehiclePreset().m_sPrefab;
 		int availableSeats;
 		bool hasPilot;
 		bool hasTurret;
@@ -853,6 +888,14 @@ class AICF_VehicleAcquisitionFlow
 		AICF_VehicleAcquisitionCandidate candidate,
 		string identity)
 	{
+		if (trip.GetVehiclePreset())
+		{
+			AICF_MatchController match = AICF_MatchController.GetActiveController();
+			AICF_VehiclePresetCatalog catalog = new AICF_VehiclePresetCatalog(faction);
+			if (!trip.IsVehiclePresetCurrent() || !match || !match.VehiclePresetEconomy() ||
+				!match.VehiclePresetEconomy().CanPayVehiclePreset(faction, selection.m_Base, catalog.Cost(candidate.m_Prefab)))
+				{ candidate.m_sFailureReason = "INSUFFICIENT_SUPPLIES"; return false; }
+		}
 		SCR_AIVehicleUsageComponent usage;
 		Vehicle spawnedVehicle;
 		string failureReason;
@@ -898,6 +941,18 @@ class AICF_VehicleAcquisitionFlow
 		AICF_VehicleAcquisitionCandidate candidate,
 		string identity)
 	{
+		if (trip.GetVehiclePreset())
+		{
+			array<BaseCompartmentSlot> seats = {};
+			AICF_VehiclePreset.Collect(candidate.m_Vehicle, seats);
+			string reason;
+			bool valid = trip.IsVehiclePresetCurrent() && trip.GetVehiclePreset().ValidateRoster(trip.GetVehiclePresetSlot(), seats, reason);
+			foreach (BaseCompartmentSlot seat : seats)
+				if (seat.GetOccupant() || seat.IsReserved()) valid = false;
+			candidate.m_iAvailableSeats = seats.Count();
+			if (!valid) RollbackUnacceptedCandidate(candidate);
+			return valid;
+		}
 		int availableSeats;
 		bool hasPilot;
 		bool hasTurret;
@@ -946,6 +1001,18 @@ class AICF_VehicleAcquisitionFlow
 			RollbackUnacceptedCandidate(candidate);
 			return EndRequest(trip, fleet, requestState, "RPL_IDENTITY_MISSING", nowMs, true);
 		}
+		int paid;
+		AICF_EconomySystem economy;
+		if (trip.GetVehiclePreset())
+		{
+			AICF_MatchController match = AICF_MatchController.GetActiveController();
+			if (match) economy = match.VehiclePresetEconomy();
+			if (!economy || !economy.PurchaseVehiclePreset(trip, faction, selection.m_Base, candidate.m_Prefab, paid))
+			{
+				RollbackUnacceptedCandidate(candidate);
+				return EndRequest(trip, fleet, requestState, "INSUFFICIENT_SUPPLIES", nowMs, true);
+			}
+		}
 		if (!fleet.BindReservedLeaseVehicle(
 			lease,
 			candidate.m_Vehicle,
@@ -955,8 +1022,14 @@ class AICF_VehicleAcquisitionFlow
 			candidate.m_iAvailableSeats,
 			selection.m_vPosition))
 		{
+			if (economy) economy.RollbackVehiclePreset(selection.m_Base, paid);
 			RollbackUnacceptedCandidate(candidate);
 			return EndRequest(trip, fleet, requestState, "FLEET_BIND_REJECTED", nowMs, true);
+		}
+		if (paid > 0)
+		{
+			trip.MarkVehiclePresetDebited();
+			AICF_Stage4Diagnostics.Info("VEHICLE_PRESET_PURCHASE", string.Format("operation=%1 prefab=%2 supplies=%3 base=%4", trip.GetOperationId(), candidate.m_Prefab, paid, AICF_Stage1Diagnostics.BaseKey(selection.m_Base)));
 		}
 		string details = BuildIdentityContext(trip, requestState, lease, causationId);
 		details += string.Format(

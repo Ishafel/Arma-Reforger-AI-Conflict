@@ -1,5 +1,67 @@
 # Проверки и baseline
 
+## Пресеты техники: issue #78 — 2026-10-25
+
+Ветка `codex/issue-78-vehicle-presets` от актуального `origin/main` `45d0431`.
+Контракт и flags: [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md). Полный отчёт,
+команды, manifests, native exits и остановленные logs:
+`.codex-runtime/issue78/REPORT.md`, `.codex-runtime/issue78/evidence/runtime/`.
+
+- До правок полный `baseline-all`: **91/91 PASS/0**. `final-all` после production
+  изменений: **94/94 PASS/0**. После расширения только fixtures/log oracles
+  повторены все 3 новых contracts в `final-delta-policy`: **3/3 PASS/0**, 29 structural
+  checks, 22 log controls, 8 client/JIP controls. Повторный полный набор после
+  последнего расширения probes не запускался; production с `final-all` не менялась.
+- Workbench production `final-stock`, `final-rhs`, `final-wcs`: **3/3 PASS/0**,
+  полные logs содержат `Script validation successful`, scriptFatal0.
+  Isolated native fixtures также скомпилированы терминально.
+- `stock-lifecycle-final`: **74/74 PASS**, 4 exact occupants обычного УАЗа,
+  один purchase125. `stock-armed-final`: **73/73 PASS**, 3 exact occupants
+  UAZ469_PKM, один purchase280. Оба — native0/stopped/scriptFatal0;
+  `Test-VehiclePresetLog.ps1 -Lifecycle` **PASS**. Проверены Save/Load/Update/
+  Delete, legacy member file, funds/cap negatives, повторный Apply без второго
+  spawn/debit, смена модели, роли, настоящей group entity и stale generation.
+- `stock-policy-final`: **76/76 PASS**, native0/stopped/scriptFatal0,
+  `-Lifecycle -Policy` **PASS**. Через настоящий IsAdmissionEligible проверено:
+  manual binding обходит automatic infantry policy, после reset она снова
+  отклоняет infantry motorization. Исходный unit profile восстановлен.
+- `stock-human-driver`: **69/69 PASS**, actual seated driver передан native
+  direct-connect player. После reset и 15s polling машина/ID/occupant сохранены;
+  player не вытеснен. Server/client native0/stopped/scriptFatal0;
+  `Test-VehiclePresetLog.ps1 -HumanProtection` **PASS**.
+- `stock-library-restart-final`: **31/31 PASS** после нового server process с
+  тем же persistent mount (`files`); точные model/seats, tombstone и старый
+  character preset. `-LibraryReload` **PASS**, physical gate этого запуска NOT RUN.
+- `stock-ui-backend`: hidden actual handlers **20 client +3 JIP checks PASS**,
+  два server readbacks, native0/0/0 и все logs остановлены. Но полный строгий
+  `Test-VehiclePresetClientLog.ps1` — **FAIL SERVER_FULL_FATAL**:8 native
+  persistence serializer leaks при reconnect. Этот FAIL не скрыт и не исключён.
+- Сравнение: baseline main `head-jip` без новых production sources даёт те же8
+  leaks; `native-jip` без всех production Scripts AICF воспроизводит те же8.
+  Одиночные native/main подключения и private-world control их не дали.
+  Нужен native persistence reconnect fix; installed/vendor files менять запрещено.
+  Доказательство происхождения не превращает обязательный gate в PASS.
+- В первом human4 запуске driver не завершил native boarding, сработал штатный
+  deadline/ALL_OR_FALLBACK. Оба собственных процесса остановлены, logs сохранены
+  как FAIL/diagnostic. Исправленная fixture задаёт начальную позицию native
+  player до probe и использует совместимый driver1. Другие ранние compile,
+  неверные topology/oracle ожидания, CRC mismatch и shutdown попытки сохранены
+  отдельно, не включены в успешные verdicts.
+
+Baseline offline failures отсутствуют. Первая non-elevated after-all попытка
+получила filesystem/Junction denial в LoadoutLibraryContracts; исходный и
+повторный полный запуск с native доступом прошли без изменения аудитора.
+Native resource/font/texture Error остаются отдельным строгим **FAIL**, как в
+[EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md); нулевой scriptFatal
+не означает отсутствия всех native Error.
+
+Визуальный/input/mouse/controller UX — **NOT RUN**, требует игрока: открыть
+карту, выбрать отряд → «Техника», распределить seats и проверить читаемость
+RU/EN, сохранить/загрузить/применить. Terminal-only правила запрещают GUI
+automation/screenshots. Длительный бой и физические RHS/WCS модели — **NOT RUN**;
+RHS/WCS в этом изменении подтверждены compile graph, не runtime универсальностью.
+Issue не закрыта, результат не объявлен ACCEPTED; ready PR блокирован.
+
 ## PR77 review: неполные комплекты живого ИИ — 2026-10-25
 
 Исходный clean `a140f22`, продолжение `codex/issue-66-loadout-qol`.

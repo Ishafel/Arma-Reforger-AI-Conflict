@@ -41,6 +41,18 @@ legacy после пересборки. Команды и границы — [DE
 
 ## Единый offline запуск
 
+Для issue #78 runner автоматически включает `Test-VehiclePresetContracts.ps1`
+(29 guards), `Test-VehiclePresetLogContracts.ps1` (22 controls) и
+`Test-VehiclePresetClientLogContracts.ps1` (8 controls).
+`tests/log-audits/Test-VehiclePresetLog.ps1` принимает `-LogPath`,
+`-LauncherPath`, `-NativeExitPath`; `-LibraryReload` выбирает restart-only oracle.
+`-Lifecycle` и `-HumanProtection` включают расширенные обязательные cases.
+`Test-VehiclePresetClientLog.ps1` принимает пары `-ServerLog/-ServerLauncher/
+-ServerExit`, `-ClientLog/-ClientLauncher/-ClientExit` и
+`-JIPLog/-JIPLauncher/-JIPExit`. Проверяются все соседние полные logs и native
+завершение. Script errors, в том числе serializers, не фильтруются как baseline.
+Flags fixtures и порядок stage — в [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
+
 `Test-FIAProximityContracts.ps1` проверяет scoped native lifecycle, logical
 losses, authority/identity, snapshot/equipment, occupancy, transfer rollback
 и Stop (40 guards и отдельная no-revival mutation).

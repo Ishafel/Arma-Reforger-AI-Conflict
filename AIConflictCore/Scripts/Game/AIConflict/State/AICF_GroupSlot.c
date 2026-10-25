@@ -1,6 +1,31 @@
 // Stable faction-local identity for one managed group across all replacements.
 class AICF_GroupSlot
 {
+	protected string m_sVehiclePresetData;
+	protected int m_iVehiclePresetRevision;
+	string GetVehiclePresetData() { return m_sVehiclePresetData; }
+	int GetVehiclePresetRevision() { return m_iVehiclePresetRevision; }
+	bool HasVehiclePreset() { return !m_sVehiclePresetData.IsEmpty(); }
+
+	bool SetVehiclePreset(AICF_VehiclePreset preset, int expectedRevision)
+	{
+		if (!Replication.IsServer() || expectedRevision != m_iVehiclePresetRevision) return false;
+		AICF_VehiclePreset current = AICF_VehiclePreset.Decode(m_sVehiclePresetData);
+		if (preset && current && preset.SameAssignment(current)) return true;
+		string data;
+		if (preset)
+		{
+			string reason;
+			if (!preset.ValidateShape(reason)) return false;
+			data = preset.Encode();
+		}
+		if (data == m_sVehiclePresetData) return true;
+		m_sVehiclePresetData = data;
+		m_iVehiclePresetRevision++;
+		m_OnPresentationInvalidated.Invoke(this);
+		return true;
+	}
+
 	protected ref ScriptInvoker m_OnPresentationInvalidated = new ScriptInvoker();
 
 	ScriptInvoker GetOnPresentationInvalidated()

@@ -1,5 +1,16 @@
 # Изменение сценарного контракта — 2026-10-24
 
+## Пресеты техники: issue #78
+
+Fixtures, flags и native oracles описаны в
+[VEHICLE_PRESETS.md](VEHICLE_PRESETS.md#проверки-и-текущая-граница-доказательств).
+`AICF_VehiclePresetProbe.c` → isolated Core/Vehicles `AICF_ZVehiclePresetProbe.c`;
+`AICF_VehiclePresetClientProbe.c` → Core/UI `AICF_ZZVehiclePresetClientProbe.c`.
+Production copies fixtures не содержит. Оба peers используют один неизменяемый
+stage. Hidden widget tree вызывает handlers без focus/input/screen capture.
+`AICF_VehicleNativeControl.c` используется отдельно, без остальных probes.
+Проверки 2026-10-25 и blockers — в [TESTING.md](TESTING.md).
+
 ## Пресеты ИИ: issue #66
 
 `AICF_EquipmentIncompleteProbe.c` → isolated Core/UI

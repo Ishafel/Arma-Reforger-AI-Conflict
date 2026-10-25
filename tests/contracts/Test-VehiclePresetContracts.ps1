@@ -1,0 +1,47 @@
+param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+$ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot '../lib/Stage3StaticAudit.Common.ps1')
+$root=Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict'
+function Source([string]$Path){[IO.File]::ReadAllText((Join-Path $root $Path))}
+function Body([string]$Source,[string]$Method){Get-AICFMethodBody ([pscustomobject]@{Source=$Source;Code=(ConvertTo-AICFCodeText $Source)}) $Method}
+$model=Source 'Vehicles/AICF_VehiclePreset.c'
+$slot=Source 'State/AICF_GroupSlot.c'
+$trip=Source 'State/Vehicles/AICF_TransportTrip.c'
+$acquisition=Source 'Vehicles/AICF_VehicleAcquisitionFlow.c'
+$boarding=Source 'Vehicles/AICF_VehicleBoardingFlow.c'
+$service=Source 'UI/AICF_VehiclePresetService.c'
+$rpc=Source 'UI/AICF_VehiclePresetRpc.c'
+$store=Source 'Vehicles/AICF_VehiclePresetStore.c'
+$catalog=Source 'Vehicles/AICF_VehiclePresetCatalog.c'
+$checks=0
+function Require([bool]$Condition,[string]$Rule){if(!$Condition){throw "FAIL $Rule"};$script:checks++}
+$encode=Body $model 'Encode'
+Require ($encode -match '"prefab"' -and $encode -match '"seats"' -and $encode -match '"members"') 'STABLE_RECIPE'
+Require ($encode -notmatch 'GetID|EntityID|RplId|GetCompartmentMgrID') 'NO_EPHEMERAL_IDENTITY'
+Require ($catalog -match '!entry.IsEnabled\(\)' -and $catalog -match 'FindComponent\(VehicleWheeledSimulation\)') 'ENABLED_GROUND_CATALOG'
+$key=Body $model 'SeatKey'
+Require ($key -match 'RelativeOwnerIndex' -and $key -notmatch 'GetCompartmentMgrID') 'INSTANCE_INDEPENDENT_SEAT'
+$validation=Body $model 'ValidateRoster'
+foreach($guard in @('MatchesSeats','GetDesiredSize','MEMBER_INACTIVE','MANDATORY_CREW_MISSING','MEMBER_WITHOUT_SEAT','CountAliveAgents','IsAuthoritativeAIEntity')){Require ($validation.Contains($guard)) "ROSTER_$guard"}
+$binding=Body $slot 'SetVehiclePreset'
+Require ($binding -match 'Replication.IsServer' -and $binding -match 'expectedRevision != m_iVehiclePresetRevision' -and $binding -match 'SameAssignment') 'AUTHORITY_REVISION_IDEMPOTENCE'
+Require ($binding -notmatch 'SetDesiredSize|SetLoadout|SpawnEntity|AddSupplies') 'NO_PARTIAL_ROSTER_KIT_SPAWN'
+$current=Body $trip 'IsVehiclePresetCurrent'
+foreach($guard in @('GetVehiclePresetRevision','GetSpawnGeneration','GetGroup','VehiclePresetMember','IsAuthoritativeAIEntity','GetRosterMember')){Require ($current.Contains($guard)) "IDENTITY_$guard"}
+$candidates=Body $acquisition 'ResolveTripCandidates'
+Require ($candidates -match 'candidates.Clear\(\)' -and $candidates -match 'candidates.Insert\(preset.m_sPrefab\)' -and $candidates -match 'ValidateRoster') 'EXACT_PREFAB_NO_FALLBACK'
+$begin=Body $boarding 'BeginPreset'
+$tick=Body $boarding 'TickPreset'
+Require ($begin -match 'SCR_AIGetInVehicle' -and $begin -match 'TrackToken' -and $begin -match 'CreateFence') 'OWNED_NATIVE_ACTIONS'
+Require ($tick -match 'GetOccupant\(\)' -and $tick -match 'access.GetCompartment\(\) == seats\[i\]' -and $tick -match 'ObserveSettled' -and $tick -match 'StartMovement') 'PHYSICAL_OCCUPANTS_BEFORE_TRANSIT'
+Require ($begin -notmatch 'CommitTransition|SpawnEntity|DeleteRplEntity|\.GetInVehicle\(') 'BOARDING_FLOW_BOUNDARY'
+Require ($rpc -match 'RplCondition.OwnerOnly' -and $rpc -match 'RplRcver.Server' -and $rpc -match 'token <= m_iAICFVehiclePresetToken') 'OWNER_STATE_AND_REPLAY'
+Require ($service -match 'ResolveVehiclePresetContext' -and $service -match 'generation != slot.GetSpawnGeneration' -and $service -match 'libraryRevision != m_Store.Revision') 'SERVER_REVALIDATION'
+Require ($store -match 'version % 2|m_iVersion % 2' -and $store -match 'saved.Encode\(\) != next.Encode\(\)' -and $store -match 'm_bDeleted') 'TWO_GENERATIONS_READBACK_TOMBSTONE'
+Require ($store -notmatch 'template_|SetVehiclePreset|SpawnEntity|AddSupplies') 'LIBRARY_SEPARATE_FROM_ACTIVE_AND_LEGACY'
+# Отрицательные representative controls именно safety oracle.
+$negative=$tick.Replace('access.GetCompartment() == seats[i]','true')
+Require ($negative -notmatch 'access.GetCompartment\(\) == seats\[i\]') 'NEGATIVE_WRONG_OCCUPANT'
+$negative=$key.Replace('RelativeOwnerIndex(seat)','seat.GetCompartmentMgrID()')
+Require ($negative -match 'GetCompartmentMgrID' -and $negative -notmatch 'RelativeOwnerIndex') 'NEGATIVE_EPHEMERAL_SEAT'
+Write-Output "PASS Vehicle preset contracts checks=$checks"

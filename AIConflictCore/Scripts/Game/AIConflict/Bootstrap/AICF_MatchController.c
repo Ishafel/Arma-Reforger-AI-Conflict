@@ -105,6 +105,7 @@ class AICF_MatchController
 	protected ref AICF_SocialService m_Social;
 	protected ref AICF_ManagedObservers m_ManagedObservers;
 	protected ref AICF_LoadoutService m_Loadouts;
+	protected ref AICF_VehiclePresetService m_VehiclePresets;
 	protected ref AICF_FactionState m_USState;
 	protected ref AICF_FactionState m_USSRState;
 
@@ -1579,6 +1580,8 @@ class AICF_MatchController
 		EvaluateVictory();
 		if (m_Loadouts)
 			m_Loadouts.Update();
+		if (m_VehiclePresets)
+			m_VehiclePresets.Update();
 	}
 
 	protected void ProcessFaction(AICF_FactionState factionState, SCR_CampaignFaction faction)
@@ -7541,6 +7544,11 @@ class AICF_MatchController
 			m_Loadouts.Stop();
 			m_Loadouts = null;
 		}
+		if (m_VehiclePresets)
+		{
+			m_VehiclePresets.Stop();
+			m_VehiclePresets = null;
+		}
 		if (m_Logistics)
 		{
 			m_Logistics.Stop();
@@ -7661,6 +7669,41 @@ class AICF_MatchController
 				RplComponent.DeleteRplEntity(group, false);
 			slot.Reset();
 		}
+	}
+
+	bool ResolveVehiclePresetContext(SCR_PlayerController player, int slotId, out AICF_GroupSlot slot, out SCR_CampaignFaction faction)
+	{
+		ResourceName source;
+		string role;
+		array<int> connectedPlayers = {};
+		if (!Replication.IsServer() || !player || !GetGame().GetPlayerManager()) return false;
+		GetGame().GetPlayerManager().GetPlayers(connectedPlayers);
+		if (!connectedPlayers.Contains(player.GetPlayerId())) return false;
+		return !m_bGraphRebuildNeeded && ResolveLoadoutContext(player, slotId, 0, slot, faction, source, role) &&
+			(!slot.GetGroup() || slot.GetGroup().GetFaction() == faction);
+	}
+
+	bool PreflightVehiclePreset(AICF_GroupSlot slot, SCR_CampaignFaction faction, AICF_VehiclePreset preset, out string reason)
+	{
+		AICF_VehiclePreset current = AICF_VehiclePreset.Decode(slot.GetVehiclePresetData());
+		if (current && current.SameAssignment(preset)) { reason = "ALREADY_APPLIED"; return true; }
+		if (!m_VehicleCoordinator || !m_VehicleCoordinator.CanConfigureVehiclePreset(slot, faction, reason)) return false;
+		return m_EconomySystem && m_EconomySystem.CanAffordVehiclePreset(faction, preset.m_sPrefab, reason);
+	}
+
+	AICF_EconomySystem VehiclePresetEconomy() { return m_EconomySystem; }
+	string VehiclePresetStatus(AICF_GroupSlot slot)
+	{
+		if (!m_VehicleCoordinator) return "MATCH_UNAVAILABLE";
+		return m_VehicleCoordinator.VehiclePresetStatus(slot);
+	}
+
+	void RequestVehiclePreset(SCR_PlayerController player, int token, int slot, int revision, int generation, int libraryRevision, int operation, string payload)
+	{
+		if (!Replication.IsServer() || !player) return;
+		if (m_bStopped) { player.AICF_VehiclePresetResult(token, false, "MATCH_UNAVAILABLE", ""); return; }
+		if (!m_VehiclePresets) m_VehiclePresets = new AICF_VehiclePresetService(this);
+		m_VehiclePresets.Request(player, token, slot, revision, generation, libraryRevision, operation, payload);
 	}
 
 	bool ResolveLoadoutContext(SCR_PlayerController player, int slotId, int member, out AICF_GroupSlot slot,
