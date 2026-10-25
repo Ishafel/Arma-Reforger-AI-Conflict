@@ -380,6 +380,7 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 			case "READY":
 			case "LOADED": message = "{AICF:AICF_UI_VehicleDraft}"; break;
 			case "SAVED": message = "{AICF:AICF_UI_VehicleSaved}"; break;
+			case "PRESET_WAITING_FOR_DESTINATION": message = "{AICF:AICF_UI_VehicleWaitingDestination}"; break;
 			case "AUTOMATIC_POLICY_RESTORED":
 			case "AUTOMATIC_POLICY": message = "{AICF:AICF_UI_VehicleAutomatic}"; break;
 			case "CONFIRM_CREW_REDUCTION": message = "{AICF:AICF_UI_VehicleConfirmCrew}"; break;

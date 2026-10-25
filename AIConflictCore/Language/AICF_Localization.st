@@ -4246,6 +4246,12 @@ StringTable
 			Target_en_us "Cannot reduce the squad now: it must be ready, on foot, outside recruitment/equipment/transport operations, with a safe return route."
 			Target_ru_ru "Сейчас сократить отряд нельзя: он должен быть готов и находиться вне техники, найма, пополнения и транспортной операции. Нужен безопасный путь возврата."
 		}
+		CustomStringTableItem "{A1CF2610257A0001}"
+		{
+			Id "AICF_UI_VehicleWaitingDestination"
+			Target_en_us "Squad mounted. Set a destination outside the dismount zone to start driving."
+			Target_ru_ru "Отряд в машине. Укажите удалённую цель, чтобы начать движение."
+		}
 
 	}
 }

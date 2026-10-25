@@ -270,7 +270,17 @@ class AICF_VehicleTransitFlow
 			vehicle.GetOrigin(),
 			assignment.GetTargetPosition());
 		if (targetDistanceMeters <= m_Config.GetDismountDistanceMeters())
+		{
+			// Выбор машины у текущей базы не означает завершённую поездку.
+			// До первого маршрута держим ручной crew внутри; обычное прибытие
+			// после начала маршрута по-прежнему разрешает высадку.
+			if (trip.GetVehiclePreset() && state.GetRouteGeneration() == 0)
+			{
+				state.RecordPresetWaitingTarget(assignment.GetAssignmentRevision(), assignment.GetTargetPosition());
+				return AICF_TripOutcome.Wait("PRESET_WAITING_FOR_DESTINATION", causationId);
+			}
 			return AICF_TripOutcome.StartDismount("TACTICAL_TARGET_WITHIN_DISMOUNT_RANGE", causationId);
+		}
 
 		bool safeReuseRetarget = state.GetAssignmentRevision() >= 0 &&
 			state.GetAssignmentRevision() != assignment.GetAssignmentRevision();

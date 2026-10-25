@@ -37,6 +37,7 @@ class AICF_VehicleCoordinator
 		if (!slot.HasVehiclePreset()) return "AUTOMATIC_POLICY";
 		if (!trip) return "WAITING_FOR_ORDER_OR_ADMISSION";
 		if (trip.IsTerminal()) return trip.GetTerminalReason();
+		if (trip.IsPresetWaitingForDestination()) return "PRESET_WAITING_FOR_DESTINATION";
 		return typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase());
 	}
 

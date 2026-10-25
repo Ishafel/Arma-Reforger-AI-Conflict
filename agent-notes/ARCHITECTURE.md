@@ -211,6 +211,12 @@ Waypoint сначала снимается с группы, затем удал�
 Перед vehicle delete повторяются identity, occupancy и clearance checks;
 неопределённость означает fail-closed.
 
+Ручной vehicle preset до первого маршрута может ждать удалённую цель в TRANSIT.
+TransitFlow возвращает WAIT `PRESET_WAITING_FOR_DESTINATION`; только controller
+через TransportTrip приостанавливает/возобновляет trip и movement deadlines.
+Во время ожидания сохраняются identity, health и exact crew guards. После
+первого staged route действуют обычные arrival/dismount и ограниченный бюджет.
+
 ## Соседние контракты
 
 `AICF_ManagedObservers` регистрирует серверные native observers для живых READY

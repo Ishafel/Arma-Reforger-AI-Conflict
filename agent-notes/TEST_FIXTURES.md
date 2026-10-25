@@ -19,6 +19,22 @@ checks, не захватывая focus/input. Последующие client/JIP
 неизменяемый script CRC stage. После matrix удаляй свои stage copies.
 Проверки 2026-10-25 и blockers — в [TESTING.md](TESTING.md).
 
+`AICF_VehiclePresetTransitProbe.c` копируется отдельно в isolated Core,
+`-aicfVehiclePresetTransitProbe 1` на Server. Создаёт свой roster5 и точный
+пятиместный UAZ469_uncovered; текущая цель у своей базы не вызывает высадку.
+После30s читает status и idle clock, загружает navmesh tiles stock bases из
+runtime graph и выбирает ближайший сухой navmesh endpoint в300..1200m.
+Затем задаёт point order с настоящим infantry suspension, требует >=25m
+физического перемещения той же машины и >=5 velocity polls без recovery.
+Retarget к текущему положению должен высадить всех5. В конце Stop/RequestClose.
+`Test-VehiclePresetTransitLog.ps1` требует16 уникальных cases и все реальные
+receipts из полных stopped logs, а не только CHECK строки. Probe не доказывает
+весь дальний маршрут, визуальное состояние клиента или все модели RHS/WCS.
+Обязательны физический DISEMBARK_COMPLETE и штатный HANDOFF→COMPLETE; выход
+через FALLBACK/FAILED_CLOSED или acceptance latch не считается успехом.
+`GetReachablePoint` не используй как гарантию дальнего target: native samples
+могут оставаться лишь в10..37m даже при запрошенном радиусе450m.
+
 ## Сокращение vehicle crew: продолжение #78
 
 `AICF_VehicleCrewReturnProbe.c` вместе с `AICF_VehiclePresetClientProbe.c` в

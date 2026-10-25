@@ -852,6 +852,33 @@ class AICF_VehicleBoardingState
 
 class AICF_VehicleMovementState
 {
+	protected int m_iPresetDestinationWaitAtMs = -1;
+
+	bool IsPresetDestinationWaiting() { return m_iPresetDestinationWaitAtMs >= 0; }
+	int GetPresetDestinationWaitMs(int nowMs)
+	{
+		if (!IsPresetDestinationWaiting()) return 0;
+		return Math.Max(0, nowMs - m_iPresetDestinationWaitAtMs);
+	}
+
+	// Вызывает только Trip controller через CommitPresetDestinationWait.
+	void SetPresetDestinationWaiting(bool waiting, int nowMs)
+	{
+		if (waiting)
+		{
+			if (!IsPresetDestinationWaiting()) m_iPresetDestinationWaitAtMs = nowMs;
+			return;
+		}
+		m_iAbsoluteDeadlineMs += GetPresetDestinationWaitMs(nowMs);
+		m_iPresetDestinationWaitAtMs = -1;
+	}
+
+	void RecordPresetWaitingTarget(int assignmentRevision, vector target)
+	{
+		m_iAssignmentRevision = assignmentRevision;
+		m_vTacticalTarget = target;
+	}
+
 	protected int m_iStartedAtMs;
 	protected int m_iAbsoluteDeadlineMs;
 	protected int m_iLastRouteProgressAtMs;
@@ -900,6 +927,7 @@ class AICF_VehicleMovementState
 	{
 		if (m_CrewRecoveryToken)
 			m_CrewRecoveryToken.CancelOwnerSafe();
+		m_iPresetDestinationWaitAtMs = -1;
 		m_iStartedAtMs = 0;
 		m_iAbsoluteDeadlineMs = 0;
 		m_iLastRouteProgressAtMs = 0;
@@ -957,7 +985,7 @@ class AICF_VehicleMovementState
 	}
 
 	int GetStartedAtMs() { return m_iStartedAtMs; }
-	int GetAbsoluteDeadlineMs() { return m_iAbsoluteDeadlineMs; }
+	int GetAbsoluteDeadlineMs() { return m_iAbsoluteDeadlineMs + GetPresetDestinationWaitMs(System.GetTickCount()); }
 	int GetLastRouteProgressAtMs() { return m_iLastRouteProgressAtMs; }
 	int GetLastPhysicalMotionAtMs() { return m_iLastPhysicalMotionAtMs; }
 	int GetLastMotionReportAtMs() { return m_iLastMotionReportAtMs; }

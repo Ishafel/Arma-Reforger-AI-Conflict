@@ -109,7 +109,18 @@ class AICF_TransportTrip
 	AICF_ETransportTripPhase GetPreviousPhase() { return m_PreviousPhase; }
 	int GetStartedAtMs() { return m_iStartedAtMs; }
 	int GetPhaseStartedAtMs() { return m_iPhaseStartedAtMs; }
-	int GetAbsoluteDeadlineMs() { return m_iAbsoluteDeadlineMs; }
+	int GetAbsoluteDeadlineMs() { return m_iAbsoluteDeadlineMs + m_MovementState.GetPresetDestinationWaitMs(System.GetTickCount()); }
+	bool IsPresetWaitingForDestination() { return m_MovementState.IsPresetDestinationWaiting(); }
+
+	bool CommitPresetDestinationWait(bool waiting, int nowMs)
+	{
+		if (!Replication.IsServer()) return false;
+		if (waiting && (m_Phase != AICF_ETransportTripPhase.TRANSIT || !m_VehiclePreset || !IsVehiclePresetCurrent() ||
+			m_MovementState.GetRouteGeneration() != 0 || m_MovementState.GetRouteWaypoint() || m_MovementState.GetSupersededRouteWaypoint())) return false;
+		if (!waiting) m_iAbsoluteDeadlineMs += m_MovementState.GetPresetDestinationWaitMs(nowMs);
+		m_MovementState.SetPresetDestinationWaiting(waiting, nowMs);
+		return true;
+	}
 	int GetTransitionCount() { return m_iTransitionCount; }
 	string GetLastTransitionReason() { return m_sLastTransitionReason; }
 	string GetTerminalReason() { return m_sTerminalReason; }
@@ -158,7 +169,7 @@ class AICF_TransportTrip
 
 	bool IsDeadlineReached(int nowMs)
 	{
-		return m_iAbsoluteDeadlineMs > 0 && nowMs >= m_iAbsoluteDeadlineMs;
+		return m_iAbsoluteDeadlineMs > 0 && nowMs >= m_iAbsoluteDeadlineMs + m_MovementState.GetPresetDestinationWaitMs(nowMs);
 	}
 
 	bool TryAttachLease(AICF_VehicleLease lease)

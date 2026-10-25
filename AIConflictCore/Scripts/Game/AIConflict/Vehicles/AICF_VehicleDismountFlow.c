@@ -199,6 +199,11 @@ class AICF_VehicleDismountFlow
 
 		if (nowMs >= state.GetNormalDeadlineMs())
 		{
+			// Уже вышедшим AI даём закончить bounded guidance/clearance;
+			// normal timeout не должен обрывать ещё выполняющиеся попытки.
+			if (sample.m_iLogicalOccupants == 0 && sample.m_iTransitions == 0 &&
+				nowMs < state.GetTerminalDeadlineMs())
+				return AICF_TripOutcome.Wait("DISEMBARK_CLEARANCE_PENDING", causationId);
 			AICF_Stage3Diagnostics.Warning(
 				"DISEMBARK_TIMEOUT",
 				FormatClearance(trip, sample, "NORMAL_DEADLINE_REACHED"));

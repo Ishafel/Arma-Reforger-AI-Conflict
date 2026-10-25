@@ -1,5 +1,78 @@
 # Проверки и baseline
 
+## Посадка Зенит-1 в UAZ и немедленная высадка: #78 — 2026-10-25
+
+Продолжение той же ветки от clean `2177416`. Полный snapshot активной пользовательской
+сессии сохранён в `.codex-runtime/issue78-transit/user-active-20261025-2111/`;
+он не является остановленным runtime PASS. В `trip-USSR-0-1-1` все5 заняли
+точные места UAZ469_uncovered в21:08:38. В том же tick штатный код признал
+исходную AREA_SECURITY у HQ достигнутой и перешёл TRANSIT→DISMOUNT с
+`TACTICAL_TARGET_WITHIN_DISMOUNT_RANGE`. Новый target в21:08:45 пришёл уже после
+высадки. Это дефект интерпретации исходной цели, а не нехватка мест в UAZ.
+
+Ручной preset до первого маршрута ждёт удалённый target в машине; controller
+приостанавливает только idle budget. После начала маршрута сохраняется обычная
+высадка. Второй обнаруженный дефект: normal timeout20s обрывал ещё выполняющийся
+physical egress. Для уже вышедших без transitions используется остаток существующего
+terminal budget40s, без его продления и без ослабления clearance/human fences.
+Контракт — [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
+
+Evidence: `.codex-runtime/issue78-transit/REPORT.md`; полные native logs,
+manifests/exits и hashes — `evidence/runtime/`. Команды запуска — сохранённые
+`Run.ps1`/`Compile.ps1`, canonical launcher, port2478, отдельные test profiles.
+
+- Свежий baseline **5/5 PASS/0**: VehiclePreset/Log, Stage3/35/4.
+  Первый post-edit subset **5/5 PASS/0**: VehiclePreset, Localization, Stage3/35/4.
+- Окончательная production компиляция `verified-Stock/RHS/ArlandWCSRHS`:
+  **3/3 PASS/0**, successful validation, scriptFatal0. `verified-workspace`
+  отдельно **PASS/0**; native compile fixture также PASS/0.
+- `clearance-candidate`: **16/16 native checks**,5 exact occupants остаются30s,
+  новый target, движение27.9971m с6 velocity polls в той же машине без mobility
+  recovery, physical DISEMBARK_COMPLETE, HANDOFF→COMPLETE,5 живых пехотинцев,
+  один purchase125. Strict TransitLog **PASS/0**, полный stopped log, scriptFatal0.
+  Final fixture дополнительно требует COMPLETE в самом ARRIVAL_FULL_DISMOUNT.
+- Первые `first/search/local-nav` подтверждали30s ожидания, но **FAIL** на
+  подготовке дальней цели: native GetReachablePoint возвращал local samples
+  лишь10..37m. Fixture теперь читает runtime graph и native navmesh endpoints;
+  production pathfinding не подменялся. `objective` подтвердил35.4434m движения,
+  но **FAIL NORMAL_TRIP_COMPLETE/TRIP_FAILURE** из-за DISEMBARK_TIMEOUT.
+  Первый слишком слабый oracle ошибочно считал on-foot после fallback успехом;
+  он усилен до штатного COMPLETE, старый полный log теперь отклоняется.
+- `Test-VehiclePresetContracts.ps1`: **61 guards PASS**.
+  `Test-VehiclePresetTransitLogContracts.ps1`: **32 controls PASS**, включая
+  недостаточный путь, отсутствие реальной скорости, подмену машины, преждевременную
+  высадку, отсутствие physical completion и fallback/latch вместо успеха.
+- Окончательный `verified`: **16/16 native checks / strict TransitLog PASS/0**,
+  тот же UAZ проехал30.0353m с8 velocity polls;30s ожидания,5 exact occupants,
+  physical DISEMBARK_COMPLETE, HANDOFF→COMPLETE, один purchase125. Полный log
+  остановлен, native0, scriptFatal0. All-native gate отдельно **FAIL/1**:
+  28 Error lines в console/error/script (с повторами),11 уникальных сообщений;
+  все11 уже были в evidence предыдущего изменения, новых signatures нет.
+- Полный окончательный offline набор: **97/97 PASS/0**,97 разных checks без
+  пропусков, `verified-all-0..5/` и `verified-summary.json`; финальный source
+  SHA256 freeze совпадает. Предварительный `final-all-*` тоже дал97 без FAIL,
+  но во время его последних checks добавлен bounded egress: он не объявляется
+  итогом одного окончательного snapshot. Logistics145 cases повторно PASS;
+  запуски его общей mutation folder не пересекались.
+
+Очистка:18 полных native logs сверены SHA256;6 test profiles и2 стадии
+полностью архивированы с SHA256 каждого entry, затем удалены.2 промежуточных
+файла также убраны; receipts — `evidence/archives.json`. Пользовательский
+Frontend/profile и его библиотека сохранены.
+
+По явному выбору пользователя отчёт остаётся только локально; GitHub issue не
+изменялся. Прежний strict JIP **FAIL8 native serializers** и all-native
+resource/font/texture Error gate не объявляются исправленными; JIP в этом
+изменении **NOT RUN**. Ready PR заблокирован, ACCEPTED не объявляется.
+
+**NOT RUN:** визуальная читаемость нового статуса и физический ввод игрока;
+GUI automation/screenshots запрещены. Нужен игрок: в новом матче выбрать
+пятерым UAZ у текущей цели, убедиться, что они ждут внутри, затем задать дальний
+target. Native probe проверяет первый участок пути и прибытие после retarget,
+но не весь путь до дальней базы, длительный бой или все модели RHS/WCS.
+Активная пользовательская игра не останавливалась; для её исходного trip нужна
+новая сессия, правка не восстанавливает уже завершённый trip задним числом.
+
 ## Preview, commander slider и подтверждённое сокращение crew: #78 — 2026-10-25
 
 Продолжение `codex/issue-78-vehicle-presets` от clean `ba2d0e9`.

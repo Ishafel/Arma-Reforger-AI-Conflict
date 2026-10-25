@@ -387,6 +387,19 @@ class AICF_TransportTripController
 				true);
 		}
 		AIWaypoint waypointForRemoval = outcome.GetWaypointForRemoval();
+		bool destinationWait = outcome.GetKind() == AICF_ETripOutcomeKind.WAIT && outcome.GetReason() == "PRESET_WAITING_FOR_DESTINATION";
+		bool wasWaiting = trip.IsPresetWaitingForDestination();
+		if (destinationWait || wasWaiting)
+		{
+			int nowMs = System.GetTickCount();
+			int waitedMs = trip.GetMovementState().GetPresetDestinationWaitMs(nowMs);
+			if (!trip.CommitPresetDestinationWait(destinationWait, nowMs))
+				return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FAILED_CLOSED,
+					"PRESET_DESTINATION_WAIT_REJECTED", outcome.GetCausationId(), true);
+			if (destinationWait != wasWaiting)
+				AICF_Stage3Diagnostics.Info("VEHICLE_PRESET_DESTINATION_WAIT", FormatIdentity(trip, outcome.GetCausationId(), outcome.GetReason()) +
+					string.Format(" waiting=%1 waited_ms=%2 absolute_deadline_ms=%3", destinationWait, waitedMs, trip.GetAbsoluteDeadlineMs()));
+		}
 		if (waypointForRemoval)
 		{
 			m_Handoff.RemoveVehicleWaypoint(
@@ -1559,6 +1572,7 @@ class AICF_TransportTripController
 
 	protected bool ExitTransit(AICF_TransportTrip trip, string reason)
 	{
+		if (!trip.CommitPresetDestinationWait(false, System.GetTickCount())) return false;
 		m_TransitFlow.AbortOwnedActions(trip);
 		bool removed = RemoveTransitWaypoints(trip, "PHASE_EXIT", reason);
 		m_Handoff.DetachVehicleUtility(trip);

@@ -146,10 +146,37 @@ readback polls: exact occupant, compartment, settled и отсутствие tra
 ALL_OR_FALLBACK. Никакого teleport в production preset path нет. Cleanup остаётся
 у VehicleCleanupManager с прежними human occupancy/clearance guards.
 
+Если после посадки текущая цель уже в dismount zone, до первого staged route
+ручной preset остаётся в TRANSIT без vehicle waypoint. TransitFlow возвращает
+`PRESET_WAITING_FOR_DESTINATION`, записывая assignment revision/target. Controller
+через `CommitPresetDestinationWait` включает ожидание только для текущего preset,
+route generation0 и отсутствующих current/superseded waypoints. Crew/health/identity
+проверяются каждый обычный tick. Время ожидания не расходует trip/movement budget;
+controller возобновляет оба дедлайна при следующем ином outcome и на ExitTransit.
+Первая удалённая цель создаёт штатный маршрут в той же машине. После его начала
+близкая цель снова означает обычную высадку; автоматические trips не ждут.
+Editor показывает локализованный статус с просьбой задать удалённую цель.
+
+Normal dismount сохраняет физический oracle: два polls без occupants,
+transitions и попадания в расширенные bounds. Если normal deadline уже истёк,
+но все вышли без transitions, bounded guidance/clearance продолжается до
+существующего terminal deadline (при штатном timeout20s — максимум40s от Begin).
+Этот запас не продлевается повторным tick; оставшиеся occupants/transitions
+сохраняют прежний normal timeout. Ни cleanup proof, ни human/LOS fences не ослаблены.
+
 ## Проверки и текущая граница доказательств
 
-`Test-VehiclePresetContracts.ps1` проверяет 39 структурных контрактов;
+`Test-VehiclePresetContracts.ps1` проверяет 61 структурных контрактов;
 `Test-VehiclePresetLogContracts.ps1` — 24 positive/negative controls анализатора.
+`AICF_VehiclePresetTransitProbe.c` с `-aicfVehiclePresetTransitProbe 1` проверяет
+отдельный native roster5 и пятиместный UAZ:30s точного crew внутри у исходной цели,
+пауза idle budget, новая удалённая цель из runtime graph, физическое движение
+той же машины >=25m с >=5 velocity polls и без mobility recovery, затем штатная
+высадка всех5 после retarget к текущему положению. Это первый участок маршрута,
+а не доказательство движения до любой удалённой базы. `Test-VehiclePresetTransitLog.ps1`
+требует16 cases, stopped/full logs, manifest/CLI, native0,5 exact occupants,
+один purchase125, штатный HANDOFF→COMPLETE и порядок движения перед высадкой;
+fallback/failed-closed/latch отклоняются. Его contracts —32 controls.
 `Test-VehiclePresetLog.ps1` требует manifest/CLI, native exit, ROSTER_READY,
 полные stopped logs, обязательные cases и actual occupants до movement.
 Он отклоняет неверного occupant, intent без посадки и повторный debit.
