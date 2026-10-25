@@ -417,6 +417,17 @@ class AICF_LoadoutInventory : SCR_PlayerArsenalLoadout
 				reason = "STORAGE_NOT_FOUND:" + recipe.m_aStorages[i];
 				return false;
 			}
+			// Скрытые native attachment slots не доступны редактору.
+			if (slot >= 0 && WeaponAttachmentsStorageComponent.Cast(storage))
+			{
+				AttachmentSlotComponent attachment = AttachmentSlotComponent.Cast(storage.GetSlot(slot).GetParentContainer());
+				if (attachment && !attachment.ShouldShowInInspection()) return false;
+			}
+			IEntity existingItem;
+			if (slot >= 0) existingItem = storage.Get(slot);
+			// BaseMagazineComponent есть и у встроенного заряда сигнальной
+			// ракеты. Native CanRemove отличает его от съёмного магазина.
+			if (existingItem && existingItem.FindComponent(BaseMagazineComponent) && !manager.CanRemoveItemFromStorage(existingItem, storage)) return false;
 			ResourceName prefab = recipe.m_aPrefabs[i];
 			if (slot >= 0 && EquipedLoadoutStorageComponent.Cast(storage))
 			{

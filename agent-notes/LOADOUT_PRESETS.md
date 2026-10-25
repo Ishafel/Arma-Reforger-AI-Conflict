@@ -78,6 +78,11 @@ recipe для следующего появления; штатный Default lo
 Пресеты могут не содержать оружия или магазинов. Validate проверяет inventory
 compatibility, personal blacklist и независимый Capture/Restore/readback;
 боеготовность не является условием сохранения или применения.
+EquipmentPlan поддерживает такие binding и при переэкипировке уже живого ИИ:
+новая revision доставляется через штатный armory, target0 не вызывает ammo loop.
+Встроенный несъёмный заряд — часть предмета; native CanRemove и visibility
+guards запрещают его отдельное удаление/замену. Съёмные magazines и оружие
+остаются необязательными. Native live checks и границы — [EQUIPMENT_SERVICE.md](EQUIPMENT_SERVICE.md).
 Формат файлов, идентичность и upsert старых библиотек не меняются.
 
 Общий Library modal показывает выбранный комплект в отдельном

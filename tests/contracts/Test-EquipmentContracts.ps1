@@ -17,6 +17,7 @@ function Rules($inputSources) {
     $slot = $inputSources['State/AICF_GroupSlot.c']
     $vehicle = $inputSources['Vehicles/AICF_VehicleCoordinator.c']
     $rounds = Get-AICFMethodBody ([pscustomobject]@{Source=$inventory;Code=$inventory}) 'RoundsIn'
+    $loaded = Get-AICFMethodBody ([pscustomobject]@{Source=$inventory;Code=$inventory}) 'Loaded'
     $consumables = Get-AICFMethodBody ([pscustomobject]@{Source=$member;Code=$member}) 'ConsumablesIn'
     [ordered]@{
         AUTHORITY = $service.Contains('!Replication.IsServer()') -and $service.Contains('!m_Campaign.IsMaster()') -and $service.Contains('!m_Campaign.IsRunning()')
@@ -32,6 +33,10 @@ function Rules($inputSources) {
         UNIQUE_CONSUMABLES = $member.Contains('return ConsumablesIn(items, prefab);') -and $consumables.Contains('AICF_EquipmentInventory.UniqueItems(items, unique);') -and $consumables.Contains('foreach (IEntity item : unique)')
         UNIQUE_TARGET = $member.Contains('AICF_EquipmentInventory.UniqueItems(rawItems, items);')
         MODEL_MUZZLE_LIFETIME = $member.Contains('BaseMuzzleComponent primaryMuzzle = AICF_EquipmentInventory.Muzzle(modelPrimary);') -and $member.Contains('primaryMuzzle = null;') -and $member -notmatch 'for\s*\([^;]*;[^;]*AICF_EquipmentInventory\.Muzzle\('
+        INCOMPLETE_BINDING_ONLY = $member.Contains('(!modelPrimary && !binding) || (modelPrimary && !primaryMuzzle)') -and $member.Contains('m_iPrimaryRounds <= 0 && !binding')
+        INCOMPLETE_READBACK = $member.Contains('binding && m_sSignature != binding.m_sSignature') -and $member.Contains('"BINDING_SIGNATURE_MISMATCH"')
+        INCOMPLETE_MUZZLE_GUARD = $member -match 'm_iPrimaryRounds = 0;[\s\S]*if \(primaryMuzzle\)[\s\S]*m_iPrimaryRounds = AICF_EquipmentInventory.Rounds\(model, modelPrimary\)'
+        EMPTY_MAGAZINE_CHAMBER = $loaded -match 'MT_BaseMuzzle\)[\s\S]*rounds = 0;[\s\S]*if \(magazine\) rounds = magazine.GetAmmoCount\(\);' -and $loaded.Contains('if (muzzle.IsBarrelChambered(i)) rounds++;')
         REAL_TRANSFER = $inventory.Contains('target.TryMoveItemToStorage(item, storage)') -and $inventory.Contains('target.Contains(item) && !source.Contains(item)') -and $inventory -notmatch 'SpawnEntity|AddSupplies|SetAmmoCount|Ticket'
         MEMBER_REVISION = $member.Contains('m_Slot.GetRosterMember(m_iIndex) != m_Character') -and $member.Contains('binding.m_iRevision == m_iRevision') -and $member.Contains('m_Slot.GetSpawnGeneration() != m_iGeneration')
         OPERATION_IDENTITY = $order.Contains('m_Slot.GetEquipmentOrder() == this') -and $order.Contains('m_Slot.GetStrategicIntentRevision() == m_iIntent') -and $order.Contains('m_Slot.GetStrategicAssignmentRevision() == m_iAssignment')
@@ -69,6 +74,11 @@ $mutations = @(
     @('Loadouts/AICF_EquipmentMember.c','foreach (IEntity item : unique)', 'foreach (IEntity item : items)', 'UNIQUE_CONSUMABLES'),
     @('Loadouts/AICF_EquipmentMember.c','AICF_EquipmentInventory.UniqueItems(rawItems, items);', 'items = rawItems;', 'UNIQUE_TARGET'),
     @('Loadouts/AICF_EquipmentMember.c','primaryMuzzle = null;', '', 'MODEL_MUZZLE_LIFETIME'),
+    @('Loadouts/AICF_EquipmentMember.c','!modelPrimary && !binding', '!modelPrimary', 'INCOMPLETE_BINDING_ONLY'),
+    @('Loadouts/AICF_EquipmentMember.c','m_iPrimaryRounds <= 0 && !binding', 'm_iPrimaryRounds <= 0', 'INCOMPLETE_BINDING_ONLY'),
+    @('Loadouts/AICF_EquipmentMember.c','binding && m_sSignature != binding.m_sSignature', 'false', 'INCOMPLETE_READBACK'),
+    @('Loadouts/AICF_EquipmentMember.c','if (primaryMuzzle)', 'if (true)', 'INCOMPLETE_MUZZLE_GUARD'),
+    @('Loadouts/AICF_EquipmentInventory.c','rounds = 0;', 'rounds = muzzle.GetAmmoCount();', 'EMPTY_MAGAZINE_CHAMBER'),
     @('Loadouts/AICF_EquipmentMember.c','barrel < primaryMuzzle.GetBarrelsCount()', 'barrel < AICF_EquipmentInventory.Muzzle(modelPrimary).GetBarrelsCount()', 'MODEL_MUZZLE_LIFETIME'),
     @('Loadouts/AICF_EquipmentInventory.c','muzzle.GetMagazineWell().Type() == magazine.GetMagazineWell().Type()', 'true', 'NATIVE_COMPATIBILITY'),
     @('Loadouts/AICF_EquipmentInventory.c','member.m_Character.GetOrigin(), corpse.GetOrigin(), AICF_EquipmentConfig.TRANSFER_METERS', 'member.m_Character.GetOrigin(), corpse.GetOrigin(), 5000', 'PHYSICAL_TRANSFER'),

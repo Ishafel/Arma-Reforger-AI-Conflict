@@ -2,6 +2,29 @@
 
 ## Пресеты ИИ: issue #66
 
+`AICF_EquipmentIncompleteProbe.c` → isolated Core/UI
+`AICF_ZZEquipmentIncompleteProbe.c` после `AICF_ZEquipmentProbe.c`, flag
+`-aicfEquipmentProbe incomplete`. Проверяет20 target cases US/USSR и настоящий
+цикл живого бойца: unarmed → без съёмных magazines → полный комплект. Для каждого
+нужны новая member revision, точный inventory, ожидаемое оружие, освобождённое
+движение,15 секунд без нового visit и неизменный ledger. Штатные readiness,
+planner, armory и native inventory receipts сохранены. Завершение Stop/RequestClose.
+`Test-EquipmentIncompleteLog.ps1` требует45 уникальных cases, DONE45/0/3,
+native0, точный manifest/CLI, ROSTER_READY и полные stopped logs без script/VM/
+fatal/recovery errors. Native resource Error — отдельный строгий FAIL gate.
+`aicfIncompletePlanOnly`/`aicfIncompleteStartCase` — только диагностика: такие
+запуски не заменяют45-case oracle. BaseMagazine включает встроенные заряды;
+strip использует native CanRemove и те же VisibleSlot, что UI.
+
+`AICF_NativePreviewControlProbe.c` — единственный test script в отдельном
+production stage, `-aicfNativePreviewControl 1` на server/client. Personal Update
+подавляется только fixture; Inspector не создаётся. Client через3s создаёт stock
+ItemPreviewManager в private world, через20s проверяет global manager, закрывается
+через40s; server закрывается через120s. Callbacks снимаются на Close/OnGameEnd.
+Это диагностический reproducer native PP errors, не доказательство UI/input или
+чистоты всех Error. Он использует canonical direct-connect и настоящую готовность
+server roster. Полные logs и phase markers обязательны для атрибуции.
+
 `AICF_LoadoutRoleTransferProbe.c` → isolated Core/UI
 `AICF_ZZZZZZRoleTransferProbe.c`, после Qol/Files/Inspector/PersonalLibrary/
 LibraryPreview; `-aicfRoleTransferProbe 1` на обоих peers. Server строит комплект

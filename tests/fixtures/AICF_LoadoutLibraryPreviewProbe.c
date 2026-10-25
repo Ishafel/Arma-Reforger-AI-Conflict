@@ -22,12 +22,15 @@ class AICF_LibraryPreviewChecks
 		if (!recipe || recipe.m_aPaths.IsEmpty() || !draft.Build(recipe, catalog, reason)) return false;
 		AICF_LoadoutNavigation tree = new AICF_LoadoutNavigation();
 		tree.Build(draft.GetCharacter(), catalog);
+		InventoryStorageManagerComponent manager = AICF_EquipmentInventory.Manager(draft.GetCharacter());
 		foreach (AICF_LoadoutLocation location : tree.m_Locations)
 		{
 			for (int slot; slot < location.m_Storage.GetSlotsCount(); slot++)
 			{
+				if (!AICF_LoadoutSlotView.VisibleSlot(location.m_Storage, slot)) continue;
 				IEntity item = location.m_Storage.Get(slot);
 				if (!item) continue;
+				if (!weapons && !manager.CanRemoveItemFromStorage(item, location.m_Storage)) continue;
 				if (weapons && item.FindComponent(BaseWeaponComponent)) return false;
 				if (!weapons && item.FindComponent(BaseMagazineComponent)) return false;
 			}
@@ -46,15 +49,18 @@ class AICF_LibraryPreviewChecks
 		if (!draft.Build(recipe, catalog, reason)) return null;
 		AICF_LoadoutNavigation tree = new AICF_LoadoutNavigation();
 		tree.Build(draft.GetCharacter(), catalog);
+		InventoryStorageManagerComponent manager = AICF_EquipmentInventory.Manager(draft.GetCharacter());
 		// Вложенные адреса снимаются раньше родительских, slots — с конца.
 		for (int i = tree.m_Locations.Count() - 1; i >= 0; i--)
 		{
 			AICF_LoadoutLocation location = tree.m_Locations[i];
 			for (int slot = location.m_Storage.GetSlotsCount() - 1; slot >= 0; slot--)
 			{
+				if (!AICF_LoadoutSlotView.VisibleSlot(location.m_Storage, slot)) continue;
 				IEntity item = location.m_Storage.Get(slot);
 				if (!item) continue;
 				bool remove = BaseMagazineComponent.Cast(item.FindComponent(BaseMagazineComponent)) != null;
+				if (remove && !weapons && !manager.CanRemoveItemFromStorage(item, location.m_Storage)) continue;
 				if (weapons) remove = BaseWeaponComponent.Cast(item.FindComponent(BaseWeaponComponent)) != null;
 				if (remove) recipe.Add(location.m_sPath, location.m_sStorage, slot, "", 1);
 			}

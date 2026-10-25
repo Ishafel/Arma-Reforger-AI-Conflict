@@ -1,5 +1,63 @@
 # Проверки и baseline
 
+## PR77 review: неполные комплекты живого ИИ — 2026-10-25
+
+Исходный clean `a140f22`, продолжение `codex/issue-66-loadout-qol`.
+Замечание `discussion_r4370295997`: Validate разрешал отсутствие оружия/магазинов,
+но EquipmentPlan отклонял такой binding и останавливал обслуживание живого member.
+Теперь optional primary/target0 допускаются только для явного binding, signature
+проверяется до Capture. Default failure guards сохранены. Loaded без magazine
+перестал учитывать патронник дважды. Replay запрещает скрытые attachment slots
+и встроенные BaseMagazine charges с native CanRemove=false; съёмные магазины
+не обязательны. Fixtures используют те же доступные slots и native query.
+
+Evidence: `.codex-runtime/issue77-review-fixes-20261025/REPORT.md`.
+
+- Baseline6/6 и after-detachable6/6 **PASS/0**: Equipment/interop, AI loadout,
+  QoL, MatchShutdown/ShutdownLog. Equipment31 rules/34 mutations, QoL77 mutations.
+- Полный `after-all` — **91/91 PASS/0**. Временный subst X: снят после children.
+- Терминальный Workbench isolated Stock/WCS — **PASS/0**, полные logs содержат
+  `Script validation successful`, не только успешный process exit.
+- `stock-detachable` / `wcs-detachable`: **45/45 PASS** каждый, native0/stopped,
+  scriptFatal0.20 target checks US/USSR; три последовательных живых комплекта
+  (unarmed, без съёмных magazines, полный), applied revision/inventory/weapon,
+  движение разблокировано,15s no loop и неизменный supplies/tickets ledger.
+- `Test-EquipmentIncompleteLog.ps1`:2 positives PASS,6 missing/failed/duplicate
+  negatives отклонены. Manifest/CLI, roster, native0 и full stopped logs обязательны.
+- Ammo/transfer регрессия: `stock-safety` **56 checks/3 families PASS**,
+  `wcs-safety` **129/16 PASS**, native0/stopped/scriptFatal0; старый
+  `Test-EquipmentLog.ps1 -Mode Safety -ExpectedFamilies 3|16` PASS.
+- Финальная UI/library регрессия: `stock-qol` и `wcs-qol` — каждый
+  **219 server/266 client checks PASS**, failures0, native0/0, полные stopped
+  logs/scriptFatal0. Все прежние oracles включены;4 positives и12 негативных
+  missing/failed/duplicate controls прошли.
+- Сравнение31 baseline logs с4 окончательными UI logs:164/155 Error identities,
+  новых0. Строгий native Error verdict остаётся **FAIL**, не PASS регрессии.
+- Финальный Workbench рабочего аддона Stock/WCS **2/2 PASS/0**, полные logs
+  подтверждают успешную validation. Cleanup:20 profiles,13 test libraries и6
+  stages убраны после архивации, собственных runtime процессов нет.
+
+Stock-first/debug выявили двойной патронник и неверный strip встроенных flare
+charges: native CanRemove различает их и настоящие magazines. Неудачные logs
+сохранены как FAIL/diagnostic; успешный короткий matrix не заменяет полный live.
+Первый UI control столкнулся с занятым портом, client readiness не дал подключиться;
+helper исправлен явным `-addr`, production не менялась. Неудачный startup со
+script leaks сохранён отдельно и не приписывается успешным final runs.
+
+`control2` — полный остановленный server/client без наших editor widgets,
+native0/scriptFatal0. Штатный prefab/API снова дал8 PP HDR/SMAA Error;52 texture
+reference Error остались. Pure Frontend controls без production scripts не дали
+штатного shutdown и **не доказывают** источник font references. См.
+[EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md). Installed files
+и severity не менялись, fixes не подменены фильтрами. Пользователь подтвердил,
+что исходных RHS/WCS projects нет. Остальные vendor defects не исправлены;
+неустановленный источник части font/texture references не объявлен внешним.
+Строгий all-native Error **FAIL**, ready PR остаётся заблокирован.
+
+Визуальная/input/controller оценка, backend-auth roundtrip, JIP, Workshop package
+и длительный бой — **NOT RUN**. GUI/screenshots запрещены AGENTS.md. Доступный
+live armory путь неполных комплектов этим этапом проверен непосредственно.
+
 ## Межролевые комплекты и очередь Inspector #66 — 2026-10-25
 
 Продолжение той же ветки, исходный чистый `1db2018`. AI member preset теперь

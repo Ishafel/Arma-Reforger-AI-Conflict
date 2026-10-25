@@ -102,5 +102,7 @@ Guard 'QOL_CARGO_PACK_PRIVATE' (Body 'AICF_LoadoutInventory.c' 'PackCargoLocal')
 Guard 'QOL_CARGO_PACK_ORDER' (Body 'AICF_LoadoutInventory.c' 'PackCargoLocal') 'SCR_UniversalInventoryStorageComponent.Cast\(storage\).*ordered.Sort\(\).*GetID\(\) != index.*GetAttachedEntity\(\) != item.GetOwner\(\)' 'ordered.Sort();'
 Guard 'QOL_CARGO_NORMALIZE_VALIDATED_COPY' (Body 'AICF_LoadoutService.c' 'Validate') 'PackCargoLocal\(draft.GetCharacter\(\)\).*Signature\(draft.GetCharacter\(\)' 'PackCargoLocal(draft.GetCharacter())'
 Guard 'QOL_CARGO_INSERT_MATERIALIZE' (Body 'AICF_LoadoutInventory.c' 'InsertLocal') 'SCR_UniversalInventoryStorageComponent.Cast\(storage\).*capacitySlot = -1;.*CanInsertResourceInStorage\(prefab, storage, capacitySlot\)' 'capacitySlot = -1;'
+Guard 'QOL_HIDDEN_ATTACHMENT_EDIT_REFUSED' (Body 'AICF_LoadoutInventory.c' 'Replay') 'WeaponAttachmentsStorageComponent.Cast\(storage\).*attachment && !attachment.ShouldShowInInspection\(\)\) return false;' '!attachment.ShouldShowInInspection()'
+Guard 'QOL_FIXED_CHARGE_EDIT_REFUSED' (Body 'AICF_LoadoutInventory.c' 'Replay') 'existingItem.FindComponent\(BaseMagazineComponent\) && !manager.CanRemoveItemFromStorage\(existingItem, storage\)\) return false;' '!manager.CanRemoveItemFromStorage(existingItem, storage)'
 if ($failures.Count) { $failures | ForEach-Object { "FAIL $_" }; exit 1 }
 Write-Output "PASS Loadout QoL contracts; mutations=$mutations; runtime=NOT_RUN"
