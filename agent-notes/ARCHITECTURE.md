@@ -9,6 +9,10 @@
 OpenGate водителя/стрелка ручного preset. MovementState владеет observation,
 flow возвращает typed WAIT/fallback, controller по-прежнему владеет переходами.
 Наблюдение не продлевает trip и не выдаёт движение за реальный progress.
+Реальный найм и длительное наблюдение первого managed slot —
+[VEHICLE_SOAK.md](VEHICLE_SOAK.md). `AICF_VehicleCleanupTrace` хранит исходные
+actor identities только как подписи диагностики retained job; история не даёт
+разрешений на recovery/delete и не участвует в occupancy/player gates.
 
 Проект расширяет stock Conflict скриптами Enforce. Единственный gameplay resource —
 тонкий inherited `MissionHeader` входа AI Conflict; runtime selection выбирает
@@ -226,6 +230,14 @@ TransitFlow возвращает WAIT `PRESET_WAITING_FOR_DESTINATION`; толь
 через TransportTrip приостанавливает/возобновляет trip и movement deadlines.
 Во время ожидания сохраняются identity, health и exact crew guards. После
 первого staged route действуют обычные arrival/dismount и ограниченный бюджет.
+`AICF_VehiclePresetWaitPolicy` проецирует только доказанное текущее ожидание
+в `AICF_VehicleSlotView.IsPresetDestinationWait()`: current assignment/intent/base
+revisions, lease/entity/RplId и exact settled assigned occupants. MatchController
+читает эту проекцию как meaningful task и bounded idle reason; сам не создаёт
+маршрут и не меняет transport deadlines. BASE сравнивается по identity базы,
+POSITION — также по точным координатам; resolved snapshot не сравнивается с
+raw owner origin базы. `AICF_PlayerMobHoldPolicy` отдельно распознаёт физически
+достигнутое пешее PLAYER POSITION удержание у MOB с текущим bound DefendWaypoint.
 
 ## Соседние контракты
 

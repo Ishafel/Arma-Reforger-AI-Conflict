@@ -6,6 +6,7 @@ class AICF_VehicleDismountFlow
 	protected static const int CONTINUOUS_CLEAR_MS = 5000;
 	protected static const int TRIP_EXIT_CLEAR_POLLS = 2;
 	protected static const int ANIMATED_EXACT_EXIT_DELAY_MS = 5000;
+	protected static const int ANIMATED_EXACT_EXIT_MAX_ATTEMPTS = 3;
 	protected static const int FORCED_EXACT_EXIT_DELAY_MS = 10000;
 	protected static const int GUIDANCE_DELAY_MS = 3000;
 	protected static const int GUIDANCE_MAX_ATTEMPTS = 3;
@@ -184,12 +185,9 @@ class AICF_VehicleDismountFlow
 		}
 
 		int normalAgeMs = nowMs - state.GetStartedAtMs();
-		if (!state.WasAnimatedExactExitAttempted() &&
-			normalAgeMs >= ANIMATED_EXACT_EXIT_DELAY_MS &&
-			(sample.m_iLogicalOccupants > 0 || sample.m_iTransitions > 0))
+		if (normalAgeMs >= ANIMATED_EXACT_EXIT_DELAY_MS && sample.m_iLogicalOccupants > 0)
 		{
-			state.MarkAnimatedExactExitAttempted();
-			TryRequestAnimatedExactManagedExits(trip, sample);
+			TryRequestAnimatedExactManagedExits(trip, sample, nowMs);
 		}
 		if (normalAgeMs >= FORCED_EXACT_EXIT_DELAY_MS &&
 			(sample.m_iLogicalOccupants > 0 || sample.m_iTransitions > 0))
@@ -795,15 +793,18 @@ class AICF_VehicleDismountFlow
 
 	protected void TryRequestAnimatedExactManagedExits(
 		AICF_TransportTrip trip,
-		AICF_DismountClearanceSample sample)
+		AICF_DismountClearanceSample sample,
+		int nowMs)
 	{
 		if (!IsAuthoritativeTripAssetCurrent(trip))
 			return;
 		SCR_AIGroup group = trip.GetAssignment().GetGroup();
 		Vehicle vehicle = trip.GetLease().GetVehicle();
-		int interrupted = m_Watchdog.ResetGroupVehicleActions(group);
+		AICF_VehicleDismountState state = trip.GetDismountState();
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);
+		bool attemptStarted;
+		int interrupted;
 		int requested;
 		int rejected;
 		foreach (AIAgent agent : agents)
@@ -814,12 +815,30 @@ class AICF_VehicleDismountFlow
 			if (!IsExactOccupantOfVehicle(character, vehicle))
 				continue;
 			CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
-			if (!access || !AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(character))
+			BaseCompartmentSlot compartment;
+			if (access)
+				compartment = access.GetCompartment();
+			if (!IsExactAnimatedExitCandidate(trip, group, vehicle, agent, character, access, compartment))
 			{
 				rejected++;
 				continue;
 			}
+			if (!attemptStarted)
+			{
+				if (!state.TryRecordAnimatedExactExitAttempt(
+					nowMs, ANIMATED_EXACT_EXIT_MAX_ATTEMPTS, ANIMATED_EXACT_EXIT_DELAY_MS))
+					return;
+				attemptStarted = true;
+			}
+			// Begin уже снял старые групповые очереди. Повтор затрагивает только
+			// оставшегося точного пассажира и не прерывает чужой текущий выход.
 			access.InterruptVehicleActionQueue(true, true, true);
+			interrupted++;
+			if (!IsExactAnimatedExitCandidate(trip, group, vehicle, agent, character, access, compartment))
+			{
+				rejected++;
+				continue;
+			}
 			if (access.GetOutVehicle(
 				EGetOutType.ANIMATED,
 				-1,
@@ -833,15 +852,47 @@ class AICF_VehicleDismountFlow
 				rejected++;
 			}
 		}
+		if (!attemptStarted)
+			return;
 		AICF_Stage3Diagnostics.Warning(
 			"DISEMBARK_ANIMATED_EXACT_RETRY",
 			FormatClearance(trip, sample, "FIVE_SECOND_EXACT_ANIMATED_RETRY") +
 			string.Format(
-				" requested=%1 rejected=%2 interrupted_actions=%3 next_escalation_ms=%4",
+				" requested=%1 rejected=%2 interrupted_actions=%3 next_escalation_ms=%4 attempt=%5 maximum_attempts=%6 interval_ms=%7",
 				requested,
 				rejected,
 				interrupted,
-				FORCED_EXACT_EXIT_DELAY_MS));
+				FORCED_EXACT_EXIT_DELAY_MS,
+				state.GetAnimatedExactExitAttempts(),
+				ANIMATED_EXACT_EXIT_MAX_ATTEMPTS,
+				ANIMATED_EXACT_EXIT_DELAY_MS));
+	}
+
+	protected bool IsExactAnimatedExitCandidate(
+		AICF_TransportTrip trip,
+		SCR_AIGroup group,
+		Vehicle vehicle,
+		AIAgent agent,
+		ChimeraCharacter character,
+		CompartmentAccessComponent access,
+		BaseCompartmentSlot compartment)
+	{
+		if (!IsAuthoritativeTripAssetCurrent(trip) || trip.GetPhase() != AICF_ETransportTripPhase.DISMOUNT ||
+			trip.GetAssignment().GetGroup() != group || trip.GetLease().GetVehicle() != vehicle ||
+			!IsExactAliveCurrentMember(group, agent) || agent.GetControlledEntity() != character ||
+			!access || character.GetCompartmentAccessComponent() != access ||
+			!compartment || access.GetCompartment() != compartment ||
+			compartment.GetVehicle() != vehicle || compartment.GetOccupant() != character ||
+			CompartmentAccessComponent.GetVehicleIn(character) != vehicle ||
+			access.IsGettingIn() || access.IsGettingOut() || access.IsSwitchingSeatsAnim())
+		{
+			return false;
+		}
+		int nowMs = System.GetTickCount();
+		AICF_VehicleDismountState state = trip.GetDismountState();
+		return !state.IsTerminalClearanceStarted() && !state.IsTerminalClearanceStopped() &&
+			nowMs < state.GetNormalDeadlineMs() && nowMs < state.GetTerminalDeadlineMs() &&
+			!trip.IsDeadlineReached(nowMs);
 	}
 
 	protected void TryForceExactManagedExit(

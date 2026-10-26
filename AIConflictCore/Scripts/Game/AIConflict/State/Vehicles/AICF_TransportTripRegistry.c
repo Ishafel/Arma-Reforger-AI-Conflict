@@ -109,6 +109,7 @@ class AICF_VehicleSlotView
 	protected string m_sStatusText;
 	protected bool m_bControlsMovement;
 	protected bool m_bExecutableVehicleTask;
+	protected bool m_bPresetDestinationWait;
 	protected bool m_bSafeSpawnWait;
 	protected bool m_bRestorePending;
 	protected bool m_bOrderRestored;
@@ -118,13 +119,14 @@ class AICF_VehicleSlotView
 	protected string m_sTerminalReason;
 	protected string m_sOperationId;
 
-	void AICF_VehicleSlotView(AICF_TransportTrip trip)
+	void AICF_VehicleSlotView(AICF_TransportTrip trip, int currentBaseRevision)
 	{
 		if (!trip)
 			return;
 		m_bPresent = true;
 		m_sPhase = typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase());
 		m_sStatusText = ResolveStatusText(trip);
+		m_bPresetDestinationWait = AICF_VehiclePresetWaitPolicy.IsCurrentMountedWait(trip, currentBaseRevision);
 		m_bControlsMovement = trip.GetPhase() == AICF_ETransportTripPhase.SITE_PLANNED ||
 			trip.GetPhase() == AICF_ETransportTripPhase.APPROACHING_SITE ||
 			trip.GetPhase() == AICF_ETransportTripPhase.STAGING_CONFIRMED ||
@@ -177,6 +179,7 @@ class AICF_VehicleSlotView
 	string GetStatusText() { return m_sStatusText; }
 	bool IsControllingMovement() { return m_bControlsMovement; }
 	bool HasExecutableVehicleTask() { return m_bExecutableVehicleTask; }
+	bool IsPresetDestinationWait() { return m_bPresetDestinationWait; }
 	bool IsSafeSpawnWait() { return m_bSafeSpawnWait; }
 	bool IsRestorePending() { return m_bRestorePending; }
 	bool IsOrderRestored() { return m_bOrderRestored; }

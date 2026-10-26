@@ -194,7 +194,7 @@ class AICF_VehicleCoordinator
 		AICF_TransportTrip trip = FindTripForSlot(slot);
 		if (!trip)
 			return null;
-		return new AICF_VehicleSlotView(trip);
+		return new AICF_VehicleSlotView(trip, m_iObservedBaseRevision);
 	}
 
 	// User-facing mobility is a physical projection first and a lifecycle

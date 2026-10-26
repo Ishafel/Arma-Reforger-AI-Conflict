@@ -400,7 +400,11 @@ class AICF_VehicleBoardingFlow
 		AICF_VehiclePreset preset = trip.GetVehiclePreset();
 		if (!preset.ValidateRoster(trip.GetVehiclePresetSlot(), seats, reason)) return Reject(trip, lease, causationId, reason);
 		int required, settled;
-		bool pendingSeat;
+		int activeEntries;
+		bool memberTransition;
+		AICF_VehicleBoardingActionToken activeToken;
+		AICF_VehicleBoardingActionToken firstUnqueued;
+		AICF_VehicleBoardingActionToken firstRetry;
 		for (int i; i < seats.Count(); i++)
 		{
 			int position = preset.m_aMembers[i];
@@ -414,20 +418,34 @@ class AICF_VehicleBoardingFlow
 			IEntity occupant = seats[i].GetOccupant();
 			if (occupant && occupant != member) return Reject(trip, lease, causationId, "PRESET_SEAT_OCCUPIED");
 			CompartmentAccessComponent access = ResolveAccess(member);
-			if (occupant == member && access && access.GetCompartment() == seats[i] && !access.IsGettingIn() && !access.IsGettingOut() &&
+			if (access && (access.IsGettingIn() || access.IsGettingOut() || access.IsSwitchingSeatsAnim()))
+				memberTransition = true;
+			bool readyOnFoot = access && !access.IsInCompartment() && !access.IsGettingIn() && !access.IsGettingOut() &&
+				!access.IsSwitchingSeatsAnim() && !CompartmentAccessComponent.GetVehicleIn(member) &&
+				!occupant && seats[i].IsCompartmentAccessible() && !seats[i].IsGetInLockedFor(member) &&
+				(!seats[i].IsReserved() || seats[i].IsReservedBy(member));
+			if (occupant == member && access && access.GetCompartment() == seats[i] && !access.IsGettingIn() && !access.IsGettingOut() && !access.IsSwitchingSeatsAnim() &&
 				m_Watchdog.IsMemberSettledInVehicle(member, lease.GetVehicle())) settled++;
 			else
 			{
-				if (!pendingSeat)
+				if (!token.WasPresetQueued())
 				{
-					if (!token.WasPresetQueued()) QueuePresetSeat(trip, state, token);
-					else
-					{
-						token.ObserveSpatialProgress(vector.DistanceXZ(member.GetOrigin(), lease.GetVehicle().GetOrigin()), 0.5);
-						TryRetryPresetSeat(trip, lease, group, state, token, seats[i], causationId);
-					}
+					if (!firstUnqueued && readyOnFoot)
+						firstUnqueued = token;
 				}
-				pendingSeat = true;
+				else
+				{
+					token.ObserveSpatialProgress(vector.DistanceXZ(member.GetOrigin(), lease.GetVehicle().GetOrigin()), 0.5);
+					EAIActionState actionState = token.GetActionState();
+					if (token.IsTrackedActionOwnedByUtility() && actionState != EAIActionState.FAILED && actionState != EAIActionState.COMPLETED)
+					{
+						activeEntries++;
+						if (!activeToken) activeToken = token;
+					}
+					else if (readyOnFoot && token.GetRetryCount() < 2 && token.GetProgressAgeMs() >= 12000 &&
+						(!firstRetry || token.GetRetryCount() < firstRetry.GetRetryCount()))
+						firstRetry = token;
+				}
 			}
 		}
 		if (state.ObserveSettled(required, settled, required == settled) >= SETTLED_POLLS_REQUIRED)
@@ -452,7 +470,46 @@ class AICF_VehicleBoardingFlow
 			return AICF_TripOutcome.StartMovement("PRESET_EXACT_OCCUPANTS_CONFIRMED", causationId);
 		}
 		if (System.GetTickCount() >= state.GetAbsoluteDeadlineMs()) return Reject(trip, lease, causationId, "PRESET_BOARDING_DEADLINE");
+		// Один застрявший вход не расходует весь общий срок, оставляя соседей
+		// вообще без первой попытки. Текущие native transitions не прерываются.
+		if (memberTransition || activeEntries > 1)
+			return AICF_TripOutcome.Wait("PRESET_ENTRY_TRANSITION_PENDING", causationId);
+		if (activeToken && (firstUnqueued || firstRetry) &&
+			TryYieldPresetSeat(trip, lease, group, state, activeToken))
+			activeToken = null;
+		if (activeToken)
+			TryRetryPresetSeat(trip, lease, group, state, activeToken, activeToken.GetCompartment(), causationId);
+		else if (firstUnqueued)
+			QueuePresetSeat(trip, state, firstUnqueued);
+		else if (firstRetry)
+			TryRetryPresetSeat(trip, lease, group, state, firstRetry, firstRetry.GetCompartment(), causationId);
 		return AICF_TripOutcome.Wait("PRESET_EXACT_OCCUPANTS_PENDING", causationId);
+	}
+
+	protected bool TryYieldPresetSeat(AICF_TransportTrip trip, AICF_VehicleLease lease, SCR_AIGroup group,
+		AICF_VehicleBoardingState state, AICF_VehicleBoardingActionToken token)
+	{
+		if (!trip.IsVehiclePresetCurrent() || !token.Matches(trip, lease, group) || !token.IsPhysicalMutationOwnerSafe() ||
+			!token.WasPresetQueued() || token.GetProgressAgeMs() < 20000 ||
+			System.GetTickCount() >= state.GetAbsoluteDeadlineMs()) return false;
+		IEntity member = token.GetReservedEntity();
+		CompartmentAccessComponent access = ResolveAccess(member);
+		BaseCompartmentSlot seat = token.GetCompartment();
+		if (!access || !seat || seat.GetVehicle() != lease.GetVehicle() || seat.GetOccupant() ||
+			access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut() || access.IsSwitchingSeatsAnim() ||
+			CompartmentAccessComponent.GetVehicleIn(member) ||
+			(seat.IsReserved() && !seat.IsReservedBy(member))) return false;
+		token.CancelOwnerSafe();
+		if (!trip.IsVehiclePresetCurrent() || !token.Matches(trip, lease, group) || !token.IsPhysicalMutationOwnerSafe() ||
+			access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut() || access.IsSwitchingSeatsAnim() ||
+			CompartmentAccessComponent.GetVehicleIn(member) || seat.GetOccupant()) return false;
+		EAIActionState actionState = token.GetActionState();
+		if (token.IsTrackedActionOwnedByUtility() && actionState != EAIActionState.FAILED && actionState != EAIActionState.COMPLETED)
+			return false;
+		AICF_Stage3Diagnostics.Info("VEHICLE_PRESET_SEAT_YIELDED", string.Format(
+			"operation_id=%1 member=%2 seat=%3 retry=%4 progress_age_ms=%5 deadline_ms=%6 reason=STALLED_ENTRY_YIELDS_TO_WAITING_MEMBER teleport=0",
+			trip.GetOperationId(), member.GetID(), AICF_VehiclePreset.SeatKey(seat), token.GetRetryCount(), token.GetProgressAgeMs(), state.GetAbsoluteDeadlineMs()));
+		return true;
 	}
 
 	protected bool QueuePresetSeat(AICF_TransportTrip trip, AICF_VehicleBoardingState state, AICF_VehicleBoardingActionToken token)

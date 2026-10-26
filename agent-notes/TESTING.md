@@ -1,5 +1,83 @@
 # Проверки и baseline
 
+## Настоящий первый отряд, найм5 и длительный бой: #78 — 2026-10-26
+
+Продолжение `codex/issue-78-vehicle-presets` от `a4fec4b`. По запросу пользователя
+выполнены отдельные получасовые US/Humvee и USSR/UAZ наблюдения с анализом логов
+и параллельными исправлениями. Отчёт только локальный:
+`.codex-runtime/vehicle-soak-30m/REPORT.md`; GitHub не изменялся.
+Workflow и границы проверки: [VEHICLE_SOAK.md](VEHICLE_SOAK.md).
+
+**Общий боевой сценарий остаётся FAIL, ready/release gates не сняты.**
+Подтверждены реальный slot0, обычный платный найм с1 до5, выбранная пятиместная
+модель, exact occupants и выдача приказа. Штатный VehicleCombatActivity прерывает
+поездку; последующий bounded fallback не объявляется успешным доездом.
+
+| Запуск | Наблюдение и результат |
+|---|---|
+| us-baseline, HEAD без production diff | Engine>=1800s, wall1828.330s,179 heartbeats, maxgap13.518s, native0/stopped; duration/liveness/provenance PASS. Functional FAIL: VehicleCombatActivity и MANAGED_MEMBERS_NOT_SETTLED_EXHAUSTED; также прежний ложный MOB deadline |
+| ussr-baseline, тот же stage | Engine>=1800s, wall1820.643s,175 heartbeats, maxgap33.205s, native0/stopped; duration/liveness/provenance PASS. Functional FAIL: назначенный roster перестал быть боеспособным после боевой высадки; retained cleanup защищает неидентифицированного occupant |
+| us-candidate, первые3 исправления | Engine>=1800s, wall1819.949s,179 heartbeats, maxgap10.217s, native0/stopped; duration/liveness/provenance PASS. Functional FAIL: native combat/fallback |
+| ussr-candidate | FAIL: после21m42s симуляция остановилась на native assertion; DONE/GameDestroyed отсутствуют. Wall1894.481s не заменяет30min живой симуляции. Проверенный собственный PID29188 остановлен, native-1 |
+| ural5 regression | Functional auditor PASS/0, native0/stopped,14 checks. Новый второй animated retry принят двумя оставшимися пассажирами; далее существующая защищённая ghost recovery вывела2 физических blockers. Все5 дошли пешком, farthest32.9379m. Условия fixture: truce/HOLD_FIRE/damage protection |
+| repeat5 regression | Functional auditor PASS/0, native0/stopped,23 checks/2 legs, те же5 actor identities. Вторая площадка475.95m: fixed budget297975ms вместо90s; вторая посадка и весь пеший этап завершены. Изолированные мирные условия |
+| ussr-hold-final,600s | Финальный код: оплаченный найм,5 exact seats,120603ms непрерывного mounted wait; SLOT_ACTIVITY показывает preset_destination_wait1/meaningful_task1/BOUNDED_VEHICLE_LIFECYCLE. Доезд143.097m от цели, displacement265.294m,65 velocity polls; normal dismount5/0. На600726ms fixture остановился до FOOT_ARRIVAL, поэтому полный functional FAIL, а не PASS |
+| us-final-15m | Wall918.328s,90 heartbeats, maxgap10.999s, native0/stopped; duration/liveness/provenance PASS, SCRIPT/VM fatal0. Финальный код:5 exact occupants и120716ms mounted hold. Затем VehicleCombatActivity,3 пассажира снаружи; bounded fallback за360.6m до цели, все5 живы. Полный functional FAIL |
+| ussr-final-15m | Wall916.605s,90 heartbeats, maxgap11.005s, native0/stopped; duration/liveness/provenance PASS, SCRIPT/VM fatal0. Финальный код:5 exact occupants и120665ms mounted hold, реальная скорость12.76m/s. После боевой высадки исходный pilot перестал читаться как живой current roster member; alive4, fallback за421.8m до цели. DEAD/transfer не доказаны. Полный functional FAIL |
+
+Native assertion сохранён в `evidence/profiles/ussr-candidate/logs/.../crash.log`:
+`enf_entity.cpp:280`, `Entity out of world bounds`, `VZ58_body.xob`,
+`<2017.858,-34005.941,1207.471>`. Перед assertion не найден project receipt
+перемещения/удаления этого оружейного actor. Причина freefall неизвестна;
+ни внешняя причина, ни связь с проектом не объявляются доказанными. World bounds
+и установленные файлы не изменялись. `native-assert-stop.json` фиксирует точный
+process/profile/port до адресной остановки; blanket process kill не применялся.
+
+Исправлены ложный egress для достигнутого пешего PLAYER hold у MOB, неправильный
+учёт mounted preset wait без route waypoint, starvation очереди посадки,
+one-shot animated dismount и недостаточный фиксированный срок дальнего подхода.
+Для BASE wait сравниваются identity/revisions, для POSITION также точные координаты.
+Добавлена read-only `VEHICLE_CLEANUP_BLOCKING_ACTOR` с original/current identity,
+life state, player status, parent group, exact seat и transitions. История не
+влияет на cleanup safety. Review нашёл и закрыл nullable PlayerManager,
+BASE position, switching-seat и blocked-retry cases; защитные gates не ослаблены.
+
+Проверки и команды:
+
+- Fresh pre-edit `Invoke-AICFChecks.ps1 -Name <8 профильных проверок>`:
+  `.codex-runtime/us-humvee-soak-baseline/`,8/8 PASS/0. Agent baselines/после
+  acquisition, dismount, boarding, cleanup и MOB сохранены отдельно, без скрытых FAIL.
+- Полный offline до последних дополнений: `final-all-0..5`,104/104 PASS/0.
+  После freeze окончательного production кода `verified-all-0..5`:107/107 PASS/0,
+  список всех имён и exact commands в summaries. Один LogisticsContracts одновременно.
+  Собственный subst X использовался только для Windows path length и удалён.
+- `CompileProduction.ps1 -Label review-final`: Stock/RHS/ArlandWCSRHS3/3 PASS/0,
+  successful validation, SCRIPT/ENGINE fatal0; все249 Core source hashes совпадают
+  с окончательным кодом. Isolated scenario/soak fixtures отдельно compiled PASS/0.
+- После исправления test-only clock oracle повторён
+  `Invoke-AICFChecks.ps1 -Name Test-VehicleSoakLogContracts.ps1,Test-VehicleSoakToolsContracts.ps1`:
+  2/2 PASS/0,58 и10 controls. После watcher-only добавления live `crash.log`
+  и IO retries/pending-write stop guard повторены те же2 checks:58+14 controls PASS/0,
+  `final-pending-watcher-delta/`; полный107 после этого tool/test-only delta не повторён.
+  START elapsed1ms законен; одинаковый clock origin,
+  полный engine span, wall minimum, heartbeat и negative29:59 сохраняются.
+  Первоначальные audit verdict/source hashes сохранены в `audit-initial/`.
+- Новые contracts: MOB18, acquisition9, dismount14, cleanup13, queue14,
+  mounted wait24 mutation +4 geometry cases. VehiclePreset78 guards сохранены.
+- `ArchiveEvidence.ps1`: полные stopped logs сохранены с SHA-256, stages упакованы
+  и сверены по каждому source hash до удаления. `evidence/archive-index.json`
+  связывает прежние profile paths с архивными. Failed runs не удалены.
+
+Строгий all-native Error gate остаётся FAIL: resource GUID/font/leak и world
+keyword/hierarchy errors отдельно записаны анализатором. Известный baseline
+не превращается в PASS. Прежний client/JIP FAIL8 native serializer leaks этим
+server-only прогоном не проверялся и не снят. Новый runtime event cleanup blockers
+и starvation YIELDED не сработали в окончательных native повторах: guards проверены
+contracts, но fault-injected native branch пока не подтверждён. Retarget5 и вся
+physical RHS/WCS/all-model матрица заново NOT RUN. Визуальная проверка, player RPC
+ownership и direct-connect client/JIP NOT RUN: fixture начинает после RPC validation,
+Computer Use/GUI/screenshots запрещены. Эти ограничения не означают PASS.
+
 ## Полные поездки и диагностика групп: #78 — 2026-10-26
 
 Добавлены read-only GROUP_TRACE/MEMBER_TRACE, native GetIn/GetOut/message/movement

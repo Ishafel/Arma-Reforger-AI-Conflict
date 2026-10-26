@@ -48,6 +48,9 @@ class AICF_VehicleAcquisitionFlow
 	protected static const int STAGING_PROGRESS_REPORT_INTERVAL_MS = 10000;
 	protected static const int APPROACH_REISSUE_COOLDOWN_MS = 15000;
 	protected static const int MAX_APPROACH_WAYPOINT_REISSUES = 1;
+	protected static const int SPAWN_APPROACH_STAGING_RESERVE_MS = 60000;
+	protected static const int MAX_DISTANCE_APPROACH_BUDGET_MS = 600000;
+	protected static const float SPAWN_APPROACH_WALK_METERS_PER_SECOND = 2.0;
 	protected static const float SPAWN_PAD_CLEARANCE_RADIUS_METERS = 8.0;
 	protected static const float SPAWN_PAD_MEMBER_CLEARANCE_MARGIN_METERS = 2.0;
 	protected static const float STAGING_TO_PAD_MARGIN_METERS = 10.0;
@@ -360,9 +363,23 @@ class AICF_VehicleAcquisitionFlow
 			return AICF_TripOutcome.Wait(selection.m_sFailureReason, causationId);
 		}
 
-		int approachDeadlineMs = Math.Min(
-			trip.GetAbsoluteDeadlineMs(),
-			nowMs + m_Config.GetSpawnApproachTimeoutMs());
+		vector stagingPosition = ResolveStagingPosition(
+			trip.GetAssignment().GetGroup(),
+			selection.m_vPosition);
+		int approachAliveCount;
+		float approachFarthestMeters;
+		if (!MeasureSpawnApproachDistance(
+			trip.GetAssignment().GetGroup(),
+			stagingPosition,
+			approachAliveCount,
+			approachFarthestMeters) || approachAliveCount < MinimumAgents(trip))
+		{
+			return EndRequest(trip, fleet, requestState, "GROUP_NOT_COMBAT_READY", nowMs);
+		}
+		int approachBudgetMs = CalculateSpawnApproachBudgetMs(
+			m_Config.GetSpawnApproachTimeoutMs(),
+			approachFarthestMeters);
+		int approachDeadlineMs = Math.Min(trip.GetAbsoluteDeadlineMs(), nowMs + approachBudgetMs);
 		AICF_VehicleSpawnSiteReservation reservation;
 		if (!m_Spawner.TryReserveSelectedSite(
 			trip,
@@ -390,9 +407,6 @@ class AICF_VehicleAcquisitionFlow
 			return AICF_TripOutcome.Wait("SPAWN_SITE_RESERVED", causationId);
 		}
 
-		vector stagingPosition = ResolveStagingPosition(
-			trip.GetAssignment().GetGroup(),
-			selection.m_vPosition);
 		AICF_VehicleSpawnPlan plan = new AICF_VehicleSpawnPlan(
 			selection,
 			reservation,
@@ -404,6 +418,12 @@ class AICF_VehicleAcquisitionFlow
 			m_Spawner.ReleaseSelectedSite(reservation);
 			return FailClosed(trip, "SPAWN_PLAN_COMMIT_REJECTED", "PLAN_GUARD");
 		}
+		AICF_Stage4Diagnostics.Info(
+			"VEHICLE_SPAWN_APPROACH_BUDGET",
+			BuildIdentityContext(trip, requestState, null, causationId) + string.Format(
+				" configured_ms=%1 alive=%2 farthest_staging_m=%3 budget_ms=%4 approach_deadline_ms=%5 trip_deadline_ms=%6 fixed_at_plan=1",
+				m_Config.GetSpawnApproachTimeoutMs(), approachAliveCount, approachFarthestMeters,
+				approachBudgetMs, approachDeadlineMs, trip.GetAbsoluteDeadlineMs()));
 
 		int oldRequestGeneration = requestState.GetRequestGeneration();
 		int waitAgeMs = GetWaitAgeMs(requestState, nowMs);
@@ -1617,6 +1637,45 @@ class AICF_VehicleAcquisitionFlow
 			SPAWN_BOARDING_ENVELOPE_RADIUS_METERS,
 			Math.Max(0, plan.GetApproachDeadlineMs() - nowMs));
 		AICF_Stage4Diagnostics.Info(eventName, details);
+	}
+
+	// Запас фиксируется при планировании: опросы и повтор waypoint его не продлевают.
+	// Вызывающая сторона ограничивает deadline неизменяемым deadline поездки.
+	static int CalculateSpawnApproachBudgetMs(int configuredTimeoutMs, float farthestDistanceMeters)
+	{
+		int travelMs = Math.Ceil(Math.Max(0.0, farthestDistanceMeters) /
+			SPAWN_APPROACH_WALK_METERS_PER_SECOND * 1000.0);
+		int distanceBudgetMs = Math.Min(MAX_DISTANCE_APPROACH_BUDGET_MS,
+			SPAWN_APPROACH_STAGING_RESERVE_MS + travelMs);
+		return Math.Max(configuredTimeoutMs, distanceBudgetMs);
+	}
+
+	protected bool MeasureSpawnApproachDistance(
+		SCR_AIGroup group,
+		vector stagingPosition,
+		out int aliveCount,
+		out float farthestDistanceMeters)
+	{
+		aliveCount = 0;
+		farthestDistanceMeters = 0;
+		if (!group)
+			return false;
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent)
+				continue;
+			IEntity member = agent.GetControlledEntity();
+			if (!AICF_GroupRuntime.IsAliveCharacter(member))
+				continue;
+			if (agent.GetParentGroup() != group)
+				return false;
+			aliveCount++;
+			farthestDistanceMeters = Math.Max(farthestDistanceMeters,
+				vector.DistanceXZ(member.GetOrigin(), stagingPosition));
+		}
+		return aliveCount > 0;
 	}
 
 	protected vector ResolveStagingPosition(SCR_AIGroup group, vector spawnPosition)

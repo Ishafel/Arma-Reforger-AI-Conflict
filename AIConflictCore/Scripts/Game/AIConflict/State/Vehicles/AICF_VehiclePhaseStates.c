@@ -1451,7 +1451,8 @@ class AICF_VehicleDismountState
 	protected int m_iClearPollCount;
 	protected int m_iTripExitClearPollCount;
 	protected int m_iContinuousClearStartedAtMs;
-	protected bool m_bAnimatedExactExitAttempted;
+	protected int m_iAnimatedExactExitAttempts;
+	protected int m_iLastAnimatedExactExitAttemptAtMs;
 	protected bool m_bTerminalClearanceStarted;
 	protected bool m_bTerminalClearanceStopped;
 	protected int m_iLastHiddenRecoveryAuditAtMs;
@@ -1479,7 +1480,8 @@ class AICF_VehicleDismountState
 		m_iClearPollCount = 0;
 		m_iTripExitClearPollCount = 0;
 		m_iContinuousClearStartedAtMs = 0;
-		m_bAnimatedExactExitAttempted = false;
+		m_iAnimatedExactExitAttempts = 0;
+		m_iLastAnimatedExactExitAttemptAtMs = 0;
 		m_bTerminalClearanceStarted = false;
 		m_bTerminalClearanceStopped = false;
 		m_iLastHiddenRecoveryAuditAtMs = 0;
@@ -1522,7 +1524,7 @@ class AICF_VehicleDismountState
 	int GetClearPollCount() { return m_iClearPollCount; }
 	int GetTripExitClearPollCount() { return m_iTripExitClearPollCount; }
 	bool WasNormalReissueAttempted() { return m_bNormalReissueAttempted; }
-	bool WasAnimatedExactExitAttempted() { return m_bAnimatedExactExitAttempted; }
+	int GetAnimatedExactExitAttempts() { return m_iAnimatedExactExitAttempts; }
 	bool IsTerminalClearanceStarted() { return m_bTerminalClearanceStarted; }
 	bool IsTerminalClearanceStopped() { return m_bTerminalClearanceStopped; }
 	AIWaypoint GetDismountWaypoint() { return m_DismountWaypoint; }
@@ -1603,11 +1605,19 @@ class AICF_VehicleDismountState
 		return true;
 	}
 
-	bool MarkAnimatedExactExitAttempted()
+	bool TryRecordAnimatedExactExitAttempt(int nowMs, int maximumAttempts, int retryIntervalMs)
 	{
-		if (m_bAnimatedExactExitAttempted)
+		if (m_bTerminalClearanceStarted || m_bTerminalClearanceStopped ||
+			nowMs >= m_iNormalDeadlineMs || nowMs >= m_iTerminalDeadlineMs ||
+			m_iAnimatedExactExitAttempts >= Math.Max(0, maximumAttempts) ||
+			nowMs - m_iStartedAtMs < retryIntervalMs ||
+			(m_iAnimatedExactExitAttempts > 0 &&
+				nowMs - m_iLastAnimatedExactExitAttemptAtMs < retryIntervalMs))
+		{
 			return false;
-		m_bAnimatedExactExitAttempted = true;
+		}
+		m_iAnimatedExactExitAttempts++;
+		m_iLastAnimatedExactExitAttemptAtMs = nowMs;
 		return true;
 	}
 

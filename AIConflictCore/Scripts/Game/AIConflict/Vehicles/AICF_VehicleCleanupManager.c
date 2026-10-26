@@ -421,6 +421,7 @@ class AICF_VehicleCleanupJob
 	ref AICF_VehicleCleanupState m_State;
 	ref AICF_VehicleCleanupFence m_Fence;
 	ref AICF_VehicleCleanupScan m_Scan;
+	ref AICF_VehicleCleanupActorHistory m_ActorHistory;
 	AICF_EVehicleReleaseDisposition m_Disposition;
 	string m_sTrigger;
 	string m_sOperationId;
@@ -658,6 +659,7 @@ class AICF_VehicleCleanupManager
 				nowMs + Math.Max(STABLE_CLEAR_MS, m_Config.GetCleanupDelayMs()));
 			if (!job.m_Fence || !job.m_Fence.IsComplete())
 				return AICF_VehicleCleanupOutcome.Rejected("LEASE_RELEASE_FENCE_INVALID");
+			job.m_ActorHistory = AICF_VehicleCleanupActorHistory.Capture(trip, lease, job.m_Group, nowMs);
 			m_aJobs.Insert(job);
 			ReportReleaseQueued(job);
 		}
@@ -2535,6 +2537,11 @@ class AICF_VehicleCleanupManager
 			}
 			details += " " + ownershipSummary;
 			AICF_Stage3Diagnostics.Error("VEHICLE_CLEANUP_RETAINED", details);
+			Vehicle observedVehicle;
+			string observedRplId;
+			string observationFailure;
+			if (ResolveExpectedVehicle(job, observedVehicle, observedRplId, observationFailure))
+				AICF_VehicleCleanupTrace.Report(job, observedVehicle, BuildJobIdentity(job), nowMs, PLAYER_PROTECTION_RADIUS_METERS);
 			if (reason.Contains("MISMATCH"))
 				AICF_Stage3Diagnostics.Warning("VEHICLE_DELETE_IDENTITY_REPLACED", details);
 			if (reason == "VEHICLE_DELETE_NOT_CONFIRMED")

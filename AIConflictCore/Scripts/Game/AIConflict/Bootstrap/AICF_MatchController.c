@@ -3254,6 +3254,8 @@ class AICF_MatchController
 		// SYSTEM_HOLD waypoint without consuming generic task/stuck budgets.
 		if (slot.IsAwaitingPlayerCommand())
 			return true;
+		if (vehicleView && vehicleView.IsPresetDestinationWait())
+			return true;
 		if (IsWaypointBoundToGroup(slot.GetGroup(), slot.GetWaypoint()))
 			return true;
 		if (vehicleView && vehicleView.HasExecutableVehicleTask())
@@ -4033,6 +4035,8 @@ class AICF_MatchController
 			return "TEMPORARY_ROUTE_REPLAN_HOLD";
 		if (slot && slot.IsPersistentStuckFieldHold() && IsWaypointBoundToGroup(slot.GetGroup(), slot.GetWaypoint()))
 			return "PERSISTENT_STUCK_FIELD_HOLD";
+		if (AICF_PlayerMobHoldPolicy.IsReachedCurrentHold(slot, mainBase, STUCK_WATCHDOG_IGNORE_RADIUS_METERS))
+			return "PLAYER_POSITION_HOLD_AT_MOB";
 		if (slot && slot.GetDecisionAuthority() == AICF_EStrategicDecisionAuthority.AI_COMMANDER &&
 			slot.GetOperationalPosture() == "AREA_SECURITY" && slot.GetTargetBase() == mainBase &&
 			IsWaypointBoundToGroup(slot.GetGroup(), slot.GetWaypoint()))
@@ -4051,7 +4055,7 @@ class AICF_MatchController
 	protected bool IsBoundedVehicleLifecycle(AICF_VehicleSlotView vehicleView)
 	{
 		return vehicleView && vehicleView.IsControllingMovement() &&
-			vehicleView.HasExecutableVehicleTask();
+			(vehicleView.HasExecutableVehicleTask() || vehicleView.IsPresetDestinationWait());
 	}
 
 	protected bool IsSafeVehicleSpawnWait(AICF_VehicleSlotView vehicleView)
@@ -6765,6 +6769,7 @@ class AICF_MatchController
 				slot.GetStrategicAssignmentRevision(),
 				m_iStrategicBaseRevision,
 				vehicleOperationId);
+			slotActivityLine += string.Format(" preset_destination_wait=%1", vehicleView && vehicleView.IsPresetDestinationWait());
 			AICF_Stage35Diagnostics.Info("SLOT_ACTIVITY", slotActivityLine);
 		}
 	}
