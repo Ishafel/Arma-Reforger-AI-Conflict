@@ -1,5 +1,22 @@
 # Планирование снабжения и приоритет набора пехоты
 
+## Bounded подход к казарме
+
+После native STUCK прежние две repair attempts могут выбрать другой endpoint
+через `AICF_RecruitmentApproachEndpoint`: native reachable point от живого leader,
+physical clearance, сохранённые service/group/spawn/assignment/intent и повторный
+fence перед commit. Нового бюджета или сброса deadline нет. История хранит только
+фактически назначенные endpoints, а SELECTED ещё не подтверждает прибытие.
+
+Для alternative completion radius равен min(15,35−serviceDistance−1), minimum1m;
+вся completion circle остаётся в прежних35m physical arrival. Native пример
+30.8624m допускает3.1376m вместо прежнего фиксированного19m cutoff. При отказе
+поиска остаётся исходный endpoint/radius15. Реальный waypoint radius и distance
+записываются COMMITTED. Оплата по-прежнему проверяет `IsPhysicallyPresent`.
+Native reachable query не гарантирует точку возле казармы; отказ всех samples
+остаётся FAIL/мемоизацией, не виртуальным прибытием. Проверки транспорта и evidence:
+[VEHICLE_MULTISQUAD.md](VEHICLE_MULTISQUAD.md).
+
 ## Последовательная очередь — issue #37
 
 `AICF_InfantryRecruitmentService.RefreshAutoService` закрепляет одну живую

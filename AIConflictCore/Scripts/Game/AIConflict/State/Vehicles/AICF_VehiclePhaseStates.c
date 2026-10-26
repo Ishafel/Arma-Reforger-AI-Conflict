@@ -923,6 +923,9 @@ class AICF_VehicleMovementState
 	protected bool m_bCrewRecoveryRoutePending;
 	protected ref AICF_VehicleCrewRecoveryToken m_CrewRecoveryToken;
 	protected ref AICF_TransportNativeGate m_NativeGate;
+	protected ref SCR_AIVehicleCombatActivity m_NativeCombatActivity;
+	protected int m_iNativeCombatStartedAtMs;
+	protected int m_iNativeCombatReportAtMs;
 
 	void Reset()
 	{
@@ -973,6 +976,7 @@ class AICF_VehicleMovementState
 		m_bCrewRecoveryRoutePending = false;
 		m_CrewRecoveryToken = null;
 		m_NativeGate = null;
+		ClearNativeCombatHold();
 	}
 
 	void Begin(int nowMs, int absoluteDeadlineMs, int maximumCrewAttempts, int maximumMobilityAttempts)
@@ -1029,6 +1033,30 @@ class AICF_VehicleMovementState
 	AICF_VehicleCrewRecoveryToken GetCrewRecoveryToken() { return m_CrewRecoveryToken; }
 	AICF_TransportNativeGate GetNativeGate() { return m_NativeGate; }
 	void SetNativeGate(AICF_TransportNativeGate gate) { m_NativeGate = gate; }
+	SCR_AIVehicleCombatActivity GetNativeCombatActivity() { return m_NativeCombatActivity; }
+	int GetNativeCombatStartedAtMs() { return m_iNativeCombatStartedAtMs; }
+
+	void BeginNativeCombatHold(SCR_AIVehicleCombatActivity activity, int nowMs)
+	{
+		m_NativeCombatActivity = activity;
+		m_iNativeCombatStartedAtMs = nowMs;
+		m_iNativeCombatReportAtMs = nowMs;
+	}
+
+	void ClearNativeCombatHold()
+	{
+		m_NativeCombatActivity = null;
+		m_iNativeCombatStartedAtMs = 0;
+		m_iNativeCombatReportAtMs = 0;
+	}
+
+	bool MarkNativeCombatReportDue(int nowMs, int intervalMs)
+	{
+		if (nowMs - m_iNativeCombatReportAtMs < intervalMs)
+			return false;
+		m_iNativeCombatReportAtMs = nowMs;
+		return true;
+	}
 
 	bool StageRouteWaypoint(
 		AIWaypoint waypoint,

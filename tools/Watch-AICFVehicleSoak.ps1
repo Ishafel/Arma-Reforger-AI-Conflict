@@ -82,10 +82,10 @@ while(([DateTimeOffset]::UtcNow-$taskStarted).TotalSeconds -lt $MaximumSeconds){
         $taskCarry=$taskLines[-1]
         for($taskIndex=0;$taskIndex -lt $taskLines.Count-1;$taskIndex++){
             $taskLine=$taskLines[$taskIndex].TrimEnd("`r")
-            if($taskLine -match '\[VEHICLE_SOAK_HEARTBEAT\]'){$taskLastHeartbeat=$taskLine}
+            if($taskLine -match '\[VEHICLE_(?:SOAK|MULTI)_HEARTBEAT\]'){$taskLastHeartbeat=$taskLine}
             $taskSeverity=''
             if($taskLine -match 'SCRIPT\s+\([EF]\)|ENGINE\s+\(F\)|Virtual Machine Exception|Access violation|Unknown class .SCR_AIGoalReaction_GetOutVehicle'){$taskSeverity='FATAL'}
-            elseif($taskLine -match '\[VEHICLE_SOAK_FAILURE\]|\[ACCEPTANCE_FAILURE_LATCHED\]'){$taskSeverity='FAILURE'}
+            elseif($taskLine -match '\[VEHICLE_(?:SOAK|MULTI)_FAILURE\]|\[ACCEPTANCE_FAILURE_LATCHED\]'){$taskSeverity='FAILURE'}
             elseif($taskLine -match '\[NATIVE_GROUP_MOVE_FAILED\]|\[TRANSPORT_NATIVE_GATE_REJECTED\]'){$taskSeverity='NATIVE_DECISION'}
             if($taskSeverity){Add-AICFSoakAlert $taskSeverity $taskLine}
         }

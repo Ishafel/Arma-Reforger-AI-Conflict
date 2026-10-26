@@ -110,6 +110,7 @@ class AICF_VehicleSlotView
 	protected bool m_bControlsMovement;
 	protected bool m_bExecutableVehicleTask;
 	protected bool m_bPresetDestinationWait;
+	protected bool m_bNativeCombatTask;
 	protected bool m_bSafeSpawnWait;
 	protected bool m_bRestorePending;
 	protected bool m_bOrderRestored;
@@ -127,6 +128,9 @@ class AICF_VehicleSlotView
 		m_sPhase = typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase());
 		m_sStatusText = ResolveStatusText(trip);
 		m_bPresetDestinationWait = AICF_VehiclePresetWaitPolicy.IsCurrentMountedWait(trip, currentBaseRevision);
+		AICF_StrategicAssignmentSnapshot assignment = trip.GetAssignment();
+		m_bNativeCombatTask = currentBaseRevision >= 0 && assignment &&
+			assignment.GetBaseRevision() == currentBaseRevision && AICF_TransportCombatHold.IsCurrentCombat(trip);
 		m_bControlsMovement = trip.GetPhase() == AICF_ETransportTripPhase.SITE_PLANNED ||
 			trip.GetPhase() == AICF_ETransportTripPhase.APPROACHING_SITE ||
 			trip.GetPhase() == AICF_ETransportTripPhase.STAGING_CONFIRMED ||
@@ -180,6 +184,7 @@ class AICF_VehicleSlotView
 	bool IsControllingMovement() { return m_bControlsMovement; }
 	bool HasExecutableVehicleTask() { return m_bExecutableVehicleTask; }
 	bool IsPresetDestinationWait() { return m_bPresetDestinationWait; }
+	bool HasNativeCombatTask() { return m_bNativeCombatTask; }
 	bool IsSafeSpawnWait() { return m_bSafeSpawnWait; }
 	bool IsRestorePending() { return m_bRestorePending; }
 	bool IsOrderRestored() { return m_bOrderRestored; }

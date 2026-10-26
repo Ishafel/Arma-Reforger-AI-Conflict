@@ -3256,6 +3256,8 @@ class AICF_MatchController
 			return true;
 		if (vehicleView && vehicleView.IsPresetDestinationWait())
 			return true;
+		if (vehicleView && vehicleView.HasNativeCombatTask())
+			return true;
 		if (IsWaypointBoundToGroup(slot.GetGroup(), slot.GetWaypoint()))
 			return true;
 		if (vehicleView && vehicleView.HasExecutableVehicleTask())
@@ -4054,6 +4056,8 @@ class AICF_MatchController
 
 	protected bool IsBoundedVehicleLifecycle(AICF_VehicleSlotView vehicleView)
 	{
+		if (vehicleView && vehicleView.IsControllingMovement() && vehicleView.HasNativeCombatTask())
+			return true;
 		return vehicleView && vehicleView.IsControllingMovement() &&
 			(vehicleView.HasExecutableVehicleTask() || vehicleView.IsPresetDestinationWait());
 	}
@@ -6770,6 +6774,7 @@ class AICF_MatchController
 				m_iStrategicBaseRevision,
 				vehicleOperationId);
 			slotActivityLine += string.Format(" preset_destination_wait=%1", vehicleView && vehicleView.IsPresetDestinationWait());
+			slotActivityLine += string.Format(" native_vehicle_combat=%1", vehicleView && vehicleView.HasNativeCombatTask());
 			AICF_Stage35Diagnostics.Info("SLOT_ACTIVITY", slotActivityLine);
 		}
 	}

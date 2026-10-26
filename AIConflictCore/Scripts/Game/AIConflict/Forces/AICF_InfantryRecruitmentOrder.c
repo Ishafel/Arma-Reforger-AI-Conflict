@@ -21,6 +21,7 @@ class AICF_InfantryRecruitmentOrder
 	SCR_ServicePointComponent m_Service;
 	EntityID m_ServiceId;
 	vector m_vPosition;
+	ref array<vector> m_aApproachEndpoints = {};
 	AIWaypoint m_Waypoint;
 	int m_iStartedAtMs;
 	int m_iArrivedAtMs;

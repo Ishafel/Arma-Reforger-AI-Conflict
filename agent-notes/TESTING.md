@@ -1,5 +1,101 @@
 # Проверки и baseline
 
+## Ступени 2 → 4 → 6 и повторная native посадка — 2026-10-26
+
+Продолжение той же ветки от `cae4df7`. По решению пользователя отчёт только
+локальный: `.codex-runtime/vehicle-multisquad/REPORT.md`; GitHub не изменялся.
+Workflow, scopes, clocks и команды: [VEHICLE_MULTISQUAD.md](VEHICLE_MULTISQUAD.md).
+**Общий runtime outcome FAIL; готовность релиза не подтверждена.** Обычные
+INFANTRY defaults и cap10/faction не менялись.
+
+Сделаны четыре полных получасовых наблюдения. У всех native0/stopped,
+duration/liveness/provenance PASS. Это не означает доезд или пройденную нагрузку.
+
+| Case | Wall/heartbeat | Functional outcome |
+|---|---|---|
+| normal-run |1821.765s/788,maxgap3090ms | FAIL: symmetric peak1, потери/recovery/spawn timeouts |
+| capacity-run |1819.972s/822,maxgap3041ms | FAIL:11/12muster, одинapproach STUCK→NO_SAFE_BARRACKS |
+| normal-v4 |1819.853s/790,maxgap3039ms | FAIL: peakUS1/USSR2, symmetric0, crew/mobility/roster failures |
+| capacity-v4 |1831.128s/760,maxgap3683ms | MOVING2/side exact5 подтверждены30246ms. На4 FAIL own transitioning crew→FOREIGN;6 не достигнуты |
+
+Наиболее сильное наблюдение нагрузки — два движущихся отряда на каждой стороне
+в `capacity-v4`, с пятью исходными бойцами на назначенных местах, непрерывно
+30.246s. Это ограниченный PASS первой ступени, не успешная транспортная цепочка
+или подтверждение четырёх/шести отрядов.
+
+CAPACITY — отдельный truce/HOLD_FIRE/protection/finitegrant4000 режим, не NORMAL
+war proof. Дополнительные900s MOUNTED_STAGING проверяют количество/посадку до
+первой дальней цели, явно CAPACITY_MOUNTED_ONLY/notmovingproof. Первый запуск
+FAIL по гонкефоновогорасхода465<475 приgrant225/4000; test-onlyJIT исправлен,
+native debit/бюджет не подменяются. Следующий915.162s/native0 FAIL поmuster3/4:
+24reachablequeries отрезаны прежним19m cutoff. Adaptive radius сохраняет35m
+containment, но сам по себе не гарантирует подход; native неудачи сохранены.
+
+Финальный `mounted-six-adaptive`: wall917.323s, elapsed900733ms,391 heartbeat,
+maxgap3034ms, native0/audit1. Duration/liveness/provenance/environment/native_fatal
+PASS; recruitment/cohorts/functional/resources FAIL. Барьер платного найма остался
+3/4: USSR/1 не дошёл к казарме,21 native endpoint вне33m envelope и3 отказа query.
+SELECTED/COMMITTED нет. Выдача машин и JIT ветвь не достигнуты; funding FAIL здесь
+означает отсутствие обязательных purchase receipts, не новую доказанную гонку.
+`cohort=2` — ожидаемая ступень, а не физический PASS. Четыре/шесть не состоялись;
+это не доказательство предела fleet capacity.
+
+Исправлены current native combat proof/meaningful task, свой exact occupant
+при физическом переходе, postcombat native seat assignment, bounded alternative
+recruitment endpoint. Source review закрыл P2 stale native GetIn fallback.
+Путь/двери/физический состав логируются read-only; реальные таймеры и ошибки
+движения не скрываются.
+
+Контролируемый CombatResume-v3: hold90516ms/stationary89495ms, natural deselect1015ms;
+FAIL — native переставил всех четырёх пассажиров и назначил driver Cargo.
+CombatResume-v4 после remap: hold90234ms/stationary89206ms/deselect1025ms,
+**RESUMED110.915m/16poll/exact5/native route**; полный scenario всё равно FAIL по
+общему VEHICLE_DAMAGE. Collision/fire/airborne не доказаны: Y50.9 абсолютная,
+root damage flag не покрывает все child managers/independent movement modifier.
+V2/V6 initial boarding FAIL125s: все door/seat/owner API разрешают вход, native
+GetIn RUNNING без transition в1.7–2.6m отentry. Внутренний BT/path отказ тогда
+не наблюдался; deadline/две попытки ради PASS не расширялись.
+
+Финальный CombatResume-v8 на актуальных production sources: initial exact5 PASS,
+hold90317ms/stationary90317ms, natural deselect1000ms, затем
+**RESUMED102.994m/29poll/exact5/native route**. Полная поездка снова FAIL по
+`VEHICLE_DAMAGE` до arrival/foot arrival; component Rpl/deadline совпали.
+Общий predicate пока не разделяет movement damage и fire: точная физическая
+причина не доказана. Не выдавать этот частичный resume за PASS доезда/высадки.
+`WITNESS_IDENTITY`/`IDENTITY_REJECTED` здесь общие названия veto, а не подмена
+identity. До health stop нет FALLBACK/UNSTUCK/mobility attempts; последующий
+FAILED_CLOSED вызван fixture cleanup (`COORDINATOR_STOP`). В V8 raw vehicle path
+содержит уже пройденные corners: сумма всей polyline не равна remaining distance.
+Новая EntryPath ветвь при успешной начальной посадке не исполнялась.
+
+Проверки с точными commands/exits/hashes сохранены в evidence:
+
+- Baseline7/7 и профильные baselines/after каждого автора PASS; ранние найденные
+  parser/oracle FAIL исправлены и не удалены.
+- Полный offline111/111, затем113 с одним restricted Junction FAIL и отдельным
+  native filesystem rerun PASS;115/115 и116/116 PASS соответствующих sources.
+  Последние adaptive/diagnostic source delta проверены отдельно:10/10 PASS;
+  полный116 после них не выдаётся за новый запуск.
+- Production compile разных freeze Stock/RHS/ArlandWCSRHS: PASS. Сохранён
+  `reviewed-final` FAIL unsupported GetOwner и fixture Formula too complex374;
+  `api-final`3/3 PASS после исправления. Затем `final-diagnostics` FAIL по
+  перегруженному EntryPath expression627; выражения разбиты на короткие guards.
+  Финальный Stock изCombatResume-v8 и `final-verified` RHS/WCS PASS на одном
+  production source. Failed compile stages не запускали симуляцию.
+  `final-source-verification.json`:254 Core files,131 byte-identical,123 отличаются
+  только CRLF/LF из git archive; substantive differences и compile source drift0.
+  `final-diagnostics`/CombatResume-v7 compile FAIL сохранён, после guard repair
+  актуальная проверка Workbench3/3 PASS, native exit0/script fatal0.
+- Фактические rates/orders/preset/actor/lease/source/CLI/watchdog receipts и полные
+  stopped server logs сохраняются; `evidence/archive-index.json` связывает пути.
+
+All-native resource/font/GUID baseline остаётся FAIL. NORMAL содержит project
+SCRIPT(E) replacement timeouts: gen2 получил1/5 через22.6s, затем gen3/4 без
+callbacks до30s; причина native queue не доказана. Старый JIP8 serializer FAIL
+не снят; client/JIP/playerRPC/UI/physicalallRHS-WCSmatrix в этом изменении NOT RUN.
+Визуальные критерии требуют игрока и отклонены из terminal workflow: AGENTS
+запрещает GUI/ComputerUse/screenshots. Это не PASS и не разрешение ready/release.
+
 ## Настоящий первый отряд, найм5 и длительный бой: #78 — 2026-10-26
 
 Продолжение `codex/issue-78-vehicle-presets` от `a4fec4b`. По запросу пользователя

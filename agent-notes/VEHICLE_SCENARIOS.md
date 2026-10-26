@@ -111,6 +111,14 @@ expected seat/occupant/reservation/lock, tracked boarding state/age. Данны�
 полный snapshot с trigger=reason. Sequence связывает членов с group snapshot;
 group generation и entity различают старый состав и замену.
 
+`PHYSICAL_MEMBER_TRACE` отдельно перечисляет всех фактических `group.GetAgents`,
+включая платно нанятых сверх исходного deployment size. `physical_index` — лишь
+порядок native массива; `roster_position` — найденная текущая позиция0..MAX_GROUP_SIZE-1
+или-1, не постоянный ID. Пишутся parent/control/replication identity, расстояние
+к target/waypoint и его completion radius, selected/executed action, group activity
+с native waypoint/current proof и фактический DefendBehavior waypoint. Этот observer
+не меняет policy и помогает отличить отставших бойцов от native cover formation.
+
 Для разбора сначала найди faction+numeric slot+group generation, затем operation.
 Сопоставь transition reason и target revision с native group action, selected и
 executed member actions. Например token может остаться EVALUATED после удаления

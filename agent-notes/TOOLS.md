@@ -41,12 +41,29 @@ legacy после пересборки. Команды и границы — [DE
 
 ## Единый offline запуск
 
+`Invoke-AICFVehicleMultiSquad.ps1` запускает ступени2/4/6 на сторону в NORMAL
+или отдельно маркированном CAPACITY; `Watch-AICFVehicleSoak.ps1` наблюдает оба
+формата heartbeat/failure. `Invoke-AICFTransportCombatResume.ps1` проверяет
+fault-injected native hold/release/resume. Это terminal runtime runners вне
+offline All. Команды, бюджет и ограничения — [VEHICLE_MULTISQUAD.md](VEHICLE_MULTISQUAD.md).
+Их fixture/log contracts входят в All. `Test-TransportCombatHoldContracts.ps1`
+и `Test-TransportCombatTaskContracts.ps1` проверяют read-only proof и projection
+в watchdog; `Test-RecruitmentApproachEndpointContracts.ps1` — bounded alternative
+endpoint без подмены физического прибытия.
+`Test-VehicleCrewOwnTransitionContracts.ps1` проверяет exact own occupant,
+human/foreign отказ,3s предел и expiry-before-wait; `Test-VehiclePresetEntryTraceContracts.ps1`
+проверяет немутирующий pre-cancel/deadline readback дверей и token identity.
+`Test-VehiclePresetNativeSeatContracts.ps1` проверяет exact slot remap, native
+clone/super boundary, weak lifecycle, stale/current traffic и чужие/неоднозначные
+запросы. GroupTrace contracts также сохраняют raw path семантику без progress writes.
+
 `tools/Invoke-AICFVehicleScenarios.ps1 -EvidenceRoot <новый каталог>` — отдельный
 native runner шести полных Stock поездок; в offline All он не входит. Готовит
 stage, выполняет Workbench, canonical Server и строгий `Test-VehicleScenarioLog.ps1`.
 Cases/flags и формат group/member trace — [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md).
 Offline All включает `Test-VehicleScenarioLogContracts.ps1` (45 controls) и
-`Test-GroupTraceContracts.ps1` (read-only/authority/rate/lifecycle,7 controls).
+`Test-GroupTraceContracts.ps1` (read-only/authority/rate/lifecycle и полный
+physical roster/raw native path и supported associated-agent API,48 controls).
 
 Для issue #78 runner автоматически включает `Test-VehiclePresetContracts.ps1`
 (78 guards), `Test-VehiclePresetLogContracts.ps1` (24 controls),

@@ -61,6 +61,17 @@ try{
         if($taskEvents.Count -ne 2 -or @($taskEvents|Where-Object severity -eq 'NATIVE_CRASH').Count -ne 1 -or $taskState.alerts -ne 2){throw 'Sibling native crash missing or duplicated'}
         $taskControls++
     }
+    $taskMultiWatch=Join-Path $taskRoot 'multi-watch'
+    $taskMultiLogs=Join-Path $taskMultiWatch 'profile/logs/native'
+    [void][IO.Directory]::CreateDirectory($taskMultiLogs)
+    $taskMultiHeartbeat='12:01:00 SCRIPT : [AICF][VEHICLE_MULTI_HEARTBEAT] mode=CAPACITY cohort=4 us_exact_active=4 ussr_exact_active=4'
+    @($taskMultiHeartbeat,'12:01:01 SCRIPT : [AICF][VEHICLE_MULTI_FAILURE] reason=SYNTHETIC_FAILURE','12:01:02 Game destroyed.')|Set-Content -LiteralPath (Join-Path $taskMultiLogs 'console.log')
+    & $taskShell -NoProfile -File (Join-Path $RepositoryRoot 'tools/Watch-AICFVehicleSoak.ps1') -EvidenceRoot $taskMultiWatch *> (Join-Path $taskRoot 'watch-multi.txt')
+    if($LASTEXITCODE -ne 0){throw 'Multi-squad watcher failed'}
+    $taskMultiState=Get-Content -LiteralPath (Join-Path $taskMultiWatch 'analysis-live.json') -Raw|ConvertFrom-Json
+    $taskMultiEvents=@(Get-Content -LiteralPath (Join-Path $taskMultiWatch 'analysis-events.jsonl')|ForEach-Object{$_|ConvertFrom-Json})
+    if($taskMultiState.latest_heartbeat -ne $taskMultiHeartbeat -or $taskMultiEvents.Count -ne 1 -or $taskMultiEvents[0].severity -ne 'FAILURE'){throw 'Multi-squad heartbeat or failure missing'}
+    $taskControls++
     # Реальная блокировка файла и фактическое условие остановки из AST watcher.
     $taskTokens=$null;$taskParseErrors=$null
     $taskWatcherAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $RepositoryRoot 'tools/Watch-AICFVehicleSoak.ps1'),[ref]$taskTokens,[ref]$taskParseErrors)

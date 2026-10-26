@@ -299,6 +299,7 @@ class AICF_VehicleTransitFlow
 		string invalidReason;
 		if (!ValidateContext(trip, causationId, true, invalidReason))
 			return AICF_TripOutcome.TerminalFailClosed(invalidReason, causationId);
+		AICF_VehiclePresetNativeSeatPolicy.Register(trip);
 		string vehicleFailure = InspectRouteAssetFailure(trip);
 		if (!vehicleFailure.IsEmpty())
 		{
@@ -316,6 +317,9 @@ class AICF_VehicleTransitFlow
 
 		AICF_VehicleMovementState state = trip.GetMovementState();
 		EnsureStateStarted(trip, state, nowMs);
+		AICF_TripOutcome combatOutcome = ObserveNativeCombat(trip, causationId, nowMs);
+		if (combatOutcome)
+			return combatOutcome;
 		AICF_TripOutcome gateOutcome = ObserveNativeGate(trip, causationId, nowMs);
 		if (gateOutcome)
 			return gateOutcome;
@@ -365,15 +369,74 @@ class AICF_VehicleTransitFlow
 
 	void AbortOwnedActions(AICF_TransportTrip trip)
 	{
+		AICF_VehiclePresetNativeSeatPolicy.Unregister(trip);
 		if (!trip || !trip.GetMovementState())
 			return;
 		AICF_VehicleMovementState state = trip.GetMovementState();
+		if (state.GetNativeCombatActivity())
+		{
+			ReportNativeCombat(trip, "TRANSPORT_NATIVE_COMBAT_ENDED", "OWNED_ACTIONS_ABORTED", System.GetTickCount());
+			state.ClearNativeCombatHold();
+		}
 		state.SetNativeGate(null);
 		AICF_VehicleCrewRecoveryToken token = state.GetCrewRecoveryToken();
 		if (!token)
 			return;
 		token.CancelOwnerSafe();
 		state.ClearCrewRecoveryToken(token);
+	}
+
+	protected AICF_TripOutcome ObserveNativeCombat(AICF_TransportTrip trip, string causationId, int nowMs)
+	{
+		AICF_VehicleMovementState state = trip.GetMovementState();
+		SCR_AIVehicleCombatActivity activity = AICF_TransportCombatHold.ResolveCurrentCombat(trip);
+		if (activity != state.GetNativeCombatActivity())
+		{
+			if (state.GetNativeCombatActivity())
+				ReportNativeCombat(trip, "TRANSPORT_NATIVE_COMBAT_ENDED", "ACTIVITY_OR_CONTEXT_CHANGED", nowMs);
+			state.ClearNativeCombatHold();
+			if (activity)
+			{
+				state.BeginNativeCombatHold(activity, nowMs);
+				ReportNativeCombat(trip, "TRANSPORT_NATIVE_COMBAT_STARTED", "EXACT_CURRENT_ACTIVITY", nowMs);
+			}
+		}
+		if (!activity)
+			return null;
+		if (state.MarkNativeCombatReportDue(nowMs, MOTION_REPORT_INTERVAL_MS))
+			ReportNativeCombat(trip, "TRANSPORT_NATIVE_COMBAT_WAIT", "EXACT_CURRENT_ACTIVITY", nowMs);
+		return AICF_TripOutcome.Wait("NATIVE_VEHICLE_COMBAT", causationId);
+	}
+
+	protected void ReportNativeCombat(AICF_TransportTrip trip, string eventName, string reason, int nowMs)
+	{
+		AICF_VehicleMovementState state = trip.GetMovementState();
+		SCR_AIVehicleCombatActivity activity = state.GetNativeCombatActivity();
+		string actionState = "NONE";
+		if (activity)
+			actionState = typename.EnumToString(EAIActionState, activity.GetActionState());
+		SCR_AIGroup group;
+		Vehicle vehicle;
+		int assignmentRevision = -1;
+		if (trip.GetAssignment())
+		{
+			group = trip.GetAssignment().GetGroup();
+			assignmentRevision = trip.GetAssignment().GetAssignmentRevision();
+		}
+		if (trip.GetLease())
+			vehicle = trip.GetLease().GetVehicle();
+		string details = string.Format("operation_id=%1 reason=%2 identity_unavailable=1", trip.GetOperationId(), reason);
+		if (trip.GetAssignment() && trip.GetLease())
+			details = FormatIdentity(trip, reason);
+		details += string.Format(
+			" group=%1 vehicle=%2 activity=SCR_AIVehicleCombatActivity activity_state=%3 hold_age_ms=%4 trip_deadline_ms=%5",
+			AICF_GroupTrace.Entity(group), AICF_GroupTrace.Entity(vehicle),
+			actionState, Math.Max(0, nowMs - state.GetNativeCombatStartedAtMs()), trip.GetAbsoluteDeadlineMs());
+		details += string.Format(
+			" route_progress_age_ms=%1 physical_motion_age_ms=%2 assignment_revision=%3 route_generation=%4 progress_clocks_unchanged=1",
+			Math.Max(0, nowMs - state.GetLastRouteProgressAtMs()), Math.Max(0, nowMs - state.GetLastPhysicalMotionAtMs()),
+			assignmentRevision, state.GetRouteGeneration());
+		AICF_Stage3Diagnostics.Info(eventName, details);
 	}
 
 	protected AICF_TripOutcome ObserveNativeGate(AICF_TransportTrip trip, string causationId, int nowMs)
@@ -991,6 +1054,23 @@ class AICF_VehicleTransitFlow
 		return details;
 	}
 
+	protected AICF_TripOutcome ObserveExactOwnedCrewRole(
+		AICF_TransportTrip trip,
+		EAICompartmentType role,
+		string causationId,
+		int nowMs)
+	{
+		BaseCompartmentSlot seat = ResolveRoleSlot(trip.GetLease().GetVehicle(), role);
+		if (!AICF_VehicleCrewRoleOwnership.IsCurrentExactPresetOccupant(trip, seat, role, nowMs))
+			return null;
+		AICF_VehicleCrewRoleSnapshot snapshot = new AICF_VehicleCrewRoleSnapshot(
+			trip.GetAssignment().GetGroup(), trip.GetLease().GetVehicle(), seat, role, m_Watchdog);
+		AICF_TripOutcome outcome = ObserveCrewRoleSettledLoss(trip, snapshot, causationId, nowMs);
+		if (outcome)
+			return outcome;
+		return AICF_TripOutcome.Wait("EXACT_OWN_CREW_ROLE_SETTLED_RECHECK", causationId);
+	}
+
 	protected AICF_TripOutcome StartCrewRecovery(
 		AICF_TransportTrip trip,
 		EAICompartmentType role,
@@ -998,6 +1078,25 @@ class AICF_VehicleTransitFlow
 		int nowMs)
 	{
 		AICF_VehicleMovementState state = trip.GetMovementState();
+		AICF_TripOutcome ownTransition = ObserveExactOwnedCrewRole(trip, role, causationId, nowMs);
+		if (ownTransition)
+			return ownTransition;
+		BaseCompartmentSlot roleSlot = ResolveRoleSlot(trip.GetLease().GetVehicle(), role);
+		IEntity occupant;
+		if (roleSlot)
+			occupant = roleSlot.GetOccupant();
+		if (occupant && SCR_AIDamageHandling.IsConscious(occupant))
+		{
+			IEntity expectedLast = state.GetLastDriver();
+			if (role == EAICompartmentType.Turret)
+				expectedLast = state.GetLastGunner();
+			AICF_Stage3Diagnostics.Warning("VEHICLE_CREW_OCCUPANT_REJECTED",
+				FormatIdentity(trip, "EXACT_OWN_OCCUPANT_PROOF_FAILED") + string.Format(
+					" role=%1 occupant=%2 expected_last=%3 group=%4 seat=%5",
+					CrewRoleName(role), AICF_GroupTrace.Entity(occupant), AICF_GroupTrace.Entity(expectedLast),
+					AICF_GroupTrace.Entity(trip.GetAssignment().GetGroup()), AICF_VehiclePreset.SeatKey(roleSlot)));
+			return FailRecovery(trip, "CREW_ROLE_OCCUPIED_BY_FOREIGN_ENTITY", "CREW", causationId);
+		}
 		if (!state.BeginCrewRecovery())
 		{
 			string exhaustedReason = "DRIVER_RECOVERY_EXHAUSTED";
@@ -1006,7 +1105,6 @@ class AICF_VehicleTransitFlow
 			return FailRecovery(trip, exhaustedReason, "CREW", causationId);
 		}
 
-		BaseCompartmentSlot roleSlot = ResolveRoleSlot(trip.GetLease().GetVehicle(), role);
 		if (!roleSlot || !roleSlot.IsCompartmentAccessible() || roleSlot.IsReserved())
 		{
 			return FailRecovery(
@@ -1015,16 +1113,6 @@ class AICF_VehicleTransitFlow
 				"CREW",
 				causationId);
 		}
-		IEntity occupant = roleSlot.GetOccupant();
-		if (occupant && SCR_AIDamageHandling.IsConscious(occupant))
-		{
-			return FailRecovery(
-				trip,
-				"CREW_ROLE_OCCUPIED_BY_FOREIGN_ENTITY",
-				"CREW",
-				causationId);
-		}
-
 		IEntity excludedEntity;
 		IEntity preferredEntity = state.GetLastDriver();
 		if (role == EAICompartmentType.Pilot)
@@ -1156,9 +1244,34 @@ class AICF_VehicleTransitFlow
 			state.ClearCrewRecoveryToken(token);
 			return AICF_TripOutcome.TerminalFailClosed("CREW_RECOVERY_COMPARTMENT_IDENTITY_CHANGED", causationId);
 		}
+		// Passive own-role waits must not hide this existing token's absolute end.
+		EAIActionState actionState = token.GetActionState();
+		if (!token.IsOwnerValid() || actionState == EAIActionState.FAILED || token.IsDeadlineReached(nowMs))
+		{
+			string failureReason = "CREW_RECOVERY_OWNER_INVALID";
+			if (actionState == EAIActionState.FAILED)
+				failureReason = "CREW_RECOVERY_ACTION_FAILED";
+			else if (token.IsDeadlineReached(nowMs))
+				failureReason = "CREW_RECOVERY_TIMEOUT";
+			EAICompartmentType failedRole = token.GetRole();
+			token.CancelOwnerSafe();
+			state.ClearCrewRecoveryToken(token);
+			AICF_Stage3Diagnostics.Warning(
+				"VEHICLE_CREW_RECOVERY_RETRY",
+				FormatIdentity(trip, failureReason) + string.Format(
+					" role=%1 attempt=%2 next_deadline_ms=%3",
+					CrewRoleName(failedRole), state.GetCrewRecoveryAttempts(),
+					Math.Min(trip.GetAbsoluteDeadlineMs(), nowMs + RECOVERY_RETRY_DELAY_MS)));
+			return AICF_TripOutcome.Retry(failureReason, causationId,
+				Math.Min(trip.GetAbsoluteDeadlineMs(), nowMs + RECOVERY_RETRY_DELAY_MS));
+		}
 		if (token.GetRole() == EAICompartmentType.Turret &&
 			!IsRoleSettled(trip, EAICompartmentType.Pilot))
 		{
+			AICF_TripOutcome ownPilotTransition = ObserveExactOwnedCrewRole(
+				trip, EAICompartmentType.Pilot, causationId, nowMs);
+			if (ownPilotTransition)
+				return ownPilotTransition;
 			token.CancelOwnerSafe();
 			state.ClearCrewRecoveryToken(token);
 			return StartCrewRecovery(trip, EAICompartmentType.Pilot, causationId, nowMs);
@@ -1198,30 +1311,6 @@ class AICF_VehicleTransitFlow
 			return PrepareCrewRecoveryRoute(trip, causationId);
 		}
 
-		EAIActionState actionState = token.GetActionState();
-		if (!token.IsOwnerValid() || actionState == EAIActionState.FAILED ||
-			token.IsDeadlineReached(nowMs))
-		{
-			string failureReason = "CREW_RECOVERY_OWNER_INVALID";
-			if (actionState == EAIActionState.FAILED)
-				failureReason = "CREW_RECOVERY_ACTION_FAILED";
-			else if (token.IsDeadlineReached(nowMs))
-				failureReason = "CREW_RECOVERY_TIMEOUT";
-			EAICompartmentType role = token.GetRole();
-			token.CancelOwnerSafe();
-			state.ClearCrewRecoveryToken(token);
-			AICF_Stage3Diagnostics.Warning(
-				"VEHICLE_CREW_RECOVERY_RETRY",
-				FormatIdentity(trip, failureReason) + string.Format(
-					" role=%1 attempt=%2 next_deadline_ms=%3",
-					CrewRoleName(role),
-					state.GetCrewRecoveryAttempts(),
-					Math.Min(trip.GetAbsoluteDeadlineMs(), nowMs + RECOVERY_RETRY_DELAY_MS)));
-			return AICF_TripOutcome.Retry(
-				failureReason,
-				causationId,
-				Math.Min(trip.GetAbsoluteDeadlineMs(), nowMs + RECOVERY_RETRY_DELAY_MS));
-		}
 		return AICF_TripOutcome.Wait("CREW_RECOVERY_TRANSITION_PENDING", causationId);
 	}
 

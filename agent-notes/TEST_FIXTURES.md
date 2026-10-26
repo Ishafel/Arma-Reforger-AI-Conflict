@@ -2,6 +2,17 @@
 
 ## Пресеты техники: issue #78
 
+`AICF_VehicleMultiSquadProbe.c` добавляется runner только в isolated Core,
+отдельно от Scenario/SoakProbe. CLI `-aicfVehicleMultiMode NORMAL|CAPACITY`,
+`-aicfVehicleMultiDurationMs 1800000`; настоящие numeric slots0..5 и платный
+ступенчатый найм/техника2→4→6. `AICF_TransportCombatResumeProbe.c` отдельно
+проверяет hold90s/release/resume100m через единственный existing native activity
+gate, CLI `-aicfTransportCombatResume 1`. Native selection/actions/clocks не
+подменяются. У него собственный isolated roster и явный FAULT_INJECTED,
+у Multi CAPACITY — конечный grant4000/faction, truce/защита. Ни один не доказывает
+player RPC, UI или матрицу всех моделей. Контракты, duration и источники evidence:
+[VEHICLE_MULTISQUAD.md](VEHICLE_MULTISQUAD.md).
+
 Полные поездки к неизменной дальней точке и повторная посадка используют
 `AICF_VehicleScenarioProbe.c`, только isolated Core. Tracked runner подготавливает
 его и компилирует автоматически; `-aicfVehicleScenario uaz5/ural5/armed3/solo1/

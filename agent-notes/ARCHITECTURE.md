@@ -1,5 +1,32 @@
 # Архитектура и навигация по исходникам
 
+`AICF_TransportCombatHold` — read-only proof текущего собственного
+`SCR_AIVehicleCombatActivity` для ручного vehicle preset в TRANSIT. Проверяются
+current/owned native action, vehicle manager, lease/entity/Rpl/generations,
+assignment и исходный живой AI roster без чужих occupants. В API1.8.0.13
+точный выбранный combat activity может остаться EVALUATED: его native
+`OnActionSelected` не вызывает super. Просто queued EVALUATED не подходит.
+Transit возвращает typed WAIT до crew/mobility recovery, но после health и
+absolute deadline gates. Уже начатые CrewRecovery/NativeGate не скрываются.
+Movement progress timestamps, deadlines, actions и recovery counters не меняются.
+Registry экспортирует отдельный `HasNativeCombatTask()` при актуальной graph
+revision; MatchController учитывает его как meaningful task/bounded lifecycle.
+События `TRANSPORT_NATIVE_COMBAT_STARTED/WAIT/ENDED` сохраняют реальные clocks.
+
+`AICF_VehicleCrewRoleOwnership` не меняет экипаж: это узкий current preset/actor/
+role/lease proof для прежнего3s ожидания собственного физического перехода.
+Transit проверяет срок/owner/FAILED уже существующего crew token до такого WAIT,
+не расходует новые попытки и не освобождает token при passive Pilot transition.
+Чужой или неидентифицированный occupant по-прежнему не вытесняется.
+
+Native повторная посадка ручного preset проходит через scoped actor reaction
+`AICF_VehiclePresetNativeSeatPolicy`: точный seat передаётся существующему native
+GetIn, без подмены action/приоритетов/таймеров. Weak bindings регистрирует Transit
+после ValidateContext и снимает в AbortOwnedActions. Helpers не владеют trip phase,
+экономикой или cleanup автомобиля; reservation далее обслуживает native action.
+Все current/stale/foreign/actor/lease guards повторяются перед dispatch/rollback.
+Raw path trace — только наблюдение, не новое основание meaningful progress.
+
 Диагностика групп: `AICF_GroupTrace` у VehicleCoordinator читает authority state
 и реальные позиции живых бойцов, без удержания engine entities в cursor.
 `AICF_NativeVehicleTrace` наблюдает штатные callbacks с однократным super,
