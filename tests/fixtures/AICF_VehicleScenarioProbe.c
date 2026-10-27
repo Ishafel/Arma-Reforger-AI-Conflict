@@ -56,12 +56,35 @@ class AICF_VSNativeGate
 	}
 }
 
+// Только политика выбора native observer; root keys/Start/Update не вызываются.
+class AICF_VSObserverPolicy : AICF_ManagedObservers
+{
+	IEntity ResolveCurrent(SCR_GameModeCampaign campaign, AICF_FactionState state, AICF_GroupSlot slot, SCR_AIGroup group, EntityID groupId, Faction faction, FactionKey expected)
+	{
+		if (!Replication.IsServer() || !campaign || !campaign.IsMaster() || !campaign.IsRunning()) return null;
+		if (!state || !slot || state.GetSlot(0) != slot || !slot.IsCombatReady()) return null;
+		if (!group || group.GetID() != groupId || slot.GetGroup() != group || !faction || group.GetFaction() != faction) return null;
+		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(group)) return null;
+		if ((expected != "US" && expected != "USSR") || state.GetFactionKey() != faction.GetFactionKey() || AICF_ContentProfile.GetActive().GetStableFactionKey(state.GetFactionKey()) != expected) return null;
+		// ResolveMember проверяет native live leader, group master и faction бойца.
+		return ResolveMember(group, expected);
+	}
+}
+
 // Полная поездка к неизменной цели и пешее прибытие; только isolated stage.
 modded class AICF_MatchController
 {
+	protected SCR_CampaignFaction m_VSFaction;
+	protected FactionKey m_sVSFaction = "USSR";
+	protected static const int AICF_VS_OBSERVER_KEY = -1513170001;
+	protected ref AICF_VSObserverPolicy m_VSObserverPolicy = new AICF_VSObserverPolicy();
+	protected ObserversSystem m_VSObservers;
+	protected IEntity m_VSObservedMember;
+	protected bool m_bVSObserverRequested;
 	protected ref AICF_FactionState m_VSState;
 	protected ref AICF_VehicleCoordinator m_VSVehicles;
 	protected SCR_AIGroup m_VSGroup;
+	protected EntityID m_VSGroupId;
 	protected ref AICF_VehiclePreset m_VSRecipe;
 	protected Vehicle m_VSVehicle;
 	protected ref AICF_TransportTrip m_VSCompletedTrip;
@@ -90,6 +113,48 @@ modded class AICF_MatchController
 	protected vector m_vVSRepeatTarget;
 	protected ref array<EntityID> m_aVSMembers = {};
 	protected ref array<ref AICF_VSNativeGate> m_aVSGates = {};
+
+	protected bool AICF_VSSelectFaction()
+	{
+		if (m_VSFaction || m_VSState) return false;
+		string requested = "USSR";
+		if (!System.GetCLIParam("aicfVehicleScenarioFaction", requested)) requested = "USSR";
+		if (requested != "US" && requested != "USSR") return false;
+		if (requested == "US" && m_sVSCase != "repeat5") return false;
+		SCR_CampaignFaction selected = m_USSRFaction;
+		if (requested == "US") selected = m_USFaction;
+		if (!selected || !selected.GetMainBase() || AICF_ContentProfile.GetActive().GetStableFactionKey(selected.GetFactionKey()) != requested) return false;
+		m_VSFaction = selected;
+		m_sVSFaction = requested;
+		return true;
+	}
+
+	protected bool AICF_VSUSModelCandidate(ResourceName prefab, int source, int seats, int cost)
+	{
+		return prefab.Contains("/M1025_") && prefab.Contains("M2HB") && source == AICF_EVehicleCatalogSource.FACTION && seats == 5 && cost > 0;
+	}
+
+	protected bool AICF_VSSelectUSModel(AICF_VehiclePresetCatalog catalog, out ResourceName selected)
+	{
+		JsonLoadContext list = new JsonLoadContext();
+		array<ResourceName> prefabs = {};
+		if (!list.LoadFromString(catalog.List()) || !list.ReadValue("prefabs", prefabs)) return false;
+		foreach (ResourceName prefab : prefabs)
+		{
+			string reason;
+			if (!prefab.Contains("/M1025_") || !prefab.Contains("M2HB") || catalog.Source(prefab) != AICF_EVehicleCatalogSource.FACTION) continue;
+			if (!catalog.Inspect(prefab, reason) || !AICF_VSUSModelCandidate(prefab, catalog.Source(prefab), catalog.Seats().Count(), catalog.Cost(prefab))) continue;
+			selected = prefab;
+			return true;
+		}
+		return false;
+	}
+
+	protected void AICF_VSUpdateVehicles()
+	{
+		if (m_sVSFaction == "US") m_VSVehicles.Update(m_VSState, m_VSFaction, null, null, m_iStrategicBaseRevision, true);
+		else m_VSVehicles.Update(null, null, m_VSState, m_VSFaction, m_iStrategicBaseRevision, true);
+	}
 
 	protected bool AICF_VSTransitCrew(AICF_GroupSlot slot, AICF_TransportTrip trip)
 	{
@@ -187,7 +252,7 @@ modded class AICF_MatchController
 				for (int index; index < m_ObjectiveGraph.GetNodeCount(); index++)
 				{
 					SCR_CampaignMilitaryBaseComponent base = m_ObjectiveGraph.GetNode(index).GetBase();
-					if (!base || !base.GetOwner() || base == m_USSRFaction.GetMainBase()) continue;
+					if (!base || !base.GetOwner() || base == m_VSFaction.GetMainBase()) continue;
 					if (vector.DistanceXZ(query, base.GetOwner().GetOrigin()) < 350) { nearBase = true; break; }
 				}
 				if (nearBase) continue;
@@ -204,7 +269,7 @@ modded class AICF_MatchController
 	}
 	protected bool AICF_VSOrder(AICF_GroupSlot slot, vector target)
 	{
-		bool accepted = m_OrderPlanner.AssignPlayerPointOrder(slot, m_USSRFaction, target, m_VSVehicles.IsInfantryOrderSuspended(slot));
+		bool accepted = m_OrderPlanner.AssignPlayerPointOrder(slot, m_VSFaction, target, m_VSVehicles.IsInfantryOrderSuspended(slot));
 		if (!accepted) return false;
 		m_vVSGoal = target;
 		m_iVSGoalRevision = slot.GetStrategicIntentRevision();
@@ -213,13 +278,152 @@ modded class AICF_MatchController
 		return true;
 	}
 
+	// Opt-in causal fixtures may own a distinct verdict without weakening the
+	// normal full-arrival scenario. The ordinary runner always returns false.
+	protected bool AICF_VSAlternativeScenario(AICF_GroupSlot slot, AICF_TransportTrip trip)
+	{
+		return false;
+	}
+
+	// A fixture-owned FactionState needs its own owner servicing. Ordinary
+	// scenarios keep the existing flow; opt-in probes may call the real owner.
+	protected void AICF_VSServiceRecovery(AICF_GroupSlot slot)
+	{
+	}
+
+	protected void AICF_VSOnRecoveryVerified(AICF_GroupSlot slot, AIWaypoint waypoint, int stableMs, int stablePolls, int requiredStableMs)
+	{
+	}
+
+	protected bool AICF_VSApplyInitialCohesion(AICF_GroupSlot slot)
+	{
+		if (!Replication.IsServer() || !slot || !slot.IsCombatReady() || !m_VSGroup || slot.GetGroup() != m_VSGroup) return false;
+		if (m_VSGroup.GetID() != m_VSGroupId || !m_GroupCohesionPolicy || m_VSGroup.GetFaction() != m_VSFaction) return false;
+		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(m_VSGroup)) return false;
+		bool applied = m_GroupCohesionPolicy.Apply(m_VSGroup);
+		AIFormationComponent formation = AIFormationComponent.Cast(m_VSGroup.FindComponent(AIFormationComponent));
+		AIGroupMovementComponent movement = AIGroupMovementComponent.Cast(m_VSGroup.FindComponent(AIGroupMovementComponent));
+		AIFormationDefinition selected;
+		AIFormationDefinition defaultFormation;
+		if (formation) selected = formation.GetFormation();
+		if (movement) defaultFormation = movement.GetFormationDefinition(AIGroupMovementComponent.DEFAULT_HANDLER_ID);
+		bool readback = applied && selected && selected.GetName() == AICF_GroupCohesionPolicy.FORMATION_NAME &&
+			defaultFormation && defaultFormation.GetName() == AICF_GroupCohesionPolicy.FORMATION_NAME && movement.GetFormationDisplacement() == 0;
+		bool current = slot.GetGroup() == m_VSGroup && m_VSGroup.GetID() == m_VSGroupId && m_VSGroup.GetFaction() == m_VSFaction;
+		Print(string.Format("[AICF][VEHICLE_SCENARIO_COHESION] scenario=%1 group=%2 formation=Column displacement=0 native_readback=%3 identity_current=%4 setup_parity_only=1 causal_foot_fix_proven=0",
+			m_sVSCase, AICF_GroupTrace.Entity(m_VSGroup), readback, current));
+		return readback && current;
+	}
+
+	protected bool AICF_VSOwnRecoveryRoster(AICF_GroupSlot slot)
+	{
+		if (!Replication.IsServer() || !m_VSState || !slot || slot != m_VSState.GetSlot(0) || !slot.IsCombatReady()) return false;
+		if (!m_VSGroup || m_VSGroup.GetID() != m_VSGroupId || slot.GetGroup() != m_VSGroup || m_VSGroup.GetFaction() != m_VSFaction) return false;
+		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(m_VSGroup) || m_aVSMembers.Count() != m_iVSSize) return false;
+		for (int position; position < m_iVSSize; position++)
+		{
+			IEntity member = slot.GetRosterMember(position);
+			if (!AICF_GroupRuntime.IsAliveCharacter(member) || member.GetID() != m_aVSMembers[position] || !AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(member)) return false;
+			ChimeraCharacter character = ChimeraCharacter.Cast(member);
+			if (!character || !character.GetAIControlComponent()) return false;
+			AIAgent agent = character.GetAIControlComponent().GetControlAIAgent();
+			if (!agent || agent.GetControlledEntity() != member || agent.GetParentGroup() != m_VSGroup) return false;
+		}
+		return true;
+	}
+
+	// The isolated scenario owns a separate FactionState/coordinator. Delegate
+	// its exact current roster to the same production failure owner boundary.
+	override protected bool ResolveVehicleSpawnApproachOwner(SCR_AIGroup group, out AICF_GroupSlot slot,
+		out AICF_VehicleCoordinator coordinator, out SCR_CampaignFaction faction)
+	{
+		if (super.ResolveVehicleSpawnApproachOwner(group, slot, coordinator, faction)) return true;
+		if (!Replication.IsServer() || !m_bStarted || !m_bRosterReady || m_bVSDone ||
+			!m_Campaign || !m_Campaign.IsMaster() || !m_Campaign.IsRunning() ||
+			!m_VSState || !m_VSVehicles || group != m_VSGroup) return false;
+		AICF_GroupSlot ownSlot = m_VSState.GetSlot(0);
+		if (!AICF_VSOwnRecoveryRoster(ownSlot)) return false;
+		slot = ownSlot;
+		coordinator = m_VSVehicles;
+		faction = m_VSFaction;
+		return true;
+	}
+
+	protected bool AICF_VSCanServiceRecovery(AICF_GroupSlot slot)
+	{
+		if (!AICF_VSOwnRecoveryRoster(slot) || !m_VSVehicles) return false;
+		if (!slot.HasPendingOrderRecovery() || !slot.IsPendingOrderRecoveryContextCurrent()) return false;
+		if (slot.GetPendingOrderRecoveryCause() != "VEHICLE_HANDOFF" || slot.PendingOrderRecoveryCountsAsReliabilityAttempt() || slot.PendingOrderRecoveryCountsAsStuckRecovery()) return false;
+		if (m_VSVehicles.IsControllingMovement(slot) || m_VSVehicles.IsRestorePending(slot)) return false;
+		return AICF_GroupRuntime.CountAliveAgentsInAnyVehicle(m_VSGroup) == 0;
+	}
+
+	protected void AICF_VSServiceOwnRecovery(AICF_GroupSlot slot)
+	{
+		if (!AICF_VSCanServiceRecovery(slot)) return;
+		AIWaypoint expected = slot.GetPendingOrderRecoveryWaypoint();
+		int stableMs = slot.GetPendingOrderRecoveryStableElapsedMs();
+		int stablePolls = slot.GetPendingOrderRecoveryStablePolls();
+		int requiredStableMs = Math.Max(ORDER_RECOVERY_MIN_STABLE_MS, m_Stage2Config.GetReliabilityIntervalMs() * ORDER_RECOVERY_STABLE_INTERVALS);
+		// Custom state is outside the ordinary faction loop. Delegate once to its
+		// real owner; never clear pending or manufacture durability observations.
+		ProcessPendingOrderRecovery(m_VSState, slot, m_VSFaction);
+		if (!AICF_VSOwnRecoveryRoster(slot) || slot.HasPendingOrderRecovery() || slot.GetWaypoint() != expected || m_VSGroup.GetCurrentWaypoint() != expected) return;
+		if (stableMs < requiredStableMs || stablePolls < ORDER_RECOVERY_STABLE_POLLS || !m_OrderPlanner.GetOrderFailureReason(slot, m_VSFaction).IsEmpty()) return;
+		Print(string.Format("[AICF][VEHICLE_SCENARIO_RECOVERY_VERIFIED] scenario=%1 leg=%2 group=%3 waypoint_id=%4 stable_ms=%5 stable_polls=%6 required_stable_ms=%7 owner=ProcessPendingOrderRecovery direct_clear=0",
+			m_sVSCase, m_iVSLeg, AICF_GroupTrace.Entity(m_VSGroup), expected.GetID(), stableMs, stablePolls, requiredStableMs));
+		AICF_VSOnRecoveryVerified(slot, expected, stableMs, stablePolls, requiredStableMs);
+	}
+
+	void AICF_VSStopObserver(string reason)
+	{
+		if (m_VSObservers && m_bVSObserverRequested)
+		{
+			m_VSObservers.RemoveObserverSP(AICF_VS_OBSERVER_KEY);
+			Print(string.Format("[AICF][VEHICLE_SCENARIO_OBSERVER] scenario=%1 event=REMOVED key=%2 removal_request=1 key_readback_available=0 reason=%3", m_sVSCase, AICF_VS_OBSERVER_KEY, reason));
+		}
+		m_bVSObserverRequested = false;
+		m_VSObservedMember = null;
+		m_VSObservers = null;
+	}
+
+	protected void AICF_VSUpdateObserver()
+	{
+		AICF_GroupSlot slot;
+		if (m_VSState) slot = m_VSState.GetSlot(0);
+		IEntity member;
+		if (!m_bStopped && !m_bVSDone && m_bRosterReady && m_VSObserverPolicy)
+			member = m_VSObserverPolicy.ResolveCurrent(m_Campaign, m_VSState, slot, m_VSGroup, m_VSGroupId, m_VSFaction, m_sVSFaction);
+		if (!member) { AICF_VSStopObserver("OWNER_NOT_CURRENT"); return; }
+		if (!m_VSObservers) m_VSObservers = ObserversSystem.Cast(GetGame().GetWorld().FindSystem(ObserversSystem));
+		if (!m_VSObservers || m_VSObserverPolicy.ResolveCurrent(m_Campaign, m_VSState, slot, m_VSGroup, m_VSGroupId, m_VSFaction, m_sVSFaction) != member)
+		{
+			AICF_VSStopObserver("NATIVE_SYSTEM_OR_IDENTITY");
+			return;
+		}
+		// Как root ManagedObservers: каждый Update, локальное смещение 0/0.
+		m_VSObservers.InsertObserverSP(AICF_VS_OBSERVER_KEY, 0, 0, member);
+		if (!m_bVSObserverRequested || m_VSObservedMember != member)
+			Print(string.Format("[AICF][VEHICLE_SCENARIO_OBSERVER] scenario=%1 event=REQUESTED key=%2 member=%3 registered_request=1 key_readback_available=0 setup_parity_only=1 causal_foot_fix_proven=0", m_sVSCase, AICF_VS_OBSERVER_KEY, AICF_GroupTrace.Entity(member)));
+		m_bVSObserverRequested = true;
+		m_VSObservedMember = member;
+	}
+
+	override protected void Stop(bool cleanupEntities)
+	{
+		AICF_VSStopObserver("STOP");
+		super.Stop(cleanupEntities);
+	}
+
 	override protected void Update()
 	{
 		super.Update();
+		AICF_VSUpdateObserver();
 		if (!Replication.IsServer() || m_bVSDone || !m_bRosterReady || !System.GetCLIParam("aicfVehicleScenario", m_sVSCase)) return;
 		int now = System.GetTickCount();
 		if (!m_iVSStarted) m_iVSStarted = now;
 		if (now - m_iVSStarted > 1200000) { AICF_VSCheck("TIMEOUT", false); AICF_VSFinish(); return; }
+		if (!m_VSFaction && !AICF_VSSelectFaction()) { AICF_VSCheck("FACTION_SELECTION", false); AICF_VSFinish(); return; }
 		if (!m_VSState)
 		{
 			string worldCombat;
@@ -243,13 +447,14 @@ modded class AICF_MatchController
 			}
 			if (m_sVSCase == "armed3") m_iVSSize = 3;
 			if (m_sVSCase == "solo1") m_iVSSize = 1;
-			m_VSState = new AICF_FactionState(m_USSRFaction.GetFactionKey(), m_Config);
+			m_VSState = new AICF_FactionState(m_VSFaction.GetFactionKey(), m_Config);
 			AICF_GroupSlot fresh = m_VSState.GetSlot(0);
 			fresh.SetDesiredSize(m_iVSSize);
 			fresh.SetUnitType(AICF_EGroupUnitType.MOTORIZED_LIGHT);
-			m_VSGroup = m_GroupSpawner.SpawnGroup(m_USSRFaction, m_USSRFaction.GetMainBase(), 0, m_iVSSize, false);
+			m_VSGroup = m_GroupSpawner.SpawnGroup(m_VSFaction, m_VSFaction.GetMainBase(), 0, m_iVSSize, false);
 			AICF_VSCheck("GROUP_CREATED", m_VSGroup != null);
 			if (!m_VSGroup) { AICF_VSFinish(); return; }
+			m_VSGroupId = m_VSGroup.GetID();
 			m_VSGroup.SetLifecyclePolicy(SCR_EAIGroupLifecyclePolicy.Manual);
 			m_VSGroup.SetDeleteWhenEmpty(false);
 			fresh.BeginInitialSpawn();
@@ -257,7 +462,7 @@ modded class AICF_MatchController
 			m_GroupSpawner.BeginRosterSpawn(m_VSGroup, m_iVSSize);
 			m_VSVehicles = new AICF_VehicleCoordinator(m_Stage3Config, m_Campaign, m_ConflictAdapter, m_OrderPlanner,
 				m_GroupCohesionPolicy, m_ObjectiveGraph, m_TargetSelector, m_ContentProfile);
-			m_vVSHome = m_USSRFaction.GetMainBase().GetSpawnPoint().GetOrigin();
+			m_vVSHome = m_VSFaction.GetMainBase().GetSpawnPoint().GetOrigin();
 			return;
 		}
 		AICF_GroupSlot slot = m_VSState.GetSlot(0);
@@ -271,6 +476,9 @@ modded class AICF_MatchController
 			if (!combatCase) groupUtility.SetCombatMode(EAIGroupCombatMode.HOLD_FIRE);
 			slot.MarkReady();
 			slot.RecordDeploymentMembers();
+			bool initialCohesion = AICF_VSApplyInitialCohesion(slot);
+			AICF_VSCheck("INITIAL_COHESION_POLICY", initialCohesion);
+			if (!initialCohesion) { AICF_VSFinish(); return; }
 			if (!combatCase)
 				for (int protectedMember; protectedMember < m_iVSSize; protectedMember++)
 				{
@@ -284,7 +492,8 @@ modded class AICF_MatchController
 			ResourceName prefab = "{259EE7B78C51B624}Prefabs/Vehicles/Wheeled/UAZ469/UAZ469.et";
 			if (m_sVSCase == "ural5") prefab = "{16C1F16C9B053801}Prefabs/Vehicles/Wheeled/Ural4320/Ural4320_transport.et";
 			if (m_sVSCase == "solo1") prefab = "{16A674FE31B0921C}Prefabs/Vehicles/Wheeled/UAZ469/UAZ469_uncovered.et";
-			AICF_VehiclePresetCatalog catalog = new AICF_VehiclePresetCatalog(m_USSRFaction);
+			AICF_VehiclePresetCatalog catalog = new AICF_VehiclePresetCatalog(m_VSFaction);
+			if (m_sVSFaction == "US" && !AICF_VSSelectUSModel(catalog, prefab)) { AICF_VSCheck("CATALOG_US_EXACT5", false); catalog.Clear(); AICF_VSFinish(); return; }
 			if (m_sVSCase == "armed3")
 			{
 				prefab = "";
@@ -298,6 +507,7 @@ modded class AICF_MatchController
 			string reason;
 			if (!catalog.Inspect(prefab, reason)) { AICF_VSCheck("CATALOG_INSPECTION", false); catalog.Clear(); AICF_VSFinish(); return; }
 			m_VSRecipe = catalog.Draft(prefab);
+			Print(string.Format("[AICF][VEHICLE_SCENARIO_SELECTION] scenario=%1 faction=%2 actual_faction=%3 prefab=%4 native_seats=%5 native_cost=%6", m_sVSCase, m_sVSFaction, m_VSFaction.GetFactionKey(), prefab, catalog.Seats().Count(), catalog.Cost(prefab)));
 			int member;
 			for (int mandatory; mandatory < catalog.Seats().Count(); mandatory++)
 				if (catalog.Seats()[mandatory].GetType() == ECompartmentType.PILOT || catalog.Seats()[mandatory].GetType() == ECompartmentType.TURRET)
@@ -309,9 +519,11 @@ modded class AICF_MatchController
 			AICF_VSCheck("EXACT_RECIPE", valid);
 			if (!valid) { AICF_VSFinish(); return; }
 			for (int actor; actor < m_iVSSize; actor++) m_aVSMembers.Insert(slot.GetRosterMember(actor).GetID());
-			AICF_VSCheck("INITIAL_ORDER", m_OrderPlanner.AssignPlayerPointOrder(slot, m_USSRFaction, m_vVSHome, false));
+			AICF_VSCheck("INITIAL_ORDER", m_OrderPlanner.AssignPlayerPointOrder(slot, m_VSFaction, m_vVSHome, false));
 		}
-		m_VSVehicles.Update(null, null, m_VSState, m_USSRFaction, m_iStrategicBaseRevision, true);
+		AICF_VSServiceOwnRecovery(slot);
+		AICF_VSServiceRecovery(slot);
+		AICF_VSUpdateVehicles();
 		AICF_TransportTrip trip = m_VSVehicles.GetTrip(slot);
 		// Реестр вправе удалить завершённый trip до пешего прибытия к точке.
 		if (!trip && m_iVSStep == 4) trip = m_VSCompletedTrip;
@@ -326,9 +538,10 @@ modded class AICF_MatchController
 			DamageManagerComponent damage = DamageManagerComponent.Cast(trip.GetLease().GetVehicle().FindComponent(DamageManagerComponent));
 			if (damage && damage.IsDamageHandlingEnabled()) damage.EnableDamageHandling(false);
 		}
+		if (AICF_VSAlternativeScenario(slot, trip)) return;
 		if (trip.IsTerminal() && trip.GetPhase() != AICF_ETransportTripPhase.COMPLETE)
 		{
-			AICF_GroupTrace.Snapshot(slot, m_USSRFaction.GetFactionKey(), trip, 0, "SCENARIO_TERMINAL_FAILURE");
+			AICF_GroupTrace.Snapshot(slot, m_VSFaction.GetFactionKey(), trip, 0, "SCENARIO_TERMINAL_FAILURE");
 			AICF_VSCheck(trip.GetTerminalReason(), false); AICF_VSFinish(); return;
 		}
 		if (m_iVSStep == 0)
@@ -423,23 +636,28 @@ modded class AICF_MatchController
 				m_sVSPreviousTrip = trip.GetOperationId();
 				m_VSCompletedTrip = null;
 				AICF_VSCheck("REPEAT_ORDER", AICF_VSOrder(slot, m_vVSRepeatTarget));
-				AICF_VSCheck("EXPLICIT_READMISSION", m_VSVehicles.RequestExplicitVehicleAdmission(slot, m_USSRFaction, "SCENARIO_REPEAT_TRIP"));
+				AICF_VSCheck("EXPLICIT_READMISSION", m_VSVehicles.RequestExplicitVehicleAdmission(slot, m_VSFaction, "SCENARIO_REPEAT_TRIP"));
 				m_iVSRepeatRequested = now;
 				m_iVSMoving = 0;
 				m_iVSRecoveries = 0;
 				m_iVSStep = 0;
 				return;
 			}
-			AICF_VSCheck("PURCHASE_LIMIT", m_VSVehicles.GetSpawnedCount(m_USSRFaction.GetFactionKey()) <= m_iVSLeg);
+			AICF_VSCheck("PURCHASE_LIMIT", m_VSVehicles.GetSpawnedCount(m_VSFaction.GetFactionKey()) <= m_iVSLeg);
 			AICF_VSFinish();
 		}
 	}
 
 	protected void AICF_VSFinish()
 	{
+		AICF_VSStopObserver("FINISH");
 		m_bVSDone = true;
 		m_VSCompletedTrip = null;
-		if (m_VSVehicles) m_VSVehicles.StopWithFactionContexts(true, null, null, m_VSState, m_USSRFaction);
+		if (m_VSVehicles)
+		{
+			if (m_sVSFaction == "US") m_VSVehicles.StopWithFactionContexts(true, m_VSState, m_VSFaction, null, null);
+			else m_VSVehicles.StopWithFactionContexts(true, null, null, m_VSState, m_VSFaction);
+		}
 		if (m_VSGroup)
 		{
 			m_OrderPlanner.ClearOrder(m_VSState.GetSlot(0));
@@ -448,5 +666,15 @@ modded class AICF_MatchController
 		}
 		Print(string.Format("[AICF][VEHICLE_SCENARIO_DONE] scenario=%1 checks=%2 failures=%3 legs=%4", m_sVSCase, m_iVSChecks, m_iVSFailures, m_iVSLeg));
 		GetGame().RequestClose();
+	}
+}
+
+modded class ArmaReforgerScripted
+{
+	override void OnGameEnd()
+	{
+		AICF_MatchController controller = AICF_MatchController.GetActiveController();
+		if (controller) controller.AICF_VSStopObserver("ON_GAME_END");
+		super.OnGameEnd();
 	}
 }

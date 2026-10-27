@@ -124,7 +124,9 @@ modded class SCR_AIProcessFailedMovementResult
 			bool hasHandler = GetVariableIn(PORT_HANDLER_ID, handler);
 			bool hasRelated = GetVariableIn(PORT_IS_WAYPOINT_RELATED, related);
 			vector location;
-			GetVariableIn(PORT_MOVE_LOCATION, location);
+			bool hasLocation = GetVariableIn(PORT_MOVE_LOCATION, location);
+			if (hasHandler && hasRelated && hasLocation && AICF_HandleSpawnApproachFailedMovement(result, handler, related, location))
+				return ENodeResult.FAIL;
 			if (AICF_FIAGarrisonMovementPolicy.Handle(m_Group, m_GroupUtilityComponent, result, handler, related, location))
 				return ENodeResult.FAIL;
 			if (AICF_FIAPatrolMovementPolicy.Handle(m_Group, m_GroupUtilityComponent, result, handler, related, location))
@@ -152,6 +154,27 @@ modded class SCR_AIProcessFailedMovementResult
 			}
 		}
 		return super.EOnTaskSimulate(owner, dt);
+	}
+
+	protected bool AICF_HandleSpawnApproachFailedMovement(int result, int handler, bool related, vector location)
+	{
+		if (!Replication.IsServer() || result != EMoveError.UNKNOWN || !related ||
+			!AICF_IsInfantryMoveHandler(handler)) return false;
+		AICF_MatchController controller = AICF_MatchController.GetActiveController();
+		if (!controller) return false;
+		SCR_AIActivityBase activity = SCR_AIActivityBase.Cast(m_GroupUtilityComponent.GetCurrentAction());
+		AIActionBase failedAction = m_GroupUtilityComponent.GetExecutedAction();
+		if (!activity || !activity.m_RelatedWaypoint || !failedAction) return false;
+		AICF_SpawnApproachFailure failure = controller.ReportVehicleSpawnApproachFailure(m_Group,
+			m_GroupUtilityComponent, failedAction, activity.m_RelatedWaypoint, location);
+		if (!failure) return false;
+		if (failure.WasDelivered()) return true;
+		if (!failure.IsSourceCurrent()) return false;
+		m_GroupUtilityComponent.OnMoveFailed(result, null, related, location);
+		// Native invokers may synchronously replace an assignment or action.
+		if (failure.ConfirmDelivery() && m_GroupUtilityComponent.GetExecutedAction() == failedAction)
+			failedAction.Fail();
+		return true;
 	}
 
 	protected bool AICF_HandleDefendArrival(int result, int handler, bool related, vector location)

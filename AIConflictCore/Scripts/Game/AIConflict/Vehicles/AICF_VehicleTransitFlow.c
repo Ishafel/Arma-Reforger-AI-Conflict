@@ -2094,6 +2094,14 @@ class AICF_VehicleTransitFlow
 		vehicle.GetWorldTransform(transform);
 		if (transform[1][1] < 0.25)
 			return "VEHICLE_OVERTURNED";
+		// Native LeaveStaticVehicles может высаживать акторов при current Move,
+		// без group GetOutActivity. Не возвращаем crew в повреждённую машину.
+		// Это native damage threshold, а не отсутствие физического движения.
+		SCR_DamageManagerComponent movementDamageManager = SCR_DamageManagerComponent.GetDamageManager(vehicle);
+		if (movementDamageManager && movementDamageManager.GetMovementDamage() >= 1.0 &&
+			!SCR_AIVehicleUsability.VehicleCanMove(vehicle, movementDamageManager) &&
+			SCR_DamageManagerComponent.GetDamageManager(vehicle) == movementDamageManager)
+			return "VEHICLE_MOVEMENT_DESTROYED";
 		return string.Empty;
 	}
 

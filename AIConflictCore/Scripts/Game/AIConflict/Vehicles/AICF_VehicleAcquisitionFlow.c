@@ -173,6 +173,44 @@ class AICF_VehicleAcquisitionFlow
 		CancelSpawnPlan(trip, trip.GetRequestState(), reason);
 	}
 
+	// Report only; phase transitions and cleanup stay on the ordinary Tick path.
+	AICF_SpawnApproachFailure ReportSpawnApproachFailure(AICF_TransportTrip trip,
+		AICF_StrategicAssignmentSnapshot currentAssignment, AICF_GroupSlot slot,
+		AICF_FactionFleet fleet, SCR_CampaignFaction faction,
+		SCR_AIGroupUtilityComponent utility, AIActionBase action, AIWaypoint waypoint, vector location)
+	{
+		if (!IsAuthorityContextValid(trip, currentAssignment, fleet, faction)) return null;
+		if (!slot || !utility || !action || !waypoint) return null;
+		if (!trip.GetAssignment().MatchesAssignmentRevision(currentAssignment)) return null;
+		if (trip.IsTerminal() || trip.GetPhase() != AICF_ETransportTripPhase.APPROACHING_SITE || trip.GetLease())
+			return null;
+		AICF_VehicleRequestState requestState = trip.GetRequestState();
+		if (!requestState) return null;
+		AICF_VehicleSpawnPlan plan = requestState.GetSpawnPlan();
+		if (!IsSpawnPlanCurrent(trip, requestState, plan, System.GetTickCount()) ||
+			plan.GetApproachWaypoint() != waypoint || !IsApproachWaypointQueued(trip, plan)) return null;
+		float locationDistance = vector.Distance(location, waypoint.GetOrigin());
+		if (!(locationDistance >= 0 && locationDistance <= 1.0)) return null;
+		AICF_SpawnApproachFailure failure = plan.GetApproachFailure();
+		if (failure)
+		{
+			if (failure.WasDelivered() && failure.MatchesTrip(trip)) return failure;
+			return null;
+		}
+		failure = new AICF_SpawnApproachFailure(trip, slot, plan, m_Spawner, utility, action, waypoint);
+		if (!plan.BindApproachFailure(failure)) return null;
+		if (!failure.IsSourceCurrent())
+		{
+			plan.ClearApproachFailure(failure);
+			return null;
+		}
+		string causationId = BuildCausationId(trip, requestState, "APPROACH_MOVE_FAILED");
+		string details = BuildIdentityContext(trip, requestState, null, causationId);
+		details += string.Format(" reason=SPAWN_SITE_APPROACH_MOVE_FAILED_UNKNOWN waypoint=%1 location=%2 pending_tick=1", waypoint.GetID(), location);
+		AICF_Stage35Diagnostics.Warning("VEHICLE_SPAWN_APPROACH_MOVE_FAILED", details);
+		return failure;
+	}
+
 	protected bool IsAuthorityContextValid(
 		AICF_TransportTrip trip,
 		AICF_StrategicAssignmentSnapshot currentAssignment,
@@ -412,7 +450,8 @@ class AICF_VehicleAcquisitionFlow
 			reservation,
 			stagingPosition,
 			nowMs,
-			approachDeadlineMs);
+			approachDeadlineMs,
+			trip.GetVehiclePreset() != null);
 		if (!requestState.SetSpawnPlan(plan))
 		{
 			m_Spawner.ReleaseSelectedSite(reservation);
@@ -473,6 +512,8 @@ class AICF_VehicleAcquisitionFlow
 			faction);
 		if (!baseFailure.IsEmpty())
 			return ReplanSpawnSite(trip, fleet, requestState, baseFailure, nowMs);
+		AICF_TripOutcome approachFailureOutcome = ObserveSpawnApproachFailure(trip, fleet, requestState, plan, nowMs);
+		if (approachFailureOutcome) return approachFailureOutcome;
 
 		int stagedCount;
 		int aliveCount;
@@ -487,7 +528,8 @@ class AICF_VehicleAcquisitionFlow
 			stagedCount,
 			aliveCount,
 			farthestDistanceMeters,
-			memberSamples) || aliveCount < MinimumAgents(trip))
+			memberSamples,
+			plan.RequiresManualRally()) || aliveCount < MinimumAgents(trip))
 		{
 			return EndRequest(trip, fleet, requestState, "GROUP_NOT_COMBAT_READY", nowMs);
 		}
@@ -1078,7 +1120,8 @@ class AICF_VehicleAcquisitionFlow
 		AICF_VehicleSpawnPlan plan,
 		int nowMs)
 	{
-		return plan && plan.IsValid() &&
+		return trip && plan && plan.IsValid() &&
+			plan.RequiresManualRally() == (trip.GetVehiclePreset() != null) &&
 			m_Spawner.IsSiteReservationCurrent(
 				plan.GetReservation(),
 				trip,
@@ -1121,7 +1164,7 @@ class AICF_VehicleAcquisitionFlow
 				stagingDistanceMeters,
 				nowMs,
 				STAGING_MEMBER_ACTION_PROGRESS_METERS);
-			if (IsMemberWithinSpawnBoardingEnvelope(entity, plan.GetSpawnPosition()))
+			if (IsMemberWithinSpawnBoardingEnvelope(entity, plan))
 			{
 				ReportStagingMemberAction(
 					trip, requestState, plan, token,
@@ -1193,6 +1236,7 @@ class AICF_VehicleAcquisitionFlow
 		AICF_VehicleSpawnPlan plan,
 		int nowMs)
 	{
+		if (plan && plan.RequiresManualRally()) return false;
 		if (!trip || !requestState || !plan || plan.GetAliveCount() <= 1 ||
 			plan.GetStagedCount() != plan.GetAliveCount() - 1 ||
 			!plan.CanProbeStagingRelocation(
@@ -1212,7 +1256,7 @@ class AICF_VehicleAcquisitionFlow
 			if (agent)
 				character = ChimeraCharacter.Cast(agent.GetControlledEntity());
 			if (!AICF_GroupRuntime.IsAliveCharacter(character) ||
-				IsMemberWithinSpawnBoardingEnvelope(character, plan.GetSpawnPosition()))
+				IsMemberWithinSpawnBoardingEnvelope(character, plan))
 			{
 				continue;
 			}
@@ -1454,7 +1498,7 @@ class AICF_VehicleAcquisitionFlow
 			if (agent)
 				entity = agent.GetControlledEntity();
 			if (!AICF_GroupRuntime.IsAliveCharacter(entity) ||
-				IsMemberWithinSpawnBoardingEnvelope(entity, plan.GetSpawnPosition()) ||
+				IsMemberWithinSpawnBoardingEnvelope(entity, plan) ||
 				plan.FindStagingActionToken(entity) ||
 				plan.IsStagingMemberExhausted(entity) ||
 				!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(entity))
@@ -1566,14 +1610,14 @@ class AICF_VehicleAcquisitionFlow
 
 	protected bool IsMemberWithinSpawnBoardingEnvelope(
 		IEntity entity,
-		vector spawnPosition)
+		AICF_VehicleSpawnPlan plan)
 	{
-		if (!AICF_GroupRuntime.IsAliveCharacter(entity))
+		if (!plan || !AICF_GroupRuntime.IsAliveCharacter(entity))
 			return false;
-		float padDistanceMeters = vector.DistanceXZ(entity.GetOrigin(), spawnPosition);
-		return padDistanceMeters >= SPAWN_PAD_CLEARANCE_RADIUS_METERS +
-			SPAWN_PAD_MEMBER_CLEARANCE_MARGIN_METERS &&
-			padDistanceMeters <= SPAWN_BOARDING_ENVELOPE_RADIUS_METERS;
+		float stagingDistanceMeters = vector.DistanceXZ(entity.GetOrigin(), plan.GetStagingPosition());
+		float padDistanceMeters = vector.DistanceXZ(entity.GetOrigin(), plan.GetSpawnPosition());
+		return AICF_VehicleSpawner.IsStagingGeometryReady(stagingDistanceMeters, m_Config.GetSpawnStagingRadiusMeters(),
+			padDistanceMeters, SPAWN_BOARDING_ENVELOPE_RADIUS_METERS, plan.RequiresManualRally());
 	}
 
 	protected void ReportStagingMemberAction(
@@ -1713,6 +1757,18 @@ class AICF_VehicleAcquisitionFlow
 			stagingPosition = navmeshPosition;
 		}
 		return stagingPosition;
+	}
+
+	protected AICF_TripOutcome ObserveSpawnApproachFailure(AICF_TransportTrip trip,
+		AICF_FactionFleet fleet, AICF_VehicleRequestState requestState, AICF_VehicleSpawnPlan plan, int nowMs)
+	{
+		if (!IsSpawnPlanCurrent(trip, requestState, plan, nowMs)) return null;
+		AICF_SpawnApproachFailure failure = plan.GetApproachFailure();
+		if (!failure) return null;
+		if (failure.WasDelivered() && failure.MatchesTrip(trip))
+			return EndRequest(trip, fleet, requestState, "SPAWN_SITE_APPROACH_MOVE_FAILED_UNKNOWN", nowMs);
+		plan.ClearApproachFailure(failure);
+		return null;
 	}
 
 	protected bool IsApproachWaypointQueued(

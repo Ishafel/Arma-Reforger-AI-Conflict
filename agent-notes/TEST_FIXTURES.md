@@ -2,6 +2,43 @@
 
 ## Пресеты техники: issue #78
 
+`Invoke-AICFVehicleScenarios.ps1 -Cases repeat5 -Faction US` выбирает настоящий
+US state/main base и собственный five-seat M1025 M2HB из native FACTION catalog;
+default `USSR` сохраняет УАЗ и прежние cases. Orders, recovery, observer и
+coordinator Update/Stop используют одну выбранную сторону. Отсутствующий CLI
+явно восстанавливает default: native GetCLIParam очищает out-string при false.
+
+`AICF_SpawnApproachFailureProbe.c` вызывает controlled UNKNOWN через production
+node handler на настоящем current approach. Реальный Tick возвращает failure,
+controller освобождает plan и восстанавливает приказ. Это fault injection;
+см. [VEHICLE_APPROACH_FAILURE.md](VEHICLE_APPROACH_FAILURE.md).
+
+`AICF_RecruitmentNavDomainProbe.c` подключается isolated Multi runner флагом
+`-RecruitmentNavDomainProbe`. Повторяет exact recruitment order/actor/generation,
+token, action/waypoint, native path и paired tile/projection snapshots до/после
+одного original CheckApproach. Surrogate body/rays CharacterAI/Projectile и
+LOD/velocity/stance являются наблюдениями, не mutation или connectivity proof.
+Physics на path node не доказывает, что SpawnPlacement ранее принимал эту точку.
+
+Custom `VehicleScenarioProbe` использует штатный initial cohesion setup
+Column/displacement0 с native readback. Собственный READY slot с current exact
+VEHICLE_HANDOFF candidate обслуживается настоящим ProcessPendingOrderRecovery,
+с теми же identity/owner/durability gates; pending не очищается напрямую.
+Это parity fixture со штатным root lifecycle, не гарантия физического прибытия.
+Causal override лишь наблюдает receipt, повторного verification call нет.
+
+`AICF_BoardingNavDomainProbe.c` подключается только opt-in
+`Invoke-AICFVehicleMultiSquad.ps1 -BoardingNavDomainProbe`. Сравнивает exact group
+и actor pathfinding/navmesh, tile loaded/valid/requested и projections до/после
+spawn и раз в5s boarding. В BOARDING повторяет lease/entity/Rpl/generations;
+PRE/POST проверяют candidate до bind. Не вызывает LoadTile, не выдаёт actions,
+не меняет radius/deadline. Projection не доказывает connectivity или причину BT.
+
+`AICF_TransportDamageFallbackProbe.c` и отдельный terminal runner/log auditor
+проверяют реальное разрушение колёс, bounded пеший fallback и finished-intent
+no-repurchase; затем explicit admission branch. Это controlled fault injection,
+отделённый от обычной войны. Команды и границы: [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md).
+
 `AICF_VehicleMultiSquadProbe.c` добавляется runner только в isolated Core,
 отдельно от Scenario/SoakProbe. CLI `-aicfVehicleMultiMode NORMAL|CAPACITY`,
 `-aicfVehicleMultiDurationMs 1800000`; настоящие numeric slots0..5 и платный

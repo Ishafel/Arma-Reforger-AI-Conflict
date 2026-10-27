@@ -85,11 +85,19 @@ Receipt не заменяет физический выход, exact settled sea
 typed fallback до crew recovery; существующий controller владеет высадкой,
 восстановлением пешего приказа и cleanup. Конкурирующие async owners сохраняются.
 
-Нормально завершённый transport intent хранится в retained terminal trip.
+Завершённый `COMPLETE` или `FALLBACK` transport intent с восстановленным пешим
+приказом хранится в retained terminal trip.
 Coordinator не принимает handoff assignment/waypoint rebuild за новый заказ
 машины: сравниваются group/generation, intent, destination и preset revision.
 Cleanup gates остаются первыми; explicit admission, новый приказ, preset или
 группа проходят обычную проверку заново.
+
+Transit проверяет native terminal movement damage до crew/combat/gate observers:
+`GetMovementDamage() >= 1`, native `VehicleCanMove == false` и повторный exact
+damage manager. Это сохраняет штатный actor-level выход из повреждённой машины
+даже при текущем group Move. Временная неготовность здоровой машины не получает
+этот veto. Fallback, handoff и cleanup остаются у прежних владельцев; budgets
+и deadlines не меняются.
 
 DismountState раздельно ограничивает logical force-exit и physical-only relocation:
 до3 batches на каждую операцию, суммарно6 на phase. Existing normal→terminal
@@ -310,6 +318,11 @@ despawn остаётся у CleanupManager, initial content readiness — у pro
 
 Flow не меняет фазу и не вызывает соседний flow, controller или cleanup.
 Waypoint сначала снимается с группы, затем удаляется как replicated entity.
+Native `UNKNOWN` на exact current acquisition approach обрабатывается через
+identity-bound receipt: node → resolver → coordinator/controller → acquisition.
+Только обычный Tick flow возвращает outcome, controller выполняет переход и
+cleanup; чужие/stale/неоднозначные callbacks остаются fail-closed. Подробности и
+отдельный fault-injection gate — [VEHICLE_APPROACH_FAILURE.md](VEHICLE_APPROACH_FAILURE.md).
 Перед vehicle delete повторяются identity, occupancy и clearance checks;
 неопределённость означает fail-closed.
 

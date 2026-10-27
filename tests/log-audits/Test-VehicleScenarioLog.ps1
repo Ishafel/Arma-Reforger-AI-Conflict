@@ -3,6 +3,7 @@ param(
  [Parameter(Mandatory)][string]$LauncherPath,
  [Parameter(Mandatory)][string]$NativeExitPath,
  [Parameter(Mandatory)][ValidateSet('uaz5','ural5','armed3','solo1','retarget5','repeat5')][string]$Scenario,
+ [ValidateSet('US','USSR')][string]$Faction='USSR',
  [switch]$Combat,
  [switch]$DismountBudgetProbe
 )
@@ -30,6 +31,9 @@ if($manifests.Count -eq 1){
  }
  $i=[array]::IndexOf($argv,'-aicfVehicleScenario')
  Require ($i -ge 0 -and $argv[$i+1] -eq $Scenario) 'SCENARIO_CLI'
+ $factionArg=[array]::IndexOf($argv,'-aicfVehicleScenarioFaction')
+ $selectedScope=$factionArg -ge 0 -or $Faction -eq 'US'
+ if($selectedScope){Require ($factionArg -ge 0 -and $argv[$factionArg+1] -eq $Faction -and $log -match ('(?:^|\s)-aicfVehicleScenarioFaction '+[regex]::Escape($Faction)+'(?:\s|$)')) 'FACTION_CLI'}
  if($DismountBudgetProbe){
   $i=[array]::IndexOf($argv,'-aicfVehicleScenarioDismountBudget')
   Require ($Scenario -eq 'ural5' -and !$Combat -and $i -ge 0 -and $argv[$i+1] -eq '1') 'DISMOUNT_BUDGET_CLI'
@@ -49,17 +53,29 @@ $legs=1;$crew=5
 if($Scenario -eq 'repeat5'){$legs=2}
 if($Scenario -eq 'armed3'){$crew=3}
 if($Scenario -eq 'solo1'){$crew=1}
+$selection=$null
+if($selectedScope){
+ $selections=@([regex]::Matches($log,'\[VEHICLE_SCENARIO_SELECTION\] scenario='+$Scenario+' faction=(\S+) actual_faction=(\S+) prefab=(\S+) native_seats=(\d+) native_cost=(\d+)'))
+ Require ($selections.Count -eq 1) 'SELECTED_NATIVE_CATALOG'
+ if($selections.Count -eq 1){
+  $selection=$selections[0]
+  Require ($selection.Groups[1].Value -eq $Faction -and $selection.Groups[2].Value -eq $Faction -and [int]$selection.Groups[4].Value -ge $crew -and [int]$selection.Groups[5].Value -gt 0) 'SELECTED_FACTION_AND_NATIVE_RECIPE'
+  if($Faction -eq 'US'){Require ($Scenario -eq 'repeat5' -and $selection.Groups[3].Value.Contains('/M1025_') -and $selection.Groups[3].Value.Contains('M2HB') -and [int]$selection.Groups[4].Value -eq 5) 'US_EXACT5_HMMWV_MODEL'}
+ }
+}
 $checks=@([regex]::Matches($log,'\[VEHICLE_SCENARIO_CHECK\] scenario='+$Scenario+' leg=(\d+) rule=(\S+) passed=(\d)'))
 Require (@($checks|Where-Object{$_.Groups[3].Value -ne '1'}).Count -eq 0) 'FAILED_CHECK'
 $done=@([regex]::Matches($log,'\[VEHICLE_SCENARIO_DONE\] scenario='+$Scenario+' checks=(\d+) failures=0 legs='+$legs))
 Require ($done.Count -eq 1 -and [int]$done[0].Groups[1].Value -eq $checks.Count) 'COMPLETION'
-foreach($rule in @('GROUP_CREATED','EXACT_RECIPE','INITIAL_ORDER','WAITING_MOUNTED','REMOTE_ORDER','PURCHASE_LIMIT')){
+foreach($rule in @('GROUP_CREATED','INITIAL_COHESION_POLICY','EXACT_RECIPE','INITIAL_ORDER','WAITING_MOUNTED','REMOTE_ORDER','PURCHASE_LIMIT')){
  Require (@($checks|Where-Object{$_.Groups[2].Value -eq $rule}).Count -eq 1) ('CASE_'+$rule)
 }
+Require ($log -match '\[VEHICLE_SCENARIO_COHESION\] scenario='+$Scenario+' [^\r\n]*formation=Column displacement=0 native_readback=1 identity_current=1 setup_parity_only=1 causal_foot_fix_proven=0') 'INITIAL_COHESION_NATIVE_READBACK'
 if($Scenario -eq 'retarget5'){Require (@($checks|Where-Object{$_.Groups[2].Value -eq 'FAR_RETARGET'}).Count -eq 1) 'FAR_RETARGET'}
 if($Scenario -eq 'repeat5'){
  foreach($rule in @('REPEAT_ORDER','EXPLICIT_READMISSION')){Require (@($checks|Where-Object{$_.Groups[2].Value -eq $rule}).Count -eq 1) $rule}
 }
+$priorOperation='';$priorVehicle='';$priorGroup='';$priorMembers=''
 for($leg=1;$leg -le $legs;$leg++){
  foreach($rule in @('EXACT_BOARDING','GATE_RETURNS_COMPLETE','ARRIVAL_AT_ORIGINAL_GOAL','REAL_TRAVEL','NORMAL_DISMOUNT','FOOT_ORDER_RESTORED','ALL_MEMBERS_AT_POINT')){
   Require (@($checks|Where-Object{[int]$_.Groups[1].Value -eq $leg -and $_.Groups[2].Value -eq $rule}).Count -eq 1) "LEG_${leg}_$rule"
@@ -82,6 +98,17 @@ for($leg=1;$leg -le $legs;$leg++){
   $occupants=@([regex]::Matches($log,'\[VEHICLE_PRESET_OCCUPANT\][^\r\n]*?operation='+$operation+' revision=\d+ position=(\d+) seat=(\S+) member=(\S+) occupant=(\S+)'))
   Require ($occupants.Count -eq $crew -and @($occupants|ForEach-Object{$_.Groups[1].Value}|Sort-Object -Unique).Count -eq $crew) "LEG_${leg}_EXACT_OCCUPANTS"
   foreach($occupant in $occupants){Require ($occupant.Groups[3].Value -eq $occupant.Groups[4].Value -and $occupant.Index -lt $boarding.Index) "LEG_${leg}_MEMBER_SEAT"}
+  if($selection){
+   Require ($boarding.Groups[1].Value.StartsWith('trip-'+$Faction+'-')) "LEG_${leg}_SELECTED_OPERATION"
+   $purchases=@([regex]::Matches($log,'\[VEHICLE_PRESET_PURCHASE\][^\r\n]*? operation='+$operation+' prefab=(\S+) supplies=(\d+)'))
+   Require ($purchases.Count -eq 1) "LEG_${leg}_REAL_DEBIT"
+   if($purchases.Count -eq 1){Require ($purchases[0].Groups[1].Value -eq $selection.Groups[3].Value -and $purchases[0].Groups[2].Value -eq $selection.Groups[5].Value -and $purchases[0].Index -lt $boarding.Index) "LEG_${leg}_SELECTED_MODEL_DEBIT"}
+   $spawns=@([regex]::Matches($log,'\[VEHICLE_SPAWNED\][^\r\n]*')|Where-Object{(Field $_.Value 'operation_id') -eq $boarding.Groups[1].Value -and (Field $_.Value 'faction') -eq $Faction -and (Field $_.Value 'prefab') -eq $selection.Groups[3].Value})
+   Require ($spawns.Count -eq 1) "LEG_${leg}_SELECTED_NATIVE_SPAWN"
+  }
+  $currentMembers=($occupants|Sort-Object {$_.Groups[1].Value}|ForEach-Object {$_.Groups[3].Value}) -join ','
+  if($leg -gt 1){Require ($boarding.Groups[1].Value -ne $priorOperation -and $boarding.Groups[2].Value -ne $priorVehicle -and $boarding.Groups[3].Value -eq $priorGroup -and $currentMembers -eq $priorMembers) 'REPEAT_NEW_ASSET_SAME_ORIGINAL_ROSTER'}
+  $priorOperation=$boarding.Groups[1].Value;$priorVehicle=$boarding.Groups[2].Value;$priorGroup=$boarding.Groups[3].Value;$priorMembers=$currentMembers
   $gates=@([regex]::Matches($log,'\[VEHICLE_SCENARIO_GATE\] '+$prefix+' event=(STARTED|RETURNED) member=(\S+) seat=(\S+) elapsed_ms=(\d+)'))
   $pending=@{}
   foreach($gate in $gates){
@@ -127,5 +154,5 @@ if($DismountBudgetProbe){
  }
 }
 if($failures.Count){$failures|Sort-Object -Unique;exit 1}
-"PASS Vehicle scenario=$Scenario legs=$legs crew=${crew}: real boarding, unchanged destination, physical arrival/dismount, all members at point, diagnostics, native0/stopped"
+"PASS Vehicle scenario=$Scenario faction=$Faction legs=$legs crew=${crew}: real boarding, unchanged destination, physical arrival/dismount, all members at point, diagnostics, native0/stopped"
 exit 0

@@ -159,6 +159,16 @@ asynchronous dynamic carving: поля `reachability_proven=0 async_carving_prov
 Gate не перемещает машину/бойцов и не меняет обычный 125s boarding budget.
 Контракты: `Test-VehicleBoardingSiteContracts.ps1`.
 
+Manual preset дополнительно требует физический сбор всех бойцов в существующем
+rally radius25m до spawn и запуска boarding clock. Одного pad envelope10..90m
+недостаточно для последовательной exact-seat очереди: дальний actor может
+потратить оставшийся срок на подход. Immutable SpawnPlan захватывает manual flag;
+Measure, fresh commit и individual approach используют один geometry predicate.
+Смена режима плана отклоняется; manual staging physical relocation запрещена.
+Automatic сохраняет прежний pad envelope: это новая узкая manual policy по
+native causal evidence, а не восстановление случайно удалённого if. Сроки,
+радиусы, retry и dismount budgets не увеличены.
+
 Preset boarding внутри существующего BoardingFlow выдаёт native SCR_AIGetInVehicle
 на конкретные seats и tracks прежние identity-safe tokens. Нужны два полных
 readback polls: exact occupant, compartment, settled и отсутствие transitions.
@@ -201,13 +211,15 @@ Busy union включает owned actions и все физические transit
 проверяют third-entry veto, complete metadata, shared/unknown/turret/human/stale
 и все cross points; native прогон остаётся отдельным gate.
 
-После нормального `COMPLETE` scheduler сохраняет существующий trip как подтверждение
-завершённой перевозки для exact group/generation, strategic intent, destination и
+После `COMPLETE` или `FALLBACK` с восстановленным пешим приказом scheduler
+сохраняет существующий trip как подтверждение завершённой попытки перевозки
+для exact group/generation, strategic intent, destination и
 preset revision. Восстановление пешего waypoint меняет assignment revision, но не
 заказывает ещё одну машину по тому же приказу; base revision также не переармляет
 поездку. Новый intent/target/preset, замена группы/типа или явная admission-заявка
 проверяются прежними cleanup и admission gates. Это не временный cooldown и не
-обход fallback/failed-closed политики. `Test-CompletedTransportIntentContracts.ps1`
+обход failed-closed политики. Одинаковый UI Apply остаётся идемпотентным и сам
+по себе не создаёт explicit admission. `Test-CompletedTransportIntentContracts.ps1`
 проверяет actual production predicates и повтор исходного handoff assignment6→7
 при неизменном intent3, включая новые приказы и explicit request.
 

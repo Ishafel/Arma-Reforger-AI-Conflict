@@ -307,6 +307,17 @@ class AICF_TransportTripController
 		return AICF_TripOutcome.Wait("STOP_SIDE_EFFECTS_ABORTED", causationId);
 	}
 
+	AICF_SpawnApproachFailure ReportSpawnApproachFailure(AICF_TransportTrip trip,
+		AICF_StrategicAssignmentSnapshot currentAssignment, AICF_GroupSlot slot,
+		AICF_FactionFleet fleet, SCR_CampaignFaction faction,
+		SCR_AIGroupUtilityComponent utility, AIActionBase action, AIWaypoint waypoint, vector location)
+	{
+		if (!IsAuthorityReady() || !HasCurrentIdentity(trip, currentAssignment, slot, fleet, faction) ||
+			HasStaleRevision(trip, currentAssignment)) return null;
+		return m_AcquisitionFlow.ReportSpawnApproachFailure(trip, currentAssignment, slot, fleet,
+			faction, utility, action, waypoint, location);
+	}
+
 	protected AICF_TripOutcome TickAcquisition(
 		AICF_TransportTrip trip,
 		AICF_StrategicAssignmentSnapshot currentAssignment,

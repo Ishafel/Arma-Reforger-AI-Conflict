@@ -140,8 +140,9 @@ $runnerTokens=$null;$runnerErrors=$null
 [void][Management.Automation.Language.Parser]::ParseInput($runner,[ref]$runnerTokens,[ref]$runnerErrors)
 if($runnerErrors.Count -or $runner -notmatch "\[string\]\`$ConcurrencyMode='MOVING'" -or
  $runner -notmatch "'-aicfVehicleMultiConcurrencyMode',\`$ConcurrencyMode" -or
- $runner -notmatch '-ConcurrencyMode \$ConcurrencyMode -MinimumSeconds \$DurationSeconds' -or
- $runner -notmatch 'classification=\$taskClassification;notmovingproof=\(\$ConcurrencyMode -eq ''MOUNTED_STAGING''\)' -or
+ # ProtectionScope между прежними аргументами/полями не меняет их binding.
+ $runner -notmatch '-ConcurrencyMode \$ConcurrencyMode' -or $runner -notmatch '-MinimumSeconds \$DurationSeconds' -or
+ $runner -notmatch 'classification=\$taskClassification;' -or $runner -notmatch 'notmovingproof=\(\$ConcurrencyMode -eq ''MOUNTED_STAGING''\)' -or
  $runner -notmatch 'Compiled stage fixture does not support the separate MOUNTED_STAGING oracle' -or
  $runner -notmatch 'muster_policy=\$taskMusterPolicy' -or $runner -notmatch "\`$taskMusterPolicy='PER_GROUP_BEFORE_VEHICLE'" -or
  $runner -notmatch 'Compiled stage fixture does not support the PER_GROUP_BEFORE_VEHICLE muster policy'){

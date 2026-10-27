@@ -7,7 +7,10 @@
 
 | Задача | Что читать |
 |---|---|
+| Разобрать native UNKNOWN во время подхода к площадке техники | [VEHICLE_APPROACH_FAILURE.md](VEHICLE_APPROACH_FAILURE.md); exact phase-owned failure receipt и отдельный controlled native probe |
+| Передать игроку визуальную проверку окна техники и подтверждения состава | [VEHICLE_VISUAL_CHECK.md](VEHICLE_VISUAL_CHECK.md); terminal probes не заменяют этот NOT RUN |
 | Проверить2→4→6 машин на сторону и native combat hold/release/resume | [VEHICLE_MULTISQUAD.md](VEHICLE_MULTISQUAD.md), MultiSquad/TransportCombatResume fixtures и их terminal runners/log auditors |
+| Разобрать повреждённую ходовую, bounded fallback и повторную покупку на прежнем intent | [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md), `Invoke-AICFTransportDamageFallback.ps1`, movement damage/finished intent contracts |
 | Проверить штатный найм5 бойцов в первом отряде, UAZ/Humvee и30 минут реального боя | [VEHICLE_SOAK.md](VEHICLE_SOAK.md), VehicleSoakProbe, Invoke/Watch-AICFVehicleSoak и SoakLog |
 | Прогнать полные поездки/повторную посадку, разобрать действия и координаты бойцов | [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md), GroupTrace, VehicleScenarioProbe и `Invoke-AICFVehicleScenarios.ps1` |
 | Изменить категории своего/CIV колёсного каталога, preview, numeric рассадку, подтверждение сокращения состава и библиотеку техники (issue #78) | [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md), `AICF_VehiclePreset`/`AICF_VehiclePresetCatalog`, `AICF_VehiclePresetService`/`AICF_VehicleCrewReturn`/`AICF_VehiclePresetStore`, content price override, acquisition/boarding/trip owners |

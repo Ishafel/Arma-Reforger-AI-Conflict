@@ -7,6 +7,13 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Структура и статус
 
+`Invoke-AICFSpawnApproachFailure.ps1` создаёт isolated controlled UNKNOWN case;
+`Test-SpawnApproachFailureLog.ps1` отделяет functional outcome от strict native
+resources. Callback/fallback не снимает resource FAIL. Scenario runner
+`-Cases repeat5 -Faction US` проверяет оба рейса native Humvee; default — USSR.
+Multi opt-in `-RecruitmentNavDomainProbe` снимает read-only paths/physics/LOD
+при подходе к казарме. Runners сохраняют immutable hashes и полный native CLI.
+
 Prepare-AICFWorkshopCatalog.ps1 — общий offline workflow для семи native
 Publishing bundles. -PublishingRoot/-OutputRoot/-ExpectedVersion готовят
 отдельные очищенные копии; -OutputRoot/-ExpectedVersion/-Check проверяют весь
@@ -40,6 +47,12 @@ legacy после пересборки. Команды и границы — [DE
 сохраняют команды того релиза; для текущего checkout используй этот каталог.
 
 ## Единый offline запуск
+
+`Invoke-AICFTransportDamageFallback.ps1` — отдельный native controlled runner
+повреждения колёс, пешего fallback и запрета повторной покупки на том же intent.
+Использует immutable snapshot, terminal Workbench и canonical runtime launcher.
+Его targeted PASS сохраняет отдельный strict-native-resource FAIL в summary;
+это не обычная поездка и не общий runtime PASS. Контракты входят в offline All.
 
 `Invoke-AICFVehicleMultiSquad.ps1` запускает ступени2/4/6 на сторону в NORMAL
 или отдельно маркированном CAPACITY; `Watch-AICFVehicleSoak.ps1` наблюдает оба

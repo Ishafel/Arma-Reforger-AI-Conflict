@@ -251,6 +251,7 @@ class AICF_VehicleSpawnPlan
 	protected ref AICF_VehicleSpawnSiteReservation m_Reservation;
 	protected vector m_vStagingPosition;
 	protected AIWaypoint m_ApproachWaypoint;
+	protected ref AICF_SpawnApproachFailure m_ApproachFailure;
 	protected int m_iPlannedAtMs;
 	protected int m_iApproachDeadlineMs;
 	protected int m_iAllStagedSinceMs;
@@ -267,25 +268,29 @@ class AICF_VehicleSpawnPlan
 	protected ref array<string> m_aStagingExhaustedEntityIds = {};
 	protected ref array<string> m_aStagingRelocatedEntityIds = {};
 	protected int m_iLastStagingRelocationProbeAtMs;
+	protected bool m_bRequireManualRally;
 
 	void AICF_VehicleSpawnPlan(
 		AICF_VehicleSpawnSiteSelection selection,
 		AICF_VehicleSpawnSiteReservation reservation,
 		vector stagingPosition,
 		int plannedAtMs,
-		int approachDeadlineMs)
+		int approachDeadlineMs,
+		bool requireManualRally = false)
 	{
 		m_Selection = selection;
 		m_Reservation = reservation;
 		m_vStagingPosition = stagingPosition;
 		m_iPlannedAtMs = plannedAtMs;
 		m_iApproachDeadlineMs = approachDeadlineMs;
+		m_bRequireManualRally = requireManualRally;
 	}
 
 	AICF_VehicleSpawnSiteSelection GetSelection() { return m_Selection; }
 	AICF_VehicleSpawnSiteReservation GetReservation() { return m_Reservation; }
 	vector GetSpawnPosition() { return m_Selection.m_vPosition; }
 	vector GetStagingPosition() { return m_vStagingPosition; }
+	bool RequiresManualRally() { return m_bRequireManualRally; }
 	AIWaypoint GetApproachWaypoint() { return m_ApproachWaypoint; }
 	int GetPlannedAtMs() { return m_iPlannedAtMs; }
 	int GetApproachDeadlineMs() { return m_iApproachDeadlineMs; }
@@ -425,7 +430,22 @@ class AICF_VehicleSpawnPlan
 		if (!expected || expected != m_ApproachWaypoint)
 			return false;
 		m_ApproachWaypoint = null;
+		m_ApproachFailure = null;
 		return true;
+	}
+
+	AICF_SpawnApproachFailure GetApproachFailure() { return m_ApproachFailure; }
+
+	bool BindApproachFailure(AICF_SpawnApproachFailure failure)
+	{
+		if (!failure || m_ApproachFailure || failure.GetWaypoint() != m_ApproachWaypoint) return false;
+		m_ApproachFailure = failure;
+		return true;
+	}
+
+	void ClearApproachFailure(AICF_SpawnApproachFailure expected)
+	{
+		if (expected && m_ApproachFailure == expected) m_ApproachFailure = null;
 	}
 
 	void RecordApproachWaypointIssued(int nowMs, bool reissue)
@@ -611,6 +631,19 @@ class AICF_VehicleSpawner
 		return true;
 	}
 
+	// Manual exact-seat очередь начинает свой срок после реального сбора.
+	// Automatic сохраняет прежний безопасный pad envelope без rally gate.
+	static bool IsStagingGeometryReady(float stagingDistanceMeters, float stagingRadiusMeters,
+		float padDistanceMeters, float boardingEnvelopeRadiusMeters, bool requireManualRally)
+	{
+		if (stagingRadiusMeters <= 0 || boardingEnvelopeRadiusMeters <= VEHICLE_CLEARANCE_RADIUS_METERS + REQUESTING_GROUP_CLEARANCE_MARGIN_METERS)
+			return false;
+		if (requireManualRally && !(stagingDistanceMeters <= stagingRadiusMeters))
+			return false;
+		return padDistanceMeters >= VEHICLE_CLEARANCE_RADIUS_METERS + REQUESTING_GROUP_CLEARANCE_MARGIN_METERS &&
+			padDistanceMeters <= boardingEnvelopeRadiusMeters;
+	}
+
 	bool MeasureStagingReadiness(
 		SCR_AIGroup group,
 		vector stagingPosition,
@@ -620,7 +653,8 @@ class AICF_VehicleSpawner
 		out int stagedCount,
 		out int aliveCount,
 		out float farthestDistanceMeters,
-		out string memberSamples)
+		out string memberSamples,
+		bool requireManualRally = false)
 	{
 		stagedCount = 0;
 		aliveCount = 0;
@@ -645,9 +679,7 @@ class AICF_VehicleSpawner
 			float padDistanceMeters = Math.Sqrt(vector.DistanceSqXZ(
 				entity.GetOrigin(),
 				spawnPosition));
-			bool ready = padDistanceMeters >= VEHICLE_CLEARANCE_RADIUS_METERS +
-				REQUESTING_GROUP_CLEARANCE_MARGIN_METERS &&
-				padDistanceMeters <= boardingEnvelopeRadiusMeters;
+			bool ready = IsStagingGeometryReady(distanceMeters, stagingRadiusMeters, padDistanceMeters, boardingEnvelopeRadiusMeters, requireManualRally);
 			aliveCount++;
 			farthestDistanceMeters = Math.Max(farthestDistanceMeters, distanceMeters);
 			if (ready)
@@ -708,7 +740,8 @@ class AICF_VehicleSpawner
 			stagedCount,
 			aliveCount,
 			farthestDistanceMeters,
-			memberSamples) || aliveCount < minimumAliveCount)
+			memberSamples,
+			plan.RequiresManualRally()) || aliveCount < minimumAliveCount)
 		{
 			failureReason = "GROUP_NOT_COMBAT_READY";
 			return false;

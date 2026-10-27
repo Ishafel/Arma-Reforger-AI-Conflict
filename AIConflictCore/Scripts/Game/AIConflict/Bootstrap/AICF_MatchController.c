@@ -513,6 +513,29 @@ class AICF_MatchController
 		return slot;
 	}
 
+	AICF_SpawnApproachFailure ReportVehicleSpawnApproachFailure(SCR_AIGroup group,
+		SCR_AIGroupUtilityComponent utility, AIActionBase action, AIWaypoint waypoint, vector location)
+	{
+		AICF_GroupSlot slot;
+		AICF_VehicleCoordinator coordinator;
+		SCR_CampaignFaction faction;
+		if (!ResolveVehicleSpawnApproachOwner(group, slot, coordinator, faction)) return null;
+		return coordinator.ReportSpawnApproachFailure(slot, faction, utility, action, waypoint, location, m_iStrategicBaseRevision);
+	}
+
+	protected bool ResolveVehicleSpawnApproachOwner(SCR_AIGroup group, out AICF_GroupSlot slot,
+		out AICF_VehicleCoordinator coordinator, out SCR_CampaignFaction faction)
+	{
+		if (!Replication.IsServer() || !m_bStarted || !m_bRosterReady || !m_VehicleCoordinator || !group) return false;
+		slot = FindManagedInfantrySlot(group);
+		if (!slot) return false;
+		if (m_USState && m_USState.FindSlotByGroup(group) == slot) faction = m_USFaction;
+		else if (m_USSRState && m_USSRState.FindSlotByGroup(group) == slot) faction = m_USSRFaction;
+		if (!faction || group.GetFaction() != faction) return false;
+		coordinator = m_VehicleCoordinator;
+		return true;
+	}
+
 	AICF_FIAPatrol ReportFIAPatrolFailedMovement(SCR_AIGroup group, AIWaypoint waypoint, IEntity vehicle = null)
 	{
 		if (!Replication.IsServer() || !m_bStarted || !m_bRosterReady || !m_FIAPatrols)

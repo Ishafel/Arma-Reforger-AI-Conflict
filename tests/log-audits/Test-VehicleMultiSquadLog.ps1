@@ -4,16 +4,19 @@ param(
  [Parameter(Mandatory)][string]$EvidenceRoot,
  [Parameter(Mandatory)][ValidateSet('NORMAL','CAPACITY')][string]$Mode,
  [ValidateSet('MOVING','MOUNTED_STAGING')][string]$ConcurrencyMode='MOVING',
+ [ValidateSet('ROOT_ONLY','HIERARCHY')][string]$ProtectionScope='ROOT_ONLY',
  [ValidateRange(1,3600)][int]$MinimumSeconds=1800
 )
 $ErrorActionPreference='Stop'
 $mounted=$ConcurrencyMode -eq 'MOUNTED_STAGING'
+$hierarchy=$ProtectionScope -eq 'HIERARCHY'
 $classification='NORMAL_CAMPAIGN';if($Mode -eq 'CAPACITY'){$classification='CONTROLLED_CAPACITY_ONLY'}
 $notMovingFlag='0';if($mounted){$classification='CAPACITY_MOUNTED_ONLY';$notMovingFlag='1'}
 $gates=[ordered]@{}
-foreach($name in @('duration','liveness','provenance','environment','funding','recruitment','cohorts','functional','native_fatal','native_resources')){$gates[$name]=[Collections.Generic.List[string]]::new()}
+foreach($name in @('duration','liveness','provenance','environment','protection','funding','recruitment','cohorts','functional','native_fatal','native_resources')){$gates[$name]=[Collections.Generic.List[string]]::new()}
 function Require([string]$gate,[bool]$ok,[string]$reason){if(!$ok -and !$gates[$gate].Contains($reason)){$gates[$gate].Add($reason)}}
 Require environment (!$mounted -or $Mode -eq 'CAPACITY') 'MOUNTED_STAGING_REQUIRES_CONTROLLED_CAPACITY'
+Require environment (!$hierarchy -or $Mode -eq 'CAPACITY') 'HIERARCHY_REQUIRES_CONTROLLED_CAPACITY'
 function Number($value){$n=0.0;if(![double]::TryParse([string]$value,[Globalization.NumberStyles]::Float,[Globalization.CultureInfo]::InvariantCulture,[ref]$n) -or [double]::IsNaN($n) -or [double]::IsInfinity($n)){return [double]::NaN};return $n}
 function Fields([string]$line){$f=@{};foreach($v in [regex]::Matches($line,'(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)=(.*?)(?=\s+[A-Za-z_][A-Za-z0-9_]*=|$)')){$f[$v.Groups[1].Value]=$v.Groups[2].Value.Trim()};return $f}
 function Entity($value){$v=([string]$value).Trim();if($v -match '^(0x[0-9a-fA-F]+)\s*(?:\{\s*\})?$'){return $Matches[1].ToUpperInvariant()};return $v}
@@ -52,6 +55,8 @@ foreach($m in [regex]::Matches($log,'\[VEHICLE_MULTI_([A-Z_]+)\]([^\r\n]*)')){
  Require environment ($e.fields.mode -eq $Mode) 'ALL_MARKERS_EXPECTED_MODE'
  Require environment ($e.fields.concurrency_mode -eq $ConcurrencyMode -and $e.fields.classification -eq $classification -and $e.fields.notmovingproof -eq $notMovingFlag) 'NO_MIXED_OR_UNLABELED_CONCURRENCY_ORACLES'
  Require environment ($e.fields.muster_policy -eq 'PER_GROUP_BEFORE_VEHICLE') 'EXPLICIT_PER_GROUP_MUSTER_POLICY'
+ if($hierarchy -or $e.fields.ContainsKey('protection_scope')){Require environment ($e.fields.protection_scope -eq $ProtectionScope) 'NO_MIXED_OR_MISSING_PROTECTION_SCOPE'}
+ if($hierarchy){Require protection ($e.fields.test_only -eq '1') 'HIERARCHY_EXPLICIT_TEST_ONLY_MARKERS'}
  if(!$byName.ContainsKey($e.name)){$byName[$e.name]=[Collections.Generic.List[object]]::new()};$byName[$e.name].Add($e)
  $key=[string]$e.fields.faction+'/'+[string]$e.fields.numeric_slot
  if($contexts.ContainsKey($key)){$ctx=$contexts[$key];if(!$ctx.events.ContainsKey($e.name)){$ctx.events[$e.name]=[Collections.Generic.List[object]]::new()};$ctx.events[$e.name].Add($e)}
@@ -76,7 +81,7 @@ foreach($event in @($byName.Values|ForEach-Object{$_}|Where-Object{$_.fields.Con
 Require duration ($start.index -ge 0 -and $done.index -gt $start.index -and (Number $start.fields.elapsed_ms) -ge 0 -and (Number $done.fields.elapsed_ms)-(Number $start.fields.elapsed_ms) -ge $minMs -and (Number $done.fields.t_ms)-(Number $start.fields.t_ms) -ge $minMs) 'MINIMUM_ENGINE_SPAN'
 Require duration ((Number $start.fields.requested_duration_ms) -ge $minMs -and $done.fields.duration_satisfied -eq '1' -and $done.fields.requested_duration_ms -eq $start.fields.requested_duration_ms -and (Number $done.fields.elapsed_ms)-(Number $start.fields.elapsed_ms) -ge (Number $start.fields.requested_duration_ms) -and (Number $start.fields.t_ms)-(Number $start.fields.elapsed_ms) -eq (Number $done.fields.t_ms)-(Number $done.fields.elapsed_ms)) 'REQUESTED_DURATION_AND_CLOCK_ORIGIN'
 $wall=[double]::NaN
-try{$timing=Get-Content -LiteralPath (Join-Path $root 'timing.json') -Raw|ConvertFrom-Json;$wall=Number $timing.wall_seconds;$clock=([DateTimeOffset]$timing.ended_utc-[DateTimeOffset]$timing.started_utc).TotalSeconds;Require duration ($wall -ge $MinimumSeconds -and $clock -ge $MinimumSeconds -and [Math]::Abs($wall-$clock) -le 1 -and $timing.mode -eq $Mode -and (Number $timing.requested_seconds) -ge $MinimumSeconds) 'MINIMUM_WALL_TIME';Require provenance ($timing.concurrency_mode -eq $ConcurrencyMode) 'TIMING_CONCURRENCY_MATCH'}catch{Require duration $false 'TIMING_MISSING_OR_INVALID'}
+try{$timing=Get-Content -LiteralPath (Join-Path $root 'timing.json') -Raw|ConvertFrom-Json;$wall=Number $timing.wall_seconds;$clock=([DateTimeOffset]$timing.ended_utc-[DateTimeOffset]$timing.started_utc).TotalSeconds;Require duration ($wall -ge $MinimumSeconds -and $clock -ge $MinimumSeconds -and [Math]::Abs($wall-$clock) -le 1 -and $timing.mode -eq $Mode -and (Number $timing.requested_seconds) -ge $MinimumSeconds) 'MINIMUM_WALL_TIME';Require provenance ($timing.concurrency_mode -eq $ConcurrencyMode) 'TIMING_CONCURRENCY_MATCH';if($hierarchy -or $timing.PSObject.Properties.Name -contains 'protection_scope'){Require provenance ($timing.protection_scope -eq $ProtectionScope) 'TIMING_PROTECTION_SCOPE_MATCH'}}catch{Require duration $false 'TIMING_MISSING_OR_INVALID'}
 try{$nativeExit=(Get-Content -LiteralPath (Join-Path $root 'native-exit.txt') -Raw).Trim();Require duration ($nativeExit -eq '0') 'NATIVE_EXIT_ZERO'}catch{Require duration $false 'NATIVE_EXIT_MISSING'}
 Require duration ($log.Contains('[ROSTER_READY]') -and $done.index -ge 0 -and $log.IndexOf('Game destroyed.',$done.index,[StringComparison]::Ordinal) -gt $done.index) 'STOPPED_FULL_LOG_AFTER_DONE'
 Require duration (!$byName.ContainsKey('ABORTED')) 'NO_EARLY_ABORT'
@@ -89,11 +94,14 @@ try{
  $matches=@([regex]::Matches($launcher,'(?m)^AICF_RUNTIME_MANIFEST_JSON=([^\r\n]+)'));Require provenance ($matches.Count -eq 1) 'SINGLE_RUNTIME_MANIFEST'
  if($matches.Count -eq 1){
   $manifest=$matches[0].Groups[1].Value|ConvertFrom-Json;$argv=@($manifest.arguments);$cli=[regex]::Match($log,'CLI Params: ([^\r\n]+)').Groups[1].Value
-  foreach($flag in @('-gproj','-profile','-addonsDir','-addons','-aicfAICommanderMode','-aicfVehicleMultiMode','-aicfVehicleMultiConcurrencyMode','-aicfVehicleMultiDurationMs')){
+  $flags=@('-gproj','-profile','-addonsDir','-addons','-aicfAICommanderMode','-aicfVehicleMultiMode','-aicfVehicleMultiConcurrencyMode','-aicfVehicleMultiDurationMs')
+  if($hierarchy -or $argv -contains '-aicfVehicleMultiProtectionScope'){$flags+='-aicfVehicleMultiProtectionScope'}
+  foreach($flag in $flags){
    $i=[array]::IndexOf($argv,$flag);Require provenance ($i -ge 0 -and $i+1 -lt $argv.Count) ('MANIFEST_'+$flag)
    if($i -ge 0 -and $i+1 -lt $argv.Count){$v=[string]$argv[$i+1];Require provenance ($cli -match ('(?:^|\s)'+[regex]::Escape($flag)+'\s+"?'+[regex]::Escape($v)+'"?(?=\s|$)')) ('ACTUAL_CLI_'+$flag)
     if($flag -eq '-aicfVehicleMultiMode'){Require provenance ($v -eq $Mode) 'MODE_MATCH'}
     if($flag -eq '-aicfVehicleMultiConcurrencyMode'){Require provenance ($v -eq $ConcurrencyMode) 'CONCURRENCY_MODE_MATCH'}
+    if($flag -eq '-aicfVehicleMultiProtectionScope'){Require provenance ($v -eq $ProtectionScope) 'PROTECTION_SCOPE_MATCH'}
     if($flag -eq '-aicfAICommanderMode'){Require provenance ($v -eq 'BOTH') 'BOTH_REAL_FACTIONS'}
     if($flag -eq '-aicfVehicleMultiDurationMs'){Require provenance ((Number $v) -eq (Number $start.fields.requested_duration_ms)) 'DURATION_MATCH'}
     if($flag -eq '-profile'){Require provenance ([IO.Path]::GetFullPath($v) -eq [IO.Path]::GetFullPath([string]$manifest.profile)) 'PROFILE_MATCH'}
@@ -101,7 +109,7 @@ try{
   }
  }
 }catch{Require provenance $false 'LAUNCHER_MANIFEST_MISSING_OR_INVALID'}
-try{$sourceManifest=Get-Content -LiteralPath (Join-Path $root 'source-manifest.json') -Raw|ConvertFrom-Json;Require provenance ($sourceManifest.muster_policy -eq 'PER_GROUP_BEFORE_VEHICLE') 'SOURCE_MUSTER_POLICY_MATCH'}catch{Require provenance $false 'SOURCE_MUSTER_POLICY_MISSING_OR_INVALID'}
+try{$sourceManifest=Get-Content -LiteralPath (Join-Path $root 'source-manifest.json') -Raw|ConvertFrom-Json;Require provenance ($sourceManifest.muster_policy -eq 'PER_GROUP_BEFORE_VEHICLE') 'SOURCE_MUSTER_POLICY_MATCH';if($hierarchy -or $sourceManifest.PSObject.Properties.Name -contains 'protection_scope'){Require provenance ($sourceManifest.protection_scope -eq $ProtectionScope) 'SOURCE_PROTECTION_SCOPE_MATCH'}}catch{Require provenance $false 'SOURCE_MUSTER_POLICY_MISSING_OR_INVALID'}
 $production=@{}
 foreach($m in [regex]::Matches($log,'\[(INFANTRY_RECRUITMENT_STARTED|INFANTRY_RECRUITMENT_PRIORITY_CHANGED|INFANTRY_RECRUITMENT_FINISHED|INFANTRY_RECRUIT_DEBITED|INFANTRY_RECRUIT_JOINED|VEHICLE_PRESET_PURCHASE|VEHICLE_PRESET_SEAT_REQUESTED|VEHICLE_PRESET_OCCUPANT|VEHICLE_SPAWN_ATTEMPT|VEHICLE_STATE_CHANGED|DISEMBARK_COMPLETE)\]([^\r\n]*)')){
  $e=[pscustomobject]@{name=$m.Groups[1].Value;index=$m.Index;fields=(Fields $m.Groups[2].Value)}
@@ -168,6 +176,34 @@ foreach($ctx in $contexts.Values){
 }
 Require recruitment ($allActors.Count -eq 60 -and @($allActors|Sort-Object -Unique).Count -eq 60) 'SIXTY_DISTINCT_REAL_ACTORS'
 Require cohorts ($allVehicles.Count -eq 12 -and @($allVehicles|Sort-Object -Unique).Count -eq 12 -and @($allRpl|Sort-Object -Unique).Count -eq 12 -and @($allRpl|Where-Object{!$_ -or $_ -eq 'NONE'}).Count -eq 0) 'TWELVE_DISTINCT_PHYSICAL_VEHICLES_AND_RPL'
+if($hierarchy){
+ foreach($ctx in $contexts.Values){
+  $ctx.protectionByEntity=@{}
+  $receipts=@();if($ctx.events.ContainsKey('PROTECTION')){$receipts=@($ctx.events['PROTECTION'])}
+  Require protection ($receipts.Count -gt 0) ($ctx.key+'_HIERARCHY_RECEIPTS_PRESENT')
+  foreach($receipt in $receipts){
+   $p=$receipt.fields;$id=Entity $p.entity;$covered=Number $p.protection_managers_covered;$children=Number $p.protection_child_managers;$zones=Number $p.protection_zones
+   Require protection ($p.protection_status -eq 'COVERED' -and $p.protection_reason -eq 'NONE' -and $p.protection_errors -eq '0' -and $p.protection_enabled_after -eq '0') ($ctx.key+'_NO_FAILED_OR_ENABLED_HIERARCHY_READBACK')
+   Require protection ($covered -ge 1 -and [Math]::Floor($covered) -eq $covered -and $children -eq $covered-1 -and $zones -ge $covered -and $zones -le 512 -and [Math]::Floor($zones) -eq $zones -and (Number $p.protection_zones_repeated) -eq $zones -and (Number $p.protection_enabled_before) -ge 0 -and (Number $p.protection_enabled_before) -le $covered) ($ctx.key+'_FULL_REPEAT_COUNTS_AND_COVERED_MANAGERS')
+   $identity=$false
+   if($p.kind -eq 'MEMBER'){$identity=$id -in $ctx.members.Values}
+   if($p.kind -eq 'VEHICLE'){$identity=$id -eq (Entity $ctx.boarded.fields.vehicle);Require protection ($children -gt 0) ($ctx.key+'_ACTUAL_VEHICLE_CHILD_MANAGERS_COVERED')}
+   Require protection ($identity -and $id -match '^0X[0-9A-F]+$') ($ctx.key+'_EXACT_ORIGINAL_PROTECTED_ENTITY')
+   if(!$ctx.protectionByEntity.ContainsKey($id)){$ctx.protectionByEntity[$id]=[Collections.Generic.List[object]]::new()}
+   $ctx.protectionByEntity[$id].Add($receipt)
+  }
+  foreach($actorId in $ctx.members.Values){Require protection ($ctx.protectionByEntity.ContainsKey([string]$actorId)) ($ctx.key+'_ALL_FIVE_ORIGINAL_ACTORS_PROTECTED')}
+  Require protection ($ctx.protectionByEntity.ContainsKey((Entity $ctx.boarded.fields.vehicle))) ($ctx.key+'_ORIGINAL_VEHICLE_PROTECTED')
+ }
+}
+function Has-RecentProtection($context,[string]$identity,$sample){
+ if(!$context.protectionByEntity.ContainsKey($identity)){return $false}
+ $items=$context.protectionByEntity[$identity];$low=0;$high=$items.Count-1;$best=-1
+ while($low -le $high){$middle=[int][Math]::Floor(($low+$high)/2);if($items[$middle].index -lt $sample.index){$best=$middle;$low=$middle+1}else{$high=$middle-1}}
+ if($best -lt 0){return $false}
+ $age=(Number $sample.fields.t_ms)-(Number $items[$best].fields.t_ms)
+ return $age -ge 0 -and $age -le 10000
+}
 $granted=@{US=0.0;USSR=0.0};$grantTokens=@{}
 foreach($grant in @($byName['GRANT'])){
  if(!$grant){continue};$g=$grant.fields;$faction=[string]$g.faction
@@ -201,6 +237,10 @@ foreach($heartbeat in $heartbeats){
   if($mounted){Require cohorts ($r.leg -eq '0' -and $r.preset_destination_wait -eq '1' -and $r.route_generation -eq '0' -and $r.route_waypoint_present -eq '0' -and $ctx.targets.Count -eq 0) 'ACTIVE_EXACT_MOUNTED_FIRST_DESTINATION_WAIT_ONLY'}
   else{Require cohorts ((Number $r.leg) -ge 1 -and (Number $r.displacement_m) -ge 25 -and (Number $r.moving_polls) -gt 0 -and $ctx.targets.Count -ge 1 -and $ctx.targets[0].index -lt $row.index) 'ACTIVE_EXACT_ORIGINAL_LEASE_MOVING_GROUP'}
   if($capacity){Require environment ($r.protected_members -eq '5' -and $r.vehicle_protected -eq '1' -and $r.hold_fire -eq '1') 'ACTUAL_SELECTED_CAPACITY_PROTECTION'}
+  if($hierarchy){
+   Require protection (Has-RecentProtection $ctx (Entity $b.fields.vehicle) $row) ($key+'_CURRENT_VEHICLE_HIERARCHY_READBACK')
+   foreach($actorId in $ctx.members.Values){Require protection (Has-RecentProtection $ctx ([string]$actorId) $row) ($key+'_CURRENT_FIVE_ACTOR_HIERARCHY_READBACK')}
+  }
   $id=Entity $b.fields.vehicle;Require cohorts (!$ids.ContainsKey($id) -and !$rpls.ContainsKey([string]$r.rpl)) 'SIMULTANEOUS_DISTINCT_LEASE_ASSETS';$ids[$id]=$true;$rpls[[string]$r.rpl]=$true;$counts[[string]$r.faction]++
  }
  Require cohorts ($counts.US -eq (Number $h.us_exact_active) -and $counts.USSR -eq (Number $h.ussr_exact_active)) 'RECONSTRUCTED_COUNTS_EQUAL_HEARTBEAT'
@@ -222,7 +262,8 @@ if($cohorts.Count -eq 3){foreach($ctx in $contexts.Values){Require functional ($
 $result=[ordered]@{};$passed=$true
 foreach($name in $gates.Keys){$verdict='PASS';if($gates[$name].Count){$verdict='FAIL';$passed=$false};$result[$name]=@{verdict=$verdict;reasons=@($gates[$name])}}
 $overall='FAIL';if($passed){$overall='PASS'}
-[ordered]@{verdict=$overall;mode=$Mode;concurrency_mode=$ConcurrencyMode;classification=$classification;notmovingproof=$mounted;muster_policy='PER_GROUP_BEFORE_VEHICLE';concurrent_moving_cohorts_proved=(!$mounted -and $result.cohorts.verdict -eq 'PASS' -and $result.environment.verdict -eq 'PASS');mounted_staging_cohorts_proved=($mounted -and $result.cohorts.verdict -eq 'PASS' -and $result.environment.verdict -eq 'PASS');normal_campaign_evidence=(!$capacity -and !$mounted);minimum_seconds=$MinimumSeconds;log_path=$LogPath;full_sibling_logs=@($siblings.FullName);gates=$result;observations=@{heartbeats=$heartbeats.Count;max_heartbeat_gap_ms=$maxGap;wall_seconds=$wall;granted=$granted;native_error_count=$nativeErrors.Count};native_errors=@($nativeErrors);resource_baseline='RECORDED_SEPARATELY_NO_WHITELIST'}|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $root 'audit-summary.json')
+$coverageValid=(!$hierarchy -or $result.protection.verdict -eq 'PASS')
+[ordered]@{verdict=$overall;mode=$Mode;concurrency_mode=$ConcurrencyMode;protection_scope=$ProtectionScope;hierarchy_protection_proved=($hierarchy -and $coverageValid -and $result.environment.verdict -eq 'PASS');classification=$classification;notmovingproof=$mounted;muster_policy='PER_GROUP_BEFORE_VEHICLE';concurrent_moving_cohorts_proved=(!$mounted -and $coverageValid -and $result.cohorts.verdict -eq 'PASS' -and $result.environment.verdict -eq 'PASS');mounted_staging_cohorts_proved=($mounted -and $coverageValid -and $result.cohorts.verdict -eq 'PASS' -and $result.environment.verdict -eq 'PASS');normal_campaign_evidence=(!$capacity -and !$mounted);minimum_seconds=$MinimumSeconds;log_path=$LogPath;full_sibling_logs=@($siblings.FullName);gates=$result;observations=@{heartbeats=$heartbeats.Count;max_heartbeat_gap_ms=$maxGap;wall_seconds=$wall;granted=$granted;native_error_count=$nativeErrors.Count};native_errors=@($nativeErrors);resource_baseline='RECORDED_SEPARATELY_NO_WHITELIST'}|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $root 'audit-summary.json')
 foreach($name in $result.Keys){"MULTI_GATE mode=$Mode concurrency_mode=$ConcurrencyMode gate=$name verdict=$($result[$name].verdict) reasons=$($result[$name].reasons -join ',')"}
 "MULTI_AUDIT mode=$Mode concurrency_mode=$ConcurrencyMode verdict=$overall classification=$classification notmovingproof=$notMovingFlag"
 if(!$passed){exit 1}

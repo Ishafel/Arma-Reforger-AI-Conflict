@@ -1,5 +1,33 @@
 # Полные сценарии техники и диагностика групп
 
+`Invoke-AICFVehicleScenarios.ps1 -Cases repeat5 -Faction US` проверяет две
+поездки native US Humvee; `USSR` — прежний default с УАЗом. US доступен только
+для repeat5. Модель выбирается из собственного FACTION catalog по реальной
+топологии five-seat M1025 M2HB и положительной стоимости. Фракция неизменна;
+order/recovery/observer/Update/Stop используют один actual owner. Analyzer
+проверяет exact faction, model, разные operation/машины/покупки и те же пять
+actor IDs. US не совпадает с префиксом USSR.
+
+## Повреждение ходовой и завершённый fallback
+
+`Invoke-AICFTransportDamageFallback.ps1 -EvidenceRoot <новый каталог> -ServerPort 2580`
+выполняет отдельный `CONTROLLED_FAULT_INJECTION` с native колёсными hitzones.
+После exact5, оплаченной машины, ожидания30s и настоящего движения >=15m/3polls
+fixture разрушает четыре колеса через `SCR_WheelHitZone.SetHealthScaled(0)` и
+штатный `UpdateVehicleState`. Проверяются фактические movement damage1/CanMove0,
+typed `VEHICLE_MOVEMENT_DESTROYED` до crew recovery, выход и пешее прибытие всех
+исходных пяти к неизменной цели <=35m. Те же trip/intent должны сохраняться
+не менее30s без новой покупки; затем отдельный explicit admission branch даёт
+новый operation/vehicle/debit. Это проверка внутреннего admission boundary,
+а не повторного UI Apply: одинаковый Apply остаётся идемпотентным.
+
+`AICF_TransportDamageFallbackProbe.c` включается только своим runner поверх
+нейтрального false-by-default hook в ScenarioProbe. Production counter/deadline
+не заполняются fixture. Общий20min срок и RequestClose прежние. Строгий анализатор
+читает полные остановленные sibling logs, исходные IDs, реальные transitions и
+покупки; native resource errors остаются отдельным FAIL. Targeted functional
+PASS не означает normal arrival или чистый общий runtime.
+
 Продолжение issue #78. Прежний TransitProbe проверяет начало движения и высадку
 после retarget к машине. Он не подтверждает доезд до исходной дальней цели.
 Для этого служит `AICF_VehicleScenarioProbe.c` и отдельный строгий анализатор.
@@ -180,6 +208,12 @@ absolute trip deadline; retries не продлевают срок. Все ме�
 только к потерявшему остальных отряду с desired size>1.
 
 Свежие verdict и ограничения — [TESTING.md](TESTING.md), полные evidence вне Git.
+`Invoke-AICFTransportDamageFallback.ps1 -BoardingNavDomainProbe` включает тот же
+read-only staging/boarding observer в isolated damage stage. CLI/fixture opt-in
+и source manifest обязательны; это позволяет заснять путь второго подхода,
+которого нет в vehicle-only GroupTrace. В damage-v4 первичная остановка лидера
+предшествовала project cancel, но нужный foot path не был снят: native solver
+или конфликт formation этим логом не доказаны. Сроки/retries не расширялись.
 
 При планировании acquisition срок подхода теперь учитывает самого далёкого
 живого участника до staging: запас60s + расстояние/2m/s, минимум configured

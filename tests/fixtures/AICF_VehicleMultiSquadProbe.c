@@ -1,5 +1,126 @@
 // Isolated test-only: 2 -> 4 -> 6 настоящих managed slots на каждую сторону.
 // NORMAL сохраняет кампанию. CAPACITY явно включает truce/защиту и finite grant.
+// HIERARCHY — отдельный opt-in controlled стенд, не доказательство обычной войны.
+class AICF_MultiHierarchyProtection
+{
+	static string SelectedScope()
+	{
+		string scope;
+		if (!System.GetCLIParam("aicfVehicleMultiProtectionScope", scope)) return "ROOT_ONLY";
+		return scope;
+	}
+
+	static bool ScopeAllowed(string mode, string scope)
+	{
+		if (scope == "ROOT_ONLY") return true;
+		return mode == "CAPACITY" && scope == "HIERARCHY";
+	}
+
+	protected static bool UnderRoot(DamageManagerComponent root, DamageManagerComponent manager)
+	{
+		HitZoneContainerComponent current = manager;
+		for (int depth; current && depth < 64; depth++)
+		{
+			if (current == root) return true;
+			current = current.GetParentHitZoneContainer();
+		}
+		return false;
+	}
+
+	protected static bool Collect(IEntity entity, DamageManagerComponent root, array<HitZone> zones,
+		array<DamageManagerComponent> managers, array<IEntity> owners, out int nativeCount, out string reason)
+	{
+		zones.Clear();
+		managers.Clear();
+		owners.Clear();
+		nativeCount = root.GetAllHitZonesInHierarchy(zones);
+		if (nativeCount <= 0 || nativeCount != zones.Count() || zones.Count() > 512)
+		{
+			reason = "INCOMPLETE_HIERARCHY";
+			return false;
+		}
+		managers.Insert(root);
+		owners.Insert(entity);
+		foreach (HitZone zone : zones)
+		{
+			if (!zone) { reason = "NULL_ZONE"; return false; }
+			DamageManagerComponent manager = DamageManagerComponent.Cast(zone.GetHitZoneContainer());
+			if (!manager) { reason = "NON_DAMAGE_CONTAINER"; return false; }
+			IEntity owner = manager.GetOwner();
+			if (!owner || owner.GetWorld() != entity.GetWorld() || owner.FindComponent(DamageManagerComponent) != manager)
+			{
+				reason = "MANAGER_OWNER_MISMATCH";
+				return false;
+			}
+			if (!UnderRoot(root, manager)) { reason = "FOREIGN_HIERARCHY"; return false; }
+			if (managers.Contains(manager)) continue;
+			managers.Insert(manager);
+			owners.Insert(owner);
+		}
+		return true;
+	}
+
+	static bool Apply(IEntity entity, out string details)
+	{
+		details = "protection_status=REJECTED protection_errors=1 protection_reason=CONTEXT";
+		string mode;
+		if (!Replication.IsServer() || !System.GetCLIParam("aicfVehicleMultiMode", mode) || mode != "CAPACITY") return false;
+		if (SelectedScope() != "HIERARCHY" || !entity || !GetGame() || entity.GetWorld() != GetGame().GetWorld()) return false;
+		EntityID identity = entity.GetID();
+		RplComponent rpl = RplComponent.Cast(entity.FindComponent(RplComponent));
+		if (!rpl || !rpl.IsMaster() || rpl.IsProxy()) return false;
+		DamageManagerComponent root = DamageManagerComponent.Cast(entity.FindComponent(DamageManagerComponent));
+		if (!root || root.GetOwner() != entity) return false;
+		array<HitZone> zones = {};
+		array<DamageManagerComponent> managers = {};
+		array<IEntity> owners = {};
+		int nativeCount;
+		string reason;
+		if (!Collect(entity, root, zones, managers, owners, nativeCount, reason))
+		{
+			details = "protection_status=REJECTED protection_errors=1 protection_reason=" + reason;
+			return false;
+		}
+		int enabledBefore;
+		foreach (int index, DamageManagerComponent manager : managers)
+		{
+			if (manager.GetOwner() != owners[index]) return false;
+			if (!manager.IsDamageHandlingEnabled()) continue;
+			enabledBefore++;
+			manager.EnableDamageHandling(false);
+		}
+		array<HitZone> repeatedZones = {};
+		array<DamageManagerComponent> repeatedManagers = {};
+		array<IEntity> repeatedOwners = {};
+		int repeatedCount;
+		if (!Collect(entity, root, repeatedZones, repeatedManagers, repeatedOwners, repeatedCount, reason))
+		{
+			details = "protection_status=REJECTED protection_errors=1 protection_reason=READBACK_" + reason;
+			return false;
+		}
+		int errors;
+		int enabledAfter;
+		if (nativeCount != repeatedCount || zones.Count() != repeatedZones.Count() || managers.Count() != repeatedManagers.Count()) errors++;
+		foreach (HitZone originalZone : zones)
+			if (!repeatedZones.Contains(originalZone)) errors++;
+		foreach (int managerIndex, DamageManagerComponent originalManager : managers)
+		{
+			int repeatedIndex = repeatedManagers.Find(originalManager);
+			if (repeatedIndex < 0) { errors++; continue; }
+			if (repeatedOwners[repeatedIndex] != owners[managerIndex] || originalManager.GetOwner() != owners[managerIndex]) errors++;
+			if (originalManager.IsDamageHandlingEnabled()) enabledAfter++;
+		}
+		if (entity.GetID() != identity || entity.FindComponent(RplComponent) != rpl || !rpl.IsMaster() || rpl.IsProxy()) errors++;
+		if (entity.FindComponent(DamageManagerComponent) != root || root.GetOwner() != entity) errors++;
+		details = string.Format("protection_errors=%1 protection_zones=%2 protection_zones_repeated=%3 protection_managers_covered=%4 protection_child_managers=%5 protection_enabled_before=%6 protection_enabled_after=%7",
+			errors, nativeCount, repeatedCount, managers.Count(), managers.Count() - 1, enabledBefore, enabledAfter);
+		bool complete = errors == 0 && enabledAfter == 0;
+		if (complete) details += " protection_status=COVERED protection_reason=NONE";
+		else details += " protection_status=REJECTED protection_reason=READBACK_FAILED";
+		return complete;
+	}
+}
+
 class AICF_MultiConcurrency
 {
 	static string Selected()
@@ -16,7 +137,10 @@ class AICF_MultiConcurrency
 		if (mode == "CAPACITY") classification = "CONTROLLED_CAPACITY_ONLY";
 		bool notMovingProof = selected == "MOUNTED_STAGING";
 		if (notMovingProof) classification = "CAPACITY_MOUNTED_ONLY";
-		return string.Format(" concurrency_mode=%1 classification=%2 notmovingproof=%3 muster_policy=PER_GROUP_BEFORE_VEHICLE", selected, classification, notMovingProof);
+		string result = string.Format(" concurrency_mode=%1 classification=%2 notmovingproof=%3 muster_policy=PER_GROUP_BEFORE_VEHICLE", selected, classification, notMovingProof);
+		string scope = AICF_MultiHierarchyProtection.SelectedScope();
+		result += " protection_scope=" + scope + " test_only=1";
+		return result;
 	}
 }
 
@@ -128,6 +252,7 @@ modded class AICF_InfantryRecruitmentService
 
 class AICF_MultiSquadCase
 {
+	int m_iProtectionNextLog;
 	string m_sFaction;
 	int m_iSlot;
 	int m_iGeneration;
@@ -200,8 +325,10 @@ modded class AICF_MatchController
 	{
 		int now = System.GetTickCount();
 		if (m_iAICFMultiSnapshotAt >= 0) now = m_iAICFMultiSnapshotAt;
-		Print(string.Format("[AICF][VEHICLE_MULTI_%1] mode=%2 faction=%3 numeric_slot=%4 t_ms=%5 elapsed_ms=%6 %7",
-			name, m_sAICFMultiMode, faction, slot, now, now - m_iAICFMultiStart, details) + AICF_MultiConcurrency.Metadata(m_sAICFMultiMode));
+		string line = string.Format("[AICF][VEHICLE_MULTI_%1] mode=%2 faction=%3 numeric_slot=%4 t_ms=%5 elapsed_ms=%6 %7",
+			name, m_sAICFMultiMode, faction, slot, now, now - m_iAICFMultiStart, details);
+		string metadata = AICF_MultiConcurrency.Metadata(m_sAICFMultiMode);
+		Print(line + metadata);
 	}
 
 	protected void AICF_MultiFail(AICF_MultiSquadCase item, string reason)
@@ -226,6 +353,7 @@ modded class AICF_MatchController
 	protected void AICF_MultiEnvironment()
 	{
 		if (m_bAICFMultiEnvironment || !m_bAICFMultiEnabled || !Replication.IsServer() || !GetGame()) return;
+		if (!AICF_MultiHierarchyProtection.ScopeAllowed(m_sAICFMultiMode, AICF_MultiHierarchyProtection.SelectedScope())) return;
 		bool truce = false;
 		if (m_sAICFMultiMode == "CAPACITY")
 		{
@@ -249,8 +377,10 @@ modded class AICF_MatchController
 		m_bAICFMultiEnvironment = true;
 		int budget;
 		if (m_sAICFMultiMode == "CAPACITY") budget = 4000;
-		Print(string.Format("[AICF][VEHICLE_MULTI_ENV] mode=%1 truce=%2 hold_fire=%3 damage_protection=%4 grant_budget_per_faction=%5 setup_before_roster=%6 test_only=1",
-			m_sAICFMultiMode, truce, truce, truce, budget, !m_bRosterReady) + AICF_MultiConcurrency.Metadata(m_sAICFMultiMode));
+		string line = string.Format("[AICF][VEHICLE_MULTI_ENV] mode=%1 truce=%2 hold_fire=%3 damage_protection=%4 grant_budget_per_faction=%5 setup_before_roster=%6 test_only=1",
+			m_sAICFMultiMode, truce, truce, truce, budget, !m_bRosterReady);
+		string metadata = AICF_MultiConcurrency.Metadata(m_sAICFMultiMode);
+		Print(line + metadata);
 	}
 
 	protected AICF_GroupSlot AICF_MultiSlot(AICF_MultiSquadCase item)
@@ -266,23 +396,50 @@ modded class AICF_MatchController
 		return m_USSRFaction;
 	}
 
-	protected void AICF_MultiProtect(AICF_GroupSlot slot, AICF_TransportTrip trip)
+	protected void AICF_MultiProtectHierarchy(IEntity entity, AICF_MultiSquadCase item, string kind, bool emit)
 	{
-		if (m_sAICFMultiMode != "CAPACITY" || !slot || !slot.GetGroup()) return;
+		string details;
+		bool covered = AICF_MultiHierarchyProtection.Apply(entity, details);
+		bool firstFailure = !covered && !item.m_aFailures.Contains("HIERARCHY_PROTECTION_FAILED");
+		if (emit || firstFailure)
+		{
+			string snapshot = "kind=" + kind + " entity=" + AICF_GroupTrace.Entity(entity) + " " + details;
+			AICF_MultiLog("PROTECTION", item.m_sFaction, item.m_iSlot,
+				snapshot);
+		}
+		if (!covered) AICF_MultiFail(item, "HIERARCHY_PROTECTION_FAILED");
+	}
+
+	protected void AICF_MultiProtect(AICF_GroupSlot slot, AICF_TransportTrip trip, AICF_MultiSquadCase item)
+	{
+		if (m_sAICFMultiMode != "CAPACITY" || !slot || !slot.GetGroup() || !Replication.IsServer()) return;
 		SCR_AIGroupUtilityComponent utility = slot.GetGroup().GetGroupUtilityComponent();
 		if (utility && utility.GetCombatModeExternal() != EAIGroupCombatMode.HOLD_FIRE)
 			utility.SetCombatMode(EAIGroupCombatMode.HOLD_FIRE);
+		bool hierarchy = AICF_MultiHierarchyProtection.SelectedScope() == "HIERARCHY";
+		bool emit = item && System.GetTickCount() >= item.m_iProtectionNextLog;
+		if (emit) item.m_iProtectionNextLog = System.GetTickCount() + 5000;
 		array<AIAgent> agents = {};
 		slot.GetGroup().GetAgents(agents);
 		foreach (AIAgent agent : agents)
 		{
 			if (!agent || agent.GetParentGroup() != slot.GetGroup()) continue;
 			ChimeraCharacter member = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (hierarchy && member && item)
+			{
+				AICF_MultiProtectHierarchy(member, item, "MEMBER", emit);
+				continue;
+			}
 			if (member && member.GetDamageManager() && member.GetDamageManager().IsDamageHandlingEnabled())
 				member.GetDamageManager().EnableDamageHandling(false);
 		}
 		if (trip && trip.GetLease() && trip.GetLease().GetVehicle())
 		{
+			if (hierarchy && item)
+			{
+				AICF_MultiProtectHierarchy(trip.GetLease().GetVehicle(), item, "VEHICLE", emit);
+				return;
+			}
 			DamageManagerComponent damage = DamageManagerComponent.Cast(trip.GetLease().GetVehicle().FindComponent(DamageManagerComponent));
 			if (damage && damage.IsDamageHandlingEnabled()) damage.EnableDamageHandling(false);
 		}
@@ -832,6 +989,11 @@ modded class AICF_MatchController
 	{
 		if (m_bAICFMultiEnabled && !m_bAICFMultiDone)
 		{
+			if (!AICF_MultiHierarchyProtection.ScopeAllowed(m_sAICFMultiMode, AICF_MultiHierarchyProtection.SelectedScope()))
+			{
+				AICF_MultiAbort("PROTECTION_SCOPE_INVALID");
+				return;
+			}
 			AICF_MultiEnvironment();
 			if (m_sAICFMultiMode == "CAPACITY")
 				foreach (AICF_MultiSquadCase protectedItem : m_aAICFMultiCases)
@@ -839,7 +1001,7 @@ modded class AICF_MatchController
 					AICF_GroupSlot protectedSlot = AICF_MultiSlot(protectedItem);
 					AICF_TransportTrip protectedTrip;
 					if (protectedSlot && m_VehicleCoordinator) protectedTrip = m_VehicleCoordinator.GetTrip(protectedSlot);
-					AICF_MultiProtect(protectedSlot, protectedTrip);
+					AICF_MultiProtect(protectedSlot, protectedTrip, protectedItem);
 				}
 		}
 		super.Update();

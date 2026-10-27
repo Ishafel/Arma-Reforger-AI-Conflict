@@ -5,9 +5,9 @@ $source=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictCore/Script
 $snapshot=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/State/Vehicles/AICF_StrategicAssignmentSnapshot.c'))
 function Body([string]$text,[string]$name){Get-AICFMethodBody ([pscustomobject]@{Source=$text;Code=(ConvertTo-AICFCodeText $text)}) $name}
 function Rules([string]$text){
- $receipt=Body $text 'HasCompletedStrategicTransportIntent';$replace=Body $text 'ShouldReplaceTerminalTrip';$process=Body $text 'ProcessSlot';$admit=Body $text 'IsAdmissionEligible'
+ $receipt=Body $text 'HasFinishedStrategicTransportIntent';$replace=Body $text 'ShouldReplaceTerminalTrip';$process=Body $text 'ProcessSlot';$admit=Body $text 'IsAdmissionEligible'
  if(!$receipt -or !$replace -or !$process -or !$admit){'MISSING_METHOD';return}
- foreach($guard in @('!Replication.IsServer()','!trip','!assignment','!slot','trip.GetPhase() != AICF_ETransportTripPhase.COMPLETE',
+ foreach($guard in @('!Replication.IsServer()','!trip','!assignment','!slot','trip.GetPhase() != AICF_ETransportTripPhase.COMPLETE && trip.GetPhase() != AICF_ETransportTripPhase.FALLBACK',
   '!trip.GetHandoffState().IsOrderRestored()',
   '!completed.MatchesCurrent(assignment.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), slot.GetGroup())',
   '!assignment.MatchesCurrent(assignment.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), slot.GetGroup())',
@@ -15,11 +15,11 @@ function Rules([string]$text){
   'completed.GetStrategicIntentRevision() != assignment.GetStrategicIntentRevision()',
   '!completed.MatchesDestination(assignment)','trip.GetVehiclePresetSlot() && trip.GetVehiclePresetSlot() != slot',
   'trip.GetVehiclePresetRevision() == slot.GetVehiclePresetRevision()')){
-  if(!$receipt.Contains($guard)){'EXACT_NORMAL_COMPLETE_INTENT_RECEIPT';break}
+  if(!$receipt.Contains($guard)){'EXACT_FINISHED_INTENT_RECEIPT';break}
  }
  if($receipt -match 'GetAssignmentRevision|GetBaseRevision|GetWaypoint|GetTickCount|GetOrigin|GetAlive|CountAlive|Deadline|Cooldown|UntilMs'){'NO_INCIDENTAL_REVISION_OR_COOLDOWN_REARM'}
- if($replace.IndexOf('!m_TripController.CanRetireTrip(trip)') -gt $replace.IndexOf('HasCompletedStrategicTransportIntent') -or
-  $replace -notmatch '(?s)if \(HasCompletedStrategicTransportIntent\(trip, assignment, slot\)\).*?if \(HasExplicitVehicleAdmission\(slot, assignment\)\) return true;.*?ReportAdmissionOnce\(assignment, "STRATEGIC_TRANSPORT_INTENT_ALREADY_COMPLETED"\);\s*return false;'){'CLEANUP_FIRST_EXPLICIT_OR_SAME_INTENT_VETO'}
+ if($replace.IndexOf('!m_TripController.CanRetireTrip(trip)') -gt $replace.IndexOf('HasFinishedStrategicTransportIntent') -or
+  $replace -notmatch '(?s)if \(HasFinishedStrategicTransportIntent\(trip, assignment, slot\)\).*?if \(HasExplicitVehicleAdmission\(slot, assignment\)\) return true;.*?ReportAdmissionOnce\(assignment, "STRATEGIC_TRANSPORT_INTENT_ALREADY_FINISHED"\);\s*return false;'){'CLEANUP_FIRST_EXPLICIT_OR_SAME_INTENT_VETO'}
  foreach($rearm in @('trip.GetVehiclePresetRevision() != trip.GetVehiclePresetSlot().GetVehiclePresetRevision()',
   'trip.GetAssignment().GetStrategicIntentRevision() != assignment.GetStrategicIntentRevision()',
   'trip.GetAssignment().GetAssignmentRevision() != assignment.GetAssignmentRevision()',
@@ -40,23 +40,23 @@ $failures=@(Rules $source)
 if($failures.Count){throw "Completed transport intent: $failures"}
 $controls=1
 foreach($mutation in @(
- @('trip.GetPhase() != AICF_ETransportTripPhase.COMPLETE','false','EXACT_NORMAL_COMPLETE_INTENT_RECEIPT'),
- @('!trip.GetHandoffState().IsOrderRestored()','false','EXACT_NORMAL_COMPLETE_INTENT_RECEIPT'),
- @('!completed.MatchesCurrent(assignment.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), slot.GetGroup())','false','EXACT_NORMAL_COMPLETE_INTENT_RECEIPT'),
- @('!assignment.MatchesCurrent(assignment.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), slot.GetGroup())','false','EXACT_NORMAL_COMPLETE_INTENT_RECEIPT'),
- @('completed.GetUnitType() != slot.GetUnitType()','false','EXACT_NORMAL_COMPLETE_INTENT_RECEIPT'),
- @('completed.GetStrategicIntentRevision() != assignment.GetStrategicIntentRevision()','false','EXACT_NORMAL_COMPLETE_INTENT_RECEIPT'),
- @('!completed.MatchesDestination(assignment)','false','EXACT_NORMAL_COMPLETE_INTENT_RECEIPT'),
- @('trip.GetVehiclePresetRevision() == slot.GetVehiclePresetRevision()','true','EXACT_NORMAL_COMPLETE_INTENT_RECEIPT'),
+ @('trip.GetPhase() != AICF_ETransportTripPhase.COMPLETE && trip.GetPhase() != AICF_ETransportTripPhase.FALLBACK','false','EXACT_FINISHED_INTENT_RECEIPT'),
+ @('!trip.GetHandoffState().IsOrderRestored()','false','EXACT_FINISHED_INTENT_RECEIPT'),
+ @('!completed.MatchesCurrent(assignment.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), slot.GetGroup())','false','EXACT_FINISHED_INTENT_RECEIPT'),
+ @('!assignment.MatchesCurrent(assignment.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), slot.GetGroup())','false','EXACT_FINISHED_INTENT_RECEIPT'),
+ @('completed.GetUnitType() != slot.GetUnitType()','false','EXACT_FINISHED_INTENT_RECEIPT'),
+ @('completed.GetStrategicIntentRevision() != assignment.GetStrategicIntentRevision()','false','EXACT_FINISHED_INTENT_RECEIPT'),
+ @('!completed.MatchesDestination(assignment)','false','EXACT_FINISHED_INTENT_RECEIPT'),
+ @('trip.GetVehiclePresetRevision() == slot.GetVehiclePresetRevision()','true','EXACT_FINISHED_INTENT_RECEIPT'),
  @('if (HasExplicitVehicleAdmission(slot, assignment)) return true;','if (false) return true;','CLEANUP_FIRST_EXPLICIT_OR_SAME_INTENT_VETO'),
- @('STRATEGIC_TRANSPORT_INTENT_ALREADY_COMPLETED','ROUTE_BELOW_VEHICLE_THRESHOLD','CLEANUP_FIRST_EXPLICIT_OR_SAME_INTENT_VETO'),
+ @('STRATEGIC_TRANSPORT_INTENT_ALREADY_FINISHED','ROUTE_BELOW_VEHICLE_THRESHOLD','CLEANUP_FIRST_EXPLICIT_OR_SAME_INTENT_VETO'),
  @('!ShouldReplaceTerminalTrip(trip, assignment, slot)','false','VETO_BEFORE_REMOVAL_AND_ORIGINAL_ADMISSION')
 )){
  if(!$source.Contains($mutation[0])){throw "Mutation target absent: $($mutation[2])"}
  if($mutation[2] -notin @(Rules ($source.Replace($mutation[0],$mutation[1])))){throw "Mutation survived: $($mutation[2])"}
  $controls++
 }
-$receipt=Body $source 'HasCompletedStrategicTransportIntent'
+$receipt=Body $source 'HasFinishedStrategicTransportIntent'
 foreach($line in @('if (completed.GetAssignmentRevision() != assignment.GetAssignmentRevision()) return false;',
  'if (completed.GetBaseRevision() != assignment.GetBaseRevision()) return false;',
  'if (System.GetTickCount() > 10000) return false;')){
@@ -100,7 +100,7 @@ public class AICF_CompletedIntentAdapter {
  public AICF_IntentController m_TripController=new AICF_IntentController(); public bool Explicit;
  public bool HasExplicitVehicleAdmission(AICF_GroupSlot slot,AICF_StrategicAssignmentSnapshot assignment){return Explicit;}
  public void ReportAdmissionOnce(AICF_StrategicAssignmentSnapshot assignment,string reason){}
- public bool HasCompletedStrategicTransportIntent(AICF_TransportTrip trip,AICF_StrategicAssignmentSnapshot assignment,AICF_GroupSlot slot) RECEIPT
+ public bool HasFinishedStrategicTransportIntent(AICF_TransportTrip trip,AICF_StrategicAssignmentSnapshot assignment,AICF_GroupSlot slot) RECEIPT
  public bool ShouldReplaceTerminalTrip(AICF_TransportTrip trip,AICF_StrategicAssignmentSnapshot assignment,AICF_GroupSlot slot) REPLACE
  public static bool[] Evaluate(int scenario){
   Replication.Server=true; var owner=new AICF_CompletedIntentAdapter(); var group=new object(); var slot=new AICF_GroupSlot(){Group=group};
@@ -125,8 +125,20 @@ public class AICF_CompletedIntentAdapter {
    case 16: trip.PresetSlot=null;trip.PresetRevision=0;slot.PresetRevision=0;break;
    case 17: completed.m_TargetKind=AICF_EOrderTargetKind.BASE;current.m_TargetKind=AICF_EOrderTargetKind.BASE;completed.m_TargetBase=new object();current.m_TargetBase=new object();break;
    case 18: completed.m_TargetKind=AICF_EOrderTargetKind.BASE;current.m_TargetKind=AICF_EOrderTargetKind.BASE;completed.m_TargetBase=new object();current.m_TargetBase=completed.m_TargetBase;current.m_vTargetPosition=999;break;
+   case 19: trip.Phase=AICF_ETransportTripPhase.FALLBACK;owner.Explicit=true;break;
+   case 20: trip.Phase=AICF_ETransportTripPhase.FALLBACK;current.Intent=4;break;
+   case 21: trip.Phase=AICF_ETransportTripPhase.FALLBACK;slot.PresetRevision=2;break;
+   case 22: trip.Phase=AICF_ETransportTripPhase.FALLBACK;current.m_vTargetPosition=999;break;
+   case 23: trip.Phase=AICF_ETransportTripPhase.FALLBACK;slot.Generation=2;break;
+   case 24: trip.Phase=AICF_ETransportTripPhase.FALLBACK;trip.Handoff.Restored=false;break;
+   case 25: trip.Phase=AICF_ETransportTripPhase.FALLBACK;owner.Explicit=true;owner.m_TripController.Retire=false;break;
+   case 26: trip.Phase=AICF_ETransportTripPhase.HANDOFF;break;
+   case 27: trip.Phase=AICF_ETransportTripPhase.FALLBACK;current.Assignment=99;current.BaseRevision=99;break;
+   case 28: trip.Phase=AICF_ETransportTripPhase.FALLBACK;trip.PresetSlot=new AICF_GroupSlot(){Group=group};break;
+   case 29: trip.Phase=AICF_ETransportTripPhase.FALLBACK;current.m_Group=new object();break;
+   case 30: trip.Phase=AICF_ETransportTripPhase.FALLBACK;completed.m_Group=new object();break;
   }
-  return new bool[]{owner.HasCompletedStrategicTransportIntent(trip,current,slot),owner.ShouldReplaceTerminalTrip(trip,current,slot)};
+  return new bool[]{owner.HasFinishedStrategicTransportIntent(trip,current,slot),owner.ShouldReplaceTerminalTrip(trip,current,slot)};
  }
 }
 '@
@@ -139,13 +151,19 @@ foreach($case in @(
  @(2,$true,$true,'explicit admission remains available'),
  @(3,$false,$true,'new intent'),@(4,$false,$true,'new point'),@(5,$false,$true,'new preset'),
  @(6,$false,$true,'new generation'),@(7,$false,$true,'foreign current group'),@(8,$false,$true,'foreign completed group'),
- @(9,$false,$true,'new unit type'),@(10,$false,$true,'fallback retains replacement policy'),@(11,$false,$true,'failedclosed retains replacement policy'),
+ @(9,$false,$true,'new unit type'),@(10,$true,$false,'restored fallback cannot repurchase same intent'),@(11,$false,$true,'failedclosed retains replacement policy'),
  @(12,$false,$true,'client cannot prove completed receipt'),@(13,$false,$true,'foreign preset slot'),@(14,$false,$true,'incomplete handoff cannot prove success'),
  @(15,$true,$false,'explicit cannot skip cleanup'),@(16,$true,$false,'automatic transport also keeps completed intent'),
- @(17,$false,$true,'new base identity'),@(18,$true,$false,'same base tolerates position refresh')
+ @(17,$false,$true,'new base identity'),@(18,$true,$false,'same base tolerates position refresh'),
+ @(19,$true,$true,'explicit retry after fallback'),@(20,$false,$true,'new intent after fallback'),
+ @(21,$false,$true,'new preset after fallback'),@(22,$false,$true,'new point after fallback'),
+ @(23,$false,$true,'new incarnation after fallback'),@(24,$false,$true,'fallback with unrestored order cannot prove finished receipt'),
+ @(25,$true,$false,'fallback explicit request cannot bypass cleanup'),@(26,$false,$true,'nonterminal phase cannot prove finished receipt'),
+ @(27,$true,$false,'fallback assignment/base churn cannot repurchase'),@(28,$false,$true,'foreign fallback preset slot'),
+ @(29,$false,$true,'foreign current group after fallback'),@(30,$false,$true,'foreign original fallback group')
 )){
  $actual=[AICF_CompletedIntentAdapter]::Evaluate($case[0])
  if($actual[0] -ne $case[1] -or $actual[1] -ne $case[2]){throw "Completed intent behavior failed: $($case[3]) actual=$actual"}
  $controls++
 }
-"PASS Completed transport intent: normal exact COMPLETE receipt survives assignment/base/waypoint rebuild; new intent/target/preset/explicit requests keep original cleanup and admission gates; controls=$controls"
+"PASS Completed transport intent: exact COMPLETE/FALLBACK receipt survives assignment/base/waypoint rebuild; new intent/target/preset/explicit requests keep original cleanup and admission gates; controls=$controls"

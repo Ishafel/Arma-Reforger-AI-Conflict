@@ -235,6 +235,21 @@ class AICF_VehicleCoordinator
 		return FindTripForSlot(slot);
 	}
 
+	AICF_SpawnApproachFailure ReportSpawnApproachFailure(AICF_GroupSlot slot,
+		SCR_CampaignFaction faction, SCR_AIGroupUtilityComponent utility,
+		AIActionBase action, AIWaypoint waypoint, vector location, int baseRevision)
+	{
+		if (!IsAuthorityReady() || !slot || !faction || !slot.IsCombatReady()) return null;
+		AICF_TransportTrip trip = FindTripForSlot(slot);
+		if (!trip || trip.GetFactionKey() != faction.GetFactionKey()) return null;
+		AICF_StrategicAssignmentSnapshot assignment;
+		if (!m_OrderPlanner.TryCreateAssignmentSnapshot(slot, faction,
+			baseRevision, assignment)) return null;
+		AICF_FactionFleet fleet = m_Fleets.FindFleet(faction.GetFactionKey());
+		return m_TripController.ReportSpawnApproachFailure(trip, assignment, slot, fleet,
+			faction, utility, action, waypoint, location);
+	}
+
 	bool ReplanControlledMovement(
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction,
@@ -824,12 +839,13 @@ class AICF_VehicleCoordinator
 	{
 		if (!trip || !assignment || !m_TripController.CanRetireTrip(trip))
 			return false;
-		if (HasCompletedStrategicTransportIntent(trip, assignment, slot))
+		if (HasFinishedStrategicTransportIntent(trip, assignment, slot))
 		{
 			// Handoff восстанавливает пеший waypoint с новой assignment revision.
-			// Тот же завершённый transport intent не становится новой покупкой.
+			// COMPLETE или FALLBACK завершают попытку того же transport intent:
+			// revision пешего waypoint не должна запускать повторную покупку.
 			if (HasExplicitVehicleAdmission(slot, assignment)) return true;
-			ReportAdmissionOnce(assignment, "STRATEGIC_TRANSPORT_INTENT_ALREADY_COMPLETED");
+			ReportAdmissionOnce(assignment, "STRATEGIC_TRANSPORT_INTENT_ALREADY_FINISHED");
 			return false;
 		}
 		bool presetChanged = trip.GetVehiclePresetSlot() &&
@@ -841,13 +857,14 @@ class AICF_VehicleCoordinator
 		return !trip.GetAssignment().MatchesDestination(assignment);
 	}
 
-	protected bool HasCompletedStrategicTransportIntent(
+	protected bool HasFinishedStrategicTransportIntent(
 		AICF_TransportTrip trip,
 		AICF_StrategicAssignmentSnapshot assignment,
 		AICF_GroupSlot slot)
 	{
 		if (!Replication.IsServer() || !trip || !assignment || !slot) return false;
-		if (trip.GetPhase() != AICF_ETransportTripPhase.COMPLETE || !trip.GetHandoffState().IsOrderRestored()) return false;
+		if (trip.GetPhase() != AICF_ETransportTripPhase.COMPLETE && trip.GetPhase() != AICF_ETransportTripPhase.FALLBACK) return false;
+		if (!trip.GetHandoffState().IsOrderRestored()) return false;
 		AICF_StrategicAssignmentSnapshot completed = trip.GetAssignment();
 		if (!completed || !completed.MatchesCurrent(assignment.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), slot.GetGroup())) return false;
 		if (!assignment.MatchesCurrent(assignment.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), slot.GetGroup())) return false;
@@ -909,6 +926,13 @@ class AICF_VehicleCoordinator
 			// Combat, mines and other stock-world damage are valid runtime
 			// conditions. Keep the terminal fallback evidence without turning an
 			// unattributed destroyed asset into an acceptance failure.
+			return AICF_EVehicleAcceptanceFailureDomain.NONE;
+		}
+		if (terminalReason == "VEHICLE_MOVEMENT_DESTROYED" &&
+			(previousPhase == AICF_ETransportTripPhase.BOARDING || previousPhase == AICF_ETransportTripPhase.TRANSIT))
+		{
+			// Native unusability завершает bounded попытку, не доказывая причину
+			// повреждения. Receipt остаётся FALLBACK и не отмечает normal COMPLETE.
 			return AICF_EVehicleAcceptanceFailureDomain.NONE;
 		}
 		switch (previousPhase)

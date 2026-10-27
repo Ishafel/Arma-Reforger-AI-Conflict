@@ -1,5 +1,17 @@
 # Ступенчатая нагрузка транспорта и native combat hold
 
+Опциональный `-RecruitmentNavDomainProbe` добавляет только isolated read-only
+наблюдение за подходом к казарме: exact order/group/actor/action/waypoint,
+повторный полный native path до512points, actor/group navmesh/tile/projection.
+Для failed/stalled подхода ограниченные surrogate-body/ray queries сравнивают
+CharacterAI и Projectile; читаются velocity/stance/LOD, публикуется hit identity.
+Ни query, ни наличие пути не гарантируют фактический проход. Все данные повторно
+сверяются до публикации; super.CheckApproach вызывается ровно один раз.
+
+Короткий5min diagnostic case не заменяет30min MOVING2→4→6 gate. Initial spawn,
+current actor position и первый path node могут различаться: физическое препятствие
+на node нельзя автоматически приписывать прежнему SpawnPlacement/Recovery.
+
 Это продолжение issue78. Пользователь выбрал сначала проверить2→4→6 отрядов
 на каждую сторону. Обычные defaults INFANTRY и cap10 машин/faction не меняются.
 Оба новых runner работают только с отдельным immutable snapshot, canonical
@@ -7,6 +19,14 @@
 не устанавливаются. Offline contracts не запускают игру.
 
 ## Два режима нагрузки
+
+`-ProtectionScope ROOT_ONLY` сохраняет историческую CAPACITY защиту только root
+damage manager. `-ProtectionScope HIERARCHY` — отдельный opt-in CAPACITY control:
+все native hitzones перечисляются дважды, проверяются exact managers/owners и
+readback disabled у всех managers. `VEHICLE_MULTI_PROTECTION` привязывает receipt
+к original actor/vehicle; strict log oracle требует полное и свежее покрытие.
+NORMAL+HIERARCHY отклоняется до запуска. Ни physics, ни actions, ни production
+health gates не меняются; protected capacity не доказывает обычную войну.
 
 ```powershell
 & tools/Invoke-AICFVehicleMultiSquad.ps1 `
@@ -120,6 +140,14 @@ production START/END/DISEMBARK/COMPLETE, а не доверяет заявлен
 технические отчёты сохраняются локально по решению пользователя; GitHub не меняется.
 
 ## Свой экипаж и диагностика посадки
+
+Opt-in `-BoardingNavDomainProbe` добавляет read-only paired group/actor snapshots
+до/после spawn и на cadence5s boarding. Сравниваются exact pathfinding/navmesh,
+tile loaded/valid/requested и projections возле actor/site/реальных entry doors.
+В BOARDING повторяются lease pointer/generations/entity/Rpl; PRE/POST остаются
+в candidate scope до bind. Сам observer не запрашивает tiles и не меняет actions,
+deadlines или допуски посадки. Разные pathfinding components не доказывают разные
+nav worlds; переход Pilot на AICarMovementComponent ожидаемо меняет domain.
 
 `AICF_VehicleCrewRoleOwnership` различает чужого occupant и своего сознательного
 authoritative AI в точном назначенном Pilot/Turret месте актуального manual preset.
