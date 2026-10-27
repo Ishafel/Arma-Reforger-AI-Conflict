@@ -20,6 +20,16 @@ retarget5/repeat5`. Никакого retarget к машине для ускор�
 бойцы должны пешком дойти до исходной точки после штатной высадки. CLI, native
 receipts, debugger fields и границы изоляции — [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md).
 
+`AICF_DismountOperationBudgetProbe.c` копируется дополнительно только при
+`Invoke-AICFVehicleScenarios.ps1 -Cases ural5 -DismountBudgetProbe`. Это isolated
+controlled fault injection: три реально charged/accepted native force batches,
+затем один physical-only hullghost после полного native egress; требуется
+production normal relocation с прежними deadlines и полный COMPLETE/foot arrival.
+Счётчики напрямую не заполняются; отсутствие реальной ветки — coverage FAIL.
+Обычный `ural5` выполняется отдельно без инъекции. Верхний предел явно6 mutation
+batches на фазу (exit3+physical3), до12 normal+existing terminal; подробности и
+строгие receipts — [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md).
+
 Fixtures, flags и native oracles описаны в
 [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md#проверки-и-текущая-граница-доказательств).
 `AICF_VehiclePresetProbe.c` → isolated Core/Vehicles `AICF_ZVehiclePresetProbe.c`;

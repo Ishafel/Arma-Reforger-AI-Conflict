@@ -4721,6 +4721,82 @@ class AICF_MatchController
 		return true;
 	}
 
+	// Завершённый POINT waypoint заменяется новым hold до durability proof.
+	// Проверка только читает точный pending candidate: replacement не должен
+	// стереть его accounting receipt или подтвердить ещё не проверенный hold.
+	protected bool TryResolveCompletedPointRepairReplacement(
+		AICF_GroupSlot slot,
+		SCR_CampaignFaction faction,
+		int attemptId,
+		out float distanceMeters)
+	{
+		distanceMeters = -1.0;
+		if (!Replication.IsServer() || !slot || !faction || attemptId <= 0)
+			return false;
+		if (!slot.HasPendingOrderRecovery() ||
+			!slot.PendingOrderRecoveryCountsAsReliabilityAttempt() ||
+			slot.GetPendingOrderRecoveryReliabilityAttemptId() != attemptId)
+		{
+			return false;
+		}
+		if (!slot.IsPendingOrderRecoveryContextCurrent() ||
+			slot.GetTargetKind() != AICF_EOrderTargetKind.POSITION)
+		{
+			return false;
+		}
+
+		SCR_AIGroup group = slot.GetPendingOrderRecoveryGroup();
+		AIWaypoint waypoint = slot.GetPendingOrderRecoveryWaypoint();
+		if (!group || group.GetFaction() != faction || !waypoint ||
+			slot.GetOwnedWaypointTerminalOutcome(waypoint) != "GROUP_CALLBACK_COMPLETED")
+		{
+			return false;
+		}
+
+		EntityID groupId = group.GetID();
+		EntityID waypointId = waypoint.GetID();
+		int generation = slot.GetSpawnGeneration();
+		int assignmentRevision = slot.GetStrategicAssignmentRevision();
+		int intentRevision = slot.GetStrategicIntentRevision();
+		vector targetPosition = slot.GetTargetPosition();
+		IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(group);
+		if (!leader)
+			return false;
+		distanceMeters = Math.Sqrt(vector.DistanceSqXZ(leader.GetOrigin(), targetPosition));
+		if (distanceMeters > POINT_DESTINATION_RADIUS_METERS)
+			return false;
+
+		bool pendingCurrent = slot.HasPendingOrderRecovery() &&
+			slot.PendingOrderRecoveryCountsAsReliabilityAttempt() &&
+			slot.GetPendingOrderRecoveryReliabilityAttemptId() == attemptId &&
+			slot.IsPendingOrderRecoveryContextCurrent();
+		if (!pendingCurrent)
+			return false;
+		bool groupCurrent =
+			slot.GetGroup() == group && group.GetID() == groupId &&
+			group.GetFaction() == faction;
+		if (!groupCurrent)
+			return false;
+		bool waypointCurrent = slot.GetWaypoint() == waypoint &&
+			waypoint.GetID() == waypointId && slot.GetSpawnGeneration() == generation;
+		if (!waypointCurrent)
+			return false;
+		bool strategicCurrent =
+			slot.GetStrategicAssignmentRevision() == assignmentRevision &&
+			slot.GetStrategicIntentRevision() == intentRevision &&
+			slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION &&
+			slot.GetTargetPosition() == targetPosition;
+		if (!strategicCurrent)
+			return false;
+		bool completedAtLeader =
+			slot.GetOwnedWaypointTerminalOutcome(waypoint) == "GROUP_CALLBACK_COMPLETED" &&
+			AICF_GroupRuntime.ResolveAliveLeader(group) == leader;
+		if (!completedAtLeader)
+			return false;
+		return vector.DistanceSqXZ(leader.GetOrigin(), targetPosition) <=
+			POINT_DESTINATION_RADIUS_METERS * POINT_DESTINATION_RADIUS_METERS;
+	}
+
 	protected void ProcessPendingOrderRecovery(
 		AICF_FactionState factionState,
 		AICF_GroupSlot slot,
@@ -4900,10 +4976,32 @@ class AICF_MatchController
 			return;
 		}
 
+		bool completedPointRepair = countsAsReliabilityRepair &&
+			slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION;
+		float completedPointDistanceMeters;
+		if (completedPointRepair && failureReason == "WAYPOINT_NOT_CURRENT" &&
+			terminalOutcome == "GROUP_CALLBACK_COMPLETED" &&
+			TryResolveCompletedPointRepairReplacement(
+				slot, faction, repairAttemptId, completedPointDistanceMeters))
+		{
+			// RebuildCurrentOrder clears pending state while replacing the point
+			// waypoint. Close this candidate before that mutation; the fresh hold
+			// has not passed a durability window and receives no repair success.
+			if (!RecordPendingOrderRepairTerminal(
+				slot, faction, "SUPERSEDED", "POINT_HOLD_REFRESH",
+				"COMPLETED_AT_POINT_REPLACEMENT"))
+			{
+				return;
+			}
+			slot.ClearPendingOrderRecovery();
+			RefreshCompletedPointHold(slot, faction, completedPointDistanceMeters);
+			return;
+		}
+
 		// Proximity is confirmation only after the stock group explicitly reports
 		// completion for this exact waypoint. A removed or unobserved waypoint at the
 		// objective remains a failed durability candidate.
-		if (terminalOutcome == "GROUP_CALLBACK_COMPLETED" &&
+		if (!completedPointRepair && terminalOutcome == "GROUP_CALLBACK_COMPLETED" &&
 			TryHoldCompletedOrderAtObjective(slot, faction, failureReason))
 		{
 			string completionReason = "TARGET_COMPLETED";

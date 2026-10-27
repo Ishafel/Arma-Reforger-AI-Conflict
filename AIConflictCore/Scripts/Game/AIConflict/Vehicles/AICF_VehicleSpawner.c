@@ -261,6 +261,7 @@ class AICF_VehicleSpawnPlan
 	protected int m_iApproachWaypointIssuedAtMs;
 	protected int m_iApproachWaypointReissueCount;
 	protected string m_sLastReportedPadProbeResult;
+	protected string m_sLastReportedFootPadProbeResult;
 	protected ref array<ref AICF_VehicleStagingActionToken> m_aStagingActionTokens = {};
 	protected ref array<string> m_aStagingRetriedEntityIds = {};
 	protected ref array<string> m_aStagingExhaustedEntityIds = {};
@@ -395,6 +396,13 @@ class AICF_VehicleSpawnPlan
 		if (m_sLastReportedPadProbeResult == result)
 			return false;
 		m_sLastReportedPadProbeResult = result;
+		return true;
+	}
+
+	bool MarkFootPadProbeResultReported(string result)
+	{
+		if (m_sLastReportedFootPadProbeResult == result) return false;
+		m_sLastReportedFootPadProbeResult = result;
 		return true;
 	}
 
@@ -766,6 +774,21 @@ class AICF_VehicleSpawner
 		if (!padClear)
 		{
 			failureReason = "SPAWN_PAD_OCCUPIED";
+			return false;
+		}
+		AICF_VehicleFootPadReadback footPad = AICF_VehicleBoardingSiteQuery.Capture(group, selection.m_vPosition);
+		string footResult = footPad.m_sReason;
+		if (footResult.IsEmpty()) footResult = "FOOT_PAD_COVERED";
+		if (plan.MarkFootPadProbeResultReported(footResult))
+		{
+			AICF_VehicleSpawnSiteReservation reservation = plan.GetReservation();
+			footPad.Report(string.Format("faction=%1 numeric_slot=%2 group_generation=%3 trip_generation=%4 request_generation=%5 site_token=%6",
+				faction.GetFactionKey(), reservation.GetSlotId(), reservation.GetGroupGeneration(), reservation.GetTripGeneration(),
+				reservation.GetRequestGeneration(), reservation.GetOwnerToken()), "SPAWN_COMMIT");
+		}
+		if (!footPad.IsSuitable())
+		{
+			failureReason = footPad.m_sReason;
 			return false;
 		}
 		failureReason = string.Empty;
@@ -1687,6 +1710,9 @@ class AICF_VehicleSpawner
 			return false;
 		}
 
+		AICF_VehicleFootPadReadback footPad = AICF_VehicleBoardingSiteQuery.Capture(group, position);
+		footPad.Report(identityContext, "SITE_PREFLIGHT");
+		if (!footPad.IsSuitable()) return false;
 		result.m_sResult = "SELECTED";
 		result.m_vPosition = position;
 		result.m_iCandidatePositionIndex = positionIndex;

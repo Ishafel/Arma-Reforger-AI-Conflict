@@ -7,10 +7,12 @@ param(
  [ValidateRange(1,65535)][int]$ServerPort=2478,
  [ValidateSet('USSR','BOTH')][string]$AICommanderMode='USSR',
  [switch]$Combat,
+	[switch]$DismountBudgetProbe,
  [switch]$SkipCompile
 )
 $ErrorActionPreference='Stop'
 if(@($Cases|Sort-Object -Unique).Count -ne $Cases.Count){throw 'Duplicate scenario names are not allowed'}
+if($DismountBudgetProbe -and ($Combat -or $Cases.Count -ne 1 -or $Cases[0] -ne 'ural5')){throw 'DismountBudgetProbe requires isolated non-combat ural5 only'}
 $taskRepository=(Resolve-Path -LiteralPath $RepositoryRoot).Path
 $taskEvidence=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($EvidenceRoot)
 if(Test-Path -LiteralPath $taskEvidence){throw 'EvidenceRoot must be new'}
@@ -33,10 +35,12 @@ if($taskOwnStage){
   Copy-Item -LiteralPath $taskSource -Destination $taskDestination -Force
  }
  Copy-Item -LiteralPath (Join-Path $taskRepository 'tests/fixtures/AICF_VehicleScenarioProbe.c') -Destination (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_VehicleScenarioProbe.c')
+ if($DismountBudgetProbe){Copy-Item -LiteralPath (Join-Path $taskRepository 'tests/fixtures/AICF_DismountOperationBudgetProbe.c') -Destination (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_ZDismountOperationBudgetProbe.c')}
 }
 $StageRoot=(Resolve-Path -LiteralPath $StageRoot).Path
 if($StageRoot -eq $taskRepository){throw 'Production checkout cannot be used as a scenario stage'}
 if(!(Test-Path -LiteralPath (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_VehicleScenarioProbe.c'))){throw 'Scenario fixture missing in stage'}
+if($DismountBudgetProbe -and !(Test-Path -LiteralPath (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_ZDismountOperationBudgetProbe.c'))){throw 'Dismount operation budget fixture missing in stage'}
 $taskHashes=@(Get-ChildItem -LiteralPath $StageRoot -Recurse -File|Where-Object{$_.Extension -in @('.c','.conf','.st','.gproj')}|ForEach-Object{[pscustomobject]@{path=$_.FullName;sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash}})
 $taskHashes|ConvertTo-Json -Depth 4|Set-Content -LiteralPath (Join-Path $taskEvidence 'source-hashes.json')
 if(!$SkipCompile){
@@ -61,13 +65,15 @@ foreach($taskCase in $Cases){
  $taskProfile=Join-Path $taskCaseRoot 'profile'
  $taskLauncher=Join-Path $taskCaseRoot 'launcher.txt'
  $taskCombat='0';if($Combat){$taskCombat='1'}
- & (Join-Path $taskRepository 'tools/Start-AICFRuntime.ps1') -Role Server -Variant Stock -AICommanderMode $AICommanderMode -RepositoryRoot $StageRoot -ProfileRoot $taskProfile -ServerPort $ServerPort -AdditionalArguments @('-aicfVehicleScenario',$taskCase,'-aicfVehicleScenarioCombat',$taskCombat,'-aicfGroupTrace','1','-aicfGroupTraceFaction','USSR','-aicfGroupTraceSlot','0','-addr',"127.0.0.1:$ServerPort") *> $taskLauncher
+ $taskAdditional=@('-aicfVehicleScenario',$taskCase,'-aicfVehicleScenarioCombat',$taskCombat,'-aicfGroupTrace','1','-aicfGroupTraceFaction','USSR','-aicfGroupTraceSlot','0','-addr',"127.0.0.1:$ServerPort")
+ if($DismountBudgetProbe){$taskAdditional+=@('-aicfVehicleScenarioDismountBudget','1')}
+ & (Join-Path $taskRepository 'tools/Start-AICFRuntime.ps1') -Role Server -Variant Stock -AICommanderMode $AICommanderMode -RepositoryRoot $StageRoot -ProfileRoot $taskProfile -ServerPort $ServerPort -AdditionalArguments $taskAdditional *> $taskLauncher
  $taskNativeExit=$LASTEXITCODE
  $taskExitPath=Join-Path $taskCaseRoot 'native-exit.txt'
  $taskNativeExit|Set-Content -LiteralPath $taskExitPath
  $taskConsole=Get-ChildItem -LiteralPath (Join-Path $taskProfile 'logs') -Recurse -Filter console.log|Select-Object -First 1
  if(!$taskConsole){throw "No console.log for $taskCase"}
- & (Join-Path $taskRepository 'tests/log-audits/Test-VehicleScenarioLog.ps1') -LogPath $taskConsole.FullName -LauncherPath $taskLauncher -NativeExitPath $taskExitPath -Scenario $taskCase -Combat:$Combat *> (Join-Path $taskCaseRoot 'audit.txt')
+ & (Join-Path $taskRepository 'tests/log-audits/Test-VehicleScenarioLog.ps1') -LogPath $taskConsole.FullName -LauncherPath $taskLauncher -NativeExitPath $taskExitPath -Scenario $taskCase -Combat:$Combat -DismountBudgetProbe:$DismountBudgetProbe *> (Join-Path $taskCaseRoot 'audit.txt')
  $taskAuditExit=$LASTEXITCODE
  $taskAuditExit|Set-Content -LiteralPath (Join-Path $taskCaseRoot 'audit-exit.txt')
  $taskResults+=[pscustomobject]@{scenario=$taskCase;native_exit=$taskNativeExit;audit_exit=$taskAuditExit;console=$taskConsole.FullName;launcher=$taskLauncher}

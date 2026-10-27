@@ -317,6 +317,14 @@ class AICF_VehicleTransitFlow
 
 		AICF_VehicleMovementState state = trip.GetMovementState();
 		EnsureStateStarted(trip, state, nowMs);
+		string nativeAbandonDetails;
+		if (AICF_TransportNativeAbandon.Observe(trip, nativeAbandonDetails))
+		{
+			AICF_Stage3Diagnostics.Info("TRANSPORT_NATIVE_GROUP_ABANDONED", FormatIdentity(trip, "NATIVE_GROUP_ABANDONED_VEHICLE") + nativeAbandonDetails);
+			return AICF_TripOutcome.FallbackToFoot("NATIVE_GROUP_ABANDONED_VEHICLE", causationId);
+		}
+		AICF_TripOutcome pendingNativeEntry = AdvancePendingNativeCrewEntries(trip, causationId, nowMs);
+		if (pendingNativeEntry) return pendingNativeEntry;
 		AICF_TripOutcome combatOutcome = ObserveNativeCombat(trip, causationId, nowMs);
 		if (combatOutcome)
 			return combatOutcome;
@@ -373,6 +381,8 @@ class AICF_VehicleTransitFlow
 		if (!trip || !trip.GetMovementState())
 			return;
 		AICF_VehicleMovementState state = trip.GetMovementState();
+		state.ClearNativeCrewEntries();
+		state.ClearNativeRouteProgress();
 		if (state.GetNativeCombatActivity())
 		{
 			ReportNativeCombat(trip, "TRANSPORT_NATIVE_COMBAT_ENDED", "OWNED_ACTIONS_ABORTED", System.GetTickCount());
@@ -460,6 +470,7 @@ class AICF_VehicleTransitFlow
 			return AICF_TripOutcome.FallbackToFoot("NATIVE_GATE_IDENTITY_OR_DEADLINE", causationId);
 		}
 		if (!gate.IsReturned()) return AICF_TripOutcome.Wait("NATIVE_OPEN_GATE", causationId);
+		if (!gate.HasResumed(m_Config.GetMotionMeters())) return AICF_TripOutcome.Wait("NATIVE_OPEN_GATE_RETURN_WAIT_RESUME", causationId);
 		gate.Log("TRANSPORT_NATIVE_GATE_RETURNED");
 		state.SetNativeGate(null);
 		return null;
@@ -570,6 +581,14 @@ class AICF_VehicleTransitFlow
 			routeDistanceMeters,
 			m_Config.GetProgressMeters(),
 			nowMs);
+		AICF_VehicleNativeRouteProgress nativeRoute = state.GetNativeRouteProgress();
+		if (nativeRoute.Observe(trip, nowMs, m_Config.GetProgressMeters()))
+		{
+			state.CreditNativeRouteProgress(nowMs);
+			routeProgress = true;
+			AICF_Stage3Diagnostics.Info("VEHICLE_NATIVE_ROUTE_PROGRESS",
+				FormatIdentity(trip, "BOUNDED_FORWARD_NATIVE_PATH_ADVANCE") + nativeRoute.GetDetails());
+		}
 		bool physicalMotion = state.ObservePhysicalMotion(
 			vehicle.GetOrigin(),
 			m_Config.GetMotionMeters(),
@@ -715,6 +734,8 @@ class AICF_VehicleTransitFlow
 		AICF_VehicleCrewRecoveryToken token = state.GetCrewRecoveryToken();
 		if (token)
 			return ProcessCrewRecoveryToken(trip, token, causationId, nowMs);
+		AICF_TripOutcome nativeDriverEntry = ObserveNativeCrewEntry(trip, EAICompartmentType.Pilot, causationId, nowMs);
+		if (nativeDriverEntry) return nativeDriverEntry;
 
 		AICF_VehicleCrewRoleSnapshot driverSnapshot = CaptureCrewRoleSnapshot(
 			trip,
@@ -734,6 +755,8 @@ class AICF_VehicleTransitFlow
 
 		if (trip.GetLease().GetKind() != AICF_EVehicleKind.ARMED_LIGHT)
 			return null;
+		AICF_TripOutcome nativeGunnerEntry = ObserveNativeCrewEntry(trip, EAICompartmentType.Turret, causationId, nowMs);
+		if (nativeGunnerEntry) return nativeGunnerEntry;
 		AICF_VehicleCrewRoleSnapshot gunnerSnapshot = CaptureCrewRoleSnapshot(
 			trip,
 			EAICompartmentType.Turret);
@@ -1071,6 +1094,95 @@ class AICF_VehicleTransitFlow
 		return AICF_TripOutcome.Wait("EXACT_OWN_CREW_ROLE_SETTLED_RECHECK", causationId);
 	}
 
+	protected AICF_TripOutcome AdvancePendingNativeCrewEntries(AICF_TransportTrip trip, string causationId, int nowMs)
+	{
+		AICF_VehicleMovementState state = trip.GetMovementState();
+		if (!state.GetNativeCrewEntry(EAICompartmentType.Pilot) && !state.GetNativeCrewEntry(EAICompartmentType.Turret)) return null;
+		AICF_VehicleCrewRecoveryToken token = state.GetCrewRecoveryToken();
+		if (token && CrewTokenRequiresImmediateAdvance(trip, token, nowMs))
+			return ProcessCrewRecoveryToken(trip, token, causationId, nowMs);
+		array<EAICompartmentType> roles = {EAICompartmentType.Pilot, EAICompartmentType.Turret};
+		foreach (EAICompartmentType role : roles)
+		{
+			AICF_TransportNativeCrewEntry entry = state.GetNativeCrewEntry(role);
+			if (!entry) continue;
+			AICF_TripOutcome invalid = InspectPendingNativeCrewEntry(trip, entry, causationId, nowMs);
+			if (invalid) return invalid;
+		}
+		// Все сохранённые windows проверены до первого role/token pending WAIT.
+		// Новый native combat/gate WAIT также не скрывает их deadline.
+		return ProcessMandatoryCrew(trip, causationId, nowMs);
+	}
+	protected bool CrewTokenRequiresImmediateAdvance(AICF_TransportTrip trip, AICF_VehicleCrewRecoveryToken token, int nowMs)
+	{
+		if (!token.Matches(trip, trip.GetLease(), trip.GetAssignment().GetGroup())) return true;
+		if (ResolveRoleSlot(trip.GetLease().GetVehicle(), token.GetRole()) != token.GetCompartment()) return true;
+		return !token.IsOwnerValid() || token.GetActionState() == EAIActionState.FAILED || token.IsDeadlineReached(nowMs);
+	}
+	protected AICF_TripOutcome InspectPendingNativeCrewEntry(AICF_TransportTrip trip, AICF_TransportNativeCrewEntry entry, string causationId, int nowMs)
+	{
+		string failure;
+		bool stale;
+		if (!entry.IsCurrentContext(trip))
+		{
+			failure = "NATIVE_CREW_ENTRY_CONTEXT_CHANGED";
+			stale = true;
+		}
+		else if (entry.IsDeadlineReached(nowMs)) failure = "NATIVE_CREW_ENTRY_TIMEOUT";
+		else if (entry.IsSettled())
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_NATIVE_CREW_ENTRY_ENDED", FormatIdentity(trip, "EXACT_NATIVE_ENTRY_SETTLED") + entry.FormatDetails(nowMs));
+			trip.GetMovementState().ClearNativeCrewEntry(entry.GetRole());
+			return null;
+		}
+		else failure = entry.PendingFailure();
+		if (failure.IsEmpty()) return null;
+		AICF_Stage3Diagnostics.Warning("VEHICLE_NATIVE_CREW_ENTRY_FAILED", FormatIdentity(trip, failure) + entry.FormatDetails(nowMs));
+		trip.GetMovementState().ClearNativeCrewEntry(entry.GetRole());
+		if (stale) return AICF_TripOutcome.TerminalFailClosed(failure, causationId);
+		return AICF_TripOutcome.FallbackToFoot(failure, causationId);
+	}
+
+	protected AICF_TripOutcome ObserveNativeCrewEntry(AICF_TransportTrip trip, EAICompartmentType role, string causationId, int nowMs)
+	{
+		AICF_VehicleMovementState state = trip.GetMovementState();
+		AICF_TransportNativeCrewEntry entry = state.GetNativeCrewEntry(role);
+		if (!entry)
+		{
+			entry = AICF_TransportNativeCrewEntry.Capture(trip, ResolveRoleSlot(trip.GetLease().GetVehicle(), role), role, nowMs, m_Config.GetBoardingTimeoutMs());
+			if (!entry) return null;
+			if (!state.TrackNativeCrewEntry(role, entry)) return AICF_TripOutcome.TerminalFailClosed("NATIVE_CREW_ENTRY_TRACKING_CHANGED", causationId);
+			AICF_Stage3Diagnostics.Info("VEHICLE_NATIVE_CREW_ENTRY_STARTED", FormatIdentity(trip, "EXACT_NATIVE_ENTRY_RUNNING") + entry.FormatDetails(nowMs));
+		}
+		if (!entry.IsCurrentContext(trip))
+		{
+			state.ClearNativeCrewEntry(role);
+			return AICF_TripOutcome.TerminalFailClosed("NATIVE_CREW_ENTRY_CONTEXT_CHANGED", causationId);
+		}
+		if (entry.IsDeadlineReached(nowMs))
+		{
+			AICF_Stage3Diagnostics.Warning("VEHICLE_NATIVE_CREW_ENTRY_FAILED", FormatIdentity(trip, "NATIVE_CREW_ENTRY_TIMEOUT") + entry.FormatDetails(nowMs));
+			state.ClearNativeCrewEntry(role);
+			return AICF_TripOutcome.FallbackToFoot("NATIVE_CREW_ENTRY_TIMEOUT", causationId);
+		}
+		if (entry.IsSettled())
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_NATIVE_CREW_ENTRY_ENDED", FormatIdentity(trip, "EXACT_NATIVE_ENTRY_SETTLED") + entry.FormatDetails(nowMs));
+			state.ClearNativeCrewEntry(role);
+			return null;
+		}
+		string failure = entry.PendingFailure();
+		if (!failure.IsEmpty())
+		{
+			AICF_Stage3Diagnostics.Warning("VEHICLE_NATIVE_CREW_ENTRY_FAILED", FormatIdentity(trip, failure) + entry.FormatDetails(nowMs));
+			state.ClearNativeCrewEntry(role);
+			return AICF_TripOutcome.FallbackToFoot(failure, causationId);
+		}
+		if (entry.MarkReportDue(nowMs))
+			AICF_Stage3Diagnostics.Info("VEHICLE_NATIVE_CREW_ENTRY_WAIT", FormatIdentity(trip, "EXACT_NATIVE_ENTRY_RUNNING") + entry.FormatDetails(nowMs));
+		return AICF_TripOutcome.Wait("NATIVE_PRESET_CREW_ENTRY_PENDING", causationId);
+	}
+
 	protected AICF_TripOutcome StartCrewRecovery(
 		AICF_TransportTrip trip,
 		EAICompartmentType role,
@@ -1078,6 +1190,8 @@ class AICF_VehicleTransitFlow
 		int nowMs)
 	{
 		AICF_VehicleMovementState state = trip.GetMovementState();
+		AICF_TripOutcome nativeEntry = ObserveNativeCrewEntry(trip, role, causationId, nowMs);
+		if (nativeEntry) return nativeEntry;
 		AICF_TripOutcome ownTransition = ObserveExactOwnedCrewRole(trip, role, causationId, nowMs);
 		if (ownTransition)
 			return ownTransition;
@@ -1268,6 +1382,8 @@ class AICF_VehicleTransitFlow
 		if (token.GetRole() == EAICompartmentType.Turret &&
 			!IsRoleSettled(trip, EAICompartmentType.Pilot))
 		{
+			AICF_TripOutcome nativePilotEntry = ObserveNativeCrewEntry(trip, EAICompartmentType.Pilot, causationId, nowMs);
+			if (nativePilotEntry) return nativePilotEntry;
 			AICF_TripOutcome ownPilotTransition = ObserveExactOwnedCrewRole(
 				trip, EAICompartmentType.Pilot, causationId, nowMs);
 			if (ownPilotTransition)
@@ -1959,6 +2075,7 @@ class AICF_VehicleTransitFlow
 			routeProgressAgeMs,
 			physicalMotionAgeMs,
 			typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase()));
+		details += " " + AICF_VehicleHealthTrace.Capture(vehicle);
 		AICF_Stage3Diagnostics.Warning("VEHICLE_FAILURE_SNAPSHOT", details);
 	}
 
@@ -2111,12 +2228,12 @@ class AICF_VehicleTransitFlow
 		{
 			AICF_Stage3Diagnostics.Info(
 				"VEHICLE_PROGRESS",
-				FormatIdentity(trip, "ROUTE_DISTANCE_REDUCED") + string.Format(
+				FormatIdentity(trip, "ROUTE_PROGRESS_CONFIRMED") + string.Format(
 					" route_distance_m=%1 target_distance_m=%2 road_endpoint=%3 tactical_target=%4",
 					routeDistanceMeters,
 					targetDistanceMeters,
 					trip.GetMovementState().GetRouteEndpoint(),
-					trip.GetMovementState().GetTacticalTarget()));
+					trip.GetMovementState().GetTacticalTarget()) + trip.GetMovementState().GetNativeRouteProgress().GetDetails());
 		}
 		else if (physicalMotion && trip.GetMovementState().MarkMotionReportDue(
 			nowMs,
@@ -2128,7 +2245,7 @@ class AICF_VehicleTransitFlow
 					string.Format(
 						" route_distance_m=%1 target_distance_m=%2",
 						routeDistanceMeters,
-						targetDistanceMeters));
+						targetDistanceMeters) + trip.GetMovementState().GetNativeRouteProgress().GetDetails());
 		}
 	}
 

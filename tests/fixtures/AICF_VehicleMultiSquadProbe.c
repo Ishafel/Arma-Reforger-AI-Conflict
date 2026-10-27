@@ -16,7 +16,7 @@ class AICF_MultiConcurrency
 		if (mode == "CAPACITY") classification = "CONTROLLED_CAPACITY_ONLY";
 		bool notMovingProof = selected == "MOUNTED_STAGING";
 		if (notMovingProof) classification = "CAPACITY_MOUNTED_ONLY";
-		return string.Format(" concurrency_mode=%1 classification=%2 notmovingproof=%3", selected, classification, notMovingProof);
+		return string.Format(" concurrency_mode=%1 classification=%2 notmovingproof=%3 muster_policy=PER_GROUP_BEFORE_VEHICLE", selected, classification, notMovingProof);
 	}
 }
 
@@ -460,10 +460,13 @@ modded class AICF_MatchController
 			foreach (AICF_MultiSquadCase item : m_aAICFMultiCases)
 			{
 				if (item.m_sFaction != faction.GetFactionKey() || item.m_iPhase == 9) continue;
+				if (item.m_iSlot >= m_iAICFMultiCohort) continue;
 				int cost, missing;
 				if (item.m_iPhase == 0 && m_InfantryRecruitment.AICF_MultiQuote(AICF_MultiSlot(item), faction, cost, missing)) hire += cost;
-				if (m_bAICFMultiMustered && item.m_iSlot < m_iAICFMultiCohort && item.m_iPhase >= 1 && item.m_iPhase <= 2 &&
-					(!item.m_Trip || !item.m_Trip.IsVehiclePresetDebited())) vehicles += price;
+				if (item.m_iPhase >= 1 && item.m_iPhase <= 2 && item.m_bRecruitAccepted && item.m_aMembers.Count() == 5)
+				{
+					if (!item.m_Trip || !item.m_Trip.IsVehiclePresetDebited()) vehicles += price;
+				}
 			}
 			int before = faction.GetMainBase().GetSupplies();
 			float income, interval, next;
@@ -493,6 +496,11 @@ modded class AICF_MatchController
 
 	protected bool AICF_MultiApply(AICF_MultiSquadCase item, AICF_GroupSlot slot, SCR_CampaignFaction faction)
 	{
+		if (item.m_iPhase != 1 || !item.m_bRecruitAccepted || item.m_aMembers.Count() != 5 || !AICF_MultiRoster(item, slot))
+		{
+			AICF_MultiFail(item, "OWN_PAID_MUSTER_REQUIRED_BEFORE_VEHICLE");
+			return false;
+		}
 		ResourceName prefab = m_sAICFMultiUSPrefab;
 		int cost = m_iAICFMultiUSPrice;
 		AICF_FactionState state = m_USState;
@@ -618,6 +626,7 @@ modded class AICF_MatchController
 			{
 				for (int position; position < 5; position++) item.m_aMembers.Insert(slot.GetRosterMember(position).GetID());
 				item.m_iPhase = 1;
+				item.m_iNextCommand = now;
 				AICF_MultiLog("RECRUITED", item.m_sFaction, item.m_iSlot, string.Format("alive=5 desired=5 initial_alive=%1 group=%2 generation=%3", item.m_iInitialAlive, AICF_GroupTrace.Entity(slot.GetGroup()), item.m_iGeneration));
 				for (int p; p < 5; p++) AICF_MultiLog("MEMBER", item.m_sFaction, item.m_iSlot, string.Format("position=%1 member=%2", p, AICF_GroupTrace.Entity(slot.GetRosterMember(p))));
 			}
@@ -634,7 +643,7 @@ modded class AICF_MatchController
 		if (!AICF_MultiRoster(item, slot)) { AICF_MultiFail(item, "ORIGINAL_ROSTER_CHANGED"); return; }
 		if (item.m_iPhase == 1)
 		{
-			if (m_bAICFMultiMustered && item.m_iSlot < m_iAICFMultiCohort && now >= item.m_iNextCommand)
+			if (item.m_iSlot < m_iAICFMultiCohort && now >= item.m_iNextCommand)
 			{
 				item.m_iNextCommand = now + 10000;
 				AICF_MultiApply(item, slot, faction);

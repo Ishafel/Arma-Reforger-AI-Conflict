@@ -53,7 +53,7 @@ $taskCompile=Get-Content -LiteralPath (Join-Path $taskEvidence 'workbench/script
 if($taskCompileExit -ne 0 -or !$taskCompile.Contains('Script validation successful.') -or $taskCompile -match 'SCRIPT\s+\([EF]\)'){throw 'Probe compilation failed; full logs saved'}
 $taskProfile=Join-Path $taskEvidence 'profile'
 $taskLauncher=Join-Path $taskEvidence 'launcher.txt'
-& (Join-Path $taskRepository 'tools/Start-AICFRuntime.ps1') -Role Server -Variant Stock -AICommanderMode USSR -RepositoryRoot $taskStage -ProfileRoot $taskProfile -ServerPort $ServerPort -AdditionalArguments @('-aicfTransportCombatResume','1','-aicfGroupTrace','1','-aicfGroupTraceFaction','USSR','-aicfGroupTraceSlot','0','-addr',"127.0.0.1:$ServerPort") *> $taskLauncher
+& (Join-Path $taskRepository 'tools/Start-AICFRuntime.ps1') -Role Server -Variant Stock -AICommanderMode USSR -RepositoryRoot $taskStage -ProfileRoot $taskProfile -ServerPort $ServerPort -AdditionalArguments @('-aicfTransportCombatResume','1','-aicfGroupTrace','1','-aicfGroupTraceFaction','USSR','-aicfGroupTraceSlot','0','-aicfGroupTracePathPointLimit','512','-addr',"127.0.0.1:$ServerPort") *> $taskLauncher
 $taskNativeExit=$LASTEXITCODE
 $taskExit=Join-Path $taskEvidence 'native-exit.txt'
 $taskNativeExit|Set-Content -LiteralPath $taskExit

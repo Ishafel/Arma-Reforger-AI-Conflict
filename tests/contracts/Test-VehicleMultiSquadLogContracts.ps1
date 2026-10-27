@@ -4,7 +4,7 @@ $work=Join-Path ([IO.Path]::GetTempPath()) ('aicf-multi-contract-'+[guid]::NewGu
 [void][IO.Directory]::CreateDirectory($work)
 $script:checks=0
 function Id([int]$n){return '0x400000000000'+$n.ToString('X4')}
-function Marker([string]$name,[int]$elapsed,[string]$faction,[int]$slot,[string]$details){return "[AICF][VEHICLE_MULTI_$name] mode=$script:mode faction=$faction numeric_slot=$slot t_ms=$(20000+$elapsed) elapsed_ms=$elapsed $details concurrency_mode=$script:concurrency classification=$script:classification notmovingproof=$script:notMoving`n"}
+function Marker([string]$name,[int]$elapsed,[string]$faction,[int]$slot,[string]$details){return "[AICF][VEHICLE_MULTI_$name] mode=$script:mode faction=$faction numeric_slot=$slot t_ms=$(20000+$elapsed) elapsed_ms=$elapsed $details concurrency_mode=$script:concurrency classification=$script:classification notmovingproof=$script:notMoving muster_policy=PER_GROUP_BEFORE_VEHICLE`n"}
 function Snapshot([int]$elapsed,[int]$cohort,[bool]$complete=$false){
  $script:sample++
  $body='';$exact=$cohort;if($complete){$exact=0}
@@ -34,7 +34,7 @@ function Fixture([string]$mode='NORMAL',[int]$autoAdditions=0,[string]$concurren
  $argv=@('-gproj','source','-profile',"$work/profile",'-addonsDir','addons','-addons','CORE,MAP','-aicfAICommanderMode','BOTH','-aicfVehicleMultiMode',$mode,'-aicfVehicleMultiConcurrencyMode',$concurrency,'-aicfVehicleMultiDurationMs',[string]$durationMs)
  [IO.File]::WriteAllText("$work/launcher.txt",'AICF_RUNTIME_MANIFEST_JSON='+(@{arguments=$argv;profile="$work/profile"}|ConvertTo-Json -Compress))
  $flag=0;$budget=0;if($mode -eq 'CAPACITY'){$flag=1;$budget=4000}
- $body='CLI Params: '+($argv -join ' ')+"`n[AICF][VEHICLE_MULTI_ENV] mode=$mode truce=$flag hold_fire=$flag damage_protection=$flag grant_budget_per_faction=$budget setup_before_roster=1 test_only=1 concurrency_mode=$concurrency classification=$script:classification notmovingproof=$script:notMoving`n[ROSTER_READY]`n"
+ $body='CLI Params: '+($argv -join ' ')+"`n[AICF][VEHICLE_MULTI_ENV] mode=$mode truce=$flag hold_fire=$flag damage_protection=$flag grant_budget_per_faction=$budget setup_before_roster=1 test_only=1 concurrency_mode=$concurrency classification=$script:classification notmovingproof=$script:notMoving muster_policy=PER_GROUP_BEFORE_VEHICLE`n[ROSTER_READY]`n"
  $body+=Marker START 0 BOTH -1 "requested_duration_ms=$durationMs slots_per_faction=6 crew=5 cohorts=2,4,6 stable_required_ms=30000 normal_campaign=$([int]($mode -eq 'NORMAL'))"
  $n=0
  foreach($faction in @('US','USSR')){for($slot=0;$slot -lt 6;$slot++){
@@ -52,20 +52,22 @@ function Fixture([string]$mode='NORMAL',[int]$autoAdditions=0,[string]$concurren
  foreach($cohort in @(2,4,6)){
   $first=20000+($cohort-2)*20000
   foreach($row in @($script:rows|Where-Object{$_.slot -ge $cohort-2 -and $_.slot -lt $cohort})){
-   $body+=Marker ACTIVATED ($first-7000) $row.faction $row.slot "cohort=$cohort desired=5 prior_desired=1 paid_muster=1"
+   $hireLead=0;if($row.faction -eq 'US' -and $row.slot -eq $cohort-2){$hireLead=3000}
+   $body+=Marker ACTIVATED ($first-7000-$hireLead) $row.faction $row.slot "cohort=$cohort desired=5 prior_desired=1 paid_muster=1"
    $body+="[INFANTRY_RECRUITMENT_STARTED] faction=$($row.faction) slot=$($row.slot) group=$($row.group) generation=1 token=$($row.token) source=AUTO`n"
    for($p=1;$p -le $autoAdditions;$p++){$body+=NativeJoin $row $p AUTO}
    $body+="[INFANTRY_RECRUITMENT_PRIORITY_CHANGED] faction=$($row.faction) slot=$($row.slot) group=$($row.group) generation=1 token=$($row.token) source=PLAYER_RECRUIT reason=PLAYER_RECRUIT`n"
-   $body+=Marker RECRUIT_REQUEST ($first-6000) $row.faction $row.slot 'accepted=1 reason=RECRUITMENT_STARTED alive=1 desired=5 authority_path=SERVER_FIXTURE_DOWNSTREAM'
+   $body+=Marker RECRUIT_REQUEST ($first-6000-$hireLead) $row.faction $row.slot 'accepted=1 reason=RECRUITMENT_STARTED alive=1 desired=5 authority_path=SERVER_FIXTURE_DOWNSTREAM'
    for($p=1+$autoAdditions;$p -lt 5;$p++){$body+=NativeJoin $row $p PLAYER_RECRUIT}
    $body+="[INFANTRY_RECRUITMENT_FINISHED] faction=$($row.faction) slot=$($row.slot) group=$($row.group) generation=1 token=$($row.token) source=PLAYER_RECRUIT reason=ROSTER_COMPLETE_OR_EMPTY`n"
-   $body+=Marker RECRUITED ($first-5000) $row.faction $row.slot "alive=5 desired=5 initial_alive=1 group=$($row.group) generation=1"
-   for($p=0;$p -lt 5;$p++){$body+=Marker MEMBER ($first-5000) $row.faction $row.slot "position=$p member=$($row.members[$p]){}"}
+   $body+=Marker RECRUITED ($first-5000-$hireLead) $row.faction $row.slot "alive=5 desired=5 initial_alive=1 group=$($row.group) generation=1"
+   for($p=0;$p -lt 5;$p++){$body+=Marker MEMBER ($first-5000-$hireLead) $row.faction $row.slot "position=$p member=$($row.members[$p]){}"}
   }
   $body+=Marker MUSTERED ($first-4000) BOTH -1 "cohort=$cohort groups=$($cohort*2) soldiers=$($cohort*10) paid_muster=1"
   foreach($row in @($script:rows|Where-Object{$_.slot -ge $cohort-2 -and $_.slot -lt $cohort})){
-   $body+=Marker VEHICLE ($first-3000) $row.faction $row.slot "prefab=$($row.prefab) seats=5 assigned=5 cost=475 revision=1 paid_muster_before_motorized=1"
-   $body+=Marker TRIP ($first-2500) $row.faction $row.slot "operation_id=$($row.operation)"
+   $vehicleLead=0;if($row.faction -eq 'US' -and $row.slot -eq $cohort-2){$vehicleLead=4000}
+   $body+=Marker VEHICLE ($first-3000-$vehicleLead) $row.faction $row.slot "prefab=$($row.prefab) seats=5 assigned=5 cost=475 revision=1 paid_muster_before_motorized=1"
+   $body+=Marker TRIP ($first-2500-$vehicleLead) $row.faction $row.slot "operation_id=$($row.operation)"
    if($mode -eq 'CAPACITY'){
     $body+="[VEHICLE_SPAWN_ATTEMPT] operation_id=$($row.operation) lease_generation=1 request_generation=1 attempt=1`n"
     foreach($stage in @('PRESPAWN','PURCHASE')){
@@ -73,9 +75,9 @@ function Fixture([string]$mode='NORMAL',[int]$autoAdditions=0,[string]$concurren
      if($row.faction -eq 'US'){$jitTotal+=$jitExtraUS}
      if($row.faction -eq 'US' -and $row.slot -eq 0 -and $stage -eq 'PRESPAWN' -and $jitDeficit -gt 0){
       $jitBefore=475-$jitDeficit;$jitAfter=475;$jitGrant=$jitDeficit;$jitExtraUS+=$jitDeficit;$jitTotal=$grant+$jitExtraUS
-      $body+=Marker GRANT ($first-2400) US -1 "token=MULTI-JIT-$($row.operation)-1-1-$stage before=$jitBefore requested=$jitGrant applied=$jitGrant after=$jitAfter total_granted=$jitTotal budget=4000 quoted_demand=475 owner=ECONOMY_SYSTEM test_only=1"
+      $body+=Marker GRANT ($first-2400-$vehicleLead) US -1 "token=MULTI-JIT-$($row.operation)-1-1-$stage before=$jitBefore requested=$jitGrant applied=$jitGrant after=$jitAfter total_granted=$jitTotal budget=4000 quoted_demand=475 owner=ECONOMY_SYSTEM test_only=1"
      }
-     $body+=Marker JIT_QUOTE ($first-2400) $row.faction $row.slot "operation_id=$($row.operation) stage=$stage prefab=$($row.prefab) quoted_cost=475 token=MULTI-JIT-$($row.operation)-1-1-$stage stock_before=$jitBefore stock_after=$jitAfter obligations=0 required_stock=475 grant=$jitGrant total_granted=$jitTotal base=HQ-$($row.faction) budget=4000 native_debit=PENDING group=$($row.group) generation=1 lease_generation=1 request_generation=1 attempt=1 site_owner=site-$($row.faction)-$($row.slot)-1-1-1"
+     $body+=Marker JIT_QUOTE ($first-2400-$vehicleLead) $row.faction $row.slot "operation_id=$($row.operation) stage=$stage prefab=$($row.prefab) quoted_cost=475 token=MULTI-JIT-$($row.operation)-1-1-$stage stock_before=$jitBefore stock_after=$jitAfter obligations=0 required_stock=475 grant=$jitGrant total_granted=$jitTotal base=HQ-$($row.faction) budget=4000 native_debit=PENDING group=$($row.group) generation=1 lease_generation=1 request_generation=1 attempt=1 site_owner=site-$($row.faction)-$($row.slot)-1-1-1"
     }
    }
    $body+="[VEHICLE_PRESET_PURCHASE] operation=$($row.operation) prefab=$($row.prefab) supplies=475 base=HQ-$($row.faction)`n"
@@ -84,8 +86,8 @@ function Fixture([string]$mode='NORMAL',[int]$autoAdditions=0,[string]$concurren
     $low=[Convert]::ToUInt64($row.members[$p].Substring(2),16) -band 4294967295L
     $body+="[VEHICLE_PRESET_OCCUPANT] operation=$($row.operation) position=$p seat=0:$p`:0 member=$low occupant=$low`n"
    }
-   $body+=Marker BOARDED ($first-2000) $row.faction $row.slot "operation_id=$($row.operation) vehicle=$($row.vehicle) {} rpl=$($row.rpl) lease_generation=1 vehicle_generation=1 seats=5 occupants=5 start=<0,0,0>"
-   if($concurrency -eq 'MOVING'){$body+=Marker TARGET ($first-1000) $row.faction $row.slot "operation_id=$($row.operation) vehicle=$($row.vehicle) leg=1 position=<650,0,0> intent_revision=2 dismount_radius_m=150 final=0"}
+   $body+=Marker BOARDED ($first-2000-$vehicleLead) $row.faction $row.slot "operation_id=$($row.operation) vehicle=$($row.vehicle) {} rpl=$($row.rpl) lease_generation=1 vehicle_generation=1 seats=5 occupants=5 start=<0,0,0>"
+   if($concurrency -eq 'MOVING'){$body+=Marker TARGET ($first-1000-$vehicleLead) $row.faction $row.slot "operation_id=$($row.operation) vehicle=$($row.vehicle) leg=1 position=<650,0,0> intent_revision=2 dismount_radius_m=150 final=0"}
   }
   for($time=$first;$time -le $first+30000;$time+=5000){$body+=Snapshot $time $cohort}
   $body+=Marker COHORT ($first+30000) BOTH -1 "sample_id=$script:sample cohort=$cohort us_exact_active=$cohort ussr_exact_active=$cohort stable_ms=30000 required_ms=30000 stable_started_elapsed_ms=$first sample_elapsed_ms=$($first+30000)"
@@ -108,8 +110,9 @@ function Fixture([string]$mode='NORMAL',[int]$autoAdditions=0,[string]$concurren
  })
  return (($timeline|Sort-Object tick,order|ForEach-Object{$_.line}) -join "`n")+"`nGame destroyed."
 }
-function Run([string]$name,[string]$body,[int]$expected,[string]$mode='NORMAL',[string]$failedGate='',[string]$sibling='',[double]$wall=1830,[string]$nativeExit='0',[string]$concurrencyMode=$script:concurrency){
+function Run([string]$name,[string]$body,[int]$expected,[string]$mode='NORMAL',[string]$failedGate='',[string]$sibling='',[double]$wall=1830,[string]$nativeExit='0',[string]$concurrencyMode=$script:concurrency,[string]$musterPolicy='PER_GROUP_BEFORE_VEHICLE'){
  [IO.File]::WriteAllText("$work/console.log",$body);[IO.File]::WriteAllText("$work/script.log",$sibling);[IO.File]::WriteAllText("$work/native-exit.txt",$nativeExit)
+ @{muster_policy=$musterPolicy}|ConvertTo-Json|Set-Content -LiteralPath "$work/source-manifest.json"
  $started=[DateTimeOffset]::Parse('2026-10-26T16:00:00Z');@{started_utc=$started.ToString('o');ended_utc=$started.AddSeconds($wall).ToString('o');wall_seconds=$wall;requested_seconds=$script:duration;mode=$mode;concurrency_mode=$script:concurrency}|ConvertTo-Json|Set-Content -LiteralPath "$work/timing.json"
  $result=& (Join-Path $RepositoryRoot 'tests/log-audits/Test-VehicleMultiSquadLog.ps1') -LogPath "$work/console.log" -EvidenceRoot $work -Mode $mode -ConcurrencyMode $concurrencyMode -MinimumSeconds $script:duration
  if($LASTEXITCODE -ne $expected){throw "$name unexpected verdict: $result"}
@@ -121,7 +124,12 @@ function Run([string]$name,[string]$body,[int]$expected,[string]$mode='NORMAL',[
  $script:checks++
 }
 try{
- $good=Fixture NORMAL;Run NORMAL-twelve-groups $good 0
+ $good=Fixture NORMAL
+ $earlyCar=[regex]::Match($good,'(?m)^\[AICF\]\[VEHICLE_MULTI_VEHICLE\] mode=NORMAL faction=US numeric_slot=0 [^\r\n]+').Index
+ $ownPaid=[regex]::Match($good,'(?m)^\[AICF\]\[VEHICLE_MULTI_RECRUITED\] mode=NORMAL faction=US numeric_slot=0 [^\r\n]+').Index
+ $allPaid=[regex]::Match($good,'(?m)^\[AICF\]\[VEHICLE_MULTI_MUSTERED\][^\r\n]+cohort=2 ').Index
+ if($ownPaid -ge $earlyCar -or $earlyCar -ge $allPaid){throw 'Positive oracle must exercise own paid five -> own vehicle before late cohort members finish hiring'}
+ Run NORMAL-per-group-vehicle-before-aggregate-paid-marker $good 0
  $capacity=Fixture CAPACITY;Run CAPACITY-explicit-funded-protected $capacity 0 CAPACITY
  $capacityJit=Fixture CAPACITY 0 MOVING 1800 10;Run CAPACITY-JIT-465-to-475-real-owner-grant $capacityJit 0 CAPACITY
  $mounted=Fixture CAPACITY 0 MOUNTED_STAGING 900;Run MOUNTED-distinct-physical-twelve-staging $mounted 0 CAPACITY -wall 930
@@ -176,7 +184,18 @@ try{
   @('missing-slot-readbacks','[VEHICLE_MULTI_SLOT]','[NO_SLOT]','cohorts'),
   @('not-stopped','Game destroyed.','','duration'),
   @('not-real-campaign','truce=0 hold_fire=0 damage_protection=0','truce=1 hold_fire=1 damage_protection=1','environment')
+  ,@('wrong-muster-policy','muster_policy=PER_GROUP_BEFORE_VEHICLE','muster_policy=GLOBAL_BARRIER','environment')
+  ,@('missing-muster-policy',' muster_policy=PER_GROUP_BEFORE_VEHICLE','','environment')
  )){Run $mutation[0] ($good.Replace($mutation[1],$mutation[2])) 1 NORMAL $mutation[3]}
+ Run wrong-source-muster-policy $good 1 NORMAL provenance -musterPolicy GLOBAL_BARRIER
+ $earlyCarLine=[regex]::Match($good,'(?m)^\[AICF\]\[VEHICLE_MULTI_VEHICLE\] mode=NORMAL faction=US numeric_slot=0 [^\r\n]+').Value
+ $ownPaidLine=[regex]::Match($good,'(?m)^\[AICF\]\[VEHICLE_MULTI_RECRUITED\] mode=NORMAL faction=US numeric_slot=0 [^\r\n]+').Value
+ $beforeOwnPaid=$good.Replace($earlyCarLine+"`n",'').Replace($ownPaidLine,$earlyCarLine+"`n"+$ownPaidLine)
+ Run vehicle-before-own-paid-five $beforeOwnPaid 1 NORMAL recruitment
+ $latePaid=$good.Replace($ownPaidLine+"`n",'').Replace($earlyCarLine,$earlyCarLine+"`n"+$ownPaidLine)
+ Run late-own-hire-cannot-borrow-other-group-paid-proof $latePaid 1 NORMAL recruitment
+ $memberLine=[regex]::Match($good,'(?m)^\[AICF\]\[VEHICLE_MULTI_MEMBER\] mode=NORMAL faction=US numeric_slot=0 [^\r\n]+position=4 [^\r\n]+').Value
+ Run original-member-id-published-after-own-vehicle ($good.Replace($memberLine+"`n",'').Replace($earlyCarLine,$earlyCarLine+"`n"+$memberLine)) 1 NORMAL recruitment
  Run ongoing-battle-failure ($good+"`n[ACCEPTANCE_FAILURE_LATCHED] reason=TIMEOUT") 1 NORMAL functional
  Run sibling-script-fatal $good 1 NORMAL native_fatal 'SCRIPT (E): Virtual Machine Exception'
  Run sibling-GetIn-reaction-unknown $good 1 NORMAL native_fatal "Unknown class 'SCR_AIGoalReaction_GetInVehicle'"

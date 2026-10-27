@@ -240,6 +240,8 @@ class AICF_TransportTripController
 			return AICF_TripOutcome.TerminalFailClosed(
 				"STOP_TRIP_IDENTITY_INVALID",
 				"controller-stop-invalid");
+		AICF_VehicleMovementState stopMovement = trip.GetMovementState();
+		if (stopMovement) stopMovement.SetNativeGate(null);
 		if (!trip.IsValid())
 		{
 			ReleaseSpawnPlan(trip, reason);
@@ -592,6 +594,17 @@ class AICF_TransportTripController
 				trip, slot, fleet, faction,
 				AICF_ETransportTripPhase.FAILED_CLOSED,
 				"SPAWN_APPROACH_CONTEXT_INVALID",
+				outcome.GetCausationId(), true);
+		}
+		// Acquisition already owns the group movement to its delivery pad. Release
+		// the infantry waypoint before binding staging, so planning cannot rebuild
+		// its PLAYER hold over the queued vehicle approach on the next tick.
+		if (!m_Handoff.SuspendInfantryOrder(trip, slot, "SPAWN_APPROACH_BEGIN"))
+		{
+			return EndVehicleControl(
+				trip, slot, fleet, faction,
+				AICF_ETransportTripPhase.FAILED_CLOSED,
+				"SPAWN_APPROACH_STRATEGIC_SUSPEND_REJECTED",
 				outcome.GetCausationId(), true);
 		}
 		if (reissue && !RemoveSpawnApproachWaypoint(trip, plan, "APPROACH_REISSUE"))

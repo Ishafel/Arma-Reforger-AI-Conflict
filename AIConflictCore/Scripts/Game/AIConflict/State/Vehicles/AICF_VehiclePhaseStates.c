@@ -922,10 +922,16 @@ class AICF_VehicleMovementState
 	protected string m_sGunnerSettledLossPredicateSnapshot;
 	protected bool m_bCrewRecoveryRoutePending;
 	protected ref AICF_VehicleCrewRecoveryToken m_CrewRecoveryToken;
+	protected ref AICF_TransportNativeCrewEntry m_NativePilotEntry;
+	protected ref AICF_TransportNativeCrewEntry m_NativeGunnerEntry;
 	protected ref AICF_TransportNativeGate m_NativeGate;
+	protected ref array<string> m_aNativeGateWindowKeys = {};
+	protected ref array<int> m_aNativeGateWindowStarts = {};
+	protected int m_iNativeGateCandidateReportAtMs;
 	protected ref SCR_AIVehicleCombatActivity m_NativeCombatActivity;
 	protected int m_iNativeCombatStartedAtMs;
 	protected int m_iNativeCombatReportAtMs;
+	protected ref AICF_VehicleNativeRouteProgress m_NativeRouteProgress;
 
 	void Reset()
 	{
@@ -975,8 +981,13 @@ class AICF_VehicleMovementState
 		m_sGunnerSettledLossPredicateSnapshot = string.Empty;
 		m_bCrewRecoveryRoutePending = false;
 		m_CrewRecoveryToken = null;
-		m_NativeGate = null;
+		ClearNativeCrewEntries();
+		SetNativeGate(null);
+		m_aNativeGateWindowKeys.Clear();
+		m_aNativeGateWindowStarts.Clear();
+		m_iNativeGateCandidateReportAtMs = 0;
 		ClearNativeCombatHold();
+		ClearNativeRouteProgress();
 	}
 
 	void Begin(int nowMs, int absoluteDeadlineMs, int maximumCrewAttempts, int maximumMobilityAttempts)
@@ -1031,8 +1042,57 @@ class AICF_VehicleMovementState
 	IEntity GetLastGunner() { return m_LastGunner; }
 	bool IsCrewRecoveryRoutePending() { return m_bCrewRecoveryRoutePending; }
 	AICF_VehicleCrewRecoveryToken GetCrewRecoveryToken() { return m_CrewRecoveryToken; }
+	AICF_TransportNativeCrewEntry GetNativeCrewEntry(EAICompartmentType role)
+	{
+		if (role == EAICompartmentType.Pilot) return m_NativePilotEntry;
+		if (role == EAICompartmentType.Turret) return m_NativeGunnerEntry;
+		return null;
+	}
+	bool TrackNativeCrewEntry(EAICompartmentType role, AICF_TransportNativeCrewEntry entry)
+	{
+		if (!entry || entry.GetRole() != role || GetNativeCrewEntry(role)) return false;
+		if (role == EAICompartmentType.Pilot) m_NativePilotEntry = entry;
+		else if (role == EAICompartmentType.Turret) m_NativeGunnerEntry = entry;
+		else return false;
+		return true;
+	}
+	void ClearNativeCrewEntry(EAICompartmentType role)
+	{
+		if (role == EAICompartmentType.Pilot) m_NativePilotEntry = null;
+		else if (role == EAICompartmentType.Turret) m_NativeGunnerEntry = null;
+	}
+	void ClearNativeCrewEntries()
+	{
+		m_NativePilotEntry = null;
+		m_NativeGunnerEntry = null;
+	}
 	AICF_TransportNativeGate GetNativeGate() { return m_NativeGate; }
-	void SetNativeGate(AICF_TransportNativeGate gate) { m_NativeGate = gate; }
+	void SetNativeGate(AICF_TransportNativeGate gate)
+	{
+		if (m_NativeGate == gate) return;
+		if (m_NativeGate) m_NativeGate.Stop();
+		m_NativeGate = gate;
+	}
+	// Один smart owner в той же route identity делит первый срок между бойцами.
+	// Повторное наблюдение/recapture не обновляет его; старые receipts не вытесняются.
+	int CaptureNativeGateWindowStart(string key, int nowMs)
+	{
+		int index = m_aNativeGateWindowKeys.Find(key);
+		if (index >= 0)
+			return m_aNativeGateWindowStarts[index];
+		if (key.IsEmpty() || nowMs <= 0 || m_aNativeGateWindowKeys.Count() >= 32)
+			return -1;
+		m_aNativeGateWindowKeys.Insert(key);
+		m_aNativeGateWindowStarts.Insert(nowMs);
+		return nowMs;
+	}
+	bool MarkNativeGateCandidateReportDue(int nowMs)
+	{
+		if (m_iNativeGateCandidateReportAtMs > 0 && nowMs - m_iNativeGateCandidateReportAtMs < 10000)
+			return false;
+		m_iNativeGateCandidateReportAtMs = nowMs;
+		return true;
+	}
 	SCR_AIVehicleCombatActivity GetNativeCombatActivity() { return m_NativeCombatActivity; }
 	int GetNativeCombatStartedAtMs() { return m_iNativeCombatStartedAtMs; }
 
@@ -1120,6 +1180,25 @@ class AICF_VehicleMovementState
 		m_RouteWaypoint = null;
 		m_bRouteWaypointBound = false;
 		return true;
+	}
+
+	AICF_VehicleNativeRouteProgress GetNativeRouteProgress()
+	{
+		if (!m_NativeRouteProgress)
+			m_NativeRouteProgress = new AICF_VehicleNativeRouteProgress();
+		return m_NativeRouteProgress;
+	}
+
+	void ClearNativeRouteProgress()
+	{
+		m_NativeRouteProgress = null;
+	}
+
+	void CreditNativeRouteProgress(int nowMs)
+	{
+		m_iLastRouteProgressAtMs = nowMs;
+		if (m_bRecoveryEvidencePending)
+			m_bRecoveryRouteEvidence = true;
 	}
 
 	bool ObserveRouteProgress(float distanceMeters, float minimumProgressMeters, int nowMs)
@@ -1472,6 +1551,8 @@ class AICF_VehicleDismountState
 	protected int m_iLastGuidanceAttemptAtMs;
 	protected int m_iForceClearanceAttempts;
 	protected int m_iMaximumForceClearanceAttempts;
+	protected int m_iPhysicalRelocationAttempts;
+	protected int m_iMaximumPhysicalRelocationAttempts;
 	protected int m_iLastExactRelocationProbeAtMs;
 	protected int m_iLogicalOccupants;
 	protected int m_iTransitions;
@@ -1501,6 +1582,8 @@ class AICF_VehicleDismountState
 		m_iLastGuidanceAttemptAtMs = 0;
 		m_iForceClearanceAttempts = 0;
 		m_iMaximumForceClearanceAttempts = 0;
+		m_iPhysicalRelocationAttempts = 0;
+		m_iMaximumPhysicalRelocationAttempts = 0;
 		m_iLastExactRelocationProbeAtMs = 0;
 		m_iLogicalOccupants = 0;
 		m_iTransitions = 0;
@@ -1528,6 +1611,7 @@ class AICF_VehicleDismountState
 		m_iTerminalDeadlineMs = terminalDeadlineMs;
 		m_iMaximumGuidanceAttempts = Math.Max(0, guidanceBudget);
 		m_iMaximumForceClearanceAttempts = Math.Max(0, forceBudget);
+		m_iMaximumPhysicalRelocationAttempts = Math.Max(0, forceBudget);
 	}
 
 	void BeginTerminal(int nowMs, int terminalDeadlineMs, int forceBudget)
@@ -1537,6 +1621,7 @@ class AICF_VehicleDismountState
 		m_iNormalDeadlineMs = nowMs;
 		m_iTerminalDeadlineMs = terminalDeadlineMs;
 		m_iMaximumForceClearanceAttempts = Math.Max(0, forceBudget);
+		m_iMaximumPhysicalRelocationAttempts = Math.Max(0, forceBudget);
 		m_bTerminalClearanceStarted = true;
 	}
 
@@ -1545,7 +1630,9 @@ class AICF_VehicleDismountState
 	int GetTerminalDeadlineMs() { return m_iTerminalDeadlineMs; }
 	int GetGuidanceAttempts() { return m_iGuidanceAttempts; }
 	int GetLastGuidanceAttemptAtMs() { return m_iLastGuidanceAttemptAtMs; }
-	int GetForceClearanceAttempts() { return m_iForceClearanceAttempts; }
+	int GetForceClearanceAttempts() { return m_iForceClearanceAttempts + m_iPhysicalRelocationAttempts; }
+	int GetForceExitAttempts() { return m_iForceClearanceAttempts; }
+	int GetPhysicalRelocationAttempts() { return m_iPhysicalRelocationAttempts; }
 	int GetLogicalOccupants() { return m_iLogicalOccupants; }
 	int GetTransitions() { return m_iTransitions; }
 	int GetInsideBounds() { return m_iInsideBounds; }
@@ -1663,6 +1750,18 @@ class AICF_VehicleDismountState
 		if (m_iForceClearanceAttempts >= m_iMaximumForceClearanceAttempts)
 			return false;
 		m_iForceClearanceAttempts++;
+		return true;
+	}
+
+	// Logical exit и физическое освобождение hull — разные bounded операции.
+	// Бюджеты живут до Reset/Begin следующей фазы, polling их не перевооружает.
+	bool RecordPhysicalRelocationAttempt()
+	{
+		if (m_iLogicalOccupants > 0 || m_iTransitions > 0 || m_iInsideBounds <= 0)
+			return false;
+		if (m_iPhysicalRelocationAttempts >= m_iMaximumPhysicalRelocationAttempts)
+			return false;
+		m_iPhysicalRelocationAttempts++;
 		return true;
 	}
 

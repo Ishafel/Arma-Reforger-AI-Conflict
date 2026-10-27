@@ -355,11 +355,11 @@ class AICF_VehicleBoardingFlow
 		int requiredSeats;
 		foreach (int assigned : preset.m_aMembers)
 			if (assigned >= 0) requiredSeats++;
-		// Последовательный вход: фиксированный бюджет на каждое назначенное место.
+		// Общий бюджет по числу назначенных мест; независимые двери допускают пару входов.
 		// Повторы его не продлевают; абсолютный срок trip остаётся верхней границей.
 		int plannedTimeoutMs = m_Config.GetBoardingTimeoutMs() * Math.Max(3, requiredSeats);
 		state.Begin(now, Math.Min(trip.GetAbsoluteDeadlineMs(), now + plannedTimeoutMs), 1, 0, trip.GetAbsoluteDeadlineMs());
-		AICF_Stage3Diagnostics.Info("VEHICLE_PRESET_BOARDING_PLAN", string.Format("operation_id=%1 assigned=%2 sequential=1 planned_timeout_ms=%3 deadline_ms=%4 trip_deadline_ms=%5",
+		AICF_Stage3Diagnostics.Info("VEHICLE_PRESET_BOARDING_PLAN", string.Format("operation_id=%1 assigned=%2 sequential=0 maximum_parallel_entries=2 shared_or_unknown_doors_serial=1 planned_timeout_ms=%3 deadline_ms=%4 trip_deadline_ms=%5",
 			trip.GetOperationId(), requiredSeats, plannedTimeoutMs, state.GetAbsoluteDeadlineMs(), trip.GetAbsoluteDeadlineMs()));
 		m_Watchdog.ResetGroupVehicleActions(group);
 		AICF_VehicleBoardingActionToken firstToken;
@@ -406,6 +406,8 @@ class AICF_VehicleBoardingFlow
 		AICF_VehicleBoardingActionToken activeToken;
 		AICF_VehicleBoardingActionToken firstUnqueued;
 		AICF_VehicleBoardingActionToken firstRetry;
+		array<AICF_VehicleBoardingActionToken> busyTokens = {};
+		array<AICF_VehicleBoardingActionToken> readyUnqueued = {};
 		for (int i; i < seats.Count(); i++)
 		{
 			int position = preset.m_aMembers[i];
@@ -420,7 +422,10 @@ class AICF_VehicleBoardingFlow
 			if (occupant && occupant != member) return Reject(trip, lease, causationId, "PRESET_SEAT_OCCUPIED");
 			CompartmentAccessComponent access = ResolveAccess(member);
 			if (access && (access.IsGettingIn() || access.IsGettingOut() || access.IsSwitchingSeatsAnim()))
+			{
 				memberTransition = true;
+				busyTokens.Insert(token);
+			}
 			bool readyOnFoot = access && !access.IsInCompartment() && !access.IsGettingIn() && !access.IsGettingOut() &&
 				!access.IsSwitchingSeatsAnim() && !CompartmentAccessComponent.GetVehicleIn(member) &&
 				!occupant && seats[i].IsCompartmentAccessible() && !seats[i].IsGetInLockedFor(member) &&
@@ -433,6 +438,7 @@ class AICF_VehicleBoardingFlow
 				{
 					if (!firstUnqueued && readyOnFoot)
 						firstUnqueued = token;
+					if (readyOnFoot) readyUnqueued.Insert(token);
 				}
 				else
 				{
@@ -441,6 +447,7 @@ class AICF_VehicleBoardingFlow
 					if (token.IsTrackedActionOwnedByUtility() && actionState != EAIActionState.FAILED && actionState != EAIActionState.COMPLETED)
 					{
 						activeEntries++;
+						if (!busyTokens.Contains(token)) busyTokens.Insert(token);
 						if (!activeToken) activeToken = token;
 					}
 					else if (readyOnFoot && token.GetRetryCount() < 2 && token.GetProgressAgeMs() >= 12000 &&
@@ -472,6 +479,9 @@ class AICF_VehicleBoardingFlow
 		}
 		if (System.GetTickCount() >= state.GetAbsoluteDeadlineMs())
 		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_PRESET_BOARDING_DEADLINE_SNAPSHOT", DescribeContext(trip, lease, causationId, "PRESET_BOARDING_DEADLINE") + string.Format(
+				" required=%1 settled=%2 settled_polls=%3 required_settled_polls=%4 member_transition=%5 active_entries=%6 busy_entries=%7 phase_deadline_ms=%8 observed_at_ms=%9",
+				required, settled, state.GetSettledPollCount(), SETTLED_POLLS_REQUIRED, memberTransition, activeEntries, busyTokens.Count(), state.GetAbsoluteDeadlineMs(), System.GetTickCount()));
 			for (int expiredIndex; expiredIndex < seats.Count(); expiredIndex++)
 			{
 				int expiredPosition = preset.m_aMembers[expiredIndex];
@@ -489,8 +499,27 @@ class AICF_VehicleBoardingFlow
 		}
 		// Один застрявший вход не расходует весь общий срок, оставляя соседей
 		// вообще без первой попытки. Текущие native transitions не прерываются.
+		if (busyTokens.Count() == 1)
+		{
+			foreach (AICF_VehicleBoardingActionToken next : readyUnqueued)
+			{
+				if (!AICF_PresetEntrySeparation.CanPair(trip, lease, group, next, busyTokens[0])) continue;
+				if (!QueuePresetSeat(trip, state, next)) continue;
+				AICF_Stage3Diagnostics.Info("VEHICLE_PRESET_PARALLEL_ENTRY", DescribeContext(trip, lease, causationId, "DISJOINT_NATIVE_DOORS") + string.Format(
+					" member=%1 active_member=%2 seat=%3 active_seat=%4 maximum_parallel_entries=2 minimum_entry_separation_m=2.5 guessed_door=0",
+					AICF_GroupTrace.Entity(next.GetReservedEntity()), AICF_GroupTrace.Entity(busyTokens[0].GetReservedEntity()), AICF_VehiclePreset.SeatKey(next.GetCompartment()), AICF_VehiclePreset.SeatKey(busyTokens[0].GetCompartment())));
+				return AICF_TripOutcome.Wait("PRESET_INDEPENDENT_ENTRIES_PENDING", causationId);
+			}
+		}
 		if (memberTransition || activeEntries > 1)
+		{
+			if (!memberTransition && activeEntries > 1)
+			{
+				foreach (AICF_VehicleBoardingActionToken busy : busyTokens)
+					if (TryYieldPresetSeat(trip, lease, group, state, busy)) break;
+			}
 			return AICF_TripOutcome.Wait("PRESET_ENTRY_TRANSITION_PENDING", causationId);
+		}
 		if (activeToken && (firstUnqueued || firstRetry) &&
 			TryYieldPresetSeat(trip, lease, group, state, activeToken))
 			activeToken = null;
@@ -806,7 +835,7 @@ class AICF_VehicleBoardingFlow
 		int position = -1;
 		for (int index; index < trip.GetVehiclePresetSlot().GetDeploymentSize(); index++)
 			if (trip.VehiclePresetMember(index) == member) { position = index; break; }
-		AICF_Stage3Diagnostics.Info("VEHICLE_PRESET_SEAT_REQUESTED", string.Format("operation=%1 revision=%2 position=%3 seat=%4 member=%5 sequential=1",
+		AICF_Stage3Diagnostics.Info("VEHICLE_PRESET_SEAT_REQUESTED", string.Format("operation=%1 revision=%2 position=%3 seat=%4 member=%5 sequential=0 maximum_parallel_entries=2",
 			trip.GetOperationId(), trip.GetVehiclePresetRevision(), position, AICF_VehiclePreset.SeatKey(seat), member.GetID()));
 		return true;
 	}

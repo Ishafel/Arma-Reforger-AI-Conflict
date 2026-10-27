@@ -3,12 +3,13 @@ $ErrorActionPreference='Stop'
 $work=Join-Path ([IO.Path]::GetTempPath()) ('aicf-scenario-contract-'+[guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($work)
 $script:checks=0
-function Fixture([string]$scenario){
+function Fixture([string]$scenario,[switch]$BudgetProbe){
  $legs=1;$crew=5
  if($scenario -eq 'repeat5'){$legs=2}
  if($scenario -eq 'armed3'){$crew=3}
  if($scenario -eq 'solo1'){$crew=1}
  $argv=@('-gproj','source','-profile','profile','-addonsDir','addons','-addons','CORE,MAP','-aicfVehicleScenario',$scenario)
+ if($BudgetProbe){$argv+=@('-aicfVehicleScenarioDismountBudget','1')}
  [IO.File]::WriteAllText("$work/launcher.txt",'AICF_RUNTIME_MANIFEST_JSON='+(@{arguments=$argv}|ConvertTo-Json -Compress))
  $body='CLI Params: '+($argv -join ' ')+"`n[ROSTER_READY]`n"
  $body+="[VEHICLE_SCENARIO_ENV] scenario=$scenario combat=0 combat_mode=HOLD_FIRE damage_protection=1 truce=1`n"
@@ -26,21 +27,28 @@ function Fixture([string]$scenario){
   $body+="[GROUP_TRACE] group=G target_pos=<500,0,0>`n"
   for($i=0;$i -lt $crew;$i++){$body+="[MEMBER_TRACE] group=G position=$i selected_action=Drive:RUNNING executed_action=Drive:RUNNING`n"}
   $body+="[VEHICLE_SCENARIO_ARRIVAL] $prefix vehicle=V$leg distance_m=145 displacement_m=355 moving_polls=12 intent_revision=$revision goal=<500,0,0>`n"
-  $body+="[DISEMBARK_COMPLETE] operation_id=O$leg logical_occupants=0 transitions=0 inside_bounds=0`n"
+  if($BudgetProbe){
+   foreach($attempt in 1..3){$body+="[VEHICLE_SCENARIO_DISMOUNT_BUDGET] scenario=ural5 operation_id=O1 event=FORCE_BATCH normal_deadline_ms=20000 terminal_deadline_ms=40000 charged=1 force_exit_attempts=$attempt native_calls=1 accepted_calls=1 logical_before=5 physical_relocation_attempts=0`n"}
+   $body+="[VEHICLE_SCENARIO_DISMOUNT_BUDGET] scenario=ural5 operation_id=O1 event=PHYSICAL_GHOST normal_deadline_ms=20000 terminal_deadline_ms=40000 force_exit_attempts=3 logical_occupants=0 transitions=0 inside_bounds=1 exact_ghost=1 native_calls=5 physical_relocation_attempts=0`n"
+   $body+="[VEHICLE_SCENARIO_DISMOUNT_BUDGET] scenario=ural5 operation_id=O1 event=NORMAL_RELOCATION normal_deadline_ms=20000 terminal_deadline_ms=40000 force_exit_attempts=3 physical_relocation_attempts=1 ghost_displacement_m=20 ghost_moved_clear=1 unchanged_deadlines=1 terminal_only=0 native_calls=5`n"
+  }
+  $telemetry='';if($BudgetProbe){$telemetry=' force_attempts=4 force_exit_attempts=3 physical_relocation_attempts=1 maximum_force_exit_attempts=3 maximum_physical_relocation_attempts=3 maximum_combined_batches_per_phase=6'}
+  $body+="[DISEMBARK_COMPLETE] operation_id=O$leg logical_occupants=0 transitions=0 inside_bounds=0$telemetry`n"
   $body+="[VEHICLE_STATE_CHANGED] operation_id=O$leg previous_state=HANDOFF state=COMPLETE`n"
   $body+="[VEHICLE_SCENARIO_FOOT_ARRIVAL] $prefix farthest_m=15 alive=$crew goal=<500,0,0>`n"
   foreach($rule in @('EXACT_BOARDING','GATE_RETURNS_COMPLETE','ARRIVAL_AT_ORIGINAL_GOAL','REAL_TRAVEL','NORMAL_DISMOUNT','FOOT_ORDER_RESTORED','ALL_MEMBERS_AT_POINT')){$body+="[VEHICLE_SCENARIO_CHECK] $prefix rule=$rule passed=1`n"}
  }
  $body+="[VEHICLE_SCENARIO_CHECK] scenario=$scenario leg=$legs rule=PURCHASE_LIMIT passed=1`n"
+ if($BudgetProbe){$body+="[VEHICLE_SCENARIO_CHECK] scenario=$scenario leg=1 rule=DISMOUNT_OPERATION_BUDGET_CAUSAL passed=1`n"}
  $count=@([regex]::Matches($body,'\[VEHICLE_SCENARIO_CHECK\]')).Count
  $body+="[VEHICLE_SCENARIO_DONE] scenario=$scenario checks=$count failures=0 legs=$legs`nGame destroyed."
  return $body
 }
-function Run([string]$name,[string]$body,[int]$expected,[string]$scenario='uaz5',[string]$nativeExit='0',[string]$sibling=''){
+function Run([string]$name,[string]$body,[int]$expected,[string]$scenario='uaz5',[string]$nativeExit='0',[string]$sibling='',[switch]$BudgetProbe){
  [IO.File]::WriteAllText("$work/console.log",$body)
  [IO.File]::WriteAllText("$work/script.log",$sibling)
  [IO.File]::WriteAllText("$work/exit.txt",$nativeExit)
- $result=& (Join-Path $RepositoryRoot 'tests/log-audits/Test-VehicleScenarioLog.ps1') -LogPath "$work/console.log" -LauncherPath "$work/launcher.txt" -NativeExitPath "$work/exit.txt" -Scenario $scenario
+ $result=& (Join-Path $RepositoryRoot 'tests/log-audits/Test-VehicleScenarioLog.ps1') -LogPath "$work/console.log" -LauncherPath "$work/launcher.txt" -NativeExitPath "$work/exit.txt" -Scenario $scenario -DismountBudgetProbe:$BudgetProbe
  if($LASTEXITCODE -ne $expected){throw "$name unexpected verdict: $result"}
  $script:checks++
 }
@@ -81,6 +89,26 @@ try{
  Run latched-failure ($good+"`n[ACCEPTANCE_FAILURE_LATCHED] reason=TIMEOUT") 1
  $repeat=Fixture 'repeat5'
  Run repeat-missing-second-arrival ($repeat.Replace('FOOT_ARRIVAL] scenario=repeat5 leg=2','FOOT_ARRIVAL] scenario=repeat5 leg=9')) 1 'repeat5'
+ $budget=Fixture 'ural5' -BudgetProbe
+ Run split-operation-budget $budget 0 'ural5' -BudgetProbe
+ foreach($mutation in @(
+  @('counter-priming-no-native-call','native_calls=1','native_calls=0'),
+  @('no-accepted-native-force','accepted_calls=1','accepted_calls=0'),
+  @('not-three-real-charges','charged=1','charged=0'),
+  @('missing-ghost','event=PHYSICAL_GHOST','event=MISSING_GHOST'),
+  @('still-logically-inside','force_exit_attempts=3 logical_occupants=0','force_exit_attempts=3 logical_occupants=1'),
+  @('still-transitioning','force_exit_attempts=3 logical_occupants=0 transitions=0','force_exit_attempts=3 logical_occupants=0 transitions=1'),
+  @('not-hull-blocker','transitions=0 inside_bounds=1 exact_ghost=1','transitions=0 inside_bounds=0 exact_ghost=0'),
+  @('no-normal-relocation','event=NORMAL_RELOCATION','event=MISSING_RELOCATION'),
+  @('deadline-rearmed','event=NORMAL_RELOCATION normal_deadline_ms=20000','event=NORMAL_RELOCATION normal_deadline_ms=30000'),
+  @('physical-not-moved','ghost_displacement_m=20 ghost_moved_clear=1','ghost_displacement_m=0 ghost_moved_clear=0'),
+  @('only-terminal-recovery','terminal_only=0','terminal_only=1'),
+  @('exit-over-bound','force_attempts=4 force_exit_attempts=3','force_attempts=5 force_exit_attempts=4'),
+  @('physical-over-bound','force_attempts=4 force_exit_attempts=3 physical_relocation_attempts=1','force_attempts=7 force_exit_attempts=3 physical_relocation_attempts=4'),
+  @('aggregate-mismatch','force_attempts=4 force_exit_attempts=3','force_attempts=3 force_exit_attempts=3'),
+  @('undisclosed-total','maximum_combined_batches_per_phase=6','maximum_combined_batches_per_phase=3'),
+  @('lost-causal-check','rule=DISMOUNT_OPERATION_BUDGET_CAUSAL','rule=MISSING_CAUSAL_CHECK')
+ )){Run $mutation[0] ($budget.Replace($mutation[1],$mutation[2])) 1 'ural5' -BudgetProbe}
 }
 finally{
  $resolved=[IO.Path]::GetFullPath($work)

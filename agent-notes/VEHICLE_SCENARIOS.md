@@ -86,6 +86,31 @@ Deadline/identity loss возвращает typed fallback; состояние �
 и profiles Frontend не удаляй. Перенос workflow на RHS/WCS и проверка всех
 машин не подтверждаются одним Stock case; нужны отдельные future fixtures.
 
+Для регрессии раздельных dismount budgets сначала выполняется обычный
+`-Cases ural5`, затем отдельный новый stage:
+
+```powershell
+& tools/Invoke-AICFVehicleScenarios.ps1 -Cases ural5 -DismountBudgetProbe `
+  -EvidenceRoot .codex-runtime/dismount-budget-<уникальное-имя> -ServerPort 2540
+```
+
+Opt-in добавляет только в stage `AICF_DismountOperationBudgetProbe.c` и CLI
+`-aicfVehicleScenarioDismountBudget 1`; production не содержит тестовых веток.
+Это controlled fault injection, не обычная игровая последовательность. Fixture
+ускоряет расписание трёх существующих `super.TryForceExactManagedExit` и делит
+exact native actors по batches1/1/3. Каждый положительный FORCE_BATCH обязан
+иметь реальный charge, вызов original member recovery и принятый native exit;
+прямая запись счётчиков не используется. После действительного полного logical
+egress fixture переносит одного исходного AI внутрь hull, сохраняя native flags
+снаружи. Production затем должен выполнить свою normal physical relocation.
+Auditor требует все три native receipts, logical0/transitions0/hull blocker,
+физический выход ghost через production relocation, прежние deadlines и всю
+обычную цепочку COMPLETE→FOOT_ARRIVAL. Отсутствие реального charge/egress/recovery
+остаётся coverage FAIL; одного успешного обычного `ural5` недостаточно.
+В clearance telemetry допускаются только exit<=3, physical<=3 и aggregate=sum<=6
+на фазу с явно объявленными максимумами3/3/6. Прежний общий предел3 не заявляется
+сохранённым. Обычный `ural5` запускается отдельно без этой инъекции.
+
 ## Снимки групп
 
 `AICF_GroupTrace` — read-only authority observer у VehicleCoordinator. По

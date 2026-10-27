@@ -118,6 +118,7 @@ class AICF_GroupTrace
 		details += string.Format(" vehicle=%1 vehicle_pos=%2 speed_mps=%3", Entity(vehicle), Position(vehicle), speed);
 		if (leader) details += string.Format(" leader_target_distance_m=%1", vector.DistanceXZ(leader.GetOrigin(), slot.GetTargetPosition()));
 		if (vehicle) details += string.Format(" vehicle_target_distance_m=%1", vector.DistanceXZ(vehicle.GetOrigin(), slot.GetTargetPosition()));
+		if (vehicle) details += " " + AICF_VehicleHealthTrace.Capture(vehicle);
 		AICF_Stage3Diagnostics.Info("GROUP_TRACE", details);
 		array<BaseCompartmentSlot> seats = {};
 		if (vehicle) AICF_VehiclePreset.Collect(vehicle, seats);
@@ -208,10 +209,17 @@ class AICF_GroupTrace
 		return true;
 	}
 
+	protected static int NativePathPointLimit()
+	{
+		string value;
+		if (!System.GetCLIParam("aicfGroupTracePathPointLimit", value)) return NATIVE_PATH_POINT_LIMIT;
+		return Math.Clamp(value.ToInt(), NATIVE_PATH_POINT_LIMIT, 512);
+	}
+
 	protected static void NativePathUnavailable(string identity, string reason, bool queried = false)
 	{
 		AICF_Stage3Diagnostics.Info("NATIVE_VEHICLE_PATH_TRACE", identity + " path_status=" + reason +
-			string.Format(" queried=%1 native_point_count=-1 emitted_points=0 point_limit=%2 truncated=0 first=NONE last=NONE raw_native_order=1 remaining_distance_proven=0", queried, NATIVE_PATH_POINT_LIMIT));
+			string.Format(" queried=%1 native_point_count=-1 emitted_points=0 point_limit=%2 truncated=0 first=NONE last=NONE raw_native_order=1 remaining_distance_proven=0", queried, NativePathPointLimit()));
 	}
 
 	protected static void NativeVehiclePath(AICF_GroupSlot slot, SCR_AIGroup group, AICF_TransportTrip trip, string identity)
@@ -289,7 +297,8 @@ class AICF_GroupTrace
 			driver.GetID() != driverId || RplComponent.Cast(driver.FindComponent(RplComponent)).Id().ToString() != driverRpl)
 		{ NativePathUnavailable(identity + " post_read_driver_reason=" + driverReason, "CONTEXT_CHANGED_DURING_READ_DISCARDED", true); return; }
 		int count = points.Count();
-		int emitted = Math.Min(count, NATIVE_PATH_POINT_LIMIT);
+		int pointLimit = NativePathPointLimit();
+		int emitted = Math.Min(count, pointLimit);
 		string first = "NONE";
 		string last = "NONE";
 		if (count > 0) { first = points[0].ToString(); last = points[count - 1].ToString(); }
@@ -297,7 +306,7 @@ class AICF_GroupTrace
 		if (count == 0) status = "EMPTY_NATIVE_PATH";
 		AICF_Stage3Diagnostics.Info("NATIVE_VEHICLE_PATH_TRACE", identity + string.Format(
 			" path_status=%1 queried=1 native_point_count=%2 emitted_points=%3 point_limit=%4 truncated=%5 first=%6 last=%7 raw_native_order=1 remaining_distance_proven=0",
-			status, count, emitted, NATIVE_PATH_POINT_LIMIT, count > emitted, first, last));
+			status, count, emitted, pointLimit, count > emitted, first, last));
 		for (int index; index < emitted; index++)
 			AICF_Stage3Diagnostics.Info("NATIVE_VEHICLE_PATH_POINT", identity + string.Format(" native_index=%1 point=%2", index, points[index]));
 	}

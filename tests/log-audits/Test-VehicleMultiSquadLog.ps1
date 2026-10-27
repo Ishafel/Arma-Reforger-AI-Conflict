@@ -51,6 +51,7 @@ foreach($m in [regex]::Matches($log,'\[VEHICLE_MULTI_([A-Z_]+)\]([^\r\n]*)')){
  $e=[pscustomobject]@{name=$m.Groups[1].Value;index=$m.Index;fields=(Fields $m.Groups[2].Value)}
  Require environment ($e.fields.mode -eq $Mode) 'ALL_MARKERS_EXPECTED_MODE'
  Require environment ($e.fields.concurrency_mode -eq $ConcurrencyMode -and $e.fields.classification -eq $classification -and $e.fields.notmovingproof -eq $notMovingFlag) 'NO_MIXED_OR_UNLABELED_CONCURRENCY_ORACLES'
+ Require environment ($e.fields.muster_policy -eq 'PER_GROUP_BEFORE_VEHICLE') 'EXPLICIT_PER_GROUP_MUSTER_POLICY'
  if(!$byName.ContainsKey($e.name)){$byName[$e.name]=[Collections.Generic.List[object]]::new()};$byName[$e.name].Add($e)
  $key=[string]$e.fields.faction+'/'+[string]$e.fields.numeric_slot
  if($contexts.ContainsKey($key)){$ctx=$contexts[$key];if(!$ctx.events.ContainsKey($e.name)){$ctx.events[$e.name]=[Collections.Generic.List[object]]::new()};$ctx.events[$e.name].Add($e)}
@@ -100,6 +101,7 @@ try{
   }
  }
 }catch{Require provenance $false 'LAUNCHER_MANIFEST_MISSING_OR_INVALID'}
+try{$sourceManifest=Get-Content -LiteralPath (Join-Path $root 'source-manifest.json') -Raw|ConvertFrom-Json;Require provenance ($sourceManifest.muster_policy -eq 'PER_GROUP_BEFORE_VEHICLE') 'SOURCE_MUSTER_POLICY_MATCH'}catch{Require provenance $false 'SOURCE_MUSTER_POLICY_MISSING_OR_INVALID'}
 $production=@{}
 foreach($m in [regex]::Matches($log,'\[(INFANTRY_RECRUITMENT_STARTED|INFANTRY_RECRUITMENT_PRIORITY_CHANGED|INFANTRY_RECRUITMENT_FINISHED|INFANTRY_RECRUIT_DEBITED|INFANTRY_RECRUIT_JOINED|VEHICLE_PRESET_PURCHASE|VEHICLE_PRESET_SEAT_REQUESTED|VEHICLE_PRESET_OCCUPANT|VEHICLE_SPAWN_ATTEMPT|VEHICLE_STATE_CHANGED|DISEMBARK_COMPLETE)\]([^\r\n]*)')){
  $e=[pscustomobject]@{name=$m.Groups[1].Value;index=$m.Index;fields=(Fields $m.Groups[2].Value)}
@@ -115,11 +117,14 @@ foreach($ctx in $contexts.Values){
  Require recruitment ($activation.fields.cohort -eq [string]$requiredCohort -and $activation.fields.prior_desired -eq '1' -and $activation.fields.desired -eq '5' -and $activation.fields.paid_muster -eq '1' -and $activation.index -gt $s.index -and $activation.index -lt $r.index) ($key+'_ACTIVATED_ONLY_IN_CURRENT_COHORT')
  if($requiredCohort -gt 2){$prior=@($stages|Where-Object{(Number $_.fields.cohort) -eq $requiredCohort-2});Require recruitment ($prior.Count -eq 1 -and $activation.index -gt $prior[0].index) ($key+'_NO_FUTURE_COHORT_RECRUITMENT')}
  Require recruitment ($s.fields.pre_muster_infantry -eq '1' -and $s.fields.initial_deployment_size -eq '1' -and (Number $s.fields.initial_alive) -ge 1 -and (Number $s.fields.initial_alive) -lt 5 -and $s.fields.desired -eq '5' -and $s.fields.initial_desired -eq '1' -and $s.fields.configured -eq '1' -and $s.fields.home_order -eq '1') ($key+'_NO_FREE_MOTORIZED_MUSTER')
- Require recruitment ($r.fields.alive -eq '5' -and $r.fields.desired -eq '5' -and $r.fields.initial_alive -eq $s.fields.initial_alive -and (Entity $r.fields.group) -eq (Entity $s.fields.group) -and $r.fields.generation -eq $s.fields.generation -and $s.index -lt $r.index -and $r.index -lt $mustered.index -and $mustered.index -lt $v.index) ($key+'_PAID_MUSTER_BEFORE_ANY_VEHICLE')
+ Require recruitment ($r.fields.alive -eq '5' -and $r.fields.desired -eq '5' -and $r.fields.initial_alive -eq $s.fields.initial_alive -and (Entity $r.fields.group) -eq (Entity $s.fields.group) -and $r.fields.generation -eq $s.fields.generation -and $s.index -lt $r.index -and $r.index -lt $mustered.index -and $r.index -lt $v.index) ($key+'_OWN_PAID_MUSTER_BEFORE_OWN_VEHICLE')
+ $cohortProof=@($stages|Where-Object{(Number $_.fields.cohort) -eq $requiredCohort})
+ Require recruitment ($cohortProof.Count -eq 1 -and $v.index -lt $cohortProof[0].index -and $mustered.index -lt $cohortProof[0].index) ($key+'_OWN_VEHICLE_AND_ALL_PAID_BEFORE_COHORT_PROOF')
  $requests=@($ctx.events['RECRUIT_REQUEST']|Where-Object{$_.fields.accepted -eq '1' -and $_.fields.authority_path -eq 'SERVER_FIXTURE_DOWNSTREAM' -and $_.index -gt $activation.index -and $_.index -lt $r.index});Require recruitment ($requests.Count -ge 1) ($key+'_ACCEPTED_REAL_RECRUIT_INTENT')
  $members=@($ctx.events['MEMBER']);$ctx.members=@{}
  foreach($member in $members){$ctx.members[[string]$member.fields.position]=Entity $member.fields.member;$allActors.Add((Entity $member.fields.member))}
  Require recruitment ($members.Count -eq 5 -and (($ctx.members.Keys|Sort-Object) -join ',') -eq '0,1,2,3,4' -and @($ctx.members.Values|Sort-Object -Unique).Count -eq 5 -and @($ctx.members.Values|Where-Object{!$_ -or $_ -eq 'NONE'}).Count -eq 0) ($key+'_FIVE_ORIGINAL_MEMBERS')
+ Require recruitment (@($members|Where-Object{$_.index -le $r.index -or $_.index -ge $v.index}).Count -eq 0) ($key+'_OWN_MEMBER_IDS_BEFORE_OWN_VEHICLE')
  $joins=@($production['INFANTRY_RECRUIT_JOINED']|Where-Object{$_.fields.faction -eq $ctx.faction -and $_.fields.slot -eq $ctx.slot -and $_.fields.generation -eq $s.fields.generation -and (Entity $_.fields.group) -eq (Entity $s.fields.group) -and $_.index -lt $r.index})
  Require recruitment ($joins.Count -eq 4 -and @($joins|ForEach-Object{Entity $_.fields.character}|Sort-Object -Unique).Count -eq 4 -and @($joins|Where-Object{(Number $_.fields.cost) -le 0 -or (Entity $_.fields.character) -notin $ctx.members.Values}).Count -eq 0) ($key+'_FOUR_NATIVE_PAID_ADDITIONS_AUTO_OR_PLAYER')
  Require recruitment (@($joins|Where-Object{$_.index -gt $s.index}).Count -eq 5-(Number $s.fields.initial_alive)) ($key+'_INITIAL_ROSTER_ACCOUNTING')
@@ -217,7 +222,7 @@ if($cohorts.Count -eq 3){foreach($ctx in $contexts.Values){Require functional ($
 $result=[ordered]@{};$passed=$true
 foreach($name in $gates.Keys){$verdict='PASS';if($gates[$name].Count){$verdict='FAIL';$passed=$false};$result[$name]=@{verdict=$verdict;reasons=@($gates[$name])}}
 $overall='FAIL';if($passed){$overall='PASS'}
-[ordered]@{verdict=$overall;mode=$Mode;concurrency_mode=$ConcurrencyMode;classification=$classification;notmovingproof=$mounted;concurrent_moving_cohorts_proved=(!$mounted -and $result.cohorts.verdict -eq 'PASS' -and $result.environment.verdict -eq 'PASS');mounted_staging_cohorts_proved=($mounted -and $result.cohorts.verdict -eq 'PASS' -and $result.environment.verdict -eq 'PASS');normal_campaign_evidence=(!$capacity -and !$mounted);minimum_seconds=$MinimumSeconds;log_path=$LogPath;full_sibling_logs=@($siblings.FullName);gates=$result;observations=@{heartbeats=$heartbeats.Count;max_heartbeat_gap_ms=$maxGap;wall_seconds=$wall;granted=$granted;native_error_count=$nativeErrors.Count};native_errors=@($nativeErrors);resource_baseline='RECORDED_SEPARATELY_NO_WHITELIST'}|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $root 'audit-summary.json')
+[ordered]@{verdict=$overall;mode=$Mode;concurrency_mode=$ConcurrencyMode;classification=$classification;notmovingproof=$mounted;muster_policy='PER_GROUP_BEFORE_VEHICLE';concurrent_moving_cohorts_proved=(!$mounted -and $result.cohorts.verdict -eq 'PASS' -and $result.environment.verdict -eq 'PASS');mounted_staging_cohorts_proved=($mounted -and $result.cohorts.verdict -eq 'PASS' -and $result.environment.verdict -eq 'PASS');normal_campaign_evidence=(!$capacity -and !$mounted);minimum_seconds=$MinimumSeconds;log_path=$LogPath;full_sibling_logs=@($siblings.FullName);gates=$result;observations=@{heartbeats=$heartbeats.Count;max_heartbeat_gap_ms=$maxGap;wall_seconds=$wall;granted=$granted;native_error_count=$nativeErrors.Count};native_errors=@($nativeErrors);resource_baseline='RECORDED_SEPARATELY_NO_WHITELIST'}|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $root 'audit-summary.json')
 foreach($name in $result.Keys){"MULTI_GATE mode=$Mode concurrency_mode=$ConcurrencyMode gate=$name verdict=$($result[$name].verdict) reasons=$($result[$name].reasons -join ',')"}
 "MULTI_AUDIT mode=$Mode concurrency_mode=$ConcurrencyMode verdict=$overall classification=$classification notmovingproof=$notMovingFlag"
 if(!$passed){exit 1}

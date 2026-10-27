@@ -3174,7 +3174,7 @@ class AICF_OrderPlanner
 		order.m_aApproachEndpoints.Insert(endpoint);
 		if (order.m_iApproachRepairs > 0)
 			order.Log("INFANTRY_RECRUITMENT_APPROACH_ENDPOINT_COMMITTED", string.Format(
-				"repair=%1 waypoint=%2 endpoint=%3 completion_radius_m=%4 service_distance_m=%5 assignment_revision=%6 intent_revision=%7 movement_confirmation=PENDING",
+				"repair=%1 waypoint=%2 endpoint=%3 completion_radius_m=%4 service_distance_m=%5 assignment_revision=%6 intent_revision=%7 movement_confirmation=PENDING reachability=UNPROVEN",
 				order.m_iApproachRepairs, waypoint.GetID(), endpoint, waypoint.GetCompletionRadius(),
 				vector.DistanceXZ(endpoint, order.m_vPosition), order.m_iAssignment, order.m_iIntent));
 		return true;

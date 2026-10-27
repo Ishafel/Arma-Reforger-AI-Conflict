@@ -15,6 +15,7 @@ param(
 $ErrorActionPreference='Stop'
 if($ConcurrencyMode -eq 'MOUNTED_STAGING' -and $Mode -ne 'CAPACITY'){throw 'MOUNTED_STAGING is a separate controlled CAPACITY test only'}
 $taskClassification='NORMAL_CAMPAIGN'
+$taskMusterPolicy='PER_GROUP_BEFORE_VEHICLE'
 if($Mode -eq 'CAPACITY'){$taskClassification='CONTROLLED_CAPACITY_ONLY'}
 if($ConcurrencyMode -eq 'MOUNTED_STAGING'){$taskClassification='CAPACITY_MOUNTED_ONLY'}
 . (Join-Path $PSScriptRoot 'AICF_VehicleSoakSources.ps1')
@@ -68,12 +69,13 @@ $StageRoot=(Resolve-Path -LiteralPath $StageRoot).Path
 if($StageRoot -eq $taskRepository){throw 'Production checkout cannot be a runtime stage'}
 $taskCoreScripts=Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict'
 if(!(Test-Path -LiteralPath (Join-Path $taskCoreScripts 'AICF_VehicleMultiSquadProbe.c'))){throw 'Multi-squad fixture missing'}
+if(!([IO.File]::ReadAllText((Join-Path $taskCoreScripts 'AICF_VehicleMultiSquadProbe.c'))).Contains('muster_policy=PER_GROUP_BEFORE_VEHICLE')){throw 'Compiled stage fixture does not support the PER_GROUP_BEFORE_VEHICLE muster policy'}
 if($ConcurrencyMode -eq 'MOUNTED_STAGING' -and !([IO.File]::ReadAllText((Join-Path $taskCoreScripts 'AICF_VehicleMultiSquadProbe.c'))).Contains('aicfVehicleMultiConcurrencyMode')){throw 'Compiled stage fixture does not support the separate MOUNTED_STAGING oracle'}
 foreach($taskOther in @('AICF_VehicleSoakProbe.c','AICF_VehicleScenarioProbe.c')){
  if(Test-Path -LiteralPath (Join-Path $taskCoreScripts $taskOther)){throw 'Competing transport fixture in runtime stage'}
 }
 $taskHashes=@(Get-AICFVehicleSoakSources $StageRoot)
-[pscustomobject]@{base_commit=$taskCommit;working_tree=$taskWorkingTree;origin_manifest=$taskOriginManifest;stage=$StageRoot;mode=$Mode;concurrency_mode=$ConcurrencyMode;classification=$taskClassification;notmovingproof=($ConcurrencyMode -eq 'MOUNTED_STAGING');duration_seconds=$DurationSeconds;groups_per_faction=6;cohorts=@(2,4,6);capacity_grant_budget_per_faction=4000;normal_campaign_evidence=($Mode -eq 'NORMAL');files=$taskHashes}|ConvertTo-Json -Depth 5|Set-Content -LiteralPath (Join-Path $taskEvidence 'source-manifest.json')
+[pscustomobject]@{base_commit=$taskCommit;working_tree=$taskWorkingTree;origin_manifest=$taskOriginManifest;stage=$StageRoot;mode=$Mode;concurrency_mode=$ConcurrencyMode;classification=$taskClassification;notmovingproof=($ConcurrencyMode -eq 'MOUNTED_STAGING');muster_policy=$taskMusterPolicy;duration_seconds=$DurationSeconds;groups_per_faction=6;cohorts=@(2,4,6);capacity_grant_budget_per_faction=4000;normal_campaign_evidence=($Mode -eq 'NORMAL');files=$taskHashes}|ConvertTo-Json -Depth 5|Set-Content -LiteralPath (Join-Path $taskEvidence 'source-manifest.json')
 if(!$SkipCompile){
  $taskPlan=@(& (Join-Path $taskRepository 'tools/Start-AICFRuntime.ps1') -Role Client -Variant Stock -RepositoryRoot $StageRoot -DryRun)
  $taskPlan|Set-Content -LiteralPath (Join-Path $taskEvidence 'compile-plan.txt')
@@ -100,13 +102,13 @@ $taskStarted=[DateTimeOffset]::UtcNow
 $taskNativeExit=$LASTEXITCODE
 $taskEnded=[DateTimeOffset]::UtcNow
 $taskNativeExit|Set-Content -LiteralPath (Join-Path $taskEvidence 'native-exit.txt')
-[pscustomobject]@{started_utc=$taskStarted.ToString('o');ended_utc=$taskEnded.ToString('o');wall_seconds=($taskEnded-$taskStarted).TotalSeconds;requested_seconds=$DurationSeconds;mode=$Mode;concurrency_mode=$ConcurrencyMode}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $taskEvidence 'timing.json')
+[pscustomobject]@{started_utc=$taskStarted.ToString('o');ended_utc=$taskEnded.ToString('o');wall_seconds=($taskEnded-$taskStarted).TotalSeconds;requested_seconds=$DurationSeconds;mode=$Mode;concurrency_mode=$ConcurrencyMode;muster_policy=$taskMusterPolicy}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $taskEvidence 'timing.json')
 Assert-AICFVehicleSoakSources $StageRoot $taskHashes
 $taskConsole=Get-ChildItem -LiteralPath (Join-Path $taskProfile 'logs') -Recurse -Filter console.log|Select-Object -First 1
 if(!$taskConsole){throw 'No full console log'}
 & (Join-Path $taskRepository 'tests/log-audits/Test-VehicleMultiSquadLog.ps1') -LogPath $taskConsole.FullName -EvidenceRoot $taskEvidence -Mode $Mode -ConcurrencyMode $ConcurrencyMode -MinimumSeconds $DurationSeconds *> (Join-Path $taskEvidence 'audit.txt')
 $taskAuditExit=$LASTEXITCODE
-[pscustomobject]@{mode=$Mode;concurrency_mode=$ConcurrencyMode;classification=$taskClassification;notmovingproof=($ConcurrencyMode -eq 'MOUNTED_STAGING');native_exit=$taskNativeExit;audit_exit=$taskAuditExit;console=$taskConsole.FullName;wall_seconds=($taskEnded-$taskStarted).TotalSeconds;normal_campaign_evidence=($Mode -eq 'NORMAL')}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $taskEvidence 'summary.json')
+[pscustomobject]@{mode=$Mode;concurrency_mode=$ConcurrencyMode;classification=$taskClassification;notmovingproof=($ConcurrencyMode -eq 'MOUNTED_STAGING');muster_policy=$taskMusterPolicy;native_exit=$taskNativeExit;audit_exit=$taskAuditExit;console=$taskConsole.FullName;wall_seconds=($taskEnded-$taskStarted).TotalSeconds;normal_campaign_evidence=($Mode -eq 'NORMAL')}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $taskEvidence 'summary.json')
 "MULTI_FINISHED=$Mode CONCURRENCY_MODE=$ConcurrencyMode CLASSIFICATION=$taskClassification NATIVE_EXIT=$taskNativeExit AUDIT_EXIT=$taskAuditExit"
 if($taskNativeExit -ne 0 -or $taskAuditExit -ne 0){exit 1}
 exit 0

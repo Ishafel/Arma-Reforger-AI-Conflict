@@ -1,5 +1,102 @@
 # Проверки и baseline
 
+## Исправления посадки и учёт native маршрута: #78 — 2026-10-27
+
+Продолжение `codex/issue-78-vehicle-presets` от `a462891`. Отчёт только локальный:
+`.codex-runtime/vehicle-repair-20261027/REPORT.md`; вложенные case summaries,
+matching auditors, полные stopped sibling logs и source hashes сохраняют версии.
+Архив завершённых profiles/stages и SHA verification: `evidence/archive-index.json`
+в том же task root; original console paths в старых summaries исторические.
+GitHub не менялся. **Общий runtime outcome остаётся FAIL; готовность релиза не подтверждена.**
+
+Исправлены подход к казарме через12 детерминированных service-ring candidates,
+конфликт infantry hold со staging approach и conservative foot-pad eligibility
+перед spawn/commit. Projection не объявляется connectivity; физический arrival,
+два repair attempts и сроки сохранены. Добавлены leaf health/damage/collision и
+full native path diagnostics. Своё текущее native GetIn теперь наблюдается до
+физического Pilot transition; независимые двери допускают максимум2 параллельных
+входа при separation≥2.5m, unknown/shared/Turret остаются serial. Deadline125s
+и retry budget не расширялись. Repair receipt пишется до POINT_HOLD_REFRESH.
+В M1 ring recovery не потребовался; в M2 он выполнялся для фонового US/8.
+SELECTED/COMMITTED доказывают исполнение, но не самостоятельный успех подхода.
+
+Test-only `PER_GROUP_BEFORE_VEHICLE` убирает искусственное ожидание чужого найма:
+каждому нужны собственные paid5, четыре native joins/debits и исходные IDs до
+своей машины. Aggregate MUSTERED остаётся marker; future cohort открывается
+только после предыдущего physical stable30s. MOB/native gates не подавляются.
+Старые M1/M2 оцениваются сохранёнными matching auditors, не новым oracle.
+
+| Case / версия | Завершённый результат |
+|---|---|
+| N1 `health-native-v1` | native0/audit1. Exact5,hold90359ms,resume108.685m/15poll; затем wheels0/movementDamage1,15/50 zones destroyed при root protection. Источник урона не доказан |
+| N2 `causal-native-v2` | native0/audit1. Exact5,hold90264ms; healthy car, но свой native Pilot reservation вызвал преждевременный recovery/fallback. Damage/collision0; исправлен observer |
+| N3 `crew-native-v3` | native0/audit1. Resume100.837m/33poll; NO_OBJECTIVE_PROGRESS120584ms при healthy/moving car. Независимый128point prefix показывает arc+508.932m, suffix140points тогда не наблюдался |
+| N4 `path-native-v4` | native0/audit1. Complete111points,13samples/61.267s,arc+719.211m,remaining1113.842→394.631m; credits0. Остановлен wheel damage:36 damage callbacks с enum EXPLOSIVE/FRAGMENTATION/INCENDIARY; source/instigator NONE. Отложенный collision callback не устанавливает время физического контакта; внешний взрыв не доказан |
+| N5 `path-diagnostic-v5`, M3 `mounted-per-group-v3` | compile-1, native NOT RUN: accounting preflight Formula too complex4765. Guards разбиты; failed stages/logs сохранены |
+| N6 `path-diagnostic-v6` | compile0/native0/audit1. Resume101.976m/25poll; telemetry CURRENT_WAYPOINT_AUTHORITY, затем NO_OBJECTIVE_PROGRESS120365ms. Native transient WP не обязан иметь RplComponent; exact current queue/route/Move/ID proof исправлен для N7 |
+| M1 `mounted-rings-v1` | wall1819.426s,785heartbeat,maxgap3065ms,native0/audit1. Найм первых4 групп состоялся; staging ownership и rear-door native STUCK не позволили подтвердить нагрузку |
+| M2 `mounted-fixed-v2` | wall1819.323s,701heartbeat,maxgap3807ms,native0/audit1. Exact5 MOUNTED2 и4/side≥30s; все12 наняли paid5,6USSR+5US сели. US/5 не завершил settled boarding до125s, поэтому6/side не доказаны |
+| N7 `path-native-v7` | native0/audit1. WP has_rpl0; реальный forward native-path credit и recovery proof подтверждены при росте прямой дистанции. Hold90.505s без изменения clocks/deadline; resume100.338m/25poll. Затем настоящий NO_PHYSICAL_MOVEMENT45s; NO_OBJECTIVE_PROGRESS и PATH_HISTORY_EXHAUSTED отсутствуют. Cargo OpenGate цепочка обнаружена по stock source/priority, полного payload proof тогда не было |
+| N8 `gate-native-v8` | native0/audit1. Hold90.512s, resume102.75m/47poll,22 native credits; primary VEHICLE_OVERTURNED с roll−110.155°. OpenGate candidates0 — NOT EXERCISED |
+| M4 `mounted-per-group-v4` | wall1817.212s,native0/audit1. MOUNTED2/4/6 exact5 и≥30s подтверждены;6/side31641ms. Все12 boarding35.150–115.027s, без deadline extension. Functional FAIL:10 повторных trips после normal COMPLETE, один старый WP-Rpl veto и один native group abandon/driver recovery конфликт |
+| M5 `moving-per-group-v5` | wall1820.109s,native0/audit1. MOVING2/side30470ms подтверждены,4/6 не пройдены. Native abandon/crew recovery, настоящая потеря колёс и последующие сроки/cohesion; arrivals0. Две project SCRIPT(E) taskless/bridge сохранены как FAIL, native exception не доказан |
+| M6 `mounted-completed-intent-v6` | native0/audit1,1800196ms. MOUNTED2/4/6≥30s;6 original trips завершили normal COMPLETE и все5 дошли≤35m, TRIP_REPLACED0. Ещё6 отказали:3 Gate,overturn,dismount timeout,gunner recovery. Gatefalseveto после реального возврата выявил transient COMPLETED→EVALUATED |
+| N9 `abandon-gate-native-v9` | native0/audit1. Resume114.935m/16poll, затем настоящий wheels0/CanMove0 на восточном участке. Script/VM fatal0; physical arrival не доказан |
+| M7 `mounted-callback-v7` | native0/audit1,wall1818.069s. MOUNTED2/side32393ms;4/6 не достигнуты из-за UAZ rear entry: native path заканчивается за5.945m до двери, entry projection0. Callback branch NOT EXERCISED; таймер/radius не расширялись |
+| M8 `callback-moving-20m-v8` | native0/audit1,wall1217.387s,целевой20min regression. MOVING2/side31160ms;3 native Cargo OpenGate→return→physical resume подтверждены26.126/36.830/27.816s для US/USSR. Cached returnEVALUATED при positive callback receipt1; после него alive5/inside5/TRANSIT, displacement11.30–21.80m. Общий FAIL4,4/6moving не пройдены |
+| `dismount-ural-regression-v1` | native0/audit1. NativeAbandon действительно исполнен: current/executed GetOut exact vehicle, typed fallback, crew_recoveries0 и order_restored1. Полная поездка FAIL; dismount budget branch не достигнут |
+| `dismount-budget-causal-v1/v2` | v1 compile-1 из-за fixture CoordToWorld API, native NOT RUN. Исправлен pinned GetWorldTransform+Multiply4. v2 native0/audit1: production3→1/COMPLETE/FOOT состоялись, но немедленный test readback дал старую позицию; ошибочный oracle сохранён |
+| `dismount-budget-causal-v3` | native0/audit0,15/15 checks. Реальные3 accepted force batches1/1/3, затем logical0/transitions0/hullghost1 → normal physical relocation1 → exact delayed outside displacement19.6603m → COMPLETE/all5 FOOT≤33.9579m. Оба исходных phase deadlines сохранены; это controlled fault injection, не обычная война |
+
+MOUNTED_STAGING означает `CAPACITY_MOUNTED_ONLY/notmovingproof`, не6 движущихся
+машин и не обычный бой. Частичные hold/resume не подтверждают arrival/dismount/foot.
+
+Native route observer требует повторный complete path2..512, exact current
+Pilot/AICar/lease/route/intent, unique projection, physical plausibility и
+high-water history без replan/replay credit. Direct/motion/absolute/recovery
+limits сохранены. В N7 WP Rpl authority проверяется, если компонент существует;
+group/car/driver replicated authority обязательны всегда. N7 подтвердил этот
+путь и реальный progress; общий сценарий при этом остаётся FAIL.
+
+Поздние исправления: retained normal COMPLETE intent больше не переармляется
+от handoff assignment revision; explicit admission/новый intent/target/preset
+сохранены. Cargo Gate observer требует уникальную native OpenGate chain,
+физический выход, completed exact return и реальное возобновление движения в
+неизменяемом первом60s окне. Отдельный stateless NativeAbandon распознаёт
+current/executed native group GetOut exact машины и возвращает typed fallback
+до driver recovery; штатные actions не отменяются и clocks не подменяются.
+M8 подтвердил callback receipt в native; Controller снимает listener даже при
+invalid trip. M6 показал отдельную budget coupling ошибку высадки: теперь logical
+exit и physical relocation имеют отдельные3 batches, aggregate максимум6/phase,
+12 normal+terminal. Сроки и permissions прежние; causal v3 проверил actual branch.
+
+Baseline parent9/9 PASS. Профильные before→after: recruitment5/5→5/5,
+boarding6/6→7/7, staging6/6→7/7, native-route5/5→7/7;
+parallel-entry3/3→8/8, accounting6/6→7/7, muster2/2→2/2 PASS.
+`full-after-v2`117/117 и `full-final-summary.json`124/124 PASS относятся к своим
+freeze, не к поздним completed-intent/Gate/NativeAbandon изменениям.
+Diagnostic-v1 compile FAIL unsupported `%` и остановленный full-after ABORTED
+сохранены; bounded subtraction исправлен. Финальный freeze N7:
+`route-native-v7-compile-summary.json` — Stock/RHS/ArlandWCSRHS **3/3 PASS**,
+native exit0/script fatal0. Затем `completed-intent-gate-v8`3/3 PASS и финальный
+`abandon-gate-v9-compile-summary.json` Stock/RHS/ArlandWCSRHS **3/3 PASS**.
+Workbench compile не означает физический client run.
+
+Финальная версия: `clearance-v11-compile-summary.json` **3/3 PASS** и
+`all-clearance-summary.json` **129/129 PASS**, exact unique union, LogisticsContracts
+ровно1. `final-source-verification.json` подтверждает отсутствие production drift
+после compile. Callback delta9/9, completion23controls/Gate46; budget baseline6/6→7/7,
+actual state27controls и ScenarioLog62 также PASS. Ошибка C# test adapter v2 сохранена,
+исправление одним Add-Type assembly подтверждено fresh v3. Все runtime завершены;
+полные stopped logs/hashes сохранены, исходники активных stages не менялись.
+M7/M8 и causal v3 завершены отдельно; native callback и operation-budget proofs
+не превращают их общие failure gates в PASS. Итоговые cause/index/cleanup и локальный
+commit перечислены в REPORT. Все129 checks относятся к final callback+budget source.
+All-native resource/font/GUID baseline остаётся FAIL; старый JIP serializer FAIL
+не снят. Client/JIP/playerRPC/UI/GUI и physical RHS/WCS matrix **NOT RUN**.
+GUI/ComputerUse запрещены terminal workflow, визуальный критерий не стал PASS.
+Предыдущие baseline и ограничения ниже сохранены без переоценки.
+
 ## Ступени 2 → 4 → 6 и повторная native посадка — 2026-10-26
 
 Продолжение той же ветки от `cae4df7`. По решению пользователя отчёт только

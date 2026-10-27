@@ -107,17 +107,153 @@ class AICF_TCRGate
 	}
 	void LogReject(string context, int observedAt)
 	{
+		string reason = RejectionReason();
 		string itemRpl = "NONE";
 		string leaseRpl = "NONE";
 		int deadline;
 		if (m_Vehicle) itemRpl = Replication.FindItemId(m_Vehicle).ToString();
 		if (m_Lease) leaseRpl = m_Lease.GetRplId();
 		if (m_Trip) deadline = m_Trip.GetAbsoluteDeadlineMs();
-		string details = string.Format("[AICF][TCR_REJECT] t_ms=%1 step=-1 context=%2 reason=%3 operation_id=%4 expected_component_rpl=%5 current_component_rpl=%6 vehicle_item_rpl=%7 lease_component_rpl=%8",
-			observedAt, context, RejectionReason(), m_sOperation, m_sVehicleRpl, ComponentRpl(m_Vehicle), itemRpl, leaseRpl);
+		string details = string.Format("[AICF][TCR_REJECT] t_ms=%1 step=-1 context=%2 reason=%3 operation_id=%4 expected_component_rpl=%5 current_component_rpl=%6 vehicle_item_rpl=%7 lease_component_rpl=%8 category=%9",
+			observedAt, context, reason, m_sOperation, m_sVehicleRpl, ComponentRpl(m_Vehicle), itemRpl, leaseRpl, RejectionCategory(reason));
 		details += string.Format(" expected_deadline_ms=%1 current_deadline_ms=%2 expected_assignment=%3 expected_intent=%4 group=%5 vehicle=%6",
 			m_iDeadline, deadline, m_iAssignment, m_iIntent, m_GroupId, m_VehicleId);
+		details += " " + AICF_VehicleHealthTrace.Capture(m_Vehicle);
 		Print(details);
+	}
+	static string RejectionCategory(string reason)
+	{
+		if (reason == "VEHICLE_DAMAGE") return "HEALTH";
+		if (reason == "TRIP_INVALID_OR_TERMINAL" || reason == "TRIP_PHASE" || reason == "ABSOLUTE_DEADLINE_EXPIRED") return "LIFECYCLE";
+		if (reason == "ACTIVITY_REMOVED_OR_SUSPENDED" || reason == "ACTIVITY_TERMINAL" || reason == "ACTIVITY_ORPHAN") return "LIFECYCLE";
+		return "IDENTITY";
+	}
+}
+
+// Non-ref observer слабый, controller по-прежнему владеет witness.
+// Native callbacks исполняются неизменно; trace не регистрирует invokers/timers.
+class AICF_TCRDamageTrace
+{
+	protected static AICF_TCRGate s_Observed;
+	protected static int s_iDamageEvents;
+	protected static int s_iCollisionEvents;
+
+	static void Bind(AICF_TCRGate gate)
+	{
+		Clear();
+		if (gate && ScopeCurrent(gate)) s_Observed = gate;
+	}
+	static void Clear()
+	{
+		s_Observed = null;
+		s_iDamageEvents = 0;
+		s_iCollisionEvents = 0;
+	}
+	protected static bool ScopeCurrent(AICF_TCRGate gate)
+	{
+		string enabled;
+		if (!Replication.IsServer() || !System.GetCLIParam("aicfTransportCombatResume", enabled) || enabled != "1") return false;
+		if (!gate || !gate.m_Trip || !gate.m_Trip.IsValid() || gate.m_Trip.IsTerminal()) return false;
+		if (gate.m_Trip.GetPhase() != AICF_ETransportTripPhase.TRANSIT || gate.m_Trip.GetOperationId() != gate.m_sOperation) return false;
+		if (gate.m_Trip.GetTripGeneration() != gate.m_iTripGeneration || gate.m_Trip.GetGroupGeneration() != gate.m_iGroupGeneration) return false;
+		if (!gate.m_Trip.IsVehiclePresetCurrent() || gate.m_Trip.GetAbsoluteDeadlineMs() != gate.m_iDeadline) return false;
+		if (!gate.m_Slot || gate.m_Slot.GetGroup() != gate.m_Group || gate.m_Slot.GetSpawnGeneration() != gate.m_iGroupGeneration) return false;
+		if (gate.m_Slot.GetStrategicIntentRevision() != gate.m_iIntent || gate.m_Slot.GetVehiclePresetRevision() != gate.m_iPresetRevision) return false;
+		if (gate.m_Trip.GetAssignment().GetAssignmentRevision() != gate.m_iAssignment || gate.m_Trip.GetAssignment().GetTargetPosition() != gate.m_vTarget) return false;
+		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(gate.m_Group)) return false;
+		if (gate.m_Group.GetID() != gate.m_GroupId || AICF_TCRGate.ComponentRpl(gate.m_Group) != gate.m_sGroupRpl) return false;
+		if (!gate.m_Lease || gate.m_Trip.GetLease() != gate.m_Lease || !gate.m_Lease.HasPhysicalAsset()) return false;
+		if (gate.m_Lease.GetLeaseGeneration() != gate.m_iLeaseGeneration || gate.m_Lease.GetVehicleGeneration() != gate.m_iVehicleGeneration) return false;
+		if (!gate.m_Lease.MatchesTripIdentity(gate.m_Trip.GetFactionKey(), gate.m_Trip.GetSlotId(), gate.m_iGroupGeneration, gate.m_iTripGeneration)) return false;
+		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(gate.m_Vehicle)) return false;
+		if (gate.m_Vehicle.GetID() != gate.m_VehicleId || AICF_TCRGate.ComponentRpl(gate.m_Vehicle) != gate.m_sVehicleRpl) return false;
+		if (!gate.m_Lease.MatchesEntityIdentity(gate.m_Vehicle, gate.m_VehicleId, gate.m_sVehicleRpl)) return false;
+		return true;
+	}
+	protected static bool SourceCurrent(AICF_TCRGate gate, SCR_DamageManagerComponent source, IEntity owner, EntityID ownerId)
+	{
+		if (!ScopeCurrent(gate) || !source || !owner) return false;
+		if (source.GetOwner() != owner || owner.GetID() != ownerId) return false;
+		if (owner != gate.m_Vehicle && owner.GetRootParent() != gate.m_Vehicle) return false;
+		return true;
+	}
+	protected static string EntityDetails(IEntity entity)
+	{
+		if (!entity) return "NONE";
+		string prefab = "NONE";
+		if (entity.GetPrefabData()) prefab = entity.GetPrefabData().GetPrefabName();
+		string id = entity.GetID().ToString();
+		id.Replace(" ", "");
+		prefab.Replace(" ", "%20");
+		return string.Format("%1:%2:%3", id, entity.Type().ToString(), prefab);
+	}
+	static void Damage(SCR_DamageManagerComponent source, BaseDamageContext context)
+	{
+		AICF_TCRGate gate = s_Observed;
+		if (!source || !context || !gate) return;
+		IEntity owner = source.GetOwner();
+		if (!owner) return;
+		EntityID ownerId = owner.GetID();
+		if (!SourceCurrent(gate, source, owner, ownerId) || s_iDamageEvents >= 2048) return;
+		string zoneName = "NONE";
+		string zoneType = "NONE";
+		if (context.struckHitZone)
+		{
+			zoneName = context.struckHitZone.GetName();
+			zoneType = context.struckHitZone.Type().ToString();
+		}
+		IEntity instigator;
+		int playerId;
+		if (context.instigator)
+		{
+			instigator = context.instigator.GetInstigatorEntity();
+			playerId = context.instigator.GetInstigatorPlayerID();
+		}
+		string details = string.Format("[AICF][TCR_DAMAGE] t_ms=%1 step=-1 operation_id=%2 phase=NATIVE_ON_DAMAGE_BEFORE_SUPER manager_owner=%3 vehicle=%4 component_rpl=%5 group_generation=%6 trip_generation=%7 event_seq=%8",
+			System.GetTickCount(), gate.m_sOperation, ownerId, gate.m_VehicleId, gate.m_sVehicleRpl, gate.m_iGroupGeneration, gate.m_iTripGeneration, s_iDamageEvents + 1);
+		details += string.Format(" damage_type=%1 damage_value=%2 hit_entity=%3 damage_source=%4 instigator=%5 instigator_player_id=%6 zone_name=%7 zone_type=%8 collider_id=%9",
+			typename.EnumToString(EDamageType, context.damageType), context.damageValue, EntityDetails(context.hitEntity), EntityDetails(context.damageSource), EntityDetails(instigator), playerId, zoneName, zoneType, context.colliderID);
+		details += string.Format(" hit_position=%1 hit_direction=%2 hit_normal=%3 impact_velocity=%4 manager_damage_enabled=%5", context.hitPosition, context.hitDirection, context.hitNormal, context.impactVelocity, source.IsDamageHandlingEnabled());
+		details += " " + AICF_VehicleHealthTrace.Capture(gate.m_Vehicle);
+		if (!SourceCurrent(gate, source, owner, ownerId)) return;
+		s_iDamageEvents++;
+		Print(details);
+	}
+	static void Collision(SCR_VehicleDamageManagerComponent source, SCR_CollisionDamageContainer collision)
+	{
+		AICF_TCRGate gate = s_Observed;
+		if (!source || !collision || !gate) return;
+		IEntity owner = source.GetOwner();
+		if (!owner) return;
+		EntityID ownerId = owner.GetID();
+		if (!SourceCurrent(gate, source, owner, ownerId) || s_iCollisionEvents >= 2048) return;
+		string details = string.Format("[AICF][TCR_COLLISION] t_ms=%1 step=-1 operation_id=%2 phase=PROCESS_COLLISION_BEFORE_SUPER manager_owner=%3 vehicle=%4 component_rpl=%5 group_generation=%6 trip_generation=%7 event_seq=%8",
+			System.GetTickCount(), gate.m_sOperation, ownerId, gate.m_VehicleId, gate.m_sVehicleRpl, gate.m_iGroupGeneration, gate.m_iTripGeneration, s_iCollisionEvents + 1);
+		details += string.Format(" other=%1 other_pilot=%2 impulse=%3 owner_momentum=%4 other_momentum=%5 damage_share=%6 impact_local=%7 impact_normal=%8",
+			EntityDetails(collision.m_Other), EntityDetails(collision.m_OtherPilot), collision.m_fImpulse, collision.m_fTotalMomentumOwner, collision.m_fTotalMomentumOther, collision.m_fDamageShare, collision.GetAverageImpactPosition(), collision.m_vImpactNormal);
+		details += string.Format(" owner_velocity_before=%1 other_velocity_before=%2 owner_origin_at_impact=%3 other_origin_at_impact=%4 other_dynamic=%5 other_destructible=%6 other_response_index=%7",
+			collision.GetOwnerVelocityBefore(), collision.GetOtherVelocityBefore(), collision.m_vOwnerOriginAtThePointOfImpact, collision.m_vOtherOriginAtThePointOfImpact, collision.m_bOtherIsDynamic, collision.m_bOtherIsDestructible, collision.m_iOtherResponseIndex);
+		if (!SourceCurrent(gate, source, owner, ownerId)) return;
+		s_iCollisionEvents++;
+		Print(details);
+	}
+}
+
+modded class SCR_DamageManagerComponent
+{
+	override protected void OnDamage(notnull BaseDamageContext damageContext)
+	{
+		AICF_TCRDamageTrace.Damage(this, damageContext);
+		super.OnDamage(damageContext);
+	}
+}
+
+modded class SCR_VehicleDamageManagerComponent
+{
+	override void ProcessCollision(notnull SCR_CollisionDamageContainer collision)
+	{
+		AICF_TCRDamageTrace.Collision(this, collision);
+		super.ProcessCollision(collision);
 	}
 }
 
@@ -156,6 +292,7 @@ modded class AICF_MatchController
 	protected int m_iTCRMotionClock;
 	protected int m_iTCRProgressClock;
 	protected int m_iTCRSample;
+	protected int m_iTCRHealthSample;
 	protected int m_iTCRMoving;
 	protected int m_iTCRChecks;
 	protected int m_iTCRFailures;
@@ -180,6 +317,14 @@ modded class AICF_MatchController
 	{
 		AICF_TCRCheck(rule, false);
 		AICF_TCRFinish();
+	}
+	protected void AICF_TCRHealth(AICF_TransportTrip trip, int now)
+	{
+		if (!trip || !trip.GetLease() || m_iTCRStep > 6 || now < m_iTCRHealthSample) return;
+		Vehicle vehicle = trip.GetLease().GetVehicle();
+		if (!vehicle) return;
+		m_iTCRHealthSample = now + 5000;
+		AICF_TCRLog("HEALTH", string.Format("operation_id=%1 context=PERIODIC %2", trip.GetOperationId(), AICF_VehicleHealthTrace.Capture(vehicle)));
 	}
 	protected bool AICF_TCRRoster(AICF_GroupSlot slot)
 	{
@@ -297,7 +442,7 @@ modded class AICF_MatchController
 			m_aTCRActors.Insert(actor.GetID());
 			AICF_TCRLog("MEMBER", string.Format("position=%1 actor=%2 rpl=%3", index, actor.GetID(), AICF_TCRGate.ComponentRpl(actor)));
 		}
-		AICF_TCRLog("ENV", "mode=FAULT_INJECTED truce=1 hold_fire=1 damage_protection=1 normal_war=0 teleport=0 setup=ISOLATED_ROSTER");
+		AICF_TCRLog("ENV", "mode=FAULT_INJECTED truce=1 hold_fire=1 damage_protection=1 damage_protection_scope=ROOT_ONLY normal_war=0 teleport=0 setup=ISOLATED_ROSTER");
 		AICF_VehiclePresetCatalog catalog = new AICF_VehiclePresetCatalog(m_USSRFaction);
 		string reason;
 		ResourceName prefab = "{259EE7B78C51B624}Prefabs/Vehicles/Wheeled/UAZ469/UAZ469.et";
@@ -350,8 +495,9 @@ modded class AICF_MatchController
 			gate.m_aActorIds.Insert(actor.GetID());
 			gate.m_aActorRpls.Insert(AICF_TCRGate.ComponentRpl(actor));
 		}
-		if (!gate.Matches()) { gate.LogReject("ARM", System.GetTickCount()); AICF_TCRFail("ARM_IDENTITY"); return false; }
+		if (!gate.Matches()) { gate.LogReject("ARM", System.GetTickCount()); AICF_TCRFail("ARM_" + AICF_TCRGate.RejectionCategory(gate.RejectionReason())); return false; }
 		m_TCRWitness = gate;
+		AICF_TCRDamageTrace.Bind(gate);
 		AICF_TCRGate.s_Owned = gate;
 		m_iTCRAt = System.GetTickCount();
 		string details = string.Format("operation_id=%1 group=%2 vehicle=%3 lease_generation=%4 vehicle_generation=%5 deadline_ms=%6 assignment_revision=%7 intent_revision=%8 target=%9",
@@ -389,6 +535,7 @@ modded class AICF_MatchController
 		if (!m_TCRTrip) return;
 		AICF_TransportTrip trip = m_TCRTrip;
 		if (active && active != trip) { AICF_TCRFail("TRIP_REPLACED"); return; }
+		AICF_TCRHealth(trip, now);
 		if (!AICF_TCRRoster(slot) || (trip.IsTerminal() && trip.GetPhase() != AICF_ETransportTripPhase.COMPLETE)) { AICF_TCRFail("ROSTER_OR_TERMINAL"); return; }
 		if (trip.GetLease() && trip.GetLease().GetVehicle())
 		{
@@ -425,7 +572,7 @@ modded class AICF_MatchController
 		if (m_TCRWitness && m_iTCRStep <= 6 && trip.GetPhase() == AICF_ETransportTripPhase.TRANSIT && !m_TCRWitness.Matches())
 		{
 			m_TCRWitness.LogReject("ACTIVE", now);
-			AICF_TCRFail("WITNESS_IDENTITY");
+			AICF_TCRFail("WITNESS_" + AICF_TCRGate.RejectionCategory(m_TCRWitness.RejectionReason()));
 			return;
 		}
 		float speed;
@@ -537,8 +684,12 @@ modded class AICF_MatchController
 	protected void AICF_TCRFinish()
 	{
 		AICF_TCRGate.Clear();
+		AICF_TCRDamageTrace.Clear();
 		if (m_bTCRDone) return;
 		m_bTCRDone = true;
+		string operation = "NONE";
+		if (m_TCRTrip) operation = m_TCRTrip.GetOperationId();
+		AICF_TCRLog("CLEANUP_BEGIN", string.Format("operation_id=%1 failures=%2 fixture_cleanup=1", operation, m_iTCRFailures));
 		if (m_TCRVehicles)
 		{
 			m_TCRVehicles.StopWithFactionContexts(true, null, null, m_TCRState, m_USSRFaction);
@@ -557,6 +708,7 @@ modded class AICF_MatchController
 	override protected void Stop(bool cleanupEntities)
 	{
 		AICF_TCRGate.Clear();
+		AICF_TCRDamageTrace.Clear();
 		string enabled;
 		if (Replication.IsServer() && !m_bTCRDone && System.GetCLIParam("aicfTransportCombatResume", enabled) && enabled == "1")
 		{

@@ -36,7 +36,15 @@ function Rules([string]$text){
   $purchase.IndexOf('AICF_MultiJitVehicleQuote(') -gt $purchase.IndexOf('super.PurchaseVehiclePreset(') -or
   ([regex]::Matches($spawn,'super.SpawnCandidate\(')).Count -ne 1 -or $spawn -notmatch 'AICF_MultiJitVehicleQuote\(trip, faction, selection.m_Base, candidate.m_Prefab, "PRESPAWN"\)' -or
   $spawn.IndexOf('AICF_MultiJitVehicleQuote(') -gt $spawn.IndexOf('super.SpawnCandidate(') -or $purchase -match 'return true|paid\s*='){'JIT_BEFORE_PREFLIGHT_AND_NATIVE_DEBIT_NO_SUCCESS_BYPASS'}
- if($init -notmatch 'slot.GetUnitType\(\) == AICF_EGroupUnitType.INFANTRY' -or $init -notmatch 'deploymentSize != 1' -or $init -notmatch 'AICF_EGroupUnitType.INFANTRY, 1' -or $tick -notmatch 'AICF_EGroupUnitType.INFANTRY, 5' -or $tick -notmatch 'RequestPlayerRecruitment\(slot, faction, reason\)' -or $tick -notmatch 'm_bAICFMultiMustered && item.m_iSlot < m_iAICFMultiCohort' -or $sample -notmatch 'mustered == m_iAICFMultiCohort \* 2'){'REAL_INFANTRY_PAID_MUSTER_BEFORE_MOTORIZED'}
+ if($init -notmatch 'slot.GetUnitType\(\) == AICF_EGroupUnitType.INFANTRY' -or $init -notmatch 'deploymentSize != 1' -or $init -notmatch 'AICF_EGroupUnitType.INFANTRY, 1' -or $tick -notmatch 'AICF_EGroupUnitType.INFANTRY, 5' -or $tick -notmatch 'RequestPlayerRecruitment\(slot, faction, reason\)' -or $sample -notmatch 'mustered == m_iAICFMultiCohort \* 2'){'REAL_INFANTRY_PAID_MUSTER_BEFORE_MOTORIZED'}
+ $apply=Body $text 'AICF_MultiApply'
+ if($tick -match 'm_bAICFMultiMustered\s*&&' -or $funding.Contains('m_bAICFMultiMustered') -or
+  $tick -notmatch '(?s)item.m_iPhase = 1;\s*item.m_iNextCommand = now;' -or
+  $tick -notmatch 'if \(item.m_iSlot < m_iAICFMultiCohort && now >= item.m_iNextCommand\)' -or
+  $apply -notmatch 'item.m_iPhase != 1 \|\| !item.m_bRecruitAccepted \|\| item.m_aMembers.Count\(\) != 5 \|\| !AICF_MultiRoster\(item, slot\)' -or
+  $funding -notmatch 'if \(item.m_iSlot >= m_iAICFMultiCohort\) continue;' -or
+  $funding -notmatch 'item.m_iPhase >= 1 && item.m_iPhase <= 2' -or $funding -notmatch 'item.m_bRecruitAccepted && item.m_aMembers.Count\(\) == 5'){'PER_GROUP_PAID_MUSTER_WITHOUT_GLOBAL_IDLE_BARRIER'}
+ if($text -notmatch 'muster_policy=PER_GROUP_BEFORE_VEHICLE'){'EXPLICIT_PER_GROUP_MUSTER_POLICY'}
  if($tick -notmatch 'if \(item.m_iSlot >= m_iAICFMultiCohort\) return;' -or $tick.IndexOf('item.m_iSlot >= m_iAICFMultiCohort') -gt $tick.IndexOf('RequestPlayerRecruitment') -or $sample -notmatch 'm_iAICFMultiCohort \+= 2;\s*m_bAICFMultiMustered = false;'){'STAGED_MUSTER_RELEASES_BARRACKS'}
  if($exact -notmatch 'lease.GetState\(\) != AICF_EVehicleLeaseState.ACTIVE' -or $exact -notmatch 'MatchesTripIdentity\(item.m_sFaction, item.m_iSlot, item.m_iGeneration, trip.GetTripGeneration\(\)\)' -or $exact -notmatch 'MatchesEntityIdentity' -or $exact -notmatch 'rpl.Id\(\).ToString\(\) != lease.GetRplId\(\)' -or $exact -notmatch 'seats\[index\].GetOccupant\(\) != actor' -or $exact -notmatch 'IsGettingIn\(\) \|\| access.IsGettingOut\(\) \|\| access.IsSwitchingSeatsAnim\(\)'){'REAL_CURRENT_LEASE_EXACT_OCCUPANTS'}
  if($sample -notmatch 'item.m_iLeg > 0 && item.m_fDisplacement >= 25 && item.m_iMoving > 0' -or $sample -notmatch 'vehicles.Contains\(vehicle\) \|\| rplIds.Contains\(item.m_sRpl\)' -or $sample -notmatch 'usExact >= m_iAICFMultiCohort && ussrExact >= m_iAICFMultiCohort' -or $sample -notmatch 'now - m_iAICFMultiStableAt >= 30000' -or $sample -notmatch 'else m_iAICFMultiStableAt = -1'){'SIMULTANEOUS_MOVING_COHORTS_STABLE_30S'}
@@ -68,6 +76,12 @@ foreach($mutation in @(
  @('4000 - AICF_MultiGranted(key)','4000000','FINITE_ECONOMY_OWNER_LEDGER'),
  @('deploymentSize != 1','false','REAL_INFANTRY_PAID_MUSTER_BEFORE_MOTORIZED'),
  @('RequestPlayerRecruitment(slot, faction, reason)','FakeRecruit(slot, faction, reason)','REAL_INFANTRY_PAID_MUSTER_BEFORE_MOTORIZED'),
+ @('if (item.m_iSlot < m_iAICFMultiCohort && now >= item.m_iNextCommand)','if (m_bAICFMultiMustered && item.m_iSlot < m_iAICFMultiCohort && now >= item.m_iNextCommand)','PER_GROUP_PAID_MUSTER_WITHOUT_GLOBAL_IDLE_BARRIER'),
+ @('item.m_iNextCommand = now;','item.m_iNextCommand = now + 90000;','PER_GROUP_PAID_MUSTER_WITHOUT_GLOBAL_IDLE_BARRIER'),
+ @('item.m_iPhase != 1 || !item.m_bRecruitAccepted || item.m_aMembers.Count() != 5 || !AICF_MultiRoster(item, slot)','false','PER_GROUP_PAID_MUSTER_WITHOUT_GLOBAL_IDLE_BARRIER'),
+ @('muster_policy=PER_GROUP_BEFORE_VEHICLE','muster_policy=GLOBAL_BARRIER','EXPLICIT_PER_GROUP_MUSTER_POLICY'),
+ @('if (item.m_iPhase >= 1 && item.m_iPhase <= 2 && item.m_bRecruitAccepted && item.m_aMembers.Count() == 5)','if (m_bAICFMultiMustered && item.m_iPhase >= 1 && item.m_iPhase <= 2 && item.m_bRecruitAccepted && item.m_aMembers.Count() == 5)','PER_GROUP_PAID_MUSTER_WITHOUT_GLOBAL_IDLE_BARRIER'),
+ @('if (item.m_iSlot >= m_iAICFMultiCohort) continue;','if (false) continue;','PER_GROUP_PAID_MUSTER_WITHOUT_GLOBAL_IDLE_BARRIER'),
  @('item.m_iSlot >= m_iAICFMultiCohort','false','STAGED_MUSTER_RELEASES_BARRACKS'),
  @('mustered == m_iAICFMultiCohort * 2','mustered == 12','REAL_INFANTRY_PAID_MUSTER_BEFORE_MOTORIZED'),
  @('m_iAICFMultiSnapshotAt = now;','m_iAICFMultiSnapshotAt = 0;','CAPTURED_NATIVE_SAMPLE_TICK'),
@@ -128,7 +142,9 @@ if($runnerErrors.Count -or $runner -notmatch "\[string\]\`$ConcurrencyMode='MOVI
  $runner -notmatch "'-aicfVehicleMultiConcurrencyMode',\`$ConcurrencyMode" -or
  $runner -notmatch '-ConcurrencyMode \$ConcurrencyMode -MinimumSeconds \$DurationSeconds' -or
  $runner -notmatch 'classification=\$taskClassification;notmovingproof=\(\$ConcurrencyMode -eq ''MOUNTED_STAGING''\)' -or
- $runner -notmatch 'Compiled stage fixture does not support the separate MOUNTED_STAGING oracle'){
+ $runner -notmatch 'Compiled stage fixture does not support the separate MOUNTED_STAGING oracle' -or
+ $runner -notmatch 'muster_policy=\$taskMusterPolicy' -or $runner -notmatch "\`$taskMusterPolicy='PER_GROUP_BEFORE_VEHICLE'" -or
+ $runner -notmatch 'Compiled stage fixture does not support the PER_GROUP_BEFORE_VEHICLE muster policy'){
  throw 'Runner must preserve default MOVING and bind CLI/auditor/manifest to the explicit concurrency mode'
 }
 $reject=[regex]::Match($runner,'if\((\$ConcurrencyMode -eq ''MOUNTED_STAGING'' -and \$Mode -ne ''CAPACITY'')\)').Groups[1].Value

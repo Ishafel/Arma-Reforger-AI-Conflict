@@ -278,12 +278,17 @@ class AICF_VehicleDismountFlow
 			return AICF_TripOutcome.ReleaseLease("TERMINAL_CLEARANCE_SAFE", causationId);
 		}
 
-		// Once all exact terminal mutations have been consumed, waiting out the
-		// remainder of the generic boarding timeout cannot improve the result.
+		// Exhaustion belongs to the currently required operation. Successful
+		// logical exit must not consume the later physical-only hull clearance.
 		// Transfer the still-protected asset immediately to CleanupManager, whose
 		// independent scan owns the stronger player-fenced recovery escalation.
-		if (!sample.m_bSafelyClear &&
-			state.GetForceClearanceAttempts() >= FORCE_MAX_ATTEMPTS)
+		bool logicalExitPending = sample.m_iLogicalOccupants > 0 || sample.m_iTransitions > 0;
+		bool activeBudgetExhausted;
+		if (logicalExitPending)
+			activeBudgetExhausted = state.GetForceExitAttempts() >= FORCE_MAX_ATTEMPTS;
+		else if (sample.m_iInsideBounds > 0)
+			activeBudgetExhausted = state.GetPhysicalRelocationAttempts() >= FORCE_MAX_ATTEMPTS;
+		if (!sample.m_bSafelyClear && activeBudgetExhausted)
 		{
 			state.StopTerminalClearance();
 			AICF_Stage3Diagnostics.Warning(
@@ -935,7 +940,7 @@ class AICF_VehicleDismountFlow
 			if (!IsExactOccupantOfVehicle(character, vehicle))
 				continue;
 			if (AICF_GroupRuntime.IsAliveCharacter(character) &&
-				ForceOneManagedMemberOut(trip, character, state.GetForceClearanceAttempts()))
+				ForceOneManagedMemberOut(trip, character, state.GetForceExitAttempts()))
 			{
 				forced++;
 			}
@@ -944,7 +949,7 @@ class AICF_VehicleDismountFlow
 				if (ForceOneNonAliveManagedMemberOut(
 					trip,
 					character,
-					state.GetForceClearanceAttempts()))
+					state.GetForceExitAttempts()))
 				{
 					forcedNonAlive++;
 				}
@@ -962,7 +967,7 @@ class AICF_VehicleDismountFlow
 				forcedNonAlive,
 				rejectedNonAlive,
 				interrupted,
-				state.GetForceClearanceAttempts(),
+				state.GetForceExitAttempts(),
 				FORCE_MAX_ATTEMPTS));
 	}
 
@@ -1108,7 +1113,9 @@ class AICF_VehicleDismountFlow
 		bool terminalOnly)
 	{
 		AICF_VehicleDismountState state = trip.GetDismountState();
-		if (state.GetForceClearanceAttempts() >= FORCE_MAX_ATTEMPTS)
+		if (state.GetPhysicalRelocationAttempts() >= FORCE_MAX_ATTEMPTS)
+			return;
+		if (!sample || sample.m_iLogicalOccupants > 0 || sample.m_iTransitions > 0 || sample.m_iInsideBounds <= 0)
 			return;
 		int nowMs = System.GetTickCount();
 		if (!state.TryBeginExactRelocationProbe(
@@ -1118,6 +1125,8 @@ class AICF_VehicleDismountFlow
 			return;
 		}
 		if (!IsAuthoritativeTripAssetCurrent(trip))
+			return;
+		if (nowMs >= state.GetTerminalDeadlineMs() || trip.IsDeadlineReached(nowMs))
 			return;
 		Vehicle vehicle = trip.GetLease().GetVehicle();
 		SCR_AIGroup group = trip.GetAssignment().GetGroup();
@@ -1232,7 +1241,7 @@ class AICF_VehicleDismountFlow
 					probePlayerFenced,
 					probeIdentityRejected) + string.Format(
 					" attempt=%1 maximum_attempts=%2 budget_consumed=0 retry_backoff_ms=%3 terminal_only=%4",
-					state.GetForceClearanceAttempts(),
+					state.GetPhysicalRelocationAttempts(),
 					FORCE_MAX_ATTEMPTS,
 					EXACT_RELOCATION_PROBE_BACKOFF_MS,
 					terminalOnly));
@@ -1241,7 +1250,17 @@ class AICF_VehicleDismountFlow
 		// Probe is read-only. Only a non-empty exact candidate set can enter the
 		// mutation budget and reset queues. Each candidate is fenced again at the
 		// final per-member commit boundary immediately before teleport.
-		if (!state.RecordForceClearanceAttempt())
+		if (!IsAuthoritativeTripAssetCurrent(trip) || trip.GetAssignment().GetGroup() != group || trip.GetLease().GetVehicle() != vehicle)
+			return;
+		int commitNowMs = System.GetTickCount();
+		if (commitNowMs >= state.GetTerminalDeadlineMs() || trip.IsDeadlineReached(commitNowMs))
+			return;
+		AICF_DismountClearanceSample current = InspectCurrentManagedClearance(trip);
+		if (!current || current.m_iLogicalOccupants > 0 || current.m_iTransitions > 0 || current.m_iInsideBounds <= 0)
+			return;
+		state.RecordClearanceSample(current.m_iLogicalOccupants, current.m_iTransitions,
+			current.m_iInsideBounds, commitNowMs, current.m_iPostEgressBlocked);
+		if (!state.RecordPhysicalRelocationAttempt())
 			return;
 		int interrupted = m_Watchdog.ResetGroupVehicleActions(group);
 		int relocated;
@@ -1334,7 +1353,7 @@ class AICF_VehicleDismountFlow
 				positionRejected,
 				commitTargetRejected) + string.Format(
 				" attempt=%1 maximum_attempts=%2 terminal_only=%3 retry_backoff_ms=%4",
-				state.GetForceClearanceAttempts(),
+				state.GetPhysicalRelocationAttempts(),
 				FORCE_MAX_ATTEMPTS,
 				terminalOnly,
 				EXACT_RELOCATION_PROBE_BACKOFF_MS) + string.Format(
@@ -1743,6 +1762,10 @@ class AICF_VehicleDismountFlow
 			reason,
 			sample.m_sMemberSamples,
 			sample.m_sPostEgressSamples);
+		details += string.Format(
+			" force_exit_attempts=%1 physical_relocation_attempts=%2 maximum_force_exit_attempts=%3 maximum_physical_relocation_attempts=%4 maximum_combined_batches_per_phase=%5",
+			trip.GetDismountState().GetForceExitAttempts(), trip.GetDismountState().GetPhysicalRelocationAttempts(),
+			FORCE_MAX_ATTEMPTS, FORCE_MAX_ATTEMPTS, FORCE_MAX_ATTEMPTS * 2);
 		return details;
 	}
 

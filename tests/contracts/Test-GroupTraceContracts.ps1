@@ -43,7 +43,11 @@ function Rules([string]$source){
  if($path -match '\.GetOwner\(' -or $pathDriver -match '\.GetOwner\('){'UNSUPPORTED_AI_COMPONENT_OWNER_API'}
  foreach($reason in @('DRIVER_NOT_AUTHORITY_AI','DRIVER_NOT_CONSCIOUS','DRIVER_CONTROL_MISSING','DRIVER_AGENT_MISSING','DRIVER_CONTROL_AGENT_CHANGED','DRIVER_AGENT_ACTOR_MISMATCH','DRIVER_AGENT_GROUP_MISMATCH','ACTUAL_PILOT_COMPARTMENT_MISSING','PILOT_VEHICLE_MISMATCH','PILOT_OCCUPANT_MISMATCH','DRIVER_ACCESS_MISSING','DRIVER_NOT_IN_VEHICLE','DRIVER_NOT_IN_COMPARTMENT','DRIVER_GETTING_IN','DRIVER_GETTING_OUT','DRIVER_SWITCHING_SEATS','DRIVER_ACTUAL_COMPARTMENT_CHANGED','DRIVER_LINKED_VEHICLE_MISMATCH','DRIVER_AGENT_NOT_IN_GROUP','VEHICLE_MANAGER_MISSING','REGISTERED_VEHICLE_MISMATCH','REGISTERED_DRIVER_CHANGED','DRIVER_MOVEMENT_COMPONENT_MISSING','DRIVER_MOVEMENT_COMPONENT_CHANGED')){if(!$pathDriver.Contains('reason = "'+$reason+'"')){'EXACT_DRIVER_REJECTION_REASONS';break}}
  foreach($field in @('driver_candidate=','driver_agent=','movement_component=','movement_component_ref=','native_associated_agent=','car_cast=','movement_agent_is_driver=','driver_control_ref=','driver_control_associated_agent=','control_agent=','driver_agent_controlled=','driver_agent_parent=','movement_agent_controlled=','movement_agent_parent=','actual_pilot=','actual_seat=')){if(!$path.Contains($field)){'RAW_COMPONENT_AND_PILOT_OBSERVATIONS';break}}
- if($source -notmatch 'NATIVE_PATH_POINT_LIMIT = 128;' -or $path -notmatch 'int emitted = Math.Min\(count, NATIVE_PATH_POINT_LIMIT\)' -or $path -notmatch 'index < emitted' -or $path -notmatch 'index, points\[index\]' -or $path -notmatch 'count > emitted, first, last' -or $path -notmatch 'points\[count - 1\].ToString\(\)'){'BOUNDED_RAW_NATIVE_ORDER'}
+ if($source -notmatch 'NATIVE_PATH_POINT_LIMIT = 128;' -or $path -notmatch 'int emitted = Math.Min\(count, pointLimit\)' -or $path -notmatch 'index < emitted' -or $path -notmatch 'index, points\[index\]' -or $path -notmatch 'count > emitted, first, last' -or $path -notmatch 'points\[count - 1\].ToString\(\)'){'BOUNDED_RAW_NATIVE_ORDER'}
+ $limit=Get-AICFMethodBody $record 'NativePathPointLimit'
+ if($limit -notmatch '!System.GetCLIParam\("aicfGroupTracePathPointLimit", value\)\) return NATIVE_PATH_POINT_LIMIT' -or
+    $limit -notmatch 'return Math.Clamp\(value.ToInt\(\), NATIVE_PATH_POINT_LIMIT, 512\)' -or
+    $path -notmatch 'int pointLimit = NativePathPointLimit\(\)'){'BOUNDED_DEBUG_POINT_OVERRIDE'}
  if($path -notmatch 'if \(count == 0\) status = "EMPTY_NATIVE_PATH"' -or $unavailable -notmatch 'native_point_count=-1 emitted_points=0' -or $path -notmatch 'CONTEXT_CHANGED_DURING_READ_DISCARDED", true' -or $source -notmatch 'remaining_distance_proven=0' -or $path -match 'remaining_distance_proven=1'){'NO_INVENTED_PATH_OR_PROGRESS_PROOF'}
  if($code -match 'OnPathSet|SetCurrentAction\(|SetExecutedAction\(|ObservePhysicalMotion\(|ObserveRouteProgress\(|\.Fail\(|\.Complete\('){'NO_PATH_CLOCK_ACTION_OR_CALLBACK_MUTATION'}
  foreach($field in @('selected_action=','executed_action=','expected_seat=','actual_seat=','reserved_by_member=','get_in_locked=','getting_in=','getting_out=','life=')){if(!$source.Contains($field)){'FIELD_'+$field}}
@@ -101,7 +105,10 @@ foreach($mutation in @(
  @('movement.GetRouteGeneration() != routeGeneration','false','PATH_POST_READ_IDENTITY'),
  @('driver.GetID() != driverId','false','PATH_POST_READ_IDENTITY'),
  @('NATIVE_PATH_POINT_LIMIT = 128;','NATIVE_PATH_POINT_LIMIT = 129;','BOUNDED_RAW_NATIVE_ORDER'),
- @('Math.Min(count, NATIVE_PATH_POINT_LIMIT)','count','BOUNDED_RAW_NATIVE_ORDER'),
+ @('Math.Min(count, pointLimit)','count','BOUNDED_RAW_NATIVE_ORDER'),
+ @('return NATIVE_PATH_POINT_LIMIT;','return 512;','BOUNDED_DEBUG_POINT_OVERRIDE'),
+ @('Math.Clamp(value.ToInt(), NATIVE_PATH_POINT_LIMIT, 512)','value.ToInt()','BOUNDED_DEBUG_POINT_OVERRIDE'),
+ @('int pointLimit = NativePathPointLimit();','int pointLimit = 4096;','BOUNDED_DEBUG_POINT_OVERRIDE'),
  @('index, points[index]','index, points[emitted - index - 1]','BOUNDED_RAW_NATIVE_ORDER'),
  @('remaining_distance_proven=0','remaining_distance_proven=1','NO_INVENTED_PATH_OR_PROGRESS_PROOF'),
  @('movementComponent.GetCurrentPath(points);','movementComponent.GetCurrentPath(points); movement.ObserveRouteProgress(0, 1, System.GetTickCount());','NO_PATH_CLOCK_ACTION_OR_CALLBACK_MUTATION'),
@@ -115,4 +122,4 @@ $driver=Get-AICFMethodBody ([pscustomobject]@{Source=$trace;Code=(ConvertTo-AICF
 $ownerAssumption=$trace.Replace($driver,$driver.Insert(1,'if (movementComponent && movementComponent.GetAIAgent() != driverAgent) return false;'))
 if('RAW_COMPONENT_IDENTITY_WITHOUT_OWNER_ASSUMPTION' -notin @(Rules $ownerAssumption)){throw 'Unproven native owner assumption survived'}
 $controls++
-"PASS Group trace: read-only authority/current pilot/lease, repeated raw base movement identity, supported associated-agent API/types/cast and rejection reasons, <=128 raw ordered points without vehicle-path or remaining-distance proof; controls=$controls"
+"PASS Group trace: read-only authority/current pilot/lease, repeated raw base movement identity, supported associated-agent API/types/cast and rejection reasons, default128 raw ordered points/debug CLI capped512 without vehicle-path or remaining-distance proof; controls=$controls"

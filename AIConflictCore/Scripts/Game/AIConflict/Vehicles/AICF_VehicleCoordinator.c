@@ -182,7 +182,11 @@ class AICF_VehicleCoordinator
 		if (!trip || trip.GetHandoffState().IsOrderRestored())
 			return false;
 		AICF_ETransportTripPhase phase = trip.GetPhase();
-		return phase == AICF_ETransportTripPhase.BOARDING ||
+		return phase == AICF_ETransportTripPhase.SITE_PLANNED ||
+			phase == AICF_ETransportTripPhase.APPROACHING_SITE ||
+			phase == AICF_ETransportTripPhase.STAGING_CONFIRMED ||
+			phase == AICF_ETransportTripPhase.SPAWN_COMMIT ||
+			phase == AICF_ETransportTripPhase.BOARDING ||
 			phase == AICF_ETransportTripPhase.TRANSIT ||
 			phase == AICF_ETransportTripPhase.DISMOUNT ||
 			phase == AICF_ETransportTripPhase.HANDOFF ||
@@ -622,7 +626,7 @@ class AICF_VehicleCoordinator
 				fleet,
 				faction);
 			ObserveTerminalCommit(trip, previousPhase, previousTransitions, observed);
-			if (!ShouldReplaceTerminalTrip(trip, assignment))
+			if (!ShouldReplaceTerminalTrip(trip, assignment, slot))
 				return;
 			m_Trips.RemoveTerminal(trip);
 		}
@@ -815,14 +819,42 @@ class AICF_VehicleCoordinator
 
 	protected bool ShouldReplaceTerminalTrip(
 		AICF_TransportTrip trip,
-		AICF_StrategicAssignmentSnapshot assignment)
+		AICF_StrategicAssignmentSnapshot assignment,
+		AICF_GroupSlot slot)
 	{
 		if (!trip || !assignment || !m_TripController.CanRetireTrip(trip))
 			return false;
-		return (trip.GetVehiclePresetSlot() && trip.GetVehiclePresetRevision() != trip.GetVehiclePresetSlot().GetVehiclePresetRevision()) ||
-			trip.GetAssignment().GetAssignmentRevision() != assignment.GetAssignmentRevision() ||
-			trip.GetAssignment().GetBaseRevision() != assignment.GetBaseRevision() ||
-			!trip.GetAssignment().MatchesDestination(assignment);
+		if (HasCompletedStrategicTransportIntent(trip, assignment, slot))
+		{
+			// Handoff восстанавливает пеший waypoint с новой assignment revision.
+			// Тот же завершённый transport intent не становится новой покупкой.
+			if (HasExplicitVehicleAdmission(slot, assignment)) return true;
+			ReportAdmissionOnce(assignment, "STRATEGIC_TRANSPORT_INTENT_ALREADY_COMPLETED");
+			return false;
+		}
+		bool presetChanged = trip.GetVehiclePresetSlot() &&
+			trip.GetVehiclePresetRevision() != trip.GetVehiclePresetSlot().GetVehiclePresetRevision();
+		if (presetChanged) return true;
+		if (trip.GetAssignment().GetStrategicIntentRevision() != assignment.GetStrategicIntentRevision()) return true;
+		if (trip.GetAssignment().GetAssignmentRevision() != assignment.GetAssignmentRevision()) return true;
+		if (trip.GetAssignment().GetBaseRevision() != assignment.GetBaseRevision()) return true;
+		return !trip.GetAssignment().MatchesDestination(assignment);
+	}
+
+	protected bool HasCompletedStrategicTransportIntent(
+		AICF_TransportTrip trip,
+		AICF_StrategicAssignmentSnapshot assignment,
+		AICF_GroupSlot slot)
+	{
+		if (!Replication.IsServer() || !trip || !assignment || !slot) return false;
+		if (trip.GetPhase() != AICF_ETransportTripPhase.COMPLETE || !trip.GetHandoffState().IsOrderRestored()) return false;
+		AICF_StrategicAssignmentSnapshot completed = trip.GetAssignment();
+		if (!completed || !completed.MatchesCurrent(assignment.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), slot.GetGroup())) return false;
+		if (!assignment.MatchesCurrent(assignment.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), slot.GetGroup())) return false;
+		if (completed.GetUnitType() != slot.GetUnitType() || assignment.GetUnitType() != slot.GetUnitType()) return false;
+		if (completed.GetStrategicIntentRevision() != assignment.GetStrategicIntentRevision() || !completed.MatchesDestination(assignment)) return false;
+		if (trip.GetVehiclePresetSlot() && trip.GetVehiclePresetSlot() != slot) return false;
+		return trip.GetVehiclePresetRevision() == slot.GetVehiclePresetRevision();
 	}
 
 	protected void ObserveTerminalCommit(

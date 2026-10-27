@@ -929,6 +929,7 @@ class AICF_VehicleAcquisitionFlow
 			usage,
 			failureReason))
 		{
+			AICF_VehicleBoardingSiteQuery.ReportSpawnedEntries(trip.GetAssignment().GetGroup(), spawnedVehicle, identity);
 			candidate.m_Vehicle = spawnedVehicle;
 			candidate.m_bEntityCreated = true;
 			return true;

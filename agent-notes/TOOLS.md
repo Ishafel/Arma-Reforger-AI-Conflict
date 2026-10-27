@@ -57,6 +57,11 @@ human/foreign отказ,3s предел и expiry-before-wait; `Test-VehiclePre
 clone/super boundary, weak lifecycle, stale/current traffic и чужие/неоднозначные
 запросы. GroupTrace contracts также сохраняют raw path семантику без progress writes.
 
+`Test-VehicleHealthTraceContracts.ps1` проверяет native leaf health readback,
+повторный component identity fence, bounded hierarchy и интеграцию с прежней
+GroupTrace cadence/failure snapshot. CombatResume contracts сохраняют отдельные
+health/identity/cleanup причины и строгий итоговый FAIL при первичном отказе.
+
 `tools/Invoke-AICFVehicleScenarios.ps1 -EvidenceRoot <новый каталог>` — отдельный
 native runner шести полных Stock поездок; в offline All он не входит. Готовит
 stage, выполняет Workbench, canonical Server и строгий `Test-VehicleScenarioLog.ps1`.
@@ -396,6 +401,28 @@ manifest и native exit; игра не входит в offline runner. Конт�
 | [Test-WCSIntegrationStatic.ps1](../tests/static/Test-WCSIntegrationStatic.ps1) | WCS profile, content и addon graph |
 
 ## Анализаторы логов
+
+Дополнительные контракты транспортного продолжения #78:
+
+| Проверка | Контракт |
+|---|---|
+| `Test-NativeCrewEntryContracts.ps1` | Exact own reserved seat и actual RUNNING GetIn, неизменяемый срок, оба role records до WAIT |
+| `Test-VehicleBoardingSiteContracts.ps1` | Foot-navmesh coverage площадки до выбора и свежий повтор перед spawn |
+| `Test-VehicleStagingHandoffContracts.ps1` | Единственный владелец движения при acquisition approach |
+| `Test-VehiclePresetParallelEntryContracts.ps1` | Максимум два входа через доказанно независимые двери, unknown/shared/Turret serial |
+| `Test-VehicleNativeRouteProgressContracts.ps1` | Полный текущий car path, projection/physics/history, proof-gated progress и rejection telemetry |
+| `Test-PointHoldRepairAccountingContracts.ps1` | Terminal receipt до замены completed POINT hold, без ложного CONFIRMED |
+| `Test-CompletedTransportIntentContracts.ps1` | Завершённый intent не переармляется от handoff revision; новые приказы и explicit admission сохранены |
+| `Test-TransportNativeGateContracts.ps1` | Cargo/OpenGate, единственная native chain, физический выход/возврат/движение и неизменяемое60s окно |
+| `Test-TransportNativeAbandonContracts.ps1` | Штатный current group GetOut exact машины приводит к typed fallback до driver recovery |
+| `Test-NativeGateCompletionContracts.ps1` | Exact completion callback, COMPLETED→EVALUATED, listener cleanup при invalid stop |
+| `Test-DismountOperationBudgetContracts.ps1` | Раздельные3+3 bounded batches, свежий logical egress до физического перемещения |
+| `Test-VehicleHealthTraceContracts.ps1` | Повторный read-only leaf health/physics fence |
+| `Test-TransportDamageTraceContracts.ps1` | Fixture-only causal callbacks, точный scope, однократный native super |
+
+`aicfGroupTracePathPointLimit` оставляет default128, допускает диапазон128..512.
+CombatResume runner явно выбирает512 для одной USSR/0; Multi сохраняет128.
+`truncated=1` запрещает объявлять trace полным remaining path.
 
 Статус всех анализаторов: поддерживаемые, но полный runtime при реорганизации
 **NOT RUN**. Synthetic inputs в contracts проверяют сам анализатор, не игру.

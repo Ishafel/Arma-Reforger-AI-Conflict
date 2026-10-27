@@ -3,7 +3,8 @@ param(
  [Parameter(Mandatory)][string]$LauncherPath,
  [Parameter(Mandatory)][string]$NativeExitPath,
  [Parameter(Mandatory)][ValidateSet('uaz5','ural5','armed3','solo1','retarget5','repeat5')][string]$Scenario,
- [switch]$Combat
+ [switch]$Combat,
+ [switch]$DismountBudgetProbe
 )
 $ErrorActionPreference='Stop'
 $log=[IO.File]::ReadAllText($LogPath)
@@ -12,6 +13,7 @@ $launcher=[IO.File]::ReadAllText($LauncherPath)
 $failures=[Collections.Generic.List[string]]::new()
 function Require([bool]$condition,[string]$rule){if(!$condition){$failures.Add($rule)}}
 function Number([string]$value){[double]::Parse($value,[Globalization.CultureInfo]::InvariantCulture)}
+function Field([string]$line,[string]$key){[regex]::Match($line,'(?:^| )'+[regex]::Escape($key)+'=([^\s]+)').Groups[1].Value}
 Require ((Get-Content -LiteralPath $NativeExitPath -Raw).Trim() -eq '0') 'NATIVE_EXIT'
 Require ($log.Contains('Game destroyed.') -and $log.Contains('[ROSTER_READY]')) 'FULL_STOPPED_ROSTER'
 if($Combat){Require ($log -match '\[VEHICLE_SCENARIO_ENV\] scenario='+$Scenario+' combat=1 combat_mode=FIRE_AT_WILL') 'COMBAT_ENVIRONMENT'}
@@ -28,6 +30,20 @@ if($manifests.Count -eq 1){
  }
  $i=[array]::IndexOf($argv,'-aicfVehicleScenario')
  Require ($i -ge 0 -and $argv[$i+1] -eq $Scenario) 'SCENARIO_CLI'
+ if($DismountBudgetProbe){
+  $i=[array]::IndexOf($argv,'-aicfVehicleScenarioDismountBudget')
+  Require ($Scenario -eq 'ural5' -and !$Combat -and $i -ge 0 -and $argv[$i+1] -eq '1') 'DISMOUNT_BUDGET_CLI'
+ }
+}
+# New production telemetry makes the split limit explicit. A batch aggregate
+# up to6 is valid only with both per-operation counters <=3 and matching sum.
+foreach($line in ($log -split "`n")){
+ if($line -notmatch '\[(?:DISEMBARK_[A-Z_]+|FALLBACK_FORCE_DISEMBARK)\]' -or !$line.Contains(' force_attempts=')){continue}
+ $exit=Field $line 'force_exit_attempts';$physical=Field $line 'physical_relocation_attempts';$aggregate=Field $line 'force_attempts'
+ $present=$exit -match '^\d+$' -and $physical -match '^\d+$' -and $aggregate -match '^\d+$'
+ Require $present 'DISMOUNT_OPERATION_BUDGET_METADATA'
+ if($present){Require ([int]$exit -le 3 -and [int]$physical -le 3 -and [int]$aggregate -eq ([int]$exit+[int]$physical) -and [int]$aggregate -le 6) 'DISMOUNT_OPERATION_BOUNDS'}
+ Require ((Field $line 'maximum_force_exit_attempts') -eq '3' -and (Field $line 'maximum_physical_relocation_attempts') -eq '3' -and (Field $line 'maximum_combined_batches_per_phase') -eq '6') 'DISMOUNT_DECLARED_TOTAL_BOUND'
 }
 $legs=1;$crew=5
 if($Scenario -eq 'repeat5'){$legs=2}
@@ -85,6 +101,31 @@ for($leg=1;$leg -le $legs;$leg++){
  }
 }
 Require ($log -notmatch '\[ACCEPTANCE_FAILURE_LATCHED\]|\[VEHICLE_STATE_CHANGED\][^\r\n]*previous_state=(?:BOARDING|TRANSIT|DISMOUNT|HANDOFF) state=(?:FALLBACK|FAILED_CLOSED)') 'TRIP_FAILURE'
+if($DismountBudgetProbe){
+ Require (@($checks|Where-Object{$_.Groups[2].Value -eq 'DISMOUNT_OPERATION_BUDGET_CAUSAL'}).Count -eq 1) 'DISMOUNT_BUDGET_CAUSAL_CHECK'
+ $receipts=@([regex]::Matches($log,'\[VEHICLE_SCENARIO_DISMOUNT_BUDGET\][^\r\n]+'))
+ $batches=@($receipts|Where-Object{$_.Value.Contains('event=FORCE_BATCH ') -and (Field $_.Value 'charged') -eq '1'})
+ $ghost=@($receipts|Where-Object{$_.Value.Contains('event=PHYSICAL_GHOST ')})
+ $relocated=@($receipts|Where-Object{$_.Value.Contains('event=NORMAL_RELOCATION ')})
+ Require ($batches.Count -eq 3 -and $ghost.Count -eq 1 -and $relocated.Count -ge 1) 'DISMOUNT_BUDGET_NATIVE_BRANCH_RECEIPTS'
+ $operation=[regex]::Match($log,'\[VEHICLE_SCENARIO_BOARDING\] scenario=ural5 leg=1 operation_id=(\S+)').Groups[1].Value
+ $firstDeadline='';$terminalDeadline='';$expected=0
+ foreach($batch in $batches){
+  $expected++
+  Require ((Field $batch.Value 'force_exit_attempts') -eq [string]$expected -and [int](Field $batch.Value 'native_calls') -gt 0 -and [int](Field $batch.Value 'accepted_calls') -gt 0 -and [int](Field $batch.Value 'logical_before') -gt 0 -and (Field $batch.Value 'physical_relocation_attempts') -eq '0') 'DISMOUNT_BUDGET_REAL_FORCE_CALLS'
+  if(!$firstDeadline){$firstDeadline=Field $batch.Value 'normal_deadline_ms';$terminalDeadline=Field $batch.Value 'terminal_deadline_ms'}
+ }
+ foreach($receipt in @($batches)+@($ghost)+@($relocated)){
+  Require ((Field $receipt.Value 'operation_id') -eq $operation -and (Field $receipt.Value 'normal_deadline_ms') -eq $firstDeadline -and (Field $receipt.Value 'terminal_deadline_ms') -eq $terminalDeadline -and [int]$firstDeadline -gt 0 -and [int]$terminalDeadline -gt [int]$firstDeadline) 'DISMOUNT_BUDGET_EXACT_IDENTITY_FIXED_DEADLINES'
+ }
+ if($ghost.Count -eq 1){
+  $g=$ghost[0]
+  Require ((Field $g.Value 'force_exit_attempts') -eq '3' -and (Field $g.Value 'logical_occupants') -eq '0' -and (Field $g.Value 'transitions') -eq '0' -and [int](Field $g.Value 'inside_bounds') -gt 0 -and (Field $g.Value 'exact_ghost') -eq '1' -and (Field $g.Value 'physical_relocation_attempts') -eq '0' -and $batches.Count -eq 3 -and $g.Index -gt $batches[-1].Index) 'DISMOUNT_BUDGET_ACTUAL_EGRESS_THEN_HULL_BLOCKER'
+ }
+ foreach($r in $relocated){
+  Require ((Field $r.Value 'force_exit_attempts') -eq '3' -and [int](Field $r.Value 'physical_relocation_attempts') -in 1..3 -and (Field $r.Value 'ghost_moved_clear') -eq '1' -and (Number (Field $r.Value 'ghost_displacement_m')) -gt 1 -and (Field $r.Value 'unchanged_deadlines') -eq '1' -and (Field $r.Value 'terminal_only') -eq '0' -and $ghost.Count -eq 1 -and $r.Index -gt $ghost[0].Index) 'DISMOUNT_BUDGET_NORMAL_PHYSICAL_RECOVERY'
+ }
+}
 if($failures.Count){$failures|Sort-Object -Unique;exit 1}
 "PASS Vehicle scenario=$Scenario legs=$legs crew=${crew}: real boarding, unchanged destination, physical arrival/dismount, all members at point, diagnostics, native0/stopped"
 exit 0

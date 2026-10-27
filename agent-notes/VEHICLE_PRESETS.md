@@ -139,6 +139,26 @@ supplies и logistics obligations перед spawn; после live validation �
 стоимость перед bind. Неуспешный bind возвращает платёж и удаляет только ещё
 непринятый candidate. Повтор accepted asset не проходит purchase заново.
 
+`AICF_VehicleBoardingSiteQuery` добавляет консервативный gate пешего покрытия
+площадки: center и восемь точек сетки с offsets ±4m. Для каждой нужны загруженный
+tile и native foot-nav projection со сдвигом <=0.5m по XZ и <=1m по высоте.
+Selector отклоняет такой candidate до SELECTED; fresh spawn commit повторяет все
+девять запросов перед reservation lease/платежом. Group/entity/Rpl/faction/world/
+pathfinding/navmesh identity проверяются повторно. Дедупликация строк commit
+не кеширует eligibility. Незагруженная navmesh даёт явный отказ без новых load
+requests, дополнительных попыток или продления deadlines.
+
+События `VEHICLE_FOOT_PAD_PROBE/POINT` содержат phase, query, tile loaded/requested,
+projection и deltas. Непосредственно после spawn, до live validation и debit,
+read-only `VEHICLE_ENTRY_SITE_PROBE` читает до16 уникальных реальных AI entry doors
+с `sample_phase=POST_SPAWN_IMMEDIATE`. Этот ранний sample может предшествовать
+asynchronous dynamic carving: поля `reachability_proven=0 async_carving_proven=0`
+сохраняют эту границу. Поздние ENTRY_PATH snapshots позволяют сопоставить
+покрытие до создания машины, после spawn и при stalled entry. Данные projection
+не доказывают связь с leader, исправность BT или точную причину препятствия.
+Gate не перемещает машину/бойцов и не меняет обычный 125s boarding budget.
+Контракты: `Test-VehicleBoardingSiteContracts.ps1`.
+
 Preset boarding внутри существующего BoardingFlow выдаёт native SCR_AIGetInVehicle
 на конкретные seats и tracks прежние identity-safe tokens. Нужны два полных
 readback polls: exact occupant, compartment, settled и отсутствие transitions.
@@ -165,6 +185,40 @@ transitions и попадания в расширенные bounds. Если nor
 сохраняют прежний normal timeout. Ни cleanup proof, ни human/LOS fences не ослаблены.
 
 ## Проверки и текущая граница доказательств
+
+Exact boarding допускает максимум два одновременных native входа, когда
+`AICF_PresetEntrySeparation` доказал независимость всех доступных дверей пары:
+непересекающиеся root-relative owner/live-manager/door keys и расстояние не менее
+2.5m по XZ между каждой парой возможных entry points. Ближайшая дверь не угадывается.
+Общие двери, неизвестные metadata и Turret остаются последовательными; чужие
+occupants/reservations, human actor и stale token отклоняют параллельный допуск.
+Busy union включает owned actions и все физические transitions, поэтому третий
+вход не запускается. Общий срок `25s * max(3, assigned)` (125s для пяти),
+две settled polls и максимум два повтора не меняются. Событие
+`VEHICLE_PRESET_PARALLEL_ENTRY` отмечает допуск, а
+`VEHICLE_PRESET_BOARDING_DEADLINE_SNAPSHOT` перед отказом сохраняет required/settled,
+число settled polls, busy entries и исходный deadline. Контракты queue/parallel entry
+проверяют third-entry veto, complete metadata, shared/unknown/turret/human/stale
+и все cross points; native прогон остаётся отдельным gate.
+
+После нормального `COMPLETE` scheduler сохраняет существующий trip как подтверждение
+завершённой перевозки для exact group/generation, strategic intent, destination и
+preset revision. Восстановление пешего waypoint меняет assignment revision, но не
+заказывает ещё одну машину по тому же приказу; base revision также не переармляет
+поездку. Новый intent/target/preset, замена группы/типа или явная admission-заявка
+проверяются прежними cleanup и admission gates. Это не временный cooldown и не
+обход fallback/failed-closed политики. `Test-CompletedTransportIntentContracts.ps1`
+проверяет actual production predicates и повтор исходного handoff assignment6→7
+при неизменном intent3, включая новые приказы и explicit request.
+
+Штатный group-wide `SCR_AIGetOutActivity` после failed vehicle movement распознаётся
+отдельно от actor-level OpenGate. Stateless `AICF_TransportNativeAbandon` требует
+текущий исполняемый high-priority PLAYER GetOut точной зарегистрированной машины,
+пустой related waypoint/boarding parameters, полный актуальный AI preset binding
+и неизменный route context. Только этот proof возвращает typed fallback
+`NATIVE_GROUP_ABANDONED_VEHICLE` до попытки восстановить водителя. Native actions,
+physics и progress clocks observer не меняет; phase, пеший handoff и clearance
+остаются у прежнего controller/cleanup. Existing crew/gate owners сохраняют приоритет.
 
 `Test-VehiclePresetContracts.ps1` проверяет 78 структурных контрактов;
 `Test-VehiclePresetLogContracts.ps1` — 24 positive/negative controls анализатора.
@@ -226,5 +280,24 @@ native-only graph ROSTER_READY обозначает нулевой managed roste
 Это не substitute production runtime gate.
 
 Свежие результаты и остающиеся критерии фиксируются в [TESTING.md](TESTING.md).
+
+Высадка разделяет два бюджета: до3 batches принудительного native logical exit
+и до3 batches физического освобождения hull после доказанного logical_occupants=0
+и transitions=0. Это увеличение общего предела до6 batches на фазу, максимум12
+за normal dismount и уже существующую terminal fallback phase вместе. Повторные
+polls бюджеты не сбрасывают; normal/terminal/absolute deadlines, три animated
+retry, три guidance attempts, exact identity и player/LOS/navmesh fences прежние.
+Непустой безопасный probe и свежая проверка полного состава предшествуют charge
+physical budget. Terminal escalation учитывает операцию, которая ещё нужна;
+исчерпанный logical exit не отменяет последующее освобождение hull.
+`force_attempts` остаётся суммой, новые `force_exit_attempts` и
+`physical_relocation_attempts` показывают составляющие; максимумы3/3/6 явно
+пишутся в clearance events и проверяются scenario auditor. Контракт
+`Test-DismountOperationBudgetContracts.ps1` исполняет production state methods,
+проверяет последовательность logical3→physical3, остановку следующей попытки,
+запрет physical recovery при logical/transition occupancy и отсутствие rearm.
+Изолированная causal fixture и отдельный обычный `ural5` описаны в
+[VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md); static PASS не подтверждает native
+выполнение новой ветки.
 Визуальное качество, физический ввод и удобство остаются NOT RUN: Computer Use,
 screenshots и GUI automation запрещены; hidden handlers этого не доказывают.
