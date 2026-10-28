@@ -3,13 +3,14 @@ $ErrorActionPreference='Stop'
 $work=Join-Path ([IO.Path]::GetTempPath()) ('aicf-scenario-contract-'+[guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($work)
 $script:checks=0
-function Fixture([string]$scenario,[switch]$BudgetProbe,[string]$Faction=''){
+function Fixture([string]$scenario,[switch]$BudgetProbe,[switch]$Adapter,[string]$Faction=''){
  $legs=1;$crew=5
  if($scenario -eq 'repeat5'){$legs=2}
  if($scenario -eq 'armed3'){$crew=3}
  if($scenario -eq 'solo1'){$crew=1}
  $argv=@('-gproj','source','-profile','profile','-addonsDir','addons','-addons','CORE,MAP','-aicfVehicleScenario',$scenario)
  if($BudgetProbe){$argv+=@('-aicfVehicleScenarioDismountBudget','1')}
+ if($Adapter){$argv+=@('-aicfVehicleScenarioDismountBudgetAdapter','1')}
  if($Faction){$argv+=@('-aicfVehicleScenarioFaction',$Faction)}
  [IO.File]::WriteAllText("$work/launcher.txt",'AICF_RUNTIME_MANIFEST_JSON='+(@{arguments=$argv}|ConvertTo-Json -Compress))
  $body='CLI Params: '+($argv -join ' ')+"`n[ROSTER_READY]`n"
@@ -33,6 +34,7 @@ function Fixture([string]$scenario,[switch]$BudgetProbe,[string]$Faction=''){
   for($i=0;$i -lt $crew;$i++){$body+="[MEMBER_TRACE] group=G position=$i selected_action=Drive:RUNNING executed_action=Drive:RUNNING`n"}
   $body+="[VEHICLE_SCENARIO_ARRIVAL] $prefix vehicle=V$leg distance_m=145 displacement_m=355 moving_polls=12 intent_revision=$revision goal=<500,0,0>`n"
   if($BudgetProbe){
+   if($Adapter){$body+="[VEHICLE_SCENARIO_DISMOUNT_BUDGET] scenario=ural5 operation_id=O1 event=ARRIVAL_ADAPTER normal_deadline_ms=0 terminal_deadline_ms=0 classification=CONTROLLED_DISMOUNT_BRANCH_ONLY source_reason=DESTINATION_REACHED native_arrival=1 route_generation=1 target_distance_m=145 dismount_radius_m=150 direct_phase_mutation=0`n"}
    foreach($attempt in 1..3){$body+="[VEHICLE_SCENARIO_DISMOUNT_BUDGET] scenario=ural5 operation_id=O1 event=FORCE_BATCH normal_deadline_ms=20000 terminal_deadline_ms=40000 charged=1 force_exit_attempts=$attempt native_calls=1 accepted_calls=1 logical_before=5 physical_relocation_attempts=0`n"}
    $body+="[VEHICLE_SCENARIO_DISMOUNT_BUDGET] scenario=ural5 operation_id=O1 event=PHYSICAL_GHOST normal_deadline_ms=20000 terminal_deadline_ms=40000 force_exit_attempts=3 logical_occupants=0 transitions=0 inside_bounds=1 exact_ghost=1 native_calls=5 physical_relocation_attempts=0`n"
    $body+="[VEHICLE_SCENARIO_DISMOUNT_BUDGET] scenario=ural5 operation_id=O1 event=NORMAL_RELOCATION normal_deadline_ms=20000 terminal_deadline_ms=40000 force_exit_attempts=3 physical_relocation_attempts=1 ghost_displacement_m=20 ghost_moved_clear=1 unchanged_deadlines=1 terminal_only=0 native_calls=5`n"
@@ -117,6 +119,9 @@ try{
   @('undisclosed-total','maximum_combined_batches_per_phase=6','maximum_combined_batches_per_phase=3'),
   @('lost-causal-check','rule=DISMOUNT_OPERATION_BUDGET_CAUSAL','rule=MISSING_CAUSAL_CHECK')
  )){Run $mutation[0] ($budget.Replace($mutation[1],$mutation[2])) 1 'ural5' -BudgetProbe}
+ $adapted=Fixture 'ural5' -BudgetProbe -Adapter
+ Run controlled-actual-arrival-adapter $adapted 0 'ural5' -BudgetProbe
+ foreach($mutation in @(@('adapter-source-reason','source_reason=DESTINATION_REACHED','source_reason=OTHER'),@('adapter-no-route','route_generation=1','route_generation=0'),@('adapter-not-arrived','target_distance_m=145','target_distance_m=151'),@('adapter-wrong-branch','classification=CONTROLLED_DISMOUNT_BRANCH_ONLY','classification=NORMAL_MANUAL'),@('adapter-phase-mutation','direct_phase_mutation=0','direct_phase_mutation=1'),@('adapter-missing-proof','native_arrival=1','native_arrival=0'),@('adapter-missing-receipt','event=ARRIVAL_ADAPTER','event=OTHER'))){Run $mutation[0] ($adapted.Replace($mutation[1],$mutation[2])) 1 'ural5' -BudgetProbe}
  $us=Fixture 'repeat5' -Faction US
  Run US-repeat-native-model-and-two-debits $us 0 'repeat5' -Faction US
  foreach($mutation in @(

@@ -1,26 +1,38 @@
+enum AICF_EVehicleBehavior
+{
+	TRANSPORT = 0,
+	COMBAT = 1
+}
+
 // Только стабильные адреса compartment и numeric position. Entity identity
 // принадлежит текущему trip и никогда не попадает в сохранённый рецепт.
 class AICF_VehiclePreset
 {
 	static const int MAX_BYTES = 16384;
 	static const int MAX_SEATS = 64;
+	static const int MIN_RETURN_DISTANCE = 50;
+	static const int MAX_RETURN_DISTANCE = 1000;
 	string m_sProfile;
 	string m_sFaction;
 	string m_sName;
 	ResourceName m_sPrefab;
+	int m_iBehavior = AICF_EVehicleBehavior.TRANSPORT;
+	int m_iReturnDistance = 300;
 	ref array<string> m_aSeats = {};
 	ref array<int> m_aMembers = {};
 
 	string Encode()
 	{
 		JsonSaveContext json = new JsonSaveContext();
-		json.WriteValue("schemaVersion", 1);
+		json.WriteValue("schemaVersion", 2);
 		json.WriteValue("profile", m_sProfile);
 		json.WriteValue("faction", m_sFaction);
 		json.WriteValue("name", m_sName);
 		json.WriteValue("prefab", m_sPrefab);
 		json.WriteValue("seats", m_aSeats);
 		json.WriteValue("members", m_aMembers);
+		json.WriteValue("behavior", m_iBehavior);
+		json.WriteValue("returnDistance", m_iReturnDistance);
 		return json.SaveToString();
 	}
 
@@ -30,10 +42,13 @@ class AICF_VehiclePreset
 		JsonLoadContext json = new JsonLoadContext();
 		AICF_VehiclePreset preset = new AICF_VehiclePreset();
 		int schema;
-		if (!json.LoadFromString(data) || !json.ReadValue("schemaVersion", schema) || schema != 1 ||
+		if (!json.LoadFromString(data) || !json.ReadValue("schemaVersion", schema) || (schema != 1 && schema != 2) ||
 			!json.ReadValue("profile", preset.m_sProfile) || !json.ReadValue("faction", preset.m_sFaction) ||
 			!json.ReadValue("name", preset.m_sName) || !json.ReadValue("prefab", preset.m_sPrefab) ||
 			!json.ReadValue("seats", preset.m_aSeats) || !json.ReadValue("members", preset.m_aMembers)) return null;
+		// Старый рецепт явно получает обычный транспорт и порог300м.
+		if (schema == 2 && (!json.ReadValue("behavior", preset.m_iBehavior) ||
+			!json.ReadValue("returnDistance", preset.m_iReturnDistance))) return null;
 		string reason;
 		if (!preset.ValidateShape(reason)) return null;
 		return preset;
@@ -41,6 +56,7 @@ class AICF_VehiclePreset
 
 	bool ValidateShape(out string reason)
 	{
+		if (!ValidBehavior(m_iBehavior, m_iReturnDistance)) { reason = "INVALID_VEHICLE_BEHAVIOR"; return false; }
 		reason = "INVALID_PRESET";
 		if (m_sProfile.IsEmpty() || m_sProfile.Length() > 80 || (m_sFaction != "US" && m_sFaction != "USSR") ||
 			!AICF_LoadoutPreset.ValidName(m_sName) || m_sPrefab.IsEmpty() || m_sPrefab.Length() > 256 ||
@@ -70,6 +86,12 @@ class AICF_VehiclePreset
 		return true;
 	}
 
+	static bool ValidBehavior(int behavior, int returnDistance)
+	{
+		return (behavior == AICF_EVehicleBehavior.TRANSPORT || behavior == AICF_EVehicleBehavior.COMBAT) &&
+			returnDistance >= MIN_RETURN_DISTANCE && returnDistance <= MAX_RETURN_DISTANCE;
+	}
+
 	bool Assign(int seatIndex, int member)
 	{
 		if (seatIndex < 0 || seatIndex >= m_aMembers.Count() || member < -1 || member >= AICF_Stage1Config.MAX_GROUP_SIZE) return false;
@@ -84,6 +106,7 @@ class AICF_VehiclePreset
 	bool SameAssignment(AICF_VehiclePreset other)
 	{
 		if (!other || m_sProfile != other.m_sProfile || m_sFaction != other.m_sFaction || m_sPrefab != other.m_sPrefab ||
+			m_iBehavior != other.m_iBehavior || m_iReturnDistance != other.m_iReturnDistance ||
 			m_aSeats.Count() != other.m_aSeats.Count()) return false;
 		for (int i; i < m_aSeats.Count(); i++)
 			if (m_aSeats[i] != other.m_aSeats[i] || m_aMembers[i] != other.m_aMembers[i]) return false;
@@ -141,6 +164,41 @@ class AICF_VehiclePreset
 		if (seats.Count() != m_aSeats.Count()) return false;
 		for (int i; i < seats.Count(); i++)
 			if (SeatKey(seats[i]) != m_aSeats[i]) return false;
+		return true;
+	}
+
+	// Runtime читает captured topology независимо от временных native allocation
+	// flags. Доступность остаётся отдельным permission gate перед GetIn/recovery.
+	static bool CollectCaptured(IEntity vehicle, AICF_VehiclePreset preset, array<BaseCompartmentSlot> seats)
+	{
+		seats.Clear();
+		if (!vehicle || !preset || preset.m_aSeats.IsEmpty() || preset.m_aSeats.Count() > MAX_SEATS ||
+			preset.m_aSeats.Count() != preset.m_aMembers.Count()) return false;
+		BaseCompartmentManagerComponent manager = BaseCompartmentManagerComponent.Cast(vehicle.FindComponent(BaseCompartmentManagerComponent));
+		if (!manager || manager.GetOwner() != vehicle) return false;
+		array<BaseCompartmentSlot> raw = {};
+		manager.GetCompartments(raw);
+		if (raw.IsEmpty() || raw.Count() > MAX_SEATS) return false;
+		array<string> keys = {};
+		foreach (BaseCompartmentSlot seat : raw)
+		{
+			if (!seat || seat.GetVehicle() != vehicle || !seat.GetOwner() || !seat.GetManager() ||
+				seat.GetManager().GetOwner() != seat.GetOwner() || RelativeOwnerIndex(seat) < 0) return false;
+			string key = SeatKey(seat);
+			if (keys.Contains(key)) return false;
+			keys.Insert(key);
+			// Catalog мог изначально исключить недоступные места. Новое доступное
+			// место вне captured recipe означает настоящую несовместимость.
+			if (!preset.m_aSeats.Contains(key) && seat.IsCompartmentAccessible()) return false;
+		}
+		array<BaseCompartmentSlot> resolved = {};
+		foreach (string captured : preset.m_aSeats)
+		{
+			int index = keys.Find(captured);
+			if (index < 0 || resolved.Contains(raw[index])) return false;
+			resolved.Insert(raw[index]);
+		}
+		seats.Copy(resolved);
 		return true;
 	}
 

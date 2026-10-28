@@ -1,5 +1,13 @@
 # Архитектура и навигация по исходникам
 
+Ручной preset теперь имеет retained `TACTICAL_DEPLOYMENT` для TRANSPORT/COMBAT:
+он сохраняет ту же оплачиваемую машину между пешими эпизодами. BehaviorFlow
+владеет физическими операциями и возвращает typed outcomes; Controller остаётся
+владельцем переходов и Handoff/OrderPlanner остаётся владельцем waypoint.
+Отдельная weak native policy сдерживает конкурирующую auto посадку/замену crew.
+Новые разрешения короткой видимой коррекции и сроки — [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md).
+Описания одноразового COMPLETE ниже сохраняются для automatic trips и старого evidence.
+
 `AICF_TransportCombatHold` — read-only proof текущего собственного
 `SCR_AIVehicleCombatActivity` для ручного vehicle preset в TRANSIT. Проверяются
 current/owned native action, vehicle manager, lease/entity/Rpl/generations,
@@ -292,6 +300,15 @@ sentinel classifier безусловно отказывает до чтения 
 После `OnMoveFailed` повторно сверяются failure identity и executed action;
 синхронно заменённый action не завершается.
 
+Для recruitment `STUCK`/`UNREACHABLE` с exact `DEFAULT_HANDLER_ID` и единственным
+AI участником `AICF_RecruitmentMoveFailure` сохраняет immutable receipt до
+native callback. Service проверяет живую регистрацию exact order и graph,
+slot — свой exact order pointer; только прежняя repair attempt может списать
+этот receipt и назначить безопасный перенос до8m. Node не ремонтирует waypoint,
+не покупает бойцов и не переносит actor. Все cross-tick identity/authority/age,
+физические guards и consume-before-Teleport находятся в профильном helper.
+Подробности и ограничения: [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md).
+
 Native defend allocation может получить удалённый вход после смены приказа.
 `AICF_AINodeLifecycle` возвращает FAIL только для invalid input управляемой
 server infantry, сохраняя native delegate валидных/чужих nodes. Он не подменяет
@@ -460,3 +477,5 @@ faction и content profile. Server validation повторяется перед 
 Не переименовывай events или `key=value` поля без синхронного обновления
 анализаторов и этих заметок. Static, compile и runtime — отдельные gates:
 [TESTING.md](TESTING.md).
+
+Native garbage не владеет удалением cap-held машины AICF. Fleet после binding устанавливает lease-owned `AICF_VehicleGarbagePermission`; weak registry позволяет callbacks проверить exact physical identity и owner. Pending/failed cleanup сохраняет protection до safety-approved transfer. `RelinquishReleasedVehicleReference` снимает registry до очистки reference; после собственного veto native tracking восстанавливается через обычный Insert. При owner destructor проверяется captured entity/Rpl/master без уничтоженных weak owners; другой current owner запрещает stale restore. Детали: [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md#native-garbage-и-удерживаемая-машина).

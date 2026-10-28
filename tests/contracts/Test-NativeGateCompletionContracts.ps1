@@ -37,7 +37,9 @@ function Rules([string]$text,[string]$state,[string]$transit,[string]$control=$c
  $controllerStop=Body $control 'AbortForStop';$invalid=$controllerStop.IndexOf('if (!trip.IsValid())')
  if($invalid -lt 0){'INVALID_TRIP_STOP_DETACHES_LOCAL_OBSERVER';return}
  $before=ConvertTo-AICFCodeText $controllerStop.Substring(0,$invalid)
- if($before -notmatch '(?s)^\s*\{\s*if \(!trip\)\s*return AICF_TripOutcome.TerminalFailClosed\([^;]+\);\s*AICF_VehicleMovementState stopMovement = trip.GetMovementState\(\);\s*if \(stopMovement\) stopMovement.SetNativeGate\(null\);\s*$' -or
+ # Новый lifecycle также снимает identity-safe tactical tokens до invalid-trip
+ # return. Разрешаем только этот конкретный cleanup, не произвольные actions.
+ if($before -notmatch '(?s)^\s*\{\s*if \(!trip\)\s*return AICF_TripOutcome.TerminalFailClosed\([^;]+\);\s*AICF_VehicleMovementState stopMovement = trip.GetMovementState\(\);\s*if \(stopMovement\) stopMovement.SetNativeGate\(null\);\s*m_BehaviorFlow.Stop\(trip\);\s*$' -or
   $before -match 'AbortOwnedActions|CancelResidualOwnedEffects|TransitionTo\('){'INVALID_TRIP_STOP_DETACHES_LOCAL_OBSERVER'}
 }
 $issues=@(Rules $source $movement $flow);if($issues.Count){throw "Native gate completion contracts: $issues"}
@@ -99,7 +101,7 @@ $code=$code.Replace('SETTER',$setter).Replace('ATTACH',$attach).Replace('CALLBAC
 $controllerStop=Body $controller 'AbortForStop'
 $prelude=$controllerStop.Substring(0,$controllerStop.IndexOf('if (reason.IsEmpty())'))
 $prelude=$prelude.Replace('if (!trip)','if (trip == null)').Replace('AICF_VehicleMovementState','AICF_CallbackMovement').Replace('if (stopMovement)','if (stopMovement != null)')
-$stopCode='public class AICF_TripOutcome { public string Reason; public AICF_TripOutcome(string reason){Reason=reason;} public static AICF_TripOutcome TerminalFailClosed(string reason,string cause){return new AICF_TripOutcome(reason);} } public class AICF_CallbackController { public int ReleaseCalls; public void ReleaseSpawnPlan(AICF_CallbackTrip trip,string reason){ReleaseCalls++;} public AICF_TripOutcome AbortForStop(AICF_CallbackTrip trip,string reason) '+$prelude+' return new AICF_TripOutcome("VALID_AFTER_LOCAL_STOP"); } }'
+$stopCode='public class AICF_TripOutcome { public string Reason; public AICF_TripOutcome(string reason){Reason=reason;} public static AICF_TripOutcome TerminalFailClosed(string reason,string cause){return new AICF_TripOutcome(reason);} } public class AICF_CallbackBehavior { public int StopCalls; public void Stop(AICF_CallbackTrip trip){if(trip==null) throw new Exception("null tactical stop"); StopCalls++;} } public class AICF_CallbackController { public AICF_CallbackBehavior m_BehaviorFlow=new AICF_CallbackBehavior(); public int ReleaseCalls; public void ReleaseSpawnPlan(AICF_CallbackTrip trip,string reason){ReleaseCalls++;} public AICF_TripOutcome AbortForStop(AICF_CallbackTrip trip,string reason) '+$prelude+' return new AICF_TripOutcome("VALID_AFTER_LOCAL_STOP"); } }'
 $code+=$stopCode
 Add-Type -TypeDefinition $code
 function Setup {
@@ -125,9 +127,9 @@ $owner=New-Object AICF_CallbackController;$case=Setup;$case.trip.Valid=$false;$b
 $result=$owner.AbortForStop($case.trip,'test')
 if($case.action.State -ne $beforeState){throw 'Invalid trip local observer Stop changed native action state'}
 $case.action.Complete()
-if($result.Reason -ne 'STOP_TRIP_IDENTITY_INVALID' -or !$case.gate.m_bStopped -or $case.action.m_OnActionCompleted.List.Count -or $case.gate.m_bReturnCompleted -or $owner.ReleaseCalls -ne 1){throw 'Invalid trip Stop skipped listener removal or accepted late completion'};$controls++
+if($result.Reason -ne 'STOP_TRIP_IDENTITY_INVALID' -or !$case.gate.m_bStopped -or $case.action.m_OnActionCompleted.List.Count -or $case.gate.m_bReturnCompleted -or $owner.ReleaseCalls -ne 1 -or $owner.m_BehaviorFlow.StopCalls -ne 1){throw 'Invalid trip Stop skipped listener removal or accepted late completion'};$controls++
 $owner=New-Object AICF_CallbackController;$result=$owner.AbortForStop($null,'test')
-if($result.Reason -ne 'STOP_TRIP_IDENTITY_INVALID' -or $owner.ReleaseCalls){throw 'Null trip Stop dereferenced trip or changed legacy release behavior'};$controls++
+if($result.Reason -ne 'STOP_TRIP_IDENTITY_INVALID' -or $owner.ReleaseCalls -or $owner.m_BehaviorFlow.StopCalls){throw 'Null trip Stop dereferenced trip or changed legacy release behavior'};$controls++
 $trip=New-Object AICF_CallbackTrip;$trip.Valid=$false;$trip.State=$null;$result=$owner.AbortForStop($trip,'test')
 if($result.Reason -ne 'STOP_TRIP_IDENTITY_INVALID'){throw 'Missing movement state invalid Stop did not fail closed'};$controls++
 "PASS Native gate completion: exact native callback survives Completed-to-Evaluated recycling; wrong/stale/canceled/stopped/replaced callbacks rejected; Insert/Remove lifecycle and physical/deadline proof preserved; controls=$controls"

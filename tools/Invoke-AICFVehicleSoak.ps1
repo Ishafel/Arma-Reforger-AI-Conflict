@@ -10,7 +10,8 @@ param(
     [string]$StageRoot,
     [switch]$SkipCompile,
     [ValidateRange(1,65535)][int]$ServerPort=2510,
-    [ValidateSet('US','USSR','BOTH')][string]$AICommanderMode='BOTH'
+    [ValidateSet('US','USSR','BOTH')][string]$AICommanderMode='BOTH',
+    [ValidateSet(1,2,3)][int]$ProofVersion=2
 )
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'AICF_VehicleSoakSources.ps1')
@@ -18,6 +19,9 @@ $taskRepository=(Resolve-Path -LiteralPath $RepositoryRoot).Path
 $taskEvidence=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($EvidenceRoot)
 if(Test-Path -LiteralPath $taskEvidence){throw 'EvidenceRoot must be new'}
 [void][IO.Directory]::CreateDirectory($taskEvidence)
+$taskAuditScript=Join-Path $taskEvidence 'Test-VehicleSoakLog.ps1'
+Copy-Item -LiteralPath (Join-Path $taskRepository 'tests/log-audits/Test-VehicleSoakLog.ps1') -Destination $taskAuditScript
+$taskAuditHash=(Get-FileHash -LiteralPath $taskAuditScript -Algorithm SHA256).Hash
 $taskCommit=(& git -C $taskRepository rev-parse --verify "$SourceRef^{commit}").Trim()
 if($LASTEXITCODE -ne 0){throw 'Cannot resolve source commit'}
 $taskOwnStage=!$StageRoot
@@ -63,7 +67,7 @@ if(!$taskOwnStage){
     }
 }
 $taskHashes=@(Get-AICFVehicleSoakSources $StageRoot)
-[pscustomobject]@{base_commit=$taskCommit;working_tree=$taskWorkingTree;origin_manifest=$taskOriginManifest;stage=$StageRoot;faction=$Faction;duration_seconds=$DurationSeconds;mounted_hold_seconds=$MountedHoldSeconds;files=$taskHashes}|ConvertTo-Json -Depth 5|Set-Content -LiteralPath (Join-Path $taskEvidence 'source-manifest.json')
+[pscustomobject]@{base_commit=$taskCommit;working_tree=$taskWorkingTree;origin_manifest=$taskOriginManifest;stage=$StageRoot;faction=$Faction;duration_seconds=$DurationSeconds;mounted_hold_seconds=$MountedHoldSeconds;proof_version=$ProofVersion;auditor=$taskAuditScript;auditor_sha256=$taskAuditHash;files=$taskHashes}|ConvertTo-Json -Depth 5|Set-Content -LiteralPath (Join-Path $taskEvidence 'source-manifest.json')
 if(!$SkipCompile){
     $taskPlan=@(& (Join-Path $taskRepository 'tools/Start-AICFRuntime.ps1') -Role Client -Variant Stock -RepositoryRoot $StageRoot -DryRun)
     $taskPlan|Set-Content -LiteralPath (Join-Path $taskEvidence 'compile-plan.txt')
@@ -89,9 +93,10 @@ $taskNativeExit|Set-Content -LiteralPath (Join-Path $taskEvidence 'native-exit.t
 Assert-AICFVehicleSoakSources $StageRoot $taskHashes
 $taskConsole=Get-ChildItem -LiteralPath (Join-Path $taskProfile 'logs') -Recurse -Filter console.log|Select-Object -First 1
 if(!$taskConsole){throw 'No full console log'}
-& (Join-Path $taskRepository 'tests/log-audits/Test-VehicleSoakLog.ps1') -LogPath $taskConsole.FullName -EvidenceRoot $taskEvidence -Faction $Faction -MinimumSeconds $DurationSeconds *> (Join-Path $taskEvidence 'audit.txt')
+if((Get-FileHash -LiteralPath $taskAuditScript -Algorithm SHA256).Hash -ne $taskAuditHash){throw 'Frozen soak auditor changed during run'}
+& $taskAuditScript -LogPath $taskConsole.FullName -EvidenceRoot $taskEvidence -Faction $Faction -MinimumSeconds $DurationSeconds -ProofVersion $ProofVersion *> (Join-Path $taskEvidence 'audit.txt')
 $taskAuditExit=$LASTEXITCODE
-[pscustomobject]@{faction=$Faction;native_exit=$taskNativeExit;audit_exit=$taskAuditExit;console=$taskConsole.FullName;wall_seconds=($taskEnded-$taskStarted).TotalSeconds}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $taskEvidence 'summary.json')
+[pscustomobject]@{faction=$Faction;proof_version=$ProofVersion;auditor_sha256=$taskAuditHash;native_exit=$taskNativeExit;audit_exit=$taskAuditExit;console=$taskConsole.FullName;wall_seconds=($taskEnded-$taskStarted).TotalSeconds}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $taskEvidence 'summary.json')
 "SOAK_FINISHED=$Faction NATIVE_EXIT=$taskNativeExit AUDIT_EXIT=$taskAuditExit"
 if($taskNativeExit -ne 0 -or $taskAuditExit -ne 0){exit 1}
 exit 0

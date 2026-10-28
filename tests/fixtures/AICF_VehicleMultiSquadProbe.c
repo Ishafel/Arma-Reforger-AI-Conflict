@@ -279,6 +279,7 @@ class AICF_MultiSquadCase
 	int m_iLastAlive = -1;
 	bool m_bFinalTarget;
 	bool m_bFootComplete;
+	bool m_bRetainedFoot;
 	ref array<string> m_aFailures = {};
 }
 
@@ -749,6 +750,74 @@ modded class AICF_MatchController
 			slot.GetTargetPosition() == item.m_vGoal;
 	}
 
+	// Новый manual endpoint сохраняет оплаченный lease. Это physical FOOT
+	// при восстановленном приказе, а не выдуманный normal COMPLETE.
+	protected bool AICF_MultiRetainedFoot(AICF_MultiSquadCase item, AICF_GroupSlot slot, AICF_TransportTrip trip, bool publish = true)
+	{
+		if (!AICF_MultiRoster(item, slot) || !AICF_MultiCurrentFinalIntent(item, slot) || !trip ||
+			trip.GetPhase() != AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT || trip.GetOperationId() != item.m_sOperation ||
+			!trip.IsVehiclePresetCurrent() || !trip.GetVehiclePreset() || !trip.GetLease() ||
+			trip.GetBehaviorState().m_bReboarding || !trip.GetHandoffState().IsOrderRestored()) return false;
+		AICF_VehicleLease lease = trip.GetLease();
+		Vehicle vehicle = lease.GetVehicle();
+		if (!vehicle || lease.GetState() != AICF_EVehicleLeaseState.ACTIVE || vehicle.GetID() != item.m_VehicleId ||
+			lease.GetRplId() != item.m_sRpl || lease.GetLeaseGeneration() != item.m_iLeaseGeneration ||
+			lease.GetVehicleGeneration() != item.m_iVehicleGeneration) return false;
+		if (!lease.MatchesTripIdentity(item.m_sFaction, item.m_iSlot, item.m_iGeneration, trip.GetTripGeneration()) ||
+			!lease.MatchesEntityIdentity(vehicle, vehicle.GetID(), AICF_VehicleBehaviorBinding.ComponentRpl(vehicle))) return false;
+		AICF_VehicleWatchdog watchdog = new AICF_VehicleWatchdog();
+		int logical, transitions, insideBounds, nonAlive;
+		string samples;
+		if (!watchdog.InspectProtectedMemberDismountClearance(slot.GetGroup(), vehicle, logical, transitions, insideBounds, nonAlive, samples)) return false;
+		vector boundsMin, boundsMax;
+		vehicle.GetBounds(boundsMin, boundsMax);
+		array<string> receipts = {};
+		for (int position; position < 5; position++)
+		{
+			ChimeraCharacter actor = ChimeraCharacter.Cast(slot.GetRosterMember(position));
+			if (!actor || actor.GetID() != item.m_aMembers[position] || !AICF_VehicleShortRecovery.IsCurrentMember(trip, actor)) return false;
+			CompartmentAccessComponent access = actor.GetCompartmentAccessComponent();
+			if (!access) return false;
+			bool linked = CompartmentAccessComponent.GetVehicleIn(actor) != null;
+			bool compartment = access.IsInCompartment();
+			bool gettingIn = access.IsGettingIn();
+			bool gettingOut = access.IsGettingOut();
+			bool characterVehicle = actor.IsInVehicle();
+			vector local = vehicle.CoordToLocal(actor.GetOrigin());
+			bool inside = local[0] >= boundsMin[0] - 0.5 && local[0] <= boundsMax[0] + 0.5 &&
+				local[1] >= boundsMin[1] - 0.5 && local[1] <= boundsMax[1] + 0.5 &&
+				local[2] >= boundsMin[2] - 0.5 && local[2] <= boundsMax[2] + 0.5;
+			if (linked || compartment || gettingIn || gettingOut || characterVehicle || inside) return false;
+			if (trip.GetLastTransitionReason() == "LOCAL_THREAT" && vector.DistanceXZ(actor.GetOrigin(), item.m_vGoal) > 35) return false;
+			string receipt = string.Format("operation_id=%1 position=%2 member=%3 linked=%4 in_compartment=%5 getting_in=%6 getting_out=%7 character_vehicle=%8 inside_bounds=%9",
+				item.m_sOperation, position, actor.GetID(), linked, compartment, gettingIn, gettingOut, characterVehicle, inside);
+			receipts.Insert(receipt);
+		}
+		if (!publish) return true;
+		foreach (string receipt : receipts) AICF_MultiLog("RETAINED_MEMBER", item.m_sFaction, item.m_iSlot, receipt);
+		string details = string.Format("operation_id=%1 vehicle=%2 rpl=%3 lease_generation=%4 vehicle_generation=%5 logical_occupants=%6 transitions=%7 inside_bounds=%8 non_alive=%9",
+			item.m_sOperation, vehicle.GetID(), lease.GetRplId(), lease.GetLeaseGeneration(), lease.GetVehicleGeneration(), logical, transitions, insideBounds, nonAlive);
+		details += " phase=TACTICAL_DEPLOYMENT order_restored=1 original_members=5";
+		AICF_MultiLog("RETAINED_CLEARANCE", item.m_sFaction, item.m_iSlot, details);
+		return true;
+	}
+
+	protected bool AICF_MultiTemporaryDeployment(AICF_MultiSquadCase item, AICF_GroupSlot slot, AICF_TransportTrip trip)
+	{
+		if (!AICF_MultiRoster(item, slot) || !trip || !trip.IsVehiclePresetCurrent() || !trip.GetLease() ||
+			trip.GetPhase() != AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT || trip.GetOperationId() != item.m_sOperation) return false;
+		AICF_VehicleLease lease = trip.GetLease();
+		Vehicle vehicle = lease.GetVehicle();
+		if (!vehicle || vehicle.GetID() != item.m_VehicleId || lease.GetRplId() != item.m_sRpl ||
+			lease.GetLeaseGeneration() != item.m_iLeaseGeneration || lease.GetVehicleGeneration() != item.m_iVehicleGeneration ||
+			lease.GetState() != AICF_EVehicleLeaseState.ACTIVE) return false;
+		if (!lease.MatchesTripIdentity(item.m_sFaction, item.m_iSlot, item.m_iGeneration, trip.GetTripGeneration()) ||
+			!lease.MatchesEntityIdentity(vehicle, vehicle.GetID(), AICF_VehicleBehaviorBinding.ComponentRpl(vehicle))) return false;
+		if (trip.GetAssignment().GetStrategicIntentRevision() != slot.GetStrategicIntentRevision() ||
+			trip.GetAssignment().GetTargetPosition() != slot.GetTargetPosition()) return false;
+		return item.m_iLeg == 0 || (slot.GetStrategicIntentRevision() == item.m_iRevision && slot.GetTargetPosition() == item.m_vGoal);
+	}
+
 	protected void AICF_MultiTick(AICF_MultiSquadCase item, int now)
 	{
 		AICF_GroupSlot slot = AICF_MultiSlot(item);
@@ -846,6 +915,9 @@ modded class AICF_MatchController
 		}
 		if (item.m_iPhase == 3)
 		{
+			// Временный пеший бой сохраняет trip. Пока он не вернулся в TRANSIT,
+			// Sample не считает машину активной и честно сбрасывает stable30s.
+			if (AICF_MultiTemporaryDeployment(item, slot, trip)) return;
 			if (trip.GetPhase() != AICF_ETransportTripPhase.TRANSIT) { AICF_MultiFail(item, "TRIP_ENDED_BEFORE_CAPACITY_COHORTS"); return; }
 			// Отдельный stationary oracle: штатный preset ждёт первую цель.
 			// Site selection/clearance остаются production; занятый pad не обходится.
@@ -876,15 +948,24 @@ modded class AICF_MatchController
 			item.m_iPhase = 6;
 			AICF_MultiLog("DISMOUNTED", item.m_sFaction, item.m_iSlot, string.Format("operation_id=%1 alive=5 in_vehicle=0 normal_complete=1 intent_revision=%2 position=%3", item.m_sOperation, slot.GetStrategicIntentRevision(), slot.GetTargetPosition()));
 		}
+		if (item.m_iPhase == 5 && AICF_MultiRetainedFoot(item, slot, trip))
+		{
+			item.m_iPhase = 6;
+			item.m_bRetainedFoot = true;
+			AICF_MultiLog("DISMOUNTED", item.m_sFaction, item.m_iSlot, string.Format("operation_id=%1 alive=5 in_vehicle=0 normal_complete=0 retained_manual=1 phase=TACTICAL_DEPLOYMENT order_restored=1 intent_revision=%2 position=%3", item.m_sOperation, slot.GetStrategicIntentRevision(), slot.GetTargetPosition()));
+		}
 		if (item.m_iPhase == 6)
 		{
+			if (item.m_bRetainedFoot && !AICF_MultiRetainedFoot(item, slot, trip, false)) return;
 			float farthest;
 			for (int actor; actor < 5; actor++) farthest = Math.Max(farthest, vector.DistanceXZ(slot.GetRosterMember(actor).GetOrigin(), item.m_vGoal));
 			if (farthest <= 35)
 			{
 				item.m_bFootComplete = true;
 				item.m_iPhase = 7;
-				AICF_MultiLog("FOOT_ARRIVAL", item.m_sFaction, item.m_iSlot, string.Format("operation_id=%1 alive=5 farthest_m=%2 position=%3 intent_revision=%4 leg=%5", item.m_sOperation, farthest, slot.GetTargetPosition(), slot.GetStrategicIntentRevision(), item.m_iLeg));
+				string retainedDetails;
+				if (item.m_bRetainedFoot) retainedDetails = " retained_manual=1 in_vehicle=0 phase=TACTICAL_DEPLOYMENT order_restored=1";
+				AICF_MultiLog("FOOT_ARRIVAL", item.m_sFaction, item.m_iSlot, string.Format("operation_id=%1 alive=5 farthest_m=%2 position=%3 intent_revision=%4 leg=%5", item.m_sOperation, farthest, slot.GetTargetPosition(), slot.GetStrategicIntentRevision(), item.m_iLeg) + retainedDetails);
 			}
 		}
 	}

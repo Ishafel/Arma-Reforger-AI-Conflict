@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Изменить поведение TRANSPORT/COMBAT, N возврата, замену потерь и разрешённую короткую принудительную посадку | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md), BehaviorFlow/Policy/ShortRecovery и retained TACTICAL_DEPLOYMENT |
 | Разобрать native UNKNOWN во время подхода к площадке техники | [VEHICLE_APPROACH_FAILURE.md](VEHICLE_APPROACH_FAILURE.md); exact phase-owned failure receipt и отдельный controlled native probe |
 | Передать игроку визуальную проверку окна техники и подтверждения состава | [VEHICLE_VISUAL_CHECK.md](VEHICLE_VISUAL_CHECK.md); terminal probes не заменяют этот NOT RUN |
 | Проверить2→4→6 машин на сторону и native combat hold/release/resume | [VEHICLE_MULTISQUAD.md](VEHICLE_MULTISQUAD.md), MultiSquad/TransportCombatResume fixtures и их terminal runners/log auditors |

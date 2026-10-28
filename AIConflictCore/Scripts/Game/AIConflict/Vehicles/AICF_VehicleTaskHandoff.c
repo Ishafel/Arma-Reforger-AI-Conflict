@@ -48,8 +48,25 @@ class AICF_VehicleTaskHandoff
 		SCR_AIGroupUtilityComponent groupUtility = group.GetGroupUtilityComponent();
 		if (!usage || !groupUtility)
 			return false;
+		AICF_VehicleBehaviorBinding binding;
+		if (trip.GetVehiclePreset())
+		{
+			// AddUsableVehicle создаёт native combat activity. Policy уже должна
+			// владеть initial/resumed entry до её первого native Evaluate/GetOut.
+			if (!AICF_VehicleBehaviorPolicy.IsBehaviorPhase(trip.GetPhase())) return false;
+			AICF_VehicleBehaviorPolicy.Register(trip);
+			binding = AICF_VehicleBehaviorPolicy.Find(vehicle);
+			if (!binding || binding.m_Trip != trip)
+			{
+				AICF_VehicleBehaviorPolicy.Unregister(trip);
+				return false;
+			}
+		}
 		groupUtility.AddUsableVehicle(usage);
-		return groupUtility.IsUsableVehicle(usage);
+		bool attached = groupUtility.IsUsableVehicle(usage);
+		if (binding && !binding.IsCurrent()) attached = false;
+		if (!attached && trip.GetVehiclePreset()) AICF_VehicleBehaviorPolicy.Unregister(trip);
+		return attached;
 	}
 
 	void DetachVehicleUtility(AICF_TransportTrip trip)
@@ -417,7 +434,9 @@ class AICF_VehicleTaskHandoff
 		// awaiting-command safety state: its dedicated reliability branch may rebuild
 		// the same HQ Defend waypoint, but it must never consume generic stuck/task-
 		// loss recovery budgets.
-		if (!slot.IsSystemHoldOrder())
+		// Повторный physical proof не начинает новую durability-проверку поверх
+		// текущей: её attempt owner, исходный clock и stable polls сохраняются.
+		if (!slot.IsSystemHoldOrder() && !slot.IsPendingOrderRecoveryContextCurrent())
 			slot.BeginOrderRecoveryVerification("VEHICLE_HANDOFF");
 		string handoffMode = "OPERATIONAL_ORDER_RESTORE";
 		if (slot.IsLoneSurvivorRetreat())

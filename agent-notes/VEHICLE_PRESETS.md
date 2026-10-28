@@ -8,8 +8,21 @@ vehicle revision и library revision. Чужая faction в рецепте не 
 
 ## Рецепт и каталог
 
-`AICF_VehiclePreset` хранит schemaVersion=1, profile, faction, имя, точный prefab,
+`AICF_VehiclePreset` хранит schemaVersion=2, profile, faction, имя, точный prefab,
 полную topology мест и numeric position для каждого места; -1 означает свободное.
+Дополнительно сохраняются `behavior` (`AICF_EVehicleBehavior.TRANSPORT=0` либо
+`COMBAT=1`) и `returnDistance`: целый порог возврата50..1000м, default300м по
+решению пользователя. Старый schemaVersion1 читается как TRANSPORT/300; schema2
+требует оба поля. Неизвестный enum/версия и порог вне диапазона отклоняются
+до изменения binding или библиотеки. Mode/N входят в `SameAssignment`, поэтому
+их фактическое изменение создаёт новую конфигурацию, точный повтор остаётся
+идемпотентным. Store envelope остаётся schema1; внутри него хранится новый рецепт.
+В окне «Техника» есть отдельный выбор поведения и поле порога в метрах.
+Save/Apply/SELECT читают целое значение; периодический readback не перетирает
+ввод, смена выбранной модели сохраняет mode/N. Load читает сохранённые значения.
+Это настройка lifecycle: транспорт высаживает состав при угрозе; боевая единица
+оставляет экипаж у оружия, высаживая десант. Runtime gates проверяются отдельно
+от schema/UI и описываются по фактическому результату текущего прогона.
 Entity/Rpl IDs не сохраняются. Переназначение освобождает прежнее место бойца.
 Raw дубликаты member/seat, неизвестная topology и неактивные позиции отклоняются.
 Apply требует заполненные Pilot/Turret/attached-turret seats. Если назначена лишь

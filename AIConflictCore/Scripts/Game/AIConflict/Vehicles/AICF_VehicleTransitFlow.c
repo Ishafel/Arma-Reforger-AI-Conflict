@@ -279,6 +279,7 @@ class AICF_VehicleTransitFlow
 				state.RecordPresetWaitingTarget(assignment.GetAssignmentRevision(), assignment.GetTargetPosition());
 				return AICF_TripOutcome.Wait("PRESET_WAITING_FOR_DESTINATION", causationId);
 			}
+			if (trip.GetVehiclePreset()) return AICF_TripOutcome.StartTacticalDeployment("DESTINATION_REACHED", causationId);
 			return AICF_TripOutcome.StartDismount("TACTICAL_TARGET_WITHIN_DISMOUNT_RANGE", causationId);
 		}
 
@@ -317,6 +318,9 @@ class AICF_VehicleTransitFlow
 
 		AICF_VehicleMovementState state = trip.GetMovementState();
 		EnsureStateStarted(trip, state, nowMs);
+		AICF_VehicleBehaviorFlow behavior = new AICF_VehicleBehaviorFlow(m_Config);
+		AICF_TripOutcome behaviorOutcome = behavior.InspectTransit(trip, causationId);
+		if (behaviorOutcome) return behaviorOutcome;
 		string nativeAbandonDetails;
 		if (AICF_TransportNativeAbandon.Observe(trip, nativeAbandonDetails))
 		{
@@ -341,6 +345,21 @@ class AICF_VehicleTransitFlow
 			return PrepareRoute(trip, causationId);
 		if (state.GetSupersededRouteWaypoint())
 			return AICF_TripOutcome.StartMovement("ROUTE_RECONCILIATION_REQUIRED", causationId);
+
+		Vehicle vehicle = trip.GetLease().GetVehicle();
+		float targetDistanceMeters = vector.DistanceXZ(
+			vehicle.GetOrigin(),
+			state.GetTacticalTarget());
+		// Только уже staged route имеет осмысленный tactical target. Native
+		// completion у настоящего arrival не является потерей маршрута.
+		if (state.GetRouteGeneration() > 0 && targetDistanceMeters <= m_Config.GetDismountDistanceMeters())
+		{
+			AbortOwnedActions(trip);
+			if (trip.GetVehiclePreset()) return AICF_TripOutcome.StartTacticalDeployment("DESTINATION_REACHED", causationId);
+			return AICF_TripOutcome.StartDismount("DISEMBARK_POSITION_REACHED", causationId);
+		}
+		AICF_TripOutcome lostRoute = RecoverLostNativeRoute(trip, causationId);
+		if (lostRoute) return lostRoute;
 		if (!state.GetRouteWaypoint())
 		{
 			if (state.IsCrewRecoveryRoutePending())
@@ -349,16 +368,6 @@ class AICF_VehicleTransitFlow
 		}
 		if (!state.IsRouteWaypointBound())
 			return AICF_TripOutcome.StartMovement("ROUTE_BIND_REQUIRED", causationId);
-
-		Vehicle vehicle = trip.GetLease().GetVehicle();
-		float targetDistanceMeters = vector.DistanceXZ(
-			vehicle.GetOrigin(),
-			state.GetTacticalTarget());
-		if (targetDistanceMeters <= m_Config.GetDismountDistanceMeters())
-		{
-			AbortOwnedActions(trip);
-			return AICF_TripOutcome.StartDismount("DISEMBARK_POSITION_REACHED", causationId);
-		}
 
 		if (!m_Watchdog.IsGroupCohesiveAroundVehicle(
 			trip.GetAssignment().GetGroup(),
@@ -373,6 +382,31 @@ class AICF_VehicleTransitFlow
 			causationId,
 			nowMs,
 			targetDistanceMeters);
+	}
+
+	static bool NeedsRouteQueueRecovery(bool cachedBound, int routeGeneration, AIWaypoint route, array<AIWaypoint> queued)
+	{
+		return cachedBound && routeGeneration > 0 && (!route || !queued.Contains(route));
+	}
+
+	protected AICF_TripOutcome RecoverLostNativeRoute(AICF_TransportTrip trip, string causationId)
+	{
+		AICF_VehicleMovementState state = trip.GetMovementState();
+		array<AIWaypoint> queued = {};
+		trip.GetAssignment().GetGroup().GetWaypoints(queued);
+		if (!NeedsRouteQueueRecovery(state.IsRouteWaypointBound(), state.GetRouteGeneration(), state.GetRouteWaypoint(), queued)) return null;
+		string reason = "NATIVE_ROUTE_WAYPOINT_LOST";
+		AICF_Stage3Diagnostics.Warning("TRANSPORT_NATIVE_ROUTE_WAYPOINT_LOST", FormatIdentity(trip, reason) + string.Format(
+			" route_waypoint=%1 queue_count=%2 cached_bound=1 actual_queued=0 route_generation=%3 mobility_attempts=%4 maximum_attempts=%5 recovery_mode=ROUTE_REBUILD_ONLY",
+			AICF_GroupTrace.Entity(state.GetRouteWaypoint()), queued.Count(), state.GetRouteGeneration(),
+			state.GetMobilityRecoveryAttempts(), state.GetMaximumMobilityRecoveryAttempts()));
+		if (!state.BeginMobilityRecovery())
+		{
+			if (state.IsRecoveryEvidencePending()) ReportPendingRecoveryFailure(trip, reason, true);
+			return FailRecovery(trip, "NATIVE_ROUTE_WAYPOINT_LOST_RECOVERY_EXHAUSTED", "MOBILITY", causationId);
+		}
+		if (state.IsRecoveryEvidencePending()) ReportPendingRecoveryFailure(trip, reason, false);
+		return BeginMobilityRecovery(trip, causationId, reason, false);
 	}
 
 	void AbortOwnedActions(AICF_TransportTrip trip)
@@ -399,6 +433,12 @@ class AICF_VehicleTransitFlow
 	protected AICF_TripOutcome ObserveNativeCombat(AICF_TransportTrip trip, string causationId, int nowMs)
 	{
 		AICF_VehicleMovementState state = trip.GetMovementState();
+		if (AICF_VehicleBehaviorPolicy.HasTransportCombatOverride(trip))
+		{
+			if (state.GetNativeCombatActivity()) ReportNativeCombat(trip, "TRANSPORT_NATIVE_COMBAT_ENDED", "EXPLICIT_DISTANT_TRANSPORT_ORDER", nowMs);
+			state.ClearNativeCombatHold();
+			return null;
+		}
 		SCR_AIVehicleCombatActivity activity = AICF_TransportCombatHold.ResolveCurrentCombat(trip);
 		if (activity != state.GetNativeCombatActivity())
 		{
@@ -753,7 +793,7 @@ class AICF_VehicleTransitFlow
 			return driverOutcome;
 		state.SetLastDriver(driverSnapshot.GetOccupant());
 
-		if (trip.GetLease().GetKind() != AICF_EVehicleKind.ARMED_LIGHT)
+		if (!RequiresGunner(trip))
 			return null;
 		AICF_TripOutcome nativeGunnerEntry = ObserveNativeCrewEntry(trip, EAICompartmentType.Turret, causationId, nowMs);
 		if (nativeGunnerEntry) return nativeGunnerEntry;
@@ -773,6 +813,20 @@ class AICF_VehicleTransitFlow
 			return gunnerOutcome;
 		state.SetLastGunner(gunnerSnapshot.GetOccupant());
 		return null;
+	}
+
+	// После потерь Pilot имеет приоритет. Пустая turret в изменённой trip-копии
+	// означает degraded машину, а не доказательство потери подвижности.
+	protected bool RequiresGunner(AICF_TransportTrip trip)
+	{
+		if (trip.GetLease().GetKind() != AICF_EVehicleKind.ARMED_LIGHT) return false;
+		AICF_VehiclePreset preset = trip.GetVehiclePreset();
+		if (!preset) return true;
+		array<BaseCompartmentSlot> seats = {};
+		if (!AICF_VehiclePreset.CollectCaptured(trip.GetLease().GetVehicle(), preset, seats)) return true;
+		for (int index; index < seats.Count(); index++)
+			if ((seats[index].GetType() == ECompartmentType.TURRET || seats[index].GetAttachedTurret()) && preset.m_aMembers[index] >= 0) return true;
+		return false;
 	}
 
 	protected AICF_VehicleCrewRoleSnapshot CaptureCrewRoleSnapshot(
@@ -1414,7 +1468,7 @@ class AICF_VehicleTransitFlow
 					string.Format(" agent=%1 action_token=%2", settledEntity.GetID(), token.GetActionToken()));
 
 			if (settledRole == EAICompartmentType.Pilot &&
-				trip.GetLease().GetKind() == AICF_EVehicleKind.ARMED_LIGHT &&
+				RequiresGunner(trip) &&
 				!IsRoleSettled(trip, EAICompartmentType.Turret))
 			{
 				return StartCrewRecovery(trip, EAICompartmentType.Turret, causationId, nowMs);

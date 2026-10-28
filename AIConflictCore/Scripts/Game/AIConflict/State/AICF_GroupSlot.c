@@ -583,6 +583,17 @@ class AICF_GroupSlot
 		return m_RecruitmentOrder && m_RecruitmentOrder.IsCurrent(this);
 	}
 
+	bool MatchesRecruitmentOrder(AICF_InfantryRecruitmentOrder order)
+	{
+		return order && m_RecruitmentOrder == order && order.IsCurrent(this);
+	}
+
+	AICF_InfantryRecruitmentOrder GetActiveRecruitmentOrder()
+	{
+		if (HasActiveRecruitmentOrder()) return m_RecruitmentOrder;
+		return null;
+	}
+
 	bool ReportRecruitmentFailedMovement(SCR_AIGroup group, AIWaypoint waypoint, int result = EMoveError.UNKNOWN)
 	{
 		return HasActiveRecruitmentOrder() && m_RecruitmentOrder.ReportFailedMovement(group, waypoint, result);

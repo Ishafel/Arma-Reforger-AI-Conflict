@@ -48,6 +48,41 @@ legacy после пересборки. Команды и границы — [DE
 
 ## Единый offline запуск
 
+`Invoke-AICFVehicleBehavior.ps1` с новым `-EvidenceRoot`, списком
+`-Cases transport,combat`, стороной `-Faction US|USSR` и своим `-ServerPort` —
+отдельный terminal controlled runner для
+TRANSPORT/COMBAT. Он сохраняет точные checkout bytes и SHA256 production/двух
+fixtures, компилирует isolated stage, запускает canonical Server и проверяет
+полные stopped logs через `Test-VehicleBehaviorLog.ps1`. Targeted functional,
+strict native resources и overall verdict хранятся раздельно в `summary.json`.
+Это не30минутная обычная война и не часть offline All. Для controlled cleanup
+недееспособного hull blocker использовать отдельный `-Cases combat` с
+`-CleanupIncapProbe`; два cases с этой опцией runner отклоняет. Физическое
+освобождение, неизменные life/health,3 attempts/deadline и release подтверждаются
+более поздними native readbacks. Контракт и подготовка fixture —
+[VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md), [TEST_FIXTURES.md](TEST_FIXTURES.md).
+
+В offline All автоматически входят новые `Test-VehicleBehaviorSettingsContracts.ps1`,
+`Test-VehicleBehaviorFlowContracts.ps1`, `Test-VehicleBehaviorNativeContracts.ps1`,
+`Test-VehicleBehaviorLifecycleContracts.ps1`, `Test-VehicleBehaviorLogContracts.ps1`,
+`Test-VehicleCapturedTopologyContracts.ps1`, `Test-DegradedVehicleCrewContracts.ps1`,
+`Test-VehicleFitRosterContracts.ps1`, `Test-VehicleShortRecoveryContracts.ps1` и
+`Test-CleanupIncapacitatedHullContracts.ps1`, `Test-CleanupAliveHullContracts.ps1`. Они проверяют server schema и
+редактор, captured roster/seats, effective crew, scoped native policy, ownership
+и конечные бюджеты. FitRoster исполняет извлечённые production identity,
+unique-seat и cargo-fill тела; cleanup contract исполняет native-state predicate
+на комбинациях состояния. Это не замена Workbench/native gates. Свежий focused
+fit roster receipt —
+`.codex-runtime/vehicle-behavior-20261028/fit-roster-after-v3/REPORT.md`; итоговый
+compile/runtime конечного snapshot подводится отдельно и здесь не отмечен PASS.
+
+Для server/client/JIP settings readback применяется прежний client probe с
+дополнительным `-aicfVehicleBehaviorReadback 1` на всех peers и
+`Test-VehiclePresetClientLog.ps1 -BehaviorSettings`. Проверяются malformed N без
+RPC, COMBAT/437 в Save/Apply/reload и подтверждённое JIP состояние. Native
+widgets не подтверждают видимость/читаемость или ввод мышью; ручные пункты
+[VEHICLE_VISUAL_CHECK.md](VEHICLE_VISUAL_CHECK.md) остаются NOT RUN.
+
 `Invoke-AICFTransportDamageFallback.ps1` — отдельный native controlled runner
 повреждения колёс, пешего fallback и запрета повторной покупки на том же intent.
 Использует immutable snapshot, terminal Workbench и canonical runtime launcher.
@@ -63,6 +98,13 @@ offline All. Команды, бюджет и ограничения — [VEHICLE
 и `Test-TransportCombatTaskContracts.ps1` проверяют read-only proof и projection
 в watchdog; `Test-RecruitmentApproachEndpointContracts.ps1` — bounded alternative
 endpoint без подмены физического прибытия.
+`Test-RecruitmentShortRecoveryContracts.ps1` проверяет immutable failure receipt,
+существующий budget2 и повторённые fences перед переносом до8m;
+`Test-RecruitmentShortRecoveryProbeContracts.ps1` проверяет отдельный controlled
+native fixture. `Test-RecruitmentShortRecoveryLog.ps1` требует20 настоящих cases,
+цепочку callback/physical hop/native approach/arrival/debit и полный остановленный
+лог с manifest/native exit. Эти gates не заменяют новый ordinary1800s Soak после
+изменения production; strict native resources сохраняют самостоятельный FAIL.
 `Test-VehicleCrewOwnTransitionContracts.ps1` проверяет exact own occupant,
 human/foreign отказ,3s предел и expiry-before-wait; `Test-VehiclePresetEntryTraceContracts.ps1`
 проверяет немутирующий pre-cancel/deadline readback дверей и token identity.
@@ -79,7 +121,7 @@ health/identity/cleanup причины и строгий итоговый FAIL �
 native runner шести полных Stock поездок; в offline All он не входит. Готовит
 stage, выполняет Workbench, canonical Server и строгий `Test-VehicleScenarioLog.ps1`.
 Cases/flags и формат group/member trace — [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md).
-Offline All включает `Test-VehicleScenarioLogContracts.ps1` (45 controls) и
+Offline All включает `Test-VehicleScenarioLogContracts.ps1` (130 controls) и
 `Test-GroupTraceContracts.ps1` (read-only/authority/rate/lifecycle и полный
 physical roster/raw native path и supported associated-agent API,48 controls).
 
@@ -483,3 +525,21 @@ Targeted probe и полный SCRIPT/fatal gate различаются в вы�
 -Difficulty 0|1|2` анализирует прогон `AICF_FIAGarrisonProbe.c` на North WCS+RHS:
 состав 0/5/10, экипажи 10/3, физический локальный патруль, захват и casualty. Отдельно сообщает
 число остальных engine/resource errors; PASS не означает отсутствие этих ошибок.
+
+GC contracts: `Test-VehicleGarbageContracts.ps1` —54 source mutants для lease ownership, weak registry, cap-held cleanup states, exact restoration, stock callback chain и test-only server→client proxy preparation/teardown null guards/RPC guard receipts. `Test-VehicleGarbageProbeContracts.ps1` —33 fixture mutants, включая deferred native commit, teardown и TTL deletion. `Test-VehicleGarbageLog.ps1` требует полный stopped native GC log с manifest/exit. Controlled TTL5/TTL1 не заменяет свежий ordinary1800s Soak.
+
+`Test-VehiclePresetClientLog.ps1 -BehaviorSettings` требует единственный actual
+`VEHICLE_UI_GC_AUTHORITY` receipt и `GC_NO_AUTHORITY_REJECTED` на первом client
+и JIP: native realm0/master0/proxy1, полный private Fleet/lease setup и оба
+отказа GC permission. Matching contract содержит49 controls, включая native
+master/отсутствующий proxy, server safe setup, совпадение RplId origin и exact
+cleanup request, штатный EntityID format с optional literal ` {}` и strict teardown
+NULL-pointer fatal. Zero identity и посторонний token отклоняются. Подготовка через fixture-only
+owned RPC не меняет production protocol; local spawn setup FAIL не удаляется.
+Для отдельного ALIVE cleanup native gate передаётся `-aicfCleanupAliveProbe 1`
+в isolated behavior fixture; runner/helper обязан явно сохранить этот CLI,
+полный stopped log и все6 `CLEANUP_ALIVE_*` receipts.
+
+Source54/fixture33 mutants и49 client-log controls не заменяют свежие native
+client/JIP logs. Server-local prefab оказался MASTER и не является proxy negative;
+actual server-spawned RplId обязан соответствовать полученному client proxy.

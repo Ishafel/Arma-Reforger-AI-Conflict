@@ -127,6 +127,8 @@ class AICF_VehicleStagingActionToken
 	protected int m_iLastAuditAtMs;
 	protected float m_fBestDistanceMeters = -1.0;
 	protected float m_fCurrentDistanceMeters = -1.0;
+	protected vector m_vLastMotionOrigin;
+	protected int m_iLastMotionAtMs;
 
 	void AICF_VehicleStagingActionToken(
 		AICF_VehicleAsyncFence fence,
@@ -151,6 +153,8 @@ class AICF_VehicleStagingActionToken
 		m_iLastAuditAtMs = nowMs;
 		m_fBestDistanceMeters = initialDistanceMeters;
 		m_fCurrentDistanceMeters = initialDistanceMeters;
+		m_vLastMotionOrigin = reservedEntity.GetOrigin();
+		m_iLastMotionAtMs = nowMs;
 	}
 
 	AICF_VehicleAsyncFence GetFence() { return m_Fence; }
@@ -164,6 +168,19 @@ class AICF_VehicleStagingActionToken
 	int GetLastProgressAtMs() { return m_iLastProgressAtMs; }
 	float GetBestDistanceMeters() { return m_fBestDistanceMeters; }
 	float GetCurrentDistanceMeters() { return m_fCurrentDistanceMeters; }
+
+	void ObservePhysicalMotion(vector origin, int nowMs)
+	{
+		if (vector.Distance(origin, m_vLastMotionOrigin) <= 0.5) return;
+		m_vLastMotionOrigin = origin;
+		m_iLastMotionAtMs = nowMs;
+	}
+
+	bool HasNoPhysicalMotion(int nowMs, int sampleMs)
+	{
+		return nowMs >= m_iLastMotionAtMs && nowMs - m_iLastMotionAtMs >= sampleMs &&
+			m_ReservedEntity && vector.Distance(m_ReservedEntity.GetOrigin(), m_vLastMotionOrigin) <= 0.5;
+	}
 
 	bool Matches(
 		AICF_TransportTrip trip,
@@ -247,6 +264,7 @@ class AICF_VehicleStagingActionToken
 // approach polls, so SPAWN_COMMIT cannot silently move the vehicle elsewhere.
 class AICF_VehicleSpawnPlan
 {
+	protected ref AICF_VehicleStagingExhaustion m_ManualExhaustion;
 	protected ref AICF_VehicleSpawnSiteSelection m_Selection;
 	protected ref AICF_VehicleSpawnSiteReservation m_Reservation;
 	protected vector m_vStagingPosition;
@@ -299,6 +317,15 @@ class AICF_VehicleSpawnPlan
 	int GetAliveCount() { return m_iAliveCount; }
 	int GetApproachWaypointReissueCount() { return m_iApproachWaypointReissueCount; }
 	int GetStagingActionTokenCount() { return m_aStagingActionTokens.Count(); }
+
+	bool CaptureManualStagingRoster(AICF_TransportTrip trip)
+	{
+		if (!m_bRequireManualRally || m_ManualExhaustion) return false;
+		m_ManualExhaustion = new AICF_VehicleStagingExhaustion(trip, this);
+		return m_ManualExhaustion.IsCaptured();
+	}
+
+	AICF_VehicleStagingExhaustion GetManualStagingExhaustion() { return m_ManualExhaustion; }
 
 	AICF_VehicleStagingActionToken GetStagingActionToken(int index)
 	{
@@ -620,6 +647,13 @@ class AICF_VehicleSpawner
 		return reservation && trip && requestState &&
 			reservation.MatchesTrip(trip, requestState.GetRequestGeneration()) &&
 			m_aSiteReservations.Contains(reservation);
+	}
+
+	bool IsSiteReservationCurrentReadOnly(AICF_VehicleSpawnSiteReservation reservation,
+		AICF_TransportTrip trip, AICF_VehicleRequestState requestState, int nowMs)
+	{
+		return reservation && trip && requestState && !reservation.IsExpired(nowMs) &&
+			reservation.MatchesTrip(trip, requestState.GetRequestGeneration()) && m_aSiteReservations.Contains(reservation);
 	}
 
 	bool ReleaseSelectedSite(AICF_VehicleSpawnSiteReservation expected)

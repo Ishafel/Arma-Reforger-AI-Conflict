@@ -35,7 +35,7 @@ function Rules([string]$f,[string]$s){
   '!IsExactAliveCurrentMember(group, agent)', '!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(character)',
   '!IsPhysicalOnlyBlocker(character, vehicle, boundsMin, boundsMax)',
   'ChimeraWorldUtils.TryGetWaterSurfaceSimple(vehicle.GetWorld(), safePosition)',
-  'CanApplyTerminalHiddenRecovery(')) {if(!$relocate.Contains($guard)){'UNCHANGED_IDENTITY_PLAYER_NAV_DEADLINE_BOUNDARIES';break}}
+  'CanApplyTerminalHiddenRecovery(')) {if(!$relocate.Contains($guard)){'REPEATED_IDENTITY_DISTANCE_NAV_DEADLINE_BOUNDARIES';break}}
  if(!$force.Contains('state.RecordForceClearanceAttempt()') -or $force.Contains('RecordPhysicalRelocationAttempt') -or !$force.Contains('state.GetForceExitAttempts()')){'LOGICAL_FORCE_OWNS_ONLY_EXIT_BUDGET'}
  if(!$terminal.Contains('activeBudgetExhausted = state.GetForceExitAttempts() >= FORCE_MAX_ATTEMPTS;') -or !$terminal.Contains('activeBudgetExhausted = state.GetPhysicalRelocationAttempts() >= FORCE_MAX_ATTEMPTS;') -or $terminal.Contains('state.GetForceClearanceAttempts() >= FORCE_MAX_ATTEMPTS')){'TERMINAL_ESCALATES_CURRENT_OPERATION_ONLY'}
  if($relocate -match '(?:Reset|BeginTerminal|SetAbsoluteDeadline)\(' -or $relocate -match '(?:Deadline\w*|m_i\w*Attempts)\s*(?:=|\+=)' -or !$f.Contains('FORCE_MAX_ATTEMPTS = 3;')){'NO_RETRY_OR_DEADLINE_EXPANSION'}
@@ -73,9 +73,9 @@ foreach($mutation in @(
  @('f','state.GetPhysicalRelocationAttempts() >= FORCE_MAX_ATTEMPTS','state.GetForceClearanceAttempts() >= FORCE_MAX_ATTEMPTS','RELOCATION_INDEPENDENT_OF_EXIT_BUDGET'),
  @('f','if (!state.RecordPhysicalRelocationAttempt())','if (!state.RecordForceClearanceAttempt())','RELOCATION_INDEPENDENT_OF_EXIT_BUDGET'),
  @('f','!current || current.m_iLogicalOccupants > 0 || current.m_iTransitions > 0 || current.m_iInsideBounds <= 0','false','FRESH_WHOLE_GROUP_EGRESS_BEFORE_CHARGE'),
- @('f','commitNowMs >= state.GetTerminalDeadlineMs() || trip.IsDeadlineReached(commitNowMs)','false','UNCHANGED_IDENTITY_PLAYER_NAV_DEADLINE_BOUNDARIES'),
- @('f','!IsPhysicalOnlyBlocker(character, vehicle, boundsMin, boundsMax)','false','UNCHANGED_IDENTITY_PLAYER_NAV_DEADLINE_BOUNDARIES'),
- @('f','!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(character)','false','UNCHANGED_IDENTITY_PLAYER_NAV_DEADLINE_BOUNDARIES'),
+ @('f','commitNowMs >= state.GetTerminalDeadlineMs() || trip.IsDeadlineReached(commitNowMs)','false','REPEATED_IDENTITY_DISTANCE_NAV_DEADLINE_BOUNDARIES'),
+ @('f','!IsPhysicalOnlyBlocker(character, vehicle, boundsMin, boundsMax)','false','REPEATED_IDENTITY_DISTANCE_NAV_DEADLINE_BOUNDARIES'),
+ @('f','!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(character)','false','REPEATED_IDENTITY_DISTANCE_NAV_DEADLINE_BOUNDARIES'),
  @('f','activeBudgetExhausted = state.GetPhysicalRelocationAttempts() >= FORCE_MAX_ATTEMPTS;','activeBudgetExhausted = state.GetForceExitAttempts() >= FORCE_MAX_ATTEMPTS;','TERMINAL_ESCALATES_CURRENT_OPERATION_ONLY'),
  @('f','FORCE_MAX_ATTEMPTS = 3;','FORCE_MAX_ATTEMPTS = 30;','NO_RETRY_OR_DEADLINE_EXPANSION'),
  @('s','m_iPhysicalRelocationAttempts >= m_iMaximumPhysicalRelocationAttempts','false','PHYSICAL_BUDGET_REQUIRES_EGRESS'),
@@ -119,4 +119,4 @@ if($case.GetPhysicalRelocationAttempts() -ne 1 -or $case.m_iNormalDeadlineMs -ne
 if(!$case.TryBeginExactRelocationProbe(12000,2000) -or $case.TryBeginExactRelocationProbe(13000,2000) -or !$case.TryBeginExactRelocationProbe(14000,2000)){throw 'Read-only probe backoff changed'};$controls++
 $case.BeginTerminal(22000,42000,3)
 if($case.GetForceClearanceAttempts() -or $case.m_iNormalDeadlineMs -ne 22000 -or $case.m_iTerminalDeadlineMs -ne 42000 -or !$case.m_bTerminalClearanceStarted){throw 'Existing new-phase terminal initialization changed'};$controls++
-"PASS Dismount operation budgets: independent logical3 then physical3 within unchanged deadlines; fresh whole-group egress, nonempty safe probe, repeat authority/player/nav fences and current-operation terminal escalation; controls=$controls"
+"PASS Dismount operation budgets: independent logical3 then physical3 within unchanged deadlines; fresh whole-group egress, nonempty safe probe, repeat authority/short-distance/nav fences and current-operation terminal escalation; controls=$controls"

@@ -8,6 +8,8 @@ class AICF_TransportTrip
 	protected ref array<IEntity> m_aVehiclePresetMembers = {};
 	protected ref array<EntityID> m_aVehiclePresetMemberIds = {};
 	protected bool m_bVehiclePresetDebited;
+	protected ref AICF_VehicleBehaviorState m_BehaviorState = new AICF_VehicleBehaviorState();
+	AICF_VehicleBehaviorState GetBehaviorState() { return m_BehaviorState; }
 	AICF_VehiclePreset GetVehiclePreset() { return m_VehiclePreset; }
 	int GetVehiclePresetRevision() { return m_iVehiclePresetRevision; }
 	AICF_GroupSlot GetVehiclePresetSlot() { return m_VehiclePresetSlot; }
@@ -32,15 +34,24 @@ class AICF_TransportTrip
 
 	bool IsVehiclePresetCurrent()
 	{
-		if (!m_VehiclePresetSlot || m_VehiclePresetSlot.GetVehiclePresetRevision() != m_iVehiclePresetRevision ||
+		if (!m_Assignment || !m_VehiclePresetSlot || m_VehiclePresetSlot.GetVehiclePresetRevision() != m_iVehiclePresetRevision ||
 			m_VehiclePresetSlot.GetGroup() != m_Assignment.GetGroup() || m_VehiclePresetSlot.GetSpawnGeneration() != GetGroupGeneration()) return false;
 		if (!m_VehiclePreset) return !m_VehiclePresetSlot.HasVehiclePreset();
-		for (int i; i < m_VehiclePreset.m_aMembers.Count(); i++)
+		if (m_aVehiclePresetMembers.Count() != AICF_Stage1Config.MAX_GROUP_SIZE ||
+			m_aVehiclePresetMemberIds.Count() != AICF_Stage1Config.MAX_GROUP_SIZE) return false;
+		// Identity охватывает весь captured roster, включая утратившие роль позиции.
+		for (int index; index < AICF_Stage1Config.MAX_GROUP_SIZE; index++)
 		{
-			int index = m_VehiclePreset.m_aMembers[i];
-			if (index < 0) continue;
 			IEntity member = VehiclePresetMember(index);
-			if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(member) || m_VehiclePresetSlot.GetRosterMember(index) != member) return false;
+			// Погибший original actor не является сменой пресета. Живой новый
+			// roster на той же позиции по-прежнему требует новой incarnation.
+			IEntity currentMember = m_VehiclePresetSlot.GetRosterMember(index);
+			if (!AICF_GroupRuntime.IsAliveCharacter(member))
+			{
+				if (AICF_GroupRuntime.IsAliveCharacter(currentMember)) return false;
+				continue;
+			}
+			if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(member) || currentMember != member) return false;
 		}
 		return true;
 	}
@@ -51,6 +62,23 @@ class AICF_TransportTrip
 		IEntity member = m_aVehiclePresetMembers[index];
 		if (!member || member.GetID() != m_aVehiclePresetMemberIds[index]) return null;
 		return member;
+	}
+
+	// Меняется только захваченная trip-копия; library/slot recipe не трогаются.
+	bool ReassignVehiclePresetSeat(int seatIndex, int memberPosition)
+	{
+		if (!Replication.IsServer() || !m_VehiclePreset || !IsVehiclePresetCurrent() ||
+			(memberPosition >= 0 && !AICF_VehicleShortRecovery.IsCurrentMember(this, VehiclePresetMember(memberPosition)))) return false;
+		return m_VehiclePreset.Assign(seatIndex, memberPosition);
+	}
+
+	bool CommitBehaviorClockPause(bool paused, int nowMs)
+	{
+		if (!Replication.IsServer() || !m_VehiclePreset) return false;
+		if (paused && m_Phase != AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT) return false;
+		if (!paused) m_iAbsoluteDeadlineMs += m_BehaviorState.PausedMs(nowMs);
+		m_BehaviorState.SetPaused(paused, nowMs);
+		return true;
 	}
 
 	protected ref AICF_StrategicAssignmentSnapshot m_Assignment;
@@ -109,7 +137,7 @@ class AICF_TransportTrip
 	AICF_ETransportTripPhase GetPreviousPhase() { return m_PreviousPhase; }
 	int GetStartedAtMs() { return m_iStartedAtMs; }
 	int GetPhaseStartedAtMs() { return m_iPhaseStartedAtMs; }
-	int GetAbsoluteDeadlineMs() { return m_iAbsoluteDeadlineMs + m_MovementState.GetPresetDestinationWaitMs(System.GetTickCount()); }
+	int GetAbsoluteDeadlineMs() { return m_iAbsoluteDeadlineMs + m_MovementState.GetPresetDestinationWaitMs(System.GetTickCount()) + m_BehaviorState.PausedMs(System.GetTickCount()); }
 	bool IsPresetWaitingForDestination() { return m_MovementState.IsPresetDestinationWaiting(); }
 
 	bool CommitPresetDestinationWait(bool waiting, int nowMs)
@@ -169,7 +197,7 @@ class AICF_TransportTrip
 
 	bool IsDeadlineReached(int nowMs)
 	{
-		return m_iAbsoluteDeadlineMs > 0 && nowMs >= m_iAbsoluteDeadlineMs + m_MovementState.GetPresetDestinationWaitMs(nowMs);
+		return m_iAbsoluteDeadlineMs > 0 && nowMs >= m_iAbsoluteDeadlineMs + m_MovementState.GetPresetDestinationWaitMs(nowMs) + m_BehaviorState.PausedMs(nowMs);
 	}
 
 	bool TryAttachLease(AICF_VehicleLease lease)
@@ -297,6 +325,11 @@ class AICF_TransportTrip
 					toPhase == AICF_ETransportTripPhase.FAILED_CLOSED;
 			case AICF_ETransportTripPhase.TRANSIT:
 				return toPhase == AICF_ETransportTripPhase.DISMOUNT ||
+					toPhase == AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT ||
+					toPhase == AICF_ETransportTripPhase.FALLBACK ||
+					toPhase == AICF_ETransportTripPhase.FAILED_CLOSED;
+			case AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT:
+				return toPhase == AICF_ETransportTripPhase.TRANSIT ||
 					toPhase == AICF_ETransportTripPhase.FALLBACK ||
 					toPhase == AICF_ETransportTripPhase.FAILED_CLOSED;
 			case AICF_ETransportTripPhase.DISMOUNT:

@@ -26,7 +26,7 @@ function NativeJoin($row,[int]$position,[string]$source){
  $body+="[INFANTRY_RECRUIT_JOINED] faction=$($row.faction) slot=$($row.slot) group=$($row.group) generation=1 token=$($row.token) source=$source role=ROLE$position cost=10 character=$($row.members[$position]) {}`n"
  return $body
 }
-function Fixture([string]$mode='NORMAL',[int]$autoAdditions=0,[string]$concurrency='MOVING',[int]$durationSeconds=1800,[int]$jitDeficit=0){
+function Fixture([string]$mode='NORMAL',[int]$autoAdditions=0,[string]$concurrency='MOVING',[int]$durationSeconds=1800,[int]$jitDeficit=0,[bool]$retained=$false){
  $script:mode=$mode;$script:concurrency=$concurrency;$script:duration=$durationSeconds;$script:sample=0;$script:rows=@();$script:classification='NORMAL_CAMPAIGN';$script:notMoving=0
  if($mode -eq 'CAPACITY'){$script:classification='CONTROLLED_CAPACITY_ONLY'}
  if($concurrency -eq 'MOUNTED_STAGING'){$script:classification='CAPACITY_MOUNTED_ONLY';$script:notMoving=1}
@@ -95,10 +95,18 @@ function Fixture([string]$mode='NORMAL',[int]$autoAdditions=0,[string]$concurren
  foreach($row in $script:rows){
   $finalLeg=2;if($concurrency -eq 'MOUNTED_STAGING'){$finalLeg=1}
   $body+=Marker FINAL_TARGET 145000 $row.faction $row.slot "operation_id=$($row.operation) vehicle=$($row.vehicle) leg=$finalLeg position=<900,0,0> intent_revision=3 dismount_radius_m=150 final=1"
+  if($retained){$body+="[VEHICLE_STATE_CHANGED] operation_id=$($row.operation) previous_state=TRANSIT state=TACTICAL_DEPLOYMENT reason=DESTINATION_REACHED`n[VEHICLE_BEHAVIOR_DEPLOYMENT_BEGIN] operation_id=$($row.operation) vehicle=$($row.vehicle) behavior=0 reason=[DESTINATION_REACHED]`n"}
   $body+=Marker ARRIVAL 160000 $row.faction $row.slot "operation_id=$($row.operation) passed=1 vehicle=$($row.vehicle) distance_m=145 displacement_m=755 moving_polls=15 intent_revision=3 leg=$finalLeg"
-  $body+="[DISEMBARK_COMPLETE] operation_id=$($row.operation) logical_occupants=0 transitions=0 inside_bounds=0`n[VEHICLE_STATE_CHANGED] operation_id=$($row.operation) previous_state=HANDOFF state=COMPLETE`n"
-  $body+=Marker DISMOUNTED 161000 $row.faction $row.slot "operation_id=$($row.operation) alive=5 in_vehicle=0 normal_complete=1 intent_revision=3 position=<900,0,0>"
-  $body+=Marker FOOT_ARRIVAL 165000 $row.faction $row.slot "operation_id=$($row.operation) alive=5 farthest_m=15 position=<900,0,0> intent_revision=3 leg=$finalLeg"
+  $completion='normal_complete=1'
+  if($retained){
+   $body+="[INFANTRY_FALLBACK] operation_id=$($row.operation) state=TACTICAL_DEPLOYMENT order_restored=1 alive=5`n"
+   for($p=0;$p -lt 5;$p++){$body+=Marker RETAINED_MEMBER 160500 $row.faction $row.slot "operation_id=$($row.operation) position=$p member=$($row.members[$p]) linked=0 in_compartment=0 getting_in=0 getting_out=0 character_vehicle=0 inside_bounds=0"}
+   $body+=Marker RETAINED_CLEARANCE 160500 $row.faction $row.slot "operation_id=$($row.operation) vehicle=$($row.vehicle) rpl=$($row.rpl) lease_generation=1 vehicle_generation=1 logical_occupants=0 transitions=0 inside_bounds=0 non_alive=0 phase=TACTICAL_DEPLOYMENT order_restored=1 original_members=5"
+   $completion='normal_complete=0 retained_manual=1 phase=TACTICAL_DEPLOYMENT order_restored=1'
+  }else{$body+="[DISEMBARK_COMPLETE] operation_id=$($row.operation) logical_occupants=0 transitions=0 inside_bounds=0`n[VEHICLE_STATE_CHANGED] operation_id=$($row.operation) previous_state=HANDOFF state=COMPLETE`n"}
+  $body+=Marker DISMOUNTED 161000 $row.faction $row.slot "operation_id=$($row.operation) alive=5 in_vehicle=0 $completion intent_revision=3 position=<900,0,0>"
+  $retainedFoot='';if($retained){$retainedFoot=' retained_manual=1 in_vehicle=0 phase=TACTICAL_DEPLOYMENT order_restored=1'}
+  $body+=Marker FOOT_ARRIVAL 165000 $row.faction $row.slot "operation_id=$($row.operation) alive=5 farthest_m=15 position=<900,0,0> intent_revision=3 leg=$finalLeg$retainedFoot"
  }
  for($time=170000;$time -lt $durationMs;$time+=50000){$body+=Snapshot $time 8 $true}
  $body+=Marker DONE $durationMs BOTH -1 "requested_duration_ms=$durationMs duration_satisfied=1 failures=0 cohort=8 completed_groups=12 us_granted=$($grant+$jitExtraUS) ussr_granted=$grant"
@@ -130,6 +138,21 @@ try{
  $allPaid=[regex]::Match($good,'(?m)^\[AICF\]\[VEHICLE_MULTI_MUSTERED\][^\r\n]+cohort=2 ').Index
  if($ownPaid -ge $earlyCar -or $earlyCar -ge $allPaid){throw 'Positive oracle must exercise own paid five -> own vehicle before late cohort members finish hiring'}
  Run NORMAL-per-group-vehicle-before-aggregate-paid-marker $good 0
+ $retained=Fixture NORMAL -retained $true
+ Run NORMAL-retained-manual-physical-foot $retained 0
+ Run NORMAL-retained-threat-foot-at-final-point ($retained.Replace('reason=DESTINATION_REACHED','reason=LOCAL_THREAT').Replace('reason=[DESTINATION_REACHED]','reason=[LOCAL_THREAT]')) 0
+ foreach($mutation in @(
+  @('retained-fake-complete','normal_complete=0 retained_manual=1','normal_complete=1 retained_manual=1'),
+  @('retained-no-live-clearance','[VEHICLE_MULTI_RETAINED_CLEARANCE]','[NO_CLEARANCE]'),
+  @('retained-missing-original-member','position=4 member=0x4000000000001004 linked=0','position=4 member=0x4000000000001003 linked=0'),
+  @('retained-actor-getting-in','getting_in=0 getting_out=0 character_vehicle=0','getting_in=1 getting_out=0 character_vehicle=0'),
+  @('retained-hull-blocker','character_vehicle=0 inside_bounds=0','character_vehicle=0 inside_bounds=1'),
+  @('retained-stale-lease','lease_generation=1 vehicle_generation=1 logical_occupants','lease_generation=2 vehicle_generation=1 logical_occupants'),
+  @('retained-no-actual-restore','[INFANTRY_FALLBACK]','[NO_RESTORE]'),
+  @('retained-mismatched-start-reason','reason=DESTINATION_REACHED','reason=LOCAL_THREAT'),
+  @('retained-reboarded-before-foot','retained_manual=1 in_vehicle=0 phase=TACTICAL_DEPLOYMENT','retained_manual=1 in_vehicle=1 phase=TACTICAL_DEPLOYMENT'),
+  @('retained-no-native-phase','previous_state=TRANSIT state=TACTICAL_DEPLOYMENT','previous_state=TRANSIT state=COMPLETE')
+ )){if(!$retained.Contains($mutation[1])){throw "Missing retained mutation target: $($mutation[0])"};Run $mutation[0] ($retained.Replace($mutation[1],$mutation[2])) 1 NORMAL functional}
  $capacity=Fixture CAPACITY;Run CAPACITY-explicit-funded-protected $capacity 0 CAPACITY
  $capacityJit=Fixture CAPACITY 0 MOVING 1800 10;Run CAPACITY-JIT-465-to-475-real-owner-grant $capacityJit 0 CAPACITY
  $mounted=Fixture CAPACITY 0 MOUNTED_STAGING 900;Run MOUNTED-distinct-physical-twelve-staging $mounted 0 CAPACITY -wall 930

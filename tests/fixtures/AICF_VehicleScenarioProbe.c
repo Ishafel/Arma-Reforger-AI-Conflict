@@ -1,3 +1,147 @@
+class AICF_VSHierarchyProtection
+{
+	static string SelectedScope()
+	{
+		string scope;
+		if (!System.GetCLIParam("aicfVehicleScenarioProtectionScope", scope)) return "ROOT_ONLY";
+		return scope;
+	}
+
+	protected static bool UnderRoot(DamageManagerComponent root, DamageManagerComponent manager)
+	{
+		HitZoneContainerComponent current = manager;
+		for (int depth; current && depth < 64; depth++)
+		{
+			if (current == root) return true;
+			current = current.GetParentHitZoneContainer();
+		}
+		return false;
+	}
+
+	protected static bool Collect(IEntity entity, DamageManagerComponent root, array<HitZone> zones,
+		array<DamageManagerComponent> managers, array<IEntity> owners, out int nativeCount, out string reason)
+	{
+		zones.Clear();
+		managers.Clear();
+		owners.Clear();
+		nativeCount = root.GetAllHitZonesInHierarchy(zones);
+		if (nativeCount <= 0 || nativeCount != zones.Count() || zones.Count() > 512)
+		{
+			reason = "INCOMPLETE_HIERARCHY";
+			return false;
+		}
+		managers.Insert(root);
+		owners.Insert(entity);
+		foreach (HitZone zone : zones)
+		{
+			if (!zone) { reason = "NULL_ZONE"; return false; }
+			DamageManagerComponent manager = DamageManagerComponent.Cast(zone.GetHitZoneContainer());
+			if (!manager) { reason = "NON_DAMAGE_CONTAINER"; return false; }
+			IEntity owner = manager.GetOwner();
+			if (!owner || owner.GetWorld() != entity.GetWorld() || owner.FindComponent(DamageManagerComponent) != manager)
+			{
+				reason = "MANAGER_OWNER_MISMATCH";
+				return false;
+			}
+			if (!UnderRoot(root, manager)) { reason = "FOREIGN_HIERARCHY"; return false; }
+			if (managers.Contains(manager)) continue;
+			managers.Insert(manager);
+			owners.Insert(owner);
+		}
+		return true;
+	}
+
+	static bool Apply(IEntity entity, out string details)
+	{
+		details = "protection_status=REJECTED protection_errors=1 protection_reason=CONTEXT";
+		string scenario; string retained; string combat;
+		if (!Replication.IsServer() || !System.GetCLIParam("aicfVehicleScenario", scenario) || scenario != "repeat5" ||
+			!System.GetCLIParam("aicfVehicleScenarioRetainedBehavior", retained) || retained != "1" ||
+			(System.GetCLIParam("aicfVehicleScenarioCombat", combat) && combat == "1")) return false;
+		if (SelectedScope() != "HIERARCHY" || !entity || !GetGame() || entity.GetWorld() != GetGame().GetWorld()) return false;
+		EntityID identity = entity.GetID();
+		RplComponent rpl = RplComponent.Cast(entity.FindComponent(RplComponent));
+		if (!rpl || !rpl.IsMaster() || rpl.IsProxy()) return false;
+		DamageManagerComponent root = DamageManagerComponent.Cast(entity.FindComponent(DamageManagerComponent));
+		if (!root || root.GetOwner() != entity) return false;
+		array<HitZone> zones = {};
+		array<DamageManagerComponent> managers = {};
+		array<IEntity> owners = {};
+		int nativeCount;
+		string reason;
+		if (!Collect(entity, root, zones, managers, owners, nativeCount, reason))
+		{
+			details = "protection_status=REJECTED protection_errors=1 protection_reason=" + reason;
+			return false;
+		}
+		int enabledBefore;
+		foreach (int index, DamageManagerComponent manager : managers)
+		{
+			if (manager.GetOwner() != owners[index]) return false;
+			if (!manager.IsDamageHandlingEnabled()) continue;
+			enabledBefore++;
+			manager.EnableDamageHandling(false);
+		}
+		array<HitZone> repeatedZones = {};
+		array<DamageManagerComponent> repeatedManagers = {};
+		array<IEntity> repeatedOwners = {};
+		int repeatedCount;
+		if (!Collect(entity, root, repeatedZones, repeatedManagers, repeatedOwners, repeatedCount, reason))
+		{
+			details = "protection_status=REJECTED protection_errors=1 protection_reason=READBACK_" + reason;
+			return false;
+		}
+		int errors;
+		int enabledAfter;
+		if (nativeCount != repeatedCount || zones.Count() != repeatedZones.Count() || managers.Count() != repeatedManagers.Count()) errors++;
+		foreach (HitZone originalZone : zones)
+			if (!repeatedZones.Contains(originalZone)) errors++;
+		foreach (int managerIndex, DamageManagerComponent originalManager : managers)
+		{
+			int repeatedIndex = repeatedManagers.Find(originalManager);
+			if (repeatedIndex < 0) { errors++; continue; }
+			if (repeatedOwners[repeatedIndex] != owners[managerIndex] || originalManager.GetOwner() != owners[managerIndex]) errors++;
+			if (originalManager.IsDamageHandlingEnabled()) enabledAfter++;
+		}
+		if (entity.GetID() != identity || entity.FindComponent(RplComponent) != rpl || !rpl.IsMaster() || rpl.IsProxy()) errors++;
+		if (entity.FindComponent(DamageManagerComponent) != root || root.GetOwner() != entity) errors++;
+		details = string.Format("protection_errors=%1 protection_zones=%2 protection_zones_repeated=%3 protection_managers_covered=%4 protection_child_managers=%5 protection_enabled_before=%6 protection_enabled_after=%7",
+			errors, nativeCount, repeatedCount, managers.Count(), managers.Count() - 1, enabledBefore, enabledAfter);
+		bool complete = errors == 0 && enabledAfter == 0;
+		if (complete) details += " protection_status=COVERED protection_reason=NONE";
+		else details += " protection_status=REJECTED protection_reason=READBACK_FAILED";
+		return complete;
+	}
+
+	// After setup this path only reads native state. No reapplication or repair.
+	static bool Verify(IEntity entity, out string details)
+	{
+		details = "protection_status=REJECTED protection_errors=1 protection_reason=VERIFY_CONTEXT";
+		if (!Replication.IsServer() || !entity || !GetGame() || entity.GetWorld() != GetGame().GetWorld() ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(entity)) return false;
+		DamageManagerComponent root = DamageManagerComponent.Cast(entity.FindComponent(DamageManagerComponent));
+		if (!root || root.GetOwner() != entity) return false;
+		array<HitZone> zones = {}; array<DamageManagerComponent> managers = {}; array<IEntity> owners = {};
+		int nativeCount; string reason;
+		if (!Collect(entity, root, zones, managers, owners, nativeCount, reason)) return false;
+		int enabled; int childZones; int enabledChildZones;
+		foreach (DamageManagerComponent manager : managers)
+			if (manager.IsDamageHandlingEnabled()) enabled++;
+		foreach (HitZone zone : zones)
+		{
+			DamageManagerComponent container = DamageManagerComponent.Cast(zone.GetHitZoneContainer());
+			if (container == root) continue;
+			childZones++;
+			if (container.IsDamageHandlingEnabled()) enabledChildZones++;
+		}
+		details = string.Format("protection_errors=0 protection_zones=%1 protection_managers_covered=%2 protection_child_managers=%3 protection_enabled_after=%4 protection_child_zones=%5 protection_child_zones_enabled=%6 read_only=1",
+			nativeCount, managers.Count(), managers.Count() - 1, enabled, childZones, enabledChildZones);
+		if (enabled != 0 || enabledChildZones != 0) return false;
+		details += " protection_status=COVERED protection_reason=NONE";
+		return true;
+	}
+}
+
 // Разрешает только доказанную штатную цепочку OpenGate → exact-seat return.
 // Наблюдатель fixture не выдаёт actions и не меняет production deadlines.
 class AICF_VSNativeGate
@@ -113,6 +257,117 @@ modded class AICF_MatchController
 	protected vector m_vVSRepeatTarget;
 	protected ref array<EntityID> m_aVSMembers = {};
 	protected ref array<ref AICF_VSNativeGate> m_aVSGates = {};
+	protected bool m_bVSRetained;
+	protected bool m_bVSCurrentBehavior;
+	protected bool m_bVSTacticalPolicy;
+	protected ref AICF_TransportTrip m_VSRetainedTrip;
+	protected ref AICF_VehicleLease m_VSRetainedLease;
+	protected string m_sVSRetainedRpl;
+	protected int m_iVSRetainedLeaseGeneration;
+	protected int m_iVSRetainedVehicleGeneration;
+	protected bool m_bVSHierarchyVehicleApplied;
+	protected Vehicle m_VSHierarchyVehicle;
+	protected EntityID m_VSHierarchyVehicleId;
+	protected string m_sVSHierarchyVehicleRpl;
+	protected string m_sVSProtectionScope = "ROOT_ONLY";
+	protected int m_iVSTruceFactionCount;
+
+	protected bool AICF_VSVerifyTruce()
+	{
+		SCR_FactionManager manager = SCR_FactionManager.Cast(GetGame().GetFactionManager());
+		if (!manager) return false;
+		array<Faction> factions = {}; manager.GetFactionsList(factions);
+		if (factions.Count() != m_iVSTruceFactionCount || factions.Count() < 2) return false;
+		for (int first; first < factions.Count(); first++)
+			for (int second = first + 1; second < factions.Count(); second++)
+			{
+				SCR_Faction a = SCR_Faction.Cast(factions[first]); SCR_Faction b = SCR_Faction.Cast(factions[second]);
+				if (!a || !b || !a.IsFactionFriendly(b) || !b.IsFactionFriendly(a)) return false;
+			}
+		return true;
+	}
+
+	protected bool AICF_VSProtectionReadback(AICF_GroupSlot slot, AICF_TransportTrip trip)
+	{
+		if (m_sVSProtectionScope != "HIERARCHY") return true;
+		if (!AICF_VSOwnRecoveryRoster(slot)) return false;
+		for (int position; position < m_iVSSize; position++)
+		{
+			string memberDetails;
+			if (!AICF_VSHierarchyProtection.Verify(slot.GetRosterMember(position), memberDetails)) return false;
+		}
+		if (!trip || !trip.GetLease() || !trip.GetLease().GetVehicle()) return true;
+		Vehicle vehicle = trip.GetLease().GetVehicle();
+		if (!m_bVSHierarchyVehicleApplied)
+		{
+			if (m_iVSStep != 0 || m_iVSLeg != 1 || !trip.IsVehiclePresetCurrent() || trip.IsTerminal() ||
+				trip.GetMovementState().GetRouteGeneration() != 0) return false;
+			string setup;
+			// One setup mutation per original entity; this flag precedes native calls.
+			m_bVSHierarchyVehicleApplied = true;
+			m_VSHierarchyVehicle = vehicle; m_VSHierarchyVehicleId = vehicle.GetID();
+			m_sVSHierarchyVehicleRpl = AICF_VehicleBehaviorBinding.ComponentRpl(vehicle);
+			if (!AICF_VSHierarchyProtection.Apply(vehicle, setup)) return false;
+			string vehicleReadback;
+			if (!AICF_VSHierarchyProtection.Verify(vehicle, vehicleReadback)) return false;
+			Print("[AICF][VEHICLE_SCENARIO_PROTECTION] event=APPLIED kind=VEHICLE position=-1 entity=" + AICF_GroupTrace.Entity(vehicle) + " scope=HIERARCHY classification=CONTROLLED_RETAINED_CYCLE_ONLY " + vehicleReadback);
+		}
+		if (vehicle != m_VSHierarchyVehicle || vehicle.GetID() != m_VSHierarchyVehicleId ||
+			AICF_VehicleBehaviorBinding.ComponentRpl(vehicle) != m_sVSHierarchyVehicleRpl) return false;
+		string verified;
+		return AICF_VSHierarchyProtection.Verify(vehicle, verified);
+	}
+
+	protected bool AICF_VSRetainedCurrent(AICF_GroupSlot slot, AICF_TransportTrip trip)
+	{
+		if (!trip || trip != m_VSRetainedTrip || trip.IsTerminal() || !trip.IsVehiclePresetCurrent() ||
+			trip.GetLease() != m_VSRetainedLease || !m_VSRetainedLease) return false;
+		if (!m_VSVehicle || m_VSRetainedLease.GetVehicle() != m_VSVehicle || m_VSVehicle.GetID() != m_VSVehicleId ||
+			m_VSRetainedLease.GetLeaseGeneration() != m_iVSRetainedLeaseGeneration ||
+			m_VSRetainedLease.GetVehicleGeneration() != m_iVSRetainedVehicleGeneration) return false;
+		return m_VSRetainedLease.MatchesEntityIdentity(m_VSVehicle, m_VSVehicleId, m_sVSRetainedRpl) &&
+			AICF_VehicleBehaviorBinding.ComponentRpl(m_VSVehicle) == m_sVSRetainedRpl &&
+			AICF_VSOwnRecoveryRoster(slot) && trip.IsVehiclePresetDebited() &&
+			m_VSVehicles.GetSpawnedCount(m_VSFaction.GetFactionKey()) == 1;
+	}
+
+	protected void AICF_VSRetainedBoarding(AICF_GroupSlot slot, AICF_TransportTrip trip)
+	{
+		Print(string.Format("[AICF][VEHICLE_SCENARIO_RETAINED_IDENTITY] leg=%1 operation_id=%2 vehicle=%3 vehicle_rpl=%4 group=%5 lease_generation=%6 vehicle_generation=%7 trip_generation=%8",
+			m_iVSLeg, trip.GetOperationId(), AICF_GroupTrace.Entity(m_VSVehicle), m_sVSRetainedRpl,
+			AICF_GroupTrace.Entity(m_VSGroup), m_iVSRetainedLeaseGeneration, m_iVSRetainedVehicleGeneration, trip.GetTripGeneration()));
+		for (int index; index < m_VSRecipe.m_aMembers.Count(); index++)
+		{
+			int position = m_VSRecipe.m_aMembers[index];
+			if (position < 0) continue;
+			IEntity member = slot.GetRosterMember(position);
+			Print(string.Format("[AICF][VEHICLE_SCENARIO_RETAINED_SEAT] leg=%1 position=%2 seat=%3 member=%4 occupant=%5",
+				m_iVSLeg, position, m_VSRecipe.m_aSeats[index], AICF_GroupTrace.Entity(member),
+				AICF_GroupTrace.Entity(ChimeraCharacter.Cast(member).GetCompartmentAccessComponent().GetCompartment().GetOccupant())));
+		}
+	}
+
+	protected bool AICF_VSRetainedFoot(AICF_GroupSlot slot)
+	{
+		if (!AICF_VSOwnRecoveryRoster(slot) || !slot.GetWaypoint() || m_VSGroup.GetCurrentWaypoint() != slot.GetWaypoint() ||
+			!HasMeaningfulTask(slot, m_VSVehicles.GetSlotView(slot)) || m_VSVehicles.IsInfantryOrderSuspended(slot)) return false;
+		if (slot.GetStrategicIntentRevision() != m_iVSGoalRevision || vector.Distance(slot.GetWaypoint().GetOrigin(), m_vVSGoal) > 1 ||
+			!m_OrderPlanner.GetOrderFailureReason(slot, m_VSFaction).IsEmpty()) return false;
+		array<AIWaypoint> queue = {}; m_VSGroup.GetWaypoints(queue);
+		if (!queue.Contains(slot.GetWaypoint())) return false;
+		vector minimum; vector maximum; m_VSVehicle.GetBounds(minimum, maximum);
+		for (int position; position < m_iVSSize; position++)
+		{
+			ChimeraCharacter actor = ChimeraCharacter.Cast(slot.GetRosterMember(position));
+			CompartmentAccessComponent access = actor.GetCompartmentAccessComponent();
+			if (!access || access.GetCompartment() || actor.IsInVehicle() || CompartmentAccessComponent.GetVehicleIn(actor) ||
+				access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut() || access.IsSwitchingSeatsAnim()) return false;
+			vector local = m_VSVehicle.CoordToLocal(actor.GetOrigin());
+			if (local[0] >= minimum[0] - 1 && local[0] <= maximum[0] + 1 && local[1] >= minimum[1] - 1 &&
+				local[1] <= maximum[1] + 1 && local[2] >= minimum[2] - 1 && local[2] <= maximum[2] + 1) return false;
+		}
+		return true;
+	}
 
 	protected bool AICF_VSSelectFaction()
 	{
@@ -159,7 +414,8 @@ modded class AICF_MatchController
 	protected bool AICF_VSTransitCrew(AICF_GroupSlot slot, AICF_TransportTrip trip)
 	{
 		array<BaseCompartmentSlot> seats = {};
-		AICF_VehiclePreset.Collect(m_VSVehicle, seats);
+		if (m_bVSTacticalPolicy) { if (!AICF_VehiclePreset.CollectCaptured(m_VSVehicle, m_VSRecipe, seats)) return false; }
+		else AICF_VehiclePreset.Collect(m_VSVehicle, seats);
 		if (!m_VSRecipe.MatchesSeats(seats)) return false;
 		for (int index; index < m_VSRecipe.m_aMembers.Count(); index++)
 		{
@@ -209,7 +465,8 @@ modded class AICF_MatchController
 	{
 		if (!m_VSVehicle || m_VSVehicle.GetID() != m_VSVehicleId) return false;
 		array<BaseCompartmentSlot> seats = {};
-		AICF_VehiclePreset.Collect(m_VSVehicle, seats);
+		if (m_bVSTacticalPolicy) { if (!AICF_VehiclePreset.CollectCaptured(m_VSVehicle, m_VSRecipe, seats)) return false; }
+		else AICF_VehiclePreset.Collect(m_VSVehicle, seats);
 		if (!m_VSRecipe.MatchesSeats(seats)) return false;
 		int exact;
 		for (int seat; seat < seats.Count(); seat++)
@@ -220,6 +477,8 @@ modded class AICF_MatchController
 			ChimeraCharacter character = ChimeraCharacter.Cast(member);
 			if (!character || member.GetID() != m_aVSMembers[position] || seats[seat].GetOccupant() != member ||
 				CompartmentAccessComponent.GetVehicleIn(member) != m_VSVehicle || character.GetCompartmentAccessComponent().IsGettingOut()) return false;
+			if (m_bVSTacticalPolicy && (!character.IsInVehicle() || character.GetCompartmentAccessComponent().GetCompartment() != seats[seat] ||
+				character.GetCompartmentAccessComponent().IsGettingIn() || character.GetCompartmentAccessComponent().IsSwitchingSeatsAnim())) return false;
 			exact++;
 		}
 		return exact == m_iVSSize;
@@ -260,6 +519,11 @@ modded class AICF_MatchController
 				vector nav;
 				if (!path.GetClosestPositionOnNavmesh(query, "20 10 20", nav)) continue;
 				if (ChimeraWorldUtils.TryGetWaterSurfaceSimple(GetGame().GetWorld(), nav - "0 0.5 0")) continue;
+				if (m_bVSTacticalPolicy)
+				{
+					IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(m_VSGroup);
+					if (!leader || vector.DistanceXZ(leader.GetOrigin(), nav) <= m_VSRecipe.m_iReturnDistance) continue;
+				}
 				target = nav;
 				best = distance;
 				found = true;
@@ -423,6 +687,18 @@ modded class AICF_MatchController
 		int now = System.GetTickCount();
 		if (!m_iVSStarted) m_iVSStarted = now;
 		if (now - m_iVSStarted > 1200000) { AICF_VSCheck("TIMEOUT", false); AICF_VSFinish(); return; }
+		string retained;
+		m_bVSRetained = System.GetCLIParam("aicfVehicleScenarioRetainedBehavior", retained) && retained == "1";
+		if (m_bVSRetained && m_sVSCase != "repeat5") { AICF_VSCheck("RETAINED_SCOPE", false); AICF_VSFinish(); return; }
+		string currentBehavior;
+		m_bVSCurrentBehavior = System.GetCLIParam("aicfVehicleScenarioCurrentBehavior", currentBehavior) && currentBehavior == "1";
+		if (m_bVSCurrentBehavior && (m_bVSRetained || m_sVSCase == "repeat5")) { AICF_VSCheck("CURRENT_BEHAVIOR_SCOPE", false); AICF_VSFinish(); return; }
+		m_bVSTacticalPolicy = m_bVSRetained || m_bVSCurrentBehavior;
+		m_sVSProtectionScope = AICF_VSHierarchyProtection.SelectedScope();
+		if (m_sVSProtectionScope != "ROOT_ONLY" && (m_sVSProtectionScope != "HIERARCHY" || !m_bVSRetained))
+		{
+			AICF_VSCheck("PROTECTION_SCOPE", false); AICF_VSFinish(); return;
+		}
 		if (!m_VSFaction && !AICF_VSSelectFaction()) { AICF_VSCheck("FACTION_SELECTION", false); AICF_VSFinish(); return; }
 		if (!m_VSState)
 		{
@@ -433,15 +709,33 @@ modded class AICF_MatchController
 				array<Faction> factions = {};
 				manager.GetFactionsList(factions);
 				m_bVSTruce = true;
+				int trucePairs; int unavailablePairs; int hostilePairs;
 				for (int first; first < factions.Count(); first++)
 					for (int second = first + 1; second < factions.Count(); second++)
 					{
 						SCR_Faction a = SCR_Faction.Cast(factions[first]);
 						SCR_Faction b = SCR_Faction.Cast(factions[second]);
-						if (!a || !b) continue;
+						if (!a || !b)
+						{
+							unavailablePairs++;
+							if (m_bVSTacticalPolicy) m_bVSTruce = false;
+							continue;
+						}
 						manager.SetFactionsFriendly(a, b);
-						if (!a.IsFactionFriendly(b) || !b.IsFactionFriendly(a)) m_bVSTruce = false;
+						bool forwardFriendly = a.IsFactionFriendly(b); bool reverseFriendly = b.IsFactionFriendly(a);
+						trucePairs++;
+						if (!forwardFriendly || !reverseFriendly) { m_bVSTruce = false; hostilePairs++; }
+						if (m_bVSTacticalPolicy) Print(string.Format("[AICF][VEHICLE_SCENARIO_TRUCE_PAIR] first=%1 second=%2 first_friendly=%3 second_friendly=%4 native_readback=1",
+							a.GetFactionKey(), b.GetFactionKey(), forwardFriendly, reverseFriendly));
 					}
+				if (m_bVSTacticalPolicy)
+				{
+					int expectedPairs = factions.Count() * (factions.Count() - 1) / 2;
+					m_iVSTruceFactionCount = factions.Count();
+					if (factions.Count() < 2 || trucePairs != expectedPairs || unavailablePairs > 0) m_bVSTruce = false;
+					Print(string.Format("[AICF][VEHICLE_SCENARIO_TRUCE_SUMMARY] factions=%1 pairs=%2 expected_pairs=%3 unavailable_pairs=%4 hostile_pairs=%5 classification=CONTROLLED_RETAINED_CYCLE_ONLY native_readback=1",
+						factions.Count(), trucePairs, expectedPairs, unavailablePairs, hostilePairs));
+				}
 				AICF_VSCheck("TEST_WORLD_TRUCE", m_bVSTruce);
 				if (!m_bVSTruce) { AICF_VSFinish(); return; }
 			}
@@ -471,6 +765,7 @@ modded class AICF_MatchController
 			if (m_VSGroup.GetAgentsCount() != m_iVSSize) return;
 			string combat;
 			bool combatCase = System.GetCLIParam("aicfVehicleScenarioCombat", combat) && combat == "1";
+			if (m_bVSRetained && combatCase) { AICF_VSCheck("RETAINED_TRANSPORT_SCOPE", false); AICF_VSFinish(); return; }
 			SCR_AIGroupUtilityComponent groupUtility = m_VSGroup.GetGroupUtilityComponent();
 			if (!groupUtility) { AICF_VSCheck("GROUP_UTILITY", false); AICF_VSFinish(); return; }
 			if (!combatCase) groupUtility.SetCombatMode(EAIGroupCombatMode.HOLD_FIRE);
@@ -486,6 +781,17 @@ modded class AICF_MatchController
 					if (!actor || !actor.GetDamageManager()) { AICF_VSCheck("DAMAGE_MANAGER", false); AICF_VSFinish(); return; }
 					actor.GetDamageManager().EnableDamageHandling(false);
 					if (actor.GetDamageManager().IsDamageHandlingEnabled()) { AICF_VSCheck("DAMAGE_PROTECTION", false); AICF_VSFinish(); return; }
+					if (m_sVSProtectionScope == "HIERARCHY")
+					{
+						string setup; string readback;
+						if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(actor) ||
+							!AICF_VSHierarchyProtection.Apply(actor, setup) || !AICF_VSHierarchyProtection.Verify(actor, readback))
+						{
+							AICF_VSCheck("MEMBER_HIERARCHY_PROTECTION", false); AICF_VSFinish(); return;
+						}
+						Print(string.Format("[AICF][VEHICLE_SCENARIO_PROTECTION] event=APPLIED kind=MEMBER position=%1 entity=%2 scope=HIERARCHY classification=CONTROLLED_RETAINED_CYCLE_ONLY %3",
+							protectedMember, AICF_GroupTrace.Entity(actor), readback));
+					}
 				}
 			Print(string.Format("[AICF][VEHICLE_SCENARIO_ENV] scenario=%1 combat=%2 combat_mode=%3 damage_protection=%4 truce=%5",
 				m_sVSCase, combatCase, typename.EnumToString(EAIGroupCombatMode, groupUtility.GetCombatModeExternal()), !combatCase, m_bVSTruce));
@@ -507,6 +813,14 @@ modded class AICF_MatchController
 			string reason;
 			if (!catalog.Inspect(prefab, reason)) { AICF_VSCheck("CATALOG_INSPECTION", false); catalog.Clear(); AICF_VSFinish(); return; }
 			m_VSRecipe = catalog.Draft(prefab);
+			if (m_bVSTacticalPolicy)
+			{
+				m_VSRecipe.m_iBehavior = AICF_EVehicleBehavior.TRANSPORT;
+				m_VSRecipe.m_iReturnDistance = 300;
+				if (m_bVSRetained) Print("[AICF][VEHICLE_SCENARIO_POLICY] scenario=repeat5 version=4 policy=RETAINED_TRANSPORT return_distance_m=300 same_asset=1");
+				else Print(string.Format("[AICF][VEHICLE_SCENARIO_POLICY] scenario=%1 version=3 policy=CURRENT_RETAINED return_distance_m=300 same_asset=1", m_sVSCase));
+				if (m_sVSProtectionScope == "HIERARCHY") Print("[AICF][VEHICLE_SCENARIO_PROTECTION_POLICY] scope=HIERARCHY classification=CONTROLLED_RETAINED_CYCLE_ONLY mode=BEFORE_MOVEMENT_ONCE");
+			}
 			Print(string.Format("[AICF][VEHICLE_SCENARIO_SELECTION] scenario=%1 faction=%2 actual_faction=%3 prefab=%4 native_seats=%5 native_cost=%6", m_sVSCase, m_sVSFaction, m_VSFaction.GetFactionKey(), prefab, catalog.Seats().Count(), catalog.Cost(prefab)));
 			int member;
 			for (int mandatory; mandatory < catalog.Seats().Count(); mandatory++)
@@ -518,11 +832,17 @@ modded class AICF_MatchController
 			catalog.Clear();
 			AICF_VSCheck("EXACT_RECIPE", valid);
 			if (!valid) { AICF_VSFinish(); return; }
-			for (int actor; actor < m_iVSSize; actor++) m_aVSMembers.Insert(slot.GetRosterMember(actor).GetID());
+			for (int actor; actor < m_iVSSize; actor++)
+			{
+				m_aVSMembers.Insert(slot.GetRosterMember(actor).GetID());
+				if (m_bVSCurrentBehavior) Print(string.Format("[AICF][VEHICLE_SCENARIO_ROSTER] position=%1 member=%2 group=%3 original_capture=1",
+					actor, AICF_GroupTrace.Entity(slot.GetRosterMember(actor)), AICF_GroupTrace.Entity(m_VSGroup)));
+			}
 			AICF_VSCheck("INITIAL_ORDER", m_OrderPlanner.AssignPlayerPointOrder(slot, m_VSFaction, m_vVSHome, false));
 		}
 		AICF_VSServiceOwnRecovery(slot);
 		AICF_VSServiceRecovery(slot);
+		if (m_bVSTacticalPolicy && m_bVSTruce && !AICF_VSVerifyTruce()) { AICF_VSCheck("CURRENT_TRUCE_READBACK", false); AICF_VSFinish(); return; }
 		AICF_VSUpdateVehicles();
 		AICF_TransportTrip trip = m_VSVehicles.GetTrip(slot);
 		// Реестр вправе удалить завершённый trip до пешего прибытия к точке.
@@ -532,6 +852,16 @@ modded class AICF_MatchController
 			AICF_VSCheck("REPEAT_TRIP_NOT_ADMITTED", false); AICF_VSFinish(); return;
 		}
 		if (!trip || trip.GetOperationId() == m_sVSPreviousTrip) return;
+		if (m_bVSTacticalPolicy && trip.IsTerminal())
+		{
+			AICF_GroupTrace.Snapshot(slot, m_VSFaction.GetFactionKey(), trip, 0, "SCENARIO_RETAINED_TERMINAL");
+			AICF_VSCheck("RETAINED_TERMINAL_" + trip.GetTerminalReason(), false); AICF_VSFinish(); return;
+		}
+		if (!AICF_VSProtectionReadback(slot, trip)) { AICF_VSCheck("HIERARCHY_PROTECTION_READBACK", false); AICF_VSFinish(); return; }
+		if (m_bVSTacticalPolicy && m_VSRetainedTrip && !AICF_VSRetainedCurrent(slot, trip))
+		{
+			AICF_VSCheck("RETAINED_IDENTITY_LOST", false); AICF_VSFinish(); return;
+		}
 		string damageCombat;
 		if ((!System.GetCLIParam("aicfVehicleScenarioCombat", damageCombat) || damageCombat != "1") && trip.GetLease() && trip.GetLease().GetVehicle())
 		{
@@ -550,13 +880,32 @@ modded class AICF_MatchController
 			m_VSVehicle = trip.GetLease().GetVehicle();
 			m_VSVehicleId = m_VSVehicle.GetID();
 			m_vVSStart = m_VSVehicle.GetOrigin();
+			if (m_bVSTacticalPolicy)
+			{
+				m_VSRetainedTrip = trip; m_VSRetainedLease = trip.GetLease();
+				m_sVSRetainedRpl = AICF_VehicleBehaviorBinding.ComponentRpl(m_VSVehicle);
+				m_iVSRetainedLeaseGeneration = m_VSRetainedLease.GetLeaseGeneration();
+				m_iVSRetainedVehicleGeneration = m_VSRetainedLease.GetVehicleGeneration();
+			}
 			AICF_VSCheck("EXACT_BOARDING", AICF_VSExact(slot));
 			Print(string.Format("[AICF][VEHICLE_SCENARIO_BOARDING] scenario=%1 leg=%2 operation_id=%3 vehicle=%4 group=%5 crew=%6",
 				m_sVSCase, m_iVSLeg, trip.GetOperationId(), AICF_GroupTrace.Entity(m_VSVehicle), AICF_GroupTrace.Entity(m_VSGroup), m_iVSSize));
 			if (!AICF_VSExact(slot)) { AICF_VSFinish(); return; }
+			if (m_bVSTacticalPolicy) AICF_VSRetainedBoarding(slot, trip);
 			m_iVSParked = now;
 			m_iVSStep = 1;
 			if (m_iVSLeg > 1) m_iVSStep = 2;
+		}
+		if (m_bVSRetained && m_iVSStep == 5)
+		{
+			if (trip.GetPhase() != AICF_ETransportTripPhase.TRANSIT) return;
+			AICF_VSCheck("EXACT_BOARDING", AICF_VSExact(slot));
+			if (!AICF_VSExact(slot)) { AICF_VSFinish(); return; }
+			AICF_VSCheck("SAME_ASSET_REBOARD", AICF_VSRetainedCurrent(slot, trip));
+			AICF_VSRetainedBoarding(slot, trip);
+			Print(string.Format("[AICF][VEHICLE_SCENARIO_BOARDING] scenario=%1 leg=%2 operation_id=%3 vehicle=%4 group=%5 crew=%6",
+				m_sVSCase, m_iVSLeg, trip.GetOperationId(), AICF_GroupTrace.Entity(m_VSVehicle), AICF_GroupTrace.Entity(m_VSGroup), m_iVSSize));
+			m_iVSStep = 2;
 		}
 		if (m_iVSStep == 1)
 		{
@@ -600,6 +949,10 @@ modded class AICF_MatchController
 				}
 				return;
 			}
+			// A threat can interrupt a current manual route. Wait for the real
+			// arrival; an early tactical deployment is not a destination receipt.
+			if (m_bVSTacticalPolicy && trip.GetPhase() == AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT &&
+				(trip.GetLastTransitionReason() != "DESTINATION_REACHED" || distance > m_Stage3Config.GetDismountDistanceMeters() + 10)) return;
 			AICF_VSCheck("GATE_RETURNS_COMPLETE", m_aVSGates.IsEmpty());
 			AICF_VSCheck("ARRIVAL_AT_ORIGINAL_GOAL", distance <= m_Stage3Config.GetDismountDistanceMeters() + 10);
 			AICF_VSCheck("REAL_TRAVEL", vector.DistanceXZ(m_vVSStart, m_VSVehicle.GetOrigin()) >= 100 && m_iVSMoving >= 5 && m_iVSRecoveries == 0);
@@ -609,7 +962,12 @@ modded class AICF_MatchController
 		}
 		if (m_iVSStep == 3)
 		{
-			if (trip.GetPhase() != AICF_ETransportTripPhase.COMPLETE) return;
+			if (m_bVSTacticalPolicy)
+			{
+				if (trip.GetPhase() != AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT || !AICF_VSRetainedFoot(slot)) return;
+				Print(string.Format("[AICF][VEHICLE_SCENARIO_RETAINED_DISMOUNT] leg=%1 logical_occupants=0 transitions=0 inside_bounds=0 actual_order=1 same_asset=1", m_iVSLeg));
+			}
+			else if (trip.GetPhase() != AICF_ETransportTripPhase.COMPLETE) return;
 			AICF_VSCheck("NORMAL_DISMOUNT", AICF_GroupRuntime.CountAliveAgents(m_VSGroup) == m_iVSSize && AICF_GroupRuntime.CountAliveAgentsInAnyVehicle(m_VSGroup) == 0);
 			AICF_VSCheck("FOOT_ORDER_RESTORED", !m_VSVehicles.IsInfantryOrderSuspended(slot) && slot.GetWaypoint() && m_VSGroup.GetCurrentWaypoint() == slot.GetWaypoint());
 			m_VSCompletedTrip = trip;
@@ -633,6 +991,19 @@ modded class AICF_MatchController
 			if (m_sVSCase == "repeat5" && m_iVSLeg == 1)
 			{
 				m_iVSLeg = 2;
+				if (m_bVSRetained)
+				{
+					IEntity leader = AICF_GroupRuntime.ResolveAliveLeader(m_VSGroup);
+					float returnDistance = vector.DistanceXZ(leader.GetOrigin(), m_vVSRepeatTarget);
+					m_vVSStart = m_VSVehicle.GetOrigin();
+					int previousIntent = m_iVSGoalRevision;
+					AICF_VSCheck("REPEAT_ORDER", AICF_VSOrder(slot, m_vVSRepeatTarget));
+					AICF_VSCheck("DISTANT_RETURN_INTENT", returnDistance > m_VSRecipe.m_iReturnDistance && m_iVSGoalRevision != previousIntent);
+					Print(string.Format("[AICF][VEHICLE_SCENARIO_RETAINED_RETURN] distance_m=%1 threshold_m=%2 previous_intent=%3 intent_revision=%4 target=%5",
+						returnDistance, m_VSRecipe.m_iReturnDistance, previousIntent, m_iVSGoalRevision, m_vVSGoal));
+					m_iVSMoving = 0; m_iVSRecoveries = 0; m_iVSStep = 5;
+					return;
+				}
 				m_sVSPreviousTrip = trip.GetOperationId();
 				m_VSCompletedTrip = null;
 				AICF_VSCheck("REPEAT_ORDER", AICF_VSOrder(slot, m_vVSRepeatTarget));
@@ -644,6 +1015,12 @@ modded class AICF_MatchController
 				return;
 			}
 			AICF_VSCheck("PURCHASE_LIMIT", m_VSVehicles.GetSpawnedCount(m_VSFaction.GetFactionKey()) <= m_iVSLeg);
+			if (m_bVSTacticalPolicy)
+			{
+				AICF_VSCheck("SINGLE_PAID_ASSET", AICF_VSRetainedCurrent(slot, trip));
+				Print(string.Format("[AICF][VEHICLE_SCENARIO_RETAINED_FINAL] operation_id=%1 spawned=%2 paid=%3 same_asset=%4",
+					trip.GetOperationId(), m_VSVehicles.GetSpawnedCount(m_VSFaction.GetFactionKey()), trip.IsVehiclePresetDebited(), AICF_VSRetainedCurrent(slot, trip)));
+			}
 			AICF_VSFinish();
 		}
 	}

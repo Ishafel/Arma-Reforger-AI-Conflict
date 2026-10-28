@@ -50,6 +50,16 @@ class AICF_TripOutcome
 		return new AICF_TripOutcome(AICF_ETripOutcomeKind.START_BOARDING, reason, causationId);
 	}
 
+	static AICF_TripOutcome StartTacticalDeployment(string reason, string causationId)
+	{
+		return new AICF_TripOutcome(AICF_ETripOutcomeKind.START_TACTICAL_DEPLOYMENT, reason, causationId);
+	}
+
+	static AICF_TripOutcome ResumeTacticalMovement(string reason, string causationId)
+	{
+		return new AICF_TripOutcome(AICF_ETripOutcomeKind.RESUME_TACTICAL_MOVEMENT, reason, causationId);
+	}
+
 	static AICF_TripOutcome StartMovement(string reason, string causationId)
 	{
 		return new AICF_TripOutcome(AICF_ETripOutcomeKind.START_MOVEMENT, reason, causationId);

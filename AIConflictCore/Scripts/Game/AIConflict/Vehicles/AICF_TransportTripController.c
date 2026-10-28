@@ -14,6 +14,7 @@ class AICF_TransportTripController
 	protected ref AICF_VehicleAcquisitionFlow m_AcquisitionFlow;
 	protected ref AICF_VehicleBoardingFlow m_BoardingFlow;
 	protected ref AICF_VehicleTransitFlow m_TransitFlow;
+	protected ref AICF_VehicleBehaviorFlow m_BehaviorFlow;
 	protected ref AICF_VehicleDismountFlow m_DismountFlow;
 	protected ref AICF_VehicleTaskHandoff m_Handoff;
 	protected ref AICF_VehicleCleanupManager m_CleanupManager;
@@ -45,6 +46,7 @@ class AICF_TransportTripController
 			contentProfile);
 		m_BoardingFlow = new AICF_VehicleBoardingFlow(m_Config, watchdog);
 		m_TransitFlow = new AICF_VehicleTransitFlow(m_Config, m_WaypointFactory, watchdog);
+		m_BehaviorFlow = new AICF_VehicleBehaviorFlow(m_Config);
 		m_DismountFlow = new AICF_VehicleDismountFlow(m_Config, watchdog, m_WaypointFactory);
 		m_Handoff = new AICF_VehicleTaskHandoff(orderPlanner, objectiveGraph, targetSelector);
 		m_Diagnostics = new AICF_VehicleDomainDiagnostics();
@@ -242,6 +244,7 @@ class AICF_TransportTripController
 				"controller-stop-invalid");
 		AICF_VehicleMovementState stopMovement = trip.GetMovementState();
 		if (stopMovement) stopMovement.SetNativeGate(null);
+		m_BehaviorFlow.Stop(trip);
 		if (!trip.IsValid())
 		{
 			ReleaseSpawnPlan(trip, reason);
@@ -368,6 +371,14 @@ class AICF_TransportTripController
 			case AICF_ETransportTripPhase.TRANSIT:
 				outcome = m_TransitFlow.Tick(trip, causationId);
 				break;
+			case AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT:
+				// Reliability владеет receipt своей незавершённой проверки. До
+				// её terminal outcome нельзя снимать waypoint или заменять candidate
+				// повторным Handoff proof. Этот WAIT обходит ApplyOutcome целиком.
+				if (slot.HasPendingOrderRecovery() && slot.PendingOrderRecoveryCountsAsReliabilityAttempt())
+					return AICF_TripOutcome.Wait("TACTICAL_INFANTRY_VERIFICATION_PENDING", causationId);
+				outcome = m_BehaviorFlow.Tick(trip, causationId);
+				break;
 			case AICF_ETransportTripPhase.DISMOUNT:
 				outcome = m_DismountFlow.ProcessNormalDismount(trip, causationId);
 				break;
@@ -425,7 +436,23 @@ class AICF_TransportTripController
 		switch (outcome.GetKind())
 		{
 			case AICF_ETripOutcomeKind.WAIT:
+				if (trip.GetPhase() == AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT)
+				{
+					if (trip.GetBehaviorState().m_bReboarding)
+					{
+						if (!m_Handoff.SuspendInfantryOrder(trip, slot, "TACTICAL_REBOARD"))
+							return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK,
+								"TACTICAL_SUSPEND_FAILED", outcome.GetCausationId(), true);
+						trip.GetHandoffState().Reset();
+					}
+					else
+						m_Handoff.RestoreInfantryOrder(trip, trip.GetHandoffState(), slot, faction, "TACTICAL_DEPLOYMENT", outcome.GetReason());
+				}
 				return outcome;
+			case AICF_ETripOutcomeKind.START_TACTICAL_DEPLOYMENT:
+				return StartTacticalDeployment(trip, outcome, currentAssignment, slot, fleet, faction);
+			case AICF_ETripOutcomeKind.RESUME_TACTICAL_MOVEMENT:
+				return ResumeTacticalMovement(trip, outcome, currentAssignment, slot, fleet, faction);
 			case AICF_ETripOutcomeKind.RETRY:
 				return ApplyRetry(trip, outcome, currentAssignment, slot, fleet, faction);
 			case AICF_ETripOutcomeKind.START_BOARDING:
@@ -452,6 +479,36 @@ class AICF_TransportTripController
 					outcome.GetReason(), outcome.GetCausationId(), true);
 		}
 		return outcome;
+	}
+
+	protected AICF_TripOutcome StartTacticalDeployment(
+		AICF_TransportTrip trip, AICF_TripOutcome outcome, AICF_StrategicAssignmentSnapshot currentAssignment,
+		AICF_GroupSlot slot, AICF_FactionFleet fleet, SCR_CampaignFaction faction)
+	{
+		if (!trip.GetVehiclePreset() || trip.GetPhase() != AICF_ETransportTripPhase.TRANSIT ||
+			!TransitionTo(trip, AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT, outcome.GetReason(), outcome.GetCausationId()))
+			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK, "TACTICAL_TRANSITION_REJECTED", outcome.GetCausationId(), true);
+		if (!trip.CommitBehaviorClockPause(true, System.GetTickCount()) || !m_BehaviorFlow.Begin(trip, outcome.GetReason()))
+			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK, "TACTICAL_BEGIN_REJECTED", outcome.GetCausationId(), true);
+		BeginHandoffEvidence(trip, false);
+		if (trip.GetVehiclePreset().m_iBehavior == AICF_EVehicleBehavior.COMBAT && !m_Handoff.AttachVehicleUtility(trip))
+			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK, "TACTICAL_UTILITY_ATTACH_REJECTED", outcome.GetCausationId(), true);
+		m_Handoff.RestoreInfantryOrder(trip, trip.GetHandoffState(), slot, faction, "TACTICAL_DEPLOYMENT", outcome.GetReason());
+		return AICF_TripOutcome.Wait("TACTICAL_DEPLOYMENT_STARTED", outcome.GetCausationId());
+	}
+
+	protected AICF_TripOutcome ResumeTacticalMovement(
+		AICF_TransportTrip trip, AICF_TripOutcome outcome, AICF_StrategicAssignmentSnapshot currentAssignment,
+		AICF_GroupSlot slot, AICF_FactionFleet fleet, SCR_CampaignFaction faction)
+	{
+		if (trip.GetPhase() != AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT ||
+			!m_Handoff.SuspendInfantryOrder(trip, slot, "TACTICAL_RETURN") ||
+			!TransitionTo(trip, AICF_ETransportTripPhase.TRANSIT, outcome.GetReason(), outcome.GetCausationId()))
+			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK, "TACTICAL_RETURN_REJECTED", outcome.GetCausationId(), true);
+		trip.GetHandoffState().Reset();
+		if (!m_Handoff.AttachVehicleUtility(trip))
+			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK, "TACTICAL_UTILITY_ATTACH_REJECTED", outcome.GetCausationId(), true);
+		return ApplyOutcome(trip, m_TransitFlow.PrepareRoute(trip, outcome.GetCausationId()), currentAssignment, slot, fleet, faction);
 	}
 
 	protected AICF_TripOutcome ApplyRetry(
@@ -1590,6 +1647,10 @@ class AICF_TransportTripController
 				return ExitTransit(trip, reason);
 			case AICF_ETransportTripPhase.DISMOUNT:
 				return ExitDismount(trip, reason);
+			case AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT:
+				m_BehaviorFlow.Stop(trip);
+				m_Handoff.DetachVehicleUtility(trip);
+				return trip.CommitBehaviorClockPause(false, System.GetTickCount());
 		}
 		return true;
 	}
@@ -1598,6 +1659,7 @@ class AICF_TransportTripController
 	{
 		if (!trip.CommitPresetDestinationWait(false, System.GetTickCount())) return false;
 		m_TransitFlow.AbortOwnedActions(trip);
+		AICF_VehicleBehaviorPolicy.Unregister(trip);
 		bool removed = RemoveTransitWaypoints(trip, "PHASE_EXIT", reason);
 		m_Handoff.DetachVehicleUtility(trip);
 		return removed;

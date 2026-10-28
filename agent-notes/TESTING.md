@@ -1,5 +1,87 @@
 # Проверки и baseline
 
+## TRANSPORT/COMBAT и короткое восстановление AI — 2026-10-28
+
+Продолжение #78 на ветке `codex/issue-78-vehicle-presets`. Пользователь выбрал
+N=300м и разрешил короткую видимую принудительную посадку/высадку без лечения,
+воскрешения и дальнего переноса. Контракт — [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md).
+Общий runtime по-прежнему **FAIL**; строгий native reconnect blocker не снят,
+пользователь прямо требует оставить #78 OPEN до native fix. Исторические
+проверки ниже не выдаются за проверки новой реализации.
+
+Evidence этого продолжения: `.codex-runtime/vehicle-behavior-20261028/REPORT.md`,
+`changed-files.txt`, manifests/source hashes, matching auditors и полные stopped
+profiles соответствующих запусков. В новых native runners targeted functional
+и strict all-native resource verdict разделены; PASS первого не снимает FAIL второго.
+
+- Baseline139/139PASS; frozen промежуточные148/148,151/151,157/157 и
+  `final-complete-v1`161/161PASS относятся к своим snapshots. Последний предшествует
+  manual short staging, exhausted staging и ALIVE hull fixes. После них полный
+  `final-complete-v2`:168/168PASS, exact unique union/Logistics ровно1/collector0.
+  Затем изменялись только fixtures/auditors/contracts для current retained policy;
+  актуальный canonical170 завершён отдельным frozen набором `final-current-170`:
+  **170/170PASS/collector0**, exact unique union, Logistics ровно1, все6shards0.
+  Последняя правка толькоScenario auditor/егоcontract после этого freeze отдельно
+  прошла3/3 и87controls; production/fixture не менялись. Сама полная170 относится
+  к frozen версии до этого последнего test-only parser delta, что явно сохранено.
+- `production-complete-v2`: terminal Workbench Stock/RHS/ArlandWCSRHS3/3PASS,
+  native0/successful validation/source drift0, включая последние три fixes.
+- Controlled behavior US/USSR: каждый transport/combat24behavior+23settingsPASS;
+  Pilot loss during reboard28+23PASS, route queue loss31+23PASS, INCAP hull30+23PASS,
+  ALIVE hull30+23PASS. Actual short displacement, compartments, original identities,
+  same vehicle/lease/debit и неизменённые health/life state проверяются в native.
+- Recruitment short20PASS с actual arrival/paid join, GC21PASS с настоящими
+  deferred stock TTL callbacks/lease veto/teardown/delete. Manual staging14PASS,
+  early exhaustion12PASS с восстановленным actual waypoint и завершённой
+  штатной durability verification. Native0/stopped; strict resourcesFAIL.
+- Final UI `backend-behavior-settings-proxy-safety-v2`:34client+8JIP functional
+  PASS, WB0/native0/0/0/fullstopped. Настоящий server-spawned client proxy,
+  full private Fleet/ACTIVE lease и оба permission denials подтверждены.
+  Server-local prefab оказался MASTER и не выдаётся за negative proxy test.
+  Corrected matching audit1 ONLY `SERVER_FULL_FATAL`:8 persistence instances,
+  raw all-sibling E lines372 (включая повторения между logs), overallFAIL.
+  Исправление EntityID parser имеет49controls, original failed audit сохранён.
+- Soak-v4 обе стороны и MOVING-v3: по1800с/native0/stopped, overallFAIL.
+  Их source предшествует последним fixes; разбор в
+  `long-final-readonly-monitor/REPORT.md`. Новые v5/v6 обе стороны и MOVING-v4
+  завершили1800с/native0/fullstopped. Все имеют strict resourcesFAIL. Multi4:
+  только cohort2≥31.639с,4/6FAIL,7failures/completed0; taskless/retained cleanup
+  в полном log не повторились, все6released leases имеют exact GC restoration/
+  WORLD_POOL_RELEASED/cap0. Actual stock STUCK→GetOut→bounded fallback доказан,
+  физическая причинаSTUCK неизвестна; это не доказательство предела cap.
+- USSR-v6 обычная война: actual paid5/settled5,276.795м/49movingpolls,
+  original5foot≤32.8675м, route_complete1/failures0. Corrected auditor даёт
+  functional/fatalPASS, resources32FAIL/overallFAIL. Original auditFAIL3 сохранён:
+  logger mismatch6мс и intentional matching stop послеDONE. Новый auditor153controls
+  требует обаactualholdintervals иheld>=configured, mismatch≤50мс; разрешает
+  только exact matching COORDINATOR_STOP teardown, full fatal/resources не режет.
+- US-v6 обычная война FAIL: исходный отряд погиб, после этого24неполных
+  replacement spawns в исходном30s окне (actual0..4 приconfigured/requested5).
+  Gen26 сформировался полностью. Dormant counters/engine queue не измерены,
+  причинаUNKNOWN; native-only причина для этих timeout не объявляется.
+  Accounting imbalance0 у всех пяти полных запусков. Итог:
+  `long-final-v5-monitor/REPORT.md`, matching corrected Soak receipts отдельно.
+- Current retained controlled repeat US/USSR: каждый26native checks/0fail,
+  два actual routes/две высадки/all5atpoint, same trip/lease/entity/Rpl/roster,
+  single purchase. Результат относится к `retained-repeat-*-current-v2` с явными
+  truce pair readbacks/HIERARCHY protection, не к ordinary war. Старые root-only
+  movement damage и hierarchy reboardtimeouts остаются FAIL. Отдельный corrected
+  matching auditor даёт targeted0 обоих, native/source drift0, resources28FAIL.
+  Original audit1 сохранён. Последний delta толькоauditor/contract,3/3PASS и
+  87logcontrols: exact own Stop pair после strictFINAL доDONE разрешён, любой
+  ранний/чужой/nonSTOP/malformed/fatal отказ остаётсяFAIL. Production не менялся.
+- `controlled-budget-current-v1`: native0/targeted audit0,16scenario checks,
+  actual arrival→fixture-only adapter→реальный bounded Dismount owner.
+  Это `CONTROLLED_DISMOUNT_BRANCH_ONLY`; current manual TRANSPORT штатно идёт
+  в TACTICAL_DEPLOYMENT. Budgets3logical+3physical/deadlines не расширялись.
+
+Сохранены исходные FAIL, в том числе NTFS junction без нужных прав, ошибочный
+snapshot с concurrent drift, compile ошибки и invalid fixture readbacks до
+native frame/deferred callback. Исправленная проверка не приписывает PASS старому
+запуску. Ручной visual UX остаётся отдельно **NOT RUN** по
+[VEHICLE_VISUAL_CHECK.md](VEHICLE_VISUAL_CHECK.md); physical all-model RHS/WCS
+matrix также NOT RUN. Compile/catalog их не заменяют.
+
 ## Продолжение #78: текущие gates — 2026-10-28
 
 Общий runtime outcome остаётся **FAIL**, issue не закрыта. Evidence:

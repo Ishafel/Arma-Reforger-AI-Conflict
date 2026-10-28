@@ -104,6 +104,28 @@ class AICF_VSDismountBudgetProbe
 	}
 }
 
+// Current manual presets normally retain the asset in TACTICAL_DEPLOYMENT.
+// This explicit test adapter enters the real bounded dismount owner only after
+// the production transit owner has proved the actual destination arrival.
+modded class AICF_VehicleTransitFlow
+{
+	override AICF_TripOutcome Tick(AICF_TransportTrip trip, string causationId)
+	{
+		AICF_TripOutcome outcome = super.Tick(trip, causationId);
+		string adapter;
+		AICF_VSDismountBudgetProbe probe = AICF_VSDismountBudgetProbe.s_Current;
+		if (!AICF_VSDismountBudgetProbe.Enabled() || !System.GetCLIParam("aicfVehicleScenarioDismountBudgetAdapter", adapter) || adapter != "1") return outcome;
+		if (!probe || !probe.Matches(trip) || trip.GetPhase() != AICF_ETransportTripPhase.TRANSIT || !outcome) return outcome;
+		if (outcome.GetKind() != AICF_ETripOutcomeKind.START_TACTICAL_DEPLOYMENT || outcome.GetReason() != "DESTINATION_REACHED" ||
+			trip.GetMovementState().GetRouteGeneration() <= 0) return outcome;
+		float distance = vector.DistanceXZ(probe.m_Vehicle.GetOrigin(), trip.GetMovementState().GetTacticalTarget());
+		if (distance > m_Config.GetDismountDistanceMeters()) return outcome;
+		probe.Log("ARRIVAL_ADAPTER", string.Format("classification=CONTROLLED_DISMOUNT_BRANCH_ONLY source_reason=DESTINATION_REACHED native_arrival=1 route_generation=%1 target_distance_m=%2 dismount_radius_m=%3 direct_phase_mutation=0",
+			trip.GetMovementState().GetRouteGeneration(), distance, m_Config.GetDismountDistanceMeters()));
+		return AICF_TripOutcome.StartDismount("CONTROLLED_BUDGET_DESTINATION_REACHED", outcome.GetCausationId());
+	}
+}
+
 modded class AICF_VehicleDismountFlow
 {
 	override AICF_TripOutcome ProcessNormalDismount(AICF_TransportTrip trip, string causationId)

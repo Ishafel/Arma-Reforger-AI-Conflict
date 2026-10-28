@@ -42,6 +42,9 @@ class AICF_VehicleBoardingActionToken
 	protected EAICompartmentType m_CompartmentType;
 	protected int m_iRetryCount;
 	protected bool m_bPresetQueued;
+	protected bool m_bShortRecoveryAttempted;
+	bool WasShortRecoveryAttempted() { return m_bShortRecoveryAttempted; }
+	void MarkShortRecoveryAttempted() { m_bShortRecoveryAttempted = true; }
 	bool WasPresetQueued() { return m_bPresetQueued; }
 	bool CompleteSettledPresetAction()
 	{

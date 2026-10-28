@@ -20,7 +20,7 @@ function Rules([string]$spawn,[string]$acquisition){
   !$acquisition.Contains('trip.GetVehiclePreset() != null);') -or !$current.Contains('plan.RequiresManualRally() == (trip.GetVehiclePreset() != null)') -or
   !$current.Contains('m_Spawner.IsSiteReservationCurrent(')){'CAPTURED_MANUAL_SCOPE_CURRENT_REQUEST_FENCE'}
  $guard='if (plan && plan.RequiresManualRally()) return false;'
- if(!$relocate.Contains($guard) -or $relocate.IndexOf($guard) -gt $relocate.IndexOf('plan.CanProbeStagingRelocation(')){'MANUAL_NO_PHYSICAL_RELOCATION'}
+ if(!$relocate.Contains($guard) -or $relocate.IndexOf($guard) -gt $relocate.IndexOf('plan.CanProbeStagingRelocation(')){'MANUAL_NO_LONG_RELOCATION'}
  if($acquisition -match 'IsMemberWithinSpawnBoardingEnvelope\((?:entity|character), plan.GetSpawnPosition\(\)\)'){'NO_OLD_ENVELOPE_EARLY_CANCELLATION'}
  if($predicate -match 'SetOrigin|Teleport|GetTickCount|Set\w*\(|AddAction|Deadline|CallLater'){'PURE_GEOMETRY_POLICY'}
 }
@@ -37,7 +37,7 @@ foreach($mutation in @(
 }
 foreach($mutation in @(
  @('plan.RequiresManualRally() == (trip.GetVehiclePreset() != null)','true','CAPTURED_MANUAL_SCOPE_CURRENT_REQUEST_FENCE'),
- @('if (plan && plan.RequiresManualRally()) return false;',';','MANUAL_NO_PHYSICAL_RELOCATION'),
+ @('if (plan && plan.RequiresManualRally()) return false;',';','MANUAL_NO_LONG_RELOCATION'),
  @('trip.GetVehiclePreset() != null);','false);','CAPTURED_MANUAL_SCOPE_CURRENT_REQUEST_FENCE')
 )){
  if(!$flow.Contains($mutation[0])){throw "Mutation target missing: $($mutation[0])"}
@@ -72,4 +72,4 @@ foreach($case in @(
  $actual=[AICF_ManualRallyAdapter]::Evaluate($case[0],$case[1],$case[2],$case[3],$case[4])
  if($actual -ne $case[5]){throw "Manual rally predicate failed: $($case[6]) actual=$actual"};$controls++
 }
-"PASS Manual vehicle rally: actual production geometry rejects premature manual staging, retains old auto envelope, shares approach/commit/member policy, fences request scope, forbids manual physical relocation; controls=$controls"
+"PASS Manual vehicle rally: actual production geometry rejects premature manual staging, retains old auto envelope and legacy long-relocation veto; bounded manual short correction has separate contracts; controls=$controls"

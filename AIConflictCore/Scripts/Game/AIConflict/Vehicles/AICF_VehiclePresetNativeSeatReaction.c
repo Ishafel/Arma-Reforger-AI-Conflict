@@ -5,6 +5,7 @@ modded class SCR_AIGoalReaction_GetInVehicle
 	override void PerformReaction(notnull SCR_AIUtilityComponent utility, SCR_AIMessageBase message)
 	{
 		SCR_AIMessage_GetIn getIn = SCR_AIMessage_GetIn.Cast(message);
+		if (AICF_VehicleBehaviorPolicy.SuppressGetIn(utility, getIn)) return;
 		AICF_VehiclePresetNativeSeatRequest request = AICF_VehiclePresetNativeSeatPolicy.Prepare(utility, getIn);
 		if (!request)
 		{

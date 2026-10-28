@@ -163,7 +163,7 @@ foreach($case in @(@(0,$true),@(4.999,$true),@(5,$false),@(5.001,$false),@(20,$f
  if([bool](& $historyCheck $case[0]) -ne $case[1]){throw 'Previously committed endpoint history separation changed'}
 }
 if($service -notmatch 'if \(order.m_iApproachRepairs >= 2\)' -or
- $service -notmatch '(?s)order.m_iApproachRepairs\+\+;\s*bool issued = m_Planner.RepairInfantryRecruitmentApproach\(order\)' -or
+ $service -notmatch '(?s)order.m_iApproachRepairs\+\+;\s*if \(!order.m_bHiddenRecoveryPending && order.m_MoveFailure && order.m_MoveFailure.TryRecover\(order\)\)\s*\{\s*order.m_bHiddenRecoveryPending = true;\s*order.m_iHiddenRecoverySubmittedAtMs = now;\s*\}\s*order.m_MoveFailure = null;\s*bool issued = m_Planner.RepairInfantryRecruitmentApproach\(order\)' -or
  $service -notmatch 'order.m_iGraphRevision != m_Graph.GetRevision\(\)' -or
  $failure -notmatch 'graphRevision != m_iGraphRevision' -or
  $failure -notmatch 'DistanceSqXZ\(leader.GetOrigin\(\), m_vGroupPosition\) < 1225'){

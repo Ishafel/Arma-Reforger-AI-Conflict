@@ -1,5 +1,67 @@
 // Hidden widget tree + настоящие owner RPC. Не открывает карту/окна,
 // не захватывает focus и не имитирует физический ввод.
+modded class AICF_FactionFleet
+{
+	// Private client-only test state; never touches the authoritative fleet.
+	AICF_VehicleLease AICF_ClientGCBind(Vehicle vehicle, string rpl)
+	{
+		if (Replication.IsServer() || !vehicle || rpl.IsEmpty() || rpl == "NONE") return null;
+		AICF_VehicleLease lease = new AICF_VehicleLease(m_sFactionKey, 0, 1, 17, ++m_iNextLeaseGeneration);
+		m_aLeases.Insert(lease);
+		if (!BindReservedLeaseVehicle(lease, vehicle, rpl,
+			"{259EE7B78C51B624}Prefabs/Vehicles/Wheeled/UAZ469/UAZ469.et", AICF_EVehicleKind.LIGHT_TRANSPORT, 5, vehicle.GetOrigin()))
+		{
+			m_aLeases.RemoveItem(lease);
+			return null;
+		}
+		return lease;
+	}
+}
+
+class AICF_VehicleClientGarbageProbe
+{
+	static bool Run(SCR_PlayerController player, Vehicle vehicle, RplId expected, bool jip)
+	{
+		IEntity avatar;
+		if (player) avatar = player.GetControlledEntity();
+		BaseWorld world = GetGame().GetWorld();
+		RplComponent component;
+		if (vehicle) component = RplComponent.Cast(vehicle.FindComponent(RplComponent));
+		ref AICF_FactionFleet fleet = new AICF_FactionFleet("USSR", 10);
+		string rpl = AICF_VehicleBehaviorBinding.ComponentRpl(vehicle);
+		AICF_VehicleLease lease = fleet.AICF_ClientGCBind(vehicle, rpl);
+		bool prepared = !Replication.IsServer() && vehicle && component && component.IsProxy() && !component.IsMaster();
+		if (prepared) prepared = expected != RplId.Invalid() && component.Id() == expected && Replication.FindItem(expected) == component;
+		if (prepared) prepared = lease && fleet.OwnsVehicleLease(lease);
+		if (prepared) prepared = lease.HasPhysicalAsset() && vehicle.GetWorld() == GetGame().GetWorld();
+		if (prepared) prepared = lease.MatchesIdentity("USSR", 0, 1, lease.GetLeaseGeneration(), lease.GetVehicleGeneration(), vehicle.GetID(), rpl);
+		if (prepared) prepared = lease.MatchesTripIdentity("USSR", 0, 1, 17);
+		bool registerDenied;
+		bool protectDenied;
+		if (prepared)
+		{
+			registerDenied = !AICF_VehicleGarbagePolicy.Register(fleet, lease);
+			ref AICF_VehicleGarbagePermission permission = new AICF_VehicleGarbagePermission(fleet, lease);
+			protectDenied = !permission.CanProtect(vehicle);
+		}
+		bool passed = prepared && registerDenied && protectDenied;
+		string details = string.Format("jip=%1 actual_server=%2 prepared=%3 register_denied=%4 protect_denied=%5 passed=%6",
+			jip, Replication.IsServer(), prepared, registerDenied, protectDenied, passed);
+		if (vehicle)
+		{
+			details += string.Format(" entity=%1 rpl=%2", AICF_GroupTrace.Entity(vehicle), rpl);
+			if (component) details += string.Format(" native_master=%1 native_proxy=%2 native_role=%3", component.IsMaster(), component.IsProxy(), component.Role());
+		}
+		details += string.Format(" actor_present=%1 world_present=%2 vehicle_present=%3 fleet_owns=%4 lease_present=%5 expected_rpl=%6 setup_reason=%7",
+			avatar != null, world != null, vehicle != null, fleet.OwnsVehicleLease(lease), lease != null, expected, player.AICF_VehicleGCProbeReason());
+		if (lease) details += string.Format(" lease_state=%1 group_generation=%2 trip_generation=%3 lease_generation=%4 vehicle_generation=%5",
+			lease.GetState(), lease.GetGroupGeneration(), lease.GetTripGeneration(), lease.GetLeaseGeneration(), lease.GetVehicleGeneration());
+		Print("[AICF][VEHICLE_UI_GC_AUTHORITY] " + details);
+		// This is a streamed proxy. Only the owning server fixture may clean it up.
+		return passed;
+	}
+}
+
 class AICF_VehiclePresetProbeUIModel : AICF_StrategicUIController
 {
 	protected int m_iSliderRequest = -1;
@@ -52,6 +114,8 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 	protected int m_iProbeFailures;
 	protected int m_iProbeExpectedRevision;
 	protected bool m_bProbeCatalogFilters;
+	protected bool m_bProbeBehaviorSettings;
+	protected bool m_bProbeGarbageChecked;
 	protected ResourceName m_sProbePrefab;
 	void AICF_VehiclePresetProbeEditor(AICF_StrategicUIController controller) { m_Controller = controller; }
 	bool Done() { return m_bProbeDone; }
@@ -70,6 +134,8 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 		m_bProbeJIP = jip;
 		string catalogFlag;
 		m_bProbeCatalogFilters = System.GetCLIParam("aicfVehicleCatalogFilters", catalogFlag);
+		string behaviorFlag;
+		m_bProbeBehaviorSettings = System.GetCLIParam("aicfVehicleBehaviorReadback", behaviorFlag) && behaviorFlag == "1";
 		if (!jip) Check("NO_FACTION_REJECTED", noRightsPassed);
 		Check("ALPHA_VEHICLE_FORM", Create(hidden, 0) && !m_wRoot.IsVisibleInHierarchy());
 		Request(AICF_EVehiclePresetOperation.READ, "");
@@ -102,7 +168,18 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 	void Tick()
 	{
 		Refresh();
+		if (m_bProbeBehaviorSettings && !m_bProbeGarbageChecked)
+			Print(string.Format("[AICF][VEHICLE_UI_GC_CLIENT_TICK] source=proxy_diag_v1 done=%1 pending=%2 queued=%3 view_bytes=%4 player_present=%5",
+				m_bProbeDone, m_bPending, m_bQueued, m_sView.Length(), m_Player != null));
 		if (m_bProbeDone || m_bPending || m_bQueued || m_sView.IsEmpty() || !m_Player) return;
+		if (m_bProbeBehaviorSettings && !m_bProbeGarbageChecked)
+		{
+			m_Player.AICF_RequestVehicleGCProbe();
+			if (!m_Player.AICF_VehicleGCProbeReady()) return;
+			Check("GC_NO_AUTHORITY_REJECTED", AICF_VehicleClientGarbageProbe.Run(m_Player,
+				m_Player.AICF_VehicleGCProbeEntity(), m_Player.AICF_VehicleGCProbeIdentity(), m_bProbeJIP));
+			m_bProbeGarbageChecked = true;
+		}
 		JsonLoadContext json = new JsonLoadContext();
 		string assigned, faction;
 		int slot;
@@ -117,6 +194,12 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 			AICF_VehiclePreset confirmed = AICF_VehiclePreset.Decode(assigned);
 			Check("JIP_CONFIRMED_ASSIGNMENT", confirmed && confirmed.m_sFaction == "USSR" && confirmed.m_sName == "UI vehicle" && confirmed.m_sPrefab.Contains("UAZ469"));
 			Check("JIP_STABLE_SLOT", slot == 0 && m_iRevision > 0 && faction == "USSR");
+			if (m_bProbeBehaviorSettings)
+			{
+				Check("JIP_BEHAVIOR_CONFIRMED", confirmed && confirmed.m_iBehavior == AICF_EVehicleBehavior.COMBAT && confirmed.m_iReturnDistance == 437);
+				Check("JIP_BEHAVIOR_UI_READBACK", m_Draft && m_Draft.m_iBehavior == AICF_EVehicleBehavior.COMBAT &&
+					m_Behavior.GetCurrentIndex() == AICF_EVehicleBehavior.COMBAT && m_wReturnDistance.GetText() == "437");
+			}
 			if (m_bProbeCatalogFilters)
 			{
 				int confirmedIndex = m_aPrefabs.Find(confirmed.m_sPrefab);
@@ -181,15 +264,33 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 				OnChanged(m_aSeats[driver], 1);
 				Check("ASSIGN_HANDLER", m_Draft.m_aMembers[driver] == 0);
 				m_wName.SetText("UI vehicle");
+				if (m_bProbeBehaviorSettings)
+				{
+					m_Behavior.SetCurrentItem(AICF_EVehicleBehavior.COMBAT, false, false, false);
+					OnChanged(m_Behavior, AICF_EVehicleBehavior.COMBAT);
+					m_wReturnDistance.SetText("49");
+					int beforeInvalid = m_iToken;
+					Click("save");
+					Check("BEHAVIOR_INVALID_DISTANCE_NO_RPC", m_iToken == beforeInvalid && !m_bPending && !m_bQueued);
+					m_wReturnDistance.SetText("437");
+					Check("BEHAVIOR_UI_CONTROLS", m_Draft.m_iBehavior == AICF_EVehicleBehavior.COMBAT &&
+						m_Behavior.GetCurrentIndex() == AICF_EVehicleBehavior.COMBAT && m_wReturnDistance.GetText() == "437");
+				}
 				m_iProbeExpectedRevision = m_iRevision;
 				Click("save");
 				break;
 			case 2:
 				Check("SAVE_HANDLER", m_Player.AICF_VehiclePresetAccepted() && m_iRevision == m_iProbeExpectedRevision && assigned.IsEmpty() && m_aLibraryIds.Count() > 0);
+				if (m_bProbeBehaviorSettings) Check("BEHAVIOR_SAVE_READBACK", m_Draft && m_Draft.m_iBehavior == AICF_EVehicleBehavior.COMBAT && m_Draft.m_iReturnDistance == 437 && assigned.IsEmpty());
 				Click("apply");
 				break;
 			case 3:
 				Check("APPLY_HANDLER", m_Player.AICF_VehiclePresetAccepted() && m_iRevision == m_iProbeExpectedRevision + 1 && AICF_VehiclePreset.Decode(assigned));
+				if (m_bProbeBehaviorSettings)
+				{
+					AICF_VehiclePreset behaviorApplied = AICF_VehiclePreset.Decode(assigned);
+					Check("BEHAVIOR_APPLY_READBACK", behaviorApplied && behaviorApplied.m_iBehavior == AICF_EVehicleBehavior.COMBAT && behaviorApplied.m_iReturnDistance == 437);
+				}
 				m_iProbeExpectedRevision = m_iRevision;
 				Click("apply");
 				break;
@@ -207,11 +308,20 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 			case 6:
 				Check("FOREIGN_FACTION_REJECTED", !m_Player.AICF_VehiclePresetAccepted() && m_iRevision == m_iProbeExpectedRevision);
 				if (m_bProbeCatalogFilters) Filter(AICF_EVehicleCatalogSource.FACTION, AICF_EVehicleCatalogCategory.TRUCKS);
+				if (m_bProbeBehaviorSettings)
+				{
+					m_Behavior.SetCurrentItem(AICF_EVehicleBehavior.TRANSPORT, false, false, false);
+					OnChanged(m_Behavior, AICF_EVehicleBehavior.TRANSPORT);
+					m_wReturnDistance.SetText("50");
+				}
 				m_Library.SetCurrentItem(0, false, false, false);
 				Click("load");
 				break;
 			case 7:
 				Check("LOAD_HANDLER", m_Player.AICF_VehiclePresetAccepted() && m_Draft && m_Draft.m_sName == "UI vehicle" && m_iRevision == m_iProbeExpectedRevision);
+				if (m_bProbeBehaviorSettings) Check("BEHAVIOR_LIBRARY_LOAD_READBACK", m_Draft &&
+					m_Draft.m_iBehavior == AICF_EVehicleBehavior.COMBAT && m_Draft.m_iReturnDistance == 437 &&
+					m_Behavior.GetCurrentIndex() == AICF_EVehicleBehavior.COMBAT && m_wReturnDistance.GetText() == "437");
 				if (m_bProbeCatalogFilters) Check("LOAD_REVEALS_DRAFT", SelectedPrefab() == m_sProbePrefab && m_SourceFilter.GetCurrentIndex() == AICF_EVehicleCatalogSource.CIVILIAN);
 				m_Library.SetCurrentItem(0, false, false, false);
 				Click("delete");
@@ -305,13 +415,267 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 
 modded class SCR_PlayerController
 {
+	protected Vehicle m_AICFGCProbeVehicle;
+	protected EntityID m_AICFGCProbeVehicleId;
+	protected RplId m_AICFGCProbeServerRpl = RplId.Invalid();
+	protected RplId m_AICFGCProbeClientRpl = RplId.Invalid();
+	protected bool m_bAICFGCProbeSpawnAttempted;
+	protected bool m_bAICFGCProbeSetupFailed;
+	protected bool m_bAICFGCProbeNearbyCharacter;
+	protected string m_sAICFGCProbeReason = "WAIT_REQUEST";
+	protected int m_iAICFGCProbeRequestAt;
+
+	void AICF_RequestVehicleGCProbe()
+	{
+		Print(string.Format("[AICF][VEHICLE_UI_GC_CLIENT_REQUEST] source=proxy_diag_v1 actual_server=%1 owner_exact=%2 setup_failed=%3 expected_rpl=%4 invalid_rpl=%5 now=%6 request_at=%7 controller_item=%8",
+			Replication.IsServer(), GetGame().GetPlayerController() == this, m_bAICFGCProbeSetupFailed,
+			m_AICFGCProbeClientRpl, RplId.Invalid(), System.GetTickCount(), m_iAICFGCProbeRequestAt, Replication.FindItemId(this)));
+		if (Replication.IsServer() || GetGame().GetPlayerController() != this || m_bAICFGCProbeSetupFailed ||
+			m_AICFGCProbeClientRpl != RplId.Invalid() || System.GetTickCount() < m_iAICFGCProbeRequestAt) return;
+		m_iAICFGCProbeRequestAt = System.GetTickCount() + 2000;
+		Print("[AICF][VEHICLE_UI_GC_CLIENT_SEND] source=proxy_diag_v1 rpc=SERVER");
+		Rpc(RpcAsk_AICFVehicleGCProbe);
+	}
+
+	Vehicle AICF_VehicleGCProbeEntity()
+	{
+		RplComponent component = RplComponent.Cast(Replication.FindItem(m_AICFGCProbeClientRpl));
+		if (!component || component.Id() != m_AICFGCProbeClientRpl) return null;
+		return Vehicle.Cast(component.GetEntity());
+	}
+	RplId AICF_VehicleGCProbeIdentity() { return m_AICFGCProbeClientRpl; }
+	string AICF_VehicleGCProbeReason() { return m_sAICFGCProbeReason; }
+	bool AICF_VehicleGCProbeReady()
+	{
+		if (m_bAICFGCProbeSetupFailed) return true;
+		Vehicle vehicle = AICF_VehicleGCProbeEntity();
+		if (!vehicle) return false;
+		RplComponent component = RplComponent.Cast(vehicle.FindComponent(RplComponent));
+		if (component) Print(string.Format("[AICF][VEHICLE_UI_GC_CLIENT_NATIVE] actual_server=%1 entity=%2 expected_rpl=%3 actual_rpl=%4 native_master=%5 native_proxy=%6 native_role=%7",
+			Replication.IsServer(), vehicle.GetID(), m_AICFGCProbeClientRpl, component.Id(), component.IsMaster(), component.IsProxy(), component.Role()));
+		return component && component.Id() == m_AICFGCProbeClientRpl && component.IsProxy() && !component.IsMaster();
+	}
+
+	protected bool AICF_VehicleGCProbeServerEnabled()
+	{
+		string clientFlag, behaviorFlag;
+		bool hasClientFlag = System.GetCLIParam("aicfVehiclePresetClient", clientFlag);
+		bool hasBehaviorFlag = System.GetCLIParam("aicfVehicleBehaviorReadback", behaviorFlag);
+		PlayerManager manager;
+		if (GetGame()) manager = GetGame().GetPlayerManager();
+		bool exactOwner = manager && manager.GetPlayerController(GetPlayerId()) == this;
+		RplComponent component = RplComponent.Cast(FindComponent(RplComponent));
+		string details = string.Format("source=proxy_diag_v1 actual_server=%1 client_flag_present=%2 client_flag=[%3] behavior_flag_present=%4 behavior_flag=[%5] player=%6 owner_exact=%7 controller_component=%8 component_authority=%9",
+			Replication.IsServer(), hasClientFlag, clientFlag, hasBehaviorFlag, behaviorFlag, GetPlayerId(), exactOwner,
+			component != null, AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(this));
+		details += string.Format(" manager_present=%1 controller_item=%2", manager != null, Replication.FindItemId(this));
+		if (component) details += string.Format(" native_master=%1 native_proxy=%2 native_role=%3", component.IsMaster(), component.IsProxy(), component.Role());
+		Print("[AICF][VEHICLE_UI_GC_SERVER_GUARDS] " + details);
+		if (!manager) return false;
+		// PlayerController RPC authority belongs to the server connection/owner.
+		// Its native component can be neither master nor proxy on the server.
+		return Replication.IsServer() && hasClientFlag && clientFlag == "1" && hasBehaviorFlag && behaviorFlag == "1" &&
+			GetPlayerId() > 0 && manager.GetPlayerController(GetPlayerId()) == this;
+	}
+
+	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
+	protected void RpcAsk_AICFVehicleGCProbe()
+	{
+		Print(string.Format("[AICF][VEHICLE_UI_GC_SERVER_RECEIVED] source=proxy_diag_v1 actual_server=%1 player=%2", Replication.IsServer(), GetPlayerId()));
+		if (!AICF_VehicleGCProbeServerEnabled()) return;
+		IEntity avatar = GetControlledEntity();
+		if (!avatar || GetGame().GetPlayerManager().GetPlayerIdFromControlledEntity(avatar) != GetPlayerId())
+		{
+			AICF_VehicleGCProbeReply("WAIT_AVATAR", false);
+			return;
+		}
+		if (!m_bAICFGCProbeSpawnAttempted)
+		{
+			m_bAICFGCProbeSpawnAttempted = true;
+			BaseWorld world = GetGame().GetWorld();
+			Resource prefab = Resource.Load("{259EE7B78C51B624}Prefabs/Vehicles/Wheeled/UAZ469/UAZ469.et");
+			bool validResource = prefab && prefab.IsValid();
+			bool safe;
+			vector position;
+			if (world && validResource)
+			{
+				array<vector> offsets = {"15 0 0", "-15 0 0", "0 0 15", "0 0 -15"};
+				foreach (vector offset : offsets)
+				{
+					vector center = avatar.GetOrigin() + offset;
+					if (!SCR_WorldTools.FindEmptyTerrainPosition(position, center, 4, 3, 3, TraceFlags.ENTS | TraceFlags.OCEAN, world)) continue;
+					float distance = vector.Distance(position, avatar.GetOrigin());
+					if (distance < 10 || distance > 20 || ChimeraWorldUtils.TryGetWaterSurfaceSimple(world, position)) continue;
+					m_bAICFGCProbeNearbyCharacter = false;
+					world.QueryEntitiesBySphere(position + "0 0.2 0", 5, AICF_VehicleGCProbeCollectNearby, null, EQueryEntitiesFlags.ALL);
+					if (m_bAICFGCProbeNearbyCharacter) continue;
+					safe = true;
+					break;
+				}
+			}
+			if (safe)
+			{
+				EntitySpawnParams params = new EntitySpawnParams();
+				params.TransformMode = ETransformMode.WORLD;
+				params.Transform[3] = position + "0 0.2 0";
+				m_AICFGCProbeVehicle = Vehicle.Cast(GetGame().SpawnEntityPrefab(prefab, world, params));
+				if (m_AICFGCProbeVehicle) m_AICFGCProbeVehicleId = m_AICFGCProbeVehicle.GetID();
+			}
+			Print(string.Format("[AICF][VEHICLE_UI_GC_SERVER_SETUP] player=%1 avatar_present=%2 world_present=%3 resource_valid=%4 safe_spawn=%5 vehicle_present=%6 distance=%7",
+				GetPlayerId(), avatar != null, world != null, validResource, safe, m_AICFGCProbeVehicle != null, vector.Distance(position, avatar.GetOrigin())));
+		}
+		if (!m_AICFGCProbeVehicle)
+		{
+			AICF_VehicleGCProbeReply("SPAWN_FAILED", true);
+			return;
+		}
+		RplComponent component = RplComponent.Cast(m_AICFGCProbeVehicle.FindComponent(RplComponent));
+		if (!component || !component.IsMaster() || component.IsProxy() || m_AICFGCProbeVehicle.GetID() != m_AICFGCProbeVehicleId)
+		{
+			AICF_VehicleGCProbeReply("SERVER_IDENTITY_FAILED", true);
+			return;
+		}
+		m_AICFGCProbeServerRpl = component.Id();
+		if (m_AICFGCProbeServerRpl == RplId.Invalid()) { AICF_VehicleGCProbeReply("WAIT_RPL", false); return; }
+		if (!AICF_VehicleGCProbeSafeDelete()) { AICF_VehicleGCProbeDescribeSafety(); AICF_VehicleGCProbeReply("NOT_EMPTY_OR_UNSAFE", true); return; }
+		AICF_VehicleGCProbeReply("SERVER_SPAWNED", false);
+	}
+
+	protected void AICF_VehicleGCProbeReply(string reason, bool failed)
+	{
+		Print(string.Format("[AICF][VEHICLE_UI_GC_SERVER_REPLY] player=%1 reason=%2 failed=%3 entity=%4 rpl=%5",
+			GetPlayerId(), reason, failed, m_AICFGCProbeVehicleId, m_AICFGCProbeServerRpl));
+		Rpc(RpcDo_AICFVehicleGCProbe, m_AICFGCProbeServerRpl, reason, failed);
+	}
+
+	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
+	protected void RpcDo_AICFVehicleGCProbe(RplId identity, string reason, bool failed)
+	{
+		if (Replication.IsServer() || GetGame().GetPlayerController() != this) return;
+		m_AICFGCProbeClientRpl = identity;
+		m_sAICFGCProbeReason = reason;
+		m_bAICFGCProbeSetupFailed = failed;
+		Print(string.Format("[AICF][VEHICLE_UI_GC_CLIENT_REPLY] actual_server=%1 reason=%2 failed=%3 rpl=%4", Replication.IsServer(), reason, failed, identity));
+	}
+
+	protected bool AICF_VehicleGCProbeCollectNearby(IEntity entity)
+	{
+		if (ChimeraCharacter.Cast(entity)) m_bAICFGCProbeNearbyCharacter = true;
+		return true;
+	}
+
+	protected bool AICF_VehicleGCProbeSafeDelete()
+	{
+		if (!GetGame()) return false;
+		BaseWorld world = GetGame().GetWorld();
+		PlayerManager manager = GetGame().GetPlayerManager();
+		if (!world || !manager) return false;
+		Vehicle vehicle = m_AICFGCProbeVehicle;
+		if (!Replication.IsServer() || !vehicle || !vehicle.GetWorld() || vehicle.GetID() != m_AICFGCProbeVehicleId ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle)) return false;
+		RplComponent component = RplComponent.Cast(vehicle.FindComponent(RplComponent));
+		if (!component || component.Id() != m_AICFGCProbeServerRpl) return false;
+		if (manager.GetPlayerIdFromControlledEntity(vehicle) > 0 ||
+			SCR_PossessingManagerComponent.GetPlayerIdFromMainEntity(vehicle) > 0) return false;
+		array<BaseCompartmentSlot> seats = {};
+		AICF_FIAPatrolCrew.Seats(vehicle, seats);
+		if (seats.IsEmpty()) return false;
+		foreach (BaseCompartmentSlot seat : seats) if (!seat || seat.GetOccupant()) return false;
+		m_bAICFGCProbeNearbyCharacter = false;
+		vehicle.GetWorld().QueryEntitiesBySphere(vehicle.GetOrigin(), 5, AICF_VehicleGCProbeCollectNearby, null, EQueryEntitiesFlags.ALL);
+		if (m_bAICFGCProbeNearbyCharacter) return false;
+		array<int> players = {};
+		manager.GetPlayers(players);
+		foreach (int playerId : players)
+		{
+			SCR_PlayerController player = SCR_PlayerController.Cast(manager.GetPlayerController(playerId));
+			if (!player) return false;
+			IEntity actor = player.GetControlledEntity();
+			if (actor == vehicle || (actor && CompartmentAccessComponent.GetVehicleIn(actor) == vehicle)) return false;
+		}
+		return AICF_LogisticsResourceAdapter.CanDeleteVehicle(vehicle);
+	}
+
+	protected void AICF_VehicleGCProbeDescribeSafety()
+	{
+		if (!GetGame()) return;
+		Vehicle vehicle = m_AICFGCProbeVehicle;
+		BaseWorld world = GetGame().GetWorld();
+		PlayerManager manager = GetGame().GetPlayerManager();
+		Print(string.Format("[AICF][VEHICLE_UI_GC_SERVER_SAFETY] realm=%1 world=%2 manager=%3 vehicle=%4",
+			Replication.IsServer(), world != null, manager != null, vehicle != null));
+		if (!vehicle || !world || !manager) return;
+		RplComponent component = RplComponent.Cast(vehicle.FindComponent(RplComponent));
+		string details = string.Format(" entity=%1 expected_entity=%2 rpl=%3 expected_rpl=%4 vehicle_authority=%5 direct_player=%6 main_player=%7",
+			vehicle.GetID(), m_AICFGCProbeVehicleId, AICF_VehicleBehaviorBinding.ComponentRpl(vehicle), m_AICFGCProbeServerRpl,
+			AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle), manager.GetPlayerIdFromControlledEntity(vehicle),
+			SCR_PossessingManagerComponent.GetPlayerIdFromMainEntity(vehicle));
+		if (component) details += string.Format(" native_master=%1 native_proxy=%2 native_role=%3", component.IsMaster(), component.IsProxy(), component.Role());
+		array<BaseCompartmentSlot> seats = {};
+		AICF_FIAPatrolCrew.Seats(vehicle, seats);
+		int occupied, unknown;
+		foreach (BaseCompartmentSlot seat : seats) { if (!seat) unknown++; else if (seat.GetOccupant()) occupied++; }
+		m_bAICFGCProbeNearbyCharacter = false;
+		vehicle.GetWorld().QueryEntitiesBySphere(vehicle.GetOrigin(), 5, AICF_VehicleGCProbeCollectNearby, null, EQueryEntitiesFlags.ALL);
+		details += string.Format(" seats=%1 occupied=%2 unknown=%3 nearby_character=%4 resources_clear=%5",
+			seats.Count(), occupied, unknown, m_bAICFGCProbeNearbyCharacter, AICF_LogisticsResourceAdapter.CanDeleteVehicle(vehicle));
+		array<int> players = {};
+		manager.GetPlayers(players);
+		foreach (int playerId : players)
+		{
+			SCR_PlayerController player = SCR_PlayerController.Cast(manager.GetPlayerController(playerId));
+			IEntity actor;
+			if (player) actor = player.GetControlledEntity();
+			IEntity linked;
+			if (actor) linked = CompartmentAccessComponent.GetVehicleIn(actor);
+			details += string.Format(" player=%1 controller_present=%2 actor=%3 actor_link=%4", playerId, player != null,
+				AICF_GroupTrace.Entity(actor), AICF_GroupTrace.Entity(linked));
+		}
+		Print("[AICF][VEHICLE_UI_GC_SERVER_SAFETY_FIELDS]" + details);
+	}
+
+	protected void AICF_VehicleGCProbeCleanup()
+	{
+		if (!AICF_VehicleGCProbeSafeDelete() || !AICF_VehicleGCProbeSafeDelete()) { AICF_VehicleGCProbeDescribeSafety(); return; }
+		Vehicle vehicle = m_AICFGCProbeVehicle;
+		m_AICFGCProbeVehicle = null;
+		RplComponent.DeleteRplEntity(vehicle, false);
+		Print(string.Format("[AICF][VEHICLE_UI_GC_SERVER_CLEANUP] player=%1 rpl=%2 exact_empty_delete_requested=1", GetPlayerId(), m_AICFGCProbeServerRpl));
+	}
+
+	void ~SCR_PlayerController() { if (GetGame()) AICF_VehicleGCProbeCleanup(); }
+
 	void AICF_VehicleProbeClientFinished(int failures, bool jip) { Rpc(RpcAsk_AICFVehicleProbeClientFinished, failures, jip); }
 	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
 	protected void RpcAsk_AICFVehicleProbeClientFinished(int failures, bool jip)
 	{
 		string flag;
 		if (!Replication.IsServer() || !System.GetCLIParam("aicfVehiclePresetClient", flag)) return;
+		AICF_VehicleGCProbeCleanup();
 		Print(string.Format("[AICF][VEHICLE_UI_SERVER_READBACK] player=%1 failures=%2 jip=%3", GetPlayerId(), failures, jip));
+		string behaviorFlag;
+		if (System.GetCLIParam("aicfVehicleBehaviorReadback", behaviorFlag) && behaviorFlag == "1")
+		{
+			AICF_MatchController match = AICF_MatchController.GetActiveController();
+			AICF_GroupSlot slot;
+			SCR_CampaignFaction faction;
+			AICF_VehiclePreset actual;
+			int schema;
+			int revision;
+			if (match && match.ResolveVehiclePresetContext(this, 0, slot, faction))
+			{
+				string encoded = slot.GetVehiclePresetData();
+				actual = AICF_VehiclePreset.Decode(encoded);
+				JsonLoadContext json = new JsonLoadContext();
+				if (json.LoadFromString(encoded)) json.ReadValue("schemaVersion", schema);
+				revision = slot.GetVehiclePresetRevision();
+			}
+			int behavior = -1;
+			int distance = -1;
+			if (actual) { behavior = actual.m_iBehavior; distance = actual.m_iReturnDistance; }
+			Print(string.Format("[AICF][VEHICLE_UI_SERVER_BEHAVIOR_READBACK] player=%1 valid=%2 behavior=%3 return_distance=%4 schema=%5 revision=%6 jip=%7",
+				GetPlayerId(), actual != null, behavior, distance, schema, revision, jip));
+		}
 		SCR_GameModeCampaign campaign = SCR_GameModeCampaign.Cast(GetGame().GetGameMode());
 		if (jip && campaign) campaign.AICF_VehicleProbeScheduleServerClose();
 	}

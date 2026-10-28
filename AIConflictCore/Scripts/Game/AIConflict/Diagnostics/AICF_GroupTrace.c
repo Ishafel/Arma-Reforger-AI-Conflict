@@ -119,6 +119,7 @@ class AICF_GroupTrace
 		if (leader) details += string.Format(" leader_target_distance_m=%1", vector.DistanceXZ(leader.GetOrigin(), slot.GetTargetPosition()));
 		if (vehicle) details += string.Format(" vehicle_target_distance_m=%1", vector.DistanceXZ(vehicle.GetOrigin(), slot.GetTargetPosition()));
 		if (vehicle) details += " " + AICF_VehicleHealthTrace.Capture(vehicle);
+		if (vehicle) details += " " + AICF_VehicleGarbagePolicy.Describe(vehicle);
 		AICF_Stage3Diagnostics.Info("GROUP_TRACE", details);
 		array<BaseCompartmentSlot> seats = {};
 		if (vehicle) AICF_VehiclePreset.Collect(vehicle, seats);

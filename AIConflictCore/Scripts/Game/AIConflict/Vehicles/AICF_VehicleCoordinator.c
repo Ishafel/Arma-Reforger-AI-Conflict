@@ -190,6 +190,7 @@ class AICF_VehicleCoordinator
 			phase == AICF_ETransportTripPhase.TRANSIT ||
 			phase == AICF_ETransportTripPhase.DISMOUNT ||
 			phase == AICF_ETransportTripPhase.HANDOFF ||
+			(phase == AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT && trip.GetBehaviorState().m_bReboarding) ||
 			trip.GetHandoffState().IsRestoreRequested();
 	}
 

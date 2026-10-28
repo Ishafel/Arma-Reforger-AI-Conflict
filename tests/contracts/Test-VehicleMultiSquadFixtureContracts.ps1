@@ -58,6 +58,31 @@ function Rules([string]$text){
  if($sample -notmatch 'now = System.GetTickCount\(\);\s*m_iAICFMultiSnapshotAt = now;' -or $sample -notmatch 'm_iAICFMultiSnapshotAt = -1;' -or (Body $text 'AICF_MultiLog') -notmatch 'if \(m_iAICFMultiSnapshotAt >= 0\) now = m_iAICFMultiSnapshotAt;'){'CAPTURED_NATIVE_SAMPLE_TICK'}
  if($intent -notmatch 'slot.HasPlayerStrategicIntent\(\)' -or $intent -notmatch 'PLAYER_COMMAND' -or $intent -notmatch 'slot.GetPlayerStrategicIntentTargetKind\(\) == AICF_EOrderTargetKind.POSITION' -or $intent -notmatch 'slot.GetTargetKind\(\) == AICF_EOrderTargetKind.POSITION' -or $intent -notmatch 'slot.GetStrategicIntentRevision\(\) == item.m_iRevision' -or $intent -notmatch 'slot.GetPlayerStrategicIntentTargetPosition\(\) == item.m_vGoal' -or $intent -notmatch 'slot.GetTargetPosition\(\) == item.m_vGoal' -or $tick -notmatch 'item.m_iPhase >= 4 && !AICF_MultiCurrentFinalIntent\(item, slot\)' -or $tick.IndexOf('!AICF_MultiCurrentFinalIntent') -gt $tick.IndexOf('"ARRIVAL"')){'LIVE_FINAL_PLAYER_POINT_INTENT'}
  if($tick -notmatch '"FOOT_ARRIVAL"[^;]*slot.GetTargetPosition\(\), slot.GetStrategicIntentRevision\(\)' -or $tick -notmatch '"DISMOUNTED"[^;]*slot.GetStrategicIntentRevision\(\), slot.GetTargetPosition\(\)'){'ACTUAL_FINAL_READBACK_NOT_CACHED'}
+ $retained=Body $text 'AICF_MultiRetainedFoot'
+ if($retained -notmatch '!AICF_MultiRoster\(item, slot\) \|\| !AICF_MultiCurrentFinalIntent\(item, slot\)' -or
+  $retained -notmatch 'trip.GetPhase\(\) != AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT' -or
+  $retained -notmatch '!trip.GetHandoffState\(\).IsOrderRestored\(\)' -or
+  $retained -notmatch 'vehicle.GetID\(\) != item.m_VehicleId' -or $retained -notmatch 'lease.GetLeaseGeneration\(\) != item.m_iLeaseGeneration' -or
+  $retained -notmatch 'lease.MatchesEntityIdentity\(vehicle, vehicle.GetID\(\), AICF_VehicleBehaviorBinding.ComponentRpl\(vehicle\)\)' -or
+  $retained -notmatch 'watchdog.InspectProtectedMemberDismountClearance\(' -or
+  $retained -notmatch 'actor.GetID\(\) != item.m_aMembers\[position\]' -or
+  $retained -notmatch 'if \(linked \|\| compartment \|\| gettingIn \|\| gettingOut \|\| characterVehicle \|\| inside\) return false' -or
+  $retained -notmatch '"RETAINED_MEMBER"' -or $retained -notmatch '"RETAINED_CLEARANCE"' -or
+  $tick -notmatch 'normal_complete=0 retained_manual=1 phase=TACTICAL_DEPLOYMENT order_restored=1' -or
+  $tick -notmatch 'item.m_iPhase == 5 && AICF_MultiRetainedFoot\(item, slot, trip\)'){'TRUTHFUL_RETAINED_MANUAL_FOOT_ENDPOINT'}
+ $temporary=Body $text 'AICF_MultiTemporaryDeployment'
+ if($temporary -notmatch '!AICF_MultiRoster\(item, slot\)' -or $temporary -notmatch 'trip.GetOperationId\(\) != item.m_sOperation' -or
+  $temporary -notmatch 'trip.GetPhase\(\) != AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT' -or
+  $temporary -notmatch 'vehicle.GetID\(\) != item.m_VehicleId' -or $temporary -notmatch 'lease.GetRplId\(\) != item.m_sRpl' -or
+  $temporary -notmatch 'lease.GetLeaseGeneration\(\) != item.m_iLeaseGeneration' -or
+  $temporary -notmatch 'trip.GetAssignment\(\).GetStrategicIntentRevision\(\) != slot.GetStrategicIntentRevision\(\)' -or
+  $tick -notmatch 'if \(AICF_MultiTemporaryDeployment\(item, slot, trip\)\) return;' -or
+  $tick.IndexOf('if (AICF_MultiTemporaryDeployment') -gt $tick.IndexOf('TRIP_ENDED_BEFORE_CAPACITY_COHORTS') -or
+  $sample -notmatch 'item.m_iPhase == 3 && concurrencyProof && AICF_MultiExact\(item, slot, trip\)' -or
+  $exact -notmatch 'trip.GetPhase\(\) != AICF_ETransportTripPhase.TRANSIT'){'TACTICAL_WAIT_IS_NOT_MOVING_CREDIT'}
+ if($retained -notmatch 'GetLastTransitionReason\(\) == "LOCAL_THREAT" && vector.DistanceXZ\(actor.GetOrigin\(\), item.m_vGoal\) > 35' -or
+  $tick -notmatch 'item.m_bRetainedFoot && !AICF_MultiRetainedFoot\(item, slot, trip, false\)' -or
+  $tick -notmatch 'retained_manual=1 in_vehicle=0 phase=TACTICAL_DEPLOYMENT order_restored=1'){'LIVE_FOOT_CLEARANCE_AFTER_RETAINED_DISEMBARK'}
  $stopIndex=$update.IndexOf('m_bStopped || !m_Campaign')
  if($stopIndex -lt 0 -or $stopIndex -gt $update.IndexOf('AICF_MultiInitialize()') -or $stopIndex -gt $update.IndexOf('now - m_iAICFMultiStart >= m_iAICFMultiDuration')){'STOP_BEFORE_INITIALIZATION_AND_DONE'}
  if($update -notmatch 'if \(!m_Campaign.IsRunning\(\)\)\s*\{\s*if \(m_bCampaignWasRunning \|\| m_bAICFMultiStarted\)\s*AICF_MultiAbort\("MATCH_STOPPED_BEFORE_DURATION"\);\s*return;' -or $update.IndexOf('now - m_iAICFMultiSetupStarted >= 180000') -gt $update.IndexOf('if (!m_Campaign.IsRunning())')){'NATIVE_STARTING_WAIT_WITH_SETUP_DEADLINE'}
@@ -71,6 +96,13 @@ $runningGuard=$runningGuard.Replace('m_bCampaignWasRunning','$wasRunning').Repla
 $evaluate=[scriptblock]::Create('param($wasRunning,$started) '+$runningGuard)
 foreach($case in @(@($false,$false,$false),@($true,$false,$true),@($false,$true,$true),@($true,$true,$true))){if([bool](& $evaluate $case[0] $case[1]) -ne $case[2]){throw 'Native STARTING/after-RUNNING stop truth table mismatch'};$controls++}
 foreach($mutation in @(
+ @('!trip.GetHandoffState().IsOrderRestored()','false','TRUTHFUL_RETAINED_MANUAL_FOOT_ENDPOINT'),
+ @('actor.GetID() != item.m_aMembers[position]','false','TRUTHFUL_RETAINED_MANUAL_FOOT_ENDPOINT'),
+ @('linked || compartment || gettingIn || gettingOut || characterVehicle || inside','false','TRUTHFUL_RETAINED_MANUAL_FOOT_ENDPOINT'),
+ @('normal_complete=0 retained_manual=1 phase=TACTICAL_DEPLOYMENT order_restored=1','normal_complete=1','TRUTHFUL_RETAINED_MANUAL_FOOT_ENDPOINT'),
+ @('if (AICF_MultiTemporaryDeployment(item, slot, trip)) return;','','TACTICAL_WAIT_IS_NOT_MOVING_CREDIT'),
+ @('trip.GetAssignment().GetStrategicIntentRevision() != slot.GetStrategicIntentRevision()','false','TACTICAL_WAIT_IS_NOT_MOVING_CREDIT'),
+ @('item.m_bRetainedFoot && !AICF_MultiRetainedFoot(item, slot, trip, false)','false','LIVE_FOOT_CLEARANCE_AFTER_RETAINED_DISEMBARK'),
  @('m_sAICFMultiMode != "CAPACITY"','false','EXPLICIT_EARLY_CAPACITY_ONLY_ENVIRONMENT'),
  @('mode != "CAPACITY"','false','FINITE_ECONOMY_OWNER_LEDGER'),
  @('4000 - AICF_MultiGranted(key)','4000000','FINITE_ECONOMY_OWNER_LEDGER'),

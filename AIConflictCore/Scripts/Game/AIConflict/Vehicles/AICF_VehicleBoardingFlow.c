@@ -420,6 +420,9 @@ class AICF_VehicleBoardingFlow
 			if (!token || !token.Matches(trip, lease, group) || token.GetCompartment() != seats[i]) return Reject(trip, lease, causationId, "PRESET_TOKEN_IDENTITY_CHANGED");
 			IEntity occupant = seats[i].GetOccupant();
 			if (occupant && occupant != member) return Reject(trip, lease, causationId, "PRESET_SEAT_OCCUPIED");
+			if (token.WasPresetQueued()) token.ObserveSpatialProgress(vector.DistanceXZ(member.GetOrigin(), lease.GetVehicle().GetOrigin()), 0.5);
+			if (TryShortPresetSeatRecovery(trip, lease, group, state, token))
+				return AICF_TripOutcome.Wait("PRESET_SHORT_RECOVERY_READBACK_PENDING", causationId);
 			CompartmentAccessComponent access = ResolveAccess(member);
 			if (access && (access.IsGettingIn() || access.IsGettingOut() || access.IsSwitchingSeatsAnim()))
 			{
@@ -530,6 +533,29 @@ class AICF_VehicleBoardingFlow
 		else if (firstRetry)
 			TryRetryPresetSeat(trip, lease, group, state, firstRetry, firstRetry.GetCompartment(), causationId);
 		return AICF_TripOutcome.Wait("PRESET_EXACT_OCCUPANTS_PENDING", causationId);
+	}
+
+	// Native отказ — достаточное основание для немедленной короткой коррекции.
+	// RUNNING требует наблюдаемого отсутствия progress; движение к машине остаётся native.
+	protected bool TryShortPresetSeatRecovery(AICF_TransportTrip trip, AICF_VehicleLease lease, SCR_AIGroup group,
+		AICF_VehicleBoardingState state, AICF_VehicleBoardingActionToken token)
+	{
+		if (!token || !token.WasPresetQueued() || token.WasShortRecoveryAttempted() ||
+			!trip.IsVehiclePresetCurrent() || !token.Matches(trip, lease, group) || !token.IsPhysicalMutationOwnerSafe() ||
+			System.GetTickCount() >= state.GetAbsoluteDeadlineMs()) return false;
+		EAIActionState actionState = token.GetActionState();
+		bool failed = actionState == EAIActionState.FAILED || actionState == EAIActionState.COMPLETED;
+		bool disappeared = !token.IsTrackedActionOwnedByUtility() && token.GetTransitionAgeMs() > 0;
+		bool stalled = token.IsTrackedActionCurrent() && token.GetProgressAgeMs() >= 5000;
+		if (!failed && !disappeared && !stalled) return false;
+		IEntity member = token.GetReservedEntity();
+		BaseCompartmentSlot seat = token.GetCompartment();
+		if (!AICF_VehicleShortRecovery.CanSeat(trip, member, seat)) return false;
+		token.CancelOwnerSafe();
+		if (!trip.IsVehiclePresetCurrent() || !token.Matches(trip, lease, group) ||
+			!AICF_VehicleShortRecovery.CanSeat(trip, member, seat)) return false;
+		token.MarkShortRecoveryAttempted();
+		return AICF_VehicleShortRecovery.TrySeat(trip, member, seat, "NATIVE_ENTRY_BLOCKED");
 	}
 
 	protected bool TryYieldPresetSeat(AICF_TransportTrip trip, AICF_VehicleLease lease, SCR_AIGroup group,

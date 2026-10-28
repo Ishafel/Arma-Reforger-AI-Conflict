@@ -125,6 +125,8 @@ modded class SCR_AIProcessFailedMovementResult
 			bool hasRelated = GetVariableIn(PORT_IS_WAYPOINT_RELATED, related);
 			vector location;
 			bool hasLocation = GetVariableIn(PORT_MOVE_LOCATION, location);
+			if (hasHandler && hasRelated && hasLocation && AICF_HandleRecruitmentFailedMovement(result, handler, related, location))
+				return ENodeResult.FAIL;
 			if (hasHandler && hasRelated && hasLocation && AICF_HandleSpawnApproachFailedMovement(result, handler, related, location))
 				return ENodeResult.FAIL;
 			if (AICF_FIAGarrisonMovementPolicy.Handle(m_Group, m_GroupUtilityComponent, result, handler, related, location))
@@ -174,6 +176,30 @@ modded class SCR_AIProcessFailedMovementResult
 		// Native invokers may synchronously replace an assignment or action.
 		if (failure.ConfirmDelivery() && m_GroupUtilityComponent.GetExecutedAction() == failedAction)
 			failedAction.Fail();
+		return true;
+	}
+
+	protected bool AICF_HandleRecruitmentFailedMovement(int result, int handler, bool related, vector location)
+	{
+		AICF_MatchController controller = AICF_MatchController.GetActiveController();
+		if (!Replication.IsServer() || !controller) return false;
+		AICF_GroupSlot slot = controller.FindManagedInfantrySlot(m_Group);
+		if (!slot) return false;
+		AICF_InfantryRecruitmentOrder order = slot.GetActiveRecruitmentOrder();
+		AICF_RecruitmentMoveFailure receipt = AICF_RecruitmentMoveFailure.Capture(order, m_GroupUtilityComponent, result, handler, related);
+		if (!receipt) return false;
+		AIActionBase action = m_GroupUtilityComponent.GetExecutedAction();
+		order.m_MoveFailure = receipt;
+		if (!order.ReportFailedMovement(m_Group, order.m_Waypoint, result))
+		{
+			order.m_MoveFailure = null;
+			return false;
+		}
+		// Capture предшествует native callback; waypoint repair остаётся в service tick.
+		m_GroupUtilityComponent.OnMoveFailed(result, null, related, location);
+		if (receipt.IsCapturedCurrent(order) && action &&
+			m_GroupUtilityComponent.GetExecutedAction() == action)
+			action.Fail();
 		return true;
 	}
 

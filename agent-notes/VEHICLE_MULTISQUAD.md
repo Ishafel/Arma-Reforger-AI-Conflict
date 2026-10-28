@@ -95,8 +95,33 @@ auditors: новый порядок не пересматривает их FAIL 
 сам по себе не доказывает concurrency. Требуются2, затем4, затем6 разных физических
 машин на сторону непрерывно30s. Все строки sample используют один настоящий
 captured decision timestamp; auditor связывает его с t_ms и elapsed_ms.
-После последней ступени задаются конечные цели: доезд, normal COMPLETE высадки
+После последней ступени задаются конечные цели: доезд, подтверждённая высадка
 и все пять пешком≤35m при неизменном PLAYER/POSITION intent/revision.
+Для manual preset текущий endpoint — retained `TACTICAL_DEPLOYMENT`: тот же
+оплаченный lease остаётся у отряда, `Handoff.IsOrderRestored()` подтверждает
+пеший приказ. Это не terminal `COMPLETE`. Fixture отдельно сверяет native
+watchdog clearance, прежние пять actor IDs и свежие compartment/transition/hull
+readbacks каждого. Только после полного clear публикуются пять
+`VEHICLE_MULTI_RETAINED_MEMBER`, `VEHICLE_MULTI_RETAINED_CLEARANCE` и
+`DISMOUNTED normal_complete=0 retained_manual=1`; физическое прибытие всех пяти
+к конечной точке остаётся отдельным `FOOT_ARRIVAL`.
+
+Matching auditor связывает retained endpoint с реальным production переходом
+`TRANSIT → TACTICAL_DEPLOYMENT` с `DESTINATION_REACHED` либо `LOCAL_THREAT`, началом deployment
+и `INFANTRY_FALLBACK order_restored=1 alive=5`. Он отклоняет отсутствующий clear,
+заменённого actor, занятую compartment/transition/hull, смену lease generation,
+несовпадающие причины перехода/deployment и ложный terminal `COMPLETE`.
+`LOCAL_THREAT` допускается как endpoint только после настоящего прибытия всех
+пяти пешком≤35m к финальной точке. Перед `FOOT_ARRIVAL` retained ветвь повторяет
+свежий physical clear: ранее вышедший, но уже вернувшийся в машину отряд не
+считается пешим. Старые logs с настоящим
+`HANDOFF → COMPLETE` читаются прежней отдельной ветвью с обязательным
+`DISEMBARK_COMPLETE`; их результаты задним числом не меняются. Эти изменения
+endpoint не расширяют MOVING oracle: exact paid5, исходные машины и непрерывные
+30s для2/4/6 на сторону по-прежнему обязательны. Временный пеший бой при том же
+trip/lease, исходных пяти бойцах и прежнем intent не объявляется завершением
+поездки: fixture ждёт возврата в `TRANSIT`. За время такой паузы active count
+равен нулю, непрерывное stable30s окно сбрасывается; пауза не даёт concurrency credit.
 Displacement/moving polls накапливаются за всю поездку, а дистанция к конечной
 цели проверяется отдельно.
 

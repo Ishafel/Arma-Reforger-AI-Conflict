@@ -43,6 +43,19 @@ class AICF_InfantryRecruitmentService
 		return count;
 	}
 
+	bool IsCurrentOrder(AICF_InfantryRecruitmentOrder order)
+	{
+		if (!Replication.IsServer() || m_bStopped || !order || !m_Campaign ||
+			!m_Campaign.IsMaster() || !m_Campaign.IsRunning() || !m_Graph ||
+			!m_aOrders.Contains(order) || order.m_RecruitmentService != this ||
+			m_Graph.GetRevision() != order.m_iGraphRevision) return false;
+		int timeout = AICF_InfantryRecruitmentConfig.APPROACH_TIMEOUT_MS;
+		if (order.m_bPlayerRequested) timeout = AICF_InfantryRecruitmentConfig.PLAYER_APPROACH_TIMEOUT_MS;
+		int age = System.GetTickCount() - order.m_iStartedAtMs;
+		return age >= 0 && age < timeout && order.IsCurrent(order.m_Slot) &&
+			order.m_Slot.MatchesRecruitmentOrder(order);
+	}
+
 	void SetRecoveryPolicy(AICF_VehicleWatchdog watchdog, AICF_Stage3Config config)
 	{
 		m_RecoveryWatchdog = watchdog;
@@ -831,6 +844,12 @@ class AICF_InfantryRecruitmentService
 			order.m_iHiddenRecoverySubmittedAtMs = now;
 		}
 		order.m_iApproachRepairs++;
+		if (!order.m_bHiddenRecoveryPending && order.m_MoveFailure && order.m_MoveFailure.TryRecover(order))
+		{
+			order.m_bHiddenRecoveryPending = true;
+			order.m_iHiddenRecoverySubmittedAtMs = now;
+		}
+		order.m_MoveFailure = null;
 		bool issued = m_Planner.RepairInfantryRecruitmentApproach(order);
 		order.Log("INFANTRY_RECRUITMENT_APPROACH_REPAIR", string.Format(
 			"attempt=%1 waypoint_present=%2 order_issued=%3 movement_confirmation=PENDING distance_m=%4",

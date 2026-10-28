@@ -4252,6 +4252,42 @@ StringTable
 			Target_en_us "Squad mounted. Set a destination outside the dismount zone to start driving."
 			Target_ru_ru "Отряд в машине. Укажите удалённую цель, чтобы начать движение."
 		}
+		CustomStringTableItem "{A1CF261028780001}"
+		{
+			Id "AICF_UI_VehicleBehavior"
+			Target_en_us "Behavior"
+			Target_ru_ru "Поведение"
+		}
+		CustomStringTableItem "{A1CF261028780002}"
+		{
+			Id "AICF_UI_VehicleBehaviorTransport"
+			Target_en_us "Transport"
+			Target_ru_ru "Транспорт"
+		}
+		CustomStringTableItem "{A1CF261028780003}"
+		{
+			Id "AICF_UI_VehicleBehaviorCombat"
+			Target_en_us "Combat vehicle"
+			Target_ru_ru "Боевая единица"
+		}
+		CustomStringTableItem "{A1CF261028780004}"
+		{
+			Id "AICF_UI_VehicleReturnDistance"
+			Target_en_us "Return above (m)"
+			Target_ru_ru "Возврат от (м)"
+		}
+		CustomStringTableItem "{A1CF261028780006}"
+		{
+			Id "AICF_UI_VehicleTacticalDeployment"
+			Target_en_us "Dismounted orders or crew return; the vehicle remains assigned."
+			Target_ru_ru "Пеший приказ или возврат экипажа; машина остаётся за отрядом."
+		}
+		CustomStringTableItem "{A1CF261028780005}"
+		{
+			Id "AICF_UI_VehicleBehaviorInvalid"
+			Target_en_us "Select vehicle behavior and enter a whole return distance from 50 to 1000 metres."
+			Target_ru_ru "Выберите поведение машины и задайте целый порог возврата от 50 до 1000 метров."
+		}
 
 	}
 }

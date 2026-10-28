@@ -171,18 +171,15 @@ class AICF_VehicleDismountFlow
 			(sample.m_iInsideBounds > 0 || sample.m_iPostEgressBlocked > 0);
 		if (egressGuidanceRequired && nowMs - state.GetStartedAtMs() >= GUIDANCE_DELAY_MS)
 			TryGuidePhysicallyBlockedMembers(trip, sample);
-		// Some stock truck exits clear every compartment flag while leaving the
-		// character transform inside the cab hull. Navigation cannot start from
-		// that non-navmesh origin. After the bounded visible guidance budget is
-		// genuinely consumed, reuse the exact authoritative player/LOS-fenced
-		// relocation instead of waiting out the remainder of the 40-second timer.
+		// Logical egress плюс transform внутри hull уже доказывают native blocker.
+		// Пользователь разрешил немедленную коррекцию рядом с видимым игроком.
 		if (sample.m_iLogicalOccupants == 0 && sample.m_iTransitions == 0 &&
-			sample.m_iInsideBounds > 0 &&
-			state.GetGuidanceAttempts() >= GUIDANCE_MAX_ATTEMPTS &&
-			state.GetGuidanceTokenCount() == 0)
+			sample.m_iInsideBounds > 0)
 		{
 			TryRelocateExactManagedMembers(trip, sample, false);
 		}
+		if (sample.m_iLogicalOccupants > 0 && HasFailedExactNativeExit(trip))
+			TryForceExactManagedExit(trip, sample);
 
 		int normalAgeMs = nowMs - state.GetStartedAtMs();
 		if (normalAgeMs >= ANIMATED_EXACT_EXIT_DELAY_MS && sample.m_iLogicalOccupants > 0)
@@ -900,6 +897,31 @@ class AICF_VehicleDismountFlow
 			!trip.IsDeadlineReached(nowMs);
 	}
 
+	protected bool HasFailedExactNativeExit(AICF_TransportTrip trip)
+	{
+		if (!IsAuthoritativeTripAssetCurrent(trip)) return false;
+		SCR_AIGroup group = trip.GetAssignment().GetGroup();
+		Vehicle vehicle = trip.GetLease().GetVehicle();
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!IsExactAliveCurrentMember(group, agent)) continue;
+			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (!IsExactOccupantOfVehicle(character, vehicle)) continue;
+			SCR_AIUtilityComponent utility = SCR_AIUtilityComponent.Cast(agent.FindComponent(SCR_AIUtilityComponent));
+			if (!utility || utility.m_OwnerEntity != character) continue;
+			array<ref AIActionBase> actions = {};
+			utility.GetActions(actions);
+			foreach (AIActionBase action : actions)
+			{
+				SCR_AIGetOutVehicle exit = SCR_AIGetOutVehicle.Cast(action);
+				if (exit && exit.m_Vehicle.m_Value == vehicle && exit.GetActionState() == EAIActionState.FAILED) return true;
+			}
+		}
+		return false;
+	}
+
 	protected void TryForceExactManagedExit(
 		AICF_TransportTrip trip,
 		AICF_DismountClearanceSample sample)
@@ -1034,6 +1056,7 @@ class AICF_VehicleDismountFlow
 		ChimeraCharacter character,
 		int forceAttempt)
 	{
+		if (!IsAuthoritativeTripAssetCurrent(trip)) return false;
 		Vehicle vehicle = trip.GetLease().GetVehicle();
 		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(character) ||
 			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle))
@@ -1047,18 +1070,16 @@ class AICF_VehicleDismountFlow
 		bool exactOwner = compartment && compartment.GetVehicle() == vehicle &&
 			compartment.GetOccupant() == character;
 		access.InterruptVehicleActionQueue(true, true, true);
+		if (!IsAuthoritativeTripAssetCurrent(trip) || trip.GetLease().GetVehicle() != vehicle ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(character) ||
+			access.GetCompartment() != compartment || !exactOwner || compartment.GetOccupant() != character) return false;
 		bool useEject = exactOwner && forceAttempt > 1;
 		bool directAccepted;
 		vector exitTransform[4];
-		if (!useEject && access.FindSuitableTeleportLocation(exitTransform))
+		if (!useEject && access.FindSuitableTeleportLocation(exitTransform) &&
+			vector.Distance(character.GetOrigin(), exitTransform[3]) <= AICF_VehicleShortRecovery.MAX_ACTOR_DISPLACEMENT_METERS &&
+			!ChimeraWorldUtils.TryGetWaterSurfaceSimple(vehicle.GetWorld(), exitTransform[3]))
 			directAccepted = access.GetOutVehicle_NoDoor(exitTransform, false, false, true);
-		if (!useEject && !directAccepted)
-			directAccepted = access.GetOutVehicle(
-				EGetOutType.TELEPORT,
-				-1,
-				ECloseDoorAfterActions.INVALID,
-				false,
-				true);
 		bool ejectRequested;
 		bool ejectImmediate;
 		bool ejectAttempted;
@@ -1373,12 +1394,8 @@ class AICF_VehicleDismountFlow
 	{
 		nearestPlayerMeters = -1.0;
 		rejectionReason = string.Empty;
-		if (!m_Config.GetHiddenRecoveryEnabled())
-		{
-			rejectionReason = "HIDDEN_RECOVERY_DISABLED";
-			return false;
-		}
 		if (!group || !vehicle ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(group) ||
 			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle))
 		{
 			rejectionReason = "RECOVERY_AUTHORITY_OR_IDENTITY_INVALID";
@@ -1398,18 +1415,15 @@ class AICF_VehicleDismountFlow
 				vehicleSpeedMetersPerSecond);
 			return false;
 		}
-		float threatMeasure;
-		if (!m_Watchdog.IsHiddenRecoveryCombatSafe(group, threatMeasure))
+		if (vector.Distance(source, destination) > AICF_VehicleShortRecovery.MAX_ACTOR_DISPLACEMENT_METERS)
 		{
-			rejectionReason = string.Format("COMBAT_THREAT_%1", threatMeasure);
+			rejectionReason = "SHORT_RECOVERY_DISTANCE_EXCEEDED";
 			return false;
 		}
-		return m_Watchdog.CanApplyHiddenRecovery(
-			source,
-			destination,
-			m_Config.GetHiddenRecoveryPlayerRadiusMeters(),
-			nearestPlayerMeters,
-			rejectionReason);
+		// Имя boundary сохранено для callers/auditors. Новые вводные разрешают
+		// egress/коррекцию hull и во время боя, и при наблюдающем игроке.
+		// Exact AI/occupant и safe destination проверяются каждым caller заново.
+		return true;
 	}
 
 	protected void AuditHiddenRecoveryDeferred(

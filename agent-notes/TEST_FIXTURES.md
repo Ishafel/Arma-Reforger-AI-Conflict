@@ -2,6 +2,58 @@
 
 ## Пресеты техники: issue #78
 
+`AICF_VehicleBehaviorProbe.c` и `AICF_VehicleBehaviorSettingsProbe.c` добавляются
+только runner `tools/Invoke-AICFVehicleBehavior.ps1` в неизменяемую isolated
+Core-копию. Cases `transport`/`combat`, `-Faction US|USSR`; production fixtures
+не содержит. Runner передаёт `-aicfVehicleBehaviorProbe <case>` и
+`-aicfVehicleBehaviorFaction <faction>`, выполняет terminal Workbench и canonical
+Server. Собственный roster, truce/native threat, реальная потеря водителя и
+предварительное nonlethal damage являются controlled setup: это не обычная
+война и не доказательство платного найма5 бойцов.
+
+Oracle требует physical dismount всего TRANSPORT либо cargo-only COMBAT,
+отложенную замену боевого экипажа, нового original survivor за рулём, тот же
+vehicle/lease/debit, сохранённые identities/health и physical resume по новому
+приказу дальше300м. Captured-seat проверка временно меняет native accessibility,
+сравнивает прежний filtered catalog с captured topology и восстанавливает флаг
+до verdict; она не объявляет этот флаг причиной исторического runtime отказа.
+Settings probe выполняет23 native Encode/Decode/library cases, включая schema1,
+schema2/COMBAT/437, границы50..1000, malformed fields, update/delete и fresh
+store reload. Отдельный client/JIP flag `-aicfVehicleBehaviorReadback 1` проверяет
+подтверждённые settings и hidden widgets; `Test-VehiclePresetClientLog.ps1`
+с `-BehaviorSettings` сохраняет полный server/client/JIP fatal gate.
+
+Опция runner `-Cases combat -CleanupIncapProbe` разрешена только для отдельного
+combat case. Она передаёт `-aicfCleanupIncapProbe 1`, создаёт короткий controlled
+hull ghost с native unconscious actor после реального egress и запускает
+production cleanup. Обязательны `CLEANUP_INCAP_HULL_GHOST_ESTABLISHED`, более
+поздний `CLEANUP_INCAP_HULL_PHYSICAL_CLEAR`, сохранение life/health/resilience,
+прежние3 attempts/deadline и полный release. Fixture не заполняет budgets и
+не лечит бойцов. Matching `Test-VehicleBehaviorLog.ps1 -CleanupIncapProbe`
+требует все receipts и полный stopped log; targeted результат хранится отдельно
+от strict native resources. Команды, identity/fit roster guards и текущие
+границы доказательств — [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md).
+
+`Test-VehicleFitRosterContracts.ps1` проверяет весь captured roster после
+переназначений, Cargo для проснувшихся originals и all-or-fallback перед Resume.
+Исполняются production identity/unique-seat/cargo-fill bodies с узкими native
+адаптерами; это не физическое пробуждение. `Test-CleanupIncapacitatedHullContracts.ps1`
+проверяет exact cleanup roster/lease/Rpl, player/foreign отказ, bounded short
+relocation и неизменные health/budgets. Итоговые compile/runtime gates конечного
+source находятся в отдельной проверке, PASS здесь не присваивается. Ручной UX —
+[NOT RUN](VEHICLE_VISUAL_CHECK.md).
+
+`AICF_VehicleBehaviorProbe.c -aicfCleanupAliveProbe 1` добавляет controlled
+ALIVE detached-hull вариант. После actual egress fixture временно отключает
+только movement controls и перемещает своего original survivor в expanded
+hull вне solid body. Обязательны `CLEANUP_ALIVE_RELEASE_QUEUED`,
+`CLEANUP_ALIVE_HULL_GHOST_ESTABLISHED`, `CLEANUP_ALIVE_HULL_PHYSICAL_CLEAR`,
+`CLEANUP_ALIVE_LIFE_HEALTH_PRESERVED`, `CLEANUP_ALIVE_RECOVERY_BUDGET` и
+`CLEANUP_ALIVE_FULL_RELEASE`. Health/resilience delta≤0.001 и ALIVE проверяются
+после реального cleanup, attempts≤3/deadline не сбрасываются; controls затем
+восстанавливаются. `Test-CleanupAliveHullContracts.ps1` исполняет384 комбинации
+native-state predicate и16 source mutants; это отдельный gate от native run.
+
 `Invoke-AICFVehicleScenarios.ps1 -Cases repeat5 -Faction US` выбирает настоящий
 US state/main base и собственный five-seat M1025 M2HB из native FACTION catalog;
 default `USSR` сохраняет УАЗ и прежние cases. Orders, recovery, observer и
@@ -19,6 +71,20 @@ token, action/waypoint, native path и paired tile/projection snapshots до/п�
 одного original CheckApproach. Surrogate body/rays CharacterAI/Projectile и
 LOD/velocity/stance являются наблюдениями, не mutation или connectivity proof.
 Physics на path node не доказывает, что SpawnPlacement ранее принимал эту точку.
+
+`AICF_RecruitmentShortRecoveryProbe.c` включается isolated stage флагом
+`-aicfRecruitmentShortRecoveryProbe 1`. Создаёт настоящую US казарму относительно
+живого seed, сохраняет обычные движение, order lifecycle, supplies debit и
+donor join. Controlled STUCK проходит через production node handler и настоящий
+`OnMoveFailed`; observer проверяет receipt до callback и ровно один вызов.
+Первый actor после короткого переноса физически проходит ещё5m и прибывает,
+покупка подтверждается новым членом и реальным уменьшением supplies. Второй
+disposable slot проверяет actual vehicle occupancy и native incapacitation;
+после проверки он не лечится и не воскрешается. No-safe negative использует
+явную test-only placement rejection.20 обязательных cases и отдельные source
+negative controls не выдаются за обычную войну или reproduction исторического
+STUCK. Общий240s deadline завершается FAIL и остановкой; полный stopped log,
+native exit0 и resource gate проверяет `Test-RecruitmentShortRecoveryLog.ps1`.
 
 Custom `VehicleScenarioProbe` использует штатный initial cohesion setup
 Column/displacement0 с native readback. Собственный READY slot с current exact
@@ -49,6 +115,13 @@ gate, CLI `-aicfTransportCombatResume 1`. Native selection/actions/clocks не
 у Multi CAPACITY — конечный grant4000/faction, truce/защита. Ни один не доказывает
 player RPC, UI или матрицу всех моделей. Контракты, duration и источники evidence:
 [VEHICLE_MULTISQUAD.md](VEHICLE_MULTISQUAD.md).
+
+Soak proof3 с явным START `casualty_policy=CAPTURED_ORIGINAL_SURVIVORS` сохраняет
+строгие исходные пять/платный найм/точную посадку, а после боя проверяет каждого
+captured original: все fit должны реально прибыть, каждый nonfit тоже физически
+отделён от машины. Пять `MEMBER_FOOT` и пять свежих `MEMBER_ARRIVAL` не допускают
+подмены actor, пропуска incapacitated body или выдуманного прибытия. Старые
+proof3 без policy сохраняют прежнюю семантику. Подробности — [VEHICLE_SOAK.md](VEHICLE_SOAK.md).
 
 Полные поездки к неизменной дальней точке и повторная посадка используют
 `AICF_VehicleScenarioProbe.c`, только isolated Core. Tracked runner подготавливает
@@ -1125,3 +1198,24 @@ Server и client используют согласованный stage. Для R
 [Test-LogisticsContracts.ps1](../tests/contracts/Test-LogisticsContracts.ps1).
 Это искусственные server/client events для положительных и отрицательных
 проверок анализатора; они не являются evidence реального runtime.
+
+## Controlled native GC
+
+`AICF_VehicleGarbageProbe.c`, CLI `-aicfVehicleGarbageProbe 1`, markers `VEHICLE_GC_CASE`/`VEHICLE_GC_FINISHED`. Два собственных stock UAZ проходят unowned Insert TTL5 и positive stock callbacks; только следующий Update при committed tracking и remaining>1 привязывает настоящие Fleet leases. Delete veto и survival проверяются отдельно от owned Insert veto, который также ждёт deferred callback. Exact stale generations, foreign entity и server-local authority имеют отдельные controls. Authority receipt сохраняет actual presence/Rpl/master/proxy/role: Local API не доказывает proxy.
+
+WORLD_POOL control ждёт positive unowned callback и remaining>0 после release. Отдельный control уничтожает sole strong Fleet owner после veto при живом world/entity и проверяет restored tracking. Затем released и unowned автомобили действительно удаляются native GC с TTL1; stock callbacks наблюдаются. Нет глобального Flush, blacklist mutation, лечения или телепортации. Deadline180s сохраняет TIMEOUT как FAIL. Source-contract mutants не являются native API proof. Первые неверные deferred oracles и настоящий teardown FAIL остаются в evidence. Полный stopped log/manifest/native exit проверяет `Test-VehicleGarbageLog.ps1`; свежие итоговые gates — в TESTING.
+
+Реальная client authority проверка входит в opt-in BehaviorSettings client/JIP
+fixture. После actual local-spawn setup FAIL (`CanSpawnEntityPrefab=0`) новый
+test-only owner RPC на сервере с обоими CLI flags создаёт empty UAZ10..20м от
+подтверждённого avatar, один раз для каждого owned controller. Client получает
+RplId через owner RPC и существующим Tick ждёт native FindItem/GetEntity proxy.
+Private client Fleet/ACTIVE lease сохраняет реальные EntityID/Rpl/generations;
+`VEHICLE_UI_GC_AUTHORITY` требует actual_server0/native_master0/native_proxy1,
+Register denied и explicit Permission.CanProtect denied. Server cleanup
+повторяет exact identity и occupancy перед удалением только probe car.
+Строгие native resources и визуальный NOT RUN сохраняются отдельными gates.
+
+GC authority negative обязателен также при `-aicfVehicleBehaviorReadback 1` в обоих real client/JIP logs. Client fixture создаёт только собственный Local prefab, private Fleet/ACTIVE lease с настоящими entity/Rpl/generations и проверяет native `Replication.IsServer=0`, отказ `Policy.Register` и explicit `Permission.CanProtect`. Marker `VEHICLE_UI_GC_AUTHORITY` и case `GC_NO_AUTHORITY_REJECTED` требуют prepared1/оба deny1; matching client auditor отвергает отсутствие/дубликат/wrong realm. Вместе с CatalogFilters ожидаются34 client checks/8 JIP. Прежние no-flag проверки не меняются.
+
+Hidden commander client может не иметь ControlledEntity при существующем PlayerController. GC authority setup поэтому допускает initial local spawn без avatar: fixture origin0 с surface+1, без перемещения существующего actor или server entity. Receipt сохраняет actor/world/resource/canSpawn/entity/fleet/lease/state/generations; подготовка0 остаётся FAIL и не считается отказом authority.

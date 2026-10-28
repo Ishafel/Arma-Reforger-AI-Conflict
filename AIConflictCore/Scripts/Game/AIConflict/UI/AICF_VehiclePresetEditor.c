@@ -10,6 +10,11 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 	protected TextWidget m_wStatus;
 	protected TextWidget m_wUnseated;
 	protected EditBoxWidget m_wName;
+	protected EditBoxWidget m_wReturnDistance;
+	protected SCR_ComboBoxComponent m_Behavior;
+	protected int m_iSelectedBehavior;
+	protected int m_iSelectedReturnDistance = 300;
+	protected bool m_bPreserveBehaviorOnSelect;
 	protected SCR_ComboBoxComponent m_Catalog;
 	protected SCR_ComboBoxComponent m_SourceFilter;
 	protected SCR_ComboBoxComponent m_CategoryFilter;
@@ -145,12 +150,24 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		m_wPreview = RenderTargetWidget.Cast(GetGame().GetWorkspace().CreateWidget(WidgetType.RenderTargetWidgetTypeID,
 			WidgetFlags.VISIBLE | WidgetFlags.BLEND | WidgetFlags.IGNORE_CURSOR, Color.White, 0, m_wPanel));
 		if (!m_wPreview) return false;
-		Place(m_wPreview, 0.03, 0.28, 0.45, 0.65);
+		Place(m_wPreview, 0.03, 0.28, 0.45, 0.50);
 		m_wPreview.SetMaxFPS(30);
 		m_wPreview.SetResolutionScale(1, 1);
 		m_wPreview.SetClearColor(true, Color.FromSRGBA(9, 19, 28, 255).PackToInt());
 		m_wPreview.SetVisible(false);
 		m_Preview = new AICF_VehiclePreview();
+		Label(0.03, 0.51, 0.18, 0.56, "{AICF:AICF_UI_VehicleBehavior}");
+		m_Behavior = Combo(0.18, 0.51, 0.45, 0.56);
+		m_Behavior.AddItem(AICF_Localization.Resolve("{AICF:AICF_UI_VehicleBehaviorTransport}"));
+		m_Behavior.AddItem(AICF_Localization.Resolve("{AICF:AICF_UI_VehicleBehaviorCombat}"));
+		m_Behavior.SetCurrentItem(0, false, false, false);
+		Label(0.03, 0.59, 0.28, 0.64, "{AICF:AICF_UI_VehicleReturnDistance}");
+		Widget distanceEdit = GetGame().GetWorkspace().CreateWidgets(EDIT, m_wPanel);
+		Place(distanceEdit, 0.28, 0.59, 0.45, 0.64);
+		m_wReturnDistance = EditBoxWidget.Cast(distanceEdit.FindAnyWidget("EditBox"));
+		SCR_EditBoxComponent distanceComponent = SCR_EditBoxComponent.Cast(distanceEdit.FindHandler(SCR_EditBoxComponent));
+		if (distanceComponent) distanceComponent.SetLabel("");
+		if (m_wReturnDistance) m_wReturnDistance.SetText("300");
 		for (int row; row < 8; row++)
 		{
 			float y = 0.28 + row * 0.047;
@@ -185,7 +202,7 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		m_wConfirmation.SetVisible(false);
 
 		m_wStatus.SetTextWrapping(true);
-		return m_wName != null;
+		return m_wName != null && m_wReturnDistance != null;
 	}
 
 	protected void Request(int operation, string payload)
@@ -279,6 +296,12 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		if (!preserveDraft && (changed || (completed && m_Player.AICF_VehiclePresetAccepted())))
 		{
 			m_Draft = AICF_VehiclePreset.Decode(draft);
+			if (m_Draft && completed && m_iOperation == AICF_EVehiclePresetOperation.SELECT && m_bPreserveBehaviorOnSelect && m_Player.AICF_VehiclePresetAccepted())
+			{
+				m_Draft.m_iBehavior = m_iSelectedBehavior;
+				m_Draft.m_iReturnDistance = m_iSelectedReturnDistance;
+			}
+			RenderBehavior();
 			m_aSeatNames.Clear();
 			list = new JsonLoadContext();
 			if (list.LoadFromString(names)) list.ReadValue("names", m_aSeatNames);
@@ -289,6 +312,7 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 			RenderSeats();
 		}
 		else RenderSeats();
+		if (completed && m_iOperation == AICF_EVehiclePresetOperation.SELECT) m_bPreserveBehaviorOnSelect = false;
 		m_bRendering = false;
 		if (completed && !m_Player.AICF_VehiclePresetAccepted()) status = m_Player.AICF_VehiclePresetReason();
 		m_wStatus.SetText(Status(status));
@@ -377,6 +401,7 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		string message = "{AICF:AICF_UI_VehicleUnavailable}";
 		switch (reason)
 		{
+			case "INVALID_VEHICLE_BEHAVIOR": message = "{AICF:AICF_UI_VehicleBehaviorInvalid}"; break;
 			case "READY":
 			case "LOADED": message = "{AICF:AICF_UI_VehicleDraft}"; break;
 			case "SAVED": message = "{AICF:AICF_UI_VehicleSaved}"; break;
@@ -411,6 +436,7 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 			case "APPROACHING_SITE": message = "{AICF:AICF_UI_VehicleApproaching}"; break;
 			case "BOARDING": message = "{AICF:AICF_UI_VehicleBoarding}"; break;
 			case "TRANSIT": message = "{AICF:AICF_UI_VehicleTransit}"; break;
+			case "TACTICAL_DEPLOYMENT": message = "{AICF:AICF_UI_VehicleTacticalDeployment}"; break;
 			case "CLEANUP_PENDING":
 			case "DISMOUNT":
 			case "HANDOFF": message = "{AICF:AICF_UI_VehicleCleanup}"; break;
@@ -447,6 +473,31 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 			if (!m_Draft || !m_Draft.m_aMembers.Contains(position)) unseated += (position + 1).ToString() + " ";
 		m_wUnseated.SetText(AICF_Localization.Resolve(AICF_Localization.Format("{AICF:AICF_UI_VehicleUnseated}", unseated)));
 		m_bRendering = previousRendering;
+	}
+
+	protected void RenderBehavior()
+	{
+		int behavior = AICF_EVehicleBehavior.TRANSPORT;
+		int returnDistance = 300;
+		if (m_Draft) { behavior = m_Draft.m_iBehavior; returnDistance = m_Draft.m_iReturnDistance; }
+		m_Behavior.SetCurrentItem(behavior, false, false, false);
+		m_wReturnDistance.SetText(returnDistance.ToString());
+	}
+
+	protected bool ReadBehavior()
+	{
+		int behavior = m_Behavior.GetCurrentIndex();
+		string value = m_wReturnDistance.GetText();
+		int returnDistance = value.ToInt(-1);
+		if (returnDistance.ToString() != value || !AICF_VehiclePreset.ValidBehavior(behavior, returnDistance))
+		{
+			m_wStatus.SetText(AICF_Localization.Resolve("{AICF:AICF_UI_VehicleBehaviorInvalid}"));
+			return false;
+		}
+		m_iSelectedBehavior = behavior;
+		m_iSelectedReturnDistance = returnDistance;
+		if (m_Draft) { m_Draft.m_iBehavior = behavior; m_Draft.m_iReturnDistance = returnDistance; }
+		return true;
 	}
 
 	protected void RefreshButtonColors()
@@ -506,6 +557,11 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 			return;
 		}
 		if (m_bPending || m_bQueued || !m_Draft) return;
+		if (combo == m_Behavior)
+		{
+			m_Draft.m_iBehavior = item;
+			return;
+		}
 		int row = m_aSeats.Find(combo);
 		if (row < 0) return;
 		m_Draft.Assign(m_iPage * 8 + row, item - 1);
@@ -526,8 +582,13 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		}
 		if (action == "select")
 		{
+			if (!ReadBehavior()) return true;
 			ResourceName selected = SelectedPrefab();
-			if (!selected.IsEmpty()) Request(AICF_EVehiclePresetOperation.SELECT, selected);
+			if (!selected.IsEmpty())
+			{
+				m_bPreserveBehaviorOnSelect = true;
+				Request(AICF_EVehiclePresetOperation.SELECT, selected);
+			}
 		}
 		else if (action == "load" || action == "delete")
 		{
@@ -539,6 +600,7 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		else if (action == "reset") Request(AICF_EVehiclePresetOperation.RESET, "");
 		else if (m_Draft && (action == "save" || action == "apply"))
 		{
+			if (!ReadBehavior()) return true;
 			m_Draft.m_sName = m_wName.GetText();
 			int operation = AICF_EVehiclePresetOperation.APPLY;
 			if (action == "save") operation = AICF_EVehiclePresetOperation.SAVE;
@@ -575,6 +637,7 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		ClearCombo(m_SourceFilter);
 		ClearCombo(m_CategoryFilter);
 		ClearCombo(m_Library);
+		ClearCombo(m_Behavior);
 		foreach (SCR_ComboBoxComponent combo : m_aSeats) ClearCombo(combo);
 		foreach (Widget input : m_aButtons) input.RemoveHandler(this);
 		m_aSeats.Clear();
@@ -589,6 +652,9 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		m_SourceFilter = null;
 		m_CategoryFilter = null;
 		m_Library = null;
+		m_Behavior = null;
+		m_wReturnDistance = null;
+		m_bPreserveBehaviorOnSelect = false;
 		m_Draft = null;
 		m_Player = null;
 		m_bPending = false;

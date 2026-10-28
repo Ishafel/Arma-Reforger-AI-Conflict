@@ -156,7 +156,7 @@ class AICF_VehicleAcquisitionFlow
 			case AICF_ETransportTripPhase.SITE_PLANNED:
 				return ProcessSitePlanned(trip, fleet, requestState, nowMs);
 			case AICF_ETransportTripPhase.APPROACHING_SITE:
-				return ProcessApproachingSite(trip, fleet, faction, requestState, nowMs);
+				return ProcessApproachingSite(trip, currentAssignment, fleet, faction, requestState, nowMs);
 			case AICF_ETransportTripPhase.STAGING_CONFIRMED:
 				return ProcessStagingConfirmed(trip, fleet, faction, requestState, nowMs);
 			case AICF_ETransportTripPhase.SPAWN_COMMIT:
@@ -457,6 +457,8 @@ class AICF_VehicleAcquisitionFlow
 			m_Spawner.ReleaseSelectedSite(reservation);
 			return FailClosed(trip, "SPAWN_PLAN_COMMIT_REJECTED", "PLAN_GUARD");
 		}
+		if (plan.RequiresManualRally() && !plan.CaptureManualStagingRoster(trip))
+			return FailClosed(trip, "SPAWN_STAGING_ROSTER_CAPTURE_REJECTED", "PLAN_GUARD");
 		AICF_Stage4Diagnostics.Info(
 			"VEHICLE_SPAWN_APPROACH_BUDGET",
 			BuildIdentityContext(trip, requestState, null, causationId) + string.Format(
@@ -497,6 +499,7 @@ class AICF_VehicleAcquisitionFlow
 
 	protected AICF_TripOutcome ProcessApproachingSite(
 		AICF_TransportTrip trip,
+		AICF_StrategicAssignmentSnapshot currentAssignment,
 		AICF_FactionFleet fleet,
 		SCR_CampaignFaction faction,
 		AICF_VehicleRequestState requestState,
@@ -549,7 +552,10 @@ class AICF_VehicleAcquisitionFlow
 				stagingConfirmed);
 		if (!stagingConfirmed)
 		{
-			MaintainStagingMemberActions(trip, requestState, plan, nowMs);
+			MaintainStagingMemberActions(trip, currentAssignment, requestState, plan, nowMs);
+			AICF_VehicleStagingExhaustion exhaustion = plan.GetManualStagingExhaustion();
+			if (exhaustion && exhaustion.ShouldEnd(currentAssignment, m_Spawner, nowMs, m_Config.GetSpawnStagingRadiusMeters()))
+				return EndRequest(trip, fleet, requestState, "SPAWN_STAGING_ACTIONS_EXHAUSTED", nowMs);
 			if (!IsApproachWaypointQueued(trip, plan))
 			{
 				// A completed All-members waypoint is normally removed by the engine.
@@ -1131,6 +1137,7 @@ class AICF_VehicleAcquisitionFlow
 
 	protected void MaintainStagingMemberActions(
 		AICF_TransportTrip trip,
+		AICF_StrategicAssignmentSnapshot currentAssignment,
 		AICF_VehicleRequestState requestState,
 		AICF_VehicleSpawnPlan plan,
 		int nowMs)
@@ -1164,6 +1171,7 @@ class AICF_VehicleAcquisitionFlow
 				stagingDistanceMeters,
 				nowMs,
 				STAGING_MEMBER_ACTION_PROGRESS_METERS);
+			token.ObservePhysicalMotion(entity.GetOrigin(), nowMs);
 			if (IsMemberWithinSpawnBoardingEnvelope(entity, plan))
 			{
 				ReportStagingMemberAction(
@@ -1197,6 +1205,15 @@ class AICF_VehicleAcquisitionFlow
 			if (nowMs - token.GetLastProgressAtMs() >= STAGING_MEMBER_ACTION_STALL_MS)
 			{
 				RecordStagingMemberAttemptOutcome(plan, entity);
+				// Второй уже списанный native move: одна короткая видимая коррекция.
+				// Ownership ещё существует; после Cancel новый permission не создаётся.
+				if (plan.RequiresManualRally() && token.GetRetryCount() == 1 &&
+					token.HasNoPhysicalMotion(nowMs, STAGING_MEMBER_ACTION_AUDIT_INTERVAL_MS))
+				{
+					AICF_VehicleManualStagingRecovery recovery = new AICF_VehicleManualStagingRecovery(
+						trip, currentAssignment, requestState, plan, token, m_Spawner, m_Config.GetSpawnStagingRadiusMeters());
+					recovery.TryRecover();
+				}
 				ReportStagingMemberAction(
 					trip, requestState, plan, token,
 					"VEHICLE_STAGING_MEMBER_ACTION_OUTCOME",

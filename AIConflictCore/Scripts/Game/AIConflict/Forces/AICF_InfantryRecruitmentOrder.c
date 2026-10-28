@@ -28,6 +28,7 @@ class AICF_InfantryRecruitmentOrder
 	int m_iApproachProgressAtMs;
 	int m_iApproachRepairs;
 	bool m_bMovementFailed;
+	ref AICF_RecruitmentMoveFailure m_MoveFailure;
 	float m_fApproachBestDistance;
 	bool m_bHiddenRecoveryPending;
 	int m_iHiddenRecoverySubmittedAtMs;
