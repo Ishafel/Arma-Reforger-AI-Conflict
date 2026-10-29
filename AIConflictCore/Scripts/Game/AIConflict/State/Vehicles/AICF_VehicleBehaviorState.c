@@ -14,6 +14,7 @@ class AICF_VehicleBehaviorState
 	int m_iSettledPolls;
 	int m_iPausedAt;
 	int m_iLastReport;
+	int m_iNextReboardTraceAt;
 	ref array<IEntity> m_aDeployed = {};
 	ref array<ref AICF_VehicleBehaviorAction> m_aActions = {};
 

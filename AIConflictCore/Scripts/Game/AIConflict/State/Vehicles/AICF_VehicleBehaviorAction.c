@@ -89,16 +89,25 @@ class AICF_VehicleBehaviorAction
 		if (!utility) return false;
 		if (!m_Entry || !OwnsAction(utility, m_Entry) || m_Entry.GetRemoveAction() ||
 			m_Entry.GetActionState() == EAIActionState.FAILED || m_Entry.GetActionState() == EAIActionState.COMPLETED) return true;
-		if (vector.DistanceXZ(m_vLastProgressPosition, m_Actor.GetOrigin()) >= 0.25)
-		{
-			m_vLastProgressPosition = m_Actor.GetOrigin();
-			m_iLastProgressAt = System.GetTickCount();
-		}
+		if (!m_Seat || m_Seat.GetVehicle() != m_Vehicle) return false;
+		ObserveEntryProgress(m_Actor.GetOrigin(), m_Seat.GetPosition(), System.GetTickCount());
 		// Native failure обрабатывается сразу; RUNNING без движения — отдельное
 		// короткое наблюдение, animated entry не прерывается по одному poll.
 		CompartmentAccessComponent access = ChimeraCharacter.Cast(m_Actor).GetCompartmentAccessComponent();
 		return access && !access.IsGettingIn() && !access.IsGettingOut() &&
 			System.GetTickCount() - m_iLastProgressAt >= 2000;
+	}
+
+	// Сравниваем обе позиции actor с одним текущим положением exact seat:
+	// движение машины само по себе не даёт credit, кружение AI не сбрасывает clock.
+	bool ObserveEntryProgress(vector actorPosition, vector seatPosition, int nowMs)
+	{
+		float previousDistance = vector.Distance(m_vLastProgressPosition, seatPosition);
+		float currentDistance = vector.Distance(actorPosition, seatPosition);
+		if (previousDistance - currentDistance < 0.25) return false;
+		m_vLastProgressPosition = actorPosition;
+		m_iLastProgressAt = nowMs;
+		return true;
 	}
 
 	void Retire()

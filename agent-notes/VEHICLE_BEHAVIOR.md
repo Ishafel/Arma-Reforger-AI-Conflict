@@ -69,6 +69,29 @@ owned actions, перечитывается actual current group: каждый �
 Caller сначала прекращает собственный конфликтующий action. Native force
 посадка не считается доказанной до actual compartment readback.
 
+При повторной посадке progress actor означает приближение к exact seat минимум
+на0.25м в3D относительно последней credited позиции. Обе actor positions
+сравниваются с одной текущей seat position: одна подвижка машины не сбрасывает
+stall clock, круги и отход/возврат вокруг неё также не дают credit. Прежнее
+правило любого XZ-сдвига могло бесконечно откладывать short correction рядом
+с машиной. Остались прежние2s наблюдения RUNNING,3short attempts и absolute
+reboard deadline; дальнего actor helper к машине не переносит.
+
+`VEHICLE_REBOARD_ENTRY` читается каждые5s и при deadline: exact member/seat,
+distance/height/speed, accessibility/lock/reservation/occupant, native access,
+transitions, owned/selected/executed actions, retry/short budgets и progress age.
+Диагностика не вызывает stateful `EntryBlocked` и не меняет clocks/actions.
+`Test-ReboardApproachProgressContracts.ps1` исполняет извлечённый production
+predicate на круговом jitter, отходе/возврате, движении машины и реальном3D
+приближении. Это offline проверка причины, не native proof старых timeout.
+
+Свежая проверка29.10.2026: профильный набор6/6PASS; controlled retained repeat
+US и USSR каждый Workbench0/native0/frozen functional audit0,26checks, два
+физических маршрута и высадки, original5actors/та же машина/lease/Rpl/одна
+покупка. Строгие resources28FAIL каждого сохранены. Полные stopped logs и hashes:
+`.codex-runtime/issue78-finalization-20261029/reboard/REPORT.md`. Обычная война
+и все исторические причины timeout этим не объявляются проверенными.
+
 Высадка/освобождение места недееспособного original crew также ограничены25м.
 Операция не восстанавливает здоровье или life state. ТС этим helper не двигается.
 Прежняя короткая mobility relocation имеет собственные safety/identity guards;
