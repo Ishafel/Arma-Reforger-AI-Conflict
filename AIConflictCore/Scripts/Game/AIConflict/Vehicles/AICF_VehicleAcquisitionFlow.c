@@ -1614,7 +1614,7 @@ class AICF_VehicleAcquisitionFlow
 			retryCount,
 			initialDistanceMeters,
 			nowMs);
-		if (!plan.TrackStagingActionToken(token))
+		if (!token.CaptureTaskAssignment(trip.GetAssignment()) || !plan.TrackStagingActionToken(token))
 			return false;
 		utility.AddAction(action);
 		string eventName = "VEHICLE_STAGING_MEMBER_ACTION_ISSUED";

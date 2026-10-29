@@ -112,6 +112,7 @@ class AICF_VehicleSlotView
 	protected bool m_bPresetDestinationWait;
 	protected bool m_bNativeCombatTask;
 	protected bool m_bTacticalActorTask;
+	protected bool m_bStagingActorTask;
 	protected bool m_bSafeSpawnWait;
 	protected bool m_bRestorePending;
 	protected bool m_bOrderRestored;
@@ -132,6 +133,7 @@ class AICF_VehicleSlotView
 		AICF_StrategicAssignmentSnapshot assignment = trip.GetAssignment();
 		m_bTacticalActorTask = currentBaseRevision >= 0 && assignment &&
 			assignment.GetBaseRevision() == currentBaseRevision && IsTacticalActorTask(trip);
+		m_bStagingActorTask = AICF_VehicleStagingTaskProof.HasCurrentTask(trip, currentBaseRevision, System.GetTickCount());
 		m_bNativeCombatTask = currentBaseRevision >= 0 && assignment &&
 			assignment.GetBaseRevision() == currentBaseRevision && AICF_TransportCombatHold.IsCurrentCombat(trip);
 		m_bControlsMovement = trip.GetPhase() == AICF_ETransportTripPhase.SITE_PLANNED ||
@@ -199,6 +201,7 @@ class AICF_VehicleSlotView
 	bool IsPresetDestinationWait() { return m_bPresetDestinationWait; }
 	bool HasNativeCombatTask() { return m_bNativeCombatTask; }
 	bool HasTacticalActorTask() { return m_bTacticalActorTask; }
+	bool HasStagingActorTask() { return m_bStagingActorTask; }
 
 	protected bool IsTacticalActorTask(AICF_TransportTrip trip)
 	{

@@ -104,12 +104,14 @@ modded class SCR_AIToggleMaxLOD
 // движения не должен читать origin отсутствующего лидера или завершать waypoint.
 modded class SCR_AIProcessFailedMovementResult
 {
+	protected ref AICF_TransitMoveFailure m_AICFTransitFailure;
 	protected bool m_bAICFMoveContextReported;
 
 	override void OnEnter(AIAgent owner)
 	{
 		super.OnEnter(owner);
 		m_bAICFMoveContextReported = false;
+		m_AICFTransitFailure = null;
 	}
 
 	override ENodeResult EOnTaskSimulate(AIAgent owner, float dt)
@@ -125,6 +127,8 @@ modded class SCR_AIProcessFailedMovementResult
 			bool hasRelated = GetVariableIn(PORT_IS_WAYPOINT_RELATED, related);
 			vector location;
 			bool hasLocation = GetVariableIn(PORT_MOVE_LOCATION, location);
+			if (hasHandler && hasRelated && hasLocation && AICF_HandleTransitFailedMovement(result, handler, related, location))
+				return ENodeResult.FAIL;
 			if (hasHandler && hasRelated && hasLocation && AICF_HandleRecruitmentFailedMovement(result, handler, related, location))
 				return ENodeResult.FAIL;
 			if (hasHandler && hasRelated && hasLocation && AICF_HandleSpawnApproachFailedMovement(result, handler, related, location))
@@ -156,6 +160,32 @@ modded class SCR_AIProcessFailedMovementResult
 			}
 		}
 		return super.EOnTaskSimulate(owner, dt);
+	}
+
+	protected bool AICF_HandleTransitFailedMovement(int result, int handler, bool related, vector location)
+	{
+		if (!Replication.IsServer() || !AICF_TransitMoveFailure.Supports(result)) return false;
+		if (m_AICFTransitFailure)
+		{
+			if (m_AICFTransitFailure.CanDiscardRetiredNativeFailure(m_Group, m_GroupUtilityComponent, result, handler, related, location))
+				return true;
+			m_AICFTransitFailure = null;
+		}
+		AICF_MatchController controller = AICF_MatchController.GetActiveController();
+		if (!controller) return false;
+		AICF_TransitMoveFailure receipt = controller.ReportVehicleTransitMoveFailure(m_Group,
+			m_GroupUtilityComponent, result, handler, related, location);
+		if (!receipt) return false;
+		if (receipt.WasDelivered()) { m_AICFTransitFailure = receipt; return true; }
+		SCR_AIGroupVehicle nativeVehicle = m_GroupUtilityComponent.m_VehicleMgr.FindVehicleBySubgroupId(handler);
+		if (!nativeVehicle || !receipt.OwnsVehicle(nativeVehicle.GetEntity())) return false;
+		if (!receipt.ConfirmDelivery()) return false;
+		m_AICFTransitFailure = receipt;
+		m_GroupUtilityComponent.OnMoveFailed(result, nativeVehicle.GetEntity(), related, location);
+		AICF_Stage3Diagnostics.Info("TRANSPORT_NATIVE_MOVE_FAILURE_CAPTURED", receipt.Details());
+		// Transit tick расходует прежний bounded recovery; callback не меняет
+		// waypoint, progress clocks, trip phase или физику.
+		return true;
 	}
 
 	protected bool AICF_HandleSpawnApproachFailedMovement(int result, int handler, bool related, vector location)

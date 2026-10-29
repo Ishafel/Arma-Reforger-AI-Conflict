@@ -93,6 +93,36 @@ Receipt не заменяет физический выход, exact settled sea
 typed fallback до crew recovery; существующий controller владеет высадкой,
 восстановлением пешего приказа и cleanup. Конкурирующие async owners сохраняются.
 
+До stock failed-movement abandonment `AICF_TransitMoveFailure` может принять
+только exact current vehicle handler ручного preset и здоровый полностью
+settled original AI roster с оставшимся mobility budget. Native callback доставляется
+ровно один раз; этот receipt не меняет actions/waypoints/physics. Обычный Transit
+Tick повторно проверяет immutable identity/revisions/health, расходует прежнюю
+попытку и запускает существующий bounded recovery. STUCK допускает прежнюю
+короткую коррекцию4..15м при captured/current speed<=1м/с, иначе route rebuild;
+UNKNOWN/UNREACHABLE — route rebuild. Исчерпанный бюджет,
+чужой handler/occupant, повреждённая машина и stale context не подавляют stock.
+Абсолютные сроки и clocks не продлеваются; Reset/ExitTransit снимают receipt.
+
+Native vehicle record сохраняется при `TACTICAL_DEPLOYMENT → TRANSIT`: уже
+сидящие бойцы не создадут повторный `CompartmentEntered` после удаления record.
+`AICF_VehicleNativeSubgroup` восстанавливает только bookkeeping exact leased
+vehicle через stock callback при unassigned negative record; positive handler
+должен совпадать с actual Pilot/car handler. Перед каждым вызовом повторяются
+current assignment/generations/component Rpl, original authoritative AI/settled
+seat и отсутствие другого native movement owner. Default/positive mismatch,
+human/foreign actor и неопределённая identity дают отказ. Физические recovery и
+решения о замене экипажа остаются у существующих flows.
+
+Во время manual acquisition stock может снять завершённый групповой staging
+waypoint, пока отдельные бойцы ещё исполняют собственный подход.
+`AICF_VehicleStagingTaskProof` передаёт в read-only slot view только actual
+selected/executed `RUNNING` staging actor task: token хранит immutable assignment
+snapshot, goal, group/trip/request/entity identity; повторяются slot revisions,
+base revision, reservation и исходные deadlines. Unowned, suspended, cancelled,
+terminal action и stale context не считаются meaningful task. Это проверка
+выполняемой работы; phase/timeout exceptions или продления сроков она не вводит.
+
 Завершённый `COMPLETE` или `FALLBACK` transport intent с восстановленным пешим
 приказом хранится в retained terminal trip.
 Coordinator не принимает handoff assignment/waypoint rebuild за новый заказ

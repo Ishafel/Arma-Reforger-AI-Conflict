@@ -279,6 +279,29 @@ class AICF_TransportNativeGate
 
 	bool IsExpired(int now) { return now - m_iStarted >= 60000 || now >= m_iDeadline; }
 
+	// Завершённая native цепочка не даёт бесконечного ожидания следующего OpenGate.
+	// Только существующий transit flow может потратить свой прежний recovery budget.
+	bool CanRecoverExpiredReturn(AICF_TransportTrip trip, int nowMs)
+	{
+		if (!Matches(trip) || !IsExpired(nowMs) || !m_bObservedExit || !m_bReturnCompleted ||
+			m_iReturnCompletedAtMs <= 0 || m_iReturnedAtMs < m_iReturnCompletedAtMs || m_iReturnedAtMs > nowMs) return false;
+		if (!AICF_VehicleShortRecovery.IsSlowVehicle(m_Vehicle)) return false;
+		AICF_VehiclePresetNativeSeatBinding binding = AICF_VehiclePresetNativeSeatBinding.Capture(trip);
+		if (!binding || !binding.IsCurrent() || m_Group.GetAgentsCount() != binding.m_aMembers.Count()) return false;
+		array<BaseCompartmentSlot> seats = {};
+		AICF_VehiclePreset.Collect(m_Vehicle, seats);
+		string rosterReason;
+		if (!trip.GetVehiclePreset().ValidateRoster(trip.GetVehiclePresetSlot(), seats, rosterReason)) return false;
+		for (int index; index < binding.m_aMembers.Count(); index++)
+		{
+			IEntity member = binding.m_aMembers[index];
+			BaseCompartmentSlot seat = binding.FindSeat(member);
+			if (!seat || !AICF_VehicleShortRecovery.IsCurrentMember(trip, member) ||
+				vector.Distance(member.GetOrigin(), seat.GetPosition()) > AICF_VehicleShortRecovery.MAX_ACTOR_DISPLACEMENT_METERS) return false;
+		}
+		return binding.IsCurrent() && Matches(trip) && AICF_VehicleShortRecovery.IsSlowVehicle(m_Vehicle);
+	}
+
 	void Log(string eventName)
 	{
 		string details = string.Format("operation_id=%1 member=%2 seat=%3 vehicle=%4 elapsed_ms=%5 route_generation=%6 assignment_revision=%7",

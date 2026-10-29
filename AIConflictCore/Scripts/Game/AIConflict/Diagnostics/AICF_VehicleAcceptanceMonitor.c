@@ -121,6 +121,7 @@ class AICF_VehicleAcceptanceMonitor
 	protected int m_iRequiredFactionCount;
 	protected ref array<FactionKey> m_aFactions = {};
 	protected ref array<ref AICF_VehicleAcceptanceRecord> m_aRecords = {};
+	protected ref array<string> m_aConfirmedCapturedDeaths = {};
 
 	protected bool m_bFailureLatched;
 	protected int m_iFailureCount;
@@ -245,6 +246,30 @@ class AICF_VehicleAcceptanceMonitor
 			return;
 		}
 		record.MarkComplete(lease.GetKind());
+		EvaluateCandidate();
+	}
+
+	// Явно поданная confirmed projection не означает выполненный original route.
+	// Предыдущие failure latches и diagnostic errors никогда не сбрасываются.
+	void ObserveConfirmedCapturedDeathRetirement(AICF_TransportTrip trip, AICF_TripRetirementObservation evidence)
+	{
+		if (m_bStopped) return;
+		if (!trip || !evidence || !evidence.IsConfirmed() || !evidence.Matches(trip) ||
+			trip.GetPhase() != AICF_ETransportTripPhase.FAILED_CLOSED)
+		{
+			ObserveTripFailure(trip, AICF_EVehicleAcceptanceFailureDomain.IDENTITY, "CAPTURED_DEATH_RETIREMENT_PROOF_INVALID");
+			return;
+		}
+		AICF_VehicleAcceptanceRecord record = FindRecord(trip.GetFactionKey(), trip.GetSlotId());
+		if (!record)
+		{
+			ObserveTripFailure(trip, AICF_EVehicleAcceptanceFailureDomain.IDENTITY, "CAPTURED_DEATH_RETIREMENT_SLOT_IDENTITY_INVALID");
+			return;
+		}
+		string key = string.Format("%1|%2|%3|%4|%5", trip.GetFactionKey(), trip.GetSlotId(), trip.GetGroupGeneration(), trip.GetTripGeneration(), trip.GetOperationId());
+		if (m_aConfirmedCapturedDeaths.Find(key) >= 0) return;
+		m_aConfirmedCapturedDeaths.Insert(key);
+		AICF_Stage3Diagnostics.Info("CAPTURED_DEATH_RETIREMENT_CONFIRMED", evidence.Details());
 		EvaluateCandidate();
 	}
 

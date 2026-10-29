@@ -2,6 +2,7 @@
 // Таймер доставки приостановлен только на бой/пеший приказ, посадка ограничена.
 class AICF_VehicleBehaviorState
 {
+	ref AICF_VehicleParking m_Parking;
 	bool m_bThreatDeployment;
 	bool m_bSawCombat;
 	bool m_bReboarding;

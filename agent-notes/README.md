@@ -9,8 +9,10 @@
 |---|---|
 | Разобрать неполный native spawn и очередь замены отрядов | [GROUP_SPAWN.md](GROUP_SPAWN.md), GroupRuntime/InfantrySpawnPlacement и controlled replacement stress |
 | Исправить persistence leaks при direct-connect без backend identity | [PERSISTENCE_IDENTITY.md](PERSISTENCE_IDENTITY.md), native SpawnLogic identity boundary и separate client/JIP gate |
+| Разобрать native out-of-world-bounds у оружия и отделить main-world drop от private Equipment model | [TEST_FIXTURES.md](TEST_FIXTURES.md#read-only-loose-weapon--private-equipment-model-observer), fixture-only LooseWeaponObserver и отдельный controlled native-drop baseline |
 | Изменить поведение TRANSPORT/COMBAT, N возврата, замену потерь и разрешённую короткую принудительную посадку | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md), BehaviorFlow/Policy/ShortRecovery и retained TACTICAL_DEPLOYMENT |
 | Разобрать native UNKNOWN во время подхода к площадке техники | [VEHICLE_APPROACH_FAILURE.md](VEHICLE_APPROACH_FAILURE.md); exact phase-owned failure receipt и отдельный controlled native probe |
+| Проверить bounded route repair после настоящего OpenGate/возврата экипажа | [TEST_FIXTURES.md](TEST_FIXTURES.md#controlled-native-opengate-expiry), NativeGateExpiryProbe с единственной controlled expiry и отдельным native motion proof |
 | Передать игроку визуальную проверку окна техники и подтверждения состава | [VEHICLE_VISUAL_CHECK.md](VEHICLE_VISUAL_CHECK.md); terminal probes не заменяют этот NOT RUN |
 | Проверить2→4→6 машин на сторону и native combat hold/release/resume | [VEHICLE_MULTISQUAD.md](VEHICLE_MULTISQUAD.md), MultiSquad/TransportCombatResume fixtures и их terminal runners/log auditors |
 | Разобрать повреждённую ходовую, bounded fallback и повторную покупку на прежнем intent | [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md), `Invoke-AICFTransportDamageFallback.ps1`, movement damage/finished intent contracts |

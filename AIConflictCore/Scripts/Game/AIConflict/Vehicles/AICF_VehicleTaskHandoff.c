@@ -64,6 +64,8 @@ class AICF_VehicleTaskHandoff
 		}
 		groupUtility.AddUsableVehicle(usage);
 		bool attached = groupUtility.IsUsableVehicle(usage);
+		if (attached && trip.GetVehiclePreset())
+			attached = groupUtility.AICF_ReconcileExactVehicleSubgroup(trip);
 		if (binding && !binding.IsCurrent()) attached = false;
 		if (!attached && trip.GetVehiclePreset()) AICF_VehicleBehaviorPolicy.Unregister(trip);
 		return attached;
@@ -171,8 +173,11 @@ class AICF_VehicleTaskHandoff
 			AICF_VehicleSpawnPlan plan = trip.GetRequestState().GetSpawnPlan();
 			return plan && waypoint == plan.GetApproachWaypoint();
 		}
-		if (!trip.IsValid() || trip.IsTerminal() || !trip.GetAssignment().GetGroup())
+		if (!trip.IsValidForRetirement() || trip.IsTerminal() ||
+			(!trip.GetAssignment().GetGroup() && !trip.HasAbsentGroupRetirementIdentity()))
 			return false;
+		if (trip.HasAbsentGroupRetirementIdentity() && (!trip.GetLease() ||
+			!trip.GetLease().MatchesTripIdentity(trip.GetFactionKey(), trip.GetSlotId(), trip.GetGroupGeneration(), trip.GetTripGeneration()))) return false;
 		if (trip.GetPhase() == AICF_ETransportTripPhase.TRANSIT)
 		{
 			AICF_VehicleMovementState movement = trip.GetMovementState();

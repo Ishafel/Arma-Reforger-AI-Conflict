@@ -513,6 +513,16 @@ class AICF_MatchController
 		return slot;
 	}
 
+	AICF_TransitMoveFailure ReportVehicleTransitMoveFailure(SCR_AIGroup group,
+		SCR_AIGroupUtilityComponent utility, int result, int handler, bool related, vector location)
+	{
+		AICF_GroupSlot slot;
+		AICF_VehicleCoordinator coordinator;
+		SCR_CampaignFaction faction;
+		if (!ResolveVehicleSpawnApproachOwner(group, slot, coordinator, faction)) return null;
+		return coordinator.ReportTransitMoveFailure(slot, utility, result, handler, related, location);
+	}
+
 	AICF_SpawnApproachFailure ReportVehicleSpawnApproachFailure(SCR_AIGroup group,
 		SCR_AIGroupUtilityComponent utility, AIActionBase action, AIWaypoint waypoint, vector location)
 	{
@@ -2547,6 +2557,7 @@ class AICF_MatchController
 
 		string groupKey = GroupKey(group);
 		SCR_CampaignMilitaryBaseComponent savedTargetBase = slot.GetTargetBase();
+		if (m_VehicleCoordinator) m_VehicleCoordinator.ObserveNativeGroupEmpty(slot, faction);
 		if (slot.IsReplacementDeployment())
 			AbortReplacementAttempt(factionState, faction, slot, "GROUP_EMPTY");
 		if (slot.HasPendingOrderRecovery())
@@ -3302,6 +3313,8 @@ class AICF_MatchController
 		if (vehicleView && vehicleView.HasNativeCombatTask())
 			return true;
 		if (vehicleView && vehicleView.HasTacticalActorTask())
+			return true;
+		if (vehicleView && vehicleView.HasStagingActorTask())
 			return true;
 		if (IsWaypointBoundToGroup(slot.GetGroup(), slot.GetWaypoint()))
 			return true;

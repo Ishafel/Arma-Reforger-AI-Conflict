@@ -32,7 +32,9 @@ function Rules([string]$owner,[string]$state,[string]$view,[string]$facade){
  if($resume -notmatch 'trip.GetPhase\(\) != AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT' -or $resume -notmatch '!m_Handoff.SuspendInfantryOrder\(trip, slot, "TACTICAL_RETURN"\)' -or $resume -notmatch '!TransitionTo\(trip, AICF_ETransportTripPhase.TRANSIT' -or $resume -notmatch '!m_Handoff.AttachVehicleUtility\(trip\)' -or $resume -notmatch 'ApplyOutcome\(trip, m_TransitFlow.PrepareRoute\(trip, outcome.GetCausationId\(\)\)'){'SAME_LEASE_RETURN_OWNER_GATES'}
  if(($start+$resume) -match 'SpawnEntity|DeleteRplEntity|TryReserveLease|AddSupplies|GetInVehicle\(|GetOutVehicle\('){'ORCHESTRATION_ONLY'}
  $exit=Body $owner 'ExitPhaseEffects'
- if($exit -notmatch 'case AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT:\s*m_BehaviorFlow.Stop\(trip\);\s*m_Handoff.DetachVehicleUtility\(trip\);\s*return trip.CommitBehaviorClockPause\(false, System.GetTickCount\(\)\)'){'EXIT_RELEASES_BINDING_UTILITY_CLOCK'}
+ $exitCode=ConvertTo-AICFCodeText $exit
+ if($exitCode -notmatch 'case AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT:\s*m_BehaviorFlow.Stop\(trip\);\s*if \(nextPhase != AICF_ETransportTripPhase.TRANSIT\)\s*m_Handoff.DetachVehicleUtility\(trip\);\s*return trip.CommitBehaviorClockPause\(false, System.GetTickCount\(\)\)' -or
+  !(Body $owner 'TransitionTo').Contains('ExitPhaseEffects(trip, previousPhase, nextPhase, reason)')){'EXIT_RELEASES_BINDING_UTILITY_CLOCK'}
  $reset=Body $state 'ResetExitedPhase'
  if($reset -notmatch 'exitedPhase == AICF_ETransportTripPhase.TRANSIT\)\s*m_MovementState.Reset\(\)'){'OWNER_RESETS_OLD_DELIVERY_CLOCKS'}
  $commit=Body $state 'CommitTransition'
@@ -42,7 +44,8 @@ function Rules([string]$owner,[string]$state,[string]$view,[string]$facade){
  $deadline=Body $state 'IsDeadlineReached'
  if($deadline -notmatch 'm_BehaviorState.PausedMs\(nowMs\)' -or (Body $state 'GetAbsoluteDeadlineMs') -notmatch 'm_BehaviorState.PausedMs\(System.GetTickCount\(\)\)'){'CLOCK_READERS_INCLUDE_SAME_PAUSE'}
  $abort=Body $owner 'AbortForStop'
- if($abort -notmatch 'm_BehaviorFlow.Stop\(trip\)' -or $abort.IndexOf('m_BehaviorFlow.Stop(trip)') -gt $abort.IndexOf('if (!trip.IsValid())')){'STOP_BEFORE_INVALID_RETURN'}
+ $invalid=$abort.IndexOf('if (!trip.IsValidForRetirement() || (trip.HasAbsentGroupRetirementIdentity() && !AICF_TripRetirementIdentity.IsFleetAssetCurrent(trip, fleet)))')
+ if($invalid -lt 0 -or $abort -notmatch 'm_BehaviorFlow.Stop\(trip\)' -or $abort.IndexOf('m_BehaviorFlow.Stop(trip)') -gt $invalid){'STOP_BEFORE_INVALID_RETURN'}
  $reassign=Body $state 'ReassignVehiclePresetSeat'
  if($reassign -notmatch '!Replication.IsServer\(\)' -or $reassign -notmatch '!IsVehiclePresetCurrent\(\)' -or $reassign -notmatch '!AICF_VehicleShortRecovery.IsCurrentMember\(this, VehiclePresetMember\(memberPosition\)\)' -or $reassign -match 'm_VehiclePresetSlot\.|SetVehiclePreset|m_aVehiclePresetMembers\.(Set|Insert|Remove)'){'REASSIGN_TRIP_COPY_CURRENT_MEMBER_ONLY'}
  $current=Body $state 'IsVehiclePresetCurrent'
@@ -72,11 +75,15 @@ $mutants=@(
  @('owner','!trip.CommitBehaviorClockPause(true, System.GetTickCount())','false','CURRENT_PRESET_TRANSIT_ENTRY'),
  @('owner','!m_Handoff.SuspendInfantryOrder(trip, slot, "TACTICAL_RETURN")','false','SAME_LEASE_RETURN_OWNER_GATES'),
  @('owner','m_BehaviorFlow.Stop(trip);','SkipBehaviorStop(trip);','EXIT_RELEASES_BINDING_UTILITY_CLOCK'),
+ @('owner','if (nextPhase != AICF_ETransportTripPhase.TRANSIT)','if (true)','EXIT_RELEASES_BINDING_UTILITY_CLOCK'),
+ @('owner','ExitPhaseEffects(trip, previousPhase, nextPhase, reason)','ExitPhaseEffects(trip, previousPhase, phase, reason)','EXIT_RELEASES_BINDING_UTILITY_CLOCK'),
  @('state','m_MovementState.Reset();','SkipMovementReset();','OWNER_RESETS_OLD_DELIVERY_CLOCKS'),
  @('state','ResetExitedPhase(previousPhase, nextPhase);','SkipPhaseReset(previousPhase, nextPhase);','RESET_BEFORE_COMMIT'),
  @('state','paused && m_Phase != AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT','false','AUTHORITY_SCOPED_TACTICAL_CLOCK'),
  @('state','m_BehaviorState.PausedMs(nowMs)','0','CLOCK_READERS_INCLUDE_SAME_PAUSE'),
  @('owner','m_BehaviorFlow.Stop(trip);','SkipBehaviorStop(trip);','STOP_BEFORE_INVALID_RETURN'),
+ @('owner','!trip.IsValidForRetirement()','false','STOP_BEFORE_INVALID_RETURN'),
+ @('owner','!AICF_TripRetirementIdentity.IsFleetAssetCurrent(trip, fleet)','false','STOP_BEFORE_INVALID_RETURN'),
  @('state','!AICF_VehicleShortRecovery.IsCurrentMember(this, VehiclePresetMember(memberPosition))','false','REASSIGN_TRIP_COPY_CURRENT_MEMBER_ONLY'),
  @('state','if (AICF_GroupRuntime.IsAliveCharacter(currentMember)) return false;','if (false) return false;','DEATH_IS_NOT_PERMISSION_FOR_NEW_IDENTITY'),
  @('view','m_bControlsMovement = trip.GetBehaviorState().m_bReboarding','m_bControlsMovement = true','FOOT_ORDER_VERSUS_BOUNDED_REBOARD_VIEW'),

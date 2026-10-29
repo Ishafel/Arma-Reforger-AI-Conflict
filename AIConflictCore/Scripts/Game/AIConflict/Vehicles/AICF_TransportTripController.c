@@ -122,7 +122,7 @@ class AICF_TransportTripController
 		if (!trip)
 			return AICF_TripOutcome.TerminalFailClosed(reason, "stale-trip-missing");
 		string causationId = BuildCausationId(trip, "STALE_TERMINATION");
-		if (!trip.IsValid() || !fleet || reason.IsEmpty() ||
+		if (!trip.IsValidForRetirement() || !fleet || reason.IsEmpty() ||
 			fleet.GetFactionKey() != trip.GetFactionKey() ||
 			!IsStaleTerminationLeaseCurrent(trip, fleet))
 		{
@@ -143,6 +143,8 @@ class AICF_TransportTripController
 			AuditTerminalPostconditions(trip, null, null);
 			return terminalOutcome;
 		}
+		trip.RecordCapturedDeadRetirement(fleet, AICF_VehicleCleanupManager.GetRetirementObservationBudget(m_Config.GetDismountTimeoutMs(), m_Config.GetCleanupDelayMs()));
+		bool capturedDeadBeforeTransition = trip.HasCapturedDeadRetirementEvidence();
 		if (!trip.IsTransitionAllowedTo(AICF_ETransportTripPhase.FAILED_CLOSED))
 		{
 			return AICF_TripOutcome.TerminalFailClosed(
@@ -157,12 +159,14 @@ class AICF_TransportTripController
 			trip,
 			AICF_ETransportTripPhase.FAILED_CLOSED,
 			reason,
-			causationId))
+			causationId,
+			fleet))
 		{
 			return AICF_TripOutcome.TerminalFailClosed(
 				"STALE_TERMINATION_COMMIT_REJECTED",
 				causationId);
 		}
+		if (capturedDeadBeforeTransition) trip.RecordCapturedDeadRetirementCommit(fleet);
 		BeginHandoffEvidence(trip, false);
 		BeginTerminalClearanceIfRequired(trip, causationId);
 		return AICF_TripOutcome.TerminalFailClosed(reason, causationId);
@@ -172,6 +176,7 @@ class AICF_TransportTripController
 		AICF_TransportTrip trip,
 		AICF_FactionFleet fleet)
 	{
+		if (trip.HasAbsentGroupRetirementIdentity() && !AICF_TripRetirementIdentity.IsFleetAssetCurrent(trip, fleet)) return false;
 		AICF_VehicleLease lease = trip.GetLease();
 		if (!lease)
 			return true;
@@ -245,7 +250,7 @@ class AICF_TransportTripController
 		AICF_VehicleMovementState stopMovement = trip.GetMovementState();
 		if (stopMovement) stopMovement.SetNativeGate(null);
 		m_BehaviorFlow.Stop(trip);
-		if (!trip.IsValid())
+		if (!trip.IsValidForRetirement() || (trip.HasAbsentGroupRetirementIdentity() && !AICF_TripRetirementIdentity.IsFleetAssetCurrent(trip, fleet)))
 		{
 			ReleaseSpawnPlan(trip, reason);
 			return AICF_TripOutcome.TerminalFailClosed(
@@ -266,7 +271,8 @@ class AICF_TransportTripController
 				trip,
 				AICF_ETransportTripPhase.FAILED_CLOSED,
 				reason,
-				causationId);
+				causationId,
+				fleet);
 			if (committedTerminal)
 				PrepareStopHandoffEvidence(trip);
 		}
@@ -1595,14 +1601,19 @@ class AICF_TransportTripController
 		AICF_TransportTrip trip,
 		AICF_ETransportTripPhase nextPhase,
 		string reason,
-		string causationId)
+		string causationId,
+		AICF_FactionFleet retirementFleet = null)
 	{
 		if (!trip || reason.IsEmpty() || causationId.IsEmpty() ||
 			!trip.CanTransitionTo(nextPhase))
 			return false;
+		if (trip.HasAbsentGroupRetirementIdentity() &&
+			!AICF_TripRetirementIdentity.IsFleetAssetCurrent(trip, retirementFleet)) return false;
 		AICF_ETransportTripPhase previousPhase = trip.GetPhase();
-		if (!ExitPhaseEffects(trip, previousPhase, reason))
+		if (!ExitPhaseEffects(trip, previousPhase, nextPhase, reason))
 			return false;
+		if (trip.HasAbsentGroupRetirementIdentity() &&
+			!AICF_TripRetirementIdentity.IsFleetAssetCurrent(trip, retirementFleet)) return false;
 		if (!trip.CommitTransition(nextPhase, reason, causationId, System.GetTickCount()))
 			return false;
 		m_Diagnostics.CommittedVehicleTransition(
@@ -1636,6 +1647,7 @@ class AICF_TransportTripController
 	protected bool ExitPhaseEffects(
 		AICF_TransportTrip trip,
 		AICF_ETransportTripPhase phase,
+		AICF_ETransportTripPhase nextPhase,
 		string reason)
 	{
 		switch (phase)
@@ -1649,7 +1661,10 @@ class AICF_TransportTripController
 				return ExitDismount(trip, reason);
 			case AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT:
 				m_BehaviorFlow.Stop(trip);
-				m_Handoff.DetachVehicleUtility(trip);
+				// Акторы уже вернулись в compartments. Remove/Add здесь теряет
+				// их native subgroup record без нового CompartmentEntered event.
+				if (nextPhase != AICF_ETransportTripPhase.TRANSIT)
+					m_Handoff.DetachVehicleUtility(trip);
 				return trip.CommitBehaviorClockPause(false, System.GetTickCount());
 		}
 		return true;

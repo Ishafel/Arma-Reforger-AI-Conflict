@@ -925,6 +925,7 @@ class AICF_VehicleMovementState
 	protected ref AICF_TransportNativeCrewEntry m_NativePilotEntry;
 	protected ref AICF_TransportNativeCrewEntry m_NativeGunnerEntry;
 	protected ref AICF_TransportNativeGate m_NativeGate;
+	protected ref AICF_TransitMoveFailure m_TransitMoveFailure;
 	protected ref array<string> m_aNativeGateWindowKeys = {};
 	protected ref array<int> m_aNativeGateWindowStarts = {};
 	protected int m_iNativeGateCandidateReportAtMs;
@@ -983,6 +984,7 @@ class AICF_VehicleMovementState
 		m_CrewRecoveryToken = null;
 		ClearNativeCrewEntries();
 		SetNativeGate(null);
+		m_TransitMoveFailure = null;
 		m_aNativeGateWindowKeys.Clear();
 		m_aNativeGateWindowStarts.Clear();
 		m_iNativeGateCandidateReportAtMs = 0;
@@ -1067,6 +1069,8 @@ class AICF_VehicleMovementState
 		m_NativeGunnerEntry = null;
 	}
 	AICF_TransportNativeGate GetNativeGate() { return m_NativeGate; }
+	AICF_TransitMoveFailure GetTransitMoveFailure() { return m_TransitMoveFailure; }
+	void SetTransitMoveFailure(AICF_TransitMoveFailure receipt) { m_TransitMoveFailure = receipt; }
 	void SetNativeGate(AICF_TransportNativeGate gate)
 	{
 		if (m_NativeGate == gate) return;

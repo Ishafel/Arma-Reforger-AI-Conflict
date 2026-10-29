@@ -27,6 +27,25 @@ TRANSPORT при местной угрозе высаживает весь жи�
 останавливает уже посаженную машину с незавершённым маршрутом. Погибший/недееспособный водитель
 заменяется свободным живым бойцом в текущей trip-копии рассадки.
 
+Перед высадкой водителя TRANSPORT `AICF_VehicleParking` включает штатный
+`CarControllerComponent.SetPersistentHandBrake(true)` и ждёт actual speed≤1m/s.
+Слабый exact lease/car/Rpl/generation token переживает пеший эпизод и повторно
+проверяет original occupants, human control/possession/target transition и чужую
+группу непосредственно перед записью. Рядом стоящий игрок не блокирует парковку.
+Ранее включённый native handbrake не присваивается проектом. Только собственная
+запись снимается на той же машине после actual settled native Pilot при resume
+либо identity-safe Stop cleanup. Другой пользователь/машина дают отказ без записи.
+Парковка не меняет pose/velocity/health, не переносит машину и не продлевает сроки.
+При human takeover запись запрещена, поэтому token не снимает тормоз за игрока.
+Автоматический native сброс при входе human **NOT RUN**; его нельзя обещать по
+Script Diff. В stock есть `SCR_ToggleHandbrakeAction`, переключающий persistent
+flag и тормоза simulation с wakeup physics; наличие/исполнение этого действия
+при human takeover на каждой модели отдельно не проверялось. Это сохранённая
+граница доказательства, а не разрешение обходить human fence.
+Для native AI отдельно проверен preexisting true перед route start без parking
+token: штатный Pilot снял flag и проехал30.8516m/5velocity polls; project parking
+writes отсутствовали. Это controlled native proof, не доказательство входа human.
+
 COMBAT высаживает только десант. Исправный driver/turret остаётся в машине,
 vehicle и пехота сохраняют общую группу и текущий приказ. Native combat policy
 не допускает преждевременной замены экипажа во время местного боя; после его

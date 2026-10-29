@@ -34,7 +34,9 @@ function Rules([string]$text,[string]$state,[string]$transit,[string]$control=$c
   $setter.IndexOf('m_NativeGate.Stop()') -gt $setter.IndexOf('m_NativeGate = gate;') -or
   !$reset.Contains('SetNativeGate(null);') -or $reset.Contains('m_NativeGate = null;') -or
   !$abort.Contains('state.SetNativeGate(null);')){'RESET_REPLACEMENT_ABORT_USE_STOP_BOUNDARY'}
- $controllerStop=Body $control 'AbortForStop';$invalid=$controllerStop.IndexOf('if (!trip.IsValid())')
+ $controllerStop=Body $control 'AbortForStop'
+ $retirementGuard='if (!trip.IsValidForRetirement() || (trip.HasAbsentGroupRetirementIdentity() && !AICF_TripRetirementIdentity.IsFleetAssetCurrent(trip, fleet)))'
+ $invalid=$controllerStop.IndexOf($retirementGuard)
  if($invalid -lt 0){'INVALID_TRIP_STOP_DETACHES_LOCAL_OBSERVER';return}
  $before=ConvertTo-AICFCodeText $controllerStop.Substring(0,$invalid)
  # Новый lifecycle также снимает identity-safe tactical tokens до invalid-trip
@@ -63,7 +65,9 @@ foreach($mutation in @(
 }
 foreach($mutated in @(
  $controller.Replace('if (stopMovement) stopMovement.SetNativeGate(null);',';'),
- $controller.Replace('if (!trip)', 'AICF_VehicleMovementState unsafeRead = trip.GetMovementState(); if (!trip)')
+ $controller.Replace('if (!trip)', 'AICF_VehicleMovementState unsafeRead = trip.GetMovementState(); if (!trip)'),
+ $controller.Replace('!trip.IsValidForRetirement()', 'false'),
+ $controller.Replace('!AICF_TripRetirementIdentity.IsFleetAssetCurrent(trip, fleet)', 'false')
 )){
  if('INVALID_TRIP_STOP_DETACHES_LOCAL_OBSERVER' -notin @(Rules $source $movement $flow $mutated)){throw 'Invalid/null trip Stop cleanup mutation survived'};$controls++
 }
@@ -86,7 +90,8 @@ public class AICF_CallbackAction {
  public AICF_CallbackInvoker m_OnActionCompleted=new AICF_CallbackInvoker(); public int State;
  public void Complete(){State=2;m_OnActionCompleted.Invoke(this);} public void Deselect(){State=0;} public void Cancel(){State=3;}
 }
-public class AICF_CallbackTrip { public bool Valid=true; public bool IsValid(){return Valid;} public AICF_CallbackMovement State=new AICF_CallbackMovement(); public AICF_CallbackMovement GetMovementState(){return State;} }
+public class AICF_CallbackTrip { public bool Valid=true,Retire=false,AssetCurrent=true; public bool IsValid(){return Valid;} public bool IsValidForRetirement(){return Valid||Retire;} public bool HasAbsentGroupRetirementIdentity(){return Retire;} public AICF_CallbackMovement State=new AICF_CallbackMovement(); public AICF_CallbackMovement GetMovementState(){return State;} }
+public class AICF_TripRetirementIdentity { public static bool IsFleetAssetCurrent(AICF_CallbackTrip trip,object fleet){return trip.AssetCurrent;} }
 public class AICF_CallbackMovement { public AICF_CallbackGate m_NativeGate; public AICF_CallbackGate GetNativeGate(){return m_NativeGate;} public void SetNativeGate(AICF_CallbackGate gate) SETTER }
 public class AICF_CallbackGate {
  public bool m_bStopped,m_bReturnListenerAttached,m_bReturnCompleted; public int m_iReturnCompletedAtMs;
@@ -101,7 +106,7 @@ $code=$code.Replace('SETTER',$setter).Replace('ATTACH',$attach).Replace('CALLBAC
 $controllerStop=Body $controller 'AbortForStop'
 $prelude=$controllerStop.Substring(0,$controllerStop.IndexOf('if (reason.IsEmpty())'))
 $prelude=$prelude.Replace('if (!trip)','if (trip == null)').Replace('AICF_VehicleMovementState','AICF_CallbackMovement').Replace('if (stopMovement)','if (stopMovement != null)')
-$stopCode='public class AICF_TripOutcome { public string Reason; public AICF_TripOutcome(string reason){Reason=reason;} public static AICF_TripOutcome TerminalFailClosed(string reason,string cause){return new AICF_TripOutcome(reason);} } public class AICF_CallbackBehavior { public int StopCalls; public void Stop(AICF_CallbackTrip trip){if(trip==null) throw new Exception("null tactical stop"); StopCalls++;} } public class AICF_CallbackController { public AICF_CallbackBehavior m_BehaviorFlow=new AICF_CallbackBehavior(); public int ReleaseCalls; public void ReleaseSpawnPlan(AICF_CallbackTrip trip,string reason){ReleaseCalls++;} public AICF_TripOutcome AbortForStop(AICF_CallbackTrip trip,string reason) '+$prelude+' return new AICF_TripOutcome("VALID_AFTER_LOCAL_STOP"); } }'
+$stopCode='public class AICF_TripOutcome { public string Reason; public AICF_TripOutcome(string reason){Reason=reason;} public static AICF_TripOutcome TerminalFailClosed(string reason,string cause){return new AICF_TripOutcome(reason);} } public class AICF_CallbackBehavior { public int StopCalls; public void Stop(AICF_CallbackTrip trip){if(trip==null) throw new Exception("null tactical stop"); StopCalls++;} } public class AICF_CallbackController { public object fleet=new object(); public AICF_CallbackBehavior m_BehaviorFlow=new AICF_CallbackBehavior(); public int ReleaseCalls; public void ReleaseSpawnPlan(AICF_CallbackTrip trip,string reason){ReleaseCalls++;} public AICF_TripOutcome AbortForStop(AICF_CallbackTrip trip,string reason) '+$prelude+' return new AICF_TripOutcome("VALID_AFTER_LOCAL_STOP"); } }'
 $code+=$stopCode
 Add-Type -TypeDefinition $code
 function Setup {
@@ -132,4 +137,8 @@ $owner=New-Object AICF_CallbackController;$result=$owner.AbortForStop($null,'tes
 if($result.Reason -ne 'STOP_TRIP_IDENTITY_INVALID' -or $owner.ReleaseCalls -or $owner.m_BehaviorFlow.StopCalls){throw 'Null trip Stop dereferenced trip or changed legacy release behavior'};$controls++
 $trip=New-Object AICF_CallbackTrip;$trip.Valid=$false;$trip.State=$null;$result=$owner.AbortForStop($trip,'test')
 if($result.Reason -ne 'STOP_TRIP_IDENTITY_INVALID'){throw 'Missing movement state invalid Stop did not fail closed'};$controls++
+$case=Setup;$case.trip.Valid=$false;$case.trip.Retire=$true;$case.trip.AssetCurrent=$false;$result=$owner.AbortForStop($case.trip,'test')
+if($result.Reason -ne 'STOP_TRIP_IDENTITY_INVALID' -or !$case.gate.m_bStopped){throw 'Stale retirement asset bypassed invalid Stop guard'};$controls++
+$case=Setup;$case.trip.Valid=$false;$case.trip.Retire=$true;$result=$owner.AbortForStop($case.trip,'test')
+if($result.Reason -ne 'VALID_AFTER_LOCAL_STOP' -or !$case.gate.m_bStopped){throw 'Exact missing-group retirement skipped safe local Stop boundary'};$controls++
 "PASS Native gate completion: exact native callback survives Completed-to-Evaluated recycling; wrong/stale/canceled/stopped/replaced callbacks rejected; Insert/Remove lifecycle and physical/deadline proof preserved; controls=$controls"

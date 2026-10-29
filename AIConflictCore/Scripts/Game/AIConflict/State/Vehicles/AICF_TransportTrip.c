@@ -100,6 +100,7 @@ class AICF_TransportTrip
 	protected ref AICF_VehicleDismountState m_DismountState;
 	protected ref AICF_VehicleHandoffState m_HandoffState;
 	protected ref AICF_VehicleCleanupState m_CleanupState;
+	protected ref AICF_TripRetirementIdentity m_RetirementIdentity;
 
 	void AICF_TransportTrip(
 		AICF_StrategicAssignmentSnapshot assignment,
@@ -123,6 +124,7 @@ class AICF_TransportTrip
 		m_DismountState = new AICF_VehicleDismountState();
 		m_HandoffState = new AICF_VehicleHandoffState();
 		m_CleanupState = new AICF_VehicleCleanupState();
+		m_RetirementIdentity = new AICF_TripRetirementIdentity(assignment, tripGeneration, operationId);
 	}
 
 	AICF_StrategicAssignmentSnapshot GetAssignment() { return m_Assignment; }
@@ -166,6 +168,38 @@ class AICF_TransportTrip
 		return m_Assignment && m_Assignment.IsValid() && m_iTripGeneration > 0 &&
 			!m_sOperationId.IsEmpty() && !m_sCausationId.IsEmpty() &&
 			m_iAbsoluteDeadlineMs > m_iStartedAtMs;
+	}
+
+	bool HasAbsentGroupRetirementIdentity()
+	{
+		return m_RetirementIdentity && m_RetirementIdentity.MatchesAbsentGroup(this) &&
+			m_iAbsoluteDeadlineMs > m_iStartedAtMs && !m_sCausationId.IsEmpty();
+	}
+
+	AICF_TripRetirementIdentity CaptureOrphanCleanupIdentity(AICF_FactionFleet fleet, AICF_VehicleLease lease, int terminalAt)
+	{
+		if (!m_RetirementIdentity || !m_RetirementIdentity.CaptureCleanup(this, fleet, lease, terminalAt)) return null;
+		return m_RetirementIdentity;
+	}
+
+	bool OwnsRetirementIdentity(AICF_TripRetirementIdentity identity) { return identity && identity == m_RetirementIdentity; }
+	void RecordCapturedDeadRetirement(AICF_FactionFleet fleet, int observationBudget)
+	{
+		if (m_RetirementIdentity) m_RetirementIdentity.RecordAllCapturedDead(this, fleet, observationBudget);
+	}
+	bool HasCapturedDeadRetirementEvidence() { return m_RetirementIdentity && m_RetirementIdentity.HasCapturedDeadEvidence(); }
+	void RecordCapturedDeadRetirementCommit(AICF_FactionFleet fleet)
+	{
+		if (m_RetirementIdentity) m_RetirementIdentity.RecordOrphanTerminalCommit(this, fleet);
+	}
+	AICF_TripRetirementObservation ObserveCapturedDeadRetirement()
+	{
+		return new AICF_TripRetirementObservation(m_RetirementIdentity, this);
+	}
+
+	bool IsValidForRetirement()
+	{
+		return IsValid() || HasAbsentGroupRetirementIdentity();
 	}
 
 	bool MatchesIdentity(
@@ -248,7 +282,7 @@ class AICF_TransportTrip
 		string causationId,
 		int nowMs)
 	{
-		if (!IsValid() || reason.IsEmpty() || causationId.IsEmpty())
+		if ((!IsValid() && !(nextPhase == AICF_ETransportTripPhase.FAILED_CLOSED && HasAbsentGroupRetirementIdentity())) || reason.IsEmpty() || causationId.IsEmpty())
 			return false;
 		if (!CanTransitionTo(nextPhase))
 			return false;
@@ -282,7 +316,7 @@ class AICF_TransportTrip
 	// precondition (for example cap-free WAITING) must be committed first.
 	bool IsTransitionAllowedTo(AICF_ETransportTripPhase nextPhase)
 	{
-		return IsValid() && !IsTerminal() && nextPhase != m_Phase &&
+		return (IsValid() || (nextPhase == AICF_ETransportTripPhase.FAILED_CLOSED && HasAbsentGroupRetirementIdentity())) && !IsTerminal() && nextPhase != m_Phase &&
 			IsAllowedTransition(m_Phase, nextPhase);
 	}
 

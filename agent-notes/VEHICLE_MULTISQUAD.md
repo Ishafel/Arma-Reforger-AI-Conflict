@@ -1,5 +1,47 @@
 # Ступенчатая нагрузка транспорта и native combat hold
 
+## Native отказ до преждевременного выхода из машины
+
+`AICF_TransitMoveFailure` передаёт точный STUCK/UNREACHABLE/UNKNOWN текущего
+vehicle handler ручного preset из `SCR_AIProcessFailedMovementResult` в обычный
+Transit Tick. Stock для STUCK/UNREACHABLE немедленно создаёт high-priority GetOut,
+а UNKNOWN оставляет debug RUNNING и пишет NodeError: до прежнего project timeout
+существующий recovery уже не успевал получить машину с settled экипажем.
+
+Новый scoped handoff требует authoritative current trip/lease/vehicle/route,
+native handler именно этой машины, current/executed MoveActivity, исходный
+живой AI roster целиком в compartments, отсутствие чужих occupants и живую
+подвижность. Смена generation/revision/identity, истёкший deadline, recovery owner
+или исчерпанный прежний бюджет сохраняют stock путь. Native OnMoveFailed вызывается
+один раз; повторный callback того же receipt не создаёт новую попытку. Callback
+не меняет phase, waypoint, progress clocks или physics. Только Transit расходует
+прежний максимум2 попытки: STUCK использует прежний bounded поиск короткой позиции
+4..15м только при captured и повторной скорости<=1м/с; при большей скорости,
+UNKNOWN/UNREACHABLE перестраивается маршрут. Ни budgets, ни absolute deadline
+не увеличиваются. Контекст повторно проверяется до recovery, receipt снимается
+при Reset и ExitTransit/AbortOwnedActions, включая переход в пеший бой.
+
+Node возвращает штатный FAIL для повторной оценки дерева, не удерживает старую
+failed-movement ветвь через RUNNING. Короткий node-local dedup допускает только
+тот же FAILED/removing action, native handler/result/точку при доказанной смене
+route generation и superseded/снятом старом waypoint. Срок5с отсчитывается от
+исходного capture и не обновляется. OnEnter снимает node-local record; новый
+RUNNING action с теми же координатами не считается старым отказом. Lease identity
+сверяется с `RplComponent.Id()`, как при её создании: `Replication.FindItemId`
+может указывать другой native item той же машины и не является её component ID.
+
+`tests/fixtures/AICF_TransitFailureRecoveryProbe.c` — отдельный controlled scaffold
+на настоящих native seated actors/vehicle handler после начальных25м движения.
+Он проверяет отказ чужого,
+default и unrelated handler, STOPPED, один native callback при повторной доставке,
+два counted repairs, настоящее движение>=25м/3velocity polls после каждого и отказ
+третьей recovery при прежнем deadline. Это `CONTROLLED_FAILURE_RECOVERY_ONLY`,
+не естественное воспроизведение STUCK и не замена полного MOVING2→4→6. Анализатор
+`Test-TransitFailureRecoveryLog.ps1` читает полный stopped log; strict resource
+вердикт хранится отдельно и не становится PASS из targeted функционального PASS.
+Актуальные результаты требуют свежего runtime evidence; прежние Multi FAIL
+не переоцениваются новым contract.
+
 Опциональный `-RecruitmentNavDomainProbe` добавляет только isolated read-only
 наблюдение за подходом к казарме: exact order/group/actor/action/waypoint,
 повторный полный native path до512points, actor/group navmesh/tile/projection.
@@ -369,3 +411,104 @@ nonnull trip вызывает local movement `SetNativeGate(null)` до ранн
 `!trip.IsValid()` return. Эта ветка не получает native action effects; null trip
 не разыменовывается. Regression проверяет уничтоженный context, удаление listener
 и отклонение позднего completion, а также null trip и отсутствующий movement state.
+
+## Сохранение native vehicle subgroup после пешего боя
+
+`SCR_AIGroupVehicle` создаётся с unassigned handle `-1`. Штатный
+`FindVehicleBySubgroupId(-1)` возвращает первый такой record, поэтому совпадение
+entity при отрицательном handler не доказывает принадлежность failed movement.
+Transit receipt отклоняет отрицательные и default handlers и дополнительно
+сопоставляет positive record handle с actual Pilot handler и его
+`AICarMovementComponent`, управляющим exact leased vehicle.
+
+При `TACTICAL_DEPLOYMENT → TRANSIT` Controller сохраняет native vehicle utility:
+бойцы уже физически сидят, а удаление и повторное добавление record теряло handle
+после последнего `CompartmentEntered`. Выход в terminal phase по-прежнему снимает
+utility. Для COMBAT entry, где экипаж остаётся внутри, Handoff после регистрации
+record восстанавливает только native bookkeeping через штатный
+`OnJoinGroupFromVehicle`. Каждый вызов ограждён повторной проверкой exact current
+trip/slot/assignment/intent/generations/component Rpl, authoritative original AI,
+settled seat, actual Pilot/car и отсутствия Gate/Crew/entry owner или активного
+native GetIn/GetOut/PerformAction. Отсутствующий боеспособный Pilot ничего не
+переназначает: решение остаётся у BehaviorFlow после боя. Физические позиции,
+health, actions, waypoint, budgets и clocks этот boundary не изменяет.
+Создание нового native handler допустимо только при отрицательном unassigned
+record. Положительный record должен уже совпадать с actual Pilot handler;
+default или положительный mismatch отклоняются до stock callback. Девять
+исполняемых случаев проверяют actual extracted pure predicate, включая такие
+stale/default значения; отдельно проверяются18 source mutation controls.
+
+Fresh controlled proof 29.10.2026: `subgroup-native-handlers-US-v1` — compile0,
+native0,29 native checks, frozen recovery audit PASS; actual movement после двух
+repairs и отрицательные `-1/-2` подтверждены. `subgroup-combat-USSR-v1` — compile0,
+native0, frozen targeted audit0/source drift0. В TACTICAL реально наблюдались
+record `-1`/Pilot handler1 → record2/Pilot2, joined2; после return record2 сохранён.
+Строгие resource errors в обоих случаях остаются FAIL; controlled checks не
+заменяют полный MOVING gate. Evidence:
+`.codex-runtime/issue78-finalization-20261029/movement/`.
+
+Предшествующий `multi-moving-v5` остановлен адресно после первого необратимого
+fallback USSR0; native exit `-1`, duration NOT_PASS. Его полные ошибки сохранены.
+Это не30-minute PASS: cohort4/6 не доказаны. Новый полный прогон должен использовать
+исправленный subgroup boundary и прежний oracle.
+
+Повторный `multi-moving-v6` использовал narrow positive-handler guard и final
+Admission. Cohort2 реально держался31.618s; при наборе cohort4 группа USSR3
+получила `NATIVE_GATE_IDENTITY_OR_DEADLINE` на повторном входе в тот же native
+OpenGate после возврата. Все исходные бойцы сохранились, однако bounded60s owner
+истёк. Cohort4/6 недостижимы в этом прогоне. После полного snapshot exact PID13980
+остановлен: native-1/audit1, wall934.997s, duration NOT_PASS, native_fatal gate PASS.
+Причина сохранена для отдельного bounded gate recovery; этот результат не
+подтверждает30минут и не разрешает ослабить исходный oracle.
+
+## Actual staging actor task
+
+В отдельном ordinary-USSR soak обнаружен настоящий diagnostic error
+`MEANINGFUL_TASK_DEADLINE_MISSED`: после единственного reissue stock снял All-members
+staging waypoint, но часть exact owned actor actions продолжала `RUNNING` подход.
+`AICF_VehicleStagingTaskProof` учитывает эту реальную выполняемую работу только для
+current manual rally. Token захватывает immutable assignment snapshot при issue;
+проверяются original AI/entity/Rpl, slot/group/trip/request generations, assignment/
+intent/base revisions, reservation и исходные deadlines, captured/native goal,
+utility ownership и actual selected/executed `RUNNING` action. Phase exemption,
+продление сроков, изменение task clocks или физические эффекты отсутствуют.
+
+Fresh compile-v4/native-v3 29.10.2026: native0/full stopped, заранее frozen auditor
+PASS15 native checks; source23 и log oracle13 mutation controls PASS. Реально снят
+групповой waypoint; stale/foreign/unowned/suspended/cancelled/failed/noactivity
+отклонены. После controlled `Fail()` обычный acquisition owner восстановил задачу
+и собрал original5 за9038ms, боец естественно прошёл5.03946m, deadlines/revisions/
+health не изменились. Source/fixture bytes staged/current6/6. Строгие14 resource E
+остаются FAIL/overall FAIL; ordinary30min этим controlled proof не заменён.
+Evidence `movement/staging-task-native-v3/` под тем же finalization root.
+
+### Истёкшая native OpenGate цепочка
+
+`multi-moving-v6` обнаружил повторный OpenGate после настоящего native return:
+бойцу снова назначалась высадка у тех же ворот, машина не продолжала движение,
+а gate observer до60s блокировал обычное mobility recovery. По истечении окна
+код сразу переходил в foot fallback, хотя два прежних recovery attempts не
+использовались. Это отдельный FAIL, он не переоценивается в PASS.
+
+`CanRecoverExpiredReturn` разрешает только истёкшую exact current цепочку с
+положительным native completion/physical return history, исходным полным живым
+AI roster, текущей lease/preset/route identity, исправной медленной машиной и
+бойцами не дальше25м от своих мест. Transit flow снимает listener через прежний
+Stop boundary и расходует один прежний mobility attempt на `ROUTE_REBUILD_ONLY`.
+Физического переноса из gate observer нет; окна, trip deadline и clocks не
+продлеваются, progress не выдумывается. Остальные случаи сохраняют прежний
+fallback, исчерпанный budget даёт terminal recovery failure.
+
+`Test-NativeGateRecoveryContracts.ps1`:34 source/extracted controls PASS;
+исполняются реальные recovery predicate и dispatch, включая null/stale roster,
+неполную native history,3D boundary25м, old budget и исходный successful path.
+Native `GateHQ-v5`: Workbench0/native0/frozen targeted audit0,10 checks PASS,
+полный fatal0. Реальный OpenGate/return предшествовал единственному controlled
+expiry; route1→2, budget0→1/2, trip deadline1188092 неизменён. Затем actual35.7453м/
+7moving polls/8.27m/s, samecar/ComponentRpl/original5/одна покупка. Закрытие/readback
+связаны с actual captured gate; следующая native цепочка завершилась штатно.
+Это fault injection, не доказательство естественного истечения60s; новые
+MOVING2→4→6 ещё PENDING. Строгие28 raw sibling resource errors остаются FAIL.
+Ранние US/USSR coverage FAIL без ворот и v4 diagnostic binding/oracle FAIL
+сохранены отдельно. Evidence `gate-expiry/native-gatehq-v5/` под finalization root;
+точные пути/commands/source hashes находятся в отчёте владельца fixture.

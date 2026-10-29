@@ -461,6 +461,18 @@ manifest и native exit; игра не входит в offline runner. Конт�
 
 | Проверка | Контракт |
 |---|---|
+| `Test-PlayerPersistenceIdentityContracts.ps1` |32 исполняемых комбинации production callback: пустая backend identity снимает tracking без удаления данных; непустая делегируется stock |
+| `Test-GroupSpawnDispatchContracts.ps1` | Read-only native expansion/dispatch counters и строгий oracle controlled replacement stress |
+| `Test-NativeSpawnAdmissionContracts.ps1` | Исполняемые границы global native budget и admission до reservation/generation; conservative pending roster |
+| `Test-VehicleNativeSubgroupContracts.ps1` | Exact owned Pilot/record, отказ positive mismatch и ограниченный native reconcile уже сидящего экипажа |
+| `Test-NativeGateRecoveryContracts.ps1` | Исполняемые отказ/допуск после доказанного native return, прежний mobility budget и исключительно route rebuild |
+| `Test-StagingActorTaskContracts.ps1` | Точный selected/executed RUNNING actor task учитывается как работа при исчезнувшем group waypoint; deadlines не продлеваются |
+| `Test-StagingActorTaskLogContracts.ps1` | Native withdraw-group-waypoint, stale/foreign/cancelled negatives и фактическое прибытие исходных бойцов |
+| `Test-VehicleSoakObservationContracts.ps1` | Proof4 ordinary-war observation: causal casualty receipt, bounded cleanup/replacement и неизменные полные native gates |
+| `Test-LooseWeaponObserverContracts.ps1` | Fixture-only наблюдение за drop/storage/world identities; static контракт не подтверждает безопасность native Physics getters |
+| `Test-ReboardApproachProgressContracts.ps1` | Реальное приближение к exact seat; круг/отход/движение машины не продлевают stall observation |
+| `Test-TransitMoveFailureContracts.ps1` | Exact owned native vehicle failure receipt, однократный callback и прежние bounded recovery attempts |
+| `Test-TransitFailureRecoveryLogContracts.ps1` | Контролируемый fault требует двух реальных восстановлений движения, exact callback и отказа при исчерпанном budget |
 | `Test-NativeCrewEntryContracts.ps1` | Exact own reserved seat и actual RUNNING GetIn, неизменяемый срок, оба role records до WAIT |
 | `Test-VehicleBoardingSiteContracts.ps1` | Foot-navmesh coverage площадки до выбора и свежий повтор перед spawn |
 | `Test-VehicleStagingHandoffContracts.ps1` | Единственный владелец движения при acquisition approach |

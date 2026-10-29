@@ -321,6 +321,8 @@ class AICF_VehicleTransitFlow
 		AICF_VehicleBehaviorFlow behavior = new AICF_VehicleBehaviorFlow(m_Config);
 		AICF_TripOutcome behaviorOutcome = behavior.InspectTransit(trip, causationId);
 		if (behaviorOutcome) return behaviorOutcome;
+		AICF_TripOutcome nativeFailure = RecoverNativeMoveFailure(trip, causationId);
+		if (nativeFailure) return nativeFailure;
 		string nativeAbandonDetails;
 		if (AICF_TransportNativeAbandon.Observe(trip, nativeAbandonDetails))
 		{
@@ -384,6 +386,22 @@ class AICF_VehicleTransitFlow
 			targetDistanceMeters);
 	}
 
+	protected AICF_TripOutcome RecoverNativeMoveFailure(AICF_TransportTrip trip, string causationId)
+	{
+		AICF_VehicleMovementState state = trip.GetMovementState();
+		AICF_TransitMoveFailure failure = state.GetTransitMoveFailure();
+		if (!failure) return null;
+		bool current = failure.WasDelivered() && failure.Matches(trip);
+		state.SetTransitMoveFailure(null);
+		if (!current)
+			return AICF_TripOutcome.FallbackToFoot("NATIVE_MOVE_FAILURE_CONTEXT_CHANGED", causationId);
+		AICF_Stage3Diagnostics.Info("TRANSPORT_NATIVE_MOVE_FAILURE_RECOVERY", failure.Details());
+		if (!state.BeginMobilityRecovery())
+			return FailRecovery(trip, "NATIVE_MOVE_FAILURE_RECOVERY_EXHAUSTED", "MOBILITY", causationId);
+		if (state.IsRecoveryEvidencePending()) ReportPendingRecoveryFailure(trip, failure.Reason(), false);
+		return BeginMobilityRecovery(trip, causationId, failure.Reason(), failure.NeedsPhysicalCorrection());
+	}
+
 	static bool NeedsRouteQueueRecovery(bool cachedBound, int routeGeneration, AIWaypoint route, array<AIWaypoint> queued)
 	{
 		return cachedBound && routeGeneration > 0 && (!route || !queued.Contains(route));
@@ -423,6 +441,7 @@ class AICF_VehicleTransitFlow
 			state.ClearNativeCombatHold();
 		}
 		state.SetNativeGate(null);
+		state.SetTransitMoveFailure(null);
 		AICF_VehicleCrewRecoveryToken token = state.GetCrewRecoveryToken();
 		if (!token)
 			return;
@@ -505,8 +524,19 @@ class AICF_VehicleTransitFlow
 		if (!gate) return null;
 		if (!gate.Matches(trip) || gate.IsExpired(nowMs))
 		{
+			bool recoverCompletedGate = gate.CanRecoverExpiredReturn(trip, nowMs);
 			gate.Log("TRANSPORT_NATIVE_GATE_REJECTED");
+			if (recoverCompletedGate) gate.Log("TRANSPORT_NATIVE_GATE_RECOVERY_REQUESTED");
 			state.SetNativeGate(null);
+			if (recoverCompletedGate)
+			{
+				if (!state.BeginMobilityRecovery())
+					return FailRecovery(trip, "NATIVE_GATE_RECOVERY_EXHAUSTED", "MOBILITY", causationId);
+				if (state.IsRecoveryEvidencePending()) ReportPendingRecoveryFailure(trip, "NATIVE_GATE_WINDOW_EXHAUSTED", false);
+				// Снятие superseded route отменяет только связанную native activity.
+				// Пока original actor снова снаружи, физическая коррекция не выполняется.
+				return BeginMobilityRecovery(trip, causationId, "NATIVE_GATE_WINDOW_EXHAUSTED", false);
+			}
 			return AICF_TripOutcome.FallbackToFoot("NATIVE_GATE_IDENTITY_OR_DEADLINE", causationId);
 		}
 		if (!gate.IsReturned()) return AICF_TripOutcome.Wait("NATIVE_OPEN_GATE", causationId);

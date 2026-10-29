@@ -61,6 +61,11 @@ class AICF_VehicleBehaviorFlow
 		if (!IsCurrent(trip) || trip.GetPhase() != AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT) return false;
 		CancelEntries(trip);
 		AICF_VehicleBehaviorState state = trip.GetBehaviorState();
+		if (trip.GetVehiclePreset().m_iBehavior == AICF_EVehicleBehavior.TRANSPORT)
+		{
+			if (!state.m_Parking) state.m_Parking = new AICF_VehicleParking(trip);
+			if (!state.m_Parking.EnsureApplied(trip)) return false;
+		}
 		state.m_bThreatDeployment = reason == "LOCAL_THREAT" || reason == "CREW_UNAVAILABLE";
 		state.m_bSawCombat = AICF_VehicleBehaviorPolicy.HasLocalCombat(trip);
 		state.m_bReboarding = false;
@@ -152,6 +157,8 @@ class AICF_VehicleBehaviorFlow
 
 	protected bool DeployActors(AICF_TransportTrip trip)
 	{
+		if (trip.GetVehiclePreset().m_iBehavior == AICF_EVehicleBehavior.TRANSPORT &&
+			(!trip.GetBehaviorState().m_Parking || !trip.GetBehaviorState().m_Parking.IsReadyForExit(trip))) return false;
 		bool outside = true;
 		foreach (IEntity actor : trip.GetBehaviorState().m_aDeployed)
 		{
@@ -173,6 +180,8 @@ class AICF_VehicleBehaviorFlow
 	protected void EnsureExit(AICF_TransportTrip trip, IEntity actor, BaseCompartmentSlot seat)
 	{
 		if (!AICF_VehicleShortRecovery.IsCurrentMember(trip, actor)) return;
+		if (seat && seat.GetType() == ECompartmentType.PILOT && trip.GetVehiclePreset().m_iBehavior == AICF_EVehicleBehavior.TRANSPORT &&
+			(!trip.GetBehaviorState().m_Parking || !trip.GetBehaviorState().m_Parking.IsReadyForExit(trip))) return;
 		AICF_VehicleBehaviorAction token = FindAction(trip, actor);
 		if (token && token.m_Exit) return;
 		if (token) token.Retire();
@@ -464,6 +473,7 @@ class AICF_VehicleBehaviorFlow
 			if (fitReason == "TACTICAL_REBOARD_PENDING") return AICF_TripOutcome.Wait(fitReason, causationId);
 			return AICF_TripOutcome.FallbackToFoot(fitReason, causationId);
 		}
+		if (state.m_Parking && !state.m_Parking.ReleaseForResume(trip)) return AICF_TripOutcome.Wait("TACTICAL_NATIVE_PILOT_PARKING_RELEASE_PENDING", causationId);
 		state.m_bParkedAfterCombat = true;
 		if (combat && trip.GetVehiclePreset().m_iBehavior == AICF_EVehicleBehavior.TRANSPORT && HasDistantOrder(trip))
 			state.m_iCombatOverrideIntent = trip.GetAssignment().GetStrategicIntentRevision();
@@ -576,6 +586,11 @@ class AICF_VehicleBehaviorFlow
 	void Stop(AICF_TransportTrip trip)
 	{
 		CancelEntries(trip);
+		if (trip && trip.GetBehaviorState().m_Parking)
+		{
+			trip.GetBehaviorState().m_Parking.Stop(trip);
+			trip.GetBehaviorState().m_Parking = null;
+		}
 		AICF_VehicleBehaviorPolicy.Unregister(trip);
 	}
 

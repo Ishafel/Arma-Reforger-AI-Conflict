@@ -2,6 +2,7 @@
 // query boundary. Domain side effects remain owned by the dedicated flows.
 class AICF_VehicleCoordinator
 {
+	protected ref array<ref AICF_TransportTrip> m_aPendingCapturedDeathRetirements = {};
 	protected ref AICF_Stage3Config m_Config;
 	protected SCR_GameModeCampaign m_Campaign;
 	protected AICF_ConflictAdapter m_ConflictAdapter;
@@ -99,6 +100,7 @@ class AICF_VehicleCoordinator
 		int nowMs = System.GetTickCount();
 		for (int fleetIndex; fleetIndex < m_Fleets.GetFleetCount(); fleetIndex++)
 			m_CleanupManager.UpdateFleet(m_Fleets.GetFleet(fleetIndex), nowMs);
+		ObservePendingCapturedDeathRetirements();
 		m_Acceptance.Audit();
 		m_GroupTrace.Update(usState, this);
 		m_GroupTrace.Update(ussrState, this);
@@ -234,6 +236,22 @@ class AICF_VehicleCoordinator
 	AICF_TransportTrip GetTrip(AICF_GroupSlot slot)
 	{
 		return FindTripForSlot(slot);
+	}
+
+	void ObserveNativeGroupEmpty(AICF_GroupSlot slot, SCR_CampaignFaction faction)
+	{
+		if (!IsAuthorityReady() || !slot || !faction || !slot.GetGroup()) return;
+		AICF_TransportTrip trip = m_Trips.Find(faction.GetFactionKey(), slot.GetSlotId());
+		if (!trip || !trip.GetAssignment() || trip.GetAssignment().GetGroup() != slot.GetGroup() || trip.GetGroupGeneration() != slot.GetSpawnGeneration()) return;
+		AICF_FactionFleet fleet = m_Fleets.FindFleet(faction.GetFactionKey());
+		trip.RecordCapturedDeadRetirement(fleet, AICF_VehicleCleanupManager.GetRetirementObservationBudget(m_Config.GetDismountTimeoutMs(), m_Config.GetCleanupDelayMs()));
+	}
+
+	AICF_TransitMoveFailure ReportTransitMoveFailure(AICF_GroupSlot slot,
+		SCR_AIGroupUtilityComponent utility, int result, int handler, bool related, vector location)
+	{
+		if (!IsAuthorityReady() || !slot || !slot.IsCombatReady()) return null;
+		return AICF_TransitMoveFailure.Capture(FindTripForSlot(slot), utility, result, handler, related, location);
 	}
 
 	AICF_SpawnApproachFailure ReportSpawnApproachFailure(AICF_GroupSlot slot,
@@ -484,6 +502,8 @@ class AICF_VehicleCoordinator
 			for (int fleetIndex; fleetIndex < m_Fleets.GetFleetCount(); fleetIndex++)
 				m_CleanupManager.BeginStopFleet(m_Fleets.GetFleet(fleetIndex), nowMs);
 		}
+		ObservePendingCapturedDeathRetirements();
+		m_aPendingCapturedDeathRetirements.Clear();
 		m_Acceptance.Stop("COORDINATOR_STOP");
 	}
 
@@ -893,6 +913,28 @@ class AICF_VehicleCoordinator
 				"UNCOMMITTED_TERMINAL_OUTCOME:" + observed.GetReason());
 			return;
 		}
+		if (trip && trip.GetPhase() == AICF_ETransportTripPhase.FAILED_CLOSED)
+		{
+			AICF_TripRetirementObservation retirement = trip.ObserveCapturedDeadRetirement();
+			if (retirement.GetStatus() == AICF_ETripRetirementObservation.CONFIRMED)
+			{
+				m_aPendingCapturedDeathRetirements.RemoveItem(trip);
+				m_Acceptance.ObserveConfirmedCapturedDeathRetirement(trip, retirement);
+				return;
+			}
+			if (retirement.GetStatus() == AICF_ETripRetirementObservation.PENDING && !m_bStopped)
+			{
+				if (m_aPendingCapturedDeathRetirements.Find(trip) < 0) m_aPendingCapturedDeathRetirements.Insert(trip);
+				if (previousPhase != trip.GetPhase()) AICF_Stage3Diagnostics.Info("CAPTURED_DEATH_RETIREMENT_PENDING", retirement.Details());
+				return;
+			}
+			if (retirement.GetStatus() != AICF_ETripRetirementObservation.NONE)
+			{
+				m_aPendingCapturedDeathRetirements.RemoveItem(trip);
+				m_Acceptance.ObserveTripFailure(trip, AICF_EVehicleAcceptanceFailureDomain.CLEANUP, "CAPTURED_DEATH_RETIREMENT_UNCONFIRMED");
+				return;
+			}
+		}
 		if (!trip || !trip.IsTerminal() || previousTransitions == trip.GetTransitionCount() ||
 			previousPhase == trip.GetPhase())
 		{
@@ -909,6 +951,22 @@ class AICF_VehicleCoordinator
 			trip,
 			terminalOutcome,
 			ResolveTerminalFailureDomain(trip.GetPreviousPhase(), terminalOutcome));
+	}
+
+	protected void ObservePendingCapturedDeathRetirements()
+	{
+		for (int index = m_aPendingCapturedDeathRetirements.Count() - 1; index >= 0; index--)
+		{
+			AICF_TransportTrip trip = m_aPendingCapturedDeathRetirements[index];
+			if (!trip) { m_aPendingCapturedDeathRetirements.Remove(index); continue; }
+			if (trip.ObserveCapturedDeadRetirement().GetStatus() == AICF_ETripRetirementObservation.NONE)
+			{
+				m_aPendingCapturedDeathRetirements.Remove(index);
+				m_Acceptance.ObserveTripFailure(trip, AICF_EVehicleAcceptanceFailureDomain.IDENTITY, "CAPTURED_DEATH_RETIREMENT_CONTEXT_LOST");
+				continue;
+			}
+			ObserveTerminalCommit(trip, trip.GetPhase(), trip.GetTransitionCount(), null);
+		}
 	}
 
 	protected AICF_EVehicleAcceptanceFailureDomain ResolveTerminalFailureDomain(

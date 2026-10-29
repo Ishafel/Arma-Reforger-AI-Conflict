@@ -2,6 +2,27 @@
 
 ## Пресеты техники: issue #78
 
+Дополнение29.10: `AICF_GroupReplacementStressProbe.c` наблюдает два этапа
+реальной гибели и штатной замены по3отряда каждой стороны, по5новых actors,
+с ONLINE казармами и обычной экономикой. Существующие30s readiness, generations
+и native queue не обходятся. `Test-GroupReplacementStressLog.ps1` разделяет
+functional proof12замен, full fatal и strict resources. Это controlled stress,
+не доказательство стабильности обычного боя; контракт [GROUP_SPAWN.md](GROUP_SPAWN.md).
+
+`AICF_PersistenceReconnectTrace.c` наблюдает audit/disconnect/serializer только
+в isolated native/control stages. Его отдельный A/B flag не входит в production;
+native metadata spawn logic сохраняется. Успех guard пустой backend identity
+проверяется также полным production client/JIP runner с прежним frozen auditor.
+Сценарии, ограничения и authenticated-account NOT RUN —
+[PERSISTENCE_IDENTITY.md](PERSISTENCE_IDENTITY.md).
+
+`AICF_TransitFailureRecoveryProbe.c` добавляется к isolated Scenario scaffold:
+только реальный TRANSIT/native car handler и settled original roster, controlled
+STUCK/UNKNOWN, однократный native callback, прежний budget2 и физическое движение
+после recovery. `Test-TransitFailureRecoveryLog.ps1` не заменяет настоящий
+MOVING2→4→6 или ordinary-war gate. Итог относится к exact snapshot и full stopped
+log, а не к одному факту наличия fixture.
+
 `AICF_VehicleBehaviorProbe.c` и `AICF_VehicleBehaviorSettingsProbe.c` добавляются
 только runner `tools/Invoke-AICFVehicleBehavior.ps1` в неизменяемую isolated
 Core-копию. Cases `transport`/`combat`, `-Faction US|USSR`; production fixtures
@@ -1219,3 +1240,110 @@ Register denied и explicit Permission.CanProtect denied. Server cleanup
 GC authority negative обязателен также при `-aicfVehicleBehaviorReadback 1` в обоих real client/JIP logs. Client fixture создаёт только собственный Local prefab, private Fleet/ACTIVE lease с настоящими entity/Rpl/generations и проверяет native `Replication.IsServer=0`, отказ `Policy.Register` и explicit `Permission.CanProtect`. Marker `VEHICLE_UI_GC_AUTHORITY` и case `GC_NO_AUTHORITY_REJECTED` требуют prepared1/оба deny1; matching client auditor отвергает отсутствие/дубликат/wrong realm. Вместе с CatalogFilters ожидаются34 client checks/8 JIP. Прежние no-flag проверки не меняются.
 
 Hidden commander client может не иметь ControlledEntity при существующем PlayerController. GC authority setup поэтому допускает initial local spawn без avatar: fixture origin0 с surface+1, без перемещения существующего actor или server entity. Receipt сохраняет actor/world/resource/canSpawn/entity/fleet/lease/state/generations; подготовка0 остаётся FAIL и не считается отказом authority.
+
+## Read-only loose weapon / private Equipment model observer
+
+`tests/fixtures/AICF_LooseWeaponObserverProbe.c` добавляется только в isolated
+stage как `AICF_ZLooseWeaponObserverProbe.c`; CLI `-aicfLooseWeaponObserver 1`.
+Обычный режим не меняет inventory, entity, simulation, damage или health.
+Он сохраняет actual inventory add/remove и native `SCR_AIDropWeapon` receipts,
+immutable EntityID/Rpl/world, source faction/slot/generation/group, отдельные
+IEntity parent и InventoryItem ParentSlot, held/weapon-slot/manager.Contains,
+lock/transition, main-world terrain delta и physics данные. Source missing/stale
+означает UNKNOWN, а не доказанное отсутствие владельца. Ledger weak/bounded:
+512 записей, TTL 120s, sample 5s. Это ограничивает диагностику: предмет без нового
+события перестаёт наблюдаться после TTL; отсутствие нового crash не объясняет
+старую entity без её identity.
+
+Cached EquipmentPlans отдельно наблюдаются через actual Draft Character и
+его root weapons с `main_world=0`. Для Physics с `IsDynamic=false` остальные
+getter данные обозначаются UNKNOWN/-1: native GetSimulationState и
+GetInteractionLayer на private Character воспроизводимо дают access violation,
+хотя `GetPhysics()` возвращает ненулевой wrapper. Прежние failed diagnostic
+runs сохранены; наличие wrapper не доказывает пригодность rigid-body API.
+Все остальные Physics getters вызываются только внутри dynamic guard.
+
+Только отдельный `-aicfLooseWeaponBaseline 1` делает ОДИН настоящий native
+`SCR_AIDropWeapon` у живого managed AI, не меняя simulation/позицию/здоровье,
+и закрывает сервер через 60s после roster. Обычные Proof4 runs используют
+только observer flag. Baseline требует SUCCESS native task, inventory remove,
+actual main-world loose item и private-model samples; весь stopped log/native
+exit проверяется отдельно от native resources. Source contract с negative
+controls: `Test-LooseWeaponObserverContracts.ps1`. Observer не предоставляет
+cleanup permission и не является fix старого SVD out-of-world assertion;
+источник/owner старого crash остаётся UNKNOWN.
+
+
+## Controlled native OpenGate expiry
+
+`AICF_NativeGateExpiryProbe.c` работает только вместе с отдельным VS repeat5
+scaffold и `-aicfNativeGateExpiryProbe 1`. Runner
+`tools/Invoke-AICFNativeGateExpiry.ps1 -EvidenceRoot <fresh> -Faction US`
+копирует точный текущий production payload и обе fixture, сохраняет SHA256,
+компилирует Workbench через терминал и запускает canonical server. VS setup
+использует явные truce/HIERARCHY, поэтому это CONTROLLED_GATE_EXPIRY_ONLY,
+не доказательство обычной войны или natural timeout.
+
+Для устойчивого native gate coverage добавь `-GateHQ`: fixture выбирает actual
+faction HQ по ближайшим native OpenGate-tagged doors, поэтому actual faction
+может отличаться от запрошенной. `HQ_SELECTED` сохраняет выбор без map coordinates.
+Planning door не считается owner реального маршрута. Только настоящий
+production-captured gate получает один `BaseDoorComponent.SetControlValue(0)`
+и actual `CLOSED_READBACK`; expiry привязана к этому же smart owner. Ни native
+AI actions, ни callback receipts fixture не создаёт. Отсутствие реальной gate
+цепочки сохраняется как FAIL; прежние coverage FAIL не переоцениваются.
+
+Единственный fault — sticky true из IsExpired для одного captured gate/trip
+после actual native observed exit, exact completion callback и settled return
+с валидными timestamps, на slow car. Fixture не создаёт native actions,
+completion receipts, не сдвигает clocks, не выполняет physical correction.
+Sticky значение нужно для двух последовательных IsExpired в production flow.
+Следующий gate и другие trip не получают новую injection.
+
+Проверяются production RECOVERY_REQUESTED с тем же smart owner/member/seat,
+исходным60s window и completion history, прежний mobility budget с одним
+потраченным attempt (максимум2), ROUTE_REBUILD_ONLY, выросший route generation
+и неизменный trip deadline. После этого требуются actual25м по двум native
+позициям, ≥3 moving polls с шагом1s, прежние car/Rpl/lease/пять original actors
+в исходных местах и единственная production purchase. Новый auditor читает
+все sibling logs: fatal и resource gates не скрываются успешными markers.
+ComponentRpl и entity NodeRpl хранятся отдельно. Decision timestamps отделены
+от момента печати: небольшая задержка Log не считается изменением recovery clock.
+Source/log mutants в Test-NativeGateExpiryProbeContracts.ps1 проверяют oracle,
+но не заменяют настоящий native OpenGate/return. Timeout без реального gate
+остаётся FAIL. Исторические failed attempts сохраняются отдельно в evidence.
+
+Свежий `issue78-finalization-20261029/gate-expiry/native-gatehq-v5`: Workbench0,
+native0, targeted auditor PASS, 10 checks/0 failures; actual35.7453м/7 moving
+polls после одного route repair, budget0→1/2 и прежний deadline. Строгие native
+resources28/error lines сохраняют overall FAIL. Это controlled proof; natural
+expiry и исчерпание второго native gate attempt этим запуском не доказаны.
+
+### Native-only stock lighting constructor
+
+`AICF_StockLightingNativeControl.c` — отдельный MRE для camera overlaps. Только
+client с `-aicfStockLightingControl 1` создаёт собственный `InspectionPreview`
+world/camera и неизменённый native `InventoryPreviewWorld.et`, затем наблюдает
+scene/world ownership. Код fixture не создаёт editor widgets/vehicle preview
+model и не вызывает ручной настройки postprocess: эффекты создаёт неизменённая
+native scene. Собственная сцена/world освобождаются в `OnGameEnd`; CallLater
+явно снимается.
+
+Для изолированного stage сохраняются штатные `AIConflictCore/addon.gproj` и
+`AIConflictArland/addon.gproj` с прежними IDs/dependencies. В его Core Scripts
+помещаются ровно3 файла: этот fixture, `AICF_VehicleNativeControl.c` и
+`AICF_PersistenceReconnectTrace.c`; production Scripts отсутствуют. Сначала
+terminal Workbench Validate по [DEVELOPMENT.md](DEVELOPMENT.md), затем разные
+терминальные sessions `Start-AICFRuntime.ps1 -Role Server|Client -Variant Stock
+-RepositoryRoot <stage> -ProfileRoot <fresh-role-profile> -ServerPort <free-port>`.
+Обеим ролям передаются `-aicfNativeVehicleControl 1 -aicfControlNoSave 1
+-aicfControlFaction 1 -aicfStockLightingControl 1 -aicfPersistenceReconnectTrace 1`;
+server также `-addr 127.0.0.1:<port>`, client — `-ServerProfileRoot <server-profile>`.
+Не передавать `aicfControlManaged`: managed roster в этом control отсутствует.
+Native fixture даёт явный `ROSTER_READY control=NATIVE_ONLY managed_groups=0`;
+canonical launcher всё равно сверяет фактические CLI/live server/readiness.
+
+Один client достаточен: control закрывает client и server штатно. Для проверки
+8 overlaps нужны полные stopped logs, а не только отмеченные BEGIN/BUILT строки.
+Это repro известного FAIL, не acceptance PASS. Прочие native/script errors
+контроля также сохраняются и не исключаются из общего verdict.

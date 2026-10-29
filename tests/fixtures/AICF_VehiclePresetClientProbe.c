@@ -193,6 +193,8 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 		{
 			AICF_VehiclePreset confirmed = AICF_VehiclePreset.Decode(assigned);
 			Check("JIP_CONFIRMED_ASSIGNMENT", confirmed && confirmed.m_sFaction == "USSR" && confirmed.m_sName == "UI vehicle" && confirmed.m_sPrefab.Contains("UAZ469"));
+			// Неудачный первый Apply должен завершить probe с FAIL, без null dereference.
+			if (!confirmed) { Finish(); return; }
 			Check("JIP_STABLE_SLOT", slot == 0 && m_iRevision > 0 && faction == "USSR");
 			if (m_bProbeBehaviorSettings)
 			{
@@ -499,15 +501,30 @@ modded class SCR_PlayerController
 			vector position;
 			if (world && validResource)
 			{
-				array<vector> offsets = {"15 0 0", "-15 0 0", "0 0 15", "0 0 -15"};
+				// Две ограниченные окружности: четыре cardinal samples могут все
+				// попасть в постройки HQ. Расстояние10..20 и все safety gates прежние.
+				array<vector> offsets = {"15 0 0", "13 0 7.5", "7.5 0 13", "0 0 15", "-7.5 0 13", "-13 0 7.5", "-15 0 0", "-13 0 -7.5", "-7.5 0 -13", "0 0 -15", "7.5 0 -13", "13 0 -7.5",
+					"18 0 0", "15.5 0 9", "9 0 15.5", "0 0 18", "-9 0 15.5", "-15.5 0 9", "-18 0 0", "-15.5 0 -9", "-9 0 -15.5", "0 0 -18", "9 0 -15.5", "15.5 0 -9"};
+				int candidate;
 				foreach (vector offset : offsets)
 				{
+					candidate++;
 					vector center = avatar.GetOrigin() + offset;
-					if (!SCR_WorldTools.FindEmptyTerrainPosition(position, center, 4, 3, 3, TraceFlags.ENTS | TraceFlags.OCEAN, world)) continue;
+					if (!SCR_WorldTools.FindEmptyTerrainPosition(position, center, 4, 3, 3, TraceFlags.ENTS | TraceFlags.OCEAN, world))
+					{
+						Print(string.Format("[AICF][VEHICLE_UI_GC_CANDIDATE] player=%1 candidate=%2 center=%3 accepted=0 reason=NO_EMPTY_TERRAIN readonly=1", GetPlayerId(), candidate, center));
+						continue;
+					}
 					float distance = vector.Distance(position, avatar.GetOrigin());
-					if (distance < 10 || distance > 20 || ChimeraWorldUtils.TryGetWaterSurfaceSimple(world, position)) continue;
+					bool water = ChimeraWorldUtils.TryGetWaterSurfaceSimple(world, position);
+					if (distance < 10 || distance > 20 || water)
+					{
+						Print(string.Format("[AICF][VEHICLE_UI_GC_CANDIDATE] player=%1 candidate=%2 position=%3 distance_m=%4 water=%5 accepted=0 reason=DISTANCE_OR_WATER readonly=1", GetPlayerId(), candidate, position, distance, water));
+						continue;
+					}
 					m_bAICFGCProbeNearbyCharacter = false;
 					world.QueryEntitiesBySphere(position + "0 0.2 0", 5, AICF_VehicleGCProbeCollectNearby, null, EQueryEntitiesFlags.ALL);
+					Print(string.Format("[AICF][VEHICLE_UI_GC_CANDIDATE] player=%1 candidate=%2 position=%3 distance_m=%4 nearby_character=%5 accepted=%6 readonly=1", GetPlayerId(), candidate, position, distance, m_bAICFGCProbeNearbyCharacter, !m_bAICFGCProbeNearbyCharacter));
 					if (m_bAICFGCProbeNearbyCharacter) continue;
 					safe = true;
 					break;
@@ -712,7 +729,9 @@ modded class AICF_MatchController
 		m_bVehicleClientConfigured = true;
 		AICF_GroupSlot slot = m_USSRState.GetSlot(0);
 		slot.SetDesiredSize(1);
-		m_OrderPlanner.AssignPlayerPointOrder(slot, m_USSRFaction, AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup()).GetOrigin() + "400 0 0", false);
+		vector point = AICF_GroupRuntime.ResolveAliveLeader(slot.GetGroup()).GetOrigin() + "400 0 0";
+		point[1] = GetGame().GetWorld().GetSurfaceY(point[0], point[2]);
+		m_OrderPlanner.AssignPlayerPointOrder(slot, m_USSRFaction, point, false);
 	}
 }
 

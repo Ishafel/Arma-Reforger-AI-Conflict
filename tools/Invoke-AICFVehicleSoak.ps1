@@ -11,7 +11,8 @@ param(
     [switch]$SkipCompile,
     [ValidateRange(1,65535)][int]$ServerPort=2510,
     [ValidateSet('US','USSR','BOTH')][string]$AICommanderMode='BOTH',
-    [ValidateSet(1,2,3)][int]$ProofVersion=2
+    [ValidateSet(1,2,3,4)][int]$ProofVersion=2,
+    [switch]$LooseWeaponObserver
 )
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'AICF_VehicleSoakSources.ps1')
@@ -20,7 +21,9 @@ $taskEvidence=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromP
 if(Test-Path -LiteralPath $taskEvidence){throw 'EvidenceRoot must be new'}
 [void][IO.Directory]::CreateDirectory($taskEvidence)
 $taskAuditScript=Join-Path $taskEvidence 'Test-VehicleSoakLog.ps1'
-Copy-Item -LiteralPath (Join-Path $taskRepository 'tests/log-audits/Test-VehicleSoakLog.ps1') -Destination $taskAuditScript
+$taskAuditSource='tests/log-audits/Test-VehicleSoakLog.ps1'
+if($ProofVersion -eq 4){$taskAuditSource='tests/log-audits/Test-VehicleSoakObservationLog.ps1'}
+Copy-Item -LiteralPath (Join-Path $taskRepository $taskAuditSource) -Destination $taskAuditScript
 $taskAuditHash=(Get-FileHash -LiteralPath $taskAuditScript -Algorithm SHA256).Hash
 $taskCommit=(& git -C $taskRepository rev-parse --verify "$SourceRef^{commit}").Trim()
 if($LASTEXITCODE -ne 0){throw 'Cannot resolve source commit'}
@@ -45,10 +48,14 @@ if(!$StageRoot){
         }
     }
     Copy-Item -LiteralPath (Join-Path $taskRepository 'tests/fixtures/AICF_VehicleSoakProbe.c') -Destination (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_VehicleSoakProbe.c')
+    if($ProofVersion -eq 4){Copy-Item -LiteralPath (Join-Path $taskRepository 'tests/fixtures/AICF_VehicleSoakRecoveryObservationProbe.c') -Destination (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_VehicleSoakRecoveryObservationProbe.c')}
+    if($LooseWeaponObserver){Copy-Item -LiteralPath (Join-Path $taskRepository 'tests/fixtures/AICF_LooseWeaponObserverProbe.c') -Destination (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_LooseWeaponObserverProbe.c')}
 }
 $StageRoot=(Resolve-Path -LiteralPath $StageRoot).Path
 if($StageRoot -eq $taskRepository){throw 'Production checkout cannot be a soak stage'}
 if(!(Test-Path -LiteralPath (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_VehicleSoakProbe.c'))){throw 'Soak fixture missing'}
+if($ProofVersion -eq 4 -and !(Test-Path -LiteralPath (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_VehicleSoakRecoveryObservationProbe.c'))){throw 'Proof4 observation fixture missing'}
+if($LooseWeaponObserver -and !(Test-Path -LiteralPath (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_LooseWeaponObserverProbe.c'))){throw 'Loose weapon observer fixture missing'}
 $taskWorkingTree=[bool]$SnapshotWorkingTree
 $taskOriginManifest=$null
 if(!$taskOwnStage){
@@ -85,7 +92,10 @@ if(!$SkipCompile){
 $taskProfile=Join-Path $taskEvidence 'profile'
 "SOAK_PROFILE=$taskProfile FACTION=$Faction DURATION_SECONDS=$DurationSeconds"
 $taskStarted=[DateTimeOffset]::UtcNow
-& (Join-Path $taskRepository 'tools/Start-AICFRuntime.ps1') -Role Server -Variant Stock -AICommanderMode $AICommanderMode -RepositoryRoot $StageRoot -ProfileRoot $taskProfile -IsolatedLoadoutLibrary -ServerPort $ServerPort -AdditionalArguments @('-aicfVehicleSoakFaction',$Faction,'-aicfVehicleSoakDurationMs',([string]($DurationSeconds*1000)),'-aicfVehicleSoakMountedHoldMs',([string]($MountedHoldSeconds*1000)),'-aicfGroupTrace','1','-aicfGroupTraceFaction',$Faction,'-aicfGroupTraceSlot','0','-addr',"127.0.0.1:$ServerPort") *> (Join-Path $taskEvidence 'launcher.txt')
+$taskRuntimeArguments=@('-aicfVehicleSoakFaction',$Faction,'-aicfVehicleSoakDurationMs',([string]($DurationSeconds*1000)),'-aicfVehicleSoakMountedHoldMs',([string]($MountedHoldSeconds*1000)),'-aicfGroupTrace','1','-aicfGroupTraceFaction',$Faction,'-aicfGroupTraceSlot','0','-addr',"127.0.0.1:$ServerPort")
+if($ProofVersion -eq 4){$taskRuntimeArguments+=@('-aicfVehicleSoakObservation4','1')}
+if($LooseWeaponObserver){$taskRuntimeArguments+=@('-aicfLooseWeaponObserver','1')}
+& (Join-Path $taskRepository 'tools/Start-AICFRuntime.ps1') -Role Server -Variant Stock -AICommanderMode $AICommanderMode -RepositoryRoot $StageRoot -ProfileRoot $taskProfile -IsolatedLoadoutLibrary -ServerPort $ServerPort -AdditionalArguments $taskRuntimeArguments *> (Join-Path $taskEvidence 'launcher.txt')
 $taskNativeExit=$LASTEXITCODE
 $taskEnded=[DateTimeOffset]::UtcNow
 $taskNativeExit|Set-Content -LiteralPath (Join-Path $taskEvidence 'native-exit.txt')

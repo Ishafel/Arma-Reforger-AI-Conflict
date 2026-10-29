@@ -115,6 +115,7 @@ class AICF_VehicleSpawnSiteReservation
 // roster member after a group or request generation change.
 class AICF_VehicleStagingActionToken
 {
+	protected ref AICF_StrategicAssignmentSnapshot m_TaskAssignment;
 	protected ref AICF_VehicleAsyncFence m_Fence;
 	protected int m_iRequestGeneration;
 	protected AIAgent m_Agent;
@@ -168,6 +169,16 @@ class AICF_VehicleStagingActionToken
 	int GetLastProgressAtMs() { return m_iLastProgressAtMs; }
 	float GetBestDistanceMeters() { return m_fBestDistanceMeters; }
 	float GetCurrentDistanceMeters() { return m_fCurrentDistanceMeters; }
+	bool CaptureTaskAssignment(AICF_StrategicAssignmentSnapshot assignment)
+	{
+		if (m_TaskAssignment || !assignment || !assignment.IsValid()) return false;
+		m_TaskAssignment = assignment;
+		return true;
+	}
+	bool MatchesTaskAssignment(AICF_StrategicAssignmentSnapshot assignment)
+	{
+		return m_TaskAssignment && m_TaskAssignment.MatchesAssignmentRevision(assignment);
+	}
 
 	void ObservePhysicalMotion(vector origin, int nowMs)
 	{

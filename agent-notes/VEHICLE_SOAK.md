@@ -28,6 +28,45 @@ runner calls; для текущего боевого probe явно переда
 для отдельной регрессии watchdog; CLI `aicfVehicleSoakMountedHoldMs`, clamp10..180s.
 Receipt `MOUNTED_HOLD` подтверждает непрерывное нахождение исходных пяти на местах.
 
+## Ordinary war observation4
+
+`-ProofVersion 4` добавляет только stage fixture
+`AICF_VehicleSoakRecoveryObservationProbe.c` и замораживает отдельный аудитор
+`Test-VehicleSoakObservationLog.ps1`. Старые Proof3 исходники, auditor receipts
+и FAIL не пересчитываются. Обе новые стороны требуют свежего полного1800s run.
+Команда аналогична примеру выше с `-ProofVersion 4`; optional
+`-LooseWeaponObserver` добавляет read-only ledger dropped оружия, без controlled
+baseline drop. Он нужен для диагностики native SVD out-of-world assertion.
+
+У observation4 два явно различных результата: `ORIGINAL_FULL_ROUTE` требует
+прежний физический маршрут исходных бойцов; `EXPLAINED_NATIVE_DAMAGE_RECOVERY`
+подтверждает законную боевую потерю и восстановление, **не** полный original route.
+Вторая ветка допускается только по native on-fire/неподвижности exact lease car
+и Rpl/generation, независимо подтверждённым FALLBACK и native health snapshot.
+Reason без actual damage не принимается. Все пять originals сохраняют actor/Rpl
+identity, native life и полное отсутствие vehicle/seat/transition. Исчезновение
+разрешено лишь после наблюдённого native DEAD; неизвестное состояние даёт FAIL.
+
+Cleanup должен подтвердить exact car absence, cap release и завершение не позже
+существующего protected-clearance terminal deadline. Далее нужны conscious
+original survivors либо ровно следующая generation с5новыми distinct actors,
+native SPAWN_BOUND/readiness и настоящим ticket/supply commit. Текущий foot
+waypoint обязан оставаться current, in queue и у прежней target/revision.
+Прогресс≥10m измеряется от одного и того же живого лидера после ready snapshot;
+promotion начинает новый survivor отсчёт. Независимый GROUP_TRACE подтверждает
+фактические leader position, current/owned waypoint и target. Подмена generation,
+car, actors, фиктивное damage, просроченный/отсутствующий cleanup, spawn timeout
+и unaccounted repair остаются FAIL. Fixture не лечит, не воскрешает и не меняет
+позиции или native budget.
+
+Duration, liveness, stopped exit, source/CLI provenance и все sibling fatal/resource
+logs остаются отдельными строгими gates. В частности console без SCRIPT(E)
+не отменяет `Assertion failed` в соседнем crash.log. Отдельные controlled route
+cases обеих сторон нужны для full-route доказательства независимо от ordinary
+war результата. Профильный контракт `Test-VehicleSoakObservationContracts.ps1`
+проверяет source mutants, поддельные receipts и полный auditor с повреждением
+duration/liveness/provenance/stopped/fatal/resource gates.
+
 ## Проверяемая последовательность
 
 1. Дождаться настоящего READY отряда, сохранить group/entity и spawn generation.
