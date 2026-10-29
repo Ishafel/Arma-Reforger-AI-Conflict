@@ -137,6 +137,15 @@ bindings вместе с applied revisions; текущая equipment source role
 revision инвалидируют старые callbacks. Stable faction/numeric slot не меняется,
 сохранённые library recipes не переписываются.
 
+Manual staging также допускает полный состав из одного сохранённого Pilot:
+`captured > 0` при точном равенстве assigned, desired и actual native agents.
+Пустой, неполный или чужой roster по-прежнему отклоняется с прежними actor/Rpl/
+faction/authority/foot guards. Регрессия `captured > 1` после сокращения10→1
+давала `SPAWN_STAGING_ROSTER_CAPTURE_REJECTED` до покупки. Fresh
+`crew-final-current-v2` подтвердил WB0, client15/server8, native0/0 и single UAZ
+Pilot после девяти distinct ARRIVED; full resource errors30/158 остаются FAIL.
+Evidence: `.codex-runtime/issue78-finalization-20261029/staging-single-crew/`.
+
 ## Lifecycle и экономика
 
 VehicleCoordinator допускает ручной запрос и для INFANTRY с одним живым бойцом,

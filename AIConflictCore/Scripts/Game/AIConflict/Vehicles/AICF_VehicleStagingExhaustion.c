@@ -98,7 +98,7 @@ class AICF_VehicleStagingExhaustion
 				actor.IsInVehicle() || CompartmentAccessComponent.GetVehicleIn(actor) || access.IsInCompartment() || access.IsGettingIn() ||
 				access.IsGettingOut() || access.IsSwitchingSeatsAnim()) return false;
 		}
-		return captured > 1 && captured == assigned && captured == m_Slot.GetDesiredSize() && captured == agents.Count();
+		return captured > 0 && captured == assigned && captured == m_Slot.GetDesiredSize() && captured == agents.Count();
 	}
 
 	protected bool HasCurrentActorTask()

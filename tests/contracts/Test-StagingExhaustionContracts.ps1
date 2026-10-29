@@ -41,6 +41,27 @@ function Rules($h,$f,$s){
  }
 }
 $bad=@(Rules $helper $flow $spawner);if($bad.Count){throw "Staging exhaustion source: $bad"}
+# Execute the production cardinality guard: one retained Pilot is a complete
+# manual roster, while every assigned/desired/native mismatch stays rejected.
+$rosterBody=Body $helper 'IsRosterCurrent'
+$cardinality=[regex]::Match($rosterBody,'return\s+(captured\s*>[^;]+);')
+if(!$cardinality.Success){throw 'Missing production staging cardinality guard'}
+$cardinalityExpression=$cardinality.Groups[1].Value.Replace('m_Slot.GetDesiredSize()','desired').Replace('agents.Count()','actual')
+$cardinalityName='AICFStagingCardinality'+[guid]::NewGuid().ToString('N')
+Add-Type "public static class $cardinalityName {public static bool Check(int captured,int assigned,int desired,int actual){return $cardinalityExpression;}}"
+$cardinalityMethod=([type]$cardinalityName).GetMethod('Check')
+$cardinalityCases=0
+foreach($size in 1..10){
+ foreach($kind in @('complete','missingAssignment','wrongDesired','extraNative','incompleteNative')){
+  $assigned=$size;$desired=$size;$actual=$size
+  switch($kind){missingAssignment{$assigned--}wrongDesired{$desired++}extraNative{$actual++}incompleteNative{$actual--}}
+  if($cardinalityMethod.Invoke($null,@([int]$size,[int]$assigned,[int]$desired,[int]$actual)) -ne ($kind -eq 'complete')){throw "Staging cardinality rejected/accepted wrong roster: size=$size kind=$kind"}
+  $cardinalityCases++
+ }
+}
+if($cardinalityMethod.Invoke($null,@(0,0,0,0))){throw 'Empty staging roster accepted'}
+$cardinalityCases++
+Write-Output "PASS Staging cardinality: actual production guard cases=$cardinalityCases; single Pilot valid, incomplete/foreign/native-count mismatches rejected"
 $mutants=@('!m_bCaptured','!m_Trip.IsVehiclePresetCurrent()','current.GetBaseRevision() != observed.GetBaseRevision()',
  'm_Request.GetRequestGeneration() != m_iRequestGeneration','m_Request.GetSpawnPlan() != m_Plan','nowMs >= m_Plan.GetApproachDeadlineMs()',
  'ComponentRpl(m_Group) != m_sGroupRpl','ComponentRpl(actor) != m_aMemberRpls[position]','m_Trip.VehiclePresetMember(position) != actor',
