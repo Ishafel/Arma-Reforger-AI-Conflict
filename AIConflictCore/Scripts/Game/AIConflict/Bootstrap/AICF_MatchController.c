@@ -462,10 +462,12 @@ class AICF_MatchController
 
 		if (!SpawnInitialRoster(m_USState, m_USFaction) || !SpawnInitialRoster(m_USSRState, m_USSRFaction))
 		{
+			if (m_bStopped || s_ActiveController != this) return;
 			Fail("INITIAL_ROSTER_FAILED", "All scenario-managed groups must be created");
 			return;
 		}
 
+		if (m_bStopped || s_ActiveController != this) return;
 		GetGame().GetCallqueue().CallLater(Update, UPDATE_INTERVAL_MS, true);
 		GetGame().GetCallqueue().CallLater(CommanderTick, m_Config.GetCommanderIntervalMs(), true);
 		GetGame().GetCallqueue().CallLater(ReliabilityTick, m_Stage2Config.GetReliabilityIntervalMs(), true);
@@ -1469,6 +1471,7 @@ class AICF_MatchController
 
 	protected bool SpawnInitialRoster(AICF_FactionState factionState, SCR_CampaignFaction faction)
 	{
+		if (m_bStopped || s_ActiveController != this) return true;
 		if (!factionState || !faction)
 			return false;
 		if (factionState.GetExpectedSlotCount() == 0)
@@ -1517,6 +1520,7 @@ class AICF_MatchController
 				spawnBase,
 				slotId,
 				slot.GetDeploymentSize());
+			int initialGeneration = slot.GetSpawnGeneration();
 			if (!group || !BindManagedGroup(factionState, faction, slot, group, "INITIAL"))
 			{
 				if (group)
@@ -1525,6 +1529,7 @@ class AICF_MatchController
 				return false;
 			}
 
+			if (!IsCurrentRosterSpawnOwner(factionState, slot, group, initialGeneration)) return true;
 			group.GetOnEmpty().Insert(OnGroupEmpty);
 		}
 
@@ -2058,6 +2063,7 @@ class AICF_MatchController
 			return;
 		}
 
+		int replacementGeneration = slot.GetSpawnGeneration();
 		if (!BindManagedGroup(factionState, faction, slot, group, "REPLACEMENT"))
 		{
 			RplComponent.DeleteRplEntity(group, false);
@@ -2066,6 +2072,7 @@ class AICF_MatchController
 			return;
 		}
 
+		if (!IsCurrentRosterSpawnOwner(factionState, slot, group, replacementGeneration)) return;
 		group.GetOnEmpty().Insert(OnGroupEmpty);
 		AICF_Stage1Diagnostics.Info(
 			"REINFORCEMENT_SPAWNED",
@@ -2190,9 +2197,10 @@ class AICF_MatchController
 		// SCR_AIWorld. It intentionally happens after the managed identity and
 		// generation observers above are installed.
 		int expectedSize = slot.GetDeploymentSize();
+		int boundGeneration = slot.GetSpawnGeneration();
 		if (!m_GroupSpawner ||
 			!slot.MarkRosterSpawnRequested(expectedSize) ||
-			!m_GroupSpawner.BeginRosterSpawn(group, expectedSize))
+			!m_GroupSpawner.BeginBoundRosterSpawn(this, factionState, slot, group, expectedSize))
 		{
 			AICF_Stage1Diagnostics.Error(
 				"ROSTER_SPAWN_REQUEST_FAILED",
@@ -2207,17 +2215,35 @@ class AICF_MatchController
 			return false;
 		}
 
+		if (!IsCurrentRosterSpawnOwner(factionState, slot, group, boundGeneration))
+		{
+			AICF_Stage1Diagnostics.Warning("ROSTER_SPAWN_SCOPE_CANCELLED",
+				string.Format("slot=%1 generation=%2 group=%3", slot.GetSlotId(), boundGeneration, GroupKey(group)));
+			return true;
+		}
+
 		AICF_Stage1Diagnostics.Info(
 			"ROSTER_SPAWN_REQUESTED",
 			string.Format(
-				"faction=%1 slot=%2 slot_key=%3 generation=%4 group=%5 expected=%6 spawning_pending=%7 pending_source=AICF_EXPECTED_MINUS_ACTUAL owner=SCR_AIWORLD_REQUEST",
+				"faction=%1 slot=%2 slot_key=%3 generation=%4 group=%5 expected=%6 spawning_pending=%7 pending_source=AICF_EXPECTED_MINUS_ACTUAL owner=%8",
 				faction.GetFactionKey(),
 				slot.GetSlotId(),
 				slot.GetSlotKey(),
 				slot.GetSpawnGeneration(),
 				GroupKey(group),
 				expectedSize,
-				expectedSize));
+				Math.Max(0, expectedSize - group.GetAgentsCount()),
+				group.AICF_GetRosterSpawnOwner()));
+		return true;
+	}
+
+	bool IsCurrentRosterSpawnOwner(AICF_FactionState state, AICF_GroupSlot slot, SCR_AIGroup group, int generation)
+	{
+		if (!Replication.IsServer() || s_ActiveController != this || m_bStopped || !m_bStarted ||
+			!state || (state != m_USState && state != m_USSRState) || !slot || !group ||
+			state.GetSlot(slot.GetSlotId()) != slot || slot.GetGroup() != group ||
+			slot.GetState() != AICF_EGroupSlotState.SPAWNING || slot.GetSpawnGeneration() != generation)
+			return false;
 		return true;
 	}
 

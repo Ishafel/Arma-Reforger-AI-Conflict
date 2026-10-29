@@ -391,13 +391,15 @@ class AICF_GroupRuntime
 			memberEntityMissingCount,
 			memberReplicationNotReadyCount,
 			pendingCount);
+		string spawnOwner = "NONE";
+		if (group) spawnOwner = group.AICF_GetRosterSpawnOwner();
 		details += string.Format(
-			" spawn_request_issued=%1 requested=%2 spawn_owner=SCR_AIWORLD_REQUEST request_age_ms=%3 spawn_age_ms=%4 progress_age_ms=%5",
+			" spawn_request_issued=%1 requested=%2 spawn_owner=%6 request_age_ms=%3 spawn_age_ms=%4 progress_age_ms=%5",
 			requested,
 			requestedCount,
 			slot.GetRosterSpawnRequestAgeMs(),
 			spawnAgeMs,
-			slot.GetRosterProgressAgeMs());
+			slot.GetRosterProgressAgeMs(), spawnOwner);
 		details += string.Format(
 			" callback_agents=%1 completion_callback=%2 ai_faction_current=%3 ai_faction_limit=%4 ai_faction_can_add=%5",
 			slot.GetRosterCallbackAgentCount(),

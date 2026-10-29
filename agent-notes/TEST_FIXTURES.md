@@ -1,5 +1,15 @@
 # Изменение сценарного контракта — 2026-10-24
 
+`AICF_RosterSpawnBatchBoundaryProbe.c`: отдельный stage с production339,
+`-aicfRosterBatchBoundary 1`. Без другого флага только наблюдает настоящий default
+startup20×seed1/desired10. С `-aicfRosterBatchMaxTen 1` **явно controlled** меняет
+USSR slot0 на MOTORIZED_LIGHT/desired10 до штатного `SpawnInitialRoster`; остальные
+19 slots сохраняют seed1. Нужны normal bind, callbacks, следующий READY poll,
+exact faction/alive/componentRpl originals и10s неизменного состава (20/29actors).
+Fixture не вызывает Expand/Request/MarkReady и не меняет poses/health/AI limits.
+60s observation deadline не продлевает production30s. Finish/Stop снимают Tick.
+Это MAX10 coverage, а не утверждение, что default создаёт200actors сразу.
+
 ## Пресеты техники: issue #78
 
 Дополнение29.10: `AICF_GroupReplacementStressProbe.c` наблюдает два этапа

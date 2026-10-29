@@ -1,5 +1,17 @@
 # Проверки и baseline
 
+`Test-RosterSpawnBatchContracts.ps1` исполняет настоящий extracted helper,
+owner predicate и bound/default dispatch:15458cases/12actual source mutants,
+exact WindowsPowerShell5.1 PASS. Есть group/faction/global veto, whole remaining,
+overflow, exact identity, callback stop/swap/generation, native success без
+прироста, nested bound/unbound и context restore. `Test-Stage35Static.ps1` narrow
+matcher обновлён с `BeginRosterSpawn` на `BeginBoundRosterSpawn` после сохранённого
+stale literal FAIL; старые health/readiness/budget/callback checks сохранены.
+Свежий production339 causal gate и его negative baseline — `native-spawn-race/`
+(см. `GROUP_SPAWN.md`); resource28FAIL не скрывается functional PASS.
+Default startup seed1 и explicit MAX10 проверяются отдельным
+`AICF_RosterSpawnBatchBoundaryProbe`; незапущенный вариант не PASS.
+
 ## Продолжение #78 — 2026-10-29/30
 
 Evidence: `.codex-runtime/issue78-finalization-20261029/REPORT.md`. Общий результат

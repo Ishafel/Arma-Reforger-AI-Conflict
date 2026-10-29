@@ -2,10 +2,55 @@
 
 Владельцы не изменены: `AICF_GroupSpawner` создаёт пустой faction-correct controller,
 `AICF_GroupSlot` хранит generation и roster identity, `AICF_MatchController` связывает
-observers до единственного `RequestSpawn()`. Native `SCR_AIWorld` владеет очередью,
+observers до `BeginBoundRosterSpawn()`. Native `SCR_AIWorld` владеет очередью,
 `SCR_AIGroup.ExpandOneMember()` и `SpawnGroupMember()` — физическим созданием.
 Исходный simulation deadline30s, exact count/faction/alive readiness и экономика
 сохраняются; диагностическое наблюдение не продлевает срок и не даёт READY.
+
+## Конкуренция после admission и bounded native batch
+
+Admission не резервирует native очередь атомарно. В ordinary USSR generation2
+допуск223+5≤228 был корректен, но дальнейшая конкуренция оставила4/5 к исходному
+30s timeout. Controlled A/B с одинаковым competing `RequestSpawn(4)` воспроизвёл
+target3/5+competitor3/4 и intended229 при hard228. Это отдельная проблема от
+длительного отсутствия capacity; batch не решает последнее.
+
+`AICF_RosterSpawnBatch` работает только с explicit managed slot context после
+bind/observers/request marker. Перед каждым stock `ExpandOneMember()` повторяются
+controller/state/slot/group/generation/spawn-start/request/expected,
+EntityID/componentRpl/master/faction и точный список prefab. Global budget берётся
+по `max(active,intended)` для **всего остатка**, повторяются `CanActivateGroup`,
+`CanAIBeActivated`, faction admission и finite faction limit. Unknown закрывает
+batch. Builders/recruit/logistics сохраняют прежний `BeginRosterSpawn()` и queue.
+
+Оптимизация допустима только при пустых authored static vehicles/static waypoints/
+dynamic waypoints: иначе сохраняется полный stock `RequestSpawn()` с его эффектами.
+Перед batch очищается только native request exact собственной пустой группы через
+`PurgeSpawnRequestsForGroup`; getter очереди в API отсутствует. Каждый expansion
+требует actual count+1. Нет прироста/временный veto — один stock request на
+фактический остаток, без изменения generation/30s clocks. После смены context в
+native callback старый вызов не изменяет группу, не ставит queue и не удаляет
+successor через внешний failure path. Nested bound восстанавливает context;
+unbound callback сохраняет stock queue.
+
+Stock callbacks только фиксируют наблюдения; READY и economy commit выполняет
+прежний следующий poll. Полный batch не вызывает повторный `RequestSpawn()`.
+`ROSTER_NATIVE_BATCH_DISPATCHED` содержит created/remaining, purge count, elapsed,
+componentRpl и реальные global/faction budgets до/после. Существующие event/fields
+сохранены: pending=`max(0,expected-actual)`, owner различает `SCR_AIWORLD_REQUEST`,
+`AICF_BOUND_NATIVE_BATCH`, `AICF_BOUND_NATIVE_BATCH_THEN_SCR_AIWORLD_REQUEST`.
+Это dispatch owner, а не длина native queue.
+
+Evidence: `.codex-runtime/issue78-finalization-20261029/native-spawn-race/`.
+Actual production pair337→339: WB0/0, native0/0; before сохраняет30s timeout и
+SCRIPT(E), after native5/5 за39ms, OnAdded5/OnAll1, normal commit250/ticket1
+на следующем poll,35s неизменных EntityID/componentRpl, target requests0 и
+active/intended228/228. After fatal0/leaks0; strict resource gate FAIL28.
+Внешняя нагрузка различалась: before один US server, after он уже завершился;
+порядок competing request одинаков, runtime sequential. Typed `GetAIAgents`
+census обоих empty controllers: counted groups0, `CountTowardsAIWorldLimit()==false`,
+actual/intended неизменны. Controller overhead не причина именно этого stock case;
+другие prefab этим не доказаны.
 
 ## Что измеряет snapshot
 
