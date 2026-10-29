@@ -79,3 +79,36 @@ server/client logs: визуальный PASS не отменяет native persi
 в [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md); их compile/runtime итог подводится
 отдельно. Добавление этого checklist не снимает строгие blockers #78 и не
 является объявлением ACCEPTED.
+
+## Native camera/resource blocker — 29.10.2026
+
+Текущие game/server/Workbench binaries имеют version1.8.0.13; несовпадение
+версий этим исследованием не обнаружено. Avatar-only control с настоящим
+player entity, но без вызовов editor/preview builders AICF, дал native0/0/0,
+полные stopped logs/fatal0/leaks0 и0 camera overlaps. Его70 exact error groups
+составляют baseline остальных resource/font/texture ошибок, а не whitelist.
+
+Отдельный минимальный native-only control содержит только
+`AICF_VehicleNativeControl.c`, `AICF_PersistenceReconnectTrace.c` и
+`AICF_StockLightingNativeControl.c`, без всех production Scripts AICF. Он создаёт
+штатный `InspectionPreview` world/camera и через `SpawnEntityPrefab` загружает
+неизменённый `InventoryPreviewWorld.et` с GUID4391FE7994EE6FE2. На1.8.0.13 native0/0,
+scene_present1/private1/same_world1; внутри этого единственного native spawn
+воспроизводятся все8 HDR/SMAA `Overlapping PP effects ... overwrites empty effect`.
+Это терминальная проверка конструктора, не визуальная проверка изображения.
+
+Evidence `.codex-runtime/issue78-finalization-20261029/backend-native-stock-lighting-v1/`
+и role profiles/launcher/exit с тем же label. Fixture включается только
+`-aicfStockLightingControl 1`; запуск через canonical launcher с native-control
+flags описан в [TEST_FIXTURES.md](TEST_FIXTURES.md). В native-only control остаются
+и прочие native errors; его общий full-log gate не объявляется PASS.
+
+Изолированные A/B `preview-inspection-v1`, `preview-native-lighting-v2` и
+`preview-owned-manager-v3` не устранили8 camera errors и **не перенесены в
+production**. Последний вариант не подтвердил готовность preview; отсутствие
+READY readback при34 UI/model checks показывает границу этих проверок.
+Generated `ItemPreviewManagerEntity` не гарантирует принадлежность возвращённого
+cached mesh миру manager и его удаление вместе с manager. Без доказательства
+ownership/полноты mesh менять существующий preview этим способом нельзя.
+Штатные lighting и исходный production preview сохранены. Читаемость, внешний
+вид и полный rendered mesh остаются визуальными NOT RUN по прежним правилам.
