@@ -36,6 +36,7 @@ class AICF_InfantryRecruitmentOrder
 	SCR_AIGroup m_Donor;
 	EntityID m_DonorId;
 	int m_iSpawnAtMs;
+	bool m_bNativeCapacityWaiting;
 	ResourceName m_sPrefab;
 	int m_iMemberIndex;
 	string m_sRole;

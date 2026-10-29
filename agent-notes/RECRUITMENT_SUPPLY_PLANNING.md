@@ -1,5 +1,39 @@
 # Планирование снабжения и приоритет набора пехоты
 
+## Native capacity перед созданием donor
+
+Managed agent limit и native global AI budget — разные ограничения. До
+`BeginRecruit` служба проверяет `AICF_SpawnAdmission.InspectRecruit`: текущие
+active/intended/hard, `CanAIBeActivated`, missing members обеих SPAWNING faction
+states и ещё не материализованные другие donors. Requested равен одному.
+Уже живой donor повторно не резервируется; собственный ожидающий donor ещё не
+создан и не создаёт вечное ожидание своей же reservation. Положительный native
+`CanActivateGroup` для пустой/dormant группы не заменяет room для actor.
+
+Отказ сохраняет текущий order/token и первоначальный total visit deadline.
+Нет donor entity, RequestSpawn, нового spawn timer или оплаты. After release
+работает прежняя асинхронная materialisation/readiness, native30s timeout и
+оплата непосредственно перед physical join. Дедлайны визита, FIFO/ручной
+приоритет, supplies demand и лимиты не увеличиваются. Context берётся из того
+же authoritative `Update` и повторно связывается с exact slot/order/graph.
+
+`INFANTRY_RECRUIT_NATIVE_CAPACITY_WAIT/RELEASED` содержат budget math и неизменный
+token; `INFANTRY_RECRUIT_NATIVE_SPAWN` при REQUEST/INVALID_OR_TIMEOUT добавляет
+native actual/wrong/nonalive, global counters, dormant/intended и реальные
+dispatch/expansion counters. Native queue length явно помечена как недоступная.
+Старые v8 donor timeout без этих counters сохраняют причину UNKNOWN.
+
+`Test-RecruitmentNativeAdmissionContracts.ps1` исполняет extracted request1
+admission и проверяет concurrent/missing/dormant/unknown cases. Изолированный
+`AICF_RecruitmentCapacityProbe.c` (`-aicfRecruitCapacityProbe 1`) отдельно
+останавливает fixture budget writer, временно устанавливает native hard limit,
+наблюдает≥35s без donor/request/debit, восстанавливает первоначальный limit на65s
+и требует реального оплаченного join того же current physical order. Stop всегда
+восстанавливает исходный limit и снимает CallLater; лечение/телепортация отсутствуют.
+Это fault injection, а не ordinary-war или исправление конкретного старого v8.
+Полный результат разбирает `Test-RecruitmentCapacityLog.ps1`; sibling native и
+resource FAIL не скрываются.
+
 ## Bounded подход к казарме
 
 После native STUCK прежние две repair attempts могут выбрать другой endpoint

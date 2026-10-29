@@ -70,6 +70,24 @@ class AICF_SpawnAdmission
 		return m_bCanActivate && FitsCounts(m_iActive, m_iIntended, m_iLimit, m_iPending, m_iRequested);
 	}
 
+	static AICF_SpawnAdmission InspectRecruit(AIWorld world, AICF_FactionState us, AICF_FactionState ussr, int unmaterializedRecruits)
+	{
+		AICF_SpawnAdmission result = new AICF_SpawnAdmission();
+		result.m_iRequested = 1;
+		if (!world || !us || !ussr || unmaterializedRecruits < 0) return result;
+		result.m_iActive = world.GetCurrentNumOfActiveAIs();
+		result.m_iIntended = world.GetActiveGroupIntendedCount();
+		result.m_iLimit = world.GetLimitOfActiveAIs();
+		result.m_bCanActivate = world.CanAIBeActivated();
+		// Donor ещё не создан; его own reservation отсутствует. Живые donor actors
+		// уже учтены native counters, добавляются только отсутствующие materialisations.
+		int usPending = MissingFaction(us, null);
+		int ussrPending = MissingFaction(ussr, null);
+		if (usPending >= 0 && ussrPending >= 0)
+			result.m_iPending = usPending + ussrPending + unmaterializedRecruits;
+		return result;
+	}
+
 	string Details()
 	{
 		return string.Format("active=%1 intended=%2 hard_limit=%3 pending=%4 requested=%5 projected=%6 global_can_activate=%7 reservation_policy=CONSERVATIVE_MISSING_MEMBERS",
