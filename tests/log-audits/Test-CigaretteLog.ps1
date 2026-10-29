@@ -10,6 +10,7 @@ $index=[array]::IndexOf($argv,'-aicfCigaretteProbe')
 $failures=@()
 if($index -lt 0 -or $argv[$index+1] -ne '1' -or @($argv|Where-Object {$_ -eq '-aicfCigaretteProbe'}).Count -ne 1 -or $log -notmatch 'CLI Params:[^\r\n]*-aicfCigaretteProbe 1'){$failures+='PROBE_CLI'}
 if($fullLogs -match 'Assertion failed|Attempt to modify locked entity|Access violation'){$failures+='NATIVE_ASSERT'}
+if($fullLogs -match 'ParticleEffectComponent:\s*Suspicious parent velocity'){$failures+='PARTICLE_POSE_VELOCITY'}
 if($fullLogs -match 'SCRIPT\s+\([EF]\)|ENGINE\s+\(F\)|NULL pointer|Virtual Machine Exception'){$failures+='FULL_LOG_FATAL'}
 $cases=@([regex]::Matches($log,'\[CIGARETTE_CASE\] case=(\w+) cycle=(\d+) pass=([01])'))
 $names=@('PARENT','PROP','COMPONENT','FRAME_MASK','PLAYBACK','DETACH','DELETE')
