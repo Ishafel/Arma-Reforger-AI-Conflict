@@ -78,6 +78,38 @@ modded class SCR_AIGroup
 {
 	protected bool m_bAICFSafeInfantrySpawn;
 	protected int m_iAICFPlacementRetryAt;
+	protected int m_iAICFExpansionCalls;
+	protected int m_iAICFExpansionSucceeded;
+	protected int m_iAICFMemberSpawnCalls;
+	protected int m_iAICFPlacementDeferred;
+	protected int m_iAICFSpawnWithoutAgent;
+	protected int m_iAICFLastExpansionAt;
+	protected int m_iAICFLastMemberSpawnAt;
+	protected int m_iAICFLastMemberIndex = -1;
+	protected string m_sAICFLastSpawnBoundary = "NOT_DISPATCHED";
+
+	string AICF_DescribeSpawnDispatch()
+	{
+		int expansionAge = -1;
+		int memberAge = -1;
+		if (m_iAICFLastExpansionAt > 0) expansionAge = System.GetTickCount(m_iAICFLastExpansionAt);
+		if (m_iAICFLastMemberSpawnAt > 0) memberAge = System.GetTickCount(m_iAICFLastMemberSpawnAt);
+		string details = string.Format("spawn_boundary=%1 expansion_calls=%2 expansion_successes=%3 expansion_age_ms=%4 member_spawn_calls=%5 member_spawn_age_ms=%6 member_last_index=%7 placement_deferred=%8 spawn_without_agent=%9",
+			m_sAICFLastSpawnBoundary, m_iAICFExpansionCalls, m_iAICFExpansionSucceeded, expansionAge,
+			m_iAICFMemberSpawnCalls, memberAge, m_iAICFLastMemberIndex, m_iAICFPlacementDeferred, m_iAICFSpawnWithoutAgent);
+		return details;
+	}
+
+	override bool ExpandOneMember()
+	{
+		if (!m_bAICFSafeInfantrySpawn || !Replication.IsServer()) return super.ExpandOneMember();
+		m_iAICFExpansionCalls++;
+		m_iAICFLastExpansionAt = System.GetTickCount();
+		m_sAICFLastSpawnBoundary = "EXPAND_DISPATCHED";
+		bool expanded = super.ExpandOneMember();
+		if (expanded) m_iAICFExpansionSucceeded++;
+		return expanded;
+	}
 
 	void AICF_EnableSafeInfantrySpawn()
 	{
@@ -89,9 +121,14 @@ modded class SCR_AIGroup
 	{
 		if (!m_bAICFSafeInfantrySpawn || !Replication.IsServer() || editMode)
 			return super.SpawnGroupMember(snapToTerrain, index, res, editMode, isLast);
+		m_iAICFMemberSpawnCalls++;
+		m_iAICFLastMemberSpawnAt = System.GetTickCount();
+		m_iAICFLastMemberIndex = index;
+		m_sAICFLastSpawnBoundary = "PLACEMENT_RETRY_BACKOFF";
 		if (System.GetTickCount() < m_iAICFPlacementRetryAt)
 			return false;
 		RplComponent rpl = RplComponent.Cast(FindComponent(RplComponent));
+		m_sAICFLastSpawnBoundary = "AUTHORITY_VETO";
 		if (!rpl || !rpl.IsMaster())
 			return false;
 		AIFormationComponent formation = AIFormationComponent.Cast(FindComponent(AIFormationComponent));
@@ -102,6 +139,8 @@ modded class SCR_AIGroup
 		vector position;
 		if (!AICF_InfantrySpawnPlacement.FindPosition(this, requested, position))
 		{
+			m_iAICFPlacementDeferred++;
+			m_sAICFLastSpawnBoundary = "PLACEMENT_NO_SAFE_CONNECTED_POSITION";
 			m_iAICFPlacementRetryAt = System.GetTickCount() + 1000;
 			AICF_Stage35Diagnostics.Warning("INFANTRY_SPAWN_PLACEMENT_DEFERRED",
 				string.Format("group=%1 member=%2 requested=%3 reason=NO_SAFE_CONNECTED_POSITION", GetID(), index, requested));
@@ -111,9 +150,20 @@ modded class SCR_AIGroup
 		// сдвигаем только пустой controller/anchor, сохраняя stock создание,
 		// callbacks, roster identity и retry. Существующие бойцы не перемещаются.
 		vector origin = GetOrigin();
+		int agentsBefore = GetAgentsCount();
 		SetOrigin(origin + position - requested);
 		bool spawned = super.SpawnGroupMember(false, index, res, editMode, isLast);
 		SetOrigin(origin);
+		m_sAICFLastSpawnBoundary = "STOCK_MEMBER_RETRY";
+		if (spawned)
+		{
+			m_sAICFLastSpawnBoundary = "STOCK_MEMBER_CREATED";
+			if (GetAgentsCount() <= agentsBefore)
+			{
+				m_iAICFSpawnWithoutAgent++;
+				m_sAICFLastSpawnBoundary = "STOCK_SUCCESS_WITHOUT_AGENT";
+			}
+		}
 		if (spawned)
 			AICF_Stage35Diagnostics.Info("INFANTRY_SPAWN_PLACEMENT",
 				string.Format("group=%1 member=%2 requested=%3 selected=%4 shift_m=%5", GetID(), index, requested, position, vector.DistanceXZ(requested, position)));

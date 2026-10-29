@@ -252,6 +252,7 @@ class AICF_GroupSlot
 	protected bool m_bObjectiveHoldReported;
 	protected bool m_bLoadBlockReported;
 	protected bool m_bAgentLimitBlockReported;
+	protected bool m_bNativeSpawnCapacityReported;
 	protected bool m_bPendingOrderRecoveryCountsAsStuck;
 	protected bool m_bPendingOrderRecoveryCountsAsReliabilityAttempt;
 	protected bool m_bUnexplainedMobIdleDeadlineReported;
@@ -1603,6 +1604,16 @@ class AICF_GroupSlot
 		m_bAgentLimitBlockReported = false;
 	}
 
+	bool MarkNativeSpawnCapacityReported()
+	{
+		if (m_bNativeSpawnCapacityReported) return false;
+		m_bNativeSpawnCapacityReported = true;
+		return true;
+	}
+
+	bool HasNativeSpawnCapacityReport() { return m_bNativeSpawnCapacityReported; }
+	void ResetNativeSpawnCapacityReport() { m_bNativeSpawnCapacityReported = false; }
+
 	bool MarkPersistentStuckReported()
 	{
 		if (m_bPersistentStuckReported)
@@ -2855,6 +2866,7 @@ class AICF_GroupSlot
 		m_bLoadBlockReported = false;
 		m_bAgentLimitBlockReported = false;
 		m_bPlayerStrategicOrder = false;
+		m_bNativeSpawnCapacityReported = false;
 		m_bAwaitingPlayerCommand = false;
 		m_bSystemHoldOrder = false;
 		m_bCommandWaitingReported = false;

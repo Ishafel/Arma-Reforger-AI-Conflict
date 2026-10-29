@@ -7,6 +7,8 @@
 
 | Задача | Что читать |
 |---|---|
+| Разобрать неполный native spawn и очередь замены отрядов | [GROUP_SPAWN.md](GROUP_SPAWN.md), GroupRuntime/InfantrySpawnPlacement и controlled replacement stress |
+| Исправить persistence leaks при direct-connect без backend identity | [PERSISTENCE_IDENTITY.md](PERSISTENCE_IDENTITY.md), native SpawnLogic identity boundary и separate client/JIP gate |
 | Изменить поведение TRANSPORT/COMBAT, N возврата, замену потерь и разрешённую короткую принудительную посадку | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md), BehaviorFlow/Policy/ShortRecovery и retained TACTICAL_DEPLOYMENT |
 | Разобрать native UNKNOWN во время подхода к площадке техники | [VEHICLE_APPROACH_FAILURE.md](VEHICLE_APPROACH_FAILURE.md); exact phase-owned failure receipt и отдельный controlled native probe |
 | Передать игроку визуальную проверку окна техники и подтверждения состава | [VEHICLE_VISUAL_CHECK.md](VEHICLE_VISUAL_CHECK.md); terminal probes не заменяют этот NOT RUN |

@@ -43,6 +43,16 @@ class AICF_InfantryRecruitmentService
 		return count;
 	}
 
+	// Donor содержит ровно один requested member. Уже появившийся donor входит
+	// в native active/intended и не должен второй раз резервировать native budget.
+	int CountUnmaterializedAgents()
+	{
+		int count;
+		foreach (AICF_InfantryRecruitmentOrder order : m_aOrders)
+			if (order && order.m_Donor && order.m_Donor.GetAgentsCount() < 1) count++;
+		return count;
+	}
+
 	bool IsCurrentOrder(AICF_InfantryRecruitmentOrder order)
 	{
 		if (!Replication.IsServer() || m_bStopped || !order || !m_Campaign ||

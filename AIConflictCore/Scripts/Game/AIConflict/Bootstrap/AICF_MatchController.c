@@ -1954,6 +1954,26 @@ class AICF_MatchController
 					managedAgentLimit));
 		}
 
+		int unmaterializedRecruits;
+		if (m_InfantryRecruitment) unmaterializedRecruits = m_InfantryRecruitment.CountUnmaterializedAgents();
+		AICF_SpawnAdmission nativeAdmission = AICF_SpawnAdmission.Inspect(GetGame().GetAIWorld(), m_USState, m_USSRState, slot, unmaterializedRecruits);
+		if (!nativeAdmission.CanAdmit())
+		{
+			slot.PostponeReinforcementUntil(nowMs + UPDATE_INTERVAL_MS);
+			if (slot.MarkNativeSpawnCapacityReported())
+				AICF_Stage1Diagnostics.Info("GROUP_SPAWN_NATIVE_CAPACITY_WAIT",
+					string.Format("faction=%1 slot=%2 stable_slot=%3 generation=%4 generation_unchanged=1 ",
+						faction.GetFactionKey(), slot.GetSlotId(), slot.GetStableSlotKey(), slot.GetSpawnGeneration()) + nativeAdmission.Details());
+			return;
+		}
+		if (slot.HasNativeSpawnCapacityReport())
+		{
+			slot.ResetNativeSpawnCapacityReport();
+			AICF_Stage1Diagnostics.Info("GROUP_SPAWN_NATIVE_CAPACITY_RELEASED",
+				string.Format("faction=%1 slot=%2 stable_slot=%3 generation=%4 generation_unchanged=1 ",
+					faction.GetFactionKey(), slot.GetSlotId(), slot.GetStableSlotKey(), slot.GetSpawnGeneration()) + nativeAdmission.Details());
+		}
+
 		if (!economyEnabled && !factionState.TryReserveDeployment(AICF_EDeploymentKind.REPLACEMENT))
 			return;
 

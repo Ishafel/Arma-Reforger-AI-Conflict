@@ -316,6 +316,11 @@ class AICF_GroupRuntime
 		int aiFactionLimit = -1;
 		int aiFactionCanAdd = -1;
 		int aiLastTickEvictions = -1;
+		int aiActive = -1;
+		int aiHardLimit = -1;
+		int aiIntended = -1;
+		int groupCanActivate = -1;
+		int aiCanActivate = -1;
 		ChimeraAIWorld aiWorld = ChimeraAIWorld.Cast(GetGame().GetAIWorld());
 		if (aiWorld)
 		{
@@ -325,6 +330,16 @@ class AICF_GroupRuntime
 			if (aiWorld.CanLimitedAIBeAddedForFaction(expectedFactionKey))
 				aiFactionCanAdd = 1;
 			aiLastTickEvictions = aiWorld.GetLastTickEvictions();
+			aiActive = aiWorld.GetCurrentNumOfActiveAIs();
+			aiHardLimit = aiWorld.GetLimitOfActiveAIs();
+			aiIntended = aiWorld.GetActiveGroupIntendedCount();
+			aiCanActivate = 0;
+			if (aiWorld.CanAIBeActivated()) aiCanActivate = 1;
+			if (group)
+			{
+				groupCanActivate = 0;
+				if (aiWorld.CanActivateGroup(group)) groupCanActivate = 1;
+			}
 		}
 
 		int requested;
@@ -395,6 +410,15 @@ class AICF_GroupRuntime
 			aiLastTickEvictions,
 			ResolveSpawnIncompleteReason(expectedFaction, slot, expectedCount),
 			roster);
+		details += string.Format(" ai_active=%1 ai_hard_limit=%2 ai_intended=%3 group_can_activate=%4 ai_can_activate=%5",
+			aiActive, aiHardLimit, aiIntended, groupCanActivate, aiCanActivate);
+		if (group)
+		{
+			details += string.Format(" group_importance=%1 group_intended=%2 dormant=%3 dormant_alive=%4 dormant_dead=%5 expand_complete=%6 lifecycle_policy=%7 ",
+				group.GetImportance(), group.GetIntendedActiveCount(), group.IsDormant(), group.GetDormantAliveCount(),
+				group.GetDormantDeadCount(), group.IsExpandComplete(), group.GetLifecyclePolicy());
+			details += group.AICF_DescribeSpawnDispatch();
+		}
 		return details;
 	}
 
