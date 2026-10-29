@@ -512,3 +512,28 @@ MOVING2→4→6 ещё PENDING. Строгие28 raw sibling resource errors о�
 Ранние US/USSR coverage FAIL без ворот и v4 diagnostic binding/oracle FAIL
 сохранены отдельно. Evidence `gate-expiry/native-gatehq-v5/` под finalization root;
 точные пути/commands/source hashes находятся в отчёте владельца fixture.
+
+### Покрытие короткого terrain recovery
+
+`multi-moving-v8` прошёл MOVING2+2 в течение31.931s, затем US1 исчерпал два
+исходных mobility attempts: старые16 search centers давали только две свободные
+terrain точки, обе возле постороннего живого бойца. Native GetOut завершился
+`NATIVE_GROUP_ABANDONED_VEHICLE`. Это сохранённый FAIL;4/6 не доказаны.
+
+Терминальный geometry repro на той же позе и модели подтвердил пропущенные
+безопасные точки. Поиск теперь ограничен32 направлениями и четырьмя rings
+8/13/6/10.5м; исходные восемь направлений идут первыми внутри каждого ring.
+Новые направления первого ring идут раньше старого второго ring. Прежние
+пределы4..15м, hazard clearance6м, identity/player/occupancy fences и два attempts
+сохранены. Живые чужие бойцы и pressure triggers по-прежнему запрещают candidate.
+
+`Test-UnstuckSearchCoverageContracts.ps1` исполняет извлечённый production builder:
+55 checks, включая порядок, уникальность, единичные направления, поворот и
+ограниченное покрытие. Native controlled sampler-v3: WB0/native0/fatal0,8 checks
+PASS; старые точки отклонены из-за чужого бойца, actual production sampler выбрал
+новую точку с3D correction8.00069м за2ms. Затем native Pilot проехал17.374м,
+здоровье original5 и машины не изменилось. Это локальная проверка sampler;
+новый полный MOVING2→4→6 остаётся PENDING до завершения Multi-v9. Raw sibling
+resource errors сохранены отдельно как FAIL. Диагностические координаты живут
+только в ignored evidence fixtures; подробные команды, frozen SHA и прежние
+fixture readiness FAIL находятся в `movement/REPORT.md` finalization evidence.

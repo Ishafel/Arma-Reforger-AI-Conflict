@@ -154,6 +154,9 @@ class AICF_VehicleTransitFlow
 	protected static const float UNSTUCK_SEARCH_RADIUS_METERS = 3.0;
 	protected static const float UNSTUCK_OUTER_OFFSET_METERS = 13.0;
 	protected static const float UNSTUCK_OUTER_SEARCH_RADIUS_METERS = 2.0;
+	protected static const float UNSTUCK_INNER_OFFSET_METERS = 6.0;
+	protected static const float UNSTUCK_MIDDLE_OFFSET_METERS = 10.5;
+	protected static const int UNSTUCK_DIRECTION_COUNT = 32;
 	protected static const float UNSTUCK_MIN_DISPLACEMENT_METERS = 4.0;
 	protected static const float UNSTUCK_MAX_DISPLACEMENT_METERS = 15.0;
 	protected static const float UNSTUCK_HAZARD_CLEARANCE_METERS = 6.0;
@@ -1696,24 +1699,18 @@ class AICF_VehicleTransitFlow
 		if (targetDirection.LengthSq() < 0.01)
 			targetDirection = "0 0 1";
 		targetDirection.Normalize();
-		vector rightDirection = Vector(targetDirection[2], 0, -targetDirection[0]);
-
-		array<vector> searchDirections = {};
-		searchDirections.Insert(targetDirection);
-		searchDirections.Insert(-targetDirection);
-		searchDirections.Insert(rightDirection);
-		searchDirections.Insert(-rightDirection);
-		searchDirections.Insert((targetDirection + rightDirection).Normalized());
-		searchDirections.Insert((targetDirection - rightDirection).Normalized());
-		searchDirections.Insert((-targetDirection + rightDirection).Normalized());
-		searchDirections.Insert((-targetDirection - rightDirection).Normalized());
+		array<vector> searchDirections = BuildUnstuckSearchDirections(targetDirection);
 
 		array<float> searchOffsets = {
 			UNSTUCK_OFFSET_METERS,
-			UNSTUCK_OUTER_OFFSET_METERS
+			UNSTUCK_OUTER_OFFSET_METERS,
+			UNSTUCK_INNER_OFFSET_METERS,
+			UNSTUCK_MIDDLE_OFFSET_METERS
 		};
 		array<float> searchRadii = {
 			UNSTUCK_SEARCH_RADIUS_METERS,
+			UNSTUCK_OUTER_SEARCH_RADIUS_METERS,
+			UNSTUCK_OUTER_SEARCH_RADIUS_METERS,
 			UNSTUCK_OUTER_SEARCH_RADIUS_METERS
 		};
 
@@ -1881,6 +1878,30 @@ class AICF_VehicleTransitFlow
 			rejectionSamples,
 			"EXHAUSTED");
 		return false;
+	}
+
+	// Keep the original eight choices first. Intermediate bearings and the two
+	// extra rings cover narrow clear patches without widening displacement or
+	// bypassing any terrain, live-character, mine, authority or player fence.
+	static array<vector> BuildUnstuckSearchDirections(vector targetDirection)
+	{
+		vector rightDirection = Vector(targetDirection[2], 0, -targetDirection[0]);
+		array<vector> directions = {};
+		directions.Insert(targetDirection);
+		directions.Insert(-targetDirection);
+		directions.Insert(rightDirection);
+		directions.Insert(-rightDirection);
+		directions.Insert((targetDirection + rightDirection).Normalized());
+		directions.Insert((targetDirection - rightDirection).Normalized());
+		directions.Insert((-targetDirection + rightDirection).Normalized());
+		directions.Insert((-targetDirection - rightDirection).Normalized());
+		for (int bearing; bearing < UNSTUCK_DIRECTION_COUNT; bearing++)
+		{
+			if (bearing % 4 == 0) continue;
+			float angle = bearing * Math.PI2 / UNSTUCK_DIRECTION_COUNT;
+			directions.Insert(targetDirection * Math.Cos(angle) + rightDirection * Math.Sin(angle));
+		}
+		return directions;
 	}
 
 	protected string AppendUnstuckSearchSample(
