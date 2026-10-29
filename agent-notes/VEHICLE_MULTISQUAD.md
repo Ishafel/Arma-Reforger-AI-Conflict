@@ -533,7 +533,117 @@ terrain точки, обе возле постороннего живого бо
 PASS; старые точки отклонены из-за чужого бойца, actual production sampler выбрал
 новую точку с3D correction8.00069м за2ms. Затем native Pilot проехал17.374м,
 здоровье original5 и машины не изменилось. Это локальная проверка sampler;
-новый полный MOVING2→4→6 остаётся PENDING до завершения Multi-v9. Raw sibling
-resource errors сохранены отдельно как FAIL. Диагностические координаты живут
+Полный Multi-v9 затем завершён как addressed ABORT/FAIL: после MOVING2+2 в течение
+30.876s появились initial boarding deadline USSR3, driven healthy overturn US3
+и staging exhaustion USSR2. MOVING4/6 не доказаны; каждый дефект требует своего
+исправления и новой проверки. Dense sampler при US3 overturn не вызывался,
+mobility attempts были0. Raw sibling resource errors сохранены отдельно как FAIL.
+Диагностические координаты живут
 только в ignored evidence fixtures; подробные команды, frozen SHA и прежние
 fixture readiness FAIL находятся в `movement/REPORT.md` finalization evidence.
+
+### Неподвижный manual staging actor после исчерпания двух native actions
+
+Multi-v9 выявил узкий дефект: exact owned actor оставался в36.0178м от
+rally25м после настоящих retry0/retry1 no-progress, групповой All-members waypoint
+уже был снят движком. Прежний short helper требовал этот live group waypoint и
+немедленный полный rally после переноса≤8м, поэтому полезное короткое продвижение
+не допускалось; fallback сработал при ещё46с исходного approach budget.
+
+`AICF_VehicleManualStagingRecovery` допускает второй вариант guidance: пустая
+native group queue, отсутствие current group waypoint и exact current individual
+staging task через `AICF_VehicleStagingTaskProof`. Общие guards прежние: current
+assignment/intent/base и request/preset/group generations, original component Rpl,
+reservation, authoritative AI, fit foot roster с точным cardinality (включая1),
+owned selected/executed RUNNING action, retry1/exhausted,12с без progress и5с без
+физического движения. Foreign waypoint/action либо неизвестный roster запрещают
+коррекцию. Другой уже exhausted outlier также запрещает её.
+
+Разрешён один перенос original actor на2..8м по3D, vertical≤1м с native placement,
+projection≤0.5м, pad10..90м и продвижением к rally более1м. One-shot marker
+потребляется до asynchronous Teleport с повторными fences. Acquisition сохраняет
+тот же native action; нового action/retry/deadline/payment не создаётся. Arrival
+не утверждается: обычный readiness должен затем физически подтвердить весь roster
+и исходный hold перед настоящими spawn/debit.
+
+Новый controlled `-aicfManualStagingUnblockProbe 1` явно отделяет bounded setup
+(безопасная36м точка, setupshift≤25м и disable movement controls) от production
+коррекции.50мс observer сначала читает реальную landing≤8м с тем же native action,
+после этого возвращает controls, отдельно читает естественный walk≥1м, затем
+полный native rally и настоящие spawn/debit. Перенос не считается walking proof.
+`-aicfManualStagingExhaustionProbe 1` теперь явно вводит fixture-only отказ всех
+bounded placement candidates: одна только исходная дистанция40м больше не
+доказывает невозможность короткого продвижения. Этот отдельный fault case
+проверяет прежний bounded fallback, физический order restore и отсутствие покупки.
+Старые runtime FAIL и исходные oracle receipts сохраняются без переоценки.
+
+30.10 fresh source checks: affected6/6PASS; short helper25source mutants,
+12actual geometry,16guidance,44cardinality; fixture42negatives, logoracle76controls.
+Causal native before-v5: WB0/native0/source drift0/full stopped; реальный
+retry0 timeout12.131с, retry1 timeout12.033с, actor35.9989м,59.786с остатка
+approach deadline → ранний `SPAWN_STAGING_ACTIONS_EXHAUSTED`. Functional FAIL,
+full fatal0, strict resources28FAIL. Native after-v3 выполняется; до результата
+это не runtime PASS. Evidence `spawn/manual-unblock-before-v5/` и
+`spawn/manual-unblock-after-v3/` под `.codex-runtime/issue78-finalization-20261029/`.
+
+Условный after-v5 (тот же fixture SHA, что before-v6) подтвердил actual3D
+correction3.00012м и прежний selected/executed native action; лишь после actual
+landing observer вернул movement controls. Затем native actor прошёл1.01263м,
+все original5 физически вошли вrally до оплаты, произошла одна настоящая покупка
+и создание машины. Health и исходные deadlines неизменны. WB0/native0/source
+SHA drift0/full stopped/auditor15PASS/fullfatal0; strict resources28FAIL.
+After-v1/v2 compileFAIL отражают соседний array.Copy API mismatch; native в них
+не запускался. After-v3/v4 functionalFAIL сохранены: все bounded destination
+были отвергнуты; успешный сценарий требует явного native safeEscape preflight.
+
+Это условное доказательство механизма, без заявления о повторении динамического
+окружения Multi-v9. Отдельный read-only historical geometry-v2 проверил exact
+старые origin/staging/pad на свежем native мире: old9 имели6 safe points,
+добавочная сетка82 — ещё61. Полная91-grid проверена по actual nativeUsable,
+3D/vertical/projection/pad/progress receipts; WB0/native0/source0/fullfatal0,
+resources28FAIL. Исторические dynamic occupants не воссозданы (явныйreceipt0).
+Пропуск всех допустимых точек вold9 не доказан, поэтому production search не
+расширен. Original Multi-v9 FAIL сохраняется; практический gate — fresh Multi.
+Geometry fixture имеет10source negatives +4 gameplay-mutation vetoes,91unique
+candidates/old9prefix. Evidence `manual-historical-geometry-v2/geometry-audit.json`.
+
+Final negative `manual-exhaustion-after-v2`: strict13/13PASS, WB0/native0/source0/
+fullfatal0, resources28FAIL. Fixture ставит native-safe ordinary point220m до
+trip, чтобы близкая home цель не завершилась законным POINT_HOLD_REFRESH раньше
+проверки. Exact restored/current/queued waypoint, original identities, production
+order durability pending0/meaningful1 и старый deadline подтверждены. Oracle
+не ослаблялся. Final source audits7/7PASS; frozen9files manifest в evidence.
+Новые ordinary final-v5 US/USSR используют335 rawSHA из root manifest, старые
+FAIL не переоцениваются; outcome30min ожидается отдельно.
+
+Свежий Multi-v10 на335 byte-exact production files (`production-final-v6-manifest.json`)
+с Workbench0 завершён как **ABORTED / native-1 / audit1**, 757.606s из1800.
+Первый permanentFAIL: US/1 `SPAWN_STAGING_ACTIONS_EXHAUSTED` в00:29:18.857,
+trip-US-1-1-3, все5 живы, asset ещё отсутствует; actual selected/executed actor
+move FAILED в25.716m от staging goal. Stable cohort receipts0, MOVING4/6 не
+доказаны. Полные остановленные3 logs: script/enginefatal0; resource gateFAIL
+сохранён. Evidence `movement/multi-moving-v10/verified-final-result.json` и
+`first-failure-window.log` под `.codex-runtime/issue78-finalization-20261029/`.
+
+### Живой server при временно отсутствующей группе
+
+Latest ordinary final-v5 обеих сторон честно FAIL: USполные1800s безSCRIPTfatal,
+но routeосталсяUNPROVEN придолгомTACTICAL_DEPLOYMENT; USSR имел настоящийpartial
+replacement4/5 timeout после midspawn worldbudgetrace и отдельный heartbeatgap.
+Все исходные335SHA после остановки совпали; native0/0, полные остановленные логи
+и frozen E550 auditor verdict сохранены. Эти результаты не переоценены.
+
+Heartbeatgap имеет отдельную fixture причину: BaseSoak.Update возвращался при
+nullgroup до10s sample, хотя Proof4 уже принимал доказанное all-DEAD retirement
+и штатный capacityWAIT. Новый fixture helper вызывается перед прежним
+GROUP_UNAVAILABLE classification, сообщает actualalive0/groupNONE/currentgen,
+slotstate/nativecapacitywait/typedretirementstatus. Readiness, progress и route
+не выдумываются, production clocks не меняются;10s cadence и frozen60s gap oracle
+прежние. Новый actual extracted Update-nullbranch/helper contract проверяет6
+случаев и исполняет неизменный auditor liveness block в2случаях: настоящий
+100s hung gap остаётсяFAIL. Это исправляет сбор evidence, а не midspawn defect.
+Production staging native diagnostics добавлены отдельно без изменения поведения:
+expected/current/executed pointer+goal/entity/radius, exact actual controlagent,
+bounded raw native path/prefixfinite flags и отдельные physical/radial samples;
+никаких path-progress credits. Новые native diagnostics начинаются со свежих
+337source, старые full198/335nativePASS к ним не относятся.

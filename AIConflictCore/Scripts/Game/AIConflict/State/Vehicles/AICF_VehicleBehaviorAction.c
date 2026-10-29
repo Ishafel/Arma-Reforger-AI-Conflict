@@ -98,6 +98,23 @@ class AICF_VehicleBehaviorAction
 			System.GetTickCount() - m_iLastProgressAt >= 2000;
 	}
 
+	// Native route может остаться RUNNING вдали от entry. Повторяет только
+	// собственный незавершённый GetIn у свободного actor; физическую связь и
+	// animations не прерывает и права короткого переноса не расширяет.
+	bool CanRestartEntry()
+	{
+		SCR_AIUtilityComponent utility = ResolveOwner();
+		if (!utility || !m_Seat || m_Seat.GetVehicle() != m_Vehicle || m_Seat.GetOccupant()) return false;
+		if (m_Entry && (m_Entry.m_CompartmentToGetIn.m_Value != m_Seat ||
+			(m_Entry.GetActionState() == EAIActionState.RUNNING && !OwnsAction(utility, m_Entry)))) return false;
+		ChimeraCharacter character = ChimeraCharacter.Cast(m_Actor);
+		if (!character) return false;
+		CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+		return access && !character.IsInVehicle() && !CompartmentAccessComponent.GetVehicleIn(m_Actor) &&
+			!access.IsInCompartment() && !access.GetCompartment() && !access.IsGettingIn() &&
+			!access.IsGettingOut() && !access.IsSwitchingSeatsAnim();
+	}
+
 	// Сравниваем обе позиции actor с одним текущим положением exact seat:
 	// движение машины само по себе не даёт credit, кружение AI не сбрасывает clock.
 	bool ObserveEntryProgress(vector actorPosition, vector seatPosition, int nowMs)

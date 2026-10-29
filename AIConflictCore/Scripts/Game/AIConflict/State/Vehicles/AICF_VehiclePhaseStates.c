@@ -368,9 +368,12 @@ class AICF_VehicleBoardingState
 	protected ref array<ref AICF_VehicleAsyncFence> m_aActionFences = {};
 	protected ref AICF_VehicleBoardingTokenSet m_Tokens;
 	protected ref AICF_VehiclePassengerSeatPlan m_PassengerSeatPlan;
+	protected ref array<ref AICF_PresetQueuedApproach> m_aPresetQueueApproaches = {};
+	protected bool m_bPresetQueueActionsChanging;
 
 	void Reset()
 	{
+		ClearPresetQueueApproaches();
 		if (m_Tokens)
 			m_Tokens.CancelAllOwnerSafe();
 		m_iStartedAtMs = 0;
@@ -477,6 +480,48 @@ class AICF_VehicleBoardingState
 	AICF_EVehicleBoardingPhase GetRoleResetNextPhase() { return m_RoleResetNextPhase; }
 	bool IsPassengerPlanIssued() { return m_bPassengerPlanIssued; }
 	AICF_VehicleBoardingTokenSet GetTokens() { return m_Tokens; }
+	void MaintainPresetQueueApproach(AICF_TransportTrip trip, AICF_VehicleLease lease, AICF_VehicleBoardingActionToken token)
+	{
+		if (m_bPresetQueueActionsChanging || m_bExitEffectsApplied || !trip || trip.GetBoardingState() != this || !token) return;
+		foreach (AICF_PresetQueuedApproach existing : m_aPresetQueueApproaches)
+		{
+			if (existing.GetToken() != token) continue;
+			existing.Tick();
+			return;
+		}
+		AICF_PresetQueuedApproach approach = new AICF_PresetQueuedApproach(trip, lease, this, token);
+		m_aPresetQueueApproaches.Insert(approach);
+		approach.Tick();
+	}
+
+	void RetirePresetQueueApproach(AICF_VehicleBoardingActionToken token)
+	{
+		bool wasChanging = m_bPresetQueueActionsChanging;
+		m_bPresetQueueActionsChanging = true;
+		array<ref AICF_PresetQueuedApproach> retired = {};
+		for (int index = m_aPresetQueueApproaches.Count() - 1; index >= 0; index--)
+		{
+			AICF_PresetQueuedApproach approach = m_aPresetQueueApproaches[index];
+			if (approach.GetToken() != token) continue;
+			m_aPresetQueueApproaches.Remove(index);
+			retired.Insert(approach);
+		}
+		// Detach before native Fail callbacks can re-enter phase cleanup.
+		foreach (AICF_PresetQueuedApproach pending : retired) pending.Stop();
+		m_bPresetQueueActionsChanging = wasChanging;
+	}
+
+	void ClearPresetQueueApproaches()
+	{
+		bool wasChanging = m_bPresetQueueActionsChanging;
+		m_bPresetQueueActionsChanging = true;
+		array<ref AICF_PresetQueuedApproach> retired = {};
+		foreach (AICF_PresetQueuedApproach captured : m_aPresetQueueApproaches) retired.Insert(captured);
+		m_aPresetQueueApproaches.Clear();
+		foreach (AICF_PresetQueuedApproach approach : retired) approach.Stop();
+		m_bPresetQueueActionsChanging = wasChanging;
+	}
+	bool ArePresetQueueActionsChanging() { return m_bPresetQueueActionsChanging; }
 	AICF_VehiclePassengerSeatPlan GetPassengerSeatPlan() { return m_PassengerSeatPlan; }
 	bool AreExitEffectsApplied() { return m_bExitEffectsApplied; }
 	int GetCrewRotationScheduledAtMs() { return m_iCrewRotationScheduledAtMs; }
@@ -799,6 +844,7 @@ class AICF_VehicleBoardingState
 		if (m_bExitEffectsApplied)
 			return false;
 		m_bExitEffectsApplied = true;
+		ClearPresetQueueApproaches();
 		if (m_Tokens)
 			m_Tokens.CancelAllOwnerSafe();
 		if (m_PassengerSeatPlan)
@@ -926,6 +972,7 @@ class AICF_VehicleMovementState
 	protected ref AICF_TransportNativeCrewEntry m_NativeGunnerEntry;
 	protected ref AICF_TransportNativeGate m_NativeGate;
 	protected ref AICF_TransitMoveFailure m_TransitMoveFailure;
+	protected ref AICF_OverturnRecovery m_OverturnRecovery;
 	protected ref array<string> m_aNativeGateWindowKeys = {};
 	protected ref array<int> m_aNativeGateWindowStarts = {};
 	protected int m_iNativeGateCandidateReportAtMs;
@@ -985,6 +1032,7 @@ class AICF_VehicleMovementState
 		ClearNativeCrewEntries();
 		SetNativeGate(null);
 		m_TransitMoveFailure = null;
+		m_OverturnRecovery = null;
 		m_aNativeGateWindowKeys.Clear();
 		m_aNativeGateWindowStarts.Clear();
 		m_iNativeGateCandidateReportAtMs = 0;
@@ -1071,6 +1119,8 @@ class AICF_VehicleMovementState
 	AICF_TransportNativeGate GetNativeGate() { return m_NativeGate; }
 	AICF_TransitMoveFailure GetTransitMoveFailure() { return m_TransitMoveFailure; }
 	void SetTransitMoveFailure(AICF_TransitMoveFailure receipt) { m_TransitMoveFailure = receipt; }
+	AICF_OverturnRecovery GetOverturnRecovery() { return m_OverturnRecovery; }
+	void SetOverturnRecovery(AICF_OverturnRecovery observed) { m_OverturnRecovery = observed; }
 	void SetNativeGate(AICF_TransportNativeGate gate)
 	{
 		if (m_NativeGate == gate) return;

@@ -43,3 +43,83 @@ if(!$p.Observe((V 0 1.5),(V 0),3000)){throw 'Real vertical 3D approach ignored'}
 $mutant=New-Object JitterMutant;$mutant.m_vLastProgressPosition=V 6
 if(!$mutant.Observe((V 0 0 6),(V 0),4000)){throw 'Former jitter regression mutant unexpectedly survived'};$checks++
 "PASS Reboard approach progress: extracted production predicate rejects circles, retreat and moving vehicle credit; real 3D approach retained; read-only bounded diagnostics; controls=$checks"
+# Reproduce the observed ordinary-war gap with the actual EnsureEntry body:
+# a current RUNNING action stalled70m away must use the existing native retry,
+# while short seating remains unavailable and no remote physical move occurs.
+$entryBody=Body $flow 'EnsureEntry'
+$retryNamespace='AICFNativeRetry'+[guid]::NewGuid().ToString('N')
+$retryHarness=@'
+using System;using System.Collections.Generic;namespace RETRY_NAMESPACE {
+public enum EAIActionState{RUNNING,FAILED,COMPLETED}
+public static class System{public static int GetTickCount(){return 10000;}}
+public static class vector{public static double Distance(double a,double b){return Math.Abs(a-b);}}
+public static class AICF_GroupTrace{public static string Entity(IEntity a){return "actor";}}
+public static class AICF_VehiclePreset{public static string SeatKey(BaseCompartmentSlot s){return "seat";}}
+public static class AICF_Stage3Diagnostics{public static void Info(string name,string value){}}
+public class IEntity{public bool Current=true,ShortSafe;public double GetOrigin(){return 70;}public static implicit operator bool(IEntity x){return x!=null;}}
+public class BaseCompartmentSlot{public IEntity Occupant;public bool Reserved,Self=true;public double GetPosition(){return 0;}public IEntity GetOccupant(){return Occupant;}public bool IsReserved(){return Reserved;}public bool IsReservedBy(IEntity a){return Self;}public static implicit operator bool(BaseCompartmentSlot x){return x!=null;}}
+public class NativeEntry{public EAIActionState State=EAIActionState.RUNNING;public bool Removed;public EAIActionState GetActionState(){return State;}public bool GetRemoveAction(){return Removed;}public static implicit operator bool(NativeEntry x){return x!=null;}}
+public class TokenList:List<AICF_VehicleBehaviorAction>{public void Insert(AICF_VehicleBehaviorAction t){Add(t);}}
+public class BehaviorState{public TokenList m_aActions=new TokenList();public int m_iReboardDeadline=100000;}
+public class AICF_TransportTrip{public BehaviorState State=new BehaviorState();public BehaviorState GetBehaviorState(){return State;}public string GetOperationId(){return "trip";}}
+public class AICF_VehicleBehaviorAction{public BaseCompartmentSlot m_Seat;public NativeEntry m_Entry=new NativeEntry();public int m_iShortAttempts,m_iRetries,Retired,m_iLastProgressAt;public bool Owner=true,Blocked=true,RestartSafe=true;public AICF_VehicleBehaviorAction(AICF_TransportTrip t,IEntity a,BaseCompartmentSlot s){m_Seat=s;}public bool ResolveOwner(){return Owner;}public bool EntryBlocked(){return Blocked;}public bool CanRestartEntry(){return RestartSafe;}public void Retire(){Retired++;m_Entry=null;}public static implicit operator bool(AICF_VehicleBehaviorAction x){return x!=null;}}
+public static class AICF_VehicleShortRecovery{public static int PhysicalCalls;public static bool IsCurrentMember(AICF_TransportTrip t,IEntity a){return a.Current;}public static bool CanSeat(AICF_TransportTrip t,IEntity a,BaseCompartmentSlot s){return a.ShortSafe;}public static bool TrySeat(AICF_TransportTrip t,IEntity a,BaseCompartmentSlot s,string reason){PhysicalCalls++;return true;}}
+public class Flow{public AICF_VehicleBehaviorAction Existing;public int NativeIssues;public AICF_VehicleBehaviorAction FindAction(AICF_TransportTrip t,IEntity a){return Existing;}public void IssueEntry(AICF_TransportTrip t,AICF_VehicleBehaviorAction token,IEntity a,BaseCompartmentSlot s){NativeIssues++;token.m_Entry=new NativeEntry();}public void EnsureEntry(AICF_TransportTrip trip,IEntity actor,BaseCompartmentSlot seat) ENTRY_BODY}
+}
+'@
+Add-Type ($retryHarness.Replace('RETRY_NAMESPACE',$retryNamespace).Replace('ENTRY_BODY',$entryBody))
+$retryCases=0
+foreach($kind in @('runningStallFar','runningProgressFar','runningStallNear','nativeBudgetSpent','transition','nativeFailureFar','missingEntry','foreignReservation','staleActor','foreignSeat','ownerLost','missingToken')){
+ $actor=[Activator]::CreateInstance([type]($retryNamespace+'.IEntity'))
+ $seat=[Activator]::CreateInstance([type]($retryNamespace+'.BaseCompartmentSlot'))
+ $trip=[Activator]::CreateInstance([type]($retryNamespace+'.AICF_TransportTrip'))
+ $entryToken=[Activator]::CreateInstance([type]($retryNamespace+'.AICF_VehicleBehaviorAction'),@($trip,$actor,$seat))
+ $model=[Activator]::CreateInstance([type]($retryNamespace+'.Flow'));$model.Existing=$entryToken
+ $shortType=[type]($retryNamespace+'.AICF_VehicleShortRecovery');$shortType.GetField('PhysicalCalls').SetValue($null,0)
+ switch($kind){
+  runningProgressFar{$entryToken.Blocked=$false}runningStallNear{$actor.ShortSafe=$true}nativeBudgetSpent{$entryToken.m_iRetries=2}
+  transition{$entryToken.RestartSafe=$false}nativeFailureFar{$entryToken.m_Entry.State=[Enum]::Parse([type]($retryNamespace+'.EAIActionState'),'FAILED')}
+  missingEntry{$entryToken.m_Entry=$null}foreignReservation{$seat.Reserved=$true;$seat.Self=$false}staleActor{$actor.Current=$false}
+  foreignSeat{$entryToken.m_Seat=[Activator]::CreateInstance([type]($retryNamespace+'.BaseCompartmentSlot'))}ownerLost{$entryToken.Owner=$false}missingToken{$model.Existing=$null}
+ }
+ $model.EnsureEntry($trip,$actor,$seat)
+ $expectedNative=[int]($kind -in @('runningStallFar','nativeFailureFar','missingEntry','missingToken'))
+ $expectedPhysical=[int]($kind -eq 'runningStallNear')
+ if($model.NativeIssues -ne $expectedNative -or $shortType.GetField('PhysicalCalls').GetValue($null) -ne $expectedPhysical){throw "Actual EnsureEntry retry regression kind=$kind native=$($model.NativeIssues) expected=$expectedNative"}
+ if($kind -eq 'runningStallFar' -and ($entryToken.m_iRetries -ne 1 -or $entryToken.m_iShortAttempts -ne 0)){throw 'RUNNING far stall did not consume exactly one native-only retry'}
+ $retryCases++
+}
+"PASS Reboard native retry: actual EnsureEntry controls=$retryCases; RUNNING far stall restarts native entry, no remote physical pull, original2 retry cap and identity/transition vetoes retained"
+$restartBody=Body $token 'CanRestartEntry'
+if(!$restartBody){throw 'Missing native restart physical/ownership guard'}
+$guardNamespace='AICFRestartGuard'+[guid]::NewGuid().ToString('N')
+$guardHarness=@'
+namespace GUARD_NAMESPACE {
+public enum EAIActionState{RUNNING,FAILED,COMPLETED}
+public class SCR_AIUtilityComponent{public static implicit operator bool(SCR_AIUtilityComponent x){return x!=null;}}
+public class BaseCompartmentSlot{public int Vehicle=1;public bool Occupant;public int GetVehicle(){return Vehicle;}public bool GetOccupant(){return Occupant;}public static implicit operator bool(BaseCompartmentSlot x){return x!=null;}}
+public class CompartmentAccessComponent{public bool Linked,Inside,GettingIn,GettingOut,Switching;public BaseCompartmentSlot Seat;public static bool GetVehicleIn(ChimeraCharacter a){return a.Access!=null&&a.Access.Linked;}public bool IsInCompartment(){return Inside;}public BaseCompartmentSlot GetCompartment(){return Seat;}public bool IsGettingIn(){return GettingIn;}public bool IsGettingOut(){return GettingOut;}public bool IsSwitchingSeatsAnim(){return Switching;}public static implicit operator bool(CompartmentAccessComponent x){return x!=null;}}
+public class ChimeraCharacter{public bool InVehicle;public CompartmentAccessComponent Access=new CompartmentAccessComponent();public static ChimeraCharacter Cast(ChimeraCharacter a){return a;}public bool IsInVehicle(){return InVehicle;}public CompartmentAccessComponent GetCompartmentAccessComponent(){return Access;}public static implicit operator bool(ChimeraCharacter x){return x!=null;}}
+public class Param{public BaseCompartmentSlot m_Value;}
+public class Entry{public Param m_CompartmentToGetIn=new Param();public EAIActionState State=EAIActionState.RUNNING;public EAIActionState GetActionState(){return State;}public static implicit operator bool(Entry x){return x!=null;}}
+public class Guard{public BaseCompartmentSlot m_Seat=new BaseCompartmentSlot();public int m_Vehicle=1;public Entry m_Entry=new Entry();public ChimeraCharacter m_Actor=new ChimeraCharacter();public bool Owner=true,Owned=true;public Guard(){m_Entry.m_CompartmentToGetIn.m_Value=m_Seat;}public SCR_AIUtilityComponent ResolveOwner(){if(Owner)return new SCR_AIUtilityComponent();return null;}public bool OwnsAction(SCR_AIUtilityComponent u,Entry a){return Owned;}public bool CanRestartEntry() RESTART_BODY}
+}
+'@
+Add-Type ($guardHarness.Replace('GUARD_NAMESPACE',$guardNamespace).Replace('RESTART_BODY',$restartBody))
+$guardCases=0
+foreach($kind in @('freeOwn','missingEntry','completedReleased','ownerLost','foreignVehicle','occupied','wrongTarget','foreignRunning','missingActor','characterLinked','nativeLinked','missingAccess','inside','compartment','gettingIn','gettingOut','switching')){
+ $guard=[Activator]::CreateInstance([type]($guardNamespace+'.Guard'))
+ switch($kind){
+  missingEntry{$guard.m_Entry=$null}completedReleased{$guard.Owned=$false;$guard.m_Entry.State=[Enum]::Parse([type]($guardNamespace+'.EAIActionState'),'COMPLETED')}
+  ownerLost{$guard.Owner=$false}foreignVehicle{$guard.m_Seat.Vehicle=2}occupied{$guard.m_Seat.Occupant=$true}
+  wrongTarget{$guard.m_Entry.m_CompartmentToGetIn.m_Value=[Activator]::CreateInstance([type]($guardNamespace+'.BaseCompartmentSlot'))}
+  foreignRunning{$guard.Owned=$false}missingActor{$guard.m_Actor=$null}characterLinked{$guard.m_Actor.InVehicle=$true}
+  nativeLinked{$guard.m_Actor.Access.Linked=$true}missingAccess{$guard.m_Actor.Access=$null}inside{$guard.m_Actor.Access.Inside=$true}
+  compartment{$guard.m_Actor.Access.Seat=$guard.m_Seat}gettingIn{$guard.m_Actor.Access.GettingIn=$true}gettingOut{$guard.m_Actor.Access.GettingOut=$true}switching{$guard.m_Actor.Access.Switching=$true}
+ }
+ if($guard.CanRestartEntry() -ne ($kind -in @('freeOwn','missingEntry','completedReleased'))){throw "Actual native restart guard escaped $kind"}
+ $guardCases++
+}
+$issue=Body $flow 'IssueEntry'
+if(!$issue.Contains('if (token.OwnsAction(utility, token.m_Entry))') -or !$issue.Contains('token.m_vLastProgressPosition = actor.GetOrigin();') -or !$issue.Contains('token.m_iLastProgressAt = System.GetTickCount();') -or $issue -match 'm_iReboardDeadline\s*=|m_iRetries\s*=|m_iShortAttempts\s*='){throw 'New owned entry must reset only its local observation clock, never deadline/budget'}
+"PASS Native restart guards: extracted physical/ownership cases=$guardCases; linked/transition/foreign actor untouched; per-action progress baseline only"

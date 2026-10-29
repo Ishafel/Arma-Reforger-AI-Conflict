@@ -130,6 +130,10 @@ class AICF_VehicleStagingActionToken
 	protected float m_fCurrentDistanceMeters = -1.0;
 	protected vector m_vLastMotionOrigin;
 	protected int m_iLastMotionAtMs;
+	// Diagnostic samples are independent of readiness, retries and progress clocks.
+	protected vector m_vDiagnosticOrigin;
+	protected float m_fDiagnosticDistance;
+	protected int m_iDiagnosticAtMs;
 
 	void AICF_VehicleStagingActionToken(
 		AICF_VehicleAsyncFence fence,
@@ -156,6 +160,9 @@ class AICF_VehicleStagingActionToken
 		m_fCurrentDistanceMeters = initialDistanceMeters;
 		m_vLastMotionOrigin = reservedEntity.GetOrigin();
 		m_iLastMotionAtMs = nowMs;
+		m_vDiagnosticOrigin = reservedEntity.GetOrigin();
+		m_fDiagnosticDistance = initialDistanceMeters;
+		m_iDiagnosticAtMs = nowMs;
 	}
 
 	AICF_VehicleAsyncFence GetFence() { return m_Fence; }
@@ -167,6 +174,19 @@ class AICF_VehicleStagingActionToken
 	int GetRetryCount() { return m_iRetryCount; }
 	int GetIssuedAtMs() { return m_iIssuedAtMs; }
 	int GetLastProgressAtMs() { return m_iLastProgressAtMs; }
+	string ObserveNativeDiagnosticMotion(int nowMs)
+	{
+		if (!m_ReservedEntity) return "diagnostic_motion_available=0";
+		vector origin = m_ReservedEntity.GetOrigin();
+		vector delta = origin - m_vDiagnosticOrigin;
+		string result = string.Format("diagnostic_motion_available=1 sample_interval_ms=%1 physical_delta=%2 physical_3d_m=%3 physical_xz_m=%4 radial_delta_m=%5 no_motion_5s=%6 last_motion_age_ms=%7",
+			Math.Max(0, nowMs - m_iDiagnosticAtMs), delta, delta.Length(), vector.DistanceXZ(origin, m_vDiagnosticOrigin),
+			m_fDiagnosticDistance - m_fCurrentDistanceMeters, HasNoPhysicalMotion(nowMs, 5000), Math.Max(0, nowMs - m_iLastMotionAtMs));
+		m_vDiagnosticOrigin = origin;
+		m_fDiagnosticDistance = m_fCurrentDistanceMeters;
+		m_iDiagnosticAtMs = nowMs;
+		return result;
+	}
 	float GetBestDistanceMeters() { return m_fBestDistanceMeters; }
 	float GetCurrentDistanceMeters() { return m_fCurrentDistanceMeters; }
 	bool CaptureTaskAssignment(AICF_StrategicAssignmentSnapshot assignment)

@@ -5,6 +5,12 @@ readback проверяют состояние, но не внешний вид,
 AGENTS запрещает агенту GUI automation, screenshots и video. Этот список не
 заменяет обязательные compile/runtime gates; текущий общий результат — FAIL.
 
+`NOT RUN` здесь относится к наблюдению игроком: читаемости, clipping, полноте
+rendered mesh, физическому вводу и видимой согласованности действий. Упомянутые
+в пунктах11–12 выход/возврат, crew deferral, same vehicle, следующий приказ,
+survivor identity и неизменное здоровье имеют отдельные terminal/native gates;
+запрет GUI не делает эти функциональные критерии непроверяемыми.
+
 Использовать fixture-free сборку и точный commit/source manifest, указанные
 в последнем отчёте #78. Не подключать stage из Scenario/MultiSquad probes.
 Stock server и direct-connect client запускать в двух терминальных сессиях

@@ -104,6 +104,14 @@ UNKNOWN/UNREACHABLE — route rebuild. Исчерпанный бюджет,
 чужой handler/occupant, повреждённая машина и stale context не подавляют stock.
 Абсолютные сроки и clocks не продлеваются; Reset/ExitTransit снимают receipt.
 
+`AICF_OverturnRecovery` хранит только bounded3s observation lease здорового
+перевёрнутого manual vehicle с исходным settled AI roster. Captured assignment,
+lease и route не меняются на retry; eligibility повторяет native subgroup/Move,
+health/authority/roster fences. Read-only asset inspection может отложить только
+такой overturn, а фактическая коррекция остаётся в Transit Tick и старом mobility
+budget. Перед transform повторяются scope/window/скорость≤1 и прежние physical
+fences; state/Stop очищает observation. Helper не владеет phase, health или crew.
+
 Native vehicle record сохраняется при `TACTICAL_DEPLOYMENT → TRANSIT`: уже
 сидящие бойцы не создадут повторный `CompartmentEntered` после удаления record.
 `AICF_VehicleNativeSubgroup` восстанавливает только bookkeeping exact leased

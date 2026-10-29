@@ -1212,7 +1212,7 @@ class AICF_VehicleAcquisitionFlow
 				{
 					AICF_VehicleManualStagingRecovery recovery = new AICF_VehicleManualStagingRecovery(
 						trip, currentAssignment, requestState, plan, token, m_Spawner, m_Config.GetSpawnStagingRadiusMeters());
-					recovery.TryRecover();
+					if (recovery.TryRecover()) return;
 				}
 				ReportStagingMemberAction(
 					trip, requestState, plan, token,
@@ -1699,6 +1699,7 @@ class AICF_VehicleAcquisitionFlow
 			SPAWN_BOARDING_ENVELOPE_RADIUS_METERS,
 			Math.Max(0, plan.GetApproachDeadlineMs() - nowMs));
 		AICF_Stage4Diagnostics.Info(eventName, details);
+		AICF_StagingNativeDiagnostics.Report(trip, requestState, plan, token, eventName, reason, nowMs);
 	}
 
 	// Запас фиксируется при планировании: опросы и повтор waypoint его не продлевают.

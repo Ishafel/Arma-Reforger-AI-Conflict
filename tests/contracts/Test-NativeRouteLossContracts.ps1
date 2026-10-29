@@ -11,7 +11,8 @@ function Rules([string]$s,[string]$p){
  $arrival=$tick.IndexOf('state.GetRouteGeneration() > 0 && targetDistanceMeters <= m_Config.GetDismountDistanceMeters()')
  $lost=$tick.IndexOf('RecoverLostNativeRoute(trip, causationId)')
  if($arrival -lt 0 -or $lost -lt $arrival -or $tick.IndexOf('state.GetAssignmentRevision() != trip.GetAssignment().GetAssignmentRevision()') -gt $arrival -or $lost -gt $tick.IndexOf('if (!state.GetRouteWaypoint())')){'STAGED_CURRENT_ARRIVAL_THEN_LOST_THEN_FREE_PREPARE'}
- foreach($guard in @('behavior.InspectTransit(trip, causationId)','AdvancePendingNativeCrewEntries(trip, causationId, nowMs)','ObserveNativeCombat(trip, causationId, nowMs)','ObserveNativeGate(trip, causationId, nowMs)','ProcessMandatoryCrew(trip, causationId, nowMs)','trip.IsDeadlineReached(nowMs)','InspectRouteAssetFailure(trip)')){if($tick.IndexOf($guard) -lt 0 -or $tick.IndexOf($guard) -gt $lost){'EXISTING_OWNERS_HEALTH_AND_DEADLINE_FIRST';break}}
+ foreach($guard in @('behavior.InspectTransit(trip, causationId)','AdvancePendingNativeCrewEntries(trip, causationId, nowMs)','ObserveNativeCombat(trip, causationId, nowMs)','ObserveNativeGate(trip, causationId, nowMs)','ProcessMandatoryCrew(trip, causationId, nowMs)','trip.IsDeadlineReached(nowMs)','InspectVehicleFailure(trip.GetLease().GetVehicle())')){if($tick.IndexOf($guard) -lt 0 -or $tick.IndexOf($guard) -gt $lost){'EXISTING_OWNERS_HEALTH_AND_DEADLINE_FIRST';break}}
+ if($tick -notmatch '(?s)if \(vehicleFailure == "VEHICLE_OVERTURNED"\)\s*\{\s*AICF_TripOutcome overturn = RecoverHealthyOverturn\(trip, causationId\);\s*if \(overturn\) return overturn;\s*\}\s*ReportVehicleFailureSnapshot\(trip, vehicleFailure\);\s*AbortOwnedActions\(trip\);\s*return AICF_TripOutcome.FallbackToFoot\(vehicleFailure, causationId\);'){'EXISTING_OWNERS_HEALTH_AND_DEADLINE_FIRST'}
  if(!$needs.Contains('return cachedBound && routeGeneration > 0 && (!route || !queued.Contains(route));') -or ($needs+$recover).Contains('GetCurrentWaypoint')){'EXACT_ACTUAL_QUEUE_NOT_CURRENT_OR_CACHED_ONLY'}
  foreach($g in @('trip.GetAssignment().GetGroup().GetWaypoints(queued);','NeedsRouteQueueRecovery(state.IsRouteWaypointBound(), state.GetRouteGeneration(), state.GetRouteWaypoint(), queued)','if (!state.BeginMobilityRecovery())','NATIVE_ROUTE_WAYPOINT_LOST_RECOVERY_EXHAUSTED','return BeginMobilityRecovery(trip, causationId, reason, false);')){if(!$recover.Contains($g)){'EXISTING_BUDGET_AND_ROUTE_ONLY_REBUILD';break}}
  if((ConvertTo-AICFCodeText $recover) -match 'SetOrigin|Teleport|SetHealth|Reset\(|\.Begin\(|ConfirmRouteWaypointBound|AddWaypoint|RollbackUncommitted|m_i.*Deadline\s*=|m_i.*Attempts\s*='){'NO_FREE_REBIND_REARM_CLOCK_OR_PHYSICAL_MUTATION'}
@@ -34,6 +35,8 @@ function Rules([string]$s,[string]$p){
 }
 $issues=@(Rules $flow $fixture);if($issues.Count){throw "Native route loss: $issues"};$checks=1
 foreach($m in @(
+ @('f','InspectVehicleFailure(trip.GetLease().GetVehicle())','string.Empty','EXISTING_OWNERS_HEALTH_AND_DEADLINE_FIRST'),
+ @('f','if (vehicleFailure == "VEHICLE_OVERTURNED")','if (true)','EXISTING_OWNERS_HEALTH_AND_DEADLINE_FIRST'),
  @('f','cachedBound && routeGeneration > 0 && (!route || !queued.Contains(route))','cachedBound','EXACT_ACTUAL_QUEUE_NOT_CURRENT_OR_CACHED_ONLY'),
  @('f','state.GetRouteGeneration() > 0 && targetDistanceMeters <= m_Config.GetDismountDistanceMeters()','targetDistanceMeters <= m_Config.GetDismountDistanceMeters()','STAGED_CURRENT_ARRIVAL_THEN_LOST_THEN_FREE_PREPARE'),
  @('f','if (!state.BeginMobilityRecovery())','if (false)','EXISTING_BUDGET_AND_ROUTE_ONLY_REBUILD'),

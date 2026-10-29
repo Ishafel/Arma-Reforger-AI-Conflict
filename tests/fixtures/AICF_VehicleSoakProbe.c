@@ -422,6 +422,30 @@ modded class AICF_MatchController
 		return found;
 	}
 
+	protected void AICF_VehicleSoakHeartbeat(AICF_GroupSlot slot, SCR_CampaignFaction faction, AICF_TransportTrip trip, int now)
+	{
+		if (!slot || !faction || now < m_iVehicleSoakNextSample) return;
+		int alive = AICF_GroupRuntime.CountAliveAgents(slot.GetGroup());
+		m_iVehicleSoakNextSample = now + 10000;
+		string phase = "NONE";
+		string reason = "NONE";
+		string retirement = "NONE";
+		if (trip)
+		{
+			phase = AICF_Stage3Diagnostics.TripPhaseToString(trip.GetPhase());
+			reason = trip.GetLastTransitionReason();
+			AICF_TripRetirementObservation evidence = trip.ObserveCapturedDeadRetirement();
+			if (evidence) retirement = typename.EnumToString(AICF_ETripRetirementObservation, evidence.GetStatus());
+		}
+		string details = string.Format("stage=%1 alive=%2 desired=%3 generation=%4 group=%5 trip_phase=%6 trip_reason=%7 recruiting=%8 route_complete=%9",
+			m_iVehicleSoakPhase, alive, slot.GetDesiredSize(), slot.GetSpawnGeneration(), AICF_GroupTrace.Entity(slot.GetGroup()),
+			phase, reason, slot.IsRecruitingInfantry(), m_bVehicleSoakFootArrived);
+		details += string.Format(" group_present=%1 slot_state=%2 native_capacity_wait=%3 retirement_status=%4",
+			slot.GetGroup() != null, typename.EnumToString(AICF_EGroupSlotState, slot.GetState()), slot.HasNativeSpawnCapacityReport(), retirement);
+		AICF_VehicleSoakLog("HEARTBEAT", details);
+		if (slot.GetGroup()) AICF_GroupTrace.Snapshot(slot, faction.GetFactionKey(), trip, 0, "VEHICLE_SOAK_READBACK");
+	}
+
 	protected void AICF_VehicleSoakObserve(AICF_GroupSlot slot, SCR_CampaignFaction faction, int now)
 	{
 		int alive = AICF_GroupRuntime.CountAliveAgents(slot.GetGroup());
@@ -431,21 +455,7 @@ modded class AICF_MatchController
 		AICF_TransportTrip trip;
 		if (m_VehicleCoordinator)
 			trip = m_VehicleCoordinator.GetTrip(slot);
-		if (now >= m_iVehicleSoakNextSample)
-		{
-			m_iVehicleSoakNextSample = now + 10000;
-			string phase = "NONE";
-			string reason = "NONE";
-			if (trip)
-			{
-				phase = AICF_Stage3Diagnostics.TripPhaseToString(trip.GetPhase());
-				reason = trip.GetLastTransitionReason();
-			}
-			AICF_VehicleSoakLog("HEARTBEAT", string.Format("stage=%1 alive=%2 desired=%3 generation=%4 group=%5 trip_phase=%6 trip_reason=%7 recruiting=%8 route_complete=%9",
-				m_iVehicleSoakPhase, alive, slot.GetDesiredSize(), slot.GetSpawnGeneration(), AICF_GroupTrace.Entity(slot.GetGroup()),
-				phase, reason, slot.IsRecruitingInfantry(), m_bVehicleSoakFootArrived));
-			AICF_GroupTrace.Snapshot(slot, faction.GetFactionKey(), trip, 0, "VEHICLE_SOAK_READBACK");
-		}
+		AICF_VehicleSoakHeartbeat(slot, faction, trip, now);
 		if (slot.GetGroup().GetID() != m_VehicleSoakGroupId || slot.GetSpawnGeneration() != m_iVehicleSoakGeneration)
 		{
 			AICF_VehicleSoakStopDamageObservers();
@@ -535,6 +545,9 @@ modded class AICF_MatchController
 		}
 		if (!slot.GetGroup())
 		{
+			AICF_TransportTrip waitingTrip;
+			if (m_VehicleCoordinator) waitingTrip = m_VehicleCoordinator.GetTrip(slot);
+			AICF_VehicleSoakHeartbeat(slot, faction, waitingTrip, now);
 			AICF_VehicleSoakFail("GROUP_UNAVAILABLE");
 			return;
 		}

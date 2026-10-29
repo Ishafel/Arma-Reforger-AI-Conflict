@@ -111,7 +111,7 @@ class AICF_VehicleBehaviorFlow
 		if (System.GetTickCount() - state.m_iLastReport >= 10000)
 		{
 			state.m_iLastReport = System.GetTickCount();
-			Report(trip, "DEPLOYMENT_WAIT", "LOCAL_COMBAT_OR_FOOT_ORDER");
+			Report(trip, "DEPLOYMENT_WAIT", "LOCAL_COMBAT_OR_FOOT_ORDER", combat);
 		}
 		// Боевая машина не восстанавливает потерянный экипаж в ongoing бою.
 		if (combat && trip.GetVehiclePreset().m_iBehavior == AICF_EVehicleBehavior.COMBAT)
@@ -538,20 +538,27 @@ class AICF_VehicleBehaviorFlow
 		if (token)
 		{
 			if (token.m_Seat != seat || !token.ResolveOwner()) return;
-			if (token.EntryBlocked() && token.m_iShortAttempts < 3 && AICF_VehicleShortRecovery.CanSeat(trip, actor, seat))
+			bool blocked = token.EntryBlocked();
+			if (blocked && token.m_iShortAttempts < 3 && AICF_VehicleShortRecovery.CanSeat(trip, actor, seat))
 			{
 				token.Retire();
 				if (!AICF_VehicleShortRecovery.IsCurrentMember(trip, actor)) return;
 				token.m_iShortAttempts++;
 				AICF_VehicleShortRecovery.TrySeat(trip, actor, seat, "TACTICAL_NATIVE_ENTRY_BLOCKED");
 			}
-			else if ((!token.m_Entry || token.m_Entry.GetActionState() == EAIActionState.FAILED || token.m_Entry.GetRemoveAction()) && token.m_iRetries < 2)
+			else if (blocked && token.m_iRetries < 2 && token.CanRestartEntry())
 			{
-				// Дальний actor продолжает идти штатно; короткая correction не
-				// превращается в разрешение тянуть его к машине издалека.
+				// Реальный RUNNING stall за пределами short entry тоже получает
+				// прежние два native retries; distant actor перемещается только AI.
+				int progressAge = System.GetTickCount() - token.m_iLastProgressAt;
 				token.Retire();
+				if (!AICF_VehicleShortRecovery.IsCurrentMember(trip, actor) || !token.CanRestartEntry()) return;
 				token.m_iRetries++;
 				IssueEntry(trip, token, actor, seat);
+				AICF_Stage3Diagnostics.Info("VEHICLE_REBOARD_NATIVE_RETRY", string.Format(
+					"operation_id=%1 member=%2 seat=%3 native_retry=%4 maximum_retries=2 distance_m=%5 progress_age_ms=%6 remaining_ms=%7 physical_relocation=0",
+					trip.GetOperationId(), AICF_GroupTrace.Entity(actor), AICF_VehiclePreset.SeatKey(seat), token.m_iRetries,
+					vector.Distance(actor.GetOrigin(), seat.GetPosition()), progressAge, trip.GetBehaviorState().m_iReboardDeadline - System.GetTickCount()));
 			}
 			return;
 		}
@@ -572,6 +579,11 @@ class AICF_VehicleBehaviorFlow
 			SCR_AICompartmentHandling.CompartmentClassToType(seat.Type()),
 			SCR_AIActionBase.PRIORITY_BEHAVIOR_GET_IN_VEHICLE, SCR_AIActionBase.PRIORITY_LEVEL_NORMAL);
 		utility.AddAction(token.m_Entry);
+		if (token.OwnsAction(utility, token.m_Entry))
+		{
+			token.m_vLastProgressPosition = actor.GetOrigin();
+			token.m_iLastProgressAt = System.GetTickCount();
+		}
 	}
 
 	void CancelEntries(AICF_TransportTrip trip)
@@ -594,12 +606,13 @@ class AICF_VehicleBehaviorFlow
 		AICF_VehicleBehaviorPolicy.Unregister(trip);
 	}
 
-	protected void Report(AICF_TransportTrip trip, string eventName, string reason)
+	protected void Report(AICF_TransportTrip trip, string eventName, string reason, bool localCombat = false)
 	{
 		AICF_Stage3Diagnostics.Info("VEHICLE_BEHAVIOR_" + eventName, string.Format(
 			"operation_id=%1 behavior=%2 return_distance_m=%3 vehicle=%4 deployed=%5 reboarding=%6 reason=[%7]",
 			trip.GetOperationId(), trip.GetVehiclePreset().m_iBehavior, trip.GetVehiclePreset().m_iReturnDistance,
 			AICF_GroupTrace.Entity(trip.GetLease().GetVehicle()), trip.GetBehaviorState().m_aDeployed.Count(), trip.GetBehaviorState().m_bReboarding, reason));
+		if (eventName == "DEPLOYMENT_WAIT") AICF_VehicleCombatTrace.Snapshot(trip, localCombat);
 	}
 
 	protected bool CollectBehaviorSeats(AICF_TransportTrip trip, array<BaseCompartmentSlot> seats, string context)

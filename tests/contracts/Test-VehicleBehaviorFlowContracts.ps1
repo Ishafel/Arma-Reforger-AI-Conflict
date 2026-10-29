@@ -54,7 +54,9 @@ function Rules([string]$f,[string]$t,[string]$s){
   $poll -notmatch 'state.m_iSettledPolls < 2' -or $poll -notmatch 'access.IsInCompartment\(\)' -or
   $poll -notmatch '!access.IsGettingIn\(\) && !access.IsGettingOut\(\) && !access.IsSwitchingSeatsAnim\(\)' -or
   $poll -notmatch 'CompartmentAccessComponent.GetVehicleIn\(actor\) == trip.GetLease\(\).GetVehicle\(\)'){'BOUNDED_EXACT_REBOARD_NOT_INTENT_ONLY'}
- if($entry -notmatch 'token.EntryBlocked\(\) && token.m_iShortAttempts < 3 && AICF_VehicleShortRecovery.CanSeat\(trip, actor, seat\)' -or
+ if($entry -notmatch 'bool blocked = token.EntryBlocked\(\)' -or
+  $entry -notmatch 'blocked && token.m_iShortAttempts < 3 && AICF_VehicleShortRecovery.CanSeat\(trip, actor, seat\)' -or
+  $entry -notmatch 'blocked && token.m_iRetries < 2 && token.CanRestartEntry\(\)' -or
   $entry -notmatch 'token.m_iRetries < 2' -or $entry -notmatch 'IssueEntry\(trip, token, actor, seat\)' -or
   $issue -notmatch 'seat.IsReserved\(\) && !seat.IsReservedBy\(actor\)' -or
   $issue -notmatch 'SCR_AICompartmentHandling.CompartmentClassToType\(seat.Type\(\)\)' -or

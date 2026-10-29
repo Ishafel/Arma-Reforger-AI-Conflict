@@ -12,6 +12,7 @@ class AICF_ManualStagingProbeState
 	static int s_Checks;
 	static int s_Failures;
 	static int s_SetupAt;
+	static bool s_SetupAttemptReported;
 	static int s_SubmittedAt;
 	static int s_ApproachDeadline;
 	static int s_TripDeadline;
@@ -21,6 +22,11 @@ class AICF_ManualStagingProbeState
 	static bool s_TwoAttemptsReported;
 	static bool s_LiveWaypointReported;
 	static bool s_ReissueRemovalReported;
+	static SCR_AIMoveIndividuallyBehavior s_UnblockAction;
+	static bool s_UnblockBaselineReady;
+	static vector s_UnblockBaseline;
+	static bool s_UnblockWalked;
+	static bool s_UnblockRally;
 	static AIWaypoint s_TemporaryWaypoint;
 	static bool ExhaustionEnabled()
 	{
@@ -31,6 +37,84 @@ class AICF_ManualStagingProbeState
 	{
 		string flag;
 		return System.GetCLIParam("aicfManualStagingProbe", flag) && flag == "1";
+	}
+	static bool UnblockEnabled()
+	{
+		string flag;
+		return Enabled() && System.GetCLIParam("aicfManualStagingUnblockProbe", flag) && flag == "1";
+	}
+	static bool FindControlledSetup(AICF_TransportTrip trip, AICF_VehicleSpawnPlan plan, float distance,
+		out ChimeraCharacter actor, out vector query, out vector destination)
+	{
+		for (int member = 1; member < 5; member++)
+		{
+			ChimeraCharacter candidate = ChimeraCharacter.Cast(trip.VehiclePresetMember(member));
+			if (!candidate || !candidate.GetCharacterController()) continue;
+			for (int step; step < 32; step++)
+			{
+				float angle = step * 11.25 * Math.DEG2RAD;
+				query = plan.GetStagingPosition() + Vector(Math.Cos(angle) * distance, 0, Math.Sin(angle) * distance);
+				if (vector.DistanceXZ(candidate.GetOrigin(), query) > 24.9) continue;
+				if (!AICF_InfantrySpawnPlacement.IsUsable(trip.GetAssignment().GetGroup(), query, destination) ||
+					vector.Distance(candidate.GetOrigin(), destination) > 25 || vector.DistanceSqXZ(query, destination) > 0.25) continue;
+				if (UnblockEnabled() && !HasControlledEscape(trip, plan, destination)) continue;
+				actor = candidate;
+				return true;
+			}
+		}
+		return false;
+	}
+	static bool HasControlledEscape(AICF_TransportTrip trip, AICF_VehicleSpawnPlan plan, vector origin)
+	{
+		vector forward = plan.GetStagingPosition() - origin; forward[1] = 0; forward.Normalize();
+		vector right = Vector(-forward[2], 0, forward[0]);
+		for (int ring; ring < 3; ring++)
+			for (int direction; direction < 3; direction++)
+			{
+				float angle;
+				if (direction == 1) angle = 45 * Math.DEG2RAD;
+				if (direction == 2) angle = -45 * Math.DEG2RAD;
+				vector query = origin + (forward * Math.Cos(angle) + right * Math.Sin(angle)) * (3 + ring * 2);
+				vector destination;
+				if (!AICF_InfantrySpawnPlacement.IsUsable(trip.GetAssignment().GetGroup(), query, destination)) continue;
+				float shift = vector.Distance(origin, destination);
+				float pad = vector.DistanceXZ(destination, plan.GetSpawnPosition());
+				if (shift < 2 || shift > 8 || Math.AbsFloat(destination[1] - origin[1]) > 1 ||
+					vector.DistanceSqXZ(query, destination) > 0.25 || pad < 10 || pad > 90 ||
+					vector.DistanceXZ(destination, plan.GetStagingPosition()) >= vector.DistanceXZ(origin, plan.GetStagingPosition()) - 1) continue;
+				Print(string.Format("[AICF][MANUAL_STAGING_SETUP_ESCAPE] origin=%1 destination=%2 shift=%3 native_usable=1 controlled_escape_precondition=1", origin, destination, shift));
+				return true;
+			}
+		return false;
+	}
+	static void PollUnblockMotion()
+	{
+		if (!s_Actor || !s_Trip || !s_Group || !s_Actor.GetAIControlComponent()) return;
+		AIAgent agent = s_Actor.GetAIControlComponent().GetControlAIAgent();
+		SCR_AIUtilityComponent utility;
+		if (agent) utility = SCR_AIUtilityComponent.Cast(agent.FindComponent(SCR_AIUtilityComponent));
+		bool same = utility && utility.GetCurrentAction() == s_UnblockAction && utility.GetExecutedAction() == s_UnblockAction;
+		if (!s_UnblockBaselineReady)
+		{
+			if (vector.Distance(s_Actor.GetOrigin(), s_Destination) > 0.5) return;
+			s_UnblockBaselineReady = true;
+			s_UnblockBaseline = s_Actor.GetOrigin();
+			float correction = vector.Distance(s_UnblockBaseline, s_Before);
+			Check("UNBLOCK_SAME_NATIVE_ACTION_AFTER_SHORT", same && correction >= 2 && correction <= 8 &&
+				vector.DistanceXZ(s_UnblockBaseline, s_ExhaustionPlan.GetStagingPosition()) > 25,
+				string.Format("actual_3d_correction_m=%1 baseline=%2 still_outside_rally=1 teleport_excluded_from_walk=1", correction, s_UnblockBaseline));
+			// Controls remain disabled until actual landing was read back. Movement
+			// starts afterwards in the exact pre-existing native action.
+			RestoreMovement();
+			return;
+		}
+		float walked = vector.DistanceXZ(s_Actor.GetOrigin(), s_UnblockBaseline);
+		if (!s_UnblockWalked && walked >= 1 && same)
+		{
+			s_UnblockWalked = true;
+			Check("UNBLOCK_ACTUAL_NATIVE_WALK", true, string.Format("walk_after_correction_m=%1 same_native_action=1 teleport_excluded=1 position=%2", walked, s_Actor.GetOrigin()));
+			GetGame().GetCallqueue().Remove(PollUnblockMotion);
+		}
 	}
 	static void Check(string name, bool passed, string details = "")
 	{
@@ -68,6 +152,23 @@ modded class AICF_VehicleStagingActionToken
 
 modded class AICF_VehicleManualStagingRecovery
 {
+	override protected bool FindDestination(out vector destination)
+	{
+		bool found = super.FindDestination(destination);
+		if (found && AICF_ManualStagingProbeState.UnblockEnabled() && m_Group == AICF_ManualStagingProbeState.s_Group)
+			AICF_ManualStagingProbeState.s_Destination = destination;
+		return found;
+	}
+	override protected bool SafeDestination(vector query, out vector destination)
+	{
+		// Новый progress-only шаг допустим даже с40m. Негативный exhaustion case
+		// теперь явно инжектирует placement veto, а не предполагает его по расстоянию.
+		if (AICF_ManualStagingProbeState.ExhaustionEnabled()) return false;
+		bool safe = super.SafeDestination(query, destination);
+		if (AICF_ManualStagingProbeState.UnblockEnabled())
+			Print(string.Format("[AICF][MANUAL_STAGING_DESTINATION_SAMPLE] safe=%1 query=%2 destination=%3 before=%4 staging=%5 pad=%6", safe, query, destination, m_vOrigin, m_vStaging, m_Plan.GetSpawnPosition()));
+		return safe;
+	}
 	protected void AICF_MSNegative(string name, bool recovered, vector before, float health)
 	{
 		AICF_ManualStagingProbeState.Check(name, !recovered && !m_bConsumed &&
@@ -104,11 +205,13 @@ modded class AICF_VehicleManualStagingRecovery
 		AICF_ManualStagingProbeState.s_Health = health;
 		AICF_ManualStagingProbeState.s_ApproachDeadline = m_Plan.GetApproachDeadlineMs();
 		AICF_ManualStagingProbeState.s_TripDeadline = m_Trip.GetAbsoluteDeadlineMs();
+		if (AICF_ManualStagingProbeState.UnblockEnabled()) AICF_ManualStagingProbeState.s_UnblockAction = m_Token.GetAction();
 		bool submitted = super.TryRecover();
 		AICF_ManualStagingProbeState.Check("SHORT_SUBMITTED_ONCE", submitted && m_bConsumed && m_Plan.WasStagingMemberRelocated(m_Actor));
 		if (submitted)
 		{
 			AICF_ManualStagingProbeState.s_SubmittedAt = System.GetTickCount();
+			if (AICF_ManualStagingProbeState.UnblockEnabled()) GetGame().GetCallqueue().CallLater(AICF_ManualStagingProbeState.PollUnblockMotion, 50, true);
 			AICF_ManualStagingProbeState.Check("DUPLICATE_NO_MUTATION", !super.TryRecover() && m_bConsumed &&
 				m_Plan.GetApproachDeadlineMs() == AICF_ManualStagingProbeState.s_ApproachDeadline &&
 				m_Trip.GetAbsoluteDeadlineMs() == AICF_ManualStagingProbeState.s_TripDeadline);
@@ -126,15 +229,21 @@ modded class AICF_VehicleAcquisitionFlow
 		if (AICF_ManualStagingProbeState.Enabled() && trip.GetAssignment().GetGroup() == AICF_ManualStagingProbeState.s_Group &&
 			!AICF_ManualStagingProbeState.s_SetupAt && plan.RequiresManualRally())
 		{
-			ChimeraCharacter actor = ChimeraCharacter.Cast(trip.VehiclePresetMember(1));
-			if (actor && actor.GetCharacterController())
+			ChimeraCharacter actor;
+			float setupDistance = 28;
+			if (AICF_ManualStagingProbeState.ExhaustionEnabled()) setupDistance = 40;
+			if (AICF_ManualStagingProbeState.UnblockEnabled()) setupDistance = 36;
+			vector query;
+			vector destination;
+			if (AICF_ManualStagingProbeState.FindControlledSetup(trip, plan, setupDistance, actor, query, destination))
 			{
-				vector direction = actor.GetOrigin() - plan.GetStagingPosition(); direction[1] = 0; direction.Normalize();
-				float setupDistance = 28;
-				if (AICF_ManualStagingProbeState.ExhaustionEnabled()) setupDistance = 40;
-				vector query = plan.GetStagingPosition() + direction * setupDistance;
-				vector destination;
-				if (AICF_InfantrySpawnPlacement.IsUsable(trip.GetAssignment().GetGroup(), query, destination) &&
+				bool usableSetup = true;
+				if (!AICF_ManualStagingProbeState.s_SetupAttemptReported)
+				{
+					AICF_ManualStagingProbeState.s_SetupAttemptReported = true;
+					Print(string.Format("[AICF][MANUAL_STAGING_SETUP_SAMPLE] actor=%1 staging=%2 query=%3 destination=%4 usable=%5 shift=%6 projection_sq=%7", actor.GetOrigin(), plan.GetStagingPosition(), query, destination, usableSetup, vector.Distance(actor.GetOrigin(), destination), vector.DistanceSqXZ(query, destination)));
+				}
+				if (usableSetup &&
 					vector.Distance(actor.GetOrigin(), destination) <= 25 && vector.DistanceSqXZ(query, destination) <= 0.25)
 				{
 					AICF_ManualStagingProbeState.s_Actor = actor;
@@ -151,6 +260,18 @@ modded class AICF_VehicleAcquisitionFlow
 					AICF_ManualStagingProbeState.Check("CONTROLLED_NATIVE_MOVEMENT_BLOCK", !trip.GetLease() && !trip.IsVehiclePresetDebited(),
 						string.Format("setup_destination=%1 setup_shift_m=%2 movement_controls_disabled=1 fixture_setup_only=1", destination, vector.Distance(actor.GetOrigin(), destination)));
 				}
+			}
+		}
+		if (AICF_ManualStagingProbeState.UnblockEnabled() && trip == AICF_ManualStagingProbeState.s_Trip)
+		{
+			AIWaypoint planWaypoint = plan.GetApproachWaypoint();
+			array<AIWaypoint> actualQueue = {}; trip.GetAssignment().GetGroup().GetWaypoints(actualQueue);
+			if (planWaypoint && actualQueue.Contains(planWaypoint)) trip.GetAssignment().GetGroup().RemoveWaypoint(planWaypoint);
+			actualQueue.Clear(); trip.GetAssignment().GetGroup().GetWaypoints(actualQueue);
+			if (!AICF_ManualStagingProbeState.s_MissingReissueReported && actualQueue.IsEmpty() && !trip.GetAssignment().GetGroup().GetCurrentWaypoint())
+			{
+				AICF_ManualStagingProbeState.s_MissingReissueReported = true;
+				AICF_ManualStagingProbeState.Check("UNBLOCK_NATIVE_GROUP_WAYPOINT_ABSENT", true, "controlled_exact_plan_waypoint_detached=1 no_foreign_waypoint=1");
 			}
 		}
 		bool exhaustionProbe = AICF_ManualStagingProbeState.ExhaustionEnabled() && trip == AICF_ManualStagingProbeState.s_Trip;
@@ -180,7 +301,7 @@ modded class AICF_VehicleAcquisitionFlow
 		{
 			AICF_ManualStagingProbeState.s_TwoAttemptsReported = true;
 			AICF_ManualStagingProbeState.Check("EXHAUSTION_TWO_ATTEMPTS_SPENT", plan.WasStagingMemberRetried(blocked) &&
-				plan.IsStagingMemberExhausted(blocked) && !plan.WasStagingMemberRelocated(blocked), "short_step_to_rally_impossible_from_40m=1");
+				plan.IsStagingMemberExhausted(blocked) && !plan.WasStagingMemberRelocated(blocked), "controlled_all_bounded_placement_rejected=1");
 		}
 		if (plan.GetApproachWaypointReissueCount() != 1 || AICF_ManualStagingProbeState.s_ReissueRemovalReported) return;
 		AIWaypoint waypoint = plan.GetApproachWaypoint();
@@ -233,6 +354,7 @@ modded class AICF_MatchController
 	protected int m_iManualStagingRestoreDeadline;
 	protected int m_iManualStagingRestoreNextPoll;
 	protected int m_iManualStagingOriginalHandoffDeadline;
+	protected bool m_bMSDistantOrderSet;
 
 	override protected void Update()
 	{
@@ -250,12 +372,29 @@ modded class AICF_MatchController
 		{
 			AICF_ManualStagingProbeState.Check("BOUNDED_FINISH", false); AICF_MSFinish(); return;
 		}
+		// The optional scaffold CLI read clears its out parameter when absent.
+		m_sVBScenario = "transport";
 		AICF_GroupSlot slot = m_VBState.GetSlot(0);
 		if (!slot.IsCombatReady())
 		{
 			if (m_VBGroup.GetAgentsCount() != 5) return;
 			if (!AICF_VBPrepare(slot)) { AICF_ManualStagingProbeState.Check("ROSTER_PRESET", false); AICF_MSFinish(); return; }
 			AICF_ManualStagingProbeState.s_Group = m_VBGroup;
+		}
+		if (AICF_ManualStagingProbeState.ExhaustionEnabled() && !m_bMSDistantOrderSet)
+		{
+			for (int direction; direction < 16; direction++)
+			{
+				float angle = direction * 22.5 * Math.DEG2RAD;
+				vector query = m_vVBHome + Vector(Math.Cos(angle) * 220, 0, Math.Sin(angle) * 220);
+				vector point;
+				if (!AICF_InfantrySpawnPlacement.IsUsable(m_VBGroup, query, point) || vector.DistanceXZ(m_vVBHome, point) < 200) continue;
+				m_bMSDistantOrderSet = m_OrderPlanner.AssignPlayerPointOrder(slot, m_VBFaction, point, false);
+				AICF_ManualStagingProbeState.Check("EXHAUSTION_DISTANT_NATIVE_ORDER_SET", m_bMSDistantOrderSet,
+					string.Format("target=%1 distance_from_home_m=%2 original_recovery_window_unchanged=1", point, vector.DistanceXZ(m_vVBHome, point)));
+				break;
+			}
+			if (!m_bMSDistantOrderSet) return;
 		}
 		AICF_VBObserve();
 		AICF_VBThreat(false);
@@ -267,6 +406,14 @@ modded class AICF_MatchController
 		}
 		if (AICF_ManualStagingProbeState.s_SubmittedAt)
 		{
+			if (AICF_ManualStagingProbeState.UnblockEnabled())
+			{
+				AICF_MSObserveUnblock(slot, trip, now);
+				if (m_bManualStagingFinished) return;
+				if (m_sVBFaction == "US") m_VBCoordinator.Update(m_VBState, m_VBFaction, null, null, m_iStrategicBaseRevision, true);
+				else m_VBCoordinator.Update(null, null, m_VBState, m_VBFaction, m_iStrategicBaseRevision, true);
+				return;
+			}
 			ChimeraCharacter actor = AICF_ManualStagingProbeState.s_Actor;
 			AICF_VehicleSpawnPlan plan = trip.GetRequestState().GetSpawnPlan();
 			int ready;
@@ -298,11 +445,36 @@ modded class AICF_MatchController
 		if (m_sVBFaction == "US") m_VBCoordinator.Update(m_VBState, m_VBFaction, null, null, m_iStrategicBaseRevision, true);
 		else m_VBCoordinator.Update(null, null, m_VBState, m_VBFaction, m_iStrategicBaseRevision, true);
 	}
+	protected void AICF_MSObserveUnblock(AICF_GroupSlot slot, AICF_TransportTrip trip, int now)
+	{
+		ChimeraCharacter actor = AICF_ManualStagingProbeState.s_Actor;
+		AICF_VehicleSpawnPlan plan = AICF_ManualStagingProbeState.s_ExhaustionPlan;
+		if (!actor || !trip || trip.IsTerminal() || !plan) { AICF_ManualStagingProbeState.Check("UNBLOCK_NO_PREMATURE_FALLBACK", false); AICF_MSFinish(); return; }
+		if (!AICF_ManualStagingProbeState.s_UnblockBaselineReady) return;
+		int ready;
+		bool exact = true;
+		for (int member; member < 5; member++)
+		{
+			IEntity original = m_aVBMembers[member];
+			exact = exact && original && original.GetID() == m_aVBMemberIds[member] && slot.GetRosterMember(member) == original && trip.VehiclePresetMember(member) == original && AICF_GroupRuntime.IsAliveCharacter(original);
+			if (original && AICF_VehicleSpawner.IsStagingGeometryReady(vector.DistanceXZ(original.GetOrigin(), plan.GetStagingPosition()), m_Stage3Config.GetSpawnStagingRadiusMeters(), vector.DistanceXZ(original.GetOrigin(), plan.GetSpawnPosition()), 90, true)) ready++;
+		}
+		if (!AICF_ManualStagingProbeState.s_UnblockRally && ready == 5 && !trip.IsVehiclePresetDebited() && !trip.GetLease())
+		{
+			AICF_ManualStagingProbeState.s_UnblockRally = true;
+			AICF_ManualStagingProbeState.Check("UNBLOCK_NATIVE_RALLY_BEFORE_DEBIT", exact && AICF_ManualStagingProbeState.s_UnblockWalked, "actual_five_ready=1 preset_debited=0");
+		}
+		if (!trip.IsVehiclePresetDebited() || !trip.GetLease() || !trip.GetLease().GetVehicle()) return;
+		AICF_ManualStagingProbeState.Check("UNBLOCK_NATIVE_SPAWN_AND_DEBIT", exact && AICF_ManualStagingProbeState.s_UnblockRally && AICF_ManualStagingProbeState.s_UnblockWalked && m_VBCoordinator.GetSpawnedCount(m_VBFaction.GetFactionKey()) == 1);
+		AICF_ManualStagingProbeState.Check("UNBLOCK_ORIGINAL_HEALTH_DEADLINES", actor.GetDamageManager().GetHealthScaled() == AICF_ManualStagingProbeState.s_Health && plan.GetApproachDeadlineMs() == AICF_ManualStagingProbeState.s_ApproachDeadline && trip.GetAbsoluteDeadlineMs() == AICF_ManualStagingProbeState.s_TripDeadline);
+		AICF_MSFinish();
+	}
 	protected void AICF_MSFinish()
 	{
 		if (m_bManualStagingFinished) return;
 		m_bManualStagingFinished = true;
 		AICF_ManualStagingProbeState.RestoreMovement();
+		GetGame().GetCallqueue().Remove(AICF_ManualStagingProbeState.PollUnblockMotion);
 		AICF_ManualStagingProbeState.s_ExhaustionPlan = null;
 		m_ManualStagingRestoreTrip = null;
 		Print(string.Format("[AICF][MANUAL_STAGING_FINISHED] checks=%1 failures=%2 scope=CONTROLLED_NATIVE_MOVEMENT_BLOCK",
@@ -366,6 +538,7 @@ modded class AICF_MatchController
 	override protected void Stop(bool cleanupEntities)
 	{
 		AICF_ManualStagingProbeState.RestoreMovement();
+		if (GetGame()) GetGame().GetCallqueue().Remove(AICF_ManualStagingProbeState.PollUnblockMotion);
 		super.Stop(cleanupEntities);
 	}
 }

@@ -11,6 +11,15 @@ occupants, authority и identity остаются обязательными п�
 Schema1 читается с TRANSPORT/300. Изменение поведения или N меняет assignment;
 Save/Load сами не приобретают машину. Настройки проверяются серверным Decode.
 
+В retained deployment раз в10s `AICF_VehicleCombatTrace` записывает
+`VEHICLE_COMBAT_READBACK/CLUSTER/MEMBER`: фактический результат `HasLocalCombat`
+из текущего Tick, current native action/behavior, свежесть и расстояние
+cluster/target, target entity/life state, threat measure без injury factor и
+consciousness живых участников. Trace не повторяет принятие решения, не меняет
+actions/health/clocks и ограничен `MAX_SEATS`. Эти readbacks нужны, чтобы
+отличать продолжающийся бой от устаревшей угрозы; наличие `LOCAL_THREAT` само по
+себе ещё не доказывает корректную причину долгой остановки маршрута.
+
 ## Владельцы и цикл
 
 `AICF_VehicleBehaviorFlow` возвращает typed outcomes; только
@@ -88,6 +97,29 @@ owned actions, перечитывается actual current group: каждый �
 Caller сначала прекращает собственный конфликтующий action. Native force
 посадка не считается доказанной до actual compartment readback.
 
+`AICF_OverturnRecovery` допускает короткое выправление здоровой перевёрнутой
+машины в текущем manual TRANSIT: authoritative exact lease/componentRpl,
+действующий native Move/waypoint/положительный Pilot handler и весь исходный
+живой conscious AI roster в устойчивых местах этой машины. Подтверждённые
+native Gate/crew/actor owners, human/foreign/stale scope, повреждение, огонь,
+потеря бойца и завершившийся deadline оставляют прежний fallback.
+
+Captured assignment/lease/route token даёт максимум3s для затухания физики;
+окно не возобновляется на retry и не продлевает trip clocks. Перенос разрешён
+только при скорости≤1м/с и angular speed≤0.5, с прежними двумя mobility attempts,
+поиском4..15м, дополнительной границей фактического3D переноса≤15м для overturn,
+terrain/live-character/pressure/player/occupancy fences. Scope и
+скорость повторно проверяются перед transform. Отсутствие safe candidate не
+создаёт route progress; исчерпанный budget/window возвращает fallback. Нет
+лечения, ремонта, воскрешения или дальней перевозки. Token удаляется при Stop,
+успехе, обычном upright Tick; несовпавшая incarnation не получает новое окно.
+
+Контракт исполняет весь извлечённый helper:56 positive/negative cases. Native
+`overturn-native-v3`: WB0/native0/full fatal0,11 checks PASS; локальная controlled
+pose fault95°/1.4м → actual upright correction3D8.09129м/oldbudget1 из2 → native
+drive29.4957м, original5/samecar/health/deadline1189069 неизменны. Это controlled
+проверка, не завершённый ordinary/Multi soak. Raw resource errors сохранены FAIL.
+
 При повторной посадке progress actor означает приближение к exact seat минимум
 на0.25м в3D относительно последней credited позиции. Обе actor positions
 сравниваются с одной текущей seat position: одна подвижка машины не сбрасывает
@@ -95,6 +127,31 @@ stall clock, круги и отход/возврат вокруг неё так�
 правило любого XZ-сдвига могло бесконечно откладывать short correction рядом
 с машиной. Остались прежние2s наблюдения RUNNING,3short attempts и absolute
 reboard deadline; дальнего actor helper к машине не переносит.
+
+После нового ordinary US `proof4-final-v4` исправлен отдельный retry gap:
+живой пассажир200A оставался примерно70м от healthy припаркованной машины,
+собственный `SCR_AIGetInVehicle` был RUNNING без progress около97s, но retries0.
+Short entry правильно отклонял дистанцию, а прежняя native retry ветка принимала
+только исчезнувший/FAILED action. Теперь настоящий RUNNING stall также может
+расходовать прежние два native retries. Только exact свободный actor без
+compartment/vehicle link, get-in/out/switch transition и чужого RUNNING action
+допускает повтор; guards повторяются после cancellation. Новый owned entry
+получает свою локальную2s observation baseline, absolute deadline и бюджеты
+не продлеваются. `VEHICLE_REBOARD_NATIVE_RETRY` сохраняет distance, progress age,
+номер native retry и remaining deadline; physical relocation=0.
+Regression исполняет actual EnsureEntry12 cases и CanRestartEntry17 cases:
+старый код давал FAIL на distant RUNNING stall, новый профильный contract PASS.
+Новый matched Cargo native A/B завершён отдельно в
+`.codex-runtime/issue78-finalization-20261029/reboard-stalled-running/`:
+before WB0/native0 сохранил119actual RUNNING stall polls, retries0 и timeout;
+after WB0/native0/frozen audit0,29checks/0failures, одна native retry после
+actual stall108.795м, тот же Cargo вернулся в exact seat, original5/samecar,
+два маршрута и высадки, одна покупка, прежний deadline. Full stopped logs:
+script/native fatal0, source drift0, raw resources28FAIL каждого. A/B использует
+сохранённый333-file baseline + только два production изменения Action/Flow,
+без новых QueueApproach/Overturn lanes; это узкий controlled proof, не новый
+ordinary soak всей текущей сборки. Ранние V1/V2 fixture FAIL сохранены в отчёте;
+прежний retained PASS ниже не подменяет новый A/B.
 
 `VEHICLE_REBOARD_ENTRY` читается каждые5s и при deadline: exact member/seat,
 distance/height/speed, accessibility/lock/reservation/occupant, native access,
@@ -230,3 +287,18 @@ identity, authority, пяти пустых местах и resources_clear1. П�
 spawn candidate до создания машины теперь проходит тот же native sphere5
 character clearance; занятую точку fixture пропускает. Повторные post-spawn
 и cleanup guards сохранены, окружающие actors не перемещаются.
+
+Health audits различают raw classifier в `Tick` и public classifier для
+`PrepareRoute`: raw failure проверяется до reconcile/create/newcrew; только
+`VEHICLE_OVERTURNED` может перейти в typed helper с исходным3s/health/identity
+scope. Combined roll+movementDamage1 сохраняет старый raw priority OVERturned,
+но actual helper отвергает recovery повреждённой машины. Любой такой отказ
+сохраняет snapshot/AbortOwnedActions/Fallback. Четыре устаревших matchers после
+этого изменения усилены: NativeRouteLoss39 и MovementDamage91 controlsPASS,
+Stage3/Stage35PASS; independent review0. Damage contract исполняет фактическую
+Tick health-ветку/public classifier и отдельно полный actual helper для12
+health/scope случаев; физическое восстановление доказывает отдельный native11,
+а не этот adapter. Full198 исходныйFAIL4 сохранён; новый полный gate учитывается
+отдельно после test delta.
+
+Canonical health audits требуют Windows PowerShell5.1: JSON bridge использует PSObject.Properties, без ConvertFrom-Json -AsHashtable. После исправления совместимости все4 audits заново PASS в exactWindowsPS5.1; старый full-v7 shard5FAIL сохранён отдельно.

@@ -240,7 +240,12 @@ dirty status, выбор набора и время; `summary.json` — argv, в
 путь к полному выводу каждого теста. Runner возвращает 1 при любом FAIL, включая
 известный baseline, и 0 только при PASS всего выбранного набора.
 
-Runner запускает дочерние `powershell.exe` последовательно. Некоторые contracts
+Runner запускает дочерние Windows PowerShell5.1 `powershell.exe`
+последовательно, даже если сам вызван из PowerShell7. Изменённый contract
+проверяй через runner либо этим же `powershell.exe`; успешный прямой запуск
+из PowerShell7 не подтверждает совместимость с canonical offline набором
+(например, `ConvertFrom-Json -AsHashtable` отсутствует в5.1).
+Некоторые contracts
 используют фиксированные вспомогательные пути в `.codex-runtime/`, поэтому не
 запускай две матрицы одновременно в одном checkout. Их дополнительное evidence
 может находиться вне каталога runner — точный путь задаётся исходником теста.
@@ -469,6 +474,13 @@ manifest и native exit; игра не входит в offline runner. Конт�
 | `Test-StagingActorTaskContracts.ps1` | Точный selected/executed RUNNING actor task учитывается как работа при исчезнувшем group waypoint; deadlines не продлеваются |
 | `Test-StagingActorTaskLogContracts.ps1` | Native withdraw-group-waypoint, stale/foreign/cancelled negatives и фактическое прибытие исходных бойцов |
 | `Test-VehicleSoakObservationContracts.ps1` | Proof4 ordinary-war observation: causal casualty receipt, bounded cleanup/replacement и неизменные полные native gates |
+| `Test-OrphanTripRetirementContracts.ps1` | Отдельная immutable absent-group identity, exact DEAD/native seat и повторные human/foreign/player/lease guards |
+| `Test-CapturedDeathRetirementProjectionContracts.ps1` | Actual extracted classification/cause/lease epochs/monitor; prior failures сохранены, pending не PASS, исторический physical release |
+| `Test-OrphanTripRetirementLogContracts.ps1` | Controlled native ledger: independent admission/DEAD/release/readiness/economy, early/original-operation Stop negatives |
+| `Test-OrphanTripRetirementLog.ps1` | Разбор полного stopped controlled before/after, source freeze и всех sibling native/resource ошибок; baseline leak coverage отдельно |
+| `Test-RecruitmentNativeAdmissionContracts.ps1` | Actual requested1 native budget, missing groups/donors, simultaneous requests, current authority/context и WAIT перед donor creation |
+| `Test-RecruitmentCapacityLogContracts.ps1` | Негативы native pressure→35s WAIT без request/payment→restore→точный paid physical join; token/total visit deadline не меняются |
+| `Test-RecruitmentCapacityLog.ps1` | Полный controlled donor native ledger, source freeze, stopped exit и все sibling fatal/resources отдельно |
 | `Test-LooseWeaponObserverContracts.ps1` | Fixture-only наблюдение за drop/storage/world identities; static контракт не подтверждает безопасность native Physics getters |
 | `Test-ReboardApproachProgressContracts.ps1` | Реальное приближение к exact seat; круг/отход/движение машины не продлевают stall observation |
 | `Test-TransitMoveFailureContracts.ps1` | Exact owned native vehicle failure receipt, однократный callback и прежние bounded recovery attempts |
@@ -555,3 +567,31 @@ owned RPC не меняет production protocol; local spawn setup FAIL не у�
 Source54/fixture33 mutants и49 client-log controls не заменяют свежие native
 client/JIP logs. Server-local prefab оказался MASTER и не является proxy negative;
 actual server-spawned RplId обязан соответствовать полученному client proxy.
+
+### Manual staging progress proof (issue78,30.10)
+
+`AICF_ManualStagingProbe.c` использует isolated scaffold
+`AICF_VehicleBehaviorProbe.c` + `AICF_VehicleBehaviorSettingsProbe.c`; в stage
+копируется как `ZZ_AICF_ManualStagingProbe.c`, после modded scaffold fragments.
+Production checkout fixture не получает. CLI `-aicfManualStagingProbe 1`
+с `-aicfManualStagingUnblockProbe 1` проверяет bounded native safeEscape,
+actual landing→тот же native action→отдельный пеший ход→original5 rally→реальный
+spawn/debit. Условный proof не заменяет ordinary/Multi gates.
+`-aicfManualStagingExhaustionProbe 1` — отдельный explicit placement-veto case,
+с обычной native-safe point целью≥200m и неизменным strict order-restore oracle.
+Режимы не смешиваются. Аудитор `Test-ManualStagingLog.ps1 -Unblock|-Exhaustion`
+выводит функциональный результат отдельно от строгого resourceFAIL.
+
+`AICF_ManualStagingGeometryProbe.c`, CLI `-aicfManualStagingGeometryProbe 1`,
+делает только present-world native geometry queries на явно test-only captured
+poses. Не перемещает бойцов/машины, не меняет health/caps, не реконструирует
+исторических dynamic occupants.91bounded forward candidates включают old9prefix;
+physical3D≤8m/vertical≤1m/projection/pad/progress guards прежние. Контракт
+`Test-ManualStagingGeometryProbeContracts.ps1` входит в auto-discovery checks.
+Evidence `spawn/manual-historical-geometry-v2/` и `spawn/staging-final-frozen-hashes.json`.
+
+`Test-VehicleSoakHeartbeatContracts.ps1` исполняет извлечённый nullgroup Update
+branch и реальный heartbeat helper с API shims, включая actualNONE/alive0/WAIT
+и сохранённую GROUP_UNAVAILABLE classification. Неизменный Proof4 auditor всё
+так же отклоняет реальную паузу>60s. Добавочные heartbeatfields диагностические;
+они не являются readiness, arrival или syntheticprogress proof.

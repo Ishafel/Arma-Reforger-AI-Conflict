@@ -30,6 +30,18 @@ Receipt `MOUNTED_HOLD` подтверждает непрерывное нахо�
 
 ## Ordinary war observation4
 
+Новые fresh stages с `captured_death_policy=TYPED_NATIVE_ALL_DEAD_RELEASE_V1`
+дополнительно различают `CONFIRMED_NATIVE_ALL_DEAD_RETIREMENT`. Это только
+доказанная естественная гибель всех пяти admission actors: EntityID и component
+RplId связываются с независимыми production native-DEAD receipts, собственным
+terminal cause, actual physical release/ack и старым cleanup deadline. Затем
+обязательны exact next generation пять, оплаченная readiness и физическое движение
+того же нового лидера≥10м с текущим приказом к сохранённой цели. PENDING, простой
+reason GROUP_UNAVAILABLE, отсутствие cleanup или неизвестная смерть не дают PASS.
+Original full route остаётся неподтверждённым; старые frozen4/3 FAIL не
+переаудируются. Подробные guards и controlled before/after — в
+[VEHICLE_RETIREMENT.md](VEHICLE_RETIREMENT.md).
+
 `-ProofVersion 4` добавляет только stage fixture
 `AICF_VehicleSoakRecoveryObservationProbe.c` и замораживает отдельный аудитор
 `Test-VehicleSoakObservationLog.ps1`. Старые Proof3 исходники, auditor receipts
@@ -38,9 +50,10 @@ Receipt `MOUNTED_HOLD` подтверждает непрерывное нахо�
 `-LooseWeaponObserver` добавляет read-only ledger dropped оружия, без controlled
 baseline drop. Он нужен для диагностики native SVD out-of-world assertion.
 
-У observation4 два явно различных результата: `ORIGINAL_FULL_ROUTE` требует
+У базовой observation4 два явно различных результата: `ORIGINAL_FULL_ROUTE` требует
 прежний физический маршрут исходных бойцов; `EXPLAINED_NATIVE_DAMAGE_RECOVERY`
 подтверждает законную боевую потерю и восстановление, **не** полный original route.
+Третья ветка новых stages с explicit captured-death policy описана выше.
 Вторая ветка допускается только по native on-fire/неподвижности exact lease car
 и Rpl/generation, независимо подтверждённым FALLBACK и native health snapshot.
 Reason без actual damage не принимается. Все пять originals сохраняют actor/Rpl

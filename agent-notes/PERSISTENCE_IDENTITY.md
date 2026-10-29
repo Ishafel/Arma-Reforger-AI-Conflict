@@ -69,6 +69,30 @@ persistence/restart этим не проверен; guard не выдаёт sess
 
 ## Дополнительная диагностика
 
+Свежий full production `backend-ui-final-current-v7` на том же333-file source,
+что final193/offline snapshot:34client+8JIP+2server readbacks PASS, native0/0/0,
+все full logs stopped, script fatal0/leaks0. Во всех actual audit identity пустая.
+Это не доказательство authenticated account persistence/restart.
+
+Дополнительный terminal probe `backend-retail-identity-current-v1` использовал
+canonical `-UseRetailClient`, текущие333production files и read-only identity
+trace, без UI/editor/поддельного UUID. WB0, но соединение штатного retail client
+с canonical Diag server отклонено до player audit:
+`isDevBinary value does not match! local=1 remote=0`. Client group4/reason6,
+`Unable to initialize the game`; authenticated identity **NOT REACHED**.
+Own процессы адресно остановлены после сохранения причины, native-1/ABORTED;
+это setup FAIL, не native crash и не production PASS. Все исходники/полные логи
+SHA-архивированы, собственные profiles/stage удалены. Account login, токены и
+обход native protocol validation не применялись.
+
+Таким образом, текущий поддержанный canonical Diag workflow не предоставил
+реальную BI-auth session. Native authenticated persistence/restart остаётся
+NOT RUN с конкретным environment ограничением, а не утверждением, что такая
+проверка вообще невозможна терминально. Для неё нужен совместимый retail
+dedicated путь и настоящая непустая BI identity; его добавление не выполнено.
+Historical preset-library restart31PASS проверяет отдельную библиотеку мода,
+а не эту native account persistence.
+
 `tests/fixtures/AICF_PersistenceReconnectTrace.c` предназначена только для
 isolated stages. Без fixture flag A/B она наблюдает native audit/disconnect и
 serializer; не вызывает `GetConfig`, не удерживает config/serializer references.

@@ -15,11 +15,12 @@ function Rules([string]$text){
  }
  if($inspect -notmatch 'if \(movementDamageManager &&' -or
   ([regex]::Matches($inspect,'SCR_DamageManagerComponent.GetDamageManager\(vehicle\)')).Count -ne 2){'REPEATED_EXACT_DAMAGE_MANAGER'}
- foreach($body in @($tick,$prepare)){
-  if($body -notmatch '(?s)InspectRouteAssetFailure\(trip\).*?ReportVehicleFailureSnapshot\(trip, vehicleFailure\);\s*AbortOwnedActions\(trip\);\s*return AICF_TripOutcome.FallbackToFoot\(vehicleFailure, causationId\);'){'TYPED_FALLBACK_WITH_SNAPSHOT_AND_OWNED_CANCELLATION'}
- }
+ if($prepare -notmatch '(?s)InspectRouteAssetFailure\(trip\).*?ReportVehicleFailureSnapshot\(trip, vehicleFailure\);\s*AbortOwnedActions\(trip\);\s*return AICF_TripOutcome.FallbackToFoot\(vehicleFailure, causationId\);'){'TYPED_FALLBACK_WITH_SNAPSHOT_AND_OWNED_CANCELLATION'}
+ if($tick -notmatch '(?s)string vehicleFailure = InspectVehicleFailure\(trip.GetLease\(\).GetVehicle\(\)\);\s*if \(!vehicleFailure.IsEmpty\(\)\)\s*\{\s*if \(vehicleFailure == "VEHICLE_OVERTURNED"\)\s*\{\s*AICF_TripOutcome overturn = RecoverHealthyOverturn\(trip, causationId\);\s*if \(overturn\) return overturn;\s*\}\s*ReportVehicleFailureSnapshot\(trip, vehicleFailure\);\s*AbortOwnedActions\(trip\);\s*return AICF_TripOutcome.FallbackToFoot\(vehicleFailure, causationId\);'){'TYPED_FALLBACK_WITH_SNAPSHOT_AND_OWNED_CANCELLATION'}
+ $recover=Body $text 'RecoverHealthyOverturn';$public=Body $text 'InspectRouteAssetFailure'
+ if($recover -notmatch 'if \(!m_Config.GetHiddenRecoveryEnabled\(\) \|\| !AICF_OverturnRecovery.CanConsider\(trip, nowMs\)\) return null;' -or $public -notmatch 'failure == "VEHICLE_OVERTURNED" && m_Config.GetHiddenRecoveryEnabled\(\) && AICF_OverturnRecovery.CanConsider\(trip, System.GetTickCount\(\)\)'){'TYPED_HEALTHY_OVERTURN_SCOPE_ONLY'}
  foreach($later in @('AdvancePendingNativeCrewEntries','ObserveNativeCombat','ObserveNativeGate','ProcessMandatoryCrew')){
-  if($tick.IndexOf('InspectRouteAssetFailure') -gt $tick.IndexOf($later)){'DAMAGE_BEFORE_NEW_OR_PENDING_CREW';break}
+  if($tick.IndexOf('InspectVehicleFailure(trip.GetLease().GetVehicle())') -lt 0 -or $tick.IndexOf('InspectVehicleFailure(trip.GetLease().GetVehicle())') -gt $tick.IndexOf($later)){'DAMAGE_BEFORE_NEW_OR_PENDING_CREW';break}
  }
  if($inspect.IndexOf('VEHICLE_MOVEMENT_DESTROYED') -lt $inspect.IndexOf('VEHICLE_OVERTURNED')){'EXISTING_ASSET_FAILURE_PRIORITY'}
  if((ConvertTo-AICFCodeText $inspect) -match 'GetVelocity|GetTickCount|Observe|Set\w*\(|AddAction|BeginCrewRecovery|Teleport|Commit|BumpMe'){'PURE_HEALTH_NO_MOTION_OR_CLOCK_MUTATION'}
@@ -28,6 +29,9 @@ $failures=@(Rules $source)
 if($failures.Count){throw "Transport movement damage: $failures"}
 $controls=1
 foreach($mutation in @(
+ @('string vehicleFailure = InspectVehicleFailure(trip.GetLease().GetVehicle());','string vehicleFailure = string.Empty;','TYPED_FALLBACK_WITH_SNAPSHOT_AND_OWNED_CANCELLATION'),
+ @('if (vehicleFailure == "VEHICLE_OVERTURNED")','if (true)','TYPED_FALLBACK_WITH_SNAPSHOT_AND_OWNED_CANCELLATION'),
+ @('!AICF_OverturnRecovery.CanConsider(trip, nowMs)','false','TYPED_HEALTHY_OVERTURN_SCOPE_ONLY'),
  @('movementDamageManager.GetMovementDamage() >= 1.0','true','CONFIRMED_NATIVE_MOVEMENT_DAMAGE'),
  @('!SCR_AIVehicleUsability.VehicleCanMove(vehicle, movementDamageManager)','true','CONFIRMED_NATIVE_MOVEMENT_DAMAGE'),
  @('SCR_DamageManagerComponent.GetDamageManager(vehicle) == movementDamageManager','true','REPEATED_EXACT_DAMAGE_MANAGER'),
@@ -94,7 +98,32 @@ public class AICF_MovementDamageAdapter {
  }
 }
 '@
-if(!('AICF_MovementDamageAdapter' -as [type])){Add-Type -TypeDefinition $adapter.Replace('BODY',$body)}
+# Выполняем фактическую health-ветку Tick и публичный PrepareRoute classifier.
+# CanConsider передаётся из отдельно исполняемого production helper ниже;
+# возвращаемый typed outcome здесь наблюдаем, физическое восстановление не моделируем.
+$tickBody=Body $source 'Tick'
+$start=$tickBody.IndexOf('string vehicleFailure = InspectVehicleFailure(')
+$end=$tickBody.IndexOf('int nowMs = System.GetTickCount();')
+if($start -lt 0 -or $end -le $start){throw 'Missing actual Tick health dispatch'}
+$healthDispatch=$tickBody.Substring($start,$end-$start).Replace('!vehicleFailure.IsEmpty()','!string.IsNullOrEmpty(vehicleFailure)').Replace('if (overturn)','if (overturn != null)')
+$publicBody=(Body $source 'InspectRouteAssetFailure').Replace('!trip || !trip.GetLease() ||','trip == null || trip.GetLease() == null ||').Replace('System.GetTickCount()','1000')
+$adapter+=@'
+public class HealthLease { public Vehicle Vehicle;public bool Physical=true;public bool HasPhysicalAsset(){return Physical;}public Vehicle GetVehicle(){return Vehicle;} }
+public class AICF_TransportTrip {public HealthLease Lease=new HealthLease();public bool Eligible;public HealthLease GetLease(){return Lease;} }
+public class AICF_TripOutcome {public string Reason;public static AICF_TripOutcome FallbackToFoot(string reason,string c){return new AICF_TripOutcome{Reason=reason};} }
+public class HealthConfig {public bool Enabled=true;public bool GetHiddenRecoveryEnabled(){return Enabled;} }
+public static class AICF_OverturnRecovery {public static bool CanConsider(AICF_TransportTrip t,int n){return t.Eligible;} }
+public class HealthDispatch {
+ public HealthConfig m_Config=new HealthConfig();public int RecoverCalls,SnapshotCalls,AbortCalls,RouteCalls;
+ public string InspectVehicleFailure(Vehicle v){return new AICF_MovementDamageAdapter().InspectVehicleFailure(v);}
+ public string InspectRouteAssetFailure(AICF_TransportTrip trip) PUBLIC_HEALTH
+ public AICF_TripOutcome RecoverHealthyOverturn(AICF_TransportTrip t,string c){RecoverCalls++;return m_Config.Enabled && AICF_OverturnRecovery.CanConsider(t,1000)?new AICF_TripOutcome{Reason="HEALTHY_OVERTURN_HANDLER"}:null;}
+ public void ReportVehicleFailureSnapshot(AICF_TransportTrip t,string r){SnapshotCalls++;}
+ public void AbortOwnedActions(AICF_TransportTrip t){AbortCalls++;}
+ public AICF_TripOutcome Tick(AICF_TransportTrip trip,string causationId){ TICK_HEALTH RouteCalls++;return new AICF_TripOutcome{Reason="CONTINUE"}; }
+}
+'@
+if(!('AICF_MovementDamageAdapter' -as [type])){Add-Type -TypeDefinition $adapter.Replace('BODY',$body).Replace('PUBLIC_HEALTH',$publicBody).Replace('TICK_HEALTH',$healthDispatch)}
 foreach($case in @(
  @(0,'','healthy'),@(1,'VEHICLE_MOVEMENT_DESTROYED','native damage1, no crew admission'),
  @(2,'','partial damage below native threshold'),@(3,'','temporary unusability without movement damage'),
@@ -106,6 +135,64 @@ foreach($case in @(
 )){
  $actual=[AICF_MovementDamageAdapter]::Evaluate($case[0])
  if($actual -cne $case[1]){throw "Movement damage case failed: $($case[2]) actual=$actual expected=$($case[1])"}
+ $controls++
+}
+# Отдельный процесс исключает конфликт native shims; helper извлекается целиком
+# из текущего production source, включая его исходное 3000ms окно и health fence.
+$helperPath=(Join-Path $PSScriptRoot 'Test-OverturnRecoveryContracts.ps1').Replace("'","''")
+$escapedRoot=$RepositoryRoot.Replace("'","''")
+$helperCommand=@'
+$ErrorActionPreference='Stop'
+$null = & '__HELPER__' -RepositoryRoot '__ROOT__'
+$results=@{}
+foreach($case in @('healthy','movement','fire','destroyed','health','stale','expired','window','human','unsettled','budget','upright')){
+ [Clock]::Now=1000;$t=[Execute]::Fresh()
+ switch($case){
+  'movement' {$t.Lease.Vehicle.Damage.Damage=1;$t.Lease.Vehicle.CanMove=$false}
+  'fire' {$t.Lease.Vehicle.Fire=$true}
+  'destroyed' {$t.Lease.Vehicle.Usage.State=[EDamageState]::DAMAGED}
+  'health' {$t.Lease.Vehicle.Damage.Zone.Health=.99}
+  'stale' {$t.Current=$false}
+  'expired' {$t.Expired=$true}
+  'window' {$t.State.Observed=[AICF_OverturnRecovery]::new($t,1000);[Clock]::Now=4001}
+  'human' {$t.Actors[0].AI=$false}
+  'unsettled' {$t.Actors[0].Settled=$false}
+  'budget' {$t.State.Attempts=2}
+  'upright' {$t.Lease.Vehicle.Up=1}
+ }
+ $results[$case]=[AICF_OverturnRecovery]::CanConsider($t,[Clock]::Now)
+}
+'ACTUAL_HEALTH_SCOPE_JSON='+($results|ConvertTo-Json -Compress)
+'@
+$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($helperCommand.Replace('__HELPER__',$helperPath).Replace('__ROOT__',$escapedRoot)))
+$helperOutput=@(& (Get-Command pwsh).Source -NoProfile -EncodedCommand $encoded 2>&1)
+if($LASTEXITCODE -ne 0){throw "Actual overturn helper failed: $helperOutput"}
+$json=@($helperOutput|Where-Object{[string]$_ -like 'ACTUAL_HEALTH_SCOPE_JSON=*'})
+if($json.Count -ne 1){throw "Missing actual helper results: $helperOutput"}
+$scopeObject=([string]$json[0]).Substring('ACTUAL_HEALTH_SCOPE_JSON='.Length)|ConvertFrom-Json
+$scope=@{}
+foreach($property in $scopeObject.PSObject.Properties){$scope[$property.Name]=[bool]$property.Value}
+foreach($name in $scope.Keys){if($scope[$name] -ne ($name -eq 'healthy')){throw "Actual helper scope unexpected: $name"};$controls++}
+foreach($case in @('healthy','movement','movementupright','fire','destroyed','health','stale','expired','window','human','unsettled','budget','upright','missingusage','missingvehicle','disabled')){
+ $t=[AICF_TransportTrip]::new();$t.Lease.Vehicle=[Vehicle]::new();$t.Lease.Vehicle.Up=-.1
+ $t.Eligible=($scope.ContainsKey($case) -and $scope[$case]);$dispatch=[HealthDispatch]::new()
+ $expected='VEHICLE_OVERTURNED';$recover=1;$fallback=1;$route=0
+ switch($case){
+  'healthy' {$expected='HEALTHY_OVERTURN_HANDLER';$fallback=0}
+  'movement' {$t.Lease.Vehicle.Damage.MovementDamage=1;$t.Lease.Vehicle.CanMove=$false}
+  'movementupright' {$t.Lease.Vehicle.Up=1;$t.Lease.Vehicle.Damage.MovementDamage=1;$t.Lease.Vehicle.CanMove=$false;$t.Eligible=$true;$expected='VEHICLE_MOVEMENT_DESTROYED';$recover=0}
+  'fire' {$t.Lease.Vehicle.Fire=$true;$t.Eligible=$true;$expected='VEHICLE_ON_FIRE';$recover=0}
+  'destroyed' {$t.Lease.Vehicle.Usage.State=[EDamageState]::DESTROYED;$t.Eligible=$true;$expected='VEHICLE_DESTROYED';$recover=0}
+  'upright' {$t.Lease.Vehicle.Up=1;$expected='CONTINUE';$recover=0;$fallback=0;$route=1}
+  'missingusage' {$t.Lease.Vehicle.Usage=$null;$expected='VEHICLE_DESTROYED';$recover=0}
+  'missingvehicle' {$t.Lease.Vehicle=$null;$expected='VEHICLE_DESTROYED';$recover=0}
+  'disabled' {$t.Eligible=$true;$dispatch.m_Config.Enabled=$false}
+ }
+ $public=$dispatch.InspectRouteAssetFailure($t)
+ $expectedPublic=$expected;if($expected -in @('CONTINUE','HEALTHY_OVERTURN_HANDLER')){$expectedPublic=''}
+ if($public -cne $expectedPublic){throw "Public health classifier $case actual=$public expected=$expectedPublic"}
+ $actual=$dispatch.Tick($t,'C1')
+ if($actual.Reason -cne $expected -or $dispatch.RecoverCalls -ne $recover -or $dispatch.SnapshotCalls -ne $fallback -or $dispatch.AbortCalls -ne $fallback -or $dispatch.RouteCalls -ne $route){throw "Actual Tick health dispatch $case wrong outcome/counters"}
  $controls++
 }
 $coordinator=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/Vehicles/AICF_VehicleCoordinator.c'))

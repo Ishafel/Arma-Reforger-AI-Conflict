@@ -5,6 +5,21 @@ $fixture=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'tests/fixtures/AICF_
 function Body($s,$m){Get-AICFMethodBody ([pscustomobject]@{Source=$s;Code=(ConvertTo-AICFCodeText $s)}) $m}
 function Rules($s){
  $maintain=Body $s 'MaintainStagingMemberActions'
+ $setup=Body $s 'FindControlledSetup'
+ foreach($guard in @('member < 5','step < 32','vector.DistanceXZ(candidate.GetOrigin(), query) > 24.9',
+  'AICF_InfantrySpawnPlacement.IsUsable(','vector.Distance(candidate.GetOrigin(), destination) > 25',
+  'vector.DistanceSqXZ(query, destination) > 0.25')){if(!$setup.Contains($guard)){'NATIVE_SETUP_BOUNDED_SEARCH';break}}
+ $escape=Body $s 'HasControlledEscape'
+ foreach($guard in @('UnblockEnabled() && !HasControlledEscape(trip, plan, destination)','ring < 3','direction < 3',
+  'shift < 2 || shift > 8','Math.AbsFloat(destination[1] - origin[1]) > 1',
+  'vector.DistanceSqXZ(query, destination) > 0.25 || pad < 10 || pad > 90',
+  'vector.DistanceXZ(destination, plan.GetStagingPosition()) >= vector.DistanceXZ(origin, plan.GetStagingPosition()) - 1',
+  'native_usable=1 controlled_escape_precondition=1')){if(!$s.Contains($guard)){'CONTROLLED_NATIVE_ESCAPE_PRECONDITION';break}}
+ if(!$escape.Contains('AICF_InfantrySpawnPlacement.IsUsable(')){'CONTROLLED_NATIVE_ESCAPE_PRECONDITION'}
+ foreach($guard in @('EXHAUSTION_DISTANT_NATIVE_ORDER_SET','!m_bMSDistantOrderSet','vector.DistanceXZ(m_vVBHome, point) < 200',
+  'm_OrderPlanner.AssignPlayerPointOrder(slot, m_VBFaction, point, false)','original_recovery_window_unchanged=1')){
+  if(!$s.Contains($guard)){'DISTANT_NATIVE_ORDER_PRESERVES_STRICT_RESTORE_ORACLE';break}
+ }
  foreach($guard in @('aicfManualStagingProbe','flag == "1"','trip.GetAssignment().GetGroup() == AICF_ManualStagingProbeState.s_Group',
   '!AICF_ManualStagingProbeState.s_SetupAt','plan.RequiresManualRally()','vector.Distance(actor.GetOrigin(), destination) <= 25',
   'AICF_InfantrySpawnPlacement.IsUsable(','GetDisableMovementControls()','SetDisableMovementControls(true)',
@@ -41,6 +56,17 @@ function Rules($s){
   if(!$s.Contains($guard)){'EXHAUSTED_NATIVE_LIFECYCLE_AND_FALLBACK_PROOF';break}
  }
  if((Body $s 'Stop').IndexOf('AICF_ManualStagingProbeState.RestoreMovement()') -gt (Body $s 'Stop').IndexOf('super.Stop(')){'RESTORE_NATIVE_CONTROL_BEFORE_STOP'}
+ foreach($guard in @('aicfManualStagingUnblockProbe','setupDistance = 36','PollUnblockMotion, 50, true',
+  'vector.Distance(s_Actor.GetOrigin(), s_Destination) > 0.5','s_UnblockBaseline = s_Actor.GetOrigin()',
+  'UNBLOCK_SAME_NATIVE_ACTION_AFTER_SHORT','UNBLOCK_ACTUAL_NATIVE_WALK','UNBLOCK_NATIVE_RALLY_BEFORE_DEBIT',
+  'UNBLOCK_NATIVE_SPAWN_AND_DEBIT','UNBLOCK_ORIGINAL_HEALTH_DEADLINES','utility.GetCurrentAction() == s_UnblockAction',
+  'utility.GetExecutedAction() == s_UnblockAction','walked >= 1 && same','Remove(PollUnblockMotion)',
+  'AICF_ManualStagingProbeState.PollUnblockMotion','controlled_all_bounded_placement_rejected=1')){
+  if(!$s.Contains($guard)){'SAME_ACTION_NATIVE_LANDING_WALK_RALLY_PURCHASE';break}
+ }
+ $destination=Body $s 'SafeDestination'
+ if(!$destination.Contains('if (AICF_ManualStagingProbeState.ExhaustionEnabled()) return false;') -or
+  !$destination.Contains('bool safe = super.SafeDestination(query, destination);') -or !$destination.Contains('return safe;')){'EXPLICIT_EXHAUSTION_PLACEMENT_FAULT_ONLY'}
  if($s.Contains('plan.GetApproachWaypointReissueCount() != AICF_ManualStagingProbeState.s_WaypointRemovals') -or
   !$maintain.Contains('!AICF_ManualStagingProbeState.s_MissingReissueReported') -or
   !$maintain.Contains('AICF_ManualStagingProbeState.s_MissingReissueReported = true;') -or
@@ -67,7 +93,15 @@ function Rules($s){
  if($restore -match '\b(?:ClearPendingOrderRecovery|RecordPendingOrderRecoveryStablePoll|BeginOrderRecoveryVerification|Set\w*Deadline)\s*\('){'NO_FAKE_RESTORE_CONFIRMATION_OR_REARM'}
 }
 $bad=@(Rules $fixture);if($bad.Count){throw "Manual staging native fixture: $bad"}
-$mutants=@('vector.Distance(actor.GetOrigin(), destination) <= 25','super.MaintainStagingMemberActions(',
+$mutants=@('!m_bMSDistantOrderSet','vector.DistanceXZ(m_vVBHome, point) < 200',
+ 'm_OrderPlanner.AssignPlayerPointOrder(slot, m_VBFaction, point, false)','original_recovery_window_unchanged=1',
+ 'UnblockEnabled() && !HasControlledEscape(trip, plan, destination)','ring < 3','direction < 3',
+ 'shift < 2 || shift > 8','Math.AbsFloat(destination[1] - origin[1]) > 1',
+ 'vector.DistanceSqXZ(query, destination) > 0.25 || pad < 10 || pad > 90',
+ 'vector.DistanceXZ(destination, plan.GetStagingPosition()) >= vector.DistanceXZ(origin, plan.GetStagingPosition()) - 1',
+ 'member < 5','step < 32','vector.DistanceXZ(candidate.GetOrigin(), query) > 24.9',
+ 'vector.Distance(candidate.GetOrigin(), destination) > 25','vector.DistanceSqXZ(query, destination) > 0.25',
+ 'vector.Distance(actor.GetOrigin(), destination) <= 25','super.MaintainStagingMemberActions(',
  'SetDisableMovementControls(s_OldMovementDisabled)','!recovered && !m_bConsumed','vector.Distance(before, m_Actor.GetOrigin()) < 0.01',
  'm_Token.GetRetryCount() == 1','m_Plan.IsStagingMemberExhausted(m_Actor)','m_iManualStagingClearPolls >= 2 && shift <= 8',
  'ready == 5 && !trip.GetLease() && !trip.IsVehiclePresetDebited()','GetHealthScaled() == AICF_ManualStagingProbeState.s_Health',

@@ -235,7 +235,10 @@ class AICF_VehicleTransitFlow
 	{
 		if (!trip || !trip.GetLease() || !trip.GetLease().HasPhysicalAsset())
 			return "VEHICLE_DESTROYED";
-		return InspectVehicleFailure(trip.GetLease().GetVehicle());
+		string failure = InspectVehicleFailure(trip.GetLease().GetVehicle());
+		if (failure == "VEHICLE_OVERTURNED" && m_Config.GetHiddenRecoveryEnabled() && AICF_OverturnRecovery.CanConsider(trip, System.GetTickCount()))
+			return string.Empty;
+		return failure;
 	}
 
 	AICF_TripOutcome PrepareRoute(AICF_TransportTrip trip, string causationId)
@@ -304,9 +307,14 @@ class AICF_VehicleTransitFlow
 		if (!ValidateContext(trip, causationId, true, invalidReason))
 			return AICF_TripOutcome.TerminalFailClosed(invalidReason, causationId);
 		AICF_VehiclePresetNativeSeatPolicy.Register(trip);
-		string vehicleFailure = InspectRouteAssetFailure(trip);
+		string vehicleFailure = InspectVehicleFailure(trip.GetLease().GetVehicle());
 		if (!vehicleFailure.IsEmpty())
 		{
+			if (vehicleFailure == "VEHICLE_OVERTURNED")
+			{
+				AICF_TripOutcome overturn = RecoverHealthyOverturn(trip, causationId);
+				if (overturn) return overturn;
+			}
 			ReportVehicleFailureSnapshot(trip, vehicleFailure);
 			AbortOwnedActions(trip);
 			return AICF_TripOutcome.FallbackToFoot(vehicleFailure, causationId);
@@ -320,6 +328,7 @@ class AICF_VehicleTransitFlow
 		}
 
 		AICF_VehicleMovementState state = trip.GetMovementState();
+		state.SetOverturnRecovery(null);
 		EnsureStateStarted(trip, state, nowMs);
 		AICF_VehicleBehaviorFlow behavior = new AICF_VehicleBehaviorFlow(m_Config);
 		AICF_TripOutcome behaviorOutcome = behavior.InspectTransit(trip, causationId);
@@ -405,6 +414,34 @@ class AICF_VehicleTransitFlow
 		return BeginMobilityRecovery(trip, causationId, failure.Reason(), failure.NeedsPhysicalCorrection());
 	}
 
+	protected AICF_TripOutcome RecoverHealthyOverturn(AICF_TransportTrip trip, string causationId)
+	{
+		int nowMs = System.GetTickCount();
+		if (!m_Config.GetHiddenRecoveryEnabled() || !AICF_OverturnRecovery.CanConsider(trip, nowMs)) return null;
+		string safetyReason;
+		if (!m_Watchdog.CanSafelyRelocateVehicle(trip.GetAssignment().GetGroup(), trip.GetLease().GetVehicle(),
+			m_Config.GetHiddenRecoveryPlayerRadiusMeters(), false, safetyReason)) return null;
+		AICF_VehicleMovementState state = trip.GetMovementState();
+		AICF_OverturnRecovery observed = state.GetOverturnRecovery();
+		if (!observed)
+		{
+			observed = new AICF_OverturnRecovery(trip, nowMs);
+			state.SetOverturnRecovery(observed);
+		}
+		if (!observed.Matches(trip, nowMs)) return null;
+		if (!AICF_OverturnRecovery.CanMutateNow(trip))
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_OVERTURN_SETTLING", FormatIdentity(trip, "HEALTHY_OVERTURN") +
+				string.Format(" observed_age_ms=%1 maximum_observation_ms=%2 mobility_attempts=%3 maximum_attempts=%4 deadline_renewed=0 physical_mutation=0",
+					observed.AgeMs(nowMs), AICF_OverturnRecovery.OBSERVATION_WINDOW_MS,
+					state.GetMobilityRecoveryAttempts(), state.GetMaximumMobilityRecoveryAttempts()));
+			return AICF_TripOutcome.Wait("HEALTHY_OVERTURN_WAIT_SLOW_PHYSICS", causationId);
+		}
+		if (!state.BeginMobilityRecovery()) return FailRecovery(trip, "HEALTHY_OVERTURN_RECOVERY_EXHAUSTED", "MOBILITY", causationId);
+		if (state.IsRecoveryEvidencePending()) ReportPendingRecoveryFailure(trip, "HEALTHY_OVERTURN", false);
+		return BeginMobilityRecovery(trip, causationId, "HEALTHY_OVERTURN", true);
+	}
+
 	static bool NeedsRouteQueueRecovery(bool cachedBound, int routeGeneration, AIWaypoint route, array<AIWaypoint> queued)
 	{
 		return cachedBound && routeGeneration > 0 && (!route || !queued.Contains(route));
@@ -445,6 +482,7 @@ class AICF_VehicleTransitFlow
 		}
 		state.SetNativeGate(null);
 		state.SetTransitMoveFailure(null);
+		state.SetOverturnRecovery(null);
 		AICF_VehicleCrewRecoveryToken token = state.GetCrewRecoveryToken();
 		if (!token)
 			return;
@@ -1547,7 +1585,8 @@ class AICF_VehicleTransitFlow
 				unstuckSearchDiagnostics,
 				state.IsMobilityRecoverySettlementGraceExpired(
 					System.GetTickCount(),
-					MANAGED_SETTLEMENT_RECOVERY_GRACE_MS));
+					MANAGED_SETTLEMENT_RECOVERY_GRACE_MS),
+				stuckReason == "HEALTHY_OVERTURN");
 			if (!relocated &&
 				unstuckMode == "REJECTED_MANAGED_MEMBERS_NOT_SETTLED")
 			{
@@ -1589,6 +1628,18 @@ class AICF_VehicleTransitFlow
 						trip.GetAbsoluteDeadlineMs(),
 						System.GetTickCount() + RECOVERY_RETRY_DELAY_MS));
 			}
+		}
+		if (stuckReason == "HEALTHY_OVERTURN")
+		{
+			if (!relocated)
+			{
+				AICF_Stage3Diagnostics.Warning("VEHICLE_OVERTURN_CORRECTION_REJECTED", FormatIdentity(trip, unstuckMode) + " " + unstuckSearchDiagnostics);
+				if (state.GetMobilityRecoveryAttempts() >= state.GetMaximumMobilityRecoveryAttempts())
+					return FailRecovery(trip, "HEALTHY_OVERTURN_RECOVERY_EXHAUSTED", "MOBILITY", causationId);
+				return AICF_TripOutcome.Retry("HEALTHY_OVERTURN_NO_SAFE_CANDIDATE", causationId,
+					Math.Min(trip.GetAbsoluteDeadlineMs(), System.GetTickCount() + RECOVERY_RETRY_DELAY_MS));
+			}
+			state.SetOverturnRecovery(null);
 		}
 		state.ClearMobilityRecoverySettlementDeferrals();
 
@@ -1652,7 +1703,8 @@ class AICF_VehicleTransitFlow
 		out vector relocatedPosition,
 		out string mode,
 		out string searchDiagnostics,
-		bool allowManagedTransitionRecovery)
+		bool allowManagedTransitionRecovery,
+		bool requireOverturnScope = false)
 	{
 		Vehicle vehicle = trip.GetLease().GetVehicle();
 		relocatedPosition = vehicle.GetOrigin();
@@ -1771,6 +1823,12 @@ class AICF_VehicleTransitFlow
 				}
 
 				string hazardReason;
+				if (requireOverturnScope && !AICF_OverturnRecovery.IsLocalCorrectionDistance(vector.Distance(originalPosition, candidate)))
+				{
+					displacementRejected++;
+					rejectionSamples = AppendUnstuckSearchSample(rejectionSamples, centersTested, candidate, "OVERTURN_3D_DISPLACEMENT_OVER_15M");
+					continue;
+				}
 				if (!IsUnstuckCandidateHazardClear(
 					candidate,
 					trip.GetAssignment().GetGroup(),
@@ -1829,6 +1887,13 @@ class AICF_VehicleTransitFlow
 					continue;
 				}
 
+				if (requireOverturnScope && (!AICF_OverturnRecovery.CanMutateNow(trip) || trip.GetLease().GetVehicle() != vehicle))
+				{
+					mode = "REJECTED_OVERTURN_SCOPE_CHANGED";
+					searchDiagnostics = BuildUnstuckSearchDiagnostics(centersTested, terrainCandidates, displacementRejected,
+						hazardRejected, hiddenFenceRejected, transformRejected, rejectionSamples, "OVERTURN_SCOPE_RECHECK_REJECTED");
+					return false;
+				}
 				vector angles = targetDirection.VectorToAngles();
 				angles[1] = 0;
 				angles[2] = 0;

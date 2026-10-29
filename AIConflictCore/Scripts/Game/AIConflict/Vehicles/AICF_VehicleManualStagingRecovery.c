@@ -1,4 +1,4 @@
-// Узкая коррекция последнего неподвижного manual rally участника. Это не arrival
+// Узкая коррекция неподвижного manual rally участника. Это не arrival
 // proof: последующий обычный MeasureStagingReadiness заново подтверждает весь roster.
 class AICF_VehicleManualStagingRecovery
 {
@@ -35,15 +35,16 @@ class AICF_VehicleManualStagingRecovery
 		m_Group = m_Assignment.GetGroup();
 		m_Actor = ChimeraCharacter.Cast(token.GetReservedEntity());
 		m_Waypoint = plan.GetApproachWaypoint();
-		if (!m_Group || !m_Actor || !m_Waypoint) return;
+		if (!m_Group || !m_Actor) return;
 		m_GroupId = m_Group.GetID(); m_sGroupRpl = AICF_VehicleBehaviorBinding.ComponentRpl(m_Group);
 		m_iRequestGeneration = request.GetRequestGeneration(); m_iPresetRevision = trip.GetVehiclePresetRevision();
-		m_vOrigin = m_Actor.GetOrigin(); m_vStaging = plan.GetStagingPosition(); m_vWaypoint = m_Waypoint.GetOrigin();
+		m_vOrigin = m_Actor.GetOrigin(); m_vStaging = plan.GetStagingPosition();
+		if (m_Waypoint) m_vWaypoint = m_Waypoint.GetOrigin();
 	}
 
 	bool IsCurrent(int nowMs)
 	{
-		if (m_bConsumed || !Replication.IsServer() || !m_Trip || !m_Trip.IsValid() || m_Trip.IsTerminal() ||
+		if (m_bConsumed || !(m_fRadius > 0) || !Replication.IsServer() || !m_Trip || !m_Trip.IsValid() || m_Trip.IsTerminal() ||
 			m_Trip.GetPhase() != AICF_ETransportTripPhase.APPROACHING_SITE || m_Trip.GetLease() ||
 			!m_Trip.GetVehiclePreset() || !m_Trip.IsVehiclePresetCurrent() || m_Trip.IsVehiclePresetDebited()) return false;
 		if (!m_Assignment || m_Trip.GetAssignment() != m_Assignment || !m_CurrentAssignment || !m_CurrentAssignment.IsValid() ||
@@ -60,18 +61,14 @@ class AICF_VehicleManualStagingRecovery
 			m_Request.GetSpawnPlan() != m_Plan || !m_Plan || !m_Plan.IsValid() || !m_Plan.RequiresManualRally() ||
 			!m_Spawner || !m_Spawner.IsSiteReservationCurrent(m_Plan.GetReservation(), m_Trip, m_Request, nowMs)) return false;
 		if (m_Trip.IsDeadlineReached(nowMs) || m_Request.IsDeadlineReached(nowMs) || nowMs >= m_Plan.GetApproachDeadlineMs() ||
-			m_Plan.GetStagingPosition() != m_vStaging || m_Plan.GetApproachWaypoint() != m_Waypoint || !m_Waypoint ||
-			m_Waypoint.GetOrigin() != m_vWaypoint || m_Group.GetCurrentWaypoint() != m_Waypoint) return false;
+			m_Plan.GetStagingPosition() != m_vStaging || m_Plan.GetApproachWaypoint() != m_Waypoint ||
+			(m_Waypoint && m_Waypoint.GetOrigin() != m_vWaypoint)) return false;
 		if (!m_Group || m_Group.GetID() != m_GroupId || !AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(m_Group) ||
 			AICF_VehicleBehaviorBinding.ComponentRpl(m_Group) != m_sGroupRpl ||
 			!m_Group.GetFaction() || m_Group.GetFaction().GetFactionKey() != m_Trip.GetFactionKey()) return false;
-		array<AIWaypoint> waypoints = {}; m_Group.GetWaypoints(waypoints);
-		SCR_AIGroupUtilityComponent groupUtility = m_Group.GetGroupUtilityComponent();
-		if (!waypoints.Contains(m_Waypoint) || !groupUtility) return false;
-		SCR_AIActivityBase activity = SCR_AIActivityBase.Cast(groupUtility.GetCurrentAction());
-		if (!activity || activity.m_RelatedWaypoint != m_Waypoint || groupUtility.GetExecutedAction() != activity ||
-			activity.GetActionState() != EAIActionState.RUNNING) return false;
+		if (!HasCurrentGuidance(nowMs)) return false;
 		if (!m_Token || m_Plan.FindStagingActionToken(m_Actor) != m_Token || !m_Token.Matches(m_Trip, m_iRequestGeneration, m_Group) ||
+			!m_Token.MatchesTaskAssignment(m_Assignment) ||
 			m_Token.GetRetryCount() != 1 || !m_Plan.WasStagingMemberRetried(m_Actor) || !m_Plan.IsStagingMemberExhausted(m_Actor) ||
 			m_Plan.WasStagingMemberRelocated(m_Actor) || m_Token.GetTargetPosition() != m_vStaging ||
 			!m_Token.HasNoPhysicalMotion(nowMs, 5000)) return false;
@@ -81,6 +78,27 @@ class AICF_VehicleManualStagingRecovery
 		if (!utility || utility.m_OwnerEntity != m_Actor || utility.GetCurrentAction() != m_Token.GetAction() ||
 			utility.GetExecutedAction() != m_Token.GetAction() || vector.Distance(m_Actor.GetOrigin(), m_vOrigin) > 0.5) return false;
 		return IsExactFootRoster(slot);
+	}
+
+	protected bool HasCurrentGuidance(int nowMs)
+	{
+		array<AIWaypoint> waypoints = {}; m_Group.GetWaypoints(waypoints);
+		bool exactGroupTask;
+		if (m_Waypoint && m_Group.GetCurrentWaypoint() == m_Waypoint && waypoints.Contains(m_Waypoint))
+		{
+			SCR_AIGroupUtilityComponent groupUtility = m_Group.GetGroupUtilityComponent();
+			SCR_AIActivityBase activity;
+			if (groupUtility) activity = SCR_AIActivityBase.Cast(groupUtility.GetCurrentAction());
+			exactGroupTask = activity && activity.m_RelatedWaypoint == m_Waypoint && groupUtility.GetExecutedAction() == activity &&
+				activity.GetActionState() == EAIActionState.RUNNING;
+		}
+		bool exactActorTask = AICF_VehicleStagingTaskProof.HasCurrentTask(m_Trip, m_CurrentAssignment.GetBaseRevision(), nowMs);
+		return AcceptGuidanceShape(exactGroupTask, waypoints.IsEmpty(), m_Group.GetCurrentWaypoint() != null, exactActorTask);
+	}
+
+	static bool AcceptGuidanceShape(bool exactGroupTask, bool queueEmpty, bool hasCurrentWaypoint, bool exactActorTask)
+	{
+		return exactGroupTask || (queueEmpty && !hasCurrentWaypoint && exactActorTask);
 	}
 
 	protected bool IsFitFootActor(ChimeraCharacter actor, AIAgent agent)
@@ -116,26 +134,29 @@ class AICF_VehicleManualStagingRecovery
 			if (!agents.Contains(agent) || !IsFitFootActor(actor, agent)) return false;
 			if (actor == m_Actor) found = true;
 			if (!AICF_VehicleSpawner.IsStagingGeometryReady(vector.DistanceXZ(actor.GetOrigin(), m_vStaging), m_fRadius,
-				vector.DistanceXZ(actor.GetOrigin(), m_Plan.GetSpawnPosition()), 90, true)) outside++;
+				vector.DistanceXZ(actor.GetOrigin(), m_Plan.GetSpawnPosition()), 90, true))
+			{
+				outside++;
+				if (actor != m_Actor && m_Plan.IsStagingMemberExhausted(actor)) return false;
+			}
 		}
-		return found && captured > 1 && captured == assigned && captured == slot.GetDesiredSize() && captured == agents.Count() && outside == 1 &&
+		return found && captured > 0 && captured == assigned && captured == slot.GetDesiredSize() && captured == agents.Count() && outside > 0 &&
 			!AICF_VehicleSpawner.IsStagingGeometryReady(vector.DistanceXZ(m_Actor.GetOrigin(), m_vStaging), m_fRadius,
 				vector.DistanceXZ(m_Actor.GetOrigin(), m_Plan.GetSpawnPosition()), 90, true);
 	}
 
 	protected bool SafeDestination(vector query, out vector destination)
 	{
-		return AICF_InfantrySpawnPlacement.IsUsable(m_Group, query, destination) &&
-			IsBoundedStep(vector.Distance(m_vOrigin, destination), Math.AbsFloat(m_vOrigin[1] - destination[1]),
-				vector.DistanceSqXZ(query, destination), vector.DistanceXZ(m_vOrigin, m_vStaging),
-				vector.DistanceXZ(destination, m_vStaging), AICF_VehicleSpawner.IsStagingGeometryReady(
-					vector.DistanceXZ(destination, m_vStaging), m_fRadius, vector.DistanceXZ(destination, m_Plan.GetSpawnPosition()), 90, true));
+		if (!AICF_InfantrySpawnPlacement.IsUsable(m_Group, query, destination)) return false;
+		float padDistance = vector.DistanceXZ(destination, m_Plan.GetSpawnPosition());
+		return padDistance >= 10 && padDistance <= 90 && IsBoundedStep(vector.Distance(m_vOrigin, destination), Math.AbsFloat(m_vOrigin[1] - destination[1]),
+				vector.DistanceSqXZ(query, destination), vector.DistanceXZ(m_vOrigin, m_vStaging), vector.DistanceXZ(destination, m_vStaging));
 	}
 
-	static bool IsBoundedStep(float shift, float vertical, float projectionSq, float before, float after, bool rallyReady)
+	static bool IsBoundedStep(float shift, float vertical, float projectionSq, float before, float after)
 	{
 		return shift >= 2 && shift <= MAX_SHIFT_METERS && vertical >= 0 && vertical <= 1 &&
-			projectionSq >= 0 && projectionSq <= 0.25 && after >= 0 && after < before - 1 && rallyReady;
+			projectionSq >= 0 && projectionSq <= 0.25 && after >= 0 && after < before - 1;
 	}
 
 	protected bool FindDestination(out vector destination)
@@ -174,7 +195,7 @@ class AICF_VehicleManualStagingRecovery
 		string details = string.Format("operation_id=%1 member=%2 request_generation=%3 action_token=%4 before=%5 destination=%6 shift_m=%7",
 			m_Trip.GetOperationId(), m_Actor.GetID(), m_iRequestGeneration, m_Token.GetFence().GetToken(), m_vOrigin, destination,
 			vector.Distance(m_vOrigin, destination));
-		details += string.Format(" retry=%1 approach_deadline_ms=%2 trip_deadline_ms=%3 paid=0 movement_confirmation=PENDING",
+		details += string.Format(" retry=%1 approach_deadline_ms=%2 trip_deadline_ms=%3 paid=0 movement_confirmation=PENDING same_native_action=1 new_retry=0",
 			m_Token.GetRetryCount(), m_Plan.GetApproachDeadlineMs(), m_Trip.GetAbsoluteDeadlineMs());
 		AICF_Stage3Diagnostics.Info("VEHICLE_MANUAL_STAGING_SHORT_SUBMITTED", details);
 		return true;

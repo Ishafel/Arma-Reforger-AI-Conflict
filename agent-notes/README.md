@@ -11,6 +11,7 @@
 | Исправить persistence leaks при direct-connect без backend identity | [PERSISTENCE_IDENTITY.md](PERSISTENCE_IDENTITY.md), native SpawnLogic identity boundary и separate client/JIP gate |
 | Разобрать native out-of-world-bounds у оружия и отделить main-world drop от private Equipment model | [TEST_FIXTURES.md](TEST_FIXTURES.md#read-only-loose-weapon--private-equipment-model-observer), fixture-only LooseWeaponObserver и отдельный controlled native-drop baseline |
 | Изменить поведение TRANSPORT/COMBAT, N возврата, замену потерь и разрешённую короткую принудительную посадку | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md), BehaviorFlow/Policy/ShortRecovery и retained TACTICAL_DEPLOYMENT |
+| Разобрать ожидание входа в машину и ранний пеший подход без расширения door cap/deadline | [VEHICLE_BOARDING_QUEUE.md](VEHICLE_BOARDING_QUEUE.md), PresetQueuedApproach/BoardingState и callback-safe QueuePresetSeat |
 | Разобрать native UNKNOWN во время подхода к площадке техники | [VEHICLE_APPROACH_FAILURE.md](VEHICLE_APPROACH_FAILURE.md); exact phase-owned failure receipt и отдельный controlled native probe |
 | Проверить bounded route repair после настоящего OpenGate/возврата экипажа | [TEST_FIXTURES.md](TEST_FIXTURES.md#controlled-native-opengate-expiry), NativeGateExpiryProbe с единственной controlled expiry и отдельным native motion proof |
 | Передать игроку визуальную проверку окна техники и подтверждения состава | [VEHICLE_VISUAL_CHECK.md](VEHICLE_VISUAL_CHECK.md); terminal probes не заменяют этот NOT RUN |
@@ -55,6 +56,7 @@
 | Изменить адаптивные цели, потребность в силах и стратегические gates | [ADAPTIVE_COMMANDER.md](ADAPTIVE_COMMANDER.md), `Command/AICF_AdaptiveCommanderPolicy.c`, `AICF_AdaptiveScore.c` |
 | Изменить категории основного/второго оружия или пропущенный быстрый слот второй винтовки | [LOADOUT_WEAPON_CATEGORIES.md](LOADOUT_WEAPON_CATEGORIES.md), `UI/AICF_LoadoutWeaponCategories.c`, `Integration/AICF_WeaponQuickslots.c` и content profiles |
 | Найти утилиту, её статус и запустить offline набор | [TOOLS.md](TOOLS.md) |
+| Исправить orphan trip после native гибели группы, проверить DEAD cleanup и типизированную retirement projection | [VEHICLE_RETIREMENT.md](VEHICLE_RETIREMENT.md), [VEHICLE_SOAK.md](VEHICLE_SOAK.md) |
 | Выбрать runtime probe и проверить ограничения | [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Проверить identity failed movement и неоднозначный handler | [ARCHITECTURE.md](ARCHITECTURE.md#authority-и-identity), `Forces/AICF_AINodeLifecycle.c`, [TESTING.md](TESTING.md), InfantryMoveHandler probe |
 | Подготовить API reference, Workbench, локальный/удалённый runtime и Diag/retail | [DEVELOPMENT.md](DEVELOPMENT.md) |

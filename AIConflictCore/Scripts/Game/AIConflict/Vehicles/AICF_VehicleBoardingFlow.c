@@ -439,6 +439,7 @@ class AICF_VehicleBoardingFlow
 			{
 				if (!token.WasPresetQueued())
 				{
+					if (readyOnFoot) state.MaintainPresetQueueApproach(trip, lease, token);
 					if (!firstUnqueued && readyOnFoot)
 						firstUnqueued = token;
 					if (readyOnFoot) readyUnqueued.Insert(token);
@@ -845,8 +846,7 @@ class AICF_VehicleBoardingFlow
 
 	protected bool QueuePresetSeat(AICF_TransportTrip trip, AICF_VehicleBoardingState state, AICF_VehicleBoardingActionToken token)
 	{
-		if (token.WasPresetQueued() || !trip.IsVehiclePresetCurrent() || !token.IsPhysicalMutationOwnerSafe() ||
-			System.GetTickCount() >= state.GetAbsoluteDeadlineMs()) return false;
+		if (!IsPresetQueueContextCurrent(trip, state, token)) return false;
 		IEntity member = token.GetReservedEntity();
 		CompartmentAccessComponent access = ResolveAccess(member);
 		BaseCompartmentSlot seat = token.GetCompartment();
@@ -854,6 +854,17 @@ class AICF_VehicleBoardingFlow
 		if (!access || !seat || !utility || !token.GetGetInAction() || access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut() ||
 			CompartmentAccessComponent.GetVehicleIn(member) || seat.GetOccupant() || !seat.IsCompartmentAccessible() ||
 			seat.IsGetInLockedFor(member) || (seat.IsReserved() && !seat.IsReservedBy(member))) return false;
+		state.RetirePresetQueueApproach(token);
+		// Native approach cancellation precedes GetIn, and may run native callbacks.
+		if (!IsPresetQueueContextCurrent(trip, state, token)) return false;
+		SCR_AIUtilityComponent currentUtility = ResolveOwnedUtility(token.GetAgent(), member);
+		if (!currentUtility || currentUtility != utility) return false;
+		utility = currentUtility;
+		access = ResolveAccess(member);
+		if (!access || access.IsInCompartment() || access.IsGettingIn() ||
+			access.IsGettingOut() || access.IsSwitchingSeatsAnim() || CompartmentAccessComponent.GetVehicleIn(member) ||
+			seat.GetOccupant() || !seat.IsCompartmentAccessible() || seat.IsGetInLockedFor(member) ||
+			(seat.IsReserved() && !seat.IsReservedBy(member))) return false;
 		seat.SetReserved(member);
 		if (!seat.IsReservedBy(member)) return false;
 		token.RecordPresetQueued(vector.DistanceXZ(member.GetOrigin(), token.GetTargetVehicle().GetOrigin()));
@@ -864,6 +875,22 @@ class AICF_VehicleBoardingFlow
 		AICF_Stage3Diagnostics.Info("VEHICLE_PRESET_SEAT_REQUESTED", string.Format("operation=%1 revision=%2 position=%3 seat=%4 member=%5 sequential=0 maximum_parallel_entries=2",
 			trip.GetOperationId(), trip.GetVehiclePresetRevision(), position, AICF_VehiclePreset.SeatKey(seat), member.GetID()));
 		return true;
+	}
+
+	protected bool IsPresetQueueContextCurrent(AICF_TransportTrip trip, AICF_VehicleBoardingState state, AICF_VehicleBoardingActionToken token)
+	{
+		if (!Replication.IsServer() || !trip || !trip.IsValid() || trip.IsTerminal() ||
+			trip.GetPhase() != AICF_ETransportTripPhase.BOARDING || !trip.IsVehiclePresetCurrent()) return false;
+		if (!state || trip.GetBoardingState() != state || state.AreExitEffectsApplied() || state.ArePresetQueueActionsChanging() ||
+			System.GetTickCount() >= state.GetAbsoluteDeadlineMs() || trip.IsDeadlineReached(System.GetTickCount())) return false;
+		AICF_VehicleLease lease = trip.GetLease();
+		SCR_AIGroup group = trip.GetAssignment().GetGroup();
+		if (!token || !lease || !group || !token.Matches(trip, lease, group) || !token.IsPhysicalMutationOwnerSafe() ||
+			token.WasPresetQueued() || !token.GetGetInAction()) return false;
+		AICF_VehicleBoardingTokenSet tokens = state.GetTokens();
+		ChimeraCharacter member = ChimeraCharacter.Cast(token.GetReservedEntity());
+		return tokens && tokens.FindByAgent(token.GetAgent()) == token && member && member.GetAIControlComponent() &&
+			member.GetAIControlComponent().GetControlAIAgent() == token.GetAgent();
 	}
 
 	// Native utility может удалить исходный action, сохранив его объект в EVALUATED.
