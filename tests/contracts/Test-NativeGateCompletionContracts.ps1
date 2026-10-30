@@ -74,7 +74,7 @@ foreach($mutated in @(
 # Actual production callback/attach/stop/setter bodies. Adapter changes only
 # object truthiness and the clock; native Complete -> Deselected resets State.
 function Adapt([string]$body){
- $body=$body.Replace('!m_Return.m_OnActionCompleted','m_Return.m_OnActionCompleted == null').Replace('!m_Return','m_Return == null').Replace('!m_Trip','m_Trip == null').Replace('&& m_Return)','&& m_Return != null)').Replace('if (m_NativeGate)','if (m_NativeGate != null)').Replace('System.GetTickCount()','1000')
+ $body=$body.Replace('!m_Perform.m_OnActionCompleted','m_Perform.m_OnActionCompleted == null').Replace('!m_Perform','m_Perform == null').Replace('&& m_Perform)','&& m_Perform != null)').Replace('!m_Return.m_OnActionCompleted','m_Return.m_OnActionCompleted == null').Replace('!m_Return','m_Return == null').Replace('!m_Trip','m_Trip == null').Replace('&& m_Return)','&& m_Return != null)').Replace('if (m_NativeGate)','if (m_NativeGate != null)').Replace('System.GetTickCount()','1000')
  return $body
 }
 $attach=Adapt (Body $source 'AttachReturnCompletion');$callback=Adapt (Body $source 'OnReturnCompleted');$stop=Adapt (Body $source 'Stop');$setter=Adapt (Body $movement 'SetNativeGate')
@@ -86,23 +86,25 @@ public class AICF_CallbackInvoker {
  public void Remove(Action<AICF_CallbackAction> action){List.Remove(action);}
  public void Invoke(AICF_CallbackAction action){foreach(var callback in List.ToArray()) callback(action);}
 }
+public enum EAIActionState { EVALUATED,RUNNING,COMPLETED,FAILED }
 public class AICF_CallbackAction {
  public AICF_CallbackInvoker m_OnActionCompleted=new AICF_CallbackInvoker(); public int State;
- public void Complete(){State=2;m_OnActionCompleted.Invoke(this);} public void Deselect(){State=0;} public void Cancel(){State=3;}
+ public EAIActionState GetActionState(){return (EAIActionState)State;} public void Complete(){State=2;m_OnActionCompleted.Invoke(this);} public void Deselect(){State=0;} public void Cancel(){State=3;}
 }
-public class AICF_CallbackTrip { public bool Valid=true,Retire=false,AssetCurrent=true; public bool IsValid(){return Valid;} public bool IsValidForRetirement(){return Valid||Retire;} public bool HasAbsentGroupRetirementIdentity(){return Retire;} public AICF_CallbackMovement State=new AICF_CallbackMovement(); public AICF_CallbackMovement GetMovementState(){return State;} }
+public class AICF_CallbackTrip { public bool IsDeadlineReached(int now){return false;} public bool Valid=true,Retire=false,AssetCurrent=true; public bool IsValid(){return Valid;} public bool IsValidForRetirement(){return Valid||Retire;} public bool HasAbsentGroupRetirementIdentity(){return Retire;} public AICF_CallbackMovement State=new AICF_CallbackMovement(); public AICF_CallbackMovement GetMovementState(){return State;} }
 public class AICF_TripRetirementIdentity { public static bool IsFleetAssetCurrent(AICF_CallbackTrip trip,object fleet){return trip.AssetCurrent;} }
 public class AICF_CallbackMovement { public AICF_CallbackGate m_NativeGate; public AICF_CallbackGate GetNativeGate(){return m_NativeGate;} public void SetNativeGate(AICF_CallbackGate gate) SETTER }
 public class AICF_CallbackGate {
- public bool m_bStopped,m_bReturnListenerAttached,m_bReturnCompleted; public int m_iReturnCompletedAtMs;
+ public bool m_bStopped,m_bReturnListenerAttached,m_bReturnCompleted,m_bPerformListenerAttached,m_bPerformCompleted; public int m_iReturnCompletedAtMs,m_iPerformCompletedAtMs; public bool IsExpired(int now){return false;} public void Log(string e){}
  public bool ContextCurrent=true; public AICF_CallbackTrip m_Trip; public AICF_CallbackAction m_Return,m_Exit,m_Perform;
  public bool Matches(AICF_CallbackTrip trip){return ContextCurrent && trip!=null;}
  public bool AttachReturnCompletion(AICF_CallbackTrip trip) ATTACH
  public void OnReturnCompleted(AICF_CallbackAction action) CALLBACK
+ public void OnPerformCompleted(AICF_CallbackAction action) PERFORMBODY
  public void Stop() STOP
 }
 '@
-$code=$code.Replace('SETTER',$setter).Replace('ATTACH',$attach).Replace('CALLBACK',$callback).Replace('STOP',$stop)
+$code=$code.Replace('PERFORMBODY',(Adapt (Body $source 'OnPerformCompleted'))).Replace('SETTER',$setter).Replace('ATTACH',$attach).Replace('CALLBACK',$callback).Replace('STOP',$stop)
 $controllerStop=Body $controller 'AbortForStop'
 $prelude=$controllerStop.Substring(0,$controllerStop.IndexOf('if (reason.IsEmpty())'))
 $prelude=$prelude.Replace('if (!trip)','if (trip == null)').Replace('AICF_VehicleMovementState','AICF_CallbackMovement').Replace('if (stopMovement)','if (stopMovement != null)')
@@ -111,7 +113,7 @@ $code+=$stopCode
 Add-Type -TypeDefinition $code
 function Setup {
  $trip=New-Object AICF_CallbackTrip;$gate=New-Object AICF_CallbackGate;$action=New-Object AICF_CallbackAction
- $gate.m_Return=$action;$trip.State.SetNativeGate($gate)
+ $gate.m_Return=$action;$gate.m_Perform=New-Object AICF_CallbackAction;$trip.State.SetNativeGate($gate)
  if(!$gate.AttachReturnCompletion($trip)){throw 'Callback fixture attach failed'}
  return [pscustomobject]@{trip=$trip;gate=$gate;action=$action}
 }

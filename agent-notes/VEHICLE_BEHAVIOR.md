@@ -28,6 +28,47 @@ route waypoint, временно восстанавливает infantry order �
 и вновь подключает vehicle utility. Lease, vehicle identity и debit сохраняются.
 Автоматические trips без ручного пресета сохраняют прежний одноразовый цикл.
 
+Временное пустое место экипажа во время уже захваченной native цепочки
+`OpenGate → exact-seat return` само по себе не означает потерю экипажа.
+`AICF_TransportNativeGate.OwnsTemporaryCrewExit` подтверждает текущий token,
+исходный assigned actor/seat, entity/Rpl/control/group, сознание, физическую
+связь только с той же машиной/местом и текущее собственное native действие.
+Лишь такой proof позволяет BehaviorFlow продолжить TRANSIT до штатного gate
+observer. `LOCAL_THREAT` сохраняет приоритет; dead/unconscious/foreign/stale,
+expired или отсутствующий token не дают исключения. Исходное окно60s, общий
+deadline и бюджеты не продлеваются, actions/health/poses не меняются.
+Короткий native handoff после успешного `Perform` подтверждается отдельным
+completion receipt: exact native invoker фиксирует только первое завершение.
+Если utility ещё хранит именно этот `Perform:COMPLETED/remove1`, допускается
+только уже стоящий в той же utility queue exact живой несuspended `Return`
+того же activity. `EVALUATED` у текущего завершённого Perform не даёт исключения.
+Оба completion listeners снимаются в `Stop`; повторные callbacks не обновляют
+время receipt. Диагностический invoker observer лишь читает actual production
+`OwnsTemporaryCrewExit`, не управляет outcome. Событие
+`TRANSPORT_NATIVE_GATE_PERFORM_COMPLETED` добавляет `perform_completed_receipt`,
+`perform_completed_at_ms`, `perform_listener_attached` к обычному gate payload.
+`Test-NativeGateCrewExitContracts.ps1` исполняет actual extracted readonly proof
+и unsafe mutants, включая receipt/queue/lifecycle; отдельный
+`Test-NativeGateCompletedHandoffProbeContracts.ps1` проверяет fixture и строгий
+лог-аудитор boundary. Native CrewReturn и paired G2/G3 field runtime остаются
+отдельными gates. Пара G2→G3 на raw342, отличающаяся только Gate class,
+проверила настоящее завершение native Perform: прежний `Owns` вернул0,
+новый вернул1 после production completion receipt. Затем AFTER подтвердил
+возврат исходного Pilot в то же место и native14,3248м/3polls без изменения
+здоровья, entity/Rpl, deadline и прежнего recovery budget. Оба stopped native
+exit0, source drift0, функциональные field/boundary и full fatal gates PASS;
+resource gate остаётся FAIL28. В v4 первого regular-cadence отказавшего
+predicate нет в журнале: доказан и исправлен класс реального native
+`COMPLETED/remove1` handoff, а тождество причины v4 остаётся inference.
+Полные v4 FAIL, промежуточные диагностические PASS и первый CLI-аудитор FAIL
+сохранены раздельно в evidence `native-gate-crew-exit/REPORT.md`.
+Последний вызван dot-source перезаписью входных путей; после save/restore
+путей добавлены реальные отдельные PS5.1 CLI проверки, а остановленные логи
+перепроверены новой frozen версией без повторного native/изменения raw logs.
+Исходный
+`crew-final-current-v4` сохранён как FAIL: actual native Pilot OpenGate был
+ошибочно принят за `CREW_UNAVAILABLE`, затем `TACTICAL_BEGIN_REJECTED`.
+
 TRANSPORT при местной угрозе высаживает весь живой отряд. После окончания боя
 возвращает выживших в ту же машину; новый приказ с перемещением дальше N также
 может потребовать возврат. После высадки по прибытии пеший приказ сохраняется

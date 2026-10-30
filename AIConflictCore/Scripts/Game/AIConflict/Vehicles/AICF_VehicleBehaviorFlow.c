@@ -51,7 +51,17 @@ class AICF_VehicleBehaviorFlow
 			BaseCompartmentSlot seat = seats[index];
 			if (!IsCrewSeat(seat)) continue;
 			if (seat.GetType() != ECompartmentType.PILOT && trip.GetVehiclePreset().m_aMembers[index] < 0) continue;
-			if (!IsFit(seat.GetOccupant())) return AICF_TripOutcome.StartTacticalDeployment("CREW_UNAVAILABLE", causationId);
+			if (!IsFit(seat.GetOccupant()))
+			{
+				AICF_TransportNativeGate gate = trip.GetMovementState().GetNativeGate();
+				IEntity assignedMember = trip.VehiclePresetMember(trip.GetVehiclePreset().m_aMembers[index]);
+				if (gate && gate.OwnsTemporaryCrewExit(trip, seat, assignedMember))
+				{
+					gate.Log("TRANSPORT_NATIVE_GATE_CREW_EXIT_OWNED");
+					continue;
+				}
+				return AICF_TripOutcome.StartTacticalDeployment("CREW_UNAVAILABLE", causationId);
+			}
 		}
 		return null;
 	}

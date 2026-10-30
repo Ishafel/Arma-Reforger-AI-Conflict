@@ -2,6 +2,39 @@
 modded class AICF_VehicleCrewReturn
 {
 	int AICF_CrewReturnCount() { return m_aReturns.Count(); }
+	void AICF_CrewTracePending(int fixtureDeadlineRemainingMs)
+	{
+		foreach (AICF_ReturningSoldier returning : m_aReturns)
+		{
+			IEntity member = returning.m_Member;
+			SCR_AIGroup group = returning.m_Group;
+			ChimeraCharacter character = ChimeraCharacter.Cast(member);
+			AIAgent agent;
+			CompartmentAccessComponent access;
+			if (character)
+			{
+				access = character.GetCompartmentAccessComponent();
+				if (character.GetAIControlComponent()) agent = character.GetAIControlComponent().GetControlAIAgent();
+			}
+			SCR_AIUtilityComponent utility;
+			if (agent) utility = SCR_AIUtilityComponent.Cast(agent.FindComponent(SCR_AIUtilityComponent));
+			string details = string.Format("member=%1 member_rpl=%2 alive=%3 conscious=%4 group=%5 agent=%6 current_owner_safe=%7 fixture_deadline_remaining_ms=%8",
+				AICF_GroupTrace.Entity(member), AICF_VehicleBehaviorBinding.ComponentRpl(member), AICF_GroupRuntime.IsAliveCharacter(member),
+				member && SCR_AIDamageHandling.IsConscious(member), AICF_GroupTrace.Entity(group), AICF_GroupTrace.Entity(agent), returning.Current(), fixtureDeadlineRemainingMs);
+			if (member) details += string.Format(" position=%1", member.GetOrigin());
+			if (agent) details += string.Format(" parent_group=%1 control_exact=%2", AICF_GroupTrace.Entity(agent.GetParentGroup()), agent.GetControlledEntity() == member);
+			if (member && returning.m_Base && returning.m_Base.GetSpawnPoint()) details += string.Format(" desired_hq=%1 distance_m=%2", returning.m_Base.GetSpawnPoint().GetOrigin(), vector.Distance(member.GetOrigin(), returning.m_Base.GetSpawnPoint().GetOrigin()));
+			if (group) details += string.Format(" current_wp=%1 owned_wp=%2", AICF_GroupTrace.Entity(group.GetCurrentWaypoint()), AICF_GroupTrace.Entity(returning.m_Waypoint));
+			if (group && group.GetGroupUtilityComponent()) details += string.Format(" group_action=%1", AICF_GroupTrace.Action(group.GetGroupUtilityComponent().GetCurrentAction()));
+			if (utility) details += string.Format(" current_behavior=%1", AICF_GroupTrace.Action(utility.GetCurrentBehavior()));
+			SCR_DamageManagerComponent damage;
+			if (member) damage = SCR_DamageManagerComponent.GetDamageManager(member);
+			if (damage && damage.GetDefaultHitZone()) details += string.Format(" health_default_scaled=%1 health_state=%2", damage.GetDefaultHitZone().GetHealthScaled(), damage.GetDefaultHitZone().GetDamageState());
+			if (access) details += string.Format(" linked_vehicle=%1 access_vehicle=%2 seat=%3 getting_in=%4 getting_out=%5 switching=%6", AICF_GroupTrace.Entity(CompartmentAccessComponent.GetVehicleIn(member)), AICF_GroupTrace.Entity(access.GetVehicleCompartmentManagerOwner()), access.GetCompartment(), access.IsGettingIn(), access.IsGettingOut(), access.IsSwitchingSeatsAnim());
+			details += string.Format(" last_order_at_ms=%1 last_order_age_ms=%2 progress_deadline=UNKNOWN native_reads_only=1", returning.m_iLastOrder, System.GetTickCount() - returning.m_iLastOrder);
+			Print("[AICF][CREW_PENDING_READBACK] " + details);
+		}
+	}
 	override bool Commit(AICF_VehicleCrewPlan plan, SCR_CampaignFaction faction, AICF_VehiclePreset preset, out string reason)
 	{
 		IEntity kept = plan.m_Slot.GetRosterMember(plan.m_aKept[0]);
@@ -24,6 +57,7 @@ modded class AICF_MatchController
 	protected int m_iCrewFailures;
 	protected bool m_bCrewReduced;
 	protected bool m_bCrewDone;
+	protected int m_iCrewNextTrace;
 
 	protected void AICF_CrewCheck(string rule, bool passed)
 	{
@@ -95,6 +129,11 @@ modded class AICF_MatchController
 			m_OrderPlanner.AssignPlayerPointOrder(slot, m_USSRFaction, m_CrewKept.GetOrigin() + "400 0 0", false);
 		}
 		m_CrewVehicles.Update(null, null, m_CrewState, m_USSRFaction, m_iStrategicBaseRevision, true);
+		if (System.GetTickCount() >= m_iCrewNextTrace)
+		{
+			m_iCrewNextTrace = System.GetTickCount() + 10000;
+			m_VehicleCrewReturn.AICF_CrewTracePending(300000 - (System.GetTickCount() - m_iCrewStarted));
+		}
 		AICF_TransportTrip trip = m_CrewVehicles.GetTrip(slot);
 		Vehicle vehicle;
 		if (trip && trip.GetLease()) vehicle = trip.GetLease().GetVehicle();

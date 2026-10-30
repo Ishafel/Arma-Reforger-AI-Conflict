@@ -4,7 +4,10 @@ class AICF_TransportNativeGate
 {
 	IEntity m_Member;
 	EntityID m_Id;
+	string m_sMemberRpl;
+	AIAgent m_Agent;
 	BaseCompartmentSlot m_Seat;
+	ECompartmentType m_SeatType;
 	SCR_AIUtilityComponent m_Utility;
 	ref SCR_AIGetInVehicle m_Return;
 	ref SCR_AIGetOutVehicle m_Exit;
@@ -12,6 +15,9 @@ class AICF_TransportNativeGate
 	AICF_TransportTrip m_Trip;
 	bool m_bStopped;
 	bool m_bReturnListenerAttached;
+	bool m_bPerformListenerAttached;
+	bool m_bPerformCompleted;
+	int m_iPerformCompletedAtMs;
 	bool m_bReturnCompleted;
 	int m_iReturnCompletedAtMs;
 	SCR_AIActivityBase m_Activity;
@@ -92,7 +98,10 @@ class AICF_TransportNativeGate
 			AICF_TransportNativeGate gate = new AICF_TransportNativeGate();
 			gate.m_Member = member;
 			gate.m_Id = member.GetID();
+			gate.m_sMemberRpl = AICF_VehicleBehaviorBinding.ComponentRpl(member);
+			gate.m_Agent = agent;
 			gate.m_Seat = seat;
+			gate.m_SeatType = seat.GetType();
 			gate.m_Utility = utility;
 			gate.m_Return = returnAction;
 			gate.m_Exit = exitAction;
@@ -215,14 +224,82 @@ class AICF_TransportNativeGate
 		return agent && agent.GetParentGroup() == m_Group && SCR_AIUtilityComponent.Cast(agent.FindComponent(SCR_AIUtilityComponent)) == m_Utility;
 	}
 
+	// Пустое исходное crew seat допустимо только пока его живой original AI
+	// исполняет собственную уже захваченную native OpenGate/return цепочку.
+	bool OwnsTemporaryCrewExit(AICF_TransportTrip trip, BaseCompartmentSlot seat, IEntity assignedMember)
+	{
+		if (!trip || !seat || !assignedMember || !trip.GetMovementState() ||
+			trip.GetMovementState().GetNativeGate() != this) return false;
+		int nowMs = System.GetTickCount();
+		if (trip.IsDeadlineReached(nowMs) || IsExpired(nowMs) || !Matches(trip)) return false;
+		if (seat != m_Seat || seat.GetType() != m_SeatType || assignedMember != m_Member ||
+			AICF_VehiclePreset.SeatKey(seat) != m_sSeatKey || seat.GetOccupant()) return false;
+		if (!AICF_VehicleShortRecovery.IsCurrentMember(trip, assignedMember) ||
+			!SCR_AIDamageHandling.IsConscious(assignedMember)) return false;
+		if (m_sMemberRpl.IsEmpty() || m_sMemberRpl == "NONE" ||
+			AICF_VehicleBehaviorBinding.ComponentRpl(assignedMember) != m_sMemberRpl) return false;
+		ChimeraCharacter character = ChimeraCharacter.Cast(assignedMember);
+		if (!character || !character.GetAIControlComponent()) return false;
+		CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+		if (!access || access.IsSwitchingSeatsAnim()) return false;
+		IEntity linkedVehicle = CompartmentAccessComponent.GetVehicleIn(assignedMember);
+		IEntity accessVehicle = access.GetVehicleCompartmentManagerOwner();
+		if ((linkedVehicle && linkedVehicle != m_Vehicle) || (accessVehicle && accessVehicle != m_Vehicle)) return false;
+		if (access.GetCompartment() && access.GetCompartment() != m_Seat) return false;
+		AIAgent currentAgent = character.GetAIControlComponent().GetControlAIAgent();
+		if (!currentAgent || currentAgent != m_Agent || currentAgent.GetControlledEntity() != assignedMember ||
+			currentAgent.GetParentGroup() != m_Group || SCR_AIUtilityComponent.Cast(currentAgent.FindComponent(SCR_AIUtilityComponent)) != m_Utility) return false;
+		if (!m_Perform || m_Perform.m_SmartActionComponent.m_Value != m_SmartAction ||
+			m_Perform.GetPriority() != SCR_AIActionBase.PRIORITY_BEHAVIOR_OPEN_NAVLINK_DOOR) return false;
+		array<string> tags = {};
+		m_SmartAction.GetTags(tags);
+		if (!tags.Contains(SCR_AIGoalReaction_OpenNavlinkDoor.SMART_ACTION_TAG) ||
+			vector.Distance(m_Vehicle.GetOrigin(), m_SmartOwner.GetOrigin()) > 50) return false;
+		AIActionBase current = m_Utility.GetCurrentBehavior();
+		if (!current || current.GetRelatedGroupActivity() != m_Activity) return false;
+		if (!Live(current)) return OwnsCompletedPerformHandoff(current, nowMs);
+		if (current == m_Perform) return true;
+		if (current == m_Return) return true;
+		return current == m_Exit && m_Exit.m_Vehicle.m_Value == m_Seat.GetOwner() &&
+			m_Exit.GetPriority() == m_Perform.GetPriority() + 100;
+	}
+
+	// Native utility может ещё хранить завершённый Perform до выбора Return.
+	// Это только продолжение исходной цепочки в её прежнем абсолютном окне.
+	protected bool OwnsCompletedPerformHandoff(AIActionBase current, int nowMs)
+	{
+		if (m_bStopped || !m_bPerformListenerAttached || !m_bPerformCompleted || !m_bObservedExit) return false;
+		if (m_iPerformCompletedAtMs < m_iStarted || m_iPerformCompletedAtMs <= 0 ||
+			m_iPerformCompletedAtMs > nowMs || m_iPerformCompletedAtMs >= m_iDeadline || IsExpired(nowMs)) return false;
+		if (current != m_Perform || current.GetActionState() != EAIActionState.COMPLETED || !current.GetRemoveAction()) return false;
+		if (!m_Utility || !Live(m_Return) || m_Return.GetActionIsSuspended() ||
+			m_Return.GetRelatedGroupActivity() != m_Activity) return false;
+		array<ref AIActionBase> actions = {};
+		m_Utility.GetActions(actions);
+		return actions.Contains(m_Return);
+	}
+
 	protected bool AttachReturnCompletion(AICF_TransportTrip trip)
 	{
 		if (m_bStopped || m_bReturnListenerAttached || !m_Return || !Matches(trip)) return false;
-		if (!m_Return.m_OnActionCompleted) return false;
+		if (m_bPerformListenerAttached || !m_Perform || !m_Return.m_OnActionCompleted || !m_Perform.m_OnActionCompleted) return false;
 		m_Trip = trip;
 		m_bReturnListenerAttached = true;
+		m_bPerformListenerAttached = true;
 		m_Return.m_OnActionCompleted.Insert(OnReturnCompleted);
+		m_Perform.m_OnActionCompleted.Insert(OnPerformCompleted);
 		return true;
+	}
+
+	protected void OnPerformCompleted(SCR_AIActionBase action)
+	{
+		if (m_bStopped || !m_bPerformListenerAttached || m_bPerformCompleted || !m_Trip || action != m_Perform) return;
+		int nowMs = System.GetTickCount();
+		if (m_Trip.IsDeadlineReached(nowMs) || IsExpired(nowMs) || !Matches(m_Trip)) return;
+		if (m_Trip.GetMovementState().GetNativeGate() != this || action.GetActionState() != EAIActionState.COMPLETED) return;
+		m_bPerformCompleted = true;
+		m_iPerformCompletedAtMs = nowMs;
+		Log("TRANSPORT_NATIVE_GATE_PERFORM_COMPLETED");
 	}
 
 	protected void OnReturnCompleted(SCR_AIActionBase action)
@@ -241,7 +318,12 @@ class AICF_TransportNativeGate
 		m_bStopped = true;
 		if (m_bReturnListenerAttached && m_Return)
 			m_Return.m_OnActionCompleted.Remove(OnReturnCompleted);
+		if (m_bPerformListenerAttached && m_Perform)
+			m_Perform.m_OnActionCompleted.Remove(OnPerformCompleted);
 		m_bReturnListenerAttached = false;
+		m_bPerformListenerAttached = false;
+		m_bPerformCompleted = false;
+		m_iPerformCompletedAtMs = 0;
 		m_bReturnCompleted = false;
 		m_Trip = null;
 		m_Return = null;
@@ -314,6 +396,8 @@ class AICF_TransportNativeGate
 			m_iStarted, m_iDeadline, m_bObservedExit, m_iReturnedAtMs, m_vReturnPosition);
 		details += string.Format(" return_completed_receipt=%1 return_completed_at_ms=%2 return_listener_attached=%3",
 			m_bReturnCompleted, m_iReturnCompletedAtMs, m_bReturnListenerAttached);
+		details += string.Format(" perform_completed_receipt=%1 perform_completed_at_ms=%2 perform_listener_attached=%3",
+			m_bPerformCompleted, m_iPerformCompletedAtMs, m_bPerformListenerAttached);
 		AICF_Stage3Diagnostics.Info(eventName, details);
 	}
 }
