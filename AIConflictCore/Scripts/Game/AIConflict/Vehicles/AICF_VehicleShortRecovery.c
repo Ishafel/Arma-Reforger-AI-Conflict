@@ -98,7 +98,7 @@ class AICF_VehicleShortRecovery
 			quota.Cancel();
 			return false;
 		}
-		if (attempt && !attempt.Commit(trip, member, seat, System.GetTickCount()))
+		if (attempt && (!attempt.IsPhysicalDispatchCurrent() || !attempt.Commit(trip, member, seat, System.GetTickCount())))
 		{
 			quota.Cancel();
 			return false;

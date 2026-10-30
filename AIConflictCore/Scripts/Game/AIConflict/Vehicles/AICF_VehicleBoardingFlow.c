@@ -548,11 +548,16 @@ class AICF_VehicleBoardingFlow
 		bool failed = actionState == EAIActionState.FAILED || actionState == EAIActionState.COMPLETED;
 		bool disappeared = !token.IsTrackedActionOwnedByUtility() && token.GetTransitionAgeMs() > 0;
 		bool stalled = token.IsTrackedActionCurrent() && token.GetProgressAgeMs() >= 5000;
-		if (!failed && !disappeared && !stalled) return false;
+		AICF_PassiveBoardingRecovery passive;
+		if (!failed && !disappeared && !stalled)
+		{
+			passive = AICF_PassiveBoardingRecovery.Capture(trip, state, token);
+			if (!passive) return false;
+		}
 		IEntity member = token.GetReservedEntity();
 		BaseCompartmentSlot seat = token.GetCompartment();
 		if (!AICF_VehicleShortRecovery.CanSeat(trip, member, seat)) return false;
-		AICF_VehicleShortSeatAttempt attempt = AICF_VehicleShortSeatAttempt.ForBoarding(trip, state, token);
+		AICF_VehicleShortSeatAttempt attempt = AICF_VehicleShortSeatAttempt.ForBoarding(trip, state, token, passive);
 		if (!attempt) return false;
 		AICF_AIQuotaVehicleDispatch quota = AICF_AIQuotaVehicleDispatch.Begin(member, lease.GetVehicle(), seat);
 		if (!quota) return false;
@@ -562,12 +567,17 @@ class AICF_VehicleBoardingFlow
 			quota.Cancel();
 			return false;
 		}
-		if (!attempt.IsCurrent(trip, member, seat, System.GetTickCount()))
+		if (!attempt.IsCurrent(trip, member, seat, System.GetTickCount()) || !attempt.IsPhysicalDispatchCurrent())
 		{
 			quota.Cancel();
 			return false;
 		}
 		token.CancelOwnerSafe();
+		if (passive && !passive.ConfirmOwnerCancellation())
+		{
+			quota.Cancel();
+			return false;
+		}
 		if (!quota.IsCurrent() || !trip.IsVehiclePresetCurrent() || !token.Matches(trip, lease, group) ||
 			!AICF_VehicleShortRecovery.CanSeat(trip, member, seat))
 		{

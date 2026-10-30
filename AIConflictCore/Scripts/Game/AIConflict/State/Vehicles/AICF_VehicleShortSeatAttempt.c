@@ -17,6 +17,7 @@ class AICF_VehicleShortSeatAttempt
 	AICF_VehicleBoardingState m_BoardingState;
 	ref AICF_VehicleBehaviorAction m_Behavior;
 	AICF_VehicleBehaviorState m_BehaviorState;
+	ref AICF_PassiveBoardingRecovery m_PassiveBoarding;
 
 	protected static AICF_VehicleShortSeatAttempt Capture(AICF_TransportTrip trip, IEntity actor, BaseCompartmentSlot seat)
 	{
@@ -32,15 +33,23 @@ class AICF_VehicleShortSeatAttempt
 		return attempt;
 	}
 
-	static AICF_VehicleShortSeatAttempt ForBoarding(AICF_TransportTrip trip, AICF_VehicleBoardingState state, AICF_VehicleBoardingActionToken token)
+	static AICF_VehicleShortSeatAttempt ForBoarding(AICF_TransportTrip trip, AICF_VehicleBoardingState state, AICF_VehicleBoardingActionToken token, AICF_PassiveBoardingRecovery passive = null)
 	{
 		if (!state || !token || token.WasShortRecoveryAttempted()) return null;
+		if (passive && !passive.Matches(trip, state, token)) return null;
 		AICF_VehicleShortSeatAttempt attempt = Capture(trip, token.GetReservedEntity(), token.GetCompartment());
 		if (!attempt || trip.GetBoardingState() != state || trip.GetPhase() != AICF_ETransportTripPhase.BOARDING) return null;
 		attempt.m_Boarding = token;
 		attempt.m_BoardingState = state;
 		attempt.m_iDeadline = state.GetAbsoluteDeadlineMs();
+		attempt.m_PassiveBoarding = passive;
 		return attempt;
+	}
+
+	// Native readback выполняется отдельно ДО pure Commit, а не внутри него.
+	bool IsPhysicalDispatchCurrent()
+	{
+		return !m_PassiveBoarding || (m_PassiveBoarding.Matches(m_Trip, m_BoardingState, m_Boarding) && m_PassiveBoarding.IsCurrent());
 	}
 
 	static AICF_VehicleShortSeatAttempt ForBehavior(AICF_TransportTrip trip, AICF_VehicleBehaviorAction token)

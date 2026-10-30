@@ -58,7 +58,7 @@ function Rules([string]$h,[string]$b,[string]$d,[string]$t){
  if((ConvertTo-AICFCodeText $h) -match 'SetHealth|SetLifeState|Resurrect|SetDamage|ForceUnconscious|\.Teleport\(|\.SetOrigin\(|SetWorldTransform|CommitTransition|CallLater|SpawnEntity'){'NO_HEAL_RESURRECTION_VEHICLE_RELOCATION_OR_LIFECYCLE'}
  if(!$recover.Contains('token.WasShortRecoveryAttempted()') -or !$recover.Contains('token.WasPresetQueued()') -or
   !$recover.Contains('token.Matches(trip, lease, group)') -or !$recover.Contains('System.GetTickCount() >= state.GetAbsoluteDeadlineMs()') -or
-  !$recover.Contains('AICF_VehicleShortSeatAttempt.ForBoarding(trip, state, token)') -or
+  !$recover.Contains('AICF_VehicleShortSeatAttempt.ForBoarding(trip, state, token, passive)') -or
   !$seat.Contains('attempt.Commit(trip, member, seat, System.GetTickCount())') -or
   !$attemptSource.Contains('m_Boarding.MarkShortRecoveryAttempted();') -or !$t.Contains('m_bShortRecoveryAttempted = true;')){'FINITE_CURRENT_TOKEN_ATTEMPT'}
  if(!$recover.Contains('actionState == EAIActionState.FAILED || actionState == EAIActionState.COMPLETED') -or
