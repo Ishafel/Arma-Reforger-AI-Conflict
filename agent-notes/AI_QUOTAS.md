@@ -14,7 +14,13 @@ absent либо inactive+uncounted exact agent и совместимый пол�
 GetLastEpoch закрывает Begin→End ABA. Actual44/7+independent31 PASS.
 Native purchase ещё FAIL на enumeration/selection, не на прежнем human-body
 blocker. Новые observed53.1/41.3FPS в чистых pressure controls не исправляют их
-functionalFAIL: поздний агент в extra-группе ещё не идентифицирован. Sets не вошли.
+functionalFAIL: без causal trace происхождение позднего extra-агента неизвестно.
+Отдельный последующий current383 trace доказал actual super Refresh128/0→127/1,
+BEGIN52→factory BOUND actor3CC1→128/0. В нём был учтённый разрешённый birth,
+а не доказанный bypass/overshoot; какое прежнее stock body освободило unit,
+не установлено. Этот вывод не переносится на предыдущие controls. Исходный
+observerFAIL EXTRA_STOCK_IDENTITY_OR_BIRTH, resources28 и minFPS20.7 сохранены;
+полные stopped logs и chronology — AI_QUOTA_STOCK_PRESSURE.md. Sets не вошли.
 
 Пользователь в issue #78 разрешил исправить раздельный учёт `stock + AICF`.
 Контракт ниже реализуется. После возобновления30.10.2026 frozen382production
@@ -321,17 +327,33 @@ bool и out-значения; observer не вызывает повторные 
 AFTER_DECISION native counters. Они не заменяют исходный snapshot.
 
 Опция public Soak runner `-QuotaCensusDecisionObserver` добавляет fixture в
-отдельный stage и CLI `-aicfQuotaCensusDecisionProbe 1`. Бюджет96distinct records,
-overflow/scope loss и ограниченный cached context первых4машин явно отмечены;
+отдельный stage и CLI `-aicfQuotaCensusDecisionProbe 1`. Бюджет384distinct records,
+overflow/scope loss и ограниченный cached context первых16машин явно отмечены;
 непросмотренный suffix не является доказательством полноты. Statics очищаются
 в OnGameEnd. Default запуск не включает observer. Цель — разобрать реальный
 долгий UNKNOWN при посадке в ordinary383; отказ сам по себе не разрешает
 ослаблять census, классифицировать чужую группу или создавать unit без permit.
 
-Текущий targeted контракт:24source/120actual wrappers/8frame/6edge/4unsafe PASS.
+Текущий targeted контракт:32source/120actual wrappers/8frame/6edge,
+48новых instance-wrapper cases/16hierarchy cases/4unsafe PASS. Четыре новые
+обёртки вызывают ровно один исходный `IsCurrent` для Owner/Use/Occupant/Entity.
+Отдельный свежий `AFTER_DECISION_NOT_ORIGINAL_INPUT` обход ограничен512nodes
+и12samples, cadence1s. Cached quartet/rows и свежие счётчики помечены раздельно;
+ни то ни другое не подменяет исходные локальные значения admission.
 Native boundaries simulated; Workbench/native этого observer учитываются
 отдельно. Явный `ref` у managed local frame — только избыточная запись:
 локальные ссылки уже сильные по Enforce ARC, старый lifetime defect не заявлен.
+
+Stock combined390 source-v7 прошёл terminal WB0/validation/full3log fatal0/
+sourceSHA0. Native US600 на нём завершился native0, functionalFAIL boarding/
+route. Свежий hierarchy snapshot показал316nodes, из них204в character subtrees,
+без parent/world/duplicate/truncation ошибок. Это отдельное доказательство
+переполнения прежнего полного256node обхода на таком дереве, а не атомарная
+запись исходных locals. Исправление и новая игровая проверка учитываются
+отдельно; V25 All261 не включает это позднее расширение observer. Новый V27
+включает его и topology fix:262/262PASS, collector0/1021SHA0/6closed0;
+production WB3graphs и combined Soak390/Multi388 отдельно PASS. Native нового
+topology fix ещё NOT RUN; границы — [VEHICLE_CENSUS_TOPOLOGY.md](VEHICLE_CENSUS_TOPOLOGY.md).
 
 В историческом draft checkpoint `5c87bae` compartment producer оставался
 `NOT IMPLEMENTED/NOT RUN`. Его новая typed реализация описана выше; новый

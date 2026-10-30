@@ -185,9 +185,18 @@ native **NOT RUN**. Старый Soak383 не содержит probe.
 он различает Capture/BuildCounts/ранний busy, character classification и
 vehicle holds через10single-super обёрток. Cached input и AFTER_DECISION native
 counters разделены; повторных Refresh, дополнительных snapshot/body anchors
-и policy writes нет. Бюджет96distinct records, null/suffix/overflow/scope loss
+и policy writes нет. Бюджет384distinct records, null/suffix/overflow/scope loss
 не скрываются. Targeted `Test-AIQuotaCensusDecisionProbeContracts.ps1`
-прошёл24source/120actual/8frames/6edges/4unsafe; native boundaries simulated.
+прошёл32source/120actual/8frames/6edges и новые48instance/16hierarchy cases/
+4unsafe; native boundaries simulated. Четыре дополнительных single-super
+`IsCurrent` wrappers различают Owner/Use/Occupant/Entity. Свежий hierarchy
+обход512nodes/12samples/cadence1s/16cached cars явно помечен
+`AFTER_DECISION_NOT_ORIGINAL_INPUT`; его character subtree/inventory/manager
+счётчики не выдаются за исходные locals. Stock combined390 v7 WB0/fullfatal0/
+source0; US600 native0, boarding/route FAIL, hierarchy316/character204 наблюдены.
+Full V25 относится к прежнему observer; новый V27 включает расширение и
+topology fix,262/262PASS/1021SHA0/6closed0. Combined Soak390v8 отдельно WB0;
+свежий native topology fix пока NOT RUN.
 Готовность его собственного compile/native gates проверяется отдельно.
 Подробности — [AI_QUOTAS.md](AI_QUOTAS.md#разбор-census-unknown-без-изменения-допуска).
 
