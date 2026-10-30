@@ -1,5 +1,24 @@
 # Передача #78 — 30.10.2026
 
+## Работа возобновлена после передачи
+
+Пользователь вновь запросил исправления и RHS Арланд/Эверон/север. Текущий
+checkpoint:382production compile Stock/RHS/ArlandWCSRHS3/3 PASS; full frozen
+`resumed-fixed-v16`247/247 PASS/987SHA0/6sessionsclosed0. Исправлены stale site/
+assignment/prefab/final slot generation и fresh-clock attempt fences, existing
+inactive character custody, compartment newborn producer и postquota RecoveryBan
+проверка FIA. Targeted Root58/21, constructor44/13, character37/5, compartment27/7.
+Native RHS3 на предыдущем380:300s/ROSTER_READY/quotaREADY/native0/project0/fatal0,
+resources136/396/396 FAIL и FPS42.5/27.3/29.5. Это не pressure нового382.
+
+Catalog client/server первый control дал serverAV до actualavatar/покупки,
+причина UNKNOWN. Native catalog/compartment/pressure и ordinary/Multi6/clientJIP
+остаются gates; новые log auditors исправляются по actual CLI ENGINE(F)/GUI(E)
+counterexamples. Issue OPEN, PR79 draft, native-only blockers неизменны.
+Подробности и последующие результаты — актуальный [TESTING.md](TESTING.md).
+
+## Историческая передача
+
 Пользователь запросил обновить issue, убрать старые артефакты, сделать итоговый
 комментарий, отправить PR и выключить компьютер. PR должен оставаться draft:
 строгий результат FAIL, issue OPEN до native fix по отдельному решению пользователя.

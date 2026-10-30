@@ -9,7 +9,7 @@ class AICF_AIQuotaCreationGuard
 	bool OwnsVehicleLease(AICF_VehicleLease lease, IEntity entity) { return false; }
 	// Optional owned request budget commit: pure captured state only, with no
 	// engine reads/callbacks/logging. It runs at the final pre-factory boundary.
-	bool CommitNativeAttempt() { return true; }
+	bool CommitNativeAttempt(int nowMs) { return true; }
 }
 
 class AICF_AIQuotaCreation

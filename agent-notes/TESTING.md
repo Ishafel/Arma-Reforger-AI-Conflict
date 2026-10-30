@@ -1,5 +1,49 @@
 # Проверки и baseline
 
+## Возобновление #78 — 30.10.2026
+
+После опубликованного draft79/HEAD5c87bae пользователь возобновил исправления
+и запросил RHS Арланд/Эверон/север без вопросов. IssueOPEN/strictFAIL сохраняются.
+Новый baseline `resumed-baseline-v15`:238/242 PASS,4FAIL, collector1/exact union/
+Logistics1/977frozenSHA0/6sessionsclosed. Первоначальные FAIL сохранены:
+LoadoutLibrary junction permission (unchanged frozen повторён с нужными правами,
+19PASS); два Stage3.5 literal/старого floor owner аудита (actual source изучен,
+строгие equivalent/owner checks и mutants обновлены); FIAIntegrity initial gate.
+Последний обнаружил реальную postquota RecoveryBan callback ошибку: HEAD-before
+GetIn1, после повторных health/lifecycle/quota guards GetIn0. Integrity24rules/
+27mutants PASS. Все checks остаются в canonical runner; нужен новый полный All.
+
+Повторный `resumed-fixed-v16` завершён: **247/247 PASS**, collector0/exact unique
+union/Logistics1/987frozenSHA0, все6sessionsclosed0. Запущен через тот же canonical
+runner с необходимыми правами для тестовой junction; старые4FAIL не переписаны.
+Это snapshot382production и247checks на момент freeze. Более поздние native
+fixture/bootstrap/log-auditor изменения проверяются отдельно и не приписываются
+этому All. В частности выявленный Root CLI-counterexample ENGINE(F)/GUI(E) в
+новых Catalog/Compartment auditors требует строгого исправления и supplement.
+
+Current frozen382production `88B2F10A1CF26726F9BB235341DADBED1A060F4D563517DC8D3C99E155DEB075`:
+terminal Workbench Stock/RHS/ArlandWCSRHS3/3 PASS, fullfatal0/postSHA0/current
+production match0. Включены новые trip/site/prefab/freshclock guards, existing
+inactive character custody и compartment newborn producer. Targeted actual:
+Root58/21, character37/5, constructor44/13/9strong, nativequeue bootstrap10/5,
+floor audit7/9, compartment27/7 (external service boundary simulated). Native
+pressure/каталог/real compartment positives ещё отдельные незавершённые gates.
+
+Первый native Catalog group тест завершился server access violation до actual
+avatar/catalog purchase:18:53:30.463/native-1073741819, client0 с двумя frontend
+SCRIPT(E). Cause UNKNOWN, full dump/logs/version1.8.0.13/382sourceSHA сохранены.
+Предположение про loadout index-1 опровергнуто pinned guard318-323, не является
+установленной причиной. Fixture переводится на validated native faction/loadout/
+spawnpoint workflow; это отдельный control, не доказанное однофайловое A/B.
+
+RHS Арланд/Эверон/север на предыдущем immutable380+2fixtures прошли300s:
+wall333.55/347.68/349.39, native0/project0/fullfatal0/source0,95/95/97cases,
+20readonly samples каждого, actual aggregate ROSTER_READY и READY policy.
+Resources136/396/396 FAIL, minFPS42.5/27.3/29.5. Living inactiveCounted0 не
+наблюдался (max0); health/LOD/native limits fixture не меняла. Это не pressure
+нового382. Полные stopped logs/manifests сохранены под
+`.codex-runtime/issue78-finalization-20261029/quota/resume-rhs-boot-v1/`.
+
 ## Передача draft по запросу пользователя — 30.10.2026
 
 Пользователь запросил обновление issue/итоговый комментарий/очистку старых

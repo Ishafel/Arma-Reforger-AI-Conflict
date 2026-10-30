@@ -192,8 +192,12 @@ if ($match) {
     $spawnTimeoutCode = ConvertTo-AICFCodeText $spawnTimeout
     $releaseGroups = ConvertTo-AICFCodeText (Get-AICFMethodBody $match 'ReleaseFactionGroups')
     Assert-AICFContains $failures 'STAGE35_AGENT_BUDGET' $startController 'if\s*\(\s*!EnsureAIWorldCapacity\s*\(\s*\)\s*\)[\s\S]*AI_WORLD_CAPACITY_UNAVAILABLE' 'Authority startup must fail closed when AIWorld cannot admit the managed-agent budget'
-    Assert-AICFContains $failures 'STAGE35_AGENT_BUDGET' $ensureAIWorldCapacity 'GetLimitOfActiveAIs\s*\(\s*\)[\s\S]*GetMaxManagedAgents\s*\(\s*\)[\s\S]*SetLimitOfActiveAIs\s*\(\s*requiredLimit\s*\)[\s\S]*effectiveLimit\s*>=\s*requiredLimit' 'AIWorld capacity must preserve higher limits and raise lower limits to the configured managed-agent budget'
-    Assert-AICFContains $failures 'STAGE35_AGENT_BUDGET' $ensureAIWorldCapacityBody 'AI_WORLD_CAPACITY[\s\S]*previous_limit=[\s\S]*required_limit=[\s\S]*effective_limit=' 'AIWorld capacity changes must be observable in Stage 3.5 diagnostics'
+    . (Join-Path $PSScriptRoot '../lib/AIQuotaFloorAudit.Common.ps1')
+    $quotaService = Get-Stage35RecordByName $records 'AICF_AIWorldQuotaService.c'
+    $quotaWorld = Find-AICFClassRecord $records 'AICF_AIQuotaWorldState'
+    $quotaStartup = Find-AICFClassRecord $records 'AICF_AIQuotaStartup'
+    $quotaFloorFailures = @(Get-AICFQuotaFloorAuditFailures -RootCapacity $ensureAIWorldCapacityBody -Install (Get-AICFMethodBody $quotaService 'InstallNativeFloor') -WorldCapture (Get-AICFMethodBody $quotaWorld 'AICF_AIQuotaWorldState') -StartupCapture (Get-AICFMethodBody $quotaStartup 'Capture') -Start $startController)
+    foreach ($quotaFloorFailure in $quotaFloorFailures) { Add-AICFAuditFailure $failures 'STAGE35_AGENT_BUDGET' "Separate quota/native floor contract failed: $quotaFloorFailure" }
     Assert-AICFContains $failures 'STAGE35_EXACT_ROSTER' $processFaction 'expectedSize\s*=\s*slot\.GetDeploymentSize\s*\([\s\S]*IsRosterSpawnRequested\s*\([\s\S]*actualCount\s*==\s*expectedSize[\s\S]*GetNumberOfMembersToSpawn\s*\([\s\S]*HasExactFactionRoster[\s\S]*MarkReady' 'Slot READY requires an issued request and the exact alive faction-correct deployment roster'
     Assert-AICFNotContains $failures 'STAGE35_AI18_QUEUE' $processFaction 'GetSpawnQueueSize\s*\(' 'READY must not use the Reforger 1.8 compatibility queue-size stub'
     Assert-AICFNotContains $failures 'STAGE35_EXACT_ROSTER' $match.Code 'GetAgentsCount\s*\(\s*\)\s*>\s*0[\s\S]{0,100}MarkReady' 'Legacy non-empty READY gate must not survive'

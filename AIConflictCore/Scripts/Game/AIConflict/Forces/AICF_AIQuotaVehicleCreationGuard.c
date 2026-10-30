@@ -49,7 +49,7 @@ class AICF_AIQuotaVehicleCreationGuard : AICF_AIQuotaCreationGuard
 	bool IsDomainCurrent() { return false; }
 	// Pure commit, invoked after all admission/native reads and immediately
 	// before the actual native factory. A quota veto must not spend attempts.
-	override bool CommitNativeAttempt() { return true; }
+	override bool CommitNativeAttempt(int nowMs) { return true; }
 
 	override bool IsCurrent()
 	{

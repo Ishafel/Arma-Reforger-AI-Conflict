@@ -83,6 +83,11 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 				quota.Cancel();
 				return false;
 			}
+			if ((!g.RecoveryAllowed() && (!g.m_Lifecycle || !g.m_Lifecycle.IsReactivating())) || !quota.IsCurrent())
+			{
+				quota.Cancel();
+				return false;
+			}
 			bool accepted = access.GetInVehicle(seat.GetOwner(), seat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
 			quota.ObserveNativeResult(accepted);
 			quota.Cancel();

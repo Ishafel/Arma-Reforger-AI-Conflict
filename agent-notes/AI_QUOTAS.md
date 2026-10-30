@@ -3,11 +3,17 @@
 ## Статус
 
 Пользователь в issue #78 разрешил исправить раздельный учёт `stock + AICF`.
-Контракт ниже реализуется; на checkpoint30.10.2026,09:10 MSK подключение policy
-и native floor написано как WIP, но integrated compile/runtime gates ещё не
-пройдены. Первые compile FAIL сохранены и исправляются. Pure contracts и
-отдельный counter control не означают успешную runtime partition. Старый
-ordinary/MOVING2→4→6 FAIL сохранён.
+Контракт ниже реализуется. После возобновления30.10.2026 frozen382production
+`88B2F10A…DEB075` прошёл terminal Workbench Stock/RHS/ArlandWCSRHS3/3 PASS,
+fullfatal0/source SHA drift0. Native RHS/Эверон/север на предыдущем380 прошли
+300s наблюдения/ROSTER_READY/quota READY, но resources FAIL во всех3 и FPS Эверона
+ниже30. Это не native pressure нового382 и не приёмка partition. Первые compile
+FAIL сохранены. Старый ordinary/MOVING2→4→6 FAIL остаётся обязательным gate.
+
+Полный frozen `resumed-fixed-v16`:247/247 PASS/987filesSHA0/collector0/6sessions
+closed0. Поздние native fixtures/auditor supplements считаются отдельно.
+Catalog native bootstrap впервые упал nativeAV до actual avatar/покупки;
+причина UNKNOWN, dump/полные логи сохранены, проверка не объявлена PASS.
 
 ## Владелец и бюджеты
 
@@ -39,7 +45,8 @@ controller. Capture выполняется до первого project `SetLimit
 старые requests. Одноразовый retry1s хранит strong immutable config/content,
 проверяет прежние controller/campaign/world/manager и снимается в `Cancel`/Stop.
 Новая session уже активной world policy не ждёт её защищённую bound queue заново.
-Actual30cases/3unsafe подтверждают helper, native bootstrap ещё NOT RUN.
+Actual30cases/3unsafe подтверждают helper; ordinary RHS bootstrap наблюдал READY,
+но оплаченная очередь до включения policy отдельно native пока не доказана.
 Restart controller в том же world не захватывает поднятый limit как stock и не
 списывает существующие тела со счетов. После включения policy `Stop` или
 неизвестный census не возвращают producers к свободному vanilla admission при
@@ -63,6 +70,26 @@ Bounded census читает actual registered agents и native active/intended c
 native intended публикуются отдельно. Временно inactive собственное тело не
 считается автоматически свободной capacity. Доказанные DEAD/inactive/absence
 освобождают учёт лишь после exact readback; UNKNOWN закрывает новое admission.
+
+Каждый actual registered ALIVE/INCAP nonplayer character удерживает unit даже
+при CountTowards=false. После полного ApplyCensus создаётся idempotent body
+binding с нулевым добавлением occupancy. Временная потеря agent/activation не
+освобождает living body: нужны exact DEAD+inactive либо actual world absence.
+Initial stock grandfather включает только реальные тела, не dormant requests.
+Actual37cases/5unsafe и peer PASS; на трёх native RHS наблюдениях Counted0 living
+ветвь не встретилась, поэтому native proof этой ветви не заявляется. Prepolicy
+journal metadata не равна native intended: partial actual1/intended1/pending9
+проверены actual10cases/5unsafe; несуществующие9 не добавляются к grandfather.
+
+Trip vehicle factory повторяет immutable assignment/intent/current slot и
+generation, preset, exact reservation membership/expiration, selection pose,
+base entity/faction и прежний ConflictAdapter.GetSpawnRejectionReason перед
+созданием. FIA разрешение привязано также к конкретному prefab. Final pure
+CommitNativeAttempt получает fresh nowMs от service после native проверок,
+заново сверяет script phase/transition/slot group+generation/revisions и срок;
+только затем расходует прежний attempt. Не меняет дедлайны и лимиты. Actual
+58cases/21unsafe и независимые before FAIL сохранены; native service в этом
+replay остаётся boundary adapter, полноценный runtime проверяется отдельно.
 
 Full remaining authored basket резервируется до native enqueue. Permit имеет
 exact world/session/owner/request/index/prefab и потребляется до native factory.
@@ -133,6 +160,38 @@ Mere action evaluation может только Peek. Actual dispatch держи�
 producer, autonomous/multiple-brain cost или неоднозначный census остаются
 строгим blocker; универсальная совместимость неизвестных mods не заявляется.
 
+### Создание персонажа внутри compartment
+
+`BaseCompartmentSlot.SpawnCharacterInCompartment` создаёт actor до назначения
+group. Его отдельный adapter не ослабляет обычный `AICF_AIQuotaVehicleEntry`:
+до factory требуется typed `AICF_AIQuotaCompartmentCreation` с exact car/seat/
+manager/Rpl, character prefab и текущим optional stock group. Фракция читается
+из проверенного character prefab, а принадлежность машины — из lease registry;
+фракция машины не заменяет ни одну из этих границ. Unknown metadata и попытка
+выдать managed group за stock закрывают admission.
+
+Car1 в его фактическом bucket и character1 в STOCK удерживаются до native
+factory как две явные reservations. Уже учтённая машина не получает второй unit
+для следующего пассажира. Prebirth custody защищает ещё пустую inactive машину
+во время промежуточного census. Разрешение newborn действует только для exact
+current creation/body до штатных `ActivateAI` и `GetInVehicle`. После успешного
+входа отдельная проверка пустого group prefab/нового controller разрешает штатный
+group bind; существующий header factory для GROUP N не меняется.
+
+`m_Creation` в context — weak, а captured character body хранится отдельно:
+strong cycle через creation guard отсутствует, и исчезновение weak creation
+не освобождает pending entry. Source Stop возвращает только неиспользованные
+reservations; уже выданный native вход удерживает car unit до exact settled seat
+или positive absence. Rollback удаляет только подтверждённого собственного
+нового unassigned nonplayer actor. При неоднозначности сохраняются тело/учёт и
+quarantine, а не ложный `NATIVE_NULL` с повторным factory.
+
+`Test-AIQuotaCompartmentProducerContracts.ps1` выполняет actual Context,
+новые backend methods, producer и Ledger:27cases/7unsafe PASS в WinPS5.1.
+External service/factory callbacks здесь boundary simulation; этот результат
+не заменяет Workbench и native physical proof. На checkpoint реализации native
+producer ещё **NOT RUN**. Generic MoveIn16actual/5unsafe/4pins — отдельный путь.
+
 ## Проверка и доказательства
 
 Обязательные результаты учитываются раздельно:
@@ -162,8 +221,6 @@ tests ещё NOT RUN. История/evidence — в [TESTING.md](TESTING.md) и
 Native-only persistence/resource blockers #78 сохраняются независимо от
 успехов квот. `NOT RUN`/UNKNOWN/coverage FAIL не превращаются в PASS.
 
-При передаче draft остаётся непокрытый producer: native
-BaseCompartmentSlot.SpawnCharacterInCompartment создаёт персонажа до group
-assignment и затем активирует/сажает его. Heterogeneous car+character basket
-для этого пути ещё NOT IMPLEMENTED/NOT RUN. Generic MoveIn имеет отдельные
-16actual/5unsafe/4pinned проверки, но не заменяет эту отсутствующую границу.
+В историческом draft checkpoint `5c87bae` compartment producer оставался
+`NOT IMPLEMENTED/NOT RUN`. Его новая typed реализация описана выше; новый
+native gate остаётся открытым до проверки текущего source.

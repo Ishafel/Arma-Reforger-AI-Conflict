@@ -18,6 +18,7 @@ class AICF_AIQuotaVehiclePermit
 modded class AICF_AIWorldQuotaService
 {
 	protected ref array<ref AICF_AIQuotaVehiclePermit> m_aVehiclePermits = {};
+	protected ref array<ref AICF_AIQuotaCompartmentCreation> m_aCompartmentCreations = {};
 	protected ref array<string> m_aVehicleTransferWait = {};
 	protected AICF_MatchController m_VehicleBootstrapController;
 	protected int m_iVehicleBootstrapSerial;
@@ -62,6 +63,8 @@ modded class AICF_AIWorldQuotaService
 	{
 		foreach (AICF_AIQuotaVehiclePermit permit : m_aVehiclePermits)
 			if (permit && !permit.m_bClosed && permit.m_Body == body) return true;
+		foreach (AICF_AIQuotaCompartmentCreation creation : m_aCompartmentCreations)
+			if (creation && !creation.m_bClosed && creation.m_CarBody == body) return true;
 		return false;
 	}
 
@@ -92,6 +95,29 @@ modded class AICF_AIWorldQuotaService
 
 	protected void ReconcileVehiclePermits()
 	{
+		for (int sourceIndex = m_aCompartmentCreations.Count() - 1; sourceIndex >= 0; sourceIndex--)
+		{
+			AICF_AIQuotaCompartmentCreation source = m_aCompartmentCreations[sourceIndex];
+			if (!source || !source.m_CarBody)
+			{
+				m_bQuarantined = true;
+				m_sLastReason = "COMPARTMENT_PRODUCER_CUSTODY_UNKNOWN";
+				return;
+			}
+			if (source.m_CarBody.IsDefinitelyGone() || (source.m_CharacterBody && source.m_CharacterBody.IsDefinitelyGone()))
+				source.m_bClosed = true;
+			if (!source.m_bClosed && source.m_bSourceEnded && source.m_Newborn && source.m_Newborn.IsCurrent() && source.IsSeatScopeCurrent())
+			{
+				ChimeraCharacter actor = ChimeraCharacter.Cast(source.m_Newborn.m_Entity);
+				CompartmentAccessComponent access;
+				if (actor) access = actor.GetCompartmentAccessComponent();
+				if (access && source.m_SeatScope.m_Seat.GetOccupant() == actor && access.GetCompartment() == source.m_SeatScope.m_Seat &&
+					!access.IsGettingIn() && !access.IsGettingOut() && !access.IsSwitchingSeatsAnim() &&
+					CompartmentAccessComponent.GetVehicleIn(actor) == source.m_SeatScope.m_Vehicle)
+					source.m_bClosed = true;
+			}
+			if (source.m_bClosed) m_aCompartmentCreations.Remove(sourceIndex);
+		}
 		for (int index = m_aVehiclePermits.Count() - 1; index >= 0; index--)
 		{
 			AICF_AIQuotaVehiclePermit permit = m_aVehiclePermits[index];
@@ -378,5 +404,149 @@ modded class AICF_AIWorldQuotaService
 				"vehicle=%1 actor=%2 has_native_result=%3 accepted=%4 source_ended=1 retained_hold=1 queue_abort_proven=0",
 				permit.m_Body.m_Id, permit.m_Entry.m_ActorIdentity.m_Id, permit.m_bHasNativeResult, permit.m_bNativeAccepted));
 		}
+	}
+
+	// Car1 и character1 — две явные части одной typed операции. Первый hold
+	// публикуется до ReserveUnits character, чтобы её Refresh не освободил
+	// ещё пустую/inactive машину в промежутке между двумя reservations.
+	AICF_AIQuotaCompartmentCreation BeginCompartmentCreation(BaseCompartmentSlot seat,
+		ResourceName characterPrefab, AIGroup group, ResourceName groupPrefab)
+	{
+		if (!IsOwnerCurrent() || !IsConfigured() || IsQuotaAdmissionBusy() || !RefreshCensus()) return null;
+		AICF_AIQuotaCompartmentCreation context = AICF_AIQuotaCompartmentCreation.Capture(this, seat, characterPrefab, group, groupPrefab);
+		if (!context || !m_Owners || m_aCompartmentCreations.Count() >= AICF_AIQuotaMath.MAX_TOTAL_UNITS) return null;
+		AICF_EAIQuotaBucket groupBucket;
+		if (!m_Owners.ClassifyGroup(SCR_AIGroup.Cast(group), groupBucket) || groupBucket != AICF_EAIQuotaBucket.STOCK) return null;
+		ChimeraAIWorld nativeWorld = ChimeraAIWorld.Cast(m_World);
+		if (!nativeWorld || !nativeWorld.CanAIBeActivated() || !nativeWorld.CanActivateGroup(group) ||
+			!nativeWorld.CanLimitedAIBeAddedForFaction(context.m_sFaction)) return null;
+		AICF_AIQuotaVehicleOwner owner = AICF_AIQuotaVehicleOwner.Capture(this, context.m_SeatScope.m_Vehicle);
+		AICF_AIQuotaVehicleUse use = AICF_AIQuotaVehicleUse.Capture(context.m_SeatScope.m_Vehicle, m_Census);
+		if (!owner || !owner.CanEnter() || !use || !use.IsCurrent()) return null;
+		AICF_AIQuotaBody body = FindBody(context.m_SeatScope.m_Vehicle);
+		if (body)
+		{
+			if (body.m_CreationGuard || body.m_bQuarantined || !IsVehicleBucket(body.m_Bucket) ||
+				m_Ledger.GetBindingBucket(body.Key()) != body.m_Bucket || !TransferVehicleHold(body, owner)) return null;
+		}
+		else
+		{
+			if (m_aBodies.Count() >= AICF_AIQuotaMath.MAX_TOTAL_UNITS) return null;
+			AICF_AIQuotaReservation carReservation = m_Ledger.Reserve(owner.m_Bucket, 1, context.m_iSerial);
+			if (!carReservation) return null;
+			AICF_AIQuotaDispatch ticket = m_Ledger.BeginDispatch(carReservation, context.m_iSerial);
+			body = AICF_AIQuotaBody.Capture(context.m_SeatScope.m_Vehicle, owner.m_Bucket);
+			if (!ticket || !body || !context.IsCurrent() || !owner.IsCurrent() || !use.IsCurrent() ||
+				!m_Ledger.Bind(ticket, context.m_iSerial, body.Key()))
+			{
+				if (ticket) m_Ledger.FailDispatch(ticket, context.m_iSerial);
+				m_Ledger.CancelAvailable(carReservation, context.m_iSerial);
+				return null;
+			}
+			m_aBodies.Insert(body);
+		}
+		context.m_CarOwner = owner;
+		context.m_CarBody = body;
+		m_aCompartmentCreations.Insert(context);
+		context.m_CharacterReservation = ReserveUnits(AICF_EAIQuotaBucket.STOCK, 1, context.m_iSerial);
+		if (!context.m_CharacterReservation || !context.IsCurrent() || !use.IsCurrent())
+		{
+			CloseCompartmentCreation(context);
+			return null;
+		}
+		return context;
+	}
+
+	bool OwnsCompartmentCreation(AICF_AIQuotaCompartmentCreation context)
+	{
+		return IsOwnerCurrent() && context && context.m_Service == this && context.m_iEpoch == m_iEpoch &&
+			m_aCompartmentCreations.Contains(context) && !context.m_bClosed && context.IsCurrent();
+	}
+
+	bool IsCompartmentCarHoldCurrent(AICF_AIQuotaCompartmentCreation context)
+	{
+		if (!context || context.m_Service != this || !IsOwnerCurrent() || context.m_iEpoch != m_iEpoch || !m_Ledger) return false;
+		AICF_AIQuotaBody body = context.m_CarBody;
+		AICF_AIQuotaVehicleOwner owner = context.m_CarOwner;
+		if (!body || !owner || body.m_bReleased || body.m_bQuarantined || !body.MatchesIdentity() || !owner.CanEnter()) return false;
+		return body.m_Bucket == owner.m_Bucket && m_Ledger.GetBindingBucket(body.Key()) == body.m_Bucket &&
+			m_Ledger.GetPhysical(AICF_EAIQuotaBucket.STOCK) >= 0;
+	}
+
+	AICF_AIQuotaCreation BeginCompartmentFactory(AICF_AIQuotaCompartmentCreation context)
+	{
+		if (!OwnsCompartmentCreation(context) || context.m_Creation || !context.m_CharacterReservation) return null;
+		context.m_Creation = BeginExternalCreation(context.m_CharacterReservation, context.m_iSerial,
+			context.m_CharacterPrefab, context.m_SeatScope.m_SeatOwnerIdentity.m_Entity, false, context);
+		return context.m_Creation;
+	}
+
+	bool CaptureCompartmentNewborn(AICF_AIQuotaCompartmentCreation context, IEntity raw)
+	{
+		if (!OwnsCompartmentCreation(context) || !context.m_Creation || context.m_Creation != m_CurrentCreation ||
+			!m_bNativeBirthBusy || context.m_Creation.m_bFinished || context.m_Creation.m_Guard != context ||
+			context.m_Creation.m_Status != AICF_EAIQuotaBirthStatus.BOUND || context.m_Creation.m_Entity != raw ||
+			!context.m_Creation.m_Body || FindBody(raw) != context.m_Creation.m_Body || !AICF_AIQuotaBirth.IsNonPlayerUnassigned(raw)) return false;
+		context.m_Newborn = AICF_AIQuotaVehicleEntity.Capture(raw);
+		context.m_CharacterBody = context.m_Creation.m_Body;
+		ChimeraCharacter actor = ChimeraCharacter.Cast(raw);
+		if (actor) context.m_Control = actor.GetAIControlComponent();
+		return context.IsNewbornCurrent() && OwnsCompartmentCreation(context);
+	}
+
+	bool OwnsCurrentCompartmentNewborn(AICF_AIQuotaCompartmentCreation context)
+	{
+		return OwnsCompartmentCreation(context) && context.IsNewbornCurrent() && context.m_Creation == m_CurrentCreation &&
+			m_bNativeBirthBusy && !context.m_Creation.m_bFinished && context.m_Creation.m_Guard == context &&
+			FindBody(context.m_Newborn.m_Entity) == context.m_Creation.m_Body;
+	}
+
+	void ObserveCompartmentEntry(AICF_AIQuotaCompartmentCreation context, bool accepted)
+	{
+		if (!context || context.m_Service != this || !m_aCompartmentCreations.Contains(context) || context.m_bHasNativeResult) return;
+		context.m_bNativeIssued = true;
+		context.m_bHasNativeResult = true;
+		context.m_bAccepted = accepted;
+	}
+
+	bool MarkCompartmentEntryDispatched(AICF_AIQuotaCompartmentCreation context)
+	{
+		if (!OwnsCurrentCompartmentNewborn(context) || context.m_bNativeIssued || context.m_bSourceEnded || context.m_bClosed) return false;
+		context.m_bNativeIssued = true;
+		return true;
+	}
+
+	void CloseCompartmentCreation(AICF_AIQuotaCompartmentCreation context)
+	{
+		if (!context || context.m_Service != this || !m_aCompartmentCreations.Contains(context) || context.m_bSourceEnded) return;
+		context.m_bSourceEnded = true;
+		if (context.m_CharacterReservation) CancelReservation(context.m_CharacterReservation, context.m_iSerial);
+		if (!context.m_bNativeIssued || (context.m_bHasNativeResult && !context.m_bAccepted)) context.m_bClosed = true;
+	}
+
+	void QuarantineCompartmentCreation(AICF_AIQuotaCompartmentCreation context, string reason)
+	{
+		if (!context || context.m_Service != this || !m_aCompartmentCreations.Contains(context)) return;
+		m_bQuarantined = true;
+		m_sLastReason = reason;
+		if (context.m_Creation && !context.m_Creation.m_bFinished) RejectExternalCreation(context.m_Creation, reason);
+		AICF_Stage1Diagnostics.Error("AI_QUOTA_COMPARTMENT_QUARANTINED", reason);
+	}
+
+	override void StopOwner(AICF_MatchController controller)
+	{
+		if (IsCurrentWorld() && controller && controller == m_Controller)
+		{
+			foreach (AICF_AIQuotaCompartmentCreation source : m_aCompartmentCreations)
+				if (source && source.m_iEpoch == m_iEpoch) CloseCompartmentCreation(source);
+		}
+		super.StopOwner(controller);
+	}
+
+	void ~AICF_AIWorldQuotaService()
+	{
+		// World уничтожен: script refs освобождаются без native действий и без
+		// ложного receipts об исчезновении ещё существующих engine entities.
+		m_aCompartmentCreations.Clear();
 	}
 }

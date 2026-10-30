@@ -186,6 +186,61 @@ class AICF_AIWorldQuotaService
 
 	// Body entries ещё без counted native agent удерживают unit, но counted row
 	// заменяет этот hold. Raw native active/intended остаются отдельной величиной.
+	protected bool ReadQuotaCharacterCustody(AICF_AIQuotaAgentRow row, out bool hold)
+	{
+		hold = false;
+		if (!IsCurrentWorld() || !row || row.m_bVehicle || !m_World || !row.IsCurrent(m_World.GetWorld())) return false;
+		ChimeraCharacter actor = ChimeraCharacter.Cast(row.m_Entity);
+		if (!actor) return true; // Empty group controllers do not cost a character.
+		CharacterControllerComponent controller = actor.GetCharacterController();
+		AIControlComponent control = actor.GetAIControlComponent();
+		PlayerManager players = GetGame().GetPlayerManager();
+		if (!controller || !control || !players || control.GetControlAIAgent() != row.m_Agent) return false;
+		ECharacterLifeState life = controller.GetLifeState();
+		bool human = controller.IsPlayerControlled() || players.GetPlayerIdFromControlledEntity(actor) != 0 ||
+			SCR_PossessingManagerComponent.GetPlayerIdFromMainEntity(actor) > 0;
+		if (life != ECharacterLifeState.ALIVE && life != ECharacterLifeState.INCAPACITATED && life != ECharacterLifeState.DEAD) return false;
+		if (!IsCurrentWorld() || GetGame().GetPlayerManager() != players || !row.IsCurrent(m_World.GetWorld()) || actor.GetCharacterController() != controller ||
+			actor.GetAIControlComponent() != control || control.GetControlAIAgent() != row.m_Agent ||
+			controller.GetLifeState() != life) return false;
+		bool repeatedHuman = controller.IsPlayerControlled() || players.GetPlayerIdFromControlledEntity(actor) != 0 ||
+			SCR_PossessingManagerComponent.GetPlayerIdFromMainEntity(actor) > 0;
+		if (human != repeatedHuman || !IsCurrentWorld() || !row.IsCurrent(m_World.GetWorld())) return false;
+		hold = !human && life != ECharacterLifeState.DEAD;
+		return true;
+	}
+
+	// Seed only actual registered living AI bodies, after the complete census is
+	// applied. The zero-increment binding keeps an inactive body charged if its
+	// agent temporarily disappears, until exact death/absence proves release.
+	protected bool InitializeQuotaCharacterBindings(AICF_AIQuotaCensus snapshot)
+	{
+		if (!snapshot || !snapshot.IsCurrent() || !m_Ledger) return false;
+		for (int index; index < snapshot.Count(); index++)
+		{
+			AICF_AIQuotaAgentRow row = snapshot.GetRow(index);
+			if (!row) return false;
+			if (row.m_bVehicle) continue;
+			bool hold;
+			if (!ReadQuotaCharacterCustody(row, hold)) return false;
+			if (!hold) continue;
+			AICF_EAIQuotaBucket bucket;
+			if (!ClassifyRow(row, bucket)) return false;
+			AICF_AIQuotaBody body = FindBody(row.m_Entity);
+			if (!body)
+			{
+				AICF_AIQuotaGroupOwner owner = m_Owners.Find(SCR_AIGroup.Cast(row.m_Group));
+				body = AICF_AIQuotaBody.Capture(row.m_Entity, bucket, owner);
+				if (!body || m_aBodies.Count() >= AICF_AIQuotaMath.MAX_TOTAL_UNITS || !snapshot.IsCurrent() ||
+					!ReadQuotaCharacterCustody(row, hold) || !hold || FindBody(row.m_Entity)) return false;
+				if (!m_Ledger.RegisterExistingBinding(body.Key(), bucket)) return false;
+				m_aBodies.Insert(body);
+			}
+			else if (!m_Ledger.RegisterExistingBinding(body.Key(), body.m_Bucket)) return false;
+		}
+		return snapshot.IsCurrent();
+	}
+
 	protected bool BuildCounts(AICF_AIQuotaCensus snapshot, array<int> counts)
 	{
 		if (!snapshot || !snapshot.IsCurrent() || !counts) return false;
@@ -207,7 +262,9 @@ class AICF_AIWorldQuotaService
 				counted.Insert(row.m_Entity);
 				continue;
 			}
-			if (!row.m_bCounted) continue;
+			bool characterHold;
+			if (!ReadQuotaCharacterCustody(row, characterHold)) return false;
+			if (!row.m_bCounted && !characterHold) continue;
 			AICF_EAIQuotaBucket bucket;
 			if (!ClassifyRow(row, bucket)) return false;
 			if (counts[bucket] >= AICF_AIQuotaMath.MAX_TOTAL_UNITS) return false;
@@ -317,11 +374,11 @@ class AICF_AIWorldQuotaService
 		m_Controller = controller;
 		m_iEpoch = epoch;
 		m_Census = snapshot;
-		if (!InitializeQuotaVehicleBindings(snapshot))
+		if (!InitializeQuotaCharacterBindings(snapshot) || !InitializeQuotaVehicleBindings(snapshot))
 		{
 			m_Ledger.ApplyCensus(null, false);
 			m_WorldState.EndSession(controller, epoch);
-			m_sLastReason = "INITIAL_VEHICLE_BINDING_UNKNOWN";
+			m_sLastReason = "INITIAL_BODY_BINDING_UNKNOWN";
 			return false;
 		}
 		m_bPolicyActive = true;
@@ -406,10 +463,10 @@ class AICF_AIWorldQuotaService
 			return false;
 		}
 		m_Census = snapshot;
-		if (!InitializeQuotaVehicleBindings(snapshot))
+		if (!InitializeQuotaCharacterBindings(snapshot) || !InitializeQuotaVehicleBindings(snapshot))
 		{
 			m_Ledger.ApplyCensus(null, false);
-			m_sLastReason = "VEHICLE_BINDING_UNKNOWN";
+			m_sLastReason = "BODY_BINDING_UNKNOWN";
 			return false;
 		}
 		m_sLastReason = "READY";
@@ -877,7 +934,12 @@ class AICF_AIWorldQuotaService
 			creation.m_Status != AICF_EAIQuotaBirthStatus.IN_NATIVE_FACTORY || !creation.IsProducerCurrent()) return false;
 		// Repeat after the producer guard's virtual/native read boundary.
 		if (!IsCurrentWorld() || creation != m_CurrentCreation || creation.m_bFinished || !m_bNativeBirthBusy || creation.m_bNativeCallStarted) return false;
-		if (commitAttempt && !creation.m_Guard.CommitNativeAttempt()) return false;
+		if (commitAttempt)
+		{
+			// Sample the deadline clock after every native producer/replication read.
+			int nowMs = System.GetTickCount();
+			if (!creation.m_Guard.CommitNativeAttempt(nowMs)) return false;
+		}
 		creation.m_bNativeCallStarted = true;
 		return true;
 	}

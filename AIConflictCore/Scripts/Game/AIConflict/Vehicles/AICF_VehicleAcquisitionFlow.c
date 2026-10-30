@@ -735,7 +735,7 @@ class AICF_VehicleAcquisitionFlow
 			}
 			if (!quotaGuard)
 			{
-				quotaGuard = AICF_AIQuotaTripVehicleCreation.Capture(trip, requestState);
+				quotaGuard = AICF_AIQuotaTripVehicleCreation.Capture(trip, requestState, m_Spawner, m_ConflictAdapter);
 				if (!quotaGuard) return AICF_TripOutcome.Wait("VEHICLE_QUOTA_PENDING", BuildCausationId(trip, requestState, "QUOTA_WAIT"));
 				requestState.SetQuotaCreation(quotaGuard);
 			}
@@ -1037,7 +1037,7 @@ class AICF_VehicleAcquisitionFlow
 			AICF_AIQuotaTripFactoryAttempt attempt = quotaGuard.GetAttempt();
 			AICF_FactionFleet pendingFleet = quotaGuard.GetFleet();
 			request.ClearQuotaCreation();
-			quotaGuard = AICF_AIQuotaTripVehicleCreation.Capture(trip, request);
+			quotaGuard = AICF_AIQuotaTripVehicleCreation.Capture(trip, request, m_Spawner, m_ConflictAdapter);
 			if (!quotaGuard || !quotaGuard.AttachPendingLease(pendingFleet, trip.GetLease()))
 			{
 				candidate.m_sFailureReason = "VEHICLE_QUOTA_PENDING";

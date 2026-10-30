@@ -1338,7 +1338,7 @@ class AICF_VehicleSpawner
 			AICF_AIQuotaFIAVehicleCreation quotaGuard;
 			if (AICF_AIWorldQuotaService.GetAuthorityForWorld(world))
 			{
-				quotaGuard = AICF_AIQuotaFIAVehicleCreation.CapturePatrol(p, fleet);
+				quotaGuard = AICF_AIQuotaFIAVehicleCreation.CapturePatrol(p, fleet, prefab);
 				if (!quotaGuard) { p.m_sSpawnQuotaFailure = "VEHICLE_QUOTA_PENDING"; return false; }
 			}
 			p.m_Vehicle = SpawnSelectedPrefab(prefab, pose[3], params, quotaGuard);

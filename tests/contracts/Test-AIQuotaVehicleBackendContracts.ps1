@@ -25,7 +25,7 @@ function Convert-VehicleReplay([string]$s){
  $s=[regex]::Replace($s,'foreach \(([^:]+) : ([^)]+)\)','foreach ($1 in $2)')
  $s=[regex]::Replace($s,'(?m)^(\s*)(int|bool) (\w+);','$1$2 $3 = default($2);')
  $s=[regex]::Replace($s,'(?m)^(\s*)(AICF_\w+|SCR_\w+|AIAgent|IEntity|Faction) (?!m_)(\w+);','$1$2 $3 = null;')
- $s=$s.Replace('ECharacterLifeState m_Life','int m_Life')
+ $s=$s.Replace('ECharacterLifeState m_Life','int m_Life').Replace('ECharacterLifeState life','int life')
  $s=$s.Replace('AddBounded(sum, value, MAX_TOTAL_UNITS, next)','AddBounded(sum, value, MAX_TOTAL_UNITS, out next)').Replace('TotalLimits(candidate, total)','TotalLimits(candidate, out total)').Replace('TotalLimits(limits, total)','TotalLimits(limits, out total)')
  $s=$s.Replace('AddBounded(physical[index], reserved[index], limits[index], occupied)','AddBounded(physical[index], reserved[index], limits[index], out occupied)').Replace('AddBounded(counts[index], m_aReserved[index], m_Limits.GetLimit(index), occupied)','AddBounded(counts[index], m_aReserved[index], m_Limits.GetLimit(index), out occupied)')
  $s=$s.Replace(', owner.m_Fleet, owner.m_Lease, owner.m_Role, owner.m_Bucket)',', out owner.m_Fleet, out owner.m_Lease, out owner.m_Role, out owner.m_Bucket)').Replace(', fleet, lease, role, bucket)',', out fleet, out lease, out role, out bucket)')
@@ -33,7 +33,8 @@ function Convert-VehicleReplay([string]$s){
  $s=$s.Replace('VehicleCharge(owner, use, FindBody(row.m_Entity), bucket, charge)','VehicleCharge(owner, use, FindBody(row.m_Entity), out bucket, out charge)').Replace('VehicleCharge(owner, use, body, bucket, charge)','VehicleCharge(owner, use, body, out bucket, out charge)')
  $s=$s.Replace('ClassifyRow(row, bucket)','ClassifyRow(row, out bucket)').Replace('ClassifyCapturedActor(body, SCR_AIGroup.Cast(row.m_Group), bucket)','ClassifyCapturedActor(body, SCR_AIGroup.Cast(row.m_Group), out bucket)').Replace('m_Owners.ClassifyGroup(SCR_AIGroup.Cast(row.m_Group), bucket)','m_Owners.ClassifyGroup(SCR_AIGroup.Cast(row.m_Group), out bucket)').Replace('m_Owners.ClassifyGroup(parent, bucket)','m_Owners.ClassifyGroup(parent, out bucket)')
  $s=$s.Replace('ClassifyCapturedActor(body, parent, bodyBucket)','ClassifyCapturedActor(body, parent, out bodyBucket)')
- $s=$s.Replace('.Remove(index)','.RemoveAt(index)').Replace('.Remove(bodyIndex)','.RemoveAt(bodyIndex)')
+ $s=$s.Replace('.Remove(index)','.RemoveAt(index)').Replace('.Remove(bodyIndex)','.RemoveAt(bodyIndex)').Replace('.Remove(sourceIndex)','.RemoveAt(sourceIndex)').Replace('CompartmentAccessComponent access;','CompartmentAccessComponent access = null;')
+ $s=$s.Replace('ReadQuotaCharacterCustody(row, hold)','ReadQuotaCharacterCustody(row, out hold)').Replace('ReadQuotaCharacterCustody(row, characterHold)','ReadQuotaCharacterCustody(row, out characterHold)')
  return $s
 }
 $service=[IO.File]::ReadAllText((Join-Path $force 'AICF_AIWorldQuotaService.c'))
@@ -48,8 +49,11 @@ public static class AICF_EVehicleLeaseState {public const int ACTIVE=1,RELEASE_P
 public static class AICF_LogisticsConfig {public const int SERVICE_SLOT_FIRST=1000;}
 public class Vehicle:IEntity {public static Vehicle Cast(object v){return v as Vehicle;}}
 public class AICF_AIQuotaCreationGuard:Native {public bool Current,Bound;public int Bucket;public AICF_VehicleLease Expected;public IEntity Entity;public bool IsCurrent(){return Current;}public int GetBucket(){return Bucket;}public bool OwnsVehicleLease(AICF_VehicleLease l,IEntity e){return Bound&&l==Expected&&e==Entity;}}
+// В этом replay новые producer methods проверяются отдельным actual contract.
+// Здесь DTO нужен только для неизменных vehicle loops при пустом producer list.
+public class AICF_AIQuotaCompartmentCreation:Native {public AICF_AIQuotaBody m_CarBody,m_CharacterBody;public AICF_AIQuotaVehicleEntity m_Newborn;public AICF_AIQuotaVehicleEntry m_SeatScope;public bool m_bClosed,m_bSourceEnded;public bool IsSeatScopeCurrent(){return m_SeatScope!=null&&m_SeatScope.IsSeatCurrent();}}
 public class AICF_AIQuotaGroupOwner:Native {public SCR_AIGroup m_Group;public bool MatchesIdentity(){return true;}public int GetBucket(){return 1;}}
-public class AICF_AIQuotaRegistry:Native {public bool ClassifyGroup(SCR_AIGroup group,out int bucket){bucket=1;return group!=null;}}
+public class AICF_AIQuotaRegistry:Native {public AICF_AIQuotaGroupOwner Find(SCR_AIGroup group){return null;}public bool ClassifyGroup(SCR_AIGroup group,out int bucket){bucket=1;return group!=null;}}
 public class AICF_VehicleLease:Native
 {
  public Vehicle Car;public string Faction="US",Life="L1";public int Slot,Group=2,Trip=3,Lease=4,Generation=5,State=1;public bool Cap=true;
@@ -77,13 +81,23 @@ public class QuotaBase:Native
  public bool IsCurrentWorld(){return Replication.Server&&Runtime.Game!=null&&m_World!=null&&m_World.World==Runtime.Game.World;}public bool IsOwnerCurrent(){return IsCurrentWorld()&&m_Controller!=null&&m_Controller.IsAIQuotaOwnerCurrent(m_World)&&m_iEpoch>0;}public bool IsConfigured(){return IsCurrentWorld()&&m_Limits!=null&&m_Limits.IsConfigured()&&m_Ledger!=null&&!m_bQuarantined;}public AICF_MatchController GetQuotaController(){return m_Controller;}public int GetEpoch(){return m_iEpoch;}public int AllocateContextSerial(){return IsConfigured()&&!m_bNativeBirthBusy?m_iNextContext++:0;}
  public virtual int BeginQuotaVehicleBootstrap(AICF_MatchController c){return 0;}public virtual bool EndQuotaVehicleBootstrap(AICF_MatchController c,int serial){return false;}public virtual bool ClassifyQuotaVehicleRow(AICF_AIQuotaAgentRow row,out int b,out bool charge){b=0;charge=false;return false;}public virtual bool AddQuotaVehicleHolds(AICF_AIQuotaCensus s,AICF_QuotaInts c,EArray<IEntity> counted){return false;}public virtual bool InitializeQuotaVehicleBindings(AICF_AIQuotaCensus s){return false;}
 '@
-foreach($method in @('FindBody','ClassifyRow','ClassifyCapturedActor','BuildCounts','RefreshCensus','RefreshCurrentCensus')){
- $type=@{FindBody='AICF_AIQuotaBody';ClassifyRow='bool';ClassifyCapturedActor='bool';BuildCounts='bool';RefreshCensus='bool';RefreshCurrentCensus='bool'}[$method]
- $args=@{FindBody='IEntity entity';ClassifyRow='AICF_AIQuotaAgentRow row, out int bucket';ClassifyCapturedActor='AICF_AIQuotaBody body, SCR_AIGroup parent, out int bucket';BuildCounts='AICF_AIQuotaCensus snapshot, AICF_QuotaInts counts';RefreshCensus='';RefreshCurrentCensus=''}[$method]
+foreach($method in @('FindBody','ClassifyRow','ClassifyCapturedActor','ReadQuotaCharacterCustody','InitializeQuotaCharacterBindings','BuildCounts','RefreshCensus','RefreshCurrentCensus')){
+ $type=@{FindBody='AICF_AIQuotaBody';ClassifyRow='bool';ClassifyCapturedActor='bool';ReadQuotaCharacterCustody='bool';InitializeQuotaCharacterBindings='bool';BuildCounts='bool';RefreshCensus='bool';RefreshCurrentCensus='bool'}[$method]
+ $args=@{FindBody='IEntity entity';ClassifyRow='AICF_AIQuotaAgentRow row, out int bucket';ClassifyCapturedActor='AICF_AIQuotaBody body, SCR_AIGroup parent, out int bucket';ReadQuotaCharacterCustody='AICF_AIQuotaAgentRow row, out bool hold';InitializeQuotaCharacterBindings='AICF_AIQuotaCensus snapshot';BuildCounts='AICF_AIQuotaCensus snapshot, AICF_QuotaInts counts';RefreshCensus='';RefreshCurrentCensus=''}[$method]
  $replay+="public $type $method($args){`n"+(Convert-VehicleReplay (ServiceBody $method))+"`n}`n"
 }
 $replay+="}`n"
-foreach($file in @('AICF_AIQuotaVehicleOwner.c','AICF_AIQuotaVehicleUse.c','AICF_AIQuotaVehicleAdmission.c')){$replay+=Convert-VehicleReplay ([IO.File]::ReadAllText((Join-Path $force $file)))}
+foreach($file in @('AICF_AIQuotaVehicleOwner.c','AICF_AIQuotaVehicleUse.c','AICF_AIQuotaVehicleAdmission.c')){
+ $vehicleSource=[IO.File]::ReadAllText((Join-Path $force $file))
+ if($file-eq'AICF_AIQuotaVehicleAdmission.c'){
+  # Exact new producer methods + lifecycle replay live in their own contract;
+  # do not substitute these native factory APIs into the existing116 cases.
+  $start=$vehicleSource.IndexOf("`tAICF_AIQuotaCompartmentCreation BeginCompartmentCreation(")
+  if($start-lt0){throw 'Named compartment producer boundary absent'}
+  $vehicleSource=$vehicleSource.Substring(0,$start)+"}`n"
+ }
+ $replay+=Convert-VehicleReplay $vehicleSource
+}
 $replay+=@'
 public static class BackendCases
 {

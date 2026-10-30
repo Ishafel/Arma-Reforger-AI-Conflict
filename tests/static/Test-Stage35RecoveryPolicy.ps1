@@ -2,6 +2,7 @@
 param()
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../lib/Stage3StaticAudit.Common.ps1')
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $issues = [System.Collections.Generic.List[string]]::new()
 
@@ -128,8 +129,18 @@ Assert-Contains $boarding 'PASSENGER_HIDDEN_EXACT_CARGO_DEFERRED' 'EXACT_CARGO_R
 Assert-Contains $boarding 'action=WAIT_UNTIL_PHASE_DEADLINE' 'EXACT_CARGO_RECOVERY_WAIT'
 Assert-Ordered $boarding 'token.ApplyHiddenExactSeatRecovery()' 'token.ScheduleHiddenExactSeatRecovery()' 'NEXT_TICK_EXACT_CARGO'
 Assert-Contains $tokens 'm_bHiddenExactSeatRecoveryAttempted = true' 'ONE_SHOT_EXACT_CARGO'
-Assert-Contains $tokens 'return access.GetInVehicle(' 'ONE_SHOT_EXACT_CARGO'
+Assert-Contains $tokens 'bool accepted = access.GetInVehicle(' 'ONE_SHOT_EXACT_CARGO'
 Assert-Contains $tokens 'true,' 'ONE_SHOT_EXACT_CARGO'
+$hiddenRecovery = Get-AICFMethodBody ([pscustomobject]@{Source=$tokens;Code=(ConvertTo-AICFCodeText $tokens)}) 'ApplyHiddenExactSeatRecovery'
+Assert-Contains $hiddenRecovery 'AICF_AIQuotaVehicleDispatch.Begin(m_ReservedEntity, m_TargetVehicle, m_Compartment)' 'EXACT_CARGO_QUOTA_ACTOR_SEAT'
+Assert-Contains $hiddenRecovery '!quota.IsCurrent() || !MatchesLiveTargetIdentity() || !IsPhysicalMutationOwnerSafe()' 'EXACT_CARGO_QUOTA_REPEAT_IDENTITY'
+Assert-Ordered $hiddenRecovery 'if (!quota) return false;' 'access.InterruptVehicleActionQueue(' 'EXACT_CARGO_QUOTA_BEFORE_QUEUE'
+Assert-Ordered $hiddenRecovery 'if (!quota) return false;' 'm_bHiddenExactSeatRecoveryAttempted = true;' 'EXACT_CARGO_QUOTA_BEFORE_ATTEMPT'
+Assert-OrderedAfter $hiddenRecovery 'm_Compartment.SetReserved(m_ReservedEntity);' '!quota.IsCurrent()' 'bool accepted = access.GetInVehicle(' 'EXACT_CARGO_AFTER_RESERVATION_RECHECK'
+Assert-Ordered $hiddenRecovery 'm_bHiddenExactSeatRecoveryAttempted = true;' 'bool accepted = access.GetInVehicle(' 'EXACT_CARGO_ONE_SHOT_BEFORE_PHYSICAL'
+Assert-Ordered $hiddenRecovery 'bool accepted = access.GetInVehicle(' 'quota.ObserveNativeResult(accepted);' 'EXACT_CARGO_ACTUAL_BOOL'
+Assert-OrderedAfter $hiddenRecovery 'bool accepted = access.GetInVehicle(' 'quota.ObserveNativeResult(accepted);' 'quota.Cancel();' 'EXACT_CARGO_SOURCE_ENDED'
+Assert-OrderedAfter $hiddenRecovery 'quota.ObserveNativeResult(accepted);' 'quota.Cancel();' 'return accepted;' 'EXACT_CARGO_NATIVE_RETURN_PRESERVED'
 Assert-Contains $boarding 'EXACT_CARGO_READY_RETRY_STALL_MS = 5000' 'NORMAL_FIRST_EXACT_CARGO'
 Assert-Contains $boarding 'EXACT_SEAT_RECOVERY_OBSERVATION_MS = 5000' 'NORMAL_FIRST_EXACT_CARGO'
 Assert-Contains $boarding 'PASSENGER_ANIMATED_EXACT_CARGO_REQUESTED' 'NORMAL_FIRST_EXACT_CARGO'
