@@ -848,3 +848,150 @@ super путь уже empty, speed2.4292. Отключение car AI перед
 затем форматирует prefix; native этого форматирования ещё NOT RUN, compile0
 на изолированном прежнем G2 snapshot. Никаких activation/LOD/policy setters
 диагностика не содержит; новый native setup требует отдельного обоснования.
+
+ROAD240-v7 выбирал fresh spawn из24 actual native-polyline centres (arc±20..240),
+только с native8м clearance и обычным commit; семь центров оказались clear.
+Actual5ready/5boarded/onepurchase150/samelease и native full76-point driving
+подтверждены, в том числе исправленные диагностические prefixes/actual bounds.
+Но full native route прошёл минимум43.11485м от historicalPad, автомобиль —
+45.27144м. Через неизменные300с fixture завершился coverageFAIL: posefault0,
+recovery0, historical3node-caseNOTRUN. Wall315.8867с/native0/3fullLogs fatal0/
+resources28FAIL/343raw0; AFTER-v7 WB0/nativeNOTRUN. Evidence
+`movement/path-hint-recovery/native-before-G2-v7-road240/verified-final-result.json`.
+
+Следующий opt-in `aicfUnstuckRoadGoalDiagnostics=1` только читает neighboring
+roads у endpoint по другую сторону ближайшей historical projection. Ограничения:
+16roads,1024finitepoints/road,4FARnativeendpoints, endpointjoin3D≤3м, goal>200м
+отspawn/historical, raw graph radius10. Даже подходящий geometric corridor≤15м
+не является drivable proof и не выдаёт приказ. Metadata-only ветка пропускает
+fixture preset/preflight/point command, дожидается normal aggregateREADY и
+закрывается в собственном Update. Это не запрещает штатную Core coordination
+внутри предшествующего super.Update; отсутствие физической машины проверяется
+по полному native контексту отдельно. Unexamined roads после goal cap и
+lateNULL запрещают complete; goal_search_complete учитывается отдельно.
+Canonical PS5.1:76source negatives +7wait +6localfault +10RoadPoint +7corridor
++8actual inspection cases PASS; terminal WB0 на oldG2 snapshot. Native этого
+metadata дополнения на этом подготовительном checkpoint было NOT RUN.
+
+Metadata AFTER-oldG2-v1 затем завершился native0/16.313с/3fullLogs fatal0/
+resources28FAIL/343raw0. Normal Core успел создать site plan, но exact observed
+operation оставалась SITE_PLANNED с vehicle/lease NONE и entity_created0 до
+COORDINATOR_STOP; это не census всех мировых машин. Actual neighboring road
+дал rawreachable1 для FAR goal `<684.711,1.5,2276.18>` через точный общий endpoint,
+enum2/examined2/queries1/complete1. Source road projection к historical pad
+находилась в10.862м. Это geometric corridor, не physical drivable proof:
+passed0/READONLY_NATIVE_NEIGHBOR_GOALS_CAPTURED, movement/recovery NOT RUN.
+Evidence `movement/path-hint-recovery/metadata-after-oldG2-native-v1/`.
+
+Новый ordinary US-v11 обнаружил отдельный deterministic cycle при UNKNOWN hint
+и native path0: после45с без physical evidence первая коррекция переместила
+Humvee22CF изA `<1690.38,29.3301,3276.95>` вB
+`<1692.77,28.1706,3284.58>`, следующая после45с вернула его почти точно вA.
+Обе попытки8м были израсходованы; затем VEHICLE_STUCK_PERSISTENT и подтверждённый
+foot fallback. При resume Pilot2100/native handler1 совпадали, own parking был
+RELEASED с persistent_brake0; последующие activation/LOD/brake не записаны и
+остаются UNKNOWN. Cycle не доказывает первичную причину native неподвижности.
+
+Candidate `AICF_UnstuckFailedSites` хранит максимум два source origins только
+после actual NO_PHYSICAL_MOVEMENT timeout и успешного transform. В пределах
+того же trip/lease/car/assignment/intent/target/phase-transition epoch и точного
+owned route он запрещает кандидат в3D≤4м от доказанно неудачной точки. Перенос
+history на новую route generation разрешён лишь явной последовательностью
+mobility flow Begin→Stage→actual bound waypoint/queue с повторной identity
+проверкой; unrelated+1 и TACTICAL→TRANSIT ABA отвергаются. Reset и настоящее
+physical motion очищают память. Старые128 samples/4..15м/2attempts/deadlines и
+health/player/foreign fences сохранены. Failed transform не создаёт record.
+Новые extracted contracts9source/37actual/4executed unsafe mutants PASS;
+старые sampler61+3/hintIdentity52+3 также PASS. Isolated frozenG3+history
+Workbench343/source drift0 PASS (`movement/failed-sites-wb-v3/`). Native
+anti-cycle proof ещё NOT RUN; этот candidate не превращает ordinary FAIL в PASS.
+
+Опциональный test-only `aicfUnstuckBrakeDispatch=1` использует ту же настоящую
+managed5/одну покупку/normal near→far поездку, но вместо historical pose fault
+однократно владеет native persistent handbrake false→true. При первоначальном
+native true он только ждёт фактического false в пределах прежних300с;
+production parking, human/foreign use или identity mismatch запрещают запись.
+Успех требует обычные45с watchdog, две реальные коррекции/history2, безопасное
+снятие только своего brake и native10м/3distinct polls при тех же ID/Rpl,
+health/lease/deadline/pay1. Native callback не подавляется: свой brake снимается
+до unchanged super, preemption остаётся coverageFAIL. Stop/Finish пытаются
+снять только собственную запись; неподтверждённое снятие не объявляется PASS.
+Это отдельный dispatch gate; `cycle_case_proven=0` обязателен. Auditor проверяет
+actual correction4..15 finite, порядок Applied→NoPhysical1→Correction1→
+NoPhysical2→Correction2→Released и exact car/operation/deadline.
+
+Brake native-v3 завершился native0/3fullLogs fatal0/resources28FAIL/344raw0,
+но initial Begin отказал до записи: corrections0/old watchdog NOT RUN.
+При far binding наблюдались active1/LOD0/nativeIdle/path0/speed0; конкретный
+отказавший parking predicate не был записан, причина UNKNOWN. Исходный runner
+также выявил несовместимость array binding с пустыми строками полного native
+лога; failure сохранён, adapter исправлен с отдельным executed blank-line case.
+Следующий test-only fixture пишет actual guard receipt и ждёт только штатного
+начального brake release;11source/17actual brake/33log cases PASS, independent
+peer/WB/native следующего checkpoint учитываются отдельно. Production3 не менялся.
+
+Bounded-wait Brake-v4 подтвердил actual initial guard: exact1/usable1/
+noForeignHuman1/nativeBrake1/noProductionParking/stopped0/currentPreset1/TRANSIT.
+Четыре ticks он ждал без записи; после actual native false записал own true.
+Следующий tick завершился BRAKE_NATIVE_OVERRIDE_OR_GATE_PREEMPTED_COVERAGE;
+свой brake безопасно отпущен/readback0, repairs0. В тот момент car/Pilot были
+active1/count1/LOD0, current+executed Move RUNNING/full76path, health1/fire0/
+movementDamage0; gate/GetOut events отсутствуют. Raw brake/точный отказавший
+predicate непосредственно перед release не записан: native override вероятен,
+но это inference. Native0/77.730с/3fullLogs fatal0/resources28FAIL/344raw0,
+PID25028 stopped. Watchdog45с/anti-cycle corrections остаются NOT RUN.
+Fixture BA0E6137/Brake contract DDD93D3C/lib336C2515: independent review0,
+PS5.1 11source/17actual/33log cases PASS, isolated WB344/0drift PASS. Полный
+verdict `movement/brake-dispatch-native-v4/summary.json`; идентичный replay
+не требуется без новой controlled setup причины.
+
+Последний post-motion Brake-v5 убрал startup неоднозначность: перед own записью
+actual native distance16.14→23.25→32.68м/3distinct polls, exact current/executed
+Move RUNNING и native brake false. Следующий tick дал вычисленный однократно
+receipt own1/exact1/noForeign1/controllerKnown1/nativeBrake0/
+failed=NATIVE_BRAKE_FALSE/gateNULL0. Native override теперь наблюдался прямо.
+Свой brake отпущен/Stop подтверждён; native0/85.296с/fatal0/resources28FAIL/
+344raw0, repairs0. Brake family закрыта без дальнейшего одинакового replay;
+она не исполнила45с watchdog или anti-cycle recovery. Frozen113592CB/
+11E04688/B40B5B88: independent11source/27actual/41logs PASS и WB344/0drift.
+
+Opt-in `aicfUnstuckHistoricalCorridor=1` использует только metadata-подтверждённую
+FAR goal684.711,1.5,2276.18 и historical **первый** STUCK origin
+1581.85,8.59795,2001.13 из MIN3 03:00:48.609; прежний Pad был destination
+неудачной коррекции. Исторический yaw неизвестен, fault сохраняет фактический
+текущий orientation. Default goal/Pad прежней fixture не изменены. Для этого
+варианта допустим actual FULL_NATIVE_PATH или LOCAL3 hint, захваченный после
+единственного actual≤15м fault; actual production sampler receipt должен
+подтвердить hint/forward correction, затем native10м/3distinct polls при прежних
+car/Rpl/lease/deadline/health/pay1. Новый auditor проверяет каждую коррекцию
+finite4..15, unique attempts1[,2] и её собственный production receipt; только
+последняя обязана быть forward с доказанным hint.
+
+Corridor-v1 достиг exact first origin: actual pose fault9.701м с OBB clear,
+затем car278D сам продолжил движение по172-node native path к другой FAR goal.
+Post-fault native distance22.12м/32.84м и далее не требует recovery и не выдаётся
+за proof исправления. Repairs0, исходные300с дали coverageFAIL:
+native0/312.854с/3fullLogs fatal0/resources28FAIL/344raw0, PID29248 stopped.
+Evidence `movement/corridor-native-v1/{summary,verified-final-result}.json`.
+FixtureA0EB5EA0 входит в frozen recovery-v14:219/219 offline PASS/919SHA0 и
+3/3 compile PASS; Corridor-specific12source/37logs independent PASS — отдельный
+последующий supplement, а не часть того full219.
+
+Последняя разрешённая вариация `aicfUnstuckCorridorReturnOriginal=1` использует
+этот FAR endpoint только для подхода. При actual≤30м/budget0 штатный Planner
+однократно получает исходную goal1475.78,36.6684,2473.24. Fixture ждёт настоящий
+новый assignment/intent/waypoint/current+executed Move и double-read native path
+с исходным endpoint, сохраняя тот же trip/car/lease/pay1/первоначальный deadline.
+Естественный route generation reset допустим лишь с фактическим новым waypoint.
+Никаких phase/path/clock/AI setters или увеличения300/15/2 нет. Source80AA7DBA/
+contractE3B7A952/lib86461349: independent20source/49logs PASS, terminal WB344/
+0drift PASS. Native `movement/corridor-original-native-v1/` теперь полностью
+остановлен:0/314.823с/3fullLogs fatal0/resources28FAIL/344raw0, PID28764 closed.
+Actual command при23.2053м изменил assignment/intent на4/4; новый waypoint/
+route2 и82-point native path к исходному endpoint подтвердились при том же
+deadline1158532. Fault11.0617м выполнен только после этого. Затем native сам
+перестроил86-point path и проехал12.13м/3distinct polls от fault без recovery.
+Исходные300с закончились coverageFAIL, repairs0/forward-correction NOT RUN.
+Все lab вариации закрыты: следующая проверка — current+quota ordinary; position/
+goal воспроизведены, historical yaw и прочий динамический контекст неизвестны.
+Native escape не подтверждает placement hint или anti-cycle runtime fix.

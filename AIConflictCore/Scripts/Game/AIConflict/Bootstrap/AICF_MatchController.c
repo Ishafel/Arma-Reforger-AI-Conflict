@@ -505,7 +505,7 @@ class AICF_MatchController
 	// Только чтение актуального владельца; policy не кеширует slot/group identity.
 	AICF_GroupSlot FindManagedInfantrySlot(SCR_AIGroup group)
 	{
-		if (!Replication.IsServer() || !m_bStarted || !m_bRosterReady || !group)
+		if (!Replication.IsServer() || !m_bStarted || m_bStopped || s_ActiveController != this || !m_bRosterReady || !group)
 			return null;
 		AICF_GroupSlot slot;
 		if (m_USState)

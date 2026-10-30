@@ -980,12 +980,20 @@ class AICF_VehicleMovementState
 	protected int m_iNativeCombatStartedAtMs;
 	protected int m_iNativeCombatReportAtMs;
 	protected ref AICF_VehicleNativeRouteProgress m_NativeRouteProgress;
+	protected ref AICF_UnstuckFailedSites m_UnstuckFailedSites;
+	AICF_UnstuckFailedSites GetUnstuckFailedSites()
+	{
+		if (!m_UnstuckFailedSites) m_UnstuckFailedSites = new AICF_UnstuckFailedSites();
+		return m_UnstuckFailedSites;
+	}
+	void ClearUnstuckFailedSites() { m_UnstuckFailedSites = null; }
 
 	void Reset()
 	{
 		if (m_CrewRecoveryToken)
 			m_CrewRecoveryToken.CancelOwnerSafe();
 		m_iPresetDestinationWaitAtMs = -1;
+		ClearUnstuckFailedSites();
 		m_iStartedAtMs = 0;
 		m_iAbsoluteDeadlineMs = 0;
 		m_iLastRouteProgressAtMs = 0;

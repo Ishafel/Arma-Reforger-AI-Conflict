@@ -208,9 +208,11 @@ class AICF_VehicleTransitFlow
 	{
 		if (!IsTripLeaseIdentityCurrent(trip))
 			return false;
-		return trip.GetMovementState().ConfirmRouteWaypointBound(
+		bool confirmed = trip.GetMovementState().ConfirmRouteWaypointBound(
 			expected,
 			boundToCurrentGroup);
+		if (confirmed) trip.GetMovementState().GetUnstuckFailedSites().AdvanceOwnedRoute(trip, trip.GetLease().GetVehicle(), expected);
+		return confirmed;
 	}
 
 	bool ConfirmSupersededWaypointRemoved(
@@ -474,6 +476,7 @@ class AICF_VehicleTransitFlow
 			return;
 		AICF_VehicleMovementState state = trip.GetMovementState();
 		state.ClearNativeCrewEntries();
+		state.ClearUnstuckFailedSites();
 		state.ClearNativeRouteProgress();
 		if (state.GetNativeCombatActivity())
 		{
@@ -704,6 +707,7 @@ class AICF_VehicleTransitFlow
 			vehicle.GetOrigin(),
 			m_Config.GetMotionMeters(),
 			nowMs);
+		if (physicalMotion) state.ClearUnstuckFailedSites();
 		if (routeProgress || physicalMotion)
 			state.ClearMobilityRecoverySettlementDeferrals();
 		ReportProgress(trip, routeProgress, physicalMotion, routeDistanceMeters, targetDistanceMeters, nowMs);
@@ -1568,8 +1572,10 @@ class AICF_VehicleTransitFlow
 		string unstuckMode = "ROUTE_REBUILD_ONLY";
 		string unstuckSearchDiagnostics = "search=NOT_APPLICABLE";
 		bool relocated = false;
+		AICF_UnstuckFailedSites failedSites = state.GetUnstuckFailedSites();
 		if (stationary)
 		{
+			failedSites.PrepareFailure(trip, vehicle, stuckReason, m_Config.GetStuckTimeoutMs());
 			AICF_Stage3Diagnostics.Info(
 				"VEHICLE_UNSTUCK_STARTED",
 				FormatIdentity(trip, stuckReason) + string.Format(
@@ -1587,6 +1593,7 @@ class AICF_VehicleTransitFlow
 					System.GetTickCount(),
 					MANAGED_SETTLEMENT_RECOVERY_GRACE_MS),
 				stuckReason == "HEALTHY_OVERTURN");
+			if (!relocated) failedSites.CancelPreparedFailure();
 			if (!relocated &&
 				unstuckMode == "REJECTED_MANAGED_MEMBERS_NOT_SETTLED")
 			{
@@ -1643,6 +1650,7 @@ class AICF_VehicleTransitFlow
 		}
 		state.ClearMobilityRecoverySettlementDeferrals();
 
+		failedSites.BeginOwnedRouteReplacement(trip, vehicle);
 		state.SuspendRouteWaypoint();
 		AICF_Stage3Diagnostics.Info(
 			"VEHICLE_RECOVERY_STARTED",
@@ -1684,6 +1692,7 @@ class AICF_VehicleTransitFlow
 			stuckReason,
 			true,
 			relocated);
+		failedSites.StageOwnedRouteReplacement(trip, vehicle, outcome.GetKind() == AICF_ETripOutcomeKind.START_MOVEMENT);
 		if (outcome.GetKind() == AICF_ETripOutcomeKind.START_MOVEMENT)
 		{
 			AICF_Stage3Diagnostics.Info(
@@ -1710,6 +1719,14 @@ class AICF_VehicleTransitFlow
 		relocatedPosition = vehicle.GetOrigin();
 		mode = "ROUTE_REBUILD_ONLY";
 		searchDiagnostics = "search=NOT_STARTED";
+		AICF_UnstuckMutationScope mutationScope = AICF_UnstuckMutationScope.Capture(trip, vehicle);
+		AICF_UnstuckFailedSites failedSites = trip.GetMovementState().GetUnstuckFailedSites();
+		bool requireFailedSiteProof = failedSites.HasPreparedFailure();
+		if (!mutationScope)
+		{
+			mode = "REJECTED_NO_CURRENT_MUTATION_OWNER";
+			return false;
+		}
 		if (!Replication.IsServer())
 		{
 			mode = "REJECTED_NOT_AUTHORITY";
@@ -1738,6 +1755,7 @@ class AICF_VehicleTransitFlow
 			return false;
 		}
 
+		if (!mutationScope.IsCurrent()) return false;
 		vector originalPosition = vehicle.GetOrigin();
 		vector targetDirection = targetPosition - originalPosition;
 		targetDirection[1] = 0;
@@ -1780,6 +1798,15 @@ class AICF_VehicleTransitFlow
 		int hiddenFenceRejected;
 		int transformRejected;
 		string rejectionSamples;
+		AICF_UnstuckPathHint pathHint = AICF_UnstuckPathHint.Capture(trip, originalPosition);
+		string hintDetails = " hint_only=1 path_progress=0 hint_kind=UNKNOWN";
+		if (pathHint) hintDetails = pathHint.Details();
+		bool selected;
+		vector selectedCandidate;
+		bool hasFirstSafe;
+		vector firstSafe;
+		int pathHintRejected;
+		int failedSiteRejected;
 		m_iUnstuckManagedOccupantObservationsIgnored = 0;
 		for (int ringIndex = 0; ringIndex < searchOffsets.Count(); ringIndex++)
 		{
@@ -1809,6 +1836,12 @@ class AICF_VehicleTransitFlow
 				}
 
 				terrainCandidates++;
+				if (failedSites.Rejects(trip, vehicle, candidate, UNSTUCK_MIN_DISPLACEMENT_METERS))
+				{
+					failedSiteRejected++;
+					rejectionSamples = AppendUnstuckSearchSample(rejectionSamples, centersTested, candidate, "PREVIOUS_FAILED_ORIGIN");
+					continue;
+				}
 				float displacementMeters = vector.DistanceXZ(originalPosition, candidate);
 				if (displacementMeters < UNSTUCK_MIN_DISPLACEMENT_METERS ||
 					displacementMeters > UNSTUCK_MAX_DISPLACEMENT_METERS)
@@ -1894,42 +1927,75 @@ class AICF_VehicleTransitFlow
 						hazardRejected, hiddenFenceRejected, transformRejected, rejectionSamples, "OVERTURN_SCOPE_RECHECK_REJECTED");
 					return false;
 				}
-				vector angles = targetDirection.VectorToAngles();
-				angles[1] = 0;
-				angles[2] = 0;
-				vector relocatedTransform[4];
-				Math3D.AnglesToMatrix(angles, relocatedTransform);
-				relocatedTransform[3] = candidate;
-				Physics physics = vehicle.GetPhysics();
-				if (physics)
+				if (!hasFirstSafe)
 				{
-					physics.SetVelocity(vector.Zero);
-					physics.SetAngularVelocity(vector.Zero);
+					hasFirstSafe = true;
+					firstSafe = candidate;
 				}
-				if (!vehicle.SetWorldTransform(relocatedTransform))
+				if (pathHint && !pathHint.Prefers(candidate))
 				{
-					transformRejected++;
-					rejectionSamples = AppendUnstuckSearchSample(
-						rejectionSamples,
-						centersTested,
-						candidate,
-						"WORLD_TRANSFORM_REJECTED");
+					pathHintRejected++;
+					rejectionSamples = AppendUnstuckSearchSample(rejectionSamples, centersTested, candidate, "NOT_FORWARD_NATIVE_PATH_HINT");
 					continue;
 				}
-
-				relocatedPosition = candidate;
+				selected = true;
+				selectedCandidate = candidate;
+				break;
+			}
+			if (selected) break;
+		}
+		string selectionDetails = hintDetails + string.Format(" hint_rejected=%1 first_safe=%2 selected=%3 failed_site_rejected=%4 failed_site_count=%5", pathHintRejected, firstSafe, selected, failedSiteRejected, failedSites.Count());
+		if (selected)
+		{
+			// A captured hint may become stale while the bounded terrain sweep runs.
+			// Never convert that drift into the unknown-hint legacy fallback.
+			bool currentHint = !pathHint || pathHint.IsCurrent();
+			bool currentSource = mutationScope.IsCurrent() && trip.GetLease() && trip.GetLease().GetVehicle() == vehicle && vehicle.GetOrigin() == originalPosition;
+			if (!currentHint || !currentSource)
+			{
+				mode = "REJECTED_NATIVE_PATH_HINT_STALE";
+				searchDiagnostics = "search=BOUNDED_MULTI_RING result=STALE_NO_MUTATION" + selectionDetails;
+				return false;
+			}
+			float repeatedNearestPlayer;
+			bool physicalCurrent = m_Watchdog.CanSafelyRelocateVehicle(trip.GetAssignment().GetGroup(), vehicle,
+				m_Config.GetHiddenRecoveryPlayerRadiusMeters(), allowManagedTransitionRecovery, safetyReason);
+			if (physicalCurrent) physicalCurrent = m_Watchdog.CanApplyHiddenRecovery(originalPosition, selectedCandidate,
+				m_Config.GetHiddenRecoveryPlayerRadiusMeters(), repeatedNearestPlayer, safetyReason);
+			if (physicalCurrent) physicalCurrent = IsUnstuckCandidateHazardClear(selectedCandidate, trip.GetAssignment().GetGroup(), vehicle, safetyReason);
+			if (!physicalCurrent)
+			{
+				mode = "REJECTED_FINAL_PHYSICAL_RECHECK";
+				searchDiagnostics = "search=BOUNDED_MULTI_RING result=FINAL_RECHECK_REJECTED reason=" + safetyReason + selectionDetails;
+				return false;
+			}
+			if (requireOverturnScope && !AICF_OverturnRecovery.CanMutateNow(trip)) return false;
+			if (pathHint && !pathHint.IsCurrent()) return false;
+			if (!mutationScope.IsCurrent()) return false;
+			if (requireFailedSiteProof && !failedSites.PreparedCurrent(trip, vehicle)) return false;
+			if (failedSites.Rejects(trip, vehicle, selectedCandidate, UNSTUCK_MIN_DISPLACEMENT_METERS)) return false;
+			vector angles = targetDirection.VectorToAngles();
+			angles[1] = 0;
+			angles[2] = 0;
+			vector relocatedTransform[4];
+			Math3D.AnglesToMatrix(angles, relocatedTransform);
+			relocatedTransform[3] = selectedCandidate;
+			Physics physics = vehicle.GetPhysics();
+			if (physics)
+			{
+				physics.SetVelocity(vector.Zero);
+				physics.SetAngularVelocity(vector.Zero);
+			}
+			if (vehicle.SetWorldTransform(relocatedTransform))
+			{
+				failedSites.CommitSuccessfulRelocation(trip, vehicle, true);
+				relocatedPosition = selectedCandidate;
 				mode = "SAFE_TERRAIN_REPOSITION";
-				searchDiagnostics = BuildUnstuckSearchDiagnostics(
-					centersTested,
-					terrainCandidates,
-					displacementRejected,
-					hazardRejected,
-					hiddenFenceRejected,
-					transformRejected,
-					rejectionSamples,
-					"ACCEPTED");
+				searchDiagnostics = BuildUnstuckSearchDiagnostics(centersTested, terrainCandidates, displacementRejected,
+					hazardRejected, hiddenFenceRejected, transformRejected, rejectionSamples, "ACCEPTED") + selectionDetails;
 				return true;
 			}
+			transformRejected++;
 		}
 
 		mode = "NO_SAFE_RELOCATION_POSITION";
@@ -1941,7 +2007,7 @@ class AICF_VehicleTransitFlow
 			hiddenFenceRejected,
 			transformRejected,
 			rejectionSamples,
-			"EXHAUSTED");
+			"EXHAUSTED") + selectionDetails;
 		return false;
 	}
 
