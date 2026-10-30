@@ -18,6 +18,7 @@ class AICF_VehicleBehaviorState
 	int m_iNextReboardTraceAt;
 	ref array<IEntity> m_aDeployed = {};
 	ref array<ref AICF_VehicleBehaviorAction> m_aActions = {};
+	ref AICF_ReboardSeatConflictScope m_ReboardSeatConflict;
 
 	int PausedMs(int nowMs)
 	{

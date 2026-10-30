@@ -436,6 +436,16 @@ class AICF_VehicleBehaviorFlow
 		array<BaseCompartmentSlot> seats = {};
 		AICF_VehiclePreset preset = trip.GetVehiclePreset();
 		if (!CollectBehaviorSeats(trip, seats, "POLL_REBOARDING")) return AICF_TripOutcome.FallbackToFoot("BEHAVIOR_TOPOLOGY_CHANGED", causationId);
+		if (state.m_ReboardSeatConflict)
+		{
+			AICF_ReboardSeatConflictScope pendingConflict = state.m_ReboardSeatConflict;
+			int exitReadback = pendingConflict.ObserveExitedReservation();
+			if (!IsCurrent(trip) || trip.GetBehaviorState() != state || state.m_ReboardSeatConflict != pendingConflict)
+				return AICF_TripOutcome.Wait("TACTICAL_OWN_SEAT_SCOPE_CHANGED", causationId);
+			if (exitReadback < 0) return AICF_TripOutcome.FallbackToFoot("TACTICAL_OWN_RESERVATION_IDENTITY_CHANGED", causationId);
+			if (exitReadback == 0) return AICF_TripOutcome.Wait("TACTICAL_OWN_SEAT_EXIT_READBACK_PENDING", causationId);
+			state.m_ReboardSeatConflict = null;
+		}
 		string fitReason;
 		if (!HasMobilePilot(trip, seats, false) && !RestoreCrewAssignments(trip, fitReason))
 		{
@@ -463,11 +473,14 @@ class AICF_VehicleBehaviorFlow
 			settled = false;
 			if (seat.GetOccupant() && seat.GetOccupant() != actor)
 			{
+				ReportSeatConflict(trip, actor, seat, "BEFORE_DECISION");
 				if (AICF_VehicleShortRecovery.IsIncapacitatedSeatCurrent(trip, seat))
 				{
 					AICF_VehicleShortRecovery.TryClearIncapacitatedSeat(trip, seat, "REBOARD_INCAPACITATED_BLOCKER");
 					continue;
 				}
+				AICF_TripOutcome ownClearance = RecoverOwnSeatConflict(trip, seats, actor, seat, causationId);
+				if (ownClearance) return ownClearance;
 				return AICF_TripOutcome.FallbackToFoot("TACTICAL_SEAT_OCCUPIED", causationId);
 			}
 			EnsureEntry(trip, actor, seat);
@@ -489,6 +502,83 @@ class AICF_VehicleBehaviorFlow
 			state.m_iCombatOverrideIntent = trip.GetAssignment().GetStrategicIntentRevision();
 		Report(trip, "REBOARD_COMPLETE", "EXACT_SURVIVORS_SAME_LEASE");
 		return AICF_TripOutcome.ResumeTacticalMovement("TACTICAL_EXACT_SEATS_CONFIRMED", causationId);
+	}
+
+	protected AICF_TripOutcome RecoverOwnSeatConflict(AICF_TransportTrip trip, array<BaseCompartmentSlot> seats,
+		IEntity expected, BaseCompartmentSlot blocked, string causationId)
+	{
+		AICF_ReboardSeatConflictScope scope = AICF_ReboardSeatConflictScope.Capture(trip, seats, blocked, expected);
+		if (!scope) return null;
+		if (trip.GetBehaviorState().m_ReboardSeatConflict) return AICF_TripOutcome.Wait("TACTICAL_OWN_SEAT_SCOPE_CHANGED", causationId);
+		CompartmentAccessComponent access = ChimeraCharacter.Cast(scope.m_Occupant).GetCompartmentAccessComponent();
+		if (access.IsGettingOut() || access.IsGettingIn() || access.IsSwitchingSeatsAnim())
+			return AICF_TripOutcome.Wait("TACTICAL_OWN_SEAT_NATIVE_TRANSITION_PENDING", causationId);
+		if (!scope.CanBeginOwnedExit()) return AICF_TripOutcome.Wait("TACTICAL_OWN_SEAT_NATIVE_TRANSITION_PENDING", causationId);
+		AICF_VehicleBehaviorAction token = FindAction(trip, scope.m_Occupant);
+		if (!token)
+		{
+			token = new AICF_VehicleBehaviorAction(trip, scope.m_Occupant, scope.m_AssignedSeat);
+			trip.GetBehaviorState().m_aActions.Insert(token);
+		}
+		if (!token.ResolveOwner() || token.m_Seat != scope.m_AssignedSeat || token.m_iShortAttempts >= 3) return null;
+		token.Retire();
+		if (!IsCurrent(trip) || !scope.IsCurrent() || !token.ResolveOwner() ||
+			!trip.GetBehaviorState().m_aActions.Contains(token) || trip.GetBehaviorState().m_ReboardSeatConflict)
+			return AICF_TripOutcome.Wait("TACTICAL_OWN_SEAT_SCOPE_CHANGED", causationId);
+		if (access.IsGettingOut() || access.IsGettingIn() || access.IsSwitchingSeatsAnim())
+			return AICF_TripOutcome.Wait("TACTICAL_OWN_SEAT_NATIVE_TRANSITION_PENDING", causationId);
+		token.m_iShortAttempts++;
+		bool accepted = AICF_VehicleShortRecovery.TryExit(trip, scope.m_Occupant, "REBOARD_OWN_WRONG_SEAT", scope);
+		if (!IsCurrent(trip) || !scope.IsContextCurrent() || trip.GetBehaviorState().m_ReboardSeatConflict)
+			return AICF_TripOutcome.Wait("TACTICAL_OWN_SEAT_SCOPE_CHANGED", causationId);
+		if (accepted) trip.GetBehaviorState().m_ReboardSeatConflict = scope;
+		AICF_Stage3Diagnostics.Info("VEHICLE_REBOARD_OWN_SEAT_CLEARANCE", string.Format(
+			"operation_id=%1 occupant=%2 wrong_seat=%3 assigned_seat=%4 short_attempt=%5 maximum_shared_short_attempts=3 accepted=%6 reboard_deadline_ms=%7 remaining_ms=%8 mapping_unchanged=1 captured_own_reservation=%9",
+			trip.GetOperationId(), AICF_GroupTrace.Entity(scope.m_Occupant), AICF_VehiclePreset.SeatKey(blocked),
+			AICF_VehiclePreset.SeatKey(scope.m_AssignedSeat), token.m_iShortAttempts, accepted,
+			trip.GetBehaviorState().m_iReboardDeadline, trip.GetBehaviorState().m_iReboardDeadline - System.GetTickCount(), scope.m_bCapturedOwnReservation));
+		ReportSeatConflict(trip, expected, blocked, "AFTER_SHORT_EXIT");
+		return AICF_TripOutcome.Wait("TACTICAL_OWN_SEAT_CLEARANCE_PENDING", causationId);
+	}
+
+	protected void ReportSeatConflict(AICF_TransportTrip trip, IEntity expected, BaseCompartmentSlot seat, string trigger)
+	{
+		if (!IsCurrent(trip) || !expected || !seat) return;
+		IEntity occupant = seat.GetOccupant();
+		CompartmentAccessComponent access;
+		SCR_AIUtilityComponent utility;
+		ChimeraCharacter character = ChimeraCharacter.Cast(occupant);
+		if (character)
+		{
+			access = character.GetCompartmentAccessComponent();
+			if (character.GetAIControlComponent())
+			{
+				AIAgent agent = character.GetAIControlComponent().GetControlAIAgent();
+				if (agent) utility = SCR_AIUtilityComponent.Cast(agent.FindComponent(SCR_AIUtilityComponent));
+			}
+		}
+		string details = string.Format("operation_id=%1 trigger=%2 seat=%3 expected=%4 expected_rpl=%5 occupant=%6 occupant_rpl=%7 captured_position=%8",
+			trip.GetOperationId(), trigger, AICF_VehiclePreset.SeatKey(seat), AICF_GroupTrace.Entity(expected),
+			AICF_VehicleBehaviorBinding.ComponentRpl(expected), AICF_GroupTrace.Entity(occupant),
+			AICF_VehicleBehaviorBinding.ComponentRpl(occupant), FindCapturedPosition(trip, occupant));
+		details += string.Format(" assignment_revision=%1 slot_assignment_revision=%2 intent_revision=%3 preset_revision=%4 reboard_deadline_ms=%5 remaining_ms=%6",
+			trip.GetAssignment().GetAssignmentRevision(), trip.GetVehiclePresetSlot().GetStrategicAssignmentRevision(),
+			trip.GetAssignment().GetStrategicIntentRevision(), trip.GetVehiclePresetRevision(),
+			trip.GetBehaviorState().m_iReboardDeadline, trip.GetBehaviorState().m_iReboardDeadline - System.GetTickCount());
+		if (access)
+		{
+			string actualSeat = "NONE";
+			if (access.GetCompartment()) actualSeat = AICF_VehiclePreset.SeatKey(access.GetCompartment());
+			details += string.Format(" linked_vehicle=%1 actual_seat=%2 getting_in=%3 getting_out=%4 switching=%5",
+				AICF_GroupTrace.Entity(CompartmentAccessComponent.GetVehicleIn(occupant)), actualSeat,
+				access.IsGettingIn(), access.IsGettingOut(), access.IsSwitchingSeatsAnim());
+		}
+		if (utility) details += string.Format(" selected_action=%1 executed_action=%2", AICF_GroupTrace.Action(utility.GetCurrentAction()), AICF_GroupTrace.Action(utility.GetCurrentBehavior()));
+		details += " readonly=1 first_conflict_branch=1";
+		details += string.Format(" expected_fit=%1 occupant_fit=%2 slow_vehicle=%3 group_generation=%4 trip_generation=%5 lease_generation=%6 vehicle_generation=%7",
+			IsFit(expected), IsFit(occupant), AICF_VehicleShortRecovery.IsSlowVehicle(trip.GetLease().GetVehicle()),
+			trip.GetGroupGeneration(), trip.GetTripGeneration(), trip.GetLease().GetLeaseGeneration(), trip.GetLease().GetVehicleGeneration());
+		AICF_Stage3Diagnostics.Info("VEHICLE_REBOARD_SEAT_CONFLICT", details);
 	}
 
 	// Диагностика не вызывает EntryBlocked: чтение не меняет progress clock.
@@ -600,6 +690,7 @@ class AICF_VehicleBehaviorFlow
 	{
 		if (!trip) return;
 		AICF_VehicleBehaviorState state = trip.GetBehaviorState();
+		state.m_ReboardSeatConflict = null;
 		foreach (AICF_VehicleBehaviorAction token : state.m_aActions)
 			if (token) token.Retire();
 		state.m_aActions.Clear();

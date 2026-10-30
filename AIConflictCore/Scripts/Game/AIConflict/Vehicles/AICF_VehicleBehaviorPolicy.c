@@ -241,6 +241,20 @@ class AICF_VehicleBehaviorPolicy
 		return binding && binding.m_Trip.GetVehiclePreset().m_iBehavior == AICF_EVehicleBehavior.COMBAT && HasLocalCombat(binding.m_Trip);
 	}
 
+	static bool IsCurrentReboarding(AICF_VehicleBehaviorBinding binding)
+	{
+		if (!binding || !binding.IsCurrent()) return false;
+		AICF_TransportTrip trip = binding.m_Trip;
+		if (trip.GetPhase() != AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT || !trip.GetBehaviorState().m_bReboarding) return false;
+		int nowMs = System.GetTickCount();
+		if (trip.IsDeadlineReached(nowMs) || nowMs >= trip.GetBehaviorState().m_iReboardDeadline) return false;
+		AICF_GroupSlot slot = trip.GetVehiclePresetSlot();
+		AICF_StrategicAssignmentSnapshot assignment = trip.GetAssignment();
+		return slot && assignment && slot.GetGroup() == assignment.GetGroup() &&
+			slot.GetStrategicAssignmentRevision() == assignment.GetAssignmentRevision() &&
+			slot.GetStrategicIntentRevision() == assignment.GetStrategicIntentRevision();
+	}
+
 	static bool HasTransportCombatOverride(AICF_TransportTrip trip)
 	{
 		if (!trip || !trip.GetVehiclePreset() || trip.GetVehiclePreset().m_iBehavior != AICF_EVehicleBehavior.TRANSPORT ||
@@ -268,6 +282,9 @@ class AICF_VehicleBehaviorPolicy
 		if (!utility || !message || !message.m_Vehicle) return false;
 		AICF_VehicleBehaviorBinding binding = Find(Vehicle.Cast(message.m_Vehicle));
 		if (!binding || !binding.OwnsActor(utility.m_OwnerEntity)) return false;
+		// Flow выдаёт собственные exact-seat actions напрямую, без native message.
+		// Новая автоматическая посадка не должна менять роли в bounded reboard.
+		if (binding.m_Trip.GetVehiclePreset().m_iBehavior == AICF_EVehicleBehavior.TRANSPORT && IsCurrentReboarding(binding)) return true;
 		if (binding.IsDeployed(utility.m_OwnerEntity)) return true;
 		if (!ShouldDeferCrewReplacement(binding.m_Vehicle)) return false;
 		EAICompartmentType role = message.m_eRoleInVehicle;

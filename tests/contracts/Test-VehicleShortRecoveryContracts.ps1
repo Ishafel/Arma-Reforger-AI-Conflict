@@ -25,7 +25,10 @@ function Rules([string]$h,[string]$b,[string]$d,[string]$t){
  if(!$h.Contains('MAX_ACTOR_DISPLACEMENT_METERS = 25.0;') -or !$h.Contains('MAX_SEAT_HEIGHT_METERS = 5.0;') -or
   !$can.Contains('vector.Distance(origin, destination) > MAX_ACTOR_DISPLACEMENT_METERS') -or
   !$can.Contains('Math.AbsFloat(origin[1] - destination[1]) > MAX_SEAT_HEIGHT_METERS') -or
-  @([regex]::Matches($exit,'vector.Distance\(member.GetOrigin\(\), destination\[3\]\) > MAX_ACTOR_DISPLACEMENT_METERS')).Count -ne 2){'SHORT_ACTOR_DISTANCE'}
+  @([regex]::Matches($exit,'vector.Distance\(member.GetOrigin\(\), destination\[3\]\) > MAX_ACTOR_DISPLACEMENT_METERS')).Count -ne 3){'SHORT_ACTOR_DISTANCE'}
+ $release=$exit.IndexOf('conflict.ReleaseOwnedReservationBeforeExit()')
+ $repeat=$exit.LastIndexOf('vector.Distance(member.GetOrigin(), destination[3]) > MAX_ACTOR_DISPLACEMENT_METERS')
+ if($release-lt0-or$repeat-lt$release-or$repeat-gt$exit.IndexOf('access.GetOutVehicle_NoDoor(')){'REPEAT_SHORT_DISTANCE_AFTER_RESERVATION_CALLBACK'}
  foreach($guard in @('seat.GetVehicle() != vehicle','!IsSlowVehicle(vehicle)','!seat.IsCompartmentAccessible()',
   'seat.GetOccupant()', 'seat.IsGetInLockedFor(member)', 'seat.IsReserved() && !seat.IsReservedBy(member)',
   '!access.IsGettingIn() && !access.IsGettingOut() && !access.IsSwitchingSeatsAnim()', '!CompartmentAccessComponent.GetVehicleIn(member)')){
@@ -76,6 +79,7 @@ foreach($mutation in @(
  @('h','!lease.MatchesEntityIdentity(vehicle, vehicle.GetID(), rpl.Id().ToString())','false','EXACT_AI_IDENTITY'),
  @('h','MAX_ACTOR_DISPLACEMENT_METERS = 25.0;','MAX_ACTOR_DISPLACEMENT_METERS = 300.0;','SHORT_ACTOR_DISTANCE'),
  @('h','Math.AbsFloat(origin[1] - destination[1]) > MAX_SEAT_HEIGHT_METERS','false','SHORT_ACTOR_DISTANCE'),
+ @('h','conflict.ReleaseOwnedReservationBeforeExit()','conflict.IsCurrent()','REPEAT_SHORT_DISTANCE_AFTER_RESERVATION_CALLBACK'),
  @('h','seat.IsReserved() && !seat.IsReservedBy(member)','false','EMPTY_EXACT_SEAT_NO_FOREIGN_MUTATION'),
  @('h','seat.GetOccupant() != member','false','REPEAT_EXACT_EXIT_FENCE'),
  @('h','players.GetPlayerIdFromControlledEntity(member) > 0','false','ONLY_CAPTURED_NONPLAYER_INCAPACITATED'),

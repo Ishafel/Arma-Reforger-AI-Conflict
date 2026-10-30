@@ -70,17 +70,21 @@ class AICF_VehicleShortRecovery
 		CompartmentAccessComponent access = ChimeraCharacter.Cast(member).GetCompartmentAccessComponent();
 		seat.SetReserved(member);
 		if (!CanSeat(trip, member, seat) || !seat.IsReservedBy(member)) return false;
+		string operationId = trip.GetOperationId();
+		string memberId = AICF_GroupTrace.Entity(member);
+		string seatKey = AICF_VehiclePreset.SeatKey(seat);
 		bool accepted = access.GetInVehicle(vehicle, seat, true, -1, ECloseDoorAfterActions.INVALID, false);
 		AICF_Stage3Diagnostics.Warning("VEHICLE_SHORT_SEAT_RECOVERY", string.Format(
 			"operation_id=%1 member=%2 seat=%3 distance_m=%4 maximum_m=%5 accepted=%6 reason=%7 visible_allowed=1 vehicle_moved=0",
-			trip.GetOperationId(), member.GetID(), AICF_VehiclePreset.SeatKey(seat), distance, MAX_ACTOR_DISPLACEMENT_METERS, accepted, reason));
-		if (!accepted && IsCurrentMember(trip, member) && seat.GetVehicle() == vehicle && seat.IsReservedBy(member)) seat.SetReserved(null);
+			operationId, memberId, seatKey, distance, MAX_ACTOR_DISPLACEMENT_METERS, accepted, reason));
+		if (!accepted && IsCurrentMember(trip, member) && seat && seat.GetVehicle() == vehicle && seat.IsReservedBy(member)) seat.SetReserved(null);
 		return accepted;
 	}
 
-	static bool TryExit(AICF_TransportTrip trip, IEntity member, string reason)
+	static bool TryExit(AICF_TransportTrip trip, IEntity member, string reason, AICF_ReboardSeatConflictScope conflict = null)
 	{
 		if (!IsCurrentMember(trip, member)) return false;
+		if (conflict && (conflict.m_Trip != trip || conflict.m_Occupant != member || !conflict.IsCurrent())) return false;
 		Vehicle vehicle = trip.GetLease().GetVehicle();
 		if (!IsSlowVehicle(vehicle)) return false;
 		ChimeraCharacter character = ChimeraCharacter.Cast(member);
@@ -97,10 +101,17 @@ class AICF_VehicleShortRecovery
 		if (!IsCurrentMember(trip, member) || !IsSlowVehicle(vehicle) || access.GetCompartment() != seat ||
 			seat.GetVehicle() != vehicle || seat.GetOccupant() != member ||
 			vector.Distance(member.GetOrigin(), destination[3]) > MAX_ACTOR_DISPLACEMENT_METERS) return false;
+		if (conflict && !conflict.IsCurrent()) return false;
+		if (conflict && !conflict.ReleaseOwnedReservationBeforeExit()) return false;
+		if (conflict && (!conflict.IsBeforeExitCurrent() ||
+			vector.Distance(member.GetOrigin(), destination[3]) > MAX_ACTOR_DISPLACEMENT_METERS)) return false;
+		string operationId = trip.GetOperationId();
+		string memberId = AICF_GroupTrace.Entity(member);
+		string seatKey = AICF_VehiclePreset.SeatKey(seat);
 		bool accepted = access.GetOutVehicle_NoDoor(destination, false, false, true);
 		AICF_Stage3Diagnostics.Warning("VEHICLE_SHORT_EXIT_RECOVERY", string.Format(
 			"operation_id=%1 member=%2 seat=%3 maximum_m=%4 accepted=%5 reason=%6 visible_allowed=1 vehicle_moved=0",
-			trip.GetOperationId(), member.GetID(), AICF_VehiclePreset.SeatKey(seat), MAX_ACTOR_DISPLACEMENT_METERS, accepted, reason));
+			operationId, memberId, seatKey, MAX_ACTOR_DISPLACEMENT_METERS, accepted, reason));
 		return accepted;
 	}
 
@@ -152,10 +163,13 @@ class AICF_VehicleShortRecovery
 		access.InterruptVehicleActionQueue(true, true, true);
 		if (!IsIncapacitatedSeatCurrent(trip, seat) || seat.GetOccupant() != member ||
 			vector.Distance(member.GetOrigin(), destination[3]) > MAX_ACTOR_DISPLACEMENT_METERS) return false;
+		string operationId = trip.GetOperationId();
+		string memberId = AICF_GroupTrace.Entity(member);
+		string seatKey = AICF_VehiclePreset.SeatKey(seat);
 		bool accepted = access.GetOutVehicle_NoDoor(destination, true, false, true);
 		AICF_Stage3Diagnostics.Warning("VEHICLE_INCAPACITATED_SEAT_CLEARED", string.Format(
 			"operation_id=%1 member=%2 seat=%3 accepted=%4 reason=%5 maximum_m=%6 life_state_unchanged=1 visible_allowed=1",
-			trip.GetOperationId(), member.GetID(), AICF_VehiclePreset.SeatKey(seat), accepted, reason, MAX_ACTOR_DISPLACEMENT_METERS));
+			operationId, memberId, seatKey, accepted, reason, MAX_ACTOR_DISPLACEMENT_METERS));
 		return accepted;
 	}
 }

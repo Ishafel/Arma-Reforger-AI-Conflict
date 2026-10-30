@@ -138,6 +138,73 @@ owned actions, перечитывается actual current group: каждый �
 Caller сначала прекращает собственный конфликтующий action. Native force
 посадка не считается доказанной до actual compartment readback.
 
+При повторной посадке исходный живой AI может фактически занять место другого
+исходного бойца той же машины. `AICF_ReboardSeatConflictScope` фиксирует обоих
+actors, места, entity/componentRpl, lease/preset/group/trip, assignment/intent,
+transition count, BehaviorState и исходный deadline. Только такой конфликт
+получает короткую высадку; расходуется прежний общий short budget именно
+занявшего чужое место бойца, максимум3. Native enter/exit/switch и живой
+собственный GetIn в освобождаемое место ждут readback в том же окне. Дальний
+боец и его собственный native GetIn не прерываются.
+
+Scope хранит первоначальный `IsReservedBy` конфликтующего бойца. После
+native Interrupt, пока captured actor ещё занимает wrong seat, освобождается
+только доказанно его reservation. Перед записью и после callback повторяются
+owner/health/identity/mapping/phase, отсутствие animations и live wrong-seat
+GetIn; затем повторяется предел25м перед native GetOut. Этот порядок
+соответствует stock GetIn completion: occupant продолжает защищать место.
+После выхода pending receipt подтверждает actual readback; существующий
+empty-only fallback не разрешает очистить чужое бронирование. Unknown/foreign
+reservation не очищается, новое правильное бронирование Pilot сохраняется.
+Замена pending
+receipt во время native callback отменяет старое наблюдение и сохраняет
+successor. `CancelEntries` снимает ссылку, но accepted exit уже не оставляет
+старое own бронирование. Исправление не создаёт окно/retry. Новая реальная
+угроза может штатно отменить episode; следующий episode создаёт сам flow.
+Native TryExit/TrySeat/incapacitated exit журналируют только строки identity,
+захваченные до native вызова: удаление actor/seat в callback не вызывает
+повторных native getters из сообщения журнала.
+Нативные GetIn messages подавляются только у текущего TRANSPORT reboard с
+актуальными assignment/intent revisions; собственные exact-seat actions flow
+выдаются напрямую. Foreign/human/stale/expired guards остаются fail-closed.
+`Test-ReboardOwnSeatConflictContracts.ps1` исполняет реальные predicates,
+recovery/exit, pending-owner ветку и unsafe mutants. Отдельный
+`Test-ReboardOwnSeatProbeContracts.ps1` проверяет controlled fixture/лог-аудитор;
+native результаты и сохранённые FAIL находятся в evidence
+`own-seat-recovery/REPORT.md` и не заменяются этими adapters.
+Native BEFOREv4 воспроизвёл actual own-Cargo в Pilot и настоящий отказ старого
+Flow `TACTICAL_SEAT_OCCUPIED`. Первый AFTERv4 выполнил выход, но сохранил
+непринадлежащую Pilot reservation пустого места: последовали исходный125s
+timeout и6 SCRIPT E от meaningful-task deadline; полный FAIL сохранён.
+Новый AFTERv6 подтвердил captured owner Cargo, пустое место до очистки,
+actual unreserved после неё, возврат тех же5 в назначенные места и native
+13,1481м/5moving polls. Health/entity/Rpl/mapping/deadline сохранены, общий
+short budget Cargo2 из3 (выход+возврат), mobility0, одна машина/покупка50.
+Native0/source0/functional и full fatal gates PASS; resourcesFAIL28 остаётся.
+Это отдельный current-after proof: native BEFOREv4 и AFTERv6 имеют разные
+общие Scope/State hashes. Подготовленная статическая v6 пара отличается только
+Flow, но native BEFOREv6 не запускался. Original ordinary v11 reservation
+owner не был залогирован; тождество этой дополнительной причины не заявляется.
+Последующий actual-extracted lifecycle тест доказал отдельный gap: прежний
+`CancelEntries` между accepted exit и empty reservation readback терял receipt,
+и следующая посадка Pilot блокировалась. Atomic pre-exit исправление и
+133 actual cases/9 executed unsafe mutants закрывают этот replay; прежние
+219 full checks и AFTERv6 относятся к состоянию до atomic delta. Свежие
+непрерывный и real LOCAL_THREAT interruption native gates закрыты на одной
+замороженной343 production +fixture сборке: native0/source0/fullfatal0,
+functionalPASS, resourcesFAIL28 в каждом. Standard вернул exact5 и подтвердил
+11,147м/4moving polls при short2/3 и unchanged125s deadline277965. Interrupted
+сначала подтвердил actual `COMBAT_REBOARD_CANCELLED` с pending1→0, combat1,
+distantOrder0 и unreserved Pilot; первый core deadline208731 не менялся.
+Следующий штатный episode создал core deadline211731, сохранённый до exact5
+и13,5366м/8moving polls. Это новые normal core episodes, а не продление helper.
+Оба сохранили исходные actor/entity/Rpl/health, одну машину и покупку50;
+интеграция с quota/anti-cycle и полные ordinary gates учитываются отдельно.
+Ignored wrapper после второго native stop неверно передал `-Interrupt`
+аудитору через array splat; ошибка сохранена. Hashtable binding исправлен,
+тот же frozen аудитор проверил те же stopped logs в WindowsPS5.1 без повторного
+runtime. Текущий контракт содержит133 actual/9 unsafe, fixture17/log48/CLI6.
+
 `AICF_OverturnRecovery` допускает короткое выправление здоровой перевёрнутой
 машины в текущем manual TRANSIT: authoritative exact lease/componentRpl,
 действующий native Move/waypoint/положительный Pilot handler и весь исходный
