@@ -83,7 +83,10 @@ fatal0/raw384+6fixtures=390/sourceSHA0, manifest0B349BDA…0F191. Combined Multi
 Frozen V24 и ошибочный v5 stage не изменялись; V24 All не запускался. Новый
 frozen V25 завершён **261/261 PASS**, collector0/exact union/Logistics1,
 1019SHA0 и6actual sessions closed0. Это snapshot до позднего doc-only обновления
-результатов компиляции; source fixture/contract bytes совпадают. Native **NOT RUN**.
+результатов компиляции; source fixture/contract bytes совпадают. Native USSR600
+v6 завершился0/fullfatal0, но boarding/route FAIL. После fallback periodic
+readback трижды показал `internal_task=1/egress_required=0`, alive5 и всех пешими.
+Это наблюдение нового predicate, не arrival/route PASS и не atomic audit input.
 Наличие fixture не меняет старый US383 ordinary1800 FAIL и не подтверждает
 исправление отставшего участника. Исправление ошибочной egress-цели не заменяет
 отдельную проверку фактического прибытия всех живых участников.

@@ -51,7 +51,12 @@ Terminal production Stock/RHS/ArlandWCSRHS — **3/3 PASS**, native0/validation/
 full3sibling fatal0. Raw384 bytes frozen V24 и V25 совпадают без drift;
 fixture-only rename не требовал повторения неизменённого production graph.
 Новые combined Soak390 и Multi388 отдельно compiled0/fullfatal0/sourceSHA0.
-Native нового изменения — **NOT RUN**. Полный259 PASS относится к snapshot
+Native USSR600 на combined v6 завершился native0/fullfatal0, но boarding/route
+functionalFAIL. После пешего fallback periodic observer трижды увидел
+`internal_task=1/egress_required=0`, alive5/physical_vehicle_members0 и текущий
+PLAYER MOVE_AND_HOLD. Это узкий положительный proof нового predicate на свежем
+readback, не исходные atomic audit locals и не доказательство прибытия/маршрута.
+US600 v7 также завершился boarding/route FAIL. Полный259 PASS относится к snapshot
 до этой правки; новый frozen V25 завершён **261/261 PASS**, collector0/exact
 union/Logistics1/1019SHA0/6actual sessions closed0. Позднее doc-only уточнение
 вердиктов не входит в frozen1019; production/contract bytes совпадают.

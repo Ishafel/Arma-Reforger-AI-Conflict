@@ -1,8 +1,123 @@
 # Проверки и baseline
 
-## Возобновление #78 — 30.10.2026
+## Возобновление #78 — 30–31.10.2026
 
-Три текущих RHS bootstrap на exact human383 из `resumed-human-v20` завершены
+Новый frozen `resumed-topology-v27` завершён31.10 в01:24:52MSK:
+**262/262 PASS**, collector0/exact unique union/Logistics1/1021sourceSHA0.
+Все шесть actual exec sessions closed0:34471/43810/14042/5181/20375/52301.
+Fresh elevated CIM после collector: native/Workbench/Full workers0. Snapshot
+включает production `CollectSeats` fix `83E62641`, Catalog client helper
+`9848FDB7` и расширенный Census observer `91F613CE`. Поздние doc-only receipts
+не входят в frozen1021; code/contract bytes не менялись. V26 остаётся подготовкой
+без выполнения All, старые V23 interruption/V24 compileFAIL сохранены отдельно.
+
+Команды: `FreezeForChecks.ps1 -Label resumed-topology-v27 -UseLatestSchedulingHistory`,
+`Invoke-OfflineShard.ps1 -PlanPath X:/resumed-topology-v27-plan/plan.json -Shard N
+-EvidenceRoot X:/resumed-topology-v27-shard-N` для N1..6, затем
+`CollectFrozenFull.ps1 -Label resumed-topology-v27`: все exit0. Новый actual
+topology contract воспроизводит старый отказ3cases, новый36cases/8unsafe PASS;
+Backend/Dispatch до/после и независимый Root replay PASS. CompileFrozenProduction
+на этом source: Stock/RHS/ArlandWCSRHS3/3PASS, native0/validation/full3sibling
+fatal0, session34961closed0. Combined Soak390v8/Multi388v4 отдельно WB0/fullfatal0/
+source0, sessions40727/65151closed0. Catalog v22 fixture в новом stage-v23
+elevated WB0/fullfatal0/source385SHA0/session85753closed0; первый platform-init
+FAIL stage-v22 без необходимых прав сохранён без validation/PASS.
+Native нового кода **NOT RUN**; далее результаты должны записываться отдельно.
+
+Evidence: `resumed-topology-v27-result.json`, `...-source-verification.json`,
+`...-session-closure.json`, `topology-v27-three-graph-expanded-verdict.json`,
+`ordinary-topology-diagnostic-source-v8/`, `multi-topology-diagnostic-source-v4/`
+в `.codex-runtime/issue78-finalization-20261029/`; Catalog stage-v23 и targeted
+baseline — в `.codex-runtime/issue78-finalization-20261030/`.
+
+После V25 выполнены дополнительные native проверки на том же production384
+`ef2204a`; это результаты до следующего topology исправления:
+
+- Multi MOVING/CAPACITY/PRODUCTION_BACKGROUND/ROOT_ONLY1800: native0,
+  elapsed1800389ms/wall1822.751s; source388SHA0/full stopped logs. Cohort2,
+  completed0, три PRESET_BOARDING_DEADLINE, один TRANSIT_DEADLINE_EXPIRED,
+  final route incomplete. USSR0 реально посадил5, проехал≥878.911м и11legs,
+  но исходный absolute deadline не прошёл. Full fatal12raw sibling rows
+  (два MEANINGFUL_TASK_DEADLINE_MISSED и два CORE_BRIDGE, каждый в трёх logs),
+  прочие native Error rows28FAIL. Runner32485closed1/watcher23932closed0;
+  native exit0. Functional/fatal/resource gates FAIL, duration/liveness/
+  provenance PASS. Production background audit, который не выполнялся,
+  остаётся NOT RUN, даже если счётчик по умолчанию равен0. MinFPS48 при
+  смешанной нагрузке не выдаётся за single-world performance proof.
+- USSR diagnostic600v3: native0/fullfatal0/source390SHA0, elapsed600678ms,
+  boarding deadline439653ms/route incomplete, resources32FAIL; runner14617
+  closed1/watcher7493closed0. Последний foot actor29.2688м вне прежнего25м
+  cap; это самостоятельный отказ, лимит не расширен. MOB periodic readback
+  трижды увидел internal_task1/egress_required0 после fallback всех5пешком;
+  это не arrival/route PASS и не исходные atomic audit locals.
+- US diagnostic600v1 с новым Census observer: native0/audit1,600935ms,
+  boarding deadline353590ms/route incomplete, full3sibling fatal0/
+  other native Error32FAIL; runner97880closed1/watcher5650closed0. При
+  свежем AFTER_DECISION обходе car20EC наблюдены
+ 316nodes/204character subtree nodes, complete/stable1 и parent/world/
+  duplicate/truncated0. Это подтверждает дефект256node полного обхода на
+  таком дереве; original decision locals не записаны атомарно.
+- Catalogv20: server/client native0/0, но BOUNDED_TIMEOUT300798ms до выбора,
+  factory/callback/debit0. Fullfatal0, strict server14resource+24other /
+  client118resource+24other FAIL. Новый client identity v22 пока проверен
+  actual30/7unsafe и полным Catalog contract; WB/native NOT RUN.
+
+Evidence: `.codex-runtime/issue78-finalization-20261030/` —
+`multi-mob-moving-v1`, `ordinary-mob-USSR-diagnostic-v3`,
+`ordinary-census-US-diagnostic-v1`, `catalog-native-v20-mob-source`.
+Первые WinPS5.1 redirected-stderr запуски USSRv2/Catalogv20 завершились
+launcher NativeCommandError до подтверждённого native shutdown: native exit
+UNKNOWN, игровой verdict отсутствует. Исправные повторы запускались явно
+через `pwsh -NoProfile -File`; исходные неудачи сохранены отдельно.
+Полные native resource/persistence gates остаются FAIL независимо от новых
+проектных исправлений. Диагностические600с не заменяют ordinary1800.
+
+Три RHS+WCS bootstrap завершены на immutable production384 из
+`resumed-idle-v23`/`player-build-idle384`, **до следующего MOB исправления**.
+Каждый stage содержит384production+2readonly fixtures; полный raw386 set/SHA
+до/после без drift. Два WCS addon graphs (Арланд и общий Эверон/север)
+прошли terminal Workbench exit0/validation/fullfatal0/postSHA0. Их78прочих
+Error-строк на graph сохранены отдельно:39различных текстов в console/error
+sibling logs, включая14StringTableSource ссылок установленных RHS/WCS gproj.
+Project-owned ошибочная ссылка или dependency по этим14refs не найдена;
+25остальных UI leak строк этим разбором не приписываются внешнему владельцу.
+
+Все три native выполнялись последовательно в единственном world, без
+параллельного Workbench/полного offline CPU. Canonical CLI, ROSTER_READY,
+native0, полный штатный shutdown, source SHA и закрытие всех трёх runner
+sessions подтверждены. Resource gate остаётся FAIL:
+
+| Вариант | Runtime cases | Hold после RUNTIME_DONE, с | Full fatal/project | Прочие native Error rows | Минимум FPS |
+|---|---:|---:|---:|---:|---:|
+| ArlandWCSRHS | 95 PASS | 302.214 | 0/0 | 206 FAIL | 42.2 |
+| EveronWCSRHS | 95 PASS | 306.486 | 0/0 | 466 FAIL | 22.9 FAIL |
+| EveronNorthWCSRHS | 97 PASS | 304.105 | 0/0 | 466 FAIL | 32.4 |
+
+Error rows учитывают полные sibling logs, включая дубли console/error;
+в console соответственно103/233/233. Everon22.9FPS наблюдались до
+ROSTER_READY в чистом single-world окне;30samples после RUNTIME_DONE
+имеют минимум50.2. Это не отменяет исходный общий FPS FAIL; причина просадки
+UNKNOWN. North подтвердил фактические7баз/2HQ/5points. WCS inventory-verified
+KIT_APPLIED присутствуют42/58/61раз; это не visual proof или полный loadout gate.
+Read-only quota observer видел NATIVE_CENSUS_MISMATCH в1/20Arland и3/20North
+пятнадцатисекундных samples; Everon0/20. Эти polls не доказывают длительность
+или причину UNKNOWN и не превращают bootstrap в quota acceptance.
+
+Evidence: `.codex-runtime/issue78-finalization-20261029/quota/wcs-idle-mapboot-v1/`
+(`three-map-summary.json`, `closed-inventory.json`, каждый `native-*/verdict.json`,
+full logs/SHA, `runner-session-closure.json`); stages
+`arland-wcs-idle-source-v1`/`everon-wcs-idle-source-v1`. Исходные384SHA совпадали
+с checkout при подготовке23:24; последующие MOB изменения в этих играх отсутствуют.
+Frozen runner до первого запуска сохранён; обратные перечисленные epoch/WCS
+замены точно восстанавливают прежний строгий RHS runner. Запуск:
+`quota/RunCurrentIdleWCSBoot.ps1 -Phase Validate|Run|Audit -Variant
+ArlandWCSRHS|EveronWCSRHS|EveronNorthWCSRHS -PreparedRoot ... -EvidenceRoot ...`;
+native только через `tools/Start-AICFRuntime.ps1`. Все sessions закрылись1 из-за
+resource gate, сами native процессы завершились0. Terminal map boot не упражняет
+physical preset/короткую посадку, обычный1800s бой, MOVING6, client/JIP или visual;
+эти gates данным результатом не подтверждаются. Issue остаётся OPEN, PR draft.
+
+Три прежних RHS bootstrap на exact human383 из `resumed-human-v20` завершены
 последовательно, по одному native world. В каждом stage383production+2readonly
 fixtures, rawSHA до/после без drift; подготовка Stock/RHS graph WB0. Body/Service/
 WorldState pins: `EC9CDDA8`/`66B86FF5`/`C9CE1F49`. Canonical CLI, ROSTER_READY,
@@ -30,7 +145,54 @@ closed-inventory). Новый isolated runner `quota/RunCurrentHumanRHSBoot.ps1`
 RHS|EveronRHS|EveronNorthRHS -PreparedRoot ... -EvidenceRoot ...`; runtime только
 через `tools/Start-AICFRuntime.ps1`. Старые runners/stages не перезаписаны.
 
-Последний `resumed-human-v20`: **255/255 PASS**, collector0/exact unique union/
+Полный `resumed-mob-v25` завершён31.10.2026 в00:11: **261/261 PASS**,
+collector0/exact unique union/Logistics1/1019frozenSHA без drift. Все шесть
+новых exec sessions фактически закрылись0:70097/27892/71785/82797/51472/41977;
+Logistics145cases завершён один раз в00:10:41. Fresh elevated inventory
+00:11:15: native/Workbench0, free21.668GiB. Это самостоятельный полный запуск,
+без наследования недоступных exit codes старого V23. Команды: `FreezeForChecks.ps1
+-Label resumed-mob-v25 -UseLatestSchedulingHistory`, canonical
+`Invoke-OfflineShard.ps1 -PlanPath X:/resumed-mob-v25-plan/plan.json -Shard <N>
+-EvidenceRoot X:/resumed-mob-v25-shard-<N>` для N=1..6, затем `CollectFrozenFull.ps1
+-Label resumed-mob-v25`; все закончились0. Cache junction указывает на pinned
+`.cache/reforger-api` проекта, единственный Logistics находится в shard1.
+
+Snapshot включает MOB internal-task исправление, финальный MobDecisionProbe
+`1C1A1CA0` и observer runner. Production384 set/SHA в V24 и V25 идентичны:
+ранее выполненные Stock/RHS/ArlandWCSRHS3/3 terminal WB относятся к тем же bytes,
+повторных трёх запусков для V25 не заявляется. Combined Soakv6raw390/378sources
+и Multiv3raw388/376sources также прошли WB0/validation/fullfatal0 до начала All.
+Первый combined Soakv5 WB FAIL сохранён: локальное имя `owned` было запрещённым
+идентификатором Enforce; исправлен только test-only alpha rename. Frozen V24
+с1019файлами/261checks сохранён как PREPARATION_NOT_RUN_SUPERSEDED, ни одного
+All session на нём не запускалось. Не считать эту подготовку выполненным набором.
+
+Evidence: `.codex-runtime/issue78-finalization-20261029/` —
+`resumed-mob-v25-result.json`, `resumed-mob-v25-source-verification.json`,
+`resumed-mob-v25-session-closure.json`, `resumed-mob-v25-closed-inventory.json`,
+`resumed-mob-v25-freeze-ready.json`, plan и полные261check logs. После freeze
+менялась только живая отчётная документация; frozen1019не изменялись. Этот All
+не заменяет runtime MOB/новой посадки, ordinary1800/MOVING6, Catalog purchase,
+client/JIP и visual gates; WCS matrix выше относится к прежнему pre-MOB384.
+
+Прежний frozen `resumed-idle-v23` с production384 и passive Idle boarding fix:
+**259/259 PASS**, exact unique union,1014 frozen SHA без drift, один завершённый
+`Test-LogisticsContracts.ps1`. Исходный запуск шести shards прерван при отказе
+локальных инструментов около22:54; сохранились246 завершённых PASS. После
+восстановления выполнены только13 отсутствовавших результатов на том же
+неизменённом snapshot: resume session74267 завершена0, combined collector0,
+полные259 check logs доступны. Это объединение исходного и возобновлённого
+запуска; нормальные exit codes прежних шести сессий недоступны и не объявляются0.
+Первоначальный неполный запуск сохранён как `INTERRUPTED_INCOMPLETE`, в том числе
+прерванная первая попытка Logistics. Fresh elevated inventory23:34:15 не содержит
+игровых/Workbench процессов или родителей resume. Проверка не включает поздние
+Catalog subscription/pending изменения после freeze и не заменяет native gates.
+Evidence: `.codex-runtime/issue78-finalization-20261029/` —
+`resumed-idle-v23-combined-result.json`, `resumed-idle-v23-interruption.json`,
+`resumed-idle-v23-resume-closure.json`; snapshot head `8f2f7ac3` задаётся plan/SHA,
+а поле Git commit в context runner отражает live ancestor repository.
+
+Прежний `resumed-human-v20`: **255/255 PASS**, collector0/exact unique union/
 Logistics1/1005frozenSHA0/6sessionsclosed0. Human bridge383payload
 `26652760F0A75381934BCE7AC5AB071E48DB19507F14A592189A14911D090823`:
 terminal Stock/RHS/ArlandWCSRHS3/3 PASS/native0/validation/fullfatal0/postSHA0.

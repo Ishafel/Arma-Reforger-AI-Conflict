@@ -1,6 +1,44 @@
-# Передача #78 — 30.10.2026
+# Состояние #78 — 31.10.2026
 
-## Работа возобновлена после передачи
+Checkpoint кода `292f09e`: topology fix `ff36669`, Catalog client fix `ef6d226`,
+Census diagnostics `292f09e`; [draft PR79](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/79),
+issue OPEN. Native новых исправлений ещё NOT RUN; прежние FAIL сохранены.
+
+- Полный frozen V27:262/262 PASS, collector0/exact union/Logistics1/1021SHA0/
+  шесть actual sessions closed0. Новый production384 Stock/RHS/ArlandWCSRHS
+  WB3/3PASS; combined Soak390/Multi388/Catalog385 отдельно compiled0/fullfatal0.
+  V25 имеет свой261PASS; V26 — только подготовка, All NOT RUN.
+- RHS+WCS Arland/Everon/North на pre-MOB384+2fixtures:95/95/97cases PASS,
+  native0/fullfatal0/source0/hold≥300s; strict resources206/466/466FAIL,
+  minFPS42.2/22.9/32.4. Everon общий FPS gate FAIL. Это map bootstrap.
+- Multi MOVING/PRODUCTION_BACKGROUND/ROOT_ONLY1800 завершился native0,
+  elapsed1800389ms: cohort2/completed0, три boarding deadline и один transit
+  deadline, route incomplete;12raw sibling SCRIPT(E) строк, resources28FAIL.
+  USSR0 действительно посадил5 и проехал≥878.911м, но исходный deadline не прошёл.
+- Диагностические600s USSRv6 и USv7 завершились native0 с boarding/route FAIL;
+  USSRfullfatal0/resources32FAIL. USSR last-foot29.2688м вне прежнего25м cap.
+  После fallback три periodic readback дали internal_task1/egress_required0:
+  узкий MOB predicate наблюдён, arrival/formation/route этим не доказаны.
+- USv7 свежий AFTER_DECISION hierarchy:316nodes, character subtrees204,
+  complete/stable/parent-world-duplicate errors0. Прежний полный256node обход
+  не способен обработать такое дерево. Исправление исключает character subtrees
+  из конструкции машины, сохраняя structural256, seat-owner/occupancy и
+  bounded sibling проверки. Targeted actual oldFAIL3/new36+8unsafe PASS;
+  новый WB3graphs/полный262PASS; новый native ещё требуется.
+- Catalogv20 server/client0/0, но300s timeout до выбора/factory/debit, strictFAIL.
+  Найден отдельный test-only defect: client использовал server-only identity.
+  V22 client helper сохраняет mainworld/entity/Rpl/PC/PM guards; production
+  server helper не меняется. Actual30/7unsafe и полный Catalog contract PASS;
+  v22 fixture прошёл WB в новом stage-v23 и Full262; native NOT RUN.
+  Старый v20 first runtime guard остаётся UNKNOWN.
+
+Evidence: `.codex-runtime/issue78-finalization-20261029/` и
+`.codex-runtime/issue78-finalization-20261030/`; команды и scope — TESTING.md.
+Native-only persistence/resource blockers сохраняются. Ready/merge/release/
+ACCEPTED не объявлены. Следующий шаг — свежие native tests без расширения caps:
+Catalog server/client, ordinary1800 обеих сторон, MOVING2→4→6 и текущие WCS карты.
+
+## Исторические checkpoints после передачи
 
 Текущий RHS3 checkpoint на exact human383 (`EC9CDDA8`/`66B86FF5`/`C9CE1F49`):
 Арланд95, Everon95, север97 runtime cases PASS; каждый native0/ROSTER_READY/
@@ -20,14 +58,33 @@ Compartment producer уже реализован и отдельно прове�
 functionalFAIL/resources28/minFPS20.7 сохранены; подробности в
 AI_QUOTA_STOCK_PRESSURE.md.
 
-Обе ordinary1800 на immutable human383+3observers запущены22:06:33/35 в двух
-native worlds. У обеих уже observed PRESET_BOARDING_DEADLINE (US347288ms,
-USSR469000ms), полное1800 окно ещё продолжается. Получены5боеспособных бойцов
-и реальные оплаченные машины; original route этим не подтверждён. У USSR
-последний foot actor находился1.92м от своего пустого доступного места, action
-owned/EVALUATED, current+executed passive Idle, без transitions. Эта конкретная
-ветка stalled entry и отдельные окна CensusUNKNOWN разбираются; исправление
-или успешный повтор ещё не заявлены.
+Обе ordinary1800 на immutable human383+3observers завершены: US1800022ms/
+native0/wall1824.221s и USSR1800687ms/native0/wall1825.528s. Duration/liveness/
+provenance/stopped PASS, но оба functionalFAIL PRESET_BOARDING_DEADLINE
+(347288/469000ms) и route incomplete. US12SCRIPT(E) MOB-egress/bridge,
+USSRfullfatal0; resource32FAIL каждый. Source383+3SHA0. Эти отрицательные
+baseline не пересчитываются по последующим исправлениям.
+
+В USSR последний foot actor находился1.92м от собственного пустого доступного
+места: owned/EVALUATED GetIn, current+executed passive Idle, без transitions.
+Fix `8f2f7ac` разрешает прежнюю bounded short-seat recovery после5s без progress
+только при exact member/group Idle и полном отсутствии competing actions.
+Контекст повторно проверяется после cancellation и quota/native getters до
+pure commit. Квоты,25м/5м/1м·с⁻¹, one-shot budget и deadlines не увеличены.
+Actual scope/flow41+5unsafe, counter27+6unsafe и own-seat133/6/9 PASS;
+fixture-free384 Stock/RHS/ArlandWCSRHS Workbench3/3PASS/fullfatal0/rawSHA0.
+Native proof нового384 ещё не получен. Долгий CensusUNKNOWN этим fix не обойдён.
+
+Read-only Census/recruitment observers и optional public Soak flags сохранены
+в `e7c3a17`; combined diagnostic389 StockWB0/fullfatal0/source0. Native NOT RUN.
+После восстановления инструментов frozenV23 содержит246завершённых PASS из259,
+1014SHA0; исходное выполнение прервано, старые6normal exits не подтверждены.
+Ровно13missing выполняются отдельно на том же frozen source. До collector
+это не полный PASS. Поздний Catalog subscriptions/pending WIP в V23 не входит.
+Подготовлены два384+2readonly WCS MapBoot graph: ArlandWCSRHS и EveronWCSRHS/
+North, оба WB0/validation/fullfatal0/raw386SHA0, resource78Erows отдельно FAIL.
+Native ожидает завершения CPU-проверок. Multi384+3diagnostics=387 StockWB0/
+fullfatal0/SHA0, native NOT RUN. Точные receipts — в evidence finalization.
 
 ### История checkpoints после возобновления
 
