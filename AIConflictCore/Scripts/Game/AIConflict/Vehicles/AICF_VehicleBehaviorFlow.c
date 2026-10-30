@@ -641,20 +641,50 @@ class AICF_VehicleBehaviorFlow
 			bool blocked = token.EntryBlocked();
 			if (blocked && token.m_iShortAttempts < 3 && AICF_VehicleShortRecovery.CanSeat(trip, actor, seat))
 			{
+				AICF_VehicleShortSeatAttempt attempt = AICF_VehicleShortSeatAttempt.ForBehavior(trip, token);
+				if (!attempt) return;
+				AICF_AIQuotaVehicleDispatch quota = AICF_AIQuotaVehicleDispatch.Begin(actor, seat.GetVehicle(), seat);
+				if (!quota) return;
+				if (!quota.IsCurrent() || !token.ResolveOwner() || !AICF_VehicleShortRecovery.CanSeat(trip, actor, seat))
+				{
+					quota.Cancel();
+					return;
+				}
+				if (!attempt.IsCurrent(trip, actor, seat, System.GetTickCount()))
+				{
+					quota.Cancel();
+					return;
+				}
 				token.Retire();
-				if (!AICF_VehicleShortRecovery.IsCurrentMember(trip, actor)) return;
-				token.m_iShortAttempts++;
-				AICF_VehicleShortRecovery.TrySeat(trip, actor, seat, "TACTICAL_NATIVE_ENTRY_BLOCKED");
+				if (!quota.IsCurrent() || !AICF_VehicleShortRecovery.IsCurrentMember(trip, actor) ||
+					!AICF_VehicleShortRecovery.CanSeat(trip, actor, seat))
+				{
+					quota.Cancel();
+					return;
+				}
+				AICF_VehicleShortRecovery.TrySeat(trip, actor, seat, "TACTICAL_NATIVE_ENTRY_BLOCKED", quota, attempt);
 			}
 			else if (blocked && token.m_iRetries < 2 && token.CanRestartEntry())
 			{
 				// Реальный RUNNING stall за пределами short entry тоже получает
 				// прежние два native retries; distant actor перемещается только AI.
 				int progressAge = System.GetTickCount() - token.m_iLastProgressAt;
+				AICF_AIQuotaVehicleDispatch quota = AICF_AIQuotaVehicleDispatch.Begin(actor, seat.GetVehicle(), seat);
+				if (!quota) return;
+				if (!quota.IsCurrent() || !token.CanRestartEntry())
+				{
+					quota.Cancel();
+					return;
+				}
 				token.Retire();
-				if (!AICF_VehicleShortRecovery.IsCurrentMember(trip, actor) || !token.CanRestartEntry()) return;
+				if (!quota.IsCurrent() || !AICF_VehicleShortRecovery.IsCurrentMember(trip, actor) || !token.CanRestartEntry())
+				{
+					quota.Cancel();
+					return;
+				}
 				token.m_iRetries++;
 				IssueEntry(trip, token, actor, seat);
+				quota.Cancel();
 				AICF_Stage3Diagnostics.Info("VEHICLE_REBOARD_NATIVE_RETRY", string.Format(
 					"operation_id=%1 member=%2 seat=%3 native_retry=%4 maximum_retries=2 distance_m=%5 progress_age_ms=%6 remaining_ms=%7 physical_relocation=0",
 					trip.GetOperationId(), AICF_GroupTrace.Entity(actor), AICF_VehiclePreset.SeatKey(seat), token.m_iRetries,

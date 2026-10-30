@@ -552,11 +552,29 @@ class AICF_VehicleBoardingFlow
 		IEntity member = token.GetReservedEntity();
 		BaseCompartmentSlot seat = token.GetCompartment();
 		if (!AICF_VehicleShortRecovery.CanSeat(trip, member, seat)) return false;
+		AICF_VehicleShortSeatAttempt attempt = AICF_VehicleShortSeatAttempt.ForBoarding(trip, state, token);
+		if (!attempt) return false;
+		AICF_AIQuotaVehicleDispatch quota = AICF_AIQuotaVehicleDispatch.Begin(member, lease.GetVehicle(), seat);
+		if (!quota) return false;
+		if (!quota.IsCurrent() || !trip.IsVehiclePresetCurrent() || !token.Matches(trip, lease, group) ||
+			!AICF_VehicleShortRecovery.CanSeat(trip, member, seat))
+		{
+			quota.Cancel();
+			return false;
+		}
+		if (!attempt.IsCurrent(trip, member, seat, System.GetTickCount()))
+		{
+			quota.Cancel();
+			return false;
+		}
 		token.CancelOwnerSafe();
-		if (!trip.IsVehiclePresetCurrent() || !token.Matches(trip, lease, group) ||
-			!AICF_VehicleShortRecovery.CanSeat(trip, member, seat)) return false;
-		token.MarkShortRecoveryAttempted();
-		return AICF_VehicleShortRecovery.TrySeat(trip, member, seat, "NATIVE_ENTRY_BLOCKED");
+		if (!quota.IsCurrent() || !trip.IsVehiclePresetCurrent() || !token.Matches(trip, lease, group) ||
+			!AICF_VehicleShortRecovery.CanSeat(trip, member, seat))
+		{
+			quota.Cancel();
+			return false;
+		}
+		return AICF_VehicleShortRecovery.TrySeat(trip, member, seat, "NATIVE_ENTRY_BLOCKED", quota, attempt);
 	}
 
 	protected bool TryYieldPresetSeat(AICF_TransportTrip trip, AICF_VehicleLease lease, SCR_AIGroup group,
@@ -4064,12 +4082,29 @@ class AICF_VehicleBoardingFlow
 		// Здесь прерываем только очередь посадки этого проверенного AI-водителя.
 		if (!recovery.Safe(w, System.GetTickCount()) || w.HasForeignOccupant(true))
 			return AICF_TripOutcome.TerminalFailClosed("FALLBACK_DRIVER_RECHECK_FAILED", recovery.m_sToken);
+		ChimeraCharacter driver = w.m_Driver;
+		Vehicle vehicle = w.m_Vehicle;
+		BaseCompartmentSlot assignedSeat = w.m_Seat;
+		AICF_AIQuotaVehicleDispatch quota = AICF_AIQuotaVehicleDispatch.Begin(driver, assignedSeat.GetOwner(), assignedSeat);
+		if (!quota) return AICF_TripOutcome.Wait("FALLBACK_VEHICLE_QUOTA_PENDING", recovery.m_sToken);
+		if (!quota.IsCurrent() || !recovery.Safe(w, System.GetTickCount()) || w.HasForeignOccupant(true) ||
+			w.m_Driver != driver || w.m_Vehicle != vehicle || w.m_Seat != assignedSeat || driver.GetCompartmentAccessComponent() != access)
+		{
+			quota.Cancel();
+			return AICF_TripOutcome.TerminalFailClosed("FALLBACK_QUOTA_CONTEXT_LOST", recovery.m_sToken);
+		}
 		access.InterruptVehicleActionQueue(true, true, true);
-		if (!recovery.Safe(w, System.GetTickCount()) || w.HasForeignOccupant(true))
+		if (!quota.IsCurrent() || !recovery.Safe(w, System.GetTickCount()) || w.HasForeignOccupant(true) ||
+			w.m_Driver != driver || w.m_Vehicle != vehicle || w.m_Seat != assignedSeat)
+		{
+			quota.Cancel();
 			return AICF_TripOutcome.TerminalFailClosed("FALLBACK_DRIVER_QUEUE_CONTEXT_LOST", recovery.m_sToken);
+		}
 		recovery.m_iSeatAttempts++;
 		recovery.m_iNextSeatMs = now + 3000;
-		bool issued = access.GetInVehicle(w.m_Seat.GetOwner(), w.m_Seat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
+		bool issued = access.GetInVehicle(assignedSeat.GetOwner(), assignedSeat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
+		quota.ObserveNativeResult(issued);
+		quota.Cancel();
 		w.Log("LOGISTICS_DRIVER_TELEPORT_ISSUED", string.Format("reason=%1 attempt=%2 issued=%3 cargo=%4 driver_rpl=%5", recovery.m_sCause, recovery.m_iSeatAttempts, issued, recovery.m_CargoPool.Value(), recovery.m_sDriverRpl));
 		// Native return=true не является подтверждением посадки: Ready проверяется
 		// следующим tick, после compartment replication/settling.

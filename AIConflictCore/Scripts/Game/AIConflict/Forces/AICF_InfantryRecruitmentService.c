@@ -791,6 +791,23 @@ class AICF_InfantryRecruitmentService
 				order.Log("INFANTRY_RECRUIT_NATIVE_CAPACITY_RELEASED", nativeAdmission.Details() + " donor_created=0 request_issued=0 paid=0 visit_deadline_reset=0 token_unchanged=1");
 			}
 			order.m_iLoadoutRevision = order.m_Slot.GetLoadoutRevision();
+			AICF_AIWorldQuotaService quotaAdmission = AICF_AIWorldQuotaService.GetAuthorityForWorld(order.m_Group.GetWorld());
+			if (quotaAdmission && !quotaAdmission.ReserveRecruit(order))
+			{
+				if (!order.m_bQuotaCapacityWaiting)
+				{
+					order.m_bQuotaCapacityWaiting = true;
+					order.Log("INFANTRY_RECRUIT_QUOTA_WAIT", "donor_created=0 request_issued=0 paid=0 visit_deadline_reset=0 token_unchanged=1 " +
+						quotaAdmission.BudgetDetails(AICF_EAIQuotaBucket.COMBAT, 1));
+				}
+				return string.Empty;
+			}
+			if (quotaAdmission && order.m_bQuotaCapacityWaiting)
+			{
+				order.m_bQuotaCapacityWaiting = false;
+				order.Log("INFANTRY_RECRUIT_QUOTA_RELEASED", "donor_created=0 request_issued=0 paid=0 visit_deadline_reset=0 token_unchanged=1 " +
+					quotaAdmission.BudgetDetails(AICF_EAIQuotaBucket.COMBAT, 1));
+			}
 			if (!m_Spawner.BeginRecruit(order))
 				return "SPAWN_REJECTED";
 			m_iAvailableAgents--;

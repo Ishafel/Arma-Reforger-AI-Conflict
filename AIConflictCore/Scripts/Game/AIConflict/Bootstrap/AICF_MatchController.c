@@ -38,6 +38,7 @@ class AICF_MatchController
 
 	protected bool m_bStarted;
 	protected bool m_bStopped;
+	protected ref AICF_AIQuotaStartup m_QuotaStartup;
 	protected bool m_bSubscribed;
 	protected bool m_bRosterReady;
 	protected bool m_bInitialSpawnQueueSettled;
@@ -142,6 +143,33 @@ class AICF_MatchController
 			return;
 		}
 
+		if (!GetGame() || !GetGame().InPlayMode() || !Replication.IsServer() || !campaign || !campaign.IsMaster())
+		{
+			m_bStarted = true;
+			Fail("SERVER_AUTHORITY_REQUIRED", "Stage 1 requires a running authoritative Conflict server/master");
+			return;
+		}
+		if (!m_QuotaStartup)
+			m_QuotaStartup = AICF_AIQuotaStartup.Capture(this, campaign, immutableConfig, contentProfile, mapKey);
+		if (!m_QuotaStartup)
+		{
+			m_bStarted = true;
+			Fail("AI_QUOTA_STARTUP_UNAVAILABLE", "Original native world or stock catalog queue identity is unavailable");
+			return;
+		}
+		AICF_EAIQuotaStartup quotaStartupState = m_QuotaStartup.Check();
+		if (quotaStartupState == AICF_EAIQuotaStartup.WAIT) return;
+		if (quotaStartupState == AICF_EAIQuotaStartup.BLOCKED)
+		{
+			string startupReason = m_QuotaStartup.GetLastReason();
+			m_QuotaStartup.Cancel();
+			m_QuotaStartup = null;
+			m_bStarted = true;
+			Fail("AI_QUOTA_STARTUP_BLOCKED", startupReason);
+			return;
+		}
+		m_QuotaStartup.Cancel();
+		m_QuotaStartup = null;
 		m_bStarted = true;
 		if (!AICF_Stage1Diagnostics.IsConfigured())
 			AICF_Stage1Diagnostics.Configure(string.Format("stage1-%1", System.GetTickCount()));
@@ -194,13 +222,6 @@ class AICF_MatchController
 			return;
 		}
 		m_LogisticsConfig.Log();
-		if (!EnsureAIWorldCapacity())
-		{
-			Fail(
-				"AI_WORLD_CAPACITY_UNAVAILABLE",
-				"Active-AI limit could not admit the configured managed-agent budget");
-			return;
-		}
 		m_ConflictAdapter = new AICF_ConflictAdapter();
 		m_ObjectiveGraph = new AICF_ObjectiveGraph();
 		m_TargetSelector = new AICF_TargetSelector();
@@ -302,6 +323,11 @@ class AICF_MatchController
 		m_Construction = new AICF_ConstructionPlanner();
 		m_Construction.Start(m_Campaign, m_BaseBuilders, m_EconomySystem, m_USAICommander, m_USSRAICommander);
 		m_Logistics = new AICF_LogisticsService(m_Campaign, m_VehicleCoordinator, m_ObjectiveGraph, m_LogisticsConfig, m_EconomySystem);
+		if (!EnsureAIWorldCapacity())
+		{
+			Fail("AI_WORLD_CAPACITY_UNAVAILABLE", "Validated separate quota policy could not be initialized before initial roster");
+			return;
+		}
 		Subscribe();
 
 		string expectedPlayerFaction = m_Config.GetExpectedPlayerFaction();
@@ -474,27 +500,161 @@ class AICF_MatchController
 		GetGame().GetCallqueue().CallLater(Heartbeat, HEARTBEAT_INTERVAL_MS, true);
 	}
 
+	// Read-only owner fence, доступный также до aggregate roster readiness.
+	bool IsAIQuotaOwnerCurrent(SCR_AIWorld world)
+	{
+		return Replication.IsServer() && m_bStarted && !m_bStopped && s_ActiveController == this &&
+			m_Campaign && m_Campaign.IsMaster() && GetGame() && world && GetGame().GetAIWorld() == world;
+	}
+
+	bool IsAIQuotaSlotCurrent(AICF_FactionState state, AICF_GroupSlot slot)
+	{
+		return GetGame() && IsAIQuotaOwnerCurrent(SCR_AIWorld.Cast(GetGame().GetAIWorld())) && state && slot &&
+			(state == m_USState || state == m_USSRState) && state.GetSlot(slot.GetSlotId()) == slot;
+	}
+
+	bool IsAIQuotaStartupCurrent(AICF_AIQuotaStartup startup)
+	{
+		return Replication.IsServer() && startup && m_QuotaStartup == startup && !m_bStarted && !m_bStopped &&
+			(!s_ActiveController || s_ActiveController == this || s_ActiveController.m_bStopped);
+	}
+
+	bool OwnsAIQuotaLogisticsWorker(AICF_LogisticsWorker worker)
+	{
+		return GetGame() && IsAIQuotaOwnerCurrent(SCR_AIWorld.Cast(GetGame().GetAIWorld())) &&
+			m_Logistics && m_Logistics.OwnsAIQuotaWorker(worker);
+	}
+
+	bool OwnsAIQuotaGarrison(AICF_FIAGarrison garrison)
+	{
+		return GetGame() && IsAIQuotaOwnerCurrent(SCR_AIWorld.Cast(GetGame().GetAIWorld())) &&
+			m_FIAGarrisons && m_FIAGarrisons.OwnsAIQuotaGarrison(garrison);
+	}
+
+	bool OwnsAIQuotaPatrol(AICF_FIAPatrol patrol)
+	{
+		return GetGame() && IsAIQuotaOwnerCurrent(SCR_AIWorld.Cast(GetGame().GetAIWorld())) &&
+			m_FIAPatrols && m_FIAPatrols.OwnsAIQuotaPatrol(patrol);
+	}
+
+	bool IsAIQuotaVehicleTripCurrent(AICF_TransportTrip trip)
+	{
+		if (!GetGame() || !IsAIQuotaOwnerCurrent(SCR_AIWorld.Cast(GetGame().GetAIWorld())) ||
+			!trip || !trip.IsValid() || trip.IsTerminal() || !m_VehicleCoordinator || !trip.GetAssignment()) return false;
+		AICF_FactionState state;
+		if (m_USState && m_USState.GetFactionKey() == trip.GetFactionKey()) state = m_USState;
+		else if (m_USSRState && m_USSRState.GetFactionKey() == trip.GetFactionKey()) state = m_USSRState;
+		if (!state) return false;
+		AICF_GroupSlot slot = state.GetSlot(trip.GetSlotId());
+		return slot && slot.GetGroup() == trip.GetAssignment().GetGroup() &&
+			slot.GetSpawnGeneration() == trip.GetGroupGeneration() && m_VehicleCoordinator.GetTrip(slot) == trip;
+	}
+
+	// Composition проверяет actual service membership; bucket не выводится из
+	// фракции. Это доступно до aggregate readiness и не выдаёт READY/приказ.
+	bool OwnsAIQuotaGroupContext(AICF_AIQuotaGroupOwner record)
+	{
+		if (!record || !GetGame() || !IsAIQuotaOwnerCurrent(SCR_AIWorld.Cast(GetGame().GetAIWorld())) ||
+			record.m_Controller != this || !record.m_Group || record.m_iGeneration <= 0)
+			return false;
+		SCR_AIGroup group = record.m_Group;
+		if (record.m_Kind == AICF_EAIQuotaGroupOwner.SLOT)
+		{
+			AICF_FactionState state = record.m_FactionState;
+			AICF_GroupSlot slot = record.m_Slot;
+			return state && (state == m_USState || state == m_USSRState) && slot &&
+				state.GetSlot(slot.GetSlotId()) == slot && slot.GetGroup() == group &&
+				slot.GetSpawnGeneration() == record.m_iGeneration;
+		}
+		if (record.m_Kind == AICF_EAIQuotaGroupOwner.DONOR)
+		{
+			AICF_InfantryRecruitmentOrder recruit = record.m_Recruit;
+			return m_InfantryRecruitment && recruit && m_InfantryRecruitment.IsCurrentOrder(recruit) &&
+				recruit.m_Donor == group && recruit.m_DonorId == record.m_GroupId &&
+				recruit.m_iGeneration == record.m_iGeneration && recruit.m_iToken == record.m_iRequestToken;
+		}
+		if (record.m_Kind == AICF_EAIQuotaGroupOwner.BUILDER)
+		{
+			AICF_BaseBuilder builder = record.m_Builder;
+			return m_BaseBuilders && m_BaseBuilders.OwnsAIQuotaBuilder(builder) && builder.m_Group == group &&
+				builder.m_GroupId == record.m_GroupId && builder.m_iGeneration == record.m_iGeneration;
+		}
+		if (record.m_Kind == AICF_EAIQuotaGroupOwner.LOGISTICS)
+		{
+			AICF_LogisticsWorker worker = record.m_Logistics;
+			return m_Logistics && m_Logistics.OwnsAIQuotaWorker(worker) && worker.m_Group == group &&
+				worker.m_GroupId == record.m_GroupId && worker.m_iGeneration == record.m_iGeneration;
+		}
+		if (record.m_Kind == AICF_EAIQuotaGroupOwner.FIA_GARRISON || record.m_Kind == AICF_EAIQuotaGroupOwner.FIA_DESANT)
+		{
+			AICF_FIAGarrison garrison = record.m_Garrison;
+			if (!m_FIAGarrisons || !m_FIAGarrisons.OwnsAIQuotaGarrison(garrison) || garrison.m_iGeneration != record.m_iGeneration)
+				return false;
+			if (record.m_Kind == AICF_EAIQuotaGroupOwner.FIA_DESANT)
+				return garrison.m_DesantGroup == group && garrison.m_DesantGroupId == record.m_GroupId;
+			return garrison.m_Group == group && garrison.m_GroupId == record.m_GroupId;
+		}
+		if (record.m_Kind == AICF_EAIQuotaGroupOwner.FIA_PATROL)
+		{
+			AICF_FIAPatrol patrol = record.m_Patrol;
+			return m_FIAPatrols && m_FIAPatrols.OwnsAIQuotaPatrol(patrol) && patrol.m_Group == group &&
+				patrol.m_GroupId == record.m_GroupId && patrol.m_iGeneration == record.m_iGeneration;
+		}
+		return false;
+	}
+
+	bool CollectAIQuotaFleets(array<AICF_FactionFleet> fleets, array<AICF_EAIQuotaBucket> roles)
+	{
+		if (!Replication.IsServer() || !GetGame() || !m_Campaign || !m_Campaign.IsMaster() || !fleets || !roles) return false;
+		fleets.Clear();
+		roles.Clear();
+		AICF_FleetRegistry registry;
+		if (m_VehicleCoordinator) registry = m_VehicleCoordinator.GetAIQuotaFleetRegistry();
+		if (registry)
+		{
+			if (registry.GetFleetCount() > AICF_AIQuotaMath.MAX_TOTAL_UNITS) return false;
+			for (int index; index < registry.GetFleetCount(); index++)
+			{
+				AICF_FactionFleet fleet = registry.GetFleet(index);
+				if (!fleet || fleets.Contains(fleet)) return false;
+				fleets.Insert(fleet);
+				roles.Insert(AICF_EAIQuotaBucket.FLEET);
+			}
+		}
+		array<AICF_FactionFleet> fia = {};
+		if (m_FIAGarrisons && m_FIAGarrisons.GetAIQuotaFleet()) fia.Insert(m_FIAGarrisons.GetAIQuotaFleet());
+		if (m_FIAPatrols && m_FIAPatrols.GetAIQuotaFleet()) fia.Insert(m_FIAPatrols.GetAIQuotaFleet());
+		foreach (AICF_FactionFleet initialFleet : fia)
+		{
+			if (!initialFleet || fleets.Contains(initialFleet)) return false;
+			fleets.Insert(initialFleet);
+			roles.Insert(AICF_EAIQuotaBucket.FIA_EXTRA);
+		}
+		return fleets.Count() == roles.Count();
+	}
+
 	protected bool EnsureAIWorldCapacity()
 	{
-		AIWorld aiWorld = GetGame().GetAIWorld();
-		if (!aiWorld || !m_Config)
-			return false;
-
-		int previousLimit = aiWorld.GetLimitOfActiveAIs();
-		int requiredLimit = m_Config.GetMaxManagedAgents();
-		if (previousLimit < requiredLimit)
-			aiWorld.SetLimitOfActiveAIs(requiredLimit);
-
-		int effectiveLimit = aiWorld.GetLimitOfActiveAIs();
-		AICF_Stage35Diagnostics.Info(
-			"AI_WORLD_CAPACITY",
-			string.Format(
-				"previous_limit=%1 required_limit=%2 effective_limit=%3 changed=%4",
-				previousLimit,
-				requiredLimit,
-				effectiveLimit,
-				effectiveLimit != previousLimit));
-		return effectiveLimit >= requiredLimit;
+		SCR_AIWorld world = SCR_AIWorld.Cast(GetGame().GetAIWorld());
+		if (!world || !m_Config || !m_Stage3Config || !m_Campaign || !m_Campaign.GetBaseManager() ||
+			!m_BaseBuilders || !m_FIAPatrols || !m_FIAGarrisons) return false;
+		array<SCR_CampaignMilitaryBaseComponent> bases = {};
+		m_Campaign.GetBaseManager().GetBases(bases);
+		if (bases.IsEmpty() || bases.Count() > 512) return false;
+		array<SCR_CampaignMilitaryBaseComponent> distinct = {};
+		foreach (SCR_CampaignMilitaryBaseComponent base : bases)
+		{
+			if (!base || !base.GetOwner() || distinct.Contains(base)) return false;
+			distinct.Insert(base);
+		}
+		int patrolUnits = m_FIAPatrols.GetAIQuotaPlanUnits();
+		int garrisonUnits = m_FIAGarrisons.GetAIQuotaPlanUnits();
+		int fiaUnits;
+		if (patrolUnits < 0 || garrisonUnits < 0 ||
+			!AICF_AIQuotaMath.AddBounded(patrolUnits, garrisonUnits, AICF_AIQuotaMath.MAX_TOTAL_UNITS, fiaUnits)) return false;
+		AICF_AIWorldQuotaService quota = world.AICF_PrepareQuotaService();
+		return quota && quota.Initialize(this, m_Config.GetMaxManagedAgents(), bases.Count(),
+			m_Stage3Config.GetMaxVehiclesPerFaction() * 2, fiaUnits) && quota.InstallNativeFloor();
 	}
 
 	static AICF_MatchController GetActiveController()
@@ -1540,6 +1700,11 @@ class AICF_MatchController
 	{
 		if (m_bStopped)
 			return;
+		if (GetGame())
+		{
+			AICF_AIWorldQuotaService quota = AICF_AIWorldQuotaService.GetAuthorityForWorld(GetGame().GetWorld());
+			if (quota) quota.Maintain();
+		}
 
 		if (!m_Campaign)
 		{
@@ -1989,11 +2154,34 @@ class AICF_MatchController
 					faction.GetFactionKey(), slot.GetSlotId(), slot.GetStableSlotKey(), slot.GetSpawnGeneration()) + nativeAdmission.Details());
 		}
 
-		if (!economyEnabled && !factionState.TryReserveDeployment(AICF_EDeploymentKind.REPLACEMENT))
+		AICF_AIWorldQuotaService quotaAdmission = AICF_AIWorldQuotaService.GetAuthorityForWorld(GetGame().GetWorld());
+		if (quotaAdmission && !quotaAdmission.ReserveReplacement(factionState, slot))
+		{
+			slot.PostponeReinforcementUntil(nowMs + UPDATE_INTERVAL_MS);
+			if (slot.MarkQuotaSpawnCapacityReported())
+				AICF_Stage1Diagnostics.Info("GROUP_SPAWN_QUOTA_WAIT", string.Format(
+					"faction=%1 slot=%2 generation=%3 generation_unchanged=1 request_issued=0 debit=0 reason=%4 ",
+					faction.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), quotaAdmission.GetLastReason()) +
+					quotaAdmission.BudgetDetails(AICF_EAIQuotaBucket.COMBAT, slot.GetDeploymentSize()));
 			return;
+		}
+		if (quotaAdmission && slot.HasQuotaSpawnCapacityReport())
+		{
+			slot.ResetQuotaSpawnCapacityReport();
+			AICF_Stage1Diagnostics.Info("GROUP_SPAWN_QUOTA_RELEASED", string.Format(
+				"faction=%1 slot=%2 generation=%3 generation_unchanged=1 ", faction.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration()) +
+				quotaAdmission.BudgetDetails(AICF_EAIQuotaBucket.COMBAT, slot.GetDeploymentSize()));
+		}
+
+		if (!economyEnabled && !factionState.TryReserveDeployment(AICF_EDeploymentKind.REPLACEMENT))
+		{
+			if (quotaAdmission) quotaAdmission.CancelPlannedSlot(slot);
+			return;
+		}
 
 		if (!slot.BeginReplacementSpawn(nowMs))
 		{
+			if (quotaAdmission) quotaAdmission.CancelPlannedSlot(slot);
 			if (!economyEnabled)
 				factionState.ReleaseDeploymentReservation(AICF_EDeploymentKind.REPLACEMENT);
 			return;
@@ -2097,6 +2285,8 @@ class AICF_MatchController
 		AICF_GroupSlot slot,
 		string reason)
 	{
+		AICF_AIWorldQuotaService quota = AICF_AIWorldQuotaService.GetAuthorityForWorld(GetGame().GetWorld());
+		if (quota) quota.CancelPlannedSlot(slot);
 		if (m_EconomySystem && m_EconomySystem.IsEnabled())
 			m_EconomySystem.AbortDeployment(factionState, faction, slot, reason);
 		else if (factionState)
@@ -2172,6 +2362,16 @@ class AICF_MatchController
 					slot.GetSpawnGeneration(),
 					GroupKey(group),
 					rejectionReason));
+			return false;
+		}
+
+		AICF_AIWorldQuotaService quota = AICF_AIWorldQuotaService.GetAuthorityForWorld(group.GetWorld());
+		AICF_AIQuotaGroupOwner quotaOwner;
+		if (quota) quotaOwner = quota.GetOwners().RegisterSlot(factionState, slot);
+		if (quota && (!quotaOwner || !quota.BindPlannedGroup(quotaOwner)))
+		{
+			AICF_Stage1Diagnostics.Error("AI_QUOTA_SLOT_BIND_REJECTED", string.Format(
+				"faction=%1 slot=%2 generation=%3", factionState.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration()));
 			return false;
 		}
 
@@ -7725,10 +7925,17 @@ class AICF_MatchController
 
 	protected void Stop(bool cleanupEntities)
 	{
+		if (m_QuotaStartup) m_QuotaStartup.Cancel();
+		m_QuotaStartup = null;
 		if (m_bStopped)
 			return;
 
 		m_bStopped = true;
+		if (GetGame())
+		{
+			AICF_AIWorldQuotaService quota = AICF_AIWorldQuotaService.GetAuthorityForWorld(GetGame().GetWorld());
+			if (quota) quota.StopOwner(this);
+		}
 		if (m_ManagedObservers)
 		{
 			m_ManagedObservers.Stop();

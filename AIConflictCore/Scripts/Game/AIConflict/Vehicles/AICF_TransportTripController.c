@@ -2180,8 +2180,36 @@ class AICF_TransportTripController
 		}
 		AIWorld world = GetGame().GetAIWorld();
 		if (!world || world.GetCurrentNumOfActiveAIs() + m_aLogisticsSpawns.Count() + 1 > world.GetLimitOfActiveAIs()) return false;
+		if (w.m_iGeneration == int.MAX) return false;
+		if (w.m_QuotaCreationGuard) w.m_QuotaCreationGuard.CancelAvailable();
+		w.m_QuotaCreationGuard = null;
+		w.m_bQuotaSpawnClosed = false;
+		AICF_AIWorldQuotaService quota = AICF_AIWorldQuotaService.GetAuthorityForWorld(GetGame().GetWorld());
+		ref AICF_AIQuotaLogisticsCreationGuard creation;
+		if (quota)
+		{
+			creation = AICF_AIQuotaLogisticsCreationGuard.Capture(quota, w, fleet);
+			if (!creation) return false;
+		}
 		w.m_iGeneration++;
-		if (!fleet.TryReserveLogistics(w)) return false;
+		if (creation && !creation.AcceptGenerationAdvance())
+		{
+			if (w.m_QuotaCreationGuard == creation)
+			{
+				w.m_bQuotaSpawnClosed = true;
+				creation.CloseSpawn();
+			}
+			return false;
+		}
+		if (!fleet.TryReserveLogistics(w) || (creation && !creation.AcceptPendingLease(w.m_Lease)))
+		{
+			if (creation && w.m_QuotaCreationGuard == creation)
+			{
+				w.m_bQuotaSpawnClosed = true;
+				creation.CloseSpawn();
+			}
+			return false;
+		}
 		w.m_bCleanupComplete = false;
 		w.m_bCleanupQueued = false;
 		w.m_iSeatAttempts = 0;
@@ -2191,6 +2219,15 @@ class AICF_TransportTripController
 		w.m_Search = null;
 		w.m_bRetireAfterCargo = false;
 		LogisticsPhase(w, AICF_ELogisticsPhase.SPAWN_PENDING, "EXACT_DEPOT_ADMITTED");
+		if (creation && !creation.AcceptSpawnPhase())
+		{
+			if (w.m_QuotaCreationGuard == creation)
+			{
+				w.m_bQuotaSpawnClosed = true;
+				creation.CloseSpawn();
+			}
+			return false;
+		}
 		m_aLogisticsSpawns.Insert(w);
 		return true;
 	}
@@ -2391,6 +2428,8 @@ class AICF_TransportTripController
 	void RetireLogistics(AICF_LogisticsWorker w, AICF_LogisticsLedger book, string reason)
 	{
 		if (!Replication.IsServer() || !w || w.m_bCleanupQueued) return;
+		w.m_bQuotaSpawnClosed = true;
+		if (w.m_QuotaCreationGuard) w.m_QuotaCreationGuard.CloseSpawn();
 		if (w.m_ExitHistory) w.m_ExitHistory.Record(w, reason, System.GetTickCount());
 		w.m_RouteRecovery = null;
 		m_Handoff.CancelLogisticsDriverInteraction(w, reason);

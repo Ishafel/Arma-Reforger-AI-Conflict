@@ -182,11 +182,11 @@ modded class AICF_FactionFleet
 
 modded class AICF_VehicleSpawner
 {
-	override protected Vehicle SpawnSelectedPrefab(ResourceName prefab, vector position, EntitySpawnParams spawnParams = null)
+	override protected Vehicle SpawnSelectedPrefab(ResourceName prefab, vector position, EntitySpawnParams spawnParams = null, AICF_AIQuotaVehicleCreationGuard quotaGuard = null)
 	{
 		bool probeOwned = AICF_PresetEconomyProbe.Enabled() && AICF_PresetEconomyProbe.s_Scope;
 		if (probeOwned) AICF_PresetEconomyProbe.s_SpawnCalls++;
-		Vehicle vehicle = super.SpawnSelectedPrefab(prefab, position, spawnParams);
+		Vehicle vehicle = super.SpawnSelectedPrefab(prefab, position, spawnParams, quotaGuard);
 		if (probeOwned && vehicle && vehicle.GetWorld() == GetGame().GetWorld()) AICF_PresetEconomyProbe.s_MainWorldCars++;
 		return vehicle;
 	}

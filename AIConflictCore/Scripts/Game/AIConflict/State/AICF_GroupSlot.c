@@ -253,6 +253,7 @@ class AICF_GroupSlot
 	protected bool m_bLoadBlockReported;
 	protected bool m_bAgentLimitBlockReported;
 	protected bool m_bNativeSpawnCapacityReported;
+	protected bool m_bQuotaSpawnCapacityReported;
 	protected bool m_bPendingOrderRecoveryCountsAsStuck;
 	protected bool m_bPendingOrderRecoveryCountsAsReliabilityAttempt;
 	protected bool m_bUnexplainedMobIdleDeadlineReported;
@@ -1613,6 +1614,14 @@ class AICF_GroupSlot
 
 	bool HasNativeSpawnCapacityReport() { return m_bNativeSpawnCapacityReported; }
 	void ResetNativeSpawnCapacityReport() { m_bNativeSpawnCapacityReported = false; }
+	bool MarkQuotaSpawnCapacityReported()
+	{
+		if (m_bQuotaSpawnCapacityReported) return false;
+		m_bQuotaSpawnCapacityReported = true;
+		return true;
+	}
+	bool HasQuotaSpawnCapacityReport() { return m_bQuotaSpawnCapacityReported; }
+	void ResetQuotaSpawnCapacityReport() { m_bQuotaSpawnCapacityReported = false; }
 
 	bool MarkPersistentStuckReported()
 	{
@@ -2867,6 +2876,7 @@ class AICF_GroupSlot
 		m_bAgentLimitBlockReported = false;
 		m_bPlayerStrategicOrder = false;
 		m_bNativeSpawnCapacityReported = false;
+		m_bQuotaSpawnCapacityReported = false;
 		m_bAwaitingPlayerCommand = false;
 		m_bSystemHoldOrder = false;
 		m_bCommandWaitingReported = false;

@@ -105,9 +105,9 @@ modded class AICF_GroupSpawner
 }
 modded class AICF_VehicleSpawner
 {
-	override protected Vehicle SpawnSelectedPrefab(ResourceName prefab, vector position, EntitySpawnParams spawnParams = null)
+	override protected Vehicle SpawnSelectedPrefab(ResourceName prefab, vector position, EntitySpawnParams spawnParams = null, AICF_AIQuotaVehicleCreationGuard quotaGuard = null)
 	{
-		Vehicle created = super.SpawnSelectedPrefab(prefab, position, spawnParams);
+		Vehicle created = super.SpawnSelectedPrefab(prefab, position, spawnParams, quotaGuard);
 		if (!AICF_GateCrewProbe.Mode().IsEmpty() && created && created.GetWorld() == GetGame().GetWorld())
 		{
 			AICF_GateCrewProbe.s_MainWorldSpawns++;

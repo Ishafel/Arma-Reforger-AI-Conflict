@@ -93,6 +93,8 @@ public class AICF_VehicleBehaviorAction:NativeObject{public AICF_TransportTrip T
 public static class AICF_VehicleShortRecovery{public static int Calls;public static Action<AICF_TransportTrip> OnExit;public static bool ExitAccepted=true,UseActualExit;public static bool IsCurrentMember(AICF_TransportTrip t,IEntity a){return t.Current&&a!=null&&a.Current;}public static bool IsSlowVehicle(Vehicle v){return v.Slow;}public static bool TryExit(AICF_TransportTrip t,IEntity a,string reason,AICF_ReboardSeatConflictScope scope){Calls++;if(OnExit!=null)OnExit(t);if(UseActualExit)return AICF_ExitProduction.TryExit(t,a,reason,scope);return ExitAccepted;}}
 public class AICF_TripOutcome:NativeObject{public string Reason;public static AICF_TripOutcome FallbackToFoot(string r,string c){return new AICF_TripOutcome{Reason=r};}public static AICF_TripOutcome Wait(string r,string c){return new AICF_TripOutcome{Reason=r};}}
 public static class AICF_GroupTrace{public static string Entity(IEntity a){return a.GetID().ToString();}}
+public class AICF_AIQuotaVehicleDispatch:NativeObject{public static bool Allowed=true,Current=true;public static int Begins,Cancels,Observed,Marked;public static Action OnBegin,OnMark;public IEntity Actor;public Vehicle Vehicle;public BaseCompartmentSlot Seat;public string ActorRpl;public bool Ended;public static AICF_AIQuotaVehicleDispatch Begin(IEntity a,Vehicle v,BaseCompartmentSlot s){Begins++;if(OnBegin!=null)OnBegin();return Allowed?new AICF_AIQuotaVehicleDispatch{Actor=a,Vehicle=v,Seat=s,ActorRpl=a.Rpl}:null;}public bool IsCurrent(){return !Ended&&Current&&Actor&&Actor.Current&&Vehicle&&Seat&&Actor.Rpl==ActorRpl;}public bool Matches(IEntity a,Vehicle v,BaseCompartmentSlot s){return Actor==a&&Vehicle==v&&Seat==s&&IsCurrent();}public void MarkDispatched(){Marked++;if(OnMark!=null)OnMark();}public void ObserveNativeResult(bool result){Observed++;}public void Cancel(){if(!Ended){Ended=true;Cancels++;}}public static void Reset(){Allowed=true;Current=true;Begins=Cancels=Observed=Marked=0;OnBegin=OnMark=null;}}
+public class AICF_VehicleShortSeatAttempt:NativeObject{public bool Commit(AICF_TransportTrip t,IEntity a,BaseCompartmentSlot s,int now){return true;}}
 public static class AICF_Stage3Diagnostics{public static void Info(string e,string d){}public static void Warning(string e,string d){}}
 public static class AICF_VehicleBehaviorPolicy{public static AICF_VehicleBehaviorBinding Binding;public static AICF_VehicleBehaviorBinding Find(Vehicle v){return Binding!=null&&Binding.m_Vehicle==v?Binding:null;}public static bool ShouldDeferCrewReplacement(Vehicle v){return false;}public static bool SuppressGetIn(SCR_AIUtilityComponent utility,SCR_AIMessage_GetIn message) SUPPRESS public static bool IsCurrentReboarding(AICF_VehicleBehaviorBinding binding) PREFLIGHT }
 SCOPE
@@ -112,10 +114,10 @@ public static class AICF_ExitProduction{
  public static bool CanSeat(AICF_TransportTrip t,IEntity a,BaseCompartmentSlot s){return t&&t.Current&&a&&s;}
  public static bool IsIncapacitatedSeatCurrent(AICF_TransportTrip t,BaseCompartmentSlot s){return t&&t.Current&&s&&s.Occupant;}
  public static bool TryExit(AICF_TransportTrip trip,IEntity member,string reason,AICF_ReboardSeatConflictScope conflict=null) EXIT
- public static bool TrySeat(AICF_TransportTrip trip,IEntity member,BaseCompartmentSlot seat,string reason) SEATBODY
+ public static bool TrySeat(AICF_TransportTrip trip,IEntity member,BaseCompartmentSlot seat,string reason,AICF_AIQuotaVehicleDispatch admitted=null,AICF_VehicleShortSeatAttempt attempt=null) SEATBODY
  public static bool TryClearIncapacitatedSeat(AICF_TransportTrip trip,BaseCompartmentSlot seat,string reason) CLEARBODY
  public static bool UnsafeExitLog(AICF_TransportTrip trip,IEntity member,string reason,AICF_ReboardSeatConflictScope conflict=null) UNSAFEEXITLOG
- public static bool UnsafeSeatLog(AICF_TransportTrip trip,IEntity member,BaseCompartmentSlot seat,string reason) UNSAFESEATLOG
+ public static bool UnsafeSeatLog(AICF_TransportTrip trip,IEntity member,BaseCompartmentSlot seat,string reason,AICF_AIQuotaVehicleDispatch admitted=null,AICF_VehicleShortSeatAttempt attempt=null) UNSAFESEATLOG
  public static bool UnsafeClearLog(AICF_TransportTrip trip,BaseCompartmentSlot seat,string reason) UNSAFECLEARLOG
 }
 public static class AICF_ConflictFixture{

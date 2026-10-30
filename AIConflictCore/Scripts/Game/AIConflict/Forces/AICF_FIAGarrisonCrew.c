@@ -75,7 +75,17 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 			// Первичная посадка; recovery возвращает только исходных живых бойцов.
 			if (!g.RecoveryAllowed() && (!g.m_Lifecycle || !g.m_Lifecycle.IsReactivating())) return false;
 			if (g.m_Lifecycle && !g.m_Lifecycle.Current()) return false;
-			access.GetInVehicle(seat.GetOwner(), seat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
+			AICF_AIQuotaVehicleDispatch quota = AICF_AIQuotaVehicleDispatch.Begin(member, seat.GetOwner(), seat);
+			if (!quota) return false;
+			if (!quota.IsCurrent() || !g.VehicleIdentity() || !g.GroupIdentity() || !g.OwnsMember(member) || seat.GetOccupant() ||
+				seat.IsReserved() || member.GetCompartmentAccessComponent() != access || (g.m_Lifecycle && !g.m_Lifecycle.Current()))
+			{
+				quota.Cancel();
+				return false;
+			}
+			bool accepted = access.GetInVehicle(seat.GetOwner(), seat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
+			quota.ObserveNativeResult(accepted);
+			quota.Cancel();
 		}
 		return seated == expected;
 	}
@@ -152,11 +162,26 @@ class AICF_FIAGarrisonCrew : AICF_FIAPatrolCrew
 				// Повторяем immutable AI/seat/player fences перед forced exact-seat boarding.
 				if (!g.RecoveryAllowed() || !g.OwnsMember(member) || !g.VehicleIdentity() || seat.GetOccupant() ||
 					!AICF_FIAGarrisonRecovery.PlayersClear(member.GetOrigin(), g.m_Vehicle.GetOrigin())) continue;
+				AICF_AIQuotaVehicleDispatch quota = AICF_AIQuotaVehicleDispatch.Begin(member, seat.GetOwner(), seat);
+				if (!quota) continue;
+				if (!quota.IsCurrent() || !g.RecoveryAllowed() || !g.OwnsMember(member) || !g.VehicleIdentity() ||
+					member.GetCompartmentAccessComponent() != access || seat.GetOccupant() ||
+					!AICF_FIAGarrisonRecovery.PlayersClear(member.GetOrigin(), g.m_Vehicle.GetOrigin()))
+				{
+					quota.Cancel();
+					continue;
+				}
 				access.InterruptVehicleActionQueue(true, true, true);
 				// Прерывание queue может синхронно вызвать сторонний invoker.
-				if (!g.RecoveryAllowed() || !g.OwnsMember(member) || !g.VehicleIdentity() || seat.GetOccupant() ||
-					!AICF_FIAGarrisonRecovery.PlayersClear(member.GetOrigin(), g.m_Vehicle.GetOrigin())) continue;
+				if (!quota.IsCurrent() || !g.RecoveryAllowed() || !g.OwnsMember(member) || !g.VehicleIdentity() || seat.GetOccupant() ||
+					(seat.IsReserved() && !seat.IsReservedBy(member)) || !AICF_FIAGarrisonRecovery.PlayersClear(member.GetOrigin(), g.m_Vehicle.GetOrigin()))
+				{
+					quota.Cancel();
+					continue;
+				}
 				bool accepted = access.GetInVehicle(seat.GetOwner(), seat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
+				quota.ObserveNativeResult(accepted);
+				quota.Cancel();
 				g.m_iCrewRecoveryNextMs = now + 2000;
 				if (accepted)
 				{

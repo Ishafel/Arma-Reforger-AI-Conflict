@@ -92,9 +92,11 @@ class AICF_VehicleRequestState
 	protected string m_sNoRangeTrend;
 	protected string m_sNoRangeCandidateTrace;
 	protected ref AICF_VehicleSpawnPlan m_SpawnPlan;
+	protected ref AICF_AIQuotaVehicleCreationGuard m_QuotaCreation;
 
 	void Reset()
 	{
+		ClearQuotaCreation();
 		m_iRequestGeneration = 0;
 		m_iStartedAtMs = 0;
 		m_iAbsoluteDeadlineMs = 0;
@@ -149,6 +151,21 @@ class AICF_VehicleRequestState
 	string GetNoRangeTrend() { return m_sNoRangeTrend; }
 	string GetNoRangeCandidateTrace() { return m_sNoRangeCandidateTrace; }
 	AICF_VehicleSpawnPlan GetSpawnPlan() { return m_SpawnPlan; }
+	AICF_AIQuotaVehicleCreationGuard GetQuotaCreation() { return m_QuotaCreation; }
+
+	void SetQuotaCreation(AICF_AIQuotaVehicleCreationGuard guard)
+	{
+		ClearQuotaCreation();
+		m_QuotaCreation = guard;
+	}
+
+	void ClearQuotaCreation()
+	{
+		if (m_QuotaCreation) m_QuotaCreation.CancelAvailable();
+		m_QuotaCreation = null;
+	}
+
+	void ~AICF_VehicleRequestState() { ClearQuotaCreation(); }
 
 	bool SetSpawnPlan(AICF_VehicleSpawnPlan plan)
 	{
@@ -162,6 +179,7 @@ class AICF_VehicleRequestState
 	{
 		if (!expected || expected != m_SpawnPlan)
 			return false;
+		ClearQuotaCreation();
 		m_SpawnPlan = null;
 		return true;
 	}
@@ -209,6 +227,7 @@ class AICF_VehicleRequestState
 
 	void RecordContextReset(int nowMs, string reason)
 	{
+		ClearQuotaCreation();
 		m_iRequestGeneration++;
 		m_iContextResetCount++;
 		m_sContextResetReason = reason;

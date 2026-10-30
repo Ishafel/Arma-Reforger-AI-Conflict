@@ -1214,7 +1214,8 @@ class AICF_VehicleSpawner
 		string identityContext,
 		out Vehicle vehicle,
 		out SCR_AIVehicleUsageComponent vehicleUsage,
-		out string failureReason)
+		out string failureReason,
+		AICF_AIQuotaVehicleCreationGuard quotaGuard = null)
 	{
 		vehicle = null;
 		vehicleUsage = null;
@@ -1228,10 +1229,15 @@ class AICF_VehicleSpawner
 		AICF_Stage3Diagnostics.Info(
 			"VEHICLE_SPAWN_SITE_SELECTED",
 			FormatAcquisitionSelectedSiteDetails(faction, selection, identityContext));
-		vehicle = SpawnSelectedPrefab(prefab, selection.m_vPosition);
+		vehicle = SpawnSelectedPrefab(prefab, selection.m_vPosition, null, quotaGuard);
 		if (!vehicle)
 		{
 			failureReason = "SPAWN_RETURNED_NULL";
+			if (quotaGuard)
+			{
+				if (quotaGuard.IsQuarantined()) failureReason = "VEHICLE_QUOTA_NATIVE_RETURN_QUARANTINED";
+				else if (!quotaGuard.WasNativeNull()) failureReason = "VEHICLE_QUOTA_PENDING";
+			}
 			return false;
 		}
 
@@ -1283,6 +1289,7 @@ class AICF_VehicleSpawner
 	// FIA acquisition: проверяем настоящий OBB, поверхность и свободный выезд.
 	bool SpawnFIAPatrol(AICF_FIAPatrol p, AICF_FactionFleet fleet, out vector crewPosition)
 	{
+		if (p) p.m_sSpawnQuotaFailure = string.Empty;
 		if (!Replication.IsServer() || !p || p.m_Vehicle || !p.m_Lease || !fleet ||
 			!p.m_Current || !p.m_Current.GetOwner() || p.m_Current.GetFaction() != p.m_Faction) return false;
 		ResourceName prefab = "{22B327C6752EC4D4}Prefabs/Vehicles/Wheeled/UAZ469/UAZ469_PKM_FIA.et";
@@ -1328,12 +1335,24 @@ class AICF_VehicleSpawner
 			EntitySpawnParams params = new EntitySpawnParams();
 			params.TransformMode = ETransformMode.WORLD;
 			for (int axis; axis < 4; axis++) params.Transform[axis] = pose[axis];
-			p.m_Vehicle = SpawnSelectedPrefab(prefab, pose[3], params);
-			if (!p.m_Vehicle) return false;
+			AICF_AIQuotaFIAVehicleCreation quotaGuard;
+			if (AICF_AIWorldQuotaService.GetAuthorityForWorld(world))
+			{
+				quotaGuard = AICF_AIQuotaFIAVehicleCreation.CapturePatrol(p, fleet);
+				if (!quotaGuard) { p.m_sSpawnQuotaFailure = "VEHICLE_QUOTA_PENDING"; return false; }
+			}
+			p.m_Vehicle = SpawnSelectedPrefab(prefab, pose[3], params, quotaGuard);
+			if (!p.m_Vehicle)
+			{
+				if (quotaGuard && quotaGuard.IsQuarantined()) p.m_sSpawnQuotaFailure = "VEHICLE_QUOTA_NATIVE_RETURN_QUARANTINED";
+				else if (quotaGuard && !quotaGuard.WasNativeNull()) p.m_sSpawnQuotaFailure = "VEHICLE_QUOTA_PENDING";
+				return false;
+			}
 			p.m_VehicleId = p.m_Vehicle.GetID();
 			RplComponent rpl = RplComponent.Cast(p.m_Vehicle.FindComponent(RplComponent));
 			if (!p.VehicleIdentity() || !rpl || !rpl.IsMaster()) return false;
-			return fleet.BindReservedLeaseVehicle(p.m_Lease, p.m_Vehicle, rpl.Id().ToString(), prefab, AICF_EVehicleKind.ARMED_LIGHT, 2, pose[3]);
+			if (!fleet.BindReservedLeaseVehicle(p.m_Lease, p.m_Vehicle, rpl.Id().ToString(), prefab, AICF_EVehicleKind.ARMED_LIGHT, 2, pose[3])) return false;
+			return !quotaGuard || quotaGuard.RecordOwnLeaseBind(p.m_Vehicle);
 		}
 		return false;
 	}
@@ -1341,6 +1360,7 @@ class AICF_VehicleSpawner
 	// Гарнизон ищет площадку в пределах своей базы, без маршрута на соседнюю.
 	bool SpawnFIAGarrison(AICF_FIAGarrison g, AICF_FactionFleet fleet, out vector crewPosition)
 	{
+		if (g) g.m_sSpawnQuotaFailure = string.Empty;
 		if (!Replication.IsServer() || !g || g.m_Vehicle || !g.m_Lease || !fleet ||
 			!g.BaseIdentity() || g.m_Base.GetFaction() != g.m_Faction) return false;
 		AICF_LogisticsVehicleFootprint footprint = AICF_LogisticsVehicleFootprint.Get(g.m_sPrefab);
@@ -1399,8 +1419,19 @@ class AICF_VehicleSpawner
 			EntitySpawnParams params = new EntitySpawnParams();
 			params.TransformMode = ETransformMode.WORLD;
 			for (int axis; axis < 4; axis++) params.Transform[axis] = pose[axis];
-			g.m_Vehicle = SpawnSelectedPrefab(g.m_sPrefab, pose[3], params);
-			if (!g.m_Vehicle) return false;
+			AICF_AIQuotaFIAVehicleCreation quotaGuard;
+			if (AICF_AIWorldQuotaService.GetAuthorityForWorld(world))
+			{
+				quotaGuard = AICF_AIQuotaFIAVehicleCreation.CaptureGarrison(g, fleet);
+				if (!quotaGuard) { g.m_sSpawnQuotaFailure = "VEHICLE_QUOTA_PENDING"; return false; }
+			}
+			g.m_Vehicle = SpawnSelectedPrefab(g.m_sPrefab, pose[3], params, quotaGuard);
+			if (!g.m_Vehicle)
+			{
+				if (quotaGuard && quotaGuard.IsQuarantined()) g.m_sSpawnQuotaFailure = "VEHICLE_QUOTA_NATIVE_RETURN_QUARANTINED";
+				else if (quotaGuard && !quotaGuard.WasNativeNull()) g.m_sSpawnQuotaFailure = "VEHICLE_QUOTA_PENDING";
+				return false;
+			}
 			g.m_VehicleId = g.m_Vehicle.GetID();
 			g.WatchVehicleIntegrity();
 			g.m_vPosition = pose[3];
@@ -1409,7 +1440,8 @@ class AICF_VehicleSpawner
 			if (!g.VehicleIdentity() || !rpl || !rpl.IsMaster()) return false;
 			array<BaseCompartmentSlot> seats = {};
 			AICF_FIAPatrolCrew.Seats(g.m_Vehicle, seats);
-			return fleet.BindReservedLeaseVehicle(g.m_Lease, g.m_Vehicle, rpl.Id().ToString(), g.m_sPrefab, AICF_EVehicleKind.ARMED_LIGHT, seats.Count(), pose[3]);
+			if (!fleet.BindReservedLeaseVehicle(g.m_Lease, g.m_Vehicle, rpl.Id().ToString(), g.m_sPrefab, AICF_EVehicleKind.ARMED_LIGHT, seats.Count(), pose[3])) return false;
+			return !quotaGuard || quotaGuard.RecordOwnLeaseBind(g.m_Vehicle);
 		}
 		return false;
 	}
@@ -1457,7 +1489,8 @@ class AICF_VehicleSpawner
 		return true;
 	}
 
-	protected Vehicle SpawnSelectedPrefab(ResourceName prefab, vector position, EntitySpawnParams spawnParams = null)
+	protected Vehicle SpawnSelectedPrefab(ResourceName prefab, vector position, EntitySpawnParams spawnParams = null,
+		AICF_AIQuotaVehicleCreationGuard quotaGuard = null)
 	{
 		if (!Replication.IsServer()) return null;
 		EntitySpawnParams params = spawnParams;
@@ -1467,7 +1500,26 @@ class AICF_VehicleSpawner
 			params.TransformMode = ETransformMode.WORLD;
 			params.Transform[3] = position;
 		}
-		return Vehicle.Cast(GetGame().SpawnEntityPrefabEx(prefab, false, params: params));
+		AICF_AIWorldQuotaService service = AICF_AIWorldQuotaService.GetAuthorityForWorld(GetGame().GetWorld());
+		AICF_AIQuotaCreation creation;
+		if (service)
+		{
+			if (!quotaGuard || quotaGuard.GetService() != service) return null;
+			creation = quotaGuard.BeginFactory(prefab);
+			if (!creation) return null;
+			if (!service.MarkExternalNativeCallStarted(creation, true))
+			{
+				service.CancelExternalCreationBeforeFactory(creation);
+				return null;
+			}
+		}
+		IEntity raw = GetGame().SpawnEntityPrefabEx(prefab, false, params: params);
+		if (!service) return Vehicle.Cast(raw);
+		service.ObserveExternalFactory(creation, raw);
+		bool accepted = quotaGuard.CaptureFactoryResult(creation, raw);
+		service.EndExternalCreation(creation);
+		if (!accepted) return null;
+		return Vehicle.Cast(raw);
 	}
 
 	protected AICF_VehicleSpawnSearchState BuildAcquisitionCandidateSet(
@@ -2250,7 +2302,15 @@ class AICF_VehicleSpawner
 		EntitySpawnParams params = new EntitySpawnParams();
 		params.TransformMode = ETransformMode.WORLD;
 		for (int i; i < 4; i++) params.Transform[i] = w.m_aSpawnTransform[i];
-		w.m_Vehicle = SpawnSelectedPrefab(w.m_Entry.GetPrefab(), w.m_aSpawnTransform[3], params);
+		AICF_AIWorldQuotaService quota = AICF_AIWorldQuotaService.GetAuthorityForWorld(GetGame().GetWorld());
+		ref AICF_AIQuotaLogisticsCreationGuard creation = w.m_QuotaCreationGuard;
+		int generation = w.m_iGeneration;
+		AICF_VehicleLease lease = w.m_Lease;
+		if (quota && (!creation || !creation.CaptureSite())) return false;
+		Vehicle created = SpawnSelectedPrefab(w.m_Entry.GetPrefab(), w.m_aSpawnTransform[3], params, creation);
+		if (quota && (!creation.IsCurrent() || w.m_QuotaCreationGuard != creation || w.m_iGeneration != generation ||
+			w.m_Lease != lease || w.m_Vehicle)) return false;
+		w.m_Vehicle = created;
 		if (!w.m_Vehicle) return false;
 		w.m_VehicleId = w.m_Vehicle.GetID();
 		w.m_bExitedSpawn = false;
@@ -2259,9 +2319,14 @@ class AICF_VehicleSpawner
 		if (rpl) w.m_sVehicleRpl = rpl.Id().ToString();
 		SCR_FactionAffiliationComponent affiliation = SCR_FactionAffiliationComponent.Cast(w.m_Vehicle.FindComponent(SCR_FactionAffiliationComponent));
 		if (!affiliation || !rpl || !rpl.IsMaster() || !resources.EmptySpawnCargo(w.m_Vehicle)) return false;
+		if (quota && (!creation.IsCurrent() || w.m_QuotaCreationGuard != creation)) return false;
 		affiliation.SetAffiliatedFaction(w.m_Faction);
-		w.m_CargoPool = resources.Resolve(SCR_ResourceComponent.FindResourceComponent(w.m_Vehicle));
+		if (quota && (!creation.IsCurrent() || w.m_QuotaCreationGuard != creation)) return false;
+		AICF_LogisticsResourcePool cargoPool = resources.Resolve(SCR_ResourceComponent.FindResourceComponent(w.m_Vehicle));
+		if (quota && (!creation.IsCurrent() || w.m_QuotaCreationGuard != creation)) return false;
+		w.m_CargoPool = cargoPool;
 		if (!w.m_Fleet.BindReservedLeaseVehicle(w.m_Lease, w.m_Vehicle, w.m_sVehicleRpl, w.m_Entry.GetPrefab(), AICF_EVehicleKind.TRANSPORT, 1, w.m_Vehicle.GetOrigin())) return false;
+		if (quota && (!creation.RecordOwnLeaseBind(w.m_Vehicle) || !creation.IsDomainCurrent() || w.m_QuotaCreationGuard != creation)) return false;
 		w.m_bCustody = true;
 		w.m_fObservedCargo = 0;
 		SCR_AIVehicleUsageComponent usage = SCR_AIVehicleUsageComponent.Cast(w.m_Vehicle.FindComponent(SCR_AIVehicleUsageComponent));

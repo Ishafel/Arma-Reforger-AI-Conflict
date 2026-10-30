@@ -350,6 +350,12 @@ class AICF_VehicleCoordinator
 		return fleet.GetReservedCount();
 	}
 
+	AICF_FleetRegistry GetAIQuotaFleetRegistry()
+	{
+		if (!Replication.IsServer()) return null;
+		return m_Fleets;
+	}
+
 	int GetCapHeldCount(FactionKey factionKey)
 	{
 		AICF_FactionFleet fleet = m_Fleets.FindFleet(factionKey);

@@ -62,18 +62,51 @@ class AICF_VehicleShortRecovery
 			!CompartmentAccessComponent.GetVehicleIn(member);
 	}
 
-	static bool TrySeat(AICF_TransportTrip trip, IEntity member, BaseCompartmentSlot seat, string reason)
+	static bool TrySeat(AICF_TransportTrip trip, IEntity member, BaseCompartmentSlot seat, string reason,
+		AICF_AIQuotaVehicleDispatch admitted = null, AICF_VehicleShortSeatAttempt attempt = null)
 	{
-		if (!CanSeat(trip, member, seat)) return false;
+		if (!CanSeat(trip, member, seat))
+		{
+			if (admitted) admitted.Cancel();
+			return false;
+		}
 		Vehicle vehicle = trip.GetLease().GetVehicle();
 		float distance = vector.Distance(member.GetOrigin(), seat.GetPosition());
 		CompartmentAccessComponent access = ChimeraCharacter.Cast(member).GetCompartmentAccessComponent();
+		int transitions = trip.GetTransitionCount();
+		AICF_AIQuotaVehicleDispatch quota = admitted;
+		if (!quota) quota = AICF_AIQuotaVehicleDispatch.Begin(member, vehicle, seat);
+		if (!quota) return false;
+		if (!quota.Matches(member, vehicle, seat) || trip.GetTransitionCount() != transitions || !CanSeat(trip, member, seat))
+		{
+			quota.Cancel();
+			return false;
+		}
 		seat.SetReserved(member);
-		if (!CanSeat(trip, member, seat) || !seat.IsReservedBy(member)) return false;
+		if (!quota.Matches(member, vehicle, seat) || trip.GetTransitionCount() != transitions || !CanSeat(trip, member, seat) || !seat.IsReservedBy(member) ||
+			ChimeraCharacter.Cast(member).GetCompartmentAccessComponent() != access)
+		{
+			quota.Cancel();
+			return false;
+		}
 		string operationId = trip.GetOperationId();
 		string memberId = AICF_GroupTrace.Entity(member);
 		string seatKey = AICF_VehiclePreset.SeatKey(seat);
+		quota.MarkDispatched();
+		if (!quota.Matches(member, vehicle, seat) || trip.GetTransitionCount() != transitions || !CanSeat(trip, member, seat))
+		{
+			quota.Cancel();
+			return false;
+		}
+		if (attempt && !attempt.Commit(trip, member, seat, System.GetTickCount()))
+		{
+			quota.Cancel();
+			return false;
+		}
+		// Counter commit и native call смежны: без getters/logging/invokers.
 		bool accepted = access.GetInVehicle(vehicle, seat, true, -1, ECloseDoorAfterActions.INVALID, false);
+		quota.ObserveNativeResult(accepted);
+		quota.Cancel();
 		AICF_Stage3Diagnostics.Warning("VEHICLE_SHORT_SEAT_RECOVERY", string.Format(
 			"operation_id=%1 member=%2 seat=%3 distance_m=%4 maximum_m=%5 accepted=%6 reason=%7 visible_allowed=1 vehicle_moved=0",
 			operationId, memberId, seatKey, distance, MAX_ACTOR_DISPLACEMENT_METERS, accepted, reason));

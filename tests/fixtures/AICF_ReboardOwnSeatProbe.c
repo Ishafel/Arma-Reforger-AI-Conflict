@@ -162,9 +162,9 @@ class AICF_OwnSeatProbe
 }
 modded class AICF_VehicleSpawner
 {
-	override protected Vehicle SpawnSelectedPrefab(ResourceName prefab, vector position, EntitySpawnParams spawnParams = null)
+	override protected Vehicle SpawnSelectedPrefab(ResourceName prefab, vector position, EntitySpawnParams spawnParams = null, AICF_AIQuotaVehicleCreationGuard quotaGuard = null)
 	{
-		Vehicle created = super.SpawnSelectedPrefab(prefab, position, spawnParams);
+		Vehicle created = super.SpawnSelectedPrefab(prefab, position, spawnParams, quotaGuard);
 		if (!AICF_OwnSeatProbe.Mode().IsEmpty() && created && created.GetWorld() == GetGame().GetWorld())
 		{
 			AICF_OwnSeatProbe.s_Spawns++;

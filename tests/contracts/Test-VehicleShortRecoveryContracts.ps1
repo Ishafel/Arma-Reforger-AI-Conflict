@@ -6,6 +6,7 @@ $helper=[IO.File]::ReadAllText((Join-Path $core 'Vehicles/AICF_VehicleShortRecov
 $boarding=[IO.File]::ReadAllText((Join-Path $core 'Vehicles/AICF_VehicleBoardingFlow.c'))
 $dismount=[IO.File]::ReadAllText((Join-Path $core 'Vehicles/AICF_VehicleDismountFlow.c'))
 $tokens=[IO.File]::ReadAllText((Join-Path $core 'State/Vehicles/AICF_VehicleBoardingTokens.c'))
+$attemptSource=[IO.File]::ReadAllText((Join-Path $core 'State/Vehicles/AICF_VehicleShortSeatAttempt.c'))
 function Body([string]$text,[string]$name){Get-AICFMethodBody ([pscustomobject]@{Source=$text;Code=(ConvertTo-AICFCodeText $text)}) $name}
 function Rules([string]$h,[string]$b,[string]$d,[string]$t){
  $identity=Body $h 'IsCurrentMember';$can=Body $h 'CanSeat';$seat=Body $h 'TrySeat';$exit=Body $h 'TryExit'
@@ -34,7 +35,7 @@ function Rules([string]$h,[string]$b,[string]$d,[string]$t){
   '!access.IsGettingIn() && !access.IsGettingOut() && !access.IsSwitchingSeatsAnim()', '!CompartmentAccessComponent.GetVehicleIn(member)')){
   if(!$can.Contains($guard)){'EMPTY_EXACT_SEAT_NO_FOREIGN_MUTATION';break}
  }
- if(@([regex]::Matches($seat,'CanSeat\(trip, member, seat\)')).Count -ne 2 -or
+ if(@([regex]::Matches($seat,'CanSeat\(trip, member, seat\)')).Count -ne 4 -or
   !$seat.Contains('!seat.IsReservedBy(member)') -or !$seat.Contains('access.GetInVehicle(vehicle, seat, true, -1, ECloseDoorAfterActions.INVALID, false)')){'REPEAT_SEAT_FENCE_BEFORE_NATIVE'}
  if(@([regex]::Matches($exit,'IsCurrentMember\(trip, member\)')).Count -ne 2 -or
   !$exit.Contains('seat.GetOccupant() != member') -or !$exit.Contains('access.GetCompartment() != seat') -or
@@ -57,13 +58,16 @@ function Rules([string]$h,[string]$b,[string]$d,[string]$t){
  if((ConvertTo-AICFCodeText $h) -match 'SetHealth|SetLifeState|Resurrect|SetDamage|ForceUnconscious|\.Teleport\(|\.SetOrigin\(|SetWorldTransform|CommitTransition|CallLater|SpawnEntity'){'NO_HEAL_RESURRECTION_VEHICLE_RELOCATION_OR_LIFECYCLE'}
  if(!$recover.Contains('token.WasShortRecoveryAttempted()') -or !$recover.Contains('token.WasPresetQueued()') -or
   !$recover.Contains('token.Matches(trip, lease, group)') -or !$recover.Contains('System.GetTickCount() >= state.GetAbsoluteDeadlineMs()') -or
-  !$recover.Contains('token.MarkShortRecoveryAttempted();') -or !$t.Contains('m_bShortRecoveryAttempted = true;')){'FINITE_CURRENT_TOKEN_ATTEMPT'}
+  !$recover.Contains('AICF_VehicleShortSeatAttempt.ForBoarding(trip, state, token)') -or
+  !$seat.Contains('attempt.Commit(trip, member, seat, System.GetTickCount())') -or
+  !$attemptSource.Contains('m_Boarding.MarkShortRecoveryAttempted();') -or !$t.Contains('m_bShortRecoveryAttempted = true;')){'FINITE_CURRENT_TOKEN_ATTEMPT'}
  if(!$recover.Contains('actionState == EAIActionState.FAILED || actionState == EAIActionState.COMPLETED') -or
   !$recover.Contains('!failed && !disappeared && !stalled') -or !$recover.Contains('token.GetProgressAgeMs() >= 5000') -or
-  $recover -match 'GetProgressAgeMs\(\) <|DeadlineMs\s*=|\.Begin\('){'IMMEDIATE_FAILURE_NO_DEADLINE_EXTENSION'}
- if($recover.IndexOf('token.CancelOwnerSafe();') -lt 0 -or $recover.IndexOf('token.CancelOwnerSafe();') -gt $recover.IndexOf('token.MarkShortRecoveryAttempted();') -or
-  $recover.IndexOf('token.MarkShortRecoveryAttempted();') -gt $recover.IndexOf('AICF_VehicleShortRecovery.TrySeat(') -or
-  @([regex]::Matches($recover,'AICF_VehicleShortRecovery.CanSeat\(trip, member, seat\)')).Count -ne 2){'CANCEL_BEFORE_SEAT_AND_REVALIDATE'}
+  $recover.Replace('AICF_AIQuotaVehicleDispatch.Begin(', 'QuotaAdmission(') -match 'GetProgressAgeMs\(\) <|DeadlineMs\s*=|\.Begin\('){'IMMEDIATE_FAILURE_NO_DEADLINE_EXTENSION'}
+ if($recover.IndexOf('token.CancelOwnerSafe();') -lt 0 -or $recover.IndexOf('token.CancelOwnerSafe();') -gt $recover.IndexOf('AICF_VehicleShortRecovery.TrySeat(') -or
+  $recover.IndexOf('AICF_AIQuotaVehicleDispatch.Begin(') -gt $recover.IndexOf('token.CancelOwnerSafe();') -or
+  !$recover.Contains('"NATIVE_ENTRY_BLOCKED", quota, attempt') -or
+  @([regex]::Matches($recover,'AICF_VehicleShortRecovery.CanSeat\(trip, member, seat\)')).Count -ne 3){'CANCEL_BEFORE_SEAT_AND_REVALIDATE'}
  if(!$normal.Contains('sample.m_iLogicalOccupants > 0 && HasFailedExactNativeExit(trip)') -or
   !$normal.Contains('sample.m_iLogicalOccupants == 0 && sample.m_iTransitions == 0 &&') -or
   (Body $d 'HasFailedExactNativeExit') -notmatch 'exit.m_Vehicle.m_Value == vehicle && exit.GetActionState\(\) == EAIActionState.FAILED'){'IMMEDIATE_PROVEN_EXIT_BLOCKER'}

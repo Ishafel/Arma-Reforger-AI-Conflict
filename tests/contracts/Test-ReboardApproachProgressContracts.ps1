@@ -57,36 +57,41 @@ public static class AICF_GroupTrace{public static string Entity(IEntity a){retur
 public static class AICF_VehiclePreset{public static string SeatKey(BaseCompartmentSlot s){return "seat";}}
 public static class AICF_Stage3Diagnostics{public static void Info(string name,string value){}}
 public class IEntity{public bool Current=true,ShortSafe;public double GetOrigin(){return 70;}public static implicit operator bool(IEntity x){return x!=null;}}
-public class BaseCompartmentSlot{public IEntity Occupant;public bool Reserved,Self=true;public double GetPosition(){return 0;}public IEntity GetOccupant(){return Occupant;}public bool IsReserved(){return Reserved;}public bool IsReservedBy(IEntity a){return Self;}public static implicit operator bool(BaseCompartmentSlot x){return x!=null;}}
+public class BaseCompartmentSlot{public IEntity Occupant;public bool Reserved,Self=true;public object GetVehicle(){return this;}public double GetPosition(){return 0;}public IEntity GetOccupant(){return Occupant;}public bool IsReserved(){return Reserved;}public bool IsReservedBy(IEntity a){return Self;}public static implicit operator bool(BaseCompartmentSlot x){return x!=null;}}
 public class NativeEntry{public EAIActionState State=EAIActionState.RUNNING;public bool Removed;public EAIActionState GetActionState(){return State;}public bool GetRemoveAction(){return Removed;}public static implicit operator bool(NativeEntry x){return x!=null;}}
 public class TokenList:List<AICF_VehicleBehaviorAction>{public void Insert(AICF_VehicleBehaviorAction t){Add(t);}}
 public class BehaviorState{public TokenList m_aActions=new TokenList();public int m_iReboardDeadline=100000;}
 public class AICF_TransportTrip{public BehaviorState State=new BehaviorState();public BehaviorState GetBehaviorState(){return State;}public string GetOperationId(){return "trip";}}
 public class AICF_VehicleBehaviorAction{public BaseCompartmentSlot m_Seat;public NativeEntry m_Entry=new NativeEntry();public int m_iShortAttempts,m_iRetries,Retired,m_iLastProgressAt;public bool Owner=true,Blocked=true,RestartSafe=true;public AICF_VehicleBehaviorAction(AICF_TransportTrip t,IEntity a,BaseCompartmentSlot s){m_Seat=s;}public bool ResolveOwner(){return Owner;}public bool EntryBlocked(){return Blocked;}public bool CanRestartEntry(){return RestartSafe;}public void Retire(){Retired++;m_Entry=null;}public static implicit operator bool(AICF_VehicleBehaviorAction x){return x!=null;}}
-public static class AICF_VehicleShortRecovery{public static int PhysicalCalls;public static bool IsCurrentMember(AICF_TransportTrip t,IEntity a){return a.Current;}public static bool CanSeat(AICF_TransportTrip t,IEntity a,BaseCompartmentSlot s){return a.ShortSafe;}public static bool TrySeat(AICF_TransportTrip t,IEntity a,BaseCompartmentSlot s,string reason){PhysicalCalls++;return true;}}
+public class AICF_AIQuotaVehicleDispatch{public static bool Allowed=true;public static AICF_AIQuotaVehicleDispatch Begin(IEntity a,object v,BaseCompartmentSlot s){return Allowed?new AICF_AIQuotaVehicleDispatch():null;}public bool IsCurrent(){return Allowed;}public void Cancel(){}public static implicit operator bool(AICF_AIQuotaVehicleDispatch x){return x!=null;}}
+public class AICF_VehicleShortSeatAttempt{public AICF_VehicleBehaviorAction Token;public int Captured;public static AICF_VehicleShortSeatAttempt ForBehavior(AICF_TransportTrip t,AICF_VehicleBehaviorAction token){return new AICF_VehicleShortSeatAttempt{Token=token,Captured=token.m_iShortAttempts};}public bool IsCurrent(AICF_TransportTrip t,IEntity a,BaseCompartmentSlot s,int now){return Token.Owner&&Token.m_iShortAttempts==Captured&&Captured<3;}public bool Commit(AICF_TransportTrip t,IEntity a,BaseCompartmentSlot s,int now){if(!IsCurrent(t,a,s,now))return false;Token.m_iShortAttempts++;return true;}public static implicit operator bool(AICF_VehicleShortSeatAttempt x){return x!=null;}}
+public static class AICF_VehicleShortRecovery{public static int PhysicalCalls;public static bool IsCurrentMember(AICF_TransportTrip t,IEntity a){return a.Current;}public static bool CanSeat(AICF_TransportTrip t,IEntity a,BaseCompartmentSlot s){return a.ShortSafe;}public static bool TrySeat(AICF_TransportTrip t,IEntity a,BaseCompartmentSlot s,string reason,AICF_AIQuotaVehicleDispatch quota=null,AICF_VehicleShortSeatAttempt attempt=null){if(attempt!=null&&!attempt.Commit(t,a,s,10000))return false;PhysicalCalls++;return true;}}
 public class Flow{public AICF_VehicleBehaviorAction Existing;public int NativeIssues;public AICF_VehicleBehaviorAction FindAction(AICF_TransportTrip t,IEntity a){return Existing;}public void IssueEntry(AICF_TransportTrip t,AICF_VehicleBehaviorAction token,IEntity a,BaseCompartmentSlot s){NativeIssues++;token.m_Entry=new NativeEntry();}public void EnsureEntry(AICF_TransportTrip trip,IEntity actor,BaseCompartmentSlot seat) ENTRY_BODY}
 }
 '@
 Add-Type ($retryHarness.Replace('RETRY_NAMESPACE',$retryNamespace).Replace('ENTRY_BODY',$entryBody))
 $retryCases=0
-foreach($kind in @('runningStallFar','runningProgressFar','runningStallNear','nativeBudgetSpent','transition','nativeFailureFar','missingEntry','foreignReservation','staleActor','foreignSeat','ownerLost','missingToken')){
+foreach($kind in @('runningStallFar','runningProgressFar','runningStallNear','nativeBudgetSpent','transition','nativeFailureFar','missingEntry','foreignReservation','staleActor','foreignSeat','ownerLost','missingToken','quotaVetoNear','quotaVetoFar')){
  $actor=[Activator]::CreateInstance([type]($retryNamespace+'.IEntity'))
  $seat=[Activator]::CreateInstance([type]($retryNamespace+'.BaseCompartmentSlot'))
  $trip=[Activator]::CreateInstance([type]($retryNamespace+'.AICF_TransportTrip'))
  $entryToken=[Activator]::CreateInstance([type]($retryNamespace+'.AICF_VehicleBehaviorAction'),@($trip,$actor,$seat))
  $model=[Activator]::CreateInstance([type]($retryNamespace+'.Flow'));$model.Existing=$entryToken
  $shortType=[type]($retryNamespace+'.AICF_VehicleShortRecovery');$shortType.GetField('PhysicalCalls').SetValue($null,0)
+ $quotaType=[type]($retryNamespace+'.AICF_AIQuotaVehicleDispatch');$quotaType.GetField('Allowed').SetValue($null,$true)
  switch($kind){
   runningProgressFar{$entryToken.Blocked=$false}runningStallNear{$actor.ShortSafe=$true}nativeBudgetSpent{$entryToken.m_iRetries=2}
   transition{$entryToken.RestartSafe=$false}nativeFailureFar{$entryToken.m_Entry.State=[Enum]::Parse([type]($retryNamespace+'.EAIActionState'),'FAILED')}
   missingEntry{$entryToken.m_Entry=$null}foreignReservation{$seat.Reserved=$true;$seat.Self=$false}staleActor{$actor.Current=$false}
   foreignSeat{$entryToken.m_Seat=[Activator]::CreateInstance([type]($retryNamespace+'.BaseCompartmentSlot'))}ownerLost{$entryToken.Owner=$false}missingToken{$model.Existing=$null}
+  quotaVetoNear{$actor.ShortSafe=$true;$quotaType.GetField('Allowed').SetValue($null,$false)}quotaVetoFar{$quotaType.GetField('Allowed').SetValue($null,$false)}
  }
  $model.EnsureEntry($trip,$actor,$seat)
  $expectedNative=[int]($kind -in @('runningStallFar','nativeFailureFar','missingEntry','missingToken'))
  $expectedPhysical=[int]($kind -eq 'runningStallNear')
  if($model.NativeIssues -ne $expectedNative -or $shortType.GetField('PhysicalCalls').GetValue($null) -ne $expectedPhysical){throw "Actual EnsureEntry retry regression kind=$kind native=$($model.NativeIssues) expected=$expectedNative"}
  if($kind -eq 'runningStallFar' -and ($entryToken.m_iRetries -ne 1 -or $entryToken.m_iShortAttempts -ne 0)){throw 'RUNNING far stall did not consume exactly one native-only retry'}
+ if($kind-in@('quotaVetoNear','quotaVetoFar')-and($entryToken.m_iRetries-ne0-or$entryToken.m_iShortAttempts-ne0-or$entryToken.Retired-ne0)){throw 'Quota veto consumed existing recovery allowance or cancelled owned native action'}
  $retryCases++
 }
 "PASS Reboard native retry: actual EnsureEntry controls=$retryCases; RUNNING far stall restarts native entry, no remote physical pull, original2 retry cap and identity/transition vetoes retained"

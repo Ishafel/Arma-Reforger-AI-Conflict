@@ -390,15 +390,7 @@ class AICF_VehicleBoardingActionToken
 			return false;
 		}
 		bool transitioning = access.IsGettingIn() || access.IsGettingOut();
-		if (transitioning)
-		{
-			if (!m_bAnimatedExactSeatRecoveryAttempted)
-				return false;
-			// The tracked replacement received its full observation window. This
-			// interrupt is reached only after the caller has passed the player/LOS
-			// fence for the hidden one-shot correction.
-			access.InterruptVehicleActionQueue(true, true, true);
-		}
+		if (transitioning && !m_bAnimatedExactSeatRecoveryAttempted) return false;
 		if (!m_Compartment.IsCompartmentAccessible() ||
 			m_Compartment.GetOccupant() ||
 			m_Compartment.IsGetInLockedFor(m_ReservedEntity) ||
@@ -407,22 +399,48 @@ class AICF_VehicleBoardingActionToken
 		{
 			return false;
 		}
+		AICF_AIQuotaVehicleDispatch quota = AICF_AIQuotaVehicleDispatch.Begin(m_ReservedEntity, m_TargetVehicle, m_Compartment);
+		if (!quota) return false;
+		if (!quota.IsCurrent() || !MatchesLiveTargetIdentity() || !IsPhysicalMutationOwnerSafe() || !IsExactCompartmentTarget() ||
+			!m_bHiddenExactSeatRecoveryPending || m_bHiddenExactSeatRecoveryAttempted || ResolveAccess(m_ReservedEntity) != access)
+		{
+			quota.Cancel();
+			return false;
+		}
+		if (transitioning)
+		{
+			// Admission предшествует прерыванию собственной native queue.
+			access.InterruptVehicleActionQueue(true, true, true);
+			if (!quota.IsCurrent() || !MatchesLiveTargetIdentity() || !IsPhysicalMutationOwnerSafe() ||
+				!IsExactCompartmentTarget() || !m_bHiddenExactSeatRecoveryPending || m_bHiddenExactSeatRecoveryAttempted)
+			{
+				quota.Cancel();
+				return false;
+			}
+		}
 		if (!m_Compartment.IsReservedBy(m_ReservedEntity))
 			m_Compartment.SetReserved(m_ReservedEntity);
-		if (!m_Compartment.IsReservedBy(m_ReservedEntity))
+		if (!quota.IsCurrent() || !MatchesLiveTargetIdentity() || !IsPhysicalMutationOwnerSafe() ||
+			!IsExactCompartmentTarget() || !m_Compartment.IsReservedBy(m_ReservedEntity))
+		{
+			quota.Cancel();
 			return false;
+		}
 
 		// Consume the allowance before invoking the engine mutation. A rejected
 		// GetInVehicle call must never be retried by this token/trip identity.
 		m_bHiddenExactSeatRecoveryPending = false;
 		m_bHiddenExactSeatRecoveryAttempted = true;
-		return access.GetInVehicle(
+		bool accepted = access.GetInVehicle(
 			m_TargetVehicle,
 			m_Compartment,
 			true,
 			-1,
 			ECloseDoorAfterActions.INVALID,
 			false);
+		quota.ObserveNativeResult(accepted);
+		quota.Cancel();
+		return accepted;
 	}
 
 	bool ObserveSpatialProgress(float distanceMeters, float minimumProgressMeters)

@@ -1,5 +1,215 @@
 # Проверки и baseline
 
+## Передача draft по запросу пользователя — 30.10.2026
+
+Пользователь запросил обновление issue/итоговый комментарий/очистку старых
+артефактов/отправку PR/выключение. Состояние передачи и оставшиеся gates —
+[ISSUE78_STATUS.md](ISSUE78_STATUS.md). Общий результат FAIL, #78 OPEN,
+PR только draft. Новый полный All и runtime pressure текущего quota integration
+не завершены; это незавершённые доступные проверки, не «невозможность» и не PASS.
+Статус последних snapshot compile/native берётся из итогового комментария.
+Targeted owned factory38actual/9unsafe и Logistics44actual/5unsafe не заменяют
+их. Для нового handoff rpl_id fresh ordinary native ещё NOT RUN.
+
+## Актуальный checkpoint #78 — 30.10.2026, 08:05 MSK
+
+Общий strict runtime/resource verdict **FAIL**, issue OPEN по решению пользователя.
+Новые функциональные PASS не снимают native-only blockers. Push/PR/release нет.
+Новый frozen `recovery-v14` завершён: **219/219 PASS**, collector0/exact unique
+union/Logistics1, все6 sessions closed0/919 frozen hashes drift0. Terminal
+`frozen-recovery-v14` Stock/RHS/ArlandWCSRHS **3/3 PASS**, native0/validation/
+fullfatal0/295 compile files postSHA0, session44499 closed0. Это объединённый
+baseline raw control trace, geometry/anti-cycle, own-seat версии102cases и четырёх
+неподключённых quota foundations. Новые Census/Registry/adapters, runtime quota
+integration и исправление прерывания pending reservation **не входят** в него.
+Старый211 ниже остаётся отдельным точным G3 snapshot, не current checkout PASS.
+
+Own-seat AFTERv6 на своих frozen5production подтвердил native0/source0/
+functional+fatal PASS/resources28 FAIL: wrong Cargo вышел из Pilot, снята только
+доказанная captured Cargo reservation, exact5 возобновили поездку и прошли
+13.1481м/5polls при прежних IDs/Rpl/health/deadline и одной покупке50 в этом
+контролируемом preset. Это не normal-UAZ150 ценовой proof. Native BEFOREv4 и
+AFTERv6 имеют разные common helper hashes; raw runtime exact-one-file A/B между
+ними не заявляется. BEFOREv4 реальный occupied-class отказ, failed AFTERv4
+timeout/fatal6 и последний непрерывный AFTERv6 positive сохранены отдельно.
+Actual extracted interruption replay затем доказал дополнительный дефект:
+`CancelEntries` теряет pending receipt после accepted exit, оставляя чужую для
+Pilot own Cargo reservation. Исправление atomic pre-exit clearance сохранено
+отдельным локальным commit `500cb4e`: снимается только exact captured own
+reservation, пока неправильный Cargo ещё занимает место, затем повторяются
+identity/entry/seat guards перед native выходом. Actual contracts
+133cases/6source/9unsafe, fixture17source/48logs/6CLI и7 affected audits PASS,
+independent peer0 и terminal Stock Workbench0. Два свежих прогона на одном
+frozen344source завершены: uninterrupted и настоящее `LOCAL_THREAT` прерывание
+с `COMBAT_REBOARD_CANCELLED`/pending1→0. Оба native0/source0/functional+fullfatal
+PASS/resources28 FAIL; exact5, прежние actor/car/Rpl/health, одна покупка50,
+затем native11.147м/4polls и13.5366м/8polls. Второе окно после новой угрозы
+создано штатным Core, fix не пишет часы и не продлевает дедлайн. Полный219 и
+3graphs выше относятся к версии ДО atomic delta, новые combined gates PENDING.
+Первоначальная ошибка dispatch анализатора в wrapper сохранена: исправленный
+hashtable binding проверил те же полные остановленные логи, без нового run.
+
+Brake fault tests не смогли дойти до watchdog: post-motion variant после
+native32.68м/3polls записал own brake write, затем следующий tick доказал
+`NATIVE_BRAKE_FALSE`/gateNULL. Native0/fatal0/resources28/source3440,
+corrections0/45s NOT RUN. Новых brake повторов без другой причины нет.
+Corridorv1 native0/312.854s/fatal0/resources28/source3440: actual9.701m pose
+на первый исторический stuck origin, затем здоровая машина сама уехала по
+172-node path к другой дальней цели. Это доказательство доступности места
+при другом goal/yaw, **не PASS native recovery**; corrections0/repair NOT RUN.
+
+- Полный `final-G3-v13`: **211/211 PASS**, collector0/exact unique union,
+  Logistics1, все6 sessions closed0,902 frozen files/hash drift0. Команда каждого
+  shard — `Invoke-OfflineShard.ps1` с canonical `tools/Invoke-AICFChecks.ps1
+  -Suite All`; plan и полные результаты сохранены в evidence.
+- `current-v14-native-gate-G3`: terminal Workbench Stock/RHS/ArlandWCSRHS
+  **3/3 PASS**, native0/validation/full script fatal0,289 compile files postSHA0.
+  Raw production342G3 manifest SHA256
+  `6C85F51E98091DA4F60A99B491437E666839D8287B580A7BA461FA37F7EC8F00`.
+- После freeze исправлен только CLI entrypoint нового анализатора: dot-source
+  базового script затирал `LogPath`/`EvidenceRoot`. Исходный CLI FAIL сохранён.
+  Новые auditor `2D67F446`/contract `F8909CA4` проверены отдельно:
+  9 source controls/32 log cases/7 настоящих Windows PowerShell5.1 CLI launches
+  PASS, independent review0 и ещё7 независимых CLI cases PASS. **Полный211
+  относится к версии до этих двух test-only правок**, targeted supplement — к
+  текущему entrypoint. Production не менялся.
+
+G3 native A/B закрыт на frozen344/344 files с единственной production delta
+`AICF_TransportNativeGate` (`D5DAE739` → `F0AC32B2`); BehaviorFlow `CA1065A6`
+и geometry4 одинаковы. Настоящий post-invoker observer увидел cached exact
+Perform `COMPLETED/remove1`, пустое Pilot seat и live unsuspended exact Return
+в очереди того же activity. BEFORE `OwnsTemporaryCrewExit=0`, AFTER=1 только
+после настоящего immutable completion receipt. AFTER затем получил native
+callback возврата exact Pilot и14.3248м/3 distinct polls при прежних IDs/Rpl,
+health1/deadline1155158/attempts0. BEFORE также вернулся и проехал17.1555м;
+helper rejection не выдаётся за обязательный whole-trip FAIL каждого запуска.
+Оба native0/source0/boundary+field+fullfatal PASS; **resources28 FAIL** каждый.
+Старый G2 AFTERv4 FAIL сохранён. Его первый отказавший regular predicate
+не захвачен: новое наблюдение доказывает исправленный класс перехода, а не
+позволяет задним числом объявить причину старого v4 установленной.
+
+Geometry native proof пока **PENDING**. ROAD240 BEFOREv7 подтвердил fresh
+native spawn/boarding/одну покупку и настоящее движение по полному76-node path,
+но minimum path distance43.11485м/car distance45.27144м до historical pad:
+pose fault0/corrections0/local3 case NOT RUN. Native0/315.8867s wall,
+full3logs fatal0/resources28 FAIL/source343 drift0. Это coverage failure,
+не PASS восстановления. Fresh56v6 показал active1/count1/LOD0 перед реальным
+UNREACHABLE; production LOD/activation policy на основании этих tests не меняется.
+
+Fixture-free PlayerV7 готов на exact342G3:342source/344playable/fixture0,
+ровно2 generatedRDB, StockWB0/Server+ClientDryRun0/every ZIP entry SHA verified.
+Игровой native запуск самой PlayerV7 NOT RUN; она experimental, не release.
+UI/direct-connect/JIP v11 на том же G3: native0/0/0,34Client+8JIP+2server PASS,
+full stopped/GameDestroyed3/fullfatal0/leaks0; strict resources348siblings
+(174console) **FAIL**. Source333/raw342 SHA drift0. Обе ordinary1800 проверки
+на old342G3 завершены: US native0/wall1818.168s/DONE1800122ms/failures4,
+USSR native0/wall1816.569s/DONE1800692ms/failures2. Duration/liveness/stopped/
+provenance/fullfatal PASS; **functional FAIL/resources32 FAIL каждый**.
+Original route0/UNPROVEN у обеих сторон. US после реального возврата из native
+OpenGate потерял первого Pilot, назначил2100 и вернулся кTRANSIT; при исправной
+ходовой/снятом own brake две8m corrections сделали A→B→A, затем45s no motion
+дали `VEHICLE_STUCK_PERSISTENT`. USSR получил `TACTICAL_SEAT_OCCUPIED` после
+реального боя: рядом с отказом original Cargo находился в Pilot seat, а его
+назначенный водитель выходил. Это локальные дефекты, не baseline whitelist.
+Native activation после reboard у US не записана; новое расширение GroupTrace
+даст raw active/count/LOD/handlers/brake, но старому run эти поля не приписываются.
+Полные остановленные3logs/source332/raw342/auditor SHA drift0 сохранены;
+current checkout сравнивается отдельно, старые stages не менялись.
+Первая попытка WinPS5.1 остановилась на setup/обработке native warning stderr,
+все процессы закрыты; её FAIL сохранён, новый запуск использует PowerShell7.
+Пользователь отдельно разрешил **раздельный учёт квот stock + AICF**.
+Архитектура и native stock admission исследуются; простое повышение общего
+лимита без защиты резерва не считается реализацией. Ordinary defaults,
+20slots и fleet cap10/faction сохраняются. Пока эта новая реализация не готова.
+Отдельный controlled native counter probe на старом G3 без quota overlay
+завершён: native0/21.8199s/source345 SHA drift0/fullfatal0/resources28 FAIL.
+14 новых пустых контроллеров с recordedAlive/intended10, Request10/Purge и
+`ActivateAI(false)` не получили actual members/activation/countTowards и не
+изменили world active/intended0/0, включая следующий native frame. Это только
+семантика пустого контроллера, **не PASS partition** и не доказательство для
+частично материализованной группы. Никто из существующих бойцов не удалялся;
+новые непустые группы сохранялись бы до нормального закрытия test world.
+Полные manifests/commands/exits/logs: ignored
+`.codex-runtime/issue78-finalization-20261029/REPORT.md`.
+G3 сохранён commit `4f44f91` (12files), diagnostics/comparator — `bcaa60e`
+(8files), без push. Geometry4 и её controlled fixture пока не коммитились.
+
+## Исторический checkpoint #78 — 30.10.2026, 04:27 MSK
+
+Общий strict runtime/resource verdict **FAIL**, работа продолжается. Старые PASS
+относятся только к своим snapshots. Native-only blocker сохраняет issue OPEN.
+Локальные завершённые commits: `77c45d3`, `8ec9878`, `f1cee62`; push/PR/release нет.
+
+| Frozen полный набор All | Результат |
+|---|---|
+| `bound-roster-v9b`, production339 | 201/201PASS/878frozenSHA0 |
+| `final-E2-v10`, economic E2 | 203/203PASS/886frozenSHA0 |
+| `final-path-hint-v11`,342 до G2 | 207/207PASS/893frozenSHA0 |
+| `final-G2-v12`,342G2 | **209/209PASS/896frozenSHA0** |
+
+Каждый collector0/exact unique union/Logistics1, все6sessions exit0/closed.
+После последнего freeze менялись только новые native fixtures/их contracts и
+анализаторы; их более новые targeted PASS учитываются отдельно. Production342G2
+остаётся byte-identical canonical manifest
+`86C1775A08BD174035F82B89E19FFE076AA629C565AA3158EAB54029AF22207E`.
+`current-v13-native-gate-G2`: Workbench Stock/RHS/ArlandWCSRHS3/3PASS/native0,
+validation/fullfatal0,289compilefiles postSHA0. Проверка текущего checkout04:24:
+342files/exactset0/hashdrift0. Это не native proof нового поведения.
+
+Economic E2 в `f1cee62`: свежие INSv3/AFFv1/DRAINv2 native0/source0,
+functional+fatalPASS, strictresources28FAIL каждый. INS — reserve/spawn/debit0,
+пешком57.7185м/20.088s barrier. AFF — одна машина/lease/pay475; owned post-DONE
+COORDINATOR_STOP сохранён в узком purchase-boundary scope, не whole-trip PASS.
+DRAIN — exact lease1/cap1→typed decline→native empty release/cap0,
+пешком50.8477м/20.032s. RegistryCreate1/currentTrip1 подтверждены. Exact PS5.1:
+114actual/4business mutants/2fixture mutations/35logs; runner16/11 PASS,
+independent review0. `RequestState.Reset` обнуляет live request generation:
+`MatchesIdentity`/`IsCurrentPreflight` после Reset обязаны false; исторические
+immutable поля читаются отдельно. Старое обещание historical match отозвано.
+См. `VEHICLE_ECONOMY_DECLINE.md`; все предыдущие FAIL сохранены.
+
+Fresh UIv10 на340E2: native0/0/0/full stopped/client34+JIP8+server2PASS,
+fullfatal0/leaks0; resources348raw/174console/78groupsFAIL. Crewv4E2 сохранил
+functionalFAIL/TIMEOUT/7of9ARRIVED и6projectSCRIPT_E sibling lines после fallback
+при player-position-unknown clearance; это не nativeVME и не whitelist.
+G2 исправляет доказанное ложное CREW_UNAVAILABLE: здоровый Pilot выходит открыть
+native gate, но crew check видит временно пустое место. Current owned/unexpired
+native chain теперь распознаётся без изменения LOCAL_THREAT priority/60s budget.
+Actual helper47/8source/3unsafe и actual InspectTransit BEFORE/AFTER23PASS,
+independent review0. Crewv5 на342G2 native0/0/full stopped/source0/client15+server8,
+9distinctARRIVED/exactPilot1/inventorysame/onepurchase/fullfatal0/leaks0 PASS;
+resources188raw/94console/78groupsFAIL. Другой HQ не привёл к нужным воротам:
+G2-specific native **NOT EXERCISED**. Отдельный western-gate native probe готовится;
+его setup/анализатор исправляются по сохранённым native/source failures.
+
+Original Multi-v11 и minimum-background-v2 остаются FAIL/ABORTED: stable2/4,
+6не доказано, capacityWAIT и затем deadline/native abandon. MIN3 на337 также
+FAIL/ABORTED1069.620/1800s/native-1/audit1/background1/full3logs fatal0/source0.
+USSR0 перед failure active1/count1/LOD0/healthy/current handler/gate0; после двух
+коррекций исчерпан прежний mobility budget и native GetOut. Полные604observer rows:
+545PROVEN/506active/39inactive только при gatePending1/59UNPROVEN; inactive вне
+gate не наблюдалось. Census229=225characters+4vehicles,189foreign characters FIA;
+AICF FIA vehicle/garrison plans в Easy равны0, prefab/origin каждого UNKNOWN.
+Контракт квот ожидает решения пользователя;228/defaults не менялись.
+
+Path-hint fix сохраняет15м/2attempts/128candidates/старые physical fences и
+ValidatePath progress oracle. Local fragment — только geometry hint, path_progress0.
+Actual geometry23+source17, mutation scope59+3unsafe, hint identity52+3unsafe PASS;
+native proof **PENDING**. Первый controlled native setup не смог создать машину
+в исторической точке: actual8m spawn cylinder перекрыт static environment. Другой
+setup24центра не нашёл площадку в15м; это не exhaustive proof, его collision
+provenance исследуется. Эти setupFAIL не доказывают native recovery PASS.
+
+PlayerV5 fixture-free на340E2:340source/342playable entries/2generatedRDB,
+WB0/DryRuns0/everyZIPentrySHAverified; обновление на окончательный342G2 PENDING.
+Старый US342v8 остановлен как superseded227.106s/native-1/ABORT_NOT_PASS,
+fullfatal0/resources24FAIL/source0. Новая shared stage342G2 WB0/332sourceSHA0,
+raw342exactcanonical0 готова; US/USSR полные1800s **NOT RUN** до финальных
+контролируемых proofs. Ручная visual UX **NOT RUN** по запрету GUI; authenticated
+retail persistence **NOT RUN** из-за setup binary mismatch. Native persistence/
+lighting/resource blockers остаются, ACCEPTED/ready/release не объявляются.
+
+Исторические подробности ниже относятся к своим исходным snapshots.
 `Test-RosterSpawnBatchContracts.ps1` исполняет настоящий extracted helper,
 owner predicate и bound/default dispatch:15458cases/12actual source mutants,
 exact WindowsPowerShell5.1 PASS. Есть group/faction/global veto, whole remaining,

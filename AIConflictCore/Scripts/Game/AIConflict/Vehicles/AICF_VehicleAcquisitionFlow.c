@@ -722,6 +722,24 @@ class AICF_VehicleAcquisitionFlow
 
 		AICF_TripOutcome economyOutcome = InspectPresetEconomyBeforeLease(trip, fleet, faction, requestState, plan, nowMs);
 		if (economyOutcome) return economyOutcome;
+		AICF_AIWorldQuotaService quotaService = AICF_AIWorldQuotaService.GetAuthorityForWorld(GetGame().GetWorld());
+		AICF_AIQuotaTripVehicleCreation quotaGuard;
+		AICF_VehicleLease acceptedLease = trip.GetLease();
+		if (quotaService && (!acceptedLease || !acceptedLease.HasPhysicalAsset()))
+		{
+			quotaGuard = AICF_AIQuotaTripVehicleCreation.Cast(requestState.GetQuotaCreation());
+			if (quotaGuard && !quotaGuard.IsCurrent())
+			{
+				requestState.ClearQuotaCreation();
+				quotaGuard = null;
+			}
+			if (!quotaGuard)
+			{
+				quotaGuard = AICF_AIQuotaTripVehicleCreation.Capture(trip, requestState);
+				if (!quotaGuard) return AICF_TripOutcome.Wait("VEHICLE_QUOTA_PENDING", BuildCausationId(trip, requestState, "QUOTA_WAIT"));
+				requestState.SetQuotaCreation(quotaGuard);
+			}
+		}
 
 		AICF_TripOutcome leaseOutcome = EnsureReservedLease(
 			trip,
@@ -740,6 +758,8 @@ class AICF_VehicleAcquisitionFlow
 		}
 		if (lease.GetState() != AICF_EVehicleLeaseState.RESERVED)
 			return FailClosed(trip, "ACQUISITION_LEASE_NOT_RESERVED", "LEASE_GUARD");
+		if (quotaService && (!quotaGuard || !quotaGuard.AttachPendingLease(fleet, lease)))
+			return FailClosed(trip, "VEHICLE_QUOTA_LEASE_IDENTITY_INVALID", "QUOTA_GUARD");
 
 		if (!requestState.CanAttempt(nowMs))
 		{
@@ -749,7 +769,9 @@ class AICF_VehicleAcquisitionFlow
 				"SPAWN_BACKOFF",
 				BuildCausationId(trip, requestState, "BACKOFF"));
 		}
-		if (!requestState.BeginAttempt(nowMs))
+		if (quotaGuard && !quotaGuard.PrepareAttempt(nowMs))
+			return AICF_TripOutcome.Wait("VEHICLE_QUOTA_PENDING", BuildCausationId(trip, requestState, "QUOTA_WAIT"));
+		if (!quotaService && !requestState.BeginAttempt(nowMs))
 			return FailClosed(trip, "SPAWN_ATTEMPT_REJECTED", "ATTEMPT_GUARD");
 
 		AICF_EVehicleKind kind;
@@ -757,7 +779,7 @@ class AICF_VehicleAcquisitionFlow
 			return EndRequest(trip, fleet, requestState, "VEHICLE_KIND_NOT_CONFIGURED", nowMs);
 		string causationId = BuildCausationId(trip, requestState, "SPAWN_ATTEMPT");
 		string identity = BuildIdentityContext(trip, requestState, lease, causationId);
-		ReportSpawnAttempt(trip, requestState, identity);
+		if (!quotaService) ReportSpawnAttempt(trip, requestState, identity);
 
 		array<ResourceName> candidates = {};
 		if (!ResolveTripCandidates(
@@ -892,6 +914,8 @@ class AICF_VehicleAcquisitionFlow
 				continue;
 			if (!SpawnCandidate(trip, faction, kind, candidates, selection, candidate, identity))
 			{
+				if (candidate.m_sFailureReason == "VEHICLE_QUOTA_PENDING")
+					return AICF_TripOutcome.Wait("VEHICLE_QUOTA_PENDING", causationId);
 				if (candidate.m_bTryNextPrefab)
 					continue;
 				if (IsRetryableSpawnFailure(candidate.m_sFailureReason))
@@ -1006,6 +1030,23 @@ class AICF_VehicleAcquisitionFlow
 		SCR_AIVehicleUsageComponent usage;
 		Vehicle spawnedVehicle;
 		string failureReason;
+		AICF_VehicleRequestState request = trip.GetRequestState();
+		AICF_AIQuotaTripVehicleCreation quotaGuard = AICF_AIQuotaTripVehicleCreation.Cast(request.GetQuotaCreation());
+		if (quotaGuard && quotaGuard.HasFactoryBody())
+		{
+			AICF_AIQuotaTripFactoryAttempt attempt = quotaGuard.GetAttempt();
+			AICF_FactionFleet pendingFleet = quotaGuard.GetFleet();
+			request.ClearQuotaCreation();
+			quotaGuard = AICF_AIQuotaTripVehicleCreation.Capture(trip, request);
+			if (!quotaGuard || !quotaGuard.AttachPendingLease(pendingFleet, trip.GetLease()))
+			{
+				candidate.m_sFailureReason = "VEHICLE_QUOTA_PENDING";
+				return false;
+			}
+			quotaGuard.AdoptAttempt(attempt);
+			request.SetQuotaCreation(quotaGuard);
+		}
+		int attemptBefore = request.GetTotalAttemptCount();
 		if (m_Spawner.TrySpawnSelectedSiteForAcquisition(
 			m_Campaign,
 			faction,
@@ -1014,13 +1055,16 @@ class AICF_VehicleAcquisitionFlow
 			identity,
 			spawnedVehicle,
 			usage,
-			failureReason))
+			failureReason,
+			quotaGuard))
 		{
+			if (quotaGuard && request.GetTotalAttemptCount() > attemptBefore) ReportSpawnAttempt(trip, request, BuildIdentityContext(trip, request, trip.GetLease(), BuildCausationId(trip, request, "SPAWN_ATTEMPT")));
 			AICF_VehicleBoardingSiteQuery.ReportSpawnedEntries(trip.GetAssignment().GetGroup(), spawnedVehicle, identity);
 			candidate.m_Vehicle = spawnedVehicle;
 			candidate.m_bEntityCreated = true;
 			return true;
 		}
+		if (quotaGuard && request.GetTotalAttemptCount() > attemptBefore) ReportSpawnAttempt(trip, request, BuildIdentityContext(trip, request, trip.GetLease(), BuildCausationId(trip, request, "SPAWN_ATTEMPT")));
 		candidate.m_sFailureReason = failureReason;
 		candidate.m_bEntityCreated = DidSpawnFailureCreateCandidate(candidate.m_sFailureReason);
 		candidate.m_bEntityDeleted = candidate.m_bEntityCreated;
@@ -1134,6 +1178,9 @@ class AICF_VehicleAcquisitionFlow
 			RollbackUnacceptedCandidate(candidate);
 			return EndRequest(trip, fleet, requestState, "FLEET_BIND_REJECTED", nowMs, true);
 		}
+		AICF_AIQuotaVehicleCreationGuard quotaGuard = requestState.GetQuotaCreation();
+		if (quotaGuard && !quotaGuard.RecordOwnLeaseBind(candidate.m_Vehicle))
+			return FailClosed(trip, "VEHICLE_QUOTA_BIND_RECEIPT_INVALID", "QUOTA_BIND");
 		if (paid > 0)
 		{
 			trip.MarkVehiclePresetDebited();
