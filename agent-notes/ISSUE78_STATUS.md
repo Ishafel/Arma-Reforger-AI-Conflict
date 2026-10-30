@@ -2,6 +2,23 @@
 
 ## Работа возобновлена после передачи
 
+Текущий RHS3 checkpoint на exact human383 (`EC9CDDA8`/`66B86FF5`/`C9CE1F49`):
+Арланд95, Everon95, север97 runtime cases PASS; каждый native0/ROSTER_READY/
+полный stopped log/hold≥300s/source383+2SHA0. Строгий итог FAIL: resource errors
+136/396/396; single-world минимум FPS43.5/27.3/36.4, Everon FPS≥30 FAIL.
+Все три процесса завершены, globalCIM[]21:54:29. Полные receipts и границы
+terminal-only проверки — [TESTING.md](TESTING.md); ordinary1800 обеих сторон,
+MOVING6 и quota acceptance этим bootstrap не закрыты.
+
+Compartment producer уже реализован и отдельно проверен на382:12native checks,
+2реальных newborn/entry, exact2character+1vehicle bindings и непрерывный known
+15s tail; native0/fatal0/source0, resources28 strictFAIL. Это не PASS human383
+под давлением. Более ранние «NOT IMPLEMENTED» и UNKNOWN ниже относятся к своим
+историческим checkpoints. Поздний pressure child-kind trace подготовлен для
+уточнения происхождения extra actor; overshoot пока не объявлен доказанным.
+
+### История checkpoints после возобновления
+
 Новый checkpoint: human bridge383 compile3graphs и frozen255/1005SHA0/6closed0
 PASS. Native player-body retirement+census restored подтверждены v11 server/client0/0;
 Catalog purchase остаётся FAIL300s до выбора записи. Scope и полный разбор —
@@ -91,11 +108,12 @@ raw roster damage observer и exact lease rpl_id в восстановлении
  Новые RHS/RHS+WCS bootstrap и полный набор фиксируются отдельными receipts
  в итоговом комментарии. Нельзя переносить их PASS на другой source hash.
 
-## Что осталось недоказанным
+## Что оставалось недоказанным в исторической передаче
 
 Полная native partition под давлением stock/managed/pending queues, initial
-inactive characters и native compartment newborn producer. Последний ещё
-NOT IMPLEMENTED. Original MOVING2→4→6 с production background (2/4 доказаны
+inactive characters и native compartment newborn producer. На том checkpoint
+последний был NOT IMPLEMENTED; текущая реализация и scoped native proof описаны
+выше. Original MOVING2→4→6 с production background (2/4 доказаны
 ранее,6нет), новые ordinary1800 обеих сторон, native correction branch,
 текущие client/JIP/retail identity и fixture-free player build остаются gates.
 Visual UX NOT RUN: нужны действия игрока с превью/hover/Automatic/ползунком/

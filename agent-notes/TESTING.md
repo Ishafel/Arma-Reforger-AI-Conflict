@@ -2,6 +2,34 @@
 
 ## Возобновление #78 — 30.10.2026
 
+Три текущих RHS bootstrap на exact human383 из `resumed-human-v20` завершены
+последовательно, по одному native world. В каждом stage383production+2readonly
+fixtures, rawSHA до/после без drift; подготовка Stock/RHS graph WB0. Body/Service/
+WorldState pins: `EC9CDDA8`/`66B86FF5`/`C9CE1F49`. Canonical CLI, ROSTER_READY,
+полные остановленные sibling logs и native0 подтверждены для всех трёх:
+
+| Вариант | Runtime cases | Hold после RUNTIME_DONE, с | Full fatal/project | Resource errors | Минимум FPS |
+|---|---:|---:|---:|---:|---:|
+| RHS Арланд | 95 PASS | 302.054 | 0/0 | 136 FAIL | 43.5 |
+| EveronRHS | 95 PASS | 304.075 | 0/0 | 396 FAIL | 27.3 FAIL |
+| EveronNorthRHS | 97 PASS | 304.466 | 0/0 | 396 FAIL | 36.4 |
+
+Строгий итог всех трёх — FAIL по полным resource/native error logs. Everon также
+не прошёл общий FPS≥30:27.3 в единственном world до ROSTER_READY;30 последующих
+samples после RUNTIME_DONE≥55.5 не отменяют FAIL, причина просадки UNKNOWN.
+На North во время окна выполнялись короткие Workbench проверки v16/v17; это
+не контроль без другой CPU нагрузки. North подтвердил7баз/2HQ/5points.
+Последний globalCIM[]21:54:29,
+собственных native процессов0. Это terminal map boot, не visual black-screen
+проверка, не quota pressure, не ordinary1800 или MOVING6.
+
+Evidence: `.codex-runtime/issue78-finalization-20261029/quota/rhs-human-mapboot-v2/`
+(`three-map-summary.json`, каждый `native-*/verdict.json`, полные logs/CLI/SHA/
+closed-inventory). Новый isolated runner `quota/RunCurrentHumanRHSBoot.ps1`
+в том же ignored checkpoint использует `-Phase Validate|Run|Audit -Variant
+RHS|EveronRHS|EveronNorthRHS -PreparedRoot ... -EvidenceRoot ...`; runtime только
+через `tools/Start-AICFRuntime.ps1`. Старые runners/stages не перезаписаны.
+
 Последний `resumed-human-v20`: **255/255 PASS**, collector0/exact unique union/
 Logistics1/1005frozenSHA0/6sessionsclosed0. Human bridge383payload
 `26652760F0A75381934BCE7AC5AB071E48DB19507F14A592189A14911D090823`:
