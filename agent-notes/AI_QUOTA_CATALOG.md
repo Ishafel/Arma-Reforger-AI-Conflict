@@ -272,4 +272,53 @@ exit0/validation/full3sibling fatal0, raw384+1=385/sourceSHA0; frozen V27
 Позднее doc-only уточнение результатов не изменяет frozen source.
 Evidence v21 compile и v22 controls:
 `.codex-runtime/issue78-finalization-20261030/catalog-native-v21-guard-diagnostics/`.
+
+## Native v23: достаточный баланс после subscription
+
+V22 source с отдельной client identity прошёл fresh elevated Workbench в stage
+v23 на frozenV27: exit0, validation successful, fatal0 во всех3полных sibling
+logs, raw384+fixture385, source drift0. Первый v22 запуск с неверными правами
+завершился native-1 на Steam platform init до validation; его логи сохранены.
+
+V23 public separate Server/Client дали native0/0. Actual client RPC42 получен,
+user/producer capture успешны, оба native subscription handle точны, ACK42
+доставлен серверу. Это подтверждает устранение client-realm дефекта fixture;
+ACK сам по себе не доказывает server resource registration. Следующий actual
+guard01:30:46.947 — `FUND_BEFORE_REJECT`: native consumer15600 при quote200,
+shortfall-15400. Pending setup продолжал требовать положительную недостачу и
+не возвращал управление к native selection. DONE01:35:02.694 — исходный
+`BOUNDED_TIMEOUT`,300249ms, selected/factory/header/callback/debit0.
+Server functional FAIL, fatal0/resources14/other24; client bootstrap functional
+PASS, fatal0/resources118/other24; strict оба FAIL. Полные остановленные логи,
+native exits, actual отдельные сессии и escalated process closure сохранены в
+`.codex-runtime/issue78-finalization-20261030/catalog-native-v23-client-identity-elevated/`.
+Причина перехода native balance к15600 отдельно не установлена; readback не
+превращается в утверждение о конкретном grid callback.
+
+Следующий fixture delta подтверждает уже достаточный native consumer только
+для собственного pending setup после matching ACK, при неизменных captured
+player/user/producer/resource/consumer/generator/entry/quote/serial. Повтор
+контекста выполняется после native getters и финального funding guard.
+Finite readback>=quote устанавливает только FundingConfirmed: generation не
+вызывается, FundingAttempted не подделывается. Отдельный receipt
+`NATIVE_ALREADY_FUNDED` содержит amount0/generation_attempted0. Положительная
+shortfall ветвь сохраняет единственный native generator и точный delta proof;
+начатый generation pending не может переключиться на обход delta.
+
+Штатные GetRequestState, slot, quota, paid native request, ровно один actual
+consumer debit и25s physical tail сохраняются. Auditor не меняется: generator
+receipt уже optional, настоящий payment обязателен. Actual replay старого Fund
+при15600/200 возвращает false, новый подтверждает только matching ACK без
+генерации;49cases/7unsafe — PASS, прежние22funding/5unsafe — PASS. Это source
+и replay; весь Catalog contract и3соседних контракта — PASS.
+
+Свежий v24 terminal elevated Workbench: exit0, validation successful,
+fatal0 во всех3полных sibling logs, source drift0. Это явно hybrid stage:
+production384 frozenV27 + reviewed checkout fixture `C1FF0C13…D9FEE7`,385files;
+public runner frozenV27 использовал RepositoryRoot=live и SourceRoot=frozenV27,
+runner/launcher/auditor SHA совпадают. Manifest `91E7EAF1…F498953`, evidence:
+`.codex-runtime/issue78-finalization-20261030/catalog-native-v24-already-funded/`.
+Оба набора source receipts и полный compile verdict сохранены. Full262PASS
+относится к frozenV27 и **не покрывает** этот поздний fixture delta.
+Native v24 **NOT RUN**, ожидает отдельной пары после очереди WCS-карт.
 Свежий compile: `catalog-native-v23-client-identity-elevated/compile-source-verdict.json`.

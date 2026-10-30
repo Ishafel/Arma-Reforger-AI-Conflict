@@ -329,6 +329,8 @@ modded class SCR_CatalogEntitySpawnerComponent
 				return false;
 			}
 			if (AICF_AIQuotaCatalogProbe.s_FundingAttempted) return AICF_QuotaProbeFundingReadback();
+			if (AICF_QuotaProbeConfirmAlreadyFunded()) return true;
+			if (AICF_AIQuotaCatalogProbe.s_Finished) return false;
 		}
 		AICF_AIQuotaCatalogIdentity producer = AICF_AIQuotaCatalogIdentity.Capture(GetOwner(), true);
 		SCR_ResourceComponent resource = GetSpawnerResourceComponent();
@@ -390,6 +392,50 @@ modded class SCR_CatalogEntitySpawnerComponent
 			return false;
 		}
 		return AICF_QuotaProbeFundingReadback();
+	}
+
+	bool AICF_QuotaProbeConfirmAlreadyFunded()
+	{
+		AICF_AIQuotaCatalogIdentity producer = AICF_AIQuotaCatalogProbe.s_FundingProducer;
+		AICF_AIQuotaCatalogIdentity user = AICF_AIQuotaCatalogProbe.s_User;
+		SCR_EntityCatalogEntry entry = AICF_AIQuotaCatalogProbe.s_FundingEntry;
+		SCR_ResourceComponent resource = AICF_AIQuotaCatalogProbe.s_FundingResource;
+		SCR_ResourceConsumer consumer = AICF_AIQuotaCatalogProbe.s_FundingConsumer;
+		SCR_ResourceGenerator generator = AICF_AIQuotaCatalogProbe.s_FundingGenerator;
+		SCR_PlayerController player = AICF_AIQuotaCatalogProbe.s_Player;
+		int serial = AICF_AIQuotaCatalogProbe.s_ResourceSerial;
+		int quote = AICF_AIQuotaCatalogProbe.s_FundingQuote;
+		if (!producer || !user || !player || serial <= 0 || quote <= 0 ||
+			AICF_AIQuotaCatalogProbe.s_FundingSpawner != this || AICF_AIQuotaCatalogProbe.s_FundingAttempted ||
+			AICF_AIQuotaCatalogProbe.s_FundingConfirmed || AICF_AIQuotaCatalogProbe.s_Finished ||
+			AICF_AIQuotaCatalogProbe.s_RequestedAt || AICF_AIQuotaCatalogProbe.s_ResourceAck != serial)
+		{
+			AICF_AIQuotaCatalogProbe.Finish(false, "ALREADY_FUNDED_CONTEXT_UNAVAILABLE");
+			return false;
+		}
+		float available = GetSpawnerResourceValue();
+		if (!AICF_QuotaProbeFundingCurrent(producer, resource, consumer, generator, entry, user.m_Entity, quote))
+		{
+			AICF_AIQuotaCatalogProbe.Finish(false, "ALREADY_FUNDED_CONTEXT_CHANGED");
+			return false;
+		}
+		// Pure repeat after all native getter/callback boundaries; never confirm a successor.
+		if (AICF_AIQuotaCatalogProbe.s_Finished || AICF_AIQuotaCatalogProbe.s_RequestedAt ||
+			AICF_AIQuotaCatalogProbe.s_FundingSpawner != this || AICF_AIQuotaCatalogProbe.s_FundingAttempted ||
+			AICF_AIQuotaCatalogProbe.s_FundingConfirmed || AICF_AIQuotaCatalogProbe.s_Player != player ||
+			AICF_AIQuotaCatalogProbe.s_User != user || AICF_AIQuotaCatalogProbe.s_FundingProducer != producer ||
+			AICF_AIQuotaCatalogProbe.s_FundingEntry != entry || AICF_AIQuotaCatalogProbe.s_FundingResource != resource ||
+			AICF_AIQuotaCatalogProbe.s_FundingConsumer != consumer || AICF_AIQuotaCatalogProbe.s_FundingGenerator != generator ||
+			AICF_AIQuotaCatalogProbe.s_ResourceSerial != serial || AICF_AIQuotaCatalogProbe.s_ResourceAck != serial ||
+			AICF_AIQuotaCatalogProbe.s_FundingQuote != quote)
+		{
+			AICF_AIQuotaCatalogProbe.Finish(false, "ALREADY_FUNDED_CONTEXT_STALE");
+			return false;
+		}
+		if (!(available >= quote && available <= 1000000000)) return false;
+		AICF_AIQuotaCatalogProbe.s_FundingConfirmed = true;
+		AICF_AIQuotaCatalogProbe.Log("NATIVE_ALREADY_FUNDED", string.Format("producer=%1 serial=%2 available=%3 effective_cost=%4 amount=0 generation_attempted=0 native_consumer=1 fixture_only=1", producer.m_Id, serial, available, quote));
+		return true;
 	}
 
 	bool AICF_QuotaProbeFundingReadback()
