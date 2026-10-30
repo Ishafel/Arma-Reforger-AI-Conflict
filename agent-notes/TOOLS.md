@@ -7,6 +7,26 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Структура и статус
 
+`Invoke-AICFQuotaCompartmentProbe.ps1` — отдельный PowerShell7 runner реального
+`BaseCompartmentSlot.SpawnCharacterInCompartment`. `-Phase Prepare` сохраняет
+точные bytes всех семи addons (кроме generated.rdb), late fixture, frozen auditor,
+canonical CLI и терминальный Workbench. `-Phase Run` использует тот же проверенный
+stage/manifest и запрещает повторный native launch. Пример с новым EvidenceRoot:
+
+```powershell
+pwsh -File tools/Invoke-AICFQuotaCompartmentProbe.ps1 -Phase Prepare -EvidenceRoot .codex-runtime/compartment-new -Variant Stock -ServerPort 2680
+pwsh -File tools/Invoke-AICFQuotaCompartmentProbe.ps1 -Phase Run -EvidenceRoot .codex-runtime/compartment-new -Variant Stock -ServerPort 2680
+```
+
+`-SourceRoot` предназначен для явно указанного fixture-free frozen payload;
+его точные файлы/SHA записываются в manifest. После runtime проверяются все
+source bytes и полные stopped sibling logs. Functional proof, fatal и все
+остальные native `(E/F)` считаются раздельно; ошибки ресурсов не становятся PASS.
+Сохранённый `native-initial-wait-v9`: exact382 Stock source,12functional checks
+PASS/native0/fatal0/source0, отдельно strictFAIL/resources28. Это не whole383,
+RHS, Catalog/payment или ordinary1800 proof. Fixture и oracle описаны в
+[TEST_FIXTURES.md](TEST_FIXTURES.md#персонаж-в-compartment-и-квоты).
+
 `Invoke-AICFVehicleEconomyDecline.ps1` запускает отдельные controlled
 `INSUFFICIENT`, `AFFORDABLE`, `DRAIN_AFTER_RESERVE` cases. Сохраняет exact production
 set/SHA, terminal Workbench, canonical CLI, frozen auditor и полные stopped logs.

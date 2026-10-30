@@ -10,6 +10,41 @@ Fixture не вызывает Expand/Request/MarkReady и не меняет pose
 60s observation deadline не продлевает production30s. Finish/Stop снимают Tick.
 Это MAX10 coverage, а не утверждение, что default создаёт200actors сразу.
 
+## Персонаж в compartment и квоты
+
+`AICF_AIQuotaCompartmentProbe.c` добавляется runner только в isolated stage как
+`Integration/AICF_ZZQuotaCompartmentProbe.c`; late имя нужно для override новых
+service methods. CLI `-aicfQuotaCompartmentProbe 1`, markers
+`[QUOTA_COMPARTMENT_PROBE]`. Public runner —
+`tools/Invoke-AICFQuotaCompartmentProbe.ps1`, команды в [TOOLS.md](TOOLS.md).
+
+После настоящего ROSTER_READY fixture выбирает prefab живого исходного бойца,
+создаёт одну свежую пустую stock UAZ на native8m-clear pad (максимум24queries),
+без teleport/health/activation/limit writes. При заполненном собственным token
+STOCK basket требует ноль native factory/entry и отменяет только свой token.
+Затем штатный compartment producer создаёт двух настоящих actors: первый новый
+empty stock group и второй actor в той же группе/машине. BOUND receipt проверяет
+character/car units до native Activate/GetIn; следующая factory выдаётся только
+после фактической первой посадки и свежего census, каждая factory ровно один раз.
+
+Окно15s требует непрерывного known census, тех же двух EntityID/componentRpl,
+здоровья, exact seats и одного car body. Каждый UNKNOWN poll сначала проверяет
+физическую identity/health/seat, затем сбрасывает только test window/polls.
+Capture/BuildCounts failure generation ловит UNKNOWN между polls. Нет повторной
+factory, нового runtime grace или изменения абсолютных300s. Первоначальный
+UNKNOWN до pressure только ждёт, до serial/reservation/factory. Stop отменяет
+свой неиспользованный token и снимает Close/timeout callbacks.
+
+`Test-AIQuotaCompartmentProbeContracts.ps1`:40source/4actual observer callback
+controls/36log cases/14настоящих WinPS5.1 CLI cases PASS, independent peer0.
+`Test-AIQuotaCompartmentLog.ps1` требует exact CLI, ROSTER_READY, DONE перед
+Game destroyed и все sibling logs; ENGINE(F)/SCRIPT(E/F)/VM/NULL fatal и
+прочие `(E/F)` не игнорируются. Native v9 exact382 Stock source:12checks PASS,
+2factory/2entry/2STOCK actors/1STOCK_VEHICLES body,15.068s/15polls known window,
+native0/fatal0/source0; **strictFAIL/resources28**. Старые v5/v7/v8 FAIL сохранены.
+Это не Catalog/payment, whole383/RHS или ordinary1800 proof. Evidence:
+`.codex-runtime/issue78-finalization-20261030/compartment-producer/`.
+
 ## Пресеты техники: issue #78
 
 Дополнение29.10: `AICF_GroupReplacementStressProbe.c` наблюдает два этапа
@@ -1149,6 +1184,7 @@ Server и client используют согласованный stage. Для R
 | Fixture | Назначение и ограничения | CLI параметры в исходнике |
 |---|---|---|
 | [AICF_AICombatInputProbe.c](../tests/fixtures/AICF_AICombatInputProbe.c) | Пустые weapon inputs; временно снимает selected-weapon reference | `aicfCombatInputProbe` |
+| [AICF_AIQuotaCompartmentProbe.c](../tests/fixtures/AICF_AIQuotaCompartmentProbe.c) | Реальный compartment producer, full-basket veto, два actors/один car body и continuous-known15s | `aicfQuotaCompartmentProbe` |
 | [AICF_ApproachRecoveryProbe.c](../tests/fixtures/AICF_ApproachRecoveryProbe.c) | Полные отряды, approach recovery и bounded shutdown | `aicfRecoveryProbe` |
 | [AICF_BarracksCombatProbe.c](../tests/fixtures/AICF_BarracksCombatProbe.c) | Подготовка казарм/supplies и размещение лидеров; не доказывает подход | `aicfBarracksCombatProbe` |
 | [AICF_BaseBuilderCompletionProbe.c](../tests/fixtures/AICF_BaseBuilderCompletionProbe.c) | Отказ completion на 45 секунд с последующей native clearance | `aicfBuilderCompletionProbe` |

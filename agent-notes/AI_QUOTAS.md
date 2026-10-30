@@ -241,9 +241,15 @@ factory и требует15 непрерывных секунд known census/д�
 occupants. UNKNOWN сбрасывает только это окно наблюдения; исходные300s,
 native identity, health и quota gates не меняются. Здоровье/identity/seat
 проверяются даже на UNKNOWN poll; физическая потеря не становится ожиданием.
-`native-initial-wait-v9` подготовлен: Workbench0,40source/4actual observer
-callbacks/36log cases/14настоящих WinPS5.1 CLI controls PASS. Его native run
-пока **NOT RUN** до завершения согласованного Catalog server/client pair.
+`native-initial-wait-v9` завершён: Workbench0,40source/4actual observer
+callbacks/36log cases/14настоящих WinPS5.1 CLI controls PASS, independent peer0.
+Его native functional **12checks PASS**: две настоящие factory/две принятые
+посадки, два exact STOCK character bindings и один STOCK_VEHICLES body, те же
+EntityID/Rpl/health и15.068s/15polls непрерывного known census. Восемь ранних
+observer resets не продлевали исходные300s; total fixture62.579s. Native0,
+full sibling fatal0, raw382 source drift0; strict **FAIL:28resource errors**.
+Это scoped Stock proof exact382 source с backend `AA82CE67`, а не новый
+whole-source383/RHS/ordinary gate. Свой сервер штатно остановлен, CIM0.
 Evidence: `.codex-runtime/issue78-finalization-20261030/compartment-producer/`.
 
 ## Проверка и доказательства
