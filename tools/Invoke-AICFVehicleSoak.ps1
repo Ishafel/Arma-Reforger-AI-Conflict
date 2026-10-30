@@ -14,7 +14,8 @@ param(
     [ValidateSet(1,2,3,4)][int]$ProofVersion=2,
     [switch]$LooseWeaponObserver,
     [switch]$RecruitmentDecisionObserver,
-    [switch]$QuotaCensusDecisionObserver
+    [switch]$QuotaCensusDecisionObserver,
+    [switch]$MobDecisionObserver
 )
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'AICF_VehicleSoakSources.ps1')
@@ -33,6 +34,7 @@ $taskOwnStage=!$StageRoot
 $taskObservers=@()
 if($RecruitmentDecisionObserver){$taskObservers+=[pscustomobject]@{name='RecruitmentDecisionObserver';source='tests/fixtures/AICF_RecruitmentDecisionProbe.c';relative='AIConflictCore/Scripts/Game/AIConflict/AICF_ZRecruitmentDecisionProbe.c';flag='-aicfRecruitmentDecisionProbe'}}
 if($QuotaCensusDecisionObserver){$taskObservers+=[pscustomobject]@{name='QuotaCensusDecisionObserver';source='tests/fixtures/AICF_AIQuotaCensusDecisionProbe.c';relative='AIConflictCore/Scripts/Game/AIConflict/Integration/AICF_ZZQuotaCensusDecisionProbe.c';flag='-aicfQuotaCensusDecisionProbe'}}
+if($MobDecisionObserver){$taskObservers+=[pscustomobject]@{name='MobDecisionObserver';source='tests/fixtures/AICF_MobDecisionProbe.c';relative='AIConflictCore/Scripts/Game/AIConflict/AICF_ZMobDecisionProbe.c';flag='-aicfMobDecisionProbe'}}
 if($SkipCompile -and $taskOwnStage){throw 'SkipCompile requires an existing compiled stage'}
 if(!$StageRoot){
     $StageRoot=Join-Path $taskEvidence 'stage'

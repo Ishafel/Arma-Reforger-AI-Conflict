@@ -1,5 +1,12 @@
 # Архитектура и навигация по исходникам
 
+`AICF_PlayerMobHoldPolicy.HasCurrentInternalTask` отделяет текущую пешую задачу
+игрока внутри MOB от требования выхода за границу MOB. Audit root учитывает
+только read-only proof exact intent/waypoint/native task/пешего состава; правило
+не объявляет прибытие или разрешённый idle. Исходные all-member arrival,
+meaningful-task и movement recovery остаются самостоятельными обязанностями.
+Границы и known leader-only ограничение — [PLAYER_MOB_TASK.md](PLAYER_MOB_TASK.md).
+
 Ручной preset теперь имеет retained `TACTICAL_DEPLOYMENT` для TRANSPORT/COMBAT:
 он сохраняет ту же оплачиваемую машину между пешими эпизодами. BehaviorFlow
 владеет физическими операциями и возвращает typed outcomes; Controller остаётся

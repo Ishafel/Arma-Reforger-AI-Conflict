@@ -3166,7 +3166,8 @@ class AICF_MatchController
 			// egress failure at the first deadline. Stalled groups receive an early
 			// identity-preserving nudge and, behind strict player/LOS/combat fences, one
 			// last-resort hidden relocation before the extended hard deadline.
-			bool mobPresenceRequiresEgress = atMob && !allowedException;
+			bool internalTask = AICF_PlayerMobHoldPolicy.HasCurrentInternalTask(slot, mainBase, STUCK_WATCHDOG_IGNORE_RADIUS_METERS);
+			bool mobPresenceRequiresEgress = atMob && !allowedException && !internalTask;
 			int commanderIntervalMs = m_Config.GetCommanderIntervalMs();
 			int outwardProgressAgeMs = slot.ObserveMobEgressOutwardProgress(
 				mobPresenceRequiresEgress,
@@ -3475,6 +3476,7 @@ class AICF_MatchController
 				outwardProgressAgeMs,
 				slot.GetMobEgressBestDistanceFromMob(),
 				slot.GetMobEgressLastHiddenRecoveryRejection());
+			mobEgressLine += string.Format(" internal_task=%1 egress_required=%2", internalTask, mobPresenceRequiresEgress);
 			AICF_Stage35Diagnostics.Error("MOB_EGRESS_DEADLINE_MISSED", mobEgressLine);
 		}
 	}
@@ -7158,6 +7160,14 @@ class AICF_MatchController
 			slotActivityLine += string.Format(" preset_destination_wait=%1", vehicleView && vehicleView.IsPresetDestinationWait());
 			slotActivityLine += string.Format(" native_vehicle_combat=%1", vehicleView && vehicleView.HasNativeCombatTask());
 			slotActivityLine += string.Format(" native_tactical_actor_task=%1", vehicleView && vehicleView.HasTacticalActorTask());
+			bool internalTask = AICF_PlayerMobHoldPolicy.HasCurrentInternalTask(slot, mainBase, STUCK_WATCHDOG_IGNORE_RADIUS_METERS);
+			bool egressAtMob = atMob;
+			float egressMemberDistance;
+			int egressAliveMembers;
+			int egressInsideMembers;
+			if (mainBase && mainBase.GetOwner() && TryObserveGroupMobEnvelope(group, mainBase.GetOwner().GetOrigin(), egressMemberDistance, egressAliveMembers, egressInsideMembers))
+				egressAtMob = egressInsideMembers > 0;
+			slotActivityLine += string.Format(" internal_task=%1 egress_required=%2", internalTask, egressAtMob && allowedIdleReason == "NONE" && !internalTask);
 			AICF_Stage35Diagnostics.Info("SLOT_ACTIVITY", slotActivityLine);
 		}
 	}

@@ -63,8 +63,10 @@ stage и полные US/USSR1800 runs не менялись этой подго
 
 Runner отдельно проверяется командой
 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/contracts/Test-VehicleSoakObserverRunnerContracts.ps1`.
-Его10cases запускают настоящий runner в отдельных WinPS-процессах с явно
-simulated git/compiler/native/auditor boundaries: off/каждый observer/оба,
-missing fixture каждого вида, SHA drift, неподтверждённое добавление после
-компиляции, реальные own-stage copies и missing source. При этом1800s/Proof4/BOTH
-сохраняются. Это CLI gate, а не запуск игры и не успешный runtime audit.
+Его19cases запускают настоящий runner в отдельных WinPS-процессах с явно
+simulated git/compiler/native/auditor boundaries: все8комбинаций трёх opt-in
+observers (включая `-MobDecisionObserver`), missing fixture, SHA drift,
+неподтверждённое добавление после компиляции, реальные own-stage copies и
+missing source. При этом1800s/Proof4/BOTH сохраняются. Targeted19PASS после
+расширения не заменяет Workbench или native gate; прежние10PASS относятся к
+версии с двумя observers. Это CLI gate, а не успешный игровой runtime audit.

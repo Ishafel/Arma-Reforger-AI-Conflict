@@ -191,6 +191,20 @@ counters разделены; повторных Refresh, дополнитель�
 Готовность его собственного compile/native gates проверяется отдельно.
 Подробности — [AI_QUOTAS.md](AI_QUOTAS.md#разбор-census-unknown-без-изменения-допуска).
 
+`AICF_MobDecisionProbe.c` — opt-in read-only observer решений allowed-idle и
+hidden MOB recovery. Public Soak подключает его через `-MobDecisionObserver`,
+stage filename `AICF_ZMobDecisionProbe.c`, CLI `-aicfMobDecisionProbe 1`.
+Три original-project single-super wrappers сохраняют actual return/out;
+последовательные snapshots читают pending/failed/intent, exact MOB origin,
+waypoint и native action/cause. Нет дополнительных terrain queries или
+action/health/clock writes. Бюджет32distinct records, overflow/scope loss
+означают incomplete observation. Native formation predicate повторно не
+вычисляется. Actual81/8unsafe и независимый Root replay PASS; combined Soak390/
+Multi388 terminal StockWB0/fullfatal0/sourceSHA0. Первый v5 compileFAIL из-за
+reserved `owned` сохранён, локальное имя исправлено в новом frozen V25.
+Native **NOT RUN**.
+Подробности — [MOB_DECISIONS.md](MOB_DECISIONS.md).
+
 `AICF_RecruitmentShortRecoveryProbe.c` включается isolated stage флагом
 `-aicfRecruitmentShortRecoveryProbe 1`. Создаёт настоящую US казарму относительно
 живого seed, сохраняет обычные движение, order lifecycle, supplies debit и

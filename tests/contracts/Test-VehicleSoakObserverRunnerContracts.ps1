@@ -12,7 +12,7 @@ $taskCore=Join-Path $taskRepo 'AIConflictCore/Scripts/Game/AIConflict';[void][IO
 $taskFixtures=Join-Path $taskRepo 'tests/fixtures'
 $taskAudits=Join-Path $taskRepo 'tests/log-audits'
 [void][IO.Directory]::CreateDirectory($taskFixtures);[void][IO.Directory]::CreateDirectory($taskAudits)
-$taskNames=@('AICF_VehicleSoakProbe.c','AICF_VehicleSoakRecoveryObservationProbe.c','AICF_RecruitmentDecisionProbe.c','AICF_AIQuotaCensusDecisionProbe.c')
+$taskNames=@('AICF_VehicleSoakProbe.c','AICF_VehicleSoakRecoveryObservationProbe.c','AICF_RecruitmentDecisionProbe.c','AICF_AIQuotaCensusDecisionProbe.c','AICF_MobDecisionProbe.c')
 foreach($name in $taskNames){Set-Content -LiteralPath (Join-Path $taskFixtures $name) ('MOCK ONLY '+$name)}
 $taskAudit=@'
 param($LogPath,$EvidenceRoot,$Faction,$MinimumSeconds,$ProofVersion)
@@ -53,19 +53,20 @@ $taskRunner=Join-Path $taskTools 'Invoke-AICFVehicleSoak.ps1'
 $taskShell=(Get-Command powershell.exe -CommandType Application).Source
 $taskControls=0
 $taskRows=@()
-function Stage([string]$Name,[bool]$Recruit,[bool]$Census){
+function Stage([string]$Name,[bool]$Recruit,[bool]$Census,[bool]$Mob=$false){
  $base=Join-Path $taskRoot ($Name+'-prepared');$stage=Join-Path $base 'stage';$core=Join-Path $stage 'AIConflictCore/Scripts/Game/AIConflict'
  [void][IO.Directory]::CreateDirectory($core)
  foreach($name in @('AICF_VehicleSoakProbe.c','AICF_VehicleSoakRecoveryObservationProbe.c')){Copy-Item -LiteralPath (Join-Path $taskFixtures $name) -Destination $core}
  if($Recruit){Copy-Item -LiteralPath (Join-Path $taskFixtures 'AICF_RecruitmentDecisionProbe.c') -Destination (Join-Path $core 'AICF_ZRecruitmentDecisionProbe.c')}
  if($Census){$dir=Join-Path $core 'Integration';[void][IO.Directory]::CreateDirectory($dir);Copy-Item -LiteralPath (Join-Path $taskFixtures 'AICF_AIQuotaCensusDecisionProbe.c') -Destination (Join-Path $dir 'AICF_ZZQuotaCensusDecisionProbe.c')}
+ if($Mob){Copy-Item -LiteralPath (Join-Path $taskFixtures 'AICF_MobDecisionProbe.c') -Destination (Join-Path $core 'AICF_ZMobDecisionProbe.c')}
  [pscustomobject]@{stage=$stage;base_commit=('0'*40);working_tree=$false;files=@(Get-AICFVehicleSoakSources $stage)}|ConvertTo-Json -Depth 5|Set-Content -LiteralPath (Join-Path $base 'source-manifest.json')
  Set-Content -LiteralPath (Join-Path $base 'compile-exit.txt') '0';$wb=Join-Path $base 'workbench';[void][IO.Directory]::CreateDirectory($wb);Set-Content -LiteralPath (Join-Path $wb 'script.log') 'Script validation successful.'
  return $stage
 }
-function RunCase([string]$Name,[string]$Stage,[bool]$Recruit,[bool]$Census,[bool]$Success,[string]$Failure){
+function RunCase([string]$Name,[string]$Stage,[bool]$Recruit,[bool]$Census,[bool]$Success,[string]$Failure,[bool]$Mob=$false){
  $e=Join-Path $taskRoot $Name;$argsPath=Join-Path $taskRoot ($Name+'-arguments.json')
- $bound=@{EvidenceRoot=$e;Faction='US';RepositoryRoot=$taskRepo;ProofVersion=4;DurationSeconds=1800;RecruitmentDecisionObserver=$Recruit;QuotaCensusDecisionObserver=$Census}
+ $bound=@{EvidenceRoot=$e;Faction='US';RepositoryRoot=$taskRepo;ProofVersion=4;DurationSeconds=1800;RecruitmentDecisionObserver=$Recruit;QuotaCensusDecisionObserver=$Census;MobDecisionObserver=$Mob}
  if($Stage){$bound.StageRoot=$Stage;$bound.SkipCompile=$true}
  $bound|ConvertTo-Json|Set-Content -LiteralPath $argsPath
  $output=Join-Path $taskRoot ($Name+'-output.txt')
@@ -81,10 +82,10 @@ function RunCase([string]$Name,[string]$Stage,[bool]$Recruit,[bool]$Census,[bool
   $runtime=Get-Content (Join-Path $e 'mock-runtime.json') -Raw|ConvertFrom-Json
   $audit=Get-Content (Join-Path $e 'mock-audit.json') -Raw|ConvertFrom-Json
   if($runtime.mode-ne'BOTH'-or$audit.minimum_seconds-ne1800-or$audit.proof_version-ne4){throw 'Existing full duration/commander/auditor changed'}
-  foreach($pair in @(@('-aicfRecruitmentDecisionProbe',$Recruit),@('-aicfQuotaCensusDecisionProbe',$Census))){$count=@($runtime.arguments|Where-Object{$_-eq$pair[0]}).Count;if($count-ne[int]$pair[1]){throw ('CLI opt-in mismatch '+$Name)};if($pair[1]-and$runtime.arguments[[array]::IndexOf($runtime.arguments,$pair[0])+1]-ne'1'){throw 'Observer value changed'}}
+  foreach($pair in @(@('-aicfRecruitmentDecisionProbe',$Recruit),@('-aicfQuotaCensusDecisionProbe',$Census),@('-aicfMobDecisionProbe',$Mob))){$count=@($runtime.arguments|Where-Object{$_-eq$pair[0]}).Count;if($count-ne[int]$pair[1]){throw ('CLI opt-in mismatch '+$Name)};if($pair[1]-and$runtime.arguments[[array]::IndexOf($runtime.arguments,$pair[0])+1]-ne'1'){throw 'Observer value changed'}}
   if($runtime.arguments[[array]::IndexOf($runtime.arguments,'-aicfVehicleSoakDurationMs')+1]-ne'1800000'){throw '1800s CLI changed'}
   $m=Get-Content (Join-Path $e 'source-manifest.json') -Raw|ConvertFrom-Json
-  if(@($m.observer_sources).Count-ne([int]$Recruit+[int]$Census)){throw 'Observer provenance missing'}
+  if(@($m.observer_sources).Count-ne([int]$Recruit+[int]$Census+[int]$Mob)){throw 'Observer provenance missing'}
   foreach($row in $m.observer_sources){if((Get-FileHash -LiteralPath $row.path).Hash-ne$row.sha256){throw 'Observer SHA receipt wrong'}}
  }else{
   if($code-eq0-or!(Get-Content $output -Raw).Contains($Failure)){throw ('Expected rejection missing '+$Name)}
@@ -94,15 +95,25 @@ function RunCase([string]$Name,[string]$Stage,[bool]$Recruit,[bool]$Census,[bool
  return $e
 }
 foreach($pair in @(@($false,$false),@($true,$false),@($false,$true),@($true,$true))){$name='shared-'+[int]$pair[0]+'-'+[int]$pair[1];$stage=Stage $name $pair[0] $pair[1];$null=RunCase $name $stage $pair[0] $pair[1] $true ''}
+foreach($pair in @(@($false,$false),@($true,$false),@($false,$true),@($true,$true))){$name='shared-mob-'+[int]$pair[0]+'-'+[int]$pair[1];$stage=Stage $name $pair[0] $pair[1] $true;$null=RunCase $name $stage $pair[0] $pair[1] $true '' $true}
 $stage=Stage missing-recruit $false $true;$null=RunCase missing-recruit $stage $true $true $false 'Requested observer fixture missing from stage: RecruitmentDecisionObserver'
 $stage=Stage missing-census $true $false;$null=RunCase missing-census $stage $true $true $false 'Requested observer fixture missing from stage: QuotaCensusDecisionObserver'
+$stage=Stage missing-mob $true $true;$null=RunCase missing-mob $stage $true $true $false 'Requested observer fixture missing from stage: MobDecisionObserver' $true
 $stage=Stage drift $true $true;Add-Content -LiteralPath (Join-Path $stage 'AIConflictCore/Scripts/Game/AIConflict/AICF_ZRecruitmentDecisionProbe.c') 'changed after compile';$null=RunCase drift $stage $true $true $false 'Stage source path or hash changed'
+$stage=Stage drift-mob $true $true $true;Add-Content -LiteralPath (Join-Path $stage 'AIConflictCore/Scripts/Game/AIConflict/AICF_ZMobDecisionProbe.c') 'changed after compile';$null=RunCase drift-mob $stage $true $true $false 'Stage source path or hash changed' $true
 $stage=Stage uncompiled-extra $false $false;Copy-Item -LiteralPath (Join-Path $taskFixtures 'AICF_RecruitmentDecisionProbe.c') -Destination (Join-Path $stage 'AIConflictCore/Scripts/Game/AIConflict/AICF_ZRecruitmentDecisionProbe.c');$null=RunCase uncompiled-extra $stage $true $false $false 'Stage source set changed'
+$stage=Stage uncompiled-mob $false $false;Copy-Item -LiteralPath (Join-Path $taskFixtures 'AICF_MobDecisionProbe.c') -Destination (Join-Path $stage 'AIConflictCore/Scripts/Game/AIConflict/AICF_ZMobDecisionProbe.c');$null=RunCase uncompiled-mob $stage $false $false $false 'Stage source set changed' $true
 $e=RunCase own-copy '' $true $true $false 'MOCK_COMPILE_PLAN_BOUNDARY_NO_WORKBENCH'
 $m=Get-Content (Join-Path $e 'source-manifest.json') -Raw|ConvertFrom-Json
 if(@($m.observer_sources).Count-ne2){throw 'Own stage did not copy both observers'}
 foreach($row in $m.observer_sources){if((Get-FileHash -LiteralPath (Join-Path $taskRepo $row.source)).Hash-ne$row.sha256-or(Get-FileHash -LiteralPath $row.path).Hash-ne$row.sha256){throw 'Own-stage observer copy changed'}}
+$e=RunCase own-copy-mob '' $true $true $false 'MOCK_COMPILE_PLAN_BOUNDARY_NO_WORKBENCH' $true
+$m=Get-Content (Join-Path $e 'source-manifest.json') -Raw|ConvertFrom-Json
+if(@($m.observer_sources).Count-ne3){throw 'Own stage did not copy all three observers'}
+foreach($row in $m.observer_sources){if((Get-FileHash -LiteralPath (Join-Path $taskRepo $row.source)).Hash-ne$row.sha256-or(Get-FileHash -LiteralPath $row.path).Hash-ne$row.sha256){throw 'Own-stage MOB observer copy changed'}}
 Remove-Item -LiteralPath (Join-Path $taskFixtures 'AICF_AIQuotaCensusDecisionProbe.c')
 $null=RunCase own-missing-source '' $true $true $false 'Requested observer source missing: QuotaCensusDecisionObserver'
+Remove-Item -LiteralPath (Join-Path $taskFixtures 'AICF_MobDecisionProbe.c')
+$null=RunCase own-missing-mob-source '' $false $false $false 'Requested observer source missing: MobDecisionObserver' $true
 $taskRows|ConvertTo-Json -Depth 4|Set-Content -LiteralPath (Join-Path $taskRoot 'verdict.json')
 "PASS Soak observer real separate WinPS CLI controls=$taskControls native_boundary=SIMULATED Workbench=NOT_RUN evidence=$taskRoot"
