@@ -94,6 +94,7 @@ class AICF_AIQuotaCatalogProbe
 	{
 		if (s_Player && s_ResourceSerial) s_Player.AICF_QuotaCatalogResourceStop(s_ResourceSerial);
 		AICF_AIQuotaCatalogResourceClient.Stop();
+		AICF_AIQuotaCatalogResourceClient.ClearNotes();
 		if (s_Service && s_Pressure) s_Service.CancelReservation(s_Pressure, s_Serial);
 		s_Pressure = null;
 		GetGame().GetCallqueue().Remove(Tick);
@@ -318,7 +319,15 @@ modded class SCR_CatalogEntitySpawnerComponent
 				return false;
 			}
 			if (AICF_AIQuotaCatalogProbe.s_FundingConfirmed) return true;
-			if (AICF_AIQuotaCatalogProbe.s_ResourceAck != AICF_AIQuotaCatalogProbe.s_ResourceSerial) return false;
+			if (AICF_AIQuotaCatalogProbe.s_ResourceAck != AICF_AIQuotaCatalogProbe.s_ResourceSerial)
+			{
+				if (AICF_AIQuotaCatalogProbe.s_ResourceLast != AICF_AIQuotaCatalogProbe.s_ResourceSerial)
+				{
+					AICF_AIQuotaCatalogProbe.s_ResourceLast = AICF_AIQuotaCatalogProbe.s_ResourceSerial;
+					AICF_AIQuotaCatalogProbe.Log("RESOURCE_HANDLES_PENDING", string.Format("serial=%1 ack=%2 funding_spawner_present=%3 generation_attempted=%4", AICF_AIQuotaCatalogProbe.s_ResourceSerial, AICF_AIQuotaCatalogProbe.s_ResourceAck, AICF_AIQuotaCatalogProbe.s_FundingSpawner != null, AICF_AIQuotaCatalogProbe.s_FundingAttempted));
+				}
+				return false;
+			}
 			if (AICF_AIQuotaCatalogProbe.s_FundingAttempted) return AICF_QuotaProbeFundingReadback();
 		}
 		AICF_AIQuotaCatalogIdentity producer = AICF_AIQuotaCatalogIdentity.Capture(GetOwner(), true);
@@ -329,7 +338,11 @@ modded class SCR_CatalogEntitySpawnerComponent
 		if (!AICF_QuotaProbeFundingCurrent(producer, resource, consumer, generator, entry, user, quote)) return false;
 		float before = GetSpawnerResourceValue();
 		float shortfall = quote - before;
-		if (!(before >= 0 && before < quote && shortfall > 0 && shortfall <= quote)) return false;
+		if (!(before >= 0 && before < quote && shortfall > 0 && shortfall <= quote))
+		{
+			AICF_AIQuotaCatalogResourceClient.Trace("FUND_BEFORE_REJECT", string.Format("producer=%1 before=%2 quote=%3 shortfall=%4 observation_only=1", producer.m_Id, before, quote, shortfall));
+			return false;
+		}
 		if (!AICF_AIQuotaCatalogProbe.s_FundingSpawner)
 		{
 			RplId resourceId = Replication.FindItemId(resource);
@@ -342,7 +355,9 @@ modded class SCR_CatalogEntitySpawnerComponent
 			AICF_AIQuotaCatalogProbe.s_FundingGenerator = generator;
 			AICF_AIQuotaCatalogProbe.s_FundingQuote = quote;
 			AICF_AIQuotaCatalogProbe.s_ResourceSerial = AICF_AIQuotaCatalogProbe.s_Service.AllocateContextSerial();
-			AICF_AIQuotaCatalogProbe.s_Player.AICF_QuotaCatalogResourceSubscribe(producer.m_Rpl.Id(), resourceId, AICF_AIQuotaCatalogProbe.s_ResourceSerial);
+			RplId producerRpcId = producer.m_Rpl.Id();
+			AICF_AIQuotaCatalogProbe.Log("RESOURCE_SUBSCRIBE_DISPATCH", string.Format("serial=%1 producer=%2 producer_rpl=%3 resource_rpl=%4 funding_spawner_present=%5", AICF_AIQuotaCatalogProbe.s_ResourceSerial, producer.m_Id, producerRpcId, resourceId, AICF_AIQuotaCatalogProbe.s_FundingSpawner != null));
+			AICF_AIQuotaCatalogProbe.s_Player.AICF_QuotaCatalogResourceSubscribe(producerRpcId, resourceId, AICF_AIQuotaCatalogProbe.s_ResourceSerial);
 			return false;
 		}
 		string generatorType = generator.Type().ToString();
@@ -598,6 +613,7 @@ modded class SCR_PlayerController
 	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
 	protected void RpcDo_AICFQuotaCatalogResourceSubscribe(RplId producer, RplId resource, int serial)
 	{
+		AICF_AIQuotaCatalogResourceClient.Trace("RPC_RECEIVED_" + serial.ToString(), string.Format("requested_serial=%1 producer_rpl=%2 resource_rpl=%3", serial, producer, resource));
 		AICF_AIQuotaCatalogResourceClient.Start(this, producer, resource, serial);
 	}
 	void AICF_QuotaCatalogResourceReady(int serial) { Rpc(RpcAsk_AICFQuotaCatalogResourceReady, serial); }
@@ -628,11 +644,46 @@ modded class SCR_PlayerController
 	protected void RpcDo_AICFQuotaCatalogProbeDone() { GetGame().RequestClose(); }
 }
 
+// Client observation identity only. It never grants server quota/factory authority.
+class AICF_QuotaCatalogClientIdentity
+{
+	IEntity m_Entity;
+	EntityID m_Id;
+	BaseWorld m_World;
+	RplComponent m_Rpl;
+	string m_sRpl;
+
+	static AICF_QuotaCatalogClientIdentity Capture(IEntity entity)
+	{
+		if (Replication.IsServer() || !GetGame() || !entity || entity.GetWorld() != GetGame().GetWorld()) return null;
+		AICF_QuotaCatalogClientIdentity identity = new AICF_QuotaCatalogClientIdentity();
+		identity.m_Entity = entity;
+		identity.m_Id = entity.GetID();
+		identity.m_World = entity.GetWorld();
+		identity.m_Rpl = RplComponent.Cast(entity.FindComponent(RplComponent));
+		if (!identity.m_Rpl) return null;
+		RplId rplId = identity.m_Rpl.Id();
+		if (!rplId.IsValid()) return null;
+		identity.m_sRpl = rplId.ToString();
+		if (!identity.IsCurrent()) return null;
+		return identity;
+	}
+
+	bool IsCurrent()
+	{
+		if (Replication.IsServer() || !GetGame() || !m_Entity || !m_World || GetGame().GetWorld() != m_World) return false;
+		if (m_Id == EntityID.INVALID || m_Entity.GetWorld() != m_World || m_Entity.GetID() != m_Id || m_World.FindEntityByID(m_Id) != m_Entity) return false;
+		if (!m_Rpl || m_Entity.FindComponent(RplComponent) != m_Rpl) return false;
+		RplId rplId = m_Rpl.Id();
+		return rplId.IsValid() && rplId.ToString() == m_sRpl && !m_sRpl.IsEmpty();
+	}
+}
+
 class AICF_AIQuotaCatalogResourceClient
 {
 	static SCR_PlayerController s_Player;
-	static ref AICF_AIQuotaCatalogIdentity s_User;
-	static ref AICF_AIQuotaCatalogIdentity s_Producer;
+	static ref AICF_QuotaCatalogClientIdentity s_User;
+	static ref AICF_QuotaCatalogClientIdentity s_Producer;
 	static SCR_ResourceComponent s_Resource;
 	static SCR_ResourceConsumer s_Consumer;
 	static SCR_ResourceGenerator s_Generator;
@@ -642,55 +693,117 @@ class AICF_AIQuotaCatalogResourceClient
 	static int s_Serial;
 	static ref SCR_ResourceSystemSubscriptionHandleBase s_ConsumerHandle;
 	static ref SCR_ResourceSystemSubscriptionHandleBase s_GeneratorHandle;
+	static ref array<string> s_Notes = {};
+	static bool s_bNotesOverflow;
+
+	static void Trace(string stage, string details)
+	{
+		string mode;
+		if (!System.GetCLIParam("aicfQuotaCatalogProbe", mode)) return;
+		string key = s_Serial.ToString() + "/" + stage;
+		if (s_Notes.Contains(key)) return;
+		if (s_Notes.Count() >= 64)
+		{
+			if (!s_bNotesOverflow) { s_bNotesOverflow = true; Print("[AICF][CATALOG_RESOURCE_CLIENT] stage=OVERFLOW observation_incomplete=1 limit=64"); }
+			return;
+		}
+		s_Notes.Insert(key);
+		Print(string.Format("[AICF][CATALOG_RESOURCE_CLIENT] serial=%1 stage=%2 resource_rpl_cached=%3 inventory_rpl_cached=%4 ", s_Serial, stage, s_ResourceId, s_InventoryId) + details);
+	}
+
+	static bool Reject(string reason)
+	{
+		Trace("CURRENT_REJECT_" + reason, "actual_first_false_guard=1 cached_branch=1");
+		return false;
+	}
+
+	static void ClearNotes() { s_Notes.Clear(); s_bNotesOverflow = false; }
 
 	static bool Current()
 	{
-		if (!s_Player || GetGame().GetPlayerController() != s_Player || !s_User || !s_User.IsCurrent()) return false;
-		if (s_Player.GetControlledEntity() != s_User.m_Entity || s_Player.GetPlayerId() <= 0) return false;
-		if (GetGame().GetPlayerManager().GetPlayerController(s_Player.GetPlayerId()) != s_Player) return false;
-		if (!s_Producer || !s_Producer.IsCurrent() || !s_Resource || !s_ResourceId.IsValid()) return false;
-		if (Replication.FindItem(s_ResourceId) != s_Resource || s_Resource.GetOwner() != s_Producer.m_Entity) return false;
-		if (!s_Inventory || s_Player.FindComponent(SCR_ResourcePlayerControllerInventoryComponent) != s_Inventory) return false;
-		if (!s_InventoryId.IsValid() || Replication.FindItemId(s_Inventory) != s_InventoryId) return false;
-		if (s_Resource.GetConsumer(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES) != s_Consumer) return false;
-		return s_Consumer && s_Generator && s_Resource.GetGenerator(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES) == s_Generator;
+		if (!s_Player) return Reject("PLAYER_NULL");
+		if (GetGame().GetPlayerController() != s_Player) return Reject("PLAYER_NOT_LOCAL");
+		if (!s_User) return Reject("USER_NULL");
+		if (!s_User.IsCurrent()) return Reject("USER_IDENTITY");
+		if (s_Player.GetControlledEntity() != s_User.m_Entity) return Reject("CONTROLLED_ENTITY");
+		if (s_Player.GetPlayerId() <= 0) return Reject("PLAYER_ID");
+		if (GetGame().GetPlayerManager().GetPlayerController(s_Player.GetPlayerId()) != s_Player) return Reject("PLAYER_MANAGER");
+		if (!s_Producer) return Reject("PRODUCER_NULL");
+		if (!s_Producer.IsCurrent()) return Reject("PRODUCER_IDENTITY");
+		if (!s_Resource) return Reject("RESOURCE_NULL");
+		if (!s_ResourceId.IsValid()) return Reject("RESOURCE_ID_INVALID");
+		if (Replication.FindItem(s_ResourceId) != s_Resource) return Reject("RESOURCE_REPLICATION");
+		if (s_Resource.GetOwner() != s_Producer.m_Entity) return Reject("RESOURCE_OWNER");
+		if (!s_Inventory) return Reject("INVENTORY_NULL");
+		if (s_Player.FindComponent(SCR_ResourcePlayerControllerInventoryComponent) != s_Inventory) return Reject("INVENTORY_COMPONENT");
+		if (!s_InventoryId.IsValid()) return Reject("INVENTORY_ID_INVALID");
+		if (Replication.FindItemId(s_Inventory) != s_InventoryId) return Reject("INVENTORY_REPLICATION");
+		if (s_Resource.GetConsumer(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES) != s_Consumer) return Reject("CONSUMER_POINTER");
+		if (!s_Consumer) return Reject("CONSUMER_NULL");
+		if (!s_Generator) return Reject("GENERATOR_NULL");
+		if (s_Resource.GetGenerator(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES) != s_Generator) return Reject("GENERATOR_POINTER");
+		return true;
 	}
 
 	static bool ExactHandle(SCR_ResourceSystemSubscriptionHandleBase handle, SCR_ResourceInteractor interactor)
 	{
-		if (!handle || !interactor) return false;
-		return handle.GetOwnerRplId() == s_InventoryId && handle.GetResourceComponentRplId() == s_ResourceId &&
-			handle.GetInteractorType() == interactor.Type() && handle.GetResourceType() == EResourceType.SUPPLIES &&
-			handle.GetResourceIdentifier() == EResourceGeneratorID.DEFAULT;
+		if (!handle) { Trace("HANDLE_NULL", "cached_branch=1"); return false; }
+		if (!interactor) { Trace("HANDLE_INTERACTOR_NULL", "cached_branch=1"); return false; }
+		RplId ownerId = handle.GetOwnerRplId();
+		if (ownerId != s_InventoryId) { Trace("HANDLE_OWNER_MISMATCH", "actual_owner=" + ownerId.ToString()); return false; }
+		RplId resourceId = handle.GetResourceComponentRplId();
+		if (resourceId != s_ResourceId) { Trace("HANDLE_RESOURCE_MISMATCH", "actual_resource=" + resourceId.ToString()); return false; }
+		typename actualType = handle.GetInteractorType();
+		typename expectedType = interactor.Type();
+		if (actualType != expectedType) { Trace("HANDLE_TYPE_MISMATCH", string.Format("actual_type=%1 expected_type=%2", actualType, expectedType)); return false; }
+		EResourceType resourceType = handle.GetResourceType();
+		if (resourceType != EResourceType.SUPPLIES) { Trace("HANDLE_RESOURCE_TYPE_MISMATCH", "actual_resource_type=" + resourceType.ToString()); return false; }
+		EResourceGeneratorID identifier = handle.GetResourceIdentifier();
+		if (identifier != EResourceGeneratorID.DEFAULT) { Trace("HANDLE_IDENTIFIER_MISMATCH", "actual_identifier=" + identifier.ToString()); return false; }
+		Trace("HANDLE_EXACT_" + actualType.ToString(), string.Format("actual_owner=%1 actual_resource=%2 actual_type=%3 expected_type=%4 resource_type=%5 identifier=%6", ownerId, resourceId, actualType, expectedType, resourceType, identifier));
+		return true;
 	}
 
 	static void Start(SCR_PlayerController player, RplId producerId, RplId resourceId, int serial)
 	{
-		if (s_Serial) return;
-		if (!player || GetGame().GetPlayerController() != player || serial <= 0 || !producerId.IsValid() || !resourceId.IsValid()) return;
+		if (s_Serial) { Trace("START_ALREADY_ACTIVE", "requested_serial=" + serial.ToString()); return; }
+		if (!player) { Trace("START_PLAYER_NULL", "cached_branch=1"); return; }
+		if (GetGame().GetPlayerController() != player) { Trace("START_PLAYER_NOT_LOCAL", "cached_branch=1"); return; }
+		if (serial <= 0) { Trace("START_SERIAL_INVALID", "cached_branch=1"); return; }
+		if (!producerId.IsValid()) { Trace("START_PRODUCER_ID_INVALID", "cached_branch=1"); return; }
+		if (!resourceId.IsValid()) { Trace("START_RESOURCE_ID_INVALID", "cached_branch=1"); return; }
 		s_Player = player;
 		s_Serial = serial;
-		s_User = AICF_AIQuotaCatalogIdentity.Capture(player.GetControlledEntity(), false);
+		Trace("START_BOUND", string.Format("producer_rpl=%1 resource_rpl=%2", producerId, resourceId));
+		s_User = AICF_QuotaCatalogClientIdentity.Capture(player.GetControlledEntity());
 		s_ResourceId = resourceId;
 		s_Resource = SCR_ResourceComponent.Cast(Replication.FindItem(resourceId));
-		if (s_Resource) s_Producer = AICF_AIQuotaCatalogIdentity.Capture(s_Resource.GetOwner(), false);
-		if (!s_Producer || !s_Producer.m_Rpl || s_Producer.m_Rpl.Id() != producerId) { Stop(); return; }
+		if (s_Resource) s_Producer = AICF_QuotaCatalogClientIdentity.Capture(s_Resource.GetOwner());
+		if (!s_Producer) { Trace("START_PRODUCER_CAPTURE_NULL", string.Format("resource_present=%1", s_Resource != null)); Stop(); return; }
+		if (!s_Producer.m_Rpl) { Trace("START_PRODUCER_RPL_NULL", "cached_branch=1"); Stop(); return; }
+		RplId actualProducerId = s_Producer.m_Rpl.Id();
+		if (actualProducerId != producerId) { Trace("START_PRODUCER_RPL_MISMATCH", "actual_producer_rpl=" + actualProducerId.ToString()); Stop(); return; }
 		s_Inventory = SCR_ResourcePlayerControllerInventoryComponent.Cast(player.FindComponent(SCR_ResourcePlayerControllerInventoryComponent));
 		if (s_Inventory) s_InventoryId = Replication.FindItemId(s_Inventory);
 		if (s_Resource) s_Consumer = s_Resource.GetConsumer(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES);
 		if (s_Resource) s_Generator = s_Resource.GetGenerator(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES);
-		if (!Current()) { Stop(); return; }
+		Trace("START_COMPONENTS_CACHED", string.Format("user_present=%1 producer_present=%2 resource_present=%3 inventory_present=%4 consumer_present=%5 generator_present=%6", s_User != null, s_Producer != null, s_Resource != null, s_Inventory != null, s_Consumer != null, s_Generator != null));
+		if (!Current()) { Trace("START_CURRENT_REJECTED", "actual_current=0"); Stop(); return; }
 		s_ConsumerHandle = GetGame().GetResourceSystemSubscriptionManager().RequestSubscriptionListenerHandleGraceful(s_Consumer, s_InventoryId);
-		if (!Current()) { Stop(); return; }
+		Trace("CONSUMER_HANDLE_RETURN", string.Format("handle_present=%1", s_ConsumerHandle != null));
+		if (!Current()) { Trace("START_CURRENT_AFTER_CONSUMER_REJECTED", "actual_current=0"); Stop(); return; }
 		s_GeneratorHandle = GetGame().GetResourceSystemSubscriptionManager().RequestSubscriptionListenerHandleGraceful(s_Generator, s_InventoryId);
-		if (!Current() || !ExactHandle(s_ConsumerHandle, s_Consumer) || !ExactHandle(s_GeneratorHandle, s_Generator)) { Stop(); return; }
+		Trace("GENERATOR_HANDLE_RETURN", string.Format("handle_present=%1", s_GeneratorHandle != null));
+		if (!Current() || !ExactHandle(s_ConsumerHandle, s_Consumer) || !ExactHandle(s_GeneratorHandle, s_Generator)) { Trace("START_HANDLES_REJECTED", "actual_handle_gate=0"); Stop(); return; }
 		SCR_ResourceSystemSubscriptionHandleBase consumerHandle = s_ConsumerHandle;
 		SCR_ResourceSystemSubscriptionHandleBase generatorHandle = s_GeneratorHandle;
 		Tick();
-		if (!Current() || s_Serial != serial || s_Player != player || s_ConsumerHandle != consumerHandle || s_GeneratorHandle != generatorHandle) return;
+		if (!Current() || s_Serial != serial || s_Player != player || s_ConsumerHandle != consumerHandle || s_GeneratorHandle != generatorHandle) { Trace("START_POST_TICK_SCOPE_REJECTED", "cached_branch=1"); return; }
+		Trace("ACK_DISPATCH", "requested_serial=" + serial.ToString());
 		player.AICF_QuotaCatalogResourceReady(serial);
-		if (s_Serial != serial || s_Player != player || s_ConsumerHandle != consumerHandle || s_GeneratorHandle != generatorHandle) return;
+		if (s_Serial != serial || s_Player != player || s_ConsumerHandle != consumerHandle || s_GeneratorHandle != generatorHandle) { Trace("START_POST_ACK_SCOPE_REJECTED", "cached_branch=1"); return; }
 		GetGame().GetCallqueue().CallLater(Tick, 1000, true);
+		Trace("KEEPALIVE_SCHEDULED", "interval_ms=1000");
 	}
 
 	static void Tick()
@@ -698,10 +811,10 @@ class AICF_AIQuotaCatalogResourceClient
 		SCR_ResourceSystemSubscriptionHandleBase consumerHandle = s_ConsumerHandle;
 		SCR_ResourceSystemSubscriptionHandleBase generatorHandle = s_GeneratorHandle;
 		int serial = s_Serial;
-		if (!Current() || !ExactHandle(s_ConsumerHandle, s_Consumer) || !ExactHandle(s_GeneratorHandle, s_Generator)) { Stop(); return; }
-		if (s_Serial != serial || s_ConsumerHandle != consumerHandle || s_GeneratorHandle != generatorHandle) return;
+		if (!Current() || !ExactHandle(s_ConsumerHandle, s_Consumer) || !ExactHandle(s_GeneratorHandle, s_Generator)) { Trace("TICK_CURRENT_OR_HANDLE_REJECTED", "cached_branch=1"); Stop(); return; }
+		if (s_Serial != serial || s_ConsumerHandle != consumerHandle || s_GeneratorHandle != generatorHandle) { Trace("TICK_PRE_POKE_SCOPE_REJECTED", "cached_branch=1"); return; }
 		consumerHandle.Poke();
-		if (!Current() || s_Serial != serial || s_ConsumerHandle != consumerHandle || s_GeneratorHandle != generatorHandle) return;
+		if (!Current() || s_Serial != serial || s_ConsumerHandle != consumerHandle || s_GeneratorHandle != generatorHandle) { Trace("TICK_POST_FIRST_POKE_REJECTED", "cached_branch=1"); return; }
 		generatorHandle.Poke();
 	}
 
@@ -713,6 +826,7 @@ class AICF_AIQuotaCatalogResourceClient
 		SCR_ResourceConsumer consumer = s_Consumer;
 		SCR_ResourceGenerator generator = s_Generator;
 		bool exact = Current();
+		Trace("STOP", string.Format("actual_current=%1 consumer_handle_present=%2 generator_handle_present=%3", exact, s_ConsumerHandle != null, s_GeneratorHandle != null));
 		s_ConsumerHandle = null;
 		s_GeneratorHandle = null;
 		s_Player = null;

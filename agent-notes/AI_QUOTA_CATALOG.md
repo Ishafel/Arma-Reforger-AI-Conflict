@@ -193,3 +193,83 @@ Evidence: `.codex-runtime/issue78-finalization-20261030/`
 actual replay — `issue78-finalization-20261029/quota/catalog-adapters/`
 `catalog-pending-after-v4.txt`. Fixture SHA `76CDB491…0437A9`, source manifest
 `D2AEA774…98B240`; точные hashes находятся в verdict.
+
+## Native v20 и точные resource checkpoints v21
+
+V20 использовал production384 frozenV25 с исправлением MOB и прежний Catalog
+fixture `76CDB491…0437A9`. Отдельные public Server/Client завершились native0/0,
+но server получил исходный `BOUNDED_TIMEOUT`,300798ms: выбранных entry,
+factory/callback/debit/header0. Client выполнил настоящий bootstrap игрока USSR.
+Server fatal0/resources14/other24; Client fatal0/resources118/other24; оба strict
+FAIL. Ни ACK, ни подтверждённого funding нет. V20 не записывал owner-client
+resource Start checkpoints, поэтому конкретный первый false guard **UNKNOWN**;
+отсутствие ACK не устанавливает причину. Полные остановленные логи и source
+receipts: `.codex-runtime/issue78-finalization-20261030/catalog-native-v20-mob-source/`.
+
+Первый WinPS5.1 wrapper завершился1 на native stderr warning до scripts, native
+exit UNKNOWN; его профиль сохранён отдельно. Повтор использовал документированный
+`pwsh`7 для обеих ролей; source/launcher/сроки не менялись. Это подтверждает
+требование shell из DEVELOPMENT, а не исправление Catalog.
+
+V21 добавляет только bounded diagnostics: authoritative dispatch с фактическими
+producer/resource Rpl IDs, один pending serial receipt, получение owner RPC,
+Start checkpoints, actual первый false guard `Current`/`ExactHandle`, результаты
+получения native handles и cached ID/type comparisons. Каждый interactor getter
+вызывается ровно в прежнем месте short circuit; для логирования используется
+полученное значение, дополнительные gameplay getters/CanSpawn/Current и refresh
+не вызываются. До64distinct notes на serial/stage; overflow означает неполное
+наблюдение. Stop очищает diagnostic notes при game end. Однократный generator,
+native funding/price/rank/slot/quota gates и исходный300s остаются прежними.
+
+Свежие targeted controls:22funding/5unsafe,13client handle lifecycle/3unsafe,
+22actual Current guard cases/3unsafe — PASS. Последние сравнивают результат и
+точный префикс/порядок16public native-boundary getters с прежним compound guard;
+для handle comparison отдельно проверяется short circuit всех6getters.
+Прежние callback/payment/log/native-super/separate-process CLI controls сохранены.
+V21 native **NOT RUN**; его отдельный Workbench выполнен ниже. Полный261PASS
+относится к frozenV25 до этого diagnostic delta. Старый v20 не переоценивается.
+
+## Client identity v22: исправление fixture
+
+Source review выявил детерминированный дефект owner-client setup: production
+`AICF_AIQuotaCatalogIdentity.Capture` и `IsCurrent` требуют server realm даже
+при `requireMaster=false`. Применение этого helper на client гарантированно
+возвращает null, если выполнение дошло до capture; последующий `Current`
+не позволяет отправить ACK. V20 не записывал получение RPC и Start, поэтому
+фактический первый runtime guard того запуска остаётся UNKNOWN. Source proof
+не доказывает прохождение более ранних native/RPC gates.
+
+V22 вводит только в opt-in fixture `AICF_QuotaCatalogClientIdentity` для двух
+полей ResourceClient: user и producer. Он требует client realm, ту же entity,
+main world, EntityID и world lookup, тот же присутствующий Rpl component и
+валидный неизменный RplId. Capture завершается повторным `IsCurrent`.
+Client master/proxy роли допустимы: authority не выводится из роли Rpl.
+Проверки local controller, PlayerManager и controlled body остаются прежними.
+Production server helper, server authority, quota/factory/economy gates,
+funding и исходные300s/25s не меняются.
+
+Прежние13lifecycle cases проверяли handles/`Tick`/`Stop` с подставленным
+контекстом и не исполняли identity capture: их PASS не доказывал client setup.
+Новый replay исполняет actual тела нового helper и production server helper:
+старый Capture отвергает client, новый принимает обе client Rpl роли,
+отвергает server и stale world/entity/lookup/Rpl/ID/teardown.30cases и7executed
+unsafe controls — PASS. Все прежние source/replay/CLI controls сохраняются;
+diagnostic wrapper extraction теперь ограничен точными modded классами,
+чтобы новый одноимённый Capture не подменял тестируемый wrapper.
+
+V21 immutable stage с fixture `B084D9A6…D1165F` скомпилирован: exit0,
+validation successful, fatal0 во всех3полных sibling logs, raw384+fixture385,
+source drift0. Native v21 **NOT RUN**; stage не обновлялся после v22 delta.
+V22 fixture `9848FDB7…AD5B4` прошёл свежий Stock WB в stage-v23:
+exit0/validation/full3sibling fatal0, raw384+1=385/sourceSHA0; frozen V27
+содержит topology fix `83E62641`. Compile session85753 closed0. Первый stage-v22
+запуск без необходимых прав завершился platform initialization FAIL/nativeWB-1,
+без validation success; его полные logs сохранены, stage не изменён.
+Исправный повтор выполнен явно elevated через `pwsh`. Native нового helper
+пока **NOT RUN**; эти compile/targeted результаты не переоценивают v20 timeout.
+Новый полный V27 завершён262/262PASS, collector0/exact union/Logistics1/
+1021SHA0/6actual sessions closed0; он включает новый client helper и diagnostics.
+Позднее doc-only уточнение результатов не изменяет frozen source.
+Evidence v21 compile и v22 controls:
+`.codex-runtime/issue78-finalization-20261030/catalog-native-v21-guard-diagnostics/`.
+Свежий compile: `catalog-native-v23-client-identity-elevated/compile-source-verdict.json`.
