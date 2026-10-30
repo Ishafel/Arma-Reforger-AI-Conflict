@@ -7,6 +7,12 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Структура и статус
 
+`Invoke-AICFQuotaStockPressure.ps1` — PowerShell7 Prepare/Run/Full для настоящего
+заполнения STOCK и обычного оплаченного найма AICF. Сохраняет все7raw addons,
+две fixture, frozen auditor, compile/source/CLI/CIM receipts и полные stopped
+logs; errors/FPS остаются отдельными строгими gates. Команды и узкий scope —
+[AI_QUOTA_STOCK_PRESSURE.md](AI_QUOTA_STOCK_PRESSURE.md).
+
 `Invoke-AICFQuotaCompartmentProbe.ps1` — отдельный PowerShell7 runner реального
 `BaseCompartmentSlot.SpawnCharacterInCompartment`. `-Phase Prepare` сохраняет
 точные bytes всех семи addons (кроме generated.rdb), late fixture, frozen auditor,

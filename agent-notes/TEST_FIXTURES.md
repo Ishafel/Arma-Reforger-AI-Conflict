@@ -10,6 +10,16 @@ Fixture не вызывает Expand/Request/MarkReady и не меняет pose
 60s observation deadline не продлевает production30s. Finish/Stop снимают Tick.
 Это MAX10 coverage, а не утверждение, что default создаёт200actors сразу.
 
+## Stock pressure и обычный набор
+
+`AICF_AIQuotaStockPressureProbe.c` с readonly `AICF_AIQuotaBootReadbackProbe.c`
+использует public `tools/Invoke-AICFQuotaStockPressure.ps1`. Source bytes и
+actual physical/reserved/intended не смешиваются. Текущий native385 —
+383production+2fixtures: Stock128/extra0/normal4paidjoins в прежний managed отряд
+до exact5 функционально PASS; resources28/minFPS22.2 — strict FAIL. Это не
+MOVING2→4→6 и не universal quota proof. Подробности, команды и исходные FAIL —
+[AI_QUOTA_STOCK_PRESSURE.md](AI_QUOTA_STOCK_PRESSURE.md).
+
 ## Персонаж в compartment и квоты
 
 `AICF_AIQuotaCompartmentProbe.c` добавляется runner только в isolated stage как

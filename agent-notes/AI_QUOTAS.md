@@ -32,6 +32,12 @@ STOCK128physical/reserved0, extraStock0 и четыре нормальных о�
 proof, не universal partition или MOVING6. Resources28/minFPS22.2 остаются FAIL;
 высокая измеренная стоимость RefreshCensus исследуется отдельно.
 
+Команды воспроизведения stock-pressure и точные границы доказательства —
+[AI_QUOTA_STOCK_PRESSURE.md](AI_QUOTA_STOCK_PRESSURE.md). Public runner сохраняет
+весь raw payload, две fixture, compile receipt, frozen auditor и stopped logs;
+сам public Run после публикации helper пока NOT RUN, прежний native использовал
+те же385 source bytes и тот же functional auditor.
+
 ## Владелец и бюджеты
 
 `AICF_AIWorldQuotaService` — authority/world-scoped владелец учёта и admission.
