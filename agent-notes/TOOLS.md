@@ -7,6 +7,18 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Структура и статус
 
+`Invoke-AICFVehicleEconomyDecline.ps1` запускает отдельные controlled
+`INSUFFICIENT`, `AFFORDABLE`, `DRAIN_AFTER_RESERVE` cases. Сохраняет exact production
+set/SHA, terminal Workbench, canonical CLI, frozen auditor и полные stopped logs.
+`SkipCompile` повторно связывает stage с реально компилировавшимся source manifest;
+native gameplay success не отменяет resourceFAIL. Команды и границы доказательства
+описаны в [VEHICLE_ECONOMY_DECLINE.md](VEHICLE_ECONOMY_DECLINE.md).
+E2 targeted evidence:114actual/4business mutants/2fixture mutations/35log cases,
+runner16actual/11mutants; три остановленных AFTER native cases имеют
+functional/fatalPASS и отдельно resources28FAIL. После настоящего request Reset
+live `MatchesIdentity` возвращает false; fixture связывает immutable receipt,
+проверенный до handoff. Эти узкие результаты не заменяют общий offline gate.
+
 `Invoke-AICFSpawnApproachFailure.ps1` создаёт isolated controlled UNKNOWN case;
 `Test-SpawnApproachFailureLog.ps1` отделяет functional outcome от strict native
 resources. Callback/fallback не снимает resource FAIL. Scenario runner

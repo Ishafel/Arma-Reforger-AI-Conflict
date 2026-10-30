@@ -8,6 +8,16 @@ class AICF_TransportTrip
 	protected ref array<IEntity> m_aVehiclePresetMembers = {};
 	protected ref array<EntityID> m_aVehiclePresetMemberIds = {};
 	protected bool m_bVehiclePresetDebited;
+	protected ref AICF_VehiclePresetEconomyDecision m_VehiclePresetEconomyDecline;
+	AICF_VehiclePresetEconomyDecision GetVehiclePresetEconomyDecline() { return m_VehiclePresetEconomyDecline; }
+	bool RecordVehiclePresetEconomyDecline(AICF_VehiclePresetEconomyDecision decision)
+	{
+		if (m_VehiclePresetEconomyDecline || !decision ||
+			decision.GetStatus() != AICF_EVehiclePresetEconomyDecision.INSUFFICIENT_AVAILABLE_SUPPLIES ||
+			!decision.IsCurrentPreflight(this) || !m_RequestState || m_RequestState.GetTotalAttemptCount() != 0) return false;
+		m_VehiclePresetEconomyDecline = decision;
+		return true;
+	}
 	protected ref AICF_VehicleBehaviorState m_BehaviorState = new AICF_VehicleBehaviorState();
 	AICF_VehicleBehaviorState GetBehaviorState() { return m_BehaviorState; }
 	AICF_VehiclePreset GetVehiclePreset() { return m_VehiclePreset; }

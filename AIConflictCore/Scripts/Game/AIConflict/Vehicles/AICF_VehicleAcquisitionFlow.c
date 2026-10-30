@@ -720,6 +720,9 @@ class AICF_VehicleAcquisitionFlow
 				BuildCausationId(trip, requestState, "CAP_WAIT_PENDING"));
 		}
 
+		AICF_TripOutcome economyOutcome = InspectPresetEconomyBeforeLease(trip, fleet, faction, requestState, plan, nowMs);
+		if (economyOutcome) return economyOutcome;
+
 		AICF_TripOutcome leaseOutcome = EnsureReservedLease(
 			trip,
 			fleet,
@@ -779,6 +782,42 @@ class AICF_VehicleAcquisitionFlow
 			identity,
 			causationId,
 			nowMs);
+	}
+
+	// Recheck even an unused reservation: native attachment returns to the next
+	// tick, so another transaction can consume stock before the first spawn.
+	protected AICF_TripOutcome InspectPresetEconomyBeforeLease(
+		AICF_TransportTrip trip, AICF_FactionFleet fleet, SCR_CampaignFaction faction,
+		AICF_VehicleRequestState requestState, AICF_VehicleSpawnPlan plan, int nowMs)
+	{
+		if (!trip.GetVehiclePreset()) return null;
+		AICF_VehicleLease existingLease = trip.GetLease();
+		if (existingLease)
+		{
+			if (!fleet || fleet.GetFactionKey() != trip.GetFactionKey() || !fleet.OwnsVehicleLease(existingLease))
+				return FailClosed(trip, "VEHICLE_ECONOMY_LEASE_IDENTITY_INVALID", "ECONOMY_PREFLIGHT");
+			if (!existingLease.MatchesTripIdentity(trip.GetFactionKey(), trip.GetSlotId(), trip.GetGroupGeneration(), trip.GetTripGeneration()))
+				return FailClosed(trip, "VEHICLE_ECONOMY_LEASE_IDENTITY_INVALID", "ECONOMY_PREFLIGHT");
+		}
+		if (trip.IsVehiclePresetDebited() || (existingLease && existingLease.HasPhysicalAsset())) return null;
+		if (existingLease && !AICF_VehiclePresetEconomyDecision.IsOwnUnusedReservation(trip, fleet, existingLease, existingLease.GetLeaseGeneration()))
+			return FailClosed(trip, "VEHICLE_ECONOMY_LEASE_STATE_INVALID", "ECONOMY_PREFLIGHT");
+		if (!requestState || requestState != trip.GetRequestState() || requestState.GetSpawnPlan() != plan)
+			return FailClosed(trip, "VEHICLE_ECONOMY_CONTEXT_INVALID", "ECONOMY_PREFLIGHT");
+		AICF_MatchController match = AICF_MatchController.GetActiveController();
+		AICF_EconomySystem economy;
+		if (match) economy = match.VehiclePresetEconomy();
+		if (!economy || !plan || !plan.GetSelection())
+			return EndRequest(trip, fleet, requestState, "VEHICLE_ECONOMY_CONTEXT_INVALID", nowMs, true);
+		AICF_VehiclePresetEconomyDecision decision = economy.InspectVehiclePresetPreflight(trip, faction, plan.GetSelection().m_Base, fleet);
+		if (!decision || decision.GetStatus() == AICF_EVehiclePresetEconomyDecision.INVALID_CONTEXT ||
+			decision.GetFleet() != fleet || !economy.IsVehiclePresetPreflightCurrent(trip, faction, decision))
+			return EndRequest(trip, fleet, requestState, "VEHICLE_ECONOMY_CONTEXT_INVALID", nowMs, true);
+		if (decision.GetStatus() != AICF_EVehiclePresetEconomyDecision.INSUFFICIENT_AVAILABLE_SUPPLIES) return null;
+		if (!trip.RecordVehiclePresetEconomyDecline(decision))
+			return EndRequest(trip, fleet, requestState, "VEHICLE_ECONOMY_RECEIPT_REJECTED", nowMs, true);
+		AICF_Stage4Diagnostics.Info("VEHICLE_PRESET_ECONOMY_DECLINED", decision.Details());
+		return EndRequest(trip, fleet, requestState, "VEHICLE_PRESET_ECONOMY_DECLINED", nowMs, false);
 	}
 
 	protected AICF_TripOutcome EnsureReservedLease(

@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Отличить нехватку средств до покупки машины от нарушения lifecycle | [VEHICLE_ECONOMY_DECLINE.md](VEHICLE_ECONOMY_DECLINE.md), typed pre-asset quote/receipt, own empty lease и terminal foot fallback |
 | Разобрать неполный native spawn и очередь замены отрядов | [GROUP_SPAWN.md](GROUP_SPAWN.md), GroupRuntime/InfantrySpawnPlacement и controlled replacement stress |
 | Исправить persistence leaks при direct-connect без backend identity | [PERSISTENCE_IDENTITY.md](PERSISTENCE_IDENTITY.md), native SpawnLogic identity boundary и separate client/JIP gate |
 | Разобрать native out-of-world-bounds у оружия и отделить main-world drop от private Equipment model | [TEST_FIXTURES.md](TEST_FIXTURES.md#read-only-loose-weapon--private-equipment-model-observer), fixture-only LooseWeaponObserver и отдельный controlled native-drop baseline |
