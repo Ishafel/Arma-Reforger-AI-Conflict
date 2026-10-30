@@ -30,6 +30,20 @@ Receipt `MOUNTED_HOLD` подтверждает непрерывное нахо�
 
 ## Ordinary war observation4
 
+Test-only damage observer читает сохранённую raw позицию исходного roster через
+fixture-only getter. Production `GetRosterMember` возвращает только `ALIVE`;
+его использование в подписке раньше обрывало журнал при `INCAPACITATED`, поэтому
+последующие попадания после native пробуждения могли остаться неизвестными.
+Exact actor/group/Rpl/world/generation и неизменённая raw позиция проверяются
+заново, переход в чужую native группу прекращает наблюдение. `Poll` выводит
+`VEHICLE_SOAK_DAMAGE_LIFE` только при смене фактического life state, включая
+возврат в `ALIVE` и `DEAD`; `cause=UNDETERMINED` сохраняется. Это диагностика,
+не разрешение считать неизвестную смерть объяснённой и не изменение health.
+Подписка снимается через прежний `Stop`/cleanup. Старые frozen логи не дополняются
+задним числом. Contract исполняет actual `IsCurrent` и raw getter: переходы
+INCAP→wake→DEAD, world/ID reuse, adoption и замену slot/generation, включая
+отрицательный контроль старого ALIVE-only getter.
+
 Новые fresh stages с `captured_death_policy=TYPED_NATIVE_ALL_DEAD_RELEASE_V1`
 дополнительно различают `CONFIRMED_NATIVE_ALL_DEAD_RETIREMENT`. Это только
 доказанная естественная гибель всех пяти admission actors: EntityID и component

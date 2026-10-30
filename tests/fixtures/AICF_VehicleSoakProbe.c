@@ -9,6 +9,17 @@ class AICF_VehicleSoakSurvivorProof
 	}
 }
 
+// Диагностика exact captured actor переживает INCAPACITATED. Production getter
+// GetRosterMember намеренно возвращает только ALIVE и для этой задачи непригоден.
+modded class AICF_GroupSlot
+{
+	IEntity AICF_VehicleSoakRawRosterMember(int position)
+	{
+		if (position < 0 || position >= m_aRosterMembers.Count()) return null;
+		return m_aRosterMembers[position];
+	}
+}
+
 class AICF_VehicleSoakDamageObserver
 {
 	protected AICF_GroupSlot m_Slot;
@@ -24,6 +35,7 @@ class AICF_VehicleSoakDamageObserver
 	protected int m_iGeneration;
 	protected int m_iStartedAt;
 	protected bool m_bBound;
+	protected string m_sLastLife = "NOT_OBSERVED";
 
 	static bool MatchesIdentity(bool exactActor, bool exactGroup, bool exactSlot, bool exactRpl, bool exactGeneration)
 	{
@@ -49,10 +61,18 @@ class AICF_VehicleSoakDamageObserver
 
 	bool IsCurrent()
 	{
-		if (!m_bBound || !m_Slot || !m_Actor || !m_Group || !m_Damage) return false;
+		if (!Replication.IsServer() || !GetGame() || !GetGame().GetWorld() || !m_bBound || !m_Slot || !m_Actor || !m_Group || !m_Damage ||
+			m_Actor.GetWorld() != GetGame().GetWorld() || m_Group.GetWorld() != GetGame().GetWorld() ||
+			GetGame().GetWorld().FindEntityByID(m_ActorId) != m_Actor || GetGame().GetWorld().FindEntityByID(m_GroupId) != m_Group)
+			return false;
+		AIControlComponent control = m_Actor.GetAIControlComponent();
+		AIAgent agent;
+		if (control) agent = control.GetControlAIAgent();
+		if (agent && (agent.GetControlledEntity() != m_Actor || (agent.GetParentGroup() && agent.GetParentGroup() != m_Group)))
+			return false;
 		return MatchesIdentity(m_Actor.GetID() == m_ActorId && m_Actor.GetDamageManager() == m_Damage,
 			m_Group.GetID() == m_GroupId && m_Slot.GetGroup() == m_Group,
-			m_Slot.GetRosterMember(m_iPosition) == m_Actor,
+			m_Slot.AICF_VehicleSoakRawRosterMember(m_iPosition) == m_Actor,
 			Replication.FindItemId(m_Actor).ToString() == m_sActorRpl && Replication.FindItemId(m_Group).ToString() == m_sGroupRpl,
 			m_Slot.GetSpawnGeneration() == m_iGeneration);
 	}
@@ -65,7 +85,15 @@ class AICF_VehicleSoakDamageObserver
 
 	void Poll()
 	{
-		if (!IsCurrent()) Stop();
+		if (!IsCurrent()) { Stop(); return; }
+		CharacterControllerComponent controller = m_Actor.GetCharacterController();
+		if (!controller) { Stop(); return; }
+		string life = SCR_Enum.GetEnumName(ECharacterLifeState, controller.GetLifeState());
+		if (life == m_sLastLife) return;
+		string details = string.Format("[AICF][VEHICLE_SOAK_DAMAGE_LIFE] faction=%1 numeric_slot=0 actor=%2 actor_rpl=%3 group=%4 generation=%5 position=%6 previous_life=%7 life=%8 elapsed_ms=%9",
+			m_sFaction, m_ActorId, m_sActorRpl, m_GroupId, m_iGeneration, m_iPosition, m_sLastLife, life, System.GetTickCount() - m_iStartedAt);
+		m_sLastLife = life;
+		Print(details + " captured_original=1 observer_only=1 cause=UNDETERMINED");
 	}
 
 	protected void OnDamage(BaseDamageContext context)
