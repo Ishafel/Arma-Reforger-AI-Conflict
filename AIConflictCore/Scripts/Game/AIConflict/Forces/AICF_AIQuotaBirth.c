@@ -16,6 +16,8 @@ class AICF_AIQuotaBirth
 	ref AICF_AIQuotaDispatch m_Ticket;
 	int m_iSlotIndex;
 	ResourceName m_Prefab;
+	ref AICF_AIQuotaVariantSet m_Variants;
+	ResourceName m_ProducedPrefab;
 	AICF_EAIQuotaBirthStatus m_Status;
 	IEntity m_Entity;
 	ref AICF_AIQuotaBody m_Body;

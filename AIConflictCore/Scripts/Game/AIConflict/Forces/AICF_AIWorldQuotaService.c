@@ -691,6 +691,12 @@ class AICF_AIWorldQuotaService
 		if (!nativeWorld || !faction || !nativeWorld.CanAIBeActivated() || !nativeWorld.CanActivateGroup(group) ||
 			!nativeWorld.CanLimitedAIBeAddedForFaction(faction.GetFactionKey()))
 			return null;
+		AICF_AIQuotaVariantSet variants = AICF_AIQuotaVariantSet.Capture(prefab);
+		if (!variants || !variants.MatchesRoot(prefab) || !IsConfigured() || IsQuotaAdmissionBusy() || !queue.IsCurrent()) return null;
+		if (!nativeWorld.CanAIBeActivated() || !nativeWorld.CanActivateGroup(group) ||
+			!nativeWorld.CanLimitedAIBeAddedForFaction(faction.GetFactionKey())) return null;
+		if (!IsConfigured() || IsQuotaAdmissionBusy() || !queue.IsCurrent()) return null;
+		if (!group.m_aUnitPrefabSlots || !group.m_aUnitPrefabSlots.IsIndexValid(index) || group.m_aUnitPrefabSlots[index] != prefab) return null;
 		AICF_AIQuotaDispatch ticket = queue.BeginDispatch(m_Ledger);
 		if (!ticket || !queue.IsCurrent())
 		{
@@ -703,6 +709,7 @@ class AICF_AIWorldQuotaService
 		birth.m_Ticket = ticket;
 		birth.m_iSlotIndex = index;
 		birth.m_Prefab = prefab;
+		birth.m_Variants = variants;
 		birth.m_Status = AICF_EAIQuotaBirthStatus.IN_NATIVE_FACTORY;
 		m_CurrentBirth = birth;
 		m_bNativeBirthBusy = true;
@@ -746,10 +753,23 @@ class AICF_AIWorldQuotaService
 			birth.m_Status = AICF_EAIQuotaBirthStatus.NATIVE_NULL;
 			return;
 		}
-		birth.m_Body = AICF_AIQuotaBody.Capture(entity, birth.m_Queue.GetBucket(), birth.m_Queue.m_Owner);
-		if (!birth.m_Body || !birth.IsRequestCurrent() || !AICF_AIQuotaBirth.IsNonPlayerUnassigned(entity) ||
-			SCR_ResourceNameUtils.GetPrefabName(entity) != birth.m_Prefab || m_aBodies.Count() >= AICF_AIQuotaMath.MAX_TOTAL_UNITS ||
-			FindBody(entity))
+		AICF_AIQuotaGroupQueue queue = birth.m_Queue;
+		AICF_AIQuotaDispatch ticket = birth.m_Ticket;
+		AICF_AIQuotaVariantSet variants = birth.m_Variants;
+		AICF_AIQuotaBody priorBody = birth.m_Body;
+		ResourceName produced = SCR_ResourceNameUtils.GetPrefabName(entity);
+		if (!IsGroupObservationCurrent(birth, queue, ticket, variants, priorBody, entity)) return;
+		AICF_AIQuotaBody body = AICF_AIQuotaBody.Capture(entity, queue.GetBucket(), queue.m_Owner);
+		if (!IsGroupObservationCurrent(birth, queue, ticket, variants, priorBody, entity)) return;
+		birth.m_Body = body;
+		if (!IsGroupObservationCurrent(birth, queue, ticket, variants, body, entity)) return;
+		if (variants && variants.MatchesRoot(birth.m_Prefab) && variants.Contains(produced)) birth.m_ProducedPrefab = produced;
+		bool valid = body && birth.IsRequestCurrent() && AICF_AIQuotaBirth.IsNonPlayerUnassigned(entity);
+		if (!variants || !variants.MatchesRoot(birth.m_Prefab) || !variants.Contains(produced)) valid = false;
+		if (m_aBodies.Count() >= AICF_AIQuotaMath.MAX_TOTAL_UNITS || FindBody(entity)) valid = false;
+		if (valid && (!entity || SCR_ResourceNameUtils.GetPrefabName(entity) != produced || birth.m_ProducedPrefab != produced)) valid = false;
+		if (!IsGroupObservationCurrent(birth, queue, ticket, variants, body, entity)) return;
+		if (!valid)
 		{
 			birth.m_Status = AICF_EAIQuotaBirthStatus.QUARANTINED;
 			birth.m_sRejectReason = "NONNULL_BODY_IDENTITY_CHANGED";
@@ -763,6 +783,18 @@ class AICF_AIWorldQuotaService
 		}
 		m_aBodies.Insert(birth.m_Body);
 		birth.m_Status = AICF_EAIQuotaBirthStatus.BOUND;
+		if (produced != birth.m_Prefab)
+			AICF_Stage1Diagnostics.Info("AI_QUOTA_NATIVE_VARIANT_BOUND", string.Format(
+				"requested_prefab=%1 produced_prefab=%2 index=%3 entity_key=%4 captured_one_level_set=1 native_randomizer_unchanged=1",
+				birth.m_Prefab, produced, birth.m_iSlotIndex, body.Key()));
+	}
+
+	protected bool IsGroupObservationCurrent(AICF_AIQuotaBirth birth, AICF_AIQuotaGroupQueue queue, AICF_AIQuotaDispatch ticket, AICF_AIQuotaVariantSet variants, AICF_AIQuotaBody body, IEntity entity)
+	{
+		if (!IsCurrentWorld() || !birth || birth != m_CurrentBirth || birth.m_Service != this || !m_bNativeBirthBusy) return false;
+		if (birth.m_bFinished || birth.m_Status != AICF_EAIQuotaBirthStatus.IN_NATIVE_FACTORY || birth == m_QuarantinedBirth) return false;
+		return birth.m_bFactoryObserved && birth.m_Queue == queue && birth.m_Ticket == ticket && birth.m_Variants == variants &&
+			birth.m_Body == body && birth.m_Entity == entity && (!body || body.m_Entity == entity) && ticket && !ticket.m_bClosed;
 	}
 
 	bool IsGroupBirthCurrent(AICF_AIQuotaBirth birth, bool assigned)
@@ -771,6 +803,8 @@ class AICF_AIWorldQuotaService
 			birth.m_Status != AICF_EAIQuotaBirthStatus.BOUND || !birth.m_bFactoryObserved || !birth.IsRequestCurrent() ||
 			!birth.m_Body || !birth.m_Body.MatchesIdentity() || birth.m_Body.m_Entity != birth.m_Entity)
 			return false;
+		if (!birth.m_Variants || !birth.m_Variants.Contains(birth.m_ProducedPrefab) ||
+			SCR_ResourceNameUtils.GetPrefabName(birth.m_Entity) != birth.m_ProducedPrefab) return false;
 		ChimeraCharacter character = ChimeraCharacter.Cast(birth.m_Entity);
 		if (!character || !character.GetAIControlComponent() || !character.GetCharacterController() ||
 			character.GetCharacterController().IsPlayerControlled() || !GetGame().GetPlayerManager() ||
@@ -870,11 +904,12 @@ class AICF_AIWorldQuotaService
 
 	bool CanRollbackGroupBirth(AICF_AIQuotaBirth birth)
 	{
-		return IsCurrentWorld() && birth && birth == m_CurrentBirth && birth.m_Service == this && m_bNativeBirthBusy &&
-			!birth.m_bFinished && birth.m_bFactoryObserved && birth.m_Entity && birth.m_Body &&
-			birth.m_Status != AICF_EAIQuotaBirthStatus.NATIVE_NULL && !birth.IsRequestCurrent() &&
-			birth.m_Body.m_Entity == birth.m_Entity && birth.m_Body.MatchesIdentity() &&
-			SCR_ResourceNameUtils.GetPrefabName(birth.m_Entity) == birth.m_Prefab &&
+		if (!IsCurrentWorld() || !birth || birth != m_CurrentBirth || birth.m_Service != this || !m_bNativeBirthBusy) return false;
+		if (birth.m_bFinished || !birth.m_bFactoryObserved || !birth.m_Entity || !birth.m_Body) return false;
+		if (birth.m_Status == AICF_EAIQuotaBirthStatus.NATIVE_NULL || birth.IsRequestCurrent()) return false;
+		if (birth.m_Body.m_Entity != birth.m_Entity || !birth.m_Body.MatchesIdentity()) return false;
+		if (!birth.m_Variants || !birth.m_Variants.Contains(birth.m_ProducedPrefab)) return false;
+		return SCR_ResourceNameUtils.GetPrefabName(birth.m_Entity) == birth.m_ProducedPrefab &&
 			AICF_AIQuotaBirth.IsNonPlayerUnassigned(birth.m_Entity);
 	}
 

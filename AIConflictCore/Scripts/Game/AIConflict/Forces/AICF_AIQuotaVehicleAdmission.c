@@ -421,7 +421,10 @@ modded class AICF_AIWorldQuotaService
 		if (!nativeWorld || !nativeWorld.CanAIBeActivated() || !nativeWorld.CanActivateGroup(group) ||
 			!nativeWorld.CanLimitedAIBeAddedForFaction(context.m_sFaction)) return null;
 		AICF_AIQuotaVehicleOwner owner = AICF_AIQuotaVehicleOwner.Capture(this, context.m_SeatScope.m_Vehicle);
-		AICF_AIQuotaVehicleUse use = AICF_AIQuotaVehicleUse.Capture(context.m_SeatScope.m_Vehicle, m_Census);
+		// VehicleUse держит weak row. Character ReserveUnits обновляет census:
+		// старый snapshot обязан жить до последнего повторного physical fence.
+		ref AICF_AIQuotaCensus capturedCensus = m_Census;
+		AICF_AIQuotaVehicleUse use = AICF_AIQuotaVehicleUse.Capture(context.m_SeatScope.m_Vehicle, capturedCensus);
 		if (!owner || !owner.CanEnter() || !use || !use.IsCurrent()) return null;
 		AICF_AIQuotaBody body = FindBody(context.m_SeatScope.m_Vehicle);
 		if (body)
@@ -449,7 +452,7 @@ modded class AICF_AIWorldQuotaService
 		context.m_CarBody = body;
 		m_aCompartmentCreations.Insert(context);
 		context.m_CharacterReservation = ReserveUnits(AICF_EAIQuotaBucket.STOCK, 1, context.m_iSerial);
-		if (!context.m_CharacterReservation || !context.IsCurrent() || !use.IsCurrent())
+		if (!context.m_CharacterReservation || !context.IsCurrent() || !capturedCensus.IsCurrent() || !use.IsCurrent())
 		{
 			CloseCompartmentCreation(context);
 			return null;

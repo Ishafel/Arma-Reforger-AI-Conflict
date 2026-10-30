@@ -62,6 +62,8 @@ public static class CharacterCases
   Setup();A.Controller.Life=999;Need(!Read(out counts,out census),"unknown life state cannot masqueradeDEAD");
   Setup();Need(Read(out counts,out census),"actual existing body capture");Apply(counts,census);A.Rpl.R.Value++;
   Need(!Read(out counts,out census),"replaced captured component Rpl cannot free or reuse old body");
+  Setup();Need(Read(out counts,out census),"actual before human proxy transition capture");Apply(counts,census);A.Controller.Player=true;Runtime.Game.Players.PlayerId=1;A.Rpl.Master=false;
+  Need(!Read(out counts,out census)&&S.m_aBodies.Count()==1&&S.m_Ledger.GetPhysical(1)==1,"conditional AI-to-human proxy transition is UNKNOWN and retains original charged custody; native topology NOT RUN");
   Setup();Need(Read(out counts,out census),"actual existing absence capture");Apply(counts,census);S.m_World.Agents.Clear();Runtime.Game.World.Entities.Remove(A.Id);S.m_aBodies[0].m_Entity=null;
   Need(Read(out counts,out census)&&counts[1]==0&&S.m_aBodies.Count()==0,"exact world absence releases bound existing body");
   Setup();Need(Read(out counts,out census),"actual existing registered count");Apply(counts,census);S.m_World.Agents.Add(Add(new AIAgent()));

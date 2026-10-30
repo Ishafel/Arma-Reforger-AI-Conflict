@@ -162,7 +162,10 @@ class AICF_AIQuotaCatalogBasket
 		basket.m_EntryPrefab = entry.GetPrefab();
 		basket.m_iPending = basket.m_iQuoted;
 		basket.m_Producer = AICF_AIQuotaCatalogIdentity.Capture(spawner.GetOwner(), true);
-		basket.m_User = AICF_AIQuotaCatalogIdentity.Capture(user, true);
+		// A remote human's body is a valid server-side Rpl proxy. Authority
+		// belongs to the master producer; the requester is bound to the exact
+		// current PlayerManager/controller/body identity below.
+		basket.m_User = AICF_AIQuotaCatalogIdentity.Capture(user, false);
 		basket.m_PlayerController = AICF_AIQuotaCatalogIdentity.Capture(controller, false);
 		basket.m_aRootPrefabs.Insert(entry.GetPrefab());
 		array<ResourceName> variants = {};
@@ -200,6 +203,7 @@ class AICF_AIQuotaCatalogBasket
 		// of an otherwise valid native body.
 		if (m_bCancelled || !m_Service || !m_Service.IsOwnerCurrent() || m_Service.GetEpoch() != m_iEpoch) return false;
 		if (m_iSerial <= 0 || !m_Producer || !m_Producer.IsCurrent() || !m_User || !m_User.IsCurrent() || !IsCounterOwnerCurrent()) return false;
+		if (!m_User.m_Rpl || !m_User.m_Rpl.Id().IsValid()) return false;
 		if (!m_Spawner || m_Spawner.GetOwner() != m_Producer.m_Entity || !SCR_CatalogEntitySpawnerComponent.INSTANCES.Contains(m_Spawner)) return false;
 		if (!m_GroupController || m_Controller.FindComponent(SCR_PlayerControllerGroupComponent) != m_GroupController || !m_GroupController.IsPlayerLeaderOwnGroup()) return false;
 		if (!m_PlayerGroup || !m_PlayerGroup.IsCurrent() || !m_PlayerSlave || !m_PlayerSlave.IsCurrent()) return false;

@@ -21,6 +21,64 @@ fixture/bootstrap/log-auditor изменения проверяются отде
 этому All. В частности выявленный Root CLI-counterexample ENGINE(F)/GUI(E) в
 новых Catalog/Compartment auditors требует строгого исправления и supplement.
 
+Поздний actual supplement: compartment native auditor25source/23log/14настоящих
+WinPS5.1 CLI cases PASS+independent peer. ENGINE(F), GUI(E), unknown(E), plain
+Virtual Machine Exception/Application crashed, отсутствие CLI/ROSTER_READY/
+GameDestroyed и native exit-1 отклоняются. Это test-only delta после full247.
+Native compartment-v3: setup/fullStock0factory/preserved/release PASS, но first
+positive0factory FAIL/native0/fatal0/resources28FAIL. DIAG-v4 зафиксировал exact
+USE_REJECTED had_native_row1/native_row_present0 при charReservation1/available1,
+ctxCurrent1/carHoldCurrent1/freshUseCurrent1/metadata1/1/native3gates1. Причина —
+weak old census row после ReserveUnits→RefreshCensus. Strong local census anchor
+с прежним post-reservation IsCurrent проходит28actual/8unsafe, backend116/8 и
+Entry56, independent peer0. Native positive ещё выполняется; первые fixture WB
+ordering/prototype FAIL сохранены.
+
+Native stock-pressure-v1 остановлен после доказанного production отказа, до600s:
+штатный randomizer Campaign_US_AI вернул конкретный Rifleman variant, а строгая
+requested-prefab equality объявила NONNULL_BODY_IDENTITY_CHANGED. Native body и
+reservation удержаны до остановки собственного world, обхода admission нет.
+Native-1/addressed stop, source0, fullfatal3 (тот же quarantine в sibling logs),
+resources24FAIL. Это не PASS pressure; closed-set variant fix исследуется.
+
+После requester proxy/census lifetime fixes заморожен resumed-combined-v17:
+**249/249 PASS**, collector0/exact union/Logistics1/992SHA0/6sessionsclosed0;
+terminal Stock/RHS/ArlandWCSRHS3/3 PASS,382payload638C6320…770A2/postSHA0.
+Последующий randomizer fix и fixture async/logging delta в snapshot не входят.
+V17 freeze первоначально завершился ошибкой
+WinPS5.1 scheduling DateTime array conversion; точный уже скопированный source
+планируется тем же helper через PowerShell7, состав проверок не менялся.
+
+Следующий variant-v18 compile получил Formula too complex в CanRollbackGroupBirth
+с каскадными ошибками классов; все3graphs FAIL/native-1. Полные логи сохранены,
+условие разбивается без ослабления guards, post-metadata native gates и reentry
+fences уточняются по actual replay. Full V18 не запускался: snapshot известного
+compile FAIL не объявляется новым PASS.
+
+Исправленный `resumed-native-v19`: **250/250 PASS**, collector0/exact unique union/
+Logistics1/994frozenSHA0/6sessionsclosed0. Current383payload
+`5E7A1FAB07A52BD075FF5E937CE15CBBA39AD6CEEBFFA9D5454AE2D03D7FB255`:
+terminal Stock/RHS/ArlandWCSRHS3/3 PASS/native0/validation/fullfatal0/postSHA0.
+Variant actual28/8/4source и independent peer закрывают stale observation writes;
+native randomizer chain Ex(true) сохранён. Более поздние compartment initial-wait/
+known-tail, Catalog telemetry и новый tracked pressure harness — отдельные
+test-only supplements после этого freeze, не входят в250.
+
+Native stock-pressure-v2 на этом383: native0/wall263.132s/fullfatal0/project0/
+source385SHA0 (383production+2fixtures), functional audit0 и Root independent
+full-stopped review0. STOCKphysical128/reserved0 удерживались156024ms, extraStock
+дал0actors/0intended increment; normal4paidjoins довели прежний US slot0/group/
+generation/originalactor до exact5. Scope только STOCK_CHARACTER_MANAGED_RECRUIT,
+не universal quota/MOVING2→4→6. Native root→Rifleman variant BOUND подтверждён.
+Resources28FAIL/minFPS22.2 (17из24samples ниже30), strict overallFAIL. Readonly
+super-once RefreshCensus profiler выявил высокую стоимость; оптимизация pending.
+
+Catalog diagnostic-v6 подтвердил настоящий server avatar proxy: actual player1/
+actor1, Rpl present1/valid1/mainWorld1/master0. Production master-veto reproducer
+FAIL; минимальный requester-only fix131actual/11unsafe/3pins, peer0 и terminal
+Stock/RHS/ArlandWCSRHS3/3 PASS. Это production delta после full247/38288B2;
+нужен новый полный набор и native positive. Producer/AI master не ослаблялись.
+
 Current frozen382production `88B2F10A1CF26726F9BB235341DADBED1A060F4D563517DC8D3C99E155DEB075`:
 terminal Workbench Stock/RHS/ArlandWCSRHS3/3 PASS, fullfatal0/postSHA0/current
 production match0. Включены новые trip/site/prefab/freshclock guards, existing

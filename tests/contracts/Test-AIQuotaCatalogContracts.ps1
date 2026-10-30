@@ -95,6 +95,9 @@ MANAGER_METHODS
 BASKET_SOURCE
 public static class Fixture{public static SCR_CatalogEntitySpawnerComponent Shop;public static SCR_EntityCatalogEntry Entry;public static SCR_EntitySpawnerSlotComponent Slot;public static SCR_SpawnerAIGroupManagerComponent Manager;public static int NextId;public static T Entity<T>()where T:IEntity,new(){var e=new T{Id=NextId++,World=Game.Current.World};e.Rpl.Value.Value="rpl"+e.Id;Game.Current.World.Entities[e.Id]=e;return e;}public static SCR_ChimeraCharacter NewActor(){return Entity<SCR_ChimeraCharacter>();}public static SCR_AIGroup NewGroup(){return Entity<SCR_AIGroup>();}public static void Reset(){NextId=1;Game.Current=new Game{World=new BaseWorld(),Service=new AICF_AIWorldQuotaService()};Game.Current.Mode=Entity<BaseGameMode>();var c=Entity<SCR_PlayerController>();c.Rpl.Master=false;c.Controlled=Entity<SCR_ChimeraCharacter>();c.GroupComponent.Group=Entity<SCR_AIGroup>();c.GroupComponent.Group.Slave=Entity<SCR_AIGroup>();Game.Current.Players.Controller=c;Shop=new SCR_CatalogEntitySpawnerComponent{Owner=Entity<IEntity>()};SCR_CatalogEntitySpawnerComponent.INSTANCES.Clear();SCR_CatalogEntitySpawnerComponent.INSTANCES.Add(Shop);Entry=new SCR_EntityCatalogEntry();Shop.Entry=Entry;Slot=new SCR_EntitySpawnerSlotComponent{Owner=Entity<IEntity>(),Rally=new SCR_EntityLabelPointComponent{Owner=Entity<IEntity>()}};Slot.Owner.Rpl=null;Slot.Rally.Owner.Rpl=null;Shop.Slot=Slot;Manager=new SCR_SpawnerAIGroupManagerComponent{Owner=Game.Current.Mode};Resource.Valid=true;Replication.Server=true;}public static AICF_AIQuotaCatalogBasket Capture(){return AICF_AIQuotaCatalogBasket.Capture(Game.Current.Service,Shop,Entry,Game.Current.Players.Controller.Controlled);}public static AICF_AIQuotaCatalogBasket Queue(int n){Entry.Data.N=n;var b=Capture();b.BindSlot(Slot);b.m_bHeaderObserved=true;for(int i=0;i<n;i++)b.m_aMemberPrefabs.Add("member"+i+".et");for(int i=0;i<n;i++)if(!Manager.AICF_QueueBoundCatalog(b,i,b.m_aMemberPrefabs[i],b.m_User.m_Entity,Slot.Owner,Slot.Rally))throw new Exception("queue setup");b.m_bCounterAdded=true;b.m_RequestComponent.Queued=n;return b;}}
 public static class UnsafeChecks{
+ public static bool UserMissingRpl(){Fixture.Reset();Game.Current.Players.Controller.Controlled.Rpl=null;return Fixture.Capture()!=null;}
+ public static bool UserInvalidRpl(){Fixture.Reset();Game.Current.Players.Controller.Controlled.Rpl.Value.Valid=false;return Fixture.Capture()!=null;}
+ public static bool UserProxyRejected(){Fixture.Reset();Game.Current.Players.Controller.Controlled.Rpl.Master=false;return Fixture.Capture()==null;}
  public static bool PartialBasket(){Fixture.Reset();Game.Current.Service.Limit=4;return Fixture.Capture()!=null;}
  public static bool QuarantineIdentityLoss(){Fixture.Reset();var b=Fixture.Capture();Game.Current.Service.Configured=false;return !b.IsCurrent();}
  public static bool ForeignHeadPop(){Fixture.Reset();var b=Fixture.Queue(3);var m=Fixture.Manager;var old=m.m_aAIQueue[0];Fixture.Shop.OnDispatch=r=>{m.m_aAIQueue.RemoveOrdered(0);m.m_aAIQueue.Insert(old);r.m_Request.m_AICFQuotaRequest=null;return true;};m.EOnFrame(m.Owner,2);return m.m_aAIQueue.Count()!=3||b.m_iPending!=3;}
@@ -146,6 +149,9 @@ $unsafe=@(
  ,@('ParentCounterWindow',$compiled.Replace('if (parent.m_Controller == controller || parent.m_RequestComponent == request || parent.m_iPlayerId == playerId) return true;','if (parent.m_Controller == controller || parent.m_RequestComponent == request || parent.m_iPlayerId == playerId) return false;'))
  ,@('VehicleKindBypass',$compiled.Replace('source && source.IsVehicle && AICF_QuotaVehicleFactoryCurrent','source && AICF_QuotaVehicleFactoryCurrent'))
  ,@('VehicleStaleMetadata',$compiled.Replace('source && source.IsVehicle && AICF_QuotaVehicleFactoryCurrent(quota, epoch, producer, slot)','source && source.IsVehicle'))
+ ,@('UserMissingRpl',$compiled.Replace('if (!m_User.m_Rpl || !m_User.m_Rpl.Id().IsValid()) return false;',''))
+ ,@('UserInvalidRpl',$compiled.Replace('!m_User.m_Rpl.Id().IsValid()','false'))
+ ,@('UserProxyRejected',$compiled.Replace('AICF_AIQuotaCatalogIdentity.Capture(user, false)','AICF_AIQuotaCatalogIdentity.Capture(user, true)'))
 )
 $executedUnsafe=0
 foreach($mutation in $unsafe){
@@ -159,13 +165,33 @@ foreach($mutation in $unsafe){
 $cases=0
 function Check($ok,$name){if(!$ok){throw "Catalog actual $name"};$script:cases++}
 [Fixture]::Reset();$b=[Fixture]::Capture();Check ($b-and$b.m_iQuoted-eq5-and[Game]::Current.Service.Reserved-eq5) 'reserve whole authored5';Check ($b.BindSlot([Fixture]::Slot)) 'real static slot metadata through exact master producer';Check $b.IsSlotCurrent() 'controller optionalRpl role0 remains valid'
-foreach($test in @('budget4','authority','producerProxy','userProxy','controllerChanged','catalogChanged','countChanged','priceChanged','prefabChanged','worldChanged','reserveCallback')){
+foreach($test in @('budget4','authority','producerProxy','userMissingRpl','userInvalidRpl','controllerChanged','catalogChanged','countChanged','priceChanged','prefabChanged','worldChanged','reserveCallback')){
  [Fixture]::Reset();$s=[Game]::Current.Service
- switch($test){budget4{$s.Limit=4} authority{[Replication]::Server=$false} producerProxy{[Fixture]::Shop.Owner.Rpl.Master=$false} userProxy{[Game]::Current.Players.Controller.Controlled.Rpl.Master=$false} reserveCallback{$s.AfterReserve=[Action]{[Fixture]::Shop.Owner.Deleted=$true}}}
+ switch($test){budget4{$s.Limit=4} authority{[Replication]::Server=$false} producerProxy{[Fixture]::Shop.Owner.Rpl.Master=$false} userMissingRpl{[Game]::Current.Players.Controller.Controlled.Rpl=$null} userInvalidRpl{[Game]::Current.Players.Controller.Controlled.Rpl.Value.Valid=$false} reserveCallback{$s.AfterReserve=[Action]{[Fixture]::Shop.Owner.Deleted=$true}}}
  $b=[Fixture]::Capture()
- if($test-in@('budget4','authority','producerProxy','userProxy','reserveCallback')){Check (!$b) $test;continue}
+ if($test-in@('budget4','authority','producerProxy','userMissingRpl','userInvalidRpl','reserveCallback')){Check (!$b) $test;continue}
  switch($test){controllerChanged{[Game]::Current.Players.Controller.PlayerId=2} catalogChanged{[Fixture]::Shop.Entry=New-Object SCR_EntityCatalogEntry} countChanged{[Fixture]::Entry.Data.N=4} priceChanged{[Fixture]::Entry.Data.Cost=201} prefabChanged{[Fixture]::Entry.Prefab='other.et'} worldChanged{[Fixture]::Shop.Owner.World=New-Object BaseWorld}}
  Check (!$b.IsCurrent()) $test
+}
+foreach($master in @($false,$true)){
+ [Fixture]::Reset();[Game]::Current.Players.Controller.Controlled.Rpl.Master=$master;$b=[Fixture]::Capture()
+ Check ([bool]$b-and$b.IsCurrent()) ('actual full player capture supports native master role '+$master)
+ foreach($change in @('absentRpl','invalidRpl','replacedRpl','changedRplId','otherBody','playerId','otherController','groupChanged','lostLeader','slaveChanged')){
+  [Fixture]::Reset();$c=[Game]::Current.Players.Controller;$c.Controlled.Rpl.Master=$master;$b=[Fixture]::Capture()
+  switch($change){
+   absentRpl {$c.Controlled.Rpl=$null}
+   invalidRpl {$c.Controlled.Rpl.Value.Valid=$false}
+   replacedRpl {$c.Controlled.Rpl=New-Object RplComponent}
+   changedRplId {$c.Controlled.Rpl.Value.Value='changed'}
+   otherBody {$c.Controlled=[Fixture]::NewActor()}
+   playerId {$c.PlayerId=2}
+   otherController {[Game]::Current.Players.Controller=New-Object SCR_PlayerController}
+   groupChanged {$c.GroupComponent.Group=[Fixture]::NewGroup()}
+   lostLeader {$c.GroupComponent.Leader=$false}
+   slaveChanged {$c.GroupComponent.Group.Slave=[Fixture]::NewGroup()}
+  }
+  Check (!$b.IsCurrent()) ('exact player identity remains required role '+$master+' '+$change)
+ }
 }
 [Fixture]::Reset();$b=[Fixture]::Capture();[Game]::Current.Service.Configured=$false;Check $b.IsCurrent() 'quota quarantine/readiness is not request identity loss'
 [Fixture]::Reset();[Fixture]::Entry.Catalog.Type=[EEntityCatalogType]::CHARACTER;Check (![Fixture]::Capture()) 'unproven character multiple-body shape rejected';[Fixture]::Entry.Data.N=1;Check ([bool][Fixture]::Capture()) 'character authored1 admitted'

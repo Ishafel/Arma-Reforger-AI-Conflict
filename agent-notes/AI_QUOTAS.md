@@ -15,6 +15,23 @@ closed0. Поздние native fixtures/auditor supplements считаются �
 Catalog native bootstrap впервые упал nativeAV до actual avatar/покупки;
 причина UNKNOWN, dump/полные логи сохранены, проверка не объявлена PASS.
 
+Следующие реальные native отказы локализованы отдельно: human requester является
+valid server Rpl proxy/master0 (requester-only fix131/11, producer master сохранён);
+compartment admission терял weak census row после собственного ReserveUnits
+(strong local snapshot anchor28/8, прежние IsCurrent gates сохранены). Для этих
+двух fixes завершён frozen249/Workbench3graphs. После randomizer fix новый
+frozen250/994SHA0/6sessionsclosed0 и current383 Stock/RHS/ArlandWCSRHS3/3 PASS.
+Stock pressure затем обнаружил legitimate native randomizer root→Rifleman
+variant, отвергнутый strict prefab equality. Этот FAIL и reservation hold
+сохранены. Новый immutable one-level набор читает pinned native metadata до
+dispatch без RNG, сохраняет exact produced prefab для последующих проверок и
+rollback; plain external factories сохраняют exact requested prefab. Actual28/8
+и native root→variant BOUND подтверждены. Stock-pressure-v2 функционально прошёл:
+STOCK128physical/reserved0, extraStock0 и четыре нормальных оплаченных join в
+прежний managed US отряд до exact5. Это только stock-character/managed-recruit
+proof, не universal partition или MOVING6. Resources28/minFPS22.2 остаются FAIL;
+высокая измеренная стоимость RefreshCensus исследуется отдельно.
+
 ## Владелец и бюджеты
 
 `AICF_AIWorldQuotaService` — authority/world-scoped владелец учёта и admission.
@@ -127,6 +144,18 @@ registered group queue. Эти новые seams — текущая незаве�
 targeted extracted PASS не означает native partition PASS.
 
 Stock catalog имеет собственный direct character factory, обходящий group seam.
+
+В native19:19:41 подтверждено: настоящий управляемый удалённым игроком avatar
+на server имеет valid Rpl при IsMaster=false. Это источник намерения, а не
+создаваемый AI. Поэтому requester identity допускает captured proxy role только
+при обязательном present/valid/current Rpl и exact PlayerManager→controller→
+controlled entity/player id/group/leader/slave/faction/world proof. Producer,
+slots там, где master обязателен, и newborn AI сохраняют master gates. Старый
+общий human-master veto был реальным дефектом, не исключением проверки.
+Actual131cases/11unsafe/3pinned, independent peer0 и Stock/RHS/WCS3graphs PASS;
+новый native catalog positive ещё требуется. Исходный serverAV до avatar и
+два последующих opaque timeout controls сохранены отдельно, их причина не
+переименована в найденный master-veto автоматически.
 Full basket проверяется до первого тела и supply debit. FIFO permit связывается
 с конкретным native request object и actual queue head; одинаковые prefab/user/
 slot не заменяют request identity. Geometry callbacks и nested same-prefab calls
@@ -187,10 +216,35 @@ reservations; уже выданный native вход удерживает car u
 quarantine, а не ложный `NATIVE_NULL` с повторным factory.
 
 `Test-AIQuotaCompartmentProducerContracts.ps1` выполняет actual Context,
-новые backend methods, producer и Ledger:27cases/7unsafe PASS в WinPS5.1.
+новые backend methods, producer и Ledger:28cases/8unsafe PASS в WinPS5.1.
+Новый actual counterexample воспроизвёл потерю weak census row после
+`ReserveUnits`→`RefreshCensus`. Backend теперь удерживает исходный snapshot
+до повторной проверки `capturedCensus.IsCurrent()` и `use.IsCurrent()`;
+равенство старого и нового `m_Census` не требуется и native gates не сняты.
 External service/factory callbacks здесь boundary simulation; этот результат
-не заменяет Workbench и native physical proof. На checkpoint реализации native
-producer ещё **NOT RUN**. Generic MoveIn16actual/5unsafe/4pins — отдельный путь.
+не заменяет Workbench и native physical proof. Generic MoveIn16actual/5unsafe/
+4pins — отдельный путь.
+
+Native `native-async-v7` на exact382 source выполнил две настоящие factory,
+два `GetInVehicle(true)`, последующую посадку двух разных здоровых actors в
+точные места той же машины и неизменные EntityID/Rpl. BOUND до активации и
+BODY после неё совпали после materialization scalar log arguments. Полный
+gate **FAIL**: на первом tail poll после начала окна native census стал
+UNKNOWN (counted-active32 против native-active31); такой же transient был до
+первой factory. Native0/fatal0/resources28FAIL, полные логи сохранены.
+`native-known-tail-v8` завершился с initial census UNKNOWN до reservation/
+factory, поэтому его новый tail branch не проверен: factories/births/entries0.
+
+Fixture-only observer ждёт первый достоверный census до reservation, выдаёт
+каждую factory только один раз, ждёт exact-seat readback перед следующей
+factory и требует15 непрерывных секунд known census/двух исходных healthy
+occupants. UNKNOWN сбрасывает только это окно наблюдения; исходные300s,
+native identity, health и quota gates не меняются. Здоровье/identity/seat
+проверяются даже на UNKNOWN poll; физическая потеря не становится ожиданием.
+`native-initial-wait-v9` подготовлен: Workbench0,40source/4actual observer
+callbacks/36log cases/14настоящих WinPS5.1 CLI controls PASS. Его native run
+пока **NOT RUN** до завершения согласованного Catalog server/client pair.
+Evidence: `.codex-runtime/issue78-finalization-20261030/compartment-producer/`.
 
 ## Проверка и доказательства
 

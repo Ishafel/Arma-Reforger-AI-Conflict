@@ -12,9 +12,18 @@ Native RHS3 на предыдущем380:300s/ROSTER_READY/quotaREADY/native0/pr
 resources136/396/396 FAIL и FPS42.5/27.3/29.5. Это не pressure нового382.
 
 Catalog client/server первый control дал serverAV до actualavatar/покупки,
-причина UNKNOWN. Native catalog/compartment/pressure и ordinary/Multi6/clientJIP
-остаются gates; новые log auditors исправляются по actual CLI ENGINE(F)/GUI(E)
-counterexamples. Issue OPEN, PR79 draft, native-only blockers неизменны.
+причина UNKNOWN. Поздние native controls доказали human requester proxy/master0
+и потерю weak census row при compartment admission; узкие fixes131/11 и28/8
+прошли actual/independent peer. Frozen249 и3graphs запущены заново, native positive
+выполняется. Stock pressure выявил strict prefab/root→variant отказ;
+quarantine/holds сохранены. Узкий closed-set fix прошёл actual28/8 и native BOUND;
+новый frozen250/994SHA0/6closed0 и current383 three-graph compile PASS. Native
+stock-pressure-v2 функционально подтвердил128stock/0extra и normal4paidjoins в
+прежний managed отряд до5, но resources28/minFPS22.2 оставляют strict FAIL.
+Новые native log auditors отклоняют
+ENGINE(F)/GUI(E) и прочие full-log errors в настоящих WinPS5.1 CLI controls.
+Native catalog/compartment/pressure и ordinary/Multi6/clientJIP остаются gates.
+Issue OPEN, PR79 draft, native-only blockers неизменны.
 Подробности и последующие результаты — актуальный [TESTING.md](TESTING.md).
 
 ## Историческая передача
