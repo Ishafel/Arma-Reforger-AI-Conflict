@@ -2,6 +2,20 @@
 
 ## Статус
 
+Последний human bridge: frozen255/1005SHA0/6closed0 и terminal Stock/RHS/WCS3/3
+PASS на383payload26652760…90823. Native Catalogv11 подтвердил снятие прежней AI
+записи exact player avatar и восстановление census, без actor/native-counter
+writes. Body.MatchesIdentity остаётся master-strict; новый отдельный human proof
+допускает только unowned STOCK/nonvehicle/no creator/no quarantine, exact
+entity/world/Rplcomponent+ID, native player/PM/controller/main-ID agreement,
+absent либо inactive+uncounted exact agent и совместимый полный census. Меняется
+только binding/record; physical заменяет следующий ApplyCensus. World-scoped End
+разрешён, successor и замена ledger/controller/epoch/record запрещены; monotonic
+GetLastEpoch закрывает Begin→End ABA. Actual44/7+independent31 PASS.
+Native purchase ещё FAIL на enumeration/selection, не на прежнем human-body
+blocker. Новые observed53.1/41.3FPS в чистых pressure controls не исправляют их
+functionalFAIL: поздний агент в extra-группе ещё не идентифицирован. Sets не вошли.
+
 Пользователь в issue #78 разрешил исправить раздельный учёт `stock + AICF`.
 Контракт ниже реализуется. После возобновления30.10.2026 frozen382production
 `88B2F10A…DEB075` прошёл terminal Workbench Stock/RHS/ArlandWCSRHS3/3 PASS,

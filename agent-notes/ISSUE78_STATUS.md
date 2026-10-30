@@ -2,6 +2,13 @@
 
 ## Работа возобновлена после передачи
 
+Новый checkpoint: human bridge383 compile3graphs и frozen255/1005SHA0/6closed0
+PASS. Native player-body retirement+census restored подтверждены v11 server/client0/0;
+Catalog purchase остаётся FAIL300s до выбора записи. Scope и полный разбор —
+TESTING.md. Два чистых pressure controls далиFPS≥30, но functionalFAIL позднего
+extra-агента; его тип ещё UNKNOWN, overshoot не объявлен. Прежние native-only
+blockers и доступные ordinary/Multi/client/JIP gates сохраняются.
+
 Пользователь вновь запросил исправления и RHS Арланд/Эверон/север. Текущий
 checkpoint:382production compile Stock/RHS/ArlandWCSRHS3/3 PASS; full frozen
 `resumed-fixed-v16`247/247 PASS/987SHA0/6sessionsclosed0. Исправлены stale site/

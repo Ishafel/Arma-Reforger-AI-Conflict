@@ -2,6 +2,7 @@
 // подключено composition root только вместе с guarded producer adapters.
 class AICF_AIWorldQuotaService
 {
+	protected int m_iHumanRetirementDiagnosticAt;
 	protected SCR_AIWorld m_World;
 	protected AICF_AIQuotaWorldState m_WorldState;
 	protected AICF_MatchController m_Controller;
@@ -153,7 +154,11 @@ class AICF_AIWorldQuotaService
 		AICF_AIQuotaBody body = FindBody(row.m_Entity);
 		if (body)
 		{
-			if (!body.MatchesIdentity() || body.m_bQuarantined) return false;
+			if (!body.MatchesIdentity() || body.m_bQuarantined)
+			{
+				ReportHumanRetirementVeto(body);
+				return false;
+			}
 			if (!body.m_bVehicle)
 				return ClassifyCapturedActor(body, SCR_AIGroup.Cast(row.m_Group), bucket);
 			bucket = body.m_Bucket;
@@ -288,8 +293,15 @@ class AICF_AIWorldQuotaService
 				m_aBodies.Remove(bodyIndex);
 				continue;
 			}
-			if (!body.MatchesIdentity() || body.m_bQuarantined) return false;
+			if (!body.MatchesIdentity())
+			{
+				if (TryRetireHumanBody(snapshot, body, bodyIndex)) continue;
+				ReportHumanRetirementVeto(body);
+				return false;
+			}
+			if (body.m_bQuarantined) return false;
 			if (counted.Contains(body.m_Entity)) continue;
+			if (TryRetireHumanBody(snapshot, body, bodyIndex)) continue;
 			AICF_EAIQuotaBucket bodyBucket = body.m_Bucket;
 			if (!body.m_bVehicle)
 			{
@@ -308,6 +320,69 @@ class AICF_AIWorldQuotaService
 			counts[bodyBucket] = counts[bodyBucket] + 1;
 		}
 		return AddQuotaVehicleHolds(snapshot, counts, counted) && snapshot.IsCurrent();
+	}
+
+	protected bool TryRetireHumanBody(AICF_AIQuotaCensus snapshot, AICF_AIQuotaBody body, int index)
+	{
+		if (!body || !snapshot || !m_Ledger || !IsCurrentWorld()) return false;
+		AICF_AIQuotaLedger ledger = m_Ledger;
+		AICF_MatchController controller = m_Controller;
+		AICF_AIQuotaWorldState worldState = m_WorldState;
+		int epoch = m_iEpoch;
+		if (!worldState) return false;
+		int activeEpoch = worldState.GetActiveEpoch();
+		int lastEpoch = worldState.GetLastEpoch();
+		if (!body || !body.HasConfirmedHumanCustody(snapshot) || !snapshot || !snapshot.IsCurrent()) return false;
+		if (!body || !body.HasConfirmedHumanCustody(snapshot)) return false;
+		// No native calls between this final owner fence and the pure ledger write.
+		if (!body || !ledger || m_Ledger != ledger || m_Controller != controller || m_iEpoch != epoch || !m_aBodies.IsIndexValid(index) || m_aBodies[index] != body) return false;
+		if (!worldState || m_WorldState != worldState) return false;
+		if (worldState.GetLastEpoch() != lastEpoch) return false;
+		// Ending a root session is allowed; publishing a successor is not.
+		int repeatedEpoch = worldState.GetActiveEpoch();
+		if (repeatedEpoch != activeEpoch && repeatedEpoch != 0) return false;
+		if (body.m_bReleased || body.m_bQuarantined || body.m_bVehicle || body.m_GroupOwner || body.m_CreationGuard || body.m_Bucket != AICF_EAIQuotaBucket.STOCK) return false;
+		string key = body.Key();
+		if (ledger.GetBindingBucket(key) != AICF_EAIQuotaBucket.STOCK || !ledger.RetireBinding(key)) return false;
+		body.m_bReleased = true;
+		m_aBodies.Remove(index);
+		AICF_Stage1Diagnostics.Info("AI_QUOTA_HUMAN_BINDING_RETIRED", string.Format(
+			"entity_key=%1 epoch=%2 exact_human_custody=1 inactive_uncounted_or_no_agent=1 origin_group_owner=0 origin_creation_guard=0 native_counter_write=0 actor_mutation=0",
+			key, epoch));
+		return true;
+	}
+
+	// AFTER the negative decision only. These values never authorize retirement.
+	protected void ReportHumanRetirementVeto(AICF_AIQuotaBody body)
+	{
+		if (!body || body.m_bVehicle || System.GetTickCount() - m_iHumanRetirementDiagnosticAt < 15000) return;
+		m_iHumanRetirementDiagnosticAt = System.GetTickCount();
+		string key = body.Key();
+		AICF_EAIQuotaBucket bucket = body.m_Bucket;
+		bool typedOwner = body.m_GroupOwner != null;
+		bool creator = body.m_CreationGuard != null;
+		ChimeraCharacter actor = ChimeraCharacter.Cast(body.m_Entity);
+		CharacterControllerComponent character;
+		AIControlComponent control;
+		AIAgent agent;
+		if (actor) character = actor.GetCharacterController();
+		if (actor) control = actor.GetAIControlComponent();
+		if (control) agent = control.GetControlAIAgent();
+		int active = -1;
+		int counted = -1;
+		bool nativePlayer;
+		if (agent) active = agent.IsAIActivated();
+		if (agent) counted = agent.CountTowardsAIWorldLimit();
+		if (character) nativePlayer = character.IsPlayerControlled();
+		int playerId = -1;
+		int mainId = -1;
+		PlayerManager players;
+		if (GetGame()) players = GetGame().GetPlayerManager();
+		if (actor && players) playerId = players.GetPlayerIdFromControlledEntity(actor);
+		if (actor) mainId = SCR_PossessingManagerComponent.GetPlayerIdFromMainEntity(actor);
+		string origin = string.Format("entity_key=%1 bucket=%2 origin_group_owner=%3 origin_creation_guard=%4", key, bucket, typedOwner, creator);
+		string flags = string.Format("agent_present=%1 active=%2 counted=%3 native_player=%4 pm_player=%5 main_player=%6", agent != null, active, counted, nativePlayer, playerId, mainId);
+		AICF_Stage1Diagnostics.Info("AI_QUOTA_HUMAN_RETIREMENT_UNPROVEN", origin + " " + flags + " decision=KEEP_BINDING observation_after_decision=1");
 	}
 
 	bool Initialize(AICF_MatchController controller, int managedUnits, int builderUnits, int fleetUnits, int fiaUnits)

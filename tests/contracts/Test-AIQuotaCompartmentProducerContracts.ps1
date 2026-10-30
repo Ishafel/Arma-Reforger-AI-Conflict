@@ -41,7 +41,12 @@ $r=$r.Replace('public class RplComponent:Native','public partial class RplCompon
 $r=$r.Replace('public class BaseWorld:Native {','public class BaseWorld:Native {public bool IsGameTimePaused(){return false;}')
 $r=$r.Replace('public AICF_AIQuotaAgentRow m_Native;','private AICF_AIQuotaAgentRow m_StrongNative;private WeakReference m_WeakNative;public AICF_AIQuotaAgentRow m_Native{get{return Probe.WeakRows?(m_WeakNative==null?null:m_WeakNative.Target as AICF_AIQuotaAgentRow):m_StrongNative;}set{if(Probe.WeakRows)m_WeakNative=new WeakReference(value);else m_StrongNative=value;}}')
 $r=$r.Replace('public bool IsCurrent(){return Current;}public int GetBucket(){return Bucket;}','public virtual bool IsCurrent(){return Current;}public virtual int GetBucket(){return Bucket;}public virtual string GetFactionKey(){return "US";}')
-$r=$r.Replace('public bool ClassifyGroup(SCR_AIGroup group,out int bucket){bucket=1;return group!=null;}','public bool ClassifyGroup(SCR_AIGroup group,out int bucket){bucket=Probe.GroupBucket;return Probe.RegistryKnown;}')
+# Explicit native registry boundary for this producer replay. The shared adapter
+# also has an UnownedStock branch; replacing an old method literal silently left
+# that adapter active and rejected the initial null-group before any factory.
+$registryPattern='(?m)^public class AICF_AIQuotaRegistry:Native \{[^\r\n]*\}\r?$'
+if([regex]::Matches($r,$registryPattern).Count-ne1){throw 'Exact producer registry adapter boundary missing/ambiguous'}
+$r=[regex]::Replace($r,$registryPattern,'public class AICF_AIQuotaRegistry:Native {public bool UnownedStock;public AICF_AIQuotaGroupOwner Find(SCR_AIGroup group){return null;}public bool ClassifyGroup(SCR_AIGroup group,out int bucket){bucket=Probe.GroupBucket;return Probe.RegistryKnown;}}')
 $r=$r.Replace('CanActivateGroup(SCR_AIGroup g)','CanActivateGroup(AIGroup g)').Replace('return Manager;}}','if(type==typeof(CompartmentAccessComponent))return (this as ChimeraCharacter)==null?null:(this as ChimeraCharacter).Access;if(type==typeof(AIControlComponent))return (this as ChimeraCharacter)==null?null:(this as ChimeraCharacter).Control;return Manager;}}')
 $r=$r.Replace('public static class AICF_Stage1Diagnostics {','public static class AICF_Stage1Diagnostics {public static void Error(string name,string text){Events.Add(name+" "+text);}')
 $r=$r.Replace('public IEntity GetOccupant(){return Occupant;}','public bool Accessible=true;public bool IsCompartmentAccessible(){return Accessible;}public IEntity GetOccupant(){return Occupant;}public static readonly V SPAWN_IN_VEHICLE_OFFSET=new V();public virtual IEntity SpawnCharacterInCompartment(string prefab,ref AIGroup group,string gp="base"){Probe.Delegated++;return null;}')

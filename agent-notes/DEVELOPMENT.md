@@ -35,6 +35,14 @@ launcher и проверку точного CLI/manifest, не подменяй 
 Кэш vendor-owned и не коммитится. Смена версии API — отдельная задача с новым
 baseline и проверкой всех затронутых контрактов, а не повод угадывать сигнатуры.
 
+При проверке lifetime учитывай [Enforce ARC](https://community.bohemia.net/wiki/Arma_Reforger%3AScripting%3A_Automatic_Reference_Counting):
+локальные ссылки и аргументы удерживают managed объект до конца scope; `ref`
+нужен для сильного поля/элемента контейнера. Замена владельца массива сама по
+себе не обнуляет локальный managed аргумент. Ручное удаление native entity или
+component проверяется отдельно. Не объявляй различие C# replay и Enforce
+дефектом без проверки фактической модели ссылок; weak field, как census row
+в VehicleUse, действительно требует живого владельца snapshot.
+
 ## Workbench Validate/Compile
 
 Только терминальный `ArmaReforgerWorkbenchSteamDiag.exe`; GUI automation,

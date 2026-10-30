@@ -35,6 +35,7 @@ class AICF_AIQuotaWorldState
 
 	int GetOriginalNativeLimit() { return m_iOriginalNativeLimit; }
 	int GetActiveEpoch() { return m_iActiveEpoch; }
+	int GetLastEpoch() { return m_iLastEpoch; }
 
 	bool IsSessionCurrent(AICF_MatchController owner, int epoch)
 	{

@@ -2,6 +2,38 @@
 
 ## Возобновление #78 — 30.10.2026
 
+Последний `resumed-human-v20`: **255/255 PASS**, collector0/exact unique union/
+Logistics1/1005frozenSHA0/6sessionsclosed0. Human bridge383payload
+`26652760F0A75381934BCE7AC5AB071E48DB19507F14A592189A14911D090823`:
+terminal Stock/RHS/ArlandWCSRHS3/3 PASS/native0/validation/fullfatal0/postSHA0.
+Поздние Catalog oracle/metadata-only observer supplements и pressure child-kind
+diagnostics не входят в этот frozenAll. Native pressure не объявляется PASS по255.
+
+Catalogv10 двумя полными scans доказал retained unowned STOCK avatar: exact
+entity/Rpl, master0, native player/PM/main-ID1/exactcontrolledbody. Body.MatchesIdentity
+master-strict сохранён. Новый world-scoped typed retirement допускает только
+подтверждённый human, absent либо inactive+uncounted agent и полный свежий snapshot;
+снимает только binding/record, physical меняется следующим ApplyCensus. End того
+же мира допустим, successor/ledger/controller/epoch/record replacement и Begin→End
+ABA отклоняются (GetLastEpoch). Actual44/7unsafe+independent31 PASS, oldBuildCounts
+на том же positive FAIL; Backend116/8/Character41/5/Producer28/8 PASS.
+
+Catalogv11 native server/client0/0: AI_QUOTA_HUMAN_BINDING_RETIRED и последующий
+CENSUS_RESTORED реально подтверждены, без actor/native-counter writes. Сам Catalog
+group всё же FAIL:300s/0selected/0factory/0debit; проверяется enumeration native
+catalog metadata. Serverfatal0/resources6/other24, clientfatal0/resources118/other24;
+strictFAIL. v10 addressed-1/-1 и полный v9 TIMEOUT сохранены. Public Catalog oracle
+peer выявил3actualCLIfalsePASS (NaN cost, GameDestroyed доDONE, unknown(E) marker),
+все3 исправлены и повторены negative1/positive0; поздний supplement отдельный.
+
+Чистые old383 pressure controls без второго native world/полного All показали
+minFPS53.1 и41.3, но оба functionalFAIL EXTRA_STOCK_IDENTITY_OR_BIRTH. Второй
+afterdecision receipt доказал прежниеgroup/Rpl/worldlookup, actualAgents1 через
+40.5sпослеveto. Тип/происхождение агента пока UNKNOWN: это не доказанный новый
+stock character или quota overshoot. Native0/fatal0/resources28/source0, все
+исходные FAIL сохранены. Прежние22.2FPS под параллельным All не приписываются
+только production коду; необязательные membership sets не применены.
+
 После опубликованного draft79/HEAD5c87bae пользователь возобновил исправления
 и запросил RHS Арланд/Эверон/север без вопросов. IssueOPEN/strictFAIL сохраняются.
 Новый baseline `resumed-baseline-v15`:238/242 PASS,4FAIL, collector1/exact union/
