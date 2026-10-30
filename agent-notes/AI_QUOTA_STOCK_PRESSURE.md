@@ -28,6 +28,20 @@ readiness. Группы теста не удаляются вручную; он�
 
 ## Воспроизведение
 
+Поздние чистые controls на прежнем383 завершились functionalFAIL: спустя34–48s
+после первоначального veto extra-группа получила counted/activated character с
+прежним group/Rpl/parent identity. Это не доказывает новый birth или overshoot:
+нужно отличить transfer и освобождённый unit. Новая fixture пишет scoped admission/
+reservation/group birth/external factory receipts с actor ID, return status и
+контекстом extra-группы. Обёртки вызывают real super один раз, не делают Refresh,
+не меняют результат; limit2048/overflow и потеря scope явно видны. BudgetDetails —
+cached ledger и отдельные after-decision native counters, не свежий полный census.
+
+Trace-only supplement: actual19controls/5unsafe и независимый peer PASS;
+полное удаление named trace blocks возвращает тот же policy token hash33EC2C8A…
+исходной fixture70020F6D… (stage pressure-agent-kind-v2). Срок35s, full/veto/FAIL и
+timeout не ослаблены. Prepare385 StockWB0/sourceSHA0; новый trace Native NOT RUN.
+
 Из корня checkout, в PowerShell 7, с доступными установленными Server и Tools:
 
 ```powershell
