@@ -5,6 +5,22 @@
 строгий результат FAIL, issue OPEN до native fix по отдельному решению пользователя.
 Merge и release не выполняются. Этот документ не является ACCEPTED.
 
+Опубликован [draft PR #79](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/79)
+с `Refs #78`; основной checkpoint `b5272ed`. Полный All текущего объединённого
+кода не завершён. Fresh frozen380 Workbench Stock/RHS/ArlandWCSRHS3/3 PASS,
+fullfatal0/source drift0. После него только trailing whitespace удалены в трёх
+новых native projections; Catalog/Defender actual contracts повторены PASS.
+
+Шесть short native bootstrap на историческом376production завершены native0,
+project0/fatal0: RHS95cases/resources136FAIL/minFPS47.2; ArlandWCSRHS95/206FAIL/
+40.1; EveronRHS95/396FAIL/22.9; EveronWCSRHS95/466FAIL/17.6;
+EveronNorthRHS97/396FAIL/27.6; EveronNorthWCSRHS97/466FAIL/28.3.
+North проверил7баз/2HQ/5points. Это не native quota pressure текущего380.
+Constructor reentry закрыт43actual/13unsafe/9strong и independent full Observe8
+cases PASS; первоначальный counterexample сохранён. Собственных native/WB
+процессов0. Всего17завершённых stages архивированы с ZIP-entry SHA проверкой;
+полные logs/manifests и старые FAIL оставлены.
+
 ## Сохранённый результат
 
 Ветка `codex/issue-78-vehicle-presets` содержит пресеты техники, поведение
