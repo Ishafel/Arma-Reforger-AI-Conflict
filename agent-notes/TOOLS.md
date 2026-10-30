@@ -7,6 +7,16 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Структура и статус
 
+`Invoke-AICFQuotaCatalogProbe.ps1` — public PowerShell7 runner с отдельными
+`Prepare`, `Server`, `Client`, `Audit` фазами. Фиксирует весь raw payload,
+Workbench/source/CLI и full stopped logs; canonical direct-connect client
+требует точный живой Server и ROSTER_READY. `-Case group|character|vehicle`
+не подменяет необходимость реального совместимого native producer/slot.
+Текущий v17: native0/0/fatal0/source0, но funding consumer readback0 и
+functional/resource/other FAIL; покупка/full-basket native positive не доказаны.
+Команды, контролируемый native funding и точные ограничения —
+[AI_QUOTA_CATALOG.md](AI_QUOTA_CATALOG.md).
+
 `Invoke-AICFQuotaStockPressure.ps1` — PowerShell7 Prepare/Run/Full для настоящего
 заполнения STOCK и обычного оплаченного найма AICF. Сохраняет все7raw addons,
 две fixture, frozen auditor, compile/source/CLI/CIM receipts и полные stopped

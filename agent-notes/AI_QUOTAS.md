@@ -52,6 +52,15 @@ proof, не universal partition или MOVING6. Resources28/minFPS22.2 оста�
 сам public Run после публикации helper пока NOT RUN, прежний native использовал
 те же385 source bytes и тот же functional auditor.
 
+Human Catalog/FIFO воспроизводится public separate-role
+`Invoke-AICFQuotaCatalogProbe.ps1`; команды и точный текущий scope —
+[AI_QUOTA_CATALOG.md](AI_QUOTA_CATALOG.md). v17 на383production имеет
+native0/0/fatal0/source0, но consumer funding readback0 и functionalFAIL;
+generator SUFFICIENT/queue11 при consumer0/base0 не доказывает покупку.
+Native full-basket negative→positive, GROUP/CHARACTER покупка и empty human
+VEHICLE при полной character квоте пока NOT RUN/не доказаны. Resource и прочие
+E/F также остаются strict FAIL; текущие source-only/CLI контракты их не снимают.
+
 ## Владелец и бюджеты
 
 `AICF_AIWorldQuotaService` — authority/world-scoped владелец учёта и admission.

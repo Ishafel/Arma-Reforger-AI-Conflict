@@ -9,6 +9,7 @@
 |---|---|
 | Продолжить #78 после передачи draft PR и выключения компьютера | [ISSUE78_STATUS.md](ISSUE78_STATUS.md), итоговый комментарий в issue и точные manifests |
 | Разделить native stock и AICF quotas, проверить full basket/catalog и позднюю активацию техники | [AI_QUOTAS.md](AI_QUOTAS.md), текущая реализация/admission и отдельные обязательные native pressure gates |
+| Воспроизвести human Catalog/FIFO, full-basket отказ и покупку пустой машины при полной character квоте | [AI_QUOTA_CATALOG.md](AI_QUOTA_CATALOG.md), public separate-role runner, native proof и строгие полные log audits |
 | Воспроизвести заполнение stock-квоты и обычный оплаченный набор AICF | [AI_QUOTA_STOCK_PRESSURE.md](AI_QUOTA_STOCK_PRESSURE.md), public Prepare/Run, scope и исходные failures |
 | Отличить нехватку средств до покупки машины от нарушения lifecycle | [VEHICLE_ECONOMY_DECLINE.md](VEHICLE_ECONOMY_DECLINE.md), typed pre-asset quote/receipt, own empty lease и terminal foot fallback |
 | Разобрать неполный native spawn и очередь замены отрядов | [GROUP_SPAWN.md](GROUP_SPAWN.md), GroupRuntime/InfantrySpawnPlacement и controlled replacement stress |

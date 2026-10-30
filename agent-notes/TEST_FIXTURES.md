@@ -20,6 +20,28 @@ actual physical/reserved/intended не смешиваются. Текущий na
 MOVING2→4→6 и не universal quota proof. Подробности, команды и исходные FAIL —
 [AI_QUOTA_STOCK_PRESSURE.md](AI_QUOTA_STOCK_PRESSURE.md).
 
+## Human Catalog/FIFO и resource linkage
+
+`AICF_AIQuotaCatalogProbe.c` добавляется public runner только в отдельный
+stage как `Integration/AICF_ZZQuotaCatalogProbe.c`. CLI
+`-aicfQuotaCatalogProbe group|character|vehicle`. Реальный client использует
+публичные faction/loadout/spawn SDK calls и owner-ready RPC; readiness/avatar
+не создаются тестом. `Invoke-AICFQuotaCatalogProbe.ps1` запускает отдельные
+Server/Client роли и после их завершения проверяет frozen source, CLI и полные
+sibling logs. Команды и полный ledger — [AI_QUOTA_CATALOG.md](AI_QUOTA_CATALOG.md).
+
+GROUP требует полный authored basket, bounded zero-effect negative и реальные
+тела/payment; VEHICLE — настоящую пустую машину при полной character квоте.
+Текущий v17 этих positive **не доказал**: один native generator вызов получил
+SUFFICIENT, но consumer readback остался0. Read-only ServicePoint observer
+вернул исходный response/super-once; generator queue0→11, consumer0, exact
+intersection0, registered bases0. Четыре штатных RequestTable/slot metadata
+экспортированы только в собственный profile. Native0/0/fatal0/source0,
+functionalFAIL/server resources14+other24/client resources118+other24 сохраняются.
+Ни SUFFICIENT, ни post-container200 без pre-value не являются debit proof.
+Текущие14fund/6payment/9factory/7generation/8links actual cases и unsafe/CLI
+контракты PASS, независимый peer0; это не whole-All или native purchase PASS.
+
 ## Персонаж в compartment и квоты
 
 `AICF_AIQuotaCompartmentProbe.c` добавляется runner только в isolated stage как
@@ -1194,6 +1216,7 @@ Server и client используют согласованный stage. Для R
 | Fixture | Назначение и ограничения | CLI параметры в исходнике |
 |---|---|---|
 | [AICF_AICombatInputProbe.c](../tests/fixtures/AICF_AICombatInputProbe.c) | Пустые weapon inputs; временно снимает selected-weapon reference | `aicfCombatInputProbe` |
+| [AICF_AIQuotaCatalogProbe.c](../tests/fixtures/AICF_AIQuotaCatalogProbe.c) | Human native Catalog/FIFO, physical/payment proof и read-only resource linkage; текущий native positive не доказан | `aicfQuotaCatalogProbe` |
 | [AICF_AIQuotaCompartmentProbe.c](../tests/fixtures/AICF_AIQuotaCompartmentProbe.c) | Реальный compartment producer, full-basket veto, два actors/один car body и continuous-known15s | `aicfQuotaCompartmentProbe` |
 | [AICF_ApproachRecoveryProbe.c](../tests/fixtures/AICF_ApproachRecoveryProbe.c) | Полные отряды, approach recovery и bounded shutdown | `aicfRecoveryProbe` |
 | [AICF_BarracksCombatProbe.c](../tests/fixtures/AICF_BarracksCombatProbe.c) | Подготовка казарм/supplies и размещение лидеров; не доказывает подход | `aicfBarracksCombatProbe` |
