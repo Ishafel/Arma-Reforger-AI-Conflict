@@ -52,6 +52,35 @@ census обоих empty controllers: counted groups0, `CountTowardsAIWorldLimit(
 actual/intended неизменны. Controller overhead не причина именно этого stock case;
 другие prefab этим не доказаны.
 
+## Общая квота и vehicle AI agents
+
+`GetMaxManagedAgents()` по умолчанию220 ограничивает проектный roster. При старте
+`EnsureAIWorldCapacity()` ставит native floor `max(previous, managedLimit)`;
+builder service затем обеспечивает `managedLimit + bases.Count()`.
+В измеренном Arland это128→220→228. Native stock actors, управляемые бойцы и
+vehicle AI agents используют один native hard limit. Существующая проверка
+admission не является отдельной гарантированной квотой для каждой подсистемы.
+
+В original Multi-v11 достигнуты устойчивые2/4 машины на сторону; следующая
+ступень встретила active233/intended226/hard228 и закончилась исходным transit
+deadline. В дополнительной preparation с8фоновыми slots по одному бойцу census
+показал complete/reconciled152active =148characters+4vehicles, intended148;
+позднее228active =221characters+7vehicles, intended221. В последнем snapshot
+52characters принадлежат20managed slots,169characters находятся вне этих
+отрядов. Последнее число включает всех остальных персонажей, а не только FIA.
+Group controllers в этих снимках сами не расходовали активную квоту.
+
+Эти конкретные снимки доказывают участие vehicle agents в native счётчике,
+но не доказывают деактивацию конкретной остановившейся машины: для этого нужны
+её собственные `IsAIActivated`, LOD и identity-bound movement readbacks.
+Поднятие лимита или изменение ordinary состава ради PASS не выполнялось.
+Контракт раздельной квоты stock/AICF либо сохранения228 как строгого ограничения
+вынесен пользователю отдельно; пока действует существующая политика.
+
+Evidence: `.codex-runtime/issue78-finalization-20261029/movement/`:
+`multi-moving-v11`, `minimum-background-v2` и их полные логи/receipts.
+Дополнительная preparation не заменяет original stress с production фоном.
+
 ## Что измеряет snapshot
 
 К существующему `GROUP_SPAWN_AUDIT`/`GROUP_SPAWN_TIMEOUT` добавлены значения из

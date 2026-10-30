@@ -2,6 +2,19 @@ param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptR
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../lib/Stage3StaticAudit.Common.ps1')
 . (Join-Path $PSScriptRoot '../log-audits/Test-VehicleSoakObservationLog.ps1') -LogPath unused -EvidenceRoot unused -Faction US
+foreach($case in @(
+ @('native hex to fixture decimal','0x4000000000005578{}','21880',$true),
+ @('fixture decimal to native hex','21880','0x4000000000005578{}',$true),
+ @('signed decimal','-1','0x40000000FFFFFFFF',$true),
+ @('signed decimal reverse','0x40000000FFFFFFFF','-1',$true),
+ @('full namespace mismatch','0x4000000000005578','0x8000000000005578',$false),
+ @('different low identity','0x4000000000005578','21881',$false),
+ @('out of range decimal','4294967296','0x4000000000000000',$false),
+ @('negative out of range decimal','-2147483649','0x400000007FFFFFFF',$false)
+)){
+ if((NativeEntityMatches $case[1] $case[2]) -ne $case[3]){throw "Native identity comparator failed: $($case[0])"}
+ Write-Output "PASS native identity comparator=$($case[0])"
+}
 $source=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'tests/fixtures/AICF_VehicleSoakRecoveryObservationProbe.c'))
 function Rules([string]$Text){
  $record=[pscustomobject]@{Source=$Text;Code=(ConvertTo-AICFCodeText $Text)}
@@ -71,6 +84,21 @@ $raw+=M DONE 'failures=0 route_complete=0 observation_complete=1 observation_cat
 $raw=$raw.Replace('operation_id=O','operation_id=trip-US-0-1-1').Replace('operation=O','operation=trip-US-0-1-1')
 $issues=@(Test-AICFObservationRecovery $raw US)
 if($issues.Count){throw "Positive recovery rejected: $issues"}
+$mixed=[regex]::Replace($raw,'(?m)^(\[VEHICLE_SOAK_[^\r\n]*)',{param($m) $m.Value.Replace('group=0xC','group=12').Replace('leader=N0','leader=21').Replace('current_waypoint=0xD','current_waypoint=13')})
+$mixed=$mixed.Replace('[SPAWN_BOUND] faction=US slot=0 generation=2 group=0xC','[SPAWN_BOUND] faction=US slot=0 generation=2 group=0x400000000000000C')
+$mixed=$mixed.Replace('trigger=SOAK_OBSERVATION_RECOVERY group=0xC','trigger=SOAK_OBSERVATION_RECOVERY group=0x400000000000000C').Replace('leader=N0 leader_pos=','leader=0x4000000000000015 leader_pos=').Replace('current_wp=0xD owned_wp=0xD','current_wp=0x400000000000000D owned_wp=0x400000000000000D')
+if(@(Test-AICFObservationRecovery $mixed US).Count){throw "Mixed native/fixture identity recovery rejected: $(Test-AICFObservationRecovery $mixed US)"}
+foreach($mutation in @(
+ @('foreign full group aliases low projection','trigger=SOAK_OBSERVATION_RECOVERY group=0x400000000000000C','trigger=SOAK_OBSERVATION_RECOVERY group=0x800000000000000C','OBS_FULL_NATIVE_REPLACEMENT_ORDER_IDENTITY'),
+ @('foreign owned waypoint aliases low projection','owned_wp=0x400000000000000D','owned_wp=0x800000000000000D','OBS_FULL_NATIVE_REPLACEMENT_ORDER_IDENTITY'),
+ @('duplicate bound low projection','[SPAWN_BOUND] faction=US slot=0 generation=2 group=0x400000000000000C',"[SPAWN_BOUND] faction=US slot=0 generation=2 group=0x400000000000000C`n[SPAWN_BOUND] faction=US slot=0 generation=2 group=0x800000000000000C",'OBS_NATIVE_REPLACEMENT_GROUP_IDENTITY'),
+ @('wrong native group generation','group_generation=2 intent_revision=7 leader=','group_generation=3 intent_revision=7 leader=','OBS_INDEPENDENT_CURRENT_PHYSICAL_ORDER'),
+ @('duplicate replacement Rpl','actor_rpl=NR3','actor_rpl=NR2','OBS_EXACT_NEW_MEMBER_IDENTITIES')
+)){
+ if(!(@(Test-AICFObservationRecovery ($mixed.Replace($mutation[1],$mutation[2])) US) -contains $mutation[3])){throw "Mixed identity negative escaped: $($mutation[0])"}
+ Write-Output "PASS mixed identity negative=$($mutation[0])"
+}
+Write-Output 'PASS mixed native/fixture identities with independent full group/generation and unique actor Rpl'
 $deadRaw=$raw.Replace('generation=1'+"`n",'generation=1'+"`n")
 $deadRaw=$deadRaw.Replace('observation_policy=ACTUAL_DAMAGE_BOUNDED_RECOVERY','observation_policy=ACTUAL_DAMAGE_BOUNDED_RECOVERY captured_death_policy=TYPED_NATIVE_ALL_DEAD_RELEASE_V1').Replace('observation_category=EXPLAINED_NATIVE_DAMAGE_RECOVERY','observation_category=CONFIRMED_NATIVE_ALL_DEAD_RETIREMENT')
 $nativeMembers=''

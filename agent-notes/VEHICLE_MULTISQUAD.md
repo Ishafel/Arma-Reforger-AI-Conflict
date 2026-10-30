@@ -647,3 +647,204 @@ expected/current/executed pointer+goal/entity/radius, exact actual controlagent,
 bounded raw native path/prefixfinite flags и отдельные physical/radial samples;
 никаких path-progress credits. Новые native diagnostics начинаются со свежих
 337source, старые full198/335nativePASS к ним не относятся.
+
+Дополнительная подготовка `MINIMUM_BACKGROUND_CAPACITY` отделена от default
+`PRODUCTION_BACKGROUND`. Исходный stress Multi-v11 завершён ABORT/native-1/
+audit1,1412.662s из1800: реальные stable2=30.832s и stable4=30.985s; затем
+native capacity WAIT (actual230..233 / hard228) и US/0 TRANSIT_DEADLINE_EXPIRED.
+Full3logs fatal0,337raw-sourceSHA0, старые fixture54261016/oracleAEF12F34
+сохранены. Это FAIL исходного фона, не PASS дополнительной подготовки.
+
+Opt-in fixture `AICF_VehicleMultiMinimumBackgroundProbe.c` изменяет только
+желаемый состав background slots6..9 у обеих сторон на1 до native пополнения.
+Весь preflight сначала требует8 original живых одиночных actor, exact group/
+generation/EntityID/Rpl/current AI agent и отсутствие active/queued recruitment.
+Actual roster>1 приводит к setup rejection: уменьшения физического состава,
+удаления, лечения или изменения native лимита нет. Pure initial muster posture
+не равна уже созданному order; queued/active order проверяются отдельно.
+Постоянные20 slots и selected12×5 остаются. SETUP/periodic/FINAL readback
+повторно подтверждает все8 original identity/alive1/desired1/physical1/queue0.
+
+В том же отдельном fixture bounded read-only world census на SETUP/COHORT и
+capacity WAIT раз в30s читает до4096 agents и4096 unique groups. Counted+
+activated классифицируются как Character/Vehicle/AIGroup controller/null/other,
+с selected/background membership US/USSR и foreign characters. Native active/
+intended считываются до/после; truncated/missing/changed snapshots не заявляются
+complete. Дельта active-vs-intended сама по себе не доказывает число машин.
+Census агрегатный, тысячи actor rows не печатает и native state не меняет.
+
+Runner `-BackgroundMode MINIMUM_BACKGROUND_CAPACITY` добавляет только
+проверенный CLI enum, отдельный fixture и явные preparation metadata. Default
+остаётся `PRODUCTION_BACKGROUND`. Старый MOVING oracle/1800s/30s stable и все
+health/deadline gates не изменяются; отдельный background log audit добавляет
+обязательные8 исходных actors до/после. Дополнительный результат не подтверждает
+обычную войну или исходный stress с default background10.
+
+Причинный stage для этого опыта копируется из immutable Multi-v11 all337
+rawSHA canonical2C694E36, не из рабочего дерева с последующими production fixes.
+Stage `movement/minimum-background-v1-source/stage`: terminalWB0,337raw
+before/after equal. Native пока NOT RUN, требует отдельного review closure.
+Контракт `Test-VehicleMultiBackgroundContracts.ps1`:73PASS (37actual identity/
+census cases,16source negatives,19 log cases); старый Fixture68PASS.
+
+### Proof4 mixed EntityID comparator, 30.10.2026
+
+`NativeEntityMatches` теперь принимает native fullhex и legacy signed low32
+fixture receipt в обеих ориентациях. Два fullhex по-прежнему сравниваются целиком:
+совпавшие low32 при другом namespace не дают equality. Replacement physical
+`GROUP_TRACE` дополнительно привязан к единственному full `SPAWN_BOUND.group`
+той же faction/slot/generation; current/owned waypoint должны иметь один full ID.
+Пять новых actor Rpl остаются уникальными, old native DEAD component identities
+и paid/readiness gates не ослаблены. Canonical PS5.1 observation contract:
+8 actual comparator cases + mixed positive/5 negative aliases/generation/Rpl,
+старые source16/log20/typed14/full7 PASS. Evidence:
+`.codex-runtime/issue78-finalization-20261029/spawn/observation-comparator-after-v1`.
+Исходный US diagnostics-v61800s/native0 имеет frozen auditorE550 functionalFAIL3
+и resourceFAIL32; новый comparator не переобъявляет его PASS. Два отказа были
+форматом ID, третий — настоящий generation2 `INSUFFICIENT_SUPPLIES` acceptance
+latch до physical recoveryDONE; его typed economic design пока не реализован.
+
+Final owner/epoch closure: root review потребовал exact active controller и
+latched US/USSR state pair. Перед/после Capture, actual IsCurrent и каждого
+ApplyCommanderConfiguration эти identity повторяются. Stopped/superseded или
+state-swap возвращают fail-closed без Abort/RequestClose successor world.
+Readback повторно проверяет все8 epoch перед summary; stale state не считается
+погибшим actor. Новый final контракт97PASS,51actual (в том числе14 owner/
+callback cases),26source negatives и19log cases; независимое review0/hashdrift0.
+Тестовый C#shim WIP compileFAIL сохраняется в ignored variant-after-owner log;
+source primitive guard был compilable, shim затем получил native-ref base и
+latched fields. Старые73/WB0 до owner guard — historical, не final proof.
+Последний stage fixture rawSHA ADE9983FE1475250C8490185346A3E7663AF1778EF5DFF61BB083C8204068
+(полный SHA в review-source-manifest-final.json); terminal WB0 01:42:47.782,
+all337 oldcausal rawSHA0; оригинальные basefixture/oracle bytes неизменны.
+Native на этом final варианте пока NOT RUN.
+
+Дополнительный MINIMUM v1 остаётся setupFAIL (15.559s): desired1 не завершает
+сам по себе штатную INFANTRY_MUSTER posture. V2 завершает только этот известный
+1/1 muster через текущий `OrderPlanner.RefreshInfantryMuster`, с повторными
+owner/epoch/actor fences; raw recruiting0 остаётся обязательным. Контракт этой
+версии110PASS/60actual, independent review0 и WB0. V2 native достиг stable2
+31.503s и stable4 31.738s, затем настоящий USSR/1 STUCK→два разрешённых repair→
+BUDGET_EXHAUSTED→NATIVE_GROUP_ABANDONED_VEHICLE. Адресный ABORT/native-1/audit1,
+864.504s из1800, полные3logs fatal0; old337raw и fixture/oracle unchanged.
+Census228=221 counted activated characters+7 vehicles при8 физических машинах
+не доказывает деактивацию конкретного UAZ2630: per-car activation/LOD не писались.
+Foreign169 здесь означает отсутствие managed membership, происхождение UNKNOWN.
+
+MINIMUM v3 добавляет только read-only observer раз в5s для не более12 машин:
+exact current lease/group/handler/Pilot, movement-associated car agent и unique
+world-agent join повторяются после native getters. Missing/null/truncated world
+snapshots, duplicates или identity drift дают UNPROVEN/UNKNOWN. PROVEN сообщает
+raw IsAIActivated/CountTowardsAIWorldLimit/LOD/permanent/max, goal/path/navlink,
+velocity/handbrake/health; никакой активации, LOD, geometry или clock mutation.
+Fixture5F916683/contract1057EFDC: canonical PS5.1 137PASS/75actual, WB0;
+337raw stage точно равен causal manifest2C694E36. Историческая подготовка v3 на этом этапе имела native NOT RUN до
+peer closure; окончательный диагностический FAIL приведён ниже. Evidence `movement/minimum-background-v3-source`; старый stress
+и V2 этим не переобъявляются PASS.
+MINIMUM v3 — диагностический FAIL, не movement PASS. 03:01:46.707 USSR/0
+NATIVE_GROUP_ABANDONED_VEHICLE на1030.291s; exact car2915/car-agent2924,
+pilot0E99/agent0E9E, handler1 и текущий lease/native control подтверждены.
+Перед STUCK и после обеих коррекций наблюдались active1/count1/LOD0, pilot1,
+health1/movementDamage0/fire0/gate0. 604 observer rows:545PROVEN,506active,
+39inactive только при gatePending1,59UNPROVEN; inactive вне gate не наблюдалось.
+Первая коррекция8м,03:00:48.609:1581.85,8.598,2001.13→1580.1,10.95,2008.93;
+вторая8м,03:01:34.461:1580.21,11.062,2009.42→1578.45,12.65,2017.22.
+Native fragment3nodes после первой коррекции не совпадает с global endpoint:
+он остаётся только local hint, не route-progress proof. После второй native
+UNREACHABLE/budget exhausted→штатный SCR_AIGetOutActivity1162/1000.
+Stable2=30.733s; stable4/6 не выполнены. Census229=225characters+4vehicles,
+из них189 foreign characters имеют factionFIA; prefab/origin UNKNOWN.
+Адресный ABORT/native-1/audit1/background1,1069.620s из1800; полные3logs fatal0,
+337raw after0drift, original fixture/oracle unchanged. Evidence
+`movement/minimum-background-v3/verified-final-result.json`, exact observer
+windows, full-before-addressed-stop.log SHA05F78EF85FDE0CF3952AA9C037D507684CCF4DF0BB3B8333E1AD87C295E6E4EA.
+Новый geometry/activation fix здесь не применялся; прежние FAIL не закрыты.
+После MINIMUM v3 введён отдельный read-only `AICF_UnstuckPathHint`:
+он не меняет `ValidatePath`, route-progress receipt, clocks или budget. Полный
+native путь обязан соответствовать endpoint по прежним правилам. Отдельный
+local fragment (2..128 finite points, первая точка≤2м от origin) может только
+предпочесть площадку; label `hint_only=1 path_progress=0` обязателен. Кандидат
+должен иметь unique projection, forward arc≥4м, gap≤2м и height≤2м. Существующие
+128 centres/4..15м/hazard6/порядок rings и bearings/две попытки сохраняются.
+UNKNOWN hint оставляет первый безопасный legacy candidate; valid hint без
+safe forward возвращает route rebuild only, captured stale hint не превращается
+в UNKNOWN fallback. Orientation коррекции не меняется.
+
+`AICF_UnstuckMutationScope` фиксирует actual managed slot/lease/trip/assignment/
+intent, EntityID/Rpl/поколения/цель/origin и исходный owner до native проверок;
+после последней physical query ownership повторяется даже при UNKNOWN hint.
+Stopped/superseded controller, чужая lease/entity, expired/deleted/weak-null или
+изменённая цель запрещают mutation. Hint отдельно повторяет actual Pilot/car/
+positive handler/current+executed Move/queued owned waypoint/full raw path,
+health/active/count/LOD0/speed≤1; окно3с неизменно. Старые private synthetic
+VehicleScenario groups не дают такого ownership proof; новый runtime scaffold
+использует только штатную initial bind/readiness/acquisition/boarding цепочку.
+
+Canonical PS5.1: geometry40 (23 actual extracted), mutation owner59 +3 executed
+unsafe mutants, hint identity52 +3 executed unsafe mutants; neighbour gates
+Unstuck55/Overturn56/NativeRoute59/Stage35Recovery PASS. Stock WB0/all342 raw0;
+independent source/test review0. Эти результаты ещё не подтверждают native
+geometry fix. G2 BEFORE-v1: real fresh five/20slots READY, но native8м spawn
+cylinder трижды отверг историческую точку из-за static environment5FC9/20CC0;
+car не создавалась. Native0,312.626s,setupFAIL/physicsNOTRUN,3fullLogs fatal0,
+resources28FAIL. AFTER-v1 WB0/nativeNOTRUN. Следующая отдельная preparation
+ищет initial8м safe pad в3D≤15м, сохраняет normal commit и near-point→real5seated→
+far-point handoff; если площадки нет — setupNOTRUN, без расширения clearance.
+Evidence `movement/path-hint-recovery/`; старые PASS/FAIL не переобъявляются.
+
+Preparation BEFORE-G2-v3 завершилась за17.284с: все24 `FindEmptyTerrainPosition`
+вернули false, native0/fatal0/resources28FAIL/source343raw0. Цилиндр в этой
+версии условно не вызывался при false, поэтому её `cylinder8=0` не является
+фактическим измерением. Отдельная read-only collision-v4 (fixtureBAF8ECAF,
+contract420A7836, canonical PS5.1 37+7 PASS, WB0, peer0) вызвала native8м
+цилиндр для каждого центра:24false,60 bounded diagnostic rays,24 blocking
+cylinder hits,0own-roster hits. Из них22 имеют static Granite/Erosion/GuardBox
+prefab,2 — Generic/StaticModel с неизвестным prefab. `FindEmpty` внутри
+проецирует высоту; его false-cause join остаётся `UNPROVEN`, хотя блокировка
+цилиндра в исходной высоте центра наблюдалась непосредственно. Это24 центра,
+а не исчерпывающее доказательство всего диска. Native0/17.773с,3fullLogs
+fatal0/resources28FAIL/source343raw0; автомобиль не создан, physicsNOTRUN.
+Evidence `movement/path-hint-recovery/native-before-G2-v4-collision/`.
+AFTER-v3 остаётся WB0/nativeNOTRUN: известный неготовый setup не повторяется.
+
+Отдельный opt-in `aicfUnstuckPathProbeSetup=FRESH56` выбирает максимум24 центра
+24/40/56м до рождения managed actors; это исходный spawn, а не перемещение живых
+ботов/машины. Native8м cylinder и production commit остаются обязательными.
+Один setup pose fault разрешён только после normal far binding, при actual3D≤15м,
+same original5/lease/car/health/deadline/old2, без human/foreign use и с native OBB
+clearance; orientation/velocity/path/phase/clocks не записываются. Он явно
+`native_progress=0`, наблюдение результата recovery начинается после fault.
+Fixture30F6715E/contractEFE2AFA9: PS5.1 46 source controls+7actual wait+6actual
+distance controls PASS, independent review0, BEFORE/AFTER WB0; оба343raw stage
+различаются только TransitFlow и содержат одинаковый G2.
+
+FRESH56 BEFORE-v5: safe pad40м к югу выбран до рождения; normal5READY,
+native commit/one paid150 purchase/5settled/near→far same trip+lease подтверждены.
+Это тот же GUID259EE7B78C51B624/UAZ469.et и цена150, что MIN3 car2915; native
+engine192142 одинаков, но точный asset SHA и сравнительные bounds не записаны.
+До исторического участка машина не доехала: два UNREACHABLE исчерпали old2 через
+route rebuild only (сначала captured speed2.14672, затем empty native path),
+физических коррекций0. Native fragment3 в начале находился у нового spawn,
+а не у historical fault pose; исходный3node-case и pose fault — NOT RUN.
+Затем native GetOut/abandon: native0/95.996с/3fullLogs fatal0/resources28FAIL/
+343raw drift0, итог SETUP/COVERAGE FAIL. AFTER-v5 compilePASS/nativeNOTRUN;
+этот результат не подтверждает geometry fix. Evidence
+`movement/path-hint-recovery/native-before-G2-v5-fresh/verified-final-result.json`.
+
+Дополнительный readonly DIAG-v6 завершился native0/84.096с/fatal0/resources28FAIL/
+343raw0 после первого native callback. Car24F1/agent9472/Pilot3741:
+worldunique1, active1/count1/LOD0, permanentLOD=-1/maxLOD10, current/executed
+Move RUNNING, handler1, health1/movementDamage0/fire0. За84мс до callback
+actual fragment3 шёл от нового spawn1969.41 на5.4м к востоку; перед controller
+super путь уже empty, speed2.4292. Отключение car AI перед этим отказом не
+наблюдалось. Road graph возвращал far endpoint, но actual closest-road point
+находился25.7287м от свежего spawn и его native8м cylinder был blocked;
+`drivable_proven=0` обязателен. Это диагностическая подготовка, не historical
+3node recovery proof. Full source и соседние native события сохранены в
+`native-before-G2-v6-road-flags/`. Prefix двух diagnostic events потерялся
+из-за nested `string.Format(...) + NativeFlags(...)`; callback row определяется
+по отдельному timestamp, source hook до super и следующему native CAPTURED.
+Последующая test-only правка заранее материализует flags в локальную строку,
+затем форматирует prefix; native этого форматирования ещё NOT RUN, compile0
+на изолированном прежнем G2 snapshot. Никаких activation/LOD/policy setters
+диагностика не содержит; новый native setup требует отдельного обоснования.

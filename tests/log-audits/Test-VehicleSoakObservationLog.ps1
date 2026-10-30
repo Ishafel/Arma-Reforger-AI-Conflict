@@ -41,6 +41,11 @@ function ObservationDistanceXZ($a,$b){
 function NativeEntityMatches($actual,$original){
  $actualId=Entity $actual;$originalId=Entity $original
  if($actualId -eq $originalId){return $true}
+ # Native/fixture joins can present either side as the signed low32 receipt.
+ # Two full EntityIDs still require exact equality, including their namespace.
+ if($actualId -match '^0X[0-9A-F]{1,16}$' -and $originalId -match '^-?\d+$'){
+  $swap=$actualId;$actualId=$originalId;$originalId=$swap
+ }
  # string.Format старого native receipt печатает EntityID как signed low32.
  # Полный ID независимо привязывается через SEAT_REQUESTED той же позиции/seat.
  if($originalId -notmatch '^0X([0-9A-F]{1,16})$' -or $actualId -notmatch '^-?\d+$'){return $false}
@@ -154,6 +159,7 @@ function Test-AICFObservationRecovery([string]$Raw,[string]$Faction){
   }
   $bounds=@($native|Where-Object{$_.name -eq 'SPAWN_BOUND' -and $_.fields.faction -eq $Faction -and $_.fields.slot -eq '0' -and $_.fields.generation -eq $ready.fields.generation -and (NativeEntityMatches $_.fields.group $ready.fields.group) -and $_.index -gt $damage.index -and $_.index -lt $ready.index})
   Need ($bounds.Count -eq 1) 'OBS_NATIVE_REPLACEMENT_GROUP_IDENTITY'
+  $boundGroup='';if($bounds.Count -eq 1){$boundGroup=Entity $bounds[0].fields.group}
  }elseif($recovery.fields.recovery_kind -eq 'SURVIVORS'){
   $readyItems=@($events|Where-Object{$_.name -eq 'OBS_SURVIVORS_READY' -and $_.index -lt $recovery.index})
   $ready=$readyItems|Select-Object -Last 1
@@ -164,6 +170,9 @@ function Test-AICFObservationRecovery([string]$Raw,[string]$Faction){
   Need ((NativeEntityMatches $ready.fields.leader $recovery.fields.leader) -and (NativeEntityMatches $ready.fields.group $recovery.fields.group) -and $ready.fields.intent_revision -eq $damage.fields.intent_revision -and $distance -ge 10 -and [Math]::Abs($distance-(Number $recovery.fields.moved_m)) -le 1 -and (ObservationDistanceXZ $ready.fields.actual_waypoint_position $damage.fields.target) -le 1 -and (ObservationDistanceXZ $recovery.fields.actual_waypoint_position $damage.fields.target) -le 1) 'OBS_MEASURED_SAME_LEADER_PHYSICAL_MOVEMENT'
   $physical=@($native|Where-Object{$_.name -eq 'GROUP_TRACE' -and $_.fields.trigger -eq 'SOAK_OBSERVATION_RECOVERY' -and (NativeEntityMatches $_.fields.group $recovery.fields.group) -and $_.fields.group_generation -eq $recovery.fields.generation -and $_.fields.intent_revision -eq $damage.fields.intent_revision -and (NativeEntityMatches $_.fields.leader $recovery.fields.leader) -and (NativeEntityMatches $_.fields.current_wp $recovery.fields.current_waypoint) -and (NativeEntityMatches $_.fields.owned_wp $recovery.fields.current_waypoint) -and (Number $_.fields.queue_count) -gt 0 -and (ObservationDistanceXZ $_.fields.leader_pos $recovery.fields.leader_position) -le 1 -and (ObservationDistanceXZ $_.fields.wp_pos $damage.fields.target) -le 1 -and $_.index -gt $ready.index -and $_.index -lt $recovery.index})
   Need ($physical.Count -eq 1) 'OBS_INDEPENDENT_CURRENT_PHYSICAL_ORDER'
+  if($recovery.fields.recovery_kind -eq 'REPLACEMENT'){
+   Need ($boundGroup -and $physical.Count -eq 1 -and (Entity $physical[0].fields.group) -eq $boundGroup -and (Entity $physical[0].fields.current_wp) -eq (Entity $physical[0].fields.owned_wp)) 'OBS_FULL_NATIVE_REPLACEMENT_ORDER_IDENTITY'
+  }
  }else{Need $false 'OBS_MEASURED_SAME_LEADER_PHYSICAL_MOVEMENT'}
  Need ($Raw -notmatch '\[GROUP_SPAWN_TIMEOUT\]|order_repair_unaccounted=[1-9]|stuck_unaccounted=[1-9]|\bbalanced=0|\[VEHICLE_CLEANUP_RETAINED\]|\[MEANINGFUL_TASK_DEADLINE_MISSED\]') 'OBS_NO_TIMEOUT_OR_ACCOUNTING_FAILURE'
  return $issues.ToArray()
