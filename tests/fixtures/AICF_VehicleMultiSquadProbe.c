@@ -1,6 +1,229 @@
 // Isolated test-only: 2 -> 4 -> 6 настоящих managed slots на каждую сторону.
 // NORMAL сохраняет кампанию. CAPACITY явно включает truce/защиту и finite grant.
 // HIERARCHY — отдельный opt-in controlled стенд, не доказательство обычной войны.
+// Opt-in read-only receipt: только script fields, actual outcome и исходный nowMs.
+// Weak domain refs не задерживают destruction заменённого request/plan/guard.
+class AICF_MultiAcquisitionContext
+{
+	AICF_TransportTrip m_Trip;
+	AICF_StrategicAssignmentSnapshot m_Assignment;
+	AICF_StrategicAssignmentSnapshot m_InputAssignment;
+	SCR_AIGroup m_Group;
+	AICF_VehicleRequestState m_Request;
+	AICF_VehicleSpawnPlan m_Plan;
+	AICF_VehicleSpawnSiteReservation m_Reservation;
+	AICF_VehicleLease m_Lease;
+	bool m_bTrip;
+	bool m_bAssignment;
+	bool m_bGroup;
+	bool m_bRequest;
+	bool m_bPlan;
+	bool m_bReservation;
+	bool m_bLease;
+	int m_iGroupGeneration;
+	int m_iTripGeneration;
+	int m_iAssignmentRevision;
+	int m_iInputRevision;
+	int m_iIntentRevision;
+	int m_iRequestGeneration;
+	string m_sReservationToken;
+	string m_sRun;
+	string m_sKey;
+	string m_sFields;
+
+	bool SameSource(AICF_MultiAcquisitionContext other)
+	{
+		if (!other || !m_bTrip || !m_bAssignment || !m_bGroup) return false;
+		if (m_bTrip != other.m_bTrip || m_Trip != other.m_Trip) return false;
+		if (m_bAssignment != other.m_bAssignment || m_Assignment != other.m_Assignment) return false;
+		if (m_InputAssignment != other.m_InputAssignment || m_bGroup != other.m_bGroup || m_Group != other.m_Group) return false;
+		if (m_sRun != other.m_sRun || m_sKey != other.m_sKey) return false;
+		if (m_iGroupGeneration != other.m_iGroupGeneration || m_iTripGeneration != other.m_iTripGeneration) return false;
+		if (m_iAssignmentRevision != other.m_iAssignmentRevision || m_iInputRevision != other.m_iInputRevision) return false;
+		return m_iIntentRevision == other.m_iIntentRevision;
+	}
+
+	bool SameAcquisitionState(AICF_MultiAcquisitionContext other)
+	{
+		if (!other || m_bRequest != other.m_bRequest || m_Request != other.m_Request) return false;
+		if (m_bPlan != other.m_bPlan || m_Plan != other.m_Plan) return false;
+		if (m_bReservation != other.m_bReservation || m_Reservation != other.m_Reservation) return false;
+		if (m_bLease != other.m_bLease || m_Lease != other.m_Lease) return false;
+		return m_iRequestGeneration == other.m_iRequestGeneration && m_sReservationToken == other.m_sReservationToken;
+	}
+}
+
+class AICF_MultiAcquisitionFrame
+{
+	bool m_bCompleted;
+}
+
+modded class AICF_TransportTrip
+{
+	int AICF_MultiStoredDeadlineMs() { return m_iAbsoluteDeadlineMs; }
+}
+
+class AICF_MultiAcquisitionProbe
+{
+	static const int MAX_RECORDS = 384;
+	static const int MAX_CONTEXTS = 32;
+	static ref array<string> s_Keys = {};
+	static ref array<string> s_Signatures = {};
+	static ref array<int> s_At = {};
+	static int s_iRecords;
+	static ref AICF_MultiAcquisitionFrame s_Frame;
+	static bool s_bOverflow;
+	static bool s_bScopeLost;
+
+	static bool Enabled()
+	{
+		string value;
+		return System.GetCLIParam("aicfVehicleAcquisitionOutcomeProbe", value) && value == "1";
+	}
+
+	static AICF_MultiAcquisitionFrame Begin()
+	{
+		bool unfinished = s_Frame && !s_Frame.m_bCompleted;
+		s_Frame = new AICF_MultiAcquisitionFrame();
+		if (unfinished) ScopeLoss("PREVIOUS_FRAME_UNFINISHED");
+		return s_Frame;
+	}
+
+	static bool TakeRecord()
+	{
+		if (s_iRecords >= MAX_RECORDS)
+		{
+			if (!s_bOverflow) { s_bOverflow = true; Print("[AICF][VEHICLE_ACQUISITION_OUTCOME] event=OVERFLOW record_limit=384 context_limit=32 observations_incomplete=1 diagnostic_only=1"); }
+			return false;
+		}
+		s_iRecords++;
+		return true;
+	}
+
+	static void ScopeLoss(string cause)
+	{
+		s_bScopeLost = true;
+		if (TakeRecord()) Print("[AICF][VEHICLE_ACQUISITION_OUTCOME] event=SCOPE_LOSS cause=" + cause + " result_saved=0 successor_cache_untouched=1 diagnostic_only=1");
+	}
+
+	static AICF_MultiAcquisitionContext Read(AICF_TransportTrip trip, AICF_StrategicAssignmentSnapshot input)
+	{
+		AICF_MultiAcquisitionContext context = new AICF_MultiAcquisitionContext();
+		context.m_sRun = AICF_Stage1Diagnostics.GetRunId();
+		context.m_Trip = trip;
+		context.m_bTrip = trip != null;
+		context.m_InputAssignment = input;
+		if (input) context.m_iInputRevision = input.GetAssignmentRevision();
+		context.m_sKey = context.m_sRun + "/MISSING_TRIP";
+		context.m_sFields = "trip_present=0";
+		if (!trip) return context;
+		context.m_Assignment = trip.GetAssignment();
+		context.m_Request = trip.GetRequestState();
+		context.m_Lease = trip.GetLease();
+		context.m_bAssignment = context.m_Assignment != null;
+		context.m_bRequest = context.m_Request != null;
+		context.m_bLease = context.m_Lease != null;
+		context.m_iTripGeneration = trip.GetTripGeneration();
+		context.m_sFields = string.Format("trip_present=1 operation_id=%1 phase=%2 transitions=%3 phase_started_ms=%4 trip_deadline_stored_ms=%5 input_assignment_revision=%6 deadline_scope=RAW_SCRIPT_FIELDS_NOT_EFFECTIVE_CLOCK", trip.GetOperationId(), trip.GetPhase(), trip.GetTransitionCount(), trip.GetPhaseStartedAtMs(), trip.AICF_MultiStoredDeadlineMs(), context.m_iInputRevision);
+		if (context.m_Assignment)
+		{
+			AICF_StrategicAssignmentSnapshot assignment = context.m_Assignment;
+			context.m_Group = assignment.GetGroup();
+			context.m_bGroup = context.m_Group != null;
+			context.m_iGroupGeneration = assignment.GetGroupGeneration();
+			context.m_iAssignmentRevision = assignment.GetAssignmentRevision();
+			context.m_iIntentRevision = assignment.GetStrategicIntentRevision();
+			context.m_sKey = string.Format("%1/%2/%3/%4/%5/%6", context.m_sRun, assignment.GetFactionKey(), assignment.GetSlotId(), context.m_iGroupGeneration, context.m_iTripGeneration, trip.GetOperationId());
+			context.m_sFields += string.Format(" faction=%1 numeric_slot=%2 group_generation=%3 trip_generation=%4 assignment_revision=%5 intent_revision=%6 base_revision=%7 group_ref_present=%8 group_identity_scope=FACTION_NUMERIC_SLOT_GENERATION_WITH_WEAK_REF", assignment.GetFactionKey(), assignment.GetSlotId(), context.m_iGroupGeneration, context.m_iTripGeneration, context.m_iAssignmentRevision, context.m_iIntentRevision, assignment.GetBaseRevision(), context.m_bGroup);
+		}
+		if (context.m_Request)
+		{
+			AICF_VehicleRequestState request = context.m_Request;
+			context.m_iRequestGeneration = request.GetRequestGeneration();
+			context.m_Plan = request.GetSpawnPlan();
+			context.m_bPlan = context.m_Plan != null;
+			context.m_sFields += string.Format(" request_generation=%1 request_deadline_ms=%2 next_attempt_ms=%3 attempt=%4 total_attempts=%5 maximum_attempts=%6 request_last_failure=%7 quota_guard_present=%8", context.m_iRequestGeneration, request.GetAbsoluteDeadlineMs(), request.GetNextAttemptAtMs(), request.GetAttemptCount(), request.GetTotalAttemptCount(), request.GetMaximumAttempts(), request.GetLastFailureReason(), request.GetQuotaCreation() != null);
+		}
+		if (context.m_Plan)
+		{
+			context.m_Reservation = context.m_Plan.GetReservation();
+			context.m_bReservation = context.m_Reservation != null;
+			context.m_sFields += string.Format(" plan_planned_ms=%1 plan_approach_deadline_ms=%2 plan_all_staged_since_ms=%3 plan_staged=%4 plan_alive=%5", context.m_Plan.GetPlannedAtMs(), context.m_Plan.GetApproachDeadlineMs(), context.m_Plan.GetAllStagedSinceMs(), context.m_Plan.GetStagedCount(), context.m_Plan.GetAliveCount());
+		}
+		if (context.m_Reservation)
+		{
+			AICF_VehicleSpawnSiteReservation reservation = context.m_Reservation;
+			context.m_sReservationToken = reservation.GetOwnerToken();
+			context.m_sFields += string.Format(" reservation_owner=%1 reservation_request_generation=%2 reservation_reserved_ms=%3 reservation_expires_ms=%4", context.m_sReservationToken, reservation.GetRequestGeneration(), reservation.GetReservedAtMs(), reservation.GetExpiresAtMs());
+		}
+		if (context.m_Lease)
+			context.m_sFields += string.Format(" lease_generation=%1 vehicle_generation=%2 vehicle_lifecycle=%3 lease_state=%4", context.m_Lease.GetLeaseGeneration(), context.m_Lease.GetVehicleGeneration(), context.m_Lease.GetVehicleLifecycleId(), context.m_Lease.GetState());
+		context.m_sFields += string.Format(" request_present=%1 plan_present=%2 reservation_present=%3 lease_present=%4 script_state_only=1", context.m_bRequest, context.m_bPlan, context.m_bReservation, context.m_bLease);
+		return context;
+	}
+
+	static bool Want(string key, string signature, int nowMs)
+	{
+		int index = s_Keys.Find(key);
+		if (index >= 0 && s_Signatures[index] == signature && nowMs >= s_At[index] && nowMs - s_At[index] < 10000) return false;
+		if (index < 0 && s_Keys.Count() >= MAX_CONTEXTS)
+		{
+			if (!s_bOverflow) { s_bOverflow = true; Print("[AICF][VEHICLE_ACQUISITION_OUTCOME] event=OVERFLOW record_limit=384 context_limit=32 observations_incomplete=1 diagnostic_only=1"); }
+			return false;
+		}
+		if (!TakeRecord()) return false;
+		if (index < 0)
+		{
+			index = s_Keys.Count();
+			s_Keys.Insert(key);
+			s_Signatures.Insert(signature);
+			s_At.Insert(nowMs);
+		}
+		else { s_Signatures[index] = signature; s_At[index] = nowMs; }
+		return true;
+	}
+
+	static void Record(AICF_MultiAcquisitionContext before, AICF_MultiAcquisitionContext after, AICF_TripOutcome actual, int nowMs, AICF_MultiAcquisitionFrame frame)
+	{
+		if (!before || !after) return;
+		int kind = -1;
+		string reason = "NO_OUTCOME";
+		string causation = "NONE";
+		int retryAt;
+		if (actual)
+		{
+			kind = actual.GetKind();
+			reason = actual.GetReason();
+			causation = actual.GetCausationId();
+			retryAt = actual.GetRetryAtMs();
+		}
+		// Вложенный observer, включая reentry из getter, владеет свежим cache.
+		if (!frame || frame != s_Frame) return;
+		frame.m_bCompleted = true;
+		bool same = before.SameSource(after);
+		if (!same)
+		{
+			ScopeLoss("STABLE_IDENTITY_CHANGED");
+			return;
+		}
+		string result = string.Format("actual_present=%1 actual_kind=%2 actual_reason=%3 actual_causation=%4 actual_retry_at_ms=%5 stable_identity_unchanged=%6 acquisition_context_changed=%7", actual != null, kind, reason, causation, retryAt, same, !before.SameAcquisitionState(after));
+		string signature = result + before.m_sFields + after.m_sFields;
+		if (!Want(before.m_sKey, signature, nowMs)) return;
+		Print(string.Format("[AICF][VEHICLE_ACQUISITION_OUTCOME] event=RESULT sequence=%1 input_now_ms=%2 diagnostic_only=1 state_scope=SEQUENTIAL_BEFORE_AFTER ", s_iRecords, nowMs) + result + " BEFORE{" + before.m_sFields + "} AFTER{" + after.m_sFields + "}");
+	}
+
+	static void Stop()
+	{
+		s_Frame = null;
+		s_Keys.Clear();
+		s_Signatures.Clear();
+		s_At.Clear();
+		s_iRecords = 0;
+		s_bOverflow = false;
+		s_bScopeLost = false;
+	}
+}
+
 class AICF_MultiHierarchyProtection
 {
 	static string SelectedScope()
@@ -229,16 +452,12 @@ modded class AICF_EconomySystem
 	}
 }
 
-modded class AICF_VehicleAcquisitionFlow
+modded class ArmaReforgerScripted
 {
-	override protected bool SpawnCandidate(AICF_TransportTrip trip, SCR_CampaignFaction faction,
-		AICF_EVehicleKind kind, array<ResourceName> candidates, AICF_VehicleSpawnSiteSelection selection,
-		AICF_VehicleAcquisitionCandidate candidate, string identity)
+	override void OnGameEnd()
 	{
-		AICF_MatchController controller = AICF_MatchController.GetActiveController();
-		if (controller && controller.VehiclePresetEconomy() && selection && candidate)
-			controller.VehiclePresetEconomy().AICF_MultiJitVehicleQuote(trip, faction, selection.m_Base, candidate.m_Prefab, "PRESPAWN");
-		return super.SpawnCandidate(trip, faction, kind, candidates, selection, candidate, identity);
+		AICF_MultiAcquisitionProbe.Stop();
+		super.OnGameEnd();
 	}
 }
 
@@ -1132,5 +1351,34 @@ modded class AICF_MatchController
 			m_iAICFMultiNextSample = now + 2000;
 			AICF_MultiSample(now);
 		}
+	}
+}
+
+modded class AICF_VehicleAcquisitionFlow
+{
+	override AICF_TripOutcome Update(AICF_TransportTrip trip, AICF_StrategicAssignmentSnapshot currentAssignment,
+		AICF_FactionFleet fleet, SCR_CampaignFaction faction, int nowMs)
+	{
+		bool observed = AICF_MultiAcquisitionProbe.Enabled();
+		ref AICF_MultiAcquisitionFrame frame;
+		AICF_MultiAcquisitionContext before;
+		if (observed)
+		{
+			frame = AICF_MultiAcquisitionProbe.Begin();
+			before = AICF_MultiAcquisitionProbe.Read(trip, currentAssignment);
+		}
+		AICF_TripOutcome actual = super.Update(trip, currentAssignment, fleet, faction, nowMs);
+		if (observed) AICF_MultiAcquisitionProbe.Record(before, AICF_MultiAcquisitionProbe.Read(trip, currentAssignment), actual, nowMs, frame);
+		return actual;
+	}
+
+	override protected bool SpawnCandidate(AICF_TransportTrip trip, SCR_CampaignFaction faction,
+		AICF_EVehicleKind kind, array<ResourceName> candidates, AICF_VehicleSpawnSiteSelection selection,
+		AICF_VehicleAcquisitionCandidate candidate, string identity)
+	{
+		AICF_MatchController controller = AICF_MatchController.GetActiveController();
+		if (controller && controller.VehiclePresetEconomy() && selection && candidate)
+			controller.VehiclePresetEconomy().AICF_MultiJitVehicleQuote(trip, faction, selection.m_Base, candidate.m_Prefab, "PRESPAWN");
+		return super.SpawnCandidate(trip, faction, kind, candidates, selection, candidate, identity);
 	}
 }

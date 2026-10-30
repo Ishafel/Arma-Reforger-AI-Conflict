@@ -1,5 +1,109 @@
 # Ступенчатая нагрузка транспорта и native combat hold
 
+## Фактический outcome ожидания acquisition
+
+В isolated `AICF_VehicleMultiSquadProbe.c` добавлен выключенный по умолчанию
+read-only observer: CLI `aicfVehicleAcquisitionOutcomeProbe=1`. Он оборачивает
+исходный public `AICF_VehicleAcquisitionFlow.Update` ровно одним `super.Update`
+с теми же аргументами и возвращает тот же `AICF_TripOutcome`, включая `null`.
+Исходное исключение не перехватывается. Это источник фактических
+`actual_kind`, `actual_reason`, `actual_causation`, `actual_retry_at_ms`, а не
+повторная оценка acquisition. `ApplyOutcome` при `WAIT` не сохраняет причину
+в transition reason trip: прежний `SPAWN_COMMIT_READY` не доказывает причину
+продолжающегося ожидания.
+
+`[AICF][VEHICLE_ACQUISITION_OUTCOME] event=RESULT` содержит отдельно
+`BEFORE` и `AFTER` script fields: faction/numeric slot, group/trip generation,
+assignment/intent/base revision, operation/phase/transition count, request
+generation/counters/deadline/backoff, plan/staging/deadline, reservation
+token/generation/expiry и lease identity/state. Это последовательные чтения,
+не атомарный снимок входов исходного решения. `trip_deadline_stored_ms` —
+только исходное поле; `deadline_scope=RAW_SCRIPT_FIELDS_NOT_EFFECTIVE_CLOCK`
+исключает заявление о текущем effective deadline с паузами. Group identity
+основана на faction/slot/generation и weak reference, без native EntityId/Rpl.
+`stable_identity_unchanged` проверяет непрерывность этих script identities,
+не заменяет gameplay `IsCurrent`. Законная смена request/plan/reservation/lease
+показывается как `acquisition_context_changed`, а не как чужой trip.
+Этот флаг сравнивает ownership references/presence, request generation и
+reservation token, а не все значения `BEFORE`/`AFTER`: изменение одного
+lease state без смены lease reference само по себе не включает флаг.
+
+Каждый вызов получает отдельный token без domain references. После всех
+snapshot/outcome getters проверяется, что token всё ещё принадлежит вызову.
+Вложенный Update, включая вызов из getter, и `Stop` с новым запуском делают
+внешний token устаревшим: внешний вызов возвращает исходный outcome, но уже
+не пишет cache, timestamps или counters поверх преемника. Новый владелец
+может сохранить bounded `SCOPE_LOSS cause=PREVIOUS_FRAME_UNFINISHED`; это
+также может означать ранее выброшенное исходное исключение, а не доказанный
+параллельный gameplay callback. При смене stable identity сохраняется
+`SCOPE_LOSS cause=STABLE_IDENTITY_CHANGED` без добавления result в cache.
+
+Общий бюджет —384 records, включая scope-loss receipts; cache содержит
+не более32 value-only context keys/signatures/timestamps. Изменение полей
+или actual outcome печатается сразу, повтор прежнего состояния — не чаще
+10с по исходному `nowMs`. `OVERFLOW observations_incomplete=1` явно означает
+неполное наблюдение. `OnGameEnd` очищает cache, flags и текущий token.
+Weak domain references существуют только в локальных context objects.
+Observer не вызывает `Capture`, `IsCurrent`, native getters, physics/nav
+queries, economic decisions или setters; не меняет timers, deadlines,
+watchdog/idle exemptions, посадку и движение. Выключенный observer не читает
+script snapshots или outcome getters. Это диагностический инструмент,
+не исправление taskless failures и не доказательство прохождения MOVING.
+
+До изменения fixture полный frozen V27 набор:262/262 PASS,1021 source hashes
+без расхождений. Он не покрывает новый observer. Первое targeted выполнение
+после правки:3/3 PASS (Multi fixture31 actual replay cases/10 executable
+unsafe variants/68 прежних controls; соседние Background и Protection PASS),
+evidence `.codex-runtime/issue78-finalization-20261030/multi-acquisition-outcome-observer/targeted-v1/`.
+Финальный targeted `targeted-v3` (2026-10-31,01:52:44–01:53:20 MSK):
+Multi fixture **33 actual replay cases/10 executable unsafe variants/43
+исходных pure-field getter bindings/68 прежних controls PASS/0**.
+Проверены disabled/null/exception, исходные аргументы/result reference,
+legitimate mutable acquisition context, stable identity loss, reentry из
+обоих snapshot reads и каждого из4 outcome getters, Stop+новый token,
+неизменность cache/signatures/timestamps преемника, обе границы объёма,
+bounded unfinished-frame metadata и OnGameEnd cleanup. `SpawnCandidate`
+только перенесён вместе с modded class: исходный raw method body совпадает
+побайтно, обе версии содержат ровно один метод. `git diff --check` PASS.
+
+Промежуточный `targeted-v2` FAIL сохранён: unsafe-вариант убирал отдельное
+сравнение trip generation, но добавленный stable context key независимо
+содержит ту же generation. Вместо дублирующего изменения проверяется
+удаление group weak-reference comparison; этот unsafe-вариант исполняется
+и отвергается actual replay. Это исправление теста избыточного mutation,
+не исключение gameplay guard или принятие FAIL.
+
+Первый терминальный Workbench mixed stage
+`.codex-runtime/issue78-finalization-20261029/multi-outcome-diagnostic-source-v5/`:
+**FAIL/native exit-1**, validation false,219 full fatal matches во всех3 полных
+логах; raw388/compiled376, source drift0. Первый собственный error —
+`AICF_VehicleMultiSquadProbe.c(36): Formula too complex` в длинном boolean
+выражении `SameSource`. Процесс и session22560 завершились, CIM01:56:31 MSK
+не нашёл native/Workbench процессов. Исходный stage и все логи сохранены.
+Оба identity predicate разбиты на эквивалентные короткие ordered guard clauses;
+ни одно условие не удалено. Compile FAIL не превращён в PASS результатом
+C# replay: потребовался отдельный свежий Workbench этой версии.
+После guard-clause исправления `targeted-v4-guard-clauses`: **3/3 PASS/0**,
+с прежними33 actual/10 unsafe/43 getter bindings/68 controls Multi и
+неизменёнными Background/Protection. Запуск01:56:52–01:57:55 MSK сохранён
+отдельно от прежних результатов.
+
+Повторный fresh mixed stage
+`.codex-runtime/issue78-finalization-20261029/multi-outcome-diagnostic-source-v6/`
+скомпилирован **PASS/native0/validation successful/full fatal0/source drift0**
+2026-10-31,02:03:07 MSK. Session93425 closed0; CIM02:03:13.816 MSK:
+native/Workbench processes отсутствуют. Состав:384 production files строго
+из frozen V27 с SHA-проверкой текущего checkout,3 неизменённые V27 fixtures
+Recruit/Census/Mob и новый Multi fixture
+`BC72EC5826C5DAA8DA88A7B759FC34D45A97207788C9406FB475819C9D95D361`.
+Raw388/compiled376; mixed source manifest
+`876AF3D6650165541777EBFFB0ED63A90C26245CEDCE43E69DA8BFDD10CFB49C`.
+Точный DryRun/compile command, per-fixture origins, SHA всех3 полных sibling
+logs и process closure сохранены рядом со stage. Исходный stage v5 не менялся.
+Компиляция подтверждает устранение `Formula too complex`, но не доказывает
+фактический WAIT reason в игре: native observer остаётся `NOT RUN`.
+Оригинальные native taskless FAIL и все прежние runtime blockers сохранены.
+
 ## Native отказ до преждевременного выхода из машины
 
 `AICF_TransitMoveFailure` передаёт точный STUCK/UNREACHABLE/UNKNOWN текущего

@@ -187,5 +187,117 @@ foreach($case in @(@('MOVING','NORMAL',$false),@('MOVING','CAPACITY',$false),@('
  if([bool](& $runnerCheck $case[0] $case[1]) -ne $case[2]){throw 'Runner mixed mode guard failed'}
  $controls++
 }
+function AcqClass([string]$Text,[string]$Name){$m=[regex]::Match($Text,'(?m)^(?:modded )?class '+[regex]::Escape($Name)+'\b');if(!$m.Success){throw "Missing $Name"};$n=[regex]::Match($Text.Substring($m.Index+$m.Length),'(?m)^(?:modded )?class ');if($n.Success){return $Text.Substring($m.Index,$m.Length+$n.Index)};return $Text.Substring($m.Index)}
+$taskAcqContext=AcqClass $source 'AICF_MultiAcquisitionContext'
+$taskAcqFrame=AcqClass $source 'AICF_MultiAcquisitionFrame'
+$taskAcqProbe=AcqClass $source 'AICF_MultiAcquisitionProbe'
+$taskAcqFlow=AcqClass $source 'AICF_VehicleAcquisitionFlow'
+$taskAcqUpdate=Body $taskAcqFlow 'Update'
+$taskAcqDeadline=Body (AcqClass $source 'AICF_TransportTrip') 'AICF_MultiStoredDeadlineMs'
+$taskAcqEnd=Body (AcqClass $source 'ArmaReforgerScripted') 'OnGameEnd'
+$taskAcqBase=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/Vehicles/AICF_VehicleAcquisitionFlow.c'))
+if($taskAcqBase -notmatch '(?m)^\s*AICF_TripOutcome Update\(' -or [regex]::Matches($taskAcqUpdate,'super.Update\(').Count-ne1 -or $taskAcqUpdate -notmatch 'return actual;'){throw 'Acquisition wrapper must delegate one original-base Update and return same outcome'}
+if($taskAcqDeadline.Trim() -ne '{ return m_iAbsoluteDeadlineMs; }'){throw 'Probe deadline accessor must read only raw stored script field'}
+if(($taskAcqContext+$taskAcqProbe+$taskAcqUpdate) -match '\.(?:IsCurrent|Capture|GetID|GetWorld|FindComponent|Set\w*|Cancel\w*|CanAttempt|IsDeadlineReached|Commit\w*|GetAbsoluteDeadlineMs\(\)\s*\+)\(' -or ($taskAcqProbe+$taskAcqUpdate) -match 'GetGame\(|CallLater|GetTickCount|ObserveMeaningfulTaskLoss|ObserveUnexplainedMobIdle'){throw 'Probe repeats decisions/native reads or changes gameplay clocks'}
+if($taskAcqContext -match 'ref\s+(?:AICF_|SCR_)' -or $taskAcqProbe.Replace('static ref AICF_MultiAcquisitionFrame s_Frame;','') -match 'static\s+(?:ref\s+)?(?:AICF_|SCR_)\w+\s+\w+\s*[;=]' -or $taskAcqFrame -match 'AICF_\w+\s+m_'){throw 'Observer retains domain refs'}
+foreach($taskGetter in @('GetKind','GetReason','GetCausationId','GetRetryAtMs')){if([regex]::Matches((Body $taskAcqProbe 'Record'),'actual\.'+$taskGetter+'\(').Count-ne1){throw "Outcome getter repeated/missing $taskGetter"}}
+if($taskAcqEnd -notmatch 'AICF_MultiAcquisitionProbe.Stop\(\);\s*super.OnGameEnd\(\);'){throw 'Probe game-end cache cleanup missing'}
+$taskAcqBindings=@(
+ @('State/Vehicles/AICF_TransportTrip.c','AICF_TransportTrip','GetAssignment,GetRequestState,GetLease,GetTripGeneration,GetOperationId,GetPhase,GetTransitionCount,GetPhaseStartedAtMs'),
+ @('State/Vehicles/AICF_StrategicAssignmentSnapshot.c','AICF_StrategicAssignmentSnapshot','GetAssignmentRevision,GetGroup,GetGroupGeneration,GetStrategicIntentRevision,GetFactionKey,GetSlotId,GetBaseRevision'),
+ @('State/Vehicles/AICF_VehiclePhaseStates.c','AICF_VehicleRequestState','GetRequestGeneration,GetSpawnPlan,GetAbsoluteDeadlineMs,GetNextAttemptAtMs,GetAttemptCount,GetTotalAttemptCount,GetMaximumAttempts,GetLastFailureReason,GetQuotaCreation'),
+ @('Vehicles/AICF_VehicleSpawner.c','AICF_VehicleSpawnPlan','GetReservation,GetPlannedAtMs,GetApproachDeadlineMs,GetAllStagedSinceMs,GetStagedCount,GetAliveCount'),
+ @('Vehicles/AICF_VehicleSpawner.c','AICF_VehicleSpawnSiteReservation','GetOwnerToken,GetRequestGeneration,GetReservedAtMs,GetExpiresAtMs'),
+ @('State/Vehicles/AICF_VehicleLease.c','AICF_VehicleLease','GetLeaseGeneration,GetVehicleGeneration,GetVehicleLifecycleId,GetState'),
+ @('State/Vehicles/AICF_TripOutcome.c','AICF_TripOutcome','GetKind,GetReason,GetCausationId,GetRetryAtMs'),
+ @('Diagnostics/AICF_Stage1Diagnostics.c','AICF_Stage1Diagnostics','GetRunId')
+)
+$taskAcqBound=0
+foreach($taskBinding in $taskAcqBindings){$taskOriginal=AcqClass ([IO.File]::ReadAllText((Join-Path $RepositoryRoot ('AIConflictCore/Scripts/Game/AIConflict/'+$taskBinding[0])))) $taskBinding[1];foreach($taskMethod in $taskBinding[2].Split(',')){if((Body $taskOriginal $taskMethod) -notmatch '^\s*\{\s*return [ms]_\w+;\s*\}\s*$'){throw "Observer getter ceased to be pure stored field: $($taskBinding[1]).$taskMethod"};$taskAcqBound++}}
+function AcqReplay([string]$Text){
+ $Text=$Text.Replace('modded class','public class').Replace('class AICF_MultiAcquisitionContext','public class AICF_MultiAcquisitionContext:Native').Replace('class AICF_MultiAcquisitionFrame','public class AICF_MultiAcquisitionFrame:Native').Replace('class AICF_MultiAcquisitionProbe','public class AICF_MultiAcquisitionProbe')
+ $Text=$Text.Replace('ref AICF_MultiAcquisitionFrame','AICF_MultiAcquisitionFrame')
+ $Text=$Text.Replace('static const int','public const int').Replace('static ref array<string>','public static EArray<string>').Replace('static ref array<int>','public static EArray<int>')
+ $Text=$Text.Replace('= {};','= new EArray<string>();').Replace('EArray<int> s_At = new EArray<string>();','EArray<int> s_At = new EArray<int>();')
+ $Text=$Text.Replace('s_Keys.Find(key)','s_Keys.IndexOf(key)').Replace('string.Format','Fmt.Format').Replace('Print(','Fmt.Print(').Replace('System.GetCLIParam("aicfVehicleAcquisitionOutcomeProbe", value)','Cli.GetCLIParam("aicfVehicleAcquisitionOutcomeProbe", out value)')
+ $Text=[regex]::Replace($Text,'(?m)^(\s*)(static )?(AICF_\w+|SCR_\w+|bool|int|string) (m_\w+|s_\w+);','$1public $2$3 $4;')
+ $Text=[regex]::Replace($Text,'(?m)^(\s*)static (bool|int|void|AICF_\w+) (\w+)\(','$1public static $2 $3(')
+ $Text=$Text.Replace('bool SameSource(','public bool SameSource(').Replace('bool SameAcquisitionState(','public bool SameAcquisitionState(').Replace('super.','base.')
+ $Text=[regex]::Replace($Text,'(?m)^(\s*)(string|int) (\w+);','$1$2 $3 = default($2);')
+ $Text=$Text.Replace('AICF_MultiAcquisitionContext before;','AICF_MultiAcquisitionContext before = null;')
+ $Text=$Text.Replace('AICF_MultiAcquisitionFrame frame;','AICF_MultiAcquisitionFrame frame = null;')
+ return $Text
+}
+$taskAcqShim=@'
+using System;using System.Collections.Generic;
+namespace MultiAcquisitionReplay{
+public class Native{public static implicit operator bool(Native n){return n!=null;}}
+public class EArray<T>:List<T>{public new int Count(){return base.Count;}public void Insert(T v){Add(v);}}
+public static class Fmt{public static List<string> Logs=new List<string>();public static string Format(string f,params object[] a){for(int i=a.Length;i>0;i--)f=f.Replace("%"+i,a[i-1]==null?"NONE":a[i-1].ToString());return f;}public static void Print(string s){Logs.Add(s);}}
+public static class Cli{public static bool Enabled;public static bool GetCLIParam(string n,out string v){v=Enabled?"1":"";return Enabled;}}
+public static class AICF_Stage1Diagnostics{public static string Run="RUN1";public static string GetRunId(){return Run;}}
+public class SCR_AIGroup:Native{}public class AICF_FactionFleet:Native{}public class SCR_CampaignFaction:Native{}
+public class AICF_StrategicAssignmentSnapshot:Native{public SCR_AIGroup Group=new SCR_AIGroup();public string Faction="US";public int Slot,Generation=1,Revision=2,Intent=3,BaseRevision=4;public Action ReadAction;public SCR_AIGroup GetGroup(){return Group;}public string GetFactionKey(){return Faction;}public int GetSlotId(){return Slot;}public int GetGroupGeneration(){return Generation;}public int GetAssignmentRevision(){if(ReadAction!=null)ReadAction();return Revision;}public int GetStrategicIntentRevision(){return Intent;}public int GetBaseRevision(){return BaseRevision;}}
+public class AICF_VehicleSpawnSiteReservation:Native{public string Token="SITE1";public int Generation=1,Reserved=10,Expires=90000;public string GetOwnerToken(){return Token;}public int GetRequestGeneration(){return Generation;}public int GetReservedAtMs(){return Reserved;}public int GetExpiresAtMs(){return Expires;}}
+public class AICF_VehicleSpawnPlan:Native{public AICF_VehicleSpawnSiteReservation Reservation=new AICF_VehicleSpawnSiteReservation();public int Planned=20,Deadline=80000,Since=30,Staged=5,Alive=5;public AICF_VehicleSpawnSiteReservation GetReservation(){return Reservation;}public int GetPlannedAtMs(){return Planned;}public int GetApproachDeadlineMs(){return Deadline;}public int GetAllStagedSinceMs(){return Since;}public int GetStagedCount(){return Staged;}public int GetAliveCount(){return Alive;}}
+public class AICF_VehicleRequestState:Native{public AICF_VehicleSpawnPlan Plan=new AICF_VehicleSpawnPlan();public int Generation=1,Deadline=100000,Next=150,Attempts=1,Total=1,Maximum=4;public string Failure="NONE";public Native Guard;public int GetRequestGeneration(){return Generation;}public int GetAbsoluteDeadlineMs(){return Deadline;}public int GetNextAttemptAtMs(){return Next;}public int GetAttemptCount(){return Attempts;}public int GetTotalAttemptCount(){return Total;}public int GetMaximumAttempts(){return Maximum;}public string GetLastFailureReason(){return Failure;}public Native GetQuotaCreation(){return Guard;}public AICF_VehicleSpawnPlan GetSpawnPlan(){return Plan;}}
+public class AICF_VehicleLease:Native{public int Generation=1,VehicleGeneration=1,State;public string Id="CAR1";public int GetLeaseGeneration(){return Generation;}public int GetVehicleGeneration(){return VehicleGeneration;}public string GetVehicleLifecycleId(){return Id;}public int GetState(){return State;}}
+public class AICF_TransportTrip:Native{public AICF_StrategicAssignmentSnapshot Assignment=new AICF_StrategicAssignmentSnapshot();public AICF_VehicleRequestState Request=new AICF_VehicleRequestState();public AICF_VehicleLease Lease;public int Generation=1,Phase=5,Transitions=4,Started=50,m_iAbsoluteDeadlineMs=120000;public string Operation="TRIP1";public AICF_StrategicAssignmentSnapshot GetAssignment(){return Assignment;}public AICF_VehicleRequestState GetRequestState(){return Request;}public AICF_VehicleLease GetLease(){return Lease;}public int GetTripGeneration(){return Generation;}public string GetOperationId(){return Operation;}public int GetPhase(){return Phase;}public int GetTransitionCount(){return Transitions;}public int GetPhaseStartedAtMs(){return Started;}public int AICF_MultiStoredDeadlineMs()DEADLINE}
+public class AICF_TripOutcome:Native{public int Kind,Retry=123,Reads;public string Reason="VEHICLE_QUOTA_PENDING",Causation="CAUSE1";public Action<string> Hook;public int GetKind(){Reads++;if(Hook!=null)Hook("kind");return Kind;}public string GetReason(){Reads++;if(Hook!=null)Hook("reason");return Reason;}public string GetCausationId(){Reads++;if(Hook!=null)Hook("causation");return Causation;}public int GetRetryAtMs(){Reads++;if(Hook!=null)Hook("retry");return Retry;}}
+public class FlowBase:Native{public int Calls,Writes;public object[] Args;public int Now;public Action During;public Exception Error;public AICF_TripOutcome Result=new AICF_TripOutcome();public virtual AICF_TripOutcome Update(AICF_TransportTrip trip,AICF_StrategicAssignmentSnapshot assignment,AICF_FactionFleet fleet,SCR_CampaignFaction faction,int now){Calls++;Args=new object[]{trip,assignment,fleet,faction};Now=now;if(During!=null)During();if(Error!=null)throw Error;return Result;}public void DebugWrite(){Writes++;}}
+public class AICF_VehicleAcquisitionFlow:FlowBase{public override AICF_TripOutcome Update(AICF_TransportTrip trip,AICF_StrategicAssignmentSnapshot currentAssignment,AICF_FactionFleet fleet,SCR_CampaignFaction faction,int nowMs)UPDATE}
+public class GameBase{public int Calls;public virtual void OnGameEnd(){Calls++;}}
+public class ArmaReforgerScripted:GameBase{public override void OnGameEnd()ENDGAME}
+'@
+$taskAcqCases=@'
+public static class AcquisitionCases{
+static AICF_TransportTrip Trip;static AICF_VehicleAcquisitionFlow Flow;static AICF_FactionFleet Fleet;static SCR_CampaignFaction Faction;
+static void Setup(bool enabled=true){AICF_MultiAcquisitionProbe.Stop();Fmt.Logs.Clear();Cli.Enabled=enabled;AICF_Stage1Diagnostics.Run="RUN1";Trip=new AICF_TransportTrip();Flow=new AICF_VehicleAcquisitionFlow();Fleet=new AICF_FactionFleet();Faction=new SCR_CampaignFaction();}
+static AICF_TripOutcome Call(int now=1000){return Flow.Update(Trip,Trip==null?null:Trip.Assignment,Fleet,Faction,now);}
+public static int Run(){int n=0;foreach(bool enabled in new[]{false,true})foreach(bool absent in new[]{false,true}){Setup(enabled);var result=Flow.Result;if(absent)Flow.Result=null;int deadline=Trip.m_iAbsoluteDeadlineMs;if(Call()!=(absent?null:result)||Flow.Calls!=1||Flow.Writes!=0||Flow.Args[0]!=Trip||Flow.Args[1]!=Trip.Assignment||Flow.Args[2]!=Fleet||Flow.Args[3]!=Faction||Flow.Now!=1000||Trip.m_iAbsoluteDeadlineMs!=deadline)throw new Exception("original result/args/deadline altered");if(result.Reads!=(enabled&&!absent?4:0))throw new Exception("outcome getters not exactly once");if(!enabled&&(Fmt.Logs.Count!=0||AICF_MultiAcquisitionProbe.s_iRecords!=0))throw new Exception("disabled probe observed");if(enabled&&!absent&&!string.Join("\n",Fmt.Logs).Contains("actual_reason=VEHICLE_QUOTA_PENDING"))throw new Exception("actual reason replaced");n++;}
+Setup(false);Trip.Assignment.ReadAction=()=>{throw new Exception("disabled snapshot observed");};if(Call()!=Flow.Result||Flow.Calls!=1)throw new Exception("disabled result");n++;
+Setup();var error=new InvalidOperationException("ORIGINAL");Flow.Error=error;bool sameError=false;try{Call();}catch(Exception e){sameError=Object.ReferenceEquals(e,error);}if(!sameError||Flow.Calls!=1||AICF_MultiAcquisitionProbe.s_iRecords!=0)throw new Exception("original exception suppressed/replaced");n++;
+foreach(string change in new[]{"group","generation","tripGeneration","assignment","inputRevision","request","requestGeneration","plan","reservation","token","lease","run","clearedRequest"}){
+ Setup();bool foreign=change=="group"||change=="generation"||change=="tripGeneration"||change=="assignment"||change=="inputRevision"||change=="run";
+ switch(change){case"group":Flow.During=()=>Trip.Assignment.Group=new SCR_AIGroup();break;case"generation":Flow.During=()=>Trip.Assignment.Generation++;break;case"tripGeneration":Flow.During=()=>Trip.Generation++;break;case"assignment":Flow.During=()=>Trip.Assignment=new AICF_StrategicAssignmentSnapshot();break;case"inputRevision":Flow.During=()=>Trip.Assignment.Revision++;break;case"request":Flow.During=()=>Trip.Request=new AICF_VehicleRequestState();break;case"requestGeneration":Flow.During=()=>Trip.Request.Generation++;break;case"plan":Flow.During=()=>Trip.Request.Plan=new AICF_VehicleSpawnPlan();break;case"reservation":Flow.During=()=>Trip.Request.Plan.Reservation=new AICF_VehicleSpawnSiteReservation();break;case"token":Flow.During=()=>Trip.Request.Plan.Reservation.Token="SITE2";break;case"lease":Flow.During=()=>Trip.Lease=new AICF_VehicleLease();break;case"run":Flow.During=()=>AICF_Stage1Diagnostics.Run="SUCCESSOR";break;case"clearedRequest":Flow.During=()=>Trip.Request=null;break;}
+ var result=Flow.Result;if(Call()!=result||Flow.Calls!=1)throw new Exception("original changed "+change);
+ if(foreign){if(!AICF_MultiAcquisitionProbe.s_bScopeLost||AICF_MultiAcquisitionProbe.s_Keys.Count()!=0||!string.Join("\n",Fmt.Logs).Contains("STABLE_IDENTITY_CHANGED"))throw new Exception("foreign cache write "+change);}
+ else if(AICF_MultiAcquisitionProbe.s_bScopeLost||!string.Join("\n",Fmt.Logs).Contains("acquisition_context_changed=True"))throw new Exception("legitimate mutable state called foreign "+change);n++;
+}
+foreach(string seam in new[]{"super","readBefore","readAfter","kind","reason","causation","retry","stopNewBegin"}){
+ Setup();var outer=Trip;var nested=new AICF_VehicleAcquisitionFlow();var next=new AICF_TransportTrip{Operation="NESTED"};int savedRecords=-1;string savedKeys=null,savedSignatures=null,savedAt=null;AICF_MultiAcquisitionFrame savedFrame=null;
+ Action inner=()=>{if(seam=="stopNewBegin")AICF_MultiAcquisitionProbe.Stop();if(nested.Update(next,next.Assignment,Fleet,Faction,1001)!=nested.Result)throw new Exception("nested result");savedRecords=AICF_MultiAcquisitionProbe.s_iRecords;savedKeys=string.Join("|",AICF_MultiAcquisitionProbe.s_Keys);savedSignatures=string.Join("|",AICF_MultiAcquisitionProbe.s_Signatures);savedAt=string.Join("|",AICF_MultiAcquisitionProbe.s_At);savedFrame=AICF_MultiAcquisitionProbe.s_Frame;};
+ if(seam=="super"||seam=="stopNewBegin")Flow.During=inner;
+ else if(seam=="readBefore"||seam=="readAfter"){int reads=0;Trip.Assignment.ReadAction=()=>{reads++;if(reads==(seam=="readBefore"?1:3)){Trip.Assignment.ReadAction=null;inner();}};}
+ else Flow.Result.Hook=key=>{if(key==seam){Flow.Result.Hook=null;inner();}};
+ if(Call()!=Flow.Result||Flow.Calls!=1||nested.Calls!=1||Flow.Result.Reads!=4||savedRecords<1||savedRecords!=AICF_MultiAcquisitionProbe.s_iRecords||savedKeys!=string.Join("|",AICF_MultiAcquisitionProbe.s_Keys)||savedSignatures!=string.Join("|",AICF_MultiAcquisitionProbe.s_Signatures)||savedAt!=string.Join("|",AICF_MultiAcquisitionProbe.s_At)||savedFrame!=AICF_MultiAcquisitionProbe.s_Frame)throw new Exception("stale outer overwrote successor "+seam);n++;
+}
+Setup();Call(1000);Call(1001);if(AICF_MultiAcquisitionProbe.s_iRecords!=1)throw new Exception("duplicate unchanged WAIT printed");Call(11000);if(AICF_MultiAcquisitionProbe.s_iRecords!=2)throw new Exception("bounded observer heartbeat missing");Flow.Result.Reason="SPAWN_BACKOFF";Call(11001);if(AICF_MultiAcquisitionProbe.s_iRecords!=3)throw new Exception("changed actual WAIT hidden");n++;
+Setup();for(int i=0;i<AICF_MultiAcquisitionProbe.MAX_CONTEXTS;i++){Trip=new AICF_TransportTrip{Operation="O"+i};Call(i);}Trip=new AICF_TransportTrip{Operation="OVER"};Call(999);if(!AICF_MultiAcquisitionProbe.s_bOverflow||AICF_MultiAcquisitionProbe.s_Keys.Count()!=AICF_MultiAcquisitionProbe.MAX_CONTEXTS)throw new Exception("context bound hidden");n++;
+Setup();for(int i=0;i<AICF_MultiAcquisitionProbe.MAX_RECORDS;i++){Flow.Result.Reason="R"+i;Call(i);}Flow.Result.Reason="OVER";Call(999);if(!AICF_MultiAcquisitionProbe.s_bOverflow||AICF_MultiAcquisitionProbe.s_iRecords!=AICF_MultiAcquisitionProbe.MAX_RECORDS)throw new Exception("record bound hidden");n++;
+Setup();Flow.Error=new InvalidOperationException("ORIGINAL");for(int i=0;i<AICF_MultiAcquisitionProbe.MAX_RECORDS+2;i++){try{Call(i);}catch(InvalidOperationException){}}if(!AICF_MultiAcquisitionProbe.s_bOverflow||!AICF_MultiAcquisitionProbe.s_bScopeLost||AICF_MultiAcquisitionProbe.s_iRecords!=AICF_MultiAcquisitionProbe.MAX_RECORDS||AICF_MultiAcquisitionProbe.s_Keys.Count()!=0)throw new Exception("unfinished-frame metadata escaped budget");n++;
+Setup();Call();var game=new ArmaReforgerScripted();game.OnGameEnd();if(game.Calls!=1||AICF_MultiAcquisitionProbe.s_Keys.Count()!=0||AICF_MultiAcquisitionProbe.s_Signatures.Count()!=0||AICF_MultiAcquisitionProbe.s_At.Count()!=0||AICF_MultiAcquisitionProbe.s_iRecords!=0||AICF_MultiAcquisitionProbe.s_bOverflow||AICF_MultiAcquisitionProbe.s_bScopeLost||AICF_MultiAcquisitionProbe.s_Frame!=null)throw new Exception("unbalanced game-end clear");n++;
+Setup();Trip=null;if(Call()!=Flow.Result||Flow.Calls!=1||!AICF_MultiAcquisitionProbe.s_bScopeLost)throw new Exception("null scope changed original delegate");n++;return n;}
+}
+}
+'@
+$taskAcqCode=$taskAcqShim.Replace('DEADLINE',$taskAcqDeadline).Replace('UPDATE',(AcqReplay $taskAcqUpdate)).Replace('ENDGAME',(AcqReplay $taskAcqEnd))+(AcqReplay $taskAcqContext)+(AcqReplay $taskAcqFrame)+(AcqReplay $taskAcqProbe)+$taskAcqCases
+Add-Type -TypeDefinition $taskAcqCode -Language CSharp
+$taskAcqCount=[MultiAcquisitionReplay.AcquisitionCases]::Run()
+$taskAcqMutants=@(
+ @('zero','AICF_TripOutcome actual = base.Update(trip, currentAssignment, fleet, faction, nowMs);','AICF_TripOutcome actual = Result;'),
+ @('double','AICF_TripOutcome actual = base.Update(trip, currentAssignment, fleet, faction, nowMs);','AICF_TripOutcome actual = base.Update(trip, currentAssignment, fleet, faction, nowMs); actual = base.Update(trip, currentAssignment, fleet, faction, nowMs);'),
+ @('return','return actual;','return null;'),
+ @('reason','reason = actual.GetReason();','reason = "FAKE";'),
+ @('getter','kind = actual.GetKind();','kind = actual.GetKind(); kind = actual.GetKind();'),
+ @('stale','m_Group != other.m_Group','false'),
+ @('frame','if (!frame || frame != s_Frame) return;','if (!frame) return;'),
+ @('mutable','!before.SameAcquisitionState(after)','false'),
+ @('cadence','nowMs - s_At[index] < 10000','nowMs - s_At[index] < 0'),
+ @('stop','s_Keys.Clear();','')
+)
+$taskAcqCaught=0
+foreach($taskMutation in $taskAcqMutants){if(!$taskAcqCode.Contains($taskMutation[1])){throw "Missing acquisition unsafe target $($taskMutation[0])"};$taskNS='MultiAcquisitionUnsafe'+$taskMutation[0];Add-Type -TypeDefinition ($taskAcqCode.Replace('MultiAcquisitionReplay',$taskNS).Replace($taskMutation[1],$taskMutation[2])) -Language CSharp;$taskBad=$false;try{[void]([type]($taskNS+'.AcquisitionCases')).GetMethod('Run').Invoke($null,@())}catch{$taskBad=$true};if(!$taskBad){throw "Acquisition unsafe survived $($taskMutation[0])"};$taskAcqCaught++}
+"PASS Multi acquisition outcome observer actual_cases=$taskAcqCount executed_unsafe=$taskAcqCaught stored_field_bindings=$taskAcqBound original_result_reference=1 script_state_only=1 native=NOT_RUN"
 "PASS Multi-squad fixture: real paid muster/leases/cohorts, NORMAL isolation, bounded CAPACITY funding, live final intent and startup/stop ordering; controls=$controls"
 exit 0
