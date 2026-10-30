@@ -15,6 +15,7 @@
 | Разобрать неполный native spawn и очередь замены отрядов | [GROUP_SPAWN.md](GROUP_SPAWN.md), GroupRuntime/InfantrySpawnPlacement и controlled replacement stress |
 | Разобрать отказ короткой коррекции при native STUCK на подходе к казарме | [RECRUITMENT_DECISIONS.md](RECRUITMENT_DECISIONS.md), isolated decision observer без изменения recovery |
 | Найти источник долгого Census UNKNOWN при посадке | [AI_QUOTAS.md](AI_QUOTAS.md#разбор-census-unknown-без-изменения-допуска), отдельный opt-in decision observer и строгие старые gates |
+| Разобрать Census UNKNOWN после посадки экипажа с inventory | [VEHICLE_CENSUS_TOPOLOGY.md](VEHICLE_CENSUS_TOPOLOGY.md), structural compartment topology, character subtree boundary и неизменные occupant guards |
 | Разобрать конфликт приказа внутри MOB с требованием выхода с базы | [PLAYER_MOB_TASK.md](PLAYER_MOB_TASK.md), отдельные egress/arrival обязанности; [MOB_DECISIONS.md](MOB_DECISIONS.md), opt-in native decision observer |
 | Исправить persistence leaks при direct-connect без backend identity | [PERSISTENCE_IDENTITY.md](PERSISTENCE_IDENTITY.md), native SpawnLogic identity boundary и separate client/JIP gate |
 | Разобрать native out-of-world-bounds у оружия и отделить main-world drop от private Equipment model | [TEST_FIXTURES.md](TEST_FIXTURES.md#read-only-loose-weapon--private-equipment-model-observer), fixture-only LooseWeaponObserver и отдельный controlled native-drop baseline |

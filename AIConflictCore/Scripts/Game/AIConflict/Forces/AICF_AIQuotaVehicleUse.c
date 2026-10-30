@@ -82,11 +82,24 @@ class AICF_AIQuotaVehicleUse
 		{
 			IEntity node = nodes[index];
 			if (!node || node.GetWorld() != vehicle.GetWorld() || nodes.Count() > MAX_TOPOLOGY) return false;
+			array<IEntity> siblings = {};
 			IEntity child = node.GetChildren();
 			while (child)
 			{
-				if (nodes.Count() >= MAX_TOPOLOGY || nodes.Contains(child) || child.GetParent() != node) return false;
-				nodes.Insert(child);
+				if (child.GetParent() != node || child.GetWorld() != vehicle.GetWorld() ||
+					siblings.Count() >= MAX_TOPOLOGY || siblings.Contains(child)) return false;
+				siblings.Insert(child);
+				// Seated characters и их inventory не являются структурой автомобиля.
+				// Не теряем неоднозначный manager на самом исключаемом actor.
+				if (ChimeraCharacter.Cast(child))
+				{
+					if (BaseCompartmentManagerComponent.Cast(child.FindComponent(BaseCompartmentManagerComponent))) return false;
+				}
+				else
+				{
+					if (nodes.Count() >= MAX_TOPOLOGY || nodes.Contains(child)) return false;
+					nodes.Insert(child);
+				}
 				child = child.GetSibling();
 			}
 		}
