@@ -12,7 +12,9 @@ param(
     [ValidateRange(1,65535)][int]$ServerPort=2510,
     [ValidateSet('US','USSR','BOTH')][string]$AICommanderMode='BOTH',
     [ValidateSet(1,2,3,4)][int]$ProofVersion=2,
-    [switch]$LooseWeaponObserver
+    [switch]$LooseWeaponObserver,
+    [switch]$RecruitmentDecisionObserver,
+    [switch]$QuotaCensusDecisionObserver
 )
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'AICF_VehicleSoakSources.ps1')
@@ -28,6 +30,9 @@ $taskAuditHash=(Get-FileHash -LiteralPath $taskAuditScript -Algorithm SHA256).Ha
 $taskCommit=(& git -C $taskRepository rev-parse --verify "$SourceRef^{commit}").Trim()
 if($LASTEXITCODE -ne 0){throw 'Cannot resolve source commit'}
 $taskOwnStage=!$StageRoot
+$taskObservers=@()
+if($RecruitmentDecisionObserver){$taskObservers+=[pscustomobject]@{name='RecruitmentDecisionObserver';source='tests/fixtures/AICF_RecruitmentDecisionProbe.c';relative='AIConflictCore/Scripts/Game/AIConflict/AICF_ZRecruitmentDecisionProbe.c';flag='-aicfRecruitmentDecisionProbe'}}
+if($QuotaCensusDecisionObserver){$taskObservers+=[pscustomobject]@{name='QuotaCensusDecisionObserver';source='tests/fixtures/AICF_AIQuotaCensusDecisionProbe.c';relative='AIConflictCore/Scripts/Game/AIConflict/Integration/AICF_ZZQuotaCensusDecisionProbe.c';flag='-aicfQuotaCensusDecisionProbe'}}
 if($SkipCompile -and $taskOwnStage){throw 'SkipCompile requires an existing compiled stage'}
 if(!$StageRoot){
     $StageRoot=Join-Path $taskEvidence 'stage'
@@ -50,12 +55,26 @@ if(!$StageRoot){
     Copy-Item -LiteralPath (Join-Path $taskRepository 'tests/fixtures/AICF_VehicleSoakProbe.c') -Destination (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_VehicleSoakProbe.c')
     if($ProofVersion -eq 4){Copy-Item -LiteralPath (Join-Path $taskRepository 'tests/fixtures/AICF_VehicleSoakRecoveryObservationProbe.c') -Destination (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_VehicleSoakRecoveryObservationProbe.c')}
     if($LooseWeaponObserver){Copy-Item -LiteralPath (Join-Path $taskRepository 'tests/fixtures/AICF_LooseWeaponObserverProbe.c') -Destination (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_LooseWeaponObserverProbe.c')}
+    foreach($taskObserver in $taskObservers){
+        $taskObserverSource=Join-Path $taskRepository $taskObserver.source
+        if(!(Test-Path -LiteralPath $taskObserverSource -PathType Leaf)){throw ('Requested observer source missing: '+$taskObserver.name)}
+        $taskObserverHash=(Get-FileHash -LiteralPath $taskObserverSource -Algorithm SHA256).Hash
+        $taskObserverDestination=Join-Path $StageRoot $taskObserver.relative
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $taskObserverDestination))
+        Copy-Item -LiteralPath $taskObserverSource -Destination $taskObserverDestination
+        if((Get-FileHash -LiteralPath $taskObserverDestination -Algorithm SHA256).Hash-ne$taskObserverHash-or(Get-FileHash -LiteralPath $taskObserverSource -Algorithm SHA256).Hash-ne$taskObserverHash){throw ('Observer source copy drift: '+$taskObserver.name)}
+    }
 }
 $StageRoot=(Resolve-Path -LiteralPath $StageRoot).Path
 if($StageRoot -eq $taskRepository){throw 'Production checkout cannot be a soak stage'}
 if(!(Test-Path -LiteralPath (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_VehicleSoakProbe.c'))){throw 'Soak fixture missing'}
 if($ProofVersion -eq 4 -and !(Test-Path -LiteralPath (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_VehicleSoakRecoveryObservationProbe.c'))){throw 'Proof4 observation fixture missing'}
 if($LooseWeaponObserver -and !(Test-Path -LiteralPath (Join-Path $StageRoot 'AIConflictCore/Scripts/Game/AIConflict/AICF_LooseWeaponObserverProbe.c'))){throw 'Loose weapon observer fixture missing'}
+$taskObserverSources=@(foreach($taskObserver in $taskObservers){
+    $taskObserverPath=Join-Path $StageRoot $taskObserver.relative
+    if(!(Test-Path -LiteralPath $taskObserverPath -PathType Leaf)){throw ('Requested observer fixture missing from stage: '+$taskObserver.name)}
+    [pscustomobject]@{name=$taskObserver.name;source=$taskObserver.source;path=$taskObserverPath;sha256=(Get-FileHash -LiteralPath $taskObserverPath -Algorithm SHA256).Hash;flag=$taskObserver.flag}
+})
 $taskWorkingTree=[bool]$SnapshotWorkingTree
 $taskOriginManifest=$null
 if(!$taskOwnStage){
@@ -74,7 +93,7 @@ if(!$taskOwnStage){
     }
 }
 $taskHashes=@(Get-AICFVehicleSoakSources $StageRoot)
-[pscustomobject]@{base_commit=$taskCommit;working_tree=$taskWorkingTree;origin_manifest=$taskOriginManifest;stage=$StageRoot;faction=$Faction;duration_seconds=$DurationSeconds;mounted_hold_seconds=$MountedHoldSeconds;proof_version=$ProofVersion;auditor=$taskAuditScript;auditor_sha256=$taskAuditHash;files=$taskHashes}|ConvertTo-Json -Depth 5|Set-Content -LiteralPath (Join-Path $taskEvidence 'source-manifest.json')
+[pscustomobject]@{base_commit=$taskCommit;working_tree=$taskWorkingTree;origin_manifest=$taskOriginManifest;stage=$StageRoot;faction=$Faction;duration_seconds=$DurationSeconds;mounted_hold_seconds=$MountedHoldSeconds;proof_version=$ProofVersion;auditor=$taskAuditScript;auditor_sha256=$taskAuditHash;recruitment_decision_observer=[bool]$RecruitmentDecisionObserver;quota_census_decision_observer=[bool]$QuotaCensusDecisionObserver;observer_sources=$taskObserverSources;files=$taskHashes}|ConvertTo-Json -Depth 5|Set-Content -LiteralPath (Join-Path $taskEvidence 'source-manifest.json')
 if(!$SkipCompile){
     $taskPlan=@(& (Join-Path $taskRepository 'tools/Start-AICFRuntime.ps1') -Role Client -Variant Stock -RepositoryRoot $StageRoot -DryRun)
     $taskPlan|Set-Content -LiteralPath (Join-Path $taskEvidence 'compile-plan.txt')
@@ -95,6 +114,7 @@ $taskStarted=[DateTimeOffset]::UtcNow
 $taskRuntimeArguments=@('-aicfVehicleSoakFaction',$Faction,'-aicfVehicleSoakDurationMs',([string]($DurationSeconds*1000)),'-aicfVehicleSoakMountedHoldMs',([string]($MountedHoldSeconds*1000)),'-aicfGroupTrace','1','-aicfGroupTraceFaction',$Faction,'-aicfGroupTraceSlot','0','-addr',"127.0.0.1:$ServerPort")
 if($ProofVersion -eq 4){$taskRuntimeArguments+=@('-aicfVehicleSoakObservation4','1')}
 if($LooseWeaponObserver){$taskRuntimeArguments+=@('-aicfLooseWeaponObserver','1')}
+foreach($taskObserver in $taskObservers){$taskRuntimeArguments+=@($taskObserver.flag,'1')}
 & (Join-Path $taskRepository 'tools/Start-AICFRuntime.ps1') -Role Server -Variant Stock -AICommanderMode $AICommanderMode -RepositoryRoot $StageRoot -ProfileRoot $taskProfile -IsolatedLoadoutLibrary -ServerPort $ServerPort -AdditionalArguments $taskRuntimeArguments *> (Join-Path $taskEvidence 'launcher.txt')
 $taskNativeExit=$LASTEXITCODE
 $taskEnded=[DateTimeOffset]::UtcNow

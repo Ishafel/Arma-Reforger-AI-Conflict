@@ -310,6 +310,29 @@ tests ещё NOT RUN. История/evidence — в [TESTING.md](TESTING.md) и
 Native-only persistence/resource blockers #78 сохраняются независимо от
 успехов квот. `NOT RUN`/UNKNOWN/coverage FAIL не превращаются в PASS.
 
+## Разбор Census UNKNOWN без изменения допуска
+
+Test-only `AICF_AIQuotaCensusDecisionProbe.c` различает ранний busy veto,
+native Capture/IsCurrent, BuildCounts, character custody/owner classification
+и vehicle holds. Один настоящий вызов каждого метода сохраняет аргументы,
+bool и out-значения; observer не вызывает повторные admission/Refresh и не
+удерживает census/body/row через дополнительные сильные поля. Он пишет только
+отрицательные решения: cached input identity и отдельно помеченные
+AFTER_DECISION native counters. Они не заменяют исходный snapshot.
+
+Опция public Soak runner `-QuotaCensusDecisionObserver` добавляет fixture в
+отдельный stage и CLI `-aicfQuotaCensusDecisionProbe 1`. Бюджет96distinct records,
+overflow/scope loss и ограниченный cached context первых4машин явно отмечены;
+непросмотренный suffix не является доказательством полноты. Statics очищаются
+в OnGameEnd. Default запуск не включает observer. Цель — разобрать реальный
+долгий UNKNOWN при посадке в ordinary383; отказ сам по себе не разрешает
+ослаблять census, классифицировать чужую группу или создавать unit без permit.
+
+Текущий targeted контракт:24source/120actual wrappers/8frame/6edge/4unsafe PASS.
+Native boundaries simulated; Workbench/native этого observer учитываются
+отдельно. Явный `ref` у managed local frame — только избыточная запись:
+локальные ссылки уже сильные по Enforce ARC, старый lifetime defect не заявлен.
+
 В историческом draft checkpoint `5c87bae` compartment producer оставался
 `NOT IMPLEMENTED/NOT RUN`. Его новая typed реализация описана выше; новый
 native gate остаётся открытым до проверки текущего source.

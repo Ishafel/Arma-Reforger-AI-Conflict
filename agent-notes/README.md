@@ -13,6 +13,8 @@
 | Воспроизвести заполнение stock-квоты и обычный оплаченный набор AICF | [AI_QUOTA_STOCK_PRESSURE.md](AI_QUOTA_STOCK_PRESSURE.md), public Prepare/Run, scope и исходные failures |
 | Отличить нехватку средств до покупки машины от нарушения lifecycle | [VEHICLE_ECONOMY_DECLINE.md](VEHICLE_ECONOMY_DECLINE.md), typed pre-asset quote/receipt, own empty lease и terminal foot fallback |
 | Разобрать неполный native spawn и очередь замены отрядов | [GROUP_SPAWN.md](GROUP_SPAWN.md), GroupRuntime/InfantrySpawnPlacement и controlled replacement stress |
+| Разобрать отказ короткой коррекции при native STUCK на подходе к казарме | [RECRUITMENT_DECISIONS.md](RECRUITMENT_DECISIONS.md), isolated decision observer без изменения recovery |
+| Найти источник долгого Census UNKNOWN при посадке | [AI_QUOTAS.md](AI_QUOTAS.md#разбор-census-unknown-без-изменения-допуска), отдельный opt-in decision observer и строгие старые gates |
 | Исправить persistence leaks при direct-connect без backend identity | [PERSISTENCE_IDENTITY.md](PERSISTENCE_IDENTITY.md), native SpawnLogic identity boundary и separate client/JIP gate |
 | Разобрать native out-of-world-bounds у оружия и отделить main-world drop от private Equipment model | [TEST_FIXTURES.md](TEST_FIXTURES.md#read-only-loose-weapon--private-equipment-model-observer), fixture-only LooseWeaponObserver и отдельный controlled native-drop baseline |
 | Изменить поведение TRANSPORT/COMBAT, N возврата, замену потерь и разрешённую короткую принудительную посадку | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md), BehaviorFlow/Policy/ShortRecovery и retained TACTICAL_DEPLOYMENT |

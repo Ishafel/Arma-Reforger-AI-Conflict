@@ -170,6 +170,27 @@ token, action/waypoint, native path и paired tile/projection snapshots до/п�
 LOD/velocity/stance являются наблюдениями, не mutation или connectivity proof.
 Physics на path node не доказывает, что SpawnPlacement ранее принимал эту точку.
 
+`AICF_RecruitmentDecisionProbe.c` — отдельный opt-in observer исходных решений
+native node/receipt current/short recovery/локального placement. Soak runner
+подключает его опцией `-RecruitmentDecisionObserver`; source SHA и CLI-флаг
+сохраняются в manifest. Один исходный delegate, те же bool/out/аргументы,
+только after-decision PRE/POST snapshots и256events с явным overflow UNKNOWN.
+Нет новых physical queries, action/clock/health/spawn изменений. Подробности и
+границы проверок — [RECRUITMENT_DECISIONS.md](RECRUITMENT_DECISIONS.md).
+Первый Stock WB v3 **FAIL** (unsupported modded-only handler override); native
+entrypoint исправлен, fresh Stock WB v4 **PASS** (384+5/source SHA0/fullfatal0),
+native **NOT RUN**. Старый Soak383 не содержит probe.
+Опция `-QuotaCensusDecisionObserver` подключает отдельный
+`AICF_AIQuotaCensusDecisionProbe.c` (CLI `-aicfQuotaCensusDecisionProbe 1`);
+он различает Capture/BuildCounts/ранний busy, character classification и
+vehicle holds через10single-super обёрток. Cached input и AFTER_DECISION native
+counters разделены; повторных Refresh, дополнительных snapshot/body anchors
+и policy writes нет. Бюджет96distinct records, null/suffix/overflow/scope loss
+не скрываются. Targeted `Test-AIQuotaCensusDecisionProbeContracts.ps1`
+прошёл24source/120actual/8frames/6edges/4unsafe; native boundaries simulated.
+Готовность его собственного compile/native gates проверяется отдельно.
+Подробности — [AI_QUOTAS.md](AI_QUOTAS.md#разбор-census-unknown-без-изменения-допуска).
+
 `AICF_RecruitmentShortRecoveryProbe.c` включается isolated stage флагом
 `-aicfRecruitmentShortRecoveryProbe 1`. Создаёт настоящую US казарму относительно
 живого seed, сохраняет обычные движение, order lifecycle, supplies debit и
