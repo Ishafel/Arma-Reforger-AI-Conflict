@@ -223,6 +223,16 @@ class AICF_GroupTrace
 			string.Format(" queried=%1 native_point_count=-1 emitted_points=0 point_limit=%2 truncated=0 first=NONE last=NONE raw_native_order=1 remaining_distance_proven=0", queried, NativePathPointLimit()));
 	}
 
+	// Raw flags относятся к указанному engine agent, а не к целому vehicle world.
+	// Associated movement agent может принадлежать машине, а не driver actor.
+	protected static string NativeAgentControlFlags(string prefix, AIAgent agent)
+	{
+		if (!agent)
+			return " " + prefix + "_active=UNKNOWN " + prefix + "_counted=UNKNOWN " + prefix + "_lod=UNKNOWN " + prefix + "_permanent_lod=UNKNOWN " + prefix + "_max_lod=UNKNOWN";
+		return string.Format(" %1_active=%2 %1_counted=%3 %1_lod=%4 %1_permanent_lod=%5 %1_max_lod=%6",
+			prefix, agent.IsAIActivated(), agent.CountTowardsAIWorldLimit(), agent.GetLOD(), agent.GetPermanentLOD(), AIAgent.GetMaxLOD());
+	}
+
 	protected static void NativeVehiclePath(AICF_GroupSlot slot, SCR_AIGroup group, AICF_TransportTrip trip, string identity)
 	{
 		if (!Replication.IsServer() || !slot || !group) return;
@@ -269,6 +279,23 @@ class AICF_GroupTrace
 			driver.GetAIControlComponent().ToString(), Entity(driver.GetAIControlComponent().GetAIAgent()), Entity(driver.GetAIControlComponent().GetControlAIAgent()));
 		if (driverAgent) identity += string.Format(" driver_agent_controlled=%1 driver_agent_parent=%2", Entity(driverAgent.GetControlledEntity()), Entity(driverAgent.GetParentGroup()));
 		if (componentAgent) identity += string.Format(" movement_agent_controlled=%1 movement_agent_parent=%2", Entity(componentAgent.GetControlledEntity()), Entity(componentAgent.GetParentGroup()));
+		// Materialize each formatted result before another native Format call.
+		string driverControlFlags = NativeAgentControlFlags("driver_agent", driverAgent);
+		string movementControlFlags = NativeAgentControlFlags("movement_agent", componentAgent);
+		identity += driverControlFlags;
+		identity += movementControlFlags;
+		int recordHandler = -1;
+		if (registered) recordHandler = registered.GetSubgroupHandleId();
+		int pilotHandler = -1;
+		AIGroupMovementComponent groupMovement = AIGroupMovementComponent.Cast(group.FindComponent(AIGroupMovementComponent));
+		if (groupMovement && driverAgent && driverAgent.GetParentGroup() == group)
+			pilotHandler = groupMovement.GetAgentMoveHandlerId(driverAgent);
+		bool exactCarComponent = carMovement && componentAgent && componentAgent.GetControlledEntity() == vehicle;
+		identity += string.Format(" native_control_observation=RAW_ASSOCIATED_AGENTS world_vehicle_uniqueness_proven=0 car_component_exact=%1 native_record_handler=%2 native_pilot_handler=%3 control_group_current=%4 control_group_executed=%5",
+			exactCarComponent, recordHandler, pilotHandler, Action(utility.GetCurrentAction()), Action(utility.GetExecutedAction()));
+		CarControllerComponent carController = CarControllerComponent.Cast(vehicle.FindComponent(CarControllerComponent));
+		if (carController) identity += string.Format(" persistent_handbrake=%1", carController.GetPersistentHandBrake());
+		else identity += " persistent_handbrake=UNKNOWN";
 		if (driver && driver.GetCompartmentAccessComponent())
 		{
 			CompartmentAccessComponent access = driver.GetCompartmentAccessComponent();

@@ -15,6 +15,7 @@ function Rules([string]$source){
  $pathTrip=Get-AICFMethodBody $record 'IsNativePathTripCurrent'
  $pathDriver=Get-AICFMethodBody $record 'IsNativePathDriverCurrent'
  $unavailable=Get-AICFMethodBody $record 'NativePathUnavailable'
+ $controlFlags=Get-AICFMethodBody $record 'NativeAgentControlFlags'
  if($snapshot -notmatch '!Replication.IsServer\(\)'){ 'AUTHORITY' }
  if($code -match '\b(?:SetReserved|AddAction|GetInVehicle|GetOutVehicle|SetOrigin|CommitTransition|BumpMe|SpawnEntityPrefab|DeleteRplEntity|CallLater|Insert)\(' -and $code -notmatch '^$'){
   # Единственная Insert — собственный cursor, без удержания engine entities.
@@ -43,6 +44,9 @@ function Rules([string]$source){
  if($path -match '\.GetOwner\(' -or $pathDriver -match '\.GetOwner\('){'UNSUPPORTED_AI_COMPONENT_OWNER_API'}
  foreach($reason in @('DRIVER_NOT_AUTHORITY_AI','DRIVER_NOT_CONSCIOUS','DRIVER_CONTROL_MISSING','DRIVER_AGENT_MISSING','DRIVER_CONTROL_AGENT_CHANGED','DRIVER_AGENT_ACTOR_MISMATCH','DRIVER_AGENT_GROUP_MISMATCH','ACTUAL_PILOT_COMPARTMENT_MISSING','PILOT_VEHICLE_MISMATCH','PILOT_OCCUPANT_MISMATCH','DRIVER_ACCESS_MISSING','DRIVER_NOT_IN_VEHICLE','DRIVER_NOT_IN_COMPARTMENT','DRIVER_GETTING_IN','DRIVER_GETTING_OUT','DRIVER_SWITCHING_SEATS','DRIVER_ACTUAL_COMPARTMENT_CHANGED','DRIVER_LINKED_VEHICLE_MISMATCH','DRIVER_AGENT_NOT_IN_GROUP','VEHICLE_MANAGER_MISSING','REGISTERED_VEHICLE_MISMATCH','REGISTERED_DRIVER_CHANGED','DRIVER_MOVEMENT_COMPONENT_MISSING','DRIVER_MOVEMENT_COMPONENT_CHANGED')){if(!$pathDriver.Contains('reason = "'+$reason+'"')){'EXACT_DRIVER_REJECTION_REASONS';break}}
  foreach($field in @('driver_candidate=','driver_agent=','movement_component=','movement_component_ref=','native_associated_agent=','car_cast=','movement_agent_is_driver=','driver_control_ref=','driver_control_associated_agent=','control_agent=','driver_agent_controlled=','driver_agent_parent=','movement_agent_controlled=','movement_agent_parent=','actual_pilot=','actual_seat=')){if(!$path.Contains($field)){'RAW_COMPONENT_AND_PILOT_OBSERVATIONS';break}}
+ foreach($guard in @('if (!agent)','_active=UNKNOWN','_counted=UNKNOWN','_lod=UNKNOWN','_permanent_lod=UNKNOWN','agent.IsAIActivated()','agent.CountTowardsAIWorldLimit()','agent.GetLOD()','agent.GetPermanentLOD()','AIAgent.GetMaxLOD()')){if(!$controlFlags.Contains($guard)){'RAW_NATIVE_CONTROL_FLAGS';break}}
+ foreach($guard in @('NativeAgentControlFlags("driver_agent", driverAgent)','NativeAgentControlFlags("movement_agent", componentAgent)','identity += driverControlFlags;','identity += movementControlFlags;','registered.GetSubgroupHandleId()','driverAgent.GetParentGroup() == group','groupMovement.GetAgentMoveHandlerId(driverAgent)','componentAgent.GetControlledEntity() == vehicle','world_vehicle_uniqueness_proven=0','native_record_handler=','native_pilot_handler=','control_group_current=','control_group_executed=','carController.GetPersistentHandBrake()','persistent_handbrake=UNKNOWN')){if(!$path.Contains($guard)){'RAW_NATIVE_CONTROL_SCOPE_AND_UNKNOWN';break}}
+ if($controlFlags -match '\b(?:Set\w*|Activate\w*|Deactivate\w*|Insert|CallLater)\s*\(' -or $path -match 'world_vehicle_uniqueness_proven=1'){'NO_NATIVE_ACTIVATION_MUTATION_OR_INVENTED_PROOF'}
  if($source -notmatch 'NATIVE_PATH_POINT_LIMIT = 128;' -or $path -notmatch 'int emitted = Math.Min\(count, pointLimit\)' -or $path -notmatch 'index < emitted' -or $path -notmatch 'index, points\[index\]' -or $path -notmatch 'count > emitted, first, last' -or $path -notmatch 'points\[count - 1\].ToString\(\)'){'BOUNDED_RAW_NATIVE_ORDER'}
  $limit=Get-AICFMethodBody $record 'NativePathPointLimit'
  if($limit -notmatch '!System.GetCLIParam\("aicfGroupTracePathPointLimit", value\)\) return NATIVE_PATH_POINT_LIMIT' -or
@@ -66,6 +70,12 @@ if(@([regex]::Matches($native,'super.OnMoveFailed\(moveResult, vehicleUsed, isWa
 $controls++
 foreach($mutation in @(
  @('!Replication.IsServer()','false','AUTHORITY'),
+ @('agent.IsAIActivated()','true','RAW_NATIVE_CONTROL_FLAGS'),
+ @('agent.CountTowardsAIWorldLimit()','true','RAW_NATIVE_CONTROL_FLAGS'),
+ @('_active=UNKNOWN','_active=1','RAW_NATIVE_CONTROL_FLAGS'),
+ @('world_vehicle_uniqueness_proven=0','world_vehicle_uniqueness_proven=1','RAW_NATIVE_CONTROL_SCOPE_AND_UNKNOWN'),
+ @('driverAgent.GetParentGroup() == group','true','RAW_NATIVE_CONTROL_SCOPE_AND_UNKNOWN'),
+ @('carController.GetPersistentHandBrake()','false','RAW_NATIVE_CONTROL_SCOPE_AND_UNKNOWN'),
  @('now < cursor.m_iNextMs','false','RATE_BOUND'),
  @('agent && boarding && boarding.GetTokens()','agent','UNSTARTED_BOARDING_SAFE'),
  @('AICF_GroupRuntime.ResolveAliveLeader(group)','group','REAL_LEADER'),

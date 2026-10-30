@@ -444,6 +444,19 @@ group generation и entity различают старый состав и за�
 с native waypoint/current proof и фактический DefendBehavior waypoint. Этот observer
 не меняет policy и помогает отличить отставших бойцов от native cover formation.
 
+`NATIVE_VEHICLE_PATH_TRACE/POINT` дополнительно сохраняют raw activation/count/
+LOD/permanent LOD/max LOD фактических `driver_agent` и associated `movement_agent`,
+native record/pilot handlers, `persistent_handbrake` и выбранное/исполняемое
+group activity. `car_component_exact` означает только прочитанное соответствие
+car component → associated agent → vehicle; глобальная уникальность не проверяется
+(`world_vehicle_uniqueness_proven=0`). Missing agent/brake дают явный UNKNOWN.
+Все поля читаются на прежней cadence и под прежними current trip/lease/route/
+driver fences, с прежней повторной проверкой после native path getter. Если
+нет current native route, activation по этой строке также не доказана.
+Observer не включает AI, не меняет LOD/тормоз, actions, clocks или progress.
+Расширение добавлено после ordinary USv11, где active/LOD после повторной
+посадки не были записаны; старому run эти новые наблюдения не приписываются.
+
 Для разбора сначала найди faction+numeric slot+group generation, затем operation.
 Сопоставь transition reason и target revision с native group action, selected и
 executed member actions. Например token может остаться EVALUATED после удаления
