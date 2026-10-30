@@ -44,6 +44,18 @@ Exact actor/group/Rpl/world/generation и неизменённая raw пози�
 INCAP→wake→DEAD, world/ID reuse, adoption и замену slot/generation, включая
 отрицательный контроль старого ALIVE-only getter.
 
+Свежий ordinaryUS1800 на geometry/atomic snapshot завершился native0,
+elapsed1800637ms/wall1817.619s/failures0 в fixture, native damage recovery с
+двумя survivors после пожара, actual10.3859м и cleanup до старого terminal
+deadline. Итоговый функциональный auditor всё равно **FAIL**:
+`OBS_INDEPENDENT_CURRENT_FOOT_HANDOFF`. Production `ORDER_RESTORE_RESULT`
+содержал car ID/generations/current waypoint, но formatter не выводил требуемый
+`rpl_id`. Анализатор не ослабляется: добавлен read-only captured lease Rpl
+в общий `VehicleTaskHandoff.FormatIdentity`; неизвестный ID выводится как NONE.
+Actual formatter20cases/1unsafe и terminal Stock compile PASS, новая native
+проверка этого поля ещё NOT RUN. Старый stopped run остаётся FAIL, его лог не
+дополняется и не пересчитывается. Fullfatal PASS, resources32 FAIL отдельно.
+
 Новые fresh stages с `captured_death_policy=TYPED_NATIVE_ALL_DEAD_RELEASE_V1`
 дополнительно различают `CONFIRMED_NATIVE_ALL_DEAD_RETIREMENT`. Это только
 доказанная естественная гибель всех пяти admission actors: EntityID и component

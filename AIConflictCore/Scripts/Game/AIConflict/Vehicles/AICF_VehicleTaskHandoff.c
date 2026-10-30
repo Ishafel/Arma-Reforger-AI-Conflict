@@ -568,7 +568,7 @@ class AICF_VehicleTaskHandoff
 		if (!trip)
 		{
 			return "faction=NONE slot=NONE numeric_slot=-1 group_generation=-1" +
-				" trip_generation=-1 vehicle=NONE kind=NONE state=NONE";
+				" trip_generation=-1 vehicle=NONE rpl_id=NONE kind=NONE state=NONE";
 		}
 		string details = string.Format(
 			"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 trip_generation=%5 operation_id=%6 causation_id=%7",
@@ -583,6 +583,7 @@ class AICF_VehicleTaskHandoff
 		int vehicleGeneration = -1;
 		string lifecycleId = "NONE";
 		string vehicleId = "NONE";
+		string vehicleRplId = "NONE";
 		string vehicleKind = "NONE";
 		AICF_VehicleLease lease = trip.GetLease();
 		if (lease)
@@ -592,6 +593,8 @@ class AICF_VehicleTaskHandoff
 			lifecycleId = lease.GetVehicleLifecycleId();
 			if (!lease.GetEntityIdString().IsEmpty())
 				vehicleId = lease.GetEntityIdString();
+			if (!lease.GetRplId().IsEmpty())
+				vehicleRplId = lease.GetRplId();
 			if (vehicleGeneration > 0)
 				vehicleKind = typename.EnumToString(AICF_EVehicleKind, lease.GetKind());
 		}
@@ -602,8 +605,9 @@ class AICF_VehicleTaskHandoff
 			lifecycleId,
 			reason);
 		details += string.Format(
-			" vehicle=%1 kind=%2 state=%3",
+			" vehicle=%1 rpl_id=%2 kind=%3 state=%4",
 			vehicleId,
+			vehicleRplId,
 			vehicleKind,
 			typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase()));
 		return details;
