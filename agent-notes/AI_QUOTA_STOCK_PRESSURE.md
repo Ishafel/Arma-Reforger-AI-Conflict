@@ -40,7 +40,26 @@ cached ledger и отдельные after-decision native counters, не све�
 Trace-only supplement: actual19controls/5unsafe и независимый peer PASS;
 полное удаление named trace blocks возвращает тот же policy token hash33EC2C8A…
 исходной fixture70020F6D… (stage pressure-agent-kind-v2). Срок35s, full/veto/FAIL и
-timeout не ослаблены. Prepare385 StockWB0/sourceSHA0; новый trace Native NOT RUN.
+timeout не ослаблены. Prepare385 StockWB0/sourceSHA0. Новый trace на human383
+завершился native0/source385SHA0/fullfatal0/project0, но исходный functionalFAIL
+`EXTRA_STOCK_IDENTITY_OR_BIRTH` сохранён; resources28/minFPS20.7 также FAIL.
+
+На494110ms получен конкретный tracked birth: перед настоящим admission cached
+STOCK128/0 сменился после его собственного Refresh на fresh127/1; exact extra
+producer получил BEGIN serial52, затем factory BOUND actor3CC1 и128/0. В этом
+случае лимит не был обойдён. Какой прежний actor освободил место, не установлено:
+native active/intended196→195 не идентифицируют тело или причину retirement.
+Историческим controls без этого trace причина задним числом не назначается.
+Actor нового extra не удалялся, исходный непрерывный pressure gate не ослаблялся.
+
+Отдельный отказ US0: normal recruit был принят, но три native STUCK спустя7–8s
+после выдачи очередного current waypoint оставили leader на прежнем месте;
+два штатных ремонта исчерпаны, затем NO_SAFE_BARRACKS. Это не quota-full отказ.
+Short receipt recovery по валидному receipt уже немедленный; причины Capture/
+placement veto старый лог не различает. Полные stopped logs,33profile windows,
+48FPS samples и exact chronology — `quota/pressure-trace-prepare-v1/` под общим
+evidence root. Новая оптимизация или поведенческая правка этим trace
+не объявлена проверенной.
 
 Из корня checkout, в PowerShell 7, с доступными установленными Server и Tools:
 

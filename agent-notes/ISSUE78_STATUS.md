@@ -14,8 +14,20 @@ Compartment producer уже реализован и отдельно прове�
 2реальных newborn/entry, exact2character+1vehicle bindings и непрерывный known
 15s tail; native0/fatal0/source0, resources28 strictFAIL. Это не PASS human383
 под давлением. Более ранние «NOT IMPLEMENTED» и UNKNOWN ниже относятся к своим
-историческим checkpoints. Поздний pressure child-kind trace подготовлен для
-уточнения происхождения extra actor; overshoot пока не объявлен доказанным.
+историческим checkpoints. Поздний pressure trace завершён: fresh127+reservation1
+разрешил tracked factory BEGIN52/BOUND actor3CC1→128/0. Обход квоты в этом запуске
+не подтверждён; предыдущее освободившее место тело неизвестно. Исходный
+functionalFAIL/resources28/minFPS20.7 сохранены; подробности в
+AI_QUOTA_STOCK_PRESSURE.md.
+
+Обе ordinary1800 на immutable human383+3observers запущены22:06:33/35 в двух
+native worlds. У обеих уже observed PRESET_BOARDING_DEADLINE (US347288ms,
+USSR469000ms), полное1800 окно ещё продолжается. Получены5боеспособных бойцов
+и реальные оплаченные машины; original route этим не подтверждён. У USSR
+последний foot actor находился1.92м от своего пустого доступного места, action
+owned/EVALUATED, current+executed passive Idle, без transitions. Эта конкретная
+ветка stalled entry и отдельные окна CensusUNKNOWN разбираются; исправление
+или успешный повтор ещё не заявлены.
 
 ### История checkpoints после возобновления
 
