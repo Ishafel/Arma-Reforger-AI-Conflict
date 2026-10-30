@@ -29,6 +29,20 @@ class AICF_AIQuotaCatalogProbe
 	static int s_LastStatus;
 	static int s_LastGroupStatus;
 	static bool s_FundingAttempted;
+	static bool s_FundingConfirmed;
+	static SCR_CatalogEntitySpawnerComponent s_FundingSpawner;
+	static SCR_EntityCatalogEntry s_FundingEntry;
+	static ref AICF_AIQuotaCatalogIdentity s_FundingProducer;
+	static SCR_ResourceComponent s_FundingResource;
+	static SCR_ResourceConsumer s_FundingConsumer;
+	static SCR_ResourceGenerator s_FundingGenerator;
+	static int s_ResourceSerial;
+	static int s_ResourceAck;
+	static int s_ResourceLast;
+	static float s_FundingBefore;
+	static float s_FundingShortfall;
+	static int s_FundingQuote;
+	static string s_FundingGeneratorType;
 	static IEntity s_Produced;
 	static ref array<ref AICF_AIQuotaVehicleEntity> s_Bodies = {};
 	static ref array<ref AICF_AIQuotaCreation> s_Creations = {};
@@ -62,6 +76,7 @@ class AICF_AIQuotaCatalogProbe
 	{
 		if (s_Finished) return;
 		s_Finished = true;
+		if (s_Player) s_Player.AICF_QuotaCatalogResourceStop(s_ResourceSerial);
 		if (s_Service && s_Pressure) s_Service.CancelReservation(s_Pressure, s_Serial);
 		s_Pressure = null;
 		SCR_PlayerController donePlayer = s_Player;
@@ -77,11 +92,19 @@ class AICF_AIQuotaCatalogProbe
 	static void Close() { GetGame().RequestClose(); }
 	static void Stop()
 	{
+		if (s_Player && s_ResourceSerial) s_Player.AICF_QuotaCatalogResourceStop(s_ResourceSerial);
+		AICF_AIQuotaCatalogResourceClient.Stop();
 		if (s_Service && s_Pressure) s_Service.CancelReservation(s_Pressure, s_Serial);
 		s_Pressure = null;
 		GetGame().GetCallqueue().Remove(Tick);
 		GetGame().GetCallqueue().Remove(Close);
 		AICF_AIQuotaCatalogResourceObservation.Stop();
+		s_FundingSpawner = null;
+		s_FundingEntry = null;
+		s_FundingProducer = null;
+		s_FundingResource = null;
+		s_FundingConsumer = null;
+		s_FundingGenerator = null;
 		s_Bodies.Clear();
 		s_Creations.Clear();
 	}
@@ -176,6 +199,11 @@ class AICF_AIQuotaCatalogProbe
 			if (!s_Player) return;
 		}
 		if (!CurrentUser()) { Finish(false, "AVATAR_IDENTITY_UNPROVEN"); return; }
+		if (s_FundingSpawner)
+		{
+			if (!s_FundingSpawner.AICF_QuotaProbeFund(s_FundingEntry, s_User.m_Entity, s_FundingQuote)) return;
+			if (s_Finished) return;
+		}
 		SCR_PlayerControllerGroupComponent groups = SCR_PlayerControllerGroupComponent.Cast(s_Player.FindComponent(SCR_PlayerControllerGroupComponent));
 		Faction faction = SCR_FactionManager.SGetPlayerFaction(s_Player.GetPlayerId());
 		SCR_GroupsManagerComponent groupManager = SCR_GroupsManagerComponent.GetInstance();
@@ -264,7 +292,7 @@ modded class SCR_CatalogEntitySpawnerComponent
 	{
 		if (!Replication.IsServer() || AICF_AIQuotaCatalogProbe.s_Finished || AICF_AIQuotaCatalogProbe.s_RequestedAt) return false;
 		if (!producer || !producer.IsCurrent() || GetOwner() != producer.m_Entity || !INSTANCES.Contains(this)) return false;
-		if (!resource || GetSpawnerResourceComponent() != resource || !resource.GetOwner()) return false;
+		if (!resource || GetSpawnerResourceComponent() != resource || resource.GetOwner() != producer.m_Entity) return false;
 		if (resource.GetOwner().GetWorld() != GetGame().GetWorld()) return false;
 		if (!consumer || !generator || resource.GetConsumer(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES) != consumer) return false;
 		if (resource.GetGenerator(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES) != generator) return false;
@@ -277,7 +305,22 @@ modded class SCR_CatalogEntitySpawnerComponent
 
 	bool AICF_QuotaProbeFund(SCR_EntityCatalogEntry entry, IEntity user, int quote)
 	{
-		if (AICF_AIQuotaCatalogProbe.s_FundingAttempted) return false;
+		if (AICF_AIQuotaCatalogProbe.s_Finished) return false;
+		if (AICF_AIQuotaCatalogProbe.s_FundingAttempted && !AICF_AIQuotaCatalogProbe.s_FundingSpawner) return false;
+		if (AICF_AIQuotaCatalogProbe.s_FundingSpawner)
+		{
+			if (AICF_AIQuotaCatalogProbe.s_FundingSpawner != this || AICF_AIQuotaCatalogProbe.s_FundingEntry != entry ||
+				AICF_AIQuotaCatalogProbe.s_FundingQuote != quote || !AICF_QuotaProbeFundingCurrent(
+				AICF_AIQuotaCatalogProbe.s_FundingProducer, AICF_AIQuotaCatalogProbe.s_FundingResource,
+				AICF_AIQuotaCatalogProbe.s_FundingConsumer, AICF_AIQuotaCatalogProbe.s_FundingGenerator, entry, user, quote))
+			{
+				AICF_AIQuotaCatalogProbe.Finish(false, "CONTROLLED_FUNDING_CONTEXT_CHANGED");
+				return false;
+			}
+			if (AICF_AIQuotaCatalogProbe.s_FundingConfirmed) return true;
+			if (AICF_AIQuotaCatalogProbe.s_ResourceAck != AICF_AIQuotaCatalogProbe.s_ResourceSerial) return false;
+			if (AICF_AIQuotaCatalogProbe.s_FundingAttempted) return AICF_QuotaProbeFundingReadback();
+		}
 		AICF_AIQuotaCatalogIdentity producer = AICF_AIQuotaCatalogIdentity.Capture(GetOwner(), true);
 		SCR_ResourceComponent resource = GetSpawnerResourceComponent();
 		if (!resource) return false;
@@ -287,6 +330,21 @@ modded class SCR_CatalogEntitySpawnerComponent
 		float before = GetSpawnerResourceValue();
 		float shortfall = quote - before;
 		if (!(before >= 0 && before < quote && shortfall > 0 && shortfall <= quote)) return false;
+		if (!AICF_AIQuotaCatalogProbe.s_FundingSpawner)
+		{
+			RplId resourceId = Replication.FindItemId(resource);
+			if (!producer.m_Rpl || !producer.m_Rpl.Id().IsValid() || !resourceId.IsValid()) return false;
+			AICF_AIQuotaCatalogProbe.s_FundingSpawner = this;
+			AICF_AIQuotaCatalogProbe.s_FundingEntry = entry;
+			AICF_AIQuotaCatalogProbe.s_FundingProducer = producer;
+			AICF_AIQuotaCatalogProbe.s_FundingResource = resource;
+			AICF_AIQuotaCatalogProbe.s_FundingConsumer = consumer;
+			AICF_AIQuotaCatalogProbe.s_FundingGenerator = generator;
+			AICF_AIQuotaCatalogProbe.s_FundingQuote = quote;
+			AICF_AIQuotaCatalogProbe.s_ResourceSerial = AICF_AIQuotaCatalogProbe.s_Service.AllocateContextSerial();
+			AICF_AIQuotaCatalogProbe.s_Player.AICF_QuotaCatalogResourceSubscribe(producer.m_Rpl.Id(), resourceId, AICF_AIQuotaCatalogProbe.s_ResourceSerial);
+			return false;
+		}
 		string generatorType = generator.Type().ToString();
 		EntityID producerId = producer.m_Id;
 		AICF_AIQuotaCatalogResourceObservation.Links(generator, consumer, "BEFORE_FUNDING");
@@ -303,6 +361,9 @@ modded class SCR_CatalogEntitySpawnerComponent
 			AICF_AIQuotaCatalogProbe.Log("RESOURCE_SERVICE_BASE", string.Format("producer=%1 index=%2 base=%3 present=%4 observation_only=1", producerId, baseIndex, baseId, baseNode != null));
 		}
 		if (!AICF_QuotaProbeFundingCurrent(producer, resource, consumer, generator, entry, user, quote)) return false;
+		AICF_AIQuotaCatalogProbe.s_FundingBefore = before;
+		AICF_AIQuotaCatalogProbe.s_FundingShortfall = shortfall;
+		AICF_AIQuotaCatalogProbe.s_FundingGeneratorType = generatorType;
 		AICF_AIQuotaCatalogProbe.s_FundingAttempted = true;
 		AICF_AIQuotaCatalogResourceObservation.s_Generator = generator;
 		AICF_AIQuotaCatalogResourceObservation.s_Consumer = consumer;
@@ -313,13 +374,65 @@ modded class SCR_CatalogEntitySpawnerComponent
 			AICF_AIQuotaCatalogProbe.Finish(false, "CONTROLLED_FUNDING_CONTEXT_CHANGED");
 			return false;
 		}
+		return AICF_QuotaProbeFundingReadback();
+	}
+
+	bool AICF_QuotaProbeFundingReadback()
+	{
+		// Only cached consumer reads after the single native generation request.
+		AICF_AIQuotaCatalogIdentity producer = AICF_AIQuotaCatalogProbe.s_FundingProducer;
+		AICF_AIQuotaCatalogIdentity user = AICF_AIQuotaCatalogProbe.s_User;
+		SCR_EntityCatalogEntry entry = AICF_AIQuotaCatalogProbe.s_FundingEntry;
+		SCR_ResourceComponent resource = AICF_AIQuotaCatalogProbe.s_FundingResource;
+		SCR_ResourceConsumer consumer = AICF_AIQuotaCatalogProbe.s_FundingConsumer;
+		SCR_ResourceGenerator generator = AICF_AIQuotaCatalogProbe.s_FundingGenerator;
+		SCR_PlayerController player = AICF_AIQuotaCatalogProbe.s_Player;
+		int serial = AICF_AIQuotaCatalogProbe.s_ResourceSerial;
+		int quote = AICF_AIQuotaCatalogProbe.s_FundingQuote;
+		float before = AICF_AIQuotaCatalogProbe.s_FundingBefore;
+		float shortfall = AICF_AIQuotaCatalogProbe.s_FundingShortfall;
 		float after = GetSpawnerResourceValue();
-		AICF_AIQuotaCatalogProbe.Log("CONTROLLED_RESOURCE_FUNDING", string.Format("producer=%1 generator_type=%2 before=%3 amount=%4 after=%5 effective_cost=%6 native_generator=1 fixture_only=1", producerId, generatorType, before, shortfall, after, quote));
-		if (!(after >= quote && Math.AbsFloat(after - before - shortfall) <= 0.01))
+		if (AICF_AIQuotaCatalogProbe.s_FundingSpawner != this || !AICF_AIQuotaCatalogProbe.s_FundingAttempted ||
+			AICF_AIQuotaCatalogProbe.s_FundingProducer != producer || AICF_AIQuotaCatalogProbe.s_User != user ||
+			AICF_AIQuotaCatalogProbe.s_FundingEntry != entry || AICF_AIQuotaCatalogProbe.s_FundingResource != resource ||
+			AICF_AIQuotaCatalogProbe.s_FundingConsumer != consumer || AICF_AIQuotaCatalogProbe.s_FundingGenerator != generator ||
+			AICF_AIQuotaCatalogProbe.s_ResourceSerial != serial || AICF_AIQuotaCatalogProbe.s_ResourceAck != serial ||
+			!AICF_AIQuotaCatalogProbe.CurrentUser())
 		{
-			AICF_AIQuotaCatalogProbe.Finish(false, "CONTROLLED_NATIVE_FUNDING_NOT_CONFIRMED");
+			AICF_AIQuotaCatalogProbe.Finish(false, "CONTROLLED_FUNDING_READBACK_PLAYER_CHANGED");
 			return false;
 		}
+		if (!AICF_QuotaProbeFundingCurrent(producer, resource, consumer, generator, entry,
+			user.m_Entity, quote))
+		{
+			AICF_AIQuotaCatalogProbe.Finish(false, "CONTROLLED_FUNDING_READBACK_CONTEXT_CHANGED");
+			return false;
+		}
+		if (!(after >= 0 && after <= 1000000000))
+		{
+			AICF_AIQuotaCatalogProbe.Finish(false, "CONTROLLED_NATIVE_FUNDING_NONFINITE");
+			return false;
+		}
+		if (after < quote) return false;
+		if (!(Math.AbsFloat(after - before - shortfall) <= 0.01))
+		{
+			AICF_AIQuotaCatalogProbe.Finish(false, "CONTROLLED_NATIVE_FUNDING_DELTA_MISMATCH");
+			return false;
+		}
+		// Pure final comparison after all getter/callback boundaries; never confirm a successor.
+		if (AICF_AIQuotaCatalogProbe.s_Finished || AICF_AIQuotaCatalogProbe.s_FundingSpawner != this ||
+			AICF_AIQuotaCatalogProbe.s_Player != player || AICF_AIQuotaCatalogProbe.s_User != user ||
+			AICF_AIQuotaCatalogProbe.s_FundingProducer != producer || AICF_AIQuotaCatalogProbe.s_FundingEntry != entry ||
+			AICF_AIQuotaCatalogProbe.s_FundingResource != resource || AICF_AIQuotaCatalogProbe.s_FundingConsumer != consumer ||
+			AICF_AIQuotaCatalogProbe.s_FundingGenerator != generator || AICF_AIQuotaCatalogProbe.s_ResourceSerial != serial ||
+			AICF_AIQuotaCatalogProbe.s_ResourceAck != serial || AICF_AIQuotaCatalogProbe.s_FundingQuote != quote ||
+			AICF_AIQuotaCatalogProbe.s_FundingBefore != before || AICF_AIQuotaCatalogProbe.s_FundingShortfall != shortfall)
+		{
+			AICF_AIQuotaCatalogProbe.Finish(false, "CONTROLLED_FUNDING_READBACK_STALE");
+			return false;
+		}
+		AICF_AIQuotaCatalogProbe.s_FundingConfirmed = true;
+		AICF_AIQuotaCatalogProbe.Log("CONTROLLED_RESOURCE_FUNDING", string.Format("producer=%1 generator_type=%2 before=%3 amount=%4 after=%5 effective_cost=%6 native_generator=1 fixture_only=1", AICF_AIQuotaCatalogProbe.s_FundingProducer.m_Id, AICF_AIQuotaCatalogProbe.s_FundingGeneratorType, AICF_AIQuotaCatalogProbe.s_FundingBefore, AICF_AIQuotaCatalogProbe.s_FundingShortfall, after, AICF_AIQuotaCatalogProbe.s_FundingQuote));
 		return true;
 	}
 
@@ -371,11 +484,13 @@ modded class SCR_CatalogEntitySpawnerComponent
 
 	bool AICF_QuotaProbeSelect(EEntityCatalogType type, IEntity user, out SCR_EntityCatalogEntry selected, out SCR_EntitySpawnerSlotComponent slot)
 	{
+		if (AICF_AIQuotaCatalogProbe.s_FundingSpawner && AICF_AIQuotaCatalogProbe.s_FundingSpawner != this) return false;
 		int checked;
 		int eligible = 0;
 		foreach (SCR_EntityCatalogEntry entry : m_aAssetList)
 		{
 			if (++checked > 256) return false;
+			if (AICF_AIQuotaCatalogProbe.s_FundingEntry && AICF_AIQuotaCatalogProbe.s_FundingEntry != entry) continue;
 			if (!entry || !entry.GetCatalogParent() || entry.GetCatalogParent().GetCatalogType() != type) continue;
 			SCR_EntityCatalogSpawnerData data = SCR_EntityCatalogSpawnerData.Cast(entry.GetEntityDataOfType(SCR_EntityCatalogSpawnerData));
 			if (!data || data.GetSupplyCost() <= 0 || data.GetEntityCount() <= 0 || data.GetEntityCount() > 20) continue;
@@ -386,6 +501,7 @@ modded class SCR_CatalogEntitySpawnerComponent
 			{
 				if (AICF_QuotaProbeFund(entry, user, data.GetSupplyCost())) nativeState = GetRequestState(entry, user);
 				if (AICF_AIQuotaCatalogProbe.s_Finished) return false;
+				if (AICF_AIQuotaCatalogProbe.s_FundingSpawner && !AICF_AIQuotaCatalogProbe.s_FundingConfirmed) return false;
 			}
 			if (eligible <= 16) AICF_AIQuotaCatalogProbe.Log("ENTRY", string.Format("prefab=%1 authored=%2 cost=%3 native_state=%4", entry.GetPrefab(), data.GetEntityCount(), data.GetSupplyCost(), nativeState));
 			if (nativeState != SCR_EEntityRequestStatus.CAN_SPAWN) continue;
@@ -478,6 +594,28 @@ modded class SCR_CatalogEntitySpawnerComponent
 
 modded class SCR_PlayerController
 {
+	void AICF_QuotaCatalogResourceSubscribe(RplId producer, RplId resource, int serial) { Rpc(RpcDo_AICFQuotaCatalogResourceSubscribe, producer, resource, serial); }
+	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
+	protected void RpcDo_AICFQuotaCatalogResourceSubscribe(RplId producer, RplId resource, int serial)
+	{
+		AICF_AIQuotaCatalogResourceClient.Start(this, producer, resource, serial);
+	}
+	void AICF_QuotaCatalogResourceReady(int serial) { Rpc(RpcAsk_AICFQuotaCatalogResourceReady, serial); }
+	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
+	protected void RpcAsk_AICFQuotaCatalogResourceReady(int serial)
+	{
+		if (!AICF_AIQuotaCatalogProbe.Enabled() || AICF_AIQuotaCatalogProbe.s_Finished) return;
+		if (AICF_AIQuotaCatalogProbe.s_Player != this || serial != AICF_AIQuotaCatalogProbe.s_ResourceSerial) return;
+		if (!AICF_AIQuotaCatalogProbe.CurrentUser()) return;
+		AICF_AIQuotaCatalogProbe.s_ResourceAck = serial;
+		AICF_AIQuotaCatalogProbe.Log("RESOURCE_HANDLES_REQUESTED", string.Format("serial=%1 player=%2 client_exact_handles=1 server_registration=UNOBSERVED", serial, GetPlayerId()));
+	}
+	void AICF_QuotaCatalogResourceStop(int serial) { Rpc(RpcDo_AICFQuotaCatalogResourceStop, serial); }
+	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
+	protected void RpcDo_AICFQuotaCatalogResourceStop(int serial)
+	{
+		if (serial == AICF_AIQuotaCatalogResourceClient.s_Serial) AICF_AIQuotaCatalogResourceClient.Stop();
+	}
 	void AICF_QuotaCatalogClientReady() { Rpc(RpcAsk_AICFQuotaCatalogClientReady); }
 	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
 	protected void RpcAsk_AICFQuotaCatalogClientReady()
@@ -488,6 +626,107 @@ modded class SCR_PlayerController
 	void AICF_QuotaCatalogProbeDone() { Rpc(RpcDo_AICFQuotaCatalogProbeDone); }
 	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
 	protected void RpcDo_AICFQuotaCatalogProbeDone() { GetGame().RequestClose(); }
+}
+
+class AICF_AIQuotaCatalogResourceClient
+{
+	static SCR_PlayerController s_Player;
+	static ref AICF_AIQuotaCatalogIdentity s_User;
+	static ref AICF_AIQuotaCatalogIdentity s_Producer;
+	static SCR_ResourceComponent s_Resource;
+	static SCR_ResourceConsumer s_Consumer;
+	static SCR_ResourceGenerator s_Generator;
+	static SCR_ResourcePlayerControllerInventoryComponent s_Inventory;
+	static RplId s_ResourceId;
+	static RplId s_InventoryId;
+	static int s_Serial;
+	static ref SCR_ResourceSystemSubscriptionHandleBase s_ConsumerHandle;
+	static ref SCR_ResourceSystemSubscriptionHandleBase s_GeneratorHandle;
+
+	static bool Current()
+	{
+		if (!s_Player || GetGame().GetPlayerController() != s_Player || !s_User || !s_User.IsCurrent()) return false;
+		if (s_Player.GetControlledEntity() != s_User.m_Entity || s_Player.GetPlayerId() <= 0) return false;
+		if (GetGame().GetPlayerManager().GetPlayerController(s_Player.GetPlayerId()) != s_Player) return false;
+		if (!s_Producer || !s_Producer.IsCurrent() || !s_Resource || !s_ResourceId.IsValid()) return false;
+		if (Replication.FindItem(s_ResourceId) != s_Resource || s_Resource.GetOwner() != s_Producer.m_Entity) return false;
+		if (!s_Inventory || s_Player.FindComponent(SCR_ResourcePlayerControllerInventoryComponent) != s_Inventory) return false;
+		if (!s_InventoryId.IsValid() || Replication.FindItemId(s_Inventory) != s_InventoryId) return false;
+		if (s_Resource.GetConsumer(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES) != s_Consumer) return false;
+		return s_Consumer && s_Generator && s_Resource.GetGenerator(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES) == s_Generator;
+	}
+
+	static bool ExactHandle(SCR_ResourceSystemSubscriptionHandleBase handle, SCR_ResourceInteractor interactor)
+	{
+		if (!handle || !interactor) return false;
+		return handle.GetOwnerRplId() == s_InventoryId && handle.GetResourceComponentRplId() == s_ResourceId &&
+			handle.GetInteractorType() == interactor.Type() && handle.GetResourceType() == EResourceType.SUPPLIES &&
+			handle.GetResourceIdentifier() == EResourceGeneratorID.DEFAULT;
+	}
+
+	static void Start(SCR_PlayerController player, RplId producerId, RplId resourceId, int serial)
+	{
+		if (s_Serial) return;
+		if (!player || GetGame().GetPlayerController() != player || serial <= 0 || !producerId.IsValid() || !resourceId.IsValid()) return;
+		s_Player = player;
+		s_Serial = serial;
+		s_User = AICF_AIQuotaCatalogIdentity.Capture(player.GetControlledEntity(), false);
+		s_ResourceId = resourceId;
+		s_Resource = SCR_ResourceComponent.Cast(Replication.FindItem(resourceId));
+		if (s_Resource) s_Producer = AICF_AIQuotaCatalogIdentity.Capture(s_Resource.GetOwner(), false);
+		if (!s_Producer || !s_Producer.m_Rpl || s_Producer.m_Rpl.Id() != producerId) { Stop(); return; }
+		s_Inventory = SCR_ResourcePlayerControllerInventoryComponent.Cast(player.FindComponent(SCR_ResourcePlayerControllerInventoryComponent));
+		if (s_Inventory) s_InventoryId = Replication.FindItemId(s_Inventory);
+		if (s_Resource) s_Consumer = s_Resource.GetConsumer(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES);
+		if (s_Resource) s_Generator = s_Resource.GetGenerator(EResourceGeneratorID.DEFAULT, EResourceType.SUPPLIES);
+		if (!Current()) { Stop(); return; }
+		s_ConsumerHandle = GetGame().GetResourceSystemSubscriptionManager().RequestSubscriptionListenerHandleGraceful(s_Consumer, s_InventoryId);
+		if (!Current()) { Stop(); return; }
+		s_GeneratorHandle = GetGame().GetResourceSystemSubscriptionManager().RequestSubscriptionListenerHandleGraceful(s_Generator, s_InventoryId);
+		if (!Current() || !ExactHandle(s_ConsumerHandle, s_Consumer) || !ExactHandle(s_GeneratorHandle, s_Generator)) { Stop(); return; }
+		SCR_ResourceSystemSubscriptionHandleBase consumerHandle = s_ConsumerHandle;
+		SCR_ResourceSystemSubscriptionHandleBase generatorHandle = s_GeneratorHandle;
+		Tick();
+		if (!Current() || s_Serial != serial || s_Player != player || s_ConsumerHandle != consumerHandle || s_GeneratorHandle != generatorHandle) return;
+		player.AICF_QuotaCatalogResourceReady(serial);
+		if (s_Serial != serial || s_Player != player || s_ConsumerHandle != consumerHandle || s_GeneratorHandle != generatorHandle) return;
+		GetGame().GetCallqueue().CallLater(Tick, 1000, true);
+	}
+
+	static void Tick()
+	{
+		SCR_ResourceSystemSubscriptionHandleBase consumerHandle = s_ConsumerHandle;
+		SCR_ResourceSystemSubscriptionHandleBase generatorHandle = s_GeneratorHandle;
+		int serial = s_Serial;
+		if (!Current() || !ExactHandle(s_ConsumerHandle, s_Consumer) || !ExactHandle(s_GeneratorHandle, s_Generator)) { Stop(); return; }
+		if (s_Serial != serial || s_ConsumerHandle != consumerHandle || s_GeneratorHandle != generatorHandle) return;
+		consumerHandle.Poke();
+		if (!Current() || s_Serial != serial || s_ConsumerHandle != consumerHandle || s_GeneratorHandle != generatorHandle) return;
+		generatorHandle.Poke();
+	}
+
+	static void Stop()
+	{
+		GetGame().GetCallqueue().Remove(Tick);
+		SCR_ResourcePlayerControllerInventoryComponent inventory = s_Inventory;
+		RplId resourceId = s_ResourceId;
+		SCR_ResourceConsumer consumer = s_Consumer;
+		SCR_ResourceGenerator generator = s_Generator;
+		bool exact = Current();
+		s_ConsumerHandle = null;
+		s_GeneratorHandle = null;
+		s_Player = null;
+		s_User = null;
+		s_Producer = null;
+		s_Resource = null;
+		s_Consumer = null;
+		s_Generator = null;
+		s_Inventory = null;
+		s_Serial = 0;
+		if (exact && inventory && consumer) inventory.RequestUnsubscription(resourceId, consumer.Type(), EResourceType.SUPPLIES, EResourceGeneratorID.DEFAULT);
+		if (exact && inventory && generator) inventory.RequestUnsubscription(resourceId, generator.Type(), EResourceType.SUPPLIES, EResourceGeneratorID.DEFAULT);
+		// Graceful manager retention expires normally; no further Poke after Stop.
+	}
 }
 
 class AICF_AIQuotaCatalogClientBootstrap

@@ -149,3 +149,47 @@ metadata exports — `vehicle/Server-profile/profile/AICF_CatalogMetadata_0.et`
 `Test-AIQuotaCatalogBootstrapContracts.ps1`, `Test-AIQuotaCatalogProbeContracts.ps1`
 и `Test-AIQuotaCatalogRunnerContracts.ps1`. Последние исполняют actual callback/
 observer replay и реальные отдельные WinPS5.1 CLI positive/negative случаи.
+
+## Pending consumer readback после штатных подписок — v19
+
+Fixture устраняет пропуск normal resource lifecycle перед прямым Catalog
+request. Authoritative server закрепляет первый producer, entry, quote,
+consumer и generator; owner client получает их реальные Rpl IDs и запрашивает
+два `RequestSubscriptionListenerHandleGraceful` через собственный настоящий
+`SCR_ResourcePlayerControllerInventoryComponent`. Это явная setup-операция,
+аналогичная native Catalog user action, а не read-only observer. ACK
+`RESOURCE_HANDLES_REQUESTED` доказывает запрос точных handles; регистрацию
+listener на сервере он **не доказывает** (`server_registration=UNOBSERVED`).
+
+После ACK сохраняются фактические `before`/shortfall и до вызова native
+generator устанавливается once-latch. Если cached consumer ещё не обновился,
+fixture читает тот же consumer в пределах исходного общего300s, без повторной
+генерации, `RequestAvailability`, `UpdateInteractor`, private balance/queue
+writes или изменения цены. Funding подтверждается только finite readback
+не ниже цены и точной delta. Настоящие `GetRequestState`, `GetFreeSlot`,
+factory, payment и25s physical tail остаются обязательными. Смена identity,
+serial, quote или player прекращает setup; другой producer/entry во время
+pending не подбирается. `GetBases=0` не превращается в доказанную normal
+GROUP/Barracks покупку: этот отдельный setup пока отсутствует.
+
+Client проверяет captured handles/serial после первого `Poke`, после `Tick`
+и после ACK перед повторным callback. `Stop` удаляет свой timer, освобождает
+handles и при сохранённом точном контексте запрашивает unsubscription.
+При утраченном контексте новых запросов нет; graceful manager retention
+истекает штатно, дальнейший `Poke` прекращается. Server readback повторяет
+captured identity до и после getter/guard boundaries; финальное подтверждение
+выполняется только после чистого сравнения того же состояния.
+
+Проверки v19: actual funding replay22cases/5unsafe и actual client
+handle/`Tick`/`Stop` replay13cases/3unsafe — PASS. Сохранены предыдущие
+callback, payment, enumeration, native-super, full-log и separate-process CLI
+controls. Terminal Stock Workbench: exit0, validation successful, fatal0 во
+всех трёх полных sibling logs, raw384+fixture=385 и source drift0. Это compile
+и targeted replay, **native v19 NOT RUN**, полного offline набора после
+этого delta ещё нет. Прежний native v17 funding FAIL остаётся FAIL.
+
+Evidence: `.codex-runtime/issue78-finalization-20261030/`
+`catalog-native-v19-readback-owner-fences/final-compile-source-verdict.json`;
+actual replay — `issue78-finalization-20261029/quota/catalog-adapters/`
+`catalog-pending-after-v4.txt`. Fixture SHA `76CDB491…0437A9`, source manifest
+`D2AEA774…98B240`; точные hashes находятся в verdict.
