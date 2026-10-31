@@ -2,6 +2,14 @@
 
 ## Возобновление #78 — 30–31.10.2026
 
+Поздние остановленные ordinary1800 и RHS+WCS topology результаты разобраны в
+[ISSUE78_STATUS.md](ISSUE78_STATUS.md#остановленные-ordinary1800-на-topology-v27).
+Оба ordinary получили оплаченные исходные5 и exact5seats на production384,
+native0/source390SHA0, но route/strict gates FAIL. Actual runner closures:
+US61868 exit1, USSR64400 exit1; observer watchers68877/47424 exit0.
+Новые staging-hold/captured-dead production изменения в эти игры не входили.
+Их следующий frozen All/Workbench/native результат необходимо записать отдельно.
+
 Новый frozen `resumed-topology-v27` завершён31.10 в01:24:52MSK:
 **262/262 PASS**, collector0/exact unique union/Logistics1/1021sourceSHA0.
 Все шесть actual exec sessions closed0:34471/43810/14042/5181/20375/52301.

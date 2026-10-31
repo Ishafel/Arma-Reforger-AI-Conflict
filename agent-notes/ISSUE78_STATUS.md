@@ -1,5 +1,54 @@
 # Состояние #78 — 31.10.2026
 
+## Остановленные ordinary1800 на topology V27
+
+Оба новых прогона завершены штатно, native exit `0`; actual runner sessions
+`61868`/`64400` закрылись `1` из-за строгого аудита. Production384 +6fixtures,
+raw390/compiled378, source SHA drift0, exact CLI/ROSTER_READY и полные stopped
+logs подтверждены. В обоих реальный оплаченный набор четырёх бойцов дал исходный
+состав5 и пять exact member==occupant мест; `CLASSIFY_VEHICLE_ROW_FAILED=0`.
+Это native positive исправления topology, но не доказательство отсутствия всех
+transient Census UNKNOWN или положительного обхода более256nodes после fix.
+
+- US:1800990ms, fullfatal0, прочие native Error32FAIL. Первая ошибка observer
+  `NO_SURVIVING_MOBILE_CREW` на617572ms: четыре исходных DEAD и один INCAP;
+  последний позднее также погиб. Машина освобождена в WORLD_POOL с cap0;
+  новый generation2 — платная замена, не воскрешение. INCAP→ALIVE наблюдалось,
+  причина неизвестна. Route0/functionalFAIL; естественные потери не объявляются
+  проектным дефектом, полный исходный маршрут этим не подтверждён.
+- USSR:1800296ms, fullfatal12raw sibling rows/прочие native Error32FAIL.
+  `MEANINGFUL_TASK_DEADLINE_MISSED` во время SPAWN_COMMIT — реальный taskless
+  интервал30170ms. Точный typed WAIT outcome старый observer не записывал.
+  После боя `VEHICLE_CLEANUP_RETAINED` удержал исходного DEAD водителя0EED,
+  исключённого native из сохранившейся группы. Exact seat/vehicle/Rpl и birth
+  identity подтверждены; `player_scan=1` не означает наличие игрока. Route0.
+
+Два отдельных production исправления ожидания и captured-dead cleanup проходят
+targeted проверки; Workbench/полный All/native для них ещё NOT RUN. Они не входят
+в эти игры и не превращают старые FAIL в PASS.
+
+Текущий RHS+WCS topology bootstrap: Arland95/Everon95/North97cases PASS,
+native0/fullfatal0/source386SHA0/hold≥300s; resources206/466/466FAIL,
+minFPS42.7/22.1/28.9. Контроль Everon с0Core gameplay.c, неизменным map adapter
+и1timer завершён native0/303.084s/source25SHA0/minFPS34.1; strict fatal18raw и
+прочие Error432FAIL. Изначальный zero-production контроль упал в native
+CallsignPool и не дал FPS. Нагрузка контроля отличается: причина просадки
+полного режима остаётся UNKNOWN, освобождение Core от ответственности не доказано.
+
+Catalogv24 подтвердил actual already-funded15600/quote200, но остался
+functionalFAIL300616ms: selected/factory/debit0, GetFreeSlot=null следует из
+контрольного потока, тип/занятость прямо не наблюдались. GROUP WIP не готов:
+standalone RequestTable не имеет ResourceComponent. Он исключается из следующего
+completed-repair snapshot до доказательства штатной полной hierarchy.
+
+Evidence: `.codex-runtime/issue78-finalization-20261030/ordinary-topology-US-1800-v1/`,
+`ordinary-topology-USSR-1800-v1/`, `cleanup-protected-occupant-readonly/`,
+`catalog-native-v24-already-funded/`; FPS —
+`.codex-runtime/issue78-finalization-20261029/quota/wcs-everon-coreless-mapcompat-fps-v3/`.
+Issue OPEN, PR79 draft; strict native-only persistence/resource blockers сохранены.
+
+## Предыдущий checkpoint V27
+
 Checkpoint кода `292f09e`: topology fix `ff36669`, Catalog client fix `ef6d226`,
 Census diagnostics `292f09e`; [draft PR79](https://github.com/Ishafel/Arma-Reforger-AI-Conflict/pull/79),
 issue OPEN. Native новых исправлений ещё NOT RUN; прежние FAIL сохранены.
