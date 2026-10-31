@@ -145,7 +145,7 @@ if ($transit) {
     Assert-AICFContains $failures 'STAGE3_RECOVERY_BUDGETS' $transit.Code 'mobility|Mobility|Unstuck' 'Transit must retain a separate mobility-recovery budget'
     Assert-AICFContains $failures 'STAGE3_RECOVERY_PROOF' $transit.Code 'pending|Pending' 'Recovery success must retain a pending post-action evidence state'
     Assert-AICFContains $failures 'STAGE3_SAFE_REUSE' $transit.Code 'retarget|Retarget|STRATEGIC_TARGET_CHANGED' 'Target changes must reroute the current usable asset'
-    Assert-AICFContains $failures 'STAGE3_TRANSIT_HEALTH_GATE' $transitTick 'InspectRouteAssetFailure[\s\S]*GetSupersededRouteWaypoint[\s\S]*PrepareRoute' 'Transit must classify terminal vehicle health before route reconciliation or creation'
+    Assert-AICFContains $failures 'STAGE3_TRANSIT_HEALTH_GATE' $transitTick 'string vehicleFailure = InspectVehicleFailure\(trip.GetLease\(\).GetVehicle\(\)\);[\s\S]*if \(vehicleFailure == "VEHICLE_OVERTURNED"\)[\s\S]*RecoverHealthyOverturn\(trip, causationId\);[\s\S]*if \(overturn\) return overturn;[\s\S]*ReportVehicleFailureSnapshot\(trip, vehicleFailure\);\s*AbortOwnedActions\(trip\);\s*return AICF_TripOutcome.FallbackToFoot\(vehicleFailure, causationId\);[\s\S]*GetSupersededRouteWaypoint[\s\S]*PrepareRoute' 'Transit must classify terminal vehicle health before route reconciliation or creation'
     Assert-AICFContains $failures 'STAGE3_TRANSIT_HEALTH_GATE' $prepareRoute 'InspectRouteAssetFailure[\s\S]*CreateAndStageRoute' 'Route preparation must reject an unusable asset before staging a waypoint'
 }
 

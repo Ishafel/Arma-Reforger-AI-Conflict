@@ -2,6 +2,7 @@
 // query boundary. Domain side effects remain owned by the dedicated flows.
 class AICF_VehicleCoordinator
 {
+	protected ref array<ref AICF_TransportTrip> m_aPendingCapturedDeathRetirements = {};
 	protected ref AICF_Stage3Config m_Config;
 	protected SCR_GameModeCampaign m_Campaign;
 	protected AICF_ConflictAdapter m_ConflictAdapter;
@@ -14,10 +15,33 @@ class AICF_VehicleCoordinator
 	protected ref AICF_VehicleCleanupManager m_CleanupManager;
 	protected ref AICF_VehicleDomainDiagnostics m_Diagnostics;
 	protected ref AICF_VehicleAcceptanceMonitor m_Acceptance;
+	protected ref AICF_GroupTrace m_GroupTrace = new AICF_GroupTrace();
 	protected ref array<ref AICF_VehicleAdmissionAudit> m_aAdmissionAudits = {};
 	protected ref array<ref AICF_ExplicitVehicleAdmissionIntent> m_aExplicitAdmissionIntents = {};
 	protected int m_iObservedBaseRevision;
 	protected bool m_bStopped;
+	bool CanConfigureVehiclePreset(AICF_GroupSlot slot, SCR_CampaignFaction faction, out string reason)
+	{
+		reason = "MATCH_UNAVAILABLE";
+		if (!IsAuthorityReady() || !slot || !faction) return false;
+		AICF_FactionFleet fleet = m_Fleets.FindFleet(faction.GetFactionKey());
+		reason = "FLEET_CAP";
+		if (!fleet || (!fleet.HasLeaseForSlot(slot.GetSlotId()) && fleet.GetCappedActiveOrReservedCount() + m_Trips.GetPreLeaseNonTerminalCount(faction.GetFactionKey()) >= fleet.GetMaximumActiveOrReserved())) return false;
+		reason = "READY";
+		return true;
+	}
+
+	string VehiclePresetStatus(AICF_GroupSlot slot)
+	{
+		if (!slot) return "MATCH_UNAVAILABLE";
+		AICF_TransportTrip trip = FindTripForSlot(slot);
+		if (trip && trip.GetVehiclePresetRevision() != slot.GetVehiclePresetRevision()) return "CLEANUP_PENDING";
+		if (!slot.HasVehiclePreset()) return "AUTOMATIC_POLICY";
+		if (!trip) return "WAITING_FOR_ORDER_OR_ADMISSION";
+		if (trip.IsTerminal()) return trip.GetTerminalReason();
+		if (trip.IsPresetWaitingForDestination()) return "PRESET_WAITING_FOR_DESTINATION";
+		return typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase());
+	}
 
 	void AICF_VehicleCoordinator(
 		AICF_Stage3Config config,
@@ -76,7 +100,10 @@ class AICF_VehicleCoordinator
 		int nowMs = System.GetTickCount();
 		for (int fleetIndex; fleetIndex < m_Fleets.GetFleetCount(); fleetIndex++)
 			m_CleanupManager.UpdateFleet(m_Fleets.GetFleet(fleetIndex), nowMs);
+		ObservePendingCapturedDeathRetirements();
 		m_Acceptance.Audit();
+		m_GroupTrace.Update(usState, this);
+		m_GroupTrace.Update(ussrState, this);
 	}
 
 	void NotifyStrategicContextChanged(int baseRevision, string reason)
@@ -157,10 +184,15 @@ class AICF_VehicleCoordinator
 		if (!trip || trip.GetHandoffState().IsOrderRestored())
 			return false;
 		AICF_ETransportTripPhase phase = trip.GetPhase();
-		return phase == AICF_ETransportTripPhase.BOARDING ||
+		return phase == AICF_ETransportTripPhase.SITE_PLANNED ||
+			phase == AICF_ETransportTripPhase.APPROACHING_SITE ||
+			phase == AICF_ETransportTripPhase.STAGING_CONFIRMED ||
+			phase == AICF_ETransportTripPhase.SPAWN_COMMIT ||
+			phase == AICF_ETransportTripPhase.BOARDING ||
 			phase == AICF_ETransportTripPhase.TRANSIT ||
 			phase == AICF_ETransportTripPhase.DISMOUNT ||
 			phase == AICF_ETransportTripPhase.HANDOFF ||
+			(phase == AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT && trip.GetBehaviorState().m_bReboarding) ||
 			trip.GetHandoffState().IsRestoreRequested();
 	}
 
@@ -169,7 +201,7 @@ class AICF_VehicleCoordinator
 		AICF_TransportTrip trip = FindTripForSlot(slot);
 		if (!trip)
 			return null;
-		return new AICF_VehicleSlotView(trip);
+		return new AICF_VehicleSlotView(trip, m_iObservedBaseRevision);
 	}
 
 	// User-facing mobility is a physical projection first and a lifecycle
@@ -204,6 +236,37 @@ class AICF_VehicleCoordinator
 	AICF_TransportTrip GetTrip(AICF_GroupSlot slot)
 	{
 		return FindTripForSlot(slot);
+	}
+
+	void ObserveNativeGroupEmpty(AICF_GroupSlot slot, SCR_CampaignFaction faction)
+	{
+		if (!IsAuthorityReady() || !slot || !faction || !slot.GetGroup()) return;
+		AICF_TransportTrip trip = m_Trips.Find(faction.GetFactionKey(), slot.GetSlotId());
+		if (!trip || !trip.GetAssignment() || trip.GetAssignment().GetGroup() != slot.GetGroup() || trip.GetGroupGeneration() != slot.GetSpawnGeneration()) return;
+		AICF_FactionFleet fleet = m_Fleets.FindFleet(faction.GetFactionKey());
+		trip.RecordCapturedDeadRetirement(fleet, AICF_VehicleCleanupManager.GetRetirementObservationBudget(m_Config.GetDismountTimeoutMs(), m_Config.GetCleanupDelayMs()));
+	}
+
+	AICF_TransitMoveFailure ReportTransitMoveFailure(AICF_GroupSlot slot,
+		SCR_AIGroupUtilityComponent utility, int result, int handler, bool related, vector location)
+	{
+		if (!IsAuthorityReady() || !slot || !slot.IsCombatReady()) return null;
+		return AICF_TransitMoveFailure.Capture(FindTripForSlot(slot), utility, result, handler, related, location);
+	}
+
+	AICF_SpawnApproachFailure ReportSpawnApproachFailure(AICF_GroupSlot slot,
+		SCR_CampaignFaction faction, SCR_AIGroupUtilityComponent utility,
+		AIActionBase action, AIWaypoint waypoint, vector location, int baseRevision)
+	{
+		if (!IsAuthorityReady() || !slot || !faction || !slot.IsCombatReady()) return null;
+		AICF_TransportTrip trip = FindTripForSlot(slot);
+		if (!trip || trip.GetFactionKey() != faction.GetFactionKey()) return null;
+		AICF_StrategicAssignmentSnapshot assignment;
+		if (!m_OrderPlanner.TryCreateAssignmentSnapshot(slot, faction,
+			baseRevision, assignment)) return null;
+		AICF_FactionFleet fleet = m_Fleets.FindFleet(faction.GetFactionKey());
+		return m_TripController.ReportSpawnApproachFailure(trip, assignment, slot, fleet,
+			faction, utility, action, waypoint, location);
 	}
 
 	bool ReplanControlledMovement(
@@ -285,6 +348,12 @@ class AICF_VehicleCoordinator
 		if (!fleet)
 			return 0;
 		return fleet.GetReservedCount();
+	}
+
+	AICF_FleetRegistry GetAIQuotaFleetRegistry()
+	{
+		if (!Replication.IsServer()) return null;
+		return m_Fleets;
 	}
 
 	int GetCapHeldCount(FactionKey factionKey)
@@ -403,6 +472,7 @@ class AICF_VehicleCoordinator
 		if (m_bStopped)
 			return;
 		m_bStopped = true;
+		m_GroupTrace.Stop();
 		int nowMs = System.GetTickCount();
 		for (int tripIndex; tripIndex < m_Trips.GetCount(); tripIndex++)
 		{
@@ -438,6 +508,8 @@ class AICF_VehicleCoordinator
 			for (int fleetIndex; fleetIndex < m_Fleets.GetFleetCount(); fleetIndex++)
 				m_CleanupManager.BeginStopFleet(m_Fleets.GetFleet(fleetIndex), nowMs);
 		}
+		ObservePendingCapturedDeathRetirements();
+		m_aPendingCapturedDeathRetirements.Clear();
 		m_Acceptance.Stop("COORDINATOR_STOP");
 	}
 
@@ -596,7 +668,7 @@ class AICF_VehicleCoordinator
 				fleet,
 				faction);
 			ObserveTerminalCommit(trip, previousPhase, previousTransitions, observed);
-			if (!ShouldReplaceTerminalTrip(trip, assignment))
+			if (!ShouldReplaceTerminalTrip(trip, assignment, slot))
 				return;
 			m_Trips.RemoveTerminal(trip);
 		}
@@ -615,6 +687,7 @@ class AICF_VehicleCoordinator
 			"STRATEGIC_ASSIGNMENT_ADMITTED");
 		if (!admitted)
 			return;
+		admitted.CaptureVehiclePreset(slot);
 		ConsumeExplicitVehicleAdmission(assignment);
 		AICF_ETransportTripPhase admittedPhase = admitted.GetPhase();
 		int admittedTransitions = admitted.GetTransitionCount();
@@ -678,13 +751,15 @@ class AICF_VehicleCoordinator
 			reason = orderOwnershipFence;
 			return false;
 		}
-		if (slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY)
+		if (slot.GetUnitType() == AICF_EGroupUnitType.INFANTRY && !slot.HasVehiclePreset())
 		{
 			reason = "COMMANDER_INFANTRY_PROFILE";
 			return false;
 		}
 		int alive = AICF_GroupRuntime.CountAliveAgents(assignment.GetGroup());
-		if (alive < m_Config.GetMinimumVehicleRequestAgents())
+		int minimumAgents = m_Config.GetMinimumVehicleRequestAgents();
+		if (slot.HasVehiclePreset()) minimumAgents = 1;
+		if (alive < minimumAgents)
 		{
 			reason = "MINIMUM_ROSTER_NOT_MET";
 			return false;
@@ -703,7 +778,7 @@ class AICF_VehicleCoordinator
 		float routeMeters = Math.Sqrt(vector.DistanceSqXZ(
 			leader.GetOrigin(),
 			assignment.GetTargetPosition()));
-		bool explicitAdmission = HasExplicitVehicleAdmission(slot, assignment);
+		bool explicitAdmission = HasExplicitVehicleAdmission(slot, assignment) || slot.HasVehiclePreset();
 		if (routeMeters < m_Config.GetMinimumRouteMeters() && !explicitAdmission)
 		{
 			reason = "ROUTE_BELOW_VEHICLE_THRESHOLD";
@@ -786,13 +861,44 @@ class AICF_VehicleCoordinator
 
 	protected bool ShouldReplaceTerminalTrip(
 		AICF_TransportTrip trip,
-		AICF_StrategicAssignmentSnapshot assignment)
+		AICF_StrategicAssignmentSnapshot assignment,
+		AICF_GroupSlot slot)
 	{
 		if (!trip || !assignment || !m_TripController.CanRetireTrip(trip))
 			return false;
-		return trip.GetAssignment().GetAssignmentRevision() != assignment.GetAssignmentRevision() ||
-			trip.GetAssignment().GetBaseRevision() != assignment.GetBaseRevision() ||
-			!trip.GetAssignment().MatchesDestination(assignment);
+		if (HasFinishedStrategicTransportIntent(trip, assignment, slot))
+		{
+			// Handoff восстанавливает пеший waypoint с новой assignment revision.
+			// COMPLETE или FALLBACK завершают попытку того же transport intent:
+			// revision пешего waypoint не должна запускать повторную покупку.
+			if (HasExplicitVehicleAdmission(slot, assignment)) return true;
+			ReportAdmissionOnce(assignment, "STRATEGIC_TRANSPORT_INTENT_ALREADY_FINISHED");
+			return false;
+		}
+		bool presetChanged = trip.GetVehiclePresetSlot() &&
+			trip.GetVehiclePresetRevision() != trip.GetVehiclePresetSlot().GetVehiclePresetRevision();
+		if (presetChanged) return true;
+		if (trip.GetAssignment().GetStrategicIntentRevision() != assignment.GetStrategicIntentRevision()) return true;
+		if (trip.GetAssignment().GetAssignmentRevision() != assignment.GetAssignmentRevision()) return true;
+		if (trip.GetAssignment().GetBaseRevision() != assignment.GetBaseRevision()) return true;
+		return !trip.GetAssignment().MatchesDestination(assignment);
+	}
+
+	protected bool HasFinishedStrategicTransportIntent(
+		AICF_TransportTrip trip,
+		AICF_StrategicAssignmentSnapshot assignment,
+		AICF_GroupSlot slot)
+	{
+		if (!Replication.IsServer() || !trip || !assignment || !slot) return false;
+		if (trip.GetPhase() != AICF_ETransportTripPhase.COMPLETE && trip.GetPhase() != AICF_ETransportTripPhase.FALLBACK) return false;
+		if (!trip.GetHandoffState().IsOrderRestored()) return false;
+		AICF_StrategicAssignmentSnapshot completed = trip.GetAssignment();
+		if (!completed || !completed.MatchesCurrent(assignment.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), slot.GetGroup())) return false;
+		if (!assignment.MatchesCurrent(assignment.GetFactionKey(), slot.GetSlotId(), slot.GetSpawnGeneration(), slot.GetGroup())) return false;
+		if (completed.GetUnitType() != slot.GetUnitType() || assignment.GetUnitType() != slot.GetUnitType()) return false;
+		if (completed.GetStrategicIntentRevision() != assignment.GetStrategicIntentRevision() || !completed.MatchesDestination(assignment)) return false;
+		if (trip.GetVehiclePresetSlot() && trip.GetVehiclePresetSlot() != slot) return false;
+		return trip.GetVehiclePresetRevision() == slot.GetVehiclePresetRevision();
 	}
 
 	protected void ObserveTerminalCommit(
@@ -813,6 +919,28 @@ class AICF_VehicleCoordinator
 				"UNCOMMITTED_TERMINAL_OUTCOME:" + observed.GetReason());
 			return;
 		}
+		if (trip && trip.GetPhase() == AICF_ETransportTripPhase.FAILED_CLOSED)
+		{
+			AICF_TripRetirementObservation retirement = trip.ObserveCapturedDeadRetirement();
+			if (retirement.GetStatus() == AICF_ETripRetirementObservation.CONFIRMED)
+			{
+				m_aPendingCapturedDeathRetirements.RemoveItem(trip);
+				m_Acceptance.ObserveConfirmedCapturedDeathRetirement(trip, retirement);
+				return;
+			}
+			if (retirement.GetStatus() == AICF_ETripRetirementObservation.PENDING && !m_bStopped)
+			{
+				if (m_aPendingCapturedDeathRetirements.Find(trip) < 0) m_aPendingCapturedDeathRetirements.Insert(trip);
+				if (previousPhase != trip.GetPhase()) AICF_Stage3Diagnostics.Info("CAPTURED_DEATH_RETIREMENT_PENDING", retirement.Details());
+				return;
+			}
+			if (retirement.GetStatus() != AICF_ETripRetirementObservation.NONE)
+			{
+				m_aPendingCapturedDeathRetirements.RemoveItem(trip);
+				m_Acceptance.ObserveTripFailure(trip, AICF_EVehicleAcceptanceFailureDomain.CLEANUP, "CAPTURED_DEATH_RETIREMENT_UNCONFIRMED");
+				return;
+			}
+		}
 		if (!trip || !trip.IsTerminal() || previousTransitions == trip.GetTransitionCount() ||
 			previousPhase == trip.GetPhase())
 		{
@@ -831,6 +959,22 @@ class AICF_VehicleCoordinator
 			ResolveTerminalFailureDomain(trip.GetPreviousPhase(), terminalOutcome));
 	}
 
+	protected void ObservePendingCapturedDeathRetirements()
+	{
+		for (int index = m_aPendingCapturedDeathRetirements.Count() - 1; index >= 0; index--)
+		{
+			AICF_TransportTrip trip = m_aPendingCapturedDeathRetirements[index];
+			if (!trip) { m_aPendingCapturedDeathRetirements.Remove(index); continue; }
+			if (trip.ObserveCapturedDeadRetirement().GetStatus() == AICF_ETripRetirementObservation.NONE)
+			{
+				m_aPendingCapturedDeathRetirements.Remove(index);
+				m_Acceptance.ObserveTripFailure(trip, AICF_EVehicleAcceptanceFailureDomain.IDENTITY, "CAPTURED_DEATH_RETIREMENT_CONTEXT_LOST");
+				continue;
+			}
+			ObserveTerminalCommit(trip, trip.GetPhase(), trip.GetTransitionCount(), null);
+		}
+	}
+
 	protected AICF_EVehicleAcceptanceFailureDomain ResolveTerminalFailureDomain(
 		AICF_ETransportTripPhase previousPhase,
 		AICF_TripOutcome terminalOutcome)
@@ -847,6 +991,13 @@ class AICF_VehicleCoordinator
 			// Combat, mines and other stock-world damage are valid runtime
 			// conditions. Keep the terminal fallback evidence without turning an
 			// unattributed destroyed asset into an acceptance failure.
+			return AICF_EVehicleAcceptanceFailureDomain.NONE;
+		}
+		if (terminalReason == "VEHICLE_MOVEMENT_DESTROYED" &&
+			(previousPhase == AICF_ETransportTripPhase.BOARDING || previousPhase == AICF_ETransportTripPhase.TRANSIT))
+		{
+			// Native unusability завершает bounded попытку, не доказывая причину
+			// повреждения. Receipt остаётся FALLBACK и не отмечает normal COMPLETE.
 			return AICF_EVehicleAcceptanceFailureDomain.NONE;
 		}
 		switch (previousPhase)

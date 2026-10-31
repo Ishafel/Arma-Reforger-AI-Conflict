@@ -2,6 +2,95 @@
 // AICF_TransportTripController may call CommitTransition or CommitRetarget.
 class AICF_TransportTrip
 {
+	protected AICF_GroupSlot m_VehiclePresetSlot;
+	protected ref AICF_VehiclePreset m_VehiclePreset;
+	protected int m_iVehiclePresetRevision;
+	protected ref array<IEntity> m_aVehiclePresetMembers = {};
+	protected ref array<EntityID> m_aVehiclePresetMemberIds = {};
+	protected bool m_bVehiclePresetDebited;
+	protected ref AICF_VehiclePresetEconomyDecision m_VehiclePresetEconomyDecline;
+	AICF_VehiclePresetEconomyDecision GetVehiclePresetEconomyDecline() { return m_VehiclePresetEconomyDecline; }
+	bool RecordVehiclePresetEconomyDecline(AICF_VehiclePresetEconomyDecision decision)
+	{
+		if (m_VehiclePresetEconomyDecline || !decision ||
+			decision.GetStatus() != AICF_EVehiclePresetEconomyDecision.INSUFFICIENT_AVAILABLE_SUPPLIES ||
+			!decision.IsCurrentPreflight(this) || !m_RequestState || m_RequestState.GetTotalAttemptCount() != 0) return false;
+		m_VehiclePresetEconomyDecline = decision;
+		return true;
+	}
+	protected ref AICF_VehicleBehaviorState m_BehaviorState = new AICF_VehicleBehaviorState();
+	AICF_VehicleBehaviorState GetBehaviorState() { return m_BehaviorState; }
+	AICF_VehiclePreset GetVehiclePreset() { return m_VehiclePreset; }
+	int GetVehiclePresetRevision() { return m_iVehiclePresetRevision; }
+	AICF_GroupSlot GetVehiclePresetSlot() { return m_VehiclePresetSlot; }
+	bool IsVehiclePresetDebited() { return m_bVehiclePresetDebited; }
+	void MarkVehiclePresetDebited() { m_bVehiclePresetDebited = true; }
+
+	void CaptureVehiclePreset(AICF_GroupSlot slot)
+	{
+		m_VehiclePresetSlot = slot;
+		m_iVehiclePresetRevision = slot.GetVehiclePresetRevision();
+		m_VehiclePreset = AICF_VehiclePreset.Decode(slot.GetVehiclePresetData());
+		if (!m_VehiclePreset) return;
+		for (int i; i < AICF_Stage1Config.MAX_GROUP_SIZE; i++)
+		{
+			IEntity member = slot.GetRosterMember(i);
+			m_aVehiclePresetMembers.Insert(member);
+			EntityID id = EntityID.INVALID;
+			if (member) id = member.GetID();
+			m_aVehiclePresetMemberIds.Insert(id);
+		}
+	}
+
+	bool IsVehiclePresetCurrent()
+	{
+		if (!m_Assignment || !m_VehiclePresetSlot || m_VehiclePresetSlot.GetVehiclePresetRevision() != m_iVehiclePresetRevision ||
+			m_VehiclePresetSlot.GetGroup() != m_Assignment.GetGroup() || m_VehiclePresetSlot.GetSpawnGeneration() != GetGroupGeneration()) return false;
+		if (!m_VehiclePreset) return !m_VehiclePresetSlot.HasVehiclePreset();
+		if (m_aVehiclePresetMembers.Count() != AICF_Stage1Config.MAX_GROUP_SIZE ||
+			m_aVehiclePresetMemberIds.Count() != AICF_Stage1Config.MAX_GROUP_SIZE) return false;
+		// Identity охватывает весь captured roster, включая утратившие роль позиции.
+		for (int index; index < AICF_Stage1Config.MAX_GROUP_SIZE; index++)
+		{
+			IEntity member = VehiclePresetMember(index);
+			// Погибший original actor не является сменой пресета. Живой новый
+			// roster на той же позиции по-прежнему требует новой incarnation.
+			IEntity currentMember = m_VehiclePresetSlot.GetRosterMember(index);
+			if (!AICF_GroupRuntime.IsAliveCharacter(member))
+			{
+				if (AICF_GroupRuntime.IsAliveCharacter(currentMember)) return false;
+				continue;
+			}
+			if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(member) || currentMember != member) return false;
+		}
+		return true;
+	}
+
+	IEntity VehiclePresetMember(int index)
+	{
+		if (!m_aVehiclePresetMembers.IsIndexValid(index)) return null;
+		IEntity member = m_aVehiclePresetMembers[index];
+		if (!member || member.GetID() != m_aVehiclePresetMemberIds[index]) return null;
+		return member;
+	}
+
+	// Меняется только захваченная trip-копия; library/slot recipe не трогаются.
+	bool ReassignVehiclePresetSeat(int seatIndex, int memberPosition)
+	{
+		if (!Replication.IsServer() || !m_VehiclePreset || !IsVehiclePresetCurrent() ||
+			(memberPosition >= 0 && !AICF_VehicleShortRecovery.IsCurrentMember(this, VehiclePresetMember(memberPosition)))) return false;
+		return m_VehiclePreset.Assign(seatIndex, memberPosition);
+	}
+
+	bool CommitBehaviorClockPause(bool paused, int nowMs)
+	{
+		if (!Replication.IsServer() || !m_VehiclePreset) return false;
+		if (paused && m_Phase != AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT) return false;
+		if (!paused) m_iAbsoluteDeadlineMs += m_BehaviorState.PausedMs(nowMs);
+		m_BehaviorState.SetPaused(paused, nowMs);
+		return true;
+	}
+
 	protected ref AICF_StrategicAssignmentSnapshot m_Assignment;
 	protected int m_iTripGeneration;
 	protected string m_sOperationId;
@@ -21,6 +110,9 @@ class AICF_TransportTrip
 	protected ref AICF_VehicleDismountState m_DismountState;
 	protected ref AICF_VehicleHandoffState m_HandoffState;
 	protected ref AICF_VehicleCleanupState m_CleanupState;
+	protected ref AICF_TripRetirementIdentity m_RetirementIdentity;
+	protected ref AICF_CleanupAssignmentRebind m_CleanupAssignmentRebind;
+	protected bool m_bCleanupAssignmentRebindStopped;
 
 	void AICF_TransportTrip(
 		AICF_StrategicAssignmentSnapshot assignment,
@@ -44,6 +136,7 @@ class AICF_TransportTrip
 		m_DismountState = new AICF_VehicleDismountState();
 		m_HandoffState = new AICF_VehicleHandoffState();
 		m_CleanupState = new AICF_VehicleCleanupState();
+		m_RetirementIdentity = new AICF_TripRetirementIdentity(assignment, tripGeneration, operationId);
 	}
 
 	AICF_StrategicAssignmentSnapshot GetAssignment() { return m_Assignment; }
@@ -58,7 +151,22 @@ class AICF_TransportTrip
 	AICF_ETransportTripPhase GetPreviousPhase() { return m_PreviousPhase; }
 	int GetStartedAtMs() { return m_iStartedAtMs; }
 	int GetPhaseStartedAtMs() { return m_iPhaseStartedAtMs; }
-	int GetAbsoluteDeadlineMs() { return m_iAbsoluteDeadlineMs; }
+	int GetAbsoluteDeadlineMs() { return m_iAbsoluteDeadlineMs + m_MovementState.GetPresetDestinationWaitMs(System.GetTickCount()) + m_BehaviorState.PausedMs(System.GetTickCount()); }
+	int AcquisitionHoldDeadlineAtMs(int nowMs)
+	{
+		return m_iAbsoluteDeadlineMs + m_MovementState.GetPresetDestinationWaitMs(nowMs) + m_BehaviorState.PausedMs(nowMs);
+	}
+	bool IsPresetWaitingForDestination() { return m_MovementState.IsPresetDestinationWaiting(); }
+
+	bool CommitPresetDestinationWait(bool waiting, int nowMs)
+	{
+		if (!Replication.IsServer()) return false;
+		if (waiting && (m_Phase != AICF_ETransportTripPhase.TRANSIT || !m_VehiclePreset || !IsVehiclePresetCurrent() ||
+			m_MovementState.GetRouteGeneration() != 0 || m_MovementState.GetRouteWaypoint() || m_MovementState.GetSupersededRouteWaypoint())) return false;
+		if (!waiting) m_iAbsoluteDeadlineMs += m_MovementState.GetPresetDestinationWaitMs(nowMs);
+		m_MovementState.SetPresetDestinationWaiting(waiting, nowMs);
+		return true;
+	}
 	int GetTransitionCount() { return m_iTransitionCount; }
 	string GetLastTransitionReason() { return m_sLastTransitionReason; }
 	string GetTerminalReason() { return m_sTerminalReason; }
@@ -76,6 +184,42 @@ class AICF_TransportTrip
 		return m_Assignment && m_Assignment.IsValid() && m_iTripGeneration > 0 &&
 			!m_sOperationId.IsEmpty() && !m_sCausationId.IsEmpty() &&
 			m_iAbsoluteDeadlineMs > m_iStartedAtMs;
+	}
+
+	bool HasAbsentGroupRetirementIdentity()
+	{
+		return m_RetirementIdentity && m_RetirementIdentity.MatchesAbsentGroup(this) &&
+			m_iAbsoluteDeadlineMs > m_iStartedAtMs && !m_sCausationId.IsEmpty();
+	}
+
+	AICF_TripRetirementIdentity CaptureOrphanCleanupIdentity(AICF_FactionFleet fleet, AICF_VehicleLease lease, int terminalAt)
+	{
+		if (!m_RetirementIdentity || !m_RetirementIdentity.CaptureCleanup(this, fleet, lease, terminalAt)) return null;
+		return m_RetirementIdentity;
+	}
+
+	bool OwnsRetirementIdentity(AICF_TripRetirementIdentity identity) { return identity && identity == m_RetirementIdentity; }
+	AICF_CapturedDeadCleanupIdentity CaptureCapturedDeadCleanupIdentity(AICF_VehicleCleanupJob job)
+	{
+		return AICF_CapturedDeadCleanupIdentity.Capture(m_RetirementIdentity, this, job);
+	}
+	void RecordCapturedDeadRetirement(AICF_FactionFleet fleet, int observationBudget)
+	{
+		if (m_RetirementIdentity) m_RetirementIdentity.RecordAllCapturedDead(this, fleet, observationBudget);
+	}
+	bool HasCapturedDeadRetirementEvidence() { return m_RetirementIdentity && m_RetirementIdentity.HasCapturedDeadEvidence(); }
+	void RecordCapturedDeadRetirementCommit(AICF_FactionFleet fleet)
+	{
+		if (m_RetirementIdentity) m_RetirementIdentity.RecordOrphanTerminalCommit(this, fleet);
+	}
+	AICF_TripRetirementObservation ObserveCapturedDeadRetirement()
+	{
+		return new AICF_TripRetirementObservation(m_RetirementIdentity, this);
+	}
+
+	bool IsValidForRetirement()
+	{
+		return IsValid() || HasAbsentGroupRetirementIdentity();
 	}
 
 	bool MatchesIdentity(
@@ -107,7 +251,7 @@ class AICF_TransportTrip
 
 	bool IsDeadlineReached(int nowMs)
 	{
-		return m_iAbsoluteDeadlineMs > 0 && nowMs >= m_iAbsoluteDeadlineMs;
+		return m_iAbsoluteDeadlineMs > 0 && nowMs >= m_iAbsoluteDeadlineMs + m_MovementState.GetPresetDestinationWaitMs(nowMs) + m_BehaviorState.PausedMs(nowMs);
 	}
 
 	bool TryAttachLease(AICF_VehicleLease lease)
@@ -133,6 +277,46 @@ class AICF_TransportTrip
 		return true;
 	}
 
+	AICF_CleanupAssignmentRebind BeginCleanupAssignmentRebind(AICF_StrategicAssignmentSnapshot accepted, AICF_GroupSlot slot)
+	{
+		if (m_bCleanupAssignmentRebindStopped) return null;
+		AICF_CleanupAssignmentRebind previousToken = m_CleanupAssignmentRebind;
+		AICF_CleanupAssignmentRebind token = AICF_CleanupAssignmentRebind.Capture(this, m_RetirementIdentity, accepted, slot);
+		if (!token || m_CleanupAssignmentRebind != previousToken) return null;
+		m_CleanupAssignmentRebind = token;
+		return token;
+	}
+
+	bool OwnsCleanupAssignmentRebind(AICF_CleanupAssignmentRebind token)
+	{
+		return token && m_CleanupAssignmentRebind == token;
+	}
+
+	void CancelCleanupAssignmentRebind(AICF_CleanupAssignmentRebind token)
+	{
+		if (OwnsCleanupAssignmentRebind(token)) m_CleanupAssignmentRebind = null;
+	}
+
+	void InvalidateCleanupAssignmentRebind()
+	{
+		m_CleanupAssignmentRebind = null;
+	}
+
+	void StopCleanupAssignmentRebind()
+	{
+		m_bCleanupAssignmentRebindStopped = true;
+		InvalidateCleanupAssignmentRebind();
+	}
+
+	bool CompleteCleanupAssignmentRebind(AICF_CleanupAssignmentRebind token, AICF_GroupSlot slot)
+	{
+		if (!OwnsCleanupAssignmentRebind(token)) return false;
+		bool accepted = false;
+		if (m_RetirementIdentity) accepted = m_RetirementIdentity.AcceptCleanupAssignmentRebind(this, slot, token);
+		CancelCleanupAssignmentRebind(token);
+		return accepted;
+	}
+
 	bool CommitRetarget(AICF_StrategicAssignmentSnapshot assignment, string causationId)
 	{
 		if (IsTerminal() || !assignment || !assignment.IsValid() || causationId.IsEmpty())
@@ -147,8 +331,11 @@ class AICF_TransportTrip
 			return false;
 		if (assignment.GetBaseRevision() < m_Assignment.GetBaseRevision())
 			return false;
+		AICF_CleanupAssignmentRebind cleanupRebind = m_CleanupAssignmentRebind;
+		bool cleanupRebindCurrent = cleanupRebind && cleanupRebind.MatchesContext(this, m_RetirementIdentity, cleanupRebind.GetSlot(), false);
 		m_Assignment = assignment;
 		m_sCausationId = causationId;
+		if (cleanupRebindCurrent && OwnsCleanupAssignmentRebind(cleanupRebind)) cleanupRebind.RecordCommitted(this, assignment);
 		return true;
 	}
 
@@ -158,7 +345,7 @@ class AICF_TransportTrip
 		string causationId,
 		int nowMs)
 	{
-		if (!IsValid() || reason.IsEmpty() || causationId.IsEmpty())
+		if ((!IsValid() && !(nextPhase == AICF_ETransportTripPhase.FAILED_CLOSED && HasAbsentGroupRetirementIdentity())) || reason.IsEmpty() || causationId.IsEmpty())
 			return false;
 		if (!CanTransitionTo(nextPhase))
 			return false;
@@ -167,6 +354,7 @@ class AICF_TransportTrip
 		ResetExitedPhase(previousPhase, nextPhase);
 		m_PreviousPhase = previousPhase;
 		m_Phase = nextPhase;
+		if (IsTerminal()) InvalidateCleanupAssignmentRebind();
 		m_iPhaseStartedAtMs = nowMs;
 		m_iTransitionCount++;
 		m_sLastTransitionReason = reason;
@@ -192,7 +380,7 @@ class AICF_TransportTrip
 	// precondition (for example cap-free WAITING) must be committed first.
 	bool IsTransitionAllowedTo(AICF_ETransportTripPhase nextPhase)
 	{
-		return IsValid() && !IsTerminal() && nextPhase != m_Phase &&
+		return (IsValid() || (nextPhase == AICF_ETransportTripPhase.FAILED_CLOSED && HasAbsentGroupRetirementIdentity())) && !IsTerminal() && nextPhase != m_Phase &&
 			IsAllowedTransition(m_Phase, nextPhase);
 	}
 
@@ -235,6 +423,11 @@ class AICF_TransportTrip
 					toPhase == AICF_ETransportTripPhase.FAILED_CLOSED;
 			case AICF_ETransportTripPhase.TRANSIT:
 				return toPhase == AICF_ETransportTripPhase.DISMOUNT ||
+					toPhase == AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT ||
+					toPhase == AICF_ETransportTripPhase.FALLBACK ||
+					toPhase == AICF_ETransportTripPhase.FAILED_CLOSED;
+			case AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT:
+				return toPhase == AICF_ETransportTripPhase.TRANSIT ||
 					toPhase == AICF_ETransportTripPhase.FALLBACK ||
 					toPhase == AICF_ETransportTripPhase.FAILED_CLOSED;
 			case AICF_ETransportTripPhase.DISMOUNT:

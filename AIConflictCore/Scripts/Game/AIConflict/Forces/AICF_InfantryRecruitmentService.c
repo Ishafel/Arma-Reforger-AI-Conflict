@@ -20,6 +20,8 @@ class AICF_InfantryRecruitmentService
 	protected int m_iNextToken = 1;
 	protected int m_iAvailableAgents;
 	protected bool m_bStopped;
+	protected AICF_FactionState m_NativeUS;
+	protected AICF_FactionState m_NativeUSSR;
 
 	void AICF_InfantryRecruitmentService(SCR_GameModeCampaign campaign, AICF_OrderPlanner planner,
 		AICF_EconomySystem economy, AICF_ObjectiveGraph graph, AICF_TargetSelector selector, AICF_GroupSpawner rosterSource)
@@ -43,6 +45,29 @@ class AICF_InfantryRecruitmentService
 		return count;
 	}
 
+	// Donor содержит ровно один requested member. Уже появившийся donor входит
+	// в native active/intended и не должен второй раз резервировать native budget.
+	int CountUnmaterializedAgents()
+	{
+		int count;
+		foreach (AICF_InfantryRecruitmentOrder order : m_aOrders)
+			if (order && order.m_Donor && order.m_Donor.GetAgentsCount() < 1) count++;
+		return count;
+	}
+
+	bool IsCurrentOrder(AICF_InfantryRecruitmentOrder order)
+	{
+		if (!Replication.IsServer() || m_bStopped || !order || !m_Campaign ||
+			!m_Campaign.IsMaster() || !m_Campaign.IsRunning() || !m_Graph ||
+			!m_aOrders.Contains(order) || order.m_RecruitmentService != this ||
+			m_Graph.GetRevision() != order.m_iGraphRevision) return false;
+		int timeout = AICF_InfantryRecruitmentConfig.APPROACH_TIMEOUT_MS;
+		if (order.m_bPlayerRequested) timeout = AICF_InfantryRecruitmentConfig.PLAYER_APPROACH_TIMEOUT_MS;
+		int age = System.GetTickCount() - order.m_iStartedAtMs;
+		return age >= 0 && age < timeout && order.IsCurrent(order.m_Slot) &&
+			order.m_Slot.MatchesRecruitmentOrder(order);
+	}
+
 	void SetRecoveryPolicy(AICF_VehicleWatchdog watchdog, AICF_Stage3Config config)
 	{
 		m_RecoveryWatchdog = watchdog;
@@ -54,6 +79,8 @@ class AICF_InfantryRecruitmentService
 	{
 		if (m_bStopped || !Replication.IsServer() || !m_Campaign || !m_Campaign.IsMaster() || !m_Campaign.IsRunning())
 			return;
+		m_NativeUS = us;
+		m_NativeUSSR = ussr;
 		m_iAvailableAgents = Math.Max(0, availableAgents);
 		m_CombatSafety.Update(m_Campaign, m_Graph);
 		for (int failureIndex = m_aApproachFailures.Count() - 1; failureIndex >= 0; failureIndex--)
@@ -746,12 +773,47 @@ class AICF_InfantryRecruitmentService
 				return string.Empty;
 			if (m_iAvailableAgents <= 0)
 				return "AGENT_LIMIT";
+			AICF_SpawnAdmission nativeAdmission = InspectRecruitAdmission(order);
+			if (!nativeAdmission || !nativeAdmission.CanAdmit())
+			{
+				if (!order.m_bNativeCapacityWaiting)
+				{
+					order.m_bNativeCapacityWaiting = true;
+					string capacity = "native_context=UNAVAILABLE";
+					if (nativeAdmission) capacity = nativeAdmission.Details();
+					order.Log("INFANTRY_RECRUIT_NATIVE_CAPACITY_WAIT", capacity + " donor_created=0 request_issued=0 paid=0 visit_deadline_reset=0 token_unchanged=1");
+				}
+				return string.Empty;
+			}
+			if (order.m_bNativeCapacityWaiting)
+			{
+				order.m_bNativeCapacityWaiting = false;
+				order.Log("INFANTRY_RECRUIT_NATIVE_CAPACITY_RELEASED", nativeAdmission.Details() + " donor_created=0 request_issued=0 paid=0 visit_deadline_reset=0 token_unchanged=1");
+			}
 			order.m_iLoadoutRevision = order.m_Slot.GetLoadoutRevision();
+			AICF_AIWorldQuotaService quotaAdmission = AICF_AIWorldQuotaService.GetAuthorityForWorld(order.m_Group.GetWorld());
+			if (quotaAdmission && !quotaAdmission.ReserveRecruit(order))
+			{
+				if (!order.m_bQuotaCapacityWaiting)
+				{
+					order.m_bQuotaCapacityWaiting = true;
+					order.Log("INFANTRY_RECRUIT_QUOTA_WAIT", "donor_created=0 request_issued=0 paid=0 visit_deadline_reset=0 token_unchanged=1 " +
+						quotaAdmission.BudgetDetails(AICF_EAIQuotaBucket.COMBAT, 1));
+				}
+				return string.Empty;
+			}
+			if (quotaAdmission && order.m_bQuotaCapacityWaiting)
+			{
+				order.m_bQuotaCapacityWaiting = false;
+				order.Log("INFANTRY_RECRUIT_QUOTA_RELEASED", "donor_created=0 request_issued=0 paid=0 visit_deadline_reset=0 token_unchanged=1 " +
+					quotaAdmission.BudgetDetails(AICF_EAIQuotaBucket.COMBAT, 1));
+			}
 			if (!m_Spawner.BeginRecruit(order))
 				return "SPAWN_REJECTED";
 			m_iAvailableAgents--;
 			order.Log("INFANTRY_RECRUIT_SPAWN_REQUESTED", string.Format(
 				"role=%1 prefab=%2 cost=%3 donor=%4 paid=0", order.m_sRole, order.m_sPrefab, order.m_iCost, order.m_DonorId));
+			LogRecruitNative(order, "REQUEST");
 			return string.Empty;
 		}
 		if (order.m_Donor.GetID() != order.m_DonorId)
@@ -760,7 +822,10 @@ class AICF_InfantryRecruitmentService
 		if (!AICF_GroupRuntime.HasExactFactionRoster(order.m_Donor, order.m_Faction.GetFactionKey(), 1, actual, wrongFaction, dead))
 		{
 			if (wrongFaction > 0 || dead > 0 || actual > 1 || now - order.m_iSpawnAtMs >= AICF_InfantryRecruitmentConfig.SPAWN_TIMEOUT_MS)
+			{
+				LogRecruitNative(order, "INVALID_OR_TIMEOUT");
 				return "SPAWN_INVALID_OR_TIMEOUT";
+			}
 			return string.Empty;
 		}
 		array<AIAgent> recruits = {};
@@ -831,6 +896,12 @@ class AICF_InfantryRecruitmentService
 			order.m_iHiddenRecoverySubmittedAtMs = now;
 		}
 		order.m_iApproachRepairs++;
+		if (!order.m_bHiddenRecoveryPending && order.m_MoveFailure && order.m_MoveFailure.TryRecover(order))
+		{
+			order.m_bHiddenRecoveryPending = true;
+			order.m_iHiddenRecoverySubmittedAtMs = now;
+		}
+		order.m_MoveFailure = null;
 		bool issued = m_Planner.RepairInfantryRecruitmentApproach(order);
 		order.Log("INFANTRY_RECRUITMENT_APPROACH_REPAIR", string.Format(
 			"attempt=%1 waypoint_present=%2 order_issued=%3 movement_confirmation=PENDING distance_m=%4",
@@ -930,6 +1001,36 @@ class AICF_InfantryRecruitmentService
 		m_aOrders.Remove(index);
 	}
 
+	protected AICF_SpawnAdmission InspectRecruitAdmission(AICF_InfantryRecruitmentOrder order)
+	{
+		if (!Replication.IsServer() || m_bStopped || !m_Campaign || !m_Campaign.IsMaster() || !m_Campaign.IsRunning() ||
+			!order || !m_aOrders.Contains(order) || order.m_RecruitmentService != this || !order.IsCurrent(order.m_Slot) ||
+			!m_Graph || order.m_iGraphRevision != m_Graph.GetRevision() || !m_NativeUS || !m_NativeUSSR || order.m_Donor) return null;
+		AICF_FactionState state;
+		if (order.m_Faction.GetFactionKey() == m_NativeUS.GetFactionKey()) state = m_NativeUS;
+		else if (order.m_Faction.GetFactionKey() == m_NativeUSSR.GetFactionKey()) state = m_NativeUSSR;
+		if (!state || state.GetSlot(order.m_Slot.GetSlotId()) != order.m_Slot) return null;
+		return AICF_SpawnAdmission.InspectRecruit(GetGame().GetAIWorld(), m_NativeUS, m_NativeUSSR, CountUnmaterializedAgents());
+	}
+
+	protected void LogRecruitNative(AICF_InfantryRecruitmentOrder order, string boundary)
+	{
+		if (!order || !order.m_Donor || !GetGame() || !GetGame().GetAIWorld()) return;
+		SCR_AIGroup donor = order.m_Donor;
+		AIWorld world = GetGame().GetAIWorld();
+		int actual, wrongFaction, nonAlive;
+		AICF_GroupRuntime.HasExactFactionRoster(donor, order.m_Faction.GetFactionKey(), 1, actual, wrongFaction, nonAlive);
+		RplComponent rpl = RplComponent.Cast(donor.FindComponent(RplComponent));
+		string donorRpl = "NONE";
+		if (rpl) donorRpl = rpl.Id().ToString();
+		string details = string.Format("boundary=%1 donor=%2 donor_rpl=%3 actual=%4 wrong_faction=%5 non_alive=%6 age_ms=%7 expected=1 paid=0 engine_queue_observable=0", boundary, donor.GetID(), donorRpl, actual, wrongFaction, nonAlive, System.GetTickCount() - order.m_iSpawnAtMs);
+		details += string.Format(" active=%1 intended=%2 hard_limit=%3 global_can_activate=%4 group_can_activate=%5 group_intended=%6 dormant=%7 dormant_alive=%8 dormant_dead=%9", world.GetCurrentNumOfActiveAIs(), world.GetActiveGroupIntendedCount(), world.GetLimitOfActiveAIs(), world.CanAIBeActivated(), world.CanActivateGroup(donor), donor.GetIntendedActiveCount(), donor.IsDormant(), donor.GetDormantAliveCount(), donor.GetDormantDeadCount());
+		string dispatch = donor.AICF_DescribeSpawnDispatch();
+		details += string.Format(" members_to_spawn=%1 expand_complete=%2 ", donor.GetNumberOfMembersToSpawn(), donor.IsExpandComplete());
+		details += dispatch;
+		order.Log("INFANTRY_RECRUIT_NATIVE_SPAWN", details);
+	}
+
 	void Stop()
 	{
 		if (!Replication.IsServer())
@@ -941,5 +1042,7 @@ class AICF_InfantryRecruitmentService
 		m_aRetryAtMs.Clear();
 		m_aApproachFailures.Clear();
 		m_CombatSafety.Stop();
+		m_NativeUS = null;
+		m_NativeUSSR = null;
 	}
 }

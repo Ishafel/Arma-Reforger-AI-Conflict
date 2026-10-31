@@ -130,6 +130,45 @@ class AICF_OrderPlanner
 		builder.m_Waypoint = null;
 	}
 
+	// Отдельный auxiliary roster возвращает существующего бойца, без spawn.
+	bool SetReturnWaypoint(AICF_ReturningSoldier returning)
+	{
+		if (!Replication.IsServer() || !returning || !returning.m_Group ||
+			returning.m_Group.GetID() != returning.m_GroupId || !returning.m_Base || !returning.m_Base.GetSpawnPoint()) return false;
+		AIPathfindingComponent pathfinding = AIPathfindingComponent.Cast(returning.m_Group.FindComponent(AIPathfindingComponent));
+		if (!pathfinding || !pathfinding.GetNavmeshComponent()) return false;
+		vector position = returning.m_Base.GetSpawnPoint().GetOrigin();
+		pathfinding.GetNavmeshComponent().LoadTileIn(position);
+		vector endpoint;
+		if (!pathfinding.GetClosestPositionOnNavmesh(position, "15 5 15", endpoint) || vector.DistanceSqXZ(endpoint, position) > 225) return false;
+		EntitySpawnParams params = new EntitySpawnParams();
+		params.TransformMode = ETransformMode.WORLD;
+		params.Transform[3] = endpoint;
+		IEntity entity = GetGame().SpawnEntityPrefabEx(ATTACK_OPERATIONAL_WAYPOINT_PREFAB, false, params: params);
+		AIWaypoint waypoint = AIWaypoint.Cast(entity);
+		if (!waypoint)
+		{
+			if (entity) RplComponent.DeleteRplEntity(entity, false);
+			return false;
+		}
+		waypoint.SetCompletionRadius(5);
+		waypoint.SetCompletionType(EAIWaypointCompletionType.All);
+		ClearReturnWaypoint(returning);
+		returning.m_Waypoint = waypoint;
+		returning.m_Group.AddWaypoint(waypoint);
+		returning.m_iLastOrder = System.GetTickCount();
+		return true;
+	}
+
+	void ClearReturnWaypoint(AICF_ReturningSoldier returning)
+	{
+		if (!Replication.IsServer() || !returning || !returning.m_Waypoint || !returning.m_Group ||
+			returning.m_Group.GetID() != returning.m_GroupId) return;
+		returning.m_Group.RemoveWaypoint(returning.m_Waypoint);
+		RplComponent.DeleteRplEntity(returning.m_Waypoint, false);
+		returning.m_Waypoint = null;
+	}
+
 	bool AssignOrder(
 		AICF_GroupSlot slot,
 		SCR_CampaignFaction faction,
@@ -3069,6 +3108,7 @@ class AICF_OrderPlanner
 			return false;
 		AIPathfindingComponent pathfinding = AIPathfindingComponent.Cast(order.m_Group.FindComponent(AIPathfindingComponent));
 		vector endpoint;
+		float completionRadius = AICF_RecruitmentApproachEndpoint.COMPLETION_RADIUS_METERS;
 		if (!pathfinding || !pathfinding.GetNavmeshComponent())
 			return false;
 		NavmeshWorldComponent navmesh = pathfinding.GetNavmeshComponent();
@@ -3077,6 +3117,21 @@ class AICF_OrderPlanner
 		if (!pathfinding.GetClosestPositionOnNavmesh(order.m_vPosition, "15 5 15", endpoint) ||
 			vector.DistanceSqXZ(endpoint, order.m_vPosition) > 225)
 			return false;
+		if (order.m_iApproachRepairs > 0)
+		{
+			vector alternative;
+			float alternativeRadius;
+			if (AICF_RecruitmentApproachEndpoint.TryResolve(order, pathfinding, alternative, alternativeRadius))
+			{
+				endpoint = alternative;
+				completionRadius = alternativeRadius;
+			}
+			else
+				order.Log("INFANTRY_RECRUITMENT_APPROACH_ENDPOINT_UNAVAILABLE", string.Format(
+					"repair=%1 fallback=ORIGINAL_BOUNDED_ENDPOINT endpoint=%2 assignment_revision=%3 intent_revision=%4 movement_confirmation=NONE",
+					order.m_iApproachRepairs, endpoint, order.m_iAssignment, order.m_iIntent));
+			if (!order.IsCurrent(order.m_Slot) || !order.HasSafeBarracks()) return false;
+		}
 		Resource resource = Resource.Load(DEFEND_WAYPOINT_PREFAB);
 		if (!resource || !resource.IsValid())
 			return false;
@@ -3091,7 +3146,7 @@ class AICF_OrderPlanner
 				RplComponent.DeleteRplEntity(entity, false);
 			return false;
 		}
-		waypoint.SetCompletionRadius(15);
+		waypoint.SetCompletionRadius(completionRadius);
 		if (!ConfigureInfantryServiceWaypoint(waypoint))
 		{
 			RplComponent.DeleteRplEntity(waypoint, false);
@@ -3099,6 +3154,11 @@ class AICF_OrderPlanner
 		}
 		waypoint.SetCompletionType(EAIWaypointCompletionType.All);
 		waypoint.SetHoldingTime(3600);
+		if (order.m_iApproachRepairs > 0 && (!order.IsCurrent(order.m_Slot) || !order.HasSafeBarracks()))
+		{
+			RplComponent.DeleteRplEntity(waypoint, false);
+			return false;
+		}
 		ClearOrder(order.m_Slot);
 		order.m_Group.AddWaypointAt(waypoint, 0);
 		order.m_Slot.AssignObjective(order.m_Base, waypoint);
@@ -3111,6 +3171,12 @@ class AICF_OrderPlanner
 		order.m_Waypoint = waypoint;
 		order.m_iAssignment = order.m_Slot.GetStrategicAssignmentRevision();
 		order.m_Slot.SetRecruitmentOrder(order);
+		order.m_aApproachEndpoints.Insert(endpoint);
+		if (order.m_iApproachRepairs > 0)
+			order.Log("INFANTRY_RECRUITMENT_APPROACH_ENDPOINT_COMMITTED", string.Format(
+				"repair=%1 waypoint=%2 endpoint=%3 completion_radius_m=%4 service_distance_m=%5 assignment_revision=%6 intent_revision=%7 movement_confirmation=PENDING reachability=UNPROVEN",
+				order.m_iApproachRepairs, waypoint.GetID(), endpoint, waypoint.GetCompletionRadius(),
+				vector.DistanceXZ(endpoint, order.m_vPosition), order.m_iAssignment, order.m_iIntent));
 		return true;
 	}
 

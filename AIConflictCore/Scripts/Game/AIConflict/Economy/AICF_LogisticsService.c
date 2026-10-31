@@ -58,6 +58,12 @@ class AICF_LogisticsService
 		return m_Manual.Submit(player, request, source, destination, amount, reason);
 	}
 
+	bool OwnsAIQuotaWorker(AICF_LogisticsWorker worker)
+	{
+		return Replication.IsServer() && !m_bStopped && m_Campaign && m_Campaign.IsMaster() &&
+			m_Registry && worker && m_Registry.m_aWorkers.Contains(worker);
+	}
+
 	void Update(SCR_CampaignFaction us, SCR_CampaignFaction ussr, bool graphReady)
 	{
 		if (m_bStopped || !Replication.IsServer() || !m_Campaign || !m_Campaign.IsMaster() || !m_Campaign.IsRunning()) return;

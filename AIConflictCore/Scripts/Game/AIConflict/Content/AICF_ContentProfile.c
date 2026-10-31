@@ -3,6 +3,11 @@
 // policy, CLI, UI and diagnostic contracts.
 class AICF_ContentProfile
 {
+	int GetVehiclePresetCostOverride(ResourceName prefab)
+	{
+		return -1;
+	}
+
 	protected static ref AICF_ContentProfile s_ActiveProfile;
 	protected static ref AICF_ContentProfile s_LastDiagnosticProfile;
 

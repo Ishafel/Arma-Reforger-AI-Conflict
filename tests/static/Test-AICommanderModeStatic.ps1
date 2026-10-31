@@ -515,7 +515,7 @@ if (Require-AICommanderClass $vehicleHandoff 'AICF_VehicleTaskHandoff') {
     $restoreInfantry = Assert-AICommanderMethodPresent $vehicleHandoff 'RestoreInfantryOrder' 'AI_COMMANDER_VEHICLE_RESTORE'
     $reportRestored = Assert-AICommanderMethodPresent $vehicleHandoff 'ReportRestoredInfantryOrder' 'AI_COMMANDER_VEHICLE_RESTORE'
     Assert-AICFContains $failures 'AI_COMMANDER_VEHICLE_RESTORE' (ConvertTo-AICFCodeText $restoreInfantry) 'loneSurvivorRetreat\s*&&\s*!slot\.IsSystemHoldOrder\s*\(\s*\)[\s\S]*AssignLoneSurvivorRetreat\s*\(' 'Vehicle fallback must rebuild a SYSTEM_HOLD Defend waypoint instead of replacing it with lone-survivor Move'
-    Assert-AICFContains $failures 'AI_COMMANDER_VEHICLE_RESTORE' (ConvertTo-AICFCodeText $reportRestored) 'if\s*\(\s*!slot\.IsSystemHoldOrder\s*\(\s*\)\s*\)[\s\S]*BeginOrderRecoveryVerification\s*\(' 'Vehicle-restored SYSTEM_HOLD must stay outside generic stuck/task-loss recovery accounting'
+    Assert-AICFContains $failures 'AI_COMMANDER_VEHICLE_RESTORE' (ConvertTo-AICFCodeText $reportRestored) 'if\s*\(\s*!slot\.IsSystemHoldOrder\s*\(\s*\)\s*&&\s*!slot\.IsPendingOrderRecoveryContextCurrent\s*\(\s*\)\s*\)[\s\S]*BeginOrderRecoveryVerification\s*\(' 'Vehicle-restored SYSTEM_HOLD stays outside repair accounting; proof-only handoff preserves an existing current durability owner'
 }
 
 if (Require-AICommanderClass $vehicleHandoffState 'AICF_VehicleHandoffState') {

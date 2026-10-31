@@ -7,6 +7,61 @@ Workbench — в [DEVELOPMENT.md](DEVELOPMENT.md). Наличие файла в 
 
 ## Структура и статус
 
+`Invoke-AICFQuotaCatalogProbe.ps1` — public PowerShell7 runner с отдельными
+`Prepare`, `Server`, `Client`, `Audit` фазами. Фиксирует весь raw payload,
+Workbench/source/CLI и full stopped logs; canonical direct-connect client
+требует точный живой Server и ROSTER_READY. `-Case group|character|vehicle`
+не подменяет необходимость реального совместимого native producer/slot.
+Текущий v17: native0/0/fatal0/source0, но funding consumer readback0 и
+functional/resource/other FAIL; покупка/full-basket native positive не доказаны.
+Команды, контролируемый native funding и точные ограничения —
+[AI_QUOTA_CATALOG.md](AI_QUOTA_CATALOG.md).
+
+`Invoke-AICFQuotaStockPressure.ps1` — PowerShell7 Prepare/Run/Full для настоящего
+заполнения STOCK и обычного оплаченного найма AICF. Сохраняет все7raw addons,
+две fixture, frozen auditor, compile/source/CLI/CIM receipts и полные stopped
+logs; errors/FPS остаются отдельными строгими gates. Команды и узкий scope —
+[AI_QUOTA_STOCK_PRESSURE.md](AI_QUOTA_STOCK_PRESSURE.md).
+
+`Invoke-AICFQuotaCompartmentProbe.ps1` — отдельный PowerShell7 runner реального
+`BaseCompartmentSlot.SpawnCharacterInCompartment`. `-Phase Prepare` сохраняет
+точные bytes всех семи addons (кроме generated.rdb), late fixture, frozen auditor,
+canonical CLI и терминальный Workbench. `-Phase Run` использует тот же проверенный
+stage/manifest и запрещает повторный native launch. Пример с новым EvidenceRoot:
+
+```powershell
+pwsh -File tools/Invoke-AICFQuotaCompartmentProbe.ps1 -Phase Prepare -EvidenceRoot .codex-runtime/compartment-new -Variant Stock -ServerPort 2680
+pwsh -File tools/Invoke-AICFQuotaCompartmentProbe.ps1 -Phase Run -EvidenceRoot .codex-runtime/compartment-new -Variant Stock -ServerPort 2680
+```
+
+`-SourceRoot` предназначен для явно указанного fixture-free frozen payload;
+его точные файлы/SHA записываются в manifest. После runtime проверяются все
+source bytes и полные stopped sibling logs. Functional proof, fatal и все
+остальные native `(E/F)` считаются раздельно; ошибки ресурсов не становятся PASS.
+Сохранённый `native-initial-wait-v9`: exact382 Stock source,12functional checks
+PASS/native0/fatal0/source0, отдельно strictFAIL/resources28. Это не whole383,
+RHS, Catalog/payment или ordinary1800 proof. Fixture и oracle описаны в
+[TEST_FIXTURES.md](TEST_FIXTURES.md#персонаж-в-compartment-и-квоты).
+
+`Invoke-AICFVehicleEconomyDecline.ps1` запускает отдельные controlled
+`INSUFFICIENT`, `AFFORDABLE`, `DRAIN_AFTER_RESERVE` cases. Сохраняет exact production
+set/SHA, terminal Workbench, canonical CLI, frozen auditor и полные stopped logs.
+`SkipCompile` повторно связывает stage с реально компилировавшимся source manifest;
+native gameplay success не отменяет resourceFAIL. Команды и границы доказательства
+описаны в [VEHICLE_ECONOMY_DECLINE.md](VEHICLE_ECONOMY_DECLINE.md).
+E2 targeted evidence:114actual/4business mutants/2fixture mutations/35log cases,
+runner16actual/11mutants; три остановленных AFTER native cases имеют
+functional/fatalPASS и отдельно resources28FAIL. После настоящего request Reset
+live `MatchesIdentity` возвращает false; fixture связывает immutable receipt,
+проверенный до handoff. Эти узкие результаты не заменяют общий offline gate.
+
+`Invoke-AICFSpawnApproachFailure.ps1` создаёт isolated controlled UNKNOWN case;
+`Test-SpawnApproachFailureLog.ps1` отделяет functional outcome от strict native
+resources. Callback/fallback не снимает resource FAIL. Scenario runner
+`-Cases repeat5 -Faction US` проверяет оба рейса native Humvee; default — USSR.
+Multi opt-in `-RecruitmentNavDomainProbe` снимает read-only paths/physics/LOD
+при подходе к казарме. Runners сохраняют immutable hashes и полный native CLI.
+
 Prepare-AICFWorkshopCatalog.ps1 — общий offline workflow для семи native
 Publishing bundles. -PublishingRoot/-OutputRoot/-ExpectedVersion готовят
 отдельные очищенные копии; -OutputRoot/-ExpectedVersion/-Check проверяют весь
@@ -40,6 +95,108 @@ legacy после пересборки. Команды и границы — [DE
 сохраняют команды того релиза; для текущего checkout используй этот каталог.
 
 ## Единый offline запуск
+
+`Invoke-AICFVehicleBehavior.ps1` с новым `-EvidenceRoot`, списком
+`-Cases transport,combat`, стороной `-Faction US|USSR` и своим `-ServerPort` —
+отдельный terminal controlled runner для
+TRANSPORT/COMBAT. Он сохраняет точные checkout bytes и SHA256 production/двух
+fixtures, компилирует isolated stage, запускает canonical Server и проверяет
+полные stopped logs через `Test-VehicleBehaviorLog.ps1`. Targeted functional,
+strict native resources и overall verdict хранятся раздельно в `summary.json`.
+Это не30минутная обычная война и не часть offline All. Для controlled cleanup
+недееспособного hull blocker использовать отдельный `-Cases combat` с
+`-CleanupIncapProbe`; два cases с этой опцией runner отклоняет. Физическое
+освобождение, неизменные life/health,3 attempts/deadline и release подтверждаются
+более поздними native readbacks. Контракт и подготовка fixture —
+[VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md), [TEST_FIXTURES.md](TEST_FIXTURES.md).
+
+В offline All автоматически входят новые `Test-VehicleBehaviorSettingsContracts.ps1`,
+`Test-VehicleBehaviorFlowContracts.ps1`, `Test-VehicleBehaviorNativeContracts.ps1`,
+`Test-VehicleBehaviorLifecycleContracts.ps1`, `Test-VehicleBehaviorLogContracts.ps1`,
+`Test-VehicleCapturedTopologyContracts.ps1`, `Test-DegradedVehicleCrewContracts.ps1`,
+`Test-VehicleFitRosterContracts.ps1`, `Test-VehicleShortRecoveryContracts.ps1` и
+`Test-CleanupIncapacitatedHullContracts.ps1`, `Test-CleanupAliveHullContracts.ps1`. Они проверяют server schema и
+редактор, captured roster/seats, effective crew, scoped native policy, ownership
+и конечные бюджеты. FitRoster исполняет извлечённые production identity,
+unique-seat и cargo-fill тела; cleanup contract исполняет native-state predicate
+на комбинациях состояния. Это не замена Workbench/native gates. Свежий focused
+fit roster receipt —
+`.codex-runtime/vehicle-behavior-20261028/fit-roster-after-v3/REPORT.md`; итоговый
+compile/runtime конечного snapshot подводится отдельно и здесь не отмечен PASS.
+
+Для server/client/JIP settings readback применяется прежний client probe с
+дополнительным `-aicfVehicleBehaviorReadback 1` на всех peers и
+`Test-VehiclePresetClientLog.ps1 -BehaviorSettings`. Проверяются malformed N без
+RPC, COMBAT/437 в Save/Apply/reload и подтверждённое JIP состояние. Native
+widgets не подтверждают видимость/читаемость или ввод мышью; ручные пункты
+[VEHICLE_VISUAL_CHECK.md](VEHICLE_VISUAL_CHECK.md) остаются NOT RUN.
+
+`Invoke-AICFTransportDamageFallback.ps1` — отдельный native controlled runner
+повреждения колёс, пешего fallback и запрета повторной покупки на том же intent.
+Использует immutable snapshot, terminal Workbench и canonical runtime launcher.
+Его targeted PASS сохраняет отдельный strict-native-resource FAIL в summary;
+это не обычная поездка и не общий runtime PASS. Контракты входят в offline All.
+
+`Invoke-AICFVehicleMultiSquad.ps1` запускает ступени2/4/6 на сторону в NORMAL
+или отдельно маркированном CAPACITY; `Watch-AICFVehicleSoak.ps1` наблюдает оба
+формата heartbeat/failure. `Invoke-AICFTransportCombatResume.ps1` проверяет
+fault-injected native hold/release/resume. Это terminal runtime runners вне
+offline All. Команды, бюджет и ограничения — [VEHICLE_MULTISQUAD.md](VEHICLE_MULTISQUAD.md).
+Их fixture/log contracts входят в All. `Test-TransportCombatHoldContracts.ps1`
+и `Test-TransportCombatTaskContracts.ps1` проверяют read-only proof и projection
+в watchdog; `Test-RecruitmentApproachEndpointContracts.ps1` — bounded alternative
+endpoint без подмены физического прибытия.
+`Test-RecruitmentShortRecoveryContracts.ps1` проверяет immutable failure receipt,
+существующий budget2 и повторённые fences перед переносом до8m;
+`Test-RecruitmentShortRecoveryProbeContracts.ps1` проверяет отдельный controlled
+native fixture. `Test-RecruitmentShortRecoveryLog.ps1` требует20 настоящих cases,
+цепочку callback/physical hop/native approach/arrival/debit и полный остановленный
+лог с manifest/native exit. Эти gates не заменяют новый ordinary1800s Soak после
+изменения production; strict native resources сохраняют самостоятельный FAIL.
+`Test-VehicleCrewOwnTransitionContracts.ps1` проверяет exact own occupant,
+human/foreign отказ,3s предел и expiry-before-wait; `Test-VehiclePresetEntryTraceContracts.ps1`
+проверяет немутирующий pre-cancel/deadline readback дверей и token identity.
+`Test-VehiclePresetNativeSeatContracts.ps1` проверяет exact slot remap, native
+clone/super boundary, weak lifecycle, stale/current traffic и чужие/неоднозначные
+запросы. GroupTrace contracts также сохраняют raw path семантику без progress writes.
+
+`Test-VehicleHealthTraceContracts.ps1` проверяет native leaf health readback,
+повторный component identity fence, bounded hierarchy и интеграцию с прежней
+GroupTrace cadence/failure snapshot. CombatResume contracts сохраняют отдельные
+health/identity/cleanup причины и строгий итоговый FAIL при первичном отказе.
+
+`tools/Invoke-AICFVehicleScenarios.ps1 -EvidenceRoot <новый каталог>` — отдельный
+native runner шести полных Stock поездок; в offline All он не входит. Готовит
+stage, выполняет Workbench, canonical Server и строгий `Test-VehicleScenarioLog.ps1`.
+Cases/flags и формат group/member trace — [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md).
+Offline All включает `Test-VehicleScenarioLogContracts.ps1` (130 controls) и
+`Test-GroupTraceContracts.ps1` (read-only/authority/rate/lifecycle и полный
+physical roster/raw native path и supported associated-agent API,48 controls).
+
+Для issue #78 runner автоматически включает `Test-VehiclePresetContracts.ps1`
+(78 guards), `Test-VehiclePresetLogContracts.ps1` (24 controls),
+`Test-VehiclePresetClientLogContracts.ps1` (12 controls) и
+`Test-VehicleCatalogLogContracts.ps1` (13 controls).
+`tests/log-audits/Test-VehiclePresetLog.ps1` принимает `-LogPath`,
+`-LauncherPath`, `-NativeExitPath`; `-LibraryReload` выбирает restart-only oracle.
+`-Lifecycle` и `-HumanProtection` включают расширенные обязательные cases.
+`-Policy` проверяет manual/automatic admission, `-Civilian` — civilian physical
+model и CLI. `Test-VehicleCatalogLog.ps1` использует те же три path parameters,
+но требует отдельный `-aicfVehicleCatalogProbe 1`,21 checks и own/CIV totals.
+`Test-VehiclePresetClientLog.ps1` принимает пары `-ServerLog/-ServerLauncher/
+-ServerExit`, `-ClientLog/-ClientLauncher/-ClientExit` и
+`-JIPLog/-JIPLauncher/-JIPExit`. Проверяются все соседние полные logs и native
+завершение. Script errors, в том числе serializers, не фильтруются как baseline.
+`-CatalogFilters` включает28 client/5 JIP oracle и actual CLI проверки фильтров.
+Flags fixtures и порядок stage — в [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
+`Test-VehiclePresetTransitLogContracts.ps1` добавляет32 controls для
+`tests/log-audits/Test-VehiclePresetTransitLog.ps1` (`-LogPath`, `-LauncherPath`,
+`-NativeExitPath`):16 native cases, exact roster5 в UAZ,30s ожидания, пауза бюджета,
+реальное движение >=25m без recovery, высадка после движения, один purchase125.
+`Test-VehicleCrewReturnLogContracts.ps1` добавляет32 positive/negative controls.
+`tests/log-audits/Test-VehicleCrewReturnLog.ps1` принимает Server/Client пары
+Log/Launcher/Exit, требует15 UI +8 server checks, неизменный inventory,9 разных
+physical arrivals и один purchase50. Full stopped-log fatal gate не ослаблен.
 
 `Test-FIAProximityContracts.ps1` проверяет scoped native lifecycle, logical
 losses, authority/identity, snapshot/equipment, occupancy, transfer rollback
@@ -131,7 +288,12 @@ dirty status, выбор набора и время; `summary.json` — argv, в
 путь к полному выводу каждого теста. Runner возвращает 1 при любом FAIL, включая
 известный baseline, и 0 только при PASS всего выбранного набора.
 
-Runner запускает дочерние `powershell.exe` последовательно. Некоторые contracts
+Runner запускает дочерние Windows PowerShell5.1 `powershell.exe`
+последовательно, даже если сам вызван из PowerShell7. Изменённый contract
+проверяй через runner либо этим же `powershell.exe`; успешный прямой запуск
+из PowerShell7 не подтверждает совместимость с canonical offline набором
+(например, `ConvertFrom-Json -AsHashtable` отсутствует в5.1).
+Некоторые contracts
 используют фиксированные вспомогательные пути в `.codex-runtime/`, поэтому не
 запускай две матрицы одновременно в одном checkout. Их дополнительное evidence
 может находиться вне каталога runner — точный путь задаётся исходником теста.
@@ -348,6 +510,47 @@ manifest и native exit; игра не входит в offline runner. Конт�
 
 ## Анализаторы логов
 
+Дополнительные контракты транспортного продолжения #78:
+
+| Проверка | Контракт |
+|---|---|
+| `Test-PlayerPersistenceIdentityContracts.ps1` |32 исполняемых комбинации production callback: пустая backend identity снимает tracking без удаления данных; непустая делегируется stock |
+| `Test-GroupSpawnDispatchContracts.ps1` | Read-only native expansion/dispatch counters и строгий oracle controlled replacement stress |
+| `Test-NativeSpawnAdmissionContracts.ps1` | Исполняемые границы global native budget и admission до reservation/generation; conservative pending roster |
+| `Test-VehicleNativeSubgroupContracts.ps1` | Exact owned Pilot/record, отказ positive mismatch и ограниченный native reconcile уже сидящего экипажа |
+| `Test-NativeGateRecoveryContracts.ps1` | Исполняемые отказ/допуск после доказанного native return, прежний mobility budget и исключительно route rebuild |
+| `Test-StagingActorTaskContracts.ps1` | Точный selected/executed RUNNING actor task учитывается как работа при исчезнувшем group waypoint; deadlines не продлеваются |
+| `Test-StagingActorTaskLogContracts.ps1` | Native withdraw-group-waypoint, stale/foreign/cancelled negatives и фактическое прибытие исходных бойцов |
+| `Test-VehicleSoakObservationContracts.ps1` | Proof4 ordinary-war observation: causal casualty receipt, bounded cleanup/replacement и неизменные полные native gates |
+| `Test-OrphanTripRetirementContracts.ps1` | Отдельная immutable absent-group identity, exact DEAD/native seat и повторные human/foreign/player/lease guards |
+| `Test-CapturedDeathRetirementProjectionContracts.ps1` | Actual extracted classification/cause/lease epochs/monitor; prior failures сохранены, pending не PASS, исторический physical release |
+| `Test-OrphanTripRetirementLogContracts.ps1` | Controlled native ledger: independent admission/DEAD/release/readiness/economy, early/original-operation Stop negatives |
+| `Test-OrphanTripRetirementLog.ps1` | Разбор полного stopped controlled before/after, source freeze и всех sibling native/resource ошибок; baseline leak coverage отдельно |
+| `Test-RecruitmentNativeAdmissionContracts.ps1` | Actual requested1 native budget, missing groups/donors, simultaneous requests, current authority/context и WAIT перед donor creation |
+| `Test-RecruitmentCapacityLogContracts.ps1` | Негативы native pressure→35s WAIT без request/payment→restore→точный paid physical join; token/total visit deadline не меняются |
+| `Test-RecruitmentCapacityLog.ps1` | Полный controlled donor native ledger, source freeze, stopped exit и все sibling fatal/resources отдельно |
+| `Test-LooseWeaponObserverContracts.ps1` | Fixture-only наблюдение за drop/storage/world identities; static контракт не подтверждает безопасность native Physics getters |
+| `Test-ReboardApproachProgressContracts.ps1` | Реальное приближение к exact seat; круг/отход/движение машины не продлевают stall observation |
+| `Test-TransitMoveFailureContracts.ps1` | Exact owned native vehicle failure receipt, однократный callback и прежние bounded recovery attempts |
+| `Test-TransitFailureRecoveryLogContracts.ps1` | Контролируемый fault требует двух реальных восстановлений движения, exact callback и отказа при исчерпанном budget |
+| `Test-NativeCrewEntryContracts.ps1` | Exact own reserved seat и actual RUNNING GetIn, неизменяемый срок, оба role records до WAIT |
+| `Test-VehicleBoardingSiteContracts.ps1` | Foot-navmesh coverage площадки до выбора и свежий повтор перед spawn |
+| `Test-VehicleStagingHandoffContracts.ps1` | Единственный владелец движения при acquisition approach |
+| `Test-VehiclePresetParallelEntryContracts.ps1` | Максимум два входа через доказанно независимые двери, unknown/shared/Turret serial |
+| `Test-VehicleNativeRouteProgressContracts.ps1` | Полный текущий car path, projection/physics/history, proof-gated progress и rejection telemetry |
+| `Test-PointHoldRepairAccountingContracts.ps1` | Terminal receipt до замены completed POINT hold, без ложного CONFIRMED |
+| `Test-CompletedTransportIntentContracts.ps1` | Завершённый intent не переармляется от handoff revision; новые приказы и explicit admission сохранены |
+| `Test-TransportNativeGateContracts.ps1` | Cargo/OpenGate, единственная native chain, физический выход/возврат/движение и неизменяемое60s окно |
+| `Test-TransportNativeAbandonContracts.ps1` | Штатный current group GetOut exact машины приводит к typed fallback до driver recovery |
+| `Test-NativeGateCompletionContracts.ps1` | Exact completion callback, COMPLETED→EVALUATED, listener cleanup при invalid stop |
+| `Test-DismountOperationBudgetContracts.ps1` | Раздельные3+3 bounded batches, свежий logical egress до физического перемещения |
+| `Test-VehicleHealthTraceContracts.ps1` | Повторный read-only leaf health/physics fence |
+| `Test-TransportDamageTraceContracts.ps1` | Fixture-only causal callbacks, точный scope, однократный native super |
+
+`aicfGroupTracePathPointLimit` оставляет default128, допускает диапазон128..512.
+CombatResume runner явно выбирает512 для одной USSR/0; Multi сохраняет128.
+`truncated=1` запрещает объявлять trace полным remaining path.
+
 Статус всех анализаторов: поддерживаемые, но полный runtime при реорганизации
 **NOT RUN**. Synthetic inputs в contracts проверяют сам анализатор, не игру.
 Передавай полные остановленные logs; `AllowActiveAtEnd` годится для диагностики
@@ -394,3 +597,49 @@ Targeted probe и полный SCRIPT/fatal gate различаются в вы�
 -Difficulty 0|1|2` анализирует прогон `AICF_FIAGarrisonProbe.c` на North WCS+RHS:
 состав 0/5/10, экипажи 10/3, физический локальный патруль, захват и casualty. Отдельно сообщает
 число остальных engine/resource errors; PASS не означает отсутствие этих ошибок.
+
+GC contracts: `Test-VehicleGarbageContracts.ps1` —54 source mutants для lease ownership, weak registry, cap-held cleanup states, exact restoration, stock callback chain и test-only server→client proxy preparation/teardown null guards/RPC guard receipts. `Test-VehicleGarbageProbeContracts.ps1` —33 fixture mutants, включая deferred native commit, teardown и TTL deletion. `Test-VehicleGarbageLog.ps1` требует полный stopped native GC log с manifest/exit. Controlled TTL5/TTL1 не заменяет свежий ordinary1800s Soak.
+
+`Test-VehiclePresetClientLog.ps1 -BehaviorSettings` требует единственный actual
+`VEHICLE_UI_GC_AUTHORITY` receipt и `GC_NO_AUTHORITY_REJECTED` на первом client
+и JIP: native realm0/master0/proxy1, полный private Fleet/lease setup и оба
+отказа GC permission. Matching contract содержит49 controls, включая native
+master/отсутствующий proxy, server safe setup, совпадение RplId origin и exact
+cleanup request, штатный EntityID format с optional literal ` {}` и strict teardown
+NULL-pointer fatal. Zero identity и посторонний token отклоняются. Подготовка через fixture-only
+owned RPC не меняет production protocol; local spawn setup FAIL не удаляется.
+Для отдельного ALIVE cleanup native gate передаётся `-aicfCleanupAliveProbe 1`
+в isolated behavior fixture; runner/helper обязан явно сохранить этот CLI,
+полный stopped log и все6 `CLEANUP_ALIVE_*` receipts.
+
+Source54/fixture33 mutants и49 client-log controls не заменяют свежие native
+client/JIP logs. Server-local prefab оказался MASTER и не является proxy negative;
+actual server-spawned RplId обязан соответствовать полученному client proxy.
+
+### Manual staging progress proof (issue78,30.10)
+
+`AICF_ManualStagingProbe.c` использует isolated scaffold
+`AICF_VehicleBehaviorProbe.c` + `AICF_VehicleBehaviorSettingsProbe.c`; в stage
+копируется как `ZZ_AICF_ManualStagingProbe.c`, после modded scaffold fragments.
+Production checkout fixture не получает. CLI `-aicfManualStagingProbe 1`
+с `-aicfManualStagingUnblockProbe 1` проверяет bounded native safeEscape,
+actual landing→тот же native action→отдельный пеший ход→original5 rally→реальный
+spawn/debit. Условный proof не заменяет ordinary/Multi gates.
+`-aicfManualStagingExhaustionProbe 1` — отдельный explicit placement-veto case,
+с обычной native-safe point целью≥200m и неизменным strict order-restore oracle.
+Режимы не смешиваются. Аудитор `Test-ManualStagingLog.ps1 -Unblock|-Exhaustion`
+выводит функциональный результат отдельно от строгого resourceFAIL.
+
+`AICF_ManualStagingGeometryProbe.c`, CLI `-aicfManualStagingGeometryProbe 1`,
+делает только present-world native geometry queries на явно test-only captured
+poses. Не перемещает бойцов/машины, не меняет health/caps, не реконструирует
+исторических dynamic occupants.91bounded forward candidates включают old9prefix;
+physical3D≤8m/vertical≤1m/projection/pad/progress guards прежние. Контракт
+`Test-ManualStagingGeometryProbeContracts.ps1` входит в auto-discovery checks.
+Evidence `spawn/manual-historical-geometry-v2/` и `spawn/staging-final-frozen-hashes.json`.
+
+`Test-VehicleSoakHeartbeatContracts.ps1` исполняет извлечённый nullgroup Update
+branch и реальный heartbeat helper с API shims, включая actualNONE/alive0/WAIT
+и сохранённую GROUP_UNAVAILABLE classification. Неизменный Proof4 auditor всё
+так же отклоняет реальную паузу>60s. Добавочные heartbeatfields диагностические;
+они не являются readiness, arrival или syntheticprogress proof.

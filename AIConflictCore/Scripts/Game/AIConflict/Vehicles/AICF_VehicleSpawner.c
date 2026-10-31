@@ -115,6 +115,7 @@ class AICF_VehicleSpawnSiteReservation
 // roster member after a group or request generation change.
 class AICF_VehicleStagingActionToken
 {
+	protected ref AICF_StrategicAssignmentSnapshot m_TaskAssignment;
 	protected ref AICF_VehicleAsyncFence m_Fence;
 	protected int m_iRequestGeneration;
 	protected AIAgent m_Agent;
@@ -127,6 +128,12 @@ class AICF_VehicleStagingActionToken
 	protected int m_iLastAuditAtMs;
 	protected float m_fBestDistanceMeters = -1.0;
 	protected float m_fCurrentDistanceMeters = -1.0;
+	protected vector m_vLastMotionOrigin;
+	protected int m_iLastMotionAtMs;
+	// Diagnostic samples are independent of readiness, retries and progress clocks.
+	protected vector m_vDiagnosticOrigin;
+	protected float m_fDiagnosticDistance;
+	protected int m_iDiagnosticAtMs;
 
 	void AICF_VehicleStagingActionToken(
 		AICF_VehicleAsyncFence fence,
@@ -151,6 +158,11 @@ class AICF_VehicleStagingActionToken
 		m_iLastAuditAtMs = nowMs;
 		m_fBestDistanceMeters = initialDistanceMeters;
 		m_fCurrentDistanceMeters = initialDistanceMeters;
+		m_vLastMotionOrigin = reservedEntity.GetOrigin();
+		m_iLastMotionAtMs = nowMs;
+		m_vDiagnosticOrigin = reservedEntity.GetOrigin();
+		m_fDiagnosticDistance = initialDistanceMeters;
+		m_iDiagnosticAtMs = nowMs;
 	}
 
 	AICF_VehicleAsyncFence GetFence() { return m_Fence; }
@@ -162,8 +174,44 @@ class AICF_VehicleStagingActionToken
 	int GetRetryCount() { return m_iRetryCount; }
 	int GetIssuedAtMs() { return m_iIssuedAtMs; }
 	int GetLastProgressAtMs() { return m_iLastProgressAtMs; }
+	string ObserveNativeDiagnosticMotion(int nowMs)
+	{
+		if (!m_ReservedEntity) return "diagnostic_motion_available=0";
+		vector origin = m_ReservedEntity.GetOrigin();
+		vector delta = origin - m_vDiagnosticOrigin;
+		string result = string.Format("diagnostic_motion_available=1 sample_interval_ms=%1 physical_delta=%2 physical_3d_m=%3 physical_xz_m=%4 radial_delta_m=%5 no_motion_5s=%6 last_motion_age_ms=%7",
+			Math.Max(0, nowMs - m_iDiagnosticAtMs), delta, delta.Length(), vector.DistanceXZ(origin, m_vDiagnosticOrigin),
+			m_fDiagnosticDistance - m_fCurrentDistanceMeters, HasNoPhysicalMotion(nowMs, 5000), Math.Max(0, nowMs - m_iLastMotionAtMs));
+		m_vDiagnosticOrigin = origin;
+		m_fDiagnosticDistance = m_fCurrentDistanceMeters;
+		m_iDiagnosticAtMs = nowMs;
+		return result;
+	}
 	float GetBestDistanceMeters() { return m_fBestDistanceMeters; }
 	float GetCurrentDistanceMeters() { return m_fCurrentDistanceMeters; }
+	bool CaptureTaskAssignment(AICF_StrategicAssignmentSnapshot assignment)
+	{
+		if (m_TaskAssignment || !assignment || !assignment.IsValid()) return false;
+		m_TaskAssignment = assignment;
+		return true;
+	}
+	bool MatchesTaskAssignment(AICF_StrategicAssignmentSnapshot assignment)
+	{
+		return m_TaskAssignment && m_TaskAssignment.MatchesAssignmentRevision(assignment);
+	}
+
+	void ObservePhysicalMotion(vector origin, int nowMs)
+	{
+		if (vector.Distance(origin, m_vLastMotionOrigin) <= 0.5) return;
+		m_vLastMotionOrigin = origin;
+		m_iLastMotionAtMs = nowMs;
+	}
+
+	bool HasNoPhysicalMotion(int nowMs, int sampleMs)
+	{
+		return nowMs >= m_iLastMotionAtMs && nowMs - m_iLastMotionAtMs >= sampleMs &&
+			m_ReservedEntity && vector.Distance(m_ReservedEntity.GetOrigin(), m_vLastMotionOrigin) <= 0.5;
+	}
 
 	bool Matches(
 		AICF_TransportTrip trip,
@@ -247,10 +295,13 @@ class AICF_VehicleStagingActionToken
 // approach polls, so SPAWN_COMMIT cannot silently move the vehicle elsewhere.
 class AICF_VehicleSpawnPlan
 {
+	protected ref AICF_VehicleStagingExhaustion m_ManualExhaustion;
 	protected ref AICF_VehicleSpawnSiteSelection m_Selection;
 	protected ref AICF_VehicleSpawnSiteReservation m_Reservation;
 	protected vector m_vStagingPosition;
 	protected AIWaypoint m_ApproachWaypoint;
+	protected ref AICF_VehicleAcquisitionHold m_AcquisitionHold;
+	protected ref AICF_SpawnApproachFailure m_ApproachFailure;
 	protected int m_iPlannedAtMs;
 	protected int m_iApproachDeadlineMs;
 	protected int m_iAllStagedSinceMs;
@@ -261,31 +312,49 @@ class AICF_VehicleSpawnPlan
 	protected int m_iApproachWaypointIssuedAtMs;
 	protected int m_iApproachWaypointReissueCount;
 	protected string m_sLastReportedPadProbeResult;
+	protected string m_sLastReportedFootPadProbeResult;
 	protected ref array<ref AICF_VehicleStagingActionToken> m_aStagingActionTokens = {};
 	protected ref array<string> m_aStagingRetriedEntityIds = {};
 	protected ref array<string> m_aStagingExhaustedEntityIds = {};
 	protected ref array<string> m_aStagingRelocatedEntityIds = {};
 	protected int m_iLastStagingRelocationProbeAtMs;
+	protected bool m_bRequireManualRally;
 
 	void AICF_VehicleSpawnPlan(
 		AICF_VehicleSpawnSiteSelection selection,
 		AICF_VehicleSpawnSiteReservation reservation,
 		vector stagingPosition,
 		int plannedAtMs,
-		int approachDeadlineMs)
+		int approachDeadlineMs,
+		bool requireManualRally = false)
 	{
 		m_Selection = selection;
 		m_Reservation = reservation;
 		m_vStagingPosition = stagingPosition;
 		m_iPlannedAtMs = plannedAtMs;
 		m_iApproachDeadlineMs = approachDeadlineMs;
+		m_bRequireManualRally = requireManualRally;
 	}
 
 	AICF_VehicleSpawnSiteSelection GetSelection() { return m_Selection; }
 	AICF_VehicleSpawnSiteReservation GetReservation() { return m_Reservation; }
 	vector GetSpawnPosition() { return m_Selection.m_vPosition; }
 	vector GetStagingPosition() { return m_vStagingPosition; }
+	bool RequiresManualRally() { return m_bRequireManualRally; }
 	AIWaypoint GetApproachWaypoint() { return m_ApproachWaypoint; }
+	AICF_VehicleAcquisitionHold GetAcquisitionHold() { return m_AcquisitionHold; }
+	bool BindAcquisitionHold(AICF_VehicleAcquisitionHold hold)
+	{
+		if (!hold || m_AcquisitionHold || !hold.GetReceipt() || hold.GetReceipt().GetPlan() != this) return false;
+		m_AcquisitionHold = hold;
+		return true;
+	}
+	bool ClearAcquisitionHold(AICF_VehicleAcquisitionHold expected)
+	{
+		if (!expected || m_AcquisitionHold != expected) return false;
+		m_AcquisitionHold = null;
+		return true;
+	}
 	int GetPlannedAtMs() { return m_iPlannedAtMs; }
 	int GetApproachDeadlineMs() { return m_iApproachDeadlineMs; }
 	int GetAllStagedSinceMs() { return m_iAllStagedSinceMs; }
@@ -293,6 +362,15 @@ class AICF_VehicleSpawnPlan
 	int GetAliveCount() { return m_iAliveCount; }
 	int GetApproachWaypointReissueCount() { return m_iApproachWaypointReissueCount; }
 	int GetStagingActionTokenCount() { return m_aStagingActionTokens.Count(); }
+
+	bool CaptureManualStagingRoster(AICF_TransportTrip trip)
+	{
+		if (!m_bRequireManualRally || m_ManualExhaustion) return false;
+		m_ManualExhaustion = new AICF_VehicleStagingExhaustion(trip, this);
+		return m_ManualExhaustion.IsCaptured();
+	}
+
+	AICF_VehicleStagingExhaustion GetManualStagingExhaustion() { return m_ManualExhaustion; }
 
 	AICF_VehicleStagingActionToken GetStagingActionToken(int index)
 	{
@@ -398,6 +476,13 @@ class AICF_VehicleSpawnPlan
 		return true;
 	}
 
+	bool MarkFootPadProbeResultReported(string result)
+	{
+		if (m_sLastReportedFootPadProbeResult == result) return false;
+		m_sLastReportedFootPadProbeResult = result;
+		return true;
+	}
+
 	bool IsValid()
 	{
 		return m_Selection && m_Selection.IsSelected() && m_Reservation &&
@@ -417,7 +502,22 @@ class AICF_VehicleSpawnPlan
 		if (!expected || expected != m_ApproachWaypoint)
 			return false;
 		m_ApproachWaypoint = null;
+		m_ApproachFailure = null;
 		return true;
+	}
+
+	AICF_SpawnApproachFailure GetApproachFailure() { return m_ApproachFailure; }
+
+	bool BindApproachFailure(AICF_SpawnApproachFailure failure)
+	{
+		if (!failure || m_ApproachFailure || failure.GetWaypoint() != m_ApproachWaypoint) return false;
+		m_ApproachFailure = failure;
+		return true;
+	}
+
+	void ClearApproachFailure(AICF_SpawnApproachFailure expected)
+	{
+		if (expected && m_ApproachFailure == expected) m_ApproachFailure = null;
 	}
 
 	void RecordApproachWaypointIssued(int nowMs, bool reissue)
@@ -594,6 +694,13 @@ class AICF_VehicleSpawner
 			m_aSiteReservations.Contains(reservation);
 	}
 
+	bool IsSiteReservationCurrentReadOnly(AICF_VehicleSpawnSiteReservation reservation,
+		AICF_TransportTrip trip, AICF_VehicleRequestState requestState, int nowMs)
+	{
+		return reservation && trip && requestState && !reservation.IsExpired(nowMs) &&
+			reservation.MatchesTrip(trip, requestState.GetRequestGeneration()) && m_aSiteReservations.Contains(reservation);
+	}
+
 	bool ReleaseSelectedSite(AICF_VehicleSpawnSiteReservation expected)
 	{
 		if (!expected || !m_aSiteReservations.Contains(expected))
@@ -601,6 +708,19 @@ class AICF_VehicleSpawner
 		m_aSiteReservations.RemoveItem(expected);
 		s_aConstructionSites.RemoveItem(expected);
 		return true;
+	}
+
+	// Manual exact-seat очередь начинает свой срок после реального сбора.
+	// Automatic сохраняет прежний безопасный pad envelope без rally gate.
+	static bool IsStagingGeometryReady(float stagingDistanceMeters, float stagingRadiusMeters,
+		float padDistanceMeters, float boardingEnvelopeRadiusMeters, bool requireManualRally)
+	{
+		if (stagingRadiusMeters <= 0 || boardingEnvelopeRadiusMeters <= VEHICLE_CLEARANCE_RADIUS_METERS + REQUESTING_GROUP_CLEARANCE_MARGIN_METERS)
+			return false;
+		if (requireManualRally && !(stagingDistanceMeters <= stagingRadiusMeters))
+			return false;
+		return padDistanceMeters >= VEHICLE_CLEARANCE_RADIUS_METERS + REQUESTING_GROUP_CLEARANCE_MARGIN_METERS &&
+			padDistanceMeters <= boardingEnvelopeRadiusMeters;
 	}
 
 	bool MeasureStagingReadiness(
@@ -612,7 +732,8 @@ class AICF_VehicleSpawner
 		out int stagedCount,
 		out int aliveCount,
 		out float farthestDistanceMeters,
-		out string memberSamples)
+		out string memberSamples,
+		bool requireManualRally = false)
 	{
 		stagedCount = 0;
 		aliveCount = 0;
@@ -637,9 +758,7 @@ class AICF_VehicleSpawner
 			float padDistanceMeters = Math.Sqrt(vector.DistanceSqXZ(
 				entity.GetOrigin(),
 				spawnPosition));
-			bool ready = padDistanceMeters >= VEHICLE_CLEARANCE_RADIUS_METERS +
-				REQUESTING_GROUP_CLEARANCE_MARGIN_METERS &&
-				padDistanceMeters <= boardingEnvelopeRadiusMeters;
+			bool ready = IsStagingGeometryReady(distanceMeters, stagingRadiusMeters, padDistanceMeters, boardingEnvelopeRadiusMeters, requireManualRally);
 			aliveCount++;
 			farthestDistanceMeters = Math.Max(farthestDistanceMeters, distanceMeters);
 			if (ready)
@@ -700,7 +819,8 @@ class AICF_VehicleSpawner
 			stagedCount,
 			aliveCount,
 			farthestDistanceMeters,
-			memberSamples) || aliveCount < minimumAliveCount)
+			memberSamples,
+			plan.RequiresManualRally()) || aliveCount < minimumAliveCount)
 		{
 			failureReason = "GROUP_NOT_COMBAT_READY";
 			return false;
@@ -766,6 +886,21 @@ class AICF_VehicleSpawner
 		if (!padClear)
 		{
 			failureReason = "SPAWN_PAD_OCCUPIED";
+			return false;
+		}
+		AICF_VehicleFootPadReadback footPad = AICF_VehicleBoardingSiteQuery.Capture(group, selection.m_vPosition);
+		string footResult = footPad.m_sReason;
+		if (footResult.IsEmpty()) footResult = "FOOT_PAD_COVERED";
+		if (plan.MarkFootPadProbeResultReported(footResult))
+		{
+			AICF_VehicleSpawnSiteReservation reservation = plan.GetReservation();
+			footPad.Report(string.Format("faction=%1 numeric_slot=%2 group_generation=%3 trip_generation=%4 request_generation=%5 site_token=%6",
+				faction.GetFactionKey(), reservation.GetSlotId(), reservation.GetGroupGeneration(), reservation.GetTripGeneration(),
+				reservation.GetRequestGeneration(), reservation.GetOwnerToken()), "SPAWN_COMMIT");
+		}
+		if (!footPad.IsSuitable())
+		{
+			failureReason = footPad.m_sReason;
 			return false;
 		}
 		failureReason = string.Empty;
@@ -1093,7 +1228,8 @@ class AICF_VehicleSpawner
 		string identityContext,
 		out Vehicle vehicle,
 		out SCR_AIVehicleUsageComponent vehicleUsage,
-		out string failureReason)
+		out string failureReason,
+		AICF_AIQuotaVehicleCreationGuard quotaGuard = null)
 	{
 		vehicle = null;
 		vehicleUsage = null;
@@ -1107,10 +1243,15 @@ class AICF_VehicleSpawner
 		AICF_Stage3Diagnostics.Info(
 			"VEHICLE_SPAWN_SITE_SELECTED",
 			FormatAcquisitionSelectedSiteDetails(faction, selection, identityContext));
-		vehicle = SpawnSelectedPrefab(prefab, selection.m_vPosition);
+		vehicle = SpawnSelectedPrefab(prefab, selection.m_vPosition, null, quotaGuard);
 		if (!vehicle)
 		{
 			failureReason = "SPAWN_RETURNED_NULL";
+			if (quotaGuard)
+			{
+				if (quotaGuard.IsQuarantined()) failureReason = "VEHICLE_QUOTA_NATIVE_RETURN_QUARANTINED";
+				else if (!quotaGuard.WasNativeNull()) failureReason = "VEHICLE_QUOTA_PENDING";
+			}
 			return false;
 		}
 
@@ -1162,6 +1303,7 @@ class AICF_VehicleSpawner
 	// FIA acquisition: проверяем настоящий OBB, поверхность и свободный выезд.
 	bool SpawnFIAPatrol(AICF_FIAPatrol p, AICF_FactionFleet fleet, out vector crewPosition)
 	{
+		if (p) p.m_sSpawnQuotaFailure = string.Empty;
 		if (!Replication.IsServer() || !p || p.m_Vehicle || !p.m_Lease || !fleet ||
 			!p.m_Current || !p.m_Current.GetOwner() || p.m_Current.GetFaction() != p.m_Faction) return false;
 		ResourceName prefab = "{22B327C6752EC4D4}Prefabs/Vehicles/Wheeled/UAZ469/UAZ469_PKM_FIA.et";
@@ -1207,12 +1349,24 @@ class AICF_VehicleSpawner
 			EntitySpawnParams params = new EntitySpawnParams();
 			params.TransformMode = ETransformMode.WORLD;
 			for (int axis; axis < 4; axis++) params.Transform[axis] = pose[axis];
-			p.m_Vehicle = SpawnSelectedPrefab(prefab, pose[3], params);
-			if (!p.m_Vehicle) return false;
+			AICF_AIQuotaFIAVehicleCreation quotaGuard;
+			if (AICF_AIWorldQuotaService.GetAuthorityForWorld(world))
+			{
+				quotaGuard = AICF_AIQuotaFIAVehicleCreation.CapturePatrol(p, fleet, prefab);
+				if (!quotaGuard) { p.m_sSpawnQuotaFailure = "VEHICLE_QUOTA_PENDING"; return false; }
+			}
+			p.m_Vehicle = SpawnSelectedPrefab(prefab, pose[3], params, quotaGuard);
+			if (!p.m_Vehicle)
+			{
+				if (quotaGuard && quotaGuard.IsQuarantined()) p.m_sSpawnQuotaFailure = "VEHICLE_QUOTA_NATIVE_RETURN_QUARANTINED";
+				else if (quotaGuard && !quotaGuard.WasNativeNull()) p.m_sSpawnQuotaFailure = "VEHICLE_QUOTA_PENDING";
+				return false;
+			}
 			p.m_VehicleId = p.m_Vehicle.GetID();
 			RplComponent rpl = RplComponent.Cast(p.m_Vehicle.FindComponent(RplComponent));
 			if (!p.VehicleIdentity() || !rpl || !rpl.IsMaster()) return false;
-			return fleet.BindReservedLeaseVehicle(p.m_Lease, p.m_Vehicle, rpl.Id().ToString(), prefab, AICF_EVehicleKind.ARMED_LIGHT, 2, pose[3]);
+			if (!fleet.BindReservedLeaseVehicle(p.m_Lease, p.m_Vehicle, rpl.Id().ToString(), prefab, AICF_EVehicleKind.ARMED_LIGHT, 2, pose[3])) return false;
+			return !quotaGuard || quotaGuard.RecordOwnLeaseBind(p.m_Vehicle);
 		}
 		return false;
 	}
@@ -1220,6 +1374,7 @@ class AICF_VehicleSpawner
 	// Гарнизон ищет площадку в пределах своей базы, без маршрута на соседнюю.
 	bool SpawnFIAGarrison(AICF_FIAGarrison g, AICF_FactionFleet fleet, out vector crewPosition)
 	{
+		if (g) g.m_sSpawnQuotaFailure = string.Empty;
 		if (!Replication.IsServer() || !g || g.m_Vehicle || !g.m_Lease || !fleet ||
 			!g.BaseIdentity() || g.m_Base.GetFaction() != g.m_Faction) return false;
 		AICF_LogisticsVehicleFootprint footprint = AICF_LogisticsVehicleFootprint.Get(g.m_sPrefab);
@@ -1278,8 +1433,19 @@ class AICF_VehicleSpawner
 			EntitySpawnParams params = new EntitySpawnParams();
 			params.TransformMode = ETransformMode.WORLD;
 			for (int axis; axis < 4; axis++) params.Transform[axis] = pose[axis];
-			g.m_Vehicle = SpawnSelectedPrefab(g.m_sPrefab, pose[3], params);
-			if (!g.m_Vehicle) return false;
+			AICF_AIQuotaFIAVehicleCreation quotaGuard;
+			if (AICF_AIWorldQuotaService.GetAuthorityForWorld(world))
+			{
+				quotaGuard = AICF_AIQuotaFIAVehicleCreation.CaptureGarrison(g, fleet);
+				if (!quotaGuard) { g.m_sSpawnQuotaFailure = "VEHICLE_QUOTA_PENDING"; return false; }
+			}
+			g.m_Vehicle = SpawnSelectedPrefab(g.m_sPrefab, pose[3], params, quotaGuard);
+			if (!g.m_Vehicle)
+			{
+				if (quotaGuard && quotaGuard.IsQuarantined()) g.m_sSpawnQuotaFailure = "VEHICLE_QUOTA_NATIVE_RETURN_QUARANTINED";
+				else if (quotaGuard && !quotaGuard.WasNativeNull()) g.m_sSpawnQuotaFailure = "VEHICLE_QUOTA_PENDING";
+				return false;
+			}
 			g.m_VehicleId = g.m_Vehicle.GetID();
 			g.WatchVehicleIntegrity();
 			g.m_vPosition = pose[3];
@@ -1288,7 +1454,8 @@ class AICF_VehicleSpawner
 			if (!g.VehicleIdentity() || !rpl || !rpl.IsMaster()) return false;
 			array<BaseCompartmentSlot> seats = {};
 			AICF_FIAPatrolCrew.Seats(g.m_Vehicle, seats);
-			return fleet.BindReservedLeaseVehicle(g.m_Lease, g.m_Vehicle, rpl.Id().ToString(), g.m_sPrefab, AICF_EVehicleKind.ARMED_LIGHT, seats.Count(), pose[3]);
+			if (!fleet.BindReservedLeaseVehicle(g.m_Lease, g.m_Vehicle, rpl.Id().ToString(), g.m_sPrefab, AICF_EVehicleKind.ARMED_LIGHT, seats.Count(), pose[3])) return false;
+			return !quotaGuard || quotaGuard.RecordOwnLeaseBind(g.m_Vehicle);
 		}
 		return false;
 	}
@@ -1336,7 +1503,8 @@ class AICF_VehicleSpawner
 		return true;
 	}
 
-	protected Vehicle SpawnSelectedPrefab(ResourceName prefab, vector position, EntitySpawnParams spawnParams = null)
+	protected Vehicle SpawnSelectedPrefab(ResourceName prefab, vector position, EntitySpawnParams spawnParams = null,
+		AICF_AIQuotaVehicleCreationGuard quotaGuard = null)
 	{
 		if (!Replication.IsServer()) return null;
 		EntitySpawnParams params = spawnParams;
@@ -1346,7 +1514,26 @@ class AICF_VehicleSpawner
 			params.TransformMode = ETransformMode.WORLD;
 			params.Transform[3] = position;
 		}
-		return Vehicle.Cast(GetGame().SpawnEntityPrefabEx(prefab, false, params: params));
+		AICF_AIWorldQuotaService service = AICF_AIWorldQuotaService.GetAuthorityForWorld(GetGame().GetWorld());
+		AICF_AIQuotaCreation creation;
+		if (service)
+		{
+			if (!quotaGuard || quotaGuard.GetService() != service) return null;
+			creation = quotaGuard.BeginFactory(prefab);
+			if (!creation) return null;
+			if (!service.MarkExternalNativeCallStarted(creation, true))
+			{
+				service.CancelExternalCreationBeforeFactory(creation);
+				return null;
+			}
+		}
+		IEntity raw = GetGame().SpawnEntityPrefabEx(prefab, false, params: params);
+		if (!service) return Vehicle.Cast(raw);
+		service.ObserveExternalFactory(creation, raw);
+		bool accepted = quotaGuard.CaptureFactoryResult(creation, raw);
+		service.EndExternalCreation(creation);
+		if (!accepted) return null;
+		return Vehicle.Cast(raw);
 	}
 
 	protected AICF_VehicleSpawnSearchState BuildAcquisitionCandidateSet(
@@ -1687,6 +1874,9 @@ class AICF_VehicleSpawner
 			return false;
 		}
 
+		AICF_VehicleFootPadReadback footPad = AICF_VehicleBoardingSiteQuery.Capture(group, position);
+		footPad.Report(identityContext, "SITE_PREFLIGHT");
+		if (!footPad.IsSuitable()) return false;
 		result.m_sResult = "SELECTED";
 		result.m_vPosition = position;
 		result.m_iCandidatePositionIndex = positionIndex;
@@ -2126,7 +2316,15 @@ class AICF_VehicleSpawner
 		EntitySpawnParams params = new EntitySpawnParams();
 		params.TransformMode = ETransformMode.WORLD;
 		for (int i; i < 4; i++) params.Transform[i] = w.m_aSpawnTransform[i];
-		w.m_Vehicle = SpawnSelectedPrefab(w.m_Entry.GetPrefab(), w.m_aSpawnTransform[3], params);
+		AICF_AIWorldQuotaService quota = AICF_AIWorldQuotaService.GetAuthorityForWorld(GetGame().GetWorld());
+		ref AICF_AIQuotaLogisticsCreationGuard creation = w.m_QuotaCreationGuard;
+		int generation = w.m_iGeneration;
+		AICF_VehicleLease lease = w.m_Lease;
+		if (quota && (!creation || !creation.CaptureSite())) return false;
+		Vehicle created = SpawnSelectedPrefab(w.m_Entry.GetPrefab(), w.m_aSpawnTransform[3], params, creation);
+		if (quota && (!creation.IsCurrent() || w.m_QuotaCreationGuard != creation || w.m_iGeneration != generation ||
+			w.m_Lease != lease || w.m_Vehicle)) return false;
+		w.m_Vehicle = created;
 		if (!w.m_Vehicle) return false;
 		w.m_VehicleId = w.m_Vehicle.GetID();
 		w.m_bExitedSpawn = false;
@@ -2135,9 +2333,14 @@ class AICF_VehicleSpawner
 		if (rpl) w.m_sVehicleRpl = rpl.Id().ToString();
 		SCR_FactionAffiliationComponent affiliation = SCR_FactionAffiliationComponent.Cast(w.m_Vehicle.FindComponent(SCR_FactionAffiliationComponent));
 		if (!affiliation || !rpl || !rpl.IsMaster() || !resources.EmptySpawnCargo(w.m_Vehicle)) return false;
+		if (quota && (!creation.IsCurrent() || w.m_QuotaCreationGuard != creation)) return false;
 		affiliation.SetAffiliatedFaction(w.m_Faction);
-		w.m_CargoPool = resources.Resolve(SCR_ResourceComponent.FindResourceComponent(w.m_Vehicle));
+		if (quota && (!creation.IsCurrent() || w.m_QuotaCreationGuard != creation)) return false;
+		AICF_LogisticsResourcePool cargoPool = resources.Resolve(SCR_ResourceComponent.FindResourceComponent(w.m_Vehicle));
+		if (quota && (!creation.IsCurrent() || w.m_QuotaCreationGuard != creation)) return false;
+		w.m_CargoPool = cargoPool;
 		if (!w.m_Fleet.BindReservedLeaseVehicle(w.m_Lease, w.m_Vehicle, w.m_sVehicleRpl, w.m_Entry.GetPrefab(), AICF_EVehicleKind.TRANSPORT, 1, w.m_Vehicle.GetOrigin())) return false;
+		if (quota && (!creation.RecordOwnLeaseBind(w.m_Vehicle) || !creation.IsDomainCurrent() || w.m_QuotaCreationGuard != creation)) return false;
 		w.m_bCustody = true;
 		w.m_fObservedCargo = 0;
 		SCR_AIVehicleUsageComponent usage = SCR_AIVehicleUsageComponent.Cast(w.m_Vehicle.FindComponent(SCR_AIVehicleUsageComponent));

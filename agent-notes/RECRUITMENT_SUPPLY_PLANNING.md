@@ -1,5 +1,107 @@
 # Планирование снабжения и приоритет набора пехоты
 
+## Native capacity перед созданием donor
+
+Managed agent limit и native global AI budget — разные ограничения. До
+`BeginRecruit` служба проверяет `AICF_SpawnAdmission.InspectRecruit`: текущие
+active/intended/hard, `CanAIBeActivated`, missing members обеих SPAWNING faction
+states и ещё не материализованные другие donors. Requested равен одному.
+Уже живой donor повторно не резервируется; собственный ожидающий donor ещё не
+создан и не создаёт вечное ожидание своей же reservation. Положительный native
+`CanActivateGroup` для пустой/dormant группы не заменяет room для actor.
+
+Отказ сохраняет текущий order/token и первоначальный total visit deadline.
+Нет donor entity, RequestSpawn, нового spawn timer или оплаты. After release
+работает прежняя асинхронная materialisation/readiness, native30s timeout и
+оплата непосредственно перед physical join. Дедлайны визита, FIFO/ручной
+приоритет, supplies demand и лимиты не увеличиваются. Context берётся из того
+же authoritative `Update` и повторно связывается с exact slot/order/graph.
+
+`INFANTRY_RECRUIT_NATIVE_CAPACITY_WAIT/RELEASED` содержат budget math и неизменный
+token; `INFANTRY_RECRUIT_NATIVE_SPAWN` при REQUEST/INVALID_OR_TIMEOUT добавляет
+native actual/wrong/nonalive, global counters, dormant/intended и реальные
+dispatch/expansion counters. Native queue length явно помечена как недоступная.
+Старые v8 donor timeout без этих counters сохраняют причину UNKNOWN.
+
+`Test-RecruitmentNativeAdmissionContracts.ps1` исполняет extracted request1
+admission и проверяет concurrent/missing/dormant/unknown cases. Изолированный
+`AICF_RecruitmentCapacityProbe.c` (`-aicfRecruitCapacityProbe 1`) отдельно
+останавливает fixture budget writer, временно устанавливает native hard limit,
+наблюдает≥35s без donor/request/debit, восстанавливает первоначальный limit на65s
+и требует реального оплаченного join того же current physical order. Stop всегда
+восстанавливает исходный limit и снимает CallLater; лечение/телепортация отсутствуют.
+Это fault injection, а не ordinary-war или исправление конкретного старого v8.
+Полный результат разбирает `Test-RecruitmentCapacityLog.ps1`; sibling native и
+resource FAIL не скрываются.
+
+## Bounded подход к казарме
+
+После native STUCK прежние две repair attempts могут выбрать другой endpoint
+через `AICF_RecruitmentApproachEndpoint`. Helper проверяет 12 точек на кольцах
+32m и 22m вокруг текущей казармы, начиная со стороны живого leader. Порядок
+фиксирован; выбирается ближайшая допустимая точка со стабильным X/Z tie-break.
+Каждая точка проходит native projection с пределом сдвига 2m по XZ и 1m по высоте,
+ground/physical clearance и повторную проверку service/group/spawn/assignment/
+intent/leader/pathfinding identity. Новый endpoint отстоит от ранее назначенных
+не менее чем на 5m. Нового бюджета или сброса deadline нет. История хранит только
+фактически назначенные endpoints; SELECTED ещё не подтверждает прибытие.
+
+Для alternative completion radius равен min(15,35−serviceDistance−1), минимум 1m;
+вся completion circle остаётся внутри прежних 35m physical arrival. При отказе
+поиска остаётся исходный endpoint/radius15. Реальный waypoint radius и distance
+записываются COMMITTED. Оплата по-прежнему проверяет `IsPhysicallyPresent`.
+
+`GetClosestPositionOnNavmesh` и свободный физический объём не доказывают путь от
+leader: SELECTED явно пишет `reachability=UNPROVEN movement_confirmation=PENDING`.
+Фактический подход исполняется штатным Move. Это тот же уровень доказательства,
+что у исходного native endpoint, а не разрешение покупать бойцов издали.
+Прежний `GetReachablePoint(origin,distance)` не принимает целевую позицию и не
+гарантирует поиск около казармы. В сохранённом `mounted-six-adaptive` все
+24 samples оказались возле leader, за пределами arrival, после чего дважды назначался тот же
+проваленный center. Удалённое заявление `native_connected=1` не относится к
+новому геометрическому поиску. При отказе всех samples остаются FAIL/мемоизация,
+без виртуального прибытия. Проверки транспорта и evidence:
+[VEHICLE_MULTISQUAD.md](VEHICLE_MULTISQUAD.md).
+
+## Короткий перенос после подтверждённого сбоя подхода
+
+`AICF_RecruitmentMoveFailure` сохраняет снимок непосредственно перед native
+`OnMoveFailed`/`Fail`. Разрешены только `STUCK`/`UNREACHABLE` с полными BT ports,
+`DEFAULT_HANDLER_ID` и единственным участником группы: group-only callback
+не позволяет надёжно выбрать бойца в большем отряде. Снимок связывает exact
+order/service/slot, token, group/actor/agent, EntityID/Rpl, generation,
+assignment/intent/graph и текущий waypoint с endpoint/radius. `UNKNOWN` не
+создаёт разрешения. Снимок старше 5 секунд, смена источника более чем на 0.5m,
+игрок, недееспособность или нахождение в машине запрещают перенос.
+
+Внутри одной из прежних двух repair attempts выбирается первый безопасный
+кандидат: 3/5/7m вперёд, влево или вправо под 45°. Native placement повторно
+проверяет землю, воду, стоящий объём и технику; projection ограничен 0.5m XZ,
+высота 1m, фактическое расстояние до назначенной точки — 8m в 3D. Перед
+`Teleport` повторяется весь контекст, receipt помечается consumed до мутации.
+Перенос не добавляет retry и не меняет абсолютный approach deadline; исходный
+post-teleport observation исключает его из proof самостоятельного движения.
+Прибытие, supplies debit и donor join остаются физическими production gates.
+Лечения, воскрешения и переноса машины нет; присутствие наблюдающего игрока
+не блокирует разрешённый короткий перенос ИИ.
+
+Проверки: `Test-RecruitmentShortRecoveryContracts.ps1` — 31 source mutant;
+`Test-RecruitmentShortRecoveryProbeContracts.ps1` — 18 source mutants.
+Изолированный `AICF_RecruitmentShortRecoveryProbe.c` включается только через
+`-aicfRecruitmentShortRecoveryProbe 1`: controlled native node result,
+настоящий `OnMoveFailed`, физический перенос, последующее native движение,
+прибытие и платный join. Отдельно проверяет stale/foreign context,
+controlled placement rejection, фактическую посадку и incapacitation без
+восстановления бойца. Это не воспроизведение исторического navmesh blocker.
+
+Evidence нового запуска находится в
+`.codex-runtime/vehicle-behavior-20261028/native-recruit-short-v1/`;
+первый Workbench `Formula too complex` сохранён отдельно в `wb-recruit-short-v1/`,
+после разделения guard clauses новый fixture compile прошёл. Длительные
+`soak-US-v3`/`soak-USSR-v3` используют более ранние byte-exact snapshots и
+не подтверждают этот последующий recruitment fix. Причина исходного STUCK
+в `recruit-short-nav-diagnosis/REPORT.md` остаётся недоказанной.
+
 ## Последовательная очередь — issue #37
 
 `AICF_InfantryRecruitmentService.RefreshAutoService` закрепляет одну живую

@@ -1,5 +1,168 @@
 # Архитектура и навигация по исходникам
 
+`AICF_PlayerMobHoldPolicy.HasCurrentInternalTask` отделяет текущую пешую задачу
+игрока внутри MOB от требования выхода за границу MOB. Audit root учитывает
+только read-only proof exact intent/waypoint/native task/пешего состава; правило
+не объявляет прибытие или разрешённый idle. Исходные all-member arrival,
+meaningful-task и movement recovery остаются самостоятельными обязанностями.
+Границы и known leader-only ограничение — [PLAYER_MOB_TASK.md](PLAYER_MOB_TASK.md).
+
+Ручной preset теперь имеет retained `TACTICAL_DEPLOYMENT` для TRANSPORT/COMBAT:
+он сохраняет ту же оплачиваемую машину между пешими эпизодами. BehaviorFlow
+владеет физическими операциями и возвращает typed outcomes; Controller остаётся
+владельцем переходов и Handoff/OrderPlanner остаётся владельцем waypoint.
+Отдельная weak native policy сдерживает конкурирующую auto посадку/замену crew.
+Новые разрешения короткой видимой коррекции и сроки — [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md).
+Описания одноразового COMPLETE ниже сохраняются для automatic trips и старого evidence.
+
+`AICF_TransportCombatHold` — read-only proof текущего собственного
+`SCR_AIVehicleCombatActivity` для ручного vehicle preset в TRANSIT. Проверяются
+current/owned native action, vehicle manager, lease/entity/Rpl/generations,
+assignment и исходный живой AI roster без чужих occupants. В API1.8.0.13
+точный выбранный combat activity может остаться EVALUATED: его native
+`OnActionSelected` не вызывает super. Просто queued EVALUATED не подходит.
+Transit возвращает typed WAIT до crew/mobility recovery, но после health и
+absolute deadline gates. Уже начатые CrewRecovery/NativeGate не скрываются.
+Movement progress timestamps, deadlines, actions и recovery counters не меняются.
+Registry экспортирует отдельный `HasNativeCombatTask()` при актуальной graph
+revision; MatchController учитывает его как meaningful task/bounded lifecycle.
+События `TRANSPORT_NATIVE_COMBAT_STARTED/WAIT/ENDED` сохраняют реальные clocks.
+
+`AICF_VehicleCrewRoleOwnership` не меняет экипаж: это узкий current preset/actor/
+role/lease proof для прежнего3s ожидания собственного физического перехода.
+Transit проверяет срок/owner/FAILED уже существующего crew token до такого WAIT,
+не расходует новые попытки и не освобождает token при passive Pilot transition.
+Чужой или неидентифицированный occupant по-прежнему не вытесняется.
+
+Native повторная посадка ручного preset проходит через scoped actor reaction
+`AICF_VehiclePresetNativeSeatPolicy`: точный seat передаётся существующему native
+GetIn, без подмены action/приоритетов/таймеров. Weak bindings регистрирует Transit
+после ValidateContext и снимает в AbortOwnedActions. Helpers не владеют trip phase,
+экономикой или cleanup автомобиля; reservation далее обслуживает native action.
+Все current/stale/foreign/actor/lease guards повторяются перед dispatch/rollback.
+Raw path trace — только наблюдение, не новое основание meaningful progress.
+
+`AICF_TransportNativeCrewEntry` отдельно наблюдает собственный текущий native
+GetIn в пустое exact reserved Pilot/Turret место. Reservation сама по себе не
+достаточна: требуется actual current/executed RUNNING action, binding и повторный
+actor/seat/lease/assignment proof. Первый срок ограничен прежним boarding timeout
+и trip absolute deadline; повторное наблюдение его не продлевает. Оба role records
+проверяются до passive WAIT. Observer не отменяет action, не расходует recovery
+attempt и не пишет progress clocks; timeout/stale context остаются typed fallback.
+
+Acquisition перед собственным staging waypoint приостанавливает infantry order
+через `AICF_VehicleTaskHandoff`. Coordinator сохраняет suspension от SITE_PLANNED
+до SPAWN_COMMIT, чтобы root не восстановил PLAYER hold поверх approach.
+Spawn/readiness и прежние сроки не обходятся; terminal restoration остаётся у Handoff.
+
+`AICF_VehicleNativeRouteProgress` отделён от raw path trace. Он дважды читает полный
+текущий путь exact settled AI Pilot/AICar, проверяет endpoint и единственную
+близкую XZ-проекцию с высотой. Только физически правдоподобное продвижение вдоль
+того же пути может дать прежний порог progress. Смена пути даёт baseline;
+bounded история сохраняет frontier при A→B→A. Transit единолично пишет progress
+clock и pending recovery evidence после положительного proof. Absolute deadline,
+direct-distance и motion checks сохранены. Причина отказа видна на прежней cadence
+`VEHICLE_MOTION`; отсутствие credit не объявляется доказательством остановки машины.
+
+`AICF_VehicleHealthTrace.Capture` читает native usability, movement damage,
+engine/gearbox/wheels efficiency, fire, root damage flag, bounded hitzone hierarchy
+и pose/velocity/terrain. GroupTrace вызывает его на прежней cadence, Transit —
+в failure snapshot; helper не меняет actions, physics или clocks. Повторный
+entity/component Rpl/manager/default hitzone/physics fence отбрасывает сменившийся
+контекст. Поля `health_*` — наблюдения с `health_cause_proven=0`, не attribution.
+Отключённый root damage flag не означает защиту всех дочерних managers.
+
+Диагностика групп: `AICF_GroupTrace` у VehicleCoordinator читает authority state
+и реальные позиции живых бойцов, без удержания engine entities в cursor.
+`AICF_NativeVehicleTrace` наблюдает штатные callbacks с однократным super,
+не меняет actions/приказы. Полные транспортные fixtures и их изоляция от боя —
+[VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md).
+`AICF_TransportNativeGate` — read-only observation у transit flow для штатного
+OpenGate водителя/стрелка ручного preset. MovementState владеет observation,
+flow возвращает typed WAIT/fallback, controller по-прежнему владеет переходами.
+Наблюдение не продлевает trip и не выдаёт движение за реальный progress.
+
+Gate observer проверяет все назначенные места, включая Cargo. Требуются
+единственная current native OpenGate chain, exact seat return, наблюдавшийся
+физический выход, завершённый native return и последующее реальное движение.
+Одна и та же interaction сохраняет первый60s срок в bounded value-only history
+MovementState; смена бойца/повторное наблюдение его не продлевает. Общий trip
+deadline остаётся верхней границей. Неоднозначные chains отклоняются.
+Native return завершение сохраняется exact action callback `m_OnActionCompleted`:
+штатный `OnActionDeselected` может сразу заменить COMPLETED на EVALUATED.
+Receipt не заменяет физический выход, exact settled seat и движение. Gate.Stop
+снимает listener; replacement/Reset/Abort используют этот boundary, включая
+локальный cleanup до invalid-trip return в Controller.AbortForStop.
+
+`AICF_TransportNativeAbandon` отдельно распознаёт текущий штатный group GetOut
+для exact trip vehicle после отказа от машины. Это stateless read-only proof,
+а не разрешение возвращать водителя в покидаемый транспорт. Transit возвращает
+typed fallback до crew recovery; существующий controller владеет высадкой,
+восстановлением пешего приказа и cleanup. Конкурирующие async owners сохраняются.
+
+До stock failed-movement abandonment `AICF_TransitMoveFailure` может принять
+только exact current vehicle handler ручного preset и здоровый полностью
+settled original AI roster с оставшимся mobility budget. Native callback доставляется
+ровно один раз; этот receipt не меняет actions/waypoints/physics. Обычный Transit
+Tick повторно проверяет immutable identity/revisions/health, расходует прежнюю
+попытку и запускает существующий bounded recovery. STUCK допускает прежнюю
+короткую коррекцию4..15м при captured/current speed<=1м/с, иначе route rebuild;
+UNKNOWN/UNREACHABLE — route rebuild. Исчерпанный бюджет,
+чужой handler/occupant, повреждённая машина и stale context не подавляют stock.
+Абсолютные сроки и clocks не продлеваются; Reset/ExitTransit снимают receipt.
+
+`AICF_OverturnRecovery` хранит только bounded3s observation lease здорового
+перевёрнутого manual vehicle с исходным settled AI roster. Captured assignment,
+lease и route не меняются на retry; eligibility повторяет native subgroup/Move,
+health/authority/roster fences. Read-only asset inspection может отложить только
+такой overturn, а фактическая коррекция остаётся в Transit Tick и старом mobility
+budget. Перед transform повторяются scope/window/скорость≤1 и прежние physical
+fences; state/Stop очищает observation. Helper не владеет phase, health или crew.
+
+Native vehicle record сохраняется при `TACTICAL_DEPLOYMENT → TRANSIT`: уже
+сидящие бойцы не создадут повторный `CompartmentEntered` после удаления record.
+`AICF_VehicleNativeSubgroup` восстанавливает только bookkeeping exact leased
+vehicle через stock callback при unassigned negative record; positive handler
+должен совпадать с actual Pilot/car handler. Перед каждым вызовом повторяются
+current assignment/generations/component Rpl, original authoritative AI/settled
+seat и отсутствие другого native movement owner. Default/positive mismatch,
+human/foreign actor и неопределённая identity дают отказ. Физические recovery и
+решения о замене экипажа остаются у существующих flows.
+
+Во время manual acquisition stock может снять завершённый групповой staging
+waypoint, пока отдельные бойцы ещё исполняют собственный подход.
+`AICF_VehicleStagingTaskProof` передаёт в read-only slot view только actual
+selected/executed `RUNNING` staging actor task: token хранит immutable assignment
+snapshot, goal, group/trip/request/entity identity; повторяются slot revisions,
+base revision, reservation и исходные deadlines. Unowned, suspended, cancelled,
+terminal action и stale context не считаются meaningful task. Это проверка
+выполняемой работы; phase/timeout exceptions или продления сроков она не вводит.
+
+Завершённый `COMPLETE` или `FALLBACK` transport intent с восстановленным пешим
+приказом хранится в retained terminal trip.
+Coordinator не принимает handoff assignment/waypoint rebuild за новый заказ
+машины: сравниваются group/generation, intent, destination и preset revision.
+Cleanup gates остаются первыми; explicit admission, новый приказ, preset или
+группа проходят обычную проверку заново.
+
+Transit проверяет native terminal movement damage до crew/combat/gate observers:
+`GetMovementDamage() >= 1`, native `VehicleCanMove == false` и повторный exact
+damage manager. Это сохраняет штатный actor-level выход из повреждённой машины
+даже при текущем group Move. Временная неготовность здоровой машины не получает
+этот veto. Fallback, handoff и cleanup остаются у прежних владельцев; budgets
+и deadlines не меняются.
+
+DismountState раздельно ограничивает logical force-exit и physical-only relocation:
+до3 batches на каждую операцию, суммарно6 на phase. Existing normal→terminal
+fallback может дать второй такой phase, то есть общий ceiling12. Сроки и прежние
+human/foreign/identity/navmesh/position permissions не расширены. Physical budget
+доступен только после свежего полного logical egress и при подтверждённом hull
+blocker; aggregate `force_attempts` остаётся telemetry, не общим лимитом3.
+Реальный найм и длительное наблюдение первого managed slot —
+[VEHICLE_SOAK.md](VEHICLE_SOAK.md). `AICF_VehicleCleanupTrace` хранит исходные
+actor identities только как подписи диагностики retained job; история не даёт
+разрешений на recovery/delete и не участвует в occupancy/player gates.
+
 Проект расширяет stock Conflict скриптами Enforce. Единственный gameplay resource —
 тонкий inherited `MissionHeader` входа AI Conflict; runtime selection выбирает
 штатную миссию и применяет её настройки.
@@ -145,6 +308,14 @@ authority и допустимость цели. Веса, fallback и исклю
 
 ## Authority и identity
 
+Ручная настройка техники принадлежит stable `AICF_GroupSlot`: отдельная
+vehicle revision и сериализованный рецепт не меняют loadout bindings, роль или
+размер состава. Trip захватывает независимую копию, revision, generation и
+immutable identity каждого назначенного member. Подбор exact prefab остаётся
+в acquisition, точная native посадка — в boarding, списание — в EconomySystem.
+Каталог читает compartments в private world; глобальный native manager ID не
+сохраняется. Контракт и ограничения проверок: [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
+
 Стратегия, spawn/delete, деньги, тикеты, ownership и match result принадлежат
 authoritative server/master. Клиент передаёт намерение; RPC заново проверяет
 игрока, faction, numeric slot, availability, лимиты и цель. Постоянные данные
@@ -174,6 +345,15 @@ sentinel classifier безусловно отказывает до чтения 
 После `OnMoveFailed` повторно сверяются failure identity и executed action;
 синхронно заменённый action не завершается.
 
+Для recruitment `STUCK`/`UNREACHABLE` с exact `DEFAULT_HANDLER_ID` и единственным
+AI участником `AICF_RecruitmentMoveFailure` сохраняет immutable receipt до
+native callback. Service проверяет живую регистрацию exact order и graph,
+slot — свой exact order pointer; только прежняя repair attempt может списать
+этот receipt и назначить безопасный перенос до8m. Node не ремонтирует waypoint,
+не покупает бойцов и не переносит actor. Все cross-tick identity/authority/age,
+физические guards и consume-before-Teleport находятся в профильном helper.
+Подробности и ограничения: [RECRUITMENT_SUPPLY_PLANNING.md](RECRUITMENT_SUPPLY_PLANNING.md).
+
 Native defend allocation может получить удалённый вход после смены приказа.
 `AICF_AINodeLifecycle` возвращает FAIL только для invalid input управляемой
 server infantry, сохраняя native delegate валидных/чужих nodes. Он не подменяет
@@ -200,8 +380,27 @@ despawn остаётся у CleanupManager, initial content readiness — у pro
 
 Flow не меняет фазу и не вызывает соседний flow, controller или cleanup.
 Waypoint сначала снимается с группы, затем удаляется как replicated entity.
+Native `UNKNOWN` на exact current acquisition approach обрабатывается через
+identity-bound receipt: node → resolver → coordinator/controller → acquisition.
+Только обычный Tick flow возвращает outcome, controller выполняет переход и
+cleanup; чужие/stale/неоднозначные callbacks остаются fail-closed. Подробности и
+отдельный fault-injection gate — [VEHICLE_APPROACH_FAILURE.md](VEHICLE_APPROACH_FAILURE.md).
 Перед vehicle delete повторяются identity, occupancy и clearance checks;
 неопределённость означает fail-closed.
+
+Ручной vehicle preset до первого маршрута может ждать удалённую цель в TRANSIT.
+TransitFlow возвращает WAIT `PRESET_WAITING_FOR_DESTINATION`; только controller
+через TransportTrip приостанавливает/возобновляет trip и movement deadlines.
+Во время ожидания сохраняются identity, health и exact crew guards. После
+первого staged route действуют обычные arrival/dismount и ограниченный бюджет.
+`AICF_VehiclePresetWaitPolicy` проецирует только доказанное текущее ожидание
+в `AICF_VehicleSlotView.IsPresetDestinationWait()`: current assignment/intent/base
+revisions, lease/entity/RplId и exact settled assigned occupants. MatchController
+читает эту проекцию как meaningful task и bounded idle reason; сам не создаёт
+маршрут и не меняет transport deadlines. BASE сравнивается по identity базы,
+POSITION — также по точным координатам; resolved snapshot не сравнивается с
+raw owner origin базы. `AICF_PlayerMobHoldPolicy` отдельно распознаёт физически
+достигнутое пешее PLAYER POSITION удержание у MOB с текущим bound DefendWaypoint.
 
 ## Соседние контракты
 
@@ -279,6 +478,23 @@ Social service не владеет waypoint или recruitment: он читае�
 Backend identity ledger не зависит от controlled entity, audio не входит в JIP
 snapshot. Ресурсы, допуск и ограничения: [SOCIAL_BEHAVIOR.md](SOCIAL_BEHAVIOR.md).
 
+Ручной vehicle catalog объединяет enabled колёсные entries своей faction и native
+CIV, а factionless entries требует маркировать `FACTION_CIV`. Категории принадлежат
+native metadata; UI фильтрует presentation, server заново разрешает prefab из того
+же whitelist. `AICF_ContentProfile.GetVehiclePresetCostOverride` — vendor boundary:
+RHS/WCS возвращает прежний quote, Core использует native SpawnerData/CAMPAIGN
+fallback без мутации budget объектов. Faction в recipe — получатель, даже для
+civilian prefab. Выдача, purchase и boarding остаются у прежних доменных owners.
+Контракт: [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
+
+Явно подтверждённое сокращение vehicle crew принадлежит `AICF_VehicleCrewReturn`:
+одноразовый `AICF_VehicleCrewPlan` проверяет identities/revisions, GroupSlot
+компактно remaps живой roster и kits, auxiliary groups возвращают неназначенных.
+Их waypoint остаётся у OrderPlanner; физическое прибытие и повторная проверка
+authority/possession/compartments обязательны перед despawn. Возвращаемые остаются
+в managed agent cap. До product confirmation нет side effects. Boarding сохраняет
+полный ALL_OR_FALLBACK для итогового состава, а не выполняет частичную перевозку.
+
 Loadout templates назначаются slot/memberIndex: новые бойцы получают binding
 при создании, живые — при допустимом посещении действующего арсенала.
 `AICF_EquipmentService` владеет потребностью, поиском источников и ограниченным
@@ -306,3 +522,5 @@ faction и content profile. Server validation повторяется перед 
 Не переименовывай events или `key=value` поля без синхронного обновления
 анализаторов и этих заметок. Static, compile и runtime — отдельные gates:
 [TESTING.md](TESTING.md).
+
+Native garbage не владеет удалением cap-held машины AICF. Fleet после binding устанавливает lease-owned `AICF_VehicleGarbagePermission`; weak registry позволяет callbacks проверить exact physical identity и owner. Pending/failed cleanup сохраняет protection до safety-approved transfer. `RelinquishReleasedVehicleReference` снимает registry до очистки reference; после собственного veto native tracking восстанавливается через обычный Insert. При owner destructor проверяется captured entity/Rpl/master без уничтоженных weak owners; другой current owner запрещает stale restore. Детали: [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md#native-garbage-и-удерживаемая-машина).

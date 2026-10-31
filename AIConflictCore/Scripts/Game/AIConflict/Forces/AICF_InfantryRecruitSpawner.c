@@ -75,6 +75,12 @@ class AICF_InfantryRecruitSpawner : AICF_GroupSpawner
 		donor.SetOrigin(position);
 		donor.m_aUnitPrefabSlots.Clear();
 		donor.m_aUnitPrefabSlots.Insert(order.m_sPrefab);
+		AICF_AIWorldQuotaService quota = AICF_AIWorldQuotaService.GetAuthorityForWorld(donor.GetWorld());
+		if (quota)
+		{
+			AICF_AIQuotaGroupOwner owner = quota.GetOwners().RegisterDonor(order);
+			if (!owner || !quota.BindPlannedGroup(owner)) return false;
+		}
 		return BeginRosterSpawn(donor, 1);
 	}
 

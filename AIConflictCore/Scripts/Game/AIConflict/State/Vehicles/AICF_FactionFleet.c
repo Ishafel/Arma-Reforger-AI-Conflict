@@ -196,6 +196,7 @@ class AICF_FactionFleet
 			origin))
 			return false;
 		m_iAcceptedVehicleGeneration = acceptedGeneration;
+		lease.InstallGarbagePermission(this);
 		return true;
 	}
 
@@ -389,6 +390,11 @@ class AICF_FactionFleet
 	{
 		return lease && lease.GetFactionKey() == m_sFactionKey &&
 			m_aLeases.Find(lease) >= 0;
+	}
+
+	bool OwnsVehicleLease(AICF_VehicleLease lease)
+	{
+		return OwnsLease(lease);
 	}
 
 	// Вспомогательные physical logistics jobs того же domain owner.

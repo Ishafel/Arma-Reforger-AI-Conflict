@@ -1,5 +1,1823 @@
 # Проверки и baseline
 
+## Отказ открытия пресетов и crash игрока — 31.10.2026
+
+Ветка `codex/preset-editor-opening-fix` от `9af7881`. Полный player log показывает
+EDIT_LOADOUT в10:17:10.980 и принятый READ/READY в10:17:11.030 без SCRIPT exception.
+Изолированное построение обеих форм до правки даёт visible1/opacity1 и
+положительные размеры. Исходный пользовательский отказ **не воспроизведён**.
+Нельзя объявлять исходной причиной размер строк или конфликт modal.
+
+Подтверждённые дефекты кода: controller скрывал командную панель до вызова Open,
+который мог молча вернуться по guard; main root редактора пехоты не регистрировался
+через native AddModal. Теперь оба Open возвращают bool, панель скрывается только
+после успеха; main loadout modal имеет paired RemoveModal в Close. Добавлены
+typed причины отказа и readback created/visible/modal/width/height/parent.
+
+Baseline audits LoadoutQol/Library/VehicleEditor —3/3 PASS; после правки вместе
+с PersonalLoadout и новым PresetEditorOpening —5/5 PASS. Новый actual-case replay:
+18 checks/2 unsafe rejected. Baseline/fixed/production Stock Workbench:
+native0, validation successful, SCRIPT/VM fatal0. Offscreen Frontend baseline и
+fixed штатно завершены native0: обе формы строятся, root/panel visible1/opacity1,
+inspector2432×1339.2, vehicle2150.4×1296 native pixels; fixed Open(null) обоих
+editor возвращает false, capture0. Это geometry/rejection readback, не native
+успех открытия формы с карты и не модальный ввод. Полный no-error gate FAIL:
+WorkBench50resource(E); native GUI/resource baseline сохранён в полных logs.
+
+После завершения старого player процесса дописан **MEMORY(E) Out of memory**
+в10:18:27.475: requested671088632bytes, Free sysMem604088KiB. Это реальный
+blocker, но его причинная связь с исходным отказом окна не установлена. После
+выхода клиента свободно около23GiB RAM; pagefile peak8024MiB. Исторического
+per-process memory witness нет; не объявлять preview утечкой по одной этой строке.
+Player profile сохранён before/after crash в evidence.
+
+Evidence `.codex-runtime/preset-editor-opening-20261031/`: baseline/after audits,
+baseline/fixed/production-workbench, baseline/fixed-profile, manifests/exits,
+player-before и player-after-crash. Все проверки терминальные, GUI запрещён.
+**NOT RUN:** исходный пользовательский путь после правки, native successful
+map→editor modal routing, human readability/input, повтор crash и memory soak,
+campaign/client/JIP/RHS/WCS/full offline. Исходный bug остаётся неподтверждённым;
+issue #78 OPEN, прежние HOLD_UNSAFE/native-only8 blockers сохранены.
+
+## Исправление геометрии мест после скриншота — 31.10.2026
+
+Ветка `codex/vehicle-seat-layout-fix` от `7bdbc10`. Прежние42 client/5 JIP
+checks не измеряли реальные rectangles, поэтому не обнаружили наложение label
+и растянутые ComboBox. Новые строки FrameWidget имеют height52/pitch58;
+дочерние controls используют относительные anchors внутри строки.
+
+- До правки `Invoke-AICFChecks.ps1 -Name Test-VehiclePresetEditorContracts.ps1,Test-VehiclePresetContracts.ps1`:
+  **2/2 PASS**. После правки те же2 PASS; финальный набор с
+  `Test-VehiclePresetClientLogContracts.ps1` — **3/3 PASS**, runner exit0.
+- Production Stock Workbench — **compile PASS**, native0/validation/fatal0.
+  Окончательные immutable baseline/fixed stages с geometry и client fixtures:
+  оба Workbench **compile PASS**, native0/validation/fatal0.
+- Одинаковая final `AICF_VehicleSeatLayoutProbe.c`, SHA
+  `E4A6AFFE1A32E20F3AF5A0CAEC613562C52518FD079FE69403EA1962C6EC4350`,
+  через canonical `Start-AICFRuntime.ps1 -Role Frontend`:5/24/64 строки ×
+  host1280×720/1920×1080/2560×1440 workspace units,9 cases/2313 checks.
+  Старый source: **FAIL1674**; исправленный: **PASS2313/2313**.
+  Проверены native row/label/Combo/text bounds, порядок/зазоры, отдельные
+  pos/size, normalized scroll endpoint, его повтор и возврат0. Дисплей не менялся.
+  Оба native exit0, полные stopped console и все sibling logs, SCRIPT/VM fatal0.
+  `Collect-Final.ps1` exit0; это только **GEOMETRY_ONLY**, не human visual PASS.
+- Первый fixed run сохранил **279 FAIL**: offscreen/opacity0 host возвращает
+  GetTextSize0, хотя actual text bbox положительный. Final fixture сохраняет
+  строгий bbox/nonempty/containment; glyph0 отмечен **NOT_PROVEN**,279 unknown,
+  а не font PASS. Положительный oversized glyph по-прежнему отвергается.
+- Final console raw `(E)` **32/32**, каждый GUI1/RESOURCES31; error.log дублирует
+  эти32, script.log0. Общий no-error gate остаётся **FAIL**. Первые baseline/fixed
+  runs35/32 сохранены; resource/WB ошибки не исключались из evidence.
+
+Evidence `.codex-runtime/vehicle-seat-layout-fix-20261031/`: baseline/after-row/
+final-affected, wb-production, baseline-final/fixed-final-workbench,
+baseline-final/fixed-final-profile, manifests/exits/source hashes и
+`final-native-verdict.json`. Терминальные команды воспроизводятся из fixtures
+по [TEST_FIXTURES.md](TEST_FIXTURES.md); own helper scripts сохранены в evidence.
+
+**NOT RUN:** человеческая читаемость/физическая мышь/dropdown popup clipping,
+кампания/client/JIP после этой узкой правки, RHS/WCS runtime и полный All273.
+Ограничение GUI workflow сохраняется; игрок открывает «Техника», меняет модель,
+прокручивает места и назначает бойца. Старый HOLD_UNSAFE/TIMEOUT и native-only8
+persistence blocker #78 не исправлялись этим изменением; issue остаётся OPEN.
+
+## Окна пресетов отряда — 31.10.2026
+
+Отдельная ветка `codex/ui-preset-reformat` от опубликованного `c5ccf6e`.
+Старые четыре unit-type controls заменены двумя входами в пресеты; backend
+UnitType и семь тел методов отправки/декодирования команд сохранены.
+SELECT вызывается изменением каталога, последняя модель ожидает свободного RPC;
+captured revision/generation запрещают перенос выбора на новую incarnation.
+Подтверждение состава обрабатывается до gate ожидающего выбора модели.
+Список мест — ScrollLayoutWidget до64 строк, без страниц и отдельного Select.
+AutoAssign меняет только draft, RESET очищает binding/draft/места/preview.
+
+Профильный offline union — **21 уникальная проверка PASS** (20 UI и canonical
+crew fixture). Первый общий
+`final-affected` дал18/19: `Test-LoadoutLibraryContracts` получил Windows
+AccessDenied при создании временной junction. Unchanged повтор с нужными
+правами `library-final-elevated` — PASS. Изменённые позднее editor/input/log
+контракты повторены в `nativefix-targeted`, `timer-proof-auditors` и
+`publiccallback-final-targeted`. Actual-source editor31/9 unsafe,
+seat assignment48/3 unsafe и input lifecycle26/4 unsafe; все эти targeted
+replay выполнены также в обеих PowerShell-средах. Последний общий
+All269 относится к предыдущему срезу: **All273 нового UI NOT RUN**.
+
+Последний production WB Stock/RHS/ArlandWCSRHS — **3/3 compile PASS**,
+native0/fatal0/validation, source378 SHA drift0, actual97917 CLOSED0.
+Resource50/52/78 — отдельный strict FAIL. Evidence:
+`.codex-runtime/ui-preset-reformat/production-wb-publiccallback-final/`.
+
+Первые native попытки сохранены: v1 —42 UI cases, затем VM при повторном
+destructor Remove; v2 WB — неверное имя аргумента override; v3 WB — reserved
+имя переменной в fixture; v4 — private/protected ByName callback; v5 — неверная
+проверка немедленного GetRemainingTime внутри того же queue tick. Own scheduled
+flag/cached queue, idempotent detach и public callback исправлены; v6 сохраняет
+отдельный post-tick native readback timer33→−1. Во v5 source уже не имел VM:
+все3 native0/stopped/fatal0, но public auditor exit1/42 cases с1 FAIL.
+Эти FAIL не вырезаны и не выдаются за PASS.
+
+Native v6 — **42/42 client +5/5 JIP**, public auditor0, все3 native0/stopped,
+full sibling fatal0; scheduled1/cancelled1, timer33→−1 после следующего tick.
+Strict Error32/158/158 сохраняется отдельно FAIL. Полные logs/manifests/exits —
+`ui-preset-reformat-20261031/native-v6/`.
+Первый crew-v1 имеет30/30 UI и9 ARRIVED, но terminal TIMEOUT: purchase/exactdriver
+не подтверждены. Его отдельный state/coordinator не входит в canonical quota
+ownership; точный подguard HOLD_UNSAFE лог не раскрывает. Crew-v2 завершился
+с GROUP10_CREATED FAIL: INFANTRY GetDeploymentSize возвращает1 при desired10.
+Crew-v3 на исправленной canonical fixture: quota_slot_current1,
+managed_lookup_current1/coordinator_current1, initial10 через MOTORIZED_LIGHT,
+после native READY профиль INFANTRY восстановлен до coordinator. **30/30 UI PASS**,
+девять distinct ARRIVED/kit unchanged, native0/0/stopped2/fullfatal0, но
+**server7checks/1FAIL, TIMEOUT**: QUOTA_WAIT → ACQUISITION_STAGING_HOLD_UNSAFE,
+purchase0/exact driver не подтверждён. Public auditor1; strict Error30/158 FAIL.
+Owner repair не устранил HOLD_UNSAFE и не объявляется его доказанной причиной.
+Это новый сохранённый runtime blocker; guards, deadlines и success criteria
+не ослаблялись. Точный подguard требует отдельного decision witness.
+Evidence `crew-v1|v2|v3/`; последняя fixture compiled в native-v8.
+Синтетические24/64 UI rows — проверка presentation capacity, не утверждение
+о64 compartments реальной машины. Прокрутка проверяется по native endpoint и
+нормализованным0..1; screen pixels не сравниваются с workspace units.
+Scoped fixture override только hidden visibility позволяет вызвать настоящий
+handler/timer без focus и физического ввода. Внешний вид, clipping и управление
+мышью игроком остаются **NOT RUN**; прежние native/resource blockers #78 сохраняются.
+
+Команды/evidence нового среза: `.codex-runtime/ui-preset-reformat-20261031/`:
+`Invoke-AICFChecks.ps1 -Name <affected>`, `Prepare-UIStage.ps1 -NativeRun native-v6`,
+отдельные `Run-UIRole.ps1 -Role Server|Client|JIP -NativeRun native-v6 -SourceRun native-v6`,
+`Collect-UIRun.ps1 -NativeRun native-v6`. Runtime использует только canonical launcher.
+
+## Текущий срез r34 — 31.10.2026
+
+**269/269 PASS**, collector0/exact unique union/Logistics1/1038sourceSHA0.
+Все6 actual Root sessions77074/6995/87915/71699/49754/23935 closed0.
+Команды: `FreezeIssue78Current.ps1 -Label r34`, шесть
+`Invoke-OfflineShard.ps1 -PlanPath X:/r34-plan/plan.json -Shard N
+-EvidenceRoot X:/r34-shard-N`, `CollectFrozenFull.ps1 -Label r34` (exit0).
+Closures: finalization20261030 `r34-actual-session-closures.json`.
+
+Предшествующий r33 —268/269FAIL: `Remove-Item` получил IOException
+`Directory is not empty` в finally `Test-VehicleMultiSquadLogContracts`.
+Точная OS/handle причина не доказана; async job/writer в контракте не найден,
+после сбоя осталась пустая собственная GUID-папка. Исходные95 assertions и
+success oracle сохранены byte-exact; bounded5IOException retries100ms+
+verifiedabsence не скрывают assertion, permanent/nonIO failure или outsidepath.
+95 прежних+7cleanup controls PASS в обоих PowerShell; пустой остаток удалён
+адресно без рекурсии. Evidence `multi-log-contract-cleanup-r33/` сохраняет
+первоначальный FAIL и оба targeted повтора. Полный r34 выполнен после исправления.
+
+R34 отличается от r33 ровно этим одним test-only файлом; все388 production
+bytes равны (`r33-r34-exact-source-delta.json`). WB r33 production3graphs
+actual14760closed0/native0/validation/full9fatal0/source1038SHA0. Отдельно
+fixture-free player bundle4graphs actual84077closed0/native0/validation/
+full12fatal0/source388SHA0, resource50/52/78/78 strictFAIL. Player18DryRun
+PASS — планы, не настоящая игра. Полные команды/логи/manifest:
+`player-current-cut-20261031/compile-summary.json` и `dryrun-summary.json`.
+Ручное прохождение остаётся NOT RUN по `VEHICLE_VISUAL_CHECK.md`.
+
+Новые WCS2graphs raw390/compiled378 WB0/fullfatal0/source0; native3map gates
+выполнены после полного r34 и закрытия всех6 workers. Их подготовка и точные argv:
+finalization20261029 `quota/r33-current-cut-preparation/plan.json` и
+`wb-two-graph-final-summary.json`. Game code идентичен r34; CPU во время
+soleworld FPS-контролей удерживается отдельно от полного offline набора.
+
+| Текущий r33 game388, RHS+WCS | Cases | Actual exec / native | Hold,s | MinFPS all31samples | Strict resource |
+|---|---:|---|---:|---:|---:|
+| Arland |95/95PASS|97275closed1/native0|302.136|42.6PASS|206FAIL|
+| Everon |95/95PASS|81738closed1/native0|303.954|30.5PASS|466FAIL|
+| EveronNorth |97/97PASS|86468closed1/native0|303.942|36.2PASS|466FAIL|
+
+Все три остановились штатно; full3siblingfatal0/project0/source390SHA0/
+exactcanonicalCLI/ROSTER. Preflight каждый раз0game/WB; Root и остальные агенты
+держали C#/Full/WB/ZIP CPU HOLD на всём soleworld window. Все исходные samples
+включены в FPS gate, старт не вырезался. Это новый FPS PASS на данном запуске,
+а не доказательство причины устранения старого Everon23.0FAIL.
+North readback08:08:47.880 получил NATIVE_CENSUS_MISMATCH/UNKNOWN:
+registered112/examined112/invalid0/chars63/alive_counted63,
+active62/intended63/hard558. Последующие known этот negative не отменяют.
+Resource errors сохраняют общий strictFAIL всех3. Evidence/fullstoppedSHA:
+`quota/r33-current-cut-mapboot-v1/`. Ни bootstrap, ни300s hold не доказывают
+ручное прохождение, intervention dropped-weapon safety, purchase Catalog
+или полный2→4→6 MOVING.
+
+## Продолжение r31/r32 — 31.10.2026
+
+Опубликованы `bef490f`, `b46b7fa`, `c261d10`, `6bdb476`; PR79 остаётся draft,
+issue OPEN. Новый dropped-weapon safety код в рабочем дереве ещё не входит
+в приведённые ниже compile/native snapshots и пока не имеет runtime PASS.
+
+| Проверка | Фактический результат и scope |
+|---|---|
+| Full r31 | 267/267 PASS, exact unique union/Logistics1/1034SHA0; actual79929/27738/1591/14892/76061/57796 closed0. До accepted-retarget policy fix. |
+| Full r32 | 267/268 FAIL, единственный `Test-NativeGateCompletionContracts`: старый exact-prefix не учитывал новый Stop pending token. Все шесть sessions закрыты:25792/67792/95163/41775/74026/72631, shard5exit1, остальные0; source1035SHA0. |
+| Native gate contract после r32 | Dual PASS29controls+2executed unsafe. Точное требование Stop до invalid return добавлено; прежние listener/physical/deadline guards сохранены. Это не повтор полного r32. |
+| Production387 r32 WB | Stock/RHS/ArlandWCSRHS3/3 code compile PASS, actual66431closed0/native0/validation/full9siblingfatal0/source1035SHA0. Other Error50/52/78 strictFAIL. |
+| Mixed r32 WB | Controlled396/384 actual40831closed0; Multi392/380 actual11789closed0; Soak394/382 actual81393closed0. В каждом native0/validation/full3fatal0/source0 и resource50strictFAIL. |
+| Controlled r31 native900 | Actual93289closed1/native0/publicaudit1, elapsed900764ms. DEAD actor остался в seat: actual admission rejects original5/current6 после SAFE_REUSE_RETARGET. Decision observer позволил установить точную причину. |
+| Controlled r32 native900 | Actual62153closed1/native-1/publicaudit1. На306277ms наблюдались DEAD detach/own release/cap0/ACK/4ALIVE, но на628s native assertion VZ58 за world bounds. Full duration/liveness/stopped/fatal FAIL; все4 stopped logs, fatal1/other24/source396SHA0. |
+| Accepted-retarget D1 v1 | Отдельный opt-in wait-only observer, D1SHA185FD469...9845E; original48/10+new26/5 dualPASS. Actual35876closed0, WB396/384/native0/validation/full3fatal0/source0/resource50FAIL. Native NOT RUN. |
+| Accepted physical auditor | SHA3467D59E...30C20:56synthetic cases PASS (4positive/52negative), actual45131closed0. Authentic manifestA4799682...391C4/D1185F, canonical full strings с ` {}`; no numeric aliases. Это проверка аудитора, не native PASS. |
+| Public Catalog runner | Baseline PASS7stage/11CLI; после optional ControlledDepotSetup — dual PASS7stage/11CLI/+12setupCLI. Enabled/disabled, manifest mismatch, nonvehicle pre-Prepare rejection, missing/wrong/duplicate/unexpected manifest/console flags исполняются через actual CLI. Native этим тестом не запускается. |
+
+Команды: `FreezeIssue78Current.ps1 -Label r31|r32`, шесть
+`Invoke-OfflineShard.ps1 -PlanPath X:/r32-plan/plan.json -Shard N
+-EvidenceRoot X:/r32-shard-N`, `CollectFrozenFull.ps1 -Label r32` (exit1),
+`CompileFrozenProduction.ps1 -SourceRoot .../r32-source -Label r32`,
+`PrepareR32RepairDiagnostics.ps1 -FrozenLabel r32 -Kind Controlled|Multi|Soak
+-Label <fresh label>`, `Invoke-R31ControlledDecision.ps1 -Faction USSR
+-DurationSeconds 900 -ProofVersion 4 -SkipCompile -StageRoot
+.../controlled-r32-decision-v1/stage` с прежними observers.
+Управляемый тест делает один Kill и обычный exact-revision RESET; исходный
+Soak auditor не ослаблялся. R32 RESET произошёл до accepted retarget: migration
+fence этим запуском не проверен. Отдельный D1 ждёт обычного actual accepted
+retarget, не вызывает его сам и сохраняет исходный180000ms post-Kill bound.
+
+VZ58 episode323: removal06:38:08.619 у поверхности, mainworld/current master,
+нет parent/slot/storage/hands/weapon-slot; source — current FIA SL. Через5.078s
+предмет уже105.055m ниже terrain, через96.568s —33634m ниже; затем
+`enf_entity.cpp:280`. Первый момент penetration не записан. Непосредственный
+инициатор native drop не доказан; MAIN_UNMANAGED/FIA не означает stock-only
+причину. Ни причина freefall, ни отсутствие связи с проектом не объявлены
+доказанными. Пять секунд readonly observer недостаточны для короткой коррекции.
+Изменение world bounds, дальний перенос, heal/resurrection не применялись.
+Pre-stop hash crash.log был недоступен из-за native file lock; ошибка сохранена,
+валидные hashes взяты только после адресной остановки exact ownedPID30704.
+
+Evidence: finalization20261029 `r31-*`, `r32-*`, `r32-expanded-compile-verdict.json`;
+finalization20261030 `r31-r32-actual-session-closures.json`,
+`controlled-r31-USSR-900-v2/`, `controlled-r32-USSR-900-v1/`,
+`controlled-r32-accepted-retarget-v1/`, `catalog-runner-controlled-final-v2-*`,
+`vz58-r32-readonly/`, `captured-casualty-cleanup-fix/controlled-observer-rebind-v1/`,
+`captured-casualty-cleanup-fix/controlled-observer-v1/accepted-audit-ready.json`.
+Строгие native-only persistence/resource/font/GUID/lighting blockers и visual
+NOT RUN остаются отдельно; старые PASS ниже не заменяют новые gates.
+
+## Возобновление #78 — 30–31.10.2026
+
+Новый `r30` завершён04:02: **265/265 PASS**, collector0/exact unique union/
+Logistics1/1029sourceSHA0; all6 actual sessions2294/76993/98211/13667/92134/
+30786 closed0. Fresh elevated CIM04:02:53 native/Workbench/shard workers0,
+free20.16GiB. Команды: `FreezeCompletedRepairs.ps1 -Label r30`, шесть
+`Invoke-OfflineShard.ps1 -PlanPath X:/r30-plan/plan.json -Shard N
+-EvidenceRoot X:/r30-shard-N`, затем `CollectFrozenFull.ps1 -Label r30`.
+Неготовые GROUP3 files в snapshot взяты из HEAD, live WIP не проверялся.
+
+Snapshot включает final90/15 captured-dead commit proof, прежний250/28 hold,
+новый exact Census contract479/21. Production386 WB3graphs0/validation/
+full3siblingfatal0/rawSHA0, actual98203closed0; otherError50/52/78FAIL сохранены.
+Mixed Soak393/Multi391/controlled394: actual80680/76404/88927 closed0,
+native0/fullfatal0/source0. First controlled fixture v1 WB1/native-1/fatal273
+(собственные Formula too complex +cascades) сохранён; predicate guards разбиты
+эквивалентно. Actual whole controlled observer48/10PASS — simulated boundaries,
+не физический Kill/detach proof. Новый native пока отдельный ожидающий gate.
+Два WCS388graphs отдельно WB0/fullfatal0/SHA0, other78Erows каждый сохранены.
+
+### RHS+WCS v4 на r30 — полные stopped результаты
+
+После265/265 и всех6 actual offline closures выполнены три последовательных
+soleworld запуска через `RunFrozenR30WCSBoot.ps1 -Phase Run -Variant
+ArlandWCSRHS|EveronWCSRHS|EveronNorthWCSRHS -PreparedRoot ... -EvidenceRoot ...
+-Port 2710|2711|2712`, explicit pwsh/elevated/canonical launcher. Два immutable
+stage содержат386production+2readonly MapBoot probes, raw388/compiled376.
+
+| Variant | Cases | Hold после DONE, с | Мин. FPS | Прочие native Error rows |
+|---|---:|---:|---:|---:|
+| ArlandWCSRHS | 95/95 PASS | 301.829 | 41.6 | 206 FAIL |
+| EveronWCSRHS | 95/95 PASS | 304.331 | 23.0 FAIL | 466 FAIL |
+| EveronNorthWCSRHS | 97/97 PASS | 304.199 | 33.8 | 466 FAIL |
+
+Actual sessions61936/6292/15356 CLOSED1; native exit0 каждый. Все9 полных
+stopped sibling logs сохранены с SHA: fatal0/project0, source388SHA drift0,
+exact canonical CLI/ROSTER_READY, normal shutdown и own CIM0. Все20 quota
+readback samples каждого прогона known, UNKNOWN0; непрерывная Census equality
+не заявляется. FPS all-sample gate≥30 сохранён, включая Everon23.0 до ROSTER.
+Ресурсные ошибки не whitelist: strict verdict всех трёх FAIL. Нормализованные
+категории/количества console Error совпали с V27, что не снимает blocker.
+
+Native windows04:03:22.794–04:08:53.031 /04:09:07.588–04:14:53.340 /
+04:15:06.252–04:20:48.864MSK. Root согласовал CPU HOLD: без WB/Full/targeted
+C# в этих windows; разрешены docs/Git/light readonly. Fresh elevated CIM
+04:20:58: native/WB0, free20.568GiB. Причинный вывод об FPS не делается.
+Это не ordinary1800, combat/MOVING6, controlled casualty physical или client/JIP
+gate; новые диагностические fixtures этим не объявляются проверенными native.
+
+Evidence: ignored `.codex-runtime/issue78-finalization-20261029/quota/
+wcs-final-cleanup-mapboot-v4/three-map-summary.json`, SHA256
+`A7F279893FF4C6D983E688E70F8AB77B66D017BF0E90F05F55BC3F5D22EB641E`;
+per-case native exit/actual runner closure, raw manifest, CLI manifest,
+full-stopped logs SHA, fatal/resource/FPS/quota indexes находятся рядом.
+Строгие native/resource/persistence gates не закрыты. Scope/paths —
+[ISSUE78_STATUS.md](ISSUE78_STATUS.md#новый-код-и-gates-r30).
+
+### Предыдущие snapshots r29/V28 и сохранённые FAIL
+
+Поздний Catalog v26 проверен отдельно от All265: raw387=386production+fixture,
+WB50727 actualCLOSED0/native0/full3fatal0/source0. Исходный commit whitespace
+FAIL исправлен удалением только двух terminal LF, code prefix byte-identical;
+v25 не изменён, v26 пересобран на новом hash. Server/Client81236/97717 CLOSED0,
+native0/0, public audit1/1: server BOUNDED_TIMEOUT300299ms, factory/debit0;
+client functionalPASS. Full6logs fatal0/resources14/118/other748/748FAIL.
+Каждый console содержит362 UnknownClass SCR_EntityCatalogSpawnerData: новый
+fixture modded class потерял штатные annotations, catalogs assets0. Это
+собственный дефект стенда, не допустимый baseline. Нужны исправление exact
+pinned header и свежий native proof; предыдущий compile не доказывает runtime
+serialization. Source387SHA0/полные exits/logs/actualCIM0 сохранены в
+finalization20261030 `catalog-native-v26-slot-preflight/`.
+
+Отдельная гипотеза startup stagger не подтвердилась: EveronWCSRHS B1000
+на386production+3fixtures/raw389 дал95/95 initial PASS и minFPS22.9 до
+ROSTER. WB v2 actual9790closed0/native0/full3fatal0/SHA0; первая v1 signature
+FAIL сохранена. После300.092s от DONE диагностический teardown получил
+VM/null `m_bScheduled` в `AICF_StartupCancel`, normal shutdown не завершён.
+Actual71396 CLOSED1/native-1, fullfatal8/resource462FAIL/raw389SHA0; остановлен
+только verified own process, fresh elevated CIM04:43:53 native/WB0. Исходный
+hold/shutdown gate FAIL; observed300s не выданы за его PASS. A0 не запускался,
+prototype в production не перенесён, причина FPS UNKNOWN. Commands/полные
+stopped logs/source/closure: finalization20261030
+`startup-stagger-r30-prototype-v1/`. Это не новый дефект Core.
+
+Свежий полный `r29` собран31.10 в03:40MSK: **264/264 PASS**, collector0,
+exact unique union/Logistics1/1027SHA0; actual sessions
+22157/49025/28380/73037/85932/94111 все закрылись0. Команды:
+`FreezeCompletedRepairs.ps1 -Label r29`, шесть `Invoke-OfflineShard.ps1
+-PlanPath X:/r29-plan/plan.json -Shard N -EvidenceRoot X:/r29-shard-N`,
+`CollectFrozenFull.ps1 -Label r29`. Неготовые3 GROUP Catalog files взяты из
+published HEAD; живой WIP сохранён отдельно и не объявлен проверенным.
+Все386 production bytes совпадают с фактически compiled V28; новые изменения
+r29 касались harness/docs. Это не новый запуск Workbench.
+
+Отдельный peer после freeze воспроизвёл **новый production FAIL** старого
+captured-dead handler: последний seat.GetOccupant callback меняет controller,
+PM controlled-id, possessing main-id либо PC.ControlledEntity, но Kick всё
+ещё исполняется. Все4 counterexamples сохранены в
+`captured-casualty-cleanup-fix/late-seat-peer-*` под finalization20261030.
+Эти случаи ещё не входили в264; итоговый PASS r29 не снимает найденный blocker.
+Нужны final commit actor proof, расширенный contract и новые WB/All/native.
+
+Первый новый completed-repair snapshot `resumed-staging-cleanup-v28`:
+**262/264 PASS,2 FAIL**, collector1/exact unique union/Logistics1/1027SHA0.
+Все6 exec sessions закрыты:22941/36691/39138/48326 exit0,66723/23758 exit1.
+Новый cleanup contract сначала применял C#6 null-conditional syntax и default
+literal: canonical WindowsPowerShell5.1 Add-Type отверг его. Harness исправлен
+без изменения65cases/13mutants; реальные WinPS5.1 и pwsh повторы дали те же
+65/13 PASS. Исходный FAIL и оба shell outputs сохранены.
+
+Второй FAIL — `Test-CheckRunnerContracts`: временный Git не записал empty-tree
+object из-за `Filename too long`. Для init/commit собственного fixture задан
+только command-scoped `core.longpaths=true`; глобальные настройки не меняются.
+Отдельный native control на физическом fixture path221/object276 воспроизводит
+Git exit1/`Filename too long` с false и exit0 с true. Повторы полного старого и
+нового контракта через другой короткий exposed X path оба дали0: это не
+выдаётся за воспроизведение всего исходного окружения. Неудачная попытка
+прямого запуска на слишком длинном physical path упала раньше в Copy-Item и
+сохранена отдельно. Свежий полный повтор r29 приведён выше.
+
+Production386 нового hold/cleanup уже прошёл WB Stock/RHS/ArlandWCSRHS3/3,
+runner8904 actual0/validation/full3siblingfatal0/sourceSHA0; прочие Error rows
+50/52/78 не исключены из strict baseline. Диагностические Soak392/Multi390
+скомпилированы отдельно, rawSHA0. Эти compile PASS не заменяют Full264 FAIL
+или ещё не запущенные native регрессии. Evidence: `staging-cleanup-v28-*`,
+`resumed-staging-cleanup-v28-*`, `ordinary-staging-cleanup-diagnostic-source-v9/`,
+`multi-staging-cleanup-diagnostic-source-v7/`, `runner-long-path-regression-v2/`
+в ignored finalization20261029; dual-shell cleanup — finalization20261030/
+`captured-casualty-cleanup-fix/CSHARP5_READY.json`.
+
+Поздние остановленные ordinary1800 и RHS+WCS topology результаты разобраны в
+[ISSUE78_STATUS.md](ISSUE78_STATUS.md#остановленные-ordinary1800-на-topology-v27).
+Оба ordinary получили оплаченные исходные5 и exact5seats на production384,
+native0/source390SHA0, но route/strict gates FAIL. Actual runner closures:
+US61868 exit1, USSR64400 exit1; observer watchers68877/47424 exit0.
+Новые staging-hold/captured-dead production изменения в эти игры не входили.
+Их следующий frozen All/Workbench/native результат необходимо записать отдельно.
+
+Новый frozen `resumed-topology-v27` завершён31.10 в01:24:52MSK:
+**262/262 PASS**, collector0/exact unique union/Logistics1/1021sourceSHA0.
+Все шесть actual exec sessions closed0:34471/43810/14042/5181/20375/52301.
+Fresh elevated CIM после collector: native/Workbench/Full workers0. Snapshot
+включает production `CollectSeats` fix `83E62641`, Catalog client helper
+`9848FDB7` и расширенный Census observer `91F613CE`. Поздние doc-only receipts
+не входят в frozen1021; code/contract bytes не менялись. V26 остаётся подготовкой
+без выполнения All, старые V23 interruption/V24 compileFAIL сохранены отдельно.
+
+Команды: `FreezeForChecks.ps1 -Label resumed-topology-v27 -UseLatestSchedulingHistory`,
+`Invoke-OfflineShard.ps1 -PlanPath X:/resumed-topology-v27-plan/plan.json -Shard N
+-EvidenceRoot X:/resumed-topology-v27-shard-N` для N1..6, затем
+`CollectFrozenFull.ps1 -Label resumed-topology-v27`: все exit0. Новый actual
+topology contract воспроизводит старый отказ3cases, новый36cases/8unsafe PASS;
+Backend/Dispatch до/после и независимый Root replay PASS. CompileFrozenProduction
+на этом source: Stock/RHS/ArlandWCSRHS3/3PASS, native0/validation/full3sibling
+fatal0, session34961closed0. Combined Soak390v8/Multi388v4 отдельно WB0/fullfatal0/
+source0, sessions40727/65151closed0. Catalog v22 fixture в новом stage-v23
+elevated WB0/fullfatal0/source385SHA0/session85753closed0; первый platform-init
+FAIL stage-v22 без необходимых прав сохранён без validation/PASS.
+Native нового кода **NOT RUN**; далее результаты должны записываться отдельно.
+
+Evidence: `resumed-topology-v27-result.json`, `...-source-verification.json`,
+`...-session-closure.json`, `topology-v27-three-graph-expanded-verdict.json`,
+`ordinary-topology-diagnostic-source-v8/`, `multi-topology-diagnostic-source-v4/`
+в `.codex-runtime/issue78-finalization-20261029/`; Catalog stage-v23 и targeted
+baseline — в `.codex-runtime/issue78-finalization-20261030/`.
+
+После V25 выполнены дополнительные native проверки на том же production384
+`ef2204a`; это результаты до следующего topology исправления:
+
+- Multi MOVING/CAPACITY/PRODUCTION_BACKGROUND/ROOT_ONLY1800: native0,
+  elapsed1800389ms/wall1822.751s; source388SHA0/full stopped logs. Cohort2,
+  completed0, три PRESET_BOARDING_DEADLINE, один TRANSIT_DEADLINE_EXPIRED,
+  final route incomplete. USSR0 реально посадил5, проехал≥878.911м и11legs,
+  но исходный absolute deadline не прошёл. Full fatal12raw sibling rows
+  (два MEANINGFUL_TASK_DEADLINE_MISSED и два CORE_BRIDGE, каждый в трёх logs),
+  прочие native Error rows28FAIL. Runner32485closed1/watcher23932closed0;
+  native exit0. Functional/fatal/resource gates FAIL, duration/liveness/
+  provenance PASS. Production background audit, который не выполнялся,
+  остаётся NOT RUN, даже если счётчик по умолчанию равен0. MinFPS48 при
+  смешанной нагрузке не выдаётся за single-world performance proof.
+- USSR diagnostic600v3: native0/fullfatal0/source390SHA0, elapsed600678ms,
+  boarding deadline439653ms/route incomplete, resources32FAIL; runner14617
+  closed1/watcher7493closed0. Последний foot actor29.2688м вне прежнего25м
+  cap; это самостоятельный отказ, лимит не расширен. MOB periodic readback
+  трижды увидел internal_task1/egress_required0 после fallback всех5пешком;
+  это не arrival/route PASS и не исходные atomic audit locals.
+- US diagnostic600v1 с новым Census observer: native0/audit1,600935ms,
+  boarding deadline353590ms/route incomplete, full3sibling fatal0/
+  other native Error32FAIL; runner97880closed1/watcher5650closed0. При
+  свежем AFTER_DECISION обходе car20EC наблюдены
+ 316nodes/204character subtree nodes, complete/stable1 и parent/world/
+  duplicate/truncated0. Это подтверждает дефект256node полного обхода на
+  таком дереве; original decision locals не записаны атомарно.
+- Catalogv20: server/client native0/0, но BOUNDED_TIMEOUT300798ms до выбора,
+  factory/callback/debit0. Fullfatal0, strict server14resource+24other /
+  client118resource+24other FAIL. Новый client identity v22 пока проверен
+  actual30/7unsafe и полным Catalog contract; WB/native NOT RUN.
+
+Evidence: `.codex-runtime/issue78-finalization-20261030/` —
+`multi-mob-moving-v1`, `ordinary-mob-USSR-diagnostic-v3`,
+`ordinary-census-US-diagnostic-v1`, `catalog-native-v20-mob-source`.
+Первые WinPS5.1 redirected-stderr запуски USSRv2/Catalogv20 завершились
+launcher NativeCommandError до подтверждённого native shutdown: native exit
+UNKNOWN, игровой verdict отсутствует. Исправные повторы запускались явно
+через `pwsh -NoProfile -File`; исходные неудачи сохранены отдельно.
+Полные native resource/persistence gates остаются FAIL независимо от новых
+проектных исправлений. Диагностические600с не заменяют ordinary1800.
+
+Три RHS+WCS bootstrap завершены на immutable production384 из
+`resumed-idle-v23`/`player-build-idle384`, **до следующего MOB исправления**.
+Каждый stage содержит384production+2readonly fixtures; полный raw386 set/SHA
+до/после без drift. Два WCS addon graphs (Арланд и общий Эверон/север)
+прошли terminal Workbench exit0/validation/fullfatal0/postSHA0. Их78прочих
+Error-строк на graph сохранены отдельно:39различных текстов в console/error
+sibling logs, включая14StringTableSource ссылок установленных RHS/WCS gproj.
+Project-owned ошибочная ссылка или dependency по этим14refs не найдена;
+25остальных UI leak строк этим разбором не приписываются внешнему владельцу.
+
+Все три native выполнялись последовательно в единственном world, без
+параллельного Workbench/полного offline CPU. Canonical CLI, ROSTER_READY,
+native0, полный штатный shutdown, source SHA и закрытие всех трёх runner
+sessions подтверждены. Resource gate остаётся FAIL:
+
+| Вариант | Runtime cases | Hold после RUNTIME_DONE, с | Full fatal/project | Прочие native Error rows | Минимум FPS |
+|---|---:|---:|---:|---:|---:|
+| ArlandWCSRHS | 95 PASS | 302.214 | 0/0 | 206 FAIL | 42.2 |
+| EveronWCSRHS | 95 PASS | 306.486 | 0/0 | 466 FAIL | 22.9 FAIL |
+| EveronNorthWCSRHS | 97 PASS | 304.105 | 0/0 | 466 FAIL | 32.4 |
+
+Error rows учитывают полные sibling logs, включая дубли console/error;
+в console соответственно103/233/233. Everon22.9FPS наблюдались до
+ROSTER_READY в чистом single-world окне;30samples после RUNTIME_DONE
+имеют минимум50.2. Это не отменяет исходный общий FPS FAIL; причина просадки
+UNKNOWN. North подтвердил фактические7баз/2HQ/5points. WCS inventory-verified
+KIT_APPLIED присутствуют42/58/61раз; это не visual proof или полный loadout gate.
+Read-only quota observer видел NATIVE_CENSUS_MISMATCH в1/20Arland и3/20North
+пятнадцатисекундных samples; Everon0/20. Эти polls не доказывают длительность
+или причину UNKNOWN и не превращают bootstrap в quota acceptance.
+
+Evidence: `.codex-runtime/issue78-finalization-20261029/quota/wcs-idle-mapboot-v1/`
+(`three-map-summary.json`, `closed-inventory.json`, каждый `native-*/verdict.json`,
+full logs/SHA, `runner-session-closure.json`); stages
+`arland-wcs-idle-source-v1`/`everon-wcs-idle-source-v1`. Исходные384SHA совпадали
+с checkout при подготовке23:24; последующие MOB изменения в этих играх отсутствуют.
+Frozen runner до первого запуска сохранён; обратные перечисленные epoch/WCS
+замены точно восстанавливают прежний строгий RHS runner. Запуск:
+`quota/RunCurrentIdleWCSBoot.ps1 -Phase Validate|Run|Audit -Variant
+ArlandWCSRHS|EveronWCSRHS|EveronNorthWCSRHS -PreparedRoot ... -EvidenceRoot ...`;
+native только через `tools/Start-AICFRuntime.ps1`. Все sessions закрылись1 из-за
+resource gate, сами native процессы завершились0. Terminal map boot не упражняет
+physical preset/короткую посадку, обычный1800s бой, MOVING6, client/JIP или visual;
+эти gates данным результатом не подтверждаются. Issue остаётся OPEN, PR draft.
+
+Три прежних RHS bootstrap на exact human383 из `resumed-human-v20` завершены
+последовательно, по одному native world. В каждом stage383production+2readonly
+fixtures, rawSHA до/после без drift; подготовка Stock/RHS graph WB0. Body/Service/
+WorldState pins: `EC9CDDA8`/`66B86FF5`/`C9CE1F49`. Canonical CLI, ROSTER_READY,
+полные остановленные sibling logs и native0 подтверждены для всех трёх:
+
+| Вариант | Runtime cases | Hold после RUNTIME_DONE, с | Full fatal/project | Resource errors | Минимум FPS |
+|---|---:|---:|---:|---:|---:|
+| RHS Арланд | 95 PASS | 302.054 | 0/0 | 136 FAIL | 43.5 |
+| EveronRHS | 95 PASS | 304.075 | 0/0 | 396 FAIL | 27.3 FAIL |
+| EveronNorthRHS | 97 PASS | 304.466 | 0/0 | 396 FAIL | 36.4 |
+
+Строгий итог всех трёх — FAIL по полным resource/native error logs. Everon также
+не прошёл общий FPS≥30:27.3 в единственном world до ROSTER_READY;30 последующих
+samples после RUNTIME_DONE≥55.5 не отменяют FAIL, причина просадки UNKNOWN.
+На North во время окна выполнялись короткие Workbench проверки v16/v17; это
+не контроль без другой CPU нагрузки. North подтвердил7баз/2HQ/5points.
+Последний globalCIM[]21:54:29,
+собственных native процессов0. Это terminal map boot, не visual black-screen
+проверка, не quota pressure, не ordinary1800 или MOVING6.
+
+Evidence: `.codex-runtime/issue78-finalization-20261029/quota/rhs-human-mapboot-v2/`
+(`three-map-summary.json`, каждый `native-*/verdict.json`, полные logs/CLI/SHA/
+closed-inventory). Новый isolated runner `quota/RunCurrentHumanRHSBoot.ps1`
+в том же ignored checkpoint использует `-Phase Validate|Run|Audit -Variant
+RHS|EveronRHS|EveronNorthRHS -PreparedRoot ... -EvidenceRoot ...`; runtime только
+через `tools/Start-AICFRuntime.ps1`. Старые runners/stages не перезаписаны.
+
+Полный `resumed-mob-v25` завершён31.10.2026 в00:11: **261/261 PASS**,
+collector0/exact unique union/Logistics1/1019frozenSHA без drift. Все шесть
+новых exec sessions фактически закрылись0:70097/27892/71785/82797/51472/41977;
+Logistics145cases завершён один раз в00:10:41. Fresh elevated inventory
+00:11:15: native/Workbench0, free21.668GiB. Это самостоятельный полный запуск,
+без наследования недоступных exit codes старого V23. Команды: `FreezeForChecks.ps1
+-Label resumed-mob-v25 -UseLatestSchedulingHistory`, canonical
+`Invoke-OfflineShard.ps1 -PlanPath X:/resumed-mob-v25-plan/plan.json -Shard <N>
+-EvidenceRoot X:/resumed-mob-v25-shard-<N>` для N=1..6, затем `CollectFrozenFull.ps1
+-Label resumed-mob-v25`; все закончились0. Cache junction указывает на pinned
+`.cache/reforger-api` проекта, единственный Logistics находится в shard1.
+
+Snapshot включает MOB internal-task исправление, финальный MobDecisionProbe
+`1C1A1CA0` и observer runner. Production384 set/SHA в V24 и V25 идентичны:
+ранее выполненные Stock/RHS/ArlandWCSRHS3/3 terminal WB относятся к тем же bytes,
+повторных трёх запусков для V25 не заявляется. Combined Soakv6raw390/378sources
+и Multiv3raw388/376sources также прошли WB0/validation/fullfatal0 до начала All.
+Первый combined Soakv5 WB FAIL сохранён: локальное имя `owned` было запрещённым
+идентификатором Enforce; исправлен только test-only alpha rename. Frozen V24
+с1019файлами/261checks сохранён как PREPARATION_NOT_RUN_SUPERSEDED, ни одного
+All session на нём не запускалось. Не считать эту подготовку выполненным набором.
+
+Evidence: `.codex-runtime/issue78-finalization-20261029/` —
+`resumed-mob-v25-result.json`, `resumed-mob-v25-source-verification.json`,
+`resumed-mob-v25-session-closure.json`, `resumed-mob-v25-closed-inventory.json`,
+`resumed-mob-v25-freeze-ready.json`, plan и полные261check logs. После freeze
+менялась только живая отчётная документация; frozen1019не изменялись. Этот All
+не заменяет runtime MOB/новой посадки, ordinary1800/MOVING6, Catalog purchase,
+client/JIP и visual gates; WCS matrix выше относится к прежнему pre-MOB384.
+
+Прежний frozen `resumed-idle-v23` с production384 и passive Idle boarding fix:
+**259/259 PASS**, exact unique union,1014 frozen SHA без drift, один завершённый
+`Test-LogisticsContracts.ps1`. Исходный запуск шести shards прерван при отказе
+локальных инструментов около22:54; сохранились246 завершённых PASS. После
+восстановления выполнены только13 отсутствовавших результатов на том же
+неизменённом snapshot: resume session74267 завершена0, combined collector0,
+полные259 check logs доступны. Это объединение исходного и возобновлённого
+запуска; нормальные exit codes прежних шести сессий недоступны и не объявляются0.
+Первоначальный неполный запуск сохранён как `INTERRUPTED_INCOMPLETE`, в том числе
+прерванная первая попытка Logistics. Fresh elevated inventory23:34:15 не содержит
+игровых/Workbench процессов или родителей resume. Проверка не включает поздние
+Catalog subscription/pending изменения после freeze и не заменяет native gates.
+Evidence: `.codex-runtime/issue78-finalization-20261029/` —
+`resumed-idle-v23-combined-result.json`, `resumed-idle-v23-interruption.json`,
+`resumed-idle-v23-resume-closure.json`; snapshot head `8f2f7ac3` задаётся plan/SHA,
+а поле Git commit в context runner отражает live ancestor repository.
+
+Прежний `resumed-human-v20`: **255/255 PASS**, collector0/exact unique union/
+Logistics1/1005frozenSHA0/6sessionsclosed0. Human bridge383payload
+`26652760F0A75381934BCE7AC5AB071E48DB19507F14A592189A14911D090823`:
+terminal Stock/RHS/ArlandWCSRHS3/3 PASS/native0/validation/fullfatal0/postSHA0.
+Поздние Catalog oracle/metadata-only observer supplements и pressure child-kind
+diagnostics не входят в этот frozenAll. Native pressure не объявляется PASS по255.
+
+Catalogv10 двумя полными scans доказал retained unowned STOCK avatar: exact
+entity/Rpl, master0, native player/PM/main-ID1/exactcontrolledbody. Body.MatchesIdentity
+master-strict сохранён. Новый world-scoped typed retirement допускает только
+подтверждённый human, absent либо inactive+uncounted agent и полный свежий snapshot;
+снимает только binding/record, physical меняется следующим ApplyCensus. End того
+же мира допустим, successor/ledger/controller/epoch/record replacement и Begin→End
+ABA отклоняются (GetLastEpoch). Actual44/7unsafe+independent31 PASS, oldBuildCounts
+на том же positive FAIL; Backend116/8/Character41/5/Producer28/8 PASS.
+
+Catalogv11 native server/client0/0: AI_QUOTA_HUMAN_BINDING_RETIRED и последующий
+CENSUS_RESTORED реально подтверждены, без actor/native-counter writes. Сам Catalog
+group всё же FAIL:300s/0selected/0factory/0debit; проверяется enumeration native
+catalog metadata. Serverfatal0/resources6/other24, clientfatal0/resources118/other24;
+strictFAIL. v10 addressed-1/-1 и полный v9 TIMEOUT сохранены. Public Catalog oracle
+peer выявил3actualCLIfalsePASS (NaN cost, GameDestroyed доDONE, unknown(E) marker),
+все3 исправлены и повторены negative1/positive0; поздний supplement отдельный.
+
+Чистые old383 pressure controls без второго native world/полного All показали
+minFPS53.1 и41.3, но оба functionalFAIL EXTRA_STOCK_IDENTITY_OR_BIRTH. Второй
+afterdecision receipt доказал прежниеgroup/Rpl/worldlookup, actualAgents1 через
+40.5sпослеveto. Тип/происхождение агента пока UNKNOWN: это не доказанный новый
+stock character или quota overshoot. Native0/fatal0/resources28/source0, все
+исходные FAIL сохранены. Прежние22.2FPS под параллельным All не приписываются
+только production коду; необязательные membership sets не применены.
+
+После опубликованного draft79/HEAD5c87bae пользователь возобновил исправления
+и запросил RHS Арланд/Эверон/север без вопросов. IssueOPEN/strictFAIL сохраняются.
+Новый baseline `resumed-baseline-v15`:238/242 PASS,4FAIL, collector1/exact union/
+Logistics1/977frozenSHA0/6sessionsclosed. Первоначальные FAIL сохранены:
+LoadoutLibrary junction permission (unchanged frozen повторён с нужными правами,
+19PASS); два Stage3.5 literal/старого floor owner аудита (actual source изучен,
+строгие equivalent/owner checks и mutants обновлены); FIAIntegrity initial gate.
+Последний обнаружил реальную postquota RecoveryBan callback ошибку: HEAD-before
+GetIn1, после повторных health/lifecycle/quota guards GetIn0. Integrity24rules/
+27mutants PASS. Все checks остаются в canonical runner; нужен новый полный All.
+
+Повторный `resumed-fixed-v16` завершён: **247/247 PASS**, collector0/exact unique
+union/Logistics1/987frozenSHA0, все6sessionsclosed0. Запущен через тот же canonical
+runner с необходимыми правами для тестовой junction; старые4FAIL не переписаны.
+Это snapshot382production и247checks на момент freeze. Более поздние native
+fixture/bootstrap/log-auditor изменения проверяются отдельно и не приписываются
+этому All. В частности выявленный Root CLI-counterexample ENGINE(F)/GUI(E) в
+новых Catalog/Compartment auditors требует строгого исправления и supplement.
+
+Поздний actual supplement: compartment native auditor25source/23log/14настоящих
+WinPS5.1 CLI cases PASS+independent peer. ENGINE(F), GUI(E), unknown(E), plain
+Virtual Machine Exception/Application crashed, отсутствие CLI/ROSTER_READY/
+GameDestroyed и native exit-1 отклоняются. Это test-only delta после full247.
+Native compartment-v3: setup/fullStock0factory/preserved/release PASS, но first
+positive0factory FAIL/native0/fatal0/resources28FAIL. DIAG-v4 зафиксировал exact
+USE_REJECTED had_native_row1/native_row_present0 при charReservation1/available1,
+ctxCurrent1/carHoldCurrent1/freshUseCurrent1/metadata1/1/native3gates1. Причина —
+weak old census row после ReserveUnits→RefreshCensus. Strong local census anchor
+с прежним post-reservation IsCurrent проходит28actual/8unsafe, backend116/8 и
+Entry56, independent peer0. Native positive ещё выполняется; первые fixture WB
+ordering/prototype FAIL сохранены.
+
+Native stock-pressure-v1 остановлен после доказанного production отказа, до600s:
+штатный randomizer Campaign_US_AI вернул конкретный Rifleman variant, а строгая
+requested-prefab equality объявила NONNULL_BODY_IDENTITY_CHANGED. Native body и
+reservation удержаны до остановки собственного world, обхода admission нет.
+Native-1/addressed stop, source0, fullfatal3 (тот же quarantine в sibling logs),
+resources24FAIL. Это не PASS pressure; closed-set variant fix исследуется.
+
+После requester proxy/census lifetime fixes заморожен resumed-combined-v17:
+**249/249 PASS**, collector0/exact union/Logistics1/992SHA0/6sessionsclosed0;
+terminal Stock/RHS/ArlandWCSRHS3/3 PASS,382payload638C6320…770A2/postSHA0.
+Последующий randomizer fix и fixture async/logging delta в snapshot не входят.
+V17 freeze первоначально завершился ошибкой
+WinPS5.1 scheduling DateTime array conversion; точный уже скопированный source
+планируется тем же helper через PowerShell7, состав проверок не менялся.
+
+Следующий variant-v18 compile получил Formula too complex в CanRollbackGroupBirth
+с каскадными ошибками классов; все3graphs FAIL/native-1. Полные логи сохранены,
+условие разбивается без ослабления guards, post-metadata native gates и reentry
+fences уточняются по actual replay. Full V18 не запускался: snapshot известного
+compile FAIL не объявляется новым PASS.
+
+Исправленный `resumed-native-v19`: **250/250 PASS**, collector0/exact unique union/
+Logistics1/994frozenSHA0/6sessionsclosed0. Current383payload
+`5E7A1FAB07A52BD075FF5E937CE15CBBA39AD6CEEBFFA9D5454AE2D03D7FB255`:
+terminal Stock/RHS/ArlandWCSRHS3/3 PASS/native0/validation/fullfatal0/postSHA0.
+Variant actual28/8/4source и independent peer закрывают stale observation writes;
+native randomizer chain Ex(true) сохранён. Более поздние compartment initial-wait/
+known-tail, Catalog telemetry и новый tracked pressure harness — отдельные
+test-only supplements после этого freeze, не входят в250.
+
+Native stock-pressure-v2 на этом383: native0/wall263.132s/fullfatal0/project0/
+source385SHA0 (383production+2fixtures), functional audit0 и Root independent
+full-stopped review0. STOCKphysical128/reserved0 удерживались156024ms, extraStock
+дал0actors/0intended increment; normal4paidjoins довели прежний US slot0/group/
+generation/originalactor до exact5. Scope только STOCK_CHARACTER_MANAGED_RECRUIT,
+не universal quota/MOVING2→4→6. Native root→Rifleman variant BOUND подтверждён.
+Resources28FAIL/minFPS22.2 (17из24samples ниже30), strict overallFAIL. Readonly
+super-once RefreshCensus profiler выявил высокую стоимость; оптимизация pending.
+
+Catalog diagnostic-v6 подтвердил настоящий server avatar proxy: actual player1/
+actor1, Rpl present1/valid1/mainWorld1/master0. Production master-veto reproducer
+FAIL; минимальный requester-only fix131actual/11unsafe/3pins, peer0 и terminal
+Stock/RHS/ArlandWCSRHS3/3 PASS. Это production delta после full247/38288B2;
+нужен новый полный набор и native positive. Producer/AI master не ослаблялись.
+
+Current frozen382production `88B2F10A1CF26726F9BB235341DADBED1A060F4D563517DC8D3C99E155DEB075`:
+terminal Workbench Stock/RHS/ArlandWCSRHS3/3 PASS, fullfatal0/postSHA0/current
+production match0. Включены новые trip/site/prefab/freshclock guards, existing
+inactive character custody и compartment newborn producer. Targeted actual:
+Root58/21, character37/5, constructor44/13/9strong, nativequeue bootstrap10/5,
+floor audit7/9, compartment27/7 (external service boundary simulated). Native
+pressure/каталог/real compartment positives ещё отдельные незавершённые gates.
+
+Первый native Catalog group тест завершился server access violation до actual
+avatar/catalog purchase:18:53:30.463/native-1073741819, client0 с двумя frontend
+SCRIPT(E). Cause UNKNOWN, full dump/logs/version1.8.0.13/382sourceSHA сохранены.
+Предположение про loadout index-1 опровергнуто pinned guard318-323, не является
+установленной причиной. Fixture переводится на validated native faction/loadout/
+spawnpoint workflow; это отдельный control, не доказанное однофайловое A/B.
+
+RHS Арланд/Эверон/север на предыдущем immutable380+2fixtures прошли300s:
+wall333.55/347.68/349.39, native0/project0/fullfatal0/source0,95/95/97cases,
+20readonly samples каждого, actual aggregate ROSTER_READY и READY policy.
+Resources136/396/396 FAIL, minFPS42.5/27.3/29.5. Living inactiveCounted0 не
+наблюдался (max0); health/LOD/native limits fixture не меняла. Это не pressure
+нового382. Полные stopped logs/manifests сохранены под
+`.codex-runtime/issue78-finalization-20261029/quota/resume-rhs-boot-v1/`.
+
+## Передача draft по запросу пользователя — 30.10.2026
+
+Пользователь запросил обновление issue/итоговый комментарий/очистку старых
+артефактов/отправку PR/выключение. Состояние передачи и оставшиеся gates —
+[ISSUE78_STATUS.md](ISSUE78_STATUS.md). Общий результат FAIL, #78 OPEN,
+PR только draft. Новый полный All и runtime pressure текущего quota integration
+не завершены; это незавершённые доступные проверки, не «невозможность» и не PASS.
+Статус последних snapshot compile/native берётся из итогового комментария.
+Targeted owned factory38actual/9unsafe и Logistics44actual/5unsafe не заменяют
+их. Для нового handoff rpl_id fresh ordinary native ещё NOT RUN.
+
+## Актуальный checkpoint #78 — 30.10.2026, 08:05 MSK
+
+Общий strict runtime/resource verdict **FAIL**, issue OPEN по решению пользователя.
+Новые функциональные PASS не снимают native-only blockers. Push/PR/release нет.
+Новый frozen `recovery-v14` завершён: **219/219 PASS**, collector0/exact unique
+union/Logistics1, все6 sessions closed0/919 frozen hashes drift0. Terminal
+`frozen-recovery-v14` Stock/RHS/ArlandWCSRHS **3/3 PASS**, native0/validation/
+fullfatal0/295 compile files postSHA0, session44499 closed0. Это объединённый
+baseline raw control trace, geometry/anti-cycle, own-seat версии102cases и четырёх
+неподключённых quota foundations. Новые Census/Registry/adapters, runtime quota
+integration и исправление прерывания pending reservation **не входят** в него.
+Старый211 ниже остаётся отдельным точным G3 snapshot, не current checkout PASS.
+
+Own-seat AFTERv6 на своих frozen5production подтвердил native0/source0/
+functional+fatal PASS/resources28 FAIL: wrong Cargo вышел из Pilot, снята только
+доказанная captured Cargo reservation, exact5 возобновили поездку и прошли
+13.1481м/5polls при прежних IDs/Rpl/health/deadline и одной покупке50 в этом
+контролируемом preset. Это не normal-UAZ150 ценовой proof. Native BEFOREv4 и
+AFTERv6 имеют разные common helper hashes; raw runtime exact-one-file A/B между
+ними не заявляется. BEFOREv4 реальный occupied-class отказ, failed AFTERv4
+timeout/fatal6 и последний непрерывный AFTERv6 positive сохранены отдельно.
+Actual extracted interruption replay затем доказал дополнительный дефект:
+`CancelEntries` теряет pending receipt после accepted exit, оставляя чужую для
+Pilot own Cargo reservation. Исправление atomic pre-exit clearance сохранено
+отдельным локальным commit `500cb4e`: снимается только exact captured own
+reservation, пока неправильный Cargo ещё занимает место, затем повторяются
+identity/entry/seat guards перед native выходом. Actual contracts
+133cases/6source/9unsafe, fixture17source/48logs/6CLI и7 affected audits PASS,
+independent peer0 и terminal Stock Workbench0. Два свежих прогона на одном
+frozen344source завершены: uninterrupted и настоящее `LOCAL_THREAT` прерывание
+с `COMBAT_REBOARD_CANCELLED`/pending1→0. Оба native0/source0/functional+fullfatal
+PASS/resources28 FAIL; exact5, прежние actor/car/Rpl/health, одна покупка50,
+затем native11.147м/4polls и13.5366м/8polls. Второе окно после новой угрозы
+создано штатным Core, fix не пишет часы и не продлевает дедлайн. Полный219 и
+3graphs выше относятся к версии ДО atomic delta, новые combined gates PENDING.
+Первоначальная ошибка dispatch анализатора в wrapper сохранена: исправленный
+hashtable binding проверил те же полные остановленные логи, без нового run.
+
+Brake fault tests не смогли дойти до watchdog: post-motion variant после
+native32.68м/3polls записал own brake write, затем следующий tick доказал
+`NATIVE_BRAKE_FALSE`/gateNULL. Native0/fatal0/resources28/source3440,
+corrections0/45s NOT RUN. Новых brake повторов без другой причины нет.
+Corridorv1 native0/312.854s/fatal0/resources28/source3440: actual9.701m pose
+на первый исторический stuck origin, затем здоровая машина сама уехала по
+172-node path к другой дальней цели. Это доказательство доступности места
+при другом goal/yaw, **не PASS native recovery**; corrections0/repair NOT RUN.
+
+- Полный `final-G3-v13`: **211/211 PASS**, collector0/exact unique union,
+  Logistics1, все6 sessions closed0,902 frozen files/hash drift0. Команда каждого
+  shard — `Invoke-OfflineShard.ps1` с canonical `tools/Invoke-AICFChecks.ps1
+  -Suite All`; plan и полные результаты сохранены в evidence.
+- `current-v14-native-gate-G3`: terminal Workbench Stock/RHS/ArlandWCSRHS
+  **3/3 PASS**, native0/validation/full script fatal0,289 compile files postSHA0.
+  Raw production342G3 manifest SHA256
+  `6C85F51E98091DA4F60A99B491437E666839D8287B580A7BA461FA37F7EC8F00`.
+- После freeze исправлен только CLI entrypoint нового анализатора: dot-source
+  базового script затирал `LogPath`/`EvidenceRoot`. Исходный CLI FAIL сохранён.
+  Новые auditor `2D67F446`/contract `F8909CA4` проверены отдельно:
+  9 source controls/32 log cases/7 настоящих Windows PowerShell5.1 CLI launches
+  PASS, independent review0 и ещё7 независимых CLI cases PASS. **Полный211
+  относится к версии до этих двух test-only правок**, targeted supplement — к
+  текущему entrypoint. Production не менялся.
+
+G3 native A/B закрыт на frozen344/344 files с единственной production delta
+`AICF_TransportNativeGate` (`D5DAE739` → `F0AC32B2`); BehaviorFlow `CA1065A6`
+и geometry4 одинаковы. Настоящий post-invoker observer увидел cached exact
+Perform `COMPLETED/remove1`, пустое Pilot seat и live unsuspended exact Return
+в очереди того же activity. BEFORE `OwnsTemporaryCrewExit=0`, AFTER=1 только
+после настоящего immutable completion receipt. AFTER затем получил native
+callback возврата exact Pilot и14.3248м/3 distinct polls при прежних IDs/Rpl,
+health1/deadline1155158/attempts0. BEFORE также вернулся и проехал17.1555м;
+helper rejection не выдаётся за обязательный whole-trip FAIL каждого запуска.
+Оба native0/source0/boundary+field+fullfatal PASS; **resources28 FAIL** каждый.
+Старый G2 AFTERv4 FAIL сохранён. Его первый отказавший regular predicate
+не захвачен: новое наблюдение доказывает исправленный класс перехода, а не
+позволяет задним числом объявить причину старого v4 установленной.
+
+Geometry native proof пока **PENDING**. ROAD240 BEFOREv7 подтвердил fresh
+native spawn/boarding/одну покупку и настоящее движение по полному76-node path,
+но minimum path distance43.11485м/car distance45.27144м до historical pad:
+pose fault0/corrections0/local3 case NOT RUN. Native0/315.8867s wall,
+full3logs fatal0/resources28 FAIL/source343 drift0. Это coverage failure,
+не PASS восстановления. Fresh56v6 показал active1/count1/LOD0 перед реальным
+UNREACHABLE; production LOD/activation policy на основании этих tests не меняется.
+
+Fixture-free PlayerV7 готов на exact342G3:342source/344playable/fixture0,
+ровно2 generatedRDB, StockWB0/Server+ClientDryRun0/every ZIP entry SHA verified.
+Игровой native запуск самой PlayerV7 NOT RUN; она experimental, не release.
+UI/direct-connect/JIP v11 на том же G3: native0/0/0,34Client+8JIP+2server PASS,
+full stopped/GameDestroyed3/fullfatal0/leaks0; strict resources348siblings
+(174console) **FAIL**. Source333/raw342 SHA drift0. Обе ordinary1800 проверки
+на old342G3 завершены: US native0/wall1818.168s/DONE1800122ms/failures4,
+USSR native0/wall1816.569s/DONE1800692ms/failures2. Duration/liveness/stopped/
+provenance/fullfatal PASS; **functional FAIL/resources32 FAIL каждый**.
+Original route0/UNPROVEN у обеих сторон. US после реального возврата из native
+OpenGate потерял первого Pilot, назначил2100 и вернулся кTRANSIT; при исправной
+ходовой/снятом own brake две8m corrections сделали A→B→A, затем45s no motion
+дали `VEHICLE_STUCK_PERSISTENT`. USSR получил `TACTICAL_SEAT_OCCUPIED` после
+реального боя: рядом с отказом original Cargo находился в Pilot seat, а его
+назначенный водитель выходил. Это локальные дефекты, не baseline whitelist.
+Native activation после reboard у US не записана; новое расширение GroupTrace
+даст raw active/count/LOD/handlers/brake, но старому run эти поля не приписываются.
+Полные остановленные3logs/source332/raw342/auditor SHA drift0 сохранены;
+current checkout сравнивается отдельно, старые stages не менялись.
+Первая попытка WinPS5.1 остановилась на setup/обработке native warning stderr,
+все процессы закрыты; её FAIL сохранён, новый запуск использует PowerShell7.
+Пользователь отдельно разрешил **раздельный учёт квот stock + AICF**.
+Архитектура и native stock admission исследуются; простое повышение общего
+лимита без защиты резерва не считается реализацией. Ordinary defaults,
+20slots и fleet cap10/faction сохраняются. Пока эта новая реализация не готова.
+Отдельный controlled native counter probe на старом G3 без quota overlay
+завершён: native0/21.8199s/source345 SHA drift0/fullfatal0/resources28 FAIL.
+14 новых пустых контроллеров с recordedAlive/intended10, Request10/Purge и
+`ActivateAI(false)` не получили actual members/activation/countTowards и не
+изменили world active/intended0/0, включая следующий native frame. Это только
+семантика пустого контроллера, **не PASS partition** и не доказательство для
+частично материализованной группы. Никто из существующих бойцов не удалялся;
+новые непустые группы сохранялись бы до нормального закрытия test world.
+Полные manifests/commands/exits/logs: ignored
+`.codex-runtime/issue78-finalization-20261029/REPORT.md`.
+G3 сохранён commit `4f44f91` (12files), diagnostics/comparator — `bcaa60e`
+(8files), без push. Geometry4 и её controlled fixture пока не коммитились.
+
+## Исторический checkpoint #78 — 30.10.2026, 04:27 MSK
+
+Общий strict runtime/resource verdict **FAIL**, работа продолжается. Старые PASS
+относятся только к своим snapshots. Native-only blocker сохраняет issue OPEN.
+Локальные завершённые commits: `77c45d3`, `8ec9878`, `f1cee62`; push/PR/release нет.
+
+| Frozen полный набор All | Результат |
+|---|---|
+| `bound-roster-v9b`, production339 | 201/201PASS/878frozenSHA0 |
+| `final-E2-v10`, economic E2 | 203/203PASS/886frozenSHA0 |
+| `final-path-hint-v11`,342 до G2 | 207/207PASS/893frozenSHA0 |
+| `final-G2-v12`,342G2 | **209/209PASS/896frozenSHA0** |
+
+Каждый collector0/exact unique union/Logistics1, все6sessions exit0/closed.
+После последнего freeze менялись только новые native fixtures/их contracts и
+анализаторы; их более новые targeted PASS учитываются отдельно. Production342G2
+остаётся byte-identical canonical manifest
+`86C1775A08BD174035F82B89E19FFE076AA629C565AA3158EAB54029AF22207E`.
+`current-v13-native-gate-G2`: Workbench Stock/RHS/ArlandWCSRHS3/3PASS/native0,
+validation/fullfatal0,289compilefiles postSHA0. Проверка текущего checkout04:24:
+342files/exactset0/hashdrift0. Это не native proof нового поведения.
+
+Economic E2 в `f1cee62`: свежие INSv3/AFFv1/DRAINv2 native0/source0,
+functional+fatalPASS, strictresources28FAIL каждый. INS — reserve/spawn/debit0,
+пешком57.7185м/20.088s barrier. AFF — одна машина/lease/pay475; owned post-DONE
+COORDINATOR_STOP сохранён в узком purchase-boundary scope, не whole-trip PASS.
+DRAIN — exact lease1/cap1→typed decline→native empty release/cap0,
+пешком50.8477м/20.032s. RegistryCreate1/currentTrip1 подтверждены. Exact PS5.1:
+114actual/4business mutants/2fixture mutations/35logs; runner16/11 PASS,
+independent review0. `RequestState.Reset` обнуляет live request generation:
+`MatchesIdentity`/`IsCurrentPreflight` после Reset обязаны false; исторические
+immutable поля читаются отдельно. Старое обещание historical match отозвано.
+См. `VEHICLE_ECONOMY_DECLINE.md`; все предыдущие FAIL сохранены.
+
+Fresh UIv10 на340E2: native0/0/0/full stopped/client34+JIP8+server2PASS,
+fullfatal0/leaks0; resources348raw/174console/78groupsFAIL. Crewv4E2 сохранил
+functionalFAIL/TIMEOUT/7of9ARRIVED и6projectSCRIPT_E sibling lines после fallback
+при player-position-unknown clearance; это не nativeVME и не whitelist.
+G2 исправляет доказанное ложное CREW_UNAVAILABLE: здоровый Pilot выходит открыть
+native gate, но crew check видит временно пустое место. Current owned/unexpired
+native chain теперь распознаётся без изменения LOCAL_THREAT priority/60s budget.
+Actual helper47/8source/3unsafe и actual InspectTransit BEFORE/AFTER23PASS,
+independent review0. Crewv5 на342G2 native0/0/full stopped/source0/client15+server8,
+9distinctARRIVED/exactPilot1/inventorysame/onepurchase/fullfatal0/leaks0 PASS;
+resources188raw/94console/78groupsFAIL. Другой HQ не привёл к нужным воротам:
+G2-specific native **NOT EXERCISED**. Отдельный western-gate native probe готовится;
+его setup/анализатор исправляются по сохранённым native/source failures.
+
+Original Multi-v11 и minimum-background-v2 остаются FAIL/ABORTED: stable2/4,
+6не доказано, capacityWAIT и затем deadline/native abandon. MIN3 на337 также
+FAIL/ABORTED1069.620/1800s/native-1/audit1/background1/full3logs fatal0/source0.
+USSR0 перед failure active1/count1/LOD0/healthy/current handler/gate0; после двух
+коррекций исчерпан прежний mobility budget и native GetOut. Полные604observer rows:
+545PROVEN/506active/39inactive только при gatePending1/59UNPROVEN; inactive вне
+gate не наблюдалось. Census229=225characters+4vehicles,189foreign characters FIA;
+AICF FIA vehicle/garrison plans в Easy равны0, prefab/origin каждого UNKNOWN.
+Контракт квот ожидает решения пользователя;228/defaults не менялись.
+
+Path-hint fix сохраняет15м/2attempts/128candidates/старые physical fences и
+ValidatePath progress oracle. Local fragment — только geometry hint, path_progress0.
+Actual geometry23+source17, mutation scope59+3unsafe, hint identity52+3unsafe PASS;
+native proof **PENDING**. Первый controlled native setup не смог создать машину
+в исторической точке: actual8m spawn cylinder перекрыт static environment. Другой
+setup24центра не нашёл площадку в15м; это не exhaustive proof, его collision
+provenance исследуется. Эти setupFAIL не доказывают native recovery PASS.
+
+PlayerV5 fixture-free на340E2:340source/342playable entries/2generatedRDB,
+WB0/DryRuns0/everyZIPentrySHAverified; обновление на окончательный342G2 PENDING.
+Старый US342v8 остановлен как superseded227.106s/native-1/ABORT_NOT_PASS,
+fullfatal0/resources24FAIL/source0. Новая shared stage342G2 WB0/332sourceSHA0,
+raw342exactcanonical0 готова; US/USSR полные1800s **NOT RUN** до финальных
+контролируемых proofs. Ручная visual UX **NOT RUN** по запрету GUI; authenticated
+retail persistence **NOT RUN** из-за setup binary mismatch. Native persistence/
+lighting/resource blockers остаются, ACCEPTED/ready/release не объявляются.
+
+Исторические подробности ниже относятся к своим исходным snapshots.
+`Test-RosterSpawnBatchContracts.ps1` исполняет настоящий extracted helper,
+owner predicate и bound/default dispatch:15458cases/12actual source mutants,
+exact WindowsPowerShell5.1 PASS. Есть group/faction/global veto, whole remaining,
+overflow, exact identity, callback stop/swap/generation, native success без
+прироста, nested bound/unbound и context restore. `Test-Stage35Static.ps1` narrow
+matcher обновлён с `BeginRosterSpawn` на `BeginBoundRosterSpawn` после сохранённого
+stale literal FAIL; старые health/readiness/budget/callback checks сохранены.
+Свежий production339 causal gate и его negative baseline — `native-spawn-race/`
+(см. `GROUP_SPAWN.md`); resource28FAIL не скрывается functional PASS.
+Default startup seed1 и explicit MAX10 проверяются отдельным
+`AICF_RosterSpawnBatchBoundaryProbe`; незапущенный вариант не PASS.
+
+## Продолжение #78 — 2026-10-29/30
+
+Evidence: `.codex-runtime/issue78-finalization-20261029/REPORT.md`. Общий результат
+остаётся **FAIL**, работа продолжается. Старый PASS относится только к своему
+снимку исходников; найденные ниже дефекты не скрываются им.
+
+- Исходный baseline `4899677`: **170/170 PASS**, collector0, exact unique union,
+  Logistics ровно один раз; 800 исходных файлов без SHA drift.
+- Frozen `final-current-v3`:179PASS/1FAIL из180 (shim нового native reconcile),
+  исходный FAIL сохранён. Следующие v4:190/190PASS/850SHA0 и v5:193/193PASS/856SHA0,
+  collector0/unique union/Logistics1, все шесть sessions exit0/closed.
+- `final-current-v6`: **194PASS/4FAIL из198**, collector1, unique union/Logistics1,
+  все sessions закрыты;869 frozen files post-run SHA drift0. Четыре health-аудита
+  ожидали прежний literal dispatch и не распознавали новый narrow overturn flow.
+  Причина проверена; исправления сохраняют health-before-recovery/waypoint gates,
+  добавляют реальные classifier/dispatch/eligibility negative controls. Отдельно
+  Route39/Damage91/Stage3/Stage35 PASS и независимое review0blockers. Исходный
+  полный FAIL не переписан. `final-current-v7`:197PASS/1FAIL из198, collector1, unique union/Logistics1, все sessions closed и869frozenSHA0. Остался неподдерживаемый WindowsPowerShell5.1 `ConvertFrom-Json -AsHashtable` в усиленном Damage-аудите; заменён на PSObject.Properties map без потери91controls. Все четыре аудита затем прошли exact5.1 (91/39/Stage3/Stage35).
+- Следующий frozen `final-current-v8`: **200/200PASS**, collector0/exact unique
+  union/Logistics1, все6sessions exit0/closed;874frozenfiles post-runSHA0.
+  Включает337production diagnostics, PS5.1 correction и heartbeat fixture.
+- Production Workbench `current-v6`: Stock/RHS/ArlandWCSRHS **3/3 PASS**,
+  native0/validation successful/script fatal0. Canonical production manifest
+  `production-final-v6-manifest.json`:335 файлов, SHA
+  `72387B6D682CFE867E7D60CE7C74A55E3ACA89AFB36B761440671C43D18FA978`.
+  После read-only staging/combat diagnostics текущий337 snapshot: manifest
+  `2C694E36D16A99DB9A1F7FA98736B49A0D6F49201E35BCAF7E5786DDDF23A2FD`,
+  Workbench `current-v8-diagnostics-final`3/3PASS/native0/validation/fatal0,
+  все284compile source hashes current drift0. Multi-v11 подтвердил original
+  COHORT2stable30.832s и COHORT4stable30.985s; COHORT6/1800s pending.
+  NativecapacityWAIT на6: active233/intended226/hard228; managed114/20groups,
+  activefleet8. Фоновые AUTO slots6..9 продолжают расти к production10;
+  вклад в давление подтверждён, controlled setup/приоритеты ещё исследуются.
+- На этом335 snapshot `backend-ui-final-current-v8`: native0/0/0/full stopped,
+  client34/JIP8/server2 PASS, full script fatal0/persistence leaks0/cigarette
+  velocity0, source drift0. **Strict resources FAIL:**348raw sibling Error lines,
+  174console/78distinct messages. Контрольные запуски объясняют происхождение
+  сообщений; это диагностическая классификация, не whitelist.
+- Native-only stock-lighting MRE без production AICF scripts воспроизводит
+  восемь HDR/SMAA overlaps в штатном InventoryPreviewWorld/InspectionPreview.
+  Client fatal0; server две штатные resupply teardown script errors; полный
+  контрольный запуск FAIL. Все установленные binaries1.8.0.13.
+- `backend-prequeue-native-v6`: ранний пеший подход вне очереди GetIn,
+  фактическое WALK23.7869→10.4198м, затем exact4occupants; native0/full stopped,
+  base82 и health gate PASS/source drift0/fullfatal0/resources28FAIL. Владение
+  action, callback-safe cleanup и неизменные deadlines проверены отдельно.
+- `movement/overturn-native-v3`: healthy current original5/own driver после
+  controlled95°roll: short correction8.09129м, затем native drive29.4957м,
+  samehealth/vehicle/deadline.11checksPASS/WB0/native0/fatal0/resources6FAIL.
+- `reboard-stalled-running` matched Cargo A/Bv3: before фактический RUNNINGstall
+  и original TIMEOUT; after один из прежних native retries→walk108м→exact seat,
+  два фактических маршрута/пешая высадка, original5/samecar/deadline390372 unchanged.
+  After29checksPASS/WB0/native0/fullfatal0/resources28FAIL. Older v1/v2 FAIL сохранены.
+- Manual staging conditional after-v5: short3.00012м→same native action→natural
+  walk→all5rally→single spawn/debit,15checksPASS. Exhaustion negative-v2:13PASS.
+  Эти fixtures не доказывают исправление каждого случая из обычного Multi.
+- Multi-v10 на335snapshot: **FAIL/ABORTED**, US1
+  `SPAWN_STAGING_ACTIONS_EXHAUSTED` на260.796s.757.606/1800s/native-1/audit1,
+  stable cohort0/fatal0; MOVING4/6 не доказаны. В отличие от прежнего stationary
+  V9, последние actors движутся от цели; radial12s gate отменяет native action.
+  Actual goal/path/ownership причина ещё исследуется, production fix не заявлен.
+- Ordinary Proof4 final-v5 US/USSR на335snapshot: оба полные1800s/native0.
+  US functional FAIL `ROUTE_NOT_COMPLETE_AT_DURATION`, route0/alive2/LOCAL_THREAT;
+  duration/liveness/stopped/provenance/fatal PASS/resources32FAIL.
+  USSR **FAIL**:
+  native admission223/223/hard228 принял5, но native world вырос до229 во время
+  asynchronous dispatch; generation2actual4/expected5→GROUP_SPAWN_TIMEOUT30.282s.
+  Поздняя generation3ready5 не очищает full SCRIPT_E. Это midspawn capacity race,
+  исследуется отдельно от естественной гибели всего original roster, для которой
+  typedCONFIRMED/own poolAck/cap0 действительно получены за~28s.
+- Ранее ordinary Proof4 final-v3 обе стороны выполнили1800s/native0/originalroute,
+  functional/fatal PASS/resources32rawFAIL; это прежний snapshot. V4US reboardFAIL
+  сохранён и вызвал новый matched Cargo fix. Исторические исходы не заменяютv5.
+- Controlled orphan callback-onlyv3 healthy33.930s/destroyed33.709s подтвердили
+  actual typedCONFIRMED/own release/Ack/old cap inactive/следующее paid-ready
+  поколение. WB0/native0/source0/stopped/functional/fatal PASS/resources28FAIL.
+- Donor native admission: actual90/90/hard90 WAIT35.183s без donor/request/debit;
+  после release65s тот же token/deadline, native MEDIC/paid physical join.
+  Functional/fatal/source/stopped PASS/resources28FAIL. Это не атомарная
+  reservation против всех дальнейших native world spawns.
+- Crew-returnv2 client15/server8PASS: private preview ready, nine distinct
+  ARRIVED, exact single Pilot в УАЗе/single purchase/inventory unchanged;
+  native0/0/stopped/fatal0/leaks0/resources188rawFAIL. Исходныйv1 FAIL сохранён.
+- Fixture-free player-build-current-v3:335source/337playable entries, ровно
+  Core+Arland generatedRDB; все ZIP entriesSHA/currentcanonical drift0,
+  StockWB0/Server+ClientDryRun0. Это snapshot335 до следующих возможных fixes.
+
+По решению пользователя strict native/resource blocker сохраняет #78 OPEN.
+Native SetId(NULL_UUID) установленным движком не исправлен; production guard
+StopTracking(false) устраняет anonymous leaks в свежих UI runs. Optional retail
+identity probe current-v1: WB0, но retail client→Diag server отвергнут
+`isDevBinary local1 remote0` до player audit. Authenticated BI identity
+NOT_REACHED/persistence restart NOT RUN; full setupFAIL/адресный ABORT сохранены.
+Совместимая retail dedicated пара canonical runner пока не реализована.
+
+Visual preview/text/hover/slider/confirmation остаются отдельно NOT RUN по
+[VEHICLE_VISUAL_CHECK.md](VEHICLE_VISUAL_CHECK.md): физический ввод, внешний вид,
+читаемость и удобство terminal readback не доказывает; GUI/screenshots/video
+запрещены. Функциональные TRANSPORT/COMBAT/N/crew/survivor/health gates доступны
+терминально. All-model RHS/WCS physical matrix — доступное непрогнанное расширение
+покрытия, не отклонённый обязательный gate. Исходный критерий требует unarmed UAZ
+и armed model, они проверены native отдельно на указанных snapshots. Historical
+library restart31PASS относится к библиотеке, не к authenticated persistence.
+ACCEPTED/ready/release не объявлены. Исторические FAIL ниже сохранены.
+
+## TRANSPORT/COMBAT и короткое восстановление AI — 2026-10-28
+
+Продолжение #78 на ветке `codex/issue-78-vehicle-presets`. Пользователь выбрал
+N=300м и разрешил короткую видимую принудительную посадку/высадку без лечения,
+воскрешения и дальнего переноса. Контракт — [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md).
+Общий runtime по-прежнему **FAIL**; строгий native reconnect blocker не снят,
+пользователь прямо требует оставить #78 OPEN до native fix. Исторические
+проверки ниже не выдаются за проверки новой реализации.
+
+Evidence этого продолжения: `.codex-runtime/vehicle-behavior-20261028/REPORT.md`,
+`changed-files.txt`, manifests/source hashes, matching auditors и полные stopped
+profiles соответствующих запусков. В новых native runners targeted functional
+и strict all-native resource verdict разделены; PASS первого не снимает FAIL второго.
+
+- Baseline139/139PASS; frozen промежуточные148/148,151/151,157/157 и
+  `final-complete-v1`161/161PASS относятся к своим snapshots. Последний предшествует
+  manual short staging, exhausted staging и ALIVE hull fixes. После них полный
+  `final-complete-v2`:168/168PASS, exact unique union/Logistics ровно1/collector0.
+  Затем изменялись только fixtures/auditors/contracts для current retained policy;
+  актуальный canonical170 завершён отдельным frozen набором `final-current-170`:
+  **170/170PASS/collector0**, exact unique union, Logistics ровно1, все6shards0.
+  Последняя правка толькоScenario auditor/егоcontract после этого freeze отдельно
+  прошла3/3 и87controls; production/fixture не менялись. Сама полная170 относится
+  к frozen версии до этого последнего test-only parser delta, что явно сохранено.
+- `production-complete-v2`: terminal Workbench Stock/RHS/ArlandWCSRHS3/3PASS,
+  native0/successful validation/source drift0, включая последние три fixes.
+- Controlled behavior US/USSR: каждый transport/combat24behavior+23settingsPASS;
+  Pilot loss during reboard28+23PASS, route queue loss31+23PASS, INCAP hull30+23PASS,
+  ALIVE hull30+23PASS. Actual short displacement, compartments, original identities,
+  same vehicle/lease/debit и неизменённые health/life state проверяются в native.
+- Recruitment short20PASS с actual arrival/paid join, GC21PASS с настоящими
+  deferred stock TTL callbacks/lease veto/teardown/delete. Manual staging14PASS,
+  early exhaustion12PASS с восстановленным actual waypoint и завершённой
+  штатной durability verification. Native0/stopped; strict resourcesFAIL.
+- Final UI `backend-behavior-settings-proxy-safety-v2`:34client+8JIP functional
+  PASS, WB0/native0/0/0/fullstopped. Настоящий server-spawned client proxy,
+  full private Fleet/ACTIVE lease и оба permission denials подтверждены.
+  Server-local prefab оказался MASTER и не выдаётся за negative proxy test.
+  Corrected matching audit1 ONLY `SERVER_FULL_FATAL`:8 persistence instances,
+  raw all-sibling E lines372 (включая повторения между logs), overallFAIL.
+  Исправление EntityID parser имеет49controls, original failed audit сохранён.
+- Soak-v4 обе стороны и MOVING-v3: по1800с/native0/stopped, overallFAIL.
+  Их source предшествует последним fixes; разбор в
+  `long-final-readonly-monitor/REPORT.md`. Новые v5/v6 обе стороны и MOVING-v4
+  завершили1800с/native0/fullstopped. Все имеют strict resourcesFAIL. Multi4:
+  только cohort2≥31.639с,4/6FAIL,7failures/completed0; taskless/retained cleanup
+  в полном log не повторились, все6released leases имеют exact GC restoration/
+  WORLD_POOL_RELEASED/cap0. Actual stock STUCK→GetOut→bounded fallback доказан,
+  физическая причинаSTUCK неизвестна; это не доказательство предела cap.
+- USSR-v6 обычная война: actual paid5/settled5,276.795м/49movingpolls,
+  original5foot≤32.8675м, route_complete1/failures0. Corrected auditor даёт
+  functional/fatalPASS, resources32FAIL/overallFAIL. Original auditFAIL3 сохранён:
+  logger mismatch6мс и intentional matching stop послеDONE. Новый auditor153controls
+  требует обаactualholdintervals иheld>=configured, mismatch≤50мс; разрешает
+  только exact matching COORDINATOR_STOP teardown, full fatal/resources не режет.
+- US-v6 обычная война FAIL: исходный отряд погиб, после этого24неполных
+  replacement spawns в исходном30s окне (actual0..4 приconfigured/requested5).
+  Gen26 сформировался полностью. Dormant counters/engine queue не измерены,
+  причинаUNKNOWN; native-only причина для этих timeout не объявляется.
+  Accounting imbalance0 у всех пяти полных запусков. Итог:
+  `long-final-v5-monitor/REPORT.md`, matching corrected Soak receipts отдельно.
+- Current retained controlled repeat US/USSR: каждый26native checks/0fail,
+  два actual routes/две высадки/all5atpoint, same trip/lease/entity/Rpl/roster,
+  single purchase. Результат относится к `retained-repeat-*-current-v2` с явными
+  truce pair readbacks/HIERARCHY protection, не к ordinary war. Старые root-only
+  movement damage и hierarchy reboardtimeouts остаются FAIL. Отдельный corrected
+  matching auditor даёт targeted0 обоих, native/source drift0, resources28FAIL.
+  Original audit1 сохранён. Последний delta толькоauditor/contract,3/3PASS и
+  87logcontrols: exact own Stop pair после strictFINAL доDONE разрешён, любой
+  ранний/чужой/nonSTOP/malformed/fatal отказ остаётсяFAIL. Production не менялся.
+- `controlled-budget-current-v1`: native0/targeted audit0,16scenario checks,
+  actual arrival→fixture-only adapter→реальный bounded Dismount owner.
+  Это `CONTROLLED_DISMOUNT_BRANCH_ONLY`; current manual TRANSPORT штатно идёт
+  в TACTICAL_DEPLOYMENT. Budgets3logical+3physical/deadlines не расширялись.
+
+Сохранены исходные FAIL, в том числе NTFS junction без нужных прав, ошибочный
+snapshot с concurrent drift, compile ошибки и invalid fixture readbacks до
+native frame/deferred callback. Исправленная проверка не приписывает PASS старому
+запуску. Ручной visual UX остаётся отдельно **NOT RUN** по
+[VEHICLE_VISUAL_CHECK.md](VEHICLE_VISUAL_CHECK.md); physical all-model RHS/WCS
+matrix также NOT RUN. Compile/catalog их не заменяют.
+
+## Продолжение #78: текущие gates — 2026-10-28
+
+Общий runtime outcome остаётся **FAIL**, issue не закрыта. Evidence:
+`.codex-runtime/issue78-continue-20261027/REPORT.md`, полные stopped logs,
+matching source hashes/manifests/exits и отдельные receipts ниже. Старые FAIL
+не превращены в PASS и не исключены из набора.
+
+* Fresh baseline129/129 PASS; промежуточные132/132 и135/135 PASS относятся к своим
+  frozen versions. Полный139 `verification-v5` дал138 PASS/1 FAIL: временная NTFS
+  junction запрещена ограниченному процессу. Тот же неизменный filesystem
+  contract повторно FAIL с ограничением и PASS19 с необходимыми правами.
+  Актуальный полный `verification-v6`: **139/139 PASS**, exact unique union,
+  LogisticsContracts ровно1, collector0; junction contract выполнен с нужными
+  правами. Post-run сверка662 исполняемых files с checkout: code drift0,
+ 228различий только EOL. Она не выдаётся за отсутствующий pre-run full manifest:
+  локальный helper ранее ошибочно фильтровал absolute `.codex-runtime` prefix,
+  пустая попытка аннулирована; inventory/runner hashes и полные outputs сохранены.
+* Production Workbench `approach-domain-v5`: **Stock/RHS/ArlandWCSRHS3/3 PASS**,
+  native0/scriptfatal0. Предыдущий v4 FAIL Formula too complex сохранён;
+  guards разделены без изменения порядка/предикатов. Fixture-free player build
+  отдельно compiled Stock PASS,314 source files совпадают с checkout byte hashes.
+* `repeat-v3` USSR УАЗ: **native0/audit0**,24checks/0failures/2legs, те же5actors,
+  обе real purchases, normal COMPLETE/дисмонт/все5≤35m. Second boarding82.45s;
+  manual rally25m и deadlines не расширялись. `retarget-v2`:16/0,
+  `ural-v2`:15/0, native0/audit0, stopped. Старые FAIL сохранены отдельно.
+* `damage-causal-v6`: **16/0 targeted controlled PASS**, native0/stopped,
+  real wheel injection → FALLBACK943ms/crew0 → original5foot32.244m;
+  actual lifecycle latch0/count0, owner recovery10.060s/10poll, retained159.204s
+  без повторной покупки. Explicit admission с тем же intent создал trip2,
+  другую машину и второй real debit150. Strict native resourcesFAIL28(E),
+  общий outcomeFAIL. v4 second approach timeout и v5 fixture selectionFAIL
+  сохранены, новый PASS им не приписывается.
+* `approach-controlled-v2`: actual production node handler0, callback1,
+  следующий Tick~1.05s → typed approach fallback, plan release/order restored
+  за12.184s, original roster,10/0checks/native0/stopped. Stage runner сохранил
+  первоначальный auditFAIL из-за decimal-only EntityID parser. Исправленный
+  matching auditor принимает только exact positive decimal/nonzero fixed hex,
+ 54positive/negative controls; fresh stopped re-audit0. Strict resourcesFAIL28.
+  Это injection supported context, не proof исторического v2 sentinel registry.
+* `ui-v3`:28client+5JIP functional checks, native0/0/0/stopped3, strict auditFAIL
+  SERVER_FULL_FATAL из-за8 native persistence leaks. `crew-v2`: UI15/server8
+  targetedPASS, native0/0/stopped2,9distinct returns, inventory/exactdriver/
+  singlepurchase. Policy/library/armed/human probes:82/37/81/77 targeted checks
+  PASS, physical occupants4/3 и сохранённый human driver/car после Reset15s.
+* `m13-rally-hierarchy-fixed`:1800s CAPACITY MOUNTED2→4→6/side stable30s PASS,
+  все12 paid5; native0/wall1819.925s.8normal trips+all5foot,4 bounded failures,
+  общийfunctionalFAIL. Это не proof движения6. `m10` доказал MOVING2/side30.084s,
+ 4/6 FAIL; `m14` полный1800s native0, но US1 recruitmentSTUCK+2repairs23.089s
+  и stickyfailed service не позволили достичь4/6. Это не предел fleet capacity.
+* Fresh normal-war `n10b`:1800s/native0/stopped, общийFAIL; отдельные реальные
+  InsufficientSupplies/OpenGate→return без движения в исходном60s окне.
+  `combat-resume-v1` controlled hold90.577s/resume103.732m PASS-prefix, затем
+  новый OpenGate timeout61005ms и полныйtripFAIL. Не преждевременный false-veto.
+
+`m15` полный1800.625s/wall1816.557s, native0/audit1/stopped,4failures/cohort2/
+completed0. US1 recruitment:26fenced snapshots, current native paths10→6→5,
+2repairs, static~0.56m до первых общих nodes; paid/joins0,176laterNO_SAFE,
+finalshift4.34m<35. Stale/неправильныйactor не подтверждены; причина segment
+не установлена. Ещё3trips завершились настоящими deadline/stuck failures.
+`m16` diagnostic300.879s/native0/stopped,4groups paid5, прежний corridor не
+повторён. Physics surrogate-hit встречался перед успешным проходом exact actor;
+actor overlaps0/selfhits0, observed actor/groupLOD0/max10. Mask policy не менялась.
+US `repeat-v1/v2`: первые trips normal COMPLETE/все5foot, вторые attempts
+SPAWN_SITE_APPROACH_TIMEOUT без второй покупки. v2:17checks/1fail/native0/stopped,
+42boarding+82staging snapshots actor/groupLOD0/max10, MaxLODcause не доказана.
+Наличие native path/tile/projection или раннийpath0 не доказывает connectivity.
+
+Native-only reconnect MRE: ровно1control.c, без production Scripts AICF и preview;
+native0/0/0/stopped3, те же8 leaks плюс2 native resupply teardown errors.
+`gates/native-reconnect-mre.zip` +SHA/instruction сохранены локально. NoSave не
+устраняет SHUTDOWN save. Vendor/installed files не менялись. Пользователь явно
+решил сохранить строгий blocker: #78 остаётся открытой до native fix.
+Visual preview/hover/menu/slider/confirmation остаются **NOT RUN**: требуется
+игрок, checklist [VEHICLE_VISUAL_CHECK.md](VEHICLE_VISUAL_CHECK.md). Terminal model
+не заменяет визуальный критерий; physical RHS/WCS all-model matrix также NOT RUN.
+Ready/release/ACCEPTED не объявлены, push/PR/merge не выполнялись.
+
+## Продолжение #78: повреждённая ходовая и retained fallback — 2026-10-27
+
+Ветка `codex/issue-78-vehicle-presets`, исходный commit `dbb9c0c` и чистое дерево.
+Evidence текущего продолжения: `.codex-runtime/issue78-continue-20261027/`.
+Свежий immutable baseline от исходного commit: **129/129 PASS**, шесть shards,
+точный unique union и LogisticsContracts ровно1. Начальный последовательный
+baseline остановлен и заменён этой полной копией; его6 PASS не считаются полным
+прогоном. Первые ограниченные Workbench запуски дали SteamAPI_Init FAIL; повтор
+с доступом к Steam: **Stock/RHS/ArlandWCSRHS 3/3 PASS**, native0/scriptfatal0.
+
+Production исправляет terminal movement damage до crew recovery и retained
+COMPLETE/FALLBACK receipt с восстановленным пешим приказом. Healthy transient
+unusability не заменяет damage1. Targeted baseline7/7, after8/8 PASS; movement
+actual-body22controls и completed-intent47controls. Новые causal/diagnostic
+fixtures описаны в TEST_FIXTURES/VEHICLE_SCENARIOS/VEHICLE_MULTISQUAD.
+
+Свежий backend: UI/filter28 + JIP5 functional checks; строгий полный server log
+**FAIL SERVER_FULL_FATAL**. Native-only reconnect MRE, ровно1 control.c и никаких
+production Scripts AICF: native exits0/0/0, два server readbacks, все logs stopped,
+те же8 persistence leaks и2 native resupply teardown SCRIPT(E). NoSave header
+не отключает `[PERSISTENCE] Save (SHUTDOWN)`; этот scope не объявляется PASS.
+CrewReturn: **UI15/server8 PASS**,9 distinct physical arrivals, exact driver,
+inventory unchanged, единственная purchase, native0/0/stopped2. Отдельный
+strict all-native resource gate этим не снят. Итоговые runtime/full-after
+результаты этого продолжения находятся в разделе текущих gates выше.
+
+## Исправления посадки и учёт native маршрута: #78 — 2026-10-27
+
+Продолжение `codex/issue-78-vehicle-presets` от `a462891`. Отчёт только локальный:
+`.codex-runtime/vehicle-repair-20261027/REPORT.md`; вложенные case summaries,
+matching auditors, полные stopped sibling logs и source hashes сохраняют версии.
+Архив завершённых profiles/stages и SHA verification: `evidence/archive-index.json`
+в том же task root; original console paths в старых summaries исторические.
+GitHub не менялся. **Общий runtime outcome остаётся FAIL; готовность релиза не подтверждена.**
+
+Исправлены подход к казарме через12 детерминированных service-ring candidates,
+конфликт infantry hold со staging approach и conservative foot-pad eligibility
+перед spawn/commit. Projection не объявляется connectivity; физический arrival,
+два repair attempts и сроки сохранены. Добавлены leaf health/damage/collision и
+full native path diagnostics. Своё текущее native GetIn теперь наблюдается до
+физического Pilot transition; независимые двери допускают максимум2 параллельных
+входа при separation≥2.5m, unknown/shared/Turret остаются serial. Deadline125s
+и retry budget не расширялись. Repair receipt пишется до POINT_HOLD_REFRESH.
+В M1 ring recovery не потребовался; в M2 он выполнялся для фонового US/8.
+SELECTED/COMMITTED доказывают исполнение, но не самостоятельный успех подхода.
+
+Test-only `PER_GROUP_BEFORE_VEHICLE` убирает искусственное ожидание чужого найма:
+каждому нужны собственные paid5, четыре native joins/debits и исходные IDs до
+своей машины. Aggregate MUSTERED остаётся marker; future cohort открывается
+только после предыдущего physical stable30s. MOB/native gates не подавляются.
+Старые M1/M2 оцениваются сохранёнными matching auditors, не новым oracle.
+
+| Case / версия | Завершённый результат |
+|---|---|
+| N1 `health-native-v1` | native0/audit1. Exact5,hold90359ms,resume108.685m/15poll; затем wheels0/movementDamage1,15/50 zones destroyed при root protection. Источник урона не доказан |
+| N2 `causal-native-v2` | native0/audit1. Exact5,hold90264ms; healthy car, но свой native Pilot reservation вызвал преждевременный recovery/fallback. Damage/collision0; исправлен observer |
+| N3 `crew-native-v3` | native0/audit1. Resume100.837m/33poll; NO_OBJECTIVE_PROGRESS120584ms при healthy/moving car. Независимый128point prefix показывает arc+508.932m, suffix140points тогда не наблюдался |
+| N4 `path-native-v4` | native0/audit1. Complete111points,13samples/61.267s,arc+719.211m,remaining1113.842→394.631m; credits0. Остановлен wheel damage:36 damage callbacks с enum EXPLOSIVE/FRAGMENTATION/INCENDIARY; source/instigator NONE. Отложенный collision callback не устанавливает время физического контакта; внешний взрыв не доказан |
+| N5 `path-diagnostic-v5`, M3 `mounted-per-group-v3` | compile-1, native NOT RUN: accounting preflight Formula too complex4765. Guards разбиты; failed stages/logs сохранены |
+| N6 `path-diagnostic-v6` | compile0/native0/audit1. Resume101.976m/25poll; telemetry CURRENT_WAYPOINT_AUTHORITY, затем NO_OBJECTIVE_PROGRESS120365ms. Native transient WP не обязан иметь RplComponent; exact current queue/route/Move/ID proof исправлен для N7 |
+| M1 `mounted-rings-v1` | wall1819.426s,785heartbeat,maxgap3065ms,native0/audit1. Найм первых4 групп состоялся; staging ownership и rear-door native STUCK не позволили подтвердить нагрузку |
+| M2 `mounted-fixed-v2` | wall1819.323s,701heartbeat,maxgap3807ms,native0/audit1. Exact5 MOUNTED2 и4/side≥30s; все12 наняли paid5,6USSR+5US сели. US/5 не завершил settled boarding до125s, поэтому6/side не доказаны |
+| N7 `path-native-v7` | native0/audit1. WP has_rpl0; реальный forward native-path credit и recovery proof подтверждены при росте прямой дистанции. Hold90.505s без изменения clocks/deadline; resume100.338m/25poll. Затем настоящий NO_PHYSICAL_MOVEMENT45s; NO_OBJECTIVE_PROGRESS и PATH_HISTORY_EXHAUSTED отсутствуют. Cargo OpenGate цепочка обнаружена по stock source/priority, полного payload proof тогда не было |
+| N8 `gate-native-v8` | native0/audit1. Hold90.512s, resume102.75m/47poll,22 native credits; primary VEHICLE_OVERTURNED с roll−110.155°. OpenGate candidates0 — NOT EXERCISED |
+| M4 `mounted-per-group-v4` | wall1817.212s,native0/audit1. MOUNTED2/4/6 exact5 и≥30s подтверждены;6/side31641ms. Все12 boarding35.150–115.027s, без deadline extension. Functional FAIL:10 повторных trips после normal COMPLETE, один старый WP-Rpl veto и один native group abandon/driver recovery конфликт |
+| M5 `moving-per-group-v5` | wall1820.109s,native0/audit1. MOVING2/side30470ms подтверждены,4/6 не пройдены. Native abandon/crew recovery, настоящая потеря колёс и последующие сроки/cohesion; arrivals0. Две project SCRIPT(E) taskless/bridge сохранены как FAIL, native exception не доказан |
+| M6 `mounted-completed-intent-v6` | native0/audit1,1800196ms. MOUNTED2/4/6≥30s;6 original trips завершили normal COMPLETE и все5 дошли≤35m, TRIP_REPLACED0. Ещё6 отказали:3 Gate,overturn,dismount timeout,gunner recovery. Gatefalseveto после реального возврата выявил transient COMPLETED→EVALUATED |
+| N9 `abandon-gate-native-v9` | native0/audit1. Resume114.935m/16poll, затем настоящий wheels0/CanMove0 на восточном участке. Script/VM fatal0; physical arrival не доказан |
+| M7 `mounted-callback-v7` | native0/audit1,wall1818.069s. MOUNTED2/side32393ms;4/6 не достигнуты из-за UAZ rear entry: native path заканчивается за5.945m до двери, entry projection0. Callback branch NOT EXERCISED; таймер/radius не расширялись |
+| M8 `callback-moving-20m-v8` | native0/audit1,wall1217.387s,целевой20min regression. MOVING2/side31160ms;3 native Cargo OpenGate→return→physical resume подтверждены26.126/36.830/27.816s для US/USSR. Cached returnEVALUATED при positive callback receipt1; после него alive5/inside5/TRANSIT, displacement11.30–21.80m. Общий FAIL4,4/6moving не пройдены |
+| `dismount-ural-regression-v1` | native0/audit1. NativeAbandon действительно исполнен: current/executed GetOut exact vehicle, typed fallback, crew_recoveries0 и order_restored1. Полная поездка FAIL; dismount budget branch не достигнут |
+| `dismount-budget-causal-v1/v2` | v1 compile-1 из-за fixture CoordToWorld API, native NOT RUN. Исправлен pinned GetWorldTransform+Multiply4. v2 native0/audit1: production3→1/COMPLETE/FOOT состоялись, но немедленный test readback дал старую позицию; ошибочный oracle сохранён |
+| `dismount-budget-causal-v3` | native0/audit0,15/15 checks. Реальные3 accepted force batches1/1/3, затем logical0/transitions0/hullghost1 → normal physical relocation1 → exact delayed outside displacement19.6603m → COMPLETE/all5 FOOT≤33.9579m. Оба исходных phase deadlines сохранены; это controlled fault injection, не обычная война |
+
+MOUNTED_STAGING означает `CAPACITY_MOUNTED_ONLY/notmovingproof`, не6 движущихся
+машин и не обычный бой. Частичные hold/resume не подтверждают arrival/dismount/foot.
+
+Native route observer требует повторный complete path2..512, exact current
+Pilot/AICar/lease/route/intent, unique projection, physical plausibility и
+high-water history без replan/replay credit. Direct/motion/absolute/recovery
+limits сохранены. В N7 WP Rpl authority проверяется, если компонент существует;
+group/car/driver replicated authority обязательны всегда. N7 подтвердил этот
+путь и реальный progress; общий сценарий при этом остаётся FAIL.
+
+Поздние исправления: retained normal COMPLETE intent больше не переармляется
+от handoff assignment revision; explicit admission/новый intent/target/preset
+сохранены. Cargo Gate observer требует уникальную native OpenGate chain,
+физический выход, completed exact return и реальное возобновление движения в
+неизменяемом первом60s окне. Отдельный stateless NativeAbandon распознаёт
+current/executed native group GetOut exact машины и возвращает typed fallback
+до driver recovery; штатные actions не отменяются и clocks не подменяются.
+M8 подтвердил callback receipt в native; Controller снимает listener даже при
+invalid trip. M6 показал отдельную budget coupling ошибку высадки: теперь logical
+exit и physical relocation имеют отдельные3 batches, aggregate максимум6/phase,
+12 normal+terminal. Сроки и permissions прежние; causal v3 проверил actual branch.
+
+Baseline parent9/9 PASS. Профильные before→after: recruitment5/5→5/5,
+boarding6/6→7/7, staging6/6→7/7, native-route5/5→7/7;
+parallel-entry3/3→8/8, accounting6/6→7/7, muster2/2→2/2 PASS.
+`full-after-v2`117/117 и `full-final-summary.json`124/124 PASS относятся к своим
+freeze, не к поздним completed-intent/Gate/NativeAbandon изменениям.
+Diagnostic-v1 compile FAIL unsupported `%` и остановленный full-after ABORTED
+сохранены; bounded subtraction исправлен. Финальный freeze N7:
+`route-native-v7-compile-summary.json` — Stock/RHS/ArlandWCSRHS **3/3 PASS**,
+native exit0/script fatal0. Затем `completed-intent-gate-v8`3/3 PASS и финальный
+`abandon-gate-v9-compile-summary.json` Stock/RHS/ArlandWCSRHS **3/3 PASS**.
+Workbench compile не означает физический client run.
+
+Финальная версия: `clearance-v11-compile-summary.json` **3/3 PASS** и
+`all-clearance-summary.json` **129/129 PASS**, exact unique union, LogisticsContracts
+ровно1. `final-source-verification.json` подтверждает отсутствие production drift
+после compile. Callback delta9/9, completion23controls/Gate46; budget baseline6/6→7/7,
+actual state27controls и ScenarioLog62 также PASS. Ошибка C# test adapter v2 сохранена,
+исправление одним Add-Type assembly подтверждено fresh v3. Все runtime завершены;
+полные stopped logs/hashes сохранены, исходники активных stages не менялись.
+M7/M8 и causal v3 завершены отдельно; native callback и operation-budget proofs
+не превращают их общие failure gates в PASS. Итоговые cause/index/cleanup и локальный
+commit перечислены в REPORT. Все129 checks относятся к final callback+budget source.
+All-native resource/font/GUID baseline остаётся FAIL; старый JIP serializer FAIL
+не снят. Client/JIP/playerRPC/UI/GUI и physical RHS/WCS matrix **NOT RUN**.
+GUI/ComputerUse запрещены terminal workflow, визуальный критерий не стал PASS.
+Предыдущие baseline и ограничения ниже сохранены без переоценки.
+
+## Ступени 2 → 4 → 6 и повторная native посадка — 2026-10-26
+
+Продолжение той же ветки от `cae4df7`. По решению пользователя отчёт только
+локальный: `.codex-runtime/vehicle-multisquad/REPORT.md`; GitHub не изменялся.
+Workflow, scopes, clocks и команды: [VEHICLE_MULTISQUAD.md](VEHICLE_MULTISQUAD.md).
+**Общий runtime outcome FAIL; готовность релиза не подтверждена.** Обычные
+INFANTRY defaults и cap10/faction не менялись.
+
+Сделаны четыре полных получасовых наблюдения. У всех native0/stopped,
+duration/liveness/provenance PASS. Это не означает доезд или пройденную нагрузку.
+
+| Case | Wall/heartbeat | Functional outcome |
+|---|---|---|
+| normal-run |1821.765s/788,maxgap3090ms | FAIL: symmetric peak1, потери/recovery/spawn timeouts |
+| capacity-run |1819.972s/822,maxgap3041ms | FAIL:11/12muster, одинapproach STUCK→NO_SAFE_BARRACKS |
+| normal-v4 |1819.853s/790,maxgap3039ms | FAIL: peakUS1/USSR2, symmetric0, crew/mobility/roster failures |
+| capacity-v4 |1831.128s/760,maxgap3683ms | MOVING2/side exact5 подтверждены30246ms. На4 FAIL own transitioning crew→FOREIGN;6 не достигнуты |
+
+Наиболее сильное наблюдение нагрузки — два движущихся отряда на каждой стороне
+в `capacity-v4`, с пятью исходными бойцами на назначенных местах, непрерывно
+30.246s. Это ограниченный PASS первой ступени, не успешная транспортная цепочка
+или подтверждение четырёх/шести отрядов.
+
+CAPACITY — отдельный truce/HOLD_FIRE/protection/finitegrant4000 режим, не NORMAL
+war proof. Дополнительные900s MOUNTED_STAGING проверяют количество/посадку до
+первой дальней цели, явно CAPACITY_MOUNTED_ONLY/notmovingproof. Первый запуск
+FAIL по гонкефоновогорасхода465<475 приgrant225/4000; test-onlyJIT исправлен,
+native debit/бюджет не подменяются. Следующий915.162s/native0 FAIL поmuster3/4:
+24reachablequeries отрезаны прежним19m cutoff. Adaptive radius сохраняет35m
+containment, но сам по себе не гарантирует подход; native неудачи сохранены.
+
+Финальный `mounted-six-adaptive`: wall917.323s, elapsed900733ms,391 heartbeat,
+maxgap3034ms, native0/audit1. Duration/liveness/provenance/environment/native_fatal
+PASS; recruitment/cohorts/functional/resources FAIL. Барьер платного найма остался
+3/4: USSR/1 не дошёл к казарме,21 native endpoint вне33m envelope и3 отказа query.
+SELECTED/COMMITTED нет. Выдача машин и JIT ветвь не достигнуты; funding FAIL здесь
+означает отсутствие обязательных purchase receipts, не новую доказанную гонку.
+`cohort=2` — ожидаемая ступень, а не физический PASS. Четыре/шесть не состоялись;
+это не доказательство предела fleet capacity.
+
+Исправлены current native combat proof/meaningful task, свой exact occupant
+при физическом переходе, postcombat native seat assignment, bounded alternative
+recruitment endpoint. Source review закрыл P2 stale native GetIn fallback.
+Путь/двери/физический состав логируются read-only; реальные таймеры и ошибки
+движения не скрываются.
+
+Контролируемый CombatResume-v3: hold90516ms/stationary89495ms, natural deselect1015ms;
+FAIL — native переставил всех четырёх пассажиров и назначил driver Cargo.
+CombatResume-v4 после remap: hold90234ms/stationary89206ms/deselect1025ms,
+**RESUMED110.915m/16poll/exact5/native route**; полный scenario всё равно FAIL по
+общему VEHICLE_DAMAGE. Collision/fire/airborne не доказаны: Y50.9 абсолютная,
+root damage flag не покрывает все child managers/independent movement modifier.
+V2/V6 initial boarding FAIL125s: все door/seat/owner API разрешают вход, native
+GetIn RUNNING без transition в1.7–2.6m отentry. Внутренний BT/path отказ тогда
+не наблюдался; deadline/две попытки ради PASS не расширялись.
+
+Финальный CombatResume-v8 на актуальных production sources: initial exact5 PASS,
+hold90317ms/stationary90317ms, natural deselect1000ms, затем
+**RESUMED102.994m/29poll/exact5/native route**. Полная поездка снова FAIL по
+`VEHICLE_DAMAGE` до arrival/foot arrival; component Rpl/deadline совпали.
+Общий predicate пока не разделяет movement damage и fire: точная физическая
+причина не доказана. Не выдавать этот частичный resume за PASS доезда/высадки.
+`WITNESS_IDENTITY`/`IDENTITY_REJECTED` здесь общие названия veto, а не подмена
+identity. До health stop нет FALLBACK/UNSTUCK/mobility attempts; последующий
+FAILED_CLOSED вызван fixture cleanup (`COORDINATOR_STOP`). В V8 raw vehicle path
+содержит уже пройденные corners: сумма всей polyline не равна remaining distance.
+Новая EntryPath ветвь при успешной начальной посадке не исполнялась.
+
+Проверки с точными commands/exits/hashes сохранены в evidence:
+
+- Baseline7/7 и профильные baselines/after каждого автора PASS; ранние найденные
+  parser/oracle FAIL исправлены и не удалены.
+- Полный offline111/111, затем113 с одним restricted Junction FAIL и отдельным
+  native filesystem rerun PASS;115/115 и116/116 PASS соответствующих sources.
+  Последние adaptive/diagnostic source delta проверены отдельно:10/10 PASS;
+  полный116 после них не выдаётся за новый запуск.
+- Production compile разных freeze Stock/RHS/ArlandWCSRHS: PASS. Сохранён
+  `reviewed-final` FAIL unsupported GetOwner и fixture Formula too complex374;
+  `api-final`3/3 PASS после исправления. Затем `final-diagnostics` FAIL по
+  перегруженному EntryPath expression627; выражения разбиты на короткие guards.
+  Финальный Stock изCombatResume-v8 и `final-verified` RHS/WCS PASS на одном
+  production source. Failed compile stages не запускали симуляцию.
+  `final-source-verification.json`:254 Core files,131 byte-identical,123 отличаются
+  только CRLF/LF из git archive; substantive differences и compile source drift0.
+  `final-diagnostics`/CombatResume-v7 compile FAIL сохранён, после guard repair
+  актуальная проверка Workbench3/3 PASS, native exit0/script fatal0.
+- Фактические rates/orders/preset/actor/lease/source/CLI/watchdog receipts и полные
+  stopped server logs сохраняются; `evidence/archive-index.json` связывает пути.
+
+All-native resource/font/GUID baseline остаётся FAIL. NORMAL содержит project
+SCRIPT(E) replacement timeouts: gen2 получил1/5 через22.6s, затем gen3/4 без
+callbacks до30s; причина native queue не доказана. Старый JIP8 serializer FAIL
+не снят; client/JIP/playerRPC/UI/physicalallRHS-WCSmatrix в этом изменении NOT RUN.
+Визуальные критерии требуют игрока и отклонены из terminal workflow: AGENTS
+запрещает GUI/ComputerUse/screenshots. Это не PASS и не разрешение ready/release.
+
+## Настоящий первый отряд, найм5 и длительный бой: #78 — 2026-10-26
+
+Продолжение `codex/issue-78-vehicle-presets` от `a4fec4b`. По запросу пользователя
+выполнены отдельные получасовые US/Humvee и USSR/UAZ наблюдения с анализом логов
+и параллельными исправлениями. Отчёт только локальный:
+`.codex-runtime/vehicle-soak-30m/REPORT.md`; GitHub не изменялся.
+Workflow и границы проверки: [VEHICLE_SOAK.md](VEHICLE_SOAK.md).
+
+**Общий боевой сценарий остаётся FAIL, ready/release gates не сняты.**
+Подтверждены реальный slot0, обычный платный найм с1 до5, выбранная пятиместная
+модель, exact occupants и выдача приказа. Штатный VehicleCombatActivity прерывает
+поездку; последующий bounded fallback не объявляется успешным доездом.
+
+| Запуск | Наблюдение и результат |
+|---|---|
+| us-baseline, HEAD без production diff | Engine>=1800s, wall1828.330s,179 heartbeats, maxgap13.518s, native0/stopped; duration/liveness/provenance PASS. Functional FAIL: VehicleCombatActivity и MANAGED_MEMBERS_NOT_SETTLED_EXHAUSTED; также прежний ложный MOB deadline |
+| ussr-baseline, тот же stage | Engine>=1800s, wall1820.643s,175 heartbeats, maxgap33.205s, native0/stopped; duration/liveness/provenance PASS. Functional FAIL: назначенный roster перестал быть боеспособным после боевой высадки; retained cleanup защищает неидентифицированного occupant |
+| us-candidate, первые3 исправления | Engine>=1800s, wall1819.949s,179 heartbeats, maxgap10.217s, native0/stopped; duration/liveness/provenance PASS. Functional FAIL: native combat/fallback |
+| ussr-candidate | FAIL: после21m42s симуляция остановилась на native assertion; DONE/GameDestroyed отсутствуют. Wall1894.481s не заменяет30min живой симуляции. Проверенный собственный PID29188 остановлен, native-1 |
+| ural5 regression | Functional auditor PASS/0, native0/stopped,14 checks. Новый второй animated retry принят двумя оставшимися пассажирами; далее существующая защищённая ghost recovery вывела2 физических blockers. Все5 дошли пешком, farthest32.9379m. Условия fixture: truce/HOLD_FIRE/damage protection |
+| repeat5 regression | Functional auditor PASS/0, native0/stopped,23 checks/2 legs, те же5 actor identities. Вторая площадка475.95m: fixed budget297975ms вместо90s; вторая посадка и весь пеший этап завершены. Изолированные мирные условия |
+| ussr-hold-final,600s | Финальный код: оплаченный найм,5 exact seats,120603ms непрерывного mounted wait; SLOT_ACTIVITY показывает preset_destination_wait1/meaningful_task1/BOUNDED_VEHICLE_LIFECYCLE. Доезд143.097m от цели, displacement265.294m,65 velocity polls; normal dismount5/0. На600726ms fixture остановился до FOOT_ARRIVAL, поэтому полный functional FAIL, а не PASS |
+| us-final-15m | Wall918.328s,90 heartbeats, maxgap10.999s, native0/stopped; duration/liveness/provenance PASS, SCRIPT/VM fatal0. Финальный код:5 exact occupants и120716ms mounted hold. Затем VehicleCombatActivity,3 пассажира снаружи; bounded fallback за360.6m до цели, все5 живы. Полный functional FAIL |
+| ussr-final-15m | Wall916.605s,90 heartbeats, maxgap11.005s, native0/stopped; duration/liveness/provenance PASS, SCRIPT/VM fatal0. Финальный код:5 exact occupants и120665ms mounted hold, реальная скорость12.76m/s. После боевой высадки исходный pilot перестал читаться как живой current roster member; alive4, fallback за421.8m до цели. DEAD/transfer не доказаны. Полный functional FAIL |
+
+Native assertion сохранён в `evidence/profiles/ussr-candidate/logs/.../crash.log`:
+`enf_entity.cpp:280`, `Entity out of world bounds`, `VZ58_body.xob`,
+`<2017.858,-34005.941,1207.471>`. Перед assertion не найден project receipt
+перемещения/удаления этого оружейного actor. Причина freefall неизвестна;
+ни внешняя причина, ни связь с проектом не объявляются доказанными. World bounds
+и установленные файлы не изменялись. `native-assert-stop.json` фиксирует точный
+process/profile/port до адресной остановки; blanket process kill не применялся.
+
+Исправлены ложный egress для достигнутого пешего PLAYER hold у MOB, неправильный
+учёт mounted preset wait без route waypoint, starvation очереди посадки,
+one-shot animated dismount и недостаточный фиксированный срок дальнего подхода.
+Для BASE wait сравниваются identity/revisions, для POSITION также точные координаты.
+Добавлена read-only `VEHICLE_CLEANUP_BLOCKING_ACTOR` с original/current identity,
+life state, player status, parent group, exact seat и transitions. История не
+влияет на cleanup safety. Review нашёл и закрыл nullable PlayerManager,
+BASE position, switching-seat и blocked-retry cases; защитные gates не ослаблены.
+
+Проверки и команды:
+
+- Fresh pre-edit `Invoke-AICFChecks.ps1 -Name <8 профильных проверок>`:
+  `.codex-runtime/us-humvee-soak-baseline/`,8/8 PASS/0. Agent baselines/после
+  acquisition, dismount, boarding, cleanup и MOB сохранены отдельно, без скрытых FAIL.
+- Полный offline до последних дополнений: `final-all-0..5`,104/104 PASS/0.
+  После freeze окончательного production кода `verified-all-0..5`:107/107 PASS/0,
+  список всех имён и exact commands в summaries. Один LogisticsContracts одновременно.
+  Собственный subst X использовался только для Windows path length и удалён.
+- `CompileProduction.ps1 -Label review-final`: Stock/RHS/ArlandWCSRHS3/3 PASS/0,
+  successful validation, SCRIPT/ENGINE fatal0; все249 Core source hashes совпадают
+  с окончательным кодом. Isolated scenario/soak fixtures отдельно compiled PASS/0.
+- После исправления test-only clock oracle повторён
+  `Invoke-AICFChecks.ps1 -Name Test-VehicleSoakLogContracts.ps1,Test-VehicleSoakToolsContracts.ps1`:
+  2/2 PASS/0,58 и10 controls. После watcher-only добавления live `crash.log`
+  и IO retries/pending-write stop guard повторены те же2 checks:58+14 controls PASS/0,
+  `final-pending-watcher-delta/`; полный107 после этого tool/test-only delta не повторён.
+  START elapsed1ms законен; одинаковый clock origin,
+  полный engine span, wall minimum, heartbeat и negative29:59 сохраняются.
+  Первоначальные audit verdict/source hashes сохранены в `audit-initial/`.
+- Новые contracts: MOB18, acquisition9, dismount14, cleanup13, queue14,
+  mounted wait24 mutation +4 geometry cases. VehiclePreset78 guards сохранены.
+- `ArchiveEvidence.ps1`: полные stopped logs сохранены с SHA-256, stages упакованы
+  и сверены по каждому source hash до удаления. `evidence/archive-index.json`
+  связывает прежние profile paths с архивными. Failed runs не удалены.
+
+Строгий all-native Error gate остаётся FAIL: resource GUID/font/leak и world
+keyword/hierarchy errors отдельно записаны анализатором. Известный baseline
+не превращается в PASS. Прежний client/JIP FAIL8 native serializer leaks этим
+server-only прогоном не проверялся и не снят. Новый runtime event cleanup blockers
+и starvation YIELDED не сработали в окончательных native повторах: guards проверены
+contracts, но fault-injected native branch пока не подтверждён. Retarget5 и вся
+physical RHS/WCS/all-model матрица заново NOT RUN. Визуальная проверка, player RPC
+ownership и direct-connect client/JIP NOT RUN: fixture начинает после RPC validation,
+Computer Use/GUI/screenshots запрещены. Эти ограничения не означают PASS.
+
+## Полные поездки и диагностика групп: #78 — 2026-10-26
+
+Добавлены read-only GROUP_TRACE/MEMBER_TRACE, native GetIn/GetOut/message/movement
+failure observers и terminal runner шести сценариев. Контракты/CLI:
+[VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md). Отчёт остаётся локальным по просьбе
+пользователя: `.codex-runtime/issue78-scenarios/REPORT.md`. GitHub не обновлялся.
+
+Исправлены orphan/stalled preset boarding (последовательный exact вход, до2
+identity-safe retries), недостаточный общий budget последовательной посадки
+(default25s × max(3, assigned seats), без rearm), native completion только своего
+settled GetIn и ошибочное отступление намеренного состава из одного водителя.
+Read-only transit observation даёт доказанной native OpenGate цепочке водителя
+ручного preset до60s на exact return, сохраняя абсолютный срок trip и настоящие
+motion/progress timestamps. `driver-gate-both`:14 checks, strict PASS/0, водитель
+вернулся за16086ms и закончил полный маршрут/пеший подход. Обычный native выход
+без paired gate chain такой отсрочки не получает.
+
+- Свежий pre-edit baseline6/6 PASS/0, `baseline/summary.json`.
+- Полный offline `native-final-all-0..5`:99/99 PASS/0. После последних изменений
+  только диагностического callback/immutable log address повторён профильный
+  `movement-final-delta`:7/7 PASS/0. После последней test-only правки repeat
+  destination выполнены fixture compile/native; полный99 снова не запускался.
+- Production Workbench `wb-movement-final-Stock/RHS/ArlandWCSRHS` и
+  `workspace`:4/4 PASS/0, successful validation, scriptFatal0.
+  После EOF-only cleanup конечные Stock/RHS/WCS повторно compiled3/3 PASS/0,
+  successful validation/scriptFatal0; eof-final-compilation.json. Это не runtime
+  проверка всех машин RHS/WCS. Финальная fixture `repeat-destination` compiled0.
+- Preset contracts78 guards, GroupTrace7 controls, ScenarioLog45 controls.
+  Прежний restricted junction FAIL сохранён; native rerun LoadoutLibrary PASS/0.
+
+**Последняя основная runtime матрица:3 PASS /3 FAIL; не release-ready.**
+Все завершённые cases имеют native0 и stopped full logs; FAIL ниже не скрыты.
+
+| Case | Итог |
+|---|---|
+| uaz5 | PASS:5 exact seats,30s mounted wait, дальняя поездка, normal COMPLETE, все5 у точки |
+| armed3 | PASS:driver/gunner/passenger, native gate excursion/return, полный маршрут |
+| solo1 | PASS; отдельные driver-gate-control/both также PASS, включая настоящее открытие ворот водителем |
+| ural5 | FAIL DISEMBARK_TIMEOUT на северном маршруте:1 пассажир остаётся на0:3:2 с GetOut RUNNING, перехода нет;3 других ещё внутри bounds. Прежний южный прогон PASS не отменяет FAIL |
+| retarget5 | FAIL PREMATURE_CREW_EXIT после far retarget:SCR_AIGetOutActivity с PLAYER priority при381m до цели; другой маршрут movement-cause PASS. Причина через native failed-movement handler — inference из pinned source, точный EMoveError прежнего отказа не снят |
+| repeat5 | FAIL SPAWN_SITE_APPROACH_TIMEOUT во второй поездке:новая цель/intent, новый trip generation2,90s не хватило для подхода к площадке. Первая полная поездка и исходные actor IDs подтверждены |
+
+READ-only `NATIVE_GROUP_MOVE_FAILED` теперь пишет фактический EMoveError для
+следующих отказов. Его runtime callback наблюдал STUCK у обычной пешей группы;
+это не объявляется кодом ошибки прежнего vehicle retarget. ROAD_REACHABLE не
+доказывает последующий успех engine pathfinding. Защитные occupancy/authority/
+clearance gates не ослаблены, насильственной высадкой FAIL не подменялся.
+
+Ранние harness failures сохранены отдельно: null unstarted boarding tokens,
+чтение vehicle после lawful cleanup, потеря retired COMPLETE trip; оба последних
+исправлены в fixture. Повтор одинаковой цели идемпотентен и не должен порождать
+второй trip: repeat fixture теперь задаёт другую дальнюю цель. Прерванные старые
+прогоны остаются ABORTED. Добавленному native GetOut observer восстановлен
+BaseContainerProps после обнаруженного WORLD Unknown class; строгий auditor
+отклоняет эту регрессию, финальные logs её не содержат.
+
+Строгий all-native Error gate остаётся FAIL по прежним resource/font/texture
+ошибкам; final logs сравниваются с baseline отдельно. Старый strict JIP FAIL8
+native serializers сохраняется, JIP/client в этом изменении NOT RUN. Визуальная
+проверка и physical input NOT RUN: нужен игрок, GUI/screenshot запрещены.
+Поездка в бою и physical matrix каждой модели RHS/WCS NOT RUN. Default scenario
+fixture использует truce/HOLD_FIRE и invulnerability только собственных actors/
+vehicle; это не production и не доказательство поведения в бою.
+
+Новые runtime FAIL и прежние native blockers запрещают ready PR. Push/PR/merge
+не выполнялись, ACCEPTED не объявляется. Полные logs/manifests/exits, command
+scripts, source hashes, архивы и cleanup receipts находятся в локальном evidence.
+
+
+## Посадка Зенит-1 в UAZ и немедленная высадка: #78 — 2026-10-25
+
+Продолжение той же ветки от clean `2177416`. Полный snapshot активной пользовательской
+сессии сохранён в `.codex-runtime/issue78-transit/user-active-20261025-2111/`;
+он не является остановленным runtime PASS. В `trip-USSR-0-1-1` все5 заняли
+точные места UAZ469_uncovered в21:08:38. В том же tick штатный код признал
+исходную AREA_SECURITY у HQ достигнутой и перешёл TRANSIT→DISMOUNT с
+`TACTICAL_TARGET_WITHIN_DISMOUNT_RANGE`. Новый target в21:08:45 пришёл уже после
+высадки. Это дефект интерпретации исходной цели, а не нехватка мест в UAZ.
+
+Ручной preset до первого маршрута ждёт удалённый target в машине; controller
+приостанавливает только idle budget. После начала маршрута сохраняется обычная
+высадка. Второй обнаруженный дефект: normal timeout20s обрывал ещё выполняющийся
+physical egress. Для уже вышедших без transitions используется остаток существующего
+terminal budget40s, без его продления и без ослабления clearance/human fences.
+Контракт — [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
+
+Evidence: `.codex-runtime/issue78-transit/REPORT.md`; полные native logs,
+manifests/exits и hashes — `evidence/runtime/`. Команды запуска — сохранённые
+`Run.ps1`/`Compile.ps1`, canonical launcher, port2478, отдельные test profiles.
+
+- Свежий baseline **5/5 PASS/0**: VehiclePreset/Log, Stage3/35/4.
+  Первый post-edit subset **5/5 PASS/0**: VehiclePreset, Localization, Stage3/35/4.
+- Окончательная production компиляция `verified-Stock/RHS/ArlandWCSRHS`:
+  **3/3 PASS/0**, successful validation, scriptFatal0. `verified-workspace`
+  отдельно **PASS/0**; native compile fixture также PASS/0.
+- `clearance-candidate`: **16/16 native checks**,5 exact occupants остаются30s,
+  новый target, движение27.9971m с6 velocity polls в той же машине без mobility
+  recovery, physical DISEMBARK_COMPLETE, HANDOFF→COMPLETE,5 живых пехотинцев,
+  один purchase125. Strict TransitLog **PASS/0**, полный stopped log, scriptFatal0.
+  Final fixture дополнительно требует COMPLETE в самом ARRIVAL_FULL_DISMOUNT.
+- Первые `first/search/local-nav` подтверждали30s ожидания, но **FAIL** на
+  подготовке дальней цели: native GetReachablePoint возвращал local samples
+  лишь10..37m. Fixture теперь читает runtime graph и native navmesh endpoints;
+  production pathfinding не подменялся. `objective` подтвердил35.4434m движения,
+  но **FAIL NORMAL_TRIP_COMPLETE/TRIP_FAILURE** из-за DISEMBARK_TIMEOUT.
+  Первый слишком слабый oracle ошибочно считал on-foot после fallback успехом;
+  он усилен до штатного COMPLETE, старый полный log теперь отклоняется.
+- `Test-VehiclePresetContracts.ps1`: **61 guards PASS**.
+  `Test-VehiclePresetTransitLogContracts.ps1`: **32 controls PASS**, включая
+  недостаточный путь, отсутствие реальной скорости, подмену машины, преждевременную
+  высадку, отсутствие physical completion и fallback/latch вместо успеха.
+- Окончательный `verified`: **16/16 native checks / strict TransitLog PASS/0**,
+  тот же UAZ проехал30.0353m с8 velocity polls;30s ожидания,5 exact occupants,
+  physical DISEMBARK_COMPLETE, HANDOFF→COMPLETE, один purchase125. Полный log
+  остановлен, native0, scriptFatal0. All-native gate отдельно **FAIL/1**:
+  28 Error lines в console/error/script (с повторами),11 уникальных сообщений;
+  все11 уже были в evidence предыдущего изменения, новых signatures нет.
+- Полный окончательный offline набор: **97/97 PASS/0**,97 разных checks без
+  пропусков, `verified-all-0..5/` и `verified-summary.json`; финальный source
+  SHA256 freeze совпадает. Предварительный `final-all-*` тоже дал97 без FAIL,
+  но во время его последних checks добавлен bounded egress: он не объявляется
+  итогом одного окончательного snapshot. Logistics145 cases повторно PASS;
+  запуски его общей mutation folder не пересекались.
+
+Очистка:18 полных native logs сверены SHA256;6 test profiles и2 стадии
+полностью архивированы с SHA256 каждого entry, затем удалены.2 промежуточных
+файла также убраны; receipts — `evidence/archives.json`. Пользовательский
+Frontend/profile и его библиотека сохранены.
+
+По явному выбору пользователя отчёт остаётся только локально; GitHub issue не
+изменялся. Прежний strict JIP **FAIL8 native serializers** и all-native
+resource/font/texture Error gate не объявляются исправленными; JIP в этом
+изменении **NOT RUN**. Ready PR заблокирован, ACCEPTED не объявляется.
+
+**NOT RUN:** визуальная читаемость нового статуса и физический ввод игрока;
+GUI automation/screenshots запрещены. Нужен игрок: в новом матче выбрать
+пятерым UAZ у текущей цели, убедиться, что они ждут внутри, затем задать дальний
+target. Native probe проверяет первый участок пути и прибытие после retarget,
+но не весь путь до дальней базы, длительный бой или все модели RHS/WCS.
+Активная пользовательская игра не останавливалась; для её исходного trip нужна
+новая сессия, правка не восстанавливает уже завершённый trip задним числом.
+
+## Preview, commander slider и подтверждённое сокращение crew: #78 — 2026-10-25
+
+Продолжение `codex/issue-78-vehicle-presets` от clean `ba2d0e9`.
+Пользователь явно изменил прежний запрет сокращения: после подтверждения оставить
+только назначенных в машину бойцов, остальных вернуть к ближайшей безопасной
+союзной точке и despawn. Контракт — [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
+
+Evidence: `.codex-runtime/issue78-editor/REPORT.md`, manifests/exits в корне
+evidence, полные native logs и SHA256 — `evidence/runtime/` и
+`evidence/runtime-hashes.json`. `Compile.ps1` берёт graph из canonical Client
+DryRun, `Run.ps1` вызывает только `tools/Start-AICFRuntime.ps1`, port2478.
+
+- Свежий baseline: **8/8 PASS/0** (VehiclePreset/Log/ClientLog/CatalogLog,
+  AICommanderUI, RecruitmentSequence, SquadCommands, Localization).
+- Окончательный полный offline набор: **96/96 PASS/0**,56 preset guards и32
+  crew log controls. `AllShard.ps1 -Group 0..5` вызывает неизменённый
+  Invoke-AICFChecks по независимым Name subsets, ровно96 разных checks без
+  пропусков. `final-all-0..5/`, `final-summary.json`; финальный SHA256 freeze
+  совпадает. Logistics запускается после завершения предыдущего экземпляра.
+- Финальная production компиляция `final-stock/rhs/wcs`: **3/3 PASS/0**,
+  successful validation, scriptFatal0. Рабочая копия `workspace-final` также
+  **PASS/0**, resource database подготовлена для клиента.
+- `crew-final-replay`: **15 UI +8 server checks PASS**, inventory до/после
+  совпадает, native0/0, stopped2, scriptFatal0. Отдельный roster10, выбран
+  исходный member9; Cancel и неверный challenge не меняют состав, Confirm
+  оставляет того же actor как member0, сохраняет kit/role и отправляет9 AI
+  пешком с40m на safe spawn point.9 разных physical arrivals, ровно1 driver
+  в civilian UAZ и единственный purchase50. Новый strict
+  `Test-VehicleCrewReturnLog.ps1` — **PASS/0**,32 negative/positive controls.
+- `final-ui`: **28 client +5 JIP functional checks PASS**, native0/0/0,
+  оба owner readbacks, все logs остановлены. Strict ClientLog auditor —
+  **FAIL SERVER_FULL_FATAL**, те же8 native persistence serializers при
+  reconnect. Прежний native-only/main reproducer описан ниже; фильтр не ослаблен.
+- Первые compile diagnostics выявили Color вместо packed int в SetClearColor
+  и несовместимый Copy для array<ref binding>; исправлены. Первый crew RPC
+  не допускал новые enum values; исправлен и повторён. Localization сначала
+  имела stale runtime tables; Build-AICFLocalization синхронизировал706 entries.
+- `crew-second` уже проверил13 UI +8 server /9 arrivals /1 driver /purchase50.
+  Следующий `crew-final` прошёл15 UI, kit и все9 returns, но завершился
+  **FAIL TIMEOUT** на прежнем staging approach к площадке, без purchase.
+  Неизменённый replay завершился полностью. Этот FAIL сохранён; успешный replay
+  не доказывает проходимость всех native маршрутов и не скрывает тайм-аут.
+- Предварительный full offline дал **95/96 PASS**, Stage4 обнаружил потерянную
+  видимую подпись MAX10. Подпись восстановлена, Stage4 повторно PASS.
+  Один ранний parallel recheck LogisticsContracts — **FAIL** из-за совпавшей
+  временной source folder двух запусков (20:31:09–20:35:27 и
+  20:34:51–20:35:13). Логи показали чужую отрицательную мутацию; production и
+  анализатор не менялись. Заключительный набор запускается без дублирования
+  checks, логистика отдельно от предыдущего экземпляра; её финальные145 cases PASS.
+
+Cleanup:33 полных log files сверены SHA256;11 test profiles,5 test libraries,
+2 staging directories и6 промежуточных файлов убраны после архивации, subst X
+снят. Пользовательский Frontend/profile и его постоянная библиотека не удалялись.
+
+Строгий all-native resource/font/texture Error gate остаётся **FAIL**; ready PR
+заблокирован, ACCEPTED не объявляется. Visual/input UX, внешний вид preview,
+clipping RU/EN и физический mouse/controller drag — **NOT RUN**: нужен игрок,
+GUI automation/screenshots запрещены. Hidden controls проверяют модель и handlers.
+Длительный бой, заблокированный return path/смена владельца под боем и physical
+matrix всех RHS/WCS моделей — **NOT RUN**; source fences/compile не заменяют их.
+
+## Категории своей и гражданской техники: продолжение #78 — 2026-10-25
+
+Ветка та же `codex/issue-78-vehicle-presets`, исходный clean `118a5ab`.
+Пользователь уточнил scope: легковые, грузовики, колёсная бронетехника своей
+faction и гражданские. Air/Tracked/stationary исключены из списка. Каталог
+больше не требует SpawnerData; quote берётся из profile/native CAMPAIGN.
+Контракт — [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
+
+Evidence: `.codex-runtime/issue78-catalog/REPORT.md`; полные launcher manifests,
+native exits и stopped logs сохраняются в `evidence/runtime/`.
+
+- Свежий baseline **5/5 PASS/0**: VehiclePreset/Log/ClientLog, Localization,
+  MenuPrice. Полный `after-all` — **95/95 PASS/0**. Новые/расширенные contracts:
+  39 structural guards,24 physical log controls,12 client/JIP controls,
+  13 native catalog log controls. Localization —701 RU/EN entries.
+- Native каталог `catalog-stock-final`, `catalog-rhs-final`, `catalog-wcs-final`:
+  **21/21 PASS** каждый, native0/stopped/scriptFatal0. Проверены полнота own/CIV
+  источников, parallel metadata, stable quotes, отсутствие budget mutation,
+  enemy rejection, civilian inspection/recipient и отсутствие spawn/purchase.
+  Stock:41 own+55 CIV для US,19+55 для USSR. RHS:18+55 /25+55.
+  Итоговый WCS после исключения legacy tracked:20+58 /26+58.
+- `civilian-physical`: **185/185 PASS**,4 exact occupants civilian UAZ blue,
+  один purchase50. `Test-VehiclePresetLog.ps1 -Civilian -Lifecycle -Policy`
+  **PASS**; native0/stopped/scriptFatal0. Проверены также library/legacy,
+  reset, повтор без второго spawn/debit, новая группа и manual/automatic policy.
+- `civilian-s105`: **186/186 PASS**,1 exact occupant S105 beige, один purchase40,
+  native0/stopped/scriptFatal0; тот же auditor **PASS**. Дополнительный CLI model
+  selector существует только в fixture. После его последней test-only правки
+  полный95 не повторялся; native/compile этой fixture подтверждены отдельно.
+- Окончательный production Workbench Stock/RHS/WCS — **3/3 PASS/0**,
+  successful validation и scriptFatal0 в полных logs, без fixtures.
+- `final-ui`: **28 client +5 JIP checks PASS**, owner readback подтверждает
+  civilian prefab своей USSR. Фильтры source/category, пустой результат без
+  SELECT, перевод visible index в prefab и Load/JIP reveal проверены hidden
+  native handlers. Server/client/JIP native0/0/0, все logs остановлены.
+  Строгий auditor `-CatalogFilters` — **FAIL SERVER_FULL_FATAL**, ровно8 native
+  persistence serializer leaks при reconnect, как установленный native-only
+  baseline предыдущего этапа. Отказ не фильтруется, ready PR остаётся блокирован.
+
+Первый диагностический compile выявил неверный InsertAll для array<ref budget>
+в собственной fixture; исправлен до production. Первый catalog probe нашёл
+ошибку range guard цены; исправлена целочисленным сравнением, поздние quotes/
+inspection прошли. Ранний WCS catalog включал legacy tracked с wheel component;
+уточнение scope потребовало отдельного исключения native tracked и `/Tracked/`.
+Дополнительный S105 fixture сначала имел неверный scope переменной CLI selector;
+исправлен до запуска S105. Diagnostic compile log сохранён отдельно.
+Ранние логи сохранены как diagnostic/FAIL, не выданы за final wheel-only PASS.
+
+Cleanup:18 собственных profiles и stage удалены после SHA256 архивации logs; subst X снят, собственных native процессов0. Полные evidence сохранены.
+
+Baseline offline failures отсутствуют. Строгий all-native resource Error gate
+остаётся **FAIL** по существующим vendor/resource errors; compile0 не заменяет
+его. Visual/input UX и clipping/filter list читаемость RU/EN — **NOT RUN**:
+нужен игрок, который откроет «Техника», переключит обе группы фильтров и загрузит
+сохранённую civilian схему. GUI automation/screenshots запрещены AGENTS.md.
+Длительный бой и physical запуск каждой RHS/WCS модели — **NOT RUN**; native
+catalog/quotes и compile не доказывают физическое выполнение всех моделей.
+
+## Пресеты техники: issue #78 — 2026-10-25
+
+Ветка `codex/issue-78-vehicle-presets` от актуального `origin/main` `45d0431`.
+Контракт и flags: [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md). Полный отчёт,
+команды, manifests, native exits и остановленные logs:
+`.codex-runtime/issue78/REPORT.md`, `.codex-runtime/issue78/evidence/runtime/`.
+
+- До правок полный `baseline-all`: **91/91 PASS/0**. `final-all` после production
+  изменений: **94/94 PASS/0**. После расширения только fixtures/log oracles
+  повторены все 3 новых contracts в `final-delta-policy`: **3/3 PASS/0**, 29 structural
+  checks, 22 log controls, 8 client/JIP controls. Повторный полный набор после
+  последнего расширения probes не запускался; production с `final-all` не менялась.
+- Workbench production `final-stock`, `final-rhs`, `final-wcs`: **3/3 PASS/0**,
+  полные logs содержат `Script validation successful`, scriptFatal0.
+  Isolated native fixtures также скомпилированы терминально.
+- `stock-lifecycle-final`: **74/74 PASS**, 4 exact occupants обычного УАЗа,
+  один purchase125. `stock-armed-final`: **73/73 PASS**, 3 exact occupants
+  UAZ469_PKM, один purchase280. Оба — native0/stopped/scriptFatal0;
+  `Test-VehiclePresetLog.ps1 -Lifecycle` **PASS**. Проверены Save/Load/Update/
+  Delete, legacy member file, funds/cap negatives, повторный Apply без второго
+  spawn/debit, смена модели, роли, настоящей group entity и stale generation.
+- `stock-policy-final`: **76/76 PASS**, native0/stopped/scriptFatal0,
+  `-Lifecycle -Policy` **PASS**. Через настоящий IsAdmissionEligible проверено:
+  manual binding обходит automatic infantry policy, после reset она снова
+  отклоняет infantry motorization. Исходный unit profile восстановлен.
+- `stock-human-driver`: **69/69 PASS**, actual seated driver передан native
+  direct-connect player. После reset и 15s polling машина/ID/occupant сохранены;
+  player не вытеснен. Server/client native0/stopped/scriptFatal0;
+  `Test-VehiclePresetLog.ps1 -HumanProtection` **PASS**.
+- `stock-library-restart-final`: **31/31 PASS** после нового server process с
+  тем же persistent mount (`files`); точные model/seats, tombstone и старый
+  character preset. `-LibraryReload` **PASS**, physical gate этого запуска NOT RUN.
+- `stock-ui-backend`: hidden actual handlers **20 client +3 JIP checks PASS**,
+  два server readbacks, native0/0/0 и все logs остановлены. Но полный строгий
+  `Test-VehiclePresetClientLog.ps1` — **FAIL SERVER_FULL_FATAL**:8 native
+  persistence serializer leaks при reconnect. Этот FAIL не скрыт и не исключён.
+- Сравнение: baseline main `head-jip` без новых production sources даёт те же8
+  leaks; `native-jip` без всех production Scripts AICF воспроизводит те же8.
+  Одиночные native/main подключения и private-world control их не дали.
+  Нужен native persistence reconnect fix; installed/vendor files менять запрещено.
+  Доказательство происхождения не превращает обязательный gate в PASS.
+- В первом human4 запуске driver не завершил native boarding, сработал штатный
+  deadline/ALL_OR_FALLBACK. Оба собственных процесса остановлены, logs сохранены
+  как FAIL/diagnostic. Исправленная fixture задаёт начальную позицию native
+  player до probe и использует совместимый driver1. Другие ранние compile,
+  неверные topology/oracle ожидания, CRC mismatch и shutdown попытки сохранены
+  отдельно, не включены в успешные verdicts.
+
+Baseline offline failures отсутствуют. Первая non-elevated after-all попытка
+получила filesystem/Junction denial в LoadoutLibraryContracts; исходный и
+повторный полный запуск с native доступом прошли без изменения аудитора.
+Native resource/font/texture Error остаются отдельным строгим **FAIL**, как в
+[EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md); нулевой scriptFatal
+не означает отсутствия всех native Error.
+
+Визуальный/input/mouse/controller UX — **NOT RUN**, требует игрока: открыть
+карту, выбрать отряд → «Техника», распределить seats и проверить читаемость
+RU/EN, сохранить/загрузить/применить. Terminal-only правила запрещают GUI
+automation/screenshots. Длительный бой и физические RHS/WCS модели — **NOT RUN**;
+RHS/WCS в этом изменении подтверждены compile graph, не runtime универсальностью.
+Issue не закрыта, результат не объявлен ACCEPTED; ready PR блокирован.
+
 ## PR77 review: неполные комплекты живого ИИ — 2026-10-25
 
 Исходный clean `a140f22`, продолжение `codex/issue-66-loadout-qol`.
@@ -7082,3 +8900,23 @@ Probe выключает damage только в изолированной ко�
 Изменены Core state/crew/patrol/service/cleanup, новый recovery, README и
 архитектурные/gameplay/testing/fixture заметки, FIAGarrisonContracts,
 RecoveryProbe и RecoveryLog; точный список — `changed-files.txt` в evidence.
+
+## Preset queued approach: tick observer — 2026-10-30
+
+`Test-PresetQueuedApproachProbeContracts.ps1` исполняет actual fixture predicates:
+14 latch cases (включая естественное завершение той же ранее наблюдённой native
+action) и6distinct500ms poll cases. Observer читает пешее приближение каждый
+`TickPreset`, а допуск очереди требует latched10м/3polls и свежие actor/vehicle
+EntityID/componentRpl/token/health/deadline fences. Он не меняет pose, AI cap,
+health, native action или gameplay clocks. `Test-PresetQueuedApproachLogContracts`
+сохраняет36controls; frozen `Test-PresetQueuedApproachLog.ps1 -RequireHealth`
+проверяет полный causal START→WALK→ENTRY→exactoccupant.
+
+Свежий current335 native `prequeue-native-v6`: WB0/native0/fullstopped,
+base82/0FAIL, WALK10.4198м/4distinctpolls до GetIn, original/health/deadline1,
+точные4occupants, source/current drift0. Functional/fatal gates PASS; строгий
+resource gate остаётся FAIL28rawlines. V5fail полностью сохранён: observer
+пропустил COMPLETED и удержал Cargo до boardingdeadline, после чего cleanup
+зафиксировал failclosed физического blocker. Это explicit project SCRIPT E,
+не VM/deletecallback crash; fixture teardown произошёл позже. Полный ledger и
+SHA: `.codex-runtime/issue78-finalization-20261029/backend-prequeue-observer-fix/REPORT.md`.

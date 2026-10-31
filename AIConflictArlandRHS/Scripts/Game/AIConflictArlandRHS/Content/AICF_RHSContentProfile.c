@@ -3,6 +3,11 @@
 // copied and no uncatalogued ResourceName is admitted.
 class AICF_RHSContentProfile : AICF_ContentProfile
 {
+	override int GetVehiclePresetCostOverride(ResourceName prefab)
+	{
+		return AICF_RHSMenuPricePolicy.GetInstance().Quote(prefab);
+	}
+
 	override bool IsFIAEquipmentReady(ChimeraCharacter character)
 	{
 		SCR_ChimeraCharacter scripted = SCR_ChimeraCharacter.Cast(character);

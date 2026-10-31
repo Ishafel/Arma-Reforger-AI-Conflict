@@ -14,6 +14,7 @@ class AICF_TransportTripController
 	protected ref AICF_VehicleAcquisitionFlow m_AcquisitionFlow;
 	protected ref AICF_VehicleBoardingFlow m_BoardingFlow;
 	protected ref AICF_VehicleTransitFlow m_TransitFlow;
+	protected ref AICF_VehicleBehaviorFlow m_BehaviorFlow;
 	protected ref AICF_VehicleDismountFlow m_DismountFlow;
 	protected ref AICF_VehicleTaskHandoff m_Handoff;
 	protected ref AICF_VehicleCleanupManager m_CleanupManager;
@@ -45,6 +46,7 @@ class AICF_TransportTripController
 			contentProfile);
 		m_BoardingFlow = new AICF_VehicleBoardingFlow(m_Config, watchdog);
 		m_TransitFlow = new AICF_VehicleTransitFlow(m_Config, m_WaypointFactory, watchdog);
+		m_BehaviorFlow = new AICF_VehicleBehaviorFlow(m_Config);
 		m_DismountFlow = new AICF_VehicleDismountFlow(m_Config, watchdog, m_WaypointFactory);
 		m_Handoff = new AICF_VehicleTaskHandoff(orderPlanner, objectiveGraph, targetSelector);
 		m_Diagnostics = new AICF_VehicleDomainDiagnostics();
@@ -90,9 +92,14 @@ class AICF_TransportTripController
 				"STALE_ASSIGNMENT_CALLBACK_CANCELLED",
 				BuildCausationId(trip, "STALE_REVISION"));
 		}
+		AICF_TripOutcome retirementOutcome;
+		if (TryFinishAcquisitionHoldRetirement(trip, currentAssignment, slot, fleet, faction, retirementOutcome))
+			return retirementOutcome;
 		RearmHandoffOrderRestoreForIntent(trip, currentAssignment);
 		if (trip.IsTerminal())
 			return TickTerminalPostconditions(trip, currentAssignment, slot, fleet, faction);
+		if (trip.GetVehiclePresetSlot() && !trip.IsVehiclePresetCurrent())
+			return ApplyOutcome(trip, AICF_TripOutcome.FallbackToFoot("VEHICLE_PRESET_SUPERSEDED", BuildCausationId(trip, "PRESET_CHANGED")), currentAssignment, slot, fleet, faction);
 
 		if (IsAcquisitionPhase(trip.GetPhase()))
 			return TickAcquisition(trip, currentAssignment, slot, fleet, faction);
@@ -118,7 +125,7 @@ class AICF_TransportTripController
 		if (!trip)
 			return AICF_TripOutcome.TerminalFailClosed(reason, "stale-trip-missing");
 		string causationId = BuildCausationId(trip, "STALE_TERMINATION");
-		if (!trip.IsValid() || !fleet || reason.IsEmpty() ||
+		if (!trip.IsValidForRetirement() || !fleet || reason.IsEmpty() ||
 			fleet.GetFactionKey() != trip.GetFactionKey() ||
 			!IsStaleTerminationLeaseCurrent(trip, fleet))
 		{
@@ -139,6 +146,8 @@ class AICF_TransportTripController
 			AuditTerminalPostconditions(trip, null, null);
 			return terminalOutcome;
 		}
+		trip.RecordCapturedDeadRetirement(fleet, AICF_VehicleCleanupManager.GetRetirementObservationBudget(m_Config.GetDismountTimeoutMs(), m_Config.GetCleanupDelayMs()));
+		bool capturedDeadBeforeTransition = trip.HasCapturedDeadRetirementEvidence();
 		if (!trip.IsTransitionAllowedTo(AICF_ETransportTripPhase.FAILED_CLOSED))
 		{
 			return AICF_TripOutcome.TerminalFailClosed(
@@ -147,18 +156,23 @@ class AICF_TransportTripController
 		}
 
 		ReleaseEmptyReservationIfPresent(trip, fleet);
-		ReleaseSpawnPlan(trip, reason);
+		AICF_VehicleSpawnPlan endingPlan = trip.GetRequestState().GetSpawnPlan();
+		bool releasedPlan = ReleaseSpawnPlan(trip, reason);
+		if (!releasedPlan && endingPlan && endingPlan.GetAcquisitionHold())
+			return AICF_TripOutcome.TerminalFailClosed("ACQUISITION_HOLD_RELEASE_PENDING", causationId);
 		m_Handoff.DetachVehicleUtility(trip);
 		if (!TransitionTo(
 			trip,
 			AICF_ETransportTripPhase.FAILED_CLOSED,
 			reason,
-			causationId))
+			causationId,
+			fleet))
 		{
 			return AICF_TripOutcome.TerminalFailClosed(
 				"STALE_TERMINATION_COMMIT_REJECTED",
 				causationId);
 		}
+		if (capturedDeadBeforeTransition) trip.RecordCapturedDeadRetirementCommit(fleet);
 		BeginHandoffEvidence(trip, false);
 		BeginTerminalClearanceIfRequired(trip, causationId);
 		return AICF_TripOutcome.TerminalFailClosed(reason, causationId);
@@ -168,6 +182,7 @@ class AICF_TransportTripController
 		AICF_TransportTrip trip,
 		AICF_FactionFleet fleet)
 	{
+		if (trip.HasAbsentGroupRetirementIdentity() && !AICF_TripRetirementIdentity.IsFleetAssetCurrent(trip, fleet)) return false;
 		AICF_VehicleLease lease = trip.GetLease();
 		if (!lease)
 			return true;
@@ -238,7 +253,11 @@ class AICF_TransportTripController
 			return AICF_TripOutcome.TerminalFailClosed(
 				"STOP_TRIP_IDENTITY_INVALID",
 				"controller-stop-invalid");
-		if (!trip.IsValid())
+		trip.StopCleanupAssignmentRebind();
+		AICF_VehicleMovementState stopMovement = trip.GetMovementState();
+		if (stopMovement) stopMovement.SetNativeGate(null);
+		m_BehaviorFlow.Stop(trip);
+		if (!trip.IsValidForRetirement() || (trip.HasAbsentGroupRetirementIdentity() && !AICF_TripRetirementIdentity.IsFleetAssetCurrent(trip, fleet)))
 		{
 			ReleaseSpawnPlan(trip, reason);
 			return AICF_TripOutcome.TerminalFailClosed(
@@ -259,7 +278,8 @@ class AICF_TransportTripController
 				trip,
 				AICF_ETransportTripPhase.FAILED_CLOSED,
 				reason,
-				causationId);
+				causationId,
+				fleet);
 			if (committedTerminal)
 				PrepareStopHandoffEvidence(trip);
 		}
@@ -303,6 +323,17 @@ class AICF_TransportTripController
 		return AICF_TripOutcome.Wait("STOP_SIDE_EFFECTS_ABORTED", causationId);
 	}
 
+	AICF_SpawnApproachFailure ReportSpawnApproachFailure(AICF_TransportTrip trip,
+		AICF_StrategicAssignmentSnapshot currentAssignment, AICF_GroupSlot slot,
+		AICF_FactionFleet fleet, SCR_CampaignFaction faction,
+		SCR_AIGroupUtilityComponent utility, AIActionBase action, AIWaypoint waypoint, vector location)
+	{
+		if (!IsAuthorityReady() || !HasCurrentIdentity(trip, currentAssignment, slot, fleet, faction) ||
+			HasStaleRevision(trip, currentAssignment)) return null;
+		return m_AcquisitionFlow.ReportSpawnApproachFailure(trip, currentAssignment, slot, fleet,
+			faction, utility, action, waypoint, location);
+	}
+
 	protected AICF_TripOutcome TickAcquisition(
 		AICF_TransportTrip trip,
 		AICF_StrategicAssignmentSnapshot currentAssignment,
@@ -320,7 +351,7 @@ class AICF_TransportTripController
 		if (assignmentChanged)
 		{
 			string causationId = ResolveCausationId(trip, outcome, "ACQUISITION_RETARGET");
-			if (!CommitRetarget(trip, currentAssignment, causationId))
+			if (!CommitRetarget(trip, currentAssignment, causationId, slot))
 			{
 				return EndVehicleControl(
 					trip,
@@ -332,6 +363,13 @@ class AICF_TransportTripController
 					causationId,
 					true);
 			}
+		}
+		bool holdSuperseded;
+		if (!ReconcileAcquisitionHold(trip, currentAssignment, slot, outcome, holdSuperseded))
+		{
+			if (holdSuperseded) return outcome;
+			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK,
+				"ACQUISITION_STAGING_HOLD_UNSAFE", ResolveCausationId(trip, outcome, "ACQUISITION_HOLD"), true);
 		}
 		return ApplyOutcome(trip, outcome, currentAssignment, slot, fleet, faction);
 	}
@@ -352,6 +390,14 @@ class AICF_TransportTripController
 				break;
 			case AICF_ETransportTripPhase.TRANSIT:
 				outcome = m_TransitFlow.Tick(trip, causationId);
+				break;
+			case AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT:
+				// Reliability владеет receipt своей незавершённой проверки. До
+				// её terminal outcome нельзя снимать waypoint или заменять candidate
+				// повторным Handoff proof. Этот WAIT обходит ApplyOutcome целиком.
+				if (slot.HasPendingOrderRecovery() && slot.PendingOrderRecoveryCountsAsReliabilityAttempt())
+					return AICF_TripOutcome.Wait("TACTICAL_INFANTRY_VERIFICATION_PENDING", causationId);
+				outcome = m_BehaviorFlow.Tick(trip, causationId);
 				break;
 			case AICF_ETransportTripPhase.DISMOUNT:
 				outcome = m_DismountFlow.ProcessNormalDismount(trip, causationId);
@@ -385,6 +431,19 @@ class AICF_TransportTripController
 				true);
 		}
 		AIWaypoint waypointForRemoval = outcome.GetWaypointForRemoval();
+		bool destinationWait = outcome.GetKind() == AICF_ETripOutcomeKind.WAIT && outcome.GetReason() == "PRESET_WAITING_FOR_DESTINATION";
+		bool wasWaiting = trip.IsPresetWaitingForDestination();
+		if (destinationWait || wasWaiting)
+		{
+			int nowMs = System.GetTickCount();
+			int waitedMs = trip.GetMovementState().GetPresetDestinationWaitMs(nowMs);
+			if (!trip.CommitPresetDestinationWait(destinationWait, nowMs))
+				return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FAILED_CLOSED,
+					"PRESET_DESTINATION_WAIT_REJECTED", outcome.GetCausationId(), true);
+			if (destinationWait != wasWaiting)
+				AICF_Stage3Diagnostics.Info("VEHICLE_PRESET_DESTINATION_WAIT", FormatIdentity(trip, outcome.GetCausationId(), outcome.GetReason()) +
+					string.Format(" waiting=%1 waited_ms=%2 absolute_deadline_ms=%3", destinationWait, waitedMs, trip.GetAbsoluteDeadlineMs()));
+		}
 		if (waypointForRemoval)
 		{
 			m_Handoff.RemoveVehicleWaypoint(
@@ -397,7 +456,23 @@ class AICF_TransportTripController
 		switch (outcome.GetKind())
 		{
 			case AICF_ETripOutcomeKind.WAIT:
+				if (trip.GetPhase() == AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT)
+				{
+					if (trip.GetBehaviorState().m_bReboarding)
+					{
+						if (!m_Handoff.SuspendInfantryOrder(trip, slot, "TACTICAL_REBOARD"))
+							return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK,
+								"TACTICAL_SUSPEND_FAILED", outcome.GetCausationId(), true);
+						trip.GetHandoffState().Reset();
+					}
+					else
+						m_Handoff.RestoreInfantryOrder(trip, trip.GetHandoffState(), slot, faction, "TACTICAL_DEPLOYMENT", outcome.GetReason());
+				}
 				return outcome;
+			case AICF_ETripOutcomeKind.START_TACTICAL_DEPLOYMENT:
+				return StartTacticalDeployment(trip, outcome, currentAssignment, slot, fleet, faction);
+			case AICF_ETripOutcomeKind.RESUME_TACTICAL_MOVEMENT:
+				return ResumeTacticalMovement(trip, outcome, currentAssignment, slot, fleet, faction);
 			case AICF_ETripOutcomeKind.RETRY:
 				return ApplyRetry(trip, outcome, currentAssignment, slot, fleet, faction);
 			case AICF_ETripOutcomeKind.START_BOARDING:
@@ -424,6 +499,36 @@ class AICF_TransportTripController
 					outcome.GetReason(), outcome.GetCausationId(), true);
 		}
 		return outcome;
+	}
+
+	protected AICF_TripOutcome StartTacticalDeployment(
+		AICF_TransportTrip trip, AICF_TripOutcome outcome, AICF_StrategicAssignmentSnapshot currentAssignment,
+		AICF_GroupSlot slot, AICF_FactionFleet fleet, SCR_CampaignFaction faction)
+	{
+		if (!trip.GetVehiclePreset() || trip.GetPhase() != AICF_ETransportTripPhase.TRANSIT ||
+			!TransitionTo(trip, AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT, outcome.GetReason(), outcome.GetCausationId()))
+			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK, "TACTICAL_TRANSITION_REJECTED", outcome.GetCausationId(), true);
+		if (!trip.CommitBehaviorClockPause(true, System.GetTickCount()) || !m_BehaviorFlow.Begin(trip, outcome.GetReason()))
+			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK, "TACTICAL_BEGIN_REJECTED", outcome.GetCausationId(), true);
+		BeginHandoffEvidence(trip, false);
+		if (trip.GetVehiclePreset().m_iBehavior == AICF_EVehicleBehavior.COMBAT && !m_Handoff.AttachVehicleUtility(trip))
+			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK, "TACTICAL_UTILITY_ATTACH_REJECTED", outcome.GetCausationId(), true);
+		m_Handoff.RestoreInfantryOrder(trip, trip.GetHandoffState(), slot, faction, "TACTICAL_DEPLOYMENT", outcome.GetReason());
+		return AICF_TripOutcome.Wait("TACTICAL_DEPLOYMENT_STARTED", outcome.GetCausationId());
+	}
+
+	protected AICF_TripOutcome ResumeTacticalMovement(
+		AICF_TransportTrip trip, AICF_TripOutcome outcome, AICF_StrategicAssignmentSnapshot currentAssignment,
+		AICF_GroupSlot slot, AICF_FactionFleet fleet, SCR_CampaignFaction faction)
+	{
+		if (trip.GetPhase() != AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT ||
+			!m_Handoff.SuspendInfantryOrder(trip, slot, "TACTICAL_RETURN") ||
+			!TransitionTo(trip, AICF_ETransportTripPhase.TRANSIT, outcome.GetReason(), outcome.GetCausationId()))
+			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK, "TACTICAL_RETURN_REJECTED", outcome.GetCausationId(), true);
+		trip.GetHandoffState().Reset();
+		if (!m_Handoff.AttachVehicleUtility(trip))
+			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK, "TACTICAL_UTILITY_ATTACH_REJECTED", outcome.GetCausationId(), true);
+		return ApplyOutcome(trip, m_TransitFlow.PrepareRoute(trip, outcome.GetCausationId()), currentAssignment, slot, fleet, faction);
 	}
 
 	protected AICF_TripOutcome ApplyRetry(
@@ -579,6 +684,17 @@ class AICF_TransportTripController
 				"SPAWN_APPROACH_CONTEXT_INVALID",
 				outcome.GetCausationId(), true);
 		}
+		// Acquisition already owns the group movement to its delivery pad. Release
+		// the infantry waypoint before binding staging, so planning cannot rebuild
+		// its PLAYER hold over the queued vehicle approach on the next tick.
+		if (!m_Handoff.SuspendInfantryOrder(trip, slot, "SPAWN_APPROACH_BEGIN"))
+		{
+			return EndVehicleControl(
+				trip, slot, fleet, faction,
+				AICF_ETransportTripPhase.FAILED_CLOSED,
+				"SPAWN_APPROACH_STRATEGIC_SUSPEND_REJECTED",
+				outcome.GetCausationId(), true);
+		}
 		if (reissue && !RemoveSpawnApproachWaypoint(trip, plan, "APPROACH_REISSUE"))
 		{
 			return EndVehicleControl(
@@ -659,6 +775,66 @@ class AICF_TransportTripController
 		return outcome;
 	}
 
+	protected bool TryFinishAcquisitionHoldRetirement(AICF_TransportTrip trip,
+		AICF_StrategicAssignmentSnapshot currentAssignment, AICF_GroupSlot slot,
+		AICF_FactionFleet fleet, SCR_CampaignFaction faction, out AICF_TripOutcome outcome)
+	{
+		outcome = null;
+		AICF_VehicleSpawnPlan plan = trip.GetRequestState().GetSpawnPlan();
+		if (!plan || !plan.GetAcquisitionHold()) return false;
+		AICF_VehicleAcquisitionHold expected = plan.GetAcquisitionHold();
+		AICF_AcquisitionHoldRetirement intent = expected.GetRetirement();
+		if (!intent) return false;
+		bool current = intent.IsEpochCurrent(trip, slot, false) && currentAssignment &&
+			currentAssignment.GetBaseRevision() == intent.GetBaseRevision();
+		if (!current)
+		{
+			// Retire only the original task. A newer assignment must not inherit End.
+			bool detached = m_Handoff.ReleaseAcquisitionHold(trip, plan, "RETIREMENT_SUPERSEDED", expected);
+			if (!detached && plan.GetAcquisitionHold() == expected)
+				outcome = AICF_TripOutcome.TerminalFailClosed("ACQUISITION_HOLD_RELEASE_PENDING", intent.GetCausationId());
+			else outcome = AICF_TripOutcome.Wait("ACQUISITION_HOLD_RETIREMENT_SUPERSEDED", intent.GetCausationId());
+			return true;
+		}
+		if (!ReleaseSpawnPlan(trip, intent.GetReason()))
+		{
+			if (plan.GetAcquisitionHold() != expected)
+				outcome = AICF_TripOutcome.Wait("ACQUISITION_HOLD_RETIREMENT_SUPERSEDED", intent.GetCausationId());
+			else outcome = AICF_TripOutcome.TerminalFailClosed("ACQUISITION_HOLD_RELEASE_PENDING", intent.GetCausationId());
+			return true;
+		}
+		if (!intent.IsEpochCurrent(trip, slot, true))
+		{
+			outcome = AICF_TripOutcome.Wait("ACQUISITION_HOLD_RETIREMENT_SUPERSEDED", intent.GetCausationId());
+			return true;
+		}
+		outcome = EndVehicleControl(trip, slot, fleet, faction, intent.GetTerminalPhase(),
+			intent.GetReason(), intent.GetCausationId(), intent.RestoreCurrentOrder());
+		return true;
+	}
+
+	protected bool ReconcileAcquisitionHold(AICF_TransportTrip trip, AICF_StrategicAssignmentSnapshot currentAssignment,
+		AICF_GroupSlot slot, AICF_TripOutcome outcome, out bool superseded)
+	{
+		superseded = false;
+		AICF_VehicleRequestState request = trip.GetRequestState();
+		AICF_VehicleSpawnPlan plan = request.GetSpawnPlan();
+		if (AICF_VehicleAcquisitionHold.IsWaitOutcome(outcome) && trip.GetPhase() == AICF_ETransportTripPhase.SPAWN_COMMIT)
+		{
+			AICF_AcquisitionStagingReceipt receipt = outcome.GetAcquisitionStagingReceipt();
+			if (!receipt || !currentAssignment || currentAssignment.GetBaseRevision() != receipt.GetBaseRevision()) return false;
+			return m_Handoff.MaintainAcquisitionHold(trip, slot, receipt, m_WaypointFactory, System.GetTickCount(), superseded);
+		}
+		if (!plan || !plan.GetAcquisitionHold()) return true;
+		if (outcome && outcome.GetKind() == AICF_ETripOutcomeKind.RETRY && outcome.GetReason() == "LEASE_RESERVED_FOR_ATTACH" &&
+			trip.GetPhase() == AICF_ETransportTripPhase.SPAWN_COMMIT)
+			return plan.GetAcquisitionHold().IsCurrent(trip, System.GetTickCount());
+		AICF_VehicleAcquisitionHold expected = plan.GetAcquisitionHold();
+		bool released = m_Handoff.ReleaseAcquisitionHold(trip, plan, "ACQUISITION_OUTCOME_CHANGED", expected);
+		if (!released && plan.GetAcquisitionHold() != expected) superseded = true;
+		return released;
+	}
+
 	protected bool RemoveSpawnApproachWaypoint(
 		AICF_TransportTrip trip,
 		AICF_VehicleSpawnPlan plan,
@@ -688,6 +864,7 @@ class AICF_TransportTripController
 		AICF_VehicleSpawnPlan plan = trip.GetRequestState().GetSpawnPlan();
 		if (!plan)
 			return true;
+		if (!m_Handoff.ReleaseAcquisitionHold(trip, plan, reason, plan.GetAcquisitionHold())) return false;
 		if (!RemoveSpawnApproachWaypoint(trip, plan, reason))
 			return false;
 		m_AcquisitionFlow.CancelPendingSpawnPlan(trip, reason);
@@ -951,8 +1128,27 @@ class AICF_TransportTripController
 			return TickTerminalPostconditions(trip, trip.GetAssignment(), slot, fleet, faction);
 		if (!trip.IsTransitionAllowedTo(terminalPhase))
 			return AICF_TripOutcome.TerminalFailClosed("TERMINAL_PREFLIGHT_REJECTED", causationId);
+		AICF_VehicleSpawnPlan endingPlan = trip.GetRequestState().GetSpawnPlan();
+		AICF_VehicleAcquisitionHold endingHold;
+		AICF_AcquisitionHoldRetirement holdIntent;
+		if (endingPlan) endingHold = endingPlan.GetAcquisitionHold();
+		if (endingHold)
+		{
+			if (endingHold.GetRetirement())
+			{
+				AICF_TripOutcome pending;
+				if (TryFinishAcquisitionHoldRetirement(trip, trip.GetAssignment(), slot, fleet, faction, pending)) return pending;
+			}
+			if (!endingHold.BeginRetirement(trip, slot, endingPlan, terminalPhase, reason, causationId, restoreCurrentOrder))
+				return AICF_TripOutcome.Wait("ACQUISITION_HOLD_RETIREMENT_SUPERSEDED", causationId);
+			holdIntent = endingHold.GetRetirement();
+		}
 		ReleaseEmptyReservationIfPresent(trip, fleet);
-		ReleaseSpawnPlan(trip, reason);
+		bool releasedPlan = ReleaseSpawnPlan(trip, reason);
+		if (!releasedPlan && endingPlan && endingPlan.GetAcquisitionHold())
+			return AICF_TripOutcome.TerminalFailClosed("ACQUISITION_HOLD_RELEASE_PENDING", causationId);
+		if (holdIntent && !holdIntent.IsEpochCurrent(trip, slot, true))
+			return AICF_TripOutcome.Wait("ACQUISITION_HOLD_RETIREMENT_SUPERSEDED", causationId);
 		m_Handoff.DetachVehicleUtility(trip);
 		if (!TransitionTo(trip, terminalPhase, reason, causationId))
 			return AICF_TripOutcome.TerminalFailClosed("TERMINAL_COMMIT_REJECTED", causationId);
@@ -1435,7 +1631,7 @@ class AICF_TransportTripController
 					causationId, true);
 			}
 		}
-		if (!CommitRetarget(trip, currentAssignment, causationId))
+		if (!CommitRetarget(trip, currentAssignment, causationId, slot))
 		{
 			return EndVehicleControl(
 				trip, slot, fleet, faction,
@@ -1463,7 +1659,8 @@ class AICF_TransportTripController
 	protected bool CommitRetarget(
 		AICF_TransportTrip trip,
 		AICF_StrategicAssignmentSnapshot currentAssignment,
-		string causationId)
+		string causationId,
+		AICF_GroupSlot slot)
 	{
 		AICF_VehicleLease expectedLease = trip.GetLease();
 		int expectedVehicleGeneration = -1;
@@ -1473,15 +1670,26 @@ class AICF_TransportTripController
 			expectedVehicleGeneration = expectedLease.GetVehicleGeneration();
 			expectedLifecycleId = expectedLease.GetVehicleLifecycleId();
 		}
+		AICF_CleanupAssignmentRebind cleanupRebind = trip.BeginCleanupAssignmentRebind(currentAssignment, slot);
 		if (!trip.CommitRetarget(currentAssignment, causationId))
+		{
+			trip.CancelCleanupAssignmentRebind(cleanupRebind);
 			return false;
+		}
 		if (trip.GetLease() != expectedLease)
+		{
+			trip.CancelCleanupAssignmentRebind(cleanupRebind);
 			return false;
+		}
 		if (expectedLease && (expectedVehicleGeneration != expectedLease.GetVehicleGeneration() ||
 			expectedLifecycleId != expectedLease.GetVehicleLifecycleId()))
 		{
+			trip.CancelCleanupAssignmentRebind(cleanupRebind);
 			return false;
 		}
+		// Bookkeeping переносится только после прежних accepted-commit lease gates.
+		// Его отказ не меняет gameplay policy штатного retarget.
+		trip.CompleteCleanupAssignmentRebind(cleanupRebind, slot);
 		if (expectedLease && expectedLease.HasPhysicalAsset())
 		{
 			AICF_Stage3Diagnostics.Info(
@@ -1499,14 +1707,19 @@ class AICF_TransportTripController
 		AICF_TransportTrip trip,
 		AICF_ETransportTripPhase nextPhase,
 		string reason,
-		string causationId)
+		string causationId,
+		AICF_FactionFleet retirementFleet = null)
 	{
 		if (!trip || reason.IsEmpty() || causationId.IsEmpty() ||
 			!trip.CanTransitionTo(nextPhase))
 			return false;
+		if (trip.HasAbsentGroupRetirementIdentity() &&
+			!AICF_TripRetirementIdentity.IsFleetAssetCurrent(trip, retirementFleet)) return false;
 		AICF_ETransportTripPhase previousPhase = trip.GetPhase();
-		if (!ExitPhaseEffects(trip, previousPhase, reason))
+		if (!ExitPhaseEffects(trip, previousPhase, nextPhase, reason))
 			return false;
+		if (trip.HasAbsentGroupRetirementIdentity() &&
+			!AICF_TripRetirementIdentity.IsFleetAssetCurrent(trip, retirementFleet)) return false;
 		if (!trip.CommitTransition(nextPhase, reason, causationId, System.GetTickCount()))
 			return false;
 		m_Diagnostics.CommittedVehicleTransition(
@@ -1540,6 +1753,7 @@ class AICF_TransportTripController
 	protected bool ExitPhaseEffects(
 		AICF_TransportTrip trip,
 		AICF_ETransportTripPhase phase,
+		AICF_ETransportTripPhase nextPhase,
 		string reason)
 	{
 		switch (phase)
@@ -1551,13 +1765,22 @@ class AICF_TransportTripController
 				return ExitTransit(trip, reason);
 			case AICF_ETransportTripPhase.DISMOUNT:
 				return ExitDismount(trip, reason);
+			case AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT:
+				m_BehaviorFlow.Stop(trip);
+				// Акторы уже вернулись в compartments. Remove/Add здесь теряет
+				// их native subgroup record без нового CompartmentEntered event.
+				if (nextPhase != AICF_ETransportTripPhase.TRANSIT)
+					m_Handoff.DetachVehicleUtility(trip);
+				return trip.CommitBehaviorClockPause(false, System.GetTickCount());
 		}
 		return true;
 	}
 
 	protected bool ExitTransit(AICF_TransportTrip trip, string reason)
 	{
+		if (!trip.CommitPresetDestinationWait(false, System.GetTickCount())) return false;
 		m_TransitFlow.AbortOwnedActions(trip);
+		AICF_VehicleBehaviorPolicy.Unregister(trip);
 		bool removed = RemoveTransitWaypoints(trip, "PHASE_EXIT", reason);
 		m_Handoff.DetachVehicleUtility(trip);
 		return removed;
@@ -1794,7 +2017,7 @@ class AICF_TransportTripController
 		if (!RemoveDismountWaypoints(trip, "COORDINATOR_STOP", reason))
 			cancelled = false;
 		m_Handoff.DetachVehicleUtility(trip);
-		ReleaseSpawnPlan(trip, reason);
+		if (!ReleaseSpawnPlan(trip, reason)) cancelled = false;
 		return cancelled;
 	}
 
@@ -2063,8 +2286,36 @@ class AICF_TransportTripController
 		}
 		AIWorld world = GetGame().GetAIWorld();
 		if (!world || world.GetCurrentNumOfActiveAIs() + m_aLogisticsSpawns.Count() + 1 > world.GetLimitOfActiveAIs()) return false;
+		if (w.m_iGeneration == int.MAX) return false;
+		if (w.m_QuotaCreationGuard) w.m_QuotaCreationGuard.CancelAvailable();
+		w.m_QuotaCreationGuard = null;
+		w.m_bQuotaSpawnClosed = false;
+		AICF_AIWorldQuotaService quota = AICF_AIWorldQuotaService.GetAuthorityForWorld(GetGame().GetWorld());
+		ref AICF_AIQuotaLogisticsCreationGuard creation;
+		if (quota)
+		{
+			creation = AICF_AIQuotaLogisticsCreationGuard.Capture(quota, w, fleet);
+			if (!creation) return false;
+		}
 		w.m_iGeneration++;
-		if (!fleet.TryReserveLogistics(w)) return false;
+		if (creation && !creation.AcceptGenerationAdvance())
+		{
+			if (w.m_QuotaCreationGuard == creation)
+			{
+				w.m_bQuotaSpawnClosed = true;
+				creation.CloseSpawn();
+			}
+			return false;
+		}
+		if (!fleet.TryReserveLogistics(w) || (creation && !creation.AcceptPendingLease(w.m_Lease)))
+		{
+			if (creation && w.m_QuotaCreationGuard == creation)
+			{
+				w.m_bQuotaSpawnClosed = true;
+				creation.CloseSpawn();
+			}
+			return false;
+		}
 		w.m_bCleanupComplete = false;
 		w.m_bCleanupQueued = false;
 		w.m_iSeatAttempts = 0;
@@ -2074,6 +2325,15 @@ class AICF_TransportTripController
 		w.m_Search = null;
 		w.m_bRetireAfterCargo = false;
 		LogisticsPhase(w, AICF_ELogisticsPhase.SPAWN_PENDING, "EXACT_DEPOT_ADMITTED");
+		if (creation && !creation.AcceptSpawnPhase())
+		{
+			if (w.m_QuotaCreationGuard == creation)
+			{
+				w.m_bQuotaSpawnClosed = true;
+				creation.CloseSpawn();
+			}
+			return false;
+		}
 		m_aLogisticsSpawns.Insert(w);
 		return true;
 	}
@@ -2274,6 +2534,8 @@ class AICF_TransportTripController
 	void RetireLogistics(AICF_LogisticsWorker w, AICF_LogisticsLedger book, string reason)
 	{
 		if (!Replication.IsServer() || !w || w.m_bCleanupQueued) return;
+		w.m_bQuotaSpawnClosed = true;
+		if (w.m_QuotaCreationGuard) w.m_QuotaCreationGuard.CloseSpawn();
 		if (w.m_ExitHistory) w.m_ExitHistory.Record(w, reason, System.GetTickCount());
 		w.m_RouteRecovery = null;
 		m_Handoff.CancelLogisticsDriverInteraction(w, reason);

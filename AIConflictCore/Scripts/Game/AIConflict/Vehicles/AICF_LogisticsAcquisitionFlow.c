@@ -33,6 +33,13 @@ class AICF_LogisticsAcquisitionFlow
 			w.m_Group = m_Drivers.CreateBuilder(w.m_Faction, driverPosition);
 			if (!w.m_Group) return AICF_TripOutcome.TerminalFailClosed("DRIVER_CONTROLLER_FAILED", token);
 			w.m_GroupId = w.m_Group.GetID();
+			AICF_AIWorldQuotaService quota = AICF_AIWorldQuotaService.GetAuthorityForWorld(w.m_Group.GetWorld());
+			if (quota)
+			{
+				AICF_AIQuotaGroupOwner owner = quota.GetOwners().RegisterLogistics(w);
+				if (!owner || !w.m_QuotaCreationGuard || !w.m_QuotaCreationGuard.AdoptDriver(w.m_Group, owner))
+					return AICF_TripOutcome.TerminalFailClosed("DRIVER_QUOTA_OWNER_REJECTED", token);
+			}
 			if (!m_Drivers.BeginRosterSpawn(w.m_Group, 1)) return AICF_TripOutcome.TerminalFailClosed("DRIVER_ROSTER_FAILED", token);
 			w.Log("LOGISTICS_SPAWN_REQUESTED", string.Format("agents=1 cargo=0 tickets=0 supplies_cost=0 driver_spawn=%1 vehicle_position=%2", driverPosition, w.m_Vehicle.GetOrigin()));
 			return AICF_TripOutcome.Wait("DRIVER_ROSTER_PENDING", token);
@@ -72,9 +79,23 @@ class AICF_LogisticsAcquisitionFlow
 			}
 		}
 		if (!w.m_Seat || w.m_Seat.GetOccupant() || w.m_Seat.IsReserved()) return AICF_TripOutcome.TerminalFailClosed("NO_EXACT_FREE_PILOT", token);
+		ChimeraCharacter driver = w.m_Driver;
+		Vehicle vehicle = w.m_Vehicle;
+		BaseCompartmentSlot assignedSeat = w.m_Seat;
+		AICF_AIQuotaVehicleDispatch quota = AICF_AIQuotaVehicleDispatch.Begin(driver, vehicle, assignedSeat);
+		if (!quota) return AICF_TripOutcome.Wait("VEHICLE_QUOTA_PENDING", token);
+		if (!quota.IsCurrent() || !w.DriverIdentity() || !w.VehicleIdentity() || w.m_Driver != driver ||
+			w.m_Vehicle != vehicle || w.m_Seat != assignedSeat || assignedSeat.GetOccupant() || assignedSeat.IsReserved() ||
+			driver.GetCompartmentAccessComponent() != access)
+		{
+			quota.Cancel();
+			return AICF_TripOutcome.TerminalFailClosed("SPAWN_QUOTA_CONTEXT_CHANGED", token);
+		}
 		w.m_iSeatAttempts++;
 		w.m_iNextSeatMs = now + 1000;
-		access.GetInVehicle(w.m_Vehicle, w.m_Seat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
+		bool accepted = access.GetInVehicle(vehicle, assignedSeat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
+		quota.ObserveNativeResult(accepted);
+		quota.Cancel();
 		return AICF_TripOutcome.Wait("SPAWN_SEAT_POSTCONDITION_PENDING", token);
 	}
 

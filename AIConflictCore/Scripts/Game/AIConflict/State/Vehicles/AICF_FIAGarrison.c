@@ -24,6 +24,7 @@ class AICF_FIAGarrison
 	SCR_AIGroup m_DesantGroup;
 	EntityID m_DesantGroupId;
 	ResourceName m_sPrefab;
+	string m_sSpawnQuotaFailure;
 	vector m_vPosition;
 	vector m_vHome;
 	vector m_vPatrolTarget;

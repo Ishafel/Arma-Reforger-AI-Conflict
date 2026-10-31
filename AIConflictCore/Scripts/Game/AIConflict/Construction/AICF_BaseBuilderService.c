@@ -73,7 +73,8 @@ class AICF_BaseBuilderService
 		m_Campaign.GetBaseManager().GetBases(bases);
 		// Отдельная ограниченная квота: не отнимает места у армейского roster.
 		AIWorld aiWorld = GetGame().GetAIWorld();
-		if (aiWorld && aiWorld.GetLimitOfActiveAIs() < m_iCombatBudget + bases.Count())
+		if (aiWorld && !AICF_AIWorldQuotaService.IsPreparingForWorld(GetGame().GetWorld()) &&
+			!AICF_AIWorldQuotaService.GetAuthorityForWorld(GetGame().GetWorld()) && aiWorld.GetLimitOfActiveAIs() < m_iCombatBudget + bases.Count())
 			aiWorld.SetLimitOfActiveAIs(m_iCombatBudget + bases.Count());
 		foreach (SCR_CampaignMilitaryBaseComponent base : bases)
 		{
@@ -102,6 +103,12 @@ class AICF_BaseBuilderService
 			if (!IsUnfinished(m_aPlaced[p]))
 				m_aPlaced.Remove(p);
 		}
+	}
+
+	bool OwnsAIQuotaBuilder(AICF_BaseBuilder builder)
+	{
+		return Replication.IsServer() && !m_bStopped && s_Instance == this && m_Campaign && m_Campaign.IsMaster() &&
+			builder && !builder.m_bRetiring && m_aBuilders.Contains(builder);
 	}
 
 	// BT только сообщает об отказе. Смена target/waypoint выполняется на следующем service tick.
@@ -351,7 +358,8 @@ class AICF_BaseBuilderService
 			builder.m_iGeneration++;
 			builder.m_iSpawnAtMs = now;
 			// Сначала bind exact identity, только затем асинхронный запрос одного AI.
-			if (!m_Spawner.BeginRosterSpawn(builder.m_Group, 1))
+			AICF_AIWorldQuotaService quota = AICF_AIWorldQuotaService.GetAuthorityForWorld(builder.m_Group.GetWorld());
+			if ((quota && !quota.GetOwners().RegisterBuilder(builder)) || !m_Spawner.BeginRosterSpawn(builder.m_Group, 1))
 				Retire(builder, "ROSTER_REQUEST_FAILED");
 			else
 				Log(builder, "BUILDER_SPAWN_REQUESTED");

@@ -6,6 +6,7 @@ class AICF_VehicleDismountFlow
 	protected static const int CONTINUOUS_CLEAR_MS = 5000;
 	protected static const int TRIP_EXIT_CLEAR_POLLS = 2;
 	protected static const int ANIMATED_EXACT_EXIT_DELAY_MS = 5000;
+	protected static const int ANIMATED_EXACT_EXIT_MAX_ATTEMPTS = 3;
 	protected static const int FORCED_EXACT_EXIT_DELAY_MS = 10000;
 	protected static const int GUIDANCE_DELAY_MS = 3000;
 	protected static const int GUIDANCE_MAX_ATTEMPTS = 3;
@@ -170,26 +171,20 @@ class AICF_VehicleDismountFlow
 			(sample.m_iInsideBounds > 0 || sample.m_iPostEgressBlocked > 0);
 		if (egressGuidanceRequired && nowMs - state.GetStartedAtMs() >= GUIDANCE_DELAY_MS)
 			TryGuidePhysicallyBlockedMembers(trip, sample);
-		// Some stock truck exits clear every compartment flag while leaving the
-		// character transform inside the cab hull. Navigation cannot start from
-		// that non-navmesh origin. After the bounded visible guidance budget is
-		// genuinely consumed, reuse the exact authoritative player/LOS-fenced
-		// relocation instead of waiting out the remainder of the 40-second timer.
+		// Logical egress плюс transform внутри hull уже доказывают native blocker.
+		// Пользователь разрешил немедленную коррекцию рядом с видимым игроком.
 		if (sample.m_iLogicalOccupants == 0 && sample.m_iTransitions == 0 &&
-			sample.m_iInsideBounds > 0 &&
-			state.GetGuidanceAttempts() >= GUIDANCE_MAX_ATTEMPTS &&
-			state.GetGuidanceTokenCount() == 0)
+			sample.m_iInsideBounds > 0)
 		{
 			TryRelocateExactManagedMembers(trip, sample, false);
 		}
+		if (sample.m_iLogicalOccupants > 0 && HasFailedExactNativeExit(trip))
+			TryForceExactManagedExit(trip, sample);
 
 		int normalAgeMs = nowMs - state.GetStartedAtMs();
-		if (!state.WasAnimatedExactExitAttempted() &&
-			normalAgeMs >= ANIMATED_EXACT_EXIT_DELAY_MS &&
-			(sample.m_iLogicalOccupants > 0 || sample.m_iTransitions > 0))
+		if (normalAgeMs >= ANIMATED_EXACT_EXIT_DELAY_MS && sample.m_iLogicalOccupants > 0)
 		{
-			state.MarkAnimatedExactExitAttempted();
-			TryRequestAnimatedExactManagedExits(trip, sample);
+			TryRequestAnimatedExactManagedExits(trip, sample, nowMs);
 		}
 		if (normalAgeMs >= FORCED_EXACT_EXIT_DELAY_MS &&
 			(sample.m_iLogicalOccupants > 0 || sample.m_iTransitions > 0))
@@ -199,6 +194,11 @@ class AICF_VehicleDismountFlow
 
 		if (nowMs >= state.GetNormalDeadlineMs())
 		{
+			// Уже вышедшим AI даём закончить bounded guidance/clearance;
+			// normal timeout не должен обрывать ещё выполняющиеся попытки.
+			if (sample.m_iLogicalOccupants == 0 && sample.m_iTransitions == 0 &&
+				nowMs < state.GetTerminalDeadlineMs())
+				return AICF_TripOutcome.Wait("DISEMBARK_CLEARANCE_PENDING", causationId);
 			AICF_Stage3Diagnostics.Warning(
 				"DISEMBARK_TIMEOUT",
 				FormatClearance(trip, sample, "NORMAL_DEADLINE_REACHED"));
@@ -275,12 +275,17 @@ class AICF_VehicleDismountFlow
 			return AICF_TripOutcome.ReleaseLease("TERMINAL_CLEARANCE_SAFE", causationId);
 		}
 
-		// Once all exact terminal mutations have been consumed, waiting out the
-		// remainder of the generic boarding timeout cannot improve the result.
+		// Exhaustion belongs to the currently required operation. Successful
+		// logical exit must not consume the later physical-only hull clearance.
 		// Transfer the still-protected asset immediately to CleanupManager, whose
 		// independent scan owns the stronger player-fenced recovery escalation.
-		if (!sample.m_bSafelyClear &&
-			state.GetForceClearanceAttempts() >= FORCE_MAX_ATTEMPTS)
+		bool logicalExitPending = sample.m_iLogicalOccupants > 0 || sample.m_iTransitions > 0;
+		bool activeBudgetExhausted;
+		if (logicalExitPending)
+			activeBudgetExhausted = state.GetForceExitAttempts() >= FORCE_MAX_ATTEMPTS;
+		else if (sample.m_iInsideBounds > 0)
+			activeBudgetExhausted = state.GetPhysicalRelocationAttempts() >= FORCE_MAX_ATTEMPTS;
+		if (!sample.m_bSafelyClear && activeBudgetExhausted)
 		{
 			state.StopTerminalClearance();
 			AICF_Stage3Diagnostics.Warning(
@@ -790,15 +795,18 @@ class AICF_VehicleDismountFlow
 
 	protected void TryRequestAnimatedExactManagedExits(
 		AICF_TransportTrip trip,
-		AICF_DismountClearanceSample sample)
+		AICF_DismountClearanceSample sample,
+		int nowMs)
 	{
 		if (!IsAuthoritativeTripAssetCurrent(trip))
 			return;
 		SCR_AIGroup group = trip.GetAssignment().GetGroup();
 		Vehicle vehicle = trip.GetLease().GetVehicle();
-		int interrupted = m_Watchdog.ResetGroupVehicleActions(group);
+		AICF_VehicleDismountState state = trip.GetDismountState();
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);
+		bool attemptStarted;
+		int interrupted;
 		int requested;
 		int rejected;
 		foreach (AIAgent agent : agents)
@@ -809,12 +817,30 @@ class AICF_VehicleDismountFlow
 			if (!IsExactOccupantOfVehicle(character, vehicle))
 				continue;
 			CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
-			if (!access || !AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(character))
+			BaseCompartmentSlot compartment;
+			if (access)
+				compartment = access.GetCompartment();
+			if (!IsExactAnimatedExitCandidate(trip, group, vehicle, agent, character, access, compartment))
 			{
 				rejected++;
 				continue;
 			}
+			if (!attemptStarted)
+			{
+				if (!state.TryRecordAnimatedExactExitAttempt(
+					nowMs, ANIMATED_EXACT_EXIT_MAX_ATTEMPTS, ANIMATED_EXACT_EXIT_DELAY_MS))
+					return;
+				attemptStarted = true;
+			}
+			// Begin уже снял старые групповые очереди. Повтор затрагивает только
+			// оставшегося точного пассажира и не прерывает чужой текущий выход.
 			access.InterruptVehicleActionQueue(true, true, true);
+			interrupted++;
+			if (!IsExactAnimatedExitCandidate(trip, group, vehicle, agent, character, access, compartment))
+			{
+				rejected++;
+				continue;
+			}
 			if (access.GetOutVehicle(
 				EGetOutType.ANIMATED,
 				-1,
@@ -828,15 +854,72 @@ class AICF_VehicleDismountFlow
 				rejected++;
 			}
 		}
+		if (!attemptStarted)
+			return;
 		AICF_Stage3Diagnostics.Warning(
 			"DISEMBARK_ANIMATED_EXACT_RETRY",
 			FormatClearance(trip, sample, "FIVE_SECOND_EXACT_ANIMATED_RETRY") +
 			string.Format(
-				" requested=%1 rejected=%2 interrupted_actions=%3 next_escalation_ms=%4",
+				" requested=%1 rejected=%2 interrupted_actions=%3 next_escalation_ms=%4 attempt=%5 maximum_attempts=%6 interval_ms=%7",
 				requested,
 				rejected,
 				interrupted,
-				FORCED_EXACT_EXIT_DELAY_MS));
+				FORCED_EXACT_EXIT_DELAY_MS,
+				state.GetAnimatedExactExitAttempts(),
+				ANIMATED_EXACT_EXIT_MAX_ATTEMPTS,
+				ANIMATED_EXACT_EXIT_DELAY_MS));
+	}
+
+	protected bool IsExactAnimatedExitCandidate(
+		AICF_TransportTrip trip,
+		SCR_AIGroup group,
+		Vehicle vehicle,
+		AIAgent agent,
+		ChimeraCharacter character,
+		CompartmentAccessComponent access,
+		BaseCompartmentSlot compartment)
+	{
+		if (!IsAuthoritativeTripAssetCurrent(trip) || trip.GetPhase() != AICF_ETransportTripPhase.DISMOUNT ||
+			trip.GetAssignment().GetGroup() != group || trip.GetLease().GetVehicle() != vehicle ||
+			!IsExactAliveCurrentMember(group, agent) || agent.GetControlledEntity() != character ||
+			!access || character.GetCompartmentAccessComponent() != access ||
+			!compartment || access.GetCompartment() != compartment ||
+			compartment.GetVehicle() != vehicle || compartment.GetOccupant() != character ||
+			CompartmentAccessComponent.GetVehicleIn(character) != vehicle ||
+			access.IsGettingIn() || access.IsGettingOut() || access.IsSwitchingSeatsAnim())
+		{
+			return false;
+		}
+		int nowMs = System.GetTickCount();
+		AICF_VehicleDismountState state = trip.GetDismountState();
+		return !state.IsTerminalClearanceStarted() && !state.IsTerminalClearanceStopped() &&
+			nowMs < state.GetNormalDeadlineMs() && nowMs < state.GetTerminalDeadlineMs() &&
+			!trip.IsDeadlineReached(nowMs);
+	}
+
+	protected bool HasFailedExactNativeExit(AICF_TransportTrip trip)
+	{
+		if (!IsAuthoritativeTripAssetCurrent(trip)) return false;
+		SCR_AIGroup group = trip.GetAssignment().GetGroup();
+		Vehicle vehicle = trip.GetLease().GetVehicle();
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		foreach (AIAgent agent : agents)
+		{
+			if (!IsExactAliveCurrentMember(group, agent)) continue;
+			ChimeraCharacter character = ChimeraCharacter.Cast(agent.GetControlledEntity());
+			if (!IsExactOccupantOfVehicle(character, vehicle)) continue;
+			SCR_AIUtilityComponent utility = SCR_AIUtilityComponent.Cast(agent.FindComponent(SCR_AIUtilityComponent));
+			if (!utility || utility.m_OwnerEntity != character) continue;
+			array<ref AIActionBase> actions = {};
+			utility.GetActions(actions);
+			foreach (AIActionBase action : actions)
+			{
+				SCR_AIGetOutVehicle exit = SCR_AIGetOutVehicle.Cast(action);
+				if (exit && exit.m_Vehicle.m_Value == vehicle && exit.GetActionState() == EAIActionState.FAILED) return true;
+			}
+		}
+		return false;
 	}
 
 	protected void TryForceExactManagedExit(
@@ -879,7 +962,7 @@ class AICF_VehicleDismountFlow
 			if (!IsExactOccupantOfVehicle(character, vehicle))
 				continue;
 			if (AICF_GroupRuntime.IsAliveCharacter(character) &&
-				ForceOneManagedMemberOut(trip, character, state.GetForceClearanceAttempts()))
+				ForceOneManagedMemberOut(trip, character, state.GetForceExitAttempts()))
 			{
 				forced++;
 			}
@@ -888,7 +971,7 @@ class AICF_VehicleDismountFlow
 				if (ForceOneNonAliveManagedMemberOut(
 					trip,
 					character,
-					state.GetForceClearanceAttempts()))
+					state.GetForceExitAttempts()))
 				{
 					forcedNonAlive++;
 				}
@@ -906,7 +989,7 @@ class AICF_VehicleDismountFlow
 				forcedNonAlive,
 				rejectedNonAlive,
 				interrupted,
-				state.GetForceClearanceAttempts(),
+				state.GetForceExitAttempts(),
 				FORCE_MAX_ATTEMPTS));
 	}
 
@@ -973,6 +1056,7 @@ class AICF_VehicleDismountFlow
 		ChimeraCharacter character,
 		int forceAttempt)
 	{
+		if (!IsAuthoritativeTripAssetCurrent(trip)) return false;
 		Vehicle vehicle = trip.GetLease().GetVehicle();
 		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(character) ||
 			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle))
@@ -986,18 +1070,16 @@ class AICF_VehicleDismountFlow
 		bool exactOwner = compartment && compartment.GetVehicle() == vehicle &&
 			compartment.GetOccupant() == character;
 		access.InterruptVehicleActionQueue(true, true, true);
+		if (!IsAuthoritativeTripAssetCurrent(trip) || trip.GetLease().GetVehicle() != vehicle ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(character) ||
+			access.GetCompartment() != compartment || !exactOwner || compartment.GetOccupant() != character) return false;
 		bool useEject = exactOwner && forceAttempt > 1;
 		bool directAccepted;
 		vector exitTransform[4];
-		if (!useEject && access.FindSuitableTeleportLocation(exitTransform))
+		if (!useEject && access.FindSuitableTeleportLocation(exitTransform) &&
+			vector.Distance(character.GetOrigin(), exitTransform[3]) <= AICF_VehicleShortRecovery.MAX_ACTOR_DISPLACEMENT_METERS &&
+			!ChimeraWorldUtils.TryGetWaterSurfaceSimple(vehicle.GetWorld(), exitTransform[3]))
 			directAccepted = access.GetOutVehicle_NoDoor(exitTransform, false, false, true);
-		if (!useEject && !directAccepted)
-			directAccepted = access.GetOutVehicle(
-				EGetOutType.TELEPORT,
-				-1,
-				ECloseDoorAfterActions.INVALID,
-				false,
-				true);
 		bool ejectRequested;
 		bool ejectImmediate;
 		bool ejectAttempted;
@@ -1052,7 +1134,9 @@ class AICF_VehicleDismountFlow
 		bool terminalOnly)
 	{
 		AICF_VehicleDismountState state = trip.GetDismountState();
-		if (state.GetForceClearanceAttempts() >= FORCE_MAX_ATTEMPTS)
+		if (state.GetPhysicalRelocationAttempts() >= FORCE_MAX_ATTEMPTS)
+			return;
+		if (!sample || sample.m_iLogicalOccupants > 0 || sample.m_iTransitions > 0 || sample.m_iInsideBounds <= 0)
 			return;
 		int nowMs = System.GetTickCount();
 		if (!state.TryBeginExactRelocationProbe(
@@ -1062,6 +1146,8 @@ class AICF_VehicleDismountFlow
 			return;
 		}
 		if (!IsAuthoritativeTripAssetCurrent(trip))
+			return;
+		if (nowMs >= state.GetTerminalDeadlineMs() || trip.IsDeadlineReached(nowMs))
 			return;
 		Vehicle vehicle = trip.GetLease().GetVehicle();
 		SCR_AIGroup group = trip.GetAssignment().GetGroup();
@@ -1176,7 +1262,7 @@ class AICF_VehicleDismountFlow
 					probePlayerFenced,
 					probeIdentityRejected) + string.Format(
 					" attempt=%1 maximum_attempts=%2 budget_consumed=0 retry_backoff_ms=%3 terminal_only=%4",
-					state.GetForceClearanceAttempts(),
+					state.GetPhysicalRelocationAttempts(),
 					FORCE_MAX_ATTEMPTS,
 					EXACT_RELOCATION_PROBE_BACKOFF_MS,
 					terminalOnly));
@@ -1185,7 +1271,17 @@ class AICF_VehicleDismountFlow
 		// Probe is read-only. Only a non-empty exact candidate set can enter the
 		// mutation budget and reset queues. Each candidate is fenced again at the
 		// final per-member commit boundary immediately before teleport.
-		if (!state.RecordForceClearanceAttempt())
+		if (!IsAuthoritativeTripAssetCurrent(trip) || trip.GetAssignment().GetGroup() != group || trip.GetLease().GetVehicle() != vehicle)
+			return;
+		int commitNowMs = System.GetTickCount();
+		if (commitNowMs >= state.GetTerminalDeadlineMs() || trip.IsDeadlineReached(commitNowMs))
+			return;
+		AICF_DismountClearanceSample current = InspectCurrentManagedClearance(trip);
+		if (!current || current.m_iLogicalOccupants > 0 || current.m_iTransitions > 0 || current.m_iInsideBounds <= 0)
+			return;
+		state.RecordClearanceSample(current.m_iLogicalOccupants, current.m_iTransitions,
+			current.m_iInsideBounds, commitNowMs, current.m_iPostEgressBlocked);
+		if (!state.RecordPhysicalRelocationAttempt())
 			return;
 		int interrupted = m_Watchdog.ResetGroupVehicleActions(group);
 		int relocated;
@@ -1278,7 +1374,7 @@ class AICF_VehicleDismountFlow
 				positionRejected,
 				commitTargetRejected) + string.Format(
 				" attempt=%1 maximum_attempts=%2 terminal_only=%3 retry_backoff_ms=%4",
-				state.GetForceClearanceAttempts(),
+				state.GetPhysicalRelocationAttempts(),
 				FORCE_MAX_ATTEMPTS,
 				terminalOnly,
 				EXACT_RELOCATION_PROBE_BACKOFF_MS) + string.Format(
@@ -1298,12 +1394,8 @@ class AICF_VehicleDismountFlow
 	{
 		nearestPlayerMeters = -1.0;
 		rejectionReason = string.Empty;
-		if (!m_Config.GetHiddenRecoveryEnabled())
-		{
-			rejectionReason = "HIDDEN_RECOVERY_DISABLED";
-			return false;
-		}
 		if (!group || !vehicle ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(group) ||
 			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(vehicle))
 		{
 			rejectionReason = "RECOVERY_AUTHORITY_OR_IDENTITY_INVALID";
@@ -1323,18 +1415,15 @@ class AICF_VehicleDismountFlow
 				vehicleSpeedMetersPerSecond);
 			return false;
 		}
-		float threatMeasure;
-		if (!m_Watchdog.IsHiddenRecoveryCombatSafe(group, threatMeasure))
+		if (vector.Distance(source, destination) > AICF_VehicleShortRecovery.MAX_ACTOR_DISPLACEMENT_METERS)
 		{
-			rejectionReason = string.Format("COMBAT_THREAT_%1", threatMeasure);
+			rejectionReason = "SHORT_RECOVERY_DISTANCE_EXCEEDED";
 			return false;
 		}
-		return m_Watchdog.CanApplyHiddenRecovery(
-			source,
-			destination,
-			m_Config.GetHiddenRecoveryPlayerRadiusMeters(),
-			nearestPlayerMeters,
-			rejectionReason);
+		// Имя boundary сохранено для callers/auditors. Новые вводные разрешают
+		// egress/коррекцию hull и во время боя, и при наблюдающем игроке.
+		// Exact AI/occupant и safe destination проверяются каждым caller заново.
+		return true;
 	}
 
 	protected void AuditHiddenRecoveryDeferred(
@@ -1687,6 +1776,10 @@ class AICF_VehicleDismountFlow
 			reason,
 			sample.m_sMemberSamples,
 			sample.m_sPostEgressSamples);
+		details += string.Format(
+			" force_exit_attempts=%1 physical_relocation_attempts=%2 maximum_force_exit_attempts=%3 maximum_physical_relocation_attempts=%4 maximum_combined_batches_per_phase=%5",
+			trip.GetDismountState().GetForceExitAttempts(), trip.GetDismountState().GetPhysicalRelocationAttempts(),
+			FORCE_MAX_ATTEMPTS, FORCE_MAX_ATTEMPTS, FORCE_MAX_ATTEMPTS * 2);
 		return details;
 	}
 

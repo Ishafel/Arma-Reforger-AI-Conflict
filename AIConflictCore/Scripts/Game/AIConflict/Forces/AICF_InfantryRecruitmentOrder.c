@@ -21,12 +21,14 @@ class AICF_InfantryRecruitmentOrder
 	SCR_ServicePointComponent m_Service;
 	EntityID m_ServiceId;
 	vector m_vPosition;
+	ref array<vector> m_aApproachEndpoints = {};
 	AIWaypoint m_Waypoint;
 	int m_iStartedAtMs;
 	int m_iArrivedAtMs;
 	int m_iApproachProgressAtMs;
 	int m_iApproachRepairs;
 	bool m_bMovementFailed;
+	ref AICF_RecruitmentMoveFailure m_MoveFailure;
 	float m_fApproachBestDistance;
 	bool m_bHiddenRecoveryPending;
 	int m_iHiddenRecoverySubmittedAtMs;
@@ -34,6 +36,8 @@ class AICF_InfantryRecruitmentOrder
 	SCR_AIGroup m_Donor;
 	EntityID m_DonorId;
 	int m_iSpawnAtMs;
+	bool m_bNativeCapacityWaiting;
+	bool m_bQuotaCapacityWaiting;
 	ResourceName m_sPrefab;
 	int m_iMemberIndex;
 	string m_sRole;

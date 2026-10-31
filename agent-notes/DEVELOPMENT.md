@@ -3,6 +3,11 @@
 Работай из корня репозитория в Windows PowerShell/PowerShell 7. Нужны
 Arma Reforger, Server и Tools одной версии, для API helper — Git for Windows.
 Перед изменением запиши `git status`, branch/commit и фактические версии.
+При проверке byte hashes учти EOL: `git archive` даёт Git-normalized bytes,
+а Windows checkout может содержать CRLF. Для fixture-free player build копируй
+весь точный tracked production payload из checkout и проверяй SHA256; не только
+dirty overlay поверх archive. Различие только CRLF/LF фиксируй отдельно,
+не объявляя его изменением gameplay source или необъяснённым source drift.
 Создай отдельную ветку задачи по [AGENTS.md](../AGENTS.md).
 
 Для полного offline набора из глубоко вложенного checkout используй временный
@@ -29,6 +34,14 @@ launcher и проверку точного CLI/manifest, не подменяй 
 
 Кэш vendor-owned и не коммитится. Смена версии API — отдельная задача с новым
 baseline и проверкой всех затронутых контрактов, а не повод угадывать сигнатуры.
+
+При проверке lifetime учитывай [Enforce ARC](https://community.bohemia.net/wiki/Arma_Reforger%3AScripting%3A_Automatic_Reference_Counting):
+локальные ссылки и аргументы удерживают managed объект до конца scope; `ref`
+нужен для сильного поля/элемента контейнера. Замена владельца массива сама по
+себе не обнуляет локальный managed аргумент. Ручное удаление native entity или
+component проверяется отдельно. Не объявляй различие C# replay и Enforce
+дефектом без проверки фактической модели ссылок; weak field, как census row
+в VehicleUse, действительно требует живого владельца snapshot.
 
 ## Workbench Validate/Compile
 
@@ -105,6 +118,12 @@ Hard — случайные пары бронетехники и одну уси
 в меню даёт тот же результат; параметры header определяют состав гарнизонов.
 
 ## Server и client
+
+Runtime runners, сохраняющие native output через `*>`, запускай из PowerShell7.
+В Windows PowerShell5 обычная native stderr строка ENGINE(W) может превратиться
+в terminating NativeCommandError при ErrorActionPreference=Stop и прервать игру
+ещё до старта. Такой запуск не подтверждает runtime и не считается native crash;
+исходный FAIL/полные logs сохраняются, повтор использует свежий profile.
 
 Запускай только через `tools/Start-AICFRuntime.ps1` в отдельных терминальных
 сессиях. Helper работает в foreground; не создавай ad-hoc `Start-Process`.

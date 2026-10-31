@@ -48,8 +48,27 @@ class AICF_VehicleTaskHandoff
 		SCR_AIGroupUtilityComponent groupUtility = group.GetGroupUtilityComponent();
 		if (!usage || !groupUtility)
 			return false;
+		AICF_VehicleBehaviorBinding binding;
+		if (trip.GetVehiclePreset())
+		{
+			// AddUsableVehicle создаёт native combat activity. Policy уже должна
+			// владеть initial/resumed entry до её первого native Evaluate/GetOut.
+			if (!AICF_VehicleBehaviorPolicy.IsBehaviorPhase(trip.GetPhase())) return false;
+			AICF_VehicleBehaviorPolicy.Register(trip);
+			binding = AICF_VehicleBehaviorPolicy.Find(vehicle);
+			if (!binding || binding.m_Trip != trip)
+			{
+				AICF_VehicleBehaviorPolicy.Unregister(trip);
+				return false;
+			}
+		}
 		groupUtility.AddUsableVehicle(usage);
-		return groupUtility.IsUsableVehicle(usage);
+		bool attached = groupUtility.IsUsableVehicle(usage);
+		if (attached && trip.GetVehiclePreset())
+			attached = groupUtility.AICF_ReconcileExactVehicleSubgroup(trip);
+		if (binding && !binding.IsCurrent()) attached = false;
+		if (!attached && trip.GetVehiclePreset()) AICF_VehicleBehaviorPolicy.Unregister(trip);
+		return attached;
 	}
 
 	void DetachVehicleUtility(AICF_TransportTrip trip)
@@ -65,6 +84,140 @@ class AICF_VehicleTaskHandoff
 		SCR_AIGroupUtilityComponent groupUtility = group.GetGroupUtilityComponent();
 		if (usage && groupUtility && groupUtility.IsUsableVehicle(usage))
 			groupUtility.RemoveUsableVehicle(usage);
+	}
+
+	bool MaintainAcquisitionHold(AICF_TransportTrip trip, AICF_GroupSlot slot,
+		AICF_AcquisitionStagingReceipt receipt, AICF_VehicleWaypointFactory factory, int nowMs, out bool superseded)
+	{
+		superseded = false;
+		if (receipt && (!receipt.HasSourceIdentity(trip) || !IsCurrentAssignment(trip, slot)))
+		{
+			superseded = true;
+			return false;
+		}
+		if (!IsCurrentAssignment(trip, slot) || !receipt || !factory || !receipt.IsCurrent(trip, nowMs)) return false;
+		AICF_VehicleSpawnPlan plan = receipt.GetPlan();
+		AICF_VehicleAcquisitionHold hold = plan.GetAcquisitionHold();
+		if (hold)
+		{
+			if (!hold.IsCurrent(trip, nowMs))
+			{
+				superseded = !receipt.HasSourceIdentity(trip) || plan.GetAcquisitionHold() != hold || hold.GetRetirement() != null;
+				return false;
+			}
+			array<AIWaypoint> existing = {};
+			receipt.GetGroup().GetWaypoints(existing);
+			bool current = existing.Contains(hold.GetWaypoint()) && hold.IsCurrent(trip, nowMs) && receipt.IsCurrent(trip, nowMs);
+			if (!current) superseded = !receipt.HasSourceIdentity(trip) || plan.GetAcquisitionHold() != hold || hold.GetRetirement() != null;
+			return current;
+		}
+		if (!receipt.HasTaskFields(trip, System.GetTickCount())) return false;
+		AIWaypoint waypoint = factory.CreateAcquisitionHoldWaypoint(receipt.GetStagingPosition(), receipt.GetRadius(), receipt.GetExpiresAtMs());
+		if (!waypoint) return false;
+		hold = AICF_VehicleAcquisitionHold.Capture(receipt, waypoint);
+		if (!hold || !receipt.IsCurrent(trip, nowMs) || !IsCurrentAssignment(trip, slot) || !plan.BindAcquisitionHold(hold))
+		{
+			superseded = !receipt.HasSourceIdentity(trip) || plan.GetAcquisitionHold() != null;
+			DeleteUnboundAcquisitionWaypoint(receipt, waypoint);
+			return false;
+		}
+		if (!hold.IsCurrent(trip, nowMs) || !BindAcquisitionHoldWaypoint(trip, slot, hold, nowMs) ||
+			!hold.IsCurrent(trip, nowMs) || !IsCurrentAssignment(trip, slot) || !receipt.HasTaskFields(trip, System.GetTickCount()))
+		{
+			superseded = !receipt.HasSourceIdentity(trip) || plan.GetAcquisitionHold() != hold || hold.GetRetirement() != null;
+			if (!superseded) ReleaseAcquisitionHold(trip, plan, "ACQUISITION_HOLD_BIND_ROLLBACK", hold);
+			return false;
+		}
+		AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_BOUND", receipt.GetIdentityDetails() +
+			string.Format(" waypoint=%1 staging=%2 expires_at_ms=%3 queue_bound=1 native_running=UNOBSERVED", waypoint.GetID(), receipt.GetStagingPosition(), receipt.GetExpiresAtMs()));
+		return true;
+	}
+
+	protected bool BindAcquisitionHoldWaypoint(AICF_TransportTrip trip, AICF_GroupSlot slot,
+		AICF_VehicleAcquisitionHold hold, int nowMs)
+	{
+		if (!hold || !hold.IsCurrent(trip, nowMs) || !IsCurrentAssignment(trip, slot)) return false;
+		SCR_AIGroup group = hold.GetReceipt().GetGroup();
+		AIWaypoint waypoint = hold.GetWaypoint();
+		array<AIWaypoint> queue = {};
+		group.GetWaypoints(queue);
+		if (!hold.IsCurrent(trip, nowMs) || !IsCurrentAssignment(trip, slot) ||
+			!hold.GetReceipt().HasTaskFields(trip, System.GetTickCount())) return false;
+		if (!queue.Contains(waypoint)) group.AddWaypointAt(waypoint, 0);
+		queue.Clear();
+		group.GetWaypoints(queue);
+		return queue.Contains(waypoint) && hold.IsCurrent(trip, nowMs) && IsCurrentAssignment(trip, slot) &&
+			hold.GetReceipt().HasTaskFields(trip, System.GetTickCount());
+	}
+
+	bool ReleaseAcquisitionHold(AICF_TransportTrip trip, AICF_VehicleSpawnPlan plan, string reason, AICF_VehicleAcquisitionHold expected)
+	{
+		if (!Replication.IsServer() || !trip || !plan) return false;
+		AICF_VehicleAcquisitionHold hold = expected;
+		if (!hold) return plan.GetAcquisitionHold() == null;
+		if (plan.GetAcquisitionHold() != hold) return false;
+		AICF_AcquisitionStagingReceipt receipt = hold.GetReceipt();
+		if (!receipt || !receipt.OwnsCleanup(trip, plan) || !hold.HasOwnedEntity()) return false;
+		if (!receipt.IsGroupIdentityCurrent() && !receipt.IsGroupAbsent()) return false;
+		SCR_AIGroup group = receipt.GetGroup();
+		AIWaypoint waypoint = hold.GetWaypoint();
+		if (waypoint && group)
+		{
+			array<AIWaypoint> queue = {};
+			group.GetWaypoints(queue);
+			if (plan.GetAcquisitionHold() != hold || !receipt.OwnsCleanup(trip, plan) ||
+				!hold.HasOwnedEntity() || !receipt.IsGroupIdentityCurrent()) return false;
+			if (queue.Contains(waypoint)) group.RemoveWaypoint(waypoint);
+			queue.Clear();
+			group.GetWaypoints(queue);
+			if (queue.Contains(waypoint)) return false;
+		}
+		if (plan.GetAcquisitionHold() != hold || !receipt.OwnsCleanup(trip, plan) || !hold.HasOwnedEntity() ||
+			(!receipt.IsGroupIdentityCurrent() && !receipt.IsGroupAbsent())) return false;
+		if (!plan.ClearAcquisitionHold(hold)) return false;
+		if (!hold.HasOwnedEntity() || !receipt.OwnsCleanup(trip, plan) || plan.GetAcquisitionHold() != null)
+		{
+			// Restore only our empty slot, never overwrite a successor token.
+			plan.BindAcquisitionHold(hold);
+			return false;
+		}
+		if (waypoint)
+		{
+			string waypointId = waypoint.GetID().ToString();
+			if (!hold.HasOwnedEntity() || !receipt.OwnsCleanup(trip, plan) || plan.GetAcquisitionHold() != null)
+			{
+				plan.BindAcquisitionHold(hold);
+				return false;
+			}
+			RplComponent.DeleteRplEntity(waypoint, false);
+			AICF_Stage35Diagnostics.Info("WAYPOINT_REMOVED", receipt.GetIdentityDetails() +
+				" waypoint=" + waypointId + " waypoint_kind=VEHICLE owner=VEHICLE_HANDOFF remove_trigger=ACQUISITION_HOLD_RELEASE remove_reason=" + reason);
+		}
+		return true;
+	}
+
+	protected bool DeleteUnboundAcquisitionWaypoint(AICF_AcquisitionStagingReceipt receipt, AIWaypoint waypoint)
+	{
+		if (!Replication.IsServer() || !receipt || !waypoint || !receipt.GetWorld() ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(waypoint)) return false;
+		EntityID id = waypoint.GetID();
+		string rpl = AICF_VehicleBehaviorBinding.ComponentRpl(waypoint);
+		if (waypoint.GetWorld() != receipt.GetWorld() || receipt.GetWorld().FindEntityByID(id) != waypoint) return false;
+		if (!receipt.IsGroupIdentityCurrent() && !receipt.IsGroupAbsent()) return false;
+		SCR_AIGroup group = receipt.GetGroup();
+		if (group)
+		{
+			array<AIWaypoint> queue = {};
+			group.GetWaypoints(queue);
+			if (queue.Contains(waypoint)) return false;
+		}
+		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(waypoint) ||
+			waypoint.GetID() != id || AICF_VehicleBehaviorBinding.ComponentRpl(waypoint) != rpl ||
+			waypoint.GetWorld() != receipt.GetWorld() || receipt.GetWorld().FindEntityByID(id) != waypoint) return false;
+		RplComponent.DeleteRplEntity(waypoint, false);
+		AICF_Stage35Diagnostics.Info("WAYPOINT_REMOVED", receipt.GetIdentityDetails() +
+			" waypoint=" + id.ToString() + " waypoint_kind=VEHICLE owner=VEHICLE_HANDOFF remove_trigger=ACQUISITION_HOLD_CREATE_ROLLBACK remove_reason=CONTEXT_CHANGED");
+		return true;
 	}
 
 	bool BindVehicleWaypoint(
@@ -154,8 +307,11 @@ class AICF_VehicleTaskHandoff
 			AICF_VehicleSpawnPlan plan = trip.GetRequestState().GetSpawnPlan();
 			return plan && waypoint == plan.GetApproachWaypoint();
 		}
-		if (!trip.IsValid() || trip.IsTerminal() || !trip.GetAssignment().GetGroup())
+		if (!trip.IsValidForRetirement() || trip.IsTerminal() ||
+			(!trip.GetAssignment().GetGroup() && !trip.HasAbsentGroupRetirementIdentity()))
 			return false;
+		if (trip.HasAbsentGroupRetirementIdentity() && (!trip.GetLease() ||
+			!trip.GetLease().MatchesTripIdentity(trip.GetFactionKey(), trip.GetSlotId(), trip.GetGroupGeneration(), trip.GetTripGeneration()))) return false;
 		if (trip.GetPhase() == AICF_ETransportTripPhase.TRANSIT)
 		{
 			AICF_VehicleMovementState movement = trip.GetMovementState();
@@ -209,6 +365,7 @@ class AICF_VehicleTaskHandoff
 		// authoritative proof is not another mutation attempt and must remain
 		// available until the handoff deadline.
 		bool requiresLoneSurvivorRetreat = slot &&
+			slot.GetDesiredSize() > 1 &&
 			AICF_GroupRuntime.CountAliveAgents(slot.GetGroup()) == 1 &&
 			!slot.IsLoneSurvivorRetreat();
 		if (!requiresLoneSurvivorRetreat && ObserveExistingInfantryOrder(
@@ -271,7 +428,8 @@ class AICF_VehicleTaskHandoff
 					" alive=0 handoff_mode=GROUP_REPLACEMENT transition_owner=GROUP_LIFECYCLE order_restored=0");
 			return false;
 		}
-		bool loneSurvivorRetreat = alive == 1;
+		// Намеренно заданный одиночный отряд не является остатком потерь.
+		bool loneSurvivorRetreat = alive == 1 && slot.GetDesiredSize() > 1;
 		bool plannerAccepted = IsExactWaypointCurrentAndQueued(slot, slot.GetWaypoint()) &&
 			m_OrderPlanner.IsOrderValid(slot, faction);
 		if (loneSurvivorRetreat && !slot.IsSystemHoldOrder() &&
@@ -415,7 +573,9 @@ class AICF_VehicleTaskHandoff
 		// awaiting-command safety state: its dedicated reliability branch may rebuild
 		// the same HQ Defend waypoint, but it must never consume generic stuck/task-
 		// loss recovery budgets.
-		if (!slot.IsSystemHoldOrder())
+		// Повторный physical proof не начинает новую durability-проверку поверх
+		// текущей: её attempt owner, исходный clock и stable polls сохраняются.
+		if (!slot.IsSystemHoldOrder() && !slot.IsPendingOrderRecoveryContextCurrent())
 			slot.BeginOrderRecoveryVerification("VEHICLE_HANDOFF");
 		string handoffMode = "OPERATIONAL_ORDER_RESTORE";
 		if (slot.IsLoneSurvivorRetreat())
@@ -542,7 +702,7 @@ class AICF_VehicleTaskHandoff
 		if (!trip)
 		{
 			return "faction=NONE slot=NONE numeric_slot=-1 group_generation=-1" +
-				" trip_generation=-1 vehicle=NONE kind=NONE state=NONE";
+				" trip_generation=-1 vehicle=NONE rpl_id=NONE kind=NONE state=NONE";
 		}
 		string details = string.Format(
 			"faction=%1 slot=%2 numeric_slot=%3 group_generation=%4 trip_generation=%5 operation_id=%6 causation_id=%7",
@@ -557,6 +717,7 @@ class AICF_VehicleTaskHandoff
 		int vehicleGeneration = -1;
 		string lifecycleId = "NONE";
 		string vehicleId = "NONE";
+		string vehicleRplId = "NONE";
 		string vehicleKind = "NONE";
 		AICF_VehicleLease lease = trip.GetLease();
 		if (lease)
@@ -566,6 +727,8 @@ class AICF_VehicleTaskHandoff
 			lifecycleId = lease.GetVehicleLifecycleId();
 			if (!lease.GetEntityIdString().IsEmpty())
 				vehicleId = lease.GetEntityIdString();
+			if (!lease.GetRplId().IsEmpty())
+				vehicleRplId = lease.GetRplId();
 			if (vehicleGeneration > 0)
 				vehicleKind = typename.EnumToString(AICF_EVehicleKind, lease.GetKind());
 		}
@@ -576,8 +739,9 @@ class AICF_VehicleTaskHandoff
 			lifecycleId,
 			reason);
 		details += string.Format(
-			" vehicle=%1 kind=%2 state=%3",
+			" vehicle=%1 rpl_id=%2 kind=%3 state=%4",
 			vehicleId,
+			vehicleRplId,
 			vehicleKind,
 			typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase()));
 		return details;

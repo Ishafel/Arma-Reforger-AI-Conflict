@@ -4,6 +4,7 @@ class AICF_GroupSpawner
 	protected ref AICF_ContentProfile m_ContentProfile;
 	protected ref array<FactionKey> m_aSourceFactions = {};
 	protected ref array<ref array<ResourceName>> m_aSourceRosters = {};
+	protected ref AICF_RosterSpawnBatch m_RosterBatch;
 
 	void AICF_GroupSpawner(AICF_ContentProfile contentProfile = null)
 	{
@@ -182,6 +183,18 @@ class AICF_GroupSpawner
 		return group;
 	}
 
+	bool BeginBoundRosterSpawn(AICF_MatchController controller, AICF_FactionState state,
+		AICF_GroupSlot slot, SCR_AIGroup group, int expectedSize)
+	{
+		AICF_RosterSpawnBatch previous = m_RosterBatch;
+		AICF_RosterSpawnBatch context = new AICF_RosterSpawnBatch(controller, state, slot, group, expectedSize);
+		m_RosterBatch = context;
+		// Keep the original virtual seam; nested callbacks restore their outer scope.
+		bool accepted = BeginRosterSpawn(group, expectedSize);
+		m_RosterBatch = previous;
+		return accepted;
+	}
+
 	bool BeginRosterSpawn(SCR_AIGroup group, int expectedSize)
 	{
 		if (!Replication.IsServer() || !group || expectedSize <= 0 ||
@@ -191,12 +204,19 @@ class AICF_GroupSpawner
 			return false;
 		}
 
+		AICF_RosterSpawnBatch context = m_RosterBatch;
+		if (context && !context.IsForGroup(group)) context = null;
+		if (context && !context.IsCurrent(group, expectedSize)) return true;
+		if (context && context.TryDispatch(group, expectedSize)) return true;
+		if (context && !context.IsCurrent(group, expectedSize)) return true;
+
 		// Arma Reforger 1.8 moved runtime member materialisation to SCR_AIWorld's
 		// global queue. Direct SpawnUnits() is now a synchronous fallback: a member
 		// blocked by an unloaded navmesh tile is not re-enqueued. RequestSpawn keeps
 		// the stock retry/budget/importance ownership and is the production API used
 		// by the 1.8 Scenario Framework.
 		group.SetNumberOfMembersToSpawn(expectedSize);
+		if (context && !context.IsCurrent(group, expectedSize)) return true;
 		group.RequestSpawn(expectedSize);
 		return true;
 	}

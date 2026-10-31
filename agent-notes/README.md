@@ -7,10 +7,37 @@
 
 | Задача | Что читать |
 |---|---|
+| Изменить окно пресетов отряда, прокрутку мест, авторассадку и вращение техники | [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md), проверки нового UI в [TESTING.md](TESTING.md) |
+| Продолжить #78 после передачи draft PR и выключения компьютера | [ISSUE78_STATUS.md](ISSUE78_STATUS.md), итоговый комментарий в issue и точные manifests |
+| Разделить native stock и AICF quotas, проверить full basket/catalog и позднюю активацию техники | [AI_QUOTAS.md](AI_QUOTAS.md), текущая реализация/admission и отдельные обязательные native pressure gates |
+| Воспроизвести human Catalog/FIFO, full-basket отказ и покупку пустой машины при полной character квоте | [AI_QUOTA_CATALOG.md](AI_QUOTA_CATALOG.md), public separate-role runner, native proof и строгие полные log audits |
+| Воспроизвести заполнение stock-квоты и обычный оплаченный набор AICF | [AI_QUOTA_STOCK_PRESSURE.md](AI_QUOTA_STOCK_PRESSURE.md), public Prepare/Run, scope и исходные failures |
+| Отличить нехватку средств до покупки машины от нарушения lifecycle | [VEHICLE_ECONOMY_DECLINE.md](VEHICLE_ECONOMY_DECLINE.md), typed pre-asset quote/receipt, own empty lease и terminal foot fallback |
+| Разобрать taskless ожидание квоты перед созданием машины | [VEHICLE_ACQUISITION_HOLD.md](VEHICLE_ACQUISITION_HOLD.md), typed staged receipt, реальный owned Defend и cleanup до продолжения acquisition |
+| Освободить исходного DEAD водителя, которого native исключил из сохранившейся группы | [CAPTURED_CASUALTY_CLEANUP.md](CAPTURED_CASUALTY_CLEANUP.md), admission capability, прежние physical guards и opt-in actual-decision observer без повторного принятия решения |
+| Разобрать неполный native spawn и очередь замены отрядов | [GROUP_SPAWN.md](GROUP_SPAWN.md), GroupRuntime/InfantrySpawnPlacement и controlled replacement stress |
+| Разобрать отказ короткой коррекции при native STUCK на подходе к казарме | [RECRUITMENT_DECISIONS.md](RECRUITMENT_DECISIONS.md), isolated decision observer без изменения recovery |
+| Найти источник долгого Census UNKNOWN при посадке | [AI_QUOTAS.md](AI_QUOTAS.md#разбор-census-unknown-без-изменения-допуска), отдельный opt-in decision observer и строгие старые gates |
+| Разобрать Census UNKNOWN после посадки экипажа с inventory | [VEHICLE_CENSUS_TOPOLOGY.md](VEHICLE_CENSUS_TOPOLOGY.md), structural compartment topology, character subtree boundary и неизменные occupant guards |
+| Разобрать конфликт приказа внутри MOB с требованием выхода с базы | [PLAYER_MOB_TASK.md](PLAYER_MOB_TASK.md), отдельные egress/arrival обязанности; [MOB_DECISIONS.md](MOB_DECISIONS.md), opt-in native decision observer |
+| Исправить persistence leaks при direct-connect без backend identity | [PERSISTENCE_IDENTITY.md](PERSISTENCE_IDENTITY.md), native SpawnLogic identity boundary и separate client/JIP gate |
+| Разобрать native out-of-world-bounds у оружия и отделить main-world drop от private Equipment model | [TEST_FIXTURES.md](TEST_FIXTURES.md#read-only-loose-weapon--private-equipment-model-observer), fixture-only LooseWeaponObserver и отдельный controlled native-drop baseline |
+| Защитить известное выпавшее оружие AI от runaway fall после пересечения terrain | [DROPPED_WEAPON_FALL_SAFETY.md](DROPPED_WEAPON_FALL_SAFETY.md), exact inventory-removal permission, human/subtree fences и отдельное подтверждение удаления |
+| Изменить поведение TRANSPORT/COMBAT, N возврата, замену потерь и разрешённую короткую принудительную посадку | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md), BehaviorFlow/Policy/ShortRecovery и retained TACTICAL_DEPLOYMENT |
+| Разобрать ожидание входа в машину и ранний пеший подход без расширения door cap/deadline | [VEHICLE_BOARDING_QUEUE.md](VEHICLE_BOARDING_QUEUE.md), PresetQueuedApproach/BoardingState и callback-safe QueuePresetSeat |
+| Разобрать native UNKNOWN во время подхода к площадке техники | [VEHICLE_APPROACH_FAILURE.md](VEHICLE_APPROACH_FAILURE.md); exact phase-owned failure receipt и отдельный controlled native probe |
+| Проверить bounded route repair после настоящего OpenGate/возврата экипажа | [TEST_FIXTURES.md](TEST_FIXTURES.md#controlled-native-opengate-expiry), NativeGateExpiryProbe с единственной controlled expiry и отдельным native motion proof |
+| Передать игроку визуальную проверку окна техники и подтверждения состава | [VEHICLE_VISUAL_CHECK.md](VEHICLE_VISUAL_CHECK.md); native геометрия строк — `AICF_VehicleSeatLayoutProbe` в [TEST_FIXTURES.md](TEST_FIXTURES.md), terminal probes не заменяют human NOT RUN |
+| Проверить2→4→6 машин на сторону и native combat hold/release/resume | [VEHICLE_MULTISQUAD.md](VEHICLE_MULTISQUAD.md), MultiSquad/TransportCombatResume fixtures и их terminal runners/log auditors |
+| Разобрать повреждённую ходовую, bounded fallback и повторную покупку на прежнем intent | [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md), `Invoke-AICFTransportDamageFallback.ps1`, movement damage/finished intent contracts |
+| Проверить штатный найм5 бойцов в первом отряде, UAZ/Humvee и30 минут реального боя | [VEHICLE_SOAK.md](VEHICLE_SOAK.md), VehicleSoakProbe, Invoke/Watch-AICFVehicleSoak и SoakLog |
+| Прогнать полные поездки/повторную посадку, разобрать действия и координаты бойцов | [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md), GroupTrace, VehicleScenarioProbe и `Invoke-AICFVehicleScenarios.ps1` |
+| Изменить категории своего/CIV колёсного каталога, preview, numeric рассадку, подтверждение сокращения состава и библиотеку техники (issue #78) | [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md), `AICF_VehiclePreset`/`AICF_VehiclePresetCatalog`, `AICF_VehiclePresetService`/`AICF_VehicleCrewReturn`/`AICF_VehiclePresetStore`, content price override, acquisition/boarding/trip owners |
 | Изменить «Инспектор», прокрутку, ввод окон, названия назначений, постоянную библиотеку, Save/Apply/Delete, перенос комплекта между ролями, массовое назначение или настройку противника (issue #66) | [LOADOUT_PRESETS.md](LOADOUT_PRESETS.md), `AICF_LoadoutService`/`AICF_LoadoutStore`/`AICF_LoadoutTransfer`, `AICF_LoadoutPreset`/`AICF_LoadoutBatch`, `AICF_LoadoutEditor`/`AICF_LoadoutRpc`, `AICF_LoadoutLibraryView`/`AICF_LoadoutSummary`, `tools/AICF_LoadoutLibrary.ps1` |
 | Запустить локальные Play/Host через обычный клиент или разобрать native shutdown crash | [DEVELOPMENT.md](DEVELOPMENT.md#локальные-playhost), [TESTING.md](TESTING.md), `tools/Start-AICFRuntime.ps1 -Role Frontend`; успешный offline/compile не заменяет stopped-log runtime gate |
 | Изменить внутриигровой брифинг на карте | [MISSION_BRIEFING.md](MISSION_BRIEFING.md), `UI/AICF_MissionBriefing.c`, MissionBriefingProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Разобрать resource/navmesh/Hierarchy ошибки и границу внешнего baseline | [EXTERNAL_RESOURCE_BASELINE.md](EXTERNAL_RESOURCE_BASELINE.md), [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), [TESTING.md](TESTING.md) |
+| Разобрать native падение проверки занятого места при отсутствующем Physics | [NATIVE_SLOT_PHYSICS_GUARD.md](NATIVE_SLOT_PHYSICS_GUARD.md), `AICF_NativeSlotPhysicsGuard`, fail-closed occupancy и отдельный Catalog native gate |
 | Исправить damage RPC при смене обуви у private model или при shutdown | [SHUTDOWN_LIFECYCLE.md](SHUTDOWN_LIFECYCLE.md), `Integration/AICF_FeetDamageLifecycle.c`, FeetDamageProbe в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить универсальное меню карт/контента, первый вход Workshop, подсказку «Как настроить», время/погоду, зависимости и native launch, видимость сценариев или ошибки SCR_FilterCategory | [SCENARIO_SETUP.md](SCENARIO_SETUP.md), `AICF_ScenarioBootstrap`/`AICF_ScenarioHostTransition`, `AICF_ScenarioEnvironment`/`AICF_ScenarioEnvironmentHandler`, `AICF_ScenarioRegistry`, `AICF_ScenarioLaunch`, `AICF_ScenarioSetupSelection`, `AICF_ScenarioSetupScreen`, `AICF_ScenarioSetupEntry`, `AICF_ArlandScenarioCatalog`, `AICF_WorkshopTagMetadata` |
 | Исправить классификацию смерти INSTIGATOR_OTHER | [INSTIGATOR_CONTEXT.md](INSTIGATOR_CONTEXT.md), `AICF_InstigatorContext`, pinned `SCR_InstigatorContextData` и native Instigator API |
@@ -43,6 +70,7 @@
 | Изменить адаптивные цели, потребность в силах и стратегические gates | [ADAPTIVE_COMMANDER.md](ADAPTIVE_COMMANDER.md), `Command/AICF_AdaptiveCommanderPolicy.c`, `AICF_AdaptiveScore.c` |
 | Изменить категории основного/второго оружия или пропущенный быстрый слот второй винтовки | [LOADOUT_WEAPON_CATEGORIES.md](LOADOUT_WEAPON_CATEGORIES.md), `UI/AICF_LoadoutWeaponCategories.c`, `Integration/AICF_WeaponQuickslots.c` и content profiles |
 | Найти утилиту, её статус и запустить offline набор | [TOOLS.md](TOOLS.md) |
+| Исправить orphan trip после native гибели группы, проверить DEAD cleanup и типизированную retirement projection | [VEHICLE_RETIREMENT.md](VEHICLE_RETIREMENT.md), [VEHICLE_SOAK.md](VEHICLE_SOAK.md) |
 | Выбрать runtime probe и проверить ограничения | [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Проверить identity failed movement и неоднозначный handler | [ARCHITECTURE.md](ARCHITECTURE.md#authority-и-identity), `Forces/AICF_AINodeLifecycle.c`, [TESTING.md](TESTING.md), InfantryMoveHandler probe |
 | Подготовить API reference, Workbench, локальный/удалённый runtime и Diag/retail | [DEVELOPMENT.md](DEVELOPMENT.md) |
