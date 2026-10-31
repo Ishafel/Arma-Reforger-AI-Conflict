@@ -21,6 +21,7 @@
 | Разобрать конфликт приказа внутри MOB с требованием выхода с базы | [PLAYER_MOB_TASK.md](PLAYER_MOB_TASK.md), отдельные egress/arrival обязанности; [MOB_DECISIONS.md](MOB_DECISIONS.md), opt-in native decision observer |
 | Исправить persistence leaks при direct-connect без backend identity | [PERSISTENCE_IDENTITY.md](PERSISTENCE_IDENTITY.md), native SpawnLogic identity boundary и separate client/JIP gate |
 | Разобрать native out-of-world-bounds у оружия и отделить main-world drop от private Equipment model | [TEST_FIXTURES.md](TEST_FIXTURES.md#read-only-loose-weapon--private-equipment-model-observer), fixture-only LooseWeaponObserver и отдельный controlled native-drop baseline |
+| Защитить известное выпавшее оружие AI от runaway fall после пересечения terrain | [DROPPED_WEAPON_FALL_SAFETY.md](DROPPED_WEAPON_FALL_SAFETY.md), exact inventory-removal permission, human/subtree fences и отдельное подтверждение удаления |
 | Изменить поведение TRANSPORT/COMBAT, N возврата, замену потерь и разрешённую короткую принудительную посадку | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md), BehaviorFlow/Policy/ShortRecovery и retained TACTICAL_DEPLOYMENT |
 | Разобрать ожидание входа в машину и ранний пеший подход без расширения door cap/deadline | [VEHICLE_BOARDING_QUEUE.md](VEHICLE_BOARDING_QUEUE.md), PresetQueuedApproach/BoardingState и callback-safe QueuePresetSeat |
 | Разобрать native UNKNOWN во время подхода к площадке техники | [VEHICLE_APPROACH_FAILURE.md](VEHICLE_APPROACH_FAILURE.md); exact phase-owned failure receipt и отдельный controlled native probe |

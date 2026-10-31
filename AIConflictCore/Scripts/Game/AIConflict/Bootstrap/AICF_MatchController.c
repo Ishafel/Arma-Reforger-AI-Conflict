@@ -103,6 +103,7 @@ class AICF_MatchController
 	protected ref AICF_EconomySystem m_EconomySystem;
 	protected ref AICF_InfantryRecruitmentService m_InfantryRecruitment;
 	protected ref AICF_EquipmentService m_EquipmentService;
+	protected ref AICF_DroppedWeaponFallSafety m_DroppedWeaponFallSafety;
 	protected ref AICF_SocialService m_Social;
 	protected ref AICF_ManagedObservers m_ManagedObservers;
 	protected ref AICF_LoadoutService m_Loadouts;
@@ -305,6 +306,8 @@ class AICF_MatchController
 			m_Campaign, m_OrderPlanner, m_EconomySystem, m_ObjectiveGraph, m_TargetSelector, m_GroupSpawner);
 		m_InfantryRecruitment.SetRecoveryPolicy(m_HiddenRecoveryWatchdog, m_Stage3Config);
 		m_EquipmentService = new AICF_EquipmentService(m_Campaign, m_OrderPlanner, m_ObjectiveGraph, m_TargetSelector, m_GroupSpawner);
+		m_DroppedWeaponFallSafety = new AICF_DroppedWeaponFallSafety();
+		m_DroppedWeaponFallSafety.Start(this, m_Campaign);
 		m_ManagedObservers = new AICF_ManagedObservers();
 		m_ManagedObservers.Start(m_Campaign);
 		m_Social = new AICF_SocialService();
@@ -660,6 +663,11 @@ class AICF_MatchController
 	static AICF_MatchController GetActiveController()
 	{
 		return s_ActiveController;
+	}
+
+	bool OwnsDroppedWeaponFallSafety(AICF_DroppedWeaponFallSafety safety)
+	{
+		return safety && m_DroppedWeaponFallSafety == safety && m_bStarted && !m_bStopped && s_ActiveController == this;
 	}
 
 	// Только чтение актуального владельца; policy не кеширует slot/group identity.
@@ -7941,6 +7949,11 @@ class AICF_MatchController
 			return;
 
 		m_bStopped = true;
+		if (m_DroppedWeaponFallSafety)
+		{
+			m_DroppedWeaponFallSafety.Stop();
+			m_DroppedWeaponFallSafety = null;
+		}
 		if (GetGame())
 		{
 			AICF_AIWorldQuotaService quota = AICF_AIWorldQuotaService.GetAuthorityForWorld(GetGame().GetWorld());
