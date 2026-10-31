@@ -460,10 +460,33 @@ Workbench на том же386+1fixture/raw387: actual22131 CLOSED0/native0,
 full3fatal0/other0/resource50FAIL/source387SHA0. Fixture3ED078FB,
 manifest114957227FD7CC29AA9F5FD15BC0E0D1616C733080A9FE5D3F002D9A3B6C08B3,
 expanded receipt в `catalog-native-v27-serialized-data-registration/`.
-Это **не** reflection proof: fresh native v27 сейчас выполняется, полного
-остановленного verdict ещё нет. Исправление подтверждается только после
-отсутствия UnknownClass, непустого настоящего native catalog и прохождения
-обычного purchase/payment/tail gate. V26 FAIL не переименовывается в PASS.
+Native v27 подтвердил отсутствие этого UnknownClass и по13 настоящих assets
+у трёх исходных USSR producer. Их slot arrays были пусты, но после обычного
+строительства появился producer23FB/slot23F8, type8/compatible1. В05:05:20.707
+штатный TraceCallback:306 разыменовал null Physics, VM остановил Tick до
+исходного300s deadline. Покупка/payment/tail **FAIL**, factory/debit0.
+Оба owned процесса принудительно остановлены после exact PID/profile proof:
+Server40559/Client14403 CLOSED1/native-1. Full7logs: Server fatal8/resource10/
+other24, Client fatal0/resource2/other24; четыре собственных path-only metadata
+Resource.Load дают8 Server resource rows. All-source387SHA drift0 сохранён.
+V26 и v27 FAIL не переименовываются в PASS; entity hit category v27 NOT PROVEN.
 
 Evidence: `.codex-runtime/issue78-finalization-20261030/catalog-native-v26-slot-preflight/`
 и его `serialized-container-fix/`; старые stage/manifest/auditor неизменны.
+
+Следующее source изменение добавляет только hook наблюдения неизвестного
+occupancy hit из [NATIVE_SLOT_PHYSICS_GUARD.md](NATIVE_SLOT_PHYSICS_GUARD.md).
+Core уже пометил unknown и возвращает occupied; fixture сохраняет исходный
+reason/наличие entity и после решения читает class/EntityID/prefab через
+однократный cached EntityPrefabData. Эти snapshots не atomic и не доказывают
+категорию прежнего v27 hit. Активный exact LastSlot/frame проверяется после
+каждого native getter, затем используется прежний bounded512 Write/Lost.
+GetPhysics/IsOccupied/TracePosition для наблюдения не вызываются повторно.
+Идентификация удалённой entity проверяется после native context validation;
+старый порядок проверок воспроизведён executable unsafe control.
+
+Прежние39/2old/6request cases и4 registration controls сохранены. Новые13
+unknown-hit cases покрывают null, неактивный/другой slot, чужой мир,
+Stop на metadata getters и удаление hit внутри проверки текущего context.
+Source replay границ native — SIMULATED. Новые WB/runtime gates ещё NOT RUN,
+включая проверку overridability нового hook между modded class слоями.

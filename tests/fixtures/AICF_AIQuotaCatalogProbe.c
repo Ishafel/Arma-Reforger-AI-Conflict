@@ -1553,6 +1553,45 @@ class AICF_QuotaCatalogSlotObserver
 		if (slot.GetOwner()) id = slot.GetOwner().GetID();
 		Write(frame, "OCCUPANCY", string.Format("slot=%1 actual_native_call=1 native_occupied=%2 additional_trace=0", id, result));
 	}
+	static bool CurrentUnknownSlot(AICF_QuotaCatalogSlotFrame frame, SCR_EntitySpawnerSlotComponent slot)
+	{
+		if (!frame || s_Frame != frame || frame.m_LastSlot != slot) return false;
+		bool current = frame.IsCurrent();
+		return current && s_Frame == frame && frame.m_LastSlot == slot;
+	}
+	static void UnknownHit(SCR_EntitySpawnerSlotComponent slot, IEntity ent, string reason)
+	{
+		AICF_QuotaCatalogSlotFrame frame = s_Frame;
+		if (!frame || frame.m_LastSlot != slot) return;
+		if (!CurrentUnknownSlot(frame, slot)) { Lost(frame); return; }
+		bool present = ent != null;
+		EntityID id;
+		string entityClass = "UNKNOWN";
+		ResourceName prefab;
+		bool metadataAvailable;
+		if (ent)
+		{
+			id = ent.GetID();
+			if (!CurrentUnknownSlot(frame, slot) || !ent) { Lost(frame); return; }
+			BaseWorld world = ent.GetWorld();
+			if (!CurrentUnknownSlot(frame, slot) || !ent) { Lost(frame); return; }
+			if (world && world == frame.m_Producer.m_World && world.FindEntityByID(id) == ent)
+			{
+				if (!CurrentUnknownSlot(frame, slot) || !ent) { Lost(frame); return; }
+				entityClass = ent.ClassName();
+				if (!CurrentUnknownSlot(frame, slot) || !ent) { Lost(frame); return; }
+				EntityPrefabData prefabData = ent.GetPrefabData();
+				if (!CurrentUnknownSlot(frame, slot) || !ent) { Lost(frame); return; }
+				if (prefabData) prefab = prefabData.GetPrefabName();
+				if (!CurrentUnknownSlot(frame, slot) || !ent) { Lost(frame); return; }
+				BaseWorld finalWorld = ent.GetWorld();
+				if (!CurrentUnknownSlot(frame, slot) || !ent) { Lost(frame); return; }
+				if (world && finalWorld == world) metadataAvailable = world.FindEntityByID(id) == ent;
+			}
+		}
+		if (!CurrentUnknownSlot(frame, slot)) { Lost(frame); return; }
+		Write(frame, "UNKNOWN_OCCUPANCY_HIT", string.Format("reason=%1 entity_present_before_metadata=%2 entity_id_snapshot=%3 class_after_decision=%4 prefab_after_decision=%5 metadata_available_snapshot=%6 entity_present_after_metadata=%7 metadata_after_decision=1 atomic_snapshot=0 additional_trace=0", reason, present, id, entityClass, prefab, metadataAvailable, ent != null));
+	}
 }
 
 [BaseContainerProps(configRoot: true), BaseContainerCustomCheckIntTitleField("m_bEnabled", "SpawnerData", "DISABLED - SpawnerData", 1)]
@@ -1567,6 +1606,11 @@ modded class SCR_EntityCatalogSpawnerData
 }
 modded class SCR_EntitySpawnerSlotComponent
 {
+	override protected void AICF_ObserveUnknownOccupancyHit(IEntity ent, string reason)
+	{
+		super.AICF_ObserveUnknownOccupancyHit(ent, reason);
+		AICF_QuotaCatalogSlotObserver.UnknownHit(this, ent, reason);
+	}
 	override SCR_EEntitySpawnerSlotType GetSlotType()
 	{
 		SCR_EEntitySpawnerSlotType result = super.GetSlotType();
