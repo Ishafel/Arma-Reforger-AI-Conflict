@@ -29,10 +29,29 @@ PASS — планы, не настоящая игра. Полные команд
 Ручное прохождение остаётся NOT RUN по `VEHICLE_VISUAL_CHECK.md`.
 
 Новые WCS2graphs raw390/compiled378 WB0/fullfatal0/source0; native3map gates
-оцениваются только после всех stopped logs. Их подготовка и точные argv:
+выполнены после полного r34 и закрытия всех6 workers. Их подготовка и точные argv:
 finalization20261029 `quota/r33-current-cut-preparation/plan.json` и
 `wb-two-graph-final-summary.json`. Game code идентичен r34; CPU во время
 soleworld FPS-контролей удерживается отдельно от полного offline набора.
+
+| Текущий r33 game388, RHS+WCS | Cases | Actual exec / native | Hold,s | MinFPS all31samples | Strict resource |
+|---|---:|---|---:|---:|---:|
+| Arland |95/95PASS|97275closed1/native0|302.136|42.6PASS|206FAIL|
+| Everon |95/95PASS|81738closed1/native0|303.954|30.5PASS|466FAIL|
+| EveronNorth |97/97PASS|86468closed1/native0|303.942|36.2PASS|466FAIL|
+
+Все три остановились штатно; full3siblingfatal0/project0/source390SHA0/
+exactcanonicalCLI/ROSTER. Preflight каждый раз0game/WB; Root и остальные агенты
+держали C#/Full/WB/ZIP CPU HOLD на всём soleworld window. Все исходные samples
+включены в FPS gate, старт не вырезался. Это новый FPS PASS на данном запуске,
+а не доказательство причины устранения старого Everon23.0FAIL.
+North readback08:08:47.880 получил NATIVE_CENSUS_MISMATCH/UNKNOWN:
+registered112/examined112/invalid0/chars63/alive_counted63,
+active62/intended63/hard558. Последующие known этот negative не отменяют.
+Resource errors сохраняют общий strictFAIL всех3. Evidence/fullstoppedSHA:
+`quota/r33-current-cut-mapboot-v1/`. Ни bootstrap, ни300s hold не доказывают
+ручное прохождение, intervention dropped-weapon safety, purchase Catalog
+или полный2→4→6 MOVING.
 
 ## Продолжение r31/r32 — 31.10.2026
 

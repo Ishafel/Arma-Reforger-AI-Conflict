@@ -32,9 +32,15 @@ Issue OPEN, PR79 draft/`Refs #78`. Код сохранён отдельными 
   поиск122693ms/188candidates; отменённый заказ дал SETUP_ORDER_IDENTITY_LOST.
   Core identity defect этим не установлен. Оплата/покупка/slot physics guard
   не достигнуты и остаются NOT EXERCISED.
-- RHS+WCS r33 Arland/Everon/North: свежие native проверки выполняются отдельно;
-  до полного stopped verdict результаты не объявляются PASS. Prepared2graphs
-  raw390/compiled378 WB0/fatal0/SHA0, other78FAIL каждый.
+- RHS+WCS r33 Arland/Everon/North завершены последовательно в soleworld после
+  всех6 offline closures:95/95/97 functionalPASS, native0 каждый,
+  fullfatal/project0/source390SHA0/CLIexact/ROSTERtrue. Hold302.136/303.954/
+  303.942s; all-sample minFPS42.6/30.5/36.2 (по31sample) — текущий FPS gatePASS.
+  Strict resource206/466/466FAIL. На North один NATIVE_CENSUS_MISMATCH:
+  registered112/chars63/alive63, active62/intended63; UNKNOWN не исключён
+  после последующих known samples. Старый Everon23.0FAIL сохранён; причина
+  изменения FPS не установлена. Это bootstrap/hold, не human playability,
+  native weapon intervention, paid Catalog purchase или полный MOVING6.
 - Сборка игроку:7addons/388sourcefiles,18DryRun plansPASS, обычный retail
   Frontend, без тестовых сценариев и modifiers. Fresh profile каждого запуска,
   отдельная постоянная библиотека внутри bundle. Ручное прохождение25–30min
@@ -49,6 +55,9 @@ Evidence: finalization20261029 `r34-*`, `r33-expanded-compile-verdict.json`,
 `r34-actual-session-closures.json`, `r33-r34-exact-source-delta.json`,
 `multi-log-contract-cleanup-r33/`, `multi-catalog-final-stopped-v1/`,
 `player-current-cut-20261031/`, `obsolete-stage-archive-plan-v1/archive-index.json`.
+Полные stopped native3: finalization20261029
+`quota/r33-current-cut-mapboot-v1/`; actual97275/81738/86468 closed1 из-за
+strict resource gate, native0 каждый, собственные процессы завершены штатно.
 Native-only8 persistence, resource/font/GUID/lighting, длительные functional
 FAIL и непроверенное человеческое прохождение остаются отдельно; issue не закрыта.
 
