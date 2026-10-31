@@ -254,9 +254,37 @@ try{
  $good=Fixture NORMAL
  Run wrong-mode-CLI ($good.Replace('-aicfVehicleMultiMode NORMAL ','-aicfVehicleMultiMode CAPACITY ')) 1 NORMAL provenance
 }finally{
- $resolved=[IO.Path]::GetFullPath($work)
- if(!$resolved.StartsWith([IO.Path]::GetTempPath(),[StringComparison]::OrdinalIgnoreCase) -or (Split-Path -Leaf $resolved) -notlike 'aicf-multi-contract-*'){throw 'Unsafe cleanup'}
- Remove-Item -LiteralPath $resolved -Recurse -Force
+ function Remove-AICFMultiContractTemp {
+  param([string]$Path,
+   [scriptblock]$RemoveAction={param($Target) Remove-Item -LiteralPath $Target -Recurse -Force -ErrorAction Stop},
+   [scriptblock]$ExistsAction={param($Target) Test-Path -LiteralPath $Target},
+   [scriptblock]$DelayAction={Start-Sleep -Milliseconds 100})
+  $tempRoot=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\','/')
+  $resolved=[IO.Path]::GetFullPath($Path).TrimEnd('\','/')
+  $parent=[IO.Path]::GetDirectoryName($resolved)
+  if(![string]::Equals($parent,$tempRoot,[StringComparison]::OrdinalIgnoreCase) -or
+   [IO.Path]::GetFileName($resolved) -notmatch '^aicf-multi-contract-[0-9a-fA-F]{32}$'){throw 'Unsafe cleanup'}
+  $lastFailure=$null
+  for($attempt=0;$attempt -lt 5;$attempt++){
+   if(!(& $ExistsAction $resolved)){return}
+   try{
+    $directory=Get-Item -LiteralPath $resolved -Force -ErrorAction Stop
+    if(!$directory.PSIsContainer -or ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Unsafe cleanup reparse/file target'}
+    $pending=New-Object 'System.Collections.Generic.Queue[System.IO.DirectoryInfo]'
+    $pending.Enqueue([IO.DirectoryInfo]$directory);$entries=0
+    while($pending.Count){foreach($entry in $pending.Dequeue().GetFileSystemInfos()){
+     if(++$entries -gt 1024 -or ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Unsafe cleanup subtree'}
+     if($entry.Attributes -band [IO.FileAttributes]::Directory){$pending.Enqueue([IO.DirectoryInfo]$entry)}
+    }}
+    & $RemoveAction $resolved
+   }catch [IO.IOException]{$lastFailure=$_}
+   if(!(& $ExistsAction $resolved)){return}
+   if($attempt -lt 4){& $DelayAction}
+  }
+  if($lastFailure){throw $lastFailure}
+  throw [IO.IOException]::new('Owned contract temp directory still exists after five cleanup attempts: '+$resolved)
+ }
+ Remove-AICFMultiContractTemp -Path $work
 }
 "PASS Multi-squad log contracts: both modes, twelve real groups, paid AUTO/manual muster, independent duration/funding/native gates and reconstructed 2/4/6 concurrency; controls=$checks"
 exit 0

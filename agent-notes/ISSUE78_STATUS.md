@@ -1,5 +1,105 @@
 # Состояние #78 — 31.10.2026
 
+## Текущий срез r33/r34 для проверки игроком
+
+Issue OPEN, PR79 draft/`Refs #78`. Код сохранён отдельными коммитами:
+`6bdb476` cleanup assignment fence, `b756a96` dropped-weapon safety,
+`cdcd3ab` canonical catalog metadata/controlled depot fixture. Передача
+экспериментальная, не release/ready/ACCEPTED.
+
+- **Full r34:269/269 PASS**, exact unique union/Logistics1/1038SHA0;
+  actual77074/6995/87915/71699/49754/23935 все closed0. R33 был268/269FAIL
+  только по IOException в cleanup тестового temp-каталога. Исходный FAIL
+  сохранён. В r34 изменён только finally одного контракта: прежние95 assertions
+  неизменны, cleanup7controls dualPASS; все388 игровых файлов равны r33.
+- Current production388 terminal WB Stock/RHS/ArlandWCSRHS3/3 compilePASS,
+  actual14760closed0/native0/full9fatal0/source1038SHA0. Fixture-free player
+  bundle отдельно WB4graphsPASS: Stock/RHS/ArlandWCS/EveronWCS,
+  actual84077closed0, full12logs fatal0/source388SHA0. Resource50/52/78/78
+  остаются strictFAIL. Наличие Workbench PASS не означает исправления ресурсов.
+- Новая защита свободного оружия: actual-source94/9 dualPASS, прежние late-lock,
+  TTL и infinite-normal failures сохранены и исправлены. Только известный
+  AI inventory-removal, mainworld/master/identity/human/subtree/terrain proof;
+  нет teleport/physics setter/лечения. Отдельный native intervention пока NOT RUN.
+- Multi r32 native1800: native0/runner1/elapsed1800907ms, полный FAIL9,
+  completed0. Максимальные readbacks US4/USSR2; подтверждён только cohort2
+  в31354ms, полного2→4→6 нет. PreflightUnavailable0; восемь выбранных составов
+  получили32 оплаченных recruits/560supplies. Source392/full3fatal0/E28/SHA0.
+  Census384captures:279true/105actualfalse;259false decision rows сохранены;
+  overflow1 означает INCOMPLETE, не PASS непрерывного покрытия.
+- Catalog V29: native0/0, public audit1/1, source388/full6fatal0/E172/SHA0.
+  Все4 metadata ResourceName exactPASS. Строительство депо исчерпало штатный
+  поиск122693ms/188candidates; отменённый заказ дал SETUP_ORDER_IDENTITY_LOST.
+  Core identity defect этим не установлен. Оплата/покупка/slot physics guard
+  не достигнуты и остаются NOT EXERCISED.
+- RHS+WCS r33 Arland/Everon/North: свежие native проверки выполняются отдельно;
+  до полного stopped verdict результаты не объявляются PASS. Prepared2graphs
+  raw390/compiled378 WB0/fatal0/SHA0, other78FAIL каждый.
+- Сборка игроку:7addons/388sourcefiles,18DryRun plansPASS, обычный retail
+  Frontend, без тестовых сценариев и modifiers. Fresh profile каждого запуска,
+  отдельная постоянная библиотека внутри bundle. Ручное прохождение25–30min
+  по [чек-листу](VEHICLE_VISUAL_CHECK.md) — **NOT RUN**.
+- Удалены8 известных старых stage-деревьев только после8ZIP exact verification:
+  3143files/400dirs/40771777bytes→11039745bytes архивов; net≈28.36MiB.
+  Полные profiles/logs/manifests/исходные FAIL сохранены, archive index связывает
+  прежние пути с проверенными ZIP. Пользовательские файлы не удалялись.
+
+Evidence: finalization20261029 `r34-*`, `r33-expanded-compile-verdict.json`,
+`quota/r33-current-cut-preparation/`; finalization20261030
+`r34-actual-session-closures.json`, `r33-r34-exact-source-delta.json`,
+`multi-log-contract-cleanup-r33/`, `multi-catalog-final-stopped-v1/`,
+`player-current-cut-20261031/`, `obsolete-stage-archive-plan-v1/archive-index.json`.
+Native-only8 persistence, resource/font/GUID/lighting, длительные functional
+FAIL и непроверенное человеческое прохождение остаются отдельно; issue не закрыта.
+
+## Исторический checkpoint r31/r32
+
+Issue остаётся OPEN, PR79 — draft/`Refs #78`. Опубликованный head `df62bed`;
+последующие исправления пока локальные. Прежние результаты ниже исторические.
+
+- Frozen r31: **267/267 PASS**, exact unique union/Logistics1/1034SHA0,
+  все шесть actual sessions closed0. Этот snapshot ещё не содержит нового
+  cleanup assignment fence.
+- Frozen r32: **267/268, FAIL** — старый exact-prefix контракт native gate не
+  учитывал новый `StopCleanupAssignmentRebind`. Исходный FAIL сохранён;
+  исправленный контракт отдельно PASS29 +2 executed unsafe в обеих оболочках.
+  Новый полный набор после этого изменения ещё не выполнен.
+- Production387 r32: терминальные Stock/RHS/ArlandWCSRHS compile3/3 PASS,
+  actual66431 closed0/native0/validation/full9 sibling fatal0/1035sourceSHA0.
+  Прочие Error50/52/78 остаются strict FAIL, не исключены из результата.
+- Контролируемый r31 native900 закончился штатно, но физическая очистка FAIL:
+  actual admission guard отвергал assignment5 после принятого retarget6.
+  Новый отдельный cleanup fence переносится только через проверенную пару
+  Begin/actual Commit/Complete; исходные admission actors неизменны. Targeted
+  rebind48/4, прежние90/15 и observer57/3 PASS в обеих оболочках.
+- Controlled r32 native900: actual62153 closed1/native-1/audit1, полный
+  duration FAIL. До assertion наблюдались два Kick, DEAD physical detach,
+  release собственной lease/cap0/ack и4ALIVE. В628s симуляции свободный VZ58
+  упал доY=-34011 и вызвал `enf_entity.cpp:280`; все4 stopped sibling logs,
+  fatal1/other24/source396SHA0 сохранены. Точный собственный PID остановлен
+  после CIM identity check; происхождение freefall пока UNKNOWN.
+  Этот запуск не исполнил accepted retarget до RESET и не доказывает новый
+  перенос assignment fence. Cached canonical IDs добавлены без aliases;
+  строгий seat join требует отдельного source-backed observer.
+- Multi r30 native1800 завершился штатно, но MOVING FAIL: genuine preflight
+  stock465 при цене475, два повреждения машин и один native abandonment.
+  Перенос test-only funding до actual preflight проверен targeted и скомпилирован
+  в Multi392; нового native подтверждения ещё нет. Причина повреждений неизвестна.
+- Catalog v27 исправил собственную потерю native data registration, но встретил
+  null Physics в штатном slot callback. Guard fail-closed compiled; v28 штатно
+  завершился timeout300100ms без native slot observations, поэтому native
+  исполнение guard и покупка пока не доказаны. Новый depot-first setup — только
+  отдельный controlled fixture, не доказательство обычного строительства.
+
+Evidence: finalization20261029 `r31-*`, `r32-*`; finalization20261030
+`r31-r32-actual-session-closures.json`, `controlled-r31-USSR-900-v2/`,
+`controlled-r32-decision-v1/`, `controlled-r32-USSR-900-v1/`,
+`multi-r30-moving-1800-v1/`, `multi-preflight-funding-race/`,
+`catalog-native-v27-serialized-data-registration/`,
+`catalog-native-v28-physics-guard/`, `native-gate-completion-r32-contract/`.
+Native-only8 persistence, строгие resource/font/GUID/lighting gates и visual
+NOT RUN остаются blockers; compile/static PASS их не заменяет.
+
 ## Новый код и gates r30
 
 Локальный code head `2ca63e5`: hold `1e85305`, captured-dead cleanup `79b85ca`,

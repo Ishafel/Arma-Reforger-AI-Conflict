@@ -1,5 +1,91 @@
 # Проверки и baseline
 
+## Текущий срез r34 — 31.10.2026
+
+**269/269 PASS**, collector0/exact unique union/Logistics1/1038sourceSHA0.
+Все6 actual Root sessions77074/6995/87915/71699/49754/23935 closed0.
+Команды: `FreezeIssue78Current.ps1 -Label r34`, шесть
+`Invoke-OfflineShard.ps1 -PlanPath X:/r34-plan/plan.json -Shard N
+-EvidenceRoot X:/r34-shard-N`, `CollectFrozenFull.ps1 -Label r34` (exit0).
+Closures: finalization20261030 `r34-actual-session-closures.json`.
+
+Предшествующий r33 —268/269FAIL: `Remove-Item` получил IOException
+`Directory is not empty` в finally `Test-VehicleMultiSquadLogContracts`.
+Точная OS/handle причина не доказана; async job/writer в контракте не найден,
+после сбоя осталась пустая собственная GUID-папка. Исходные95 assertions и
+success oracle сохранены byte-exact; bounded5IOException retries100ms+
+verifiedabsence не скрывают assertion, permanent/nonIO failure или outsidepath.
+95 прежних+7cleanup controls PASS в обоих PowerShell; пустой остаток удалён
+адресно без рекурсии. Evidence `multi-log-contract-cleanup-r33/` сохраняет
+первоначальный FAIL и оба targeted повтора. Полный r34 выполнен после исправления.
+
+R34 отличается от r33 ровно этим одним test-only файлом; все388 production
+bytes равны (`r33-r34-exact-source-delta.json`). WB r33 production3graphs
+actual14760closed0/native0/validation/full9fatal0/source1038SHA0. Отдельно
+fixture-free player bundle4graphs actual84077closed0/native0/validation/
+full12fatal0/source388SHA0, resource50/52/78/78 strictFAIL. Player18DryRun
+PASS — планы, не настоящая игра. Полные команды/логи/manifest:
+`player-current-cut-20261031/compile-summary.json` и `dryrun-summary.json`.
+Ручное прохождение остаётся NOT RUN по `VEHICLE_VISUAL_CHECK.md`.
+
+Новые WCS2graphs raw390/compiled378 WB0/fullfatal0/source0; native3map gates
+оцениваются только после всех stopped logs. Их подготовка и точные argv:
+finalization20261029 `quota/r33-current-cut-preparation/plan.json` и
+`wb-two-graph-final-summary.json`. Game code идентичен r34; CPU во время
+soleworld FPS-контролей удерживается отдельно от полного offline набора.
+
+## Продолжение r31/r32 — 31.10.2026
+
+Опубликованы `bef490f`, `b46b7fa`, `c261d10`, `6bdb476`; PR79 остаётся draft,
+issue OPEN. Новый dropped-weapon safety код в рабочем дереве ещё не входит
+в приведённые ниже compile/native snapshots и пока не имеет runtime PASS.
+
+| Проверка | Фактический результат и scope |
+|---|---|
+| Full r31 | 267/267 PASS, exact unique union/Logistics1/1034SHA0; actual79929/27738/1591/14892/76061/57796 closed0. До accepted-retarget policy fix. |
+| Full r32 | 267/268 FAIL, единственный `Test-NativeGateCompletionContracts`: старый exact-prefix не учитывал новый Stop pending token. Все шесть sessions закрыты:25792/67792/95163/41775/74026/72631, shard5exit1, остальные0; source1035SHA0. |
+| Native gate contract после r32 | Dual PASS29controls+2executed unsafe. Точное требование Stop до invalid return добавлено; прежние listener/physical/deadline guards сохранены. Это не повтор полного r32. |
+| Production387 r32 WB | Stock/RHS/ArlandWCSRHS3/3 code compile PASS, actual66431closed0/native0/validation/full9siblingfatal0/source1035SHA0. Other Error50/52/78 strictFAIL. |
+| Mixed r32 WB | Controlled396/384 actual40831closed0; Multi392/380 actual11789closed0; Soak394/382 actual81393closed0. В каждом native0/validation/full3fatal0/source0 и resource50strictFAIL. |
+| Controlled r31 native900 | Actual93289closed1/native0/publicaudit1, elapsed900764ms. DEAD actor остался в seat: actual admission rejects original5/current6 после SAFE_REUSE_RETARGET. Decision observer позволил установить точную причину. |
+| Controlled r32 native900 | Actual62153closed1/native-1/publicaudit1. На306277ms наблюдались DEAD detach/own release/cap0/ACK/4ALIVE, но на628s native assertion VZ58 за world bounds. Full duration/liveness/stopped/fatal FAIL; все4 stopped logs, fatal1/other24/source396SHA0. |
+| Accepted-retarget D1 v1 | Отдельный opt-in wait-only observer, D1SHA185FD469...9845E; original48/10+new26/5 dualPASS. Actual35876closed0, WB396/384/native0/validation/full3fatal0/source0/resource50FAIL. Native NOT RUN. |
+| Accepted physical auditor | SHA3467D59E...30C20:56synthetic cases PASS (4positive/52negative), actual45131closed0. Authentic manifestA4799682...391C4/D1185F, canonical full strings с ` {}`; no numeric aliases. Это проверка аудитора, не native PASS. |
+| Public Catalog runner | Baseline PASS7stage/11CLI; после optional ControlledDepotSetup — dual PASS7stage/11CLI/+12setupCLI. Enabled/disabled, manifest mismatch, nonvehicle pre-Prepare rejection, missing/wrong/duplicate/unexpected manifest/console flags исполняются через actual CLI. Native этим тестом не запускается. |
+
+Команды: `FreezeIssue78Current.ps1 -Label r31|r32`, шесть
+`Invoke-OfflineShard.ps1 -PlanPath X:/r32-plan/plan.json -Shard N
+-EvidenceRoot X:/r32-shard-N`, `CollectFrozenFull.ps1 -Label r32` (exit1),
+`CompileFrozenProduction.ps1 -SourceRoot .../r32-source -Label r32`,
+`PrepareR32RepairDiagnostics.ps1 -FrozenLabel r32 -Kind Controlled|Multi|Soak
+-Label <fresh label>`, `Invoke-R31ControlledDecision.ps1 -Faction USSR
+-DurationSeconds 900 -ProofVersion 4 -SkipCompile -StageRoot
+.../controlled-r32-decision-v1/stage` с прежними observers.
+Управляемый тест делает один Kill и обычный exact-revision RESET; исходный
+Soak auditor не ослаблялся. R32 RESET произошёл до accepted retarget: migration
+fence этим запуском не проверен. Отдельный D1 ждёт обычного actual accepted
+retarget, не вызывает его сам и сохраняет исходный180000ms post-Kill bound.
+
+VZ58 episode323: removal06:38:08.619 у поверхности, mainworld/current master,
+нет parent/slot/storage/hands/weapon-slot; source — current FIA SL. Через5.078s
+предмет уже105.055m ниже terrain, через96.568s —33634m ниже; затем
+`enf_entity.cpp:280`. Первый момент penetration не записан. Непосредственный
+инициатор native drop не доказан; MAIN_UNMANAGED/FIA не означает stock-only
+причину. Ни причина freefall, ни отсутствие связи с проектом не объявлены
+доказанными. Пять секунд readonly observer недостаточны для короткой коррекции.
+Изменение world bounds, дальний перенос, heal/resurrection не применялись.
+Pre-stop hash crash.log был недоступен из-за native file lock; ошибка сохранена,
+валидные hashes взяты только после адресной остановки exact ownedPID30704.
+
+Evidence: finalization20261029 `r31-*`, `r32-*`, `r32-expanded-compile-verdict.json`;
+finalization20261030 `r31-r32-actual-session-closures.json`,
+`controlled-r31-USSR-900-v2/`, `controlled-r32-USSR-900-v1/`,
+`controlled-r32-accepted-retarget-v1/`, `catalog-runner-controlled-final-v2-*`,
+`vz58-r32-readonly/`, `captured-casualty-cleanup-fix/controlled-observer-rebind-v1/`,
+`captured-casualty-cleanup-fix/controlled-observer-v1/accepted-audit-ready.json`.
+Строгие native-only persistence/resource/font/GUID/lighting blockers и visual
+NOT RUN остаются отдельно; старые PASS ниже не заменяют новые gates.
+
 ## Возобновление #78 — 30–31.10.2026
 
 Новый `r30` завершён04:02: **265/265 PASS**, collector0/exact unique union/
