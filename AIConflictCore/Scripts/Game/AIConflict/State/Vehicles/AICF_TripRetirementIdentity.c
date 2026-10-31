@@ -14,6 +14,11 @@ class AICF_TripRetirementMember
 
 class AICF_TripRetirementIdentity
 {
+	// Diagnostic no-op: original decision is already evaluated; no native reads.
+	protected void AICF_ObserveTerminalAdmissionDecision(AICF_TransportTrip trip, string stage, bool actual)
+	{
+	}
+
 	protected bool m_bCaptured;
 	protected FactionKey m_sFaction;
 	protected int m_iSlot;
@@ -290,16 +295,38 @@ class AICF_TripRetirementIdentity
 	// Orphan resolver ниже сохраняет прежний, более узкий контракт.
 	bool MatchesTerminalCleanupAdmission(AICF_TransportTrip trip)
 	{
-		if (!Replication.IsServer() || !m_bRosterTrusted || m_aMembers.IsEmpty() || !GetGame()) return false;
-		if (!m_AdmissionWorld || GetGame().GetWorld() != m_AdmissionWorld || !trip || !trip.IsTerminal()) return false;
-		if (!trip.OwnsRetirementIdentity(this) || trip.GetAssignment() != m_AdmissionAssignment || !MatchesLiveCapturedGroup(trip)) return false;
+		if (!Replication.IsServer() || !m_bRosterTrusted || m_aMembers.IsEmpty() || !GetGame())
+		{
+			AICF_ObserveTerminalAdmissionDecision(trip, "ADMISSION_01", false);
+			return false;
+		}
+		if (!m_AdmissionWorld || GetGame().GetWorld() != m_AdmissionWorld || !trip || !trip.IsTerminal())
+		{
+			AICF_ObserveTerminalAdmissionDecision(trip, "ADMISSION_02", false);
+			return false;
+		}
+		if (!trip.OwnsRetirementIdentity(this) || trip.GetAssignment() != m_AdmissionAssignment || !MatchesLiveCapturedGroup(trip))
+		{
+			AICF_ObserveTerminalAdmissionDecision(trip, "ADMISSION_03", false);
+			return false;
+		}
 		if (m_AdmissionAssignment.GetAssignmentRevision() != m_iAdmissionAssignmentRevision ||
 			m_AdmissionAssignment.GetStrategicIntentRevision() != m_iAdmissionIntentRevision ||
-			m_AdmissionAssignment.GetBaseRevision() != m_iAdmissionBaseRevision) return false;
+			m_AdmissionAssignment.GetBaseRevision() != m_iAdmissionBaseRevision)
+		{
+			AICF_ObserveTerminalAdmissionDecision(trip, "ADMISSION_04", false);
+			return false;
+		}
 		if (m_CapturedGroup.GetWorld() != m_AdmissionWorld || m_AdmissionWorld.FindEntityByID(m_GroupId) != m_CapturedGroup ||
-			m_CapturedGroup.FindComponent(RplComponent) != m_AdmissionGroupRpl) return false;
+			m_CapturedGroup.FindComponent(RplComponent) != m_AdmissionGroupRpl)
+		{
+			AICF_ObserveTerminalAdmissionDecision(trip, "ADMISSION_05", false);
+			return false;
+		}
 		AICF_GroupSlot slot = trip.GetVehiclePresetSlot();
-		return slot && slot.GetSlotId() == m_iSlot && slot.GetGroup() == m_CapturedGroup && slot.GetSpawnGeneration() == m_iGroupGeneration;
+		bool actualAdmission = slot && slot.GetSlotId() == m_iSlot && slot.GetGroup() == m_CapturedGroup && slot.GetSpawnGeneration() == m_iGroupGeneration;
+		AICF_ObserveTerminalAdmissionDecision(trip, "ADMISSION_FINAL", actualAdmission);
+		return actualAdmission;
 	}
 
 	ChimeraCharacter ResolveTerminalDeadActor(int index)

@@ -10,6 +10,17 @@ Fixture не вызывает Expand/Request/MarkReady и не меняет pose
 60s observation deadline не продлевает production30s. Finish/Stop снимают Tick.
 Это MAX10 coverage, а не утверждение, что default создаёт200actors сразу.
 
+## Фактическое решение очистки исходного погибшего бойца
+
+`AICF_CapturedDeadCleanupDecisionProbe.c` с CLI
+`-aicfCapturedDeadCleanupDecisionProbe 1` наблюдает фактический отказ admission/
+cleanup capability через пустые Core hooks. Оригинальное решение не принимается
+повторно. Необязательный `-aicfCapturedDeadCleanupRearmExact 1` один раз запускает
+новый явно обозначенный epoch существующего Exact Census observer перед
+controlled factory; прежний overflow остаётся в логе. Это диагностика, а не
+исправление native detach. Состав stage, границы, commands и прежний900s FAIL —
+[CAPTURED_CASUALTY_CLEANUP.md](CAPTURED_CASUALTY_CLEANUP.md).
+
 ## Stock pressure и обычный набор
 
 `AICF_AIQuotaStockPressureProbe.c` с readonly `AICF_AIQuotaBootReadbackProbe.c`

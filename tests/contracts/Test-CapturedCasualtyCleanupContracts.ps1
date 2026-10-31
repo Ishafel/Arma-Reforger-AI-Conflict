@@ -58,7 +58,8 @@ $cap=$cap -replace '(?m)^\t(static |bool |int |ChimeraCharacter )',"`tpublic `$1
 $commitActor=Body $identity 'ResolveTerminalDeadActorForCommit'
 if($Mutation -eq 'skip-final-human-pc'){$commitActor=[regex]::Replace($commitActor,'foreach \(int playerId : playerIds\)\s*\{[\s\S]+?\}', 'foreach (int playerId : playerIds) {}')}
 if($Mutation -eq 'skip-final-actor'){$handler=$handler.Replace('ChimeraCharacter commitActor = identity.ResolveForCommit(job, vehicle, index, character, access, seat);','ChimeraCharacter commitActor = character;')}
-$admissionMethods='public bool MatchesLiveCapturedGroup(AICF_TransportTrip trip)'+(Body $identity 'MatchesLiveCapturedGroup')+
+$admissionMethods='public void AICF_ObserveTerminalAdmissionDecision(AICF_TransportTrip trip, string stage, bool actual)'+(Body $identity 'AICF_ObserveTerminalAdmissionDecision')+
+ 'public bool MatchesLiveCapturedGroup(AICF_TransportTrip trip)'+(Body $identity 'MatchesLiveCapturedGroup')+
  'public bool MatchesTerminalCleanupAdmission(AICF_TransportTrip trip)'+(Body $identity 'MatchesTerminalCleanupAdmission')+
  'public ChimeraCharacter ResolveDeadCapturedIdentity(int index)'+(Body $identity 'ResolveDeadCapturedIdentity')+
  'public ChimeraCharacter ResolveTerminalDeadActor(int index)'+(Body $identity 'ResolveTerminalDeadActor')+
