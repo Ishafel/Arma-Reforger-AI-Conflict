@@ -3,10 +3,30 @@
 class AICF_VehicleWaypointFactory
 {
 	protected static const ResourceName MOVE_WAYPOINT_PREFAB = "{750A8D1695BD6998}Prefabs/AI/Waypoints/AIWaypoint_Move.et";
+	protected static const ResourceName ACQUISITION_HOLD_PREFAB = "{93291E72AC23930F}Prefabs/AI/Waypoints/AIWaypoint_Defend.et";
 	protected static const ResourceName GET_OUT_WAYPOINT_PREFAB = "{C40316EE26846CAB}Prefabs/AI/Waypoints/AIWaypoint_GetOut.et";
 	protected static const float DISMOUNT_COMPLETION_RADIUS_METERS = 12.0;
 	protected static const float MOVE_COMPLETION_RADIUS_METERS = 25.0;
 	protected static const float MINIMUM_STAGING_COMPLETION_RADIUS_METERS = 5.0;
+
+	AIWaypoint CreateAcquisitionHoldWaypoint(vector position, float radius, int expiresAtMs)
+	{
+		if (!(radius > 0) || expiresAtMs <= System.GetTickCount()) return null;
+		AIWaypoint entity = SpawnWaypoint(ACQUISITION_HOLD_PREFAB, position);
+		SCR_DefendWaypoint waypoint = SCR_DefendWaypoint.Cast(entity);
+		if (!waypoint) return entity;
+		SCR_DefendWaypointPreset preset = waypoint.GetCurrentDefendPreset();
+		if (!preset) return entity;
+		preset.SetUseTurrets(false);
+		preset.SetFractionOfSA(0);
+		waypoint.SetFastInit(false);
+		waypoint.SetCompletionRadius(radius);
+		waypoint.SetCompletionType(EAIWaypointCompletionType.All);
+		float holdingSeconds = (expiresAtMs - System.GetTickCount()) * 0.001;
+		if (!(holdingSeconds > 0)) return entity;
+		waypoint.SetHoldingTime(holdingSeconds);
+		return waypoint;
+	}
 
 	AIWaypoint CreateSpawnStagingWaypoint(
 		vector stagingPosition,

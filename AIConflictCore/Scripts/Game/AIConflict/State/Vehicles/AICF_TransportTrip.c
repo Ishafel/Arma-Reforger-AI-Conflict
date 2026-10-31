@@ -150,6 +150,10 @@ class AICF_TransportTrip
 	int GetStartedAtMs() { return m_iStartedAtMs; }
 	int GetPhaseStartedAtMs() { return m_iPhaseStartedAtMs; }
 	int GetAbsoluteDeadlineMs() { return m_iAbsoluteDeadlineMs + m_MovementState.GetPresetDestinationWaitMs(System.GetTickCount()) + m_BehaviorState.PausedMs(System.GetTickCount()); }
+	int AcquisitionHoldDeadlineAtMs(int nowMs)
+	{
+		return m_iAbsoluteDeadlineMs + m_MovementState.GetPresetDestinationWaitMs(nowMs) + m_BehaviorState.PausedMs(nowMs);
+	}
 	bool IsPresetWaitingForDestination() { return m_MovementState.IsPresetDestinationWaiting(); }
 
 	bool CommitPresetDestinationWait(bool waiting, int nowMs)

@@ -160,7 +160,11 @@ class AICF_VehicleAcquisitionFlow
 			case AICF_ETransportTripPhase.STAGING_CONFIRMED:
 				return ProcessStagingConfirmed(trip, fleet, faction, requestState, nowMs);
 			case AICF_ETransportTripPhase.SPAWN_COMMIT:
-				return ProcessSpawnCommit(trip, fleet, faction, requestState, nowMs);
+				AICF_TripOutcome stagedOutcome = ProcessSpawnCommit(trip, fleet, faction, requestState, nowMs);
+				if (AICF_VehicleAcquisitionHold.IsWaitOutcome(stagedOutcome))
+					stagedOutcome.BindAcquisitionStagingReceipt(AICF_AcquisitionStagingReceipt.Capture(
+						trip, m_Spawner, m_Config.GetSpawnStagingRadiusMeters(), SPAWN_BOARDING_ENVELOPE_RADIUS_METERS, nowMs));
+				return stagedOutcome;
 		}
 
 		return FailClosed(trip, "ACQUISITION_PHASE_MISMATCH", "PHASE_GUARD");
@@ -1897,6 +1901,8 @@ class AICF_VehicleAcquisitionFlow
 		AICF_VehicleSpawnPlan plan = requestState.GetSpawnPlan();
 		if (!plan)
 			return;
+		// Only Controller/Handoff can detach the real hold before plan release.
+		if (plan.GetAcquisitionHold()) return;
 		string details = BuildIdentityContext(
 			trip,
 			requestState,

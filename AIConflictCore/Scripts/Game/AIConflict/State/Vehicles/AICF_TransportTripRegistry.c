@@ -161,6 +161,11 @@ class AICF_VehicleSlotView
 			if (plan)
 				m_VehicleWaypoint = plan.GetApproachWaypoint();
 			m_bExecutableVehicleTask = m_VehicleWaypoint != null;
+			if (phase == AICF_ETransportTripPhase.SPAWN_COMMIT && plan && plan.GetAcquisitionHold())
+			{
+				m_VehicleWaypoint = plan.GetAcquisitionHold().GetWaypoint();
+				m_bExecutableVehicleTask = plan.GetAcquisitionHold().HasCurrentTask(trip, currentBaseRevision, System.GetTickCount());
+			}
 		}
 		else if (phase == AICF_ETransportTripPhase.BOARDING)
 		{

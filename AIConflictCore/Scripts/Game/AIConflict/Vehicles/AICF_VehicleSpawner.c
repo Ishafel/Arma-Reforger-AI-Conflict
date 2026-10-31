@@ -300,6 +300,7 @@ class AICF_VehicleSpawnPlan
 	protected ref AICF_VehicleSpawnSiteReservation m_Reservation;
 	protected vector m_vStagingPosition;
 	protected AIWaypoint m_ApproachWaypoint;
+	protected ref AICF_VehicleAcquisitionHold m_AcquisitionHold;
 	protected ref AICF_SpawnApproachFailure m_ApproachFailure;
 	protected int m_iPlannedAtMs;
 	protected int m_iApproachDeadlineMs;
@@ -341,6 +342,19 @@ class AICF_VehicleSpawnPlan
 	vector GetStagingPosition() { return m_vStagingPosition; }
 	bool RequiresManualRally() { return m_bRequireManualRally; }
 	AIWaypoint GetApproachWaypoint() { return m_ApproachWaypoint; }
+	AICF_VehicleAcquisitionHold GetAcquisitionHold() { return m_AcquisitionHold; }
+	bool BindAcquisitionHold(AICF_VehicleAcquisitionHold hold)
+	{
+		if (!hold || m_AcquisitionHold || !hold.GetReceipt() || hold.GetReceipt().GetPlan() != this) return false;
+		m_AcquisitionHold = hold;
+		return true;
+	}
+	bool ClearAcquisitionHold(AICF_VehicleAcquisitionHold expected)
+	{
+		if (!expected || m_AcquisitionHold != expected) return false;
+		m_AcquisitionHold = null;
+		return true;
+	}
 	int GetPlannedAtMs() { return m_iPlannedAtMs; }
 	int GetApproachDeadlineMs() { return m_iApproachDeadlineMs; }
 	int GetAllStagedSinceMs() { return m_iAllStagedSinceMs; }
