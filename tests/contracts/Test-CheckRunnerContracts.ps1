@@ -27,9 +27,11 @@ function Run-Case([string]$Name, [string[]]$Arguments, [int]$ExpectedExit) {
     return ($output -join "`n")
 }
 try {
-    & git -C $fixture init --quiet
+    # Frozen evidence paths can exceed Git for Windows' default object path limit.
+    # Keep the setting scoped to this temporary fixture command.
+    & git -c core.longpaths=true -C $fixture init --quiet
     if ($LASTEXITCODE -ne 0) { throw 'Fixture git init failed' }
-    & git -C $fixture -c user.name=AICF -c user.email=aicf@example.invalid -c commit.gpgsign=false -c core.hooksPath="$fixture/.no-hooks" commit --allow-empty --quiet -m fixture
+    & git -c core.longpaths=true -C $fixture -c user.name=AICF -c user.email=aicf@example.invalid -c commit.gpgsign=false -c core.hooksPath="$fixture/.no-hooks" commit --allow-empty --quiet -m fixture
     if ($LASTEXITCODE -ne 0) { throw 'Fixture git commit failed' }
     $listEvidence = Join-Path $evidence 'must-not-exist'
     $listing = Run-Case 'list' @('-List', '-EvidenceRoot', $listEvidence) 0

@@ -2,6 +2,52 @@
 
 ## Возобновление #78 — 30–31.10.2026
 
+Свежий полный `r29` собран31.10 в03:40MSK: **264/264 PASS**, collector0,
+exact unique union/Logistics1/1027SHA0; actual sessions
+22157/49025/28380/73037/85932/94111 все закрылись0. Команды:
+`FreezeCompletedRepairs.ps1 -Label r29`, шесть `Invoke-OfflineShard.ps1
+-PlanPath X:/r29-plan/plan.json -Shard N -EvidenceRoot X:/r29-shard-N`,
+`CollectFrozenFull.ps1 -Label r29`. Неготовые3 GROUP Catalog files взяты из
+published HEAD; живой WIP сохранён отдельно и не объявлен проверенным.
+Все386 production bytes совпадают с фактически compiled V28; новые изменения
+r29 касались harness/docs. Это не новый запуск Workbench.
+
+Отдельный peer после freeze воспроизвёл **новый production FAIL** старого
+captured-dead handler: последний seat.GetOccupant callback меняет controller,
+PM controlled-id, possessing main-id либо PC.ControlledEntity, но Kick всё
+ещё исполняется. Все4 counterexamples сохранены в
+`captured-casualty-cleanup-fix/late-seat-peer-*` под finalization20261030.
+Эти случаи ещё не входили в264; итоговый PASS r29 не снимает найденный blocker.
+Нужны final commit actor proof, расширенный contract и новые WB/All/native.
+
+Первый новый completed-repair snapshot `resumed-staging-cleanup-v28`:
+**262/264 PASS,2 FAIL**, collector1/exact unique union/Logistics1/1027SHA0.
+Все6 exec sessions закрыты:22941/36691/39138/48326 exit0,66723/23758 exit1.
+Новый cleanup contract сначала применял C#6 null-conditional syntax и default
+literal: canonical WindowsPowerShell5.1 Add-Type отверг его. Harness исправлен
+без изменения65cases/13mutants; реальные WinPS5.1 и pwsh повторы дали те же
+65/13 PASS. Исходный FAIL и оба shell outputs сохранены.
+
+Второй FAIL — `Test-CheckRunnerContracts`: временный Git не записал empty-tree
+object из-за `Filename too long`. Для init/commit собственного fixture задан
+только command-scoped `core.longpaths=true`; глобальные настройки не меняются.
+Отдельный native control на физическом fixture path221/object276 воспроизводит
+Git exit1/`Filename too long` с false и exit0 с true. Повторы полного старого и
+нового контракта через другой короткий exposed X path оба дали0: это не
+выдаётся за воспроизведение всего исходного окружения. Неудачная попытка
+прямого запуска на слишком длинном physical path упала раньше в Copy-Item и
+сохранена отдельно. Свежий полный повтор r29 приведён выше.
+
+Production386 нового hold/cleanup уже прошёл WB Stock/RHS/ArlandWCSRHS3/3,
+runner8904 actual0/validation/full3siblingfatal0/sourceSHA0; прочие Error rows
+50/52/78 не исключены из strict baseline. Диагностические Soak392/Multi390
+скомпилированы отдельно, rawSHA0. Эти compile PASS не заменяют Full264 FAIL
+или ещё не запущенные native регрессии. Evidence: `staging-cleanup-v28-*`,
+`resumed-staging-cleanup-v28-*`, `ordinary-staging-cleanup-diagnostic-source-v9/`,
+`multi-staging-cleanup-diagnostic-source-v7/`, `runner-long-path-regression-v2/`
+в ignored finalization20261029; dual-shell cleanup — finalization20261030/
+`captured-casualty-cleanup-fix/CSHARP5_READY.json`.
+
 Поздние остановленные ordinary1800 и RHS+WCS topology результаты разобраны в
 [ISSUE78_STATUS.md](ISSUE78_STATUS.md#остановленные-ordinary1800-на-topology-v27).
 Оба ordinary получили оплаченные исходные5 и exact5seats на production384,
