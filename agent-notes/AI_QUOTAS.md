@@ -358,3 +358,48 @@ topology fix ещё NOT RUN; границы — [VEHICLE_CENSUS_TOPOLOGY.md](VEH
 В историческом draft checkpoint `5c87bae` compartment producer оставался
 `NOT IMPLEMENTED/NOT RUN`. Его новая typed реализация описана выше; новый
 native gate остаётся открытым до проверки текущего source.
+
+### Точные аргументы решения Census
+
+Полный stopped USSR1800 на topology V27 дал повторные UNKNOWN окна80.517с,
+154.958с и незавершённое321.776с до остановки. Все280 Capture failures имели
+`NATIVE_CENSUS_MISMATCH`, vehicle Classify failures0. Часто AFTER nativeActive
+равнялся q11+q10, но были исключения: это не основание менять формулу допуска.
+q10 уже оплачивается в BuildCounts как counted character; проблема не является
+доказанным пропуском расхода квоты. Native budget implementation отсутствует
+в pinned Script Diff, а прежние логи не содержали исходных локальных значений.
+
+Пустой protected instance hook `AICF_ObserveCaptureDecision` получает результат
+единственного actual IsComplete и его8 исходных аргументов. Сам Core ничего
+не логирует и не меняет решение. Механическое удаление hook и замена локального
+bool/returned обратно на прежний if восстанавливают исходный код точно после
+нормализации EOL; счётчики движка, пределы, BuildCounts и dispatch не меняются.
+
+Изолированная fixture `AICF_AIQuotaExactCaptureProbe.c` включается только
+`-aicfQuotaCensusExactCaptureProbe 1`. Она сохраняет примитивы внутри hook, а
+публикует `[AICF][QUOTA_CENSUS_EXACT]` после возврата единственного super.Capture.
+Actual row.IsCurrent делегируется один раз; его свидетели имеют отдельный
+`DYNAMIC_CAPTURE_CALLS` scope. Они могут включать вложенный посторонний вызов.
+Поэтому dedicated q10 count/IDs собираются отдельно только из actual
+snapshot.m_aRows после возврата: `CAPTURE_SNAPSHOT_CACHED_AFTER_RETURN`.
+Это script fields; свежие life/LOD/Rpl и дополнительные native getters
+отсутствуют, `life_lod_rpl=NOT_OBSERVED` не выдаётся за измерение.
+
+Record budget384, sample budget8 и bound MAX_TOTAL_UNITS сопровождаются
+явными overflow/неполнотой. Unique frame object и instance token не дают
+устаревшему callback менять successor, в том числе после Stop/Start и ABA.
+OnGameEnd отключает observer до явного нового lifecycle Start; последующий
+Capture при cleanup только делегируется. Повторный Start активного lifecycle
+не стирает boot evidence. Default запуск не подключает fixture.
+
+Проверки exact observer и его compilation/native scope фиксируются отдельно
+в TESTING.md; они не доказывают исправление q11/nativeActive инварианта.
+Final actual-source contract:479assertions/21executed unsafe PASS в WinPS5.1
+и pwsh; кандидат legacy Census4120/6 PASS, inverse EXACT. После Root apply
+все3 профильных canonical contracts PASS. Full `r30`:265/265PASS/collector0/
+1029SHA0/6actual sessions closed0. Production WB3graphs и mixed Soak393/
+Multi391 отдельно compiled0/fullfatal0/source0. Native exact observer NOT RUN;
+WCS bootstrap подключает прежние2readonly fixtures и не доказывает его работу.
+Исходные full logs, повторные окна, inverse и отдельные development FAIL:
+`.codex-runtime/issue78-finalization-20261030/census-exact-capture-diagnostic-v1/`
+и `ordinary-topology-USSR-1800-v1/`.

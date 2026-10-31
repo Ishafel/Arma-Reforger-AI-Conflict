@@ -50,6 +50,12 @@ class AICF_AIQuotaCensus
 			beforeIntended == afterIntended;
 	}
 
+	// Diagnostic seam: default is a no-op; receives the one actual predicate.
+	protected void AICF_ObserveCaptureDecision(bool actual, int returned, int examined, int invalid,
+		int countedActive, int beforeActive, int afterActive, int beforeIntended, int afterIntended)
+	{
+	}
+
 	bool Capture(SCR_AIWorld world)
 	{
 		m_bComplete = false;
@@ -107,7 +113,10 @@ class AICF_AIQuotaCensus
 		int afterActive = world.GetCurrentNumOfActiveAIs();
 		int afterIntended = world.GetActiveGroupIntendedCount();
 		m_sReason = "NATIVE_CENSUS_MISMATCH";
-		if (!IsComplete(agents.Count(), examined, invalid, countedActive, beforeActive, afterActive, beforeIntended, afterIntended))
+		int returned = agents.Count();
+		bool actual = IsComplete(returned, examined, invalid, countedActive, beforeActive, afterActive, beforeIntended, afterIntended);
+		AICF_ObserveCaptureDecision(actual, returned, examined, invalid, countedActive, beforeActive, afterActive, beforeIntended, afterIntended);
+		if (!actual)
 			return false;
 		m_iActive = afterActive;
 		m_iIntended = afterIntended;
