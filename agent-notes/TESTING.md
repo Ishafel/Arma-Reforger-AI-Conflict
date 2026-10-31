@@ -2,6 +2,28 @@
 
 ## Возобновление #78 — 30–31.10.2026
 
+Новый `r30` завершён04:02: **265/265 PASS**, collector0/exact unique union/
+Logistics1/1029sourceSHA0; all6 actual sessions2294/76993/98211/13667/92134/
+30786 closed0. Fresh elevated CIM04:02:53 native/Workbench/shard workers0,
+free20.16GiB. Команды: `FreezeCompletedRepairs.ps1 -Label r30`, шесть
+`Invoke-OfflineShard.ps1 -PlanPath X:/r30-plan/plan.json -Shard N
+-EvidenceRoot X:/r30-shard-N`, затем `CollectFrozenFull.ps1 -Label r30`.
+Неготовые GROUP3 files в snapshot взяты из HEAD, live WIP не проверялся.
+
+Snapshot включает final90/15 captured-dead commit proof, прежний250/28 hold,
+новый exact Census contract479/21. Production386 WB3graphs0/validation/
+full3siblingfatal0/rawSHA0, actual98203closed0; otherError50/52/78FAIL сохранены.
+Mixed Soak393/Multi391/controlled394: actual80680/76404/88927 closed0,
+native0/fullfatal0/source0. First controlled fixture v1 WB1/native-1/fatal273
+(собственные Formula too complex +cascades) сохранён; predicate guards разбиты
+эквивалентно. Actual whole controlled observer48/10PASS — simulated boundaries,
+не физический Kill/detach proof. Новый native пока отдельный ожидающий gate.
+Два WCS388graphs отдельно WB0/fullfatal0/SHA0, other78Erows каждый сохранены.
+
+Строгие native/resource/persistence gates этим не закрыты. Результаты текущего
+RHS+WCS v4 до полного shutdown не объявляются PASS. Scope/paths —
+[ISSUE78_STATUS.md](ISSUE78_STATUS.md#новый-код-и-gates-r30).
+
 Свежий полный `r29` собран31.10 в03:40MSK: **264/264 PASS**, collector0,
 exact unique union/Logistics1/1027SHA0; actual sessions
 22157/49025/28380/73037/85932/94111 все закрылись0. Команды:

@@ -1,5 +1,52 @@
 # Состояние #78 — 31.10.2026
 
+## Новый код и gates r30
+
+Локальный code head `2ca63e5`: hold `1e85305`, captured-dead cleanup `79b85ca`,
+exact Census diagnostics `2ca63e5`; harness long-path fix `99620f3`.
+Передача остаётся draft PR79/Refs78. Issue OPEN до native fix.
+
+- Полный frozen `r30`: **265/265 PASS**, collector0/exact unique union/
+  Logistics1/1029SHA0; все6 actual sessions2294/76993/98211/13667/92134/30786
+  закрылись0. Полные commands/closures/source hashes — TESTING.md и evidence.
+- Production386: terminal WB Stock/RHS/ArlandWCSRHS3/3PASS, actual98203closed0,
+  native0/validation/full3siblingfatal0/source0. Прочие Error rows50/52/78
+  сохранены как strict baseline, не объявлены отсутствующими.
+- Staged hold: реальный owned Defend, исходные сроки, отдельный terminal intent
+  до любого следующего acquisition/economy, actual250/28 и canonical9/9PASS.
+  Actual waypoint Y хранится после construction, XZ staging не меняется.
+- Cleanup: исходный DEAD actor вне сохранившегося native roster разрешён только
+  через admission/terminal/lease identity. Последний actor nonplayer proof идёт
+  после seat reads, далее только own context/budget. Peer старого кода реально
+  воспроизвёл4 late-human и weak-group counterexample; исправленный90cases/
+  15source mutants/2executed unsafe controls, dual+8neighbors PASS. Начальные
+  V28 harness и поздний production FAIL сохранены, не скрыты под Full r29PASS.
+- Exact Census: actual bool+8original arguments, no-op Core hook, zero extra
+  native getters; отдельные dynamic row witnesses и snapshot-only cached q10.
+  Dual479/21PASS/inverseEXACT/legacy4120/6PASS. Формула квоты не изменена.
+- Mixed Soak393/Multi391/controlled394 отдельно WB0/fullfatal0/rawSHA0.
+  Controlled observer48/10PASS вызывает один native Kill и обычный exactrevision
+  RESET; старый Soak audit не ослабляет. Первоначальный fixture Formula too
+  complex FAIL сохранён, исправлены ordered guards и два fixture races.
+
+RHS+WCS v4 на этих386production подготовлен и compiled в двухgraphs, raw388,
+compiled376/fullfatal0/SHA0; resource78rows каждый остаётся FAIL. Native три карты
+проверяются по одной. Арланд firstROSTER_READY04:03:47, первыйFPS41.6 — только
+live observation, полного stopped verdict пока нет. Соседние native, WB,
+Full/targeted CPU tests перед стартом отсутствовали. Ни map bootstrap, ни
+compile не закрывают ordinary1800/MOVING6/controlledphysical/client/JIP.
+Native нового exact observer и физическая регрессия cleanup пока NOT RUN.
+
+Evidence: ignored finalization20261029 `r30-*`,
+`ordinary-r30-exact-diagnostic-v10/`, `multi-r30-exact-diagnostic-v8/`,
+`quota/wcs-final-cleanup-mapboot-v4-preparation/`; finalization20261030
+`captured-casualty-cleanup-fix/controlled-native-r30-v2/`,
+`census-exact-capture-diagnostic-v1/`, `r30-native-preparations-v2/`.
+Неготовый GROUP Catalog WIP сохранён отдельно, не попал в265. Новый vehicle
+selector кандидат также пока ignored-only/NOT RUN native. Strict native-only
+8persistence/resource/font/GUID/lighting blockers и visual NOT RUN сохраняются.
+Ready/merge/release/ACCEPTED не объявлены.
+
 ## Остановленные ordinary1800 на topology V27
 
 Оба новых прогона завершены штатно, native exit `0`; actual runner sessions
