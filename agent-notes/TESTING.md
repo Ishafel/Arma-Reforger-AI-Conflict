@@ -20,9 +20,69 @@ native0/fullfatal0/source0. First controlled fixture v1 WB1/native-1/fatal273
 не физический Kill/detach proof. Новый native пока отдельный ожидающий gate.
 Два WCS388graphs отдельно WB0/fullfatal0/SHA0, other78Erows каждый сохранены.
 
-Строгие native/resource/persistence gates этим не закрыты. Результаты текущего
-RHS+WCS v4 до полного shutdown не объявляются PASS. Scope/paths —
+### RHS+WCS v4 на r30 — полные stopped результаты
+
+После265/265 и всех6 actual offline closures выполнены три последовательных
+soleworld запуска через `RunFrozenR30WCSBoot.ps1 -Phase Run -Variant
+ArlandWCSRHS|EveronWCSRHS|EveronNorthWCSRHS -PreparedRoot ... -EvidenceRoot ...
+-Port 2710|2711|2712`, explicit pwsh/elevated/canonical launcher. Два immutable
+stage содержат386production+2readonly MapBoot probes, raw388/compiled376.
+
+| Variant | Cases | Hold после DONE, с | Мин. FPS | Прочие native Error rows |
+|---|---:|---:|---:|---:|
+| ArlandWCSRHS | 95/95 PASS | 301.829 | 41.6 | 206 FAIL |
+| EveronWCSRHS | 95/95 PASS | 304.331 | 23.0 FAIL | 466 FAIL |
+| EveronNorthWCSRHS | 97/97 PASS | 304.199 | 33.8 | 466 FAIL |
+
+Actual sessions61936/6292/15356 CLOSED1; native exit0 каждый. Все9 полных
+stopped sibling logs сохранены с SHA: fatal0/project0, source388SHA drift0,
+exact canonical CLI/ROSTER_READY, normal shutdown и own CIM0. Все20 quota
+readback samples каждого прогона known, UNKNOWN0; непрерывная Census equality
+не заявляется. FPS all-sample gate≥30 сохранён, включая Everon23.0 до ROSTER.
+Ресурсные ошибки не whitelist: strict verdict всех трёх FAIL. Нормализованные
+категории/количества console Error совпали с V27, что не снимает blocker.
+
+Native windows04:03:22.794–04:08:53.031 /04:09:07.588–04:14:53.340 /
+04:15:06.252–04:20:48.864MSK. Root согласовал CPU HOLD: без WB/Full/targeted
+C# в этих windows; разрешены docs/Git/light readonly. Fresh elevated CIM
+04:20:58: native/WB0, free20.568GiB. Причинный вывод об FPS не делается.
+Это не ordinary1800, combat/MOVING6, controlled casualty physical или client/JIP
+gate; новые диагностические fixtures этим не объявляются проверенными native.
+
+Evidence: ignored `.codex-runtime/issue78-finalization-20261029/quota/
+wcs-final-cleanup-mapboot-v4/three-map-summary.json`, SHA256
+`A7F279893FF4C6D983E688E70F8AB77B66D017BF0E90F05F55BC3F5D22EB641E`;
+per-case native exit/actual runner closure, raw manifest, CLI manifest,
+full-stopped logs SHA, fatal/resource/FPS/quota indexes находятся рядом.
+Строгие native/resource/persistence gates не закрыты. Scope/paths —
 [ISSUE78_STATUS.md](ISSUE78_STATUS.md#новый-код-и-gates-r30).
+
+### Предыдущие snapshots r29/V28 и сохранённые FAIL
+
+Поздний Catalog v26 проверен отдельно от All265: raw387=386production+fixture,
+WB50727 actualCLOSED0/native0/full3fatal0/source0. Исходный commit whitespace
+FAIL исправлен удалением только двух terminal LF, code prefix byte-identical;
+v25 не изменён, v26 пересобран на новом hash. Server/Client81236/97717 CLOSED0,
+native0/0, public audit1/1: server BOUNDED_TIMEOUT300299ms, factory/debit0;
+client functionalPASS. Full6logs fatal0/resources14/118/other748/748FAIL.
+Каждый console содержит362 UnknownClass SCR_EntityCatalogSpawnerData: новый
+fixture modded class потерял штатные annotations, catalogs assets0. Это
+собственный дефект стенда, не допустимый baseline. Нужны исправление exact
+pinned header и свежий native proof; предыдущий compile не доказывает runtime
+serialization. Source387SHA0/полные exits/logs/actualCIM0 сохранены в
+finalization20261030 `catalog-native-v26-slot-preflight/`.
+
+Отдельная гипотеза startup stagger не подтвердилась: EveronWCSRHS B1000
+на386production+3fixtures/raw389 дал95/95 initial PASS и minFPS22.9 до
+ROSTER. WB v2 actual9790closed0/native0/full3fatal0/SHA0; первая v1 signature
+FAIL сохранена. После300.092s от DONE диагностический teardown получил
+VM/null `m_bScheduled` в `AICF_StartupCancel`, normal shutdown не завершён.
+Actual71396 CLOSED1/native-1, fullfatal8/resource462FAIL/raw389SHA0; остановлен
+только verified own process, fresh elevated CIM04:43:53 native/WB0. Исходный
+hold/shutdown gate FAIL; observed300s не выданы за его PASS. A0 не запускался,
+prototype в production не перенесён, причина FPS UNKNOWN. Commands/полные
+stopped logs/source/closure: finalization20261030
+`startup-stagger-r30-prototype-v1/`. Это не новый дефект Core.
 
 Свежий полный `r29` собран31.10 в03:40MSK: **264/264 PASS**, collector0,
 exact unique union/Logistics1/1027SHA0; actual sessions

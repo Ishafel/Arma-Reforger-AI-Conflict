@@ -30,22 +30,67 @@ exact Census diagnostics `2ca63e5`; harness long-path fix `99620f3`.
   complex FAIL сохранён, исправлены ordered guards и два fixture races.
 
 RHS+WCS v4 на этих386production подготовлен и compiled в двухgraphs, raw388,
-compiled376/fullfatal0/SHA0; resource78rows каждый остаётся FAIL. Native три карты
-проверяются по одной. Арланд firstROSTER_READY04:03:47, первыйFPS41.6 — только
-live observation, полного stopped verdict пока нет. Соседние native, WB,
-Full/targeted CPU tests перед стартом отсутствовали. Ни map bootstrap, ни
-compile не закрывают ordinary1800/MOVING6/controlledphysical/client/JIP.
+compiled376/fullfatal0/SHA0; resource78rows каждый остаётся FAIL. Три native
+прогона завершены по одному world после265/265 и закрытия всех6 offline sessions:
+
+| Variant | Cases | Hold после DONE, с | Мин. FPS всех samples | Прочие native Error rows |
+|---|---:|---:|---:|---:|
+| ArlandWCSRHS | 95/95 PASS | 301.829 | 41.6 | 206 FAIL |
+| EveronWCSRHS | 95/95 PASS | 304.331 | 23.0 FAIL | 466 FAIL |
+| EveronNorthWCSRHS | 97/97 PASS | 304.199 | 33.8 | 466 FAIL |
+
+Actual runner sessions61936/6292/15356 закрылись1, native exit0 каждый;
+полные9 stopped sibling logs: fatal0/project0, raw388 sourceSHA drift0,
+exact canonical CLI/ROSTER_READY. У каждого20 read-only quota samples known,
+UNKNOWN0; это не непрерывное доказательство Census. Everon23.0 наблюдался
+до ROSTER_READY; стартовые samples не исключены из FPS gate. Все strict verdict
+FAIL сохранены. Категории и количества console Error совпадают с прежним V27;
+старый FAIL не является исключением. Native/WB0 подтверждены04:20:58,
+свободно20.568GiB. На время трёх native windows согласован HOLD WB/Full/targeted
+CPU; Root делал docs/Git/light readonly. Причина FPS просадки этим не установлена.
+Ни map bootstrap, ни compile не закрывают ordinary1800/MOVING6/
+controlledphysical/client/JIP.
 Native нового exact observer и физическая регрессия cleanup пока NOT RUN.
 
 Evidence: ignored finalization20261029 `r30-*`,
 `ordinary-r30-exact-diagnostic-v10/`, `multi-r30-exact-diagnostic-v8/`,
-`quota/wcs-final-cleanup-mapboot-v4-preparation/`; finalization20261030
+`quota/wcs-final-cleanup-mapboot-v4-preparation/`,
+`quota/wcs-final-cleanup-mapboot-v4/three-map-summary.json`
+(SHA256 `A7F279893FF4C6D983E688E70F8AB77B66D017BF0E90F05F55BC3F5D22EB641E`);
+finalization20261030
 `captured-casualty-cleanup-fix/controlled-native-r30-v2/`,
 `census-exact-capture-diagnostic-v1/`, `r30-native-preparations-v2/`.
-Неготовый GROUP Catalog WIP сохранён отдельно, не попал в265. Новый vehicle
-selector кандидат также пока ignored-only/NOT RUN native. Strict native-only
+Неготовый GROUP Catalog WIP сохранён отдельно, не попал в265. Поздний vehicle
+selector не входил в этот All. Fresh Stock Catalog v26 (386+1fixture/raw387)
+прошёл WB50727 CLOSED0/native0/full3fatal0/SHA0; первый commit attempt поймал
+лишнюю blank EOF, два LF удалены с proof неизменности всего code prefix.
+Server/Client81236/97717 CLOSED0/native0/0, public audit1/1: server
+`BOUNDED_TIMEOUT`300299ms/factory/header/callback/debit0, client functionalPASS.
+Full6logs: fatal0, resources14/118, прочие Error748/748FAIL. По362 console
+`Unknown class 'SCR_EntityCatalogSpawnerData'` на роль объясняют724 raw sibling
+rows; native vehicle catalogs пусты. Это новый собственный fixture FAIL,
+не внешний baseline. У modded data class отсутствуют обе штатные annotations;
+узкое исправление и новый native positive пока ожидают проверки. v26 stage,
+полные логи, exits и source387SHA0 сохранены в finalization20261030
+`catalog-native-v26-slot-preflight/`. Strict native-only
 8persistence/resource/font/GUID/lighting blockers и visual NOT RUN сохраняются.
 Ready/merge/release/ACCEPTED не объявлены.
+
+## Проверка гипотезы startup stagger
+
+Отдельный startup-stagger control на r30 EveronWCSRHS проверял гипотезу
+одновременного старта:386production +2 прежних readonly +1 ignored prototype,
+raw389, terminal WB v2 native0/full3fatal0/source0. Первая WB v1 имела
+несовпадение имени аргумента override и сохранена FAIL. B1000 действительно
+разнёс20 dispatch, initial95/95PASS, но minFPS22.9 сохранился до ROSTER.
+В04:41:52 после наблюдавшихся300.092s от DONE test-only teardown получил
+VM/null `m_bScheduled` в `AICF_StartupCancel`; процесс пришлось завершить.
+Actual71396 CLOSED1/native-1, fullfatal8/resource462FAIL/raw389SHA0.
+Это FAIL normal shutdown/исходного hold gate, а не production regression.
+Fresh elevated CIM04:43:53 game/Workbench0. A0 повтор не запускался: B уже
+не устранил просадку; prototype в production не переносился. Причина FPS
+по-прежнему UNKNOWN. Evidence: finalization20261030
+`startup-stagger-r30-prototype-v1/native-B1000-v1/`.
 
 ## Остановленные ordinary1800 на topology V27
 
