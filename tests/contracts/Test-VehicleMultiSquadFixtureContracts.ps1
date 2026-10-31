@@ -10,7 +10,7 @@ function Rules([string]$text){
  if($text -match 'new AICF_FactionState|SpawnGroup\(|MarkReady\(|SetOrigin\(|Teleport\(|SetWorldTransform\(|CommitTransition\('){'NO_FAKE_DEPLOYMENT_OR_MOVEMENT'}
  if($start.IndexOf('AICF_MultiEnvironment()') -gt $start.IndexOf('super.Start(') -or $environment -notmatch 'm_sAICFMultiMode == "CAPACITY"' -or $environment -notmatch 'SetFactionsFriendly' -or $protect -notmatch 'm_sAICFMultiMode != "CAPACITY"' -or $funding -notmatch 'if \(m_sAICFMultiMode == "CAPACITY"\)'){'EXPLICIT_EARLY_CAPACITY_ONLY_ENVIRONMENT'}
  if($fund -notmatch 'mode != "CAPACITY"' -or $fund -notmatch '4000 - AICF_MultiGranted\(key\)' -or $fund -notmatch 'm_aAICFMultiGrantTokens.Contains\(token\)' -or $fund -notmatch 'IsOperationalOwnedBase\(base, faction\)' -or $fund -notmatch 'Math.Min\(quotedDemand, base.GetSuppliesMax\(\)\)' -or $fund -notmatch 'base.AddSupplies\(requested\)' -or $fund -notmatch 'owner=ECONOMY_SYSTEM test_only=1' -or @([regex]::Matches($text,'\.AddSupplies\(')).Count -ne 1){'FINITE_ECONOMY_OWNER_LEDGER'}
- $jit=Body $text 'AICF_MultiJitVehicleQuote';$quote=Body $text 'AICF_MultiOwnVehicleQuote';$purchase=Body $text 'PurchaseVehiclePreset';$spawn=Body $text 'SpawnCandidate'
+ $jit=Body $text 'AICF_MultiJitVehicleQuote';$quote=Body $text 'AICF_MultiOwnVehicleQuote';$purchase=Body $text 'PurchaseVehiclePreset';$preflight=Body $text 'InspectVehiclePresetPreflight'
  foreach($guard in @('mode != "CAPACITY"','!Replication.IsServer()','!m_Campaign.IsMaster()',
   '!m_Campaign.IsRunning()','!m_bGraphContextReady','base != faction.GetMainBase()',
   '!m_SupplyNetwork.IsOperationalOwnedBase(base, faction)','!m_ConflictAdapter.GetSpawnRejectionReason(base, faction).IsEmpty()',
@@ -34,8 +34,11 @@ function Rules([string]$text){
   $jit -notmatch 'native_debit=PENDING' -or ([regex]::Matches($purchase,'super.PurchaseVehiclePreset\(')).Count -ne 1 -or
   $purchase -notmatch 'return super.PurchaseVehiclePreset\(trip, faction, base, prefab, paid\)' -or
   $purchase.IndexOf('AICF_MultiJitVehicleQuote(') -gt $purchase.IndexOf('super.PurchaseVehiclePreset(') -or
-  ([regex]::Matches($spawn,'super.SpawnCandidate\(')).Count -ne 1 -or $spawn -notmatch 'AICF_MultiJitVehicleQuote\(trip, faction, selection.m_Base, candidate.m_Prefab, "PRESPAWN"\)' -or
-  $spawn.IndexOf('AICF_MultiJitVehicleQuote(') -gt $spawn.IndexOf('super.SpawnCandidate(') -or $purchase -match 'return true|paid\s*='){'JIT_BEFORE_PREFLIGHT_AND_NATIVE_DEBIT_NO_SUCCESS_BYPASS'}
+  ([regex]::Matches($preflight,'super.InspectVehiclePresetPreflight\(')).Count -ne 1 -or
+  $preflight -notmatch 'return super.InspectVehiclePresetPreflight\(trip, faction, base, fleet\);' -or
+  $preflight -notmatch '"PREFLIGHT", fleet, frame' -or
+  $preflight.IndexOf('AICF_MultiJitVehicleQuote(') -gt $preflight.IndexOf('super.InspectVehiclePresetPreflight(') -or
+  $text -match 'super.SpawnCandidate\(' -or $purchase -match 'return true|paid\s*='){'JIT_BEFORE_PREFLIGHT_AND_NATIVE_DEBIT_NO_SUCCESS_BYPASS'}
  if($init -notmatch 'slot.GetUnitType\(\) == AICF_EGroupUnitType.INFANTRY' -or $init -notmatch 'deploymentSize != 1' -or $init -notmatch 'AICF_EGroupUnitType.INFANTRY, 1' -or $tick -notmatch 'AICF_EGroupUnitType.INFANTRY, 5' -or $tick -notmatch 'RequestPlayerRecruitment\(slot, faction, reason\)' -or $sample -notmatch 'mustered == m_iAICFMultiCohort \* 2'){'REAL_INFANTRY_PAID_MUSTER_BEFORE_MOTORIZED'}
  $apply=Body $text 'AICF_MultiApply'
  if($tick -match 'm_bAICFMultiMustered\s*&&' -or $funding.Contains('m_bAICFMultiMustered') -or
@@ -143,7 +146,7 @@ foreach($mutation in @(
  ,@('reservation.IsExpired(System.GetTickCount())','false','JIT_SELECTED_REAL_SIX_RECIPE_TRIP_IDENTITY')
  ,@('cost + Math.Ceil(Math.Max(0, obligations))','4000','JIT_DEFICIT_ONLY_CURRENT_ECONOMY_OWNER')
  ,@('return super.PurchaseVehiclePreset(trip, faction, base, prefab, paid);','paid = 475; return true;','JIT_BEFORE_PREFLIGHT_AND_NATIVE_DEBIT_NO_SUCCESS_BYPASS')
- ,@('return super.SpawnCandidate(trip, faction, kind, candidates, selection, candidate, identity);','return true;','JIT_BEFORE_PREFLIGHT_AND_NATIVE_DEBIT_NO_SUCCESS_BYPASS')
+ ,@('return super.InspectVehiclePresetPreflight(trip, faction, base, fleet);','return null;','JIT_BEFORE_PREFLIGHT_AND_NATIVE_DEBIT_NO_SUCCESS_BYPASS')
 )){
  if(!$source.Contains($mutation[0])){throw "Missing mutation target $($mutation[2])"}
  if($mutation[2] -notin @(Rules ($source.Replace($mutation[0],$mutation[1])))){throw "Mutation survived $($mutation[2])"}
@@ -300,4 +303,136 @@ $taskAcqCaught=0
 foreach($taskMutation in $taskAcqMutants){if(!$taskAcqCode.Contains($taskMutation[1])){throw "Missing acquisition unsafe target $($taskMutation[0])"};$taskNS='MultiAcquisitionUnsafe'+$taskMutation[0];Add-Type -TypeDefinition ($taskAcqCode.Replace('MultiAcquisitionReplay',$taskNS).Replace($taskMutation[1],$taskMutation[2])) -Language CSharp;$taskBad=$false;try{[void]([type]($taskNS+'.AcquisitionCases')).GetMethod('Run').Invoke($null,@())}catch{$taskBad=$true};if(!$taskBad){throw "Acquisition unsafe survived $($taskMutation[0])"};$taskAcqCaught++}
 "PASS Multi acquisition outcome observer actual_cases=$taskAcqCount executed_unsafe=$taskAcqCaught stored_field_bindings=$taskAcqBound original_result_reference=1 script_state_only=1 native=NOT_RUN"
 "PASS Multi-squad fixture: real paid muster/leases/cohorts, NORMAL isolation, bounded CAPACITY funding, live final intent and startup/stop ordering; controls=$controls"
+# Actual composed preflight flow. Native calls are deterministic stubs; bodies below are extracted.
+$taskFundingCore=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/Economy/AICF_EconomySystem.c'))
+$taskFundingFlow=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/Vehicles/AICF_VehicleAcquisitionFlow.c'))
+$taskFundingDecision=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/Economy/AICF_VehiclePresetEconomyDecision.c'))
+function FundingAdapt([string]$s){
+ $s=$s.Replace('super.','SUPER.');$s=[regex]::Replace($s,'\bbase\b','site');$s=$s.Replace('SUPER.','base.')
+ $s=$s.Replace('GetGame()','Runtime.Game').Replace('string.Format(','Runtime.Format(').Replace('System.GetTickCount()','Runtime.Now').Replace('ResourceName','string').Replace('EntityID.INVALID','0').Replace('EntityID','int').Replace('AICF_EconomySystem','Economy')
+ $s=$s.Replace('System.GetCLIParam("aicfVehicleMultiMode", mode)','Cli.Get(out mode)')
+ $s=[regex]::Replace($s,'\bIEntity\b','Actor')
+ $s=$s.Replace('protected ref ','protected ').Replace('override ','').Replace('protected ','public ')
+ $s=$s.Replace('array<string>','L<string>').Replace('L<string> m_aAICFMultiGrantTokens = {};','L<string> m_aAICFMultiGrantTokens = new L<string>();')
+ $s=[regex]::Replace($s,'foreach \(([^:]+) : ([^)]+)\)','foreach ($1 in $2)')
+ $s=[regex]::Replace($s,'(?m)^(\s*)(int|bool|string|Economy|AICF_\w+)\s+(\w+);\s*$',{param($m)$v='null';switch($m.Groups[2].Value){int{$v='0'}bool{$v='false'}string{$v='""'}};$m.Groups[1].Value+$m.Groups[2].Value+' '+$m.Groups[3].Value+'='+$v+';'})
+ $s=[regex]::Replace($s,'for \(int (\w+);','for (int $1 = 0;')
+ $s=$s.Replace('int cost, started;','int cost=0, started=0;').Replace('out int','out int')
+ $s=$s.Replace('prefab, cost, started)','prefab, out cost, out started)')
+ $s=$s.Replace('faction, base, prefab, paid)','faction, site, prefab, out paid)')
+ $s=[regex]::Replace($s,'(?m)^(\s*)(bool|void|int|AICF_\w+) (\w+)\(','$1public $2 $3(')
+ return $s
+}
+function FundingMethod([string]$text,[string]$name){
+ $head=[regex]::Match($text,'(?m)^\s*(?:(?:override|protected|static)\s+)*\w+\s+'+[regex]::Escape($name)+'\([^)]*\)').Value
+ if(!$head){throw ('Funding method declaration missing '+$name)}
+ $method=FundingAdapt ($head+(Body $text $name))
+ if($name-eq'AICF_MultiOwnVehicleQuote'){$method=$method.Insert($method.IndexOf('{')+1,'cost=0; started=0;')}
+ return $method
+}
+$taskFundingMethods=@('InspectVehiclePresetPreflight','AICF_MultiPreflightScopeCurrent','AICF_MultiJitVehicleQuote','AICF_MultiGranted','AICF_MultiFund')|ForEach-Object{FundingMethod $source $_}
+$taskFundingOwner=@('AICF_MultiOwnVehicleQuote','AICF_MultiOwnPreflightFleet','AICF_MultiRoster')|ForEach-Object{FundingMethod $source $_}
+$taskFundingOriginal=FundingAdapt (Body $taskFundingCore 'InspectVehiclePresetPreflight')
+$taskFundingOriginal=$taskFundingOriginal.Insert(1,'Calls++;')
+$taskFundingClassify=FundingAdapt (Body $taskFundingDecision 'ClassifyQuote')
+$taskFundingLease=FundingAdapt (Body $taskFundingDecision 'IsOwnUnusedReservation')
+$taskFundingFlowBody=FundingMethod $taskFundingFlow 'InspectPresetEconomyBeforeLease'
+$taskFundingCode=@'
+#pragma warning disable 0162,0168
+using System;
+namespace FundingReplay {
+public static class S{public static bool IsEmpty(this string s){return string.IsNullOrEmpty(s);}}
+public class N{public static implicit operator bool(N x){return x!=null;}public static void Print(string s){Runtime.Logs.Add(s);}}
+public class L<T>:System.Collections.Generic.List<T>{public new int Count(){return base.Count;}public void Insert(T x){Add(x);}}
+public static class Math{public static int Max(int a,int b){return System.Math.Max(a,b);}public static int Min(int a,int b){return System.Math.Min(a,b);}public static float Max(float a,float b){return System.Math.Max(a,b);}public static int Ceil(float x){return (int)System.Math.Ceiling(x);}}
+public static class Cli{public static string Mode="CAPACITY";public static bool Get(out string m){m=Mode;return true;}}
+public static class Replication{public static bool Server=true;public static bool IsServer(){return Server;}}
+public static class Runtime{public static int Now=1000,Price=475;public static Action MetadataHook;public static int MetadataReads;public static System.Collections.Generic.List<string> Logs=new System.Collections.Generic.List<string>();public static Game Game=new Game();public static string Format(string f,params object[] a){for(int i=9;i>=1;i--)f=f.Replace("%"+i,"{"+(i-1)+"}");return string.Format(f,a);}}
+public class Game:N{public bool IsServer(){return true;}}
+public enum AICF_EVehiclePresetEconomyDecision{INVALID_CONTEXT,AFFORDABLE,INSUFFICIENT_AVAILABLE_SUPPLIES}
+public enum AICF_ETransportTripPhase{SPAWN_COMMIT,OTHER}
+public enum AICF_EVehicleLeaseState{RESERVED,ACTIVE}
+public class AICF_VehiclePreset:N{public string m_sPrefab="CAR";}
+public class Actor:N{public int Id;public bool Alive=true,Authority=true;public int GetID(){return Id;}}
+public class SCR_AIGroup:N{public int Id=11;public int GetID(){return Id;}public bool Authority=true;public L<Actor> Actors=new L<Actor>();}
+public class AICF_GroupSlot:N{public SCR_AIGroup Group;public int Generation=1;public bool IsCombatReady(){return true;}public int GetSpawnGeneration(){return Generation;}public SCR_AIGroup GetGroup(){return Group;}public Actor GetRosterMember(int i){return Group.Actors[i];}}
+public class SCR_CampaignMilitaryBaseComponent:N{public int Stock=465,Capacity=1200,Adds;public Action OnAdd;public int GetSupplies(){return Stock;}public int GetSuppliesMax(){return Capacity;}public void AddSupplies(int n){Adds++;Stock=System.Math.Min(Capacity,Stock+n);if(OnAdd!=null)OnAdd();}}
+public class SCR_CampaignFaction:N{public string Key="US";public SCR_CampaignMilitaryBaseComponent Site;public string GetFactionKey(){return Key;}public SCR_CampaignMilitaryBaseComponent GetMainBase(){return Site;}}
+public class AICF_StrategicAssignmentSnapshot:N{public SCR_AIGroup Group;public int Revision=1;public SCR_AIGroup GetGroup(){return Group;}}
+public class AICF_VehicleLease:N{public bool Match=true,Physical;public int Gen=1;public AICF_EVehicleLeaseState State=AICF_EVehicleLeaseState.RESERVED;public bool MatchesTripIdentity(string f,int s,int g,int t){return Match;}public int GetLeaseGeneration(){return Gen;}public AICF_EVehicleLeaseState GetState(){return State;}public bool HasPhysicalAsset(){return Physical;}public N GetVehicle(){return Physical?new N():null;}public int GetVehicleGeneration(){return Physical?1:0;}public int GetEntityId(){return Physical?1:0;}public N GetCleanupSnapshot(){return null;}public string GetEntityIdString(){return Physical?"1":"";}public string GetRplId(){return "";}public string GetPrefab(){return "";}public string GetVehicleLifecycleId(){return "";}}
+public class AICF_FactionFleet:N{public string Key="US";public AICF_VehicleLease Lease;public string GetFactionKey(){return Key;}public bool OwnsVehicleLease(AICF_VehicleLease l){return Lease==l;}public AICF_VehicleLease FindLeaseForSlot(int i){return Lease;}}
+public class AICF_FleetRegistry:N{public AICF_FactionFleet Fleet;public AICF_FactionFleet FindFleet(string f){return Fleet;}}
+public class AICF_VehicleSpawnSiteSelection:N{public SCR_CampaignMilitaryBaseComponent m_Base;}
+public class AICF_VehicleSpawnSiteReservation:N{public SCR_CampaignMilitaryBaseComponent Site;public string Token="SITE";public bool Current=true;public SCR_CampaignMilitaryBaseComponent GetBase(){return Site;}public bool IsExpired(int now){return !Current;}public bool MatchesTrip(AICF_TransportTrip t,int g){return Current;}public string GetOwnerToken(){return Token;}}
+public class AICF_VehicleSpawnPlan:N{public AICF_VehicleSpawnSiteSelection Selection;public AICF_VehicleSpawnSiteReservation Reservation;public AICF_VehicleSpawnSiteSelection GetSelection(){return Selection;}public AICF_VehicleSpawnSiteReservation GetReservation(){return Reservation;}}
+public class AICF_VehicleRequestState:N{public int Generation=1,Attempt;public AICF_VehicleSpawnPlan Plan;public int GetRequestGeneration(){return Generation;}public int GetAttemptCount(){return Attempt;}public AICF_VehicleSpawnPlan GetSpawnPlan(){return Plan;}}
+public class AICF_TransportTrip:N{public bool Valid=true,Current=true,Debited,Expired;public string Operation="O";public int Slot,GroupGen=1,TripGen=1,PresetRevision=1;public AICF_ETransportTripPhase Phase;public AICF_VehiclePreset Preset=new AICF_VehiclePreset();public AICF_VehicleRequestState Request;public AICF_VehicleLease Lease;public AICF_StrategicAssignmentSnapshot Assignment;public AICF_GroupSlot PresetSlot;public bool IsValid(){return Valid;}public bool IsTerminal(){return false;}public bool IsDeadlineReached(int n){return Expired;}public bool IsVehiclePresetCurrent(){return Current;}public bool IsVehiclePresetDebited(){return Debited;}public AICF_ETransportTripPhase GetPhase(){return Phase;}public int GetSlotId(){return Slot;}public string GetFactionKey(){return "US";}public int GetGroupGeneration(){return GroupGen;}public int GetTripGeneration(){return TripGen;}public int GetVehiclePresetRevision(){return PresetRevision;}public AICF_VehiclePreset GetVehiclePreset(){return Preset;}public AICF_VehicleRequestState GetRequestState(){return Request;}public AICF_VehicleLease GetLease(){return Lease;}public bool HasLease(){return Lease!=null;}public AICF_StrategicAssignmentSnapshot GetAssignment(){return Assignment;}public string GetOperationId(){return Operation;}public AICF_GroupSlot GetVehiclePresetSlot(){return PresetSlot;}public bool RecordVehiclePresetEconomyDecline(AICF_VehiclePresetEconomyDecision d){return true;}}
+public class AICF_MultiAcquisitionFrame:N{public bool m_bCompleted;public int m_iQuoteSequence;}
+public class AICF_MultiAcquisitionContext:N{public AICF_TransportTrip Trip;public AICF_VehicleRequestState Request;public AICF_VehicleSpawnPlan Plan;public string Signature,m_sFields;public bool SameSource(AICF_MultiAcquisitionContext a){return a!=null&&a.Trip==Trip&&Signature==a.Signature;}public bool SameAcquisitionState(AICF_MultiAcquisitionContext a){return a!=null&&a.Request==Request&&a.Plan==Plan;}}
+public static class AICF_MultiAcquisitionProbe{public static AICF_MultiAcquisitionContext Read(AICF_TransportTrip t,AICF_StrategicAssignmentSnapshot a){return new AICF_MultiAcquisitionContext{Trip=t,Request=t.Request,Plan=t.Request==null?null:t.Request.Plan,Signature=t.GroupGen+"/"+t.TripGen+"/"+t.PresetRevision+"/"+a.Revision,m_sFields=t.Operation+"/"+t.Phase+"/"+(t.Request==null?"NONE":t.Request.Generation+"/"+(t.Request.Plan==null?"NONE":t.Request.Plan.Reservation.Token))};}}
+public static class AICF_GroupTrace{public static string Entity(SCR_AIGroup g){return g.Id.ToString();}}
+public static class AICF_Stage1Diagnostics{public static string BaseKey(SCR_CampaignMilitaryBaseComponent b){return "BASE";}}
+public static class AICF_Stage4Diagnostics{public static void Info(string e,string d){Runtime.Logs.Add(e);}}
+public static class AICF_MultiConcurrency{public static string Metadata(string m){return " diagnostic";}}
+public static class AICF_GroupRuntime{public static int CountAliveAgents(SCR_AIGroup g){return g.Actors.FindAll(a=>a.Alive).Count;}public static bool IsAliveCharacter(Actor a){return a.Alive;}}
+public static class AICF_VehicleBoardingMutationFence{public static bool IsAuthoritativeReplicatedEntity(SCR_AIGroup g){return g.Authority;}public static bool IsAuthoritativeAIEntity(Actor a){return a.Authority;}}
+public class AICF_VehiclePresetCatalog:N{int Price;public AICF_VehiclePresetCatalog(SCR_CampaignFaction f){Runtime.MetadataReads++;Price=Runtime.Price;if(Runtime.MetadataHook!=null)Runtime.MetadataHook();}public int Cost(string p){return Price;}public void Clear(){}}
+public class Recipe:N{public string m_sPrefab="CAR";}
+public class AICF_MultiSquadCase:N{public string m_sFaction="US";public int m_iSlot,m_iPhase=2,m_iGeneration=1,m_GroupId=11;public bool m_bRecruitAccepted=true;public L<int> m_aMembers=new L<int>();public Recipe m_Recipe=new Recipe();}
+public class Coordinator:N{public AICF_FleetRegistry Registry;public AICF_TransportTrip Trip;public AICF_TransportTrip GetTrip(AICF_GroupSlot s){return Trip;}public AICF_FleetRegistry GetAIQuotaFleetRegistry(){return Registry;}}
+public class Campaign:N{public bool Master=true,Running=true;public bool IsMaster(){return Master;}public bool IsRunning(){return Running;}}
+public class Supply:N{public bool Operational=true;public bool IsOperationalOwnedBase(SCR_CampaignMilitaryBaseComponent b,SCR_CampaignFaction f){return Operational;}}
+public class Adapter:N{public string Reject="";public string GetSpawnRejectionReason(SCR_CampaignMilitaryBaseComponent b,SCR_CampaignFaction f){return Reject;}}
+public class AICF_MatchController:N{public static AICF_MatchController Active;public bool m_bStopped,m_bAICFMultiDone;public bool m_bAICFMultiStarted=true;public string m_sAICFMultiMode="CAPACITY";public int m_iAICFMultiCohort=2,m_iAICFMultiStart=1;public Coordinator m_VehicleCoordinator;public AICF_GroupSlot Slot;public L<AICF_MultiSquadCase> m_aAICFMultiCases=new L<AICF_MultiSquadCase>();public static AICF_MatchController GetActiveController(){return Active;}public AICF_GroupSlot AICF_MultiSlot(AICF_MultiSquadCase i){return Slot;} OWNER_METHODS }
+public class AICF_VehiclePresetEconomyDecision:N{public static AICF_VehiclePresetEconomyDecision Last;public AICF_EVehiclePresetEconomyDecision Status;public int Cost,Stock,Obligations;public SCR_CampaignMilitaryBaseComponent Site;public AICF_FactionFleet Fleet;public AICF_VehiclePresetEconomyDecision(AICF_TransportTrip t,SCR_CampaignMilitaryBaseComponent b,int c,int s,int o,AICF_EVehiclePresetEconomyDecision st,AICF_FactionFleet f=null){Cost=c;Stock=s;Obligations=o;Status=st;Site=b;Fleet=f;Last=this;}public AICF_EVehiclePresetEconomyDecision GetStatus(){return Status;}public AICF_FactionFleet GetFleet(){return Fleet;}public string Details(){return "ACTUAL";}public static AICF_EVehiclePresetEconomyDecision ClassifyQuote(int cost,int stock,int obligations) CLASSIFY public static bool IsOwnUnusedReservation(AICF_TransportTrip trip,AICF_FactionFleet fleet,AICF_VehicleLease lease,int leaseGeneration) LEASE }
+public class EconomyBase:N{public int Calls,Obligations;public bool Enabled=true,m_bGraphContextReady=true;public N m_Graph=new N();public Campaign m_Campaign=new Campaign();public Supply m_SupplyNetwork=new Supply();public Adapter m_ConflictAdapter=new Adapter();public bool IsEnabled(){return Enabled;}public int LogisticsObligations(SCR_CampaignMilitaryBaseComponent b){return Obligations;}public virtual AICF_VehiclePresetEconomyDecision InspectVehiclePresetPreflight(AICF_TransportTrip trip,SCR_CampaignFaction faction,SCR_CampaignMilitaryBaseComponent site,AICF_FactionFleet fleet) ORIGINAL }
+public class Economy:EconomyBase{public int m_iAICFMultiUSGrant,m_iAICFMultiUSSRGrant,m_iAICFMultiPreflightSequence;public L<string> m_aAICFMultiGrantTokens=new L<string>();public AICF_MultiAcquisitionFrame m_AICFMultiPreflightFrame; FIXTURE_METHODS }
+public class AICF_TripOutcome:N{public string Reason;public AICF_TripOutcome(string r){Reason=r;}}
+public class Flow:N{public Economy Economy;public int EndCalls,FactoryCalls;public AICF_TripOutcome EndRequest(AICF_TransportTrip t,AICF_FactionFleet f,AICF_VehicleRequestState r,string why,int now,bool strict){EndCalls++;return new AICF_TripOutcome(why);}public AICF_TripOutcome FailClosed(AICF_TransportTrip t,string r,string c){EndCalls++;return new AICF_TripOutcome(r);} FLOW_BODY }
+'@
+# Bind only the original public return seam; all original method inputs are unchanged.
+$taskFundingFlowBody=$taskFundingFlowBody.Replace('match.VehiclePresetEconomy()','match.FundingEconomy')
+$taskFundingCode=$taskFundingCode.Replace('public static AICF_MatchController Active;','public static AICF_MatchController Active;public Economy FundingEconomy;')
+$taskFundingCode=$taskFundingCode.Replace('public class AICF_MatchController:N','public class AICF_MatchController:N')
+$taskFundingCode=$taskFundingCode.Replace(' OWNER_METHODS ',($taskFundingOwner -join "`n")).Replace(' CLASSIFY ',$taskFundingClassify).Replace(' LEASE ',$taskFundingLease).Replace(' ORIGINAL ',$taskFundingOriginal).Replace(' FIXTURE_METHODS ',($taskFundingMethods -join "`n")).Replace(' FLOW_BODY ',$taskFundingFlowBody)
+$taskFundingCode=$taskFundingCode.Replace('public AICF_VehiclePresetEconomyDecision InspectVehiclePresetPreflight(','public override AICF_VehiclePresetEconomyDecision InspectVehiclePresetPreflight(')
+$taskFundingCode=$taskFundingCode.Replace('public override AICF_VehiclePresetEconomyDecision InspectVehiclePresetPreflight(AICF_TransportTrip trip','public override AICF_VehiclePresetEconomyDecision InspectVehiclePresetPreflight(AICF_TransportTrip trip')
+$taskFundingCode=$taskFundingCode.Replace('!economy.IsVehiclePresetPreflightCurrent(trip, faction, decision)','!economy.IsVehiclePresetPreflightCurrent(trip, faction, decision)')
+$taskFundingCode=$taskFundingCode.Replace('public int Calls,Obligations;','public int Calls,Obligations;public bool IsVehiclePresetPreflightCurrent(AICF_TransportTrip t,SCR_CampaignFaction f,AICF_VehiclePresetEconomyDecision d){return d.Status!=AICF_EVehiclePresetEconomyDecision.INVALID_CONTEXT&&d.Stock==d.Site.Stock&&d.Cost==Runtime.Price;}')
+$taskFundingCode+=@'
+public static class Cases{
+static int n;static Economy E;static Flow F;static AICF_TransportTrip T;static AICF_FactionFleet Fleet;static SCR_CampaignFaction Side;static SCR_CampaignMilitaryBaseComponent Site;static AICF_MatchController C;
+static void Need(bool v,string x){n++;if(!v)throw new Exception(x);}
+static void Setup(){Cli.Mode="CAPACITY";Replication.Server=true;Runtime.Price=475;Runtime.MetadataReads=0;Runtime.MetadataHook=null;Runtime.Logs.Clear();E=new Economy();F=new Flow{Economy=E};Site=new SCR_CampaignMilitaryBaseComponent();Side=new SCR_CampaignFaction{Site=Site};var g=new SCR_AIGroup();for(int i=0;i<5;i++)g.Actors.Add(new Actor{Id=100+i});var slot=new AICF_GroupSlot{Group=g};T=new AICF_TransportTrip{PresetSlot=slot,Assignment=new AICF_StrategicAssignmentSnapshot{Group=g},Request=new AICF_VehicleRequestState{Plan=new AICF_VehicleSpawnPlan{Selection=new AICF_VehicleSpawnSiteSelection{m_Base=Site},Reservation=new AICF_VehicleSpawnSiteReservation{Site=Site}}}};Fleet=new AICF_FactionFleet();C=new AICF_MatchController{Slot=slot,FundingEconomy=E,m_VehicleCoordinator=new Coordinator{Trip=T,Registry=new AICF_FleetRegistry{Fleet=Fleet}}};var item=new AICF_MultiSquadCase();for(int i=0;i<5;i++)item.m_aMembers.Add(100+i);C.m_aAICFMultiCases.Add(item);AICF_MatchController.Active=C;}
+static AICF_TripOutcome Call(){return F.InspectPresetEconomyBeforeLease(T,Fleet,Side,T.Request,T.Request.Plan,Runtime.Now);}
+public static int Run(){n=0;Setup();Site.Stock=485;Site.Stock-=20;Cli.Mode="NORMAL";var old=Call();Need(old!=null&&old.Reason=="VEHICLE_PRESET_ECONOMY_DECLINED"&&E.Calls==1&&Site.Adds==0,"actual old485-20 declines475 BEFORE factory");
+Setup();var result=Call();Need(result==null&&E.Calls==1&&Site.Stock==475&&E.m_iAICFMultiUSGrant==10&&Site.Adds==1,"bounded JIT10 before single original classifier");Need(AICF_VehiclePresetEconomyDecision.Last.Status==AICF_EVehiclePresetEconomyDecision.AFFORDABLE,"original actual status");Need(Runtime.Logs.Exists(s=>s.Contains("BEFORE_METADATA_SNAPSHOT")),"honest non-atomic helper quote label");Need(Runtime.MetadataReads==2,"one helper metadata quote +one authoritative original quote");
+Setup();var actual=E.InspectVehiclePresetPreflight(T,Side,Site,Fleet);Need(object.ReferenceEquals(actual,AICF_VehiclePresetEconomyDecision.Last)&&E.Calls==1,"same decision reference returned");
+Setup();var sentinel=new InvalidOperationException("ORIGINAL_INSPECT");Runtime.MetadataHook=()=>{if(Runtime.MetadataReads==2)throw sentinel;};Exception caught=null;try{E.InspectVehiclePresetPreflight(T,Side,Site,Fleet);}catch(Exception ex){caught=ex;}Need(object.ReferenceEquals(caught,sentinel)&&E.Calls==1&&E.m_AICFMultiPreflightFrame==null,"same original exception propagated after helper scope cleanup");
+Setup();E.m_iAICFMultiUSGrant=4000;actual=E.InspectVehiclePresetPreflight(T,Side,Site,Fleet);Need(actual.Status==AICF_EVehiclePresetEconomyDecision.INSUFFICIENT_AVAILABLE_SUPPLIES&&Site.Adds==0&&E.Calls==1,"budget exhausted original negative retained");
+Setup();Site.OnAdd=()=>Runtime.Price=525;actual=E.InspectVehiclePresetPreflight(T,Side,Site,Fleet);Need(actual.Cost==525&&actual.Stock==475&&actual.Status==AICF_EVehiclePresetEconomyDecision.INSUFFICIENT_AVAILABLE_SUPPLIES&&E.Calls==1,"helper475 original525 change stays negative no rewritten status");
+foreach(string bad in new[]{"NORMAL","cohort","member","fleet","physical","generation","reservation","preset","requestCallback"}){Setup();if(bad=="NORMAL")Cli.Mode="NORMAL";if(bad=="cohort")C.m_iAICFMultiCohort=0;if(bad=="member")C.Slot.Group.Actors[0].Id=999;if(bad=="fleet")C.m_VehicleCoordinator.Registry.Fleet=new AICF_FactionFleet();if(bad=="physical"){T.Lease=new AICF_VehicleLease{Physical=true};Fleet.Lease=T.Lease;}if(bad=="generation")T.GroupGen=2;if(bad=="reservation")T.Request.Plan.Reservation.Current=false;if(bad=="preset")T.Current=false;if(bad=="requestCallback")Runtime.MetadataHook=()=>{Runtime.MetadataHook=null;T.Request=new AICF_VehicleRequestState{Plan=T.Request.Plan,Generation=2};};actual=E.InspectVehiclePresetPreflight(T,Side,Site,Fleet);Need(Site.Adds==0&&E.Calls==1&&actual.Status!=AICF_EVehiclePresetEconomyDecision.AFFORDABLE,"invalid current scope no funding "+bad);}
+Setup();Site.OnAdd=()=>{Site.OnAdd=null;T.Current=false;};actual=E.InspectVehiclePresetPreflight(T,Side,Site,Fleet);Need(E.Calls==1&&object.ReferenceEquals(actual,AICF_VehiclePresetEconomyDecision.Last)&&E.m_AICFMultiPreflightFrame==null&&actual.Status==AICF_EVehiclePresetEconomyDecision.INVALID_CONTEXT,"grant callback native context failure remains actual negative and scope released");
+Setup();Site.Capacity=470;actual=E.InspectVehiclePresetPreflight(T,Side,Site,Fleet);Need(Site.Stock==470&&E.m_iAICFMultiUSGrant==5&&actual.Status==AICF_EVehiclePresetEconomyDecision.INSUFFICIENT_AVAILABLE_SUPPLIES,"native capacity partial grant remains decline");
+Setup();E.m_iAICFMultiUSGrant=3995;actual=E.InspectVehiclePresetPreflight(T,Side,Site,Fleet);Need(E.m_iAICFMultiUSGrant==4000&&Site.Stock==470&&actual.Status==AICF_EVehiclePresetEconomyDecision.INSUFFICIENT_AVAILABLE_SUPPLIES,"remaining5 finite budget clamp");
+Setup();E.Obligations=20;actual=E.InspectVehiclePresetPreflight(T,Side,Site,Fleet);Need(Site.Stock==495&&actual.Obligations==20&&actual.Status==AICF_EVehiclePresetEconomyDecision.AFFORDABLE,"actual obligations remain charged");
+Setup();E.InspectVehiclePresetPreflight(T,Side,Site,Fleet);Site.Stock-=20;actual=E.InspectVehiclePresetPreflight(T,Side,Site,Fleet);Need(E.Calls==2&&Site.Stock==475&&E.m_iAICFMultiUSGrant==30&&actual.Status==AICF_EVehiclePresetEconomyDecision.AFFORDABLE,"distinct actual invocation deficit funded within same4000 no request replacement");
+return n;}}
+}
+'@
+Add-Type -TypeDefinition $taskFundingCode -Language CSharp
+$taskFundingCount=[FundingReplay.Cases]::Run()
+$taskFundingUnsafe=@(
+ @('noJit','AICF_MultiJitVehicleQuote(trip, faction, site, trip.GetVehiclePreset().m_sPrefab, "PREFLIGHT", fleet, frame);',''),
+ @('double','return base.InspectVehiclePresetPreflight(trip, faction, site, fleet);','base.InspectVehiclePresetPreflight(trip, faction, site, fleet); return base.InspectVehiclePresetPreflight(trip, faction, site, fleet);'),
+ @('return','return base.InspectVehiclePresetPreflight(trip, faction, site, fleet);','base.InspectVehiclePresetPreflight(trip, faction, site, fleet); return null;'),
+ @('budget','4000 - AICF_MultiGranted(key)','4000000'),
+ @('fleet','registry.FindFleet(faction.GetFactionKey()) != fleet','false'),
+ @('scope','!AICF_MultiPreflightScopeCurrent(trip, quoteContext, quoteFrame)','false'),
+ @('physical','return AICF_VehiclePresetEconomyDecision.IsOwnUnusedReservation(trip, fleet, lease, lease.GetLeaseGeneration());','return true;')
+)
+$taskFundingCaught=0
+foreach($mutation in $taskFundingUnsafe){if(!$taskFundingCode.Contains($mutation[1])){throw ('Missing funding unsafe target '+$mutation[0])};$ns='FundingUnsafe'+$mutation[0];Add-Type -TypeDefinition ($taskFundingCode.Replace('FundingReplay',$ns).Replace($mutation[1],$mutation[2])) -Language CSharp;$caught=$false;try{[void]([type]($ns+'.Cases')).GetMethod('Run').Invoke($null,@())}catch{$caught=$true};if(!$caught){throw ('Funding unsafe survived '+$mutation[0])};$taskFundingCaught++}
+"PASS Multi preflight funding composed_actual_cases=$taskFundingCount executed_unsafe=$taskFundingCaught original_actual_decision_return=1 production=UNCHANGED native=NOT_RUN"
+
 exit 0

@@ -556,6 +556,53 @@ fallback USSR0; native exit `-1`, duration NOT_PASS. Его полные оши�
 Это не30-minute PASS: cohort4/6 не доказаны. Новый полный прогон должен использовать
 исправленный subgroup boundary и прежний oracle.
 
+## Controlled funding перед фактическим preflight
+
+В frozen r30 MOVING1800 сохранён FAIL:05:11:50.779 US имеет stock485 при
+quote475; последующий recruit расходует20, а исходный economic preflight
+05:11:53.794 честно отказывает при stock465/obligations0. `SpawnCandidate`
+не вызывается после этого отказа, поэтому прежний JIT в его override был
+слишком поздним. Это дефект подготовки controlled CAPACITY, а не основание
+менять production отказ при недостатке средств. Полный r30 run завершился
+штатно native0/audit1, elapsed1800109ms, cohort2/completed0; старые FAIL
+(также destroyed/abandoned vehicle), source391 и полные логи сохранены в
+`.codex-runtime/issue78-finalization-20261030/multi-r30-moving-1800-v1/`.
+
+Новая версия fixture переносит этот JIT перед единственным исходным
+`InspectVehiclePresetPreflight(trip, faction, base, fleet)`; возвращает тот же
+фактический decision object/exception. `SpawnCandidate` больше не override,
+конструктор и compartment fences не менялись; JIT перед исходным purchase
+сохранён. Только CAPACITY, текущая cohort, те же5 original actors, текущие
+trip/request/plan/reservation/preset generations и exact fleet; допустимы
+только отсутствие lease либо собственная неиспользованная RESERVED lease.
+Script context и preset повторно проверяются после metadata reads и перед
+native grant. Вложенная preflight делает старый quote-frame устаревшим.
+
+Helper quote помечен `BEFORE_METADATA_SNAPSHOT`: он readonly, но не pure —
+конструктор catalog читает native metadata/Resource.Load. Это дополнительный
+metadata read, не повтор original decision; preview `Open`, actor factory,
+Census и health/pose setters здесь не вызываются. Original quote остаётся
+авторитетным: смена цены между helper и original по-прежнему может отказать.
+Прежние per-faction4000, native capacity/readback и единственный AddSupplies
+сохранены; invocation token отличает новый реальный preflight от replay того
+же grant. Отрицательный decision не подменяется, request/retry/deadlines,
+MOVING/ROOT_ONLY/PRODUCTION_BACKGROUND и игровые составы не меняются.
+
+Targeted baseline до правки: MultiFixture+PresetEconomyDecline2/2 PASS,
+`multi-preflight-funding-race/baseline-v2`. Первый CLI с объединённой строкой
+имён был отклонён до запуска тестов. Новый composed replay исполняет actual
+core preflight/flow и fixture grant/ownership bodies; adapter-only initial
+FAIL сохранены в `multi-preflight-funding-race/`, включая defaults/out/types.
+Финальный targeted replay в PowerShell7 и Windows PowerShell5.1: PASS23 actual
+composed cases /7 executed unsafe; прежние68 fixture controls и outcome observer
+33 actual /10 unsafe /43 bindings также PASS. Проверены старый485→465 отказ,
+JIT до единственного original preflight, неизменный result/exception, scope loss,
+physical/foreign lease, предел4000, неполный native grant и изменение actual price
+после helper. Полные результаты и exit receipts: `final3-pwsh.txt`,
+`final3-winps51.txt`, `final3-dual-exit.json` в том же evidence-каталоге.
+Новые Workbench/native gates этой версии пока **NOT RUN**; старый r30 run
+не является проверкой новой правки.
+
 Повторный `multi-moving-v6` использовал narrow positive-handler guard и final
 Admission. Cohort2 реально держался31.618s; при наборе cohort4 группа USSR3
 получила `NATIVE_GATE_IDENTITY_OR_DEADLINE` на повторном входе в тот же native

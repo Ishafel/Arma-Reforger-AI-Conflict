@@ -56,6 +56,7 @@ class AICF_MultiAcquisitionContext
 class AICF_MultiAcquisitionFrame
 {
 	bool m_bCompleted;
+	int m_iQuoteSequence;
 }
 
 modded class AICF_TransportTrip
@@ -372,6 +373,8 @@ modded class AICF_EconomySystem
 	protected int m_iAICFMultiUSGrant;
 	protected int m_iAICFMultiUSSRGrant;
 	protected ref array<string> m_aAICFMultiGrantTokens = {};
+	protected ref AICF_MultiAcquisitionFrame m_AICFMultiPreflightFrame;
+	protected int m_iAICFMultiPreflightSequence;
 
 	int AICF_MultiGranted(string faction)
 	{
@@ -380,37 +383,90 @@ modded class AICF_EconomySystem
 		return 0;
 	}
 
+	// Exact preflight boundary. Metadata quote is readonly, not pure/atomic;
+	// the original decision below owns the authoritative quote and classification.
+	override AICF_VehiclePresetEconomyDecision InspectVehiclePresetPreflight(
+		AICF_TransportTrip trip, SCR_CampaignFaction faction, SCR_CampaignMilitaryBaseComponent base, AICF_FactionFleet fleet)
+	{
+		string mode;
+		bool enabled = Replication.IsServer() && System.GetCLIParam("aicfVehicleMultiMode", mode) && mode == "CAPACITY";
+		if (enabled)
+		{
+			if (m_AICFMultiPreflightFrame) m_AICFMultiPreflightFrame.m_bCompleted = true;
+			else
+			{
+				AICF_MultiAcquisitionFrame frame = new AICF_MultiAcquisitionFrame();
+				frame.m_iQuoteSequence = ++m_iAICFMultiPreflightSequence;
+				m_AICFMultiPreflightFrame = frame;
+				if (trip && trip.GetVehiclePreset())
+					AICF_MultiJitVehicleQuote(trip, faction, base, trip.GetVehiclePreset().m_sPrefab, "PREFLIGHT", fleet, frame);
+				if (m_AICFMultiPreflightFrame == frame) m_AICFMultiPreflightFrame = null;
+			}
+		}
+		return super.InspectVehiclePresetPreflight(trip, faction, base, fleet);
+	}
+
+	protected bool AICF_MultiPreflightScopeCurrent(AICF_TransportTrip trip, AICF_MultiAcquisitionContext before,
+		AICF_MultiAcquisitionFrame frame)
+	{
+		if (!frame || frame != m_AICFMultiPreflightFrame || frame.m_bCompleted || !before || !trip) return false;
+		if (!trip.IsVehiclePresetCurrent()) return false;
+		AICF_MultiAcquisitionContext after = AICF_MultiAcquisitionProbe.Read(trip, trip.GetAssignment());
+		if (frame != m_AICFMultiPreflightFrame || frame.m_bCompleted) return false;
+		return before.SameSource(after) && before.SameAcquisitionState(after) && before.m_sFields == after.m_sFields;
+	}
+
 	void AICF_MultiJitVehicleQuote(AICF_TransportTrip trip, SCR_CampaignFaction faction,
-		SCR_CampaignMilitaryBaseComponent base, ResourceName prefab, string stage)
+		SCR_CampaignMilitaryBaseComponent base, ResourceName prefab, string stage,
+		AICF_FactionFleet fleet = null, AICF_MultiAcquisitionFrame quoteFrame = null)
 	{
 		string mode;
 		if (!Replication.IsServer() || !System.GetCLIParam("aicfVehicleMultiMode", mode) || mode != "CAPACITY") return;
 		if (!IsEnabled() || !m_Campaign || !m_Campaign.IsMaster() || !m_Campaign.IsRunning()) return;
 		if (!m_bGraphContextReady || !m_SupplyNetwork || !m_ConflictAdapter) return;
-		if (stage != "PRESPAWN" && stage != "PURCHASE") return;
+		if (stage != "PREFLIGHT" && stage != "PURCHASE") return;
 		if (!faction || base != faction.GetMainBase()) return;
 		if (!m_SupplyNetwork.IsOperationalOwnedBase(base, faction)) return;
 		if (!m_ConflictAdapter.GetSpawnRejectionReason(base, faction).IsEmpty()) return;
 		AICF_MatchController controller = AICF_MatchController.GetActiveController();
+		AICF_MultiAcquisitionContext quoteContext;
+		if (stage == "PREFLIGHT")
+		{
+			if (!controller || !controller.AICF_MultiOwnPreflightFleet(trip, faction, fleet)) return;
+			quoteContext = AICF_MultiAcquisitionProbe.Read(trip, trip.GetAssignment());
+			if (!AICF_MultiPreflightScopeCurrent(trip, quoteContext, quoteFrame)) return;
+		}
 		int cost, started;
 		if (!controller || !controller.AICF_MultiOwnVehicleQuote(trip, faction, base, prefab, cost, started)) return;
 		float obligations = LogisticsObligations(base);
 		int required = cost + Math.Ceil(Math.Max(0, obligations));
 		int before = base.GetSupplies();
+		if (stage == "PREFLIGHT" && !AICF_MultiPreflightScopeCurrent(trip, quoteContext, quoteFrame)) return;
 		string token = string.Format("MULTI-JIT-%1-%2-%3-%4", trip.GetOperationId(),
 			trip.GetRequestState().GetRequestGeneration(), trip.GetRequestState().GetAttemptCount(), stage);
+		if (stage == "PREFLIGHT") token += "-" + quoteFrame.m_iQuoteSequence.ToString();
 		int leaseGeneration = -1;
 		if (trip.GetLease()) leaseGeneration = trip.GetLease().GetLeaseGeneration();
 		string siteOwner = trip.GetRequestState().GetSpawnPlan().GetReservation().GetOwnerToken();
+		string operation = trip.GetOperationId();
+		int numericSlot = trip.GetSlotId();
+		string groupId = AICF_GroupTrace.Entity(trip.GetAssignment().GetGroup());
+		int generation = trip.GetGroupGeneration();
+		int requestGeneration = trip.GetRequestState().GetRequestGeneration();
+		int attempt = trip.GetRequestState().GetAttemptCount();
+		string factionKey = faction.GetFactionKey();
+		string baseKey = AICF_Stage1Diagnostics.BaseKey(base);
+		if (stage == "PREFLIGHT" && !AICF_MultiPreflightScopeCurrent(trip, quoteContext, quoteFrame)) return;
 		int grant = AICF_MultiFund(faction, required, token, started);
+		bool scopeAfter = stage != "PREFLIGHT" || AICF_MultiPreflightScopeCurrent(trip, quoteContext, quoteFrame);
 		int now = System.GetTickCount();
 		string details = string.Format("[AICF][VEHICLE_MULTI_JIT_QUOTE] mode=CAPACITY faction=%1 numeric_slot=%2 t_ms=%3 elapsed_ms=%4 operation_id=%5 stage=%6 prefab=%7 quoted_cost=%8",
-			faction.GetFactionKey(), trip.GetSlotId(), now, now - started, trip.GetOperationId(), stage, prefab, cost);
+			factionKey, numericSlot, now, now - started, operation, stage, prefab, cost);
 		details += string.Format(" token=%1 stock_before=%2 stock_after=%3 obligations=%4 required_stock=%5 grant=%6 total_granted=%7 base=%8 budget=4000 native_debit=PENDING",
-			token, before, base.GetSupplies(), obligations, required, grant, AICF_MultiGranted(faction.GetFactionKey()), AICF_Stage1Diagnostics.BaseKey(base));
+			token, before, base.GetSupplies(), obligations, required, grant, AICF_MultiGranted(factionKey), baseKey);
 		details += string.Format(" group=%1 generation=%2 lease_generation=%3 request_generation=%4 attempt=%5 site_owner=%6",
-			AICF_GroupTrace.Entity(trip.GetAssignment().GetGroup()), trip.GetGroupGeneration(), leaseGeneration,
-			trip.GetRequestState().GetRequestGeneration(), trip.GetRequestState().GetAttemptCount(), siteOwner);
+			groupId, generation, leaseGeneration, requestGeneration, attempt, siteOwner);
+		details += string.Format(" helper_quote_scope=BEFORE_METADATA_SNAPSHOT authoritative_decision=ORIGINAL_PREFLIGHT helper_scope_after=%1", scopeAfter);
 		Print(details + AICF_MultiConcurrency.Metadata(mode));
 	}
 
@@ -793,6 +849,17 @@ modded class AICF_MatchController
 			return cost > 0;
 		}
 		return false;
+	}
+
+	bool AICF_MultiOwnPreflightFleet(AICF_TransportTrip trip, SCR_CampaignFaction faction, AICF_FactionFleet fleet)
+	{
+		if (!trip || !faction || !fleet || !m_VehicleCoordinator) return false;
+		AICF_FleetRegistry registry = m_VehicleCoordinator.GetAIQuotaFleetRegistry();
+		if (!registry || registry.FindFleet(faction.GetFactionKey()) != fleet) return false;
+		if (fleet.GetFactionKey() != trip.GetFactionKey()) return false;
+		AICF_VehicleLease lease = trip.GetLease();
+		if (!lease) return !fleet.FindLeaseForSlot(trip.GetSlotId());
+		return AICF_VehiclePresetEconomyDecision.IsOwnUnusedReservation(trip, fleet, lease, lease.GetLeaseGeneration());
 	}
 
 	protected bool AICF_MultiExact(AICF_MultiSquadCase item, AICF_GroupSlot slot, AICF_TransportTrip trip)
@@ -1372,13 +1439,4 @@ modded class AICF_VehicleAcquisitionFlow
 		return actual;
 	}
 
-	override protected bool SpawnCandidate(AICF_TransportTrip trip, SCR_CampaignFaction faction,
-		AICF_EVehicleKind kind, array<ResourceName> candidates, AICF_VehicleSpawnSiteSelection selection,
-		AICF_VehicleAcquisitionCandidate candidate, string identity)
-	{
-		AICF_MatchController controller = AICF_MatchController.GetActiveController();
-		if (controller && controller.VehiclePresetEconomy() && selection && candidate)
-			controller.VehiclePresetEconomy().AICF_MultiJitVehicleQuote(trip, faction, selection.m_Base, candidate.m_Prefab, "PRESPAWN");
-		return super.SpawnCandidate(trip, faction, kind, candidates, selection, candidate, identity);
-	}
 }
