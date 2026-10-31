@@ -97,6 +97,7 @@ class AICF_StrategicUIController
 	protected Widget m_wCommandAccent;
 	protected Widget m_wCloseButton;
 	protected Widget m_wLoadoutButton;
+	protected Widget m_wVehiclePresetButton;
 	protected Widget m_wLoadoutShortcut;
 	protected Widget m_wRecruitButton;
 	protected Widget m_wReturnAIButton;
@@ -118,7 +119,6 @@ class AICF_StrategicUIController
 	protected ref array<Widget> m_aGroupButtons = {};
 	protected ref array<TextWidget> m_aGroupTexts = {};
 	protected ref array<Widget> m_aRoleButtons = {};
-	protected ref array<Widget> m_aUnitTypeButtons = {};
 	protected ref array<Widget> m_aSizeButtons = {};
 	protected ref array<Widget> m_aTargetButtons = {};
 	protected ref array<ref AICF_StrategicUIButtonHandler> m_aHandlers = {};
@@ -531,27 +531,18 @@ class AICF_StrategicUIController
 
 		CreateText(
 			m_wCommandPanel, 0.515, 0.312, 0.97, 0.347,
-			"{AICF:AICF_UI_UNIT_TYPE_NO_HEAVY_ARMOR_9befc517}",
+			"{AICF:AICF_UI_CommandPresets}",
 			14, Color.FromSRGBA(173, 190, 200, 255));
-		array<string> typeLabels = {"INFANTRY", "LIGHT 4X4", "TRUCK", "ARMED 4X4"};
-		for (int typeIndex = 0; typeIndex < typeLabels.Count(); typeIndex++)
-		{
-			float typeLeft = 0.515 + typeIndex * 0.113;
-			Widget typeButton = CreateRect(
-				m_wCommandPanel,
-				typeLeft, 0.349, typeLeft + 0.105, 0.4,
-				Color.FromSRGBA(34, 45, 52, 245),
-				true);
-			CreateText(
-				typeButton, 0, 0, 1, 1,
-				AICF_Localization.Code(typeLabels[typeIndex]),
-				14, Color.FromSRGBA(235, 241, 245, 255), true);
-			m_aUnitTypeButtons.Insert(typeButton);
-			AttachHandler(
-				typeButton,
-				AICF_EStrategicUIButtonAction.SET_UNIT_TYPE,
-				typeIndex);
-		}
+		m_wLoadoutButton = CreateRect(m_wCommandPanel, 0.515, 0.349, 0.73, 0.4,
+			Color.FromSRGBA(46, 74, 91, 255), true);
+		CreateText(m_wLoadoutButton, 0, 0, 1, 1,
+			"{AICF:AICF_UI_CommandInfantryPreset}", 17, Color.White, true);
+		AttachHandler(m_wLoadoutButton, AICF_EStrategicUIButtonAction.EDIT_LOADOUT);
+		m_wVehiclePresetButton = CreateRect(m_wCommandPanel, 0.745, 0.349, 0.97, 0.4,
+			Color.FromSRGBA(46, 74, 91, 255), true);
+		CreateText(m_wVehiclePresetButton, 0, 0, 1, 1,
+			"{AICF:AICF_UI_CommandVehiclePreset}", 17, Color.White, true);
+		AttachHandler(m_wVehiclePresetButton, AICF_EStrategicUIButtonAction.EDIT_VEHICLE);
 
 		CreateText(
 			m_wCommandPanel, 0.515, 0.414, 0.69, 0.438,
@@ -571,24 +562,15 @@ class AICF_StrategicUIController
 			15, Color.FromSRGBA(132, 149, 159, 255));
 
 		m_wCommandStatus = CreateText(
-			m_wCommandPanel, 0.03, 0.907, 0.97, 0.99,
+			m_wCommandPanel, 0.03, 0.884, 0.97, 0.99,
 			"{AICF:AICF_UI_HOW_TO_USE_SELECT_GROUP_CONFIGURE_ROLE_TYP_201828d4}",
 			15, Color.FromSRGBA(173, 190, 200, 255));
-		Widget loadoutButton = CreateRect(m_wCommandPanel, 0.03, 0.792, 0.47, 0.835,
-			Color.FromSRGBA(46, 74, 91, 255), true);
-		m_wLoadoutButton = loadoutButton;
-		CreateText(loadoutButton, 0, 0, 1, 1, "{AICF:AICF_UI_Loadout_4e116f01}", 19, Color.FromSRGBA(255, 255, 255, 255), true);
-		AttachHandler(loadoutButton, AICF_EStrategicUIButtonAction.EDIT_LOADOUT);
-		Widget vehicleButton = CreateRect(m_wCommandPanel, 0.515, 0.792, 0.97, 0.835,
-			Color.FromSRGBA(46, 74, 91, 255), true);
-		CreateText(vehicleButton, 0, 0, 1, 1, "{AICF:AICF_UI_VehicleTitle}", 19, Color.White, true);
-		AttachHandler(vehicleButton, AICF_EStrategicUIButtonAction.EDIT_VEHICLE);
-		m_wRecruitButton = CreateRect(m_wCommandPanel, 0.03, 0.843, 0.49, 0.896,
+		m_wRecruitButton = CreateRect(m_wCommandPanel, 0.03, 0.811, 0.49, 0.872,
 			Color.FromSRGBA(35, 85, 65, 255), true);
 		CreateText(m_wRecruitButton, 0, 0, 1, 1, "{AICF:AICF_UI_RecruitSquad}",
 			16, Color.FromSRGBA(235, 245, 240, 255), true);
 		AttachHandler(m_wRecruitButton, AICF_EStrategicUIButtonAction.RECRUIT);
-		m_wReturnAIButton = CreateRect(m_wCommandPanel, 0.515, 0.843, 0.97, 0.896,
+		m_wReturnAIButton = CreateRect(m_wCommandPanel, 0.515, 0.811, 0.97, 0.872,
 			Color.FromSRGBA(24, 79, 105, 255), true);
 		CreateText(m_wReturnAIButton, 0, 0, 1, 1, "{AICF:AICF_UI_ReturnSquadAI}",
 			16, Color.FromSRGBA(220, 244, 255, 255), true);
@@ -1234,13 +1216,6 @@ class AICF_StrategicUIController
 			else
 				SetRectColor(m_aRoleButtons[roleIndex], Color.FromSRGBA(34, 45, 52, 245));
 		}
-		for (int typeIndex = 0; typeIndex < m_aUnitTypeButtons.Count(); typeIndex++)
-		{
-			if (typeIndex == unitTypeCode)
-				SetRectColor(m_aUnitTypeButtons[typeIndex], Color.FromSRGBA(113, 72, 20, 250));
-			else
-				SetRectColor(m_aUnitTypeButtons[typeIndex], Color.FromSRGBA(34, 45, 52, 245));
-		}
 		if (m_wSizeValue && !m_bDraggingSizeSlider)
 			m_wSizeValue.SetText(AICF_Localization.Resolve(desiredSize.ToString()));
 		if (m_SizeSlider && !m_bDraggingSizeSlider && m_SizeSlider.GetValue() != desiredSize)
@@ -1380,6 +1355,7 @@ class AICF_StrategicUIController
 		m_wCommandAccent = null;
 		m_wCloseButton = null;
 		m_wLoadoutButton = null;
+		m_wVehiclePresetButton = null;
 		m_wRecruitButton = null;
 		m_wReturnAIButton = null;
 		m_wCommandOverview = null;
@@ -1393,7 +1369,6 @@ class AICF_StrategicUIController
 		m_aGroupButtons.Clear();
 		m_aGroupTexts.Clear();
 		m_aRoleButtons.Clear();
-		m_aUnitTypeButtons.Clear();
 		m_aSizeButtons.Clear();
 		m_aTargetButtons.Clear();
 		m_wMapPointButton = null;
@@ -1415,14 +1390,13 @@ class AICF_StrategicUIController
 		SetRectColor(m_wCommandAccent, Color.FromSRGBA(226, 167, 79, 255));
 		SetRectColor(m_wCloseButton, Color.FromSRGBA(91, 34, 34, 250));
 		SetRectColor(m_wLoadoutButton, Color.FromSRGBA(46, 74, 91, 255));
+		SetRectColor(m_wVehiclePresetButton, Color.FromSRGBA(46, 74, 91, 255));
 		SetRectColor(m_wRecruitButton, Color.FromSRGBA(35, 85, 65, 255));
 		SetRectColor(m_wReturnAIButton, Color.FromSRGBA(24, 79, 105, 255));
 		SetRectColor(m_wMapPointPrompt, Color.FromSRGBA(6, 18, 25, 245));
 		SetRectColor(m_wMapPointCancel, Color.FromSRGBA(91, 34, 34, 250));
 		foreach (Widget roleButton : m_aRoleButtons)
 			SetRectColor(roleButton, Color.FromSRGBA(34, 45, 52, 245));
-		foreach (Widget unitTypeButton : m_aUnitTypeButtons)
-			SetRectColor(unitTypeButton, Color.FromSRGBA(34, 45, 52, 245));
 		foreach (Widget sizeButton : m_aSizeButtons)
 			SetRectColor(sizeButton, Color.FromSRGBA(34, 45, 52, 245));
 		foreach (Widget targetButton : m_aTargetButtons)

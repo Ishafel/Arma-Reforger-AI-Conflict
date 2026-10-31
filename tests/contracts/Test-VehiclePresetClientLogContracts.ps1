@@ -6,8 +6,13 @@ $argv=@('-gproj','C:\source\addon.gproj','-profile','C:\profile','-addonsDir','C
 $header='CLI Params: '+($argv -join ' ')+"`n[ROSTER_READY]`n"
 $launcher='AICF_RUNTIME_MANIFEST_JSON='+(@{arguments=$argv}|ConvertTo-Json -Compress)+"`n[SERVER_READY]"
 $names=@('NO_FACTION_REJECTED','ALPHA_VEHICLE_FORM','CONTEXT','UAZ_WHITELIST','SELECT_HANDLER','NATIVE_SEAT_LABELS','DRIVER_SEAT','ASSIGN_HANDLER','SAVE_HANDLER','APPLY_HANDLER','REPEAT_APPLY_IDEMPOTENT','STALE_REVISION_REJECTED','FOREIGN_FACTION_REJECTED','LOAD_HANDLER','DELETE_HANDLER')
+$modernCases=@('CATALOG_SENTINEL_NO_RPC','NO_OBSOLETE_PAGE_SELECT_BUTTONS','NATIVE_MANDATORY_SEATS','AUTO_SEATS_MANDATORY_FIRST','AUTO_SEATS_NO_RPC','SEAT_SCROLL_24_ROWS','SEAT_SCROLL_64_ROWS','SEAT_SCROLL_CONTENT_HEIGHT','SEAT_SCROLL_WHEEL_CLAMPED','SEAT_SCROLL_DESCENDANT_WHEEL','PREVIEW_INPUT_ATTACHED','PREVIEW_CURSOR_ENABLED','PREVIEW_ROTATE_ZOOM_LOCAL','PREVIEW_INPUT_CLEANUP')
+$names+=$modernCases
 for($i=0;$i -lt 5;$i++){$names+='NO_FAKE_TURRET_'+$i}
-$client=$header+(@($names|ForEach-Object{"[VEHICLE_UI_CHECK] rule=$_ passed=1"}) -join "`n")+"`n[VEHICLE_UI_DONE] checks=20 failures=0 jip=0`nGame destroyed."
+$scroll="`n[VEHICLE_UI_SCROLL_SAMPLE] rows=64 height=3712 content_px=5568 viewport_px=618.667 max_px=4949.333 down=58 bottom=4949.333 top=0 child_down=58 normalized_down=0.012 normalized_bottom=1 normalized_repeat=1 normalized_top=0 synthetic_presentation=1 rpc_sent=0 physical_seat_claim=0"
+$client=$header+(@($names|ForEach-Object{"[VEHICLE_UI_CHECK] rule=$_ passed=1"}) -join "`n")+$scroll+"`n[VEHICLE_UI_DONE] checks=34 failures=0 jip=0`nGame destroyed."
+$timer="`n[VEHICLE_UI_PREVIEW_TIMER] scheduled=1 cancelled=1 before_ms=33 after_ms=-1 hidden_visibility_fixture_override=1 physical_input=0"
+$client+=$timer
 $jip=$header+(@(@('ALPHA_VEHICLE_FORM','JIP_CONFIRMED_ASSIGNMENT','JIP_STABLE_SLOT')|ForEach-Object{"[VEHICLE_UI_CHECK] rule=$_ passed=1"}) -join "`n")+"`n[VEHICLE_UI_DONE] checks=3 failures=0 jip=1`nGame destroyed."
 $server=$header+"[VEHICLE_UI_SERVER_READBACK] player=1 failures=0 jip=0`n[VEHICLE_UI_SERVER_READBACK] player=2 failures=0 jip=1`nGame destroyed."
 $count=0
@@ -40,6 +45,27 @@ function Check([string]$Name,[string]$Server,[string]$Client,[string]$JIP,[int]$
 }
 try{
  Check 'complete' $server $client $jip 0 ''
+ foreach($case in $modernCases){
+  Check ('modern-missing-'+$case) $server ($client.Replace('rule='+$case+' passed=1','rule=REMOVED passed=1')) $jip 1 ('CLIENT_CASE_'+$case)
+  Check ('modern-duplicate-'+$case) $server ($client+"`n[VEHICLE_UI_CHECK] rule=$case passed=1") $jip 1 ('CLIENT_CASE_'+$case)
+ }
+ Check 'scroll-missing' $server ($client.Replace($scroll,'')) $jip 1 'CLIENT_SCROLL_NATIVE_READBACK'
+ Check 'timer-missing' $server ($client.Replace($timer,'')) $jip 1 'CLIENT_PREVIEW_TIMER_NATIVE_READBACK'
+ Check 'timer-duplicate' $server ($client+$timer) $jip 1 'CLIENT_PREVIEW_TIMER_NATIVE_READBACK'
+ Check 'timer-not-scheduled' $server ($client.Replace('before_ms=33','before_ms=0')) $jip 1 'CLIENT_PREVIEW_TIMER_NATIVE_READBACK'
+ Check 'timer-not-cancelled' $server ($client.Replace('after_ms=-1','after_ms=33')) $jip 1 'CLIENT_PREVIEW_TIMER_NATIVE_READBACK'
+ Check 'scroll-wrong-height' $server ($client.Replace('height=3712','height=58')) $jip 1 'CLIENT_SCROLL_NATIVE_READBACK'
+ Check 'scroll-not-moving' $server ($client.Replace('down=58 bottom','down=0 bottom')) $jip 1 'CLIENT_SCROLL_NATIVE_READBACK'
+ Check 'scroll-not-clamped' $server ($client.Replace('top=0','top=1')) $jip 1 'CLIENT_SCROLL_NATIVE_READBACK'
+ Check 'scroll-descendant-not-moving' $server ($client.Replace('child_down=58','child_down=0')) $jip 1 'CLIENT_SCROLL_NATIVE_READBACK'
+ Check 'scroll-physical-claim' $server ($client.Replace('physical_seat_claim=0','physical_seat_claim=1')) $jip 1 'CLIENT_SCROLL_NATIVE_READBACK'
+ Check 'scroll-duplicate' $server ($client+$scroll) $jip 1 'CLIENT_SCROLL_NATIVE_READBACK'
+ Check 'scroll-native-endpoint-not-dip-height' $server ($client.Replace('max_px=4949.333','max_px=3712').Replace('bottom=4949.333','bottom=3712')) $jip 0 ''
+ Check 'scroll-endpoint-mismatch' $server ($client.Replace('max_px=4949.333','max_px=3712')) $jip 1 'CLIENT_SCROLL_NATIVE_READBACK'
+ Check 'scroll-normalized-not-at-bottom' $server ($client.Replace('normalized_bottom=1','normalized_bottom=0.9')) $jip 1 'CLIENT_SCROLL_NATIVE_READBACK'
+ Check 'scroll-normalized-repeat-drift' $server ($client.Replace('normalized_repeat=1','normalized_repeat=0.9')) $jip 1 'CLIENT_SCROLL_NATIVE_READBACK'
+ Check 'scroll-normalized-not-at-top' $server ($client.Replace('normalized_top=0','normalized_top=0.1')) $jip 1 'CLIENT_SCROLL_NATIVE_READBACK'
+ Check 'scroll-normalized-no-movement' $server ($client.Replace('normalized_down=0.012','normalized_down=0')) $jip 1 'CLIENT_SCROLL_NATIVE_READBACK'
  Check 'wrong-jip' $server $client ($jip.Replace('rule=JIP_CONFIRMED_ASSIGNMENT passed=1','rule=JIP_CONFIRMED_ASSIGNMENT passed=0')) 1 'JIP_CASE_JIP_CONFIRMED_ASSIGNMENT'
  Check 'missing-server-owner' ($server.Replace('player=2 failures=0 jip=1','player=2 failures=0 jip=0')) $client $jip 1 'SERVER_READBACK_1'
  Check 'stale-accepted' $server ($client.Replace('rule=STALE_REVISION_REJECTED passed=1','rule=STALE_REVISION_REJECTED passed=0')) $jip 1 'CLIENT_CASE_STALE_REVISION_REJECTED'
@@ -47,8 +73,8 @@ try{
  Check 'unfinished-jip' $server $client ($jip.Replace('Game destroyed.','')) 1 'JIP_STOPPED'
  Check 'shutdown-leaks' ($server+"`nSCRIPT (E): Leaked script instance") $client $jip 1 'SERVER_FULL_FATAL'
  Check 'wrong-cli' $server ($client.Replace('-aicfVehiclePresetClient 1','-aicfVehiclePresetClient 0')) $jip 1 'CLIENT_CLI'
- $filterNames=@('ALL_NATIVE_CATALOG','CIVILIAN_FILTER','CAR_CATEGORY_FILTER','FACTION_FILTER','EMPTY_FILTER_SAFE','EMPTY_SELECT_NO_RPC','FILTERED_PREFAB_MAPPING','LOAD_REVEALS_DRAFT')
- $filterClient=$client.Replace('[ROSTER_READY]','-aicfVehicleCatalogFilters 1'+"`n[ROSTER_READY]").Replace('checks=20','checks=28')+"`n"+(@($filterNames|ForEach-Object{"[VEHICLE_UI_CHECK] rule=$_ passed=1"}) -join "`n")
+ $filterNames=@('ALL_NATIVE_CATALOG','CIVILIAN_FILTER','CAR_CATEGORY_FILTER','FACTION_FILTER','EMPTY_FILTER_SAFE','EMPTY_CATALOG_CHANGE_NO_RPC','FILTERED_PREFAB_MAPPING','LOAD_REVEALS_DRAFT')
+ $filterClient=$client.Replace('[ROSTER_READY]','-aicfVehicleCatalogFilters 1'+"`n[ROSTER_READY]").Replace('checks=34','checks=42')+"`n"+(@($filterNames|ForEach-Object{"[VEHICLE_UI_CHECK] rule=$_ passed=1"}) -join "`n")
  $filterJIP=$jip.Replace('[ROSTER_READY]','-aicfVehicleCatalogFilters 1'+"`n[ROSTER_READY]").Replace('checks=3','checks=5')+"`n[VEHICLE_UI_CHECK] rule=JIP_CIVILIAN_AVAILABLE passed=1`n[VEHICLE_UI_CHECK] rule=JIP_FILTERED_SELECTION passed=1"
  $filterServer=$server.Replace('[ROSTER_READY]','-aicfVehicleCatalogFilters 1'+"`n[ROSTER_READY]")
  Check 'catalog-filters' $filterServer $filterClient $filterJIP 0 '' -Filters
@@ -56,7 +82,7 @@ try{
  Check 'missing-filter-load' $filterServer ($filterClient.Replace('rule=LOAD_REVEALS_DRAFT','rule=REMOVED')) $filterJIP 1 'FILTER_CASE_LOAD_REVEALS_DRAFT' -Filters
  Check 'filter-shutdown-leaks' ($filterServer+"`nSCRIPT (E): Leaked script instance") $filterClient $filterJIP 1 'SERVER_FULL_FATAL' -Filters
  $behaviorCases=@('BEHAVIOR_INVALID_DISTANCE_NO_RPC','BEHAVIOR_UI_CONTROLS','BEHAVIOR_SAVE_READBACK','BEHAVIOR_APPLY_READBACK','BEHAVIOR_LIBRARY_LOAD_READBACK','GC_NO_AUTHORITY_REJECTED')
- $behaviorClient=$client.Replace('[ROSTER_READY]','-aicfVehicleBehaviorReadback 1'+"`n[ROSTER_READY]").Replace('checks=20','checks=26')+"`n"+(@($behaviorCases|ForEach-Object{"[VEHICLE_UI_CHECK] rule=$_ passed=1"}) -join "`n")
+ $behaviorClient=$client.Replace('[ROSTER_READY]','-aicfVehicleBehaviorReadback 1'+"`n[ROSTER_READY]").Replace('checks=34','checks=40')+"`n"+(@($behaviorCases|ForEach-Object{"[VEHICLE_UI_CHECK] rule=$_ passed=1"}) -join "`n")
  $behaviorJIP=$jip.Replace('[ROSTER_READY]','-aicfVehicleBehaviorReadback 1'+"`n[ROSTER_READY]").Replace('checks=3','checks=6')+"`n[VEHICLE_UI_CHECK] rule=JIP_BEHAVIOR_CONFIRMED passed=1`n[VEHICLE_UI_CHECK] rule=JIP_BEHAVIOR_UI_READBACK passed=1"+"`n[VEHICLE_UI_CHECK] rule=GC_NO_AUTHORITY_REJECTED passed=1"
  $behaviorServer=$server.Replace('[ROSTER_READY]','-aicfVehicleBehaviorReadback 1'+"`n[ROSTER_READY]")+"`n[VEHICLE_UI_SERVER_BEHAVIOR_READBACK] player=1 valid=1 behavior=1 return_distance=437 schema=2 revision=1 jip=0`n[VEHICLE_UI_SERVER_BEHAVIOR_READBACK] player=2 valid=1 behavior=1 return_distance=437 schema=2 revision=1 jip=1"
  $gcClientMarker="`n[VEHICLE_UI_GC_AUTHORITY] jip=0 actual_server=0 prepared=1 register_denied=1 protect_denied=1 passed=1 entity=123 rpl=321 native_master=0 native_proxy=1 native_role=1"
@@ -79,7 +105,7 @@ try{
  Check 'behavior-server-changed-revision' ($behaviorServer.Replace('revision=1 jip=1','revision=2 jip=1')) $behaviorClient $behaviorJIP 1 'SERVER_BEHAVIOR_REVISION_CONTINUITY' -Behavior
  Check 'behavior-leaks-still-block' ($behaviorServer+"`nSCRIPT (E): Leaked script instance") $behaviorClient $behaviorJIP 1 'SERVER_FULL_FATAL' -Behavior
  Check 'behavior-cli-required' $server $behaviorClient $behaviorJIP 1 'SERVER_CLI' -Behavior
- $bothClient=$filterClient.Replace('-aicfVehicleCatalogFilters 1','-aicfVehicleCatalogFilters 1 -aicfVehicleBehaviorReadback 1').Replace('checks=28','checks=34')+"`n"+(@($behaviorCases|ForEach-Object{"[VEHICLE_UI_CHECK] rule=$_ passed=1"}) -join "`n")
+ $bothClient=$filterClient.Replace('-aicfVehicleCatalogFilters 1','-aicfVehicleCatalogFilters 1 -aicfVehicleBehaviorReadback 1').Replace('checks=42','checks=48')+"`n"+(@($behaviorCases|ForEach-Object{"[VEHICLE_UI_CHECK] rule=$_ passed=1"}) -join "`n")
  $bothJIP=$filterJIP.Replace('-aicfVehicleCatalogFilters 1','-aicfVehicleCatalogFilters 1 -aicfVehicleBehaviorReadback 1').Replace('checks=5','checks=8')+"`n[VEHICLE_UI_CHECK] rule=JIP_BEHAVIOR_CONFIRMED passed=1`n[VEHICLE_UI_CHECK] rule=JIP_BEHAVIOR_UI_READBACK passed=1"
  $bothServer=$behaviorServer.Replace('-aicfVehicleBehaviorReadback 1','-aicfVehicleCatalogFilters 1 -aicfVehicleBehaviorReadback 1')
  $bothClient+=$gcClientMarker

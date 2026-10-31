@@ -1,5 +1,79 @@
 // Hidden widget tree + настоящие owner RPC. Не открывает карту/окна,
 // не захватывает focus и не имитирует физический ввод.
+modded class AICF_VehiclePreviewInput
+{
+	protected bool m_bUIProbeHiddenInput;
+	override protected bool Ready()
+	{
+		// Только fixture: скрытый widget не получает focus/физический ввод.
+		// Проверяем регистрацию timer; подтверждение отмены ждёт следующий native tick.
+		if (m_bUIProbeHiddenInput)
+			return GetGame() && m_wTarget && m_Preview && m_wTarget.IsEnabledInHierarchy() && m_Preview.IsReady();
+		return super.Ready();
+	}
+	bool AICF_UIProbeTimer()
+	{
+		if (!m_wTarget || !m_Preview) return false;
+		m_bUIProbeHiddenInput = true;
+		RenderTargetWidget widget = m_wTarget;
+		ScriptCallQueue queue = GetGame().GetCallqueue();
+		bool started = OnMouseButtonDown(widget, 0, 0, SCR_EMouseButtons.LEFT);
+		int before = queue.GetRemainingTimeByName(this, "UpdateDrag");
+		bool timerOwned = started && m_bDragScheduled && m_DragQueue == queue && before > 0;
+		bool released = OnMouseButtonUp(widget, 0, 0, SCR_EMouseButtons.LEFT);
+		bool cancelled = released && !m_bDragScheduled && !m_DragQueue;
+		m_bUIProbeHiddenInput = false;
+		// RemoveByName вызывается внутри AICF_VehicleUITick той же queue.
+		// GetRemainingTimeByName в этом frame ещё может вернуть старую запись.
+		queue.CallLater(AICF_UIProbeVerifyTimer, 100, false, queue, timerOwned, cancelled, before);
+		return timerOwned && cancelled;
+	}
+	void AICF_UIProbeVerifyTimer(ScriptCallQueue queue, bool scheduled, bool released, int before)
+	{
+		int after = queue.GetRemainingTimeByName(this, "UpdateDrag");
+		bool cancelled = released && after <= 0;
+		Print(string.Format("[AICF][VEHICLE_UI_PREVIEW_TIMER] scheduled=%1 cancelled=%2 before_ms=%3 after_ms=%4 hidden_visibility_fixture_override=1 physical_input=0", scheduled, cancelled, before, after));
+	}
+	bool AICF_UIProbeBound(RenderTargetWidget widget, AICF_VehiclePreview preview)
+	{
+		return m_wTarget == widget && m_Preview == preview;
+	}
+	bool AICF_UIProbeDetached() { return !m_wTarget && !m_Preview && !m_bRotating && !m_bPanning; }
+}
+
+modded class AICF_VehiclePreview
+{
+	bool AICF_UIProbeInput(RenderTargetWidget widget)
+	{
+		return m_Input && m_Input.AICF_UIProbeBound(widget, this) && m_Input.AICF_UIProbeTimer();
+	}
+	bool AICF_UIProbeCamera()
+	{
+		if (!IsReady() || GetWorld() == GetGame().GetWorld()) return false;
+		BaseWorld world = GetWorld();
+		IEntity model = m_Model;
+		vector origin = model.GetOrigin();
+		vector before[4];
+		vector after[4];
+		world.GetCamera(0, before);
+		float fov = m_fFOV;
+		Rotate(30);
+		Zoom(-3);
+		world.GetCamera(0, after);
+		bool changed = vector.DistanceSq(before[2], after[2]) > 0.01 && m_fFOV == fov - 3;
+		bool local = GetWorld() == world && m_Model == model && model.GetOrigin() == origin && world != GetGame().GetWorld();
+		Rotate(-30);
+		Zoom(3);
+		return changed && local && m_fFOV == fov;
+	}
+	bool AICF_UIProbeClear()
+	{
+		AICF_VehiclePreviewInput input = m_Input;
+		Clear();
+		return input && input.AICF_UIProbeDetached() && !GetWorld() && !IsReady();
+	}
+}
+
 modded class AICF_FactionFleet
 {
 	// Private client-only test state; never touches the authoritative fleet.
@@ -130,6 +204,9 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 
 	void Build(Widget hidden, SCR_PlayerController player, bool jip, bool noRightsPassed)
 	{
+		// Геометрия реальна, но дерево остаётся невидимым и не получает focus.
+		FrameSlot.SetSize(hidden, 1280, 720);
+		hidden.Update();
 		m_Player = player;
 		m_bProbeJIP = jip;
 		string catalogFlag;
@@ -159,9 +236,22 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 
 	protected bool VisibleMatches(int source, int category)
 	{
-		if (m_aVisibleVehicles.IsEmpty()) return false;
+		if (m_aVisibleVehicles.Count() <= 1 || m_aVisibleVehicles[0] != -1) return false;
 		foreach (int index : m_aVisibleVehicles)
+		{
+			if (index == -1) continue;
 			if ((source > 0 && m_aCatalogSources[index] != source) || (category > 0 && m_aCatalogCategories[index] != category)) return false;
+		}
+		return true;
+	}
+
+	protected bool SelectProbePrefab()
+	{
+		int full = m_aPrefabs.Find(m_sProbePrefab);
+		int visible = m_aVisibleVehicles.Find(full);
+		if (full < 0 || visible <= 0) return false;
+		m_Catalog.SetCurrentItem(visible, false, false, false);
+		OnChanged(m_Catalog, visible);
 		return true;
 	}
 
@@ -219,7 +309,7 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 				Check("CONTEXT", slot == 0 && faction == "USSR");
 				if (m_bProbeCatalogFilters)
 				{
-					Check("ALL_NATIVE_CATALOG", m_aVisibleVehicles.Count() == m_aPrefabs.Count());
+					Check("ALL_NATIVE_CATALOG", m_aVisibleVehicles.Count() == m_aPrefabs.Count() + 1 && m_aVisibleVehicles[0] == -1);
 					Filter(AICF_EVehicleCatalogSource.CIVILIAN, AICF_EVehicleCatalogCategory.ALL);
 					Check("CIVILIAN_FILTER", VisibleMatches(AICF_EVehicleCatalogSource.CIVILIAN, 0));
 					Filter(AICF_EVehicleCatalogSource.CIVILIAN, AICF_EVehicleCatalogCategory.CARS);
@@ -227,10 +317,10 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 					Filter(AICF_EVehicleCatalogSource.FACTION, AICF_EVehicleCatalogCategory.ALL);
 					Check("FACTION_FILTER", VisibleMatches(AICF_EVehicleCatalogSource.FACTION, 0));
 					Filter(AICF_EVehicleCatalogSource.CIVILIAN, AICF_EVehicleCatalogCategory.ARMOR);
-					Check("EMPTY_FILTER_SAFE", m_aVisibleVehicles.IsEmpty() && SelectedPrefab().IsEmpty());
+					Check("EMPTY_FILTER_SAFE", m_aVisibleVehicles.Count() == 1 && m_aVisibleVehicles[0] == -1 && SelectedPrefab().IsEmpty());
 					int emptyToken = m_iToken;
-					Click("select");
-					Check("EMPTY_SELECT_NO_RPC", m_iToken == emptyToken && !m_bQueued && !m_bPending);
+					OnChanged(m_Catalog, 0);
+					Check("EMPTY_CATALOG_CHANGE_NO_RPC", m_iToken == emptyToken && !m_bQueued && !m_bPending && m_sQueuedSelection.IsEmpty());
 					Filter(AICF_EVehicleCatalogSource.CIVILIAN, AICF_EVehicleCatalogCategory.CARS);
 				}
 				int selected = -1;
@@ -247,11 +337,12 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 				m_sProbePrefab = m_aPrefabs[selected];
 				m_Catalog.SetCurrentItem(m_aVisibleVehicles.Find(selected), false, false, false);
 				if (m_bProbeCatalogFilters) Check("FILTERED_PREFAB_MAPPING", SelectedPrefab() == m_sProbePrefab);
-				Click("select");
+				OnChanged(m_Catalog, m_Catalog.GetCurrentIndex());
 				break;
 			case 1:
 				Check("SELECT_HANDLER", m_Player.AICF_VehiclePresetAccepted() && m_Draft && m_Draft.m_sPrefab == m_sProbePrefab);
 				if (!m_Draft) { Finish(); return; }
+				CheckModernPresentation();
 				Check("NATIVE_SEAT_LABELS", m_aSeatNames.Count() == m_Draft.m_aSeats.Count());
 				int driver = -1;
 				for (int seat; seat < m_Draft.m_aSeats.Count(); seat++)
@@ -261,8 +352,8 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 					if (parts[2].ToInt() == ECompartmentType.PILOT) driver = seat;
 					Check("NO_FAKE_TURRET_" + seat.ToString(), parts[2].ToInt() != ECompartmentType.TURRET);
 				}
-				Check("DRIVER_SEAT", driver >= 0 && driver < 8);
-				if (driver < 0 || driver >= 8) { Finish(); return; }
+				Check("DRIVER_SEAT", driver >= 0 && driver < m_aSeats.Count());
+				if (driver < 0 || driver >= m_aSeats.Count()) { Finish(); return; }
 				OnChanged(m_aSeats[driver], 1);
 				Check("ASSIGN_HANDLER", m_Draft.m_aMembers[driver] == 0);
 				m_wName.SetText("UI vehicle");
@@ -336,6 +427,128 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 		m_iProbeStep++;
 	}
 
+	protected void SyntheticSeatRows(int count, AICF_VehiclePreset original)
+	{
+		// Presentation stress only: не native compartments и никогда не RPC.
+		m_Draft = AICF_VehiclePreset.Decode(original.Encode());
+		m_Draft.m_aSeats.Clear();
+		m_Draft.m_aMembers.Clear();
+		m_aSeatNames.Clear();
+		for (int row; row < count; row++)
+		{
+			m_Draft.m_aSeats.Insert(string.Format("0:%1:%2", row, ECompartmentType.CARGO));
+			m_Draft.m_aMembers.Insert(-1);
+			m_aSeatNames.Insert("Presentation row " + (row + 1).ToString());
+		}
+		RenderSeats();
+		m_wRoot.Update();
+		m_wSeatScroll.Update();
+	}
+
+	protected void CheckModernPresentation()
+	{
+		AICF_VehiclePreset original = AICF_VehiclePreset.Decode(m_Draft.Encode());
+		array<string> originalNames = {};
+		originalNames.Copy(m_aSeatNames);
+		int token = m_iToken;
+		m_Catalog.SetCurrentItem(0, false, false, false);
+		OnChanged(m_Catalog, 0);
+		Check("CATALOG_SENTINEL_NO_RPC", m_iToken == token && !m_bPending && !m_bQueued && m_sQueuedSelection.IsEmpty() && m_Draft.m_sPrefab == original.m_sPrefab && SelectedPrefab() == original.m_sPrefab);
+		bool obsolete;
+		foreach (Widget button : m_aButtons)
+			if (button.GetName() == "previous" || button.GetName() == "prev" || button.GetName() == "next" || button.GetName() == "select") obsolete = true;
+		Check("NO_OBSOLETE_PAGE_SELECT_BUTTONS", !obsolete);
+
+		SCR_CampaignFaction faction = SCR_CampaignFaction.Cast(GetGame().GetFactionManager().GetFactionByKey(AICF_ContentProfile.GetActive().GetRuntimeFactionKey("USSR")));
+		AICF_VehiclePresetCatalog nativeCatalog = new AICF_VehiclePresetCatalog(faction);
+		string reason;
+		bool inspected = nativeCatalog.Inspect(original.m_sPrefab, reason);
+		array<int> required = {};
+		if (inspected)
+		{
+			array<BaseCompartmentSlot> nativeSeats = nativeCatalog.Seats();
+			for (int seat; seat < nativeSeats.Count(); seat++)
+			{
+				BaseCompartmentSlot nativeSeat = nativeSeats[seat];
+				if (nativeSeat.GetType() == ECompartmentType.PILOT || nativeSeat.GetType() == ECompartmentType.TURRET || nativeSeat.GetAttachedTurret()) required.Insert(seat);
+			}
+		}
+		bool mandatory = inspected && !required.IsEmpty() && required.Count() == m_aMandatorySeats.Count();
+		foreach (int requiredSeat : required)
+			if (!m_aMandatorySeats.Contains(requiredSeat)) mandatory = false;
+		nativeCatalog.Clear();
+		Check("NATIVE_MANDATORY_SEATS", mandatory);
+		Click("autoSeats");
+		array<int> ordered = {};
+		for (int member; member < AICF_Stage1Config.MAX_GROUP_SIZE; member++)
+			if (m_aActiveMembers.Contains(member)) ordered.Insert(member);
+		bool assigned = mandatory && ordered.Count() >= required.Count();
+		int next;
+		for (int mandatoryIndex; mandatoryIndex < m_Draft.m_aSeats.Count(); mandatoryIndex++)
+		{
+			if (!required.Contains(mandatoryIndex)) continue;
+			if (next >= ordered.Count() || m_Draft.m_aMembers[mandatoryIndex] != ordered[next]) assigned = false;
+			next++;
+		}
+		Check("AUTO_SEATS_MANDATORY_FIRST", assigned);
+		Check("AUTO_SEATS_NO_RPC", m_iToken == token && !m_bPending && !m_bQueued && m_sQueuedSelection.IsEmpty());
+
+		SyntheticSeatRows(24, original);
+		Check("SEAT_SCROLL_24_ROWS", m_aSeats.Count() == 24 && m_aSeatLabels.Count() == 24 && m_aSeatLabels[23].IsVisible() && m_aSeats[23].GetRootWidget().GetParent() == m_wSeatContent);
+		SyntheticSeatRows(AICF_VehiclePreset.MAX_SEATS, original);
+		Check("SEAT_SCROLL_64_ROWS", m_aSeats.Count() == 64 && m_aSeatLabels.Count() == 64 && m_aSeatLabels[63].IsVisible() && m_aSeats[63].GetRootWidget().GetParent() == m_wSeatContent);
+		Check("SEAT_SCROLL_CONTENT_HEIGHT", m_wSeatSize.IsHeightOverride() && m_wSeatSize.GetHeightOverride() == 64 * 58);
+		m_wSeatScroll.SetSliderPos(0, 0);
+		bool wheel = OnMouseWheel(m_wSeatScroll, 0, 0, -1);
+		float scrollX, down;
+		m_wSeatScroll.GetSliderPosPixels(scrollX, down);
+		float normalizedDown;
+		m_wSeatScroll.GetSliderPos(scrollX, normalizedDown);
+		OnMouseWheel(m_wSeatScroll, 0, 0, -10000);
+		float bottom;
+		m_wSeatScroll.GetSliderPosPixels(scrollX, bottom);
+		float normalizedBottom;
+		m_wSeatScroll.GetSliderPos(scrollX, normalizedBottom);
+		OnMouseWheel(m_wSeatScroll, 0, 0, -10000);
+		float clampedBottom;
+		m_wSeatScroll.GetSliderPosPixels(scrollX, clampedBottom);
+		float normalizedRepeat;
+		m_wSeatScroll.GetSliderPos(scrollX, normalizedRepeat);
+		OnMouseWheel(m_wSeatScroll, 0, 0, 10000);
+		float top;
+		m_wSeatScroll.GetSliderPosPixels(scrollX, top);
+		float normalizedTop;
+		m_wSeatScroll.GetSliderPos(scrollX, normalizedTop);
+		float contentWidth, contentPixels, viewportWidth, viewportPixels;
+		m_wSeatContent.GetScreenSize(contentWidth, contentPixels);
+		m_wSeatScroll.GetScreenSize(viewportWidth, viewportPixels);
+		// Native documented 0..1 endpoint is the oracle, not a DPI conversion.
+		m_wSeatScroll.SetSliderPos(0, 1);
+		float maximumPixels;
+		m_wSeatScroll.GetSliderPosPixels(scrollX, maximumPixels);
+		bool normalizedBound = normalizedDown > 0 && normalizedDown <= 1 && normalizedBottom == 1 && normalizedRepeat == 1 && normalizedTop == 0;
+		bool pixelBound = maximumPixels > 0 && Math.AbsFloat(bottom - maximumPixels) <= 0.01;
+		bool movement = wheel && down > 0 && bottom >= down && bottom == clampedBottom && top == 0;
+		Check("SEAT_SCROLL_WHEEL_CLAMPED", movement && normalizedBound && pixelBound);
+		m_wSeatScroll.SetSliderPos(0, 0);
+		bool descendant = OnMouseWheel(m_aSeats[63].GetRootWidget(), 0, 0, -1);
+		float childDown;
+		m_wSeatScroll.GetSliderPosPixels(scrollX, childDown);
+		Check("SEAT_SCROLL_DESCENDANT_WHEEL", descendant && childDown > 0 && !OnMouseWheel(m_wPreview, 0, 0, -1));
+		string scrollSample = string.Format("[AICF][VEHICLE_UI_SCROLL_SAMPLE] rows=64 height=%1 content_px=%2 viewport_px=%3 max_px=%4 down=%5 bottom=%6 top=%7 child_down=%8", m_wSeatSize.GetHeightOverride(), contentPixels, viewportPixels, maximumPixels, down, bottom, top, childDown);
+		scrollSample += string.Format(" normalized_down=%1 normalized_bottom=%2 normalized_repeat=%3 normalized_top=%4 synthetic_presentation=1 rpc_sent=0 physical_seat_claim=0", normalizedDown, normalizedBottom, normalizedRepeat, normalizedTop);
+		Print(scrollSample);
+		m_Draft = original;
+		m_aSeatNames.Copy(originalNames);
+		RenderSeats();
+		RefreshPreview();
+		Check("PREVIEW_INPUT_ATTACHED", m_Preview && m_Preview.AICF_UIProbeInput(m_wPreview));
+		Check("PREVIEW_CURSOR_ENABLED", (m_wPreview.GetFlags() & WidgetFlags.IGNORE_CURSOR) == 0);
+		Check("PREVIEW_ROTATE_ZOOM_LOCAL", m_Preview && m_Preview.AICF_UIProbeCamera());
+		Check("PREVIEW_INPUT_CLEANUP", m_Preview && m_Preview.AICF_UIProbeClear());
+		RefreshPreview();
+	}
+
 	protected void CheckPresentation()
 	{
 		RefreshPreview();
@@ -360,12 +573,13 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 				for (int index; index < m_aPrefabs.Count(); index++)
 					if (m_aPrefabs[index].Contains("UAZ469_uncovered_CIV_blue.et")) { m_sProbePrefab = m_aPrefabs[index]; m_Catalog.SetCurrentItem(m_aVisibleVehicles.Find(index), false, false, false); }
 				Check("GROUP10_READY", m_iSize == 10 && !m_sProbePrefab.IsEmpty());
-				Click("select");
+				SelectProbePrefab();
 				break;
 			case 1:
 				Check("UAZ_SELECTED", m_Draft && m_Draft.m_sPrefab == m_sProbePrefab);
 				if (!m_Draft) { Finish(); return; }
 				CheckPresentation();
+				CheckModernPresentation();
 				for (int seat; seat < m_Draft.m_aSeats.Count(); seat++)
 				{
 					array<string> parts = {};
@@ -376,29 +590,44 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 				Click("reset");
 				break;
 			case 2:
-				Check("AUTOMATIC_PRESERVES_UNSAVED_SEATS", m_Draft && m_Draft.m_aMembers.Contains(9) && m_wName.GetText() == "Nonprefix driver" && assigned.IsEmpty() && m_aSeatLabels[0].IsVisible());
-				Click("apply");
+				bool resetDraft = m_Player.AICF_VehiclePresetAccepted() && !m_Draft && assigned.IsEmpty() && m_iConfirmation == 0;
+				bool resetFields = m_aSeats.IsEmpty() && m_aSeatLabels.IsEmpty() && m_wName.GetText().IsEmpty() && SelectedPrefab().IsEmpty();
+				bool resetPreview = m_Preview && !m_Preview.IsReady() && !m_wPreview.IsVisible();
+				Check("RESET_CLEARS_DRAFT_SEATS_PREVIEW", resetDraft && resetFields && resetPreview);
+				SelectProbePrefab();
 				break;
 			case 3:
+				Check("RESET_RESELECT_RESTORES_NATIVE_SEATS", m_Player.AICF_VehiclePresetAccepted() && m_Draft && m_Draft.m_sPrefab == m_sProbePrefab && !m_aSeats.IsEmpty() && m_aSeatLabels.Count() == m_Draft.m_aSeats.Count());
+				if (!m_Draft) { Finish(); return; }
+				for (int restoredSeat; restoredSeat < m_Draft.m_aSeats.Count(); restoredSeat++)
+				{
+					array<string> restoredParts = {};
+					m_Draft.m_aSeats[restoredSeat].Split(":", restoredParts, false);
+					if (restoredParts[2].ToInt() == ECompartmentType.PILOT) OnChanged(m_aSeats[restoredSeat], 10);
+				}
+				m_wName.SetText("Nonprefix driver");
+				Click("apply");
+				break;
+			case 4:
 				Check("CONFIRMATION_WITHOUT_SIDE_EFFECTS", !m_Player.AICF_VehiclePresetAccepted() && m_iConfirmation > 0 && m_iSize == 10 && m_aActiveMembers.Count() == 10 && assigned.IsEmpty());
 				Click("cancelCrew");
 				break;
-			case 4:
+			case 5:
 				Check("CANCEL_PRESERVES_SQUAD_AND_DRAFT", m_iConfirmation == 0 && m_iSize == 10 && m_aActiveMembers.Count() == 10 && assigned.IsEmpty() && m_Draft.m_aMembers.Contains(9));
 				Click("apply");
 				break;
-			case 5:
+			case 6:
 				Check("CONFIRM_AGAIN", m_iConfirmation > 0 && m_wConfirmation.IsVisible());
 				Request(AICF_EVehiclePresetOperation.CONFIRM_CREW, (m_iConfirmation + 1).ToString());
 				break;
-			case 6:
+			case 7:
 				Check("WRONG_CONFIRMATION_REFUSED", !m_Player.AICF_VehiclePresetAccepted() && m_iConfirmation == 0 && m_iSize == 10 && assigned.IsEmpty());
 				Click("apply");
 				break;
-			case 7:
+			case 8:
 				Click("confirmCrew");
 				break;
-			case 8:
+			case 9:
 				AICF_VehiclePreset applied = AICF_VehiclePreset.Decode(assigned);
 				Check("CONFIRMED_10_TO_1", m_Player.AICF_VehiclePresetAccepted() && m_iConfirmation == 0 && m_iSize == 1 && m_aActiveMembers.Count() == 1 && applied && applied.m_aMembers.Contains(0) && !applied.m_aMembers.Contains(9));
 				Finish();

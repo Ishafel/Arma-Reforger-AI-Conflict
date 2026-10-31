@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Изменить окно пресетов отряда, прокрутку мест, авторассадку и вращение техники | [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md), проверки нового UI в [TESTING.md](TESTING.md) |
 | Продолжить #78 после передачи draft PR и выключения компьютера | [ISSUE78_STATUS.md](ISSUE78_STATUS.md), итоговый комментарий в issue и точные manifests |
 | Разделить native stock и AICF quotas, проверить full basket/catalog и позднюю активацию техники | [AI_QUOTAS.md](AI_QUOTAS.md), текущая реализация/admission и отдельные обязательные native pressure gates |
 | Воспроизвести human Catalog/FIFO, full-basket отказ и покупку пустой машины при полной character квоте | [AI_QUOTA_CATALOG.md](AI_QUOTA_CATALOG.md), public separate-role runner, native proof и строгие полные log audits |

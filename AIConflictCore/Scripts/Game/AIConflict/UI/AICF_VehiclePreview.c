@@ -2,6 +2,22 @@
 class AICF_VehiclePreview : AICF_LoadoutPreview
 {
 	protected ResourceName m_sPrefab;
+	protected ref AICF_VehiclePreviewInput m_Input;
+
+	// Подключать после BuildVehicle/SetWorld. Повторный refresh той же модели
+	// не прерывает drag; новая модель получает новый input scope.
+	void AttachInput(RenderTargetWidget widget)
+	{
+		if (!m_Input) m_Input = new AICF_VehiclePreviewInput();
+		m_Input.Attach(widget, this);
+	}
+
+	override void Clear()
+	{
+		if (m_Input) m_Input.Detach();
+		m_sPrefab = ResourceName.Empty;
+		super.Clear();
+	}
 
 	bool BuildVehicle(ResourceName prefab)
 	{

@@ -17,6 +17,7 @@ class AICF_VehiclePresetViewer
 	int m_iSlot;
 	ref AICF_VehiclePreset m_Draft;
 	string m_sSeatNames;
+	ref array<int> m_aMandatorySeats = {};
 	ref AICF_VehicleCrewPlan m_Plan;
 	int m_iConfirmation;
 }
@@ -74,7 +75,13 @@ class AICF_VehiclePresetService
 		else if (operation == AICF_EVehiclePresetOperation.RESET)
 		{
 			accepted = slot.SetVehiclePreset(null, revision);
-			if (accepted) reason = "AUTOMATIC_POLICY_RESTORED";
+			if (accepted)
+			{
+				viewer.m_Draft = null;
+				viewer.m_sSeatNames = "";
+				viewer.m_aMandatorySeats.Clear();
+				reason = "AUTOMATIC_POLICY_RESTORED";
+			}
 		}
 		else if (operation == AICF_EVehiclePresetOperation.LOAD || operation == AICF_EVehiclePresetOperation.DELETE)
 		{
@@ -135,7 +142,19 @@ class AICF_VehiclePresetService
 			}
 		}
 		string presentationReason;
-		if (viewer.m_Draft && catalog.Inspect(viewer.m_Draft.m_sPrefab, presentationReason)) viewer.m_sSeatNames = catalog.SeatNames();
+		viewer.m_sSeatNames = "";
+		viewer.m_aMandatorySeats.Clear();
+		if (viewer.m_Draft && catalog.Inspect(viewer.m_Draft.m_sPrefab, presentationReason))
+		{
+			viewer.m_sSeatNames = catalog.SeatNames();
+			array<BaseCompartmentSlot> seats = catalog.Seats();
+			for (int seatIndex; seatIndex < seats.Count(); seatIndex++)
+			{
+				BaseCompartmentSlot seat = seats[seatIndex];
+				if (seat.GetType() == ECompartmentType.PILOT || seat.GetType() == ECompartmentType.TURRET || seat.GetAttachedTurret())
+					viewer.m_aMandatorySeats.Insert(seatIndex);
+			}
+		}
 		// Presentation не подменяет результат последней операции.
 		catalog.Clear();
 		Publish(viewer, slot, faction, catalog);
@@ -156,7 +175,7 @@ class AICF_VehiclePresetService
 		foreach (AICF_VehiclePresetViewer viewer : m_aViewers)
 			if (viewer.m_Player == player)
 			{
-				if (viewer.m_iSlot != slotId) { viewer.m_Draft = null; viewer.m_sSeatNames = ""; viewer.m_Plan = null; viewer.m_iConfirmation = 0; viewer.m_iSlot = slotId; }
+				if (viewer.m_iSlot != slotId) { viewer.m_Draft = null; viewer.m_sSeatNames = ""; viewer.m_aMandatorySeats.Clear(); viewer.m_Plan = null; viewer.m_iConfirmation = 0; viewer.m_iSlot = slotId; }
 				return viewer;
 			}
 		AICF_VehiclePresetViewer created = new AICF_VehiclePresetViewer();
@@ -190,6 +209,7 @@ class AICF_VehiclePresetService
 		json.WriteValue("draft", draft);
 		json.WriteValue("assigned", slot.GetVehiclePresetData());
 		json.WriteValue("seatNames", viewer.m_sSeatNames);
+		json.WriteValue("mandatorySeats", viewer.m_aMandatorySeats);
 		json.WriteValue("catalog", catalog.List());
 		json.WriteValue("library", m_Store.List(AICF_ContentProfile.GetActive().GetProfileKey(), AICF_ContentProfile.GetActive().GetStableFactionKey(faction.GetFactionKey())));
 		viewer.m_Player.AICF_PublishVehiclePresetView(json.SaveToString());

@@ -1,5 +1,71 @@
 # Проверки и baseline
 
+## Окна пресетов отряда — 31.10.2026
+
+Отдельная ветка `codex/ui-preset-reformat` от опубликованного `c5ccf6e`.
+Старые четыре unit-type controls заменены двумя входами в пресеты; backend
+UnitType и семь тел методов отправки/декодирования команд сохранены.
+SELECT вызывается изменением каталога, последняя модель ожидает свободного RPC;
+captured revision/generation запрещают перенос выбора на новую incarnation.
+Подтверждение состава обрабатывается до gate ожидающего выбора модели.
+Список мест — ScrollLayoutWidget до64 строк, без страниц и отдельного Select.
+AutoAssign меняет только draft, RESET очищает binding/draft/места/preview.
+
+Профильный offline union — **21 уникальная проверка PASS** (20 UI и canonical
+crew fixture). Первый общий
+`final-affected` дал18/19: `Test-LoadoutLibraryContracts` получил Windows
+AccessDenied при создании временной junction. Unchanged повтор с нужными
+правами `library-final-elevated` — PASS. Изменённые позднее editor/input/log
+контракты повторены в `nativefix-targeted`, `timer-proof-auditors` и
+`publiccallback-final-targeted`. Actual-source editor31/9 unsafe,
+seat assignment48/3 unsafe и input lifecycle26/4 unsafe; все эти targeted
+replay выполнены также в обеих PowerShell-средах. Последний общий
+All269 относится к предыдущему срезу: **All273 нового UI NOT RUN**.
+
+Последний production WB Stock/RHS/ArlandWCSRHS — **3/3 compile PASS**,
+native0/fatal0/validation, source378 SHA drift0, actual97917 CLOSED0.
+Resource50/52/78 — отдельный strict FAIL. Evidence:
+`.codex-runtime/ui-preset-reformat/production-wb-publiccallback-final/`.
+
+Первые native попытки сохранены: v1 —42 UI cases, затем VM при повторном
+destructor Remove; v2 WB — неверное имя аргумента override; v3 WB — reserved
+имя переменной в fixture; v4 — private/protected ByName callback; v5 — неверная
+проверка немедленного GetRemainingTime внутри того же queue tick. Own scheduled
+flag/cached queue, idempotent detach и public callback исправлены; v6 сохраняет
+отдельный post-tick native readback timer33→−1. Во v5 source уже не имел VM:
+все3 native0/stopped/fatal0, но public auditor exit1/42 cases с1 FAIL.
+Эти FAIL не вырезаны и не выдаются за PASS.
+
+Native v6 — **42/42 client +5/5 JIP**, public auditor0, все3 native0/stopped,
+full sibling fatal0; scheduled1/cancelled1, timer33→−1 после следующего tick.
+Strict Error32/158/158 сохраняется отдельно FAIL. Полные logs/manifests/exits —
+`ui-preset-reformat-20261031/native-v6/`.
+Первый crew-v1 имеет30/30 UI и9 ARRIVED, но terminal TIMEOUT: purchase/exactdriver
+не подтверждены. Его отдельный state/coordinator не входит в canonical quota
+ownership; точный подguard HOLD_UNSAFE лог не раскрывает. Crew-v2 завершился
+с GROUP10_CREATED FAIL: INFANTRY GetDeploymentSize возвращает1 при desired10.
+Crew-v3 на исправленной canonical fixture: quota_slot_current1,
+managed_lookup_current1/coordinator_current1, initial10 через MOTORIZED_LIGHT,
+после native READY профиль INFANTRY восстановлен до coordinator. **30/30 UI PASS**,
+девять distinct ARRIVED/kit unchanged, native0/0/stopped2/fullfatal0, но
+**server7checks/1FAIL, TIMEOUT**: QUOTA_WAIT → ACQUISITION_STAGING_HOLD_UNSAFE,
+purchase0/exact driver не подтверждён. Public auditor1; strict Error30/158 FAIL.
+Owner repair не устранил HOLD_UNSAFE и не объявляется его доказанной причиной.
+Это новый сохранённый runtime blocker; guards, deadlines и success criteria
+не ослаблялись. Точный подguard требует отдельного decision witness.
+Evidence `crew-v1|v2|v3/`; последняя fixture compiled в native-v8.
+Синтетические24/64 UI rows — проверка presentation capacity, не утверждение
+о64 compartments реальной машины. Прокрутка проверяется по native endpoint и
+нормализованным0..1; screen pixels не сравниваются с workspace units.
+Scoped fixture override только hidden visibility позволяет вызвать настоящий
+handler/timer без focus и физического ввода. Внешний вид, clipping и управление
+мышью игроком остаются **NOT RUN**; прежние native/resource blockers #78 сохраняются.
+
+Команды/evidence нового среза: `.codex-runtime/ui-preset-reformat-20261031/`:
+`Invoke-AICFChecks.ps1 -Name <affected>`, `Prepare-UIStage.ps1 -NativeRun native-v6`,
+отдельные `Run-UIRole.ps1 -Role Server|Client|JIP -NativeRun native-v6 -SourceRun native-v6`,
+`Collect-UIRun.ps1 -NativeRun native-v6`. Runtime использует только canonical launcher.
+
 ## Текущий срез r34 — 31.10.2026
 
 **269/269 PASS**, collector0/exact unique union/Logistics1/1038sourceSHA0.

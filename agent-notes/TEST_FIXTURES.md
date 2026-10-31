@@ -330,9 +330,15 @@ receipts из полных stopped logs, а не только CHECK строки
 
 `AICF_VehicleCrewReturnProbe.c` вместе с `AICF_VehiclePresetClientProbe.c` в
 isolated Core, `-aicfVehicleCrewReturnProbe 1 -aicfVehiclePresetClient 1` на обоих
-peers. Отдельный roster10, сохранение только позиции9, настоящий owner RPC,
-Automatic сохраняет несохранённую рассадку, Apply → Cancel → Apply → wrong token
-→ Apply → Confirm. До подтверждения нет сокращения. Hidden native controls
+peers. Штатный USSR slot0 получает initial roster10 через MOTORIZED_LIGHT;
+после native READY fixture восстанавливает INFANTRY до первого coordinator tick.
+Spawn/registration/квоты/readiness остаются у штатного lifecycle, отдельный
+state/coordinator больше не создаётся. Player point hold защищает confirmation
+от AI retarget; после сокращения дальний приказ задаётся до coordinator.
+Это controlled free initial deployment, не доказательство оплаченного найма.
+Сохранение только позиции9, настоящий owner RPC,
+RESET очищает черновик/места/preview, повторный выбор модели сразу открывает места;
+Apply → Cancel → Apply → wrong token → Apply → Confirm. До подтверждения нет сокращения. Hidden native controls
 проверяют preview private world, localization, hover и native slider1..10 без
 focus/input/GUI. Server проверяет exact actor/role remap, неизменный inventory,
 9 managed returns и реальную ходьбу с40m до safe point, затем exact driver в UAZ

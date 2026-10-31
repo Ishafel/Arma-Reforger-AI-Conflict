@@ -1,5 +1,28 @@
 # Состояние #78 — 31.10.2026
 
+## Локальная переработка UI после проверки игроком
+
+Ветка `codex/ui-preset-reformat` от `c5ccf6e`; новый UI не входит в ранее
+опубликованный PR79. Вместо четырёх unit-type кнопок — пресеты пехоты/техники;
+выбор модели сразу открывает draft, места прокручиваются без страниц,
+AutoAssign и RESET разделены, preview вращается/приближается.
+
+Профильный union21 PASS, All273 NOT RUN; последний production WB3 compilePASS,
+resources50/52/78 FAIL. Native UI42+JIP5/publicaudit0, native0/0/0/stopped3,
+fullfatal0, strict Error32/158/158 FAIL. Повторный crew —30/30 UI/9 ARRIVED,
+canonical owner predicates1, но server TIMEOUT/покупка0/exactdriver не подтверждён:
+QUOTA_WAIT → `ACQUISITION_STAGING_HOLD_UNSAFE`. Public audit1; native0/0/stopped2/
+fullfatal0, strict Error30/158 FAIL. Исправление ownership тестовой сцены не
+устранило отказ, точный подguard ещё не доказан. Этот blocker сохраняется
+дополнительно к прежним failures; готовность/закрытие issue не заявляются.
+
+Fixture-free Vanilla пакет:403 exact ZIP entries/production390/7own RDB,
+1382813bytes, SHA256 `E8302FB7B1BE2C998C4DE2E70D5B3180B736DFCE8B31573519C8BF7B2FCF4A12`.
+`Start-Playtest.ps1` по умолчанию Stock/Arland/USSR. Визуальная проверка нового
+окна и физический ввод игроком NOT RUN. Evidence/report:
+`.codex-runtime/ui-preset-reformat-20261031/REPORT.md`; полный новый срез —
+[TESTING.md](TESTING.md#окна-пресетов-отряда--31102026).
+
 ## Текущий срез r33/r34 для проверки игроком
 
 Issue OPEN, PR79 draft/`Refs #78`. Код сохранён отдельными коммитами:

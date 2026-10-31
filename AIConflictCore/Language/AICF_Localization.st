@@ -2173,8 +2173,8 @@ StringTable
 		CustomStringTableItem "{A1CF19090000013C}"
 		{
 			Id "AICF_UI_HOW_TO_USE_SELECT_GROUP_CONFIGURE_ROLE_TYP_201828d4"
-			Target_en_us "HOW TO USE // SELECT GROUP   CONFIGURE ROLE / TYPE / NEXT SIZE   ISSUE TARGET"
-			Target_ru_ru "ВЫБЕРИТЕ ОТРЯД   НАСТРОЙТЕ РОЛЬ / ТИП / СОСТАВ   УКАЖИТЕ ЦЕЛЬ"
+			Target_en_us "Select a squad, configure its role, size and presets, then issue an order."
+			Target_ru_ru "Выберите отряд, настройте роль, состав и пресеты, затем отдайте приказ."
 		}
 		CustomStringTableItem "{A1CF19090000013D}"
 		{
@@ -3991,8 +3991,8 @@ StringTable
 		CustomStringTableItem "{A1CF261025780005}"
 		{
 			Id "AICF_UI_VehicleReset"
-			Target_en_us "Automatic"
-			Target_ru_ru "Автоматика"
+			Target_en_us "Remove preset"
+			Target_ru_ru "Снять пресет"
 		}
 		CustomStringTableItem "{A1CF261025780006}"
 		{
@@ -4063,8 +4063,8 @@ StringTable
 		CustomStringTableItem "{A1CF261025780025}"
 		{
 			Id "AICF_UI_VehicleAutomatic"
-			Target_en_us "Ordinary vehicle policy is active."
-			Target_ru_ru "Включена обычная политика техники."
+			Target_en_us "Vehicle preset removed. Ordinary vehicle policy is active."
+			Target_ru_ru "Пресет техники снят. Включена обычная политика техники."
 		}
 		CustomStringTableItem "{A1CF261025780026}"
 		{
@@ -4288,6 +4288,47 @@ StringTable
 			Target_en_us "Select vehicle behavior and enter a whole return distance from 50 to 1000 metres."
 			Target_ru_ru "Выберите поведение машины и задайте целый порог возврата от 50 до 1000 метров."
 		}
-
+		CustomStringTableItem "{A1CF261031780001}"
+		{
+			Id "AICF_UI_CommandPresets"
+			Target_en_us "Squad presets"
+			Target_ru_ru "Пресеты отряда"
+		}
+		CustomStringTableItem "{A1CF261031780002}"
+		{
+			Id "AICF_UI_CommandInfantryPreset"
+			Target_en_us "Infantry preset"
+			Target_ru_ru "Пресет пехоты"
+		}
+		CustomStringTableItem "{A1CF261031780003}"
+		{
+			Id "AICF_UI_CommandVehiclePreset"
+			Target_en_us "Vehicle preset"
+			Target_ru_ru "Пресет техники"
+		}
+		CustomStringTableItem "{A1CF261031780004}"
+		{
+			Id "AICF_UI_VehicleAutoSeats"
+			Target_en_us "Assign seats automatically"
+			Target_ru_ru "Рассадить автоматически"
+		}
+		CustomStringTableItem "{A1CF261031780005}"
+		{
+			Id "AICF_UI_VehicleAutoSeatsReady"
+			Target_en_us "Seats assigned in the draft. Review the squad and Apply to use this preset."
+			Target_ru_ru "Места назначены в черновике. Проверьте состав и примените пресет."
+		}
+		CustomStringTableItem "{A1CF261031780006}"
+		{
+			Id "AICF_UI_VehicleAutoSeatsFailed"
+			Target_en_us "Select a vehicle first. Automatic assignment requires enough active members for every mandatory crew seat."
+			Target_ru_ru "Сначала выберите машину. Для авторассадки нужны действующие бойцы на все обязательные места экипажа."
+		}
+		CustomStringTableItem "{A1CF261031780007}"
+		{
+			Id "AICF_UI_VehiclePreviewControls"
+			Target_en_us "Drag: rotate. Wheel: zoom. Middle drag: pan."
+			Target_ru_ru "ЛКМ: вращение. Колесо: масштаб. СКМ: сдвиг."
+		}
 	}
 }

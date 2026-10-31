@@ -32,7 +32,7 @@ Require ((Body $model 'ValidateShape') -match '!ValidBehavior\(m_iBehavior, m_iR
 $read=Body $editor 'ReadBehavior'
 Require ($read -match 'returnDistance.ToString\(\) != value' -and $read -match '!AICF_VehiclePreset.ValidBehavior\(behavior, returnDistance\)') 'UI_REJECTS_NONCANONICAL_AND_OUT_OF_RANGE_VALUES'
 $click=Body $editor 'OnClick'
-Require ([regex]::Matches($click,'!ReadBehavior\(\)').Count -eq 2 -and $click -match 'm_bPreserveBehaviorOnSelect = true') 'SAVE_APPLY_AND_MODEL_SELECTION_READ_CURRENT_INPUT'
+Require ($click -match '!ReadBehavior\(\)' -and (Body $editor 'SendSelection') -match '!ReadBehavior\(\)' -and (Body $editor 'SendSelection') -match 'm_bPreserveBehaviorOnSelect = true') 'SAVE_APPLY_AND_MODEL_SELECTION_READ_CURRENT_INPUT'
 $refresh=Body $editor 'Refresh'
 Require ($refresh -match 'm_bPreserveBehaviorOnSelect && m_Player.AICF_VehiclePresetAccepted\(\)' -and $refresh -match 'm_Draft.m_iBehavior = m_iSelectedBehavior' -and $refresh -match 'm_Draft.m_iReturnDistance = m_iSelectedReturnDistance') 'SELECT_PRESERVES_UNSAVED_BEHAVIOR_AFTER_ACCEPTANCE'
 Require ((Body $editor 'RenderSeats') -notmatch 'm_wReturnDistance.SetText|RenderBehavior\(') 'PERIODIC_REFRESH_DOES_NOT_OVERWRITE_TYPED_DISTANCE'

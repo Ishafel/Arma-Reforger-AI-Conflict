@@ -34,16 +34,26 @@ foreach($case in @('NO_FACTION_REJECTED','ALPHA_VEHICLE_FORM','CONTEXT','UAZ_WHI
  $found=@([regex]::Matches($client,'\[VEHICLE_UI_CHECK\] rule='+$case+' passed=1'))
  if($found.Count -ne 1){$failures.Add('CLIENT_CASE_'+$case)}
 }
+$modernCases=@('CATALOG_SENTINEL_NO_RPC','NO_OBSOLETE_PAGE_SELECT_BUTTONS','NATIVE_MANDATORY_SEATS','AUTO_SEATS_MANDATORY_FIRST','AUTO_SEATS_NO_RPC','SEAT_SCROLL_24_ROWS','SEAT_SCROLL_64_ROWS','SEAT_SCROLL_CONTENT_HEIGHT','SEAT_SCROLL_WHEEL_CLAMPED','SEAT_SCROLL_DESCENDANT_WHEEL','PREVIEW_INPUT_ATTACHED','PREVIEW_CURSOR_ENABLED','PREVIEW_ROTATE_ZOOM_LOCAL','PREVIEW_INPUT_CLEANUP')
+foreach($case in $modernCases){
+ if(@([regex]::Matches($client,'\[VEHICLE_UI_CHECK\] rule='+$case+' passed=1')).Count -ne 1){$failures.Add('CLIENT_CASE_'+$case)}
+}
+$scroll=@([regex]::Matches($client,'\[VEHICLE_UI_SCROLL_SAMPLE\] rows=64 height=([0-9.]+) content_px=([0-9.]+) viewport_px=([0-9.]+) max_px=([0-9.]+) down=([0-9.]+) bottom=([0-9.]+) top=([0-9.]+) child_down=([0-9.]+) normalized_down=([0-9.]+) normalized_bottom=([0-9.]+) normalized_repeat=([0-9.]+) normalized_top=([0-9.]+) synthetic_presentation=1 rpc_sent=0 physical_seat_claim=0'))
+if($scroll.Count -ne 1 -or @([regex]::Matches($client,'\[VEHICLE_UI_SCROLL_SAMPLE\]')).Count -ne 1){$failures.Add('CLIENT_SCROLL_NATIVE_READBACK')}
+else{
+  $values=@(1..12|ForEach-Object{[double]::Parse($scroll[0].Groups[$_].Value,[Globalization.CultureInfo]::InvariantCulture)})
+ if($values[0] -ne 3712 -or $values[3] -le 0 -or $values[4] -le 0 -or $values[4] -gt $values[3] -or [Math]::Abs($values[5]-$values[3]) -gt 0.01 -or [Math]::Abs($values[6]) -gt 0.01 -or $values[7] -le 0 -or $values[7] -gt $values[3] -or $values[8] -le 0 -or $values[8] -gt 1 -or $values[9] -ne 1 -or $values[10] -ne 1 -or $values[11] -ne 0){$failures.Add('CLIENT_SCROLL_NATIVE_READBACK')}
+}
 foreach($case in @('ALPHA_VEHICLE_FORM','JIP_CONFIRMED_ASSIGNMENT','JIP_STABLE_SLOT')){
  if(@([regex]::Matches($jip,'\[VEHICLE_UI_CHECK\] rule='+$case+' passed=1')).Count -ne 1){$failures.Add('JIP_CASE_'+$case)}
 }
 if(($client+"`n"+$jip) -match '\[VEHICLE_UI_CHECK\].*passed=0|VEHICLE_UI_TIMEOUT'){$failures.Add('FAILED_CASE')}
-$clientChecks=20
+$clientChecks=20+$modernCases.Count
 $jipChecks=3
 if($CatalogFilters){
- $clientChecks=28
+ $clientChecks=28+$modernCases.Count
  $jipChecks=5
- foreach($case in @('ALL_NATIVE_CATALOG','CIVILIAN_FILTER','CAR_CATEGORY_FILTER','FACTION_FILTER','EMPTY_FILTER_SAFE','EMPTY_SELECT_NO_RPC','FILTERED_PREFAB_MAPPING','LOAD_REVEALS_DRAFT')){
+ foreach($case in @('ALL_NATIVE_CATALOG','CIVILIAN_FILTER','CAR_CATEGORY_FILTER','FACTION_FILTER','EMPTY_FILTER_SAFE','EMPTY_CATALOG_CHANGE_NO_RPC','FILTERED_PREFAB_MAPPING','LOAD_REVEALS_DRAFT')){
   if(@([regex]::Matches($client,'\[VEHICLE_UI_CHECK\] rule='+$case+' passed=1')).Count -ne 1){$failures.Add('FILTER_CASE_'+$case)}
  }
  foreach($case in @('JIP_CIVILIAN_AVAILABLE','JIP_FILTERED_SELECTION')){
@@ -86,6 +96,9 @@ if($BehaviorSettings){
 if(@([regex]::Matches($client,'\[VEHICLE_UI_DONE\] checks='+$clientChecks+' failures=0 jip=0')).Count -ne 1){$failures.Add('CLIENT_COMPLETION')}
 if(@([regex]::Matches($jip,'\[VEHICLE_UI_DONE\] checks='+$jipChecks+' failures=0 jip=1')).Count -ne 1){$failures.Add('JIP_COMPLETION')}
 foreach($late in @('0','1')){if(@([regex]::Matches($server,'\[VEHICLE_UI_SERVER_READBACK\] player=\d+ failures=0 jip='+$late)).Count -ne 1){$failures.Add('SERVER_READBACK_'+$late)}}
+$timer=@([regex]::Matches($client,'\[VEHICLE_UI_PREVIEW_TIMER\] scheduled=1 cancelled=1 before_ms=(\d+) after_ms=(-?\d+) hidden_visibility_fixture_override=1 physical_input=0'))
+if($timer.Count -ne 1 -or @([regex]::Matches($client,'\[VEHICLE_UI_PREVIEW_TIMER\]')).Count -ne 1){$failures.Add('CLIENT_PREVIEW_TIMER_NATIVE_READBACK')}
+elseif([int]$timer[0].Groups[1].Value -le 0 -or [int]$timer[0].Groups[2].Value -gt 0){$failures.Add('CLIENT_PREVIEW_TIMER_NATIVE_READBACK')}
 if($failures.Count){$failures|Sort-Object -Unique;exit 1}
 "PASS Vehicle preset UI/RPC client=$clientChecks JIP=$jipChecks server_readback=2 native=0/0/0 stopped=3"
 exit 0

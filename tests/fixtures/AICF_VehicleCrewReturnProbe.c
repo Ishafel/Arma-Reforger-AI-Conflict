@@ -1,4 +1,4 @@
-// Дополнение client probe: реальный RPC, отдельный roster10, physical return и driver-only trip.
+// Дополнение client probe: реальный RPC, canonical roster10, physical return и driver-only trip.
 modded class AICF_VehicleCrewReturn
 {
 	int AICF_CrewReturnCount() { return m_aReturns.Count(); }
@@ -48,8 +48,6 @@ modded class AICF_VehicleCrewReturn
 
 modded class AICF_MatchController
 {
-	protected ref AICF_FactionState m_CrewState;
-	protected ref AICF_VehicleCoordinator m_CrewVehicles;
 	protected SCR_AIGroup m_CrewGroup;
 	protected IEntity m_CrewKept;
 	protected int m_iCrewStarted;
@@ -57,6 +55,8 @@ modded class AICF_MatchController
 	protected int m_iCrewFailures;
 	protected bool m_bCrewReduced;
 	protected bool m_bCrewDone;
+	protected bool m_bCrewPrepared;
+	protected bool m_bCrewSpawnProfileRestored;
 	protected int m_iCrewNextTrace;
 
 	protected void AICF_CrewCheck(string rule, bool passed)
@@ -66,14 +66,63 @@ modded class AICF_MatchController
 		Print(string.Format("[AICF][CREW_CHECK] rule=%1 passed=%2", rule, passed));
 	}
 
-	override bool ResolveVehiclePresetContext(SCR_PlayerController player, int slotId, out AICF_GroupSlot slot, out SCR_CampaignFaction faction)
+	override protected bool SpawnInitialRoster(AICF_FactionState factionState, SCR_CampaignFaction faction)
 	{
-		if (!super.ResolveVehiclePresetContext(player, slotId, slot, faction)) return false;
 		string flag;
-		if (!System.GetCLIParam("aicfVehicleCrewReturnProbe", flag)) return true;
-		if (!m_CrewState || !m_CrewState.GetSlot(0).IsCombatReady() || slotId != 0 || faction != m_USSRFaction) return false;
-		slot = m_CrewState.GetSlot(0);
-		return true;
+		if (Replication.IsServer() && System.GetCLIParam("aicfVehicleCrewReturnProbe", flag) &&
+			factionState && factionState == m_USSRState && faction && faction == m_USSRFaction)
+		{
+			AICF_GroupSlot slot = factionState.GetSlot(0);
+			if (!slot || slot.GetState() != AICF_EGroupSlotState.EMPTY || slot.GetGroup()) return false;
+			// Только исходные параметры сценария; super владеет generation, quota bind,
+			// actual roster request и readiness. MOTORIZED_LIGHT разворачивает desired10;
+			// INFANTRY разворачивает только MIN1 и здесь не подходит.
+			slot.SetUnitType(AICF_EGroupUnitType.MOTORIZED_LIGHT);
+			slot.SetDesiredSize(10);
+		}
+		return super.SpawnInitialRoster(factionState, faction);
+	}
+
+	override protected void ProcessFaction(AICF_FactionState factionState, SCR_CampaignFaction faction)
+	{
+		super.ProcessFaction(factionState, faction);
+		string flag;
+		if (!Replication.IsServer() || !System.GetCLIParam("aicfVehicleCrewReturnProbe", flag) ||
+			m_bStopped || m_bCrewDone) return;
+		if (!factionState || factionState != m_USSRState || !faction || faction != m_USSRFaction) return;
+		AICF_GroupSlot slot = factionState.GetSlot(0);
+		if (m_bCrewSpawnProfileRestored)
+		{
+			if (slot && slot.IsCombatReady()) AICF_CrewPrepareReducedOrder(slot);
+			return;
+		}
+		if (!slot || !slot.IsCombatReady() || slot.IsReplacementDeployment() || slot.GetSpawnGeneration() != 1) return;
+		if (slot.GetDesiredSize() != 10 || slot.GetUnitType() != AICF_EGroupUnitType.MOTORIZED_LIGHT) return;
+		SCR_AIGroup group = slot.GetGroup();
+		if (!group || group.GetAgentsCount() != 10 || !slot.GetRosterMember(9)) return;
+		if (m_bStopped || m_bCrewDone || m_bCrewSpawnProfileRestored || factionState != m_USSRState || faction != m_USSRFaction) return;
+		if (factionState.GetSlot(0) != slot || slot.GetGroup() != group || !slot.IsCombatReady() || slot.GetSpawnGeneration() != 1) return;
+		if (slot.IsReplacementDeployment() || slot.GetDesiredSize() != 10 || slot.GetUnitType() != AICF_EGroupUnitType.MOTORIZED_LIGHT) return;
+		// ProcessFaction уже выполнил native READY/CompleteReadyDeployment. Внешний
+		// root.Update ещё не дошёл до coordinator: никакой automatic trip не начат.
+		slot.SetUnitType(AICF_EGroupUnitType.INFANTRY);
+		m_bCrewSpawnProfileRestored = true;
+		Print("[AICF][CREW_PROFILE_RESTORED] generation=1 actual=10 unit_type=INFANTRY before_coordinator_tick=1");
+	}
+
+	protected void AICF_CrewPrepareReducedOrder(AICF_GroupSlot slot)
+	{
+		if (!m_bCrewPrepared || m_bCrewReduced || !slot.HasVehiclePreset() || slot.GetGroup() != m_CrewGroup) return;
+		m_bCrewReduced = true;
+		AICF_CrewCheck("ONLY_ASSIGNED_MEMBER_RETAINED", slot.GetDesiredSize() == 1 && m_CrewGroup.GetAgentsCount() == 1 && slot.GetRosterMember(0) == m_CrewKept && !slot.GetRosterMember(9));
+		AICF_CrewCheck("ROLE_AND_TRACKING_REMAPPED", slot.GetEquipmentSourceIndex(0) == 9 && m_CrewGroup.AICF_GetSpawnMember(0) == m_CrewKept);
+		AICF_CrewCheck("NINE_MANAGED_RETURNING", m_VehicleCrewReturn.CountAgents() == 9 && m_VehicleCrewReturn.AICF_CrewReturnCount() == 9);
+		if (m_bStopped || m_bCrewDone || m_USSRState.GetSlot(0) != slot || slot.GetGroup() != m_CrewGroup || slot.GetRosterMember(0) != m_CrewKept) return;
+		if (!m_OrderPlanner.AssignPlayerPointOrder(slot, m_USSRFaction, m_CrewKept.GetOrigin() + "400 0 0", false))
+		{
+			AICF_CrewCheck("FAR_ORDER_REJECTED", false);
+			AICF_CrewClose();
+		}
 	}
 
 	override protected void Update()
@@ -83,29 +132,17 @@ modded class AICF_MatchController
 		if (!Replication.IsServer() || !System.GetCLIParam("aicfVehicleCrewReturnProbe", flag) || !m_bRosterReady || m_bCrewDone) return;
 		if (!m_iCrewStarted) m_iCrewStarted = System.GetTickCount();
 		if (System.GetTickCount() - m_iCrewStarted > 300000) { AICF_CrewCheck("TIMEOUT", false); AICF_CrewClose(); return; }
-		if (!m_CrewState)
+		if (!m_USSRState || !m_VehicleCoordinator || !m_USSRFaction) return;
+		AICF_GroupSlot slot = m_USSRState.GetSlot(0);
+		if (!slot || !slot.IsCombatReady()) return;
+		if (!m_bCrewPrepared)
 		{
-			m_CrewState = new AICF_FactionState(m_USSRFaction.GetFactionKey(), m_Config);
-			AICF_GroupSlot fresh = m_CrewState.GetSlot(0);
-			fresh.SetUnitType(AICF_EGroupUnitType.MOTORIZED_LIGHT);
-			fresh.SetDesiredSize(10);
-			m_CrewGroup = m_GroupSpawner.SpawnGroup(m_USSRFaction, m_USSRFaction.GetMainBase(), 0, 10, false);
-			AICF_CrewCheck("GROUP10_CREATED", m_CrewGroup != null);
-			if (!m_CrewGroup) { AICF_CrewClose(); return; }
-			m_CrewGroup.SetLifecyclePolicy(SCR_EAIGroupLifecyclePolicy.Manual);
-			m_CrewGroup.SetDeleteWhenEmpty(false);
-			fresh.BeginInitialSpawn();
-			fresh.BindSpawnedGroup(m_CrewGroup);
-			m_GroupSpawner.BeginRosterSpawn(m_CrewGroup, 10);
-			m_CrewVehicles = new AICF_VehicleCoordinator(m_Stage3Config, m_Campaign, m_ConflictAdapter, m_OrderPlanner, m_GroupCohesionPolicy, m_ObjectiveGraph, m_TargetSelector, m_ContentProfile);
-			return;
-		}
-		AICF_GroupSlot slot = m_CrewState.GetSlot(0);
-		if (!slot.IsCombatReady())
-		{
-			if (m_CrewGroup.GetAgentsCount() != 10) return;
-			slot.MarkReady();
-			slot.RecordDeploymentMembers();
+			m_CrewGroup = slot.GetGroup();
+			AICF_CrewCheck("GROUP10_CREATED", m_CrewGroup && m_CrewGroup.GetAgentsCount() == 10 && slot.GetDesiredSize() == 10 && m_bCrewSpawnProfileRestored);
+			if (!m_CrewGroup || m_CrewGroup.GetAgentsCount() != 10) { AICF_CrewClose(); return; }
+			Print(string.Format("[AICF][CREW_CANONICAL_BIND] group=%1 initial_generation=%2 desired=10 actual=%3 quota_slot_current=%4 managed_lookup_current=%5 coordinator_current=%6",
+				AICF_GroupTrace.Entity(m_CrewGroup), slot.GetSpawnGeneration(), m_CrewGroup.GetAgentsCount(),
+				IsAIQuotaSlotCurrent(m_USSRState, slot), FindManagedInfantrySlot(m_CrewGroup) == slot, m_VehicleCoordinator != null));
 			m_CrewKept = slot.GetRosterMember(9);
 			AICF_CrewCheck("TEN_TRACKED_NONPREFIX", m_CrewKept && slot.GetRosterMember(0));
 			// Начальная сцена fixture: бойцы стоят в 40m от штатного spawn point.
@@ -114,27 +151,27 @@ modded class AICF_MatchController
 			path.GetNavmeshComponent().LoadTileIn(origin + "40 0 0");
 			vector position;
 			bool located = path.GetClosestPositionOnNavmesh(origin + "40 0 0", "12 5 12", position);
-			AICF_CrewCheck("RETURN_ROUTE_START_OUTSIDE_BASE", located && vector.DistanceSqXZ(origin, position) > 225);
-			if (!located) { AICF_CrewClose(); return; }
+			if (!located) { AICF_CrewCheck("RETURN_ROUTE_START_OUTSIDE_BASE", false); AICF_CrewClose(); return; }
 			for (int i; i < 10; i++) { slot.GetRosterMember(i).SetOrigin(position + Vector(0, 0, i * 0.7)); slot.GetRosterMember(i).Update(); }
+			// Настоящий player point hold защищает confirmation от AI retarget;
+			// waypoint не suspended, поэтому обычный CanResize остаётся проверяемым.
+			bool holding = m_OrderPlanner.AssignPlayerPointOrder(slot, m_USSRFaction, position, false);
+			bool resizeAllowed = CanResizeVehicleCrew(slot);
+			AICF_CrewCheck("RETURN_ROUTE_START_OUTSIDE_BASE", vector.DistanceSqXZ(origin, position) > 225 && holding && resizeAllowed);
+			if (!holding || !resizeAllowed) { AICF_CrewClose(); return; }
+			Print(string.Format("[AICF][CREW_CONFIRMATION_HOLD] player_intent=%1 resize_allowed=%2 waypoint=%3",
+				slot.HasPlayerStrategicIntent(), resizeAllowed, AICF_GroupTrace.Entity(slot.GetWaypoint())));
+			m_bCrewPrepared = true;
 			return;
 		}
+		if (slot.GetGroup() != m_CrewGroup) { AICF_CrewCheck("CANONICAL_GROUP_REPLACED", false); AICF_CrewClose(); return; }
 		if (!slot.HasVehiclePreset()) return;
-		if (!m_bCrewReduced)
-		{
-			m_bCrewReduced = true;
-			AICF_CrewCheck("ONLY_ASSIGNED_MEMBER_RETAINED", slot.GetDesiredSize() == 1 && m_CrewGroup.GetAgentsCount() == 1 && slot.GetRosterMember(0) == m_CrewKept && !slot.GetRosterMember(9));
-			AICF_CrewCheck("ROLE_AND_TRACKING_REMAPPED", slot.GetEquipmentSourceIndex(0) == 9 && m_CrewGroup.AICF_GetSpawnMember(0) == m_CrewKept);
-			AICF_CrewCheck("NINE_MANAGED_RETURNING", m_VehicleCrewReturn.CountAgents() == 9 && m_VehicleCrewReturn.AICF_CrewReturnCount() == 9);
-			m_OrderPlanner.AssignPlayerPointOrder(slot, m_USSRFaction, m_CrewKept.GetOrigin() + "400 0 0", false);
-		}
-		m_CrewVehicles.Update(null, null, m_CrewState, m_USSRFaction, m_iStrategicBaseRevision, true);
 		if (System.GetTickCount() >= m_iCrewNextTrace)
 		{
 			m_iCrewNextTrace = System.GetTickCount() + 10000;
 			m_VehicleCrewReturn.AICF_CrewTracePending(300000 - (System.GetTickCount() - m_iCrewStarted));
 		}
-		AICF_TransportTrip trip = m_CrewVehicles.GetTrip(slot);
+		AICF_TransportTrip trip = m_VehicleCoordinator.GetTrip(slot);
 		Vehicle vehicle;
 		if (trip && trip.GetLease()) vehicle = trip.GetLease().GetVehicle();
 		if (vehicle && m_VehicleCrewReturn.AICF_CrewReturnCount() == 0 && CompartmentAccessComponent.GetVehicleIn(m_CrewKept) == vehicle)
@@ -157,14 +194,8 @@ modded class AICF_MatchController
 	protected void AICF_CrewClose()
 	{
 		m_bCrewDone = true;
-		if (m_CrewVehicles) m_CrewVehicles.StopWithFactionContexts(true, null, null, m_CrewState, m_USSRFaction);
-		m_CrewVehicles = null;
-		if (m_CrewGroup)
-		{
-			m_OrderPlanner.ClearOrder(m_CrewState.GetSlot(0));
-			m_CrewGroup.DespawnMembers();
-			RplComponent.DeleteRplEntity(m_CrewGroup, false);
-		}
+		// Канонические slot/group/coordinator не принадлежат fixture. Штатный
+		// scheduled shutdown выполняет их единственный lifecycle cleanup.
 		Print(string.Format("[AICF][CREW_DONE] checks=%1 failures=%2", m_iCrewChecks, m_iCrewFailures));
 		SCR_GameModeCampaign.Cast(m_Campaign).AICF_VehicleProbeScheduleServerClose();
 	}

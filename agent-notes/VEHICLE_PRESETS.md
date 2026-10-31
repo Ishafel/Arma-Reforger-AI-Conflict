@@ -51,6 +51,9 @@ Owner-only JSON catalog содержит параллельные `prefabs`, `na
 Отфильтрованный индекс переводится через `m_aVisibleVehicles`, а не используется
 как индекс полного массива. Load раскрывает фильтры, скрывающие модель draft;
 смена фильтра не меняет draft, binding или library. Пустой список не шлёт SELECT.
+В пустом начальном черновике каталог не выбирает первую машину за игрока.
+Выбор конкретной строки сразу отправляет SELECT и обновляет черновик/превью
+после ответа сервера; отдельная кнопка подтверждения выбора модели не нужна.
 При совпадении native имён UI дописывает короткое имя варианта без GUID/пути.
 
 Стоимость: content profile quote override → native SpawnerData → сумма native
@@ -87,10 +90,36 @@ Ordinal строится в hierarchy только из entities с compartment 
   но Apply всегда заново проверяет живой roster. Delete не меняет binding.
 - Apply без сокращения меняет только отдельный binding stable slot. Совпадающая модель и
   рассадка не увеличивают revision и не создают новую заявку/списание.
-- «Автоматика» снимает binding, сохраняя открытый черновик и несохранённую рассадку;
-  после cleanup действует обычный unit profile.
+- «Снять пресет» отправляет прежнюю операцию RESET: сервер снимает binding,
+  после успешного сброса очищает viewer draft, seatNames и mandatorySeats.
+  Редактор очищает выбор и превью. Отказ по revision/generation сохраняет draft;
+  CANCEL_CREW также сохраняет несохранённую рассадку. RESET не меняет unit profile,
+  не назначает места и не создаёт новую машину; после cleanup действует обычный
+  профиль отряда. Старое название «Автоматика» смешивало два разных действия.
   Ручной binding имеет приоритет над профилем motorization и сохраняется при
   переименовании роли и замене группы. Новая incarnation проверяется заново.
+
+«Рассадить автоматически» — отдельное локальное действие над черновиком.
+`AICF_VehicleSeatAssignment.AutoAssign(preset, activeMembers, mandatoryIndices)`
+не отправляет RPC, не сохраняет рецепт и не применяет binding. Серверный view
+содержит `mandatorySeats`: индексы фактических PILOT, TURRET и attached-turret
+compartments из того же успешного catalog.Inspect, сохранённые до catalog.Clear.
+Поле `activeMembers` содержит только живые numeric positions текущего отряда.
+Helper проверяет shape, bounds и уникальность входов до изменения массива мест.
+Живые позиции назначаются по возрастанию: сначала обязательные места по индексу,
+затем пассажирские. При недостатке экипажа для обязательных мест, пустых либо
+некорректных данных возвращается false без частичного изменения. Избыток состава
+остаётся неназначенным: дальнейший Apply сохраняет обычное явное подтверждение
+сокращения, повторную проверку roster и server-side preflight. Неактивный боец
+не создаётся и не получает место.
+
+Targeted helper исполняется из production source через синтаксический adapter:
+48 actual checks и 3 исполняемых unsafe variants PASS в pwsh и Windows PowerShell
+5.1; source-controls server metadata/RESET — 2 PASS. Первый adapter compile FAIL
+из-за constant-false unsafe variant сохранён; исправлен только исполняемый
+negative control. Evidence: `.codex-runtime/ui-preset-reformat/automatic-service/`.
+Это offline проверка. Актуальные Workbench/native результаты нового UI и сохранённые
+ранние FAIL находятся в [TESTING.md](TESTING.md#окна-пресетов-отряда--31102026).
 
 Persistence использует тот же profile и существующий persistent library mount.
 Launcher import `-LoadoutLibraryPath` пока импортирует только старые character
@@ -102,7 +131,17 @@ files; перенос `vehicle_` в новый изолированный profil
 
 `AICF_VehiclePreview` владеет собственной local моделью, камерой и светом в private
 world; native RenderTargetWidget не создаёт машины/crew в кампании. Close очищает
-модель и world. Footer явно разрешает AICF localization перед SetText; native
+модель и world. `AICF_VehiclePreviewInput` принимает drag для поворота и колесо
+для масштаба только внутри области превью; это локальное состояние камеры.
+Handler хранит exact queue и признак собственного scheduled timer, отзывает
+их до отмены и делает Detach повторяемым. `UpdateDrag` — public для native
+ByName API; generation gate блокирует устаревшие callbacks. Отмена проверяется
+после следующего queue tick, поскольку текущий tick ещё видит старую запись.
+Список мест имеет отдельную вертикальную прокрутку и не ограничивает количество
+видимых назначений высотой окна. Фактическая доступность мест по-прежнему берётся
+из catalog topology, а не из размеров UI. Терминальные source/compile проверки
+не подтверждают удобство drag, масштаба или прокрутки игроком: такая оценка NOT RUN.
+Footer явно разрешает AICF localization перед SetText; native
 EditBox label/placeholder заменены названием пресета. Hover/pressed кнопок формы
 и commander сохраняется при периодической перерисовке. Commander использует
 native SCR_SliderComponent 1..10: число меняется при движении, configuration
