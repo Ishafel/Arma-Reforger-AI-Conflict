@@ -4,12 +4,99 @@ class AICF_TripRetirementMember
 {
 	ChimeraCharacter m_Character;
 	EntityID m_Id;
+	string m_sIdCanonical;
 	string m_sRpl;
 	bool m_bNativeDeadObserved;
 	BaseWorld m_World;
 	RplComponent m_Rpl;
 	CharacterControllerComponent m_Controller;
 	bool m_bAdmissionAlive;
+}
+
+// Одноразовый bookkeeping token: не выбирает приказ и не меняет gameplay.
+class AICF_CleanupAssignmentRebind
+{
+	protected AICF_TransportTrip m_Trip;
+	protected AICF_TripRetirementIdentity m_Identity;
+	protected AICF_GroupSlot m_Slot;
+	protected ref AICF_StrategicAssignmentSnapshot m_Previous;
+	protected ref AICF_StrategicAssignmentSnapshot m_Accepted;
+	protected ref AICF_VehicleLease m_Lease;
+	protected int m_iPreviousRevision;
+	protected int m_iPreviousIntent;
+	protected int m_iPreviousBase;
+	protected int m_iAcceptedRevision;
+	protected int m_iAcceptedIntent;
+	protected int m_iAcceptedBase;
+	protected int m_iTripGeneration;
+	protected int m_iLeaseGeneration;
+	protected int m_iVehicleGeneration;
+	protected string m_sLifecycle;
+	protected string m_sOperation;
+	protected bool m_bCommitted;
+
+	static AICF_CleanupAssignmentRebind Capture(AICF_TransportTrip trip, AICF_TripRetirementIdentity identity,
+		AICF_StrategicAssignmentSnapshot accepted, AICF_GroupSlot slot)
+	{
+		if (!Replication.IsServer() || !trip || !identity || !accepted || !slot || trip.IsTerminal()) return null;
+		AICF_StrategicAssignmentSnapshot previous = trip.GetAssignment();
+		if (!identity.MatchesCleanupAssignmentFence(previous) || !trip.OwnsRetirementIdentity(identity)) return null;
+		AICF_CleanupAssignmentRebind token = new AICF_CleanupAssignmentRebind();
+		token.m_Trip = trip;
+		token.m_Identity = identity;
+		token.m_Slot = slot;
+		token.m_Previous = previous;
+		token.m_Accepted = accepted;
+		token.m_iPreviousRevision = previous.GetAssignmentRevision();
+		token.m_iPreviousIntent = previous.GetStrategicIntentRevision();
+		token.m_iPreviousBase = previous.GetBaseRevision();
+		token.m_iAcceptedRevision = accepted.GetAssignmentRevision();
+		token.m_iAcceptedIntent = accepted.GetStrategicIntentRevision();
+		token.m_iAcceptedBase = accepted.GetBaseRevision();
+		token.m_iTripGeneration = trip.GetTripGeneration();
+		token.m_sOperation = trip.GetOperationId();
+		token.m_Lease = trip.GetLease();
+		if (token.m_Lease)
+		{
+			token.m_iLeaseGeneration = token.m_Lease.GetLeaseGeneration();
+			token.m_iVehicleGeneration = token.m_Lease.GetVehicleGeneration();
+			token.m_sLifecycle = token.m_Lease.GetVehicleLifecycleId();
+		}
+		if (!token.MatchesContext(trip, identity, slot, false)) return null;
+		return token;
+	}
+
+	// Только actual Trip.CommitRetarget может отметить exact candidate принятым.
+	void RecordCommitted(AICF_TransportTrip trip, AICF_StrategicAssignmentSnapshot accepted)
+	{
+		if (!trip || !accepted) return;
+		if (trip == m_Trip && accepted == m_Accepted && trip.GetAssignment() == m_Accepted)
+			m_bCommitted = true;
+	}
+
+	AICF_StrategicAssignmentSnapshot GetPrevious() { return m_Previous; }
+	AICF_StrategicAssignmentSnapshot GetAccepted() { return m_Accepted; }
+	AICF_GroupSlot GetSlot() { return m_Slot; }
+
+	// Все getters ниже — script state, без native callbacks.
+	bool MatchesContext(AICF_TransportTrip trip, AICF_TripRetirementIdentity identity, AICF_GroupSlot slot, bool committed)
+	{
+		if (!trip || trip != m_Trip || identity != m_Identity || slot != m_Slot || !slot || trip.IsTerminal()) return false;
+		if (committed != m_bCommitted || !trip.OwnsRetirementIdentity(identity) || trip.GetTripGeneration() != m_iTripGeneration || trip.GetOperationId() != m_sOperation) return false;
+		if (!m_Previous || !m_Accepted || !identity.MatchesCleanupAssignmentFence(m_Previous)) return false;
+		if (!committed && trip.GetAssignment() != m_Previous) return false;
+		if (committed && trip.GetAssignment() != m_Accepted) return false;
+		if (m_Previous.GetAssignmentRevision() != m_iPreviousRevision || m_Previous.GetStrategicIntentRevision() != m_iPreviousIntent || m_Previous.GetBaseRevision() != m_iPreviousBase) return false;
+		if (m_Accepted.GetAssignmentRevision() != m_iAcceptedRevision || m_Accepted.GetStrategicIntentRevision() != m_iAcceptedIntent || m_Accepted.GetBaseRevision() != m_iAcceptedBase) return false;
+		if (!m_Accepted.MatchesCurrent(m_Previous.GetFactionKey(), m_Previous.GetSlotId(), m_Previous.GetGroupGeneration(), m_Previous.GetGroup())) return false;
+		if (slot.GetSlotId() != m_Accepted.GetSlotId() || slot.GetGroup() != m_Accepted.GetGroup() || slot.GetSpawnGeneration() != m_Accepted.GetGroupGeneration()) return false;
+		if (slot.GetStrategicAssignmentRevision() != m_iAcceptedRevision || slot.GetStrategicIntentRevision() != m_iAcceptedIntent) return false;
+		if (slot.GetTargetKind() != m_Accepted.GetTargetKind() || slot.GetTargetBase() != m_Accepted.GetTargetBase()) return false;
+		if (slot.GetTargetKind() == AICF_EOrderTargetKind.POSITION && slot.GetTargetPosition() != m_Accepted.GetTargetPosition()) return false;
+		if (trip.GetLease() != m_Lease) return false;
+		if (m_Lease && (m_Lease.GetLeaseGeneration() != m_iLeaseGeneration || m_Lease.GetVehicleGeneration() != m_iVehicleGeneration || m_Lease.GetVehicleLifecycleId() != m_sLifecycle)) return false;
+		return true;
+	}
 }
 
 class AICF_TripRetirementIdentity
@@ -34,6 +121,10 @@ class AICF_TripRetirementIdentity
 	protected int m_iAdmissionAssignmentRevision;
 	protected int m_iAdmissionIntentRevision;
 	protected int m_iAdmissionBaseRevision;
+	protected ref AICF_StrategicAssignmentSnapshot m_CleanupAssignment;
+	protected int m_iCleanupAssignmentRevision;
+	protected int m_iCleanupIntentRevision;
+	protected int m_iCleanupBaseRevision;
 	protected ref array<ref AICF_TripRetirementMember> m_aMembers = {};
 	protected bool m_bRosterTrusted = true;
 	protected AICF_FactionFleet m_CleanupFleet;
@@ -78,6 +169,10 @@ class AICF_TripRetirementIdentity
 		m_iAdmissionAssignmentRevision = assignment.GetAssignmentRevision();
 		m_iAdmissionIntentRevision = assignment.GetStrategicIntentRevision();
 		m_iAdmissionBaseRevision = assignment.GetBaseRevision();
+		m_CleanupAssignment = assignment;
+		m_iCleanupAssignmentRevision = m_iAdmissionAssignmentRevision;
+		m_iCleanupIntentRevision = m_iAdmissionIntentRevision;
+		m_iCleanupBaseRevision = m_iAdmissionBaseRevision;
 		m_bCaptured = true;
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);
@@ -104,13 +199,14 @@ class AICF_TripRetirementIdentity
 		AICF_TripRetirementMember member = new AICF_TripRetirementMember();
 		member.m_Character = character;
 		member.m_Id = character.GetID();
+		member.m_sIdCanonical = member.m_Id.ToString();
 		member.m_sRpl = rpl.Id().ToString();
 		member.m_World = character.GetWorld();
 		member.m_Rpl = rpl;
 		member.m_Controller = character.GetCharacterController();
 		member.m_bAdmissionAlive = member.m_World == m_AdmissionWorld && member.m_Controller && member.m_Controller.GetLifeState() == ECharacterLifeState.ALIVE;
 		m_aMembers.Insert(member);
-		AICF_Stage3Diagnostics.Info("TRIP_RETIREMENT_MEMBER_CAPTURED", string.Format("faction=%1 slot=%2 group_generation=%3 trip_generation=%4 operation_id=%5 member=%6 actor_rpl=%7 scope=ADMISSION_LIVE_GROUP", m_sFaction, m_iSlot, m_iGroupGeneration, m_iTripGeneration, m_sOperation, member.m_Id, member.m_sRpl));
+		AICF_Stage3Diagnostics.Info("TRIP_RETIREMENT_MEMBER_CAPTURED", string.Format("faction=%1 slot=%2 group_generation=%3 trip_generation=%4 operation_id=%5 member=%6 actor_rpl=%7 scope=ADMISSION_LIVE_GROUP member_id_canonical=%8", m_sFaction, m_iSlot, m_iGroupGeneration, m_iTripGeneration, m_sOperation, member.m_Id, member.m_sRpl, member.m_sIdCanonical));
 	}
 
 	protected bool IsCapturedGroupAbsent()
@@ -290,6 +386,36 @@ class AICF_TripRetirementIdentity
 	}
 
 	int GetCapturedMemberCount() { return m_aMembers.Count(); }
+	string GetCapturedMemberIdString(int index)
+	{
+		if (!m_aMembers.IsIndexValid(index)) return string.Empty;
+		return m_aMembers[index].m_sIdCanonical;
+	}
+
+	bool MatchesCleanupAssignmentFence(AICF_StrategicAssignmentSnapshot assignment)
+	{
+		return m_bCaptured && assignment && assignment == m_CleanupAssignment &&
+			assignment.GetAssignmentRevision() == m_iCleanupAssignmentRevision &&
+			assignment.GetStrategicIntentRevision() == m_iCleanupIntentRevision &&
+			assignment.GetBaseRevision() == m_iCleanupBaseRevision;
+	}
+
+	bool AcceptCleanupAssignmentRebind(AICF_TransportTrip trip, AICF_GroupSlot slot, AICF_CleanupAssignmentRebind token)
+	{
+		if (!Replication.IsServer() || !GetGame() || GetGame().GetWorld() != m_AdmissionWorld || !trip || !token) return false;
+		if (!trip.OwnsCleanupAssignmentRebind(token) || !token.MatchesContext(trip, this, slot, true)) return false;
+		if (!MatchesLiveCapturedGroup(trip) || m_CapturedGroup.GetWorld() != m_AdmissionWorld) return false;
+		if (m_AdmissionWorld.FindEntityByID(m_GroupId) != m_CapturedGroup || m_CapturedGroup.FindComponent(RplComponent) != m_AdmissionGroupRpl) return false;
+		if (!Replication.IsServer() || !GetGame() || GetGame().GetWorld() != m_AdmissionWorld) return false;
+		// Native getters закончены: stale outer callback не переносит successor fence.
+		if (!trip.OwnsCleanupAssignmentRebind(token) || !token.MatchesContext(trip, this, slot, true)) return false;
+		AICF_StrategicAssignmentSnapshot accepted = token.GetAccepted();
+		m_CleanupAssignment = accepted;
+		m_iCleanupAssignmentRevision = accepted.GetAssignmentRevision();
+		m_iCleanupIntentRevision = accepted.GetStrategicIntentRevision();
+		m_iCleanupBaseRevision = accepted.GetBaseRevision();
+		return true;
+	}
 
 	// Отдельный cleanup capability для исходного DEAD actor при ещё живой группе.
 	// Orphan resolver ниже сохраняет прежний, более узкий контракт.
@@ -305,7 +431,7 @@ class AICF_TripRetirementIdentity
 			AICF_ObserveTerminalAdmissionDecision(trip, "ADMISSION_02", false);
 			return false;
 		}
-		if (!trip.OwnsRetirementIdentity(this) || trip.GetAssignment() != m_AdmissionAssignment || !MatchesLiveCapturedGroup(trip))
+		if (!trip.OwnsRetirementIdentity(this) || !MatchesCleanupAssignmentFence(trip.GetAssignment()) || !MatchesLiveCapturedGroup(trip))
 		{
 			AICF_ObserveTerminalAdmissionDecision(trip, "ADMISSION_03", false);
 			return false;

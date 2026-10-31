@@ -218,6 +218,7 @@ class AICF_CapturedDeadCleanupIdentity
 	}
 
 	int GetCapturedMemberCount() { return m_Admission.GetCapturedMemberCount(); }
+	string GetCapturedMemberIdString(int index) { return m_Admission.GetCapturedMemberIdString(index); }
 
 	ChimeraCharacter Resolve(AICF_VehicleCleanupJob job, Vehicle vehicle, int index)
 	{

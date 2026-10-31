@@ -253,6 +253,7 @@ class AICF_TransportTripController
 			return AICF_TripOutcome.TerminalFailClosed(
 				"STOP_TRIP_IDENTITY_INVALID",
 				"controller-stop-invalid");
+		trip.StopCleanupAssignmentRebind();
 		AICF_VehicleMovementState stopMovement = trip.GetMovementState();
 		if (stopMovement) stopMovement.SetNativeGate(null);
 		m_BehaviorFlow.Stop(trip);
@@ -350,7 +351,7 @@ class AICF_TransportTripController
 		if (assignmentChanged)
 		{
 			string causationId = ResolveCausationId(trip, outcome, "ACQUISITION_RETARGET");
-			if (!CommitRetarget(trip, currentAssignment, causationId))
+			if (!CommitRetarget(trip, currentAssignment, causationId, slot))
 			{
 				return EndVehicleControl(
 					trip,
@@ -1630,7 +1631,7 @@ class AICF_TransportTripController
 					causationId, true);
 			}
 		}
-		if (!CommitRetarget(trip, currentAssignment, causationId))
+		if (!CommitRetarget(trip, currentAssignment, causationId, slot))
 		{
 			return EndVehicleControl(
 				trip, slot, fleet, faction,
@@ -1658,7 +1659,8 @@ class AICF_TransportTripController
 	protected bool CommitRetarget(
 		AICF_TransportTrip trip,
 		AICF_StrategicAssignmentSnapshot currentAssignment,
-		string causationId)
+		string causationId,
+		AICF_GroupSlot slot)
 	{
 		AICF_VehicleLease expectedLease = trip.GetLease();
 		int expectedVehicleGeneration = -1;
@@ -1668,15 +1670,26 @@ class AICF_TransportTripController
 			expectedVehicleGeneration = expectedLease.GetVehicleGeneration();
 			expectedLifecycleId = expectedLease.GetVehicleLifecycleId();
 		}
+		AICF_CleanupAssignmentRebind cleanupRebind = trip.BeginCleanupAssignmentRebind(currentAssignment, slot);
 		if (!trip.CommitRetarget(currentAssignment, causationId))
+		{
+			trip.CancelCleanupAssignmentRebind(cleanupRebind);
 			return false;
+		}
 		if (trip.GetLease() != expectedLease)
+		{
+			trip.CancelCleanupAssignmentRebind(cleanupRebind);
 			return false;
+		}
 		if (expectedLease && (expectedVehicleGeneration != expectedLease.GetVehicleGeneration() ||
 			expectedLifecycleId != expectedLease.GetVehicleLifecycleId()))
 		{
+			trip.CancelCleanupAssignmentRebind(cleanupRebind);
 			return false;
 		}
+		// Bookkeeping переносится только после прежних accepted-commit lease gates.
+		// Его отказ не меняет gameplay policy штатного retarget.
+		trip.CompleteCleanupAssignmentRebind(cleanupRebind, slot);
 		if (expectedLease && expectedLease.HasPhysicalAsset())
 		{
 			AICF_Stage3Diagnostics.Info(

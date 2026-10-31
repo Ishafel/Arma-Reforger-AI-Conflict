@@ -1,5 +1,93 @@
 # Исходный погибший actor вне native roster
 
+## Отозванный production seat emitter и отдельный observer
+
+Попытка добавить canonical fields прямо в `VEHICLE_PRESET_OCCUPANT` отозвана
+после peer review. Native temporary `GetID()` vararg и cached EntityID могут
+печататься по-разному; caching мог нарушить существующие regex/raw-string joins
+в Preset/Transit/Scenario/DamageFallback/QueuedApproach и остальных log audits.
+BoardingFlow восстановлен побайтово до baseline; старый event и его потребители
+не изменены. Новый untracked emitter contract перенесён в ignored evidence,
+в runner/релиз не входит. Никакие aliases, low32 conversions или ослабления
+обычных/Multi критериев не добавлены.
+
+Baseline ParallelEntry37/EntryTrace43 PASS, deferred emitter model9/3 PASS в обеих
+версиях PowerShell сохраняются как история неотправленной diagnostic идеи,
+не как проверка shipped production. Полные source copies, первый harness FAIL,
+выводы и exact-before SHA: `.codex-runtime/issue78-finalization-20261030/seat-canonical-bridge/withdrawn-receipt.json`.
+
+Одобрен следующий изолированный read-only D1 observer: `CANONICAL_SEAT_CAPTURE`
+из уже существующего foreach реальных seats, cached actor row/Rpl/EntityID и
+единожды прочитанного прежнего GetType. Пять unique canonical actors/seats,
+pilot и исходные admission identities проверяются непосредственно по этим
+наблюдениям; старые production counts/slotkeys остаются отдельным источником.
+Это смена источника строгого физического proof, а не соединение decimal/hex.
+В immutable r32/396 такого observer ещё нет: canonical seat criterion для него
+`NOT RUN`/FAIL, старые native результаты не пересчитываются в PASS.
+
+## Accepted retarget и отдельный cleanup assignment fence
+
+В controlled r31 actual900 исходный admission snapshot5 сохранялся, но обычное
+восстановление пешего приказа после `CREW_UNAVAILABLE` создало runtime revision6.
+В05:52:56.152 штатный `SAFE_REUSE_RETARGET` принял snapshot6; RESET принят позже,
+в05:52:56.183. Следующий тик завершил trip по `PRESET_CHANGED`. Новый read-only
+observer показал первый реальный отказ `ADMISSION_03 actual=0
+current_assignment_same=0`; исходные intent2/base1 и group/trip generations1
+сохранились. Controlled DONE05:55:55.505 — `FAIL`, `detached=0`. Это конкретный
+доказанный отказ pointer guard, без заявления об атомарном native snapshot.
+
+Исправление вводит отдельный cleanup assignment fence. Исходный admission
+snapshot, его revisions и пять actor records неизменны. Exact pending token
+создаётся до штатного retarget, actual `Trip.CommitRetarget` отмечает принятие
+только своего candidate, а Controller завершает перенос только после прежних
+lease postchecks. Перед записью проверяются captured group/world/Rpl и ещё раз
+чистые trip/slot/token/current-assignment/lease fields. Stale callback отменяет
+только свой token; terminal и Stop инвалидируют pending token, Stop запрещает
+повторный запуск этого bookkeeping. Отказ переноса не меняет gameplay результат
+или допустимые новые intent/цель штатного retarget.
+`RecordCommitted` явно отвергает null caller/candidate, в том числе после
+истечения слабой ссылки token→Trip, до разыменования.
+
+Observer сохраняет прежний `current_assignment_same` для original admission и
+add-only выводит `cleanup_assignment_same`, cached cleanup assignment/intent/base
+revisions. Поэтому original=false при cleanup=true и ADMISSION_FINAL=true имеет
+однозначное значение принятого fence. Это только cached script fields после
+решения; новый native getter или повторная проверка admission не выполняются.
+
+Terminal capability продолжает захватывать exact текущий terminal snapshot и
+все transition/cause/job/fleet/lease/vehicle fences. Поздняя замена snapshot,
+включая чужой объект с теми же полями, не допускается. Actor/player/DEAD/seat,
+budget/deadline/cap/release policy не ослаблены. Add-only
+`member_id_canonical` хранится из исходного `EntityID.ToString()`; pure accessor
+`GetCapturedMemberIdString(index)` не делает новых native queries и не создаёт
+numeric/hex alias. Admission и production Kick сохраняют старые поля и добавляют
+canonical string; vehicle `entity_id_canonical` также берётся из cached fence
+без повторного actor/world чтения. Сравнение полных canonical strings не заменяется
+усечением handle64, low32 или преобразованием старых несовместимых форматов.
+
+Новый `Test-CleanupAssignmentRebindContracts.ps1` проверяет связанные actual
+source сегменты planner/accepted commit и RESET/End/terminal capability/physical
+handler с явными native-boundary shims. Это не полный мир, не native physical
+release и не ACK. **48 actual cases + 4 executable unsafe PASS** в pwsh и WinPS5.1:
+old r31 admission отказывает для обоих accepted retarget, новый fence допускает
+same-intent rebuild и допустимый new intent/target; исходные5 records и4 ALIVE
+сохраняются. Проверены forged/no-commit/successor/lease/terminal/Stop и поздние
+native group component callbacks с заменой world/authority перед чистым tail.
+Отдельно **старые90/15 и observer57/3 PASS** в обеих версиях PowerShell; два
+прежних unsafe дают ожидаемый exit1. Старый90 oracle не ослаблен: механически
+добавлены реальные accessor/fence methods и поля boundary shim. Observer inverse
+сохраняет прежний r30 hash после удаления только диагностических hooks и точной
+обратной подстановки заявленной admission fence delta.
+
+Полные outputs и closures: `captured-casualty-cleanup-fix/rebind-final-targeted-v1/`
+(06:14:38.627–06:15:06.349) и `rebind-final-targeted-v2/`
+(06:19:39.081–06:19:57.607). Старые55 observer cases сохранены; добавлены два
+cached split/revision-dedupe случая. Три соседних static audits также PASS в
+`rebind-neighbor-statics-v1/`. Первые translation/wiring failures сохраняются в
+`rebind-contract-preparation/`, `rebind-targeted-v1/`; они не выдаются за production
+runtime результат. Старый Full267 относится к immutable r31 до исправления.
+Новый WB и native900 пока `NOT RUN`; старые controlled FAIL сохраняются.
+
 ## Поздний controlled r30 FAIL и диагностический seam
 
 Остановленный `controlled-r30-USSR-900-v1-receipt-replay-v2` воспроизвёл
@@ -164,3 +252,27 @@ DEAD вне roster, unsafe identity/life/player/world/seat/lease/generation/budg
 Исходный полный live prefix, hash и индексы:
 `.codex-runtime/issue78-finalization-20261030/cleanup-protected-occupant-readonly/`.
 Live prefix не выдаётся за аудит полного остановленного server log.
+
+## Совместный Stop pending token и native gate observer
+
+В Full r32 сохранён исходный FAIL `Test-NativeGateCompletionContracts`:
+`INVALID_TRIP_STOP_DETACHES_LOCAL_OBSERVER`. Причина — устаревший exact-prefix
+контракт `AbortForStop`, который не разрешал новую строку
+`trip.StopCleanupAssignmentRebind()` до снятия native gate listener и до
+invalid-retirement return. Production уже сохраняет null guard, локальный
+listener Stop и прежние retirement/asset fences; gameplay для этой правки
+контракта не менялся.
+
+Контракт теперь требует ровно этот дополнительный lifecycle вызов; произвольные
+actions до invalid-trip return по-прежнему запрещены. Replay исполняет actual
+Trip `StopCleanupAssignmentRebind`/`InvalidateCleanupAssignmentRebind` вместе
+с actual Controller prelude. Для invalid trip, отсутствующего movement state
+и retirement asset проверяются снятие token и запрет его перезапуска без
+изменения native action. Прежние callback/Insert/Remove/physical/deadline
+контроли сохранены. PowerShell7 и Windows PowerShell5.1: **PASS29 controls +
+2 executed unsafe**, оба exit0. Unsafe варианты реально оставляют pending token
+при пропуске Stop либо его clear; тест их отвергает. Baseline FAIL и начальный
+adapter-only placeholder FAIL сохранены отдельно, production source SHA до/после
+совпадает. Evidence:
+`.codex-runtime/issue78-finalization-20261030/native-gate-completion-r32-contract/`.
+Эта проверка не подменяет новый полный offline набор, Workbench или native run.

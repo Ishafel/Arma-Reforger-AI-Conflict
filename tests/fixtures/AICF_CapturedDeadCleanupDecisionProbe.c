@@ -110,6 +110,8 @@ modded class AICF_TripRetirementIdentity
 			m_bCaptured, m_bRosterTrusted, m_aMembers.Count(), m_AdmissionWorld != null, m_CapturedGroup != null, m_AdmissionGroupRpl != null, m_AdmissionAssignment != null, current == m_AdmissionAssignment);
 		details += string.Format(" cached_assignment_revision=%1 cached_intent_revision=%2 cached_base_revision=%3 cached_group_generation=%4 cached_trip_generation=%5",
 			m_iAdmissionAssignmentRevision, m_iAdmissionIntentRevision, m_iAdmissionBaseRevision, m_iGroupGeneration, m_iTripGeneration);
+		details += string.Format(" cleanup_assignment_same=%1 cached_cleanup_assignment_revision=%2 cached_cleanup_intent_revision=%3 cached_cleanup_base_revision=%4",
+			current == m_CleanupAssignment, m_iCleanupAssignmentRevision, m_iCleanupIntentRevision, m_iCleanupBaseRevision);
 		details += " " + AICF_CapturedDeadCleanupDecisionProbe.TripDetails(trip);
 		AICF_CapturedDeadCleanupDecisionProbe.Write(m_sOperation, "MatchesTerminalCleanupAdmission", stage, actual, details);
 	}

@@ -111,6 +111,8 @@ class AICF_TransportTrip
 	protected ref AICF_VehicleHandoffState m_HandoffState;
 	protected ref AICF_VehicleCleanupState m_CleanupState;
 	protected ref AICF_TripRetirementIdentity m_RetirementIdentity;
+	protected ref AICF_CleanupAssignmentRebind m_CleanupAssignmentRebind;
+	protected bool m_bCleanupAssignmentRebindStopped;
 
 	void AICF_TransportTrip(
 		AICF_StrategicAssignmentSnapshot assignment,
@@ -275,6 +277,46 @@ class AICF_TransportTrip
 		return true;
 	}
 
+	AICF_CleanupAssignmentRebind BeginCleanupAssignmentRebind(AICF_StrategicAssignmentSnapshot accepted, AICF_GroupSlot slot)
+	{
+		if (m_bCleanupAssignmentRebindStopped) return null;
+		AICF_CleanupAssignmentRebind previousToken = m_CleanupAssignmentRebind;
+		AICF_CleanupAssignmentRebind token = AICF_CleanupAssignmentRebind.Capture(this, m_RetirementIdentity, accepted, slot);
+		if (!token || m_CleanupAssignmentRebind != previousToken) return null;
+		m_CleanupAssignmentRebind = token;
+		return token;
+	}
+
+	bool OwnsCleanupAssignmentRebind(AICF_CleanupAssignmentRebind token)
+	{
+		return token && m_CleanupAssignmentRebind == token;
+	}
+
+	void CancelCleanupAssignmentRebind(AICF_CleanupAssignmentRebind token)
+	{
+		if (OwnsCleanupAssignmentRebind(token)) m_CleanupAssignmentRebind = null;
+	}
+
+	void InvalidateCleanupAssignmentRebind()
+	{
+		m_CleanupAssignmentRebind = null;
+	}
+
+	void StopCleanupAssignmentRebind()
+	{
+		m_bCleanupAssignmentRebindStopped = true;
+		InvalidateCleanupAssignmentRebind();
+	}
+
+	bool CompleteCleanupAssignmentRebind(AICF_CleanupAssignmentRebind token, AICF_GroupSlot slot)
+	{
+		if (!OwnsCleanupAssignmentRebind(token)) return false;
+		bool accepted = false;
+		if (m_RetirementIdentity) accepted = m_RetirementIdentity.AcceptCleanupAssignmentRebind(this, slot, token);
+		CancelCleanupAssignmentRebind(token);
+		return accepted;
+	}
+
 	bool CommitRetarget(AICF_StrategicAssignmentSnapshot assignment, string causationId)
 	{
 		if (IsTerminal() || !assignment || !assignment.IsValid() || causationId.IsEmpty())
@@ -289,8 +331,11 @@ class AICF_TransportTrip
 			return false;
 		if (assignment.GetBaseRevision() < m_Assignment.GetBaseRevision())
 			return false;
+		AICF_CleanupAssignmentRebind cleanupRebind = m_CleanupAssignmentRebind;
+		bool cleanupRebindCurrent = cleanupRebind && cleanupRebind.MatchesContext(this, m_RetirementIdentity, cleanupRebind.GetSlot(), false);
 		m_Assignment = assignment;
 		m_sCausationId = causationId;
+		if (cleanupRebindCurrent && OwnsCleanupAssignmentRebind(cleanupRebind)) cleanupRebind.RecordCommitted(this, assignment);
 		return true;
 	}
 
@@ -309,6 +354,7 @@ class AICF_TransportTrip
 		ResetExitedPhase(previousPhase, nextPhase);
 		m_PreviousPhase = previousPhase;
 		m_Phase = nextPhase;
+		if (IsTerminal()) InvalidateCleanupAssignmentRebind();
 		m_iPhaseStartedAtMs = nowMs;
 		m_iTransitionCount++;
 		m_sLastTransitionReason = reason;

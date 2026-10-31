@@ -1494,10 +1494,12 @@ class AICF_VehicleCleanupManager
 			if (job.m_iLastNonAliveDetachAtMs > 0 && nowMs - job.m_iLastNonAliveDetachAtMs < NON_ALIVE_DETACH_INTERVAL_MS) return false;
 			job.m_iNonAliveDetachAttempts++;
 			job.m_iLastNonAliveDetachAtMs = nowMs;
+			string memberIdCanonical = identity.GetCapturedMemberIdString(index);
 			access.KickFromVehicle(doorIndex);
 			if (!IsAuthority() || !IsJobCurrent(job) || job.m_CapturedDeadCleanup != identity || !identity.IsCurrent(job, vehicle)) return false;
 			string details = BuildJobIdentity(job);
 			details += string.Format(" member=%1 actor_rpl=%2 scope=CAPTURED_DEAD_CLEANUP life_state=DEAD captured_admission=1 native_helper=KICK_FROM_VEHICLE exit_door=%3 attempt=%4 maximum_attempts=%5 health_mutated=0 position_mutated=0 corpse_deleted=0", character.GetID(), AICF_VehicleCleanupRecoveryRoster.ComponentRpl(character), doorIndex, job.m_iNonAliveDetachAttempts, NON_ALIVE_DETACH_MAX_ATTEMPTS);
+			details += string.Format(" member_id_canonical=%1 member_id_canonical_source=CACHED_ADMISSION_ENTITYID_TOSTRING", memberIdCanonical);
 			AICF_Stage35Diagnostics.Info("VEHICLE_CLEANUP_CAPTURED_DEAD_MEMBER", details);
 			return true;
 		}
@@ -3203,6 +3205,7 @@ class AICF_VehicleCleanupManager
 				job.m_Snapshot.GetPrefab(),
 				job.m_Snapshot.GetReleaseAtMs());
 		}
+		details += string.Format(" entity_id_canonical=%1 entity_id_canonical_source=CACHED_FENCE_ENTITYID_TOSTRING", fence.GetEntityId().ToString());
 		return details;
 	}
 
