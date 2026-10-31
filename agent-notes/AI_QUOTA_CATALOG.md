@@ -320,5 +320,150 @@ runner/launcher/auditor SHA совпадают. Manifest `91E7EAF1…F498953`, e
 `.codex-runtime/issue78-finalization-20261030/catalog-native-v24-already-funded/`.
 Оба набора source receipts и полный compile verdict сохранены. Full262PASS
 относится к frozenV27 и **не покрывает** этот поздний fixture delta.
-Native v24 **NOT RUN**, ожидает отдельной пары после очереди WCS-карт.
+Native v24 выполнен: **strict FAIL**, результаты и следующий vehicle-only delta описаны ниже.
 Свежий compile: `catalog-native-v23-client-identity-elevated/compile-source-verdict.json`.
+
+## Native v24: supplies готовы, выбор слота не завершён
+
+Обе отдельные public роли v24 завершились штатно, native0/0; полные
+остановленные sibling logs и role/session closure сохранены. Server functional
+FAIL: DONE02:02:04.383, `BOUNDED_TIMEOUT`,300616ms, factories/headers/callbacks/
+debits0. Client bootstrap functional PASS, оба strict audits FAIL: server
+fatal0/resources14/other24, client fatal0/resources118/other24. Это **не**
+успешная покупка.
+
+`01:58:45.617 NATIVE_ALREADY_FUNDED` действительно подтвердил native consumer
+15600 при quote200, без нового generation. Затем183 `ENTRY` относятся только к
+Ural4320_transport, native_state8 (`CAN_SPAWN`). Четыре same-faction producer
+0262/03BA/03BB/23C1 перечислены, но ранний FundingSpawner/Entry binding исключил
+альтернативы. Единственная следующая ветка опубликованного selector —
+`GetFreeSlot(data)`; его null — вывод из control flow, не сохранённый return
+receipt. Реальные типы, занятость, cache state и расстояния слотов в v24
+**не наблюдались**. Нельзя утверждать, что перестановка выбора сама по себе
+гарантирует native покупку.
+
+Полные логи/выходы/audits:
+`.codex-runtime/issue78-finalization-20261030/catalog-native-v24-already-funded/`.
+Проверенная C1FF-копия, hashes, факты и план:
+`.codex-runtime/issue78-finalization-20261030/catalog-vehicle-slot-selection-readonly/`.
+
+## Vehicle-only preflight перед funding binding
+
+Для `vehicle` selector теперь ищет настоящий совместимый native free slot
+**до** первого binding/subscription/funding. Null-slot кандидат пропускается;
+проверяются остальные native entries и producers. Режимы `group`/`character`
+сохраняют прежний selector. Новая ветка не добавляет каталог, не меняет slot
+type/registry, native cache, цену, rank, cooldown, квоты или factory.
+
+Штатный `NOT_ENOUGH_SUPPLIES` возвращается раньше faction/rank/cooldown checks,
+поэтому до funding выполняются реальные `GetRequesterFaction`, `RankCheck` и
+`CooldownCheck`. После ACK и непосредственно перед запросом сохраняются
+штатные `GetRequestState`, `InitiateSpawn` и `PerformSpawn`. Последний заново
+проверяет реальную совместимость и занятость preferred slot; native veto не
+обходится. Исходные300s, один native generator при shortfall, уже достаточный
+consumer без генерации, фактический debit и25s physical tail не изменены.
+
+Pending candidate связывает точные producer/user/entry/data/quote и native slot
+component/owner entity/world/Rpl identities. Slot owner требует authoritative
+валидный Rpl; наличие его у всех штатных slots **не предполагается**. Если
+capture отказал, `NATIVE_SLOT_CANDIDATE_REJECT` отражает доступные cached facts,
+а identity не ослабляется ради PASS. После binding смена candidate/slot/context
+завершает тест до factory/debit; другого producer/entry и второго funding в
+этом scope нет. Frame/request callback, остановивший owner, не запускает native
+request. `Stop` очищает observer и candidate.
+
+`NATIVE_SLOT_OBSERVATION` фиксирует actual native type, compatibility и
+occupancy calls, free-cache hit, registered Child/Near arrays, occupied-cache
+membership snapshot, effective radius и позиции. Все overrides вызывают
+`super` ровно один раз и возвращают его результат без изменений. Для логов
+нет дополнительных `GetFreeSlot`, `IsOccupied` или physics traces. Это важно:
+штатный `IsOccupied.TraceCallback` сам может удалить destroyed vehicle wreck;
+его нельзя считать пассивным getter и нельзя дублировать ради диагностики.
+
+Native cache interval из pinned1.8.0.13 —6000ms. Cached free не выдаётся за
+fresh empty proof; occupied-cache snapshot отдельно от actual occupancy call.
+Near-slot правило использует strict XZ radius и parent service; Child slots
+регистрируются отдельно. Metadata/позиции помечаются как snapshots, без
+утверждения об atomic или историческом registration. Записи ограничены512
+различными ключами, overflow явный. При потере frame печатается отдельный
+`SLOT_OBSERVER_SCOPE_LOST`, без изменения successor/shared keys.
+
+Offline gate на точных fixture `77429416…E1CD` и объединённом contract
+`FAC68763…D4C0`: оба Windows PowerShell5.1 и pwsh7 — PASS всего прежнего Catalog
+контракта и portable namespaced addendum. Addendum:39 cases (включая2 observer),
+2 executed old-selector pin replays и6 actual request-wrapper cases. Он
+показывает старое binding на неподходящем Ural, выбор альтернативы новой веткой,
+stale identity/ACK/context veto, callback/overflow, native-call single-super
+counts и request space veto на явно моделируемых native boundaries. Два unsafe
+mutants (`producer-component`, `observer-scope`) дают ожидаемый FAIL в обоих
+shells на тех же source/contract hashes. Нового canonical test-файла нет:
+addendum включён в прежний `Test-AIQuotaCatalogProbeContracts.ps1`.
+
+Свежий public `Prepare` Stock v25 выполнил терминальный Workbench на387 файлах:
+386 frozenR30 production + fixture `77429416…E1CD`. Actual session74802 CLOSED0,
+native0, `Script validation successful` в04:31:35.459. Повторно проверены все три
+полных остановленных sibling logs: fatal0/other0, RESOURCE(E)50 суммарно
+(дублированные UI leak записи console/error). Последние сохранены отдельно:
+compile-specific **PASS** не означает отсутствие всех ошибок в журналах.
+Stage/source frozen386 SHA drift0, actual/expected387, auditor `ACEA76CA…EB52`,
+manifest `1F0ADA6D…1752`, source/compile receipts связаны. Expanded receipt:
+`.codex-runtime/issue78-finalization-20261030/catalog-native-v25-slot-preflight/expanded-compile-verdict.json`.
+Fresh separate-role native gate этого delta пока **NOT RUN**. Прежний Full не
+покрывает позднюю fixture; offline модель и compile не доказывают физическую
+покупку, payment или исправление native slot setup. Evidence полного combined
+dual gate и последнего exact-hash mutant повтора:
+`.codex-runtime/issue78-finalization-20261030/catalog-vehicle-slot-selection-readonly/implementation-v1/`.
+
+Незавершённый controlled GROUP setup удалён из текущих трёх файлов и сохранён
+отдельно с точными SHA в `live-group-wip-preserved-manifest.json` этого evidence.
+Он **не готов**: standalone Barracks RequestTable не содержит нужного native
+ResourceComponent, полная LivingArea hierarchy не экспортирована. Попытки
+metadata Workbench v1–v5 не дали пригодного экспорта; их native exit0 не
+считается proof. GROUP full basket и native positive остаются неподтверждёнными,
+vehicle gate их не заменяет.
+
+## Native v26: регистрация serialized data observer
+
+EOF-only исправление удалило2 лишних LF в конце fixture (77429416 →485970BD),
+не меняя остальных байтов или поведения. Fresh v26 public Stock Prepare на
+386 frozenR30 production +fixture =387 завершился actual50727 CLOSED0/native0;
+validation/full3fatal0/other0, RESOURCE(E)50 сохранены, source drift0. Старый v25
+stage с77429416 остался неизменным. EOF proof:
+`catalog-vehicle-slot-selection-readonly/implementation-v1/eof-only-proof.json`.
+
+V26 Server81236/Client97717 завершились штатно native0/0 после исходного300s;
+полные остановленные sibling logs/audits сохранены. Server DONE04:51:09.503 —
+BOUNDED_TIMEOUT300299ms, factory/header/callback/debit0. Server functionalFAIL,
+fatal0/resources14/other748; Client bootstrap functionalPASS,
+fatal0/resources118/other748; strict оба FAIL.
+
+Раньше первого selector, в04:46:01.700, native deserializer сообщил
+`Unknown class 'SCR_EntityCatalogSpawnerData'`. В каждом console362 таких ошибок,
+в шести sibling logs суммарно1448 с учётом дублирования. Все наблюдавшиеся
+same-faction VEHICLE producer имели assets0; slot observer и funding не были
+достигнуты. Это regression новой test fixture, а не доказательство проблемы
+Core, rank или GetFreeSlot. Early vehicle dispatch не пропустил native list init:
+исходный selector также начинал непосредственно с существующего m_aAssetList.
+
+В отдельном новом source v27 восстановлены **обе** точные исходные аннотации
+над `modded class SCR_EntityCatalogSpawnerData`: `BaseContainerProps(configRoot:
+true)` и `BaseContainerCustomCheckIntTitleField` с исходными аргументами.
+Pinned Script Diff1.8.0.13 original API SHA:
+`76D8618626FC0095C5919C24F98B452DD4F4E693AE34CFE4904356B592FF8806`.
+Dummy fields, native slot/price/rank/quota/factory условия не добавлялись.
+
+Новый контракт проверяет точный соседний header настоящего code span, а не
+comment/string, и4unsafe source controls. Все прежние Catalog/observer/callback/
+funding controls и portable39/2old/6request cases сохранены; full targeted
+Windows PowerShell5.1 и pwsh7 PASS. Свежий public Prepare v27 прошёл терминальный
+Workbench на том же386+1fixture/raw387: actual22131 CLOSED0/native0,
+full3fatal0/other0/resource50FAIL/source387SHA0. Fixture3ED078FB,
+manifest114957227FD7CC29AA9F5FD15BC0E0D1616C733080A9FE5D3F002D9A3B6C08B3,
+expanded receipt в `catalog-native-v27-serialized-data-registration/`.
+Это **не** reflection proof: fresh native v27 сейчас выполняется, полного
+остановленного verdict ещё нет. Исправление подтверждается только после
+отсутствия UnknownClass, непустого настоящего native catalog и прохождения
+обычного purchase/payment/tail gate. V26 FAIL не переименовывается в PASS.
+
+Evidence: `.codex-runtime/issue78-finalization-20261030/catalog-native-v26-slot-preflight/`
+и его `serialized-container-fix/`; старые stage/manifest/auditor неизменны.

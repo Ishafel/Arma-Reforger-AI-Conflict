@@ -14,6 +14,7 @@ class AICF_AIQuotaCatalogProbe
 	static SCR_CatalogEntitySpawnerComponent s_Spawner;
 	static SCR_EntityCatalogEntry s_Entry;
 	static SCR_EntitySpawnerSlotComponent s_Slot;
+	static ref AICF_QuotaCatalogVehicleSelection s_VehicleSelection;
 	static ref AICF_AIQuotaReservation s_Pressure;
 	static AICF_AIWorldQuotaService s_Service;
 	static int s_Serial;
@@ -76,6 +77,7 @@ class AICF_AIQuotaCatalogProbe
 	{
 		if (s_Finished) return;
 		s_Finished = true;
+		AICF_QuotaCatalogSlotObserver.Stop();
 		if (s_Player) s_Player.AICF_QuotaCatalogResourceStop(s_ResourceSerial);
 		if (s_Service && s_Pressure) s_Service.CancelReservation(s_Pressure, s_Serial);
 		s_Pressure = null;
@@ -92,6 +94,8 @@ class AICF_AIQuotaCatalogProbe
 	static void Close() { GetGame().RequestClose(); }
 	static void Stop()
 	{
+		AICF_QuotaCatalogSlotObserver.Stop();
+		s_VehicleSelection = null;
 		if (s_Player && s_ResourceSerial) s_Player.AICF_QuotaCatalogResourceStop(s_ResourceSerial);
 		AICF_AIQuotaCatalogResourceClient.Stop();
 		AICF_AIQuotaCatalogResourceClient.ClearNotes();
@@ -281,6 +285,9 @@ class AICF_AIQuotaCatalogProbe
 			}
 			else if (state != SCR_EEntityRequestStatus.CAN_SPAWN) { Finish(false, "EMPTY_HUMAN_VEHICLE_VETOED"); return; }
 		}
+		if (s_Mode == "vehicle" && (!s_VehicleSelection || s_VehicleSelection.m_Slot != s_Slot ||
+			!s_VehicleSelection.IsCurrent(s_Spawner, s_Entry, s_User.m_Entity, s_VehicleSelection.m_iQuote)))
+		{ Finish(false, "VEHICLE_SELECTION_STALE_BEFORE_REQUEST"); return; }
 		s_RequestedAt = now;
 		s_Spawner.AICF_QuotaProbeRequest(s_Entry, s_User.m_Entity, s_Slot);
 	}
@@ -291,6 +298,8 @@ modded class SCR_CatalogEntitySpawnerComponent
 	bool AICF_QuotaProbeFundingCurrent(AICF_AIQuotaCatalogIdentity producer, SCR_ResourceComponent resource,
 		SCR_ResourceConsumer consumer, SCR_ResourceGenerator generator, SCR_EntityCatalogEntry entry, IEntity user, int quote)
 	{
+		if (AICF_AIQuotaCatalogProbe.s_Mode == "vehicle" && (!AICF_AIQuotaCatalogProbe.s_VehicleSelection ||
+			!AICF_AIQuotaCatalogProbe.s_VehicleSelection.IsCurrent(this, entry, user, quote))) return false;
 		if (!Replication.IsServer() || AICF_AIQuotaCatalogProbe.s_Finished || AICF_AIQuotaCatalogProbe.s_RequestedAt) return false;
 		if (!producer || !producer.IsCurrent() || GetOwner() != producer.m_Entity || !INSTANCES.Contains(this)) return false;
 		if (!resource || GetSpawnerResourceComponent() != resource || resource.GetOwner() != producer.m_Entity) return false;
@@ -545,6 +554,7 @@ modded class SCR_CatalogEntitySpawnerComponent
 
 	bool AICF_QuotaProbeSelect(EEntityCatalogType type, IEntity user, out SCR_EntityCatalogEntry selected, out SCR_EntitySpawnerSlotComponent slot)
 	{
+		if (type == EEntityCatalogType.VEHICLE) return AICF_QuotaProbeSelectVehicle(user, selected, slot);
 		if (AICF_AIQuotaCatalogProbe.s_FundingSpawner && AICF_AIQuotaCatalogProbe.s_FundingSpawner != this) return false;
 		int checked;
 		int eligible = 0;
@@ -576,7 +586,18 @@ modded class SCR_CatalogEntitySpawnerComponent
 
 	void AICF_QuotaProbeRequest(SCR_EntityCatalogEntry entry, IEntity user, SCR_EntitySpawnerSlotComponent slot)
 	{
+		AICF_QuotaCatalogSlotFrame frame;
+		if (AICF_AIQuotaCatalogProbe.s_Mode == "vehicle")
+		{
+			AICF_QuotaCatalogVehicleSelection candidate = AICF_AIQuotaCatalogProbe.s_VehicleSelection;
+			if (!candidate || candidate.m_Slot != slot || !candidate.IsCurrent(this, entry, user, candidate.m_iQuote))
+			{ AICF_AIQuotaCatalogProbe.Finish(false, "VEHICLE_SELECTION_STALE_AT_REQUEST"); return; }
+			frame = AICF_QuotaCatalogSlotObserver.Begin(this, entry, candidate.m_Data, user, "REQUEST");
+			if (!frame || AICF_AIQuotaCatalogProbe.s_Finished || AICF_AIQuotaCatalogProbe.s_VehicleSelection != candidate || !candidate.IsCurrent(this, entry, user, candidate.m_iQuote))
+			{ AICF_AIQuotaCatalogProbe.Finish(false, "VEHICLE_REQUEST_SCOPE_CHANGED"); return; }
+		}
 		InitiateSpawn(entry, GetGame().GetPlayerManager().GetPlayerIdFromControlledEntity(user), slot);
+		AICF_QuotaCatalogSlotObserver.End(frame, null);
 		AICF_AIQuotaCatalogProbe.s_Produced = m_SpawnedEntity;
 	}
 
@@ -651,6 +672,102 @@ modded class SCR_CatalogEntitySpawnerComponent
 		if (this == AICF_AIQuotaCatalogProbe.s_Spawner) AICF_AIQuotaCatalogProbe.ObserveCallback(ai);
 		super.OnChimeraCharacterSpawned(ai, user, rallyPoint);
 	}
+
+	bool AICF_QuotaProbeSlotCurrent(SCR_EntitySpawnerSlotComponent slot)
+	{
+		return slot && INSTANCES.Contains(this) && (m_aChildSlots.Contains(slot) || m_aNearSlots.Contains(slot));
+	}
+
+	bool AICF_QuotaProbeUnfundedVehicleEligible(SCR_EntityCatalogEntry entry, IEntity user)
+	{
+		if (!entry || !m_aAssetList.Contains(entry) || GetRequesterFaction(user) != GetFaction()) return false;
+		if (SCR_GameModeCampaign.GetInstance())
+		{
+			if (!RankCheck(entry, user) || !CooldownCheck(user)) return false;
+		}
+		return AICF_AIQuotaCatalogProbe.CurrentUser() && !AICF_AIQuotaCatalogProbe.s_Finished;
+	}
+
+	bool AICF_QuotaProbeSelectVehicle(IEntity user, out SCR_EntityCatalogEntry selected, out SCR_EntitySpawnerSlotComponent slot)
+	{
+		if (AICF_AIQuotaCatalogProbe.s_FundingSpawner && AICF_AIQuotaCatalogProbe.s_FundingSpawner != this) return false;
+		int checked;
+		foreach (SCR_EntityCatalogEntry entry : m_aAssetList)
+		{
+			if (++checked > 256) return false;
+			if (AICF_AIQuotaCatalogProbe.s_FundingEntry && AICF_AIQuotaCatalogProbe.s_FundingEntry != entry) continue;
+			if (!entry || !entry.GetCatalogParent() || entry.GetCatalogParent().GetCatalogType() != EEntityCatalogType.VEHICLE) continue;
+			SCR_EntityCatalogSpawnerData data = SCR_EntityCatalogSpawnerData.Cast(entry.GetEntityDataOfType(SCR_EntityCatalogSpawnerData));
+			if (!data || data.GetSupplyCost() <= 0 || data.GetEntityCount() <= 0 || data.GetEntityCount() > 20) continue;
+			SCR_EEntityRequestStatus nativeState = GetRequestState(entry, user);
+			if (nativeState != SCR_EEntityRequestStatus.CAN_SPAWN && nativeState != SCR_EEntityRequestStatus.NOT_ENOUGH_SUPPLIES) continue;
+			if (!AICF_QuotaProbeUnfundedVehicleEligible(entry, user)) continue;
+			AICF_QuotaCatalogSlotFrame frame = AICF_QuotaCatalogSlotObserver.Begin(this, entry, data, user, "SELECTION");
+			if (!frame || AICF_AIQuotaCatalogProbe.s_Finished || !AICF_AIQuotaCatalogProbe.CurrentUser()) return false;
+			SCR_EntitySpawnerSlotComponent freeSlot = GetFreeSlot(data);
+			AICF_QuotaCatalogSlotObserver.End(frame, freeSlot);
+			if (AICF_AIQuotaCatalogProbe.s_Finished || !AICF_AIQuotaCatalogProbe.CurrentUser()) return false;
+			AICF_QuotaCatalogVehicleSelection candidate = AICF_AIQuotaCatalogProbe.s_VehicleSelection;
+			if (AICF_AIQuotaCatalogProbe.s_FundingSpawner)
+			{
+				if (!candidate || candidate.m_Slot != freeSlot || !candidate.IsCurrent(this, entry, user, data.GetSupplyCost()))
+				{ AICF_AIQuotaCatalogProbe.Finish(false, "BOUND_NATIVE_SLOT_CHANGED"); return false; }
+			}
+			else
+			{
+				if (!freeSlot) continue;
+				candidate = AICF_QuotaCatalogVehicleSelection.Capture(this, entry, user, freeSlot);
+				if (!candidate) continue;
+				AICF_AIQuotaCatalogProbe.s_VehicleSelection = candidate;
+			}
+			if (nativeState == SCR_EEntityRequestStatus.NOT_ENOUGH_SUPPLIES && !AICF_AIQuotaCatalogProbe.s_FundingAttempted)
+			{
+				if (AICF_QuotaProbeFund(entry, user, data.GetSupplyCost())) nativeState = GetRequestState(entry, user);
+				if (AICF_AIQuotaCatalogProbe.s_Finished) return false;
+				if (AICF_AIQuotaCatalogProbe.s_FundingSpawner && !AICF_AIQuotaCatalogProbe.s_FundingConfirmed) return false;
+			}
+			if (nativeState != SCR_EEntityRequestStatus.CAN_SPAWN)
+			{
+				if (!AICF_AIQuotaCatalogProbe.s_FundingSpawner) AICF_AIQuotaCatalogProbe.s_VehicleSelection = null;
+				continue;
+			}
+			if (AICF_AIQuotaCatalogProbe.s_VehicleSelection != candidate || !candidate.IsCurrent(this, entry, user, data.GetSupplyCost())) return false;
+			selected = entry;
+			slot = freeSlot;
+			return true;
+		}
+		return false;
+	}
+
+
+	override protected SCR_EntitySpawnerSlotComponent GetFreeSlotFromArray(notnull array<SCR_EntitySpawnerSlotComponent> slots, notnull SCR_EntityCatalogSpawnerData spawnerData, notnull array<SCR_EntitySpawnerSlotComponent> occupiedSlots)
+	{
+		AICF_QuotaCatalogSlotFrame frame = AICF_QuotaCatalogSlotObserver.s_Frame;
+		string source = "OTHER";
+		if (slots == m_aChildSlots) source = "CHILD";
+		else if (slots == m_aNearSlots) source = "NEAR";
+		int count = slots.Count();
+		int occupied = occupiedSlots.Count();
+		if (frame) frame.m_OccupiedSnapshot = occupiedSlots;
+		SCR_EntitySpawnerSlotComponent result = super.GetFreeSlotFromArray(slots, spawnerData, occupiedSlots);
+		if (frame)
+		{
+			SCR_SlotServiceComponentClass serviceData = SCR_SlotServiceComponentClass.Cast(GetComponentData(GetOwner()));
+			float radius;
+			if (serviceData) radius = serviceData.GetMaxSlotDistance();
+			AICF_QuotaCatalogSlotObserver.Write(frame, "RANGE_METADATA", string.Format("range_known=%1 effective_max_slot_distance=%2 near_range_rule=STRICT_XZ child_range_rule=UNRESTRICTED metadata_snapshot_after_native=1", serviceData != null, radius));
+		}
+		AICF_QuotaCatalogSlotObserver.Write(frame, "ARRAY", string.Format("source=%1 registered_count_before=%2 occupied_cache_count_before=%3 returned=%4 native_order_unchanged=1", source, count, occupied, result != null));
+		return result;
+	}
+	override protected SCR_EntitySpawnerSlotComponent GetLastKnownSuitableSlot(notnull SCR_EntityCatalogSpawnerData spawnerData)
+	{
+		AICF_QuotaCatalogSlotFrame frame = AICF_QuotaCatalogSlotObserver.s_Frame;
+		SCR_EntitySpawnerSlotComponent result = super.GetLastKnownSuitableSlot(spawnerData);
+		AICF_QuotaCatalogSlotObserver.Write(frame, "FREE_CACHE", string.Format("native_cache_hit=%1 fresh_occupancy_claim=0", result != null));
+		return result;
+	}
+
 }
 
 modded class SCR_PlayerController
@@ -1252,5 +1369,214 @@ modded class AICF_AIWorldQuotaService
 			Print(string.Format("[AICF][QUOTA_CATALOG_BODY_SCAN] stored=%1 examined=%2 bad=%3 bad_logged=%4 current_examples=%5 scan_complete=%6 observation_after_decision=1", storedCount, inspected, badCount, badLogged, currentLogged, inspected == storedCount));
 		}
 		return actual;
+	}
+}
+// Fixture-only immutable candidate. No reservation, registration or physical query.
+class AICF_QuotaCatalogVehicleSelection
+{
+	ref AICF_AIQuotaCatalogIdentity m_Producer;
+	ref AICF_AIQuotaCatalogIdentity m_User;
+	ref AICF_AIQuotaCatalogIdentity m_SlotOwner;
+	SCR_CatalogEntitySpawnerComponent m_Spawner;
+	SCR_EntityCatalogEntry m_Entry;
+	SCR_EntityCatalogSpawnerData m_Data;
+	SCR_EntitySpawnerSlotComponent m_Slot;
+	int m_iQuote;
+
+	static AICF_QuotaCatalogVehicleSelection Capture(SCR_CatalogEntitySpawnerComponent spawner, SCR_EntityCatalogEntry entry, IEntity user, SCR_EntitySpawnerSlotComponent slot)
+	{
+		if (!spawner || !entry || !slot || !AICF_AIQuotaCatalogProbe.CurrentUser()) return null;
+		if (!spawner || !entry || !slot) return null;
+		AICF_QuotaCatalogVehicleSelection selection = new AICF_QuotaCatalogVehicleSelection();
+		selection.m_Spawner = spawner;
+		selection.m_Entry = entry;
+		selection.m_Slot = slot;
+		selection.m_User = AICF_AIQuotaCatalogProbe.s_User;
+		selection.m_Producer = AICF_AIQuotaCatalogIdentity.Capture(spawner.GetOwner(), true);
+		selection.m_SlotOwner = AICF_AIQuotaCatalogIdentity.Capture(slot.GetOwner(), true);
+		selection.m_Data = SCR_EntityCatalogSpawnerData.Cast(entry.GetEntityDataOfType(SCR_EntityCatalogSpawnerData));
+		if (!selection.m_Data) return null;
+		if (!selection.m_Producer || !selection.m_SlotOwner)
+		{
+			if (!AICF_AIQuotaCatalogProbe.s_Finished) AICF_AIQuotaCatalogProbe.Log("NATIVE_SLOT_CANDIDATE_REJECT", string.Format("producer_identity_present=%1 slot_owner_identity_present=%2 stage=IDENTITY_CAPTURE native_slot_returned=1", selection.m_Producer != null, selection.m_SlotOwner != null));
+			return null;
+		}
+		selection.m_iQuote = selection.m_Data.GetSupplyCost();
+		if (!selection.IsCurrent(spawner, entry, user, selection.m_iQuote)) return null;
+		return selection;
+	}
+
+	bool IsCurrent(SCR_CatalogEntitySpawnerComponent spawner, SCR_EntityCatalogEntry entry, IEntity user, int quote)
+	{
+		if (!Replication.IsServer() || AICF_AIQuotaCatalogProbe.s_Finished || !m_User || !m_Producer || !m_SlotOwner) return false;
+		if (spawner != m_Spawner || entry != m_Entry || user != m_User.m_Entity || quote <= 0 || quote != m_iQuote) return false;
+		if (AICF_AIQuotaCatalogProbe.s_User != m_User || !AICF_AIQuotaCatalogProbe.CurrentUser()) return false;
+		if (!m_Producer.IsCurrent() || !m_SlotOwner.IsCurrent() || !m_User.IsCurrent()) return false;
+		if (m_Producer.m_Entity.FindComponent(SCR_CatalogEntitySpawnerComponent) != m_Spawner || m_SlotOwner.m_Entity.FindComponent(SCR_EntitySpawnerSlotComponent) != m_Slot) return false;
+		if (!m_Spawner || m_Spawner.GetOwner() != m_Producer.m_Entity || !m_Slot || m_Slot.GetOwner() != m_SlotOwner.m_Entity) return false;
+		if (m_Producer.m_Entity.FindComponent(SCR_CatalogEntitySpawnerComponent) != m_Spawner) return false;
+		if (m_SlotOwner.m_Entity.FindComponent(SCR_EntitySpawnerSlotComponent) != m_Slot) return false;
+		if (!m_Spawner.AICF_QuotaProbeSlotCurrent(m_Slot) || !m_Data || m_Entry.GetEntityDataOfType(SCR_EntityCatalogSpawnerData) != m_Data) return false;
+		if (m_Data.GetSupplyCost() != m_iQuote || m_Spawner.GetRequesterFaction(user) != m_Spawner.GetFaction()) return false;
+		if (!m_Producer.IsCurrent() || !m_SlotOwner.IsCurrent() || !m_User.IsCurrent()) return false;
+		if (m_Producer.m_Entity.FindComponent(SCR_CatalogEntitySpawnerComponent) != m_Spawner || m_SlotOwner.m_Entity.FindComponent(SCR_EntitySpawnerSlotComponent) != m_Slot) return false;
+		return !AICF_AIQuotaCatalogProbe.s_Finished && AICF_AIQuotaCatalogProbe.s_User == m_User && m_User.m_Entity == user && m_Spawner.AICF_QuotaProbeSlotCurrent(m_Slot);
+	}
+}
+
+
+
+// Observation of existing native calls only. IsOccupied may delete native wrecks;
+// the observer must never call it, TracePosition or GetFreeSlot for logging.
+class AICF_QuotaCatalogSlotFrame
+{
+	ref AICF_AIQuotaCatalogIdentity m_Producer;
+	ref AICF_AIQuotaCatalogIdentity m_User;
+	SCR_CatalogEntitySpawnerComponent m_Spawner;
+	SCR_EntityCatalogEntry m_Entry;
+	SCR_EntityCatalogSpawnerData m_Data;
+	SCR_EntitySpawnerSlotComponent m_LastSlot;
+	array<SCR_EntitySpawnerSlotComponent> m_OccupiedSnapshot;
+	string m_sPhase;
+	string m_sEntryPrefab;
+	bool m_bLossReported;
+	int m_iTypeCalls;
+	int m_iCompatibilityCalls;
+	int m_iOccupancyCalls;
+	int m_iSerial;
+	int m_iFundingSerial;
+	int m_iRequestedAt;
+	bool IsCurrent()
+	{
+		if (!Replication.IsServer() || AICF_AIQuotaCatalogProbe.s_Finished || !m_Producer || !m_User) return false;
+		if (AICF_AIQuotaCatalogProbe.s_Mode != "vehicle" || AICF_AIQuotaCatalogProbe.s_User != m_User) return false;
+		if (AICF_AIQuotaCatalogProbe.s_ResourceSerial != m_iFundingSerial || AICF_AIQuotaCatalogProbe.s_RequestedAt != m_iRequestedAt) return false;
+		if (!m_Producer.IsCurrent() || !m_User.IsCurrent() || !m_Spawner || m_Spawner.GetOwner() != m_Producer.m_Entity) return false;
+		if (m_Producer.m_Entity.FindComponent(SCR_CatalogEntitySpawnerComponent) != m_Spawner || !SCR_CatalogEntitySpawnerComponent.INSTANCES.Contains(m_Spawner)) return false;
+		if (!AICF_AIQuotaCatalogProbe.CurrentUser() || !m_Entry || m_Entry.GetEntityDataOfType(SCR_EntityCatalogSpawnerData) != m_Data) return false;
+		return !AICF_AIQuotaCatalogProbe.s_Finished && AICF_AIQuotaCatalogProbe.s_User == m_User;
+	}
+}
+
+class AICF_QuotaCatalogSlotObserver
+{
+	static ref AICF_QuotaCatalogSlotFrame s_Frame;
+	static int s_iSerial;
+	static bool s_bOverflow;
+	static ref array<string> s_Keys = {};
+	static void Stop() { s_Frame = null; s_Keys.Clear(); s_bOverflow = false; }
+	static AICF_QuotaCatalogSlotFrame Begin(SCR_CatalogEntitySpawnerComponent spawner, SCR_EntityCatalogEntry entry, SCR_EntityCatalogSpawnerData data, IEntity user, string phase)
+	{
+		if (s_Frame || AICF_AIQuotaCatalogProbe.s_Mode != "vehicle" || AICF_AIQuotaCatalogProbe.s_Finished) return null;
+		if (!spawner || !entry || !data || !user || !AICF_AIQuotaCatalogProbe.CurrentUser()) return null;
+		if (!spawner || !entry || !data || !user) return null;
+		AICF_QuotaCatalogSlotFrame frame = new AICF_QuotaCatalogSlotFrame();
+		frame.m_Spawner = spawner; frame.m_Entry = entry; frame.m_Data = data; frame.m_sPhase = phase;
+		frame.m_sEntryPrefab = entry.GetPrefab();
+		frame.m_Producer = AICF_AIQuotaCatalogIdentity.Capture(spawner.GetOwner(), true);
+		frame.m_User = AICF_AIQuotaCatalogProbe.s_User;
+		frame.m_iSerial = ++s_iSerial;
+		frame.m_iFundingSerial = AICF_AIQuotaCatalogProbe.s_ResourceSerial;
+		frame.m_iRequestedAt = AICF_AIQuotaCatalogProbe.s_RequestedAt;
+		if (!frame.IsCurrent() || user != frame.m_User.m_Entity || s_Frame) return null;
+		s_Frame = frame;
+		return frame;
+	}
+	static void Lost(AICF_QuotaCatalogSlotFrame frame)
+	{
+		if (!frame || frame.m_bLossReported) return;
+		frame.m_bLossReported = true;
+		AICF_AIQuotaCatalogProbe.Log("SLOT_OBSERVER_SCOPE_LOST", string.Format("serial=%1 funding_serial=%2 phase=%3 entry_prefab_snapshot=%4 shared_keys_modified=0", frame.m_iSerial, frame.m_iFundingSerial, frame.m_sPhase, frame.m_sEntryPrefab));
+	}
+	static void Write(AICF_QuotaCatalogSlotFrame frame, string kind, string detail)
+	{
+		if (!frame) return;
+		if (s_Frame != frame) { Lost(frame); return; }
+		bool current = frame.IsCurrent();
+		if (s_Frame != frame || !current) { Lost(frame); return; }
+		string key = string.Format("%1:%2:%3:%4", frame.m_Producer.m_Id, frame.m_sEntryPrefab, kind, detail);
+		if (s_Frame != frame || !frame.IsCurrent() || s_Frame != frame) { Lost(frame); return; }
+		if (s_Keys.Contains(key)) return;
+		if (s_Keys.Count() >= 512)
+		{
+			if (!s_bOverflow) { s_bOverflow = true; AICF_AIQuotaCatalogProbe.Log("SLOT_OBSERVER_OVERFLOW", "maximum_distinct=512 full_census_proven=0"); }
+			return;
+		}
+		s_Keys.Insert(key);
+		AICF_AIQuotaCatalogProbe.Log("NATIVE_SLOT_OBSERVATION", string.Format("serial=%1 funding_serial=%2 phase=%3 producer=%4 entry_prefab_snapshot=%5 kind=%6 %7", frame.m_iSerial, frame.m_iFundingSerial, frame.m_sPhase, frame.m_Producer.m_Id, frame.m_sEntryPrefab, kind, detail));
+	}
+	static void End(AICF_QuotaCatalogSlotFrame frame, SCR_EntitySpawnerSlotComponent result)
+	{
+		if (!frame) return;
+		EntityID id;
+		if (result && result.GetOwner()) id = result.GetOwner().GetID();
+		string kind = "RETURN";
+		if (frame && frame.m_sPhase == "REQUEST") kind = "REQUEST_END";
+		Write(frame, kind, string.Format("returned_slot=%1 nonnull=%2 fresh_occupancy_claim=0 type_calls=%3 compatibility_calls=%4 occupancy_calls=%5", id, result != null, frame.m_iTypeCalls, frame.m_iCompatibilityCalls, frame.m_iOccupancyCalls));
+		if (s_Frame == frame) s_Frame = null;
+	}
+	static void Type(SCR_EntitySpawnerSlotComponent slot, SCR_EEntitySpawnerSlotType result)
+	{
+		AICF_QuotaCatalogSlotFrame frame = s_Frame;
+		if (!frame || !frame.m_Spawner.AICF_QuotaProbeSlotCurrent(slot)) return;
+		IEntity owner = slot.GetOwner();
+		if (!owner) return;
+		EntityID id = owner.GetID();
+		vector position = owner.GetOrigin();
+		vector producerPosition = frame.m_Producer.m_Entity.GetOrigin();
+		IEntity parent = owner.GetParent();
+		EntityID parentId;
+		bool otherService;
+		if (parent) { parentId = parent.GetID(); otherService = parent != frame.m_Producer.m_Entity && parent.FindComponent(SCR_SlotServiceComponent) != null; }
+		if (s_Frame != frame || !frame.IsCurrent() || s_Frame != frame) { Lost(frame); return; }
+		frame.m_LastSlot = slot;
+		frame.m_iTypeCalls++;
+		Write(frame, "TYPE", string.Format("slot=%1 native_type=%2 position_snapshot=%3 producer_position_snapshot=%4 distance_sq_xz=%5 parent=%6 parent_other_service_snapshot=%7 atomic_snapshot=0", id, result, position, producerPosition, vector.DistanceSqXZ(position, producerPosition), parentId, otherService));
+	}
+	static void Compatibility(SCR_EntityCatalogSpawnerData data, SCR_EEntitySpawnerSlotType type, bool result)
+	{
+		AICF_QuotaCatalogSlotFrame frame = s_Frame;
+		if (!frame || frame.m_Data != data) return;
+		if (s_Frame != frame || !frame.IsCurrent() || s_Frame != frame) { Lost(frame); return; }
+		frame.m_iCompatibilityCalls++;
+		EntityID id;
+		if (frame.m_LastSlot && frame.m_LastSlot.GetOwner()) id = frame.m_LastSlot.GetOwner().GetID();
+		Write(frame, "COMPATIBILITY", string.Format("last_actual_slot=%1 native_type=%2 native_compatible=%3 cached_occupied_membership_snapshot=%4 occupied_cache_snapshot_available=%5", id, type, result, frame.m_OccupiedSnapshot && frame.m_OccupiedSnapshot.Contains(frame.m_LastSlot), frame.m_OccupiedSnapshot != null));
+	}
+	static void Occupied(SCR_EntitySpawnerSlotComponent slot, bool result)
+	{
+		AICF_QuotaCatalogSlotFrame frame = s_Frame;
+		if (!frame || !frame.m_Spawner.AICF_QuotaProbeSlotCurrent(slot)) return;
+		if (s_Frame != frame || !frame.IsCurrent() || s_Frame != frame) { Lost(frame); return; }
+		frame.m_iOccupancyCalls++;
+		EntityID id;
+		if (slot.GetOwner()) id = slot.GetOwner().GetID();
+		Write(frame, "OCCUPANCY", string.Format("slot=%1 actual_native_call=1 native_occupied=%2 additional_trace=0", id, result));
+	}
+}
+
+[BaseContainerProps(configRoot: true), BaseContainerCustomCheckIntTitleField("m_bEnabled", "SpawnerData", "DISABLED - SpawnerData", 1)]
+modded class SCR_EntityCatalogSpawnerData
+{
+	override bool CanSpawnInSlot(SCR_EEntitySpawnerSlotType slotSize)
+	{
+		bool result = super.CanSpawnInSlot(slotSize);
+		AICF_QuotaCatalogSlotObserver.Compatibility(this, slotSize, result);
+		return result;
+	}
+}
+modded class SCR_EntitySpawnerSlotComponent
+{
+	override SCR_EEntitySpawnerSlotType GetSlotType()
+	{
+		SCR_EEntitySpawnerSlotType result = super.GetSlotType();
+		AICF_QuotaCatalogSlotObserver.Type(this, result);
+		return result;
+	}
+	override bool IsOccupied()
+	{
+		bool result = super.IsOccupied();
+		AICF_QuotaCatalogSlotObserver.Occupied(this, result);
+		return result;
 	}
 }

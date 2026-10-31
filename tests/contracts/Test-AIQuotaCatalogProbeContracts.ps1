@@ -3,6 +3,32 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../lib/Stage3StaticAudit.Common.ps1')
 $s=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'tests/fixtures/AICF_AIQuotaCatalogProbe.c'))
 function Body($name){Get-AICFMethodBody ([pscustomobject]@{Source=$s;Code=(ConvertTo-AICFCodeText $s)}) $name}
+# Pinned 1.8.0.13 SCR_EntityCatalogSpawnerData.c SHA256:
+# 76D8618626FC0095C5919C24F98B452DD4F4E693AE34CFE4904356B592FF8806.
+# Native BaseContainer registration is separate from script compilation.
+$catalogDataNativeHeader='[BaseContainerProps(configRoot: true), BaseContainerCustomCheckIntTitleField("m_bEnabled", "SpawnerData", "DISABLED - SpawnerData", 1)]'
+function Assert-AICFCatalogDataRegistration([string]$source){
+ $pattern='(?m)^[\t ]*'+[regex]::Escape($catalogDataNativeHeader)+'\s*modded[\t ]+class[\t ]+SCR_EntityCatalogSpawnerData\b'
+ $match=[regex]::Match($source,$pattern)
+ if(!$match.Success){throw 'Serialized catalog observer requires exact adjacent original configRoot/title annotations'}
+ $code=ConvertTo-AICFCodeText $source
+ $actual=$code.Substring($match.Index,$match.Length)
+ if($actual -notmatch '\bBaseContainerProps\s*\(configRoot:\s*true\)' -or
+  $actual -notmatch '\bBaseContainerCustomCheckIntTitleField\s*\(' -or
+  $actual -notmatch '\bmodded\s+class\s+SCR_EntityCatalogSpawnerData\b'){
+  throw 'Catalog registration header must be real code, not a comment/string'
+ }
+}
+Assert-AICFCatalogDataRegistration $s
+$registrationUnsafe=@(
+ $s.Replace($catalogDataNativeHeader,''),
+ $s.Replace($catalogDataNativeHeader,$catalogDataNativeHeader.Replace('configRoot: true','configRoot: false')),
+ $s.Replace($catalogDataNativeHeader,'[BaseContainerProps(configRoot: true)]'),
+ $s.Replace($catalogDataNativeHeader+([regex]::Match($s,[regex]::Escape($catalogDataNativeHeader)+'(\r?\n)').Groups[1].Value)+'modded class SCR_EntityCatalogSpawnerData',
+  '/*'+$catalogDataNativeHeader+([Environment]::NewLine)+'modded class SCR_EntityCatalogSpawnerData*/'+([Environment]::NewLine)+'modded class SCR_EntityCatalogSpawnerData')
+)
+foreach($mutant in $registrationUnsafe){$rejected=$false;try{Assert-AICFCatalogDataRegistration $mutant}catch{$rejected=$true};if(!$rejected){throw 'Unsafe serialized-class registration mutation escaped'}}
+'PASS catalog serialized_data_registration exact_pinned_header=1 unsafe_source_controls=4 native_reflection=NOT_RUN'
 $rules=@('300000','InitiateSpawn(entry, GetGame().GetPlayerManager().GetPlayerIdFromControlledEntity(user), slot);','s_Service.ReserveUnits(AICF_EAIQuotaBucket.STOCK, pressure, s_Serial)','s_Service.CancelReservation(s_Pressure, s_Serial)','state != SCR_EEntityRequestStatus.AI_LIMIT_REACHED','GetPlayerManager().GetPlayerController(s_Player.GetPlayerId()) == s_Player','!AICF_GroupRuntime.IsAliveCharacter(liveBody.m_Entity)','Math.AbsFloat(s_Debited - s_Cost) <= 0.01','GetControlAIAgent().CountTowardsAIWorldLimit()','seat.GetOccupant() || seat.IsReserved()','GetCallqueue().Remove(Tick)','GetCallqueue().Remove(Close)')
 foreach($r in $rules){if(!$s.Contains($r)){throw "Native catalog fixture boundary missing: $r"}}
 if(!$s.Contains('AICF_AIQuotaCatalogIdentity.Capture(player.GetControlledEntity(), false)')-or!$s.Contains('if (!s_User.m_Rpl || !s_User.m_Rpl.Id().IsValid()) return false;')){throw 'Actual network player requires present valid Rpl without assuming server master role'}
@@ -445,3 +471,142 @@ namespace CatalogResourceLinksReplay {
 Add-Type -TypeDefinition ($linksCode.Replace('BODY',$links))
 $linkCases=[CatalogResourceLinksReplay.Cases]::Run()
 "PASS catalog generation_super_once_cases=$generationCases exact_container_link_cases=$linkCases metadata_sources=4 native_mutation=0"
+
+# Vehicle-only eligible native slot/captured pending identity regressions.
+& {
+param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),[string]$Mutation='')
+$ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot '../lib/Stage3StaticAudit.Common.ps1')
+$s=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'tests/fixtures/AICF_AIQuotaCatalogProbe.c'))
+function Body($name){Get-AICFMethodBody ([pscustomobject]@{Source=$s;Code=(ConvertTo-AICFCodeText $s)}) $name}
+function Class($name){Get-AICFBracedBody -Source $s -StartPattern ('\bclass\s+'+$name+'\b')}
+function Tx($s){
+ $s=$s -replace '\bprotected\b','public' -replace '\bref\s+','' -replace '\bnotnull\s+','' -replace '\bEntityID\b','int' -replace '\bchecked\b','examined'
+ $s=$s -replace 'FindComponent\((RplComponent|SCR_EntitySpawnerSlotComponent|SCR_SlotServiceComponent|SCR_CatalogEntitySpawnerComponent)\)','FindComponent(typeof($1))'
+ $s=$s -replace 'GetEntityDataOfType\(SCR_EntityCatalogSpawnerData\)','GetEntityDataOfType(typeof(SCR_EntityCatalogSpawnerData))'
+ $s=$s -replace 'array<([^>]+)> (\w+) = \{\};','EArray<$1> $2 = new EArray<$1>();' -replace '\barray<','EArray<'
+ $s=$s -replace 'foreach \(([^:]+) : ([^)]+)\)','foreach ($1 in $2)'
+ $s=$s -replace '(?m)^(\s*)(int|float|bool|IEntity) (\w+);','$1$2 $3 = default($2);'
+ $s=$s -replace 'string.Format\(','Fmt('
+ $s=$s -replace 'super\.','base.'
+ $s=$s -replace '(?m)^\t(static |bool |void |AICF_QuotaCatalogSlotFrame )',"`tpublic `$1"
+ $s=$s -replace '(?m)^\t(?!public\b)([A-Za-z])',"`tpublic `$1"
+ return $s
+}
+$selector=Tx (Body 'AICF_QuotaProbeSelectVehicle');$selector=$selector.Insert($selector.IndexOf('{')+1,'selected=null;slot=null;')
+$candidate=Tx (Class 'AICF_QuotaCatalogVehicleSelection')
+if($Mutation -eq 'producer-component'){$candidate=$candidate.Replace('if (m_Producer.m_Entity.FindComponent(typeof(SCR_CatalogEntitySpawnerComponent)) != m_Spawner) return false;','').Replace('m_Producer.m_Entity.FindComponent(typeof(SCR_CatalogEntitySpawnerComponent)) != m_Spawner || ','')}
+$frame=Tx (Class 'AICF_QuotaCatalogSlotFrame')
+$observer=Tx (Class 'AICF_QuotaCatalogSlotObserver')
+if($Mutation -eq 'observer-scope'){$observer=$observer.Replace('if (s_Frame != frame) { Lost(frame); return; }','').Replace('if (s_Frame != frame || !current) { Lost(frame); return; }','').Replace('if (s_Frame != frame || !frame.IsCurrent() || s_Frame != frame) { Lost(frame); return; }','')}
+$identity=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/Forces/AICF_AIQuotaCatalogBasket.c'))
+$identity=Tx (Get-AICFBracedBody -Source $identity -StartPattern '\bclass\s+AICF_AIQuotaCatalogIdentity\b')
+$identity=$identity -replace '(?m)^\t(IEntity|int|BaseWorld|RplComponent|string|bool) ',"`tpublic `$1 "
+$identity=$identity -replace '(?m)^\t(static AICF_AIQuotaCatalogIdentity )',"`tpublic `$1"
+$fundGate=[regex]::Match((Body 'AICF_QuotaProbeFundingCurrent'),'if \(AICF_AIQuotaCatalogProbe.s_Mode == "vehicle"[\s\S]+?return false;').Value
+if(!$fundGate){throw 'Missing actual vehicle funding identity gate'}
+$sourceRequired=@('GetFreeSlot(data)','AICF_QuotaProbeFund(entry, user, data.GetSupplyCost())','candidate.m_Slot != freeSlot','!RankCheck(entry, user) || !CooldownCheck(user)','BOUND_NATIVE_SLOT_CHANGED','AICF_QuotaCatalogSlotObserver.Stop();')
+foreach($part in $sourceRequired){if(!$s.Contains($part)){throw "Missing source fence $part"}}
+if((Body 'AICF_QuotaProbeSelectVehicle').IndexOf('GetFreeSlot(data)') -gt (Body 'AICF_QuotaProbeSelectVehicle').IndexOf('AICF_QuotaProbeFund(entry')){throw 'Slot must precede funding'}
+foreach($method in @('GetSlotType','IsOccupied','CanSpawnInSlot','GetFreeSlotFromArray','GetLastKnownSuitableSlot')){if(([regex]::Matches((Body $method),'super\.')).Count -ne 1 -or !(Body $method).Contains('return result;')){throw "Single-super/rawreturn $method"}}
+$code=@'
+using System;using System.Collections.Generic;
+public class N{public static implicit operator bool(N x){return x!=null;}public static Game GetGame(){return Env.Game;}public static string Fmt(string f,params object[] p){for(int i=9;i>0;i--)f=f.Replace("%"+i,"{"+(i-1)+"}");return string.Format(f,p);}}
+public class EArray<T>:List<T>{public static implicit operator bool(EArray<T> xs){return xs!=null;}public new int Count(){return base.Count;}public void Insert(T x){Add(x);}}
+public static class Text{public static bool IsValid(this int x){return x>0;}}
+public class vector:N{public float X,Z;public static float DistanceSqXZ(vector a,vector b){return (a.X-b.X)*(a.X-b.X)+(a.Z-b.Z)*(a.Z-b.Z);}public override string ToString(){return X+","+Z;}}
+public class BaseWorld:N{public Dictionary<int,IEntity> Map=new Dictionary<int,IEntity>();public IEntity FindEntityByID(int id){return Map.ContainsKey(id)?Map[id]:null;}}
+public class Game:N{public BaseWorld World=new BaseWorld();public BaseWorld GetWorld(){return World;}}
+public class RplComponent:N{public int Value=1;public bool Master=true;public int Id(){return Value;}public bool IsMaster(){return Master;}public static RplComponent Cast(object x){return x as RplComponent;}}
+public class IEntity:N{public int Id;public BaseWorld World;public RplComponent Rpl=new RplComponent();public SCR_EntitySpawnerSlotComponent Slot;public SCR_CatalogEntitySpawnerComponent Spawner;public IEntity Parent;public int GetID(){return Id;}public BaseWorld GetWorld(){return World;}public object FindComponent(Type t){if(t==typeof(RplComponent))return Rpl;if(t==typeof(SCR_EntitySpawnerSlotComponent))return Slot;if(t==typeof(SCR_CatalogEntitySpawnerComponent))return Spawner;return null;}public vector GetOrigin(){return new vector();}public IEntity GetParent(){return Parent;}}
+public class SCR_SlotServiceComponent:N{}public class SCR_SlotServiceComponentClass:N{public static SCR_SlotServiceComponentClass Cast(object o){return o as SCR_SlotServiceComponentClass;}public float GetMaxSlotDistance(){return 5;}}
+public enum SCR_EEntitySpawnerSlotType{INVALID=0,SMALL=1,LARGE=2}
+public enum EEntityCatalogType{VEHICLE,GROUP,CHARACTER}
+public enum SCR_EEntityRequestStatus{CAN_SPAWN,NOT_ENOUGH_SUPPLIES,RANK_LOW}
+public class Catalog:N{public EEntityCatalogType Type=EEntityCatalogType.VEHICLE;public EEntityCatalogType GetCatalogType(){return Type;}}
+public class BaseData:N{public int Mask=1;public int CompatibilityCalls;public virtual bool CanSpawnInSlot(SCR_EEntitySpawnerSlotType t){CompatibilityCalls++;return (Mask&(int)t)!=0;}}
+public class SCR_EntityCatalogSpawnerData:BaseData{public int Cost=200,Count=1;public Action CostRead;public int CostReads,CostReadAt=1;public int GetSupplyCost(){CostReads++;if(CostReads==CostReadAt){var r=CostRead;CostRead=null;if(r!=null)r();}return Cost;}public int GetEntityCount(){return Count;}public static SCR_EntityCatalogSpawnerData Cast(object x){return x as SCR_EntityCatalogSpawnerData;}public override bool CanSpawnInSlot(SCR_EEntitySpawnerSlotType slotSize) COMPAT}
+public class SCR_EntityCatalogEntry:N{public SCR_EntityCatalogSpawnerData Data=new SCR_EntityCatalogSpawnerData();public Catalog Parent=new Catalog();public string Name="car";public SCR_EEntityRequestStatus State=SCR_EEntityRequestStatus.CAN_SPAWN;public Catalog GetCatalogParent(){return Parent;}public Action DataRead;public object GetEntityDataOfType(Type t){var r=DataRead;DataRead=null;if(r!=null)r();return Data;}public string GetPrefab(){return Name;}}
+public class BaseSlot:N{public IEntity Owner;public bool Occupied;public SCR_EEntitySpawnerSlotType Type=SCR_EEntitySpawnerSlotType.SMALL;public int TypeCalls,OccupiedCalls;public Action OnType,OnOccupied;public IEntity GetOwner(){return Owner;}public virtual SCR_EEntitySpawnerSlotType GetSlotType(){TypeCalls++;var r=OnType;OnType=null;if(r!=null)r();return Type;}public virtual bool IsOccupied(){OccupiedCalls++;var r=OnOccupied;OnOccupied=null;if(r!=null)r();return Occupied;}}
+public class SCR_EntitySpawnerSlotComponent:BaseSlot{public override SCR_EEntitySpawnerSlotType GetSlotType() TYPE public override bool IsOccupied() OCCUPIED}
+public class SCR_GameModeCampaign:N{public static bool Enabled=true;public static SCR_GameModeCampaign GetInstance(){return Enabled?new SCR_GameModeCampaign():null;}}
+public class BaseSpawner:N{public object GetComponentData(IEntity owner){return new SCR_SlotServiceComponentClass();}public IEntity Owner;public EArray<SCR_EntitySpawnerSlotComponent> m_aChildSlots=new EArray<SCR_EntitySpawnerSlotComponent>(),m_aNearSlots=new EArray<SCR_EntitySpawnerSlotComponent>(),CacheOccupied=new EArray<SCR_EntitySpawnerSlotComponent>();public SCR_EntitySpawnerSlotComponent CacheFree;public int ArraySuperCalls,CacheSuperCalls,FreeCalls;public Action QueryRead;public IEntity GetOwner(){return Owner;}public SCR_EntitySpawnerSlotComponent GetFreeSlot(SCR_EntityCatalogSpawnerData data){FreeCalls++;var x=GetLastKnownSuitableSlot(data);if(!x)x=GetFreeSlotFromArray(m_aChildSlots,data,CacheOccupied);if(!x)x=GetFreeSlotFromArray(m_aNearSlots,data,CacheOccupied);var r=QueryRead;QueryRead=null;if(r!=null)r();return x;}public virtual SCR_EntitySpawnerSlotComponent GetFreeSlotFromArray(EArray<SCR_EntitySpawnerSlotComponent> slots,SCR_EntityCatalogSpawnerData data,EArray<SCR_EntitySpawnerSlotComponent> occupied){ArraySuperCalls++;foreach(var slot in slots)if(data.CanSpawnInSlot(slot.GetSlotType())&&!occupied.Contains(slot)&&!slot.IsOccupied())return slot;return null;}public virtual SCR_EntitySpawnerSlotComponent GetLastKnownSuitableSlot(SCR_EntityCatalogSpawnerData d){CacheSuperCalls++;if(CacheFree&&d.CanSpawnInSlot(CacheFree.GetSlotType()))return CacheFree;return null;}}
+public class SCR_CatalogEntitySpawnerComponent:BaseSpawner{public static EArray<SCR_CatalogEntitySpawnerComponent> INSTANCES=new EArray<SCR_CatalogEntitySpawnerComponent>();public EArray<SCR_EntityCatalogEntry> m_aAssetList=new EArray<SCR_EntityCatalogEntry>();public bool Rank=true,Cooldown=true,Faction=true,Ack=true;public int FundCalls,Bindings;public object GetFaction(){return Env.Faction;}public object GetRequesterFaction(IEntity u){return Faction?Env.Faction:new object();}public bool RankCheck(SCR_EntityCatalogEntry e,IEntity u){return Rank;}public bool CooldownCheck(IEntity u){return Cooldown;}public SCR_EEntityRequestStatus GetRequestState(SCR_EntityCatalogEntry e,IEntity u){return e.State;}public bool FundingGate(SCR_EntityCatalogEntry entry,IEntity user,int quote){FUNDGATE return true;}public bool AICF_QuotaProbeFund(SCR_EntityCatalogEntry e,IEntity u,int q){FundCalls++;if(!FundingGate(e,u,q))return false;if(!AICF_AIQuotaCatalogProbe.s_FundingSpawner){Bindings++;AICF_AIQuotaCatalogProbe.s_FundingSpawner=this;AICF_AIQuotaCatalogProbe.s_FundingEntry=e;AICF_AIQuotaCatalogProbe.s_ResourceSerial=42;}if(!Ack)return false;AICF_AIQuotaCatalogProbe.s_FundingConfirmed=true;e.State=SCR_EEntityRequestStatus.CAN_SPAWN;return true;}public bool AICF_QuotaProbeSlotCurrent(SCR_EntitySpawnerSlotComponent slot) SLOTCURRENT public bool AICF_QuotaProbeUnfundedVehicleEligible(SCR_EntityCatalogEntry entry,IEntity user) ELIGIBLE public bool Select(IEntity user,out SCR_EntityCatalogEntry selected,out SCR_EntitySpawnerSlotComponent slot) SELECTOR public override SCR_EntitySpawnerSlotComponent GetFreeSlotFromArray(EArray<SCR_EntitySpawnerSlotComponent> slots,SCR_EntityCatalogSpawnerData spawnerData,EArray<SCR_EntitySpawnerSlotComponent> occupiedSlots) ARRAYHOOK public override SCR_EntitySpawnerSlotComponent GetLastKnownSuitableSlot(SCR_EntityCatalogSpawnerData spawnerData) CACHEHOOK }
+public static class Replication{public static bool Server=true;public static bool IsServer(){return Server;}}
+public class AICF_AIQuotaCatalogIdentity:N IDENTITY
+public class AICF_QuotaCatalogVehicleSelection:N CANDIDATE
+public class AICF_QuotaCatalogSlotFrame:N FRAME
+public class AICF_QuotaCatalogSlotObserver:N OBSERVER
+public class AICF_AIQuotaCatalogProbe:N{public static bool s_Finished,s_FundingAttempted,s_FundingConfirmed;public static int s_ResourceSerial,s_RequestedAt,Done,Logs;public static string s_Mode="vehicle";public static AICF_AIQuotaCatalogIdentity s_User;public static SCR_CatalogEntitySpawnerComponent s_FundingSpawner;public static SCR_EntityCatalogEntry s_FundingEntry;public static AICF_QuotaCatalogVehicleSelection s_VehicleSelection;public static bool CurrentUser(){return s_User&&s_User.IsCurrent()&&!s_Finished;}public static void Finish(bool p,string r){s_Finished=true;Done++;AICF_QuotaCatalogSlotObserver.Stop();}public static string LastLog;public static void Log(string e,string d){Logs++;LastLog=e;}public static void Reset(){s_Finished=s_FundingAttempted=s_FundingConfirmed=false;s_ResourceSerial=s_RequestedAt=Done=Logs=0;s_Mode="vehicle";s_User=null;s_FundingSpawner=null;s_FundingEntry=null;s_VehicleSelection=null;AICF_QuotaCatalogSlotObserver.Stop();SCR_CatalogEntitySpawnerComponent.INSTANCES.Clear();Replication.Server=true;}}
+public class Env{public static Game Game;public static object Faction=new object();public IEntity User;public SCR_CatalogEntitySpawnerComponent Spawner;public SCR_EntityCatalogEntry Entry;public SCR_EntitySpawnerSlotComponent Slot;public Env(){AICF_AIQuotaCatalogProbe.Reset();Game=new Game();User=Entity(1);AICF_AIQuotaCatalogProbe.s_User=AICF_AIQuotaCatalogIdentity.Capture(User,false);Spawner=NewSpawner(10);Entry=new SCR_EntityCatalogEntry();Spawner.m_aAssetList.Add(Entry);Slot=NewSlot(20);Spawner.m_aNearSlots.Add(Slot);}public static IEntity Entity(int id){var e=new IEntity{Id=id,World=Game.World};Game.World.Map[id]=e;return e;}public static SCR_CatalogEntitySpawnerComponent NewSpawner(int id){var s=new SCR_CatalogEntitySpawnerComponent{Owner=Entity(id)};s.Owner.Spawner=s;SCR_CatalogEntitySpawnerComponent.INSTANCES.Add(s);return s;}public static SCR_EntitySpawnerSlotComponent NewSlot(int id){var s=new SCR_EntitySpawnerSlotComponent{Owner=Entity(id)};s.Owner.Slot=s;return s;}public bool Select(){SCR_EntityCatalogEntry e;SCR_EntitySpawnerSlotComponent s;return Spawner.Select(User,out e,out s);}}
+'@
+$parts=@{SELECTOR=$selector;CANDIDATE=$candidate;FRAME=$frame;OBSERVER=$observer;IDENTITY=$identity;FUNDGATE=(Tx $fundGate);SLOTCURRENT=(Tx (Body 'AICF_QuotaProbeSlotCurrent'));ELIGIBLE=(Tx (Body 'AICF_QuotaProbeUnfundedVehicleEligible'));TYPE=(Tx (Body 'GetSlotType'));OCCUPIED=(Tx (Body 'IsOccupied'));COMPAT=(Tx (Body 'CanSpawnInSlot'));ARRAYHOOK=(Tx (Body 'GetFreeSlotFromArray'));CACHEHOOK=(Tx (Body 'GetLastKnownSuitableSlot'))}
+$code=[regex]::Replace($code,'\b(SELECTOR|CANDIDATE|FRAME|OBSERVER|IDENTITY|FUNDGATE|SLOTCURRENT|ELIGIBLE|TYPE|OCCUPIED|COMPAT|ARRAYHOOK|CACHEHOOK)\b',{param($match) $parts[$match.Value]})
+$oldBody=Body 'AICF_QuotaProbeSelect'
+$delegate='if (type == EEntityCatalogType.VEHICLE) return AICF_QuotaProbeSelectVehicle(user, selected, slot);'
+if(!$oldBody.Contains($delegate)){throw 'Original generic selector vehicle delegation missing'}
+$oldBody=$oldBody.Replace($delegate,'')
+$oldBody=(Tx $oldBody).Replace('AICF_QuotaProbeFund(','LegacyFund(')
+$oldBody=$oldBody.Insert($oldBody.IndexOf('{')+1,'selected=null;slot=null;')
+$code=$code.Replace('public bool Select(IEntity user,','public bool LegacyFund(SCR_EntityCatalogEntry e,IEntity u,int q){Bindings++;AICF_AIQuotaCatalogProbe.s_FundingSpawner=this;AICF_AIQuotaCatalogProbe.s_FundingEntry=e;AICF_AIQuotaCatalogProbe.s_FundingConfirmed=true;e.State=SCR_EEntityRequestStatus.CAN_SPAWN;return true;}public bool LegacySelect(EEntityCatalogType type,IEntity user,out SCR_EntityCatalogEntry selected,out SCR_EntitySpawnerSlotComponent slot)'+$oldBody+'public bool Select(IEntity user,')
+$request=(Tx (Body 'AICF_QuotaProbeRequest')).Replace('AICF_QuotaCatalogSlotFrame frame;','AICF_QuotaCatalogSlotFrame frame=null;')
+$code=$code.Replace('public bool Select(IEntity user,','public IEntity m_SpawnedEntity;public int RequestCalls,Factories,Debits;public void InitiateSpawn(SCR_EntityCatalogEntry e,int user,SCR_EntitySpawnerSlotComponent slot){RequestCalls++;if(!Replication.Server||user<=0||e.State!=SCR_EEntityRequestStatus.CAN_SPAWN||!Rank||!Cooldown||!Faction)return;if(slot&&e.Data.CanSpawnInSlot(slot.GetSlotType())&&!slot.IsOccupied()){Factories++;Debits++;m_SpawnedEntity=Env.Entity(90);}}public void Request(SCR_EntityCatalogEntry entry,IEntity user,SCR_EntitySpawnerSlotComponent slot)'+$request+'public bool Select(IEntity user,')
+$code=$code.Replace('public class Game:N{','public class PlayerManager:N{public int GetPlayerIdFromControlledEntity(IEntity user){return user?1:0;}}public class Game:N{public PlayerManager PM=new PlayerManager();public PlayerManager GetPlayerManager(){return PM;}')
+$code=$code.Replace('public static bool s_Finished,s_FundingAttempted,s_FundingConfirmed;','public static IEntity s_Produced;public static bool s_Finished,s_FundingAttempted,s_FundingConfirmed;')
+$code=$code.Replace('public string GetPrefab(){return Name;}','public Action PrefabRead;public string GetPrefab(){var r=PrefabRead;PrefabRead=null;if(r!=null)r();return Name;}')
+$code='namespace AICF_CatalogVehicleCandidateScope {'+$code+'}'
+Add-Type -TypeDefinition $code
+[AICF_CatalogVehicleCandidateScope.AICF_QuotaCatalogSlotObserver]::End($null,$null)
+$legacy=[AICF_CatalogVehicleCandidateScope.Env]::new();$legacy.Entry.Data.Mask=2;$legacy.Entry.State=[AICF_CatalogVehicleCandidateScope.SCR_EEntityRequestStatus]::NOT_ENOUGH_SUPPLIES;$second=[AICF_CatalogVehicleCandidateScope.SCR_EntityCatalogEntry]::new();$legacy.Spawner.m_aAssetList.Add($second);$picked=$null;$pickedSlot=$null
+if($legacy.Spawner.LegacySelect([AICF_CatalogVehicleCandidateScope.EEntityCatalogType]::VEHICLE,$legacy.User,[ref]$picked,[ref]$pickedSlot) -or $legacy.Spawner.Bindings -ne 1 -or [AICF_CatalogVehicleCandidateScope.AICF_AIQuotaCatalogProbe]::s_FundingEntry -ne $legacy.Entry){throw 'Actual old selector did not reproduce first null-slot funding pin'}
+if($legacy.Spawner.LegacySelect([AICF_CatalogVehicleCandidateScope.EEntityCatalogType]::VEHICLE,$legacy.User,[ref]$picked,[ref]$pickedSlot)){throw 'Actual old selector unexpectedly escaped pinned wrong-type entry'}
+$cases=@('positive','first-entry-wrong-type','first-producer-no-slot','all-no-slot','occupied','cached-occupied','cache-free','lowrank','cooldown','foreign','wrong-kind','invalid-cost','invalid-count','query-stop','type-world','occupancy-stop','pending-ack','bound-slot-swapped','bound-world','bound-user','bound-producer-component','bound-slot-component','bound-entry-data','bound-quote','bound-slot-unregistered','bound-funding-gate','bound-direct-producer-gate','slot-no-rpl','slot-invalid-rpl','slot-not-master','producer-no-rpl','producer-invalid-rpl','producer-not-master','late-quote-producer-component','late-quote-slot-component','query-slot-unregistered','query-producer-replacement','observer-stale-write','observer-overflow')
+$count=0
+foreach($case in $cases){$e=[AICF_CatalogVehicleCandidateScope.Env]::new();$expected=$case -in @('positive','first-entry-wrong-type','first-producer-no-slot','cache-free','pending-ack');if($case -in @('lowrank','cooldown','foreign','wrong-kind','invalid-cost','invalid-count','all-no-slot','occupied','cached-occupied')){$e.Entry.State=[AICF_CatalogVehicleCandidateScope.SCR_EEntityRequestStatus]::NOT_ENOUGH_SUPPLIES};switch($case){
+ 'first-entry-wrong-type'{$e.Entry.Data.Mask=2;$e.Entry.State=[AICF_CatalogVehicleCandidateScope.SCR_EEntityRequestStatus]::NOT_ENOUGH_SUPPLIES;$next=[AICF_CatalogVehicleCandidateScope.SCR_EntityCatalogEntry]::new();$next.State=[AICF_CatalogVehicleCandidateScope.SCR_EEntityRequestStatus]::NOT_ENOUGH_SUPPLIES;$e.Spawner.m_aAssetList.Add($next)}
+ 'first-producer-no-slot'{$e.Entry.State=[AICF_CatalogVehicleCandidateScope.SCR_EEntityRequestStatus]::NOT_ENOUGH_SUPPLIES;$e.Spawner.m_aNearSlots.Clear();if($e.Select() -or $e.Spawner.Bindings -ne 0){throw 'No-slot native producer must not bind funding'};$other=[AICF_CatalogVehicleCandidateScope.Env]::NewSpawner(11);$next=[AICF_CatalogVehicleCandidateScope.SCR_EntityCatalogEntry]::new();$next.State=[AICF_CatalogVehicleCandidateScope.SCR_EEntityRequestStatus]::NOT_ENOUGH_SUPPLIES;$other.m_aAssetList.Add($next);$other.m_aNearSlots.Add($e.Slot);$e.Spawner=$other}
+ 'all-no-slot'{$e.Spawner.m_aNearSlots.Clear()}
+ 'occupied'{$e.Slot.Occupied=$true}
+ 'cached-occupied'{$e.Spawner.CacheOccupied.Add($e.Slot)}
+ 'cache-free'{$e.Spawner.CacheFree=$e.Slot}
+ 'lowrank'{$e.Spawner.Rank=$false}
+ 'cooldown'{$e.Spawner.Cooldown=$false}
+ 'foreign'{$e.Spawner.Faction=$false}
+ 'wrong-kind'{$e.Entry.Parent.Type=[AICF_CatalogVehicleCandidateScope.EEntityCatalogType]::GROUP}
+ 'invalid-cost'{$e.Entry.Data.Cost=0}
+ 'invalid-count'{$e.Entry.Data.Count=21}
+ 'query-stop'{$e.Spawner.QueryRead={[AICF_CatalogVehicleCandidateScope.AICF_AIQuotaCatalogProbe]::Finish($false,'injected')}}
+ 'type-world'{$e.Slot.OnType={[AICF_CatalogVehicleCandidateScope.Env]::Game.World=[AICF_CatalogVehicleCandidateScope.BaseWorld]::new()}}
+ 'occupancy-stop'{$e.Slot.OnOccupied={[AICF_CatalogVehicleCandidateScope.AICF_AIQuotaCatalogProbe]::Finish($false,'injected')}}
+ 'pending-ack'{$e.Entry.State=[AICF_CatalogVehicleCandidateScope.SCR_EEntityRequestStatus]::NOT_ENOUGH_SUPPLIES;$e.Spawner.Ack=$false;if($e.Select()){throw 'Before ACK selected'};if($e.Spawner.Bindings -ne 1){throw 'Preflight before funding did not bind exact candidate'};$e.Spawner.Ack=$true}
+ 'slot-no-rpl'{$e.Slot.Owner.Rpl=$null}
+ 'slot-invalid-rpl'{$e.Slot.Owner.Rpl.Value=0}
+ 'slot-not-master'{$e.Slot.Owner.Rpl.Master=$false}
+ 'producer-no-rpl'{$e.Spawner.Owner.Rpl=$null}
+ 'producer-invalid-rpl'{$e.Spawner.Owner.Rpl.Value=0}
+ 'producer-not-master'{$e.Spawner.Owner.Rpl.Master=$false}
+ 'late-quote-producer-component'{$x=$e;$e.Entry.Data.CostReadAt=3;$e.Entry.Data.CostRead={$x.Spawner.Owner.Spawner=[AICF_CatalogVehicleCandidateScope.Env]::NewSpawner(40)}.GetNewClosure()}
+ 'late-quote-slot-component'{$x=$e;$e.Entry.Data.CostReadAt=3;$e.Entry.Data.CostRead={$x.Slot.Owner.Slot=[AICF_CatalogVehicleCandidateScope.Env]::NewSlot(41)}.GetNewClosure()}
+ 'query-slot-unregistered'{$x=$e;$e.Spawner.QueryRead={$x.Spawner.m_aNearSlots.Clear()}.GetNewClosure()}
+ 'query-producer-replacement'{$x=$e;$e.Spawner.QueryRead={$x.Spawner.Owner.Spawner=[AICF_CatalogVehicleCandidateScope.Env]::NewSpawner(42)}.GetNewClosure()}
+ 'observer-stale-write'{$f=[AICF_CatalogVehicleCandidateScope.AICF_QuotaCatalogSlotObserver]::Begin($e.Spawner,$e.Entry,$e.Entry.Data,$e.User,'TEST');$e.Entry.DataRead={[AICF_CatalogVehicleCandidateScope.AICF_QuotaCatalogSlotObserver]::Stop()};[AICF_CatalogVehicleCandidateScope.AICF_QuotaCatalogSlotObserver]::Write($f,'test','stale');if([AICF_CatalogVehicleCandidateScope.AICF_AIQuotaCatalogProbe]::LastLog -ne 'SLOT_OBSERVER_SCOPE_LOST' -or [AICF_CatalogVehicleCandidateScope.AICF_QuotaCatalogSlotObserver]::s_Keys.ToArray().Length -ne 0){throw 'Stale observer mutated successor'};continue}
+ 'observer-overflow'{$f=[AICF_CatalogVehicleCandidateScope.AICF_QuotaCatalogSlotObserver]::Begin($e.Spawner,$e.Entry,$e.Entry.Data,$e.User,'TEST');0..511|ForEach-Object {[AICF_CatalogVehicleCandidateScope.AICF_QuotaCatalogSlotObserver]::s_Keys.Add($_.ToString())};[AICF_CatalogVehicleCandidateScope.AICF_QuotaCatalogSlotObserver]::Write($f,'new','overflow');if(![AICF_CatalogVehicleCandidateScope.AICF_QuotaCatalogSlotObserver]::s_bOverflow -or [AICF_CatalogVehicleCandidateScope.AICF_QuotaCatalogSlotObserver]::s_Keys.ToArray().Length -ne 512){throw 'Observer overflow unbounded'};continue}
+ default {if($case.StartsWith('bound-')){$e.Entry.State=[AICF_CatalogVehicleCandidateScope.SCR_EEntityRequestStatus]::NOT_ENOUGH_SUPPLIES;$e.Spawner.Ack=$false;[void]$e.Select();$e.Spawner.Ack=$true;switch($case){'bound-slot-swapped'{$e.Spawner.m_aNearSlots.Clear();$e.Spawner.m_aNearSlots.Add([AICF_CatalogVehicleCandidateScope.Env]::NewSlot(21))}'bound-world'{[AICF_CatalogVehicleCandidateScope.Env]::Game.World=[AICF_CatalogVehicleCandidateScope.BaseWorld]::new()}'bound-user'{[AICF_CatalogVehicleCandidateScope.AICF_AIQuotaCatalogProbe]::s_User=[AICF_CatalogVehicleCandidateScope.AICF_AIQuotaCatalogIdentity]::Capture([AICF_CatalogVehicleCandidateScope.Env]::Entity(2),$false)}'bound-producer-component'{$e.Spawner.Owner.Spawner=[AICF_CatalogVehicleCandidateScope.Env]::NewSpawner(30)}'bound-slot-component'{$e.Slot.Owner.Slot=[AICF_CatalogVehicleCandidateScope.Env]::NewSlot(31)}'bound-entry-data'{$e.Entry.Data=[AICF_CatalogVehicleCandidateScope.SCR_EntityCatalogSpawnerData]::new()}'bound-quote'{$e.Entry.Data.Cost++}'bound-slot-unregistered'{$e.Spawner.m_aNearSlots.Clear()}'bound-funding-gate'{$e.Slot.Owner.Rpl.Value++;if($e.Spawner.FundingGate($e.Entry,$e.User,200)){throw 'Actual funding gate accepted stale slot identity'}}'bound-direct-producer-gate'{$e.Spawner.Owner.Spawner=[AICF_CatalogVehicleCandidateScope.Env]::NewSpawner(32);if($e.Spawner.FundingGate($e.Entry,$e.User,200)){throw 'Actual funding gate accepted replacement producer component'}}}}}
+ };if($case.StartsWith('observer-')){$count++;continue};$actual=$e.Select();if($actual -ne $expected){throw "Actual selector mismatch case=$case actual=$actual expected=$expected"};if(!$expected -and $e.Spawner.Bindings -gt 0 -and !$case.StartsWith('bound-')){throw "Rejected candidate funded $case"};if($case -eq 'pending-ack' -and $e.Spawner.Bindings -ne 1){throw 'Repeated subscription binding'};if($case -eq 'cache-free' -and $e.Slot.OccupiedCalls -ne 0){throw 'Observer added occupancy query to native cache hit'};if($case -eq 'positive' -and ($e.Spawner.FreeCalls -ne 1 -or $e.Spawner.CacheSuperCalls -ne 1 -or $e.Spawner.ArraySuperCalls -ne 2 -or $e.Slot.TypeCalls -ne 1 -or $e.Slot.OccupiedCalls -ne 1 -or $e.Entry.Data.CompatibilityCalls -ne 1)){throw 'Observer duplicated native lookup/compatibility/occupancy call'};$count++}
+$requests=0
+foreach($case in @('request-positive','request-slot-stale','request-scope-stop','request-occupied','request-cache-occupied','request-user-stale')){
+ $e=[AICF_CatalogVehicleCandidateScope.Env]::new();if($case -eq 'request-cache-occupied'){$e.Spawner.CacheFree=$e.Slot;$e.Slot.Occupied=$true}
+ if(!$e.Select()){throw "Request setup selection failed $case"};[AICF_CatalogVehicleCandidateScope.AICF_AIQuotaCatalogProbe]::s_RequestedAt=123
+ switch($case){
+  'request-slot-stale'{$e.Slot.Owner.Rpl.Value++}
+  'request-scope-stop'{$e.Entry.PrefabRead={[AICF_CatalogVehicleCandidateScope.AICF_AIQuotaCatalogProbe]::Finish($false,'injected-request-scope')}}
+  'request-occupied'{$e.Slot.Occupied=$true}
+  'request-user-stale'{[AICF_CatalogVehicleCandidateScope.AICF_AIQuotaCatalogProbe]::s_User=[AICF_CatalogVehicleCandidateScope.AICF_AIQuotaCatalogIdentity]::Capture([AICF_CatalogVehicleCandidateScope.Env]::Entity(99),$false)}
+ }
+ $e.Spawner.Request($e.Entry,$e.User,$e.Slot);$expected=0;if($case -eq 'request-positive'){$expected=1}
+ if($e.Spawner.Factories -ne $expected -or $e.Spawner.Debits -ne $expected){throw "Actual request wrapper bypassed stale/native space veto $case"}
+ if($case -in @('request-slot-stale','request-scope-stop','request-user-stale') -and $e.Spawner.RequestCalls -ne 0){throw "Stale wrapper reached native boundary $case"};$requests++
+}
+"PASS actual_vehicle_cases=$count includes_observer_cases=2 old_pinned_selector_replays=2 actual_request_cases=$requests source_scope=C1FF_ignored native_boundaries=SIMULATED WinPS_CSharp5=1"
+
+} -RepositoryRoot $RepositoryRoot
