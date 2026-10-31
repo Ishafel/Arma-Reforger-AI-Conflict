@@ -94,6 +94,7 @@ class AICF_AIQuotaCatalogProbe
 	static void Close() { GetGame().RequestClose(); }
 	static void Stop()
 	{
+		AICF_QuotaCatalogDepotSetup.Stop();
 		AICF_QuotaCatalogSlotObserver.Stop();
 		s_VehicleSelection = null;
 		if (s_Player && s_ResourceSerial) s_Player.AICF_QuotaCatalogResourceStop(s_ResourceSerial);
@@ -130,6 +131,7 @@ class AICF_AIQuotaCatalogProbe
 		{
 			s_Started = now;
 			AICF_AIQuotaCatalogResourceObservation.DumpKnownSources();
+			if (s_Finished) return;
 		}
 		if (System.GetTickCount(s_Started) >= 300000) { Finish(false, "BOUNDED_TIMEOUT"); return; }
 		if (now - s_Last < 1000) return;
@@ -204,6 +206,7 @@ class AICF_AIQuotaCatalogProbe
 			if (!s_Player) return;
 		}
 		if (!CurrentUser()) { Finish(false, "AVATAR_IDENTITY_UNPROVEN"); return; }
+		if (!AICF_QuotaCatalogDepotSetup.Ready()) return;
 		if (s_FundingSpawner)
 		{
 			if (!s_FundingSpawner.AICF_QuotaProbeFund(s_FundingEntry, s_User.m_Entity, s_FundingQuote)) return;
@@ -246,6 +249,7 @@ class AICF_AIQuotaCatalogProbe
 			if (++checked > 128) break;
 			if (spawner && observeEnumeration) spawner.AICF_QuotaProbeDescribe(wanted, faction);
 			if (!spawner || spawner.GetFaction() != faction) continue;
+			if (!AICF_QuotaCatalogDepotSetup.AllowsSpawner(spawner)) continue;
 			bool selected = spawner.AICF_QuotaProbeSelect(wanted, s_User.m_Entity, s_Entry, s_Slot);
 			if (s_Finished) return;
 			if (selected) { s_Spawner = spawner; break; }
@@ -1085,6 +1089,7 @@ modded class ArmaReforgerScripted
 {
 	override bool OnGameStart()
 	{
+		AICF_QuotaCatalogDepotSetup.Initialize();
 		bool started = super.OnGameStart();
 		if (!AICF_AIQuotaCatalogProbe.Enabled()) return started;
 		if (Replication.IsServer()) GetGame().GetCallqueue().CallLater(AICF_AIQuotaCatalogProbe.Tick, 1000, true);
@@ -1105,19 +1110,32 @@ class AICF_AIQuotaCatalogResourceObservation
 	static SCR_ResourceGenerator s_Generator;
 	static SCR_ResourceConsumer s_Consumer;
 	static void Stop() { s_Generator = null; s_Consumer = null; }
+	static bool ExactSourceResource(Resource resource, ResourceName expected, out ResourceName actualName)
+	{
+		actualName = string.Empty;
+		if (!resource || !resource.IsValid()) return false;
+		BaseResourceObject loaded = resource.GetResource();
+		if (!loaded) return false;
+		actualName = loaded.GetResourceName();
+		return actualName == expected;
+	}
 
 	static void DumpKnownSources()
 	{
 		if (!Replication.IsServer() || !GetGame()) return;
 		array<ResourceName> paths = {
-			"Prefabs/MP/Campaign/RequestTable_US_Barracks.et",
-			"Prefabs/MP/Campaign/RequestTable_USSR_Barracks.et",
-			"Prefabs/Systems/Compositions/EntitySpawnerSlot/EntitySpawnerSlot_Character.et",
-			"Prefabs/Systems/Logic/CharacterSpawnerSlot.et"
+			"{F8A337C38BB8D4EA}Prefabs/MP/Campaign/RequestTable_US_Barracks.et",
+			"{2337DFDD05C26996}Prefabs/MP/Campaign/RequestTable_USSR_Barracks.et",
+			"{4B1971606FBC57DF}Prefabs/Systems/Compositions/EntitySpawnerSlot/EntitySpawnerSlot_Character.et",
+			"{9540DC5C8AC4E6EE}Prefabs/Systems/Logic/CharacterSpawnerSlot.et"
 		};
 		foreach (int index, ResourceName path : paths)
 		{
 			Resource resource = Resource.Load(path);
+			ResourceName actualName;
+			bool exactName = ExactSourceResource(resource, path, actualName);
+			AICF_AIQuotaCatalogProbe.Log("RESOURCE_SOURCE_NAME", string.Format("index=%1 expected=%2 actual=%3 exact_name=%4 observation_only=1", index, path, actualName, exactName));
+			if (!exactName) { AICF_AIQuotaCatalogProbe.Finish(false, "METADATA_RESOURCE_IDENTITY_REJECTED"); return; }
 			IEntitySource source;
 			if (resource && resource.IsValid()) source = SCR_BaseContainerTools.FindEntitySource(resource);
 			if (!source)
@@ -1621,6 +1639,452 @@ modded class SCR_EntitySpawnerSlotComponent
 	{
 		bool result = super.IsOccupied();
 		AICF_QuotaCatalogSlotObserver.Occupied(this, result);
+		return result;
+	}
+}
+
+// Controlled infrastructure preparation, not an ordinary construction proof.
+class AICF_QuotaCatalogDepotScope
+{
+	AICF_ConstructionBaseState m_State;
+	AICF_ConstructionPlanner m_Planner;
+	SCR_CampaignFaction m_Faction;
+	SCR_CampaignMilitaryBaseComponent m_Base;
+	SCR_CampaignBuildingProviderComponent m_Provider;
+	EntityID m_BaseId;
+	EntityID m_ProviderId;
+	BaseWorld m_World;
+	int m_iEpoch;
+	bool m_bTarget;
+}
+
+class AICF_QuotaCatalogDepotScan
+{
+	AICF_ConstructionOrder m_Order;
+	IEntity m_Root;
+	int m_iEpoch;
+	int m_iVisited;
+	ref array<ref AICF_AIQuotaCatalogIdentity> m_Producers = {};
+}
+
+class AICF_QuotaCatalogDepotSetup
+{
+	static bool s_Initialized;
+	static bool s_Enabled;
+	static bool s_Stopped;
+	static bool s_Paid;
+	static bool s_CompletionRequested;
+	static bool s_Ready;
+	static int s_Epoch;
+	static ref AICF_QuotaCatalogDepotScope s_Scope;
+	static ref AICF_ConstructionOrder s_Order;
+	static AICF_ConstructionPlanner s_Planner;
+	static AICF_ConstructionBaseState s_State;
+	static SCR_CampaignFaction s_Faction;
+	static BaseWorld s_World;
+	static string s_Token;
+	static int s_Revision;
+	static EntityID s_BaseId;
+	static EntityID s_ProviderId;
+	static ResourceName s_Prefab;
+	static ref AICF_ConstructionMetadata s_Metadata;
+	static IEntity s_Root;
+	static EntityID s_RootId;
+	static SCR_CampaignBuildingLayoutComponent s_Layout;
+	static ref AICF_AIQuotaCatalogIdentity s_RootProof;
+	static ref AICF_AIQuotaCatalogIdentity s_LayoutProof;
+	static ref AICF_QuotaCatalogDepotScan s_Scan;
+	static ref array<ref AICF_AIQuotaCatalogIdentity> s_Producers = {};
+	static ref array<string> s_Waits = {};
+
+	static void Initialize()
+	{
+		if (s_Initialized) return;
+		s_Initialized = true;
+		string value;
+		bool opted = System.GetCLIParam("aicfQuotaCatalogControlledDepotSetup", value) && value == "1";
+		bool probe = AICF_AIQuotaCatalogProbe.Enabled();
+		s_Enabled = opted && probe && AICF_AIQuotaCatalogProbe.s_Mode == "vehicle";
+		if (s_Enabled && Replication.IsServer()) AICF_AIQuotaCatalogProbe.Log("CONTROLLED_SETUP", "phase=ENABLED kind=PAID_NATIVE_LIGHT_DEPOT ordinary_proof=0 clock_reset=0");
+	}
+	static bool Active()
+	{
+		if (!s_Enabled || s_Stopped || !Replication.IsServer()) return false;
+		return !AICF_AIQuotaCatalogProbe.s_Finished && !AICF_AIQuotaCatalogProbe.s_Pressure;
+	}
+	static void Stop()
+	{
+		s_Stopped = true;
+		s_Epoch++;
+		s_Scope = null;
+		s_Order = null;
+		s_Planner = null;
+		s_State = null;
+		s_Faction = null;
+		s_World = null;
+		s_Metadata = null;
+		s_Root = null;
+		s_Layout = null;
+		s_RootProof = null;
+		s_LayoutProof = null;
+		s_Scan = null;
+		s_Producers.Clear();
+		s_Waits.Clear();
+	}
+	static void NoteWait(string reason, int epoch)
+	{
+		if (epoch != s_Epoch || !Active() || s_Waits.Contains(reason)) return;
+		if (s_Waits.Count() >= 16) return;
+		s_Waits.Insert(reason);
+		AICF_AIQuotaCatalogProbe.Log("CONTROLLED_SETUP", "phase=WAIT ordinary_proof=0 reason=" + reason);
+	}
+	static void PlannerStopped(AICF_ConstructionPlanner planner)
+	{
+		if (!s_Enabled) return;
+		if (planner == s_Planner || (s_Scope && s_Scope.m_Planner == planner)) Stop();
+	}
+	static bool ScopePinned(AICF_QuotaCatalogDepotScope frame)
+	{
+		if (!frame || s_Scope != frame || !frame.m_bTarget || !Active()) return false;
+		if (frame.m_iEpoch != s_Epoch || !frame.m_State || !frame.m_Planner) return false;
+		return frame.m_State.m_Base == frame.m_Base && frame.m_State.m_BaseId == frame.m_BaseId;
+	}
+	static AICF_QuotaCatalogDepotScope Enter(AICF_ConstructionPlanner planner, AICF_ConstructionBaseState state)
+	{
+		AICF_QuotaCatalogDepotScope frame = new AICF_QuotaCatalogDepotScope();
+		frame.m_State = state; frame.m_Planner = planner; frame.m_iEpoch = s_Epoch;
+		s_Scope = frame;
+		if (!Active() || s_Order || !state || state.m_Order || !state.m_Base) return frame;
+		SCR_CampaignMilitaryBaseComponent base = state.m_Base;
+		SCR_CampaignFaction faction = SCR_CampaignFaction.Cast(base.GetFaction());
+		if (!faction || faction.GetFactionKey() != AICF_ContentProfile.GetActive().GetRuntimeFactionKey("USSR")) return frame;
+		if (faction.GetMainBase() != base || !base.IsInitialized()) return frame;
+		SCR_CampaignBuildingProviderComponent provider = base.GetMasterProvider();
+		if (!provider || !provider.GetOwner() || !base.GetOwner() || !GetGame()) return frame;
+		frame.m_Faction = faction; frame.m_Base = base; frame.m_Provider = provider;
+		frame.m_BaseId = base.GetOwner().GetID(); frame.m_ProviderId = provider.GetOwner().GetID();
+		frame.m_World = GetGame().GetWorld();
+		if (s_Scope == frame && Active() && frame.m_iEpoch == s_Epoch) frame.m_bTarget = true;
+		return frame;
+	}
+	static bool ScopeCurrent(AICF_QuotaCatalogDepotScope frame)
+	{
+		if (!frame || s_Scope != frame || !frame.m_bTarget || !Active()) return false;
+		if (frame.m_iEpoch != s_Epoch || !GetGame() || GetGame().GetWorld() != frame.m_World) return false;
+		if (!frame.m_Base || !frame.m_Provider || !frame.m_Faction || !frame.m_State) return false;
+		IEntity baseOwner = frame.m_Base.GetOwner();
+		IEntity providerOwner = frame.m_Provider.GetOwner();
+		if (!baseOwner || !providerOwner || !frame.m_World) return false;
+		if (frame.m_World.FindEntityByID(frame.m_BaseId) != baseOwner) return false;
+		if (frame.m_World.FindEntityByID(frame.m_ProviderId) != providerOwner) return false;
+		if (frame.m_Base.GetFaction() != frame.m_Faction || frame.m_Faction.GetMainBase() != frame.m_Base) return false;
+		if (frame.m_Base.GetMasterProvider() != frame.m_Provider || frame.m_Provider.GetCampaignMilitaryBaseComponent() != frame.m_Base) return false;
+		return ScopePinned(frame);
+	}
+	static int Select(AICF_AICommander commander, array<bool> covered, int original)
+	{
+		AICF_QuotaCatalogDepotScope frame = s_Scope;
+		if (!frame || !frame.m_bTarget) return original;
+		if (!commander) return -1;
+		if (commander.GetFaction() != frame.m_Faction) return original;
+		if (!ScopeCurrent(frame)) return -1;
+		if (!covered || covered.Count() != AICF_EConstructionType.COUNT || covered[AICF_EConstructionType.LIGHT_DEPOT]) return -1;
+		return AICF_EConstructionType.LIGHT_DEPOT;
+	}
+	static void Leave(AICF_QuotaCatalogDepotScope frame, AICF_QuotaCatalogDepotScope previous)
+	{
+		if (ScopeCurrent(frame) && !s_Order && frame.m_State.m_Order)
+		{
+			AICF_ConstructionOrder order = frame.m_State.m_Order;
+			if (OrderInScope(frame, order) && order.IdentityValid() && OrderInScope(frame, order))
+			{
+				if (ScopePinned(frame) && frame.m_State.m_Order == order)
+				{
+					s_Order = order; s_State = frame.m_State; s_Faction = frame.m_Faction; s_World = frame.m_World;
+					s_Planner = frame.m_Planner;
+					s_Token = order.m_sToken; s_Revision = order.m_iRevision;
+					s_BaseId = order.m_BaseId; s_ProviderId = order.m_ProviderId;
+					s_Metadata = order.m_Metadata;
+					if (s_Metadata) s_Prefab = s_Metadata.m_sPrefab;
+					AICF_AIQuotaCatalogProbe.Log("CONTROLLED_SETUP", "phase=ORDER_CAPTURED kind=PAID_NATIVE_LIGHT_DEPOT ordinary_proof=0 token=" + s_Token);
+				}
+			}
+		}
+		if (s_Scope == frame) s_Scope = previous;
+	}
+	static bool OrderInScope(AICF_QuotaCatalogDepotScope frame, AICF_ConstructionOrder order)
+	{
+		if (!ScopePinned(frame) || !order || frame.m_State.m_Order != order) return false;
+		if (order.m_eType != AICF_EConstructionType.LIGHT_DEPOT || order.m_Faction != frame.m_Faction) return false;
+		if (order.m_Base != frame.m_Base || order.m_Provider != frame.m_Provider) return false;
+		return order.m_BaseId == frame.m_BaseId && order.m_ProviderId == frame.m_ProviderId;
+	}
+	static bool Same(AICF_ConstructionOrder order, int epoch)
+	{
+		if (!Active() || !order || s_Order != order || s_Epoch != epoch) return false;
+		if (order.m_sToken != s_Token || order.m_iRevision != s_Revision) return false;
+		if (!s_Metadata || order.m_Metadata != s_Metadata) return false;
+		if (order.m_BaseId != s_BaseId || order.m_ProviderId != s_ProviderId || order.m_Faction != s_Faction) return false;
+		return order.m_eType == AICF_EConstructionType.LIGHT_DEPOT && !order.m_bCancelled;
+	}
+	static bool Current(AICF_ConstructionOrder order)
+	{
+		int epoch = s_Epoch;
+		if (!Same(order, epoch) || !GetGame() || GetGame().GetWorld() != s_World) return false;
+		if (!order.m_Metadata || order.m_Metadata.m_sPrefab != s_Prefab) return false;
+		bool identity = order.IdentityValid();
+		if (!identity || !Same(order, epoch) || !order.m_Faction) return false;
+		if (order.m_Faction.GetMainBase() != order.m_Base) return false;
+		if (!s_Paid && (!s_State || s_State.m_Order != order)) return false;
+		return Same(order, epoch);
+	}
+	static void Placed(AICF_ConstructionOrder order, bool nativeResult)
+	{
+		if (order != s_Order || !nativeResult) return;
+		int epoch = s_Epoch;
+		if (!Current(order) || s_Paid) { AICF_AIQuotaCatalogProbe.Finish(false, "SETUP_PAID_SCOPE_OR_DUPLICATE"); return; }
+		if (!order.m_bAccepted || !order.m_bPaid || !order.m_bCommitStarted || order.m_iCost <= 0) { AICF_AIQuotaCatalogProbe.Finish(false, "SETUP_PAYMENT_NOT_PROVEN"); return; }
+		if (Math.AbsFloat(order.m_fBefore - order.m_fAfter - order.m_iCost) > 0.01) { AICF_AIQuotaCatalogProbe.Finish(false, "SETUP_PAYMENT_DELTA"); return; }
+		if (!order.m_Composition || order.m_Composition.m_AICFConstructionReceipt != order) { AICF_AIQuotaCatalogProbe.Finish(false, "SETUP_RECEIPT_LOST"); return; }
+		IEntity root = order.m_Composition.GetOwner();
+		SCR_CampaignBuildingLayoutComponent layout = order.m_Composition.GetCompositionLayout();
+		if (!root || !layout || !Same(order, epoch)) return;
+		EntityID rootId = root.GetID();
+		if (!Same(order, epoch) || !root || !layout) return;
+		if (rootId != order.m_LayoutId || !order.PlacementUnchanged()) { AICF_AIQuotaCatalogProbe.Finish(false, "SETUP_PLACEMENT_UNPROVEN"); return; }
+		if (!Current(order) || !Same(order, epoch) || !root || !layout) return;
+		s_Root = root; s_RootId = order.m_LayoutId; s_Layout = layout; s_Paid = true;
+		AICF_AIQuotaCatalogProbe.Log("CONTROLLED_SETUP", string.Format("phase=PAID_PLACED ordinary_proof=0 token=%1 root=%2 cost=%3 before=%4 after=%5 completion_forced=0", s_Token, s_RootId, order.m_iCost, order.m_fBefore, order.m_fAfter));
+	}
+	static bool PlacedCurrent(AICF_ConstructionOrder order)
+	{
+		int epoch = s_Epoch;
+		IEntity root = s_Root;
+		SCR_CampaignBuildingLayoutComponent layout = s_Layout;
+		BaseWorld world = s_World;
+		if (!s_Paid || !Current(order) || !order || !order.m_Composition) return false;
+		SCR_CampaignBuildingCompositionComponent composition = order.m_Composition;
+		if (!PurePlaced(order, epoch, root, layout, composition, world)) return false;
+		IEntity owner = composition.GetOwner();
+		if (!PurePlaced(order, epoch, root, layout, composition, world) || owner != root) return false;
+		IEntity found = world.FindEntityByID(s_RootId);
+		if (!PurePlaced(order, epoch, root, layout, composition, world) || found != root) return false;
+		BaseWorld actualWorld = root.GetWorld();
+		if (!PurePlaced(order, epoch, root, layout, composition, world) || actualWorld != world) return false;
+		SCR_CampaignBuildingLayoutComponent actualLayout = composition.GetCompositionLayout();
+		if (!PurePlaced(order, epoch, root, layout, composition, world) || actualLayout != layout) return false;
+		bool unchanged = order.PlacementUnchanged();
+		if (!GetGame() || GetGame().GetWorld() != world) return false;
+		return PurePlaced(order, epoch, root, layout, composition, world) && unchanged;
+	}
+	static bool PurePlaced(AICF_ConstructionOrder order, int epoch, IEntity root, SCR_CampaignBuildingLayoutComponent layout, SCR_CampaignBuildingCompositionComponent composition, BaseWorld world)
+	{
+		if (!Same(order, epoch) || !s_Paid || !root || !layout || !composition || !world) return false;
+		if (root != s_Root || layout != s_Layout || world != s_World || composition != order.m_Composition) return false;
+		return order.m_bPaid && order.m_bAccepted && composition.m_AICFConstructionReceipt == order;
+	}
+	static bool EnsureMaster(AICF_ConstructionOrder order)
+	{
+		int epoch = s_Epoch;
+		if (!PlacedCurrent(order)) return false;
+		IEntity root = s_Root;
+		SCR_CampaignBuildingLayoutComponent layout = s_Layout;
+		if (!s_RootProof)
+		{
+			AICF_AIQuotaCatalogIdentity proof = AICF_AIQuotaCatalogIdentity.Capture(root, true);
+			if (!Same(order, epoch) || s_Root != root || !root || !proof) return false;
+			s_RootProof = proof;
+		}
+		if (!s_LayoutProof)
+		{
+			if (!layout || !Same(order, epoch)) return false;
+			IEntity owner = layout.GetOwner();
+			if (!Same(order, epoch) || !owner || layout != s_Layout) return false;
+			AICF_AIQuotaCatalogIdentity proofLayout = AICF_AIQuotaCatalogIdentity.Capture(owner, true);
+			if (!Same(order, epoch) || layout != s_Layout || !proofLayout) return false;
+			s_LayoutProof = proofLayout;
+		}
+		return MasterCurrent(order);
+	}
+	static bool MasterCurrent(AICF_ConstructionOrder order)
+	{
+		int epoch = s_Epoch;
+		AICF_AIQuotaCatalogIdentity rootProof = s_RootProof;
+		AICF_AIQuotaCatalogIdentity layoutProof = s_LayoutProof;
+		if (!rootProof || !layoutProof || !AuthorityCurrent(order) || !PlacedCurrent(order)) return false;
+		SCR_CampaignBuildingLayoutComponent layout = s_Layout;
+		if (!layout) return false;
+		IEntity layoutOwner = layout.GetOwner();
+		if (!Same(order, epoch) || !layout || layout != s_Layout || layoutProof.m_Entity != layoutOwner) return false;
+		if (!rootProof.IsCurrent()) return false;
+		if (!Same(order, epoch) || rootProof != s_RootProof || layoutProof != s_LayoutProof) return false;
+		if (!layoutProof.IsCurrent()) return false;
+		if (!Same(order, epoch) || rootProof != s_RootProof || layoutProof != s_LayoutProof) return false;
+		return s_Root && s_Layout && rootProof.m_Entity == s_Root;
+	}
+	static bool AuthorityCurrent(AICF_ConstructionOrder order)
+	{
+		int epoch = s_Epoch;
+		if (!Same(order, epoch) || !GetGame()) return false;
+		SCR_GameModeCampaign campaign = SCR_GameModeCampaign.Cast(GetGame().GetGameMode());
+		if (!Same(order, epoch) || !campaign) return false;
+		bool master = campaign.IsMaster();
+		if (!Same(order, epoch) || !campaign) return false;
+		bool running = campaign.IsRunning();
+		return Same(order, epoch) && campaign && master && running;
+	}
+	static bool ScanPinned(AICF_QuotaCatalogDepotScan frame)
+	{
+		return frame && s_Scan == frame && Same(frame.m_Order, frame.m_iEpoch) && s_Root == frame.m_Root;
+	}
+	static bool ScanCurrent(AICF_QuotaCatalogDepotScan frame)
+	{
+		if (!ScanPinned(frame) || !MasterCurrent(frame.m_Order)) return false;
+		return ScanPinned(frame);
+	}
+	static bool Scan(IEntity entity, SCR_PlayerController player, AICF_QuotaCatalogDepotScan frame)
+	{
+		if (!ScanCurrent(frame) || !entity || ++frame.m_iVisited > 256) return false;
+		SCR_DefenderSpawnerComponent defender = SCR_DefenderSpawnerComponent.Cast(entity.FindComponent(SCR_DefenderSpawnerComponent));
+		if (!ScanCurrent(frame) || !entity) return false;
+		bool defenderEnabled;
+		if (defender) defenderEnabled = defender.IsSpawningEnabled();
+		if (!ScanCurrent(frame) || !entity) return false;
+		if (defender && defenderEnabled)
+		{
+			if (!player || !AICF_AIQuotaCatalogProbe.CurrentUser() || !ScanCurrent(frame)) return false;
+			AICF_AIQuotaCatalogIdentity defenderProof = AICF_AIQuotaCatalogIdentity.Capture(entity, true);
+			if (!defenderProof || !ScanCurrent(frame) || !entity || !defender) return false;
+			if (entity.FindComponent(SCR_DefenderSpawnerComponent) != defender || defender.GetOwner() != entity) return false;
+			int playerId = player.GetPlayerId();
+			if (!ScanCurrent(frame) || !player || !defender) return false;
+			if (!defenderProof.IsCurrent() || !ScanPinned(frame) || !defender || !player) return false;
+			defender.EnableSpawning(false, playerId);
+			if (!defender || !ScanCurrent(frame)) return false;
+			bool stillEnabled = defender.IsSpawningEnabled();
+			if (!ScanCurrent(frame)) return false;
+			if (stillEnabled) { NoteWait("NATIVE_DEFENDER_TOGGLE_REJECTED", frame.m_iEpoch); return false; }
+			AICF_AIQuotaCatalogProbe.Log("CONTROLLED_SETUP", "phase=NATIVE_DEFENDER_DISABLED actual_player_validation=1 existing_bodies_retained=1");
+		}
+		SCR_CatalogEntitySpawnerComponent producer = SCR_CatalogEntitySpawnerComponent.Cast(entity.FindComponent(SCR_CatalogEntitySpawnerComponent));
+		if (!ScanCurrent(frame) || !entity) return false;
+		bool light;
+		bool sameFaction;
+		if (producer)
+		{
+			light = producer.GetType() == SCR_EServicePointType.LIGHT_VEHICLE_DEPOT;
+			if (!ScanCurrent(frame) || !entity || !producer) return false;
+			sameFaction = producer.GetFaction() == s_Faction;
+			if (!ScanCurrent(frame) || !entity || !producer) return false;
+		}
+		if (producer && light && sameFaction)
+		{
+			AICF_AIQuotaCatalogIdentity identity = AICF_AIQuotaCatalogIdentity.Capture(entity, true);
+			if (!identity || !ScanCurrent(frame) || !entity) { NoteWait("PRODUCER_IDENTITY_PENDING_OR_REJECTED", frame.m_iEpoch); return false; }
+			frame.m_Producers.Insert(identity);
+		}
+		IEntity child = entity.GetChildren();
+		if (!ScanCurrent(frame) || !entity) return false;
+		while (child)
+		{
+			IEntity next = child.GetSibling();
+			if (!ScanCurrent(frame)) return false;
+			if (!Scan(child, player, frame)) return false;
+			child = next;
+		}
+		return ScanCurrent(frame);
+	}
+	static bool Ready()
+	{
+		if (!s_Enabled) return true;
+		if (!Active()) return false;
+		int epoch = s_Epoch;
+		AICF_ConstructionOrder order = s_Order;
+		if (!order) return false;
+		if (!Current(order)) { AICF_AIQuotaCatalogProbe.Finish(false, "SETUP_ORDER_IDENTITY_LOST"); return false; }
+		if (!s_Paid) return false;
+		if (!PlacedCurrent(order)) { AICF_AIQuotaCatalogProbe.Finish(false, "SETUP_PAID_LAYOUT_LOST"); return false; }
+		if (!EnsureMaster(order)) { NoteWait("MASTER_IDENTITY_OR_CAMPAIGN_PENDING", epoch); return false; }
+		bool spawned = order.m_Composition.IsCompositionSpawned();
+		if (!PlacedCurrent(order)) return false;
+		if (!spawned)
+		{
+			if (s_CompletionRequested) { NoteWait("COMPOSITION_SPAWN_PENDING_OR_BLOCKED", epoch); return false; }
+			if (!AICF_ConstructionSiteSearch.CompletionClear(order)) { NoteWait("ORIGINAL_COMPLETION_CLEAR_BLOCKED", epoch); return false; }
+			if (!MasterCurrent(order)) return false;
+			SCR_CampaignBuildingLayoutComponent layout = s_Layout;
+			if (!layout) return false;
+			int total = layout.GetToBuildValue();
+			if (total <= 0 || !MasterCurrent(order) || !layout || layout != s_Layout) return false;
+			s_CompletionRequested = true;
+			layout.SetBuildingValue(total);
+			AICF_AIQuotaCatalogProbe.Log("CONTROLLED_SETUP", "phase=COMPLETION_REQUESTED controlled_public_SetBuildingValue=1 original_completion_clear=1 ordinary_worker_proof=0");
+			return false;
+		}
+		if (!AICF_ConstructionMetadata.HasOnlineService(s_Root, AICF_EConstructionType.LIGHT_DEPOT)) { NoteWait("NATIVE_SERVICE_OFFLINE", epoch); return false; }
+		if (!s_Ready)
+		{
+			if (s_Scan) return false;
+			AICF_QuotaCatalogDepotScan frame = new AICF_QuotaCatalogDepotScan();
+			frame.m_Order = order; frame.m_Root = s_Root; frame.m_iEpoch = s_Epoch;
+			s_Scan = frame;
+			bool scanned = Scan(s_Root, AICF_AIQuotaCatalogProbe.s_Player, frame);
+			bool current = ScanCurrent(frame);
+			if (scanned && current && !frame.m_Producers.IsEmpty())
+			{
+				s_Producers = frame.m_Producers;
+				s_Ready = true;
+			}
+			if (s_Scan == frame) s_Scan = null;
+			if (!s_Ready || !current) { NoteWait("NATIVE_PRODUCER_OR_DEFENDER_PENDING", frame.m_iEpoch); return false; }
+			AICF_AIQuotaCatalogProbe.Log("CONTROLLED_SETUP", string.Format("phase=ONLINE ordinary_proof=0 paid_construction=1 producers=%1 native_slots_registration=REQUIRED_BY_SELECTION stock_bodies_retained=1 stock_ledger_recomputed_before_pressure=1", s_Producers.Count()));
+		}
+		return PlacedCurrent(order);
+	}
+	static bool AllowsSpawner(SCR_CatalogEntitySpawnerComponent producer)
+	{
+		if (!s_Enabled) return true;
+		if (!s_Ready || !producer || !PlacedCurrent(s_Order)) return false;
+		foreach (AICF_AIQuotaCatalogIdentity identity : s_Producers)
+		{
+			if (!identity || !identity.IsCurrent() || !producer) continue;
+			if (producer.GetOwner() == identity.m_Entity && producer.GetFaction() == s_Faction && PlacedCurrent(s_Order)) return true;
+		}
+		return false;
+	}
+}
+
+modded class AICF_ConstructionPlanner
+{
+	override void Stop()
+	{
+		AICF_QuotaCatalogDepotSetup.PlannerStopped(this);
+		super.Stop();
+	}
+	override protected void Decide(AICF_ConstructionBaseState state, int now)
+	{
+		AICF_QuotaCatalogDepotScope previous = AICF_QuotaCatalogDepotSetup.s_Scope;
+		AICF_QuotaCatalogDepotScope frame;
+		if (AICF_QuotaCatalogDepotSetup.s_Enabled) frame = AICF_QuotaCatalogDepotSetup.Enter(this, state);
+		super.Decide(state, now);
+		if (frame) AICF_QuotaCatalogDepotSetup.Leave(frame, previous);
+	}
+}
+modded class AICF_AICommander
+{
+	override int SelectConstructionType(array<bool> covered, int startType)
+	{
+		int chosen = AICF_QuotaCatalogDepotSetup.Select(this, covered, startType);
+		if (chosen < 0) return -1;
+		return super.SelectConstructionType(covered, chosen);
+	}
+}
+modded class AICF_StockConstructionAdapter
+{
+	override bool Place(AICF_ConstructionOrder order, AICF_ConstructionConfig config, AICF_EconomySystem economy, SCR_CampaignBuildingManagerComponent manager, AICF_BaseBuilderService builders)
+	{
+		bool result = super.Place(order, config, economy, manager, builders);
+		AICF_QuotaCatalogDepotSetup.Placed(order, result);
 		return result;
 	}
 }

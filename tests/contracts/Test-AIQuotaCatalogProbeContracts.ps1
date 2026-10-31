@@ -434,7 +434,7 @@ $links=Body Links
 if($links-match'\.\s*(Register\w*|Update\w*|Set\w*|Request\w*|Spawn\w*)\s*\('){throw 'Container linkage diagnostic mutates resource state'}
 foreach($guard in @('g < 32','c < 32','if (!container) complete = false;','if (!consumedContainer) complete = false;','generatorContainers.Contains(consumedContainer)','generated && consumed')){if(!$links.Contains($guard)){throw "Bounded exact resource linkage observation missing $guard"}}
 $dump=Body DumpKnownSources
-if(@([regex]::Matches($dump,'"Prefabs/[^"\r\n]+\.et"')).Count-ne4-or!$dump.Contains('"$profile:AICF_CatalogMetadata_%1.et"')-or$dump-match'SpawnEntity|\.\s*(Set\w*|Register\w*|RequestGeneration|RequestConsumtion)\s*\('){throw 'Resource source export must be bounded/read-only/fixed own profile path'}
+if(@([regex]::Matches($dump,'"\{[A-F0-9]{16}\}Prefabs/[^"\r\n]+\.et"')).Count-ne4-or!$dump.Contains('"$profile:AICF_CatalogMetadata_%1.et"')-or$dump-match'SpawnEntity|\.\s*(Set\w*|Register\w*|RequestGeneration|RequestConsumtion)\s*\('){throw 'Resource source export must be bounded/read-only/canonical/fixed own profile path'}
 if(!$fund.Contains('AICF_AIQuotaCatalogResourceObservation.s_Generator = generator;')-or!$fund.Contains('if (AICF_AIQuotaCatalogResourceObservation.s_Generator == generator) AICF_AIQuotaCatalogResourceObservation.Stop();')-or!(Body Stop).Contains('AICF_AIQuotaCatalogResourceObservation.Stop();')){throw 'Diagnostic generation target lifetime unbalanced'}
 $generation=$generation.Replace('super.','base.').Replace('foreach (SCR_ResourceGeneratorActionBase action : m_aActions)','foreach (SCR_ResourceGeneratorActionBase action in m_aActions)').Replace('float storageRange;','float storageRange=0;').Replace('float multiplier;','float multiplier=0;').Replace('string actions;','string actions="";').Replace('int actionIndex;','int actionIndex=0;')
 $generationCode=@'
@@ -643,4 +643,170 @@ foreach($case in @('null-entity','null-physics','inactive','different-slot','for
 }
 "PASS actual_unknown_hit_cases=$unknownCases native_boundaries=SIMULATED"
 
+} -RepositoryRoot $RepositoryRoot
+
+# Actual controlled setup wrappers/owner state. Native construction and geometry
+# are explicit boundary shims; this does not prove a physical depot or purchase.
+& {
+param([string]$RepositoryRoot,[string]$Mutation='')
+$ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot '../lib/Stage3StaticAudit.Common.ps1')
+$setupSource=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'tests/fixtures/AICF_AIQuotaCatalogProbe.c'))
+function SetupClass($n){Get-AICFBracedBody -Source $setupSource -StartPattern ('\bclass\s+'+$n+'\b')}
+function SetupBody($n){Get-AICFMethodBody ([pscustomobject]@{Source=$setupSource;Code=(ConvertTo-AICFCodeText $setupSource)}) $n}
+function SetupTx($v){
+ $v=$v-replace '\bbase\b','baseEntity'
+ $v=$v-replace '\bref\s+','' -replace '\bprotected\b','public' -replace '\bResourceName\b','string' -replace '\bEntityID\b','int' -replace '\bFactionKey\b','string'
+ $v=$v-replace '\barray<','EArray<' -replace 's_Producers = \{\};','s_Producers = new EArray<AICF_AIQuotaCatalogIdentity>();'
+ $v=$v-replace '(EArray<[^>]+>) (\w+) = \{\};','$1 $2 = new $1();'
+ $v=$v-replace 'foreach \(([^:]+) : ([^)]+)\)','foreach ($1 in $2)'
+ $v=$v-replace 'FindComponent\((SCR_DefenderSpawnerComponent|SCR_CatalogEntitySpawnerComponent)\)','FindComponent(typeof($1))'
+ $v=$v-replace '\bsuper\.','base.' -replace 'System.GetCLIParam','Cli.GetCLIParam' -replace 'string.Format\(','Fmt('
+ $v=$v-replace '\.GetType\(\)','.GetServiceType()'
+ $v=$v.Replace('AICF_QuotaCatalogDepotScope frame;','AICF_QuotaCatalogDepotScope frame = null;').Replace('string value;','string value = string.Empty;').Replace('"aicfQuotaCatalogControlledDepotSetup", value)','"aicfQuotaCatalogControlledDepotSetup", out value)')
+ $v=$v-replace '(?m)^(\s*)bool (\w+);','$1bool $2 = false;'
+ $v=$v.Replace('covered[AICF_EConstructionType.LIGHT_DEPOT]','covered[(int)AICF_EConstructionType.LIGHT_DEPOT]').Replace('covered.Count() != AICF_EConstructionType.COUNT','covered.Count() != (int)AICF_EConstructionType.COUNT').Replace('return AICF_EConstructionType.LIGHT_DEPOT;','return (int)AICF_EConstructionType.LIGHT_DEPOT;')
+ $v=$v-replace '(?m)^\t(static |AICF_|SCR_|BaseWorld |EntityID |int |bool )',"`tpublic `$1"
+ $v=$v-replace '(?m)^\t(?!public\b)([A-Za-z])',"`tpublic `$1"
+ return $v
+}
+$setupOwner=SetupTx (SetupClass 'AICF_QuotaCatalogDepotSetup')
+$setupFrame=SetupTx (SetupClass 'AICF_QuotaCatalogDepotScope')
+$setupScan=SetupTx (SetupClass 'AICF_QuotaCatalogDepotScan')
+$decide=SetupTx (SetupBody 'Decide');$choose=SetupTx (SetupBody 'SelectConstructionType');$place=SetupTx (SetupBody 'Place')
+$plannerText=SetupClass 'AICF_ConstructionPlanner'
+$plannerStop=SetupTx (Get-AICFMethodBody ([pscustomobject]@{Source=$plannerText;Code=(ConvertTo-AICFCodeText $plannerText)}) 'Stop')
+$exact=SetupTx (SetupBody 'ExactSourceResource')
+if($setupOwner-match '\.(?:SetHealth|SetOrigin|SetWorldTransform|RegisterSlot|RequestGeneration|RequestConsumtion)\(' -or $setupOwner-match 'm_a(?:Near|Child)Slots\.Insert|m_bEnableSpawning\s*=') {throw 'Controlled setup bypasses native policy'}
+foreach($v in @('s_CompletionRequested = true;','layout.SetBuildingValue(total);','AICF_ConstructionSiteSearch.CompletionClear(order)','order.m_Composition.m_AICFConstructionReceipt != order','order.m_fBefore - order.m_fAfter - order.m_iCost','if (s_Scope == frame) s_Scope = previous;','defender.EnableSpawning(false, playerId);','MasterCurrent(order)','frame.m_Producers.Insert(identity);')){if(!$setupSource.Contains($v)){throw "Controlled setup fence missing $v"}}
+if($decide.Split(@('base.Decide('),[StringSplitOptions]::None).Length-ne2-or$place.Split(@('base.Place('),[StringSplitOptions]::None).Length-ne2){throw 'Setup wrappers must execute one original owner call'}
+if((SetupBody 'OnGameStart').IndexOf('AICF_QuotaCatalogDepotSetup.Initialize()')-gt(SetupBody 'OnGameStart').IndexOf('super.OnGameStart()')){throw 'Setup flag initialization must precede original startup'}
+if((SetupBody 'Tick').IndexOf('AICF_QuotaCatalogDepotSetup.Ready()')-gt(SetupBody 'Tick').IndexOf('ReserveUnits(')){throw 'Setup must precede pressure'}
+if(!(SetupBody 'Stop').Contains('AICF_QuotaCatalogDepotSetup.Stop();')){throw 'Setup owner lifetime not stopped'}
+$canonical=@('{F8A337C38BB8D4EA}Prefabs/MP/Campaign/RequestTable_US_Barracks.et','{2337DFDD05C26996}Prefabs/MP/Campaign/RequestTable_USSR_Barracks.et','{4B1971606FBC57DF}Prefabs/Systems/Compositions/EntitySpawnerSlot/EntitySpawnerSlot_Character.et','{9540DC5C8AC4E6EE}Prefabs/Systems/Logic/CharacterSpawnerSlot.et')
+foreach($n in $canonical){if(!$setupSource.Contains('"'+$n+'"')){throw 'Verified official-RDB canonical metadata name lost'}}
+switch($Mutation){
+ 'skip-payment' {$setupOwner=$setupOwner.Replace('!order.m_bAccepted || !order.m_bPaid || !order.m_bCommitStarted || order.m_iCost <= 0','false').Replace('Math.AbsFloat(order.m_fBefore - order.m_fAfter - order.m_iCost) > 0.01','false')}
+ 'skip-completion-once' {$setupOwner=[regex]::Replace($setupOwner,'if \(s_CompletionRequested\)\s*\{[^{}]*return false;\s*\}','')}
+ 'restore-stale-scope' {$setupOwner=$setupOwner.Replace('if (s_Scope == frame) s_Scope = previous;','s_Scope = previous;')}
+ 'skip-order-scope' {$setupOwner=$setupOwner.Replace('if (order.m_Base != frame.m_Base || order.m_Provider != frame.m_Provider) return false;','').Replace('return order.m_BaseId == frame.m_BaseId && order.m_ProviderId == frame.m_ProviderId;','return true;')}
+ 'skip-scope-tail' {$setupOwner=$setupOwner.Replace('return ScopePinned(frame);','return Active() && s_Scope == frame && frame.m_iEpoch == s_Epoch;')}
+ 'publish-after-stop' {$setupOwner=[regex]::Replace($setupOwner,'if \(!identity \|\| !ScanCurrent\(frame\) \|\| !entity\)\s*\{[^{}]*return false;\s*\}','if (!identity) return false;').Replace('frame.m_Producers.Insert(identity);','s_Producers.Insert(identity);')}
+ 'clear-successor-cache' {$setupOwner=$setupOwner.Replace('if (s_Scan == frame) s_Scan = null;','if (!scanned) s_Producers.Clear(); if (s_Scan == frame) s_Scan = null;')}
+ 'skip-master' {foreach($method in @('EnsureMaster','MasterCurrent')){$b=Get-AICFMethodBody ([pscustomobject]@{Source=$setupOwner;Code=(ConvertTo-AICFCodeText $setupOwner)}) $method;$setupOwner=$setupOwner.Replace($b,'{ return PlacedCurrent(order); }')}}
+ '' {}
+ default {throw 'Unknown setup mutant'}
+}
+$cs=@'
+using System;using System.Collections.Generic;
+namespace AICF_CatalogDepotSetupReplay {
+public class N {public bool Removed;public static implicit operator bool(N n){return n!=null&&!n.Removed;}public static Game GetGame(){return Env.Game;}public static string Fmt(string f,params object[] a){for(int i=9;i>0;i--)f=f.Replace("%"+i,"{"+(i-1)+"}");return String.Format(f,a);}}
+public class EArray<T>:List<T>{public new int Count(){return base.Count;}public void Insert(T v){Add(v);}public bool IsEmpty(){return base.Count==0;}public static implicit operator bool(EArray<T> v){return v!=null;}}
+public static class Cli{public static bool Enabled=true;public static string Value="1";public static bool GetCLIParam(string key,out string value){value=Value;return Enabled;}}
+public static class Replication{public static bool Server=true;public static bool IsServer(){return Server;}}
+public static class Math{public static float AbsFloat(float n){return System.Math.Abs(n);}}
+public enum AICF_EConstructionType{SMALL_BARRACKS,ARMORY,LIGHT_DEPOT,LARGE_BARRACKS,HEAVY_DEPOT,COUNT}
+public enum SCR_EServicePointType{LIGHT_VEHICLE_DEPOT,OTHER}
+public class BaseWorld:N{public Dictionary<int,IEntity> Map=new Dictionary<int,IEntity>();public Action Read=delegate{};public IEntity FindEntityByID(int id){Read();return Map.ContainsKey(id)?Map[id]:null;}}
+public class Game:N{public BaseWorld World=new BaseWorld();public SCR_GameModeCampaign Mode=new SCR_GameModeCampaign();public Action Read=delegate{};public BaseWorld GetWorld(){Read();return World;}public SCR_GameModeCampaign GetGameMode(){return Mode;}}
+public class SCR_GameModeCampaign:N{public bool Master=true,Running=true;public Action Read=delegate{};public bool IsMaster(){Read();return Master;}public bool IsRunning(){Read();return Running;}public static SCR_GameModeCampaign Cast(object o){return o as SCR_GameModeCampaign;}}
+public class IEntity:N{public int Id;public BaseWorld World;public IEntity Child,Sibling;public SCR_DefenderSpawnerComponent Defender;public SCR_CatalogEntitySpawnerComponent Producer;public bool Rpl=true,Master=true;public Action<string> Read=delegate{};public int GetID(){Read("id");return Id;}public BaseWorld GetWorld(){Read("world");return World;}public N FindComponent(Type t){Read("component");if(t==typeof(SCR_DefenderSpawnerComponent)){if(Defender)Defender.Owner=this;return Defender;}return Producer;}public IEntity GetChildren(){Read("children");return Child;}public IEntity GetSibling(){Read("sibling");return Sibling;}}
+public class SCR_CampaignFaction:N{public string Key="USSR";public SCR_CampaignMilitaryBaseComponent Main;public string GetFactionKey(){return Key;}public SCR_CampaignMilitaryBaseComponent GetMainBase(){return Main;}public static SCR_CampaignFaction Cast(object o){return o as SCR_CampaignFaction;}}
+public class SCR_CampaignMilitaryBaseComponent:N{public IEntity Owner;public SCR_CampaignFaction Faction;public SCR_CampaignBuildingProviderComponent Provider;public bool Initialized=true;public IEntity GetOwner(){return Owner;}public SCR_CampaignFaction GetFaction(){return Faction;}public SCR_CampaignBuildingProviderComponent GetMasterProvider(){return Provider;}public bool IsInitialized(){return Initialized;}}
+public class SCR_CampaignBuildingProviderComponent:N{public IEntity Owner;public SCR_CampaignMilitaryBaseComponent Base;public IEntity GetOwner(){return Owner;}public SCR_CampaignMilitaryBaseComponent GetCampaignMilitaryBaseComponent(){return Base;}}
+public class AICF_ContentProfile:N{public static AICF_ContentProfile GetActive(){return new AICF_ContentProfile();}public string GetRuntimeFactionKey(string key){return key;}}
+public class Metadata:AICF_ConstructionMetadata{}
+public class AICF_ConstructionOrder:N{public string m_sToken="setup-token";public int m_iRevision=1,m_BaseId,m_ProviderId,m_LayoutId,m_iCost=150;public AICF_EConstructionType m_eType=AICF_EConstructionType.LIGHT_DEPOT;public SCR_CampaignFaction m_Faction;public SCR_CampaignMilitaryBaseComponent m_Base;public SCR_CampaignBuildingProviderComponent m_Provider;public Metadata m_Metadata=new Metadata();public SCR_CampaignBuildingCompositionComponent m_Composition;public bool m_bCancelled,m_bAccepted,m_bPaid,m_bCommitStarted;public float m_fBefore=1000,m_fAfter=850;public bool Identity=true,Placement=true;public Action IdentityRead=delegate{},PlacementRead=delegate{};public bool IdentityValid(){IdentityRead();return Identity&&!m_bCancelled&&m_Base&&m_Provider&&m_Base.Faction==m_Faction&&m_Base.Provider==m_Provider;}public bool PlacementUnchanged(){PlacementRead();return Placement;}}
+public class AICF_ConstructionBaseState:N{public SCR_CampaignMilitaryBaseComponent m_Base;public int m_BaseId;public AICF_ConstructionOrder m_Order;}
+public class SCR_CampaignBuildingCompositionComponent:N{public IEntity Owner;public AICF_ConstructionOrder m_AICFConstructionReceipt;public SCR_CampaignBuildingLayoutComponent Layout;public bool Spawned;public Action<string> Read=delegate{};public IEntity GetOwner(){Read("owner");return Owner;}public SCR_CampaignBuildingLayoutComponent GetCompositionLayout(){Read("layout");return Layout;}public bool IsCompositionSpawned(){Read("spawned");return Spawned;}}
+public class SCR_CampaignBuildingLayoutComponent:N{public int Sets,Total=50;public bool Immediate=true;public SCR_CampaignBuildingCompositionComponent Composition;public Action Read=delegate{};public IEntity GetOwner(){return Composition.Owner;}public int GetToBuildValue(){Read();return Total;}public void SetBuildingValue(float v){Sets++;if(Immediate&&AICF_ConstructionSiteSearch.CompletionClear(Composition.m_AICFConstructionReceipt))Composition.Spawned=true;}}
+public static class AICF_ConstructionSiteSearch{public static bool Clear=true;public static Action Read=delegate{};public static bool CompletionClear(AICF_ConstructionOrder o){Read();return Clear&&o.IdentityValid()&&o.m_bPaid&&o.m_bAccepted;}}
+public class AICF_ConstructionMetadata:N{public string m_sPrefab="verified-native-depot.et";public static bool Online=true;public static bool HasOnlineService(IEntity e,AICF_EConstructionType t){return e&&Online;}}
+public class SCR_PlayerController:N{public int Id=7;public int GetPlayerId(){return Id;}}
+public class SCR_DefenderSpawnerComponent:N{public IEntity Owner;public bool Enabled=true,Rank=true;public int Calls;public IEntity GetOwner(){return Owner;}public bool IsSpawningEnabled(){return Enabled;}public void EnableSpawning(bool enabled,int id){Calls++;if(Rank&&id==7)Enabled=enabled;}public static SCR_DefenderSpawnerComponent Cast(object o){return o as SCR_DefenderSpawnerComponent;}}
+public class SCR_CatalogEntitySpawnerComponent:N{public IEntity Owner;public SCR_CampaignFaction Faction;public SCR_EServicePointType Type=SCR_EServicePointType.LIGHT_VEHICLE_DEPOT;public IEntity GetOwner(){return Owner;}public SCR_CampaignFaction GetFaction(){return Faction;}public SCR_EServicePointType GetServiceType(){return Type;}public static SCR_CatalogEntitySpawnerComponent Cast(object o){return o as SCR_CatalogEntitySpawnerComponent;}}
+public class AICF_AIQuotaCatalogIdentity:N{public IEntity m_Entity;public bool RequireMaster;public static Action<IEntity> CaptureRead=delegate{};public static Action<IEntity> CurrentRead=delegate{};public static AICF_AIQuotaCatalogIdentity Capture(IEntity e,bool master){CaptureRead(e);return e&&e.Rpl&&(!master||e.Master)?new AICF_AIQuotaCatalogIdentity{m_Entity=e,RequireMaster=master}:null;}public bool IsCurrent(){CurrentRead(m_Entity);return m_Entity&&m_Entity.Rpl&&(!RequireMaster||m_Entity.Master);}}
+public class AICF_ConstructionConfig:N{}public class AICF_EconomySystem:N{}public class SCR_CampaignBuildingManagerComponent:N{}public class AICF_BaseBuilderService:N{}
+public static class AICF_AIQuotaCatalogProbe{public static string s_Mode="vehicle",Last;public static bool s_Finished;public static N s_Pressure;public static SCR_PlayerController s_Player=new SCR_PlayerController();public static bool User=true;public static int Finished;public static bool Enabled(){return s_Mode=="vehicle";}public static bool CurrentUser(){return User&&!s_Finished;}public static void Finish(bool p,string r){s_Finished=true;Finished++;Last=r;}public static void Log(string n,string d){Last=n+" "+d;}}
+public class NativePlanner:N{public int Calls,Stops;public bool Affordable=true;public AICF_AICommander Commander;public EArray<bool> Covered=new EArray<bool>{false,false,false,false,false};public Action During=delegate{};public virtual void Stop(){Stops++;}public virtual void Decide(AICF_ConstructionBaseState state,int now){Calls++;During();int t=Commander.SelectConstructionType(Covered,0);if(t<0||!Affordable)return;state.m_Order=Env.Order(state,t);}}
+public class AICF_ConstructionPlanner:NativePlanner{public override void Stop() PLANNERSTOP public override void Decide(AICF_ConstructionBaseState state,int now) DECIDE}
+public class NativeCommander:N{public int Calls;public bool Enabled=true;public SCR_CampaignFaction Faction;public SCR_CampaignFaction GetFaction(){return Faction;}public virtual int SelectConstructionType(EArray<bool> covered,int start){Calls++;if(!Replication.Server||!Enabled||covered==null||covered.Count()!=5)return -1;for(int i=0;i<5;i++){int t=(start+i)%5;if(!covered[t])return t;}return -1;}}
+public class AICF_AICommander:NativeCommander{public override int SelectConstructionType(EArray<bool> covered,int startType) CHOOSE}
+public class NativeAdapter:N{public int Calls;public bool Accept=true;public Action During=delegate{};public virtual bool Place(AICF_ConstructionOrder order,AICF_ConstructionConfig c,AICF_EconomySystem e,SCR_CampaignBuildingManagerComponent m,AICF_BaseBuilderService b){Calls++;During();if(!Accept||order.m_bCommitStarted)return false;Env.PlaceNative(order);return true;}}
+public class AICF_StockConstructionAdapter:NativeAdapter{public override bool Place(AICF_ConstructionOrder order,AICF_ConstructionConfig config,AICF_EconomySystem economy,SCR_CampaignBuildingManagerComponent manager,AICF_BaseBuilderService builders) PLACE}
+public class AICF_QuotaCatalogDepotScope:N FRAME
+public class AICF_QuotaCatalogDepotScan:N SCANFRAME
+public class AICF_QuotaCatalogDepotSetup:N OWNER
+public class BaseResourceObject:N{public string Name;public int Reads;public string GetResourceName(){Reads++;return Name;}}
+public class Resource:N{public bool Valid=true;public int Reads;public BaseResourceObject Value;public bool IsValid(){return Valid;}public BaseResourceObject GetResource(){Reads++;return Value;}}
+public class ExactNames:N{public static bool Check(Resource resource,string expected,out string actualName) EXACT}
+public class Env{public static Game Game;public SCR_CampaignFaction Faction;public AICF_ConstructionBaseState State;public AICF_ConstructionPlanner Planner;public AICF_AICommander Commander;public AICF_StockConstructionAdapter Adapter;public Env(){Game=new Game();Replication.Server=true;Cli.Enabled=true;Cli.Value="1";AICF_AIQuotaCatalogProbe.s_Mode="vehicle";AICF_AIQuotaCatalogProbe.s_Finished=false;AICF_AIQuotaCatalogProbe.s_Pressure=null;AICF_AIQuotaCatalogProbe.User=true;AICF_AIQuotaCatalogProbe.Finished=0;AICF_QuotaCatalogDepotSetup.Stop();AICF_QuotaCatalogDepotSetup.s_Initialized=false;AICF_QuotaCatalogDepotSetup.s_Stopped=false;AICF_QuotaCatalogDepotSetup.s_Paid=AICF_QuotaCatalogDepotSetup.s_Ready=AICF_QuotaCatalogDepotSetup.s_CompletionRequested=false;AICF_QuotaCatalogDepotSetup.Initialize();Faction=new SCR_CampaignFaction();var b=new SCR_CampaignMilitaryBaseComponent{Owner=Entity(10),Faction=Faction};var p=new SCR_CampaignBuildingProviderComponent{Owner=Entity(11),Base=b};b.Provider=p;Faction.Main=b;State=new AICF_ConstructionBaseState{m_Base=b,m_BaseId=10};Commander=new AICF_AICommander{Faction=Faction};Planner=new AICF_ConstructionPlanner{Commander=Commander};Adapter=new AICF_StockConstructionAdapter();AICF_ConstructionSiteSearch.Clear=true;AICF_ConstructionSiteSearch.Read=delegate{};AICF_ConstructionMetadata.Online=true;AICF_AIQuotaCatalogIdentity.CaptureRead=delegate{};AICF_AIQuotaCatalogIdentity.CurrentRead=delegate{};}
+ public static IEntity Entity(int id){var e=new IEntity{Id=id,World=Game.World};Game.World.Map[id]=e;return e;}
+ public static AICF_ConstructionOrder Order(AICF_ConstructionBaseState s,int t){return new AICF_ConstructionOrder{m_eType=(AICF_EConstructionType)t,m_Base=s.m_Base,m_BaseId=s.m_Base.Owner.Id,m_Provider=s.m_Base.Provider,m_ProviderId=s.m_Base.Provider.Owner.Id,m_Faction=s.m_Base.Faction};}
+ public static void PlaceNative(AICF_ConstructionOrder o){var root=Entity(30);var producerEntity=Entity(31);root.Child=producerEntity;producerEntity.Producer=new SCR_CatalogEntitySpawnerComponent{Owner=producerEntity,Faction=o.m_Faction};var comp=new SCR_CampaignBuildingCompositionComponent{Owner=root,m_AICFConstructionReceipt=o};var layout=new SCR_CampaignBuildingLayoutComponent{Composition=comp};comp.Layout=layout;o.m_Composition=comp;o.m_LayoutId=30;o.m_bCommitStarted=o.m_bAccepted=o.m_bPaid=true;}
+ public void Decide(){Planner.Decide(State,0);}public void Paid(){Decide();if(State.m_Order==null)throw new Exception("setup order absent");Adapter.Place(State.m_Order,null,null,null,null);}public void Online(){Paid();if(AICF_QuotaCatalogDepotSetup.Ready())throw new Exception("completion initial wait");if(!AICF_QuotaCatalogDepotSetup.Ready())throw new Exception("online absent");}
+}
+public static class Cases{
+ static int n;static void Check(bool v,string name){n++;if(!v)throw new Exception("SETUP_CASE "+name);}
+ public static string Run(){
+  var e=new Env();e.Decide();Check(e.Planner.Calls==1&&e.Commander.Calls==1&&e.State.m_Order.m_eType==AICF_EConstructionType.LIGHT_DEPOT&&AICF_QuotaCatalogDepotSetup.s_Order==e.State.m_Order,"ORIGINAL_DECIDE_LIGHT_FIRST_CAPTURE");
+  e=new Env();AICF_QuotaCatalogDepotSetup.s_Enabled=false;e.Decide();Check(e.State.m_Order.m_eType==AICF_EConstructionType.SMALL_BARRACKS&&AICF_QuotaCatalogDepotSetup.s_Order==null&&AICF_QuotaCatalogDepotSetup.Ready(),"DISABLED_NATIVE_UNCHANGED");
+  e=new Env();e.Commander.Enabled=false;e.Decide();Check(e.State.m_Order==null,"NATIVE_COMMANDER_AUTHORITY_CHECK");
+  e=new Env();e.Planner.Affordable=false;e.Decide();Check(e.State.m_Order==null&&!AICF_QuotaCatalogDepotSetup.s_Paid,"NATIVE_AFFORDABILITY_NOT_BYPASSED");
+  e=new Env();e.Planner.Covered[2]=true;e.Decide();Check(e.State.m_Order==null,"NO_FALLBACK_CONSTRUCTION_IN_SETUP");
+  e=new Env();e.Faction.Key="US";e.Decide();Check(e.State.m_Order.m_eType==AICF_EConstructionType.SMALL_BARRACKS&&AICF_QuotaCatalogDepotSetup.s_Order==null,"FOREIGN_FACTION_UNCHANGED");
+  e=new Env();e.Faction.Main=new SCR_CampaignMilitaryBaseComponent();e.Decide();Check(e.State.m_Order.m_eType==AICF_EConstructionType.SMALL_BARRACKS&&AICF_QuotaCatalogDepotSetup.s_Order==null,"NONMAIN_BASE_UNCHANGED");
+  e=new Env();e.Online();Check(e.Adapter.Calls==1&&e.State.m_Order.m_Composition.Layout.Sets==1&&AICF_QuotaCatalogDepotSetup.s_Paid&&AICF_QuotaCatalogDepotSetup.s_Producers.Count()==1,"PAID_ONCE_NATIVE_COMPLETION_ONLINE");
+  Check(AICF_QuotaCatalogDepotSetup.Ready()&&e.State.m_Order.m_Composition.Layout.Sets==1,"READY_REPEAT_NO_COMPLETION");
+  Check(AICF_QuotaCatalogDepotSetup.AllowsSpawner(e.State.m_Order.m_Composition.Owner.Child.Producer),"OWN_PRODUCER_ONLY");
+  Check(!AICF_QuotaCatalogDepotSetup.AllowsSpawner(new SCR_CatalogEntitySpawnerComponent{Owner=Env.Entity(99),Faction=e.Faction}),"FOREIGN_PRODUCER_REJECTED");
+  foreach(string bad in new[]{"paid","accepted","commit","cost","delta","receipt","placement","token","revision","world"}){
+   e=new Env();e.Decide();var o=e.State.m_Order;Env.PlaceNative(o);e.Adapter.Accept=false;
+   switch(bad){case"paid":o.m_bPaid=false;break;case"accepted":o.m_bAccepted=false;break;case"commit":o.m_bCommitStarted=false;break;case"cost":o.m_iCost=0;break;case"delta":o.m_fAfter=999;break;case"receipt":o.m_Composition.m_AICFConstructionReceipt=null;break;case"placement":o.Placement=false;break;case"token":o.m_sToken="new";break;case"revision":o.m_iRevision++;break;case"world":GameSwap();break;}
+   AICF_QuotaCatalogDepotSetup.Placed(o,true);Check(!AICF_QuotaCatalogDepotSetup.s_Paid&&o.m_Composition.Layout.Sets==0,"PAYMENT_IDENTITY_"+bad);
+  }
+  e=new Env();e.Paid();AICF_ConstructionSiteSearch.Clear=false;Check(!AICF_QuotaCatalogDepotSetup.Ready()&&e.State.m_Order.m_Composition.Layout.Sets==0,"ORIGINAL_COMPLETION_CLEAR_BLOCKS");
+  e=new Env();e.Paid();e.State.m_Order.m_Composition.Layout.Immediate=false;AICF_QuotaCatalogDepotSetup.Ready();AICF_QuotaCatalogDepotSetup.Ready();Check(e.State.m_Order.m_Composition.Layout.Sets==1,"ASYNC_COMPLETION_EXACTLY_ONCE");
+  e=new Env();e.Paid();var pending=e.State.m_Order;AICF_QuotaCatalogDepotSetup.Placed(pending,true);Check(AICF_AIQuotaCatalogProbe.s_Finished,"DUPLICATE_PAID_OBSERVER_FAILS");
+  e=new Env();e.Paid();AICF_ConstructionSiteSearch.Read=delegate{AICF_QuotaCatalogDepotSetup.Stop();};Check(!AICF_QuotaCatalogDepotSetup.Ready()&&e.State.m_Order.m_Composition.Layout.Sets==0,"STOP_DURING_CLEAR_NO_COMPLETION");
+  e=new Env();e.Paid();e.State.m_Order.m_Composition.Layout.Read=delegate{AICF_QuotaCatalogDepotSetup.Stop();};Check(!AICF_QuotaCatalogDepotSetup.Ready()&&e.State.m_Order.m_Composition.Layout.Sets==0,"STOP_DURING_TOTAL_NO_COMPLETION");
+  e=new Env();e.Paid();AICF_AIQuotaCatalogProbe.s_Pressure=new N();Check(!AICF_QuotaCatalogDepotSetup.Ready()&&e.State.m_Order.m_Composition.Layout.Sets==0,"NO_SETUP_AFTER_PRESSURE");
+  e=new Env();e.Paid();e.State.m_Order.m_Composition.Owner.Child.Rpl=false;AICF_QuotaCatalogDepotSetup.Ready();Check(!AICF_QuotaCatalogDepotSetup.Ready()&&!AICF_QuotaCatalogDepotSetup.s_Ready&&e.Adapter.Calls==1,"RPL_PENDING_NO_RESPAWN");
+  e=new Env();e.Paid();var d=new SCR_DefenderSpawnerComponent();e.State.m_Order.m_Composition.Owner.Child.Defender=d;AICF_QuotaCatalogDepotSetup.Ready();Check(AICF_QuotaCatalogDepotSetup.Ready()&&d.Calls==1&&!d.Enabled,"NATIVE_PLAYER_DEFENDER_DISABLE");
+  e=new Env();e.Paid();d=new SCR_DefenderSpawnerComponent{Rank=false};e.State.m_Order.m_Composition.Owner.Child.Defender=d;AICF_QuotaCatalogDepotSetup.Ready();Check(!AICF_QuotaCatalogDepotSetup.Ready()&&!AICF_QuotaCatalogDepotSetup.s_Ready&&d.Enabled,"NATIVE_DEFENDER_RANK_VETO");
+  e=new Env();var previous=new AICF_QuotaCatalogDepotScope();var f=AICF_QuotaCatalogDepotSetup.Enter(e.Planner,e.State);var successor=new AICF_QuotaCatalogDepotScope();AICF_QuotaCatalogDepotSetup.s_Scope=successor;AICF_QuotaCatalogDepotSetup.Leave(f,previous);Check(AICF_QuotaCatalogDepotSetup.s_Scope==successor,"NO_STALE_SCOPE_RESTORE");
+  e=new Env();f=AICF_QuotaCatalogDepotSetup.Enter(e.Planner,e.State);var foreignBase=new SCR_CampaignMilitaryBaseComponent{Owner=Env.Entity(70),Faction=e.Faction};var foreignProvider=new SCR_CampaignBuildingProviderComponent{Owner=Env.Entity(71),Base=foreignBase};foreignBase.Provider=foreignProvider;var foreignOrder=new AICF_ConstructionOrder{m_Base=foreignBase,m_BaseId=70,m_Provider=foreignProvider,m_ProviderId=71,m_Faction=e.Faction};e.State.m_Order=foreignOrder;Check(foreignOrder.IdentityValid(),"GENUINE_FOREIGN_SAME_FACTION_ORDER_VALID");AICF_QuotaCatalogDepotSetup.Leave(f,null);Check(AICF_QuotaCatalogDepotSetup.s_Order==null,"FOREIGN_ORDER_NOT_ADOPTED");
+  e=new Env();f=AICF_QuotaCatalogDepotSetup.Enter(e.Planner,e.State);e.State.m_Order=Env.Order(e.State,2);var firstOrder=e.State.m_Order;firstOrder.IdentityRead=delegate{e.State.m_Order=Env.Order(e.State,2);};AICF_QuotaCatalogDepotSetup.Leave(f,null);Check(AICF_QuotaCatalogDepotSetup.s_Order==null,"LATE_STATE_ORDER_REPLACEMENT_VETO");
+  e=new Env();f=AICF_QuotaCatalogDepotSetup.Enter(e.Planner,e.State);e.State.m_Order=Env.Order(e.State,2);int reads=0;Env.Game.World.Read=delegate{if(++reads==2)f.m_State=null;};AICF_QuotaCatalogDepotSetup.Leave(f,null);Check(AICF_QuotaCatalogDepotSetup.s_Order==null,"LATE_FRAME_STATE_NULL_VETO");
+  e=new Env();e.Paid();e.Planner.Stop();Check(e.Planner.Stops==1&&!AICF_QuotaCatalogDepotSetup.Ready()&&AICF_QuotaCatalogDepotSetup.s_Order==null,"ORIGINAL_PLANNER_STOP_INVALIDATES_SETUP");
+  e=new Env();e.Paid();e.State.m_Order.m_Metadata=new Metadata();Check(!AICF_QuotaCatalogDepotSetup.Ready()&&e.State.m_Order.m_Composition.Layout.Sets==0,"METADATA_IDENTITY_REPLACEMENT_VETO");
+  foreach(string authority in new[]{"missingRpl","proxy","lostAfterProof"}){
+   e=new Env();e.Paid();var root=e.State.m_Order.m_Composition.Owner;
+   if(authority=="missingRpl")root.Rpl=false;else if(authority=="proxy")root.Master=false;else AICF_AIQuotaCatalogIdentity.CurrentRead=delegate(IEntity actor){if(actor==root)root.Master=false;};
+   Check(!AICF_QuotaCatalogDepotSetup.Ready()&&e.State.m_Order.m_Composition.Layout.Sets==0&&e.Adapter.Calls==1,"ROOT_MASTER_AUTHORITY_"+authority);
+  }
+  foreach(string authority in new[]{"campaignProxy","campaignStopped","campaignMissing"}){e=new Env();e.Paid();if(authority=="campaignProxy")Env.Game.Mode.Master=false;else if(authority=="campaignStopped")Env.Game.Mode.Running=false;else Env.Game.Mode=null;Check(!AICF_QuotaCatalogDepotSetup.Ready()&&e.State.m_Order.m_Composition.Layout.Sets==0,"CAMPAIGN_AUTHORITY_"+authority);}
+  e=new Env();e.Paid();e.State.m_Order.m_Composition.Owner.Child.Master=false;AICF_QuotaCatalogDepotSetup.Ready();Check(!AICF_QuotaCatalogDepotSetup.Ready()&&!AICF_QuotaCatalogDepotSetup.s_Ready,"PRODUCER_PROXY_REJECTED");
+  e=new Env();e.Paid();var delayedRoot=e.State.m_Order.m_Composition.Owner;delayedRoot.Rpl=false;Check(!AICF_QuotaCatalogDepotSetup.Ready(),"ROOT_BIRTH_RPL_PENDING");delayedRoot.Rpl=true;AICF_QuotaCatalogDepotSetup.Ready();Check(AICF_QuotaCatalogDepotSetup.Ready()&&e.Adapter.Calls==1,"ROOT_RPL_READINESS_NO_REPEAT_FACTORY");
+  e=new Env();e.Paid();var defNode=e.State.m_Order.m_Composition.Owner.Child;d=new SCR_DefenderSpawnerComponent();defNode.Defender=d;defNode.Master=false;AICF_QuotaCatalogDepotSetup.Ready();Check(!AICF_QuotaCatalogDepotSetup.Ready()&&d.Calls==0,"DEFENDER_PROXY_NO_NATIVE_DISABLE");
+  foreach(string capture in new[]{"stop","successor"}){
+   e=new Env();e.Paid();AICF_QuotaCatalogDepotSetup.Ready();var keep=new EArray<AICF_AIQuotaCatalogIdentity>();keep.Add(new AICF_AIQuotaCatalogIdentity{m_Entity=Env.Entity(90)});AICF_AIQuotaCatalogIdentity.CaptureRead=delegate(IEntity actor){if(actor!=null&&actor.Id==31){AICF_QuotaCatalogDepotSetup.Stop();if(capture=="successor")AICF_QuotaCatalogDepotSetup.s_Producers=keep;}};
+   Check(!AICF_QuotaCatalogDepotSetup.Ready()&&AICF_QuotaCatalogDepotSetup.s_Producers.Count()==(capture=="stop"?0:1),"CAPTURE_REENTRY_NO_GLOBAL_PUBLISH_"+capture);
+   if(capture=="successor")Check(AICF_QuotaCatalogDepotSetup.s_Producers==keep,"SUCCESSOR_CACHE_NOT_CLEARED");
+  }
+  e=new Env();e.Paid();var ownOrder=e.State.m_Order;Env.Game.World.Map[ownOrder.m_LayoutId]=Env.Entity(ownOrder.m_LayoutId);Check(!AICF_QuotaCatalogDepotSetup.Ready()&&ownOrder.m_Composition.Layout.Sets==0,"ROOT_ENTITY_ID_REUSE_VETO");
+  e=new Env();e.Paid();var oldLayout=e.State.m_Order.m_Composition.Layout;e.State.m_Order.m_Composition.Layout=new SCR_CampaignBuildingLayoutComponent{Composition=e.State.m_Order.m_Composition};Check(!AICF_QuotaCatalogDepotSetup.Ready()&&oldLayout.Sets==0,"LAYOUT_COMPONENT_REPLACEMENT_VETO");
+  e=new Env();Cli.Value="0";e.Decide();Check(e.State.m_Order.m_eType==AICF_EConstructionType.LIGHT_DEPOT,"CLI_CACHED_ONCE_NOT_POLLED");
+  foreach(string bad in new[]{"valid","null","invalid","object","name"}){var obj=new BaseResourceObject{Name="{GUID}known.et"};var r=new Resource{Value=obj};switch(bad){case"null":r=null;break;case"invalid":r.Valid=false;break;case"object":r.Value=null;break;case"name":obj.Name="{OTHER}wrong.et";break;}string actual;bool ok=ExactNames.Check(r,"{GUID}known.et",out actual);Check(ok==(bad=="valid")&&(r==null||r.Reads<=1)&&obj.Reads<=1,"LOADED_CANONICAL_NAME_"+bad);}
+  return "PASS actual_controlled_depot_setup_cases="+n+" native_construction_geometry_resource_boundaries=SIMULATED";
+ }
+ static void GameSwap(){Env.Game.World=new BaseWorld();}
+}
+}
+'@
+$parts=@{FRAME=$setupFrame;SCANFRAME=$setupScan;OWNER=$setupOwner;PLANNERSTOP=$plannerStop;DECIDE=$decide;CHOOSE=$choose;PLACE=$place;EXACT=$exact}
+$cs=[regex]::Replace($cs,'\b(FRAME|SCANFRAME|OWNER|PLANNERSTOP|DECIDE|CHOOSE|PLACE|EXACT)\b',{param($m)$parts[$m.Value]})
+$cs=$cs.Replace('ExactSourceResource(resource, path, actualName)','ExactSourceResource(resource, path, out actualName)')
+Add-Type -TypeDefinition $cs -Language CSharp
+[AICF_CatalogDepotSetupReplay.Cases]::Run()
 } -RepositoryRoot $RepositoryRoot

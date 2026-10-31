@@ -490,3 +490,93 @@ unknown-hit cases покрывают null, неактивный/другой slo
 Stop на metadata getters и удаление hit внутри проверки текущего context.
 Source replay границ native — SIMULATED. Новые WB/runtime gates ещё NOT RUN,
 включая проверку overridability нового hook между modded class слоями.
+
+## Controlled paid LIGHT_DEPOT setup
+
+V28 прошёл full388 compile (actual60357 CLOSED0, fatal0/other0/resource50),
+но native Server37583/Client28741 закончились штатно0/0 без покупки:
+BOUNDED_TIMEOUT300100ms, factory/header/debit0. Все72 записанных slot arrays
+пусты, TYPE/OCCUPANCY/unknown-hit0, BUILDER_COMPLETED0. Поэтому отсутствие VM
+не подтверждает выполнение Physics guard. Full6logs: server fatal0/resource14/
+other24, client fatal0/resource118/other24; strict оба FAIL. 25s paid-vehicle
+tail не достигнут, его правило не ослаблено. Evidence:
+`catalog-native-v28-physics-guard/final-verdict.json`.
+
+Новый **opt-in**, test-only setup включается `-ControlledDepotSetup` у
+`tools/Invoke-AICFQuotaCatalogProbe.ps1` во всех фазах Prepare/Server/Client/Audit.
+Runner закрепляет bool в manifest, допускает только Case=vehicle и проверяет
+точный `-aicfQuotaCatalogControlledDepotSetup 1` в canonical и actual CLI.
+Fixture читает flag один раз до original OnGameStart; default-disabled
+поведение сохраняет прежнюю стратегию строительства. Это отдельный
+`CONTROLLED_SETUP ordinary_proof=0`, не ordinary builder/construction proof.
+
+В точном synchronous scope original Planner.Decide для реальной USSR main
+base меняется только начальный cursor original Commander.SelectConstructionType
+на LIGHT_DEPOT. Другие базы/фракции идут прежним путём; covered/disabled/
+affordability veto не обходятся. Metadata, geometry, provider radius, native
+path, clearance, props budgets и original paid Adapter.Place остаются
+штатными. Координат или имён баз нет. Pending order привязывается к точным
+state/planner/base/provider/faction/IDs/token/revision/metadata; native callback
+не может подменить его другим same-faction order.
+
+Полный untouched prefab берётся из ContentProfile: US
+`{A0FEA3E718F5B605}.../E_VehicleMaintenance_S_Conflict_US_01.et`, USSR
+`{5ACECF41C167567D}.../E_VehicleMaintenance_S_Conflict_USSR_01.et`.
+V27 фактически оплатил второй prefab за150 (900→750, debit_count1) и получил
+native producer23FB/slot23F8. Но его очередь ждала SMALL_BARRACKS до134s;
+новая test-only priority устраняет эту зависимость, не обещая успех при
+занятой геометрии или отказе оплаты.
+
+Только после original successful Place, accepted/paid receipt и точного
+списания допускается один controlled public
+`layout.SetBuildingValue(layout.GetToBuildValue())`. Original CompletionClear
+и native EvaluateBuildingStatus/SpawnComposition обязательны. Stop внутри
+clear/max/readback не допускает продолжения. Root/layout identities требуют
+текущего master Rpl и running/master campaign; async Rpl readiness ожидается
+на той же созданной entity, без повторного factory. Planner.Stop и общий
+fixture Stop инвалидируют epoch и очищают project references.
+
+Native lifecycle сам создаёт services/resources/slots. Registry arrays,
+slot type/cache/Physics не изменяются. Иерархия проверяется ограниченным
+scan256; producer identities собираются локально и публикуются только своим
+scan/epoch. Старый callback не вставляет элементы и не очищает successor
+cache. Для найденных enabled defenders используется только native
+EnableSpawning(false, actual playerID), с собственными faction/rank проверками
+и readback. Существующие тела сохраняются; constructor births/reservations
+входят в текущий stock ledger перед прежним pressure. Цена машины, native
+permissions, ACK/funding, factory, debit, occupancy и empty25s tail не менялись.
+Причины ожидания пишутся максимум по16 distinct keys, без повторных native
+getter ради логов. Весь setup входит в исходные300s, clock не сбрасывается.
+
+Четыре прежних path-only metadata Load заменены canonical ResourceNames:
+
+- `{F8A337C38BB8D4EA}Prefabs/MP/Campaign/RequestTable_US_Barracks.et`;
+- `{2337DFDD05C26996}Prefabs/MP/Campaign/RequestTable_USSR_Barracks.et`;
+- `{4B1971606FBC57DF}Prefabs/Systems/Compositions/EntitySpawnerSlot/EntitySpawnerSlot_Character.et`;
+- `{9540DC5C8AC4E6EE}Prefabs/Systems/Logic/CharacterSpawnerSlot.et`.
+
+Они извлечены независимо из official Client и Server resourceDatabase.rdb;
+decoder проверен на10 известных Core/pinned/native ResourceNames. В evidence
+сохранены обе SHA, offsets, record headers и GUID bytes. Native Load этих
+четырёх новых полных имён **NOT RUN**: новый RESOURCE_SOURCE_NAME обязан
+подтвердить точное loaded.GetResourceName(), иначе probe завершается FAIL.
+Исходные Wrong GUID ошибки не подавляются и не объявляются внешними.
+
+Actual-source C#5 replay нового setup: **58 cases PASS** в WinPS5.1 и pwsh7;
+**8 executed unsafe mutants** в каждой оболочке ожидаемо FAIL. Проверены
+default-disabled, original owner calls, native affordability/clear/rank veto,
+однократные paid/completion effects, foreign order/state replacement, Stop,
+cache successor, master/proxy/campaign loss, pending Rpl без respawn,
+metadata identity и exact resource names. Все прежние Catalog controls,
+39/2old/6request,4 registration и13unknown-hit cases сохранены; полный
+dual contract batch59830 CLOSED0. Native construction/geometry/resource
+boundaries этого replay явно SIMULATED.
+
+Первые portable adapter FAIL (implicit local defaults/out/base-name conversion)
+и первый Source FAIL при Stop внутри CompletionClear сохранены; post-call
+guard исправлен. Peer findings по order/scope, cache ownership и authority
+исправлены и включены в cases/mutants. Evidence/source-before/proposal:
+`.codex-runtime/issue78-finalization-20261030/catalog-native-setup-readonly-v1/`.
+Baseline final r31 All267 и V28 FAIL неизменны. Новый setup WB/runtime пока
+**NOT RUN**; ранний WB на older production subset не заменит final frozen
+source gates или настоящий paid native purchase.

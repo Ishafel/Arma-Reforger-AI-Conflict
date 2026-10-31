@@ -8,6 +8,7 @@ param(
  [ValidateRange(1,65535)][int]$ServerPort=2670,
  [string]$RepositoryRoot,
  [string]$SourceRoot,
+ [switch]$ControlledDepotSetup,
  [string]$RhsAddonsRoot,
  [string]$WorkbenchPath='C:/Program Files (x86)/Steam/steamapps/common/Arma Reforger Tools/Workbench/ArmaReforgerWorkbenchSteamDiag.exe'
 )
@@ -41,6 +42,7 @@ function Get-AICFQuotaCatalogCanonical([string]$LauncherLog){
 # Loading the reusable validation functions must not prepare or start anything.
 if($MyInvocation.InvocationName-eq'.'){return}
 if(!$EvidenceRoot){throw 'EvidenceRoot required'}
+if($ControlledDepotSetup-and$Case-ne'vehicle'){throw 'ControlledDepotSetup requires vehicle case'}
 if(!$RepositoryRoot){$RepositoryRoot=Split-Path -Parent $PSScriptRoot}
 $taskRepo=(Resolve-Path -LiteralPath $RepositoryRoot).Path
 $taskEvidence=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($EvidenceRoot)
@@ -59,7 +61,7 @@ if($Phase-eq'Prepare'){
  foreach($row in $taskFiles){$destination=Join-Path $taskStage $row.path;[void][IO.Directory]::CreateDirectory((Split-Path -Parent $destination));Copy-Item -LiteralPath (Join-Path $taskSource $row.path) -Destination $destination}
  Copy-Item -LiteralPath (Join-Path $taskRepo 'tests/fixtures/AICF_AIQuotaCatalogProbe.c') -Destination (Join-Path $taskStage $taskFixture)
  Copy-Item -LiteralPath (Join-Path $taskRepo 'tests/log-audits/Test-AIQuotaCatalogLog.ps1') -Destination $taskAudit
- $taskData=[pscustomobject]@{created=(Get-Date -Format o);source=$taskSource;stage=$taskStage;variant=$Variant;server_port=$ServerPort;rhs_addons_root=$RhsAddonsRoot;raw_files=$taskFiles.Count;files=$taskFiles;fixture=[pscustomobject]@{path=$taskFixture;sha256=(Get-FileHash (Join-Path $taskStage $taskFixture)).Hash};auditor_sha256=(Get-FileHash $taskAudit).Hash;canonical_launcher_sha256=(Get-FileHash $taskLauncher).Hash}
+ $taskData=[pscustomobject]@{created=(Get-Date -Format o);source=$taskSource;stage=$taskStage;variant=$Variant;server_port=$ServerPort;rhs_addons_root=$RhsAddonsRoot;controlled_depot_setup=[bool]$ControlledDepotSetup;raw_files=$taskFiles.Count;files=$taskFiles;fixture=[pscustomobject]@{path=$taskFixture;sha256=(Get-FileHash (Join-Path $taskStage $taskFixture)).Hash};auditor_sha256=(Get-FileHash $taskAudit).Hash;canonical_launcher_sha256=(Get-FileHash $taskLauncher).Hash}
  $taskData|ConvertTo-Json -Depth 7|Set-Content -LiteralPath $taskManifest -Encoding UTF8
  Assert-AICFQuotaCatalogPayload $taskData $taskStage $taskAudit
  $planArgs=@{Role='Client';Variant=$Variant;RepositoryRoot=$taskStage;DryRun=$true};if($RhsAddonsRoot){$planArgs.RhsAddonsRoot=$RhsAddonsRoot}
@@ -76,6 +78,7 @@ if($Phase-eq'Prepare'){
 }
 $taskData=Get-Content -LiteralPath $taskManifest -Raw|ConvertFrom-Json
 if($taskData.variant-ne$Variant-or$taskData.server_port-ne$ServerPort){throw 'Prepared variant/port differs'}
+if([bool]$taskData.controlled_depot_setup-ne[bool]$ControlledDepotSetup){throw 'Prepared controlled depot setup differs'}
 Assert-AICFQuotaCatalogPayload $taskData $taskStage $taskAudit
 if((Get-FileHash $taskLauncher).Hash-ne$taskData.canonical_launcher_sha256){throw 'Canonical launcher changed since preparation'}
 $compile=Get-Content (Join-Path $taskEvidence 'compile-receipt.json') -Raw|ConvertFrom-Json
@@ -95,6 +98,7 @@ if($Phase-in@('Server','Client')){
  $marker=Join-Path $taskCase ($Phase+'-started.json');$lock=[IO.File]::Open($marker,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
  try{$bytes=[Text.Encoding]::UTF8.GetBytes(([ordered]@{at=(Get-Date -Format o);source_manifest_sha256=(Get-FileHash $taskManifest).Hash;mode=$Case;role=$Phase}|ConvertTo-Json));$lock.Write($bytes,0,$bytes.Length)}finally{$lock.Dispose()}
  $options=@{Role=$Phase;Variant=$Variant;RepositoryRoot=$taskStage;ProfileRoot=(Join-Path $taskCase ($Phase+'-profile'));ServerPort=$ServerPort;IsolatedLoadoutLibrary=$true;ReadyTimeoutSeconds=240;AdditionalArguments=@('-aicfQuotaCatalogProbe',$Case)}
+ if($ControlledDepotSetup){$options.AdditionalArguments+=@('-aicfQuotaCatalogControlledDepotSetup','1')}
  if($taskData.rhs_addons_root){$options.RhsAddonsRoot=$taskData.rhs_addons_root}
  if($Phase-eq'Server'){$options.AdditionalArguments+=@('-addr',"127.0.0.1:$ServerPort")}else{$options.ServerProfileRoot=Join-Path $taskCase 'Server-profile'}
  $options|ConvertTo-Json -Depth 5|Set-Content (Join-Path $taskCase ($Phase+'-options.json'))
@@ -109,6 +113,8 @@ foreach($role in @('Server','Client')){
  if($runtime.role-ne$role-or$runtime.variant-ne$Variant-or$runtime.profile-ne(Join-Path $taskCase ($role+'-profile'))){throw 'Actual canonical role/profile differs'}
  $runtimeArguments=$runtime.arguments;$index=[array]::IndexOf($runtimeArguments,'-aicfQuotaCatalogProbe')
  if($index-lt0-or$runtimeArguments[$index+1]-ne$Case-or$runtimeArguments-contains'-autodeployFaction'){throw 'Actual native probe CLI differs'}
+ $setupIndices=@(for($i=0;$i-lt$runtimeArguments.Count;$i++){if($runtimeArguments[$i]-eq'-aicfQuotaCatalogControlledDepotSetup'){$i}})
+ if($ControlledDepotSetup){if($setupIndices.Count-ne1-or$runtimeArguments[$setupIndices[0]+1]-ne'1'){throw 'Actual controlled depot CLI differs'}}elseif($setupIndices.Count){throw 'Unexpected controlled depot CLI'}
  $projectIndex=[array]::IndexOf($runtimeArguments,'-gproj')
  $stagePrefix=[IO.Path]::GetFullPath($taskStage).TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar
  if($projectIndex-lt0-or![IO.Path]::GetFullPath($runtimeArguments[$projectIndex+1]).StartsWith($stagePrefix,[StringComparison]::OrdinalIgnoreCase)){throw 'Native project is outside frozen stage'}
@@ -116,6 +122,8 @@ foreach($role in @('Server','Client')){
  if(!$console){throw 'Full native console missing'}
  $cli=@(Select-String -LiteralPath $console.FullName -Pattern 'CLI Params:')
  if($cli.Count-ne1-or$cli[0].Line-notmatch('-aicfQuotaCatalogProbe\s+'+[regex]::Escape($Case)+'(?:\s|$)')){throw 'Actual native CLI not proven'}
+ $setupCli=@([regex]::Matches($cli[0].Line,'(?:^|\s)-aicfQuotaCatalogControlledDepotSetup(?:\s|$)'))
+ if($ControlledDepotSetup){if($setupCli.Count-ne1-or$cli[0].Line-notmatch'(?:^|\s)-aicfQuotaCatalogControlledDepotSetup\s+1(?:\s|$)'){throw 'Actual controlled depot console CLI differs'}}elseif($setupCli.Count){throw 'Unexpected controlled depot console CLI'}
  $exit=[int](Get-Content -LiteralPath (Join-Path $taskCase ($role+'-exit.txt')))
  $launcherText=[IO.File]::ReadAllText((Join-Path $taskCase ($role+'-launcher.txt')))
  if($launcherText-notmatch('\[RUNTIME_LAUNCHER\]\[EXIT\].*role='+$role+'\b.*exit_code='+$exit+'\b')){throw 'Actual native launcher exit differs'}
