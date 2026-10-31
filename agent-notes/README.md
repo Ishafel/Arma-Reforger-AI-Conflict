@@ -13,6 +13,7 @@
 | Воспроизвести заполнение stock-квоты и обычный оплаченный набор AICF | [AI_QUOTA_STOCK_PRESSURE.md](AI_QUOTA_STOCK_PRESSURE.md), public Prepare/Run, scope и исходные failures |
 | Отличить нехватку средств до покупки машины от нарушения lifecycle | [VEHICLE_ECONOMY_DECLINE.md](VEHICLE_ECONOMY_DECLINE.md), typed pre-asset quote/receipt, own empty lease и terminal foot fallback |
 | Разобрать taskless ожидание квоты перед созданием машины | [VEHICLE_ACQUISITION_HOLD.md](VEHICLE_ACQUISITION_HOLD.md), typed staged receipt, реальный owned Defend и cleanup до продолжения acquisition |
+| Освободить исходного DEAD водителя, которого native исключил из сохранившейся группы | [CAPTURED_CASUALTY_CLEANUP.md](CAPTURED_CASUALTY_CLEANUP.md), отдельный admission capability и прежние physical cleanup guards |
 | Разобрать неполный native spawn и очередь замены отрядов | [GROUP_SPAWN.md](GROUP_SPAWN.md), GroupRuntime/InfantrySpawnPlacement и controlled replacement stress |
 | Разобрать отказ короткой коррекции при native STUCK на подходе к казарме | [RECRUITMENT_DECISIONS.md](RECRUITMENT_DECISIONS.md), isolated decision observer без изменения recovery |
 | Найти источник долгого Census UNKNOWN при посадке | [AI_QUOTAS.md](AI_QUOTAS.md#разбор-census-unknown-без-изменения-допуска), отдельный opt-in decision observer и строгие старые gates |

@@ -6,6 +6,10 @@ class AICF_TripRetirementMember
 	EntityID m_Id;
 	string m_sRpl;
 	bool m_bNativeDeadObserved;
+	BaseWorld m_World;
+	RplComponent m_Rpl;
+	CharacterControllerComponent m_Controller;
+	bool m_bAdmissionAlive;
 }
 
 class AICF_TripRetirementIdentity
@@ -19,6 +23,12 @@ class AICF_TripRetirementIdentity
 	protected EntityID m_GroupId;
 	protected RplId m_GroupRpl = RplId.Invalid();
 	protected SCR_AIGroup m_CapturedGroup;
+	protected BaseWorld m_AdmissionWorld;
+	protected RplComponent m_AdmissionGroupRpl;
+	protected ref AICF_StrategicAssignmentSnapshot m_AdmissionAssignment;
+	protected int m_iAdmissionAssignmentRevision;
+	protected int m_iAdmissionIntentRevision;
+	protected int m_iAdmissionBaseRevision;
 	protected ref array<ref AICF_TripRetirementMember> m_aMembers = {};
 	protected bool m_bRosterTrusted = true;
 	protected AICF_FactionFleet m_CleanupFleet;
@@ -44,7 +54,7 @@ class AICF_TripRetirementIdentity
 
 	void AICF_TripRetirementIdentity(AICF_StrategicAssignmentSnapshot assignment, int tripGeneration, string operation)
 	{
-		if (!Replication.IsServer() || !assignment || !assignment.IsValid() || tripGeneration <= 0 || operation.IsEmpty()) return;
+		if (!Replication.IsServer() || !GetGame() || !GetGame().GetWorld() || !assignment || !assignment.IsValid() || tripGeneration <= 0 || operation.IsEmpty()) return;
 		SCR_AIGroup group = assignment.GetGroup();
 		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(group)) return;
 		RplComponent rpl = RplComponent.Cast(group.FindComponent(RplComponent));
@@ -57,6 +67,12 @@ class AICF_TripRetirementIdentity
 		m_GroupId = group.GetID();
 		m_GroupRpl = rpl.Id();
 		m_CapturedGroup = group;
+		m_AdmissionWorld = GetGame().GetWorld();
+		m_AdmissionGroupRpl = rpl;
+		m_AdmissionAssignment = assignment;
+		m_iAdmissionAssignmentRevision = assignment.GetAssignmentRevision();
+		m_iAdmissionIntentRevision = assignment.GetStrategicIntentRevision();
+		m_iAdmissionBaseRevision = assignment.GetBaseRevision();
 		m_bCaptured = true;
 		array<AIAgent> agents = {};
 		group.GetAgents(agents);
@@ -84,6 +100,10 @@ class AICF_TripRetirementIdentity
 		member.m_Character = character;
 		member.m_Id = character.GetID();
 		member.m_sRpl = rpl.Id().ToString();
+		member.m_World = character.GetWorld();
+		member.m_Rpl = rpl;
+		member.m_Controller = character.GetCharacterController();
+		member.m_bAdmissionAlive = member.m_World == m_AdmissionWorld && member.m_Controller && member.m_Controller.GetLifeState() == ECharacterLifeState.ALIVE;
 		m_aMembers.Insert(member);
 		AICF_Stage3Diagnostics.Info("TRIP_RETIREMENT_MEMBER_CAPTURED", string.Format("faction=%1 slot=%2 group_generation=%3 trip_generation=%4 operation_id=%5 member=%6 actor_rpl=%7 scope=ADMISSION_LIVE_GROUP", m_sFaction, m_iSlot, m_iGroupGeneration, m_iTripGeneration, m_sOperation, member.m_Id, member.m_sRpl));
 	}
@@ -265,6 +285,89 @@ class AICF_TripRetirementIdentity
 	}
 
 	int GetCapturedMemberCount() { return m_aMembers.Count(); }
+
+	// Отдельный cleanup capability для исходного DEAD actor при ещё живой группе.
+	// Orphan resolver ниже сохраняет прежний, более узкий контракт.
+	bool MatchesTerminalCleanupAdmission(AICF_TransportTrip trip)
+	{
+		if (!Replication.IsServer() || !m_bRosterTrusted || m_aMembers.IsEmpty() || !GetGame()) return false;
+		if (!m_AdmissionWorld || GetGame().GetWorld() != m_AdmissionWorld || !trip || !trip.IsTerminal()) return false;
+		if (!trip.OwnsRetirementIdentity(this) || trip.GetAssignment() != m_AdmissionAssignment || !MatchesLiveCapturedGroup(trip)) return false;
+		if (m_AdmissionAssignment.GetAssignmentRevision() != m_iAdmissionAssignmentRevision ||
+			m_AdmissionAssignment.GetStrategicIntentRevision() != m_iAdmissionIntentRevision ||
+			m_AdmissionAssignment.GetBaseRevision() != m_iAdmissionBaseRevision) return false;
+		if (m_CapturedGroup.GetWorld() != m_AdmissionWorld || m_AdmissionWorld.FindEntityByID(m_GroupId) != m_CapturedGroup ||
+			m_CapturedGroup.FindComponent(RplComponent) != m_AdmissionGroupRpl) return false;
+		AICF_GroupSlot slot = trip.GetVehiclePresetSlot();
+		return slot && slot.GetSlotId() == m_iSlot && slot.GetGroup() == m_CapturedGroup && slot.GetSpawnGeneration() == m_iGroupGeneration;
+	}
+
+	ChimeraCharacter ResolveTerminalDeadActor(int index)
+	{
+		if (!Replication.IsServer() || !m_bRosterTrusted || !m_aMembers.IsIndexValid(index) ||
+			!GetGame() || GetGame().GetWorld() != m_AdmissionWorld) return null;
+		AICF_TripRetirementMember member = m_aMembers[index];
+		ChimeraCharacter character = ResolveDeadCapturedIdentity(index);
+		if (!character || !member.m_bAdmissionAlive || member.m_World != m_AdmissionWorld || character.GetWorld() != m_AdmissionWorld ||
+			character.FindComponent(RplComponent) != member.m_Rpl || character.GetCharacterController() != member.m_Controller) return null;
+		if (member.m_Controller.IsPlayerControlled()) return null;
+		// Все native parent/component/life/world чтения ДО последнего human scan.
+		if (!Replication.IsServer() || !GetGame() || GetGame().GetWorld() != m_AdmissionWorld ||
+			ResolveDeadCapturedIdentity(index) != character || character.FindComponent(RplComponent) != member.m_Rpl ||
+			character.GetCharacterController() != member.m_Controller) return null;
+		if (character.GetWorld() != m_AdmissionWorld || member.m_Controller.GetLifeState() != ECharacterLifeState.DEAD ||
+			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(character)) return null;
+		PlayerManager playerManager = GetGame().GetPlayerManager();
+		if (!playerManager) return null;
+		array<int> playerIds = {};
+		int playerCount = playerManager.GetAllPlayers(playerIds);
+		if (playerCount != playerIds.Count() || playerCount > 256) return null;
+		foreach (int playerId : playerIds)
+		{
+			PlayerController playerController = playerManager.GetPlayerController(playerId);
+			if (!playerController || playerController.GetControlledEntity() == character) return null;
+		}
+		// PC getter callbacks могут сменить world либо прямое player ownership.
+		if (!GetGame() || GetGame().GetWorld() != m_AdmissionWorld || GetGame().GetPlayerManager() != playerManager) return null;
+		if (member.m_Controller.IsPlayerControlled() || playerManager.GetPlayerIdFromControlledEntity(character) > 0 ||
+			SCR_PossessingManagerComponent.GetPlayerIdFromMainEntity(character) > 0) return null;
+		return character;
+	}
+
+	ChimeraCharacter ResolveTerminalDeadActorForCommit(int index, ChimeraCharacter expectedActor, Vehicle vehicle,
+		CompartmentAccessComponent expectedAccess, BaseCompartmentSlot expectedSeat)
+	{
+		// 1. World/entity/Rpl/component/parent до exact native seat proof.
+		if (!expectedActor || ResolveTerminalDeadActor(index) != expectedActor) return null;
+		AICF_TripRetirementMember member = m_aMembers[index];
+		// 2. Последние native access/seat/vehicle getters.
+		if (!expectedAccess || !expectedSeat || expectedActor.GetCompartmentAccessComponent() != expectedAccess) return null;
+		if (expectedAccess.GetCompartment() != expectedSeat || expectedSeat.GetVehicle() != vehicle ||
+			expectedSeat.GetOccupant() != expectedActor) return null;
+		// 3. Финальный DEAD/control/nonplayer proof. Ни parent, ни seat после него.
+		if (!expectedActor || !member || !member.m_Controller) return null;
+		CharacterControllerComponent controller = expectedActor.GetCharacterController();
+		if (!controller || controller != member.m_Controller || controller.GetLifeState() != ECharacterLifeState.DEAD || controller.IsPlayerControlled()) return null;
+		if (!Replication.IsServer() || !GetGame() || GetGame().GetWorld() != m_AdmissionWorld) return null;
+		PlayerManager playerManager = GetGame().GetPlayerManager();
+		if (!playerManager || playerManager.GetPlayerIdFromControlledEntity(expectedActor) > 0 ||
+			SCR_PossessingManagerComponent.GetPlayerIdFromMainEntity(expectedActor) > 0) return null;
+		array<int> playerIds = {};
+		int playerCount = playerManager.GetAllPlayers(playerIds);
+		if (playerCount != playerIds.Count() || playerCount > 256) return null;
+		foreach (int playerId : playerIds)
+		{
+			PlayerController playerController = playerManager.GetPlayerController(playerId);
+			if (!playerController || playerController.GetControlledEntity() == expectedActor) return null;
+		}
+		if (!Replication.IsServer() || !GetGame() || !expectedActor || !controller || !playerManager) return null;
+		if (GetGame().GetWorld() != m_AdmissionWorld || GetGame().GetPlayerManager() != playerManager) return null;
+		if (!expectedActor || !controller || !playerManager) return null;
+		if (expectedActor.GetCharacterController() != controller) return null;
+		if (!controller || controller.GetLifeState() != ECharacterLifeState.DEAD || controller.IsPlayerControlled() ||
+			playerManager.GetPlayerIdFromControlledEntity(expectedActor) > 0 || SCR_PossessingManagerComponent.GetPlayerIdFromMainEntity(expectedActor) > 0) return null;
+		return expectedActor;
+	}
 
 	ChimeraCharacter ResolveCapturedDeadMember(AICF_VehicleCleanupJob job, Vehicle vehicle, int index)
 	{

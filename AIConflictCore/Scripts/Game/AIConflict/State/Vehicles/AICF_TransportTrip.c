@@ -197,6 +197,10 @@ class AICF_TransportTrip
 	}
 
 	bool OwnsRetirementIdentity(AICF_TripRetirementIdentity identity) { return identity && identity == m_RetirementIdentity; }
+	AICF_CapturedDeadCleanupIdentity CaptureCapturedDeadCleanupIdentity(AICF_VehicleCleanupJob job)
+	{
+		return AICF_CapturedDeadCleanupIdentity.Capture(m_RetirementIdentity, this, job);
+	}
 	void RecordCapturedDeadRetirement(AICF_FactionFleet fleet, int observationBudget)
 	{
 		if (m_RetirementIdentity) m_RetirementIdentity.RecordAllCapturedDead(this, fleet, observationBudget);

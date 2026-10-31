@@ -424,6 +424,7 @@ class AICF_VehicleCleanupJob
 	ref AICF_VehicleCleanupActorHistory m_ActorHistory;
 	ref AICF_VehicleCleanupRecoveryRoster m_RecoveryRoster;
 	ref AICF_TripRetirementIdentity m_OrphanRetirement;
+	ref AICF_CapturedDeadCleanupIdentity m_CapturedDeadCleanup;
 	AICF_EVehicleReleaseDisposition m_Disposition;
 	string m_sTrigger;
 	string m_sOperationId;
@@ -667,6 +668,7 @@ class AICF_VehicleCleanupManager
 			job.m_ActorHistory = AICF_VehicleCleanupActorHistory.Capture(trip, lease, job.m_Group, nowMs);
 			job.m_RecoveryRoster = AICF_VehicleCleanupRecoveryRoster.Capture(trip, lease, job.m_Group);
 			job.m_OrphanRetirement = trip.CaptureOrphanCleanupIdentity(fleet, lease, job.m_iProtectedClearanceDeadlineAtMs + PROTECTED_CLEARANCE_TERMINAL_GRACE_MS);
+			job.m_CapturedDeadCleanup = trip.CaptureCapturedDeadCleanupIdentity(job);
 			m_aJobs.Insert(job);
 			ReportReleaseQueued(job);
 		}
@@ -944,6 +946,8 @@ class AICF_VehicleCleanupManager
 		if (!ResolveExpectedVehicle(job, vehicle, actualRplId, identityFailure))
 			return RetainFailClosed(job, identityFailure, actualRplId, nowMs);
 
+		if (!TryDetachCapturedTerminalDeadMembers(job, vehicle, nowMs))
+			return AICF_VehicleCleanupOutcome.Queued("CAPTURED_DEAD_CONTEXT_CHANGED", job.m_sActionToken);
 		TryDetachCapturedDeadOrphanMembers(job, vehicle, nowMs);
 		TryDetachNonAliveExactOccupants(job, vehicle, nowMs);
 		InspectCleanupSafety(job, vehicle, job.m_Scan);
@@ -1046,6 +1050,7 @@ class AICF_VehicleCleanupManager
 			return;
 		}
 
+		if (!TryDetachCapturedTerminalDeadMembers(job, vehicle, nowMs)) return;
 		TryDetachCapturedDeadOrphanMembers(job, vehicle, nowMs);
 		TryDetachNonAliveExactOccupants(job, vehicle, nowMs);
 		InspectCleanupSafety(job, vehicle, job.m_Scan);
@@ -1448,6 +1453,55 @@ class AICF_VehicleCleanupManager
 	static int GetRetirementObservationBudget(int clearanceMs, int cleanupDelayMs)
 	{
 		return Math.Max(1000, clearanceMs) + Math.Max(STABLE_CLEAR_MS, cleanupDelayMs) + PROTECTED_CLEARANCE_TERMINAL_GRACE_MS;
+	}
+
+	// Native может удалить DEAD actor из roster раньше физического detach.
+	// Permission даёт отдельная admission identity, не диагностическая history.
+	protected bool TryDetachCapturedTerminalDeadMembers(AICF_VehicleCleanupJob job, Vehicle vehicle, int nowMs)
+	{
+		if (!IsAuthority() || !job || !job.m_CapturedDeadCleanup || !vehicle || !m_Config ||
+			!m_Config.GetHiddenRecoveryEnabled() || !IsJobCurrent(job) || job.m_iNonAliveDetachAttempts >= NON_ALIVE_DETACH_MAX_ATTEMPTS) return true;
+		if (job.m_iLastNonAliveDetachAtMs > 0 && nowMs - job.m_iLastNonAliveDetachAtMs < NON_ALIVE_DETACH_INTERVAL_MS) return true;
+		AICF_CapturedDeadCleanupIdentity identity = job.m_CapturedDeadCleanup;
+		for (int index; index < identity.GetCapturedMemberCount(); index++)
+		{
+			ChimeraCharacter character = identity.Resolve(job, vehicle, index);
+			if (!character || !IsExactCleanupOccupantOfVehicle(character, vehicle)) continue;
+			float nearestPlayer;
+			string playerFence;
+			float radius = m_Config.GetHiddenRecoveryPlayerRadiusMeters();
+			if (!m_Watchdog.CanApplyHiddenRecovery(vehicle.GetOrigin(), vehicle.GetOrigin(), radius, nearestPlayer, playerFence)) return true;
+			CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
+			BaseCompartmentSlot seat;
+			if (access) seat = access.GetCompartment();
+			if (!seat || seat.GetVehicle() != vehicle || seat.GetOccupant() != character) continue;
+			int doorIndex = seat.PickDoorIndexForPoint(character.GetOrigin());
+			if (doorIndex < 0) continue;
+			// Повтор после native door/player getters: тот же actor/access/seat/job.
+			if (!IsAuthority() || !IsJobCurrent(job) || job.m_CapturedDeadCleanup != identity) return false;
+			if (identity.Resolve(job, vehicle, index) != character || character.GetCompartmentAccessComponent() != access) return false;
+			if (access.GetCompartment() != seat || seat.GetVehicle() != vehicle || seat.GetOccupant() != character) return false;
+			if (!m_Watchdog.CanApplyHiddenRecovery(vehicle.GetOrigin(), vehicle.GetOrigin(), radius, nearestPlayer, playerFence)) return true;
+			if (identity.Resolve(job, vehicle, index) != character || !IsAuthority() || !IsJobCurrent(job)) return false;
+			if (character.GetCompartmentAccessComponent() != access || access.GetCompartment() != seat) return false;
+			if (seat.GetVehicle() != vehicle || seat.GetOccupant() != character ||
+				job.m_iNonAliveDetachAttempts >= NON_ALIVE_DETACH_MAX_ATTEMPTS) return false;
+			if (!IsAuthority() || !GetGame() || GetGame().GetWorld() != vehicle.GetWorld()) return false;
+			ChimeraCharacter commitActor = identity.ResolveForCommit(job, vehicle, index, character, access, seat);
+			if (!commitActor || commitActor != character || !character || !access || !seat) return false;
+			if (!identity.MatchesOwnerContext(job) || job.m_CapturedDeadCleanup != identity) return false;
+			if (job.m_iNonAliveDetachAttempts >= NON_ALIVE_DETACH_MAX_ATTEMPTS) return false;
+			if (job.m_iLastNonAliveDetachAtMs > 0 && nowMs - job.m_iLastNonAliveDetachAtMs < NON_ALIVE_DETACH_INTERVAL_MS) return false;
+			job.m_iNonAliveDetachAttempts++;
+			job.m_iLastNonAliveDetachAtMs = nowMs;
+			access.KickFromVehicle(doorIndex);
+			if (!IsAuthority() || !IsJobCurrent(job) || job.m_CapturedDeadCleanup != identity || !identity.IsCurrent(job, vehicle)) return false;
+			string details = BuildJobIdentity(job);
+			details += string.Format(" member=%1 actor_rpl=%2 scope=CAPTURED_DEAD_CLEANUP life_state=DEAD captured_admission=1 native_helper=KICK_FROM_VEHICLE exit_door=%3 attempt=%4 maximum_attempts=%5 health_mutated=0 position_mutated=0 corpse_deleted=0", character.GetID(), AICF_VehicleCleanupRecoveryRoster.ComponentRpl(character), doorIndex, job.m_iNonAliveDetachAttempts, NON_ALIVE_DETACH_MAX_ATTEMPTS);
+			AICF_Stage35Diagnostics.Info("VEHICLE_CLEANUP_CAPTURED_DEAD_MEMBER", details);
+			return true;
+		}
+		return true;
 	}
 
 	// После native удаления группы разрешены только DEAD originals, захваченные
