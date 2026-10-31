@@ -8,6 +8,14 @@ vehicle revision и library revision. Чужая faction в рецепте не 
 
 ## Рецепт и каталог
 
+Переход из панели команд в редакторы пехоты/техники закрывает панель только
+после успешного `Open(): bool`. Отказ context/map/cursor/form оставляет панель
+доступной и пишет `[AICF][PRESET_EDITOR_OPEN] created=0 reason=...`.
+Успешный вызов пишет created/visible/modal/width/height/parent; это readback,
+не доказательство визуальной читаемости. Основная форма пехоты регистрирует
+свой root через Workspace.AddModal и снимает его в Close после вложенных
+диалогов. У техники этот paired lifecycle уже существовал.
+
 `AICF_VehiclePreset` хранит schemaVersion=2, profile, faction, имя, точный prefab,
 полную topology мест и numeric position для каждого места; -1 означает свободное.
 Дополнительно сохраняются `behavior` (`AICF_EVehicleBehavior.TRANSPORT=0` либо

@@ -319,6 +319,18 @@ host может быть недоступен: нулевой GetTextSize не �
 или визуальную читаемость. Полные logs и DONE обязательны; native exit0 сам по
 себе не означает успешную геометрию. История до/после — в TESTING.md.
 
+`AICF_PresetEditorOpeningProbe.c` → isolated Core/UI `AICF_ZZOpeningProbe.c`;
+тот же canonical Frontend запуск, flag `-aicfPresetEditorOpeningProbe 1`.
+Offscreen/opacity0 host строит обе настоящие формы, читает visibility/opacity
+и native размеры, затем вызывает настоящий Open с отсутствующим parent:
+ожидается false и отсутствие захваченного ввода. Campaign, RPC, focus и
+физический ввод не используются. Probe не проверяет успешный переход из
+реальной карты или main-modal input routing: эти пути отдельно NOT RUN.
+`Test-PresetEditorOpeningContracts.ps1` исполняет реальные два case контроллера
+через adapter: успех/отказ обоих editors, отсутствующий parent и admin shortcut;
+18 checks и2 unsafe closing-on-rejection variants. Source checks требуют paired
+native modal API, но не являются его runtime доказательством.
+
 `AICF_VehicleCatalogProbe.c` → Core/Vehicles `AICF_ZCatalogProbe.c`, flag
 `-aicfVehicleCatalogProbe 1`: полный native own/CIV wheeled catalog, metadata,
 stable quotes, немутирующее чтение budgets и enemy rejection,21 cases.

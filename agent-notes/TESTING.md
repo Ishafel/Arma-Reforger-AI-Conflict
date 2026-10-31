@@ -1,5 +1,44 @@
 # Проверки и baseline
 
+## Отказ открытия пресетов и crash игрока — 31.10.2026
+
+Ветка `codex/preset-editor-opening-fix` от `9af7881`. Полный player log показывает
+EDIT_LOADOUT в10:17:10.980 и принятый READ/READY в10:17:11.030 без SCRIPT exception.
+Изолированное построение обеих форм до правки даёт visible1/opacity1 и
+положительные размеры. Исходный пользовательский отказ **не воспроизведён**.
+Нельзя объявлять исходной причиной размер строк или конфликт modal.
+
+Подтверждённые дефекты кода: controller скрывал командную панель до вызова Open,
+который мог молча вернуться по guard; main root редактора пехоты не регистрировался
+через native AddModal. Теперь оба Open возвращают bool, панель скрывается только
+после успеха; main loadout modal имеет paired RemoveModal в Close. Добавлены
+typed причины отказа и readback created/visible/modal/width/height/parent.
+
+Baseline audits LoadoutQol/Library/VehicleEditor —3/3 PASS; после правки вместе
+с PersonalLoadout и новым PresetEditorOpening —5/5 PASS. Новый actual-case replay:
+18 checks/2 unsafe rejected. Baseline/fixed/production Stock Workbench:
+native0, validation successful, SCRIPT/VM fatal0. Offscreen Frontend baseline и
+fixed штатно завершены native0: обе формы строятся, root/panel visible1/opacity1,
+inspector2432×1339.2, vehicle2150.4×1296 native pixels; fixed Open(null) обоих
+editor возвращает false, capture0. Это geometry/rejection readback, не native
+успех открытия формы с карты и не модальный ввод. Полный no-error gate FAIL:
+WorkBench50resource(E); native GUI/resource baseline сохранён в полных logs.
+
+После завершения старого player процесса дописан **MEMORY(E) Out of memory**
+в10:18:27.475: requested671088632bytes, Free sysMem604088KiB. Это реальный
+blocker, но его причинная связь с исходным отказом окна не установлена. После
+выхода клиента свободно около23GiB RAM; pagefile peak8024MiB. Исторического
+per-process memory witness нет; не объявлять preview утечкой по одной этой строке.
+Player profile сохранён before/after crash в evidence.
+
+Evidence `.codex-runtime/preset-editor-opening-20261031/`: baseline/after audits,
+baseline/fixed/production-workbench, baseline/fixed-profile, manifests/exits,
+player-before и player-after-crash. Все проверки терминальные, GUI запрещён.
+**NOT RUN:** исходный пользовательский путь после правки, native successful
+map→editor modal routing, human readability/input, повтор crash и memory soak,
+campaign/client/JIP/RHS/WCS/full offline. Исходный bug остаётся неподтверждённым;
+issue #78 OPEN, прежние HOLD_UNSAFE/native-only8 blockers сохранены.
+
 ## Исправление геометрии мест после скриншота — 31.10.2026
 
 Ветка `codex/vehicle-seat-layout-fix` от `7bdbc10`. Прежние42 client/5 JIP

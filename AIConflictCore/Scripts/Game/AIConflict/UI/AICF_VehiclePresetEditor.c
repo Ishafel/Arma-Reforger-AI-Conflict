@@ -113,21 +113,32 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		return component;
 	}
 
-	void Open(Widget parent, int slot)
+	bool Open(Widget parent, int slot)
 	{
 		Close();
 		m_Player = SCR_PlayerController.Cast(GetGame().GetPlayerController());
-		if (!m_Player || !parent) return;
+		if (!m_Player || !parent) return OpenRejected("CONTEXT_UNAVAILABLE");
 		SCR_MapEntity mapEntity = SCR_MapEntity.GetMapInstance();
-		if (!mapEntity || !mapEntity.IsOpen()) return;
+		if (!mapEntity || !mapEntity.IsOpen()) return OpenRejected("MAP_CLOSED");
 		m_Cursor = SCR_MapCursorModule.Cast(mapEntity.GetMapModule(SCR_MapCursorModule));
-		if (!m_Cursor || (m_Cursor.GetCursorState() & EMapCursorState.CS_DIALOG)) return;
-		if (!Create(parent, slot)) { Close(); return; }
+		if (!m_Cursor || (m_Cursor.GetCursorState() & EMapCursorState.CS_DIALOG)) return OpenRejected("CURSOR_DIALOG_BUSY");
+		if (!Create(parent, slot)) { Close(); return OpenRejected("FORM_CREATE_FAILED"); }
 		m_bCaptured = true;
 		m_Cursor.AICF_SetVehiclePresetDialog(this);
 		GetGame().GetWorkspace().AddModal(m_wRoot, m_wPanel);
 		GetGame().GetInputManager().AddActionListener(UIConstants.MENU_ACTION_BACK, EActionTrigger.DOWN, OnBack);
 		Request(AICF_EVehiclePresetOperation.READ, "");
+		m_wRoot.Update();
+		float width, height;
+		m_wRoot.GetScreenSize(width, height);
+		Print(string.Format("[AICF][PRESET_EDITOR_OPEN] editor=VEHICLE slot=%1 created=1 visible=%2 modal=%3 width=%4 height=%5 parent=%6", slot, m_wRoot.IsVisibleInHierarchy(), GetGame().GetWorkspace().GetModal() == m_wRoot, width, height, parent.GetName()));
+		return true;
+	}
+
+	protected bool OpenRejected(string reason)
+	{
+		Print("[AICF][PRESET_EDITOR_OPEN] editor=VEHICLE created=0 reason=" + reason);
+		return false;
 	}
 
 	protected bool Create(Widget parent, int slot)

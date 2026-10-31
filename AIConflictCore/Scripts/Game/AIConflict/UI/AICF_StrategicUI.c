@@ -229,8 +229,8 @@ class AICF_StrategicUIController
 			case AICF_EStrategicUIButtonAction.EDIT_LOADOUT:
 				if (m_LoadoutEditor && m_wCommandScrim)
 				{
-					SetCommandOpen(false);
-					m_LoadoutEditor.Open(m_wCommandScrim.GetParent(), m_iSelectedSlot);
+					if (m_LoadoutEditor.Open(m_wCommandScrim.GetParent(), m_iSelectedSlot))
+						SetCommandOpen(false);
 				}
 				else if (m_LoadoutEditor && m_wLoadoutShortcut && SCR_Global.IsAdmin())
 					m_LoadoutEditor.Open(m_wLoadoutShortcut.GetParent(), 0, false, true);
@@ -238,8 +238,8 @@ class AICF_StrategicUIController
 			case AICF_EStrategicUIButtonAction.EDIT_VEHICLE:
 				if (m_VehiclePresetEditor && m_wCommandScrim)
 				{
-					SetCommandOpen(false);
-					m_VehiclePresetEditor.Open(m_wCommandScrim.GetParent(), m_iSelectedSlot);
+					if (m_VehiclePresetEditor.Open(m_wCommandScrim.GetParent(), m_iSelectedSlot))
+						SetCommandOpen(false);
 				}
 				break;
 		}
