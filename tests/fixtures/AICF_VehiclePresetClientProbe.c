@@ -494,9 +494,9 @@ class AICF_VehiclePresetProbeEditor : AICF_VehiclePresetEditor
 		Check("AUTO_SEATS_NO_RPC", m_iToken == token && !m_bPending && !m_bQueued && m_sQueuedSelection.IsEmpty());
 
 		SyntheticSeatRows(24, original);
-		Check("SEAT_SCROLL_24_ROWS", m_aSeats.Count() == 24 && m_aSeatLabels.Count() == 24 && m_aSeatLabels[23].IsVisible() && m_aSeats[23].GetRootWidget().GetParent() == m_wSeatContent);
+		Check("SEAT_SCROLL_24_ROWS", m_aSeats.Count() == 24 && m_aSeatLabels.Count() == 24 && m_aSeatLabels[23].IsVisible() && m_aSeats[23].GetRootWidget().GetParent().GetParent() == m_wSeatContent && m_aSeatLabels[23].GetParent() == m_aSeats[23].GetRootWidget().GetParent());
 		SyntheticSeatRows(AICF_VehiclePreset.MAX_SEATS, original);
-		Check("SEAT_SCROLL_64_ROWS", m_aSeats.Count() == 64 && m_aSeatLabels.Count() == 64 && m_aSeatLabels[63].IsVisible() && m_aSeats[63].GetRootWidget().GetParent() == m_wSeatContent);
+		Check("SEAT_SCROLL_64_ROWS", m_aSeats.Count() == 64 && m_aSeatLabels.Count() == 64 && m_aSeatLabels[63].IsVisible() && m_aSeats[63].GetRootWidget().GetParent().GetParent() == m_wSeatContent && m_aSeatLabels[63].GetParent() == m_aSeats[63].GetRootWidget().GetParent());
 		Check("SEAT_SCROLL_CONTENT_HEIGHT", m_wSeatSize.IsHeightOverride() && m_wSeatSize.GetHeightOverride() == 64 * 58);
 		m_wSeatScroll.SetSliderPos(0, 0);
 		bool wheel = OnMouseWheel(m_wSeatScroll, 0, 0, -1);

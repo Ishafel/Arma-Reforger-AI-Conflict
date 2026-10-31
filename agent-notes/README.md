@@ -27,7 +27,7 @@
 | Разобрать ожидание входа в машину и ранний пеший подход без расширения door cap/deadline | [VEHICLE_BOARDING_QUEUE.md](VEHICLE_BOARDING_QUEUE.md), PresetQueuedApproach/BoardingState и callback-safe QueuePresetSeat |
 | Разобрать native UNKNOWN во время подхода к площадке техники | [VEHICLE_APPROACH_FAILURE.md](VEHICLE_APPROACH_FAILURE.md); exact phase-owned failure receipt и отдельный controlled native probe |
 | Проверить bounded route repair после настоящего OpenGate/возврата экипажа | [TEST_FIXTURES.md](TEST_FIXTURES.md#controlled-native-opengate-expiry), NativeGateExpiryProbe с единственной controlled expiry и отдельным native motion proof |
-| Передать игроку визуальную проверку окна техники и подтверждения состава | [VEHICLE_VISUAL_CHECK.md](VEHICLE_VISUAL_CHECK.md); terminal probes не заменяют этот NOT RUN |
+| Передать игроку визуальную проверку окна техники и подтверждения состава | [VEHICLE_VISUAL_CHECK.md](VEHICLE_VISUAL_CHECK.md); native геометрия строк — `AICF_VehicleSeatLayoutProbe` в [TEST_FIXTURES.md](TEST_FIXTURES.md), terminal probes не заменяют human NOT RUN |
 | Проверить2→4→6 машин на сторону и native combat hold/release/resume | [VEHICLE_MULTISQUAD.md](VEHICLE_MULTISQUAD.md), MultiSquad/TransportCombatResume fixtures и их terminal runners/log auditors |
 | Разобрать повреждённую ходовую, bounded fallback и повторную покупку на прежнем intent | [VEHICLE_SCENARIOS.md](VEHICLE_SCENARIOS.md), `Invoke-AICFTransportDamageFallback.ps1`, movement damage/finished intent contracts |
 | Проверить штатный найм5 бойцов в первом отряде, UAZ/Humvee и30 минут реального боя | [VEHICLE_SOAK.md](VEHICLE_SOAK.md), VehicleSoakProbe, Invoke/Watch-AICFVehicleSoak и SoakLog |

@@ -1,5 +1,47 @@
 # Проверки и baseline
 
+## Исправление геометрии мест после скриншота — 31.10.2026
+
+Ветка `codex/vehicle-seat-layout-fix` от `7bdbc10`. Прежние42 client/5 JIP
+checks не измеряли реальные rectangles, поэтому не обнаружили наложение label
+и растянутые ComboBox. Новые строки FrameWidget имеют height52/pitch58;
+дочерние controls используют относительные anchors внутри строки.
+
+- До правки `Invoke-AICFChecks.ps1 -Name Test-VehiclePresetEditorContracts.ps1,Test-VehiclePresetContracts.ps1`:
+  **2/2 PASS**. После правки те же2 PASS; финальный набор с
+  `Test-VehiclePresetClientLogContracts.ps1` — **3/3 PASS**, runner exit0.
+- Production Stock Workbench — **compile PASS**, native0/validation/fatal0.
+  Окончательные immutable baseline/fixed stages с geometry и client fixtures:
+  оба Workbench **compile PASS**, native0/validation/fatal0.
+- Одинаковая final `AICF_VehicleSeatLayoutProbe.c`, SHA
+  `E4A6AFFE1A32E20F3AF5A0CAEC613562C52518FD079FE69403EA1962C6EC4350`,
+  через canonical `Start-AICFRuntime.ps1 -Role Frontend`:5/24/64 строки ×
+  host1280×720/1920×1080/2560×1440 workspace units,9 cases/2313 checks.
+  Старый source: **FAIL1674**; исправленный: **PASS2313/2313**.
+  Проверены native row/label/Combo/text bounds, порядок/зазоры, отдельные
+  pos/size, normalized scroll endpoint, его повтор и возврат0. Дисплей не менялся.
+  Оба native exit0, полные stopped console и все sibling logs, SCRIPT/VM fatal0.
+  `Collect-Final.ps1` exit0; это только **GEOMETRY_ONLY**, не human visual PASS.
+- Первый fixed run сохранил **279 FAIL**: offscreen/opacity0 host возвращает
+  GetTextSize0, хотя actual text bbox положительный. Final fixture сохраняет
+  строгий bbox/nonempty/containment; glyph0 отмечен **NOT_PROVEN**,279 unknown,
+  а не font PASS. Положительный oversized glyph по-прежнему отвергается.
+- Final console raw `(E)` **32/32**, каждый GUI1/RESOURCES31; error.log дублирует
+  эти32, script.log0. Общий no-error gate остаётся **FAIL**. Первые baseline/fixed
+  runs35/32 сохранены; resource/WB ошибки не исключались из evidence.
+
+Evidence `.codex-runtime/vehicle-seat-layout-fix-20261031/`: baseline/after-row/
+final-affected, wb-production, baseline-final/fixed-final-workbench,
+baseline-final/fixed-final-profile, manifests/exits/source hashes и
+`final-native-verdict.json`. Терминальные команды воспроизводятся из fixtures
+по [TEST_FIXTURES.md](TEST_FIXTURES.md); own helper scripts сохранены в evidence.
+
+**NOT RUN:** человеческая читаемость/физическая мышь/dropdown popup clipping,
+кампания/client/JIP после этой узкой правки, RHS/WCS runtime и полный All273.
+Ограничение GUI workflow сохраняется; игрок открывает «Техника», меняет модель,
+прокручивает места и назначает бойца. Старый HOLD_UNSAFE/TIMEOUT и native-only8
+persistence blocker #78 не исправлялись этим изменением; issue остаётся OPEN.
+
 ## Окна пресетов отряда — 31.10.2026
 
 Отдельная ветка `codex/ui-preset-reformat` от опубликованного `c5ccf6e`.

@@ -300,6 +300,25 @@ Fixtures, flags и native oracles описаны в
 Production copies fixtures не содержит. Оба peers используют один неизменяемый
 stage. Hidden widget tree вызывает handlers без focus/input/screen capture.
 `AICF_VehicleNativeControl.c` используется отдельно, без остальных probes.
+
+`AICF_VehicleSeatLayoutProbe.c` → isolated Core/UI
+`AICF_ZZVehicleSeatLayoutProbe.c`; flag `-aicfVehicleSeatLayoutProbe 1`.
+После терминального Workbench Validate запускается отдельно через
+`tools/Start-AICFRuntime.ps1 -Role Frontend -Variant Stock -RepositoryRoot <stage>
+-ProfileRoot <fresh-profile> -IsolatedLoadoutLibrary -AdditionalArguments
+@('-aicfVehicleSeatLayoutProbe','1')`. Stage содержит неизменяемые production
+addons и fixture; runtime profiles находятся вне stage. Campaign/server не нужны.
+Fixture создаёт настоящий редактор с синтетическим draft без RPC/actors и
+проверяет5/24/64 строки при host1280×720/1920×1080/2560×1440 workspace units.
+Host VISIBLE для native layout, но offscreen/opacity0/IGNORE_CURSOR, без focus
+и физического ввода; разрешение дисплея не меняется. Native rectangles всех
+строк, label, ComboBox и его TextWidget должны быть положительными, находиться
+в своих границах и не пересекаться между строками. Положение и размер строки
+проверяются отдельно в workspace units и screen pixels. Размер глифов в таком
+host может быть недоступен: нулевой GetTextSize не доказывает размер шрифта
+или визуальную читаемость. Полные logs и DONE обязательны; native exit0 сам по
+себе не означает успешную геометрию. История до/после — в TESTING.md.
+
 `AICF_VehicleCatalogProbe.c` → Core/Vehicles `AICF_ZCatalogProbe.c`, flag
 `-aicfVehicleCatalogProbe 1`: полный native own/CIV wheeled catalog, metadata,
 stable quotes, немутирующее чтение budgets и enemy rejection,21 cases.

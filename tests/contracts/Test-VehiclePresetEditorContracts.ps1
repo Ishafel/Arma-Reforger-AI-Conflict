@@ -19,9 +19,10 @@ foreach ($required in @('ScrollLayoutWidgetTypeID','WidgetFlags.CLIPCHILDREN','S
 }
 $previewCreate = [regex]::Match($create,'CreateWidget\(WidgetType.RenderTargetWidgetTypeID,[\s\S]*?m_wPanel\)')
 if (!$previewCreate.Success -or $previewCreate.Value.Contains('IGNORE_CURSOR')) { throw 'Interactive vehicle preview ignores cursor' }
-foreach ($required in @('oldCombo.GetRootWidget().RemoveFromHierarchy()','m_wSeatSize.SetHeightOverride','m_aSeats.Clear()','m_aSeatLabels.Clear()')) {
+foreach ($required in @('ClearCombo(oldCombo)','oldRow.RemoveFromHierarchy()','m_wSeatSize.SetHeightOverride','m_aSeats.Clear()','m_aSeatLabels.Clear()','m_aSeatRows.Clear()','FrameSlot.SetSizeToContent(row, false)','FrameSlot.SetPosY(row, seat * 58)','FrameSlot.SetSizeY(row, 52)','CreateText(row, 0, 0, 0.42, 1','Combo(0.43, 0, 0.97, 1, row)')) {
  if (!$render.Contains($required)) { throw "Missing seat rebuild lifecycle $required" }
 }
+if ($render -match 'FrameSlot.SetOffsets\(label|FrameSlot.SetOffsets\(combo.GetRootWidget') { throw 'Seat child geometry must use its fixed parent row' }
 foreach ($required in @('ClearCombo(m_Catalog)','ClearCombo(m_SourceFilter)','ClearCombo(m_CategoryFilter)','m_wSeatScroll.RemoveHandler(this)','m_sQueuedSelection = ResourceName.Empty','m_wSeatScroll = null','m_Preview.Clear()')) {
  if (!$close.Contains($required)) { throw "Missing editor Close cleanup $required" }
 }

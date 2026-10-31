@@ -21,6 +21,7 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 	protected SCR_ComboBoxComponent m_Library;
 	protected ref array<SCR_ComboBoxComponent> m_aSeats = {};
 	protected ref array<TextWidget> m_aSeatLabels = {};
+	protected ref array<Widget> m_aSeatRows = {};
 	protected ScrollLayoutWidget m_wSeatScroll;
 	protected SizeLayoutWidget m_wSeatSize;
 	protected Widget m_wSeatContent;
@@ -510,23 +511,28 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		if (m_aSeats.Count() != seatCount)
 		{
 			foreach (SCR_ComboBoxComponent oldCombo : m_aSeats)
-			{
 				ClearCombo(oldCombo);
-				oldCombo.GetRootWidget().RemoveFromHierarchy();
-			}
-			foreach (TextWidget oldLabel : m_aSeatLabels) oldLabel.RemoveFromHierarchy();
+			foreach (Widget oldRow : m_aSeatRows) oldRow.RemoveFromHierarchy();
 			m_aSeats.Clear();
 			m_aSeatLabels.Clear();
+			m_aSeatRows.Clear();
 			m_wSeatSize.SetHeightOverride(Math.Max(1, seatCount) * 58);
 			m_wSeatScroll.SetSliderPos(0, 0);
 			for (int seat; seat < seatCount; seat++)
 			{
-				float top = seat * 58;
-				TextWidget label = m_Controller.CreateText(m_wSeatContent, 0, 0, 0.42, 0, "", 18, Color.White);
-				FrameSlot.SetOffsets(label, 0, top, 0, top + 52);
+				Widget row = GetGame().GetWorkspace().CreateWidget(WidgetType.FrameWidgetTypeID,
+					WidgetFlags.VISIBLE, Color.White, 0, m_wSeatContent);
+				FrameSlot.SetAnchorMin(row, 0, 0);
+				FrameSlot.SetAnchorMax(row, 1, 0);
+				FrameSlot.SetAlignment(row, 0, 0);
+				FrameSlot.SetOffsets(row, 0, 0, 0, 0);
+				FrameSlot.SetSizeToContent(row, false);
+				FrameSlot.SetPosY(row, seat * 58);
+				FrameSlot.SetSizeY(row, 52);
+				m_aSeatRows.Insert(row);
+				TextWidget label = m_Controller.CreateText(row, 0, 0, 0.42, 1, "", 18, Color.White);
 				m_aSeatLabels.Insert(label);
-				SCR_ComboBoxComponent combo = Combo(0.43, 0, 0.97, 0, m_wSeatContent);
-				FrameSlot.SetOffsets(combo.GetRootWidget(), 0, top, 0, top + 52);
+				SCR_ComboBoxComponent combo = Combo(0.43, 0, 0.97, 1, row);
 				m_aSeats.Insert(combo);
 			}
 		}
@@ -742,6 +748,7 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		if (m_wSeatScroll) m_wSeatScroll.RemoveHandler(this);
 		m_aSeats.Clear();
 		m_aSeatLabels.Clear();
+		m_aSeatRows.Clear();
 		m_wSeatScroll = null;
 		m_wSeatSize = null;
 		m_wSeatContent = null;

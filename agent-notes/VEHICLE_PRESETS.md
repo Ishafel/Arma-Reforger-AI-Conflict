@@ -139,7 +139,14 @@ ByName API; generation gate блокирует устаревшие callbacks. �
 после следующего queue tick, поскольку текущий tick ещё видит старую запись.
 Список мест имеет отдельную вертикальную прокрутку и не ограничивает количество
 видимых назначений высотой окна. Фактическая доступность мест по-прежнему берётся
-из catalog topology, а не из размеров UI. Терминальные source/compile проверки
+из catalog topology, а не из размеров UI. Каждое место находится в собственной
+FrameWidget строке: высота52, шаг58 workspace units; label и native ComboBox
+растянуты по высоте только внутри строки. Позиция и размер задаются отдельно
+через FrameSlot.SetPosY/SetSizeY, а не offsets дочерних controls с нулевыми
+вертикальными anchors. При перестроении сначала снимаются Combo callbacks,
+затем удаляются целые строки. Native геометрия проверяется отдельной
+`AICF_VehicleSeatLayoutProbe.c` (см. TEST_FIXTURES/TESTING).
+Терминальные source/compile проверки
 не подтверждают удобство drag, масштаба или прокрутки игроком: такая оценка NOT RUN.
 Footer явно разрешает AICF localization перед SetText; native
 EditBox label/placeholder заменены названием пресета. Hover/pressed кнопок формы
