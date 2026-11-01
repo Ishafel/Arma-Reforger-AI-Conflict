@@ -1,5 +1,21 @@
 # Состояние #78
 
+## Объединение веток — 01.11.2026
+
+Все15local рабочих веток и прежний remote checkpoint включены в единую
+`codex/issue-78-vehicle-presets`, head draft PR79. Merge4ee7ec7 сохраняет
+полное дерево последнего c212de5 без игровых/test/tool изменений; исходная
+ветка цен теперь также реальный ancestor. Свежие профильные5/5 до и послеPASS.
+Состав/проверки: [ISSUE78_INTEGRATION.md](ISSUE78_INTEGRATION.md).
+
+**Issue OPEN, PR draft, FPS/runtime/resource FAIL сохраняются.** Последний
+WCS32/30min выявил server min0,6FPS/client min29FPS;4meaningful-task deadlines
+и4cleanup retained; обе исправленные vehicle ошибки0. Это актуальное
+ограничение, прежние короткие FPS/functional PASS его не заменяют.
+Новый full offline/Workbench/native в merge-only задаче NOT RUN:
+source exact c212de5; предыдущая293unique матрица и WB — прежние проверки.
+Ни main merge, ни release/ready/закрытие issue не выполняются.
+
 ## Уточнение Co-op — 01.11.2026
 
 По прямому уточнению пользователя исправляется ошибка2471562: на стороне

@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Найти единую ветку всех работ #78 и проверить включение исходных веток без потери исправлений | [ISSUE78_INTEGRATION.md](ISSUE78_INTEGRATION.md), canonical `codex/issue-78-vehicle-presets`, PR79 draft |
 | Сверить установленные AI Conflict/RHS/WCS и прочие Workshop версии, отличить missing dependencies от устаревания | [ADDON_VERSIONS.md](ADDON_VERSIONS.md): датированная online-сверка42пакетов, активный graph полный |
 | Разобрать ложный STRING_FORMAT_PLACEHOLDER на percent encoding и проверить native Format arity | [LANGUAGE_AUDIT.md](LANGUAGE_AUDIT.md), `Test-LanguageAuditContracts.ps1` |
 | Повторить длительный WCS бой под высокой нагрузкой, проверить FPS и обе vehicle regressions | [WCS_HIGHLOAD_SOAK.md](WCS_HIGHLOAD_SOAK.md): 32min server/30min client, FPS FAIL, прежние ошибки0, реальные поездки и новые blockers |
