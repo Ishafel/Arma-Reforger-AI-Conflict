@@ -1,5 +1,19 @@
 # Проверки и baseline
 
+## Совместный срез: подпись пресета и цена ИИ — 01.11.2026
+
+После объединения обеих фич:14/14 профильных checks PASS, затем2/2 затронутых
+price checks повторены после integer minimum guard. Финальная компиляция
+fixture-free root394production файлов Stock/RHS/WCS3/3 PASS, native0,
+validation/fatal0/source drift0; WBresources50/52/78 остаются FAIL.
+Первый integrated compile/checkpoint до integer guard сохранён отдельно.
+Evidence `.codex-runtime/group-preset-label-20261101/integrated-checks/`,
+`integrated-price-final/`, `integrated-compile-final/`; native доказательства
+каждой фичи относятся к отдельным явно указанным snapshots ниже/в профильных notes.
+Новый полный offline287 и connected client/JIP не запускались; прежний284
+не выдаётся за новый. User layout/input NOT RUN. Исходные persistence/resource/
+window/OOM blockers сохраняются, PR79 draft/issue78 OPEN.
+
 ## Имя пресета техники в списке групп — 01.11.2026
 
 `BuildGroupSummary` добавляет optional field14 после прежних14полей. Строка

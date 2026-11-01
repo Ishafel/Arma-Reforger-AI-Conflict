@@ -46,7 +46,10 @@ canonical tank scaffold с controlled исходным crew и supplies; он н
 
 Evidence и полные остановленные логи:
 `.codex-runtime/ai-combat-price-native-20261101/` в основном workspace;
-статические проверки — `.codex-runtime/ai-combat-prices/` ценового worktree.
+статические проверки скопированы с byte/SHA verification в
+`.codex-runtime/ai-combat-price-native-20261101/static/ai-combat-prices/`.
+Индекс архивов и cleanup — `artifact-index.json`/`worktree-cleanup.json`;
+временный worktree удалён, исходные коммиты сохранены в Git.
 Результаты functional, Workbench и strict resource gate учитываются отдельно.
 Игра человеком/connected client/JIP новой цены — отдельный NOT RUN; работающий
 retail клиент пользователя не перезапускается.

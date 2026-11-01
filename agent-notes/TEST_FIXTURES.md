@@ -1,5 +1,23 @@
 # Изменение сценарного контракта — 2026-10-24
 
+## Имя vehicle preset и цена боевой техники ИИ — 01.11.2026
+
+`AICF_VehiclePresetSummaryProbe.c`, флаг `-aicfVehiclePresetSummaryProbe 1`:
+изолированный native Stock server, actual JSON→BuildGroupSummary→UIformatter,
+RU/EN literal names, legacy14, no/reset15 и имя до покупки;14/14 PASS.
+Нет создания widget/model, ввода GUI, покупки или изменения живых групп.
+`Test-VehiclePresetSummaryContracts.ps1` исполняет87cases/7unsafe.
+
+`AICF_AICombatPriceProbe.c`, флаги `-aicfAIPriceProbe 1`,
+`-aicfAIPriceBaseline 1` для старой policy, `-aicfAIPricePurchase 1`
+для observer реального debit. Label/raw/AI quote readback обеих сторон,
+unarmed/human unchanged;48/5 actual-source и13 parser controls.
+Для native purchase используется canonical tank scaffold с controlled
+исходным crew/запасом, без изменения purchase/authority/economy guards.
+Подробные команды, ограничения и evidence — [AI_VEHICLE_PRICES.md](AI_VEHICLE_PRICES.md)
+и [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md). Каждый opt-in probe копируется только
+в изолированный stage; compile/full stopped/fatal/resource gates разделены.
+
 ## Lifetime private vehicle preview — 01.11.2026
 
 `AICF_PreviewLifetimeProbe.c` добавляется только в отдельный Stock stage вместе
