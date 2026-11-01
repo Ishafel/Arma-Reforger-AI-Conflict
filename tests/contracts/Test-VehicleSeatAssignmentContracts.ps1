@@ -80,7 +80,7 @@ $method=[AssignmentReplay+Assign]
 $delegates=@(foreach($type in @($actual,$unsafeCargo,$unsafeDuplicates,$unsafeShort)){[Delegate]::CreateDelegate($method,$type.GetMethod('AutoAssign'))})
 [AssignmentReplay]::Run($delegates[0],$delegates[1],$delegates[2],$delegates[3])
 $service=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/UI/AICF_VehiclePresetService.c'))
-if($service -notmatch 'json.WriteValue\("mandatorySeats", viewer.m_aMandatorySeats\)' -or $service -notmatch 'GetAttachedTurret\(\)' -or $service -notmatch 'ECompartmentType.PILOT' -or $service -notmatch 'ECompartmentType.TURRET'){throw 'FAIL actual catalog mandatory metadata'}
+if($service -notmatch 'json.WriteValue\("mandatorySeats", viewer.m_aMandatorySeats\)' -or $service -notmatch 'IsVehiclePresetCrewSeat\(viewer.m_Draft.m_sPrefab, viewer.m_Draft.m_sFaction, seat\)'){throw 'FAIL actual catalog mandatory metadata uses exact recipe crew policy'}
 $reset=[regex]::Match($service,'(?s)else if \(operation == AICF_EVehiclePresetOperation.RESET\)(.*?)else if').Groups[1].Value
 if($reset -notmatch '(?s)if \(accepted\).*?viewer.m_Draft = null' -or $reset -notmatch 'viewer.m_aMandatorySeats.Clear\(\)' -or $reset -match 'SetUnitType|AutoAssign|Spawn'){throw 'FAIL reset clears draft without changing unit policy'}
 Write-Output 'PASS Service metadata/reset source controls=2'

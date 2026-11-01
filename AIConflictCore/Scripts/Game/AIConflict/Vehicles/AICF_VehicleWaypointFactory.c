@@ -9,14 +9,36 @@ class AICF_VehicleWaypointFactory
 	protected static const float MOVE_COMPLETION_RADIUS_METERS = 25.0;
 	protected static const float MINIMUM_STAGING_COMPLETION_RADIUS_METERS = 5.0;
 
+	AIWaypoint CreateOwnedAcquisitionHoldWaypoint(AICF_AcquisitionStagingReceipt receipt,
+		out AICF_AcquisitionHoldWaypointCreation created)
+	{
+		created = null;
+		if (!receipt) return null;
+		AIWaypoint waypoint = CreateAcquisitionHoldWaypoint(receipt.GetStagingPosition(), receipt.GetRadius(), receipt.GetExpiresAtMs());
+		if (waypoint) created = AICF_AcquisitionHoldWaypointCreation.Capture(this, waypoint, ACQUISITION_HOLD_PREFAB, receipt);
+		return waypoint;
+	}
+
 	AIWaypoint CreateAcquisitionHoldWaypoint(vector position, float radius, int expiresAtMs)
 	{
-		if (!(radius > 0) || expiresAtMs <= System.GetTickCount()) return null;
+		if (!(radius > 0) || expiresAtMs <= System.GetTickCount())
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", "stage=WAYPOINT_FACTORY reason=RADIUS_OR_DEADLINE");
+			return null;
+		}
 		AIWaypoint entity = SpawnWaypoint(ACQUISITION_HOLD_PREFAB, position);
 		SCR_DefendWaypoint waypoint = SCR_DefendWaypoint.Cast(entity);
-		if (!waypoint) return entity;
+		if (!waypoint)
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", string.Format("stage=WAYPOINT_FACTORY reason=DEFEND_SUBTYPE waypoint=%1 native_defend=0", entity));
+			return entity;
+		}
 		SCR_DefendWaypointPreset preset = waypoint.GetCurrentDefendPreset();
-		if (!preset) return entity;
+		if (!preset)
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", string.Format("stage=WAYPOINT_FACTORY reason=DEFEND_PRESET waypoint=%1 native_defend=1 preset=0", entity));
+			return entity;
+		}
 		preset.SetUseTurrets(false);
 		preset.SetFractionOfSA(0);
 		waypoint.SetFastInit(false);

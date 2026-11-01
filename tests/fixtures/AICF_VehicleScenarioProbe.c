@@ -259,6 +259,7 @@ modded class AICF_MatchController
 	protected ref array<ref AICF_VSNativeGate> m_aVSGates = {};
 	protected bool m_bVSRetained;
 	protected bool m_bVSCurrentBehavior;
+	protected bool m_bVSCanonicalPrepared;
 	protected bool m_bVSTacticalPolicy;
 	protected ref AICF_TransportTrip m_VSRetainedTrip;
 	protected ref AICF_VehicleLease m_VSRetainedLease;
@@ -375,7 +376,7 @@ modded class AICF_MatchController
 		string requested = "USSR";
 		if (!System.GetCLIParam("aicfVehicleScenarioFaction", requested)) requested = "USSR";
 		if (requested != "US" && requested != "USSR") return false;
-		if (requested == "US" && m_sVSCase != "repeat5") return false;
+		if (requested == "US" && m_sVSCase != "repeat5" && m_sVSCase != "tank") return false;
 		SCR_CampaignFaction selected = m_USSRFaction;
 		if (requested == "US") selected = m_USFaction;
 		if (!selected || !selected.GetMainBase() || AICF_ContentProfile.GetActive().GetStableFactionKey(selected.GetFactionKey()) != requested) return false;
@@ -407,8 +408,15 @@ modded class AICF_MatchController
 
 	protected void AICF_VSUpdateVehicles()
 	{
+		if (AICF_VSCanonicalOwner()) return;
 		if (m_sVSFaction == "US") m_VSVehicles.Update(m_VSState, m_VSFaction, null, null, m_iStrategicBaseRevision, true);
 		else m_VSVehicles.Update(null, null, m_VSState, m_VSFaction, m_iStrategicBaseRevision, true);
+	}
+
+	protected bool AICF_VSCanonicalOwner()
+	{
+		string enabled;
+		return System.GetCLIParam("aicfVehicleScenarioCanonicalOwner", enabled) && enabled == "1";
 	}
 
 	protected bool AICF_VSTransitCrew(AICF_GroupSlot slot, AICF_TransportTrip trip)
@@ -624,6 +632,7 @@ modded class AICF_MatchController
 
 	protected void AICF_VSServiceOwnRecovery(AICF_GroupSlot slot)
 	{
+		if (AICF_VSCanonicalOwner()) return;
 		if (!AICF_VSCanServiceRecovery(slot)) return;
 		AIWaypoint expected = slot.GetPendingOrderRecoveryWaypoint();
 		int stableMs = slot.GetPendingOrderRecoveryStableElapsedMs();
@@ -741,26 +750,49 @@ modded class AICF_MatchController
 			}
 			if (m_sVSCase == "armed3") m_iVSSize = 3;
 			if (m_sVSCase == "solo1") m_iVSSize = 1;
-			m_VSState = new AICF_FactionState(m_VSFaction.GetFactionKey(), m_Config);
-			AICF_GroupSlot fresh = m_VSState.GetSlot(0);
-			fresh.SetDesiredSize(m_iVSSize);
-			fresh.SetUnitType(AICF_EGroupUnitType.MOTORIZED_LIGHT);
-			m_VSGroup = m_GroupSpawner.SpawnGroup(m_VSFaction, m_VSFaction.GetMainBase(), 0, m_iVSSize, false);
-			AICF_VSCheck("GROUP_CREATED", m_VSGroup != null);
-			if (!m_VSGroup) { AICF_VSFinish(); return; }
-			m_VSGroupId = m_VSGroup.GetID();
-			m_VSGroup.SetLifecyclePolicy(SCR_EAIGroupLifecyclePolicy.Manual);
-			m_VSGroup.SetDeleteWhenEmpty(false);
-			fresh.BeginInitialSpawn();
-			fresh.BindSpawnedGroup(m_VSGroup);
-			m_GroupSpawner.BeginRosterSpawn(m_VSGroup, m_iVSSize);
-			m_VSVehicles = new AICF_VehicleCoordinator(m_Stage3Config, m_Campaign, m_ConflictAdapter, m_OrderPlanner,
-				m_GroupCohesionPolicy, m_ObjectiveGraph, m_TargetSelector, m_ContentProfile);
+			if (m_sVSCase == "tank")
+			{
+				m_iVSSize = 3;
+				if (m_sVSFaction == "US") m_iVSSize = 4;
+			}
+			if (AICF_VSCanonicalOwner())
+			{
+				if (m_sVSCase != "uaz5" && m_sVSCase != "tank") { AICF_VSCheck("CANONICAL_CASE_SCOPE", false); AICF_VSFinish(); return; }
+				if (m_sVSFaction == "US") m_VSState = m_USState;
+				else m_VSState = m_USSRState;
+				AICF_GroupSlot managed = m_VSState.GetSlot(0);
+				m_VSGroup = managed.GetGroup();
+				m_VSVehicles = m_VehicleCoordinator;
+				bool canonical = managed.IsCombatReady() && m_VSGroup && m_VSVehicles &&
+					FindManagedInfantrySlot(m_VSGroup) == managed && IsAIQuotaSlotCurrent(m_VSState, managed) &&
+					managed.GetDesiredSize() == m_iVSSize && m_VSGroup.GetAgentsCount() == m_iVSSize;
+				AICF_VSCheck("CANONICAL_OWNER", canonical);
+				if (!canonical) { AICF_VSFinish(); return; }
+				m_VSGroupId = m_VSGroup.GetID();
+			}
+			else
+			{
+				m_VSState = new AICF_FactionState(m_VSFaction.GetFactionKey(), m_Config);
+				AICF_GroupSlot fresh = m_VSState.GetSlot(0);
+				fresh.SetDesiredSize(m_iVSSize);
+				fresh.SetUnitType(AICF_EGroupUnitType.MOTORIZED_LIGHT);
+				m_VSGroup = m_GroupSpawner.SpawnGroup(m_VSFaction, m_VSFaction.GetMainBase(), 0, m_iVSSize, false);
+				AICF_VSCheck("GROUP_CREATED", m_VSGroup != null);
+				if (!m_VSGroup) { AICF_VSFinish(); return; }
+				m_VSGroupId = m_VSGroup.GetID();
+				m_VSGroup.SetLifecyclePolicy(SCR_EAIGroupLifecyclePolicy.Manual);
+				m_VSGroup.SetDeleteWhenEmpty(false);
+				fresh.BeginInitialSpawn();
+				fresh.BindSpawnedGroup(m_VSGroup);
+				m_GroupSpawner.BeginRosterSpawn(m_VSGroup, m_iVSSize);
+				m_VSVehicles = new AICF_VehicleCoordinator(m_Stage3Config, m_Campaign, m_ConflictAdapter, m_OrderPlanner,
+					m_GroupCohesionPolicy, m_ObjectiveGraph, m_TargetSelector, m_ContentProfile);
+			}
 			m_vVSHome = m_VSFaction.GetMainBase().GetSpawnPoint().GetOrigin();
 			return;
 		}
 		AICF_GroupSlot slot = m_VSState.GetSlot(0);
-		if (!slot.IsCombatReady())
+		if (!slot.IsCombatReady() || (AICF_VSCanonicalOwner() && !m_bVSCanonicalPrepared))
 		{
 			if (m_VSGroup.GetAgentsCount() != m_iVSSize) return;
 			string combat;
@@ -769,8 +801,11 @@ modded class AICF_MatchController
 			SCR_AIGroupUtilityComponent groupUtility = m_VSGroup.GetGroupUtilityComponent();
 			if (!groupUtility) { AICF_VSCheck("GROUP_UTILITY", false); AICF_VSFinish(); return; }
 			if (!combatCase) groupUtility.SetCombatMode(EAIGroupCombatMode.HOLD_FIRE);
-			slot.MarkReady();
-			slot.RecordDeploymentMembers();
+			if (!AICF_VSCanonicalOwner())
+			{
+				slot.MarkReady();
+				slot.RecordDeploymentMembers();
+			}
 			bool initialCohesion = AICF_VSApplyInitialCohesion(slot);
 			AICF_VSCheck("INITIAL_COHESION_POLICY", initialCohesion);
 			if (!initialCohesion) { AICF_VSFinish(); return; }
@@ -799,7 +834,22 @@ modded class AICF_MatchController
 			if (m_sVSCase == "ural5") prefab = "{16C1F16C9B053801}Prefabs/Vehicles/Wheeled/Ural4320/Ural4320_transport.et";
 			if (m_sVSCase == "solo1") prefab = "{16A674FE31B0921C}Prefabs/Vehicles/Wheeled/UAZ469/UAZ469_uncovered.et";
 			AICF_VehiclePresetCatalog catalog = new AICF_VehiclePresetCatalog(m_VSFaction);
-			if (m_sVSFaction == "US" && !AICF_VSSelectUSModel(catalog, prefab)) { AICF_VSCheck("CATALOG_US_EXACT5", false); catalog.Clear(); AICF_VSFinish(); return; }
+			if (m_sVSFaction == "US" && m_sVSCase != "tank" && !AICF_VSSelectUSModel(catalog, prefab)) { AICF_VSCheck("CATALOG_US_EXACT5", false); catalog.Clear(); AICF_VSFinish(); return; }
+			if (m_sVSCase == "tank")
+			{
+				prefab = "";
+				array<string> tankSuffixes = {};
+				m_ContentProfile.BuildCoopVehicleSuffixPreference(m_sVSFaction, AICF_ECoopVehicleRole.TANK, tankSuffixes);
+				array<ResourceName> tankCandidates = {};
+				catalog.OwnCandidates(tankSuffixes, tankCandidates);
+				foreach (ResourceName tankCandidate : tankCandidates)
+				{
+					string tankReason;
+					if (!catalog.Inspect(tankCandidate, tankReason) || catalog.Seats().Count() != m_iVSSize) continue;
+					prefab = tankCandidate;
+					break;
+				}
+			}
 			if (m_sVSCase == "armed3")
 			{
 				prefab = "";
@@ -816,6 +866,7 @@ modded class AICF_MatchController
 			if (m_bVSTacticalPolicy)
 			{
 				m_VSRecipe.m_iBehavior = AICF_EVehicleBehavior.TRANSPORT;
+				if (m_sVSCase == "tank") m_VSRecipe.m_iBehavior = AICF_EVehicleBehavior.COMBAT;
 				m_VSRecipe.m_iReturnDistance = 300;
 				if (m_bVSRetained) Print("[AICF][VEHICLE_SCENARIO_POLICY] scenario=repeat5 version=4 policy=RETAINED_TRANSPORT return_distance_m=300 same_asset=1");
 				else Print(string.Format("[AICF][VEHICLE_SCENARIO_POLICY] scenario=%1 version=3 policy=CURRENT_RETAINED return_distance_m=300 same_asset=1", m_sVSCase));
@@ -839,6 +890,7 @@ modded class AICF_MatchController
 					actor, AICF_GroupTrace.Entity(slot.GetRosterMember(actor)), AICF_GroupTrace.Entity(m_VSGroup)));
 			}
 			AICF_VSCheck("INITIAL_ORDER", m_OrderPlanner.AssignPlayerPointOrder(slot, m_VSFaction, m_vVSHome, false));
+			m_bVSCanonicalPrepared = true;
 		}
 		AICF_VSServiceOwnRecovery(slot);
 		AICF_VSServiceRecovery(slot);
@@ -1030,12 +1082,12 @@ modded class AICF_MatchController
 		AICF_VSStopObserver("FINISH");
 		m_bVSDone = true;
 		m_VSCompletedTrip = null;
-		if (m_VSVehicles)
+		if (m_VSVehicles && !AICF_VSCanonicalOwner())
 		{
 			if (m_sVSFaction == "US") m_VSVehicles.StopWithFactionContexts(true, m_VSState, m_VSFaction, null, null);
 			else m_VSVehicles.StopWithFactionContexts(true, null, null, m_VSState, m_VSFaction);
 		}
-		if (m_VSGroup)
+		if (m_VSGroup && !AICF_VSCanonicalOwner())
 		{
 			m_OrderPlanner.ClearOrder(m_VSState.GetSlot(0));
 			m_VSGroup.DespawnMembers();

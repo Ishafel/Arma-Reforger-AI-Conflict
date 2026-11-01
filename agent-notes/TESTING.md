@@ -1,5 +1,26 @@
 # Проверки и baseline
 
+## Пополнение и смешанный Co-op — 01.11.2026
+
+Актуальный scope, доказательства и ограничения:
+[COOP_FLEET_RECOVERY.md](COOP_FLEET_RECOVERY.md).
+Production393files: терминальный Workbench Stock/RHS/ArlandWCSRHS3/3 PASS0,
+validation/fatal0/source drift0; raw sibling resource Error50/52/78 — FAIL.
+`final-compile-root-v3` проверяет checkout после SupplyDepot,
+двух null-owner guards, completed Exit receipt, hint-first resolver и native
+subgroup repair; root RDB обновлены самим WB.
+Offline union284/284 PASS (`offline-union-284-reviewed-handler-auditor.json`), история9
+исходных failures сохранена. Последний Gate delta6/6 PASS, actual138 cases,
+8 source/12 executable unsafe; SupplyDepot54 cases/8 unsafe; subgroup40/8.
+`final-critical`7/7 actual-source contracts PASS. Deferred native5server+6client,
+отдельный reconnect3server+5primary+1JIP, Co-op Stock22/WCS22 и native recovery
+same vehicle27.8693m — functional PASS. Полные resource gates остаются FAIL.
+Current393 V14-positive: actual own native handler fault/reconcile,
+тот же T72:592.313m/142polls,3crew retained5s/native0; public
+`-RequirePositiveHandler` functional/fatal PASS, strict resources208 FAIL.
+Один gate не подменяет другой. Evidence `.codex-runtime/coop-fleet-recovery-20261101/`,
+`.codex-runtime/coop-fleet-20261101/`, `.codex-runtime/healthy-native-abandon-20261101/`.
+
 ## Отказ открытия пресетов и crash игрока — 31.10.2026
 
 Ветка `codex/preset-editor-opening-fix` от `9af7881`. Полный player log показывает
@@ -8920,3 +8941,92 @@ resource gate остаётся FAIL28rawlines. V5fail полностью сох�
 зафиксировал failclosed физического blocker. Это explicit project SCRIPT E,
 не VM/deletecallback crash; fixture teardown произошёл позже. Полный ledger и
 SHA: `.codex-runtime/issue78-finalization-20261029/backend-prequeue-observer-fix/REPORT.md`.
+
+## Coop 4 транспорта + 1 вооружённая машина + 2 APC (+2 WCS танка), 01.11.2026
+
+Evidence: `.codex-runtime/coop-fleet-20261101/REPORT.md`.
+Baseline6/6 PASS. Changed Coop matrix/log/static + integration/preset gates7/7
+PASS (`after-final`); final tank crew/behavior suite8/8 PASS (`tank-crew-final`).
+Actual Role+MatchRules114checks, actual profile/BehaviorFlow crew130checks.
+Stock-v3 и WCS-v2 terminal Workbench native0/validation1/fatal0. Native server
+canonical launcher, source392files hash0, обаnative0/Game destroyed/script0/fatal0.
+Stock-v3:22/22cases и14actualbindings (7на сторону); WCS-v2:22/22 и18bindings
+(9на сторону), включая mandatory CARGO loader M1, planned отказ при пустом loader.
+Полный строгий error gate FAIL: Stock28/WCS206raw sibling E lines.
+Ранние Stock-v1/v2 по2FAIL из-за неполной US APC preference сохранены; исправлено
+по actual vanilla LAV25 readback. Ранний WCS-v1 setupFAIL: -port2481 не изменил
+RPL listener2001; повтор с canonical -addr127.0.0.1:2481 успешно завершён.
+NOT RUN: полноценная оплаченная покупка/движение всех7/9машин, physical combat
+loader retention, client/JIP и визуальный ввод. Не выдавать initial binding за
+физически купленную армию или чистый native log.
+
+## Назначение техники до пополнения — 01.11.2026
+
+`AICF_DeferredVehiclePreset` отделяет сохранение будущего numeric recipe от
+исполнения: отдельные planned predicates, selectableMembers и revision-scoped
+pending-crew gate сохраняют строгие runtime roster/economy/physical permissions.
+Baseline targeted3/3PASS; after6/6PASS, actual predicates31checks.
+`Test-DeferredVehiclePresetLogContracts` positive+7negative controlsPASS.
+
+Fresh isolated Stock/Standard Arland `native-v3`: actual owner RPC при seed1/desired10,
+9distinct paid recruits(135), fresh crew10→1 position9→0 без изменения kit,
+одна покупка UAZ50, exact settled Pilot. Server5/client6 casesPASS; оба native0,
+оба stopped. `Test-DeferredVehiclePresetLog.ps1` exit0. Полные sibling logs:
+SCRIPT E/F, persistence/StopTracking/VM/OOM0; raw errors30/142, strict error gateFAIL.
+
+Отдельный sequential `native-v4`, fresh profiles `*-v5`: native primary5checks,
+штатное закрытие после binding, native JIP spawn и только owner READ1check;
+server3checks подтверждают first_disconnected1/same_binding1. Все3native0/stopped;
+`Test-DeferredVehiclePresetReconnectLog.ps1` exit0. Полные server/client/JIP
+sibling logs имеют0SCRIPT E/F, persistence leaks/StopTracking/VM/OOM/FATAL;
+raw errors32/142/142, strict error gateFAIL. Это current project two-connect gate;
+старый native-only MRE8persistence не повторялся и не объявлен исправленным.
+
+Неуспешные попытки сохранены: v1nativeNULL missing-member branch (исправлен
+explicitelse); v2fixturemanaged→human ownership нарушал quota contract и давал
+CensusUNKNOWN (заменён native player respawn); первая v4 setupRPLcollision на2001
+при игнорируемом `-port2012` вызвала80Roadleaks. Эти FAIL не превращены в PASS.
+Полный ledger/команды/manifests/hashes/logs и byte-verified stage archives:
+`.codex-runtime/coop-fleet-recovery-20261101/reinforcement/REPORT.md`.
+V3 позже общего checkout на6productionfiles, v4 на1TaskHandoff; точный drift
+сохранён отдельно. Это не gate всех последующих root изменений. Human UI,
+RHS/WCS deferred E2E и full combat/soak — NOT RUN.
+
+## Native Play → return →120s OOM observer —01.11.2026
+
+Isolated `ScenarioTransitionProbe -aicfProbeReturnToMenu 1` final-v3 прошёл
+production Play4cases/ROSTER_READY, stock gameplay end, actual main menu120224ms,
+native0/fullstopped. `Test-ScenarioReturnLog.ps1` exit0; полные sibling fatal/OOM0,
+raw136E сохраняют strictFAIL.30own-PID memory samples: peak3516.34MiB, menu после
+первых15s2309.01..2313.14MiB; pressure не создавался. Исходный allocation671088632
+не воспроизведён; OOM не объявлен fixed. Редакторы и ручная игровая сессия здесь
+не открывались. V1 static phase не пережил reload, v2 legacy availability
+не годилась для gameplay; оба FAIL сохранены. V3 сохраняет initial expected
+header/graph вместе с phase в fresh profile и строго сверяет actual readback.
+
+Negative controls:119999ms, missing phase2 и OOM в sibling error.log — expected
+exit1 каждый. Exact manifests, commands, full logs, native receipts и memory:
+`.codex-runtime/coop-fleet-recovery-20261101/frontend-return/REPORT.md`.
+Отдельные nullable deferred-owner wrappers UpdateDeferred/Stop и slot Clear
+исполнены offline:6дополнительныхchecks(включая2unsafevariants), total37PASS;
+это не native proof уничтоженного owner. Последние production nullguards
+появились после native snapshots, source drift указан отдельно.
+
+## Coop default fleet: RHS/WCS × Arland/Everon/North — 01.11.2026
+
+Freshterminalmatrix6/6functionalPASS на едином393filecheckpoint до SupplyDepotdelta.
+Evidence: `.codex-runtime/coop-fleet-matrix-20261101/REPORT.md`, `summary.json`.
+Во всех6graphs Workbench native0/validation1/scriptfatal0; canonicalserver
+freshprofile/actual-addr127.0.0.1:2461/native0/Game destroyed/fullscript0fatal0.
+RHS3карты:7bindings/side; WCS3карты:9bindings/side, actualRHS_USAF/RHS_AFRF.
+132nativecases+275postauditchecksPASS; graphnodes9/41/7 дляобоихcontentsets.
+StrictfullresourcegateFAIL:136/396/396/206/466/466rawE. Nativebindings/private
+compartmentreadback не заменяют покупку, поездки, combat или client/JIP.
+Все6имеютsame393productionhashes+samefixtureSHA/stagedrift0. Во время матрицы
+Root/соседнийагент изменили6productionфайлов SupplyDepot; этот PASS не относится
+к последующему storagehead. Root выполняет отдельные новые gates.
+Семь собственныхsourceкаталогов byteverifiedвZIP и удалены; fullprofiles/logs
+сохранены; свои nativeпроцессы завершены. Productionкод матрицей не менялся.
+
+Supply depot: tests/contracts/Test-SupplyDepotDemandContracts.ps1 — actual-source quote/coverage/registry/alias и COUNT-sized constructor/reset/Cancel (54 checks + 8 unsafe controls). Native paid construction — отдельный AICF_SupplyDepotConstructionProbe; статический PASS не заменяет ONLINE/capacity/payment gate. Контекст: [SUPPLY_DEPOT_DEMAND.md](SUPPLY_DEPOT_DEMAND.md).
+Native supply auditor: tests/log-audits/Test-SupplyDepotConstructionLog.ps1 -LogPath <stopped console.log> -LauncherPath <launcher.txt> -NativeExitPath <native-exit.txt> вызывает обычный ConstructionLog -ExpectedMode US -RequireCompletion и отдельно проверяет metadata, платёж, рост capacity, Co-op veto и все sibling logs на fatal/OOM.

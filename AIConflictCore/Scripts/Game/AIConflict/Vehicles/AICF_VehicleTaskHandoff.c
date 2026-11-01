@@ -95,36 +95,53 @@ class AICF_VehicleTaskHandoff
 			superseded = true;
 			return false;
 		}
-		if (!IsCurrentAssignment(trip, slot) || !receipt || !factory || !receipt.IsCurrent(trip, nowMs)) return false;
+		if (!IsCurrentAssignment(trip, slot) || !receipt || !factory || !receipt.IsCurrent(trip, nowMs))
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", "stage=HANDOFF_PRECONDITION");
+			return false;
+		}
 		AICF_VehicleSpawnPlan plan = receipt.GetPlan();
 		AICF_VehicleAcquisitionHold hold = plan.GetAcquisitionHold();
 		if (hold)
 		{
 			if (!hold.IsCurrent(trip, nowMs))
 			{
+				AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", receipt.GetIdentityDetails() + " stage=EXISTING_HOLD_IDENTITY");
 				superseded = !receipt.HasSourceIdentity(trip) || plan.GetAcquisitionHold() != hold || hold.GetRetirement() != null;
 				return false;
 			}
 			array<AIWaypoint> existing = {};
 			receipt.GetGroup().GetWaypoints(existing);
 			bool current = existing.Contains(hold.GetWaypoint()) && hold.IsCurrent(trip, nowMs) && receipt.IsCurrent(trip, nowMs);
+			if (!current) AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", receipt.GetIdentityDetails() + " stage=EXISTING_HOLD_QUEUE");
 			if (!current) superseded = !receipt.HasSourceIdentity(trip) || plan.GetAcquisitionHold() != hold || hold.GetRetirement() != null;
 			return current;
 		}
-		if (!receipt.HasTaskFields(trip, System.GetTickCount())) return false;
-		AIWaypoint waypoint = factory.CreateAcquisitionHoldWaypoint(receipt.GetStagingPosition(), receipt.GetRadius(), receipt.GetExpiresAtMs());
-		if (!waypoint) return false;
-		hold = AICF_VehicleAcquisitionHold.Capture(receipt, waypoint);
+		if (!receipt.HasTaskFields(trip, System.GetTickCount()))
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", receipt.GetIdentityDetails() + " stage=TASK_FIELDS");
+			return false;
+		}
+		AICF_AcquisitionHoldWaypointCreation created;
+		AIWaypoint waypoint = factory.CreateOwnedAcquisitionHoldWaypoint(receipt, created);
+		if (!waypoint)
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", receipt.GetIdentityDetails() + " stage=WAYPOINT_CREATE");
+			return false;
+		}
+		hold = AICF_VehicleAcquisitionHold.Capture(receipt, waypoint, created);
 		if (!hold || !receipt.IsCurrent(trip, nowMs) || !IsCurrentAssignment(trip, slot) || !plan.BindAcquisitionHold(hold))
 		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", receipt.GetIdentityDetails() + " stage=HOLD_CAPTURE_OR_BIND");
 			superseded = !receipt.HasSourceIdentity(trip) || plan.GetAcquisitionHold() != null;
-			DeleteUnboundAcquisitionWaypoint(receipt, waypoint);
+			DeleteUnboundAcquisitionWaypoint(receipt, waypoint, created);
 			return false;
 		}
 		if (!hold.IsCurrent(trip, nowMs) || !BindAcquisitionHoldWaypoint(trip, slot, hold, nowMs) ||
 			!hold.IsCurrent(trip, nowMs) || !IsCurrentAssignment(trip, slot) || !receipt.HasTaskFields(trip, System.GetTickCount()))
 		{
 			superseded = !receipt.HasSourceIdentity(trip) || plan.GetAcquisitionHold() != hold || hold.GetRetirement() != null;
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", receipt.GetIdentityDetails() + " stage=WAYPOINT_BIND_OR_READBACK");
 			if (!superseded) ReleaseAcquisitionHold(trip, plan, "ACQUISITION_HOLD_BIND_ROLLBACK", hold);
 			return false;
 		}
@@ -183,6 +200,7 @@ class AICF_VehicleTaskHandoff
 		}
 		if (waypoint)
 		{
+			EntityID deletedIdentity = waypoint.GetID();
 			string waypointId = waypoint.GetID().ToString();
 			if (!hold.HasOwnedEntity() || !receipt.OwnsCleanup(trip, plan) || plan.GetAcquisitionHold() != null)
 			{
@@ -190,16 +208,25 @@ class AICF_VehicleTaskHandoff
 				return false;
 			}
 			RplComponent.DeleteRplEntity(waypoint, false);
+			bool absent = receipt.GetWorld() && !receipt.GetWorld().FindEntityByID(deletedIdentity);
+			AICF_Stage35Diagnostics.Info("WAYPOINT_DELETE_READBACK", receipt.GetIdentityDetails() +
+				string.Format(" waypoint=%1 owner=ACQUISITION_HOLD absent=%2", waypointId, absent));
+			if (!absent)
+			{
+				if (plan.GetAcquisitionHold() == null && receipt.OwnsCleanup(trip, plan) && hold.HasOwnedEntity()) plan.BindAcquisitionHold(hold);
+				return false;
+			}
 			AICF_Stage35Diagnostics.Info("WAYPOINT_REMOVED", receipt.GetIdentityDetails() +
 				" waypoint=" + waypointId + " waypoint_kind=VEHICLE owner=VEHICLE_HANDOFF remove_trigger=ACQUISITION_HOLD_RELEASE remove_reason=" + reason);
 		}
 		return true;
 	}
 
-	protected bool DeleteUnboundAcquisitionWaypoint(AICF_AcquisitionStagingReceipt receipt, AIWaypoint waypoint)
+	protected bool DeleteUnboundAcquisitionWaypoint(AICF_AcquisitionStagingReceipt receipt, AIWaypoint waypoint,
+		AICF_AcquisitionHoldWaypointCreation created = null)
 	{
 		if (!Replication.IsServer() || !receipt || !waypoint || !receipt.GetWorld() ||
-			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(waypoint)) return false;
+			!AICF_AcquisitionHoldWaypointCreation.HasAuthority(waypoint, receipt, created)) return false;
 		EntityID id = waypoint.GetID();
 		string rpl = AICF_VehicleBehaviorBinding.ComponentRpl(waypoint);
 		if (waypoint.GetWorld() != receipt.GetWorld() || receipt.GetWorld().FindEntityByID(id) != waypoint) return false;
@@ -211,10 +238,14 @@ class AICF_VehicleTaskHandoff
 			group.GetWaypoints(queue);
 			if (queue.Contains(waypoint)) return false;
 		}
-		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(waypoint) ||
+		if (!AICF_AcquisitionHoldWaypointCreation.HasAuthority(waypoint, receipt, created) ||
 			waypoint.GetID() != id || AICF_VehicleBehaviorBinding.ComponentRpl(waypoint) != rpl ||
 			waypoint.GetWorld() != receipt.GetWorld() || receipt.GetWorld().FindEntityByID(id) != waypoint) return false;
 		RplComponent.DeleteRplEntity(waypoint, false);
+		bool absent = receipt.GetWorld() && !receipt.GetWorld().FindEntityByID(id);
+		AICF_Stage35Diagnostics.Info("WAYPOINT_DELETE_READBACK", receipt.GetIdentityDetails() +
+			string.Format(" waypoint=%1 owner=ACQUISITION_HOLD_ROLLBACK absent=%2", id, absent));
+		if (!absent) return false;
 		AICF_Stage35Diagnostics.Info("WAYPOINT_REMOVED", receipt.GetIdentityDetails() +
 			" waypoint=" + id.ToString() + " waypoint_kind=VEHICLE owner=VEHICLE_HANDOFF remove_trigger=ACQUISITION_HOLD_CREATE_ROLLBACK remove_reason=CONTEXT_CHANGED");
 		return true;

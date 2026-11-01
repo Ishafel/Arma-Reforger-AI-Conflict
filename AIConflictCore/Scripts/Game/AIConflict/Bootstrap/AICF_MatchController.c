@@ -274,6 +274,8 @@ class AICF_MatchController
 
 		m_USState = new AICF_FactionState(m_USFaction.GetFactionKey(), m_Config);
 		m_USSRState = new AICF_FactionState(m_USSRFaction.GetFactionKey(), m_Config);
+		AICF_CoopFleetDefaults.Apply(m_USState, m_Config.GetMatchRules());
+		AICF_CoopFleetDefaults.Apply(m_USSRState, m_Config.GetMatchRules());
 		m_Campaign.AICF_SetMatchMode(m_Config.GetMatchRules().GetMode());
 		if (m_CommandAuthorityPolicy.IsAICommanderEnabled("US"))
 		{

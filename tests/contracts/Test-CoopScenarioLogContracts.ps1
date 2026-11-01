@@ -1,11 +1,11 @@
-﻿param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference='Stop'
 $tempBase=[IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $work=Join-Path $tempBase ('aicf-coop-log-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work | Out-Null
 $audit=Join-Path $RepositoryRoot 'tests/log-audits/Test-CoopScenarioLog.ps1'
-$names=@('US_ROSTER','USSR_ROSTER','QUEUE_SETTLED','US_TICKETS','USSR_TICKETS','COMMANDERS','HELPERS','BUDGET_FLOOR','STANDARD_POLICY','MIRROR_POLICY','STABLE_ROSTER','REPLICATED_MODE','ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','NO_GROUP_SUMMARY','FACTION_ACCESS','AUTO_CONSTRUCTION','CONTENT_FACTIONS','HEADER_MODE')
-$positive=(@('[AICF][ROSTER_READY] us_groups=10 ussr_groups=0')+@($names | ForEach-Object {"[AICF][COOP_CASE] case=$_ pass=1"})+@('[AICF][COOP_DONE] mode=USSR checks=19 failed=0 elapsed_ms=30000','ENGINE : Game destroyed.')) -join "`n"
+$names=@('US_ROSTER','USSR_ROSTER','QUEUE_SETTLED','US_TICKETS','USSR_TICKETS','COMMANDERS','HELPERS','BUDGET_FLOOR','STANDARD_POLICY','MIRROR_POLICY','STABLE_ROSTER','REPLICATED_MODE','ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','AI_GROUP_SUMMARY','FACTION_ACCESS','AUTO_CONSTRUCTION','CONTENT_FACTIONS','HEADER_MODE')
+$positive=(@('[AICF][ROSTER_READY] us_groups=10 ussr_groups=10')+@($names | ForEach-Object {"[AICF][COOP_CASE] case=$_ pass=1"})+@('[AICF][COOP_DONE] mode=USSR checks=19 failed=0 elapsed_ms=30000','ENGINE : Game destroyed.')) -join "`n"
 $manifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Server';variant='Stock';matchMode='CoopUSSR';arguments=@('-aicfCoopProbe','USSR')} | ConvertTo-Json -Compress)
 $positive+="`n[COOP_CONTEXT] mode=USSR us_faction=US ussr_faction=USSR nodes=7"
 $positiveCases=0; $negativeCases=0
@@ -40,8 +40,7 @@ try {
         @('missing-completion',($positive -replace '\[AICF\]\[COOP_DONE\][^\r\n]*',''),'COMPLETION'),
         @('short-observation',$positive.Replace('elapsed_ms=30000','elapsed_ms=29999'),'COMPLETION'),
         @('wrong-mode',$positive.Replace('mode=USSR','mode=STANDARD'),'COMPLETION'),
-        @('wrong-roster',$positive.Replace('ussr_groups=0','ussr_groups=10'),'ROSTER'),
-        @('player-spawn',($positive+"`n[AICF][SPAWN_ATTEMPT_STARTED] faction=USSR slot=0"),'PLAYER_COMBAT_SPAWN'),
+        @('wrong-roster',$positive.Replace('ussr_groups=10','ussr_groups=0'),'ROSTER'),
         @('timeout',($positive+"`n[AICF][COOP_TIMEOUT]"),'PROBE_FAILURE')
     )) { Check $case[0] $case[1] $manifest 1 $case[2] }
     Check 'missing-manifest' $positive '' 1 'MANIFEST'
@@ -111,8 +110,8 @@ try {
     )) { Check $case[0] $case[1] $manifest 1 $case[2] -RequireBarracks }
     Check 'barracks-missing-player-mode' $barracksClient $clientLaunch 1 'PLAYER_MODE' -Client -RequireBarracks
     Check 'barracks-wrong-variant' $barracksClient ($playerLaunch.Replace('Stock','Everon')) 1 'BARRACKS_VARIANT' -Client -RequireBarracks
-    $standardServer=$barracksServer.Replace('us_groups=10 ussr_groups=0','us_groups=10 ussr_groups=10').Replace('mode=USSR checks=19','mode=STANDARD checks=16').Replace('[COOP_CONTEXT] mode=USSR','[COOP_CONTEXT] mode=STANDARD')
-    foreach($name in @('ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','NO_GROUP_SUMMARY')) {
+    $standardServer=$barracksServer.Replace('us_groups=10 ussr_groups=10','us_groups=10 ussr_groups=10').Replace('mode=USSR checks=19','mode=STANDARD checks=16').Replace('[COOP_CONTEXT] mode=USSR','[COOP_CONTEXT] mode=STANDARD')
+    foreach($name in @('ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','AI_GROUP_SUMMARY')) {
         $standardServer=$standardServer.Replace("[AICF][COOP_CASE] case=$name pass=1`n",'')
     }
     $standardManifest=$manifest.Replace('CoopUSSR','Standard').Replace('"USSR"','"STANDARD"')
@@ -149,13 +148,13 @@ try {
     Check 'rhs-server-ussr' $rhsServer $rhsManifest 0 ''
     Check 'rhs-server-wrong-context' ($rhsServer.Replace('ussr_faction=RHS_AFRF','ussr_faction=USSR')) $rhsManifest 1 'CONTENT_CONTEXT'
     Check 'rhs-server-wrong-north-scope' ($rhsServer.Replace('nodes=7','nodes=8')) $rhsManifest 1 'NORTH_SCOPE'
-    $rhsUS=$rhsServer.Replace('us_groups=10 ussr_groups=0','us_groups=0 ussr_groups=10').Replace('mode=USSR','mode=US')
+    $rhsUS=$rhsServer.Replace('mode=USSR','mode=US')
     $rhsUSManifest=$rhsManifest.Replace('CoopUSSR','CoopUS').Replace('"USSR"','"US"')
     Check 'rhs-server-us' $rhsUS $rhsUSManifest 0 ''
     $rhsVictory=$rhsUS.Replace('checks=19','checks=20')+"`n[COOP_CASE] case=TERRITORIAL_WINNER pass=1`n[VICTORY] winner=USSR loser=US loser_tickets=12 reason=ALL_OBJECTIVES_UNCONTESTED"
     Check 'rhs-victory-stable-key' $rhsVictory $rhsUSManifest 0 '' -Winner USSR
     Check 'rhs-victory-runtime-key' ($rhsVictory.Replace('winner=USSR','winner=RHS_AFRF')) $rhsUSManifest 1 'TERRITORIAL_RESULT' -Winner USSR
-    Check 'rhs-server-spawned-player-side' ($rhsUS+"`n[SPAWN_ATTEMPT_STARTED] faction=RHS_USAF slot=0") $rhsUSManifest 1 'PLAYER_COMBAT_SPAWN'
+    Check 'rhs-server-spawned-player-side' ($rhsUS+"`n[SPAWN_ATTEMPT_STARTED] faction=RHS_USAF slot=0") $rhsUSManifest 0 ''
     $rhsClient=$playerLog+"`n[COOP_WELCOME] faction=RHS_USAF visible=0 playable=1`n[COOP_WELCOME] faction=RHS_AFRF visible=1 playable=1`n[COOP_WELCOME] faction=FIA visible=0 playable=1"
     $rhsClientManifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Client';variant='EveronNorthWCSRHS';matchMode='CoopUSSR';arguments=@('-aicfCoopProbe','USSR','-aicfCoopProbePlayer','1')}|ConvertTo-Json -Compress)+"`n[SERVER_READY] process_id=123 port=2440 log=server.log"
     Check 'rhs-client-ussr' $rhsClient $rhsClientManifest 0 '' -Client -RequirePlayer -RequireWelcome

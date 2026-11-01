@@ -30,7 +30,7 @@ Require ($catalog -match '!entry.IsEnabled\(\)' -and $catalog -match 'FindCompon
 $append=Body $catalog 'Append'
 Require ($catalog -match 'GetFactionByKey\("CIV"\)' -and $catalog -match 'GetEntityCatalogOfType\(EEntityCatalogType.VEHICLE, false\)' -and $append -match 'requireCivilianLabel && !entry.HasEditableEntityLabel\(EEditableEntityLabel.FACTION_CIV\)') 'OWN_AND_NATIVE_CIV_PERMISSION'
 Require ($append -match 'FindComponentSource\(resource, VehicleWheeledSimulation\)' -and $append -notmatch 'GetSupplyCost\(\) <= 0') 'ALL_WHEELED_VARIANTS_WITHOUT_SPAWNER_FILTER'
-Require ($append -match 'VehicleTrackedSimulation' -and $append -match '/tracked/') 'NATIVE_AND_LEGACY_TRACKED_EXCLUDED'
+Require ($append -match 'VehicleTrackedSimulation' -and $append -match '/tracked/' -and $append -match 'source != AICF_EVehicleCatalogSource.FACTION' -and $append -match '!AICF_ContentProfile.GetActive\(\).AllowsTrackedVehiclePreset') 'TRACKED_REQUIRES_OWN_FACTION_PROFILE_PERMISSION'
 Require ($append -match 'm_aPrefabs.Contains' -and $append -match 'm_aSources.Insert' -and $append -match 'm_aCategories.Insert') 'DEDUPED_PARALLEL_METADATA'
 $price=Body $catalog 'EntryCost'
 Require ($price -match 'GetVehiclePresetCostOverride' -and $price -match 'SCR_EntityCatalogSpawnerData' -and $price -match 'm_EntityBudgetCost' -and $price -match 'm_EntityChildrenBudgetCost' -and $price -notmatch 'MergeBudgetCosts\(|AddBudgetValue|SetBudget') 'NATIVE_PRICE_WITHOUT_BUDGET_MUTATION'

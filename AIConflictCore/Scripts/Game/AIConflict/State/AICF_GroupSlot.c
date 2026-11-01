@@ -3,6 +3,16 @@ class AICF_GroupSlot
 {
 	protected string m_sVehiclePresetData;
 	protected int m_iVehiclePresetRevision;
+	protected int m_iDeferredVehicleCrewRevision = -1;
+	bool IsVehicleCrewResizePending() { return HasVehiclePreset() && m_iDeferredVehicleCrewRevision == m_iVehiclePresetRevision; }
+	void MarkDeferredVehicleCrew()
+	{
+		if (Replication.IsServer() && HasVehiclePreset()) m_iDeferredVehicleCrewRevision = m_iVehiclePresetRevision;
+	}
+	void ClearDeferredVehicleCrew(int revision)
+	{
+		if (Replication.IsServer() && m_iDeferredVehicleCrewRevision == revision) m_iDeferredVehicleCrewRevision = -1;
+	}
 	string GetVehiclePresetData() { return m_sVehiclePresetData; }
 	int GetVehiclePresetRevision() { return m_iVehiclePresetRevision; }
 	bool HasVehiclePreset() { return !m_sVehiclePresetData.IsEmpty(); }

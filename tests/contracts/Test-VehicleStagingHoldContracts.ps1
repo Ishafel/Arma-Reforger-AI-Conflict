@@ -5,6 +5,7 @@ $taskCore=Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict'
 function Read([string]$Path){[IO.File]::ReadAllText((Join-Path $taskCore $Path)).Replace("`r`n","`n")}
 function Body([string]$Text,[string]$Name){Get-AICFMethodBody ([pscustomobject]@{Source=$Text;Code=(ConvertTo-AICFCodeText $Text)}) $Name}
 $taskHold=Read 'Vehicles/AICF_VehicleAcquisitionHold.c'
+$taskCreation=Read 'Vehicles/AICF_AcquisitionHoldWaypointCreation.c'
 $taskLegacy=Read 'Vehicles/AICF_VehicleStagingTaskProof.c'
 $taskPlan=Read 'Vehicles/AICF_VehicleSpawner.c'
 $taskHandoff=Read 'Vehicles/AICF_VehicleTaskHandoff.c'
@@ -24,8 +25,14 @@ function Replay([string]$Text){
  $Text=[regex]::Replace($Text,'(?<![\w.])(\d+\.\d+)(?![\w.])','$1f')
  $Text=[regex]::Replace($Text,'(?m)^(\s*)(static (?:bool|AICF_\w+)|bool|AIAgent|SCR_AIGroup|AICF_\w+|BaseWorld|V|float|int|string|AIWaypoint) (\w+)\(','$1public $2 $3(')
  $Text=$Text.Replace('public public ','public ')
+ $Text=[regex]::Replace($Text,'(ValidateCurrent\([^;\n]*, )(reason|rejection)(\))','$1out $2$3')
+ $Text=$Text.Replace('reason.IsEmpty()', 'string.IsNullOrEmpty(reason)').Replace('prefab.IsEmpty()', 'string.IsNullOrEmpty(prefab)')
+ $Text=$Text.Replace('string reason;','string reason = null;').Replace('string rejection;','string rejection = null;')
  $Text=[regex]::Replace($Text,'(?m)^(\s*)(AICF_\w+) (endingHold|holdIntent|pending|retirementOutcome);','$1$2 $3 = null;')
  $Text=[regex]::Replace($Text,'FindComponent\((SCR_AIUtilityComponent|RplComponent)\)','FindComponent(typeof($1))')
+ $Text=$Text.Replace('AICF_AcquisitionHoldWaypointCreation created;','AICF_AcquisitionHoldWaypointCreation created = null;').Replace(', created);',', out created);')
+ # Only the native out-parameter factory call needs C# out at the call site.
+ $Text=$Text.Replace('Capture(receipt, waypoint, out created)','Capture(receipt, waypoint, created)').Replace('DeleteUnboundAcquisitionWaypoint(receipt, waypoint, out created)','DeleteUnboundAcquisitionWaypoint(receipt, waypoint, created)')
  return $Text
 }
 $taskShim=@'
@@ -57,7 +64,7 @@ public class Faction:N{public string Key="US";public string GetFactionKey(){retu
 public class SCR_AIGroup:IEntity{public EArray<AIAgent> Agents=new EArray<AIAgent>();public EArray<AIWaypoint> Queue=new EArray<AIWaypoint>();public AIWaypoint Current;public SCR_AIGroupUtilityComponent Utility=new SCR_AIGroupUtilityComponent();public Action<AIWaypoint> OnAdd,OnRemove;public bool RefuseRemove;public Faction Faction=new Faction();public void GetAgents(EArray<AIAgent> a){a.AddRange(Agents);if(OnAgents!=null)OnAgents();}public SCR_AIGroupUtilityComponent GetGroupUtilityComponent(){return Utility;}public void GetWaypoints(EArray<AIWaypoint> q){q.AddRange(Queue);}public AIWaypoint GetCurrentWaypoint(){return Current;}public Faction GetFaction(){return Faction;}public void AddWaypointAt(AIWaypoint w,int i){Queue.Insert(i,w);Current=w;Runtime.Events.Add("attach");if(OnAdd!=null)OnAdd(w);}public void RemoveWaypoint(AIWaypoint w){Runtime.Events.Add("detach");if(!RefuseRemove){Queue.Remove(w);if(Current==w)Current=null;}if(OnRemove!=null)OnRemove(w);}}
 public class AIWaypoint:IEntity{public float Radius,Holding;public EAIWaypointCompletionType Completion;public void SetCompletionRadius(float r){Radius=r;}public void SetCompletionType(EAIWaypointCompletionType v){Completion=v;}public void SetHoldingTime(float s){Holding=s;}}
 public class SCR_DefendWaypointPreset:N{public bool Turrets=true;public float Smart=1;public void SetUseTurrets(bool b){Turrets=b;}public void SetFractionOfSA(float f){Smart=f;}}public class SCR_DefendWaypoint:AIWaypoint{public SCR_DefendWaypointPreset Preset=new SCR_DefendWaypointPreset();public bool Fast=true;public SCR_DefendWaypointPreset GetCurrentDefendPreset(){return Preset;}public void SetFastInit(bool b){Fast=b;}public static SCR_DefendWaypoint Cast(object o){return o as SCR_DefendWaypoint;}}
-public static class AICF_VehicleBoardingMutationFence{public static bool IsAuthoritativeAIEntity(IEntity e){return e!=null&&e.Authority&&e.AI&&e.Id>0;}public static bool IsAuthoritativeReplicatedEntity(IEntity e){return e!=null&&e.Authority&&e.Id>0&&!string.IsNullOrEmpty(e.Rpl);}}
+public static class AICF_VehicleBoardingMutationFence{public static bool IsAuthoritativeAIEntity(IEntity e){return e!=null&&e.Authority&&e.AI&&e.Id>0;}public static bool IsAuthoritativeReplicatedEntity(IEntity e){return e!=null&&e.HasRpl&&e.Authority&&e.Id>0&&!string.IsNullOrEmpty(e.Rpl);}}
 public static class AICF_VehicleBehaviorBinding{public static string ComponentRpl(IEntity e){return e==null?"NONE":e.Rpl;}}
 public static class SCR_AIDamageHandling{public static bool IsConscious(IEntity e){return e!=null&&e.Conscious;}}
 public static class AICF_Stage1Config{public const int MAX_GROUP_SIZE=10;}
@@ -98,10 +105,14 @@ return n;}}
 $taskShim=$taskShim.Replace('PLAN_BIND',('public bool BindAcquisitionHold(AICF_VehicleAcquisitionHold hold)'+(Body $taskPlan 'BindAcquisitionHold'))).Replace('PLAN_CLEAR',('public bool ClearAcquisitionHold(AICF_VehicleAcquisitionHold expected)'+(Body $taskPlan 'ClearAcquisitionHold'))).Replace('OUTCOME_BIND',('public bool BindAcquisitionStagingReceipt(AICF_AcquisitionStagingReceipt receipt)'+(Body $taskOutcome 'BindAcquisitionStagingReceipt')))
 $taskShim=$taskShim.Replace('public AICF_VehicleAcquisitionHold m_AcquisitionHold;','private AICF_VehicleAcquisitionHold backingHold;public AICF_VehicleAcquisitionHold m_AcquisitionHold{get{return backingHold;}set{backingHold=value;if(value==null)Runtime.Events.Add("stateclear");}}')
 $taskShim=$taskShim.Replace('public bool Authority=true,AI=true,Conscious=true;','public bool Authority=true,AI=true,Conscious=true,Deleted;')
+$taskShim=$taskShim.Replace('public bool Authority=true,AI=true,Conscious=true,Deleted;','public bool Authority=true,AI=true,Conscious=true,Deleted,HasRpl=true;public string Prefab="native-defend";')
+$taskShim=$taskShim.Replace('public virtual object FindComponent(Type t){return null;}','public virtual object FindComponent(Type t){return t==typeof(RplComponent)&&HasRpl?new RplComponent():null;}')
+$taskShim=$taskShim.Replace('return e==null?"NONE":e.Rpl;','return e==null||!e.HasRpl?"NONE":e.Rpl;')
 $taskShim=$taskShim.Replace('public Action<AIWaypoint> OnAdd,OnRemove;','public Action<AIWaypoint> OnAdd,OnRemove;public Action OnRead,OnAgents;')
 $taskShim=$taskShim.Replace('public void GetWaypoints(EArray<AIWaypoint> q){q.AddRange(Queue);}','public void GetWaypoints(EArray<AIWaypoint> q){q.AddRange(Queue);if(OnRead!=null)OnRead();}')
 $taskNativeBoundaries=@'
-public static class ReplayGuard{public static bool On(){return true;}public static bool Off(){return false;}}public class RplComponent:N{public static void DeleteRplEntity(IEntity e,bool children){foreach(var p in new List<IEntity>(Runtime.Game.World.Entities.Values)){var g=p as SCR_AIGroup;if(g!=null&&g.Queue.Contains(e as AIWaypoint))throw new Exception("native delete while queued");}Runtime.Events.Add("delete");Runtime.Game.World.Entities.Remove(e.Id);e.Deleted=true;if(Runtime.OnDelete!=null)Runtime.OnDelete(e);}}
+public static class SCR_ResourceNameUtils{public static string GetPrefabName(IEntity entity){return entity.Prefab;}}
+public static class ReplayGuard{public static bool On(){return true;}public static bool Off(){return false;}}public class RplComponent:N{public static RplComponent Cast(object value){return value as RplComponent;}public static void DeleteRplEntity(IEntity e,bool children){foreach(var p in new List<IEntity>(Runtime.Game.World.Entities.Values)){var g=p as SCR_AIGroup;if(g!=null&&g.Queue.Contains(e as AIWaypoint))throw new Exception("native delete while queued");}Runtime.Events.Add("delete");Runtime.Game.World.Entities.Remove(e.Id);e.Deleted=true;if(Runtime.OnDelete!=null)Runtime.OnDelete(e);}}
 public static class AICF_Stage3Diagnostics{public static void Info(string e,string d){}}
 public static class AICF_Stage35Diagnostics{public static void Info(string e,string d){}}
 public class AICF_VehicleWaypointFactory:N{public const string ACQUISITION_HOLD_PREFAB="native-defend";public int Created;public bool WrongType,ReturnNull;public Action<AIWaypoint> OnCreate;public AIWaypoint Last;public AIWaypoint SpawnWaypoint(string prefab,V p){if(ReturnNull)return null;Created++;AIWaypoint w=WrongType?new AIWaypoint():new SCR_DefendWaypoint();w.Position=p;Last=Cases.Register(w);if(OnCreate!=null)OnCreate(w);return w;}FACTORY_CREATE}
@@ -113,10 +124,11 @@ foreach($taskMethod in @(
  @('MaintainAcquisitionHold','public bool MaintainAcquisitionHold(AICF_TransportTrip trip,AICF_GroupSlot slot,AICF_AcquisitionStagingReceipt receipt,AICF_VehicleWaypointFactory factory,int nowMs,out bool superseded)'),
  @('ReleaseAcquisitionHold','public bool ReleaseAcquisitionHold(AICF_TransportTrip trip,AICF_VehicleSpawnPlan plan,string reason,AICF_VehicleAcquisitionHold expected)'),
  @('BindAcquisitionHoldWaypoint','public bool BindAcquisitionHoldWaypoint(AICF_TransportTrip trip,AICF_GroupSlot slot,AICF_VehicleAcquisitionHold hold,int nowMs)'),
- @('DeleteUnboundAcquisitionWaypoint','public bool DeleteUnboundAcquisitionWaypoint(AICF_AcquisitionStagingReceipt receipt,AIWaypoint waypoint)'),
+ @('DeleteUnboundAcquisitionWaypoint','public bool DeleteUnboundAcquisitionWaypoint(AICF_AcquisitionStagingReceipt receipt,AIWaypoint waypoint,AICF_AcquisitionHoldWaypointCreation created = null)'),
  @('IsCurrentAssignment','public bool IsCurrentAssignment(AICF_TransportTrip trip,AICF_GroupSlot slot)')
 )){$taskBody=Body $taskHandoff $taskMethod[0];if(!$taskBody){throw "Actual method absent: $($taskMethod[0])"};$taskMethods+=$taskMethod[1]+$taskBody+"`n"}
 $taskNativeBoundaries=$taskNativeBoundaries.Replace('HANDOFF_METHODS',(Replay $taskMethods)).Replace('FACTORY_CREATE',(Replay ('public AIWaypoint CreateAcquisitionHoldWaypoint(V position,float radius,int expiresAtMs)'+(Body $taskFactory 'CreateAcquisitionHoldWaypoint')))).Replace('RECONCILE',(Replay ('public bool ReconcileAcquisitionHold(AICF_TransportTrip trip,AICF_StrategicAssignmentSnapshot currentAssignment,AICF_GroupSlot slot,AICF_TripOutcome outcome,out bool superseded)'+(Body $taskController 'ReconcileAcquisitionHold'))).Replace(', superseded)',', out superseded)'))
+$taskNativeBoundaries=$taskNativeBoundaries.Replace('public class AICF_VehicleWaypointFactory:N{','public class AICF_VehicleWaypointFactory:N{'+(Replay ('public AIWaypoint CreateOwnedAcquisitionHoldWaypoint(AICF_AcquisitionStagingReceipt receipt,out AICF_AcquisitionHoldWaypointCreation created)'+(Body $taskFactory 'CreateOwnedAcquisitionHoldWaypoint'))))
 $taskLifecycle=@'
 public static class Lifecycle{
 public static AICF_VehicleTaskHandoff Owner;public static AICF_VehicleWaypointFactory Factory;
@@ -202,7 +214,22 @@ foreach(string axis in new[]{"X","Z"}){Cases.Setup();Cases.R=Cases.Capture();Cas
 return n;}}
 '@
 $taskCases=$taskCases.Replace('return n+Lifecycle.Run()+NativeReadCases.Run();','return n+Lifecycle.Run()+NativeReadCases.Run()+RetirementCases.Run();')
-$taskCompiled=$taskShim+(Replay ($taskHold+$taskLegacy))+$taskNativeBoundaries+$taskLifecycle+$taskReadCases+$taskRetirementCases+$taskCases
+$taskCreationCases=@'
+public static class CreationCases {
+public static AICF_AcquisitionHoldWaypointCreation Permission;public static AIWaypoint Waypoint;
+public static void Setup(){Lifecycle.Setup();Lifecycle.Factory.OnCreate=wp=>{wp.HasRpl=false;wp.Authority=false;};Cases.R=Cases.Capture();Waypoint=Lifecycle.Factory.CreateOwnedAcquisitionHoldWaypoint(Cases.R,out Permission);Cases.Need(Waypoint!=null&&Permission!=null,"native local factory permission setup");}
+public static int Run(){int n=0;bool superseded;
+Lifecycle.Setup();Lifecycle.Factory.OnCreate=wp=>{wp.HasRpl=false;wp.Authority=false;};Cases.Need(Lifecycle.Maintain(out superseded),"factory-created local Defend must bind without Rpl");var h=Cases.P.GetAcquisitionHold();var w=h.GetWaypoint();Cases.Need(h.IsCurrent(Cases.T,1000)&&!w.HasRpl,"local hold full immutable identity current");var action=new SCR_AIDefendActivity{m_RelatedWaypoint=w};Cases.G.Utility.Current=Cases.G.Utility.Executed=action;Cases.Need(h.HasCurrentTask(Cases.T,7,1000),"local owned actual RUNNING Defend task");Runtime.Events.Clear();Cases.Need(Lifecycle.Owner.ReleaseAcquisitionHold(Cases.T,Cases.P,"local-stop",h)&&w.Deleted&&string.Join(",",Runtime.Events)=="detach,stateclear,delete","local native deletion after exact detach/clear");n+=4;
+Setup();Cases.Need(AICF_VehicleAcquisitionHold.Capture(Cases.R,Waypoint)==null,"foreign unowned local waypoint cannot use replicated authority fallback");Cases.Need(!Lifecycle.Owner.DeleteUnboundAcquisitionWaypoint(Cases.R,Waypoint)&&!Waypoint.Deleted,"unowned local rollback cannot delete entity");Cases.Need(Lifecycle.Owner.DeleteUnboundAcquisitionWaypoint(Cases.R,Waypoint,Permission)&&Waypoint.Deleted,"exact owned local rollback deletes");n+=3;
+Setup();var other=Cases.Register(new SCR_DefendWaypoint{HasRpl=false,Authority=false,Position=Cases.P.Staging});Cases.Need(AICF_VehicleAcquisitionHold.Capture(Cases.R,other,Permission)==null&&!Permission.Matches(other,Cases.R),"creation permission cannot authorize another local waypoint");n++;
+foreach(string k in new[]{"client","world","worldIndex","id","entityReplacedSameId","prefab","rplAppeared","factoryGone","receiptChanged"}){Setup();switch(k){case"client":Replication.Server=false;break;case"world":Waypoint.World=new BaseWorld();break;case"worldIndex":Runtime.Game.World.Entities[Waypoint.Id]=new AIWaypoint();break;case"id":Waypoint.Id++;break;case"entityReplacedSameId":var replacement=new SCR_DefendWaypoint{HasRpl=false,Authority=false,Id=Waypoint.Id,World=Waypoint.World,Rpl=Waypoint.Rpl};Runtime.Game.World.Entities[Waypoint.Id]=replacement;Waypoint=replacement;break;case"prefab":Waypoint.Prefab="foreign-model";break;case"rplAppeared":Waypoint.HasRpl=true;break;case"factoryGone":Permission.m_Factory=null;break;case"receiptChanged":Cases.R=Cases.Capture();break;}Cases.Need(!Permission.Matches(Waypoint,Cases.R),"local immutable permission scope/"+k);n++;}
+Lifecycle.Setup();Cases.R=Cases.Capture();w=Cases.Register(new SCR_DefendWaypoint{Authority=false,HasRpl=true});Cases.Need(AICF_AcquisitionHoldWaypointCreation.Capture(Lifecycle.Factory,w,"native-defend",Cases.R)==null&&AICF_VehicleAcquisitionHold.Capture(Cases.R,w)==null,"replicated non-master/proxy waypoint veto preserved");n++;
+Lifecycle.Setup();Cases.R=Cases.Capture();AICF_AcquisitionHoldWaypointCreation token;w=Lifecycle.Factory.CreateOwnedAcquisitionHoldWaypoint(Cases.R,out token);Cases.Need(token!=null,"replicated factory setup");w.HasRpl=false;Cases.Need(!token.Matches(w,Cases.R),"replicated permission cannot become local");n++;
+Setup();Cases.Need(AICF_AcquisitionHoldWaypointCreation.Capture(null,Waypoint,"native-defend",Cases.R)==null,"no factory permission without factory");Cases.Need(AICF_AcquisitionHoldWaypointCreation.Capture(Lifecycle.Factory,Waypoint,"wrong-model",Cases.R)==null,"factory model must match actual prefab");n+=2;
+return n;}}
+'@
+$taskCases=$taskCases.Replace('return n+Lifecycle.Run()+NativeReadCases.Run()+RetirementCases.Run();','return n+Lifecycle.Run()+NativeReadCases.Run()+RetirementCases.Run()+CreationCases.Run();')
+$taskCompiled=$taskShim+(Replay ($taskCreation+$taskHold+$taskLegacy))+$taskNativeBoundaries+$taskLifecycle+$taskReadCases+$taskRetirementCases+$taskCreationCases+$taskCases
 if($taskHold -match '\b(SetOrigin|Teleport|CommitTransition|ObserveRouteProgress|ObserveMeaningfulTaskLoss|ResetMob|RecordAttempt)\s*\('){throw 'Staging receipt gained action/progress/counter side effects'}
 foreach($taskNeed in @('AICF_TripOutcome stagedOutcome = ProcessSpawnCommit','stagedOutcome.BindAcquisitionStagingReceipt','return stagedOutcome;')){if(!$taskFlow.Contains($taskNeed)){throw "Actual Flow WAIT receipt integration missing: $taskNeed"}}
 if(!$taskController.Contains('if (holdSuperseded) return outcome;')-or!$taskView.Contains('plan.GetAcquisitionHold().HasCurrentTask(trip, currentBaseRevision, System.GetTickCount())')){throw 'Superseded callback or actual task projection integration missing'}
@@ -218,7 +245,7 @@ $taskMutants=@(
  @('taskRunning','activity.GetActionState() == EAIActionState.RUNNING','true'),
  @('taskRelated','activity.m_RelatedWaypoint == m_Waypoint','true'),
  @('taskExecuted','utility.GetExecutedAction() == activity','true'),
- @('waypointAuthority','AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(m_Waypoint)','true'),
+ @('waypointAuthority','AICF_AcquisitionHoldWaypointCreation.HasAuthority(m_Waypoint, m_Receipt, m_Creation)','true'),
  @('tripDeadlineIdentity','trip.AcquisitionHoldDeadlineAtMs(nowMs) != m_iTripDeadline','false'),
  @('groupThreat','cluster && cluster.m_State.GetTimeSinceLastNewInformation() <= 30','false'),
  @('cleanupIdentity','!receipt.OwnsCleanup(trip, plan)','false'),
@@ -237,6 +264,9 @@ $taskMutants=@(
  @('retirementTask','if (m_Retirement) return false;','if (ReplayGuard.Off()) return false;'),
  @('initialXZ','actualOrigin[0] != staging[0] || actualOrigin[2] != staging[2]','ReplayGuard.Off()'),
  @('actualOrigin','m_Waypoint.GetOrigin() != m_vWaypointOrigin','ReplayGuard.Off()')
+ ,@('localCreationIdentity','waypoint != m_Waypoint','ReplayGuard.Off()')
+ ,@('localCreationReceipt','receipt != m_Receipt','ReplayGuard.Off()')
+ ,@('localCreationModel','SCR_ResourceNameUtils.GetPrefabName(waypoint) != m_sPrefab','ReplayGuard.Off()')
 )
 $taskCaught=0
 foreach($taskMutation in $taskMutants){

@@ -41,7 +41,8 @@ class AICF_MatchRules
 
 	bool AllowsAutomaticConstruction(FactionKey factionKey)
 	{
-		return GetManagedSlotCount(factionKey) > 0;
+		return GetManagedSlotCount(factionKey) > 0 &&
+			AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey) != GetPlayerOnlyFaction();
 	}
 
 	bool IsValid()
@@ -58,8 +59,6 @@ class AICF_MatchRules
 
 	string GetAICommanderMode()
 	{
-		if (m_eMode == AICF_EMatchMode.COOP_US) return "USSR";
-		if (m_eMode == AICF_EMatchMode.COOP_USSR) return "US";
 		return "BOTH";
 	}
 
@@ -67,12 +66,12 @@ class AICF_MatchRules
 	{
 		factionKey = AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey);
 		if (!IsValid() || (factionKey != "US" && factionKey != "USSR")) return 0;
-		if (factionKey == GetPlayerOnlyFaction()) return 0;
 		return AICF_Stage1Config.GROUP_SLOTS_PER_FACTION;
 	}
 
 	bool UsesTicketDefeat(FactionKey factionKey)
 	{
-		return GetManagedSlotCount(factionKey) > 0;
+		return GetManagedSlotCount(factionKey) > 0 &&
+			AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey) != GetPlayerOnlyFaction();
 	}
 }

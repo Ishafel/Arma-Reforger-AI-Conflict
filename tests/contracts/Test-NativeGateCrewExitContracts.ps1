@@ -19,6 +19,18 @@ function Rules($g,$f){
  }
  foreach($guard in @('gate.m_sMemberRpl = AICF_VehicleBehaviorBinding.ComponentRpl(member);','gate.m_Agent = agent;','gate.m_SeatType = seat.GetType();')){if(!$begin.Contains($guard)){'CAPTURE_IMMUTABLE_ACTOR_AND_SEAT';break}}
  if($owned -match '\b(?:Set\w*|AddAction|CallLater|Fail|Complete|Mark\w*|Commit\w*)\s*\('){'READONLY_PROOF_NO_NEW_WAIT_OR_MUTATION'}
+ if(!$owned.Contains('if (!access || access.IsSwitchingSeatsAnim()) return false;')){'SWITCHING_ANIMATION_STILL_REJECTED'}
+ $exitHandoff=Body $g 'OwnsCompletedExitHandoff';$exitCallback=Body $g 'OnExitCompleted'
+ foreach($guard in @('!m_bExitListenerAttached','!m_bExitCompleted','m_iExitCompletedAtMs < m_iStarted','m_iExitCompletedAtMs > nowMs','m_iExitCompletedAtMs >= m_iDeadline','IsExpired(nowMs)',
+  'current != m_Exit','current.GetActionState() != EAIActionState.COMPLETED','!current.GetRemoveAction()','!Live(m_Perform)','m_Perform.GetActionIsSuspended()',
+  'm_Perform.GetRelatedGroupActivity() != m_Activity','!Live(m_Return)','m_Return.GetActionIsSuspended()','m_Return.GetRelatedGroupActivity() != m_Activity','actions.Contains(m_Perform) && actions.Contains(m_Return)',
+  'm_Exit.m_Vehicle.m_Value != m_Seat.GetOwner()','m_Exit.GetPriority() != m_Perform.GetPriority() + 100')){
+  if(!$exitHandoff.Contains($guard)){'EXACT_COMPLETED_EXIT_WITH_QUEUED_PERFORM_AND_RETURN';break}
+ }
+ foreach($guard in @('m_bExitCompleted','action != m_Exit','m_Trip.IsDeadlineReached(nowMs)','IsExpired(nowMs)','!Matches(m_Trip)',
+  'm_Trip.GetMovementState().GetNativeGate() != this','action.GetActionState() != EAIActionState.COMPLETED','m_iExitCompletedAtMs = nowMs;')){if(!$exitCallback.Contains($guard)){'IMMUTABLE_OWN_NATIVE_EXIT_COMPLETION';break}}
+ if(!(Body $g 'AttachReturnCompletion').Contains('m_Exit.m_OnActionCompleted.Insert(OnExitCompleted);') -or
+  !(Body $g 'Stop').Contains('m_Exit.m_OnActionCompleted.Remove(OnExitCompleted);')){'BALANCED_EXIT_LISTENER_LIFECYCLE'}
  if(!$inspect.Contains('gate.OwnsTemporaryCrewExit(trip, seat, assignedMember)') -or !$inspect.Contains('trip.VehiclePresetMember(trip.GetVehiclePreset().m_aMembers[index])') -or
   $inspect.IndexOf('StartTacticalDeployment("LOCAL_THREAT"') -gt $inspect.IndexOf('OwnsTemporaryCrewExit(') -or
   !$inspect.Contains('StartTacticalDeployment("CREW_UNAVAILABLE"')){'THREAT_PRIORITY_AND_OTHER_CREW_FAILURE_PRESERVED'}
@@ -76,12 +88,14 @@ public class Gate:N {
  public BaseCompartmentSlot m_Seat;public ECompartmentType m_SeatType=ECompartmentType.PILOT;public IEntity m_Member;
  public string m_sSeatKey="0:2:0",m_sMemberRpl="actor-rpl";public AIAgent m_Agent;public Group m_Group;public SCR_AIUtilityComponent m_Utility;
  public AIActionBase m_Perform,m_Exit,m_Return;public Smart m_SmartAction;public IEntity m_SmartOwner,m_Vehicle;public N m_Activity;
- public AICF_TransportTrip m_Trip;public bool m_bStopped,m_bReturnListenerAttached,m_bPerformListenerAttached,m_bPerformCompleted,m_bReturnCompleted,m_bObservedExit;public int m_iStarted=50,m_iDeadline=500,m_iPerformCompletedAtMs,m_iReturnCompletedAtMs;public int LogCalls;public Action<Gate> Reenter;public void Log(string e){LogCalls++;if(Reenter!=null)Reenter(this);}
+ public AICF_TransportTrip m_Trip;public bool m_bStopped,m_bReturnListenerAttached,m_bPerformListenerAttached,m_bPerformCompleted,m_bReturnCompleted,m_bObservedExit,m_bExitListenerAttached,m_bExitCompleted;public int m_iStarted=50,m_iDeadline=500,m_iPerformCompletedAtMs,m_iReturnCompletedAtMs,m_iExitCompletedAtMs;public int LogCalls;public Action<Gate> Reenter;public void Log(string e){LogCalls++;if(Reenter!=null)Reenter(this);}
  public bool Expired,MatchesNow=true;public bool IsExpired(int now){return Expired || now>=m_iDeadline || now-m_iStarted>=60000;}public bool Matches(AICF_TransportTrip t){return MatchesNow;}
  public static bool Live(AIActionBase action) LIVE
  public bool OwnsCompletedPerformHandoff(AIActionBase current,int nowMs) HANDOFF
+ public bool OwnsCompletedExitHandoff(AIActionBase current,int nowMs) EXITBODY
  public bool AttachReturnCompletion(AICF_TransportTrip trip) ATTACH
  public void OnPerformCompleted(SCR_AIActionBase action) PERFORMCALLBACK
+ public void OnExitCompleted(SCR_AIActionBase action) EXITCALLBACK
  public void OnReturnCompleted(SCR_AIActionBase action) RETURNCALLBACK
  public void Stop() STOPBODY
  public bool OwnsTemporaryCrewExit(AICF_TransportTrip trip,BaseCompartmentSlot seat,IEntity assignedMember) OWNED
@@ -97,6 +111,11 @@ public class Gate:N {
  public bool Actual(){return OwnsTemporaryCrewExit(Trip,Seat,Actor);}
 }
 public static class NativeGateCrewTests {
+ public static Gate ExitHandoff(){
+  Clock.Now=100;var g=Gate.Fresh();g.m_Utility.Current=g.m_Exit;g.m_Utility.Actions.Add(g.m_Perform);g.m_Utility.Actions.Add(g.m_Return);
+  if(!g.AttachReturnCompletion(g.Trip))throw new Exception("Native exit listener setup failed");
+  g.m_Exit.State=EAIActionState.COMPLETED;g.m_Exit.Removed=true;g.m_Exit.m_OnActionCompleted.Fire((SCR_AIActionBase)g.m_Exit);return g;
+ }
  public static Gate Handoff(){
   Clock.Now=100;var g=Gate.Fresh();g.m_Utility.Current=g.m_Perform;g.m_Utility.Actions.Add(g.m_Return);g.m_bObservedExit=true;
   g.m_Perform.State=EAIActionState.COMPLETED;g.m_Perform.Removed=true;
@@ -120,6 +139,23 @@ public static class NativeGateCrewTests {
   var transition=Gate.Fresh();transition.Actor.Access.Linked=transition.m_Vehicle;transition.Actor.Access.Owner=transition.m_Vehicle;transition.Actor.Access.Seat=transition.Seat;check(transition.Actual(),"original exact vehicle/seat transition linkage");
   var zero=Gate.Fresh();check(!zero.OwnsTemporaryCrewExit(null,zero.Seat,zero.Actor),"missing trip");check(!zero.OwnsTemporaryCrewExit(zero.Trip,null,zero.Actor),"missing seat");check(!zero.OwnsTemporaryCrewExit(zero.Trip,zero.Seat,null),"missing assigned original");
   var completed=Handoff();check(completed.Actual(),"actual successful completion receipt bridges cached COMPLETED Perform");
+  var exitCompleted=ExitHandoff();check(exitCompleted.Actual() && !exitCompleted.m_bObservedExit,"actual exit receipt bridges completed GetOut before polling observer");
+  var exitNegatives=new Action<Gate>[] {
+   g=>g.m_bStopped=true,g=>g.m_bExitListenerAttached=false,g=>g.m_bExitCompleted=false,g=>g.m_iExitCompletedAtMs=0,g=>g.m_iExitCompletedAtMs=49,
+   g=>g.m_iExitCompletedAtMs=101,g=>g.m_iExitCompletedAtMs=500,g=>g.Expired=true,g=>g.Trip.Expired=true,g=>g.MatchesNow=false,
+   g=>g.m_Utility.Current=new SCR_AIActionBase{State=EAIActionState.COMPLETED,Removed=true,Activity=g.m_Activity},g=>g.m_Exit.State=EAIActionState.FAILED,g=>g.m_Exit.Removed=false,
+   g=>g.m_Perform.State=EAIActionState.FAILED,g=>g.m_Perform.State=EAIActionState.COMPLETED,g=>g.m_Perform.Removed=true,g=>g.m_Perform.Suspended=true,g=>g.m_Perform.Activity=new N(),
+   g=>g.m_Return.State=EAIActionState.FAILED,g=>g.m_Return.State=EAIActionState.COMPLETED,g=>g.m_Return.Removed=true,g=>g.m_Return.Suspended=true,g=>g.m_Return.Activity=new N(),
+   g=>g.m_Utility.Actions.Remove(g.m_Perform),g=>g.m_Utility.Actions.Remove(g.m_Return),g=>g.m_Exit.m_Vehicle.m_Value=new IEntity(),g=>g.m_Exit.Priority=109,g=>g.Actor.Conscious=false,g=>g.Actor.Current=false,
+   g=>g.Actor.Rpl="other",g=>g.Actor.Access.Switching=true,g=>g.Actor.Access.Linked=new IEntity(),g=>g.Seat.Occupant=new IEntity()
+  };
+  int exitCase=0;foreach(var mutate in exitNegatives){var g=ExitHandoff();mutate(g);check(!g.Actual(),"completed exit handoff must retain exact bounded native chain case="+exitCase++);}
+  var exitDuplicate=ExitHandoff();Clock.Now=120;exitDuplicate.m_Exit.m_OnActionCompleted.Fire((SCR_AIActionBase)exitDuplicate.m_Exit);check(exitDuplicate.m_iExitCompletedAtMs==100 && exitDuplicate.LogCalls==1,"duplicate exit callback cannot renew receipt");
+  foreach(var mutate in new Action<Gate>[] {g=>g.m_bStopped=true,g=>g.m_bExitListenerAttached=false,g=>g.m_Trip=null,g=>g.Trip.Expired=true,g=>g.Expired=true,g=>g.MatchesNow=false,g=>g.Trip.Movement.Gate=Gate.Fresh(),g=>g.m_Exit.State=EAIActionState.FAILED}){
+   var g=ExitHandoff();g.m_bExitCompleted=false;g.m_iExitCompletedAtMs=0;mutate(g);g.OnExitCompleted((SCR_AIActionBase)g.m_Exit);check(!g.m_bExitCompleted,"invalid exit completion cannot grant receipt");
+  }
+  var exitForeign=ExitHandoff();exitForeign.m_bExitCompleted=false;exitForeign.OnExitCompleted(new SCR_AIActionBase{State=EAIActionState.COMPLETED});check(!exitForeign.m_bExitCompleted,"foreign exit callback rejected");
+  var exitStop=ExitHandoff();var exitInvoker=exitStop.m_Exit.m_OnActionCompleted;exitStop.Stop();exitStop.Stop();check(exitInvoker.List.Count==0 && exitInvoker.RemoveCalls==1 && !exitStop.m_bExitCompleted && !exitStop.m_bExitListenerAttached && exitStop.m_iExitCompletedAtMs==0,"Stop balances and clears exact exit receipt");
   var handoffNegatives=new Action<Gate>[] {
    g=>g.m_bStopped=true,g=>g.m_bPerformListenerAttached=false,g=>g.m_bPerformCompleted=false,g=>g.m_bObservedExit=false,
    g=>g.m_iPerformCompletedAtMs=0,g=>g.m_iPerformCompletedAtMs=49,g=>g.m_iPerformCompletedAtMs=101,g=>g.m_iPerformCompletedAtMs=500,
@@ -155,12 +191,12 @@ public static class NativeGateCrewTests {
 }
 '@
 $template=$code.Replace('LIVE',(Cs (Body $gate 'Live')))
-foreach($entry in @(@('HANDOFF','OwnsCompletedPerformHandoff'),@('ATTACH','AttachReturnCompletion'),@('PERFORMCALLBACK','OnPerformCompleted'),@('RETURNCALLBACK','OnReturnCompleted'),@('STOPBODY','Stop'))){$template=$template.Replace($entry[0],(Cs (Body $gate $entry[1])))}
+foreach($entry in @(@('HANDOFF','OwnsCompletedPerformHandoff'),@('EXITBODY','OwnsCompletedExitHandoff'),@('ATTACH','AttachReturnCompletion'),@('PERFORMCALLBACK','OnPerformCompleted'),@('EXITCALLBACK','OnExitCompleted'),@('RETURNCALLBACK','OnReturnCompleted'),@('STOPBODY','Stop'))){$template=$template.Replace($entry[0],(Cs (Body $gate $entry[1])))}
 $code=$template.Replace('OWNED',(Cs (Body $gate 'OwnsTemporaryCrewExit')))
 Add-Type -TypeDefinition $code -Language CSharp
 $actual=[NativeGateCrewTests]::Run()
 $unsafeMutants=0
-foreach($guard in @('IsExpired(nowMs)','!Matches(trip)','assignedMember != m_Member')){
+foreach($guard in @('IsExpired(nowMs)','!Matches(trip)','assignedMember != m_Member','access.IsSwitchingSeatsAnim()')){
  $unsafeMutants++;$variant='NativeGateUnsafe'+$unsafeMutants
  $mutated=(Cs (Body $gate 'OwnsTemporaryCrewExit')).Replace($guard,'false')
  Add-Type -TypeDefinition ('namespace '+$variant+' {'+$template.Replace('OWNED',$mutated)+'}') -Language CSharp
@@ -168,7 +204,7 @@ foreach($guard in @('IsExpired(nowMs)','!Matches(trip)','assignedMember != m_Mem
  try{([type]($variant+'.NativeGateCrewTests')).GetMethod('Run').Invoke($null,@())|Out-Null}catch{$caught=$true}
  if(!$caught){throw "Actual unsafe mutant escaped: $guard"}
 }
-foreach($change in @(@('!m_bPerformCompleted','false'),@('actions.Contains(m_Return)','true'),@('current != m_Perform','false'),@('m_Return.GetActionIsSuspended()','false'))){
+foreach($change in @(@('!m_bPerformCompleted','false'),@('actions.Contains(m_Return)','true'),@('current != m_Perform','false'),@('m_Return.GetActionIsSuspended()','false'),@('!m_bExitCompleted','false'),@('actions.Contains(m_Perform)','true'),@('m_Perform.GetActionIsSuspended()','false'),@('m_iExitCompletedAtMs > nowMs','false'))){
  $unsafeMutants++;$variant='NativeGateHandoffUnsafe'+$unsafeMutants
  $mutatedTemplate=$template.Replace($change[0],$change[1])
  Add-Type -TypeDefinition ('namespace '+$variant+' {'+$mutatedTemplate.Replace('OWNED',(Cs (Body $gate 'OwnsTemporaryCrewExit')))+'}') -Language CSharp

@@ -639,6 +639,11 @@ class AICF_ConstructionPlanner
 
 	protected bool Covered(AICF_ConstructionOrder order, AICF_EConstructionType type)
 	{
+		if (type == AICF_EConstructionType.SUPPLY_DEPOT)
+		{
+			AICF_AICommander commander = Commander(order.m_Faction);
+			if (!commander || commander.GetMaximumVehiclePresetCost() <= order.m_Base.GetSuppliesMax()) return true;
+		}
 		foreach (IEntity entity : m_aInventory)
 		{
 			if (!entity)
@@ -659,6 +664,14 @@ class AICF_ConstructionPlanner
 				continue;
 			if (!actualService && !labeledComposition)
 				continue;
+			if (type == AICF_EConstructionType.SUPPLY_DEPOT)
+			{
+				// При недостаточной native capacity готовый склад не закрывает
+				// дальнейший спрос. Только уже оплаченный незавершённый layout
+				// удерживает очередь от второго параллельного строительства.
+				SCR_CampaignBuildingCompositionComponent composition = SCR_CampaignBuildingCompositionComponent.Cast(entity.FindComponent(SCR_CampaignBuildingCompositionComponent));
+				if (!composition || composition.IsCompositionSpawned()) continue;
+			}
 			if (type == AICF_EConstructionType.SMALL_BARRACKS || type == AICF_EConstructionType.LARGE_BARRACKS)
 			{
 				// Не подменяем два типа одним SERVICE_LIVING_AREA. Unknown tier

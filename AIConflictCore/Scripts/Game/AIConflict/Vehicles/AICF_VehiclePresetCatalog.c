@@ -53,11 +53,16 @@ class AICF_VehiclePresetCatalog
 			if (requireCivilianLabel && !entry.HasEditableEntityLabel(EEditableEntityLabel.FACTION_CIV)) continue;
 			Resource resource = Resource.Load(entry.GetPrefab());
 			if (!resource || !resource.IsValid()) continue;
-			if (!SCR_BaseContainerTools.FindComponentSource(resource, VehicleWheeledSimulation)) continue;
 			// Legacy модовые tracked prefabs могут наследовать wheel component.
 			string path = entry.GetPrefab();
 			path.ToLower();
-			if (path.Contains("/tracked/") || SCR_BaseContainerTools.FindComponentSource(resource, VehicleTrackedSimulation)) continue;
+			bool tracked = path.Contains("/tracked/") || SCR_BaseContainerTools.FindComponentSource(resource, VehicleTrackedSimulation);
+			if (tracked)
+			{
+				if (source != AICF_EVehicleCatalogSource.FACTION || !AICF_ContentProfile.GetActive().AllowsTrackedVehiclePreset(entry.GetPrefab(),
+					AICF_ContentProfile.GetActive().GetStableFactionKey(m_Faction.GetFactionKey()))) continue;
+			}
+			else if (!SCR_BaseContainerTools.FindComponentSource(resource, VehicleWheeledSimulation)) continue;
 			m_aPrefabs.Insert(entry.GetPrefab());
 			string name = FilePath.StripPath(entry.GetPrefab());
 			SCR_UIInfo info = entry.GetEntityUiInfo();
@@ -121,6 +126,19 @@ class AICF_VehiclePresetCatalog
 		return m_aSources[index];
 	}
 
+	void OwnCandidates(array<string> suffixes, array<ResourceName> candidates)
+	{
+		candidates.Clear();
+		foreach (string suffix : suffixes)
+		{
+			array<ResourceName> matches = {};
+			foreach (int index, ResourceName prefab : m_aPrefabs)
+				if (m_aSources[index] == AICF_EVehicleCatalogSource.FACTION && prefab.Contains(suffix) && !candidates.Contains(prefab)) matches.Insert(prefab);
+			matches.Sort();
+			candidates.InsertAll(matches);
+		}
+	}
+
 	int Cost(ResourceName prefab)
 	{
 		int index = m_aPrefabs.Find(prefab);
@@ -153,8 +171,15 @@ class AICF_VehiclePresetCatalog
 		// Backend topology не использует глобальный UI ItemPreviewManager cache.
 		m_Model = GetGame().SpawnEntityPrefabLocal(Resource.Load(prefab), world);
 		if (!Vehicle.Cast(m_Model) || m_Model.GetWorld() == GetGame().GetWorld()) { Clear(); return false; }
-		if (!m_Model.FindComponent(VehicleWheeledSimulation)) { reason = "UNSUPPORTED_VEHICLE"; Clear(); return false; }
-		if (m_Model.FindComponent(VehicleTrackedSimulation)) { reason = "UNSUPPORTED_VEHICLE"; Clear(); return false; }
+		string path = prefab;
+		path.ToLower();
+		bool tracked = path.Contains("/tracked/") || m_Model.FindComponent(VehicleTrackedSimulation);
+		if (tracked)
+		{
+			if (Source(prefab) != AICF_EVehicleCatalogSource.FACTION || !AICF_ContentProfile.GetActive().AllowsTrackedVehiclePreset(prefab,
+				AICF_ContentProfile.GetActive().GetStableFactionKey(m_Faction.GetFactionKey()))) { reason = "UNSUPPORTED_VEHICLE"; Clear(); return false; }
+		}
+		else if (!m_Model.FindComponent(VehicleWheeledSimulation)) { reason = "UNSUPPORTED_VEHICLE"; Clear(); return false; }
 		AICF_VehiclePreset.Collect(m_Model, m_aSeats);
 		int pilots;
 		foreach (BaseCompartmentSlot seat : m_aSeats)
@@ -165,6 +190,8 @@ class AICF_VehiclePresetCatalog
 	}
 
 	array<BaseCompartmentSlot> Seats() { return m_aSeats; }
+	bool HasInspectedTrackedSimulation() { return m_Model && m_Model.FindComponent(VehicleTrackedSimulation); }
+	bool HasInspectedWheeledSimulation() { return m_Model && m_Model.FindComponent(VehicleWheeledSimulation); }
 
 	AICF_VehiclePreset Draft(ResourceName prefab)
 	{

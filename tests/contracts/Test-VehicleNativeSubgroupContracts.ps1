@@ -24,12 +24,16 @@ function Rules([string]$scope,[string]$controller,[string]$boundary){
  if(!$handler.Contains('handler < 0 || handler == AIGroupMovementComponent.DEFAULT_HANDLER_ID') -or
   !$handler.Contains('registered.GetSubgroupHandleId() == handler && movement.GetAgentMoveHandlerId(pilot) == handler')){'REAL_POSITIVE_PILOT_HANDLER'}
  if(!$reconcile.Contains('if (!pilot) return true;') -or !$read.Contains('if (!pilot || !AICF_GroupRuntime.IsAliveCharacter(pilot) || !SCR_AIDamageHandling.IsConscious(pilot)) return true;')){'COMBAT_NO_CREW_REPLACEMENT'}
- if(!$reconcile.Contains('if (!AICF_VehicleNativeSubgroup.CanReconcileHandle(before, pilotBefore))') -or
-  !$reconcile.Contains('bool repair = before < 0;') -or $reconcile.IndexOf('CanReconcileHandle(') -gt $reconcile.IndexOf('OnJoinGroupFromVehicle(')){'STALE_POSITIVE_HANDLE_FAIL_CLOSED'}
+ if(!$reconcile.Contains('bool positiveRepair = !AICF_VehicleNativeSubgroup.CanReconcileHandle(before, pilotBefore);') -or
+  !$reconcile.Contains('bool repair = before < 0 || positiveRepair;') -or $reconcile.IndexOf('CanReconcileHandle(') -gt $reconcile.IndexOf('OnJoinGroupFromVehicle(')){'STALE_POSITIVE_HANDLE_FAIL_CLOSED'}
+ if(@([regex]::Matches($reconcile,'AICF_VehicleNativeSubgroup.CanReconcilePositiveHandles\(')).Count -ne 2 -or
+  !$reconcile.Contains('positiveRepair && !AICF_VehicleNativeSubgroup.CanReconcilePositiveHandles(') -or
+  !$reconcile.Contains('registered.GetSubgroupHandleId() != before || movement.GetAgentMoveHandlerId(pilot) != pilotBefore')){'SCOPED_POSITIVE_HANDLER_OWNERSHIP'}
+ if((ConvertTo-AICFCodeText $scope) -match '\b(?:SetSubgroupHandleId|RemoveGroupMoveHandler|CreateGroupMoveHandler|MoveAgentToHandler|SetMoveHandlerLeader|ClearGroupMoveHandlers)\s*\('){'NO_DIRECT_NATIVE_HANDLER_RESET'}
  if(!$reconcile.Contains('if (repair && !OnJoinGroupFromVehicle(pilot, true)) return false;') -or
   !$reconcile.Contains('if (!OnJoinGroupFromVehicle(agent, false) || movement.GetAgentMoveHandlerId(agent) != handle) return false;') -or
-  @([regex]::Matches($reconcile,'AICF_VehicleNativeSubgroup.Read\(')).Count -ne 4 -or
-  @([regex]::Matches($reconcile,'repeatedRecord != registered \|\| repeatedPilot != pilot \|\| repeatedMovement != movement')).Count -ne 3 -or
+  @([regex]::Matches($reconcile,'AICF_VehicleNativeSubgroup.Read\(')).Count -ne 5 -or
+  @([regex]::Matches($reconcile,'repeatedRecord != registered \|\| repeatedPilot != pilot \|\| repeatedMovement != movement')).Count -ne 4 -or
   !$reconcile.Contains('!AICF_VehicleNativeSubgroup.Settled(actor, vehicle)')){'REPEATED_STOCK_RECONCILIATION'}
  if((ConvertTo-AICFCodeText $scope) -match '\b(?:SetOrigin|SetVelocity|GetInVehicle|GetOutVehicle|SetHealth|Heal|CreateNewSubgroup|AddAction|RemoveAction|CallLater|PrepareRoute|BeginMobilityRecovery)\s*\('){'NO_PHYSICAL_ACTION_OR_CLOCK_MUTATION'}
  $exit=Body $controller 'ExitPhaseEffects'
@@ -61,8 +65,10 @@ foreach($mutation in @(
  @('s','handler < 0 || handler == AIGroupMovementComponent.DEFAULT_HANDLER_ID','false','REAL_POSITIVE_PILOT_HANDLER'),
  @('s','movement.GetAgentMoveHandlerId(pilot) == handler','true','REAL_POSITIVE_PILOT_HANDLER'),
  @('s','if (!pilot) return true;','if (!pilot) return false;','COMBAT_NO_CREW_REPLACEMENT'),
- @('s','if (!AICF_VehicleNativeSubgroup.CanReconcileHandle(before, pilotBefore))','if (false)','STALE_POSITIVE_HANDLE_FAIL_CLOSED'),
- @('s','bool repair = before < 0;','bool repair = before != pilotBefore;','STALE_POSITIVE_HANDLE_FAIL_CLOSED'),
+ @('s','bool positiveRepair = !AICF_VehicleNativeSubgroup.CanReconcileHandle(before, pilotBefore);','if (false)','STALE_POSITIVE_HANDLE_FAIL_CLOSED'),
+ @('s','bool repair = before < 0 || positiveRepair;','bool repair = before != pilotBefore;','STALE_POSITIVE_HANDLE_FAIL_CLOSED'),
+ @('s','AICF_VehicleNativeSubgroup.CanReconcilePositiveHandles(trip, this, group, vehicle, registered, pilot, movement, reason)','true','SCOPED_POSITIVE_HANDLER_OWNERSHIP'),
+ @('s','bool positiveRepair =','registered.SetSubgroupHandleId(pilotBefore); bool positiveRepair =','NO_DIRECT_NATIVE_HANDLER_RESET'),
  @('s','OnJoinGroupFromVehicle(pilot, true)','OnJoinGroupFromVehicle(pilot, false)','REPEATED_STOCK_RECONCILIATION'),
  @('s','repeatedRecord != registered || repeatedPilot != pilot || repeatedMovement != movement','false','REPEATED_STOCK_RECONCILIATION'),
  @('o','if (nextPhase != AICF_ETransportTripPhase.TRANSIT)','if (true)','PRESERVE_RESUMED_NATIVE_RECORD'),

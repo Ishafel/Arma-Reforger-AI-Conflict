@@ -20,7 +20,7 @@ function Rules([string]$f,[string]$t,[string]$s){
  if($begin -notmatch 'state.m_iDeploymentDeadline = System.GetTickCount\(\) \+ DEPLOYMENT_TIMEOUT_MS' -or
   $tick -notmatch 'System.GetTickCount\(\) >= state.m_iDeploymentDeadline' -or $tick -notmatch 'TACTICAL_DISEMBARK_TIMEOUT' -or
   $tick -match 'm_iDeploymentDeadline\s*=' -or $f -notmatch 'DEPLOYMENT_TIMEOUT_MS = 40000'){'FIXED_PHYSICAL_EGRESS_DEADLINE'}
- if($begin -notmatch 'preset.m_iBehavior == AICF_EVehicleBehavior.COMBAT && IsCrewSeat\(seats\[index\]\)' -or
+ if($begin -notmatch 'preset.m_iBehavior == AICF_EVehicleBehavior.COMBAT && IsCrewSeat\(seats\[index\], trip.GetVehiclePreset\(\)\)' -or
   $begin.IndexOf('AICF_VehicleBehaviorPolicy.Update') -lt $begin.IndexOf('state.m_aDeployed.Insert') -or
   $deploy -notmatch 'EnsureExit\(trip, actor, access.GetCompartment\(\)\)' -or
   $exit -notmatch 'new SCR_AIGetOutVehicle' -or $exit -notmatch 'PRIORITY_BEHAVIOR_GET_OUT_VEHICLE_HIGH_PRIORITY' -or
@@ -92,7 +92,7 @@ $controls=1
 foreach($mutation in @(
  @('f','!trip.IsVehiclePresetCurrent()','false','EXACT_LIVE_TRIP_ASSET'),
  @('f','System.GetTickCount() >= state.m_iDeploymentDeadline','false','FIXED_PHYSICAL_EGRESS_DEADLINE'),
- @('f','COMBAT && IsCrewSeat(seats[index])','TRANSPORT && IsCrewSeat(seats[index])','SCOPED_CARGO_OR_ALL_DEPLOYMENT_WITH_NATIVE_STOP'),
+ @('f','COMBAT && IsCrewSeat(seats[index], trip.GetVehiclePreset())','TRANSPORT && IsCrewSeat(seats[index], trip.GetVehiclePreset())','SCOPED_CARGO_OR_ALL_DEPLOYMENT_WITH_NATIVE_STOP'),
  @('f','PRIORITY_BEHAVIOR_GET_OUT_VEHICLE_HIGH_PRIORITY','PRIORITY_BEHAVIOR_GET_IN_VEHICLE','SCOPED_CARGO_OR_ALL_DEPLOYMENT_WITH_NATIVE_STOP'),
  @('f','trip.ReassignVehiclePresetSeat(index, -1)','false','PILOT_PRIORITY_OPTIONAL_TURRET_NO_RESTORE_LOOP'),
  @('f','seat.GetType() != ECompartmentType.PILOT && trip.GetVehiclePreset().m_aMembers[index] < 0','false','PILOT_PRIORITY_OPTIONAL_TURRET_NO_RESTORE_LOOP'),

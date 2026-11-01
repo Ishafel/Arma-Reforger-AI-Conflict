@@ -1,6 +1,40 @@
 // Карта, readiness, roster и транспорт сохраняют владельцев из RHS integration.
 class AICF_WCSRHSContentProfile : AICF_RHSContentProfile
 {
+	override bool HasCoopTankSlots()
+	{
+		return true;
+	}
+
+	override bool IsVehiclePresetCrewSeat(ResourceName prefab, FactionKey stableKey, BaseCompartmentSlot seat)
+	{
+		// Legacy M1 loader is authored CARGO but is crew, never dismounting infantry.
+		if (seat && AllowsTrackedVehiclePreset(prefab, stableKey)) return true;
+		return super.IsVehiclePresetCrewSeat(prefab, stableKey, seat);
+	}
+
+	override bool AllowsTrackedVehiclePreset(ResourceName prefab, FactionKey stableKey)
+	{
+		if (stableKey == "US") return prefab.Contains("Prefabs/Vehicles/Tracked/M1A1/");
+		if (stableKey == "USSR") return prefab.Contains("Prefabs/Vehicles/Tracked/T72A/") || prefab.Contains("Prefabs/Vehicles/Tracked/T72B/");
+		return false;
+	}
+
+	override void BuildCoopVehicleSuffixPreference(FactionKey stableKey, AICF_ECoopVehicleRole role, array<string> suffixes)
+	{
+		if (role == AICF_ECoopVehicleRole.TANK)
+		{
+			if (stableKey == "US") suffixes.Insert("Prefabs/Vehicles/Tracked/M1A1/");
+			if (stableKey == "USSR")
+			{
+				suffixes.Insert("Prefabs/Vehicles/Tracked/T72B/");
+				suffixes.Insert("Prefabs/Vehicles/Tracked/T72A/");
+			}
+			return;
+		}
+		super.BuildCoopVehicleSuffixPreference(stableKey, role, suffixes);
+	}
+
 	// Кеш принадлежит экземпляру profile одного матча. Только строки,
 	// без entity, preview world, catalog или изменяемых inventory objects.
 	protected ref map<string, string> m_mKitSnapshots = new map<string, string>();

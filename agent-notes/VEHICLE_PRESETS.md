@@ -46,10 +46,11 @@ spawn, binding или debit. Cancel сохраняет состав. Подтв�
 своей стороны и `CIV` текущего content graph. Дополняющий factionless каталог
 допускается только для entries с явной меткой `FACTION_CIV`; чужие faction catalogs
 не обходятся. Дубликат получает собственный faction source, стоящий первым.
-До включения проверяются resource и `VehicleWheeledSimulation` в prefab source;
-`VehicleTrackedSimulation` и legacy путь `/Tracked/` исключаются. Пользователь
-уточнил scope: легковые, грузовики и колёсная бронетехника; авиация/гусеничные/
-стационарные установки не входят. Это полный активный whitelist колёсных моделей,
+До включения проверяются resource и ground simulation в prefab source;
+`VehicleTrackedSimulation` и legacy путь `/Tracked/` по умолчанию исключаются.
+С01.11.2026 WCS profile отдельно допускает собственные танки M1/T72 для
+новой coop раскладки; CIV и другие tracked сохраняют запрет. Разрешение
+повторяется на живой модели. Это полный активный whitelist колёсных моделей,
 без прежнего ограничения наличием SpawnerData или curated suffixes.
 
 Owner-only JSON catalog содержит параллельные `prefabs`, `names`, `costs`, `sources`,
@@ -76,7 +77,7 @@ faction получателя (`US`/`USSR`), не `CIV`. Проверки Apply �
 SELECT создаёт local
 модель в private world и читает native accessible compartments, без глобального
 ItemPreviewManager cache. Поддерживается наземная машина
-с VehicleWheeledSimulation и одним Pilot; модели без Pilot или с несколькими
+с ground simulation и одним Pilot; модели без Pilot или с несколькими
 Pilot отклоняются после live inspection, даже если source прошёл фильтр.
 
 Стабильный seat key: `relative compartment-manager owner ordinal:local slot ID:type`.
@@ -88,6 +89,34 @@ Ordinal строится в hierarchy только из entities с compartment 
 Ручной путь использует фактические compartments.
 
 ## Библиотека и применение
+
+Назначение доступно и во время набора в казарме, и при ожидании новой incarnation
+отряда. Сервер публикует `selectableMembers` по будущим numeric positions
+`0..desiredSize-1`; `activeMembers` по-прежнему означает только живых бойцов.
+Авторассадка использует selectable positions. `ValidatePlannedRoster` проверяет
+схему, фактическую topology, обязательный экипаж и диапазон desired positions,
+но разрешает лишь сохранить намерение: не создаёт бойцов/машину, не меняет
+recruitment и не списывает средства. Полный состав сразу получает binding с
+результатом `WAITING_FOR_REINFORCEMENTS`.
+
+Машина меньшей вместимости требует прежнего явного подтверждения сокращения.
+Неподтверждённый deferred snapshot имеет отдельные group/entity/member,
+generation, assignment/loadout/vehicle revision, desired size и60s fences.
+Подтверждённая очередь относится к stable slot и текущему binding revision,
+переживает закрытие окна, отключение владельца и замену группы. Она ждёт
+обычного полного пополнения, затем создаёт новый `AICF_VehicleCrewPlan` для
+текущих живых entities и вызывает существующий `VehicleCrewReturn.Commit`.
+Такой путь может сначала нанять весь desired состав и вернуть лишних: отмены
+или изменения уже оплаченного recruitment не вводятся. Несовпадение binding,
+desired size или faction отменяет очередь. Повторный тот же assignment использует
+канонический сохранённый рецепт, включая прежнее имя.
+
+Revision-scoped `IsVehicleCrewResizePending` запрещает admission машины до
+такого commit. Незавершённый roster также остаётся отдельным admission gate.
+Фактические acquisition/boarding сохраняют строгую `ValidateRoster`, economy и
+fleet gates: доступность сохранения будущего намерения не означает покупки
+вне квот или при нехватке средств. Native end-to-end проверка этого нового пути
+должна подтверждаться отдельно; offline predicates не подтверждают реальный найм.
 
 - Save пишет `vehicle_<id>_0.json` / `vehicle_<id>_1.json` в
   `$profile:AICF_Loadouts`; namespace не пересекается с `template_` персонажей.
@@ -110,8 +139,10 @@ Ordinal строится в hierarchy только из entities с compartment 
 «Рассадить автоматически» — отдельное локальное действие над черновиком.
 `AICF_VehicleSeatAssignment.AutoAssign(preset, activeMembers, mandatoryIndices)`
 не отправляет RPC, не сохраняет рецепт и не применяет binding. Серверный view
-содержит `mandatorySeats`: индексы фактических PILOT, TURRET и attached-turret
-compartments из того же успешного catalog.Inspect, сохранённые до catalog.Clear.
+содержит `mandatorySeats`: индексы crew compartments по content profile из
+того же успешного catalog.Inspect, сохранённые до catalog.Clear. Обычно это
+PILOT, TURRET и attached-turret; WCS tank loader CARGO тоже обязателен и
+остаётся экипажем при COMBAT deployment. APC CARGO сохраняет роль десанта.
 Поле `activeMembers` содержит только живые numeric positions текущего отряда.
 Helper проверяет shape, bounds и уникальность входов до изменения массива мест.
 Живые позиции назначаются по возрастанию: сначала обязательные места по индексу,
@@ -389,3 +420,15 @@ physical budget. Terminal escalation учитывает операцию, кот
 выполнение новой ветки.
 Визуальное качество, физический ввод и удобство остаются NOT RUN: Computer Use,
 screenshots и GUI automation запрещены; hidden handlers этого не доказывают.
+
+Проверка от01.11.2026: isolated Stock native-v3 подтвердил реальный owner RPC при
+1/10 бойцах,9оплаченных пополнений, fresh crew10→1 с тем же inventory, одну покупку
+UAZ50 и exact settled Pilot (server5/client6checks, native0/0/stopped2). Отдельный
+sequential native-v4/profiles-v5 подтвердил сохранение deferred binding после
+закрытия первого клиента и owner READ второго native-spawn клиента
+(server3/primary5/JIP1, native0/0/0/stopped3). Полные SCRIPT/persistence/VM/OOM0;
+resource/world/network errors сохраняют strictFAIL30/142 и32/142/142.
+Начальные VM и fixture/setupFAIL исправлялись и сохраняются в evidence.
+Точный ledger: `.codex-runtime/coop-fleet-recovery-20261101/reinforcement/REPORT.md`;
+ограничения и source drift — в TESTING. Удобство человеческого UI и RHS/WCS
+этого конкретного deferred E2E остаются NOT RUN.

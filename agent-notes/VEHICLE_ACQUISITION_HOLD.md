@@ -1,5 +1,41 @@
 # Реальная задача удержания при acquisition WAIT
 
+## Stock local waypoint: исправление authority — 01.11.2026
+
+В свежем native `uaz5` фактический отказ `ACQUISITION_STAGING_HOLD_UNSAFE`
+локализован до `HOLD_CAPTURE/WAYPOINT_AUTHORITY`: созданный штатный
+`SCR_DefendWaypoint` имеет корректные subtype/preset, но **не имеет RplComponent**.
+Vehicle/character predicate `IsAuthoritativeReplicatedEntity` неприменим к такому
+stock waypoint. Снятие этого guard без proof владения не допускается.
+
+`AICF_AcquisitionHoldWaypointCreation` выдаётся только после вызова construction
+factory и связывает exact factory, staging receipt, waypoint reference/EntityID,
+world/FindEntityByID, prefab model, наличие и identity RplComponent. Для local
+entity требуется этот captured creation token; другой местный waypoint или
+другой receipt той же карты не получают разрешения. При имеющемся RplComponent
+сохраняется прежний master/nonproxy guard; появление/исчезновение компонента
+после capture отклоняется. Общий `AICF_VehicleBoardingMutationFence` не меняется.
+Capture/current task и identity-safe rollback используют один и тот же token.
+Все прежние физические staging/roster/threat/assignment/deadline guards receipt
+сохраняются. Наличие waypoint в queue само по себе не является meaningful task.
+
+Перед удалением повторяются exact token, receipt и отсутствие waypoint в queue;
+очерёдность остаётся detach → clear exact plan owner → delete. Используется
+прежний `RplComponent.DeleteRplEntity`: pinned `SCR_EntityHelper.DeleteEntityAndChildren`
+определяет его как общий wrapper удаления entity. Для native local waypoint
+фактическое отсутствие entity после удаления проверяется отдельно; один source
+или adapter PASS этого не доказывает.
+
+Actual native rejection guards имеют отдельные `VEHICLE_ACQUISITION_HOLD_REJECTED`
+stage/reason для receipt, subtype, preset, authority, XZ, factory и plan bind.
+Это наблюдение принятого branch, без повторного принятия quota/economy решения.
+Baseline `Test-VehicleStagingHoldContracts` —250 cases/28 unsafe PASS; после
+creation capability —271 cases/31 unsafe PASS. Новые случаи покрывают owned local
+task/cleanup, unowned local/foreign entity, same-ID replacement, другой receipt,
+world/model/Rpl changes и прежний nonmaster/proxy veto. Native verdict хранится
+в `.codex-runtime/healthy-native-abandon-20261101/REPORT.md`; первые v3/v4/v5 FAIL
+не заменяются новым offline PASS.
+
 ## Причина
 
 В обычном USSR1800 на frozen topology V27 отряд оплатил4 пополнения и собрал
@@ -85,7 +121,7 @@ queued/current waypoint и current/executed `SCR_AIDefendActivity:RUNNING`,
 Controller вызывает Handoff для снятия конкретного expected token. Сначала
 waypoint снимается с исходной группы и проверяется отсутствие в очереди,
 затем очищается exact plan pointer, затем повторяются ownership/authority
-guards и удаляется replicated entity. Утраченная health/staging/calm или уже
+guards и удаляется собственная entity (для local Defend — по creation token выше). Утраченная health/staging/calm или уже
 активный физический lease не блокируют удаление собственной закончившейся задачи.
 Cleanup fence сохраняет original trip/group/trip generation, request pointer/
 generation, plan/reservation pointers/token, original group identity и точный

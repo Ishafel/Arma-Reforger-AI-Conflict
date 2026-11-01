@@ -27,6 +27,72 @@ class AICF_VehicleNativeSubgroup
 		return false;
 	}
 
+	// Только два существующих собственных vehicle handlers. Ни default/foreign
+	// handler, ни умерший/пеший участник не дают права воспроизводить native join.
+	static bool ExactSettledHandler(AICF_TransportTrip trip, SCR_AIGroup group, Vehicle vehicle,
+		AIGroupMovementComponent movement, int handler, array<AIAgent> groupAgents)
+	{
+		if (handler <= AIGroupMovementComponent.DEFAULT_HANDLER_ID || !movement.GetFormationDefinition(handler)) return false;
+		array<AIAgent> members = {};
+		int count = movement.GetAgentsInHandler(members, handler);
+		if (count <= 0 || count != members.Count() || count != movement.GetMoveHandlerAgentCount(handler)) return false;
+		array<AIAgent> seen = {};
+		foreach (AIAgent agent : members)
+		{
+			if (!agent || seen.Contains(agent) || !groupAgents.Contains(agent) || agent.GetParentGroup() != group ||
+				movement.GetAgentMoveHandlerId(agent) != handler) return false;
+			IEntity actor = agent.GetControlledEntity();
+			if (!CapturedMember(trip, actor) || !AICF_VehicleShortRecovery.IsCurrentMember(trip, actor) ||
+				!SCR_AIDamageHandling.IsConscious(actor) || !Settled(actor, vehicle)) return false;
+			seen.Insert(agent);
+		}
+		AIAgent leader = movement.GetHandlerLeaderAgent(handler);
+		return !leader || members.Contains(leader);
+	}
+
+	static bool CanReconcilePositiveHandles(AICF_TransportTrip trip, SCR_AIGroupUtilityComponent utility,
+		SCR_AIGroup group, Vehicle vehicle, SCR_AIGroupVehicle registered, AIAgent pilot,
+		AIGroupMovementComponent movement, out string reason)
+	{
+		reason = "POSITIVE_HANDLER_SCOPE";
+		int recordHandle = registered.GetSubgroupHandleId();
+		int pilotHandle = movement.GetAgentMoveHandlerId(pilot);
+		if (recordHandle <= AIGroupMovementComponent.DEFAULT_HANDLER_ID || pilotHandle <= AIGroupMovementComponent.DEFAULT_HANDLER_ID || recordHandle == pilotHandle) return false;
+		array<AIAgent> agents = {};
+		group.GetAgents(agents);
+		AICF_GroupSlot slot = trip.GetVehiclePresetSlot();
+		reason = "POSITIVE_HANDLER_FULL_ROSTER";
+		if (!slot || agents.Count() != slot.GetDesiredSize() || agents.Count() != group.GetAgentsCount()) return false;
+		foreach (AIAgent agent : agents)
+		{
+			if (!agent || !CapturedMember(trip, agent.GetControlledEntity()) ||
+				!AICF_VehicleShortRecovery.IsCurrentMember(trip, agent.GetControlledEntity()) ||
+				!SCR_AIDamageHandling.IsConscious(agent.GetControlledEntity()) || !Settled(agent.GetControlledEntity(), vehicle)) return false;
+		}
+		reason = "POSITIVE_HANDLER_FOREIGN_OR_UNSETTLED";
+		if (!ExactSettledHandler(trip, group, vehicle, movement, recordHandle, agents) ||
+			!ExactSettledHandler(trip, group, vehicle, movement, pilotHandle, agents)) return false;
+		reason = "POSITIVE_HANDLER_OTHER_VEHICLE_CLAIM";
+		array<ref SCR_AIGroupVehicle> records = {};
+		utility.m_VehicleMgr.GetAllVehicles(records);
+		int ownRecords;
+		foreach (SCR_AIGroupVehicle record : records)
+		{
+			if (!record) return false;
+			if (record == registered)
+			{
+				if (record.GetEntity() != vehicle) return false;
+				ownRecords++;
+				continue;
+			}
+			if (record.GetEntity() == vehicle || record.GetSubgroupHandleId() == recordHandle || record.GetSubgroupHandleId() == pilotHandle) return false;
+		}
+		if (ownRecords != 1 || utility.m_VehicleMgr.FindVehicleBySubgroupId(recordHandle) != registered ||
+			utility.m_VehicleMgr.FindVehicleBySubgroupId(pilotHandle)) return false;
+		reason = "EXACT_OWN_POSITIVE_HANDLERS";
+		return true;
+	}
+
 	static bool Settled(IEntity actor, Vehicle vehicle)
 	{
 		ChimeraCharacter character = ChimeraCharacter.Cast(actor);
@@ -143,18 +209,27 @@ modded class SCR_AIGroupUtilityComponent
 		if (!pilot) return true;
 		int before = registered.GetSubgroupHandleId();
 		int pilotBefore = movement.GetAgentMoveHandlerId(pilot);
-		if (!AICF_VehicleNativeSubgroup.CanReconcileHandle(before, pilotBefore))
-		{
-			AICF_Stage3Diagnostics.Info("VEHICLE_NATIVE_SUBGROUP_REJECTED", string.Format("reason=STALE_POSITIVE_HANDLER record=%1 pilot_handler=%2 physical_mutation=0", before, pilotBefore));
-			return false;
-		}
-		bool repair = before < 0;
-		if (repair && !OnJoinGroupFromVehicle(pilot, true)) return false;
 		SCR_AIGroup repeatedGroup;
 		Vehicle repeatedVehicle;
 		SCR_AIGroupVehicle repeatedRecord;
 		AIAgent repeatedPilot;
 		AIGroupMovementComponent repeatedMovement;
+		bool positiveRepair = !AICF_VehicleNativeSubgroup.CanReconcileHandle(before, pilotBefore);
+		if (positiveRepair && !AICF_VehicleNativeSubgroup.CanReconcilePositiveHandles(trip, this, group, vehicle, registered, pilot, movement, reason))
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_NATIVE_SUBGROUP_REJECTED", string.Format("reason=STALE_POSITIVE_HANDLER record=%1 pilot_handler=%2 scope=%3 physical_mutation=0", before, pilotBefore, reason));
+			return false;
+		}
+		bool repair = before < 0 || positiveRepair;
+		if (positiveRepair && (!AICF_VehicleNativeSubgroup.Read(trip, this, repeatedGroup, repeatedVehicle, repeatedRecord, repeatedPilot, repeatedMovement, reason) ||
+			repeatedGroup != group || repeatedVehicle != vehicle || repeatedRecord != registered || repeatedPilot != pilot || repeatedMovement != movement ||
+			registered.GetSubgroupHandleId() != before || movement.GetAgentMoveHandlerId(pilot) != pilotBefore ||
+			!AICF_VehicleNativeSubgroup.CanReconcilePositiveHandles(trip, this, group, vehicle, registered, pilot, movement, reason))) return false;
+		if (positiveRepair)
+			AICF_Stage3Diagnostics.Info("VEHICLE_NATIVE_SUBGROUP_POSITIVE_RECONCILE", string.Format("operation_id=%1 group=%2 vehicle=%3 record=%4 pilot_handler=%5 record_members=%6 pilot_members=%7 scope=%8 physical_mutation=0 native_join_calls=1",
+				trip.GetOperationId(), AICF_GroupTrace.Entity(group), AICF_GroupTrace.Entity(vehicle), before, pilotBefore,
+				movement.GetMoveHandlerAgentCount(before), movement.GetMoveHandlerAgentCount(pilotBefore), reason));
+		if (repair && !OnJoinGroupFromVehicle(pilot, true)) return false;
 		if (!AICF_VehicleNativeSubgroup.Read(trip, this, repeatedGroup, repeatedVehicle, repeatedRecord, repeatedPilot, repeatedMovement, reason) ||
 			repeatedGroup != group || repeatedVehicle != vehicle || repeatedRecord != registered || repeatedPilot != pilot || repeatedMovement != movement) return false;
 		int handle = registered.GetSubgroupHandleId();

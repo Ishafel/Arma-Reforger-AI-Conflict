@@ -3,6 +3,44 @@
 // policy, CLI, UI and diagnostic contracts.
 class AICF_ContentProfile
 {
+	protected BaseWorld m_SupplyPrefabWorld;
+	protected SCR_CampaignBuildingManagerComponent m_SupplyPrefabManager;
+	protected ref array<SCR_CampaignFaction> m_aSupplyPrefabFactions = {};
+	protected ref array<ResourceName> m_aSupplyPrefabs = {};
+	// Optional tracked support belongs to the active integration, never the map.
+	bool AllowsTrackedVehiclePreset(ResourceName prefab, FactionKey stableKey)
+	{
+		return false;
+	}
+
+	bool HasCoopTankSlots()
+	{
+		return false;
+	}
+
+	bool IsVehiclePresetCrewSeat(ResourceName prefab, FactionKey stableKey, BaseCompartmentSlot seat)
+	{
+		return seat && (seat.GetType() == ECompartmentType.PILOT ||
+			seat.GetType() == ECompartmentType.TURRET || seat.GetAttachedTurret());
+	}
+
+	void BuildCoopVehicleSuffixPreference(FactionKey stableKey, AICF_ECoopVehicleRole role, array<string> suffixes)
+	{
+		if (role == AICF_ECoopVehicleRole.TRANSPORT)
+		{
+			BuildVehicleSuffixPreference(stableKey, AICF_EVehicleKind.TRANSPORT, suffixes);
+			return;
+		}
+		if (role == AICF_ECoopVehicleRole.ARMED_LIGHT)
+		{
+			BuildVehicleSuffixPreference(stableKey, AICF_EVehicleKind.ARMED_LIGHT, suffixes);
+			return;
+		}
+		if (role != AICF_ECoopVehicleRole.APC) return;
+		if (stableKey == "US") suffixes.Insert("/LAV25/");
+		if (stableKey == "USSR") suffixes.Insert("/BTR70/BTR70.et");
+	}
+
 	int GetVehiclePresetCostOverride(ResourceName prefab)
 	{
 		return -1;
@@ -154,6 +192,17 @@ class AICF_ContentProfile
 
 	ResourceName GetConstructionPrefab(FactionKey stableKey, AICF_EConstructionType type)
 	{
+		if (type == AICF_EConstructionType.SUPPLY_DEPOT)
+		{
+			if ((stableKey != "US" && stableKey != "USSR") || !GetGame() || !GetGame().GetFactionManager()) return ResourceName.Empty;
+			SCR_CampaignFaction faction = SCR_CampaignFaction.Cast(GetGame().GetFactionManager().GetFactionByKey(GetRuntimeFactionKey(stableKey)));
+			if (!faction) return ResourceName.Empty;
+			SCR_GameModeCampaign campaign = SCR_GameModeCampaign.Cast(GetGame().GetGameMode());
+			if (!campaign) return ResourceName.Empty;
+			SCR_CampaignBuildingManagerComponent manager = SCR_CampaignBuildingManagerComponent.Cast(campaign.FindComponent(SCR_CampaignBuildingManagerComponent));
+			if (!manager) return ResourceName.Empty;
+			return ResolveSupplyDepotPrefab(faction, manager, GetGame().GetWorld());
+		}
 		if (stableKey == "US")
 		{
 			switch (type)
@@ -177,6 +226,75 @@ class AICF_ContentProfile
 			}
 		}
 		return ResourceName.Empty;
+	}
+
+	protected bool IsSupplyDepotMetadata(ResourceName prefab, SCR_CampaignFaction faction)
+	{
+		if (prefab.IsEmpty() || !faction) return false;
+		SCR_EditableEntityUIInfo info = SCR_EditableEntityUIInfo.ExtractEditableUIInfoFromPrefab(prefab);
+		return info && info.GetFactionKey() == faction.GetFactionKey() && info.HasEntityLabel(faction.GetFactionLabel()) &&
+			info.HasEntityLabel(EEditableEntityLabel.TRAIT_SERVICE) && info.HasEntityLabel(EEditableEntityLabel.SERVICE_SUPPLY_STORAGE);
+	}
+
+	bool AllowsConstructionMetadataAlias(ResourceName prefab, AICF_EConstructionType type, SCR_CampaignFaction faction, SCR_EditableEntityUIInfo info)
+	{
+		return false;
+	}
+
+	protected ResourceName ResolveSupplyDepotPrefab(SCR_CampaignFaction faction, SCR_CampaignBuildingManagerComponent manager, BaseWorld world)
+	{
+		if (!faction || !manager || !world) return ResourceName.Empty;
+		if (m_SupplyPrefabWorld != world || m_SupplyPrefabManager != manager)
+		{
+			m_aSupplyPrefabFactions.Clear();
+			m_aSupplyPrefabs.Clear();
+			m_SupplyPrefabWorld = world;
+			m_SupplyPrefabManager = manager;
+		}
+		int cached = m_aSupplyPrefabFactions.Find(faction);
+		if (cached >= 0)
+		{
+			ResourceName existing = m_aSupplyPrefabs[cached];
+			if (manager.GetCompositionId(existing) >= 0 && IsSupplyDepotMetadata(existing, faction)) return existing;
+			m_aSupplyPrefabFactions.Remove(cached);
+			m_aSupplyPrefabs.Remove(cached);
+		}
+		int started = System.GetTickCount();
+		ResourceName selected = faction.GetBuildingPrefab(EEditableEntityLabel.SERVICE_SUPPLY_STORAGE);
+		int examined;
+		if (selected.IsEmpty() || manager.GetCompositionId(selected) < 0 || !IsSupplyDepotMetadata(selected, faction))
+		{
+			selected = ResourceName.Empty;
+			// Native registry returns a copy. No sort/mutation of manager identity table.
+			array<ResourceName> candidates = manager.GetPlaceablePrefabs();
+			if (!candidates) return ResourceName.Empty;
+			candidates.Sort();
+			// Prefer descriptive storage names before loading unrelated compositions.
+			// Labels/faction remain authoritative; unfamiliar names retain full fallback.
+			for (int pass; pass < 2 && selected.IsEmpty(); pass++)
+			{
+				foreach (ResourceName candidate : candidates)
+				{
+					string name = candidate;
+					name.ToLower();
+					bool hint = name.Contains("supply") || name.Contains("cache") || name.Contains("storage");
+					if ((pass == 0 && !hint) || (pass == 1 && hint)) continue;
+					examined++;
+					if (!IsSupplyDepotMetadata(candidate, faction)) continue;
+					selected = candidate;
+					break;
+				}
+			}
+		}
+		// Empty before faction/catalog readiness is never memoized.
+		if (!selected.IsEmpty())
+		{
+			m_aSupplyPrefabFactions.Insert(faction);
+			m_aSupplyPrefabs.Insert(selected);
+			AICF_Stage1Diagnostics.Info("CONSTRUCTION_SUPPLY_PREFAB", string.Format("faction=%1 prefab=%2 examined=%3 duration_ms=%4",
+				faction.GetFactionKey(), selected, examined, System.GetTickCount() - started));
+		}
+		return selected;
 	}
 
 	FactionKey GetRuntimeFactionKey(FactionKey stableKey)

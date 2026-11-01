@@ -43,6 +43,7 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 	protected ref map<string, int> m_mCatalogNameCounts = new map<string, int>();
 	protected ref array<int> m_aLibraryIds = {};
 	protected ref array<int> m_aActiveMembers = {};
+	protected ref array<int> m_aSelectableMembers = {};
 	protected ref array<int> m_aMandatorySeats = {};
 	protected ref array<string> m_aSeatNames = {};
 	protected ref AICF_VehiclePreset m_Draft;
@@ -278,6 +279,7 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		m_iGeneration = generation;
 		json.ReadValue("size", m_iSize);
 		json.ReadValue("activeMembers", m_aActiveMembers);
+		json.ReadValue("selectableMembers", m_aSelectableMembers);
 		json.ReadValue("mandatorySeats", m_aMandatorySeats);
 		json.ReadValue("status", status);
 		json.ReadValue("confirmation", m_iConfirmation);
@@ -441,9 +443,14 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		if (prefab.IsEmpty())
 		{
 			m_wPreview.SetVisible(false);
+			m_wPreview.SetWorld(null, 0);
 			m_Preview.Clear();
 			return;
 		}
+		// RenderTarget держит native world независимо от script-ссылки.
+		// Снимаем binding до удаления старой модели/world при смене prefab.
+		m_wPreview.SetVisible(false);
+		m_wPreview.SetWorld(null, 0);
 		bool ready = m_Preview.BuildVehicle(prefab);
 		if (ready)
 		{
@@ -497,6 +504,7 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 			case "UNSUPPORTED_VEHICLE": message = "{AICF:AICF_UI_VehicleUnsupportedType}"; break;
 			case "VEHICLE_COST_UNAVAILABLE": message = "{AICF:AICF_UI_VehicleCostUnavailable}"; break;
 			case "WAITING_FOR_ORDER_OR_ADMISSION":
+			case "WAITING_FOR_REINFORCEMENTS":
 			case "WAITING_FOR_VEHICLE_LIFECYCLE":
 			case "WAITING_FOR_SITE":
 			case "SITE_PLANNED":
@@ -562,13 +570,13 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 			for (int member; member < AICF_Stage1Config.MAX_GROUP_SIZE; member++)
 			{
 				string caption = AICF_Localization.Format("{AICF:AICF_UI_VehicleMember}", (member + 1).ToString());
-				if (!m_aActiveMembers.Contains(member)) caption = AICF_Localization.Format("{AICF:AICF_UI_VehicleInactiveMember}", (member + 1).ToString());
+				if (!m_aSelectableMembers.Contains(member)) caption = AICF_Localization.Format("{AICF:AICF_UI_VehicleInactiveMember}", (member + 1).ToString());
 				m_aSeats[row].AddItem(AICF_Localization.Resolve(caption));
 			}
 			m_aSeats[row].SetCurrentItem(m_Draft.m_aMembers[index] + 1, false, false, false);
 		}
 		string unseated;
-		foreach (int position : m_aActiveMembers)
+		foreach (int position : m_aSelectableMembers)
 			if (!m_Draft || !m_Draft.m_aMembers.Contains(position)) unseated += (position + 1).ToString() + " ";
 		m_wUnseated.SetText(AICF_Localization.Resolve(AICF_Localization.Format("{AICF:AICF_UI_VehicleUnseated}", unseated)));
 		m_bRendering = previousRendering;
@@ -702,7 +710,7 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		if (!m_sQueuedSelection.IsEmpty()) return true;
 		if (action == "autoSeats")
 		{
-			bool assigned = AICF_VehicleSeatAssignment.AutoAssign(m_Draft, m_aActiveMembers, m_aMandatorySeats);
+			bool assigned = AICF_VehicleSeatAssignment.AutoAssign(m_Draft, m_aSelectableMembers, m_aMandatorySeats);
 			RenderSeats();
 			string message = "{AICF:AICF_UI_VehicleAutoSeatsFailed}";
 			if (assigned) message = "{AICF:AICF_UI_VehicleAutoSeatsReady}";
@@ -738,7 +746,11 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 
 	void Close()
 	{
-		if (m_wPreview) m_wPreview.SetVisible(false);
+		if (m_wPreview)
+		{
+			m_wPreview.SetVisible(false);
+			m_wPreview.SetWorld(null, 0);
+		}
 		if (m_Preview) m_Preview.Clear();
 		m_Preview = null;
 		m_wPreview = null;
@@ -794,6 +806,7 @@ class AICF_VehiclePresetEditor : ScriptedWidgetEventHandler
 		m_sCatalogData = "";
 		m_sLibraryData = "";
 		m_aActiveMembers.Clear();
+		m_aSelectableMembers.Clear();
 		m_aMandatorySeats.Clear();
 		m_aPrefabs.Clear();
 		m_aCatalogNames.Clear();

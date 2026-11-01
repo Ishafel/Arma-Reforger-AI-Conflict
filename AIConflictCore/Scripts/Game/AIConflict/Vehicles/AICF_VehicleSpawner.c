@@ -345,7 +345,11 @@ class AICF_VehicleSpawnPlan
 	AICF_VehicleAcquisitionHold GetAcquisitionHold() { return m_AcquisitionHold; }
 	bool BindAcquisitionHold(AICF_VehicleAcquisitionHold hold)
 	{
-		if (!hold || m_AcquisitionHold || !hold.GetReceipt() || hold.GetReceipt().GetPlan() != this) return false;
+		if (!hold || m_AcquisitionHold || !hold.GetReceipt() || hold.GetReceipt().GetPlan() != this)
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", "stage=PLAN_BIND reason=OWNER_OR_RECEIPT");
+			return false;
+		}
 		m_AcquisitionHold = hold;
 		return true;
 	}

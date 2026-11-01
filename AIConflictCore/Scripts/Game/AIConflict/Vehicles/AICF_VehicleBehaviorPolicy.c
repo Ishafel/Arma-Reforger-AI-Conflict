@@ -222,7 +222,7 @@ class AICF_VehicleBehaviorPolicy
 		if (!access || !access.IsInCompartment() || access.IsGettingOut() || CompartmentAccessComponent.GetVehicleIn(utility.m_OwnerEntity) != vehicle) return false;
 		BaseCompartmentSlot seat = access.GetCompartment();
 		return seat && seat.GetVehicle() == vehicle && seat.GetOccupant() == utility.m_OwnerEntity &&
-			(seat.GetType() == ECompartmentType.PILOT || seat.GetType() == ECompartmentType.TURRET || seat.GetAttachedTurret());
+			AICF_VehicleBehaviorFlow.IsCrewSeat(seat, binding.m_Trip.GetVehiclePreset());
 	}
 
 	static bool KeepCombatTurret(SCR_AIUtilityComponent utility, IEntity vehicle)
@@ -296,6 +296,17 @@ class AICF_VehicleBehaviorPolicy
 			BaseCompartmentSlot currentSeat = access.GetCompartment();
 			if (currentSeat && ((message.m_CompartmentSlot && message.m_CompartmentSlot == currentSeat) ||
 				(!message.m_CompartmentSlot && SCR_AICompartmentHandling.CompartmentClassToType(currentSeat.Type()) == role))) return false;
+		}
+		// WCS loader uses native Cargo. A crew repair must still wait for quiet,
+		// including a native role-only request without an exact compartment.
+		if (message.m_CompartmentSlot && message.m_CompartmentSlot.GetVehicle() == binding.m_Vehicle &&
+			AICF_VehicleBehaviorFlow.IsCrewSeat(message.m_CompartmentSlot, binding.m_Trip.GetVehiclePreset())) return true;
+		if (!message.m_CompartmentSlot && role == EAICompartmentType.Cargo)
+		{
+			array<BaseCompartmentSlot> seats = {};
+			AICF_VehiclePreset.Collect(binding.m_Vehicle, seats);
+			foreach (BaseCompartmentSlot seat : seats)
+				if (seat.GetType() == ECompartmentType.CARGO && AICF_VehicleBehaviorFlow.IsCrewSeat(seat, binding.m_Trip.GetVehiclePreset())) return true;
 		}
 		return role == EAICompartmentType.Pilot || role == EAICompartmentType.Turret || role == EAICompartmentType.None;
 	}

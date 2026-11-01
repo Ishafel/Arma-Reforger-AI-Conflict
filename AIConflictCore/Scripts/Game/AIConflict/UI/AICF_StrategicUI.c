@@ -372,7 +372,7 @@ class AICF_StrategicUIController
 		string supply = "{AICF:AICF_UI_SYNC_476c685a}";
 		if (m_Campaign.AICF_GetStage4Enabled())
 			supply = string.Format("%1/%2", connectedSupplies, totalSupplies);
-		if (m_Campaign.AICF_IsPlayerOnlyFaction(m_bLocalUSSR))
+		if (m_Campaign.AICF_IsCoopPlayerFaction(m_bLocalUSSR))
 		{
 			m_wHUDText.SetText(AICF_Localization.Resolve(AICF_Localization.Format(
 				"{AICF:AICF_UI_CoopHUD}", supply)));

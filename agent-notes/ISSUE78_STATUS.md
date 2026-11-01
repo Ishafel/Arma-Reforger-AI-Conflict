@@ -1,4 +1,19 @@
-# Состояние #78 — 31.10.2026
+# Состояние #78
+
+## Продолжение 01.11.2026
+
+Текущий локальный срез — [COOP_FLEET_RECOVERY.md](COOP_FLEET_RECOVERY.md):
+назначение до пополнения с реальным наймом/покупкой, смешанные Co-op defaults
+обеим сторонам, WCS tanks/loader, исправление отказа local acquisition hold
+и native восстановление той же исправной машины. Новый proof: exact native
+handler repair и592.313м/142polls той же T72,3/3crew, native0; обычная платная
+постройка склада175→ONLINE/cap4000 подтверждена отдельным snapshot.
+Полный offline union284/284 PASS; production Workbench
+Stock/RHS/WCS3/3 PASS на текущих393 файлах; resource gate остаётся FAIL.
+Native reconnect сохранил
+назначение и завершился без project persistence leaks; native-only8 blocker
+не объявляется исправленным. Исходные human window/OOM остаются неподтверждёнными.
+Issue OPEN, PR79 draft; прежние результаты ниже — история отдельных срезов.
 
 ## Локальная переработка UI после проверки игроком
 

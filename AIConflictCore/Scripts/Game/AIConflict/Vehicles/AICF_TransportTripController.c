@@ -368,6 +368,12 @@ class AICF_TransportTripController
 		if (!ReconcileAcquisitionHold(trip, currentAssignment, slot, outcome, holdSuperseded))
 		{
 			if (holdSuperseded) return outcome;
+			string holdReason = "NO_OUTCOME";
+			if (outcome) holdReason = outcome.GetReason();
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED",
+				string.Format("faction=%1 numeric_slot=%2 group_generation=%3 trip_generation=%4 stage=RECONCILE outcome_reason=%5 receipt=%6",
+					trip.GetFactionKey(), trip.GetSlotId(), trip.GetGroupGeneration(), trip.GetTripGeneration(), holdReason,
+					outcome && outcome.GetAcquisitionStagingReceipt() != null));
 			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK,
 				"ACQUISITION_STAGING_HOLD_UNSAFE", ResolveCausationId(trip, outcome, "ACQUISITION_HOLD"), true);
 		}

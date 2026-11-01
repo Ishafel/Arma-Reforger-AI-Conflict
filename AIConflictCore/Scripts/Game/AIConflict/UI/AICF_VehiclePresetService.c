@@ -19,6 +19,7 @@ class AICF_VehiclePresetViewer
 	string m_sSeatNames;
 	ref array<int> m_aMandatorySeats = {};
 	ref AICF_VehicleCrewPlan m_Plan;
+	ref AICF_DeferredVehiclePreset m_DeferredPlan;
 	int m_iConfirmation;
 }
 
@@ -28,6 +29,7 @@ class AICF_VehiclePresetService
 	protected int m_iNextConfirmation;
 	protected ref AICF_VehiclePresetStore m_Store = new AICF_VehiclePresetStore();
 	protected ref array<ref AICF_VehiclePresetViewer> m_aViewers = {};
+	protected ref array<ref AICF_DeferredVehiclePreset> m_aDeferred = {};
 
 	void AICF_VehiclePresetService(AICF_MatchController match) { m_Match = match; }
 
@@ -45,8 +47,10 @@ class AICF_VehiclePresetService
 		AICF_VehiclePresetViewer viewer = Viewer(player, slotId);
 		AICF_VehiclePresetCatalog catalog = new AICF_VehiclePresetCatalog(faction);
 		AICF_VehicleCrewPlan confirmation = viewer.m_Plan;
+		AICF_DeferredVehiclePreset deferredConfirmation = viewer.m_DeferredPlan;
 		int confirmationId = viewer.m_iConfirmation;
 		viewer.m_Plan = null;
+		viewer.m_DeferredPlan = null;
 		viewer.m_iConfirmation = 0;
 		bool accepted;
 		bool libraryOperation = operation == AICF_EVehiclePresetOperation.SAVE || operation == AICF_EVehiclePresetOperation.LOAD || operation == AICF_EVehiclePresetOperation.DELETE;
@@ -104,6 +108,9 @@ class AICF_VehiclePresetService
 				candidateData = "";
 				if (confirmation && confirmationId > 0 && payload == confirmationId.ToString() && confirmation.Current(slot, confirmation.m_sPreset))
 					candidateData = confirmation.m_sPreset;
+				else if (deferredConfirmation && confirmationId > 0 && payload == confirmationId.ToString() &&
+					deferredConfirmation.ConfirmationCurrent(slot, deferredConfirmation.m_sPreset))
+					candidateData = deferredConfirmation.m_sPreset;
 			}
 			AICF_VehiclePreset candidate = AICF_VehiclePreset.Decode(candidateData);
 			reason = "INVALID_PRESET";
@@ -111,6 +118,38 @@ class AICF_VehiclePresetService
 			{
 				if (!candidate.MatchesSeats(catalog.Seats())) reason = "SEAT_TOPOLOGY_CHANGED";
 				else if (operation == AICF_EVehiclePresetOperation.SAVE) accepted = m_Store.Save(candidate, reason);
+				else if ((operation == AICF_EVehiclePresetOperation.APPLY || operation == AICF_EVehiclePresetOperation.CONFIRM_CREW) &&
+					AICF_DeferredVehiclePreset.NeedsRoster(slot))
+				{
+					if (candidate.ValidatePlannedRoster(slot, catalog.Seats(), reason))
+					{
+						AICF_DeferredVehiclePreset planned = new AICF_DeferredVehiclePreset(slot, faction, candidate);
+						if (planned.m_iAssigned < slot.GetDesiredSize() && !(operation == AICF_EVehiclePresetOperation.CONFIRM_CREW && deferredConfirmation))
+						{
+							viewer.m_DeferredPlan = planned;
+							viewer.m_iConfirmation = ++m_iNextConfirmation;
+							viewer.m_Draft = candidate;
+							reason = "CONFIRM_CREW_REDUCTION";
+						}
+						else
+						{
+							accepted = slot.SetVehiclePreset(candidate, revision);
+							if (accepted)
+							{
+								if (planned.m_iAssigned < slot.GetDesiredSize())
+								{
+									for (int old = m_aDeferred.Count() - 1; old >= 0; old--)
+										if (m_aDeferred[old].m_Slot == slot) m_aDeferred.Remove(old);
+									planned.m_iVehicleRevision = slot.GetVehiclePresetRevision();
+									planned.m_sPreset = slot.GetVehiclePresetData();
+									slot.MarkDeferredVehicleCrew();
+									m_aDeferred.Insert(planned);
+								}
+								reason = "WAITING_FOR_REINFORCEMENTS";
+							}
+						}
+					}
+				}
 				else if ((operation == AICF_EVehiclePresetOperation.APPLY || operation == AICF_EVehiclePresetOperation.CONFIRM_CREW) &&
 					candidate.ValidateRoster(slot, catalog.Seats(), reason, true) && m_Match.PreflightVehiclePreset(slot, faction, candidate, reason))
 				{
@@ -151,7 +190,7 @@ class AICF_VehiclePresetService
 			for (int seatIndex; seatIndex < seats.Count(); seatIndex++)
 			{
 				BaseCompartmentSlot seat = seats[seatIndex];
-				if (seat.GetType() == ECompartmentType.PILOT || seat.GetType() == ECompartmentType.TURRET || seat.GetAttachedTurret())
+				if (AICF_ContentProfile.GetActive().IsVehiclePresetCrewSeat(viewer.m_Draft.m_sPrefab, viewer.m_Draft.m_sFaction, seat))
 					viewer.m_aMandatorySeats.Insert(seatIndex);
 			}
 		}
@@ -175,7 +214,7 @@ class AICF_VehiclePresetService
 		foreach (AICF_VehiclePresetViewer viewer : m_aViewers)
 			if (viewer.m_Player == player)
 			{
-				if (viewer.m_iSlot != slotId) { viewer.m_Draft = null; viewer.m_sSeatNames = ""; viewer.m_aMandatorySeats.Clear(); viewer.m_Plan = null; viewer.m_iConfirmation = 0; viewer.m_iSlot = slotId; }
+				if (viewer.m_iSlot != slotId) { viewer.m_Draft = null; viewer.m_sSeatNames = ""; viewer.m_aMandatorySeats.Clear(); viewer.m_Plan = null; viewer.m_DeferredPlan = null; viewer.m_iConfirmation = 0; viewer.m_iSlot = slotId; }
 				return viewer;
 			}
 		AICF_VehiclePresetViewer created = new AICF_VehiclePresetViewer();
@@ -197,11 +236,19 @@ class AICF_VehiclePresetService
 		for (int member; member < AICF_Stage1Config.MAX_GROUP_SIZE; member++)
 			if (AICF_GroupRuntime.IsAliveCharacter(slot.GetRosterMember(member))) activeMembers.Insert(member);
 		json.WriteValue("activeMembers", activeMembers);
+		array<int> selectableMembers = {};
+		if (AICF_DeferredVehiclePreset.NeedsRoster(slot))
+			for (int plannedMember; plannedMember < slot.GetDesiredSize(); plannedMember++) selectableMembers.Insert(plannedMember);
+		else selectableMembers.Copy(activeMembers);
+		json.WriteValue("selectableMembers", selectableMembers);
 		json.WriteValue("status", m_Match.VehiclePresetStatus(slot));
 		if (viewer.m_Plan && !viewer.m_Plan.Current(slot, viewer.m_Plan.m_sPreset)) { viewer.m_Plan = null; viewer.m_iConfirmation = 0; }
+		if (viewer.m_DeferredPlan && !viewer.m_DeferredPlan.ConfirmationCurrent(slot, viewer.m_DeferredPlan.m_sPreset))
+			{ viewer.m_DeferredPlan = null; viewer.m_iConfirmation = 0; }
 		json.WriteValue("confirmation", viewer.m_iConfirmation);
 		int kept, returning;
 		if (viewer.m_Plan) { kept = viewer.m_Plan.m_aKept.Count(); returning = viewer.m_Plan.m_aReturning.Count(); }
+		if (viewer.m_DeferredPlan) { kept = viewer.m_DeferredPlan.m_iAssigned; returning = viewer.m_DeferredPlan.m_iSize - kept; }
 		json.WriteValue("kept", kept);
 		json.WriteValue("returning", returning);
 		string draft;
@@ -217,6 +264,7 @@ class AICF_VehiclePresetService
 
 	void Update()
 	{
+		UpdateDeferred();
 		for (int i = m_aViewers.Count() - 1; i >= 0; i--)
 		{
 			AICF_VehiclePresetViewer viewer = m_aViewers[i];
@@ -234,11 +282,44 @@ class AICF_VehiclePresetService
 		}
 	}
 
+	protected void UpdateDeferred()
+	{
+		for (int index = m_aDeferred.Count() - 1; index >= 0; index--)
+		{
+			AICF_DeferredVehiclePreset pending = m_aDeferred[index];
+			if (!pending.BindingCurrent())
+			{
+				if (pending.m_Slot) pending.m_Slot.ClearDeferredVehicleCrew(pending.m_iVehicleRevision);
+				m_aDeferred.Remove(index);
+				continue;
+			}
+			AICF_GroupSlot slot = pending.m_Slot;
+			if (AICF_DeferredVehiclePreset.NeedsRoster(slot) || !m_Match.CanResizeVehicleCrew(slot)) continue;
+			AICF_VehiclePreset candidate = AICF_VehiclePreset.Decode(pending.m_sPreset);
+			if (!candidate) continue;
+			AICF_VehicleCrewPlan plan = new AICF_VehicleCrewPlan(slot, candidate);
+			string reason;
+			if (!m_Match.VehicleCrewReturn().CanReturn(plan, pending.m_Faction, reason)) continue;
+			AICF_VehiclePresetCatalog catalog = new AICF_VehiclePresetCatalog(pending.m_Faction);
+			bool valid = candidate && catalog.Inspect(candidate.m_sPrefab, reason) && candidate.ValidateRoster(slot, catalog.Seats(), reason, true);
+			catalog.Clear();
+			if (!valid) continue;
+			if (m_Match.VehicleCrewReturn().Commit(plan, pending.m_Faction, candidate, reason))
+			{
+				slot.ClearDeferredVehicleCrew(pending.m_iVehicleRevision);
+				m_aDeferred.Remove(index);
+			}
+		}
+	}
+
 	void Stop()
 	{
 		foreach (AICF_VehiclePresetViewer viewer : m_aViewers)
 			if (viewer.m_Player) viewer.m_Player.AICF_PublishVehiclePresetView("");
 		m_aViewers.Clear();
+		foreach (AICF_DeferredVehiclePreset pending : m_aDeferred)
+			if (pending.m_Slot) pending.m_Slot.ClearDeferredVehicleCrew(pending.m_iVehicleRevision);
+		m_aDeferred.Clear();
 		m_Match = null;
 	}
 }

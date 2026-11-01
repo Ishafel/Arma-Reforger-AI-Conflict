@@ -11,8 +11,9 @@ class AICF_VehicleBehaviorFlow
 		if (!m_Config) m_Config = new AICF_Stage3Config();
 	}
 
-	static bool IsCrewSeat(BaseCompartmentSlot seat)
+	static bool IsCrewSeat(BaseCompartmentSlot seat, AICF_VehiclePreset preset = null)
 	{
+		if (preset) return AICF_ContentProfile.GetActive().IsVehiclePresetCrewSeat(preset.m_sPrefab, preset.m_sFaction, seat);
 		return seat && (seat.GetType() == ECompartmentType.PILOT ||
 			seat.GetType() == ECompartmentType.TURRET || seat.GetAttachedTurret());
 	}
@@ -49,7 +50,7 @@ class AICF_VehicleBehaviorFlow
 		for (int index; index < seats.Count(); index++)
 		{
 			BaseCompartmentSlot seat = seats[index];
-			if (!IsCrewSeat(seat)) continue;
+			if (!IsCrewSeat(seat, trip.GetVehiclePreset())) continue;
 			if (seat.GetType() != ECompartmentType.PILOT && trip.GetVehiclePreset().m_aMembers[index] < 0) continue;
 			if (!IsFit(seat.GetOccupant()))
 			{
@@ -60,6 +61,7 @@ class AICF_VehicleBehaviorFlow
 					gate.Log("TRANSPORT_NATIVE_GATE_CREW_EXIT_OWNED");
 					continue;
 				}
+				if (gate) gate.Log("TRANSPORT_NATIVE_GATE_CREW_EXIT_REJECTED");
 				return AICF_TripOutcome.StartTacticalDeployment("CREW_UNAVAILABLE", causationId);
 			}
 		}
@@ -92,7 +94,7 @@ class AICF_VehicleBehaviorFlow
 		if (!CollectBehaviorSeats(trip, seats, "BEGIN_DEPLOYMENT")) return false;
 		for (int index; index < seats.Count(); index++)
 		{
-			if (preset.m_iBehavior == AICF_EVehicleBehavior.COMBAT && IsCrewSeat(seats[index])) continue;
+			if (preset.m_iBehavior == AICF_EVehicleBehavior.COMBAT && IsCrewSeat(seats[index], trip.GetVehiclePreset())) continue;
 			IEntity actor = trip.VehiclePresetMember(preset.m_aMembers[index]);
 			if (IsFit(actor)) state.m_aDeployed.Insert(actor);
 		}
@@ -216,7 +218,7 @@ class AICF_VehicleBehaviorFlow
 			for (int index; index < seats.Count(); index++)
 			{
 				BaseCompartmentSlot seat = seats[index];
-				if (!IsCrewSeat(seat)) continue;
+				if (!IsCrewSeat(seat, trip.GetVehiclePreset())) continue;
 				if ((pass == 0) != (seat.GetType() == ECompartmentType.PILOT)) continue;
 				// Native транспорт мог уже посадить своего живого replacement.
 				// Принимаем только exact captured actor, не вытесняем его повторно.
@@ -280,7 +282,7 @@ class AICF_VehicleBehaviorFlow
 			for (int index; index < seats.Count(); index++)
 			{
 				BaseCompartmentSlot seat = seats[index];
-				if (seat.GetType() != ECompartmentType.CARGO || IsCrewSeat(seat) || seat.GetOccupant() ||
+				if (seat.GetType() != ECompartmentType.CARGO || IsCrewSeat(seat, trip.GetVehiclePreset()) || seat.GetOccupant() ||
 					IsFit(trip.VehiclePresetMember(preset.m_aMembers[index]))) continue;
 				cargo = index;
 				break;
@@ -365,7 +367,7 @@ class AICF_VehicleBehaviorFlow
 			IEntity actor = trip.VehiclePresetMember(position);
 			if (!IsFit(actor) || !AICF_VehicleShortRecovery.IsCurrentMember(trip, actor)) continue;
 			int seatIndex = preset.m_aMembers.Find(position);
-			if (seatIndex >= 0 && IsCrewSeat(seats[seatIndex]))
+			if (seatIndex >= 0 && IsCrewSeat(seats[seatIndex], trip.GetVehiclePreset()))
 			{
 				if (!allowTurret || seats[seatIndex].GetType() == ECompartmentType.PILOT) continue;
 			}

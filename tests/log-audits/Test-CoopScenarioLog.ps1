@@ -133,17 +133,13 @@ if($manifest) {
         $done=[regex]::Matches($log,'\[COOP_DONE\] mode=(USSR|US|STANDARD) checks=(\d+) failed=0 elapsed_ms=(\d+)')
         if($done.Count -ne 1 -or $done[0].Groups[1].Value -cne $mode -or [int]$done[0].Groups[3].Value -lt $MinimumObservationMs) { $failures.Add('COMPLETION') }
         $expected=@('US_ROSTER','USSR_ROSTER','QUEUE_SETTLED','US_TICKETS','USSR_TICKETS','COMMANDERS','HELPERS','BUDGET_FLOOR','STANDARD_POLICY','MIRROR_POLICY','STABLE_ROSTER','REPLICATED_MODE','FACTION_ACCESS','AUTO_CONSTRUCTION','CONTENT_FACTIONS','HEADER_MODE')
-        if($mode -ne 'STANDARD') { $expected+=@('ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','NO_GROUP_SUMMARY') }
+        if($mode -ne 'STANDARD') { $expected+=@('ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','AI_GROUP_SUMMARY') }
         if($ExpectedWinner) { $expected+='TERRITORIAL_WINNER' }
         $cases=[regex]::Matches($log,'\[COOP_CASE\] case=(\w+) pass=1')
         if($cases.Count -ne $expected.Count -or ($done.Count -eq 1 -and [int]$done[0].Groups[2].Value -ne $expected.Count)) { $failures.Add('CASE_COUNT') }
         foreach($name in $expected) { if(@($cases | Where-Object {$_.Groups[1].Value -ceq $name}).Count -ne 1) { $failures.Add("CASE_$name") } }
-        $ussr=10; if($mode -eq 'USSR') {$ussr=0}; $us=10; if($mode -eq 'US'){$us=0}
+        $ussr=10; $us=10
         if($log -notmatch ("\[ROSTER_READY\][^\r\n]*us_groups=$us ussr_groups=$ussr\b")) { $failures.Add('ROSTER') }
-        if($mode -ne 'STANDARD') {
-            $runtimeSide=$plan.usFaction; if($mode -eq 'USSR'){$runtimeSide=$plan.ussrFaction}
-            if($log -match ('\[(?:SPAWN_ATTEMPT_STARTED|GROUP_ROSTER_READY|REPLACEMENT_SPAWNED)\][^\r\n]*faction=(?:'+[regex]::Escape($mode)+'|'+[regex]::Escape($runtimeSide)+')\b')) { $failures.Add('PLAYER_COMBAT_SPAWN') }
-        }
         if($manifest.PSObject.Properties['matchMode']) {
             $context=[regex]::Matches($log,('\[COOP_CONTEXT\] mode='+$mode+' us_faction='+[regex]::Escape($plan.usFaction)+' ussr_faction='+[regex]::Escape($plan.ussrFaction)+' nodes=(\d+)'))
             if($context.Count -ne 1 -or [int]$context[0].Groups[1].Value -le 0){$failures.Add('CONTENT_CONTEXT')}

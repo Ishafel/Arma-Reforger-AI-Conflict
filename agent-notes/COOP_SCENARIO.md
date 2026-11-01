@@ -20,21 +20,21 @@
 
 `AICF_Stage1Config` один раз читает header, затем CLI. Immutable `AICF_MatchRules`
 определяет число slots, default commander и применимость ticket defeat.
-Co-op автоматически выбирает commander противоположной стороны; несовместимый CLI mode
+Co-op автоматически выбирает commander `BOTH`; несовместимый CLI mode
 отклоняется существующим ранним CONFIG_INVALID gate. Отдельного
 `aicfPlayerOnlyFaction` CLI в этой реализации нет.
 
 `AICF_FactionState` сохраняется для обеих сторон, включая ticket ledger и
-экономику. Число slots — 0 у людей, 10 у противника. Initial spawn, replacements,
+экономику. Число slots — по10 у обеих сторон, включая союзную игрокам армию. Initial spawn, replacements,
 recruitment, equipment service и transport обходят фактические slots.
 Ожидаемое число slots хранится отдельно: empty roster допустим только согласно
-policy. Initial queue и ROSTER_READY ждут весь предусмотренный состав; обычный
-режим по-прежнему требует 10+10 READY. Событие ROSTER_READY и его поля сохранены.
+policy. Initial queue и ROSTER_READY ждут10+10 предусмотренных slots во всех
+режимах. Событие ROSTER_READY и его поля сохранены.
 
 Минимум `aicfMaxManagedAgents` учитывает полные группы активных сторон:
-200 в STANDARD, 100 в Co-op. Default — 220 / 120 соответственно.
+200 во всех режимах. Default —220.
 Квоты строителей, logistics и FIA остаются у прежних владельцев. Усиление
-армии противника за счёт дополнительных боевых slots не добавлено.
+армии сверх10 slots на сторону не добавлено.
 
 `AICF_VictorySystem` проверяет билеты только у faction state с
 `UsesTicketDefeat()`. Территориальная проверка общая: все активные цели,
@@ -44,9 +44,12 @@ policy. Initial queue и ROSTER_READY ждут весь предусмотрен
 
 Match mode реплицируется через RplProp штатного campaign entity; authority
 меняет его с BumpMe только при изменении. Командная панель стороны игроков
-не создаётся, HUD показывает Co-op/припасы/территориальную цель. Supply UI
+доступна для союзных managed slots, HUD показывает Co-op/припасы/территориальную цель. Supply UI
 сохраняется. Server handlers повторно определяют фракцию игрока и получают
 slot из её state: несуществующий slot нельзя настроить или пополнить.
+Союзные managed slots остаются AI-owned; штатные player groups и право найма
+чужих AI не меняются. `UsesTicketDefeat` и `AllowsAutomaticConstruction`
+сохраняют отдельный veto стороны людей, независимо от наличия её AI slots.
 `AICF_CoopFactionMenu` исключает остальные стороны из native списка выбора,
 его active buttons и случайного выбора. `CanRequestFaction_S` и `SetFaction_S`
 на authority отдельно отвергают чужую сторону, включая прямой запрос клиента;
@@ -126,3 +129,52 @@ AICF_CoopHeadersProbe.c теперь читает штатный target для �
 Co-op планов. Отдельные mode/difficulty headers и legacy FIA flags не читаются.
 Полный выбор и retired GUID проверяет AICF_RuntimeScenarioProbe.c.
 Native чтение логических планов не подтверждает 54 полных боевых кампании.
+
+## Автоматический состав техники — 01.11.2026
+
+`AICF_CoopFleetDefaults.Apply` вызывается authority composition root после
+создания двух faction states, до initial materialization. Stable numeric slots
+0..3 получают транспорт полной вместимости10 бойцов,4 — вооружённую лёгкую
+машину,5..6 — APC. WCS добавляет танки в7..8; остальные остаются пешими.
+Роли командира и callsigns не определяют тип техники. Раскладка одинакова
+для обеих сторон в `COOP_US` и `COOP_USSR`; STANDARD сохраняет прежний состав.
+
+Модели выбираются только из enabled own-faction native whitelist с положительной
+ценой. Content profile задаёт предпочтения: Stock M923A1/Ural, Humvee/UAZ PKM,
+US LAV25/USSR BTR70; RHS Humvee/K4386, US LAV25/USSR BTR70. Если собственная
+модель недоступна, выводится `COOP_FLEET_DEFAULT_UNAVAILABLE`, слот сохраняется
+пешим; такой результат не считается выполнением раскладки. Чужая faction
+техника не добавляется. Первый Stock probe получил два явных отказа US APC:
+native readback показал собственные LAV25 в текущем каталоге, а ошибочной была
+неполная preference. Добавлен Stock US `/LAV25/`; исходный FAIL сохранён.
+
+В WCS `AllowsTrackedVehiclePreset` допускает только собственные M1A1 для US и
+T72A/T72B для USSR, проверяя source и живую модель. Stock/RHS и CIV сохраняют
+запрет tracked. Остальные гусеничные/авиация не получают допуск. Выбор кандидатов
+детерминирован: profile preference, затем lexical ResourceName.
+
+Черновик строится по live topology в private world с обязательными местами
+экипажа первыми. Desired size задаётся до создания живого отряда по числу мест,
+не более10; транспорт обязан вмещать10. TRANSPORT/COMBAT выбираются по роли,
+порог возврата300м. WCS танковые CARGO места, включая заряжающего M1, являются
+экипажем по `IsVehiclePresetCrewSeat`: обязательны при planned/live validation,
+авторассадке, UI metadata, выборе выжившего и COMBAT deployment/native keep.
+Обычный CARGO десант APC по-прежнему высаживается. Faction-проверяемый tank
+allowlist не распространяет правило на чужие танки или неизвестные tracked.
+Это только начальный binding: нет бесплатной покупки, spawn,
+transfer или списания. Readiness, acquisition, экономика и boarding остаются
+у прежних владельцев. Дефолт не применяется повторно поверх материала живого
+отряда, ручного binding или RESET (`revision != 0`). Временная недоступность
+каталога на этом раннем шаге логируется; автоматический поздний retry с
+изменением уже живого roster не реализован и требует отдельного контракта.
+
+Текущие terminal gates: `Test-CoopFleetDefaultsContracts.ps1` исполняет actual
+production `Role` и `MatchRules` через syntax adapter (114checks), включая
+обе faction keys и RHS mapping, обе coop стороны, STANDARD, human ticket и
+construction veto. Native readback: `tests/fixtures/AICF_CoopFleetDefaultsProbe.c`,
+флаг `-aicfCoopFleetProbe 1`,22checks после roster READY, полные stop logs.
+Его PASS сам по себе не подтверждает оплаченную покупку и поездку всех машин.
+`Test-VehiclePresetCrewContracts.ps1` исполняет actual Core/WCS/BehaviorFlow
+crew predicates:130checks, включая loader, чужую faction, APC cargo и null.
+Native fixture отдельно повторяет live topology/crew classification и
+отказ planned recipe с незаполненным loader через `COOP_FLEET_CREW_INSPECTED`.

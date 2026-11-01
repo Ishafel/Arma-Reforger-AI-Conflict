@@ -16,6 +16,9 @@ class AICF_TransportNativeGate
 	bool m_bStopped;
 	bool m_bReturnListenerAttached;
 	bool m_bPerformListenerAttached;
+	bool m_bExitListenerAttached;
+	bool m_bExitCompleted;
+	int m_iExitCompletedAtMs;
 	bool m_bPerformCompleted;
 	int m_iPerformCompletedAtMs;
 	bool m_bReturnCompleted;
@@ -257,7 +260,11 @@ class AICF_TransportNativeGate
 			vector.Distance(m_Vehicle.GetOrigin(), m_SmartOwner.GetOrigin()) > 50) return false;
 		AIActionBase current = m_Utility.GetCurrentBehavior();
 		if (!current || current.GetRelatedGroupActivity() != m_Activity) return false;
-		if (!Live(current)) return OwnsCompletedPerformHandoff(current, nowMs);
+		if (!Live(current))
+		{
+			if (current == m_Exit) return OwnsCompletedExitHandoff(current, nowMs);
+			return OwnsCompletedPerformHandoff(current, nowMs);
+		}
 		if (current == m_Perform) return true;
 		if (current == m_Return) return true;
 		return current == m_Exit && m_Exit.m_Vehicle.m_Value == m_Seat.GetOwner() &&
@@ -279,6 +286,24 @@ class AICF_TransportNativeGate
 		return actions.Contains(m_Return);
 	}
 
+	// Native utility может один tick хранить завершённый GetOut, пока исходный
+	// Perform ещё EVALUATED. Только receipt его exact invoker и оба живых queued
+	// продолжения доказывают этот handoff; новое ожидание здесь не создаётся.
+	protected bool OwnsCompletedExitHandoff(AIActionBase current, int nowMs)
+	{
+		if (m_bStopped || !m_bExitListenerAttached || !m_bExitCompleted) return false;
+		if (m_iExitCompletedAtMs < m_iStarted || m_iExitCompletedAtMs <= 0 ||
+			m_iExitCompletedAtMs > nowMs || m_iExitCompletedAtMs >= m_iDeadline || IsExpired(nowMs)) return false;
+		if (current != m_Exit || current.GetActionState() != EAIActionState.COMPLETED || !current.GetRemoveAction()) return false;
+		if (m_Exit.m_Vehicle.m_Value != m_Seat.GetOwner() || m_Exit.GetPriority() != m_Perform.GetPriority() + 100) return false;
+		if (!m_Utility || !Live(m_Perform) || m_Perform.GetActionIsSuspended() ||
+			m_Perform.GetRelatedGroupActivity() != m_Activity || !Live(m_Return) ||
+			m_Return.GetActionIsSuspended() || m_Return.GetRelatedGroupActivity() != m_Activity) return false;
+		array<ref AIActionBase> actions = {};
+		m_Utility.GetActions(actions);
+		return actions.Contains(m_Perform) && actions.Contains(m_Return);
+	}
+
 	protected bool AttachReturnCompletion(AICF_TransportTrip trip)
 	{
 		if (m_bStopped || m_bReturnListenerAttached || !m_Return || !Matches(trip)) return false;
@@ -288,7 +313,23 @@ class AICF_TransportNativeGate
 		m_bPerformListenerAttached = true;
 		m_Return.m_OnActionCompleted.Insert(OnReturnCompleted);
 		m_Perform.m_OnActionCompleted.Insert(OnPerformCompleted);
+		if (m_Exit && m_Exit.m_OnActionCompleted)
+		{
+			m_bExitListenerAttached = true;
+			m_Exit.m_OnActionCompleted.Insert(OnExitCompleted);
+		}
 		return true;
+	}
+
+	protected void OnExitCompleted(SCR_AIActionBase action)
+	{
+		if (m_bStopped || !m_bExitListenerAttached || m_bExitCompleted || !m_Trip || action != m_Exit) return;
+		int nowMs = System.GetTickCount();
+		if (m_Trip.IsDeadlineReached(nowMs) || IsExpired(nowMs) || !Matches(m_Trip)) return;
+		if (m_Trip.GetMovementState().GetNativeGate() != this || action.GetActionState() != EAIActionState.COMPLETED) return;
+		m_bExitCompleted = true;
+		m_iExitCompletedAtMs = nowMs;
+		Log("TRANSPORT_NATIVE_GATE_EXIT_COMPLETED");
 	}
 
 	protected void OnPerformCompleted(SCR_AIActionBase action)
@@ -320,8 +361,13 @@ class AICF_TransportNativeGate
 			m_Return.m_OnActionCompleted.Remove(OnReturnCompleted);
 		if (m_bPerformListenerAttached && m_Perform)
 			m_Perform.m_OnActionCompleted.Remove(OnPerformCompleted);
+		if (m_bExitListenerAttached && m_Exit)
+			m_Exit.m_OnActionCompleted.Remove(OnExitCompleted);
 		m_bReturnListenerAttached = false;
 		m_bPerformListenerAttached = false;
+		m_bExitListenerAttached = false;
+		m_bExitCompleted = false;
+		m_iExitCompletedAtMs = 0;
 		m_bPerformCompleted = false;
 		m_iPerformCompletedAtMs = 0;
 		m_bReturnCompleted = false;
@@ -398,6 +444,16 @@ class AICF_TransportNativeGate
 			m_bReturnCompleted, m_iReturnCompletedAtMs, m_bReturnListenerAttached);
 		details += string.Format(" perform_completed_receipt=%1 perform_completed_at_ms=%2 perform_listener_attached=%3",
 			m_bPerformCompleted, m_iPerformCompletedAtMs, m_bPerformListenerAttached);
+		details += string.Format(" exit_completed_receipt=%1 exit_completed_at_ms=%2 exit_listener_attached=%3",
+			m_bExitCompleted, m_iExitCompletedAtMs, m_bExitListenerAttached);
+		ChimeraCharacter character = ChimeraCharacter.Cast(m_Member);
+		CompartmentAccessComponent access;
+		if (character) access = character.GetCompartmentAccessComponent();
+		AIActionBase current;
+		if (m_Utility) current = m_Utility.GetCurrentBehavior();
+		details += string.Format(" current_action=%1 switching_animation=%2 member_conscious=%3 expired=%4",
+			AICF_GroupTrace.Action(current), access && access.IsSwitchingSeatsAnim(),
+			SCR_AIDamageHandling.IsConscious(m_Member), IsExpired(System.GetTickCount()));
 		AICF_Stage3Diagnostics.Info(eventName, details);
 	}
 }

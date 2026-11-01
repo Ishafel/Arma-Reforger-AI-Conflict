@@ -3,6 +3,17 @@
 // copied and no uncatalogued ResourceName is admitted.
 class AICF_RHSContentProfile : AICF_ContentProfile
 {
+	override void BuildCoopVehicleSuffixPreference(FactionKey stableKey, AICF_ECoopVehicleRole role, array<string> suffixes)
+	{
+		if (role == AICF_ECoopVehicleRole.APC)
+		{
+			if (stableKey == "US") suffixes.Insert("/LAV25/LAV25_RHS.et");
+			if (stableKey == "USSR") suffixes.Insert("/BTR70/BTR70_AFRF.et");
+			return;
+		}
+		super.BuildCoopVehicleSuffixPreference(stableKey, role, suffixes);
+	}
+
 	override int GetVehiclePresetCostOverride(ResourceName prefab)
 	{
 		return AICF_RHSMenuPricePolicy.GetInstance().Quote(prefab);
@@ -100,6 +111,7 @@ class AICF_RHSContentProfile : AICF_ContentProfile
 
 	override ResourceName GetConstructionPrefab(FactionKey stableKey, AICF_EConstructionType type)
 	{
+		if (type == AICF_EConstructionType.SUPPLY_DEPOT) return super.GetConstructionPrefab(stableKey, type);
 		if (stableKey == "US")
 		{
 			switch (type)
@@ -123,6 +135,34 @@ class AICF_RHSContentProfile : AICF_ContentProfile
 			}
 		}
 		return ResourceName.Empty;
+	}
+
+	// Native registered supply caches сохраняют stock recipient labels. Только
+	// этот сервис может использовать точный same-side stock alias, подтверждённый
+	// registry resolver; остальные строительные faction guards остаются строгими.
+	override protected bool IsSupplyDepotMetadata(ResourceName prefab, SCR_CampaignFaction faction)
+	{
+		if (super.IsSupplyDepotMetadata(prefab, faction)) return true;
+		if (!faction || prefab.IsEmpty()) return false;
+		FactionKey stableKey = GetStableFactionKey(faction.GetFactionKey());
+		if ((stableKey != "US" && stableKey != "USSR") || faction.GetFactionKey() != GetRuntimeFactionKey(stableKey)) return false;
+		SCR_EditableEntityUIInfo info = SCR_EditableEntityUIInfo.ExtractEditableUIInfoFromPrefab(prefab);
+		if (!info || info.GetFactionKey() != stableKey) return false;
+		EEditableEntityLabel label = EEditableEntityLabel.FACTION_US;
+		if (stableKey == "USSR") label = EEditableEntityLabel.FACTION_USSR;
+		return info.HasEntityLabel(label) && info.HasEntityLabel(EEditableEntityLabel.TRAIT_SERVICE) &&
+			info.HasEntityLabel(EEditableEntityLabel.SERVICE_SUPPLY_STORAGE);
+	}
+
+	override bool AllowsConstructionMetadataAlias(ResourceName prefab, AICF_EConstructionType type, SCR_CampaignFaction faction, SCR_EditableEntityUIInfo info)
+	{
+		if (type != AICF_EConstructionType.SUPPLY_DEPOT || !faction || !info || !IsSupplyDepotMetadata(prefab, faction)) return false;
+		FactionKey stableKey = GetStableFactionKey(faction.GetFactionKey());
+		if (prefab != GetConstructionPrefab(stableKey, type) || info.GetFactionKey() != stableKey) return false;
+		EEditableEntityLabel label = EEditableEntityLabel.FACTION_US;
+		if (stableKey == "USSR") label = EEditableEntityLabel.FACTION_USSR;
+		return info.HasEntityLabel(label) && info.HasEntityLabel(EEditableEntityLabel.TRAIT_SERVICE) &&
+			info.HasEntityLabel(EEditableEntityLabel.SERVICE_SUPPLY_STORAGE);
 	}
 
 	override FactionKey GetStableFactionKey(FactionKey runtimeKey)

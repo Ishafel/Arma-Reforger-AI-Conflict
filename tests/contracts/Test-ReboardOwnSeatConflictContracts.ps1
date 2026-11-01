@@ -1,4 +1,4 @@
-﻿param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../lib/Stage3StaticAudit.Common.ps1')
 $domain=Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict'
@@ -35,6 +35,7 @@ function Adapt([string]$s){
  $s=$s.Replace('array<BaseCompartmentSlot>','NativeArray<BaseCompartmentSlot>').Replace('EntityID','int').Replace('int position;','int position = 0;').Replace('Faction faction;','Faction faction = null;').Replace('ChimeraCharacter character =','IEntity character =').Replace('ChimeraCharacter member =','IEntity member =').Replace('IEntity linked =','Vehicle linked =').Replace('System.GetTickCount()','Clock.Now')
  $s=$s.Replace('member.FindComponent(FactionAffiliationComponent)','member.Affiliation')
  $s=$s.Replace('protected bool IsOwnFaction','public bool IsOwnFaction')
+ $s=$s.Replace('NativeArray<BaseCompartmentSlot> seats = {};','NativeArray<BaseCompartmentSlot> seats = new NativeArray<BaseCompartmentSlot>();').Replace('foreach (BaseCompartmentSlot seat : seats)','foreach (BaseCompartmentSlot seat in seats)')
   $s=$s.Replace('array<ref AIActionBase> actions = {};','NativeArray<AIActionBase> actions = new NativeArray<AIActionBase>();').Replace('foreach (AIActionBase action : actions)','foreach (AIActionBase action in actions)').Replace('agent.FindComponent(SCR_AIUtilityComponent)','agent.Utility')
  return $s
 }
@@ -68,9 +69,9 @@ public class Faction:NativeObject{public string Key="USSR";public string GetFact
 public class FactionAffiliationComponent:NativeObject{public Faction Faction=new Faction();public Faction GetAffiliatedFaction(){return Faction;}public static FactionAffiliationComponent Cast(FactionAffiliationComponent a){return a;}}
 public class IEntity:NativeObject{public AIControl Control=new AIControl();public AIControl GetAIControlComponent(){return Control;}public bool IsInVehicle(){return Access.Inside;}public int Id;public string Rpl="rpl";public bool Current=true;public FactionAffiliationComponent Affiliation=new FactionAffiliationComponent();public CompartmentAccessComponent Access=new CompartmentAccessComponent();public vector Origin=new vector();public vector GetOrigin(){return Origin;}public int GetID(){if(Deleted)throw new Exception("native getter after actor delete");return Id;}public object GetWorld(){return this;}public void GetWorldTransform(vector[] v){v[3]=Origin;}public CompartmentAccessComponent GetCompartmentAccessComponent(){return Access;}}
 public static class ChimeraCharacter{public static IEntity Cast(IEntity a){return a;}}
-public class Vehicle:NativeObject{public bool Slow=true,Fire,Movable=true;public object GetWorld(){return this;}public static Vehicle Cast(Vehicle v){return v;}}
+public class Vehicle:NativeObject{public NativeArray<BaseCompartmentSlot> Seats=new NativeArray<BaseCompartmentSlot>();public bool Slow=true,Fire,Movable=true;public object GetWorld(){return this;}public static Vehicle Cast(Vehicle v){return v;}}
 public enum ECloseDoorAfterActions{INVALID}public enum EAICompartmentType{Pilot,Turret,Cargo,None}
-public class BaseCompartmentSlot:NativeObject{public Vehicle Vehicle;public IEntity Occupant;public IEntity Reserved;public int ReservationWrites;public Action OnReservationWrite;public bool IsReserved(){return Reserved!=null;}public bool IsReservedBy(IEntity a){return Reserved==a;}public void SetReserved(IEntity a){Reserved=a;ReservationWrites++;if(OnReservationWrite!=null)OnReservationWrite();}public string Key;public EAICompartmentType Role=EAICompartmentType.Cargo;public EAICompartmentType Type(){return Role;}public vector GetPosition(){return new vector();}public Vehicle GetVehicle(){if(Deleted)throw new Exception("native getter after seat delete");return Vehicle;}public IEntity GetOccupant(){return Occupant;}}
+public enum ECompartmentType{PILOT,TURRET,CARGO} public static class AICF_VehicleBehaviorFlow{public static bool IsCrewSeat(BaseCompartmentSlot seat,AICF_VehiclePreset preset){return seat!=null && seat.Crew;}} public class BaseCompartmentSlot:NativeObject{public bool Crew;public new ECompartmentType GetType(){return (ECompartmentType)Role;}public Vehicle Vehicle;public IEntity Occupant;public IEntity Reserved;public int ReservationWrites;public Action OnReservationWrite;public bool IsReserved(){return Reserved!=null;}public bool IsReservedBy(IEntity a){return Reserved==a;}public void SetReserved(IEntity a){Reserved=a;ReservationWrites++;if(OnReservationWrite!=null)OnReservationWrite();}public string Key;public EAICompartmentType Role=EAICompartmentType.Cargo;public EAICompartmentType Type(){return Role;}public vector GetPosition(){return new vector();}public Vehicle GetVehicle(){if(Deleted)throw new Exception("native getter after seat delete");return Vehicle;}public IEntity GetOccupant(){return Occupant;}}
 public class SCR_AIMessage_GetIn:NativeObject{public Vehicle m_Vehicle;public BaseCompartmentSlot m_CompartmentSlot;public EAICompartmentType m_eRoleInVehicle;}
 public static class SCR_AICompartmentHandling{public static EAICompartmentType CompartmentClassToType(EAICompartmentType t){return t;}}
 public class vector{public float Value;public static float Distance(vector a,vector b){return Math.Abs(a.Value-b.Value);}}
@@ -82,7 +83,7 @@ public class AICF_StrategicAssignmentSnapshot:NativeObject{public SCR_AIGroup Gr
 public class AICF_GroupSlot:NativeObject{public SCR_AIGroup Group;public int Revision=3,Intent=4;public SCR_AIGroup GetGroup(){return Group;}public int GetStrategicAssignmentRevision(){return Revision;}public int GetStrategicIntentRevision(){return Intent;}}
 public enum AICF_ETransportTripPhase{TRANSIT,TACTICAL_DEPLOYMENT,FALLBACK}
 public enum AICF_EVehicleBehavior{TRANSPORT,COMBAT}
-public class AICF_VehiclePreset:NativeObject{public AICF_EVehicleBehavior m_iBehavior=AICF_EVehicleBehavior.TRANSPORT;public NativeArray<int> m_aMembers=new NativeArray<int>();public static string SeatKey(BaseCompartmentSlot s){if(s.Deleted)throw new Exception("seat key after native delete");return s.Key;}}
+public class AICF_VehiclePreset:NativeObject{public static void Collect(Vehicle vehicle,NativeArray<BaseCompartmentSlot> seats){seats.AddRange(vehicle.Seats);}public AICF_EVehicleBehavior m_iBehavior=AICF_EVehicleBehavior.TRANSPORT;public NativeArray<int> m_aMembers=new NativeArray<int>();public static string SeatKey(BaseCompartmentSlot s){if(s.Deleted)throw new Exception("seat key after native delete");return s.Key;}}
 public class AICF_VehicleLease:NativeObject{public Vehicle Vehicle=new Vehicle();public Vehicle GetVehicle(){return Vehicle;}}
 public class AICF_VehicleBehaviorState:NativeObject{public NativeObject m_ReboardSeatConflict;public bool m_bReboarding=true;public int m_iReboardDeadline=9000;public NativeArray<AICF_VehicleBehaviorAction> m_aActions=new NativeArray<AICF_VehicleBehaviorAction>();}
 public class AICF_TransportTrip:NativeObject{public AICF_VehicleBehaviorBinding Binding;public int Transitions=5;public int GetTransitionCount(){return Transitions;}public bool Current=true,Expired;public AICF_StrategicAssignmentSnapshot Assignment=new AICF_StrategicAssignmentSnapshot();public AICF_GroupSlot Slot=new AICF_GroupSlot();public AICF_VehicleLease Lease=new AICF_VehicleLease();public AICF_VehicleBehaviorState State=new AICF_VehicleBehaviorState();public AICF_VehiclePreset Preset=new AICF_VehiclePreset();public IEntity[] Roster=new IEntity[5];public AICF_ETransportTripPhase Phase=AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT;public AICF_StrategicAssignmentSnapshot GetAssignment(){return Assignment;}public AICF_GroupSlot GetVehiclePresetSlot(){return Slot;}public AICF_VehicleLease GetLease(){return Lease;}public AICF_VehicleBehaviorState GetBehaviorState(){return State;}public AICF_VehiclePreset GetVehiclePreset(){return Preset;}public IEntity VehiclePresetMember(int p){return p>=0&&p<5?Roster[p]:null;}public string GetFactionKey(){return "USSR";}public AICF_ETransportTripPhase GetPhase(){return Phase;}public bool IsDeadlineReached(int n){return Expired;}public string GetOperationId(){if(Deleted)throw new Exception("trip getter after native callback");return "trip";}}
@@ -96,7 +97,7 @@ public static class AICF_GroupTrace{public static string Entity(IEntity a){retur
 public class AICF_AIQuotaVehicleDispatch:NativeObject{public static bool Allowed=true,Current=true;public static int Begins,Cancels,Observed,Marked;public static Action OnBegin,OnMark;public IEntity Actor;public Vehicle Vehicle;public BaseCompartmentSlot Seat;public string ActorRpl;public bool Ended;public static AICF_AIQuotaVehicleDispatch Begin(IEntity a,Vehicle v,BaseCompartmentSlot s){Begins++;if(OnBegin!=null)OnBegin();return Allowed?new AICF_AIQuotaVehicleDispatch{Actor=a,Vehicle=v,Seat=s,ActorRpl=a.Rpl}:null;}public bool IsCurrent(){return !Ended&&Current&&Actor&&Actor.Current&&Vehicle&&Seat&&Actor.Rpl==ActorRpl;}public bool Matches(IEntity a,Vehicle v,BaseCompartmentSlot s){return Actor==a&&Vehicle==v&&Seat==s&&IsCurrent();}public void MarkDispatched(){Marked++;if(OnMark!=null)OnMark();}public void ObserveNativeResult(bool result){Observed++;}public void Cancel(){if(!Ended){Ended=true;Cancels++;}}public static void Reset(){Allowed=true;Current=true;Begins=Cancels=Observed=Marked=0;OnBegin=OnMark=null;}}
 public class AICF_VehicleShortSeatAttempt:NativeObject{public bool IsPhysicalDispatchCurrent(){return true;}public bool Commit(AICF_TransportTrip t,IEntity a,BaseCompartmentSlot s,int now){return true;}}
 public static class AICF_Stage3Diagnostics{public static void Info(string e,string d){}public static void Warning(string e,string d){}}
-public static class AICF_VehicleBehaviorPolicy{public static AICF_VehicleBehaviorBinding Binding;public static AICF_VehicleBehaviorBinding Find(Vehicle v){return Binding!=null&&Binding.m_Vehicle==v?Binding:null;}public static bool ShouldDeferCrewReplacement(Vehicle v){return false;}public static bool SuppressGetIn(SCR_AIUtilityComponent utility,SCR_AIMessage_GetIn message) SUPPRESS public static bool IsCurrentReboarding(AICF_VehicleBehaviorBinding binding) PREFLIGHT }
+public static class AICF_VehicleBehaviorPolicy{public static bool Combat;public static AICF_VehicleBehaviorBinding Binding;public static AICF_VehicleBehaviorBinding Find(Vehicle v){return Binding!=null&&Binding.m_Vehicle==v?Binding:null;}public static bool ShouldDeferCrewReplacement(Vehicle v){return Combat;}public static bool SuppressGetIn(SCR_AIUtilityComponent utility,SCR_AIMessage_GetIn message) SUPPRESS public static bool IsCurrentReboarding(AICF_VehicleBehaviorBinding binding) PREFLIGHT }
 SCOPE
 public static class AICF_ConflictProduction{
  public static bool IsCurrent(AICF_TransportTrip t){return t.Current;}
@@ -122,7 +123,7 @@ public static class AICF_ExitProduction{
 }
 public static class AICF_ConflictFixture{
  public static NativeArray<BaseCompartmentSlot> Seats;
- public static AICF_TransportTrip Create(){var t=new AICF_TransportTrip();t.Slot.Group=t.Assignment.Group;Seats=new NativeArray<BaseCompartmentSlot>();for(int i=0;i<5;i++){var a=new IEntity{Id=i+1,Rpl="rpl"+i};a.Control.Agent.Controlled=a;a.Control.Agent.Utility.m_OwnerEntity=a;t.Roster[i]=a;t.Preset.m_aMembers.Add(i);Seats.Add(new BaseCompartmentSlot{Vehicle=t.Lease.Vehicle,Key="seat"+i});}Seats[0].Reserved=t.Roster[1];Seats[0].Occupant=t.Roster[1];t.Roster[1].Access.Seat=Seats[0];t.Roster[1].Access.Vehicle=t.Lease.Vehicle;t.Binding=new AICF_VehicleBehaviorBinding{m_Trip=t,m_Vehicle=t.Lease.Vehicle};AICF_VehicleBehaviorPolicy.Binding=t.Binding;AICF_VehicleShortRecovery.Calls=0;AICF_VehicleShortRecovery.OnExit=null;AICF_VehicleShortRecovery.UseActualExit=false;return t;}
+ public static AICF_TransportTrip Create(){AICF_VehicleBehaviorPolicy.Combat=false;var t=new AICF_TransportTrip();t.Slot.Group=t.Assignment.Group;Seats=new NativeArray<BaseCompartmentSlot>();for(int i=0;i<5;i++){var a=new IEntity{Id=i+1,Rpl="rpl"+i};a.Control.Agent.Controlled=a;a.Control.Agent.Utility.m_OwnerEntity=a;t.Roster[i]=a;t.Preset.m_aMembers.Add(i);Seats.Add(new BaseCompartmentSlot{Vehicle=t.Lease.Vehicle,Key="seat"+i});}Seats[0].Reserved=t.Roster[1];Seats[0].Occupant=t.Roster[1];t.Roster[1].Access.Seat=Seats[0];t.Roster[1].Access.Vehicle=t.Lease.Vehicle;t.Binding=new AICF_VehicleBehaviorBinding{m_Trip=t,m_Vehicle=t.Lease.Vehicle};AICF_VehicleBehaviorPolicy.Binding=t.Binding;AICF_VehicleShortRecovery.Calls=0;AICF_VehicleShortRecovery.OnExit=null;AICF_VehicleShortRecovery.UseActualExit=false;return t;}
  public static AICF_ReboardSeatConflictScope Capture(AICF_TransportTrip t){var s=AICF_ReboardSeatConflictScope.Capture(t,Seats,Seats[0],t.Roster[0]);t.State.m_ReboardSeatConflict=s;return s;}
  public static AICF_TripOutcome Recover(AICF_TransportTrip t){return AICF_ConflictProduction.RecoverOwnSeatConflict(t,Seats,t.Roster[0],Seats[0],"cause");}
 }
@@ -387,5 +388,25 @@ foreach($m in $reservationMutants){
   LiveEntry {$u=$t.Roster[1].Control.Agent.Utility;$entry=New-Object SCR_AIGetInVehicle;$entry.m_Utility=$u;$entry.m_Vehicle.m_Value=$t.Lease.Vehicle;$entry.m_CompartmentToGetIn.m_Value=$seats[0];$u.Actions.Add($entry)}
  }
  if($s.ObserveExitedReservation()-ne1-or$seats[0].ReservationWrites-ne1){throw "Reservation unsafe mutant did not demonstrate forbidden clear: $($m[0])"};$executedMutants++
+}
+# Actual native-message decision includes Cargo crew supplied by profile policy.
+# Crew classification itself is replayed independently from production in CrewContracts.
+foreach($kind in @('loader-exact','loader-role','apc-exact','loader-foreign-seat','current-loader-stays','not-combat','foreign-actor','apc-role')){
+ $t=[AICF_ConflictFixture]::Create();$t.Preset.m_iBehavior=[AICF_EVehicleBehavior]::COMBAT
+ [AICF_VehicleBehaviorPolicy]::Combat=$true
+ $seat=[AICF_ConflictFixture]::Seats[0];$seat.Crew=$true
+ $utility=New-Object SCR_AIUtilityComponent;$utility.m_OwnerEntity=$t.Roster[0]
+ $message=New-Object SCR_AIMessage_GetIn;$message.m_Vehicle=$t.Lease.Vehicle;$message.m_CompartmentSlot=$seat;$message.m_eRoleInVehicle=[EAICompartmentType]::Cargo
+ $expected=$kind -in @('loader-exact','loader-role')
+ switch($kind){
+  'loader-role' {$message.m_CompartmentSlot=$null;$t.Lease.Vehicle.Seats.Add($seat)}
+  'apc-exact' {$seat.Crew=$false}
+  'loader-foreign-seat' {$seat.Vehicle=New-Object Vehicle}
+  'current-loader-stays' {$utility.m_OwnerEntity=$t.Roster[1]}
+  'not-combat' {[AICF_VehicleBehaviorPolicy]::Combat=$false}
+  'foreign-actor' {$utility.m_OwnerEntity.Current=$false}
+  'apc-role' {$message.m_CompartmentSlot=$null;$seat.Crew=$false;$t.Lease.Vehicle.Seats.Add($seat)}
+ }
+ Check ([AICF_VehicleBehaviorPolicy]::SuppressGetIn($utility,$message) -eq $expected) ('actual Cargo crew defer '+$kind)
 }
 "PASS Own wrong seat: actual_scope_policy_flow_exit=$cases source_controls=$sourceChecks executed_unsafe_mutants=$executedMutants native_physical=NOT_RUN"

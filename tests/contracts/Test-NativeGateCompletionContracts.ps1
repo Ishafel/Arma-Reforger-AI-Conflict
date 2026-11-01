@@ -77,6 +77,7 @@ foreach($mutated in @(
 # Actual production callback/attach/stop/setter bodies. Adapter changes only
 # object truthiness and the clock; native Complete -> Deselected resets State.
 function Adapt([string]$body){
+ $body=$body.Replace('m_Exit && m_Exit.m_OnActionCompleted','m_Exit != null && m_Exit.m_OnActionCompleted != null').Replace('&& m_Exit)','&& m_Exit != null)')
  $body=$body.Replace('!m_Perform.m_OnActionCompleted','m_Perform.m_OnActionCompleted == null').Replace('!m_Perform','m_Perform == null').Replace('&& m_Perform)','&& m_Perform != null)').Replace('!m_Return.m_OnActionCompleted','m_Return.m_OnActionCompleted == null').Replace('!m_Return','m_Return == null').Replace('!m_Trip','m_Trip == null').Replace('&& m_Return)','&& m_Return != null)').Replace('if (m_NativeGate)','if (m_NativeGate != null)').Replace('System.GetTickCount()','1000')
  return $body
 }
@@ -98,16 +99,17 @@ public class AICF_CallbackTrip { public bool IsDeadlineReached(int now){return f
 public class AICF_TripRetirementIdentity { public static bool IsFleetAssetCurrent(AICF_CallbackTrip trip,object fleet){return trip.AssetCurrent;} }
 public class AICF_CallbackMovement { public AICF_CallbackGate m_NativeGate; public AICF_CallbackGate GetNativeGate(){return m_NativeGate;} public void SetNativeGate(AICF_CallbackGate gate) SETTER }
 public class AICF_CallbackGate {
- public bool m_bStopped,m_bReturnListenerAttached,m_bReturnCompleted,m_bPerformListenerAttached,m_bPerformCompleted; public int m_iReturnCompletedAtMs,m_iPerformCompletedAtMs; public bool IsExpired(int now){return false;} public void Log(string e){}
+ public bool m_bStopped,m_bReturnListenerAttached,m_bReturnCompleted,m_bPerformListenerAttached,m_bPerformCompleted,m_bExitListenerAttached,m_bExitCompleted; public int m_iReturnCompletedAtMs,m_iPerformCompletedAtMs,m_iExitCompletedAtMs; public bool IsExpired(int now){return false;} public void Log(string e){}
  public bool ContextCurrent=true; public AICF_CallbackTrip m_Trip; public AICF_CallbackAction m_Return,m_Exit,m_Perform;
  public bool Matches(AICF_CallbackTrip trip){return ContextCurrent && trip!=null;}
  public bool AttachReturnCompletion(AICF_CallbackTrip trip) ATTACH
  public void OnReturnCompleted(AICF_CallbackAction action) CALLBACK
  public void OnPerformCompleted(AICF_CallbackAction action) PERFORMBODY
+ public void OnExitCompleted(AICF_CallbackAction action) EXITBODY
  public void Stop() STOP
 }
 '@
-$code=$code.Replace('PERFORMBODY',(Adapt (Body $source 'OnPerformCompleted'))).Replace('SETTER',$setter).Replace('ATTACH',$attach).Replace('CALLBACK',$callback).Replace('STOP',$stop)
+$code=$code.Replace('PERFORMBODY',(Adapt (Body $source 'OnPerformCompleted'))).Replace('EXITBODY',(Adapt (Body $source 'OnExitCompleted'))).Replace('SETTER',$setter).Replace('ATTACH',$attach).Replace('CALLBACK',$callback).Replace('STOP',$stop)
 $tripStopMethods='public void StopCleanupAssignmentRebind() '+(Body $tripSource 'StopCleanupAssignmentRebind')+' public void InvalidateCleanupAssignmentRebind() '+(Body $tripSource 'InvalidateCleanupAssignmentRebind')
 $code=$code.Replace('PENDINGLIFECYCLE_BODY',$tripStopMethods)
 $controllerStop=Body $controller 'AbortForStop'

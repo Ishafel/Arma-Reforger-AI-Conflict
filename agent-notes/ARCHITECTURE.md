@@ -95,10 +95,13 @@ Receipt не заменяет физический выход, exact settled sea
 локальный cleanup до invalid-trip return в Controller.AbortForStop.
 
 `AICF_TransportNativeAbandon` отдельно распознаёт текущий штатный group GetOut
-для exact trip vehicle после отказа от машины. Это stateless read-only proof,
-а не разрешение возвращать водителя в покидаемый транспорт. Transit возвращает
-typed fallback до crew recovery; существующий controller владеет высадкой,
-восстановлением пешего приказа и cleanup. Конкурирующие async owners сохраняются.
+для exact trip vehicle после отказа от машины. Наблюдатель остаётся stateless
+и read-only. Transit может отменить только exact current/executed GetOut до
+начала actor egress: нужна полностью исправная машина, полный settled AI roster,
+отсутствие боя, повторный immutable binding и прежний recovery budget/deadline.
+Далее выполняется route-only repair той же машины. При отказе этих проверок
+остаётся typed fallback; controller владеет высадкой, пешим приказом и cleanup.
+Конкурирующие async owners сохраняются. См. [COOP_FLEET_RECOVERY.md](COOP_FLEET_RECOVERY.md).
 
 До stock failed-movement abandonment `AICF_TransitMoveFailure` может принять
 только exact current vehicle handler ручного preset и здоровый полностью
@@ -524,3 +527,5 @@ faction и content profile. Server validation повторяется перед 
 [TESTING.md](TESTING.md).
 
 Native garbage не владеет удалением cap-held машины AICF. Fleet после binding устанавливает lease-owned `AICF_VehicleGarbagePermission`; weak registry позволяет callbacks проверить exact physical identity и owner. Pending/failed cleanup сохраняет protection до safety-approved transfer. `RelinquishReleasedVehicleReference` снимает registry до очистки reference; после собственного veto native tracking восстанавливается через обычный Insert. При owner destructor проверяется captured entity/Rpl/master без уничтоженных weak owners; другой current owner запрещает stale restore. Детали: [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md#native-garbage-и-удерживаемая-машина).
+
+Supply capacity demand: AICommander читает максимальную цену slot presets; ConstructionPlanner владеет решением и платной постройкой native SUPPLY_DEPOT. Profile выбирает registered prefab и узкий RHS metadata alias; capacity меняется только штатными service/resource leaves. См. [SUPPLY_DEPOT_DEMAND.md](SUPPLY_DEPOT_DEMAND.md).

@@ -1,5 +1,21 @@
 # Изменение сценарного контракта — 2026-10-24
 
+## Lifetime private vehicle preview — 01.11.2026
+
+`AICF_PreviewLifetimeProbe.c` добавляется только в отдельный Stock stage вместе
+с `AICF_PresetEditorOpeningProbe.c`. После терминального Workbench запускается
+через `Start-AICFRuntime.ps1 -Role Frontend` с `-aicfPreviewLifetimeProbe 1`.
+Hidden off-screen widget вызывает production RenderCatalog/RefreshPreview:
+60 чередований canonical UAZ/M998, каждый пятый — Reset/Close/recreate.
+Нет GUI automation, физического ввода или игрового матча. Каждый private world
+должен быть готов, Reset должен снять world; FINISHED требует60cycles/failures0.
+Stop снимает timer и закрывает форму. Нужны native0 и полные stopped sibling logs.
+
+Сравнение старого/нового UI прошло60/60 на обоих source; это ограниченный
+lifecycle proof, исходный post-match OOM не воспроизведён. Первый ошибочный стенд
+с ResourceName без GUID падал на обоих source; его FAIL сохранён отдельно.
+Результаты, memory samples и scope: [COOP_FLEET_RECOVERY.md](COOP_FLEET_RECOVERY.md).
+
 `AICF_RosterSpawnBatchBoundaryProbe.c`: отдельный stage с production339,
 `-aicfRosterBatchBoundary 1`. Без другого флага только наблюдает настоящий default
 startup20×seed1/desired10. С `-aicfRosterBatchMaxTen 1` **явно controlled** меняет
@@ -110,6 +126,31 @@ STUCK/UNKNOWN, однократный native callback, прежний budget2 и
 после recovery. `Test-TransitFailureRecoveryLog.ps1` не заменяет настоящий
 MOVING2→4→6 или ordinary-war gate. Итог относится к exact snapshot и full stopped
 log, а не к одному факту наличия fixture.
+
+`AICF_HealthyNativeAbandonProbe.c` также использует isolated Scenario scaffold
+(`AICF_VehicleScenarioProbe.c`, case `uaz5`, current behavior, no combat,
+`-aicfHealthyNativeAbandonProbe 1 -aicfVehicleScenarioCanonicalOwner 1`). Файл
+extension загружается после scaffold. Canonical mode использует actual root
+state/slot/group/coordinator; исходные5 готовятся через super initial roster,
+профиль восстанавливается перед coordinator tick. READY/generation вручную не
+меняются; повторные coordinator/recovery ticks и foreign cleanup выключены.
+Исторический scaffold без этого opt-in создаёт alternate owner и не доказывает
+separate-quota admission. Другие старые cases требуют собственного актуального
+canonical setup, их прежний PASS не наследуется.
+Только после настоящего mounted native movement≥25м fixture добавляет штатный
+high-priority `SCR_AIGetOutActivity`. Native utility сама выбирает/исполняет его;
+observer не вызывает recovery напрямую и возвращает исходный production outcome.
+Требуются exact action FAILED, одна прежняя mobility attempt, route generation,
+неизменный trip deadline, тот же vehicle и original roster, физическое движение
+после repair≥25м/3polls. Predicate `HNA_PRODUCTION_RECOVERY` и финальный DONE
+обязательны; timeout/terminal/rejected scope не объявляются PASS. Никаких
+health/pose writes у extension нет; controlled scaffold isolation не является
+обычной войной. Полные остановленные logs/errors/native exit проверяются отдельно.
+Public `Test-HealthyNativeAbandonLog.ps1` требует canonical manifest/readback и
+causal INJECTED→actual production DECISION→same-asset25м/3polls, неизменный
+deadline/one attempt. FUNCTIONAL/FULL_FATAL/STRICT_FULL_ERRORS выводятся раздельно;
+любой FAIL сохраняет exit1. Parser contract использует13 synthetic controls,
+которые не являются native proof.
 
 `AICF_VehicleBehaviorProbe.c` и `AICF_VehicleBehaviorSettingsProbe.c` добавляются
 только runner `tools/Invoke-AICFVehicleBehavior.ps1` в неизменяемую isolated
@@ -1518,3 +1559,140 @@ canonical launcher всё равно сверяет фактические CLI/l
 8 overlaps нужны полные stopped logs, а не только отмеченные BEGIN/BUILT строки.
 Это repro известного FAIL, не acceptance PASS. Прочие native/script errors
 контроля также сохраняются и не исключаются из общего verdict.
+
+## Deferred vehicle preset: назначение до пополнения
+
+`tests/fixtures/AICF_DeferredVehiclePresetProbe.c` копируется только в isolated
+Core stage. Stock/Standard server и direct-connect client запускаются canonical
+`Start-AICFRuntime.ps1` с `-aicfDeferredVehiclePresetProbe 1`; runtime helper обязан
+сохранить manifests/readiness и свежие profiles обеих ролей. Без флага fixture
+не меняет gameplay.
+
+Для USSR slot0 fixture временно отклоняет только `CanRecruitInfantry`, пока
+нет vehicle binding: seed остаётся в штатном muster, а construction работает
+обычно. Клиент выбирает собственную faction через native affiliation, запрашивает
+реальный owner READ/SELECT/APPLY/CONFIRM_CREW и назначает ещё не нанятую numeric
+position9 водителем native civilian UAZ. Это не имитация ввода и не открытие UI.
+После подтверждения ограничения fixture больше нет: production самостоятельно
+строит казарму, нанимает9 бойцов с оплатой и исполняет deferred сокращение10→1.
+Оставшийся position9 должен стать position0 с тем же inventory. После него probe
+отправляет обычный point order400м и ждёт оплаченный UAZ с exact settled Pilot.
+Avatar создаётся через штатные native faction/loadout/respawn requests; managed
+AI не передаётся игроку. Для изоляции одной операции остальные19 desired sizes
+равны1; исходный slot0/ростер не подменяется. Деньги, здоровье, readiness и quota
+не подделываются. Такой прогон проверяет backend/RPC, не удобство окна игроком.
+
+Server пишет `[DEFERRED_CHECK]`/`[DEFERRED_CREW_COMMIT]`/`[DEFERRED_DONE]`, client —
+`[DEFERRED_CLIENT_CHECK]`/`[DEFERRED_CLIENT_DONE]`. `Test-DeferredVehiclePresetLog.ps1`
+требует полные остановленные server/client logs, оба launcher и exit receipts;
+проверяет11 обязательных cases,9 distinct paid recruits, unchanged kit и единственную
+оплаченную покупку с exact driver. Native resource errors подсчитываются отдельно
+как строгий полный error gate; функциональный exit0 не отменяет его FAIL.
+
+Сроки observer660/690с и canonical native autoshutdown730с не продлевают
+production trip/recruitment deadlines. Все fixture timers снимаются в OnGameEnd.
+
+## Coop fleet defaults и танковый crew — 01.11.2026
+
+`tests/fixtures/AICF_CoopFleetDefaultsProbe.c` включается только в изолированный
+Core/UI stage флагом `-aicfCoopFleetProbe 1` на canonical Server с CoopUS/CoopUSSR.
+После production ROSTER_READY читает обе стороны:22cases (shape+10slots каждой),
+реальные preset binding/desired size/role/mode/300m, повторную native topology
+в private world и `BehaviorFlow.IsCrewSeat`. Нет fixture vehicle/crew spawn,
+покупки, подмены roster или GUI. Уникальные модели читаются один раз; native
+`COOP_FLEET_CREW_INSPECTED` показывает crew/cargo counts. Для CARGO loader
+проверяется отказ planned recipe с незаполненным местом. Завершение RequestClose
+через5s, общий readiness deadline180s, timers снимаются в Stop/OnGameEnd.
+Полный JSON каталога в WCS может быть обрезан native Print по длине строки:
+такой диагностический readback не является доказательством полного каталога;
+полные выбранные модели/топология имеют отдельные короткие события.
+
+Targeted actual predicates: `Test-CoopFleetDefaultsContracts.ps1` (114checks
+Role+MatchRules), `Test-VehiclePresetCrewContracts.ps1` (130checks Core/WCS/Flow).
+Fresh evidence: `.codex-runtime/coop-fleet-20261101/REPORT.md`. Functional PASS
+не означает оплаченные18покупок/поездки, combat loader retention с реальными
+occupants, client/JIP, визуальную проверку или чистый resource gate.
+
+### Возврат Play в главное меню и OOM linger
+
+`AICF_ScenarioTransitionProbe` имеет отдельный opt-in
+`-aicfProbeReturnToMenu 1` поверх `-aicfTransitionProbe 1`. Только fresh isolated
+Frontend profile: до production Start сохраняются immutable expected header,
+mode/difficulty/addon IDs и фазовый guard в `$profile:AICF_TransitionReturnProbe.phase`
+(schema `AICF_RETURN_V2`). Static cache сам по себе не переживает native module
+reload. После ROSTER_READY callback вызывает pinned stock
+`GameStateTransitions.RequestGameplayEndTransition()`, ждёт actual main menu,
+остаётся там120s реального времени и вызывает RequestClose. Повторный Launch
+запрещён фазой; observer ограничен360s, timers снимаются в OnGameEnd. Это не
+ручной ввод, не оценка UI и не изменение gameplay recovery/economy.
+
+`Test-ScenarioReturnLog.ps1 -LogPath <full console> -LauncherPath <canonical output>
+-NativeExitPath <receipt>` сначала выполняет прежний4-case production transition
+analyzer, затем требует exact one return/menu, restored phases1/2,120s monotonic
+linger и полный sibling fatal/OOM veto. Manifest должен содержать прежний
+`-aicfExpectedReadyVariants` для общего analyzer; опция не создаёт новых вариантов.
+Resource errors имеют отдельный строгий FAIL, функциональный exit0 его не отменяет.
+
+Fresh Stock/Arland final-v3:4casesPASS, native0/stopped, actualmenu120224ms,
+fullfatal/OOM0, raw136E(strictFAIL). Исходный OOM не воспроизведён и не объявлен
+исправленным; UI editor/manual gameplay и исходное pressure не покрыты.
+Failed attempts/static-state и frontend availability в gameplay сохранены,
+не переименованы в PASS. Ledger: `.codex-runtime/coop-fleet-recovery-20261101/frontend-return/REPORT.md`.
+
+### Физическая проверка танкового экипажа WCS
+
+`AICF_TankPhysicalProbe.c` загружается после `AICF_VehicleScenarioProbe.c` только
+в isolated stage с `-aicfVehicleScenario tank -aicfTankPhysicalProbe 1`
+и `-aicfVehicleScenarioCanonicalOwner 1`. Сторона выбирается через
+`-aicfVehicleScenarioFaction US|USSR`: штатный первый roster содержит4/3 бойца;
+готовность, quota owner и поколения остаются у production root. Выбор танка
+берётся из активного profile/catalog. Покупка оплачивается обычной экономикой,
+места сверяются с фактическими native compartments; после дальнего приказа
+нужны50м движения,3 velocity polls и сохранение всего экипажа после прибытия.
+Для M1 проверяется CARGO-заряжающий как crew. Это COMBAT policy в controlled
+truce, а не доказательство поведения под реальным обстрелом.
+
+Подготовка экономики — явно контролируемое начальное условие: без
+`-aicfTankUseNativeStorage 1` fixture увеличивает ёмкость одного native leaf
+и заполняет склад до фактического max. Это не production изменение, не
+снижение цены и не доказательство обычной достижимости дорогого танка.
+С флагом native storage fixture читает зарегистрированные композиции,
+создаёт штатный склад с provider и измеряет агрегированную ёмкость без
+`SetMaxResourceValue`; размещение склада не доказывает оплату его строительства.
+
+`Test-TankPhysicalLog.ps1` принимает полный остановленный console, launcher,
+native exit и сторону. Он проверяет canonical CLI, оплату точной catalog quote,
+одну operation/машину, экипаж, физическое движение, прибытие и loader; все sibling
+logs участвуют в fatal/OOM и отдельном строгом resource gate.
+`-RequireNativeGate` дополнительно требует native STARTED→RETURNED с исходным
+60s окном, exact actor/seat/vehicle, прежними route/assignment и обоими completion
+receipts до прибытия. `-RequireExitHandoff` дополнительно требует actual readonly
+invoker boundary: cached Exit COMPLETED/remove1, production proof accepted1,
+его receipt1, оба исходных продолжения в queue, exact actor/vehicle/window.
+`Test-TankPhysicalLogContracts.ps1` содержит46 синтетических контролей парсера,
+включая неоплаченную/удешевлённую покупку и foreign asset; они не заменяют native run.
+Полный ledger: `.codex-runtime/wcs-tank-physical-20261101/REPORT.md`.
+
+Native случайно выбирает HQ; один и тот же Arland сценарий может дать другой
+начальный маршрут без ворот. `-aicfTankRequireNearbyGate 1` в ready setup только
+читает actual OpenGate smart tags в150м от main base. Неподходящий HQ приводит
+к раннему NOT_APPLICABLE и штатному RequestClose до покупки, без изменения HQ,
+actor/vehicle pose или native actions. Такой запуск не является PASS gate.
+
+`-aicfTankPositiveHandlerFault 1` ставится отдельно: на первом обычном production
+Attach/Reconcile полной healthy settled crew fixture создаёт собственный пустой
+native handler и перемещает в него только original Pilot через native
+SetMoveHandlerLeader. Record не подменяется; normal `super` выполняет реальное
+production reconciliation и возвращает исходный bool. Печатаются INJECTED →
+production POSITIVE_RECONCILE/BOUND → DECISION, lease/generations/deadline/budget
+до/после. Созданный пустой handler удаляется только при отсутствии members и
+vehicle record claim. Никаких actor/vehicle poses, здоровья или actions fixture
+не меняет. `Test-TankPhysicalLog.ps1 -RequirePositiveHandler` требует всю цепочку,
+неизменные identity/deadline/budget и последующее движение/прибытие той же машины.
+Чтобы override production modded utility видел её custom method, этот fixture
+копируется в stage как `Vehicles/ZZ_AICF_TankPhysicalProbe.c`, после production
+NativeSubgroup. Прежний root-path v13 WB FAIL сохранён, native там NOT RUN.
+
+## Supply depot: normal paid construction
+AICF_SupplyDepotConstructionProbe.c, opt-in -aicfSupplyDepotConstructionProbe 1. Для ArlandWCSRHS CoopUSSR приоритет AI US только SUPPLY_DEPOT; human USSR veto читается из actual Planner.Commander. Metadata и Place вызывают super; observer ждёт штатный ONLINE и рост GetSuppliesMax до цены назначенного пресета. Fixture не создаёт storage entity, не добавляет supplies и не меняет capacity. Deadline 900s после roster-ready. Выполнять в изолированном stage, полные server logs/manifest/exit обязательны.
+Дополнительно: файл $profile:AICF_SupplyProbe.stop вызывает штатный RequestClose с INCOMPLETE marker. -aicfSupplyDepotRegistryOnly 1 выполняет только registered prefab/Metadata.Load readback US и USSR без строительства. Supply log gate требует native exit0/canonical manifest/full stopped logs, связывает paid token с тем же SUPPLY_DEPOT layout completion и отдельно выводит strict_resources.

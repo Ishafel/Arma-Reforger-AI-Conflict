@@ -157,6 +157,7 @@ $scenarioSource=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'tests/fixture
 $damageSource=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'tests/fixtures/AICF_TransportDamageFallbackProbe.c'))
 function ScenarioBody([string]$name){Get-AICFMethodBody ([pscustomobject]@{Source=$scenarioSource;Code=(ConvertTo-AICFCodeText $scenarioSource)}) $name}
 $rosterBody=ScenarioBody 'AICF_VSOwnRecoveryRoster';$guardBody=ScenarioBody 'AICF_VSCanServiceRecovery';$serviceBody=ScenarioBody 'AICF_VSServiceOwnRecovery'
+$canonicalBody=(ScenarioBody 'AICF_VSCanonicalOwner').Replace('string enabled;','string enabled = null;').Replace('System.GetCLIParam(','AICF_ScenarioCLI.Get(').Replace(', enabled)',', out enabled)')
 if(!$rosterBody -or !$guardBody -or !$serviceBody){throw 'Scenario own-state recovery service missing'}
 $cohesionBody=ScenarioBody 'AICF_VSApplyInitialCohesion'
 function CohesionRules([string]$body){
@@ -195,6 +196,7 @@ using System.Collections.Generic;
 public static class AICF_ScenarioString{public static bool IsEmpty(this string value){return String.IsNullOrEmpty(value);}}
 public class AICF_ScenarioArray<T>{public List<T> Values=new List<T>();public int Count(){return Values.Count;}public T this[int i]{get{return Values[i];}}}
 public static class Replication{public static bool Server=true;public static bool IsServer(){return Server;}}
+public static class AICF_ScenarioCLI{public static string Canonical;public static bool Get(string name,out string value){value=Canonical;return name=="aicfVehicleScenarioCanonicalOwner" && value!=null;}}
 public class IEntity{public int Id;public bool Alive=true,Authority=true;public int GetID(){return Id;}}
 public class AIAgent{public IEntity Entity;public SCR_AIGroup Parent;public IEntity GetControlledEntity(){return Entity;}public SCR_AIGroup GetParentGroup(){return Parent;}}
 public class AICF_ScenarioControl{public AIAgent Agent;public AIAgent GetControlAIAgent(){return Agent;}}
@@ -214,13 +216,14 @@ public class AICF_ScenarioOwnerAdapter{
  public const int ORDER_RECOVERY_MIN_STABLE_MS=10000,ORDER_RECOVERY_STABLE_INTERVALS=2,ORDER_RECOVERY_STABLE_POLLS=3;
  public int Calls,Verified;public bool OwnerClears=true,OwnerChangesRoster;
  public bool AICF_VSOwnRecoveryRoster(AICF_GroupSlot slot) ROSTER
+ public bool AICF_VSCanonicalOwner() CANONICAL
  public bool AICF_VSCanServiceRecovery(AICF_GroupSlot slot) GUARD
  public void AICF_VSServiceOwnRecovery(AICF_GroupSlot slot) SERVICE
  public void ProcessPendingOrderRecovery(AICF_FactionState state,AICF_GroupSlot slot,object faction){Calls++;if(OwnerClears)slot.Pending=false;if(OwnerChangesRoster)slot.Members[0].Id=999;}
  public void AICF_VSOnRecoveryVerified(AICF_GroupSlot slot,AIWaypoint waypoint,int ms,int polls,int required){Verified++;}
  public void Print(string message){}
  public static int[] Evaluate(int scenario){
-  Replication.Server=true;var owner=new AICF_ScenarioOwnerAdapter();owner.m_VSFaction=new object();owner.m_VSGroup=new SCR_AIGroup(){Id=55,Faction=owner.m_VSFaction};var waypoint=new AIWaypoint(){Id=70};owner.m_VSGroup.Waypoint=waypoint;var slot=new AICF_GroupSlot(){Group=owner.m_VSGroup,Waypoint=waypoint};owner.m_VSState=new AICF_FactionState(){Slot=slot};
+  Replication.Server=true;AICF_ScenarioCLI.Canonical=null;var owner=new AICF_ScenarioOwnerAdapter();owner.m_VSFaction=new object();owner.m_VSGroup=new SCR_AIGroup(){Id=55,Faction=owner.m_VSFaction};var waypoint=new AIWaypoint(){Id=70};owner.m_VSGroup.Waypoint=waypoint;var slot=new AICF_GroupSlot(){Group=owner.m_VSGroup,Waypoint=waypoint};owner.m_VSState=new AICF_FactionState(){Slot=slot};
   for(int i=0;i<2;i++){var member=new ChimeraCharacter(){Id=100+i};member.Control.Agent=new AIAgent(){Entity=member,Parent=owner.m_VSGroup};slot.Members.Add(member);owner.m_aVSMembers.Values.Add(member.Id);}
   switch(scenario){
    case 1:Replication.Server=false;break;case 2:owner.m_VSState.Slot=new AICF_GroupSlot();break;case 3:slot.Ready=false;break;
@@ -233,20 +236,22 @@ public class AICF_ScenarioOwnerAdapter{
    case 25:owner.m_VSGroup=null;break;case 26:owner.m_VSState=null;break;case 27:slot=null;break;case 28:slot.Members[0]=null;break;
    case 29:owner.OwnerClears=false;break;case 30:owner.OwnerChangesRoster=true;break;case 31:slot.StableMs=9999;break;case 32:slot.Polls=2;break;
    case 33:owner.m_VSGroup.Waypoint=new AIWaypoint();break;case 34:owner.m_OrderPlanner.Failure="WAYPOINT_MISSING";break;
+   case 35:AICF_ScenarioCLI.Canonical="1";break;case 36:AICF_ScenarioCLI.Canonical="0";break;case 37:AICF_ScenarioCLI.Canonical="true";break;
   }
   bool own=owner.AICF_VSOwnRecoveryRoster(slot),eligible=owner.AICF_VSCanServiceRecovery(slot);owner.AICF_VSServiceOwnRecovery(slot);
   return new int[]{own?1:0,eligible?1:0,owner.Calls,owner.Verified};
  }
 }
 '@
-$adapter=$adapter.Replace('ROSTER',(AdaptScenarioBody $rosterBody)).Replace('GUARD',(AdaptScenarioBody $guardBody)).Replace('SERVICE',(AdaptScenarioBody $serviceBody))
+$adapter=$adapter.Replace('ROSTER',(AdaptScenarioBody $rosterBody)).Replace('GUARD',(AdaptScenarioBody $guardBody)).Replace('SERVICE',(AdaptScenarioBody $serviceBody)).Replace('CANONICAL',$canonicalBody)
 if(!('AICF_ScenarioOwnerAdapter' -as [type])){Add-Type -TypeDefinition $adapter}
-for($case=0;$case -le 34;$case++){
+for($case=0;$case -le 37;$case++){
  $actual=[AICF_ScenarioOwnerAdapter]::Evaluate($case)
  $own=1;if($case -in 1..15 -or $case -in 25..28){$own=0}
  $eligible=0;$calls=0;$verified=0
  if($case -eq 0 -or $case -ge 29){$eligible=1;$calls=1}
- if($case -eq 0){$verified=1}
+ if($case -in @(0,36,37)){$verified=1}
+ if($case -eq 35){$calls=0}
  if($actual[0] -ne $own -or $actual[1] -ne $eligible -or $actual[2] -ne $calls -or $actual[3] -ne $verified){throw "Actual scenario owner dispatch case=$case actual=$actual expected=$own,$eligible,$calls,$verified"}
  $script:checks++
 }

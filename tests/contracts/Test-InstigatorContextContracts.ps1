@@ -29,8 +29,8 @@ try{
     Check 'live-log' ($log.Replace('Game destroyed.','running')) $launch 1 'BASE_RUNTIME'
     Check 'missing-cli' $log ($launch.Replace('-aicfInstigatorProbe','-unknown')) 1 'PROBE_ARGUMENT'
     Check 'missing-player-cases' $log $launch 1 'CASE_NATIVE_PLAYER' -Player
-    $playerCases=$baseCases+@('ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','NO_GROUP_SUMMARY')
-    $playerLog="[ROSTER_READY] us_groups=0 ussr_groups=10`n[COOP_CONTEXT] mode=US us_faction=US ussr_faction=USSR nodes=5`n"+(@($playerCases|ForEach-Object {"[COOP_CASE] case=$_ pass=1"}) -join "`n")+"`n[COOP_DONE] mode=US checks=19 failed=0 elapsed_ms=35000`n"+(@(($cases|Where-Object {$_ -ne 'NATIVE_ENEMY_AI'})+@('NATIVE_PLAYER','OTHER_PLAYER_OVERRIDE','OTHER_PLAYER_VICTIM')|ForEach-Object {"[INSTIGATOR_CASE] case=$_ pass=1"}) -join "`n")+"`n[INSTIGATOR_DONE] checks=20 failed=0`nGame destroyed."
+    $playerCases=$baseCases+@('ZERO_PLAYER_TICKETS_NO_DEFEAT','CONFLICT_REJECTED','AI_GROUP_SUMMARY')
+    $playerLog="[ROSTER_READY] us_groups=10 ussr_groups=10`n[COOP_CONTEXT] mode=US us_faction=US ussr_faction=USSR nodes=5`n"+(@($playerCases|ForEach-Object {"[COOP_CASE] case=$_ pass=1"}) -join "`n")+"`n[COOP_DONE] mode=US checks=19 failed=0 elapsed_ms=35000`n"+(@(($cases|Where-Object {$_ -ne 'NATIVE_ENEMY_AI'})+@('NATIVE_PLAYER','OTHER_PLAYER_OVERRIDE','OTHER_PLAYER_VICTIM')|ForEach-Object {"[INSTIGATOR_CASE] case=$_ pass=1"}) -join "`n")+"`n[INSTIGATOR_DONE] checks=20 failed=0`nGame destroyed."
     $playerLaunch='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Server';variant='Stock';matchMode='CoopUS';difficulty='Easy';arguments=@('-aicfCoopProbe','US','-aicfInstigatorProbe','1','-aicfInstigatorPlayer','1')}|ConvertTo-Json -Compress)
     Check 'player-positive' $playerLog $playerLaunch 0 '' -Player
     Check 'player-missing-argument' $playerLog ($playerLaunch.Replace('-aicfInstigatorPlayer','-unknown')) 1 'PLAYER_ARGUMENT' -Player

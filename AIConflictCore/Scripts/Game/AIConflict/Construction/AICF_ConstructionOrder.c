@@ -5,6 +5,7 @@ enum AICF_EConstructionType
 	LIGHT_DEPOT,
 	LARGE_BARRACKS,
 	HEAVY_DEPOT,
+	SUPPLY_DEPOT,
 	COUNT
 }
 
@@ -212,14 +213,21 @@ class AICF_ConstructionBaseState
 {
 	SCR_CampaignFaction m_RetryFaction;
 	EntityID m_RetryProviderId;
-	ref array<int> m_aSearchFailures = {0, 0, 0, 0, 0};
-	ref array<int> m_aSearchRetryAt = {0, 0, 0, 0, 0};
+	ref array<int> m_aSearchFailures = {};
+	ref array<int> m_aSearchRetryAt = {};
 	SCR_CampaignMilitaryBaseComponent m_Base;
 	EntityID m_BaseId;
 	int m_iDueAt;
 	int m_iRevision;
 	int m_iNextType;
 	int m_iSmallFailures;
-	ref array<int> m_aSearchOffsets = {0, 0, 0, 0, 0};
+	ref array<int> m_aSearchOffsets = {};
 	ref AICF_ConstructionOrder m_Order;
+
+	void AICF_ConstructionBaseState()
+	{
+		m_aSearchFailures.Resize(AICF_EConstructionType.COUNT);
+		m_aSearchRetryAt.Resize(AICF_EConstructionType.COUNT);
+		m_aSearchOffsets.Resize(AICF_EConstructionType.COUNT);
+	}
 }

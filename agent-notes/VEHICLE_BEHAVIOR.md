@@ -6,6 +6,44 @@
 Воскрешение, лечение и дальние переносы запрещены. Human possession, чужие
 occupants, authority и identity остаются обязательными проверками.
 
+## Исправная машина при native отказе от движения
+
+`AICF_TransportNativeAbandon` остаётся read-only доказательством exact stock
+high-priority group GetOut после movement failure. Само наличие такого action
+больше не вызывает немедленный отказ от исправной машины. Transit сначала
+проверяет UNDAMAGED, root health=1, movement damage=0, native mobility/no fire,
+полный исходный numeric roster и settled crew без местного боя. Перед отменой
+дважды повторяется полный observer/binding scope; резервируется прежняя mobility
+attempt. Отменяется только exact current+executed GetOut через `Fail()`, затем
+повторно проверяются assignment/route generation/lease после callback и строится
+новый маршрут той же машины. Новый debit/spawn, health/pose writes, продление
+absolute deadline и сброс счётчика попыток отсутствуют. Это route-only repair;
+обычная отдельная STUCK recovery сохраняет прежний локальный physical cap.
+
+Переход уже начавших выход акторов, неполный roster, damage, foreign/human,
+ongoing combat, stale identity, deadline или исчерпанный прежний budget не
+получают разрешение на принудительный откат. В этих случаях остаётся прежний
+bounded fallback; бесконечное удержание неисправимой машины не вводится.
+`TRANSPORT_NATIVE_ABANDON_RECOVERY[_REJECTED]` записывает реальные eligibility
+predicates и выбранный route-only режим. Исходный `TRANSPORT_NATIVE_GROUP_ABANDONED`
+по-прежнему означает фактический fallback, а не попытку восстановления.
+
+Offline `Test-HealthyNativeAbandonRecoveryContracts.ps1` исполняет production
+predicate для192 сочетаний eligibility/budget и отклоняет6 unsafe source variants.
+Это не подтверждение отмены native action или физического движения. Отдельная
+`AICF_HealthyNativeAbandonProbe` под Scenario scaffold ставит настоящий stock
+GetOut в native utility queue и наблюдает production outcome, неизменный deadline,
+то же vehicle/исходный roster и последующие25м/3velocity polls. Fault контролируемый;
+ordinary-war/native failure происхождение этим probe не доказывается. Runtime
+verdict, в том числе FAIL, фиксируется в отчёте конкретного запуска.
+
+Свежий canonical Stock v8 подтвердил actual native GetOut → exact action FAILED
+→ route1→2 при attempts0→1/max2 и неизменном deadline; та же UAZ/исходные5
+проехали27.8693м/6velocity polls. Controlled functional10/10, WB0/native0,
+full stopped/fatal0, source drift0; strict resource gate FAIL14console(E)
+(28raw sibling lines). Это отдельное доказательство данного recovery и одной
+оплаченной покупки150 supplies, не обычного боя или отсутствия resource ошибок.
+
 Пресет schema2 хранит `behavior` (`TRANSPORT`/`COMBAT`) и `returnDistance`.
 Пользователь выбрал N=300м; редактор допускает целое значение50..1000м.
 Schema1 читается с TRANSPORT/300. Изменение поведения или N меняет assignment;
@@ -68,6 +106,45 @@ predicate нет в журнале: доказан и исправлен кла�
 Исходный
 `crew-final-current-v4` сохранён как FAIL: actual native Pilot OpenGate был
 ошибочно принят за `CREW_UNAVAILABLE`, затем `TACTICAL_BEGIN_REJECTED`.
+
+Дополнительный WCS T72 A/B control `USSR-v10-oldguard` установил другой точный
+handoff: actual current `GetOut:COMPLETED` ещё хранится в utility, оба исходных
+`Perform`/`Return` стоят `EVALUATED`, switching animation0, actor conscious1,
+elapsed6021ms при исходном окне60s. Прежний `!Live(current)` направлял его
+в proof завершённого Perform и вызывал ложный `CREW_UNAVAILABLE`.
+Теперь exact captured Exit имеет собственный первый completion receipt и
+listener. Только cached `Exit:COMPLETED/remove1` с неизменными vehicle/priority,
+живыми несuspended исходными Perform+Return в той же utility queue и прежним
+absolute window допускает продолжение. Общие actor/seat/lease/revision/health
+guards сохраняются; seat-switch animation остаётся запрещена. Третий listener
+снимается в Stop, receipt сбрасывается; duplicate callbacks не обновляют время.
+`TRANSPORT_NATIVE_GATE_EXIT_COMPLETED` и `exit_completed_receipt`,
+`exit_completed_at_ms`, `exit_listener_attached` делают этот proof проверяемым.
+Tank fixture только читает actual proof в native callback boundary.
+Физический повтор exact bridge — отдельный gate в
+`.codex-runtime/wcs-tank-physical-20261101/REPORT.md`; прошлый v8 PASS без
+наблюдения новой ветви не считается подтверждением этого исправления.
+
+Native возвращение экипажа может оставить разные положительные movement
+handlers у зарегистрированной машины и её Pilot. Обычный stale-positive veto
+сохраняется; `CanReconcilePositiveHandles` даёт узкое исключение только для
+полного current/captured/conscious roster, целиком settled в одной lease-машине.
+Оба affected handlers должны быть существующими nondefault formations: native
+`GetAgentsInHandler`/count, отсутствие дублей, все члены exact own group/vehicle;
+ни один другой vehicle record не может владеть любым из этих ID. Native record
+единственный. Непосредственно перед изменением повторяются весь Read, identity,
+оба ID и proof. Выполняется один штатный `OnJoinGroupFromVehicle(pilot,true)`;
+затем прежние repeated readbacks и passenger pass проверяют общий handler.
+Прямого reset/SetSubgroupHandleId, создания/удаления handler, pose/action/health
+или изменения бюджета/deadline в production нет. Третий original settled actor
+в другом handler обрабатывается прежним passenger pass, только как конкретный
+own actor; чужой/default handler целиком не присваивается и не удаляется.
+Foot, dead, incomplete, foreign, pending native owner и неопределённость
+сохраняют fail-closed veto. Событие `VEHICLE_NATIVE_SUBGROUP_POSITIVE_RECONCILE`
+фиксирует два исходных ID/counts и единственный native join; последующий
+`VEHICLE_NATIVE_SUBGROUP_BOUND` фиксирует физически проверенный результат.
+`Test-VehiclePositiveSubgroupContracts.ps1` исполняет actual readonly readers:
+40cases/8unsafe mutations; native восстановление подтверждается отдельно.
 
 TRANSPORT при местной угрозе высаживает весь живой отряд. После окончания боя
 возвращает выживших в ту же машину; новый приказ с перемещением дальше N также

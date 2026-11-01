@@ -340,6 +340,8 @@ class AICF_VehicleTransitFlow
 		string nativeAbandonDetails;
 		if (AICF_TransportNativeAbandon.Observe(trip, nativeAbandonDetails))
 		{
+			AICF_TripOutcome retained = RecoverHealthyNativeAbandon(trip, causationId);
+			if (retained) return retained;
 			AICF_Stage3Diagnostics.Info("TRANSPORT_NATIVE_GROUP_ABANDONED", FormatIdentity(trip, "NATIVE_GROUP_ABANDONED_VEHICLE") + nativeAbandonDetails);
 			return AICF_TripOutcome.FallbackToFoot("NATIVE_GROUP_ABANDONED_VEHICLE", causationId);
 		}
@@ -398,6 +400,77 @@ class AICF_VehicleTransitFlow
 			causationId,
 			nowMs,
 			targetDistanceMeters);
+	}
+
+	// The stock movement node may already have queued its high-priority GetOut
+	// before our failed-move receipt was captured. A healthy asset with its full
+	// original crew gets the same bounded route repair instead of immediate sale/
+	// cleanup. Only the exact observed action is cancelled, before actor egress.
+	static bool CanRecoverNativeAbandon(bool healthy, bool fullRoster, bool settled,
+		bool localCombat, int attempts, int maximumAttempts, bool expired)
+	{
+		return healthy && fullRoster && settled && !localCombat && !expired &&
+			attempts >= 0 && attempts < maximumAttempts;
+	}
+
+	protected bool ReadHealthyNativeAbandonScope(AICF_TransportTrip trip, out string reason)
+	{
+		reason = "EXACT_NATIVE_ABANDON";
+		string observed;
+		if (!AICF_TransportNativeAbandon.Observe(trip, observed)) return false;
+		AICF_VehiclePresetNativeSeatBinding binding = AICF_VehiclePresetNativeSeatBinding.Capture(trip);
+		if (!binding || !binding.IsCurrent()) return false;
+		Vehicle vehicle = binding.m_Vehicle;
+		SCR_DamageManagerComponent damage = SCR_DamageManagerComponent.GetDamageManager(vehicle);
+		SCR_AIVehicleUsageComponent usage = SCR_AIVehicleUsageComponent.Cast(vehicle.FindComponent(SCR_AIVehicleUsageComponent));
+		bool healthy = usage && usage.GetDamageState() == EDamageState.UNDAMAGED &&
+			damage && damage.GetDefaultHitZone() && damage.GetDefaultHitZone().GetHealthScaled() == 1.0 &&
+			damage.GetMovementDamage() == 0 && SCR_AIVehicleUsability.VehicleCanMove(vehicle) &&
+			!SCR_AIVehicleUsability.VehicleIsOnFire(vehicle);
+		array<AIAgent> agents = {};
+		binding.m_Group.GetAgents(agents);
+		bool fullRoster = binding.m_aMembers.Count() > 0 && binding.m_aMembers.Count() == agents.Count() &&
+			agents.Count() == trip.GetVehiclePresetSlot().GetDesiredSize();
+		bool settled = m_Watchdog.AreAllAliveMembersSettledInVehicle(binding.m_Group, vehicle);
+		bool combat = AICF_VehicleBehaviorPolicy.HasLocalCombat(trip);
+		AICF_VehicleMovementState state = trip.GetMovementState();
+		bool expired = trip.IsDeadlineReached(System.GetTickCount());
+		bool allowed = CanRecoverNativeAbandon(healthy, fullRoster, settled, combat,
+			state.GetMobilityRecoveryAttempts(), state.GetMaximumMobilityRecoveryAttempts(), expired);
+		reason = string.Format("healthy=%1|full_roster=%2|settled=%3|local_combat=%4|attempts=%5|maximum_attempts=%6|expired=%7",
+			healthy, fullRoster, settled, combat, state.GetMobilityRecoveryAttempts(),
+			state.GetMaximumMobilityRecoveryAttempts(), expired);
+		return allowed && binding.IsCurrent() && SCR_DamageManagerComponent.GetDamageManager(vehicle) == damage &&
+			SCR_AIVehicleUsageComponent.Cast(vehicle.FindComponent(SCR_AIVehicleUsageComponent)) == usage;
+	}
+
+	protected AICF_TripOutcome RecoverHealthyNativeAbandon(AICF_TransportTrip trip, string causationId)
+	{
+		string eligibility;
+		if (!ReadHealthyNativeAbandonScope(trip, eligibility))
+		{
+			AICF_Stage3Diagnostics.Info("TRANSPORT_NATIVE_ABANDON_RECOVERY_REJECTED", FormatIdentity(trip, "HEALTHY_RETENTION_REJECTED") + " predicates=[" + eligibility + "]");
+			return null;
+		}
+		SCR_AIGroup group = trip.GetAssignment().GetGroup();
+		SCR_AIGroupUtilityComponent utility = group.GetGroupUtilityComponent();
+		SCR_AIGetOutActivity action = SCR_AIGetOutActivity.Cast(utility.GetCurrentAction());
+		AICF_VehicleMovementState state = trip.GetMovementState();
+		AICF_StrategicAssignmentSnapshot assignment = trip.GetAssignment();
+		int routeGeneration = state.GetRouteGeneration();
+		AICF_VehiclePresetNativeSeatBinding binding = AICF_VehiclePresetNativeSeatBinding.Capture(trip);
+		// Re-read all permissions immediately before touching the native action.
+		if (!binding || !binding.IsCurrent() || !ReadHealthyNativeAbandonScope(trip, eligibility) || group.GetGroupUtilityComponent() != utility ||
+			utility.GetCurrentAction() != action || utility.GetExecutedAction() != action || !state.BeginMobilityRecovery()) return null;
+		action.Fail();
+		string invalidReason;
+		if (!ValidateContext(trip, causationId, true, invalidReason) || !binding.IsCurrent() ||
+			trip.GetAssignment() != assignment || trip.GetMovementState() != state || state.GetRouteGeneration() != routeGeneration)
+			return AICF_TripOutcome.TerminalFailClosed("HEALTHY_RETENTION_CONTEXT_CHANGED", causationId);
+		AICF_Stage3Diagnostics.Info("TRANSPORT_NATIVE_ABANDON_RECOVERY", FormatIdentity(trip, "HEALTHY_FULL_ROSTER") +
+			" predicates=[" + eligibility + "] native_get_out_cancelled=1 recovery_mode=ROUTE_REBUILD_ONLY health_unchanged=1 deadline_renewed=0");
+		if (state.IsRecoveryEvidencePending()) ReportPendingRecoveryFailure(trip, "HEALTHY_NATIVE_ABANDON", false);
+		return BeginMobilityRecovery(trip, causationId, "HEALTHY_NATIVE_ABANDON", false);
 	}
 
 	protected AICF_TripOutcome RecoverNativeMoveFailure(AICF_TransportTrip trip, string causationId)

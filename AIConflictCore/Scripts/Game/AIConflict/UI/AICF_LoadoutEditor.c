@@ -1071,9 +1071,17 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			AICF_LoadoutRecipe context = AICF_PersonalLoadout.Context(m_Player, faction);
 			if (!context || context.m_sCharacter != m_sPersonalSource) { Close(); return; }
 		}
-		if (!m_Player || GetGame().GetPlayerController() != m_Player || SCR_FactionManager.SGetLocalPlayerFaction() != m_Faction ||
-			m_Player.GetControlledEntity() != m_PlayerCharacter)
+		if (!m_Player || GetGame().GetPlayerController() != m_Player || SCR_FactionManager.SGetLocalPlayerFaction() != m_Faction)
 		{
+			Print("[AICF][PRESET_EDITOR_CONTEXT_LOST] editor=INFANTRY reason=PLAYER_OR_FACTION_CHANGED");
+			Close();
+			return;
+		}
+		// AI пресет принадлежит faction/slot, а не текущему аватару игрока.
+		// Личный редактор по-прежнему закрывается при смене персонажа.
+		if (m_bPersonal && m_Player.GetControlledEntity() != m_PlayerCharacter)
+		{
+			Print("[AICF][PRESET_EDITOR_CONTEXT_LOST] editor=INFANTRY reason=PERSONAL_CHARACTER_CHANGED");
 			Close();
 			return;
 		}
@@ -1300,6 +1308,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_aSlotLocations.Clear();
 		m_bDraftReady = false;
 		m_wPreview.SetVisible(false);
+		m_wPreview.SetWorld(null, 0);
 		// Отменяем незавершённые binds старых карточек до смены черновика.
 		m_Slots.ReleasePreviews();
 		m_Items.ReleasePreviews();
@@ -2176,7 +2185,11 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_aButtons.Clear();
 		m_aButtonFrames.Clear();
 		if (m_wPreview)
+		{
+			m_wPreview.SetVisible(false);
+			m_wPreview.SetWorld(null, 0);
 			m_wPreview.RemoveHandler(this);
+		}
 		if (m_wSearch)
 			m_wSearch.RemoveHandler(this);
 		if (m_wName)

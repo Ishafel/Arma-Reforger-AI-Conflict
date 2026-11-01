@@ -1,6 +1,108 @@
 // Isolated frontend only. Invokes production launch without GUI input.
 class AICF_ScenarioTransitionProbe
 {
+	// Persists across world transitions in the same already loaded addon graph.
+	static int s_iReturnPhase;
+	static int s_iReturnStarted;
+	static int s_iMainMenuAt;
+	static int s_iLingerSample;
+	static ResourceName s_sExpectedResource;
+	static int s_iExpectedMode;
+	static int s_iExpectedDifficulty;
+	static ref array<string> s_aExpectedAddons = {};
+	static const string RETURN_STATE_PATH = "$profile:AICF_TransitionReturnProbe.phase";
+	static bool ReturnMode() { return System.IsCLIParam("aicfProbeReturnToMenu"); }
+	static void SaveReturnState()
+	{
+		FileHandle file = FileIO.OpenFile(RETURN_STATE_PATH, FileMode.WRITE);
+		if (!file) { Print("[AICF][TRANSITION_RETURN_FAIL] reason=STATE_WRITE"); Close(); return; }
+		file.WriteLine("AICF_RETURN_V2");
+		file.WriteLine(s_iReturnPhase.ToString());
+		file.WriteLine(s_iReturnStarted.ToString());
+		file.WriteLine(s_iMainMenuAt.ToString());
+		file.WriteLine(s_sExpectedResource);
+		file.WriteLine(s_iExpectedMode.ToString());
+		file.WriteLine(s_iExpectedDifficulty.ToString());
+		file.WriteLine(s_aExpectedAddons.Count().ToString());
+		foreach (string addon : s_aExpectedAddons) file.WriteLine(addon);
+		file.Close();
+	}
+	static void LoadReturnState()
+	{
+		if (s_iReturnPhase != 0 || !FileIO.FileExists(RETURN_STATE_PATH)) return;
+		FileHandle file = FileIO.OpenFile(RETURN_STATE_PATH, FileMode.READ);
+		if (!file) { Print("[AICF][TRANSITION_RETURN_FAIL] reason=STATE_READ"); Close(); return; }
+		string tag, phase, started, menu, resource, mode, difficulty, addonCount;
+		bool read = file.ReadLine(tag) >= 0 && file.ReadLine(phase) >= 0 && file.ReadLine(started) >= 0 && file.ReadLine(menu) >= 0;
+		read = read && file.ReadLine(resource) >= 0 && file.ReadLine(mode) >= 0 && file.ReadLine(difficulty) >= 0 && file.ReadLine(addonCount) >= 0;
+		array<string> addons = {};
+		int count = addonCount.ToInt(-1);
+		if (count < 1 || count > 64) read = false;
+		if (read)
+			for (int index; index < count; index++)
+			{
+				string addon;
+				if (file.ReadLine(addon) < 0 || addon.IsEmpty() || addons.Contains(addon)) { read = false; break; }
+				addons.Insert(addon);
+			}
+		file.Close();
+		if (!read || tag != "AICF_RETURN_V2" || phase.ToInt(-1) < 1 || phase.ToInt() > 4 || started.ToInt(-1) < 0 || menu.ToInt(-1) < 0 ||
+			resource.IsEmpty() || mode.ToInt(-1) < 0 || mode.ToInt() > 2 || difficulty.ToInt(-1) < 0 || difficulty.ToInt() > 2)
+			{ Print("[AICF][TRANSITION_RETURN_FAIL] reason=INVALID_STATE"); Close(); return; }
+		s_iReturnPhase = phase.ToInt();
+		s_iReturnStarted = started.ToInt();
+		s_iMainMenuAt = menu.ToInt();
+		s_sExpectedResource = resource;
+		s_iExpectedMode = mode.ToInt();
+		s_iExpectedDifficulty = difficulty.ToInt();
+		s_aExpectedAddons.Copy(addons);
+		Print(string.Format("[AICF][TRANSITION_RETURN_STATE] phase=%1 restored=1", s_iReturnPhase));
+	}
+	static void ReturnMenu()
+	{
+		LoadReturnState();
+		if (s_iReturnPhase != 1 || GameStateTransitions.IsInsideMainMenu())
+			{ Print(string.Format("[AICF][TRANSITION_RETURN_FAIL] reason=UNARMED phase=%1", s_iReturnPhase)); Close(); return; }
+		s_iReturnPhase = 2;
+		SaveReturnState();
+		Print("[AICF][TRANSITION_RETURN_REQUEST] production_gameplay_end=1");
+		GameStateTransitions.RequestGameplayEndTransition();
+	}
+	static void ObserveReturn()
+	{
+		int now = System.GetTickCount();
+		if (s_iReturnStarted && now - s_iReturnStarted >= 360000)
+		{
+			Print(string.Format("[AICF][TRANSITION_RETURN_FAIL] reason=DEADLINE phase=%1", s_iReturnPhase));
+			Close();
+			return;
+		}
+		if (s_iReturnPhase == 2 && GameStateTransitions.IsInsideMainMenu())
+		{
+			s_iReturnPhase = 3;
+			s_iMainMenuAt = now;
+			SaveReturnState();
+			Print("[AICF][TRANSITION_RETURN_MAIN_MENU] actual_menu=1 linger_ms=120000");
+		}
+		if (s_iReturnPhase != 3) return;
+		if (!GameStateTransitions.IsInsideMainMenu())
+		{
+			Print("[AICF][TRANSITION_RETURN_FAIL] reason=LEFT_MAIN_MENU");
+			Close();
+			return;
+		}
+		int elapsed = now - s_iMainMenuAt;
+		if (now >= s_iLingerSample)
+		{
+			s_iLingerSample = now + 30000;
+			Print(string.Format("[AICF][TRANSITION_RETURN_LINGER] elapsed_ms=%1", elapsed));
+		}
+		if (elapsed < 120000) return;
+		s_iReturnPhase = 4;
+		SaveReturnState();
+		Print(string.Format("[AICF][TRANSITION_RETURN_DONE] actual_menu=1 elapsed_ms=%1 relaunch=0", elapsed));
+		Close();
+	}
 	static SCR_DSConfig HostConfig()
 	{
 		if (!System.IsCLIParam("aicfProbeHost")) return null;
@@ -60,6 +162,7 @@ class AICF_ScenarioTransitionProbe
 	static void Launch()
 	{
 		if (!GameStateTransitions.IsInsideMainMenu()) return;
+		if (ReturnMode() && s_iReturnPhase != 0) return;
 		AICF_ScenarioSetupSelection selection = Selection();
 		MissionWorkshopItem entry = SCR_ScenarioUICommon.GetInGameScenario("{A1CF261019500001}Missions/AICF_Conflict_Arland_Setup.conf");
 		int complete, total;
@@ -80,6 +183,16 @@ class AICF_ScenarioTransitionProbe
 		SCR_DSConfig config = HostConfig();
 		bool ready = AICF_ScenarioLaunch.CanStart(selection, entry, config);
 		Print(string.Format("[AICF][TRANSITION_CASE] case=PREFLIGHT pass=%1", ready));
+		if (ReturnMode())
+		{
+			if (!selection) { Print("[AICF][TRANSITION_RETURN_FAIL] reason=NO_EXPECTED_SELECTION"); Close(); return; }
+			s_sExpectedResource = selection.GetResource();
+			s_iExpectedMode = selection.GetMode();
+			s_iExpectedDifficulty = selection.GetDifficulty();
+			s_aExpectedAddons.Copy(selection.GetVariant().m_aAddons);
+			s_iReturnPhase = 1;
+			SaveReturnState();
+		}
 		bool accepted = AICF_ScenarioLaunch.Start(selection, entry, config);
 		Print(string.Format("[AICF][TRANSITION_CASE] case=ACCEPTED pass=%1", accepted));
 		if (config)
@@ -104,6 +217,13 @@ modded class ArmaReforgerScripted
 		bool started = super.OnGameStart();
 		if (System.IsCLIParam("aicfTransitionProbe"))
 		{
+			if (AICF_ScenarioTransitionProbe.ReturnMode())
+			{
+				AICF_ScenarioTransitionProbe.LoadReturnState();
+				if (!AICF_ScenarioTransitionProbe.s_iReturnStarted) AICF_ScenarioTransitionProbe.s_iReturnStarted = System.GetTickCount();
+				GetGame().GetCallqueue().CallLater(AICF_ScenarioTransitionProbe.ObserveReturn, 1000, true);
+				if (AICF_ScenarioTransitionProbe.s_iReturnPhase != 0) return started;
+			}
 			WorkshopApi workshop = GetGame().GetBackendApi().GetWorkshop();
 			if (workshop.NeedAddonsScan()) workshop.ScanOfflineItems();
 			GetGame().GetCallqueue().CallLater(AICF_ScenarioTransitionProbe.Launch, 12000, false);
@@ -116,6 +236,8 @@ modded class ArmaReforgerScripted
 		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.Launch);
 		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.Timeout);
 		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.Close);
+		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.ReturnMenu);
+		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.ObserveReturn);
 		super.OnGameEnd();
 	}
 }
@@ -131,7 +253,7 @@ modded class AICF_MatchController
 	{
 		ChimeraWorld world = ChimeraWorld.CastFrom(GetGame().GetWorld());
 		// Только fixture: Welcome pause не должна блокировать автоматический readback.
-		if (System.IsCLIParam("aicfProbeTime") && world) world.PauseGameTime(false);
+		if ((System.IsCLIParam("aicfProbeTime") || AICF_ScenarioTransitionProbe.ReturnMode()) && world) world.PauseGameTime(false);
 		if (System.IsCLIParam("aicfTransitionProbe"))
 		{
 			if (!m_iAICFTransitionObservedAt && m_USState && m_USSRState && m_USState.GetSlotCount() + m_USSRState.GetSlotCount() > 0)
@@ -174,9 +296,11 @@ modded class AICF_MatchController
 		if (!m_bRosterReady) return;
 		if (System.IsCLIParam("aicfProbeResumeAfter") && !m_bAICFTransitionPauseChecked) return;
 		m_bAICFTransitionRead = true;
-		AICF_ScenarioSetupSelection selection = AICF_ScenarioTransitionProbe.Selection();
+		AICF_ScenarioSetupSelection selection;
+		if (!AICF_ScenarioTransitionProbe.ReturnMode() || System.IsCLIParam("aicfProbeTime")) selection = AICF_ScenarioTransitionProbe.Selection();
 		if (System.IsCLIParam("aicfProbeTime"))
 		{
+			if (!selection) { Print("[AICF][TRANSITION_RETURN_FAIL] reason=NO_ENVIRONMENT_SELECTION"); GetGame().RequestClose(); return; }
 			TimeAndWeatherManagerEntity manager = world.GetTimeAndWeatherManager();
 			AICF_ScenarioEnvironment expected = selection.GetEnvironment();
 			string weather = manager.GetCurrentWeatherState().GetStateName();
@@ -203,13 +327,18 @@ modded class AICF_MatchController
 		}
 		SCR_MissionHeaderCampaign header = SCR_MissionHeaderCampaign.Cast(GetGame().GetMissionHeader());
 		bool target = selection && header && header.GetHeaderResourceName() == selection.GetResource() && header.m_eAICFMatchMode == selection.GetMode() && header.m_eAICFDifficulty == selection.GetDifficulty();
+		if (AICF_ScenarioTransitionProbe.ReturnMode())
+			target = header && header.GetHeaderResourceName() == AICF_ScenarioTransitionProbe.s_sExpectedResource &&
+				header.m_eAICFMatchMode == AICF_ScenarioTransitionProbe.s_iExpectedMode && header.m_eAICFDifficulty == AICF_ScenarioTransitionProbe.s_iExpectedDifficulty;
 		Print(string.Format("[AICF][TRANSITION_CASE] case=ACTIVE_HEADER pass=%1", target));
 		array<string> loaded = {};
 		GameProject.GetLoadedAddons(loaded);
-		bool graph = selection != null;
-		if (selection)
+		array<string> expected = {};
+		if (AICF_ScenarioTransitionProbe.ReturnMode()) expected.Copy(AICF_ScenarioTransitionProbe.s_aExpectedAddons);
+		else if (selection) expected.Copy(selection.GetVariant().m_aAddons);
+		bool graph = !expected.IsEmpty();
+		if (graph)
 		{
-			array<string> expected = selection.GetVariant().m_aAddons;
 			foreach (string id : expected) if (loaded.Find(id) < 0) graph = false;
 			foreach (string id : loaded)
 			{
@@ -222,7 +351,9 @@ modded class AICF_MatchController
 		Print(string.Format("[AICF][TRANSITION_DONE] header=%1 graph=%2 roster=1", target, graph));
 		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.Launch);
 		GetGame().GetCallqueue().Remove(AICF_ScenarioTransitionProbe.Timeout);
-		if (!System.IsCLIParam("aicfCigaretteProbe"))
+		if (AICF_ScenarioTransitionProbe.ReturnMode())
+			GetGame().GetCallqueue().CallLater(AICF_ScenarioTransitionProbe.ReturnMenu, 5000, false);
+		else if (!System.IsCLIParam("aicfCigaretteProbe"))
 			GetGame().GetCallqueue().CallLater(AICF_ScenarioTransitionProbe.Close, 3000, false);
 	}
 }

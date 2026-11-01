@@ -76,12 +76,12 @@ public class AICF_VSFactionSelection{
  public Faction m_USFaction=new Faction(){Key="US"},m_USSRFaction=new Faction(){Key="USSR"},m_VSFaction;public object m_VSState;public string m_sVSCase="repeat5",m_sVSFaction="USSR";
  public bool Select() SELECT_BODY
  public bool Model(string prefab,int source,int seats,int cost) MODEL_BODY
- public static string Evaluate(int scenario){CLI.Requested=null;var owner=new AICF_VSFactionSelection();Faction prior=null;switch(scenario){case 1:CLI.Requested="USSR";break;case 2:CLI.Requested="US";break;case 3:CLI.Requested="US";owner.m_sVSCase="uaz5";break;case 4:CLI.Requested="CIV";break;case 5:owner.m_USSRFaction=null;break;case 6:owner.m_USSRFaction.Base=null;break;case 7:owner.m_USSRFaction.Key="US";break;case 8:prior=new Faction(){Key="PINNED"};owner.m_VSFaction=prior;break;case 9:owner.m_VSState=new object();break;case 10:CLI.Requested="";break;case 11:CLI.Requested="US";owner.m_USFaction=null;break;case 12:CLI.Requested="US";owner.m_USFaction.Base=null;break;}bool accepted=owner.Select();if(scenario==8&&owner.m_VSFaction!=prior)throw new System.Exception("Reassignment");bool same=owner.m_VSFaction!=null&&(owner.m_VSFaction==owner.m_USFaction||owner.m_VSFaction==owner.m_USSRFaction);return accepted+","+owner.m_sVSFaction+","+same;}
+ public static string Evaluate(int scenario){CLI.Requested=null;var owner=new AICF_VSFactionSelection();Faction prior=null;switch(scenario){case 1:CLI.Requested="USSR";break;case 2:CLI.Requested="US";break;case 3:CLI.Requested="US";owner.m_sVSCase="uaz5";break;case 4:CLI.Requested="CIV";break;case 5:owner.m_USSRFaction=null;break;case 6:owner.m_USSRFaction.Base=null;break;case 7:owner.m_USSRFaction.Key="US";break;case 8:prior=new Faction(){Key="PINNED"};owner.m_VSFaction=prior;break;case 9:owner.m_VSState=new object();break;case 10:CLI.Requested="";break;case 11:CLI.Requested="US";owner.m_USFaction=null;break;case 12:CLI.Requested="US";owner.m_USFaction.Base=null;break;case 13:CLI.Requested="US";owner.m_sVSCase="tank";break;case 14:CLI.Requested="USSR";owner.m_sVSCase="tank";break;}bool accepted=owner.Select();if(scenario==8&&owner.m_VSFaction!=prior)throw new System.Exception("Reassignment");bool same=owner.m_VSFaction!=null&&(owner.m_VSFaction==owner.m_USFaction||owner.m_VSFaction==owner.m_USSRFaction);return accepted+","+owner.m_sVSFaction+","+same;}
 }
 '@
 if(!('AICF_VSFactionSelection' -as [type])){Add-Type -TypeDefinition ($factionAdapter.Replace('SELECT_BODY',$selectionBody).Replace('MODEL_BODY',$modelBody))}
-for($selectionCase=0;$selectionCase -le 12;$selectionCase++){
- $expected='False,USSR,False';if($selectionCase -in 0,1){$expected='True,USSR,True'};if($selectionCase -eq 2){$expected='True,US,True'}
+for($selectionCase=0;$selectionCase -le 14;$selectionCase++){
+ $expected='False,USSR,False';if($selectionCase -in 0,1,14){$expected='True,USSR,True'};if($selectionCase -in 2,13){$expected='True,US,True'}
  if([AICF_VSFactionSelection]::Evaluate($selectionCase) -ne $expected){throw "Actual faction selector case=$selectionCase"}
 }
 $nativeCandidate=New-Object AICF_VSFactionSelection
@@ -91,4 +91,4 @@ foreach($needle in @('catalog.List()','catalog.Inspect(prefab, reason)','AICF_VS
 $runner=[IO.File]::ReadAllText((Join-Path $RepositoryRoot 'tools/Invoke-AICFVehicleScenarios.ps1'))
 foreach($needle in @('[ValidateSet(''US'',''USSR'')][string]$Faction=''USSR''','''-aicfVehicleScenarioFaction'',$Faction','''-aicfGroupTraceFaction'',$Faction','-Faction $Faction')){if(!$runner.Contains($needle)){throw "Canonical selected-faction launch missing: $needle"}}
 if((Body 'ResolveVehicleSpawnApproachOwner') -notmatch 'faction = m_VSFaction;' -or (Body 'AICF_VSUpdateVehicles') -notmatch 'Update\(m_VSState, m_VSFaction, null, null' -or (Body 'AICF_VSUpdateVehicles') -notmatch 'Update\(null, null, m_VSState, m_VSFaction'){throw 'Selected faction must own failure/recovery/coordinator contexts'}
-'PASS Vehicle scenario observer: owner controls=26, actual faction selector controls=13, actual own-catalog HMMWV controls=6; both factions/exact lifecycle/request-only marker, native runtime required'
+'PASS Vehicle scenario observer: owner controls=26, actual faction selector controls=15, actual own-catalog HMMWV controls=6; both factions/exact lifecycle/request-only marker, native runtime required'

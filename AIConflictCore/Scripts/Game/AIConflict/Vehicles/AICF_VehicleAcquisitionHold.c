@@ -23,29 +23,38 @@ class AICF_AcquisitionStagedBody
 
 	bool IsCurrent(SCR_AIGroup group, vector staging, vector spawn, float radius, float envelope, bool manual)
 	{
+		string reason;
+		return ValidateCurrent(group, staging, spawn, radius, envelope, manual, reason);
+	}
+
+	bool ValidateCurrent(SCR_AIGroup group, vector staging, vector spawn, float radius, float envelope, bool manual, out string reason)
+	{
+		reason = string.Empty;
 		if (!group || !m_Agent || m_Agent.GetID() != m_AgentId || m_Agent.GetWorld() != group.GetWorld() || m_Agent.GetParentGroup() != group ||
-			m_Agent.GetControlledEntity() != m_Actor || !m_Actor) return false;
+			m_Agent.GetControlledEntity() != m_Actor || !m_Actor) { reason = "AGENT_IDENTITY"; return false; }
 		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeAIEntity(m_Actor) ||
 			m_Actor.GetID() != m_ActorId || !m_Actor.GetWorld() || m_Actor.GetWorld() != group.GetWorld() ||
 			m_Actor.GetWorld().FindEntityByID(m_ActorId) != m_Actor ||
 			AICF_VehicleBehaviorBinding.ComponentRpl(m_Actor) != m_sActorRpl ||
-			!SCR_AIDamageHandling.IsConscious(m_Actor)) return false;
+			!SCR_AIDamageHandling.IsConscious(m_Actor)) { reason = "ACTOR_IDENTITY_OR_HEALTH"; return false; }
 		ChimeraCharacter character = ChimeraCharacter.Cast(m_Actor);
 		if (!character || !character.GetAIControlComponent() ||
-			character.GetAIControlComponent().GetControlAIAgent() != m_Agent) return false;
+			character.GetAIControlComponent().GetControlAIAgent() != m_Agent) { reason = "CONTROL_OWNER"; return false; }
 		CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
 		if (!access || character.IsInVehicle() || access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut() ||
-			access.IsSwitchingSeatsAnim() || CompartmentAccessComponent.GetVehicleIn(m_Actor)) return false;
+			access.IsSwitchingSeatsAnim() || CompartmentAccessComponent.GetVehicleIn(m_Actor)) { reason = "COMPARTMENT_TRANSITION"; return false; }
 		if (!AICF_VehicleSpawner.IsStagingGeometryReady(vector.DistanceXZ(m_Actor.GetOrigin(), staging), radius,
-			vector.DistanceXZ(m_Actor.GetOrigin(), spawn), envelope, manual)) return false;
+			vector.DistanceXZ(m_Actor.GetOrigin(), spawn), envelope, manual)) { reason = "STAGING_GEOMETRY"; return false; }
 		SCR_AIUtilityComponent utility = SCR_AIUtilityComponent.Cast(m_Agent.FindComponent(SCR_AIUtilityComponent));
-		if (!utility || utility.m_OwnerEntity != m_Actor || !utility.m_ThreatSystem || !utility.m_CombatComponent) return false;
+		if (!utility || utility.m_OwnerEntity != m_Actor || !utility.m_ThreatSystem || !utility.m_CombatComponent) { reason = "UTILITY_CONTEXT"; return false; }
 		BaseTarget target = utility.m_CombatComponent.GetCurrentTarget();
-		if (target && target.GetTimeSinceSeen() <= 30) return false;
+		if (target && target.GetTimeSinceSeen() <= 30) { reason = "RECENT_TARGET"; return false; }
 		if (utility.m_ThreatSystem.GetState() >= EAIThreatState.ALERTED &&
-			utility.m_ThreatSystem.GetThreatMeasureWithoutInjuryFactor() > 0.01) return false;
+			utility.m_ThreatSystem.GetThreatMeasureWithoutInjuryFactor() > 0.01) { reason = "ACTIVE_THREAT"; return false; }
 		SCR_AIBehaviorBase behavior = utility.GetCurrentBehavior();
-		return !SCR_AIAttackBehavior.Cast(behavior) && !SCR_AISuppressBehavior.Cast(behavior);
+		if (SCR_AIAttackBehavior.Cast(behavior) || SCR_AISuppressBehavior.Cast(behavior))
+		{ reason = "COMBAT_BEHAVIOR"; return false; }
+		return true;
 	}
 }
 
@@ -143,7 +152,12 @@ class AICF_AcquisitionStagingReceipt
 			if (!body) return null;
 			receipt.m_aBodies.Insert(body);
 		}
-		if (!receipt.IsCurrent(trip, nowMs)) return null;
+		string rejection;
+		if (!receipt.ValidateCurrent(trip, nowMs, rejection))
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", receipt.GetIdentityDetails() + " stage=CAPTURE reason=" + rejection);
+			return null;
+		}
 		return receipt;
 	}
 
@@ -169,43 +183,52 @@ class AICF_AcquisitionStagingReceipt
 
 	bool IsCurrent(AICF_TransportTrip trip, int nowMs)
 	{
+		string reason;
+		return ValidateCurrent(trip, nowMs, reason);
+	}
+
+	bool ValidateCurrent(AICF_TransportTrip trip, int nowMs, out string reason)
+	{
+		reason = string.Empty;
 		if (!Replication.IsServer() || !GetGame() || !trip || trip != m_Trip || !trip.IsValid() || trip.IsTerminal() ||
-			trip.GetPhase() != AICF_ETransportTripPhase.SPAWN_COMMIT || trip.IsDeadlineReached(nowMs)) return false;
+			trip.GetPhase() != AICF_ETransportTripPhase.SPAWN_COMMIT || trip.IsDeadlineReached(nowMs)) { reason = "AUTHORITY_OR_PHASE"; return false; }
 		if (!m_Assignment || trip.GetAssignment() != m_Assignment || !m_Request || trip.GetRequestState() != m_Request ||
-			!m_Plan || m_Request.GetSpawnPlan() != m_Plan || !m_Spawner || !m_Reservation) return false;
+			!m_Plan || m_Request.GetSpawnPlan() != m_Plan || !m_Spawner || !m_Reservation) { reason = "REQUEST_IDENTITY"; return false; }
 		if (nowMs >= m_iExpiresAtMs || m_iExpiresAtMs <= 0 || m_Request.IsDeadlineReached(nowMs) ||
-			trip.AcquisitionHoldDeadlineAtMs(nowMs) != m_iTripDeadline || m_Request.GetAbsoluteDeadlineMs() != m_iRequestDeadline) return false;
-		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(m_Group)) return false;
+			trip.AcquisitionHoldDeadlineAtMs(nowMs) != m_iTripDeadline || m_Request.GetAbsoluteDeadlineMs() != m_iRequestDeadline) { reason = "DEADLINE"; return false; }
+		if (!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(m_Group)) { reason = "GROUP_AUTHORITY"; return false; }
 		if (trip.GetGroupGeneration() != m_iGroupGeneration || trip.GetTripGeneration() != m_iTripGeneration ||
-			m_Assignment.GetGroup() != m_Group || !IsGroupIdentityCurrent() || GetGame().GetWorld() != m_World) return false;
+			m_Assignment.GetGroup() != m_Group || !IsGroupIdentityCurrent() || GetGame().GetWorld() != m_World) { reason = "GROUP_IDENTITY"; return false; }
 		if (m_Assignment.GetAssignmentRevision() != m_iAssignmentRevision || m_Assignment.GetStrategicIntentRevision() != m_iIntentRevision ||
-			m_Assignment.GetBaseRevision() != m_iBaseRevision || m_Request.GetRequestGeneration() != m_iRequestGeneration) return false;
-		if (m_Reservation.GetOwnerToken() != m_sReservationToken) return false;
+			m_Assignment.GetBaseRevision() != m_iBaseRevision || m_Request.GetRequestGeneration() != m_iRequestGeneration) { reason = "ASSIGNMENT_REVISION"; return false; }
+		if (m_Reservation.GetOwnerToken() != m_sReservationToken) { reason = "RESERVATION_TOKEN"; return false; }
 		if (!m_Plan.IsValid() || m_Plan.GetReservation() != m_Reservation || m_Plan.GetStagingPosition() != m_vStaging ||
 			m_Plan.GetSpawnPosition() != m_vSpawn || m_Plan.RequiresManualRally() != m_bManual ||
-			!m_Spawner.IsSiteReservationCurrentReadOnly(m_Reservation, trip, m_Request, nowMs)) return false;
+			!m_Spawner.IsSiteReservationCurrentReadOnly(m_Reservation, trip, m_Request, nowMs)) { reason = "SITE_RESERVATION"; return false; }
 		AICF_GroupSlot slot = trip.GetVehiclePresetSlot();
 		if (trip.GetVehiclePreset() && (!trip.IsVehiclePresetCurrent() || !slot || slot.GetGroup() != m_Group ||
 			slot.GetSpawnGeneration() != m_iGroupGeneration || slot.GetStrategicAssignmentRevision() != m_iAssignmentRevision ||
-			slot.GetStrategicIntentRevision() != m_iIntentRevision)) return false;
+			slot.GetStrategicIntentRevision() != m_iIntentRevision)) { reason = "PRESET_IDENTITY"; return false; }
 		AICF_VehicleLease lease = trip.GetLease();
 		if (lease && (lease.HasPhysicalAsset() || lease.GetState() != AICF_EVehicleLeaseState.RESERVED ||
-			!lease.MatchesTripIdentity(trip.GetFactionKey(), trip.GetSlotId(), m_iGroupGeneration, m_iTripGeneration))) return false;
+			!lease.MatchesTripIdentity(trip.GetFactionKey(), trip.GetSlotId(), m_iGroupGeneration, m_iTripGeneration))) { reason = "LEASE_STATE"; return false; }
 		SCR_AIGroupUtilityComponent utility = m_Group.GetGroupUtilityComponent();
-		if (!utility || utility.m_Owner != m_Group || !utility.m_Perception) return false;
+		if (!utility || utility.m_Owner != m_Group || !utility.m_Perception) { reason = "GROUP_UTILITY"; return false; }
 		SCR_AIGroupTargetCluster cluster = utility.m_Perception.m_MostDangerousCluster;
-		if (cluster && cluster.m_State.GetTimeSinceLastNewInformation() <= 30) return false;
+		if (cluster && cluster.m_State.GetTimeSinceLastNewInformation() <= 30) { reason = "GROUP_THREAT"; return false; }
 		array<AIAgent> agents = {};
 		m_Group.GetAgents(agents);
-		if (agents.Count() != m_aBodies.Count() || agents.IsEmpty()) return false;
+		if (agents.Count() != m_aBodies.Count() || agents.IsEmpty()) { reason = "ROSTER_COUNT"; return false; }
 		array<AIAgent> seen = {};
 		foreach (AICF_AcquisitionStagedBody body : m_aBodies)
 		{
-			if (!body || !body.IsCurrent(m_Group, m_vStaging, m_vSpawn, m_fRadius, m_fEnvelope, m_bManual) ||
-				!agents.Contains(body.GetAgent()) || seen.Contains(body.GetAgent())) return false;
+			if (!body || !body.ValidateCurrent(m_Group, m_vStaging, m_vSpawn, m_fRadius, m_fEnvelope, m_bManual, reason) ||
+				!agents.Contains(body.GetAgent()) || seen.Contains(body.GetAgent())) { if (reason.IsEmpty()) reason = "ROSTER_IDENTITY"; return false; }
 			seen.Insert(body.GetAgent());
 		}
-		return IsGroupIdentityCurrent() && HasTaskFields(trip, nowMs);
+		if (!IsGroupIdentityCurrent() || !HasTaskFields(trip, nowMs))
+		{ reason = "SOURCE_IDENTITY_OR_TASK_FIELDS"; return false; }
+		return true;
 	}
 
 	bool HasSourceIdentity(AICF_TransportTrip trip)
@@ -334,6 +357,7 @@ class AICF_VehicleAcquisitionHold
 	protected EntityID m_WaypointId;
 	protected string m_sWaypointRpl;
 	protected vector m_vWaypointOrigin;
+	protected ref AICF_AcquisitionHoldWaypointCreation m_Creation;
 
 	static bool IsWaitOutcome(AICF_TripOutcome outcome)
 	{
@@ -342,20 +366,53 @@ class AICF_VehicleAcquisitionHold
 			outcome.GetReason() == "SPAWN_BACKOFF";
 	}
 
-	static AICF_VehicleAcquisitionHold Capture(AICF_AcquisitionStagingReceipt receipt, AIWaypoint waypoint)
+	static AICF_VehicleAcquisitionHold Capture(AICF_AcquisitionStagingReceipt receipt, AIWaypoint waypoint,
+		AICF_AcquisitionHoldWaypointCreation created = null)
 	{
 		SCR_DefendWaypoint defend = SCR_DefendWaypoint.Cast(waypoint);
-		if (!receipt || !defend || !defend.GetCurrentDefendPreset() ||
-			!AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(waypoint)) return null;
+		if (!receipt)
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", "stage=HOLD_CAPTURE reason=RECEIPT_MISSING");
+			return null;
+		}
+		if (!defend)
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", receipt.GetIdentityDetails() +
+				string.Format(" stage=HOLD_CAPTURE reason=DEFEND_SUBTYPE waypoint=%1 native_defend=0", waypoint));
+			return null;
+		}
+		if (!defend.GetCurrentDefendPreset())
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", receipt.GetIdentityDetails() +
+				string.Format(" stage=HOLD_CAPTURE reason=DEFEND_PRESET waypoint=%1 native_defend=1 preset=0", waypoint));
+			return null;
+		}
+		if (!AICF_AcquisitionHoldWaypointCreation.HasAuthority(waypoint, receipt, created))
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", receipt.GetIdentityDetails() +
+				string.Format(" stage=HOLD_CAPTURE reason=WAYPOINT_AUTHORITY waypoint=%1 native_defend=1 preset=1 authority=0 component_rpl=%2",
+					waypoint, AICF_VehicleBehaviorBinding.ComponentRpl(waypoint)));
+			return null;
+		}
 		vector actualOrigin = waypoint.GetOrigin();
 		vector staging = receipt.GetStagingPosition();
-		if (actualOrigin[0] != staging[0] || actualOrigin[2] != staging[2]) return null;
+		if (actualOrigin[0] != staging[0] || actualOrigin[2] != staging[2])
+		{
+			AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_REJECTED", receipt.GetIdentityDetails() +
+				string.Format(" stage=HOLD_CAPTURE reason=WAYPOINT_XZ_POSITION actual=%1 staging=%2 delta_xz_m=%3 native_defend=1 preset=1 authority=1",
+					actualOrigin, staging, vector.DistanceXZ(actualOrigin, staging)));
+			return null;
+		}
 		AICF_VehicleAcquisitionHold hold = new AICF_VehicleAcquisitionHold();
 		hold.m_Receipt = receipt;
 		hold.m_Waypoint = waypoint;
 		hold.m_WaypointId = waypoint.GetID();
 		hold.m_sWaypointRpl = AICF_VehicleBehaviorBinding.ComponentRpl(waypoint);
 		hold.m_vWaypointOrigin = actualOrigin;
+		hold.m_Creation = created;
+		AICF_Stage3Diagnostics.Info("VEHICLE_ACQUISITION_HOLD_CAPTURED", receipt.GetIdentityDetails() +
+			string.Format(" waypoint=%1 native_defend=1 preset=1 authority=1 component_rpl=%2 actual=%3 staging=%4 exact_xz=1",
+				waypoint, hold.m_sWaypointRpl, actualOrigin, staging));
 		return hold;
 	}
 
@@ -375,7 +432,7 @@ class AICF_VehicleAcquisitionHold
 	{
 		if (!m_Receipt || !m_Receipt.GetWorld()) return false;
 		if (!m_Waypoint) return !m_Receipt.GetWorld().FindEntityByID(m_WaypointId);
-		return AICF_VehicleBoardingMutationFence.IsAuthoritativeReplicatedEntity(m_Waypoint) &&
+		return AICF_AcquisitionHoldWaypointCreation.HasAuthority(m_Waypoint, m_Receipt, m_Creation) &&
 			m_Waypoint.GetWorld() == m_Receipt.GetWorld() && m_Waypoint.GetID() == m_WaypointId &&
 			m_Receipt.GetWorld().FindEntityByID(m_WaypointId) == m_Waypoint &&
 			AICF_VehicleBehaviorBinding.ComponentRpl(m_Waypoint) == m_sWaypointRpl;

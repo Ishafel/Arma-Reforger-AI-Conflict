@@ -535,9 +535,10 @@ foreach ($phase in @('WAITING_FOR_SITE', 'SITE_PLANNED', 'APPROACHING_SITE', 'ST
 }
 Assert-OrderedAfter $coordinator 'if (!orderOwnershipFence.IsEmpty() &&' 'ReportAdmissionOnce(assignment, orderOwnershipFence);' 'return;' 'TRANSPORT_FALSE_COMPLETION_PREBOARDING_FENCE'
 Assert-OrderedAfter $coordinator 'if (!orderOwnershipFence.IsEmpty() &&' 'return;' 'AICF_TripOutcome observed = m_TripController.Tick(' 'TRANSPORT_FALSE_COMPLETION_PREBOARDING_FENCE'
-Assert-OrderedAfter $coordinator 'protected bool IsAdmissionEligible(' 'GetInfantryOrderAdmissionFenceReason(slot)' 'reason = orderOwnershipFence;' 'TRANSPORT_FALSE_COMPLETION_ADMISSION_FENCE'
-Assert-OrderedAfter $coordinator 'protected bool IsAdmissionEligible(' 'reason = orderOwnershipFence;' 'return false;' 'TRANSPORT_FALSE_COMPLETION_ADMISSION_FENCE'
-Assert-OrderedAfter $coordinator 'protected bool IsAdmissionEligible(' 'return false;' 'slot.GetUnitType()' 'TRANSPORT_FALSE_COMPLETION_ADMISSION_FENCE'
+$admissionBody = Get-AICFMethodBody ([pscustomobject]@{Source=$coordinator;Code=(ConvertTo-AICFCodeText $coordinator)}) 'IsAdmissionEligible'
+Assert-Ordered $admissionBody 'GetInfantryOrderAdmissionFenceReason(slot)' 'if (!orderOwnershipFence.IsEmpty())' 'TRANSPORT_FALSE_COMPLETION_ADMISSION_FENCE'
+Assert-OrderedAfter $admissionBody 'if (!orderOwnershipFence.IsEmpty())' 'reason = orderOwnershipFence;' 'return false;' 'TRANSPORT_FALSE_COMPLETION_ADMISSION_FENCE'
+Assert-OrderedAfter $admissionBody 'reason = orderOwnershipFence;' 'return false;' 'slot.GetUnitType()' 'TRANSPORT_FALSE_COMPLETION_ADMISSION_FENCE'
 
 Assert-Contains $match 'MOB_EGRESS_SOFT_NUDGE' 'BOUNDED_MOB_EGRESS_RECOVERY'
 Assert-Contains $match 'MOB_EGRESS_DELAYED_PROGRESSING' 'BOUNDED_MOB_EGRESS_RECOVERY'

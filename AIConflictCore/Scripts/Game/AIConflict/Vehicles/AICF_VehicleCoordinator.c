@@ -37,6 +37,7 @@ class AICF_VehicleCoordinator
 		AICF_TransportTrip trip = FindTripForSlot(slot);
 		if (trip && trip.GetVehiclePresetRevision() != slot.GetVehiclePresetRevision()) return "CLEANUP_PENDING";
 		if (!slot.HasVehiclePreset()) return "AUTOMATIC_POLICY";
+		if (slot.IsVehicleCrewResizePending() || AICF_DeferredVehiclePreset.NeedsRoster(slot)) return "WAITING_FOR_REINFORCEMENTS";
 		if (!trip) return "WAITING_FOR_ORDER_OR_ADMISSION";
 		if (trip.IsTerminal()) return trip.GetTerminalReason();
 		if (trip.IsPresetWaitingForDestination()) return "PRESET_WAITING_FOR_DESTINATION";
@@ -745,6 +746,11 @@ class AICF_VehicleCoordinator
 		out string reason)
 	{
 		reason = "NONE";
+		if (slot.HasVehiclePreset() && (slot.IsVehicleCrewResizePending() || AICF_DeferredVehiclePreset.NeedsRoster(slot)))
+		{
+			reason = "WAITING_FOR_REINFORCEMENTS";
+			return false;
+		}
 		string orderOwnershipFence = GetInfantryOrderAdmissionFenceReason(slot);
 		if (!orderOwnershipFence.IsEmpty())
 		{

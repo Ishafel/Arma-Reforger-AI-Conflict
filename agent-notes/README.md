@@ -7,13 +7,17 @@
 
 | Задача | Что читать |
 |---|---|
+| Разобрать native supply capacity ниже цены танка, demand склада и узкий RHS metadata alias | [SUPPLY_DEPOT_DEMAND.md](SUPPLY_DEPOT_DEMAND.md) |
+| Продолжить смешанный Co-op, назначение техники до пополнения и восстановление исправной машины | [COOP_FLEET_RECOVERY.md](COOP_FLEET_RECOVERY.md), отдельные native доказательства и сохраняющиеся blockers |
+| Проверить WCS танковый экипаж, completed OpenGate Exit и собственные stale-positive native handlers | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md), `AICF_TankPhysicalProbe` и отдельные строгие gates в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
+| Назначить технику до пополнения, проверить future numeric positions и deferred crew reduction | [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md), `AICF_DeferredVehiclePresetProbe` в [TEST_FIXTURES.md](TEST_FIXTURES.md) |
 | Изменить окно пресетов отряда, прокрутку мест, авторассадку и вращение техники | [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md), проверки нового UI в [TESTING.md](TESTING.md) |
 | Продолжить #78 после передачи draft PR и выключения компьютера | [ISSUE78_STATUS.md](ISSUE78_STATUS.md), итоговый комментарий в issue и точные manifests |
 | Разделить native stock и AICF quotas, проверить full basket/catalog и позднюю активацию техники | [AI_QUOTAS.md](AI_QUOTAS.md), текущая реализация/admission и отдельные обязательные native pressure gates |
 | Воспроизвести human Catalog/FIFO, full-basket отказ и покупку пустой машины при полной character квоте | [AI_QUOTA_CATALOG.md](AI_QUOTA_CATALOG.md), public separate-role runner, native proof и строгие полные log audits |
 | Воспроизвести заполнение stock-квоты и обычный оплаченный набор AICF | [AI_QUOTA_STOCK_PRESSURE.md](AI_QUOTA_STOCK_PRESSURE.md), public Prepare/Run, scope и исходные failures |
 | Отличить нехватку средств до покупки машины от нарушения lifecycle | [VEHICLE_ECONOMY_DECLINE.md](VEHICLE_ECONOMY_DECLINE.md), typed pre-asset quote/receipt, own empty lease и terminal foot fallback |
-| Разобрать taskless ожидание квоты перед созданием машины | [VEHICLE_ACQUISITION_HOLD.md](VEHICLE_ACQUISITION_HOLD.md), typed staged receipt, реальный owned Defend и cleanup до продолжения acquisition |
+| Разобрать ожидание квоты/покупки и stock local Defend без RplComponent | [VEHICLE_ACQUISITION_HOLD.md](VEHICLE_ACQUISITION_HOLD.md), typed staged receipt, factory creation capability, реальный owned Defend и cleanup до продолжения acquisition |
 | Освободить исходного DEAD водителя, которого native исключил из сохранившейся группы | [CAPTURED_CASUALTY_CLEANUP.md](CAPTURED_CASUALTY_CLEANUP.md), admission capability, прежние physical guards и opt-in actual-decision observer без повторного принятия решения |
 | Разобрать неполный native spawn и очередь замены отрядов | [GROUP_SPAWN.md](GROUP_SPAWN.md), GroupRuntime/InfantrySpawnPlacement и controlled replacement stress |
 | Разобрать отказ короткой коррекции при native STUCK на подходе к казарме | [RECRUITMENT_DECISIONS.md](RECRUITMENT_DECISIONS.md), isolated decision observer без изменения recovery |

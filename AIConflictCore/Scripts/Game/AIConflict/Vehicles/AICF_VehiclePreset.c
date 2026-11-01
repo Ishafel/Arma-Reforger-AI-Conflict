@@ -202,6 +202,33 @@ class AICF_VehiclePreset
 		return true;
 	}
 
+	// Только запись намерения для будущего roster. Runtime всегда использует
+	// ValidateRoster и заново проверяет живые authority entities перед покупкой.
+	bool ValidatePlannedRoster(AICF_GroupSlot slot, array<BaseCompartmentSlot> seats, out string reason)
+	{
+		if (!ValidateShape(reason)) return false;
+		reason = "SEAT_TOPOLOGY_CHANGED";
+		if (!MatchesSeats(seats)) return false;
+		reason = "ROSTER_NOT_READY";
+		if (!slot || slot.GetDesiredSize() < 1 || slot.GetDesiredSize() > AICF_Stage1Config.MAX_GROUP_SIZE) return false;
+		int pilots, assigned;
+		for (int seatIndex; seatIndex < seats.Count(); seatIndex++)
+		{
+			BaseCompartmentSlot seat = seats[seatIndex];
+			if (seat.GetType() == ECompartmentType.PILOT) pilots++;
+			int member = m_aMembers[seatIndex];
+			if (AICF_ContentProfile.GetActive().IsVehiclePresetCrewSeat(m_sPrefab, m_sFaction, seat) && member < 0)
+				{ reason = "MANDATORY_CREW_MISSING"; return false; }
+			if (member < 0) continue;
+			if (member >= slot.GetDesiredSize()) { reason = "MEMBER_INACTIVE"; return false; }
+			assigned++;
+		}
+		if (pilots != 1) { reason = "DRIVER_SEAT_MISSING"; return false; }
+		if (assigned < 1) { reason = "MANDATORY_CREW_MISSING"; return false; }
+		reason = "READY";
+		return true;
+	}
+
 	// partial — только read-only проверка плана сокращения перед подтверждением.
 	bool ValidateRoster(AICF_GroupSlot slot, array<BaseCompartmentSlot> seats, out string reason, bool partial = false)
 	{
@@ -217,7 +244,7 @@ class AICF_VehiclePreset
 		{
 			BaseCompartmentSlot requiredSeat = seats[seatIndex];
 			if (requiredSeat.GetType() == ECompartmentType.PILOT) pilots++;
-			if ((requiredSeat.GetType() == ECompartmentType.PILOT || requiredSeat.GetType() == ECompartmentType.TURRET || requiredSeat.GetAttachedTurret()) && m_aMembers[seatIndex] < 0)
+			if (AICF_ContentProfile.GetActive().IsVehiclePresetCrewSeat(m_sPrefab, m_sFaction, requiredSeat) && m_aMembers[seatIndex] < 0)
 				{ reason = "MANDATORY_CREW_MISSING"; return false; }
 		}
 		reason = "DRIVER_SEAT_MISSING";
