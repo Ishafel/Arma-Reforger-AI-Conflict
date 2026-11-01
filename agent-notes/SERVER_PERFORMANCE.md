@@ -1,5 +1,16 @@
 # Производительность сервера
 
+Новый длительный WCS Everon/Standard/Hard controlled mixed-fleet soak:
+32min server/30min client, peak302/303AIChar. При подключённом client и
+>=140AIChar server156windows avg16,30/min0,6FPS, max6786,8мс.
+Client114qualified frontline windows avg52,74/min29FPS, max146,8мс.
+**FPS FAIL**, обе исправленные vehicle ошибки0; общий runtimeFAIL из-за
+4meaningful-task deadlines и4cleanup retained после client exit.
+`RefreshCensus` занял46,65% inclusive elapsed high-load profiler windows,
+max424мс/call; вложенные timings не суммируются. Производственной оптимизации
+этого нового bottleneck в проверочном snapshot нет. Условия, реальные поездки,
+метод квалификации камеры и полные gates — [WCS_HIGHLOAD_SOAK.md](WCS_HIGHLOAD_SOAK.md).
+
 Обновление WCS vehicle blockers: `codex/wcs-assignment-scope` исправляет ложный
 ASSIGNMENT_SCOPE для BASE с разными cached/resolved позициями и восстанавливает
 минимальную native регистрацию до tactical reboard. Final WCS North12min:

@@ -1,5 +1,38 @@
 # Проверки и baseline
 
+## Длительный WCS high-load бой — 01.11.2026
+
+Ветка `codex/wcs-highload-soak`, production52ab958 без изменений.
+Подробности/команды: [WCS_HIGHLOAD_SOAK.md](WCS_HIGHLOAD_SOAK.md), evidence
+`.codex-runtime/wcs-highload-soak-20261101/REPORT.md`.
+Final full-v5 WCS Everon Standard/Hard:32min server/30min client,
+native0/Game destroyed обе роли, production395/root drift0, frozen398/stage drift0.
+Controlled initial mixed recipes обеим армиям; обычные экономика/quotas/AI/physics.
+
+FPS **FAIL**: server connected-highload156windows avg16,30/min0,6,
+max6786,8мс; peak302AIChar. Client114qualified frontline-highload windows
+avg52,74/min29/max146,8мс, peak303AIChar. Камера readback/replicated actor
+и реальный suppression behavior подтверждены; manual visual replay NOT RUN.
+`RefreshCensus`46,65% inclusive profiler windows/max424мс, не суммировать с nested.
+
+Original registration error0/ASSIGNMENT_SCOPE rejected0/VM0 в полных sibling logs.
+8initial records/5exact boarding confirmations/10tactical records/5resumes,
+4реальных BASE different-position cases. Same identity + native route progress
+после tactical return: AFRF slot1 547,54м, USAF slot0 238,11м.
+5из8покупок реально двигались269–908м;3boarding deadlines, танки не покупались.
+Строгий `Test-BoardingRegistrationLog.ps1 -MinimumMovementMeters 100
+-RequireAssignmentScope` **FAIL1**:4meaningful-task deadline errors и4cleanup
+retained после client exit,16console SCRIPT E с bridge /48sibling SCRIPT E.
+Server rawE552/client548, другие resource/world/pathfinding gatesFAIL.
+Terminal WB final compilePASS0/validation/fatal0, raw resource78FAIL; baseline3/3PASS.
+Полный offline292 четырьмя canonical shards:290PASS/2FAIL. Junction permission
+в LoadoutLibrary разрешён точным native recheckPASS; ложный `%25` audit исправлен
+test-only commit0fa8fbe, actual-helper17cases и Stage35PASS0.
+Итог293uniquePASS после трёх точных dependency/environment rechecks, missing/
+duplicates0; исходные FAIL сохранены. Это не новый монолитный All293.
+[LANGUAGE_AUDIT.md](LANGUAGE_AUDIT.md); runtime FAIL этим не снимается.
+Все6stages byte-verified в ZIP и удалены, собственных native processes0.
+
 ## WCS ASSIGNMENT_SCOPE и retained reboard — 01.11.2026
 
 Ветка `codex/wcs-assignment-scope` от c9a731d; evidence:

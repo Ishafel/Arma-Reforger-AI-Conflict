@@ -8,6 +8,7 @@
 | Задача | Что читать |
 |---|---|
 | Разобрать ложный STRING_FORMAT_PLACEHOLDER на percent encoding и проверить native Format arity | [LANGUAGE_AUDIT.md](LANGUAGE_AUDIT.md), `Test-LanguageAuditContracts.ps1` |
+| Повторить длительный WCS бой под высокой нагрузкой, проверить FPS и обе vehicle regressions | [WCS_HIGHLOAD_SOAK.md](WCS_HIGHLOAD_SOAK.md): 32min server/30min client, FPS FAIL, прежние ошибки0, реальные поездки и новые blockers |
 | Разобрать WCS ASSIGNMENT_SCOPE при разных BASE endpoint и повторную native регистрацию в tactical phase | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md#base-destination-и-retained-registration), результаты в [TESTING.md](TESTING.md) |
 | Исправить native GetIn ошибку `vehicle provided is not registered as used inside group!` | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md#native-group-record-до-посадки), native registration gates в [TESTING.md](TESTING.md) |
 | Разобрать просадки FPS, стоимость census и повторные обходы мест заполненной техники | [SERVER_PERFORMANCE.md](SERVER_PERFORMANCE.md), [VEHICLE_TOPOLOGY_PERFORMANCE.md](VEHICLE_TOPOLOGY_PERFORMANCE.md) |

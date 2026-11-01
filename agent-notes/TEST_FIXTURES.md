@@ -1,5 +1,28 @@
 # Изменение сценарного контракта — 2026-10-24
 
+## Длительный WCS high-load observer
+
+`AICF_LongBattleProbe.c`, только isolated stage и `-aicfLongBattle 1`:
+Standard получает обычные Co-op mixed recipes для обеих армий до spawn;
+production slot count, quotas, transactions, AI, health, time scale и физические
+позиции actors/vehicles не изменяются. Server self-close задаёт
+`-aicfLongBattleDurationMs 1920000` после roster readiness; client self-close
+`-aicfLongBattleClientDurationMs 1800000` после native game start.
+
+Client использует native faction/loadout/respawn и локальную CameraBase через
+CameraManager. Server выбирает живую готовую ATTACK группу с чужой target base,
+sticky120s; при отсутствии подходящей группы временно наблюдает fallback,
+который не получает frontline qualification. RPC повторно проверяет player
+controller identity и rate limit. View telemetry содержит фактическую предыдущую
+camera pose, camera entity error, replicated actor/distance и actual FPS.
+CallLater снимается при self-close и destructor, local camera удаляется.
+Ни GUI input, ни possession managed бойца не используются.
+
+Qualified window и ограничения terminal observer определены в
+[WCS_HIGHLOAD_SOAK.md](WCS_HIGHLOAD_SOAK.md). `frontline=1` сам по себе не
+доказывает визуальную проверку или стрельбу. В full-v5 дополнительно найден
+реальный native suppression behavior наблюдаемой группы.
+
 ## WCS BASE scope и tactical registration
 
 `AICF_BoardingRegistrationProbe.c` наблюдает реальные Begin/Attach/Tick и
