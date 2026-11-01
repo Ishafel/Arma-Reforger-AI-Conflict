@@ -69,6 +69,10 @@ E/F также остаются strict FAIL; текущие source-only/CLI ко
 
 ## Владелец и бюджеты
 
+Стоимость поиска body records внутри одного синхронного census сокращает
+call-local `AICF_AIQuotaBodyLookup`; native/identity/custody/ledger проверки
+остаются свежими. Paired timing и ограничения — [SERVER_PERFORMANCE.md](SERVER_PERFORMANCE.md).
+
 `AICF_AIWorldQuotaService` — authority/world-scoped владелец учёта и admission.
 Он не назначает приказы, не создаёт стратегические slots, не платит за технику
 и не меняет transport phase. Native hard limit должен покрывать сумму шести

@@ -115,7 +115,12 @@ class AICF_VehiclePreset
 
 	static string SeatKey(BaseCompartmentSlot seat)
 	{
-		return string.Format("%1:%2:%3", RelativeOwnerIndex(seat), seat.GetCompartmentSlotID(), seat.GetType());
+		return SeatKeyAtOwner(seat, RelativeOwnerIndex(seat));
+	}
+
+	protected static string SeatKeyAtOwner(BaseCompartmentSlot seat, int ownerIndex)
+	{
+		return string.Format("%1:%2:%3", ownerIndex, seat.GetCompartmentSlotID(), seat.GetType());
 	}
 
 	// Native manager IDs растут между инстансами и мирами. В сохранённом
@@ -147,23 +152,44 @@ class AICF_VehiclePreset
 		if (!manager) return;
 		array<BaseCompartmentSlot> found = {};
 		manager.GetCompartments(found);
+		// Снимок живёт только в этом вызове. Полный прежний DFS и его ordinal
+		// сохраняются, в том числе для иерархии с пассажирами и inventory.
+		array<IEntity> owners = {};
+		CollectHierarchy(vehicle, owners);
+		array<int> ordinals = {};
 		foreach (BaseCompartmentSlot seat : found)
 		{
 			if (!seat || !seat.IsCompartmentAccessible() || seat.GetVehicle() != vehicle) continue;
+			int ownerIndex = owners.Find(seat.GetOwner());
 			int index = seats.Count();
 			for (int i; i < seats.Count(); i++)
-				if (RelativeOwnerIndex(seat) < RelativeOwnerIndex(seats[i]) ||
-					(RelativeOwnerIndex(seat) == RelativeOwnerIndex(seats[i]) && seat.GetCompartmentSlotID() < seats[i].GetCompartmentSlotID()))
+				if (ownerIndex < ordinals[i] ||
+					(ownerIndex == ordinals[i] && seat.GetCompartmentSlotID() < seats[i].GetCompartmentSlotID()))
 				{ index = i; break; }
 			seats.InsertAt(seat, index);
+			ordinals.InsertAt(ownerIndex, index);
 		}
 	}
 
 	bool MatchesSeats(array<BaseCompartmentSlot> seats)
 	{
 		if (seats.Count() != m_aSeats.Count()) return false;
+		array<IEntity> vehicles = {};
+		array<ref array<IEntity>> ownerTables = {};
 		for (int i; i < seats.Count(); i++)
-			if (SeatKey(seats[i]) != m_aSeats[i]) return false;
+		{
+			IEntity vehicle = seats[i].GetVehicle();
+			int table = vehicles.Find(vehicle);
+			if (table < 0)
+			{
+				array<IEntity> owners = {};
+				CollectHierarchy(vehicle, owners);
+				table = vehicles.Count();
+				vehicles.Insert(vehicle);
+				ownerTables.Insert(owners);
+			}
+			if (SeatKeyAtOwner(seats[i], ownerTables[table].Find(seats[i].GetOwner())) != m_aSeats[i]) return false;
+		}
 		return true;
 	}
 
@@ -179,12 +205,16 @@ class AICF_VehiclePreset
 		array<BaseCompartmentSlot> raw = {};
 		manager.GetCompartments(raw);
 		if (raw.IsEmpty() || raw.Count() > MAX_SEATS) return false;
+		array<IEntity> owners = {};
+		CollectHierarchy(vehicle, owners);
 		array<string> keys = {};
 		foreach (BaseCompartmentSlot seat : raw)
 		{
 			if (!seat || seat.GetVehicle() != vehicle || !seat.GetOwner() || !seat.GetManager() ||
-				seat.GetManager().GetOwner() != seat.GetOwner() || RelativeOwnerIndex(seat) < 0) return false;
-			string key = SeatKey(seat);
+				seat.GetManager().GetOwner() != seat.GetOwner()) return false;
+			int ownerIndex = owners.Find(seat.GetOwner());
+			if (ownerIndex < 0) return false;
+			string key = SeatKeyAtOwner(seat, ownerIndex);
 			if (keys.Contains(key)) return false;
 			keys.Insert(key);
 			// Catalog мог изначально исключить недоступные места. Новое доступное

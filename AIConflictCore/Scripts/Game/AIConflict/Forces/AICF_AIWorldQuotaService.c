@@ -14,6 +14,7 @@ class AICF_AIWorldQuotaService
 	protected ref AICF_AIQuotaCensus m_Census;
 	protected ref array<ref AICF_AIQuotaGroupQueue> m_aQueues = {};
 	protected ref array<ref AICF_AIQuotaBody> m_aBodies = {};
+	protected ref AICF_AIQuotaBodyLookup m_BodyLookup;
 	protected ref array<ref AICF_AIQuotaPlannedGroup> m_aPlannedGroups = {};
 	protected bool m_bNativeBirthBusy;
 	protected bool m_bQuotaCensusBusy;
@@ -142,6 +143,7 @@ class AICF_AIWorldQuotaService
 	protected AICF_AIQuotaBody FindBody(IEntity entity)
 	{
 		if (!entity) return null;
+		if (m_BodyLookup) return m_BodyLookup.Find(entity, m_aBodies);
 		foreach (AICF_AIQuotaBody body : m_aBodies)
 			if (body && !body.m_bReleased && body.m_Entity == entity) return body;
 		return null;
@@ -495,7 +497,10 @@ class AICF_AIWorldQuotaService
 	{
 		if (IsQuotaAdmissionBusy()) return false;
 		m_bQuotaCensusBusy = true;
+		m_BodyLookup = new AICF_AIQuotaBodyLookup();
+		m_BodyLookup.Capture(m_aBodies);
 		bool refreshed = RefreshCurrentCensus();
+		m_BodyLookup = null;
 		m_bQuotaCensusBusy = false;
 		return refreshed;
 	}

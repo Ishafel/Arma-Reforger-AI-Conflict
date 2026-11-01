@@ -1,5 +1,21 @@
 # Проверки и baseline
 
+## FPS: census body lookup и vehicle topology — 01.11.2026
+
+Профильный baseline41/41, после44unique PASS (первый reentry adapter FAIL
+исправлен и сохранён), с topology-набором51uniquePASS, final-focused7/7. Lookup521cases/5unsafe, reentry10/4unsafe,
+topology2319cases/3unsafe. Production terminalWB Stock/RHS/ArlandWCSRHS3/3
+compile PASS,395source drift0/fatal0, resources50/52/78 остаются FAIL.
+Native same-world148AI body lookup965→821мс за32refreshes/strategy, stable1;
+WCS actual10equipped Ural15seats old/newCollect299/0мс, Matches10/1,
+Captured26/0, exactkeys/identity/occupants. WCS native0/fullstopped/exactCLI/
+source0/fatal0, resource466FAIL. Post-roster min47,1/avg57,39FPS, max424,4мс
+в controlled old-benchmark sample; pre-roster20FPS/5048мс сохраняются.
+Три Stockpressure functional gates FAIL, не превращены в PASS по timing.
+Полный All/same human high-load replay/universal FPS fix NOT RUN.
+Evidence `.codex-runtime/server-fps-census-20261101/`; scope и точные ограничения:
+[SERVER_PERFORMANCE.md](SERVER_PERFORMANCE.md), [VEHICLE_TOPOLOGY_PERFORMANCE.md](VEHICLE_TOPOLOGY_PERFORMANCE.md).
+
 ## Совместный срез: подпись пресета и цена ИИ — 01.11.2026
 
 После объединения обеих фич:14/14 профильных checks PASS, затем2/2 затронутых

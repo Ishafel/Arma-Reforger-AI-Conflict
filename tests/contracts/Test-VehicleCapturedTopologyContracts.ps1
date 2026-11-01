@@ -12,7 +12,7 @@ function Rules([string]$p,[string]$f,[string]$probe){
  foreach($guard in @('preset.m_aSeats.IsEmpty()', 'preset.m_aSeats.Count() > MAX_SEATS',
   'preset.m_aSeats.Count() != preset.m_aMembers.Count()', 'manager.GetOwner() != vehicle',
   'raw.IsEmpty() || raw.Count() > MAX_SEATS', 'seat.GetVehicle() != vehicle', '!seat.GetOwner() || !seat.GetManager()',
-  'seat.GetManager().GetOwner() != seat.GetOwner() || RelativeOwnerIndex(seat) < 0',
+  'seat.GetManager().GetOwner() != seat.GetOwner()', 'int ownerIndex = owners.Find(seat.GetOwner());', 'if (ownerIndex < 0) return false;',
   'if (keys.Contains(key)) return false;',
   '!preset.m_aSeats.Contains(key) && seat.IsCompartmentAccessible()',
   'index < 0 || resolved.Contains(raw[index])')){
@@ -53,7 +53,7 @@ foreach($mutation in @(
  @('p','if (keys.Contains(key)) return false;','if (false) return false;','FULL_RAW_STRUCTURE_AND_CAPTURED_KEYS'),
  @('p','index < 0 || resolved.Contains(raw[index])','index < 0','FULL_RAW_STRUCTURE_AND_CAPTURED_KEYS'),
  @('p','!preset.m_aSeats.Contains(key) && seat.IsCompartmentAccessible()','false','FULL_RAW_STRUCTURE_AND_CAPTURED_KEYS'),
- @('p','seat.GetManager().GetOwner() != seat.GetOwner() || RelativeOwnerIndex(seat) < 0','false','FULL_RAW_STRUCTURE_AND_CAPTURED_KEYS'),
+ @('p','if (ownerIndex < 0) return false;','if (false) return false;','FULL_RAW_STRUCTURE_AND_CAPTURED_KEYS'),
  @('p','seat.GetVehicle() != vehicle','false','FULL_RAW_STRUCTURE_AND_CAPTURED_KEYS'),
  @('p','seats.Copy(resolved);','seats.Copy(raw);','ATOMIC_ORDERED_CAPTURED_RESOLUTION'),
  @('f','group.GetAllocatedCompartments(allocated);','group.ReleaseCompartments();','BOUNDED_RAW_ALLOCATION_DIAGNOSTICS'),
@@ -84,13 +84,14 @@ public class AICFArray<T>:IEnumerable<T> {
  public void Copy(AICFArray<T> other){values.Clear();values.AddRange(other.values);} public void Remove(int i){values.RemoveAt(i);}
  public IEnumerator<T> GetEnumerator(){return values.GetEnumerator();} IEnumerator IEnumerable.GetEnumerator(){return GetEnumerator();}
 }
-public class IEntity {public BaseCompartmentManagerComponent Manager;public object FindComponent(Type type){return Manager;} public static implicit operator bool(IEntity v){return !object.ReferenceEquals(v,null);}}
+public class IEntity {public IEntity Child,Sibling;public IEntity GetChildren(){return Child;}public IEntity GetSibling(){return Sibling;}public BaseCompartmentManagerComponent Manager;public object FindComponent(Type type){return Manager;} public static implicit operator bool(IEntity v){return !object.ReferenceEquals(v,null);}}
 public class BaseCompartmentManagerComponent {public IEntity Owner;public AICFArray<BaseCompartmentSlot> Raw=new AICFArray<BaseCompartmentSlot>(); public static BaseCompartmentManagerComponent Cast(object o){return o as BaseCompartmentManagerComponent;}public IEntity GetOwner(){return Owner;} public void GetCompartments(AICFArray<BaseCompartmentSlot> dst){dst.Copy(Raw);}public static implicit operator bool(BaseCompartmentManagerComponent v){return !object.ReferenceEquals(v,null);}}
 public class BaseCompartmentSlot {public string Key;public bool Accessible=true;public IEntity Vehicle;public IEntity Owner;public BaseCompartmentManagerComponent Manager;public int Ordinal=0;public IEntity GetVehicle(){return Vehicle;}public IEntity GetOwner(){return Owner;}public BaseCompartmentManagerComponent GetManager(){return Manager;}public bool IsCompartmentAccessible(){return Accessible;}public static implicit operator bool(BaseCompartmentSlot v){return !object.ReferenceEquals(v,null);}}
 public class AICF_VehiclePreset {public AICFArray<string> m_aSeats=new AICFArray<string>();public AICFArray<int> m_aMembers=new AICFArray<int>();public static implicit operator bool(AICF_VehiclePreset v){return !object.ReferenceEquals(v,null);}}
 public class CapturedTopologyHarness {
- const int MAX_SEATS=64; static int RelativeOwnerIndex(BaseCompartmentSlot seat){return seat.Ordinal;}static string SeatKey(BaseCompartmentSlot seat){return seat.Key;}
+ const int MAX_SEATS=64; static string SeatKeyAtOwner(BaseCompartmentSlot seat,int ownerIndex){return seat.Key;}
 '@
+$scaffold+='static void CollectHierarchy(IEntity entity,AICFArray<IEntity> owners)'+(Body $preset 'CollectHierarchy').Replace('entity.FindComponent(BaseCompartmentManagerComponent)','entity.FindComponent(typeof(BaseCompartmentManagerComponent))').Replace('if (entity.FindComponent(typeof(BaseCompartmentManagerComponent)))','if (entity.FindComponent(typeof(BaseCompartmentManagerComponent)) != null)')
 $scaffold+='public static bool Resolve(IEntity vehicle,AICF_VehiclePreset preset,AICFArray<BaseCompartmentSlot> seats)'+$body
 $scaffold+=@'
  static void Check(bool pass,string name){if(!pass)throw new Exception(name);}
@@ -104,7 +105,7 @@ $scaffold+=@'
  string expected=recipe.m_aSeats[0];recipe.m_aSeats[0]="0:100:2";Check(!Resolve(car,recipe,output)&&output.IsEmpty(),"missing key atomic failure");count++;recipe.m_aSeats[0]=expected;
  recipe.m_aSeats[0]=recipe.m_aSeats[1];Check(!Resolve(car,recipe,output),"duplicate captured key");count++;recipe.m_aSeats[0]=expected;
  string originalKey=first.Key;first.Key=chosen.Key;Check(!Resolve(car,recipe,output),"duplicate raw key");count++;first.Key=originalKey;
- first.Ordinal=-1;Check(!Resolve(car,recipe,output),"owner outside actual vehicle hierarchy");count++;first.Ordinal=0;
+ var originalOwner=first.Owner;var originalManager=first.Manager;first.Owner=new IEntity();first.Manager=new BaseCompartmentManagerComponent{Owner=first.Owner};Check(!Resolve(car,recipe,output),"owner outside actual vehicle hierarchy");count++;first.Owner=originalOwner;first.Manager=originalManager;
  var correctManager=first.Manager;first.Manager=new BaseCompartmentManagerComponent{Owner=new IEntity()};Check(!Resolve(car,recipe,output),"manager owner mismatch");count++;first.Manager=correctManager;
  car.Manager.Raw.Insert(null);Check(!Resolve(car,recipe,output),"null raw slot");count++;car.Manager.Raw.Remove(3);
  recipe.m_aMembers.Remove(2);Check(!Resolve(car,recipe,output),"parallel mapping shape");count++;recipe.m_aMembers.Insert(2);

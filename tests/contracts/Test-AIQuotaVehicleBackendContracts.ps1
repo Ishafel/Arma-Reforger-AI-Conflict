@@ -6,6 +6,7 @@ $entry=[regex]::Replace($code,'(?m)^using [^\r\n]+;\s*','')
 $entry=$entry.Replace('public class PlayerManager:Native {public int PlayerId;public int GetPlayerIdFromControlledEntity(IEntity e){return PlayerId;}}','public class PlayerController:Native {public int Id=1;public IEntity Actor;public Action OnRead;public int GetPlayerId(){return Id;}public IEntity GetControlledEntity(){if(OnRead!=null)OnRead();return Actor;}} public class PlayerManager:Native {public int PlayerId;public PlayerController Controller;public Action OnLookup;public int GetPlayerIdFromControlledEntity(IEntity e){if(OnLookup!=null)OnLookup();return PlayerId;}public PlayerController GetPlayerController(int id){return Controller;}}')
 $force=Join-Path $RepositoryRoot 'AIConflictCore/Scripts/Game/AIConflict/Forces'
 function Convert-VehicleReplay([string]$s){
+ $s=$s.Replace('map<IEntity, AICF_AIQuotaBody>','EMap<IEntity, AICF_AIQuotaBody>')
  $s=$s.Replace('ref ','').Replace('GetGame()','Runtime.Game').Replace('EntityID','long').Replace('int.MAX','int.MaxValue').Replace('string.Format','Fmt.Format')
  $s=$s.Replace('long.INVALID','0L').Replace('System.GetTickCount()','QuotaDiagnosticClock.GetTickCount()')
  $s=$s.Replace('active = agent.IsAIActivated();','active = agent.IsAIActivated()?1:0;').Replace('counted = agent.CountTowardsAIWorldLimit();','counted = agent.CountTowardsAIWorldLimit()?1:0;')
@@ -47,6 +48,7 @@ $replay+=@'
 public class EArray<T>:List<T>{public new int Count(){return base.Count;}public void Insert(T v){Add(v);}public bool IsEmpty(){return base.Count==0;}public int Find(T v){return IndexOf(v);}public bool IsIndexValid(int i){return i>=0&&i<base.Count;}public static implicit operator bool(EArray<T> v){return v!=null;}}
 public static class QuotaDiagnosticClock {public static int GetTickCount(){return 20000;}}
 public class AICF_QuotaInts:EArray<int>{public void Resize(int n){while(base.Count()<n)Add(0);if(base.Count()>n)RemoveRange(n,base.Count()-n);}}
+public class EMap<K,V> where V:class {readonly Dictionary<K,V> Values=new Dictionary<K,V>();public void Clear(){Values.Clear();}public bool Contains(K key){return Values.ContainsKey(key);}public void Set(K key,V value){Values[key]=value;}public V Get(K key){V value;return Values.TryGetValue(key,out value)?value:null;}}
 public static class Fmt {public static string Format(string format,params object[] values){for(int i=values.Length;i>=1;i--)format=format.Replace("%"+i,Convert.ToString(values[i-1]));return format;}}
 public static class AICF_EAIQuotaBucket {public const int STOCK=0,COMBAT=1,BUILDERS=2,FLEET=3,FIA_EXTRA=4,STOCK_VEHICLES=5,COUNT=6;}
 public static class AICF_EVehicleLeaseState {public const int ACTIVE=1,RELEASE_PENDING=2,FAILED_CLOSED=3;}
@@ -77,11 +79,11 @@ public class AICF_AIQuotaCensus:Native
 }
 public static class AICF_Stage1Diagnostics {public static List<string> Events=new List<string>();public static void Info(string name,string text){Events.Add(name+" "+text);}}
 '@
-foreach($file in @('AICF_AIQuotaMath.c','AICF_AIQuotaLimits.c','AICF_AIQuotaLedger.c','AICF_AIQuotaBody.c')){$replay+=Convert-VehicleReplay ([IO.File]::ReadAllText((Join-Path $force $file)))}
+foreach($file in @('AICF_AIQuotaMath.c','AICF_AIQuotaLimits.c','AICF_AIQuotaLedger.c','AICF_AIQuotaBody.c','AICF_AIQuotaBodyLookup.c')){$replay+=Convert-VehicleReplay ([IO.File]::ReadAllText((Join-Path $force $file)))}
 $replay+=@'
 public class QuotaBase:Native
 {
- public ChimeraAIWorld m_World;public AICF_MatchController m_Controller,m_InitializingController;public int m_iEpoch,m_iNextContext=1,m_iHumanRetirementDiagnosticAt;public AICF_AIQuotaLimits m_Limits;public AICF_AIQuotaLedger m_Ledger;public AICF_AIQuotaWorldState m_WorldState=new AICF_AIQuotaWorldState();public AICF_AIQuotaCensus m_Census;public AICF_AIQuotaRegistry m_Owners=new AICF_AIQuotaRegistry();public EArray<AICF_AIQuotaBody> m_aBodies=new EArray<AICF_AIQuotaBody>();public bool m_bNativeBirthBusy,m_bQuarantined,m_bQuotaCensusBusy;public string m_sLastReason;
+ public ChimeraAIWorld m_World;public AICF_MatchController m_Controller,m_InitializingController;public int m_iEpoch,m_iNextContext=1,m_iHumanRetirementDiagnosticAt;public AICF_AIQuotaLimits m_Limits;public AICF_AIQuotaLedger m_Ledger;public AICF_AIQuotaWorldState m_WorldState=new AICF_AIQuotaWorldState();public AICF_AIQuotaCensus m_Census;public AICF_AIQuotaRegistry m_Owners=new AICF_AIQuotaRegistry();public EArray<AICF_AIQuotaBody> m_aBodies=new EArray<AICF_AIQuotaBody>();public AICF_AIQuotaBodyLookup m_BodyLookup;public bool m_bNativeBirthBusy,m_bQuarantined,m_bQuotaCensusBusy;public string m_sLastReason;
  public bool IsQuotaAdmissionBusy(){return m_bNativeBirthBusy||m_bQuotaCensusBusy;}public void PruneGroupQueues(){}
  public bool IsCurrentWorld(){return Replication.Server&&Runtime.Game!=null&&m_World!=null&&m_World.World==Runtime.Game.World;}public bool IsOwnerCurrent(){return IsCurrentWorld()&&m_Controller!=null&&m_Controller.IsAIQuotaOwnerCurrent(m_World)&&m_iEpoch>0;}public bool IsConfigured(){return IsCurrentWorld()&&m_Limits!=null&&m_Limits.IsConfigured()&&m_Ledger!=null&&!m_bQuarantined;}public AICF_MatchController GetQuotaController(){return m_Controller;}public int GetEpoch(){return m_iEpoch;}public int AllocateContextSerial(){return IsConfigured()&&!m_bNativeBirthBusy?m_iNextContext++:0;}
  public virtual int BeginQuotaVehicleBootstrap(AICF_MatchController c){return 0;}public virtual bool EndQuotaVehicleBootstrap(AICF_MatchController c,int serial){return false;}public virtual bool ClassifyQuotaVehicleRow(AICF_AIQuotaAgentRow row,out int b,out bool charge){b=0;charge=false;return false;}public virtual bool AddQuotaVehicleHolds(AICF_AIQuotaCensus s,AICF_QuotaInts c,EArray<IEntity> counted){return false;}public virtual bool InitializeQuotaVehicleBindings(AICF_AIQuotaCensus s){return false;}

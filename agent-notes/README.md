@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Разобрать просадки FPS, стоимость census и повторные обходы мест заполненной техники | [SERVER_PERFORMANCE.md](SERVER_PERFORMANCE.md), [VEHICLE_TOPOLOGY_PERFORMANCE.md](VEHICLE_TOPOLOGY_PERFORMANCE.md) |
 | Изменить AI-only цену боевой техники и отделить её от native цены игрока | [AI_VEHICLE_PRICES.md](AI_VEHICLE_PRICES.md) |
 | Исключить автономные отряды стороны игроков из Co-op и сохранить смешанный парк противника | [COOP_ENEMY_ONLY.md](COOP_ENEMY_ONLY.md), [COOP_SCENARIO.md](COOP_SCENARIO.md) |
 | Разобрать native supply capacity ниже цены танка, demand склада и узкий RHS metadata alias | [SUPPLY_DEPOT_DEMAND.md](SUPPLY_DEPOT_DEMAND.md) |
