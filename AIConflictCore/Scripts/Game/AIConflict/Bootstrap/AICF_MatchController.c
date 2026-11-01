@@ -7761,6 +7761,7 @@ class AICF_MatchController
 			Math.Round(displayTargetPosition[0]),
 			Math.Round(displayTargetPosition[2]),
 			slot.GetStrategicIntentRevision());
+		summary += "|" + AICF_VehiclePresetSummary.Field(slot);
 		return summary;
 	}
 

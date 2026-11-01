@@ -642,7 +642,7 @@ class AICF_StrategicUIController
 		for (int slotId = 0; slotId < m_aGroupTexts.Count(); slotId++)
 		{
 			string summary = m_Campaign.AICF_GetStrategicGroupSummary(m_bLocalUSSR, slotId);
-			m_aGroupTexts[slotId].SetText(AICF_Localization.Resolve(FormatGroupSummary(summary)));
+			m_aGroupTexts[slotId].SetText(FormatGroupSummary(summary));
 			if (slotId == m_iSelectedSlot)
 				SetRectColor(m_aGroupButtons[slotId], Color.FromSRGBA(25, 92, 125, 245));
 			else
@@ -1231,13 +1231,17 @@ class AICF_StrategicUIController
 		array<string> fields = {};
 		summary.Split("|", fields, false);
 		if (fields.Count() < 10)
-			return AICF_Localization.Code("UNAVAILABLE");
+			return AICF_Localization.Resolve(AICF_Localization.Code("UNAVAILABLE"));
 		string result = string.Format(
 			"%1  %2  %3  %4/%5",
 			fields[0], AICF_Localization.Code(fields[1]), AICF_Localization.Code(fields[2]), fields[3], fields[9]);
 		result += AICF_Localization.Format(
 			"{AICF:AICF_UI_TASK_VEHICLE_RECRUIT_d74255ca}",
 			string.Format("%1", AICF_Localization.Code(fields[8])), string.Format("%1", AICF_Localization.Code(fields[4])), string.Format("%1", AICF_Localization.Code(fields[5])), string.Format("%1", fields[6]), string.Format("%1", fields[7]));
+		// Имя пользователя добавляется после локализации, как literal text.
+		result = AICF_Localization.Resolve(result);
+		if (fields.Count() > 14 && !fields[14].IsEmpty())
+			result += "\n" + AICF_Localization.Resolve("{AICF:AICF_UI_CommandVehiclePreset}") + ": " + AICF_VehiclePresetSummary.DecodeName(fields[14]);
 		return result;
 	}
 
@@ -1560,5 +1564,39 @@ class AICF_StrategicUIController
 		widget.SetExactFontSize(fontSize);
 		widget.SetText(AICF_Localization.Resolve(text));
 		return widget;
+	}
+}
+
+// Не меняет recipe/binding/revision: только безопасное поле campaign summary.
+class AICF_VehiclePresetSummary
+{
+	static string Field(AICF_GroupSlot slot)
+	{
+		if (!slot || !slot.HasVehiclePreset()) return string.Empty;
+		AICF_VehiclePreset preset = AICF_VehiclePreset.Decode(slot.GetVehiclePresetData());
+		if (!preset) return string.Empty;
+		return EncodeName(preset.m_sName);
+	}
+
+	static string EncodeName(string name)
+	{
+		name.Replace("%", "%25");
+		name.Replace("|", "%7C");
+		name.Replace("~", "%7E");
+		name.Replace(";", "%3B");
+		name.Replace("{", "%7B");
+		name.Replace("}", "%7D");
+		return name;
+	}
+
+	static string DecodeName(string name)
+	{
+		name.Replace("%7C", "|");
+		name.Replace("%7E", "~");
+		name.Replace("%3B", ";");
+		name.Replace("%7B", "{");
+		name.Replace("%7D", "}");
+		name.Replace("%25", "%");
+		return name;
 	}
 }

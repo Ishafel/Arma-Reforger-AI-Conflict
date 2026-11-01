@@ -60,8 +60,8 @@ modded class SCR_GameModeCampaign
 		string summary = AICF_GetStrategicGroupSummary(false, 0);
 		array<string> fields = {};
 		summary.Split("|", fields, false);
-		AICF_CheckLocalization("SUMMARY_FIELDS", fields.Count().ToString(), "14");
-		if (fields.Count() == 14)
+		AICF_CheckLocalization("SUMMARY_FIELDS", fields.Count().ToString(), "15");
+		if (fields.Count() == 15)
 		{
 			WidgetManager.SetLanguage("en_us");
 			Print("[AICF][LOCALIZATION_PROBE_SUMMARY] language=en_us vehicle=" + AICF_Localization.Resolve(fields[6]) + " target=" + AICF_Localization.Resolve(fields[4]));

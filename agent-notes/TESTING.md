@@ -1,5 +1,20 @@
 # Проверки и baseline
 
+## Имя пресета техники в списке групп — 01.11.2026
+
+`BuildGroupSummary` добавляет optional field14 после прежних14полей. Строка
+отряда показывает подтверждённое имя после локализации базового текста;
+wire-разделители и literal localization tokens сохраняются. RESET очищает
+подпись, старые14-field summaries совместимы, assignment/Deferred не меняются.
+Baseline root4/4 и соседний4/4; новые профильные5/5 и root3/3 PASS,
+actual codec/Field/formatter87cases/7unsafe. Stock terminalWB validation/native0;
+изолированный native JSON→BuildGroupSummary→actualUIformatter14/14 PASS,
+native0/full stopped/fatal0/source393drift0. WBresources50/native28 — FAIL.
+Human layout/readability и новый client/JIP NOT RUN, пользовательский клиент
+не затронут. Полные команды/логи/архивы:
+`.codex-runtime/vehicle-preset-summary-20261101/REPORT.md`, root evidence
+`.codex-runtime/group-preset-label-20261101/`. Контракт — [VEHICLE_PRESETS.md](VEHICLE_PRESETS.md).
+
 ## Исправление стороны игроков Co-op — 01.11.2026
 
 Уточнённый контракт0 human/10 enemy и old→new proof:
