@@ -1,5 +1,32 @@
 # Производительность сервера
 
+## Повторное обращение игрока и перезапуск — 01.11.2026
+
+Игрок подтвердил просадку server FPS и изображения клиента. Найденная живая
+сессия стартовала в13:01/13:02, до commit `b44b00f` (14:09); её исходный
+snapshot — `6941517`. Она не проверяла исправления census/topology. По явному
+разрешению игрока остановлены только PID54204/70056 после проверки CommandLine;
+полные остановленные profiles сохранены. Принудительное завершение не является
+доказательством штатного shutdown. Новый fixture-free сервер PID66724 и клиент
+PID60068 запущены canonical launcher на root `b44b00f`, NorthWCS/CoopUS/Easy,
+AICommanderMode USSR; SERVER_READY перед client подтверждён. Они оставлены игроку.
+
+Отдельный isolated ordinary-wcs,180s, без topology/body benchmark: WB exit0,
+validation1/fatal0; server native0/Game destroyed/fatal0, resource466rawE — FAIL.
+После ROSTER_READY17samples: min49,6/avg58,18FPS, maxframe238мс, max71AI/45AIChar.
+Параллельно работала пользовательская сессия, нагрузка ниже исходной: это не
+paired FPS proof. Последнее окно census27calls/397ms/max21ms; BuildCounts212ms,
+VehicleUseCurrent128ms inclusive, вложенные времена не складывать.
+Новые проверки Census/BodyLookup/VehicleTopologyPerformance3/3PASS; production
+в этом продолжении не менялся. Клиентский лог не содержит FPS samples;
+полная high-load проверка обоих FPS и нового игрового shutdown — NOT RUN.
+
+Evidence/команды: `.codex-runtime/fps-followup-20261101/` (Measure-Server.ps1,
+baseline/, ordinary-wcs/compile/, ordinary-wcs/logs/, ordinary-summary.json,
+old-session-stopped/, server-launcher.txt, client-launcher.txt). Изолированный
+stage архивирован и удалён; тестовый сервер штатно завершён. Свежие player
+profiles: `C:/Users/retar/AppData/Local/AICF/FpsFollowup-20261101/{server,client}`.
+
 Исходное наблюдение WCS / CoopUS / Northern Everon, 01.11.2026:
 `.codex-runtime/north-wcs-coopus-playtest-20261101-130116/REPORT.md`.
 В 13:11:02–13:21:02 MSK сервер падал до19,6 FPS, отдельный кадр2513,6мс.
