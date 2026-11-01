@@ -1714,3 +1714,15 @@ NativeSubgroup. Прежний root-path v13 WB FAIL сохранён, native т
 ## Supply depot: normal paid construction
 AICF_SupplyDepotConstructionProbe.c, opt-in -aicfSupplyDepotConstructionProbe 1. Для ArlandWCSRHS CoopUSSR приоритет AI US только SUPPLY_DEPOT; human USSR veto читается из actual Planner.Commander. Metadata и Place вызывают super; observer ждёт штатный ONLINE и рост GetSuppliesMax до цены назначенного пресета. Fixture не создаёт storage entity, не добавляет supplies и не меняет capacity. Deadline 900s после roster-ready. Выполнять в изолированном stage, полные server logs/manifest/exit обязательны.
 Дополнительно: файл $profile:AICF_SupplyProbe.stop вызывает штатный RequestClose с INCOMPLETE marker. -aicfSupplyDepotRegistryOnly 1 выполняет только registered prefab/Metadata.Load readback US и USSR без строительства. Supply log gate требует native exit0/canonical manifest/full stopped logs, связывает paid token с тем же SUPPLY_DEPOT layout completion и отдельно выводит strict_resources.
+# PMC callback performance
+
+`tests/fixtures/AICF_PMCPerformanceProbe.c` подключается только в изолированную
+копию `AIConflictArlandRHS/Scripts/Game/AIConflictArlandRHS/`, после production
+PMC integration. Он оборачивает `AICF_ApplyPMCEquipment` одним `super`, не вызывает
+дополнительный Apply и не меняет clocks/army/inventory. `PMC_PERFORMANCE`
+содержит `entity`, `elapsed_ms`, `applied`, `frame`, `added_gameplay_calls=0`.
+Для frame-budget gate проверяй уникальность frame только у applied=1, полный
+остановленный sibling log, отсутствие PMC failures и exact source snapshot.
+Самостоятельно этот probe не доказывает FPS полного боя или клиентского вида.
+См. [SERVER_PERFORMANCE.md](SERVER_PERFORMANCE.md) и
+[FIA_ARMAMENT.md](FIA_ARMAMENT.md).

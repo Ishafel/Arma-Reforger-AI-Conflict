@@ -1,5 +1,15 @@
 # Проверки и baseline
 
+## FPS high-load follow-up: PMC и native boarding — 01.11.2026
+
+Новые gates и ограничения: [SERVER_PERFORMANCE.md](SERVER_PERFORMANCE.md),
+evidence `.codex-runtime/fps-highload-20261101/REPORT.md`. Offline PMC/RHS/FIA3/3,
+launcher/Coop2/2, production WB3/3 compilePASS; полный runtimeFAIL (native boarding
+VM2, cleanup retained3, resource492rawE). Высокая нагрузка до исправления достигла
+180AIChar, после исправления максимум80; равная high-load проверка NOT RUN.
+Callback frame budget106actual casesPASS; native31success/31frames, но defer
+ветка естественно не исполнилась. Общая причина FPS и полное устранение не доказаны.
+
 ## FPS: census body lookup и vehicle topology — 01.11.2026
 
 Профильный baseline41/41, после44unique PASS (первый reentry adapter FAIL

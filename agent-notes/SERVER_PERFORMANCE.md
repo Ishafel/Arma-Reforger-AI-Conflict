@@ -1,5 +1,53 @@
 # Производительность сервера
 
+## Полный бой, PMC frame budget и найденные blockers — 01.11.2026
+
+Evidence: `.codex-runtime/fps-highload-20261101/REPORT.md`. Продолжение
+`codex/fps-followup`, исходный production `b44b00f`.
+Остановленная прежняя сессия:255server samples, peak180AIChar;154samples
+при >=140AIChar дают avg54,83/min36,8FPS, maxframe844,6мс. Просадки сохранялись.
+Клиент переподключён с новым `-ClientLogStats`; подтверждение картинки рядом
+с боем без участия игрока отсутствует, даже при большом global AIChar.
+
+Stage-only PMC profiler измерил30actual initialization callbacks:
+avg79,8/min64/max164мс. Теперь callback допускается через main-world frame
+budget, остальные identity-safe callbacks повторяются через50мс. Численность,
+inventory transaction, pending boarding gates и lifecycle Remove сохранены.
+Actual-source budget106casesPASS; профильные3checksPASS; launcher+Coop2checksPASS;
+terminal production WB Stock/RHS/WCS3/3compilePASS, source drift0, resources
+50/52/78FAIL. Новый отдельный20min native0/stopped,31successful PMC callbacks
+в31разныхframes, PMCfailures0. Но callback_total=31: native deferral path в этом
+случайном мире не исполнился. Нельзя выдавать этот прогон за измеренное устранение
+пакетного stall или доказанную причину первоначальной просадки.
+
+Новый20min peak80AIChar, порог140не достигнут: high-load comparison NOT RUN.
+После первого загрузочного sample server119samples avg59,07/min37,2FPS,
+maxframe3576,4мс; client119samples avg143,94/min140FPS, maxframe170мс.
+Разные миры/камера/численность не допускают causal FPS comparison.
+Server3576,4мс попал в окно15:17:27–35 с двумя native VM exceptions:
+`SCR_AIGetEmptyCompartment` → `NodeError` → `Debug.Error`, причина
+`vehicle provided is not registered as used inside group!`. Это временная
+связь, отдельная причинность не доказана. Плюс3VEHICLE_CLEANUP_RETAINED
+с PLAYER_POSITION_UNKNOWN (всего8console SCRIPT E с bridge duplicates).
+Строгий runtime gateFAIL, несмотря на native0/Game destroyed; raw sibling492E.
+Исходная нагрузка и устранение просадок обоих FPS не подтверждены.
+
+В старом полном бою подтверждены10покупок:5Ural,2BTR70,K4386,2T72,
+всего4567supplies. Максимальное горизонтальное удаление от первой trace позиции:
+Ural slots1/3 —716/1116м, BTRslot5 —720м, K4386 —816м. Второй BTR/первый T72
+почти не двигались после TRANSIT и получили VEHICLE_UTILITY_ATTACH_REJECTED.
+Есть TACTICAL_BEGIN_REJECTED, TACTICAL_UTILITY_ATTACH_REJECTED,
+TACTICAL_REBOARD_TIMEOUT и boarding deadline. Это сбор данных, не исправление
+надёжности всего парка. Полная таблица/operation IDs — `vehicles.json`.
+
+Полные stopped logs/manifests/commands/source hashes и byte-verified stage ZIP
+сохранены; stages удалены, тестовые процессы остановлены. Старые player sessions
+завершены адресно с проверкой CommandLine; forced stop не равен graceful PASS.
+Ранний RHS static FAIL был запретом нового retry: whitelist сужен до exact
+frame-budget branch, общий запрет сторонних loops сохранён. Дополнительный frozen
+launcher baseline первый раз FAIL из-за execution policy ручного запуска;
+повтор через powershell.exe -ExecutionPolicy Bypass PASS. Все попытки сохранены.
+
 ## Повторное обращение игрока и перезапуск — 01.11.2026
 
 Игрок подтвердил просадку server FPS и изображения клиента. Найденная живая

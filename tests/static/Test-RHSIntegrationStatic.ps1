@@ -189,6 +189,9 @@ if ($failures.Count -eq 0) {
     # campaign lifecycle. Любой другой CallLater (включая повторный) запрещён.
     $pmcInitCall = 'GetGame\(\)\.GetCallqueue\(\)\.CallLater\(AICF_ApplyPMCEquipment, 1500, false\);'
     $rhsCampaignSources = [regex]::Replace($rhsSources, $pmcInitCall, '')
+    # Exact initialization deferral only; general loops remain forbidden.
+    $pmcFrameDefer = 'if \(!AICF_PMCEquipmentFrameBudget.TryBegin\(GetWorld\(\)\)\)\s*\{\s*GetGame\(\)\.GetCallqueue\(\)\.CallLater\(AICF_ApplyPMCEquipment, 50, false\);\s*return;\s*\}'
+    $rhsCampaignSources = [regex]::Replace($rhsCampaignSources, $pmcFrameDefer, '')
     $patchInitCall = 'GetGame\(\)\.GetCallqueue\(\)\.CallLater\(AICF_ApplyDefaultPatches, 1500, false\);'
     $rhsCampaignSources = [regex]::Replace($rhsCampaignSources, $patchInitCall, '')
     Forbid-Match 'RHS_SINGLE_LIFECYCLE' $rhsCampaignSources 'new\s+AICF_MatchController|CallLater\s*\(|GetOn\w*\(\)\.Insert\s*\(' 'RHS addon must not add a controller, loop or event subscription'

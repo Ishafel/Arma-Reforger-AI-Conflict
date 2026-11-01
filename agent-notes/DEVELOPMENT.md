@@ -119,6 +119,12 @@ Hard — случайные пары бронетехники и одну уси
 
 ## Server и client
 
+Для терминального измерения клиентских кадров передавай `-ClientLogStats`
+в `tools/Start-AICFRuntime.ps1 -Role Client`. Launcher добавляет штатный
+`-logStats 10000` без ограничения client FPS; native `CLI Params` и manifest
+должны содержать эту пару. Первое окно загрузки анализируй отдельно от боя.
+Само присутствие connected client не доказывает вид камеры рядом с перестрелкой.
+
 Runtime runners, сохраняющие native output через `*>`, запускай из PowerShell7.
 В Windows PowerShell5 обычная native stderr строка ENGINE(W) может превратиться
 в terminating NativeCommandError при ErrorActionPreference=Stop и прервать игру

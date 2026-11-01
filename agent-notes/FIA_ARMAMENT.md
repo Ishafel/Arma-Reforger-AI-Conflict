@@ -1,5 +1,17 @@
 # Вооружение FIA в RHS и WCS
 
+`AICF_PMCEquipmentFrameBudget` допускает одну initialization экипировки за
+native main-world frame (`BaseWorld.GetFrameNumber`, API1.8.0.13). Остальные
+character callbacks повторяются через50мс с прежним destructor Remove;
+перед каждым retry повторяются entity/source/pending/authority/eligibility.
+Готовность посадки остаётся закрытой до успешной прежней transaction. Это
+распределение synchronous работы, не сокращение FIA, inventory или проверок.
+Одиночная дорогая transaction по-прежнему может задержать кадр.
+Проверка: `Test-PMCEquipmentFrameBudgetContracts.ps1`; stage-only RHS/WCS
+`AICF_PMCPerformanceProbe.c` измеряет существующий callback одним super и
+печатает elapsed_ms/applied/frame без дополнительных Apply. Измеритель
+подключается только в isolated RHS addon, не в production.
+
 Issue #52. Core и vanilla integrations сохраняют stock FIA. Общая transaction
 находится в RHS `AICF_RHSPMCEquipment`; `AICF_RHSPMCArmament` собирает оружие
 в отдельном preview world. RHS/WCS content profiles определяют число вариантов
