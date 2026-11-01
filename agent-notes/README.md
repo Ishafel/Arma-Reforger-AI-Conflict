@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Сверить установленные AI Conflict/RHS/WCS и прочие Workshop версии, отличить missing dependencies от устаревания | [ADDON_VERSIONS.md](ADDON_VERSIONS.md): датированная online-сверка42пакетов, активный graph полный |
 | Разобрать ложный STRING_FORMAT_PLACEHOLDER на percent encoding и проверить native Format arity | [LANGUAGE_AUDIT.md](LANGUAGE_AUDIT.md), `Test-LanguageAuditContracts.ps1` |
 | Повторить длительный WCS бой под высокой нагрузкой, проверить FPS и обе vehicle regressions | [WCS_HIGHLOAD_SOAK.md](WCS_HIGHLOAD_SOAK.md): 32min server/30min client, FPS FAIL, прежние ошибки0, реальные поездки и новые blockers |
 | Разобрать WCS ASSIGNMENT_SCOPE при разных BASE endpoint и повторную native регистрацию в tactical phase | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md#base-destination-и-retained-registration), результаты в [TESTING.md](TESTING.md) |
