@@ -1,5 +1,17 @@
 # Состояние #78
 
+## Уточнение Co-op — 01.11.2026
+
+По прямому уточнению пользователя исправляется ошибка2471562: на стороне
+игроков0 автономных slots, у противника10 со смешанным парком. Прежнее10+10
+не является принятым требованием. Контракт и новые проверки:
+[COOP_ENEMY_ONLY.md](COOP_ENEMY_ONLY.md). Native-only/resource/window/OOM
+blockers сохраняются, issue OPEN и PR79 draft.
+Новая проверка: профильные11/11 PASS, WB3/3, native Stock/WCS обе стороны
+Co-op и Stock STANDARD5/5 functional PASS; у людей0 autonomous groups,
+у противника10. Общий resource gate остаётся FAIL; client/JIP нового build
+и human UI/input NOT RUN. Прежний284/284 не выдаётся за новый полный запуск.
+
 ## Продолжение 01.11.2026
 
 Текущий локальный срез — [COOP_FLEET_RECOVERY.md](COOP_FLEET_RECOVERY.md):

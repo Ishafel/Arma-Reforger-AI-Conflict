@@ -62,8 +62,8 @@ function Resolve-AICFScenario {
     $index=@('Easy','Medium','Hard').IndexOf($difficultyName)
     $mode=@('Standard','CoopUS','CoopUSSR').IndexOf($modeName)
     $side='';$commander='BOTH';$suffix=$entry.profileSuffix
-    if($mode -eq 1){$side='US'}
-    if($mode -eq 2){$side='USSR'}
+    if($mode -eq 1){$side='US';$commander='USSR'}
+    if($mode -eq 2){$side='USSR';$commander='US'}
     if($mode){$suffix+='-'+$modeName}
     [pscustomobject]@{
         variant=$entry.name;baseVariant=$entry.name;matchMode=$modeName;mode=$mode

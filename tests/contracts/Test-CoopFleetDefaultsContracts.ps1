@@ -39,11 +39,13 @@ public class AICF_CoopRulesAdapter {
 Add-Type -TypeDefinition ($adapter+$rulesAdapter)
 foreach($mode in 0..2){
     $policy=New-Object AICF_CoopRulesAdapter($mode)
-    Require ($policy.GetAICommanderMode() -ceq 'BOTH') "BOTH_COMMANDERS_$mode"
+    $commander=@('BOTH','USSR','US')[$mode]
+    Require ($policy.GetAICommanderMode() -ceq $commander) "ENEMY_COMMANDER_$mode"
     foreach($side in @('US','USSR','RHS_USAF','RHS_AFRF')){
         $stable=$side; if($side -eq 'RHS_USAF'){$stable='US'};if($side -eq 'RHS_AFRF'){$stable='USSR'}
         $human=($mode -eq 1 -and $stable -eq 'US') -or ($mode -eq 2 -and $stable -eq 'USSR')
-        Require ($policy.GetManagedSlotCount($side) -eq 10) "BOTH_SIDES_${mode}_$side"
+        $slots=10; if($human){$slots=0}
+        Require ($policy.GetManagedSlotCount($side) -eq $slots) "MANAGED_ROSTER_${mode}_$side"
         Require ($policy.UsesTicketDefeat($side) -eq !$human) "TICKET_DEFEAT_${mode}_$side"
         Require ($policy.AllowsAutomaticConstruction($side) -eq !$human) "HUMAN_CONSTRUCTION_${mode}_$side"
         Require ($policy.AllowsPlayerFaction($side) -eq ($mode -eq 0 -or $human)) "PLAYER_ACCESS_${mode}_$side"
@@ -59,6 +61,8 @@ foreach($tanks in @($false,$true)){
     }
 }
 Require ($source -match '!Replication.IsServer\(\)' -and $source -match 'rules.GetMode\(\) == AICF_EMatchMode.STANDARD' -and $source -match '!rules.IsValid\(\)') 'AUTHORITY_COOP_VALID_MODE_ONLY'
+$apply=Get-AICFMethodBody ([pscustomobject]@{Source=$source;Code=(ConvertTo-AICFCodeText $source)}) 'Apply'
+Require ($apply.Contains('rules.GetManagedSlotCount(state.GetFactionKey()) <= 0') -and $apply.IndexOf('rules.GetManagedSlotCount(') -lt $apply.IndexOf('new AICF_VehiclePresetCatalog')) 'NO_HUMAN_DEFAULT_OR_MODEL_INSPECTION'
 Require ($source -match 'slot.GetState\(\) != AICF_EGroupSlotState.EMPTY' -and $source -match 'slot.HasVehiclePreset\(\)' -and $source -match 'slot.GetVehiclePresetRevision\(\) != 0') 'INITIAL_ONLY_PRESERVES_MANUAL_RESET_AND_BINDING'
 Require ($source -match 'AICF_VehicleSeatAssignment.AutoAssign' -and $source -match 'profile.IsVehiclePresetCrewSeat\(prefab, stableKey, seat\)' -and $source -match 'size = Math.Min') 'LIVE_TOPOLOGY_AND_MANDATORY_FIRST'
 Require ($source -match 'TRANSPORT_TOO_SMALL' -and $source -match 'role != AICF_ECoopVehicleRole.TRANSPORT.*?recipe.m_iBehavior = AICF_EVehicleBehavior.COMBAT' -and $source -match 'catalog.Clear\(\)') 'FULL_TRANSPORT_COMBAT_CREW_AND_WORLD_RELEASE'

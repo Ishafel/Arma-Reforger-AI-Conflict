@@ -14,25 +14,33 @@ modded class AICF_MatchController
 		int failures;
 		AICF_CoopFleetCheck(m_USState, m_USFaction, checks, failures);
 		AICF_CoopFleetCheck(m_USSRState, m_USSRFaction, checks, failures);
-		Print(string.Format("[AICF][COOP_FLEET_DONE] checks=%1 failures=%2 target_slots_per_faction=10 profile=%3", checks, failures, m_ContentProfile.GetProfileKey()));
+		Print(string.Format("[AICF][COOP_FLEET_DONE] checks=%1 failures=%2 us_slots=%3 ussr_slots=%4 profile=%5", checks, failures, m_USState.GetSlotCount(), m_USSRState.GetSlotCount(), m_ContentProfile.GetProfileKey()));
 		GetGame().GetCallqueue().CallLater(AICF_CoopFleetProbeClose, 5000, false);
 	}
 
 	protected void AICF_CoopFleetCheck(AICF_FactionState state, SCR_CampaignFaction faction, inout int checks, inout int failures)
 	{
 		FactionKey stable = m_ContentProfile.GetStableFactionKey(faction.GetFactionKey());
-		bool shape = state && state.GetSlotCount() == 10 && m_Config.GetAICommanderMode() == "BOTH" && m_Config.GetMinimumManagedAgents() == 200;
+		AICF_MatchRules rules = m_Config.GetMatchRules();
+		bool human = stable == rules.GetPlayerOnlyFaction();
+		int expected = 10;
+		if (human) expected = 0;
+		int minimumAgents = 100;
+		if (rules.GetMode() == AICF_EMatchMode.STANDARD) minimumAgents = 200;
+		bool shape = state && state.GetSlotCount() == expected && m_Config.GetAICommanderMode() == rules.GetAICommanderMode() && m_Config.GetMinimumManagedAgents() == minimumAgents;
 		checks++;
 		if (!shape) failures++;
 		Print(string.Format("[AICF][COOP_FLEET_CASE] faction=%1 case=SHAPE pass=%2", stable, shape));
 		if (!state) return;
+		if (human) return;
 		AICF_VehiclePresetCatalog catalog = new AICF_VehiclePresetCatalog(faction);
 		Print(string.Format("[AICF][COOP_FLEET_CATALOG] faction=%1 catalog=%2", stable, catalog.List()));
 		catalog.Clear();
 		for (int slotId; slotId < state.GetSlotCount(); slotId++)
 		{
 			AICF_GroupSlot slot = state.GetSlot(slotId);
-			AICF_ECoopVehicleRole role = AICF_CoopFleetDefaults.Role(slotId, m_ContentProfile.HasCoopTankSlots());
+			AICF_ECoopVehicleRole role = AICF_ECoopVehicleRole.FOOT;
+			if (rules.GetMode() != AICF_EMatchMode.STANDARD) role = AICF_CoopFleetDefaults.Role(slotId, m_ContentProfile.HasCoopTankSlots());
 			AICF_VehiclePreset preset = AICF_VehiclePreset.Decode(slot.GetVehiclePresetData());
 			bool passed = role == AICF_ECoopVehicleRole.FOOT && !preset;
 			string reason = "FOOT";

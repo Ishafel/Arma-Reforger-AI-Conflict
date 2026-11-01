@@ -18,9 +18,9 @@ function Test-CoopContracts($s) {
     if($s.recruitment -match 'SetRecruited\(|SetMaxAIPerGroup\(|RequestAddAIAgent\(|override bool IsRecruitable\(') { 'NATIVE_RECRUIT_RULES' }
     if($s.recruitment -match 'GetMode\(\)|AICF_EMatchMode') { 'PURCHASE_ALL_MODES' }
     foreach($rule in @(
-        @('rules','int GetManagedSlotCount.*?!IsValid\(\).*?return AICF_Stage1Config.GROUP_SLOTS_PER_FACTION;','ROSTER_POLICY'),
+        @('rules','int GetManagedSlotCount.*?!IsValid\(\).*?if \(factionKey == GetPlayerOnlyFaction\(\)\) return 0;.*?return AICF_Stage1Config.GROUP_SLOTS_PER_FACTION;','ROSTER_POLICY'),
         @('rules','bool UsesTicketDefeat.*?return GetManagedSlotCount\(factionKey\) > 0 &&\s*AICF_ContentProfile.GetActive\(\).GetStableFactionKey\(factionKey\) != GetPlayerOnlyFaction\(\);','TICKET_POLICY'),
-        @('rulesRaw','string GetAICommanderMode\(\)\s*\{\s*return "BOTH";','BOTH_COMMANDERS'),
+        @('rulesRaw','string GetAICommanderMode\(\)\s*\{\s*if \(m_eMode == AICF_EMatchMode.COOP_US\) return "USSR";\s*if \(m_eMode == AICF_EMatchMode.COOP_USSR\) return "US";\s*return "BOTH";','ENEMY_COMMANDER'),
         @('rules','bool AllowsAutomaticConstruction.*?return GetManagedSlotCount\(factionKey\) > 0 &&\s*AICF_ContentProfile.GetActive\(\).GetStableFactionKey\(factionKey\) != GetPlayerOnlyFaction\(\);','HUMAN_CONSTRUCTION_VETO'),
         @('rules','bool AllowsPlayerFaction.*?if \(!IsValid\(\)\) return false;.*?if \(m_eMode == AICF_EMatchMode.STANDARD\) return true;.*?GetStableFactionKey\(factionKey\) == GetPlayerOnlyFaction\(\)','FACTION_POLICY'),
         @('factionMenu','modded class SCR_WelcomeScreenFactionContent.*?int previousCount = m_aFactionWidgets.Count\(\);\s*super.FillFactionWidget\(faction, content, color\);.*?AllowsPlayerFaction\(faction.GetFactionKey\(\)\).*?m_aFactionWidgets.Count\(\) == previousCount\) return;.*?Widget factionWidget = m_aFactionWidgets\[previousCount\];\s*factionWidget.SetVisible\(false\);\s*factionWidget.SetEnabled\(false\);','WELCOME_FACTIONS'),
@@ -57,8 +57,11 @@ function Test-CoopContracts($s) {
 $failures=@(Test-CoopContracts $sources)
 $mutations=@(
     @('rules','return AICF_Stage1Config.GROUP_SLOTS_PER_FACTION;','return 0;','ROSTER_POLICY'),
+    @('rules','if (factionKey == GetPlayerOnlyFaction()) return 0;','','ROSTER_POLICY'),
     @('rules','return GetManagedSlotCount(factionKey) > 0 &&','return true ||','TICKET_POLICY'),
-    @('rulesRaw','return "BOTH";','return "USSR";','BOTH_COMMANDERS'),
+    @('rulesRaw','return "BOTH";','return "USSR";','ENEMY_COMMANDER'),
+    @('rulesRaw','COOP_US) return "USSR"','COOP_US) return "BOTH"','ENEMY_COMMANDER'),
+    @('rulesRaw','COOP_USSR) return "US"','COOP_USSR) return "BOTH"','ENEMY_COMMANDER'),
     @('rules','AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey) != GetPlayerOnlyFaction()','true','HUMAN_CONSTRUCTION_VETO'),
     @('rules','GetStableFactionKey(factionKey) == GetPlayerOnlyFaction()','true','FACTION_POLICY'),
     @('factionMenu','super.FillFactionWidget(faction, content, color);','','WELCOME_FACTIONS'),

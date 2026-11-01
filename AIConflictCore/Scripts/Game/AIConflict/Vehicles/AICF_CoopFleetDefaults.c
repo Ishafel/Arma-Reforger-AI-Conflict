@@ -24,6 +24,7 @@ class AICF_CoopFleetDefaults
 	static void Apply(AICF_FactionState state, AICF_MatchRules rules)
 	{
 		if (!Replication.IsServer() || !state || !rules || !rules.IsValid() || rules.GetMode() == AICF_EMatchMode.STANDARD) return;
+		if (rules.GetManagedSlotCount(state.GetFactionKey()) <= 0 || state.GetSlotCount() == 0) return;
 		AICF_ContentProfile profile = AICF_ContentProfile.GetActive();
 		FactionKey stableKey = profile.GetStableFactionKey(state.GetFactionKey());
 		if (stableKey != "US" && stableKey != "USSR") return;

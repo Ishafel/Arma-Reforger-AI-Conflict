@@ -20,19 +20,20 @@
 
 `AICF_Stage1Config` один раз читает header, затем CLI. Immutable `AICF_MatchRules`
 определяет число slots, default commander и применимость ticket defeat.
-Co-op автоматически выбирает commander `BOTH`; несовместимый CLI mode
+Co-op автоматически выбирает commander противника: `USSR` для Co-op US,
+`US` для Co-op USSR; несовместимый CLI mode
 отклоняется существующим ранним CONFIG_INVALID gate. Отдельного
 `aicfPlayerOnlyFaction` CLI в этой реализации нет.
 
 `AICF_FactionState` сохраняется для обеих сторон, включая ticket ledger и
-экономику. Число slots — по10 у обеих сторон, включая союзную игрокам армию. Initial spawn, replacements,
+экономику. Число slots —0 у стороны игроков,10 у противника. Initial spawn, replacements,
 recruitment, equipment service и transport обходят фактические slots.
 Ожидаемое число slots хранится отдельно: empty roster допустим только согласно
-policy. Initial queue и ROSTER_READY ждут10+10 предусмотренных slots во всех
-режимах. Событие ROSTER_READY и его поля сохранены.
+policy. Initial queue и ROSTER_READY ждут0+10 или10+0 в Co-op,
+10+10 в STANDARD. Событие ROSTER_READY и его поля сохранены.
 
 Минимум `aicfMaxManagedAgents` учитывает полные группы активных сторон:
-200 во всех режимах. Default —220.
+100 в Co-op и200 в STANDARD. Default —120 и220 соответственно.
 Квоты строителей, logistics и FIA остаются у прежних владельцев. Усиление
 армии сверх10 slots на сторону не добавлено.
 
@@ -44,11 +45,11 @@ policy. Initial queue и ROSTER_READY ждут10+10 предусмотренны
 
 Match mode реплицируется через RplProp штатного campaign entity; authority
 меняет его с BumpMe только при изменении. Командная панель стороны игроков
-доступна для союзных managed slots, HUD показывает Co-op/припасы/территориальную цель. Supply UI
+скрыта, HUD показывает Co-op/припасы/территориальную цель. Supply UI
 сохраняется. Server handlers повторно определяют фракцию игрока и получают
 slot из её state: несуществующий slot нельзя настроить или пополнить.
-Союзные managed slots остаются AI-owned; штатные player groups и право найма
-чужих AI не меняются. `UsesTicketDefeat` и `AllowsAutomaticConstruction`
+Союзных managed slots нет; штатные player groups и право найма
+купленных AI сохраняются. `UsesTicketDefeat` и `AllowsAutomaticConstruction`
 сохраняют отдельный veto стороны людей, независимо от наличия её AI slots.
 `AICF_CoopFactionMenu` исключает остальные стороны из native списка выбора,
 его active buttons и случайного выбора. `CanRequestFaction_S` и `SetFaction_S`
@@ -136,8 +137,9 @@ Native чтение логических планов не подтвержда�
 создания двух faction states, до initial materialization. Stable numeric slots
 0..3 получают транспорт полной вместимости10 бойцов,4 — вооружённую лёгкую
 машину,5..6 — APC. WCS добавляет танки в7..8; остальные остаются пешими.
-Роли командира и callsigns не определяют тип техники. Раскладка одинакова
-для обеих сторон в `COOP_US` и `COOP_USSR`; STANDARD сохраняет прежний состав.
+Роли командира и callsigns не определяют тип техники. Раскладка применяется
+к противнику: USSR в `COOP_US`, US в `COOP_USSR`; STANDARD сохраняет прежний состав.
+Пустая сторона игроков отсекается до создания каталога или preview моделей.
 
 Модели выбираются только из enabled own-faction native whitelist с положительной
 ценой. Content profile задаёт предпочтения: Stock M923A1/Ural, Humvee/UAZ PKM,

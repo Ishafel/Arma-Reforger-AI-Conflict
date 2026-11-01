@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Исключить автономные отряды стороны игроков из Co-op и сохранить смешанный парк противника | [COOP_ENEMY_ONLY.md](COOP_ENEMY_ONLY.md), [COOP_SCENARIO.md](COOP_SCENARIO.md) |
 | Разобрать native supply capacity ниже цены танка, demand склада и узкий RHS metadata alias | [SUPPLY_DEPOT_DEMAND.md](SUPPLY_DEPOT_DEMAND.md) |
 | Продолжить смешанный Co-op, назначение техники до пополнения и восстановление исправной машины | [COOP_FLEET_RECOVERY.md](COOP_FLEET_RECOVERY.md), отдельные native доказательства и сохраняющиеся blockers |
 | Проверить WCS танковый экипаж, completed OpenGate Exit и собственные stale-positive native handlers | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md), `AICF_TankPhysicalProbe` и отдельные строгие gates в [TEST_FIXTURES.md](TEST_FIXTURES.md) |

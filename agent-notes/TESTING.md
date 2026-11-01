@@ -1,5 +1,15 @@
 # Проверки и baseline
 
+## Исправление стороны игроков Co-op — 01.11.2026
+
+Уточнённый контракт0 human/10 enemy и old→new proof:
+[COOP_ENEMY_ONLY.md](COOP_ENEMY_ONLY.md). Срез2471562 и его10+10 результаты
+ниже — история ошибочной интерпретации, не новый PASS пользовательского требования.
+Новые профильные11/11 PASS; WB3/3 compile PASS; native Stock/WCS обе стороны
+Co-op + Stock STANDARD5/5 functional PASS (Fleet70/70, Scenario92/92).
+Все native0/full stopped,393 source drift0/fatal0. Resource28/28/206/206/28 FAIL.
+Полный284 не повторялся; новый client/JIP и human UI/input NOT RUN.
+
 ## Пополнение и смешанный Co-op — 01.11.2026
 
 Актуальный scope, доказательства и ограничения:
