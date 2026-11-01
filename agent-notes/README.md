@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Исправить native GetIn ошибку `vehicle provided is not registered as used inside group!` | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md#native-group-record-до-посадки), native registration gates в [TESTING.md](TESTING.md) |
 | Разобрать просадки FPS, стоимость census и повторные обходы мест заполненной техники | [SERVER_PERFORMANCE.md](SERVER_PERFORMANCE.md), [VEHICLE_TOPOLOGY_PERFORMANCE.md](VEHICLE_TOPOLOGY_PERFORMANCE.md) |
 | Изменить AI-only цену боевой техники и отделить её от native цены игрока | [AI_VEHICLE_PRICES.md](AI_VEHICLE_PRICES.md) |
 | Исключить автономные отряды стороны игроков из Co-op и сохранить смешанный парк противника | [COOP_ENEMY_ONLY.md](COOP_ENEMY_ONLY.md), [COOP_SCENARIO.md](COOP_SCENARIO.md) |

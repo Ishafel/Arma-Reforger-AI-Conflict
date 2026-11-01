@@ -914,6 +914,12 @@ class AICF_TransportTripController
 				"STRATEGIC_WAYPOINT_SUSPEND_REJECTED",
 				outcome.GetCausationId(), true);
 		}
+		if (!m_Handoff.RegisterBoardingVehicle(trip, slot))
+		{
+			return EndVehicleControl(trip, slot, fleet, faction,
+				AICF_ETransportTripPhase.FAILED_CLOSED, "BOARDING_VEHICLE_REGISTRATION_REJECTED",
+				outcome.GetCausationId(), true);
+		}
 		AICF_TripOutcome beginOutcome = m_BoardingFlow.Begin(
 			trip,
 			outcome.GetCausationId());

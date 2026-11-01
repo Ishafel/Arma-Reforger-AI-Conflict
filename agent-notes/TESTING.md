@@ -1,5 +1,31 @@
 # Проверки и baseline
 
+## Native vehicle registration до GetIn — 01.11.2026
+
+`codex/native-boarding-registration`, source f68ae93 + fix. До правки3/3профильных
+checksPASS; после4/4 +5/5соседнихPASS, actual RegisterBoardingVehicle16cases.
+Тот же regression test отвергает старый source f68ae93 (expected exit1).
+Production terminalWB Stock/RHS/WCS3/3compilePASS0, source drift0;
+resource50/52/78FAIL. Evidence `.codex-runtime/native-boarding-registration-20261101/REPORT.md`.
+
+Stock natural CoopUS:2actual boarding dispatches с native record до actions,
+exact production occupant proof, физическое движение11.499м, native0/stopped,
+SCRIPT E/F/VM0, raw sibling28resourceFAIL. WCS North natural CoopUS10min:
+4dispatches с record, exact occupant proof, native0/stopped, SCRIPT E/F/VM0,
+исходная ошибка0; raw sibling466resourceFAIL. WCS full movement gateFAIL:
+прежний ASSIGNMENT_SCOPE/VEHICLE_UTILITY_ATTACH_REJECTED не исправлялся и
+не превращён в PASS. `Test-BoardingRegistrationLog.ps1 -RegistrationOnly`
+подтверждает лишь регистрацию/посадку/отсутствие script errors; default дополнительно
+требует движение.4negative log controls отвергнуты, exit1каждый.
+
+Ранний Stock legacy Transit fixture:TIMEOUT до boarding, native0/fatal0,
+functionalFAIL сохранён. Первый WCS setup:занятый порт2674, replication startup
+FAIL и Road leaks; повтор2676вfreshprofile успешен. Helper первоначально объединил
+логи двух profiles: исходный verdict сохранён, fatal0 нового profile независимо
+пересчитан по всем его sibling logs и подтверждён frozen auditor.
+Полный All, client/JIP, длительный combat soak и teardown во время boarding —
+NOT RUN. Stages byte-verified в ZIP и удалены, тестовые процессы завершены.
+
 ## FPS high-load follow-up: PMC и native boarding — 01.11.2026
 
 Новые gates и ограничения: [SERVER_PERFORMANCE.md](SERVER_PERFORMANCE.md),

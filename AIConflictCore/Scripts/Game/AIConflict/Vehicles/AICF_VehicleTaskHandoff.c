@@ -37,6 +37,23 @@ class AICF_VehicleTaskHandoff
 		return slot.GetWaypoint() == null;
 	}
 
+	// Native GetIn BT может повторно искать место и требует group record ещё
+	// до посадки. Полный AddUsableVehicle здесь создал бы combat activity.
+	bool RegisterBoardingVehicle(AICF_TransportTrip trip, AICF_GroupSlot slot)
+	{
+		if (!Replication.IsServer() || !IsCurrentAssignment(trip, slot) || !IsTripLeaseCurrent(trip) ||
+			trip.GetPhase() != AICF_ETransportTripPhase.BOARDING) return false;
+		SCR_AIGroup group = trip.GetAssignment().GetGroup();
+		Vehicle vehicle = trip.GetLease().GetVehicle();
+		RplComponent rpl = RplComponent.Cast(group.FindComponent(RplComponent));
+		SCR_AIGroupUtilityComponent utility = group.GetGroupUtilityComponent();
+		SCR_AIVehicleUsageComponent usage = SCR_AIVehicleUsageComponent.Cast(vehicle.FindComponent(SCR_AIVehicleUsageComponent));
+		if (!rpl || !rpl.IsMaster() || !utility || !utility.m_VehicleMgr || !usage) return false;
+		SCR_AIGroupVehicle record = utility.m_VehicleMgr.TryAddVehicle(usage);
+		return record && record.GetEntity() == vehicle && record.GetVehicleUsageComponent() == usage &&
+			utility.m_VehicleMgr.FindVehicle(vehicle) == record;
+	}
+
 	bool AttachVehicleUtility(AICF_TransportTrip trip)
 	{
 		if (!IsTripLeaseCurrent(trip))

@@ -1,5 +1,11 @@
 # Архитектура и навигация по исходникам
 
+Native group record для boarding регистрирует `AICF_VehicleTaskHandoff` по
+команде `AICF_TransportTripController` до первого GetIn. Это ранняя bookkeeping
+часть существующей vehicle utility boundary: TryAddVehicle без combat activity;
+полный Attach по-прежнему выполняется при движении. Контракт и проверка:
+[VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md#native-group-record-до-посадки).
+
 `AICF_PlayerMobHoldPolicy.HasCurrentInternalTask` отделяет текущую пешую задачу
 игрока внутри MOB от требования выхода за границу MOB. Audit root учитывает
 только read-only proof exact intent/waypoint/native task/пешего состава; правило

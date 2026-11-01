@@ -1,5 +1,20 @@
 # Поведение транспорта и боевой машины
 
+## Native group record до посадки
+
+`AICF_TransportTripController` после перехода в BOARDING и снятия infantry order
+вызывает `AICF_VehicleTaskHandoff.RegisterBoardingVehicle` до `BoardingFlow.Begin`.
+Handoff проверяет authority, current assignment/slot/generation, lease и phase,
+затем выполняет idempotent `m_VehicleMgr.TryAddVehicle(usage)`. Запись нужна
+штатному `SCR_AIGetEmptyCompartment`, когда GetIn BT повторно ищет место.
+Раньше она появлялась только в TRANSIT, что оставляло native boarding без record.
+`AddUsableVehicle` и создание native combat activity остаются в AttachVehicleUtility;
+ранний шаг не подписывается на events, не меняет seat reservation/occupancy,
+subgroup handlers или trip clocks. Прежний DetachVehicleUtility удаляет record
+на terminal cleanup. Отказ ранней регистрации — typed fail-closed до GetIn.
+Проверки: `Test-BoardingRegistrationContracts.ps1`, isolated
+`AICF_BoardingRegistrationProbe.c`; результаты — в TESTING.
+
 Дополнение пользователя к #78 от 28.10.2026 разрешает короткую принудительную
 посадку и высадку AI, в том числе при видимом/близком игроке. Прежнее требование
 полностью скрытой коррекции для этих операций заменено этим разрешением.
