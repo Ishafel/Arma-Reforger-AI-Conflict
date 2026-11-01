@@ -68,7 +68,7 @@ class AICF_VehiclePresetCatalog
 			SCR_UIInfo info = entry.GetEntityUiInfo();
 			if (info && !info.GetName().IsEmpty()) name = info.GetName();
 			m_aNames.Insert(name);
-			m_aCosts.Insert(EntryCost(entry, resource));
+			m_aCosts.Insert(AICF_AIVehiclePricePolicy.Quote(EntryCost(entry, resource), AICF_AIVehiclePricePolicy.IsCombat(entry)));
 			m_aSources.Insert(source);
 			m_aCategories.Insert(Category(entry));
 		}
