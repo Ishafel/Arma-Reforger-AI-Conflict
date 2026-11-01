@@ -14,6 +14,7 @@ class AICF_AIVehiclePricePolicy
 		// Точное округление к ближайшему целому без float и переполнения суммы.
 		int reduced = nativeCost / 3;
 		if (nativeCost % 3 == 2) reduced++;
-		return Math.Max(1, reduced);
+		if (reduced < 1) return 1;
+		return reduced;
 	}
 }

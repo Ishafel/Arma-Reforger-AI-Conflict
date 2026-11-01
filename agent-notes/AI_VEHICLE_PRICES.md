@@ -32,7 +32,7 @@ obligations, quota, site/ownership и transaction guards не менялись.
 
 `Test-AICombatVehiclePriceContracts.ps1` исполняет извлечённые production bodies:
 classification, rounding, `Cost`/UI `List`, `CanPayVehiclePreset`, purchase и
-rollback. Проверяет48 случаев и4 отвергаемых unsafe варианта: неверный остаток,
+rollback. Проверяет48 случаев и5 отвергаемых unsafe варианта: неверный остаток,
 скидка небоевым моделям, потеря minimum1 и списание исходной цены вместо AI quote.
 Релевантный baseline4/4PASS; тот же набор с новым контрактом5/5PASS.
 
@@ -52,3 +52,5 @@ Evidence и полные остановленные логи:
 retail клиент пользователя не перезапускается.
 
 Финал ветки: релевантные offline6/6PASS, включая13 parsercontrols нового log auditor. Терминальный WB Stock/RHS/WCS3/3PASS0; raw50/52/78 — strict resourceFAIL. Native WCS10/10 и Stock8/8 price rows подтвердили новый AI quote и неизменный native raw: для3stock вариантов безSpawnerData повторно прочитан немутирующийCAMPAIGN budget. Настоящий T72Purchase: raw/human3500, quote/paid1167, stock10555→9388, тот жеtrip/boundleasegen1, native0/fullstopped/fatal0. Runtime raw28/206 — strictFAIL. Первый fixture считал обязательной отсутствующуюTRAIT_UNARMED label; затем исправлен выбор LIGHT_TRANSPORT. Первая дополнительная scaffold-сборка нарушала canonical modded order; FAIL сохранён, повтор по точным root/ZZ paths дал WB3PASS. Цена production при этих исправлениях fixture не менялась.
+
+Integer guard важен: pinned Math.Max принимает float, поэтому minimum1 проверяется явным int guard. Контракт моделирует Enforce float32 Math.Max и отдельным unsafe вариантом ловит потерю точности INT_MAX→715827904 вместо715827882. Все5 unsafe variants исполняются, не подменяются source regex.
