@@ -13,6 +13,24 @@ class AICF_FIAGarrisonService
 
 	bool IsPlanValid() { return m_bPlanValid; }
 
+	AICF_FactionFleet GetAIQuotaFleet()
+	{
+		if (!Replication.IsServer()) return null;
+		return m_Fleet;
+	}
+
+	int GetAIQuotaPlanUnits()
+	{
+		if (!Replication.IsServer() || m_bStopped || !m_bPlanValid || s_aDefenders.Count() > AICF_AIQuotaMath.MAX_TOTAL_UNITS / 17) return -1;
+		return s_aDefenders.Count() * 17; // DiscoverSeats bounded16 + one native car
+	}
+
+	bool OwnsAIQuotaGarrison(AICF_FIAGarrison garrison)
+	{
+		return Replication.IsServer() && !m_bStopped && m_bPlanValid && m_Planner && garrison &&
+			!garrison.m_bRetired && m_Planner.m_aPlan.Contains(garrison) && s_aDefenders.Contains(garrison);
+	}
+
 	static bool IsDefender(IEntity entity)
 	{
 		if (!Replication.IsServer() || !entity) return false;
@@ -130,6 +148,7 @@ class AICF_FIAGarrisonService
 	// Однократная квота initial plan: новые экипажи не вытесняют прежний roster.
 	protected void ReserveCrewCapacity(SCR_GameModeCampaign campaign)
 	{
+		if (GetGame() && AICF_AIWorldQuotaService.IsPreparingForWorld(GetGame().GetWorld())) return;
 		if (s_aDefenders.IsEmpty()) return;
 		AIWorld world = GetGame().GetAIWorld();
 		if (!world || !campaign.GetBaseManager()) return;
@@ -200,6 +219,8 @@ class AICF_FIAGarrisonService
 		vector crewPosition;
 		if (!m_Spawner.SpawnFIAGarrison(g, m_Fleet, crewPosition))
 		{
+			if (g.m_sSpawnQuotaFailure == "VEHICLE_QUOTA_NATIVE_RETURN_QUARANTINED") { Retire(g, g.m_sSpawnQuotaFailure); return; }
+			if (g.m_sSpawnQuotaFailure == "VEHICLE_QUOTA_PENDING") { g.m_iRetryAtMs = now + 1000; g.Log("FIA_GARRISON_WAIT", "reason=VEHICLE_QUOTA_PENDING"); return; }
 			if (g.m_Vehicle) Retire(g, "SPAWN_REJECTED_AFTER_ENTITY");
 			else g.Log("FIA_GARRISON_WAIT", "reason=NO_CLEAR_SITE");
 			return;

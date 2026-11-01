@@ -194,7 +194,16 @@ Assert-Contains 'STAGE4_VARIABLE_ROSTER' $groupSpawner 'SpawnGroup\s*\([\s\S]*in
 Assert-Contains 'STAGE4_ROLE_ROSTER' $groupSpawner 'EEntityCatalogType\.CHARACTER[\s\S]*BuildCharacterRoleCandidates[\s\S]*FindCharacterPrefab' 'Managed roster must resolve role candidates from the active faction character catalog'
 Assert-Contains 'STAGE4_ROLE_ROSTER' $contentProfile 'SQUAD_LEADER[\s\S]*MEDIC[\s\S]*MACHINE_GUNNER[\s\S]*ANTI_TANK[\s\S]*GRENADIER[\s\S]*AUTOMATIC_RIFLEMAN[\s\S]*MACHINE_GUNNER_ASSISTANT[\s\S]*ANTI_TANK_ASSISTANT[\s\S]*RIFLEMAN' 'Stock content profile must retain the varied ten-position role table'
 Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $strategicUI 'ROLE[\s\S]*ATTACK[\s\S]*DEFEND[\s\S]*RESERVE' 'Commander panel must expose all group roles'
-Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $uiLabels 'UNIT TYPE / NO HEAVY ARMOR[\s\S]*INFANTRY[\s\S]*LIGHT 4X4[\s\S]*TRUCK[\s\S]*ARMED 4X4' 'Commander panel must expose infantry, transport, and armed-light profiles without heavy armor'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $strategicUI 'AICF_UI_CommandPresets[\s\S]*AICF_UI_CommandInfantryPreset[\s\S]*AttachHandler\(m_wLoadoutButton, AICF_EStrategicUIButtonAction\.EDIT_LOADOUT\)[\s\S]*AICF_UI_CommandVehiclePreset[\s\S]*AttachHandler\(m_wVehiclePresetButton, AICF_EStrategicUIButtonAction\.EDIT_VEHICLE\)' 'Commander configuration must expose the existing infantry and vehicle preset editors'
+Assert-NotContains 'STAGE4_GROUP_CONFIGURATION' $strategicUI 'typeLabels|m_aUnitTypeButtons|AttachHandler\s*\([^;]*AICF_EStrategicUIButtonAction\.SET_UNIT_TYPE' 'Legacy unit-type controls must not duplicate preset configuration'
+foreach ($presetButton in @('m_wLoadoutButton', 'm_wVehiclePresetButton')) {
+    if ([regex]::Matches($strategicUI, ([regex]::Escape($presetButton) + '\s*=\s*CreateRect\(')).Count -ne 1) {
+        Add-Failure 'STAGE4_GROUP_CONFIGURATION' "Commander panel must create exactly one $presetButton"
+    }
+}
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $strategicUI 'case AICF_EStrategicUIButtonAction\.SET_ROLE:\s*SubmitGroupConfiguration\(value, -1, 0\)' 'Role edits must preserve the selected backend unit type'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $strategicUI 'case AICF_EStrategicUIButtonAction\.ADJUST_SIZE:\s*SubmitGroupConfiguration\(-1, -1, value\)' 'Size edits must preserve the selected backend role and unit type'
+Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $strategicUI 'int unitTypeCode = GetUnitTypeCode\(fields\[8\]\)[\s\S]*unitTypeCode = m_iPendingConfigUnitType[\s\S]*if \(requestedUnitType >= 0\)\s*unitTypeCode = requestedUnitType' 'Configuration must retain authoritative or pending backend type unless explicitly requested'
 Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $uiLabels 'NEXT DEPLOYMENT SIZE[\s\S]*MAX 10' 'Commander panel must label deferred roster-size changes and show the cap'
 Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $unitTypes 'AICF_EGroupUnitType[\s\S]*INFANTRY[\s\S]*MOTORIZED_LIGHT[\s\S]*MOTORIZED_TRUCK[\s\S]*MOTORIZED_ARMED_LIGHT' 'Model must contain infantry, transport, and armed-light profiles without heavy armor'
 Assert-Contains 'STAGE4_GROUP_CONFIGURATION' $vehicleAcquisition 'GetUnitType[\s\S]*MOTORIZED_LIGHT[\s\S]*LIGHT_TRANSPORT[\s\S]*MOTORIZED_TRUCK[\s\S]*TRANSPORT[\s\S]*MOTORIZED_ARMED_LIGHT[\s\S]*ARMED_LIGHT' 'Vehicle acquisition must derive light, truck, and armed-light mobility from commander unit type'

@@ -7,6 +7,7 @@ class AICF_TripOutcome
 	protected string m_sCausationId;
 	protected int m_iRetryAtMs;
 	protected AIWaypoint m_WaypointForRemoval;
+	protected ref AICF_AcquisitionStagingReceipt m_AcquisitionStagingReceipt;
 
 	protected void AICF_TripOutcome(
 		AICF_ETripOutcomeKind kind,
@@ -27,6 +28,14 @@ class AICF_TripOutcome
 	string GetCausationId() { return m_sCausationId; }
 	int GetRetryAtMs() { return m_iRetryAtMs; }
 	AIWaypoint GetWaypointForRemoval() { return m_WaypointForRemoval; }
+	AICF_AcquisitionStagingReceipt GetAcquisitionStagingReceipt() { return m_AcquisitionStagingReceipt; }
+
+	bool BindAcquisitionStagingReceipt(AICF_AcquisitionStagingReceipt receipt)
+	{
+		if (!receipt || m_AcquisitionStagingReceipt || !AICF_VehicleAcquisitionHold.IsWaitOutcome(this)) return false;
+		m_AcquisitionStagingReceipt = receipt;
+		return true;
+	}
 
 	bool IsTerminal()
 	{
@@ -48,6 +57,16 @@ class AICF_TripOutcome
 	static AICF_TripOutcome StartBoarding(string reason, string causationId)
 	{
 		return new AICF_TripOutcome(AICF_ETripOutcomeKind.START_BOARDING, reason, causationId);
+	}
+
+	static AICF_TripOutcome StartTacticalDeployment(string reason, string causationId)
+	{
+		return new AICF_TripOutcome(AICF_ETripOutcomeKind.START_TACTICAL_DEPLOYMENT, reason, causationId);
+	}
+
+	static AICF_TripOutcome ResumeTacticalMovement(string reason, string causationId)
+	{
+		return new AICF_TripOutcome(AICF_ETripOutcomeKind.RESUME_TACTICAL_MOVEMENT, reason, causationId);
 	}
 
 	static AICF_TripOutcome StartMovement(string reason, string causationId)

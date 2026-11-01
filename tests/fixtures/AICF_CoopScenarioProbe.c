@@ -38,15 +38,19 @@ modded class AICF_MatchController
 		if (!System.GetCLIParam("aicfCoopProbe", mode) || !m_bRosterReady || m_bStopped || m_bCoopProbeDone) return;
 		int expectedUSSR = 10;
 		int expectedUS = 10;
-		if (mode == "USSR") expectedUSSR = 0;
 		if (mode == "US") expectedUS = 0;
+		if (mode == "USSR") expectedUSSR = 0;
 		bool coop = mode != "STANDARD";
 		int now = System.GetTickCount();
 		if (!m_iCoopProbeStarted)
 		{
 			m_iCoopProbeStarted = now;
-			AICF_CoopCheck("US_ROSTER", m_USState.GetSlotCount() == expectedUS && m_USState.CountSlotsByState(AICF_EGroupSlotState.READY) == expectedUS && CountFactionAgents(m_USState) >= expectedUS);
-			AICF_CoopCheck("USSR_ROSTER", m_USSRState.GetSlotCount() == expectedUSSR && m_USSRState.CountSlotsByState(AICF_EGroupSlotState.READY) == expectedUSSR && CountFactionAgents(m_USSRState) >= expectedUSSR);
+			bool usAgents = CountFactionAgents(m_USState) >= expectedUS;
+			bool ussrAgents = CountFactionAgents(m_USSRState) >= expectedUSSR;
+			if (expectedUS == 0) usAgents = CountFactionAgents(m_USState) == 0;
+			if (expectedUSSR == 0) ussrAgents = CountFactionAgents(m_USSRState) == 0;
+			AICF_CoopCheck("US_ROSTER", m_USState.GetSlotCount() == expectedUS && m_USState.CountSlotsByState(AICF_EGroupSlotState.READY) == expectedUS && usAgents);
+			AICF_CoopCheck("USSR_ROSTER", m_USSRState.GetSlotCount() == expectedUSSR && m_USSRState.CountSlotsByState(AICF_EGroupSlotState.READY) == expectedUSSR && ussrAgents);
 			AICF_CoopCaptureSlots(m_USState, m_aCoopUSSlots);
 			AICF_CoopCaptureSlots(m_USSRState, m_aCoopUSSRSlots);
 			AICF_ContentProfile profile = AICF_ContentProfile.GetActive();
@@ -57,30 +61,31 @@ modded class AICF_MatchController
 			AICF_CoopCheck("HEADER_MODE", m_Config.GetMatchRules().GetMode() == expectedMode);
 			Print(string.Format("[AICF][COOP_CONTEXT] mode=%1 us_faction=%2 ussr_faction=%3 nodes=%4", mode, m_USFaction.GetFactionKey(), m_USSRFaction.GetFactionKey(), m_ObjectiveGraph.GetNodeCount()));
 			AICF_CoopCheck("QUEUE_SETTLED", m_USState.IsInitialSpawnQueueSettled() && m_USSRState.IsInitialSpawnQueueSettled());
-			AICF_CoopCheck("US_TICKETS", m_USState.UsesTicketDefeat() == (expectedUS > 0));
-			AICF_CoopCheck("USSR_TICKETS", m_USSRState.UsesTicketDefeat() == (expectedUSSR > 0));
+			AICF_CoopCheck("US_TICKETS", m_USState.UsesTicketDefeat() == (mode != "US"));
+			AICF_CoopCheck("USSR_TICKETS", m_USSRState.UsesTicketDefeat() == (mode != "USSR"));
 			AICF_CoopCheck("COMMANDERS", ((expectedUS > 0) == (m_USAICommander != null)) && ((expectedUSSR > 0) == (m_USSRAICommander != null)));
 			AICF_CoopCheck("HELPERS", m_BaseBuilders && m_Logistics && m_Construction && m_EconomySystem && m_VehicleCoordinator);
-			AICF_CoopCheck("FACTION_ACCESS", m_USFaction.IsPlayable() && m_USSRFaction.IsPlayable() && m_Config.GetMatchRules().AllowsPlayerFaction(m_USFaction.GetFactionKey()) == (!coop || expectedUS == 0) && m_Config.GetMatchRules().AllowsPlayerFaction(m_USSRFaction.GetFactionKey()) == (!coop || expectedUSSR == 0) && m_Config.GetMatchRules().AllowsPlayerFaction("FIA") == !coop);
-			AICF_CoopCheck("AUTO_CONSTRUCTION", m_Construction.AICF_CoopProbeAutomatic(m_USFaction) == (expectedUS > 0) && m_Construction.AICF_CoopProbeAutomatic(m_USSRFaction) == (expectedUSSR > 0));
+			AICF_CoopCheck("FACTION_ACCESS", m_USFaction.IsPlayable() && m_USSRFaction.IsPlayable() && m_Config.GetMatchRules().AllowsPlayerFaction(m_USFaction.GetFactionKey()) == (!coop || mode == "US") && m_Config.GetMatchRules().AllowsPlayerFaction(m_USSRFaction.GetFactionKey()) == (!coop || mode == "USSR") && m_Config.GetMatchRules().AllowsPlayerFaction("FIA") == !coop);
+			AICF_CoopCheck("AUTO_CONSTRUCTION", m_Construction.AICF_CoopProbeAutomatic(m_USFaction) == (mode != "US") && m_Construction.AICF_CoopProbeAutomatic(m_USSRFaction) == (mode != "USSR"));
 			AICF_Stage1Config budget = new AICF_Stage1Config();
 			budget.SetMaxManagedAgents(1);
 			AICF_CoopCheck("BUDGET_FLOOR", budget.GetMaxManagedAgents() == (expectedUS + expectedUSSR) * 10);
 			AICF_MatchRules standard = new AICF_MatchRules();
 			AICF_CoopCheck("STANDARD_POLICY", standard.GetManagedSlotCount("US") == 10 && standard.GetManagedSlotCount("USSR") == 10 && standard.UsesTicketDefeat("USSR"));
 			AICF_MatchRules mirror = new AICF_MatchRules(AICF_EMatchMode.COOP_US);
-			AICF_CoopCheck("MIRROR_POLICY", mirror.GetManagedSlotCount("US") == 0 && mirror.GetManagedSlotCount("USSR") == 10);
+			AICF_CoopCheck("MIRROR_POLICY", mirror.GetManagedSlotCount("US") == 0 && mirror.GetManagedSlotCount("USSR") == 10 && mirror.GetAICommanderMode() == "USSR" && !mirror.UsesTicketDefeat("US") && mirror.UsesTicketDefeat("USSR"));
 			if (coop)
 			{
 				budget.SetInitialTickets(1);
-				if (expectedUS == 0) budget.SetInitialTickets(0);
+				if (mode == "US") budget.SetInitialTickets(0);
 				AICF_FactionState testUS = new AICF_FactionState("US", budget);
 				budget.SetInitialTickets(0);
-				if (expectedUSSR > 0) budget.SetInitialTickets(1);
+				if (mode != "USSR") budget.SetInitialTickets(1);
 				AICF_FactionState testUSSR = new AICF_FactionState("USSR", budget);
 				AICF_VictorySystem victory = new AICF_VictorySystem();
 				AICF_CoopCheck("ZERO_PLAYER_TICKETS_NO_DEFEAT", !victory.EvaluateAndEnd(m_Campaign, testUS, testUSSR, null) && !victory.IsEnded());
-				budget.SetAICommanderMode("BOTH");
+				if (mode == "US") budget.SetAICommanderMode("US");
+				else budget.SetAICommanderMode("USSR");
 				AICF_CoopCheck("CONFLICT_REJECTED", !budget.IsAICommanderModeValid());
 			}
 		}
@@ -90,15 +95,13 @@ modded class AICF_MatchController
 		if (now - m_iCoopProbeStarted < duration) return;
 		// Combat losses/replacements may change live counts; numeric slot identity must persist.
 		bool stable = AICF_CoopSameSlots(m_USState, expectedUS, m_aCoopUSSlots) && AICF_CoopSameSlots(m_USSRState, expectedUSSR, m_aCoopUSSRSlots);
-		if (expectedUS == 0) stable = stable && CountFactionAgents(m_USState) == 0;
-		if (expectedUSSR == 0) stable = stable && CountFactionAgents(m_USSRState) == 0;
 		AICF_CoopCheck("STABLE_ROSTER", stable);
 		Print(string.Format("[AICF][COOP_ROSTER_OBSERVATION] us_slots=%1 us_agents=%2 ussr_slots=%3 ussr_agents=%4", m_USState.GetSlotCount(), CountFactionAgents(m_USState), m_USSRState.GetSlotCount(), CountFactionAgents(m_USSRState)));
-		AICF_CoopCheck("REPLICATED_MODE", m_Campaign.AICF_IsPlayerOnlyFaction(true) == (expectedUSSR == 0) && m_Campaign.AICF_IsPlayerOnlyFaction(false) == (expectedUS == 0));
+		AICF_CoopCheck("REPLICATED_MODE", m_Campaign.AICF_GetRuntimeMode() == m_Config.GetMatchRules().GetMode() && m_Campaign.AICF_IsPlayerOnlyFaction(true) == (mode == "USSR") && m_Campaign.AICF_IsPlayerOnlyFaction(false) == (mode == "US"));
 		if (coop)
 		{
 			AICF_FactionState humanState = m_USSRState;
-			if (expectedUS == 0) humanState = m_USState;
+			if (mode == "US") humanState = m_USState;
 			AICF_CoopCheck("NO_GROUP_SUMMARY", BuildGroupSummary(humanState, 0).IsEmpty());
 		}
 		m_bCoopProbeDone = true;
@@ -219,6 +222,9 @@ modded class SCR_GameModeCampaign
 			bool passed = AICF_IsPlayerOnlyFaction(humanUSSR) && !AICF_IsPlayerOnlyFaction(!humanUSSR) &&
 				AICF_GetAICommanderEnabled(!humanUSSR) && !AICF_GetAICommanderEnabled(humanUSSR) &&
 				AICF_GetCombatGroups(humanUSSR) == 0 && AICF_GetManagedAgents(humanUSSR) == 0 && AICF_GetStrategicGroupSummary(humanUSSR, 0).IsEmpty();
+			if (mode == "STANDARD") passed = !AICF_IsPlayerOnlyFaction(true) && !AICF_IsPlayerOnlyFaction(false) &&
+				AICF_GetAICommanderEnabled(true) && AICF_GetAICommanderEnabled(false) &&
+				AICF_GetCombatGroups(true) > 0 && AICF_GetCombatGroups(false) > 0;
 			Print(string.Format("[AICF][COOP_CLIENT_DONE] pass=%1 samples=%2", passed, m_iCoopClientSamples));
 			m_bCoopClientFinished = true;
 		}

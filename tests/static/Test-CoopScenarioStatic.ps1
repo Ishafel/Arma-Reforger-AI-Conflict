@@ -12,13 +12,16 @@ foreach($entry in @{
     playerGroups='Integration/AICF_CoopPlayerGroups.c'
     recruitment='Integration/AICF_BarracksRecruitment.c'
 }.GetEnumerator()) { $sources[$entry.Key]=ConvertTo-AICFCodeText ([IO.File]::ReadAllText((Join-Path $core $entry.Value))) }
+$sources.rulesRaw=[IO.File]::ReadAllText((Join-Path $core 'Config/AICF_MatchRules.c'))
 function Test-CoopContracts($s) {
     if($s.access -match 'class SCR_Faction\b|override bool IsPlayable\(') { 'NATIVE_FACTION_SETUP' }
     if($s.recruitment -match 'SetRecruited\(|SetMaxAIPerGroup\(|RequestAddAIAgent\(|override bool IsRecruitable\(') { 'NATIVE_RECRUIT_RULES' }
     if($s.recruitment -match 'GetMode\(\)|AICF_EMatchMode') { 'PURCHASE_ALL_MODES' }
     foreach($rule in @(
-        @('rules','if \(factionKey == GetPlayerOnlyFaction\(\)\) return 0;\s*return AICF_Stage1Config.GROUP_SLOTS_PER_FACTION;','ROSTER_POLICY'),
-        @('rules','bool UsesTicketDefeat.*?return GetManagedSlotCount\(factionKey\) > 0;','TICKET_POLICY'),
+        @('rules','int GetManagedSlotCount.*?!IsValid\(\).*?if \(factionKey == GetPlayerOnlyFaction\(\)\) return 0;.*?return AICF_Stage1Config.GROUP_SLOTS_PER_FACTION;','ROSTER_POLICY'),
+        @('rules','bool UsesTicketDefeat.*?return GetManagedSlotCount\(factionKey\) > 0 &&\s*AICF_ContentProfile.GetActive\(\).GetStableFactionKey\(factionKey\) != GetPlayerOnlyFaction\(\);','TICKET_POLICY'),
+        @('rulesRaw','string GetAICommanderMode\(\)\s*\{\s*if \(m_eMode == AICF_EMatchMode.COOP_US\) return "USSR";\s*if \(m_eMode == AICF_EMatchMode.COOP_USSR\) return "US";\s*return "BOTH";','ENEMY_COMMANDER'),
+        @('rules','bool AllowsAutomaticConstruction.*?return GetManagedSlotCount\(factionKey\) > 0 &&\s*AICF_ContentProfile.GetActive\(\).GetStableFactionKey\(factionKey\) != GetPlayerOnlyFaction\(\);','HUMAN_CONSTRUCTION_VETO'),
         @('rules','bool AllowsPlayerFaction.*?if \(!IsValid\(\)\) return false;.*?if \(m_eMode == AICF_EMatchMode.STANDARD\) return true;.*?GetStableFactionKey\(factionKey\) == GetPlayerOnlyFaction\(\)','FACTION_POLICY'),
         @('factionMenu','modded class SCR_WelcomeScreenFactionContent.*?int previousCount = m_aFactionWidgets.Count\(\);\s*super.FillFactionWidget\(faction, content, color\);.*?AllowsPlayerFaction\(faction.GetFactionKey\(\)\).*?m_aFactionWidgets.Count\(\) == previousCount\) return;.*?Widget factionWidget = m_aFactionWidgets\[previousCount\];\s*factionWidget.SetVisible\(false\);\s*factionWidget.SetEnabled\(false\);','WELCOME_FACTIONS'),
         @('playerGroups','super.OnPlayerFactionChanged\(owner, previousFaction, newFaction\);.*?!Replication.IsServer\(\).*?!GetGameMode\(\).IsMaster\(\).*?rules.GetMode\(\) == AICF_EMatchMode.STANDARD.*?CallLater\(AICF_EnsureCoopPlayerGroup, 0, false, owner, newFaction\);','GROUP_JOIN_BOUNDARY'),
@@ -44,15 +47,22 @@ function Test-CoopContracts($s) {
         @('controller','m_USSRState.CountSlotsByState\(AICF_EGroupSlotState.READY\) != m_USSRState.GetExpectedSlotCount\(\)','READY_GATE'),
         @('campaign','\[RplProp\(\)\]\s*protected AICF_EMatchMode m_eAICFMatchMode;','JIP'),
         @('campaign','if \(!Replication.IsServer\(\) \|\| !IsMaster\(\)\) return;.*?if \(m_eAICFMatchMode == mode\) return;\s*m_eAICFMatchMode = mode;\s*Replication.BumpMe\(\);','AUTHORITY'),
+        @('campaign','bool AICF_IsPlayerOnlyFaction.*?new AICF_MatchRules\(m_eAICFMatchMode\).*?rules.GetPlayerOnlyFaction\(\) == stableKey && rules.GetManagedSlotCount\(stableKey\) == 0','COMMAND_ACCESS_WITH_AI_SLOTS'),
         @('ui','AICF_IsPlayerOnlyFaction\(m_bLocalUSSR\)\)\s*return;\s*m_wMapToggle =','COMMAND_UI'),
+        @('ui','AICF_IsCoopPlayerFaction\(m_bLocalUSSR\).*?m_wHUDText.SetText','COOP_TERRITORIAL_HUD'),
         @('victory','ussrState.UsesTicketDefeat\(\) && ussrState.GetTickets\(\) <= 0','TICKET_VICTORY'),
         @('victory','loserState.UsesTicketDefeat\(\) && loserState.GetTickets\(\) <= 0','VICTORY_REASON')
     )) { if($s[$rule[0]] -notmatch ('(?s)'+$rule[1])) { $rule[2] } }
 }
 $failures=@(Test-CoopContracts $sources)
 $mutations=@(
+    @('rules','return AICF_Stage1Config.GROUP_SLOTS_PER_FACTION;','return 0;','ROSTER_POLICY'),
     @('rules','if (factionKey == GetPlayerOnlyFaction()) return 0;','','ROSTER_POLICY'),
-    @('rules','return GetManagedSlotCount(factionKey) > 0;','return true;','TICKET_POLICY'),
+    @('rules','return GetManagedSlotCount(factionKey) > 0 &&','return true ||','TICKET_POLICY'),
+    @('rulesRaw','return "BOTH";','return "USSR";','ENEMY_COMMANDER'),
+    @('rulesRaw','COOP_US) return "USSR"','COOP_US) return "BOTH"','ENEMY_COMMANDER'),
+    @('rulesRaw','COOP_USSR) return "US"','COOP_USSR) return "BOTH"','ENEMY_COMMANDER'),
+    @('rules','AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey) != GetPlayerOnlyFaction()','true','HUMAN_CONSTRUCTION_VETO'),
     @('rules','GetStableFactionKey(factionKey) == GetPlayerOnlyFaction()','true','FACTION_POLICY'),
     @('factionMenu','super.FillFactionWidget(faction, content, color);','','WELCOME_FACTIONS'),
     @('factionMenu','factionWidget.SetVisible(false);','factionWidget.SetVisible(true);','WELCOME_FACTIONS'),
@@ -87,7 +97,9 @@ $mutations=@(
     @('controller','m_USSRState.GetExpectedSlotCount()','AICF_Stage1Config.GROUP_SLOTS_PER_FACTION','READY_GATE'),
     @('campaign','[RplProp()]','/* removed */','JIP'),
     @('campaign','if (m_eAICFMatchMode == mode) return;','','AUTHORITY'),
+    @('campaign','rules.GetManagedSlotCount(stableKey) == 0','true','COMMAND_ACCESS_WITH_AI_SLOTS'),
     @('ui','if (m_Campaign.AICF_IsPlayerOnlyFaction(m_bLocalUSSR))','if (false)','COMMAND_UI'),
+    @('ui','AICF_IsCoopPlayerFaction(m_bLocalUSSR)','false','COOP_TERRITORIAL_HUD'),
     @('victory','ussrState.UsesTicketDefeat() && ','','TICKET_VICTORY'),
     @('victory','loserState.UsesTicketDefeat() && ','','VICTORY_REASON')
 )

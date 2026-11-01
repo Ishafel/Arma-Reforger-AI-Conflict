@@ -109,6 +109,10 @@ class AICF_VehicleSlotView
 	protected string m_sStatusText;
 	protected bool m_bControlsMovement;
 	protected bool m_bExecutableVehicleTask;
+	protected bool m_bPresetDestinationWait;
+	protected bool m_bNativeCombatTask;
+	protected bool m_bTacticalActorTask;
+	protected bool m_bStagingActorTask;
 	protected bool m_bSafeSpawnWait;
 	protected bool m_bRestorePending;
 	protected bool m_bOrderRestored;
@@ -118,13 +122,20 @@ class AICF_VehicleSlotView
 	protected string m_sTerminalReason;
 	protected string m_sOperationId;
 
-	void AICF_VehicleSlotView(AICF_TransportTrip trip)
+	void AICF_VehicleSlotView(AICF_TransportTrip trip, int currentBaseRevision)
 	{
 		if (!trip)
 			return;
 		m_bPresent = true;
 		m_sPhase = typename.EnumToString(AICF_ETransportTripPhase, trip.GetPhase());
 		m_sStatusText = ResolveStatusText(trip);
+		m_bPresetDestinationWait = AICF_VehiclePresetWaitPolicy.IsCurrentMountedWait(trip, currentBaseRevision);
+		AICF_StrategicAssignmentSnapshot assignment = trip.GetAssignment();
+		m_bTacticalActorTask = currentBaseRevision >= 0 && assignment &&
+			assignment.GetBaseRevision() == currentBaseRevision && IsTacticalActorTask(trip);
+		m_bStagingActorTask = AICF_VehicleStagingTaskProof.HasCurrentTask(trip, currentBaseRevision, System.GetTickCount());
+		m_bNativeCombatTask = currentBaseRevision >= 0 && assignment &&
+			assignment.GetBaseRevision() == currentBaseRevision && AICF_TransportCombatHold.IsCurrentCombat(trip);
 		m_bControlsMovement = trip.GetPhase() == AICF_ETransportTripPhase.SITE_PLANNED ||
 			trip.GetPhase() == AICF_ETransportTripPhase.APPROACHING_SITE ||
 			trip.GetPhase() == AICF_ETransportTripPhase.STAGING_CONFIRMED ||
@@ -132,6 +143,8 @@ class AICF_VehicleSlotView
 			trip.GetPhase() == AICF_ETransportTripPhase.BOARDING ||
 			trip.GetPhase() == AICF_ETransportTripPhase.TRANSIT ||
 			trip.GetPhase() == AICF_ETransportTripPhase.DISMOUNT;
+		if (trip.GetPhase() == AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT)
+			m_bControlsMovement = trip.GetBehaviorState().m_bReboarding;
 		m_bSafeSpawnWait = trip.GetPhase() == AICF_ETransportTripPhase.WAITING_FOR_SITE &&
 			IsSafeSiteReason(trip.GetRequestState().GetLastFailureReason());
 		m_bOrderRestored = trip.GetHandoffState().IsOrderRestored();
@@ -148,12 +161,25 @@ class AICF_VehicleSlotView
 			if (plan)
 				m_VehicleWaypoint = plan.GetApproachWaypoint();
 			m_bExecutableVehicleTask = m_VehicleWaypoint != null;
+			if (phase == AICF_ETransportTripPhase.SPAWN_COMMIT && plan && plan.GetAcquisitionHold())
+			{
+				m_VehicleWaypoint = plan.GetAcquisitionHold().GetWaypoint();
+				m_bExecutableVehicleTask = plan.GetAcquisitionHold().HasCurrentTask(trip, currentBaseRevision, System.GetTickCount());
+			}
 		}
 		else if (phase == AICF_ETransportTripPhase.BOARDING)
 		{
 			AICF_VehicleBoardingTokenSet tokens = trip.GetBoardingState().GetTokens();
 			m_bExecutableVehicleTask = trip.GetBoardingState().GetStartedAtMs() > 0 &&
 				tokens && tokens.Count() > 0;
+		}
+		else if (phase == AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT)
+		{
+			m_bExecutableVehicleTask = trip.GetBehaviorState().m_bReboarding &&
+				System.GetTickCount() < trip.GetBehaviorState().m_iReboardDeadline;
+			if (!trip.GetHandoffState().IsOrderRestored() && !trip.GetBehaviorState().m_bReboarding &&
+				System.GetTickCount() < trip.GetBehaviorState().m_iDeploymentDeadline)
+				m_bExecutableVehicleTask = true;
 		}
 		else if (phase == AICF_ETransportTripPhase.TRANSIT)
 		{
@@ -177,6 +203,32 @@ class AICF_VehicleSlotView
 	string GetStatusText() { return m_sStatusText; }
 	bool IsControllingMovement() { return m_bControlsMovement; }
 	bool HasExecutableVehicleTask() { return m_bExecutableVehicleTask; }
+	bool IsPresetDestinationWait() { return m_bPresetDestinationWait; }
+	bool HasNativeCombatTask() { return m_bNativeCombatTask; }
+	bool HasTacticalActorTask() { return m_bTacticalActorTask; }
+	bool HasStagingActorTask() { return m_bStagingActorTask; }
+
+	protected bool IsTacticalActorTask(AICF_TransportTrip trip)
+	{
+		if (!Replication.IsServer() || !trip || !trip.IsValid() || trip.GetPhase() != AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT ||
+			!trip.IsVehiclePresetCurrent()) return false;
+		AICF_VehicleBehaviorState state = trip.GetBehaviorState();
+		int nowMs = System.GetTickCount();
+		int deadline = state.m_iDeploymentDeadline;
+		if (state.m_bReboarding) deadline = state.m_iReboardDeadline;
+		if (deadline <= 0 || nowMs >= deadline) return false;
+		foreach (AICF_VehicleBehaviorAction token : state.m_aActions)
+		{
+			if (!token) continue;
+			SCR_AIUtilityComponent utility = token.ResolveOwner();
+			if (!utility) continue;
+			SCR_AIVehicleBehavior action = token.m_Exit;
+			if (state.m_bReboarding) action = token.m_Entry;
+			if (action && token.OwnsAction(utility, action) && !action.GetRemoveAction() && !action.GetActionIsSuspended() &&
+				action.GetActionState() != EAIActionState.FAILED && action.GetActionState() != EAIActionState.COMPLETED) return true;
+		}
+		return false;
+	}
 	bool IsSafeSpawnWait() { return m_bSafeSpawnWait; }
 	bool IsRestorePending() { return m_bRestorePending; }
 	bool IsOrderRestored() { return m_bOrderRestored; }
@@ -217,6 +269,9 @@ class AICF_VehicleSlotView
 				return "{AICF:AICF_UI_Boarding_ed5ca035}";
 			case AICF_ETransportTripPhase.TRANSIT:
 				return "{AICF:AICF_UI_In_transit_5a91ec5d}";
+			case AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT:
+				if (trip.GetBehaviorState().m_bReboarding) return "{AICF:AICF_UI_Boarding_ed5ca035}";
+				return "{AICF:AICF_UI_On_foot_dd408061}";
 			case AICF_ETransportTripPhase.DISMOUNT:
 				return "{AICF:AICF_UI_Dismounting_04e8e517}";
 			case AICF_ETransportTripPhase.HANDOFF:

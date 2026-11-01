@@ -22,6 +22,44 @@ authoritative правила матча и выбор idle не меняются
 callbacks, detach и delete. Это не проверка художественного вида дыма или
 точного положения сигареты в руке во всех анимациях.
 
+При client streaming возможен скачок world pose локального cigar prop: в full
+UI/JIP log наблюдался переход с y≈-828м к реальному бойцу и native
+`ParticleEffectComponent: Suspicious parent velocity` >1млнкм/ч. Это не движение
+бойца. Простая замена FollowParent на прямой Parent в controlled A/B не помогла.
+FRAME adapter теперь сравнивает последовательные prop positions. Скачок больше
+`max(5м, timeSlice*100м/с)` сбрасывает только motion history двух собственных
+particle entities через их удаление и штатное повторное создание. Прежние
+PLAYING состояния восстанавливаются в том же frame; нагрев/охлаждение, native
+FollowParent/offset/pivot и VISIBLE policy mouth сохраняются. После native
+создания снова снимается POSTFIXEDFRAME и включается FRAME. Pose sample
+сбрасывается при detach/delete. Actor, ТС и игровой lifecycle не меняются.
+`CIGARETTE_POSE_RESYNC` фиксирует расстояние/время и сохранённые playing states.
+
+`AICF_CigaretteStreamingProbe.c` — отдельная direct-connect fixture вместе с
+VehiclePresetProbe/VehiclePresetClientProbe, которые дают настоящий avatar.
+Только локальный cosmetic prop получает заведомо большой скачок pose; actor/ТС
+не перемещаются. Проверяются три цикла, actual cigar world offset/rotation и
+leading parent, mouth parent/position, PLAYING/active particles/simulation clocks,
+FRAME-only callbacks и удаление именно CURRENT emitter entities после resync.
+Для наблюдения невидимого mouth fixture отдельно включает его FRAME updates;
+production VISIBLE policy не меняется. Без такого observer native clock на
+невидимом avatar был0 при PLAYING/active1; прежний диагностический FAIL сохранён.
+
+`Test-CigarettePoseContracts.ps1` исполняет извлечённые production threshold и
+recreate body: границы distance/dt, все четыре сочетания playing states, отказ
+создания одного emitter, FRAME masks и неизменный heat. `Test-CigaretteLog.ps1`
+теперь отклоняет Suspicious parent velocity в любом полном sibling log;
+положительный summary не скрывает native error. Свежие targeted contracts5/5
+PASS и Stock native24/24/WB0/server0/client0/fullstopped относятся к evidence
+`.codex-runtime/issue78-finalization-20261029/smoke/production-fixed-v1`.
+В formal probe velocity/locked-thread/script-fatal0; strict resources остаётся
+FAIL. Controlled emission/pose proof не подтверждает художественный вид дыма.
+Исторический experimental `observer-resync-v2` всё ещё имеет full-log FAIL:
+12 console velocity errors во время дальней pose до обратного скачка, при
+24/24 functional checks. Точная причина этих post-sim перемещений не доказана;
+этот запуск не переобъявлялся PASS по одному чистому хвосту или по summary.
+Formal production run и свежий UI/JIP оцениваются отдельно по полным логам.
+
 Общий server-owned `AICF_SocialService` обслуживает только готовые живые
 пехотные slots US/USSR. `AICF_MatchController` создаёт и останавливает сервис.
 Сервис не назначает waypoint, не меняет roster, очередь, цены или темп набора.

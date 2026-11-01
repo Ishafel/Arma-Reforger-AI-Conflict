@@ -35,6 +35,9 @@ try{
  Check done ($good.Replace('checks=42 failed=0 cycles=6','checks=42 failed=0 cycles=5')) 1 COMPLETION
  Check thread ($good+"`nAttempt to modify locked entity from a different thread") 1 NATIVE_ASSERT
  Check assertion ($good+"`nAssertion failed") 1 NATIVE_ASSERT
+ Check posevelocity ($good+"`nDEFAULT (E): ParticleEffectComponent: Suspicious parent velocity (1095480.62 km/h) for particle effect 'Particles/Enviroment/Cigarette_smoke.ptc'.") 1 PARTICLE_POSE_VELOCITY
+ [IO.File]::WriteAllText("$work/smoke.log",'ParticleEffectComponent: Suspicious parent velocity')
+ try{Check posevelocitysibling $good 1 PARTICLE_POSE_VELOCITY}finally{Remove-Item -LiteralPath "$work/smoke.log"}
  [IO.File]::WriteAllText("$work/crash.log",'Attempt to modify locked entity from a different thread')
  try{Check crashfile $good 1 NATIVE_ASSERT}finally{Remove-Item -LiteralPath "$work/crash.log"}
  Check stopped ($good.Replace('Game destroyed.','')) 1 STOPPED_LOG

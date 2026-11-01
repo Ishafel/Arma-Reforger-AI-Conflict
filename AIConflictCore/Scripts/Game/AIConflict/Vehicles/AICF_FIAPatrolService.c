@@ -11,6 +11,24 @@ class AICF_FIAPatrolService
 	protected bool m_bStopped;
 	protected int m_iNextSpawnMs;
 
+	AICF_FactionFleet GetAIQuotaFleet()
+	{
+		if (!Replication.IsServer()) return null;
+		return m_Fleet;
+	}
+
+	int GetAIQuotaPlanUnits()
+	{
+		if (!Replication.IsServer() || m_bStopped || m_aPatrols.Count() > AICF_AIQuotaMath.MAX_TOTAL_UNITS / 3) return -1;
+		return m_aPatrols.Count() * 3; // native car + the fixed two-person patrol
+	}
+
+	bool OwnsAIQuotaPatrol(AICF_FIAPatrol patrol)
+	{
+		return Replication.IsServer() && !m_bStopped && m_Graph && m_Fleet && patrol &&
+			!patrol.m_bRetired && m_aPatrols.Contains(patrol);
+	}
+
 	AICF_FIAPatrol ReportFailedMovement(SCR_AIGroup group, AIWaypoint waypoint, IEntity vehicle = null)
 	{
 		if (!Replication.IsServer() || m_bStopped || !m_Graph || !group || !waypoint) return null;
@@ -151,6 +169,8 @@ class AICF_FIAPatrolService
 		vector crewPosition;
 		if (!m_Spawner.SpawnFIAPatrol(p, m_Fleet, crewPosition))
 		{
+			if (p.m_sSpawnQuotaFailure == "VEHICLE_QUOTA_NATIVE_RETURN_QUARANTINED") { Retire(p, p.m_sSpawnQuotaFailure); return; }
+			if (p.m_sSpawnQuotaFailure == "VEHICLE_QUOTA_PENDING") { p.m_iRetryAtMs = now + 1000; p.Log("FIA_PATROL_WAIT", "reason=VEHICLE_QUOTA_PENDING"); return; }
 			if (p.m_Vehicle) Retire(p, "SPAWN_REJECTED_AFTER_ENTITY");
 			else p.Log("FIA_PATROL_WAIT", "reason=NO_CLEAR_ROAD_SITE");
 			return;

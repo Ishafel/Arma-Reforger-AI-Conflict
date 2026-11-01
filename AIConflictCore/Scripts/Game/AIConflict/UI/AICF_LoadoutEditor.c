@@ -189,7 +189,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 	void AICF_LoadoutEditor(AICF_StrategicUIController controller) { m_Controller = controller; }
 	bool IsInputCaptured() { return m_bCaptured; }
 
-	void Open(Widget mapRoot, int slotId, bool personal = false, bool opponent = false)
+	bool Open(Widget mapRoot, int slotId, bool personal = false, bool opponent = false)
 	{
 		Close();
 		m_bPersonal = personal;
@@ -197,16 +197,16 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_Faction = SCR_FactionManager.SGetLocalPlayerFaction();
 		SCR_MapEntity mapEntity = SCR_MapEntity.GetMapInstance();
 		if (!mapRoot || !m_Player || !m_Faction || RplSession.Mode() == RplMode.Dedicated)
-			return;
+			return OpenRejected("CONTEXT_UNAVAILABLE");
 		// Оба редактора захватывают ввод карты, включая карту экрана появления.
-		if (!mapEntity || !mapEntity.IsOpen()) return;
+		if (!mapEntity || !mapEntity.IsOpen()) return OpenRejected("MAP_CLOSED");
 		m_Cursor = SCR_MapCursorModule.Cast(mapEntity.GetMapModule(SCR_MapCursorModule));
-		if (!m_Cursor || (m_Cursor.GetCursorState() & EMapCursorState.CS_DIALOG)) return;
+		if (!m_Cursor || (m_Cursor.GetCursorState() & EMapCursorState.CS_DIALOG)) return OpenRejected("CURSOR_DIALOG_BUSY");
 		if (m_bPersonal)
 		{
 			SCR_CampaignFaction faction;
 			AICF_LoadoutRecipe context = AICF_PersonalLoadout.Context(m_Player, faction);
-			if (!context) return;
+			if (!context) return OpenRejected("PERSONAL_CONTEXT_UNAVAILABLE");
 			m_sPersonalSource = context.m_sCharacter;
 		}
 		m_PlayerCharacter = m_Player.GetControlledEntity();
@@ -226,13 +226,25 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		if (!Create(mapRoot))
 		{
 			Close();
-			return;
+			return OpenRejected("FORM_CREATE_FAILED");
 		}
 		m_bCaptured = true;
 		if (m_Cursor) m_Cursor.AICF_SetLoadoutDialog(this);
 		s_CapturedEditor = this;
+		GetGame().GetWorkspace().AddModal(m_wRoot, null);
 		GetGame().GetInputManager().AddActionListener(UIConstants.MENU_ACTION_BACK, EActionTrigger.DOWN, OnBack);
 		Request(0);
+		m_wRoot.Update();
+		float width, height;
+		m_wRoot.GetScreenSize(width, height);
+		Print(string.Format("[AICF][PRESET_EDITOR_OPEN] editor=INFANTRY slot=%1 created=1 visible=%2 modal=%3 width=%4 height=%5 parent=%6", slotId, m_wRoot.IsVisibleInHierarchy(), GetGame().GetWorkspace().GetModal() == m_wRoot, width, height, mapRoot.GetName()));
+		return true;
+	}
+
+	protected bool OpenRejected(string reason)
+	{
+		Print("[AICF][PRESET_EDITOR_OPEN] editor=INFANTRY created=0 reason=" + reason);
+		return false;
 	}
 
 	protected void Place(Widget widget, float l, float t, float r, float b)
@@ -1059,9 +1071,17 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 			AICF_LoadoutRecipe context = AICF_PersonalLoadout.Context(m_Player, faction);
 			if (!context || context.m_sCharacter != m_sPersonalSource) { Close(); return; }
 		}
-		if (!m_Player || GetGame().GetPlayerController() != m_Player || SCR_FactionManager.SGetLocalPlayerFaction() != m_Faction ||
-			m_Player.GetControlledEntity() != m_PlayerCharacter)
+		if (!m_Player || GetGame().GetPlayerController() != m_Player || SCR_FactionManager.SGetLocalPlayerFaction() != m_Faction)
 		{
+			Print("[AICF][PRESET_EDITOR_CONTEXT_LOST] editor=INFANTRY reason=PLAYER_OR_FACTION_CHANGED");
+			Close();
+			return;
+		}
+		// AI пресет принадлежит faction/slot, а не текущему аватару игрока.
+		// Личный редактор по-прежнему закрывается при смене персонажа.
+		if (m_bPersonal && m_Player.GetControlledEntity() != m_PlayerCharacter)
+		{
+			Print("[AICF][PRESET_EDITOR_CONTEXT_LOST] editor=INFANTRY reason=PERSONAL_CHARACTER_CHANGED");
 			Close();
 			return;
 		}
@@ -1288,6 +1308,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_aSlotLocations.Clear();
 		m_bDraftReady = false;
 		m_wPreview.SetVisible(false);
+		m_wPreview.SetWorld(null, 0);
 		// Отменяем незавершённые binds старых карточек до смены черновика.
 		m_Slots.ReleasePreviews();
 		m_Items.ReleasePreviews();
@@ -2141,6 +2162,7 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 
 	void Close()
 	{
+		if (m_bCaptured) Print("[AICF][PRESET_EDITOR_CLOSE] editor=INFANTRY captured=1");
 		GetGame().GetCallqueue().Remove(DispatchRequest);
 		m_sRequestPayload = string.Empty;
 		HideModal();
@@ -2163,7 +2185,11 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_aButtons.Clear();
 		m_aButtonFrames.Clear();
 		if (m_wPreview)
+		{
+			m_wPreview.SetVisible(false);
+			m_wPreview.SetWorld(null, 0);
 			m_wPreview.RemoveHandler(this);
+		}
 		if (m_wSearch)
 			m_wSearch.RemoveHandler(this);
 		if (m_wName)
@@ -2186,7 +2212,10 @@ class AICF_LoadoutEditor : ScriptedWidgetEventHandler
 		m_Items = null;
 		if (m_LibraryView) m_LibraryView.Close();
 		if (m_wRoot)
+		{
+			GetGame().GetWorkspace().RemoveModal(m_wRoot);
 			m_wRoot.RemoveFromHierarchy();
+		}
 		m_wRoot = null;
 		m_wPreview = null;
 		m_LibraryView = null;

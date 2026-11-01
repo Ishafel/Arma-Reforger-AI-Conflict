@@ -138,11 +138,17 @@ if($manifest) {
         $cases=[regex]::Matches($log,'\[COOP_CASE\] case=(\w+) pass=1')
         if($cases.Count -ne $expected.Count -or ($done.Count -eq 1 -and [int]$done[0].Groups[2].Value -ne $expected.Count)) { $failures.Add('CASE_COUNT') }
         foreach($name in $expected) { if(@($cases | Where-Object {$_.Groups[1].Value -ceq $name}).Count -ne 1) { $failures.Add("CASE_$name") } }
-        $ussr=10; if($mode -eq 'USSR') {$ussr=0}; $us=10; if($mode -eq 'US'){$us=0}
-        if($log -notmatch ("\[ROSTER_READY\][^\r\n]*us_groups=$us ussr_groups=$ussr\b")) { $failures.Add('ROSTER') }
+        $ussr=10; $us=10
+        if($mode -eq 'US'){$us=0}
+        if($mode -eq 'USSR'){$ussr=0}
+        $rosters=[regex]::Matches($log,'\[ROSTER_READY\][^\r\n]*us_groups=(\d+) ussr_groups=(\d+)\b')
+        if($rosters.Count -ne 1 -or [int]$rosters[0].Groups[1].Value -ne $us -or [int]$rosters[0].Groups[2].Value -ne $ussr) { $failures.Add('ROSTER') }
         if($mode -ne 'STANDARD') {
-            $runtimeSide=$plan.usFaction; if($mode -eq 'USSR'){$runtimeSide=$plan.ussrFaction}
-            if($log -match ('\[(?:SPAWN_ATTEMPT_STARTED|GROUP_ROSTER_READY|REPLACEMENT_SPAWNED)\][^\r\n]*faction=(?:'+[regex]::Escape($mode)+'|'+[regex]::Escape($runtimeSide)+')\b')) { $failures.Add('PLAYER_COMBAT_SPAWN') }
+            $human=$plan.usFaction; if($mode -eq 'USSR'){$human=$plan.ussrFaction}
+            foreach($humanKey in @($human,$mode)|Select-Object -Unique){
+                if($log -match ('\[SPAWN_ATTEMPT_STARTED\][^\r\n]*faction='+[regex]::Escape($humanKey)+'\s')){$failures.Add('HUMAN_AUTONOMOUS_SPAWN')}
+            }
+            if($log -match ('\[COOP_FLEET_(?:DEFAULT|DEFAULT_UNAVAILABLE|MODEL_INSPECTED)\][^\r\n]*faction='+$mode+'\s')){$failures.Add('HUMAN_FLEET_DEFAULT')}
         }
         if($manifest.PSObject.Properties['matchMode']) {
             $context=[regex]::Matches($log,('\[COOP_CONTEXT\] mode='+$mode+' us_faction='+[regex]::Escape($plan.usFaction)+' ussr_faction='+[regex]::Escape($plan.ussrFaction)+' nodes=(\d+)'))

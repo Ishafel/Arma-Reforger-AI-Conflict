@@ -45,7 +45,7 @@ class AICF_EquipmentService
 	protected AICF_EquipmentPlan Plan(AICF_GroupSlot slot, SCR_CampaignFaction faction, int index)
 	{
 		string role;
-		ResourceName source = m_RosterSource.ResolveRecruitPrefab(faction, index, role);
+		ResourceName source = m_RosterSource.ResolveRecruitPrefab(faction, slot.GetEquipmentSourceIndex(index), role);
 		AICF_LoadoutBinding binding = slot.GetLoadout(index);
 		string key = faction.GetFactionKey() + "|" + source;
 		if (binding) key += "|" + binding.m_sInventory;

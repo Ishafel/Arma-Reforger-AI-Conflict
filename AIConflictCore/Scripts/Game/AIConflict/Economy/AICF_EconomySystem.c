@@ -2,6 +2,88 @@
 // deployment reservations, and physical supply transaction ledger.
 class AICF_EconomySystem
 {
+	AICF_VehiclePresetEconomyDecision InspectVehiclePresetPreflight(
+		AICF_TransportTrip trip, SCR_CampaignFaction faction, SCR_CampaignMilitaryBaseComponent base, AICF_FactionFleet fleet)
+	{
+		AICF_EVehiclePresetEconomyDecision status = AICF_EVehiclePresetEconomyDecision.INVALID_CONTEXT;
+		int cost = -1;
+		int stock = -1;
+		int obligations = -1;
+		if (Replication.IsServer() && IsEnabled() && m_bGraphContextReady && m_Graph && m_SupplyNetwork && m_ConflictAdapter &&
+			trip && trip.IsValid() && trip.IsVehiclePresetCurrent() && trip.GetVehiclePreset() &&
+			faction && faction.GetFactionKey() == trip.GetFactionKey() && base &&
+			m_SupplyNetwork.IsOperationalOwnedBase(base, faction) &&
+			m_ConflictAdapter.GetSpawnRejectionReason(base, faction).IsEmpty())
+		{
+			AICF_VehiclePresetCatalog catalog = new AICF_VehiclePresetCatalog(faction);
+			cost = catalog.Cost(trip.GetVehiclePreset().m_sPrefab);
+			stock = base.GetSupplies();
+			obligations = LogisticsObligations(base);
+			status = AICF_VehiclePresetEconomyDecision.ClassifyQuote(cost, stock, obligations);
+		}
+		return new AICF_VehiclePresetEconomyDecision(trip, base, cost, stock, obligations, status, fleet);
+	}
+
+	bool IsVehiclePresetPreflightCurrent(AICF_TransportTrip trip, SCR_CampaignFaction faction, AICF_VehiclePresetEconomyDecision decision)
+	{
+		bool current = Replication.IsServer() && IsEnabled() && m_bGraphContextReady && m_Graph && m_SupplyNetwork && m_ConflictAdapter &&
+			decision && decision.IsCurrentPreflight(trip) && faction && faction.GetFactionKey() == trip.GetFactionKey() &&
+			m_SupplyNetwork.IsOperationalOwnedBase(decision.GetBase(), faction) &&
+			m_ConflictAdapter.GetSpawnRejectionReason(decision.GetBase(), faction).IsEmpty() &&
+			decision.GetObligations() == LogisticsObligations(decision.GetBase());
+		if (!current) return false;
+		AICF_VehiclePresetCatalog catalog = new AICF_VehiclePresetCatalog(faction);
+		return catalog.Cost(trip.GetVehiclePreset().m_sPrefab) == decision.GetCost();
+	}
+
+	bool CanAffordVehiclePreset(SCR_CampaignFaction faction, ResourceName prefab, out string reason)
+	{
+		reason = "PREFAB_UNAVAILABLE";
+		AICF_VehiclePresetCatalog catalog = new AICF_VehiclePresetCatalog(faction);
+		int cost = catalog.Cost(prefab);
+		if (cost <= 0) return false;
+		reason = "INSUFFICIENT_SUPPLIES";
+		if (!Replication.IsServer() || !m_bGraphContextReady || !m_Graph) return false;
+		for (int i; i < m_Graph.GetNodeCount(); i++)
+		{
+			AICF_ObjectiveNode node = m_Graph.GetNode(i);
+			if (node && CanPayVehiclePreset(faction, node.GetBase(), cost)) { reason = "READY"; return true; }
+		}
+		return false;
+	}
+
+	bool CanPayVehiclePreset(SCR_CampaignFaction faction, SCR_CampaignMilitaryBaseComponent base, int cost)
+	{
+		return Replication.IsServer() && IsEnabled() && m_bGraphContextReady && cost > 0 &&
+			m_SupplyNetwork.IsOperationalOwnedBase(base, faction) &&
+			m_ConflictAdapter.GetSpawnRejectionReason(base, faction).IsEmpty() &&
+			base.GetSupplies() - LogisticsObligations(base) >= cost;
+	}
+
+	bool PurchaseVehiclePreset(AICF_TransportTrip trip, SCR_CampaignFaction faction, SCR_CampaignMilitaryBaseComponent base, ResourceName prefab, out int paid)
+	{
+		paid = 0;
+		if (!trip || !trip.IsVehiclePresetCurrent() || !trip.GetVehiclePreset() || trip.IsVehiclePresetDebited() ||
+			trip.GetVehiclePreset().m_sPrefab != prefab) return false;
+		AICF_VehiclePresetCatalog catalog = new AICF_VehiclePresetCatalog(faction);
+		int cost = catalog.Cost(prefab);
+		if (!CanPayVehiclePreset(faction, base, cost)) return false;
+		int before = base.GetSupplies();
+		base.AddSupplies(-cost);
+		if (base.GetSupplies() != before - cost)
+		{
+			base.AddSupplies(before - base.GetSupplies());
+			return false;
+		}
+		paid = cost;
+		return true;
+	}
+
+	void RollbackVehiclePreset(SCR_CampaignMilitaryBaseComponent base, int paid)
+	{
+		if (Replication.IsServer() && base && paid > 0) base.AddSupplies(paid);
+	}
+
 	protected ref AICF_LogisticsLedger m_LogisticsLedger = new AICF_LogisticsLedger();
 	protected AICF_Stage4Config m_Config;
 	protected SCR_GameModeCampaign m_Campaign;

@@ -13,7 +13,8 @@ enum AICF_ETransportTripPhase
 	HANDOFF,
 	COMPLETE,
 	FALLBACK,
-	FAILED_CLOSED
+	FAILED_CLOSED,
+	TACTICAL_DEPLOYMENT
 }
 
 // Phase flows return data. They never transition the trip or invoke another
@@ -28,7 +29,9 @@ enum AICF_ETripOutcomeKind
 	COMPLETE_TRIP,
 	FALLBACK_TO_FOOT,
 	RELEASE_LEASE,
-	TERMINAL_FAIL_CLOSED
+	TERMINAL_FAIL_CLOSED,
+	START_TACTICAL_DEPLOYMENT,
+	RESUME_TACTICAL_MOVEMENT
 }
 
 // Only FactionFleet may change lease state. A world-pool vehicle has no lease

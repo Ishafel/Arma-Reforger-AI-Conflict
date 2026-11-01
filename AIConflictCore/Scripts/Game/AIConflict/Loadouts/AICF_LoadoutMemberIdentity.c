@@ -20,6 +20,15 @@ modded class SCR_AIGroup
 		return m_aAICFSpawnMembers[index];
 	}
 
+	void AICF_RebindMemberPositions(array<IEntity> members)
+	{
+		if (!Replication.IsServer()) return;
+		m_bAICFTrackMembers = true;
+		m_aAICFSpawnMembers.Clear();
+		m_aAICFSpawnMembers.Copy(members);
+		m_aAICFSpawnMembers.Resize(AICF_Stage1Config.MAX_GROUP_SIZE);
+	}
+
 	override protected bool SpawnGroupMember(bool snapToTerrain, int index, ResourceName res, bool editMode, bool isLast)
 	{
 		if (!m_bAICFTrackMembers || !Replication.IsServer() || editMode)

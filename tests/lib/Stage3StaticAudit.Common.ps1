@@ -1139,6 +1139,7 @@ function Get-AICFStringFormatCallInfo {
     $inLineComment = $false
     $inBlockComment = $false
     $literal = ''
+    $firstArgumentEnd = -1
 
     for ($offset = $OpenParenOffset + 1; $offset -lt $Source.Length; $offset++) {
         $character = $Source[$offset]
@@ -1166,11 +1167,17 @@ function Get-AICFStringFormatCallInfo {
             $depth--
             if ($depth -eq 0) {
                 if (-not $hasContent) { $argumentCount = 0 }
+                if ($firstArgumentEnd -lt 0) { $firstArgumentEnd = $offset }
+                $literal = Get-AICFStringLiteralText -Source ($Source.Substring($OpenParenOffset + 1, $firstArgumentEnd - $OpenParenOffset - 1))
                 return [pscustomobject]@{ Closed = $true; ArgumentCount = $argumentCount; Literal = $literal }
             }
             continue
         }
-        if ($character -eq ',' -and $depth -eq 1) { $argumentCount++; continue }
+        if ($character -eq ',' -and $depth -eq 1) {
+            if ($argumentCount -eq 1) { $firstArgumentEnd = $offset }
+            $argumentCount++
+            continue
+        }
         if (-not [char]::IsWhiteSpace($character)) { $hasContent = $true }
     }
 
@@ -1201,12 +1208,12 @@ function Invoke-AICFLanguageAudit {
             if ($substitutions -gt 9) {
                 Add-AICFAuditFailure $failures 'STRING_FORMAT_ARITY' "string.Format has $substitutions substitutions; maximum is 9 ($($record.RelativePath):$line)"
             }
-        }
-
-        foreach ($placeholderMatch in [regex]::Matches($record.Strings, '%([0-9]{2,})')) {
-            $placeholder = 0
-            if ([int]::TryParse($placeholderMatch.Groups[1].Value, [ref]$placeholder) -and $placeholder -gt 9) {
-                Add-AICFAuditFailure $failures 'STRING_FORMAT_PLACEHOLDER' "String literal uses unsupported placeholder %$placeholder ($($record.RelativePath))"
+            # Percent encoding и строковые значения аргументов не являются format template.
+            foreach ($placeholderMatch in [regex]::Matches($callInfo.Literal, '%([0-9]{2,})')) {
+                $placeholder = 0
+                if ([int]::TryParse($placeholderMatch.Groups[1].Value, [ref]$placeholder) -and $placeholder -gt 9) {
+                    Add-AICFAuditFailure $failures 'STRING_FORMAT_PLACEHOLDER' "Format string uses unsupported placeholder %$placeholder ($($record.RelativePath):$line)"
+                }
             }
         }
     }

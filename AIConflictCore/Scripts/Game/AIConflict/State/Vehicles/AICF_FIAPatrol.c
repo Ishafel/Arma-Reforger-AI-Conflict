@@ -6,6 +6,7 @@ class AICF_FIAPatrol
 	int m_iRequestedAtMs;
 	int m_iRetryAtMs;
 	int m_iSpawnAttempt;
+	string m_sSpawnQuotaFailure;
 	int m_iGraphRevision;
 	int m_iLeg;
 	int m_iLegAtMs;

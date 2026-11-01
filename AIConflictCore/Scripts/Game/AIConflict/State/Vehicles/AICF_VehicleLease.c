@@ -85,6 +85,7 @@ class AICF_VehicleCleanupSnapshot
 // one physical vehicle. State/generation mutation is called only by Fleet.
 class AICF_VehicleLease
 {
+	protected ref AICF_VehicleGarbagePermission m_GarbagePermission;
 	protected FactionKey m_sFactionKey;
 	protected int m_iSlotId;
 	protected int m_iGroupGeneration;
@@ -135,6 +136,16 @@ class AICF_VehicleLease
 	int GetCapacity() { return m_iCapacity; }
 	vector GetLastKnownOrigin() { return m_vLastKnownOrigin; }
 	AICF_VehicleCleanupSnapshot GetCleanupSnapshot() { return m_CleanupSnapshot; }
+
+	void InstallGarbagePermission(AICF_FactionFleet owner)
+	{
+		if (!m_GarbagePermission) m_GarbagePermission = AICF_VehicleGarbagePolicy.Register(owner, this);
+	}
+
+	void ~AICF_VehicleLease()
+	{
+		if (m_GarbagePermission) m_GarbagePermission.Stop();
+	}
 
 	bool MatchesSlotIdentity(FactionKey factionKey, int slotId, int groupGeneration)
 	{
@@ -313,6 +324,8 @@ class AICF_VehicleLease
 			!m_CleanupSnapshot.Matches(m_EntityId, m_sRplId) ||
 			expectedVehicle.GetID() != m_EntityId)
 			return false;
+		if (m_GarbagePermission) m_GarbagePermission.Stop();
+		m_GarbagePermission = null;
 		m_Vehicle = null;
 		return true;
 	}

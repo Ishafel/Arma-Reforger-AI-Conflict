@@ -117,6 +117,16 @@ class AICF_FIAPatrolCrew : AICF_GroupSpawner
 		if (!control || !control.GetAIAgent() || control.GetAIAgent().GetParentGroup() != p.m_Group) return;
 		CompartmentAccessComponent access = character.GetCompartmentAccessComponent();
 		if (!access || access.IsInCompartment() || access.IsGettingIn() || access.IsGettingOut()) return;
-		access.GetInVehicle(seat.GetOwner(), seat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
+		AICF_AIQuotaVehicleDispatch quota = AICF_AIQuotaVehicleDispatch.Begin(character, seat.GetOwner(), seat);
+		if (!quota) return;
+		if (!quota.IsCurrent() || !p.GroupIdentity() || !p.VehicleIdentity() || !p.CrewIdentity() ||
+			seat.GetVehicle() != p.m_Vehicle || seat.GetOccupant() || seat.IsReserved() || character.GetCompartmentAccessComponent() != access)
+		{
+			quota.Cancel();
+			return;
+		}
+		bool accepted = access.GetInVehicle(seat.GetOwner(), seat, true, -1, ECloseDoorAfterActions.CLOSE_DOOR, true);
+		quota.ObserveNativeResult(accepted);
+		quota.Cancel();
 	}
 }

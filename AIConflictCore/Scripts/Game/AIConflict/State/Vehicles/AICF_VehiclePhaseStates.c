@@ -92,9 +92,11 @@ class AICF_VehicleRequestState
 	protected string m_sNoRangeTrend;
 	protected string m_sNoRangeCandidateTrace;
 	protected ref AICF_VehicleSpawnPlan m_SpawnPlan;
+	protected ref AICF_AIQuotaVehicleCreationGuard m_QuotaCreation;
 
 	void Reset()
 	{
+		ClearQuotaCreation();
 		m_iRequestGeneration = 0;
 		m_iStartedAtMs = 0;
 		m_iAbsoluteDeadlineMs = 0;
@@ -149,6 +151,21 @@ class AICF_VehicleRequestState
 	string GetNoRangeTrend() { return m_sNoRangeTrend; }
 	string GetNoRangeCandidateTrace() { return m_sNoRangeCandidateTrace; }
 	AICF_VehicleSpawnPlan GetSpawnPlan() { return m_SpawnPlan; }
+	AICF_AIQuotaVehicleCreationGuard GetQuotaCreation() { return m_QuotaCreation; }
+
+	void SetQuotaCreation(AICF_AIQuotaVehicleCreationGuard guard)
+	{
+		ClearQuotaCreation();
+		m_QuotaCreation = guard;
+	}
+
+	void ClearQuotaCreation()
+	{
+		if (m_QuotaCreation) m_QuotaCreation.CancelAvailable();
+		m_QuotaCreation = null;
+	}
+
+	void ~AICF_VehicleRequestState() { ClearQuotaCreation(); }
 
 	bool SetSpawnPlan(AICF_VehicleSpawnPlan plan)
 	{
@@ -162,6 +179,7 @@ class AICF_VehicleRequestState
 	{
 		if (!expected || expected != m_SpawnPlan)
 			return false;
+		ClearQuotaCreation();
 		m_SpawnPlan = null;
 		return true;
 	}
@@ -209,6 +227,7 @@ class AICF_VehicleRequestState
 
 	void RecordContextReset(int nowMs, string reason)
 	{
+		ClearQuotaCreation();
 		m_iRequestGeneration++;
 		m_iContextResetCount++;
 		m_sContextResetReason = reason;
@@ -368,9 +387,12 @@ class AICF_VehicleBoardingState
 	protected ref array<ref AICF_VehicleAsyncFence> m_aActionFences = {};
 	protected ref AICF_VehicleBoardingTokenSet m_Tokens;
 	protected ref AICF_VehiclePassengerSeatPlan m_PassengerSeatPlan;
+	protected ref array<ref AICF_PresetQueuedApproach> m_aPresetQueueApproaches = {};
+	protected bool m_bPresetQueueActionsChanging;
 
 	void Reset()
 	{
+		ClearPresetQueueApproaches();
 		if (m_Tokens)
 			m_Tokens.CancelAllOwnerSafe();
 		m_iStartedAtMs = 0;
@@ -477,6 +499,48 @@ class AICF_VehicleBoardingState
 	AICF_EVehicleBoardingPhase GetRoleResetNextPhase() { return m_RoleResetNextPhase; }
 	bool IsPassengerPlanIssued() { return m_bPassengerPlanIssued; }
 	AICF_VehicleBoardingTokenSet GetTokens() { return m_Tokens; }
+	void MaintainPresetQueueApproach(AICF_TransportTrip trip, AICF_VehicleLease lease, AICF_VehicleBoardingActionToken token)
+	{
+		if (m_bPresetQueueActionsChanging || m_bExitEffectsApplied || !trip || trip.GetBoardingState() != this || !token) return;
+		foreach (AICF_PresetQueuedApproach existing : m_aPresetQueueApproaches)
+		{
+			if (existing.GetToken() != token) continue;
+			existing.Tick();
+			return;
+		}
+		AICF_PresetQueuedApproach approach = new AICF_PresetQueuedApproach(trip, lease, this, token);
+		m_aPresetQueueApproaches.Insert(approach);
+		approach.Tick();
+	}
+
+	void RetirePresetQueueApproach(AICF_VehicleBoardingActionToken token)
+	{
+		bool wasChanging = m_bPresetQueueActionsChanging;
+		m_bPresetQueueActionsChanging = true;
+		array<ref AICF_PresetQueuedApproach> retired = {};
+		for (int index = m_aPresetQueueApproaches.Count() - 1; index >= 0; index--)
+		{
+			AICF_PresetQueuedApproach approach = m_aPresetQueueApproaches[index];
+			if (approach.GetToken() != token) continue;
+			m_aPresetQueueApproaches.Remove(index);
+			retired.Insert(approach);
+		}
+		// Detach before native Fail callbacks can re-enter phase cleanup.
+		foreach (AICF_PresetQueuedApproach pending : retired) pending.Stop();
+		m_bPresetQueueActionsChanging = wasChanging;
+	}
+
+	void ClearPresetQueueApproaches()
+	{
+		bool wasChanging = m_bPresetQueueActionsChanging;
+		m_bPresetQueueActionsChanging = true;
+		array<ref AICF_PresetQueuedApproach> retired = {};
+		foreach (AICF_PresetQueuedApproach captured : m_aPresetQueueApproaches) retired.Insert(captured);
+		m_aPresetQueueApproaches.Clear();
+		foreach (AICF_PresetQueuedApproach approach : retired) approach.Stop();
+		m_bPresetQueueActionsChanging = wasChanging;
+	}
+	bool ArePresetQueueActionsChanging() { return m_bPresetQueueActionsChanging; }
 	AICF_VehiclePassengerSeatPlan GetPassengerSeatPlan() { return m_PassengerSeatPlan; }
 	bool AreExitEffectsApplied() { return m_bExitEffectsApplied; }
 	int GetCrewRotationScheduledAtMs() { return m_iCrewRotationScheduledAtMs; }
@@ -799,6 +863,7 @@ class AICF_VehicleBoardingState
 		if (m_bExitEffectsApplied)
 			return false;
 		m_bExitEffectsApplied = true;
+		ClearPresetQueueApproaches();
 		if (m_Tokens)
 			m_Tokens.CancelAllOwnerSafe();
 		if (m_PassengerSeatPlan)
@@ -852,6 +917,33 @@ class AICF_VehicleBoardingState
 
 class AICF_VehicleMovementState
 {
+	protected int m_iPresetDestinationWaitAtMs = -1;
+
+	bool IsPresetDestinationWaiting() { return m_iPresetDestinationWaitAtMs >= 0; }
+	int GetPresetDestinationWaitMs(int nowMs)
+	{
+		if (!IsPresetDestinationWaiting()) return 0;
+		return Math.Max(0, nowMs - m_iPresetDestinationWaitAtMs);
+	}
+
+	// Вызывает только Trip controller через CommitPresetDestinationWait.
+	void SetPresetDestinationWaiting(bool waiting, int nowMs)
+	{
+		if (waiting)
+		{
+			if (!IsPresetDestinationWaiting()) m_iPresetDestinationWaitAtMs = nowMs;
+			return;
+		}
+		m_iAbsoluteDeadlineMs += GetPresetDestinationWaitMs(nowMs);
+		m_iPresetDestinationWaitAtMs = -1;
+	}
+
+	void RecordPresetWaitingTarget(int assignmentRevision, vector target)
+	{
+		m_iAssignmentRevision = assignmentRevision;
+		m_vTacticalTarget = target;
+	}
+
 	protected int m_iStartedAtMs;
 	protected int m_iAbsoluteDeadlineMs;
 	protected int m_iLastRouteProgressAtMs;
@@ -895,11 +987,32 @@ class AICF_VehicleMovementState
 	protected string m_sGunnerSettledLossPredicateSnapshot;
 	protected bool m_bCrewRecoveryRoutePending;
 	protected ref AICF_VehicleCrewRecoveryToken m_CrewRecoveryToken;
+	protected ref AICF_TransportNativeCrewEntry m_NativePilotEntry;
+	protected ref AICF_TransportNativeCrewEntry m_NativeGunnerEntry;
+	protected ref AICF_TransportNativeGate m_NativeGate;
+	protected ref AICF_TransitMoveFailure m_TransitMoveFailure;
+	protected ref AICF_OverturnRecovery m_OverturnRecovery;
+	protected ref array<string> m_aNativeGateWindowKeys = {};
+	protected ref array<int> m_aNativeGateWindowStarts = {};
+	protected int m_iNativeGateCandidateReportAtMs;
+	protected ref SCR_AIVehicleCombatActivity m_NativeCombatActivity;
+	protected int m_iNativeCombatStartedAtMs;
+	protected int m_iNativeCombatReportAtMs;
+	protected ref AICF_VehicleNativeRouteProgress m_NativeRouteProgress;
+	protected ref AICF_UnstuckFailedSites m_UnstuckFailedSites;
+	AICF_UnstuckFailedSites GetUnstuckFailedSites()
+	{
+		if (!m_UnstuckFailedSites) m_UnstuckFailedSites = new AICF_UnstuckFailedSites();
+		return m_UnstuckFailedSites;
+	}
+	void ClearUnstuckFailedSites() { m_UnstuckFailedSites = null; }
 
 	void Reset()
 	{
 		if (m_CrewRecoveryToken)
 			m_CrewRecoveryToken.CancelOwnerSafe();
+		m_iPresetDestinationWaitAtMs = -1;
+		ClearUnstuckFailedSites();
 		m_iStartedAtMs = 0;
 		m_iAbsoluteDeadlineMs = 0;
 		m_iLastRouteProgressAtMs = 0;
@@ -943,6 +1056,15 @@ class AICF_VehicleMovementState
 		m_sGunnerSettledLossPredicateSnapshot = string.Empty;
 		m_bCrewRecoveryRoutePending = false;
 		m_CrewRecoveryToken = null;
+		ClearNativeCrewEntries();
+		SetNativeGate(null);
+		m_TransitMoveFailure = null;
+		m_OverturnRecovery = null;
+		m_aNativeGateWindowKeys.Clear();
+		m_aNativeGateWindowStarts.Clear();
+		m_iNativeGateCandidateReportAtMs = 0;
+		ClearNativeCombatHold();
+		ClearNativeRouteProgress();
 	}
 
 	void Begin(int nowMs, int absoluteDeadlineMs, int maximumCrewAttempts, int maximumMobilityAttempts)
@@ -957,7 +1079,7 @@ class AICF_VehicleMovementState
 	}
 
 	int GetStartedAtMs() { return m_iStartedAtMs; }
-	int GetAbsoluteDeadlineMs() { return m_iAbsoluteDeadlineMs; }
+	int GetAbsoluteDeadlineMs() { return m_iAbsoluteDeadlineMs + GetPresetDestinationWaitMs(System.GetTickCount()); }
 	int GetLastRouteProgressAtMs() { return m_iLastRouteProgressAtMs; }
 	int GetLastPhysicalMotionAtMs() { return m_iLastPhysicalMotionAtMs; }
 	int GetLastMotionReportAtMs() { return m_iLastMotionReportAtMs; }
@@ -997,6 +1119,85 @@ class AICF_VehicleMovementState
 	IEntity GetLastGunner() { return m_LastGunner; }
 	bool IsCrewRecoveryRoutePending() { return m_bCrewRecoveryRoutePending; }
 	AICF_VehicleCrewRecoveryToken GetCrewRecoveryToken() { return m_CrewRecoveryToken; }
+	AICF_TransportNativeCrewEntry GetNativeCrewEntry(EAICompartmentType role)
+	{
+		if (role == EAICompartmentType.Pilot) return m_NativePilotEntry;
+		if (role == EAICompartmentType.Turret) return m_NativeGunnerEntry;
+		return null;
+	}
+	bool TrackNativeCrewEntry(EAICompartmentType role, AICF_TransportNativeCrewEntry entry)
+	{
+		if (!entry || entry.GetRole() != role || GetNativeCrewEntry(role)) return false;
+		if (role == EAICompartmentType.Pilot) m_NativePilotEntry = entry;
+		else if (role == EAICompartmentType.Turret) m_NativeGunnerEntry = entry;
+		else return false;
+		return true;
+	}
+	void ClearNativeCrewEntry(EAICompartmentType role)
+	{
+		if (role == EAICompartmentType.Pilot) m_NativePilotEntry = null;
+		else if (role == EAICompartmentType.Turret) m_NativeGunnerEntry = null;
+	}
+	void ClearNativeCrewEntries()
+	{
+		m_NativePilotEntry = null;
+		m_NativeGunnerEntry = null;
+	}
+	AICF_TransportNativeGate GetNativeGate() { return m_NativeGate; }
+	AICF_TransitMoveFailure GetTransitMoveFailure() { return m_TransitMoveFailure; }
+	void SetTransitMoveFailure(AICF_TransitMoveFailure receipt) { m_TransitMoveFailure = receipt; }
+	AICF_OverturnRecovery GetOverturnRecovery() { return m_OverturnRecovery; }
+	void SetOverturnRecovery(AICF_OverturnRecovery observed) { m_OverturnRecovery = observed; }
+	void SetNativeGate(AICF_TransportNativeGate gate)
+	{
+		if (m_NativeGate == gate) return;
+		if (m_NativeGate) m_NativeGate.Stop();
+		m_NativeGate = gate;
+	}
+	// Один smart owner в той же route identity делит первый срок между бойцами.
+	// Повторное наблюдение/recapture не обновляет его; старые receipts не вытесняются.
+	int CaptureNativeGateWindowStart(string key, int nowMs)
+	{
+		int index = m_aNativeGateWindowKeys.Find(key);
+		if (index >= 0)
+			return m_aNativeGateWindowStarts[index];
+		if (key.IsEmpty() || nowMs <= 0 || m_aNativeGateWindowKeys.Count() >= 32)
+			return -1;
+		m_aNativeGateWindowKeys.Insert(key);
+		m_aNativeGateWindowStarts.Insert(nowMs);
+		return nowMs;
+	}
+	bool MarkNativeGateCandidateReportDue(int nowMs)
+	{
+		if (m_iNativeGateCandidateReportAtMs > 0 && nowMs - m_iNativeGateCandidateReportAtMs < 10000)
+			return false;
+		m_iNativeGateCandidateReportAtMs = nowMs;
+		return true;
+	}
+	SCR_AIVehicleCombatActivity GetNativeCombatActivity() { return m_NativeCombatActivity; }
+	int GetNativeCombatStartedAtMs() { return m_iNativeCombatStartedAtMs; }
+
+	void BeginNativeCombatHold(SCR_AIVehicleCombatActivity activity, int nowMs)
+	{
+		m_NativeCombatActivity = activity;
+		m_iNativeCombatStartedAtMs = nowMs;
+		m_iNativeCombatReportAtMs = nowMs;
+	}
+
+	void ClearNativeCombatHold()
+	{
+		m_NativeCombatActivity = null;
+		m_iNativeCombatStartedAtMs = 0;
+		m_iNativeCombatReportAtMs = 0;
+	}
+
+	bool MarkNativeCombatReportDue(int nowMs, int intervalMs)
+	{
+		if (nowMs - m_iNativeCombatReportAtMs < intervalMs)
+			return false;
+		m_iNativeCombatReportAtMs = nowMs;
+		return true;
+	}
 
 	bool StageRouteWaypoint(
 		AIWaypoint waypoint,
@@ -1060,6 +1261,25 @@ class AICF_VehicleMovementState
 		m_RouteWaypoint = null;
 		m_bRouteWaypointBound = false;
 		return true;
+	}
+
+	AICF_VehicleNativeRouteProgress GetNativeRouteProgress()
+	{
+		if (!m_NativeRouteProgress)
+			m_NativeRouteProgress = new AICF_VehicleNativeRouteProgress();
+		return m_NativeRouteProgress;
+	}
+
+	void ClearNativeRouteProgress()
+	{
+		m_NativeRouteProgress = null;
+	}
+
+	void CreditNativeRouteProgress(int nowMs)
+	{
+		m_iLastRouteProgressAtMs = nowMs;
+		if (m_bRecoveryEvidencePending)
+			m_bRecoveryRouteEvidence = true;
 	}
 
 	bool ObserveRouteProgress(float distanceMeters, float minimumProgressMeters, int nowMs)
@@ -1412,6 +1632,8 @@ class AICF_VehicleDismountState
 	protected int m_iLastGuidanceAttemptAtMs;
 	protected int m_iForceClearanceAttempts;
 	protected int m_iMaximumForceClearanceAttempts;
+	protected int m_iPhysicalRelocationAttempts;
+	protected int m_iMaximumPhysicalRelocationAttempts;
 	protected int m_iLastExactRelocationProbeAtMs;
 	protected int m_iLogicalOccupants;
 	protected int m_iTransitions;
@@ -1419,7 +1641,8 @@ class AICF_VehicleDismountState
 	protected int m_iClearPollCount;
 	protected int m_iTripExitClearPollCount;
 	protected int m_iContinuousClearStartedAtMs;
-	protected bool m_bAnimatedExactExitAttempted;
+	protected int m_iAnimatedExactExitAttempts;
+	protected int m_iLastAnimatedExactExitAttemptAtMs;
 	protected bool m_bTerminalClearanceStarted;
 	protected bool m_bTerminalClearanceStopped;
 	protected int m_iLastHiddenRecoveryAuditAtMs;
@@ -1440,6 +1663,8 @@ class AICF_VehicleDismountState
 		m_iLastGuidanceAttemptAtMs = 0;
 		m_iForceClearanceAttempts = 0;
 		m_iMaximumForceClearanceAttempts = 0;
+		m_iPhysicalRelocationAttempts = 0;
+		m_iMaximumPhysicalRelocationAttempts = 0;
 		m_iLastExactRelocationProbeAtMs = 0;
 		m_iLogicalOccupants = 0;
 		m_iTransitions = 0;
@@ -1447,7 +1672,8 @@ class AICF_VehicleDismountState
 		m_iClearPollCount = 0;
 		m_iTripExitClearPollCount = 0;
 		m_iContinuousClearStartedAtMs = 0;
-		m_bAnimatedExactExitAttempted = false;
+		m_iAnimatedExactExitAttempts = 0;
+		m_iLastAnimatedExactExitAttemptAtMs = 0;
 		m_bTerminalClearanceStarted = false;
 		m_bTerminalClearanceStopped = false;
 		m_iLastHiddenRecoveryAuditAtMs = 0;
@@ -1466,6 +1692,7 @@ class AICF_VehicleDismountState
 		m_iTerminalDeadlineMs = terminalDeadlineMs;
 		m_iMaximumGuidanceAttempts = Math.Max(0, guidanceBudget);
 		m_iMaximumForceClearanceAttempts = Math.Max(0, forceBudget);
+		m_iMaximumPhysicalRelocationAttempts = Math.Max(0, forceBudget);
 	}
 
 	void BeginTerminal(int nowMs, int terminalDeadlineMs, int forceBudget)
@@ -1475,6 +1702,7 @@ class AICF_VehicleDismountState
 		m_iNormalDeadlineMs = nowMs;
 		m_iTerminalDeadlineMs = terminalDeadlineMs;
 		m_iMaximumForceClearanceAttempts = Math.Max(0, forceBudget);
+		m_iMaximumPhysicalRelocationAttempts = Math.Max(0, forceBudget);
 		m_bTerminalClearanceStarted = true;
 	}
 
@@ -1483,14 +1711,16 @@ class AICF_VehicleDismountState
 	int GetTerminalDeadlineMs() { return m_iTerminalDeadlineMs; }
 	int GetGuidanceAttempts() { return m_iGuidanceAttempts; }
 	int GetLastGuidanceAttemptAtMs() { return m_iLastGuidanceAttemptAtMs; }
-	int GetForceClearanceAttempts() { return m_iForceClearanceAttempts; }
+	int GetForceClearanceAttempts() { return m_iForceClearanceAttempts + m_iPhysicalRelocationAttempts; }
+	int GetForceExitAttempts() { return m_iForceClearanceAttempts; }
+	int GetPhysicalRelocationAttempts() { return m_iPhysicalRelocationAttempts; }
 	int GetLogicalOccupants() { return m_iLogicalOccupants; }
 	int GetTransitions() { return m_iTransitions; }
 	int GetInsideBounds() { return m_iInsideBounds; }
 	int GetClearPollCount() { return m_iClearPollCount; }
 	int GetTripExitClearPollCount() { return m_iTripExitClearPollCount; }
 	bool WasNormalReissueAttempted() { return m_bNormalReissueAttempted; }
-	bool WasAnimatedExactExitAttempted() { return m_bAnimatedExactExitAttempted; }
+	int GetAnimatedExactExitAttempts() { return m_iAnimatedExactExitAttempts; }
 	bool IsTerminalClearanceStarted() { return m_bTerminalClearanceStarted; }
 	bool IsTerminalClearanceStopped() { return m_bTerminalClearanceStopped; }
 	AIWaypoint GetDismountWaypoint() { return m_DismountWaypoint; }
@@ -1571,11 +1801,19 @@ class AICF_VehicleDismountState
 		return true;
 	}
 
-	bool MarkAnimatedExactExitAttempted()
+	bool TryRecordAnimatedExactExitAttempt(int nowMs, int maximumAttempts, int retryIntervalMs)
 	{
-		if (m_bAnimatedExactExitAttempted)
+		if (m_bTerminalClearanceStarted || m_bTerminalClearanceStopped ||
+			nowMs >= m_iNormalDeadlineMs || nowMs >= m_iTerminalDeadlineMs ||
+			m_iAnimatedExactExitAttempts >= Math.Max(0, maximumAttempts) ||
+			nowMs - m_iStartedAtMs < retryIntervalMs ||
+			(m_iAnimatedExactExitAttempts > 0 &&
+				nowMs - m_iLastAnimatedExactExitAttemptAtMs < retryIntervalMs))
+		{
 			return false;
-		m_bAnimatedExactExitAttempted = true;
+		}
+		m_iAnimatedExactExitAttempts++;
+		m_iLastAnimatedExactExitAttemptAtMs = nowMs;
 		return true;
 	}
 
@@ -1593,6 +1831,18 @@ class AICF_VehicleDismountState
 		if (m_iForceClearanceAttempts >= m_iMaximumForceClearanceAttempts)
 			return false;
 		m_iForceClearanceAttempts++;
+		return true;
+	}
+
+	// Logical exit и физическое освобождение hull — разные bounded операции.
+	// Бюджеты живут до Reset/Begin следующей фазы, polling их не перевооружает.
+	bool RecordPhysicalRelocationAttempt()
+	{
+		if (m_iLogicalOccupants > 0 || m_iTransitions > 0 || m_iInsideBounds <= 0)
+			return false;
+		if (m_iPhysicalRelocationAttempts >= m_iMaximumPhysicalRelocationAttempts)
+			return false;
+		m_iPhysicalRelocationAttempts++;
 		return true;
 	}
 

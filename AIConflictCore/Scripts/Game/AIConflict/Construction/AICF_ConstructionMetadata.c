@@ -96,6 +96,7 @@ class AICF_ConstructionMetadata
 			case AICF_EConstructionType.ARMORY: return EEditableEntityLabel.SERVICE_ARMORY;
 			case AICF_EConstructionType.LIGHT_DEPOT: return EEditableEntityLabel.SERVICE_VEHICLE_DEPOT_LIGHT;
 			case AICF_EConstructionType.HEAVY_DEPOT: return EEditableEntityLabel.SERVICE_VEHICLE_DEPOT_HEAVY;
+			case AICF_EConstructionType.SUPPLY_DEPOT: return EEditableEntityLabel.SERVICE_SUPPLY_STORAGE;
 		}
 		return EEditableEntityLabel.SERVICE_LIVING_AREA;
 	}
@@ -107,6 +108,7 @@ class AICF_ConstructionMetadata
 			case AICF_EConstructionType.ARMORY: return SCR_EServicePointType.ARMORY;
 			case AICF_EConstructionType.LIGHT_DEPOT: return SCR_EServicePointType.LIGHT_VEHICLE_DEPOT;
 			case AICF_EConstructionType.HEAVY_DEPOT: return SCR_EServicePointType.HEAVY_VEHICLE_DEPOT;
+			case AICF_EConstructionType.SUPPLY_DEPOT: return SCR_EServicePointType.SUPPLY_DEPOT;
 		}
 		return SCR_EServicePointType.BARRACKS;
 	}
@@ -146,10 +148,12 @@ class AICF_ConstructionMetadata
 		if (!info)
 			return;
 		m_sInvalidReason = "FACTION_KEY_MISMATCH";
-		if (info.GetFactionKey() != faction.GetFactionKey())
+		if (info.GetFactionKey() != faction.GetFactionKey() &&
+			!AICF_ContentProfile.GetActive().AllowsConstructionMetadataAlias(prefab, type, faction, info))
 			return;
 		m_sInvalidReason = "FACTION_LABEL_MISSING";
-		if (!info.HasEntityLabel(faction.GetFactionLabel()))
+		if (!info.HasEntityLabel(faction.GetFactionLabel()) &&
+			!AICF_ContentProfile.GetActive().AllowsConstructionMetadataAlias(prefab, type, faction, info))
 			return;
 		m_sInvalidReason = "SERVICE_LABEL_MISSING";
 		if (!info.HasEntityLabel(ServiceLabel(type)))

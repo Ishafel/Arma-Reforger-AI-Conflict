@@ -39,6 +39,14 @@ class AICF_FIAProximityLifecycle
 		else m_iGeneration = p.m_iGeneration;
 		if (g) { m_Vehicle = g.m_Vehicle; m_VehicleId = g.m_VehicleId; }
 		else { m_Vehicle = p.m_Vehicle; m_VehicleId = p.m_VehicleId; }
+		AICF_AIWorldQuotaService quota = AICF_AIWorldQuotaService.GetAuthorityForWorld(group.GetWorld());
+		if (quota)
+		{
+			AICF_AIQuotaGroupOwner owner;
+			if (g) owner = quota.GetOwners().RegisterGarrison(g, group == g.m_DesantGroup);
+			else owner = quota.GetOwners().RegisterPatrol(p);
+			if (!owner) { Stop(); return; }
+		}
 		if (!empty)
 		{
 			foreach (int index, ResourceName prefab : group.m_aUnitPrefabSlots)

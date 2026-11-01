@@ -1,4 +1,4 @@
-﻿param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+param([string]$RepositoryRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ErrorActionPreference='Stop'
 $tempBase=[IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $work=Join-Path $tempBase ('aicf-coop-log-'+[guid]::NewGuid().ToString('N'))
@@ -40,8 +40,9 @@ try {
         @('missing-completion',($positive -replace '\[AICF\]\[COOP_DONE\][^\r\n]*',''),'COMPLETION'),
         @('short-observation',$positive.Replace('elapsed_ms=30000','elapsed_ms=29999'),'COMPLETION'),
         @('wrong-mode',$positive.Replace('mode=USSR','mode=STANDARD'),'COMPLETION'),
-        @('wrong-roster',$positive.Replace('ussr_groups=0','ussr_groups=10'),'ROSTER'),
-        @('player-spawn',($positive+"`n[AICF][SPAWN_ATTEMPT_STARTED] faction=USSR slot=0"),'PLAYER_COMBAT_SPAWN'),
+        @('spawned-human-roster',$positive.Replace('ussr_groups=0','ussr_groups=10'),'ROSTER'),
+        @('missing-enemy-roster',$positive.Replace('us_groups=10','us_groups=0'),'ROSTER'),
+        @('second-human-roster',($positive+"`n[ROSTER_READY] us_groups=10 ussr_groups=10"),'ROSTER'),
         @('timeout',($positive+"`n[AICF][COOP_TIMEOUT]"),'PROBE_FAILURE')
     )) { Check $case[0] $case[1] $manifest 1 $case[2] }
     Check 'missing-manifest' $positive '' 1 'MANIFEST'
@@ -149,13 +150,18 @@ try {
     Check 'rhs-server-ussr' $rhsServer $rhsManifest 0 ''
     Check 'rhs-server-wrong-context' ($rhsServer.Replace('ussr_faction=RHS_AFRF','ussr_faction=USSR')) $rhsManifest 1 'CONTENT_CONTEXT'
     Check 'rhs-server-wrong-north-scope' ($rhsServer.Replace('nodes=7','nodes=8')) $rhsManifest 1 'NORTH_SCOPE'
-    $rhsUS=$rhsServer.Replace('us_groups=10 ussr_groups=0','us_groups=0 ussr_groups=10').Replace('mode=USSR','mode=US')
+    $rhsUS=$rhsServer.Replace('mode=USSR','mode=US').Replace('us_groups=10 ussr_groups=0','us_groups=0 ussr_groups=10')
     $rhsUSManifest=$rhsManifest.Replace('CoopUSSR','CoopUS').Replace('"USSR"','"US"')
     Check 'rhs-server-us' $rhsUS $rhsUSManifest 0 ''
     $rhsVictory=$rhsUS.Replace('checks=19','checks=20')+"`n[COOP_CASE] case=TERRITORIAL_WINNER pass=1`n[VICTORY] winner=USSR loser=US loser_tickets=12 reason=ALL_OBJECTIVES_UNCONTESTED"
     Check 'rhs-victory-stable-key' $rhsVictory $rhsUSManifest 0 '' -Winner USSR
     Check 'rhs-victory-runtime-key' ($rhsVictory.Replace('winner=USSR','winner=RHS_AFRF')) $rhsUSManifest 1 'TERRITORIAL_RESULT' -Winner USSR
-    Check 'rhs-server-spawned-player-side' ($rhsUS+"`n[SPAWN_ATTEMPT_STARTED] faction=RHS_USAF slot=0") $rhsUSManifest 1 'PLAYER_COMBAT_SPAWN'
+    Check 'rhs-server-spawned-player-side' ($rhsUS+"`n[SPAWN_ATTEMPT_STARTED] faction=RHS_USAF slot=0") $rhsUSManifest 1 'HUMAN_AUTONOMOUS_SPAWN'
+    Check 'rhs-server-spawned-stable-player-side' ($rhsUS+"`n[SPAWN_ATTEMPT_STARTED] faction=US slot=0") $rhsUSManifest 1 'HUMAN_AUTONOMOUS_SPAWN'
+    Check 'stock-server-spawned-player-side' ($positive+"`n[SPAWN_ATTEMPT_STARTED] faction=USSR slot=0") $manifest 1 'HUMAN_AUTONOMOUS_SPAWN'
+    Check 'rhs-server-human-default' ($rhsUS+"`n[COOP_FLEET_DEFAULT] faction=US slot=0") $rhsUSManifest 1 'HUMAN_FLEET_DEFAULT'
+    Check 'stock-server-human-default' ($positive+"`n[COOP_FLEET_DEFAULT] faction=USSR slot=0") $manifest 1 'HUMAN_FLEET_DEFAULT'
+    Check 'rhs-server-human-model-inspected' ($rhsUS+"`n[COOP_FLEET_MODEL_INSPECTED] faction=US role=1") $rhsUSManifest 1 'HUMAN_FLEET_DEFAULT'
     $rhsClient=$playerLog+"`n[COOP_WELCOME] faction=RHS_USAF visible=0 playable=1`n[COOP_WELCOME] faction=RHS_AFRF visible=1 playable=1`n[COOP_WELCOME] faction=FIA visible=0 playable=1"
     $rhsClientManifest='AICF_RUNTIME_MANIFEST_JSON='+(@{role='Client';variant='EveronNorthWCSRHS';matchMode='CoopUSSR';arguments=@('-aicfCoopProbe','USSR','-aicfCoopProbePlayer','1')}|ConvertTo-Json -Compress)+"`n[SERVER_READY] process_id=123 port=2440 log=server.log"
     Check 'rhs-client-ussr' $rhsClient $rhsClientManifest 0 '' -Client -RequirePlayer -RequireWelcome

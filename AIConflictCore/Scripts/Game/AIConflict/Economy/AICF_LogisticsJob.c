@@ -99,6 +99,8 @@ class AICF_LogisticsWorker
 	BaseCompartmentSlot m_Seat;
 	ref AICF_VehicleLease m_Lease;
 	AICF_FactionFleet m_Fleet;
+	ref AICF_AIQuotaLogisticsCreationGuard m_QuotaCreationGuard;
+	bool m_bQuotaSpawnClosed;
 	ref AICF_LogisticsJob m_Job;
 	ref AICF_LogisticsSearch m_Search;
 	ref array<ref AICF_LogisticsCargoBatch> m_aCargo = {};

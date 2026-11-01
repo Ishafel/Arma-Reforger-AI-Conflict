@@ -312,6 +312,23 @@ class AICF_RHSPMCEquipment
 	}
 }
 
+// Только распределение initialization по кадрам; не кэш разрешений/identity.
+class AICF_PMCEquipmentFrameBudget
+{
+	protected static BaseWorld s_World;
+	protected static int s_iFrame = -1;
+
+	static bool TryBegin(BaseWorld world)
+	{
+		if (!world) return false;
+		int frame = world.GetFrameNumber();
+		if (s_World == world && s_iFrame == frame) return false;
+		s_World = world;
+		s_iFrame = frame;
+		return true;
+	}
+}
+
 modded class SCR_ChimeraCharacter
 {
 	protected EntityID m_iAICFPMCIdentity;
@@ -360,8 +377,15 @@ modded class SCR_ChimeraCharacter
 
 	protected void AICF_ApplyPMCEquipment()
 	{
-		if (GetID() == m_iAICFPMCIdentity)
-			AICF_RHSPMCEquipment.Apply(this);
+		if (GetID() != m_iAICFPMCIdentity || !m_bAICFPMCEquipmentPending ||
+			SCR_ResourceNameUtils.GetPrefabName(this) != m_sAICFPMCSource ||
+			!AICF_RHSPMCEquipment.Eligible(this)) return;
+		if (!AICF_PMCEquipmentFrameBudget.TryBegin(GetWorld()))
+		{
+			GetGame().GetCallqueue().CallLater(AICF_ApplyPMCEquipment, 50, false);
+			return;
+		}
+		AICF_RHSPMCEquipment.Apply(this);
 		// Неудавшаяся подготовка остаётся закрытым boarding gate.
 	}
 

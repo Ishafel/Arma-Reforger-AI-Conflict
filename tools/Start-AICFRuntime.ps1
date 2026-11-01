@@ -20,6 +20,7 @@ param(
     [string]$ProfileRoot,
     [string]$ServerProfileRoot,
     [switch]$UseRetailClient,
+    [switch]$ClientLogStats,
     [string]$RemoteReadinessProbe,
     [string]$ExpectedSourceCommit,
     [string]$LoadoutLibraryPath,
@@ -514,6 +515,10 @@ if ($Role -eq 'Server') {
     }
     $nativeArguments += $scenarioPlan.selectionArguments
     $nativeArguments += @('-maxFPS', '60', '-logStats', '10000')
+}
+if ($ClientLogStats) {
+    if ($Role -ne 'Client') { throw 'ClientLogStats требует Role Client.' }
+    $nativeArguments += @('-logStats', '10000')
 }
 if (@($AdditionalArguments).Count -gt 0) {
     $nativeArguments += $AdditionalArguments

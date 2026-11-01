@@ -2173,8 +2173,8 @@ StringTable
 		CustomStringTableItem "{A1CF19090000013C}"
 		{
 			Id "AICF_UI_HOW_TO_USE_SELECT_GROUP_CONFIGURE_ROLE_TYP_201828d4"
-			Target_en_us "HOW TO USE // SELECT GROUP   CONFIGURE ROLE / TYPE / NEXT SIZE   ISSUE TARGET"
-			Target_ru_ru "ВЫБЕРИТЕ ОТРЯД   НАСТРОЙТЕ РОЛЬ / ТИП / СОСТАВ   УКАЖИТЕ ЦЕЛЬ"
+			Target_en_us "Select a squad, configure its role, size and presets, then issue an order."
+			Target_ru_ru "Выберите отряд, настройте роль, состав и пресеты, затем отдайте приказ."
 		}
 		CustomStringTableItem "{A1CF19090000013D}"
 		{
@@ -3963,6 +3963,372 @@ StringTable
 			Id "AICF_UI_PresetAllMembersHelp"
 			Target_en_us "Equip all ten positions of this squad with the current kit. Roles, roster size and orders stay unchanged."
 			Target_ru_ru "Назначить текущий комплект всем десяти позициям этого отряда. Роли, численность и приказы сохраняются."
+		}
+		CustomStringTableItem "{A1CF261025780001}"
+		{
+			Id "AICF_UI_VehicleTitle"
+			Target_en_us "Vehicles"
+			Target_ru_ru "Техника"
+		}
+		CustomStringTableItem "{A1CF261025780002}"
+		{
+			Id "AICF_UI_VehicleSelect"
+			Target_en_us "Choose vehicle"
+			Target_ru_ru "Выбрать машину"
+		}
+		CustomStringTableItem "{A1CF261025780003}"
+		{
+			Id "AICF_UI_VehicleSave"
+			Target_en_us "Save"
+			Target_ru_ru "Сохранить"
+		}
+		CustomStringTableItem "{A1CF261025780004}"
+		{
+			Id "AICF_UI_VehicleApply"
+			Target_en_us "Apply"
+			Target_ru_ru "Применить"
+		}
+		CustomStringTableItem "{A1CF261025780005}"
+		{
+			Id "AICF_UI_VehicleReset"
+			Target_en_us "Remove preset"
+			Target_ru_ru "Снять пресет"
+		}
+		CustomStringTableItem "{A1CF261025780006}"
+		{
+			Id "AICF_UI_VehicleLoad"
+			Target_en_us "Load"
+			Target_ru_ru "Загрузить"
+		}
+		CustomStringTableItem "{A1CF261025780007}"
+		{
+			Id "AICF_UI_VehicleDelete"
+			Target_en_us "Delete"
+			Target_ru_ru "Удалить"
+		}
+		CustomStringTableItem "{A1CF261025780008}"
+		{
+			Id "AICF_UI_VehicleWaiting"
+			Target_en_us "Waiting for server…"
+			Target_ru_ru "Ожидание сервера…"
+		}
+		CustomStringTableItem "{A1CF261025780009}"
+		{
+			Id "AICF_UI_VehicleSeatFree"
+			Target_en_us "Unassigned seat"
+			Target_ru_ru "Свободное место"
+		}
+		CustomStringTableItem "{A1CF26102578000A}"
+		{
+			Id "AICF_UI_VehicleMember"
+			Target_en_us "Member %1"
+			Target_ru_ru "Боец %1"
+		}
+		CustomStringTableItem "{A1CF26102578000B}"
+		{
+			Id "AICF_UI_VehicleUnseated"
+			Target_en_us "Members without seats: %1"
+			Target_ru_ru "Без места: %1"
+		}
+		CustomStringTableItem "{A1CF26102578000C}"
+		{
+			Id "AICF_UI_VehicleStatus"
+			Target_en_us "Status:"
+			Target_ru_ru "Состояние:"
+		}
+		CustomStringTableItem "{A1CF261025780021}"
+		{
+			Id "AICF_UI_VehicleInactiveMember"
+			Target_en_us "Member %1 (inactive)"
+			Target_ru_ru "Боец %1 (неактивен)"
+		}
+		CustomStringTableItem "{A1CF261025780022}"
+		{
+			Id "AICF_UI_VehicleUnavailable"
+			Target_en_us "Vehicle request unavailable or refused. Read the server status after refreshing."
+			Target_ru_ru "Запрос техники недоступен или отклонён. Обновите настройку."
+		}
+		CustomStringTableItem "{A1CF261025780023}"
+		{
+			Id "AICF_UI_VehicleDraft"
+			Target_en_us "Draft: assign the members to keep, then Apply. Unassigned members return after confirmation. Save only updates the library."
+			Target_ru_ru "Черновик: назначьте места бойцам, которых оставляете, и примените. Остальные вернутся после подтверждения. Сохранение меняет только библиотеку."
+		}
+		CustomStringTableItem "{A1CF261025780024}"
+		{
+			Id "AICF_UI_VehicleSaved"
+			Target_en_us "Vehicle preset saved. The active assignment is unchanged."
+			Target_ru_ru "Пресет техники сохранён. Действующее назначение не изменено."
+		}
+		CustomStringTableItem "{A1CF261025780025}"
+		{
+			Id "AICF_UI_VehicleAutomatic"
+			Target_en_us "Vehicle preset removed. Ordinary vehicle policy is active."
+			Target_ru_ru "Пресет техники снят. Включена обычная политика техники."
+		}
+		CustomStringTableItem "{A1CF261025780026}"
+		{
+			Id "AICF_UI_VehicleTooSmall"
+			Target_en_us "Too few seats for the configured squad size. Choose a larger vehicle or explicitly configure a smaller squad."
+			Target_ru_ru "Мест меньше заданного состава. Выберите машину вместительнее либо отдельно настройте размер отряда."
+		}
+		CustomStringTableItem "{A1CF261025780027}"
+		{
+			Id "AICF_UI_VehicleCrewMissing"
+			Target_en_us "Assign the driver and every required weapon seat."
+			Target_ru_ru "Назначьте водителя и бойцов на обязательные места вооружения."
+		}
+		CustomStringTableItem "{A1CF261025780028}"
+		{
+			Id "AICF_UI_VehicleMemberMissing"
+			Target_en_us "Assign a seat to every active member. Partial transport is unavailable."
+			Target_ru_ru "Назначьте место каждому активному бойцу. Частичная перевозка недоступна."
+		}
+		CustomStringTableItem "{A1CF261025780029}"
+		{
+			Id "AICF_UI_VehicleInactive"
+			Target_en_us "An assigned member is inactive. Adjust the draft before applying."
+			Target_ru_ru "Назначенный боец неактивен. Исправьте рассадку перед применением."
+		}
+		CustomStringTableItem "{A1CF26102578002A}"
+		{
+			Id "AICF_UI_VehicleNoSupplies"
+			Target_en_us "Insufficient supplies at a safe vehicle site."
+			Target_ru_ru "Недостаточно снабжения на безопасной площадке техники."
+		}
+		CustomStringTableItem "{A1CF26102578002B}"
+		{
+			Id "AICF_UI_VehicleFleetCap"
+			Target_en_us "Faction vehicle limit reached."
+			Target_ru_ru "Достигнут лимит техники стороны."
+		}
+		CustomStringTableItem "{A1CF26102578002C}"
+		{
+			Id "AICF_UI_VehicleStale"
+			Target_en_us "Squad or library changed. Reopen the vehicle configuration."
+			Target_ru_ru "Отряд или библиотека изменились. Откройте настройку техники заново."
+		}
+		CustomStringTableItem "{A1CF26102578002D}"
+		{
+			Id "AICF_UI_VehicleDuplicate"
+			Target_en_us "A member or seat is assigned more than once."
+			Target_ru_ru "Боец или место назначены несколько раз."
+		}
+		CustomStringTableItem "{A1CF26102578002E}"
+		{
+			Id "AICF_UI_VehicleUnsupported"
+			Target_en_us "This vehicle or its compartments are unavailable in the active content profile."
+			Target_ru_ru "Машина или её места недоступны в текущем профиле контента."
+		}
+		CustomStringTableItem "{A1CF26102578002F}"
+		{
+			Id "AICF_UI_VehiclePending"
+			Target_en_us "Waiting for a valid order, free site and fleet admission."
+			Target_ru_ru "Ожидание допустимого приказа, свободной площадки и лимита техники."
+		}
+		CustomStringTableItem "{A1CF261025780030}"
+		{
+			Id "AICF_UI_VehicleApproaching"
+			Target_en_us "Squad is approaching the vehicle site."
+			Target_ru_ru "Отряд подходит к площадке техники."
+		}
+		CustomStringTableItem "{A1CF261025780031}"
+		{
+			Id "AICF_UI_VehicleBoarding"
+			Target_en_us "Members are boarding their assigned seats."
+			Target_ru_ru "Бойцы занимают назначенные места."
+		}
+		CustomStringTableItem "{A1CF261025780032}"
+		{
+			Id "AICF_UI_VehicleTransit"
+			Target_en_us "Assigned occupants confirmed; vehicle is following the order."
+			Target_ru_ru "Рассадка подтверждена; машина выполняет приказ."
+		}
+		CustomStringTableItem "{A1CF261025780033}"
+		{
+			Id "AICF_UI_VehicleCleanup"
+			Target_en_us "Waiting for safe dismount and vehicle release. Vehicles occupied by players are protected."
+			Target_ru_ru "Ожидание безопасной высадки и освобождения машины. Техника с игроками защищена."
+		}
+		CustomStringTableItem "{A1CF261025780034}"
+		{
+			Id "AICF_UI_VehicleAllSources"
+			Target_en_us "All available vehicles"
+			Target_ru_ru "Все доступные машины"
+		}
+		CustomStringTableItem "{A1CF261025780035}"
+		{
+			Id "AICF_UI_VehicleFactionSource"
+			Target_en_us "Own faction"
+			Target_ru_ru "Своя фракция"
+		}
+		CustomStringTableItem "{A1CF261025780036}"
+		{
+			Id "AICF_UI_VehicleCivilianSource"
+			Target_en_us "Civilian vehicles"
+			Target_ru_ru "Гражданские машины"
+		}
+		CustomStringTableItem "{A1CF261025780037}"
+		{
+			Id "AICF_UI_VehicleAllCategories"
+			Target_en_us "All categories"
+			Target_ru_ru "Все категории"
+		}
+		CustomStringTableItem "{A1CF261025780038}"
+		{
+			Id "AICF_UI_VehicleCars"
+			Target_en_us "Cars and light vehicles"
+			Target_ru_ru "Легковые и лёгкие машины"
+		}
+		CustomStringTableItem "{A1CF261025780039}"
+		{
+			Id "AICF_UI_VehicleTrucks"
+			Target_en_us "Trucks"
+			Target_ru_ru "Грузовики"
+		}
+		CustomStringTableItem "{A1CF26102578003A}"
+		{
+			Id "AICF_UI_VehicleArmor"
+			Target_en_us "Armoured vehicles"
+			Target_ru_ru "Бронетехника"
+		}
+		CustomStringTableItem "{A1CF26102578003C}"
+		{
+			Id "AICF_UI_VehicleOther"
+			Target_en_us "Other vehicles"
+			Target_ru_ru "Прочая техника"
+		}
+		CustomStringTableItem "{A1CF26102578003D}"
+		{
+			Id "AICF_UI_VehicleNoPrice"
+			Target_en_us "price unavailable"
+			Target_ru_ru "нет цены"
+		}
+		CustomStringTableItem "{A1CF26102578003E}"
+		{
+			Id "AICF_UI_VehicleCostUnavailable"
+			Target_en_us "No valid supply cost is available for this vehicle."
+			Target_ru_ru "Для этой машины не задана допустимая стоимость в supplies."
+		}
+		CustomStringTableItem "{A1CF26102578003F}"
+		{
+			Id "AICF_UI_VehicleUnsupportedType"
+			Target_en_us "The transport AI does not support this vehicle type yet."
+			Target_ru_ru "Транспортный ИИ пока не поддерживает этот тип техники."
+		}
+		CustomStringTableItem "{A1CF261025790000}"
+		{
+			Id "AICF_UI_VehiclePresetName"
+			Target_en_us "Preset name"
+			Target_ru_ru "Название пресета"
+		}
+		CustomStringTableItem "{A1CF261025790001}"
+		{
+			Id "AICF_UI_VehicleConfirmCrew"
+			Target_en_us "Confirm squad reduction"
+			Target_ru_ru "Подтвердить сокращение отряда"
+		}
+		CustomStringTableItem "{A1CF261025790002}"
+		{
+			Id "AICF_UI_VehicleCancelCrew"
+			Target_en_us "Cancel"
+			Target_ru_ru "Отмена"
+		}
+		CustomStringTableItem "{A1CF261025790003}"
+		{
+			Id "AICF_UI_VehicleCrewConfirmation"
+			Target_en_us "Keep %1 assigned members. Return %2 unassigned members to the nearest safe friendly point for despawn?"
+			Target_ru_ru "Оставить назначенных бойцов: %1. Отправить остальных (%2) на ближайшую безопасную союзную точку для удаления?"
+		}
+		CustomStringTableItem "{A1CF261025790004}"
+		{
+			Id "AICF_UI_VehicleCrewBusy"
+			Target_en_us "Cannot reduce the squad now: it must be ready, on foot, outside recruitment/equipment/transport operations, with a safe return route."
+			Target_ru_ru "Сейчас сократить отряд нельзя: он должен быть готов и находиться вне техники, найма, пополнения и транспортной операции. Нужен безопасный путь возврата."
+		}
+		CustomStringTableItem "{A1CF2610257A0001}"
+		{
+			Id "AICF_UI_VehicleWaitingDestination"
+			Target_en_us "Squad mounted. Set a destination outside the dismount zone to start driving."
+			Target_ru_ru "Отряд в машине. Укажите удалённую цель, чтобы начать движение."
+		}
+		CustomStringTableItem "{A1CF261028780001}"
+		{
+			Id "AICF_UI_VehicleBehavior"
+			Target_en_us "Behavior"
+			Target_ru_ru "Поведение"
+		}
+		CustomStringTableItem "{A1CF261028780002}"
+		{
+			Id "AICF_UI_VehicleBehaviorTransport"
+			Target_en_us "Transport"
+			Target_ru_ru "Транспорт"
+		}
+		CustomStringTableItem "{A1CF261028780003}"
+		{
+			Id "AICF_UI_VehicleBehaviorCombat"
+			Target_en_us "Combat vehicle"
+			Target_ru_ru "Боевая единица"
+		}
+		CustomStringTableItem "{A1CF261028780004}"
+		{
+			Id "AICF_UI_VehicleReturnDistance"
+			Target_en_us "Return above (m)"
+			Target_ru_ru "Возврат от (м)"
+		}
+		CustomStringTableItem "{A1CF261028780006}"
+		{
+			Id "AICF_UI_VehicleTacticalDeployment"
+			Target_en_us "Dismounted orders or crew return; the vehicle remains assigned."
+			Target_ru_ru "Пеший приказ или возврат экипажа; машина остаётся за отрядом."
+		}
+		CustomStringTableItem "{A1CF261028780005}"
+		{
+			Id "AICF_UI_VehicleBehaviorInvalid"
+			Target_en_us "Select vehicle behavior and enter a whole return distance from 50 to 1000 metres."
+			Target_ru_ru "Выберите поведение машины и задайте целый порог возврата от 50 до 1000 метров."
+		}
+		CustomStringTableItem "{A1CF261031780001}"
+		{
+			Id "AICF_UI_CommandPresets"
+			Target_en_us "Squad presets"
+			Target_ru_ru "Пресеты отряда"
+		}
+		CustomStringTableItem "{A1CF261031780002}"
+		{
+			Id "AICF_UI_CommandInfantryPreset"
+			Target_en_us "Infantry preset"
+			Target_ru_ru "Пресет пехоты"
+		}
+		CustomStringTableItem "{A1CF261031780003}"
+		{
+			Id "AICF_UI_CommandVehiclePreset"
+			Target_en_us "Vehicle preset"
+			Target_ru_ru "Пресет техники"
+		}
+		CustomStringTableItem "{A1CF261031780004}"
+		{
+			Id "AICF_UI_VehicleAutoSeats"
+			Target_en_us "Assign seats automatically"
+			Target_ru_ru "Рассадить автоматически"
+		}
+		CustomStringTableItem "{A1CF261031780005}"
+		{
+			Id "AICF_UI_VehicleAutoSeatsReady"
+			Target_en_us "Seats assigned in the draft. Review the squad and Apply to use this preset."
+			Target_ru_ru "Места назначены в черновике. Проверьте состав и примените пресет."
+		}
+		CustomStringTableItem "{A1CF261031780006}"
+		{
+			Id "AICF_UI_VehicleAutoSeatsFailed"
+			Target_en_us "Select a vehicle first. Automatic assignment requires enough active members for every mandatory crew seat."
+			Target_ru_ru "Сначала выберите машину. Для авторассадки нужны действующие бойцы на все обязательные места экипажа."
+		}
+		CustomStringTableItem "{A1CF261031780007}"
+		{
+			Id "AICF_UI_VehiclePreviewControls"
+			Target_en_us "Drag: rotate. Wheel: zoom. Middle drag: pan."
+			Target_ru_ru "ЛКМ: вращение. Колесо: масштаб. СКМ: сдвиг."
 		}
 	}
 }

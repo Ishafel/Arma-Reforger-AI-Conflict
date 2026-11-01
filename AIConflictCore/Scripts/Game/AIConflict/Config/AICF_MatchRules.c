@@ -41,7 +41,8 @@ class AICF_MatchRules
 
 	bool AllowsAutomaticConstruction(FactionKey factionKey)
 	{
-		return GetManagedSlotCount(factionKey) > 0;
+		return GetManagedSlotCount(factionKey) > 0 &&
+			AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey) != GetPlayerOnlyFaction();
 	}
 
 	bool IsValid()
@@ -73,6 +74,7 @@ class AICF_MatchRules
 
 	bool UsesTicketDefeat(FactionKey factionKey)
 	{
-		return GetManagedSlotCount(factionKey) > 0;
+		return GetManagedSlotCount(factionKey) > 0 &&
+			AICF_ContentProfile.GetActive().GetStableFactionKey(factionKey) != GetPlayerOnlyFaction();
 	}
 }

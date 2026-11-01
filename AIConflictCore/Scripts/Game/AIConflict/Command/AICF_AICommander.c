@@ -65,6 +65,27 @@ class AICF_AICommander
 		return -1;
 	}
 
+	// Только demand/quote. Не меняет supplies, capacity, roster или vehicle lifecycle.
+	int GetMaximumVehiclePresetCost()
+	{
+		if (!Replication.IsServer() || !IsEnabled()) return 0;
+		AICF_ContentProfile profile = AICF_ContentProfile.GetActive();
+		FactionKey stableKey = profile.GetStableFactionKey(m_sFactionKey);
+		AICF_VehiclePresetCatalog catalog;
+		int maximum;
+		for (int index; index < m_FactionState.GetSlotCount(); index++)
+		{
+			AICF_GroupSlot slot = m_FactionState.GetSlot(index);
+			if (!slot || !slot.HasVehiclePreset()) continue;
+			AICF_VehiclePreset preset = AICF_VehiclePreset.Decode(slot.GetVehiclePresetData());
+			if (!preset || preset.m_sProfile != profile.GetProfileKey() || preset.m_sFaction != stableKey) continue;
+			if (!catalog) catalog = new AICF_VehiclePresetCatalog(m_Faction);
+			maximum = Math.Max(maximum, catalog.Cost(preset.m_sPrefab));
+		}
+		if (catalog) catalog.Clear();
+		return maximum;
+	}
+
 	// Read-only infantry navmesh context; не создаёт group/worker или assignment.
 	AIPathfindingComponent GetConstructionPathfinding()
 	{

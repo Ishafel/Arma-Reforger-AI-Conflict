@@ -6,6 +6,18 @@ modded class SCR_MapCursorModule
 {
 	protected AICF_SupplyMapUI m_AICFSupplyDialog;
 	protected AICF_LoadoutEditor m_AICFLoadoutDialog;
+	protected AICF_VehiclePresetEditor m_AICFVehiclePresetDialog;
+	void AICF_SetVehiclePresetDialog(AICF_VehiclePresetEditor dialog)
+	{
+		m_AICFVehiclePresetDialog = dialog;
+		HandleDialog(true);
+	}
+	void AICF_ClearVehiclePresetDialog(AICF_VehiclePresetEditor dialog)
+	{
+		if (m_AICFVehiclePresetDialog != dialog) return;
+		m_AICFVehiclePresetDialog = null;
+		HandleDialog(false);
+	}
 
 	void AICF_SetLoadoutDialog(AICF_LoadoutEditor dialog)
 	{
@@ -38,7 +50,8 @@ modded class SCR_MapCursorModule
 	protected bool AICF_HasSupplyDialog()
 	{
 		return (m_AICFSupplyDialog && m_AICFSupplyDialog.IsInputCaptured()) ||
-			(m_AICFLoadoutDialog && m_AICFLoadoutDialog.IsInputCaptured());
+			(m_AICFLoadoutDialog && m_AICFLoadoutDialog.IsInputCaptured()) ||
+			(m_AICFVehiclePresetDialog && m_AICFVehiclePresetDialog.IsInputCaptured());
 	}
 
 	override protected void OnInputZoomIn(float value, EActionTrigger reason)

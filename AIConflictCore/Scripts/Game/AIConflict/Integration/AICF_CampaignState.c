@@ -82,10 +82,18 @@ modded class SCR_GameModeCampaign
 		Replication.BumpMe();
 	}
 
-	bool AICF_IsPlayerOnlyFaction(bool isUSSR)
+	bool AICF_IsCoopPlayerFaction(bool isUSSR)
 	{
 		if (isUSSR) return m_eAICFMatchMode == AICF_EMatchMode.COOP_USSR;
 		return m_eAICFMatchMode == AICF_EMatchMode.COOP_US;
+	}
+
+	bool AICF_IsPlayerOnlyFaction(bool isUSSR)
+	{
+		AICF_MatchRules rules = new AICF_MatchRules(m_eAICFMatchMode);
+		FactionKey stableKey = "US";
+		if (isUSSR) stableKey = "USSR";
+		return rules.GetPlayerOnlyFaction() == stableKey && rules.GetManagedSlotCount(stableKey) == 0;
 	}
 
 	[RplProp(onRplName: "AICF_OnStage4StateReplicated")]
