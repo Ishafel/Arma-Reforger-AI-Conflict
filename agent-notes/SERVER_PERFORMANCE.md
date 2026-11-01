@@ -1,5 +1,13 @@
 # Производительность сервера
 
+Обновление WCS vehicle blockers: `codex/wcs-assignment-scope` исправляет ложный
+ASSIGNMENT_SCOPE для BASE с разными cached/resolved позициями и восстанавливает
+минимальную native регистрацию до tactical reboard. Final WCS North12min:
+same-vehicle resume +104.469м, full script/VM/registration/ASSIGNMENT_SCOPE0,
+resource466FAIL. Это vehicle functional gate, не новое доказательство устранения
+FPS stalls. Подробные попытки и команды — [TESTING.md](TESTING.md), evidence
+`.codex-runtime/wcs-assignment-scope-20261101/REPORT.md`.
+
 ## Полный бой, PMC frame budget и найденные blockers — 01.11.2026
 
 Evidence: `.codex-runtime/fps-highload-20261101/REPORT.md`. Продолжение

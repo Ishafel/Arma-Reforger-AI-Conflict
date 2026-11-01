@@ -1,5 +1,41 @@
 # Проверки и baseline
 
+## WCS ASSIGNMENT_SCOPE и retained reboard — 01.11.2026
+
+Ветка `codex/wcs-assignment-scope` от c9a731d; evidence:
+`.codex-runtime/wcs-assignment-scope-20261101/REPORT.md`.
+BASE guard сверяет identity базы, POSITION сохраняет exact coordinates.
+Отдельно восстановлен минимальный native record на входе в tactical phase:
+полная utility по-прежнему снимается ExitTransit, а reboard больше не остаётся
+без prerequisite. Native NodeError не подавляется.
+
+До правок: профильные3/3PASS, перед retained-правкой отдельные3/3PASS.
+Итоговые11/11PASS; actual destination16cases и registration22cases.
+Старый guard отклонён новым тестом на BASE same-base/different-position,
+expected exit1. Production terminalWB Stock/RHS/WCS3/3compilePASS0,
+395files/root source drift0, resources50/52/78 остаются FAIL.
+
+Final-v2 native WCS North/CoopUS/Easy12min: обычные оплаченные машины,
+5initial registrations,4tactical registrations,2same-vehicle resumes.
+Тот же Ural trip-RHS_AFRF-0-1-1 проехал104.469м после возврата из tactical;
+production native route progress между resume и proof, entity/Rpl/lease/vehicle
+generations совпали. Guard реально встретил разные BASE позиции при одинаковых
+base/revisions/group/generation. Полные stopped logs: native0/Game destroyed,
+SCRIPT E/F/ENGINE F/VM/original registration error/registration LOST/ASSIGNMENT_SCOPE0.
+Расширенный frozen auditor PASS0 с MinimumMovementMeters100,
+RequireAssignmentScope и RequireTacticalRecovery.6negative controls expectedFAIL1.
+Strict resource gate остаётся FAIL466raw siblingE, не подменён functional PASS.
+
+Сохранены неуспешные и неподтверждающие попытки: baseline matching-position
+проехал11.6347м, но ошибку не воспроизвёл; первый fixed без retained-правки дал
+поздний GetEmptyCompartment VM и был адресно остановлен (-1, не graceful PASS).
+Первый trace WB FAIL из-за имени override argument, исправлен под pinned API.
+Diagnostic-v2 native0/fatal0/110.026м и стек ExitTransit→Detach→RemoveVehicle
+подтвердили отдельную проблему lifecycle; это ещё не финальная версия.
+Два подготовленных stages не запускались и не объявляются runtime PASS.
+Все stages byte-verified в ZIP и удалены, свои тестовые процессы завершены.
+Full All, client/JIP и длительный многокартовый soak — NOT RUN.
+
 ## Native vehicle registration до GetIn — 01.11.2026
 
 `codex/native-boarding-registration`, source f68ae93 + fix. До правки3/3профильных

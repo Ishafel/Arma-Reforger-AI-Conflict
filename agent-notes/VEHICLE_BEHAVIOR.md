@@ -1,5 +1,32 @@
 # Поведение транспорта и боевой машины
 
+## BASE destination и retained registration
+
+`AICF_VehicleNativeSubgroup.Read` сверяет BASE по kind и identity базы;
+точное равенство координат требуется только для POSITION. Это тот же контракт,
+что у `AICF_StrategicAssignmentSnapshot.MatchesDestination` и native route proof.
+Snapshot содержит planner-resolved endpoint, а cached position slot может
+содержать origin базы или позицию infantry waypoint. Их различие само по себе
+не означает другую BASE assignment. Group/slot/generations, assignment/intent
+revisions, faction, lease/entity/Rpl и физические guards остаются строгими.
+
+При TRANSIT→TACTICAL_DEPLOYMENT ExitTransit по-прежнему снимает полную utility.
+До BehaviorFlow.Begin Controller вызывает Handoff.RegisterTacticalVehicle:
+восстанавливается только native manager record для последующего reboard.
+Combat activity и subscriptions этим вызовом не создаются. Общий protected
+RegisterVehicleRecord сохраняет authority/assignment/lease/phase fences;
+RegisterBoardingVehicle и RegisterTacticalVehicle допускают только свои phase.
+Terminal Detach очищает record прежним путём, а переход TACTICAL→TRANSIT
+сохраняет уже обновлённый native record, как и раньше.
+
+Проверки: Test-VehicleSubgroupDestinationContracts (actual guard16cases),
+Test-BoardingRegistrationContracts (actual initial/retained registration22cases),
+native BoardingRegistrationProbe с CLI -aicfRequireTacticalRegistration1 и
+-aicfBoardingRegistrationDistanceM100. Scope probe фиксирует реальные поля
+AttachVehicleUtility; NativeRegistrationTraceProbe вызывает super без подмены
+решения и логирует отсутствующий record/стек RemoveVehicle. Только isolated
+fixtures; production native NodeError не подавляется.
+
 ## Native group record до посадки
 
 `AICF_TransportTripController` после перехода в BOARDING и снятия infantry order

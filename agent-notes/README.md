@@ -7,6 +7,7 @@
 
 | Задача | Что читать |
 |---|---|
+| Разобрать WCS ASSIGNMENT_SCOPE при разных BASE endpoint и повторную native регистрацию в tactical phase | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md#base-destination-и-retained-registration), результаты в [TESTING.md](TESTING.md) |
 | Исправить native GetIn ошибку `vehicle provided is not registered as used inside group!` | [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md#native-group-record-до-посадки), native registration gates в [TESTING.md](TESTING.md) |
 | Разобрать просадки FPS, стоимость census и повторные обходы мест заполненной техники | [SERVER_PERFORMANCE.md](SERVER_PERFORMANCE.md), [VEHICLE_TOPOLOGY_PERFORMANCE.md](VEHICLE_TOPOLOGY_PERFORMANCE.md) |
 | Изменить AI-only цену боевой техники и отделить её от native цены игрока | [AI_VEHICLE_PRICES.md](AI_VEHICLE_PRICES.md) |

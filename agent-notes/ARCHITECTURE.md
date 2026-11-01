@@ -1,5 +1,13 @@
 # Архитектура и навигация по исходникам
 
+BASE destination identity не включает cached position slot: planner-resolved
+endpoint snapshot может отличаться от неё. POSITION остаётся exact-coordinate.
+NativeSubgroup использует этот контракт без ослабления revisions/lease fences.
+Handoff.RegisterTacticalVehicle восстанавливает минимальный native record после
+отключения полной utility на входе в retained tactical phase; последующий reboard
+проходит с тем же bookkeeping prerequisite, что и начальная посадка.
+Подробности: [VEHICLE_BEHAVIOR.md](VEHICLE_BEHAVIOR.md#base-destination-и-retained-registration).
+
 Native group record для boarding регистрирует `AICF_VehicleTaskHandoff` по
 команде `AICF_TransportTripController` до первого GetIn. Это ранняя bookkeeping
 часть существующей vehicle utility boundary: TryAddVehicle без combat activity;

@@ -121,8 +121,10 @@ class AICF_VehicleNativeSubgroup
 		if (!group || !vehicle || slot.GetGroup() != group || slot.GetSpawnGeneration() != trip.GetGroupGeneration() ||
 			slot.GetStrategicAssignmentRevision() != assignment.GetAssignmentRevision() ||
 			slot.GetStrategicIntentRevision() != assignment.GetStrategicIntentRevision() || slot.GetSlotId() != trip.GetSlotId()) return false;
-		if (assignment.GetTargetKind() != slot.GetTargetKind() || assignment.GetTargetPosition() != slot.GetTargetPosition() ||
-			assignment.GetTargetBase() != slot.GetTargetBase()) return false;
+		// BASE хранит planner-resolved endpoint, slot может хранить origin базы.
+		// Как в MatchesDestination: identity базы, а точные координаты — для POSITION.
+		if (assignment.GetTargetKind() != slot.GetTargetKind() || assignment.GetTargetBase() != slot.GetTargetBase() ||
+			(assignment.GetTargetKind() == AICF_EOrderTargetKind.POSITION && assignment.GetTargetPosition() != slot.GetTargetPosition())) return false;
 		if (!group.GetFaction() || group.GetFaction().GetFactionKey() != trip.GetFactionKey() ||
 			!lease.MatchesTripIdentity(trip.GetFactionKey(), trip.GetSlotId(), trip.GetGroupGeneration(), trip.GetTripGeneration())) return false;
 		reason = "REPLICATED_IDENTITY";

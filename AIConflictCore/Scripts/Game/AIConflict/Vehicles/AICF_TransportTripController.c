@@ -514,6 +514,9 @@ class AICF_TransportTripController
 		if (!trip.GetVehiclePreset() || trip.GetPhase() != AICF_ETransportTripPhase.TRANSIT ||
 			!TransitionTo(trip, AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT, outcome.GetReason(), outcome.GetCausationId()))
 			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK, "TACTICAL_TRANSITION_REJECTED", outcome.GetCausationId(), true);
+		// ExitTransit снял полную utility. Native reboard всё ещё требует record.
+		if (!m_Handoff.RegisterTacticalVehicle(trip, slot))
+			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK, "TACTICAL_VEHICLE_REGISTRATION_REJECTED", outcome.GetCausationId(), true);
 		if (!trip.CommitBehaviorClockPause(true, System.GetTickCount()) || !m_BehaviorFlow.Begin(trip, outcome.GetReason()))
 			return EndVehicleControl(trip, slot, fleet, faction, AICF_ETransportTripPhase.FALLBACK, "TACTICAL_BEGIN_REJECTED", outcome.GetCausationId(), true);
 		BeginHandoffEvidence(trip, false);

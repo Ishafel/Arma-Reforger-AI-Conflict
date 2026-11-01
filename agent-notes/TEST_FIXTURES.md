@@ -1,5 +1,29 @@
 # Изменение сценарного контракта — 2026-10-24
 
+## WCS BASE scope и tactical registration
+
+`AICF_BoardingRegistrationProbe.c` наблюдает реальные Begin/Attach/Tick и
+production exact-occupant outcome, не создаёт и не перемещает actors/vehicle.
+`-aicfRequireTacticalRegistration 1 -aicfBoardingRegistrationDistanceM 100`
+требует native tactical registration, resume того же trip и движение после
+resume. `-aicfBoardingRegistrationObserveOnly 1` сохраняет наблюдение после
+movement proof до остановки ServerPerformanceProbe по bounded duration.
+Scope probe печатает реальные kind/base/positions/revisions/group/generation.
+
+`AICF_NativeRegistrationTraceProbe.c` — дополнительный isolated observer
+GetEmptyCompartment и RemoveVehicle: записывает actor/group/vehicle/manager и
+native стек удаления record, каждый override вызывает super ровно один раз.
+Он не отменяет native ошибку и не восстанавливает record. Стеки добавляют
+диагностическую нагрузку, поэтому этот прогон не является обычным FPS benchmark.
+
+Полный остановленный лог проверяет `Test-BoardingRegistrationLog.ps1` с
+`-MinimumMovementMeters 100 -RequireAssignmentScope -RequireTacticalRecovery`:
+native registration, exact occupants, same entity/Rpl/lease/vehicle generations
+на обеих границах tactical phase, production route progress между resume и
+movement proof, отсутствие original error/VM/registration LOST/ASSIGNMENT_SCOPE.
+Resource verdict выводится отдельно. Результаты и отрицательные контроли —
+[TESTING.md](TESTING.md), `.codex-runtime/wcs-assignment-scope-20261101/REPORT.md`.
+
 ## Имя vehicle preset и цена боевой техники ИИ — 01.11.2026
 
 `AICF_VehiclePresetSummaryProbe.c`, флаг `-aicfVehiclePresetSummaryProbe 1`:

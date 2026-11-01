@@ -41,8 +41,19 @@ class AICF_VehicleTaskHandoff
 	// до посадки. Полный AddUsableVehicle здесь создал бы combat activity.
 	bool RegisterBoardingVehicle(AICF_TransportTrip trip, AICF_GroupSlot slot)
 	{
+		return RegisterVehicleRecord(trip, slot, AICF_ETransportTripPhase.BOARDING);
+	}
+
+	bool RegisterTacticalVehicle(AICF_TransportTrip trip, AICF_GroupSlot slot)
+	{
+		if (!trip || !trip.GetVehiclePreset()) return false;
+		return RegisterVehicleRecord(trip, slot, AICF_ETransportTripPhase.TACTICAL_DEPLOYMENT);
+	}
+
+	protected bool RegisterVehicleRecord(AICF_TransportTrip trip, AICF_GroupSlot slot, AICF_ETransportTripPhase phase)
+	{
 		if (!Replication.IsServer() || !IsCurrentAssignment(trip, slot) || !IsTripLeaseCurrent(trip) ||
-			trip.GetPhase() != AICF_ETransportTripPhase.BOARDING) return false;
+			trip.GetPhase() != phase) return false;
 		SCR_AIGroup group = trip.GetAssignment().GetGroup();
 		Vehicle vehicle = trip.GetLease().GetVehicle();
 		RplComponent rpl = RplComponent.Cast(group.FindComponent(RplComponent));
