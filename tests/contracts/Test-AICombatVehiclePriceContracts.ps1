@@ -6,7 +6,7 @@ function Read([string]$p){[IO.File]::ReadAllText((Join-Path $root $p))}
 function Body([string]$s,[string]$m){Get-AICFMethodBody ([pscustomobject]@{Source=$s;Code=(ConvertTo-AICFCodeText $s)}) $m}
 $policy=Read 'Economy/AICF_AIVehiclePricePolicy.c';$catalog=Read 'Vehicles/AICF_VehiclePresetCatalog.c';$economy=Read 'Economy/AICF_EconomySystem.c'
 $combat=(Body $policy 'IsCombat').Replace('return entry &&','return entry != null &&')
-$quote=Body $policy 'Quote'
+$quote=(Body $policy 'Quote').Replace('Math.Max(1, reduced)','(int)EnforceMath.Max(1, reduced)')
 $purchase=(Body $economy 'PurchaseVehiclePreset') -replace '\bbase\b','baseEntity'
 $pay=(Body $economy 'CanPayVehiclePreset') -replace '\bbase\b','baseEntity'
 $list=Body $catalog 'List'
@@ -16,6 +16,7 @@ $shim=@'
 using System;using System.Collections.Generic;
 namespace __NS__ {
 public static class EEditableEntityLabel {public const int TRAIT_ARMED=21,TRAIT_ARMOR=20,VEHICLE_APC=53,TRAIT_UNARMED=22;}
+public static class EnforceMath {public static float Max(float x,float y){return Math.Max(x,y);}}
 public class SCR_EntityCatalogEntry {public HashSet<int> Labels=new HashSet<int>();public bool HasEditableEntityLabel(int label){return Labels.Contains(label);}}
 public static class AICF_AIVehiclePricePolicy {public static bool IsCombat(SCR_EntityCatalogEntry entry){__COMBAT__}public static int Quote(int nativeCost,bool combat){__QUOTE__}}
 public class Native {public static implicit operator bool(Native v){return v!=null;}}
@@ -74,7 +75,8 @@ if($human.Contains('AICF_AIVehiclePricePolicy')){throw 'Native player price must
 $unsafe=@(
  @{source=$shim.Replace('nativeCost % 3 == 2','nativeCost % 3 == 1');rule='exact nearest rounding and positive minimum'},
  @{source=$shim.Replace('nativeCost <= 0 || !combat','nativeCost <= 0');rule='unarmed prices unchanged'},
- @{source=$shim.Replace('Math.Max(1, reduced)','reduced');rule='exact nearest rounding and positive minimum'},
+ @{source=$shim.Replace('if (reduced < 1) return 1;','');rule='exact nearest rounding and positive minimum'},
+ @{source=$shim.Replace('return reduced;','return (int)EnforceMath.Max(1, reduced);');rule='exact nearest rounding and positive minimum'},
  @{source=$shim.Replace('baseEntity.AddSupplies(-cost);','baseEntity.AddSupplies(-AICF_VehiclePresetCatalog.Raw);');rule='actual purchase debits quoted AI price exactly once'}
 )
 foreach($v in $unsafe){$bad='AIPricesUnsafe'+[guid]::NewGuid().ToString('N');Add-Type -TypeDefinition $v.source.Replace('__NS__',$bad);$caught=$false;try{[void]([type]($bad+'.Suite'))::Run()}catch{if($_.Exception.ToString().Contains($v.rule)){$caught=$true}else{throw}};if(!$caught){throw "Unsafe variant accepted: $($v.rule)"}}
