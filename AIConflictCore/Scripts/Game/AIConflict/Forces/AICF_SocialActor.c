@@ -147,8 +147,8 @@ class AICF_SocialActor
 			if (!controller.CanPlayLoiterAnimation(type)) return false;
 		}
 		SCR_LoiterCustomAnimData data = SCR_LoiterCustomAnimData.CreateInstance();
-		if (m_iVariant == 0) data = SCR_LoiterCustomAnimData.CreateInstance(itemPreset: SCR_ELoiterItemID.CIGAR);
-		if (m_iVariant == 2) data = SCR_LoiterCustomAnimData.CreateInstance(itemPreset: SCR_ELoiterItemID.CHAIR);
+		if (m_iVariant == 0) data = SCR_LoiterCustomAnimData.CreateInstance(itemPreset: SCR_EAnimationItemID.CIGAR);
+		if (m_iVariant == 2) data = SCR_LoiterCustomAnimData.CreateInstance(itemPreset: SCR_EAnimationItemID.CHAIR);
 		m_LoiterData = data;
 		m_bOwnsLoiter = true;
 		m_iPhase = 1;
